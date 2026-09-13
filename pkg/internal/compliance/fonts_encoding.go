@@ -798,7 +798,15 @@ func builtinProgramEncoding(ctx context.Context, doc *document.Document, fontDic
 	}
 	if fontFileObj, ok := fd["FontFile"]; ok {
 		stream, err := document.ResolveStream(ctx, doc, fontFileObj)
-		if err == nil {
+		// A /FontFile that holds no Type 1 program in the form ISO 32000-1,
+		// 9.9.1 defines embeds no encoding either: [streamHoldsFontProgram]
+		// already leaves such a font unembedded, and reading names out of it
+		// anyway credited glyphs with Unicode values from a program the font
+		// was reported as lacking. pdfjs bug860632.pdf embeds Helvetica as a PFB
+		// container with no /Encoding: veraPDF, which cannot read that program,
+		// finds no name for any code it shows and reports ISO 14289-1, 7.21.7
+		// t1 on each, while litho read StandardEncoding out of the PFB.
+		if err == nil && streamHoldsFontProgram(ctx, doc, "FontFile", stream) {
 			data, err := doc.DecodeStream(ctx, stream)
 			if err == nil {
 				if enc := typography.ExtractType1EncodingNames(data); len(enc) > 0 {

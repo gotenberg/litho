@@ -84,3 +84,49 @@ func TestBuiltinProgramEncoding_PredefinedReference(t *testing.T) {
 		}
 	})
 }
+
+// TestBuiltinProgramEncoding_PFBContainerNamesNothing pins that a /FontFile
+// holding a PFB container supplies no encoding. ISO 32000-1, 9.9.1 defines the
+// embedded Type 1 form without the PFB segment headers, and litho already reports
+// such a font as unembedded; reading its encoding anyway gave its glyphs Unicode
+// values. pdfjs bug860632.pdf embeds Helvetica that way with no /Encoding, and
+// veraPDF reports every glyph it shows under ISO 14289-1, 7.21.7 t1.
+func TestBuiltinProgramEncoding_PFBContainerNamesNothing(t *testing.T) {
+	t.Parallel()
+
+	const cleartext = "%!PS-AdobeFont-1.0: Probe 001.001\n/FontName /Probe def\n" +
+		"/Encoding StandardEncoding def\ncurrentdict end\ncurrentfile eexec\n"
+	// pfbSegment wraps the cleartext in the PFB ASCII segment header: 0x80, type
+	// 1, and a four-byte little-endian length.
+	pfbSegment := func(s string) string {
+		n := len(s)
+		return string([]byte{0x80, 0x01, byte(n), byte(n >> 8), byte(n >> 16), byte(n >> 24)}) + s
+	}
+
+	// pdf shows code 0x54 'T' through a symbolic Type 1 font with no /Encoding,
+	// so the program's own encoding is the only source of a glyph name.
+	pdf := func(prog string) []byte {
+		stream := "BT /F1 12 Tf 10 50 Td <54> Tj ET"
+		return cyclePDF(
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] "+
+				"/Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+			fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(stream), stream),
+			"<< /Type /Font /Subtype /Type1 /BaseFont /ABCDEF+Probe "+
+				"/FirstChar 84 /LastChar 84 /Widths [600] /FontDescriptor 6 0 R >>",
+			"<< /Type /FontDescriptor /FontName /ABCDEF+Probe /Flags 4 "+
+				"/ItalicAngle 0 /Ascent 700 /Descent -200 /CapHeight 700 /StemV 80 "+
+				"/FontBBox [0 0 1000 1000] /FontFile 7 0 R >>",
+			fmt.Sprintf("<< /Length %d /Length1 %d /Length2 0 /Length3 0 >>\nstream\n%s\nendstream",
+				len(prog), len(prog), prog),
+		)
+	}
+
+	if firesUnicodeRule(t, pdf(cleartext)) {
+		t.Error("a Type 1 program naming StandardEncoding names code 84 'T'")
+	}
+	if !firesUnicodeRule(t, pdf(pfbSegment(cleartext))) {
+		t.Error("a PFB container embeds no program, so code 84 has no glyph name and no Unicode value")
+	}
+}
