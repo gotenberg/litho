@@ -302,7 +302,17 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	// DocInfo to XMP consistency (§6.7.3), parts 1 and 4 only.
 	if part == 1 || part == 4 {
-		xmpCheckDocInfoSync(ctx, doc, xmpData, part, &results)
+		// A packet that is not well-formed yields no properties at all, the same
+		// XMPCore behaviour the property audits above are gated on. Every §6.7.3
+		// analogue then reads as null, so each Info entry present is unmatched:
+		// pdfjs issue18941.pdf, whose packet ends "</x:xmpmeta" with no closing
+		// ">", reports all six of its Info keys on veraPDF. Recovering values
+		// from it instead passed three of them.
+		syncData := xmpData
+		if !packetParses {
+			syncData = nil
+		}
+		xmpCheckDocInfoSync(ctx, doc, syncData, part, &results)
 	}
 
 	if ctx.Err() != nil {
