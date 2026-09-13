@@ -8,13 +8,14 @@ import (
 func TestUA2WidgetForm(t *testing.T) {
 	ctx := context.Background()
 	// Build a UA-2 document where the structure element of type enclType encloses
-	// (via OBJR) the widget annotation described by widgetBody.
+	// the widget annotation described by widgetBody, through both the parent tree
+	// and an OBJR.
 	build := func(enclType, widgetBody string) []Violation {
 		doc, cat := objsDocPDF(t,
 			"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R /AcroForm << /Fields [8 0 R] >> >>",
 			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [8 0 R] >>",
-			"<< /Type /StructTreeRoot /Namespaces [5 0 R] /K 6 0 R >>",
+			"<< /Type /StructTreeRoot /Namespaces [5 0 R] /K 6 0 R /ParentTree << /Nums [0 7 0 R] >> >>",
 			"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
 			"<< /Type /StructElem /S /Document /NS 5 0 R /P 4 0 R /K 7 0 R >>",
 			"<< /Type /StructElem /S /"+enclType+" /NS 5 0 R /P 6 0 R /K 9 0 R >>",

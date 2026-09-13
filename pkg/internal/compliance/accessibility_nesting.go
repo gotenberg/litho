@@ -271,35 +271,21 @@ func numberTreeLookupObj(ctx context.Context, doc *document.Document, node ast.P
 	return nil
 }
 
-// buildAnnotStructTypeMapNS walks the structure tree and returns a map from
-// annotation object number to the PDF 2.0 namespace-resolved standard type of
-// the enclosing structure element, resolving element types through
-// [nsRoleResolver] so a custom type role-mapped to a standard type is
-// recognised.
-func buildAnnotStructTypeMapNS(ctx context.Context, doc *document.Document, treeRoot ast.PdfDict, r *nsRoleResolver) map[int]string {
-	result := make(map[int]string)
-	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, _ string) {
-		stdType, _, ok := r.elementStandardType(ctx, doc, elem)
-		if !ok {
-			return
-		}
-		if kObj, has := elem["K"]; has {
-			collectOBJRWithType(ctx, doc, kObj, stdType, result)
-		}
-	})
-	return result
-}
-
 // checkPDFUA2AnnotStructNesting validates PDF/UA-2 annotation-in-structure
 // nesting rules that depend on the enclosing element's namespace-resolved type:
+//   - §8.9.2.3 t1: a markup annotation shall be enclosed by an Annot element.
 //   - §8.10.1 t1: a field widget annotation shall be enclosed by a Form element.
 //   - §8.9.2.4.16 t1: a Watermark annotation used as real content shall be
 //     enclosed by an Annot element.
 //   - §8.2.5.20 t1: a Link annotation shall be enclosed by a Link or Reference
 //     element.
 //
-// Annotations that are artifacts (absent from the structure tree) are exempt
-// from both, matching the rules' structParentType/isArtifact conditions.
+// Each rule is gated on veraPDF's structParentType, structParentStandardType and
+// isArtifact, all read from the element the annotation's /StructParent names in
+// the structure parent tree ([annotStructParent]). Clause 8.9 exempts artifacts
+// from the structure requirements, so an annotation with no such element, or
+// whose element or one of its ancestors is an Artifact, is out of scope. An OBJR
+// that references the annotation does not bring it into scope.
 func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if PDFUAPart(profile) != 2 {
 		return nil
@@ -308,7 +294,7 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 	if err != nil || treeRoot == nil {
 		return nil
 	}
-	structMap := buildAnnotStructTypeMapNS(ctx, doc, treeRoot, newNSRoleResolver(ctx, doc, treeRoot))
+	r := newNSRoleResolver(ctx, doc, treeRoot)
 
 	var results []Violation
 	for _, page := range collectPages(ctx, doc, catalog) {
@@ -317,37 +303,32 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 		}
 		annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
 		for _, annotObj := range annots {
-			objNum := 0
-			if ref, ok := annotObj.(ast.PdfIndirectRef); ok {
-				objNum = ref.ObjectNum
-			}
 			annot, _ := document.ResolveDict(ctx, doc, annotObj)
 			if annot == nil {
 				continue
 			}
-			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
-
-			// §8.9.2.3 t1: a markup annotation shall be enclosed within an Annot
-			// structure element. ISO 14289-2 §8.9.2.3 constrains the enclosing
-			// element, so it has nothing to say about an annotation that no
-			// element encloses: such an annotation is an artifact, and clause 8.9
-			// exempts artifacts from the structure requirements. An annotation
-			// absent from the structure tree therefore passes, and only one
-			// enclosed by an element other than Annot fails.
-			if markupAnnotationSubtypes[subtype] {
-				stdType, inTree := structMap[objNum]
-				if inTree && stdType != "Annot" {
-					results = append(results, failf(Rule_14289_2_8_9_2_3_t01,
-						"%s markup annotation enclosed by %s instead of Annot",
-						subtype, nestingDesc(stdType))...)
-				}
+			parent := annotStructParent(ctx, doc, treeRoot, annot)
+			if parent == nil {
 				continue
 			}
+			parentType, _ := document.ResolveName(ctx, doc, parent["S"])
+			if parentType == "" || structElemUnderArtifact(ctx, doc, r, parent) {
+				continue
+			}
+			// structParentStandardType is null for a type that resolves to no
+			// standard type, which matches none of the required types.
+			stdType, _, _ := r.elementStandardType(ctx, doc, parent)
+			encl := stdType
+			if encl == "" {
+				encl = string(parentType)
+			}
+			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 
-			// structParentType == null (not in the tree, i.e. an artifact) is
-			// exempt for the remaining rules.
-			stdType, inTree := structMap[objNum]
-			if !inTree {
+			if markupAnnotationSubtypes[subtype] {
+				if stdType != "Annot" {
+					results = append(results, failf(Rule_14289_2_8_9_2_3_t01,
+						"%s markup annotation enclosed by %s instead of Annot", subtype, encl)...)
+				}
 				continue
 			}
 
@@ -359,27 +340,44 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 				_, hasParent := annot["Parent"]
 				if (hasFT || hasParent) && stdType != "Form" {
 					results = append(results, failf(Rule_14289_2_8_10_1_t01,
-						"field Widget annotation enclosed by %s instead of Form", nestingDesc(stdType))...)
+						"field Widget annotation enclosed by %s instead of Form", encl)...)
 				}
 			case "Watermark":
 				if stdType != "Annot" {
 					results = append(results, failf(Rule_14289_2_8_9_2_4_16_t01,
-						"Watermark annotation enclosed by %s instead of Annot", nestingDesc(stdType))...)
+						"Watermark annotation enclosed by %s instead of Annot", encl)...)
 				}
 			case "Link":
-				// §8.2.5.20 t1: a Link annotation shall be enclosed by a Link or
-				// Reference element. Artifact is excluded explicitly because it is
-				// a PDF 2.0 standard type and so resolves here, where veraPDF
-				// exempts it through its separate isArtifact condition.
-				if stdType != "Link" && stdType != "Reference" && stdType != "Artifact" {
+				if stdType != "Link" && stdType != "Reference" {
 					results = append(results, failf(Rule_14289_2_8_2_5_20_t01,
-						"Link annotation enclosed by %s instead of Link or Reference",
-						nestingDesc(stdType))...)
+						"Link annotation enclosed by %s instead of Link or Reference", encl)...)
 				}
 			}
 		}
 	}
 	return results
+}
+
+// structElemUnderArtifact reports whether a structure element, or any ancestor
+// its /P chain reaches, stands for the standard type Artifact. It mirrors
+// veraPDF's GFPDAnnot.getisArtifact, which climbs from the element enclosing an
+// annotation; ISO 14289-2, 8.9 exempts artifacts from the structure
+// requirements.
+func structElemUnderArtifact(ctx context.Context, doc *document.Document, r *nsRoleResolver, elem ast.PdfDict) bool {
+	for range maxStructTreeWalkDepth {
+		if elem == nil || ctx.Err() != nil {
+			return false
+		}
+		if stdType, _, ok := r.elementStandardType(ctx, doc, elem); ok && stdType == "Artifact" {
+			return true
+		}
+		parent, err := document.ResolveDict(ctx, doc, elem["P"])
+		if err != nil {
+			return false
+		}
+		elem = parent
+	}
+	return false
 }
 
 // LoadRoleMap loads the /RoleMap dictionary from the structure tree root. It is
@@ -428,33 +426,4 @@ func resolveStandardType(name ast.PdfName, roleMap map[ast.PdfName]ast.PdfName, 
 		current = target
 	}
 	return current
-}
-
-// collectOBJRWithType finds OBJR dicts in /K children and records the annotation
-// object numbers with their enclosing element's standard type.
-func collectOBJRWithType(ctx context.Context, doc *document.Document, kObj ast.PdfObject, stdType string, dest map[int]string) {
-	arr, err := document.ResolveArray(ctx, doc, kObj)
-	if err != nil {
-		recordOBJRType(ctx, doc, kObj, stdType, dest)
-		return
-	}
-	for _, item := range arr {
-		recordOBJRType(ctx, doc, item, stdType, dest)
-	}
-}
-
-// recordOBJRType checks if obj is an OBJR dict and records the annotation
-// object number with the given standard type.
-func recordOBJRType(ctx context.Context, doc *document.Document, obj ast.PdfObject, stdType string, dest map[int]string) {
-	dict, err := document.ResolveDict(ctx, doc, obj)
-	if err != nil || dict == nil {
-		return
-	}
-	typeName, _ := document.ResolveName(ctx, doc, dict["Type"])
-	if typeName != "OBJR" {
-		return
-	}
-	if ref, ok := dict["Obj"].(ast.PdfIndirectRef); ok {
-		dest[ref.ObjectNum] = stdType
-	}
 }

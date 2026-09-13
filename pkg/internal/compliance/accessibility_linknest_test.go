@@ -38,7 +38,7 @@ func TestUA2LinkAnnotNesting(t *testing.T) {
 			"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
 			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [8 0 R] >>",
-			"<< /Type /StructTreeRoot /Namespaces [5 0 R] /K 6 0 R >>",
+			"<< /Type /StructTreeRoot /Namespaces [5 0 R] /K 6 0 R /ParentTree << /Nums [0 7 0 R] >> >>",
 			"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
 			"<< /Type /StructElem /S /Document /NS 5 0 R /P 4 0 R /K 7 0 R >>",
 			"<< /Type /StructElem /S /"+enclType+" /NS 5 0 R /P 6 0 R /K 9 0 R >>",
@@ -52,10 +52,13 @@ func TestUA2LinkAnnotNesting(t *testing.T) {
 		enclType string
 		want     bool
 	}{
-		{enclType: "", want: false},          // absent from the tree: an artifact
-		{enclType: "Link", want: false},      // the type the clause requires
-		{enclType: "Reference", want: false}, // the alternative it allows
-		{enclType: "Artifact", want: false},  // veraPDF's isArtifact exemption
+		{enclType: "", want: false},     // absent from the tree: an artifact
+		{enclType: "Link", want: false}, // the type the clause requires
+		// The clause allows Reference, but only the PDF 1.7 vocabulary defines it:
+		// an element in the PDF 2.0 namespace named Reference stands for no
+		// standard type, and veraPDF reports the Link.
+		{enclType: "Reference", want: true},
+		{enclType: "Artifact", want: false}, // veraPDF's isArtifact exemption
 		{enclType: "P", want: true},
 		{enclType: "Div", want: true},
 	} {
@@ -75,7 +78,7 @@ func TestUA2LinkAnnotNesting(t *testing.T) {
 		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [8 0 R 9 0 R] >>",
-		"<< /Type /StructTreeRoot /Namespaces [5 0 R] /K 6 0 R >>",
+		"<< /Type /StructTreeRoot /Namespaces [5 0 R] /K 6 0 R /ParentTree << /Nums [0 7 0 R 1 10 0 R] >> >>",
 		"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
 		"<< /Type /StructElem /S /Document /NS 5 0 R /P 4 0 R /K [7 0 R 10 0 R] >>",
 		"<< /Type /StructElem /S /Link /NS 5 0 R /P 6 0 R /K 11 0 R >>",
