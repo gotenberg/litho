@@ -198,6 +198,10 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		xobjVisited := make(map[int]bool)
 		results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, checkedObjs, xobjVisited, 0)...)
 
+		// A tiling pattern's cell is another content stream the page walk above
+		// never enters. See [checkPatternFonts].
+		results = append(results, checkPatternFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, checkedObjs, xobjVisited, 0)...)
+
 		// A Type3 glyph procedure is another content stream that may select
 		// fonts of its own, and the page walk above stops at the Type3 font
 		// itself. veraPDF applies the font rules inside those procedures too.
@@ -392,6 +396,80 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 		results = append(results, checkResourceFonts(ctx, doc, xobjRes, subOps, pageNum, profile, checkedObjs)...)
 		results = append(results, checkFormPUA(ctx, doc, xobjRes, subOps, data, stream.Dict, treeRoot, pageNum, profile)...)
 		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, xobjRes, treeRoot, pageNum, profile, checkedObjs, visited, depth+1)...)
+		results = append(results, checkPatternFonts(ctx, doc, subOps, xobjRes, treeRoot, pageNum, profile, checkedObjs, visited, depth+1)...)
+	}
+	return results
+}
+
+// checkPatternFonts checks fonts used for rendering inside the tiling patterns a
+// content stream selects as a colour. A coloured tiling pattern (ISO 32000-1,
+// 8.7.3.3, PatternType 1 with PaintType 1) paints its cell with a content stream
+// of its own, resolved against its own /Resources, and veraPDF descends into it
+// from the scn or SCN operator that selects it, applying the same font rules to
+// the glyphs the cell shows: pdfjs issue15716.pdf fills a rectangle with a
+// pattern whose cell shows a glyph from an unembedded ZapfDingbats, which
+// veraPDF reports under ISO 19005-2, 6.2.11.4.1 and litho never reached.
+//
+// Only a pattern that scn or SCN names comes into scope: one merely declared in
+// /Resources/Pattern paints nothing. An uncoloured pattern (PaintType 2) is left
+// out, as veraPDF leaves it, and a cell that shows no text judges no font. A
+// pattern selected inside a Form XObject is reached through the form walk.
+// Measured against veraPDF on a fixture of each shape. Recursion shares the Form
+// XObject walk's visited set and depth bound.
+func checkPatternFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
+	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+		return nil
+	}
+	patternDict, _ := document.ResolveDict(ctx, doc, res["Pattern"])
+	if len(patternDict) == 0 {
+		return nil
+	}
+
+	var results []Violation
+	for _, op := range ops {
+		if (op.Operator != "scn" && op.Operator != "SCN") || len(op.Operands) == 0 {
+			continue
+		}
+		name, ok := op.Operands[len(op.Operands)-1].(ast.PdfName)
+		if !ok {
+			continue
+		}
+		patternRef := patternDict[name]
+		ref, isRef := patternRef.(ast.PdfIndirectRef)
+		if isRef && visited[ref.ObjectNum] {
+			continue
+		}
+		// A shading pattern is a dictionary, not a stream, and shows no glyph.
+		stream, err := document.ResolveStream(ctx, doc, patternRef)
+		if err != nil || stream.Dict == nil {
+			continue
+		}
+		if patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"]); patternType != 1 {
+			continue
+		}
+		if paintType, _ := document.ResolveInt(ctx, doc, stream.Dict["PaintType"]); paintType == 2 {
+			continue
+		}
+		if isRef {
+			visited[ref.ObjectNum] = true
+		}
+		patternRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+		if patternRes == nil {
+			continue
+		}
+		data, err := doc.DecodeStream(ctx, stream)
+		if err != nil {
+			doc.Logger.Debug("compliance: fonts: cannot decode tiling pattern", "page", pageNum, "error", err)
+			continue
+		}
+		subOps, err := content.ParseStreamData(ctx, data)
+		if err != nil {
+			doc.Logger.Debug("compliance: fonts: cannot parse tiling pattern", "page", pageNum, "error", err)
+			continue
+		}
+		results = append(results, checkResourceFonts(ctx, doc, patternRes, subOps, pageNum, profile, checkedObjs)...)
+		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, patternRes, treeRoot, pageNum, profile, checkedObjs, visited, depth+1)...)
+		results = append(results, checkPatternFonts(ctx, doc, subOps, patternRes, treeRoot, pageNum, profile, checkedObjs, visited, depth+1)...)
 	}
 	return results
 }
