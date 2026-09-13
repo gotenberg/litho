@@ -752,8 +752,9 @@ func overlaps(aStart, aSpan, bStart, bSpan int) bool {
 	return aStart < bStart+bSpan && bStart < aStart+aSpan
 }
 
-// validateTableHeaderDetermination checks PDF/UA-2 §8.2.5.26 t5/t6 on every
-// TD of a table that contains TH cells. Per ISO 32000-2 Table 384, a TD is
+// validateTableHeaderDetermination checks PDF/UA-2 §8.2.5.26 t5/t6 and PDF/UA-1
+// §7.5 t1/t2 on the TDs of a table that contains TH cells, stopping at the first
+// TD whose headers it cannot determine. Per ISO 32000-2 Table 384, a TD is
 // connected to a header when its /Headers list names a TH /ID in the same
 // table, or when a TH /Scope covers the TD's grid position (Row: shared row;
 // Column: shared column; Both: either). /Headers entries naming no TH in
@@ -912,13 +913,13 @@ func validateTableHeaderDetermination(ctx context.Context, state *walkState, tab
 		}
 
 		// veraPDF's fallback stops at the first cell whose headers it cannot
-		// determine, so one table yields one verdict rather than one per cell.
-		// Reporting every cell would name the same defect repeatedly and, since
-		// the two tests split by whether the cell named unknown IDs, could
-		// report both halves of the split for a single table.
-		if state.profile == "PDF/UA-2" {
-			return
-		}
+		// determine, so one table yields one verdict rather than one per cell,
+		// under PDF/UA-1 as under PDF/UA-2: measured on tables of two, four, and
+		// six unconnected cells, each reported once. Reporting every cell would
+		// name the same defect repeatedly and, since the two tests split by
+		// whether the cell named unknown IDs, could report both halves of the
+		// split for a single table.
+		return
 	}
 }
 

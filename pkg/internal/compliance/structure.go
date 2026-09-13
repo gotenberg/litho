@@ -626,16 +626,11 @@ type walkState struct {
 	// noteIDs tracks Note element /ID values for uniqueness (§7.9 t2).
 	noteIDs map[string]bool
 
-	// tableUsesHeaderIDs is true when the current enclosing Table uses
-	// the Headers+IDs association model (any TD has /Headers in its
-	// attributes). When true, TH elements do not need /Scope.
-	tableUsesHeaderIDs bool
-
 	// tableIrregular is true when the current enclosing Table failed the
 	// regularity check (§8.2.5.26 / §7.2). Header determination (§8.2.5.26
 	// t5/t6, §7.5) is only well-defined on a regular grid, where every row has
-	// the same column count, so the scope and per-TD header checks skip an
-	// irregular table whose row/column geometry cannot be resolved.
+	// the same column count, so the per-TD header check skips an irregular
+	// table whose row/column geometry cannot be resolved.
 	tableIrregular bool
 
 	// roleMap is the StructTreeRoot /RoleMap as a name index, used to
@@ -935,13 +930,6 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		}
 	}
 
-	// TH /Scope (§7.5 t1) is PDF/UA-1 only. PDF/UA-2 replaces the per-TH /Scope
-	// requirement with the TD header-determination rules §8.2.5.26 t5/t6, a
-	// different test on a different object.
-	if typeName == "TH" && state.profile == "PDF/UA-1" {
-		validateTHScope(ctx, state, elem)
-	}
-
 	// The Formula and Note requirements bind the structure type an element stands
 	// for, not the name it is written with: veraPDF judges its SEFormula and
 	// SENote objects, which it builds from the standard type the /RoleMap maps
@@ -980,17 +968,14 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		}
 	}
 
-	// When entering a Table, determine if it uses the Headers+IDs model and
-	// whether it is column-regular. Both flags drive the header checks on its
-	// descendant TH/TD cells (validated during the child recursion below), so
-	// compute them here. Save and restore so nested tables don't leak state.
-	prevTableUsesHeaderIDs := state.tableUsesHeaderIDs
+	// When entering a Table, determine whether it is column-regular. The flag
+	// gates the header determination run when the table is left, so compute it
+	// here. Save and restore so nested tables don't leak state.
 	prevTableIrregular := state.tableIrregular
 	// veraPDF builds its SETable object for an element whose standard type is
 	// Table (GFSEFactory.createTypedStructElem), so the role map decides.
 	isTable := iso32005Key(ctx, state, elem, typeName) == "Table"
 	if isTable {
-		state.tableUsesHeaderIDs = tableHasHeaderIDs(ctx, state.doc, elem)
 		state.tableIrregular = !validateTableColumnConsistency(ctx, state, elem)
 		// ISO 14289-1 §7.2 t15 is a per-cell rule, but a cell only intersects
 		// relative to the table's grid, so the whole table is scanned once on
@@ -1040,7 +1025,6 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		if (state.profile == "PDF/UA-2" || state.profile == "PDF/UA-1") && !state.tableIrregular {
 			validateTableHeaderDetermination(ctx, state, elem)
 		}
-		state.tableUsesHeaderIDs = prevTableUsesHeaderIDs
 		state.tableIrregular = prevTableIrregular
 	}
 }
@@ -1770,182 +1754,6 @@ func checkSingleDocumentRoot(ctx context.Context, doc *document.Document, struct
 // pdf2NamespaceURI is the PDF 2.0 standard structure namespace (ISO 32000-2
 // §14.8.6).
 const pdf2NamespaceURI = "http://iso.org/pdf2/ssn"
-
-// validateTHScope checks that TH elements have a /Scope attribute.
-// When the table uses ID-based header association (TH has /ID attribute),
-// /Scope is not required per ISO 14289-1, 7.5.
-func validateTHScope(ctx context.Context, state *walkState, elem ast.PdfDict) {
-	// Header determination is only well-defined on a regular table; an
-	// irregular grid reports the regularity violation alone.
-	if state.tableIrregular {
-		return
-	}
-
-	// If the enclosing table uses the Headers+IDs association model
-	// (any TD references TH via /Headers), /Scope is not required on any TH.
-	if state.tableUsesHeaderIDs {
-		return
-	}
-
-	// If TH has an /ID attribute, the table may use ID-based header
-	// association (TD elements reference TH via /Headers). In that case,
-	// /Scope is not required.
-	if _, hasID := elem["ID"]; hasID {
-		return
-	}
-
-	// Check /A attribute dict for Scope.
-	aObj, ok := elem["A"]
-	if !ok {
-		*state.results = append(*state.results,
-			fail(Rule_14289_1_7_5_t01, "TH element missing /Scope attribute")...)
-		return
-	}
-
-	// /A can be a dict or an array of dicts.
-	if hasScope := findScopeInAttributes(ctx, state.doc, aObj); !hasScope {
-		*state.results = append(*state.results,
-			fail(Rule_14289_1_7_5_t01, "TH element missing /Scope attribute")...)
-	}
-}
-
-// findScopeInAttributes checks whether a /Scope key exists in the attribute
-// object(s) attached to a structure element.
-func findScopeInAttributes(ctx context.Context, doc *document.Document, aObj ast.PdfObject) bool {
-	// Try as a single dict.
-	dict, err := document.ResolveDict(ctx, doc, aObj)
-	if err == nil && dict != nil {
-		if _, ok := dict["Scope"]; ok {
-			return true
-		}
-	}
-
-	// Try as an array of attribute dicts.
-	arr, err := document.ResolveArray(ctx, doc, aObj)
-	if err != nil {
-		return false
-	}
-	for _, item := range arr {
-		if ctx.Err() != nil {
-			return false
-		}
-		d, err := document.ResolveDict(ctx, doc, item)
-		if err != nil || d == nil {
-			continue
-		}
-		if _, ok := d["Scope"]; ok {
-			return true
-		}
-	}
-	return false
-}
-
-// tableHasHeaderIDs scans a Table structure element's subtree to determine
-// whether any TD cell uses the /Headers attribute (referencing TH IDs).
-// When true, the table uses the Headers+IDs association model and TH elements
-// do not need /Scope.
-func tableHasHeaderIDs(ctx context.Context, doc *document.Document, tableElem ast.PdfDict) bool {
-	kObj, ok := tableElem["K"]
-	if !ok {
-		return false
-	}
-	return scanForHeaders(ctx, doc, kObj, make(map[int]bool), 0)
-}
-
-// scanForHeaders recursively searches structure element children for TD/TH
-// elements that have /Headers in their attribute dict or directly on the element.
-// seen visits each element once so a shared or cyclic /K tree cannot fan out
-// 2^depth (a denial of service).
-func scanForHeaders(ctx context.Context, doc *document.Document, kObj ast.PdfObject, seen map[int]bool, depth int) bool {
-	if ctx.Err() != nil || depth > maxStructTreeDepth {
-		return false
-	}
-
-	arr, err := document.ResolveArray(ctx, doc, kObj)
-	if err != nil {
-		// Single element.
-		if ref, ok := kObj.(ast.PdfIndirectRef); ok {
-			if seen[ref.ObjectNum] {
-				return false
-			}
-			seen[ref.ObjectNum] = true
-		}
-		dict, err := document.ResolveDict(ctx, doc, kObj)
-		if err != nil || dict == nil {
-			return false
-		}
-		return elemHasHeaders(ctx, doc, dict, seen, depth)
-	}
-
-	for _, item := range arr {
-		if ref, ok := item.(ast.PdfIndirectRef); ok {
-			if seen[ref.ObjectNum] {
-				continue
-			}
-			seen[ref.ObjectNum] = true
-		}
-		dict, err := document.ResolveDict(ctx, doc, item)
-		if err != nil || dict == nil {
-			continue
-		}
-		if elemHasHeaders(ctx, doc, dict, seen, depth) {
-			return true
-		}
-	}
-	return false
-}
-
-// elemHasHeaders checks if a structure element is a TD/TH with /Headers,
-// or recurses into its children.
-func elemHasHeaders(ctx context.Context, doc *document.Document, elem ast.PdfDict, seen map[int]bool, depth int) bool {
-	typeName, _ := document.ResolveName(ctx, doc, elem["S"])
-	if typeName == "" {
-		return false
-	}
-
-	// TD or TH with /Headers (direct or in /A attributes) indicates header use.
-	if typeName == "TD" || typeName == "TH" {
-		if _, ok := elem["Headers"]; ok {
-			return true
-		}
-		if findHeadersInAttributes(ctx, doc, elem["A"]) {
-			return true
-		}
-	}
-
-	// Recurse into children (TR, THead, TBody, TFoot, etc.).
-	if kObj, ok := elem["K"]; ok {
-		return scanForHeaders(ctx, doc, kObj, seen, depth+1)
-	}
-	return false
-}
-
-// findHeadersInAttributes checks whether /Headers exists in attribute dict(s).
-func findHeadersInAttributes(ctx context.Context, doc *document.Document, aObj ast.PdfObject) bool {
-	if aObj == nil {
-		return false
-	}
-	dict, err := document.ResolveDict(ctx, doc, aObj)
-	if err == nil && dict != nil {
-		if _, ok := dict["Headers"]; ok {
-			return true
-		}
-	}
-	arr, err := document.ResolveArray(ctx, doc, aObj)
-	if err != nil {
-		return false
-	}
-	for _, item := range arr {
-		d, err := document.ResolveDict(ctx, doc, item)
-		if err != nil || d == nil {
-			continue
-		}
-		if _, ok := d["Headers"]; ok {
-			return true
-		}
-	}
-	return false
-}
 
 // checkPDFALangValid validates §6.8.4 (PDF/A-1) / §6.7.3.4 (PDF/A-2/3):
 // if a /Lang entry is present in the catalog or structure elements, its value
