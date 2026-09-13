@@ -857,8 +857,8 @@ func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document
 	}
 
 	// A PUA character is covered when an enclosing marked-content sequence carries
-	// /ActualText, or when the structure element of its /MCID (or an ancestor)
-	// does. mcidCovered maps each MCID of the stream to the latter.
+	// /ActualText, or when the structure element of its /MCID does.
+	// mcidCovered maps each MCID of the stream to the latter.
 	//
 	// ISO 14289-2, 8.4.3 accepts an /Alt wherever it accepts an /ActualText
 	// (veraPDF altPresent reads the same places); ISO 19005-2/3, 6.2.11.7.3 asks
@@ -934,10 +934,11 @@ func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document
 
 // mcidActualTextCoverage maps each marked-content identifier on a page to whether
 // the structure element it belongs to (resolved through the page /StructParents
-// entry in the ParentTree) or one of its ancestors carries an /ActualText entry.
-// With withAlt, an element that itself carries an /Alt text string covers its
-// identifiers too: veraPDF's altPresent reads the element the MCID names and not
-// its ancestors (MarkedContentHelper.containsStringKey).
+// entry in the ParentTree) carries an /ActualText text string, and with withAlt
+// an /Alt one too. veraPDF's actualTextPresent and altPresent read the element
+// the MCID names and not its ancestors, and accept only a string value
+// (MarkedContentHelper.containsStringKey), so a parent's /ActualText does not
+// cover a child element that has none.
 func mcidActualTextCoverage(ctx context.Context, doc *document.Document, treeRoot, page ast.PdfDict, withAlt bool) map[int]bool {
 	out := make(map[int]bool)
 	if treeRoot == nil {
@@ -964,27 +965,11 @@ func mcidActualTextCoverage(ctx context.Context, doc *document.Document, treeRoo
 		if derr != nil || elem == nil {
 			continue
 		}
-		if elemOrAncestorHasActualText(ctx, doc, elem, 0) || (withAlt && dictHasString(ctx, doc, elem, "Alt")) {
+		if dictHasString(ctx, doc, elem, "ActualText") || (withAlt && dictHasString(ctx, doc, elem, "Alt")) {
 			out[mcid] = true
 		}
 	}
 	return out
-}
-
-// elemOrAncestorHasActualText reports whether a structure element or one of its
-// /P ancestors carries an /ActualText entry.
-func elemOrAncestorHasActualText(ctx context.Context, doc *document.Document, elem ast.PdfDict, depth int) bool {
-	if elem == nil || depth > maxStructTreeWalkDepth {
-		return false
-	}
-	if _, ok := elem["ActualText"]; ok {
-		return true
-	}
-	parent, err := document.ResolveDict(ctx, doc, elem["P"])
-	if err != nil {
-		return false
-	}
-	return elemOrAncestorHasActualText(ctx, doc, parent, depth+1)
 }
 
 // bdcProps returns a BDC operator's property list, written inline or named
