@@ -45,15 +45,17 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 		}
 		dict := fs.dict
 
-		// PDF/UA-1 §7.11: /F and /UF must both be present and non-empty.
+		// PDF/UA-1 §7.11: /F and /UF must both be present and non-empty, judged
+		// as veraPDF reads them (GFCosFileSpecification, getStringKey): decoded,
+		// so a name holding only a byte order mark is empty. Measured against
+		// veraPDF.
 		if profile == "PDF/UA-1" {
-			fStr, _ := document.ResolveString(ctx, doc, dict["F"])
-			ufStr, _ := document.ResolveString(ctx, doc, dict["UF"])
-
-			if len(fStr) == 0 || len(ufStr) == 0 {
+			hasF := hasNonEmptyStringKey(ctx, doc, dict, "F")
+			hasUF := hasNonEmptyStringKey(ctx, doc, dict, "UF")
+			if !hasF || !hasUF {
 				results = append(results, Violation{
 					Rule:    rule,
-					Context: fmt.Sprintf("%s: file spec F=%v UF=%v", fs.label(), len(fStr) > 0, len(ufStr) > 0),
+					Context: fmt.Sprintf("%s: file spec F=%v UF=%v", fs.label(), hasF, hasUF),
 				})
 			}
 		}

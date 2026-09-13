@@ -949,14 +949,17 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		}
 	}
 
-	// §7.9 t1/t2: Note elements must have /ID, and IDs must be unique.
+	// §7.9 t1/t2: Note elements must have /ID, and IDs must be unique. veraPDF
+	// reads /ID as a decoded text string (GFSENote, getStringKey): an /ID holding
+	// only a byte order mark is empty, and two /ID strings that decode to the
+	// same text are the same ID whatever their encoding. Measured against
+	// veraPDF.
 	if standardType == "Note" && state.profile == "PDF/UA-1" {
-		idStr, _ := document.ResolveString(ctx, state.doc, elem["ID"])
-		if len(idStr) == 0 {
+		idVal, ok := decodedStringKey(ctx, state.doc, elem, "ID")
+		if !ok || idVal == "" {
 			*state.results = append(*state.results,
 				failf(Rule_14289_1_7_9_t01, "Note element without /ID entry")...)
 		} else {
-			idVal := string(idStr)
 			if state.noteIDs == nil {
 				state.noteIDs = make(map[string]bool)
 			}
