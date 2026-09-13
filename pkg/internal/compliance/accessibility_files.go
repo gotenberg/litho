@@ -64,11 +64,13 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 		// in the EmbeddedFiles name tree (and only there, see inEFTree).
 		// The clause requires the key to be present; it does not constrain
 		// its contents, so an empty /Desc () satisfies the requirement and
-		// only an absent /Desc is a violation.
+		// only an absent /Desc is a violation. A /Desc written as null is
+		// absent (ISO 32000-1, 7.3.7), as veraPDF's knownKey reads it,
+		// measured ([nonNullKeyPresent]).
 		// A direct filespec has no object number, so it cannot be a name-tree
 		// value and inEFTree rightly leaves it out of the /Desc requirement.
 		if profile == "PDF/UA-2" && fs.objNum != 0 && inEFTree[fs.objNum] {
-			if _, hasDesc := dict["Desc"]; !hasDesc {
+			if !nonNullKeyPresent(ctx, doc, dict, "Desc") {
 				results = append(results, Violation{
 					Rule:    Rule_14289_2_8_14_1_t01,
 					Context: fmt.Sprintf("%s: embedded file spec missing /Desc", fs.label()),
@@ -213,8 +215,10 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 			case "FileAttachment":
 				// §8.9.2.4.10 t1: a file attachment annotation referencing a file
 				// specification dictionary shall include /AFRelationship on it.
+				// veraPDF reads it with getNameKeyStringValue, so only a name
+				// counts ([nameKeyPresent]): a null or string value is absent.
 				if fs, _ := document.ResolveDict(ctx, doc, annot["FS"]); fs != nil {
-					if _, hasAF := fs["AFRelationship"]; !hasAF {
+					if !nameKeyPresent(ctx, doc, fs, "AFRelationship") {
 						results = append(results, failf(Rule_14289_2_8_9_2_4_10_t01,
 							"FileAttachment file specification lacks /AFRelationship")...)
 					}
@@ -340,8 +344,10 @@ func checkMediaClipData(ctx context.Context, doc *document.Document, catalog ast
 				continue
 			}
 
-			// t01: /CT key must be present on the clip dict.
-			if _, hasCT := clipDict["CT"]; !hasCT {
+			// t01: /CT shall be present on the clip dict. veraPDF reads it with
+			// getContentType, so only a string counts ([stringKeyPresent]): a
+			// null or name value is absent, measured.
+			if !stringKeyPresent(ctx, doc, clipDict, "CT") {
 				results = append(results, failf(Rule_14289_1_7_18_6_2_t01,
 					"media clip missing /CT key")...)
 			}
@@ -605,4 +611,13 @@ func annotRectOutsidePageCropBox(ctx context.Context, doc *document.Document, an
 	}
 	// Check non-intersection.
 	return rx2 <= bx1 || rx1 >= bx2 || ry2 <= by1 || ry1 >= by2
+}
+
+// nonNullKeyPresent reports whether a dict holds a non-null value under key, of
+// any type, as veraPDF's knownKey reads a dictionary: an entry whose value is
+// null, or refers to an object the file does not define, is the same as an
+// absent one ([resourceEntryNull], ISO 32000-1, 7.3.7 and 7.3.10).
+func nonNullKeyPresent(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) bool {
+	obj, ok := dict[key]
+	return ok && !resourceEntryNull(ctx, doc, obj)
 }
