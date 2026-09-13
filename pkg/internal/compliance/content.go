@@ -206,9 +206,10 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 	}
 
 	var (
-		allData []byte
-		decoded int
-		lastErr error
+		allData         []byte
+		decoded         int
+		lastErr         error
+		undecodablePart bool
 	)
 	for _, s := range streams {
 		// A stream whose /Filter chain contains an undecodable filter (e.g. a
@@ -216,9 +217,18 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 		// Parsing those bytes as content operators yields a run of spurious
 		// "undefined operator" violations; the bad filter itself is reported
 		// separately (ISO 19005 §6.1.6.2). veraPDF likewise does not parse an
-		// undecodable content stream, so skip the page's operator analysis.
+		// undecodable content stream.
+		//
+		// It skips that part only, not the page: ISO 32000-1, 7.7.3.3 makes the
+		// array one content stream split into parts, and veraPDF judges the
+		// parts it can read. pdfjs bomb_giant.pdf follows its text part with
+		// three /JBIG2Decode parts, and veraPDF reports the text's unembedded
+		// font and untagged content while litho dropped the page. Measured
+		// against veraPDF with the undecodable part before and after the
+		// readable one, and with an unknown filter name in its place.
 		if doc.StreamHasUndecodableFilter(s) {
-			return nil, errUndecodableContent
+			undecodablePart = true
+			continue
 		}
 		data, err := doc.DecodeStream(ctx, s)
 		if err != nil {
@@ -241,7 +251,11 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 	}
 
 	// Nothing decoded at all is a page whose content litho cannot read, which
-	// the caller answers conservatively.
+	// the caller answers conservatively. A page held back by an undecodable
+	// filter keeps its own sentinel, whatever else failed beside it.
+	if decoded == 0 && undecodablePart {
+		return nil, errUndecodableContent
+	}
 	if decoded == 0 && lastErr != nil {
 		return nil, fmt.Errorf("decoding content stream: %w", lastErr)
 	}

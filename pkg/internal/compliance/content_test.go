@@ -1,6 +1,7 @@
 package compliance
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -47,5 +48,35 @@ func TestResolvePageContentBytes_UndecodableFilterSkipped(t *testing.T) {
 	}
 	if len(data) == 0 {
 		t.Error("unfiltered content: want decoded bytes, got none")
+	}
+}
+
+// TestResolvePageContentBytes_UndecodablePartSkipped pins that an undecodable
+// part of a /Contents array costs only that part. ISO 32000-1, 7.7.3.3 makes the
+// array one content stream split into parts, and veraPDF judges the parts it can
+// read: pdfjs bomb_giant.pdf follows its text with /JBIG2Decode parts, and
+// veraPDF reports the text's defects whichever order the parts take.
+func TestResolvePageContentBytes_UndecodablePartSkipped(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	for _, contents := range []string{"[3 0 R 4 0 R]", "[4 0 R 3 0 R]"} {
+		doc, _ := objsDocPDF(t,
+			"<< /Type /Catalog >>",
+			"<< /Type /Page /Contents "+contents+" >>",
+			"<< /Filter /Flatedecode /Length 5 >>\nstream\nhello\nendstream",
+			"<< /Length 5 >>\nstream\nBT ET\nendstream",
+		)
+		page, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
+		if err != nil {
+			t.Fatalf("resolve page: %v", err)
+		}
+		data, err := resolvePageContentBytes(ctx, doc, page)
+		if err != nil {
+			t.Fatalf("contents %s: unexpected error %v", contents, err)
+		}
+		if !bytes.Contains(data, []byte("BT ET")) || bytes.Contains(data, []byte("hello")) {
+			t.Errorf("contents %s: want the readable part alone, got %q", contents, data)
+		}
 	}
 }
