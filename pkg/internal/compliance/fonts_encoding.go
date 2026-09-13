@@ -1089,6 +1089,10 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 	if code, name, leftOut := shownCodeOutsideToUnicode(ctx, doc, fontDict, usage); leftOut {
+		if name == "" {
+			return failf(rule, "font %s on page %d: code %d is outside /ToUnicode and the font embeds no program to name it",
+				fontName, pageNum, code)
+		}
 		return failf(rule, "font %s on page %d: code %d is outside /ToUnicode and its glyph name %s has no Unicode value",
 			fontName, pageNum, code, name)
 	}
@@ -1115,7 +1119,15 @@ func shownCodeOutsideToUnicode(ctx context.Context, doc *document.Document, font
 	if usage == nil || len(usage.charCodes) == 0 {
 		return 0, "", false
 	}
-	if st := fontSubtype(ctx, doc, fontDict); st != "Type1" && st != "MMType1" {
+	// A font that embeds no program carries no built-in glyph names to fall back
+	// on, so a code its encoding leaves unnamed has no Unicode source at all once
+	// the /ToUnicode CMap omits it. That case is judged for a TrueType too; the
+	// named-but-unresolvable case below stays Type 1 only, because a TrueType
+	// resolves its codes through the program's own cmap (ISO 32000-1, 9.6.6.4).
+	embedded := embedsFontProgram(ctx, doc, fontDict)
+	st := fontSubtype(ctx, doc, fontDict)
+	unembeddedTrueType := st == "TrueType" && !embedded
+	if st != "Type1" && st != "MMType1" && !unembeddedTrueType {
 		return 0, "", false
 	}
 	tuObj, ok := fontDict["ToUnicode"]
@@ -1152,6 +1164,14 @@ func shownCodeOutsideToUnicode(ctx context.Context, doc *document.Document, font
 		}
 		name := enc[c]
 		if name == "" || name == ".notdef" {
+			// veraPDF reads the program's own glyph name here, which this check
+			// does not establish, so a named program keeps its exemption. With
+			// no program there is nothing left to read: pdfjs bug864847.pdf shows
+			// an unembedded symbolic Arial-ItalicMT with no /Encoding whose
+			// /ToUnicode maps only <20>, and veraPDF reports every other code.
+			if !embedded {
+				return c, "", true
+			}
 			continue
 		}
 		if glyphNameHasUnicode(name) || symbolEncodingNames[name] {
