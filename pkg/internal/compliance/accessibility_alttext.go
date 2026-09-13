@@ -332,6 +332,11 @@ func checkOBJR(ctx context.Context, doc *document.Document, obj ast.PdfObject, d
 // entries. For PDF/UA-1, the presence of /AA on a Widget is forbidden per §7.18.
 // For PDF/UA-2, if /AA is present, the Widget must have a /Contents entry (§8.10.2.3 t02).
 func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err != nil {
+		doc.Logger.Debug("compliance.accessibility: cannot resolve structure tree root", "error", err)
+	}
+	r := newNSRoleResolver(ctx, doc, treeRoot)
 	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
 
@@ -379,10 +384,11 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 				continue
 			}
 			// ISO 14289-2 §8.10.2.3 t02 applies to a widget linked into the
-			// structure tree. A widget with no /StructParent is not linked, so
-			// it has no structure-element alternate description to govern and is
-			// exempt.
-			if _, inTree := annot["StructParent"]; !inTree {
+			// structure tree and not enclosed by an Artifact: veraPDF gates it on
+			// structParentType == null || isArtifact, read through the structure
+			// parent tree ([annotStructScope]), so a bare /StructParent the
+			// parent tree does not map leaves the widget exempt.
+			if parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot); parent == nil || underArtifact {
 				continue
 			}
 			loc := fmt.Sprintf("page %d, widget annot %d", pageIdx+1, annotIdx)

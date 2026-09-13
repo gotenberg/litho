@@ -5,15 +5,24 @@ import (
 	"testing"
 )
 
+// ua2AnnotViolations runs the PDF/UA-2 annotation constraints on a one-page
+// document holding annotObj. Its structure parent tree maps key 0 to a P
+// element, so an annotation that carries /StructParent 0 sits in the structure
+// tree the way veraPDF reads it.
 func ua2AnnotViolations(t *testing.T, annotObj string, extra ...string) []Violation {
 	t.Helper()
+	root := 5 + len(extra)
 	objs := []string{
-		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot " + itoa(root) + " 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
 		annotObj,
 	}
 	objs = append(objs, extra...)
+	objs = append(objs,
+		"<< /Type /StructTreeRoot /K "+itoa(root+1)+" 0 R /ParentTree << /Nums [0 "+itoa(root+1)+" 0 R] >> >>",
+		"<< /Type /StructElem /S /P /P "+itoa(root)+" 0 R /K << /Type /OBJR /Obj 4 0 R >> >>",
+	)
 	doc, cat := objsDocPDF(t, objs...)
 	return checkPDFUA2AnnotationConstraints(context.Background(), doc, cat, "PDF/UA-2")
 }
@@ -124,10 +133,12 @@ func TestUA2FileAttachmentAFRelationship(t *testing.T) {
 func TestUA2AnnotArtifactFlags(t *testing.T) {
 	flagViolations := func(annotObj string) []Violation {
 		doc, cat := objsDocPDF(t,
-			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 5 0 R >>",
 			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
 			annotObj,
+			"<< /Type /StructTreeRoot /K 6 0 R /ParentTree << /Nums [0 6 0 R] >> >>",
+			"<< /Type /StructElem /S /Annot /P 5 0 R /K << /Type /OBJR /Obj 4 0 R >> >>",
 		)
 		return checkAnnotArtifactFlags(context.Background(), doc, cat, "PDF/UA-2")
 	}

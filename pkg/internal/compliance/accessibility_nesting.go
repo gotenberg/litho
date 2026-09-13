@@ -307,14 +307,11 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 			if annot == nil {
 				continue
 			}
-			parent := annotStructParent(ctx, doc, treeRoot, annot)
-			if parent == nil {
+			parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot)
+			if parent == nil || underArtifact {
 				continue
 			}
 			parentType, _ := document.ResolveName(ctx, doc, parent["S"])
-			if parentType == "" || structElemUnderArtifact(ctx, doc, r, parent) {
-				continue
-			}
 			// structParentStandardType is null for a type that resolves to no
 			// standard type, which matches none of the required types.
 			stdType, _, _ := r.elementStandardType(ctx, doc, parent)
@@ -356,6 +353,23 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 		}
 	}
 	return results
+}
+
+// annotStructScope returns the structure element enclosing an annotation and
+// whether that element sits under an Artifact, the two facts ISO 14289-2 gates
+// its annotation rules on. The element is nil when veraPDF's structParentType
+// is null: the annotation has no /StructParent, the structure parent tree has
+// no entry for it, or the entry's element carries no /S. underArtifact is
+// veraPDF's isArtifact for that element, see [structElemUnderArtifact].
+func annotStructScope(ctx context.Context, doc *document.Document, treeRoot ast.PdfDict, r *nsRoleResolver, annot ast.PdfDict) (parent ast.PdfDict, underArtifact bool) {
+	parent = annotStructParent(ctx, doc, treeRoot, annot)
+	if parent == nil {
+		return nil, false
+	}
+	if sType, _ := document.ResolveName(ctx, doc, parent["S"]); sType == "" {
+		return nil, false
+	}
+	return parent, structElemUnderArtifact(ctx, doc, r, parent)
 }
 
 // structElemUnderArtifact reports whether a structure element, or any ancestor

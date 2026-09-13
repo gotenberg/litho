@@ -886,6 +886,12 @@ func checkAnnotArtifactFlags(ctx context.Context, doc *document.Document, catalo
 		return nil
 	}
 
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err != nil {
+		doc.Logger.Debug("compliance.accessibility: cannot resolve structure tree root", "error", err)
+	}
+	r := newNSRoleResolver(ctx, doc, treeRoot)
+
 	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
 
@@ -915,8 +921,10 @@ func checkAnnotArtifactFlags(ctx context.Context, doc *document.Document, catalo
 				continue
 			}
 
-			// Both tests apply only to annotations in the logical structure.
-			if _, hasStructParent := annot["StructParent"]; !hasStructParent {
+			// Both tests apply only to an annotation in the logical structure
+			// that no Artifact encloses: veraPDF gates them on
+			// structParentType == null || isArtifact, see [annotStructScope].
+			if parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot); parent == nil || underArtifact {
 				continue
 			}
 

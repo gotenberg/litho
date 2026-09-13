@@ -39,6 +39,7 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 	}
 
 	// §8.10.2.3 t01: Widget annotations without label need /Contents.
+	nsResolver := newNSRoleResolver(ctx, doc, treeRoot)
 	pages := collectPages(ctx, doc, catalog)
 	for _, page := range pages {
 		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
@@ -62,10 +63,11 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 			if !isFieldWidget(annot) {
 				continue
 			}
-			// structParentType == null / isArtifact: a widget not resolved to an
-			// enclosing structure element through its /StructParent is out of scope.
-			structElem := annotStructParent(ctx, doc, treeRoot, annot)
-			if structElem == nil {
+			// structParentType == null / isArtifact: a widget with no enclosing
+			// element in the structure parent tree, or one under an Artifact, is
+			// out of scope.
+			structElem, underArtifact := annotStructScope(ctx, doc, treeRoot, nsResolver, annot)
+			if structElem == nil || underArtifact {
 				continue
 			}
 			// containsLbl: a Lbl kid of the enclosing element supplies the label.

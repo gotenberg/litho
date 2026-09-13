@@ -147,6 +147,14 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 		return nil
 	}
 
+	// The artifact rules below read the enclosing element through the
+	// structure parent tree, see [annotStructScope].
+	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+	if err != nil {
+		doc.Logger.Debug("compliance.accessibility: cannot resolve structure tree root", "error", err)
+	}
+	r := newNSRoleResolver(ctx, doc, treeRoot)
+
 	var results []Violation
 	for _, page := range collectPages(ctx, doc, catalog) {
 		if ctx.Err() != nil {
@@ -179,15 +187,15 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 					"TrapNet annotation is forbidden in PDF/UA-2")...)
 			case "Popup":
 				// §8.9.2.4.9 t1: Popup annotations shall not be in the structure
-				// tree. /StructParent presence is the in-structure signal.
-				if _, inStruct := annot["StructParent"]; inStruct {
+				// tree. veraPDF tests structParentType == null alone, with no
+				// isArtifact exemption, so a Popup under an Artifact still fails.
+				if parent, _ := annotStructScope(ctx, doc, treeRoot, r, annot); parent != nil {
 					results = append(results, failf(Rule_14289_2_8_9_2_4_9_t01,
 						"Popup annotation present in the structure tree")...)
 				}
 			case "PrinterMark":
-				// §8.9.2.4.14 t1: a printer mark annotation shall be an artifact
-				// (absent from the structure tree).
-				if _, inStruct := annot["StructParent"]; inStruct {
+				// §8.9.2.4.14 t1: a printer mark annotation shall be an artifact.
+				if parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot); parent != nil && !underArtifact {
 					results = append(results, failf(Rule_14289_2_8_9_2_4_14_t01,
 						"PrinterMark annotation is not an artifact (present in the structure tree)")...)
 				}
@@ -235,8 +243,11 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 				}
 			case "Widget":
 				// §8.9.2.4.13 t1: a zero height-and-width widget annotation shall
-				// be an artifact (absent from the structure tree).
-				if _, inStruct := annot["StructParent"]; inStruct && isZeroRect(ctx, doc, annot) {
+				// be an artifact.
+				if !isZeroRect(ctx, doc, annot) {
+					break
+				}
+				if parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot); parent != nil && !underArtifact {
 					results = append(results, failf(Rule_14289_2_8_9_2_4_13_t01,
 						"zero-size Widget annotation is not an artifact (present in the structure tree)")...)
 				}
