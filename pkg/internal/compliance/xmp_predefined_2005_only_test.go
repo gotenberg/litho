@@ -39,7 +39,7 @@ func TestXMPPredefinedProperties_SchemasTheEditionsDisagreeOn(t *testing.T) {
 				tc.prefix, tc.ns, tc.prefix, tc.property, tc.prefix, tc.property))
 
 			var part1 []Violation
-			xmpCheckPredefinedProperties(context.Background(), data, 1, nil, &part1)
+			xmpCheckPredefinedProperties(context.Background(), data, 1, nil, nil, &part1)
 			if !hasRule(part1, Rule_19005_1_6_7_9_t02) {
 				t.Errorf("%s:%s under PDF/A-1 (XMP 2004): got %v, want §6.7.9 t2",
 					tc.prefix, tc.property, part1)
@@ -49,7 +49,7 @@ func TestXMPPredefinedProperties_SchemasTheEditionsDisagreeOn(t *testing.T) {
 			// which is the isDefinedInCurrentPackage half of the same test.
 			var declared []Violation
 			xmpCheckPredefinedProperties(context.Background(), data, 1,
-				map[string]bool{tc.ns: true}, &declared)
+				map[string]bool{tc.ns: true}, nil, &declared)
 			if len(declared) != 0 {
 				t.Errorf("%s:%s declared by an extension schema must pass, got %v",
 					tc.prefix, tc.property, declared)
@@ -58,7 +58,7 @@ func TestXMPPredefinedProperties_SchemasTheEditionsDisagreeOn(t *testing.T) {
 			// Parts 2 and 3 read the 2005 edition, which predefines all three.
 			for _, part := range []int{2, 3} {
 				var got []Violation
-				xmpCheckPredefinedProperties(context.Background(), data, part, nil, &got)
+				xmpCheckPredefinedProperties(context.Background(), data, part, nil, nil, &got)
 				if len(got) != 0 {
 					t.Errorf("%s:%s under PDF/A-%d is predefined in XMP 2005, got %v",
 						tc.prefix, tc.property, part, got)

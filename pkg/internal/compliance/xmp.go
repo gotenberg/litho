@@ -187,9 +187,10 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// packet, which is the isDefinedInMainPackage disjunct veraPDF's rule
 	// carries, so the other packets are audited against the union of their own
 	// declarations and the catalog's.
-	var mainExtensionNS map[string]bool
+	var mainExtensionNS, mainExtensionTypes map[string]bool
 	if len(xmpData) > 0 {
 		_, mainExtensionNS = xmpExtractNamespaces(xmpData)
+		mainExtensionTypes = xmpExtensionDeclaredTypes(xmpData)
 	}
 
 	// The packet tests govern "all content of all XMP packets located in any
@@ -197,7 +198,7 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// 19005-2/3 §6.6.2.1 t2..t5), so they run over every other metadata
 	// stream too. Independent of the catalog packet: a file whose catalog
 	// packet is absent still has to carry well-formed page packets.
-	results = append(results, xmpCheckOtherPackets(ctx, doc, catalog, part, mainExtensionNS)...)
+	results = append(results, xmpCheckOtherPackets(ctx, doc, catalog, part, mainExtensionNS, mainExtensionTypes)...)
 
 	// §6.7.3 compares the document information dictionary against XMP, and a
 	// document carrying no metadata stream at all is one of the ways the two can
@@ -264,7 +265,7 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	// Property-level predefined-schema audit (§6.7.9 / §6.6.2.3.1).
 	if packetParses {
-		xmpCheckPredefinedProperties(ctx, xmpData, part, nil, &results)
+		xmpCheckPredefinedProperties(ctx, xmpData, part, nil, nil, &results)
 	}
 
 	if ctx.Err() != nil {
@@ -422,7 +423,7 @@ const maxXMPContainerDepth = 32
 // a page packet carrying bytes= reports nothing while the same attribute in the
 // catalog packet reports §6.7.5 t1. Part 1 therefore returns early: widening it
 // would raise violations no PDF/A-1 validator raises.
-func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, mainExtensionNS map[string]bool) []Violation {
+func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, mainExtensionNS, mainTypes map[string]bool) []Violation {
 	if part == 1 {
 		return nil
 	}
@@ -458,7 +459,7 @@ func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog a
 		// nothing to audit, so those run only when the serialization check is
 		// silent.
 		if len(serialization) == 0 {
-			xmpCheckPredefinedProperties(ctx, data, part, mainExtensionNS, &packet)
+			xmpCheckPredefinedProperties(ctx, data, part, mainExtensionNS, mainTypes, &packet)
 			xmpCheckPropertyTypes(data, part, ast.PdfStream{}, mainExtensionNS, &packet)
 		}
 
@@ -1329,7 +1330,7 @@ func xmpExtractTopLevelProperties(data []byte) []xmpTopLevelProperty {
 // the property-name half for namespaces with a predefined catalog.
 // Presence only: value-type correspondence stays with
 // [xmpCheckPropertyTypes].
-func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, extraExtensionNS map[string]bool, results *[]Violation) {
+func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, extraExtensionNS, mainTypes map[string]bool, results *[]Violation) {
 	catalog := xmpPredefinedPropertyCatalog(part)
 	if catalog == nil {
 		// ISO 19005-4 drops the extension-schema requirements of parts
@@ -1337,6 +1338,7 @@ func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, ex
 		return
 	}
 	_, extensionNS := xmpExtractNamespaces(data)
+	usableNS := xmpExtensionUsableNamespaces(data, part, mainTypes)
 	maps.Copy(extensionNS, extraExtensionNS)
 	prefixes := xmpExtractPrefixMap(ctx, data)
 
@@ -1350,23 +1352,114 @@ func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, ex
 		// extension schema declares properties by namespace and name with
 		// no restriction against predefined namespaces, so litho keeps its
 		// namespace-level leniency for extension-declared namespaces.
+		// A namespace this packet declares exempts only the property names it
+		// usably declares, which is veraPDF's isDefinedInCurrentPackage. A
+		// namespace contributed solely by the catalog packet (extraExtensionNS)
+		// has no parsed entry here, so it keeps the namespace-level leniency
+		// that answers isDefinedInMainPackage.
+		undeclaredHere := false
 		if extensionNS[p.ns] {
-			continue
-		}
-		known, ok := catalog[p.ns]
-		if !ok {
-			// Non-catalog namespaces are handled by xmpCheckNamespaces.
-			continue
-		}
-		if _, defined := known[p.name]; defined {
-			continue
+			usable, declaredHere := usableNS[p.ns]
+			if !declaredHere || usable {
+				continue
+			}
+			// The extension schema legitimises nothing for this name, but a
+			// predefined schema still may: pdfjs issue2074.pdf declares an
+			// extension schema over the pdf: and xmpMM: namespaces covering a
+			// few names, then uses pdf:Producer and xmpMM:DocumentID, which the
+			// XMP Specification predefines. Reporting here instead of falling
+			// through to the catalog invented 67 violations veraPDF never makes.
+			undeclaredHere = true
 		}
 		prefixed := p.ns + ":" + p.name
 		if prefix := prefixes[p.ns]; prefix != "" {
 			prefixed = prefix + ":" + p.name
 		}
+		known, ok := catalog[p.ns]
+		if !ok {
+			// Non-catalog namespaces are otherwise handled by xmpCheckNamespaces,
+			// which judges namespaces and would let an undeclared name through.
+			if undeclaredHere {
+				*results = append(*results, xmpSchemaPropertyRule(part, prefixed)...)
+			}
+			continue
+		}
+		if _, defined := known[p.name]; defined {
+			continue
+		}
 		*results = append(*results, xmpSchemaPropertyRule(part, prefixed)...)
 	}
+}
+
+// xmpExtensionDeclaredTypes returns the simplified names of every value type a
+// packet's extension schemas declare, for callers that must resolve a type
+// another packet names.
+func xmpExtensionDeclaredTypes(data []byte) map[string]bool {
+	out := make(map[string]bool)
+	for _, s := range xmpParseExtensionSchemas(data) {
+		if s.nsURI == "" {
+			continue
+		}
+		for name := range s.typeFields {
+			out[xmpSimplifyValueType(name)] = true
+		}
+	}
+	return out
+}
+
+// xmpExtensionUsableNamespaces reports, per extension-schema namespace URI,
+// whether that namespace's declarations are usable. veraPDF's
+// isDefinedInCurrentPackage is namespace-level, not per property name: the
+// veraPDF test suite's 6-6-2-3-2-t01-pass-d.pdf declares only CustomNumber yet
+// uses cs:CProp, and veraPDF passes it. What makes the namespace stop
+// legitimising anything is a DEFECTIVE declaration, so an entry counts as
+// usable only when every property item it opens is named and carries a value
+// type something defines.
+//
+// 6-6-2-3-3-t02-fail-c.pdf opens one property item with no pdfaProperty:name,
+// and 6-6-2-3-3-t03-fail-e.pdf one whose value type nothing defines; veraPDF
+// reports the used property as neither predefined nor declared in both, and
+// restoring the missing field clears it. An entry that opens no property item
+// at all is legitimate (it may declare only value types) and stays usable.
+//
+// A schema entry with no namespaceURI contributes nothing, for the reason
+// [xmpExtUndefinedValueTypes]' caller records: it reaches no namespace at all.
+func xmpExtensionUsableNamespaces(data []byte, part int, mainTypes map[string]bool) map[string]bool {
+	schemas := xmpParseExtensionSchemas(data)
+
+	declaredTypes := make(map[string]bool, len(mainTypes))
+	// A value type the catalog packet declares resolves for every other packet,
+	// which is veraPDF's isDefinedInMainPackage: the veraPDF test suite's
+	// 6-6-2-3-2-t01-pass-d.pdf declares ArticleNumber in the catalog packet and
+	// uses it from a page packet that declares only CValue.
+	maps.Copy(declaredTypes, mainTypes)
+	for _, s := range schemas {
+		if s.nsURI == "" {
+			continue
+		}
+		for name := range s.typeFields {
+			declaredTypes[xmpSimplifyValueType(name)] = true
+		}
+	}
+
+	out := make(map[string]bool, len(schemas))
+	for _, s := range schemas {
+		if s.nsURI == "" {
+			continue
+		}
+		resolvable := 0
+		for _, vt := range s.propTypes {
+			if xmpValueTypeDefined(part, xmpSimplifyValueType(vt), declaredTypes) {
+				resolvable++
+			}
+		}
+		usable := resolvable == s.propItems
+		if prev, seen := out[s.nsURI]; seen {
+			usable = usable && prev
+		}
+		out[s.nsURI] = usable
+	}
+	return out
 }
 
 // xmpSchemaPropertyRule returns ISO 19005-1 §6.7.9 t2 and ISO 19005-2/3
@@ -2773,6 +2866,10 @@ type xmpExtSchemaDef struct {
 	nsURI      string
 	propTypes  map[string]string // property name → declared valueType
 	typeFields map[string]bool   // custom type name → hasFields
+	// propItems counts the property declarations the entry opened, complete or
+	// not, so a caller can tell "declares no properties" (legitimate: an entry
+	// may declare only value types) from "declares one badly".
+	propItems int
 }
 
 // xmpExtSchemaItemDepth is the rdf:li nesting depth of a single property or
@@ -2808,8 +2905,16 @@ func xmpParseExtensionSchemas(data []byte) []xmpExtSchemaDef {
 	// false ISO 19005-2/3 §6.6.2.3.1 t2 on every ZUGFeRD/Factur-X file: the
 	// four-property zf schema resolved only its final entry.
 	flushProperty := func() {
-		if current != nil && propName != "" && propVT != "" {
-			current.propTypes[propName] = propVT
+		// Count only an item that carried something. The end of
+		// pdfaSchema:property flushes a second time to catch a declaration
+		// written without the Seq/rdf:li wrapper, and that trailing flush is
+		// empty for a well-formed entry, so counting it would make every such
+		// entry look as though it had opened a property it never completed.
+		if current != nil && (propName != "" || propVT != "") {
+			current.propItems++
+			if propName != "" && propVT != "" {
+				current.propTypes[propName] = propVT
+			}
 		}
 		propName = ""
 		propVT = ""
