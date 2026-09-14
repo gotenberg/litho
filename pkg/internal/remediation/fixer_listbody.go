@@ -44,7 +44,7 @@ func fixListBody(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 // or an object reference is left in place. The fixer bails (returns 0) when the
 // LI already owns an LBody, or when any orphan is inline, since neither can be
 // re-parented in place safely.
-func wrapOrphans(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, li structNode) int {
+func wrapOrphans(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, li structNode, roleMap map[ast.PdfName]ast.PdfName) int {
 	arr := resolveStructKids(ctx, doc, li.dict["K"])
 	if len(arr) == 0 {
 		return 0
@@ -58,7 +58,7 @@ func wrapOrphans(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 			// Raw marked content or an object reference: not flagged, left alone.
 			continue
 		}
-		switch structType(ctx, doc, d) {
+		switch resolvedStructType(ctx, doc, d, roleMap) {
 		case "Lbl":
 			// The list label stays in place.
 		case "LBody":

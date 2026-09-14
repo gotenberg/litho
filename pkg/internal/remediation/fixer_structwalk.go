@@ -102,8 +102,56 @@ func walkStructElems(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 }
 
 // childWrapper repairs one structure element in place, returning the number of
-// children it moved (0 when no repair applied).
-type childWrapper func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, node structNode) int
+// children it moved (0 when no repair applied). roleMap is the StructTreeRoot
+// /RoleMap, loaded once by [wrapStructChildren], for wrappers that must judge a
+// child by the role it RESOLVES to rather than the name its /S spells.
+type childWrapper func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, node structNode, roleMap map[ast.PdfName]ast.PdfName) int
+
+// structTreeRoleMap returns the document's /RoleMap, or nil when it has none.
+// Reads are allocator-aware so a wrapper sees the map as earlier fixers left it,
+// which matters because the rolemap fixer runs first and may have dropped
+// entries.
+func structTreeRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) map[ast.PdfName]ast.PdfName {
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
+	if !ok {
+		return nil
+	}
+	catalog := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	if catalog == nil {
+		return nil
+	}
+	stRef, ok := catalog["StructTreeRoot"].(ast.PdfIndirectRef)
+	if !ok {
+		return nil
+	}
+	stDict := resolveFromAllocOrDoc(ctx, alloc, doc, stRef)
+	if stDict == nil {
+		return nil
+	}
+	return compliance.LoadRoleMap(ctx, doc, stDict)
+}
+
+// resolvedStructType returns the role an element stands for, following the
+// /RoleMap the way the validator does (ISO 32000-1, 14.8.4). A fixer that reads
+// the raw /S instead disagrees with the rule it is repairing: govdocs
+// thread_100_100631.pdf maps /LI_Title to /LBody, so the list fixer saw a child
+// it did not recognise, treated an existing list body as an orphan, and wrapped
+// it in a SECOND LBody, leaving an LBody whose parent was an LBody and drawing
+// ISO 14289-1 7.2 test 18, which the input never had.
+//
+// The walk is bounded by the map size, so a /RoleMap cycle terminates; the
+// rolemap fixer breaks such cycles, but this must not depend on having run.
+func resolvedStructType(ctx context.Context, doc *document.Document, elem ast.PdfDict, roleMap map[ast.PdfName]ast.PdfName) ast.PdfName {
+	role := structType(ctx, doc, elem)
+	for range len(roleMap) {
+		next, ok := roleMap[role]
+		if !ok || next == role {
+			break
+		}
+		role = next
+	}
+	return role
+}
 
 // wrapStructChildren runs wrap over every structure element of the given role and
 // reports one message per element repaired. It is the shared driver behind the
@@ -113,9 +161,10 @@ func wrapStructChildren(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	if err != nil {
 		return nil, err
 	}
+	roleMap := structTreeRoleMap(ctx, alloc, doc)
 	var fixes []string
 	for _, n := range nodes {
-		if c := wrap(ctx, alloc, doc, n); c > 0 {
+		if c := wrap(ctx, alloc, doc, n, roleMap); c > 0 {
 			fixes = append(fixes, fmt.Sprintf(msgf, c))
 		}
 	}

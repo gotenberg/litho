@@ -54,7 +54,7 @@ func fixTableCells(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // cells are moved; a container that mixes in an inline cell is left untouched for
 // safety, mirroring the table-section and list-body fixers. Existing TR children
 // and any non-cell children are left in place.
-func wrapCellsInRow(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, container structNode) int {
+func wrapCellsInRow(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, container structNode, _ map[ast.PdfName]ast.PdfName) int {
 	arr := resolveStructKids(ctx, doc, container.dict["K"])
 	if len(arr) == 0 {
 		return 0

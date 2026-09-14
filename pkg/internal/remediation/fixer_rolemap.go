@@ -82,6 +82,11 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 
 	var cyclesBroken, standardsDropped int
 
+	// Standard-type sources removed in pass 2, against the target each declared,
+	// so the elements that used them can be retagged rather than left to resolve
+	// to a different type than the file meant.
+	dropped := make(map[ast.PdfName]ast.PdfName)
+
 	// Pass 1: break every circular mapping. Follow each source's chain; if it
 	// returns to that source, the entry closes a cycle. In a non-namespaced
 	// document remap that source to the nearest standard type (P) rather than
@@ -149,11 +154,35 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 				continue
 			}
 			if compliance.IsStandardStructType(src, profile) {
+				// Retag only towards a target that is itself standard. A
+				// standard source mapped to a CUSTOM name (veraPDF's
+				// PDF_UA-1__7.1-t07-fail-a.pdf maps /Document to /Book) is
+				// already the standard type its /S names; rewriting it to the
+				// custom name would leave an element of an unmapped type and
+				// trade this violation for ISO 14289-1 7.1 test 5. Dropping
+				// the mapping alone is the whole repair there.
+				if compliance.IsStandardStructType(targets[src], profile) {
+					dropped[src] = targets[src]
+				}
 				delete(keep, src)
 				standardsDropped++
 			}
 		}
 	}
+
+	// Dropping the entry un-maps every element that used it, so the element now
+	// resolves to the standard type its /S literally names. That silently
+	// changes what the document says: veraPDF resolves a role through the
+	// RoleMap even for a standard name, so before the drop those elements read
+	// as the target and after it they read as the source. Retag them to the
+	// target the producer declared, which keeps the meaning the file already
+	// had and leaves only the forbidden mapping removed.
+	//
+	// govdocs thread_300_300708.pdf maps /H4 -> /P. Dropping it alone turned
+	// paragraphs into the document's FIRST heading, an H4, which fails the
+	// heading sequence of ISO 14289-1, 7.4.2 test 1: a repair introducing a
+	// violation the input did not have.
+	retagged := retagDroppedRoles(ctx, alloc, doc, dropped)
 
 	// PDF/A-1 targets: every Annot structure element needs a role mapping
 	// to a PDF 1.4 standard type. Link is the nearest functional
@@ -186,10 +215,58 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	if standardsDropped > 0 {
 		fixes = append(fixes, fmt.Sprintf("removed %d standard-type role mapping(s)", standardsDropped))
 	}
+	if retagged > 0 {
+		fixes = append(fixes, fmt.Sprintf("retagged %d element(s) to the role their dropped mapping declared", retagged))
+	}
 	if annotMapped > 0 {
 		fixes = append(fixes, "mapped Annot structure elements to Link for PDF/A-1")
 	}
 	return fixes, nil
+}
+
+// retagDroppedRoles rewrites /S on every element that used a role mapping pass 2
+// removed, setting it to the target that mapping declared. It returns the number
+// of elements rewritten.
+//
+// Only a mapping whose target resolves to a non-empty name is followed: an
+// unreadable target names no role to retag to, and rewriting /S to an empty name
+// would destroy the element. A source equal to its target needs no rewrite, and
+// would be a self-mapping pass 1 has already broken.
+func retagDroppedRoles(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, dropped map[ast.PdfName]ast.PdfName) int {
+	srcs := make([]ast.PdfName, 0, len(dropped))
+	for src, dst := range dropped {
+		if dst == "" || dst == src {
+			continue
+		}
+		srcs = append(srcs, src)
+	}
+	// Sorted so the walk order, and therefore the output, is deterministic.
+	slices.Sort(srcs)
+
+	retagged := 0
+	for _, src := range srcs {
+		if ctx.Err() != nil {
+			return retagged
+		}
+		elems, err := collectStructElems(ctx, alloc, doc, src)
+		if err != nil {
+			doc.Logger.Debug("remediation.rolemap: cannot collect elements for dropped role",
+				"role", string(src), "error", err)
+			continue
+		}
+		for _, elem := range elems {
+			if elem.ref.ObjectNum <= 0 {
+				continue // inline element: nothing to write back at
+			}
+			newElem := make(ast.PdfDict, len(elem.dict))
+			maps.Copy(newElem, elem.dict)
+			newElem["S"] = dropped[src]
+			if alloc.AllocAt(elem.ref.ObjectNum, newElem) {
+				retagged++
+			}
+		}
+	}
+	return retagged
 }
 
 // structTreeHasAnnotElement reports whether any structure element in the

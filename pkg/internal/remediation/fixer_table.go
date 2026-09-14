@@ -37,7 +37,7 @@ func fixTableSections(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 // a Table that mixes in an inline TR is left untouched for safety. Body rows
 // need not be contiguous in /K: every direct-child TR moves into the TBody
 // regardless of position, and the TBody takes the slot of the first body row.
-func wrapBodyRows(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, t structNode) int {
+func wrapBodyRows(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, t structNode, _ map[ast.PdfName]ast.PdfName) int {
 	arr := resolveStructKids(ctx, doc, t.dict["K"])
 	if len(arr) == 0 {
 		return 0
