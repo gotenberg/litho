@@ -124,15 +124,11 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 			return nil
 		}
 
-		// Parts 2/3 / PDF/UA: strict bidirectional check against the
-		// entire CFF charset. CharSet must equal the font program glyph
-		// set (extras forbidden, missing glyphs forbidden).
+		// Parts 2/3 and PDF/UA compare /CharSet against the whole font
+		// program, which no page's codes enter into, so
+		// [checkCharSetDeclaredCoverage] states it with the dictionary rules.
 		if PDFAPart(profile) != 1 {
-			glyphNames := typography.ExtractGlyphNames(ctx, fontData)
-			if glyphNames == nil {
-				return nil
-			}
-			return checkCharSetCompleteness(string(charSetStr), glyphNames, fontName, pageNum, completenessRule, true)
+			return nil
 		}
 
 		// Part 1: §6.3.5 t2 is one-directional and scoped to rendered glyphs:
@@ -152,6 +148,60 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 	}
 
 	return nil
+}
+
+// checkCharSetDeclaredCoverage states the parts 2/3 and PDF/UA form of the
+// /CharSet rule: a strict bidirectional comparison against the entire font
+// program glyph set, extras and omissions both forbidden.
+//
+// It is a property of the font object, not of one page's codes, so it belongs
+// with the dictionary rules for the same reason [checkGlyphWidths] does.
+// Judging it per page multiplied one finding by the pages that select the font:
+// govdocs thread_300_300511.pdf reports glyph "O" of NSNPEK+CMR12 missing from
+// /CharSet on 31 pages, where veraPDF states it once against the font.
+//
+// Part 1 is a different rule, scoped to the glyphs a page actually renders, and
+// stays with the usage rules in [checkGlyphCoverage].
+func checkCharSetDeclaredCoverage(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
+	if PDFAPart(profile) == 1 {
+		return nil
+	}
+	if !isSubsetFont(fontBaseFont(ctx, doc, fontDict)) {
+		return nil
+	}
+	if subtype := fontSubtype(ctx, doc, fontDict); subtype != "Type1" && subtype != "MMType1" {
+		return nil
+	}
+	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fd == nil {
+		return nil
+	}
+	rule := charSetRule(profile)
+	if rule.Specification == "" && !IsPDFUA(profile) {
+		return nil
+	}
+	// An absent /CharSet is conformant here ("CharSet == null ||
+	// charSetListsAllGlyphs"); a present but empty one is not, so key presence
+	// decides rather than the decoded value.
+	charSetObj, hasCharSet := fd["CharSet"]
+	if !hasCharSet {
+		return nil
+	}
+	charSetStr, _ := document.ResolveString(ctx, doc, charSetObj)
+
+	completenessRule := charSetCompletenessRule(profile)
+	if completenessRule.Specification == "" {
+		return nil
+	}
+	fontData := extractFontProgramData(ctx, doc, fd)
+	if fontData == nil {
+		return nil
+	}
+	glyphNames := typography.ExtractGlyphNames(ctx, fontData)
+	if glyphNames == nil {
+		return nil
+	}
+	return checkCharSetCompleteness(string(charSetStr), glyphNames, fontName, pageNum, completenessRule, true)
 }
 
 // checkCharSetCompleteness verifies that /CharSet lists all glyph names

@@ -784,6 +784,10 @@ func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict as
 		results = append(results, checkTrueTypeEncoding(ctx, doc, fontDict, fontName, pageNum, profile)...)
 	}
 
+	// /CharSet completeness compares the declared glyph list against the whole
+	// font program, which is likewise a property of the object.
+	results = append(results, checkCharSetDeclaredCoverage(ctx, doc, fontDict, fontName, pageNum, profile)...)
+
 	// Glyph widths compare the /Widths array against the font program, which is
 	// a property of the font object rather than of one page's codes, so this
 	// belongs with the dictionary rules. Judging it per page reported width
