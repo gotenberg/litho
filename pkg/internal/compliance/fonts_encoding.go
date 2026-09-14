@@ -1472,12 +1472,25 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 		return nil
 	}
 
-	// Exemption: known CJK character collections.
+	// Exemption: known CJK character collections. A collection alone does not
+	// carry it under part 1: the Unicode value comes from the CMap that reaches
+	// the collection, and ISO 19005-1 is written against PDF 1.4, which
+	// predefines no UTF-8, UTF-16 or UTF-32 CMap (see
+	// [cmapNameIsUnicodeTransformFormat]). With one of those names the font
+	// reaches its collection through a CMap the profile does not define, so no
+	// Unicode value follows and the exemption lapses.
+	//
+	// Measured against veraPDF at PDF/A-1a over an Adobe-GB1 CIDFont with no
+	// /ToUnicode: GBK-EUC-H and UniGB-UCS2-H report nothing, UniGB-UTF16-H
+	// reports the glyph. pdfjs issue18466.pdf is the corpus case, 16 glyphs of a
+	// FZSSK--GBK1-0 encoded UniGB-UTF16-H.
 	cidSysInfo, err := document.ResolveDict(ctx, doc, cidFontDict["CIDSystemInfo"])
 	if err == nil && cidSysInfo != nil {
 		ordering, _ := document.ResolveString(ctx, doc, cidSysInfo["Ordering"])
 		registry, _ := document.ResolveString(ctx, doc, cidSysInfo["Registry"])
-		if string(registry) == "Adobe" {
+		encName, _ := document.ResolveName(ctx, doc, type0Dict["Encoding"])
+		undefinedHere := PDFAPart(profile) == 1 && cmapNameIsUnicodeTransformFormat(string(encName))
+		if string(registry) == "Adobe" && !undefinedHere {
 			switch string(ordering) {
 			case "GB1", "CNS1", "Japan1", "Korea1":
 				return nil
