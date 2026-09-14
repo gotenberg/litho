@@ -1250,6 +1250,21 @@ type xmpTopLevelProperty struct {
 // §6.6.2.3.1 apply to properties, not to structure fields, so fields of
 // structured values, including ones serialized as nested rdf:Description
 // elements, must stay invisible here.
+// xmpNamespaceHoldsMachinery reports whether a namespace names XMP machinery
+// rather than properties of the document. A packet that declares an extension
+// schema writes pdfaExtension:schemas as a top-level property and its vocabulary
+// below it, and ISO 19005-2 §6.6.2.3.2 requires exactly that, so the
+// predefined-property rule passes over the whole vocabulary. veraPDF reports
+// none of it either.
+func xmpNamespaceHoldsMachinery(ns string) bool {
+	switch ns {
+	case xmpPdfaSchemaPrefix, xmpPdfaPropertyPrefix, xmpPdfaTypePrefix, xmpPdfaFieldPrefix,
+		"http://www.aiim.org/pdfa/ns/extension/":
+		return true
+	}
+	return false
+}
+
 // xmpIsRDFTypeProperty reports whether an element name is rdf:type.
 //
 // The RDF namespace carries the packet's structure, so the property audits pass
@@ -1405,13 +1420,17 @@ func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, ex
 		}
 		known, ok := catalog[p.ns]
 		if !ok {
-			// Non-catalog namespaces are otherwise handled by xmpCheckNamespaces,
-			// which judges namespaces and would let an undeclared name through.
-			// It passes over the RDF namespace as structural, so nothing would
-			// judge rdf:type: see [xmpIsRDFTypeProperty]. No predefined schema
-			// defines it and no extension schema declared it here, which is
-			// exactly what this rule forbids.
-			if undeclaredHere || p.ns == xmpRDFNamespace {
+			// A namespace litho does not recognise at all is reported by
+			// xmpCheckNamespaces, which names the namespace once where veraPDF
+			// names each property: same clause, coarser wording. A namespace it
+			// recognises but the part does not predefine has no such backstop,
+			// so nothing judged the property. That silence covered rdf:type
+			// (see [xmpIsRDFTypeProperty]) and the IPTC Core schema: govdocs
+			// thread_000_000163.pdf writes Iptc4xmpCore:CreatorContactInfo,
+			// CountryCode and Location, none of them predefined by the XMP
+			// Specification this part admits, and veraPDF reports all three.
+			if undeclaredHere ||
+				(knownXMPNamespaces[p.ns] && !xmpNamespaceHoldsMachinery(p.ns)) {
 				*results = append(*results, xmpSchemaPropertyRule(part, prefixed)...)
 			}
 			continue
