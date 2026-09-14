@@ -53,7 +53,8 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 
 		res := resolveInheritedResources(ctx, doc, page)
 		if res != nil {
-			results = append(results, checkResourceTransparency1(ctx, doc, res, i+1, visited, 0)...)
+			results = append(results, checkResourceTransparency1(ctx, doc, res, i+1, visited, 0,
+				pageDrawnResources(ctx, doc, page))...)
 		}
 
 		// Annotation appearance streams carry their own /Resources, so an
@@ -72,12 +73,12 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 // nested XObjects and patterns rather than stopping at the page dict. visited
 // breaks resource cycles; depth is capped by [maxFormXObjectDepth] (anti-DoS
 // guard shared with the device-colour scan).
-func checkResourceTransparency1(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, visited map[int]bool, depth int) []Violation {
+func checkResourceTransparency1(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, visited map[int]bool, depth int, drawn *drawnResources) []Violation {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return nil
 	}
 
-	results := checkExtGStateTransparency1(ctx, doc, res, pageNum)
+	results := checkExtGStateTransparency1(ctx, doc, res, pageNum, drawn)
 	results = append(results, checkXObjectTransparency1(ctx, doc, res, pageNum)...)
 
 	results = append(results, walkNestedResources1(ctx, doc, res["XObject"], pageNum, visited, depth)...)
@@ -113,7 +114,9 @@ func checkResourceTransparency1(ctx context.Context, doc *document.Document, res
 			if err != nil || fontRes == nil {
 				continue
 			}
-			results = append(results, checkResourceTransparency1(ctx, doc, fontRes, pageNum, visited, depth+1)...)
+			// A Type 3 glyph draws through its own CharProc, whose operators
+			// are not in hand here, so its resources stay unscoped.
+			results = append(results, checkResourceTransparency1(ctx, doc, fontRes, pageNum, visited, depth+1, nil)...)
 		}
 	}
 	return results
@@ -151,7 +154,8 @@ func walkNestedResources1(ctx context.Context, doc *document.Document, dictObj a
 		if err != nil || nested == nil {
 			continue
 		}
-		results = append(results, checkResourceTransparency1(ctx, doc, nested, pageNum, visited, depth+1)...)
+		results = append(results, checkResourceTransparency1(ctx, doc, nested, pageNum, visited, depth+1,
+			formDrawnResources(ctx, doc, stream))...)
 	}
 	return results
 }
@@ -223,7 +227,8 @@ func appearanceStreamTransparency1(ctx context.Context, doc *document.Document, 
 	}
 	results := formXObjectTransparency1(ctx, doc, stream.Dict, pageNum, "annotation appearance")
 	if nested, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && nested != nil {
-		results = append(results, checkResourceTransparency1(ctx, doc, nested, pageNum, visited, 0)...)
+		results = append(results, checkResourceTransparency1(ctx, doc, nested, pageNum, visited, 0,
+			formDrawnResources(ctx, doc, stream))...)
 	}
 	return results
 }
@@ -270,7 +275,7 @@ func checkPageTransparencyGroup1(ctx context.Context, doc *document.Document, pa
 
 // checkExtGStateTransparency1 checks all ExtGState entries for transparency
 // (SMask, BM, CA, ca) which are forbidden in PDF/A-1.
-func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, resources ast.PdfDict, pageNum int) []Violation {
+func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, resources ast.PdfDict, pageNum int, drawn *drawnResources) []Violation {
 	gsDict, err := document.ResolveDict(ctx, doc, resources["ExtGState"])
 	if err != nil || gsDict == nil {
 		return nil
@@ -281,6 +286,15 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 		gsObj := gsDict[gsName]
 		if ctx.Err() != nil {
 			return results
+		}
+		// A resource dictionary lists what the content MAY set, not what it
+		// sets; see [drawnResources]. veraPDF builds its PDExtGState from the
+		// gs operator that selects it, so a state nothing selects is reported
+		// nowhere: pdfjs issue20914.pdf declares /GDIModeMask with a /Darken
+		// blend mode and never sets it, and veraPDF reports only the
+		// /Transparent state a form actually applies.
+		if !drawn.setsExtGState(string(gsName)) {
+			continue
 		}
 
 		gs, err := document.ResolveDict(ctx, doc, gsObj)
