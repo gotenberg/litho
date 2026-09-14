@@ -149,6 +149,36 @@ func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.P
 
 		*results = append(*results, checkXObject(ctx, doc, stream, xobjDict, subtype, name, pageNum, part, profile)...)
 
+		// An image's soft mask and stencil mask are image dictionaries in their
+		// own right, and the image rules bind to them too: veraPDF builds a
+		// PDSMaskImage for /SMask and reports its /Interpolate, which govdocs
+		// thread_400_400019.pdf shows 15 times against 57 plain XObjects (72
+		// findings from veraPDF, 57 from litho). Fixtures confirm it states the
+		// rule for /Mask as well. /Mask may instead be a colour-key ARRAY
+		// (ISO 32000-1, 8.9.6.4), which is no image and resolves to no stream.
+		if subtype == "Image" {
+			for _, maskKey := range []ast.PdfName{"SMask", "Mask"} {
+				maskObj, hasMask := xobjDict[maskKey]
+				if !hasMask {
+					continue
+				}
+				if ref, ok := maskObj.(ast.PdfIndirectRef); ok {
+					key := fmt.Sprintf("xo:%d", ref.ObjectNum)
+					if visited[key] {
+						continue
+					}
+					visited[key] = true
+				}
+				maskStream, err := document.ResolveStream(ctx, doc, maskObj)
+				if err != nil {
+					continue
+				}
+				maskSubtype, _ := document.ResolveName(ctx, doc, maskStream.Dict["Subtype"])
+				*results = append(*results, checkXObject(ctx, doc, maskStream, maskStream.Dict, maskSubtype,
+					name+"/"+maskKey, pageNum, part, profile)...)
+			}
+		}
+
 		// Recurse into Form XObject sub-resources.
 		if subtype == "Form" {
 			subRes, _ := document.ResolveDict(ctx, doc, xobjDict["Resources"])
