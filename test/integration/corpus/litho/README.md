@@ -121,6 +121,7 @@ one deliberately rather than diffing it against a fresh build.
 | `linearized_1b.pdf`    | PDF/A-1b     | A linearized file whose two trailers disagree on `/ID`           |
 | `jpx_2b.pdf`           | PDF/A-2b     | The JPEG 2000 container boxes a conforming image may carry       |
 | `threed_4e.pdf`        | PDF/A-4e     | The 3D stream subtypes the engineering conformance permits       |
+| `grouping_ua2.pdf`     | PDF/UA-2     | Both halves of a Table 5 row, chosen by how the parent is used   |
 
 ### Must-not-fire controls
 
@@ -250,6 +251,8 @@ violation but is exempt, so a firing is a false positive.
 | `gstateform_1b`                           | An `ExtGState` carrying no halftone origin                             | ISO 19005-4, 6.2.5 t3        |
 | `gstateform_1b`                           | A form XObject carrying neither `/OPI` nor PostScript                  | ISO 19005-1, 6.2.5 t1        |
 | `gstateform_1b`                           | A PostScript form XObject judged at part 4, which has no such rule     | ISO 19005-4, 6.2.8.1 t1      |
+| `grouping_ua2`                            | A grouping `Link` holding exactly one `Caption`                        | ISO/TS 32005, Table 5 t1     |
+| `grouping_ua2`                            | A grouping `Link` holding a heading                                    | ISO/TS 32005, Table 5 t1     |
 | `gstateform_1b`                           | An ICC profile whose `/N` agrees with its header                       | ISO 19005-1, 6.2.3.2 t2      |
 | `gstateform_1b`                           | An ICC `/N` mismatch judged at parts 2 to 4, which have no such rule   | ISO 19005-2, 6.2.4.2 t1      |
 | `xmpsyntax_1b`                            | A second page carrying no defect of its own                            | ISO 19005-1, 6.1.2 t1        |
@@ -324,6 +327,7 @@ which are covered under [Known divergences](#known-divergences).
 | `formmedia_ua1.pdf`    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 7   | 7    | 8    | 7    | 5    |
 | `formstruct_ua2.pdf`   | 4    | 4    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 7    | 7    |
 | `glyphs_2b.pdf`        | 7    | 4    | 8    | 5    | 6    | 8    | 5    | 6    | 6   | 6    | 7    | 10   | 10   |
+| `grouping_ua2.pdf`     | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 5    | 8    |
 | `gstate_2b.pdf`        | 8    | 6    | 12   | 10   | 10   | 12   | 10   | 10   | 10  | 10   | 11   | 7    | 7    |
 | `gstateform_1b.pdf`    | 9    | 6    | 8    | 5    | 6    | 8    | 5    | 6    | 9   | 9    | 10   | 8    | 7    |
 | `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 5    |
@@ -2629,16 +2633,52 @@ At every profile other than PDF/A-4e a 3D annotation is a forbidden subtype,
 which is a different clause on a different object, so this is the one fixture
 whose home profile is a conformance level rather than a part.
 
+### `grouping_ua2.pdf`
+
+Most ISO/TS 32005 Table 5 rows are stated twice, as two rules sharing a clause
+and differing only by test number: one governs the parent "when used as a
+grouping element", the other "when used as a non-grouping element". Which half
+applies is not a property of the type name. ISO 32000-2:2020, 14.8.4.2 lets
+`Link` sit at block or inline level, so the same type groups in one document and
+carries content in another.
+
+A coverage scan over the 5170 corpus files found the two grouping-dependent rule
+kinds unreached in every one of them: no file held a `Link`, `Annot`, `Reference`
+or `FENote` used as a container. litho decided the question from a static set of
+type names, which answers both halves wrongly, and nothing in the corpus said so.
+
+Five `Link` elements sit side by side, none carrying a content item of its own,
+so the only thing that varies is what each contains:
+
+| `Link` kids        | Grouping | Answers                   |
+| ------------------ | -------- | ------------------------- |
+| `Caption` x2       | yes      | `Table 5. Link-Caption/1` |
+| `Span` + `H1`      | no       | `Table 5. Link-Hn/1`      |
+| `Span` + `Caption` | no       | `Table 5. Link-Caption/2` |
+| `Caption`          | yes      | nothing                   |
+| `H1`               | yes      | nothing                   |
+
+The `Span` is what makes two of them non-grouping, and planting them beside the
+first is the whole point: the same `Caption` kid is legal under a grouping `Link`
+and forbidden under a non-grouping one, so a checker keying on the type name
+cannot pass both rows at once. The last two are controls, and each is a
+construct the wrong half would condemn: a single `Caption` satisfies "at most
+one", and the `Hn` row governs non-grouping use only.
+
+Every firing was measured on veraPDF 1.30.2 and litho one construct per file
+before the five were planted together, and the two tools return the same rule
+set in all thirteen cells.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets, and
 `manifest.json` expands every fixture across the eight profiles it lists. The
 hand-measured matrix is wider: all thirteen conformance levels veraPDF
-validates, so 68 x 13 = 884 cells. litho and veraPDF return the same verdict in
+validates, so 69 x 13 = 897 cells. litho and veraPDF return the same verdict in
 all of them: in each cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 882 of the 884 cells. The two
+fixtures exist to protect, and it holds in 895 of the 897 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
