@@ -50,11 +50,13 @@ func fixTableCells(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 }
 
 // wrapCellsInRow wraps a container's direct-child TD/TH elements in a new TR. It
-// returns the number of cells wrapped, or 0 when no repair applies. Only indirect
+// returns the number of cells wrapped, or 0 when no repair applies. Cells are
+// judged by the role they RESOLVE to, the way the validator judges them, so a
+// cell named through the /RoleMap is repaired like a literal one. Only indirect
 // cells are moved; a container that mixes in an inline cell is left untouched for
 // safety, mirroring the table-section and list-body fixers. Existing TR children
 // and any non-cell children are left in place.
-func wrapCellsInRow(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, container structNode, _ map[ast.PdfName]ast.PdfName) int {
+func wrapCellsInRow(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, container structNode, roleMap map[ast.PdfName]ast.PdfName) int {
 	arr := resolveStructKids(ctx, doc, container.dict["K"])
 	if len(arr) == 0 {
 		return 0
@@ -67,7 +69,7 @@ func wrapCellsInRow(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		if err != nil || d == nil {
 			continue
 		}
-		switch structType(ctx, doc, d) {
+		switch resolvedStructType(ctx, doc, d, roleMap) {
 		case "TD", "TH":
 			if ref, ok := item.(ast.PdfIndirectRef); ok {
 				cellRefs = append(cellRefs, ref)

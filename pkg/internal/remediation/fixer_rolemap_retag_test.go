@@ -164,3 +164,80 @@ func TestFixRoleMap_RetagsOnlyTowardsStandardTargets(t *testing.T) {
 		}
 	})
 }
+
+// tableSectionPDF builds a Table carrying a header section named by headRole and
+// two body rows directly under the Table, with no TBody: ISO 14289-1 §7.2 t14.
+func tableSectionPDF(headRole, roleMap string) []byte {
+	st := "<< /Type /StructTreeRoot /K [5 0 R]"
+	if roleMap != "" {
+		st += " /RoleMap " + roleMap
+	}
+	st += " >>"
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		st,
+		"<< /Type /StructElem /S /Table /P 4 0 R /K [6 0 R 7 0 R 8 0 R] >>",
+		"<< /Type /StructElem /S /" + headRole + " /P 5 0 R >>",
+		"<< /Type /StructElem /S /TR /P 5 0 R >>",
+		"<< /Type /StructElem /S /TR /P 5 0 R >>",
+	}
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	offsets := make([]int, len(objs)+1)
+	for i, body := range objs {
+		offsets[i+1] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
+	}
+	xref := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&b, "%010d 00000 n \r\n", offsets[i])
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
+	return b.Bytes()
+}
+
+// TestFixTableSections_ResolvesRoleMappedSections pins that the table fixer sees
+// a section named through the /RoleMap.
+//
+// The validator resolves roles, so both documents below draw ISO 14289-1 §7.2
+// t14; reading the raw /S made the fixer repair only the literal one and decline
+// the mapped one, leaving a violation it was supposed to answer.
+func TestFixTableSections_ResolvesRoleMappedSections(t *testing.T) {
+	t.Parallel()
+
+	wrapped := func(t *testing.T, data []byte) int {
+		t.Helper()
+		doc, alloc := newTestDoc(t, data)
+		fixes, err := fixTableSections(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-1")
+		if err != nil {
+			t.Fatalf("fixTableSections: %v", err)
+		}
+		return len(fixes)
+	}
+
+	t.Run("a literal THead is repaired", func(t *testing.T) {
+		t.Parallel()
+		if n := wrapped(t, tableSectionPDF("THead", "")); n != 1 {
+			t.Errorf("a literal THead must draw the TBody repair, got %d fixes", n)
+		}
+	})
+
+	t.Run("a role-mapped THead is repaired too", func(t *testing.T) {
+		t.Parallel()
+		if n := wrapped(t, tableSectionPDF("TableHead", "<< /TableHead /THead >>")); n != 1 {
+			t.Errorf("a role-mapped THead must draw the same repair, got %d fixes", n)
+		}
+	})
+
+	t.Run("no section means no repair", func(t *testing.T) {
+		t.Parallel()
+		// Without a THead or TFoot the rows are not misplaced, so the fixer
+		// must stay out: this is the control that keeps the check honest.
+		if n := wrapped(t, tableSectionPDF("TR", "")); n != 0 {
+			t.Errorf("a table with no header section must not be repaired, got %d fixes", n)
+		}
+	})
+}

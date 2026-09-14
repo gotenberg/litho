@@ -32,12 +32,15 @@ func fixTableSections(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 }
 
 // wrapBodyRows wraps a Table's direct-child TR elements in a new TBody when the
-// Table carries a THead or TFoot but no TBody. It returns the number of rows
+// Table carries a THead or TFoot but no TBody. Children are judged by the role
+// they RESOLVE to, as the validator judges them: a table whose sections are
+// named through the /RoleMap (/TableHead -> /THead) draws the same 7.2 t14 and
+// must draw the same repair, where reading the raw /S silently declined. It returns the number of rows
 // wrapped, or 0 when no repair applies. Only indirect TR children are wrapped;
 // a Table that mixes in an inline TR is left untouched for safety. Body rows
 // need not be contiguous in /K: every direct-child TR moves into the TBody
 // regardless of position, and the TBody takes the slot of the first body row.
-func wrapBodyRows(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, t structNode, _ map[ast.PdfName]ast.PdfName) int {
+func wrapBodyRows(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, t structNode, roleMap map[ast.PdfName]ast.PdfName) int {
 	arr := resolveStructKids(ctx, doc, t.dict["K"])
 	if len(arr) == 0 {
 		return 0
@@ -50,7 +53,7 @@ func wrapBodyRows(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		if err != nil || d == nil {
 			continue
 		}
-		switch structType(ctx, doc, d) {
+		switch resolvedStructType(ctx, doc, d, roleMap) {
 		case "THead", "TFoot":
 			hasSection = true
 		case "TBody":
