@@ -3559,6 +3559,16 @@ func xmpCheckStructFieldNames(data []byte, part int, results *[]Violation) {
 	var propNS, propLocal string
 	flagged := make(map[string]bool) // dedup per enclosing property
 
+	flag := func(ns, local, field string) {
+		key := ns + " " + local
+		if flagged[key] {
+			return
+		}
+		flagged[key] = true
+		*results = append(*results, xmpPropertyTypeRule(part, ns, local,
+			fmt.Sprintf("structured value contains field %s not defined by its value type", field))...)
+	}
+
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
@@ -3578,19 +3588,24 @@ func xmpCheckStructFieldNames(data []byte, part int, results *[]Violation) {
 			if depth == 1 && t.Name.Space != "" && t.Name.Space != xmpRDFNamespace {
 				propNS = t.Name.Space
 				propLocal = t.Name.Local
+				// A struct written with RDF/XML property attributes carries its
+				// fields there, so they answer the same audit. pdfjs
+				// issue13971.pdf writes <xmpMM:DerivedFrom
+				// stRef:originalDocumentID="..."/>, a field the 2005
+				// ResourceRef does not define, and veraPDF reports it.
+				for _, attr := range t.Attr {
+					if fields, isStructType := xmpStructTypeFields[attr.Name.Space]; isStructType && !fields[attr.Name.Local] {
+						flag(propNS, propLocal, attr.Name.Local)
+						break
+					}
+				}
 				continue
 			}
 			fields, isStructType := xmpStructTypeFields[t.Name.Space]
 			if !isStructType || propLocal == "" || fields[t.Name.Local] {
 				continue
 			}
-			key := propNS + " " + propLocal
-			if flagged[key] {
-				continue
-			}
-			flagged[key] = true
-			*results = append(*results, xmpPropertyTypeRule(part, propNS, propLocal,
-				fmt.Sprintf("structured value contains field %s not defined by its value type", t.Name.Local))...)
+			flag(propNS, propLocal, t.Name.Local)
 		case xml.EndElement:
 			if t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description" {
 				inDescription = false
@@ -3692,10 +3707,25 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 					// govdocs thread_100_100847.pdf carries
 					// <xapMM:DerivedFrom rdf:parseType="Resource"></...> and litho
 					// read its whitespace as a plain text value.
+					// A namespace-qualified attribute on the property element is
+					// the other shorthand: RDF/XML property attributes
+					// (RDF 1.1 XML Syntax, 2.5) say the same as a nested
+					// Description carrying those fields, so the value is a
+					// struct. govdocs thread_300_300116.pdf writes
+					// <exif:Flash exif:Fired="False" .../> in one packet and the
+					// same struct with sub-elements in another; litho read the
+					// first as plain text and reported a struct property with a
+					// text value that veraPDF does not report.
 					for _, attr := range t.Attr {
-						if attr.Name.Space == xmpRDFNamespace && attr.Name.Local == "parseType" && attr.Value == "Resource" {
+						switch attr.Name.Space {
+						case xmpRDFNamespace:
+							if attr.Name.Local == "parseType" && attr.Value == "Resource" {
+								pv.isStructured = true
+							}
+						case "", "http://www.w3.org/XML/1998/namespace",
+							"http://www.w3.org/2000/xmlns/":
+						default:
 							pv.isStructured = true
-							break
 						}
 					}
 					record(currentNS, currentLocal, pv)
