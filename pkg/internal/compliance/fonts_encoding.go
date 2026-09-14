@@ -359,6 +359,46 @@ func glyphNameHasUnicode(name string) bool {
 // of scope here. With no recorded usage the check is vacuous: the rules it
 // backs are scoped to veraPDF's Glyph object, which exists only for a code the
 // content stream actually shows, so an override nothing renders maps nothing.
+// shownCodesNamedByResolvableDifferences reports whether /Differences names
+// every character code the content stream shows through this font, and every
+// such name carries a Unicode value.
+//
+// It is deliberately stricter than [usedDifferencesGlyphNamesResolvable], which
+// walks the /Differences entries and so says nothing about a shown code the
+// array never names. Here a code left to the base encoding fails the test: a
+// predefined table only implies a name, and for a TrueType ISO 32000-1, 9.6.6.4
+// still resolves the code through the program's own cmap.
+//
+// Answering false with no usage on hand is the safe direction: without the shown
+// codes there is nothing to prove.
+func shownCodesNamedByResolvableDifferences(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
+	if usage == nil || len(usage.charCodes) == 0 {
+		return false
+	}
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return false
+	}
+	encDict, err := document.ResolveDict(ctx, doc, encObj)
+	if err != nil || encDict == nil {
+		return false
+	}
+	names := differencesGlyphNames(ctx, doc, encDict)
+	for code := range usage.charCodes {
+		name, named := names[code]
+		if !named || name == "" {
+			return false
+		}
+		if name == ".notdef" {
+			continue
+		}
+		if !glyphNameHasUnicode(name) {
+			return false
+		}
+	}
+	return true
+}
+
 func usedDifferencesGlyphNamesResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
 	if usage == nil || len(usage.charCodes) == 0 {
 		return true
@@ -1053,6 +1093,22 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// reports 16 govdocs files whose TrueType names /WinAnsiEncoding or
 	// /MacRomanEncoding and shows codes the program leaves unmapped.
 	subtype := fontSubtype(ctx, doc, fontDict)
+
+	// A /Differences array that names every code the font shows is the one
+	// TrueType case the paragraph above does not argue against: the names are
+	// stated outright rather than implied by a predefined table, so ISO 32000-1,
+	// 9.10.2 derives Unicode from them without reading the program's cmap, and
+	// the 16 govdocs files that motivated the restriction all show codes
+	// /Differences never names. veraPDF asks Glyph.toUnicode != null (the
+	// PDFA-1A profile's own test for 6.3.8 t1) and so passes both shapes:
+	// pdfjs issue8613.pdf shows two unembedded MSSansSerif fonts whose
+	// /Differences names the whole range, and govdocs thread_300_300859.pdf an
+	// embedded ZJLCSM+Symbol whose only code is named /bullet.
+	if subtype == "TrueType" && fontEncodingIsDict(ctx, doc, fontDict) &&
+		shownCodesNamedByResolvableDifferences(ctx, doc, fontDict, usage) {
+		return nil
+	}
+
 	if subtype == "Type1" || subtype == "MMType1" ||
 		(subtype == "TrueType" && IsPDFUA(profile) && fontEncodingIsDict(ctx, doc, fontDict)) {
 		if allGlyphNamesAGLResolvable(ctx, doc, fontDict, usage) {
