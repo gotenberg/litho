@@ -1058,8 +1058,29 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// parse them), so this stays free of false positives; usage-less checks stay
 	// exempt for the same reason. A /ToUnicode CMap vouches only for the codes it
 	// maps, see [shownCodeOutsideToUnicode].
+	// ZapfDingbats earns no name-based exemption, for the reason
+	// [allGlyphNamesAGLResolvable] states: its glyphs are named a1 to a191, and
+	// ISO 32000-1, 9.10.2 admits "the Adobe standard Latin character set or the
+	// set of named characters in the Symbol font" and no third set, so those
+	// names carry no Unicode value here. The Adobe Glyph List does map them,
+	// which is why [glyphNameHasUnicode] answers true and every name survey
+	// below would pass the font. govdocs thread_100_100601.pdf shows code 1 of
+	// an embedded MHHIBN+ZapfDingbats named /a73 with no /ToUnicode, and veraPDF
+	// reports that glyph. [allGlyphNamesAGLResolvable] already excluded the
+	// standard 14 spelling; an embedded subset reaches the surveys below instead.
+	//
+	// Part 1 only, and measured rather than assumed: veraPDF answers the very
+	// same test (`toUnicode != null` on a Glyph) differently by flavour. On
+	// thread_100_100601.pdf it reports the /a73 glyph at PDF/A-1a and passes it
+	// at PDF/A-2u, where the rule runs and succeeds rather than going unapplied
+	// (142 passed rules against 121 at 1a). Parts 2 and later evidently admit
+	// the Adobe Glyph List entry that 9.10.2 does not, so the exemption stands
+	// there and extending this carve-out to them reported four files veraPDF
+	// passes.
+	dingbats := PDFAPart(profile) == 1 && isZapfDingbatsByName(ctx, doc, fontDict)
+
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
-	if isSymbolicFont(ctx, doc, fd) {
+	if isSymbolicFont(ctx, doc, fd) && !dingbats {
 		if _, hasEncoding := fontDict["Encoding"]; hasEncoding {
 			if usage == nil || usedGlyphNamesResolvable(ctx, doc, fontDict, usage) {
 				return nil
@@ -1109,8 +1130,8 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		return nil
 	}
 
-	if subtype == "Type1" || subtype == "MMType1" ||
-		(subtype == "TrueType" && IsPDFUA(profile) && fontEncodingIsDict(ctx, doc, fontDict)) {
+	if !dingbats && (subtype == "Type1" || subtype == "MMType1" ||
+		(subtype == "TrueType" && IsPDFUA(profile) && fontEncodingIsDict(ctx, doc, fontDict))) {
 		if allGlyphNamesAGLResolvable(ctx, doc, fontDict, usage) {
 			return nil
 		}
