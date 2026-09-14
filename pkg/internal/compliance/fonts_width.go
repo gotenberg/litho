@@ -312,14 +312,21 @@ func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict 
 		return nil
 	}
 
+	// A shown code the array does not cover takes the descriptor's
+	// /MissingWidth (ISO 32000-1, Table 111, default 0), which is the same
+	// comparison [checkSimpleFontUncoveredWidths] makes on the GID-keyed path.
+	// Skipping those codes here left a whole class of Type 1 fonts unjudged:
+	// govdocs thread_300_300705.pdf shows code 13 through a Helvetica-Light
+	// whose /Widths starts at 32, and veraPDF reports the 278-unit charstring
+	// against the 0 the dictionary implies.
+	missingWidth := simpleFontMissingWidth(ctx, doc, fontDict)
+
 	for _, code := range sortedByteKeys(usage.charCodes) {
 		if code == 0 {
 			continue
 		}
 		idx := int(code) - int(firstChar)
-		if idx < 0 || idx >= len(widths) {
-			continue
-		}
+		covered := idx >= 0 && idx < len(widths)
 		// Prefer the PDF /Encoding name when the program defines a glyph for it;
 		// otherwise fall back to the program's built-in name for the code (the
 		// G-name subset case). Skip a code that resolves to no defined glyph.
@@ -332,16 +339,21 @@ func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict 
 			continue
 		}
 		expected := rawWidth * scale * 1000.0
-		pdfWidth, wOK := widthValue(ctx, doc, widths[idx])
-		if !wOK {
-			continue
+		pdfWidth := missingWidth
+		source := " from /MissingWidth"
+		if covered {
+			w, wOK := widthValue(ctx, doc, widths[idx])
+			if !wOK {
+				continue
+			}
+			pdfWidth, source = w, ""
 		}
 		if pdfWidth < math.MinInt32 || pdfWidth > math.MaxInt32 {
 			continue
 		}
 		if widthsInconsistent(pdfWidth, expected) {
-			return failf(rule, "font %s on page %d: char %d width mismatch (PDF=%.1f, font=%.1f)",
-				fontName, pageNum, code, pdfWidth, expected)
+			return failf(rule, "font %s on page %d: char %d width mismatch (PDF=%.1f%s, font=%.1f)",
+				fontName, pageNum, code, pdfWidth, source, expected)
 		}
 	}
 	return nil
