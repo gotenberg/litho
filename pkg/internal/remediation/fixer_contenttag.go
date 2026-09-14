@@ -161,16 +161,35 @@ func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		newPage["StructParents"] = ast.PdfInt(nextKey)
 		alloc.AllocAt(page.Ref.ObjectNum, newPage)
 
-		// Add MCR (marked-content reference) to the Document element's /K.
-		kChildren = append(kChildren, ast.PdfDict{
-			"Type": ast.PdfName("MCR"),
+		// Hang the marked content off a P of its own rather than off the
+		// Document. ISO/TS 32005 Table 5 forbids a Document from holding a
+		// direct content item ("Table 5. Document-content"), so attaching the
+		// MCR straight to it repaired the untagged content and introduced a
+		// structure fault in its place: 158 of the 173 files where PDF/UA-2
+		// remediation introduced a violation were this one line.
+		//
+		// P is the wrapper because it may hold content (it is outside Table 5's
+		// noContent set) and, unlike Div, Part and NonStruct, it is not a
+		// pass-through type: Table 5 looks THROUGH those and would attribute
+		// the content to the Document again.
+		wrapperRef := alloc.Alloc(ast.PdfDict{
+			"Type": ast.PdfName("StructElem"),
+			"S":    ast.PdfName("P"),
+			"P":    docElemRef,
 			"Pg":   page.Ref,
-			"MCID": ast.PdfInt(0),
+			"K": ast.PdfDict{
+				"Type": ast.PdfName("MCR"),
+				"Pg":   page.Ref,
+				"MCID": ast.PdfInt(0),
+			},
 		})
+		kChildren = append(kChildren, wrapperRef)
 
+		// The parent tree maps the page's marked content to the element that
+		// owns it, which is now the wrapper rather than the Document.
 		parentTreeNums = append(parentTreeNums,
 			ast.PdfInt(nextKey),
-			ast.PdfArray{docElemRef},
+			ast.PdfArray{wrapperRef},
 		)
 		nextKey++
 		count++

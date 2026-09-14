@@ -69,22 +69,35 @@ func TestFixContentTag_TagsUntaggedPages(t *testing.T) {
 		}
 	}
 
-	// Document element /K: two MCRs, both with MCID 0 (the ParentTree
-	// entry array for a page is indexed by MCID; the old code used the
-	// page index, which broke the lookup on every page but the first).
+	// Document element /K: one P wrapper per page, each owning that page's
+	// MCR with MCID 0 (the ParentTree entry array for a page is indexed by
+	// MCID; the old code used the page index, which broke the lookup on every
+	// page but the first). The content hangs off the P, never off the
+	// Document: ISO/TS 32005 Table 5 forbids a Document from holding a direct
+	// content item, so attaching the MCR straight to it swapped one violation
+	// for another.
 	docElem := pendingDict(t, alloc, 6)
 	k, ok := docElem["K"].(ast.PdfArray)
 	if !ok || len(k) != 2 {
-		t.Fatalf("Document /K: got %v, want 2 MCRs", docElem["K"])
+		t.Fatalf("Document /K: got %v, want 2 wrappers", docElem["K"])
 	}
 	for i, item := range k {
-		mcr, ok := item.(ast.PdfDict)
+		ref, ok := item.(ast.PdfIndirectRef)
+		if !ok {
+			t.Fatalf("Document /K[%d]: got %T, want an indirect wrapper", i, item)
+		}
+		wrapper := pendingDict(t, alloc, ref.ObjectNum)
+		if wrapper["S"] != ast.PdfName("P") {
+			t.Errorf("wrapper %d /S: got %v, want P", i, wrapper["S"])
+		}
+		mcr, ok := wrapper["K"].(ast.PdfDict)
 		if !ok || mcr["Type"] != ast.PdfName("MCR") || mcr["MCID"] != ast.PdfInt(0) {
-			t.Errorf("Document /K[%d]: got %v, want MCR with MCID 0", i, item)
+			t.Errorf("wrapper %d /K: got %v, want MCR with MCID 0", i, wrapper["K"])
 		}
 	}
 
-	// ParentTree: [0 [doc] 1 [doc]], keys matching /StructParents.
+	// ParentTree: keys matching /StructParents, each pointing at the wrapper
+	// that owns the page's content rather than at the Document.
 	st := pendingDict(t, alloc, 5)
 	pt, ok := st["ParentTree"].(ast.PdfDict)
 	if !ok {
@@ -96,6 +109,20 @@ func TestFixContentTag_TagsUntaggedPages(t *testing.T) {
 	}
 	if nums[0] != ast.PdfInt(0) || nums[2] != ast.PdfInt(1) {
 		t.Errorf("ParentTree keys: got %v/%v, want 0/1", nums[0], nums[2])
+	}
+	for i, slot := range []int{1, 3} {
+		arr, ok := nums[slot].(ast.PdfArray)
+		if !ok || len(arr) != 1 {
+			t.Fatalf("ParentTree entry %d: got %v, want a one-element array", i, nums[slot])
+		}
+		ref, ok := arr[0].(ast.PdfIndirectRef)
+		if !ok {
+			t.Fatalf("ParentTree entry %d: got %T, want a reference", i, arr[0])
+		}
+		owner := pendingDict(t, alloc, ref.ObjectNum)
+		if owner["S"] != ast.PdfName("P") {
+			t.Errorf("ParentTree entry %d points at /S %v, want the P wrapper", i, owner["S"])
+		}
 	}
 }
 
