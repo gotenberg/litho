@@ -655,6 +655,17 @@ type walkState struct {
 	// parent-child row.
 	iso32005Parent string
 
+	// seq numbers each structure element the walk enters, and ua1ParentSeq is
+	// the number of the element whose children are being walked. The PDF/UA-1
+	// list rules state their verdict against the PARENT element (veraPDF keys
+	// §7.2 t19 on SEL and t20 on SELI, each testing the whole kidsStandardTypes
+	// string at once), so litho, which visits children, needs the parent's
+	// identity to state each finding once. listReported records the parents
+	// already reported, keyed by [listRuleKey].
+	seq          int
+	ua1ParentSeq int
+	listReported map[int]bool
+
 	// ua1Parent is veraPDF's parentStandardType for the elements currently
 	// being walked, which the PDF/UA-1 containment rules test. It reads through
 	// the role map and past Div, Part, and NonStruct as iso32005Parent does, but
@@ -997,17 +1008,23 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	// transparent: its kids keep the current effective parent.
 	if kObj, ok := elem["K"]; ok {
 		prevISOParent, prevUA1Parent := state.iso32005Parent, state.ua1Parent
+		prevUA1ParentSeq := state.ua1ParentSeq
+		state.seq++
+		selfSeq := state.seq
 		selfKey := iso32005Key(ctx, state, elem, typeName)
 		if !iso32005PassThroughTypes[selfKey] {
 			state.iso32005Parent = selfKey
 			state.ua1Parent = selfKey
+			state.ua1ParentSeq = selfSeq
 		} else if state.ua1Parent == ua1RootParent {
 			// veraPDF's climb through pass-through parents stops at the root
 			// and reports the type of the last one it passed.
 			state.ua1Parent = selfKey
+			state.ua1ParentSeq = selfSeq
 		}
 		walkChildren(ctx, state, kObj, typeName, depth+1, lastHeadingLevel)
 		state.iso32005Parent, state.ua1Parent = prevISOParent, prevUA1Parent
+		state.ua1ParentSeq = prevUA1ParentSeq
 	}
 
 	if isTable {
@@ -1034,10 +1051,13 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 
 // validateListContainment checks PDF/UA list structure rules.
 func validateListContainment(_ context.Context, state *walkState, _ ast.PdfDict, typeName ast.PdfName, parentType ast.PdfName) {
-	// L must contain only LI (and optionally Caption).
+	// L must contain only LI (and optionally Caption). Stated once for the L,
+	// however many of its children offend: see [walkState.listReported].
 	if parentType == "L" && ua1KidJudged(typeName) && typeName != "LI" && typeName != "Caption" && typeName != "L" {
-		*state.results = append(*state.results,
-			failf(Rule_14289_1_7_2_t19, "L contains %s instead of L/LI/Caption", typeName)...)
+		if !listParentReported(state, 19) {
+			*state.results = append(*state.results,
+				failf(Rule_14289_1_7_2_t19, "L contains %s instead of L/LI/Caption", typeName)...)
+		}
 	}
 
 	// LI must be inside L.
@@ -1058,10 +1078,35 @@ func validateListContainment(_ context.Context, state *walkState, _ ast.PdfDict,
 		case "Lbl", "LBody":
 			// OK
 		default:
-			*state.results = append(*state.results,
-				failf(Rule_14289_1_7_2_t20, "LI contains %s instead of Lbl/LBody", typeName)...)
+			// Stated once for the LI, however many of its children offend.
+			// govdocs thread_400_400037.pdf holds 21 LI elements with exactly
+			// two offending children each: litho reported 42, veraPDF 21.
+			if !listParentReported(state, 20) {
+				*state.results = append(*state.results,
+					failf(Rule_14289_1_7_2_t20, "LI contains %s instead of Lbl/LBody", typeName)...)
+			}
 		}
 	}
+}
+
+// listParentReported reports whether the PDF/UA-1 list rule test has already
+// been stated for the element whose children are being walked, marking it when
+// it has not. veraPDF states §7.2 t19 against the SEL and t20 against the SELI,
+// each testing that element's whole kid list, so one offending parent is one
+// finding whatever the number of offending children.
+func listParentReported(state *walkState, test int) bool {
+	if state.ua1ParentSeq == 0 {
+		return false
+	}
+	if state.listReported == nil {
+		state.listReported = make(map[int]bool)
+	}
+	key := state.ua1ParentSeq*100 + test
+	if state.listReported[key] {
+		return true
+	}
+	state.listReported[key] = true
+	return false
 }
 
 // ua1RootParent marks the children of the structure tree root, which have no
