@@ -471,7 +471,7 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 					if bm != "" && !standardBlendModes[bm] {
 						results = append(results, failf(blendModeRule(part), "page %d, ExtGState %s, BM=%s", i+1, string(gsName), bm)...)
 					}
-					if bm != "" && bm != "Normal" && bm != "Compatible" {
+					if blendModeIsTransparency(bm) {
 						pageUsesTransparency = true
 					}
 				}
@@ -643,6 +643,23 @@ func formDrawnResources(ctx context.Context, doc *document.Document, stream ast.
 	return collectDrawnResources(ops)
 }
 
+// blendModeIsTransparency reports whether an ExtGState /BM value makes the
+// content transparent for the blending-colour-space rules.
+//
+// /Compatible counts, which reads oddly: ISO 32000-1, 11.3.5 calls it "the same
+// as Normal" and ISO 19005-2 §6.2.10 t1 lists it beside Normal among the values
+// the blend mode may take, so litho read it as no transparency at all. The
+// question this answers is a different one, and veraPDF's
+// PDPage.containsTransparency is what §6.2.10 t2 acts on: given an ExtGState
+// naming /Compatible, no page /Group and no PDF/A OutputIntent it reports "The
+// page contains transparent objects with no blending colour space defined",
+// while the same file naming /Normal passes. govdocs thread_300_300345.pdf is
+// the corpus case. The rule that judges which values /BM may take is a separate
+// check and still admits Compatible.
+func blendModeIsTransparency(bm string) bool {
+	return bm != "" && bm != "Normal"
+}
+
 // resourcesUseTransparency reports whether a resource dictionary reaches any
 // transparency the content stream actually draws: an ExtGState with a
 // non-isolating blend mode, a soft mask, or a non-opaque constant alpha; an
@@ -669,8 +686,7 @@ func resourcesUseTransparency(ctx context.Context, doc *document.Document, res a
 				continue
 			}
 			if bmObj, ok := gs["BM"]; ok {
-				bm := resolveBlendMode(ctx, doc, bmObj)
-				if bm != "" && bm != "Normal" && bm != "Compatible" {
+				if blendModeIsTransparency(resolveBlendMode(ctx, doc, bmObj)) {
 					return true
 				}
 			}
@@ -761,8 +777,7 @@ func checkAnnotationTransparency(ctx context.Context, doc *document.Document, pa
 		// Check /BM (blend mode) directly on the annotation dict.
 		// PDF annotations can carry their own blend mode (ISO 32000-2 Table 165).
 		if bmObj, hasBM := annot["BM"]; hasBM {
-			bm := resolveBlendMode(ctx, doc, bmObj)
-			if bm != "" && bm != "Normal" && bm != "Compatible" {
+			if blendModeIsTransparency(resolveBlendMode(ctx, doc, bmObj)) {
 				return true
 			}
 		}
@@ -894,8 +909,7 @@ func checkPatternTransparency(ctx context.Context, doc *document.Document, pageR
 				continue
 			}
 			if bmObj, hasBM := gs["BM"]; hasBM {
-				bm := resolveBlendMode(ctx, doc, bmObj)
-				if bm != "" && bm != "Normal" && bm != "Compatible" {
+				if blendModeIsTransparency(resolveBlendMode(ctx, doc, bmObj)) {
 					return true
 				}
 			}
@@ -1144,7 +1158,7 @@ func type3CharProcTransparent(ctx context.Context, doc *document.Document, charP
 // stroking or non-stroking constant alpha.
 func extGStateTransparent(ctx context.Context, doc *document.Document, gs ast.PdfDict) bool {
 	if bmObj, ok := gs["BM"]; ok {
-		if bm := resolveBlendMode(ctx, doc, bmObj); bm != "" && bm != "Normal" && bm != "Compatible" {
+		if blendModeIsTransparency(resolveBlendMode(ctx, doc, bmObj)) {
 			return true
 		}
 	}
