@@ -19,16 +19,81 @@ import (
 // as "Hn" (ISO 32000-2 §14.8.4.6.2 allows unbounded levels in PDF 2.0).
 var iso32005HnRe = regexp.MustCompile(`^H[1-9][0-9]*$`)
 
-// iso32005GroupingTypes lists the grouping structure types per
-// ISO/TS 32005 (ISO 32000-2:2020 Table 364 grouping level, plus Art,
-// which ISO 32000-1 Table 333 defines as grouping and role maps carry
-// into PDF 2.0 documents). The Table 5 isGrouping tests key on this set.
+// iso32005GroupingTypes lists the structure types that are grouping types by
+// their type alone, per ISO 32000-2:2020, 14.8.4.4 (Table 364 grouping level),
+// plus Art, which ISO 32000-1 Table 333 defines as grouping and role maps carry
+// into PDF 2.0 documents. See [iso32005IsGrouping] for the types whose grouping
+// role depends on what they contain rather than on their name.
 //
 //nolint:gochecknoglobals // static spec table
 var iso32005GroupingTypes = map[string]bool{
-	"Document": true, "DocumentFragment": true, "Part": true,
-	"Sect": true, "Div": true, "Aside": true,
-	"NonStruct": true, "Private": true, "Art": true,
+	"Part": true, "Sect": true, "Div": true, "Aside": true,
+	"NonStruct": true, "Art": true, "Index": true,
+	"TOC": true, "TOCI": true,
+}
+
+// iso32005BlockOrGroupingTypes and iso32005BlockOrGroupingOrInlineTypes list the
+// structure types ISO 32000-2:2020, 14.8.4 permits at more than one level, so
+// whether they group depends on their content. [iso32005IsGrouping] admits both
+// sets to its content-dependent test; a type in neither is never grouping.
+//
+//nolint:gochecknoglobals // static spec table
+var iso32005BlockOrGroupingTypes = map[string]bool{
+	"BlockQuote": true, "Caption": true, "Title": true,
+}
+
+//nolint:gochecknoglobals // static spec table
+var iso32005BlockOrGroupingOrInlineTypes = map[string]bool{
+	"Annot": true, "Artifact": true, "BibEntry": true, "Code": true,
+	"FENote": true, "Figure": true, "Form": true, "Link": true,
+	"Note": true, "Private": true, "Quote": true, "Reference": true,
+}
+
+// iso32005InlineTypes lists the structure types ISO 32000-2:2020, 14.8.4.6
+// defines as inline-level. An inline kid keeps its parent out of the grouping
+// role: an element mixing inline children is being used as content, not as a
+// container.
+//
+//nolint:gochecknoglobals // static spec table
+var iso32005InlineTypes = map[string]bool{
+	"Em": true, "RB": true, "RP": true, "RT": true, "Ruby": true,
+	"Span": true, "Strong": true, "Sub": true, "Warichu": true,
+	"WP": true, "WT": true,
+}
+
+// iso32005IsGrouping reports whether an element stands in the grouping role the
+// Table 5 isGrouping tests ask about. Several types are grouping only by use:
+// ISO 32000-2:2020, 14.8.4.2 lets Link, Annot, Reference, Form and their kin sit
+// at block or inline level, so the same type groups in one document and carries
+// content in another. Deciding on the type name alone answers both the
+// "shall contain at most one" and the "shall not contain" halves of a Table 5
+// row wrongly: litho reported Table 5. Link-Caption test 2 for a Link holding a
+// single empty Caption, where veraPDF reported nothing, and missed test 1 for a
+// Link holding two, which veraPDF reports.
+//
+// veraPDF 1.30 computes the same property in GFPDStructElem.getisGrouping, and
+// this mirrors it: a type that groups by name always groups; a type that can
+// only be block or inline never does; anything else groups when it holds no
+// direct content and no inline child.
+func iso32005IsGrouping(key string, hasContent bool, kidKeys []string) bool {
+	if key == "" {
+		return false
+	}
+	if iso32005GroupingTypes[key] {
+		return true
+	}
+	if !iso32005BlockOrGroupingTypes[key] && !iso32005BlockOrGroupingOrInlineTypes[key] {
+		return false
+	}
+	if hasContent {
+		return false
+	}
+	for _, kid := range kidKeys {
+		if iso32005InlineTypes[kid] {
+			return false
+		}
+	}
+	return true
 }
 
 // iso32005PassThroughTypes lists the structure types Table 5 looks through
@@ -361,7 +426,7 @@ func validateISO32005(ctx context.Context, state *walkState, elem ast.PdfDict, t
 	for _, k := range kidKeys {
 		counts[k]++
 	}
-	grouping := iso32005GroupingTypes[selfKey]
+	grouping := iso32005IsGrouping(selfKey, hasContent, kidKeys)
 
 	for _, e := range constraints {
 		violated := false
