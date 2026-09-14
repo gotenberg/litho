@@ -77,6 +77,16 @@ var predefinedCMapPrefixes = []string{
 	"UniJIS2004-UTF16", "UniJIS-UTF8",
 }
 
+// cmapNameIsUnicodeTransformFormat reports whether a predefined CMap name names
+// one of the UTF-8, UTF-16 or UTF-32 families. ISO 32000-1, Table 118 marks
+// every one of them a PDF 1.5 addition, so a PDF 1.4 conforming reader
+// predefines none of them.
+func cmapNameIsUnicodeTransformFormat(name string) bool {
+	return strings.Contains(name, "-UTF8-") ||
+		strings.Contains(name, "-UTF16-") ||
+		strings.Contains(name, "-UTF32-")
+}
+
 // table116CMapNames is the complete set of predefined CMap names of
 // ISO 32000-2, Table 116.
 //
@@ -315,6 +325,20 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 		// character collections), so select by profile: PDF/A-4 and PDF/UA-2 are
 		// ISO 32000-2, the rest ISO 32000-1.
 		pdf20 := PDFAPart(profile) == 4 || (IsPDFUA(profile) && PDFUAPart(profile) == 2)
+		// ISO 19005-1 is written against PDF 1.4, which predefines no UTF-8,
+		// UTF-16 or UTF-32 CMap: ISO 32000-1 Table 118 marks that whole family a
+		// PDF 1.5 addition. Under part 1 such a name is therefore not a
+		// predefined CMap at all, so it supplies no CIDSystemInfo to compare
+		// against and this test cannot be established, exactly as for a name
+		// that names no CMap. Measured against veraPDF at PDF/A-1a with one
+		// fixture per family: UniGB, UniJIS, UniKS and UniCNS in -UTF16-, -UTF8-
+		// and -UTF32- all report, while the UCS2, EUC, RKSJ and GBK names of the
+		// same character collections pass. pdfjs issue18466.pdf carries
+		// UniGB-UTF16-H over Adobe-GB1.
+		if PDFAPart(profile) == 1 && cmapNameIsUnicodeTransformFormat(string(encName)) {
+			return failf(rule, "font %s on page %d: encoding %q is no predefined CMap of PDF 1.4",
+				fontName, pageNum, string(encName))
+		}
 		reg, ord, sup, ok := cmap.PredefinedCMapCIDSystemInfo(string(encName), pdf20)
 		if !ok {
 			return failf(rule, "font %s on page %d: encoding %q is neither embedded nor a predefined CMap",
