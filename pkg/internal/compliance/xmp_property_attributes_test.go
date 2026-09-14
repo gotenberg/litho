@@ -86,6 +86,60 @@ func TestXMPPropertyAttributes_FieldsAreStillAudited(t *testing.T) {
 	}
 }
 
+// TestXMPPropertyAttributes_FieldsInsideAnArrayAreAudited pins that a struct
+// written with property attributes is read wherever its value type puts it. An
+// xmpMM:History is a Seq of ResourceEvent, so each event is an rdf:li three
+// levels down, and Adobe writes its fields as attributes.
+//
+// pdfjs issue13971.pdf carries stEvt:changed there, a field the 2005
+// ResourceEvent does not define, and veraPDF reports it against xmpMM:History.
+// Auditing only the property element left it silent.
+func TestXMPPropertyAttributes_FieldsInsideAnArrayAreAudited(t *testing.T) {
+	t.Parallel()
+
+	data := xmpPacket(`<rdf:Description rdf:about=""
+      xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"
+      xmlns:stEvt="http://ns.adobe.com/xap/1.0/sType/ResourceEvent#">
+      <xmpMM:History>
+        <rdf:Seq>
+          <rdf:li stEvt:action="saved" stEvt:instanceID="xmp.iid:1"
+                  stEvt:when="2020-06-29T10:57:51+02:00" stEvt:changed="/metadata"/>
+        </rdf:Seq>
+      </xmpMM:History>
+    </rdf:Description>`)
+
+	var got []Violation
+	xmpCheckStructFieldNames(data, 2, &got)
+	if !hasRule(got, Rule_19005_2_6_6_2_3_1_t02) {
+		t.Errorf("an undefined field on an array item must report, got %v", got)
+	}
+}
+
+// TestXMPPropertyAttributes_DefinedArrayFieldsStaySilent pins the negative for
+// the same shape: an event limited to the fields the 2005 ResourceEvent defines
+// reports nothing.
+func TestXMPPropertyAttributes_DefinedArrayFieldsStaySilent(t *testing.T) {
+	t.Parallel()
+
+	data := xmpPacket(`<rdf:Description rdf:about=""
+      xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"
+      xmlns:stEvt="http://ns.adobe.com/xap/1.0/sType/ResourceEvent#">
+      <xmpMM:History>
+        <rdf:Seq>
+          <rdf:li stEvt:action="saved" stEvt:instanceID="xmp.iid:1"
+                  stEvt:when="2020-06-29T10:57:51+02:00"
+                  stEvt:softwareAgent="Acrobat"/>
+        </rdf:Seq>
+      </xmpMM:History>
+    </rdf:Description>`)
+
+	var got []Violation
+	xmpCheckStructFieldNames(data, 2, &got)
+	if len(got) != 0 {
+		t.Errorf("defined event fields must stay silent, got %v", got)
+	}
+}
+
 // TestXMPPropertyAttributes_DefinedFieldsStaySilent pins that the attribute form
 // of a fully defined struct reports nothing.
 func TestXMPPropertyAttributes_DefinedFieldsStaySilent(t *testing.T) {

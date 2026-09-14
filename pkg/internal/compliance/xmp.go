@@ -3616,6 +3616,24 @@ func xmpCheckStructFieldNames(data []byte, part int, results *[]Violation) {
 			fmt.Sprintf("structured value contains field %s not defined by its value type", field))...)
 	}
 
+	// A struct written with RDF/XML property attributes carries its fields
+	// there, and it sits wherever the value type puts it: as the property
+	// element itself, or as an rdf:li of the array a Seq-valued property holds.
+	// pdfjs issue13971.pdf writes both, <xmpMM:DerivedFrom
+	// stRef:originalDocumentID=".."/> and an xmpMM:History whose events carry
+	// stEvt:changed, and veraPDF reports each against its enclosing property.
+	scanAttrFields := func(t xml.StartElement) {
+		if propLocal == "" {
+			return
+		}
+		for _, attr := range t.Attr {
+			if fields, isStructType := xmpStructTypeFields[attr.Name.Space]; isStructType && !fields[attr.Name.Local] {
+				flag(propNS, propLocal, attr.Name.Local)
+				return
+			}
+		}
+	}
+
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
@@ -3635,19 +3653,10 @@ func xmpCheckStructFieldNames(data []byte, part int, results *[]Violation) {
 			if depth == 1 && t.Name.Space != "" && t.Name.Space != xmpRDFNamespace {
 				propNS = t.Name.Space
 				propLocal = t.Name.Local
-				// A struct written with RDF/XML property attributes carries its
-				// fields there, so they answer the same audit. pdfjs
-				// issue13971.pdf writes <xmpMM:DerivedFrom
-				// stRef:originalDocumentID="..."/>, a field the 2005
-				// ResourceRef does not define, and veraPDF reports it.
-				for _, attr := range t.Attr {
-					if fields, isStructType := xmpStructTypeFields[attr.Name.Space]; isStructType && !fields[attr.Name.Local] {
-						flag(propNS, propLocal, attr.Name.Local)
-						break
-					}
-				}
+				scanAttrFields(t)
 				continue
 			}
+			scanAttrFields(t)
 			fields, isStructType := xmpStructTypeFields[t.Name.Space]
 			if !isStructType || propLocal == "" || fields[t.Name.Local] {
 				continue
