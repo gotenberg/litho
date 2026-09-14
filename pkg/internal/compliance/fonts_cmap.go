@@ -205,15 +205,19 @@ func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict a
 		return nil
 	}
 
-	// CIDToGIDMap maps CIDs into an embedded TrueType program's glyph space, so
-	// the requirement applies only when a font program is embedded. veraPDF's
-	// test carries a "containsFontFile == false" escape (ISO 32000-1 §9.7.4,
-	// Table 117). A non-embedded CIDFontType2 has nothing to map and instead
-	// fails the embedding rule (§6.2.11.4.1); flagging a missing CIDToGIDMap too
-	// is a false positive.
-	fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
-	if fd == nil || !isFontEmbedded(ctx, doc, fd, fontFileKeys(cidSubtype), PDFAPart(profile)) {
-		return nil
+	// The two escapes are not the same escape, and litho applied part 2's to
+	// part 1 as well. ISO 19005-2/3 §6.2.11.3.2 t1 and ISO 19005-4 §6.2.10.3.2
+	// t1 read "containsFontFile == false": CIDToGIDMap maps CIDs into an
+	// embedded TrueType program's glyph space (ISO 32000-1 §9.7.4, Table 117),
+	// so a CIDFontType2 with no program has nothing to map and fails the
+	// embedding rule instead. ISO 19005-1 §6.3.3.2 t1 reads "renderingMode == 3"
+	// and exempts no unembedded font: pdfjs issue7835.pdf shows an unembedded
+	// Arial-Black CIDFontType2 with no /CIDToGIDMap and veraPDF reports it.
+	if PDFAPart(profile) != 1 {
+		fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
+		if fd == nil || !isFontEmbedded(ctx, doc, fd, fontFileKeys(cidSubtype), PDFAPart(profile)) {
+			return nil
+		}
 	}
 
 	// PDF/A-1 6.3.3.2 t1 carries a renderingMode == 3 escape: a font used only
