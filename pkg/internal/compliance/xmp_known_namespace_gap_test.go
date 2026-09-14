@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -47,6 +48,56 @@ func TestXMPKnownNamespace_StillNeedsPredefining(t *testing.T) {
 				t.Errorf("%s:%s must report the undefined name, got %v", tc.prefix, tc.prop, got)
 			}
 		})
+	}
+}
+
+// TestXMPKnownNamespace_TypeTestFollows pins that the value-type test answers
+// for the same properties the name test does: a property no schema defines has
+// no defined type either, which is why veraPDF's t2 failures always include its
+// t1 failures.
+func TestXMPKnownNamespace_TypeTestFollows(t *testing.T) {
+	t.Parallel()
+
+	data := xmpPacket(`<rdf:Description rdf:about=""
+      xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/">
+      <Iptc4xmpCore:Location>Paris</Iptc4xmpCore:Location>
+    </rdf:Description>`)
+
+	var got []Violation
+	xmpCheckPropertyTypes(data, 2, ast.PdfStream{}, nil, &got)
+	if !hasRule(got, Rule_19005_2_6_6_2_3_1_t02) {
+		t.Errorf("Iptc4xmpCore:Location must report the missing value type, got %v", got)
+	}
+}
+
+// TestXMPKnownNamespace_QualifiersAndFieldsAreNotProperties pins the boundary
+// the type test needs. Only a top-level property is a property: the veraPDF test
+// suite's 6-7-2-t07-*-j files hang an xmpidq:Scheme qualifier on each
+// xmp:Identifier item and 6-7-2-t03-fail-i writes the stFnt fields of
+// xmpTPg:Fonts, and veraPDF reports none of them. Reporting them cost five
+// false positives in that corpus before this gate.
+func TestXMPKnownNamespace_QualifiersAndFieldsAreNotProperties(t *testing.T) {
+	t.Parallel()
+
+	data := xmpPacket(`<rdf:Description rdf:about=""
+      xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+      xmlns:xmpidq="http://ns.adobe.com/xmp/Identifier/qual/1.0/">
+      <xmp:Identifier>
+        <rdf:Bag>
+          <rdf:li rdf:parseType="Resource">
+            <rdf:value>id-1</rdf:value>
+            <xmpidq:Scheme>internal</xmpidq:Scheme>
+          </rdf:li>
+        </rdf:Bag>
+      </xmp:Identifier>
+    </rdf:Description>`)
+
+	var got []Violation
+	xmpCheckPropertyTypes(data, 2, ast.PdfStream{}, nil, &got)
+	for _, v := range got {
+		if strings.Contains(v.Context, "Identifier/qual") {
+			t.Errorf("a qualifier must not be judged as a property, got %v", v)
+		}
 	}
 }
 

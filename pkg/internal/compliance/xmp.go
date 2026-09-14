@@ -3280,6 +3280,19 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, extraExtensio
 	_, extensionNS := xmpExtractNamespaces(data)
 	maps.Copy(extensionNS, extraExtensionNS)
 
+	// Only a top-level property is a property. xmpExtractPropertyValues also
+	// records qualifiers and the fields of a nested Description, which this
+	// clause does not judge: the veraPDF test suite's 6-7-2-t07-*-j files carry
+	// an xmpidq:Scheme qualifier on each xmp:Identifier item and 6-7-2-t03-fail-i
+	// carries the stFnt fields of xmpTPg:Fonts, and veraPDF reports none of them.
+	topLevel := make(map[string]map[string]bool)
+	for _, p := range xmpExtractTopLevelProperties(data) {
+		if topLevel[p.ns] == nil {
+			topLevel[p.ns] = make(map[string]bool)
+		}
+		topLevel[p.ns][p.name] = true
+	}
+
 	// Sorted, because both maps are iterated to EMIT violations and Go
 	// randomises map order: the same binary on the same file otherwise reported
 	// identical findings in a different order, which reads as a diff to
@@ -3303,13 +3316,26 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, extraExtensio
 		}
 
 		registry, hasSchema := xmpPropertyRegistry[ns]
-		if !hasSchema {
-			// Namespace not in registry, already handled by xmpCheckNamespaces.
+		if !hasSchema && (!knownXMPNamespaces[ns] || xmpNamespaceHoldsMachinery(ns)) {
+			// A namespace litho does not recognise at all is reported once by
+			// xmpCheckNamespaces, which answers the whole clause for it. A
+			// namespace it recognises but holds no types for has no such
+			// backstop, and a property no schema defines has no value type
+			// either, so it answers this test as an unknown name would: the
+			// same split [xmpCheckPredefinedProperties] makes for t1. A nil
+			// registry states exactly that.
 			continue
 		}
 
 		for _, prop := range slices.Sorted(maps.Keys(props)) {
 			pv := props[prop]
+
+			// A namespace litho holds no types for reaches here only to state
+			// that its properties are undefined, so it answers for the
+			// properties alone, never for a qualifier or a nested field.
+			if !hasSchema && !topLevel[ns][prop] {
+				continue
+			}
 
 			// veraPDF instantiates one object per observed property and asks it
 			// `isValueTypeCorrect`, so however many ways a property fails its
@@ -3325,12 +3351,14 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, extraExtensio
 	// [xmpIsRDFTypeProperty]: it is a property, and no predefined schema gives
 	// it a value type, so it answers this test the way any unknown property
 	// name does.
-	for _, p := range xmpExtractTopLevelProperties(data) {
-		if p.ns != xmpRDFNamespace || extensionNS[p.ns] {
-			continue
-		}
-		if details := xmpPropertyTypeDetails(part, p.ns, p.name, xmpPropertyValue{}, nil); len(details) > 0 {
-			*results = append(*results, xmpPropertyTypeRule(part, p.ns, p.name, strings.Join(details, "; "))...)
+	if !extensionNS[xmpRDFNamespace] {
+		// Sorted for the same reason the loop above sorts: two runs must emit
+		// the same findings in the same order.
+		for _, name := range slices.Sorted(maps.Keys(topLevel[xmpRDFNamespace])) {
+			if details := xmpPropertyTypeDetails(part, xmpRDFNamespace, name, xmpPropertyValue{}, nil); len(details) > 0 {
+				*results = append(*results,
+					xmpPropertyTypeRule(part, xmpRDFNamespace, name, strings.Join(details, "; "))...)
+			}
 		}
 	}
 }
