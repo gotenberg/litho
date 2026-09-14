@@ -461,6 +461,14 @@ func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog a
 		if len(serialization) == 0 {
 			xmpCheckPredefinedProperties(ctx, data, part, mainExtensionNS, pooled, &packet)
 			xmpCheckPropertyTypes(data, part, ast.PdfStream{}, mainExtensionNS, &packet)
+			// The structured value-type field names are a property-level audit
+			// too, so they answer for every packet by the same clause. pdfjs
+			// issue19319.pdf carries an xmpMM:DerivedFrom whose stRef fields
+			// include originalDocumentID, which the XMP 2005 ResourceRef does not
+			// define; litho reported it while the packet sat in the catalog and
+			// fell silent once remediation moved the same bytes into an
+			// object-level stream.
+			xmpCheckStructFieldNames(data, part, &packet)
 		}
 
 		for _, v := range packet {
