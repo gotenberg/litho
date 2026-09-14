@@ -3321,6 +3321,23 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, extraExtensio
 // property, whatever comes back.
 func xmpPropertyTypeDetails(part int, ns, prop string, pv xmpPropertyValue, registry map[string]xmpPropType) []string {
 	expectedType, known := registry[prop]
+	// veraPDF answers both tests of the clause from one SchemasDefinition: a
+	// property no schema defines has no defined type either, so
+	// getSchemasDefinition returns null, getisValueTypeCorrect returns null with
+	// it, and t2 fails wherever t1 does. litho's type registry is a superset of
+	// the predefined catalog (207 names for part 2), so a name the catalog
+	// rejects still found a type here and stayed silent: govdocs
+	// thread_300_300116 reports photoshop:ColorMode, photoshop:History,
+	// photoshop:ICCProfile, exif:NativeDigest, tiff:NativeDigest and pdf:Trapped
+	// under t1 alone while veraPDF reports every one under both.
+	if known {
+		if catalog := xmpPredefinedPropertyCatalog(part); catalog != nil {
+			names, nsKnown := catalog[ns]
+			if _, defined := names[prop]; !nsKnown || !defined {
+				known = false
+			}
+		}
+	}
 	// pdfaid:rev exists only in the PDF/A-4 identification schema. The XMP 2005
 	// catalog (ISO 19005-2/3 §6.6.2.3.1, mirrored in xmpPredefined2005Extra)
 	// predefines part/conformance/amd/corr only, so rev is an unknown property
