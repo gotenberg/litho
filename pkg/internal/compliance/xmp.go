@@ -1250,6 +1250,20 @@ type xmpTopLevelProperty struct {
 // §6.6.2.3.1 apply to properties, not to structure fields, so fields of
 // structured values, including ones serialized as nested rdf:Description
 // elements, must stay invisible here.
+// xmpIsRDFTypeProperty reports whether an element name is rdf:type.
+//
+// The RDF namespace carries the packet's structure, so the property audits pass
+// over it. rdf:type is the exception: RDF/XML writes a node's class as an
+// ordinary property element (RDF 1.1 XML Syntax §2.13 abbreviates exactly that
+// form), and the XMP model keeps it as a property of the RDF namespace. No
+// predefined schema defines it, so ISO 19005-2 §6.6.2.3.1 forbids it unless an
+// extension schema declares it. Six govdocs files write one and veraPDF reports
+// every one; nothing else in 3732 packets carrying RDF-namespace names at that
+// position is written as an element.
+func xmpIsRDFTypeProperty(name xml.Name) bool {
+	return name.Space == xmpRDFNamespace && name.Local == "type"
+}
+
 func xmpExtractTopLevelProperties(data []byte) []xmpTopLevelProperty {
 	// Ancestor classification: structural wrappers (document root,
 	// x:xmpmeta, rdf:RDF), a top-level rdf:Description, or content
@@ -1315,7 +1329,9 @@ func xmpExtractTopLevelProperties(data []byte) []xmpTopLevelProperty {
 					frame = xmpFrameStructural
 				}
 			case xmpFrameDescription:
-				if !ignored[t.Name.Space] {
+				// Attributes stay ignored: rdf:about and friends are RDF
+				// syntax, never properties.
+				if !ignored[t.Name.Space] || xmpIsRDFTypeProperty(t.Name) {
 					record(t.Name.Space, t.Name.Local)
 				}
 			}
@@ -1391,7 +1407,11 @@ func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, ex
 		if !ok {
 			// Non-catalog namespaces are otherwise handled by xmpCheckNamespaces,
 			// which judges namespaces and would let an undeclared name through.
-			if undeclaredHere {
+			// It passes over the RDF namespace as structural, so nothing would
+			// judge rdf:type: see [xmpIsRDFTypeProperty]. No predefined schema
+			// defines it and no extension schema declared it here, which is
+			// exactly what this rule forbids.
+			if undeclaredHere || p.ns == xmpRDFNamespace {
 				*results = append(*results, xmpSchemaPropertyRule(part, prefixed)...)
 			}
 			continue
@@ -3278,6 +3298,20 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, extraExtensio
 			if details := xmpPropertyTypeDetails(part, ns, prop, pv, registry); len(details) > 0 {
 				*results = append(*results, xmpPropertyTypeRule(part, ns, prop, strings.Join(details, "; "))...)
 			}
+		}
+	}
+
+	// rdf:type is the one RDF-namespace name the loop above cannot reach, since
+	// xmpExtractPropertyValues reads no value for it. See
+	// [xmpIsRDFTypeProperty]: it is a property, and no predefined schema gives
+	// it a value type, so it answers this test the way any unknown property
+	// name does.
+	for _, p := range xmpExtractTopLevelProperties(data) {
+		if p.ns != xmpRDFNamespace || extensionNS[p.ns] {
+			continue
+		}
+		if details := xmpPropertyTypeDetails(part, p.ns, p.name, xmpPropertyValue{}, nil); len(details) > 0 {
+			*results = append(*results, xmpPropertyTypeRule(part, p.ns, p.name, strings.Join(details, "; "))...)
 		}
 	}
 }
