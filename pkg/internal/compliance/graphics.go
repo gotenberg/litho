@@ -20,6 +20,10 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	doc.Logger.Debug("compliance.graphics: starting checks", "profile", profile, "part", part)
 
+	// One ExtGState dictionary is judged once for the whole document; see
+	// [objectJudgedOnce].
+	judgedGS := make(map[int]bool)
+
 	var results []Violation
 	for i := range vctx.pages {
 		p := &vctx.pages[i]
@@ -57,7 +61,7 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			continue
 		}
 
-		results = append(results, checkExtGStateGraphics(ctx, doc, res, profile, part, i+1)...)
+		results = append(results, checkExtGStateGraphics(ctx, doc, res, profile, part, i+1, judgedGS)...)
 
 		if hasContent {
 			if part >= 2 {
@@ -74,13 +78,13 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		results = append(results, checkFormXObjectResources(ctx, doc, res, part, i+1, referencedXObjects)...)
 
 		// Scan Form XObject ExtGState for halftone/rendering intent violations.
-		results = append(results, checkFormXObjectExtGState(ctx, doc, res, profile, part, i+1)...)
+		results = append(results, checkFormXObjectExtGState(ctx, doc, res, profile, part, i+1, judgedGS)...)
 
 		// Check Type3 font CharProc resource completeness.
 		results = append(results, checkType3CharProcResources(ctx, doc, res, part, i+1)...)
 
 		// Scan annotation appearance ExtGState for halftone/rendering intent.
-		results = append(results, checkAnnotationAppearanceExtGState(ctx, doc, page, profile, part, i+1)...)
+		results = append(results, checkAnnotationAppearanceExtGState(ctx, doc, page, profile, part, i+1, judgedGS)...)
 
 		// Scan annotation appearance streams for undefined operators.
 		results = append(results, checkAnnotationAppearanceOps(ctx, doc, page, part, i+1)...)
@@ -194,7 +198,7 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 
 // checkAnnotationAppearanceExtGState scans annotation appearance stream
 // resources for ExtGState entries (rendering intent, halftone, etc.).
-func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Document, page ast.PdfDict, profile string, part, pageNum int) []Violation {
+func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Document, page ast.PdfDict, profile string, part, pageNum int, judged map[int]bool) []Violation {
 	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annotsArr) == 0 {
 		return nil
@@ -221,7 +225,7 @@ func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Docum
 			}
 			apRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
 			if apRes != nil {
-				results = append(results, checkExtGStateGraphics(ctx, doc, apRes, profile, part, pageNum)...)
+				results = append(results, checkExtGStateGraphics(ctx, doc, apRes, profile, part, pageNum, judged)...)
 			}
 		}
 	}
@@ -339,7 +343,7 @@ func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, strea
 
 // checkFormXObjectExtGState scans Form XObject resources for ExtGState
 // entries (halftone, rendering intent, etc.) that the page-level scan misses.
-func checkFormXObjectExtGState(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, profile string, part, pageNum int) []Violation {
+func checkFormXObjectExtGState(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, profile string, part, pageNum int, judged map[int]bool) []Violation {
 	if pageRes == nil {
 		return nil
 	}
@@ -363,13 +367,13 @@ func checkFormXObjectExtGState(ctx context.Context, doc *document.Document, page
 		if formRes == nil {
 			continue
 		}
-		results = append(results, checkExtGStateGraphics(ctx, doc, formRes, profile, part, pageNum)...)
+		results = append(results, checkExtGStateGraphics(ctx, doc, formRes, profile, part, pageNum, judged)...)
 	}
 	return results
 }
 
 // checkExtGStateGraphics validates all ExtGState entries in a page's resources.
-func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resources ast.PdfDict, profile string, part, pageNum int) []Violation {
+func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resources ast.PdfDict, profile string, part, pageNum int, judged map[int]bool) []Violation {
 	gsDict, err := document.ResolveDict(ctx, doc, resources["ExtGState"])
 	if err != nil || gsDict == nil {
 		return nil
@@ -380,6 +384,15 @@ func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resourc
 		gsObj := gsDict[gsName]
 		if ctx.Err() != nil {
 			return results
+		}
+
+		// One ExtGState dictionary, one finding: these rules forbid keys OF THE
+		// DICTIONARY (ISO 19005-2 §6.2.5 among them), so a state 30 pages share
+		// is one violation, not 30. veraPDF states each against its single
+		// PDExtGState: govdocs thread_100_100666.pdf references object 190 from
+		// 30 pages and veraPDF reports its /TR once. See [objectJudgedOnce].
+		if objectJudgedOnce(gsObj, judged) {
+			continue
 		}
 
 		gs, err := document.ResolveDict(ctx, doc, gsObj)

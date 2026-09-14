@@ -420,7 +420,7 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 	// Walk widget /A action chain for forbidden types (when /A is present and
 	// not already flagged as structurally forbidden). Type violations still
 	// fire for completeness.
-	if hasA && !actionAlreadyJudged(annotDict["A"], judged) {
+	if hasA && !objectJudgedOnce(annotDict["A"], judged) {
 		aDict, err := document.ResolveDict(ctx, doc, annotDict["A"])
 		if err == nil && aDict != nil {
 			results = append(results, walkActionChain(ctx, doc, aDict, profile, part, location+" /A", 0, make(map[int]bool))...)
@@ -441,7 +441,7 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 				if ctx.Err() != nil {
 					return results
 				}
-				if actionAlreadyJudged(actionObj, judged) {
+				if objectJudgedOnce(actionObj, judged) {
 					continue
 				}
 				actionDict, err := document.ResolveDict(ctx, doc, actionObj)
@@ -456,8 +456,11 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 	return results
 }
 
-// actionAlreadyJudged reports whether an action object has been judged already,
-// marking it when it has not.
+// objectJudgedOnce reports whether an indirect object has been judged already,
+// marking it when it has not. It keeps one finding per object where a document
+// lets several parents reach the same dictionary, which is how veraPDF counts:
+// it builds one model object per PDF object and states each rule against it
+// once. [checkExtGStateGraphics] uses it for the same reason.
 //
 // A terminal form field merged with its widget annotation is ONE dictionary
 // (ISO 32000-1, 12.5.6.19), so litho reaches its /A and /AA twice: once walking
@@ -468,7 +471,7 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 //
 // Only an indirect action can be shared, so a direct dictionary is always
 // judged: it belongs to the one parent that spells it out.
-func actionAlreadyJudged(obj ast.PdfObject, judged map[int]bool) bool {
+func objectJudgedOnce(obj ast.PdfObject, judged map[int]bool) bool {
 	ref, ok := obj.(ast.PdfIndirectRef)
 	if !ok || judged == nil {
 		return false
@@ -790,7 +793,7 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 		}
 
 		// Check /A on the field.
-		if aObj, hasA := field["A"]; hasA && !actionAlreadyJudged(aObj, judged) {
+		if aObj, hasA := field["A"]; hasA && !objectJudgedOnce(aObj, judged) {
 			aDict, err := document.ResolveDict(ctx, doc, aObj)
 			if err == nil && aDict != nil {
 				if _, hasS := aDict["S"]; hasS {
@@ -805,7 +808,7 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 			if err == nil && aaDict != nil {
 				for _, key := range sortedNames(aaDict) {
 					valObj := aaDict[key]
-					if actionAlreadyJudged(valObj, judged) {
+					if objectJudgedOnce(valObj, judged) {
 						continue
 					}
 					actDict, err := document.ResolveDict(ctx, doc, valObj)
