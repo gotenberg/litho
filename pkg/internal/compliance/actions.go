@@ -158,8 +158,12 @@ func checkActionGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// Check page /AA dicts.
 	results = append(results, checkPageActions(ctx, doc, catalog, profile, part)...)
 
+	// One action object is judged once, however many parents reach it; see
+	// [actionAlreadyJudged].
+	judged := make(map[int]bool)
+
 	// Check annotation /A and /AA.
-	results = append(results, checkAnnotationActions(ctx, doc, catalog, profile, part)...)
+	results = append(results, checkAnnotationActions(ctx, doc, catalog, profile, part, judged)...)
 
 	// Check /Names/JavaScript name tree for JavaScript actions.
 	results = append(results, checkJavaScriptNameTree(ctx, doc, catalog, profile, part)...)
@@ -168,7 +172,7 @@ func checkActionGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	results = append(results, checkOutlineActions(ctx, doc, catalog, profile, part)...)
 
 	// Check AcroForm field actions.
-	results = append(results, checkFormFieldActions(ctx, doc, catalog, profile, part)...)
+	results = append(results, checkFormFieldActions(ctx, doc, catalog, profile, part, judged)...)
 
 	return results
 }
@@ -299,7 +303,7 @@ func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.P
 
 // checkAnnotationActions checks /A and /AA entries on all annotations across
 // all pages.
-func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
+func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, judged map[int]bool) []Violation {
 	pages := collectPages(ctx, doc, catalog)
 
 	var results []Violation
@@ -333,7 +337,7 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 			location := fmt.Sprintf("page %d annot %d (/%s)", pageIdx+1, annotIdx, subtype)
 
 			if isWidget {
-				results = append(results, checkWidgetActions(ctx, doc, annotDict, profile, part, location)...)
+				results = append(results, checkWidgetActions(ctx, doc, annotDict, profile, part, location, judged)...)
 			}
 
 			if !isWidget {
@@ -378,7 +382,7 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 
 // checkWidgetActions validates action restrictions specific to Widget
 // annotations.
-func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, profile string, part int, location string) []Violation {
+func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, profile string, part int, location string, judged map[int]bool) []Violation {
 	var results []Violation
 
 	_, hasA := annotDict["A"]
@@ -416,7 +420,7 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 	// Walk widget /A action chain for forbidden types (when /A is present and
 	// not already flagged as structurally forbidden). Type violations still
 	// fire for completeness.
-	if hasA {
+	if hasA && !actionAlreadyJudged(annotDict["A"], judged) {
 		aDict, err := document.ResolveDict(ctx, doc, annotDict["A"])
 		if err == nil && aDict != nil {
 			results = append(results, walkActionChain(ctx, doc, aDict, profile, part, location+" /A", 0, make(map[int]bool))...)
@@ -437,6 +441,9 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 				if ctx.Err() != nil {
 					return results
 				}
+				if actionAlreadyJudged(actionObj, judged) {
+					continue
+				}
 				actionDict, err := document.ResolveDict(ctx, doc, actionObj)
 				if err != nil || actionDict == nil {
 					continue
@@ -447,6 +454,30 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 	}
 
 	return results
+}
+
+// actionAlreadyJudged reports whether an action object has been judged already,
+// marking it when it has not.
+//
+// A terminal form field merged with its widget annotation is ONE dictionary
+// (ISO 32000-1, 12.5.6.19), so litho reaches its /A and /AA twice: once walking
+// the page's /Annots and once walking the AcroForm /Fields tree. veraPDF builds
+// one PDAction per action object and reports it once, which is why pdfjs
+// 160F-2019.pdf drew 117 findings from litho against 54 from veraPDF, split
+// exactly 57 and 57 between the two paths over the same 42 merged dictionaries.
+//
+// Only an indirect action can be shared, so a direct dictionary is always
+// judged: it belongs to the one parent that spells it out.
+func actionAlreadyJudged(obj ast.PdfObject, judged map[int]bool) bool {
+	ref, ok := obj.(ast.PdfIndirectRef)
+	if !ok || judged == nil {
+		return false
+	}
+	if judged[ref.ObjectNum] {
+		return true
+	}
+	judged[ref.ObjectNum] = true
+	return false
 }
 
 // walkActionChain recursively checks an action dict and its /Next chain for
@@ -687,7 +718,7 @@ func checkOutlineActionPDFA(ctx context.Context, doc *document.Document, action 
 
 // checkFormFieldActions walks the AcroForm /Fields array and checks form field
 // dicts for forbidden actions (/A and /AA keys).
-func checkFormFieldActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
+func checkFormFieldActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, judged map[int]bool) []Violation {
 	acroFormObj, ok := catalog["AcroForm"]
 	if !ok {
 		return nil
@@ -707,14 +738,14 @@ func checkFormFieldActions(ctx context.Context, doc *document.Document, catalog 
 	}
 
 	var results []Violation
-	walkFormFields(ctx, doc, fields, profile, part, &results, 0, make(map[int]bool))
+	walkFormFields(ctx, doc, fields, profile, part, &results, 0, make(map[int]bool), judged)
 	return results
 }
 
 // walkFormFields recursively checks form field dicts for forbidden actions. seen
 // processes each field object once, so a shared or cyclic /Kids tree (a node
 // whose children list the same object repeatedly) cannot force exponential work.
-func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, profile string, part int, results *[]Violation, depth int, seen map[int]bool) {
+func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, profile string, part int, results *[]Violation, depth int, seen, judged map[int]bool) {
 	if depth > maxActionChainDepth {
 		return
 	}
@@ -759,7 +790,7 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 		}
 
 		// Check /A on the field.
-		if aObj, hasA := field["A"]; hasA {
+		if aObj, hasA := field["A"]; hasA && !actionAlreadyJudged(aObj, judged) {
 			aDict, err := document.ResolveDict(ctx, doc, aObj)
 			if err == nil && aDict != nil {
 				if _, hasS := aDict["S"]; hasS {
@@ -774,6 +805,9 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 			if err == nil && aaDict != nil {
 				for _, key := range sortedNames(aaDict) {
 					valObj := aaDict[key]
+					if actionAlreadyJudged(valObj, judged) {
+						continue
+					}
 					actDict, err := document.ResolveDict(ctx, doc, valObj)
 					if err != nil || actDict == nil {
 						continue
@@ -790,7 +824,7 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 		if kidsObj, hasKids := field["Kids"]; hasKids {
 			kids, err := document.ResolveArray(ctx, doc, kidsObj)
 			if err == nil {
-				walkFormFields(ctx, doc, kids, profile, part, results, depth+1, seen)
+				walkFormFields(ctx, doc, kids, profile, part, results, depth+1, seen, judged)
 			}
 		}
 	}

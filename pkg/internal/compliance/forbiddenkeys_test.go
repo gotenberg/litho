@@ -96,14 +96,14 @@ func TestFormFieldAAForbidden(t *testing.T) {
 		2: Rule_19005_2_6_4_1_t02,
 		3: Rule_19005_3_6_4_1_t02,
 	} {
-		got := checkFormFieldActions(ctx, doc, cat, "", part)
+		got := checkFormFieldActions(ctx, doc, cat, "", part, make(map[int]bool))
 		if !hasRule(got, want) {
 			t.Errorf("part %d field /AA: got %v, want includes %v", part, got, want)
 		}
 	}
 
 	// PDF/A-4 has no blanket field-/AA prohibition (§6.6.3 permits a key set).
-	got4 := checkFormFieldActions(ctx, doc, cat, "", 4)
+	got4 := checkFormFieldActions(ctx, doc, cat, "", 4, make(map[int]bool))
 	for _, r := range []Rule{Rule_19005_1_6_6_2_t02, Rule_19005_2_6_4_1_t02, Rule_19005_3_6_4_1_t02} {
 		if hasRule(got4, r) {
 			t.Errorf("part 4 wrongly emitted field-/AA rule %v: %v", r, got4)
@@ -117,7 +117,7 @@ func TestFormFieldAAForbidden(t *testing.T) {
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
 		"<< /FT /Tx /T (f1) >>",
 	)
-	if got := checkFormFieldActions(ctx, docOK, catOK, "", 2); hasRule(got, Rule_19005_2_6_4_1_t02) {
+	if got := checkFormFieldActions(ctx, docOK, catOK, "", 2, make(map[int]bool)); hasRule(got, Rule_19005_2_6_4_1_t02) {
 		t.Errorf("field without /AA wrongly flagged: %v", got)
 	}
 }
