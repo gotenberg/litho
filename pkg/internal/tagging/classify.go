@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -618,7 +617,7 @@ func classifyBlocks(blocks []textBlock, pageIndex int, data []byte) []*Element {
 
 	roles := make([]Role, len(blocks))
 	for i, b := range blocks {
-		roles[i] = roleOf(b, body, levels)
+		roles[i] = roleOf(b, body, levels[i])
 	}
 
 	var elems []*Element
@@ -772,10 +771,11 @@ func blankGap(data []byte, aEnd, bStart int) bool {
 }
 
 // roleOf classifies one block as a heading (by font size relative to body) or a
-// paragraph.
-func roleOf(b textBlock, body float64, levels map[float64]int) Role {
-	if body > 0 && b.fontSize >= body*headingSizeRatio {
-		return headingRole(levels[roundHalf(b.fontSize)])
+// paragraph. level is the block's reading-order heading level from
+// [headingLevels], and is 0 when the block is not a heading.
+func roleOf(b textBlock, body float64, level int) Role {
+	if level > 0 && body > 0 && b.fontSize >= body*headingSizeRatio {
+		return headingRole(level)
 	}
 	return RoleP
 }
@@ -817,26 +817,34 @@ func bodyFontSize(blocks []textBlock) float64 {
 	return best
 }
 
-// headingLevels maps each distinct heading size (rounded) to a no-skip level:
-// the largest size is H1, the next H2, and so on. Sizes below the heading
-// threshold are absent from the map.
-func headingLevels(blocks []textBlock, body float64) map[float64]int {
-	seen := make(map[float64]bool)
-	var sizes []float64
-	for _, b := range blocks {
-		if body > 0 && b.fontSize >= body*headingSizeRatio {
-			sz := roundHalf(b.fontSize)
-			if !seen[sz] {
-				seen[sz] = true
-				sizes = append(sizes, sz)
-			}
+// headingLevels assigns a heading level to every block, in reading order, and
+// returns one level per block index (0 where the block is not a heading).
+//
+// ISO 14289-1, 7.4.2 judges the sequence as it is READ, not as it is sized: the
+// first heading in the document must be H1, and no heading may jump more than
+// one level past the deepest level seen so far. Ranking the distinct sizes and
+// handing each block its rank satisfies neither, because the first heading a
+// page happens to contain is rarely the largest one on it. govdocs
+// thread_000_000337.pdf tagged to H6 first and drew 7.4.2 test 1 from litho's
+// own validator, one of 35 files where remediation introduced that violation.
+//
+// A monotone stack of the sizes still open gives the level instead. A heading
+// closes every open heading its own size or smaller, then sits one level below
+// whatever remains, so the first heading always lands on H1, a larger heading
+// re-opens at a shallower level, and the level can only ever grow by one.
+func headingLevels(blocks []textBlock, body float64) []int {
+	levels := make([]int, len(blocks))
+	var open []float64
+	for i, b := range blocks {
+		if body <= 0 || b.fontSize < body*headingSizeRatio {
+			continue
 		}
-	}
-	sort.Slice(sizes, func(i, j int) bool { return sizes[i] > sizes[j] })
-
-	levels := make(map[float64]int, len(sizes))
-	for i, sz := range sizes {
-		levels[sz] = i + 1 // contiguous H1..Hn, no skips
+		sz := roundHalf(b.fontSize)
+		for len(open) > 0 && open[len(open)-1] <= sz {
+			open = open[:len(open)-1]
+		}
+		levels[i] = len(open) + 1
+		open = append(open, sz)
 	}
 	return levels
 }
