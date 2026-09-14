@@ -648,6 +648,17 @@ func checkXRefFormat(doc *document.Document, profile string) []Violation {
 		if typeName, ok := trailer["Type"].(ast.PdfName); ok && typeName == "XRef" {
 			return fail(xrefStreamForbiddenRule(profile), "document uses xref streams")
 		}
+		// A hybrid-reference file keeps a classic table for readers that
+		// predate xref streams and an xref STREAM for the rest, linked from the
+		// trailer's /XRefStm (ISO 32000-1, 7.5.8.4). Neither test above sees it:
+		// the classic table supplies every entry, so none is compressed, and the
+		// trailer is its own dictionary rather than the stream's. The file uses
+		// an xref stream all the same, which is what this clause forbids, and
+		// veraPDF answers containsXRefStream true for govdocs
+		// thread_400_400545.pdf, a hybrid file litho passed.
+		if _, hybrid := trailer["XRefStm"]; hybrid {
+			return fail(xrefStreamForbiddenRule(profile), "document uses xref streams")
+		}
 	}
 
 	return nil
