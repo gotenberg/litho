@@ -1307,7 +1307,14 @@ func ExtractType1FontMatrixScale(fontData []byte) (float64, bool) {
 // to synthetic G-names here that the PDF /Encoding's standard names do not
 // cover.
 func ExtractType1BuiltinEncoding(fontData []byte) [256]string {
-	return type1.ParseEncoding(fontData)
+	return type1.ParseEncodingPS(fontData)
+}
+
+// ExtractType1NotdefFilled reports whether a raw Type 1 font program fills its
+// built-in encoding vector with .notdef before listing codes, so a code the
+// vector does not list names .notdef rather than nothing.
+func ExtractType1NotdefFilled(fontData []byte) bool {
+	return type1.EncodingFillsNotdef(fontData)
 }
 
 // ExtractType1EncodingNames reads the built-in encoding from a raw Type 1

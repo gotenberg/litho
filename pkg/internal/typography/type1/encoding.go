@@ -2,8 +2,10 @@ package type1
 
 import (
 	"bytes"
+	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // eexecMarker is the PostScript keyword that begins the encrypted
@@ -16,6 +18,26 @@ var eexecMarker = []byte("currentfile eexec")
 // a Type 1 /Encoding vector. The byte index is captured in group 1
 // and the glyph name in group 2.
 var dupPutRe = regexp.MustCompile(`dup\s+(\d+)\s+/(\S+)\s+put`)
+
+// dupPutRadixRe is [dupPutRe] with the index also allowed to be a
+// PostScript radix number such as 8#101 (PostScript Language Reference,
+// 3.2.2), which some producers write the whole vector in.
+var dupPutRadixRe = regexp.MustCompile(`dup\s+(\d+(?:#[0-9A-Za-z]+)?)\s+/(\S+)\s+put`)
+
+// parseCode reads an encoding vector index: a decimal integer or a
+// PostScript radix number "base#digits" with a base from 2 to 36.
+func parseCode(tok string) (int, error) {
+	base, digits, radix := strings.Cut(tok, "#")
+	if !radix {
+		return strconv.Atoi(tok)
+	}
+	b, err := strconv.Atoi(base)
+	if err != nil || b < 2 || b > 36 {
+		return 0, fmt.Errorf("type1: radix %q out of range", base)
+	}
+	v, err := strconv.ParseInt(digits, b, 32)
+	return int(v), err
+}
 
 // namedEncodingRe captures the case where /Encoding references a
 // predefined encoding by name (e.g. "/Encoding StandardEncoding
@@ -30,7 +52,25 @@ var namedEncodingRe = regexp.MustCompile(`/Encoding\s+(\S+)\s+def`)
 // recognise the reference and load the corresponding table
 // themselves. Fonts without a recognisable /Encoding produce an all-
 // empty result.
+//
+// Indices are read as decimal integers, as pdf.js's Type1Parser reads them
+// (parseInt, base 10), so text extraction keeps agreeing with the pdf.js
+// reference it is measured against. [ParseEncodingPS] reads radix numbers
+// too, as a PostScript interpreter does.
 func ParseEncoding(data []byte) [256]string {
+	return parseEncoding(data, dupPutRe)
+}
+
+// ParseEncodingPS is [ParseEncoding] reading the vector's indices as a
+// PostScript interpreter does, radix numbers such as 8#101 included, which is
+// how veraPDF reads them: govdocs thread_100_100480.pdf writes its whole vector
+// that way.
+func ParseEncodingPS(data []byte) [256]string {
+	return parseEncoding(data, dupPutRadixRe)
+}
+
+// parseEncoding implements [ParseEncoding] with the given dup/put matcher.
+func parseEncoding(data []byte, entryRe *regexp.Regexp) [256]string {
 	var enc [256]string
 	if len(data) == 0 {
 		return enc
@@ -53,8 +93,8 @@ func ParseEncoding(data []byte) [256]string {
 		}
 	}
 
-	for _, m := range dupPutRe.FindAllSubmatch(region, -1) {
-		idx, err := strconv.Atoi(string(m[1]))
+	for _, m := range entryRe.FindAllSubmatch(region, -1) {
+		idx, err := parseCode(string(m[1]))
 		if err != nil || idx < 0 || idx > 255 {
 			continue
 		}

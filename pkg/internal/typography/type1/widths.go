@@ -172,22 +172,26 @@ const (
 	csOpVhcurveTo      = 30 //nolint:unused // listed for context
 	csOpHvcurveTo      = 31 //nolint:unused // listed for context
 	csOpEscapeSbw byte = 7  // follows csOpEscape to form the two-byte sbw operator
+	csOpEscapeDiv byte = 12 // follows csOpEscape to form the two-byte div operator
 )
 
 // extractAdvanceWidth walks the decrypted charstring bytes, decoding
 // the Type 1 integer encoding until it hits either hsbw (operator
 // 13) or sbw (12 7). Returns the advance width pushed immediately
-// before that operator. Any other operator or malformed byte stream
-// returns (0, false) so the caller can skip the glyph.
+// before that operator. A div (12 12) on the way is evaluated, since a
+// fractional advance can only be written as a quotient (Adobe Type 1 Font
+// Format, 6.5): TeX's Computer Modern subsets set "78 113889 100 div hsbw".
+// Any other operator or malformed byte stream returns (0, false) so the
+// caller can skip the glyph.
 func extractAdvanceWidth(plain []byte) (float64, bool) {
 	if len(plain) == 0 {
 		return 0, false
 	}
 	const stackLimit = 24
-	var stack [stackLimit]int
+	var stack [stackLimit]float64
 	top := 0
 
-	push := func(v int) bool {
+	push := func(v float64) bool {
 		if top >= stackLimit {
 			return false
 		}
@@ -200,7 +204,7 @@ func extractAdvanceWidth(plain []byte) (float64, bool) {
 		b := plain[i]
 		switch {
 		case b >= 32 && b <= 246:
-			if !push(int(b) - 139) {
+			if !push(float64(int(b) - 139)) {
 				return 0, false
 			}
 			i++
@@ -208,7 +212,7 @@ func extractAdvanceWidth(plain []byte) (float64, bool) {
 			if i+1 >= len(plain) {
 				return 0, false
 			}
-			if !push((int(b)-247)*256 + int(plain[i+1]) + 108) {
+			if !push(float64((int(b)-247)*256 + int(plain[i+1]) + 108)) {
 				return 0, false
 			}
 			i += 2
@@ -216,7 +220,7 @@ func extractAdvanceWidth(plain []byte) (float64, bool) {
 			if i+1 >= len(plain) {
 				return 0, false
 			}
-			if !push(-(int(b)-251)*256 - int(plain[i+1]) - 108) {
+			if !push(float64(-(int(b)-251)*256 - int(plain[i+1]) - 108)) {
 				return 0, false
 			}
 			i += 2
@@ -225,7 +229,7 @@ func extractAdvanceWidth(plain []byte) (float64, bool) {
 				return 0, false
 			}
 			v := int32(plain[i+1])<<24 | int32(plain[i+2])<<16 | int32(plain[i+3])<<8 | int32(plain[i+4])
-			if !push(int(v)) {
+			if !push(float64(v)) {
 				return 0, false
 			}
 			i += 5
@@ -233,7 +237,7 @@ func extractAdvanceWidth(plain []byte) (float64, bool) {
 			if top < 2 {
 				return 0, false
 			}
-			return float64(stack[top-1]), true
+			return stack[top-1], true
 		case b == csOpEscape:
 			if i+1 >= len(plain) {
 				return 0, false
@@ -243,7 +247,16 @@ func extractAdvanceWidth(plain []byte) (float64, bool) {
 				if top < 4 {
 					return 0, false
 				}
-				return float64(stack[top-2]), true
+				return stack[top-2], true
+			}
+			if next == csOpEscapeDiv {
+				if top < 2 || stack[top-1] == 0 {
+					return 0, false
+				}
+				stack[top-2] /= stack[top-1]
+				top--
+				i += 2
+				continue
 			}
 			// Any other escaped operator before hsbw/sbw is a spec
 			// violation for Type 1 charstrings; abandon rather than

@@ -287,12 +287,15 @@ func buildNameToGID(glyphNames map[uint16]string) map[string]uint16 {
 // /Widths array against the advance widths in its embedded charstrings. It is
 // the counterpart to [checkSimpleFontWidths] for programs whose widths live in
 // each glyph's hsbw/sbw operator (which the GID-keyed [typography.ExtractBinaryWidths]
-// cannot read). A code is resolved to a glyph name through the program's own
-// built-in encoding (subset fonts routinely map codes to synthetic G-names the
-// PDF /Encoding's standard names do not cover), and the charstring advance is
-// scaled by the /FontMatrix to reach the 1000-unit text space of /Widths. A
-// glyph the program does not define is skipped so an incomplete map cannot
-// produce a false positive.
+// cannot read). The charstring advance is scaled by the /FontMatrix to reach
+// the 1000-unit text space of /Widths.
+//
+// [type1WidthGlyphName] picks the glyph as veraPDF does. A glyph the program
+// does not define is taken at the /MissingWidth where that choice is veraPDF's
+// too, and so is a code outside /FirstChar to /LastChar on the dictionary side
+// (ISO 32000-1, 9.6.2.1, Table 111): pdfjs bug1354114.pdf shows WinAnsi code 10,
+// below its /FirstChar, and veraPDF weighs the 500-unit .notdef it selects
+// against 0.
 func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
 	if usage == nil || len(usage.charCodes) == 0 || !usage.visible {
 		return nil
@@ -312,9 +315,21 @@ func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict 
 	if len(nameWidths) == 0 {
 		return nil
 	}
-	builtin := typography.ExtractType1BuiltinEncoding(fontData)
+	builtin := builtinEncodingNames(fontData)
 	pdfEnc := resolveSimpleFontEncoding(ctx, doc, fontDict)
 	scale, _ := typography.ExtractType1FontMatrixScale(fontData)
+	table := type1EncodingTable(ctx, doc, fontDict)
+	differences := fontDifferencesNames(ctx, doc, fontDict)
+	// A predefined encoding the program references names .notdef wherever it
+	// defines nothing, as a vector the program fills with .notdef does; a bare
+	// "256 array" names nothing there, and veraPDF then finds no glyph for such a
+	// code and takes the /MissingWidth.
+	raw := typography.ExtractType1BuiltinEncoding(fontData)
+	fillsNotdef := (raw[0] != "" && raw[0] == raw[255]) || typography.ExtractType1NotdefFilled(fontData)
+	definedGlyphs := make(map[string]bool)
+	for _, name := range typography.ExtractGlyphNames(ctx, fontData) {
+		definedGlyphs[name] = true
+	}
 
 	widths, err := document.ResolveArray(ctx, doc, fontDict["Widths"])
 	if err != nil || len(widths) == 0 {
@@ -338,23 +353,18 @@ func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict 
 		if code == 0 {
 			continue
 		}
-		idx := int(code) - int(firstChar)
-		covered := idx >= 0 && idx < len(widths)
-		// Prefer the PDF /Encoding name when the program defines a glyph for it;
-		// otherwise fall back to the program's built-in name for the code (the
-		// G-name subset case). Skip a code that resolves to no defined glyph.
-		name := pdfEnc[code]
-		if _, ok := nameWidths[name]; name == "" || name == ".notdef" || !ok {
-			name = builtin[code]
-		}
-		rawWidth, ok := nameWidths[name]
-		if !ok || name == ".notdef" {
+		name, absentIsMissing := type1WidthGlyphName(code, pdfEnc, builtin, differences, table, fillsNotdef, nameWidths)
+		expected := missingWidth
+		if rawWidth, ok := nameWidths[name]; ok && name != "" {
+			expected = rawWidth * scale * 1000.0
+		} else if !absentIsMissing || definedGlyphs[name] {
+			// A glyph the program defines but whose advance litho could not
+			// read is not missing: skip it rather than weigh it at /MissingWidth.
 			continue
 		}
-		expected := rawWidth * scale * 1000.0
 		pdfWidth := missingWidth
 		source := " from /MissingWidth"
-		if covered {
+		if idx := int(code) - int(firstChar); idx >= 0 && idx < len(widths) {
 			w, wOK := widthValue(ctx, doc, widths[idx])
 			if !wOK {
 				continue
@@ -740,8 +750,7 @@ func checkType1GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 		if name == "" {
 			// A code no encoding in force names has nothing to look up in
 			// /CharStrings, so it selects no glyph at all. Answering that needs
-			// the program's own charset, which this check reads (the .notdef
-			// rule, which does not, leaves the embedded case alone). Both
+			// the program's own charset, which this check reads. Both
 			// encodings unreadable leaves the question open instead: pdfjs
 			// bug1354114.pdf shows WinAnsi code 10, issue6721_reduced.pdf
 			// StandardEncoding code 224 and issue6901.pdf a code its Type 1
@@ -752,8 +761,11 @@ func checkType1GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 			return failf(rule, "font %s on page %d: charCode %d is named by no encoding, so it selects no glyph",
 				fontName, pageNum, code)
 		}
+		// A code that selects .notdef paints no glyph: veraPDF's Type 1
+		// containsGlyph holds .notdef absent, so a /Differences entry naming it
+		// fails the rule too.
 		if name == ".notdef" {
-			continue
+			return failf(rule, "font %s on page %d: charCode %d selects .notdef, which paints no glyph", fontName, pageNum, code)
 		}
 		if !defined[name] {
 			return failf(rule, "font %s on page %d: glyph %s for charCode %d not present in embedded font program",

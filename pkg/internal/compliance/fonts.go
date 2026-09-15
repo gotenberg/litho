@@ -1416,14 +1416,41 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 			// (ISO 32000-1, 9.6.6.2); answering that needs the program's own
 			// charset, which this check does not read, so it stays silent there.
 			namedTable := ""
+			embedded := false
 			if fd := document.ResolveFontDescriptor(ctx, doc, fontDict); fd == nil ||
 				extractFontProgramData(ctx, doc, fd) == nil {
 				namedTable = namedEncodingTable(ctx, doc, fontDict)
+			} else {
+				embedded = true
+			}
+			// An embedded Type 1 font is judged by the name its /Encoding gives
+			// the code (ISO 32000-1, 9.6.6.1): .notdef where the predefined base
+			// table leaves the code undefined, whatever the symbolic flag says,
+			// which is how veraPDF names it. veraPDF's Encoding holds a table for
+			// MacRomanEncoding, MacExpertEncoding and WinAnsiEncoding only, so
+			// under StandardEncoding, a /Differences-only dictionary or no
+			// /Encoding a code the dictionary leaves alone gets no name and no
+			// report. pdfjs bug1354114.pdf shows WinAnsi code 10 through a
+			// symbolic NimbusRomNo9L subset and veraPDF reports it; the same code
+			// taken from StandardEncoding it does not.
+			embeddedType1 := embedded && (subtype == "Type1" || subtype == "MMType1")
+			type1Table := ""
+			var type1Differences map[byte]string
+			if embeddedType1 {
+				type1Table = type1EncodingTable(ctx, doc, fontDict)
+				type1Differences = fontDifferencesNames(ctx, doc, fontDict)
 			}
 			for _, code := range sortedByteKeys(usage.charCodes) {
 				glyphName := enc[code]
 				if glyphName == ".notdef" {
 					return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
+				}
+				if embeddedType1 {
+					if _, named := type1Differences[code]; !named && type1UndefinedCode(type1Table, code) {
+						return failf(rule, "font %s on page %d: charCode %d is undefined in %s, so it maps to .notdef",
+							fontName, pageNum, code, type1Table)
+					}
+					continue
 				}
 				// The symbolic and DEL exemptions below apply here too: a
 				// symbolic font resolves codes through its built-in encoding
