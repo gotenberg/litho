@@ -279,7 +279,7 @@ func DecodePdfString(s ast.PdfString) string {
 	// UTF-8 BOM (0xEF 0xBB 0xBF): added in PDF 2.0 for the text-string
 	// type. Strip the marker, repair any invalid UTF-8 in the payload
 	// (producers that flag UTF-8 but then write a lone continuation
-	// byte are rare but real — the canonical fix is to surface the
+	// byte are rare but real; the canonical fix is to surface the
 	// damage as U+FFFD instead of returning a Go string that fails
 	// utf8.Valid), and trim a second leading U+FEFF rune if the
 	// producer double-wrapped the BOM.

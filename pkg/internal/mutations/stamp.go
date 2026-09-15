@@ -154,7 +154,7 @@ func StampText(
 		// Translate to the rotation origin, rotate, then draw at (0, 0).
 		ops.WriteString(buildTransformMatrix(opts.X, opts.Y, 1, 1, opts.Rotation))
 		// string(), not the PdfName: its String method already supplies the
-		// leading slash, so "/%s" emitted "//StampF23" — two names where the
+		// leading slash, so "/%s" emitted "//StampF23": two names where the
 		// operator expects one, so the font was never selected and the stamp
 		// drew (and extracted) under whatever font was current.
 		fmt.Fprintf(&ops, "BT /%s %s Tf 0 0 Td %s Tj ET ",

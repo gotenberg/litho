@@ -492,8 +492,8 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	}
 
 	// A raw-scan rebuild only recovers uncompressed "N G obj" headers; objects
-	// held inside object streams (ISO 32000-1 §7.5.7) — which can include a
-	// catalog or page-tree node a modern producer compressed — are invisible to
+	// held inside object streams (ISO 32000-1 §7.5.7), which can include a
+	// catalog or page-tree node a modern producer compressed, are invisible to
 	// it. Register each recovered object stream's members so [ResolveCatalog]
 	// can still find a compressed /Type /Catalog (otherwise the whole page tree
 	// is lost). Runs only after a rebuild, when the fully-constructed document

@@ -381,7 +381,7 @@ func mergeByOffset(a, b []*Element) []*Element {
 //
 // Baselines are tracked from the text positioning operators only
 // (Tm translation, Td/TD/T*/TL). The CTM (cm) translation and scale, Tm's own
-// vertical scale and shear, text rise (Ts, intentionally — it is a per-glyph
+// vertical scale and shear, text rise (Ts, intentionally: it is a per-glyph
 // offset, not a line advance), and rotation are all ignored, so the baseline is
 // the true device Y only for upright, unit-scale, non-cm-repositioned text. The
 // merge pass guards against the resulting errors by refusing to merge across
