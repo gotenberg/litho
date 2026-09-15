@@ -24,18 +24,23 @@ type OCREngine interface {
 // default 1.0). A portrait MediaBox with /Rotate 90 reports landscape dimensions.
 // Values must not be shared across goroutines without synchronization.
 type Page struct {
-	PageNumber  int               `json:"pageNumber"`
-	Width       float64           `json:"width"`
-	Height      float64           `json:"height"`
-	Rotate      int               `json:"rotate"`
-	UserUnit    float64           `json:"userUnit"`
-	IsLandscape bool              `json:"isLandscape"`
-	DPM         map[string]string `json:"dpm,omitempty"`
-	MediaBox    [4]float64        `json:"mediaBox"`
-	CropBox     [4]float64        `json:"cropBox"`
-	BleedBox    [4]float64        `json:"bleedBox"`
-	TrimBox     [4]float64        `json:"trimBox"`
-	ArtBox      [4]float64        `json:"artBox"`
+	PageNumber  int     `json:"pageNumber"`
+	Width       float64 `json:"width"`
+	Height      float64 `json:"height"`
+	Rotate      int     `json:"rotate"`
+	UserUnit    float64 `json:"userUnit"`
+	IsLandscape bool    `json:"isLandscape"`
+	// DPM aliases the reader's cached page metadata rather than copying it:
+	// the page tree is resolved once per reader and every Page handed out
+	// carries that same map. Treat it as read-only, and copy it before
+	// changing anything, since writing through it edits the reader's own
+	// state for every later caller. The rest of this struct is values.
+	DPM      map[string]string `json:"dpm,omitempty"`
+	MediaBox [4]float64        `json:"mediaBox"`
+	CropBox  [4]float64        `json:"cropBox"`
+	BleedBox [4]float64        `json:"bleedBox"`
+	TrimBox  [4]float64        `json:"trimBox"`
+	ArtBox   [4]float64        `json:"artBox"`
 }
 
 // TextElement represents a spatially positioned piece of text on a page.
