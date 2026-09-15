@@ -135,20 +135,33 @@ func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 // ParseEmbeddedCIDMap builds a [CIDMap] from an embedded CMap stream: the
 // cidchar/cidrange sections supply the code-to-CID mapping and the
 // codespacerange sections supply the byte-length structure needed to decode
-// content-stream strings. Returns nil when either half is missing, so a
+// content-stream strings. Returns nil when the codespace is missing, so a
 // malformed stream degrades to "encoding not decodable" instead of wrong
 // CIDs.
+//
+// A CMap with a codespace but no cidchar or cidrange section still decodes:
+// ISO 32000-1, 9.7.6.3 sends a code no mapping covers to CID 0, and a
+// bfchar or bfrange section maps to Unicode, not to CIDs (9.10.3). pdfjs
+// bug920426.pdf gives a Type 0 font an encoding CMap written with bfchar alone;
+// veraPDF's CMap.toCID reads its codes as CID 0. When the stream names a base
+// CMap (usecmap) or notdef mappings, which litho does not resolve, an
+// unmapped code stays unknown instead.
 func ParseEmbeddedCIDMap(ctx context.Context, data []byte) *CIDMap {
 	cidc, err := ParseCID(ctx, data)
-	if err != nil || cidc == nil || len(cidc.Mapping) == 0 {
+	if err != nil || cidc == nil {
 		return nil
 	}
 	full, err := Parse(ctx, data)
 	if err != nil || full == nil || len(full.CodeSpaceRanges) == 0 {
 		return nil
 	}
+	closed := !bytes.Contains(data, []byte("usecmap")) && !bytes.Contains(data, []byte("beginnotdef"))
+	if len(cidc.Mapping) == 0 && !closed {
+		return nil
+	}
 	return &CIDMap{
-		charToCID: cidc.Mapping,
-		cs:        &CMap{CodeSpaceRanges: full.CodeSpaceRanges},
+		charToCID:      cidc.Mapping,
+		cs:             &CMap{CodeSpaceRanges: full.CodeSpaceRanges},
+		unmappedNotdef: closed,
 	}
 }

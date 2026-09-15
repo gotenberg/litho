@@ -20,6 +20,17 @@ type CIDCode struct {
 type CIDMap struct {
 	charToCID map[int]int
 	cs        *CMap // carries the codespace ranges for the shared helpers
+	// unmappedNotdef marks a map whose every mapping litho holds, so a code it
+	// leaves unmapped selects CID 0; see [CIDMap.UnmappedNotdef].
+	unmappedNotdef bool
+}
+
+// UnmappedNotdef reports whether a code the map leaves unmapped is known to
+// select CID 0 (ISO 32000-1, 9.7.6.3): true for an embedded CMap that names no
+// base CMap (usecmap) and no notdef mappings, false when an unresolved base
+// CMap or notdef range could still supply the code.
+func (m *CIDMap) UnmappedNotdef() bool {
+	return m.unmappedNotdef
 }
 
 // predefinedCIDCache caches loaded predefined CID maps by encoding name.

@@ -1563,6 +1563,12 @@ func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInf
 		for _, s := range usage.rawStrings {
 			for _, c := range embedded.Decode([]byte(s)) {
 				if !c.Mapped {
+					// A code the CMap leaves unmapped selects CID 0 when litho
+					// holds all its mappings (ISO 32000-1, 9.7.6.3); see
+					// [cmap.CIDMap.UnmappedNotdef].
+					if embedded.UnmappedNotdef() {
+						cids[0] = true
+					}
 					continue
 				}
 				// A CMap mapping a used code to a CID beyond 65535
