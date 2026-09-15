@@ -209,15 +209,25 @@ func inlineBDCMCID(ctx context.Context, doc *document.Document, op content.Opera
 	if !ok {
 		return -1
 	}
-	mcidObj, ok := props["MCID"]
+	mcid, ok := mcidValue(ctx, doc, props["MCID"])
 	if !ok {
 		return -1
 	}
-	mcid, err := document.ResolveInt(ctx, doc, mcidObj)
+	return mcid
+}
+
+// mcidValue returns the marked-content identifier obj holds, as veraPDF's
+// GFOpMarkedContent.getMCID reads it: the /MCID entry counts only as an
+// integer (getAttribute(MCID, COS_INTEGER)), so an /MCID written as null, a
+// name or a real is no identifier and tags nothing (ISO 32000-1, 14.7.4.2
+// makes it an integer). Measured on each under PDF/UA-1 and PDF/UA-2.
+func mcidValue(ctx context.Context, doc *document.Document, obj ast.PdfObject) (int, bool) {
+	resolved, err := document.ResolveObject(ctx, doc, obj)
 	if err != nil {
-		return -1
+		return 0, false
 	}
-	return int(mcid)
+	n, ok := resolved.(ast.PdfInt)
+	return int(n), ok
 }
 
 // numberTreeLookup resolves a key in a number tree (Nums leaves, Kids

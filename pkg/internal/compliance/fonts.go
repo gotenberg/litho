@@ -1074,17 +1074,20 @@ func bdcProps(ctx context.Context, doc *document.Document, op content.Operation,
 }
 
 // bdcMCID returns the /MCID value of a BDC operator's property list (inline or
-// named via the page /Properties), or -1 when absent.
+// named via the page /Properties), or -1 when it carries none. Only an integer
+// /MCID counts ([mcidValue]): document.ResolveInt read an absent or null one as
+// 0, so text under no identifier borrowed the /ActualText of the element that
+// owns MCID 0, where veraPDF reports ISO 14289-2, 8.4.3 t1. Measured.
 func bdcMCID(ctx context.Context, doc *document.Document, op content.Operation, props func() ast.PdfDict) int {
 	pd := bdcProps(ctx, doc, op, props)
 	if pd == nil {
 		return -1
 	}
-	mcid, err := document.ResolveInt(ctx, doc, pd["MCID"])
-	if err != nil {
+	mcid, ok := mcidValue(ctx, doc, pd["MCID"])
+	if !ok {
 		return -1
 	}
-	return int(mcid)
+	return mcid
 }
 
 // bdcHasStringKey reports whether a BDC operator's property list carries key

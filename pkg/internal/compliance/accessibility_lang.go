@@ -385,20 +385,18 @@ func (s *structElemLang) hasLang(ctx context.Context, pd ast.PdfDict) bool {
 	if len(s.entries) == 0 {
 		return false
 	}
-	obj, ok := pd["MCID"]
-	if !ok {
+	// An /MCID counts only as an integer, as GFOpMarkedContent.getMCID reads it
+	// ([mcidValue]): a null one no longer borrows element 0's /Lang.
+	mcid, ok := mcidValue(ctx, s.doc, pd["MCID"])
+	if !ok || mcid < 0 || mcid >= len(s.entries) {
 		return false
 	}
-	mcid, err := document.ResolveInt(ctx, s.doc, obj)
-	if err != nil || mcid < 0 || int(mcid) >= len(s.entries) {
-		return false
-	}
-	if found, ok := s.cache[int(mcid)]; ok {
+	if found, ok := s.cache[mcid]; ok {
 		return found
 	}
 	elem, err := document.ResolveDict(ctx, s.doc, s.entries[mcid])
 	found := err == nil && elem != nil && structElemChainHasLang(ctx, s.doc, elem)
-	s.cache[int(mcid)] = found
+	s.cache[mcid] = found
 	return found
 }
 
@@ -999,13 +997,14 @@ func opsShowUndeterminedText(ctx context.Context, doc *document.Document, ops []
 // key even when the tag is empty or malformed, and judges that value under UA-1
 // §7.2 t29 instead (see [checkMarkedContentLang]).
 // markedContentHasMCID reports whether a BDC operator's property list carries an
-// /MCID, tying its content to a structure element.
+// integer /MCID, tying its content to a structure element. Any other /MCID ties
+// nothing ([mcidValue]).
 func markedContentHasMCID(ctx context.Context, props *markedContentProps, op content.Operation) bool {
 	pd := props.dict(ctx, op)
 	if pd == nil {
 		return false
 	}
-	_, ok := pd["MCID"]
+	_, ok := mcidValue(ctx, props.doc, pd["MCID"])
 	return ok
 }
 
