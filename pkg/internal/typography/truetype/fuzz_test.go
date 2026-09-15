@@ -19,6 +19,11 @@ func FuzzTrueType(f *testing.F) {
 	// coverage-expanding input in 19 million executions, against 523 for the
 	// CFF target beside it.
 	f.Add(minimalSfnt())
+	// The seed above carries a format 0 cmap and no post table, which leaves
+	// the format 6 and 12 subtable readers and the glyph-name reader
+	// unreachable: a mutation cannot invent a consistent subtable of a
+	// different format. This one carries all three.
+	f.Add(richSfnt())
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {
@@ -128,5 +133,100 @@ func TestMinimalSfntIsAccepted(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("CmapSubtableCount = %d, want 1", count)
+	}
+}
+
+// richSfnt builds a font exercising the cmap subtable formats and the post
+// table that [minimalSfnt] leaves out: a format 6 trimmed mapping, a format 12
+// grouped mapping, and a version 2.0 post table naming its glyphs.
+func richSfnt() []byte {
+	maxp := make([]byte, 6)
+	binary.BigEndian.PutUint32(maxp[0:], 0x00005000)
+	binary.BigEndian.PutUint16(maxp[4:], 2) // numGlyphs
+
+	// Format 6: firstCode 65, one entry mapping to glyph 1.
+	f6 := make([]byte, 12)
+	binary.BigEndian.PutUint16(f6[0:], 6)
+	binary.BigEndian.PutUint16(f6[2:], uint16(len(f6)))
+	binary.BigEndian.PutUint16(f6[6:], 65) // firstCode
+	binary.BigEndian.PutUint16(f6[8:], 1)  // entryCount
+	binary.BigEndian.PutUint16(f6[10:], 1) // glyphIdArray[0]
+
+	// Format 12: one group mapping U+0041 to glyph 1.
+	f12 := make([]byte, 16+12)
+	binary.BigEndian.PutUint16(f12[0:], 12)
+	binary.BigEndian.PutUint32(f12[4:], uint32(len(f12))) // length
+	binary.BigEndian.PutUint32(f12[12:], 1)               // numGroups
+	binary.BigEndian.PutUint32(f12[16:], 0x41)            // startCharCode
+	binary.BigEndian.PutUint32(f12[20:], 0x41)            // endCharCode
+	binary.BigEndian.PutUint32(f12[24:], 1)               // startGlyphID
+
+	// cmap header with two encoding records pointing at the subtables.
+	const recs = 2
+	head := 4 + recs*8
+	cmap := make([]byte, head)
+	binary.BigEndian.PutUint16(cmap[2:], recs)
+	binary.BigEndian.PutUint16(cmap[4:], 1) // platformID: Macintosh
+	binary.BigEndian.PutUint16(cmap[6:], 0)
+	binary.BigEndian.PutUint32(cmap[8:], uint32(head))
+	binary.BigEndian.PutUint16(cmap[12:], 3) // platformID: Windows
+	binary.BigEndian.PutUint16(cmap[14:], 10)
+	binary.BigEndian.PutUint32(cmap[16:], uint32(head+len(f6)))
+	cmap = append(cmap, f6...)
+	cmap = append(cmap, f12...)
+
+	// post version 2.0: header, glyph count, name indices, then Pascal names.
+	post := make([]byte, 34)
+	binary.BigEndian.PutUint32(post[0:], 0x00020000)
+	binary.BigEndian.PutUint16(post[32:], 2) // numGlyphs
+	post = append(post, 0x00, 0x00)          // glyph 0 -> standard name 0 (.notdef)
+	// Indices below 258 name a standard Macintosh glyph; 258 is the first
+	// custom name, read from the Pascal strings that follow the index array.
+	post = append(post, 0x01, 0x02) // glyph 1 -> custom name 0
+	post = append(post, byte(len("Alpha")))
+	post = append(post, []byte("Alpha")...)
+
+	tables := []struct {
+		tag  string
+		data []byte
+	}{
+		{"cmap", cmap}, {"maxp", maxp}, {"post", post},
+	}
+
+	const dirEntry = 16
+	out := make([]byte, 12+dirEntry*len(tables))
+	binary.BigEndian.PutUint32(out[0:], 0x00010000)
+	binary.BigEndian.PutUint16(out[4:], uint16(len(tables)))
+	for i, t := range tables {
+		rec := 12 + i*dirEntry
+		copy(out[rec:], t.tag)
+		binary.BigEndian.PutUint32(out[rec+8:], uint32(len(out)))
+		binary.BigEndian.PutUint32(out[rec+12:], uint32(len(t.data)))
+		out = append(out, t.data...)
+	}
+	return out
+}
+
+// TestRichSfntReachesTheOtherFormats pins that the second seed exercises what
+// the first cannot: two cmap subtables and a post table that names a glyph.
+func TestRichSfntReachesTheOtherFormats(t *testing.T) {
+	t.Parallel()
+
+	data := richSfnt()
+
+	count, err := CmapSubtableCount(data)
+	if err != nil {
+		t.Fatalf("CmapSubtableCount: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("CmapSubtableCount = %d, want 2", count)
+	}
+
+	names, err := PostGlyphNames(context.Background(), data)
+	if err != nil {
+		t.Fatalf("PostGlyphNames: %v", err)
+	}
+	if names[1] != "Alpha" {
+		t.Errorf("post name for glyph 1 = %q, want %q", names[1], "Alpha")
 	}
 }
