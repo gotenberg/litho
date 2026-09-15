@@ -1,6 +1,7 @@
 package remediation
 
 import (
+	"encoding/xml"
 	"strings"
 	"testing"
 
@@ -108,5 +109,50 @@ func TestPatchExistingXMPLeavesElementFormAlone(t *testing.T) {
 	}
 	if strings.Contains(patched, "&lt;rdf:Alt&gt;") {
 		t.Errorf("the rdf:Alt markup was escaped into text:\n%s", patched)
+	}
+}
+
+// TestXMLEscapeCarriageReturnRoundTrips pins that a value carrying a carriage
+// return survives being written into XMP and parsed back.
+//
+// XML 1.0, 2.11 requires a parser to normalise CR and CRLF to a single LF before
+// the application sees the value, so a literal CR written into the packet is
+// gone by the time any validator compares it. The docinfo-XMP equality rules
+// (ISO 19005-1, 6.7.3) then fail however faithfully the bytes were written:
+// govdocs thread_000_000187.pdf has a CRLF inside /Keywords, litho reported
+// "synced pdf:Keywords with Info /Keywords", and both litho and veraPDF still
+// failed test 5 on the output. A numeric character reference is exempt.
+func TestXMLEscapeCarriageReturnRoundTrips(t *testing.T) {
+	t.Parallel()
+
+	const value = "line one\r\nline two"
+	escaped := xmlEscape(value)
+
+	if strings.Contains(escaped, "\r") {
+		t.Errorf("a literal CR must not reach the packet: %q", escaped)
+	}
+	if !strings.Contains(escaped, "&#xD;") {
+		t.Errorf("CR must be written as a character reference: %q", escaped)
+	}
+
+	// The real check: parse it back the way a validator does.
+	var got struct {
+		Value string `xml:",chardata"`
+	}
+	if err := xml.Unmarshal([]byte("<v>"+escaped+"</v>"), &got); err != nil {
+		t.Fatalf("escaped value is not well-formed: %v", err)
+	}
+	if got.Value != value {
+		t.Errorf("round trip = %q, want %q", got.Value, value)
+	}
+}
+
+// TestXMLEscapeLineFeedUntouched pins that a bare LF is left alone: it is
+// unaffected by line-ending normalisation, so escaping it would only bloat the
+// packet.
+func TestXMLEscapeLineFeedUntouched(t *testing.T) {
+	t.Parallel()
+	if got := xmlEscape("a\nb"); got != "a\nb" {
+		t.Errorf("xmlEscape(%q) = %q, want it unchanged", "a\nb", got)
 	}
 }

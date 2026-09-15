@@ -1505,6 +1505,16 @@ func xmlEscape(s string) string {
 	// pdf:Keywords closed the attribute early and cost the packet its
 	// well-formedness (ISO 19005-2, 6.6.2.1 tests 4 and 5).
 	s = strings.ReplaceAll(s, "'", "&apos;")
+	// A literal carriage return cannot survive a round trip: XML 1.0, 2.11
+	// requires a parser to normalise CR and CRLF to a single LF before the
+	// application ever sees the value, so an /Info string containing CR can
+	// never equal the XMP property parsed back out, and the docinfo-XMP
+	// equality rules (ISO 19005-1, 6.7.3) keep failing however faithfully the
+	// bytes were written. A numeric character reference is exempt from that
+	// normalisation and parses back as CR. govdocs thread_000_000187.pdf has a
+	// CRLF inside /Keywords: litho reported the sync as done and both litho and
+	// veraPDF still failed 6.7.3 test 5 on the output.
+	s = strings.ReplaceAll(s, "\r", "&#xD;")
 	return s
 }
 
