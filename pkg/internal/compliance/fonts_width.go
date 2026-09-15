@@ -96,6 +96,19 @@ type simpleFontGlyphs struct {
 	encodingNames map[byte]string
 }
 
+// The OpenType head table bounds unitsPerEm to 16..16384 ("Valid range is from
+// 16 to 16384"), so a value outside it is a corrupt head, not a scale. Every
+// width derived from one is meaningless: pdfjs issue9462.pdf carries a font
+// whose program yields a nonsense unitsPerEm, and scaling by it produced
+// /Widths near 1.5 million, which then broke the PDF/A-1 real-number ceiling of
+// 32767 (ISO 19005-1, 6.1.12). Fall back to the same 1000 the unreadable-head
+// paths already use.
+const (
+	minUnitsPerEm     = 16
+	maxUnitsPerEm     = 16384
+	defaultUnitsPerEm = 1000
+)
+
 // resolveSimpleFontGlyphs does the work of [simpleFontGlyphMetrics] and also
 // reports whether a symbol cmap subtable decided the codes.
 func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (simpleFontGlyphs, bool) {
@@ -115,8 +128,8 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 	}
 
 	unitsPerEm := typography.ReadUnitsPerEm(fontData)
-	if unitsPerEm == 0 {
-		unitsPerEm = 1000
+	if unitsPerEm < minUnitsPerEm || unitsPerEm > maxUnitsPerEm {
+		unitsPerEm = defaultUnitsPerEm
 	}
 
 	// Extract charCode → GID mapping from font's cmap table (TrueType/OTTO).
@@ -817,8 +830,8 @@ func ExpectedCIDFontWidths(ctx context.Context, doc *document.Document, cidFontD
 		return nil, false
 	}
 	unitsPerEm := typography.ReadUnitsPerEm(fontData)
-	if unitsPerEm == 0 {
-		unitsPerEm = 1000
+	if unitsPerEm < minUnitsPerEm || unitsPerEm > maxUnitsPerEm {
+		unitsPerEm = defaultUnitsPerEm
 	}
 
 	out := make(map[int]int, len(binaryWidths))

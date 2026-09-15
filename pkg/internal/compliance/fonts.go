@@ -1331,8 +1331,8 @@ func checkType0UsageRules(ctx context.Context, doc *document.Document, fontDict,
 			binaryWidths := typography.ExtractCIDBinaryWidths(ctx, fontData)
 			if binaryWidths != nil {
 				unitsPerEm := typography.ReadUnitsPerEm(fontData)
-				if unitsPerEm == 0 {
-					unitsPerEm = 1000
+				if unitsPerEm < minUnitsPerEm || unitsPerEm > maxUnitsPerEm {
+					unitsPerEm = defaultUnitsPerEm
 				}
 				rule := glyphWidthRule(profile)
 				if rule.Specification != "" {
