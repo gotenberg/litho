@@ -2,6 +2,8 @@ package cff
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -12,6 +14,19 @@ func FuzzCFF(f *testing.F) {
 	f.Add([]byte{})
 	f.Add([]byte{0x01, 0x00, 0x04, 0x01}) // header: major 1, hdrSize 4, offSize 1
 	f.Add(make([]byte, 64))
+	// Real fonts, because the synthetic seeds above reach only the header and
+	// the INDEX walk. A CID-keyed CFF carries a charset, an FDSelect and an
+	// FDArray of Private dicts, and a charstring that calls a subroutine needs
+	// the subroutine INDEXes to resolve: neither structure arises by mutating
+	// four header bytes, so those readers were measured at zero coverage.
+	// These fixtures are the package's own, already used by the unit tests.
+	for _, name := range []string{"g5.cff", "cid_fdarray_matrix.cff", "frutiger_subr_width.cff"} {
+		data, err := os.ReadFile(filepath.Join("testdata", name))
+		if err != nil {
+			f.Fatalf("reading seed fixture %s: %v", name, err)
+		}
+		f.Add(data)
+	}
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {
