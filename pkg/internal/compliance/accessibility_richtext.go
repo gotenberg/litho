@@ -34,14 +34,17 @@ var errRichTextNotXML = errors.New("rich text is not a parseable XML document")
 // place on either side, attributes do not contribute, comments are dropped and
 // processing instruction data counts.
 func checkMarkupAnnotRichText(ctx context.Context, doc *document.Document, annot ast.PdfDict) []Violation {
-	if _, hasRC := annot["RC"]; !hasRC {
+	// veraPDF's containsRC is a knownKey on /RC, so an /RC written as null is
+	// absent (ISO 32000-1, 7.3.7) and the rule does not apply, measured.
+	if !nonNullKeyPresent(ctx, doc, annot, "RC") {
 		return nil
 	}
 
-	contents, err := document.ResolveString(ctx, doc, annot["Contents"])
-	if err != nil {
-		// Per ISO 14289-2, 8.9.2.3 t2 an absent /Contents satisfies the rule.
-		doc.Logger.Debug("compliance.accessibility: /Contents absent or not a string, 8.9.2.3 t2 does not apply", "error", err)
+	// Per ISO 14289-2, 8.9.2.3 t2 an absent /Contents satisfies the rule. veraPDF
+	// reads it with getStringKey, so a null or non-string /Contents is absent
+	// too ([decodedStringKey]), measured.
+	plain, ok := decodedStringKey(ctx, doc, annot, "Contents")
+	if !ok {
 		return nil
 	}
 
@@ -56,10 +59,10 @@ func checkMarkupAnnotRichText(ctx context.Context, doc *document.Document, annot
 	if err != nil {
 		return failf(Rule_14289_2_8_9_2_3_t02,
 			"markup annotation /RC yields no text and so cannot match /Contents %q",
-			document.DecodePdfString(contents))
+			plain)
 	}
 
-	if plain := document.DecodePdfString(contents); text != plain {
+	if text != plain {
 		return failf(Rule_14289_2_8_9_2_3_t02,
 			"markup annotation /RC text %q differs from /Contents %q", text, plain)
 	}
@@ -232,7 +235,9 @@ func walkTextFieldRichValue(ctx context.Context, doc *document.Document, fieldOb
 // textFieldRichValueViolation reports one text field whose /RV does not answer
 // for its /V.
 func textFieldRichValueViolation(ctx context.Context, doc *document.Document, field ast.PdfDict) []Violation {
-	if _, hasRV := field["RV"]; !hasRV {
+	// veraPDF's containsRV is a knownKey on /RV, so an /RV written as null is
+	// absent (ISO 32000-1, 7.3.7) and the rule does not apply, measured.
+	if !nonNullKeyPresent(ctx, doc, field, "RV") {
 		return nil
 	}
 
