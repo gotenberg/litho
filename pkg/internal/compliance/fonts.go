@@ -1941,7 +1941,17 @@ func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.P
 			}
 		}
 	case "CIDFontType2":
-		if cidToGIDMap, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"]); cidToGIDMap == "Identity" {
+		// ISO 32000-1, Table 117 gives /CIDToGIDMap the default value Identity,
+		// so an absent entry maps CID to GID exactly as the explicit name does
+		// and must be judged the same way. Reading only the explicit name made
+		// the verdict depend on whether the producer wrote a redundant entry:
+		// pdfjs issue5874.pdf passed §6.3.5 t1 until remediation added the
+		// /CIDToGIDMap /Identity that ISO 19005-1 §6.3.3.2 requires, and the
+		// same bytes then failed. A repair that only writes a documented
+		// default cannot change what the file means.
+		cidToGIDMap, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"])
+		_, hasCIDToGID := cidFontDict["CIDToGIDMap"]
+		if cidToGIDMap == "Identity" || !hasCIDToGID {
 			// renderingMode == 3 exempts a glyph outright, and usage.visible is
 			// false only when every use of this font was in that mode.
 			if usage.visible {
