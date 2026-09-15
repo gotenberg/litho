@@ -1081,7 +1081,11 @@ func xmpNormalizeForChecks(data []byte, part int, results *[]Violation) []byte {
 func xmpCheckNamespaces(data []byte, part int, results *[]Violation) {
 	usedNamespaces, extensionNamespaces := xmpExtractNamespaces(data)
 
-	for ns := range usedNamespaces {
+	// Sorted: a packet naming several undeclared namespaces reports one
+	// violation per namespace, and ranging the set emitted them in Go's
+	// randomized map order, so the same file produced the same findings in a
+	// different order on every run. pdfjs issue21089.pdf names eighteen.
+	for _, ns := range slices.Sorted(maps.Keys(usedNamespaces)) {
 		if knownXMPNamespaces[ns] || extensionNamespaces[ns] {
 			continue
 		}
@@ -3167,7 +3171,10 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 	}
 	used := xmpExtractPropertyValues(data)
 	for _, s := range schemas {
-		for pName, vt := range s.propTypes {
+		// Sorted: these become report lines, and ranging the map emitted the
+		// same set of violations in a different order on every run.
+		for _, pName := range slices.Sorted(maps.Keys(s.propTypes)) {
+			vt := s.propTypes[pName]
 			if xmpPredefinedValueTypes[vt] {
 				continue
 			}
@@ -3203,7 +3210,11 @@ func xmpCheckExtensionPropertyResolution(data []byte, part int, results *[]Viola
 			effective[s.nsURI] = s.propTypes
 		}
 	}
-	for ns, props := range xmpExtractPropertyValues(data) {
+	// Sorted for the same reason: both the namespaces and the properties
+	// within each reach the report, so both walks have to be ordered.
+	byNS := xmpExtractPropertyValues(data)
+	for _, ns := range slices.Sorted(maps.Keys(byNS)) {
+		props := byNS[ns]
 		declared, isExt := effective[ns]
 		if !isExt {
 			continue
@@ -3212,7 +3223,7 @@ func xmpCheckExtensionPropertyResolution(data []byte, part int, results *[]Viola
 		// member of the namespace stays resolvable from the predefined
 		// catalog even when an extension schema declares the same URI.
 		predefined := xmpPropertyRegistry[ns]
-		for prop := range props {
+		for _, prop := range slices.Sorted(maps.Keys(props)) {
 			if _, ok := declared[prop]; ok {
 				continue
 			}

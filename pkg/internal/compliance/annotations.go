@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -660,5 +661,9 @@ func apExtraKeys(ap ast.PdfDict) string {
 	if len(extras) == 0 {
 		return ""
 	}
+	// Sorted: the names go straight into the violation message, and ranging the
+	// dictionary printed the same extras in a different order on every run
+	// (pdfjs issue14301.pdf reports "[R D]" or "[D R]" for the same annotation).
+	slices.Sort(extras)
 	return fmt.Sprintf("%v", extras)
 }
