@@ -540,28 +540,22 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 // by cs/CS, so the resource scan can distinguish colour spaces that are
 // actually referenced from ones merely declared in /Resources/ColorSpace, and
 // the colour-space state in effect at each Do, which a Form XObject inherits.
-func scanContentStreamDeviceCS(ctx context.Context, doc *document.Document, page ast.PdfDict, pageIdx int) (deviceCSUsage, map[string]bool, map[string]bool, *usedResources, map[string]inheritedCS) {
+// scanContentStreamDeviceCS surveys one page's already-parsed operations.
+//
+// It takes the operations rather than the page, because three separate check
+// groups (colour, graphics, XObject) each survey every page and each used to
+// resolve and re-parse the same content stream to do it. The page's operations
+// are parsed once by [pageCtx.parsedOps] and shared from there. A page whose
+// content is missing or will not parse yields no operations, which is the same
+// empty survey the resolve and parse failures returned before.
+func scanContentStreamDeviceCS(ctx context.Context, ops []content.Operation) (deviceCSUsage, map[string]bool, map[string]bool, *usedResources, map[string]inheritedCS) {
 	var usage deviceCSUsage
 	referencedXObjects := make(map[string]bool)
 	referencedCSNames := make(map[string]bool)
 	used := newUsedResources()
 	inherited := make(map[string]inheritedCS)
 
-	streamData, err := resolvePageContentBytes(ctx, doc, page)
-	if err != nil {
-		doc.Logger.Debug("compliance.color: failed to get content stream bytes for CS scan",
-			"page", pageIdx, "error", err)
-		return usage, referencedXObjects, referencedCSNames, used, inherited
-	}
-
-	if len(streamData) == 0 {
-		return usage, referencedXObjects, referencedCSNames, used, inherited
-	}
-
-	ops, err := content.ParseStreamData(ctx, streamData)
-	if err != nil {
-		doc.Logger.Debug("compliance.color: failed to parse content stream for CS scan",
-			"page", pageIdx, "error", err)
+	if len(ops) == 0 {
 		return usage, referencedXObjects, referencedCSNames, used, inherited
 	}
 

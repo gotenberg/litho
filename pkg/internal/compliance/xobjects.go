@@ -30,7 +30,6 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	visited := make(map[string]bool)
 
 	for i := range vctx.pages {
-		page := vctx.pages[i].dict
 		if ctx.Err() != nil {
 			return results
 		}
@@ -42,7 +41,7 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		// Collect Do operator targets from the page content stream so we
 		// only check XObjects that are actually referenced (used).
-		_, referencedXObjects, _, _, _ := scanContentStreamDeviceCS(ctx, doc, page, i)
+		_, referencedXObjects, _, _, _ := scanContentStreamDeviceCS(ctx, vctx.pages[i].parsedOps(ctx))
 
 		scanXObjectResources(ctx, doc, res, i+1, part, profile, &results, visited, 0, referencedXObjects)
 

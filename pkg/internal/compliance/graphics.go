@@ -73,7 +73,7 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// Only scan Forms referenced by Do operators in the page content.
 		var referencedXObjects map[string]bool
 		if hasContent {
-			_, referencedXObjects, _, _, _ = scanContentStreamDeviceCS(ctx, doc, page, i)
+			_, referencedXObjects, _, _, _ = scanContentStreamDeviceCS(ctx, vctx.pages[i].parsedOps(ctx))
 		}
 		results = append(results, checkFormXObjectResources(ctx, doc, res, part, i+1, referencedXObjects)...)
 

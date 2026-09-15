@@ -47,9 +47,12 @@ const maxFormXObjectDepth = 10
 
 // checkDeviceColorSpaces validates that device-dependent colour spaces
 // (DeviceRGB, DeviceCMYK, DeviceGray) are only used when allowed.
-func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, hasICC bool, iccColorSpace string, results *[]Violation) {
-	pages := collectPages(ctx, doc, catalog)
-	for i, page := range pages {
+// checkDeviceColorSpaces takes the already-resolved pages so it can reuse their
+// parsed operations; the page dictionaries are the same ones [collectPages]
+// yields, in the same order.
+func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages []pageCtx, part int, hasICC bool, iccColorSpace string, results *[]Violation) {
+	for i := range pages {
+		page := pages[i].dict
 		if ctx.Err() != nil {
 			return
 		}
@@ -78,7 +81,7 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, catalog
 
 		// Scan content stream operators for device CS usage and collect
 		// XObject names referenced by Do operators.
-		contentCSUsed, referencedXObjects, contentCSNames, usedResourceKeys, inheritedCSAtDo := scanContentStreamDeviceCS(ctx, doc, page, i)
+		contentCSUsed, referencedXObjects, contentCSNames, usedResourceKeys, inheritedCSAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx))
 
 		deviceCSUsed := scanForDeviceColorSpaces(ctx, doc, csDict, resources, referencedXObjects, usedResourceKeys, inheritedCSAtDo, part, contentCSNames)
 		deviceCSUsed.rgb = deviceCSUsed.rgb || contentCSUsed.rgb
