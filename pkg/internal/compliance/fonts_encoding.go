@@ -846,8 +846,8 @@ func builtinProgramEncoding(ctx context.Context, doc *document.Document, fontDic
 		// container with no /Encoding: veraPDF, which cannot read that program,
 		// finds no name for any code it shows and reports ISO 14289-1, 7.21.7
 		// t1 on each, while litho read StandardEncoding out of the PFB.
-		if err == nil && streamHoldsFontProgram(ctx, doc, "FontFile", stream) {
-			data, err := doc.DecodeStream(ctx, stream)
+		if err == nil && streamHoldsFontProgram(ctx, doc, "FontFile", fontFileObj, stream) {
+			data, err := decodeFontProgram(ctx, doc, fontFileObj, stream)
 			if err == nil {
 				if enc := typography.ExtractType1EncodingNames(data); len(enc) > 0 {
 					return enc
@@ -874,7 +874,7 @@ func builtinProgramEncoding(ctx context.Context, doc *document.Document, fontDic
 	if fontFile3Obj, ok := fd["FontFile3"]; ok {
 		stream, err := document.ResolveStream(ctx, doc, fontFile3Obj)
 		if err == nil {
-			data, err := doc.DecodeStream(ctx, stream)
+			data, err := decodeFontProgram(ctx, doc, fontFile3Obj, stream)
 			if err == nil {
 				if enc := typography.ExtractCFFEncodingNames(data); len(enc) > 0 {
 					return enc

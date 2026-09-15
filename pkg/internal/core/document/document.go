@@ -48,9 +48,11 @@ type Document struct {
 	cmapCache        map[int]any         // parsed CMap by ToUnicode stream object number
 	objStmCache      map[int]*objStmData // parsed object streams by ObjStm object number
 	objStmCacheBytes int                 // decoded bytes held in objStmCache, bounded by maxObjStmCacheBytes
+	fontProgCache    map[int][]byte      // decoded font programs by FontFile stream object number
+	fontProgBytes    int                 // decoded bytes held in fontProgCache, bounded by maxFontProgCacheBytes
 	sortedOffsets    []int64             // ascending normal-object offsets, for O(log N) endobj scan-capping
 	sortedOffsetsLen int                 // len(Index.Entries) when sortedOffsets was built; rebuild on change
-	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, sortedOffsets, formatViolations, and the lazy Index.Entries augmentation
+	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, sortedOffsets, formatViolations, and the lazy Index.Entries augmentation
 	runMu            sync.Mutex          // serializes compliance-engine validation runs
 	xrefAugment      sync.Once           // guards the one-shot raw-bytes augmentation of Index
 	maxCacheSize     int                 // evict all objects when cache exceeds this size
@@ -717,8 +719,59 @@ func (d *Document) ClearCaches() {
 	d.cmapCache = make(map[int]any)
 	d.objStmCache = nil
 	d.objStmCacheBytes = 0
+	d.fontProgCache = nil
+	d.fontProgBytes = 0
 	d.formatViolations = nil
 	d.mu.Unlock()
+}
+
+// maxFontProgCacheBytes bounds the total decoded font-program bytes retained by
+// [Document.SetCachedFontProgram]. It is an anti-DoS guard, not spec-mandated: a
+// crafted file could declare many large font programs, so the cache evicts
+// rather than grow without bound. Measured against the test corpora, the
+// heaviest real document embeds 18.4 MB of font programs across 2129 documents
+// that embed any, so 64 MB leaves better than 3x headroom while staying well
+// under the 256 MB single-stream decompression cap.
+const maxFontProgCacheBytes = 64 << 20
+
+// CachedFontProgram returns the decoded font program for the given FontFile
+// stream object number. Returns nil, false if not cached.
+//
+// The returned slice is the cached buffer itself, shared by every caller, so
+// callers must treat it as read-only. Font programs are parsed, never edited,
+// and copying them per call would undo the decode this cache exists to avoid.
+func (d *Document) CachedFontProgram(objNum int) ([]byte, bool) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	data, ok := d.fontProgCache[objNum]
+	return data, ok
+}
+
+// SetCachedFontProgram stores a decoded font program keyed by its FontFile
+// stream object number, bounding total cached bytes with an evict-all policy.
+//
+// Font programs have strong locality: one embedded font is re-read by every
+// per-page font check, which is exactly what makes the cache pay. A single
+// program larger than the budget is not cached, so it cannot force repeated
+// evictions.
+func (d *Document) SetCachedFontProgram(objNum int, data []byte) {
+	if len(data) > maxFontProgCacheBytes {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.fontProgCache == nil {
+		d.fontProgCache = make(map[int][]byte)
+	}
+	if _, ok := d.fontProgCache[objNum]; ok {
+		return
+	}
+	if d.fontProgBytes+len(data) > maxFontProgCacheBytes {
+		d.fontProgCache = make(map[int][]byte)
+		d.fontProgBytes = 0
+	}
+	d.fontProgCache[objNum] = data
+	d.fontProgBytes += len(data)
 }
 
 // CachedCMap returns a previously cached parsed CMap for the given stream

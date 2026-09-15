@@ -1168,6 +1168,9 @@ func sortedCIDs(set map[uint16]bool) []uint16 {
 }
 
 // extractFontProgramData gets the raw font program bytes from FontDescriptor.
+//
+// The bytes come from [decodeFontProgram] and are shared with every other
+// caller, so they must not be modified.
 func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict ast.PdfDict) []byte {
 	for _, key := range []ast.PdfName{"FontFile2", "FontFile3", "FontFile"} {
 		ffObj, ok := fdDict[key]
@@ -1181,7 +1184,7 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 		if stream.Dict == nil {
 			continue
 		}
-		data, err := doc.DecodeStream(ctx, stream)
+		data, err := decodeFontProgram(ctx, doc, ffObj, stream)
 		if err != nil {
 			// Fall back to raw data.
 			rawData, rawErr := stream.Bytes(ctx)
