@@ -7,21 +7,27 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-func TestWalkFormFields_PureWidgetAANotFieldViolation(t *testing.T) {
+func TestWalkFormFields_FieldAAJudgesFormFieldsOnly(t *testing.T) {
 	t.Parallel()
 
-	// A pure widget-annotation kid (/Subtype /Widget, no /FT, no /T) carries a
-	// field's appearance, not its identity (ISO 32000-1 §12.7.3.1); its /AA is a
-	// §6.4.1 t1 (widget) violation only, never t2 (PDFormField). A terminal field
-	// merged with its widget keeps /FT (or /T) and stays a field.
+	// §6.4.1 t2 judges veraPDF's form fields: every dictionary the /Fields array
+	// lists, and below a field only the kids that carry a non-null /T. A kid
+	// widget with /FT and no /T, or with a null /T, carries a field's appearance,
+	// not its identity (ISO 32000-1 §12.7.3.1); its /AA is a t1 (widget)
+	// violation only. A top-level widget is a field whatever it carries, and a
+	// null /AA is absent (7.3.7). Measured against veraPDF.
 	fields := ast.PdfArray{
-		ast.PdfDict{"Subtype": ast.PdfName("Widget"), "AA": ast.PdfDict{}},                           // pure widget: no t2
-		ast.PdfDict{"Subtype": ast.PdfName("Widget"), "FT": ast.PdfName("Btn"), "AA": ast.PdfDict{}}, // merged terminal: t2
-		ast.PdfDict{"FT": ast.PdfName("Tx"), "T": ast.PdfString("f"), "AA": ast.PdfDict{}},           // plain field: t2
+		ast.PdfDict{"Subtype": ast.PdfName("Widget"), "AA": ast.PdfDict{}}, // top-level widget: t2
+		ast.PdfDict{"FT": ast.PdfName("Tx"), "T": ast.PdfString("p"), "AA": ast.PdfDict{}, "Kids": ast.PdfArray{ // field: t2
+			ast.PdfDict{"Subtype": ast.PdfName("Widget"), "FT": ast.PdfName("Btn"), "AA": ast.PdfDict{}}, // no /T: no t2
+			ast.PdfDict{"Subtype": ast.PdfName("Widget"), "T": ast.PdfNull{}, "AA": ast.PdfDict{}},       // null /T: no t2
+			ast.PdfDict{"T": ast.PdfString("k"), "AA": ast.PdfDict{}},                                    // kid field: t2
+		}},
+		ast.PdfDict{"FT": ast.PdfName("Tx"), "T": ast.PdfString("f"), "AA": ast.PdfNull{}}, // null /AA: no t2
 	}
 
 	var results []Violation
-	walkFormFields(context.Background(), nil, fields, "PDF/A-2b", 2, &results, 0, make(map[int]bool), make(map[int]bool))
+	walkFormFields(context.Background(), nopDoc(), fields, "PDF/A-2b", 2, &results, 0, make(map[int]bool), make(map[int]bool), true)
 
 	t2 := 0
 	for _, v := range results {
@@ -29,8 +35,8 @@ func TestWalkFormFields_PureWidgetAANotFieldViolation(t *testing.T) {
 			t2++
 		}
 	}
-	if t2 != 2 {
-		t.Errorf("expected 2 field /AA (t2) violations (merged terminal + plain field), got %d", t2)
+	if t2 != 3 {
+		t.Errorf("expected 3 field /AA (t2) violations (top-level widget, parent field, kid field), got %d", t2)
 	}
 }
 

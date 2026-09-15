@@ -70,19 +70,45 @@ const maxNameTreeDepth = 64
 // bookmarks that every other reader resolves came back with no destination at
 // all. The rescan costs a full walk only when the fast path already failed.
 func searchNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfArray, error) {
-	result, err := searchNameTreeAt(ctx, doc, nodeObj, key, make(map[int]bool), 0, true)
+	obj, err := lookupNameTree(ctx, doc, nodeObj, key, func(v ast.PdfObject) (ast.PdfObject, error) {
+		arr, err := resolveDestValue(ctx, doc, v)
+		if arr == nil {
+			return nil, err
+		}
+		return arr, err
+	})
+	arr, _ := obj.(ast.PdfArray)
+	return arr, err
+}
+
+// LookupNameTree returns the value the name tree rooted at nodeObj maps key to,
+// unresolved, or nil when the tree holds no such key. Keys compare as byte
+// strings (ISO 32000-1, 7.9.6), and a miss is retried with the /Limits ignored,
+// as in [ResolveNamedDest].
+func LookupNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfObject, error) {
+	return lookupNameTree(ctx, doc, nodeObj, key, func(v ast.PdfObject) (ast.PdfObject, error) {
+		return v, nil
+	})
+}
+
+// lookupNameTree searches with the /Limits pruning first and then without it,
+// handing each value whose key matches to leaf, which returns nil to keep
+// searching.
+func lookupNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string, leaf func(ast.PdfObject) (ast.PdfObject, error)) (ast.PdfObject, error) {
+	result, err := searchNameTreeAt(ctx, doc, nodeObj, key, make(map[int]bool), 0, true, leaf)
 	if err != nil || result != nil {
 		return result, err
 	}
-	return searchNameTreeAt(ctx, doc, nodeObj, key, make(map[int]bool), 0, false)
+	return searchNameTreeAt(ctx, doc, nodeObj, key, make(map[int]bool), 0, false, leaf)
 }
 
-// searchNameTreeAt searches a name-tree node for key. seen visits each node
+// searchNameTreeAt searches a name-tree node for key and returns what leaf
+// makes of the first matching value it accepts. seen visits each node
 // once: a name tree is a strict tree, so a /Kids entry reached twice is
 // malformed, and without the guard a node whose /Kids lists the same child
 // twice (with no pruning /Limits) fans out 2^depth on a key that is absent (a
 // denial of service).
-func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string, seen map[int]bool, depth int, prune bool) (ast.PdfArray, error) {
+func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string, seen map[int]bool, depth int, prune bool, leaf func(ast.PdfObject) (ast.PdfObject, error)) (ast.PdfObject, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -134,7 +160,7 @@ func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject,
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
-			result, err := searchNameTreeAt(ctx, doc, kid, key, seen, depth+1, prune)
+			result, err := searchNameTreeAt(ctx, doc, kid, key, seen, depth+1, prune, leaf)
 			if err != nil {
 				return nil, err
 			}
@@ -161,7 +187,7 @@ func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject,
 	for i := 0; i+1 < len(namesArr); i += 2 {
 		entryName := nameTreeKey(ctx, doc, namesArr[i])
 		if entryName == key {
-			return resolveDestValue(ctx, doc, namesArr[i+1])
+			return leaf(namesArr[i+1])
 		}
 	}
 

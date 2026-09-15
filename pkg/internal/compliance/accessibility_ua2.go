@@ -366,7 +366,9 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 				continue
 			}
 			if st, _ := document.ResolveName(ctx, doc, annot["Subtype"]); st == "Link" {
-				if destObj, ok := annot["Dest"]; ok && !isStructureDestination(ctx, doc, destObj) {
+				// A /Dest written as null is absent (ISO 32000-1, 7.3.7): veraPDF builds
+				// no destination from it, measured.
+				if nonNullKeyPresent(ctx, doc, annot, "Dest") && !isStructureDestination(ctx, doc, annot["Dest"]) {
 					results = append(results, fail(Rule_14289_2_8_8_t01,
 						"Link annotation destination is not a structure destination")...)
 				}
@@ -446,9 +448,10 @@ func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.
 			return
 		}
 
-		// Check /Dest on outline item (t01).
-		if destObj, hasDest := item["Dest"]; hasDest {
-			if !isStructureDestination(ctx, doc, destObj) {
+		// Check /Dest on outline item (t01). A /Dest written as null is absent
+		// (ISO 32000-1, 7.3.7), measured.
+		if nonNullKeyPresent(ctx, doc, item, "Dest") {
+			if !isStructureDestination(ctx, doc, item["Dest"]) {
 				*results = append(*results, fail(Rule_14289_2_8_8_t01,
 					"Outline item destination is not a structure destination")...)
 			}
@@ -475,59 +478,95 @@ func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.
 	}
 }
 
-// isStructureDestination checks if a destination object is a "structure
-// destination" per PDF 2.0: an array whose first element references a
-// structure element (has /Type /StructElem or /S key) rather than a page.
-// goToHasStructDest reports whether a GoTo action dict satisfies the
-// PDF/UA-2 §8.8 t2 requirement: either the action carries an /SD entry
-// (the PDF 2.0 dual-destination form, ISO 32000-2 Table 202, where /SD
-// holds the structure destination) or its /D is itself a structure
-// destination.
+// goToHasStructDest reports whether a GoTo action dict satisfies the PDF/UA-2
+// §8.8 t2 requirement, as veraPDF's PDAction.containsStructureDestination
+// decides: the action carries a non-null /SD (the PDF 2.0 structure
+// destination, ISO 32000-2 Table 202), or its /D is a name or string naming a
+// structure destination. An explicit /D array is no structure destination here,
+// and neither is an action with no /D at all. Measured on each.
 func goToHasStructDest(ctx context.Context, doc *document.Document, act ast.PdfDict) bool {
-	if _, hasSD := act["SD"]; hasSD {
+	if nonNullKeyPresent(ctx, doc, act, "SD") {
 		return true
 	}
-	dObj, hasD := act["D"]
-	if !hasD {
-		return true // nothing to point anywhere; not a t2 case
+	dObj, ok := act["D"]
+	if !ok {
+		return false
 	}
-	return isStructureDestination(ctx, doc, dObj)
+	d, err := document.ResolveObject(ctx, doc, dObj)
+	if err != nil {
+		return false
+	}
+	switch d.(type) {
+	case ast.PdfName, ast.PdfString:
+		return isStructureDestination(ctx, doc, d)
+	}
+	return false
 }
 
+// isStructureDestination reports whether a destination is a structure
+// destination, as veraPDF's PDDestination.getIsStructDestination decides for
+// ISO 14289-2, 8.8 t1. A string names an entry of the /Names /Dests tree and a
+// name an entry of the catalog /Dests dictionary (ISO 32000-1, 12.3.2.3), each
+// judged by the value it maps to. A dictionary is one when its /SD is non-null,
+// and an array when its first element carries a non-null /S, as a structure
+// element does (ISO 32000-2, 12.3.2.2). Measured on each form.
 func isStructureDestination(ctx context.Context, doc *document.Document, destObj ast.PdfObject) bool {
-	// Resolve named destination if it's a string/name.
-	if nameObj, err := document.ResolveName(ctx, doc, destObj); err == nil && nameObj != "" {
-		// Named destination. Look up in /Names/Dests.
-		// For simplicity, assume named destinations are not structure destinations.
+	dest, err := document.ResolveObject(ctx, doc, destObj)
+	if err != nil {
 		return false
 	}
+	switch v := dest.(type) {
+	case ast.PdfString:
+		dest = namedDestValue(ctx, doc, string(v), false)
+	case ast.PdfName:
+		dest = namedDestValue(ctx, doc, string(v), true)
+	}
+	switch v := dest.(type) {
+	case ast.PdfDict:
+		return nonNullKeyPresent(ctx, doc, v, "SD")
+	case ast.PdfArray:
+		if len(v) == 0 {
+			return false
+		}
+		first, err := document.ResolveDict(ctx, doc, v[0])
+		return err == nil && first != nil && nonNullKeyPresent(ctx, doc, first, "S")
+	}
+	return false
+}
 
-	// Dictionary destination: a /SD entry makes it a structure
-	// destination (ISO 32000-2 §12.3.2.3).
-	if dict, err := document.ResolveDict(ctx, doc, destObj); err == nil && dict != nil {
-		if _, hasSD := dict["SD"]; hasSD {
-			return true
+// namedDestValue returns the resolved value a named destination maps to, or nil
+// when there is none. veraPDF looks a string up in the /Names /Dests name tree
+// only, and a name in the catalog /Dests dictionary (PDF 1.1) only, so a string
+// that only the catalog /Dests holds names nothing. Measured on both.
+func namedDestValue(ctx context.Context, doc *document.Document, key string, legacy bool) ast.PdfObject {
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		doc.Logger.Debug("compliance: structure destination: cannot resolve catalog", "error", err)
+		return nil
+	}
+	var val ast.PdfObject
+	if legacy {
+		// A missing or non-dictionary /Dests names no destination.
+		dests, _ := document.ResolveDict(ctx, doc, catalog.Dict["Dests"])
+		val = dests[ast.PdfName(key)]
+	} else {
+		// A missing or non-dictionary /Names names no destination.
+		names, _ := document.ResolveDict(ctx, doc, catalog.Dict["Names"])
+		if names == nil {
+			return nil
+		}
+		val, err = document.LookupNameTree(ctx, doc, names["Dests"], key)
+		if err != nil {
+			doc.Logger.Debug("compliance: structure destination: name tree lookup failed", "error", err)
+			return nil
 		}
 	}
-
-	arr, err := document.ResolveArray(ctx, doc, destObj)
-	if err != nil || len(arr) == 0 {
-		return false
+	if val == nil {
+		return nil
 	}
-
-	// The first element of a structure destination is a reference to a
-	// structure element dict (has /S key), not a page dict (has /Type /Page).
-	firstDict, err := document.ResolveDict(ctx, doc, arr[0])
-	if err != nil || firstDict == nil {
-		return false
+	resolved, err := document.ResolveObject(ctx, doc, val)
+	if err != nil {
+		return nil
 	}
-
-	// Structure elements have /S key.
-	if _, hasS := firstDict["S"]; hasS {
-		return true
-	}
-
-	// Also check /Type /StructElem explicitly.
-	typeName, _ := document.ResolveName(ctx, doc, firstDict["Type"])
-	return typeName == "StructElem"
+	return resolved
 }

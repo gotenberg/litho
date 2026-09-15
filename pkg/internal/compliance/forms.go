@@ -3,6 +3,7 @@ package compliance
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -592,14 +593,13 @@ func checkFieldAppearance(ctx context.Context, doc *document.Document, field ast
 		return
 	}
 
-	// Fields with /Kids but no /FT are non-terminal; skip appearance check.
-	if _, hasKids := field["Kids"]; hasKids {
-		if _, hasFT := field["FT"]; !hasFT {
-			return
-		}
+	// Fields with /Kids but no /FT are non-terminal; skip appearance check. A
+	// /Kids or /FT written as null is absent (ISO 32000-1, 7.3.7), measured.
+	if nonNullKeyPresent(ctx, doc, field, "Kids") && !nonNullKeyPresent(ctx, doc, field, "FT") {
+		return
 	}
 
-	if _, hasAP := field["AP"]; hasAP {
+	if fieldHasAPDict(ctx, doc, field) {
 		return
 	}
 
@@ -638,12 +638,35 @@ func widgetHasAppearance(ctx context.Context, doc *document.Document, field ast.
 			continue
 		}
 		// Widget annotations have /Subtype /Widget or lack /FT (terminal field indicator).
-		if _, hasAP := kid["AP"]; hasAP {
+		if fieldHasAPDict(ctx, doc, kid) {
 			return true
 		}
 	}
 
 	return false
+}
+
+// fieldHasAPDict reports whether d carries an appearance dictionary as veraPDF
+// reads one for ISO 19005-1, 6.9 t2 ("AP != null"): PDAnnotation.getCOSAP keeps
+// /AP only when it is a dictionary, so an /AP written as null, naming an
+// undefined object (ISO 32000-1, 7.3.10), or holding a name or a stream is no
+// /AP. Measured on a null, a name and a stream /AP. Any other resolution
+// failure leaves the entry unjudged, as present.
+func fieldHasAPDict(ctx context.Context, doc *document.Document, d ast.PdfDict) bool {
+	apObj, ok := d["AP"]
+	if !ok {
+		return false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, apObj)
+	if err != nil {
+		if errors.Is(err, document.ErrObjectNotFound) {
+			return false
+		}
+		doc.Logger.Debug("compliance.forms: cannot resolve /AP", "error", err)
+		return true
+	}
+	_, isDict := resolved.(ast.PdfDict)
+	return isDict
 }
 
 // xfaRule selects the XFA prohibition rule based on profile.

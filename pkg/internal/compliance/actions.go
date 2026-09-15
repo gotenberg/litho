@@ -385,8 +385,10 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, profile string, part int, location string, judged map[int]bool) []Violation {
 	var results []Violation
 
-	_, hasA := annotDict["A"]
-	_, hasAA := annotDict["AA"]
+	// veraPDF's containsA and containsAA are knownKey tests, so an /A or /AA
+	// written as null is absent (ISO 32000-1, 7.3.7), measured.
+	hasA := nonNullKeyPresent(ctx, doc, annotDict, "A")
+	hasAA := nonNullKeyPresent(ctx, doc, annotDict, "AA")
 
 	switch part {
 	case 1:
@@ -741,14 +743,16 @@ func checkFormFieldActions(ctx context.Context, doc *document.Document, catalog 
 	}
 
 	var results []Violation
-	walkFormFields(ctx, doc, fields, profile, part, &results, 0, make(map[int]bool), judged)
+	walkFormFields(ctx, doc, fields, profile, part, &results, 0, make(map[int]bool), judged, true)
 	return results
 }
 
 // walkFormFields recursively checks form field dicts for forbidden actions. seen
 // processes each field object once, so a shared or cyclic /Kids tree (a node
 // whose children list the same object repeatedly) cannot force exponential work.
-func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, profile string, part int, results *[]Violation, depth int, seen, judged map[int]bool) {
+// listedByField says whether fields is the /Fields array or a form field's
+// /Kids, the only lists veraPDF draws form fields from.
+func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, profile string, part int, results *[]Violation, depth int, seen, judged map[int]bool, listedByField bool) {
 	if depth > maxActionChainDepth {
 		return
 	}
@@ -768,25 +772,22 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 		}
 		loc := fmt.Sprintf("form field %d", i)
 
-		// A /Kids entry that is a widget annotation without its own field
-		// identity (no /FT and no /T) is a pure widget, not a form field:
-		// ISO 32000-1 §12.7.3.1 lets a field's appearance be carried by child
-		// widget annotations that share the field's name. veraPDF scopes §6.4.1
-		// t2 to the PDFormField object, so such a widget's /AA is a t1
-		// (PDWidgetAnnot) violation only. A terminal field merged with its
-		// widget keeps /FT (or /T), so it stays a field here.
-		isPureWidget := false
-		if st, _ := document.ResolveName(ctx, doc, field["Subtype"]); st == "Widget" {
-			_, hasFT := field["FT"]
-			_, hasT := field["T"]
-			isPureWidget = !hasFT && !hasT
-		}
+		// §6.4.1 t2 judges veraPDF's form fields: every dictionary the /AcroForm
+		// /Fields array lists, and below a field only the /Kids that carry a
+		// partial field name /T (PDFormField.getChildFormFields keeps a kid when
+		// isField, a knownKey on /T, holds). Any other kid, such as a widget that
+		// carries /FT but no /T (ISO 32000-1, 12.7.3.1 makes /FT inheritable) or
+		// one whose /T is null (7.3.7), is judged by t1 as an annotation only.
+		// Measured on each, and on a top-level widget with neither /T nor /FT,
+		// which is a field.
+		isField := listedByField && (depth == 0 || nonNullKeyPresent(ctx, doc, field, "T"))
 
 		// §6.6.2 t2 (PDF/A-1) / §6.4.1 t2 (PDF/A-2/3): a form field dictionary
 		// shall not contain an /AA additional-actions entry. The prohibition
-		// is on the key itself, so mere presence of /AA is the violation,
-		// independent of the actions it holds.
-		if _, hasAA := field["AA"]; hasAA && !isPureWidget {
+		// is on the key itself, so a non-null /AA is the violation, independent
+		// of the actions it holds. veraPDF's containsAA is a knownKey test, and
+		// ISO 32000-1, 7.3.7 makes a null entry absent, measured.
+		if isField && nonNullKeyPresent(ctx, doc, field, "AA") {
 			if rule := fieldAARule(part); rule != (Rule{}) {
 				*results = append(*results, failf(rule, "%s contains forbidden /AA entry", loc)...)
 			}
@@ -827,7 +828,7 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 		if kidsObj, hasKids := field["Kids"]; hasKids {
 			kids, err := document.ResolveArray(ctx, doc, kidsObj)
 			if err == nil {
-				walkFormFields(ctx, doc, kids, profile, part, results, depth+1, seen, judged)
+				walkFormFields(ctx, doc, kids, profile, part, results, depth+1, seen, judged, isField)
 			}
 		}
 	}

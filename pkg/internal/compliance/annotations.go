@@ -350,8 +350,9 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 	// annotation is judged as carrying none. veraPDF reads it that way: /AP
 	// null, /AP naming an undefined object (ISO 32000-1, 7.3.10 treats that as
 	// the null object) and /AP 5 each fail its "AP != null" test, measured on a
-	// fixture of each. Any other resolution failure stays unjudged, and so does
-	// a stream, whose reading was not measured.
+	// fixture of each, and so does an /AP naming a stream, since
+	// PDAnnotation.getCOSAP keeps a dictionary only (measured on a widget). Any
+	// other resolution failure stays unjudged.
 	var (
 		ap      ast.PdfDict
 		apFound bool
@@ -361,9 +362,6 @@ func checkAnnotAppearance(ctx context.Context, doc *document.Document, annot ast
 		switch v := resolved.(type) {
 		case ast.PdfDict:
 			ap, apFound = v, true
-		case ast.PdfStream:
-			doc.Logger.Debug("compliance: annotations: /AP is a stream", "loc", loc)
-			return nil
 		default:
 			if err != nil && !errors.Is(err, document.ErrObjectNotFound) {
 				doc.Logger.Debug("compliance: annotations: failed to resolve /AP dict", "loc", loc, "error", err)
