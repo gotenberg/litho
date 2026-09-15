@@ -85,8 +85,11 @@ func checkOutputIntentICC(ctx context.Context, doc *document.Document, catalog a
 		// GTS_PDFX) do not grant coverage.
 		isPDFAIntent := subtypeName == "GTS_PDFA1"
 
+		// A /DestOutputProfile that resolves to null names no profile (ISO
+		// 32000-1, 7.3.7 and 7.3.10): veraPDF judges no output profile for it,
+		// measured on a null and on a reference to a null object.
 		destProfileObj, ok := intent["DestOutputProfile"]
-		if !ok {
+		if !ok || resourceEntryNull(ctx, doc, destProfileObj) {
 			// §6.2.2: OutputIntent without DestOutputProfile must have
 			// OutputConditionIdentifier referencing a well-known registry.
 			if _, hasOCI := intent["OutputConditionIdentifier"]; !hasOCI {
@@ -299,7 +302,7 @@ func checkPageOutputIntents(ctx context.Context, doc *document.Document, catalog
 			}
 
 			destProfileObj, ok := intent["DestOutputProfile"]
-			if !ok {
+			if !ok || resourceEntryNull(ctx, doc, destProfileObj) {
 				continue
 			}
 
@@ -338,7 +341,7 @@ func resolveOutputIntentICCInfo(ctx context.Context, doc *document.Document, cat
 		}
 
 		destObj, ok := intent["DestOutputProfile"]
-		if !ok {
+		if !ok || resourceEntryNull(ctx, doc, destObj) {
 			continue
 		}
 
@@ -385,7 +388,7 @@ func outputIntentHasDestProfile(ctx context.Context, doc *document.Document, cat
 		if err != nil || intent == nil {
 			continue
 		}
-		if _, ok := intent["DestOutputProfile"]; ok {
+		if nonNullKeyPresent(ctx, doc, intent, "DestOutputProfile") {
 			return true
 		}
 	}

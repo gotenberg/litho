@@ -566,27 +566,38 @@ func resolveNonEmptyLang(ctx context.Context, doc *document.Document, dict ast.P
 // test as written ([IsValidUALangTag]). An absent or unreadable entry passes:
 // the callers judge presence and emptiness themselves.
 func langEntryValid(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
-	obj, ok := dict["Lang"]
+	s, ok := langString(ctx, doc, dict)
 	if !ok {
 		return true
 	}
-	s, err := document.ResolveString(ctx, doc, obj)
-	if err != nil {
-		return true
-	}
 	return IsValidUALangTag(s)
+}
+
+// langString returns the string dict's /Lang resolves to, and false when the
+// entry is absent or resolves to anything but a string. A /Lang that resolves to
+// null is absent (ISO 32000-1, 7.3.7 and 7.3.10), not the empty tag
+// document.ResolveString would read it as: veraPDF reports no invalid tag for
+// one on the catalog or on a structure element, measured.
+func langString(ctx context.Context, doc *document.Document, dict ast.PdfDict) (ast.PdfString, bool) {
+	obj, ok := dict["Lang"]
+	if !ok {
+		return "", false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return "", false
+	}
+	str, isStr := resolved.(ast.PdfString)
+	return str, isStr
 }
 
 // langPresentButEmpty reports whether dict carries a /Lang key that resolves to
 // an empty (or whitespace-only) string. Such a value is an invalid Language-Tag,
 // not an absent one: the key exists but its value fails the tag grammar.
 func langPresentButEmpty(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
-	obj, ok := dict["Lang"]
+	// A /Lang that resolves to null is absent, not empty ([langString]).
+	langStr, ok := langString(ctx, doc, dict)
 	if !ok {
-		return false
-	}
-	langStr, err := document.ResolveString(ctx, doc, obj)
-	if err != nil {
 		return false
 	}
 	return strings.TrimSpace(document.DecodePdfString(langStr)) == ""
@@ -1243,7 +1254,9 @@ func checkOutlineLang(ctx context.Context, doc *document.Document, catalog ast.P
 	// their language is determinable. A present-but-empty /Lang is an invalid
 	// Language-Tag (reported once as §7.2 t29 in [checkLangRequired]), not an
 	// undeterminable-language defect, so it must not also fire t2 per outline.
-	if _, hasLang := catalog["Lang"]; hasLang {
+	// A catalog /Lang that resolves to null declares nothing (ISO 32000-1, 7.3.7
+	// and 7.3.10): veraPDF reports each outline item then, measured.
+	if stringKeyPresent(ctx, doc, catalog, "Lang") {
 		return nil
 	}
 
@@ -1321,14 +1334,10 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 
 	var results []Violation
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
-		langObj, ok := elem["Lang"]
+		// An absent /Lang, or one that resolves to null or to no string, carries
+		// no tag to validate ([langString]).
+		langStr, ok := langString(ctx, doc, elem)
 		if !ok {
-			return
-		}
-		langStr, err := document.ResolveString(ctx, doc, langObj)
-		if err != nil {
-			doc.Logger.Debug("compliance.accessibility: cannot resolve /Lang in structure element",
-				"path", path, "error", err)
 			return
 		}
 		trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
