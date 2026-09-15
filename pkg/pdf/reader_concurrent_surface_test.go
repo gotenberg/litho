@@ -85,3 +85,70 @@ func TestConcurrentReaderSurface(t *testing.T) {
 		t.Errorf("made %d reader calls, want %d", calls.Load(), want)
 	}
 }
+
+// TestConcurrentPageReadersSurface hammers every page-scoped reader across both
+// pages at once.
+//
+// These are the readers worth racing hardest: unlike the context-only ones they
+// build per-page and per-font state (glyph maps, decoded content, image
+// dictionaries) on first use, so two goroutines asking different pages for
+// different things share more machinery than any single-reader test reaches.
+// TestConcurrentSemanticReaders covers ExtractAnnotations alone; this covers all
+// ten, on both pages simultaneously.
+//
+// Errors are ignored for the same reason as in [TestConcurrentReaderSurface]:
+// the fixture has no 3D models, geospatial data or redactions, and "this page
+// has none of that" is a correct answer. The property under test is the absence
+// of a race, not the content.
+func TestConcurrentPageReadersSurface(t *testing.T) {
+	t.Parallel()
+
+	data := richReaderPDF(t)
+	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() {
+		if closeErr := r.Close(); closeErr != nil {
+			t.Logf("closing reader: %v", closeErr)
+		}
+	})
+
+	readers := []func(context.Context, int){
+		func(c context.Context, p int) { _, _ = r.Extract3DModels(c, p) },
+		func(c context.Context, p int) { _, _ = r.ExtractAnnotations(c, p) },
+		func(c context.Context, p int) { _, _ = r.ExtractGeoData(c, p) },
+		func(c context.Context, p int) { _, _ = r.ExtractImages(c, p) },
+		func(c context.Context, p int) { _, _ = r.ExtractLines(c, p) },
+		func(c context.Context, p int) { _, _ = r.ExtractMeasurements(c, p) },
+		func(c context.Context, p int) { _, _ = r.ExtractRedactedText(c, p) },
+		func(c context.Context, p int) { _, _ = r.ExtractTables(c, p) },
+		func(c context.Context, p int) { _, _ = r.ExtractTextElements(c, p) },
+		func(c context.Context, p int) { _, _ = r.Page(c, p) },
+	}
+
+	// richReaderPDF builds two pages; racing both at once is the point, since a
+	// per-page cache keyed wrongly would only show up across pages.
+	const pages = 2
+	const rounds = 4
+
+	var calls atomic.Int64
+	var wg sync.WaitGroup
+	for range rounds {
+		for page := 1; page <= pages; page++ {
+			for _, call := range readers {
+				wg.Add(1)
+				go func(fn func(context.Context, int), p int) {
+					defer wg.Done()
+					fn(context.Background(), p)
+					calls.Add(1)
+				}(call, page)
+			}
+		}
+	}
+	wg.Wait()
+
+	if want := int64(rounds * pages * len(readers)); calls.Load() != want {
+		t.Errorf("made %d page-reader calls, want %d", calls.Load(), want)
+	}
+}
