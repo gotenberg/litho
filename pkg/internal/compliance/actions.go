@@ -230,18 +230,8 @@ func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		results = append(results, checkAAKeyRestrictions(ctx, doc, aaDict, "catalog")...)
 	}
 
-	// Walk each action in the AA dict for forbidden types.
-	for _, key := range sortedNames(aaDict) {
-		actionObj := aaDict[key]
-		if ctx.Err() != nil {
-			return results
-		}
-		actionDict, err := document.ResolveDict(ctx, doc, actionObj)
-		if err != nil || actionDict == nil {
-			continue
-		}
-		results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("catalog /AA/%s", key), 0, make(map[int]bool))...)
-	}
+	// Walk the actions under the catalog's trigger events for forbidden types.
+	results = append(results, walkAATriggers(ctx, doc, aaDict, catalogAATriggers, profile, part, "catalog", nil)...)
 
 	return results
 }
@@ -284,20 +274,47 @@ func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.P
 			results = append(results, checkAAKeyRestrictions(ctx, doc, aaDict, fmt.Sprintf("page %d", i+1))...)
 		}
 
-		// Walk each action in the page AA dict for forbidden types.
-		for _, key := range sortedNames(aaDict) {
-			actionObj := aaDict[key]
-			if ctx.Err() != nil {
-				return results
-			}
-			actionDict, err := document.ResolveDict(ctx, doc, actionObj)
-			if err != nil || actionDict == nil {
-				continue
-			}
-			results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("page %d /AA/%s", i+1, key), 0, make(map[int]bool))...)
-		}
+		// Walk the actions under the page's trigger events for forbidden types.
+		results = append(results, walkAATriggers(ctx, doc, aaDict, pageAATriggers, profile, part, fmt.Sprintf("page %d", i+1), nil)...)
 	}
 
+	return results
+}
+
+// The trigger events each additional-actions owner defines: an annotation's
+// (ISO 32000-1, Table 194), a page's (Table 195), a form field's (Table 196)
+// and the document catalog's (Table 197). veraPDF builds actions from these
+// entries alone (PDAnnotationAdditionalActions, PDPageAdditionalActions,
+// PDFormFieldActions, PDCatalogAdditionalActions), so an action filed under
+// another owner's trigger, such as a keystroke /K on an annotation, is never
+// judged.
+//
+//nolint:gochecknoglobals // package-level lookup tables.
+var (
+	annotAATriggers   = []ast.PdfName{"E", "X", "D", "U", "Fo", "Bl", "PO", "PC", "PV", "PI"}
+	pageAATriggers    = []ast.PdfName{"O", "C"}
+	fieldAATriggers   = []ast.PdfName{"K", "F", "V", "C"}
+	catalogAATriggers = []ast.PdfName{"WC", "WS", "DS", "WP", "DP"}
+)
+
+// walkAATriggers walks, for forbidden action types, the actions aaDict holds
+// under the trigger events in triggers, in sorted key order. An action object
+// judged already under another parent is skipped; see [objectJudgedOnce].
+func walkAATriggers(ctx context.Context, doc *document.Document, aaDict ast.PdfDict, triggers []ast.PdfName, profile string, part int, location string, judged map[int]bool) []Violation {
+	var results []Violation
+	for _, key := range sortedNames(aaDict) {
+		if ctx.Err() != nil {
+			return results
+		}
+		if !slices.Contains(triggers, key) || objectJudgedOnce(aaDict[key], judged) {
+			continue
+		}
+		actionDict, err := document.ResolveDict(ctx, doc, aaDict[key])
+		if err != nil || actionDict == nil {
+			continue
+		}
+		results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("%s /AA/%s", location, key), 0, make(map[int]bool))...)
+	}
 	return results
 }
 
@@ -361,17 +378,7 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 						results = append(results, checkAAKeyRestrictions(ctx, doc, aaDict, location)...)
 					}
 
-					for _, key := range sortedNames(aaDict) {
-						actionObj := aaDict[key]
-						if ctx.Err() != nil {
-							return results
-						}
-						actionDict, err := document.ResolveDict(ctx, doc, actionObj)
-						if err != nil || actionDict == nil {
-							continue
-						}
-						results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("%s /AA/%s", location, key), 0, make(map[int]bool))...)
-					}
+					results = append(results, walkAATriggers(ctx, doc, aaDict, annotAATriggers, profile, part, location, nil)...)
 				}
 			}
 		}
@@ -434,24 +441,13 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 	// validated against the forbidden action type list.
 	// Note: Widget annotations have additional allowed AA keys (K, V, F, C)
 	// beyond the standard E, X, D, U, Fo, Bl. Do NOT apply the non-widget
-	// AA key restriction check here.
+	// AA key restriction check here. Those form-field triggers belong to the
+	// field, though: veraPDF walks a widget's /AA under the annotation
+	// triggers alone, and the field's under K, F, V and C (walkFormFields).
 	if hasAA {
 		aaDict, err := document.ResolveDict(ctx, doc, annotDict["AA"])
 		if err == nil && aaDict != nil {
-			for _, key := range sortedNames(aaDict) {
-				actionObj := aaDict[key]
-				if ctx.Err() != nil {
-					return results
-				}
-				if objectJudgedOnce(actionObj, judged) {
-					continue
-				}
-				actionDict, err := document.ResolveDict(ctx, doc, actionObj)
-				if err != nil || actionDict == nil {
-					continue
-				}
-				results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("%s /AA/%s", location, key), 0, make(map[int]bool))...)
-			}
+			results = append(results, walkAATriggers(ctx, doc, aaDict, annotAATriggers, profile, part, location, judged)...)
 		}
 	}
 
@@ -793,34 +789,15 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 			}
 		}
 
-		// Check /A on the field.
-		if aObj, hasA := field["A"]; hasA && !objectJudgedOnce(aObj, judged) {
-			aDict, err := document.ResolveDict(ctx, doc, aObj)
-			if err == nil && aDict != nil {
-				if _, hasS := aDict["S"]; hasS {
-					*results = append(*results, walkActionChain(ctx, doc, aDict, profile, part, loc, 0, make(map[int]bool))...)
-				}
-			}
-		}
-
-		// Check /AA on the field.
-		if aaObj, hasAA := field["AA"]; hasAA {
-			aaDict, err := document.ResolveDict(ctx, doc, aaObj)
-			if err == nil && aaDict != nil {
-				for _, key := range sortedNames(aaDict) {
-					valObj := aaDict[key]
-					if objectJudgedOnce(valObj, judged) {
-						continue
-					}
-					actDict, err := document.ResolveDict(ctx, doc, valObj)
-					if err != nil || actDict == nil {
-						continue
-					}
-					if _, hasS := actDict["S"]; hasS {
-						*results = append(*results, walkActionChain(ctx, doc, actDict, profile, part,
-							fmt.Sprintf("%s /AA/%s", loc, key), 0, make(map[int]bool))...)
-					}
-				}
+		// Walk the actions under the field's trigger events (K, F, V, C) for
+		// forbidden types. veraPDF links a form field to its /AA alone, never to
+		// an /A, which it judges on the widget annotation instead, so a field's
+		// /A is not walked here: walking it counted a merged field widget's
+		// action twice, and judged a non-annotation field's action veraPDF never
+		// reaches. Measured.
+		if isField {
+			if aaDict, err := document.ResolveDict(ctx, doc, field["AA"]); err == nil && aaDict != nil {
+				*results = append(*results, walkAATriggers(ctx, doc, aaDict, fieldAATriggers, profile, part, loc, judged)...)
 			}
 		}
 
