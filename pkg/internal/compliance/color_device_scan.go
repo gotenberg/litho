@@ -140,15 +140,24 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 		// 8.6.8. pdfjs issue7308.pdf draws a JBIG2 image mask on a page that
 		// sets no colour at all, which veraPDF reports under ISO 19005-2
 		// §6.2.4.3 t4 and litho counted as no colour use whatever.
+		isMask := false
 		if mask, err := document.ResolveBool(ctx, doc, stream.Dict["ImageMask"]); err == nil && mask {
+			isMask = true
 			if !inheritedCSFor(inherited, string(name)).fill {
 				usage.gray = true
 			}
 		}
 
-		// Check the XObject's own /ColorSpace entry.
+		// Check the XObject's own /ColorSpace entry. An image mask is exempt:
+		// ISO 32000-1, 8.9.5, Table 89 does not allow the entry there, so one a
+		// producer writes anyway selects no colour, and veraPDF ignores it too.
+		// pdfjs issue11518.pdf gives its image masks /ColorSpace /DeviceGray
+		// while filling them in an ICCBased space.
 		csObj := stream.Dict["ColorSpace"]
-		csResolved := resolveCSName(ctx, doc, csObj)
+		csResolved := ""
+		if !isMask {
+			csResolved = resolveCSName(ctx, doc, csObj)
+		}
 		if csResolved != "" {
 			markDeviceCS(csResolved, usage)
 			// Check base/alternate spaces for Indexed, Separation, DeviceN.
