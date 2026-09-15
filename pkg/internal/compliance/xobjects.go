@@ -41,9 +41,10 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		// Collect Do operator targets from the page content stream so we
 		// only check XObjects that are actually referenced (used).
-		_, referencedXObjects, _, _, _ := scanContentStreamDeviceCS(ctx, vctx.pages[i].parsedOps(ctx))
+		_, referencedXObjects, _, used, _ := scanContentStreamDeviceCS(ctx, vctx.pages[i].parsedOps(ctx))
 
 		scanXObjectResources(ctx, doc, res, i+1, part, profile, &results, visited, 0, referencedXObjects)
+		scanPatternImages(ctx, doc, res, used, i+1, part, profile, &results, visited)
 
 		// Check inline images for Interpolate = true.
 		results = append(results, checkInlineImageInterpolate(vctx.pages[i].parsedOps(ctx), i+1, part)...)
@@ -51,6 +52,52 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	doc.Logger.Debug("compliance.xobjects: checks complete", "violations", len(results))
 	return results
+}
+
+// scanPatternImages applies the XObject rules to what a page's tiling patterns
+// draw. A tiling pattern carries its own /Resources and content stream (ISO
+// 32000-1, 8.7.3.1), which paint wherever a scn/SCN selects the pattern, so the
+// images and forms that content invokes are used as surely as a page's own.
+// veraPDF reaches them through the pattern the page selects and states the
+// image rules there, ISO 19005-2, 6.2.8 t3 among them: pdfjs bug1771477.pdf
+// draws an image with /Interpolate true inside a tiling pattern. A pattern the
+// page declares but never selects paints nothing and is not judged, as veraPDF
+// does not judge it.
+func scanPatternImages(ctx context.Context, doc *document.Document, res ast.PdfDict, used *usedResources, pageNum, part int, profile string, results *[]Violation, visited map[string]bool) {
+	patterns, err := document.ResolveDict(ctx, doc, res["Pattern"])
+	if err != nil || patterns == nil || used == nil {
+		return
+	}
+	for _, name := range sortedNames(patterns) {
+		if ctx.Err() != nil {
+			return
+		}
+		if !used.patterns[string(name)] {
+			continue
+		}
+		stream, err := document.ResolveStream(ctx, doc, patterns[name])
+		if err != nil {
+			continue // a shading pattern: a dictionary with no content of its own
+		}
+		if patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"]); patternType != 1 {
+			continue
+		}
+		data, err := doc.DecodeStream(ctx, stream)
+		if err != nil {
+			doc.Logger.Debug("compliance.xobjects: cannot decode tiling pattern", "pattern", name, "error", err)
+			continue
+		}
+		ops, err := content.ParseStreamData(ctx, data)
+		if err != nil {
+			doc.Logger.Debug("compliance.xobjects: cannot parse tiling pattern", "pattern", name, "error", err)
+			continue
+		}
+		if patternRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); patternRes != nil {
+			_, referenced, _, _, _ := scanContentStreamDeviceCS(ctx, ops)
+			scanXObjectResources(ctx, doc, patternRes, pageNum, part, profile, results, visited, 0, referenced)
+		}
+		*results = append(*results, checkInlineImageInterpolate(ops, pageNum, part)...)
+	}
 }
 
 // checkInlineImageInterpolate checks parsed BI operations for inline images
