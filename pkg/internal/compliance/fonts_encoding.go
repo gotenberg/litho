@@ -1461,14 +1461,16 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 					if err != nil || encDict == nil {
 						results = append(results, failf(rule, "font %s on page %d has invalid Encoding type", fontName, pageNum)...)
 					} else {
+						// veraPDF states the rule as one test per font, so a font whose
+						// base encoding and /Differences both fail it is reported once:
+						// pdfjs issue215.pdf names no /BaseEncoding and lists small-cap
+						// names outside the Adobe Glyph List, and veraPDF counts one.
 						baseEnc, _ := document.ResolveName(ctx, doc, encDict["BaseEncoding"])
 						if baseEnc != "MacRomanEncoding" && baseEnc != "WinAnsiEncoding" {
 							results = append(results, failf(rule, "font %s on page %d BaseEncoding=%s", fontName, pageNum, baseEnc)...)
-						}
-
-						// Part 1: Differences is forbidden entirely. Parts 2+ allow
-						// it on the terms [nonSymbolicDifferencesProblem] checks.
-						if diffObj, hasDiff := encDict["Differences"]; hasDiff {
+						} else if diffObj, hasDiff := encDict["Differences"]; hasDiff {
+							// Part 1: Differences is forbidden entirely. Parts 2+ allow
+							// it on the terms [nonSymbolicDifferencesProblem] checks.
 							if PDFAPart(profile) == 1 {
 								results = append(results, failf(rule, "font %s on page %d has Differences in encoding dict", fontName, pageNum)...)
 							} else if diffArr, diffErr := document.ResolveArray(ctx, doc, diffObj); diffErr == nil {

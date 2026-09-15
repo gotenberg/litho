@@ -104,3 +104,59 @@ func TestNonSymbolicTrueTypeDifferencesListed(t *testing.T) {
 		}
 	}
 }
+
+// TestNonSymbolicTrueTypeEncodingReportedOnce pins that ISO 19005-2, 6.2.11.6
+// t2 and ISO 19005-1, 6.3.7 t1 are stated once per font: veraPDF tests one
+// expression per font, so a dictionary whose missing /BaseEncoding and whose
+// /Differences both fail it counts one finding, as on pdfjs issue215.pdf.
+// Every case was measured against veraPDF.
+func TestNonSymbolicTrueTypeEncodingReportedOnce(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	ttf, err := os.ReadFile("testdata/cidfont_notdef_min.ttf")
+	if err != nil {
+		t.Fatalf("read TTF fixture: %v", err)
+	}
+	tests := []struct {
+		name     string
+		encoding string
+		want1    int // PDF/A-1b, 6.3.7 t1
+		want2    int // PDF/A-2b, 6.2.11.6 t2
+	}{
+		{"no /BaseEncoding and an unlisted name", "<< /Type /Encoding /Differences [65 /a.sc] >>", 1, 1},
+		{"no /BaseEncoding and a listed name", "<< /Type /Encoding /Differences [65 /A] >>", 1, 1},
+		{"a WinAnsiEncoding base and an unlisted name", "<< /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences [65 /a.sc] >>", 1, 1},
+		{"a WinAnsiEncoding base and a listed name", "<< /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences [65 /A] >>", 1, 0},
+	}
+	for _, tt := range tests {
+		for _, p := range []struct {
+			profile models.PDFAProfile
+			rule    Rule
+			want    int
+		}{{models.PDFA1b, Rule_19005_1_6_3_7_t01, tt.want1}, {models.PDFA2b, Rule_19005_2_6_2_11_6_t02, tt.want2}} {
+			t.Run(fmt.Sprintf("%s, %s", tt.name, p.profile), func(t *testing.T) {
+				t.Parallel()
+				const body = "BT /F1 12 Tf 10 50 Td (A) Tj ET"
+				doc, _ := objsDocPDF(t,
+					"<< /Type /Catalog /Pages 2 0 R >>",
+					"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+					"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+					fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(body), body),
+					"<< /Type /Font /Subtype /TrueType /BaseFont /Test /FirstChar 65 /LastChar 65 /Widths [722]"+
+						" /Encoding "+tt.encoding+" /FontDescriptor 6 0 R >>",
+					"<< /Type /FontDescriptor /FontName /Test /Flags 32 /Ascent 700 /Descent -200 /CapHeight 700 /StemV 80"+
+						" /FontBBox [0 0 500 700] /ItalicAngle 0 /FontFile2 7 0 R >>",
+					fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(ttf), ttf),
+				)
+				viols, err := ValidatePDFA(ctx, doc, p.profile)
+				if err != nil {
+					t.Fatalf("ValidatePDFA: %v", err)
+				}
+				if got := countRuleErrs(t, viols, p.rule); got != p.want {
+					t.Errorf("%s t%d fired %d times, want %d", p.rule.Clause, p.rule.TestNumber, got, p.want)
+				}
+			})
+		}
+	}
+}
