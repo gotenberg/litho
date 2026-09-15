@@ -49,7 +49,7 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 				if pagesDict, err := document.ResolveDict(ctx, doc, vctx.catalog["Pages"]); err == nil && pagesDict != nil {
 					inheritedRes = resolveResources(ctx, doc, pagesDict)
 				}
-				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, ownRes, inheritedRes, part, i+1, false)...)
+				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, p.overflow, ownRes, inheritedRes, part, i+1, false)...)
 				// Check inline image /Intent values from parsed BI operations.
 				results = append(results, checkInlineImageIntent(ops, part, i+1)...)
 				// Inline image filters are stated by checkInlineImageFilters,

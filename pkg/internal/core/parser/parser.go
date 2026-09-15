@@ -49,6 +49,16 @@ type Parser struct {
 	FormatViolations []error
 	checkFormat      bool
 
+	// IntegerOverflows holds, in parse order, the value of every integer
+	// literal too large for a 64-bit integer, which the parser reads as a
+	// real. ISO 32000-1, 7.3.3 writes an integer as decimal digits with an
+	// optional sign, so the literal is an integer object whatever its
+	// magnitude, and a PDF/A validator judges it against the integer limit
+	// (ISO 19005-2, 6.1.13 t1), not the real one. It is collected on every
+	// parse, not only under format checking: such literals are rare, and an
+	// object cached before a validation starts is never parsed again.
+	IntegerOverflows []float64
+
 	// ends holds the end byte offset of each buffered token, parallel to
 	// tokens. It is populated only when trackOffsets is set (via
 	// WithOffsetTracking), so the default parse path pays no overhead. The
@@ -265,6 +275,9 @@ func (p *Parser) ParseObject(ctx context.Context) (ast.PdfObject, error) {
 			// no ISO 32000-1, 7.3.3 syntax at all and stays a parse error.
 			if isDecimalDigits(t0.Value) {
 				if f, ferr := strconv.ParseFloat(t0.Value, 64); ferr == nil && !math.IsInf(f, 0) {
+					// The value is read as a real, but the literal stays an
+					// integer, which is what a compliance check must judge.
+					p.IntegerOverflows = append(p.IntegerOverflows, f)
 					return ast.PdfReal(f), nil
 				}
 			}

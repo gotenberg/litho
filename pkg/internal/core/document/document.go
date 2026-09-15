@@ -122,6 +122,14 @@ type Document struct {
 	// cap of its own.
 	formatViolations map[int][]error
 
+	// integerOverflows records, per object number, the integer literals past
+	// the 64-bit range that the object's parse read as reals (see
+	// [parser.Parser.IntegerOverflows]). It is recorded in every mode, the
+	// first recording for an object wins, and only objects that hold one get
+	// a key, so it lives under the same bound as formatViolations. Access is
+	// serialized by d.mu.
+	integerOverflows map[int][]float64
+
 	// XRefTableOffsets records the byte offsets of traditional xref tables
 	// encountered during parsing. Written once during construction and
 	// read-only thereafter.
@@ -185,6 +193,35 @@ func (d *Document) FormatViolations() []error {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.formatViolationsLocked()
+}
+
+// recordIntegerOverflows records the integer literals past the 64-bit range
+// that the parse of object objNum read as reals. The first recording for an
+// object wins, as in [Document.RecordFormatViolations], so the record is a
+// function of the input bytes. An empty list records nothing.
+func (d *Document) recordIntegerOverflows(objNum int, values []float64) {
+	if len(values) == 0 {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.integerOverflows == nil {
+		d.integerOverflows = make(map[int][]float64)
+	}
+	if _, ok := d.integerOverflows[objNum]; ok {
+		return
+	}
+	d.integerOverflows[objNum] = slices.Clone(values)
+}
+
+// IntegerOverflows returns the integer literals past the 64-bit range that the
+// parse of object objNum read as reals, in parse order, or nil when it held
+// none or has not been parsed. The result is a fresh slice. IntegerOverflows
+// is safe for concurrent use.
+func (d *Document) IntegerOverflows(objNum int) []float64 {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return slices.Clone(d.integerOverflows[objNum])
 }
 
 // ResetFormatViolations drops every recorded format violation and returns
@@ -729,6 +766,7 @@ func (d *Document) ClearCaches() {
 	d.fontProgCache = nil
 	d.fontProgBytes = 0
 	d.formatViolations = nil
+	d.integerOverflows = nil
 	d.mu.Unlock()
 }
 

@@ -161,6 +161,17 @@ func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation
 	return ops, p.FormatViolations
 }
 
+// ParseStreamDataWithOverflows parses content stream data like
+// [ParseStreamData] and also returns the value of every integer literal the
+// parser read as a real because it overflows 64 bits (see
+// [parser.Parser.IntegerOverflows]).
+func ParseStreamDataWithOverflows(ctx context.Context, data []byte) ([]Operation, []float64, error) {
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
+	p := parser.NewParser(lex)
+	ops, err := parseOperations(ctx, p, nil)
+	return ops, p.IntegerOverflows, err
+}
+
 // MaxPageContentSize bounds the decoded content one page may accumulate across
 // its /Contents array. It is an anti-DoS guard, not spec-mandated.
 //

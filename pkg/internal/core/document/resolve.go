@@ -490,7 +490,11 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum, targe
 	absoluteOffset := int64(data.first + targetOffset)
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data.decoded), int64(len(data.decoded)), absoluteOffset))
 	p := parser.NewParser(lex)
-	return p.ParseObject(ctx)
+	obj, err := p.ParseObject(ctx)
+	if err == nil {
+		d.recordIntegerOverflows(targetObjNum, p.IntegerOverflows)
+	}
+	return obj, err
 }
 
 // slotFor returns the header index of the object to extract. It trusts the
@@ -1012,6 +1016,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		if complianceMode {
 			d.RecordFormatViolations(ref.ObjectNum, append(formatViolations, p.FormatViolations...)...)
 		}
+		d.recordIntegerOverflows(ref.ObjectNum, p.IntegerOverflows)
 
 		d.Logger.Debug("resolve object parsed",
 			slog.Int("obj", ref.ObjectNum),

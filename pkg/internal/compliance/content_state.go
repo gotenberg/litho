@@ -278,13 +278,13 @@ func checkContentStreamResources(
 	pageNum int,
 	reportUndefinedOps bool,
 ) []Violation {
-	ops, err := content.ParseStreamData(ctx, streamData)
+	ops, overflows, err := content.ParseStreamDataWithOverflows(ctx, streamData)
 	if err != nil {
 		doc.Logger.Debug("compliance.content: cannot parse content stream", "error", err)
 		return nil
 	}
 
-	results := checkContentStreamResourcesOps(ctx, doc, ops, resources, inherited, part, pageNum, reportUndefinedOps)
+	results := checkContentStreamResourcesOps(ctx, doc, ops, countOverflows(overflows), resources, inherited, part, pageNum, reportUndefinedOps)
 
 	// Check inline image /Intent values from parsed BI operations.
 	results = append(results, checkInlineImageIntent(ops, part, pageNum)...)
@@ -299,6 +299,7 @@ func checkContentStreamResourcesOps(
 	ctx context.Context,
 	doc *document.Document,
 	ops []content.Operation,
+	overflow map[float64]int,
 	resources ast.PdfDict,
 	inherited ast.PdfDict,
 	part int,
@@ -356,6 +357,13 @@ func checkContentStreamResourcesOps(
 		if part == 1 && !reportedRealLimit && realRule.Specification != "" {
 			for _, operand := range op.Operands {
 				if r, ok := operand.(ast.PdfReal); ok {
+					// A real the parser read from an integer literal past the
+					// 64-bit range is an integer, judged by checkNumericLimits
+					// (see [checkNumberLimits]). overflow is shared by the check
+					// groups, so it is read, never consumed.
+					if overflow[float64(r)] > 0 {
+						continue
+					}
 					if math.Abs(float64(r)) > maxRealAbs1 {
 						results = append(results, Violation{
 							Rule:    realRule,

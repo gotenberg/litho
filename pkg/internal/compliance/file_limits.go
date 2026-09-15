@@ -105,7 +105,8 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 			continue
 		}
 
-		results = append(results, checkObjectNumericLimits(obj, fmt.Sprintf("object %d", objNum), part, profile)...)
+		overflow := countOverflows(doc.IntegerOverflows(objNum))
+		results = append(results, checkObjectNumericLimits(obj, fmt.Sprintf("object %d", objNum), part, profile, overflow)...)
 	}
 
 	// The trailer dictionary is not an indirect object, so the walk above never
@@ -117,7 +118,7 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 	// alone: pdfjs bug1980958.pdf is 219 damaged bytes whose synthesized /Size
 	// is 2147483648, a value that appears nowhere in it.
 	if !doc.TrailerSynthesized {
-		results = append(results, checkObjectNumericLimits(doc.Index.Trailer, "trailer", part, profile)...)
+		results = append(results, checkObjectNumericLimits(doc.Index.Trailer, "trailer", part, profile, nil)...)
 	}
 
 	// Additionally, scan actual content streams for string/integer limits.
@@ -202,11 +203,12 @@ func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream
 	if err != nil || len(data) == 0 {
 		return nil
 	}
-	ops, err := content.ParseStreamData(ctx, data)
+	ops, overflows, err := content.ParseStreamDataWithOverflows(ctx, data)
 	if err != nil {
 		doc.Logger.Debug("compliance.file_structure: cannot parse content stream", "error", err)
 		return nil
 	}
+	overflow := countOverflows(overflows)
 	part := PDFAPart(profile)
 	where := fmt.Sprintf("object %d (stream content)", objNum)
 	var results []Violation
@@ -229,7 +231,7 @@ func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream
 					})
 				}
 			case ast.PdfReal:
-				results = append(results, checkRealLimits(float64(v), part, profile, where)...)
+				results = append(results, checkNumberLimits(float64(v), part, profile, where, overflow)...)
 			case ast.PdfArray:
 				// TJ arrays carry strings and displacement numbers alike.
 				for _, elem := range v {
@@ -242,7 +244,7 @@ func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream
 							})
 						}
 					case ast.PdfReal:
-						results = append(results, checkRealLimits(float64(e), part, profile, where)...)
+						results = append(results, checkNumberLimits(float64(e), part, profile, where, overflow)...)
 					}
 				}
 			}
@@ -291,6 +293,37 @@ func scanInvokedFormLimits(ctx context.Context, doc *document.Document, ops []co
 	return results
 }
 
+// countOverflows counts, by value, the integer literals past the 64-bit range
+// that the parser read as reals in one object or content stream.
+func countOverflows(values []float64) map[float64]int {
+	if len(values) == 0 {
+		return nil
+	}
+	overflow := make(map[float64]int, len(values))
+	for _, v := range values {
+		overflow[v]++
+	}
+	return overflow
+}
+
+// checkNumberLimits checks a parsed real that may have been written as an
+// integer. ISO 32000-1, 7.3.3 makes a signed run of digits an integer object
+// whatever its magnitude, so a literal past the 64-bit range, which the parser
+// can only hold as a real, is judged against the integer limit (ISO 19005-2,
+// 6.1.13 t1). veraPDF reads it as an integer too: pdfjs issue20872.pdf writes
+// four 309-digit coordinates and veraPDF reports t1 for each. overflow counts
+// those literals by value; each one matched is consumed.
+func checkNumberLimits(fval float64, part int, profile, where string, overflow map[float64]int) []Violation {
+	if overflow[fval] == 0 {
+		return checkRealLimits(fval, part, profile, where)
+	}
+	overflow[fval]--
+	return []Violation{{
+		Rule:    integerRangeRule(profile),
+		Context: fmt.Sprintf("%s: integer %g out of range", where, fval),
+	}}
+}
+
 // checkRealLimits checks one real against the magnitude cap its part states,
 // and against the denormal floor parts 2 and 3 add. where names the carrier
 // for the violation context.
@@ -329,8 +362,10 @@ func checkRealLimits(fval float64, part int, profile, where string) []Violation 
 // checkObjectNumericLimits checks a single resolved object for numeric limit
 // violations. It handles nested dicts and arrays recursively. where names the
 // carrier for the violation context, since not every carrier is an indirect
-// object: the trailer dictionary has no object number of its own.
-func checkObjectNumericLimits(obj ast.PdfObject, where string, part int, profile string) []Violation {
+// object: the trailer dictionary has no object number of its own. overflow
+// counts the integer literals the object's parse read as reals (see
+// [checkNumberLimits]).
+func checkObjectNumericLimits(obj ast.PdfObject, where string, part int, profile string, overflow map[float64]int) []Violation {
 	var results []Violation
 
 	switch v := obj.(type) {
@@ -344,7 +379,7 @@ func checkObjectNumericLimits(obj ast.PdfObject, where string, part int, profile
 		}
 
 	case ast.PdfReal:
-		results = append(results, checkRealLimits(float64(v), part, profile, where)...)
+		results = append(results, checkNumberLimits(float64(v), part, profile, where, overflow)...)
 
 	case ast.PdfString:
 		maxStr := maxStringBytes1
@@ -378,7 +413,7 @@ func checkObjectNumericLimits(obj ast.PdfObject, where string, part int, profile
 			})
 		}
 		for _, elem := range v {
-			results = append(results, checkObjectNumericLimits(elem, where, part, profile)...)
+			results = append(results, checkObjectNumericLimits(elem, where, part, profile, overflow)...)
 		}
 
 	case ast.PdfDict:
@@ -393,14 +428,14 @@ func checkObjectNumericLimits(obj ast.PdfObject, where string, part int, profile
 		// Go map, so an unsorted walk reported the same two out-of-range reals
 		// in a different order on consecutive runs.
 		for _, key := range slices.Sorted(maps.Keys(v)) {
-			results = append(results, checkObjectNumericLimits(key, where, part, profile)...)
-			results = append(results, checkObjectNumericLimits(v[key], where, part, profile)...)
+			results = append(results, checkObjectNumericLimits(key, where, part, profile, overflow)...)
+			results = append(results, checkObjectNumericLimits(v[key], where, part, profile, overflow)...)
 		}
 
 	case ast.PdfStream:
 		// Check the stream dictionary.
 		if v.Dict != nil {
-			results = append(results, checkObjectNumericLimits(v.Dict, where, part, profile)...)
+			results = append(results, checkObjectNumericLimits(v.Dict, where, part, profile, overflow)...)
 		}
 	}
 
