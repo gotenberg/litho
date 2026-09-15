@@ -232,6 +232,31 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 							"tagged content inside content marked as Artifact")...)
 						reportedT2 = true
 					}
+					// An /Artifact sequence that carries an /MCID the ParentTree
+					// maps to an element reaching the root is itself tagged
+					// content (veraPDF isTaggedContent climbs the MCID's owner),
+					// so it is both an Artifact inside tagged content and tagged
+					// content inside an Artifact. govdocs thread_000_000632.pdf
+					// wraps an image in /Artifact <</MCID 31>> BDC that its /S
+					// /Artifact element owns, and veraPDF reports t1 and t2; with
+					// the MCID left out of the ParentTree it reports neither.
+					// Measured with an owner of /S /Artifact and of /S /P.
+					if kind == markerArtifact && structTree != nil {
+						if mcid := inlineBDCMCID(ctx, doc, op); mcid >= 0 {
+							if reach, mapped := mcidReach[mcid]; mapped && reach {
+								if !reportedT1 {
+									results = append(results, failf(Rule_14289_1_7_1_t01,
+										"content marked as Artifact carries an MCID its structure element tags")...)
+									reportedT1 = true
+								}
+								if !reportedT2 {
+									results = append(results, failf(Rule_14289_1_7_1_t02,
+										"tagged content marked as Artifact")...)
+									reportedT2 = true
+								}
+							}
+						}
+					}
 				}
 				markerStack = append(markerStack, kind)
 				mcidStack = append(mcidStack, inlineBDCMCID(ctx, doc, op))
