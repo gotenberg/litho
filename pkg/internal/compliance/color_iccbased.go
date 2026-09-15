@@ -476,12 +476,14 @@ func resolvePageBlendingICCRef(ctx context.Context, doc *document.Document, page
 }
 
 // expectedComponentCount returns the expected /N value for a given ICC colour
-// space signature.
+// space signature. A Lab profile has three components (ISO 15076-1, Table 19),
+// and veraPDF's ISO 19005-1, 6.2.3.2 t2 test accepts N 3 for "Lab " as for
+// "RGB ", measured on an output intent and on an ICCBased colour space.
 func expectedComponentCount(colorSpace string) int {
 	switch colorSpace {
 	case "GRAY":
 		return 1
-	case "RGB ":
+	case "RGB ", "Lab ":
 		return 3
 	case "CMYK":
 		return 4

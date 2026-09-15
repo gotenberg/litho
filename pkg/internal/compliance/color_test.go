@@ -132,7 +132,7 @@ func TestExpectedComponentCount(t *testing.T) {
 		{"GRAY", 1},
 		{"RGB ", 3},
 		{"CMYK", 4},
-		{"Lab ", 0},
+		{"Lab ", 3},
 		{"", 0},
 		{"XYZ ", 0},
 	}
