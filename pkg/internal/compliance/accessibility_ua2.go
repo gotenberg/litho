@@ -119,7 +119,10 @@ func hasLabelKid(ctx context.Context, state *walkState, elem ast.PdfDict) bool {
 
 // structElemHasKids reports whether a structure element's /K holds at least one
 // kid: a marked-content identifier, a marked-content or object reference, or a
-// structure element (ISO 32000-1, 14.7.2, Table 323).
+// structure element (ISO 32000-1, 14.7.2, Table 323), with or without its /S.
+// veraPDF's getChildren counts any dictionary whose /Type is absent or
+// StructElem as a structure element (TaggedPDFHelper.isStructElem), so a Lbl
+// whose only kid carries no /S still labels its widget. Measured.
 func structElemHasKids(ctx context.Context, doc *document.Document, elem ast.PdfDict) bool {
 	kObj, ok := elem["K"]
 	if !ok {
@@ -138,10 +141,8 @@ func structElemHasKids(ctx context.Context, doc *document.Document, elem ast.Pdf
 		case ast.PdfInt:
 			return true
 		case ast.PdfDict:
-			if _, hasS := v["S"]; hasS {
-				return true
-			}
-			if t, _ := document.ResolveName(ctx, doc, v["Type"]); t == "MCR" || t == "OBJR" {
+			switch t, _ := document.ResolveName(ctx, doc, v["Type"]); t {
+			case "", "StructElem", "MCR", "OBJR":
 				return true
 			}
 		}

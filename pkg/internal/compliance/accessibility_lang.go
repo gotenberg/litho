@@ -137,6 +137,12 @@ type markedContentProps struct {
 	page     ast.PdfDict
 	props    ast.PdfDict
 	resolved bool
+	// parentTree is the structure tree's ParentTree when the scan judges
+	// MCID-owned text through the tree, nil otherwise; owners caches the entry
+	// page's /StructParents selects in it.
+	parentTree     ast.PdfDict
+	owners         ast.PdfArray
+	ownersResolved bool
 }
 
 // dict returns the property list op carries, or nil when it carries none or the
@@ -922,6 +928,15 @@ func mcidsShowingText(ctx context.Context, ops []content.Operation) map[int]bool
 // mcidCovers treats a marked-content sequence carrying an /MCID as covered, for
 // callers that judge MCID-owned text through the structure tree instead.
 func documentShowsUndeterminedText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, mcidCovers bool) bool {
+	var parentTree ast.PdfDict
+	if mcidCovers {
+		// Best-effort: a missing or unresolvable tree or ParentTree leaves it nil,
+		// and then no MCID owns its text ([markedContentHasMCID]).
+		treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
+		if treeRoot != nil {
+			parentTree, _ = document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
+		}
+	}
 	for _, page := range collectPages(ctx, doc, catalog) {
 		if ctx.Err() != nil {
 			return false
@@ -939,7 +954,7 @@ func documentShowsUndeterminedText(ctx context.Context, doc *document.Document, 
 			doc.Logger.Debug("compliance.accessibility: cannot parse page content", "error", err)
 			return true
 		}
-		props := &markedContentProps{doc: doc, page: page}
+		props := &markedContentProps{doc: doc, page: page, parentTree: parentTree}
 		// The visited set is per page: a Form XObject with no /Resources of its
 		// own resolves its nested names against the invoking page's, so the same
 		// XObject can reach different content from two pages.
@@ -983,7 +998,7 @@ func opsShowUndeterminedText(ctx context.Context, doc *document.Document, ops []
 		case "Do":
 			// The XObject paints inside the sequence the Do sits in (ISO 32000-1
 			// §14.6), so that sequence's /Lang covers its text too.
-			if formShowsUndeterminedText(ctx, doc, op, res, cur, mcidCovers, seen, depth) {
+			if formShowsUndeterminedText(ctx, doc, op, res, cur, mcidCovers, props.parentTree, seen, depth) {
 				return true
 			}
 		}
@@ -997,15 +1012,30 @@ func opsShowUndeterminedText(ctx context.Context, doc *document.Document, ops []
 // key even when the tag is empty or malformed, and judges that value under UA-1
 // §7.2 t29 instead (see [checkMarkedContentLang]).
 // markedContentHasMCID reports whether a BDC operator's property list carries an
-// integer /MCID, tying its content to a structure element. Any other /MCID ties
-// nothing ([mcidValue]).
+// integer /MCID ([mcidValue]) that ties its content to a structure element: the
+// ParentTree entry the page's (or Form XObject's) /StructParents selects maps
+// the identifier to an element (ISO 32000-1, 14.7.4.4). veraPDF finds a text
+// item's owner that way alone, so an MCID the ParentTree does not map, or any
+// MCID of a tree with no ParentTree, owns nothing, and its text draws no /Lang
+// from the element that lists it in /K. Measured against veraPDF.
 func markedContentHasMCID(ctx context.Context, props *markedContentProps, op content.Operation) bool {
 	pd := props.dict(ctx, op)
 	if pd == nil {
 		return false
 	}
-	_, ok := mcidValue(ctx, props.doc, pd["MCID"])
-	return ok
+	mcid, ok := mcidValue(ctx, props.doc, pd["MCID"])
+	if !ok || mcid < 0 {
+		return false
+	}
+	if !props.ownersResolved {
+		props.owners = pageParentTreeEntries(ctx, props.doc, props.parentTree, props.page)
+		props.ownersResolved = true
+	}
+	if mcid >= len(props.owners) {
+		return false
+	}
+	_, isRef := props.owners[mcid].(ast.PdfIndirectRef)
+	return isRef
 }
 
 func markedContentLangPresent(ctx context.Context, props *markedContentProps, op content.Operation) bool {
@@ -1021,7 +1051,7 @@ func markedContentLangPresent(ctx context.Context, props *markedContentProps, op
 // invokes paints text no /Lang covers. A Do naming an absent or non-Form XObject
 // paints no text: per ISO 32000-1 §8.10.1 an unresolvable name makes the
 // operator a no-op.
-func formShowsUndeterminedText(ctx context.Context, doc *document.Document, op content.Operation, res ast.PdfDict, covered, mcidCovers bool, seen map[int]bool, depth int) bool {
+func formShowsUndeterminedText(ctx context.Context, doc *document.Document, op content.Operation, res ast.PdfDict, covered, mcidCovers bool, parentTree ast.PdfDict, seen map[int]bool, depth int) bool {
 	if res == nil || len(op.Operands) < 1 {
 		return false
 	}
@@ -1068,7 +1098,7 @@ func formShowsUndeterminedText(ctx context.Context, doc *document.Document, op c
 	if err != nil || subRes == nil {
 		subRes = res
 	}
-	return opsShowUndeterminedText(ctx, doc, ops, &markedContentProps{doc: doc, page: stream.Dict}, subRes, covered, mcidCovers, seen, depth+1)
+	return opsShowUndeterminedText(ctx, doc, ops, &markedContentProps{doc: doc, page: stream.Dict, parentTree: parentTree}, subRes, covered, mcidCovers, seen, depth+1)
 }
 
 // markedContentID returns the /MCID an inline BDC property list carries, or -1
@@ -1172,7 +1202,9 @@ func walkStructKidsWithLang(ctx context.Context, doc *document.Document, obj ast
 }
 
 func visitStructElemWithLang(ctx context.Context, doc *document.Document, elem ast.PdfDict, path string, seen map[int]bool, depth, objNum int, ancestorLang bool, fn structLangVisitor) {
-	if _, hasS := elem["S"]; !hasS {
+	// A structure element with no /S still carries its /Lang to its kids, and
+	// its kids still show text veraPDF judges ([isStructElemDict]).
+	if !isStructElemDict(ctx, doc, elem) {
 		return
 	}
 	typeName, _ := document.ResolveName(ctx, doc, elem["S"])
