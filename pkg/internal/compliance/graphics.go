@@ -423,8 +423,10 @@ func checkTransferFunction(ctx context.Context, doc *document.Document, gs ast.P
 	var results []Violation
 
 	// PDF/A-1: /TR key is completely forbidden.
-	// PDF/A-2+/4: /TR key is also forbidden.
-	if _, hasTR := gs["TR"]; hasTR {
+	// PDF/A-2+/4: /TR key is also forbidden. A /TR written as null is absent
+	// (ISO 32000-1, 7.3.7) and one naming any object counts, as veraPDF's
+	// knownKey reads it ([knownKey]). Measured.
+	if knownKey(gs, "TR") {
 		results = append(results, failf(trForbiddenRule(part), "page %d, ExtGState %s", pageNum, gsName)...)
 	}
 
@@ -505,13 +507,16 @@ func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, 
 		}
 	}
 
-	// HalftoneName forbidden.
-	if _, hasHTName := ht["HalftoneName"]; hasHTName {
+	// HalftoneName forbidden. One that resolves to null names nothing (ISO
+	// 32000-1, 7.3.7 and 7.3.10): veraPDF reports neither a null nor a reference
+	// to a null object. Measured.
+	if nonNullKeyPresent(ctx, doc, ht, "HalftoneName") {
 		results = append(results, failf(halftoneNameRule(part), "page %d, ExtGState %s", pageNum, gsName)...)
 	}
 
-	// TransferFunction must be /Default or absent.
-	if tfObj, hasTF := ht["TransferFunction"]; hasTF {
+	// TransferFunction must be /Default or absent. One that resolves to null is
+	// absent (ISO 32000-1, 7.3.7 and 7.3.10), measured as for HalftoneName.
+	if tfObj, hasTF := ht["TransferFunction"]; hasTF && !resourceEntryNull(ctx, doc, tfObj) {
 		tfName, _ := document.ResolveName(ctx, doc, tfObj)
 		if tfName != "Default" {
 			results = append(results, failf(halftoneTransferRule(part), "page %d, ExtGState %s", pageNum, gsName)...)

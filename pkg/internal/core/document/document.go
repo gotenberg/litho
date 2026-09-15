@@ -514,8 +514,15 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		slog.Bool("linearized", doc.Linearization != nil),
 	)
 
-	// Initialize Crypto if Encrypt dictionary is present
-	if encObj, ok := doc.Index.Trailer["Encrypt"]; ok {
+	// Initialize Crypto if Encrypt dictionary is present. An /Encrypt written as
+	// the null object is absent (ISO 32000-1, 7.3.7), so the file is not
+	// encrypted: veraPDF opens it as such. A reference to a null object still
+	// fails below, as veraPDF also refuses that file.
+	encObj, ok := doc.Index.Trailer["Encrypt"]
+	if _, isNull := encObj.(ast.PdfNull); isNull {
+		ok = false
+	}
+	if ok {
 		var encDict ast.PdfDict
 		if ref, ok := encObj.(ast.PdfIndirectRef); ok {
 			// Resolving without Crypto is safe because Encrypt dict values are never encrypted

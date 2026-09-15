@@ -51,7 +51,7 @@ func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	if part >= 2 {
 		results = append(results, checkAlternatePresentations(ctx, doc, catalog, part)...)
-		results = append(results, checkRequirementsKey(catalog, part)...)
+		results = append(results, checkRequirementsKey(ctx, doc, catalog, part)...)
 		results = append(results, checkNeedsRenderingKey(catalog, part)...)
 	}
 
@@ -191,7 +191,9 @@ func checkAlternatePresentations(ctx context.Context, doc *document.Document, ca
 		return nil
 	}
 
-	if _, hasAP := namesDict["AlternatePresentations"]; hasAP {
+	// An entry that resolves to null is absent (ISO 32000-1, 7.3.7 and 7.3.10):
+	// veraPDF reports neither a null nor a reference to a null object. Measured.
+	if nonNullKeyPresent(ctx, doc, namesDict, "AlternatePresentations") {
 		rule := alternatePresentationsRule(part)
 		return fail(rule, "AlternatePresentations key present in Names dictionary")
 	}
@@ -201,8 +203,10 @@ func checkAlternatePresentations(ctx context.Context, doc *document.Document, ca
 
 // checkRequirementsKey validates that the /Requirements key is not present in
 // the document catalog (parts 2+/4).
-func checkRequirementsKey(catalog ast.PdfDict, part int) []Violation {
-	if _, hasReq := catalog["Requirements"]; hasReq {
+func checkRequirementsKey(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
+	// An entry that resolves to null is absent (ISO 32000-1, 7.3.7 and 7.3.10),
+	// as veraPDF reads it. Measured.
+	if nonNullKeyPresent(ctx, doc, catalog, "Requirements") {
 		rule := requirementsRule(part)
 		return fail(rule, "Requirements key present in document catalog")
 	}
@@ -213,7 +217,9 @@ func checkRequirementsKey(catalog ast.PdfDict, part int) []Violation {
 // checkNeedsRenderingKey validates that the catalog does not contain the
 // forbidden /NeedsRendering key (ISO 19005-2/3/4 §6.4.2).
 func checkNeedsRenderingKey(catalog ast.PdfDict, part int) []Violation {
-	if _, ok := catalog["NeedsRendering"]; ok {
+	// veraPDF reads the key with knownKey ([knownKey]): a direct null is absent
+	// (ISO 32000-1, 7.3.7), a reference counts. Measured.
+	if knownKey(catalog, "NeedsRendering") {
 		return fail(needsRenderingRule(part), "NeedsRendering key present in document catalog")
 	}
 
@@ -382,7 +388,9 @@ func permsDictRule(part int) Rule {
 // indicator that a document declares optional content, so its presence alone is
 // the conformance signal.
 func checkForbiddenOCProperties(catalog ast.PdfDict) []Violation {
-	if _, ok := catalog["OCProperties"]; ok {
+	// A direct null is absent (ISO 32000-1, 7.3.7), a reference counts, as
+	// veraPDF's knownKey reads it ([knownKey]). Measured.
+	if knownKey(catalog, "OCProperties") {
 		return fail(Rule_19005_1_6_1_13_t01, "catalog contains /OCProperties (optional content forbidden in PDF/A-1)")
 	}
 	return nil
@@ -513,7 +521,9 @@ func configName(ctx context.Context, doc *document.Document, cfg ast.PdfDict) st
 func checkPresSteps(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	pages := collectPages(ctx, doc, catalog)
 	for i, page := range pages {
-		if _, has := page["PresSteps"]; has {
+		// An entry that resolves to null is absent (ISO 32000-1, 7.3.7 and
+		// 7.3.10), as veraPDF reads it. Measured.
+		if nonNullKeyPresent(ctx, doc, page, "PresSteps") {
 			return failf(presStepsRule(part), "page %d contains /PresSteps entry", i)
 		}
 	}

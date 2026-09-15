@@ -297,8 +297,10 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 			continue
 		}
 
-		// SMask must be None or absent.
-		if smaskObj, hasSMask := gs["SMask"]; hasSMask {
+		// SMask must be None or absent. veraPDF reads the key with knownKey
+		// ([knownKey]): a direct null is absent (ISO 32000-1, 7.3.7), a reference
+		// to a null object is an SMask that is not None. Measured.
+		if smaskObj := gs["SMask"]; knownKey(gs, "SMask") {
 			smaskName, _ := document.ResolveName(ctx, doc, smaskObj)
 			if smaskName != "None" {
 				results = append(results, failf(Rule_19005_1_6_4_t01, "page %d, ExtGState %s", pageNum, string(gsName))...)
@@ -370,8 +372,9 @@ func checkXObjectTransparency1(ctx context.Context, doc *document.Document, reso
 func formXObjectTransparency1(ctx context.Context, doc *document.Document, xo ast.PdfDict, pageNum int, label string) []Violation {
 	var results []Violation
 
-	// SMask key must not be present on XObjects.
-	if _, hasSMask := xo["SMask"]; hasSMask {
+	// SMask key must not be present on XObjects: a direct null is absent, a
+	// reference counts ([knownKey]). Measured.
+	if knownKey(xo, "SMask") {
 		results = append(results, failf(Rule_19005_1_6_4_t02, "page %d, %s", pageNum, label)...)
 	}
 
@@ -472,8 +475,11 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 					}
 				}
 
-				// SMask (other than None) indicates transparency.
-				if smaskObj, hasSMask := gs["SMask"]; hasSMask {
+				// SMask (other than None) indicates transparency. One that resolves
+				// to null masks nothing (ISO 32000-1, 7.3.7 and 7.3.10): veraPDF sees
+				// no transparency in either a null or a reference to a null object.
+				// Measured, and so throughout the transparency detection here.
+				if smaskObj, hasSMask := gs["SMask"]; hasSMask && !resourceEntryNull(ctx, doc, smaskObj) {
 					smaskName, _ := document.ResolveName(ctx, doc, smaskObj)
 					if smaskName != "None" {
 						pageUsesTransparency = true
@@ -686,7 +692,7 @@ func resourcesUseTransparency(ctx context.Context, doc *document.Document, res a
 					return true
 				}
 			}
-			if smObj, ok := gs["SMask"]; ok {
+			if smObj, ok := gs["SMask"]; ok && !resourceEntryNull(ctx, doc, smObj) {
 				if nm, _ := document.ResolveName(ctx, doc, smObj); nm != "None" {
 					return true
 				}
@@ -718,7 +724,7 @@ func resourcesUseTransparency(ctx context.Context, doc *document.Document, res a
 		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
 		switch subtype {
 		case "Image":
-			if _, ok := stream.Dict["SMask"]; ok {
+			if nonNullKeyPresent(ctx, doc, stream.Dict, "SMask") {
 				return true
 			}
 			// A JPXDecode image can carry its opacity channel inside the JPEG2000
@@ -909,7 +915,7 @@ func checkPatternTransparency(ctx context.Context, doc *document.Document, pageR
 					return true
 				}
 			}
-			if smaskObj, hasSMask := gs["SMask"]; hasSMask {
+			if smaskObj, hasSMask := gs["SMask"]; hasSMask && !resourceEntryNull(ctx, doc, smaskObj) {
 				smaskName, _ := document.ResolveName(ctx, doc, smaskObj)
 				if smaskName != "None" {
 					return true
@@ -1122,7 +1128,7 @@ func type3CharProcTransparent(ctx context.Context, doc *document.Document, charP
 				// 32000-1 §11.6.5): pdfjs issue10717.pdf keeps its /SMask
 				// images in the Type3 font's own /Resources, where only this
 				// walk reaches them.
-				if _, ok := stream.Dict["SMask"]; ok {
+				if nonNullKeyPresent(ctx, doc, stream.Dict, "SMask") {
 					return true
 				}
 				if document.Float(stream.Dict["SMaskInData"]) > 0 {
@@ -1154,7 +1160,7 @@ func extGStateTransparent(ctx context.Context, doc *document.Document, gs ast.Pd
 			return true
 		}
 	}
-	if smaskObj, ok := gs["SMask"]; ok {
+	if smaskObj, ok := gs["SMask"]; ok && !resourceEntryNull(ctx, doc, smaskObj) {
 		if smaskName, _ := document.ResolveName(ctx, doc, smaskObj); smaskName != "None" {
 			return true
 		}

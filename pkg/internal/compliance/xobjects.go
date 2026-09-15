@@ -204,8 +204,11 @@ func checkXObject(
 	var results []Violation
 
 	// §6.2.9: Reference XObjects forbidden (all parts).
-	// A /Ref key in the XObject dict indicates a reference XObject.
-	if _, hasRef := xobjDict["Ref"]; hasRef {
+	// A /Ref key in the XObject dict indicates a reference XObject. The
+	// XObject presence tests here (/Ref, /OPI, /PS, /Alternates) read the key
+	// as veraPDF's knownKey does ([knownKey]): a direct null is absent (ISO
+	// 32000-1, 7.3.7), a reference counts. Measured on each.
+	if knownKey(xobjDict, "Ref") {
 		results = append(results, refXObjectRule(part, pageNum, name)...)
 	}
 
@@ -252,7 +255,7 @@ func checkFormXObjectPart1(
 
 	// /OPI key forbidden (ISO 19005-1 §6.2.4 t2 covers Image and Form
 	// XObjects; the image path is checked in checkImageXObjectPart1).
-	if _, hasOPI := formDict["OPI"]; hasOPI {
+	if knownKey(formDict, "OPI") {
 		results = append(results, failf(Rule_19005_1_6_2_4_t02, "page %d, XObject %s", pageNum, name)...)
 	}
 
@@ -265,7 +268,7 @@ func checkFormXObjectPart1(
 	}
 
 	// /PS key is forbidden in form XObject.
-	if _, hasPS := formDict["PS"]; hasPS {
+	if knownKey(formDict, "PS") {
 		results = append(results, failf(Rule_19005_1_6_2_5_t01, "page %d, XObject %s", pageNum, name)...)
 	}
 
@@ -283,12 +286,12 @@ func checkImageXObjectPart1(
 	var results []Violation
 
 	// /Alternates forbidden.
-	if _, hasAlt := imgDict["Alternates"]; hasAlt {
+	if knownKey(imgDict, "Alternates") {
 		results = append(results, failf(Rule_19005_1_6_2_4_t01, "page %d, XObject %s", pageNum, name)...)
 	}
 
 	// /OPI forbidden.
-	if _, hasOPI := imgDict["OPI"]; hasOPI {
+	if knownKey(imgDict, "OPI") {
 		results = append(results, failf(Rule_19005_1_6_2_4_t02, "page %d, XObject %s", pageNum, name)...)
 	}
 
@@ -339,7 +342,7 @@ func checkFormXObject(
 	}
 
 	// /OPI key forbidden in form XObject.
-	if _, hasOPI := formDict["OPI"]; hasOPI {
+	if knownKey(formDict, "OPI") {
 		results = append(results, failf(formRule, "page %d, XObject %s: OPI key present", pageNum, name)...)
 	}
 
@@ -359,7 +362,7 @@ func checkFormXObject(
 		}
 	}
 
-	if _, hasPS := formDict["PS"]; hasPS {
+	if knownKey(formDict, "PS") {
 		results = append(results, failf(formRule, "page %d, XObject %s: PS key present", pageNum, name)...)
 	}
 
@@ -395,12 +398,12 @@ func checkImageXObject(
 	}
 
 	// /Alternates forbidden (§6.2.7/6.2.8).
-	if _, hasAlt := imgDict["Alternates"]; hasAlt {
+	if knownKey(imgDict, "Alternates") {
 		results = append(results, failf(altRule, "page %d, XObject %s", pageNum, name)...)
 	}
 
 	// /OPI forbidden (§6.2.8).
-	if _, hasOPI := imgDict["OPI"]; hasOPI {
+	if knownKey(imgDict, "OPI") {
 		results = append(results, failf(opiRule, "page %d, XObject %s", pageNum, name)...)
 	}
 

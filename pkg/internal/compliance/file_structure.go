@@ -360,7 +360,9 @@ func checkEncryptionForbidden(doc *document.Document, profile string) []Violatio
 
 	trailer := doc.Index.Trailer
 	if trailer != nil {
-		if _, hasEncrypt := trailer["Encrypt"]; hasEncrypt {
+		// A direct null is absent (ISO 32000-1, 7.3.7) and opens as an
+		// unencrypted file, as veraPDF reads it. Measured.
+		if knownKey(trailer, "Encrypt") {
 			return fail(encryptRule(profile), "Encrypt key present in trailer")
 		}
 	}
@@ -611,7 +613,9 @@ func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast
 	if ok {
 		namesDict, err := document.ResolveDict(ctx, doc, namesObj)
 		if err == nil && namesDict != nil {
-			if _, hasEF := namesDict["EmbeddedFiles"]; hasEF {
+			// A direct null is absent (ISO 32000-1, 7.3.7), a reference counts,
+			// as veraPDF's knownKey reads it ([knownKey]). Measured.
+			if knownKey(namesDict, "EmbeddedFiles") {
 				results = append(results, fail(embeddedFilesNameRule(profile),
 					"EmbeddedFiles key present in Names dictionary")...)
 			}
