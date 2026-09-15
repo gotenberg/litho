@@ -1518,6 +1518,25 @@ func xmlEscape(s string) string {
 	return s
 }
 
+// numericField validates one fixed-width numeric field of a PDF date and
+// reports whether it holds two digits inside the given range. A field that does
+// not is a malformed date, not a date to be guessed at.
+func numericField(field string, lo, hi int) (string, bool) {
+	if len(field) != 2 {
+		return "", false
+	}
+	for _, c := range field {
+		if c < '0' || c > '9' {
+			return "", false
+		}
+	}
+	n := int(field[0]-'0')*10 + int(field[1]-'0')
+	if n < lo || n > hi {
+		return "", false
+	}
+	return field, true
+}
+
 // pdfDateToXMP converts a PDF date string (D:YYYYMMDDHHmmSSOHH'mm')
 // to an XMP/ISO 8601 date string (YYYY-MM-DDTHH:mm:ss+HH:MM).
 // Returns an empty string if the input is unparseable.
@@ -1545,11 +1564,25 @@ func pdfDateToXMP(pdfDate string) string {
 		}
 	}
 
-	month := get(4, 2, "01")
-	day := get(6, 2, "01")
-	hour := get(8, 2, "00")
-	min := get(10, 2, "00")
-	sec := get(12, 2, "00")
+	// Every remaining component is a fixed-width numeric field (ISO 32000-1,
+	// 7.9.4: D:YYYYMMDDHHmmSSOHH'mm). A producer that writes a shorter field
+	// leaves the slice straddling the next separator, and copying it through
+	// yields a value no ISO 8601 parser accepts: pdfjs issue18122.pdf carries
+	// "D:202403083:4:5 ", whose hour slice is "3:", and litho injected
+	// xmp:CreateDate "2024-03-08T3::4::5 Z" -- valid XMP syntax holding an
+	// invalid Date, which ISO 19005-1 6.7.9 test 3 then reports. An
+	// unparseable Info date yields no XMP date at all; the caller skips the
+	// sync on an empty return, which is the right outcome, since writing a
+	// wrong date is worse than leaving the property absent.
+	month, okM := numericField(get(4, 2, "01"), 1, 12)
+	day, okD := numericField(get(6, 2, "01"), 1, 31)
+	hour, okH := numericField(get(8, 2, "00"), 0, 23)
+	min, okMin := numericField(get(10, 2, "00"), 0, 59)
+	// 60 admits a leap second, which ISO 8601 permits.
+	sec, okS := numericField(get(12, 2, "00"), 0, 60)
+	if !okM || !okD || !okH || !okMin || !okS {
+		return ""
+	}
 
 	// Parse timezone. Starts at offset 14.
 	tz := "Z"
