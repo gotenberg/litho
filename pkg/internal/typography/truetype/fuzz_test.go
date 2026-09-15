@@ -22,6 +22,10 @@ func FuzzTrueType(f *testing.F) {
 		_, _ = TableData(data, records, "cmap")
 		_, _ = CmapSubtables(data)
 		_, _ = CmapSubtableCount(data)
+		// NumGlyphs reads the maxp table straight out of the caller's bytes and
+		// is a package entry point no other function here calls, so nothing else
+		// in this target reaches it.
+		_, _ = NumGlyphs(data)
 		_, _ = GlyphWidths(ctx, data)
 		_, _ = EmptyGIDs(ctx, data)
 		_, _ = CharCodeToGID(ctx, data)
