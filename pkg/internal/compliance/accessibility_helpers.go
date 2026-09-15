@@ -133,8 +133,9 @@ func walkStructKids(ctx context.Context, doc *document.Document, obj ast.PdfObje
 }
 
 func visitStructElem(ctx context.Context, doc *document.Document, elem ast.PdfDict, path string, seen map[int]bool, depth int, fn func(elem ast.PdfDict, path string)) {
-	// Only visit dicts that look like structure elements (have /S key).
-	if _, hasS := elem["S"]; hasS {
+	// Only visit structure elements ([isStructElemDict]), whether or not they
+	// carry the /S their type needs.
+	if isStructElemDict(ctx, doc, elem) {
 		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
 		elemPath := fmt.Sprintf("%s/%s", path, string(typeName))
 		fn(elem, elemPath)
@@ -144,6 +145,31 @@ func visitStructElem(ctx context.Context, doc *document.Document, elem ast.PdfDi
 			walkStructKids(ctx, doc, kidsObj, elemPath, seen, depth+1, fn)
 		}
 	}
+}
+
+// isStructElemDict reports whether a /K kid dictionary is a structure element
+// rather than a content item. veraPDF (TaggedPDFHelper.isStructElem) takes any
+// dictionary whose /Type is absent or StructElem, whatever its /S, so an
+// element with no /S is still an element, one whose structure type is missing
+// (ISO 32000-1, Table 323 makes /S required). A marked-content or object
+// reference keeps its role without a /Type, though: ISO 32000-1, Tables 324 and
+// 325 make /Type optional there and require /MCID and /Obj, so an untyped
+// dictionary holding either and no /S is a content item. veraPDF calls it an
+// element with no type, which the spec does not support.
+func isStructElemDict(ctx context.Context, doc *document.Document, d ast.PdfDict) bool {
+	switch t, _ := document.ResolveName(ctx, doc, d["Type"]); t {
+	case "StructElem":
+		return true
+	case "":
+	default:
+		return false
+	}
+	if _, hasS := d["S"]; hasS {
+		return true
+	}
+	_, hasMCID := d["MCID"]
+	_, hasObj := d["Obj"]
+	return !hasMCID && !hasObj
 }
 
 // hasStringKeyPresent checks if a dict has a key whose value resolves to a

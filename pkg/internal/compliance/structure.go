@@ -739,8 +739,9 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 		if err != nil || dict == nil {
 			continue
 		}
-		// Only process structure elements (skip marked content refs, object refs).
-		if _, hasS := dict["S"]; hasS {
+		// Only process structure elements (skip marked content refs, object refs):
+		// [isStructElemDict] keeps an element whose /S is missing.
+		if isStructElemDict(ctx, state.doc, dict) {
 			// §7.4.4 t1 (at most one H child per node) is PDF/UA-1 only.
 			// PDF/UA-2 has no analogue: ISO 14289-2 §8.2.5.12 forbids H
 			// entirely (t1, emitted per element in walkElement).
@@ -789,6 +790,9 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 
 	typeName, err := document.ResolveName(ctx, state.doc, elem["S"])
 	if err != nil || typeName == "" {
+		if isStructElemDict(ctx, state.doc, elem) {
+			walkTypelessElement(ctx, state, elem, depth, lastHeadingLevel)
+		}
 		return
 	}
 
@@ -1107,6 +1111,22 @@ func listParentReported(state *walkState, test int) bool {
 	}
 	state.listReported[key] = true
 	return false
+}
+
+// walkTypelessElement walks the kids of a structure element whose /S is missing,
+// null or no name. veraPDF keeps such an element in the tree with no standard
+// type (TaggedPDFHelper.isStructElem), so its kids are judged against a parent of
+// no type: a TR under it stands outside any table (ISO 14289-1, 7.2 t4), and two
+// H kids are two H in one node (7.4.4 t1). Measured against veraPDF.
+func walkTypelessElement(ctx context.Context, state *walkState, elem ast.PdfDict, depth int, lastHeadingLevel int) {
+	kObj, ok := elem["K"]
+	if !ok {
+		return
+	}
+	prevISOParent, prevUA1Parent := state.iso32005Parent, state.ua1Parent
+	state.iso32005Parent, state.ua1Parent = "", ""
+	walkChildren(ctx, state, kObj, "", depth+1, lastHeadingLevel)
+	state.iso32005Parent, state.ua1Parent = prevISOParent, prevUA1Parent
 }
 
 // ua1RootParent marks the children of the structure tree root, which have no
@@ -1745,7 +1765,14 @@ func checkUnmappedStructTypes(ctx context.Context, doc *document.Document, struc
 
 	walkStructureElements(ctx, doc, structTreeRoot, func(elem ast.PdfDict, _ string) {
 		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
-		if typeName == "" || isStandardStructType(typeName, profile) {
+		if typeName == "" {
+			// An element whose /S is missing, null or no name has no structure
+			// type (ISO 32000-1, Table 323 makes /S required), so it reaches no
+			// standard type: veraPDF's SENonStandard reports it. Measured.
+			*results = append(*results, failf(rule, "structure element has no structure type")...)
+			return
+		}
+		if isStandardStructType(typeName, profile) {
 			return
 		}
 		// A circular chain is the circular rule's business, and it is scoped to

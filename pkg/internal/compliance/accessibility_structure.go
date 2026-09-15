@@ -364,6 +364,13 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 				return // One violation is enough per document.
 			}
 		}
+	} else if depth > 0 && isStructElemDict(ctx, doc, node) {
+		// An element whose /S is missing, null or no name has no structure type
+		// (ISO 32000-1, Table 323 makes /S required), so it maps to no standard
+		// type: veraPDF's SENonStandard reports ISO 14289-2, 8.2.4 t1 for each.
+		// Measured.
+		*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
+			"structure element has no structure type")...)
 	}
 
 	kObj := node["K"]
