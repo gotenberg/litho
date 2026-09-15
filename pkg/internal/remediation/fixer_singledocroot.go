@@ -69,29 +69,54 @@ func fixSingleDocRoot(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 
 	nsRef, stWithNS := ensurePDF2Namespace(ctx, alloc, doc, stDict)
 
-	kidArray := make(ast.PdfArray, len(kids))
-	for i, ref := range kids {
-		kidArray[i] = ref
-	}
-	docElem := ast.PdfDict{
+	docRef := alloc.Alloc(ast.PdfDict{
 		"Type": ast.PdfName("StructElem"),
 		"S":    ast.PdfName("Document"),
 		"P":    stRef,
-		"K":    kidArray,
 		"NS":   nsRef,
-	}
-	docRef := alloc.Alloc(docElem)
+	})
 
+	// A Document may not hold every structure type. ISO/TS 32005 Table 5
+	// forbids 24 of them directly under it, so hanging the old roots straight
+	// off the new Document repairs the missing root and introduces a
+	// containment fault instead: a stray LI became "Table 5. Document-LI",
+	// which is how 12 corpus files failed after remediation. Where the matrix
+	// forbids the pairing, put the container it does allow in between.
+	kidArray := make(ast.PdfArray, 0, len(kids))
+	interposed := 0
 	for _, ref := range kids {
 		elem := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
 		if elem == nil {
+			kidArray = append(kidArray, ref)
 			continue
 		}
+		role, _ := document.ResolveName(ctx, doc, elem["S"])
+		parentRef := docRef
+		container, needed := compliance.ISO32005Interposer("Document", string(role))
+		if needed {
+			// The container owns the element; the Document owns the container.
+			parentRef = alloc.Alloc(ast.PdfDict{
+				"Type": ast.PdfName("StructElem"),
+				"S":    ast.PdfName(container),
+				"P":    docRef,
+				"K":    ast.PdfArray{ref},
+				"NS":   nsRef,
+			})
+			interposed++
+		}
+		kidArray = append(kidArray, parentRef)
+
 		patched := make(ast.PdfDict, len(elem)+1)
 		maps.Copy(patched, elem)
-		patched["P"] = docRef
+		patched["P"] = parentRef
 		alloc.AllocAt(ref.ObjectNum, patched)
 	}
+
+	docElem := resolveFromAllocOrDoc(ctx, alloc, doc, docRef)
+	newDoc := make(ast.PdfDict, len(docElem)+1)
+	maps.Copy(newDoc, docElem)
+	newDoc["K"] = kidArray
+	alloc.AllocAt(docRef.ObjectNum, newDoc)
 
 	base := stDict
 	if stWithNS != nil {
@@ -102,7 +127,11 @@ func fixSingleDocRoot(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 	newST["K"] = docRef
 	alloc.AllocAt(stRef.ObjectNum, newST)
 
-	return []string{fmt.Sprintf("wrapped %d top-level structure element(s) in a Document element", len(kids))}, nil
+	fixes := []string{fmt.Sprintf("wrapped %d top-level structure element(s) in a Document element", len(kids))}
+	if interposed > 0 {
+		fixes = append(fixes, fmt.Sprintf("interposed a container for %d element(s) a Document may not hold", interposed))
+	}
+	return fixes, nil
 }
 
 // indirectStructChildren resolves a /K entry to the list of its children and

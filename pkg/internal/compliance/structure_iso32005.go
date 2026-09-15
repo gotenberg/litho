@@ -468,3 +468,40 @@ func validateISO32005Root(ctx context.Context, state *walkState, structTreeRoot 
 		}
 	}
 }
+
+// iso32005Interposers lists, in preference order, the containers
+// [ISO32005Interposer] may put between a parent and a child the ISO/TS 32005
+// Table 5 matrix will not let touch. They are ordered from the most generic
+// block container to the most specific, so a repair reaches for P before it
+// reaches for a list or a section, and none of them is a pass-through type
+// (Table 5 looks through Div, Part and NonStruct, which would re-attribute the
+// child to the original parent and repair nothing).
+//
+//nolint:gochecknoglobals // static preference order
+var iso32005Interposers = []string{"P", "Sect", "L", "Art", "Figure", "Table"}
+
+// ISO32005Interposer returns a structure type that may legally sit between
+// parent and child, for a pairing Table 5 forbids directly. It reports false
+// when the pairing is already legal, or when no candidate can hold the child.
+//
+// Remediation needs this because moving an element under a new parent can
+// create a containment fault the input never had: wrapping a document's
+// top-level elements in a Document turns a stray LI into "Table 5.
+// Document-LI". The answer is read out of the same matrix the validator
+// applies, so the two cannot drift, rather than hardcoded per type.
+func ISO32005Interposer(parent, child string) (string, bool) {
+	iso32005Once.Do(iso32005BuildIndexes)
+	if _, forbidden := iso32005ForbiddenParents[child][parent]; !forbidden {
+		return "", false
+	}
+	for _, candidate := range iso32005Interposers {
+		if _, bad := iso32005ForbiddenParents[candidate][parent]; bad {
+			continue
+		}
+		if _, bad := iso32005ForbiddenParents[child][candidate]; bad {
+			continue
+		}
+		return candidate, true
+	}
+	return "", false
+}
