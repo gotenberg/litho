@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"bufio"
 	"context"
 	"crypto/x509"
 	"fmt"
@@ -1758,7 +1759,29 @@ func copySourceCancellable(ctx context.Context, dst io.Writer, src io.ReaderAt, 
 // with the single-use guard and the sign/full-rewrite compatibility
 // check. Remediation calls this directly so its internal probe writes
 // do not trip the single-use guard before the caller's real WriteTo.
-func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...WriteOption) error {
+// writeBufferSize is the buffer [Writer.writeToInternal] wraps its destination
+// in. It is a throughput choice, not a limit: the serializer writes a few bytes
+// at a time, so the buffer decides how many of those become one syscall. 64 KiB
+// is the usual page-cache friendly size and bounds the extra memory at a fixed
+// amount regardless of document size.
+const writeBufferSize = 64 << 10
+
+func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...WriteOption) (err error) {
+	// The serializer emits a write per token: a dictionary key, a delimiter, a
+	// number. Against an unbuffered destination every one of those is a
+	// syscall, which dominated remediation (write syscalls were 30% of a
+	// govdocs remediate, since each round serializes the document to a temp
+	// file to revalidate it). Buffer here rather than at each call site so the
+	// public [Writer.WriteTo] gets it too: a caller passing an *os.File is the
+	// common case and would otherwise pay the same cost.
+	buffered := bufio.NewWriterSize(dst, writeBufferSize)
+	defer func() {
+		if flushErr := buffered.Flush(); flushErr != nil && err == nil {
+			err = fmt.Errorf("flushing output: %w", flushErr)
+		}
+	}()
+	dst = buffered
+
 	cfg := writeOpts{}
 	for _, o := range opts {
 		o(&cfg)
