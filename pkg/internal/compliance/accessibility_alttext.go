@@ -280,7 +280,7 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 
 			// veraPDF's containsAA is a knownKey on /AA, so an /AA written as null is
 			// absent (ISO 32000-1, 7.3.7), measured on a widget without /Contents.
-			if !nonNullKeyPresent(ctx, doc, annot, "AA") {
+			if !knownKey(annot, "AA") {
 				continue
 			}
 

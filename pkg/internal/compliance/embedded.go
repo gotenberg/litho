@@ -258,7 +258,7 @@ func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.P
 		// as veraPDF's containsEF (a knownKey on /EF) reads it, is false for an
 		// /EF written as null (ISO 32000-1, 7.3.7): measured on PDF/A-1b, 2b,
 		// 3b, 4 and 4f, where a null /EF fired 6.1.11 t1, 6.8 t2 or 6.9 t2.
-		hasEF := nonNullKeyPresent(ctx, doc, dict, "EF")
+		hasEF := knownKey(dict, "EF")
 
 		specs = append(specs, fileSpecEntry{dict: dict, objNum: objNum, hasEF: hasEF})
 	}
@@ -350,7 +350,7 @@ func directFileSpecsIn(ctx context.Context, doc *document.Document, obj ast.PdfO
 		if typeName, _ := document.ResolveName(ctx, doc, v["Type"]); typeName == "Filespec" && path != "" {
 			specs = append(specs, fileSpecEntry{
 				dict:      v,
-				hasEF:     nonNullKeyPresent(ctx, doc, v, "EF"),
+				hasEF:     knownKey(v, "EF"),
 				container: container,
 				path:      path,
 			})

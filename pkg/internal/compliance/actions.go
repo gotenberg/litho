@@ -196,8 +196,9 @@ func checkCatalogOpenAction(ctx context.Context, doc *document.Document, catalog
 
 // checkCatalogAA checks the catalog /AA dictionary.
 func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
-	aaObj, ok := catalog["AA"]
-	if !ok {
+	// veraPDF's PDDocument containsAA is a knownKey test: an /AA written as null
+	// is absent (ISO 32000-1, 7.3.7), one naming any object is present. Measured.
+	if !knownKey(catalog, "AA") {
 		return nil
 	}
 
@@ -219,7 +220,7 @@ func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		results = append(results, fail(Rule_19005_3_6_5_2_t01, "catalog")...)
 	}
 
-	aaDict, err := document.ResolveDict(ctx, doc, aaObj)
+	aaDict, err := document.ResolveDict(ctx, doc, catalog["AA"])
 	if err != nil || aaDict == nil {
 		doc.Logger.Debug("compliance.actions: catalog /AA is not a dict", "error", err)
 		return results
@@ -246,10 +247,12 @@ func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.P
 			return results
 		}
 
-		aaObj, ok := page["AA"]
-		if !ok {
+		// veraPDF's PDPage containsAA is a knownKey test: an /AA written as null is
+		// absent (ISO 32000-1, 7.3.7), one naming any object is present. Measured.
+		if !knownKey(page, "AA") {
 			continue
 		}
+		aaObj := page["AA"]
 
 		// Parts 2/3: the page /AA dictionary itself is forbidden (§6.5.2 t02).
 		// Record that, but do not stop here: per ISO 19005-2/3 §6.5.1, the
@@ -394,8 +397,8 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 
 	// veraPDF's containsA and containsAA are knownKey tests, so an /A or /AA
 	// written as null is absent (ISO 32000-1, 7.3.7), measured.
-	hasA := nonNullKeyPresent(ctx, doc, annotDict, "A")
-	hasAA := nonNullKeyPresent(ctx, doc, annotDict, "AA")
+	hasA := knownKey(annotDict, "A")
+	hasAA := knownKey(annotDict, "AA")
 
 	switch part {
 	case 1:
@@ -776,14 +779,14 @@ func walkFormFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 		// one whose /T is null (7.3.7), is judged by t1 as an annotation only.
 		// Measured on each, and on a top-level widget with neither /T nor /FT,
 		// which is a field.
-		isField := listedByField && (depth == 0 || nonNullKeyPresent(ctx, doc, field, "T"))
+		isField := listedByField && (depth == 0 || knownKey(field, "T"))
 
 		// §6.6.2 t2 (PDF/A-1) / §6.4.1 t2 (PDF/A-2/3): a form field dictionary
 		// shall not contain an /AA additional-actions entry. The prohibition
 		// is on the key itself, so a non-null /AA is the violation, independent
 		// of the actions it holds. veraPDF's containsAA is a knownKey test, and
 		// ISO 32000-1, 7.3.7 makes a null entry absent, measured.
-		if isField && nonNullKeyPresent(ctx, doc, field, "AA") {
+		if isField && knownKey(field, "AA") {
 			if rule := fieldAARule(part); rule != (Rule{}) {
 				*results = append(*results, failf(rule, "%s contains forbidden /AA entry", loc)...)
 			}

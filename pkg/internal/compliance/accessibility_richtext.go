@@ -36,7 +36,7 @@ var errRichTextNotXML = errors.New("rich text is not a parseable XML document")
 func checkMarkupAnnotRichText(ctx context.Context, doc *document.Document, annot ast.PdfDict) []Violation {
 	// veraPDF's containsRC is a knownKey on /RC, so an /RC written as null is
 	// absent (ISO 32000-1, 7.3.7) and the rule does not apply, measured.
-	if !nonNullKeyPresent(ctx, doc, annot, "RC") {
+	if !knownKey(annot, "RC") {
 		return nil
 	}
 
@@ -237,7 +237,7 @@ func walkTextFieldRichValue(ctx context.Context, doc *document.Document, fieldOb
 func textFieldRichValueViolation(ctx context.Context, doc *document.Document, field ast.PdfDict) []Violation {
 	// veraPDF's containsRV is a knownKey on /RV, so an /RV written as null is
 	// absent (ISO 32000-1, 7.3.7) and the rule does not apply, measured.
-	if !nonNullKeyPresent(ctx, doc, field, "RV") {
+	if !knownKey(field, "RV") {
 		return nil
 	}
 

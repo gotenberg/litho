@@ -48,7 +48,7 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 		// veraPDF. Only a specification that embeds a file is judged: veraPDF's
 		// containsEF is a knownKey on /EF, so an /EF written as null embeds
 		// nothing (ISO 32000-1, 7.3.7), measured ([nonNullKeyPresent]).
-		if profile == "PDF/UA-1" && nonNullKeyPresent(ctx, doc, dict, "EF") {
+		if profile == "PDF/UA-1" && knownKey(dict, "EF") {
 			hasF := hasNonEmptyStringKey(ctx, doc, dict, "F")
 			hasUF := hasNonEmptyStringKey(ctx, doc, dict, "UF")
 			if !hasF || !hasUF {
@@ -72,7 +72,7 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 		// A direct filespec has no object number, so it cannot be a name-tree
 		// value and inEFTree rightly leaves it out of the /Desc requirement.
 		if profile == "PDF/UA-2" && fs.objNum != 0 && inEFTree[fs.objNum] {
-			if !nonNullKeyPresent(ctx, doc, dict, "Desc") {
+			if !knownKey(dict, "Desc") {
 				results = append(results, Violation{
 					Rule:    Rule_14289_2_8_14_1_t01,
 					Context: fmt.Sprintf("%s: embedded file spec missing /Desc", fs.label()),
@@ -615,11 +615,28 @@ func annotRectOutsidePageCropBox(ctx context.Context, doc *document.Document, an
 	return rx2 <= bx1 || rx1 >= bx2 || ry2 <= by1 || ry1 >= by2
 }
 
-// nonNullKeyPresent reports whether a dict holds a non-null value under key, of
-// any type, as veraPDF's knownKey reads a dictionary: an entry whose value is
-// null, or refers to an object the file does not define, is the same as an
-// absent one ([resourceEntryNull], ISO 32000-1, 7.3.7 and 7.3.10).
+// nonNullKeyPresent reports whether dict holds key with a value that resolves to
+// something other than the null object: an entry written as null, or naming a
+// null or undefined object (ISO 32000-1, 7.3.7 and 7.3.10), is absent. It mirrors
+// the veraPDF accessors that follow the reference, such as PDAnnotation.getCOSC
+// and getParent. The knownKey tests read differently, see [knownKey]. Measured on
+// both readings.
 func nonNullKeyPresent(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) bool {
 	obj, ok := dict[key]
 	return ok && !resourceEntryNull(ctx, doc, obj)
+}
+
+// knownKey reports whether dict holds key as veraPDF's COSObject.knownKey reads
+// it: its parser drops an entry whose value is the null object (ISO 32000-1,
+// 7.3.7), but keeps an indirect reference whatever it names, so a key naming a
+// null or an undefined object is present. Measured on a direct null, a reference
+// to a null object and a reference to an undefined object, for /AA, /A, /T, /EF,
+// /Desc, /RC, /RV, /AS, /SD, /S and /Dest.
+func knownKey(dict ast.PdfDict, key ast.PdfName) bool {
+	v, ok := dict[key]
+	if !ok {
+		return false
+	}
+	_, isNull := v.(ast.PdfNull)
+	return !isNull
 }

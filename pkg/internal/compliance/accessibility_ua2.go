@@ -154,10 +154,11 @@ func structElemHasKids(ctx context.Context, doc *document.Document, elem ast.Pdf
 // widget is merged with its field (it carries the partial field name /T, the
 // field test of PDFormField.isField) or it has a field /Parent. A field type
 // /FT alone makes no field widget, and a /T or /Parent written as null is
-// absent (ISO 32000-1, 7.3.7). veraPDF's ISO 14289-2 §8.10.1 t1 and §8.10.2.3 t1
+// absent (ISO 32000-1, 7.3.7). A /T naming any object counts ([knownKey]); a
+// /Parent counts only by what it resolves to. veraPDF's ISO 14289-2 §8.10.1 t1 and §8.10.2.3 t1
 // exempt non-field widgets (isFieldWidget == false). Measured against veraPDF.
 func isFieldWidget(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
-	return nonNullKeyPresent(ctx, doc, annot, "T") || nonNullKeyPresent(ctx, doc, annot, "Parent")
+	return knownKey(annot, "T") || nonNullKeyPresent(ctx, doc, annot, "Parent")
 }
 
 // annotStructParent resolves the structure element that encloses an annotation
@@ -368,7 +369,7 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 			if st, _ := document.ResolveName(ctx, doc, annot["Subtype"]); st == "Link" {
 				// A /Dest written as null is absent (ISO 32000-1, 7.3.7): veraPDF builds
 				// no destination from it, measured.
-				if nonNullKeyPresent(ctx, doc, annot, "Dest") && !isStructureDestination(ctx, doc, annot["Dest"]) {
+				if knownKey(annot, "Dest") && !isStructureDestination(ctx, doc, annot["Dest"]) {
 					results = append(results, fail(Rule_14289_2_8_8_t01,
 						"Link annotation destination is not a structure destination")...)
 				}
@@ -450,7 +451,7 @@ func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.
 
 		// Check /Dest on outline item (t01). A /Dest written as null is absent
 		// (ISO 32000-1, 7.3.7), measured.
-		if nonNullKeyPresent(ctx, doc, item, "Dest") {
+		if knownKey(item, "Dest") {
 			if !isStructureDestination(ctx, doc, item["Dest"]) {
 				*results = append(*results, fail(Rule_14289_2_8_8_t01,
 					"Outline item destination is not a structure destination")...)
@@ -485,7 +486,7 @@ func walkOutlineStructDest(ctx context.Context, doc *document.Document, obj ast.
 // structure destination. An explicit /D array is no structure destination here,
 // and neither is an action with no /D at all. Measured on each.
 func goToHasStructDest(ctx context.Context, doc *document.Document, act ast.PdfDict) bool {
-	if nonNullKeyPresent(ctx, doc, act, "SD") {
+	if knownKey(act, "SD") {
 		return true
 	}
 	dObj, ok := act["D"]
@@ -523,13 +524,13 @@ func isStructureDestination(ctx context.Context, doc *document.Document, destObj
 	}
 	switch v := dest.(type) {
 	case ast.PdfDict:
-		return nonNullKeyPresent(ctx, doc, v, "SD")
+		return knownKey(v, "SD")
 	case ast.PdfArray:
 		if len(v) == 0 {
 			return false
 		}
 		first, err := document.ResolveDict(ctx, doc, v[0])
-		return err == nil && first != nil && nonNullKeyPresent(ctx, doc, first, "S")
+		return err == nil && first != nil && knownKey(first, "S")
 	}
 	return false
 }
