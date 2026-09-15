@@ -38,7 +38,7 @@ func TestCheckType3FontTransparency_RenderedGlyphsOnly(t *testing.T) {
 			t.Fatalf("resolve page: %v", err)
 		}
 		res, _ := document.ResolveDict(ctx, doc, page["Resources"])
-		return checkType3FontTransparency(ctx, doc, page, res)
+		return checkType3FontTransparency(ctx, doc, &pageCtxsForPages(ctx, doc, page)[0], res)
 	}
 
 	if build(t, "b") { // renders /triangle (opaque); /square never painted
@@ -68,7 +68,7 @@ func TestCheckTransparency_DeviceGroupCSNeedNotMatchOutputIntent(t *testing.T) {
 	if err != nil || page == nil {
 		t.Fatalf("resolve page: %v", err)
 	}
-	got := checkTransparencyParts2Plus(ctx, doc, cat, []ast.PdfDict{page}, "PDF/A-4", 4)
+	got := checkTransparencyParts2Plus(ctx, doc, cat, pageCtxsForPages(ctx, doc, page), "PDF/A-4", 4)
 	if hasRule(got, Rule_19005_4_6_2_9_t02) {
 		t.Errorf("DeviceRGB /Group /CS under a CMYK OutputIntent must not fire §6.2.9 t2, got %v", got)
 	}
@@ -134,7 +134,7 @@ func TestCheckAnnotAPTransparency1(t *testing.T) {
 			"<< /Type /Annot /Subtype /Widget /Rect [0 0 10 10] /AP << /N 5 0 R >> >>",
 			form,
 		)
-		return checkTransparencyPart1(ctx, doc, collectPages(ctx, doc, cat))
+		return checkTransparencyPart1(ctx, doc, pageCtxsFor(ctx, doc, cat))
 	}
 
 	t.Run("transparency group on widget appearance fires t3", func(t *testing.T) {

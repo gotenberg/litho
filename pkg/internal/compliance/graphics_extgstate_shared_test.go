@@ -2,19 +2,37 @@ package compliance
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// pageCtxsFor builds the per-page context checkGraphicsGroup expects, the same
-// way check.go does.
+// pageCtxsFor builds the per-page context the page-scoped checks expect, the
+// same way check.go does.
 func pageCtxsFor(ctx context.Context, doc *document.Document, cat ast.PdfDict) []pageCtx {
-	raw := collectPages(ctx, doc, cat)
-	out := make([]pageCtx, len(raw))
-	for i, page := range raw {
-		out[i] = pageCtx{dict: page, resources: resolveResources(ctx, doc, page)}
+	return pageCtxsForPages(ctx, doc, collectPages(ctx, doc, cat)...)
+}
+
+// pageCtxsForPages wraps explicit page dictionaries the same way.
+//
+// Several tests build a page without a /Pages tree for the catalog to reach, so
+// collectPages finds nothing and [pageCtxsFor] cannot serve them. The content
+// stream is resolved here because the checks now read their operations from
+// [pageCtx.parsedOps]: leaving it unset would hand them a page that paints
+// nothing, and the test would pass while exercising far less than it claims.
+func pageCtxsForPages(ctx context.Context, doc *document.Document, pages ...ast.PdfDict) []pageCtx {
+	out := make([]pageCtx, len(pages))
+	for i, page := range pages {
+		contentBytes, contentErr := resolvePageContentBytes(ctx, doc, page)
+		out[i] = pageCtx{
+			dict:              page,
+			resources:         resolveResources(ctx, doc, page),
+			content:           contentBytes,
+			parseFailed:       contentErr != nil && !errors.Is(contentErr, errUndecodableContent),
+			contentUnreadable: contentErr != nil,
+		}
 	}
 	return out
 }

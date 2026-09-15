@@ -22,26 +22,21 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 
 	doc.Logger.Debug("compliance.transparency: starting checks", "profile", profile, "part", part)
 
-	// Extract raw page dicts for sub-functions that expect []ast.PdfDict.
-	rawPages := make([]ast.PdfDict, len(vctx.pages))
-	for i := range vctx.pages {
-		rawPages[i] = vctx.pages[i].dict
-	}
-
 	var results []Violation
 	if part == 1 {
-		results = checkTransparencyPart1(ctx, doc, rawPages)
+		results = checkTransparencyPart1(ctx, doc, vctx.pages)
 	} else {
-		results = checkTransparencyParts2Plus(ctx, doc, catalog, rawPages, profile, part)
+		results = checkTransparencyParts2Plus(ctx, doc, catalog, vctx.pages, profile, part)
 	}
 
 	doc.Logger.Debug("compliance.transparency: checks complete", "violations", len(results))
 	return results
 }
 
-func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages []ast.PdfDict) []Violation {
+func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages []pageCtx) []Violation {
 	var results []Violation
-	for i, page := range pages {
+	for i := range pages {
+		page := pages[i].dict
 		if ctx.Err() != nil {
 			return results
 		}
@@ -54,7 +49,7 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 		res := resolveInheritedResources(ctx, doc, page)
 		if res != nil {
 			results = append(results, checkResourceTransparency1(ctx, doc, res, i+1, visited, 0,
-				pageDrawnResources(ctx, doc, page))...)
+				pageDrawnResources(ctx, &pages[i]))...)
 		}
 
 		// Annotation appearance streams carry their own /Resources, so an
@@ -424,11 +419,12 @@ func blendingCSRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_10_t02, Rule_19005_3_6_2_10_t02, Rule_19005_4_6_2_9_t02)
 }
 
-func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []ast.PdfDict, _ string, part int) []Violation {
+func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []pageCtx, _ string, part int) []Violation {
 	hasOutputIntent, _ := documentOutputIntentInfo(ctx, doc, catalog)
 
 	var results []Violation
-	for i, page := range pages {
+	for i := range pages {
+		page := pages[i].dict
 		if ctx.Err() != nil {
 			return results
 		}
@@ -505,7 +501,7 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		// colour space (ISO 19005-2 §6.2.10 t2).
 		if !pageUsesTransparency {
 			pageUsesTransparency = resourcesUseTransparency(ctx, doc, res, 0, map[string]bool{},
-				pageDrawnResources(ctx, doc, page))
+				pageDrawnResources(ctx, &pages[i]))
 		}
 
 		// Check tiling patterns for transparency triggers.
@@ -517,7 +513,7 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		// Type 3 font CharProcs may use ExtGState with transparency or
 		// reference Form XObjects with transparency groups.
 		if !pageUsesTransparency {
-			pageUsesTransparency = checkType3FontTransparency(ctx, doc, page, res)
+			pageUsesTransparency = checkType3FontTransparency(ctx, doc, &pages[i], res)
 		}
 
 		// Also check annotations for transparency triggers.
@@ -612,16 +608,16 @@ func (d *drawnResources) setsExtGState(name string) bool {
 // invokes. Returns nil when the content cannot be read, which leaves the
 // transparency survey unscoped rather than silently emptying it: a page whose
 // content litho cannot parse must not be reported as transparency-free.
-func pageDrawnResources(ctx context.Context, doc *document.Document, page ast.PdfDict) *drawnResources {
-	data, err := resolvePageContentBytes(ctx, doc, page)
-	if err != nil {
-		return nil
-	}
+func pageDrawnResources(ctx context.Context, p *pageCtx) *drawnResources {
 	// No content, or empty content, paints nothing: the drawn set is empty
 	// rather than unknown, so a resource the page never reaches stays out of
-	// scope. Only a stream litho cannot read falls back to surveying them all.
-	ops, err := content.ParseStreamData(ctx, data)
-	if err != nil {
+	// scope. Only a stream litho cannot read falls back to surveying them all,
+	// which is what a nil result means to the caller.
+	if p.contentUnreadable {
+		return nil
+	}
+	ops := p.parsedOps(ctx)
+	if p.parseFailed {
 		return nil
 	}
 	return collectDrawnResources(ops)
@@ -934,12 +930,12 @@ func checkPatternTransparency(ctx context.Context, doc *document.Document, pageR
 	return false
 }
 
-func checkType3FontTransparency(ctx context.Context, doc *document.Document, page, pageRes ast.PdfDict) bool {
+func checkType3FontTransparency(ctx context.Context, doc *document.Document, p *pageCtx, pageRes ast.PdfDict) bool {
 	fontDict, err := document.ResolveDict(ctx, doc, pageRes["Font"])
 	if err != nil || fontDict == nil {
 		return false
 	}
-	rendered := pageType3RenderedCodes(ctx, doc, page)
+	rendered := pageType3RenderedCodes(ctx, p)
 	for fontName, fontObj := range fontDict {
 		fd, err := document.ResolveDict(ctx, doc, fontObj)
 		if err != nil || fd == nil {
@@ -993,14 +989,10 @@ func checkType3FontTransparency(ctx context.Context, doc *document.Document, pag
 // pageType3RenderedCodes returns, per font resource name, the set of single-byte
 // character codes shown by the page's own content stream. It scans only the page
 // content (matching the resource scope of [checkType3FontTransparency]).
-func pageType3RenderedCodes(ctx context.Context, doc *document.Document, page ast.PdfDict) map[string]map[int]bool {
+func pageType3RenderedCodes(ctx context.Context, p *pageCtx) map[string]map[int]bool {
 	out := map[string]map[int]bool{}
-	data, err := resolvePageContentBytes(ctx, doc, page)
-	if err != nil || len(data) == 0 {
-		return out
-	}
-	ops, err := content.ParseStreamData(ctx, data)
-	if err != nil {
+	ops := p.parsedOps(ctx)
+	if len(ops) == 0 {
 		return out
 	}
 	current := ""

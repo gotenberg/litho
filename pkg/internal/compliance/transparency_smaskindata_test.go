@@ -37,7 +37,7 @@ func TestResourcesUseTransparency_JPXSMaskInData(t *testing.T) {
 		if err != nil || page == nil {
 			t.Fatalf("resolve page: %v", err)
 		}
-		return checkTransparencyParts2Plus(ctx, doc, cat, []ast.PdfDict{page}, "PDF/A-3", 3)
+		return checkTransparencyParts2Plus(ctx, doc, cat, pageCtxsForPages(ctx, doc, page), "PDF/A-3", 3)
 	}
 
 	if got := build("/SMaskInData 1 "); !hasRule(got, Rule_19005_3_6_2_10_t02) {

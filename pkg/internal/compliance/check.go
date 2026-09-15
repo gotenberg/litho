@@ -39,6 +39,13 @@ type pageCtx struct {
 	ops         []content.Operation
 	opsOnce     sync.Once
 	parseFailed bool // true only when ParseStreamData errored (not for empty content)
+
+	// contentUnreadable is true when the content stream could not be resolved
+	// or decoded at all, including the undecodable-filter case that
+	// parseFailed deliberately excludes. A survey that must stay conservative
+	// when it cannot see what a page paints (see [pageDrawnResources]) keys on
+	// this rather than on empty operations, which a blank page also produces.
+	contentUnreadable bool
 }
 
 // parsedOps returns the lazily-parsed content stream operations. The result is
@@ -166,7 +173,8 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 			// stream either, so checking every declared font against it would
 			// report defects veraPDF never raises; the filter itself is already
 			// reported by its own rule.
-			parseFailed: contentErr != nil && !errors.Is(contentErr, errUndecodableContent),
+			parseFailed:       contentErr != nil && !errors.Is(contentErr, errUndecodableContent),
+			contentUnreadable: contentErr != nil,
 		}
 	}
 

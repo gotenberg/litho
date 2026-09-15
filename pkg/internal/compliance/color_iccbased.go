@@ -6,7 +6,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 func iccBasedProfileRule(part int) Rule {
@@ -37,7 +36,10 @@ func iccBasedIdentityRule(part int) Rule {
 
 // checkICCBasedProfiles validates ICCBased colour space profiles per
 // §6.2.3.2 (part 1) or §6.2.4.2 (parts 2-4).
-func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Violation) {
+// checkICCBasedProfiles takes the already-resolved pages so it can reuse their
+// parsed operations; the page dictionaries are the same ones [collectPages]
+// yields, in the same order.
+func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []pageCtx, part int, results *[]Violation) {
 	// Collect the OutputIntent ICC profile info for identity comparison (parts 2+).
 	var outputIntentRef ast.PdfIndirectRef
 	var outputIntentHdr iccProfileHeader
@@ -46,8 +48,8 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 		outputIntentRef, outputIntentHdr, outputIntentData = resolveOutputIntentICCInfo(ctx, doc, catalog)
 	}
 
-	pages := collectPages(ctx, doc, catalog)
-	for i, page := range pages {
+	for i := range pages {
+		page := pages[i].dict
 		if ctx.Err() != nil {
 			return
 		}
@@ -67,13 +69,10 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 		// Get page blending CS ICC ref for identity comparison.
 		blendingCSRef := resolvePageBlendingICCRef(ctx, doc, page)
 
-		// Collect CS names actually used by cs/CS operators in the content stream.
-		pageContent, _ := resolvePageContentBytes(ctx, doc, page)
-		var pageOps []content.Operation
-		if len(pageContent) > 0 {
-			pageOps, _ = content.ParseStreamData(ctx, pageContent) // Parse failure yields nil ops; checks run on whatever is available.
-		}
-		usedCSNames := collectUsedCSNames(pageOps)
+		// Collect CS names actually used by cs/CS operators in the content
+		// stream. Parse failure yields nil ops; checks run on whatever is
+		// available.
+		usedCSNames := collectUsedCSNames(pages[i].parsedOps(ctx))
 
 		checkICCBasedInResources(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, usedCSNames, results)
 

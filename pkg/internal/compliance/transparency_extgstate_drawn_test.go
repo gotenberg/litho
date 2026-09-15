@@ -35,7 +35,7 @@ func TestExtGStateTransparency1ScopedToDrawnStates(t *testing.T) {
 			"<< /Type /ExtGState /BM /Darken >>",
 			"<< /Type /ExtGState /BM /Normal >>",
 		)
-		return checkTransparencyPart1(ctx, doc, collectPages(ctx, doc, cat))
+		return checkTransparencyPart1(ctx, doc, pageCtxsFor(ctx, doc, cat))
 	}
 
 	t.Run("a state the content never sets is out of scope", func(t *testing.T) {
@@ -80,7 +80,7 @@ func TestExtGStateTransparency1UnreadableContentStaysUnscoped(t *testing.T) {
 		"<< /Type /ExtGState /BM /Darken >>",
 	)
 
-	vs := checkTransparencyPart1(ctx, doc, collectPages(ctx, doc, cat))
+	vs := checkTransparencyPart1(ctx, doc, pageCtxsFor(ctx, doc, cat))
 	if !hasRule(vs, Rule_19005_1_6_4_t04) {
 		t.Errorf("unreadable content must leave the survey unscoped, got %v", vs)
 	}

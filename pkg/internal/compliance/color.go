@@ -29,7 +29,7 @@ func checkColorGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	iccColorSpace, hasICC := checkOutputIntentICC(ctx, doc, catalog, part, &results)
 	checkPageOutputIntents(ctx, doc, catalog, part, &results)
 	checkDeviceColorSpaces(ctx, doc, vctx.pages, part, hasICC, iccColorSpace, &results)
-	checkICCBasedProfiles(ctx, doc, catalog, part, &results)
+	checkICCBasedProfiles(ctx, doc, catalog, vctx.pages, part, &results)
 
 	// Run for all parts: part 1 needs DeviceN component limit (§6.1.12 t09),
 	// parts 2+ need colorant consistency (§6.2.4.4 t01/t02).

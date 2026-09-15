@@ -36,7 +36,7 @@ func TestBlendModeCompatibleIsTransparency(t *testing.T) {
 			fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
 			"<< /Type /ExtGState /BM /"+blendMode+" /CA 1 /ca 1 /SMask /None >>",
 		)
-		return checkTransparencyParts2Plus(ctx, doc, cat, collectPages(ctx, doc, cat), "PDF/A-2b", 2)
+		return checkTransparencyParts2Plus(ctx, doc, cat, pageCtxsFor(ctx, doc, cat), "PDF/A-2b", 2)
 	}
 
 	t.Run("Compatible contains transparency", func(t *testing.T) {
