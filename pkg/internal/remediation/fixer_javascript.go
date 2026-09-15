@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -313,9 +314,11 @@ func removeForbiddenFromAADict(ctx context.Context, doc *document.Document, aaOb
 		return nil, nil
 	}
 
+	// Sorted: the caller turns these into report lines, and ranging the
+	// dictionary ordered them randomly between runs of the same file.
 	var forbidden []ast.PdfName
-	for k, v := range aaDict {
-		if isForbiddenAction(ctx, doc, v) {
+	for _, k := range slices.Sorted(maps.Keys(aaDict)) {
+		if isForbiddenAction(ctx, doc, aaDict[k]) {
 			forbidden = append(forbidden, k)
 		}
 	}

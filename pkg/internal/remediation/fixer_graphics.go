@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -103,7 +104,11 @@ func fixExtGStates(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 	var notes []string
 
-	for name, gsEntryObj := range gsDict {
+	// Sorted: the notes below become report lines, and ranging the dictionary
+	// emitted them in Go's randomized map order, so the same file produced a
+	// differently ordered report on every run.
+	for _, name := range slices.Sorted(maps.Keys(gsDict)) {
+		gsEntryObj := gsDict[name]
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
@@ -291,7 +296,9 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 
 	var notes []string
 
-	for name, entryObj := range xobjDict {
+	// Sorted, for the reason given in [fixExtGState].
+	for _, name := range slices.Sorted(maps.Keys(xobjDict)) {
+		entryObj := xobjDict[name]
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
