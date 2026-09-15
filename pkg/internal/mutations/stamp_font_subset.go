@@ -196,8 +196,14 @@ func expandCompositeClosure(keep map[uint16]bool, glyfData []byte, offsets []uin
 			}
 			start := offsets[gid]
 			end := offsets[gid+1]
-			if end > glyfLen || end <= start+10 {
-				// Empty or too short to have a composite header.
+			// The offsets come from the file's loca table, so they need not be
+			// ordered or in range. Compare them before doing any arithmetic:
+			// start+10 is a uint32 addition, and a loca entry of 0xFFFFFFFF
+			// wrapped it to 9, which passed the length test and panicked the
+			// slice below. The rebuild loop already rejects start > end; this
+			// walk has to survive it too, since it runs first.
+			if start > end || end > glyfLen || end-start <= 10 {
+				// Out of range, or too short to have a composite header.
 				continue
 			}
 			data := glyfData[start:end]
