@@ -190,6 +190,21 @@ func checkHeaderBytes(buf []byte, profile string) []Violation {
 	// byte at part 1, but still scan on to the EOL so the t2 binary comment on
 	// the next line is evaluated (it is independent of the version line).
 	eol := 8
+	if eol >= len(buf) {
+		// The buffer ends with the version, so there is no byte 8 to hold an
+		// EOL and no next line to hold the binary comment. The length guard
+		// above only establishes len(buf) >= 8, which leaves this one byte
+		// short: reading it panicked on an 8-byte buffer.
+		//
+		// Report what a file one byte longer would report: parts 2-4 anchor the
+		// header line, so a missing EOL fails §6.1.2 t1 there, and the comment
+		// is absent for every profile.
+		if part >= 2 {
+			results = append(results, fail(fileHeaderRule(profile),
+				"header version not followed by EOL marker (buffer ends after the version)")...)
+		}
+		return append(results, failf(fileBinaryCommentRule(profile), "missing %% binary comment after header")...)
+	}
 	if buf[eol] != '\n' && buf[eol] != '\r' {
 		if part >= 2 {
 			results = append(results, fail(fileHeaderRule(profile),
