@@ -409,7 +409,8 @@ func decodeCIDSetBits(data []byte) map[uint16]bool {
 // a font that has no such entry (ISO 32000-1, 9.7.4.2, Table 117). veraPDF
 // requires this for unrendered and empty-outline slots a non-subsetted program
 // retains, not only the glyphs the content paints. GID 0 (.notdef) is exempt.
-// Stream maps and non-TrueType programs return nil.
+// A /CIDToGIDMap stream is judged by [checkCIDSetStreamMap]; non-TrueType
+// programs return nil.
 //
 // veraPDF lists the program's CIDs through its horizontal metrics, one per hmtx
 // long metric (CIDFontType2Program.getCIDList), so it requires every GID below
@@ -421,7 +422,8 @@ func checkCIDSetCompletenessTrueType(ctx context.Context, doc *document.Document
 	// veraPDF's CIDToGIDMapping reads an absent entry as Identity too: pdfjs
 	// issue5874.pdf embeds a TrueType subset with no map whose /CIDSet leaves out
 	// 18800 of its 19642 glyphs, and veraPDF reports it.
-	if lookup, ok := cidToGIDMapping(ctx, doc, cidFontDict); !ok || lookup != nil {
+	lookup, ok := cidToGIDMapping(ctx, doc, cidFontDict)
+	if !ok {
 		return nil
 	}
 	fontData := extractFontProgramData(ctx, doc, fd)
@@ -441,6 +443,9 @@ func checkCIDSetCompletenessTrueType(ctx context.Context, doc *document.Document
 		return nil
 	}
 	cidSetBits := decodeCIDSetBits(cidSetData)
+	if lookup != nil {
+		return checkCIDSetStreamMap(ctx, doc, cidFontDict, cidSetBits, numGlyphs, fontName, pageNum, rule)
+	}
 	listed := min(typography.ExtractNumberOfHMetrics(fontData), numGlyphs)
 	for gid := 1; gid < listed; gid++ {
 		if !cidSetBits[uint16(gid)] { //nolint:gosec // gid < numGlyphs, a uint16 from maxp.
@@ -459,6 +464,70 @@ func checkCIDSetCompletenessTrueType(ctx context.Context, doc *document.Document
 			fontName, pageNum, past, numGlyphs)
 	}
 	return nil
+}
+
+// checkCIDSetStreamMap judges a TrueType /CIDSet against a /CIDToGIDMap stream
+// (ISO 19005-2, 6.2.11.4.2 t2: every CID present in the font program). A CID the
+// map covers is present when the glyph it selects exists, GID 0 included, since
+// .notdef is a glyph of the program: veraPDF lists the program's CIDs as every
+// CID below the map's length whose GID is below maxp.numGlyphs
+// (CIDFontType2Program.getCIDList and containsCID), and fails a set bit for any
+// other CID. pdfjs issue11768_reduced.pdf maps 15443 CIDs, 68 of them to real
+// glyphs, and its /CIDSet lists only those 68; veraPDF reports it. CID 0 is
+// exempt both ways.
+func checkCIDSetStreamMap(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSetBits map[uint16]bool, numGlyphs int, fontName string, pageNum int, rule Rule) []Violation {
+	gids, ok := cidToGIDStreamEntries(ctx, doc, cidFontDict["CIDToGIDMap"])
+	if !ok {
+		return nil
+	}
+	inSet := func(cid int) bool {
+		return cid <= maxCID && cidSetBits[uint16(cid)] //nolint:gosec // cid <= maxCID, the 16-bit CID space.
+	}
+	for cid := 1; cid < len(gids); cid++ {
+		if gids[cid] < numGlyphs && !inSet(cid) {
+			return failf(rule, "font %s on page %d: CID %d, mapped to GID %d of the font program, not in /CIDSet",
+				fontName, pageNum, cid, gids[cid])
+		}
+	}
+	past := -1
+	for cid := range cidSetBits {
+		c := int(cid)
+		if c == 0 || (c < len(gids) && gids[c] < numGlyphs) {
+			continue
+		}
+		if past < 0 || c < past {
+			past = c
+		}
+	}
+	if past >= 0 {
+		return failf(rule, "font %s on page %d: /CIDSet lists CID %d, which the font program does not hold",
+			fontName, pageNum, past)
+	}
+	return nil
+}
+
+// cidToGIDStreamEntries reads a /CIDToGIDMap stream as veraPDF's
+// CIDToGIDMapping.readMapping does: one big-endian GID per two bytes, and a
+// trailing odd byte as one more entry holding that byte shifted left by 8. ok is
+// false when the stream cannot be read.
+func cidToGIDStreamEntries(ctx context.Context, doc *document.Document, obj ast.PdfObject) (gids []int, ok bool) {
+	stream, err := document.ResolveStream(ctx, doc, obj)
+	if err != nil {
+		return nil, false
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		return nil, false
+	}
+	gids = make([]int, 0, (len(data)+1)/2)
+	for i := 0; i < len(data); i += 2 {
+		gid := int(data[i]) << 8
+		if i+1 < len(data) {
+			gid |= int(data[i+1])
+		}
+		gids = append(gids, gid)
+	}
+	return gids, true
 }
 
 // checkCIDSetCompletenessTrueTypeRendered is the rendered-scoped TrueType CIDSet

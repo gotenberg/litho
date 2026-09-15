@@ -37,8 +37,10 @@ func withNumberOfHMetrics(t *testing.T, data []byte, n uint16) []byte {
 // program, as it shall under /CIDToGIDMap /Identity. veraPDF reads the absent
 // entry that way on pdfjs issue5874.pdf. It requires the glyphs below
 // hhea.numberOfHMetrics only, as on pdfjs issue5202.pdf, and fails a bit for a
-// CID the program does not hold. Every case was measured against veraPDF. A
-// stream map stays unjudged here.
+// CID the program does not hold. Under a /CIDToGIDMap stream every CID the map
+// covers whose glyph exists counts, GID 0 included, and a trailing odd byte is
+// one more entry, as on pdfjs issue11768_reduced.pdf. Every case was measured
+// against veraPDF.
 func TestCIDSetCompletenessAbsentMap(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -51,19 +53,28 @@ func TestCIDSetCompletenessAbsentMap(t *testing.T) {
 	missing := []byte{0x3F, 0xFF, 0xFF, 0xFF, 0xFC}       // CID 1 left out
 	pastEnd := []byte{0x7F, 0xFF, 0xFF, 0xFF, 0xFC, 0x80} // CIDs 1 to 37 and 40
 
+	const stream = " /CIDToGIDMap 6 0 R"
+	cid1 := []byte{0x40}   // CID 1
+	cids12 := []byte{0x60} // CIDs 1 and 2
 	tests := []struct {
 		name     string
 		mapEntry string
+		mapData  string // the /CIDToGIDMap stream's bytes
 		cidSet   []byte
 		metrics  uint16 // hhea numberOfHMetrics to write, 0 to keep the program's
 		fires    bool
 	}{
-		{"no map, every glyph listed", "", full, 0, false},
-		{"no map, a glyph left out", "", missing, 0, true},
-		{"no map, a glyph past numberOfHMetrics left out", "", missing, 1, false},
-		{"no map, a bit past the last glyph", "", pastEnd, 0, true},
-		{"an Identity map, a glyph left out", " /CIDToGIDMap /Identity", missing, 0, true},
-		{"a stream map, a glyph left out", " /CIDToGIDMap 6 0 R", missing, 0, false},
+		{"no map, every glyph listed", "", "", full, 0, false},
+		{"no map, a glyph left out", "", "", missing, 0, true},
+		{"no map, a glyph past numberOfHMetrics left out", "", "", missing, 1, false},
+		{"no map, a bit past the last glyph", "", "", pastEnd, 0, true},
+		{"an Identity map, a glyph left out", " /CIDToGIDMap /Identity", "", missing, 0, true},
+		{"a stream map, every mapped CID listed", stream, "\x00\x00\x00\x01", cid1, 0, false},
+		{"a stream map, a mapped CID left out", stream, "\x00\x00\x00\x01", missing, 0, true},
+		{"a stream map, a CID mapped to GID 0 left out", stream, "\x00\x00\x00\x01\x00\x00", cid1, 0, true},
+		{"a stream map, a bit past the map", stream, "\x00\x00\x00\x01", cids12, 0, true},
+		{"a stream map with an odd byte, its CID left out", stream, "\x00\x00\x00\x01\x00", cid1, 0, true},
+		{"a stream map with an odd byte, its CID listed", stream, "\x00\x00\x00\x01\x00", cids12, 0, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -80,7 +91,7 @@ func TestCIDSetCompletenessAbsentMap(t *testing.T) {
 					" /CapHeight 700 /StemV 80 /FontBBox [0 0 1000 1000] /FontFile2 4 0 R /CIDSet 5 0 R >>",
 				fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(program), program),
 				fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(tt.cidSet), tt.cidSet),
-				"<< /Length 4 >>\nstream\n\x00\x00\x00\x01\nendstream",
+				fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(tt.mapData), tt.mapData),
 			)
 			cidFontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
 			if err != nil {
