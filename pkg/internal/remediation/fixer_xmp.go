@@ -654,188 +654,8 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		}
 	}
 
-	// Sync dc:title with Info /Title. PDF/UA additionally requires a
-	// dc:title outright (ISO 14289-1 §7.1, ISO 14289-2 §8.11.1): when
-	// neither DocInfo nor the packet carries one, synthesize it from the
-	// first outline title, then from a placeholder, so the requirement is
-	// met and /DisplayDocTitle has something to show.
-	title := info.Title
-	titleSource := "Info /Title"
-	if uaPart > 0 && title == "" && findXMPProperty(buf, dcNS, "title").Form == xmpPropertyNotFound {
-		if info.FallbackTitle != "" {
-			title = info.FallbackTitle
-			titleSource = "outline title"
-		} else {
-			title = "Untitled document"
-			titleSource = "placeholder"
-		}
-	}
-	if title != "" {
-		escaped := xmlEscape(title)
-		value := fmt.Sprintf(`<rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt>`, escaped)
-		element := fmt.Sprintf(`<dc:title>%s</dc:title>`, value)
-		existed := findXMPProperty(buf, dcNS, "title").Form != xmpPropertyNotFound
-		if out, changed := setStructuredXMPProperty(buf, dcNS, "dc", "title", value, element); changed {
-			buf = out
-			if existed {
-				fixes = append(fixes, "synced dc:title with Info /Title")
-			} else {
-				fixes = append(fixes, fmt.Sprintf("injected dc:title from %s", titleSource))
-			}
-		}
-	}
-
-	// Sync dc:creator with Info /Author.
-	if info.Author != "" {
-		escaped := xmlEscape(info.Author)
-		value := fmt.Sprintf(`<rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq>`, escaped)
-		element := fmt.Sprintf(`<dc:creator>%s</dc:creator>`, value)
-		existed := findXMPProperty(buf, dcNS, "creator").Form != xmpPropertyNotFound
-		if out, changed := setStructuredXMPProperty(buf, dcNS, "dc", "creator", value, element); changed {
-			buf = out
-			if existed {
-				fixes = append(fixes, "synced dc:creator with Info /Author")
-			} else {
-				fixes = append(fixes, "injected dc:creator from Info /Author")
-			}
-		}
-	}
-
-	// Sync pdf:Producer with Info /Producer.
-	if info.Producer != "" {
-		escaped := xmlEscape(info.Producer)
-		if findXMPProperty(buf, pdfNS, "Producer").Form != xmpPropertyNotFound {
-			if out, err := replacePropertyValue(buf, pdfNS, "Producer", escaped); err == nil {
-				if !bytes.Equal(out, buf) {
-					fixes = append(fixes, "synced pdf:Producer with Info /Producer")
-				}
-				buf = out
-			}
-		} else {
-			if out, err := ensureNamespaceDecl(buf, "pdf", pdfNS); err == nil {
-				buf = out
-			}
-			if out, err := insertChildElement(buf, fmt.Sprintf(
-				"<pdf:Producer>%s</pdf:Producer>", escaped)); err == nil {
-				buf = out
-				fixes = append(fixes, "injected pdf:Producer from Info dict")
-			}
-		}
-	}
-
-	// Sync xmp:CreatorTool with Info /Creator.
-	if info.Creator != "" {
-		escaped := xmlEscape(info.Creator)
-		if findXMPProperty(buf, xmpNS, "CreatorTool").Form != xmpPropertyNotFound {
-			if out, err := replacePropertyValue(buf, xmpNS, "CreatorTool", escaped); err == nil {
-				if !bytes.Equal(out, buf) {
-					fixes = append(fixes, "synced xmp:CreatorTool with Info /Creator")
-				}
-				buf = out
-			}
-		} else {
-			if out, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
-				buf = out
-			}
-			if out, err := insertChildElement(buf, fmt.Sprintf(
-				"<xmp:CreatorTool>%s</xmp:CreatorTool>", escaped)); err == nil {
-				buf = out
-				fixes = append(fixes, "injected xmp:CreatorTool from Info dict")
-			}
-		}
-	}
-
-	// Sync xmp:CreateDate with Info /CreationDate.
-	if info.CreationDate != "" {
-		xmpDate := pdfDateToXMP(info.CreationDate)
-		if xmpDate != "" {
-			if findXMPProperty(buf, xmpNS, "CreateDate").Form != xmpPropertyNotFound {
-				if out, err := replacePropertyValue(buf, xmpNS, "CreateDate", xmpDate); err == nil {
-					if !bytes.Equal(out, buf) {
-						fixes = append(fixes, "synced xmp:CreateDate with Info /CreationDate")
-					}
-					buf = out
-				}
-			} else {
-				if out, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
-					buf = out
-				}
-				if out, err := insertChildElement(buf, fmt.Sprintf(
-					"<xmp:CreateDate>%s</xmp:CreateDate>", xmpDate)); err == nil {
-					buf = out
-					fixes = append(fixes, "injected xmp:CreateDate from Info /CreationDate")
-				}
-			}
-		}
-	}
-
-	// Sync xmp:ModifyDate with Info /ModDate.
-	if info.ModDate != "" {
-		xmpDate := pdfDateToXMP(info.ModDate)
-		if xmpDate != "" {
-			if findXMPProperty(buf, xmpNS, "ModifyDate").Form != xmpPropertyNotFound {
-				if out, err := replacePropertyValue(buf, xmpNS, "ModifyDate", xmpDate); err == nil {
-					if !bytes.Equal(out, buf) {
-						fixes = append(fixes, "synced xmp:ModifyDate with Info /ModDate")
-					}
-					buf = out
-				}
-			} else {
-				if out, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
-					buf = out
-				}
-				if out, err := insertChildElement(buf, fmt.Sprintf(
-					"<xmp:ModifyDate>%s</xmp:ModifyDate>", xmpDate)); err == nil {
-					buf = out
-					fixes = append(fixes, "injected xmp:ModifyDate from Info /ModDate")
-				}
-			}
-		}
-	}
-
-	// Sync dc:description with Info /Subject. dc:description is a language
-	// alternative, so it goes through setStructuredXMPProperty like dc:title:
-	// writing the rdf:Alt into a property a producer wrote in attribute form
-	// puts a literal '<' inside an attribute value, which XML 1.0, 2.3
-	// forbids. Seven govdocs files came out of remediation newly failing
-	// ISO 19005-2, 6.6.2.1 tests 4 and 5 that way.
-	if info.Subject != "" {
-		escaped := xmlEscape(info.Subject)
-		value := fmt.Sprintf(`<rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt>`, escaped)
-		element := fmt.Sprintf(`<dc:description>%s</dc:description>`, value)
-		existed := findXMPProperty(buf, dcNS, "description").Form != xmpPropertyNotFound
-		if out, changed := setStructuredXMPProperty(buf, dcNS, "dc", "description", value, element); changed {
-			buf = out
-			if existed {
-				fixes = append(fixes, "synced dc:description with Info /Subject")
-			} else {
-				fixes = append(fixes, "injected dc:description from Info /Subject")
-			}
-		}
-	}
-
-	// Sync pdf:Keywords with Info /Keywords. A present-but-empty
-	// /Keywords also drives the sync: ISO 19005 §6.7.3 requires the XMP
-	// property and the Info entry to match verbatim, so a whitespace-only
-	// pdf:Keywords is not equivalent to an empty Info entry.
-	if info.Keywords != "" || info.Present["Keywords"] {
-		escaped := xmlEscape(info.Keywords)
-		if findXMPProperty(buf, pdfNS, "Keywords").Form != xmpPropertyNotFound {
-			if out, err := replacePropertyValue(buf, pdfNS, "Keywords", escaped); err == nil && !bytes.Equal(out, buf) {
-				buf = out
-				fixes = append(fixes, "synced pdf:Keywords with Info /Keywords")
-			}
-		} else {
-			if out, err := ensureNamespaceDecl(buf, "pdf", pdfNS); err == nil {
-				buf = out
-			}
-			if out, err := insertChildElement(buf, fmt.Sprintf(
-				"<pdf:Keywords>%s</pdf:Keywords>", escaped)); err == nil {
-				buf = out
-				fixes = append(fixes, "injected pdf:Keywords from Info dict")
-			}
-		}
-	}
+	buf, syncFixes := syncInfoIntoXMP(buf, info, uaPart)
+	fixes = append(fixes, syncFixes...)
 
 	buf, extFixes := applyExtensionSchemas(buf, part)
 	fixes = append(fixes, extFixes...)
@@ -1605,4 +1425,271 @@ func pdfDateToXMP(pdfDate string) string {
 	}
 
 	return year + "-" + month + "-" + day + "T" + hour + ":" + min + ":" + sec + tz
+}
+
+// syncInfoIntoXMP rewrites the XMP properties that duplicate the document
+// information dictionary so they carry its values.
+//
+// Split out of [patchExistingXMP] so the same synchronisation can run on its
+// own, without the identification and extension-schema work that surrounds it
+// there: [SyncXMPWithDocInfo] needs exactly this part when a caller edits
+// /Info directly.
+//
+// uaPart drives only the dc:title fallback, which PDF/UA requires and PDF/A
+// does not; pass 0 to sync what /Info holds and synthesize nothing.
+func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []string) {
+	var fixes []string
+	// Sync dc:title with Info /Title. PDF/UA additionally requires a
+	// dc:title outright (ISO 14289-1 §7.1, ISO 14289-2 §8.11.1): when
+	// neither DocInfo nor the packet carries one, synthesize it from the
+	// first outline title, then from a placeholder, so the requirement is
+	// met and /DisplayDocTitle has something to show.
+	title := info.Title
+	titleSource := "Info /Title"
+	if uaPart > 0 && title == "" && findXMPProperty(buf, dcNS, "title").Form == xmpPropertyNotFound {
+		if info.FallbackTitle != "" {
+			title = info.FallbackTitle
+			titleSource = "outline title"
+		} else {
+			title = "Untitled document"
+			titleSource = "placeholder"
+		}
+	}
+	if title != "" {
+		escaped := xmlEscape(title)
+		value := fmt.Sprintf(`<rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt>`, escaped)
+		element := fmt.Sprintf(`<dc:title>%s</dc:title>`, value)
+		existed := findXMPProperty(buf, dcNS, "title").Form != xmpPropertyNotFound
+		if out, changed := setStructuredXMPProperty(buf, dcNS, "dc", "title", value, element); changed {
+			buf = out
+			if existed {
+				fixes = append(fixes, "synced dc:title with Info /Title")
+			} else {
+				fixes = append(fixes, fmt.Sprintf("injected dc:title from %s", titleSource))
+			}
+		}
+	}
+
+	// Sync dc:creator with Info /Author.
+	if info.Author != "" {
+		escaped := xmlEscape(info.Author)
+		value := fmt.Sprintf(`<rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq>`, escaped)
+		element := fmt.Sprintf(`<dc:creator>%s</dc:creator>`, value)
+		existed := findXMPProperty(buf, dcNS, "creator").Form != xmpPropertyNotFound
+		if out, changed := setStructuredXMPProperty(buf, dcNS, "dc", "creator", value, element); changed {
+			buf = out
+			if existed {
+				fixes = append(fixes, "synced dc:creator with Info /Author")
+			} else {
+				fixes = append(fixes, "injected dc:creator from Info /Author")
+			}
+		}
+	}
+
+	// Sync pdf:Producer with Info /Producer.
+	if info.Producer != "" {
+		escaped := xmlEscape(info.Producer)
+		if findXMPProperty(buf, pdfNS, "Producer").Form != xmpPropertyNotFound {
+			if out, err := replacePropertyValue(buf, pdfNS, "Producer", escaped); err == nil {
+				if !bytes.Equal(out, buf) {
+					fixes = append(fixes, "synced pdf:Producer with Info /Producer")
+				}
+				buf = out
+			}
+		} else {
+			if out, err := ensureNamespaceDecl(buf, "pdf", pdfNS); err == nil {
+				buf = out
+			}
+			if out, err := insertChildElement(buf, fmt.Sprintf(
+				"<pdf:Producer>%s</pdf:Producer>", escaped)); err == nil {
+				buf = out
+				fixes = append(fixes, "injected pdf:Producer from Info dict")
+			}
+		}
+	}
+
+	// Sync xmp:CreatorTool with Info /Creator.
+	if info.Creator != "" {
+		escaped := xmlEscape(info.Creator)
+		if findXMPProperty(buf, xmpNS, "CreatorTool").Form != xmpPropertyNotFound {
+			if out, err := replacePropertyValue(buf, xmpNS, "CreatorTool", escaped); err == nil {
+				if !bytes.Equal(out, buf) {
+					fixes = append(fixes, "synced xmp:CreatorTool with Info /Creator")
+				}
+				buf = out
+			}
+		} else {
+			if out, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
+				buf = out
+			}
+			if out, err := insertChildElement(buf, fmt.Sprintf(
+				"<xmp:CreatorTool>%s</xmp:CreatorTool>", escaped)); err == nil {
+				buf = out
+				fixes = append(fixes, "injected xmp:CreatorTool from Info dict")
+			}
+		}
+	}
+
+	// Sync xmp:CreateDate with Info /CreationDate.
+	if info.CreationDate != "" {
+		xmpDate := pdfDateToXMP(info.CreationDate)
+		if xmpDate != "" {
+			if findXMPProperty(buf, xmpNS, "CreateDate").Form != xmpPropertyNotFound {
+				if out, err := replacePropertyValue(buf, xmpNS, "CreateDate", xmpDate); err == nil {
+					if !bytes.Equal(out, buf) {
+						fixes = append(fixes, "synced xmp:CreateDate with Info /CreationDate")
+					}
+					buf = out
+				}
+			} else {
+				if out, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
+					buf = out
+				}
+				if out, err := insertChildElement(buf, fmt.Sprintf(
+					"<xmp:CreateDate>%s</xmp:CreateDate>", xmpDate)); err == nil {
+					buf = out
+					fixes = append(fixes, "injected xmp:CreateDate from Info /CreationDate")
+				}
+			}
+		}
+	}
+
+	// Sync xmp:ModifyDate with Info /ModDate.
+	if info.ModDate != "" {
+		xmpDate := pdfDateToXMP(info.ModDate)
+		if xmpDate != "" {
+			if findXMPProperty(buf, xmpNS, "ModifyDate").Form != xmpPropertyNotFound {
+				if out, err := replacePropertyValue(buf, xmpNS, "ModifyDate", xmpDate); err == nil {
+					if !bytes.Equal(out, buf) {
+						fixes = append(fixes, "synced xmp:ModifyDate with Info /ModDate")
+					}
+					buf = out
+				}
+			} else {
+				if out, err := ensureNamespaceDecl(buf, "xmp", xmpNS); err == nil {
+					buf = out
+				}
+				if out, err := insertChildElement(buf, fmt.Sprintf(
+					"<xmp:ModifyDate>%s</xmp:ModifyDate>", xmpDate)); err == nil {
+					buf = out
+					fixes = append(fixes, "injected xmp:ModifyDate from Info /ModDate")
+				}
+			}
+		}
+	}
+
+	// Sync dc:description with Info /Subject. dc:description is a language
+	// alternative, so it goes through setStructuredXMPProperty like dc:title:
+	// writing the rdf:Alt into a property a producer wrote in attribute form
+	// puts a literal '<' inside an attribute value, which XML 1.0, 2.3
+	// forbids. Seven govdocs files came out of remediation newly failing
+	// ISO 19005-2, 6.6.2.1 tests 4 and 5 that way.
+	if info.Subject != "" {
+		escaped := xmlEscape(info.Subject)
+		value := fmt.Sprintf(`<rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt>`, escaped)
+		element := fmt.Sprintf(`<dc:description>%s</dc:description>`, value)
+		existed := findXMPProperty(buf, dcNS, "description").Form != xmpPropertyNotFound
+		if out, changed := setStructuredXMPProperty(buf, dcNS, "dc", "description", value, element); changed {
+			buf = out
+			if existed {
+				fixes = append(fixes, "synced dc:description with Info /Subject")
+			} else {
+				fixes = append(fixes, "injected dc:description from Info /Subject")
+			}
+		}
+	}
+
+	// Sync pdf:Keywords with Info /Keywords. A present-but-empty
+	// /Keywords also drives the sync: ISO 19005 §6.7.3 requires the XMP
+	// property and the Info entry to match verbatim, so a whitespace-only
+	// pdf:Keywords is not equivalent to an empty Info entry.
+	if info.Keywords != "" || info.Present["Keywords"] {
+		escaped := xmlEscape(info.Keywords)
+		if findXMPProperty(buf, pdfNS, "Keywords").Form != xmpPropertyNotFound {
+			if out, err := replacePropertyValue(buf, pdfNS, "Keywords", escaped); err == nil && !bytes.Equal(out, buf) {
+				buf = out
+				fixes = append(fixes, "synced pdf:Keywords with Info /Keywords")
+			}
+		} else {
+			if out, err := ensureNamespaceDecl(buf, "pdf", pdfNS); err == nil {
+				buf = out
+			}
+			if out, err := insertChildElement(buf, fmt.Sprintf(
+				"<pdf:Keywords>%s</pdf:Keywords>", escaped)); err == nil {
+				buf = out
+				fixes = append(fixes, "injected pdf:Keywords from Info dict")
+			}
+		}
+	}
+	return buf, fixes
+}
+
+// SyncXMPWithDocInfo rewrites the catalog's XMP packet so the properties that
+// duplicate the document information dictionary carry its current values.
+//
+// It exists for callers that edit /Info directly, notably [pdf.Writer.SetMetadata]:
+// setting a new /Title left the XMP dc:title saying the old one, which is a
+// conformance defect for any profile that requires the two to agree
+// (ISO 19005-2/3, 6.6.3 and ISO 19005-4, 6.7.3, all worded "shall be equivalent
+// to the document information dictionary entry"), and simply wrong for every
+// other reader that prefers XMP.
+//
+// Only synchronisation runs, not the rest of the XMP repair: no pdfaid
+// identification is injected and no extension schemas are declared, because a
+// caller editing metadata has not asked to claim conformance to anything.
+//
+// A document with no XMP packet is left alone and reports no fixes. Writing one
+// would add a claim the file never made, and /Info alone is complete without it.
+//
+// The /Info values are read live, so this must run after the mutation that
+// updates them; [writer.ObjAllocator] pending objects are consulted first.
+func SyncXMPWithDocInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) ([]string, error) {
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
+	if !ok {
+		return nil, fmt.Errorf("locating catalog")
+	}
+	// Read through the allocator: an earlier mutation in the same write may
+	// already have replaced the catalog, and patching the stale one would drop
+	// its edit.
+	catalogDict := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	if catalogDict == nil {
+		return nil, fmt.Errorf("resolving catalog")
+	}
+
+	metaObj, hasMeta := catalogDict["Metadata"]
+	if !hasMeta {
+		return nil, nil
+	}
+	stream, err := document.ResolveStream(ctx, doc, metaObj)
+	if err != nil {
+		return nil, nil
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		return nil, nil
+	}
+	// The packet must be UTF-8 before any splicing, for the reason given in
+	// [fixXMP]: a UTF-16 packet defeats the byte-range editor silently.
+	data, reencoded := xmpToUTF8(data)
+
+	patched, fixes := syncInfoIntoXMP(data, gatherInfoMetadata(ctx, alloc, doc), 0)
+	if len(fixes) == 0 && !reencoded {
+		return nil, nil
+	}
+	if reencoded {
+		fixes = append(fixes, "re-encoded XMP packet to UTF-8")
+	}
+
+	xmpStream := ast.NewStream(ast.PdfDict{
+		"Type":    ast.PdfName("Metadata"),
+		"Subtype": ast.PdfName("XML"),
+	}, patched)
+	xmpRef := alloc.Alloc(xmpStream)
+
+	newCatalog := make(ast.PdfDict, len(catalogDict))
+	maps.Copy(newCatalog, catalogDict)
+	newCatalog["Metadata"] = xmpRef
+	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
+
+	return fixes, nil
 }

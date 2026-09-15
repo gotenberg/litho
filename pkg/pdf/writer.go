@@ -505,6 +505,21 @@ func (w *Writer) SetMetadata(meta Metadata) {
 			return mutations.SetMetadata(ctx, alloc, doc, mutations.Metadata(meta))
 		},
 	})
+	// A document that carries XMP duplicates these values there, and leaving
+	// the packet alone left it asserting the old title: a conformance defect
+	// wherever the two are required to agree (ISO 19005-2/3, 6.6.3), and
+	// misleading everywhere else, since most readers prefer XMP. Queued as a
+	// second mutation rather than folded into the first because the
+	// synchronisation lives in the remediation package, which imports
+	// mutations and so cannot be imported by it.
+	w.mutations = append(w.mutations, mutation{
+		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+			// The fix list is for a remediation report; a plain metadata edit
+			// has nowhere to show it.
+			_, err := remediation.SyncXMPWithDocInfo(ctx, alloc, doc)
+			return err
+		},
+	})
 }
 
 // ClearMetadata removes all document metadata: the /Info dictionary is emptied
