@@ -25,7 +25,7 @@ func TestUA2WidgetForm(t *testing.T) {
 		return checkPDFUA2AnnotStructNesting(ctx, doc, cat, "PDF/UA-2")
 	}
 
-	fieldWidget := "<< /Type /Annot /Subtype /Widget /FT /Tx /Rect [0 0 10 10] /StructParent 0 >>"
+	fieldWidget := "<< /Type /Annot /Subtype /Widget /FT /Tx /T (f) /Rect [0 0 10 10] /StructParent 0 >>"
 
 	// A field widget enclosed by a Form element is conformant.
 	if got := build("Form", fieldWidget); hasRule(got, Rule_14289_2_8_10_1_t01) {
@@ -35,7 +35,7 @@ func TestUA2WidgetForm(t *testing.T) {
 	if got := build("Div", fieldWidget); !hasRule(got, Rule_14289_2_8_10_1_t01) {
 		t.Errorf("widget in Div: got %v, want §8.10.1 t1", got)
 	}
-	// A widget not associated with a form field (no /FT, no /Parent) is exempt.
+	// A widget not associated with a form field (no /T, no /Parent) is exempt.
 	nonField := "<< /Type /Annot /Subtype /Widget /Rect [0 0 10 10] /StructParent 0 >>"
 	if got := build("Div", nonField); hasRule(got, Rule_14289_2_8_10_1_t01) {
 		t.Errorf("non-field widget: got %v, want none", got)

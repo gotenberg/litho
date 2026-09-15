@@ -32,14 +32,14 @@ func TestCheckWidgetLabel(t *testing.T) {
 	// A hidden (/F 2) field widget with no Lbl and no /Contents fails: there is
 	// no Hidden exemption.
 	hidden := build("[7 0 R]",
-		"<< /Type /Annot /Subtype /Widget /FT /Tx /StructParent 0 /F 2 >>")
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (f) /StructParent 0 /F 2 >>")
 	if !hasRule(hidden, Rule_14289_2_8_10_2_3_t01) {
 		t.Errorf("hidden field widget, no label/Contents: want §8.10.2.3 t1, got %v", hidden)
 	}
 
 	// A field widget whose /Contents supplies a description is conformant.
 	withContents := build("[7 0 R]",
-		"<< /Type /Annot /Subtype /Widget /FT /Tx /StructParent 0 /Contents (label) >>")
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (f) /StructParent 0 /Contents (label) >>")
 	if hasRule(withContents, Rule_14289_2_8_10_2_3_t01) {
 		t.Errorf("field widget with /Contents: want none, got %v", withContents)
 	}
@@ -47,13 +47,13 @@ func TestCheckWidgetLabel(t *testing.T) {
 	// A field widget whose enclosing element carries a Lbl with content is
 	// conformant.
 	withLbl := build("[7 0 R 9 0 R]",
-		"<< /Type /Annot /Subtype /Widget /FT /Tx /StructParent 0 >>",
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (f) /StructParent 0 >>",
 		"<< /Type /StructElem /S /Lbl /K 0 >>")
 	if hasRule(withLbl, Rule_14289_2_8_10_2_3_t01) {
 		t.Errorf("field widget with Lbl: want none, got %v", withLbl)
 	}
 
-	// A non-field widget (no /FT, /Parent, /T) is out of scope.
+	// A non-field widget (no /T, no /Parent) is out of scope.
 	nonField := build("[7 0 R]",
 		"<< /Type /Annot /Subtype /Widget /StructParent 0 >>")
 	if hasRule(nonField, Rule_14289_2_8_10_2_3_t01) {

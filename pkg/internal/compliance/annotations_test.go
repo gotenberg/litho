@@ -14,7 +14,7 @@ func TestCheckAnnotColorArrays(t *testing.T) {
 	noColor := ast.PdfDict{}
 
 	fires := func(annot ast.PdfDict, outputCS string, hasProfile bool) bool {
-		return len(checkAnnotColorArrays(annot, outputCS, hasProfile, "loc")) > 0
+		return len(checkAnnotColorArrays(context.Background(), nopDoc(), annot, outputCS, hasProfile, "loc")) > 0
 	}
 
 	tests := []struct {

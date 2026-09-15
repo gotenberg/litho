@@ -37,7 +37,7 @@ func TestCheckWidgetLabel_ByStandardType(t *testing.T) {
 				"<< /Type /StructElem /S /Form /K [7 0 R 9 0 R] >>",
 				"<< /Nums [0 5 0 R] >>",
 				"<< /Type /OBJR /Obj 8 0 R >>",
-				"<< /Type /Annot /Subtype /Widget /FT /Tx /StructParent 0 >>",
+				"<< /Type /Annot /Subtype /Widget /FT /Tx /T (f) /StructParent 0 >>",
 				tt.label,
 			)
 			got := checkPDFUA2FormStructure(context.Background(), doc, cat, "PDF/UA-2")
@@ -76,9 +76,9 @@ func TestCheckFormWidgetCount_ByStandardType(t *testing.T) {
 				"<< /Type /StructElem /S "+tt.s+" /K [7 0 R 9 0 R] >>",
 				"<< /Nums [0 5 0 R 1 5 0 R] >>",
 				"<< /Type /OBJR /Obj 8 0 R >>",
-				"<< /Type /Annot /Subtype /Widget /FT /Tx /StructParent 0 /Contents (a) >>",
+				"<< /Type /Annot /Subtype /Widget /FT /Tx /T (a) /StructParent 0 /Contents (a) >>",
 				"<< /Type /OBJR /Obj 10 0 R >>",
-				"<< /Type /Annot /Subtype /Widget /FT /Tx /StructParent 1 /Contents (b) >>",
+				"<< /Type /Annot /Subtype /Widget /FT /Tx /T (b) /StructParent 1 /Contents (b) >>",
 			)
 			got := checkPDFUA2FormStructure(context.Background(), doc, cat, "PDF/UA-2")
 			if fired := hasRule(got, Rule_14289_2_8_10_1_t02); fired != tt.fires {

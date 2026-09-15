@@ -60,7 +60,7 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 			// /Contents entry. There is NO Hidden exemption (unlike the UA-1
 			// §7.18.1 alt-text rule): a hidden field widget may still be exposed,
 			// e.g. shown by script, so it must be labelled.
-			if !isFieldWidget(annot) {
+			if !isFieldWidget(ctx, doc, annot) {
 				continue
 			}
 			// structParentType == null / isArtifact: a widget with no enclosing
@@ -150,17 +150,14 @@ func structElemHasKids(ctx context.Context, doc *document.Document, elem ast.Pdf
 }
 
 // isFieldWidget reports whether a Widget annotation participates in an
-// interactive form field. A widget that carries a field type (/FT), a partial
-// field name (/T, the merged terminal-field case), or a field parent (/Parent)
-// is a field widget; a pure decorative widget is not. veraPDF's §8.10.2.3 t1
-// exempts non-field widgets (isFieldWidget == false).
-func isFieldWidget(annot ast.PdfDict) bool {
-	for _, k := range []ast.PdfName{"FT", "Parent", "T"} {
-		if _, ok := annot[k]; ok {
-			return true
-		}
-	}
-	return false
+// interactive form field, as veraPDF's GFPDWidgetAnnot.isFieldWidget decides: the
+// widget is merged with its field (it carries the partial field name /T, the
+// field test of PDFormField.isField) or it has a field /Parent. A field type
+// /FT alone makes no field widget, and a /T or /Parent written as null is
+// absent (ISO 32000-1, 7.3.7). veraPDF's ISO 14289-2 §8.10.1 t1 and §8.10.2.3 t1
+// exempt non-field widgets (isFieldWidget == false). Measured against veraPDF.
+func isFieldWidget(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
+	return nonNullKeyPresent(ctx, doc, annot, "T") || nonNullKeyPresent(ctx, doc, annot, "Parent")
 }
 
 // annotStructParent resolves the structure element that encloses an annotation

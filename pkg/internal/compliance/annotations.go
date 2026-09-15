@@ -153,7 +153,7 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 			// Annotation opacity and colour arrays (PDF/A-1 only).
 			if part == 1 {
 				results = append(results, checkAnnotOpacity(ctx, doc, annot, loc)...)
-				results = append(results, checkAnnotColorArrays(annot, outputCS, hasOutputProfile, loc)...)
+				results = append(results, checkAnnotColorArrays(ctx, doc, annot, outputCS, hasOutputProfile, loc)...)
 			}
 
 			// 3D stream Subtype must be U3D or PRC. Only ISO 19005-4's
@@ -606,7 +606,7 @@ func nStreamRule(part int) Rule {
 // contain a /C or /IC colour array unless the PDF/A-1 OutputIntent destination
 // profile colour space is RGB. hasOutputProfile reports whether a
 // /DestOutputProfile is present at all (parseable or not).
-func checkAnnotColorArrays(annot ast.PdfDict, outputCS string, hasOutputProfile bool, loc string) []Violation {
+func checkAnnotColorArrays(ctx context.Context, doc *document.Document, annot ast.PdfDict, outputCS string, hasOutputProfile bool, loc string) []Violation {
 	// "RGB " carries a trailing space: ICC colour space signatures are 4 bytes.
 	if outputCS == "RGB " {
 		return nil
@@ -619,8 +619,10 @@ func checkAnnotColorArrays(annot ast.PdfDict, outputCS string, hasOutputProfile 
 	if outputCS == "" && hasOutputProfile {
 		return nil
 	}
-	_, hasC := annot["C"]
-	_, hasIC := annot["IC"]
+	// veraPDF's containsC and containsIC ask for a non-null /C or /IC, so one
+	// written as null is absent (ISO 32000-1, 7.3.7), measured.
+	hasC := nonNullKeyPresent(ctx, doc, annot, "C")
+	hasIC := nonNullKeyPresent(ctx, doc, annot, "IC")
 	if !hasC && !hasIC {
 		return nil
 	}

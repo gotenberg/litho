@@ -323,11 +323,8 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 
 			switch subtype {
 			case "Widget":
-				// isFieldWidget: a widget associated with an AcroForm field
-				// carries /FT (merged field+widget) or /Parent (a child of a field).
-				_, hasFT := annot["FT"]
-				_, hasParent := annot["Parent"]
-				if (hasFT || hasParent) && stdType != "Form" {
+				// A field widget, as veraPDF's isFieldWidget decides ([isFieldWidget]).
+				if isFieldWidget(ctx, doc, annot) && stdType != "Form" {
 					results = append(results, failf(Rule_14289_2_8_10_1_t01,
 						"field Widget annotation enclosed by %s instead of Form", encl)...)
 				}

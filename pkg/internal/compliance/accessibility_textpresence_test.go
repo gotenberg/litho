@@ -68,7 +68,7 @@ func TestTextStringPresence(t *testing.T) {
 				"<< /Type /StructElem /S /Form /K [7 0 R] >>",
 				"<< /Nums [0 5 0 R] >>",
 				"<< /Type /OBJR /Obj 8 0 R >>",
-				"<< /Type /Annot /Subtype /Widget /FT /Tx /StructParent 0"+tc.contents+" >>",
+				"<< /Type /Annot /Subtype /Widget /FT /Tx /T (f) /StructParent 0"+tc.contents+" >>",
 			)
 			if fired := hasRule(checkPDFUA2FormStructure(ctx, doc, cat, "PDF/UA-2"), Rule_14289_2_8_10_2_3_t01); fired != tc.fires {
 				t.Errorf("contents %q: 8.10.2.3 t1 fired = %v, want %v", tc.contents, fired, tc.fires)
