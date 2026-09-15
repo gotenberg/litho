@@ -216,14 +216,21 @@ func checkCharSetCompleteness(charSetStr string, glyphNames map[uint16]string, f
 		}
 	}
 
+	// Lowest missing name, not the first one the loop met: glyphNames is keyed
+	// by GID, Go randomizes map iteration, and the rule fires once per font, so
+	// the first-found name made the message differ between runs of the same file.
+	var missing lowestOffender[string]
 	for _, name := range glyphNames {
 		if name == ".notdef" || name == "" {
 			continue
 		}
 		if !charSetNames[name] {
-			return failf(rule, "font %s on page %d: glyph %q in font program not listed in /CharSet",
-				fontName, pageNum, name)
+			missing.offer(name)
 		}
+	}
+	if name, any := missing.result(); any {
+		return failf(rule, "font %s on page %d: glyph %q in font program not listed in /CharSet",
+			fontName, pageNum, name)
 	}
 
 	// Reverse check: every name in /CharSet must exist in the font program.
@@ -237,14 +244,18 @@ func checkCharSetCompleteness(charSetStr string, glyphNames map[uint16]string, f
 			fontNameSet[name] = true
 		}
 	}
+	var extra lowestOffender[string]
 	for name := range charSetNames {
 		if name == ".notdef" {
 			continue
 		}
 		if !fontNameSet[name] {
-			return failf(rule, "font %s on page %d: /CharSet lists glyph %q not present in font program",
-				fontName, pageNum, name)
+			extra.offer(name)
 		}
+	}
+	if name, any := extra.result(); any {
+		return failf(rule, "font %s on page %d: /CharSet lists glyph %q not present in font program",
+			fontName, pageNum, name)
 	}
 
 	return nil
@@ -281,6 +292,8 @@ func checkCharSetRenderedGlyphs(ctx context.Context, doc *document.Document, fon
 		}
 	}
 
+	// Lowest missing name, for the reason given in [lowestOffender].
+	var missing lowestOffender[string]
 	for code := range usage.charCodes {
 		name := encoding[code]
 		if name == "" || name == ".notdef" {
@@ -293,9 +306,12 @@ func checkCharSetRenderedGlyphs(ctx context.Context, doc *document.Document, fon
 			continue
 		}
 		if !charSetNames[name] {
-			return failf(rule, "font %s on page %d: rendered glyph %q not listed in /CharSet",
-				fontName, pageNum, name)
+			missing.offer(name)
 		}
+	}
+	if name, any := missing.result(); any {
+		return failf(rule, "font %s on page %d: rendered glyph %q not listed in /CharSet",
+			fontName, pageNum, name)
 	}
 	return nil
 }
@@ -455,6 +471,8 @@ func checkCIDSetCompletenessTrueTypeRendered(ctx context.Context, doc *document.
 		return nil
 	}
 	cidSetBits := decodeCIDSetBits(cidSetData)
+	// Lowest offending CID; see [lowestOffender].
+	var worst lowestOffender[uint16]
 	for cid := range usedCIDs {
 		if cid == 0 {
 			continue // .notdef
@@ -467,8 +485,11 @@ func checkCIDSetCompletenessTrueTypeRendered(ctx context.Context, doc *document.
 			continue // glyph has no outline data
 		}
 		if !cidSetBits[cid] {
-			return failf(rule, "font %s on page %d: rendered CID %d not in /CIDSet", fontName, pageNum, cid)
+			worst.offer(cid)
 		}
+	}
+	if cid, any := worst.result(); any {
+		return failf(rule, "font %s on page %d: rendered CID %d not in /CIDSet", fontName, pageNum, cid)
 	}
 	return nil
 }
@@ -548,6 +569,8 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 	}
 
 	validCIDs := typography.ExtractValidCIDs(fontData)
+	// Lowest offending CID; see [lowestOffender].
+	var worst lowestOffender[uint16]
 	for cid := range validCIDs {
 		if cid == 0 {
 			continue // .notdef
@@ -556,8 +579,11 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 			continue
 		}
 		if !cidSetBits[cid] {
-			return failf(rule, "font %s on page %d: CID %d in font program not in /CIDSet", fontName, pageNum, cid)
+			worst.offer(cid)
 		}
+	}
+	if cid, any := worst.result(); any {
+		return failf(rule, "font %s on page %d: CID %d in font program not in /CIDSet", fontName, pageNum, cid)
 	}
 	return nil
 }
@@ -595,13 +621,18 @@ func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cid
 	// Decode CIDSet bitfield (may be empty for a zero-length stream).
 	cidSetBits := decodeCIDSetBits(cidSetData)
 
+	// Lowest offending CID; see [lowestOffender].
+	var worst lowestOffender[uint16]
 	for cid := range validCIDs {
 		if cid == 0 {
 			continue // .notdef
 		}
 		if !cidSetBits[cid] {
-			return failf(rule, "font %s on page %d: CID %d in font program not in /CIDSet", fontName, pageNum, cid)
+			worst.offer(cid)
 		}
+	}
+	if cid, any := worst.result(); any {
+		return failf(rule, "font %s on page %d: CID %d in font program not in /CIDSet", fontName, pageNum, cid)
 	}
 	return nil
 }

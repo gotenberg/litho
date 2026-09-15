@@ -1471,11 +1471,16 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 					// by that name alone, even when the program stores the glyph at
 					// GID 0: pdfjs issue13107_reduced.pdf embeds a DejaVuSans subset
 					// with no .notdef glyph whose post table names GID 0 "space".
+					// Lowest offending code; see [lowestOffender].
+					var worst lowestOffender[byte]
 					for code := range usage.charCodes {
 						glyphName := enc[code]
 						if glyphName == "" || glyphName == ".notdef" {
-							return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
+							worst.offer(code)
 						}
+					}
+					if code, any := worst.result(); any {
+						return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
 					}
 				} else {
 					// No post table glyph names, so use cmap + loca + /Widths.

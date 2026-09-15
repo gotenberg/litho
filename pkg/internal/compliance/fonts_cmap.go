@@ -503,12 +503,17 @@ func checkCMapCIDValues(ctx context.Context, doc *document.Document, type0Dict a
 		return nil
 	}
 
+	// Lowest offending CID; see [lowestOffender].
+	var worst lowestOffender[int]
 	for _, cidVal := range cidCMap.Mapping {
 		if cidVal > maxCID {
-			return failf(rule,
-				"font %s on page %d: CID value %d exceeds maximum 65,535",
-				fontName, pageNum, cidVal)
+			worst.offer(cidVal)
 		}
+	}
+	if cidVal, any := worst.result(); any {
+		return failf(rule,
+			"font %s on page %d: CID value %d exceeds maximum 65,535",
+			fontName, pageNum, cidVal)
 	}
 
 	return nil
