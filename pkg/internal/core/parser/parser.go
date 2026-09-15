@@ -25,8 +25,19 @@ type DecryptFunc func([]byte) ([]byte, error)
 // are intentionally discarded. Every call is preceded by a successful ReadByte,
 // which guarantees bufPos > 0 and UnreadByte cannot fail.
 type Parser struct {
-	lex       *lexer.Lexer
-	tokens    []lexer.Token
+	lex    *lexer.Lexer
+	tokens []lexer.Token
+
+	// head is the index in tokens of the next unconsumed token.
+	//
+	// Consuming used to reslice with tokens = tokens[1:], which walks the
+	// slice header forward through the backing array and never comes back:
+	// capacity fell by one per token, so append allocated a fresh array every
+	// few tokens and the buffer was never reused. Parsing one govdocs page of
+	// 1.5 million operators spent 1.58 GB there. Advancing an index instead
+	// lets the drained buffer rewind to the start of the array it already has.
+	head int
+
 	err       error
 	decryptFn DecryptFunc
 
@@ -79,10 +90,15 @@ func (p *Parser) WithOffsetTracking() *Parser {
 // if offset tracking is disabled or n is out of range. The offset is the
 // reader position just past the token's last byte.
 func (p *Parser) PeekEnd(n int) int64 {
-	if !p.trackOffsets || n < 0 || n >= len(p.ends) {
+	if !p.trackOffsets || n < 0 || n >= p.buffered() {
 		return -1
 	}
-	return p.ends[n]
+	return p.ends[p.head+n]
+}
+
+// buffered reports how many read-ahead tokens are held but not yet consumed.
+func (p *Parser) buffered() int {
+	return len(p.tokens) - p.head
 }
 
 // Position returns the underlying reader's current byte offset. Callers with
@@ -100,7 +116,7 @@ func (p *Parser) recordViolation(msg string) {
 
 // Peek returns the token n positions ahead without consuming it.
 func (p *Parser) Peek(n int) (lexer.Token, error) {
-	for len(p.tokens) <= n {
+	for p.buffered() <= n {
 		if p.err != nil {
 			return lexer.Token{Type: lexer.TokenEOF}, p.err
 		}
@@ -113,16 +129,20 @@ func (p *Parser) Peek(n int) (lexer.Token, error) {
 			p.err = err
 		}
 	}
-	return p.tokens[n], nil
+	return p.tokens[p.head+n], nil
 }
 
 // Consume returns the next token and advances the parser position.
 func (p *Parser) Consume() (lexer.Token, error) {
 	tok, err := p.Peek(0)
-	if len(p.tokens) > 0 {
-		p.tokens = p.tokens[1:]
-		if p.trackOffsets && len(p.ends) > 0 {
-			p.ends = p.ends[1:]
+	if p.buffered() > 0 {
+		p.head++
+		if p.head == len(p.tokens) {
+			// Drained: rewind to the front of the backing arrays so the next
+			// read-ahead reuses them instead of allocating.
+			p.tokens = p.tokens[:0]
+			p.ends = p.ends[:0]
+			p.head = 0
 		}
 	}
 	return tok, err
@@ -478,7 +498,7 @@ func (p *Parser) parseStreamAfterDict(ctx context.Context, dict ast.PdfDict) (as
 	// next bytes belong to the raw stream body, not the token stream.
 	// Peek(0) of "stream" consumed its token via Expect() above; any
 	// additional tokens in the buffer mean we read past the stream start.
-	if len(p.tokens) > 0 {
+	if p.buffered() > 0 {
 		return nil, fmt.Errorf("parser read ahead too far before stream data")
 	}
 
@@ -1005,7 +1025,7 @@ func (p *Parser) SkipInlineImage(ctx context.Context) error {
 	}
 
 	// Ensure no lookahead tokens remain before switching to raw byte reading.
-	if len(p.tokens) > 0 {
+	if p.buffered() > 0 {
 		return fmt.Errorf("parser read ahead too far before inline image data")
 	}
 
@@ -1104,7 +1124,7 @@ func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) 
 	}
 
 	// Ensure no lookahead tokens remain before switching to raw byte reading.
-	if len(p.tokens) > 0 {
+	if p.buffered() > 0 {
 		return nil, fmt.Errorf("parser read ahead too far before inline image data")
 	}
 
