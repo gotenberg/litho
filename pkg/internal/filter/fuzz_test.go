@@ -48,6 +48,22 @@ func FuzzApplyDecodeFilter(f *testing.F) {
 func FuzzApplyPredictor(f *testing.F) {
 	f.Add([]byte{2, 0, 0, 0, 0})
 	f.Add([]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08})
+	// The predictor is picked by data[0] modulo the table length, so the two
+	// seeds above select PNG (indices 2 and 1) and the TIFF path was measured
+	// at zero coverage. A leading byte divisible by 7 selects it; 0, 7 and 14
+	// pair it with 1, 4 and 16 bits per component, which are the widths that
+	// drive the sub-byte sample readers rather than the plain byte copy.
+	f.Add([]byte{0, 0x11, 0x22, 0x33, 0x44, 0x55, 4})
+	f.Add([]byte{7, 0xFF, 0x80, 0x01, 0x7F, 0x00, 3})
+	f.Add([]byte{14, 0xAA, 0x55, 0xAA, 0x55, 0xAA, 2})
+	// PNG rows are each prefixed with a filter-type byte, and type 4 is Paeth,
+	// the only one that reads the pixel above-left. The leading byte does double
+	// duty here: it picks the predictor AND is row 0's filter byte, so it has to
+	// be 4 itself. 4 selects PNG predictor 13 with 16 bits per component, which
+	// with the trailing 0 (Columns 1) and the middle 4 (Colors 1) makes a
+	// two-byte row and a three-byte stride, landing the second 4 on row 1's
+	// filter byte too.
+	f.Add([]byte{4, 0x10, 0x20, 4, 0x30, 0x40, 0})
 
 	predictors := []int{2, 10, 11, 12, 13, 14, 15}
 	bpcs := []int{1, 2, 4, 8, 16}
