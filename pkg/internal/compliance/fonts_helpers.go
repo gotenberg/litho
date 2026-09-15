@@ -299,8 +299,11 @@ func checkSimpleFontRequiredKeys(ctx context.Context, doc *document.Document, fo
 	}
 
 	var results []Violation
-	_, hasFirst := fontDict["FirstChar"]
-	_, hasLast := fontDict["LastChar"]
+	// veraPDF reads /FirstChar and /LastChar as numbers (PDSimpleFont), so one
+	// that resolves to null, or to no number, is missing (ISO 32000-1, 7.3.7 and
+	// 7.3.10). Measured on a null and on a reference to a null object.
+	hasFirst := numberKeyPresent(ctx, doc, fontDict, "FirstChar")
+	hasLast := numberKeyPresent(ctx, doc, fontDict, "LastChar")
 	if !hasFirst {
 		results = append(results, failf(fontReqKeyRule(part, 4), "simple font missing /FirstChar")...)
 	}
@@ -623,10 +626,29 @@ func isSubsetFont(basefont string) bool {
 	return true
 }
 
-// hasToUnicode returns true if the font dictionary has a /ToUnicode entry.
-func hasToUnicode(fontDict ast.PdfDict) bool {
-	_, ok := fontDict["ToUnicode"]
-	return ok
+// hasToUnicode returns true if the font dictionary has a /ToUnicode entry. One
+// that resolves to null supplies no mapping (ISO 32000-1, 7.3.7 and 7.3.10):
+// veraPDF finds no Unicode value for the glyphs then, measured on a null and on
+// a reference to a null object.
+func hasToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	return nonNullKeyPresent(ctx, doc, fontDict, "ToUnicode")
+}
+
+// numberKeyPresent reports whether dict's key resolves to a number.
+func numberKeyPresent(ctx context.Context, doc *document.Document, dict ast.PdfDict, key ast.PdfName) bool {
+	obj, ok := dict[key]
+	if !ok {
+		return false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return false
+	}
+	switch resolved.(type) {
+	case ast.PdfInt, ast.PdfReal:
+		return true
+	}
+	return false
 }
 
 // checkFontEmbedding validates that a font program is embedded (rule 1).

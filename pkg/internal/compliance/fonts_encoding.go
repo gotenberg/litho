@@ -1030,7 +1030,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 			}
 		}
 		// Fall through to the ToUnicode presence check below.
-		if !hasToUnicode(fontDict) {
+		if !hasToUnicode(ctx, doc, fontDict) {
 			return failf(rule, "font %s on page %d", fontName, pageNum)
 		}
 		return nil
@@ -1085,7 +1085,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 			if usage == nil || usedGlyphNamesResolvable(ctx, doc, fontDict, usage) {
 				return nil
 			}
-			if hasToUnicode(fontDict) {
+			if hasToUnicode(ctx, doc, fontDict) {
 				if _, _, leftOut := shownCodeOutsideToUnicode(ctx, doc, fontDict, usage); !leftOut {
 					return nil
 				}
@@ -1162,7 +1162,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		return nil
 	}
 
-	if !hasToUnicode(fontDict) {
+	if !hasToUnicode(ctx, doc, fontDict) {
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 	if code, name, leftOut := shownCodeOutsideToUnicode(ctx, doc, fontDict, usage); leftOut {
@@ -1498,7 +1498,7 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 		}
 	}
 
-	if !hasToUnicode(type0Dict) {
+	if !hasToUnicode(ctx, doc, type0Dict) {
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 
@@ -1555,7 +1555,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 	// With no /ToUnicode the glyph name is the only mapping the font offers, so
 	// a rendered .notdef override has nothing to override it.
 	tuObj, hasToUnicode := fontDict["ToUnicode"]
-	if !hasToUnicode {
+	if !hasToUnicode || resourceEntryNull(ctx, doc, tuObj) {
 		return notdefUnicodeViolation(ctx, doc, fontDict, fontName, pageNum, rule, usage, nil)
 	}
 
