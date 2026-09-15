@@ -331,14 +331,15 @@ func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict 
 		definedGlyphs[name] = true
 	}
 
-	widths, err := document.ResolveArray(ctx, doc, fontDict["Widths"])
-	if err != nil || len(widths) == 0 {
-		return nil
-	}
-	firstChar, err := document.ResolveInt(ctx, doc, fontDict["FirstChar"])
-	if err != nil {
-		return nil
-	}
+	// A font stating no /Widths, or none it can be indexed by, declares the
+	// /MissingWidth for every code it shows (ISO 32000-1, 9.6.2.1, Table 111),
+	// as [checkSimpleFontWidths] reads it for a program with a GID-keyed table:
+	// veraPDF reads an array only when /Widths, /FirstChar and /LastChar are all
+	// present and the array is not empty, and weighs every other code at the
+	// /MissingWidth. pdfjs issue11150_reduced.pdf embeds a Symbol program with
+	// no /Widths whose code 113 advances 521 units, and veraPDF reports it
+	// against 0.
+	widths, firstChar, lastChar := type1WidthsArray(ctx, doc, fontDict)
 
 	// A shown code the array does not cover takes the descriptor's
 	// /MissingWidth (ISO 32000-1, Table 111, default 0), which is the same
@@ -364,7 +365,7 @@ func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict 
 		}
 		pdfWidth := missingWidth
 		source := " from /MissingWidth"
-		if idx := int(code) - int(firstChar); idx >= 0 && idx < len(widths) {
+		if idx := int(code) - firstChar; idx >= 0 && idx < len(widths) && int(code) <= lastChar {
 			w, wOK := widthValue(ctx, doc, widths[idx])
 			if !wOK {
 				continue
@@ -380,6 +381,25 @@ func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict 
 		}
 	}
 	return nil
+}
+
+// type1WidthsArray returns a simple font's /Widths array with the /FirstChar
+// and /LastChar that bound it, or a nil array when any of the three is absent,
+// not of its type, or the array is empty: every code is then uncovered and
+// takes the /MissingWidth.
+func type1WidthsArray(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (widths ast.PdfArray, firstChar, lastChar int) {
+	arr, err := document.ResolveArray(ctx, doc, fontDict["Widths"])
+	if err != nil || len(arr) == 0 {
+		return nil, 0, 0
+	}
+	first, errFirst := document.ResolveObject(ctx, doc, fontDict["FirstChar"])
+	last, errLast := document.ResolveObject(ctx, doc, fontDict["LastChar"])
+	fc, okFirst := first.(ast.PdfInt)
+	lc, okLast := last.(ast.PdfInt)
+	if errFirst != nil || errLast != nil || !okFirst || !okLast {
+		return nil, 0, 0
+	}
+	return arr, int(fc), int(lc)
 }
 
 // checkSimpleFontWidths compares /Widths array against binary widths for simple fonts.
