@@ -278,8 +278,9 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 				continue
 			}
 
-			_, hasAA := annot["AA"]
-			if !hasAA {
+			// veraPDF's containsAA is a knownKey on /AA, so an /AA written as null is
+			// absent (ISO 32000-1, 7.3.7), measured on a widget without /Contents.
+			if !nonNullKeyPresent(ctx, doc, annot, "AA") {
 				continue
 			}
 
@@ -299,7 +300,9 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 				continue
 			}
 			loc := fmt.Sprintf("page %d, widget annot %d", pageIdx+1, annotIdx)
-			if _, hasContents := annot["Contents"]; !hasContents {
+			// /Contents counts only as a string ([stringKeyPresent]): veraPDF
+			// reports a widget whose /Contents is null or a name, measured.
+			if !stringKeyPresent(ctx, doc, annot, "Contents") {
 				results = append(results, Violation{
 					Rule:    Rule_14289_2_8_10_2_3_t02,
 					Context: loc,

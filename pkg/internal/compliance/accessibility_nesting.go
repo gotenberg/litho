@@ -149,13 +149,13 @@ func checkPDFUA1FormRole(ctx context.Context, doc *document.Document, catalog as
 	// veraPDF builds SEForm from the standard type the role map resolves to
 	// (GFSEFactory.createTypedStructElem), so a name mapped to Form is a Form and
 	// a Form the role map remaps is not. Measured against veraPDF with both.
-	typeState := &walkState{doc: doc, roleMap: buildRoleMapIndex(ctx, doc, treeRoot)}
+	typeState := &walkState{doc: doc, roleMap: buildRoleMapIndex(ctx, doc, treeRoot), classMap: structClassMap(ctx, doc, treeRoot)}
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
 		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
 		if iso32005Key(ctx, typeState, elem, typeName) != "Form" {
 			return
 		}
-		if formHasPrintFieldRole(ctx, doc, elem) || formHasOneInteractiveChild(ctx, doc, elem) {
+		if formHasPrintFieldRole(ctx, typeState, elem) || formHasOneInteractiveChild(ctx, doc, elem) {
 			return
 		}
 		results = append(results, fail(Rule_14289_1_7_18_4_t02,
@@ -165,36 +165,14 @@ func checkPDFUA1FormRole(ctx context.Context, doc *document.Document, catalog as
 }
 
 // formHasPrintFieldRole reports whether a Form structure element carries a
-// PrintField attribute owner with a /Role entry (ISO 32000-1 Table 348), which
-// satisfies veraPDF's roleAttribute != null. The /A entry may be a single
-// attribute dictionary or an array mixing attribute dictionaries and revision
-// numbers; a /Role under any /O /PrintField owner counts.
-func formHasPrintFieldRole(ctx context.Context, doc *document.Document, elem ast.PdfDict) bool {
-	aObj, ok := elem["A"]
-	if !ok {
-		return false
-	}
-	if arr, err := document.ResolveArray(ctx, doc, aObj); err == nil {
-		for _, a := range arr {
-			if attrIsPrintFieldRole(ctx, doc, a) {
-				return true
-			}
-		}
-		return false
-	}
-	return attrIsPrintFieldRole(ctx, doc, aObj)
-}
-
-func attrIsPrintFieldRole(ctx context.Context, doc *document.Document, obj ast.PdfObject) bool {
-	d, err := document.ResolveDict(ctx, doc, obj)
-	if err != nil || d == nil {
-		return false
-	}
-	if owner, _ := document.ResolveName(ctx, doc, d["O"]); owner != "PrintField" {
-		return false
-	}
-	_, hasRole := d["Role"]
-	return hasRole
+// PrintField /Role attribute (ISO 32000-1, Table 348), which satisfies veraPDF's
+// roleAttribute != null. veraPDF reads it with AttributeHelper.getRole, a
+// PrintField-owned name taken from /A and then from the classes /C names in the
+// /ClassMap, without inheritance: a /Role written as null or as a string is
+// absent, and one a class supplies counts. Measured against veraPDF on each.
+func formHasPrintFieldRole(ctx context.Context, state *walkState, elem ast.PdfDict) bool {
+	return ownedAttributeName(ctx, state.doc, elem["A"], "PrintField", "Role") != "" ||
+		classAttributeName(ctx, state, elem["C"], "PrintField", "Role") != ""
 }
 
 // formHasOneInteractiveChild reports whether a Form structure element's /K

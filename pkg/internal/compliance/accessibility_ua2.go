@@ -242,12 +242,9 @@ func linkTargetConflict(ctx context.Context, doc *document.Document, treeRoot, a
 // and its getStringKey returns null only for an absent or non-string entry, so
 // an empty /Contents counts.
 func widgetHasContents(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
-	contentsObj, ok := annot["Contents"]
-	if !ok {
-		return false
-	}
-	_, err := document.ResolveString(ctx, doc, contentsObj)
-	return err == nil
+	// /Contents counts only as a string ([stringKeyPresent]): veraPDF reads it
+	// with getStringKey, so a null or name value is absent, measured.
+	return stringKeyPresent(ctx, doc, annot, "Contents")
 }
 
 // countOBJRWidgets counts OBJR children of a structure element that point to

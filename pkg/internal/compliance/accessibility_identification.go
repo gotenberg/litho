@@ -47,8 +47,9 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 				results = append(results, Violation{Rule: rule, Context: "default config (D)"})
 			}
 			// §7.10 t2 (PDF/UA-1) / §8.7 t2 (PDF/UA-2): /AS key forbidden in any
-			// OC config dict.
-			if _, hasAS := dConfig["AS"]; hasAS {
+			// OC config dict. An /AS written as null is absent (ISO 32000-1,
+			// 7.3.7), as veraPDF reads it, measured ([nonNullKeyPresent]).
+			if nonNullKeyPresent(ctx, doc, dConfig, "AS") {
 				results = append(results, Violation{
 					Rule: asForbiddenRule(profile), Context: "default config (D)",
 				})
@@ -70,7 +71,7 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("config %d", i)})
 		}
 		// §7.10 t2 (PDF/UA-1) / §8.7 t2 (PDF/UA-2): /AS key forbidden.
-		if _, hasAS := cfg["AS"]; hasAS {
+		if nonNullKeyPresent(ctx, doc, cfg, "AS") {
 			results = append(results, Violation{
 				Rule: asForbiddenRule(profile), Context: fmt.Sprintf("config %d", i),
 			})
