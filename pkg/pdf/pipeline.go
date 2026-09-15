@@ -26,6 +26,11 @@ import (
 // closure contents; incompatible-operation checks (e.g., Sign +
 // full-rewrite) are enforced by [Writer.WriteTo] at execution time.
 // Pipeline values must not be modified after being passed to [Pipeline.WriteTo].
+//
+// A Pipeline is not safe for concurrent use. Every stage method appends to the
+// same slice, so building one from several goroutines races; declare the
+// pipeline on one goroutine and hand the finished value to [Pipeline.WriteTo].
+// [PipelineResult] carries the same requirement.
 type Pipeline struct {
 	stages   []stage
 	firstErr error
