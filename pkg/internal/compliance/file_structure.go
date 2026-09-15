@@ -1096,7 +1096,11 @@ func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		// Font names: check /BaseFont on each font.
 		fontDict, err := document.ResolveDict(ctx, doc, res["Font"])
 		if err == nil && fontDict != nil {
-			for _, fontObj := range fontDict {
+			// Sorted, like the RoleMap walk below: a page naming several fonts
+			// with invalid names reports one violation each, and ranging the
+			// resource dictionary ordered them randomly between runs.
+			for _, fontName := range sortedNames(fontDict) {
+				fontObj := fontDict[fontName]
 				fd, err := document.ResolveDict(ctx, doc, fontObj)
 				if err != nil || fd == nil {
 					continue
@@ -1111,7 +1115,8 @@ func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		// Colorant names in Separation/DeviceN colour spaces.
 		csDict, err := document.ResolveDict(ctx, doc, res["ColorSpace"])
 		if err == nil && csDict != nil {
-			for _, csObj := range csDict {
+			for _, csName := range sortedNames(csDict) {
+				csObj := csDict[csName]
 				arr, err := document.ResolveArray(ctx, doc, csObj)
 				if err != nil || len(arr) < 2 {
 					continue
