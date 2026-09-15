@@ -556,6 +556,15 @@ func GlyphToRuneSimple(name string) (rune, bool) {
 	return 0, false
 }
 
+// InAdobeGlyphList reports whether the Adobe Glyph List (glyphlist.txt, AGL
+// 2.0) lists name. Unlike [GlyphToRuneFull], it derives nothing from a uniXXXX
+// or uXXXX[XX] spelling: a rule that asks whether a name is "listed in the Adobe
+// Glyph List" (ISO 19005-2, 6.2.11.6) means the published list.
+func InAdobeGlyphList(name string) bool {
+	_, ok := aglNames[name]
+	return ok
+}
+
 // RecoverGlyphName strips common suffixes from corrupted glyph names.
 // For example, "A.001" → "A", "space.alt" → "space".
 func RecoverGlyphName(name string) string {

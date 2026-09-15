@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"strings"
@@ -1314,6 +1315,44 @@ func symbolicCmapViolation(profile string, subs []truetype.CmapSubtable) bool {
 	}
 }
 
+// nonSymbolicDifferencesProblem reports why a non-symbolic TrueType font's
+// /Differences array may not stand, or "" when it may. ISO 19005-2, 6.2.11.6
+// (and ISO 19005-4, 6.2.10.6, ISO 14289-1, 7.21.6, ISO 14289-2, 8.4.5.7) allow
+// the array only when "all of the glyph names in the Differences array are
+// listed in the Adobe Glyph List and the embedded font program contains at
+// least the Microsoft Unicode (3,1 – Platform ID=3, Encoding ID=1) encoding in
+// the 'cmap' table".
+//
+// Listed means the published list, which veraPDF's AdobeGlyphList holds with
+// .notdef: a uniXXXX name, which the glyph list conventions derive rather than
+// list, does not qualify, and pdfjs issue13626.pdf names uni0453 where veraPDF
+// reports it. A font with no embedded program is left to the embedding rule, as
+// veraPDF leaves it, and a program whose table directory will not parse is not
+// held to the subtable half, since whether it carries the subtable is unknown.
+func nonSymbolicDifferencesProblem(ctx context.Context, doc *document.Document, fd ast.PdfDict, differences ast.PdfArray) string {
+	fontData := extractFontProgramData(ctx, doc, fd)
+	if fontData == nil {
+		return ""
+	}
+	subs, err := truetype.CmapSubtables(fontData)
+	switch {
+	case errors.Is(err, truetype.ErrTableNotFound):
+		return "Differences array over a program with no cmap table"
+	case err == nil && !slices.Contains(subs, truetype.CmapSubtable{PlatformID: 3, EncodingID: 1}):
+		return "Differences array over a program with no Microsoft Unicode (3,1) cmap subtable"
+	}
+	for _, item := range differences {
+		name, ok := item.(ast.PdfName)
+		if !ok || name == ".notdef" {
+			continue
+		}
+		if !encodings.InAdobeGlyphList(string(name)) {
+			return fmt.Sprintf("Differences glyph %q not in Adobe Glyph List", string(name))
+		}
+	}
+	return ""
+}
+
 // nonSymbolicCmapViolation reports whether a non-symbolic TrueType font's cmap
 // subtable set violates the conformance level's requirement. The permitted sets
 // differ by part, mirroring the veraPDF test expressions exactly:
@@ -1427,28 +1466,14 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 							results = append(results, failf(rule, "font %s on page %d BaseEncoding=%s", fontName, pageNum, baseEnc)...)
 						}
 
-						// Part 1: Differences is forbidden entirely.
-						// Parts 2+: Differences is allowed only if all glyph names
-						// are in the Adobe Glyph List.
+						// Part 1: Differences is forbidden entirely. Parts 2+ allow
+						// it on the terms [nonSymbolicDifferencesProblem] checks.
 						if diffObj, hasDiff := encDict["Differences"]; hasDiff {
 							if PDFAPart(profile) == 1 {
 								results = append(results, failf(rule, "font %s on page %d has Differences in encoding dict", fontName, pageNum)...)
-							} else {
-								// Validate all glyph names in Differences against AGL.
-								diffArr, diffErr := document.ResolveArray(ctx, doc, diffObj)
-								if diffErr == nil {
-									for _, item := range diffArr {
-										name, ok := item.(ast.PdfName)
-										if !ok || string(name) == ".notdef" {
-											continue
-										}
-										if _, resolved := encodings.GlyphToRuneFull(string(name)); !resolved {
-											results = append(results, failf(rule,
-												"font %s on page %d: Differences glyph %q not in Adobe Glyph List",
-												fontName, pageNum, string(name))...)
-											break
-										}
-									}
+							} else if diffArr, diffErr := document.ResolveArray(ctx, doc, diffObj); diffErr == nil {
+								if problem := nonSymbolicDifferencesProblem(ctx, doc, fd, diffArr); problem != "" {
+									results = append(results, failf(rule, "font %s on page %d: %s", fontName, pageNum, problem)...)
 								}
 							}
 						}

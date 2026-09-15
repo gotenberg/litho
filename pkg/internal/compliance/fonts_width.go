@@ -973,9 +973,20 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 	// mismatch (the map is authoritative, veraPDF follows it). A nil lookup means
 	// Identity (CID==GID); ok=false means the map stream is unreadable, so the
 	// GID is unknowable and the check is skipped rather than guessed.
-	cidToGID, ok := cidToGIDMapping(ctx, doc, cidFontDict)
-	if !ok {
-		return nil
+	//
+	// A CIDFontType0 has no such map: ISO 32000-1, 9.7.4.2, Table 117 gives the
+	// entry to Type 2 CIDFonts only, and a Type 0 CIDFont selects its glyph
+	// through the CFF charset, or takes the CID as the GID when the CFF is not
+	// CID-keyed. A map it carries is ignored, as veraPDF ignores it: pdfjs
+	// issue7901.pdf pairs an OpenType CFF that is not CID-keyed with a map /W was
+	// written against, and veraPDF reports 15 glyph widths.
+	var cidToGID func(uint16) uint16
+	if fontSubtype(ctx, doc, cidFontDict) != "CIDFontType0" {
+		var ok bool
+		cidToGID, ok = cidToGIDMapping(ctx, doc, cidFontDict)
+		if !ok {
+			return nil
+		}
 	}
 
 	// /W array format: [cid [w1 w2 ...]] or [cidFirst cidLast w]

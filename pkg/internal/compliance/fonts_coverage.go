@@ -404,13 +404,24 @@ func decodeCIDSetBits(data []byte) map[uint16]bool {
 }
 
 // checkCIDSetCompletenessTrueType verifies that a TrueType (CIDFontType2) subset
-// /CIDSet identifies every glyph in the font program: all GIDs in 1..numGlyphs-1
-// under CIDToGIDMap=/Identity (ISO 19005 §6.2.11.4.2 t2 / §6.3.5 t3). veraPDF
+// /CIDSet identifies the glyphs of the font program under an Identity
+// /CIDToGIDMap (ISO 19005 §6.2.11.4.2 t2 / §6.3.5 t3), which is also the map of
+// a font that has no such entry (ISO 32000-1, 9.7.4.2, Table 117). veraPDF
 // requires this for unrendered and empty-outline slots a non-subsetted program
 // retains, not only the glyphs the content paints. GID 0 (.notdef) is exempt.
-// Non-Identity maps and non-TrueType programs return nil.
+// Stream maps and non-TrueType programs return nil.
+//
+// veraPDF lists the program's CIDs through its horizontal metrics, one per hmtx
+// long metric (CIDFontType2Program.getCIDList), so it requires every GID below
+// hhea.numberOfHMetrics and not the glyphs past it, which share the last
+// advance: pdfjs issue5202.pdf embeds an IPAexMincho subset whose
+// numberOfHMetrics is 1 beside a six-glyph /CIDSet, and veraPDF passes it. A
+// set bit whose CID the program does not hold fails too (containsCID).
 func checkCIDSetCompletenessTrueType(ctx context.Context, doc *document.Document, cidFontDict, fd ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule) []Violation {
-	if name, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"]); name != "Identity" {
+	// veraPDF's CIDToGIDMapping reads an absent entry as Identity too: pdfjs
+	// issue5874.pdf embeds a TrueType subset with no map whose /CIDSet leaves out
+	// 18800 of its 19642 glyphs, and veraPDF reports it.
+	if lookup, ok := cidToGIDMapping(ctx, doc, cidFontDict); !ok || lookup != nil {
 		return nil
 	}
 	fontData := extractFontProgramData(ctx, doc, fd)
@@ -430,11 +441,22 @@ func checkCIDSetCompletenessTrueType(ctx context.Context, doc *document.Document
 		return nil
 	}
 	cidSetBits := decodeCIDSetBits(cidSetData)
-	for gid := 1; gid < numGlyphs; gid++ {
+	listed := min(typography.ExtractNumberOfHMetrics(fontData), numGlyphs)
+	for gid := 1; gid < listed; gid++ {
 		if !cidSetBits[uint16(gid)] { //nolint:gosec // gid < numGlyphs, a uint16 from maxp.
 			return failf(rule, "font %s on page %d: CID %d in font program not in /CIDSet",
 				fontName, pageNum, gid)
 		}
+	}
+	past := -1
+	for cid := range cidSetBits {
+		if int(cid) >= numGlyphs && (past < 0 || int(cid) < past) {
+			past = int(cid)
+		}
+	}
+	if past >= 0 {
+		return failf(rule, "font %s on page %d: /CIDSet lists CID %d, past the program's %d glyphs",
+			fontName, pageNum, past, numGlyphs)
 	}
 	return nil
 }

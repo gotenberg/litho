@@ -116,6 +116,23 @@ func GlyphWidths(ctx context.Context, data []byte) (map[uint16]float64, error) {
 	return result, nil
 }
 
+// NumberOfHMetrics returns the hhea numberOfHMetrics field: how many glyphs the
+// hmtx table gives a full horizontal metric, the rest sharing the last advance.
+func NumberOfHMetrics(data []byte) (int, error) {
+	records, err := ParseTableDirectory(data)
+	if err != nil {
+		return 0, err
+	}
+	hheaData, err := TableData(data, records, "hhea")
+	if err != nil {
+		return 0, err
+	}
+	if len(hheaData) < 36 {
+		return 0, fmt.Errorf("%w: hhea table too short", ErrInvalidFont)
+	}
+	return int(binary.BigEndian.Uint16(hheaData[34:36])), nil
+}
+
 // EmptyGIDs returns the set of GIDs that have zero-length glyph data in
 // a TrueType font. It parses the loca table (using the indexToLocFormat
 // from the head table) to find GIDs where loca[gid] == loca[gid+1],
