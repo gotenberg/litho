@@ -476,6 +476,14 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 					doc.Logger.Debug("compliance.color: cannot parse CharProc stream", "error", err)
 					continue
 				}
+				// A glyph description that opens with d1 is a stencil mask painted
+				// in the current colour: any colour operator in it shall be ignored
+				// (ISO 32000-1, 9.6.5, Table 113), so it uses no colour space of its
+				// own. veraPDF counts none for it, and does count them in a d0
+				// glyph. Measured.
+				if len(ops) > 0 && ops[0].Operator == "d1" {
+					continue
+				}
 				for _, op := range ops {
 					switch op.Operator {
 					case "g", "G":
