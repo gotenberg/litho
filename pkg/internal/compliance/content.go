@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // validPDFOperators is the set of all operators defined in ISO 32000.
@@ -248,6 +249,16 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 		decoded++
 		allData = append(allData, data...)
 		allData = append(allData, '\n')
+
+		// Bounded for the reason given on [content.MaxPageContentSize]: the
+		// per-stream decompression cap does not bound the sum across a
+		// /Contents array, and this buffer feeds every page-scoped check.
+		// Stopping here leaves the page looking unreadable, which the callers
+		// already answer conservatively, rather than letting a crafted page
+		// grow the buffer with the file's object count.
+		if len(allData) > content.MaxPageContentSize {
+			return nil, fmt.Errorf("page content exceeds %d MB limit", content.MaxPageContentSize>>20)
+		}
 	}
 
 	// Nothing decoded at all is a page whose content litho cannot read, which

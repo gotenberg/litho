@@ -161,6 +161,22 @@ func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation
 	return ops, p.FormatViolations
 }
 
+// MaxPageContentSize bounds the decoded content one page may accumulate across
+// its /Contents array. It is an anti-DoS guard, not spec-mandated.
+//
+// Per ISO 32000-1, 7.7.3.3 a page's content may be split across an array of
+// streams, and the per-stream decompression cap says nothing about their sum: a
+// page can name thousands of stream objects, so without a bound here the
+// accumulated buffer grows with the file's object count rather than with
+// anything the page could legitimately draw.
+//
+// 64 MB is chosen against the corpora rather than by round number. The largest
+// real page found across all of them is page 1 of pdfjs issue21089.pdf at
+// 27.51 MB of decoded content (in a 12.11 MB file), so this leaves better than
+// 2x headroom over the heaviest legitimate page while still bounding the worst
+// case. It was 32 MB, which that page came within 16% of.
+const MaxPageContentSize = 64 << 20
+
 // ParsePageContent extracts, concatenates, and parses the content streams of a page or form XObject.
 func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfObject) ([]Operation, error) {
 	var streams []ast.PdfStream
@@ -202,7 +218,6 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 		return nil, fmt.Errorf("invalid node type for ParsePageContent: %T", node)
 	}
 
-	const maxContentStreamSize = 32 << 20 // 32 MB: no legitimate page needs more
 	var allData []byte
 	for _, s := range streams {
 		if ctx.Err() != nil {
@@ -221,8 +236,8 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 		}
 		allData = append(allData, data...)
 		allData = append(allData, '\n')
-		if len(allData) > maxContentStreamSize {
-			return nil, fmt.Errorf("content stream exceeds %d MB limit", maxContentStreamSize>>20)
+		if len(allData) > MaxPageContentSize {
+			return nil, fmt.Errorf("content stream exceeds %d MB limit", MaxPageContentSize>>20)
 		}
 	}
 
