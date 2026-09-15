@@ -169,6 +169,8 @@ func WithFigureAltText(alt string) RemediateOption {
 // nondeterminism seam. An id of any other length is ignored and the
 // random seam applies. [Writer.Encrypt] mints its own ID and is not
 // affected by this option.
+// The slice is retained, not copied; leave it untouched until the
+// remediation completes.
 func WithDocumentID(id []byte) RemediateOption {
 	return func(o *remediateOpts) {
 		o.documentID = id
@@ -360,7 +362,10 @@ func NewTTFFont(data []byte) (StampFont, error) {
 	return StampFont{ttf: cp}, nil
 }
 
-// ImageStamp defines an image overlay. Data must be JPEG or PNG bytes.
+// ImageStamp defines an image overlay. Data must be JPEG or PNG bytes, and
+// is retained rather than copied: the stamp is drawn when
+// [Writer.WriteTo] drains the queue, so leave the slice untouched until
+// then.
 // Values must not be shared across goroutines without synchronization.
 type ImageStamp struct {
 	// Data is the raw image file contents.
@@ -884,6 +889,11 @@ func textStampToOptions(s TextStamp) mutations.TextStampOptions {
 // For PDF/A-3, Factur-X, or ZUGFeRD compliance where an embedded file
 // must carry a /AFRelationship and appear in the catalog /AF array,
 // use [Writer.AddAssociatedFile] instead.
+//
+// data is retained, not copied: the attachment is written when
+// [Writer.WriteTo] drains the queue, so the caller must leave the slice
+// untouched until then. Reusing the buffer in between puts the later
+// contents in the file.
 func (w *Writer) AddAttachment(name string, data []byte, mimeType string) {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
@@ -898,7 +908,9 @@ func (w *Writer) AddAttachment(name string, data []byte, mimeType string) {
 type AssociatedFile struct {
 	// Name is the displayed file name.
 	Name string
-	// Data is the file content.
+	// Data is the file content. It is retained, not copied: the file is
+	// written when [Writer.WriteTo] drains the queue, so leave the slice
+	// untouched until then.
 	Data []byte
 	// MimeType is the embedded file /Subtype (e.g., "application/xml").
 	MimeType string
