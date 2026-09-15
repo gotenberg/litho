@@ -822,6 +822,35 @@ func declaredStreamLength(ctx context.Context, doc *document.Document, lengthObj
 	}
 }
 
+// insideStringOrComment reports whether buf[pos] lies inside a literal string
+// (ISO 32000-1, 7.3.4.2: balanced parentheses, a backslash escaping the next
+// byte) or a comment (7.2.4: from % to the end of the line), scanning buf from
+// its start, which is the object header.
+func insideStringOrComment(buf []byte, pos int) bool {
+	depth, comment := 0, false
+	for i := 0; i < pos; i++ {
+		c := buf[i]
+		switch {
+		case comment:
+			comment = c != '\r' && c != '\n'
+		case depth > 0:
+			switch c {
+			case '\\':
+				i++
+			case '(':
+				depth++
+			case ')':
+				depth--
+			}
+		case c == '(':
+			depth = 1
+		case c == '%':
+			comment = true
+		}
+	}
+	return depth > 0 || comment
+}
+
 // findStreamDataStart locates the byte offset within buf where stream data
 // begins (immediately after the "stream" keyword and its required EOL).
 // Returns -1 if the "stream" keyword is not found in buf or when ctx is
@@ -846,6 +875,16 @@ func findStreamDataStart(ctx context.Context, buf []byte) int {
 
 		// Skip "endstream".
 		if absIdx >= 3 && bytes.Equal(buf[absIdx-3:absIdx], []byte("end")) {
+			searchFrom = absIdx + 6
+			continue
+		}
+
+		// A "stream" inside a literal string or a comment of the dictionary is
+		// no keyword (ISO 32000-1, 7.3.4.2 and 7.2.4). pdfjs issue13823.pdf's
+		// cross-reference stream dictionary holds /XRef(stream), which placed
+		// the data start inside the dictionary and reported its correct /Length
+		// as wrong; veraPDF lexes the string as a string.
+		if insideStringOrComment(buf, absIdx) {
 			searchFrom = absIdx + 6
 			continue
 		}

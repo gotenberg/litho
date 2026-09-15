@@ -161,6 +161,22 @@ func TestFindStreamDataStart(t *testing.T) {
 			buf:  "stream \nx",
 			want: 6,
 		},
+		{
+			// pdfjs issue13823.pdf: a string in the dictionary spells the keyword.
+			name: "stream inside a literal string",
+			buf:  "39 0 obj\n<</XRef(stream)/Length 5>>stream\r\nhello",
+			want: len("39 0 obj\n<</XRef(stream)/Length 5>>stream\r\n"),
+		},
+		{
+			name: "stream inside a nested string with an escaped parenthesis",
+			buf:  "1 0 obj\n<< /A (a \\) (stream) b) /Length 5 >>\nstream\nhello",
+			want: len("1 0 obj\n<< /A (a \\) (stream) b) /Length 5 >>\nstream\n"),
+		},
+		{
+			name: "stream inside a comment",
+			buf:  "1 0 obj\n<< % stream\n/Length 5 >>\nstream\nhello",
+			want: len("1 0 obj\n<< % stream\n/Length 5 >>\nstream\n"),
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
