@@ -85,6 +85,41 @@ var validICCDeviceClasses = map[string]bool{ //nolint:gochecknoglobals // consta
 	"mntr": true,
 }
 
+// validICCInputDeviceClasses and validICCInputColorSpaces are the device
+// classes and colour spaces an ICCBased colour space's profile may declare:
+// input (scnr), display (mntr), output (prtr) or colour space conversion (spac)
+// profiles over RGB, CMYK, GRAY or Lab data (ISO 19005-1, 6.2.3.2; ISO 19005-2,
+// 6.2.4.2). They mirror veraPDF's ICCInputProfile test in every part, measured
+// on abstract, device link, named colour and XYZ profiles.
+var validICCInputDeviceClasses = map[string]bool{ //nolint:gochecknoglobals // constant set.
+	"prtr": true,
+	"mntr": true,
+	"scnr": true,
+	"spac": true,
+}
+
+var validICCInputColorSpaces = map[string]bool{ //nolint:gochecknoglobals // constant set.
+	"GRAY": true,
+	"RGB ": true, //nolint:gocritic // ICC colour space signatures are exactly 4 bytes; trailing space is correct.
+	"CMYK": true,
+	"Lab ": true, //nolint:gocritic // ICC colour space signatures are exactly 4 bytes; trailing space is correct.
+}
+
+// iccInputHeaderProblem describes why an ICCBased colour space's profile
+// header fails ISO 19005-1, 6.2.3.2 t1 / ISO 19005-2, 6.2.4.2 t1, or returns
+// the empty string when it passes.
+func iccInputHeaderProblem(hdr iccProfileHeader, part int) string {
+	switch {
+	case iccVersionExceedsCeiling(hdr.version, part):
+		return fmt.Sprintf("ICC profile version %d exceeds the PDF/A part ceiling", hdr.version)
+	case !validICCInputDeviceClasses[hdr.deviceClass]:
+		return fmt.Sprintf("ICC profile device class %q is not prtr, mntr, scnr or spac", hdr.deviceClass)
+	case !validICCInputColorSpaces[hdr.colorSpace]:
+		return fmt.Sprintf("ICC profile colour space %q is not RGB, CMYK, GRAY or Lab", hdr.colorSpace)
+	}
+	return ""
+}
+
 // validICCColorSpaces are the allowed colour spaces for OutputIntent
 // profiles: the ICC.1 data colour space signatures permitted by
 // ISO 19005-2/3 §6.2.2.

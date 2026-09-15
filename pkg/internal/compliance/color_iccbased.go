@@ -184,11 +184,13 @@ func checkImageICCBasedVersion(ctx context.Context, doc *document.Document, stre
 		return
 	}
 	hdr, ok := parseICCHeader(data)
-	if !ok || !iccVersionExceedsCeiling(hdr.version, part) {
+	if !ok {
 		return
 	}
-	*results = append(*results, failf(iccBasedProfileRule(part),
-		"page %d, image %s: ICC profile version %d exceeds the PDF/A part ceiling", pageIdx+1, name, hdr.version)...)
+	if problem := iccInputHeaderProblem(hdr, part); problem != "" {
+		*results = append(*results, failf(iccBasedProfileRule(part),
+			"page %d, image %s: %s", pageIdx+1, name, problem)...)
+	}
 }
 
 // resolveFormBlendingRef extracts the ICCBased blending CS ref from a Form
@@ -323,9 +325,9 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 			continue
 		}
 
-		if iccVersionExceedsCeiling(hdr.version, part) {
+		if problem := iccInputHeaderProblem(hdr, part); problem != "" {
 			*results = append(*results, failf(iccBasedProfileRule(part),
-				"page %d, ColorSpace %s: ICC profile version %d exceeds the PDF/A part ceiling", pageIdx+1, name, hdr.version)...)
+				"page %d, ColorSpace %s: %s", pageIdx+1, name, problem)...)
 		}
 
 		expectedN := expectedComponentCount(hdr.colorSpace)
