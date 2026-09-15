@@ -1091,7 +1091,14 @@ func (r *Reader) ExtractTables(ctx context.Context, pageNum int) (_ []models.Tab
 // HasAcroForm returns false for them. Hybrid documents that declare
 // both /XFA and real widget fields keep returning true, since the
 // widget fields are genuinely interactive under a standard reader.
-func (r *Reader) HasAcroForm(ctx context.Context) bool {
+func (r *Reader) HasAcroForm(ctx context.Context) (has bool) {
+	// This entry point resolves the catalog out of file-controlled bytes like
+	// any other, so it needs the same panic boundary, but its signature carries
+	// no error to report one through. Recover with a nil error pointer: the
+	// panic is still logged at Error with a stack, and the answer falls back to
+	// false, which is what an unreadable catalog means to a caller anyway.
+	defer recoverToError(r.logger(), "Reader.HasAcroForm", nil)
+
 	resolved, err := document.ResolveCatalog(ctx, r.doc)
 	if err != nil || resolved == nil || resolved.Dict == nil {
 		return false
