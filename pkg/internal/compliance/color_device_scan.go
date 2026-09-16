@@ -665,6 +665,24 @@ func inheritedCSFor(states map[string]inheritedCS, name string) inheritedCS {
 	return inheritedCSDefault()
 }
 
+// textModePaints reports whether a text rendering mode paints glyphs with
+// the fill colour and with the stroke colour (ISO 32000-1, Table 106): fill in
+// modes 0, 2, 4 and 6, stroke in modes 1, 2, 5 and 6, neither in 3 and 7. A
+// mode outside 0 to 7 fills, as the default mode 0 does. Measured against
+// veraPDF for every mode.
+func textModePaints(mode int) (fill, stroke bool) {
+	switch mode {
+	case 1, 5: //nolint:mnd // Table 106 stroke-only modes.
+		return false, true
+	case 2, 6: //nolint:mnd // Table 106 fill-and-stroke modes.
+		return true, true
+	case textRenderInvisible, textRenderClip:
+		return false, false
+	default:
+		return true, false
+	}
+}
+
 // scanContentColorOps records device colour usage from a content stream:
 // explicit colour operators (g/G, rg/RG, k/K, cs/CS with a direct device
 // name), the colour-space names selected by cs/CS (referencedCSNames), and the
@@ -775,7 +793,12 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 			// shown in either paints nothing, so it selects no colour space,
 			// which is what veraPDF models. Reporting the initial DeviceGray
 			// there flagged an uncalibrated colour space the file never uses.
-			if textRender != textRenderInvisible && textRender != textRenderClip && !fillCSSet {
+			// The other modes paint with the fill colour, the stroke colour or
+			// both, so the space each one needs is the one that must be
+			// selected: pdfjs issue20513.pdf strokes its text (Tr 1) after only
+			// K, and veraPDF reports DeviceCMYK at strokeCS and no DeviceGray.
+			fills, strokes := textModePaints(textRender)
+			if (fills && !fillCSSet) || (strokes && !strokeCSSet) {
 				usage.initialGray = true
 			}
 		case "BI":
