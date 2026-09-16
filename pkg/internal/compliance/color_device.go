@@ -39,6 +39,13 @@ type deviceCSUsage struct {
 	subScopeRGB  bool
 	subScopeCMYK bool
 	subScopeGray bool
+	// initialGray tracks painting with no colour space selected, here or in
+	// any scope that invoked this one, which uses the initial DeviceGray of
+	// ISO 32000-1, 8.6.8. That selection belongs to the root content stream
+	// (the page, or an annotation appearance), so the root's DefaultGray
+	// covers it and a form's or a tiling pattern's own never does: veraPDF
+	// was measured on forms, nested forms, image masks and patterns.
+	initialGray bool
 }
 
 // maxFormXObjectDepth is the maximum recursion depth for scanning Form XObject
@@ -87,6 +94,10 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 		deviceCSUsed.rgb = deviceCSUsed.rgb || contentCSUsed.rgb
 		deviceCSUsed.cmyk = deviceCSUsed.cmyk || contentCSUsed.cmyk
 		deviceCSUsed.gray = deviceCSUsed.gray || contentCSUsed.gray
+		// The initial DeviceGray painted with no colour space selected, on the
+		// page or in a form or tiling pattern it draws, is the page's own
+		// selection, which the page's DefaultGray covers (ISO 32000-1, 8.6.5.6).
+		deviceCSUsed.gray = deviceCSUsed.gray || contentCSUsed.initialGray || deviceCSUsed.initialGray
 
 		// Also scan annotation appearance streams for device CS usage.
 		annotUsage := scanAnnotationAppearanceCS(ctx, doc, page, part)

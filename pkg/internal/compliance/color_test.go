@@ -332,8 +332,10 @@ func TestScanContentColorOps_InheritedColorSpace(t *testing.T) {
 			}
 			var usage deviceCSUsage
 			scanContentColorOps(ctx, ops, &usage, nil, nil, nil, nil, tc.entry)
-			if usage.gray != tc.expectGray {
-				t.Errorf("DeviceGray usage = %v, want %v", usage.gray, tc.expectGray)
+			// The default DeviceGray is recorded as initialGray: the root content
+			// stream's DefaultGray is what covers it.
+			if got := usage.gray || usage.initialGray; got != tc.expectGray {
+				t.Errorf("DeviceGray usage = %v, want %v", got, tc.expectGray)
 			}
 		})
 	}

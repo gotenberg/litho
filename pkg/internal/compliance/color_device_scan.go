@@ -144,7 +144,7 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 		if mask, err := document.ResolveBool(ctx, doc, stream.Dict["ImageMask"]); err == nil && mask {
 			isMask = true
 			if !inheritedCSFor(inherited, string(name)).fill {
-				usage.gray = true
+				usage.initialGray = true
 			}
 		}
 
@@ -183,6 +183,7 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 			usage.rgb = usage.rgb || formUsage.rgb
 			usage.cmyk = usage.cmyk || formUsage.cmyk
 			usage.gray = usage.gray || formUsage.gray
+			usage.initialGray = usage.initialGray || formUsage.initialGray
 			usage.subScopeRGB = usage.subScopeRGB || formUsage.subScopeRGB
 			usage.subScopeCMYK = usage.subScopeCMYK || formUsage.subScopeCMYK
 			usage.subScopeGray = usage.subScopeGray || formUsage.subScopeGray
@@ -670,7 +671,8 @@ func inheritedCSFor(states map[string]inheritedCS, name string) inheritedCS {
 // XObjects invoked by Do (referencedXObjects). A painting operator that runs
 // with no colour space yet selected uses the initial graphics-state colour
 // space, DeviceGray; veraPDF flags that implicit default use, so it counts as
-// DeviceGray usage here too (ISO 19005-2 §6.2.4.3).
+// DeviceGray usage here too (ISO 19005-2 §6.2.4.3), recorded as initialGray
+// because the root content stream's DefaultGray is what covers it.
 //
 // Only cs/CS and the shorthands g/G, rg/RG, k/K select a colour space. sc/scn
 // and SC/SCN set components within the space cs/CS already selected (ISO
@@ -757,15 +759,15 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 			}
 		case "f", "F", "f*":
 			if !fillCSSet {
-				usage.gray = true
+				usage.initialGray = true
 			}
 		case "S", "s":
 			if !strokeCSSet {
-				usage.gray = true
+				usage.initialGray = true
 			}
 		case "B", "B*", "b", "b*":
 			if !fillCSSet || !strokeCSSet {
-				usage.gray = true
+				usage.initialGray = true
 			}
 		case "Tj", "TJ", "'", "\"":
 			// Per ISO 32000-1, Table 106, modes 3 and 7 add no marks: 3 is
@@ -774,7 +776,7 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 			// which is what veraPDF models. Reporting the initial DeviceGray
 			// there flagged an uncalibrated colour space the file never uses.
 			if textRender != textRenderInvisible && textRender != textRenderClip && !fillCSSet {
-				usage.gray = true
+				usage.initialGray = true
 			}
 		case "sc", "scn", "SC", "SCN":
 			// Per ISO 32000-1, Table 74 the only form of scn/SCN that takes a
@@ -915,6 +917,7 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 				usage.subScopeRGB = usage.subScopeRGB || formUsage.subScopeRGB
 				usage.subScopeCMYK = usage.subScopeCMYK || formUsage.subScopeCMYK
 				usage.subScopeGray = usage.subScopeGray || formUsage.subScopeGray
+				foldAppearanceInitialGray(ctx, doc, stream, formUsage, &usage)
 				continue
 			}
 			// Dict of sub-appearances (keyed by state name).
@@ -935,10 +938,28 @@ func scanAnnotationAppearanceCS(ctx context.Context, doc *document.Document, pag
 				usage.subScopeRGB = usage.subScopeRGB || formUsage.subScopeRGB
 				usage.subScopeCMYK = usage.subScopeCMYK || formUsage.subScopeCMYK
 				usage.subScopeGray = usage.subScopeGray || formUsage.subScopeGray
+				foldAppearanceInitialGray(ctx, doc, subStream, formUsage, &usage)
 			}
 		}
 	}
 	return usage
+}
+
+// foldAppearanceInitialGray settles the initial DeviceGray an annotation
+// appearance stream paints with no colour space selected. The appearance is a
+// root content stream, so its own DefaultGray covers that use and the page's
+// does not (ISO 32000-1, 8.6.5.6): veraPDF passes a bare fill in an appearance
+// that declares DefaultGray and reports it in one that does not, whatever the
+// page declares. An uncovered use is recorded as a sub-scope usage so the
+// page's defaults cannot cover it.
+func foldAppearanceInitialGray(ctx context.Context, doc *document.Document, stream ast.PdfStream, formUsage deviceCSUsage, usage *deviceCSUsage) {
+	if !formUsage.initialGray {
+		return
+	}
+	ownRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+	if !collectDefaultColorSpaces(ctx, doc, ownRes).hasGray {
+		usage.gray, usage.subScopeGray = true, true
+	}
 }
 
 // scan3DAnnotationCS walks a /Subtype /3D annotation for device colour
@@ -1097,6 +1118,7 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 		usage.rgb = usage.rgb || formUsage.rgb
 		usage.cmyk = usage.cmyk || formUsage.cmyk
 		usage.gray = usage.gray || formUsage.gray
+		usage.initialGray = usage.initialGray || formUsage.initialGray
 		usage.subScopeRGB = usage.subScopeRGB || formUsage.subScopeRGB
 		usage.subScopeCMYK = usage.subScopeCMYK || formUsage.subScopeCMYK
 		usage.subScopeGray = usage.subScopeGray || formUsage.subScopeGray
