@@ -2,7 +2,11 @@ package compliance
 
 import (
 	"bytes"
+	"compress/flate"
+	"compress/zlib"
 	"context"
+	"errors"
+	"io"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -483,10 +487,51 @@ func decodeFontProgram(ctx context.Context, doc *document.Document, obj ast.PdfO
 	if err != nil {
 		return nil, err
 	}
+	// The filter keeps what it inflated before corrupt deflate data, which is
+	// not the program the file embeds; see [deflateDataCorrupt]. Such a program
+	// reads as absent, so the font counts as unembedded and no rule weighs its
+	// glyphs, as in veraPDF.
+	if deflateDataCorrupt(ctx, doc, stream, len(data)) {
+		data = nil
+	}
 	if indirect {
 		doc.SetCachedFontProgram(ref.ObjectNum, data)
 	}
 	return data, nil
+}
+
+// deflateDataCorrupt reports whether a stream filtered by FlateDecode alone
+// holds deflate data that is corrupt or fails its Adler-32 check, as opposed to
+// cut short. litho's filter keeps the bytes inflated before the damage, which
+// suits text extraction, but veraPDF cannot read a font program whose deflate
+// data is corrupt, or whose check fails, and reports
+// the font as not embedded (ISO 19005-2, 6.2.11.4.1 t1), then skips the rules
+// that need the program, the /CIDToGIDMap one (6.2.11.3.2 t1) among them. A
+// stream that merely ends early still embeds its glyphs for veraPDF. Measured on
+// pdfjs issue11651.pdf (invalid distance), on a /FontFile2 with one deflate byte
+// flipped (a failed check) and on one cut 40 bytes short. inflated bounds the
+// strict pass: the damage lies within the bytes the filter already produced.
+func deflateDataCorrupt(ctx context.Context, doc *document.Document, stream ast.PdfStream, inflated int) bool {
+	filter := stream.Dict["Filter"]
+	if arr, err := document.ResolveArray(ctx, doc, filter); err == nil && len(arr) == 1 {
+		filter = arr[0]
+	}
+	if name, _ := document.ResolveName(ctx, doc, filter); name != "FlateDecode" {
+		return false
+	}
+	raw, err := stream.Bytes(ctx)
+	if err != nil {
+		return false
+	}
+	zr, err := zlib.NewReader(bytes.NewReader(raw))
+	if err != nil {
+		// A damaged zlib header is a different failure, not measured here.
+		return false
+	}
+	defer zr.Close()
+	_, err = io.CopyN(io.Discard, zr, int64(inflated)+1)
+	var corrupt flate.CorruptInputError
+	return errors.As(err, &corrupt) || errors.Is(err, zlib.ErrChecksum)
 }
 
 // streamHoldsFontProgram reports whether a font file stream actually carries a
