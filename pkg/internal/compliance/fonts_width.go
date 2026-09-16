@@ -1300,7 +1300,22 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 			if consumed <= 0 {
 				consumed = 1
 			}
-			if ok {
+			// An Identity CMap makes every character code two bytes (ISO
+			// 32000-1, 9.7.5.2), and a /ToUnicode CMap describes those same
+			// codes (9.10.3). A one-byte codespace declared there does not
+			// shorten the font's codes, but reading the string through it split
+			// "\x00\x24" into two one-byte codes and reported the leading zero
+			// byte as unmapped. veraPDF keys its /ToUnicode entries by code
+			// value (CMap.getUnicode(int)) and never consults that codespace, so
+			// it maps 0x0024 through a one-byte bfrange covering 9 to 64: pdfjs
+			// bug898853.pdf writes Identity-H codes against exactly such a map.
+			if identity {
+				consumed = 2
+				if off+consumed > len(b) {
+					consumed = len(b) - off
+				}
+				ok = toUnicodeCoversCode(strict, b[off:off+consumed])
+			} else if ok {
 				_, ok = strict[string(b[off:off+consumed])]
 			}
 			if !ok {
@@ -1322,6 +1337,22 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 		}
 	}
 	return nil
+}
+
+// toUnicodeCoversCode reports whether a /ToUnicode mapping holds an entry for
+// code, matching by code value rather than by byte length. veraPDF keys its
+// entries by integer (CMap.getUnicode(int)), so an entry written with one byte
+// covers the same code written with leading zero bytes.
+func toUnicodeCoversCode(mapping map[string]string, code []byte) bool {
+	if _, ok := mapping[string(code)]; ok {
+		return true
+	}
+	trimmed := code
+	for len(trimmed) > 1 && trimmed[0] == 0 {
+		trimmed = trimmed[1:]
+	}
+	_, ok := mapping[string(trimmed)]
+	return ok
 }
 
 // ExpectedSimpleFontWidths returns the authoritative width (in 1/1000 text
