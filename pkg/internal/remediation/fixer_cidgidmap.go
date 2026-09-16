@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/core/xref"
 )
 
 // matchCIDToGIDMap matches the Type 2 CIDFont CIDToGIDMap violation. The rule
@@ -32,13 +33,21 @@ func matchCIDToGIDMap(v compliance.Violation) bool {
 // indirect CIDFonts are rewritten; an inline descendant CIDFont (a direct dict
 // in a Type0 font's /DescendantFonts) has no object number to patch in place and
 // is left to the validator to report.
+//
+// Fonts held in an object stream (ISO 32000-1, 7.5.7) are repaired too. Their
+// cross-reference entry is type 2 rather than a byte offset (Table 18), and
+// real producers store CIDFonts that way, so skipping them left the violation
+// standing on most files that carry it. Rewriting one is sound: the update
+// defines the object normally in a later cross-reference section, which
+// supersedes the copy inside the object stream (7.5.8). Objects in an object
+// stream always have generation 0 (7.5.7), which is what the entry reports.
 func fixCIDToGIDMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	var count int
 	for objNum, entry := range doc.Index.Entries {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if entry.Type != 1 || objNum == 0 {
+		if entry.Type == xref.XRefTypeFree || objNum == 0 {
 			continue
 		}
 
