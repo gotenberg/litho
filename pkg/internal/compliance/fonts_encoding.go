@@ -1139,8 +1139,37 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		return nil
 	}
 
-	if !dingbats && (subtype == "Type1" || subtype == "MMType1" ||
-		(subtype == "TrueType" && IsPDFUA(profile) && fontEncodingIsDict(ctx, doc, fontDict))) {
+	// The TrueType disjunct is not scoped to PDF/UA. ISO 19005-2, 6.2.11.7.2,
+	// ISO 14289-1, 7.21.7 and ISO 14289-2, 8.4.5.8 all ask the same thing, that
+	// every shown code carry a Unicode value, and veraPDF answers it the same
+	// way in every flavour: Glyph.toUnicode != null. Holding the A profiles to
+	// /Differences alone reported a font whose remaining codes resolve through
+	// the base encoding, which [resolveSimpleFontEncoding] derives for exactly
+	// this shape (an embedded non-symbolic TrueType whose /Differences state no
+	// /BaseEncoding takes StandardEncoding, ISO 32000-1, 9.6.6.4 and Table 114).
+	// pdfjs bug1727053.pdf shows 27 codes of an embedded Arial,Bold, 23 of them
+	// named by that base rather than by its 88-entry /Differences: veraPDF
+	// passes all 27 (passedChecks=27) while litho reported the font at PDF/A-2u,
+	// 2a, 3a and 3u and stayed silent at PDF/UA-1 and UA-2.
+	//
+	// The restriction the exemption above states still holds, because the base
+	// encoding is only derived where its names are earned: that fallback is
+	// gated on a non-symbolic font that is not ZapfDingbats and either embeds a
+	// program or is one of the standard 14. The 16 govdocs files that motivated
+	// the restriction name /WinAnsiEncoding or /MacRomanEncoding and show codes
+	// their program leaves unmapped, so they take the /BaseEncoding route and
+	// never reach it.
+	//
+	// The TrueType disjunct admits only a font whose shown codes were recorded.
+	// [allGlyphNamesAGLResolvable] falls back to surveying the names the font
+	// mentions when usage is empty, and that survey answers a different
+	// question: /Differences naming a handful of codes says nothing about the
+	// rest, so a font litho could not collect usage for would earn the
+	// exemption on a name list alone.
+	trueTypeWithUsage := subtype == "TrueType" && usage != nil && len(usage.charCodes) > 0 &&
+		fontEncodingIsDict(ctx, doc, fontDict)
+
+	if !dingbats && (subtype == "Type1" || subtype == "MMType1" || trueTypeWithUsage) {
 		if allGlyphNamesAGLResolvable(ctx, doc, fontDict, usage) {
 			return nil
 		}
