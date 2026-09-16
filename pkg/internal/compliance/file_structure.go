@@ -47,7 +47,7 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 	var results []Violation
 
 	results = append(results, checkFileHeader(ctx, doc, profile)...)
-	results = append(results, checkTrailerID(doc, profile)...)
+	results = append(results, checkTrailerID(ctx, doc, profile)...)
 	results = append(results, checkEncryptionForbidden(doc, profile)...)
 	results = append(results, checkPostEOFData(ctx, doc, profile)...)
 	results = append(results, checkStreamExternalKeys(ctx, doc, profile)...)
@@ -260,7 +260,7 @@ func checkHeaderBytes(buf []byte, profile string) []Violation {
 // The presence rule and the linearized-consistency rule are separate tests over
 // the same key, so a trailer with no /ID answers both: it fails presence, and
 // its absent value cannot equal the /ID the last trailer carries.
-func checkTrailerID(doc *document.Document, profile string) []Violation {
+func checkTrailerID(ctx context.Context, doc *document.Document, profile string) []Violation {
 	trailer := doc.Index.Trailer
 	if trailer == nil {
 		return fail(trailerIDRule(profile), "no trailer dictionary")
@@ -268,9 +268,18 @@ func checkTrailerID(doc *document.Document, profile string) []Violation {
 
 	var results []Violation
 	idObj, hasID := trailer["ID"]
+	// File identifiers are an array of two byte strings (ISO 32000-1, 14.4), and
+	// veraPDF reads any other value, null included, as no identifier at all:
+	// pdfjs issue5599.pdf writes /ID 77777777777777777 and issue11651.pdf
+	// /ID null, and both fail t1 under parts 1 and 2 alike. An indirect
+	// reference to an array is an identifier (measured).
+	resolvedID, _ := document.ResolveObject(ctx, doc, idObj)
+	_, isArray := resolvedID.(ast.PdfArray)
 	switch {
 	case !hasID:
 		results = fail(trailerIDRule(profile), "missing ID in trailer")
+	case !isArray:
+		results = fail(trailerIDRule(profile), "trailer ID is not an array of file identifiers")
 	case PDFAPart(profile) != 1:
 		// ISO 19005-1 §6.1.3 t1 asks only that the trailer carry an /ID
 		// ("lastID != null"), so a part-1 file satisfies it whatever the entry
@@ -279,7 +288,7 @@ func checkTrailerID(doc *document.Document, profile string) []Violation {
 		// whole: measured on a five-cell matrix, [<AB><>] passes because its
 		// first string carries content, while [<><>] and [] fail because the
 		// entry carries none.
-		if arr, ok := idObj.(ast.PdfArray); ok && fileIDContentLength(arr) == 0 {
+		if arr, ok := resolvedID.(ast.PdfArray); ok && fileIDContentLength(arr) == 0 {
 			results = fail(trailerIDRule(profile), "ID array carries no content")
 		}
 	}

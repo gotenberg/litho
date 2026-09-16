@@ -1,6 +1,7 @@
 package compliance
 
 import (
+	"context"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -10,8 +11,8 @@ import (
 
 // TestCheckTrailerID_ContentRequirementIsPart2Onwards pins how much the file
 // identifier has to carry. ISO 19005-1 §6.1.3 t1 asks only that the trailer
-// hold an /ID ("lastID != null"), so a part-1 file satisfies it whatever the
-// entry contains. ISO 19005-2/3 §6.1.3 t1 and ISO 19005-4 §6.1.3 t1 add
+// hold an /ID ("lastID != null"), so a part-1 file satisfies it whatever
+// array the entry holds. ISO 19005-2/3 §6.1.3 t1 and ISO 19005-4 §6.1.3 t1 add
 // "lastID.length() > 0", and veraPDF measures that over the entry as a whole
 // rather than per element.
 //
@@ -46,7 +47,7 @@ func TestCheckTrailerID_ContentRequirementIsPart2Onwards(t *testing.T) {
 				doc := &document.Document{Index: xref.Index{
 					Trailer: ast.PdfDict{"ID": tc.id},
 				}}
-				got := len(checkTrailerID(doc, profile)) > 0
+				got := len(checkTrailerID(context.Background(), doc, profile)) > 0
 				if got != tc.want[i] {
 					t.Errorf("%s with %s: violation = %v, want %v",
 						profile, tc.name, got, tc.want[i])
@@ -63,7 +64,7 @@ func TestCheckTrailerID_AbsentIDFailsEveryPart(t *testing.T) {
 
 	for _, profile := range []string{"PDF/A-1b", "PDF/A-2b", "PDF/A-4"} {
 		doc := &document.Document{Index: xref.Index{Trailer: ast.PdfDict{}}}
-		if len(checkTrailerID(doc, profile)) == 0 {
+		if len(checkTrailerID(context.Background(), doc, profile)) == 0 {
 			t.Errorf("%s: a trailer with no /ID must fail §6.1.3 t1", profile)
 		}
 	}
