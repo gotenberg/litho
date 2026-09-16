@@ -778,6 +778,16 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 			if textRender != textRenderInvisible && textRender != textRenderClip && !fillCSSet {
 				usage.initialGray = true
 			}
+		case "BI":
+			// An inline image mask carries no colour space: ISO 32000-1, 8.9.7
+			// (Table 93 abbreviates ImageMask as IM) paints it like an image
+			// mask XObject, with the current fill colour (8.9.6.2), so with no
+			// fill space selected it paints the initial DeviceGray. veraPDF
+			// reports that at .../inlineImage[0]/imageCS[0], in page content and
+			// in a form alike, and the page's DefaultGray covers it.
+			if !fillCSSet && inlineImageIsMask(op) {
+				usage.initialGray = true
+			}
 		case "sc", "scn", "SC", "SCN":
 			// Per ISO 32000-1, Table 74 the only form of scn/SCN that takes a
 			// name operand is the pattern form, so a trailing name is a
@@ -815,6 +825,24 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 			}
 		}
 	}
+}
+
+// inlineImageIsMask reports whether a BI operation's dictionary marks the
+// inline image as a stencil mask, by /IM or its full name /ImageMask.
+func inlineImageIsMask(op content.Operation) bool {
+	if len(op.Operands) == 0 {
+		return false
+	}
+	dict, ok := op.Operands[0].(ast.PdfDict)
+	if !ok {
+		return false
+	}
+	for _, key := range []ast.PdfName{"IM", "ImageMask"} {
+		if b, ok := dict[key].(ast.PdfBool); ok && bool(b) {
+			return true
+		}
+	}
+	return false
 }
 
 // scanInlineImageCSOps checks parsed BI operations for inline image colour
