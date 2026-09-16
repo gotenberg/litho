@@ -1398,7 +1398,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 			// Type1 and TrueType alike (the TrueType glyph-program path below
 			// cannot run for a non-embedded font, exactly where control-code
 			// .notdef references hide). DEL (0x7F) is deliberately excluded: some
-			// fonts do define a glyph there, so it is not universally .notdef.
+			// fonts do define a glyph there when they embed a program.
 			// A symbolic font resolves codes through its built-in encoding (ISO
 			// 32000-1 §9.6.6.2), which litho does not parse, so the implicit case
 			// is declined rather than reported as a false positive.
@@ -1452,10 +1452,17 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 					}
 					continue
 				}
-				// The symbolic and DEL exemptions below apply here too: a
+				// The symbolic exemption below applies here too: a
 				// symbolic font resolves codes through its built-in encoding
-				// (ISO 32000-1, 9.6.6.2) and some fonts do define a DEL glyph.
-				if glyphName == "" && namedTable != "" && !symbolic && code != 0x7F {
+				// (ISO 32000-1, 9.6.6.2), which this check does not read. DEL is
+				// not exempt here: this branch runs only when the font embeds
+				// no program, so nothing can define a glyph at 0x7F, and none
+				// of the four predefined tables does. veraPDF agrees, reading
+				// predefinedEncoding[code] in Encoding.getName with no carve
+				// out for DEL: govdocs thread_000_000153.pdf shows code 127 of
+				// an unembedded NewYork declared /MacRomanEncoding, which it
+				// reports under ISO 14289-1, 7.21.8 t1.
+				if glyphName == "" && namedTable != "" && !symbolic {
 					return failf(rule, "font %s on page %d: charCode %d is undefined in %s, so it maps to .notdef",
 						fontName, pageNum, code, namedTable)
 				}
