@@ -366,38 +366,35 @@ func extractInlineImageFilters(dictBytes []byte) []string {
 	// Inline image dictionaries use abbreviated key names. The value may be a
 	// single name (/AHx) or a filter-chain array ([/AHx /Fl]); both are legal.
 	tokens := tokenizeInlineDict(dictBytes)
-	for i := 0; i < len(tokens)-1; i++ {
-		key := tokens[i]
-		if key != "/F" && key != "/Filter" {
-			continue
-		}
-		val := tokens[i+1]
-		if !strings.HasPrefix(val, "[") {
-			return []string{inlineFilterName(val)}
-		}
-		// Filter-chain array: collect the /Name tokens up to the closing ']'.
-		// The '[' may be its own token or glued to the first name.
-		var names []string
-		if rest := inlineFilterName(strings.TrimPrefix(val, "[")); rest != "" {
-			names = append(names, rest)
-		}
-		for j := i + 2; j < len(tokens); j++ {
-			if strings.HasPrefix(tokens[j], "]") {
-				break
+	// A dictionary that writes both the abbreviation and the full name is
+	// judged by the abbreviation, whichever comes first: veraPDF reports
+	// /F /AHx /Filter /LZWDecode and /Filter /LZWDecode /F /AHx alike as
+	// conforming, and /F /LZW /Filter /AHx as not.
+	for _, want := range []string{"/F", "/Filter"} {
+		for i := 0; i < len(tokens)-1; i++ {
+			if tokens[i] != want {
+				continue
 			}
-			if n := inlineFilterName(tokens[j]); n != "" {
-				names = append(names, n)
+			val := tokens[i+1]
+			if val != "[" {
+				return []string{inlineFilterName(val)}
 			}
+			// Filter-chain array: collect the names up to the closing ']'.
+			var names []string
+			for j := i + 2; j < len(tokens) && tokens[j] != "]"; j++ {
+				if n := inlineFilterName(tokens[j]); n != "" {
+					names = append(names, n)
+				}
+			}
+			return names
 		}
-		return names
 	}
 	return nil
 }
 
 // inlineFilterName normalises an inline-image filter token to a bare filter
-// name: it drops a leading '/' and any trailing ']' left by array tokenization.
+// name by dropping its leading '/'.
 func inlineFilterName(tok string) string {
-	tok = strings.TrimSuffix(tok, "]")
 	return strings.TrimPrefix(tok, "/")
 }
 
@@ -407,33 +404,44 @@ func tokenizeInlineDict(data []byte) []string {
 	var tokens []string
 	i := 0
 	for i < len(data) {
-		// Skip whitespace.
-		if isPDFWhitespace(data[i]) {
+		c := data[i]
+		switch {
+		case isPDFWhitespace(c):
 			i++
-			continue
-		}
-
-		// Name token.
-		if data[i] == '/' {
-			start := i
-			i++
-			for i < len(data) && !isPDFWhitespace(data[i]) && data[i] != '/' {
+		case c == '%':
+			// A comment runs to the end of the line (ISO 32000-1, 7.2.4); a
+			// key written inside one is no key. pdfjs issue14256.pdf comments
+			// out lines of its inline image dictionaries.
+			for i < len(data) && data[i] != '\n' && data[i] != '\r' {
 				i++
 			}
-			tokens = append(tokens, string(data[start:i]))
-			continue
-		}
-
-		// Other token (value).
-		start := i
-		for i < len(data) && !isPDFWhitespace(data[i]) && data[i] != '/' {
+		case c == '[' || c == ']':
+			// Array delimiters stand alone, so /F [/AHx] /L 3 ends the array at
+			// the ']' glued to /AHx rather than reading /L as a filter.
+			tokens = append(tokens, string(c))
 			i++
-		}
-		if i > start {
+		default:
+			// A name or any other token runs to the next white space or
+			// delimiter (ISO 32000-1, 7.2.2).
+			start := i
+			i++
+			for i < len(data) && !isPDFWhitespace(data[i]) && !isInlineDictDelimiter(data[i]) {
+				i++
+			}
 			tokens = append(tokens, string(data[start:i]))
 		}
 	}
 	return tokens
+}
+
+// isInlineDictDelimiter reports whether b is a PDF delimiter character that
+// ends a token in an inline image dictionary (ISO 32000-1, 7.2.2, Table 2).
+func isInlineDictDelimiter(b byte) bool {
+	switch b {
+	case '/', '[', ']', '(', ')', '<', '>', '{', '}', '%':
+		return true
+	}
+	return false
 }
 
 // isPDFWhitespace returns true if b is a PDF whitespace character (SP, TAB, CR, LF, FF, NUL).

@@ -131,15 +131,16 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 		if !ok {
 			continue
 		}
-		// Check /I (abbreviated) and /Interpolate (full name).
-		for _, key := range []ast.PdfName{"I", "Interpolate"} {
-			val, exists := dict[key]
-			if !exists {
-				continue
-			}
-			if b, ok := val.(ast.PdfBool); ok && bool(b) {
-				return failf(rule, "page %d: inline image has Interpolate=true", pageNum)
-			}
+		// /I is the abbreviation of /Interpolate (ISO 32000-1, 8.9.7, Table
+		// 93). A dictionary that writes both is judged by /I, whichever comes
+		// first: veraPDF passes /I false /Interpolate true and fails
+		// /Interpolate false /I true. pdfjs issue14256.pdf writes both.
+		val, exists := dict["I"]
+		if !exists {
+			val = dict["Interpolate"]
+		}
+		if b, ok := val.(ast.PdfBool); ok && bool(b) {
+			return failf(rule, "page %d: inline image has Interpolate=true", pageNum)
 		}
 	}
 	return nil
