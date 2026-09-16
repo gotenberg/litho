@@ -240,19 +240,24 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return results
 	}
 
+	// The header and property audits below are scoped to veraPDF's
+	// XMPPackage and XMPProperty objects, which XMPCore builds only from a
+	// packet it parsed. A packet that is not well-formed yields neither, so it
+	// answers for its serialization (reported just above) and for nothing inside
+	// it. Reporting a property there named a schema violation in a packet litho
+	// could not read, and the header attributes go the same way: a malformed
+	// packet whose header carries bytes= or encoding= fails t4 and t5 alone on
+	// veraPDF, where a well-formed one fails t2 or t3 (measured).
+	packetParses := xmpWellFormed(xmpData)
+
 	// XMP packet header (§6.7.2.1 / §6.6.2.1).
-	xmpCheckPacketHeader(xmpData, part, &results)
+	if packetParses {
+		xmpCheckPacketHeader(xmpData, part, &results)
+	}
 
 	if ctx.Err() != nil {
 		return results
 	}
-
-	// The property-level audits below are scoped to veraPDF's XMPProperty
-	// object, which XMPCore builds only from a packet it parsed. A packet that
-	// is not well-formed yields none, so it answers for its serialization
-	// (reported just above) and for nothing inside it. Reporting a property
-	// there named a schema violation in a packet litho could not read.
-	packetParses := xmpWellFormed(xmpData)
 
 	// XMP schema validation (§6.7.9 / §6.6.2.3.1).
 	if packetParses {
@@ -320,15 +325,23 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		return results
 	}
 
-	// XMP property types (§6.7.2 / §6.6.2.3.1).
-	xmpCheckPropertyTypes(xmpData, part, metaStream, nil, &results)
+	// XMP property types (§6.7.2 / §6.6.2.3.1), a property-level audit gated
+	// like the others: govdocs thread_300_300234.pdf ships a packet whose
+	// prefixes are unbound, and veraPDF reports its serialization alone, not
+	// the property types litho recovered from it.
+	if packetParses {
+		xmpCheckPropertyTypes(xmpData, part, metaStream, nil, &results)
+	}
 
 	if ctx.Err() != nil {
 		return results
 	}
 
-	// Structured value-type field names (§6.7.9 t3 / §6.6.2.3.1 t2).
-	xmpCheckStructFieldNames(xmpData, part, &results)
+	// Structured value-type field names (§6.7.9 t3 / §6.6.2.3.1 t2), gated like
+	// every property-level audit, as xmpCheckOtherPackets already gates it.
+	if packetParses {
+		xmpCheckStructFieldNames(xmpData, part, &results)
+	}
 
 	doc.Logger.Debug("compliance.xmp: XMP checks complete", "violations", len(results))
 	return results
@@ -447,7 +460,11 @@ func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog a
 		data = xmpNormalizeForChecks(data, part, &packet)
 		serialization := xmpPacketSerializationValidity(data, part)
 		packet = append(packet, serialization...)
-		xmpCheckPacketHeader(data, part, &packet)
+		// The header attributes belong to the packet veraPDF parsed, as for the
+		// catalog packet: a malformed one answers for its serialization alone.
+		if len(serialization) == 0 {
+			xmpCheckPacketHeader(data, part, &packet)
+		}
 
 		// The property-level audits apply to every packet, not only the
 		// catalog's: ISO 19005-2 §6.6.2.3.1 constrains the properties of "all
