@@ -490,8 +490,16 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 					}
 
 					// RichMedia annotations reference file specs through
-					// /RichMediaContent/Assets (a name tree).
-					collectRichMediaFileSpecRefs(ctx, doc, annotDict, afRefs)
+					// /RichMediaContent/Assets (a name tree). That is an
+					// annotation reference, not an /AF entry, so it associates
+					// an external filespec only: an embedded one (/EF) still
+					// needs a real /AF array, exactly as for a direct /FS
+					// above. veraPDF fails ISO 19005-3, 6.8 t4
+					// (isAssociatedFile == true) on the two /EF filespecs of
+					// PDF_A-4e__veraPDF_test_suite_6-3-2-t01-fail-b.pdf, whose
+					// only route is a /RichMedia annotation's /Assets tree and
+					// which carry no /AF anywhere in the file.
+					collectRichMediaFileSpecRefs(ctx, doc, annotDict, fsAnnotRefs)
 				}
 			}
 		}
