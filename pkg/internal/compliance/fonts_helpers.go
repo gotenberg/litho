@@ -344,8 +344,10 @@ func checkSimpleFontRequiredKeys(ctx context.Context, doc *document.Document, fo
 
 // checkFontRequiredKeys validates the PDF/A font-dictionary required-key rules
 // that apply to every font (PDFont): /Type must be Font (t1), /Subtype must be a
-// recognised font subtype (t2), and /BaseFont must be present unless the font is
-// a Type 3 font (t3, PDF/A-1 only).
+// recognised font subtype (t2), and /BaseFont must name the font unless it is a
+// Type 3 font (t3). Every part carries t3, stated as
+// "Subtype == Type3 || fontName != null": ISO 19005-1 6.3.2 t3, ISO 19005-2 and
+// -3 6.2.11.2 t3, ISO 19005-4 6.2.10.2 t3.
 func checkFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, subtype string, part int) []Violation {
 	if part == 0 {
 		return nil
@@ -359,9 +361,21 @@ func checkFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict
 		results = append(results, failf(fontReqKeyRule(part, 2), "font /Subtype %q is not a valid font subtype", subtype)...)
 	}
 	if subtype != "Type3" {
-		if _, ok := fontDict["BaseFont"]; !ok {
+		// ISO 32000-1, 9.6.2, Table 111 types /BaseFont as a name, and the test
+		// every part states is "fontName != null", not "the key is present". A
+		// value of any other type names no font, so it fails exactly as a
+		// missing entry does: pdfjs issue1350.pdf writes both its fonts as
+		// /BaseFont<feff004100410043...>, a UTF-16BE hex string, and veraPDF
+		// reports each one with the font itself resolved to null.
+		baseFont, present := fontDict["BaseFont"]
+		_, nameErr := document.ResolveName(ctx, doc, baseFont)
+		if !present || nameErr != nil {
 			if rule := fontReqKeyRule(part, 3); rule.Specification != "" {
-				results = append(results, failf(rule, "font missing /BaseFont")...)
+				if !present {
+					results = append(results, failf(rule, "font missing /BaseFont")...)
+				} else {
+					results = append(results, failf(rule, "font /BaseFont is not a name")...)
+				}
 			}
 		}
 	}
