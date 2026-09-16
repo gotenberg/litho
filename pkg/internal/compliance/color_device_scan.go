@@ -863,6 +863,14 @@ func scanInlineImageCSOps(ops []content.Operation, usage *deviceCSUsage, referen
 		if !ok {
 			continue
 		}
+		// An inline image mask carries no colour space: ISO 32000-1, 8.9.5,
+		// Table 89 does not allow the entry on a mask, which paints with the
+		// current fill colour instead (scanContentColorOps). veraPDF ignores a
+		// /CS written on one, as it does on an image mask XObject: a mask
+		// declaring /CS /RGB or /CS /G under an ICCBased fill reports nothing.
+		if inlineImageIsMask(op) {
+			continue
+		}
 		// Check /CS (abbreviated) and /ColorSpace (full name).
 		for _, key := range []ast.PdfName{"CS", "ColorSpace"} {
 			val, exists := dict[key]
