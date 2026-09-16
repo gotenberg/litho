@@ -238,17 +238,28 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	}
 
 	// A device transparency-group blending colour space is itself a device-colour
-	// usage coverable only by a matching OutputIntent (veraPDF reports PDDeviceRGB
-	// at context /Group/colorSpace), independent of the form's content or its
-	// resources. Record it as a sub-scope usage so neither DefaultCS suppression
-	// nor a missing /Resources early-return can drop it.
+	// usage (veraPDF reports PDDeviceRGB at context /Group/colorSpace). The form's
+	// own resources resolve it, so a matching Default colour space there covers
+	// it (ISO 32000-1, 8.6.5.6), while one the invoking page declares does not,
+	// nor does the page's when the form has no /Resources: veraPDF measured all
+	// three for a DeviceRGB group. Record an uncovered one as a sub-scope usage
+	// so neither the suppression below nor a missing /Resources early-return
+	// can drop it.
+	ownRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+	ownDefaults := collectDefaultColorSpaces(ctx, doc, ownRes)
 	switch pageTransparencyGroupCSName(ctx, doc, stream.Dict) {
 	case "DeviceRGB":
-		usage.rgb, usage.subScopeRGB = true, true
+		if !ownDefaults.hasRGB {
+			usage.rgb, usage.subScopeRGB = true, true
+		}
 	case "DeviceCMYK":
-		usage.cmyk, usage.subScopeCMYK = true, true
+		if !ownDefaults.hasCMYK {
+			usage.cmyk, usage.subScopeCMYK = true, true
+		}
 	case "DeviceGray":
-		usage.gray, usage.subScopeGray = true, true
+		if !ownDefaults.hasGray {
+			usage.gray, usage.subScopeGray = true, true
+		}
 	}
 
 	// Check nested resources within the Form XObject.

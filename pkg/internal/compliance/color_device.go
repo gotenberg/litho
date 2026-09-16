@@ -153,23 +153,27 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 		}
 
 		// A transparency group whose blending colour space is itself a device
-		// colour space is a device-colour usage that only an OutputIntent can
-		// cover, never a DefaultCS (ISO 19005-2/3 §6.2.4.3; veraPDF object
-		// PDDeviceRGB at context /Group/colorSpace requires gOutputCS match).
-		// The "transparency group" context routes the repair to fixGroupCS,
-		// which drops the /CS so the blending space falls back to the intent
-		// profile, rather than to the OutputIntent fixer.
+		// colour space is a device-colour usage (ISO 19005-2/3 §6.2.4.3; veraPDF
+		// object PDDeviceRGB at context /Group/colorSpace). The page's effective
+		// resources resolve it like any other device colour space, so a matching
+		// Default colour space there covers it (ISO 32000-1, 8.6.5.6), inherited
+		// from a Pages node or not: pdfjs bug1019475_1.pdf gives its page a
+		// DeviceRGB group beside a DefaultRGB and veraPDF reports no DeviceRGB.
+		// Measured for RGB, CMYK and Gray groups. The "transparency group"
+		// context routes the repair to fixGroupCS, which drops the /CS so the
+		// blending space falls back to the intent profile, rather than to the
+		// OutputIntent fixer.
 		switch pageTransparencyGroupCSName(ctx, doc, page) {
 		case "DeviceRGB":
-			if !rgbUniversalCover {
+			if !rgbUniversalCover && !defaults.hasRGB {
 				*results = append(*results, failf(deviceRGBRule(part), "page %d: transparency group blending colour space is DeviceRGB without RGB OutputIntent", i+1)...)
 			}
 		case "DeviceCMYK":
-			if !cmykUniversalCover {
+			if !cmykUniversalCover && !defaults.hasCMYK {
 				*results = append(*results, failf(deviceCMYKRule(part), "page %d: transparency group blending colour space is DeviceCMYK without CMYK OutputIntent", i+1)...)
 			}
 		case "DeviceGray":
-			if !grayUniversalCover {
+			if !grayUniversalCover && !defaults.hasGray {
 				*results = append(*results, failf(deviceGrayRule(part), "page %d: transparency group blending colour space is DeviceGray without OutputIntent", i+1)...)
 			}
 		}
