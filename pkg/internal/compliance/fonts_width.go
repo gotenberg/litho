@@ -1242,18 +1242,31 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 	return nil
 }
 
-// checkType0PerGlyphToUnicode validates that every code rendered through a
+// checkType0PerGlyphToUnicode validates that every code shown through a
 // Type0 font resolves to a Unicode value via the font's /ToUnicode CMap. The
-// requirement is per painted glyph (ISO 14289-1 §7.21.7 t1 for UA-1,
+// requirement is per shown glyph (ISO 14289-1 §7.21.7 t1 for UA-1,
 // ISO 14289-2 §8.4.5.8 t1 for UA-2), so it fires alongside the presence and
 // notdef rules on the same glyph. A missing /ToUnicode entirely is the
 // font-level rule's job; this check covers a present map with gaps.
+//
+// Text rendering mode 3 grants no exemption here. Every profile spells this
+// rule on object Glyph as "toUnicode != null" with no renderingMode term: ISO
+// 19005-1 §6.3.8 t1, ISO 19005-2/3 §6.2.11.7.2 t1, ISO 19005-4 §6.2.10.7 t1,
+// ISO 14289-1 §7.21.7 t1 and ISO 14289-2 §8.4.5.8 t1. The embedding and
+// glyph-presence rules do carry one, each beginning "renderingMode == 3 ||"
+// (ISO 14289-2 §8.4.5.5.1 t1 and t2), because those bear on the visual
+// representation of a glyph. A Unicode value does not: invisible text is
+// exactly what a reader extracts and what assistive technology speaks, which
+// is why a scanned page's OCR layer is drawn with 3 Tr. Measured against
+// veraPDF on an Identity-H font showing <017F> past its /ToUnicode range,
+// which it fails at 8.4.5.8 t1 under both 0 Tr and 3 Tr while passing
+// 8.4.5.5.1 under 3 Tr.
 func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := perGlyphToUnicodeRule(profile)
 	if rule.Specification == "" {
 		return nil
 	}
-	if usage == nil || len(usage.rawStrings) == 0 || !usage.visible {
+	if usage == nil || len(usage.rawStrings) == 0 {
 		return nil
 	}
 	tuStream, err := document.ResolveStream(ctx, doc, fontDict["ToUnicode"])
