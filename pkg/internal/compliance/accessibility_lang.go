@@ -1360,8 +1360,9 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 // PDF/A-2/3/4 and PDF/UA (ISO 19005-2/3 §6.7.4 t1, ISO 14289-1 §7.2 t29, ISO
 // 14289-2 §8.4.4 t2): a 1-8 letter primary subtag followed by any number of 1-8
 // alphanumeric subtags. An empty or whitespace-only tag is "not present" and
-// passes. PDF/A-1's stricter §6.8.4 t1 grammar (no digits in subtags) is
-// [isValidLangTagPDFA1].
+// passes. The PDF/A tests read the value as written rather than trimmed, so
+// they go through [pdfaLangTagInvalid], which also carries PDF/A-1's stricter
+// §6.8.4 t1 grammar of letters-only subtags.
 //
 // The grammar is RFC 3066 as referenced by ISO 32000-1:2008, 14.9.2, NOT the
 // tighter RFC 5646: subtags may be 1-8 alphanumerics (e.g. "en-12" is valid),
@@ -1382,12 +1383,38 @@ func IsValidUALangTag(s ast.PdfString) bool {
 	return !document.ContainsUndefinedPDFDocBytes(s) && langTagAlphaNum.MatchString(document.DecodePdfString(s))
 }
 
-// isValidLangTagPDFA1 applies the PDF/A-1 grammar of ISO 19005-1 §6.8.4 t1,
-// whose subtags are letters only (no digits), unlike the alphanumeric subtags
-// every later profile allows.
-func isValidLangTagPDFA1(tag string) bool {
-	trimmed := strings.TrimSpace(tag)
-	return trimmed == "" || langTagAlphaOnly.MatchString(trimmed)
+// pdfaLangTagInvalid reports whether a /Lang value breaks the PDF/A
+// language-tag grammar, judged on the bytes the file wrote rather than on the
+// display form.
+//
+// ISO 19005-1, 6.8.4 t1 and ISO 19005-2/3, 6.7.4 t1 read the value as written:
+// veraPDF admits an empty value or one matching
+// /^[a-zA-Z]{1,8}(-[a-zA-Z]{1,8})*$/, with nothing trimmed and no byte
+// dropped, the same way [IsValidUALangTag] reads the PDF/UA restatement. [document.DecodePdfString] drops an undefined
+// PDFDocEncoding byte by design, so "EN-US\x00" reached the grammar as a legal
+// "EN-US": govdocs thread_100_100172, thread_100_100195, thread_200_200961 and
+// thread_300_300346 write exactly that and veraPDF reports every one.
+//
+// A BOM-prefixed value is exempt from the byte test, as
+// [document.ContainsUndefinedPDFDocBytes] states, because its bytes are UTF-16
+// code units and not PDFDocEncoding: veraPDF passes the BOM'd "en-GB" of its
+// own 6-8-4-t01-pass-f fixture. Such a value is still held to the grammar after
+// decoding, which is what already reports the BOM'd "EN-US\x00" of govdocs
+// thread_000_000153 and thread_200_200295.
+//
+// An empty or all-whitespace value states no tag, which every profile permits.
+func pdfaLangTagInvalid(s ast.PdfString, part int) bool {
+	decoded := document.DecodePdfString(s)
+	if strings.TrimSpace(decoded) == "" {
+		return false
+	}
+	if document.ContainsUndefinedPDFDocBytes(s) {
+		return true
+	}
+	if part == 1 {
+		return !langTagAlphaOnly.MatchString(decoded)
+	}
+	return !langTagAlphaNum.MatchString(decoded)
 }
 
 func isDigit(b byte) bool {

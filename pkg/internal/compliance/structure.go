@@ -1836,24 +1836,17 @@ const pdf2NamespaceURI = "http://iso.org/pdf2/ssn"
 func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast.PdfDict, _ string, part int) []Violation {
 	rule := pdfaLangValidRule(part)
 
-	// PDF/A-1's 6.8.4 t1 grammar forbids digits in subtags; parts 2/3 (6.7.4)
-	// allow them, matching the alphanumeric grammar of PDF/UA and the general
-	// validator.
-	validLang := IsValidLangTag
-	if part == 1 {
-		validLang = isValidLangTagPDFA1
-	}
-
 	var results []Violation
 
-	// Check catalog /Lang.
+	// Check catalog /Lang. [pdfaLangTagInvalid] carries the grammar each part
+	// requires and judges the bytes the file wrote.
 	if langObj, ok := catalog["Lang"]; ok {
 		langStr, err := document.ResolveString(ctx, doc, langObj)
-		if err == nil {
-			trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
-			if trimmed != "" && !validLang(trimmed) {
-				results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("catalog lang=%s", trimmed)})
-			}
+		if err == nil && pdfaLangTagInvalid(langStr, part) {
+			results = append(results, Violation{
+				Rule:    rule,
+				Context: fmt.Sprintf("catalog lang=%s", strings.TrimSpace(document.DecodePdfString(langStr))),
+			})
 		}
 	}
 
@@ -1872,9 +1865,11 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 		if err != nil {
 			return
 		}
-		trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
-		if trimmed != "" && !validLang(trimmed) {
-			results = append(results, Violation{Rule: rule, Context: fmt.Sprintf("lang=%s, %s", trimmed, path)})
+		if pdfaLangTagInvalid(langStr, part) {
+			results = append(results, Violation{
+				Rule:    rule,
+				Context: fmt.Sprintf("lang=%s, %s", strings.TrimSpace(document.DecodePdfString(langStr)), path),
+			})
 		}
 	})
 
@@ -1910,7 +1905,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 				if len(rest) == 0 {
 					break
 				}
-				var langVal string
+				var langVal ast.PdfString
 				if rest[0] == '(' {
 					depth := 1
 					i := 1
@@ -1926,20 +1921,20 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 						i++
 					}
 					if i > 1 {
-						langVal = document.DecodePdfString(ast.PdfString(rest[1 : i-1]))
+						langVal = ast.PdfString(rest[1 : i-1])
 					}
 				} else if rest[0] == '<' && rest[0] != '<' || (len(rest) > 1 && rest[0] == '<' && rest[1] != '<') {
 					// Hex string.
 					end := strings.Index(rest[1:], ">")
 					if end > 0 {
-						langVal = document.DecodePdfString(ast.PdfString(decodeHexString(rest[1 : end+1])))
+						langVal = ast.PdfString(decodeHexString(rest[1 : end+1]))
 					}
 				}
-				trimmed := strings.TrimSpace(langVal)
-				if trimmed != "" && !validLang(trimmed) {
+				if pdfaLangTagInvalid(langVal, part) {
 					results = append(results, Violation{
-						Rule:    rule,
-						Context: fmt.Sprintf("lang=%s, page %d inline BDC", trimmed, pageIdx+1),
+						Rule: rule,
+						Context: fmt.Sprintf("lang=%s, page %d inline BDC",
+							strings.TrimSpace(document.DecodePdfString(langVal)), pageIdx+1),
 					})
 					break
 				}
@@ -1961,11 +1956,11 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 				doc.Logger.Debug("compliance.structure: cannot resolve Lang string", "error", err)
 				continue
 			}
-			trimmed := strings.TrimSpace(document.DecodePdfString(langStr))
-			if trimmed != "" && !validLang(trimmed) {
+			if pdfaLangTagInvalid(langStr, part) {
 				results = append(results, Violation{
-					Rule:    rule,
-					Context: fmt.Sprintf("lang=%s, page %d property %s", trimmed, pageIdx+1, propName),
+					Rule: rule,
+					Context: fmt.Sprintf("lang=%s, page %d property %s",
+						strings.TrimSpace(document.DecodePdfString(langStr)), pageIdx+1, propName),
 				})
 			}
 		}
