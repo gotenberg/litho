@@ -1167,6 +1167,18 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 		// DeviceGray of §8.6.8 therefore never applies inside the cell, so a
 		// bare painting operator there is not a DeviceGray use. veraPDF reports
 		// nothing for such a cell, not even an explicit "0 g" in it.
+		//
+		// That last sentence holds for a painting operator, not for an image
+		// mask. A mask carries no colour space and paints with the current fill
+		// colour (ISO 32000-1, 8.9.6.2), which inside one of these cells is the
+		// scn/SCN colour in the underlying space, so it is no more a DeviceGray
+		// use than the operator is. veraPDF disagrees there: govdocs
+		// thread_200_200567.pdf draws 71 /ImageMask true images inside 71
+		// PaintType 2 cells whose base is [/Pattern /ICCBased], writes no gray
+		// operator anywhere, and carries no /OutputIntent, and veraPDF reports
+		// all 71 under ISO 19005-2 §6.2.4.3 t4 with a synthesised DeviceGray
+		// imageCS. Skipping the cell is still right; do not read the sentence
+		// above as covering masks.
 		paintType, _ := document.ResolveInt(ctx, doc, stream.Dict["PaintType"])
 		if paintType == 2 {
 			continue
