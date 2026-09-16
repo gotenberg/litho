@@ -58,8 +58,17 @@ func parseCMSSignature(blob []byte) (cmsSignatureInfo, error) {
 		return info, errCMSUnparseable
 	}
 
+	// RFC 5652 allows BER, and a streaming signer writes indefinite lengths
+	// that encoding/asn1 rejects: pdfjs issue16553.pdf signs with one, its
+	// /Contents opening 30 80, and veraPDF finds the certificate and the one
+	// signer it holds. Rewrite the lengths before decoding.
+	der, err := berToDER(blob)
+	if err != nil {
+		return info, errCMSUnparseable
+	}
+
 	var outer cmsContentInfo
-	if _, err := asn1.Unmarshal(blob, &outer); err != nil {
+	if _, err := asn1.Unmarshal(der, &outer); err != nil {
 		return info, errCMSUnparseable
 	}
 
