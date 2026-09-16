@@ -730,9 +730,17 @@ func usedGlyphNamesResolvable(ctx context.Context, doc *document.Document, fontD
 func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) map[byte]string {
 	// Priority 1: PDF-level /Encoding.
 	if encObj, ok := fontDict["Encoding"]; ok {
-		// Named encoding.
+		// Named encoding. A name no predefined encoding carries states nothing,
+		// so the font's built-in encoding stays in force (ISO 32000-1, Table
+		// 114, BaseEncoding): pdfjs bug859204.pdf writes /Encoding /NULL over an
+		// embedded Type 1 whose built-in names are all in the Adobe Glyph List,
+		// and veraPDF derives a Unicode value for every one of the eleven codes
+		// the page shows. Reading the invalid name as an empty encoding left
+		// those codes unnamed and reported ISO 14289-1, 7.21.7 t1 against them.
 		if encName, err := document.ResolveName(ctx, doc, encObj); err == nil && encName != "" {
-			return predefinedEncodingNames(string(encName))
+			if names := predefinedEncodingNames(string(encName)); len(names) > 0 {
+				return names
+			}
 		}
 		// Encoding dict with /Differences.
 		if encDict, err := document.ResolveDict(ctx, doc, encObj); err == nil && encDict != nil {
