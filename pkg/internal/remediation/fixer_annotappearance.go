@@ -23,12 +23,20 @@ func matchAnnotAppearance(v compliance.Violation) bool {
 }
 
 // fixAnnotAppearance synthesizes a minimal /AP /N Form XObject for every
-// annotation that lacks one. Popup, Link, and zero-area annotations are
-// exempt per ISO 19005-1 §6.3.3. The generated XObject is a blank Form
+// annotation that lacks one. Popup and Link annotations are exempt, as are
+// zero-area ones under ISO 19005-2/3/4 §6.3.3 t1, whose test opens with
+// "width == 0 && height == 0". The generated XObject is a blank Form
 // with the annotation's /Rect as its /BBox, which satisfies the spec's
 // requirement that "Every annotation shall have at least one appearance
 // dictionary" without altering the visible page content.
-func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
+//
+// PDF/A-1 states the requirement on the widget instead, and states it
+// unconditionally: ISO 19005-1 §6.9 t2 is keyed to veraPDF's PDWidgetAnnot
+// with the test "AP != null" and grants no zero-area exemption, which is why
+// [checkFieldAppearance] deliberately applies none either. An invisible
+// signature field is conventionally /Rect [0 0 0 0], so exempting it here
+// left part 1 reporting a violation this fixer could never answer.
+func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
@@ -92,7 +100,16 @@ func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 			// missing /AP, and any appearance built for it would have carried a
 			// 1 by 1 /BBox instead of the annotation's own size.
 			rect = document.ResolveRectangle(ctx, doc, rect)
-			if isZeroAreaRect(rect) {
+			// A zero-area annotation is exempt everywhere except a PDF/A-1
+			// widget: ISO 19005-2/3/4 §6.3.3 t1 opens its test with
+			// "width == 0 && height == 0", while ISO 19005-1 §6.9 t2 asks only
+			// "AP != null" of a PDWidgetAnnot. Invisible signature fields carry
+			// /Rect [0 0 0 0], so skipping them left a part-1 violation
+			// reported and unfixable. Part 1 states nothing about a zero-area
+			// annotation that is not a widget: its §6.5.3 tests 4 to 6 all
+			// begin "AP != N", constraining an appearance that exists rather
+			// than requiring one, so those stay exempt.
+			if isZeroAreaRect(rect) && (compliance.PDFAPart(profile) != 1 || subtype != "Widget") {
 				continue
 			}
 
