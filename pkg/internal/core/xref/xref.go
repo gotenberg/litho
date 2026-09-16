@@ -41,6 +41,18 @@ type Index struct {
 	// the two /ID values, which Trailer alone cannot answer. It is nil when no
 	// trailer was parsed and equal to Trailer when the file has one section.
 	LastTrailer ast.PdfDict
+
+	// HighestOffsetTrailer is the trailer of the section that starts furthest
+	// into the file. veraPDF keeps every section's start offset in a sorted set
+	// and takes the greatest as "the last trailer dictionary in a PDF file"
+	// (COSXRefTableReader.setFirstLastTrailersAndStartXRefs), which is what ISO
+	// 19005-2, 6.1.3 test 1 reads for its /ID.
+	//
+	// It is neither Trailer nor LastTrailer. Trailer is the section the last
+	// startxref designates, which in a linearized layout is the first-page
+	// section at the top of the file, and LastTrailer is the oldest section on
+	// the /Prev chain. The three coincide only when a file has one section.
+	HighestOffsetTrailer ast.PdfDict
 }
 
 func readInt(data []byte, width int) int64 {

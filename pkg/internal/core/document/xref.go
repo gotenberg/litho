@@ -80,6 +80,10 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 	// walk to the file's distinct offsets, so it is not a fixed anti-DoS cap.
 	visited := make(map[int64]struct{})
 
+	// The section furthest into the file answers the /ID rule, whichever order
+	// the /Prev chain visits the sections in: see [xref.Index.HighestOffsetTrailer].
+	highestOffset := int64(-1)
+
 	for currentOffset != 0 {
 		if _, seen := visited[currentOffset]; seen {
 			d.Logger.Debug("xref chain: /Prev cycle detected, stopping walk",
@@ -113,6 +117,10 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 			}
 			prev = p
 			d.Index.LastTrailer = trailerDict
+			if currentOffset > highestOffset {
+				highestOffset = currentOffset
+				d.Index.HighestOffsetTrailer = trailerDict
+			}
 			if d.Index.Trailer == nil {
 				d.Index.Trailer = trailerDict
 			} else {
@@ -149,6 +157,10 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 			}
 			prev = pVal
 			d.Index.LastTrailer = stream.Dict
+			if currentOffset > highestOffset {
+				highestOffset = currentOffset
+				d.Index.HighestOffsetTrailer = stream.Dict
+			}
 			if d.Index.Trailer == nil {
 				d.Index.Trailer = stream.Dict
 			} else {

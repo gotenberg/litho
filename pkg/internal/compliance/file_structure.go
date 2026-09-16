@@ -261,7 +261,7 @@ func checkHeaderBytes(buf []byte, profile string) []Violation {
 // the same key, so a trailer with no /ID answers both: it fails presence, and
 // its absent value cannot equal the /ID the last trailer carries.
 func checkTrailerID(ctx context.Context, doc *document.Document, profile string) []Violation {
-	trailer := doc.Index.Trailer
+	trailer := trailerAnsweringID(doc)
 	if trailer == nil {
 		return fail(trailerIDRule(profile), "no trailer dictionary")
 	}
@@ -299,6 +299,43 @@ func checkTrailerID(ctx context.Context, doc *document.Document, profile string)
 	}
 
 	return results
+}
+
+// trailerAnsweringID returns the trailer whose /ID answers §6.1.3 t1: "the last
+// trailer dictionary in a PDF file".
+//
+// veraPDF keeps every xref section's start offset in a sorted set and reads the
+// greatest one (COSXRefTableReader.setFirstLastTrailersAndStartXRefs), which is
+// not the section the last startxref designates. A file laid out for
+// linearization puts its first-page section at the top, so litho's
+// [xref.Index.Trailer], latched on the first section parsed, is the one at the
+// LOWER offset. That section carries the /ID while the section further into the
+// file need not, and mergeTrailerKeys does not copy /ID between them.
+//
+// The distinction only shows when veraPDF does not judge the file linearized,
+// because a linearized file resolves the identifier from its first-page section
+// and passes. PDFParser.isLinearized requires /L to equal the file's real
+// length, so trailing bytes after the last %%EOF defeat it: measured both ways
+// on govdocs thread_200_200432.pdf, whose /L misses its size by the 2 bytes it
+// carries past %%EOF. Trimming those 2 bytes turns veraPDF's t1 from fail to
+// pass, and appending 2 bytes to thread_000_000012.pdf turns it from pass to
+// fail. [document.Document.Linearization] answers that same question, being nil
+// for a stale /L, so a non-nil value is the linearized case. It measures the
+// length from the header while veraPDF measures the whole stream, which only
+// parts company on a file carrying a prefix before %PDF-.
+//
+// Censused over 4963 corpus files: 4 files answer differently (govdocs
+// thread_100_100820, thread_200_200432, thread_200_200932, thread_400_400299),
+// veraPDF reports every one, and NO file loses a violation litho reports today.
+func trailerAnsweringID(doc *document.Document) ast.PdfDict {
+	if doc.Linearization != nil {
+		return doc.Index.Trailer
+	}
+	// A rebuilt file has a trailer without a walked chain behind it.
+	if doc.Index.HighestOffsetTrailer == nil {
+		return doc.Index.Trailer
+	}
+	return doc.Index.HighestOffsetTrailer
 }
 
 // fileIDContentLength returns the total number of bytes the string elements of
