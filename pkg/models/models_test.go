@@ -563,6 +563,43 @@ func TestPDFUAProfile_IsValid(t *testing.T) {
 	}
 }
 
+func TestWTPDFProfile_IsValid(t *testing.T) {
+	for _, p := range []WTPDFProfile{WTPDF1Accessibility, WTPDF1Reuse} {
+		if !p.IsValid() {
+			t.Errorf("WTPDFProfile(%q).IsValid() = false, want true", p)
+		}
+		if p.String() != string(p) {
+			t.Errorf("String() drift on %q", p)
+		}
+	}
+	for _, p := range []WTPDFProfile{"", "WTPDF", "WTPDF-1.0", "WTPDF-2.0-Reuse", "wtpdf-1.0-reuse", "PDF/UA-2"} {
+		if p.IsValid() {
+			t.Errorf("WTPDFProfile(%q).IsValid() = true, want false", p)
+		}
+	}
+}
+
+func TestWTPDFProfile_JSONValue(t *testing.T) {
+	tests := []struct {
+		profile WTPDFProfile
+		want    string
+	}{
+		{WTPDF1Accessibility, `"WTPDF-1.0-Accessibility"`},
+		{WTPDF1Reuse, `"WTPDF-1.0-Reuse"`},
+	}
+	for _, tc := range tests {
+		t.Run(string(tc.profile), func(t *testing.T) {
+			data, err := json.Marshal(tc.profile)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			if string(data) != tc.want {
+				t.Errorf("got %s, want %s", data, tc.want)
+			}
+		})
+	}
+}
+
 func TestFacturXLevel_JSONValue(t *testing.T) {
 	tests := []struct {
 		level FacturXLevel

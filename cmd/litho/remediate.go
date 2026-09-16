@@ -57,7 +57,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if fs.NArg() < 1 || *output == "" || *profile == "" {
 		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] -o out.pdf")
 		fmt.Fprintln(stderr)
-		fmt.Fprintln(stderr, "Profiles: "+strings.Join(allProfileNames(), ", "))
+		fmt.Fprintln(stderr, "Profiles: "+strings.Join(remediateProfileNames(), ", "))
 		return exitError
 	}
 
@@ -87,7 +87,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 			return exitError
 		}
 	} else {
-		fmt.Fprintf(stderr, "unknown profile %q. Valid: %s\n", *profile, strings.Join(allProfileNames(), ", "))
+		fmt.Fprintf(stderr, "unknown profile %q. Valid: %s\n", *profile, strings.Join(remediateProfileNames(), ", "))
 		return exitError
 	}
 

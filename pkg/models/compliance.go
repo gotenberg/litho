@@ -29,9 +29,39 @@ const (
 	PDFUA2 PDFUAProfile = "PDF/UA-2"
 )
 
+// WTPDFProfile identifies a Well-Tagged PDF (WTPDF) 1.0 conformance
+// level. WTPDF builds on ISO 14289-2 (PDF/UA-2): both levels carry the
+// PDF/UA-2 requirements except the identification rules of its clause 5,
+// and each adds a PDF Declaration naming the level.
+// Values are immutable and safe for concurrent use.
+type WTPDFProfile string
+
+// WTPDF 1.0 profile constants. Accessibility is the stricter level;
+// Reuse relaxes the requirements that serve assistive technology rather
+// than content reuse.
+const (
+	WTPDF1Accessibility WTPDFProfile = "WTPDF-1.0-Accessibility"
+	WTPDF1Reuse         WTPDFProfile = "WTPDF-1.0-Reuse"
+)
+
 // String returns the canonical string form of the profile, e.g.
 // "PDF/A-2b". The zero value renders as the empty string.
 func (p PDFAProfile) String() string { return string(p) }
+
+// String returns the canonical string form of the profile, e.g.
+// "WTPDF-1.0-Reuse". The zero value renders as the empty string.
+func (p WTPDFProfile) String() string { return string(p) }
+
+// IsValid reports whether p matches one of the documented WTPDF
+// profile constants. Use this to validate user input before passing
+// the value to validators that assume a known profile.
+func (p WTPDFProfile) IsValid() bool {
+	switch p {
+	case WTPDF1Accessibility, WTPDF1Reuse:
+		return true
+	}
+	return false
+}
 
 // IsValid reports whether p matches one of the documented PDF/A
 // profile constants. Use this to validate user input before passing

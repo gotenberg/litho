@@ -1,12 +1,14 @@
-// Package compliance validates PDFs against ISO 19005 (PDF/A) and
-// ISO 14289 (PDF/UA). Each rule encodes a clause and test from those
-// standards, identified by (Specification, Clause, TestNumber).
+// Package compliance validates PDFs against ISO 19005 (PDF/A),
+// ISO 14289 (PDF/UA) and Well-Tagged PDF (WTPDF). Each rule encodes a
+// clause and test from those standards, identified by
+// (Specification, Clause, TestNumber).
 //
 // # Entry Points
 //
-// [ValidatePDFA] and [ValidatePDFUA] audit a parsed document against a specific
-// profile. Both return violations as []error where each element is a [Violation]
-// value. Type-assert to access the structured [Rule] and Context fields:
+// [ValidatePDFA], [ValidatePDFUA] and [ValidateWTPDF] audit a parsed document
+// against a specific profile. All return violations as []error where each
+// element is a [Violation] value. Type-assert to access the structured [Rule]
+// and Context fields:
 //
 //	violations, err := compliance.ValidatePDFA(ctx, doc, models.PDFA2b)
 //	for _, v := range violations {

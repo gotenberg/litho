@@ -49,6 +49,11 @@ var pdfuaProfiles = map[string]models.PDFUAProfile{
 	"PDF/UA-2": models.PDFUA2,
 }
 
+var wtpdfProfiles = map[string]models.WTPDFProfile{
+	"WTPDF-1.0-Accessibility": models.WTPDF1Accessibility,
+	"WTPDF-1.0-Reuse":         models.WTPDF1Reuse,
+}
+
 // facturXProfileName is the profile string selecting Factur-X / ZUGFeRD
 // 2.1+ validation, which takes no version argument.
 const facturXProfileName = "Factur-X"
@@ -74,7 +79,7 @@ func runValidate(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	if len(files) == 0 || *profile == "" {
 		fmt.Fprintln(stderr, "Usage: litho validate --profile PROFILE [-f json] [-p password] <file> [file...]")
 		fmt.Fprintln(stderr)
-		fmt.Fprintln(stderr, "Profiles: "+strings.Join(allProfileNames(), ", "))
+		fmt.Fprintln(stderr, "Profiles: "+strings.Join(validateProfileNames(), ", "))
 		return exitError
 	}
 
@@ -108,6 +113,15 @@ func runValidate(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			}
 			res.Compliant = len(violations) == 0
 			res.Violations = structuredViolations(violations)
+		} else if wtpdfP, ok := wtpdfProfiles[*profile]; ok {
+			violations, err := r.ValidateWTPDFReport(ctx, wtpdfP)
+			if err != nil {
+				closer()
+				fmt.Fprintf(stderr, "%s: %v\n", path, err)
+				return exitError
+			}
+			res.Compliant = len(violations) == 0
+			res.Violations = structuredViolations(violations)
 		} else if *profile == facturXProfileName {
 			rep, err := r.ValidateFacturXReport(ctx)
 			if err != nil {
@@ -130,7 +144,7 @@ func runValidate(ctx context.Context, args []string, stdout, stderr io.Writer) i
 			res.Advisories = advisoryMessages(rep.Advisories)
 		} else {
 			closer()
-			fmt.Fprintf(stderr, "unknown profile %q. Valid: %s\n", *profile, strings.Join(allProfileNames(), ", "))
+			fmt.Fprintf(stderr, "unknown profile %q. Valid: %s\n", *profile, strings.Join(validateProfileNames(), ", "))
 			return exitError
 		}
 
@@ -220,16 +234,39 @@ func advisoryMessages(errs []error) []string {
 	return msgs
 }
 
-func allProfileNames() []string {
-	names := make([]string, 0, len(pdfaProfiles)+len(pdfuaProfiles)+1+len(zugferdProfiles))
+// validateProfileNames lists every profile `litho validate` accepts.
+// remediate accepts a different set, so it has its own list: advertising
+// a profile a command then refuses sends the caller in circles.
+func validateProfileNames() []string {
+	names := make([]string, 0, len(pdfaProfiles)+len(pdfuaProfiles)+len(wtpdfProfiles)+1+len(zugferdProfiles))
 	for k := range pdfaProfiles {
 		names = append(names, k)
 	}
 	for k := range pdfuaProfiles {
 		names = append(names, k)
 	}
+	for k := range wtpdfProfiles {
+		names = append(names, k)
+	}
 	names = append(names, facturXProfileName)
 	for k := range zugferdProfiles {
+		names = append(names, k)
+	}
+	return names
+}
+
+// remediateProfileNames lists every profile `litho remediate` accepts.
+// WTPDF and ZUGFeRD are absent deliberately: the remediation engine has
+// no fixers for them, so its dispatch rejects both.
+func remediateProfileNames() []string {
+	names := make([]string, 0, len(pdfaProfiles)+len(pdfuaProfiles)+len(facturxVariants))
+	for k := range pdfaProfiles {
+		names = append(names, k)
+	}
+	for k := range pdfuaProfiles {
+		names = append(names, k)
+	}
+	for k := range facturxVariants {
 		names = append(names, k)
 	}
 	return names

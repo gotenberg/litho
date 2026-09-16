@@ -55,6 +55,19 @@ func ValidatePDFUA(ctx context.Context, doc *document.Document, profile models.P
 // runValidation is the shared body of [ValidatePDFA] and [ValidatePDFUA].
 // The caller must hold the document's validation run mutex.
 func runValidation(ctx context.Context, doc *document.Document, profile string, groups []checkGroup) ([]error, error) {
+	violations, err := runValidationViolations(ctx, doc, profile, groups)
+	if err != nil {
+		return nil, err
+	}
+	return violationsToErrors(violations), nil
+}
+
+// runValidationViolations runs the checks and returns the violations
+// themselves. [ValidateWTPDF] needs the structured form: it subtracts
+// the rules its conformance level does not state before the violations
+// become errors. The caller must hold the document's validation run
+// mutex.
+func runValidationViolations(ctx context.Context, doc *document.Document, profile string, groups []checkGroup) ([]Violation, error) {
 	// Enable parser-level format checking, resolve all objects upfront so
 	// the checks run against a fully-parsed document graph, then disable
 	// compliance mode again so concurrent reads after the run return
@@ -102,7 +115,7 @@ func runValidation(ctx context.Context, doc *document.Document, profile string, 
 		"profile", profile,
 		"violations", len(violations),
 	)
-	return violationsToErrors(violations), nil
+	return violations, nil
 }
 
 // Violation records a single rule violation with context about where it occurred.

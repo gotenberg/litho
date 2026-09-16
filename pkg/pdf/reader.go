@@ -215,6 +215,17 @@ func (r *Reader) ValidatePDFUA(ctx context.Context, profile models.PDFUAProfile)
 	return compliance.ValidatePDFUA(ctx, r.doc, profile)
 }
 
+// ValidateWTPDF audits the document against a Well-Tagged PDF 1.0
+// conformance level, returning all compliance violations found. An
+// empty slice means the document passes. WTPDF adopts the ISO 14289-2
+// (PDF/UA-2) requirements, so the violations report those clauses,
+// minus the rules the level does not state, plus the PDF Declaration
+// WTPDF requires of its own.
+func (r *Reader) ValidateWTPDF(ctx context.Context, profile models.WTPDFProfile) (_ []error, err error) {
+	defer recoverToError(r.logger(), "Reader.ValidateWTPDF", &err)
+	return compliance.ValidateWTPDF(ctx, r.doc, profile)
+}
+
 // ValidatePDFAReport audits the document against a PDF/A profile and
 // returns structured [Violation] values carrying the clause, test
 // number, and severity that [Reader.ValidatePDFA] stringifies away.
@@ -235,6 +246,17 @@ func (r *Reader) ValidatePDFAReport(ctx context.Context, profile models.PDFAProf
 func (r *Reader) ValidatePDFUAReport(ctx context.Context, profile models.PDFUAProfile) (_ []Violation, err error) {
 	defer recoverToError(r.logger(), "Reader.ValidatePDFUAReport", &err)
 	errs, err := compliance.ValidatePDFUA(ctx, r.doc, profile)
+	if err != nil {
+		return nil, err
+	}
+	return toViolations(errs), nil
+}
+
+// ValidateWTPDFReport mirrors [Reader.ValidatePDFAReport] for WTPDF.
+// Every WTPDF violation is [SeverityFatal]: conformance is binary.
+func (r *Reader) ValidateWTPDFReport(ctx context.Context, profile models.WTPDFProfile) (_ []Violation, err error) {
+	defer recoverToError(r.logger(), "Reader.ValidateWTPDFReport", &err)
+	errs, err := compliance.ValidateWTPDF(ctx, r.doc, profile)
 	if err != nil {
 		return nil, err
 	}

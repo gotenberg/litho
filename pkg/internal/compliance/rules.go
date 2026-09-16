@@ -6029,6 +6029,27 @@ var (
 		Object:        "CosDocument",
 		Description:   "A PDF/A-4f conforming file shall contain an EmbeddedFiles key in the name dictionary of the document catalog dictionary",
 	}
+
+	// WTPDF 1.0 states one rule of its own per conformance level: the
+	// PDF Declaration that names the level. Everything else it requires
+	// is ISO 14289-2, which is why these carry the WTPDF_1_0
+	// specification and the rest of a WTPDF run reports ISO_14289_2
+	// clauses.
+	Rule_WTPDF_1_0_6_1_2_t01 = Rule{
+		Specification: "WTPDF_1_0",
+		Clause:        "6.1.2",
+		TestNumber:    1,
+		Object:        "MainXMPPackage",
+		Description:   "File conforming to the WTPDF 1.0 conformance level for reuse shall include a PDF Declaration with the URI identifier \"http://pdfa.org/declarations/wtpdf#reuse1.0\" as its pdfd:conformsTo entry",
+	}
+
+	Rule_WTPDF_1_0_6_1_3_t01 = Rule{
+		Specification: "WTPDF_1_0",
+		Clause:        "6.1.3",
+		TestNumber:    1,
+		Object:        "MainXMPPackage",
+		Description:   "File conforming to the WTPDF 1.0 conformance level for accessibility shall include a PDF Declaration with the URI identifier \"http://pdfa.org/declarations/wtpdf#accessibility1.0\" as its pdfd:conformsTo entry",
+	}
 )
 
 // PDFA1aRules returns the rule set for PDF/A-1a (135 rules).
