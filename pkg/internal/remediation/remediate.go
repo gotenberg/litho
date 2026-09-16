@@ -32,6 +32,22 @@ func RemediatePDFUA(ctx context.Context, doc *document.Document, alloc *writer.O
 	return remediate(ctx, doc, alloc, string(profile), opts, violations)
 }
 
+// RemediateWTPDF validates the document against the given WTPDF conformance
+// level, applies targeted fixes for remediable violations, and returns a
+// report.
+//
+// The violations come from [compliance.ValidateWTPDF], not the PDF/UA-2
+// validator: the levels drop rules PDF/UA-2 states, and judging the document
+// against PDF/UA-2 here would report those as residuals the level never
+// required.
+func RemediateWTPDF(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, profile models.WTPDFProfile, opts Options) (*Report, error) {
+	violations, err := compliance.ValidateWTPDF(ctx, doc, profile)
+	if err != nil {
+		return nil, fmt.Errorf("validating for remediation: %w", err)
+	}
+	return remediate(ctx, doc, alloc, string(profile), opts, violations)
+}
+
 func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, profile string, opts Options, violations []error) (*Report, error) {
 	if len(violations) == 0 {
 		doc.Logger.Debug("remediate: no violations",

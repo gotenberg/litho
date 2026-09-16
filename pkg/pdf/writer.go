@@ -1012,6 +1012,24 @@ func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile
 	})
 }
 
+// RemediateWTPDF applies the Well-Tagged PDF fixer set for the given
+// conformance level and returns a report of what was fixed and what
+// remains. WTPDF adopts the ISO 14289-2 requirements, so the fixes are the
+// PDF/UA-2 ones, plus the PDF Declaration WTPDF states of its own.
+//
+// Violations the level does not state are never reported: the run is judged
+// by [Reader.ValidateWTPDF], which applies the level's rule subtractions.
+func (w *Writer) RemediateWTPDF(ctx context.Context, profile models.WTPDFProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
+	defer recoverToError(w.logger(), "Writer.RemediateWTPDF", &err)
+	cfg, remOpts := remediateConfig(opts)
+	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
+		return r.ValidateWTPDF(ctx, profile)
+	}
+	return w.remediate(ctx, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
+		return remediation.RemediateWTPDF(ctx, doc, alloc, profile, remOpts)
+	})
+}
+
 // FacturX defaults applied by [Writer.RemediateFacturX] when the
 // corresponding [FacturXConfig] field is zero.
 const (

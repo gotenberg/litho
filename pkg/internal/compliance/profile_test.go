@@ -123,6 +123,13 @@ func TestIsPDFUA(t *testing.T) {
 		{"PDF/UA-1", true},
 		{"PDF/UA-2", true},
 		{"PDF/UA-99", true}, // prefix match; caller must check part separately
+		// WTPDF adopts the ISO 14289-2 requirements, so it imposes PDF/UA
+		// obligations. Remediation fixers gate on this: a bare "PDF/UA"
+		// prefix test silently disabled the marked-content language fix
+		// under a WTPDF run.
+		{"WTPDF-1.0-Accessibility", true},
+		{"WTPDF-1.0-Reuse", true},
+		{"WTPDF-1.0", false}, // not a conformance level
 		{"PDF/A-1a", false},
 		{"PDF/A-4", false},
 		{"", false},
@@ -148,6 +155,10 @@ func TestPDFUAPart(t *testing.T) {
 		{"PDF/UA-1", 1},
 		{"PDF/UA-2", 2},
 		{"PDF/UA-99", 0}, // matches IsPDFUA prefix but not a real part
+		// Both WTPDF levels build on ISO 14289-2 and so report part 2.
+		{"WTPDF-1.0-Accessibility", 2},
+		{"WTPDF-1.0-Reuse", 2},
+		{"WTPDF-1.0", 0},
 		{"PDF/A-1a", 0},
 		{"", 0},
 	}

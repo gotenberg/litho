@@ -84,6 +84,20 @@ func wtpdfDeclarationRule(profile models.WTPDFProfile) (Rule, string) {
 	return Rule{}, ""
 }
 
+// WTPDFDeclarationURI returns the PDF Declaration URI a WTPDF conformance
+// level requires, or "" when the profile is not a WTPDF one. Remediation
+// uses it to write the declaration this package validates, so both sides
+// read the URI from one place.
+func WTPDFDeclarationURI(profile string) string {
+	_, uri := wtpdfDeclarationRule(models.WTPDFProfile(profile))
+	return uri
+}
+
+// WTPDFDeclarationNamespace is the XMP namespace URI of the PDF
+// Declarations schema, exported for the remediation fixer that writes a
+// declaration into a packet.
+const WTPDFDeclarationNamespace = wtpdfDeclarationNamespace
+
 // maxWTPDFDeclarations bounds how many pdfd:conformsTo entries are read
 // from one XMP packet. This is an anti-DoS guard, not a spec limit: a
 // crafted packet can repeat the property indefinitely, while a real one

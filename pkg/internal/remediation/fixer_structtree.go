@@ -32,7 +32,10 @@ func fixStructTree(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 	var fixes []string
 
-	needsNamespaces := profile == "PDF/UA-2"
+	// ISO 14289-2 requires the structure namespaces; the WTPDF levels adopt
+	// that requirement, so ask which part the profile builds on rather than
+	// comparing the identifier.
+	needsNamespaces := compliance.PDFUAPart(profile) == 2
 
 	// Check for existing StructTreeRoot.
 	if stObj, ok := catalogDict["StructTreeRoot"]; ok {

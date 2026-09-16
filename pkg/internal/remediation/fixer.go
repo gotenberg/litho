@@ -62,6 +62,9 @@ var registry = []fixer{
 	{name: "info-date", safety: safetyStructural, matches: matchInfoDate, apply: fixInfoDate},
 	{name: "xmp-metadata", safety: safetyStructural, matches: matchXMP, apply: fixXMP},
 	{name: "xmp-schema", safety: safetyStructural, matches: matchXMPSchema, apply: fixXMPSchema},
+	// Runs after the XMP fixers so it splices into the packet they queued
+	// rather than the stale source one.
+	{name: "wtpdf-declaration", safety: safetyStructural, matches: matchWTPDFDeclaration, apply: fixWTPDFDeclaration},
 	{name: "output-intent", safety: safetyStructural, matches: matchOutputIntent, apply: fixOutputIntent},
 	{name: "corrupt-icc", safety: safetyStructural, matches: matchCorruptICC, apply: fixCorruptICC},
 	{name: "output-intent-cleanup", safety: safetyStructural, matches: matchOutputIntentCleanup, apply: fixOutputIntentCleanup},

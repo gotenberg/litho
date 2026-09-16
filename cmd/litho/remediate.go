@@ -81,6 +81,8 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		report, err = w.RemediatePDFA(ctx, pdfaP, remOpts...)
 	} else if pdfuaP, ok := pdfuaProfiles[*profile]; ok {
 		report, err = w.RemediatePDFUA(ctx, pdfuaP, remOpts...)
+	} else if wtpdfP, ok := wtpdfProfiles[*profile]; ok {
+		report, err = w.RemediateWTPDF(ctx, wtpdfP, remOpts...)
 	} else if variant, ok := facturxVariants[*profile]; ok {
 		report, err = remediateFacturX(ctx, w, variant, *invoice, *level, remOpts, stderr)
 		if err == errBadFacturXInput {

@@ -1,6 +1,10 @@
 package compliance
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/gotenberg/litho/pkg/models"
+)
 
 // Profile-identifier parsing helpers. These are the single source of truth
 // for interpreting profile strings like "PDF/A-2b" or "PDF/UA-1" across
@@ -63,18 +67,34 @@ func IsPDFA(profile string) bool {
 	return PDFAPart(profile) != 0
 }
 
-// IsPDFUA reports whether the profile identifier names a PDF/UA profile.
+// IsPDFUA reports whether the profile identifier names a profile built on
+// ISO 14289 (PDF/UA). The WTPDF levels are included: WTPDF 1.0 adopts the
+// ISO 14289-2 requirements wholesale, so code asking "does this profile
+// impose PDF/UA obligations" must answer yes for them. Validation never
+// asks with a WTPDF identifier (it runs the checks under PDF/UA-2), but
+// remediation passes the caller's profile to its fixers unchanged, and a
+// prefix test silently disabled every PDF/UA fixer under a WTPDF run.
 func IsPDFUA(profile string) bool {
-	return strings.HasPrefix(profile, "PDF/UA")
+	return strings.HasPrefix(profile, "PDF/UA") || IsWTPDF(profile)
 }
 
-// PDFUAPart returns the PDF/UA part number (1 or 2) for the given profile
-// identifier. Returns 0 if the string is not a recognized PDF/UA profile.
+// IsWTPDF reports whether the profile identifier names a WTPDF conformance
+// level.
+func IsWTPDF(profile string) bool {
+	return models.WTPDFProfile(profile).IsValid()
+}
+
+// PDFUAPart returns the ISO 14289 part number (1 or 2) the profile builds
+// on. Returns 0 if the string is not a recognized PDF/UA or WTPDF profile.
+// Both WTPDF levels build on ISO 14289-2 and so report part 2.
 func PDFUAPart(profile string) int {
 	switch profile {
 	case "PDF/UA-1":
 		return 1
 	case "PDF/UA-2":
+		return 2
+	}
+	if IsWTPDF(profile) {
 		return 2
 	}
 	return 0

@@ -256,14 +256,17 @@ func validateProfileNames() []string {
 }
 
 // remediateProfileNames lists every profile `litho remediate` accepts.
-// WTPDF and ZUGFeRD are absent deliberately: the remediation engine has
-// no fixers for them, so its dispatch rejects both.
+// It is deliberately separate from [validateProfileNames]: advertising a
+// profile a command then refuses sends the caller in circles.
 func remediateProfileNames() []string {
-	names := make([]string, 0, len(pdfaProfiles)+len(pdfuaProfiles)+len(facturxVariants))
+	names := make([]string, 0, len(pdfaProfiles)+len(pdfuaProfiles)+len(wtpdfProfiles)+len(facturxVariants))
 	for k := range pdfaProfiles {
 		names = append(names, k)
 	}
 	for k := range pdfuaProfiles {
+		names = append(names, k)
+	}
+	for k := range wtpdfProfiles {
 		names = append(names, k)
 	}
 	for k := range facturxVariants {
