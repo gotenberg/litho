@@ -225,7 +225,7 @@ func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict a
 	// Arial-Black CIDFontType2 with no /CIDToGIDMap and veraPDF reports it.
 	if PDFAPart(profile) != 1 {
 		fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
-		if fd == nil || !isFontEmbedded(ctx, doc, fd, fontFileKeys(cidSubtype), PDFAPart(profile)) {
+		if fd == nil || !isFontEmbedded(ctx, doc, fd, cidSubtype, PDFAPart(profile)) {
 			return nil
 		}
 	}

@@ -14,11 +14,16 @@ import (
 // bare CFF ("Type1C", "CIDFontType0C") or an sfnt ("OpenType") per ISO 32000-1,
 // Table 126, so bytes that are neither embed nothing.
 //
-// Two leniencies are pinned deliberately. The CFF major version is unread, so a
-// CFF2 program still counts. And a subtype naming the other container is
-// accepted: pdfjs issue4668.pdf declares /Type1C over a TrueType sfnt, and
-// veraPDF reports it embedded because its verdict is whether its own parser
-// succeeded, not which container the subtype named.
+// One leniency is pinned deliberately: the CFF major version is unread, so a
+// CFF2 program still counts.
+//
+// The container the /Subtype names is enforced, but only for the fonts that
+// read it. veraPDF picks the parser from the font, so a simple TrueType font
+// parses /FontFile3 as an sfnt whatever the subtype says (pdfjs issue4668.pdf
+// declares /Type1C over a TrueType sfnt and is embedded), while the /Type1 font
+// this fixture builds dispatches on the subtype and cannot read the other
+// container: see [fontFile3ParsesForFont] and
+// [TestFontFile3ContainerMatchesFont], where every pairing was measured.
 func TestFontEmbedding_FontFile3Container(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -64,9 +69,9 @@ func TestFontEmbedding_FontFile3Container(t *testing.T) {
 		{"a header shorter than the fixed record does not", "Type1C", "\x01\x00\x04", true},
 		{"a header reaching past the program does not", "Type1C", "\x01\x00\x64\x02rest", true},
 		{"an offset size out of range does not", "Type1C", "\x01\x00\x04\x05rest", true},
-		{"an sfnt in a Type1C slot still embeds a program", "Type1C", sfnt, false},
+		{"a Type1 font cannot read an sfnt in a Type1C slot", "Type1C", sfnt, true},
 		{"an sfnt program embeds an OpenType font", "OpenType", sfnt, false},
-		{"a bare CFF in an OpenType slot still embeds a program", "OpenType", cff, false},
+		{"a Type1 font cannot read a bare CFF in an OpenType slot", "OpenType", cff, true},
 		{"zero bytes in an OpenType slot do not", "OpenType", "\x00\x00\x00\x00", true},
 	}
 	for _, tc := range cases {

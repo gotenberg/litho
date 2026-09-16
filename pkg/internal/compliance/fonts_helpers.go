@@ -403,8 +403,6 @@ func isStandard14Font(ctx context.Context, doc *document.Document, fontDict ast.
 	return standard14Fonts[string(basefont)]
 }
 
-// isFontEmbedded checks whether the font descriptor contains a FontFile,
-// FontFile2, or FontFile3 stream indicating an embedded font program.
 // fontFileKeys returns the FontDescriptor font-file keys that constitute valid
 // embedding for a font of the given subtype, per ISO 32000-1 Table 126. A
 // CIDFont must carry its program in the key matching its glyph format:
@@ -423,11 +421,15 @@ func fontFileKeys(subtype string) []ast.PdfName {
 	}
 }
 
-func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict, validKeys []ast.PdfName, part int) bool {
+// isFontEmbedded reports whether a font descriptor carries a font program a
+// consumer can read, which is what the embedding rules ask (ISO 19005-2,
+// 6.2.11.4.1 t1 and its restatements). fontSub is the font's own /Subtype, the
+// descendant's for a CIDFont, and selects the keys that may hold the program.
+func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict, fontSub string, part int) bool {
 	if fd == nil {
 		return false
 	}
-	for _, key := range validKeys {
+	for _, key := range fontFileKeys(fontSub) {
 		if obj, ok := fd[key]; ok {
 			resolved, err := document.ResolveObject(ctx, doc, obj)
 			if err != nil {
@@ -446,6 +448,9 @@ func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict,
 					if !namesAFontProgram(string(subtype)) {
 						continue
 					}
+					if !fontFile3ParsesForFont(ctx, doc, fontSub, string(subtype), obj, stream) {
+						continue
+					}
 				}
 				if !streamHoldsFontProgram(ctx, doc, key, obj, stream) {
 					continue
@@ -462,6 +467,44 @@ func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict,
 		}
 	}
 	return false
+}
+
+// fontFile3ParsesForFont reports whether a /FontFile3 program sits in the
+// container the consumer will read it as. ISO 32000-1, Table 126 names two: a
+// bare CFF for "Type1C" and "CIDFontType0C", an sfnt for "OpenType".
+//
+// veraPDF picks the parser from the font, not from the stream.
+// truetype.PDTrueTypeFont.getFontProgram calls parseTrueTypeFontProgram for
+// /FontFile2 and /FontFile3 alike, so a simple TrueType font reads its program
+// as an sfnt whatever /Subtype names it. type1.PDType1Font and PDCIDFont
+// instead dispatch on that /Subtype. A program in the other container leaves
+// the parse unfinished, and GFPDFont.getcontainsFontFile, which answers
+// getFontProgram() != null && fontProgramParsed, reports the font as not
+// embedded (ISO 19005-2, 6.2.11.4.1 t1; ISO 14289-2, 8.4.5.5.1 t1).
+//
+// Measured against veraPDF 1.30.2, moving the same program bytes between
+// declarations: a /Type1 font fails an sfnt under "Type1C" (pdfjs
+// issue7598.pdf embeds an OTTO) and passes a bare CFF; a /CIDFontType0 fails an
+// OTTO under "CIDFontType0C" (issue20426.pdf, issue6782.pdf) and passes the same
+// bytes under "OpenType"; a /TrueType font passes an sfnt under "Type1C"
+// (issue4668.pdf) and fails a bare CFF there.
+func fontFile3ParsesForFont(ctx context.Context, doc *document.Document, fontSub, declared string, obj ast.PdfObject, stream ast.PdfStream) bool {
+	data, err := decodeFontProgram(ctx, doc, obj, stream)
+	if err != nil || len(data) == 0 {
+		// Bytes that will not decode, and an empty program, are
+		// [streamHoldsFontProgram]'s to judge. Leave both to it.
+		return true
+	}
+	if fontSub == "TrueType" {
+		return isSfntFontProgram(data)
+	}
+	switch declared {
+	case "OpenType":
+		return isSfntFontProgram(data)
+	case "Type1C", "CIDFontType0C":
+		return isCFFFontProgram(data)
+	}
+	return true
 }
 
 // decodeFontProgram decodes an embedded font program, reusing the document's
@@ -715,7 +758,7 @@ func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict as
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 
-	if !isFontEmbedded(ctx, doc, fd, fontFileKeys(fontSubtype(ctx, doc, fontDict)), PDFAPart(profile)) {
+	if !isFontEmbedded(ctx, doc, fd, fontSubtype(ctx, doc, fontDict), PDFAPart(profile)) {
 		return failf(rule, "font %s on page %d", fontName, pageNum)
 	}
 
