@@ -58,7 +58,7 @@ func TestCheckAnnotationAppearanceFonts_NonEmbeddedFont(t *testing.T) {
 		t.Fatalf("resolve page: %v", err)
 	}
 
-	results := checkAnnotationAppearanceFonts(ctx, doc, page, 1, "PDF/A-2b", map[int]bool{})
+	results := checkAnnotationAppearanceFonts(ctx, doc, page, nil, 1, "PDF/A-2b", map[int]bool{})
 	if !hasRule(results, fontEmbeddingRule("PDF/A-2b")) {
 		t.Errorf("non-embedded font used inside an annotation appearance should fire the embedding rule, got %v", results)
 	}

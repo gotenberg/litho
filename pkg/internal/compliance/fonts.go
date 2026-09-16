@@ -189,7 +189,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// through the appearance content stream (for example
 		// annots[0]/appearance[0]/contentStream[0]/operators[N]/font[0]); litho
 		// matches by checking their subset glyph coverage here.
-		results = append(results, checkAnnotationAppearanceFonts(ctx, doc, p.dict, pageIdx+1, profile, checkedObjs)...)
+		results = append(results, checkAnnotationAppearanceFonts(ctx, doc, p.dict, treeRoot, pageIdx+1, profile, checkedObjs)...)
 
 		// Fonts used only inside a Form XObject invoked from the page content
 		// (a Do operator) are likewise not reached by the page /Resources/Font
@@ -627,7 +627,7 @@ const maxAppearanceStateFonts = 256
 // reached. The full single-font suite runs here, scoped to the glyphs the
 // appearance stream actually renders. checkedObjs deduplicates against fonts
 // already checked on the page and across appearance streams.
-func checkAnnotationAppearanceFonts(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int, profile string, checkedObjs map[int]bool) []Violation {
+func checkAnnotationAppearanceFonts(ctx context.Context, doc *document.Document, page, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs map[int]bool) []Violation {
 	annots, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annots) == 0 {
 		return nil
@@ -654,7 +654,7 @@ func checkAnnotationAppearanceFonts(ctx context.Context, doc *document.Document,
 			if !ok {
 				continue
 			}
-			results = append(results, checkAppearanceStreamFonts(ctx, doc, apObj, pageNum, profile, checkedObjs, visited, 0)...)
+			results = append(results, checkAppearanceStreamFonts(ctx, doc, apObj, treeRoot, pageNum, profile, checkedObjs, visited, 0)...)
 		}
 	}
 	return results
@@ -664,7 +664,7 @@ func checkAnnotationAppearanceFonts(ctx context.Context, doc *document.Document,
 // subdictionary of streams) and checks the subset glyph coverage of every font
 // the stream actually uses for rendering. visited guards against parsing the
 // same appearance stream twice.
-func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apObj ast.PdfObject, pageNum int, profile string, checkedObjs, visited map[int]bool, stateCount int) []Violation {
+func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apObj ast.PdfObject, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, stateCount int) []Violation {
 	stream, err := document.ResolveStream(ctx, doc, apObj)
 	if err != nil {
 		// A state subdictionary: each value is an appearance stream.
@@ -678,7 +678,7 @@ func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apO
 				break
 			}
 			stateCount++
-			results = append(results, checkAppearanceStreamFonts(ctx, doc, subDict[stateName], pageNum, profile, checkedObjs, visited, stateCount)...)
+			results = append(results, checkAppearanceStreamFonts(ctx, doc, subDict[stateName], treeRoot, pageNum, profile, checkedObjs, visited, stateCount)...)
 		}
 		return results
 	}
@@ -694,10 +694,10 @@ func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apO
 	if res == nil {
 		return nil
 	}
+	// An appearance whose own /Resources name no font may still draw text: a Do
+	// inside it invokes a Form XObject that carries the font. Decoding the stream
+	// before that test is what reaches those, and the walk below judges them.
 	fontDict, _ := document.ResolveDict(ctx, doc, res["Font"])
-	if len(fontDict) == 0 {
-		return nil
-	}
 
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
@@ -714,7 +714,17 @@ func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apO
 		return nil
 	}
 
-	var results []Violation
+	// A Form XObject the appearance invokes is another content stream the walk
+	// above never enters, and veraPDF reaches its fonts through the appearance:
+	// pdfjs bug854315.pdf draws a subset CIDFont at
+	// annots[0]/appearance[0]/contentStream[0]/operators[N]/xObject[0]/contentStream[0],
+	// and issue17069.pdf shows both routes at once, one font named by the
+	// appearance itself and one only by the form it invokes. The colour scan
+	// already descends the same way (see [scanAnnotationAppearanceCS]).
+	// [checkFormXObjectFonts] carries the Do gating, the depth cap and the
+	// visited set, so a shared form is walked once.
+	results := checkFormXObjectFonts(ctx, doc, ops, res, treeRoot, pageNum, profile, checkedObjs, visited, 0)
+
 	for _, fontName := range sortedNames(fontDict) {
 		fontUsage := usage[string(fontName)]
 		if fontUsage == nil {

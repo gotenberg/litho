@@ -71,3 +71,55 @@ func TestAppearanceFont_CharSetPresentNoFire(t *testing.T) {
 		t.Error("a Type1 subset with /CharSet present must not fire 6.3.5 t2")
 	}
 }
+
+// nestedAppearanceFontPDF builds a one-page PDF whose page declares NO /Font and
+// whose appearance stream declares none either: the only font hangs off a Form
+// XObject the appearance invokes with a Do. That is the shape pdfjs
+// bug854315.pdf writes, where veraPDF reaches the font through
+// annots[0]/appearance[0]/contentStream[0]/operators[N]/xObject[0]/contentStream[0]
+// and litho stopped at the appearance's own /Resources/Font.
+func nestedAppearanceFontPDF(fdExtra string) []byte {
+	inner := "BT /F0 12 Tf (Hi) Tj ET"
+	innerStream := fmt.Sprintf(
+		"<< /Type /XObject /Subtype /Form /BBox [0 0 200 100] "+
+			"/Resources << /Font << /F0 7 0 R >> >> /Length %d >>\nstream\n%s\nendstream",
+		len(inner), inner)
+
+	outer := "q /FRM Do Q"
+	outerStream := fmt.Sprintf(
+		"<< /Type /XObject /Subtype /Form /BBox [0 0 200 100] "+
+			"/Resources << /XObject << /FRM 6 0 R >> >> /Length %d >>\nstream\n%s\nendstream",
+		len(outer), outer)
+
+	return cyclePDF(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		// Neither the page nor the appearance names a font.
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Annots [4 0 R] >>",
+		"<< /Type /Annot /Subtype /Widget /Rect [0 0 200 100] /AP << /N 5 0 R >> >>",
+		outerStream,
+		innerStream,
+		"<< /Type /Font /Subtype /Type1 /BaseFont /ABCDEF+Helvetica /FontDescriptor 8 0 R >>",
+		"<< /Type /FontDescriptor /FontName /ABCDEF+Helvetica /Flags 4 "+fdExtra+">>",
+	)
+}
+
+// TestAppearanceFont_NestedFormReached pins that a font reached only through a
+// Form XObject invoked inside an annotation appearance is still judged. The
+// appearance's own /Resources name no font, so the walk used to return before
+// decoding the stream and the subset defect went unreported (ISO 19005-1
+// §6.3.5 t2).
+func TestAppearanceFont_NestedFormReached(t *testing.T) {
+	if !firesRule(t, nestedAppearanceFontPDF(""), "6.3.5", 2) {
+		t.Error("a Type1 subset behind a Form XObject in an appearance must fire 6.3.5 t2")
+	}
+}
+
+// TestAppearanceFont_NestedFormCharSetPresentNoFire is the control: the same
+// nesting with a conformant /CharSet must stay silent, so reaching deeper does
+// not turn into over-reporting.
+func TestAppearanceFont_NestedFormCharSetPresentNoFire(t *testing.T) {
+	if firesRule(t, nestedAppearanceFontPDF("/CharSet (/H) "), "6.3.5", 2) {
+		t.Error("a nested Type1 subset with /CharSet present must not fire 6.3.5 t2")
+	}
+}
