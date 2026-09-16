@@ -72,10 +72,14 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// Also check Form XObject content streams for resource completeness.
 		// Only scan Forms referenced by Do operators in the page content.
 		var referencedXObjects map[string]bool
+		var used *usedResources
 		if hasContent {
-			_, referencedXObjects, _, _, _ = scanContentStreamDeviceCS(ctx, vctx.pages[i].parsedOps(ctx))
+			_, referencedXObjects, _, used, _ = scanContentStreamDeviceCS(ctx, vctx.pages[i].parsedOps(ctx))
 		}
 		results = append(results, checkFormXObjectResources(ctx, doc, res, part, i+1, referencedXObjects)...)
+
+		// Check the content streams of the tiling patterns the page paints.
+		results = append(results, checkPatternResources(ctx, doc, res, part, i+1, used)...)
 
 		// Scan Form XObject ExtGState for halftone/rendering intent violations.
 		results = append(results, checkFormXObjectExtGState(ctx, doc, res, profile, part, i+1, judgedGS)...)
@@ -139,6 +143,58 @@ func checkFormXObjectResources(ctx context.Context, doc *document.Document, page
 		// in the PAGE's resources is an inherited reference (t2), so the page
 		// resources serve as the fallback scope when scanning the form stream.
 		results = append(results, checkContentStreamResources(ctx, doc, formData, formRes, pageRes, part, pageNum, true)...)
+	}
+	return results
+}
+
+// checkPatternResources checks the content stream of every tiling pattern the
+// page paints. A tiling pattern draws its cell with a content stream of its own
+// (ISO 32000-1, 8.7.3.1), so the operand limits and resource rules apply there
+// as they do on the page. ISO 19005-1, 6.1.12 t2 states the real-magnitude
+// limit over CosReal, which is every real the file writes: pdfjs
+// 22060_A1_01_Plans.pdf keeps its 136 KB page stream inside the limit and holds
+// -39455.5 in patterns /R21 and /R24, and veraPDF reports it there six times.
+//
+// Only a pattern a scn or SCN selects is judged, the same scope
+// [scanPatternImages] uses. veraPDF passes a pattern the page declares and
+// never paints, measured on a fixture whose unselected pattern carries the same
+// out-of-range real.
+func checkPatternResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part, pageNum int, used *usedResources) []Violation {
+	if pageRes == nil || used == nil {
+		return nil
+	}
+	patterns, err := document.ResolveDict(ctx, doc, pageRes["Pattern"])
+	if err != nil || patterns == nil {
+		return nil
+	}
+
+	var results []Violation
+	for _, name := range sortedNames(patterns) {
+		if ctx.Err() != nil {
+			return results
+		}
+		if !used.patterns[string(name)] {
+			continue
+		}
+		stream, err := document.ResolveStream(ctx, doc, patterns[name])
+		if err != nil {
+			continue // a shading pattern: a dictionary with no content of its own
+		}
+		if patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"]); patternType != 1 {
+			continue
+		}
+		data, err := doc.DecodeStream(ctx, stream)
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		patternRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+		if patternRes == nil {
+			patternRes = make(ast.PdfDict)
+		}
+		// A pattern content stream resolves resource names against its own
+		// /Resources first, with the page's serving as the fallback scope, as a
+		// Form XObject's does.
+		results = append(results, checkContentStreamResources(ctx, doc, data, patternRes, pageRes, part, pageNum, true)...)
 	}
 	return results
 }
