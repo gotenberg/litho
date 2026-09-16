@@ -1553,7 +1553,8 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 // toUnicodeMapsNothing reports whether a /ToUnicode entry is a stream that does
 // not read as a CMap mapping any code. An entry that is not a stream, such as the
 // name /Identity-H some producers write, and a stream litho cannot read at all
-// are left to other rules.
+// are left to other rules. A CMap carrying a token its syntax cannot produce
+// maps nothing whatever its entries say: see [cmap.CMap.Malformed].
 func toUnicodeMapsNothing(ctx context.Context, doc *document.Document, tuObj ast.PdfObject) bool {
 	stream, err := document.ResolveStream(ctx, doc, tuObj)
 	if err != nil || stream.Dict == nil {
@@ -1566,7 +1567,7 @@ func toUnicodeMapsNothing(ctx context.Context, doc *document.Document, tuObj ast
 		}
 	}
 	parsed, err := cmap.Parse(ctx, data)
-	return err != nil || parsed == nil || len(parsed.Mapping) == 0
+	return err != nil || parsed == nil || len(parsed.Mapping) == 0 || parsed.Malformed()
 }
 
 // checkToUnicodeCMapValues validates that a readable /ToUnicode CMap does not

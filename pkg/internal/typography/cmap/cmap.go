@@ -40,6 +40,10 @@ type CMap struct {
 	// strict is nil until a non-conforming bfrange appears, and from then on
 	// holds only the mappings a conforming reader keeps.
 	strict map[string]string
+
+	// malformed records a token the CMap syntax cannot produce, which leaves
+	// the whole CMap unusable to a validator even where entries still parsed.
+	malformed bool
 }
 
 // StrictMapping returns the mapping without the codes that only a
@@ -55,6 +59,15 @@ func (c *CMap) StrictMapping() map[string]string {
 		return c.strict
 	}
 	return c.Mapping
+}
+
+// Malformed reports whether the CMap text carried a token no CMap syntax
+// produces, such as the bare ">" a corrupted name leaves behind. Text
+// extraction keeps reading [CMap.Mapping], which holds every entry that
+// parsed. A compliance check asking whether a code has a Unicode value treats
+// such a CMap as mapping nothing, which is how veraPDF judges it.
+func (c *CMap) Malformed() bool {
+	return c.malformed
 }
 
 // set records one mapping. A code only a non-conforming bfrange reaches stays
@@ -290,6 +303,17 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 			}
 
 		default:
+			// A bare ">" is a token no CMap syntax produces: the lexer returns
+			// ">>" whole and a hex string consumes its own ">". It appears where
+			// a name or string is corrupted, as in the "/CMapName
+			// /Adobe-Identity-UC>" of pdfjs issue11651.pdf, whose S became a
+			// ">". ISO 32000-1, 7.3.5 ends a name at a delimiter, so what
+			// follows is valid nowhere, and veraPDF discards the CMap whole: it
+			// reports ISO 14289-1, 7.21.7 t1 on every code the page shows, the
+			// codes its bfchar list maps included.
+			if tok.Type == lexer.TokenDelimiter && tok.Value == ">" {
+				c.malformed = true
+			}
 			if _, err := p.Consume(); err != nil {
 				return nil, err
 			}
