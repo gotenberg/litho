@@ -939,7 +939,13 @@ func isPdfWhitespaceOrDelim(b byte) bool {
 func streamLengthMatches(win []byte, expOff, esRel int) bool {
 	switch esRel - expOff {
 	case 0:
-		return esRel < 1 || (win[esRel-1] != '\n' && win[esRel-1] != '\r')
+		// An endstream at the very start of the data follows only the EOL that
+		// ends the stream keyword. veraPDF takes that EOL for the one before
+		// endstream as well and measures the stream at -1 bytes, so an empty
+		// stream whose endstream follows that EOL alone fails t1 whatever its
+		// /Length, while a second EOL before endstream passes (pdfjs
+		// issue4461.pdf; measured with LF and CRLF).
+		return esRel >= 1 && win[esRel-1] != '\n' && win[esRel-1] != '\r'
 	case 1:
 		return expOff < len(win) && (win[expOff] == '\n' || win[expOff] == '\r')
 	case 2:
