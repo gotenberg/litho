@@ -124,22 +124,49 @@ func violationFor(clause string, test int, context string) compliance.Violation 
 	}
 }
 
-// TestMatchHexStringClaimsOnlyTheOddDigitReport pins the match: the fixer must
-// claim the odd-digit violation and leave the invalid-character one, which is a
-// different repair.
-func TestMatchHexStringClaimsOnlyTheOddDigitReport(t *testing.T) {
+// TestMatchHexStringClaimsBothMalformedReports pins the match: re-serialising a
+// page repairs either way a hexadecimal string is written wrongly, so the fixer
+// claims both the odd-count report and the invalid-character one, and nothing
+// from another clause.
+//
+// The invalid-character report used to be left alone, repaired only as a side
+// effect: the parity test counted hex digits, so "<41!4>" read as odd and the
+// page was rewritten anyway. Counting non-white-space characters instead (ISO
+// 19005-2, 6.1.6 t1, which veraPDF measures the same way) leaves that string
+// even, so claiming the odd-count report alone stopped repairing it.
+func TestMatchHexStringClaimsBothMalformedReports(t *testing.T) {
 	t.Parallel()
 
 	odd := violationFor("6.1.6", 1, "page 1: compliance: "+oddHexDigits)
 	if !matchHexString(odd) {
-		t.Error("the odd-digit violation is not claimed")
+		t.Error("the odd-count violation is not claimed")
 	}
-	bad := violationFor("6.1.6", 2, "page 1: compliance: hex string has invalid character")
-	if matchHexString(bad) {
-		t.Error("the invalid-character violation was claimed by the odd-digit fixer")
+	bad := violationFor("6.1.6", 2, "page 1: compliance: "+invalidHexChar+" '!'")
+	if !matchHexString(bad) {
+		t.Error("the invalid-character violation is not claimed")
 	}
 	other := violationFor("6.2.2", 2, "page 1: compliance: "+oddHexDigits)
 	if matchHexString(other) {
 		t.Error("an unrelated clause was claimed")
+	}
+}
+
+// TestFixHexStringRewritesAnInvalidCharacterString pins the repair the widened
+// match enables: a hex string whose non-white-space count is even but which
+// carries a character that is no hexadecimal digit is still malformed, and
+// re-serialising the page writes the value the parser read (ISO 32000-1,
+// 7.3.4.3), dropping the stray character.
+func TestFixHexStringRewritesAnInvalidCharacterString(t *testing.T) {
+	t.Parallel()
+
+	got := rewrittenContent(t, hexStringPDF("<41!4>"))
+	if got == "" {
+		t.Fatal("the content stream was not rewritten")
+	}
+	if strings.Contains(got, "41!4") {
+		t.Errorf("the malformed hex string survived:\n%s", got)
+	}
+	if !strings.Contains(got, "Tj") {
+		t.Errorf("the show-text operator was lost:\n%s", got)
 	}
 }

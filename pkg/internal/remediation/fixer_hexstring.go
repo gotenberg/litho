@@ -11,21 +11,28 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// oddHexDigits is the parser's wording for a hex string whose digit count is
-// odd, which is what the fixer below repairs.
-const oddHexDigits = "hex string has odd number of digits"
+// oddHexDigits and invalidHexChar are the parser's wordings for the two ways a
+// hexadecimal string is written wrongly, both of which the fixer below repairs
+// by re-serialising the page.
+const (
+	oddHexDigits   = "hex string has odd number of digits"
+	invalidHexChar = "hex string contains invalid character"
+)
 
-// matchHexString matches an odd-digit hex string inside a page content stream
-// (ISO 19005-1/2/3 §6.1.6 test 1, ISO 19005-4 §6.1.5 test 1).
+// matchHexString matches a malformed hex string inside a page content stream:
+// an odd number of non-white-space characters (ISO 19005-1/2/3 §6.1.6 test 1,
+// ISO 19005-4 §6.1.5 test 1) or a character that is no hexadecimal digit
+// (test 2). Re-serialising the page repairs both, so the fixer claims both.
 func matchHexString(v compliance.Violation) bool {
 	if !clausePrefix(v, "6.1.5", "6.1.6") {
 		return false
 	}
-	return contextContains(v, oddHexDigits)
+	return contextContains(v, oddHexDigits) || contextContains(v, invalidHexChar)
 }
 
-// fixHexString rewrites the content streams that hold a hex string with an odd
-// number of digits.
+// fixHexString rewrites the content streams that hold a malformed hex string:
+// an odd number of non-white-space characters, or a character that is no
+// hexadecimal digit.
 //
 // ISO 32000-1, 7.3.4.3 lets a reader assume a missing final digit is 0, and
 // litho's parser does exactly that, so the value is already understood; the
@@ -59,7 +66,7 @@ func fixHexString(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	if count == 0 {
 		return nil, nil
 	}
-	return []string{fmt.Sprintf("rewrote %d content stream(s) holding an odd-digit hex string", count)}, nil
+	return []string{fmt.Sprintf("rewrote %d content stream(s) holding a malformed hex string", count)}, nil
 }
 
 // repairPageHexStrings re-serialises one page when its content carries an
@@ -81,7 +88,7 @@ func repairPageHexStrings(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	// The detector's own parse, so a page is rewritten exactly when litho
 	// reports one (compliance.checkContentStreamHexStrings).
 	ops, violations := content.ParseStreamDataFormatChecked(ctx, data)
-	if !hasOddHexViolation(violations) {
+	if !hasMalformedHexViolation(violations) {
 		return false
 	}
 	if err := replaceContentStream(ctx, alloc, doc, contentsObj, serializeOps(ops), pageNum); err != nil {
@@ -92,13 +99,25 @@ func repairPageHexStrings(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	return true
 }
 
-// hasOddHexViolation reports whether any parse violation is the odd-digit one.
-// A page whose only complaint is an invalid character is left alone: dropping
-// that character is a different repair, and re-serialising would silently make
-// the string mean something else.
-func hasOddHexViolation(violations []error) bool {
+// hasMalformedHexViolation reports whether any parse violation is one of the
+// two the fixer repairs.
+//
+// A stray non-hexadecimal character used to be repaired only as a side effect:
+// the old parity test counted hex digits, so "<41!4>" read as odd and the page
+// was re-serialised, dropping the character with it. Counting non-white-space
+// characters instead (ISO 19005-2, 6.1.6 t1, which veraPDF measures the same
+// way) leaves that string even, so the page was no longer rewritten and its
+// invalid character stayed, costing 30 files their remediated verdict on the
+// veraPDF corpus. The parser already drops the character when it reads the
+// value (ISO 32000-1, 7.3.4.3 assumes a missing final digit is 0), so
+// re-serialising writes what the reader understood.
+func hasMalformedHexViolation(violations []error) bool {
 	for _, v := range violations {
-		if v != nil && strings.Contains(v.Error(), oddHexDigits) {
+		if v == nil {
+			continue
+		}
+		msg := v.Error()
+		if strings.Contains(msg, oddHexDigits) || strings.Contains(msg, invalidHexChar) {
 			return true
 		}
 	}

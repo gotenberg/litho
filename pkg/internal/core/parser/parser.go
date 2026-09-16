@@ -1313,15 +1313,26 @@ func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
 		val = val[1 : len(val)-1]
 	}
 
-	// Record any invalid hex character before it is dropped below.
+	// Record any invalid hex character before it is dropped below, and count
+	// the non-white-space characters: ISO 19005-2, 6.1.6 t1 requires an even
+	// number of them, invalid ones included, so an odd count of hex digits
+	// padded by a stray character is no odd-length string. veraPDF counts the
+	// same way (BaseParser.readHexString's hexCount adds every byte that is not
+	// white space): <484!> fails only t2.
+	nonWhiteSpace := 0
 	if p.checkFormat {
+		reported := false
 		for _, r := range val {
 			// PDF whitespace: null, tab, LF, FF, CR, space (ISO 32000-1 §7.2.2).
 			isWS := r == 0x00 || r == '\t' || r == '\n' || r == 0x0C || r == '\r' || r == ' '
+			if isWS {
+				continue
+			}
+			nonWhiteSpace++
 			isHex := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
-			if !isWS && !isHex {
+			if !isHex && !reported {
 				p.recordViolation(fmt.Sprintf("hex string contains invalid character %q", r))
-				break
+				reported = true
 			}
 		}
 	}
@@ -1341,10 +1352,10 @@ func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
 		return r
 	}, val)
 
+	if p.checkFormat && nonWhiteSpace%2 != 0 {
+		p.recordViolation("hex string has odd number of digits")
+	}
 	if len(val)%2 != 0 {
-		if p.checkFormat {
-			p.recordViolation("hex string has odd number of digits")
-		}
 		val += "0"
 	}
 	decoded, err := hex.DecodeString(val)
