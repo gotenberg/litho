@@ -90,6 +90,11 @@ var registry = []fixer{
 	{name: "table-sections", safety: safetyStructural, matches: matchTableSections, apply: fixTableSections},
 	{name: "table-cells", safety: safetyStructural, matches: matchTableCells, apply: fixTableCells},
 	{name: "list-body", safety: safetyStructural, matches: matchListBody, apply: fixListBody},
+	// list-content moves marked content, not structure elements, so it
+	// repoints the /ParentTree slots itself rather than relying on the
+	// parent-tree fixer above: that one only registers pages holding no entry
+	// yet and skips every page already keyed, which is all of them here.
+	{name: "list-content", safety: safetyStructural, matches: matchListContent, apply: fixListContent},
 	{name: "figure-alt", safety: safetyStructural, matches: matchFigureAlt, apply: fixFigureAlt},
 	{name: "list-numbering", safety: safetyStructural, matches: matchListNumbering, apply: fixListNumbering},
 	{name: "viewer-prefs", safety: safetyStructural, matches: matchViewerPrefs, apply: fixViewerPrefs},
