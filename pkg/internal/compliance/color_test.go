@@ -348,11 +348,18 @@ func TestRecordInheritedCS_CombinesInvocations(t *testing.T) {
 	t.Parallel()
 
 	states := map[string]inheritedCS{}
-	recordInheritedCS(states, "Fm0", true, true)
-	recordInheritedCS(states, "Fm0", false, true)
+	recordInheritedCS(states, "Fm0", true, true, true, true)
+	recordInheritedCS(states, "Fm0", false, true, false, true)
 	got := inheritedCSFor(states, "Fm0")
 	if got.fill || !got.stroke {
 		t.Errorf("Fm0 inherited = %+v, want fill false and stroke true", got)
+	}
+
+	// Whether the inherited space is specifically a Pattern space combines the
+	// same way. A form one Do invokes with a pattern selected and another
+	// without cannot be said to paint a pattern of its own.
+	if got.fillPattern || !got.strokePattern {
+		t.Errorf("Fm0 inherited = %+v, want fillPattern false and strokePattern true", got)
 	}
 
 	// An XObject litho never sees invoked starts from the default state, which is

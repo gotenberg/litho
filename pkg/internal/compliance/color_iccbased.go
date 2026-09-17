@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 func iccBasedProfileRule(part int) Rule {
@@ -76,13 +77,13 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 
 		// A pattern or a shading takes part only when the page paints with it,
 		// which the same parsed operations report.
-		_, referencedXObjects, _, used, _ := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
+		_, referencedXObjects, _, used, inheritedAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
 
 		checkICCBasedInResources(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, usedCSNames, results)
 
 		// Recursively scan Form XObject and annotation sub-resources.
 		visited := make(map[string]bool)
-		scanICCBasedRecursive(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, results, 0, visited, used, referencedXObjects)
+		scanICCBasedRecursive(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, results, 0, visited, used, referencedXObjects, inheritedAtDo)
 
 		// Scan annotation appearance streams.
 		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
@@ -109,20 +110,49 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 				if subRes != nil {
 					formBlendRef := resolveFormBlendingRef(ctx, doc, stream, blendingCSRef)
 					checkICCBasedInResources(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, nil, results)
-					// An appearance stream's operations were not surveyed, so
-					// nothing in it is known to be painted: passing no survey
-					// leaves its patterns and shadings unscanned rather than
-					// widening the check on an unmeasured scope.
-					scanICCBasedRecursive(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, results, 1, visited, nil, nil)
+					// An appearance stream no Do invokes begins in the default
+					// colour-space state, so its own operations report which
+					// patterns and shadings it paints.
+					apUsed, apXObjects, apInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
+					scanICCBasedRecursive(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, results, 1, visited, apUsed, apXObjects, apInherited)
 				}
 			}
 		}
 	}
 }
 
+// nestedScopeUsage surveys one nested content stream's own operators, so the
+// patterns and shadings that scope paints are judged rather than skipped.
+//
+// entry is the colour-space state the scope inherits (ISO 32000-1 §8.10.2): a
+// Form XObject begins from the state in effect at the Do that invoked it, while
+// a tiling pattern cell and an annotation appearance stream begin from the
+// default state (see [inheritedCSDefault]).
+//
+// A stream that will not decode or parse yields no survey. Returning nil leaves
+// such a scope judged exactly as an unsurveyed one was, rather than widening a
+// check on bytes nothing could read.
+func nestedScopeUsage(ctx context.Context, doc *document.Document, stream ast.PdfStream, resources ast.PdfDict, entry inheritedCS) (*usedResources, map[string]bool, map[string]inheritedCS) {
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("compliance.color: cannot decode nested content stream", "error", err)
+		return nil, nil, nil
+	}
+
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		doc.Logger.Debug("compliance.color: cannot parse nested content stream", "error", err)
+		return nil, nil, nil
+	}
+
+	_, referencedXObjects, _, used, inherited := scanContentStreamDeviceCSFrom(ctx, ops, collectPatternCSNames(ctx, doc, resources), entry)
+
+	return used, referencedXObjects, inherited
+}
+
 // scanICCBasedRecursive scans Form XObject sub-resources recursively for
 // ICCBased colour spaces.
-func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Violation, depth int, visited map[string]bool, used *usedResources, referencedXObjects map[string]bool) {
+func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Violation, depth int, visited map[string]bool, used *usedResources, referencedXObjects map[string]bool, inherited map[string]inheritedCS) {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return
 	}
@@ -185,9 +215,11 @@ func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resource
 		}
 		formBlendRef := resolveFormBlendingRef(ctx, doc, stream, blendingCSRef)
 		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, nil, results)
-		// The form's own operations were not surveyed here, so its patterns and
-		// shadings are left alone while its named colour spaces are judged.
-		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, results, depth+1, visited, nil, nil)
+		// A form begins from the colour-space state in effect at its Do, so a
+		// bare scn inside it can select a pattern the invoking stream chose the
+		// space for.
+		formUsed, formXObjects, formInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSFor(inherited, string(k)))
+		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, results, depth+1, visited, formUsed, formXObjects, formInherited)
 	}
 }
 
@@ -425,11 +457,12 @@ func scanICCBasedInPatterns(ctx context.Context, doc *document.Document, resourc
 		if subRes == nil {
 			continue
 		}
-		// The cell's own operations were not surveyed, so its named colour
-		// spaces are judged in full and its own patterns and shadings are left
-		// alone.
+		// A tiling pattern cell no Do invokes begins in the default
+		// colour-space state, so its own operations report which patterns and
+		// shadings it paints. Its named colour spaces stay judged in full.
 		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, nil, results)
-		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results, depth+1, visited, nil, nil)
+		cellUsed, cellXObjects, cellInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
+		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results, depth+1, visited, cellUsed, cellXObjects, cellInherited)
 	}
 }
 

@@ -127,16 +127,17 @@ func iccImageInFormPDF() []byte {
 			len(formContent), formContent))...)
 }
 
-// TestICCBasedInUnsurveyedFormStillJudged pins that a scope whose operations
-// were not surveyed is judged in full rather than filtered against a survey it
-// does not have.
+// TestICCBasedInFormInvokedImageJudged pins that an image a Form XObject
+// invokes is judged.
 //
-// The form's own content stream is not parsed by this check, so no set of
-// Do-invoked names exists for it and the recursion passes nil. Treating a nil
-// set as "nothing is invoked" would silence every XObject inside a form, an
+// The form's own operations are surveyed, so the image it names with Do is
+// recorded as referenced and its profile validated. A scope whose stream will
+// not decode or parse yields no survey at all, and is then judged in full
+// rather than filtered against a survey it does not have: treating a missing
+// survey as "nothing is invoked" would silence every XObject inside a form, an
 // appearance stream or a pattern cell. Measured against veraPDF 1.30.2, which
 // reports the clause for this construct.
-func TestICCBasedInUnsurveyedFormStillJudged(t *testing.T) {
+func TestICCBasedInFormInvokedImageJudged(t *testing.T) {
 	t.Parallel()
 
 	if !firesRule2b(t, iccImageInFormPDF(), "6.2.4.2", 1) {

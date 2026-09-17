@@ -587,6 +587,17 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 // content is missing or will not parse yields no operations, which is the same
 // empty survey the resolve and parse failures returned before.
 func scanContentStreamDeviceCS(ctx context.Context, ops []content.Operation, patternCSNames map[string]bool) (deviceCSUsage, map[string]bool, map[string]bool, *usedResources, map[string]inheritedCS) {
+	return scanContentStreamDeviceCSFrom(ctx, ops, patternCSNames, inheritedCSDefault())
+}
+
+// scanContentStreamDeviceCSFrom surveys operations that begin from an inherited
+// colour-space state.
+//
+// A page content stream inherits nothing, which is the state
+// [scanContentStreamDeviceCS] passes. A Form XObject instead begins from the
+// state in effect at the Do that invoked it (ISO 32000-1 §8.10.2), so a bare
+// scn there can name a pattern the invoking stream selected the space for.
+func scanContentStreamDeviceCSFrom(ctx context.Context, ops []content.Operation, patternCSNames map[string]bool, entry inheritedCS) (deviceCSUsage, map[string]bool, map[string]bool, *usedResources, map[string]inheritedCS) {
 	var usage deviceCSUsage
 	referencedXObjects := make(map[string]bool)
 	referencedCSNames := make(map[string]bool)
@@ -599,7 +610,7 @@ func scanContentStreamDeviceCS(ctx context.Context, ops []content.Operation, pat
 
 	// Check inline image colour spaces from parsed BI operations.
 	scanInlineImageCSOps(ops, &usage, referencedCSNames)
-	scanContentColorOps(ctx, ops, &usage, referencedXObjects, referencedCSNames, used, inherited, inheritedCSDefault(), patternCSNames)
+	scanContentColorOps(ctx, ops, &usage, referencedXObjects, referencedCSNames, used, inherited, entry, patternCSNames)
 
 	return usage, referencedXObjects, referencedCSNames, used, inherited
 }
@@ -635,7 +646,8 @@ func newUsedResources() *usedResources {
 // the scope that invokes it: whether a fill and a stroke space were selected at
 // that point (ISO 32000-1 §8.10.2).
 type inheritedCS struct {
-	fill, stroke bool
+	fill, stroke               bool
+	fillPattern, strokePattern bool
 }
 
 // recordInheritedCS notes the state in effect at one Do. An XObject invoked
@@ -643,15 +655,22 @@ type inheritedCS struct {
 // invocation that runs with no space selected, so the states combine by AND:
 // the nested scope counts a space as selected only if every invocation selected
 // one.
-func recordInheritedCS(states map[string]inheritedCS, name string, fillCSSet, strokeCSSet bool) {
+func recordInheritedCS(states map[string]inheritedCS, name string, fillCSSet, strokeCSSet, fillPattern, strokePattern bool) {
 	if states == nil {
 		return
 	}
 	if prev, seen := states[name]; seen {
 		fillCSSet = fillCSSet && prev.fill
 		strokeCSSet = strokeCSSet && prev.stroke
+		fillPattern = fillPattern && prev.fillPattern
+		strokePattern = strokePattern && prev.strokePattern
 	}
-	states[name] = inheritedCS{fill: fillCSSet, stroke: strokeCSSet}
+	states[name] = inheritedCS{
+		fill:          fillCSSet,
+		stroke:        strokeCSSet,
+		fillPattern:   fillPattern,
+		strokePattern: strokePattern,
+	}
 }
 
 // inheritedCSDefault is the entry state of a scope that inherits nothing: a page
@@ -723,10 +742,16 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 	fillCSSet, strokeCSSet := entry.fill, entry.stroke
 	// Whether the space currently selected is specifically a Pattern space. A
 	// name operand to scn/SCN names a /Resources/Pattern key only once one is
-	// (ISO 32000-1 §8.6.8, Table 74). A scope begins with none selected: entry
-	// records only that some space was selected, not which, so a nested scope
-	// must select Pattern itself to paint with one.
-	fillPattern, strokePattern := false, false
+	// (ISO 32000-1 §8.6.8, Table 74).
+	//
+	// A nested scope inherits that selection from the state in effect at the Do
+	// that invoked it (ISO 32000-1 §8.10.2): veraPDF judges a pattern a form
+	// selects with a bare scn after the invoking stream chose the Pattern
+	// space. A scope no Do invokes inherits nothing, so a bare scn with no
+	// Pattern space selected anywhere still paints nothing (pdfjs
+	// issue18466.pdf writes "/P12 scn /P12 SCN" without ever selecting
+	// /Pattern, and veraPDF reports nothing for the image inside it).
+	fillPattern, strokePattern := entry.fillPattern, entry.strokePattern
 	// Text rendering mode is part of the text state, which q/Q saves and
 	// restores with the rest of the graphics state (ISO 32000-1, 9.3.1).
 	textRender := 0
@@ -884,7 +909,7 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 					if referencedXObjects != nil {
 						referencedXObjects[string(name)] = true
 					}
-					recordInheritedCS(inheritedXObjectCS, string(name), fillCSSet, strokeCSSet)
+					recordInheritedCS(inheritedXObjectCS, string(name), fillCSSet, strokeCSSet, fillPattern, strokePattern)
 				}
 			}
 		}
