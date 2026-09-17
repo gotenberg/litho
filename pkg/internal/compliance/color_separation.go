@@ -49,24 +49,29 @@ func deviceNConsistencyRule(part int) Rule {
 // checkSeparationDeviceN validates Separation and DeviceN colour space
 // consistency per §6.2.4.4. It ensures that the same colorant name always maps
 // to the same alternate colour space across the entire document.
-func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, results *[]Violation) {
+func checkSeparationDeviceN(ctx context.Context, doc *document.Document, pages []pageCtx, part int, results *[]Violation) {
 	// colorantAlternates tracks colorant name -> first alternate space seen.
 	colorantAlternates := make(map[string]string)
 	// colorantTintFuncs tracks colorant name -> first tint transform (resolved).
 	colorantTintFuncs := make(map[string]ast.PdfObject)
 
-	pages := collectPages(ctx, doc, catalog)
-	for i, page := range pages {
+	for i := range pages {
 		if ctx.Err() != nil {
 			return
 		}
 
+		page := pages[i].dict
 		resources := resolveInheritedResources(ctx, doc, page)
 		if resources == nil {
 			continue
 		}
 
-		scanSeparationDeviceNInResources(ctx, doc, resources, part, i, colorantAlternates, colorantTintFuncs, results)
+		// A pattern or a shading takes part only when the page paints with it,
+		// which the parsed operations report. They are already cached on the
+		// page (see [pageCtx.parsedOps]), so this costs no second parse.
+		_, _, _, used, _ := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx))
+
+		scanSeparationDeviceNInResources(ctx, doc, resources, part, i, colorantAlternates, colorantTintFuncs, results, used)
 
 		// Also scan annotation appearance streams on this page.
 		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
@@ -90,7 +95,11 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 				}
 				apRes, _ := document.ResolveDict(ctx, doc, apStream.Dict["Resources"])
 				if apRes != nil {
-					scanSeparationDeviceNInResources(ctx, doc, apRes, part, i, colorantAlternates, colorantTintFuncs, results)
+					// No operations were surveyed for an appearance stream, so
+					// nothing here is known to be painted. Passing no usage set
+					// leaves its patterns and shadings unscanned rather than
+					// widening the check on an unmeasured scope.
+					scanSeparationDeviceNInResources(ctx, doc, apRes, part, i, colorantAlternates, colorantTintFuncs, results, nil)
 				}
 			}
 		}
@@ -102,14 +111,16 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, catalog
 
 // scanSeparationDeviceNInResources scans a resources dictionary for Separation
 // and DeviceN colour space arrays and validates colorant-to-alternate consistency.
-func scanSeparationDeviceNInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation) {
+func scanSeparationDeviceNInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation, used *usedResources) {
 	visited := make(map[string]bool)
-	scanSeparationDeviceNRecursive(ctx, doc, resources, part, pageIdx, colorantAlternates, colorantTintFuncs, results, 0, visited)
+	scanSeparationDeviceNRecursive(ctx, doc, resources, part, pageIdx, colorantAlternates, colorantTintFuncs, results, 0, visited, used)
 }
 
 // scanSeparationDeviceNRecursive scans resources (and Form XObject sub-resources)
-// for Separation and DeviceN colour space arrays.
-func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation, depth int, visited map[string]bool) {
+// for Separation and DeviceN colour space arrays. used names the patterns and
+// shadings the surveyed content stream paints, and is nil for a scope whose
+// operations were not surveyed.
+func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation, depth int, visited map[string]bool, used *usedResources) {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return
 	}
@@ -117,30 +128,20 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 	csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
 	if err == nil && csDict != nil {
 		for _, name := range sortedNames(csDict) {
-			csObj := csDict[name]
 			if ctx.Err() != nil {
 				return
 			}
-
-			arr, err := document.ResolveArray(ctx, doc, csObj)
-			if err != nil || len(arr) < 2 {
-				continue
-			}
-
-			csType, err := document.ResolveName(ctx, doc, arr[0])
-			if err != nil {
-				doc.Logger.Debug("compliance.color: cannot resolve color space type name", "error", err)
-				continue
-			}
-
-			switch string(csType) {
-			case "Separation":
-				checkSeparationCS(ctx, doc, arr, part, pageIdx, string(name), colorantAlternates, colorantTintFuncs, results)
-			case "DeviceN":
-				checkDeviceNCS(ctx, doc, arr, part, pageIdx, string(name), colorantAlternates, colorantTintFuncs, results)
-			}
+			checkSeparationDeviceNArray(ctx, doc, csDict[name], part, pageIdx, string(name), colorantAlternates, colorantTintFuncs, results)
 		}
 	}
+
+	// A Separation reached through a painted tiling pattern's own resources, or
+	// named as a painted shading's /ColorSpace, is still "within a single
+	// PDF/A-2 file" (ISO 19005-2 §6.2.4.4), so it takes part in colorant
+	// consistency. Scoping the walk to /Resources/ColorSpace and Form XObjects
+	// left both unreachable while veraPDF reported them.
+	scanSeparationInShadings(ctx, doc, resources, part, pageIdx, colorantAlternates, colorantTintFuncs, results, used)
+	scanSeparationInPatterns(ctx, doc, resources, part, pageIdx, colorantAlternates, colorantTintFuncs, results, depth, visited, used)
 
 	// Recurse into Form XObject resources.
 	xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
@@ -184,8 +185,145 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 		}
 		subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
 		if subRes != nil {
-			scanSeparationDeviceNRecursive(ctx, doc, subRes, part, pageIdx, colorantAlternates, colorantTintFuncs, results, depth+1, visited)
+			// The form's own operations were not surveyed here, so nothing
+			// inside it is known to be painted: its /Resources/ColorSpace is
+			// judged, its patterns and shadings are left alone.
+			scanSeparationDeviceNRecursive(ctx, doc, subRes, part, pageIdx, colorantAlternates, colorantTintFuncs, results, depth+1, visited, nil)
 		}
+	}
+}
+
+// ISO 32000-1 §8.7.3.1, Table 75: /PatternType 1 is a tiling pattern. Per
+// §8.7.3.3 its /PaintType 2 is the uncoloured form, whose cell specifies no
+// colour of its own.
+const (
+	sepTilingPatternType   = 1
+	sepUncolouredPaintType = 2
+)
+
+// checkSeparationDeviceNArray dispatches one colour-space object to the
+// Separation or DeviceN consistency check. where names the site the violation
+// message reports.
+func checkSeparationDeviceNArray(ctx context.Context, doc *document.Document, csObj ast.PdfObject, part int, pageIdx int, where string, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation) {
+	arr, err := document.ResolveArray(ctx, doc, csObj)
+	if err != nil || len(arr) < 2 {
+		return
+	}
+
+	csType, err := document.ResolveName(ctx, doc, arr[0])
+	if err != nil {
+		doc.Logger.Debug("compliance.color: cannot resolve color space type name", "error", err)
+		return
+	}
+
+	switch string(csType) {
+	case "Separation":
+		checkSeparationCS(ctx, doc, arr, part, pageIdx, where, colorantAlternates, colorantTintFuncs, results)
+	case "DeviceN":
+		checkDeviceNCS(ctx, doc, arr, part, pageIdx, where, colorantAlternates, colorantTintFuncs, results)
+	}
+}
+
+// scanSeparationInShadings judges the colour space a painted shading names. A
+// shading dictionary carries /ColorSpace directly (ISO 32000-1 §8.7.4.3), not
+// through /Resources/ColorSpace, so the resource walk never reaches it.
+//
+// Only a shading an sh operator paints counts. veraPDF reports nothing for one
+// that no operator paints, which is the usage-driven scope litho's
+// device-colour scan already applies (see [usedResources]).
+func scanSeparationInShadings(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation, used *usedResources) {
+	if used == nil {
+		return
+	}
+
+	shDict, err := document.ResolveDict(ctx, doc, resources["Shading"])
+	if err != nil || shDict == nil {
+		return
+	}
+
+	for _, name := range sortedNames(shDict) {
+		if ctx.Err() != nil {
+			return
+		}
+		if !used.shadings[string(name)] {
+			continue
+		}
+		sd := resolveShadingDict(ctx, doc, shDict[name])
+		if sd == nil {
+			doc.Logger.Debug("compliance.color: cannot resolve Shading dict", "name", name)
+			continue
+		}
+		checkSeparationDeviceNArray(ctx, doc, sd["ColorSpace"], part, pageIdx, fmt.Sprintf("Shading %s", name), colorantAlternates, colorantTintFuncs, results)
+	}
+}
+
+// scanSeparationInPatterns judges the Separation and DeviceN spaces a painted
+// pattern reaches: a tiling pattern through its own /Resources, a shading
+// pattern through its /Shading dictionary (ISO 32000-1 §8.7.3).
+//
+// Only a pattern a scn/SCN operator selects counts, and an uncoloured tiling
+// pattern is skipped: its cell specifies no colour at all (ISO 32000-1
+// §8.7.3.3). Measured against veraPDF on one file at both paint types: it
+// reports §6.2.4.4 t2 for the colorant inside a /PaintType 1 cell and nothing
+// at all for the same cell at /PaintType 2.
+func scanSeparationInPatterns(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation, depth int, visited map[string]bool, used *usedResources) {
+	if used == nil {
+		return
+	}
+
+	patDict, err := document.ResolveDict(ctx, doc, resources["Pattern"])
+	if err != nil || patDict == nil {
+		return
+	}
+
+	for _, name := range sortedNames(patDict) {
+		if ctx.Err() != nil {
+			return
+		}
+		if !used.patterns[string(name)] {
+			continue
+		}
+
+		patternObj := patDict[name]
+		if ref, ok := patternObj.(ast.PdfIndirectRef); ok {
+			key := fmt.Sprintf("pattern %d", ref.ObjectNum)
+			if visited[key] {
+				continue
+			}
+			visited[key] = true
+		}
+
+		stream, err := document.ResolveStream(ctx, doc, patternObj)
+		if err != nil {
+			// A shading pattern is a dictionary rather than a stream, and names
+			// its colour space on the /Shading it paints.
+			patternDict, err := document.ResolveDict(ctx, doc, patternObj)
+			if err != nil || patternDict == nil {
+				continue
+			}
+			if sd := resolveShadingDict(ctx, doc, patternDict["Shading"]); sd != nil {
+				checkSeparationDeviceNArray(ctx, doc, sd["ColorSpace"], part, pageIdx, fmt.Sprintf("Pattern %s shading", name), colorantAlternates, colorantTintFuncs, results)
+			}
+			continue
+		}
+
+		patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"])
+		if patternType != sepTilingPatternType {
+			continue
+		}
+		paintType, _ := document.ResolveInt(ctx, doc, stream.Dict["PaintType"])
+		if paintType == sepUncolouredPaintType {
+			continue
+		}
+
+		subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+		if subRes == nil {
+			continue
+		}
+		// The cell's own operations were not surveyed, so its
+		// /Resources/ColorSpace is judged while its own patterns and shadings
+		// are left alone.
+		scanSeparationDeviceNRecursive(ctx, doc, subRes, part, pageIdx, colorantAlternates, colorantTintFuncs, results, depth+1, visited, nil)
 	}
 }
 
