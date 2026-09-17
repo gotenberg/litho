@@ -53,6 +53,8 @@ declare -A FLAVOURS=(
   ["PDF_A-4f"]="4f"
   ["PDF_UA-1"]="ua1"
   ["PDF_UA-2"]="ua2"
+  ["WTPDF-1.0-Accessibility"]="wt1a"
+  ["WTPDF-1.0-Reuse"]="wt1r"
 )
 
 if [ -n "$CLAIMS" ]; then

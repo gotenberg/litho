@@ -84,6 +84,14 @@ var dirToPDFUAProfile = map[string]models.PDFUAProfile{
 	"PDF_UA-2": models.PDFUA2,
 }
 
+// dirToWTPDFProfile maps the Well-Tagged PDF profile directory names. WTPDF
+// adopts the ISO 14289-2 requirements, so VeraPDF validates these fixtures
+// under its wt1a and wt1r flavours and litho under [pdf.Reader.ValidateWTPDF].
+var dirToWTPDFProfile = map[string]models.WTPDFProfile{
+	"WTPDF-1.0-Accessibility": models.WTPDF1Accessibility,
+	"WTPDF-1.0-Reuse":         models.WTPDF1Reuse,
+}
+
 // complianceFeature cross-checks litho's compliance verdict against
 // VeraPDF. The golden index is keyed by fixture ID (relative path from
 // corpus PDF root, without extension).
@@ -302,7 +310,13 @@ func validateWithLitho(ctx context.Context, pdfPath, profileDir string) (bool, [
 		errs, err = r.ValidatePDFA(ctx, pdfa)
 	} else if pdfua, ok := dirToPDFUAProfile[profileDir]; ok {
 		errs, err = r.ValidatePDFUA(ctx, pdfua)
+	} else if wtpdf, ok := dirToWTPDFProfile[profileDir]; ok {
+		errs, err = r.ValidateWTPDF(ctx, wtpdf)
 	} else {
+		// A profile directory no map covers scores every fixture in it as
+		// compliant, which reads as a feature that passed rather than one
+		// that validated nothing. Add the profile to a map above when a new
+		// golden directory appears.
 		return true, nil
 	}
 	if err != nil {
