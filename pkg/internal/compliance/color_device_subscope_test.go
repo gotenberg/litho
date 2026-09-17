@@ -1,0 +1,139 @@
+package compliance
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/models"
+)
+
+// calRGBDefault is a device-independent DefaultRGB. It covers page-scope rg
+// (ISO 32000-1, 8.6.5.6) but not a Form XObject's own, whose Resources define
+// no default of their own (ISO 32000-2, 8.6.5.7).
+const calRGBDefault = "[/CalRGB << /WhitePoint [0.9505 1 1.089] >>]"
+
+// subScopePDF builds a one-page document. pageOps is the page content, formOps
+// the content of a Form XObject the page may invoke, and defaultCS an optional
+// /Resources/ColorSpace entry such as /DefaultRGB.
+func subScopePDF(pageOps, formOps, defaultCS string) []byte {
+	res := "<< /XObject << /Fm0 5 0 R >>"
+	if defaultCS != "" {
+		res += " /ColorSpace << " + defaultCS + " 6 0 R >>"
+	}
+	res += " >>"
+
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources " + res + " /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(pageOps), pageOps),
+		fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 200 100] /Resources << >> "+
+			"/Length %d >>\nstream\n%s\nendstream", len(formOps), formOps),
+	}
+	if defaultCS != "" {
+		objs = append(objs, calRGBDefault)
+	}
+	return cyclePDF(objs...)
+}
+
+// countClauseViolations reports how many violations carry the given clause and test.
+// [firesRule2b] answers whether a rule fired at all; catching a clause written
+// twice for one usage needs the count.
+func countClauseViolations(t *testing.T, data []byte, clause string, test int) int {
+	t.Helper()
+
+	doc, err := document.NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	viols, err := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+	if err != nil {
+		t.Fatalf("ValidatePDFA: %v", err)
+	}
+
+	n := 0
+	for _, e := range viols {
+		if v, ok := e.(Violation); ok && v.Rule.Clause == clause && v.Rule.TestNumber == test {
+			n++
+		}
+	}
+	return n
+}
+
+// TestDeviceRGBSubScopeReportedOnce pins §6.2.4.3 t2 across every combination
+// of page-scope and sub-scope DeviceRGB usage with and without a page
+// DefaultRGB.
+//
+// The plain and sub-scope checks answer different questions: a page DefaultRGB
+// covers page-scope rg but never a form's own. With no page default, though,
+// the plain check already reports the form's usage, so firing both wrote the
+// clause twice for a single use. Each row below is one usage, so each expects
+// exactly one violation, or none when a default covers it.
+func TestDeviceRGBSubScopeReportedOnce(t *testing.T) {
+	t.Parallel()
+
+	const pageRGB = "1 0 0 rg 0 0 20 20 re f"
+	const formRGB = "0 0 1 rg 30 0 20 20 re f"
+	const invokeForm = "q /Fm0 Do Q"
+
+	for _, tc := range []struct {
+		name    string
+		pageOps string
+		formOps string
+		def     string
+		want    int
+	}{
+		{"page rgb, no default", pageRGB, "", "", 1},
+		{"form rgb, no default", invokeForm, formRGB, "", 1},
+		{"form rgb, page DefaultRGB", invokeForm, formRGB, "/DefaultRGB", 1},
+		{"page rgb, page DefaultRGB", pageRGB, "", "/DefaultRGB", 0},
+		{"page and form rgb, no default", pageRGB + " " + invokeForm, formRGB, "", 1},
+		{"page and form rgb, page DefaultRGB", pageRGB + " " + invokeForm, formRGB, "/DefaultRGB", 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := countClauseViolations(t, subScopePDF(tc.pageOps, tc.formOps, tc.def), "6.2.4.3", 2)
+			if got != tc.want {
+				t.Errorf("§6.2.4.3 t2 fired %d time(s), want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestDeviceGraySubScopeReportedOnce pins the same shape for §6.2.4.3 t4.
+//
+// The initial DeviceGray of ISO 32000-1 §8.6.8, painted with no colour space
+// selected, belongs to the root content stream rather than to the form, so it
+// is page-scope usage and reports once through the plain check.
+func TestDeviceGraySubScopeReportedOnce(t *testing.T) {
+	t.Parallel()
+
+	const pageGray = "0.5 g 0 0 20 20 re f"
+	const formGray = "0.5 g 30 0 20 20 re f"
+	const formInitialGray = "0 0 20 20 re f"
+	const invokeForm = "q /Fm0 Do Q"
+
+	for _, tc := range []struct {
+		name    string
+		pageOps string
+		formOps string
+		want    int
+	}{
+		{"page gray", pageGray, "", 1},
+		{"form gray", invokeForm, formGray, 1},
+		{"form initial gray", invokeForm, formInitialGray, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := countClauseViolations(t, subScopePDF(tc.pageOps, tc.formOps, ""), "6.2.4.3", 4)
+			if got != tc.want {
+				t.Errorf("§6.2.4.3 t4 fired %d time(s), want %d", got, tc.want)
+			}
+		})
+	}
+}

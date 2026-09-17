@@ -140,8 +140,11 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 		if deviceCSUsed.rgb && !defaults.hasRGB && !rgbUniversalCover {
 			*results = append(*results, failf(deviceRGBRule(part), "page %d: DeviceRGB used without DefaultRGB or RGB OutputIntent", i+1)...)
 		}
-		// Sub-scope DeviceRGB: page DefaultRGB doesn't apply; only universal coverage.
-		if deviceCSUsed.subScopeRGB && !rgbUniversalCover {
+		// Sub-scope DeviceRGB: page DefaultRGB doesn't apply; only universal
+		// coverage. This adds something only when a page DefaultRGB suppressed
+		// the check above: without one, that check already reports the same
+		// usage, and firing both wrote the clause twice for a single use.
+		if deviceCSUsed.subScopeRGB && defaults.hasRGB && !rgbUniversalCover {
 			*results = append(*results, failf(deviceRGBRule(part), "page %d: DeviceRGB used in pattern/form without local DefaultRGB or RGB OutputIntent", i+1)...)
 		}
 
@@ -149,8 +152,9 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 		if deviceCSUsed.cmyk && !defaults.hasCMYK && !cmykUniversalCover {
 			*results = append(*results, failf(deviceCMYKRule(part), "page %d: DeviceCMYK used without DefaultCMYK or CMYK OutputIntent", i+1)...)
 		}
-		// Sub-scope DeviceCMYK: page DefaultCMYK doesn't apply.
-		if deviceCSUsed.subScopeCMYK && !cmykUniversalCover {
+		// Sub-scope DeviceCMYK: page DefaultCMYK doesn't apply. Reported only
+		// when a page DefaultCMYK suppressed the check above (see DeviceRGB).
+		if deviceCSUsed.subScopeCMYK && defaults.hasCMYK && !cmykUniversalCover {
 			*results = append(*results, failf(deviceCMYKRule(part), "page %d: DeviceCMYK used in pattern/form without local DefaultCMYK or CMYK OutputIntent", i+1)...)
 		}
 
@@ -158,8 +162,9 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 		if deviceCSUsed.gray && !defaults.hasGray && !grayUniversalCover {
 			*results = append(*results, failf(deviceGrayRule(part), "page %d: DeviceGray used without DefaultGray or OutputIntent", i+1)...)
 		}
-		// Sub-scope DeviceGray: page DefaultGray doesn't apply.
-		if deviceCSUsed.subScopeGray && !grayUniversalCover {
+		// Sub-scope DeviceGray: page DefaultGray doesn't apply. Reported only
+		// when a page DefaultGray suppressed the check above (see DeviceRGB).
+		if deviceCSUsed.subScopeGray && defaults.hasGray && !grayUniversalCover {
 			*results = append(*results, failf(deviceGrayRule(part), "page %d: DeviceGray used in pattern/form without local DefaultGray or OutputIntent", i+1)...)
 		}
 
