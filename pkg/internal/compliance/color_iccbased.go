@@ -109,11 +109,12 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 				subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
 				if subRes != nil {
 					formBlendRef := resolveFormBlendingRef(ctx, doc, stream, blendingCSRef)
-					checkICCBasedInResources(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, nil, results)
 					// An appearance stream no Do invokes begins in the default
 					// colour-space state, so its own operations report which
-					// patterns and shadings it paints.
-					apUsed, apXObjects, _, apInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
+					// patterns and shadings it paints and which colour spaces
+					// it selects.
+					apUsed, apXObjects, apCSNames, apInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
+					checkICCBasedInResources(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, apCSNames, results)
 					scanICCBasedRecursive(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, results, 1, visited, apUsed, apXObjects, apInherited)
 				}
 			}
@@ -214,11 +215,13 @@ func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resource
 			continue
 		}
 		formBlendRef := resolveFormBlendingRef(ctx, doc, stream, blendingCSRef)
-		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, nil, results)
 		// A form begins from the colour-space state in effect at its Do, so a
 		// bare scn inside it can select a pattern the invoking stream chose the
-		// space for.
-		formUsed, formXObjects, _, formInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSFor(inherited, string(k)))
+		// space for. Its own operations also report which of its colour spaces
+		// it selects: one it merely declares is employed by nothing, and
+		// veraPDF reports nothing for it.
+		formUsed, formXObjects, formCSNames, formInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSFor(inherited, string(k)))
+		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, formCSNames, results)
 		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, results, depth+1, visited, formUsed, formXObjects, formInherited)
 	}
 }
@@ -459,9 +462,9 @@ func scanICCBasedInPatterns(ctx context.Context, doc *document.Document, resourc
 		}
 		// A tiling pattern cell no Do invokes begins in the default
 		// colour-space state, so its own operations report which patterns and
-		// shadings it paints. Its named colour spaces stay judged in full.
-		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, nil, results)
-		cellUsed, cellXObjects, _, cellInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
+		// shadings it paints and which colour spaces it selects.
+		cellUsed, cellXObjects, cellCSNames, cellInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
+		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, cellCSNames, results)
 		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results, depth+1, visited, cellUsed, cellXObjects, cellInherited)
 	}
 }
