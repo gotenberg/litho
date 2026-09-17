@@ -335,6 +335,17 @@ func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) {
 	case ast.PdfString:
 		buf.WriteByte('(')
 		for _, b := range []byte(v) {
+			// A literal end-of-line marker inside a string is not the byte it
+			// looks like: ISO 32000-2, 7.3.4.2 has a reader normalise CR, and
+			// CR LF, to a single LF. Writing a carriage return raw therefore
+			// changes the value on the way back in, and a CR LF pair loses a
+			// byte outright. Escaped, it survives, which the same clause's
+			// table spells \r. LF, tab and every high byte already round-trip
+			// as written, so they stay unescaped.
+			if b == '\r' {
+				buf.WriteString(`\r`)
+				continue
+			}
 			if b == '(' || b == ')' || b == '\\' {
 				buf.WriteByte('\\')
 			}
