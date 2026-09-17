@@ -78,13 +78,14 @@ func TestSeparationSelectedButUnpaintedStillJudged(t *testing.T) {
 	}
 }
 
-// TestSeparationInFormResourcesStillJudged pins that the selection gate does
-// not reach a scope whose operations were never surveyed.
+// TestSeparationInFormResourcesStillJudged pins that a Separation a Form
+// XObject selects is judged.
 //
-// A Form XObject's own content stream is not parsed by this check, so no set of
-// selected colour-space names exists for it. Filtering the form's resources
-// against the page's survey would silence every Separation declared inside a
-// form, turning a false-positive fix into a far larger false negative.
+// The form's own operations are surveyed (see [nestedScopeUsage]), so the
+// colour spaces it selects are known: this form runs "/CS1 cs", which employs
+// the array and brings it under ISO 19005-2 §6.2.4.4. The form's survey is its
+// own, never the page's: filtering a form's resources against the invoking
+// page's selections would silence every Separation a form selects for itself.
 func TestSeparationInFormResourcesStillJudged(t *testing.T) {
 	t.Parallel()
 

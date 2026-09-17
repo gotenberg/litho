@@ -113,7 +113,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 					// An appearance stream no Do invokes begins in the default
 					// colour-space state, so its own operations report which
 					// patterns and shadings it paints.
-					apUsed, apXObjects, apInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
+					apUsed, apXObjects, _, apInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
 					scanICCBasedRecursive(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, results, 1, visited, apUsed, apXObjects, apInherited)
 				}
 			}
@@ -132,22 +132,22 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 // A stream that will not decode or parse yields no survey. Returning nil leaves
 // such a scope judged exactly as an unsurveyed one was, rather than widening a
 // check on bytes nothing could read.
-func nestedScopeUsage(ctx context.Context, doc *document.Document, stream ast.PdfStream, resources ast.PdfDict, entry inheritedCS) (*usedResources, map[string]bool, map[string]inheritedCS) {
+func nestedScopeUsage(ctx context.Context, doc *document.Document, stream ast.PdfStream, resources ast.PdfDict, entry inheritedCS) (*usedResources, map[string]bool, map[string]bool, map[string]inheritedCS) {
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		doc.Logger.Debug("compliance.color: cannot decode nested content stream", "error", err)
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	ops, err := content.ParseStreamData(ctx, data)
 	if err != nil {
 		doc.Logger.Debug("compliance.color: cannot parse nested content stream", "error", err)
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
-	_, referencedXObjects, _, used, inherited := scanContentStreamDeviceCSFrom(ctx, ops, collectPatternCSNames(ctx, doc, resources), entry)
+	_, referencedXObjects, contentCSNames, used, inherited := scanContentStreamDeviceCSFrom(ctx, ops, collectPatternCSNames(ctx, doc, resources), entry)
 
-	return used, referencedXObjects, inherited
+	return used, referencedXObjects, contentCSNames, inherited
 }
 
 // scanICCBasedRecursive scans Form XObject sub-resources recursively for
@@ -218,7 +218,7 @@ func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resource
 		// A form begins from the colour-space state in effect at its Do, so a
 		// bare scn inside it can select a pattern the invoking stream chose the
 		// space for.
-		formUsed, formXObjects, formInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSFor(inherited, string(k)))
+		formUsed, formXObjects, _, formInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSFor(inherited, string(k)))
 		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, results, depth+1, visited, formUsed, formXObjects, formInherited)
 	}
 }
@@ -461,7 +461,7 @@ func scanICCBasedInPatterns(ctx context.Context, doc *document.Document, resourc
 		// colour-space state, so its own operations report which patterns and
 		// shadings it paints. Its named colour spaces stay judged in full.
 		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, nil, results)
-		cellUsed, cellXObjects, cellInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
+		cellUsed, cellXObjects, _, cellInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
 		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results, depth+1, visited, cellUsed, cellXObjects, cellInherited)
 	}
 }
