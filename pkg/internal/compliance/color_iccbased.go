@@ -76,13 +76,13 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 
 		// A pattern or a shading takes part only when the page paints with it,
 		// which the same parsed operations report.
-		_, _, _, used, _ := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
+		_, referencedXObjects, _, used, _ := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
 
 		checkICCBasedInResources(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, usedCSNames, results)
 
 		// Recursively scan Form XObject and annotation sub-resources.
 		visited := make(map[string]bool)
-		scanICCBasedRecursive(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, results, 0, visited, used)
+		scanICCBasedRecursive(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, results, 0, visited, used, referencedXObjects)
 
 		// Scan annotation appearance streams.
 		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
@@ -113,7 +113,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 					// nothing in it is known to be painted: passing no survey
 					// leaves its patterns and shadings unscanned rather than
 					// widening the check on an unmeasured scope.
-					scanICCBasedRecursive(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, results, 1, visited, nil)
+					scanICCBasedRecursive(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, results, 1, visited, nil, nil)
 				}
 			}
 		}
@@ -122,7 +122,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 
 // scanICCBasedRecursive scans Form XObject sub-resources recursively for
 // ICCBased colour spaces.
-func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Violation, depth int, visited map[string]bool, used *usedResources) {
+func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Violation, depth int, visited map[string]bool, used *usedResources, referencedXObjects map[string]bool) {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return
 	}
@@ -143,6 +143,17 @@ func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resource
 		xobjObj := xobjDict[k]
 		if ctx.Err() != nil {
 			return
+		}
+		// Only an XObject a Do operator invokes is used. One merely declared in
+		// /Resources/XObject paints nothing, so its colour space is not a use,
+		// which is the scoping [scanXObjectColorSpaces] already applies.
+		// Measured: veraPDF reports nothing for a truncated ICC profile on an
+		// image no operator invokes, and reports it as soon as a Do does.
+		// referencedXObjects is nil for a scope whose operations were not
+		// surveyed, which judges that scope in full rather than filtering it
+		// against a survey that does not exist.
+		if referencedXObjects != nil && !referencedXObjects[string(k)] {
+			continue
 		}
 		// Cycle detection.
 		if ref, ok := xobjObj.(ast.PdfIndirectRef); ok {
@@ -176,7 +187,7 @@ func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resource
 		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, nil, results)
 		// The form's own operations were not surveyed here, so its patterns and
 		// shadings are left alone while its named colour spaces are judged.
-		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, results, depth+1, visited, nil)
+		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, results, depth+1, visited, nil, nil)
 	}
 }
 
@@ -399,7 +410,7 @@ func scanICCBasedInPatterns(ctx context.Context, doc *document.Document, resourc
 		// spaces are judged in full and its own patterns and shadings are left
 		// alone.
 		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, nil, results)
-		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results, depth+1, visited, nil)
+		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results, depth+1, visited, nil, nil)
 	}
 }
 

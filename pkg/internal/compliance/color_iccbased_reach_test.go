@@ -68,6 +68,82 @@ func iccImagePDF() []byte {
 			"/ColorSpace 5 0 R /Length 3 >>\nstream\n\x00\x00\x00\nendstream")...)
 }
 
+// iccImageDeclaredOnlyPDF declares the same broken ICCBased image in the page
+// resources but never invokes it, so the page paints with a device colour
+// instead.
+func iccImageDeclaredOnlyPDF() []byte {
+	const content = "0 0 0 rg 0 0 10 10 re f"
+
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources " +
+			"<< /XObject << /Im0 7 0 R >> >> /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+	}
+	objs = append(objs, shortICCObjects()...)
+	return cyclePDF(append(objs,
+		"<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 "+
+			"/ColorSpace 5 0 R /Length 3 >>\nstream\n\x00\x00\x00\nendstream")...)
+}
+
+// TestICCBasedOnUninvokedImageIgnored pins that an image no Do operator invokes
+// is not judged.
+//
+// An XObject merely declared in /Resources/XObject paints nothing, so its
+// colour space is not a use. Measured against veraPDF 1.30.2 on this construct
+// and its invoked twin: it reports the clause for the invoked image and nothing
+// at all for the declared-only one, while litho reported both.
+func TestICCBasedOnUninvokedImageIgnored(t *testing.T) {
+	t.Parallel()
+
+	if firesRule2b(t, iccImageDeclaredOnlyPDF(), "6.2.4.2", 1) {
+		t.Error("an ICCBased profile on an image that no Do invokes must stay silent")
+	}
+	if !firesRule2b(t, iccImagePDF(), "6.2.4.2", 1) {
+		t.Error("the same image invoked by Do must still fire §6.2.4.2 t1")
+	}
+}
+
+// iccImageInFormPDF puts the broken ICCBased image inside a Form XObject's own
+// resources. The page invokes the form, and the form invokes the image.
+func iccImageInFormPDF() []byte {
+	const pageContent = "q /Fm0 Do Q"
+	const formContent = "q 10 0 0 10 0 0 cm /Im0 Do Q"
+
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources " +
+			"<< /XObject << /Fm0 8 0 R >> >> /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(pageContent), pageContent),
+	}
+	objs = append(objs, shortICCObjects()...)
+	return cyclePDF(append(objs,
+		"<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 "+
+			"/ColorSpace 5 0 R /Length 3 >>\nstream\n\x00\x00\x00\nendstream",
+		fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 200 100] /Resources "+
+			"<< /XObject << /Im0 7 0 R >> >> /Length %d >>\nstream\n%s\nendstream",
+			len(formContent), formContent))...)
+}
+
+// TestICCBasedInUnsurveyedFormStillJudged pins that a scope whose operations
+// were not surveyed is judged in full rather than filtered against a survey it
+// does not have.
+//
+// The form's own content stream is not parsed by this check, so no set of
+// Do-invoked names exists for it and the recursion passes nil. Treating a nil
+// set as "nothing is invoked" would silence every XObject inside a form, an
+// appearance stream or a pattern cell. Measured against veraPDF 1.30.2, which
+// reports the clause for this construct.
+func TestICCBasedInUnsurveyedFormStillJudged(t *testing.T) {
+	t.Parallel()
+
+	if !firesRule2b(t, iccImageInFormPDF(), "6.2.4.2", 1) {
+		t.Error("an ICCBased profile on an image inside a form must still fire §6.2.4.2 t1")
+	}
+}
+
 // TestICCBasedInPaintedPattern pins that an ICCBased profile reached through a
 // painted tiling pattern's own resources is validated.
 //
