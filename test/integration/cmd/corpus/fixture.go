@@ -253,7 +253,15 @@ func matchOne(re *regexp.Regexp, src []byte) string {
 }
 
 // isProfileDir reports whether a directory name matches a VeraPDF
-// profile convention (PDF_A-* or PDF_UA-*).
+// profile convention (PDF_A-*, PDF_UA-* or WTPDF-*).
+//
+// The predicate gates two things: [remediationFeature.Prepare] groups
+// fixtures by it, so a profile it does not recognise never reaches the
+// remediators and every cell reports "no precomputed verdict"; and
+// [baseFixtureID] strips the directory so profile-agnostic features key
+// their goldens on the basename.
 func isProfileDir(name string) bool {
-	return strings.HasPrefix(name, "PDF_A-") || strings.HasPrefix(name, "PDF_UA-")
+	return strings.HasPrefix(name, "PDF_A-") ||
+		strings.HasPrefix(name, "PDF_UA-") ||
+		strings.HasPrefix(name, "WTPDF-")
 }

@@ -107,8 +107,9 @@ func (f *remediationFeature) Prepare(ctx context.Context, fixtures []Fixture) er
 }
 
 // remediators returns the litho validate and remediate closures for a profile
-// directory, binding the PDF/A or PDF/UA conformance profile (auto-tagging makes
-// remediation target PDF/UA, so both are supported). ok is false for a profile
+// directory, binding the PDF/A, PDF/UA or WTPDF conformance profile
+// (auto-tagging makes remediation target PDF/UA, and WTPDF adopts the
+// ISO 14289-2 rules, so all three are supported). ok is false for a profile
 // the remediation engine does not target.
 func (f *remediationFeature) remediators(profile string) (validate func(context.Context, *pdf.Reader) ([]pdf.Violation, error), remediate func(context.Context, *pdf.Writer) error, ok bool) {
 	var opts []pdf.RemediateOption
@@ -126,6 +127,16 @@ func (f *remediationFeature) remediators(profile string) (validate func(context.
 			},
 			func(ctx context.Context, w *pdf.Writer) error {
 				_, err := w.RemediatePDFUA(ctx, p, opts...)
+				return err
+			},
+			true
+	}
+	if p, isWT := dirToWTPDFProfile[profile]; isWT {
+		return func(ctx context.Context, r *pdf.Reader) ([]pdf.Violation, error) {
+				return r.ValidateWTPDFReport(ctx, p)
+			},
+			func(ctx context.Context, w *pdf.Writer) error {
+				_, err := w.RemediateWTPDF(ctx, p, opts...)
 				return err
 			},
 			true
@@ -563,6 +574,12 @@ func profileDirToVeraPDFFlavour(profileDir string) (string, bool) {
 		"PDF_A-4f": "4f",
 		"PDF_UA-1": "ua1",
 		"PDF_UA-2": "ua2",
+		// WTPDF levels ride the ISO 14289-2 rule set; VeraPDF names them
+		// wt1a and wt1r. A profile missing from this map is skipped with
+		// "no verapdf flavour" even when [remediationFeature.remediators]
+		// supports it, so both maps move together.
+		"WTPDF-1.0-Accessibility": "wt1a",
+		"WTPDF-1.0-Reuse":         "wt1r",
 	}
 	v, ok := m[profileDir]
 	return v, ok
