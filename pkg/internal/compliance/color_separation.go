@@ -70,7 +70,7 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, pages [
 		// and a colour space only when something selects it. The parsed
 		// operations report both, and they are already cached on the page (see
 		// [pageCtx.parsedOps]), so this costs no second parse.
-		_, referencedXObjects, contentCSNames, used, _ := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx))
+		_, referencedXObjects, contentCSNames, used, _ := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
 
 		scanSeparationDeviceNInResources(ctx, doc, resources, part, i, colorantAlternates, colorantTintFuncs, results, used, referencedXObjects, contentCSNames)
 

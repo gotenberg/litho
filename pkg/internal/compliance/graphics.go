@@ -74,7 +74,7 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		var referencedXObjects map[string]bool
 		var used *usedResources
 		if hasContent {
-			_, referencedXObjects, _, used, _ = scanContentStreamDeviceCS(ctx, vctx.pages[i].parsedOps(ctx))
+			_, referencedXObjects, _, used, _ = scanContentStreamDeviceCS(ctx, vctx.pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, res))
 		}
 		results = append(results, checkFormXObjectResources(ctx, doc, res, part, i+1, referencedXObjects)...)
 

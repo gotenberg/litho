@@ -331,7 +331,7 @@ func TestScanContentColorOps_InheritedColorSpace(t *testing.T) {
 				t.Fatalf("parse content stream: %v", err)
 			}
 			var usage deviceCSUsage
-			scanContentColorOps(ctx, ops, &usage, nil, nil, nil, nil, tc.entry)
+			scanContentColorOps(ctx, ops, &usage, nil, nil, nil, nil, tc.entry, nil)
 			// The default DeviceGray is recorded as initialGray: the root content
 			// stream's DefaultGray is what covers it.
 			if got := usage.gray || usage.initialGray; got != tc.expectGray {
@@ -373,9 +373,10 @@ func TestScanContentColorOps_ReferencedPatterns(t *testing.T) {
 	ctx := context.Background()
 
 	for _, tc := range []struct {
-		name   string
-		stream string
-		want   []string
+		name      string
+		stream    string
+		patternCS map[string]bool
+		want      []string
 	}{
 		{
 			name:   "a fill pattern is recorded",
@@ -397,6 +398,23 @@ func TestScanContentColorOps_ReferencedPatterns(t *testing.T) {
 			stream: "/CS0 cs 0.1 0.2 0.3 scn 0 0 50 50 re f",
 			want:   nil,
 		},
+		{
+			// The spelling real producers emit: the Pattern space is named in
+			// /Resources/ColorSpace as [/Pattern base] and selected by that
+			// name, not written literally (pdfjs tiling-pattern-large-steps.pdf
+			// uses "/cs1 cs", issue13372.pdf "/R8 cs").
+			name:      "a pattern space reached by resource name is recorded",
+			stream:    "/cs1 cs /P3 scn 0 0 50 50 re f",
+			patternCS: map[string]bool{"cs1": true},
+			want:      []string{"P3"},
+		},
+		{
+			// Same stream, but the name resolves to something other than a
+			// Pattern space, so the operand selects no pattern.
+			name:   "a name operand under a non-Pattern space is not recorded",
+			stream: "/cs1 cs /P3 scn 0 0 50 50 re f",
+			want:   nil,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -406,7 +424,7 @@ func TestScanContentColorOps_ReferencedPatterns(t *testing.T) {
 			}
 			var usage deviceCSUsage
 			used := newUsedResources()
-			scanContentColorOps(ctx, ops, &usage, nil, nil, used, nil, inheritedCSDefault())
+			scanContentColorOps(ctx, ops, &usage, nil, nil, used, nil, inheritedCSDefault(), tc.patternCS)
 			if len(used.patterns) != len(tc.want) {
 				t.Fatalf("recorded patterns = %v, want %v", used.patterns, tc.want)
 			}

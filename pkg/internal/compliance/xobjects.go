@@ -41,7 +41,7 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		// Collect Do operator targets from the page content stream so we
 		// only check XObjects that are actually referenced (used).
-		_, referencedXObjects, _, used, _ := scanContentStreamDeviceCS(ctx, vctx.pages[i].parsedOps(ctx))
+		_, referencedXObjects, _, used, _ := scanContentStreamDeviceCS(ctx, vctx.pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, res))
 
 		scanXObjectResources(ctx, doc, res, i+1, part, profile, &results, visited, 0, referencedXObjects)
 		scanPatternImages(ctx, doc, res, used, i+1, part, profile, &results, visited)
@@ -93,7 +93,7 @@ func scanPatternImages(ctx context.Context, doc *document.Document, res ast.PdfD
 			continue
 		}
 		if patternRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); patternRes != nil {
-			_, referenced, _, _, _ := scanContentStreamDeviceCS(ctx, ops)
+			_, referenced, _, _, _ := scanContentStreamDeviceCS(ctx, ops, collectPatternCSNames(ctx, doc, patternRes))
 			scanXObjectResources(ctx, doc, patternRes, pageNum, part, profile, results, visited, 0, referenced)
 		}
 		*results = append(*results, checkInlineImageInterpolate(ops, pageNum, part)...)

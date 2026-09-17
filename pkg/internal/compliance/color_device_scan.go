@@ -227,6 +227,15 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	nestedInherited := make(map[string]inheritedCS)
 	nestedUsed := newUsedResources()
 
+	// A form names its pattern colour spaces in its own /Resources. One that
+	// omits /Resources draws on the invoking stream's (ISO 32000-1, 8.10.1),
+	// which is what parentRes carries.
+	formResForCS := parentRes
+	if ownRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); ownRes != nil {
+		formResForCS = ownRes
+	}
+	formPatternCS := collectPatternCSNames(ctx, doc, formResForCS)
+
 	if len(data) > 0 {
 		ops, err := content.ParseStreamData(ctx, data)
 		if err != nil {
@@ -234,7 +243,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 		} else {
 			// Check inline image colour spaces from parsed BI operations.
 			scanInlineImageCSOps(ops, &usage, formCSNames)
-			scanContentColorOps(ctx, ops, &usage, nestedXObjects, formCSNames, nestedUsed, nestedInherited, entryCS)
+			scanContentColorOps(ctx, ops, &usage, nestedXObjects, formCSNames, nestedUsed, nestedInherited, entryCS, formPatternCS)
 		}
 	}
 
@@ -577,7 +586,7 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 // are parsed once by [pageCtx.parsedOps] and shared from there. A page whose
 // content is missing or will not parse yields no operations, which is the same
 // empty survey the resolve and parse failures returned before.
-func scanContentStreamDeviceCS(ctx context.Context, ops []content.Operation) (deviceCSUsage, map[string]bool, map[string]bool, *usedResources, map[string]inheritedCS) {
+func scanContentStreamDeviceCS(ctx context.Context, ops []content.Operation, patternCSNames map[string]bool) (deviceCSUsage, map[string]bool, map[string]bool, *usedResources, map[string]inheritedCS) {
 	var usage deviceCSUsage
 	referencedXObjects := make(map[string]bool)
 	referencedCSNames := make(map[string]bool)
@@ -590,7 +599,7 @@ func scanContentStreamDeviceCS(ctx context.Context, ops []content.Operation) (de
 
 	// Check inline image colour spaces from parsed BI operations.
 	scanInlineImageCSOps(ops, &usage, referencedCSNames)
-	scanContentColorOps(ctx, ops, &usage, referencedXObjects, referencedCSNames, used, inherited, inheritedCSDefault())
+	scanContentColorOps(ctx, ops, &usage, referencedXObjects, referencedCSNames, used, inherited, inheritedCSDefault(), patternCSNames)
 
 	return usage, referencedXObjects, referencedCSNames, used, inherited
 }
@@ -710,14 +719,21 @@ func textModePaints(mode int) (fill, stroke bool) {
 //
 // inheritedXObjectCS records, per XObject name, the state in effect at each Do
 // that invokes it, so a nested form scan starts from the observed state.
-func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *deviceCSUsage, referencedXObjects, referencedCSNames map[string]bool, used *usedResources, inheritedXObjectCS map[string]inheritedCS, entry inheritedCS) {
+func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *deviceCSUsage, referencedXObjects, referencedCSNames map[string]bool, used *usedResources, inheritedXObjectCS map[string]inheritedCS, entry inheritedCS, patternCSNames map[string]bool) {
 	fillCSSet, strokeCSSet := entry.fill, entry.stroke
+	// Whether the space currently selected is specifically a Pattern space. A
+	// name operand to scn/SCN names a /Resources/Pattern key only once one is
+	// (ISO 32000-1 §8.6.8, Table 74). A scope begins with none selected: entry
+	// records only that some space was selected, not which, so a nested scope
+	// must select Pattern itself to paint with one.
+	fillPattern, strokePattern := false, false
 	// Text rendering mode is part of the text state, which q/Q saves and
 	// restores with the rest of the graphics state (ISO 32000-1, 9.3.1).
 	textRender := 0
 	type csState struct {
-		fill, stroke bool
-		textRender   int
+		fill, stroke               bool
+		fillPattern, strokePattern bool
+		textRender                 int
 	}
 	var csStack []csState
 
@@ -727,12 +743,13 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 		}
 		switch op.Operator {
 		case "q":
-			csStack = append(csStack, csState{fillCSSet, strokeCSSet, textRender})
+			csStack = append(csStack, csState{fillCSSet, strokeCSSet, fillPattern, strokePattern, textRender})
 		case "Q":
 			if len(csStack) > 0 {
 				prev := csStack[len(csStack)-1]
 				csStack = csStack[:len(csStack)-1]
 				fillCSSet, strokeCSSet, textRender = prev.fill, prev.stroke, prev.textRender
+				fillPattern, strokePattern = prev.fillPattern, prev.strokePattern
 			}
 		case "Tr":
 			if len(op.Operands) >= 1 {
@@ -743,23 +760,23 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 		case "g", "G":
 			usage.gray = true
 			if op.Operator == "g" {
-				fillCSSet = true
+				fillCSSet, fillPattern = true, false
 			} else {
-				strokeCSSet = true
+				strokeCSSet, strokePattern = true, false
 			}
 		case "rg", "RG":
 			usage.rgb = true
 			if op.Operator == "rg" {
-				fillCSSet = true
+				fillCSSet, fillPattern = true, false
 			} else {
-				strokeCSSet = true
+				strokeCSSet, strokePattern = true, false
 			}
 		case "k", "K":
 			usage.cmyk = true
 			if op.Operator == "k" {
-				fillCSSet = true
+				fillCSSet, fillPattern = true, false
 			} else {
-				strokeCSSet = true
+				strokeCSSet, strokePattern = true, false
 			}
 		case "cs", "CS":
 			if op.Operator == "cs" {
@@ -772,6 +789,17 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 					markDeviceCS(string(name), usage)
 					if referencedCSNames != nil {
 						referencedCSNames[string(name)] = true
+					}
+					// Selecting a Pattern space is what lets a later scn/SCN
+					// name operand select a pattern; any other space clears it.
+					// The space is usually named in /Resources/ColorSpace as
+					// [/Pattern base] rather than written literally, so
+					// patternCSNames carries the keys that resolve to one.
+					selectsPattern := name == "Pattern" || patternCSNames[string(name)]
+					if op.Operator == "cs" {
+						fillPattern = selectsPattern
+					} else {
+						strokePattern = selectsPattern
 					}
 				}
 			}
@@ -816,7 +844,20 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 			// name operand is the pattern form, so a trailing name is a
 			// /Resources/Pattern key. sc/SC never take one; they are listed here
 			// only so a malformed stream cannot smuggle a name past this case.
-			if len(op.Operands) > 0 && used != nil {
+			//
+			// The operand names a pattern only when a Pattern space is current
+			// on the side it sets: scn sets the fill colour, SCN the stroke
+			// colour (ISO 32000-1 §8.6.8). A name with no Pattern space
+			// selected is malformed and paints nothing. pdfjs issue18466.pdf
+			// writes "/P12 scn /P12 SCN" without ever selecting /Pattern, and
+			// veraPDF reports nothing for the image inside that pattern;
+			// treating the name as a use judged a pattern the file never paints.
+			stroking := op.Operator == "SC" || op.Operator == "SCN"
+			patternSelected := fillPattern
+			if stroking {
+				patternSelected = strokePattern
+			}
+			if patternSelected && len(op.Operands) > 0 && used != nil {
 				if name, ok := op.Operands[len(op.Operands)-1].(ast.PdfName); ok {
 					used.patterns[string(name)] = true
 				}

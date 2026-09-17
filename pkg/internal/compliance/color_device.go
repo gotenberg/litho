@@ -88,7 +88,7 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 
 		// Scan content stream operators for device CS usage and collect
 		// XObject names referenced by Do operators.
-		contentCSUsed, referencedXObjects, contentCSNames, usedResourceKeys, inheritedCSAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx))
+		contentCSUsed, referencedXObjects, contentCSNames, usedResourceKeys, inheritedCSAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
 
 		deviceCSUsed := scanForDeviceColorSpaces(ctx, doc, csDict, resources, referencedXObjects, usedResourceKeys, inheritedCSAtDo, part, contentCSNames)
 		deviceCSUsed.rgb = deviceCSUsed.rgb || contentCSUsed.rgb
@@ -292,6 +292,35 @@ func collectDefaultColorSpaces(ctx context.Context, doc *document.Document, reso
 		ds.hasGray = true
 	}
 	return ds
+}
+
+// collectPatternCSNames returns the /Resources/ColorSpace keys that name a
+// Pattern colour space, so the content scan can tell that "/cs1 cs" selects
+// one.
+//
+// A pattern space is written [/Pattern] or [/Pattern base] (ISO 32000-1
+// §8.7.3.3) and is normally reached through a resource name rather than the
+// literal /Pattern: pdfjs tiling-pattern-large-steps.pdf declares
+// /cs1 [/Pattern /DeviceRGB] and selects it with "/cs1 cs", and issue13372.pdf
+// declares /R8 [/Pattern]. Recognising only the literal spelling left every
+// such pattern looking unpainted.
+func collectPatternCSNames(ctx context.Context, doc *document.Document, resources ast.PdfDict) map[string]bool {
+	csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
+	if err != nil || csDict == nil {
+		return nil
+	}
+
+	var names map[string]bool
+	for name, csObj := range csDict {
+		if resolveCSName(ctx, doc, csObj) != "Pattern" {
+			continue
+		}
+		if names == nil {
+			names = make(map[string]bool)
+		}
+		names[string(name)] = true
+	}
+	return names
 }
 
 // collectUsedCSNames returns the set of colour space names referenced by
