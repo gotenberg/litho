@@ -216,8 +216,8 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 // §8.7.3.3 its /PaintType 2 is the uncoloured form, whose cell specifies no
 // colour of its own.
 const (
-	sepTilingPatternType   = 1
-	sepUncolouredPaintType = 2
+	tilingPatternType   = 1
+	uncolouredPaintType = 2
 )
 
 // checkSeparationDeviceNArray dispatches one colour-space object to the
@@ -327,11 +327,11 @@ func scanSeparationInPatterns(ctx context.Context, doc *document.Document, resou
 		}
 
 		patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"])
-		if patternType != sepTilingPatternType {
+		if patternType != tilingPatternType {
 			continue
 		}
 		paintType, _ := document.ResolveInt(ctx, doc, stream.Dict["PaintType"])
-		if paintType == sepUncolouredPaintType {
+		if paintType == uncolouredPaintType {
 			continue
 		}
 
