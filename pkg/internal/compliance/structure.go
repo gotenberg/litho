@@ -258,7 +258,6 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// PDF/UA-2 §8.4.3: /ActualText (t02) and /Alt (t03) shall not contain PUA.
 		if profile == "PDF/UA-2" {
 			results = append(results, checkActualTextPUA(ctx, doc, catalog, structTreeRoot, Rule_14289_2_8_4_3_t02, Rule_14289_2_8_4_3_t03)...)
-			results = append(results, checkOutlineTitlePUA(ctx, doc, catalog)...)
 		}
 
 		// PDF/UA-2 §8.2.5.2: single Document root child.
@@ -271,6 +270,16 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			}
 			validateISO32005Root(ctx, rootState, structTreeRoot)
 		}
+	}
+
+	// PDF/UA-2 §8.6 t1: an outline item /Title is a catalog-level text string,
+	// not a structure element, so it is judged whether or not the document
+	// carries a structure tree. veraPDF scopes the clause to CosTextString and
+	// reports a PUA title on a file whose catalog names no /StructTreeRoot;
+	// running the check inside the structure-tree branch above left exactly
+	// those files unreported.
+	if profile == "PDF/UA-2" {
+		results = append(results, checkOutlineTitlePUA(ctx, doc, catalog)...)
 	}
 
 	doc.Logger.Debug("compliance.structure: structure checks complete", "violations", len(results))
