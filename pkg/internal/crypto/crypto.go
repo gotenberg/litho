@@ -433,6 +433,24 @@ func (h *Handler) DecryptFunc(objNum, genNum int) func([]byte) ([]byte, error) {
 
 // aesDecrypt performs AES-CBC decryption with PKCS7 unpadding.
 // The IV is the first 16 bytes of data.
+//
+// Data that cannot be an AES ciphertext comes back unchanged rather than as an
+// error. ISO 32000-1, 7.6.2 encrypts with a 16 byte initialisation vector
+// followed by whole cipher blocks, so bytes shorter than one block, or leaving a
+// partial block after the IV, were never produced by the algorithm and no key
+// decrypts them. Leniency: such bytes are returned as they are stored.
+//
+// The relaxation is for producers that write a stream in plaintext inside an
+// encrypted file. pdfjs bug1826783.pdf declares /EncryptMetadata true with AESV2
+// yet stores its /Metadata packet as plaintext: 1544 bytes leave 8 past the IV,
+// and passing them through recovers the XMP the producer meant. Erroring instead
+// would lose the stream outright, since [github.com/gotenberg/litho/pkg/internal/core/parser]
+// turns a decryption error into an unreadable stream. 1 of the 5044 corpus files
+// depends on this, and veraPDF, which decrypts regardless, reports the resulting
+// bytes as a malformed XMP packet.
+//
+// The passthrough serves strings as well as streams: [Handler.DecryptFunc] routes
+// both here for /V 5 and for /V 4 with AESV2 or AESV3.
 func aesDecrypt(key, data []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -444,7 +462,7 @@ func aesDecrypt(key, data []byte) ([]byte, error) {
 	iv := data[:aes.BlockSize]
 	ciphertext := data[aes.BlockSize:]
 	if len(ciphertext)%aes.BlockSize != 0 {
-		return data, nil // Malformed
+		return data, nil
 	}
 	mode := cipher.NewCBCDecrypter(block, iv)
 	mode.CryptBlocks(ciphertext, ciphertext)
