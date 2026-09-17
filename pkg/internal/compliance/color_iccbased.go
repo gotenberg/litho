@@ -191,6 +191,23 @@ func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resource
 	}
 }
 
+// reportUnreadableICCN reports /N against a profile whose own component count
+// cannot be read.
+//
+// ISO 19005-1 §6.2.3.2 test 2 requires /N to match the number of components in
+// the embedded profile. A profile that will not decode, or whose header is
+// truncated before the data colour space at byte 16, states no count at all, so
+// the requirement stands unmet rather than unmeasured. Only the profile stream
+// being unresolvable leaves this silent, because there is then no profile to
+// judge (see [checkICCBasedArray]).
+func reportUnreadableICCN(nRule Rule, nVal int, pageIdx int, where string, results *[]Violation) {
+	if nRule.Specification == "" {
+		return
+	}
+	*results = append(*results, failf(nRule,
+		"page %d, %s: /N=%d cannot be matched against an unreadable embedded profile", pageIdx+1, where, nVal)...)
+}
+
 // checkICCBasedArray validates one [/ICCBased stream] colour space array.
 // where names the site the violation message reports, so a caller can say
 // "ColorSpace CS0", "image Im0" or "Shading Sh0" while sharing one validation.
@@ -226,6 +243,7 @@ func checkICCBasedArray(ctx context.Context, doc *document.Document, arr ast.Pdf
 		doc.Logger.Debug("compliance.color: cannot decode ICCBased stream", "page", pageIdx, "where", where, "error", err)
 		*results = append(*results, failf(iccBasedProfileRule(part),
 			"page %d, %s: cannot decode ICCBased profile", pageIdx+1, where)...)
+		reportUnreadableICCN(nRule, int(nVal), pageIdx, where, results)
 		return
 	}
 
@@ -233,6 +251,7 @@ func checkICCBasedArray(ctx context.Context, doc *document.Document, arr ast.Pdf
 	if !ok {
 		*results = append(*results, failf(iccBasedProfileRule(part),
 			"page %d, %s: ICC profile header too short", pageIdx+1, where)...)
+		reportUnreadableICCN(nRule, int(nVal), pageIdx, where, results)
 		return
 	}
 
