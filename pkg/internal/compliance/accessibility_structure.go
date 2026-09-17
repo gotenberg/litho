@@ -507,49 +507,77 @@ func (r *nsRoleResolver) resolveStandardType(ctx context.Context, doc *document.
 		}
 		visited[key] = true
 
-		// Landing in a standard namespace is not enough: each standard namespace
-		// defines its own vocabulary (ISO 32000-2:2020, 14.8.6), so a name that
-		// namespace does not define keeps resolving through /RoleMapNS.
-		if standardNamespaceURIs[nsURI] && isStandardStructTypeInNS(ast.PdfName(typeName), nsURI) {
-			return typeName, nsURI, true
-		}
-
-		if nsURI == "" {
-			// No namespace mechanism: the legacy /RoleMap targets standard type
-			// names with no namespace.
-			if isStandardStructTypeInNS(ast.PdfName(typeName), "") {
-				return typeName, "", true
-			}
-			next, exists := r.classicRole[ast.PdfName(typeName)]
-			if !exists {
-				return "", "", false
-			}
-			typeName = string(next)
+		// A type is resolved through the mapping that governs it BEFORE it is
+		// accepted as standard: a standard type that IS remapped no longer denotes
+		// that standard type (ISO 32000-2:2020, 14.8.6). Accepting the standard
+		// name first reported ISO 14289-2 8.2.5.2 t2 (a Document in the wrong
+		// namespace) where veraPDF reports t1 (the root holds no Document at all),
+		// and disagreed with [iso32005Resolve], which already resolves in this
+		// order for the ISO/TS 32005 matrix.
+		//
+		// A type that maps to itself has no applicable mapping and stands for
+		// itself; 8.2.4 t2 reports the circular entry separately.
+		if next, nextNS, mapped := r.equivalentType(ctx, doc, typeName, nsURI); mapped &&
+			(next != typeName || nextNS != nsURI) {
+			typeName, nsURI = next, nextNS
 			continue
 		}
 
-		// Namespaced type: follow /RoleMapNS[type] -> [targetType, targetNS].
-		rmns, exists := r.rmnsByURI[nsURI]
-		if !exists {
-			return "", "", false
+		// Landing in a standard namespace is not enough: each standard namespace
+		// defines its own vocabulary (ISO 32000-2:2020, 14.8.6), so a name that
+		// namespace does not define resolves to no standard type at all.
+		if standardNamespaceURIs[nsURI] && isStandardStructTypeInNS(ast.PdfName(typeName), nsURI) {
+			return typeName, nsURI, true
 		}
-		mappingObj, exists := rmns[ast.PdfName(typeName)]
-		if !exists {
-			return "", "", false
+		if nsURI == "" && isStandardStructTypeInNS(ast.PdfName(typeName), "") {
+			return typeName, "", true
 		}
-		arr, _ := document.ResolveArray(ctx, doc, mappingObj)
-		if len(arr) < 2 {
-			return "", "", false
-		}
-		targetType, _ := document.ResolveName(ctx, doc, arr[0])
-		targetNSDict, _ := document.ResolveDict(ctx, doc, arr[1])
-		if targetType == "" || targetNSDict == nil {
-			return "", "", false
-		}
-		targetURI, _ := document.ResolveString(ctx, doc, targetNSDict["NS"])
-		typeName, nsURI = string(targetType), string(targetURI)
+		return "", "", false
 	}
 	return "", "", false
+}
+
+// equivalentType returns the role-map target of one structure type, mirroring
+// [iso32005Equivalent]: a type whose namespace declares a /RoleMapNS is remapped
+// through it, while the structure tree root's legacy /RoleMap governs only a type
+// in no namespace or in the PDF 1.7 one (ISO 32000-2:2020, 14.8.6). A legacy
+// target names no namespace of its own. mapped is false when no mapping governs
+// the type, which is what makes it stand for itself.
+func (r *nsRoleResolver) equivalentType(ctx context.Context, doc *document.Document, typeName, nsURI string) (target, targetNS string, mapped bool) {
+	if nsURI != "" {
+		if rmns, declares := r.rmnsByURI[nsURI]; declares {
+			return roleMapNSTarget(ctx, doc, rmns[ast.PdfName(typeName)])
+		}
+		if nsURI != pdf1NamespaceURI {
+			return "", "", false
+		}
+	}
+	next, exists := r.classicRole[ast.PdfName(typeName)]
+	if !exists {
+		return "", "", false
+	}
+	return string(next), "", true
+}
+
+// roleMapNSTarget reads one /RoleMapNS value as a [name namespace] pair
+// (ISO 32000-2:2020, Table 353). mapped is false for a malformed entry, so the
+// type stands for itself rather than resolving through a mapping that is not
+// there.
+func roleMapNSTarget(ctx context.Context, doc *document.Document, entry ast.PdfObject) (target, targetNS string, mapped bool) {
+	if entry == nil {
+		return "", "", false
+	}
+	arr, err := document.ResolveArray(ctx, doc, entry)
+	if err != nil || len(arr) < 2 {
+		return "", "", false
+	}
+	targetType, _ := document.ResolveName(ctx, doc, arr[0])
+	targetNSDict, _ := document.ResolveDict(ctx, doc, arr[1])
+	if targetType == "" || targetNSDict == nil {
+		return "", "", false
+	}
+	uri, _ := document.ResolveString(ctx, doc, targetNSDict["NS"])
+	return string(targetType), string(uri), true
 }
 
 // childStandardTypes returns the effective standard structure types of an
