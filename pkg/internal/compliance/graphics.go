@@ -297,15 +297,18 @@ func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Docum
 // a page's own /Contents and the Form XObjects its resources name, so an
 // operator inside /Annots[]/AP went unreported while veraPDF flagged it.
 //
-// Only the undefined-operator test runs here. The resource-reference tests
-// that accompany it for Form XObjects are deliberately left out: they were not
-// measured against the reference validator for appearance streams, and a rule
-// that fires where veraPDF stays silent costs more than the one it catches.
+// The named-resource test runs here too, for the one part that states it.
+// An earlier note left it out as unmeasured against the reference validator;
+// it has since been measured. veraPDF 1.30.2 fails ISO 19005-4, 6.2.2 t3 on
+// appearance streams: pdfjs issue14438.pdf runs /OC /MC0 BDC in 2 of its 19
+// appearance streams, whose own /Resources carry no /Properties, and veraPDF
+// reports exactly those 2.
 func checkAnnotationAppearanceOps(ctx context.Context, doc *document.Document, page ast.PdfDict, part, pageNum int) []Violation {
 	rule := undefinedOperatorRule(part)
-	if rule.Specification == "" {
+	if rule.Specification == "" && missingResourceRule(part).Specification == "" {
 		return nil
 	}
+	pageRes := resolveResources(ctx, doc, page)
 	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annotsArr) == 0 {
 		return nil
@@ -339,7 +342,7 @@ func checkAnnotationAppearanceOps(ctx context.Context, doc *document.Document, p
 					}
 					seen[ref.ObjectNum] = true
 				}
-				results = append(results, checkAppearanceStreamOps(ctx, doc, streamObj, rule, pageNum)...)
+				results = append(results, checkAppearanceStreamOps(ctx, doc, streamObj, rule, pageRes, part, pageNum)...)
 			}
 		}
 	}
@@ -365,9 +368,10 @@ func appearanceStreamObjects(ctx context.Context, doc *document.Document, apObj 
 	return out
 }
 
-// checkAppearanceStreamOps parses one appearance stream and reports every
-// operator outside [validPDFOperators].
-func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, streamObj ast.PdfObject, rule Rule, pageNum int) []Violation {
+// checkAppearanceStreamOps parses one appearance stream, reports every operator
+// outside [validPDFOperators], and reports the names it references that no
+// resource dictionary defines.
+func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, streamObj ast.PdfObject, rule Rule, pageRes ast.PdfDict, part, pageNum int) []Violation {
 	stream, err := document.ResolveStream(ctx, doc, streamObj)
 	if err != nil {
 		doc.Logger.Debug("compliance.graphics: cannot resolve appearance stream", "error", err)
@@ -394,7 +398,73 @@ func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, strea
 		results = append(results, failf(rule,
 			"page %d: undefined operator %q in annotation appearance", pageNum, op.Operator)...)
 	}
+
+	// Only ISO 19005-4 states the undefined-name test (§6.2.2 t3), so the scan
+	// is confined to the part that can report it. The inherited-resource
+	// dictionary is nil: a name the page defines is not an inherited reference
+	// for an appearance stream, and veraPDF reports nothing at all for it.
+	if missingResourceRule(part).Specification == "" {
+		return results
+	}
+	streamRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+	if err != nil {
+		doc.Logger.Debug("compliance.graphics: cannot resolve appearance resources", "error", err)
+		return results
+	}
+	for _, v := range checkContentStreamResourcesOps(ctx, doc, ops, nil,
+		appearanceResources(ctx, doc, streamRes, pageRes), nil, part, pageNum, false) {
+		v.Context += ", annotation appearance"
+		results = append(results, v)
+	}
 	return results
+}
+
+// appearanceResources returns the resource dictionary an appearance stream's
+// names resolve against: its own /Resources, with the page's standing in for
+// every name the stream does not define itself.
+//
+// The fallback is per name rather than per category, measured against veraPDF
+// 1.30.2 on pdfjs issue14438.pdf. Defining /MC0 on the page alone silences
+// §6.2.2 t3, and so does giving the appearance stream a /Properties holding a
+// different name while the page defines /MC0. ISO 32000-1, 12.5.5 leaves an
+// appearance stream's resources to the stream, so the page fills the gaps
+// rather than replacing them.
+func appearanceResources(ctx context.Context, doc *document.Document, streamRes, pageRes ast.PdfDict) ast.PdfDict {
+	if streamRes == nil {
+		return pageRes
+	}
+	if pageRes == nil {
+		return streamRes
+	}
+
+	merged := make(ast.PdfDict, len(streamRes)+len(pageRes))
+	for category, value := range streamRes {
+		merged[category] = value
+	}
+	for category, pageEntry := range pageRes {
+		streamEntry, ok := streamRes[category]
+		if !ok {
+			merged[category] = pageEntry
+			continue
+		}
+		streamSub, err := document.ResolveDict(ctx, doc, streamEntry)
+		if err != nil || streamSub == nil {
+			continue
+		}
+		pageSub, err := document.ResolveDict(ctx, doc, pageEntry)
+		if err != nil || pageSub == nil {
+			continue
+		}
+		sub := make(ast.PdfDict, len(pageSub)+len(streamSub))
+		for name, value := range pageSub {
+			sub[name] = value
+		}
+		for name, value := range streamSub {
+			sub[name] = value
+		}
+		merged[category] = sub
+	}
+	return merged
 }
 
 // checkFormXObjectExtGState scans Form XObject resources for ExtGState

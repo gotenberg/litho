@@ -422,6 +422,16 @@ func checkContentStreamResourcesOps(
 			name = propName
 		}
 
+		// ISO 32000-1, 7.3.5 allows a name object to be empty, and a resource
+		// dictionary cannot usefully key an entry on it, so veraPDF models no
+		// reference at all: pdfjs bug1669099.pdf writes "/ 12.00000 Tf" in 15
+		// widget appearance streams and veraPDF reports no §6.2.2 t3 for the
+		// file. Reporting the empty name instead invents a violation per
+		// occurrence.
+		if name == "" {
+			continue
+		}
+
 		// Look up the name in the appropriate Resources sub-dictionary.
 		subDict, err := document.ResolveDict(ctx, doc, resources[category])
 		if err != nil || subDict == nil {
