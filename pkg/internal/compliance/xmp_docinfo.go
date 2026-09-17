@@ -584,7 +584,12 @@ func xmpDateInstant(s string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	return t.UTC().Format(time.RFC3339), true
+	// Format with sub-second precision: RFC 3339 alone drops it, so
+	// "07:42:46.729Z" and "07:42:46Z" collapsed to one string and a pair
+	// 729 ms apart compared equal. veraPDF reports them as not equivalent.
+	// RFC3339Nano omits trailing zeros, so ".000" still equals a value
+	// carrying no fraction at all, which is the same instant.
+	return t.UTC().Format(time.RFC3339Nano), true
 }
 
 // xmpNormalizeISO8601 canonicalizes an ISO 8601 date string for comparison.
@@ -593,6 +598,19 @@ func xmpDateInstant(s string) (string, bool) {
 func xmpNormalizeISO8601(s string) string {
 	if !strings.Contains(s, "T") {
 		return s
+	}
+
+	// An offset written without minutes ("+03") is not RFC 3339, so the instant
+	// comparison cannot parse it, and the caller falls back to comparing the two
+	// spellings literally: a date that names the same instant is then reported as
+	// a mismatch. veraPDF parses the short form and compares instants, measured
+	// by a date in that form naming a DIFFERENT instant, which it does report as
+	// a violation rather than passing vacuously. Expand it to the full form.
+	if n := len(s); n >= 3 {
+		if c := s[n-3]; (c == '+' || c == '-') &&
+			s[n-2] >= '0' && s[n-2] <= '9' && s[n-1] >= '0' && s[n-1] <= '9' {
+			s += ":00"
+		}
 	}
 
 	// Normalize explicit UTC offsets (+00:00 / -00:00) to Z.
