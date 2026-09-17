@@ -506,6 +506,15 @@ func jobVerdict(vr verapdfValidationResult) veraVerdict {
 	for _, r := range rules {
 		ids = append(ids, fmt.Sprintf("%s-t%02d", r.Clause, r.TestNumber))
 	}
+	// VeraPDF lists rule summaries in a different order for a single-file run
+	// than for the same file inside a batch, and [singleValidate] retries any
+	// file the batch report drops, so identical failures reach
+	// verapdf_post_rules permuted according to which path the file took.
+	// Measured on 25 govdocs files: batch against batch is stable, batch
+	// against single permutes 5 of 6. Sort as [distinctRuleIDs] already does
+	// for the litho side, so diffing two gate reports shows only what moved.
+	// The count stays len(rules): these ids are reported, not deduplicated.
+	sort.Strings(ids)
 	return veraVerdict{count: len(rules), rules: ids}
 }
 
