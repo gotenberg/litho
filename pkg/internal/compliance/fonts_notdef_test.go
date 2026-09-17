@@ -16,7 +16,7 @@ func TestCollectType0CIDs(t *testing.T) {
 
 	t.Run("identity even length collects CIDs", func(t *testing.T) {
 		t.Parallel()
-		cids, notdef, ok := collectType0CIDs("Identity-H", nil, usage(0x00, 0x05, 0x01, 0x00))
+		cids, notdef, _, ok := collectType0CIDs("Identity-H", nil, usage(0x00, 0x05, 0x01, 0x00))
 		if !ok || notdef {
 			t.Fatalf("ok=%v notdef=%v, want ok and not notdef", ok, notdef)
 		}
@@ -27,7 +27,7 @@ func TestCollectType0CIDs(t *testing.T) {
 
 	t.Run("identity odd length is notdef", func(t *testing.T) {
 		t.Parallel()
-		_, notdef, ok := collectType0CIDs("Identity-V", nil, usage(0x00, 0x05, 0x01))
+		_, notdef, _, ok := collectType0CIDs("Identity-V", nil, usage(0x00, 0x05, 0x01))
 		if !ok || !notdef {
 			t.Errorf("odd-length string under a 2-byte CMap must be notdef: ok=%v notdef=%v", ok, notdef)
 		}
@@ -36,7 +36,7 @@ func TestCollectType0CIDs(t *testing.T) {
 	t.Run("predefined CMap valid code maps", func(t *testing.T) {
 		t.Parallel()
 		// 0x41 ('A') is a valid single-byte Shift-JIS code mapped to a CID.
-		cids, notdef, ok := collectType0CIDs("90ms-RKSJ-H", nil, usage(0x41))
+		cids, notdef, _, ok := collectType0CIDs("90ms-RKSJ-H", nil, usage(0x41))
 		if !ok || notdef {
 			t.Fatalf("ok=%v notdef=%v cids=%v", ok, notdef, cids)
 		}
@@ -50,7 +50,7 @@ func TestCollectType0CIDs(t *testing.T) {
 		// 0xFF is undefined in this CMap. To avoid a false positive when a
 		// mapping lives in an unresolved usecmap base, it is skipped (not
 		// flagged) rather than reported as .notdef.
-		cids, notdef, ok := collectType0CIDs("90ms-RKSJ-H", nil, usage(0xFF))
+		cids, notdef, _, ok := collectType0CIDs("90ms-RKSJ-H", nil, usage(0xFF))
 		if !ok || notdef {
 			t.Errorf("undefined code must be skipped (no false positive): ok=%v notdef=%v", ok, notdef)
 		}
@@ -61,7 +61,7 @@ func TestCollectType0CIDs(t *testing.T) {
 
 	t.Run("embedded or unknown encoding is undecodable", func(t *testing.T) {
 		t.Parallel()
-		if _, _, ok := collectType0CIDs("SomeEmbeddedStreamCMap", nil, usage(0x00, 0x01)); ok {
+		if _, _, _, ok := collectType0CIDs("SomeEmbeddedStreamCMap", nil, usage(0x00, 0x01)); ok {
 			t.Error("an unrecognized encoding must report ok=false so the caller skips the check")
 		}
 	})

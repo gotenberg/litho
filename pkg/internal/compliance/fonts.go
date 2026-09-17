@@ -1569,7 +1569,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 // (Adobe-Japan1 etc.) is decoded codespace-aware through its bundled bcmap; the
 // resolvable CIDs are returned for the caller's embedded-font charset check,
 // while unmapped codes are skipped to stay free of false positives.
-func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInfo) (cids map[uint16]bool, notdef, ok bool) {
+func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInfo) (cids map[uint16]bool, notdef, unmappedZero, ok bool) {
 	// An embedded CMap stream resolves to an empty name; decode through the
 	// parsed stream instead so the used-glyph checks cover fonts that map
 	// codes to CIDs with a custom CMap. Without this, a font whose /Encoding
@@ -1582,9 +1582,13 @@ func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInf
 				if !c.Mapped {
 					// A code the CMap leaves unmapped selects CID 0 when litho
 					// holds all its mappings (ISO 32000-1, 9.7.6.3); see
-					// [cmap.CIDMap.UnmappedNotdef].
+					// [cmap.CIDMap.UnmappedNotdef]. unmappedZero separates that
+					// from a code written as CID 0: the first reaches no glyph
+					// at all, the second reaches the .notdef glyph, which the
+					// program does contain.
 					if embedded.UnmappedNotdef() {
 						cids[0] = true
+						unmappedZero = true
 					}
 					continue
 				}
@@ -1593,12 +1597,12 @@ func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInf
 				// limits CIDs to 0..65535): the renderer draws .notdef,
 				// which is exactly what the caller's notdef path reports.
 				if c.CID < 0 || c.CID > 0xFFFF {
-					return nil, true, true
+					return nil, true, false, true
 				}
 				cids[uint16(c.CID)] = true
 			}
 		}
-		return cids, false, true
+		return cids, false, unmappedZero, true
 	}
 	switch encName {
 	case "Identity-H", "Identity-V":
@@ -1608,13 +1612,13 @@ func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInf
 			// An odd-length string under a 2-byte CMap leaves a trailing byte
 			// that cannot form a CID; the renderer draws .notdef.
 			if len(data)%2 != 0 {
-				return nil, true, true
+				return nil, true, false, true
 			}
 			for i := 0; i+1 < len(data); i += 2 {
 				cids[uint16(data[i])<<8|uint16(data[i+1])] = true
 			}
 		}
-		return cids, false, true
+		return cids, false, false, true
 	default:
 		// Any other named encoding is a predefined CMap, decoded through its
 		// bundled bcmap. A nil map means the name is not a recognized
@@ -1630,7 +1634,7 @@ func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInf
 		// .notdef (a false negative) for zero false positives.
 		cm := cmap.LoadPredefinedCIDMap(encName)
 		if cm == nil {
-			return nil, false, false
+			return nil, false, false, false
 		}
 		cids = make(map[uint16]bool)
 		for _, s := range usage.rawStrings {
@@ -1640,7 +1644,7 @@ func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInf
 				}
 			}
 		}
-		return cids, false, true
+		return cids, false, false, true
 	}
 }
 
@@ -1667,7 +1671,7 @@ func type0UsedCIDs(ctx context.Context, doc *document.Document, fontDict ast.Pdf
 			}
 		}
 	}
-	cids, _, ok := collectType0CIDs(string(encName), embedded, usage)
+	cids, _, _, ok := collectType0CIDs(string(encName), embedded, usage)
 	if !ok || len(cids) == 0 {
 		return nil
 	}
@@ -1713,7 +1717,7 @@ func checkType0NotdefWidth(ctx context.Context, doc *document.Document, fontDict
 			}
 		}
 	}
-	usedCIDs, notdef, ok := collectType0CIDs(string(encName), embedded, usage)
+	usedCIDs, notdef, _, ok := collectType0CIDs(string(encName), embedded, usage)
 	if !ok {
 		return nil
 	}
@@ -1768,7 +1772,7 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 			}
 		}
 	}
-	usedCIDs, notdef, ok := collectType0CIDs(string(encName), embedded, usage)
+	usedCIDs, notdef, unmappedZero, ok := collectType0CIDs(string(encName), embedded, usage)
 	if !ok {
 		// litho cannot decode this /Encoding to CIDs (an unparseable
 		// embedded CMap stream or an unrecognized predefined CMap); leave
@@ -1795,7 +1799,19 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 
 	// CID 0 is always .notdef.
 	if usedCIDs[0] {
-		return failf(rule, "font %s on page %d: text references CID 0 (.notdef)", fontName, pageNum)
+		results := failf(rule, "font %s on page %d: text references CID 0 (.notdef)", fontName, pageNum)
+		// A code the encoding CMap maps nowhere reaches no glyph at all, which
+		// the glyph-presence rule covers as well: veraPDF reports both for it.
+		// A code written as CID 0 reaches the .notdef glyph, which the program
+		// does contain, so that keeps firing the .notdef rule alone (both tools
+		// agree there; see [absentType0CIDs]). renderingMode == 3 exempts the
+		// glyph-presence half, as in the decode-level branch above.
+		if pr := glyphPresenceRule(profile); unmappedZero && pr.Specification != "" &&
+			usage.visible && type0HasEmbeddedProgram(ctx, doc, fontDict) {
+			results = append(results, failf(pr,
+				"font %s on page %d: the encoding CMap maps a rendered code to no glyph in the embedded font program", fontName, pageNum)...)
+		}
+		return results
 	}
 
 	// Resolve descendant CIDFont to verify referenced CIDs exist in the font program.
@@ -1961,7 +1977,7 @@ func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.P
 			}
 		}
 	}
-	usedCIDs, notdef, decodeOK := collectType0CIDs(string(encName), embedded, usage)
+	usedCIDs, notdef, _, decodeOK := collectType0CIDs(string(encName), embedded, usage)
 	if !decodeOK {
 		return absent, "", notdef, false
 	}
@@ -2050,6 +2066,24 @@ func checkType0GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 	absent, _, notdef, ok := absentType0CIDs(ctx, doc, fontDict, usage)
 	if !ok {
 		return nil
+	}
+	// A code the encoding CMap maps nowhere reaches no glyph at all. Parts 2 to
+	// 4 report it from [checkType0NotdefGlyph] beside the .notdef rule; PDF/A-1
+	// has no .notdef rule and reaches only this path, so honor the signal here.
+	if !notdef && len(absent) == 0 {
+		encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
+		var embedded *cmap.CIDMap
+		if encName == "" {
+			if stream, serr := document.ResolveStream(ctx, doc, fontDict["Encoding"]); serr == nil {
+				if data, derr := doc.DecodeStream(ctx, stream); derr == nil {
+					embedded = cmap.ParseEmbeddedCIDMap(ctx, data)
+				}
+			}
+		}
+		if _, _, unmappedZero, decodeOK := collectType0CIDs(string(encName), embedded, usage); decodeOK && unmappedZero &&
+			usage.visible && type0HasEmbeddedProgram(ctx, doc, fontDict) {
+			return failf(rule, "font %s on page %d: the encoding CMap maps a rendered code to no glyph in the embedded font program", fontName, pageNum)
+		}
 	}
 	// A decode-level .notdef (odd-length code tail or a CID beyond 65535) means
 	// the rendered code resolves to no glyph. Parts 2-4 fire this via
