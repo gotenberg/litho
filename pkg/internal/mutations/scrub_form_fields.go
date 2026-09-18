@@ -152,6 +152,7 @@ func fieldValueOwner(
 	dict := annotDict
 	ref := annotRef
 	addressable := true
+	seen := make(map[int]bool)
 
 	for depth := 0; depth < maxFieldAncestorDepth && dict != nil; depth++ {
 		for _, key := range fieldValueKeys {
@@ -159,7 +160,7 @@ func fieldValueOwner(
 				return dict, ref, addressable
 			}
 		}
-		parentObj, ok := dict["Parent"]
+		parentObj, parent, ok := fieldParent(ctx, doc, dict, seen)
 		if !ok {
 			return nil, ast.PdfIndirectRef{}, false
 		}
@@ -175,10 +176,6 @@ func fieldValueOwner(
 			// Written straight into its child, so there is no object to replace
 			// if the value turns out to live here.
 			addressable = false
-		}
-		parent, err := document.ResolveDict(ctx, doc, parentObj)
-		if err != nil || parent == nil {
-			return nil, ast.PdfIndirectRef{}, false
 		}
 		dict = parent
 	}
