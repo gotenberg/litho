@@ -166,6 +166,25 @@ var ErrImageRegionCoversNoSample = errors.New("region covers an image but none o
 // as well as inside it. Translating them is possible and is not done yet.
 var ErrImageCarriesSampleEntries = errors.New("image carries decode or mask entries")
 
+// ErrStructElementPartlyRemoved reports a structure element that describes both
+// marked content a redaction removed and marked content it kept.
+//
+// One element can cover several marked-content sequences, and its /ActualText,
+// /Alt and /E describe all of them together. Clearing those for the sequence
+// that went would take the description of the ones that stayed, and leaving
+// them keeps a copy of the removed text in the structure tree. Splitting the
+// element is the operation this needs, and it does not exist yet.
+var ErrStructElementPartlyRemoved = errors.New("structure element describes both removed and surviving content")
+
+// ErrStructElementNotAddressable reports a structure element the mutation
+// cannot rewrite because it has no indirect reference of its own.
+//
+// Scrubbing replaces the element's own object, so an element written directly
+// into the /ParentTree array has no object number for the replacement to take.
+// Reporting it beats leaving the structure tree holding a copy of text the page
+// no longer draws.
+var ErrStructElementNotAddressable = errors.New("structure element has no indirect reference")
+
 // ErrScanTokenEmpty reports an empty token handed to a document scan.
 //
 // An empty string is contained in every other string, so scanning for one would

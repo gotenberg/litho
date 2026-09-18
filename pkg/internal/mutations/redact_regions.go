@@ -113,6 +113,10 @@ type RedactReport struct {
 	// there is nothing for a scan to look for; the count is for the caller's
 	// report of what it did.
 	RemovedPaths int
+	// RemovedMCIDs lists the marked-content identifiers whose content was
+	// removed, ascending. They are what reaches the structure tree: a tagged
+	// page keeps a parallel copy of its text there, keyed by these.
+	RemovedMCIDs []int
 }
 
 func redactPageRegions(
@@ -213,6 +217,7 @@ func redactPageRegions(
 	type coverage struct {
 		inside, outside int
 		glyphs          []string
+		mcids           []int
 	}
 	tally := make(map[int]*coverage)
 
@@ -241,6 +246,9 @@ func redactPageRegions(
 			tally[origin] = c
 		}
 		c.glyphs = append(c.glyphs, el.Text)
+		if el.MCID >= 0 {
+			c.mcids = append(c.mcids, el.MCID)
+		}
 		if selected {
 			c.inside++
 		} else {
@@ -275,6 +283,37 @@ func redactPageRegions(
 	// ExcisePageSpans sorts and rejects overlaps, so the two sets need no
 	// ordering here. A path run that somehow enclosed a show-text operator
 	// would be caught there as an overlap rather than silently merged.
+	// Which marked content went and which stayed. An identifier can appear on
+	// both sides when it covers operators the region split between, and the
+	// scrub has to see that rather than clear an element describing both.
+	removedMCIDs := make(map[int]bool)
+	survivingMCIDs := make(map[int]bool)
+	selectedOrigins := make(map[int]bool, len(selected))
+	for _, origin := range selected {
+		selectedOrigins[origin] = true
+		for _, mcid := range tally[origin].mcids {
+			removedMCIDs[mcid] = true
+		}
+	}
+	for origin, c := range tally {
+		if selectedOrigins[origin] {
+			continue
+		}
+		for _, mcid := range c.mcids {
+			survivingMCIDs[mcid] = true
+		}
+	}
+	for mcid := range removedMCIDs {
+		report.RemovedMCIDs = append(report.RemovedMCIDs, mcid)
+	}
+	sort.Ints(report.RemovedMCIDs)
+
+	// The structure tree holds a second copy of the page's text, so clearing
+	// the page alone leaves it readable there.
+	if err := scrubStructTreeText(ctx, alloc, doc, page, removedMCIDs, survivingMCIDs); err != nil {
+		return RedactReport{}, err
+	}
+
 	spans = append(spans, vectorSpans...)
 	if len(spans) == 0 {
 		// An image may still have been blanked, so the report stands even when

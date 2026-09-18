@@ -107,9 +107,18 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   glyph and handing single letters to a scan matches nearly every object in a real file. Runs that
   decode to nothing are dropped, for the same reason an empty token is refused. One honest limit: the
   scan reads a parsed document, while a redaction's output is queued in the allocator, so proving a
-  written document clean means re-reading the output and scanning that. Still open here: the scrubbing
-  itself — structure tree, annotation values, outlines, `/PieceInfo`, `/Thumb`, metadata, font
-  re-subset — is untouched. The scan tells you the document is still dirty; it does not clean it.
+  written document clean means re-reading the output and scanning that. **The structure tree is now scrubbed**, which is the
+  first vector past the page itself and the one that matters most, since a tagged PDF keeps a parallel
+  copy of its text in `/ActualText`, `/Alt` and `/E` and tagged PDFs are the common case. The page's
+  `/StructParents` keys the `/ParentTree` entry, which for a page is an array indexed by MCID
+  (ISO 32000-1, 14.7.4.4), so a removed MCID reaches the element describing it; the element keeps its
+  `/S` and loses only the text-bearing entries. Two cases refuse instead: an element describing both
+  removed and surviving content (one MCID spanning operators on both sides, or two MCIDs naming the
+  same element — a single element commonly spans a whole paragraph, so this is ordinary rather than a
+  corner case), and an element written directly into the array with no object number to replace.
+  Still open here: annotation values, outlines, `/PieceInfo`, `/Thumb`, metadata and font re-subset
+  are all still untouched, so the scan continues to tell you the document is dirty without cleaning
+  it.
 - **PR5 — CLI.** `litho redact --region <page:x,y,w,h>...` or `--apply-marks`.
 
 ## Limits and honest scope
