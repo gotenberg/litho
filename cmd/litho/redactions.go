@@ -50,10 +50,20 @@ func runRedactions(ctx context.Context, args []string, stdout, stderr io.Writer)
 				fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
 				continue
 			}
-			if len(rt) == 0 {
+			// Report only the text a redaction mark covers. The reader
+			// returns every element on the page with the covered ones
+			// flagged, so printing the slice as it comes listed the whole
+			// page, including files carrying no redaction marks at all.
+			var covered []models.TextElement
+			for _, el := range rt {
+				if el.Redacted {
+					covered = append(covered, el)
+				}
+			}
+			if len(covered) == 0 {
 				continue
 			}
-			res.Pages = append(res.Pages, redactionsPageResult{Page: p, RedactedText: rt})
+			res.Pages = append(res.Pages, redactionsPageResult{Page: p, RedactedText: covered})
 		}
 		results = append(results, res)
 		closer()
