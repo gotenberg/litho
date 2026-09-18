@@ -101,7 +101,9 @@ func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, 
 // per-operator helpers (handleTfOp, handleShowTextOp, handleTJOp, handleDoOp)
 // so that each piece of the extraction state machine can be audited in
 // isolation.
-func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool) error {
+// When origins is non-nil, one entry is appended to it per element appended to
+// elements, naming the index in ops of the operation that drew it.
+func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, origins *[]int) error {
 	if depth > maxFormXObjectDepth {
 		if doc != nil {
 			doc.Logger.Debug("form xobject max depth reached",
@@ -174,6 +176,8 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		// handleTJOp see the correct font.
 		syncFont(state)
 
+		before := len(*elements)
+
 		switch op.Operator {
 		case "Tf":
 			currentFont = handleTfOp(ctx, doc, resources, op, currentFont)
@@ -203,6 +207,22 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		case "Do":
 			if err := handleDoOp(ctx, doc, machine, resources, op, elements, visited, depth, annotAppearances); err != nil {
 				return err
+			}
+		}
+
+		// Name the operation that drew each new element, so a caller can map an
+		// element back to the bytes that produced it. A Do invokes a form
+		// XObject whose elements come from the form's own content stream, so
+		// their bytes are not in ops at all: mark them unattributable rather
+		// than name the Do, which would invite a caller to remove a whole form
+		// to reach one glyph drawn inside it.
+		if origins != nil {
+			origin := opIdx
+			if op.Operator == "Do" {
+				origin = OriginUnattributable
+			}
+			for range len(*elements) - before {
+				*origins = append(*origins, origin)
 			}
 		}
 	}
@@ -508,7 +528,9 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	// (ISO 32000-1, 14.6). Close any it leaves open before returning to the
 	// parent, or an unbalanced /Artifact would suppress the rest of the page.
 	mcSpans := machine.SnapshotMarkedContent()
-	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances)
+	// No origins below the top level: these elements are drawn by the form's own
+	// content stream, and the caller's operation indices do not address it.
+	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances, nil)
 	machine.RestoreMarkedContent(mcSpans)
 	if objNum != 0 {
 		delete(visited, objNum)
@@ -529,8 +551,10 @@ type ExtractionConfig struct {
 	StripArtifacts bool // If true, discards text inside /Artifact marked content (headers, footers, page numbers)
 }
 
-// ExtractElements extracts text from a page's content [content.Operation] values as raw spatial [models.TextElement] entries.
-func ExtractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, error) {
+// extractElements does the work behind [ExtractElements] and
+// [ExtractElementsWithOrigins]. It reports origins only when asked, so the
+// common path allocates nothing extra.
+func extractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, recordOrigins bool) ([]models.TextElement, []int, error) {
 	// Collect annotation appearance object numbers so we can skip them during
 	// text extraction. Annotation appearances are visual overlays, not page content.
 	annotAppearances := collectAnnotAppearanceObjects(ctx, doc, page.Dict)
@@ -540,8 +564,14 @@ func ExtractElements(ctx context.Context, doc *document.Document, machine *graph
 		//nolint:mnd // minimum capacity to avoid early reallocations
 		64)
 	elements := make([]models.TextElement, 0, estimatedCap)
-	if err := extractTextRecursive(ctx, doc, machine, page.Resources, ops, &elements, make(map[int]bool), 0, annotAppearances); err != nil {
-		return nil, err
+	var origins []int
+	var originsPtr *[]int
+	if recordOrigins {
+		origins = make([]int, 0, estimatedCap)
+		originsPtr = &origins
+	}
+	if err := extractTextRecursive(ctx, doc, machine, page.Resources, ops, &elements, make(map[int]bool), 0, annotAppearances, originsPtr); err != nil {
+		return nil, nil, err
 	}
 
 	if doc != nil {
@@ -615,7 +645,39 @@ func ExtractElements(ctx context.Context, doc *document.Document, machine *graph
 		}
 	}
 
-	return elements, nil
+	return elements, origins, nil
+}
+
+// OriginUnattributable marks an element whose bytes are not in the operations
+// its origins were taken over. A form XObject paints from its own content
+// stream, so no offset into the invoking stream addresses the glyph it drew.
+const OriginUnattributable = -1
+
+// ExtractElements extracts text from a page's content [content.Operation]
+// values as raw spatial [models.TextElement] entries.
+func ExtractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, error) {
+	elements, _, err := extractElements(ctx, doc, machine, page, ops, false)
+	return elements, err
+}
+
+// ExtractElementsWithOrigins extracts elements and, for each, the index in ops
+// of the operation that drew it. The two slices are the same length.
+//
+// Pair it with [content.ParseStreamDataWithOffsets] over the bytes ops was
+// parsed from: the ranges it returns are parallel to ops, so an element's
+// origin indexes straight into them and a caller can reach the bytes that drew
+// the element. Offsets taken over a different assembly of the page address
+// different bytes.
+//
+// An element painted inside a form XObject reports [OriginUnattributable],
+// because its bytes live in the form's stream rather than in ops. A caller
+// removing content has to refuse such an element: excising the Do that invoked
+// the form would take everything else the form paints with it.
+//
+// The origins describe these elements as returned. [CoalesceElements] merges
+// and drops entries, so origins do not survive it; correlate first.
+func ExtractElementsWithOrigins(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, []int, error) {
+	return extractElements(ctx, doc, machine, page, ops, true)
 }
 
 // CoalesceElements merges consecutive per-glyph [models.TextElement]
