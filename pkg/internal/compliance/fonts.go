@@ -1519,10 +1519,23 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 					// GID 0: pdfjs issue13107_reduced.pdf embeds a DejaVuSans subset
 					// with no .notdef glyph whose post table names GID 0 "space".
 					// Lowest offending code; see [lowestOffender].
+					// A font that declares no /Encoding names no code at all, so an
+					// empty name here is the absence of a declaration rather than
+					// evidence of .notdef: ISO 32000-1, 9.6.6.4 resolves such a
+					// TrueType through the program's own cmap, which the no-names
+					// branch below consults. Condemning the empty name regardless
+					// reported every code a font shows: pdfjs issue6410.pdf embeds
+					// four nonsymbolic TrueTypes with no /Encoding whose post 2.0
+					// table sends them down this branch, and litho named charCode 32
+					// though all three cmap subtables map it to "space", while
+					// veraPDF judged 149 glyphs there and found no .notdef. A
+					// declared encoding that leaves a code undefined still fires,
+					// which is the MacExpertEncoding case above.
+					declaresEncoding := len(enc) > 0
 					var worst lowestOffender[byte]
 					for code := range usage.charCodes {
 						glyphName := enc[code]
-						if glyphName == "" || glyphName == ".notdef" {
+						if glyphName == ".notdef" || (glyphName == "" && declaresEncoding) {
 							worst.offer(code)
 						}
 					}
