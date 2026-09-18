@@ -29,11 +29,41 @@ type EFEntry struct {
 // Pending allocator versions take precedence so repeated mutations see
 // each other's edits.
 func CollectEmbeddedFileEntries(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, depth int, out *[]EFEntry) {
+	collectEmbeddedFileEntriesAt(ctx, alloc, doc, nodeObj, depth, make(map[int]bool), out)
+}
+
+// collectEmbeddedFileEntriesAt is [CollectEmbeddedFileEntries] carrying the set
+// of nodes already walked.
+//
+// seen visits each node once, as [document.LookupNameTree] does for the same
+// structure: a name tree is a strict tree (ISO 32000-1, 7.9.6), so a /Kids entry
+// reached twice is malformed. [maxAttachmentTreeDepth] does not contain that on
+// its own, because this walk fans out: a node whose /Kids names the same child
+// twice costs 2^depth, which at 64 is a denial of service rather than a slow
+// walk.
+//
+// The guard also keeps the answer right, which is why it is not merely a
+// limit. What this collects is written back as a rebuilt tree, so walking one
+// leaf twice appends it twice, and [uniqueEFName] then renames the second copy
+// to "name (2)": a file would gain an attachment it never carried.
+func collectEmbeddedFileEntriesAt(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	nodeObj ast.PdfObject,
+	depth int,
+	seen map[int]bool,
+	out *[]EFEntry,
+) {
 	if depth > maxAttachmentTreeDepth {
 		return
 	}
 	var node ast.PdfDict
 	if ref, ok := nodeObj.(ast.PdfIndirectRef); ok {
+		if seen[ref.ObjectNum] {
+			return
+		}
+		seen[ref.ObjectNum] = true
 		node = ResolveFromAllocOrDoc(ctx, alloc, doc, ref)
 	}
 	if node == nil {
@@ -45,7 +75,7 @@ func CollectEmbeddedFileEntries(ctx context.Context, alloc *writer.ObjAllocator,
 	if kidsObj, ok := node["Kids"]; ok {
 		if kids, err := document.ResolveArray(ctx, doc, kidsObj); err == nil {
 			for _, kid := range kids {
-				CollectEmbeddedFileEntries(ctx, alloc, doc, kid, depth+1, out)
+				collectEmbeddedFileEntriesAt(ctx, alloc, doc, kid, depth+1, seen, out)
 			}
 			return
 		}

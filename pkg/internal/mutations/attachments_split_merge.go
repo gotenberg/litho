@@ -105,8 +105,37 @@ func uniqueEFName(used map[string]int, name string) string {
 // their objects independently, so resolving through it would answer with an
 // unrelated output object that happens to share a number.
 func collectSourceEmbeddedFiles(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, depth int, out *[]EFEntry) {
+	collectSourceEmbeddedFilesAt(ctx, doc, nodeObj, depth, make(map[int]bool), out)
+}
+
+// collectSourceEmbeddedFilesAt is [collectSourceEmbeddedFiles] carrying the set
+// of nodes already walked.
+//
+// seen visits each node once, exactly as [document.LookupNameTree] does: a name
+// tree is a strict tree (ISO 32000-1, 7.9.6), so a /Kids entry reached twice is
+// malformed. The depth bound alone does not contain that, because this walk
+// fans out: a node whose /Kids lists the same child twice costs 2^depth, which
+// at maxAttachmentTreeDepth is a denial of service rather than a slow walk.
+//
+// It also keeps the answer right. Every entry collected here is written back
+// into a rebuilt tree, so traversing one leaf twice appends it twice and
+// [uniqueEFName] renames the copy, inventing an attachment the file never had.
+func collectSourceEmbeddedFilesAt(
+	ctx context.Context,
+	doc *document.Document,
+	nodeObj ast.PdfObject,
+	depth int,
+	seen map[int]bool,
+	out *[]EFEntry,
+) {
 	if depth > maxAttachmentTreeDepth {
 		return
+	}
+	if ref, ok := nodeObj.(ast.PdfIndirectRef); ok {
+		if seen[ref.ObjectNum] {
+			return
+		}
+		seen[ref.ObjectNum] = true
 	}
 	node, err := document.ResolveDict(ctx, doc, nodeObj)
 	if err != nil || node == nil {
@@ -114,7 +143,7 @@ func collectSourceEmbeddedFiles(ctx context.Context, doc *document.Document, nod
 	}
 	if kids, err := document.ResolveArray(ctx, doc, node["Kids"]); err == nil && kids != nil {
 		for _, kid := range kids {
-			collectSourceEmbeddedFiles(ctx, doc, kid, depth+1, out)
+			collectSourceEmbeddedFilesAt(ctx, doc, kid, depth+1, seen, out)
 		}
 		return
 	}
