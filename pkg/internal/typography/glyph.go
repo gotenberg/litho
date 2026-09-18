@@ -84,6 +84,7 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 			Chunk:         machine.Chunk,
 			MCID:          mcid,
 			Invisible:     textIsInvisible(state),
+			Hidden:        textIsClipped(state, x, y),
 			Vertical:      font.WMode == 1,
 			Angle:         angle,
 			PatternType:   state.FillPatternType,
@@ -233,6 +234,23 @@ func textIsInvisible(state *graphics.State) bool {
 		return len(state.FillColor) == 1 && state.FillColor[0] == 1
 	}
 	return false
+}
+
+// textIsClipped reports whether a glyph drawn at (x, y) falls outside the
+// clipping path the page put in force.
+//
+// It answers only when a W or W* operator took part: [graphics.NewMachine]
+// seeds the clipping path with the page box, so testing the bounds alone would
+// repeat what [models.TextElement.IsClipped] already says about the CropBox and
+// report every page as clipping its overflow. The glyph origin is the test
+// point, matching the CropBox check downstream and the viewers that drop a
+// glyph whose text-matrix position lands outside.
+func textIsClipped(state *graphics.State, x, y float64) bool {
+	if !state.ClipApplied {
+		return false
+	}
+	clip := state.ClippingPath
+	return x < clip.MinX || x > clip.MaxX || y < clip.MinY || y > clip.MaxY
 }
 
 // computeGlyphPageWidth returns the painted advance width of a glyph in

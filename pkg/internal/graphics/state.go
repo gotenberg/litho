@@ -44,6 +44,12 @@ type State struct {
 	Text             TextState
 	SkipExtraction   bool        // Used for Optional Content Groups (Hidden Layers)
 	ClippingPath     BoundingBox // Simplified clipping to a bounding box for performance
+	// ClipApplied reports whether a W or W* operator has taken part in the
+	// current clipping path. [NewMachine] seeds ClippingPath with the page box,
+	// so without this flag "outside the clipping path" cannot be told from
+	// "outside the CropBox", which is already reported separately. It rides the
+	// graphics state, so q/Q restore it with everything else.
+	ClipApplied bool
 }
 
 // MarkedContentState tracks the nested state of marked content blocks.

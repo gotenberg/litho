@@ -706,6 +706,12 @@ func handlePathEndNoPaint(_ context.Context, m *Machine, _ *State, _ content.Ope
 }
 
 func handleClipPath(_ context.Context, m *Machine, state *State, _ content.Operation) {
+	// Note that an explicit clip is in force before intersecting. A W whose
+	// path is wider than the current bounds narrows nothing, and the clip still
+	// applies: the flag records that the page asked for one, which is what
+	// separates this from the page box every state starts with.
+	state.ClipApplied = true
+
 	// Intersect the current clipping path with the current path bounds.
 	// Per PDF 32000 §8.5.4, W/W* marks the path for clipping but does
 	// not end it. A subsequent n / S / s / f / F / B / B* / b / b*
