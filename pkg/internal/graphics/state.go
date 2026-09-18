@@ -79,6 +79,14 @@ type Machine struct {
 	// reconstruction can treat them as one logical text run and
 	// suppress gap-based space insertion inside that run.
 	Chunk int
+	// RecordUnknownOperators makes the machine remember every operator it
+	// has no handler for. Off by default, because ignoring one is right for
+	// extraction: a page still yields its text when the machine skips a
+	// construct it does not model. It is wrong for a caller that must refuse
+	// rather than silently pass over content it cannot account for, which
+	// cannot currently tell the two apart. See [Machine.UnknownOperators].
+	RecordUnknownOperators bool
+	unknownOperators       map[string]int
 }
 
 // NewMachine initializes a new graphics state machine with the default state.

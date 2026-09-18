@@ -3,6 +3,7 @@ package graphics
 import (
 	"context"
 	"math"
+	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -128,10 +129,62 @@ func (m *Machine) Execute(ctx context.Context, ops []content.Operation) error {
 func (m *Machine) executeOp(ctx context.Context, op content.Operation) error {
 	h, ok := opHandlers[op.Operator]
 	if !ok {
+		m.recordUnknownOperator(op.Operator)
 		return nil
 	}
 	h(ctx, m, m.Current(), op)
 	return nil
+}
+
+// maxRecordedUnknownOperators bounds how many distinct operator keywords
+// [Machine.UnknownOperators] retains. It is an anti-DoS guard, not
+// spec-mandated: a keyword is whatever the content stream says it is, so a
+// crafted page can invent unlimited distinct ones, and a caller reporting why
+// it refused needs a handful of names rather than all of them. Occurrences of
+// a keyword already held keep counting once the cap is reached.
+const maxRecordedUnknownOperators = 64
+
+// UnknownOperator pairs an operator keyword the machine models no handler for
+// with the number of times it appeared.
+type UnknownOperator struct {
+	Operator string
+	Count    int
+}
+
+// recordUnknownOperator notes an operator with no entry in [opHandlers], but
+// only when the caller asked for it via [Machine.RecordUnknownOperators].
+func (m *Machine) recordUnknownOperator(name string) {
+	if !m.RecordUnknownOperators || name == "" {
+		return
+	}
+	if m.unknownOperators == nil {
+		m.unknownOperators = make(map[string]int)
+	}
+	if _, seen := m.unknownOperators[name]; !seen && len(m.unknownOperators) >= maxRecordedUnknownOperators {
+		return
+	}
+	m.unknownOperators[name]++
+}
+
+// UnknownOperators returns the operators the machine met and had no handler
+// for, ordered by keyword, each with how often it appeared. It is empty unless
+// [Machine.RecordUnknownOperators] was set before execution, and it is capped
+// at [maxRecordedUnknownOperators] distinct keywords.
+//
+// Use it to tell "this page holds only constructs I model" from "this page
+// holds something I skipped", a distinction the machine otherwise discards.
+// The operators absent from [opHandlers] include XObject invocation (Do),
+// shading paints (sh), and graphics-state parameters (gs).
+func (m *Machine) UnknownOperators() []UnknownOperator {
+	if len(m.unknownOperators) == 0 {
+		return nil
+	}
+	out := make([]UnknownOperator, 0, len(m.unknownOperators))
+	for name, count := range m.unknownOperators {
+		out = append(out, UnknownOperator{Operator: name, Count: count})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Operator < out[j].Operator })
+	return out
 }
 
 func handleSaveState(_ context.Context, m *Machine, state *State, _ content.Operation) {
