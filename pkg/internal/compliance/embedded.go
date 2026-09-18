@@ -228,9 +228,13 @@ func (fs fileSpecEntry) label() string {
 // The cross-reference map holds only indirect objects, so the scan alone cannot
 // see a filespec written inline. Annotations carrying a direct /FS are gathered
 // separately: pdfjs issue14203.pdf attaches example.tex through one, and every
-// clause 6.8 check skipped it. A direct filespec inside an /AF array or an
-// EmbeddedFiles name tree stays out of scope, unobserved across 5144 corpus
-// files.
+// clause 6.8 check skipped it. A direct filespec inside an /AF array stays out
+// of scope, unobserved across 5144 corpus files.
+//
+// The sweep identifies a candidate by /Type alone, which is all it can do over
+// every object in a file, so it misses one whose /Type is wrong. The
+// /Names /EmbeddedFiles tree names its values regardless, and
+// [collectNameTreeFileSpecs] gathers those by position.
 func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []fileSpecEntry {
 	var specs []fileSpecEntry
 
@@ -265,6 +269,14 @@ func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.P
 
 	specs = append(specs, collectDirectAnnotFileSpecs(ctx, doc, catalog)...)
 
+	gathered := make(map[int]bool, len(specs))
+	for _, fs := range specs {
+		if fs.objNum != 0 {
+			gathered[fs.objNum] = true
+		}
+	}
+	specs = append(specs, collectNameTreeFileSpecs(ctx, doc, catalog, gathered)...)
+
 	slices.SortFunc(specs, func(a, b fileSpecEntry) int {
 		if a.objNum != b.objNum {
 			return a.objNum - b.objNum
@@ -275,6 +287,61 @@ func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.P
 		return strings.Compare(a.path, b.path)
 	})
 
+	return specs
+}
+
+// collectNameTreeFileSpecs gathers the file specifications the catalog's
+// /Names /EmbeddedFiles tree names, skipping any the caller already holds.
+//
+// ISO 32000-1, 7.11.4 defines that tree as mapping name strings to file
+// specification dictionaries, so a dictionary it names is one whatever its
+// /Type says, and position identifies it where the sweep's /Type test cannot.
+// Table 44 requires /Type on a filespec carrying /EF, so a file writing
+// anything else is malformed: reading its attachments anyway reports the
+// defects they carry instead of hiding them behind the one key the producer got
+// wrong. pdfjs issue9367.pdf names three specs as /Type /F, and veraPDF reports
+// every one under 6.1.11 t1, 6.8 t5, 6.8 t1/t3/t4 and 6.9 t1/t3/t4 across parts
+// 1 to 4 while litho saw none of them.
+//
+// gathered carries the object numbers the sweep and the annotation walk already
+// returned. A spec both reach would otherwise be stated twice, which is the
+// double-reporting [TestEmbeddedFilesReportedOncePerObject] pins.
+func collectNameTreeFileSpecs(ctx context.Context, doc *document.Document, catalog ast.PdfDict, gathered map[int]bool) []fileSpecEntry {
+	namesDict, ok := resolveNamesDict(ctx, doc, catalog)
+	if !ok {
+		return nil
+	}
+	efObj, ok := namesDict["EmbeddedFiles"]
+	if !ok {
+		return nil
+	}
+
+	refs := make(map[int]bool)
+	collectNameTreeSpecRefs(ctx, doc, efObj, refs, make(map[int]bool), 0)
+
+	// The tree walk fills a map, whose iteration order Go randomises, so the
+	// object numbers are ordered before resolving: the caller sorts the whole
+	// slice afterwards, but an unstable order here would still let two entries
+	// carrying the same number swap places between runs.
+	nums := make([]int, 0, len(refs))
+	for objNum := range refs {
+		if !gathered[objNum] {
+			nums = append(nums, objNum)
+		}
+	}
+	slices.Sort(nums)
+
+	specs := make([]fileSpecEntry, 0, len(nums))
+	for _, objNum := range nums {
+		if ctx.Err() != nil {
+			return specs
+		}
+		dict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+		if err != nil || dict == nil {
+			continue
+		}
+		specs = append(specs, fileSpecEntry{dict: dict, objNum: objNum, hasEF: knownKey(dict, "EF")})
+	}
 	return specs
 }
 
