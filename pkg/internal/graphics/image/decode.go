@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/jpeg"
 	"io"
 	"log/slog"
 
@@ -141,6 +140,36 @@ func imageFilterName(ctx context.Context, doc *document.Document, dict ast.PdfDi
 	return ""
 }
 
+// jpegSampleSpace names the colour space of the samples decodeDCT produced,
+// deduced from how many bytes it returned per pixel.
+//
+// The count has to be measured rather than taken from the image dictionary.
+// decodeDCT reports whatever the JPEG's own colour transform yielded
+// (*image.Gray as one byte, *image.CMYK as four, anything else converted to
+// three bytes of RGB), and that need not agree with the /ColorSpace the
+// dictionary declares. A grayscale JPEG declared /DeviceRGB is the common
+// disagreement, and believing the declaration there asks the pixel loop for
+// three bytes a pixel when one arrived, which reads as "decoded data too
+// short" on a file every other reader opens.
+//
+// ok is false when the length is not a whole number of 1, 3 or 4 byte pixels,
+// which means the samples are not shaped like anything this decoder builds.
+func jpegSampleSpace(decodedLen, width, height int) (string, bool) {
+	pixels := width * height
+	if pixels <= 0 || decodedLen%pixels != 0 {
+		return "", false
+	}
+	switch decodedLen / pixels {
+	case 1:
+		return "DeviceGray", true
+	case 3:
+		return "DeviceRGB", true
+	case 4:
+		return "DeviceCMYK", true
+	}
+	return "", false
+}
+
 // AppliesDecodeArray reports whether [DecodeImage] applies the image's /Decode
 // array to the pixels it returns.
 //
@@ -149,25 +178,18 @@ func imageFilterName(ctx context.Context, doc *document.Document, dict ast.PdfDi
 // from the new image and the result renders the same; where it has not, the
 // pixels still need it and dropping it changes the picture.
 //
-// It is false in two cases. An indexed image's /Decode remaps palette INDICES
-// rather than colour components (ISO 32000-1, 8.9.5.2), and [decodeIndexed]
-// looks each index up directly without consulting it. And a JPEG takes the
-// DCTDecode branch of [DecodeImage], which hands the stream to image/jpeg
-// instead of to the sample path that builds the /Decode tables: an
-// Adobe-inverted CMYK JPEG carrying /Decode [1 0 1 0 1 0 1 0] is the ordinary
-// case there, and treating its pixels as already mapped would invert it.
+// Only an indexed image is excluded: its /Decode remaps palette INDICES rather
+// than colour components (ISO 32000-1, 8.9.5.2), and [decodeIndexed] looks each
+// index up directly without ever consulting the array.
 //
-// That branch is in fact broken today, which does not change the answer but
-// does change what to watch: the filter pipeline already runs decodeDCT, so
-// image/jpeg is handed decoded samples and reports a missing SOI marker, and no
-// JPEG decodes at all. If that is fixed by routing DCTDecode through the
-// ordinary sample path, the /Decode tables WOULD then be applied and this
-// function must stop excluding it.
+// A JPEG was excluded too, while the DCTDecode branch returned image/jpeg's
+// output without building the /Decode tables. That branch is gone: a JPEG now
+// takes the ordinary sample path, where the array is applied like any other
+// image's. An Adobe-inverted CMYK JPEG carrying /Decode [1 0 1 0 1 0 1 0]
+// therefore arrives already inverted, and the entry is redundant on re-encode.
 func AppliesDecodeArray(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
-	if _, indexed := resolveIndexedPalette(ctx, doc, dict); indexed {
-		return false
-	}
-	return imageFilterName(ctx, doc, dict) != "DCTDecode"
+	_, indexed := resolveIndexedPalette(ctx, doc, dict)
+	return !indexed
 }
 
 // imageComponents returns the samples-per-pixel for the color spaces the
@@ -427,27 +449,16 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 
 	filterName := imageFilterName(ctx, doc, stream.Dict)
 
-	if filterName == "DCTDecode" {
-		// Raw JPEG: stream through the filter pipeline without buffering.
-		rc, err := doc.NewStreamReader(ctx, stream)
-		if err != nil {
-			return nil, fmt.Errorf("opening JPEG stream: %w", err)
-		}
-		defer func() {
-			if closeErr := rc.Close(); closeErr != nil {
-				doc.Logger.Debug("closing JPEG stream reader", slog.Any("err", closeErr))
-			}
-		}()
-		img, err := jpeg.Decode(rc)
-		if err != nil {
-			return nil, fmt.Errorf("decoding JPEG: %w", err)
-		}
-		return img, nil
-	}
-
-	// Non-JPEG: stream through filters and read all decoded bytes for pixel
-	// construction below. Streaming decompression avoids holding both
-	// compressed and decompressed copies in memory simultaneously.
+	// Stream through filters and read all decoded bytes for pixel construction
+	// below. Streaming decompression avoids holding both compressed and
+	// decompressed copies in memory simultaneously.
+	//
+	// A JPEG comes through here too. It used to take a branch of its own that
+	// handed the stream to image/jpeg, on the premise that the filter pipeline
+	// passed DCTDecode through untouched. It does not: [filter.Decodable] lists
+	// DCTDecode, and the pipeline runs decodeDCT, which returns decoded samples.
+	// image/jpeg was therefore being asked to decode already-decoded bytes and
+	// reported a missing SOI marker, so no JPEG decoded at all.
 	rc, err := doc.NewStreamReader(ctx, stream)
 	if err != nil {
 		return nil, fmt.Errorf("opening image stream: %w", err)
@@ -476,6 +487,34 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 	// components (ISO 32000-1, 8.9.5.2), and the default [0 2^n-1] is the
 	// identity, which is what every indexed image in the corpora states.
 	pal, isIndexed := resolveIndexedPalette(ctx, doc, stream.Dict)
+
+	// The samples of a JPEG are described by the codestream, not the dictionary,
+	// so their shape is measured before anything is built from it. Their depth
+	// is likewise fixed: decodeDCT returns one byte per component, and
+	// ISO 32000-1, Table 89 requires 8 for a DCTDecode image in any case, so a
+	// dictionary claiming another depth must not drive the unpacking.
+	if filterName == "DCTDecode" {
+		if isIndexed {
+			// An indexed image holds one index per pixel, but decodeDCT returns
+			// whatever the codestream held. A colour JPEG yields three bytes a
+			// pixel, and [decodeIndexed] would then read colour components as
+			// indices: its own length check passes, so the picture would come
+			// out wrong with no error at all. Only a one-byte-per-pixel
+			// codestream can be carrying indices.
+			if len(decodedData) != width*height {
+				return nil, fmt.Errorf("indexed JPEG decoded to %d bytes, which is not one index per pixel of %dx%d",
+					len(decodedData), width, height)
+			}
+		} else {
+			measured, ok := jpegSampleSpace(len(decodedData), width, height)
+			if !ok {
+				return nil, fmt.Errorf("decoded JPEG is %d bytes, which is not 1, 3 or 4 per pixel of %dx%d",
+					len(decodedData), width, height)
+			}
+			colorSpace = measured
+		}
+		bitsPerComp = 8
+	}
 
 	samplesPerPixel := 1
 	if !isIndexed {

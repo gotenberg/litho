@@ -94,15 +94,13 @@ func TestBlankImage_IndexedDecodeStillRefuses(t *testing.T) {
 
 // tinyJPEG returns the bytes of a 1x1 JPEG.
 //
-// Real JPEG data so the fixture is honest about what it holds, but it does NOT
-// make the test below stronger, and finding that out was worth the attempt:
-// litho cannot presently decode any DCTDecode image at all. filter.decodeDCT
-// already turns the stream into raw samples, and DecodeImage then hands those
-// samples to image/jpeg a second time, which reports "missing SOI marker"
-// (measured: 598 JPEG bytes in, 3 RGB bytes out of the filter). So removing the
-// guard yields ErrImageNotDecodable rather than the silent wrong blank the
-// guard exists to prevent. Pinning that stronger behaviour waits on the
-// double-decode being fixed.
+// Real JPEG data, so the test below exercises an image that genuinely decodes.
+//
+// The history is worth keeping. DecodeImage used to hand already-decoded samples
+// back to image/jpeg, so no JPEG decoded at all; a JPEG was refused here on the
+// grounds that its /Decode never reached its pixels. Reading a negative
+// control's message rather than its verdict is what turned up that
+// double-decode, and fixing it removed the reason for the refusal.
 func tinyJPEG(t *testing.T) string {
 	t.Helper()
 
@@ -115,22 +113,25 @@ func tinyJPEG(t *testing.T) string {
 	return buf.String()
 }
 
-func TestBlankImage_JPEGDecodeStillRefuses(t *testing.T) {
-	// A JPEG is returned straight from image/jpeg, which never sees /Decode, so
-	// its pixels still need the array. An Adobe-inverted CMYK JPEG is the
-	// ordinary case, and blanking one as though the mapping were applied would
-	// invert the whole picture.
-	//
-	// What this pins is that the guard fires FIRST, before any decode is
-	// attempted. It cannot yet pin the silent wrong render itself, because the
-	// decode would fail anyway today: see tinyJPEG.
+func TestBlankImage_JPEGDecodeNoLongerRefuses(t *testing.T) {
+	// A JPEG's /Decode reaches its pixels now that DecodeImage no longer
+	// double-decodes, so on re-encode the entry is redundant exactly as it is
+	// for a Flate image and there is nothing left to refuse over. This refused
+	// until that fix, on a premise that had quietly stopped being true.
 	doc, page := blankDictFixture(t, "/DeviceRGB",
 		"/Filter /DCTDecode /Decode [1 0 1 0 1 0] ", tinyJPEG(t))
 	alloc := writer.NewObjAllocator(20)
 
-	_, err := RedactPageRegions(context.Background(), alloc, doc, page, theImageRegion)
-	if !errors.Is(err, ErrImageCarriesSampleEntries) {
-		t.Errorf("err = %v, want ErrImageCarriesSampleEntries for a JPEG /Decode", err)
+	if _, err := RedactPageRegions(context.Background(), alloc, doc, page, theImageRegion); err != nil {
+		t.Fatalf("RedactPageRegions refused a JPEG whose /Decode the decoder applied: %v", err)
+	}
+
+	replaced, ok := alloc.Pending()[7].(ast.PdfStream)
+	if !ok {
+		t.Fatalf("object 7 was not replaced: %T", alloc.Pending()[7])
+	}
+	if _, present := replaced.Dict["Decode"]; present {
+		t.Errorf("the replacement carries /Decode, which would apply the mapping twice")
 	}
 }
 

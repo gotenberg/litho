@@ -33,9 +33,13 @@ func TestAppliesDecodeArray(t *testing.T) {
 			true,
 		},
 		{
-			"a JPEG does not: image/jpeg never sees the array",
+			// False while the DCTDecode branch bypassed the sample path. A JPEG
+			// is now decoded like anything else, so the array is applied and the
+			// entry may be dropped on re-encode. Kept as a case so re-adding the
+			// exception fails here rather than silently refusing JPEGs.
+			"a JPEG does: it takes the ordinary sample path",
 			ast.PdfDict{"ColorSpace": ast.PdfName("DeviceRGB"), "Filter": ast.PdfName("DCTDecode")},
-			false,
+			true,
 		},
 		{
 			"an indexed space does not: the array remaps indices",
@@ -48,11 +52,10 @@ func TestAppliesDecodeArray(t *testing.T) {
 			false,
 		},
 		{
-			// Mirrors DecodeImage, which tests only the first filter for
-			// DCTDecode. The limitation is inherited on purpose: a predicate
-			// that disagreed with the decoder would be worse than one that
-			// shares its blind spot.
-			"a chain whose first filter is not DCT reports the same as the decoder",
+			// The filter no longer enters into it at all; only the colour space
+			// does. This case existed to pin that the predicate mirrored
+			// DecodeImage's first-filter rule, back when DCTDecode was excluded.
+			"a filter chain does not change the answer",
 			ast.PdfDict{
 				"ColorSpace": ast.PdfName("DeviceRGB"),
 				"Filter":     ast.PdfArray{ast.PdfName("ASCII85Decode"), ast.PdfName("DCTDecode")},
