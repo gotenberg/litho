@@ -89,6 +89,49 @@ func TestImageBoxes_FlippedCTMReportsTheAreaCovered(t *testing.T) {
 	}
 }
 
+func TestImageBoxes_InlineImageIsRecorded(t *testing.T) {
+	m := testMachine()
+	m.RecordImageBoxes = true
+	// No resources at all: an inline image carries its data in the content
+	// stream, so nothing has to be looked up for it.
+	m.Current().CTM = [6]float64{80, 0, 0, 40, 5, 15}
+
+	bi := content.Operation{
+		Operator: "BI",
+		Operands: []ast.PdfObject{ast.PdfDict{"W": ast.PdfInt(1), "H": ast.PdfInt(1)}},
+	}
+	if err := m.Execute(context.Background(), []content.Operation{bi}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	boxes := m.ImageBoxes()
+	if len(boxes) != 1 {
+		t.Fatalf("ImageBoxes() = %v, want one box", boxes)
+	}
+	want := ImageBox{Name: inlineImageName, MinX: 5, MinY: 15, MaxX: 85, MaxY: 55}
+	if boxes[0] != want {
+		t.Errorf("box = %+v, want %+v", boxes[0], want)
+	}
+	// Nothing was looked up, so nothing can have failed to resolve.
+	if n := m.UnresolvedXObjects(); n != 0 {
+		t.Errorf("UnresolvedXObjects() = %d, want 0 for an inline image", n)
+	}
+}
+
+func TestImageBoxes_InlineImageSilentByDefault(t *testing.T) {
+	m := testMachine()
+	m.Current().CTM = [6]float64{80, 0, 0, 40, 5, 15}
+
+	bi := content.Operation{Operator: "BI", Operands: []ast.PdfObject{ast.PdfDict{}}}
+	if err := m.Execute(context.Background(), []content.Operation{bi}); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	if got := m.ImageBoxes(); len(got) != 0 {
+		t.Errorf("ImageBoxes() = %v, want none while recording is off", got)
+	}
+}
+
 func TestImageBoxes_FormXObjectIsNotRecorded(t *testing.T) {
 	m := testMachine()
 	m.RecordImageBoxes = true

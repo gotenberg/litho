@@ -100,6 +100,11 @@ func init() {
 		// otherwise inert, so the state every existing caller observes is
 		// unchanged.
 		"Do": handleDoXObject,
+
+		// Inline images. The parser emits BI carrying the image dictionary and
+		// swallows the binary data up to EI, so the operator reaches here and
+		// its placement can be recorded alongside an XObject image's.
+		"BI": handleInlineImage,
 	}
 }
 
@@ -244,6 +249,30 @@ func handleDoXObject(ctx context.Context, m *Machine, state *State, op content.O
 		return
 	}
 	m.imageBoxes = append(m.imageBoxes, imageBoxFromCTM(string(name), state.CTM))
+}
+
+// inlineImageName stands in for the resource name an inline image does not
+// have: it travels in the content stream rather than in /XObject, so there is
+// nothing to name it by.
+const inlineImageName = "(inline)"
+
+// handleInlineImage records where an inline image lands, when the caller asked
+// for it.
+//
+// An inline image paints the unit square through the CTM exactly as an image
+// XObject does (ISO 32000-1, 8.9.7), so the same mapping applies. Unlike a Do
+// there is nothing to look up — the image travels in the content stream — so
+// this cannot fail to resolve and never counts toward
+// [Machine.UnresolvedXObjects].
+//
+// A page can paint pixels this way with no Do anywhere, so a caller that
+// accounts for images has to see these too; the parser emits BI with the image
+// dictionary as its operand and consumes the binary data up to EI.
+func handleInlineImage(_ context.Context, m *Machine, state *State, _ content.Operation) {
+	if !m.RecordImageBoxes {
+		return
+	}
+	m.imageBoxes = append(m.imageBoxes, imageBoxFromCTM(inlineImageName, state.CTM))
 }
 
 // resolveXObject looks a name up in the current /XObject resources, reporting

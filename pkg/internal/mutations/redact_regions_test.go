@@ -196,6 +196,54 @@ func TestRedactPageRegions_ImageAwayFromTheRegionDoesNotRefuse(t *testing.T) {
 	}
 }
 
+// inlineImagePageContent paints an inline image over the same box
+// imagePageContent uses for Im1, then draws "KEEP" well clear of it. The
+// fixture's /XObject resource goes unreferenced, so the inline image is the
+// only one on the page and a refusal can only have come from it.
+//
+// ID is followed by exactly one whitespace byte, and EI must be preceded by
+// whitespace, which is what the parser's inline-image scan expects.
+const inlineImagePageContent = "q 200 0 0 100 50 600 cm BI /W 1 /H 1 /CS /G /BPC 8 ID \x00 EI Q " +
+	"BT /F1 12 Tf 100 300 Td (KEEP) Tj ET"
+
+func TestRedactPageRegions_RefusesARegionCoveringAnInlineImage(t *testing.T) {
+	doc, page := redactImageFixture(t, inlineImagePageContent)
+	alloc := writer.NewObjAllocator(20)
+
+	// An inline image carries its pixels in the content stream and no Do names
+	// it, so it is a second way a page paints over a region. Removal still
+	// cannot blank those pixels.
+	err := RedactPageRegions(context.Background(), alloc, doc, page,
+		[][4]float64{{60, 610, 240, 690}})
+	if !errors.Is(err, ErrRegionCoversAnImage) {
+		t.Errorf("err = %v, want ErrRegionCoversAnImage", err)
+	}
+	if n := len(alloc.Pending()); n != 0 {
+		t.Errorf("registered %d objects while refusing", n)
+	}
+}
+
+func TestRedactPageRegions_InlineImageAwayFromTheRegionDoesNotRefuse(t *testing.T) {
+	doc, page := redactImageFixture(t, inlineImagePageContent)
+	alloc := writer.NewObjAllocator(20)
+
+	// An inline image elsewhere on the page must not block redaction, or a page
+	// carrying one anywhere could never be cleared.
+	err := RedactPageRegions(context.Background(), alloc, doc, page,
+		[][4]float64{{90, 290, 300, 330}})
+	if err != nil {
+		t.Fatalf("RedactPageRegions: %v", err)
+	}
+
+	got := newPageContents(t, alloc, page.Ref.ObjectNum)
+	if bytes.Contains(got, []byte("KEEP")) {
+		t.Errorf("the covered text is still in the page content: %q", got)
+	}
+	if !bytes.Contains(got, []byte("BI ")) {
+		t.Errorf("the inline image was removed too: %q", got)
+	}
+}
+
 func TestRedactPageRegions_RefusesAnUnresolvableXObject(t *testing.T) {
 	doc, page := redactImageFixture(t, "q 1 0 0 1 0 0 cm /Missing Do Q")
 	alloc := writer.NewObjAllocator(20)
