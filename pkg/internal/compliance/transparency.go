@@ -450,6 +450,18 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 			}
 		}
 
+		// A resource dictionary lists what the content MAY set, not what it
+		// sets, and veraPDF builds its PDExtGState from the gs operator that
+		// selects one, so a state nothing selects contributes no transparency.
+		// [checkExtGStateTransparency1] and [resourcesUseTransparency] already
+		// scope themselves this way; this loop did not, and it runs first.
+		// pdfjs issue6741.pdf declares /G1 (/BM /Darken) and /G2 (/BM
+		// /Lighten), sets only /G0 (/BM /Normal), carries no page /Group and no
+		// OutputIntent, and veraPDF reports nothing for it while litho fired
+		// §6.2.10 t2. A nil drawn admits every name, which keeps a page whose
+		// content litho cannot read unscoped rather than silently clean.
+		drawn := pageDrawnResources(ctx, &pages[i])
+
 		// Check blend modes in ExtGState.
 		gsDict, err := document.ResolveDict(ctx, doc, res["ExtGState"])
 		if err == nil && gsDict != nil {
@@ -457,6 +469,9 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 				gsObj := gsDict[gsName]
 				if ctx.Err() != nil {
 					return results
+				}
+				if !drawn.setsExtGState(string(gsName)) {
+					continue
 				}
 
 				gs, err := document.ResolveDict(ctx, doc, gsObj)
@@ -506,8 +521,7 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		// its transparency only inside a Form XObject still requires a blending
 		// colour space (ISO 19005-2 §6.2.10 t2).
 		if !pageUsesTransparency {
-			pageUsesTransparency = resourcesUseTransparency(ctx, doc, res, 0, map[string]bool{},
-				pageDrawnResources(ctx, &pages[i]))
+			pageUsesTransparency = resourcesUseTransparency(ctx, doc, res, 0, map[string]bool{}, drawn)
 		}
 
 		// Check tiling patterns for transparency triggers.
