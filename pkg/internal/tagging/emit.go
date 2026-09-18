@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // maxTagDepth bounds structure-tree recursion. It is an anti-DoS guard, not
@@ -20,9 +21,14 @@ import (
 const maxTagDepth = 64
 
 // maxTaggedContentSize bounds a page's decoded content before marking. It is
-// an anti-DoS guard matching the limit in [content.ParsePageContent]; no
-// legitimate page needs more.
-const maxTaggedContentSize = 32 << 20
+// an anti-DoS guard, not spec-mandated.
+//
+// It tracks [content.MaxPageContentSize] by reference rather than by value.
+// The two were written to match, then drifted when that limit rose from 32 MB
+// to 64 MB, leaving this one to refuse pages the rest of the pipeline reads.
+// The gap was reachable rather than theoretical: page 1 of pdfjs
+// issue21089.pdf decodes to 27.51 MB, within 16% of the stale bound.
+const maxTaggedContentSize = content.MaxPageContentSize
 
 // Emit synthesizes a PDF structure tree from the logical tree rooted at root,
 // injects per-element marked content into the pages its leaves reference, and
