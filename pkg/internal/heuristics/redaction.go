@@ -27,7 +27,7 @@ const glyphDescenderFraction = 0.2
 // which keeps every element the origin test caught flagged here too.
 func DetectUnappliedRedactions(elements []models.TextElement, annots []models.Annotation) []models.TextElement {
 	// Collect redaction zones: use QuadPoints if available, otherwise Rect.
-	var zones []redactionZone
+	var zones []Zone
 	for _, a := range annots {
 		if a.Subtype != "Redact" {
 			continue
@@ -37,7 +37,7 @@ func DetectUnappliedRedactions(elements []models.TextElement, annots []models.An
 				zones = append(zones, quadToRect(qp))
 			}
 		} else {
-			zones = append(zones, rectToZone(a.Rect))
+			zones = append(zones, ZoneFromRect(a.Rect))
 		}
 	}
 
@@ -49,9 +49,9 @@ func DetectUnappliedRedactions(elements []models.TextElement, annots []models.An
 	copy(result, elements)
 
 	for i := range result {
-		box := elementZone(result[i])
+		box := ElementZone(result[i])
 		for _, z := range zones {
-			if zonesOverlap(box, z) {
+			if ZonesOverlap(box, z) {
 				result[i].Redacted = true
 				break
 			}
@@ -61,16 +61,16 @@ func DetectUnappliedRedactions(elements []models.TextElement, annots []models.An
 	return result
 }
 
-// redactionZone is an axis-aligned bounding box derived from a /Rect or
+// Zone is an axis-aligned bounding box derived from a /Rect or
 // /QuadPoints entry.
-type redactionZone struct {
+type Zone struct {
 	minX, minY, maxX, maxY float64
 }
 
-// rectToZone normalises a PDF /Rect array into a redactionZone.
+// ZoneFromRect normalises a PDF /Rect array into a Zone.
 // PDF rects may have coordinates in any order.
-func rectToZone(r [4]float64) redactionZone {
-	z := redactionZone{minX: r[0], minY: r[1], maxX: r[2], maxY: r[3]}
+func ZoneFromRect(r [4]float64) Zone {
+	z := Zone{minX: r[0], minY: r[1], maxX: r[2], maxY: r[3]}
 	if z.minX > z.maxX {
 		z.minX, z.maxX = z.maxX, z.minX
 	}
@@ -82,8 +82,8 @@ func rectToZone(r [4]float64) redactionZone {
 
 // quadToRect computes the axis-aligned bounding box of a QuadPoints group.
 // A QuadPoints group is 8 floats: x1,y1, x2,y2, x3,y3, x4,y4.
-func quadToRect(qp [8]float64) redactionZone {
-	z := redactionZone{
+func quadToRect(qp [8]float64) Zone {
+	z := Zone{
 		minX: qp[0], maxX: qp[0],
 		minY: qp[1], maxY: qp[1],
 	}
@@ -105,11 +105,11 @@ func quadToRect(qp [8]float64) redactionZone {
 	return z
 }
 
-// elementZone returns the axis-aligned bounds of the ink a text element
+// ElementZone returns the axis-aligned bounds of the ink a text element
 // paints. The element origin sits on the baseline at the start of the run,
 // [models.TextElement.Width] measures the advance along that baseline, and the
 // ink rises a font size above it. The returned box always contains the origin.
-func elementZone(el models.TextElement) redactionZone {
+func ElementZone(el models.TextElement) Zone {
 	dirX, dirY := baselineDirection(el)
 	perpX, perpY := -dirY, dirX
 
@@ -134,7 +134,7 @@ func elementZone(el models.TextElement) redactionZone {
 		el.Y + dirY*el.Width + perpY*far,
 	}
 
-	z := redactionZone{minX: xs[0], maxX: xs[0], minY: ys[0], maxY: ys[0]}
+	z := Zone{minX: xs[0], maxX: xs[0], minY: ys[0], maxY: ys[0]}
 	for i := 1; i < len(xs); i++ {
 		z.minX = math.Min(z.minX, xs[i])
 		z.maxX = math.Max(z.maxX, xs[i])
@@ -155,9 +155,9 @@ func baselineDirection(el models.TextElement) (float64, float64) {
 	return math.Cos(el.Angle), math.Sin(el.Angle)
 }
 
-// zonesOverlap reports whether two axis-aligned boxes share any area.
+// ZonesOverlap reports whether two axis-aligned boxes share any area.
 // Touching edges count: a mark drawn flush against a glyph still covers it.
-func zonesOverlap(a, b redactionZone) bool {
+func ZonesOverlap(a, b Zone) bool {
 	return a.minX <= b.maxX && a.maxX >= b.minX &&
 		a.minY <= b.maxY && a.maxY >= b.minY
 }

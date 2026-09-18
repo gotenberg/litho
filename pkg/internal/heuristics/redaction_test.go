@@ -236,7 +236,7 @@ func TestDetectUnappliedRedactions_BoxContainsOrigin(t *testing.T) {
 		{Text: "z", X: 10, Y: 20},
 	}
 	for _, el := range cases {
-		z := elementZone(el)
+		z := ElementZone(el)
 		if el.X < z.minX || el.X > z.maxX || el.Y < z.minY || el.Y > z.maxY {
 			t.Errorf("origin (%g,%g) outside its own box %+v", el.X, el.Y, z)
 		}

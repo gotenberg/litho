@@ -42,6 +42,27 @@ var ErrPageTreeNotReproduced = errors.New("source page tree could not be reprodu
 // rather than clamping it to fit.
 var ErrSpanOutOfRange = errors.New("byte span lies outside the content")
 
+// ErrPartialOperatorCoverage reports a region that covers some but not all of
+// what one content-stream operator draws.
+//
+// An operator is removed whole or not at all, because excision deletes byte
+// ranges and cannot rewrite one: dropping a show-text operator whose run only
+// partly meets the region would take the rest of its text with it. Splitting
+// the run at glyph boundaries is the alternative, and it has to answer the
+// glyph-advance leak first (arXiv 2206.02285), where the advances of the
+// surviving glyphs still spell the removed ones. Refusing states the problem
+// instead of removing more than the caller asked for.
+var ErrPartialOperatorCoverage = errors.New("region covers an operator only partly")
+
+// ErrRegionInFormXObject reports a region that selects content a form XObject
+// draws.
+//
+// The glyphs belong to the form's own content stream, so no byte range in the
+// page's stream addresses them. Removing the Do that invoked the form would
+// erase everything else the form draws, so the mutation reports the region
+// rather than reaching for the only span it could name.
+var ErrRegionInFormXObject = errors.New("region selects content drawn by a form XObject")
+
 // ErrSpansOverlap reports two byte spans that cover some of the same bytes.
 //
 // Overlapping spans stop having a single meaning once one of them is removed,
