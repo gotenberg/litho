@@ -770,6 +770,26 @@ func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict as
 	// Required font-dictionary keys (PDFont): §6.3.2 / §6.2.11.2 / §6.2.10.2.
 	results = append(results, checkFontRequiredKeys(ctx, doc, fontDict, subtype, PDFAPart(profile))...)
 	if subtype == "Type0" {
+		// A Type0's descendant CIDFont is a font dictionary in its own right,
+		// and ISO 32000-1, 9.7.4, Table 117 requires /Type /Font on it. veraPDF
+		// models it as a PDFont of its own and reports §6.2.11.2 t1 against it:
+		// pdfjs issue7544.pdf writes a /CIDFontType2 descendant carrying
+		// /BaseFont, /CIDSystemInfo, /CIDToGIDMap, /FontDescriptor, /Subtype and
+		// /W but no /Type, confirmed in the file's own bytes.
+		//
+		// Only /Type is judged here. t2 cannot fire, since both CIDFont
+		// subtypes are already valid; t3 fires on no corpus file; and t7 reads
+		// the descriptor that [document.ResolveFontDescriptor] already reaches
+		// THROUGH the descendant, so running the whole check again would judge
+		// one descriptor twice.
+		if descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"]); err == nil && len(descArr) > 0 {
+			if cid, err := document.ResolveDict(ctx, doc, descArr[0]); err == nil && cid != nil {
+				if typeName, _ := document.ResolveName(ctx, doc, cid["Type"]); typeName != "Font" {
+					results = append(results, failf(fontReqKeyRule(PDFAPart(profile), 1),
+						"descendant CIDFont /Type is %q, not Font", typeName)...)
+				}
+			}
+		}
 		return results
 	}
 
