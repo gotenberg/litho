@@ -240,15 +240,14 @@ var ErrAnnotationStraddlesRegion = errors.New("annotation reaches outside the re
 // ErrAnnotationIsFormWidget reports a widget annotation inside the region that
 // cannot be detached from its form.
 //
-// A widget carrying /Parent is a kid of a field living above it, so removing it
-// means pruning that parent's /Kids and settling what becomes of a field whose
-// kids have all gone. That cascade is not done, and dropping the widget without
-// it would leave the field naming an annotation no page carries while still
-// holding its value. Clearing that value is [ScrubFormFieldValues]' job.
-//
-// A parentless widget is not refused: it is the merged field-and-annotation of
-// ISO 32000-1, 12.5.6.19, which is its own root field, so it is removed from
-// the page and from AcroForm /Fields together.
+// Most widgets are detachable and are not refused. A parentless one is the
+// merged field-and-annotation of ISO 32000-1, 12.5.6.19 and leaves AcroForm
+// /Fields with the page; one carrying /Parent is dropped from that field's
+// /Kids. What remains here is the case with nothing to rewrite: a /Parent
+// written directly into the widget, or a widget written directly into /Annots,
+// neither of which has an object number for the detachment to take. Removing
+// the widget anyway would leave a field naming an annotation no page carries,
+// still holding its value, which is [ScrubFormFieldValues]' to clear.
 var ErrAnnotationIsFormWidget = errors.New("annotation is a form widget")
 
 // ErrAnnotationNotPlaceable reports an annotation whose rectangle cannot be

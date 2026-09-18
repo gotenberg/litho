@@ -133,18 +133,78 @@ func TestRemoveRegionAnnotations_StraddlingRefuses(t *testing.T) {
 	}
 }
 
-func TestRemoveRegionAnnotations_KidWidgetRefuses(t *testing.T) {
-	// A widget with /Parent is a kid of a field above it. Detaching it means
-	// pruning that parent's /Kids and settling what becomes of a field whose
-	// kids all went, which is a cascade this does not do.
+func TestRemoveRegionAnnotations_KidWidgetLeavesItsParentsKids(t *testing.T) {
+	// A widget carrying /Parent is reached by that field's /Kids, so dropping it
+	// from the page alone would leave the field naming an annotation no page
+	// carries. Object 9 has exactly one kid, which is the common shape: roughly
+	// half the fields carrying /Kids have one. The field stays and loses the
+	// entry rather than being removed itself — it still states its name and
+	// type, and its value is ScrubFormFieldValues' to clear.
 	doc, page := annotPageFixture(t, "[8 0 R]",
 		"8 0 obj\n<< /Type /Annot /Subtype /Widget /Rect [100 695 200 720] /Parent 9 0 R >>\nendobj\n"+
 			"9 0 obj\n<< /FT /Tx /T (name) /V (SECRET) /Kids [8 0 R] >>\nendobj\n")
 	alloc := writer.NewObjAllocator(20)
 
+	report, err := RedactPageRegions(context.Background(), alloc, doc, page, theTextRegion)
+	if err != nil {
+		t.Fatalf("RedactPageRegions: %v", err)
+	}
+	if !slices.Contains(report.RemovedAnnotations, 8) {
+		t.Errorf("RemovedAnnotations = %v, want object 8", report.RemovedAnnotations)
+	}
+
+	field, ok := alloc.Pending()[9].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("the parent field was not rewritten: %T", alloc.Pending()[9])
+	}
+	if _, present := field["Kids"]; present {
+		t.Errorf("/Kids = %v, want the entry dropped once its last kid went", field["Kids"])
+	}
+	if _, present := field["T"]; !present {
+		t.Errorf("the field lost its name, but only its kid was removed")
+	}
+}
+
+func TestRemoveRegionAnnotations_TwoKidsUnderOneParentBothGo(t *testing.T) {
+	// Both widgets name the same field. Pruning them one at a time against the
+	// document would make the second write undo the first, which is the same
+	// composition hazard the AcroForm read has: the parent is read alloc-first
+	// and the widgets are grouped, so one field is rewritten once.
+	doc, page := annotPageFixture(t, "[8 0 R 11 0 R]",
+		"8 0 obj\n<< /Type /Annot /Subtype /Widget /Rect [100 695 150 720] /Parent 9 0 R >>\nendobj\n"+
+			"11 0 obj\n<< /Type /Annot /Subtype /Widget /Rect [160 695 200 720] /Parent 9 0 R >>\nendobj\n"+
+			"9 0 obj\n<< /FT /Tx /T (name) /Kids [8 0 R 11 0 R] >>\nendobj\n")
+	alloc := writer.NewObjAllocator(20)
+
+	report, err := RedactPageRegions(context.Background(), alloc, doc, page, theTextRegion)
+	if err != nil {
+		t.Fatalf("RedactPageRegions: %v", err)
+	}
+	if !slices.Contains(report.RemovedAnnotations, 8) || !slices.Contains(report.RemovedAnnotations, 11) {
+		t.Errorf("RemovedAnnotations = %v, want both 8 and 11", report.RemovedAnnotations)
+	}
+
+	field, ok := alloc.Pending()[9].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("the parent field was not rewritten: %T", alloc.Pending()[9])
+	}
+	if kids, present := field["Kids"]; present {
+		t.Errorf("/Kids = %v, want the entry dropped: both kids went", kids)
+	}
+}
+
+func TestRemoveRegionAnnotations_DirectParentStillRefuses(t *testing.T) {
+	// The /Parent is written into the widget rather than named, so there is no
+	// object for the detachment to take. Removing the widget anyway would leave
+	// that field holding a value with no widget to show it.
+	doc, page := annotPageFixture(t, "[8 0 R]",
+		"8 0 obj\n<< /Type /Annot /Subtype /Widget /Rect [100 695 200 720]"+
+			" /Parent << /FT /Tx /T (name) /V (SECRET) >> >>\nendobj\n")
+	alloc := writer.NewObjAllocator(20)
+
 	_, err := RedactPageRegions(context.Background(), alloc, doc, page, theTextRegion)
 	if !errors.Is(err, ErrAnnotationIsFormWidget) {
-		t.Errorf("err = %v, want ErrAnnotationIsFormWidget for a kid widget", err)
+		t.Errorf("err = %v, want ErrAnnotationIsFormWidget for a direct /Parent", err)
 	}
 }
 

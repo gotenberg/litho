@@ -102,7 +102,13 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   refused: it is the merged field-and-annotation of ISO 32000-1 12.5.6.19, so it is its own root
   field and goes from the page and from AcroForm `/Fields` together. The last refusal is one
   whose `/Rect` cannot be read (unplaceable is un-rule-out-able, the same reasoning as
-  `ErrXObjectUnresolved`). Still open here: detaching a **kid** widget from its field tree, inline images (their
+  `ErrXObjectUnresolved`). A widget carrying `/Parent` is **detached from that field's `/Kids`** in one hop, and a field whose
+  last kid goes keeps its name and type while losing the `/Kids` entry — cascading upward would decide
+  for the caller that a named field should cease to exist, and `ScrubFormFieldValues` already clears
+  the value. One hop also sidesteps `/Parent` cycles, which are real: 16 of them in one corpus file,
+  against a deepest genuinely acyclic chain of 7. What still refuses is only the case with nothing to
+  rewrite — a `/Parent` written inline, or a widget written directly into `/Annots`. Still open here:
+  inline images (their
   samples sit in the content stream, so blanking means splicing bytes rather than replacing an
   object), JBIG2's dependence on the CGO plugin, and translating `/Decode` for the indexed images
   that still refuse.

@@ -52,6 +52,7 @@ func removeRegionAnnotations(
 
 	kept := make(ast.PdfArray, 0, len(annots))
 	var removed, rootWidgets []int
+	var kidWidgets []kidWidget
 
 	for _, entry := range annots {
 		annot, err := document.ResolveDict(ctx, doc, entry)
@@ -97,12 +98,19 @@ func removeRegionAnnotations(
 			// /Fields holds root fields only (12.7.2), so removing it is
 			// dropping one entry from that array and nothing else. Whether it
 			// also states /FT makes no difference to the detachment.
-			if _, hasParent := annot["Parent"]; hasParent {
-				return nil, fmt.Errorf("%w: %s", ErrAnnotationIsFormWidget, annotLabel(entry))
-			}
-			// A widget written directly into /Annots cannot be named by
-			// /Fields, which holds references, so there is nothing to prune.
-			if ref, isRef := entry.(ast.PdfIndirectRef); isRef {
+			if parentObj, hasParent := annot["Parent"]; hasParent {
+				// The parent has to be an object this can rewrite, and the
+				// widget an entry that parent can name. Either missing leaves
+				// nothing to detach from, so it still refuses.
+				parentRef, parentIsRef := parentObj.(ast.PdfIndirectRef)
+				ref, widgetIsRef := entry.(ast.PdfIndirectRef)
+				if !parentIsRef || !widgetIsRef {
+					return nil, fmt.Errorf("%w: %s", ErrAnnotationIsFormWidget, annotLabel(entry))
+				}
+				kidWidgets = append(kidWidgets, kidWidget{widget: ref.ObjectNum, parent: parentRef})
+			} else if ref, isRef := entry.(ast.PdfIndirectRef); isRef {
+				// A widget written directly into /Annots cannot be named by
+				// /Fields, which holds references, so there is nothing to prune.
 				rootWidgets = append(rootWidgets, ref.ObjectNum)
 			}
 		}
@@ -127,12 +135,103 @@ func removeRegionAnnotations(
 		return nil, ErrPageNotAddressable
 	}
 
+	if err := pruneKidWidgets(ctx, alloc, doc, kidWidgets); err != nil {
+		return nil, err
+	}
 	if err := pruneRootFields(ctx, alloc, doc, rootWidgets); err != nil {
 		return nil, err
 	}
 
 	sort.Ints(removed)
 	return removed, nil
+}
+
+// kidWidget is a removed widget and the field that named it through /Kids.
+type kidWidget struct {
+	widget int
+	parent ast.PdfIndirectRef
+}
+
+// pruneKidWidgets detaches removed widgets from the fields that named them.
+//
+// A widget carrying /Parent is reached by that field's /Kids (ISO 32000-1,
+// 12.7.3.1), so dropping it from the page alone leaves the field naming an
+// annotation no page carries. Removing it there is one hop: the field is the
+// direct parent, and nothing further up has to be walked. That matters, because
+// /Parent chains in the wild are not always trees — 16 of them cycle in one
+// corpus file — and a walk would need the cycle guard [rootFieldOf] carries.
+//
+// A field whose last kid goes keeps the field and loses the /Kids entry rather
+// than being removed itself. Roughly half the fields carrying /Kids have exactly
+// one, so this is the common outcome, not a corner: the field still states its
+// name and type, other fields may share that name, and its value is
+// [ScrubFormFieldValues]' to clear. Cascading upward instead would decide on the
+// caller's behalf that a named field should cease to exist, which
+// [pruneFieldKids] declines to do for the same reason.
+//
+// Parents are read alloc-first and grouped, so two widgets under one field, or a
+// field pruned again for a later page, compose rather than overwrite each other.
+func pruneKidWidgets(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	kids []kidWidget,
+) error {
+	if len(kids) == 0 {
+		return nil
+	}
+
+	// Grouped in first-seen order, so one field is rewritten once and the same
+	// document always writes the same bytes.
+	byParent := make(map[int][]int, len(kids))
+	var order []ast.PdfIndirectRef
+	for _, k := range kids {
+		if _, seen := byParent[k.parent.ObjectNum]; !seen {
+			order = append(order, k.parent)
+		}
+		byParent[k.parent.ObjectNum] = append(byParent[k.parent.ObjectNum], k.widget)
+	}
+
+	for _, parentRef := range order {
+		parent := ResolveFromAllocOrDoc(ctx, alloc, doc, parentRef)
+		if parent == nil {
+			return ErrFormNotAddressable
+		}
+		// Resolved from the document for the same reason, and with the same
+		// invariant, as in pruneRootFields: the pruned array is written INTO the
+		// field dictionary, never back as an object of its own.
+		kidsArr, err := document.ResolveArray(ctx, doc, parent["Kids"])
+		if err != nil || kidsArr == nil {
+			continue
+		}
+
+		dropping := make(map[int]bool, len(byParent[parentRef.ObjectNum]))
+		for _, objNum := range byParent[parentRef.ObjectNum] {
+			dropping[objNum] = true
+		}
+		kept := make(ast.PdfArray, 0, len(kidsArr))
+		for _, kid := range kidsArr {
+			if ref, isRef := kid.(ast.PdfIndirectRef); isRef && dropping[ref.ObjectNum] {
+				continue
+			}
+			kept = append(kept, kid)
+		}
+		if len(kept) == len(kidsArr) {
+			continue
+		}
+
+		newParent := make(ast.PdfDict, len(parent))
+		maps.Copy(newParent, parent)
+		if len(kept) == 0 {
+			delete(newParent, "Kids")
+		} else {
+			newParent["Kids"] = kept
+		}
+		if !alloc.AllocAt(parentRef.ObjectNum, newParent) {
+			return ErrFormNotAddressable
+		}
+	}
+	return nil
 }
 
 // pruneRootFields drops the given root fields from the document's AcroForm.
