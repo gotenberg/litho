@@ -54,14 +54,23 @@ var ErrSpanOutOfRange = errors.New("byte span lies outside the content")
 // instead of removing more than the caller asked for.
 var ErrPartialOperatorCoverage = errors.New("region covers an operator only partly")
 
-// ErrRegionCoversAnImage reports a region that meets an image the page paints.
+// ErrRegionCoversAnImage reported a region that meets an image the page paints.
 //
-// Removal deletes whole content-stream operators, so it takes an image entirely
-// or not at all, and an image usually carries far more than the region selected.
-// Blanking the covered pixels is the operation this needs, and litho cannot do
-// that yet. Reporting the region beats removing the text over a picture and
-// leaving the picture: a black rectangle with the words still underneath is the
-// failure redaction exists to prevent, and so is a photograph nobody removed.
+// SUPERSEDED, and nothing returns it. It dates from when removal could only
+// delete whole content-stream operators, so an image was taken entirely or not
+// at all and the honest answer was to refuse. Blanking the covered pixels is
+// the operation it said litho could not do yet, and [RedactPageRegions] does it
+// now: see [blankImage], which rewrites the covered samples in place and
+// records the XObject in RedactionReport.BlankedImages.
+//
+// The cases where an image still cannot be cleared each have their own
+// sentinel, so this one covers nothing the others do not:
+// [ErrImageNotAddressable], [ErrImageNotDecodable],
+// [ErrImagePlacementDegenerate], [ErrImageRegionCoversNoSample],
+// [ErrImageCarriesSampleEntries] and [ErrInlineImageInRegion].
+//
+// Kept rather than deleted because unused code here may be deliberate; removing
+// it is a maintainer's call.
 var ErrRegionCoversAnImage = errors.New("region covers an image")
 
 // ErrXObjectUnresolved reports a Do the machine could not follow to an XObject.
