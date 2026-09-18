@@ -261,6 +261,24 @@ func checkHeaderBytes(buf []byte, profile string) []Violation {
 // the same key, so a trailer with no /ID answers both: it fails presence, and
 // its absent value cannot equal the /ID the last trailer carries.
 func checkTrailerID(ctx context.Context, doc *document.Document, profile string) []Violation {
+	// A trailer litho made up because the file has none holds litho's entries,
+	// not the file's, so it answers nothing about the identifier the file
+	// carries. [checkNumericLimits] already declines to judge such a trailer for
+	// the same reason. Measured: 4 of 1201 pdfjs files synthesize one and all
+	// four reported here, while 0 of 2601 veraPDF files do. issue11330.pdf,
+	// issue14269.pdf and issue15833.pdf each hold an /ID in their bytes inside a
+	// /Type /XRef stream dictionary that the rebuild could not recover, and
+	// veraPDF passes issue11330 with a real verdict. The fourth, bug1980958.pdf,
+	// is 219 damaged bytes with no /ID anywhere, so the report there was true
+	// but unevidenced, and veraPDF does not evaluate the rule on it at all.
+	//
+	// The linearized consistency test below goes the same way: recovering no
+	// trailer leaves nothing to compare, and such a file can still be judged
+	// linearized (issue11330.pdf is).
+	if doc.TrailerSynthesized {
+		return nil
+	}
+
 	trailer := trailerAnsweringID(doc)
 	if trailer == nil {
 		return fail(trailerIDRule(profile), "no trailer dictionary")
