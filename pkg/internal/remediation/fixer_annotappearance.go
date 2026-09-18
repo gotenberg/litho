@@ -292,12 +292,13 @@ func normalizeAP(ctx context.Context, doc *document.Document, annotDict ast.PdfD
 // ISO 19005-2, 6.3.3 test 3 requires a subdictionary.
 func inheritedFieldType(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) ast.PdfName {
 	dict := annotDict
+	seen := make(map[int]bool)
 	for depth := 0; depth < maxFieldParentDepth && dict != nil; depth++ {
 		if ft, err := document.ResolveName(ctx, doc, dict["FT"]); err == nil && ft != "" {
 			return ft
 		}
-		parent, err := document.ResolveDict(ctx, doc, dict["Parent"])
-		if err != nil || parent == nil {
+		_, parent, ok := document.ResolveFieldParent(ctx, doc, dict, seen)
+		if !ok {
 			return ""
 		}
 		dict = parent
@@ -366,6 +367,7 @@ func rendersOwnValue(ctx context.Context, doc *document.Document, annotDict ast.
 	dict := annotDict
 	var fieldType ast.PdfName
 	var value ast.PdfObject
+	seen := make(map[int]bool)
 	for depth := 0; depth < maxFieldParentDepth && dict != nil; depth++ {
 		if fieldType == "" {
 			if ft, err := document.ResolveName(ctx, doc, dict["FT"]); err == nil && ft != "" {
@@ -380,8 +382,8 @@ func rendersOwnValue(ctx context.Context, doc *document.Document, annotDict ast.
 		if fieldType != "" && value != nil {
 			break
 		}
-		parent, err := document.ResolveDict(ctx, doc, dict["Parent"])
-		if err != nil || parent == nil {
+		_, parent, ok := document.ResolveFieldParent(ctx, doc, dict, seen)
+		if !ok {
 			break
 		}
 		dict = parent

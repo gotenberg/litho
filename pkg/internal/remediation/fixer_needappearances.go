@@ -357,12 +357,13 @@ func appearanceShowsValue(ctx context.Context, doc *document.Document, annot ast
 // inheritable (ISO 32000-1, 12.7.3.1).
 func fieldFlags(ctx context.Context, doc *document.Document, annot ast.PdfDict) int {
 	dict := annot
+	seen := make(map[int]bool)
 	for depth := 0; depth < maxFieldParentDepth && dict != nil; depth++ {
 		if flags, ok := dict["Ff"].(ast.PdfInt); ok {
 			return int(flags)
 		}
-		parent, err := document.ResolveDict(ctx, doc, dict["Parent"])
-		if err != nil || parent == nil {
+		_, parent, ok := document.ResolveFieldParent(ctx, doc, dict, seen)
+		if !ok {
 			return 0
 		}
 		dict = parent
@@ -373,6 +374,7 @@ func fieldFlags(ctx context.Context, doc *document.Document, annot ast.PdfDict) 
 // fieldValueText returns the field's /V as text, following /Parent.
 func fieldValueText(ctx context.Context, doc *document.Document, annot ast.PdfDict) string {
 	dict := annot
+	seen := make(map[int]bool)
 	for depth := 0; depth < maxFieldParentDepth && dict != nil; depth++ {
 		if value, ok := dict["V"]; ok {
 			if text, ok := value.(ast.PdfString); ok {
@@ -380,8 +382,8 @@ func fieldValueText(ctx context.Context, doc *document.Document, annot ast.PdfDi
 			}
 			return ""
 		}
-		parent, err := document.ResolveDict(ctx, doc, dict["Parent"])
-		if err != nil || parent == nil {
+		_, parent, ok := document.ResolveFieldParent(ctx, doc, dict, seen)
+		if !ok {
 			return ""
 		}
 		dict = parent
