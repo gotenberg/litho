@@ -116,9 +116,16 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   removed and surviving content (one MCID spanning operators on both sides, or two MCIDs naming the
   same element — a single element commonly spans a whole paragraph, so this is ordinary rather than a
   corner case), and an element written directly into the array with no object number to replace.
-  Still open here: annotation values, outlines, `/PieceInfo`, `/Thumb`, metadata and font re-subset
-  are all still untouched, so the scan continues to tell you the document is dirty without cleaning
-  it.
+  **The redacted page's `/Thumb` and page-level `/PieceInfo` are now dropped** once something was
+  actually removed, and only then: a page that cleared nothing keeps its thumbnail. `/Thumb` is a
+  producer-baked raster of the page as it was, so image blanking — which rewrites content XObjects —
+  never reaches it and the removed words stay visible in it. The **catalog's** `/PieceInfo` is
+  deliberately left alone: ISO 19005-4, 6.1.3 forbids `/Info` in the trailer unless the catalog
+  carries `/PieceInfo` (a rule litho both checks and repairs), so dropping it would make a conforming
+  PDF/A-4 file non-conforming whenever `/Info` stayed. Clearing that one means clearing `/Info` with
+  it, which is a document-wide decision rather than a page-scoped edit's to make. Still open here:
+  annotation values, outlines, metadata and font re-subset are untouched, so the scan continues to
+  tell you the document is dirty without cleaning it.
 - **PR5 — CLI.** `litho redact --region <page:x,y,w,h>...` or `--apply-marks`.
 
 ## Limits and honest scope

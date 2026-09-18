@@ -117,6 +117,9 @@ type RedactReport struct {
 	// removed, ascending. They are what reaches the structure tree: a tagged
 	// page keeps a parallel copy of its text there, keyed by these.
 	RemovedMCIDs []int
+	// DroppedPageEntries names the page entries dropped because they held a
+	// copy of what was removed, such as /Thumb.
+	DroppedPageEntries []string
 }
 
 func redactPageRegions(
@@ -317,13 +320,20 @@ func redactPageRegions(
 	spans = append(spans, vectorSpans...)
 	if len(spans) == 0 {
 		// An image may still have been blanked, so the report stands even when
-		// no operator was removed.
+		// no operator was removed, and the page's own copies still have to go.
+		if len(report.BlankedImages) > 0 {
+			report.DroppedPageEntries = stripPageCopies(alloc, page)
+		}
 		return report, nil
 	}
 
 	if err := ExcisePageSpans(ctx, alloc, doc, page, spans); err != nil {
 		return RedactReport{}, err
 	}
+	// After the content is gone, not before: a page that refused partway
+	// through keeps its thumbnail along with everything else. Run last so the
+	// alloc-first read picks up the /Contents the excision just queued.
+	report.DroppedPageEntries = stripPageCopies(alloc, page)
 	return report, nil
 }
 
