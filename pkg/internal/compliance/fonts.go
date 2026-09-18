@@ -1266,6 +1266,23 @@ func sliceAnyTrue(b []bool) bool {
 
 // structTreeHasActualText recursively checks if any structure element has /ActualText.
 func structTreeHasActualText(ctx context.Context, doc *document.Document, node ast.PdfDict, depth int) bool {
+	return structTreeHasActualTextAt(ctx, doc, node, make(map[int]bool), depth)
+}
+
+// structTreeHasActualTextAt is [structTreeHasActualText] carrying the elements
+// already examined.
+//
+// visited bounds a crafted /K graph. This walk fans out over every kid, so
+// [maxStructAttrSearchDepth] caps the work at branch^depth rather than at
+// depth: an element whose /K names the same child twice costs 2^30 visits while
+// sitting entirely inside the bound. The answer cannot change, since the
+// question is only whether some element carries /ActualText, so this is a limit
+// rather than a repair.
+//
+// [TestStructTreeFanoutBomb] does not reach here: this walk runs only for a
+// font whose /ToUnicode maps into a private use area, and that fixture carries
+// no such font.
+func structTreeHasActualTextAt(ctx context.Context, doc *document.Document, node ast.PdfDict, visited map[int]bool, depth int) bool {
 	if depth > maxStructAttrSearchDepth {
 		return false
 	}
@@ -1278,13 +1295,27 @@ func structTreeHasActualText(ctx context.Context, doc *document.Document, node a
 	}
 	if arr, _ := document.ResolveArray(ctx, doc, kObj); len(arr) > 0 {
 		for _, kid := range arr {
+			if ref, isRef := kid.(ast.PdfIndirectRef); isRef {
+				if visited[ref.ObjectNum] {
+					continue
+				}
+				visited[ref.ObjectNum] = true
+			}
 			kidDict, _ := document.ResolveDict(ctx, doc, kid)
-			if kidDict != nil && structTreeHasActualText(ctx, doc, kidDict, depth+1) {
+			if kidDict != nil && structTreeHasActualTextAt(ctx, doc, kidDict, visited, depth+1) {
 				return true
 			}
 		}
-	} else if kidDict, _ := document.ResolveDict(ctx, doc, kObj); kidDict != nil {
-		return structTreeHasActualText(ctx, doc, kidDict, depth+1)
+		return false
+	}
+	if ref, isRef := kObj.(ast.PdfIndirectRef); isRef {
+		if visited[ref.ObjectNum] {
+			return false
+		}
+		visited[ref.ObjectNum] = true
+	}
+	if kidDict, _ := document.ResolveDict(ctx, doc, kObj); kidDict != nil {
+		return structTreeHasActualTextAt(ctx, doc, kidDict, visited, depth+1)
 	}
 	return false
 }
