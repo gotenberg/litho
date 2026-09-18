@@ -100,28 +100,9 @@ func DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 // contract matches DecodeStream (best-effort), so callers that ignore
 // incomplete behave exactly as before.
 func DecodeStreamChecked(ctx context.Context, stream ast.PdfStream) (data []byte, incomplete bool, err error) {
-	filterObj, hasFilter := stream.Dict["Filter"]
-	if !hasFilter {
-		b, berr := stream.Bytes(ctx)
-		return b, false, berr
-	}
-
-	var filters []ast.PdfName
-	switch f := filterObj.(type) {
-	case ast.PdfName:
-		filters = append(filters, f)
-	case ast.PdfArray:
-		for _, item := range f {
-			if name, ok := item.(ast.PdfName); ok {
-				filters = append(filters, name)
-			}
-		}
-	case ast.PdfNull:
-		// An explicit null /Filter is equivalent to no filter (the data is
-		// unencoded). qpdf emits this on cross-reference streams; treating it
-		// as an error would make the whole document unreadable.
-	default:
-		return nil, false, fmt.Errorf("invalid type for /Filter: %T", filterObj)
+	filters, err := streamFilterNames(stream.Dict)
+	if err != nil {
+		return nil, false, err
 	}
 
 	// Extract per-filter DecodeParms. The value can be a single dict (applied
@@ -152,6 +133,74 @@ func DecodeStreamChecked(ctx context.Context, stream ast.PdfStream) (data []byte
 	}
 
 	return data, incomplete, nil
+}
+
+// streamFilterNames returns the stream's /Filter entries in the order they
+// apply. A missing or null /Filter yields none: per ISO 32000-1, 7.3.9, a null
+// value is equivalent to the key being absent, so the data is unencoded. qpdf
+// emits an explicit null on cross-reference streams, and rejecting it would
+// make the whole document unreadable.
+func streamFilterNames(dict ast.PdfDict) ([]ast.PdfName, error) {
+	filterObj, ok := dict["Filter"]
+	if !ok {
+		return nil, nil
+	}
+	switch f := filterObj.(type) {
+	case ast.PdfName:
+		return []ast.PdfName{f}, nil
+	case ast.PdfArray:
+		names := make([]ast.PdfName, 0, len(f))
+		for _, item := range f {
+			if name, isName := item.(ast.PdfName); isName {
+				names = append(names, name)
+			}
+		}
+		return names, nil
+	case ast.PdfNull:
+		return nil, nil
+	default:
+		return nil, fmt.Errorf("invalid type for /Filter: %T", filterObj)
+	}
+}
+
+// DecodeStreamUpTo decodes stream through its filter chain, stopping before
+// the first stop filter, and returns the bytes that filter itself receives.
+// found reports whether stop appears in the chain; when it does not, the
+// returned bytes are the fully decoded stream.
+//
+// A check that judges an embedded image format reads the input to that
+// format's filter, not its output: the JP2 boxes ISO 19005-2, 6.2.8.3 inspects
+// are what JPXDecode consumes. [ast.PdfStream.Bytes] returns the raw bytes,
+// which are that input only when the format filter is the whole chain, so a
+// /Filter of [/FlateDecode /JPXDecode] handed the checks a compressed buffer
+// that matched no signature and every JPEG2000 violation behind an outer
+// filter went unreported.
+//
+// Unlike [DecodeStreamChecked], a filter before stop that cannot be decoded is
+// an error rather than a skip: its output is the only route to stop's input,
+// so continuing would judge the wrong bytes.
+func DecodeStreamUpTo(ctx context.Context, stream ast.PdfStream, stop ast.PdfName) (data []byte, found bool, err error) {
+	filters, err := streamFilterNames(stream.Dict)
+	if err != nil {
+		return nil, false, err
+	}
+	parms := extractDecodeParms(stream.Dict, len(filters))
+
+	data, err = stream.Bytes(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	for i, f := range filters {
+		if f == stop {
+			return data, true, nil
+		}
+		decoded, derr := applyDecodeFilter(ctx, data, f, parms[i])
+		if derr != nil {
+			return nil, false, fmt.Errorf("decoding %s before %s: %w", f, stop, derr)
+		}
+		data = decoded
+	}
+	return data, false, nil
 }
 
 // extractDecodeParms returns a slice of DecodeParms dicts, one per filter.

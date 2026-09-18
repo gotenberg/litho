@@ -278,6 +278,21 @@ func (d *Document) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]by
 	return data, err
 }
 
+// DecodeStreamUpTo decodes stream through its filter chain, stopping before
+// the first stop filter, and returns the bytes that filter itself receives.
+// found reports whether stop appears in the chain. See
+// [filter.DecodeStreamUpTo] for why an image-format check reads its filter's
+// input rather than the raw or fully decoded bytes.
+//
+// The filters this skips past are the built-in ones (a JPEG2000 or JBIG2
+// codestream is what a chain ends with, never what it passes through), so the
+// document's plugin decoder is not consulted and the result does not vary with
+// which optional plugins are registered.
+func (d *Document) DecodeStreamUpTo(ctx context.Context, stream ast.PdfStream, stop ast.PdfName) ([]byte, bool, error) {
+	stream = d.resolveStreamFilterKeys(ctx, stream)
+	return filter.DecodeStreamUpTo(ctx, stream, stop)
+}
+
 // NewStreamReader returns a lazy [io.ReadCloser] using the document's filter decoder.
 func (d *Document) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
 	stream = d.resolveStreamFilterKeys(ctx, stream)
