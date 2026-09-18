@@ -206,6 +206,17 @@ var ErrAnnotationAppearanceHoldsText = errors.New("annotation appearance stream 
 // draws.
 var ErrAnnotationNotAddressable = errors.New("annotation has no indirect reference")
 
+// ErrFieldValueNotAddressable reports a form field whose value the mutation
+// cannot clear because the dictionary stating it has no indirect reference.
+//
+// A field's /V is inheritable (ISO 32000-1, 12.7.3.1), so the value a widget
+// shows is often stated by an ancestor field rather than by the widget itself.
+// Clearing it means rewriting that ancestor's own object, and one written
+// directly into its parent's /Kids has no object number for the replacement to
+// take. Reporting it beats leaving the value in the field tree while telling
+// the caller the document was cleared.
+var ErrFieldValueNotAddressable = errors.New("form field value has no indirect reference")
+
 // ErrScanTokenEmpty reports an empty token handed to a document scan.
 //
 // An empty string is contained in every other string, so scanning for one would

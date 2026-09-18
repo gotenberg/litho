@@ -134,9 +134,17 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   inheritable (ISO 32000-1, 12.7.3.1), so a value can live on an ancestor field dictionary appearing
   in no page's `/Annots`, and walking annotations would silently miss it — that needs an ancestor walk
   of its own. The pass is **not wired into `RedactPageRegions`**: it is document-wide while that
-  function is page-scoped, so a caller runs it with `RedactReport.RemovedText`. Still open here: form
-  field values, outlines, metadata and font re-subset are untouched, so the scan continues to tell you
-  the document is dirty without cleaning it.
+  function is page-scoped, so a caller runs it with `RedactReport.RemovedText`. **Form field values are now scrubbed too**, by
+  `mutations.ScrubFormFieldValues`, which closes the half the annotation pass deliberately left open.
+  `/V` and `/DV` are cleared on the dictionary that actually **states** them, which is frequently an
+  ancestor field appearing in no page's `/Annots` at all, because both entries are inheritable
+  (ISO 32000-1, 12.7.3.1) — clearing only what the widget carries looks complete and leaves the value
+  sitting in the parent. The widget's `/AP` goes with it: the appearance draws the old value, and
+  unlike a markup annotation a widget's appearance is one litho regenerates from the field value, so
+  dropping it is recoverable rather than destructive. It refuses when the dictionary stating the value
+  is written directly into its child, having no object number to replace. Still open here: outlines,
+  metadata and font re-subset are untouched, so the scan continues to tell you the document is dirty
+  without cleaning it.
 - **PR5 — CLI.** `litho redact --region <page:x,y,w,h>...` or `--apply-marks`.
 
 ## Limits and honest scope

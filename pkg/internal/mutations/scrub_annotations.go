@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"sort"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -68,40 +67,9 @@ func scrubAnnotationText(
 	doc *document.Document,
 	tokens []string,
 ) ([]int, error) {
-	for _, tok := range tokens {
-		if tok == "" {
-			return nil, fmt.Errorf("%w: an empty token matches every annotation", ErrScanTokenEmpty)
-		}
-	}
-	if len(tokens) == 0 {
-		return nil, nil
-	}
-
-	catalog, err := document.ResolveCatalog(ctx, doc)
-	if err != nil || catalog == nil {
-		return nil, nil
-	}
-	pages, err := document.ResolvePages(ctx, doc, catalog)
-	if err != nil {
-		return nil, fmt.Errorf("resolving pages: %w", err)
-	}
-
-	scrubbed := make(map[int]bool)
-	for _, page := range pages {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if err := scrubPageAnnotations(ctx, alloc, doc, page, tokens, scrubbed); err != nil {
-			return nil, err
-		}
-	}
-
-	out := make([]int, 0, len(scrubbed))
-	for objNum := range scrubbed {
-		out = append(out, objNum)
-	}
-	sort.Ints(out)
-	return out, nil
+	return scrubDocumentPages(ctx, doc, tokens, func(page *document.Page, scrubbed map[int]bool) error {
+		return scrubPageAnnotations(ctx, alloc, doc, page, tokens, scrubbed)
+	})
 }
 
 // scrubPageAnnotations clears the annotations one page carries.
