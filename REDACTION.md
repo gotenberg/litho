@@ -123,9 +123,20 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   deliberately left alone: ISO 19005-4, 6.1.3 forbids `/Info` in the trailer unless the catalog
   carries `/PieceInfo` (a rule litho both checks and repairs), so dropping it would make a conforming
   PDF/A-4 file non-conforming whenever `/Info` stayed. Clearing that one means clearing `/Info` with
-  it, which is a document-wide decision rather than a page-scoped edit's to make. Still open here:
-  annotation values, outlines, metadata and font re-subset are untouched, so the scan continues to
-  tell you the document is dirty without cleaning it.
+  it, which is a document-wide decision rather than a page-scoped edit's to make. **Annotation text is now scrubbed document-wide** by
+  `mutations.ScrubAnnotationText`, which takes the removed tokens and clears `/Contents`, `/RC` and
+  `/URI` on any annotation quoting one — document-wide rather than in-region because an annotation on
+  page five can quote text redacted on page one, and a link target routinely spells the heading it
+  points at. Two refusals: an annotation whose `/AP` still paints text (the words are drawn by the
+  appearance's own content stream, so clearing `/Contents` would leave them on screen, and only a
+  widget's appearance regenerates from its field value), and one written directly into `/Annots` with
+  no object number to replace. **Form field values are deliberately not covered**: `/FT` and `/V` are
+  inheritable (ISO 32000-1, 12.7.3.1), so a value can live on an ancestor field dictionary appearing
+  in no page's `/Annots`, and walking annotations would silently miss it — that needs an ancestor walk
+  of its own. The pass is **not wired into `RedactPageRegions`**: it is document-wide while that
+  function is page-scoped, so a caller runs it with `RedactReport.RemovedText`. Still open here: form
+  field values, outlines, metadata and font re-subset are untouched, so the scan continues to tell you
+  the document is dirty without cleaning it.
 - **PR5 — CLI.** `litho redact --region <page:x,y,w,h>...` or `--apply-marks`.
 
 ## Limits and honest scope

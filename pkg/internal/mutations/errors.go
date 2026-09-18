@@ -185,6 +185,27 @@ var ErrStructElementPartlyRemoved = errors.New("structure element describes both
 // no longer draws.
 var ErrStructElementNotAddressable = errors.New("structure element has no indirect reference")
 
+// ErrAnnotationAppearanceHoldsText reports an annotation whose appearance
+// stream still paints text of its own.
+//
+// An annotation's words can be drawn twice: once as the /Contents a viewer may
+// show, and again by the content stream in its /AP, which is what actually
+// appears on the page. Clearing /Contents alone leaves the appearance drawing
+// them. Dropping the appearance is only recoverable for a widget, whose
+// appearance litho can regenerate from the field value; a markup annotation's
+// appearance has nothing to rebuild it from, so removing it would destroy the
+// annotation's visual instead of cleaning it.
+var ErrAnnotationAppearanceHoldsText = errors.New("annotation appearance stream still paints text")
+
+// ErrAnnotationNotAddressable reports an annotation the mutation cannot rewrite
+// because it has no indirect reference of its own.
+//
+// Scrubbing replaces the annotation's own object, so one written directly into
+// a page's /Annots array has no object number for the replacement to take.
+// Reporting it beats leaving an annotation quoting text the page no longer
+// draws.
+var ErrAnnotationNotAddressable = errors.New("annotation has no indirect reference")
+
 // ErrScanTokenEmpty reports an empty token handed to a document scan.
 //
 // An empty string is contained in every other string, so scanning for one would
