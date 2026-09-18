@@ -39,6 +39,15 @@ import (
 //     as a litho FALSE POSITIVE. [roleMapChainReachesStandard] already follows
 //     a legacy /RoleMap chain and is the shape the fix wants.
 //
+//     A dead end worth not re-walking: that helper is NOT evidence litho
+//     contradicts itself. Its only callers are the two t01 sites, where it
+//     answers a different question, "does a NON-standard name eventually reach
+//     a standard type", as the escape from t01. t04 asks whether a STANDARD
+//     type is remapped to a non-standard one, and judging the first hop is
+//     defensible there on its own terms: /Document -> /Foo is a remap to a
+//     non-standard name whatever /Foo points at next. So the FP rests on the
+//     unverifiable veraPDF record alone, which is why it is not fixed here.
+//
 // Keeping this as a test rather than a note means a later session with a
 // veraPDF oracle sees the exact inputs, and any change to either verdict has
 // to be deliberate rather than silent.
