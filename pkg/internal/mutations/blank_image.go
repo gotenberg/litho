@@ -15,11 +15,12 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
 )
 
-// sampleEncodingEntries are the image dictionary entries that describe how the
-// current samples are to be read. Blanking re-encodes the samples, so an image
-// carrying one of these is refused rather than silently re-interpreted against
-// an encoding it no longer has (ISO 32000-1, Table 89).
-var sampleEncodingEntries = []ast.PdfName{"Decode", "Mask", "ColorKeyMask"}
+// maskEntries are the image dictionary entries that say which samples are
+// painted at all. Blanking writes a new dictionary that carries neither, and
+// [pdfimage.DecodeImage] does not apply them, so an image carrying one is
+// refused rather than returned with its masked-out picture made opaque
+// (ISO 32000-1, Table 89).
+var maskEntries = []ast.PdfName{"Mask", "ColorKeyMask"}
 
 // blankImage overwrites the samples of one image that the zones cover and
 // replaces the image's stream object with the result.
@@ -56,10 +57,20 @@ func blankImage(
 	if err != nil {
 		return fmt.Errorf("resolving image %q: %w", box.Name, err)
 	}
-	for _, key := range sampleEncodingEntries {
+	for _, key := range maskEntries {
 		if _, present := stream.Dict[key]; present {
 			return fmt.Errorf("%w: %q carries /%s", ErrImageCarriesSampleEntries, box.Name, key)
 		}
+	}
+	// /Decode is only a problem when the decode did not already fold it into
+	// the pixels. Where it did, the blanked samples carry the mapping and the
+	// replacement dictionary simply omits the entry, so the image renders as it
+	// did before. Where it did not, the pixels still need it and dropping it
+	// would change the picture outside the region as well as inside.
+	if _, present := stream.Dict["Decode"]; present &&
+		!pdfimage.AppliesDecodeArray(ctx, doc, stream.Dict) {
+		return fmt.Errorf("%w: %q carries a /Decode the decode does not apply",
+			ErrImageCarriesSampleEntries, box.Name)
 	}
 
 	img, err := pdfimage.DecodeImage(ctx, doc, page, ast.PdfName(box.Name))

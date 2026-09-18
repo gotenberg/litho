@@ -119,6 +119,57 @@ func unpackSamples(data []byte, width, height, samplesPerPixel, bpc int, scale b
 	return out, nil
 }
 
+// imageFilterName returns the name of the first filter an image declares, or
+// "" when it declares none.
+func imageFilterName(ctx context.Context, doc *document.Document, dict ast.PdfDict) string {
+	filterObj, ok := dict["Filter"]
+	if !ok {
+		return ""
+	}
+	filterRes, err := document.ResolveObject(ctx, doc, filterObj)
+	if err != nil {
+		doc.Logger.Debug("resolving image filter", slog.Any("err", err))
+	}
+	if fn, ok := filterRes.(ast.PdfName); ok {
+		return string(fn)
+	}
+	if fArr, ok := filterRes.(ast.PdfArray); ok && len(fArr) > 0 {
+		if fn, ok := fArr[0].(ast.PdfName); ok {
+			return string(fn)
+		}
+	}
+	return ""
+}
+
+// AppliesDecodeArray reports whether [DecodeImage] applies the image's /Decode
+// array to the pixels it returns.
+//
+// A caller that re-encodes decoded pixels needs this to know whether /Decode
+// has already been folded into them. Where it has, the entry may be dropped
+// from the new image and the result renders the same; where it has not, the
+// pixels still need it and dropping it changes the picture.
+//
+// It is false in two cases. An indexed image's /Decode remaps palette INDICES
+// rather than colour components (ISO 32000-1, 8.9.5.2), and [decodeIndexed]
+// looks each index up directly without consulting it. And a JPEG takes the
+// DCTDecode branch of [DecodeImage], which hands the stream to image/jpeg
+// instead of to the sample path that builds the /Decode tables: an
+// Adobe-inverted CMYK JPEG carrying /Decode [1 0 1 0 1 0 1 0] is the ordinary
+// case there, and treating its pixels as already mapped would invert it.
+//
+// That branch is in fact broken today, which does not change the answer but
+// does change what to watch: the filter pipeline already runs decodeDCT, so
+// image/jpeg is handed decoded samples and reports a missing SOI marker, and no
+// JPEG decodes at all. If that is fixed by routing DCTDecode through the
+// ordinary sample path, the /Decode tables WOULD then be applied and this
+// function must stop excluding it.
+func AppliesDecodeArray(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
+	if _, indexed := resolveIndexedPalette(ctx, doc, dict); indexed {
+		return false
+	}
+	return imageFilterName(ctx, doc, dict) != "DCTDecode"
+}
+
 // imageComponents returns the samples-per-pixel for the color spaces the
 // 8-bit decoder handles, or 0 for anything else.
 func imageComponents(colorSpace string) int {
@@ -374,21 +425,7 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 	colorSpace := resolveColorSpace(ctx, doc, stream.Dict)
 	bitsPerComp := statedBitsPerComponent(ctx, doc, stream.Dict)
 
-	// Determine the filter.
-	filterName := ""
-	if filterObj, ok := stream.Dict["Filter"]; ok {
-		filterRes, err := document.ResolveObject(ctx, doc, filterObj)
-		if err != nil {
-			doc.Logger.Debug("resolving image filter", slog.Any("err", err))
-		}
-		if fn, ok := filterRes.(ast.PdfName); ok {
-			filterName = string(fn)
-		} else if fArr, ok := filterRes.(ast.PdfArray); ok && len(fArr) > 0 {
-			if fn, ok := fArr[0].(ast.PdfName); ok {
-				filterName = string(fn)
-			}
-		}
-	}
+	filterName := imageFilterName(ctx, doc, stream.Dict)
 
 	if filterName == "DCTDecode" {
 		// Raw JPEG: stream through the filter pipeline without buffering.

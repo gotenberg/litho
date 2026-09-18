@@ -158,12 +158,24 @@ var ErrImagePlacementDegenerate = errors.New("image placement matrix cannot be i
 var ErrImageRegionCoversNoSample = errors.New("region covers an image but none of its samples")
 
 // ErrImageCarriesSampleEntries reports an image whose dictionary holds entries
-// describing its current sample encoding.
+// the blanked replacement cannot carry forward.
 //
-// Blanking re-encodes the samples as 8-bit DeviceRGB, which leaves /Decode,
-// /Mask and /ColorKeyMask describing an encoding that no longer exists: applied
-// to the new samples they would change how the image renders outside the region
-// as well as inside it. Translating them is possible and is not done yet.
+// Blanking re-encodes the samples as 8-bit DeviceRGB under a fresh dictionary,
+// so /Decode, /Mask and /ColorKeyMask are dropped rather than retained. What
+// matters is whether the decoded pixels already carry what the dropped entry
+// said.
+//
+// /Mask and /ColorKeyMask say which samples are painted at all. The decoder
+// does not apply them, so blanking one would make masked-out picture opaque
+// outside the region as well as inside it. Both are always refused.
+//
+// /Decode is refused only when the decode did not apply it, which
+// [pdfimage.AppliesDecodeArray] answers: an indexed image's array remaps
+// palette indices the decoder never consults, and a JPEG takes a branch that
+// hands the stream to image/jpeg rather than to the sample path that builds the
+// /Decode tables. Everywhere else the mapping is already in the pixels and the
+// entry is redundant, so the image is blanked rather than refused. Translating
+// the two remaining cases is possible and is not done yet.
 var ErrImageCarriesSampleEntries = errors.New("image carries decode or mask entries")
 
 // ErrStructElementPartlyRemoved reports a structure element that describes both
