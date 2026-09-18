@@ -3,6 +3,7 @@ package document
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -207,5 +208,32 @@ func TestRebuild_TrailerInfoScanHonoursCancellation(t *testing.T) {
 	cancel()
 	if _, ok := doc.findTrailerInfoRef(cancelled); ok {
 		t.Errorf("a cancelled context must stop the trailer scan")
+	}
+}
+
+// TestRebuild_FindLastTrailerHonoursCancellation pins that the trailer search
+// stops once the caller cancels. Both of its passes read large regions of the
+// document: the startxref pass walks every %%EOF marker in the tail, and the
+// keyword pass doubles its window until it has read almost the whole file.
+func TestRebuild_FindLastTrailerHonoursCancellation(t *testing.T) {
+	t.Parallel()
+
+	data := minimalPDF()
+	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+
+	// Control: a live context does locate the trailer, so the cancelled arm
+	// below reports cancellation rather than an unrelated failure to find one.
+	dict, err := doc.findLastTrailer(context.Background())
+	if err != nil || dict == nil {
+		t.Fatalf("findLastTrailer under a live context: dict=%v err=%v", dict, err)
+	}
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := doc.findLastTrailer(cancelled); !errors.Is(err, context.Canceled) {
+		t.Errorf("findLastTrailer(cancelled) error = %v, want one wrapping context.Canceled", err)
 	}
 }

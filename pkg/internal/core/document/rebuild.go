@@ -91,7 +91,7 @@ func (d *Document) rebuildXRef(ctx context.Context) error {
 	}
 
 	// Find the last trailer dictionary in the file.
-	trailer, err := d.findLastTrailer()
+	trailer, err := d.findLastTrailer(ctx)
 	if err != nil {
 		// Last-resort: synthesize a minimal trailer. The file has
 		// parseable objects but no recoverable trailer, so downstream
@@ -285,9 +285,9 @@ func (d *Document) findTrailerInfoRef(ctx context.Context) (ast.PdfObject, bool)
 // It first tries to follow the last startxref pointer (which may point to a
 // cross-reference stream whose dict IS the trailer). Falls back to scanning
 // for the last "trailer" keyword.
-func (d *Document) findLastTrailer() (ast.PdfDict, error) {
+func (d *Document) findLastTrailer(ctx context.Context) (ast.PdfDict, error) {
 	// Try 1: follow the last startxref pointer.
-	if dict := d.findTrailerViaStartXRef(); dict != nil {
+	if dict := d.findTrailerViaStartXRef(ctx); dict != nil {
 		return dict, nil
 	}
 
@@ -295,7 +295,12 @@ func (d *Document) findLastTrailer() (ast.PdfDict, error) {
 	const searchBuf = 4096
 	searchSize := min(d.size, int64(searchBuf))
 
+	// Each pass doubles the window, so a file holding no trailer keyword is
+	// read almost in full before the scan gives up. Check ctx once per pass.
 	for window := searchSize; window <= d.size; window = min(window*2, d.size) {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("scanning for the last trailer: %w", err)
+		}
 		buf := make([]byte, window)
 		offset := d.size - window
 		_, err := d.r.ReadAt(buf, offset)
@@ -314,7 +319,7 @@ func (d *Document) findLastTrailer() (ast.PdfDict, error) {
 		dictStart := offset + int64(idx) + int64(len("trailer"))
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, dictStart))
 		p := parser.NewParser(lex)
-		obj, err := p.ParseObject(context.Background())
+		obj, err := p.ParseObject(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse trailer dictionary: %w", err)
 		}
@@ -332,7 +337,7 @@ func (d *Document) findLastTrailer() (ast.PdfDict, error) {
 // findTrailerViaStartXRef scans backwards through all %%EOF markers and tries
 // each startxref pointer. Returns the trailer from the first valid one found
 // (cross-reference stream dict or traditional xref trailer).
-func (d *Document) findTrailerViaStartXRef() ast.PdfDict {
+func (d *Document) findTrailerViaStartXRef(ctx context.Context) ast.PdfDict {
 	// Read the last portion of the file to find %%EOF markers.
 	// Use a large window to cover incremental updates that may add
 	// significant data between the second-to-last and last %%EOF.
@@ -358,6 +363,9 @@ func (d *Document) findTrailerViaStartXRef() ast.PdfDict {
 
 	// Try each %%EOF's startxref, newest first.
 	for _, eofIdx := range eofPositions {
+		if ctx.Err() != nil {
+			return nil
+		}
 		region := buf[max(0, eofIdx-60):eofIdx]
 		sxrIdx := bytes.LastIndex(region, []byte("startxref"))
 		if sxrIdx == -1 {
@@ -381,14 +389,14 @@ func (d *Document) findTrailerViaStartXRef() ast.PdfDict {
 
 		// Traditional xref table: parse the trailer after the table.
 		if bytes.HasPrefix(trimmed, []byte("xref")) {
-			if dict := d.parseTrailerAfterXRef(xrefOffset); dict != nil {
+			if dict := d.parseTrailerAfterXRef(ctx, xrefOffset); dict != nil {
 				return dict
 			}
 			continue
 		}
 
 		// Cross-reference stream: parse the object.
-		if dict := d.parseXRefStreamDict(xrefOffset); dict != nil {
+		if dict := d.parseXRefStreamDict(ctx, xrefOffset); dict != nil {
 			return dict
 		}
 	}
@@ -398,7 +406,7 @@ func (d *Document) findTrailerViaStartXRef() ast.PdfDict {
 
 // parseTrailerAfterXRef reads an xref table at offset and returns its
 // trailer dictionary. The xref entries themselves are discarded.
-func (d *Document) parseTrailerAfterXRef(offset int64) ast.PdfDict {
+func (d *Document) parseTrailerAfterXRef(ctx context.Context, offset int64) ast.PdfDict {
 	// Scan for "trailer" keyword after the xref table.
 	readLen := min(d.size-offset, 65536)
 	buf := make([]byte, readLen)
@@ -412,7 +420,7 @@ func (d *Document) parseTrailerAfterXRef(offset int64) ast.PdfDict {
 	dictStart := offset + int64(idx) + int64(len("trailer"))
 	lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, dictStart))
 	p := parser.NewParser(lex)
-	obj, err := p.ParseObject(context.Background())
+	obj, err := p.ParseObject(ctx)
 	if err != nil {
 		return nil
 	}
@@ -424,10 +432,10 @@ func (d *Document) parseTrailerAfterXRef(offset int64) ast.PdfDict {
 }
 
 // parseXRefStreamDict parses a cross-reference stream and returns its dict.
-func (d *Document) parseXRefStreamDict(offset int64) ast.PdfDict {
+func (d *Document) parseXRefStreamDict(ctx context.Context, offset int64) ast.PdfDict {
 	lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, offset))
 	p := parser.NewParser(lex)
-	obj, err := p.ParseObject(context.Background())
+	obj, err := p.ParseObject(ctx)
 	if err != nil {
 		return nil
 	}
