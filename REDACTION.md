@@ -142,8 +142,19 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   sitting in the parent. The widget's `/AP` goes with it: the appearance draws the old value, and
   unlike a markup annotation a widget's appearance is one litho regenerates from the field value, so
   dropping it is recoverable rather than destructive. It refuses when the dictionary stating the value
-  is written directly into its child, having no object number to replace. Still open here: outlines,
-  metadata and font re-subset are untouched, so the scan continues to tell you the document is dirty
+  is written directly into its child, having no object number to replace. **Outline titles are now scrubbed too**, by
+  `mutations.ScrubOutlineTitles`, which walks the tree from the catalog's `/Outlines` rather than page
+  by page: a bookmark title routinely repeats the heading it points at, so a cleared page can still
+  spell it in the outline panel of every viewer that opens the file. The title is **emptied, not
+  deleted** — `/Title` is required on an outline item (ISO 32000-1, Table 153), so removing the entry
+  would leave an item the spec disallows; the bookmark survives, points where it did, and says
+  nothing. An item written directly into its parent's `/First` or a sibling's `/Next` **refuses**
+  rather than being walked past: it cannot be rewritten, and because `/Next` lives inside it every
+  later sibling is reachable only through it, so continuing would report a clean outline while the
+  titles behind it still quote the removed text. Still open here: font re-subset is untouched. Metadata needs no new scrubber — `mutations.ClearMetadata` already empties
+  the `/Info` dictionary and drops the catalog's `/Metadata` XMP stream, which is the whole of that
+  row; what is missing is composing it into a redaction flow rather than any new code. Until the
+  remaining vectors are cleaned and composed, the scan continues to tell you the document is dirty
   without cleaning it.
 - **PR5 — CLI.** `litho redact --region <page:x,y,w,h>...` or `--apply-marks`.
 

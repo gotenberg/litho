@@ -217,6 +217,17 @@ var ErrAnnotationNotAddressable = errors.New("annotation has no indirect referen
 // the caller the document was cleared.
 var ErrFieldValueNotAddressable = errors.New("form field value has no indirect reference")
 
+// ErrOutlineItemNotAddressable reports an outline item quoting removed text
+// that the mutation cannot rewrite, because the entry naming it is not an
+// indirect reference.
+//
+// Scrubbing replaces the item's own object, so one written directly into its
+// parent's /First or a sibling's /Next has no object number for the replacement
+// to take. Walking past it is what a destination prune does, because an
+// unpruned destination is merely stale; here it would leave a bookmark whose
+// title still spells the text the page no longer draws.
+var ErrOutlineItemNotAddressable = errors.New("outline item has no indirect reference")
+
 // ErrScanTokenEmpty reports an empty token handed to a document scan.
 //
 // An empty string is contained in every other string, so scanning for one would
