@@ -73,7 +73,7 @@ func TestNotdefGlyph_DELIsUndefinedWithoutAProgram(t *testing.T) {
 // widths256 returns a /Widths array covering every byte code.
 func widths256() string {
 	out := make([]byte, 0, 256*4)
-	for i := 0; i < 256; i++ {
+	for range 256 {
 		out = append(out, "500 "...)
 	}
 	return string(out)

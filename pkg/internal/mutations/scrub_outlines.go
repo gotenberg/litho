@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -52,10 +53,8 @@ func scrubOutlineTitles(
 	doc *document.Document,
 	tokens []string,
 ) ([]int, error) {
-	for _, tok := range tokens {
-		if tok == "" {
-			return nil, fmt.Errorf("%w: an empty token matches every title", ErrScanTokenEmpty)
-		}
+	if slices.Contains(tokens, "") {
+		return nil, fmt.Errorf("%w: an empty token matches every title", ErrScanTokenEmpty)
 	}
 	if len(tokens) == 0 {
 		return nil, nil

@@ -176,8 +176,8 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		// -1 for a marker that carries none.
 		var mcidStack []int
 		innermostMCIDTagged := func() bool {
-			for i := len(markerStack) - 1; i >= 0; i-- {
-				if markerStack[i] != markerTaggedMCID {
+			for i, m := range slices.Backward(markerStack) {
+				if m != markerTaggedMCID {
 					continue
 				}
 				reach, mapped := mcidReach[mcidStack[i]]

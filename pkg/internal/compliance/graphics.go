@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -438,9 +439,7 @@ func appearanceResources(ctx context.Context, doc *document.Document, streamRes,
 	}
 
 	merged := make(ast.PdfDict, len(streamRes)+len(pageRes))
-	for category, value := range streamRes {
-		merged[category] = value
-	}
+	maps.Copy(merged, streamRes)
 	for category, pageEntry := range pageRes {
 		streamEntry, ok := streamRes[category]
 		if !ok {
@@ -456,12 +455,8 @@ func appearanceResources(ctx context.Context, doc *document.Document, streamRes,
 			continue
 		}
 		sub := make(ast.PdfDict, len(pageSub)+len(streamSub))
-		for name, value := range pageSub {
-			sub[name] = value
-		}
-		for name, value := range streamSub {
-			sub[name] = value
-		}
+		maps.Copy(sub, pageSub)
+		maps.Copy(sub, streamSub)
 		merged[category] = sub
 	}
 	return merged

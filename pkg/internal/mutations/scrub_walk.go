@@ -3,6 +3,7 @@ package mutations
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -24,10 +25,8 @@ func scrubDocumentPages(
 	tokens []string,
 	perPage func(page *document.Page, scrubbed map[int]bool) error,
 ) ([]int, error) {
-	for _, tok := range tokens {
-		if tok == "" {
-			return nil, fmt.Errorf("%w: an empty token matches every object", ErrScanTokenEmpty)
-		}
+	if slices.Contains(tokens, "") {
+		return nil, fmt.Errorf("%w: an empty token matches every object", ErrScanTokenEmpty)
 	}
 	if len(tokens) == 0 {
 		return nil, nil

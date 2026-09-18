@@ -256,31 +256,39 @@ func TestFixListContent_Declines(t *testing.T) {
 			// An LI that already owns an LBody: a second one is not a shape
 			// any producer writes, and merging reorders content.
 			name: "existing LBody",
-			bodies: []string{stRoot, list,
+			bodies: []string{
+				stRoot, list,
 				"<< /Type /StructElem /S /LI /P 5 0 R /Pg 3 0 R /K [0 7 0 R] >>",
-				"<< /Type /StructElem /S /LBody /P 6 0 R >>"},
+				"<< /Type /StructElem /S /LBody /P 6 0 R >>",
+			},
 		},
 		{
 			// An /MCR may name its own /Pg, so the page whose ParentTree slot
 			// needs rewriting is not the LI's.
 			name: "MCR content item",
-			bodies: []string{stRoot, list,
-				"<< /Type /StructElem /S /LI /P 5 0 R /Pg 3 0 R /K [<< /Type /MCR /Pg 3 0 R /MCID 0 >>] >>"},
+			bodies: []string{
+				stRoot, list,
+				"<< /Type /StructElem /S /LI /P 5 0 R /Pg 3 0 R /K [<< /Type /MCR /Pg 3 0 R /MCID 0 >>] >>",
+			},
 		},
 		{
 			// Without a /Pg there is no page whose ParentTree array indexes
 			// the MCID.
 			name: "no /Pg",
-			bodies: []string{stRoot, list,
-				"<< /Type /StructElem /S /LI /P 5 0 R /K [0] >>"},
+			bodies: []string{
+				stRoot, list,
+				"<< /Type /StructElem /S /LI /P 5 0 R /K [0] >>",
+			},
 		},
 		{
 			// Table 5 looks through Div, so the LI is flagged while its
 			// content sits deeper than the /K this fixer rebuilds.
 			name: "pass-through Div child",
-			bodies: []string{stRoot, list,
+			bodies: []string{
+				stRoot, list,
 				"<< /Type /StructElem /S /LI /P 5 0 R /Pg 3 0 R /K [0 7 0 R] >>",
-				"<< /Type /StructElem /S /Div /P 6 0 R >>"},
+				"<< /Type /StructElem /S /Div /P 6 0 R >>",
+			},
 		},
 	}
 	for _, tc := range tests {

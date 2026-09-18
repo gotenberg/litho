@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -77,12 +78,7 @@ func TestFontTypeMessageDistinguishesDefects(t *testing.T) {
 	}
 
 	has := func(got []string, want string) bool {
-		for _, g := range got {
-			if g == want {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(got, want)
 	}
 
 	tests := []struct {
@@ -131,8 +127,10 @@ func TestFontTypeMessageDistinguishesDefects(t *testing.T) {
 
 	t.Run("no message ever reports a bare slash", func(t *testing.T) {
 		t.Parallel()
-		for _, data := range [][]byte{simpleFont(""), simpleFont("/Type null"),
-			simpleFont("/Type (Font)"), descendantFont(""), descendantFont("/Type (Font)")} {
+		for _, data := range [][]byte{
+			simpleFont(""), simpleFont("/Type null"),
+			simpleFont("/Type (Font)"), descendantFont(""), descendantFont("/Type (Font)"),
+		} {
 			for _, msg := range ruleContexts(t, data, models.PDFA2b, "6.2.11.2", 1) {
 				if msg == `font /Type is "/", not Font` || msg == `descendant CIDFont /Type is "/", not Font` {
 					t.Errorf("message still reports a bare slash: %q", msg)

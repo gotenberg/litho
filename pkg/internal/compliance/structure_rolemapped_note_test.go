@@ -24,20 +24,34 @@ func TestRoleMappedNoteAndFormula(t *testing.T) {
 		rule    Rule
 		want    bool
 	}{
-		{"a Footnote mapped to Note, without /ID", "<< /S /Footnote /K [8 0 R] /P 6 0 R >>",
-			"<< /Footnote /Note >>", Rule_14289_1_7_9_t01, true},
-		{"a Footnote mapped to Note, with /ID", "<< /S /Footnote /K [8 0 R] /P 6 0 R /ID (n1) >>",
-			"<< /Footnote /Note >>", Rule_14289_1_7_9_t01, false},
-		{"an unmapped Footnote without /ID", "<< /S /Footnote /K [8 0 R] /P 6 0 R >>",
-			"<< >>", Rule_14289_1_7_9_t01, false},
-		{"a Note without /ID", "<< /S /Note /K [8 0 R] /P 6 0 R >>",
-			"<< >>", Rule_14289_1_7_9_t01, true},
-		{"a name mapped to Formula, without /Alt", "<< /S /MyFormula /K [8 0 R] /P 6 0 R >>",
-			"<< /MyFormula /Formula >>", Rule_14289_1_7_7_t01, true},
-		{"a name mapped to Formula, with /Alt", "<< /S /MyFormula /K [8 0 R] /P 6 0 R /Alt (x squared) >>",
-			"<< /MyFormula /Formula >>", Rule_14289_1_7_7_t01, false},
-		{"a Formula without /Alt", "<< /S /Formula /K [8 0 R] /P 6 0 R >>",
-			"<< >>", Rule_14289_1_7_7_t01, true},
+		{
+			"a Footnote mapped to Note, without /ID", "<< /S /Footnote /K [8 0 R] /P 6 0 R >>",
+			"<< /Footnote /Note >>", Rule_14289_1_7_9_t01, true,
+		},
+		{
+			"a Footnote mapped to Note, with /ID", "<< /S /Footnote /K [8 0 R] /P 6 0 R /ID (n1) >>",
+			"<< /Footnote /Note >>", Rule_14289_1_7_9_t01, false,
+		},
+		{
+			"an unmapped Footnote without /ID", "<< /S /Footnote /K [8 0 R] /P 6 0 R >>",
+			"<< >>", Rule_14289_1_7_9_t01, false,
+		},
+		{
+			"a Note without /ID", "<< /S /Note /K [8 0 R] /P 6 0 R >>",
+			"<< >>", Rule_14289_1_7_9_t01, true,
+		},
+		{
+			"a name mapped to Formula, without /Alt", "<< /S /MyFormula /K [8 0 R] /P 6 0 R >>",
+			"<< /MyFormula /Formula >>", Rule_14289_1_7_7_t01, true,
+		},
+		{
+			"a name mapped to Formula, with /Alt", "<< /S /MyFormula /K [8 0 R] /P 6 0 R /Alt (x squared) >>",
+			"<< /MyFormula /Formula >>", Rule_14289_1_7_7_t01, false,
+		},
+		{
+			"a Formula without /Alt", "<< /S /Formula /K [8 0 R] /P 6 0 R >>",
+			"<< >>", Rule_14289_1_7_7_t01, true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

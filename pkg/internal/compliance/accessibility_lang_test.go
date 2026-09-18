@@ -351,12 +351,20 @@ func TestCheckOutlineLang_EveryReachableItem(t *testing.T) {
 		items    []string
 		want     int
 	}{
-		{"an item without /Title", "<< /Type /Outlines /First 5 0 R /Count 1 >>",
-			[]string{"<< /Parent 4 0 R >>"}, 1},
-		{"a page in the item's place", "<< /Type /Outlines /First 3 0 R /Count 1 >>",
-			nil, 1},
-		{"an untitled item before a titled one", "<< /Type /Outlines /First 5 0 R /Last 6 0 R /Count 2 >>",
-			[]string{"<< /Parent 4 0 R /Next 6 0 R >>", "<< /Title (Chapter 2) /Parent 4 0 R /Prev 5 0 R >>"}, 2},
+		{
+			"an item without /Title", "<< /Type /Outlines /First 5 0 R /Count 1 >>",
+			[]string{"<< /Parent 4 0 R >>"},
+			1,
+		},
+		{
+			"a page in the item's place", "<< /Type /Outlines /First 3 0 R /Count 1 >>",
+			nil, 1,
+		},
+		{
+			"an untitled item before a titled one", "<< /Type /Outlines /First 5 0 R /Last 6 0 R /Count 2 >>",
+			[]string{"<< /Parent 4 0 R /Next 6 0 R >>", "<< /Title (Chapter 2) /Parent 4 0 R /Prev 5 0 R >>"},
+			2,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

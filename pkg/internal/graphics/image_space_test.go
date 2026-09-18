@@ -11,8 +11,10 @@ func TestImageSpace_AxisAlignedPlacement(t *testing.T) {
 	t.Parallel()
 
 	// 100 0 0 50 10 20 cm: the unit square lands on (10,20)-(110,70).
-	box := ImageBox{Name: "Im1", MinX: 10, MinY: 20, MaxX: 110, MaxY: 70,
-		CTM: [6]float64{100, 0, 0, 50, 10, 20}}
+	box := ImageBox{
+		Name: "Im1", MinX: 10, MinY: 20, MaxX: 110, MaxY: 70,
+		CTM: [6]float64{100, 0, 0, 50, 10, 20},
+	}
 
 	cases := []struct {
 		name string
@@ -44,8 +46,10 @@ func TestImageSpace_RotatedPlacementTheBoxCannotDescribe(t *testing.T) {
 	// so the unit corners land at (100,200) (100,240) (70,200) (70,240).
 	// The axis-aligned box is x 70..100, y 200..240 for every one of them,
 	// which is exactly why blanking pixels needs the matrix and not the box.
-	box := ImageBox{Name: "Im1", MinX: 70, MinY: 200, MaxX: 100, MaxY: 240,
-		CTM: [6]float64{0, 40, -30, 0, 100, 200}}
+	box := ImageBox{
+		Name: "Im1", MinX: 70, MinY: 200, MaxX: 100, MaxY: 240,
+		CTM: [6]float64{0, 40, -30, 0, 100, 200},
+	}
 
 	cases := []struct {
 		name string

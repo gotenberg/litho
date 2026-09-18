@@ -31,24 +31,42 @@ func TestCheckContentMarking_OwnerReachesRoot(t *testing.T) {
 		owner   string // object 8, which the ParentTree names for MCID 0
 		want    bool   // the untagged-content rule fires
 	}{
-		{"an owner whose /P chain reaches the root", "PDF/UA-1",
-			reaching, "<< /S /P /Pg 3 0 R /K [0] /P 7 0 R >>", false},
-		{"an owner with no /P", "PDF/UA-1",
-			reaching, "<< /S /P /Pg 3 0 R /K [0] >>", true},
-		{"a parent with no /P", "PDF/UA-1",
-			"<< /S /Sect /K [8 0 R] >>", "<< /S /P /Pg 3 0 R /K [0] /P 7 0 R >>", true},
-		{"a /P loop", "PDF/UA-1",
-			"<< /S /Sect /K [8 0 R] /P 8 0 R >>", "<< /S /P /Pg 3 0 R /K [0] /P 7 0 R >>", true},
-		{"a /P that is no dictionary", "PDF/UA-1",
-			reaching, "<< /S /P /Pg 3 0 R /K [0] /P 5 >>", true},
-		{"a /P straight to the root", "PDF/UA-1",
-			reaching, "<< /S /P /Pg 3 0 R /K [0] /P 5 0 R >>", false},
-		{"a /P through an element outside the /K tree", "PDF/UA-1",
-			reaching, "<< /S /P /Pg 3 0 R /K [0] /P 11 0 R >>", false},
-		{"PDF/UA-2: an owner with no /P", "PDF/UA-2",
-			reaching, "<< /S /P /Pg 3 0 R /K [0] >>", true},
-		{"PDF/UA-2: an owner whose /P chain reaches the root", "PDF/UA-2",
-			reaching, "<< /S /P /Pg 3 0 R /K [0] /P 7 0 R >>", false},
+		{
+			"an owner whose /P chain reaches the root", "PDF/UA-1",
+			reaching, "<< /S /P /Pg 3 0 R /K [0] /P 7 0 R >>", false,
+		},
+		{
+			"an owner with no /P", "PDF/UA-1",
+			reaching, "<< /S /P /Pg 3 0 R /K [0] >>", true,
+		},
+		{
+			"a parent with no /P", "PDF/UA-1",
+			"<< /S /Sect /K [8 0 R] >>", "<< /S /P /Pg 3 0 R /K [0] /P 7 0 R >>", true,
+		},
+		{
+			"a /P loop", "PDF/UA-1",
+			"<< /S /Sect /K [8 0 R] /P 8 0 R >>", "<< /S /P /Pg 3 0 R /K [0] /P 7 0 R >>", true,
+		},
+		{
+			"a /P that is no dictionary", "PDF/UA-1",
+			reaching, "<< /S /P /Pg 3 0 R /K [0] /P 5 >>", true,
+		},
+		{
+			"a /P straight to the root", "PDF/UA-1",
+			reaching, "<< /S /P /Pg 3 0 R /K [0] /P 5 0 R >>", false,
+		},
+		{
+			"a /P through an element outside the /K tree", "PDF/UA-1",
+			reaching, "<< /S /P /Pg 3 0 R /K [0] /P 11 0 R >>", false,
+		},
+		{
+			"PDF/UA-2: an owner with no /P", "PDF/UA-2",
+			reaching, "<< /S /P /Pg 3 0 R /K [0] >>", true,
+		},
+		{
+			"PDF/UA-2: an owner whose /P chain reaches the root", "PDF/UA-2",
+			reaching, "<< /S /P /Pg 3 0 R /K [0] /P 7 0 R >>", false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

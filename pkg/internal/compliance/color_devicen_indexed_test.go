@@ -7,7 +7,7 @@ import "testing"
 // sizes the lookup string, which holds one byte per base component per entry.
 func indexedOver(deviceN string, components int) string {
 	lookup := ""
-	for i := 0; i < components; i++ {
+	for range components {
 		lookup += "00"
 	}
 	return "[/Indexed " + deviceN + " 0 <" + lookup + ">]"

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"sort"
 	"strings"
 
@@ -208,10 +209,8 @@ func ScanOutputForTokens(
 
 // validateScanTokens refuses a token that would make the answer meaningless.
 func validateScanTokens(tokens []string) error {
-	for _, tok := range tokens {
-		if tok == "" {
-			return fmt.Errorf("%w: an empty token matches every object", ErrScanTokenEmpty)
-		}
+	if slices.Contains(tokens, "") {
+		return fmt.Errorf("%w: an empty token matches every object", ErrScanTokenEmpty)
 	}
 	return nil
 }

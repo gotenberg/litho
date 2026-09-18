@@ -62,13 +62,22 @@ func TestUA1CaptionKidPositions(t *testing.T) {
 		t16, t28, t40 int
 	}{
 		{"a Caption between two rows", capNode{"Table", []capNode{tr, caption, tr}}, "<< >>", 1, 0, 0},
-		{"a name mapped to Caption between two rows", capNode{"Table", []capNode{tr, {"MyCap", nil}, tr}},
-			"<< /MyCap /Caption >>", 1, 0, 0},
-		{"a name mapped to Table with a middle Caption", capNode{"MyTable", []capNode{tr, caption, tr}},
-			"<< /MyTable /Table >>", 1, 0, 0},
+		{
+			"a name mapped to Caption between two rows",
+			capNode{"Table", []capNode{tr, {"MyCap", nil}, tr}},
+			"<< /MyCap /Caption >>", 1, 0, 0,
+		},
+		{
+			"a name mapped to Table with a middle Caption",
+			capNode{"MyTable", []capNode{tr, caption, tr}},
+			"<< /MyTable /Table >>", 1, 0, 0,
+		},
 		{"two middle Captions", capNode{"Table", []capNode{tr, caption, caption, tr}}, "<< >>", 1, 0, 0},
-		{"a middle Caption inside a Div", capNode{"Table", []capNode{tr, {"Div", []capNode{caption}}, tr}},
-			"<< >>", 1, 0, 0},
+		{
+			"a middle Caption inside a Div",
+			capNode{"Table", []capNode{tr, {"Div", []capNode{caption}}, tr}},
+			"<< >>", 1, 0, 0,
+		},
 		{"a last Caption", capNode{"Table", []capNode{tr, tr, caption}}, "<< >>", 0, 0, 0},
 		{"a first Caption", capNode{"Table", []capNode{caption, tr}}, "<< >>", 0, 0, 0},
 		{"a middle Caption mapped to P", capNode{"Table", []capNode{tr, caption, tr}}, "<< /Caption /P >>", 0, 0, 0},

@@ -94,8 +94,12 @@ func TestDecodeImage_OneBitGrayPadsEachRow(t *testing.T) {
 		x, y int
 		want uint8
 	}{
-		{0, 0, 255}, {1, 0, 0}, {2, 0, 255},
-		{0, 1, 0}, {1, 1, 255}, {2, 1, 0},
+		{0, 0, 255},
+		{1, 0, 0},
+		{2, 0, 255},
+		{0, 1, 0},
+		{1, 1, 255},
+		{2, 1, 0},
 	} {
 		if got := grey(t, img, tc.x, tc.y); got != tc.want {
 			t.Errorf("pixel (%d,%d) = %d, want %d", tc.x, tc.y, got, tc.want)
@@ -126,8 +130,12 @@ func TestDecodeImage_OneBitHonoursAnInvertedDecodeArray(t *testing.T) {
 		x, y int
 		want uint8
 	}{
-		{0, 0, 0}, {1, 0, 255}, {2, 0, 0},
-		{0, 1, 255}, {1, 1, 0}, {2, 1, 255},
+		{0, 0, 0},
+		{1, 0, 255},
+		{2, 0, 0},
+		{0, 1, 255},
+		{1, 1, 0},
+		{2, 1, 255},
 	} {
 		if got := grey(t, img, tc.x, tc.y); got != tc.want {
 			t.Errorf("pixel (%d,%d) = %d, want %d under /Decode [1 0]", tc.x, tc.y, got, tc.want)

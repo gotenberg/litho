@@ -24,14 +24,22 @@ func TestTOCIRef_StandardTypeAndDescendants(t *testing.T) {
 		roleMap string
 		want    bool
 	}{
-		{"a name mapped to TOCI, without /Ref", "<< /S /MyTOCI /K [8 0 R] /P 7 0 R >>",
-			"<< /S /P /Pg 3 0 R /K [0] /P 12 0 R >>", "<< /MyTOCI /TOCI >>", true},
-		{"a TOCI without /Ref", "<< /S /TOCI /K [8 0 R] /P 7 0 R >>",
-			"<< /S /P /Pg 3 0 R /K [0] /P 12 0 R >>", "<< >>", true},
-		{"a TOCI whose child carries /Ref", "<< /S /TOCI /K [8 0 R] /P 7 0 R >>",
-			"<< /S /P /Pg 3 0 R /K [0] /P 12 0 R /Ref [6 0 R] >>", "<< >>", false},
-		{"a TOCI carrying /Ref", "<< /S /TOCI /K [8 0 R] /P 7 0 R /Ref [6 0 R] >>",
-			"<< /S /P /Pg 3 0 R /K [0] /P 12 0 R >>", "<< >>", false},
+		{
+			"a name mapped to TOCI, without /Ref", "<< /S /MyTOCI /K [8 0 R] /P 7 0 R >>",
+			"<< /S /P /Pg 3 0 R /K [0] /P 12 0 R >>", "<< /MyTOCI /TOCI >>", true,
+		},
+		{
+			"a TOCI without /Ref", "<< /S /TOCI /K [8 0 R] /P 7 0 R >>",
+			"<< /S /P /Pg 3 0 R /K [0] /P 12 0 R >>", "<< >>", true,
+		},
+		{
+			"a TOCI whose child carries /Ref", "<< /S /TOCI /K [8 0 R] /P 7 0 R >>",
+			"<< /S /P /Pg 3 0 R /K [0] /P 12 0 R /Ref [6 0 R] >>", "<< >>", false,
+		},
+		{
+			"a TOCI carrying /Ref", "<< /S /TOCI /K [8 0 R] /P 7 0 R /Ref [6 0 R] >>",
+			"<< /S /P /Pg 3 0 R /K [0] /P 12 0 R >>", "<< >>", false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

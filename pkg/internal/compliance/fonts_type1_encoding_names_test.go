@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -131,9 +132,7 @@ var type1BareVectorCases = []type1EncodingCase{
 // Type 1 font embedding program.
 func (c type1EncodingCase) objects(program type1WidthFont) []string {
 	widths := map[int]int{32: 250, 65: 722}
-	for code, w := range c.widths {
-		widths[code] = w
-	}
+	maps.Copy(widths, c.widths)
 	lastChar := slices.Max([]int{65, int(c.code)})
 	var arr strings.Builder
 	for code := c.firstChar; code <= lastChar; code++ {

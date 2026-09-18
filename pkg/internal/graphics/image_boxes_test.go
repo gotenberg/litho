@@ -58,8 +58,10 @@ func TestImageBoxes_RecordsPlacementWhenAsked(t *testing.T) {
 		t.Fatalf("ImageBoxes() = %v, want one box", boxes)
 	}
 	got := boxes[0]
-	want := ImageBox{Name: "Im1", MinX: 10, MinY: 20, MaxX: 110, MaxY: 70,
-		CTM: [6]float64{100, 0, 0, 50, 10, 20}}
+	want := ImageBox{
+		Name: "Im1", MinX: 10, MinY: 20, MaxX: 110, MaxY: 70,
+		CTM: [6]float64{100, 0, 0, 50, 10, 20},
+	}
 	if got != want {
 		t.Errorf("box = %+v, want %+v", got, want)
 	}
@@ -86,8 +88,10 @@ func TestImageBoxes_FlippedCTMReportsTheAreaCovered(t *testing.T) {
 	}
 	// The box cannot describe this placement: its origin is the box's top-right
 	// corner and both scales are negative, so the matrix has to be carried too.
-	want := ImageBox{Name: "Im1", MinX: 60, MinY: 170, MaxX: 100, MaxY: 200,
-		CTM: [6]float64{-40, 0, 0, -30, 100, 200}}
+	want := ImageBox{
+		Name: "Im1", MinX: 60, MinY: 170, MaxX: 100, MaxY: 200,
+		CTM: [6]float64{-40, 0, 0, -30, 100, 200},
+	}
 	if boxes[0] != want {
 		t.Errorf("box = %+v, want %+v", boxes[0], want)
 	}
@@ -112,8 +116,10 @@ func TestImageBoxes_InlineImageIsRecorded(t *testing.T) {
 	if len(boxes) != 1 {
 		t.Fatalf("ImageBoxes() = %v, want one box", boxes)
 	}
-	want := ImageBox{Name: InlineImageName, MinX: 5, MinY: 15, MaxX: 85, MaxY: 55,
-		CTM: [6]float64{80, 0, 0, 40, 5, 15}}
+	want := ImageBox{
+		Name: InlineImageName, MinX: 5, MinY: 15, MaxX: 85, MaxY: 55,
+		CTM: [6]float64{80, 0, 0, 40, 5, 15},
+	}
 	if boxes[0] != want {
 		t.Errorf("box = %+v, want %+v", boxes[0], want)
 	}

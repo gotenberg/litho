@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"maps"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -29,9 +30,7 @@ func TestCellSpanFromAttributeClass(t *testing.T) {
 
 	cell := func(entries ast.PdfDict) ast.PdfDict {
 		d := ast.PdfDict{"S": ast.PdfName("TH")}
-		for k, v := range entries {
-			d[k] = v
-		}
+		maps.Copy(d, entries)
 		return d
 	}
 
