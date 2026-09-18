@@ -105,9 +105,17 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   `RedactPageRegions` returns a `RedactReport` whose `RemovedText` holds one string per removed
   show-text operator — the run it drew, not its glyphs, because one extracted element is a single
   glyph and handing single letters to a scan matches nearly every object in a real file. Runs that
-  decode to nothing are dropped, for the same reason an empty token is refused. One honest limit: the
-  scan reads a parsed document, while a redaction's output is queued in the allocator, so proving a
-  written document clean means re-reading the output and scanning that. **The structure tree is now scrubbed**, which is the
+  decode to nothing are dropped, for the same reason an empty token is refused. **The scan now answers
+  for the output, not only for the input.** `ScanForTokens` reads the document as parsed, which is the
+  honest question for the bytes on disk and for an incremental update, since that appends and leaves
+  every superseded object in the file. `ScanOutputForTokens` asks instead what a full rewrite would
+  write: it resolves every reference through the allocator first, so it reads the replacement a
+  redaction queued rather than the original, and it reaches outward from the roots `FullRewrite`
+  copies (the catalog, and the trailer `/Info`, which nothing in the catalog graph reaches) rather
+  than sweeping the object table. Reaching outward is what drops the page's original content stream
+  from the answer: an excision leaves it referenced by nothing, and a full rewrite never copies it, so
+  reporting it would name a leak the output does not have. The two are not interchangeable, and which
+  one is honest depends on how the caller writes the file. **The structure tree is now scrubbed**, which is the
   first vector past the page itself and the one that matters most, since a tagged PDF keeps a parallel
   copy of its text in `/ActualText`, `/Alt` and `/E` and tagged PDFs are the common case. The page's
   `/StructParents` keys the `/ParentTree` entry, which for a page is an array indexed by MCID

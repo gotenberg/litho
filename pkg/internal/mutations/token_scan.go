@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -27,6 +28,16 @@ const maxScannedStreamSize = content.MaxPageContentSize
 // recursion. It matches maxPageTreeDepth in the compliance walk for the same
 // reason.
 const maxScanDepth = 100
+
+// maxScanRefDepth bounds how long a chain of indirect references an output scan
+// follows. Anti-DoS guard, not spec-mandated: the visited set already stops a
+// cycle, so what this bounds is Go stack depth on a crafted file that chains
+// references linearly rather than circularly. It is counted separately from
+// maxScanDepth on purpose. Sharing one budget would let an ordinary page tree
+// spend what a deeply tagged document's structure tree needs, and a structure
+// the walk gave up on is reported unreadable, which fails a caller closed over
+// a document that was never malformed.
+const maxScanRefDepth = 100
 
 // TokenHit records one token still present in the document, and where.
 type TokenHit struct {
@@ -64,6 +75,12 @@ func (r ScanResult) Clean() bool {
 // places a redaction happens to know about, which is the point: it catches the
 // vector nobody enumerated.
 //
+// It reads the document as parsed, so it answers for the bytes on disk and for
+// an incremental update, which appends and leaves every superseded object in
+// the file. It does not see edits queued in an allocator, and it reports
+// objects a full rewrite would drop as unreferenced. Ask
+// [ScanOutputForTokens] what a full rewrite would write.
+//
 // Strings are compared after [document.DecodePdfString], so a token written as
 // UTF-16 matches the same as one written in PDFDocEncoding. Comparison is exact
 // and case-sensitive: a scan is a check on litho's own removal, not a search
@@ -74,17 +91,16 @@ func (r ScanResult) Clean() bool {
 // (arXiv 2206.02285), and a token this finds may be an innocent coincidence in
 // unrelated data.
 func ScanForTokens(ctx context.Context, doc *document.Document, tokens []string) (ScanResult, error) {
-	for _, tok := range tokens {
-		if tok == "" {
-			return ScanResult{}, fmt.Errorf("%w: an empty token matches every object", ErrScanTokenEmpty)
-		}
+	if err := validateScanTokens(tokens); err != nil {
+		return ScanResult{}, err
 	}
 	if len(tokens) == 0 {
 		return ScanResult{}, nil
 	}
 
-	hits := make(map[TokenHit]bool)
-	unreadable := make(map[int]bool)
+	// No allocator and no reference following: this sweep reaches every object
+	// in the file on its own.
+	w := newScanWalk(doc, nil, tokens, false)
 
 	count := 0
 	for objNum, entry := range doc.XRefEntriesSnapshot() {
@@ -103,57 +119,226 @@ func ScanForTokens(ctx context.Context, doc *document.Document, tokens []string)
 		if err != nil {
 			// An object litho cannot parse is one it cannot clear either, so it
 			// counts as unread rather than as clean.
-			unreadable[objNum] = true
+			w.unreadable[objNum] = true
 			doc.Logger.Debug("token scan: object could not be resolved",
 				slog.Int("object", objNum), slog.Any("err", err))
 			continue
 		}
-		scanObject(ctx, doc, objNum, obj, tokens, 0, hits, unreadable)
+		w.walk(ctx, objNum, obj, 0)
 	}
 
-	return buildScanResult(hits, unreadable), nil
+	return w.result(), nil
 }
 
-// scanObject walks one object's strings and stream data. Indirect references
-// are deliberately not followed: the caller's sweep visits every object in the
-// file exactly once, so following them would rescan objects and could loop.
-func scanObject(
+// ScanOutputForTokens reports every place one of tokens would still appear in
+// the document [FullRewrite] writes from doc and the edits queued in alloc.
+//
+// A redaction queues its replacements in an allocator and leaves the document
+// it read untouched, so [ScanForTokens] run straight afterwards answers about
+// the wrong bytes twice over: it reports the original content stream, which the
+// output no longer references, and it never sees the replacement, which exists
+// only in the allocator. This resolves every reference through alloc first and
+// reaches outward from the roots [FullRewrite] copies, so what it reports is
+// what the rewritten file would hold.
+//
+// Reaching outward from the roots is also what drops an unreferenced object
+// from the answer. An excision leaves the page's original content stream in the
+// document, referenced by nothing; a full rewrite never copies it, so reporting
+// it would name a leak the output does not have. That reasoning holds only for
+// a full rewrite: an incremental update keeps every superseded object in the
+// file, and a caller writing one has to ask [ScanForTokens] instead.
+//
+// A nil alloc scans the document as a full rewrite of it would be written, with
+// no edits applied.
+//
+// The caveats on [ScanForTokens] hold here too: it is a check, not a proof.
+func ScanOutputForTokens(
 	ctx context.Context,
+	alloc *writer.ObjAllocator,
 	doc *document.Document,
-	objNum int,
-	obj ast.PdfObject,
 	tokens []string,
-	depth int,
-	hits map[TokenHit]bool,
-	unreadable map[int]bool,
-) {
+) (ScanResult, error) {
+	if err := validateScanTokens(tokens); err != nil {
+		return ScanResult{}, err
+	}
+	if len(tokens) == 0 {
+		return ScanResult{}, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return ScanResult{}, err
+	}
+
+	w := newScanWalk(doc, alloc, tokens, true)
+
+	// Mirrors [FullRewrite]: the trailer /Root when it resolves to a real
+	// catalog, and the catalog the reader recovers when it does not. Reaching
+	// from a root the rewrite would not use answers about a file litho never
+	// writes.
+	catalogRef, hasRef := CatalogRef(ctx, doc)
+	if hasRef && catalogRefResolves(ctx, doc, catalogRef) {
+		w.follow(ctx, catalogRef)
+	} else {
+		catalog, err := document.ResolveCatalog(ctx, doc)
+		if err != nil {
+			return ScanResult{}, fmt.Errorf("resolving catalog for the scan: %w", err)
+		}
+		if catalog == nil || catalog.Dict == nil {
+			return ScanResult{}, ErrCatalogUnreadable
+		}
+		// Reported against the object number the trailer named, or against zero
+		// when it named none. Zero is not a real object number: ISO 32000-1,
+		// 7.5.4 reserves cross-reference entry zero for the head of the free
+		// list, which is why [writer.ObjAllocator.AllocAt] refuses it. It reads
+		// here as "no object number", never as object zero.
+		w.walk(ctx, catalogRef.ObjectNum, catalog.Dict, 0)
+	}
+
+	// The rewrite copies the trailer's /Info, and /Info is a documented home for
+	// a copy of page text, so it is a root in its own right: nothing in the
+	// catalog graph reaches it.
+	if infoRef, ok := doc.Index.Trailer["Info"].(ast.PdfIndirectRef); ok {
+		w.follow(ctx, infoRef)
+	}
+
+	if w.err != nil {
+		return ScanResult{}, w.err
+	}
+	return w.result(), nil
+}
+
+// validateScanTokens refuses a token that would make the answer meaningless.
+func validateScanTokens(tokens []string) error {
+	for _, tok := range tokens {
+		if tok == "" {
+			return fmt.Errorf("%w: an empty token matches every object", ErrScanTokenEmpty)
+		}
+	}
+	return nil
+}
+
+// scanWalk carries the state of one scan.
+type scanWalk struct {
+	doc    *document.Document
+	alloc  *writer.ObjAllocator
+	tokens []string
+
+	hits       map[TokenHit]bool
+	unreadable map[int]bool
+
+	// visited is non-nil only on a walk that follows indirect references, and
+	// holds every object number already entered. The xref sweep leaves it nil:
+	// it reaches every object itself, so following a reference there would
+	// rescan objects and could loop.
+	visited  map[int]bool
+	refDepth int
+
+	// err holds a cancellation seen mid-walk. The walk cannot return one, and
+	// abandoning it silently would hand back a short result that reads as a
+	// cleaner document than was examined.
+	err error
+}
+
+func newScanWalk(doc *document.Document, alloc *writer.ObjAllocator, tokens []string, follow bool) *scanWalk {
+	w := &scanWalk{
+		doc:        doc,
+		alloc:      alloc,
+		tokens:     tokens,
+		hits:       make(map[TokenHit]bool),
+		unreadable: make(map[int]bool),
+	}
+	if follow {
+		w.visited = make(map[int]bool)
+	}
+	return w
+}
+
+func (w *scanWalk) result() ScanResult {
+	return buildScanResult(w.hits, w.unreadable)
+}
+
+// walk scans one object's strings and stream data. depth bounds nesting inside
+// this object; a reference leaves it, and the object it names starts afresh
+// bounded by refDepth instead.
+func (w *scanWalk) walk(ctx context.Context, objNum int, obj ast.PdfObject, depth int) {
+	if w.err != nil {
+		return
+	}
 	if depth > maxScanDepth {
-		unreadable[objNum] = true
+		w.unreadable[objNum] = true
 		return
 	}
 
 	switch v := obj.(type) {
 	case ast.PdfString:
 		text := document.DecodePdfString(v)
-		for _, tok := range tokens {
+		for _, tok := range w.tokens {
 			if strings.Contains(text, tok) {
-				hits[TokenHit{ObjectNum: objNum, Token: tok, Where: "string"}] = true
+				w.hits[TokenHit{ObjectNum: objNum, Token: tok, Where: "string"}] = true
 			}
 		}
 	case ast.PdfArray:
 		for _, item := range v {
-			scanObject(ctx, doc, objNum, item, tokens, depth+1, hits, unreadable)
+			w.walk(ctx, objNum, item, depth+1)
 		}
 	case ast.PdfDict:
 		// Keys are names, not text: a /Title key never carries a redacted word,
 		// its value does.
 		for _, item := range v {
-			scanObject(ctx, doc, objNum, item, tokens, depth+1, hits, unreadable)
+			w.walk(ctx, objNum, item, depth+1)
 		}
 	case ast.PdfStream:
-		scanObject(ctx, doc, objNum, v.Dict, tokens, depth+1, hits, unreadable)
-		scanStreamData(ctx, doc, objNum, v, tokens, hits, unreadable)
+		w.walk(ctx, objNum, v.Dict, depth+1)
+		w.scanStreamData(ctx, objNum, v)
+	case ast.PdfIndirectRef:
+		w.follow(ctx, v)
 	}
+}
+
+// follow visits the object a reference names, once, on a walk that reaches
+// outward from a root. It does nothing on the xref sweep, which visits every
+// object itself.
+func (w *scanWalk) follow(ctx context.Context, ref ast.PdfIndirectRef) {
+	if w.visited == nil || w.visited[ref.ObjectNum] || w.err != nil {
+		return
+	}
+	if w.refDepth >= maxScanRefDepth {
+		w.unreadable[ref.ObjectNum] = true
+		return
+	}
+	if len(w.visited)%100 == 0 { //nolint:mnd // amortized cancellation check, matching the sweep above
+		if err := ctx.Err(); err != nil {
+			w.err = err
+			return
+		}
+	}
+	w.visited[ref.ObjectNum] = true
+
+	obj, ok := w.resolve(ctx, ref)
+	if !ok {
+		w.unreadable[ref.ObjectNum] = true
+		return
+	}
+
+	w.refDepth++
+	w.walk(ctx, ref.ObjectNum, obj, 0)
+	w.refDepth--
+}
+
+// resolve returns the object the output would hold at this reference: the
+// version queued in the allocator when there is one, the document's otherwise.
+func (w *scanWalk) resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.PdfObject, bool) {
+	if w.alloc != nil {
+		if obj, ok := w.alloc.Pending()[ref.ObjectNum]; ok {
+			return obj, true
+		}
+	}
+	obj, err := document.ResolveObject(ctx, w.doc, ref)
+	if err != nil {
+		w.doc.Logger.Debug("token scan: object could not be resolved",
+			slog.Int("object", ref.ObjectNum), slog.Any("err", err))
+		return nil, false
+	}
+	return obj, true
 }
 
 // scanStreamData decodes one stream and looks for the tokens in its bytes.
@@ -161,45 +346,37 @@ func scanObject(
 // Decoded rather than raw, because the copy that matters is the one a reader
 // sees: a redacted word inside a Flate-compressed structure tree or appearance
 // stream is invisible to a scan of the stored bytes.
-func scanStreamData(
-	ctx context.Context,
-	doc *document.Document,
-	objNum int,
-	stream ast.PdfStream,
-	tokens []string,
-	hits map[TokenHit]bool,
-	unreadable map[int]bool,
-) {
-	rc, err := doc.NewStreamReader(ctx, stream)
+func (w *scanWalk) scanStreamData(ctx context.Context, objNum int, stream ast.PdfStream) {
+	rc, err := w.doc.NewStreamReader(ctx, stream)
 	if err != nil {
-		unreadable[objNum] = true
-		doc.Logger.Debug("token scan: stream could not be opened",
+		w.unreadable[objNum] = true
+		w.doc.Logger.Debug("token scan: stream could not be opened",
 			slog.Int("object", objNum), slog.Any("err", err))
 		return
 	}
 	data, err := io.ReadAll(io.LimitReader(rc, int64(maxScannedStreamSize)+1))
 	if closeErr := rc.Close(); closeErr != nil {
-		doc.Logger.Debug("token scan: closing stream reader",
+		w.doc.Logger.Debug("token scan: closing stream reader",
 			slog.Int("object", objNum), slog.Any("err", closeErr))
 	}
 	if err != nil {
-		unreadable[objNum] = true
-		doc.Logger.Debug("token scan: stream could not be decoded",
+		w.unreadable[objNum] = true
+		w.doc.Logger.Debug("token scan: stream could not be decoded",
 			slog.Int("object", objNum), slog.Any("err", err))
 		return
 	}
 	if len(data) > maxScannedStreamSize {
 		// Read short of the end, so the rest of it is unexamined.
-		unreadable[objNum] = true
-		doc.Logger.Debug("token scan: stream exceeds the scan cap",
+		w.unreadable[objNum] = true
+		w.doc.Logger.Debug("token scan: stream exceeds the scan cap",
 			slog.Int("object", objNum), slog.Int("cap", maxScannedStreamSize))
 		return
 	}
 
 	text := string(data)
-	for _, tok := range tokens {
+	for _, tok := range w.tokens {
 		if strings.Contains(text, tok) {
-			hits[TokenHit{ObjectNum: objNum, Token: tok, Where: "stream"}] = true
+			w.hits[TokenHit{ObjectNum: objNum, Token: tok, Where: "stream"}] = true
 		}
 	}
 }

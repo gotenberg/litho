@@ -21,8 +21,13 @@ import (
 //
 // It reports what it removed. Clearing a page is not clearing a document: the
 // same text survives in the structure tree, annotation values, outlines and
-// metadata, so a caller hands [RedactReport.RemovedText] to [ScanForTokens] to
-// find the copies this did not touch.
+// metadata, so a caller hands [RedactReport.RemovedText] to a scan to find the
+// copies this did not touch. Which scan depends on how the output is written.
+// [ScanForTokens] reads the document as parsed, which answers for the bytes on
+// disk and for an incremental update, since that appends and leaves every
+// superseded object in the file. [ScanOutputForTokens] resolves through this
+// allocator and reaches outward from the roots a rewrite copies, so it answers
+// for the file [FullRewrite] would write.
 //
 // Selection is geometric and visibility-independent: a glyph counts when the
 // box it paints meets a region, whatever its colour, its text rendering mode,
