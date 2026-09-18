@@ -242,3 +242,42 @@ func TestDetectUnappliedRedactions_BoxContainsOrigin(t *testing.T) {
 		}
 	}
 }
+
+func TestZoneContains(t *testing.T) {
+	outer := ZoneFromRect([4]float64{10, 10, 100, 100})
+
+	cases := []struct {
+		name  string
+		inner [4]float64
+		want  bool
+	}{
+		{"wholly inside", [4]float64{20, 20, 50, 50}, true},
+		{"identical, edges included", [4]float64{10, 10, 100, 100}, true},
+		{"flush against one edge", [4]float64{10, 20, 50, 50}, true},
+		{"reaches past the right", [4]float64{50, 20, 120, 50}, false},
+		{"reaches below the bottom", [4]float64{20, 5, 50, 50}, false},
+		{"encloses the outer box", [4]float64{0, 0, 200, 200}, false},
+		{"disjoint", [4]float64{200, 200, 300, 300}, false},
+	}
+	for _, tc := range cases {
+		if got := ZoneContains(outer, ZoneFromRect(tc.inner)); got != tc.want {
+			t.Errorf("%s: ZoneContains = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestZoneContains_IsStricterThanOverlap(t *testing.T) {
+	// The distinction removal depends on. A straddling mark overlaps the
+	// region, which is what selects it, and is not contained by it, which is
+	// what refuses it. If the two ever agreed, a path reaching outside the
+	// region would be excised along with everything else it draws.
+	region := ZoneFromRect([4]float64{10, 10, 100, 100})
+	straddling := ZoneFromRect([4]float64{50, 50, 150, 150})
+
+	if !ZonesOverlap(region, straddling) {
+		t.Error("a straddling box must overlap: that is what selects it")
+	}
+	if ZoneContains(region, straddling) {
+		t.Error("a straddling box must not be contained: that is what refuses it")
+	}
+}

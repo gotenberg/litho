@@ -161,3 +161,13 @@ func ZonesOverlap(a, b Zone) bool {
 	return a.minX <= b.maxX && a.maxX >= b.minX &&
 		a.minY <= b.maxY && a.maxY >= b.minY
 }
+
+// ZoneContains reports whether outer covers all of inner, edges included.
+//
+// Overlap is the right test for finding what a region selects, and the wrong
+// one for deciding what may be removed: content that comes out whole has to sit
+// wholly inside, or removing it takes marks the caller never selected.
+func ZoneContains(outer, inner Zone) bool {
+	return inner.minX >= outer.minX && inner.maxX <= outer.maxX &&
+		inner.minY >= outer.minY && inner.maxY <= outer.maxY
+}

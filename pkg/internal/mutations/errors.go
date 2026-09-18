@@ -72,13 +72,45 @@ var ErrRegionCoversAnImage = errors.New("region covers an image")
 var ErrXObjectUnresolved = errors.New("page invokes an XObject that could not be resolved")
 
 // ErrRegionInFormXObject reports a region that selects content a form XObject
-// draws.
+// draws, whether glyphs or a painted path.
 //
-// The glyphs belong to the form's own content stream, so no byte range in the
-// page's stream addresses them. Removing the Do that invoked the form would
+// The content belongs to the form's own content stream, so no byte range in the
+// page's stream addresses it. Removing the Do that invoked the form would
 // erase everything else the form draws, so the mutation reports the region
 // rather than reaching for the only span it could name.
 var ErrRegionInFormXObject = errors.New("region selects content drawn by a form XObject")
+
+// ErrPathStraddlesRegion reports a painted path that lies only partly inside
+// the region being cleared.
+//
+// Removing a path takes its whole run, from the first construction operator
+// through the paint operator that ended it, because the construction operators
+// left behind would merge into the next path and be painted by its operator
+// instead. A path reaching outside the region would therefore lose ink the
+// caller never selected. Refusing states the problem rather than clearing more
+// of the page than was asked.
+var ErrPathStraddlesRegion = errors.New("painted path lies only partly inside the region")
+
+// ErrRegionCoversAStrokedPath reports a region meeting a path painted by a
+// stroking operator.
+//
+// A stroke is centred on the path and spreads half the line width to either
+// side (ISO 32000-1, 8.4.3.2), so its ink covers more than the path geometry
+// the machine records. A stroked path whose recorded bounds sit inside the
+// region can still mark the page outside it, which makes containment
+// unprovable from the bounds alone. Refusing beats removing ink outside the
+// region; inflating the bounds by the line width in force would lift this.
+var ErrRegionCoversAStrokedPath = errors.New("region covers a stroked path")
+
+// ErrRegionCoversAClippedPath reports a region meeting a path that a W or W*
+// took part in.
+//
+// Such a path does double duty: it paints, and it narrows the clipping region
+// for everything drawn after it (ISO 32000-1, 8.5.4). Removing it would widen
+// the clip and change how later content renders, which is a change well
+// outside the region the caller named. Refusing beats editing the rest of the
+// page as a side effect of clearing part of it.
+var ErrRegionCoversAClippedPath = errors.New("region covers a path that also clips")
 
 // ErrSpansOverlap reports two byte spans that cover some of the same bytes.
 //

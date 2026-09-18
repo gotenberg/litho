@@ -28,6 +28,10 @@ import (
 //   - A region covering only part of what one operator draws reports
 //     [ErrPartialOperatorCoverage]. Excision deletes byte ranges and cannot
 //     rewrite an operator, so removing that one would take the rest of its text.
+//   - A painted path reaching outside the region reports
+//     [ErrPathStraddlesRegion], one painted by a stroking operator reports
+//     [ErrRegionCoversAStrokedPath], and one a W or W* took part in reports
+//     [ErrRegionCoversAClippedPath].
 //   - A region selecting content a form XObject draws reports
 //     [ErrRegionInFormXObject], whose bytes are in the form's stream.
 //   - A region meeting an image reports [ErrRegionCoversAnImage]. Removal takes
@@ -39,12 +43,15 @@ import (
 // Refusing beats removing more than was asked, and beats reporting success over
 // content that is still in the file.
 //
-// This removes text. Vector paths and the document-wide copies of page text
-// (the structure tree, annotation values, outlines, metadata) are still
-// untouched, so the result is not a redacted document on its own. An image is
-// no longer stepped over silently: a region meeting one is refused, because
-// stripping the text off a picture and leaving the picture reads as success
-// while the content is still there.
+// This removes text and the filled paths a region covers. A stroked or
+// clipping path is refused rather than removed, because a stroke's ink spreads
+// past the geometry the machine records and a clipping path also constrains
+// content outside the region. The document-wide copies of page text (the
+// structure tree, annotation values, outlines, metadata) are still untouched,
+// so the result is not a redacted document on its own. An image is not stepped
+// over silently either: a region meeting one is refused, because stripping the
+// text off a picture and leaving the picture reads as success while the content
+// is still there.
 func RedactPageRegions(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -81,6 +88,9 @@ func RedactPageRegions(
 	// Where images land decides whether this can proceed at all: one inside the
 	// region is content that has to be accounted for, not stepped over.
 	machine.RecordImageBoxes = true
+	// A filled path inside the region is content to remove, and a stroked or
+	// clipping one is content to refuse over. Both need its geometry.
+	machine.RecordPathBoxes = true
 
 	elements, origins, err := typography.ExtractElementsWithOrigins(ctx, doc, machine, page, ops)
 	if err != nil {
@@ -107,6 +117,11 @@ func RedactPageRegions(
 	// be placed is one that cannot be ruled out of the region either.
 	if n := machine.UnresolvedXObjects(); n > 0 {
 		return fmt.Errorf("%w: %d on this page", ErrXObjectUnresolved, n)
+	}
+
+	vectorSpans, err := pathSpans(machine.PathBoxes(), ops, ranges, zones)
+	if err != nil {
+		return err
 	}
 
 	// Tally each operator's glyphs, because an operator leaves whole or stays
@@ -154,7 +169,7 @@ func RedactPageRegions(
 	}
 	sort.Ints(selected)
 
-	spans := make([]content.ByteRange, 0, len(selected))
+	spans := make([]content.ByteRange, 0, len(selected)+len(vectorSpans))
 	for _, origin := range selected {
 		if c := tally[origin]; c.outside > 0 {
 			return fmt.Errorf("%w: operation %d draws %d glyphs inside and %d outside",
@@ -162,11 +177,90 @@ func RedactPageRegions(
 		}
 		spans = append(spans, ranges[origin])
 	}
+	// ExcisePageSpans sorts and rejects overlaps, so the two sets need no
+	// ordering here. A path run that somehow enclosed a show-text operator
+	// would be caught there as an overlap rather than silently merged.
+	spans = append(spans, vectorSpans...)
 	if len(spans) == 0 {
 		return nil
 	}
 
 	return ExcisePageSpans(ctx, alloc, doc, page, spans)
+}
+
+// pathSpans returns the byte ranges of the painted paths the zones cover, and
+// refuses any path it cannot remove exactly.
+//
+// A path is removed as a whole run, from its first construction operator
+// through the paint operator that ended it, so it qualifies only when it sits
+// wholly inside one region. Overlapping is what selects it; containment is what
+// permits removing it.
+func pathSpans(boxes []graphics.PathBox, ops []content.Operation, ranges []content.ByteRange, zones []heuristics.Zone) ([]content.ByteRange, error) {
+	spans := make([]content.ByteRange, 0, len(boxes))
+
+	for _, box := range boxes {
+		painted := heuristics.ZoneFromRect([4]float64{box.MinX, box.MinY, box.MaxX, box.MaxY})
+
+		selected := false
+		for _, z := range zones {
+			if heuristics.ZonesOverlap(painted, z) {
+				selected = true
+				break
+			}
+		}
+		if !selected {
+			continue
+		}
+
+		// The operators that drew it are in the form's own stream, where no
+		// offset into this one reaches them.
+		if box.FormDepth > 0 {
+			return nil, fmt.Errorf("%w: a painted path", ErrRegionInFormXObject)
+		}
+		if box.Clipped {
+			return nil, fmt.Errorf("%w: operations %d to %d", ErrRegionCoversAClippedPath, box.StartOp, box.EndOp)
+		}
+		if box.StartOp < 0 || box.StartOp > box.EndOp || box.EndOp >= len(ops) {
+			return nil, fmt.Errorf("painted path reports operations %d to %d, which is not a run of the %d parsed",
+				box.StartOp, box.EndOp, len(ops))
+		}
+		if pathPaintStrokes(ops[box.EndOp].Operator) {
+			return nil, fmt.Errorf("%w: operation %d paints with %q",
+				ErrRegionCoversAStrokedPath, box.EndOp, ops[box.EndOp].Operator)
+		}
+
+		contained := false
+		for _, z := range zones {
+			if heuristics.ZoneContains(z, painted) {
+				contained = true
+				break
+			}
+		}
+		if !contained {
+			return nil, fmt.Errorf("%w: operations %d to %d", ErrPathStraddlesRegion, box.StartOp, box.EndOp)
+		}
+
+		spans = append(spans, content.ByteRange{
+			Start: ranges[box.StartOp].Start,
+			End:   ranges[box.EndOp].End,
+		})
+	}
+
+	return spans, nil
+}
+
+// pathPaintStrokes reports whether a path-painting operator strokes.
+//
+// Per ISO 32000-1, 8.5.3.2 the stroking painters are S and s, plus B, B*, b and
+// b*, which fill and stroke in one operation. Only f, F and f* paint by filling
+// alone, and only those keep their ink inside the path geometry the machine
+// records.
+func pathPaintStrokes(operator string) bool {
+	switch operator {
+	case "S", "s", "B", "B*", "b", "b*":
+		return true
+	}
+	return false
 }
 
 // pageBox returns the page's visible region for the graphics machine,
