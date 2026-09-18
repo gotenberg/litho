@@ -673,6 +673,24 @@ func blendModeIsTransparency(bm string) bool {
 // drawn narrows the scan to the names the content stream invokes; see
 // [drawnResources]. A nil drawn admits every name, for callers that hold no
 // content stream to consult.
+// imageSoftMasked reports whether an image XObject carries a soft mask.
+//
+// Per ISO 32000-1, Table 89, the /SMask entry of an image is either a stream or
+// the name None, and None states that the image has no soft mask. Testing only
+// that the key is present and not null therefore read an explicit /SMask /None
+// as transparency and demanded a blending colour space the page does not need:
+// pdfjs issue14814.pdf draws one such image on a page carrying no /Group under
+// no OutputIntent, and veraPDF reports nothing there. Two fixtures differing
+// only in that value settle it. The ExtGState paths already draw the same
+// distinction inline.
+func imageSoftMasked(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
+	if !nonNullKeyPresent(ctx, doc, dict, "SMask") {
+		return false
+	}
+	name, _ := document.ResolveName(ctx, doc, dict["SMask"])
+	return name != "None"
+}
+
 func resourcesUseTransparency(ctx context.Context, doc *document.Document, res ast.PdfDict, depth int, visited map[string]bool, drawn *drawnResources) bool {
 	if res == nil || depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return false
@@ -724,7 +742,7 @@ func resourcesUseTransparency(ctx context.Context, doc *document.Document, res a
 		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
 		switch subtype {
 		case "Image":
-			if nonNullKeyPresent(ctx, doc, stream.Dict, "SMask") {
+			if imageSoftMasked(ctx, doc, stream.Dict) {
 				return true
 			}
 			// A JPXDecode image can carry its opacity channel inside the JPEG2000
@@ -1128,7 +1146,7 @@ func type3CharProcTransparent(ctx context.Context, doc *document.Document, charP
 				// 32000-1 §11.6.5): pdfjs issue10717.pdf keeps its /SMask
 				// images in the Type3 font's own /Resources, where only this
 				// walk reaches them.
-				if nonNullKeyPresent(ctx, doc, stream.Dict, "SMask") {
+				if imageSoftMasked(ctx, doc, stream.Dict) {
 					return true
 				}
 				if document.Float(stream.Dict["SMaskInData"]) > 0 {
