@@ -34,6 +34,11 @@ func FuzzCFF(f *testing.F) {
 		}
 		ctx := context.Background()
 		_ = ExtractEncoding(data)
+		// PredefinedEncodingNames is a separate entry point from ExtractEncoding
+		// above: it returns the whole predefined table without intersecting it
+		// against the charset. No other function in this package calls it, so
+		// nothing else in this target reaches it.
+		_ = PredefinedEncodingNames(data)
 		_, _ = GlyphToUnicode(ctx, data)
 		_, _ = GlyphNames(ctx, data)
 		_, _ = ValidCIDs(data)
