@@ -101,6 +101,35 @@ type Machine struct {
 	RecordImageBoxes   bool
 	imageBoxes         []ImageBox
 	unresolvedXObjects int
+	// RecordPathBoxes makes the machine remember where each painted path
+	// covers. Off by default for the same reason as [Machine.RecordImageBoxes]:
+	// the common caller extracts text and would pay for geometry it never
+	// reads. See [Machine.PathBoxes].
+	RecordPathBoxes bool
+	pathBoxes       []PathBox
+	// FormDepth is the nesting level of the content stream being executed: 0 for
+	// the page's own, one deeper per form XObject a caller recurses into. The
+	// machine cannot know this by itself, because a form's operators arrive
+	// through the same Execute calls as the page's; the caller driving the walk
+	// sets it. Recorded geometry carries it so a caller can tell a mark the page
+	// made from one a form made, whose bytes live in another stream.
+	FormDepth int
+	// OpIndex is the position in the caller's operation slice of the operator
+	// now executing. The machine cannot know it for the same reason as
+	// [Machine.FormDepth]: operators arrive one at a time with no index
+	// attached, so the caller driving the walk sets it. Recorded geometry
+	// carries it, which is what lets a caller map a mark back to the operator
+	// that made it instead of re-deriving the correspondence by counting.
+	OpIndex int
+	// pathStartOp is the OpIndex of the first construction operator of the path
+	// being built. Bounds alone do not say which bytes drew them, and removing a
+	// paint operator without the construction operators that fed it would leave
+	// the path behind to merge into the next one.
+	pathStartOp int
+	// pathClipped records whether a W or W* took part in the path being built.
+	// Such a path both paints and narrows the clip for everything after it, so a
+	// caller removing it would change how later content renders.
+	pathClipped bool
 }
 
 // NewMachine initializes a new graphics state machine with the default state.

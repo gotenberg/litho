@@ -630,6 +630,14 @@ func handleStrokeColorInCurrentSpace(_ context.Context, _ *Machine, state *State
 // the machine's current bounding box to include the resulting page-space
 // point. Shared by m, l, c, v, y, and re.
 func (m *Machine) updatePathBounds(state *State, x, y float64) {
+	// The first point of a path is the one moment its start is visible: the
+	// sentinel is still in place, and the comparisons below tighten it away.
+	// Every construction operator funnels through here, so this catches the
+	// start whichever one begins the path.
+	if m.CurrentPath == emptyBoundingBox {
+		m.pathStartOp = m.OpIndex
+	}
+
 	px := x*state.CTM[0] + y*state.CTM[2] + state.CTM[4]
 	py := x*state.CTM[1] + y*state.CTM[3] + state.CTM[5]
 	if px < m.CurrentPath.MinX {
@@ -702,7 +710,13 @@ func handlePathClose(_ context.Context, _ *Machine, _ *State, _ content.Operatio
 }
 
 func handlePathEndNoPaint(_ context.Context, m *Machine, _ *State, _ content.Operation) {
+	// An n paints nothing, so it records no box. It still ends the path, and
+	// the clip flag and start offset must not outlive it: W n is the ordinary
+	// way to set a clip, and leaving either behind would attribute them to the
+	// next path and mark it unremovable.
 	m.CurrentPath = emptyBoundingBox
+	m.pathStartOp = 0
+	m.pathClipped = false
 }
 
 func handleClipPath(_ context.Context, m *Machine, state *State, _ content.Operation) {
@@ -711,6 +725,9 @@ func handleClipPath(_ context.Context, m *Machine, state *State, _ content.Opera
 	// applies: the flag records that the page asked for one, which is what
 	// separates this from the page box every state starts with.
 	state.ClipApplied = true
+	// The path now does double duty. If a paint operator ends it, it both marks
+	// the page and narrows the clip, which is what makes it unsafe to remove.
+	m.pathClipped = true
 
 	// Intersect the current clipping path with the current path bounds.
 	// Per PDF 32000 §8.5.4, W/W* marks the path for clipping but does
@@ -730,9 +747,59 @@ func handleClipPath(_ context.Context, m *Machine, state *State, _ content.Opera
 	}
 }
 
+// PathBox is the page-space box a painted path covers, together with the
+// operators that drew it.
+type PathBox struct {
+	MinX, MinY, MaxX, MaxY float64
+	// FormDepth is 0 for a path the page's own content stream painted. Deeper
+	// values mean a form XObject drew it, so its operators are in the form's
+	// stream and no byte range in the page's addresses them.
+	FormDepth int
+	// StartOp and EndOp bracket the operators that drew the path, from its first
+	// construction operator through the paint operator that ended it, both
+	// inclusive. A caller removing the path has to take the whole run: dropping
+	// the paint operator alone would leave the construction operators behind to
+	// merge into the next path, which the following paint operator would then
+	// draw. Removing a path would add one.
+	StartOp, EndOp int
+	// Clipped reports that a W or W* took part in the path, so it both paints
+	// and narrows the clipping region for everything after it. Removing such a
+	// path would widen the clip and change how later content renders.
+	Clipped bool
+}
+
 func handlePathPaint(_ context.Context, m *Machine, _ *State, _ content.Operation) {
+	// Record before the reset: this is the one moment the finished path's bounds
+	// are known, and the next line is what discards them. A paint operator with
+	// no path constructed marks nothing, so it is not a box.
+	if m.RecordPathBoxes && m.CurrentPath != emptyBoundingBox {
+		m.pathBoxes = append(m.pathBoxes, PathBox{
+			MinX:      m.CurrentPath.MinX,
+			MinY:      m.CurrentPath.MinY,
+			MaxX:      m.CurrentPath.MaxX,
+			MaxY:      m.CurrentPath.MaxY,
+			FormDepth: m.FormDepth,
+			StartOp:   m.pathStartOp,
+			EndOp:     m.OpIndex,
+			Clipped:   m.pathClipped,
+		})
+	}
+
 	// After any paint operation the current path is consumed.
 	m.CurrentPath = emptyBoundingBox
+	m.pathStartOp = 0
+	m.pathClipped = false
+}
+
+// PathBoxes returns where painted paths covered, in the order the content
+// stream drew them. It is empty unless [Machine.RecordPathBoxes] was set before
+// execution.
+//
+// Paths drawn inside a form XObject carry a non-zero [PathBox.FormDepth]. A
+// caller removing content has to skip those: the operators that drew them are
+// in the form's stream, so no offset into the invoking stream reaches them.
+func (m *Machine) PathBoxes() []PathBox {
+	return m.pathBoxes
 }
 
 func handleBDC(_ context.Context, m *Machine, state *State, op content.Operation) {

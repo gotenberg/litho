@@ -79,3 +79,39 @@ func TestFormRecursionRestoresResources(t *testing.T) {
 		t.Errorf("box = %+v, want %+v", boxes[0], want)
 	}
 }
+
+// TestFormRecursionRestoresDepth pins that geometry drawn after a Do is
+// attributed to the page, not to the form that just returned.
+func TestFormRecursionRestoresDepth(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	data := formThenImagePDF()
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		t.Fatalf("ResolveCatalog: %v", err)
+	}
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("ResolvePages: %v (%d pages)", err, len(pages))
+	}
+
+	ops, err := content.ParsePageContent(ctx, doc, pages[0].Dict)
+	if err != nil {
+		t.Fatalf("ParsePageContent: %v", err)
+	}
+
+	machine := graphics.NewMachine([4]float64{0, 0, 612, 792})
+	if _, err := ExtractElements(ctx, doc, machine, pages[0], ops); err != nil {
+		t.Fatalf("ExtractElements: %v", err)
+	}
+
+	// The walk ends back on the page, so the depth it finishes at is the page's.
+	if machine.FormDepth != 0 {
+		t.Errorf("FormDepth = %d after the walk, want 0: the form's depth outlived its recursion", machine.FormDepth)
+	}
+}

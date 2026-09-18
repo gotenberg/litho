@@ -116,10 +116,12 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		return err
 	}
 
-	// Make resources available to the machine for pattern resolution.
-	// [handleDoOp] puts them back after it recurses.
+	// Make resources available to the machine for pattern resolution, and tell
+	// it how deep this stream sits so recorded geometry can say whether the page
+	// or a form drew it. [handleDoOp] puts both back after it recurses.
 	machine.Doc = doc
 	machine.Resources = resources
+	machine.FormDepth = depth
 
 	populateOCsFromResources(ctx, doc, machine, resources)
 
@@ -152,6 +154,9 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 				return err
 			}
 		}
+		// Name the operator before it runs, so any geometry it records can say
+		// which operation drew it.
+		machine.OpIndex = opIdx
 		// Errors from Execute are non-fatal: unknown/unsupported operators
 		// return errors but must not abort extraction of the rest.
 		_ = machine.ExecuteOne(ctx, op) //nolint:errcheck // Deliberate: an unsupported operator must not abort extraction of the rest, as the comment above says.
@@ -529,15 +534,20 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	// (ISO 32000-1, 14.6). Close any it leaves open before returning to the
 	// parent, or an unbalanced /Artifact would suppress the rest of the page.
 	mcSpans := machine.SnapshotMarkedContent()
-	// The recursion points the machine at the form's resources, and nothing else
-	// puts them back: the synthetic Q restores the graphics state, but the
-	// resources ride the machine rather than the state stack. Left unrestored,
-	// every later lookup on this page resolves against the form's resources.
+	// The recursion points the machine at the form's resources and depth, and
+	// nothing else puts them back: the synthetic Q restores the graphics state,
+	// but these ride the machine rather than the state stack. Left unrestored,
+	// every later lookup on this page resolves against the form's resources,
+	// and every later mark is attributed to the form rather than the page.
 	prevResources := machine.Resources
+	prevDepth := machine.FormDepth
+	prevOpIndex := machine.OpIndex
 	// No origins below the top level: these elements are drawn by the form's own
 	// content stream, and the caller's operation indices do not address it.
 	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances, nil)
 	machine.Resources = prevResources
+	machine.FormDepth = prevDepth
+	machine.OpIndex = prevOpIndex
 	machine.RestoreMarkedContent(mcSpans)
 	if objNum != 0 {
 		delete(visited, objNum)
