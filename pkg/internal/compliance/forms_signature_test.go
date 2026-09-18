@@ -129,7 +129,7 @@ func TestCheckSignatureByteRange(t *testing.T) {
 
 func TestNextXRefOffset(t *testing.T) {
 	t.Parallel()
-	doc := &document.Document{XRefTableOffsets: []int64{900, 100, 500}}
+	doc := &document.Document{XRefSectionOffsets: []int64{900, 100, 500}}
 	tests := []struct {
 		off  int64
 		want int64

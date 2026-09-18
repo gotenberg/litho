@@ -170,6 +170,11 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 			return fmt.Errorf("unexpected token at xref offset: %v", tok.Value)
 		}
 
+		// A revision's %%EOF follows its cross-reference section whichever
+		// form that section takes, so record both. Recording after the switch
+		// keeps a section that failed to parse out of the list.
+		d.XRefSectionOffsets = append(d.XRefSectionOffsets, currentOffset)
+
 		currentOffset = prev
 	}
 

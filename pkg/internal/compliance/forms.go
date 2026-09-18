@@ -282,7 +282,7 @@ func checkSignatureContents(ctx context.Context, doc *document.Document, sig ast
 // computeSignatureByteRange recomputes a signature's expected /ByteRange
 // from the file. actual[1]/actual[2] bound the /Contents hex string;
 // actual[3] spans from actual[2] to the %%EOF of the revision whose
-// cross-reference table is the first one after the /Contents. floating
+// cross-reference section is the first one after the /Contents. floating
 // counts the EOL bytes after that %%EOF; streamEnd reports whether that
 // %%EOF ends the file.
 func computeSignatureByteRange(ctx context.Context, doc *document.Document, sigObjNum int) (actual [4]int64, floating int64, streamEnd, ok bool) {
@@ -340,12 +340,22 @@ func contentsHexBounds(ctx context.Context, doc *document.Document, objOffset in
 	return objOffset + int64(p), objOffset + int64(p) + int64(rel) + 1, true
 }
 
-// nextXRefOffset returns the first cross-reference table offset greater
+// nextXRefOffset returns the first cross-reference section offset greater
 // than off, or off when none follows.
+//
+// Every section counts, not just the traditional tables. Keying this on
+// traditional tables alone left the offset list empty for a file written with
+// cross-reference streams, 47 of the 61 signed files across the corpora, so the
+// anchor collapsed onto off itself and the %%EOF scan started mid-dictionary.
+// A single-revision file survived that by accident, its only %%EOF being the
+// one the proper anchor reaches, which held for 33 of the 39 signature objects
+// measured. The other 6 sit more than maxSigEOFScan past their /Contents, so
+// the scan found no marker and [computeSignatureByteRange] bailed. pdfjs
+// xfa_filled_imm1344e.pdf is one, its signed revision spanning 2.5 MB.
 func nextXRefOffset(doc *document.Document, off int64) int64 {
 	best := off
 	found := false
-	for _, x := range doc.XRefTableOffsets {
+	for _, x := range doc.XRefSectionOffsets {
 		if x > off && (!found || x < best) {
 			best, found = x, true
 		}

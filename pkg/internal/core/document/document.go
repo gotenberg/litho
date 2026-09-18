@@ -135,6 +135,18 @@ type Document struct {
 	// read-only thereafter.
 	XRefTableOffsets []int64
 
+	// XRefSectionOffsets records the byte offset of every cross-reference
+	// section the /Prev chain visits, whether that section is a traditional
+	// xref table or a cross-reference stream (ISO 32000-1, 7.5.8). Only
+	// sections that parsed are recorded. Written once during construction
+	// and read-only thereafter.
+	//
+	// [Document.XRefTableOffsets] lists the traditional tables alone, because
+	// its readers parse the raw bytes that follow the xref keyword. Anything
+	// that only needs to know where a revision ends wants this field: a file
+	// written with cross-reference streams has no traditional table at all.
+	XRefSectionOffsets []int64
+
 	// Filters holds registered filter plugins for stream decoding.
 	// Nil when no plugins are registered. Set once during construction,
 	// then read-only.
