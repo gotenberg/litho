@@ -160,7 +160,7 @@ func fieldValueOwner(
 				return dict, ref, addressable
 			}
 		}
-		parentObj, parent, ok := fieldParent(ctx, doc, dict, seen)
+		parentObj, parent, ok := document.ResolveFieldParent(ctx, doc, dict, seen)
 		if !ok {
 			return nil, ast.PdfIndirectRef{}, false
 		}

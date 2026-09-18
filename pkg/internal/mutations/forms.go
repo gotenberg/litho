@@ -192,7 +192,7 @@ func rootFieldRef(ctx context.Context, doc *document.Document, annotObj ast.PdfO
 	current := annotObj
 	seen := make(map[int]bool)
 	for range maxFieldTreeDepth {
-		parentObj, parentDict, ok := fieldParent(ctx, doc, node, seen)
+		parentObj, parentDict, ok := document.ResolveFieldParent(ctx, doc, node, seen)
 		if !ok {
 			break
 		}
@@ -245,7 +245,7 @@ func widgetFieldIdentity(ctx context.Context, doc *document.Document, annotObj a
 			}
 		}
 
-		parentObj, parentDict, ok := fieldParent(ctx, doc, node, seen)
+		parentObj, parentDict, ok := document.ResolveFieldParent(ctx, doc, node, seen)
 		if !ok {
 			break
 		}
@@ -785,7 +785,7 @@ func fieldHoldsText(ctx context.Context, doc *document.Document, annotDict ast.P
 		if fieldType != "" && value != nil {
 			break
 		}
-		_, parent, ok := fieldParent(ctx, doc, dict, seen)
+		_, parent, ok := document.ResolveFieldParent(ctx, doc, dict, seen)
 		if !ok {
 			break
 		}
@@ -816,43 +816,6 @@ const (
 // anti-DoS guard, not a spec limit: ISO 32000-1, 12.7.3.1 puts no depth on the
 // field tree, while a crafted file can chain parents indefinitely.
 const maxFieldAncestorDepth = 32
-
-// fieldParent follows one hop up a field's /Parent chain, returning the parent
-// object and its dictionary, and reporting whether the walk may continue.
-//
-// seen records the object numbers already visited so a cyclic chain ends the
-// walk. A depth bound alone stops a cycle without detecting one, which is worse
-// than it sounds: the walk runs to the bound and then reports whichever node it
-// happened to halt on as though that node were the answer. The resolver offers
-// no protection either. [document.Document.Resolve] scopes its own visited set
-// to a single call and unwinds it on return, and a second visit to the same
-// object hits the object cache and returns before that check runs at all.
-//
-// Only an indirect /Parent can close a cycle, since a dictionary written
-// directly into its child cannot refer back to it, so a direct parent is
-// followed without being recorded.
-func fieldParent(
-	ctx context.Context,
-	doc *document.Document,
-	dict ast.PdfDict,
-	seen map[int]bool,
-) (ast.PdfObject, ast.PdfDict, bool) {
-	parentObj, ok := dict["Parent"]
-	if !ok {
-		return nil, nil, false
-	}
-	if ref, isRef := parentObj.(ast.PdfIndirectRef); isRef {
-		if seen[ref.ObjectNum] {
-			return nil, nil, false
-		}
-		seen[ref.ObjectNum] = true
-	}
-	parent, err := document.ResolveDict(ctx, doc, parentObj)
-	if err != nil || parent == nil {
-		return nil, nil, false
-	}
-	return parentObj, parent, true
-}
 
 // keepWidget rewrites a widget the flatten is leaving in place so it can still
 // be drawn once the interactive form is gone.
@@ -991,7 +954,7 @@ func inheritedFieldTypeAndValue(ctx context.Context, doc *document.Document, ann
 		if fieldType != "" && value != nil {
 			break
 		}
-		_, parent, ok := fieldParent(ctx, doc, dict, seen)
+		_, parent, ok := document.ResolveFieldParent(ctx, doc, dict, seen)
 		if !ok {
 			break
 		}
