@@ -484,6 +484,17 @@ func isZeroRect(ctx context.Context, doc *document.Document, annot ast.PdfDict) 
 	return x1 == x2 && y1 == y2
 }
 
+// maxFieldParentDepth bounds the walk up a widget's /Parent chain to the field
+// that types it. Anti-DoS guard, not spec-mandated: ISO 32000-1, 12.7.3.1 sets
+// no depth on the field tree, while a crafted file can chain parents forever.
+//
+// This walk used to read [maxPageTreeDepth], which bounds the PAGE tree in
+// check.go and says nothing about how deep a widget's /Parent chain runs. The
+// value stays 100 so the walk reaches exactly as far as it always has; only the
+// name now describes what it bounds. A visited set breaks cycles independently,
+// since a bound stops a cycle without detecting one.
+const maxFieldParentDepth = 100
+
 // resolveFieldType resolves the /FT key for a Widget annotation, walking up
 // the parent chain if needed (merged field/widget dictionaries).
 func resolveFieldType(ctx context.Context, doc *document.Document, annot ast.PdfDict) ast.PdfName {
@@ -496,13 +507,10 @@ func resolveFieldType(ctx context.Context, doc *document.Document, annot ast.Pdf
 	}
 	// Walk up /Parent chain.
 	current := annot
-	for range maxPageTreeDepth {
-		parentObj, ok := current["Parent"]
+	seen := make(map[int]bool)
+	for range maxFieldParentDepth {
+		_, parent, ok := document.ResolveFieldParent(ctx, doc, current, seen)
 		if !ok {
-			break
-		}
-		parent, err := document.ResolveDict(ctx, doc, parentObj)
-		if err != nil || parent == nil {
 			break
 		}
 		if ftObj, ok := parent["FT"]; ok {
