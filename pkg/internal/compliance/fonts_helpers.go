@@ -354,8 +354,23 @@ func checkFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict
 	}
 	var results []Violation
 
-	if typeName, _ := document.ResolveName(ctx, doc, fontDict["Type"]); typeName != "Font" {
-		results = append(results, failf(fontReqKeyRule(part, 1), "font /Type is %q, not Font", typeName)...)
+	// Three defects reach this rule and only one of them is "the file names the
+	// wrong type". [ast.PdfName] renders with a leading slash, so %q on the
+	// empty name printed `"/"` and read as though the font carried a name
+	// consisting of a slash, whether /Type was absent, null, or not a name at
+	// all. ISO 32000-1, 7.3.9 makes a null entry equivalent to an absent one,
+	// and [document.ResolveName] reports both as the empty name, so they state
+	// the same defect. The /BaseFont branch below already draws this
+	// distinction; draw it here too.
+	typeObj, typePresent := fontDict["Type"]
+	typeName, typeErr := document.ResolveName(ctx, doc, typeObj)
+	switch {
+	case typeErr != nil:
+		results = append(results, failf(fontReqKeyRule(part, 1), "font /Type is not a name")...)
+	case !typePresent || typeName == "":
+		results = append(results, failf(fontReqKeyRule(part, 1), "font missing /Type")...)
+	case typeName != "Font":
+		results = append(results, failf(fontReqKeyRule(part, 1), "font /Type is %s, not Font", typeName)...)
 	}
 	if !validFontSubtypes[subtype] {
 		results = append(results, failf(fontReqKeyRule(part, 2), "font /Subtype %q is not a valid font subtype", subtype)...)

@@ -784,9 +784,21 @@ func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict as
 		// one descriptor twice.
 		if descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"]); err == nil && len(descArr) > 0 {
 			if cid, err := document.ResolveDict(ctx, doc, descArr[0]); err == nil && cid != nil {
-				if typeName, _ := document.ResolveName(ctx, doc, cid["Type"]); typeName != "Font" {
-					results = append(results, failf(fontReqKeyRule(PDFAPart(profile), 1),
-						"descendant CIDFont /Type is %q, not Font", typeName)...)
+				// Absent, null and not-a-name are three defects, and only the
+				// last of the cases below is "the file names the wrong type".
+				// See [checkFontRequiredKeys] for why %q on the empty name
+				// printed a bare slash.
+				typeObj, typePresent := cid["Type"]
+				typeName, typeErr := document.ResolveName(ctx, doc, typeObj)
+				rule := fontReqKeyRule(PDFAPart(profile), 1)
+				switch {
+				case typeErr != nil:
+					results = append(results, failf(rule, "descendant CIDFont /Type is not a name")...)
+				case !typePresent || typeName == "":
+					results = append(results, failf(rule, "descendant CIDFont missing /Type")...)
+				case typeName != "Font":
+					results = append(results, failf(rule,
+						"descendant CIDFont /Type is %s, not Font", typeName)...)
 				}
 			}
 		}
