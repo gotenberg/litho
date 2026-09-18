@@ -489,8 +489,26 @@ type nameTreeDropFunc func(value ast.PdfObject) bool
 // than the keys that remain still contains every key below it, which is all a
 // lookup needs (ISO 32000-1, 7.9.6).
 func pruneDestNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, drop nameTreeDropFunc, depth int) (ast.PdfObject, bool) {
+	return pruneDestNameTreeAt(ctx, alloc, doc, nodeObj, drop, make(map[int]bool), depth)
+}
+
+// pruneDestNameTreeAt is [pruneDestNameTree] carrying the nodes already walked.
+//
+// visited mirrors the guard [document.LookupNameTree] applies to the same kind
+// of structure: a name tree is a strict tree (ISO 32000-1, 7.9.6), so a /Kids
+// entry reached twice is malformed. The depth bound does not stand in for it,
+// because this walk fans out and a node whose /Kids names the same child twice
+// costs 2^depth. Each kid is written back at its own index, so a repeated visit
+// produces the same output and only the work explodes.
+func pruneDestNameTreeAt(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, drop nameTreeDropFunc, visited map[int]bool, depth int) (ast.PdfObject, bool) {
 	if depth > maxDestTreeDepth {
 		return nodeObj, false
+	}
+	if ref, isRef := nodeObj.(ast.PdfIndirectRef); isRef {
+		if visited[ref.ObjectNum] {
+			return nodeObj, false
+		}
+		visited[ref.ObjectNum] = true
 	}
 
 	var node ast.PdfDict
@@ -512,7 +530,7 @@ func pruneDestNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		if kids, err := document.ResolveArray(ctx, doc, kidsObj); err == nil {
 			newKids := make(ast.PdfArray, len(kids))
 			for i, kid := range kids {
-				newKid, kidChanged := pruneDestNameTree(ctx, alloc, doc, kid, drop, depth+1)
+				newKid, kidChanged := pruneDestNameTreeAt(ctx, alloc, doc, kid, drop, visited, depth+1)
 				newKids[i] = newKid
 				changed = changed || kidChanged
 			}

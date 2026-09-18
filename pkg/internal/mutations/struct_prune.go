@@ -237,8 +237,34 @@ func pruneParentTree(
 	removed map[int]bool,
 	depth int,
 ) structKidsResult {
+	return pruneParentTreeAt(ctx, alloc, doc, nodeObj, removed, make(map[int]bool), depth)
+}
+
+// pruneParentTreeAt is [pruneParentTree] carrying the nodes already walked.
+//
+// visited costs nothing on a well-formed tree and bounds a malformed one. The
+// walk fans out over /Kids, so [maxStructTreeDepth] caps the work at
+// branch^depth rather than at depth: a node whose /Kids names the same child
+// twice costs 2^64. The output does not change either way, since each kid is
+// written back at its own index, which is why this is a limit rather than a
+// repair.
+func pruneParentTreeAt(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	nodeObj ast.PdfObject,
+	removed map[int]bool,
+	visited map[int]bool,
+	depth int,
+) structKidsResult {
 	if depth > maxStructTreeDepth || nodeObj == nil {
 		return structKidsResult{Value: nodeObj}
+	}
+	if ref, isRef := nodeObj.(ast.PdfIndirectRef); isRef {
+		if visited[ref.ObjectNum] {
+			return structKidsResult{Value: nodeObj}
+		}
+		visited[ref.ObjectNum] = true
 	}
 	node, err := document.ResolveDict(ctx, doc, nodeObj)
 	if err != nil || node == nil {
@@ -254,7 +280,7 @@ func pruneParentTree(
 			newKids := make(ast.PdfArray, len(kids))
 			kidsChanged := false
 			for i, kid := range kids {
-				res := pruneParentTree(ctx, alloc, doc, kid, removed, depth+1)
+				res := pruneParentTreeAt(ctx, alloc, doc, kid, removed, visited, depth+1)
 				newKids[i] = kid
 				if !res.Changed {
 					continue
