@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // PDFStampOptions describes a single PDF-page overlay applied by
@@ -197,6 +198,14 @@ func collectPageContents(ctx context.Context, doc *document.Document, page *docu
 				buf.WriteByte('\n')
 			}
 			buf.Write(data)
+
+			// Bounded for the reason given on [content.MaxPageContentSize]: the
+			// per-stream decompression cap says nothing about their sum, so a
+			// page naming thousands of streams grows this buffer with the file's
+			// object count rather than with anything the page could draw.
+			if buf.Len() > content.MaxPageContentSize {
+				return nil, fmt.Errorf("page content exceeds %d MB limit", content.MaxPageContentSize>>20)
+			}
 		}
 	default:
 		return nil, fmt.Errorf("unsupported /Contents type %T", obj)

@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 func matchContentTag(v compliance.Violation) bool {
@@ -316,6 +317,14 @@ func resolveContentBytes(ctx context.Context, doc *document.Document, contentsOb
 			}
 			all = append(all, data...)
 			all = append(all, '\n')
+
+			// Bounded for the reason given on [content.MaxPageContentSize]: the
+			// per-stream decompression cap says nothing about their sum, so a
+			// page naming thousands of streams grows this buffer with the file's
+			// object count rather than with anything the page could draw.
+			if len(all) > content.MaxPageContentSize {
+				return nil, fmt.Errorf("page content exceeds %d MB limit", content.MaxPageContentSize>>20)
+			}
 		}
 		return all, nil
 	}
