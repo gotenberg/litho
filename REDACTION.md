@@ -89,10 +89,20 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   `AllocAt`, and the result is transcoded to 8-bit DeviceRGB under `/FlateDecode` so the
   missing JPX/DCT encoders never block clearing. Samples are tested by carrying each one
   forward through the CTM, not by clearing an inverse-mapped bounding box, which would
-  destroy content outside R under a rotated placement. Still open here: in-region
-  annotation and form-field removal, inline images (their samples sit in the content
-  stream, so blanking means splicing bytes rather than replacing an object), JBIG2's dependence on the CGO plugin, and
-  translating `/Decode` for the indexed images that still refuse.
+  destroy content outside R under a rotated placement. **In-region annotation removal has landed**:
+  an annotation whose normalised `/Rect` sits inside a region is dropped from the page's `/Annots`,
+  because clearing the content stream leaves it whole — its `/Contents` and `/A /URI` survive, any
+  `/AP` goes on drawing over the cleared area, and its `/Rect` marks exactly where the removed
+  content sat. Measured reach: 84,788 annotations across 831 of 5,171 corpus files, 91% of them
+  `/Link`. Three refusals rather than approximate removal: one **straddling** the region (an
+  annotation is atomic, so dropping it would take link or widget behaviour outside R, which is why
+  `ErrPathStraddlesRegion` exists for paths), a **`/Widget`** (its AcroForm field would be left
+  naming an annotation no page carries — clearing the field is `ScrubFormFieldValues`' job), and one
+  whose `/Rect` cannot be read (unplaceable is un-rule-out-able, the same reasoning as
+  `ErrXObjectUnresolved`). Still open here: in-region form-field/widget removal, inline images (their
+  samples sit in the content stream, so blanking means splicing bytes rather than replacing an
+  object), JBIG2's dependence on the CGO plugin, and translating `/Decode` for the indexed images
+  that still refuse.
 - **PR4 — Document-wide sanitization** (the full vector table) + font re-subset + full-rewrite
   enforcement + the token-scan verification gate; fail closed. **The scan half has landed**, and only
   that half: `mutations.ScanForTokens` walks every object in the file — not the places a redaction
@@ -142,7 +152,11 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   inheritable (ISO 32000-1, 12.7.3.1), so a value can live on an ancestor field dictionary appearing
   in no page's `/Annots`, and walking annotations would silently miss it — that needs an ancestor walk
   of its own. The pass is **not wired into `RedactPageRegions`**: it is document-wide while that
-  function is page-scoped, so a caller runs it with `RedactReport.RemovedText`. **Form field values are now scrubbed too**, by
+  function is page-scoped, so a caller runs it with `RedactReport.RemovedText`. Its in-region
+  counterpart is a separate pass and that one **is** wired in: `RedactPageRegions` drops annotations
+  whose `/Rect` sits inside a region (see PR3 above). The two are complementary rather than
+  alternatives — one selects an annotation by what it says, the other by where it sits, and an
+  annotation can leak either way. **Form field values are now scrubbed too**, by
   `mutations.ScrubFormFieldValues`, which closes the half the annotation pass deliberately left open.
   `/V` and `/DV` are cleared on the dictionary that actually **states** them, which is frequently an
   ancestor field appearing in no page's `/Annots` at all, because both entries are inheritable

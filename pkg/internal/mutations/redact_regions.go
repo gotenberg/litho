@@ -137,6 +137,13 @@ type RedactReport struct {
 	// A caller that must also strip the outlines has to re-subset the font,
 	// which litho cannot do across the three embedded formats yet.
 	FontsFullyRemovedOnPage []int
+	// RemovedAnnotations lists the object numbers of the annotations dropped
+	// because their rectangle sat inside a region, ascending.
+	//
+	// Only the annotations the page named by reference appear here. One written
+	// directly into /Annots is removed just the same, since removing an entry
+	// needs no object number, but it has none to report.
+	RemovedAnnotations []int
 }
 
 func redactPageRegions(
@@ -225,6 +232,16 @@ func redactPageRegions(
 		}
 		report.BlankedImages = append(report.BlankedImages, box.Name)
 	}
+
+	// Before any content is excised, so a refusal here happens while the page is
+	// otherwise untouched. An annotation is not drawn by the content stream, so
+	// clearing the stream leaves it whole: its /Contents and /A /URI survive,
+	// and its /Rect goes on marking exactly where the removed content sat.
+	removedAnnots, err := removeRegionAnnotations(ctx, alloc, doc, page, zones)
+	if err != nil {
+		return RedactReport{}, err
+	}
+	report.RemovedAnnotations = removedAnnots
 
 	vectorSpans, err := pathSpans(machine.PathBoxes(), ops, ranges, zones)
 	if err != nil {

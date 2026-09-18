@@ -218,6 +218,36 @@ var ErrAnnotationAppearanceHoldsText = errors.New("annotation appearance stream 
 // draws.
 var ErrAnnotationNotAddressable = errors.New("annotation has no indirect reference")
 
+// ErrAnnotationStraddlesRegion reports an annotation reaching outside the
+// region that selected it.
+//
+// An annotation is atomic: there is no way to remove the part inside the region
+// and keep the rest. Removing one that extends past the region would take link
+// or widget behaviour the caller never selected, and any appearance it draws
+// outside with it. Refusing matches [ErrPathStraddlesRegion], which exists for
+// the same reason.
+var ErrAnnotationStraddlesRegion = errors.New("annotation reaches outside the region")
+
+// ErrAnnotationIsFormWidget reports a widget annotation inside the region.
+//
+// A widget is the visual half of an AcroForm field (ISO 32000-1, 12.5.6.19):
+// the field tree in the catalog reaches it through /Kids, and the field states
+// the value it shows. Dropping the widget from a page's /Annots alone would
+// leave the field pointing at an annotation no page carries, and the value
+// still in the tree. Clearing the field as well is [ScrubFormFieldValues]' job,
+// so the two are not mixed here.
+var ErrAnnotationIsFormWidget = errors.New("annotation is a form widget")
+
+// ErrAnnotationNotPlaceable reports an annotation whose rectangle cannot be
+// read.
+//
+// /Rect is required (ISO 32000-1, Table 164), so one missing or malformed means
+// the annotation cannot be placed on the page at all. An annotation that cannot
+// be placed cannot be ruled outside the region either, which is the same reason
+// [ErrXObjectUnresolved] refuses rather than stepping over content it could not
+// follow.
+var ErrAnnotationNotPlaceable = errors.New("annotation rectangle cannot be read")
+
 // ErrFieldValueNotAddressable reports a form field whose value the mutation
 // cannot clear because the dictionary stating it has no indirect reference.
 //
