@@ -280,10 +280,10 @@ func handleDoXObject(ctx context.Context, m *Machine, state *State, op content.O
 	m.imageBoxes = append(m.imageBoxes, imageBoxFromCTM(string(name), state.CTM))
 }
 
-// inlineImageName stands in for the resource name an inline image does not
+// InlineImageName stands in for the resource name an inline image does not
 // have: it travels in the content stream rather than in /XObject, so there is
 // nothing to name it by.
-const inlineImageName = "(inline)"
+const InlineImageName = "(inline)"
 
 // handleInlineImage records where an inline image lands, when the caller asked
 // for it.
@@ -301,7 +301,7 @@ func handleInlineImage(_ context.Context, m *Machine, state *State, _ content.Op
 	if !m.RecordImageBoxes {
 		return
 	}
-	m.imageBoxes = append(m.imageBoxes, imageBoxFromCTM(inlineImageName, state.CTM))
+	m.imageBoxes = append(m.imageBoxes, imageBoxFromCTM(InlineImageName, state.CTM))
 }
 
 // resolveXObject looks a name up in the current /XObject resources, reporting

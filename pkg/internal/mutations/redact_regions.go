@@ -13,9 +13,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography"
 )
 
-// RedactPageRegions removes the text a page draws inside the given regions and
-// writes the remaining content back as the page's only content stream.
-// Regions are [llx, lly, urx, ury] in page space.
+// RedactPageRegions clears what a page draws inside the given regions: it
+// removes the text and filled paths they cover, blanks the samples of any image
+// they cover, and writes the remaining content back as the page's only content
+// stream. Regions are [llx, lly, urx, ury] in page space.
 //
 // Selection is geometric and visibility-independent: a glyph counts when the
 // box it paints meets a region, whatever its colour, its text rendering mode,
@@ -34,8 +35,15 @@ import (
 //     [ErrRegionCoversAClippedPath].
 //   - A region selecting content a form XObject draws reports
 //     [ErrRegionInFormXObject], whose bytes are in the form's stream.
-//   - A region meeting an image reports [ErrRegionCoversAnImage]. Removal takes
-//     whole operators and cannot blank pixels, so the picture would survive.
+//   - An image whose samples cannot be rewritten reports one of
+//     [ErrInlineImageInRegion] (its pixels live in the content stream, so there
+//     is no object to replace), [ErrImageNotAddressable],
+//     [ErrImageNotDecodable], [ErrImagePlacementDegenerate] or
+//     [ErrImageCarriesSampleEntries].
+//   - A region that meets an image but falls between its sample centres reports
+//     [ErrImageRegionCoversNoSample]: it covers picture the caller asked to
+//     clear while clearing none of it, so returning success would leave that
+//     content in the file.
 //   - A Do the machine cannot follow reports [ErrXObjectUnresolved], because
 //     content it cannot place is content it cannot rule out of the region.
 //   - A page with no object number of its own reports [ErrPageNotAddressable].
@@ -48,11 +56,34 @@ import (
 // past the geometry the machine records and a clipping path also constrains
 // content outside the region. The document-wide copies of page text (the
 // structure tree, annotation values, outlines, metadata) are still untouched,
-// so the result is not a redacted document on its own. An image is not stepped
-// over silently either: a region meeting one is refused, because stripping the
-// text off a picture and leaving the picture reads as success while the content
-// is still there.
+// so the result is not a redacted document on its own. An image the regions
+// cover is blanked rather than removed: one Do carries the whole picture, so
+// dropping it would take the parts the caller never selected, while overwriting
+// the covered samples clears exactly what was asked. A blanked image comes back
+// as 8-bit DeviceRGB under /FlateDecode whatever it arrived as, which is what
+// lets an image in a filter litho cannot write be cleared at all.
 func RedactPageRegions(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	page *document.Page,
+	regions [][4]float64,
+) error {
+	// Blanking an image queues its replacement before the remaining checks run,
+	// and a refusal after that has to leave nothing behind: a refused redaction
+	// registers no objects at all, or a caller that handled the error would
+	// still write a half-edited document. Restore is lossless here because
+	// every edit is a fresh object handed to AllocAt, never an AST mutated in
+	// place, which is the condition [writer.ObjAllocator.Snapshot] documents.
+	snap := alloc.Snapshot()
+	if err := redactPageRegions(ctx, alloc, doc, page, regions); err != nil {
+		alloc.Restore(snap)
+		return err
+	}
+	return nil
+}
+
+func redactPageRegions(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
 	doc *document.Document,
@@ -102,21 +133,33 @@ func RedactPageRegions(
 		zones = append(zones, heuristics.ZoneFromRect(r))
 	}
 
-	// An image is taken whole or not at all, and its pixels cannot be blanked
-	// here, so a region meeting one cannot be cleared by removing operators.
-	for _, box := range machine.ImageBoxes() {
-		painted := heuristics.ZoneFromRect([4]float64{box.MinX, box.MinY, box.MaxX, box.MaxY})
-		for _, z := range zones {
-			if heuristics.ZonesOverlap(painted, z) {
-				return fmt.Errorf("%w: %q", ErrRegionCoversAnImage, box.Name)
-			}
-		}
-	}
-
 	// Page-wide rather than region-scoped on purpose: an XObject that could not
-	// be placed is one that cannot be ruled out of the region either.
+	// be placed is one that cannot be ruled out of the region either. Checked
+	// before anything is blanked, because content the machine could not place
+	// is a reason to refuse outright rather than to edit and roll back.
 	if n := machine.UnresolvedXObjects(); n > 0 {
 		return fmt.Errorf("%w: %d on this page", ErrXObjectUnresolved, n)
+	}
+
+	// An image cannot be cleared by removing operators: a single Do carries the
+	// whole picture, so dropping it would take the parts the region never
+	// selected. Blanking the covered samples clears exactly what was asked, and
+	// refuses when it cannot. See [blankImage].
+	for _, box := range machine.ImageBoxes() {
+		painted := heuristics.ZoneFromRect([4]float64{box.MinX, box.MinY, box.MaxX, box.MaxY})
+		covered := false
+		for _, z := range zones {
+			if heuristics.ZonesOverlap(painted, z) {
+				covered = true
+				break
+			}
+		}
+		if !covered {
+			continue
+		}
+		if err := blankImage(ctx, alloc, doc, page, box, zones); err != nil {
+			return err
+		}
 	}
 
 	vectorSpans, err := pathSpans(machine.PathBoxes(), ops, ranges, zones)

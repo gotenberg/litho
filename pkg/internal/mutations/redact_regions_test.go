@@ -2,8 +2,10 @@ package mutations
 
 import (
 	"bytes"
+	"compress/zlib"
 	"context"
 	"errors"
+	"io"
 	"strconv"
 	"testing"
 
@@ -299,19 +301,85 @@ func redactImageFixture(t *testing.T, body string) (*document.Document, *documen
 // (100,300), well clear of it.
 const imagePageContent = "q 200 0 0 100 50 600 cm /Im1 Do Q BT /F1 12 Tf 100 300 Td (KEEP) Tj ET"
 
-func TestRedactPageRegions_RefusesARegionCoveringAnImage(t *testing.T) {
+func TestRedactPageRegions_BlanksAnImageInsideTheRegion(t *testing.T) {
 	doc, page := redactImageFixture(t, imagePageContent)
 	alloc := writer.NewObjAllocator(20)
 
-	// Squarely inside the image's box. Removal deletes whole operators and
-	// cannot blank pixels, so clearing this region is not something it can do.
+	// Squarely inside the image's box at (50,600)-(250,700). The image is one
+	// sample, whose centre lands at (150,650), inside this region.
 	err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{60, 610, 240, 690}})
-	if !errors.Is(err, ErrRegionCoversAnImage) {
-		t.Errorf("err = %v, want ErrRegionCoversAnImage", err)
+	if err != nil {
+		t.Fatalf("RedactPageRegions: %v", err)
+	}
+
+	// Object 7 is the fixture's image XObject. Blanking replaces it where it
+	// stands, so the page's /XObject entry still reaches it and no resource
+	// dictionary has to be rewritten.
+	replaced, ok := alloc.Pending()[7].(ast.PdfStream)
+	if !ok {
+		t.Fatalf("object 7 = %T, want the replaced image stream", alloc.Pending()[7])
+	}
+	if cs := replaced.Dict["ColorSpace"]; cs != ast.PdfName("DeviceRGB") {
+		t.Errorf("ColorSpace = %v, want DeviceRGB: the samples are re-encoded", cs)
+	}
+	if f := replaced.Dict["Filter"]; f != ast.PdfName("FlateDecode") {
+		t.Errorf("Filter = %v, want FlateDecode: it has to be written in a filter litho can produce", f)
+	}
+
+	raw, err := replaced.Bytes(context.Background())
+	if err != nil {
+		t.Fatalf("reading the replacement stream: %v", err)
+	}
+	zr, err := zlib.NewReader(bytes.NewReader(raw))
+	if err != nil {
+		t.Fatalf("opening the flate stream: %v", err)
+	}
+	defer func() { _ = zr.Close() }()
+	samples, err := io.ReadAll(zr)
+	if err != nil {
+		t.Fatalf("decompressing the replacement: %v", err)
+	}
+	if !bytes.Equal(samples, []byte{0, 0, 0}) {
+		t.Errorf("samples = %v, want one black RGB pixel: the covered sample was not cleared", samples)
+	}
+}
+
+func TestRedactPageRegions_RefusesWhenTheRegionClearsNoSample(t *testing.T) {
+	doc, page := redactImageFixture(t, imagePageContent)
+	alloc := writer.NewObjAllocator(20)
+
+	// The image is one sample stretched over (50,600)-(250,700), so its only
+	// sample centre is at (150,650). This region covers the picture's lower
+	// left corner and misses that centre, which means blanking clears nothing
+	// while the region genuinely covers part of the image. Returning success
+	// would leave that content in the file.
+	err := RedactPageRegions(context.Background(), alloc, doc, page,
+		[][4]float64{{55, 605, 100, 640}})
+	if !errors.Is(err, ErrImageRegionCoversNoSample) {
+		t.Errorf("err = %v, want ErrImageRegionCoversNoSample", err)
 	}
 	if n := len(alloc.Pending()); n != 0 {
 		t.Errorf("registered %d objects while refusing", n)
+	}
+}
+
+func TestRedactPageRegions_RefusalAfterBlankingRegistersNothing(t *testing.T) {
+	// The first region covers the image and the second meets a path that runs
+	// past it. The image is blanked, then the straddling path refuses. The
+	// allocator has to come back empty: a caller that handled the error would
+	// otherwise still write a document carrying a half-cleared image.
+	doc, page := redactImageFixture(t,
+		"q 200 0 0 100 50 600 cm /Im1 Do Q 100 100 100 100 re f")
+	alloc := writer.NewObjAllocator(20)
+
+	err := RedactPageRegions(context.Background(), alloc, doc, page,
+		[][4]float64{{60, 610, 240, 690}, {90, 90, 160, 160}})
+	if !errors.Is(err, ErrPathStraddlesRegion) {
+		t.Fatalf("err = %v, want ErrPathStraddlesRegion", err)
+	}
+	if n := len(alloc.Pending()); n != 0 {
+		t.Errorf("registered %d objects while refusing: the blanked image was not rolled back", n)
 	}
 }
 
@@ -351,12 +419,12 @@ func TestRedactPageRegions_RefusesARegionCoveringAnInlineImage(t *testing.T) {
 	alloc := writer.NewObjAllocator(20)
 
 	// An inline image carries its pixels in the content stream and no Do names
-	// it, so it is a second way a page paints over a region. Removal still
-	// cannot blank those pixels.
+	// it, so there is no object to replace: blanking one means splicing new
+	// sample bytes into the stream itself, which does not exist yet.
 	err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{60, 610, 240, 690}})
-	if !errors.Is(err, ErrRegionCoversAnImage) {
-		t.Errorf("err = %v, want ErrRegionCoversAnImage", err)
+	if !errors.Is(err, ErrInlineImageInRegion) {
+		t.Errorf("err = %v, want ErrInlineImageInRegion", err)
 	}
 	if n := len(alloc.Pending()); n != 0 {
 		t.Errorf("registered %d objects while refusing", n)

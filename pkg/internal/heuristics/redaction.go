@@ -162,6 +162,14 @@ func ZonesOverlap(a, b Zone) bool {
 		a.minY <= b.maxY && a.maxY >= b.minY
 }
 
+// ZoneBounds returns the zone's edges, so a caller working in another
+// coordinate space can carry its corners there. A Zone is otherwise opaque:
+// build one with [ZoneFromRect] or [ElementZone] and compare with
+// [ZonesOverlap] or [ZoneContains].
+func ZoneBounds(z Zone) (minX, minY, maxX, maxY float64) {
+	return z.minX, z.minY, z.maxX, z.maxY
+}
+
 // ZoneContains reports whether outer covers all of inner, edges included.
 //
 // Overlap is the right test for finding what a region selects, and the wrong

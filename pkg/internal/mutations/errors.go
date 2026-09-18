@@ -112,6 +112,60 @@ var ErrRegionCoversAStrokedPath = errors.New("region covers a stroked path")
 // page as a side effect of clearing part of it.
 var ErrRegionCoversAClippedPath = errors.New("region covers a path that also clips")
 
+// ErrImageNotAddressable reports an image the mutation cannot replace because
+// it has no indirect reference of its own.
+//
+// Blanking rewrites the image's own stream object, so an image written directly
+// into a resource dictionary has no object number for the replacement to take.
+// Reporting it beats leaving the picture in place while telling the caller the
+// region was cleared.
+var ErrImageNotAddressable = errors.New("image has no indirect reference")
+
+// ErrInlineImageInRegion reports an inline image the region covers.
+//
+// An inline image carries its samples in the content stream between BI and EI
+// (ISO 32000-1, 8.9.7), so there is no object to replace: blanking one means
+// splicing new sample bytes into the stream itself. That path does not exist
+// yet, so the mutation reports it rather than leaving the pixels in place.
+var ErrInlineImageInRegion = errors.New("region covers an inline image")
+
+// ErrImageNotDecodable reports an image whose samples the mutation could not
+// read.
+//
+// Blanking decodes the samples, overwrites the covered ones and re-encodes. A
+// filter litho cannot decode (JBIG2 and JPX without their plugins) or a sample
+// depth it does not unpack leaves nothing to overwrite, and an image it cannot
+// read is one it cannot prove it cleared.
+var ErrImageNotDecodable = errors.New("image samples could not be decoded")
+
+// ErrImagePlacementDegenerate reports an image whose placement matrix cannot be
+// inverted.
+//
+// The matrix collapsed the image's unit square onto a line or a point, so no
+// pixel corresponds to a page-space point and the covered samples cannot be
+// identified at all.
+var ErrImagePlacementDegenerate = errors.New("image placement matrix cannot be inverted")
+
+// ErrImageRegionCoversNoSample reports a region that meets an image but falls
+// between its sample centres, so blanking clears nothing.
+//
+// The region still covers part of what the image paints: a single sample can be
+// stretched across a large area, and a region inside that area covers picture
+// the caller asked to clear. Blanking the nearest samples would clear more of
+// the picture than was asked, and returning success would leave that content in
+// the file while telling the caller it was cleared. Reporting it is the only
+// honest answer, and a higher-resolution image does not hit this at all.
+var ErrImageRegionCoversNoSample = errors.New("region covers an image but none of its samples")
+
+// ErrImageCarriesSampleEntries reports an image whose dictionary holds entries
+// describing its current sample encoding.
+//
+// Blanking re-encodes the samples as 8-bit DeviceRGB, which leaves /Decode,
+// /Mask and /ColorKeyMask describing an encoding that no longer exists: applied
+// to the new samples they would change how the image renders outside the region
+// as well as inside it. Translating them is possible and is not done yet.
+var ErrImageCarriesSampleEntries = errors.New("image carries decode or mask entries")
+
 // ErrSpansOverlap reports two byte spans that cover some of the same bytes.
 //
 // Overlapping spans stop having a single meaning once one of them is removed,

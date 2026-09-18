@@ -112,7 +112,7 @@ func TestImageBoxes_InlineImageIsRecorded(t *testing.T) {
 	if len(boxes) != 1 {
 		t.Fatalf("ImageBoxes() = %v, want one box", boxes)
 	}
-	want := ImageBox{Name: inlineImageName, MinX: 5, MinY: 15, MaxX: 85, MaxY: 55,
+	want := ImageBox{Name: InlineImageName, MinX: 5, MinY: 15, MaxX: 85, MaxY: 55,
 		CTM: [6]float64{80, 0, 0, 40, 5, 15}}
 	if boxes[0] != want {
 		t.Errorf("box = %+v, want %+v", boxes[0], want)
