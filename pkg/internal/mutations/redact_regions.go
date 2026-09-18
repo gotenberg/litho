@@ -120,6 +120,18 @@ type RedactReport struct {
 	// DroppedPageEntries names the page entries dropped because they held a
 	// copy of what was removed, such as /Thumb.
 	DroppedPageEntries []string
+	// FontsFullyRemovedOnPage lists the object numbers of fonts whose every
+	// glyph on this page was removed, ascending.
+	//
+	// Page-scoped on purpose, and the distinction matters: it says this page
+	// draws nothing with that font any more, not that the document does. The
+	// font may still be used elsewhere, and its embedded program still carries
+	// the outlines either way. Reporting rather than refusing, because a
+	// heading set in its own font and redacted whole is the ordinary case, not
+	// a corner one: refusing there would block redaction on everyday documents.
+	// A caller that must also strip the outlines has to re-subset the font,
+	// which litho cannot do across the three embedded formats yet.
+	FontsFullyRemovedOnPage []int
 }
 
 func redactPageRegions(
@@ -162,10 +174,15 @@ func redactPageRegions(
 	// clipping one is content to refuse over. Both need its geometry.
 	machine.RecordPathBoxes = true
 
-	elements, origins, err := typography.ExtractElementsWithOrigins(ctx, doc, machine, page, ops)
+	elements, origins, fontRefs, err := typography.ExtractElementsWithAttribution(ctx, doc, machine, page, ops)
 	if err != nil {
 		return RedactReport{}, fmt.Errorf("extracting page text: %w", err)
 	}
+
+	// Per-font counts, so a caller can be told which fonts this page no longer
+	// draws with once the removal is done.
+	fontGlyphs := make(map[int]int)
+	fontRemoved := make(map[int]int)
 
 	zones := make([]heuristics.Zone, 0, len(regions))
 	for _, r := range regions {
@@ -221,6 +238,12 @@ func redactPageRegions(
 		inside, outside int
 		glyphs          []string
 		mcids           []int
+		// fontRef is the font every glyph of this operator was drawn with: one
+		// show-text operator paints with whatever Tf last selected. It holds
+		// [typography.FontUnattributable] until a glyph names a font, so an
+		// operator drawn with a font that has no object number is never
+		// mistaken for one drawn with object zero.
+		fontRef int
 	}
 	tally := make(map[int]*coverage)
 
@@ -245,12 +268,18 @@ func redactPageRegions(
 		}
 		c := tally[origin]
 		if c == nil {
-			c = &coverage{}
+			c = &coverage{fontRef: typography.FontUnattributable}
 			tally[origin] = c
 		}
 		c.glyphs = append(c.glyphs, el.Text)
 		if el.MCID >= 0 {
 			c.mcids = append(c.mcids, el.MCID)
+		}
+		// The three slices are parallel, but guard the index rather than trust
+		// it: a mismatch would attribute glyphs to the wrong font silently.
+		if i < len(fontRefs) && fontRefs[i] != typography.FontUnattributable {
+			c.fontRef = fontRefs[i]
+			fontGlyphs[fontRefs[i]]++
 		}
 		if selected {
 			c.inside++
@@ -275,6 +304,12 @@ func redactPageRegions(
 				ErrPartialOperatorCoverage, origin, c.inside, c.outside)
 		}
 		spans = append(spans, ranges[origin])
+		// Counted here rather than from the selected set, so it is reached only
+		// after the partial-coverage refusal above: an operator that stays is
+		// not a removal.
+		if c := tally[origin]; c.fontRef != typography.FontUnattributable {
+			fontRemoved[c.fontRef] += c.inside
+		}
 		// An unresolved glyph decodes to nothing, so a run of only those joins
 		// to "". Reporting that as removed text would hand a scan a token
 		// contained in every string, which is the same answer as scanning for
@@ -283,6 +318,15 @@ func redactPageRegions(
 			report.RemovedText = append(report.RemovedText, run)
 		}
 	}
+	// A font every one of whose glyphs went is one this page no longer draws
+	// with, so its embedded outlines now describe only removed text.
+	for fontRef, drawn := range fontGlyphs {
+		if drawn > 0 && fontRemoved[fontRef] == drawn {
+			report.FontsFullyRemovedOnPage = append(report.FontsFullyRemovedOnPage, fontRef)
+		}
+	}
+	sort.Ints(report.FontsFullyRemovedOnPage)
+
 	// ExcisePageSpans sorts and rejects overlaps, so the two sets need no
 	// ordering here. A path run that somehow enclosed a show-text operator
 	// would be caught there as an overlap rather than silently merged.

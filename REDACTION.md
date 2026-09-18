@@ -151,7 +151,17 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   nothing. An item written directly into its parent's `/First` or a sibling's `/Next` **refuses**
   rather than being walked past: it cannot be rewritten, and because `/Next` lives inside it every
   later sibling is reachable only through it, so continuing would report a clean outline while the
-  titles behind it still quote the removed text. Still open here: font re-subset is untouched. Metadata needs no new scrubber — `mutations.ClearMetadata` already empties
+  titles behind it still quote the removed text. Font re-subset splits in two, and only the first half is
+  done. **Detection landed**: `RedactReport.FontsFullyRemovedOnPage` names the fonts whose every
+  glyph on the redacted page was removed, so a caller is told which embedded programs now carry
+  outlines describing nothing the page still draws. It is **page-scoped** — the font may be used on
+  another page, and its program holds the outlines either way — and it **reports rather than
+  refuses**, because a heading set in its own font and redacted whole is the ordinary case, so
+  refusing there would block redaction on everyday documents. **Re-subsetting is still untouched**:
+  the only subsetter (`mutations/stamp_font_subset.go`) is TrueType-only and serves the stamping path,
+  where litho generated the font and already knows every glyph it used; redaction is the inverse
+  problem across three embedded formats (`FontFile`, `FontFile2`, `FontFile3`), and the glyph-level
+  usage mapping it would need does not exist. Metadata needs no new scrubber — `mutations.ClearMetadata` already empties
   the `/Info` dictionary and drops the catalog's `/Metadata` XMP stream, which is the whole of that
   row; what is missing is composing it into a redaction flow rather than any new code. Until the
   remaining vectors are cleaned and composed, the scan continues to tell you the document is dirty
