@@ -197,8 +197,14 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 			if err != nil || len(imgCS) < 2 {
 				continue
 			}
+			where := fmt.Sprintf("Image XObject %s", k)
+			// An /Indexed image names its DeviceN one level down; see
+			// [indexedBaseArray].
+			if base := indexedBaseArray(ctx, doc, imgCS, 0); base != nil {
+				imgCS, where = base, where+" /Indexed base"
+			}
 			if csType, err := document.ResolveName(ctx, doc, imgCS[0]); err == nil && csType == "DeviceN" {
-				checkDeviceNColorants(ctx, doc, imgCS, part, pageIdx, fmt.Sprintf("Image XObject %s", k), results)
+				checkDeviceNColorants(ctx, doc, imgCS, part, pageIdx, where, results)
 			}
 			continue
 		}
@@ -227,6 +233,42 @@ const (
 	uncolouredPaintType = 2
 )
 
+// maxIndexedBaseDepth bounds how far [indexedBaseArray] follows a chain of
+// /Indexed bases. Anti-DoS guard, not spec-mandated: ISO 32000-1, 8.6.6.3
+// forbids an /Indexed base from being another /Indexed space, so one level is
+// the only conformant shape and this merely stops a crafted chain.
+const maxIndexedBaseDepth = 4
+
+// indexedBaseArray returns the base colour space array of an /Indexed space,
+// following a nested /Indexed base up to [maxIndexedBaseDepth]. Returns nil
+// when arr does not name /Indexed, or its base is not an array.
+//
+// ISO 32000-1, 8.6.6.3 makes that base a colour space in its own right, so the
+// constraints on the space apply to it. veraPDF models it the same way and
+// anchors ISO 19005-2 §6.2.4.4 t1 at
+// imageCS[0](52 0 obj PDIndexed)/base[0](51 0 obj PDDeviceN): pdfjs
+// issue9940.pdf paints /Im0 and /Im1 in /Indexed over
+// /DeviceN(/IBM,/None,/None,/None) whose attributes declare no /Colorants entry
+// for IBM, and litho reported nothing because every caller tested only the head
+// of the outer array.
+func indexedBaseArray(ctx context.Context, doc *document.Document, arr ast.PdfArray, depth int) ast.PdfArray {
+	if depth > maxIndexedBaseDepth || ctx.Err() != nil || len(arr) < 2 {
+		return nil
+	}
+	csType, err := document.ResolveName(ctx, doc, arr[0])
+	if err != nil || csType != "Indexed" {
+		return nil
+	}
+	base, err := document.ResolveArray(ctx, doc, arr[1])
+	if err != nil || len(base) < 2 {
+		return nil
+	}
+	if baseType, berr := document.ResolveName(ctx, doc, base[0]); berr == nil && baseType == "Indexed" {
+		return indexedBaseArray(ctx, doc, base, depth+1)
+	}
+	return base
+}
+
 // checkSeparationDeviceNArray dispatches one colour-space object to the
 // Separation or DeviceN consistency check. where names the site the violation
 // message reports.
@@ -247,6 +289,18 @@ func checkSeparationDeviceNArray(ctx context.Context, doc *document.Document, cs
 		checkSeparationCS(ctx, doc, arr, part, pageIdx, where, colorantAlternates, colorantTintFuncs, results)
 	case "DeviceN":
 		checkDeviceNCS(ctx, doc, arr, part, pageIdx, where, colorantAlternates, colorantTintFuncs, results)
+	case "Indexed":
+		// Only §6.2.4.4 t1 follows the base. The colorant-consistency scan
+		// (t2) keeps its resource-dictionary scope, exactly as the image
+		// XObject site in [scanSeparationDeviceNRecursive] already states,
+		// so an /Indexed base adds no new alternate-space comparisons.
+		base := indexedBaseArray(ctx, doc, arr, 0)
+		if base == nil {
+			return
+		}
+		if baseType, berr := document.ResolveName(ctx, doc, base[0]); berr == nil && baseType == "DeviceN" {
+			checkDeviceNColorants(ctx, doc, base, part, pageIdx, where+" /Indexed base", results)
+		}
 	}
 }
 
