@@ -281,6 +281,29 @@ func pruneFieldKids(
 	overrides map[int]ast.PdfObject,
 	depth int,
 ) {
+	pruneFieldKidsAt(ctx, doc, fieldObj, droppedAnnots, overrides, make(map[int]bool), depth)
+}
+
+// pruneFieldKidsAt is [pruneFieldKids] carrying the fields already walked.
+//
+// visited bounds a crafted field tree. The walk fans out over /Kids, so the
+// depth bound caps the work at branch^depth rather than at depth: a field whose
+// /Kids names the same child twice costs 2^32 while nesting only 32 deep.
+// Refusing the repeat cannot change the answer, because a second visit
+// recomputes the identical entries in overrides under the same object numbers,
+// so this is a limit rather than a repair.
+//
+// Every field here is an indirect object already, since a direct one is
+// rejected below: it has no object number to write an override for.
+func pruneFieldKidsAt(
+	ctx context.Context,
+	doc *document.Document,
+	fieldObj ast.PdfObject,
+	droppedAnnots map[int]bool,
+	overrides map[int]ast.PdfObject,
+	visited map[int]bool,
+	depth int,
+) {
 	if depth > maxFieldParentDepth {
 		return
 	}
@@ -288,6 +311,10 @@ func pruneFieldKids(
 	if !isRef {
 		return
 	}
+	if visited[ref.ObjectNum] {
+		return
+	}
+	visited[ref.ObjectNum] = true
 	field, err := document.ResolveDict(ctx, doc, fieldObj)
 	if err != nil || field == nil {
 		return
@@ -306,7 +333,7 @@ func pruneFieldKids(
 		if kidRef, kidIsRef := kid.(ast.PdfIndirectRef); kidIsRef && droppedAnnots[kidRef.ObjectNum] {
 			continue
 		}
-		pruneFieldKids(ctx, doc, kid, droppedAnnots, overrides, depth+1)
+		pruneFieldKidsAt(ctx, doc, kid, droppedAnnots, overrides, visited, depth+1)
 		kept = append(kept, kid)
 	}
 	if len(kept) == len(kids) {
