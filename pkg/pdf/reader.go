@@ -1440,10 +1440,15 @@ func (r *Reader) ExtractFormulas(ctx context.Context) (_ []models.FormulaElement
 	return structure.ExtractFormulas(ctx, r.doc)
 }
 
-// ExtractRedactedText extracts text elements from the given 1-based
-// page and flags any that fall inside unapplied /Redact annotations.
-// Use this to detect redactions applied visually but not committed to
-// content streams.
+// ExtractRedactedText extracts text elements from the given 1-based page and
+// flags every element whose ink overlaps an unapplied /Redact annotation. Use
+// this to detect redactions applied visually but not committed to content
+// streams.
+//
+// Every element on the page is returned, covered or not: read
+// [models.TextElement.Redacted] to tell them apart. Overlap is geometric, so
+// an element counts when any part of it meets the mark, not only when it
+// starts underneath.
 func (r *Reader) ExtractRedactedText(ctx context.Context, pageNum int) (_ []models.TextElement, err error) {
 	defer recoverToError(r.logger(), "Reader.ExtractRedactedText", &err)
 	elements, err := r.ExtractTextElements(ctx, pageNum)
