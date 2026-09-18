@@ -13,7 +13,13 @@ import (
 // Anti-DoS guard, not a spec limit: a field tree is a handful of levels deep in
 // practice (ISO 32000-1, 12.7.3.1 nests fields only to group them), but a
 // crafted file can chain /Parent far deeper, and a cycle must not hang the
-// writer. It matches maxPageTreeDepth in catalog.go for the same reason.
+// writer.
+//
+// It does not track any other cap. This comment used to say it matched
+// maxPageTreeDepth in catalog.go, which bounds the page tree at 256 and has
+// nothing to do with how deep a widget's /Parent chain runs; the two numbers
+// were never equal and nothing breaks when they differ. 32 is chosen for the
+// field tree on its own terms.
 const maxFieldParentDepth = 32
 
 // rebuildAcroForm writes an /AcroForm onto dst describing the form fields that
