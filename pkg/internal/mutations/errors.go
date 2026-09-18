@@ -54,6 +54,23 @@ var ErrSpanOutOfRange = errors.New("byte span lies outside the content")
 // instead of removing more than the caller asked for.
 var ErrPartialOperatorCoverage = errors.New("region covers an operator only partly")
 
+// ErrRegionCoversAnImage reports a region that meets an image the page paints.
+//
+// Removal deletes whole content-stream operators, so it takes an image entirely
+// or not at all, and an image usually carries far more than the region selected.
+// Blanking the covered pixels is the operation this needs, and litho cannot do
+// that yet. Reporting the region beats removing the text over a picture and
+// leaving the picture: a black rectangle with the words still underneath is the
+// failure redaction exists to prevent, and so is a photograph nobody removed.
+var ErrRegionCoversAnImage = errors.New("region covers an image")
+
+// ErrXObjectUnresolved reports a Do the machine could not follow to an XObject.
+//
+// An XObject it cannot read is content it cannot place, so it cannot rule out
+// that the thing covers the region being cleared. Removal has to be provable,
+// and "I could not tell what this draws" is not a proof.
+var ErrXObjectUnresolved = errors.New("page invokes an XObject that could not be resolved")
+
 // ErrRegionInFormXObject reports a region that selects content a form XObject
 // draws.
 //

@@ -122,6 +122,96 @@ func TestRedactPageRegions_RefusesAnUnaddressablePage(t *testing.T) {
 	}
 }
 
+// redactImageFixture builds a one-page document whose content places an image
+// at (50,600)-(250,700) and draws "KEEP" far below it, so a region can meet
+// either one without the other.
+func redactImageFixture(t *testing.T, body string) (*document.Document, *document.Page) {
+	t.Helper()
+	ctx := context.Background()
+
+	data := []byte("%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
+		"5 0 obj\n<< /Font << /F1 4 0 R >> /XObject << /Im1 7 0 R >> >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 5 0 R /Contents 6 0 R >>\nendobj\n" +
+		"6 0 obj\n<< /Length " + strconv.Itoa(len(body)) + " >>\nstream\n" + body + "\nendstream\nendobj\n" +
+		"7 0 obj\n<< /Type /XObject /Subtype /Image /Width 1 /Height 1 " +
+		"/ColorSpace /DeviceGray /BitsPerComponent 8 /Length 1 >>\nstream\n \nendstream\nendobj\n" +
+		"trailer\n<< /Size 8 /Root 1 0 R >>\n%%EOF\n")
+
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		t.Fatalf("ResolveCatalog: %v", err)
+	}
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil || len(pages) == 0 {
+		t.Fatalf("ResolvePages: %v (%d pages)", err, len(pages))
+	}
+	return doc, pages[0]
+}
+
+// imagePageContent places Im1 at (50,600) sized 200x100, then draws "KEEP" at
+// (100,300), well clear of it.
+const imagePageContent = "q 200 0 0 100 50 600 cm /Im1 Do Q BT /F1 12 Tf 100 300 Td (KEEP) Tj ET"
+
+func TestRedactPageRegions_RefusesARegionCoveringAnImage(t *testing.T) {
+	doc, page := redactImageFixture(t, imagePageContent)
+	alloc := writer.NewObjAllocator(20)
+
+	// Squarely inside the image's box. Removal deletes whole operators and
+	// cannot blank pixels, so clearing this region is not something it can do.
+	err := RedactPageRegions(context.Background(), alloc, doc, page,
+		[][4]float64{{60, 610, 240, 690}})
+	if !errors.Is(err, ErrRegionCoversAnImage) {
+		t.Errorf("err = %v, want ErrRegionCoversAnImage", err)
+	}
+	if n := len(alloc.Pending()); n != 0 {
+		t.Errorf("registered %d objects while refusing", n)
+	}
+}
+
+func TestRedactPageRegions_ImageAwayFromTheRegionDoesNotRefuse(t *testing.T) {
+	doc, page := redactImageFixture(t, imagePageContent)
+	alloc := writer.NewObjAllocator(20)
+
+	// An image on the page must not block redaction by existing; only a region
+	// that actually meets it is refused. This one covers the text instead.
+	err := RedactPageRegions(context.Background(), alloc, doc, page,
+		[][4]float64{{90, 290, 300, 330}})
+	if err != nil {
+		t.Fatalf("RedactPageRegions: %v", err)
+	}
+
+	got := newPageContents(t, alloc, page.Ref.ObjectNum)
+	if bytes.Contains(got, []byte("KEEP")) {
+		t.Errorf("the covered text is still in the page content: %q", got)
+	}
+	if !bytes.Contains(got, []byte("/Im1 Do")) {
+		t.Errorf("the image invocation was removed too: %q", got)
+	}
+}
+
+func TestRedactPageRegions_RefusesAnUnresolvableXObject(t *testing.T) {
+	doc, page := redactImageFixture(t, "q 1 0 0 1 0 0 cm /Missing Do Q")
+	alloc := writer.NewObjAllocator(20)
+
+	// The name is not in /XObject, so the machine cannot place what this Do
+	// draws and cannot rule it out of the region either.
+	err := RedactPageRegions(context.Background(), alloc, doc, page,
+		[][4]float64{{0, 0, 10, 10}})
+	if !errors.Is(err, ErrXObjectUnresolved) {
+		t.Errorf("err = %v, want ErrXObjectUnresolved", err)
+	}
+	if n := len(alloc.Pending()); n != 0 {
+		t.Errorf("registered %d objects while refusing", n)
+	}
+}
+
 // redactFormFixture builds a one-page document whose only content invokes a
 // form XObject that paints text from the form's own stream.
 func redactFormFixture(t *testing.T) (*document.Document, *document.Page) {

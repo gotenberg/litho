@@ -95,6 +95,11 @@ func init() {
 		"BMC": handleBMC,
 		"EMC": handleEMC,
 		"DP":  handleDesignatedMCPoint,
+
+		// XObject invocation. Records image placement when asked and is
+		// otherwise inert, so the state every existing caller observes is
+		// unchanged.
+		"Do": handleDoXObject,
 	}
 }
 
@@ -173,8 +178,15 @@ func (m *Machine) recordUnknownOperator(name string) {
 //
 // Use it to tell "this page holds only constructs I model" from "this page
 // holds something I skipped", a distinction the machine otherwise discards.
-// The operators absent from [opHandlers] include XObject invocation (Do),
-// shading paints (sh), and graphics-state parameters (gs).
+// The operators absent from [opHandlers] include shading paints (sh) and
+// graphics-state parameters (gs).
+//
+// It answers a question about the handler table, not about content: an operator
+// is reported when nothing handles it, whatever it would have drawn. XObject
+// invocation (Do) is handled and so never appears here, but the machine models
+// only where an image lands, not what a form XObject paints. A caller that has
+// to account for every mark needs [Machine.UnresolvedXObjects] and, for form
+// content, a walk of its own.
 func (m *Machine) UnknownOperators() []UnknownOperator {
 	if len(m.unknownOperators) == 0 {
 		return nil
@@ -185,6 +197,119 @@ func (m *Machine) UnknownOperators() []UnknownOperator {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Operator < out[j].Operator })
 	return out
+}
+
+// ImageBox is the page-space box an image XObject paints, named by the resource
+// that invoked it.
+type ImageBox struct {
+	Name                   string
+	MinX, MinY, MaxX, MaxY float64
+}
+
+// handleDoXObject records where an image lands, when the caller asked for it.
+//
+// An image occupies the unit square in its own space (ISO 32000-1, 8.9.5.2), so
+// the CTM in force at the Do maps that square onto the page. A form XObject is
+// deliberately not recorded: a form paints through its own content stream, and
+// what that stream draws is not this operator's geometry.
+//
+// Anything it cannot resolve counts toward [Machine.UnresolvedXObjects] rather
+// than passing silently, so a caller can tell "this page paints no image here"
+// from "I could not tell what this Do paints" — a distinction that decides
+// whether refusing is honest.
+func handleDoXObject(ctx context.Context, m *Machine, state *State, op content.Operation) {
+	if !m.RecordImageBoxes {
+		return
+	}
+	if len(op.Operands) == 0 {
+		m.unresolvedXObjects++
+		return
+	}
+	name, ok := op.Operands[0].(ast.PdfName)
+	if !ok {
+		m.unresolvedXObjects++
+		return
+	}
+	stream, ok := m.resolveXObject(ctx, name)
+	if !ok {
+		m.unresolvedXObjects++
+		return
+	}
+	subtype, err := document.ResolveName(ctx, m.Doc, stream.Dict["Subtype"])
+	if err != nil {
+		m.unresolvedXObjects++
+		return
+	}
+	if subtype != "Image" {
+		return
+	}
+	m.imageBoxes = append(m.imageBoxes, imageBoxFromCTM(string(name), state.CTM))
+}
+
+// resolveXObject looks a name up in the current /XObject resources, reporting
+// whether it could be reached at all.
+func (m *Machine) resolveXObject(ctx context.Context, name ast.PdfName) (ast.PdfStream, bool) {
+	if m.Resources == nil {
+		return ast.PdfStream{}, false
+	}
+	xobjObj, ok := m.Resources["XObject"]
+	if !ok {
+		return ast.PdfStream{}, false
+	}
+	xobjDict, err := document.ResolveDict(ctx, m.Doc, xobjObj)
+	if err != nil || xobjDict == nil {
+		return ast.PdfStream{}, false
+	}
+	target, ok := xobjDict[name]
+	if !ok {
+		return ast.PdfStream{}, false
+	}
+	stream, err := document.ResolveStream(ctx, m.Doc, target)
+	if err != nil || stream.Dict == nil {
+		return ast.PdfStream{}, false
+	}
+	return stream, true
+}
+
+// imageBoxFromCTM maps the unit square onto the page through ctm and returns its
+// axis-aligned bounds, so a rotated or flipped placement still reports the area
+// it covers.
+func imageBoxFromCTM(name string, ctm [6]float64) ImageBox {
+	xs := [4]float64{
+		ctm[4],
+		ctm[0] + ctm[4],
+		ctm[2] + ctm[4],
+		ctm[0] + ctm[2] + ctm[4],
+	}
+	ys := [4]float64{
+		ctm[5],
+		ctm[1] + ctm[5],
+		ctm[3] + ctm[5],
+		ctm[1] + ctm[3] + ctm[5],
+	}
+	box := ImageBox{Name: name, MinX: xs[0], MaxX: xs[0], MinY: ys[0], MaxY: ys[0]}
+	for i := 1; i < len(xs); i++ {
+		box.MinX = math.Min(box.MinX, xs[i])
+		box.MaxX = math.Max(box.MaxX, xs[i])
+		box.MinY = math.Min(box.MinY, ys[i])
+		box.MaxY = math.Max(box.MaxY, ys[i])
+	}
+	return box
+}
+
+// ImageBoxes returns where images painted, in the order the content stream drew
+// them. It is empty unless [Machine.RecordImageBoxes] was set before execution.
+func (m *Machine) ImageBoxes() []ImageBox {
+	return m.imageBoxes
+}
+
+// UnresolvedXObjects reports how many Do operators the machine could not follow
+// to an XObject: a missing operand, absent resources, or a stream it could not
+// read. A caller clearing a region must treat a non-zero count as "unknown
+// content may be here", because an image it could not resolve is an image it
+// cannot rule out.
+func (m *Machine) UnresolvedXObjects() int {
+	return m.unresolvedXObjects
 }
 
 func handleSaveState(_ context.Context, m *Machine, state *State, _ content.Operation) {

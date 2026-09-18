@@ -30,14 +30,21 @@ import (
 //     rewrite an operator, so removing that one would take the rest of its text.
 //   - A region selecting content a form XObject draws reports
 //     [ErrRegionInFormXObject], whose bytes are in the form's stream.
+//   - A region meeting an image reports [ErrRegionCoversAnImage]. Removal takes
+//     whole operators and cannot blank pixels, so the picture would survive.
+//   - A Do the machine cannot follow reports [ErrXObjectUnresolved], because
+//     content it cannot place is content it cannot rule out of the region.
 //   - A page with no object number of its own reports [ErrPageNotAddressable].
 //
 // Refusing beats removing more than was asked, and beats reporting success over
 // content that is still in the file.
 //
-// This removes text. Images, vector paths and the document-wide copies of page
-// text (the structure tree, annotation values, outlines, metadata) are not
-// touched, so the result is not a redacted document on its own.
+// This removes text. Vector paths and the document-wide copies of page text
+// (the structure tree, annotation values, outlines, metadata) are still
+// untouched, so the result is not a redacted document on its own. An image is
+// no longer stepped over silently: a region meeting one is refused, because
+// stripping the text off a picture and leaving the picture reads as success
+// while the content is still there.
 func RedactPageRegions(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -71,6 +78,9 @@ func RedactPageRegions(
 	// An optional-content group that is off still holds its content in the
 	// file, so its visibility must not gate removal.
 	machine.IgnoreOCVisibility = true
+	// Where images land decides whether this can proceed at all: one inside the
+	// region is content that has to be accounted for, not stepped over.
+	machine.RecordImageBoxes = true
 
 	elements, origins, err := typography.ExtractElementsWithOrigins(ctx, doc, machine, page, ops)
 	if err != nil {
@@ -80,6 +90,23 @@ func RedactPageRegions(
 	zones := make([]heuristics.Zone, 0, len(regions))
 	for _, r := range regions {
 		zones = append(zones, heuristics.ZoneFromRect(r))
+	}
+
+	// An image is taken whole or not at all, and its pixels cannot be blanked
+	// here, so a region meeting one cannot be cleared by removing operators.
+	for _, box := range machine.ImageBoxes() {
+		painted := heuristics.ZoneFromRect([4]float64{box.MinX, box.MinY, box.MaxX, box.MaxY})
+		for _, z := range zones {
+			if heuristics.ZonesOverlap(painted, z) {
+				return fmt.Errorf("%w: %q", ErrRegionCoversAnImage, box.Name)
+			}
+		}
+	}
+
+	// Page-wide rather than region-scoped on purpose: an XObject that could not
+	// be placed is one that cannot be ruled out of the region either.
+	if n := machine.UnresolvedXObjects(); n > 0 {
+		return fmt.Errorf("%w: %d on this page", ErrXObjectUnresolved, n)
 	}
 
 	// Tally each operator's glyphs, because an operator leaves whole or stays

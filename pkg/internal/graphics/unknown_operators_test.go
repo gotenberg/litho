@@ -32,11 +32,13 @@ func TestUnknownOperators_SilentByDefault(t *testing.T) {
 func TestUnknownOperators_RecordedWhenAsked(t *testing.T) {
 	m := testMachine()
 	m.RecordUnknownOperators = true
+	// BX rather than Do: Do gained a handler once the machine started recording
+	// image placement, so it is modelled now and must not be reported here.
 	ops := []content.Operation{
 		{Operator: "sh"},
-		{Operator: "Do"},
+		{Operator: "BX"},
 		{Operator: "q"}, // handled, must not be reported
-		{Operator: "Do"},
+		{Operator: "BX"},
 		{Operator: "gs"},
 	}
 
@@ -46,7 +48,7 @@ func TestUnknownOperators_RecordedWhenAsked(t *testing.T) {
 
 	// Ordered by keyword, so the result does not depend on map iteration.
 	want := []UnknownOperator{
-		{Operator: "Do", Count: 2},
+		{Operator: "BX", Count: 2},
 		{Operator: "gs", Count: 1},
 		{Operator: "sh", Count: 1},
 	}

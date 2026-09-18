@@ -87,6 +87,14 @@ type Machine struct {
 	// cannot currently tell the two apart. See [Machine.UnknownOperators].
 	RecordUnknownOperators bool
 	unknownOperators       map[string]int
+	// RecordImageBoxes makes the machine remember where each image XObject
+	// paints. Off by default, because the common caller extracts text and would
+	// pay for geometry it never reads. A caller that removes content needs it:
+	// an image inside the region it is clearing is content it must account for.
+	// See [Machine.ImageBoxes] and [Machine.UnresolvedXObjects].
+	RecordImageBoxes   bool
+	imageBoxes         []ImageBox
+	unresolvedXObjects int
 }
 
 // NewMachine initializes a new graphics state machine with the default state.
