@@ -74,7 +74,10 @@ func TestFormRecursionRestoresResources(t *testing.T) {
 	if len(boxes) != 1 {
 		t.Fatalf("ImageBoxes() = %v, want the page's image", boxes)
 	}
-	want := graphics.ImageBox{Name: "Im1", MinX: 10, MinY: 20, MaxX: 110, MaxY: 70}
+	// The page concatenates 100 0 0 50 10 20 onto an identity CTM, so that is
+	// the matrix in force at the Do.
+	want := graphics.ImageBox{Name: "Im1", MinX: 10, MinY: 20, MaxX: 110, MaxY: 70,
+		CTM: [6]float64{100, 0, 0, 50, 10, 20}}
 	if boxes[0] != want {
 		t.Errorf("box = %+v, want %+v", boxes[0], want)
 	}

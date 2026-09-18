@@ -209,6 +209,35 @@ func (m *Machine) UnknownOperators() []UnknownOperator {
 type ImageBox struct {
 	Name                   string
 	MinX, MinY, MaxX, MaxY float64
+	// CTM is the matrix in force at the Do, which maps the image's unit square
+	// onto the page (ISO 32000-1, 8.9.5.2). The box above is only that square's
+	// axis-aligned extent: a rotated or skewed placement cannot be recovered
+	// from it, so carrying a page-space point back into the image needs the
+	// matrix itself. See [ImageBox.ImageSpace].
+	CTM [6]float64
+}
+
+// ImageSpace maps a page-space point into the image's unit square, where (0,0)
+// is the bottom-left corner of the image and (1,1) the top-right.
+//
+// It reports false when the CTM cannot be inverted, which means the placement
+// collapsed the unit square onto a line or a point. A caller that has to
+// account for every pixel a region covers must refuse such an image rather than
+// guess which samples it reaches. A near-degenerate placement inverts to very
+// large coordinates instead, which a caller's containment test rejects on its
+// own.
+func (b ImageBox) ImageSpace(x, y float64) (u, v float64, ok bool) {
+	// The CTM is [a b c d e f] for x' = ax + cy + e, y' = bx + dy + f, so the
+	// linear part is [[a, c], [b, d]] and its determinant is ad - bc.
+	det := b.CTM[0]*b.CTM[3] - b.CTM[1]*b.CTM[2]
+	if det == 0 {
+		return 0, 0, false
+	}
+	dx := x - b.CTM[4]
+	dy := y - b.CTM[5]
+	return (dx*b.CTM[3] - dy*b.CTM[2]) / det,
+		(dy*b.CTM[0] - dx*b.CTM[1]) / det,
+		true
 }
 
 // handleDoXObject records where an image lands, when the caller asked for it.
@@ -316,7 +345,7 @@ func imageBoxFromCTM(name string, ctm [6]float64) ImageBox {
 		ctm[3] + ctm[5],
 		ctm[1] + ctm[3] + ctm[5],
 	}
-	box := ImageBox{Name: name, MinX: xs[0], MaxX: xs[0], MinY: ys[0], MaxY: ys[0]}
+	box := ImageBox{Name: name, MinX: xs[0], MaxX: xs[0], MinY: ys[0], MaxY: ys[0], CTM: ctm}
 	for i := 1; i < len(xs); i++ {
 		box.MinX = math.Min(box.MinX, xs[i])
 		box.MaxX = math.Max(box.MaxX, xs[i])
