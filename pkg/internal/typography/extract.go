@@ -117,6 +117,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 	}
 
 	// Make resources available to the machine for pattern resolution.
+	// [handleDoOp] puts them back after it recurses.
 	machine.Doc = doc
 	machine.Resources = resources
 
@@ -528,9 +529,15 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	// (ISO 32000-1, 14.6). Close any it leaves open before returning to the
 	// parent, or an unbalanced /Artifact would suppress the rest of the page.
 	mcSpans := machine.SnapshotMarkedContent()
+	// The recursion points the machine at the form's resources, and nothing else
+	// puts them back: the synthetic Q restores the graphics state, but the
+	// resources ride the machine rather than the state stack. Left unrestored,
+	// every later lookup on this page resolves against the form's resources.
+	prevResources := machine.Resources
 	// No origins below the top level: these elements are drawn by the form's own
 	// content stream, and the caller's operation indices do not address it.
 	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances, nil)
+	machine.Resources = prevResources
 	machine.RestoreMarkedContent(mcSpans)
 	if objNum != 0 {
 		delete(visited, objNum)
