@@ -1430,6 +1430,56 @@ func classAttributeName(ctx context.Context, state *walkState, cObj ast.PdfObjec
 	return ""
 }
 
+// ownedAttributeInt returns the integer value of key in the first attribute
+// object whose /O names owner and that gives key a positive integer. It is the
+// numeric counterpart of [ownedAttributeName]: ISO 32000-1, Table 349 types
+// /ColSpan and /RowSpan as integers, which ResolveName cannot read.
+func ownedAttributeInt(ctx context.Context, doc *document.Document, obj ast.PdfObject, owner, key ast.PdfName) (int, bool) {
+	if obj == nil {
+		return 0, false
+	}
+	items, err := document.ResolveArray(ctx, doc, obj)
+	if err != nil {
+		items = ast.PdfArray{obj}
+	}
+	for _, item := range items {
+		d, derr := document.ResolveDict(ctx, doc, item)
+		if derr != nil || d == nil {
+			continue
+		}
+		if o, _ := document.ResolveName(ctx, doc, d["O"]); o != owner {
+			continue
+		}
+		if v, verr := document.ResolveInt(ctx, doc, d[key]); verr == nil && v > 0 {
+			return int(v), true
+		}
+	}
+	return 0, false
+}
+
+// classAttributeInt resolves an integer key through the attribute classes a
+// structure element's /C names, against the StructTreeRoot /ClassMap
+// (ISO 32000-1, 14.7.5.2). Numeric counterpart of [classAttributeName].
+func classAttributeInt(ctx context.Context, state *walkState, cObj ast.PdfObject, owner, key ast.PdfName) (int, bool) {
+	if cObj == nil || state.classMap == nil {
+		return 0, false
+	}
+	names, err := document.ResolveArray(ctx, state.doc, cObj)
+	if err != nil {
+		names = ast.PdfArray{cObj}
+	}
+	for _, item := range names {
+		class, nerr := document.ResolveName(ctx, state.doc, item)
+		if nerr != nil || class == "" {
+			continue
+		}
+		if v, ok := ownedAttributeInt(ctx, state.doc, state.classMap[class], owner, key); ok {
+			return v, true
+		}
+	}
+	return 0, false
+}
+
 // feNoteType returns the NoteType attribute that applies to an FENote element,
 // or None when it states none. veraPDF reads it only from attribute objects the
 // FENote owner holds, in the element's /A and then in the classes its /C names,

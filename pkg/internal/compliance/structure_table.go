@@ -159,7 +159,7 @@ func rowSpanCrossingSection(ctx context.Context, state *walkState, tableElem ast
 			continue
 		}
 		for _, cell := range resolveRowCells(ctx, state, row) {
-			if rs := cellRowSpan(ctx, state.doc, cell); rs > 1 && ri+rs-1 > end {
+			if rs := cellRowSpan(ctx, state, cell); rs > 1 && ri+rs-1 > end {
 				return ri, true
 			}
 		}
@@ -213,8 +213,8 @@ func computeEffectiveColumns(ctx context.Context, state *walkState, rows []ast.P
 				colPos++
 			}
 
-			cs := cellColSpan(ctx, state.doc, cell)
-			rs := cellRowSpan(ctx, state.doc, cell)
+			cs := cellColSpan(ctx, state, cell)
+			rs := cellRowSpan(ctx, state, cell)
 
 			// This cell occupies colPos..colPos+cs-1. Set carry to rs
 			// (not rs-1) because the end-of-row decrement will subtract 1.
@@ -333,63 +333,67 @@ func sectionRows(ctx context.Context, state *walkState, section ast.PdfDict) []a
 }
 
 // cellColSpan returns the ColSpan value for a TD/TH cell (default 1).
-func cellColSpan(ctx context.Context, doc *document.Document, cell ast.PdfDict) int {
-	// ColSpan is in the cell's attribute dict /A or table attribute array.
+//
+// A cell states a span in its own /A attributes or through the classes its /C
+// names (ISO 32000-1, 14.7.5.2), and pdfjs bug1997343 uses the second form: its
+// row-1 header carries /C [/TH-col /colspan-2] with the ClassMap defining
+// /colspan-2 as << /O /Table /ColSpan 2 >>. Reading only /A counted that row as
+// one column against two in every other row and reported a regular table as
+// irregular. /A keeps precedence; /C is consulted only when /A names no span.
+func cellColSpan(ctx context.Context, state *walkState, cell ast.PdfDict) int {
+	return cellSpan(ctx, state, cell, "ColSpan")
+}
+
+// cellSpan returns the value a TD/TH cell states for a span attribute, 1 when
+// it states none. /ColSpan and /RowSpan are read the same way and differ only
+// in the key, so they share this; keeping two copies tripped the duplication
+// linter and would have let the two paths drift apart.
+func cellSpan(ctx context.Context, state *walkState, cell ast.PdfDict, key ast.PdfName) int {
+	doc := state.doc
+	// The span is in the cell's attribute dict /A or table attribute array.
 	aObj := cell["A"]
 	if aObj == nil {
-		return 1
+		return cellClassSpan(ctx, state, cell, key)
 	}
 	// /A can be a dict or array of dicts.
 	aDict, err := document.ResolveDict(ctx, doc, aObj)
 	if err == nil && aDict != nil {
-		if cs, _ := document.ResolveInt(ctx, doc, aDict["ColSpan"]); cs > 0 {
-			return int(cs)
+		if v, _ := document.ResolveInt(ctx, doc, aDict[key]); v > 0 {
+			return int(v)
 		}
-		return 1
+		return cellClassSpan(ctx, state, cell, key)
 	}
 	aArr, err := document.ResolveArray(ctx, doc, aObj)
 	if err != nil {
-		return 1
+		return cellClassSpan(ctx, state, cell, key)
 	}
 	for _, item := range aArr {
 		d, _ := document.ResolveDict(ctx, doc, item)
 		if d == nil {
 			continue
 		}
-		if cs, _ := document.ResolveInt(ctx, doc, d["ColSpan"]); cs > 0 {
-			return int(cs)
+		if v, _ := document.ResolveInt(ctx, doc, d[key]); v > 0 {
+			return int(v)
 		}
+	}
+	return cellClassSpan(ctx, state, cell, key)
+}
+
+// cellClassSpan reads a span attribute from the classes a cell's /C names,
+// returning 1 when none states one. The /Table owner is required here, matching
+// [classAttributeName]; the /A path above stays deliberately lenient about /O
+// because that leniency predates this and its population is unmeasured.
+func cellClassSpan(ctx context.Context, state *walkState, cell ast.PdfDict, key ast.PdfName) int {
+	if v, ok := classAttributeInt(ctx, state, cell["C"], "Table", key); ok {
+		return v
 	}
 	return 1
 }
 
-// cellRowSpan returns the RowSpan value for a TD/TH cell (default 1).
-func cellRowSpan(ctx context.Context, doc *document.Document, cell ast.PdfDict) int {
-	aObj := cell["A"]
-	if aObj == nil {
-		return 1
-	}
-	aDict, err := document.ResolveDict(ctx, doc, aObj)
-	if err == nil && aDict != nil {
-		if rs, _ := document.ResolveInt(ctx, doc, aDict["RowSpan"]); rs > 0 {
-			return int(rs)
-		}
-		return 1
-	}
-	aArr, err := document.ResolveArray(ctx, doc, aObj)
-	if err != nil {
-		return 1
-	}
-	for _, item := range aArr {
-		d, _ := document.ResolveDict(ctx, doc, item)
-		if d == nil {
-			continue
-		}
-		if rs, _ := document.ResolveInt(ctx, doc, d["RowSpan"]); rs > 0 {
-			return int(rs)
-		}
-	}
-	return 1
+// cellRowSpan returns the RowSpan value for a TD/TH cell (default 1). It reads
+// /A first and then the classes /C names, for the reason [cellColSpan] records.
+func cellRowSpan(ctx context.Context, state *walkState, cell ast.PdfDict) int {
+	return cellSpan(ctx, state, cell, "RowSpan")
 }
 
 // tableColumnRule selects the irregular-table rule by profile and direction.
@@ -520,7 +524,7 @@ func tableGridRowCount(ctx context.Context, state *walkState, rows []ast.PdfDict
 			return 0, false
 		}
 		for _, cell := range resolveRowCells(ctx, state, rows[i]) {
-			rowSpan := cellRowSpan(ctx, state.doc, cell)
+			rowSpan := cellRowSpan(ctx, state, cell)
 			if rowSpan > maxTableGridSlots || count > maxTableGridSlots-rowSpan {
 				return 0, false
 			}
@@ -540,7 +544,7 @@ func tableGridRowCount(ctx context.Context, state *walkState, rows []ast.PdfDict
 func tableGridColumnCount(ctx context.Context, state *walkState, row ast.PdfDict) (int, bool) {
 	count := 0
 	for _, cell := range resolveRowCells(ctx, state, row) {
-		colSpan := cellColSpan(ctx, state.doc, cell)
+		colSpan := cellColSpan(ctx, state, cell)
 		if colSpan > maxTableGridSlots || count > maxTableGridSlots-colSpan {
 			return 0, false
 		}
@@ -583,8 +587,8 @@ func tableCellIntersection(ctx context.Context, state *walkState, rows []ast.Pdf
 		col, hasCell := 0, false
 		for _, cell := range resolveRowCells(ctx, state, rows[row]) {
 			hasCell = true
-			colSpan := cellColSpan(ctx, state.doc, cell)
-			rowSpan := cellRowSpan(ctx, state.doc, cell)
+			colSpan := cellColSpan(ctx, state, cell)
+			rowSpan := cellRowSpan(ctx, state, cell)
 			for col < numCols {
 				if _, taken := grid[[2]int{row, col}]; !taken {
 					break
@@ -661,8 +665,8 @@ func buildTableGrid(ctx context.Context, state *walkState, rows []ast.PdfDict) [
 			for carry[colPos] > 0 {
 				colPos++
 			}
-			cs := cellColSpan(ctx, state.doc, cell)
-			rs := cellRowSpan(ctx, state.doc, cell)
+			cs := cellColSpan(ctx, state, cell)
+			rs := cellRowSpan(ctx, state, cell)
 			typeName, _ := document.ResolveName(ctx, state.doc, cell["S"])
 			cells = append(cells, tableGridCell{
 				elem: cell, isTH: iso32005Key(ctx, state, cell, typeName) == "TH",
@@ -973,8 +977,8 @@ func firstRowSpanOverrun(ctx context.Context, state *walkState, rows []ast.PdfDi
 			for carry[colPos] > 0 {
 				colPos++
 			}
-			cs := cellColSpan(ctx, state.doc, cell)
-			rs := cellRowSpan(ctx, state.doc, cell)
+			cs := cellColSpan(ctx, state, cell)
+			rs := cellRowSpan(ctx, state, cell)
 			if ri+rs > len(rows) {
 				return colPos, ri, true
 			}
