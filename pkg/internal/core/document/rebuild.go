@@ -101,6 +101,25 @@ func (d *Document) rebuildXRef(ctx context.Context) error {
 		// pre-computed /Root.
 		trailer = synthesizeTrailer(entries)
 		d.TrailerSynthesized = true
+	} else if _, hasInfo := trailer["Info"]; !hasInfo {
+		// A damaged file's LAST trailer can be a stub while the real one sits
+		// earlier: govdocs thread_100_100982.pdf and thread_100_100983.pdf both
+		// end with `trailer<</Size N/ID[...]>>` and carry
+		// `/Info N 0 R /Root N 0 R /Prev N` in a trailer near the start, whose
+		// own startxref offset is a malformed 0. The xref CHAIN path already
+		// carries these keys forward across sections with [mergeTrailerKeys];
+		// the rebuild path did not, so a trailer the file plainly has went
+		// missing and ISO 19005-4, 6.1.3 t4 and t5, which read the trailer
+		// /Info, reported nothing while veraPDF reported both.
+		//
+		// Only /Info is recovered. /Root is deliberately left alone: a
+		// synthesized trailer omits it so [ResolveCatalog] scans for
+		// /Type /Catalog, and that recovery path carries a documented prior
+		// regression. This branch also never runs for a synthesized trailer,
+		// so a trailer litho invented gains nothing it cannot evidence.
+		if infoRef, ok := d.findTrailerInfoRef(ctx); ok {
+			trailer["Info"] = infoRef
+		}
 	}
 
 	d.Index.Entries = entries
@@ -184,6 +203,82 @@ func synthesizeTrailer(entries map[int]xref.XRefEntry) ast.PdfDict {
 	return ast.PdfDict{
 		"Size": ast.PdfInt(maxObj + 1),
 	}
+}
+
+// maxRecoveredTrailers caps how many trailer dictionaries
+// [Document.findTrailerInfoRef] parses. Anti-DoS guard, not spec-mandated: the
+// count of "trailer" keywords is untrusted input, while a real file carries one
+// per revision and a handful of revisions is already unusual.
+const maxRecoveredTrailers = 16
+
+// findTrailerInfoRef returns the /Info value of the newest trailer in the file
+// that states one, for a rebuild whose recovered trailer has none.
+//
+// The scan runs over the whole file rather than a window near the end: in the
+// files this exists for, the stub trailer is last while the trailer carrying
+// /Info sits about a kilobyte into a hundred-kilobyte document, so a tail
+// window never reaches it. Candidates are examined newest first, matching the
+// rule the rebuild's object scan already follows, and only /Info is read.
+//
+// The scan reads the whole file, so it checks ctx once per chunk and reports
+// nothing found once the caller cancels.
+func (d *Document) findTrailerInfoRef(ctx context.Context) (ast.PdfObject, bool) {
+	keyword := []byte("trailer")
+	const overlap = 16 // longer than the keyword, so a chunk boundary cannot split it.
+
+	var offsets []int64
+	buf := make([]byte, rebuildChunkSize)
+	for filePos := int64(0); filePos < d.size; {
+		if ctx.Err() != nil {
+			return nil, false
+		}
+		n, err := d.r.ReadAt(buf, filePos)
+		if n == 0 {
+			break
+		}
+		chunk := buf[:n]
+		for searched := 0; ; {
+			idx := bytes.Index(chunk[searched:], keyword)
+			if idx == -1 {
+				break
+			}
+			off := filePos + int64(searched+idx) + int64(len(keyword))
+			// Chunks overlap so a keyword cannot be split across a boundary,
+			// which means one inside the overlap region is seen twice. Offsets
+			// only ever increase, so dropping a repeat keeps
+			// [maxRecoveredTrailers] a bound on DISTINCT trailers rather than
+			// on sightings. The object scan above needs no such guard because
+			// it keys a map by object number.
+			if len(offsets) == 0 || off > offsets[len(offsets)-1] {
+				offsets = append(offsets, off)
+			}
+			searched += idx + len(keyword)
+		}
+		if err != nil {
+			break
+		}
+		advance := int64(n) - overlap
+		if advance <= 0 {
+			break
+		}
+		filePos += advance
+	}
+
+	for i := len(offsets) - 1; i >= 0 && len(offsets)-i <= maxRecoveredTrailers; i-- {
+		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, offsets[i]))
+		obj, err := parser.NewParser(lex).ParseObject(ctx)
+		if err != nil {
+			continue
+		}
+		dict, ok := obj.(ast.PdfDict)
+		if !ok {
+			continue
+		}
+		if infoRef, ok := dict["Info"]; ok {
+			return infoRef, true
+		}
+	}
+	return nil, false
 }
 
 // findLastTrailer locates the document's authoritative trailer dictionary.
