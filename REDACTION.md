@@ -107,8 +107,14 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   object), JBIG2's dependence on the CGO plugin, and translating `/Decode` for the indexed images
   that still refuse.
 - **PR4 — Document-wide sanitization** (the full vector table) + font re-subset + full-rewrite
-  enforcement + the token-scan verification gate; fail closed. **The scan half has landed**, and only
-  that half: `mutations.ScanForTokens` walks every object in the file — not the places a redaction
+  enforcement + the token-scan verification gate; fail closed. **Both halves have landed.** `mutations.SanitizeDocument`
+  is the gate itself: it runs the document-wide passes over a redaction's `RemovedText`, then
+  verifies with `ScanOutputForTokens` and **fails closed** when a copy survives. Its two failure
+  modes differ on purpose — a pass that _refuses_ rolls everything back (a half-scrubbed document is
+  worse than an unscrubbed one), while _verification_ finding a survivor leaves the correct edits
+  queued and names the objects in `SanitizeReport.Scan`, because the usual cause is a home no
+  token-driven pass reaches, such as `/Info`, which `ClearMetadata` owns. The scan half:
+  `mutations.ScanForTokens` walks every object in the file — not the places a redaction
   happens to know about, which is the point, since it catches the vector nobody enumerated. Strings
   are compared after `DecodePdfString`, so a UTF-16 copy matches like a PDFDocEncoding one, and stream
   data is compared **decoded**, so a word inside a Flate-compressed structure tree or appearance
@@ -155,7 +161,9 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   inheritable (ISO 32000-1, 12.7.3.1), so a value can live on an ancestor field dictionary appearing
   in no page's `/Annots`, and walking annotations would silently miss it — that needs an ancestor walk
   of its own. The pass is **not wired into `RedactPageRegions`**: it is document-wide while that
-  function is page-scoped, so a caller runs it with `RedactReport.RemovedText`. Its in-region
+  function is page-scoped, so a caller runs it with `RedactReport.RemovedText` — and
+  `mutations.SanitizeDocument` is now that caller, running all three document-wide passes in turn and
+  then failing closed on whatever survives. Its in-region
   counterpart is a separate pass and that one **is** wired in: `RedactPageRegions` drops annotations
   whose `/Rect` sits inside a region (see PR3 above). The two are complementary rather than
   alternatives — one selects an annotation by what it says, the other by where it sits, and an

@@ -291,6 +291,22 @@ var ErrOutlineItemNotAddressable = errors.New("outline item has no indirect refe
 // instead of returning an answer it cannot support.
 var ErrScanTokenEmpty = errors.New("scan token is empty")
 
+// ErrSanitizationIncomplete reports a document that still holds removed text
+// after every document-wide pass has run.
+//
+// It is the point of the gate rather than a defect in it. The passes clear the
+// homes they know: annotation values, form field values, outline titles. A
+// token surviving past them sits somewhere none of them reaches, most often
+// /Info, which [ClearMetadata] owns and which no token-driven pass touches. The
+// scan's own caveat applies: a hit may be an innocent coincidence in unrelated
+// data, so this says the document cannot be declared clean, not that it
+// certainly leaks.
+//
+// The edits already queued are left in place, and [SanitizeReport.Scan] names
+// the objects, so a caller can clear what remains and ask again rather than
+// starting over.
+var ErrSanitizationIncomplete = errors.New("document still holds removed text after sanitization")
+
 // ErrSpansOverlap reports two byte spans that cover some of the same bytes.
 //
 // Overlapping spans stop having a single meaning once one of them is removed,
