@@ -17,11 +17,22 @@ import (
 // whose page carries the given /Annots array and annotation objects.
 func annotPageFixture(t *testing.T, annotsArray, annotObjects string) (*document.Document, *document.Page) {
 	t.Helper()
+	return annotPageFixtureWithCatalog(t, annotsArray, annotObjects, "")
+}
+
+// annotPageFixtureWithCatalog is [annotPageFixture] with extra catalog entries,
+// which is how a fixture states an /AcroForm. One builder rather than two, so
+// the raw PDF lives in a single place.
+func annotPageFixtureWithCatalog(
+	t *testing.T,
+	annotsArray, annotObjects, catalogExtra string,
+) (*document.Document, *document.Page) {
+	t.Helper()
 	ctx := context.Background()
 
 	body := "BT /F1 12 Tf 100 700 Td (SECRET) Tj ET"
 	raw := "%PDF-1.7\n" +
-		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R " + catalogExtra + " >>\nendobj\n" +
 		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
 		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
 		"5 0 obj\n<< /Font << /F1 4 0 R >> >>\nendobj\n" +
@@ -122,16 +133,167 @@ func TestRemoveRegionAnnotations_StraddlingRefuses(t *testing.T) {
 	}
 }
 
-func TestRemoveRegionAnnotations_WidgetRefuses(t *testing.T) {
-	// Its field lives in the catalog's AcroForm tree. Dropping the widget alone
-	// would leave the field naming an annotation no page carries.
+func TestRemoveRegionAnnotations_KidWidgetRefuses(t *testing.T) {
+	// A widget with /Parent is a kid of a field above it. Detaching it means
+	// pruning that parent's /Kids and settling what becomes of a field whose
+	// kids all went, which is a cascade this does not do.
 	doc, page := annotPageFixture(t, "[8 0 R]",
-		"8 0 obj\n<< /Type /Annot /Subtype /Widget /Rect [100 695 200 720] /V (SECRET) >>\nendobj\n")
+		"8 0 obj\n<< /Type /Annot /Subtype /Widget /Rect [100 695 200 720] /Parent 9 0 R >>\nendobj\n"+
+			"9 0 obj\n<< /FT /Tx /T (name) /V (SECRET) /Kids [8 0 R] >>\nendobj\n")
 	alloc := writer.NewObjAllocator(20)
 
 	_, err := RedactPageRegions(context.Background(), alloc, doc, page, theTextRegion)
 	if !errors.Is(err, ErrAnnotationIsFormWidget) {
-		t.Errorf("err = %v, want ErrAnnotationIsFormWidget", err)
+		t.Errorf("err = %v, want ErrAnnotationIsFormWidget for a kid widget", err)
+	}
+}
+
+func TestRemoveRegionAnnotations_RootWidgetIsRemovedFromFieldsToo(t *testing.T) {
+	// A parentless widget is the merged field-and-annotation of ISO 32000-1,
+	// 12.5.6.19, so it is its own root field. Dropping it from /Annots alone
+	// would leave AcroForm /Fields naming an annotation no page carries, still
+	// holding /V. Both go together.
+	doc, page := annotPageFixtureWithCatalog(t, "[8 0 R]",
+		"8 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (SECRET)"+
+			" /Rect [100 695 200 720] >>\nendobj\n",
+		"/AcroForm << /Fields [8 0 R] >>")
+	alloc := writer.NewObjAllocator(20)
+
+	report, err := RedactPageRegions(context.Background(), alloc, doc, page, theTextRegion)
+	if err != nil {
+		t.Fatalf("RedactPageRegions: %v", err)
+	}
+	if !slices.Contains(report.RemovedAnnotations, 8) {
+		t.Errorf("RemovedAnnotations = %v, want object 8", report.RemovedAnnotations)
+	}
+
+	catalog, ok := alloc.Pending()[1].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("the catalog was not rewritten, so /Fields still names the widget: %T",
+			alloc.Pending()[1])
+	}
+	form, _ := catalog["AcroForm"].(ast.PdfDict)
+	fields, _ := form["Fields"].(ast.PdfArray)
+	if len(fields) != 0 {
+		t.Errorf("/Fields = %v, want empty: the root field went with its widget", fields)
+	}
+}
+
+func TestRemoveRegionAnnotations_IndirectAcroFormIsRewrittenInPlace(t *testing.T) {
+	// The test above stated /AcroForm inline, which drives the catalog-rewrite
+	// branch. An indirect /AcroForm is the ordinary shape, and it takes the
+	// other branch: the form object is replaced where it stands and the catalog
+	// is left alone. Asserting both halves is what pins WHICH branch ran, rather
+	// than only that the field went.
+	doc, page := annotPageFixtureWithCatalog(t, "[8 0 R]",
+		"8 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (SECRET)"+
+			" /Rect [100 695 200 720] >>\nendobj\n"+
+			"10 0 obj\n<< /Fields [8 0 R] >>\nendobj\n",
+		"/AcroForm 10 0 R")
+	alloc := writer.NewObjAllocator(20)
+
+	if _, err := RedactPageRegions(context.Background(), alloc, doc, page, theTextRegion); err != nil {
+		t.Fatalf("RedactPageRegions: %v", err)
+	}
+
+	form, ok := alloc.Pending()[10].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("the AcroForm object was not rewritten: %T", alloc.Pending()[10])
+	}
+	fields, _ := form["Fields"].(ast.PdfArray)
+	if len(fields) != 0 {
+		t.Errorf("/Fields = %v, want empty", fields)
+	}
+	if _, rewritten := alloc.Pending()[1]; rewritten {
+		t.Errorf("the catalog was rewritten, but an indirect /AcroForm is replaced where it stands")
+	}
+}
+
+func TestRemoveRegionAnnotations_RootWidgetWithoutAcroFormStillGoes(t *testing.T) {
+	// No form to prune. Removing the widget from the page is the whole of it,
+	// and inventing an AcroForm to edit would be worse than doing nothing.
+	doc, page := annotPageFixture(t, "[8 0 R]",
+		"8 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Tx /T (name)"+
+			" /Rect [100 695 200 720] >>\nendobj\n")
+	alloc := writer.NewObjAllocator(20)
+
+	report, err := RedactPageRegions(context.Background(), alloc, doc, page, theTextRegion)
+	if err != nil {
+		t.Fatalf("RedactPageRegions: %v", err)
+	}
+	if !slices.Contains(report.RemovedAnnotations, 8) {
+		t.Errorf("RemovedAnnotations = %v, want object 8", report.RemovedAnnotations)
+	}
+}
+
+// twoPageWidgetFixture builds a two-page document whose pages each carry one
+// parentless widget, both named by a single shared AcroForm.
+func twoPageWidgetFixture(t *testing.T) (*document.Document, []*document.Page) {
+	t.Helper()
+	ctx := context.Background()
+
+	body := "BT /F1 12 Tf 100 700 Td (SECRET) Tj ET"
+	n := strconv.Itoa(len(body))
+	raw := "%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /AcroForm 10 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R 13 0 R] /Count 2 >>\nendobj\n" +
+		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
+		"5 0 obj\n<< /Font << /F1 4 0 R >> >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 5 0 R" +
+		" /Contents 6 0 R /Annots [8 0 R] >>\nendobj\n" +
+		"6 0 obj\n<< /Length " + n + " >>\nstream\n" + body + "\nendstream\nendobj\n" +
+		"8 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Tx /T (one) /V (SECRET)" +
+		" /Rect [100 695 200 720] >>\nendobj\n" +
+		"13 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 5 0 R" +
+		" /Contents 14 0 R /Annots [9 0 R] >>\nendobj\n" +
+		"14 0 obj\n<< /Length " + n + " >>\nstream\n" + body + "\nendstream\nendobj\n" +
+		"9 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Tx /T (two) /V (SECRET)" +
+		" /Rect [100 695 200 720] >>\nendobj\n" +
+		"10 0 obj\n<< /Fields [8 0 R 9 0 R] >>\nendobj\n" +
+		"trailer\n<< /Size 20 /Root 1 0 R >>\n%%EOF\n"
+
+	doc, err := document.NewDocument(ctx, bytes.NewReader([]byte(raw)), int64(len(raw)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		t.Fatalf("ResolveCatalog: %v", err)
+	}
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil || len(pages) != 2 {
+		t.Fatalf("ResolvePages: %v (%d pages)", err, len(pages))
+	}
+	return doc, pages
+}
+
+func TestRemoveRegionAnnotations_SecondPageKeepsTheFirstPagesPruning(t *testing.T) {
+	// A caller redacting page after page shares ONE allocator. The form must
+	// therefore be read back as it now stands, not as the document states it:
+	// reading it from the document would prune the original array a second time
+	// and write that over the first page's result, putting field 8 back into
+	// /Fields with no widget left to carry it.
+	//
+	// Every other test here uses a fresh allocator and a single page, so this is
+	// the only one that can see it. Without the alloc-first read /Fields ends as
+	// [8 0 R] rather than empty.
+	ctx := context.Background()
+	doc, pages := twoPageWidgetFixture(t)
+	alloc := writer.NewObjAllocator(30)
+
+	for i, page := range pages {
+		if _, err := RedactPageRegions(ctx, alloc, doc, page, theTextRegion); err != nil {
+			t.Fatalf("RedactPageRegions on page %d: %v", i+1, err)
+		}
+	}
+
+	form, ok := alloc.Pending()[10].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("the AcroForm was not rewritten: %T", alloc.Pending()[10])
+	}
+	fields, _ := form["Fields"].(ast.PdfArray)
+	if len(fields) != 0 {
+		t.Errorf("/Fields = %v, want empty: the second page overwrote the first page's pruning", fields)
 	}
 }
 

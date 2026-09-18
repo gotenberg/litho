@@ -96,10 +96,13 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   content sat. Measured reach: 84,788 annotations across 831 of 5,171 corpus files, 91% of them
   `/Link`. Three refusals rather than approximate removal: one **straddling** the region (an
   annotation is atomic, so dropping it would take link or widget behaviour outside R, which is why
-  `ErrPathStraddlesRegion` exists for paths), a **`/Widget`** (its AcroForm field would be left
-  naming an annotation no page carries — clearing the field is `ScrubFormFieldValues`' job), and one
+  `ErrPathStraddlesRegion` exists for paths), a **`/Widget` that is a kid of a field above it**
+  (detaching one means pruning that parent's `/Kids` and settling what becomes of a field whose kids
+  have all gone; clearing the value is `ScrubFormFieldValues`' job). A **parentless** widget is not
+  refused: it is the merged field-and-annotation of ISO 32000-1 12.5.6.19, so it is its own root
+  field and goes from the page and from AcroForm `/Fields` together. The last refusal is one
   whose `/Rect` cannot be read (unplaceable is un-rule-out-able, the same reasoning as
-  `ErrXObjectUnresolved`). Still open here: in-region form-field/widget removal, inline images (their
+  `ErrXObjectUnresolved`). Still open here: detaching a **kid** widget from its field tree, inline images (their
   samples sit in the content stream, so blanking means splicing bytes rather than replacing an
   object), JBIG2's dependence on the CGO plugin, and translating `/Decode` for the indexed images
   that still refuse.

@@ -51,7 +51,7 @@ func removeRegionAnnotations(
 	}
 
 	kept := make(ast.PdfArray, 0, len(annots))
-	var removed []int
+	var removed, rootWidgets []int
 
 	for _, entry := range annots {
 		annot, err := document.ResolveDict(ctx, doc, entry)
@@ -88,7 +88,23 @@ func removeRegionAnnotations(
 			return nil, fmt.Errorf("%w: %s", ErrAnnotationStraddlesRegion, annotLabel(entry))
 		}
 		if subtype, _ := annot["Subtype"].(ast.PdfName); subtype == "Widget" {
-			return nil, fmt.Errorf("%w: %s", ErrAnnotationIsFormWidget, annotLabel(entry))
+			// A widget carrying /Parent is a kid of a field that lives on above
+			// it. Detaching one means pruning that parent's /Kids and deciding
+			// what becomes of a field whose kids all went, so it still refuses.
+			//
+			// A parentless widget is the merged field-and-annotation of
+			// ISO 32000-1, 12.5.6.19: it IS its own root field, and AcroForm
+			// /Fields holds root fields only (12.7.2), so removing it is
+			// dropping one entry from that array and nothing else. Whether it
+			// also states /FT makes no difference to the detachment.
+			if _, hasParent := annot["Parent"]; hasParent {
+				return nil, fmt.Errorf("%w: %s", ErrAnnotationIsFormWidget, annotLabel(entry))
+			}
+			// A widget written directly into /Annots cannot be named by
+			// /Fields, which holds references, so there is nothing to prune.
+			if ref, isRef := entry.(ast.PdfIndirectRef); isRef {
+				rootWidgets = append(rootWidgets, ref.ObjectNum)
+			}
 		}
 
 		if ref, isRef := entry.(ast.PdfIndirectRef); isRef {
@@ -111,8 +127,108 @@ func removeRegionAnnotations(
 		return nil, ErrPageNotAddressable
 	}
 
+	if err := pruneRootFields(ctx, alloc, doc, rootWidgets); err != nil {
+		return nil, err
+	}
+
 	sort.Ints(removed)
 	return removed, nil
+}
+
+// pruneRootFields drops the given root fields from the document's AcroForm.
+//
+// A removed merged field-and-annotation is still named by /Fields, and a form
+// naming a field no page carries is one a viewer may still tab to and a
+// document-wide scrub may still find. Per ISO 32000-1, 12.7.2 that array holds
+// the ROOT fields, which is exactly what a parentless widget is, so the entry
+// goes and nothing below it has to be walked.
+//
+// Read alloc-first and written back through the allocator, so this joins the
+// rollback a later refusal relies on. A document stating no form, or one whose
+// /Fields does not name these objects, needs no change: removing the widget
+// from the page was the whole of it.
+func pruneRootFields(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	rootWidgets []int,
+) error {
+	if len(rootWidgets) == 0 {
+		return nil
+	}
+	catalogRef, ok := CatalogRef(ctx, doc)
+	if !ok {
+		return nil
+	}
+	catalogDict := ResolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	if catalogDict == nil {
+		return nil
+	}
+	acroFormObj, hasForm := catalogDict["AcroForm"]
+	if !hasForm {
+		return nil
+	}
+	// Alloc-first, like the catalog above, and for a reason one level less
+	// obvious: a caller redacting page after page shares one allocator, so a
+	// form this already pruned for an earlier page has to be read back as it now
+	// stands. Resolving it from the document would prune the original a second
+	// time and write that over the earlier result, putting the first page's
+	// field back into /Fields with no widget left to carry it.
+	var acroForm ast.PdfDict
+	if ref, isRef := acroFormObj.(ast.PdfIndirectRef); isRef {
+		acroForm = ResolveFromAllocOrDoc(ctx, alloc, doc, ref)
+	} else {
+		acroForm, _ = acroFormObj.(ast.PdfDict)
+	}
+	if acroForm == nil {
+		return nil
+	}
+	// Resolved from the document rather than alloc-first, which is safe only
+	// because of an invariant this function keeps: the pruned array is written
+	// INTO the form dictionary, never back as an object of its own. A form read
+	// from the allocator therefore already carries a direct /Fields, and
+	// ResolveArray has nothing stale to fetch. Write the array separately one
+	// day and this becomes the same bug the read above exists to avoid.
+	fields, err := document.ResolveArray(ctx, doc, acroForm["Fields"])
+	if err != nil || fields == nil {
+		return nil
+	}
+
+	dropping := make(map[int]bool, len(rootWidgets))
+	for _, objNum := range rootWidgets {
+		dropping[objNum] = true
+	}
+
+	keptFields := make(ast.PdfArray, 0, len(fields))
+	for _, entry := range fields {
+		if ref, isRef := entry.(ast.PdfIndirectRef); isRef && dropping[ref.ObjectNum] {
+			continue
+		}
+		keptFields = append(keptFields, entry)
+	}
+	if len(keptFields) == len(fields) {
+		return nil
+	}
+
+	newForm := make(ast.PdfDict, len(acroForm))
+	maps.Copy(newForm, acroForm)
+	newForm["Fields"] = keptFields
+
+	// An inline /AcroForm travels with the catalog, so the catalog is what gets
+	// rewritten; an indirect one is replaced where it stands.
+	if ref, isRef := acroFormObj.(ast.PdfIndirectRef); isRef {
+		if !alloc.AllocAt(ref.ObjectNum, newForm) {
+			return ErrFormNotAddressable
+		}
+		return nil
+	}
+	newCatalog := make(ast.PdfDict, len(catalogDict))
+	maps.Copy(newCatalog, catalogDict)
+	newCatalog["AcroForm"] = newForm
+	if !alloc.AllocAt(catalogRef.ObjectNum, newCatalog) {
+		return ErrFormNotAddressable
+	}
+	return nil
 }
 
 // annotRect returns the annotation's rectangle as a zone.

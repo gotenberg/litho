@@ -218,6 +218,15 @@ var ErrAnnotationAppearanceHoldsText = errors.New("annotation appearance stream 
 // draws.
 var ErrAnnotationNotAddressable = errors.New("annotation has no indirect reference")
 
+// ErrFormNotAddressable reports an interactive form the mutation cannot
+// rewrite.
+//
+// Pruning a root field means replacing the AcroForm dictionary, or the catalog
+// carrying it inline. Neither can take a replacement without an object number
+// of its own, and reporting it beats leaving /Fields naming a field whose
+// widget the page no longer carries.
+var ErrFormNotAddressable = errors.New("interactive form has no indirect reference")
+
 // ErrAnnotationStraddlesRegion reports an annotation reaching outside the
 // region that selected it.
 //
@@ -228,14 +237,18 @@ var ErrAnnotationNotAddressable = errors.New("annotation has no indirect referen
 // the same reason.
 var ErrAnnotationStraddlesRegion = errors.New("annotation reaches outside the region")
 
-// ErrAnnotationIsFormWidget reports a widget annotation inside the region.
+// ErrAnnotationIsFormWidget reports a widget annotation inside the region that
+// cannot be detached from its form.
 //
-// A widget is the visual half of an AcroForm field (ISO 32000-1, 12.5.6.19):
-// the field tree in the catalog reaches it through /Kids, and the field states
-// the value it shows. Dropping the widget from a page's /Annots alone would
-// leave the field pointing at an annotation no page carries, and the value
-// still in the tree. Clearing the field as well is [ScrubFormFieldValues]' job,
-// so the two are not mixed here.
+// A widget carrying /Parent is a kid of a field living above it, so removing it
+// means pruning that parent's /Kids and settling what becomes of a field whose
+// kids have all gone. That cascade is not done, and dropping the widget without
+// it would leave the field naming an annotation no page carries while still
+// holding its value. Clearing that value is [ScrubFormFieldValues]' job.
+//
+// A parentless widget is not refused: it is the merged field-and-annotation of
+// ISO 32000-1, 12.5.6.19, which is its own root field, so it is removed from
+// the page and from AcroForm /Fields together.
 var ErrAnnotationIsFormWidget = errors.New("annotation is a form widget")
 
 // ErrAnnotationNotPlaceable reports an annotation whose rectangle cannot be
