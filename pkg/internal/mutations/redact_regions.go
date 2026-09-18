@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -17,6 +18,11 @@ import (
 // removes the text and filled paths they cover, blanks the samples of any image
 // they cover, and writes the remaining content back as the page's only content
 // stream. Regions are [llx, lly, urx, ury] in page space.
+//
+// It reports what it removed. Clearing a page is not clearing a document: the
+// same text survives in the structure tree, annotation values, outlines and
+// metadata, so a caller hands [RedactReport.RemovedText] to [ScanForTokens] to
+// find the copies this did not touch.
 //
 // Selection is geometric and visibility-independent: a glyph counts when the
 // box it paints meets a region, whatever its colour, its text rendering mode,
@@ -68,7 +74,7 @@ func RedactPageRegions(
 	doc *document.Document,
 	page *document.Page,
 	regions [][4]float64,
-) error {
+) (RedactReport, error) {
 	// Blanking an image queues its replacement before the remaining checks run,
 	// and a refusal after that has to leave nothing behind: a refused redaction
 	// registers no objects at all, or a caller that handled the error would
@@ -76,11 +82,37 @@ func RedactPageRegions(
 	// every edit is a fresh object handed to AllocAt, never an AST mutated in
 	// place, which is the condition [writer.ObjAllocator.Snapshot] documents.
 	snap := alloc.Snapshot()
-	if err := redactPageRegions(ctx, alloc, doc, page, regions); err != nil {
+	report, err := redactPageRegions(ctx, alloc, doc, page, regions)
+	if err != nil {
 		alloc.Restore(snap)
-		return err
+		return RedactReport{}, err
 	}
-	return nil
+	return report, nil
+}
+
+// RedactReport says what a redaction removed, per vector.
+//
+// It exists because removing content from a page does not remove the copies of
+// it held elsewhere in the file. [ScanForTokens] takes RemovedText and looks for
+// those copies, which is the only way to tell a cleared page from a cleared
+// document.
+type RedactReport struct {
+	// RemovedText holds the text of each show-text operator that was removed,
+	// one string per operator, in the order the page drew them.
+	//
+	// One string per operator rather than per glyph: an extracted text element
+	// is a single glyph on this path, and a list of single characters would be
+	// useless to a scan, since "e" appears in nearly every object of a real
+	// file. Runs that decode to nothing are dropped for the same reason an
+	// empty token is refused outright.
+	RemovedText []string
+	// BlankedImages names the image XObjects whose covered samples were
+	// overwritten.
+	BlankedImages []string
+	// RemovedPaths counts the painted paths removed. Paths carry no text, so
+	// there is nothing for a scan to look for; the count is for the caller's
+	// report of what it did.
+	RemovedPaths int
 }
 
 func redactPageRegions(
@@ -89,27 +121,27 @@ func redactPageRegions(
 	doc *document.Document,
 	page *document.Page,
 	regions [][4]float64,
-) error {
+) (RedactReport, error) {
 	if len(regions) == 0 {
-		return nil
+		return RedactReport{}, nil
 	}
 	if page.Ref.ObjectNum == 0 {
-		return ErrPageNotAddressable
+		return RedactReport{}, ErrPageNotAddressable
 	}
 
 	// The spans below index this buffer, so the parse and the later excision
 	// both have to read the page the same way.
 	data, err := collectPageContents(ctx, doc, page)
 	if err != nil {
-		return fmt.Errorf("assembling page content: %w", err)
+		return RedactReport{}, fmt.Errorf("assembling page content: %w", err)
 	}
 	if len(data) == 0 {
-		return nil
+		return RedactReport{}, nil
 	}
 
 	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data)
 	if err != nil {
-		return fmt.Errorf("parsing page content: %w", err)
+		return RedactReport{}, fmt.Errorf("parsing page content: %w", err)
 	}
 
 	machine := graphics.NewMachine(pageBox(page))
@@ -125,7 +157,7 @@ func redactPageRegions(
 
 	elements, origins, err := typography.ExtractElementsWithOrigins(ctx, doc, machine, page, ops)
 	if err != nil {
-		return fmt.Errorf("extracting page text: %w", err)
+		return RedactReport{}, fmt.Errorf("extracting page text: %w", err)
 	}
 
 	zones := make([]heuristics.Zone, 0, len(regions))
@@ -133,12 +165,14 @@ func redactPageRegions(
 		zones = append(zones, heuristics.ZoneFromRect(r))
 	}
 
+	var report RedactReport
+
 	// Page-wide rather than region-scoped on purpose: an XObject that could not
 	// be placed is one that cannot be ruled out of the region either. Checked
 	// before anything is blanked, because content the machine could not place
 	// is a reason to refuse outright rather than to edit and roll back.
 	if n := machine.UnresolvedXObjects(); n > 0 {
-		return fmt.Errorf("%w: %d on this page", ErrXObjectUnresolved, n)
+		return RedactReport{}, fmt.Errorf("%w: %d on this page", ErrXObjectUnresolved, n)
 	}
 
 	// An image cannot be cleared by removing operators: a single Do carries the
@@ -158,18 +192,28 @@ func redactPageRegions(
 			continue
 		}
 		if err := blankImage(ctx, alloc, doc, page, box, zones); err != nil {
-			return err
+			return RedactReport{}, err
 		}
+		report.BlankedImages = append(report.BlankedImages, box.Name)
 	}
 
 	vectorSpans, err := pathSpans(machine.PathBoxes(), ops, ranges, zones)
 	if err != nil {
-		return err
+		return RedactReport{}, err
 	}
+	report.RemovedPaths = len(vectorSpans)
 
 	// Tally each operator's glyphs, because an operator leaves whole or stays
 	// whole: every glyph it drew has to agree about the regions.
-	type coverage struct{ inside, outside int }
+	//
+	// The glyphs are also where the removed text lives. One element is one
+	// glyph on this path ([typography.CoalesceElements] merges them into runs
+	// and is deliberately not called here), so the run an operator drew is its
+	// glyphs joined in the order they were appended.
+	type coverage struct {
+		inside, outside int
+		glyphs          []string
+	}
 	tally := make(map[int]*coverage)
 
 	for i, el := range elements {
@@ -184,18 +228,19 @@ func redactPageRegions(
 		origin := origins[i]
 		if origin == typography.OriginUnattributable {
 			if selected {
-				return fmt.Errorf("%w: %q", ErrRegionInFormXObject, el.Text)
+				return RedactReport{}, fmt.Errorf("%w: %q", ErrRegionInFormXObject, el.Text)
 			}
 			continue
 		}
 		if origin < 0 || origin >= len(ops) {
-			return fmt.Errorf("element %d reports operation %d, which is not one of %d", i, origin, len(ops))
+			return RedactReport{}, fmt.Errorf("element %d reports operation %d, which is not one of %d", i, origin, len(ops))
 		}
 		c := tally[origin]
 		if c == nil {
 			c = &coverage{}
 			tally[origin] = c
 		}
+		c.glyphs = append(c.glyphs, el.Text)
 		if selected {
 			c.inside++
 		} else {
@@ -215,20 +260,32 @@ func redactPageRegions(
 	spans := make([]content.ByteRange, 0, len(selected)+len(vectorSpans))
 	for _, origin := range selected {
 		if c := tally[origin]; c.outside > 0 {
-			return fmt.Errorf("%w: operation %d draws %d glyphs inside and %d outside",
+			return RedactReport{}, fmt.Errorf("%w: operation %d draws %d glyphs inside and %d outside",
 				ErrPartialOperatorCoverage, origin, c.inside, c.outside)
 		}
 		spans = append(spans, ranges[origin])
+		// An unresolved glyph decodes to nothing, so a run of only those joins
+		// to "". Reporting that as removed text would hand a scan a token
+		// contained in every string, which is the same answer as scanning for
+		// nothing at all.
+		if run := strings.Join(tally[origin].glyphs, ""); run != "" {
+			report.RemovedText = append(report.RemovedText, run)
+		}
 	}
 	// ExcisePageSpans sorts and rejects overlaps, so the two sets need no
 	// ordering here. A path run that somehow enclosed a show-text operator
 	// would be caught there as an overlap rather than silently merged.
 	spans = append(spans, vectorSpans...)
 	if len(spans) == 0 {
-		return nil
+		// An image may still have been blanked, so the report stands even when
+		// no operator was removed.
+		return report, nil
 	}
 
-	return ExcisePageSpans(ctx, alloc, doc, page, spans)
+	if err := ExcisePageSpans(ctx, alloc, doc, page, spans); err != nil {
+		return RedactReport{}, err
+	}
+	return report, nil
 }
 
 // pathSpans returns the byte ranges of the painted paths the zones cover, and

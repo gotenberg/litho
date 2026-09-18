@@ -101,8 +101,13 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   data is compared **decoded**, so a word inside a Flate-compressed structure tree or appearance
   stream is not missed. It returns the objects it could **not** read alongside the hits: a scan that
   skipped a stream has not proved that stream clean, and reporting the empty hit list as success would
-  be the same false negative the scan exists to prevent. Still open here: nothing is wired to it yet
-  (removal does not report what it cleared, so there are no tokens to feed it), and the scrubbing
+  be the same false negative the scan exists to prevent. **Removal now reports what it cleared** and feeds it:
+  `RedactPageRegions` returns a `RedactReport` whose `RemovedText` holds one string per removed
+  show-text operator — the run it drew, not its glyphs, because one extracted element is a single
+  glyph and handing single letters to a scan matches nearly every object in a real file. Runs that
+  decode to nothing are dropped, for the same reason an empty token is refused. One honest limit: the
+  scan reads a parsed document, while a redaction's output is queued in the allocator, so proving a
+  written document clean means re-reading the output and scanning that. Still open here: the scrubbing
   itself — structure tree, annotation values, outlines, `/PieceInfo`, `/Thumb`, metadata, font
   re-subset — is untouched. The scan tells you the document is still dirty; it does not clean it.
 - **PR5 — CLI.** `litho redact --region <page:x,y,w,h>...` or `--apply-marks`.

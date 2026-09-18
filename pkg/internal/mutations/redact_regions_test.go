@@ -50,7 +50,7 @@ func TestRedactPageRegions_RemovesTheCoveredRunAndKeepsTheRest(t *testing.T) {
 	alloc := writer.NewObjAllocator(20)
 
 	// Covers the "SECRET" run at y=700 and nothing at y=600.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{90, 690, 300, 730}})
 	if err != nil {
 		t.Fatalf("RedactPageRegions: %v", err)
@@ -69,7 +69,7 @@ func TestRedactPageRegions_NoRegionsLeavesThePageAlone(t *testing.T) {
 	doc, page := redactFixture(t)
 	alloc := writer.NewObjAllocator(20)
 
-	if err := RedactPageRegions(context.Background(), alloc, doc, page, nil); err != nil {
+	if _, err := RedactPageRegions(context.Background(), alloc, doc, page, nil); err != nil {
 		t.Fatalf("RedactPageRegions: %v", err)
 	}
 	if n := len(alloc.Pending()); n != 0 {
@@ -82,7 +82,7 @@ func TestRedactPageRegions_RegionCoveringNothingLeavesThePageAlone(t *testing.T)
 	alloc := writer.NewObjAllocator(20)
 
 	// Empty corner of the page: no glyph's box reaches it.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{10, 10, 40, 40}})
 	if err != nil {
 		t.Fatalf("RedactPageRegions: %v", err)
@@ -99,7 +99,7 @@ func TestRedactPageRegions_RefusesPartialOperatorCoverage(t *testing.T) {
 	// Clips the left edge of "SECRET": some of its glyphs are inside the
 	// region and some are not. Removing the operator would take the rest of
 	// the word with it, so the mutation refuses.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{90, 690, 110, 730}})
 	if !errors.Is(err, ErrPartialOperatorCoverage) {
 		t.Errorf("err = %v, want ErrPartialOperatorCoverage", err)
@@ -114,7 +114,7 @@ func TestRedactPageRegions_RefusesAnUnaddressablePage(t *testing.T) {
 	alloc := writer.NewObjAllocator(20)
 
 	inlined := &document.Page{Ref: ast.PdfIndirectRef{ObjectNum: 0}, Dict: ast.PdfDict{}}
-	err := RedactPageRegions(context.Background(), alloc, doc, inlined,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, inlined,
 		[][4]float64{{0, 0, 100, 100}})
 	if !errors.Is(err, ErrPageNotAddressable) {
 		t.Errorf("err = %v, want ErrPageNotAddressable", err)
@@ -160,7 +160,7 @@ func TestRedactPageRegions_RemovesAFilledPathInsideTheRegion(t *testing.T) {
 	alloc := writer.NewObjAllocator(20)
 
 	// Covers the rectangle at (100,100)-(150,150) and nothing at y=600.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{90, 90, 160, 160}})
 	if err != nil {
 		t.Fatalf("RedactPageRegions: %v", err)
@@ -186,7 +186,7 @@ func TestRedactPageRegions_RefusesAPathStraddlingTheRegion(t *testing.T) {
 
 	// The rectangle runs to (200,200) and the region stops at 160, so removing
 	// the path would take ink the caller never selected.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{90, 90, 160, 160}})
 	if !errors.Is(err, ErrPathStraddlesRegion) {
 		t.Errorf("err = %v, want ErrPathStraddlesRegion", err)
@@ -202,7 +202,7 @@ func TestRedactPageRegions_RefusesAStrokedPath(t *testing.T) {
 
 	// A stroke spreads half a line width past the geometry the machine
 	// records, so the bounds cannot prove the ink stays inside the region.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{90, 90, 160, 160}})
 	if !errors.Is(err, ErrRegionCoversAStrokedPath) {
 		t.Errorf("err = %v, want ErrRegionCoversAStrokedPath", err)
@@ -218,7 +218,7 @@ func TestRedactPageRegions_RefusesAPathThatAlsoClips(t *testing.T) {
 
 	// The path paints and narrows the clip, so removing it would widen the
 	// clip for everything drawn after it.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{90, 90, 160, 160}})
 	if !errors.Is(err, ErrRegionCoversAClippedPath) {
 		t.Errorf("err = %v, want ErrRegionCoversAClippedPath", err)
@@ -235,7 +235,7 @@ func TestRedactPageRegions_ClipViaNDoesNotTaintTheNextPath(t *testing.T) {
 	doc, page := redactPathFixture(t, "0 0 50 50 re W n 100 100 50 50 re f")
 	alloc := writer.NewObjAllocator(20)
 
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{90, 90, 160, 160}})
 	if err != nil {
 		t.Fatalf("RedactPageRegions: %v", err)
@@ -254,7 +254,7 @@ func TestRedactPageRegions_PathAwayFromTheRegionIsLeftAlone(t *testing.T) {
 	doc, page := redactPathFixture(t, "400 400 50 50 re f")
 	alloc := writer.NewObjAllocator(20)
 
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{90, 90, 160, 160}})
 	if err != nil {
 		t.Fatalf("RedactPageRegions: %v", err)
@@ -307,7 +307,7 @@ func TestRedactPageRegions_BlanksAnImageInsideTheRegion(t *testing.T) {
 
 	// Squarely inside the image's box at (50,600)-(250,700). The image is one
 	// sample, whose centre lands at (150,650), inside this region.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{60, 610, 240, 690}})
 	if err != nil {
 		t.Fatalf("RedactPageRegions: %v", err)
@@ -354,7 +354,7 @@ func TestRedactPageRegions_RefusesWhenTheRegionClearsNoSample(t *testing.T) {
 	// left corner and misses that centre, which means blanking clears nothing
 	// while the region genuinely covers part of the image. Returning success
 	// would leave that content in the file.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{55, 605, 100, 640}})
 	if !errors.Is(err, ErrImageRegionCoversNoSample) {
 		t.Errorf("err = %v, want ErrImageRegionCoversNoSample", err)
@@ -373,7 +373,7 @@ func TestRedactPageRegions_RefusalAfterBlankingRegistersNothing(t *testing.T) {
 		"q 200 0 0 100 50 600 cm /Im1 Do Q 100 100 100 100 re f")
 	alloc := writer.NewObjAllocator(20)
 
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{60, 610, 240, 690}, {90, 90, 160, 160}})
 	if !errors.Is(err, ErrPathStraddlesRegion) {
 		t.Fatalf("err = %v, want ErrPathStraddlesRegion", err)
@@ -389,7 +389,7 @@ func TestRedactPageRegions_ImageAwayFromTheRegionDoesNotRefuse(t *testing.T) {
 
 	// An image on the page must not block redaction by existing; only a region
 	// that actually meets it is refused. This one covers the text instead.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{90, 290, 300, 330}})
 	if err != nil {
 		t.Fatalf("RedactPageRegions: %v", err)
@@ -421,7 +421,7 @@ func TestRedactPageRegions_RefusesARegionCoveringAnInlineImage(t *testing.T) {
 	// An inline image carries its pixels in the content stream and no Do names
 	// it, so there is no object to replace: blanking one means splicing new
 	// sample bytes into the stream itself, which does not exist yet.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{60, 610, 240, 690}})
 	if !errors.Is(err, ErrInlineImageInRegion) {
 		t.Errorf("err = %v, want ErrInlineImageInRegion", err)
@@ -437,7 +437,7 @@ func TestRedactPageRegions_InlineImageAwayFromTheRegionDoesNotRefuse(t *testing.
 
 	// An inline image elsewhere on the page must not block redaction, or a page
 	// carrying one anywhere could never be cleared.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{90, 290, 300, 330}})
 	if err != nil {
 		t.Fatalf("RedactPageRegions: %v", err)
@@ -458,7 +458,7 @@ func TestRedactPageRegions_RefusesAnUnresolvableXObject(t *testing.T) {
 
 	// The name is not in /XObject, so the machine cannot place what this Do
 	// draws and cannot rule it out of the region either.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{0, 0, 10, 10}})
 	if !errors.Is(err, ErrXObjectUnresolved) {
 		t.Errorf("err = %v, want ErrXObjectUnresolved", err)
@@ -510,7 +510,7 @@ func TestRedactPageRegions_RefusesContentDrawnByAFormXObject(t *testing.T) {
 	// the page's stream addresses them. Removing the Do that invoked the form
 	// would erase everything else the form draws, so the region is refused
 	// rather than answered with the only span it could name.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{-10, -10, 300, 300}})
 	if !errors.Is(err, ErrRegionInFormXObject) {
 		t.Errorf("err = %v, want ErrRegionInFormXObject", err)
@@ -527,7 +527,7 @@ func TestRedactPageRegions_FormContentOutsideTheRegionDoesNotRefuse(t *testing.T
 	// A form on the page must not block redaction by existing. Only a region
 	// that actually selects what the form draws is refused; this one is far
 	// from it, so the page is simply left alone.
-	err := RedactPageRegions(context.Background(), alloc, doc, page,
+	_, err := RedactPageRegions(context.Background(), alloc, doc, page,
 		[][4]float64{{500, 700, 560, 760}})
 	if err != nil {
 		t.Fatalf("RedactPageRegions: %v", err)
