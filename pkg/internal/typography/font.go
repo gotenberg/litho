@@ -1285,6 +1285,14 @@ func ExtractCFFEncodingNames(fontData []byte) map[byte]string {
 	return cff.ExtractEncoding(fontData)
 }
 
+// ExtractCFFPredefinedEncodingNames returns the complete predefined encoding a
+// CFF program declares, Standard or Expert, without intersecting it against the
+// font's charset. Returns nil when the program builds its own encoding. See
+// [cff.PredefinedEncodingNames] for why the two differ.
+func ExtractCFFPredefinedEncodingNames(fontData []byte) map[byte]string {
+	return cff.PredefinedEncodingNames(fontData)
+}
+
 // ExtractType1AdvanceWidths returns the advance width, in the font's own design
 // units (before the /FontMatrix scale), of every glyph a raw Type 1 (/FontFile)
 // program defines, keyed by glyph name. Scale the values by

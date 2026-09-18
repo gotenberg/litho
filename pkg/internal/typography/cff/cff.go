@@ -180,6 +180,50 @@ func ExtractEncoding(data []byte) map[byte]string {
 	return result
 }
 
+// PredefinedEncodingNames returns the complete byte code → glyph name mapping
+// of the predefined encoding a CFF declares in its Top DICT: offset 0 selects
+// the Standard encoding, offset 1 the Expert encoding. Returns nil when the
+// program builds its own encoding, which [ExtractEncoding] already reports in
+// full.
+//
+// Unlike [ExtractEncoding] this does not intersect the table with the font's
+// charset. An encoding states which glyph a code selects whether or not a
+// subset embeds that glyph, so a caller asking what a code MEANS wants the
+// whole table; whether the glyph is present is a separate question, and
+// intersecting the two hides a code whose meaning is perfectly well defined.
+func PredefinedEncodingNames(data []byte) map[byte]string {
+	if len(data) < 4 || data[0] != 1 {
+		return nil
+	}
+	hdrSize := max(int(data[2]), 4)
+	nameEnd, err := skipINDEX(data, hdrSize)
+	if err != nil {
+		return nil
+	}
+	_, topDictEntries, err := parseINDEX(data, nameEnd)
+	if err != nil || len(topDictEntries) == 0 {
+		return nil
+	}
+
+	var predefined []string
+	switch parseTopDict(topDictEntries[0]).encodingOffset {
+	case 0:
+		predefined = standardEncodingNames[:]
+	case 1:
+		predefined = expertEncodingNames[:]
+	default:
+		return nil
+	}
+
+	result := make(map[byte]string, len(predefined))
+	for code, name := range predefined {
+		if name != "" {
+			result[byte(code)] = name //nolint:gosec // code indexes a 256-entry table, 0-255
+		}
+	}
+	return result
+}
+
 // GlyphToUnicode extracts a GID → Unicode rune mapping from CFF font data.
 // It parses the charset to get GID → SID, resolves SIDs to glyph names via
 // the standard + custom string tables, then maps glyph names to Unicode via

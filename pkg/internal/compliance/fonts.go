@@ -1181,8 +1181,14 @@ func glyphNamePUACodes(ctx context.Context, doc *document.Document, fontDict ast
 		}
 		mapped = cmapSourceCodeValues(parsed)
 	}
+	// A subset CFF declaring a predefined encoding names only the codes whose
+	// glyph it embeds, so [cffPredefinedEncodingFilled] restores the rest: the
+	// encoding assigns them whether or not the subset carries the glyph.
+	names := cffPredefinedEncodingFilled(ctx, doc, fontDict,
+		resolveSimpleFontEncoding(ctx, doc, fontDict))
+
 	out := make(map[uint32]bool)
-	for code, name := range resolveSimpleFontEncoding(ctx, doc, fontDict) {
+	for code, name := range names {
 		if aglPUAGlyphNames[name] && !mapped[int(code)] {
 			out[uint32(code)] = true
 		}

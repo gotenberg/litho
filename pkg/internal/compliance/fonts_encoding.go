@@ -806,6 +806,78 @@ func fontDifferencesNames(ctx context.Context, doc *document.Document, fontDict 
 	return differencesGlyphNames(ctx, doc, encDict)
 }
 
+// cffPredefinedEncodingFilled returns names plus the codes a predefined CFF
+// encoding assigns that names leaves unnamed.
+//
+// [cff.PredefinedEncodingNames] reports the whole table while
+// [typography.ExtractCFFEncodingNames] reports only the codes whose glyph the
+// subset embeds. That intersection is right for drawing and wrong for asking
+// what a code means: pdfjs issue8586.pdf embeds BHIACH+TimesNRExpertMT, a
+// subset CFF declaring the Expert encoding whose charset holds Gsmall and
+// Ismall but not Hsmall, so code 0x61 was left unnamed even though the encoding
+// plainly assigns it Hsmall. That is the only code the page shows, and Hsmall
+// carries a PUA value, so ISO 19005-2 §6.2.11.7.3 went unreported while veraPDF
+// 1.30.2 failed it.
+//
+// The fill applies only where the built-in encoding governs. Per ISO 32000-1,
+// Table 114 a named /Encoding or a /BaseEncoding replaces the program's own
+// encoding outright, and the nine veraPDF-corpus fixtures that embed an
+// Expert CFF all name /WinAnsiEncoding or /MacExpertEncoding, so their codes
+// must keep resolving through that table rather than the font's.
+func cffPredefinedEncodingFilled(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, names map[byte]string) map[byte]string {
+	if !builtinEncodingGoverns(ctx, doc, fontDict) {
+		return names
+	}
+	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
+	if fd == nil {
+		return names
+	}
+	fontFile3Obj, ok := fd["FontFile3"]
+	if !ok {
+		return names
+	}
+	stream, err := document.ResolveStream(ctx, doc, fontFile3Obj)
+	if err != nil {
+		return names
+	}
+	data, err := decodeFontProgram(ctx, doc, fontFile3Obj, stream)
+	if err != nil {
+		return names
+	}
+	predefined := typography.ExtractCFFPredefinedEncodingNames(data)
+	if len(predefined) == 0 {
+		return names
+	}
+
+	filled := make(map[byte]string, len(names)+len(predefined))
+	maps.Copy(filled, names)
+	for code, name := range predefined {
+		if _, taken := filled[code]; !taken {
+			filled[code] = name
+		}
+	}
+	return filled
+}
+
+// builtinEncodingGoverns reports whether an embedded program's own encoding is
+// the one in force, which per ISO 32000-1, Table 114 holds only when the font
+// dictionary neither names an /Encoding nor states a /BaseEncoding.
+func builtinEncodingGoverns(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	encObj, ok := fontDict["Encoding"]
+	if !ok {
+		return true
+	}
+	if encName, err := document.ResolveName(ctx, doc, encObj); err == nil && encName != "" {
+		return predefinedEncodingNames(string(encName)) == nil
+	}
+	encDict, err := document.ResolveDict(ctx, doc, encObj)
+	if err != nil || encDict == nil {
+		return true
+	}
+	baseName, err := document.ResolveName(ctx, doc, encDict["BaseEncoding"])
+	return err != nil || baseName == ""
+}
+
 // builtinEncodingNames returns a Type 1 program's own charCode → glyphName
 // mapping. [typography.ExtractType1BuiltinEncoding] reports a program that
 // references a predefined encoding ("/Encoding StandardEncoding def") by
