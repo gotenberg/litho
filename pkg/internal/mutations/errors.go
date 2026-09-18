@@ -32,3 +32,19 @@ var ErrCatalogUnreadable = errors.New("document catalog could not be read")
 // Report the loss instead, and reserve the empty tree for a catalog that never
 // named one.
 var ErrPageTreeNotReproduced = errors.New("source page tree could not be reproduced in the rewrite")
+
+// ErrSpanOutOfRange reports a byte span that does not lie within the content it
+// addresses.
+//
+// A span names offsets in one parse of a content stream, so a span reaching
+// past the bytes being rewritten means the two have diverged. Excising it would
+// cut whatever occupies those offsets now, so the mutation reports the span
+// rather than clamping it to fit.
+var ErrSpanOutOfRange = errors.New("byte span lies outside the content")
+
+// ErrSpansOverlap reports two byte spans that cover some of the same bytes.
+//
+// Overlapping spans stop having a single meaning once one of them is removed,
+// and merging them quietly would excise bytes no caller selected. Removal has
+// to be provable, so the mutation reports the overlap instead.
+var ErrSpansOverlap = errors.New("byte spans overlap")
