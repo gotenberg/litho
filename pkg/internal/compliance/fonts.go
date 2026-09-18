@@ -1279,9 +1279,14 @@ func structTreeHasActualText(ctx context.Context, doc *document.Document, node a
 // question is only whether some element carries /ActualText, so this is a limit
 // rather than a repair.
 //
-// [TestStructTreeFanoutBomb] does not reach here: this walk runs only for a
-// font whose /ToUnicode maps into a private use area, and that fixture carries
-// no such font.
+// Reaching this search at all takes some doing, which is why no fan-out
+// fixture covered it before. The call sits inside the conservative() closure
+// of [checkStreamPUAWithoutActualText], and that closure runs on only three
+// branches. A font whose /ToUnicode maps into a private use area is necessary
+// but NOT sufficient: an Identity-H encoding splits its codes successfully and
+// takes the precise per-MCID path instead, never calling the closure. An
+// encoding naming a CMap litho cannot load leaves [type0CodeSplitter] nil, and
+// that is what routes a document here.
 func structTreeHasActualTextAt(ctx context.Context, doc *document.Document, node ast.PdfDict, visited map[int]bool, depth int) bool {
 	if depth > maxStructAttrSearchDepth {
 		return false
