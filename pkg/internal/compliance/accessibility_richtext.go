@@ -161,9 +161,16 @@ func richTextContent(data []byte) (string, error) {
 
 // maxTextFieldTreeDepth bounds the /Kids descent when looking for text fields.
 // Anti-DoS guard, not spec-mandated: a field tree is a shallow grouping device,
-// and a crafted one could otherwise nest without limit. It matches the depth the
-// sibling field walk in accessibility_files.go uses.
-const maxTextFieldTreeDepth = 10
+// and a crafted one could otherwise nest without limit.
+//
+// It binds [maxFieldTreeDepth] by reference rather than restating a number, so
+// the two field walks cannot drift apart again. This comment used to claim it
+// matched "the sibling field walk in accessibility_files.go", which walks a
+// name tree rather than a field tree and stops at 64; the field walk is the one
+// in forms.go, and this bound had drifted to a tenth of it. A field tree
+// nesting past ten levels was still walked by every other field check while
+// this one gave up, which loses a violation instead of reporting it.
+const maxTextFieldTreeDepth = maxFieldTreeDepth
 
 // checkTextFieldRichValue validates ISO 14289-2, 8.10.3.3 t1: a text field
 // carrying rich text in /RV shall also carry /V, and the two shall say the same
