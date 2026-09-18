@@ -166,6 +166,14 @@ var ErrImageRegionCoversNoSample = errors.New("region covers an image but none o
 // as well as inside it. Translating them is possible and is not done yet.
 var ErrImageCarriesSampleEntries = errors.New("image carries decode or mask entries")
 
+// ErrScanTokenEmpty reports an empty token handed to a document scan.
+//
+// An empty string is contained in every other string, so scanning for one would
+// report every object in the file as still holding the token. That reads as a
+// catastrophic leak and means nothing, so the scan reports the caller's mistake
+// instead of returning an answer it cannot support.
+var ErrScanTokenEmpty = errors.New("scan token is empty")
+
 // ErrSpansOverlap reports two byte spans that cover some of the same bytes.
 //
 // Overlapping spans stop having a single meaning once one of them is removed,

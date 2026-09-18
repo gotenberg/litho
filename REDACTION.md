@@ -93,7 +93,18 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   annotation and form-field removal, inline images (their samples sit in the content
   stream, so blanking means splicing bytes rather than replacing an object), and JBIG2's
   1-bpc decode path.
-- **PR4 — Document-wide sanitization** (the full vector table) + font re-subset + full-rewrite enforcement + the token-scan verification gate; fail closed.
+- **PR4 — Document-wide sanitization** (the full vector table) + font re-subset + full-rewrite
+  enforcement + the token-scan verification gate; fail closed. **The scan half has landed**, and only
+  that half: `mutations.ScanForTokens` walks every object in the file — not the places a redaction
+  happens to know about, which is the point, since it catches the vector nobody enumerated. Strings
+  are compared after `DecodePdfString`, so a UTF-16 copy matches like a PDFDocEncoding one, and stream
+  data is compared **decoded**, so a word inside a Flate-compressed structure tree or appearance
+  stream is not missed. It returns the objects it could **not** read alongside the hits: a scan that
+  skipped a stream has not proved that stream clean, and reporting the empty hit list as success would
+  be the same false negative the scan exists to prevent. Still open here: nothing is wired to it yet
+  (removal does not report what it cleared, so there are no tokens to feed it), and the scrubbing
+  itself — structure tree, annotation values, outlines, `/PieceInfo`, `/Thumb`, metadata, font
+  re-subset — is untouched. The scan tells you the document is still dirty; it does not clean it.
 - **PR5 — CLI.** `litho redact --region <page:x,y,w,h>...` or `--apply-marks`.
 
 ## Limits and honest scope
