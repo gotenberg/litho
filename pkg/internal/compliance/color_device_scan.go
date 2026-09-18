@@ -1204,16 +1204,21 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 		// Patterns can be streams (tiling) or dicts (shading patterns).
 		stream, err := document.ResolveStream(ctx, doc, patternObj)
 		if err != nil {
-			// Shading pattern (Type 2): check its /Shading dict for device CS.
+			// Shading pattern (Type 2): check its /Shading for device CS.
 			patDict, err := document.ResolveDict(ctx, doc, patternObj)
 			if err == nil && patDict != nil {
-				shadingObj, ok := patDict["Shading"]
-				if ok {
-					sd, err := document.ResolveDict(ctx, doc, shadingObj)
-					if err == nil && sd != nil {
+				if shadingObj, ok := patDict["Shading"]; ok {
+					// A mesh shading of type 4 to 7 is a STREAM, so resolving
+					// only the dictionary form drops it here exactly as it did
+					// on the sh path (see [resolveShadingDict]): pdfjs
+					// coons-allflags-withfunction.pdf and
+					// tensor-allflags-withfunction.pdf each select a
+					// PatternType 2 whose /Shading is a type 6 or 7 stream in
+					// DeviceRGB, and with no /OutputIntents litho counted no
+					// device colour space for the page at all.
+					if sd := resolveShadingDict(ctx, doc, shadingObj); sd != nil {
 						if csObj, ok := sd["ColorSpace"]; ok {
-							csN := resolveCSName(ctx, doc, csObj)
-							markDeviceCS(csN, usage)
+							markDeviceCS(resolveCSName(ctx, doc, csObj), usage)
 						}
 					}
 				}
