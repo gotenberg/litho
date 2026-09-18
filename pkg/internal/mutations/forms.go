@@ -21,6 +21,13 @@ import (
 // anti-DoS guard, not spec-mandated: ISO 32000-1, 12.7.3 describes a shallow
 // field hierarchy, and a crafted file whose /Parent points back at a descendant
 // would otherwise loop.
+//
+// The name says tree; the bound is on a /Parent ASCENT. This is the same
+// concept as maxFieldParentDepth in acroform_split_merge.go, which carries the
+// measured depth and the note on cycles. Renaming it would collide with that
+// constant in this same package, so the two are cross-referenced instead.
+// Beware that compliance and signature each define a maxFieldTreeDepth that
+// really is a /Kids descent, a different walk entirely.
 const maxFieldTreeDepth = 64
 
 // SetFormField finds a form field by name and updates its /V value.
@@ -815,6 +822,11 @@ const (
 // maxFieldAncestorDepth bounds the walk up a field's /Parent chain. This is an
 // anti-DoS guard, not a spec limit: ISO 32000-1, 12.7.3.1 puts no depth on the
 // field tree, while a crafted file can chain parents indefinitely.
+//
+// Third name in this package for one walk, beside maxFieldParentDepth (32) in
+// acroform_split_merge.go, which carries the measurement, and maxFieldTreeDepth
+// (64) above. Cross-referenced rather than merged: the deepest real chain is 7,
+// so no document tells these values apart.
 const maxFieldAncestorDepth = 32
 
 // keepWidget rewrites a widget the flatten is leaving in place so it can still

@@ -335,6 +335,12 @@ func allocateBlankForm(alloc *writer.ObjAllocator, bbox ast.PdfArray) ast.PdfInd
 // an anti-DoS guard, not a spec limit: ISO 32000-1, 12.7.3.1 puts no depth on
 // the field tree, but a crafted file can chain parents indefinitely and a real
 // form nests a handful at most.
+//
+// The same ascent is bounded in mutations (three constants), in
+// annotation/acroform.go (64) and in compliance/annotations.go (100). See
+// mutations/acroform_split_merge.go for the measurement that makes the
+// difference unreachable, and [document.ResolveFieldParent] for the visited set
+// that ends a cyclic chain.
 const maxFieldParentDepth = 32
 
 // rendersOwnValue reports whether a viewer would draw this annotation from text

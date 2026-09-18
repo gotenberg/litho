@@ -20,6 +20,24 @@ import (
 // nothing to do with how deep a widget's /Parent chain runs; the two numbers
 // were never equal and nothing breaks when they differ. 32 is chosen for the
 // field tree on its own terms.
+//
+// Five other constants bound this same /Parent ascent, at values that differ:
+// maxFieldTreeDepth (64) and maxFieldAncestorDepth (32) in forms.go,
+// maxFieldParentDepth in annotation/acroform.go (64), in
+// remediation/fixer_annotappearance.go (32) and in compliance/annotations.go
+// (100). They stay separate and cross-referenced rather than merged into one,
+// because the difference cannot be reached: measured across 5171 corpus files,
+// the deepest ACYCLIC /Parent chain is 7.
+//
+// The number is not what makes any of these walks safe. A bound stops a cycle
+// without detecting one, so the walk runs to the bound and then reports
+// whichever node it halted on as though that were the answer. Cycles are real:
+// 16 /Parent chains in a single corpus file are cyclic. Every one of these
+// walks therefore carries a visited set. Most reach it through one shared hop,
+// [document.ResolveFieldParent], which owns the set and the detection together.
+// [rootFieldOf] below is the exception: it reads the allocator's pending
+// objects rather than the document, so it cannot use that hop and keeps a
+// visited set of its own.
 const maxFieldParentDepth = 32
 
 // rebuildAcroForm writes an /AcroForm onto dst describing the form fields that

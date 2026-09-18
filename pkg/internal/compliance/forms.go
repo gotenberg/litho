@@ -158,7 +158,16 @@ func collectPageAnnotObjNums(ctx context.Context, vctx *validationCtx) map[int]b
 	return objs
 }
 
-// maxFieldTreeDepth limits recursion when walking the field tree.
+// maxFieldTreeDepth bounds the recursion DOWN a field's /Kids. It is an
+// anti-DoS guard, not spec-mandated: ISO 32000-1, 12.7.3 describes a hierarchy
+// only a few levels deep, so 100 sits far above any real form, while a crafted
+// file whose /Kids points back at an ancestor would otherwise recurse until the
+// stack is exhausted.
+//
+// Not to be confused with the /Parent ASCENT bounded by maxFieldParentDepth in
+// annotations.go: opposite direction, different concept. signature.go defines
+// another maxFieldTreeDepth (64) that is a /Kids descent like this one, while
+// the maxFieldTreeDepth in mutations is an ascent despite its name.
 const maxFieldTreeDepth = 100
 
 // Anti-DoS caps for the signature byte-range recomputation. Not

@@ -493,6 +493,12 @@ func isZeroRect(ctx context.Context, doc *document.Document, annot ast.PdfDict) 
 // value stays 100 so the walk reaches exactly as far as it always has; only the
 // name now describes what it bounds. A visited set breaks cycles independently,
 // since a bound stops a cycle without detecting one.
+//
+// Five other constants bound this same ascent, in mutations (three of them),
+// annotation and remediation, at 32 and 64. See
+// mutations/acroform_split_merge.go for the measurement that makes the spread
+// unreachable, and [document.ResolveFieldParent] for the shared hop. Distinct
+// again from maxFieldTreeDepth in forms.go, which descends /Kids.
 const maxFieldParentDepth = 100
 
 // resolveFieldType resolves the /FT key for a Widget annotation, walking up

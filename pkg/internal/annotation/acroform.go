@@ -81,6 +81,12 @@ func HasPageWidgetField(ctx context.Context, doc *document.Document) bool {
 // anti-DoS guard, not spec-mandated: ISO 32000-1, 12.7.3 describes a shallow
 // field hierarchy, and a crafted file whose /Parent points back at a descendant
 // would otherwise loop.
+//
+// The same ascent is bounded in mutations (three constants), in remediation and
+// in compliance, at 32, 64 and 100. See mutations/acroform_split_merge.go for
+// the measurement that puts every one of those far above anything real, and
+// [document.ResolveFieldParent] for the visited set that does the actual work
+// of ending a cyclic chain.
 const maxFieldParentDepth = 64
 
 // unregisteredWidgetFields returns the form fields a page carries that the
