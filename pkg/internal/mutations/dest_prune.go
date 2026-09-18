@@ -295,6 +295,13 @@ func pruneFieldKids(
 //
 // Every field here is an indirect object already, since a direct one is
 // rejected below: it has no object number to write an override for.
+//
+// The bound reads maxFieldParentDepth, which is named for the /Parent ASCENT
+// in acroform_split_merge.go, while this walk descends /Kids. That is a name
+// mismatch, not a wrong limit: a field tree is a handful of levels deep either
+// way (ISO 32000-1, 12.7.3), and 32 sits far above it. See that file's note for
+// the measurement and for the rest of the family, which carries the same
+// confusion under three different names.
 func pruneFieldKidsAt(
 	ctx context.Context,
 	doc *document.Document,

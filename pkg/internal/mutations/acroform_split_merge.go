@@ -29,6 +29,10 @@ import (
 // because the difference cannot be reached: measured across 5171 corpus files,
 // the deepest ACYCLIC /Parent chain is 7.
 //
+// This constant is borrowed for one walk that is not an ascent at all:
+// pruneFieldKidsAt in dest_prune.go descends /Kids under it. The limit is fine
+// there, the name is not, and that site says so.
+//
 // The number is not what makes any of these walks safe. A bound stops a cycle
 // without detecting one, so the walk runs to the bound and then reports
 // whichever node it halted on as though that were the answer. Cycles are real:
