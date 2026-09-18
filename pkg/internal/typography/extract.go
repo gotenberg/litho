@@ -103,7 +103,7 @@ func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, 
 // isolation.
 // When origins is non-nil, one entry is appended to it per element appended to
 // elements, naming the index in ops of the operation that drew it.
-func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, origins *[]int) error {
+func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, origins *[]int, fontRefs *[]int) error {
 	if depth > maxFormXObjectDepth {
 		if doc != nil {
 			doc.Logger.Debug("form xobject max depth reached",
@@ -127,6 +127,9 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 
 	var currentFont *Font
 	var currentFontName string
+	// The object number of the font dictionary currently selected by Tf, so a
+	// caller can tell which font drew each glyph.
+	currentFontRef := FontUnattributable
 	syncFont := func(state *graphics.State) {
 		// q/Q save/restore the Tf state on the graphics stack. The
 		// currentFont variable lives outside that stack, so a Q that
@@ -138,13 +141,18 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 		currentFontName = state.Text.Tf
 		if state.Text.Tf == "" {
 			currentFont = nil
+			currentFontRef = FontUnattributable
 			return
 		}
-		if font := resolveFontFromResources(ctx, doc, resources, ast.PdfName(state.Text.Tf)); font != nil {
+		if font, objNum := resolveFontFromResources(ctx, doc, resources, ast.PdfName(state.Text.Tf)); font != nil {
 			currentFont = font
+			currentFontRef = objNum
 			return
 		}
+		// A font litho could not resolve is drawn with a stand-in, and the
+		// stand-in is not in the file: nothing to attribute it to.
 		currentFont = fallbackFont()
+		currentFontRef = FontUnattributable
 	}
 	for opIdx, op := range ops {
 		// Check for context cancellation every 100 operators to respect
@@ -186,7 +194,13 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 
 		switch op.Operator {
 		case "Tf":
-			currentFont = handleTfOp(ctx, doc, resources, op, currentFont)
+			// syncFont above has already resolved this font and captured its
+			// reference: Execute applied the Tf before the loop reached here,
+			// so the state carries the new name and syncFont's early return
+			// does not fire. Capturing again keeps the reference from drifting
+			// away from currentFont if either path changes, and both resolve
+			// through the same cache, so the second lookup costs nothing.
+			currentFont, currentFontRef = handleTfOp(ctx, doc, resources, op, currentFont, currentFontRef)
 			// A malformed content stream can carry a Tf with no operands;
 			// guard the operand access so a crafted page cannot panic.
 			if len(op.Operands) > 0 {
@@ -229,6 +243,22 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 			}
 			for range len(*elements) - before {
 				*origins = append(*origins, origin)
+			}
+		}
+
+		// Name the font that drew each new element, so a caller can tell which
+		// embedded font a glyph came from. Attributed here rather than at the
+		// append itself because this is where the count of new elements is
+		// known, and the font selected by Tf is in scope.
+		if fontRefs != nil {
+			fontRef := currentFontRef
+			if op.Operator == "Do" {
+				// A form resolves fonts through its own /Resources, so the font
+				// selected out here did not draw them.
+				fontRef = FontUnattributable
+			}
+			for range len(*elements) - before {
+				*fontRefs = append(*fontRefs, fontRef)
 			}
 		}
 	}
@@ -297,54 +327,85 @@ func ocgVisible(v ast.PdfObject, cfg *document.OCConfig) bool {
 // page's /Font resource dict and the document-wide font cache. Returns
 // the resolved font, or a best-effort [fallbackFont] if nothing can be
 // found. Never returns an error, extraction always continues.
-func handleTfOp(ctx context.Context, doc *document.Document, resources ast.PdfDict, op content.Operation, prev *Font) *Font {
+//
+// It also returns the object number of the font dictionary, which is what
+// identifies a font across the document, or [FontUnattributable] when there is
+// no object to name. A Tf this cannot read leaves the font unchanged, so it
+// gives back the caller's current number rather than clearing it.
+func handleTfOp(
+	ctx context.Context,
+	doc *document.Document,
+	resources ast.PdfDict,
+	op content.Operation,
+	prev *Font,
+	prevRef int,
+) (*Font, int) {
 	if len(op.Operands) < 1 {
-		return prev
+		return prev, prevRef
 	}
 	fontName, ok := op.Operands[0].(ast.PdfName)
 	if !ok {
-		return prev
+		return prev, prevRef
 	}
 
-	if font := resolveFontFromResources(ctx, doc, resources, fontName); font != nil {
-		return font
+	if font, objNum := resolveFontFromResources(ctx, doc, resources, fontName); font != nil {
+		return font, objNum
 	}
 
 	// Fall back to a default font rather than aborting the page. Text may
 	// be garbled, but extraction continues. Best-effort is our contract.
+	//
+	// The stand-in is not in the file, so there is nothing to attribute its
+	// glyphs to.
 	if doc != nil {
 		doc.Logger.Debug("font not found, using fallback",
 			slog.String("font", string(fontName)),
 		)
 	}
-	return fallbackFont()
+	return fallbackFont(), FontUnattributable
 }
 
 // resolveFontFromResources looks up a font name in the resource dict's
 // /Font sub-dict, consulting the document's font cache first and
 // populating it on cache miss. Returns nil if the font cannot be resolved.
-func resolveFontFromResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, fontName ast.PdfName) *Font {
+// resolveFontFromResources returns the font a resource name binds, and the
+// object number of the font dictionary behind it.
+//
+// The object number is what identifies a font across the document: a resource
+// name is scoped to one page's resources, so two pages may bind /F1 to
+// different fonts.
+//
+// It reports [FontUnattributable] whenever there is no object to name: the
+// resources hold the font dictionary directly rather than referencing it, the
+// name is absent, or the font could not be read at all. The last two return a
+// nil font as well, so a caller that checks the font first never sees them.
+func resolveFontFromResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, fontName ast.PdfName) (*Font, int) {
 	resObj, ok := resources["Font"]
 	if !ok {
-		return nil
+		return nil, FontUnattributable
 	}
 	resDictRoot, err := document.ResolveDict(ctx, doc, resObj)
 	if err != nil {
 		doc.Logger.Debug("resolving Font resource dict", slog.Any("err", err))
 	}
 	if resDictRoot == nil {
-		return nil
+		return nil, FontUnattributable
 	}
 	fontRefObj, ok := resDictRoot[fontName]
 	if !ok {
-		return nil
+		return nil, FontUnattributable
+	}
+
+	objNum := FontUnattributable
+	if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok {
+		objNum = ref.ObjectNum
 	}
 
 	// Cache hit by indirect reference object number.
 	if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok && doc != nil {
 		if cached, ok := doc.CachedFont(ref.ObjectNum); ok {
 			if f, ok := cached.(*Font); ok {
-				return f
+				return f, objNum
 			}
 		}
 	}
@@ -352,16 +413,16 @@ func resolveFontFromResources(ctx context.Context, doc *document.Document, resou
 	// Cache miss: parse the font dict and store it back.
 	fontDict, err := document.ResolveDict(ctx, doc, fontRefObj)
 	if err != nil || fontDict == nil {
-		return nil
+		return nil, FontUnattributable
 	}
 	font, err := ResolveFont(ctx, doc, fontDict)
 	if err != nil {
-		return nil
+		return nil, FontUnattributable
 	}
 	if ref, ok := fontRefObj.(ast.PdfIndirectRef); ok && doc != nil {
 		doc.SetCachedFont(ref.ObjectNum, font)
 	}
-	return font
+	return font, objNum
 }
 
 // handleShowTextOp processes Tj ("), and " operators. strIndex selects the
@@ -543,8 +604,11 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	prevDepth := machine.FormDepth
 	prevOpIndex := machine.OpIndex
 	// No origins below the top level: these elements are drawn by the form's own
-	// content stream, and the caller's operation indices do not address it.
-	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances, nil)
+	// content stream, and the caller's operation indices do not address it. No
+	// font references either, and for a sharper reason: the form selects its
+	// fonts from its own /Resources, so the reference held out here names a
+	// different font than the one that drew them.
+	err = extractTextRecursive(ctx, doc, machine, formRes, formOps, elements, visited, depth+1, annotAppearances, nil, nil)
 	machine.Resources = prevResources
 	machine.FormDepth = prevDepth
 	machine.OpIndex = prevOpIndex
@@ -571,7 +635,7 @@ type ExtractionConfig struct {
 // extractElements does the work behind [ExtractElements] and
 // [ExtractElementsWithOrigins]. It reports origins only when asked, so the
 // common path allocates nothing extra.
-func extractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, recordOrigins bool) ([]models.TextElement, []int, error) {
+func extractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, recordOrigins, recordFonts bool) ([]models.TextElement, []int, []int, error) {
 	// Collect annotation appearance object numbers so we can skip them during
 	// text extraction. Annotation appearances are visual overlays, not page content.
 	annotAppearances := collectAnnotAppearanceObjects(ctx, doc, page.Dict)
@@ -587,8 +651,14 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 		origins = make([]int, 0, estimatedCap)
 		originsPtr = &origins
 	}
-	if err := extractTextRecursive(ctx, doc, machine, page.Resources, ops, &elements, make(map[int]bool), 0, annotAppearances, originsPtr); err != nil {
-		return nil, nil, err
+	var fontRefs []int
+	var fontRefsPtr *[]int
+	if recordFonts {
+		fontRefs = make([]int, 0, estimatedCap)
+		fontRefsPtr = &fontRefs
+	}
+	if err := extractTextRecursive(ctx, doc, machine, page.Resources, ops, &elements, make(map[int]bool), 0, annotAppearances, originsPtr, fontRefsPtr); err != nil {
+		return nil, nil, nil, err
 	}
 
 	if doc != nil {
@@ -662,7 +732,7 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 		}
 	}
 
-	return elements, origins, nil
+	return elements, origins, fontRefs, nil
 }
 
 // OriginUnattributable marks an element whose bytes are not in the operations
@@ -670,10 +740,22 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 // stream, so no offset into the invoking stream addresses the glyph it drew.
 const OriginUnattributable = -1
 
+// FontUnattributable marks an element whose font has no object number of its
+// own, because the page's /Font resource holds the font dictionary directly
+// rather than naming it (ISO 32000-1, 7.3.10 allows either).
+//
+// A caller deciding whether a font is left carrying nothing but removed text
+// identifies fonts by object number, so one without a number cannot be judged
+// and must not be mistaken for a font that was never used. It is a separate
+// constant from [OriginUnattributable] because the two say different things: an
+// unattributable origin means the bytes are elsewhere, an unattributable font
+// means there is no object to point at.
+const FontUnattributable = -1
+
 // ExtractElements extracts text from a page's content [content.Operation]
 // values as raw spatial [models.TextElement] entries.
 func ExtractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, error) {
-	elements, _, err := extractElements(ctx, doc, machine, page, ops, false)
+	elements, _, _, err := extractElements(ctx, doc, machine, page, ops, false, false)
 	return elements, err
 }
 
@@ -694,7 +776,24 @@ func ExtractElements(ctx context.Context, doc *document.Document, machine *graph
 // The origins describe these elements as returned. [CoalesceElements] merges
 // and drops entries, so origins do not survive it; correlate first.
 func ExtractElementsWithOrigins(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, []int, error) {
-	return extractElements(ctx, doc, machine, page, ops, true)
+	elements, origins, _, err := extractElements(ctx, doc, machine, page, ops, true, false)
+	return elements, origins, err
+}
+
+// ExtractElementsWithAttribution extracts elements and, for each, both the
+// index in ops of the operation that drew it and the object number of the font
+// dictionary it was drawn with. All three slices are the same length.
+//
+// The font reference is what tells a caller which embedded font a glyph came
+// from, which a redaction needs to judge whether a font is left describing
+// nothing but removed text. A resource name cannot answer that: /F1 is scoped
+// to one page's resources, so two pages may bind it to different fonts.
+//
+// An element drawn inside a form XObject reports [OriginUnattributable] and
+// [FontUnattributable]: its bytes are in the form's own stream, and the form
+// selects its fonts from its own resources.
+func ExtractElementsWithAttribution(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation) ([]models.TextElement, []int, []int, error) {
+	return extractElements(ctx, doc, machine, page, ops, true, true)
 }
 
 // CoalesceElements merges consecutive per-glyph [models.TextElement]
