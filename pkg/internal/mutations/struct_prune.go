@@ -101,13 +101,44 @@ func pruneStructKids(
 	ownerOnRemovedPage bool,
 	depth int,
 ) structKidsResult {
+	return pruneStructKidsAt(ctx, alloc, doc, kidsObj, removed, make(map[int]structElemVerdict), ownerOnRemovedPage, depth)
+}
+
+// structElemVerdict is what pruning one element decided, remembered so an
+// element named more than once is pruned once and answers the same every time.
+type structElemVerdict struct{ drop, changed bool }
+
+// pruneStructKidsAt is [pruneStructKids] carrying the verdicts already reached.
+//
+// memo is a cache, not a visited set, and the difference matters here. This
+// walk fans out over /K, so [maxStructTreeDepth] caps the work at branch^depth
+// rather than at depth, and an element whose /K names the same child twice
+// costs 2^64. Simply refusing the second visit would answer "keep, unchanged"
+// where the first visit may have said "drop", and the two entries of one /K
+// array would then disagree. Returning the remembered verdict keeps the output
+// exactly what the unguarded walk produced while the work stays linear. Its
+// [writer.ObjAllocator] write is safe to skip on a repeat, since the first
+// visit already made the identical one.
+//
+// A well-formed tree never hits the memo at all, because no element is named
+// twice.
+func pruneStructKidsAt(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	kidsObj ast.PdfObject,
+	removed map[int]bool,
+	memo map[int]structElemVerdict,
+	ownerOnRemovedPage bool,
+	depth int,
+) structKidsResult {
 	if depth > maxStructTreeDepth || kidsObj == nil {
 		return structKidsResult{Value: kidsObj, Survivors: 1}
 	}
 
 	arr, err := document.ResolveArray(ctx, doc, kidsObj)
 	if err != nil {
-		drop, changed := pruneStructKid(ctx, alloc, doc, kidsObj, removed, ownerOnRemovedPage, depth)
+		drop, changed := pruneStructKidAt(ctx, alloc, doc, kidsObj, removed, memo, ownerOnRemovedPage, depth)
 		if drop {
 			return structKidsResult{Changed: true}
 		}
@@ -117,7 +148,7 @@ func pruneStructKids(
 	kept := make(ast.PdfArray, 0, len(arr))
 	changed := false
 	for _, kid := range arr {
-		drop, kidChanged := pruneStructKid(ctx, alloc, doc, kid, removed, ownerOnRemovedPage, depth)
+		drop, kidChanged := pruneStructKidAt(ctx, alloc, doc, kid, removed, memo, ownerOnRemovedPage, depth)
 		if drop {
 			changed = true
 			continue
@@ -137,12 +168,13 @@ func pruneStructKids(
 
 // pruneStructKid decides the fate of one kid of a structure element, reporting
 // whether it must be dropped and whether it was rewritten in place.
-func pruneStructKid(
+func pruneStructKidAt(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
 	doc *document.Document,
 	kid ast.PdfObject,
 	removed map[int]bool,
+	memo map[int]structElemVerdict,
 	ownerOnRemovedPage bool,
 	depth int,
 ) (drop, changed bool) {
@@ -167,7 +199,7 @@ func pruneStructKid(
 		}
 		return onRemovedPage(dict, removed), false
 	}
-	return pruneStructElement(ctx, alloc, doc, kid, dict, removed, depth)
+	return pruneStructElementAt(ctx, alloc, doc, kid, dict, removed, memo, depth)
 }
 
 // pruneStructElement filters one element's own /K and decides whether the
@@ -178,33 +210,51 @@ func pruneStructKid(
 // on pages that stayed keeps its place and loses only /Pg, because dropping it
 // would detach those children from the tree, and because /Pg is optional
 // (ISO 32000-1, Table 323) and the content it named is gone.
-func pruneStructElement(
+func pruneStructElementAt(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
 	doc *document.Document,
 	obj ast.PdfObject,
 	element ast.PdfDict,
 	removed map[int]bool,
+	memo map[int]structElemVerdict,
 	depth int,
 ) (drop, changed bool) {
+	// An element named twice answers with the verdict it already reached, so a
+	// /K that fans out is pruned once. Only an indirect element can be named
+	// twice: one written directly into its parent has no object of its own.
+	elemRef, elemIsRef := obj.(ast.PdfIndirectRef)
+	if elemIsRef {
+		if v, done := memo[elemRef.ObjectNum]; done {
+			return v.drop, v.changed
+		}
+	}
+
 	pageGone := onRemovedPage(element, removed)
 
-	kids := pruneStructKids(ctx, alloc, doc, element["K"], removed, pageGone, depth+1)
+	kids := pruneStructKidsAt(ctx, alloc, doc, element["K"], removed, memo, pageGone, depth+1)
 	survivors := kids.Survivors
 	if _, hasKids := element["K"]; !hasKids {
 		survivors = 0
 	}
 
-	if pageGone && survivors == 0 {
-		return true, false
-	}
-	if !kids.Changed && !pageGone {
-		return false, false
+	remember := func(drop, changed bool) (bool, bool) {
+		if elemIsRef {
+			memo[elemRef.ObjectNum] = structElemVerdict{drop: drop, changed: changed}
+		}
+		return drop, changed
 	}
 
-	ref, isRef := obj.(ast.PdfIndirectRef)
+	if pageGone && survivors == 0 {
+		return remember(true, false)
+	}
+	if !kids.Changed && !pageGone {
+		return remember(false, false)
+	}
+
+	ref, isRef := elemRef, elemIsRef
 	if !isRef {
-		return false, kids.Changed
+		return remember(false, kids.Changed)
 	}
 	newElement := make(ast.PdfDict, len(element))
 	maps.Copy(newElement, element)
@@ -219,7 +269,7 @@ func pruneStructElement(
 		}
 	}
 	alloc.AllocAt(ref.ObjectNum, newElement)
-	return false, true
+	return remember(false, true)
 }
 
 // pruneParentTree drops the /ParentTree entries whose elements describe removed
