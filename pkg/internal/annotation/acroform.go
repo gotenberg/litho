@@ -150,13 +150,10 @@ func widgetFieldRoot(ctx context.Context, doc *document.Document, annotObj ast.P
 	}
 
 	current, currentDict := annotObj, annotDict
+	seen := make(map[int]bool)
 	for range maxFieldParentDepth {
-		parentObj, hasParent := currentDict["Parent"]
-		if !hasParent {
-			break
-		}
-		parentDict, err := document.ResolveDict(ctx, doc, parentObj)
-		if err != nil || parentDict == nil {
+		parentObj, parentDict, ok := document.ResolveFieldParent(ctx, doc, currentDict, seen)
+		if !ok {
 			break
 		}
 		current, currentDict = parentObj, parentDict
@@ -164,16 +161,24 @@ func widgetFieldRoot(ctx context.Context, doc *document.Document, annotObj ast.P
 
 	// A field carries a type, inherited or its own. Without one the widget is
 	// decoration rather than a form field.
+	//
+	// This search keeps its own visited set rather than sharing the ascent's.
+	// It resumes at the node the ascent stopped on, which that set already
+	// records, so a shared one would reject its own first hop. Usually it has
+	// no hop to make: the ascent ends at a parentless field whose /FT is read
+	// right here. The two sets matter when the ascent stopped early instead, on
+	// a cycle or a parent that does not resolve.
+	ftSeen := make(map[int]bool)
 	node, depth := currentDict, 0
 	for node != nil && depth < maxFieldParentDepth {
 		if _, ok := node["FT"]; ok {
 			return current, true
 		}
-		parentDict, err := document.ResolveDict(ctx, doc, node["Parent"])
-		if err != nil {
+		_, parent, ok := document.ResolveFieldParent(ctx, doc, node, ftSeen)
+		if !ok {
 			return nil, false
 		}
-		node = parentDict
+		node = parent
 		depth++
 	}
 	return nil, false
