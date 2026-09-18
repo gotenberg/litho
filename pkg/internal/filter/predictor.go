@@ -244,8 +244,8 @@ func applyTIFFPredictor(data []byte, params *predictorParams) ([]byte, error) {
 		for off := 0; off+rowBytes <= len(result); off += rowBytes {
 			row := result[off : off+rowBytes]
 			for i := params.Colors; i < numSamples; i++ {
-				cur := bitSample(row, i, bpc, mask)
-				prev := bitSample(row, i-params.Colors, bpc, mask)
+				cur := BitSample(row, i, bpc, mask)
+				prev := BitSample(row, i-params.Colors, bpc, mask)
 				setBitSample(row, i, bpc, mask, (cur+prev)&mask)
 			}
 		}
@@ -258,8 +258,13 @@ func applyTIFFPredictor(data []byte, params *predictorParams) ([]byte, error) {
 	}
 }
 
-// bitSample extracts a sub-byte sample at the given sample index.
-func bitSample(row []byte, sampleIdx, bpc int, mask byte) byte {
+// BitSample extracts a sub-byte sample at the given sample index.
+//
+// Per ISO 32000-1, 8.9.3 sub-byte samples are packed MSB-first, so the sample
+// at index i begins at bit i*bpc counted from the high end of the row. Exported
+// because image decoding unpacks packed samples by this same rule, and the rule
+// is better stated once than restated per package.
+func BitSample(row []byte, sampleIdx, bpc int, mask byte) byte {
 	bitPos := sampleIdx * bpc
 	byteIdx := bitPos / 8
 	shift := 8 - (bitPos%8 + bpc) // MSB-first packing

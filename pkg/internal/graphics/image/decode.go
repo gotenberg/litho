@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 const (
@@ -38,6 +39,84 @@ func validateImageDimensions(width, height int) error {
 		return fmt.Errorf("image %dx%d exceeds %d-pixel safety cap", width, height, maxImagePixels)
 	}
 	return nil
+}
+
+// unpackSamples expands packed image samples so each occupies one byte,
+// returning 8-bit data untouched.
+//
+// Per ISO 32000-1, 8.9.3 samples are packed MSB-first and every row begins on a
+// byte boundary, so one row occupies ceil(width*samples*bpc/8) bytes and the
+// padding bits at its end are skipped rather than read as the next row's first
+// samples. Unpacking row by row rather than straight down the buffer is what
+// keeps a width that is not a multiple of 8 from shifting every row after the
+// first.
+//
+// scale separates a colour value from a palette index. A colour value is
+// stretched to the full 8-bit range, which leaves [buildDecodeLUTs] exact: those
+// tables are linear across 0..255, so stretching first and mapping after gives
+// the same answer as mapping the raw [0, 2^bpc-1] range ISO 32000-1, 8.9.5.2
+// defines, inverted /Decode arrays included. A palette index must NOT be
+// stretched, because [decodeIndexed] looks it up directly and a stretched index
+// addresses the wrong colour.
+//
+// The result needs no cap of its own: [validateImageDimensions] holds
+// width*height to maxImagePixels and samplesPerPixel is at most 4, so the
+// expansion cannot exceed maxImageBytes however small the packed input was.
+func unpackSamples(data []byte, width, height, samplesPerPixel, bpc int, scale bool) ([]byte, error) {
+	if bpc == 8 {
+		return data, nil
+	}
+
+	perRow := width * samplesPerPixel
+	var rowBytes int
+	switch bpc {
+	case 1, 2, 4:
+		rowBytes = (perRow*bpc + 7) / 8
+	case 16:
+		rowBytes = perRow * 2
+	default:
+		// ISO 32000-1, 8.9.5.1 Table 89 permits 1, 2, 4, 8 and 16 only. A
+		// corpus image declares 3, which has no defined packing at all, so it
+		// is refused rather than strided as though it had one.
+		return nil, fmt.Errorf("unsupported BitsPerComponent %d for image decode", bpc)
+	}
+
+	if len(data) < rowBytes*height {
+		return nil, fmt.Errorf("decoded data too short for %d-bit image: got %d, want %d",
+			bpc, len(data), rowBytes*height)
+	}
+
+	out := make([]byte, 0, perRow*height)
+
+	if bpc == 16 {
+		// The high byte alone: this decoder and its /Decode tables are 8-bit,
+		// so the low byte has nowhere to land.
+		for y := range height {
+			row := data[y*rowBytes : (y+1)*rowBytes]
+			for i := range perRow {
+				out = append(out, row[i*2])
+			}
+		}
+		return out, nil
+	}
+
+	maxVal := byte(1<<bpc - 1)
+	// Bit replication. 255/maxVal is exact for 1, 2 and 4 bits (255, 85, 17),
+	// so a stretched sample is the raw value repeated across the byte and the
+	// brightest sample lands on exactly 255 rather than one short of it.
+	mul := byte(255) / maxVal
+
+	for y := range height {
+		row := data[y*rowBytes : (y+1)*rowBytes]
+		for i := range perRow {
+			v := filter.BitSample(row, i, bpc, maxVal)
+			if scale {
+				v *= mul
+			}
+			out = append(out, v)
+		}
+	}
+	return out, nil
 }
 
 // imageComponents returns the samples-per-pixel for the color spaces the
@@ -293,10 +372,7 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 	}
 
 	colorSpace := resolveColorSpace(ctx, doc, stream.Dict)
-	bitsPerComp, _ := resolveInt(ctx, doc, stream.Dict, "BitsPerComponent")
-	if bitsPerComp == 0 {
-		bitsPerComp = 8
-	}
+	bitsPerComp := statedBitsPerComponent(ctx, doc, stream.Dict)
 
 	// Determine the filter.
 	filterName := ""
@@ -353,16 +429,31 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 		return nil, fmt.Errorf("decoded image stream exceeds %d-byte safety cap", maxImageBytes)
 	}
 
-	if bitsPerComp != 8 {
-		return nil, fmt.Errorf("unsupported BitsPerComponent %d for image decode", bitsPerComp)
+	// Resolved before the samples are unpacked, because an indexed image holds
+	// ONE sample per pixel whatever its base space is, while resolveColorSpace
+	// reports that base: [/Indexed /DeviceRGB ...] reads back as "DeviceRGB".
+	// Taking the sample count from the base would stride packed samples three
+	// or four times too far and mis-read every sub-byte indexed image.
+	//
+	// An indexed image's /Decode array remaps the index range, not colour
+	// components (ISO 32000-1, 8.9.5.2), and the default [0 2^n-1] is the
+	// identity, which is what every indexed image in the corpora states.
+	pal, isIndexed := resolveIndexedPalette(ctx, doc, stream.Dict)
+
+	samplesPerPixel := 1
+	if !isIndexed {
+		samplesPerPixel = imageComponents(colorSpace)
+		if samplesPerPixel == 0 {
+			return nil, fmt.Errorf("unsupported color space %q for image decode", colorSpace)
+		}
 	}
 
-	// An indexed image stores one index per pixel rather than a colour, so it
-	// is mapped through its palette before anything else looks at the bytes.
-	// Its /Decode array remaps the index range, not colour components
-	// (ISO 32000-1, 8.9.5.2), and the default [0 2^n-1] is the identity, which
-	// is what every indexed image in the corpora states.
-	if pal, ok := resolveIndexedPalette(ctx, doc, stream.Dict); ok {
+	decodedData, err = unpackSamples(decodedData, width, height, samplesPerPixel, bitsPerComp, !isIndexed)
+	if err != nil {
+		return nil, err
+	}
+
+	if isIndexed {
 		return decodeIndexed(decodedData, width, height, pal)
 	}
 

@@ -414,6 +414,26 @@ func usesJPXDecode(ctx context.Context, doc *document.Document, dict ast.PdfDict
 	return false
 }
 
+// statedBitsPerComponent returns the sample depth an image is to be read at,
+// defaulting to 8.
+//
+// Per ISO 32000-1, Table 89 /BitsPerComponent is optional for a JPXDecode image
+// and shall be ignored if present, because the depth belongs to the JPEG 2000
+// codestream rather than to the dictionary. pdfjs issue12213.pdf states 4 for an
+// image poppler reads as 8. Honouring that number would report a depth the spec
+// says means nothing, and worse, would drive [unpackSamples] to stride 8-bit
+// codestream output as though it were packed 4-bit and mis-read the whole image.
+//
+// One helper rather than the same clause applied in two places, so the reading
+// cannot drift between what an image reports and what it decodes as.
+func statedBitsPerComponent(ctx context.Context, doc *document.Document, dict ast.PdfDict) int {
+	bpc, _ := resolveInt(ctx, doc, dict, "BitsPerComponent")
+	if bpc == 0 || usesJPXDecode(ctx, doc, dict) {
+		return 8
+	}
+	return bpc
+}
+
 // imageMeta reads the metadata an Image XObject states.
 func imageMeta(ctx context.Context, doc *document.Document, name string, stream ast.PdfStream) (models.ImageMeta, bool) {
 	width, err := resolveInt(ctx, doc, stream.Dict, "Width")
@@ -424,18 +444,7 @@ func imageMeta(ctx context.Context, doc *document.Document, name string, stream 
 	if err != nil {
 		return models.ImageMeta{}, false
 	}
-	bitsPerComp, _ := resolveInt(ctx, doc, stream.Dict, "BitsPerComponent")
-	if usesJPXDecode(ctx, doc, stream.Dict) {
-		// Per ISO 32000-1, Table 89 the entry is optional for a JPXDecode
-		// image and shall be ignored if present: the depth comes from the
-		// JPEG 2000 codestream. pdfjs issue12213.pdf states 4 for an image
-		// poppler reads as 8, and reporting the stated value gave a caller a
-		// number the spec says means nothing.
-		bitsPerComp = 0
-	}
-	if bitsPerComp == 0 {
-		bitsPerComp = 8
-	}
+	bitsPerComp := statedBitsPerComponent(ctx, doc, stream.Dict)
 	return models.ImageMeta{
 		Filename:         name,
 		Width:            width,
