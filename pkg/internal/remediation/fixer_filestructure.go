@@ -22,6 +22,18 @@ func matchFileStructure(v compliance.Violation) bool {
 		strings.HasPrefix(clause, "6.1.5") || // hex string length (part 4)
 		strings.HasPrefix(clause, "6.1.6") || // hex string length / stream length
 		strings.HasPrefix(clause, "6.1.7.1") || // stream length
+		// ISO 19005-1 spells the stream-length (t1) and stream-keyword-EOL
+		// (t2) rules 6.1.7, where parts 2 and 3 spell them 6.1.7.1 and part 4
+		// 6.1.6.1. The prefix above is LONGER than the part-1 clause, so it
+		// can never match it and those rules went unclaimed for PDF/A-1
+		// targets while the full rewrite repaired them everywhere else.
+		//
+		// Scoped to the specification because ISO 19005-4 clause 6.1.7 is
+		// CosUnicodeName, an unrelated requirement, and scoped to t1 and t2
+		// because t3 forbids the F, FFilter and FDecodeParms keys, which
+		// re-serialisation cannot delete: stream-file-keys repairs that one.
+		(v.Rule.Specification == "ISO_19005_1" && clause == "6.1.7" &&
+			(v.Rule.TestNumber == 1 || v.Rule.TestNumber == 2)) ||
 		strings.HasPrefix(clause, "6.1.8") || // object/endobj spacing
 		strings.HasPrefix(clause, "6.1.9") || // object/endobj EOL markers
 		clause == "6.1.12" || // integer out of range (part 1/2/4)
