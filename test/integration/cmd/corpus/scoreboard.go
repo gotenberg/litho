@@ -84,11 +84,15 @@ func printFeatureRow(w io.Writer, fr *FeatureReport) {
 		fn := fr.Metrics["false_negative"]
 		fmt.Fprintf(w, "%s %s  FP=%d FN=%d\n", prefix, primary, fp, fn)
 	case "remediation", "remediation-aggressive":
+		// Report the metrics the feature actually emits. No feature ever wrote
+		// "regression" or "improved", so both columns printed 0 for every
+		// corpus on every run, which reads as a measured guarantee of zero
+		// regressions instead of as a missing measurement.
 		fullyFixed := fr.Metrics["fully_fixed"]
-		regressions := fr.Metrics["regression"]
-		improved := fr.Metrics["improved"]
-		fmt.Fprintf(w, "%s %s  fully_fixed=%d  regressions=%d  improved=%d\n",
-			prefix, primary, fullyFixed, regressions, improved)
+		lithoRegressed := fr.Metrics["litho_regressed"]
+		veraRegressed := fr.Metrics["verapdf_regressed"]
+		fmt.Fprintf(w, "%s %s  fully_fixed=%d  litho_regressed=%d  verapdf_regressed=%d\n",
+			prefix, primary, fullyFixed, lithoRegressed, veraRegressed)
 	default:
 		fmt.Fprintf(w, "%s %s\n", prefix, primary)
 	}
