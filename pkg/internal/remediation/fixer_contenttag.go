@@ -307,8 +307,43 @@ func pageHasMarkedContent(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	return false
 }
 
-// resolveContentBytes reads and concatenates all content streams for a page.
-func resolveContentBytes(ctx context.Context, doc *document.Document, contentsObj ast.PdfObject) ([]byte, error) {
+// maxContentIndirectionDepth bounds how far [resolveContentBytes] follows a
+// reference before giving up. It is an anti-DoS guard, not spec-mandated: a
+// queued /Contents legitimately reaches two levels (a reference whose pending
+// replacement is another reference, which [replaceContentStream] writes when it
+// swaps an array for a single stream), while a crafted or mistaken file can
+// point a reference at itself.
+const maxContentIndirectionDepth = 8
+
+// resolveContentBytes reads and concatenates all content streams for a page,
+// preferring a replacement queued in alloc over the version in the document.
+//
+// Every shape /Contents may take is resolved the same way (ISO 32000-1,
+// 7.7.3.3 allows a stream or an array of streams, either one direct or
+// indirect), because a fixer that queued a repair must see it again: an
+// earlier fixer's rewrite lives only in alloc until the document is written.
+// Reading the document for an array while reading alloc for a single stream
+// made the second fixer of a page overwrite the first one's repair.
+//
+// A nil alloc reads the document alone, which is what a caller holding no
+// allocator wants. With nothing queued the result matches
+// [content.ParsePageContent], so the fixer and the checker still agree on an
+// untouched page.
+func resolveContentBytes(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, contentsObj ast.PdfObject) ([]byte, error) {
+	return resolveContentBytesAt(ctx, alloc, doc, contentsObj, 0)
+}
+
+func resolveContentBytesAt(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, contentsObj ast.PdfObject, depth int) ([]byte, error) {
+	if depth > maxContentIndirectionDepth {
+		return nil, fmt.Errorf("/Contents indirection exceeds %d levels", maxContentIndirectionDepth)
+	}
+
+	if ref, ok := contentsObj.(ast.PdfIndirectRef); ok && alloc != nil {
+		if pending, ok := alloc.Pending()[ref.ObjectNum]; ok {
+			return resolveContentBytesAt(ctx, alloc, doc, pending, depth+1)
+		}
+	}
+
 	resolved, err := document.ResolveObject(ctx, doc, contentsObj)
 	if err != nil {
 		return nil, err
@@ -320,12 +355,13 @@ func resolveContentBytes(ctx context.Context, doc *document.Document, contentsOb
 	case ast.PdfArray:
 		var all []byte
 		for _, item := range v {
-			stream, err := document.ResolveStream(ctx, doc, item)
+			// Each element goes back through the walk so a queued replacement
+			// of one stream of the array is seen, not just a queued
+			// replacement of the array itself.
+			data, err := resolveContentBytesAt(ctx, alloc, doc, item, depth+1)
 			if err != nil {
-				continue
-			}
-			data, err := doc.DecodeStream(ctx, stream)
-			if err != nil {
+				// Tolerate an element that will not resolve, as before: skip it
+				// and keep the rest of the page's content.
 				continue
 			}
 			all = append(all, data...)

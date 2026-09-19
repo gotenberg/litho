@@ -489,20 +489,20 @@ func livePageContentOps(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	return ops, contentsObj, nil
 }
 
-// liveContentBytes returns a page's decoded content bytes, preferring a single
-// stream queued in alloc (a content rewrite not yet in the document) over the
-// parsed document. The queued stream is decoded, not read raw: an earlier fixer
-// may have queued a filtered replacement at this object number (the LZW fixer
-// re-encodes content as FlateDecode), so its body is not necessarily plaintext.
-// Anything not queued in alloc falls back to the document resolver, matching the
-// prior doc-only behavior.
+// liveContentBytes returns a page's decoded content bytes, preferring a
+// replacement queued in alloc (a content rewrite not yet in the document) over
+// the parsed document. A queued stream is decoded, not read raw: an earlier
+// fixer may have queued a filtered replacement at this object number (the LZW
+// fixer re-encodes content as FlateDecode), so its body is not necessarily
+// plaintext.
+//
+// This holds for every shape /Contents may take, an array included. It used to
+// hold only for a single indirect reference to a stream, so a page whose
+// /Contents is an array read the document while a repair sat queued in alloc:
+// the next fixer to rewrite that page built on the stale bytes and dropped the
+// earlier repair. Nothing reported it, because the page still parsed.
 func liveContentBytes(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, contentsObj ast.PdfObject) ([]byte, error) {
-	if ref, ok := contentsObj.(ast.PdfIndirectRef); ok {
-		if s, ok := alloc.Pending()[ref.ObjectNum].(ast.PdfStream); ok {
-			return doc.DecodeStream(ctx, s)
-		}
-	}
-	return resolveContentBytes(ctx, doc, contentsObj)
+	return resolveContentBytes(ctx, alloc, doc, contentsObj)
 }
 
 // DecodeStream is checked via interface to avoid import cycle.
