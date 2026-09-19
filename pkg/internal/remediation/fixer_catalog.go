@@ -19,19 +19,36 @@ func matchCatalogCleanup(v compliance.Violation) bool {
 		clausePrefix(v, "6.1.11") { // Perms dict (PDF/A-1)
 		return true
 	}
-	// One requirement, four spellings. "Each optional content configuration
-	// dictionary ... shall contain the Name key" is ISO 19005-4 6.10 (claimed
-	// by the prefix above), ISO 19005-2 and 19005-3 6.9, ISO 14289-1 7.10 and
-	// ISO 14289-2 8.7. Only the part-4 spelling reached [fixOCGConfigs], so the
-	// same file was repaired as PDF/A-4 and left flagged as PDF/A-2b.
+	// One requirement, several spellings. The optional-content configuration
+	// clause is ISO 19005-4 6.10 (claimed by the prefix above), ISO 19005-2 and
+	// 19005-3 6.9, ISO 14289-1 7.10 and ISO 14289-2 8.7, and the last of those
+	// also reaches a WTPDF run, which reports PDF/UA-2 clauses as its own.
+	// Only the part-4 spelling reached [fixOCGConfigs], so the same file was
+	// repaired as PDF/A-4 and left flagged as PDF/A-2b.
 	//
-	// Test 1 only: [fixOCGConfigs] adds a missing /Name and implements neither
-	// the uniqueness of test 2, the /Order array of test 3, nor the /AS ban, so
-	// claiming those would report them handled while they persist.
+	// [fixOCGConfigs] repairs the /Name of test 1, the uniqueness of test 2 and
+	// the /AS ban of test 4, which the UA specifications spell as their own
+	// test 2. It does NOT repair the /Order array of test 3, so test 3 is not
+	// claimed: claiming a rule this fixer cannot complete would report it
+	// handled while it survives.
+	//
+	// Test 3 was implemented and MEASURED to be a false fix. litho's own
+	// [compliance] check inspects only /D and collects OCGs only from
+	// /OCProperties /OCGs; veraPDF requires more. complex_ua2 carries a
+	// /Configs configuration with its own incomplete /Order that litho never
+	// looks at, so completing /D alone silenced litho while veraPDF kept
+	// reporting: litho corpus disagreement moved from exactly 0 to 10 across
+	// two fixtures, while the verapdf corpus gained 8 cells and hid it.
+	// Repairing to satisfy the DETECTOR rather than the rule is what made that
+	// look correct.
+	//
+	// The test numbers are written out rather than taken as a range, so a test
+	// this fixer does not implement cannot be claimed by arriving later.
 	//
 	// Exact specification and clause, never clausePrefix: ISO 19005-1 spells an
-	// AcroForm NeedAppearances rule 6.9 and ISO 19005-4 an embedded-file rule
-	// 6.9, and the prefix "7.1" already swallows 7.10 in [matchXMP].
+	// AcroForm NeedAppearances rule 6.9, and EVERY part-4 6.9 test is an
+	// embedded-file rule (t2 the F and UF keys, t3 embedded-file conformance,
+	// t4 AFRelationship). The prefix "7.1" already swallows 7.10 in [matchXMP].
 	//
 	// Each arm MATCHES and falls through; none of them returns a negative.
 	// Written as `return v.Rule.Clause == "6.9"` this claimed the OCG rule and
@@ -40,18 +57,25 @@ func matchCatalogCleanup(v compliance.Violation) bool {
 	// Signature-Reference block below. That cost 12 corpus cells, and the
 	// count-based gate could not see it: 46 newly matched cells hid 12 newly
 	// broken ones behind a net improvement.
-	if v.Rule.TestNumber == 1 {
-		switch v.Rule.Specification {
-		case "ISO_19005_2", "ISO_19005_3":
-			if v.Rule.Clause == "6.9" {
+	switch v.Rule.Specification {
+	case "ISO_19005_2", "ISO_19005_3":
+		if v.Rule.Clause == "6.9" {
+			switch v.Rule.TestNumber {
+			case 1, 2, 4:
 				return true
 			}
-		case "ISO_14289_1":
-			if v.Rule.Clause == "7.10" {
+		}
+	case "ISO_14289_1":
+		if v.Rule.Clause == "7.10" {
+			switch v.Rule.TestNumber {
+			case 1, 2:
 				return true
 			}
-		case "ISO_14289_2":
-			if v.Rule.Clause == "8.7" {
+		}
+	case "ISO_14289_2":
+		if v.Rule.Clause == "8.7" {
+			switch v.Rule.TestNumber {
+			case 1, 2:
 				return true
 			}
 		}
@@ -67,7 +91,7 @@ func matchCatalogCleanup(v compliance.Violation) bool {
 	return false
 }
 
-func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
+func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, violations []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
@@ -88,9 +112,9 @@ func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		fixes = append(fixes, "removed /Encrypt from trailer")
 	}
 
-	// 6.10: Ensure OCG config dicts have /Name.
+	// 6.10: Repair the optional-content configuration dictionaries.
 	if ocpObj, ok := catalogDict["OCProperties"]; ok {
-		ocFixes := fixOCGConfigs(ctx, alloc, doc, catalogDict, catalogRef, ocpObj)
+		ocFixes := fixOCGConfigs(ctx, alloc, doc, catalogDict, catalogRef, ocpObj, violations)
 		fixes = append(fixes, ocFixes...)
 		// Re-read catalog in case it was updated.
 		catalogDict = resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
@@ -249,9 +273,21 @@ func fixSignatureReferences(ctx context.Context, alloc *writer.ObjAllocator, doc
 	return fixes
 }
 
-// fixOCGConfigs walks /OCProperties /D and /Configs, adding /Name to any
-// config dict that lacks it. Per ISO 32000-2, Table 100.
-func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogDict ast.PdfDict, catalogRef ast.PdfIndirectRef, ocpObj ast.PdfObject) []string {
+// fixOCGConfigs walks /OCProperties /D and /Configs and repairs three of the
+// four requirements the optional-content configuration clause states: a /Name
+// on each configuration, a name unique among them, and no /AS. Per ISO 32000-2,
+// Table 100.
+//
+// The /Order completeness of test 3 is deliberately NOT repaired; see
+// [matchCatalogCleanup] for the measurement that removed it.
+//
+// The /Name repair runs unconditionally. The other two run only when the
+// validation actually reported them, because the profiles do not all state
+// them: ISO 19005-4 6.10 has no AS test, so a PDF/A-4 file may legitimately
+// carry an /AS that a part-2 file may not. Reading that from the violations
+// rather than from the profile string keeps the part table in [compliance],
+// which is the only place that decides which rule a profile states.
+func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogDict ast.PdfDict, catalogRef ast.PdfIndirectRef, ocpObj ast.PdfObject, violations []compliance.Violation) []string {
 	var ocpDict ast.PdfDict
 	var ocpRef ast.PdfIndirectRef
 	var ocpIsRef bool
@@ -311,6 +347,24 @@ func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		}
 	}
 
+	// The other two requirements of the same clause. Each is gated on its own
+	// violation: see the function comment for why the profile string is not
+	// consulted here.
+	//
+	// /AS is stripped before the names are made unique, so a configuration is
+	// copied at most once per repair.
+	if anyOCGViolation(violations, ocgASViolation) {
+		if descs := stripOCGUsageApplication(ctx, alloc, doc, newOCP); len(descs) > 0 {
+			fixes = append(fixes, descs...)
+			modified = true
+		}
+	}
+	if anyOCGViolation(violations, ocgNameUniqueViolation) {
+		if descs := uniqueOCGConfigNames(ctx, alloc, doc, newOCP); len(descs) > 0 {
+			fixes = append(fixes, descs...)
+			modified = true
+		}
+	}
 	if modified {
 		if ocpIsRef {
 			alloc.AllocAt(ocpRef.ObjectNum, newOCP)
@@ -324,6 +378,210 @@ func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	}
 
 	return fixes
+}
+
+// anyOCGViolation reports whether the run flagged a rule pred names.
+func anyOCGViolation(violations []compliance.Violation, pred func(compliance.Rule) bool) bool {
+	for _, v := range violations {
+		if pred(v.Rule) {
+			return true
+		}
+	}
+	return false
+}
+
+// ocgNameUniqueViolation matches "the /Name shall be unique amongst all
+// optional content configuration dictionaries": ISO 19005-2/3 6.9 t2 and
+// ISO 19005-4 6.10 t2.
+func ocgNameUniqueViolation(r compliance.Rule) bool {
+	switch r.Specification {
+	case "ISO_19005_2", "ISO_19005_3":
+		return r.Clause == "6.9" && r.TestNumber == 2
+	case "ISO_19005_4":
+		return r.Clause == "6.10" && r.TestNumber == 2
+	}
+	return false
+}
+
+// ocgASViolation matches "the AS key shall not appear in any optional content
+// configuration dictionary": ISO 19005-2/3 6.9 t4, ISO 14289-1 7.10 t2 and
+// ISO 14289-2 8.7 t2. ISO 19005-4 states no AS test, which is exactly why this
+// is read from the violations: a part-4 file keeps its /AS.
+func ocgASViolation(r compliance.Rule) bool {
+	switch r.Specification {
+	case "ISO_19005_2", "ISO_19005_3":
+		return r.Clause == "6.9" && r.TestNumber == 4
+	case "ISO_14289_1":
+		return r.Clause == "7.10" && r.TestNumber == 2
+	case "ISO_14289_2":
+		return r.Clause == "8.7" && r.TestNumber == 2
+	}
+	return false
+}
+
+// eachOCGConfig applies fn to the default configuration and then to every
+// /Configs entry, in the order [compliance] inspects them, so a repair that
+// depends on what came before sees the sequence the checker did.
+//
+// A changed configuration is written back where it lives: through the allocator
+// when it is indirect, or into ocp when it is direct, because a direct
+// dictionary has no object number to address. fn returns the replacement and
+// whether anything changed; it must not mutate the dictionary it is given.
+func eachOCGConfig(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ocp ast.PdfDict, fn func(label string, d ast.PdfDict) (ast.PdfDict, bool)) {
+	apply := func(obj ast.PdfObject, label string) (ast.PdfObject, bool) {
+		ref, isRef := obj.(ast.PdfIndirectRef)
+
+		var d ast.PdfDict
+		if isRef {
+			d = resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+		}
+		if d == nil {
+			resolved, err := document.ResolveDict(ctx, doc, obj)
+			if err != nil || resolved == nil {
+				return obj, false
+			}
+			d = resolved
+		}
+
+		replacement, changed := fn(label, d)
+		if !changed {
+			return obj, false
+		}
+		if isRef {
+			alloc.AllocAt(ref.ObjectNum, replacement)
+			return obj, true
+		}
+		return replacement, true
+	}
+
+	if dObj, ok := ocp["D"]; ok {
+		if replacement, changed := apply(dObj, "default config (D)"); changed {
+			ocp["D"] = replacement
+		}
+	}
+
+	configsObj, ok := ocp["Configs"]
+	if !ok {
+		return
+	}
+	arr, err := document.ResolveArray(ctx, doc, configsObj)
+	if err != nil || arr == nil {
+		return
+	}
+	newConfigs := make(ast.PdfArray, len(arr))
+	copy(newConfigs, arr)
+	configsChanged := false
+	for i, entry := range arr {
+		if ctx.Err() != nil {
+			return
+		}
+		if replacement, changed := apply(entry, fmt.Sprintf("config %d", i)); changed {
+			newConfigs[i] = replacement
+			configsChanged = true
+		}
+	}
+	if configsChanged {
+		ocp["Configs"] = newConfigs
+	}
+}
+
+// stripOCGUsageApplication removes the /AS array from every optional-content
+// configuration. A usage-application array lets a viewer toggle content
+// visibility automatically, which the profiles that state the rule forbid.
+//
+// Presence is read as the key being there at all, which is how the PDF/A
+// checker reads it. The UA checker drops an entry whose value is the null
+// object, so a direct null is absent to it; deleting the key satisfies both
+// readings.
+func stripOCGUsageApplication(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ocp ast.PdfDict) []string {
+	var fixes []string
+	eachOCGConfig(ctx, alloc, doc, ocp, func(label string, d ast.PdfDict) (ast.PdfDict, bool) {
+		if _, has := d["AS"]; !has {
+			return nil, false
+		}
+		newD := make(ast.PdfDict, len(d))
+		maps.Copy(newD, d)
+		delete(newD, "AS")
+		fixes = append(fixes, fmt.Sprintf("removed forbidden /AS from OCG %s", label))
+		return newD, true
+	})
+	return fixes
+}
+
+// uniqueOCGConfigNames renames a configuration whose /Name another
+// configuration already used. The checker collects /D first and then /Configs
+// in order, flagging each repeat, so the first use keeps the name and the later
+// one is renamed.
+//
+// A configuration with no name at all is left to the test-1 repair above.
+func uniqueOCGConfigNames(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ocp ast.PdfDict) []string {
+	var fixes []string
+	seen := make(map[string]bool)
+	eachOCGConfig(ctx, alloc, doc, ocp, func(label string, d ast.PdfDict) (ast.PdfDict, bool) {
+		name := ocgConfigName(ctx, doc, d)
+		if name == "" {
+			return nil, false
+		}
+		if !seen[name] {
+			seen[name] = true
+			return nil, false
+		}
+		unique := disambiguateOCGConfigName(name, seen)
+		seen[unique] = true
+
+		newD := make(ast.PdfDict, len(d))
+		maps.Copy(newD, d)
+		newD["Name"] = ast.PdfString(unique)
+		fixes = append(fixes, fmt.Sprintf("made OCG %s name unique: %q became %q", label, name, unique))
+		return newD, true
+	})
+	return fixes
+}
+
+// disambiguateOCGConfigName derives a name no other configuration carries by
+// suffixing the one the file already uses. The value is a label a viewer shows
+// in its layer panel (ISO 32000-1, Table 101), so deriving from the original
+// keeps what the producer meant. Inventing an unrelated name, or deleting the
+// duplicate configuration, would lose more than the defect costs.
+//
+// The search ends at the first free candidate, and seen never holds more
+// entries than the file has configurations, so it cannot run away.
+func disambiguateOCGConfigName(base string, seen map[string]bool) string {
+	for n := 2; ; n++ {
+		candidate := fmt.Sprintf("%s (%d)", base, n)
+		if !seen[candidate] {
+			return candidate
+		}
+	}
+}
+
+// ocgConfigName reads an optional-content configuration's /Name as the checker
+// does: a text string normally, a name object from the occasional producer that
+// writes one. Returns "" when absent or unresolvable.
+//
+// doc may be nil when a caller repairs a dictionary it already holds, so a
+// direct value is read without resolving.
+func ocgConfigName(ctx context.Context, doc *document.Document, d ast.PdfDict) string {
+	nameObj, ok := d["Name"]
+	if !ok {
+		return ""
+	}
+	if s, ok := nameObj.(ast.PdfString); ok {
+		return string(s)
+	}
+	if n, ok := nameObj.(ast.PdfName); ok {
+		return string(n)
+	}
+	if doc == nil {
+		return ""
+	}
+	if s, err := document.ResolveString(ctx, doc, nameObj); err == nil {
+		return string(s)
+	}
+	if n, err := document.ResolveName(ctx, doc, nameObj); err == nil {
+		return string(n)
+	}
+	return ""
 }
 
 // ensureOCGConfigName adds /Name to an OCG config dict if missing.

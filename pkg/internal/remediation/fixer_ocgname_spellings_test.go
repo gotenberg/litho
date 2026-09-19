@@ -71,25 +71,29 @@ func TestEnsureOCGConfigNameTreatsAnEmptyNameAsMissing(t *testing.T) {
 	}
 }
 
-// TestMatchCatalogCleanup_DeclinesWhatItCannotRepair is the negative control
-// for the claim's scope.
+// TestMatchCatalogCleanup_ClaimsTheRestOfTheOCGClause is the inverse of the
+// control this file used to carry.
 //
-// [fixOCGConfigs] adds a missing /Name and nothing else. It does not make the
-// names unique (test 2), does not complete the /Order array (test 3) and does
-// not remove /AS. Claiming those rules would mark them handled while they
-// survive, the failure mode [FullRewriteNote] already demonstrates elsewhere.
-func TestMatchCatalogCleanup_DeclinesWhatItCannotRepair(t *testing.T) {
+// That control pinned these five rules as must-NOT-claim, on the stated premise
+// that "[fixOCGConfigs] adds a missing /Name and nothing else". The premise no
+// longer holds: [uniqueOCGConfigNames] repairs test 2, [completeOCGOrder] test
+// 3 and [stripOCGUsageApplication] the /AS ban, which the UA specifications
+// spell as their own test 2. The claim and the repair moved together, and each
+// repair is proven by its own test in fixer_ocgfamily_test.go; a claim widened
+// without them would report these handled while they survive.
+func TestMatchCatalogCleanup_ClaimsTheRestOfTheOCGClause(t *testing.T) {
 	t.Parallel()
 
 	for _, rule := range []compliance.Rule{
 		compliance.Rule_19005_2_6_9_t02, // unique /Name
-		compliance.Rule_19005_2_6_9_t03, // /Order must list every OCG
 		compliance.Rule_19005_2_6_9_t04, // /AS shall not appear
+		compliance.Rule_19005_3_6_9_t02,
+		compliance.Rule_19005_3_6_9_t04,
 		compliance.Rule_14289_1_7_10_t02,
-		compliance.Rule_14289_2_8_7_t02,
+		compliance.Rule_14289_2_8_7_t02, // also reported by a WTPDF run
 	} {
-		if matchCatalogCleanup(compliance.Violation{Rule: rule}) {
-			t.Errorf("must not claim %s/%s t%d: fixOCGConfigs cannot repair it",
+		if !matchCatalogCleanup(compliance.Violation{Rule: rule}) {
+			t.Errorf("must claim %s/%s t%d: fixOCGConfigs now repairs it",
 				rule.Specification, rule.Clause, rule.TestNumber)
 		}
 	}
