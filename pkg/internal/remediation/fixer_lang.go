@@ -19,8 +19,17 @@ import (
 // breaks reference cycles.
 const maxStructTreeDepth = compliance.MaxStructTreeWalkDepth
 
+// matchCatalogLang matches the /Lang violations this fixer repairs, across the
+// specs that state them.
+//
+// ISO 14289-1 states its language requirements in clause 7.2 exactly, and the
+// clause is matched exactly for that reason: [clausePrefix] is a string prefix
+// test, so "7.2" also matches 7.20 and every 7.21.x clause, which is the whole
+// PDF/UA-1 FONT family (CMaps, embedding, ToUnicode, .notdef). Claiming those
+// here made clause 7.21.8 look repaired while no fixer could touch it. The
+// other three clauses have no such neighbour, measured against the rule table.
 func matchCatalogLang(v compliance.Violation) bool {
-	return clausePrefix(v, "6.7.4", "6.8.4", "7.2", "8.4.4") // /Lang across specs
+	return clausePrefix(v, "6.7.4", "6.8.4", "8.4.4") || v.Rule.Clause == "7.2"
 }
 
 // fixCatalogLang repairs the document language. It adds a missing catalog /Lang,

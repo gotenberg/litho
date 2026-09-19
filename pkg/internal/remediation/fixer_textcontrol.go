@@ -18,7 +18,7 @@ import (
 // glyph because the character code resolves to a missing or undefined
 // entry in the font's charset.
 func matchTextControl(v compliance.Violation) bool {
-	if !clausePrefix(v, "6.2.10.9", "6.2.11.8") {
+	if !clausePrefix(v, "6.2.10.9", "6.2.11.8", "8.4.5.9", "7.21.8") {
 		return false
 	}
 	return descriptionContains(v, ".notdef") || contextContains(v, ".notdef")
