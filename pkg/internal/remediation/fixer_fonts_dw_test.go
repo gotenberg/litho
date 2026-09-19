@@ -65,7 +65,7 @@ func repairedCIDFont(t *testing.T, data []byte) (ast.PdfDict, []string) {
 	if err != nil {
 		t.Fatalf("resolving the Type0 font: %v", err)
 	}
-	fixes := fixType0Font(ctx, doc, alloc, fontDict, ast.PdfIndirectRef{ObjectNum: 4}, true, false)
+	fixes := fixType0Font(ctx, doc, alloc, fontDict, ast.PdfIndirectRef{ObjectNum: 4}, true, false, false)
 	cid, _ := alloc.Pending()[5].(ast.PdfDict)
 	return cid, fixes
 }

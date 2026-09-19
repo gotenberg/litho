@@ -51,6 +51,7 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	hasWidthViolation := false
 	hasCIDSetViolation := false
 	hasCharSetViolation := false
+	needCIDSet := false
 	for _, v := range violations {
 		if clausePrefix(v, "6.2.10.5", "6.2.11.5", "6.3.6") {
 			hasWidthViolation = true
@@ -64,6 +65,24 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		}
 		if clausePrefix(v, "6.3.5", "7.21.4.2") {
 			hasCharSetViolation = true
+		}
+		// ISO 19005-1, 6.3.5 t3 is a PRESENCE rule: the descriptor of a rendered
+		// CIDFont subset shall INCLUDE a /CIDSet stream. It needs a flag of its
+		// own for two reasons. The regeneration path above rewrites only a key
+		// that is already there, so a reported absence reaches nothing; and
+		// clausePrefix cannot tell t3 from t2 (a Type 1 /CharSet) because both
+		// sit under clause 6.3.5, so t3 was raising the /CharSet flag, which
+		// only ever reaches simple fonts, and the CIDFont the violation named
+		// was never touched.
+		//
+		// The /CharSet twin, t2, is deliberately NOT repaired. Supplying one
+		// measured as a FALSE FIX: on 6-2-10-9-t01-fail-a under PDF_A-1a and
+		// PDF_A-1b litho accepted the written /CharSet while veraPDF went on
+		// reporting 6.3.5 t2, taking the corpus disagreement metric 14 -> 16.
+		// litho's glyph-name enumeration need not match the checker's, which is
+		// the hazard the /Widths comment above already records.
+		if v.Rule.Clause == "6.3.5" && v.Rule.TestNumber == 3 {
+			needCIDSet = true
 		}
 	}
 	catalog, err := document.ResolveCatalog(ctx, doc)
@@ -125,7 +144,7 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			subtype, _ := fd["Subtype"].(ast.PdfName)
 			switch string(subtype) {
 			case "Type0":
-				if f := fixType0Font(ctx, doc, alloc, fd, fontRef, hasWidthViolation, hasCIDSetViolation); len(f) > 0 {
+				if f := fixType0Font(ctx, doc, alloc, fd, fontRef, hasWidthViolation, hasCIDSetViolation, needCIDSet); len(f) > 0 {
 					fixes = append(fixes, f...)
 				}
 			case "Type1", "TrueType", "MMType1":
@@ -230,7 +249,10 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 		}
 	}
 
-	// Fix CharSet if incomplete.
+	// Fix CharSet if incomplete. Supplying a MISSING one (ISO 19005-1, 6.3.5
+	// t2) was tried and reverted: litho accepted the written /CharSet while
+	// veraPDF kept reporting the rule, which silences the violation on litho's
+	// side without repairing it. See the scan in [fixFontIssues].
 	if _, ok := fdDict["CharSet"]; ok && regenCharSet {
 		if fixed := fixCharSet(ctx, alloc, fdDict, fdRef, fontData); fixed {
 			fixes = append(fixes, fmt.Sprintf("regenerated /CharSet for font %s", baseName))
@@ -240,7 +262,7 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	return fixes
 }
 
-func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, fixWidths, regenCIDSet bool) []string {
+func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, fixWidths, regenCIDSet, createCIDSet bool) []string {
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
 		return nil
@@ -321,10 +343,19 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 		fixes = append(fixes, pending...)
 	}
 
-	// Fix CIDSet if incomplete.
-	if _, ok := fdDict["CIDSet"]; ok && regenCIDSet {
+	// Fix /CIDSet if incomplete, or supply the one ISO 19005-1, 6.3.5 t3
+	// requires of a rendered CIDFont subset. Regeneration stays gated on the key
+	// already being present: the conditional rules (6.2.11.4.2, 7.21.4.2) say
+	// only that a PRESENT /CIDSet must identify every CID in the program, so
+	// writing one uninvited would answer a rule nobody reported.
+	_, hasCIDSet := fdDict["CIDSet"]
+	if (hasCIDSet && regenCIDSet) || (!hasCIDSet && createCIDSet) {
 		if fixed := fixCIDSet(ctx, doc, alloc, fdDict, fdRef, fontData); fixed {
-			fixes = append(fixes, fmt.Sprintf("regenerated /CIDSet for font %s", baseName))
+			verb := "regenerated"
+			if !hasCIDSet {
+				verb = "added"
+			}
+			fixes = append(fixes, fmt.Sprintf("%s /CIDSet for font %s", verb, baseName))
 		}
 	}
 
