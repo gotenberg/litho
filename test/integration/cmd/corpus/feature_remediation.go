@@ -323,24 +323,22 @@ func (f *remediationFeature) Compare(fixtureID string, output []byte) Verdict {
 		disagreement = -disagreement
 	}
 
+	// Emit every metric unconditionally, zero included. A metric written only
+	// when it fires disappears from the baseline once it reaches zero, and
+	// [diffBaseline] iterates the baseline's own key set, so the bar stops
+	// gating entirely: a later regression in that metric goes unreported.
 	metrics := map[string]int{
-		"litho_pre":     got.LithoPre,
-		"litho_post":    got.LithoPost,
-		"verapdf_pre":   got.VeraPre,
-		"verapdf_post":  got.VeraPost,
-		"litho_fixed":   max(0, got.LithoPre-got.LithoPost),
-		"verapdf_fixed": max(0, got.VeraPre-got.VeraPost),
-		"disagreement":  disagreement,
-		"parse_failed":  boolToInt(got.ParseFailed),
-	}
-	if fullyFixed {
-		metrics["fully_fixed"] = 1
-	}
-	if got.LithoPost > got.LithoPre {
-		metrics["litho_regressed"] = 1
-	}
-	if got.VeraPost > got.VeraPre {
-		metrics["verapdf_regressed"] = 1
+		"litho_pre":         got.LithoPre,
+		"litho_post":        got.LithoPost,
+		"verapdf_pre":       got.VeraPre,
+		"verapdf_post":      got.VeraPost,
+		"litho_fixed":       max(0, got.LithoPre-got.LithoPost),
+		"verapdf_fixed":     max(0, got.VeraPre-got.VeraPost),
+		"disagreement":      disagreement,
+		"parse_failed":      boolToInt(got.ParseFailed),
+		"fully_fixed":       boolToInt(fullyFixed),
+		"litho_regressed":   boolToInt(got.LithoPost > got.LithoPre),
+		"verapdf_regressed": boolToInt(got.VeraPost > got.VeraPre),
 	}
 
 	raw, _ := json.Marshal(remediationReport{
