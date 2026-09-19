@@ -145,6 +145,9 @@ var registry = []fixer{
 	{name: "font-widths", safety: safetyContent, matches: matchFontWidth, apply: fixFontWidth},
 	{name: "tt-encoding", safety: safetyContent, matches: matchTrueTypeEncoding, apply: fixTrueTypeEncoding},
 	{name: "cid-sysinfo", safety: safetyContent, matches: matchCIDSystemInfo, apply: fixCIDSystemInfo},
+	// Inlining a usecmap chain maps every code exactly as the chain did, so
+	// the glyph a content byte selects does not change.
+	{name: "cmap-flatten", safety: safetyContent, matches: matchCMapFlatten, apply: fixCMapFlatten},
 	{name: "images", safety: safetyContent, matches: matchImageIssues, apply: fixImageIssues},
 	{name: "lzw", safety: safetyContent, matches: matchLZW, apply: fixLZW},
 	{name: "signature-strip", safety: safetyContent, matches: matchSignatureStrip, apply: fixSignatureStrip},
