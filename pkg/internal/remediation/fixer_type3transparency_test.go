@@ -30,7 +30,7 @@ func TestFixType3FontTransparency_ReachesTheFontsOwnExtGState(t *testing.T) {
 		doc, alloc := newTestDoc(t, pdf)
 		pageRes := ast.PdfDict{"Font": ast.PdfDict{"F1": ast.PdfIndirectRef{ObjectNum: 10}}}
 
-		n := fixType3FontTransparency(context.Background(), doc, alloc, pageRes)
+		n := fixType3FontTransparency(context.Background(), doc, alloc, pageRes, make(map[int]bool), 0)
 		if n == 0 {
 			t.Errorf("%s: an ExtGState inside a Type 3 font must be repaired", tc.name)
 			continue
@@ -51,7 +51,7 @@ func TestFixType3FontTransparency_IgnoresNonType3Fonts(t *testing.T) {
 	doc, alloc := newTestDoc(t, pdf)
 	pageRes := ast.PdfDict{"Font": ast.PdfDict{"F1": ast.PdfIndirectRef{ObjectNum: 10}}}
 
-	if n := fixType3FontTransparency(context.Background(), doc, alloc, pageRes); n != 0 {
+	if n := fixType3FontTransparency(context.Background(), doc, alloc, pageRes, make(map[int]bool), 0); n != 0 {
 		t.Errorf("a non-Type3 font must be left alone, repaired %d", n)
 	}
 	if _, ok := alloc.Pending()[12]; ok {
@@ -67,7 +67,7 @@ func TestFixType3FontTransparency_LeavesConformingValuesAlone(t *testing.T) {
 	doc, alloc := newTestDoc(t, pdf)
 	pageRes := ast.PdfDict{"Font": ast.PdfDict{"F1": ast.PdfIndirectRef{ObjectNum: 10}}}
 
-	if n := fixType3FontTransparency(context.Background(), doc, alloc, pageRes); n != 0 {
+	if n := fixType3FontTransparency(context.Background(), doc, alloc, pageRes, make(map[int]bool), 0); n != 0 {
 		t.Errorf("conforming values must not be rewritten, repaired %d", n)
 	}
 }
@@ -84,10 +84,10 @@ func TestFixType3FontTransparency_LeavesConformingValuesAlone(t *testing.T) {
 // behaviour: empty input must not be treated as "walk the page instead".
 func TestFixType3FontTransparency_EmptyInputRepairsNothing(t *testing.T) {
 	doc, alloc := newTestDoc(t, minimalCatalogPDF(""))
-	if n := fixType3FontTransparency(context.Background(), doc, alloc, nil); n != 0 {
+	if n := fixType3FontTransparency(context.Background(), doc, alloc, nil, make(map[int]bool), 0); n != 0 {
 		t.Errorf("nil resources must repair nothing, got %d", n)
 	}
-	if n := fixType3FontTransparency(context.Background(), doc, alloc, ast.PdfDict{}); n != 0 {
+	if n := fixType3FontTransparency(context.Background(), doc, alloc, ast.PdfDict{}, make(map[int]bool), 0); n != 0 {
 		t.Errorf("resources without /Font must repair nothing, got %d", n)
 	}
 }

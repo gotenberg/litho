@@ -36,7 +36,7 @@ func TestFixExtGState_FullyInlineChainIsWritten(t *testing.T) {
 			doc, alloc := newTestDoc(t, inlineType3PDF(tc.gs))
 			pageRes := ast.PdfDict{"Font": ast.PdfDict{"F1": ast.PdfIndirectRef{ObjectNum: 10}}}
 
-			if n := fixType3FontTransparency(context.Background(), doc, alloc, pageRes); n == 0 {
+			if n := fixType3FontTransparency(context.Background(), doc, alloc, pageRes, make(map[int]bool), 0); n == 0 {
 				t.Fatal("a fully inline ExtGState chain must still be repaired")
 			}
 
@@ -101,7 +101,7 @@ func TestFixExtGState_EveryInlineEntryIsKept(t *testing.T) {
 	doc, alloc := newTestDoc(t, inlineType3PDFMulti())
 	pageRes := ast.PdfDict{"Font": ast.PdfDict{"F1": ast.PdfIndirectRef{ObjectNum: 10}}}
 
-	if n := fixType3FontTransparency(context.Background(), doc, alloc, pageRes); n < 2 {
+	if n := fixType3FontTransparency(context.Background(), doc, alloc, pageRes, make(map[int]bool), 0); n < 2 {
 		t.Fatalf("both inline entries must be repaired, counted %d", n)
 	}
 
@@ -140,7 +140,7 @@ func TestFixType3CharProcs_GlyphStreamResourcesAreRepaired(t *testing.T) {
 	doc, alloc := newTestDoc(t, type3CharProcPDF())
 	pageRes := ast.PdfDict{"Font": ast.PdfDict{"F1": ast.PdfIndirectRef{ObjectNum: 10}}}
 
-	if n := fixType3FontTransparency(context.Background(), doc, alloc, pageRes); n < 2 {
+	if n := fixType3FontTransparency(context.Background(), doc, alloc, pageRes, make(map[int]bool), 0); n < 2 {
 		t.Fatalf("font and glyph resources must both be repaired, counted %d", n)
 	}
 

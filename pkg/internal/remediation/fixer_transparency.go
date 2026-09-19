@@ -35,6 +35,12 @@ func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 
 	var totalFixed int
 
+	// Shared across the whole document. An object repaired once must never be
+	// rebuilt from the stale original and written again: the second write would
+	// discard the first repair. Appearance streams are shared between
+	// annotations, and one form can be declared by several pages.
+	visited := make(map[int]bool)
+
 	for _, page := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -49,23 +55,15 @@ func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		maps.Copy(workPage, pageDict)
 		pageDirty, pagePending := false, 0
 
-		// Fix ExtGState entries in page Resources.
+		// One uniform walk of the page's resources: /ExtGState here, then the
+		// XObjects, patterns and Type 3 fonts it names, recursively.
 		if page.Resources != nil {
-			n, pending, dirty := fixExtGStateDict(ctx, doc, alloc, page.Resources, workPage)
+			n, pending, dirty := fixResourceTransparency(ctx, doc, alloc, page.Resources, workPage, visited, 0)
 			totalFixed += n
 			if dirty {
 				pageDirty, pagePending = true, pagePending+pending
 			}
 		}
-
-		// Fix XObjects in page Resources (SMask on images, Group on forms).
-		totalFixed += fixXObjectTransparency(ctx, doc, alloc, page.Resources)
-
-		// Fix ExtGState inside the resources of a pattern the page declares.
-		totalFixed += fixPatternTransparency(ctx, doc, alloc, page.Resources)
-
-		// Fix ExtGState inside the resources of a Type 3 font the page declares.
-		totalFixed += fixType3FontTransparency(ctx, doc, alloc, page.Resources)
 
 		// Remove page-level transparency group.
 		groupRemoved := false
@@ -83,9 +81,9 @@ func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			}
 		}
 
-		// Fix annotation appearance stream resources.
+		// Fix annotation appearance streams.
 		if annotsObj, ok := pageDict["Annots"]; ok {
-			totalFixed += fixAnnotationTransparency(ctx, doc, alloc, annotsObj)
+			totalFixed += fixAnnotationTransparency(ctx, doc, alloc, annotsObj, visited)
 		}
 	}
 
@@ -111,8 +109,8 @@ func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 //
 // visited breaks reference cycles: a pattern's resources may name the pattern
 // itself, and an unguarded walk would revisit it without bound.
-func fixPatternTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict) int {
-	if resources == nil {
+func fixPatternTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict, visited map[int]bool, depth int) int {
+	if resources == nil || depth > maxTransparencyResourceDepth {
 		return 0
 	}
 
@@ -125,7 +123,6 @@ func fixPatternTransparency(ctx context.Context, doc *document.Document, alloc *
 		return 0
 	}
 
-	visited := make(map[int]bool, len(patDict))
 	fixed := 0
 	for _, entry := range patDict {
 		if ref, isRef := entry.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
@@ -164,7 +161,7 @@ func fixPatternTransparency(ctx context.Context, doc *document.Document, alloc *
 			maps.Copy(work, v)
 		}
 
-		n, pending, dirty := fixExtGStateDict(ctx, doc, alloc, res, work)
+		n, pending, dirty := fixResourceTransparency(ctx, doc, alloc, res, work, visited, depth+1)
 		fixed += n
 		if !dirty {
 			continue
@@ -173,7 +170,7 @@ func fixPatternTransparency(ctx context.Context, doc *document.Document, alloc *
 		if !isRef || ref.ObjectNum <= 0 {
 			continue
 		}
-		written := false
+		var written bool
 		if st, isStream := resolved.(ast.PdfStream); isStream {
 			written = alloc.AllocAt(ref.ObjectNum, ast.NewLazyStream(work, st.Bytes))
 		} else {
@@ -207,8 +204,8 @@ func fixPatternTransparency(ctx context.Context, doc *document.Document, alloc *
 // /BM, /CA and /ca together: ISO 19005-1 §6.4 t1, t4, t5 and t6 respectively.
 //
 // visited breaks reference cycles: two font names may share one font object.
-func fixType3FontTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict) int {
-	if resources == nil {
+func fixType3FontTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict, visited map[int]bool, depth int) int {
+	if resources == nil || depth > maxTransparencyResourceDepth {
 		return 0
 	}
 
@@ -217,7 +214,6 @@ func fixType3FontTransparency(ctx context.Context, doc *document.Document, alloc
 		return 0
 	}
 
-	visited := make(map[int]bool, len(fontDict))
 	fixed := 0
 	for _, entry := range fontDict {
 		if ref, isRef := entry.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
@@ -244,7 +240,7 @@ func fixType3FontTransparency(ctx context.Context, doc *document.Document, alloc
 			work := make(ast.PdfDict, len(fd))
 			maps.Copy(work, fd)
 
-			n, pending, dirty := fixExtGStateDict(ctx, doc, alloc, own, work)
+			n, pending, dirty := fixResourceTransparency(ctx, doc, alloc, own, work, visited, depth+1)
 			fixed += n
 			if dirty {
 				if ref, isRef := entry.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 &&
@@ -259,10 +255,47 @@ func fixType3FontTransparency(ctx context.Context, doc *document.Document, alloc
 		// the font holds one non-conforming /CA and its three /CharProcs
 		// streams hold one each, so repairing only the font leaves three
 		// behind, which veraPDF reports and litho does not.
-		fixed += fixType3CharProcTransparency(ctx, doc, alloc, fd)
+		fixed += fixType3CharProcTransparency(ctx, doc, alloc, fd, visited, depth)
 	}
 
 	return fixed
+}
+
+// maxTransparencyResourceDepth caps recursion through nested resource
+// dictionaries. Anti-DoS guard, not spec-mandated: a crafted file can nest Form
+// XObjects arbitrarily and each level costs a resolve plus a dictionary copy.
+// Ten is far beyond any real document (the veraPDF corpus peaks at two) while
+// keeping the work bounded. It does not replace the visited set: a depth bound
+// survives a cycle without ever detecting it.
+const maxTransparencyResourceDepth = 10
+
+// fixResourceTransparency repairs every transparency construct reachable from
+// one resource dictionary: the /ExtGState entries it declares, then the
+// XObjects, patterns and Type 3 fonts it names, recursively.
+//
+// Every site walks the same shape, because ISO 19005-1 §6.4 forbids
+// transparency wherever it renders: a resource dictionary reached through a
+// page, a Form XObject, a glyph procedure or an annotation appearance is
+// equally rendered content. Applying a different subset per site is what left
+// each site leaking a different location, measured on the veraPDF §6.4 test 3
+// carriers (a group survived in an appearance form, in a form nested inside a
+// form, and in a form a Type 3 font declares).
+//
+// owner is the caller's working copy of the dictionary that holds res under
+// /Resources; see [fixExtGStateDict] for how a fully inline chain is written.
+// visited is shared across the whole document so an object repaired once is
+// never rebuilt from the stale original and written again.
+func fixResourceTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, res ast.PdfDict, owner ast.PdfDict, visited map[int]bool, depth int) (int, int, bool) {
+	if res == nil || depth > maxTransparencyResourceDepth {
+		return 0, 0, false
+	}
+
+	fixed, pending, dirty := fixExtGStateDict(ctx, doc, alloc, res, owner)
+	fixed += fixXObjectTransparency(ctx, doc, alloc, res, visited, depth)
+	fixed += fixPatternTransparency(ctx, doc, alloc, res, visited, depth)
+	fixed += fixType3FontTransparency(ctx, doc, alloc, res, visited, depth)
+
+	return fixed, pending, dirty
 }
 
 // fixType3CharProcTransparency fixes transparency in the resources of every
@@ -276,13 +309,16 @@ func fixType3FontTransparency(ctx context.Context, doc *document.Document, alloc
 //
 // visited breaks reference cycles and shared glyph procedures: two names in
 // /CharProcs may address one stream.
-func fixType3CharProcTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict) int {
+func fixType3CharProcTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, visited map[int]bool, depth int) int {
+	if depth > maxTransparencyResourceDepth {
+		return 0
+	}
+
 	charProcs, err := document.ResolveDict(ctx, doc, fontDict["CharProcs"])
 	if err != nil || charProcs == nil {
 		return 0
 	}
 
-	visited := make(map[int]bool, len(charProcs))
 	fixed := 0
 	for _, entry := range charProcs {
 		ref, isRef := entry.(ast.PdfIndirectRef)
@@ -301,19 +337,42 @@ func fixType3CharProcTransparency(ctx context.Context, doc *document.Document, a
 		if !ok {
 			continue
 		}
-		res, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-		if err != nil || res == nil {
-			continue
-		}
-
 		work := make(ast.PdfDict, len(stream.Dict))
 		maps.Copy(work, stream.Dict)
+		changed := false
 
-		n, pending, dirty := fixExtGStateDict(ctx, doc, alloc, res, work)
-		fixed += n
-		if dirty && isRef && ref.ObjectNum > 0 &&
+		// A glyph procedure typed as a Form XObject may carry its own
+		// transparency group, which ISO 19005-1 §6.4 test 3 forbids wherever it
+		// renders. No corpus carrier exercises this, so the unit tests are its
+		// only evidence.
+		if groupObj, ok := stream.Dict["Group"]; ok && isTransparencyGroup(ctx, doc, groupObj) {
+			delete(work, "Group")
+			changed = true
+		}
+
+		pending := 0
+		if res, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && res != nil {
+			n, p, dirty := fixResourceTransparency(ctx, doc, alloc, res, work, visited, depth+1)
+			fixed += n
+			if dirty {
+				changed = true
+				pending = p
+			}
+		}
+
+		// One write per glyph stream. Dropping /Group and repairing an inline
+		// graphics state both land in the same object, and two AllocAt calls
+		// would keep only the second: an earlier version wrote inside the
+		// inline branch and then skipped this one, so a failed write discarded
+		// the group removal with nothing reported.
+		if changed && isRef && ref.ObjectNum > 0 &&
 			alloc.AllocAt(ref.ObjectNum, ast.NewLazyStream(work, stream.Bytes)) {
 			fixed += pending
+			if _, had := stream.Dict["Group"]; had {
+				if _, kept := work["Group"]; !kept {
+					fixed++
+				}
+			}
 		}
 	}
 
@@ -469,8 +528,8 @@ func fixExtGStateDict(ctx context.Context, doc *document.Document, alloc *writer
 }
 
 // fixXObjectTransparency removes SMask from images and Group/Transparency from forms.
-func fixXObjectTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict) int {
-	if resources == nil {
+func fixXObjectTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict, visited map[int]bool, depth int) int {
+	if resources == nil || depth > maxTransparencyResourceDepth {
 		return 0
 	}
 
@@ -489,6 +548,12 @@ func fixXObjectTransparency(ctx context.Context, doc *document.Document, alloc *
 		var xoRef ast.PdfIndirectRef
 		if ref, ok := xoEntry.(ast.PdfIndirectRef); ok {
 			xoRef = ref
+			if ref.ObjectNum > 0 {
+				if visited[ref.ObjectNum] {
+					continue
+				}
+				visited[ref.ObjectNum] = true
+			}
 		}
 
 		resolved, err := document.ResolveObject(ctx, doc, xoEntry)
@@ -523,11 +588,14 @@ func fixXObjectTransparency(ctx context.Context, doc *document.Document, alloc *
 					fixed++
 				}
 			}
-			// Recurse into Form XObject Resources. newDict is the working copy
-			// written below, so an inline repair rides the same write that drops
-			// /Group instead of being overwritten by it.
+			// Recurse into Form XObject Resources, the full walk: a form may
+			// itself declare forms, patterns and Type 3 fonts, and a
+			// transparency group nested one level deeper is equally rendered
+			// content. newDict is the working copy written below, so an inline
+			// repair rides the same write that drops /Group instead of being
+			// overwritten by it.
 			if formRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && formRes != nil {
-				n, pending, dirty := fixExtGStateDict(ctx, doc, alloc, formRes, newDict)
+				n, pending, dirty := fixResourceTransparency(ctx, doc, alloc, formRes, newDict, visited, depth+1)
 				fixed += n
 				if dirty {
 					modified = true
@@ -548,7 +616,7 @@ func fixXObjectTransparency(ctx context.Context, doc *document.Document, alloc *
 
 // fixAnnotationTransparency walks page annotations and fixes transparency in
 // their appearance stream resources.
-func fixAnnotationTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotsObj ast.PdfObject) int {
+func fixAnnotationTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotsObj ast.PdfObject, visited map[int]bool) int {
 	annots, err := document.ResolveArray(ctx, doc, annotsObj)
 	if err != nil || annots == nil {
 		return 0
@@ -561,34 +629,93 @@ func fixAnnotationTransparency(ctx context.Context, doc *document.Document, allo
 			continue
 		}
 
-		apObj, ok := annotDict["AP"]
-		if !ok {
-			continue
-		}
-
-		apDict, err := document.ResolveDict(ctx, doc, apObj)
+		apDict, err := document.ResolveDict(ctx, doc, annotDict["AP"])
 		if err != nil || apDict == nil {
 			continue
 		}
 
-		// Check /N (normal appearance).
-		if nObj, ok := apDict["N"]; ok {
-			resolved, err := document.ResolveObject(ctx, doc, nObj)
-			if err == nil {
-				if stream, ok := resolved.(ast.PdfStream); ok {
-					if res, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && res != nil {
-						// The appearance stream is the nearest indirect ancestor.
-						work := make(ast.PdfDict, len(stream.Dict))
-						maps.Copy(work, stream.Dict)
+		// ISO 32000-1, 12.5.5: /N, /R and /D each hold either an appearance
+		// stream or a subdictionary of named appearance states. Only /N as a
+		// stream was handled before, so a group or graphics state reached
+		// through a state subdictionary, or through /D or /R, survived.
+		for _, which := range []ast.PdfName{"N", "R", "D"} {
+			entry, ok := apDict[which]
+			if !ok {
+				continue
+			}
 
-						n, pending, dirty := fixExtGStateDict(ctx, doc, alloc, res, work)
-						fixed += n
-						if ref, isRef := nObj.(ast.PdfIndirectRef); dirty && isRef && ref.ObjectNum > 0 &&
-							alloc.AllocAt(ref.ObjectNum, ast.NewLazyStream(work, stream.Bytes)) {
-							fixed += pending
-						}
+			resolved, err := document.ResolveObject(ctx, doc, entry)
+			if err != nil {
+				continue
+			}
+
+			switch v := resolved.(type) {
+			case ast.PdfStream:
+				fixed += fixAppearanceStream(ctx, doc, alloc, entry, v, visited)
+			case ast.PdfDict:
+				for _, state := range sortedDictKeys(v) {
+					stateEntry := v[state]
+					stateObj, err := document.ResolveObject(ctx, doc, stateEntry)
+					if err != nil {
+						continue
+					}
+					if stream, ok := stateObj.(ast.PdfStream); ok {
+						fixed += fixAppearanceStream(ctx, doc, alloc, stateEntry, stream, visited)
 					}
 				}
+			}
+		}
+	}
+
+	return fixed
+}
+
+// fixAppearanceStream repairs one appearance form XObject: its own transparency
+// group, and every transparency construct its /Resources reach.
+//
+// An appearance stream is a Form XObject (ISO 32000-1, 12.5.5), so ISO 19005-1
+// §6.4 test 3 forbids a /Group with /S /Transparency on it exactly as on any
+// other form. The previous walk repaired the graphics states inside its
+// resources but never the group on the stream itself, which left the rule
+// standing on every carrier that hides its group there.
+//
+// entry is the appearance value as stored, so an indirect reference can be
+// written back; a direct stream has no object number and cannot be rewritten.
+func fixAppearanceStream(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, entry ast.PdfObject, stream ast.PdfStream, visited map[int]bool) int {
+	ref, isRef := entry.(ast.PdfIndirectRef)
+	if isRef && ref.ObjectNum > 0 {
+		if visited[ref.ObjectNum] {
+			return 0
+		}
+		visited[ref.ObjectNum] = true
+	}
+
+	work := make(ast.PdfDict, len(stream.Dict))
+	maps.Copy(work, stream.Dict)
+
+	fixed := 0
+	changed := false
+	if groupObj, ok := stream.Dict["Group"]; ok && isTransparencyGroup(ctx, doc, groupObj) {
+		delete(work, "Group")
+		changed = true
+	}
+
+	pending := 0
+	if res, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && res != nil {
+		n, p, dirty := fixResourceTransparency(ctx, doc, alloc, res, work, visited, 1)
+		fixed += n
+		if dirty {
+			changed = true
+			pending = p
+		}
+	}
+
+	if changed && isRef && ref.ObjectNum > 0 &&
+		alloc.AllocAt(ref.ObjectNum, ast.NewLazyStream(work, stream.Bytes)) {
+		fixed += pending
+		if _, hadGroup := stream.Dict["Group"]; hadGroup {
+			if _, keptGroup := work["Group"]; !keptGroup {
+				fixed++
 			}
 		}
 	}

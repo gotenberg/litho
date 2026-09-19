@@ -97,14 +97,14 @@ func TestFixPatternTransparency_DeclinesWhenThereIsNoPattern(t *testing.T) {
 	t.Parallel()
 
 	doc, alloc := newTestDoc(t, patternTransparencyPDF())
-	if n := fixPatternTransparency(context.Background(), doc, alloc, nil); n != 0 {
+	if n := fixPatternTransparency(context.Background(), doc, alloc, nil, make(map[int]bool), 0); n != 0 {
 		t.Errorf("nil resources fixed %d, want 0", n)
 	}
-	if n := fixPatternTransparency(context.Background(), doc, alloc, ast.PdfDict{}); n != 0 {
+	if n := fixPatternTransparency(context.Background(), doc, alloc, ast.PdfDict{}, make(map[int]bool), 0); n != 0 {
 		t.Errorf("empty resources fixed %d, want 0", n)
 	}
 	if n := fixPatternTransparency(context.Background(), doc, alloc,
-		ast.PdfDict{"XObject": ast.PdfDict{}}); n != 0 {
+		ast.PdfDict{"XObject": ast.PdfDict{}}, make(map[int]bool), 0); n != 0 {
 		t.Errorf("resources without /Pattern fixed %d, want 0", n)
 	}
 }
