@@ -21,7 +21,7 @@ import (
 func matchFontFixes(v compliance.Violation) bool {
 	return clausePrefix(v,
 		"6.2.10.5", "6.2.11.5", "6.3.6", // glyph width mismatch
-		"7.21.5",                   // the PDF/UA-1 restatement of the width rule
+		"7.21.5", "8.4.5.6", // the PDF/UA-1 and PDF/UA-2 restatements of the width rule
 		"6.2.10.7",                 // ToUnicode maps to U+0000/FEFF/FFFE
 		"6.2.11.7",                 // Unicode mapping required (PDF/A-2)
 		"6.3.8",                    // ToUnicode required (PDF/A-1b)
@@ -53,7 +53,14 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	hasCharSetViolation := false
 	needCIDSet := false
 	for _, v := range violations {
-		if clausePrefix(v, "6.2.10.5", "6.2.11.5", "6.3.6") {
+		// The PDF/UA restatements belong here for the same reason they belong
+		// in [matchFontFixes]: ISO 14289-1 7.21.5 and ISO 14289-2 8.4.5.6 state
+		// the identical requirement, so a mismatch reported under a UA profile
+		// is just as much a reported mismatch. Claiming the violation without
+		// enabling this flag left the fixer running and repairing nothing: the
+		// matcher learned 7.21.5 in 5ea5b54e while this gate, written in
+		// f17f6792, kept only the PDF/A spellings.
+		if clausePrefix(v, "6.2.10.5", "6.2.11.5", "6.3.6", "7.21.5", "8.4.5.6") {
 			hasWidthViolation = true
 		}
 		// Kept apart: a reported /CharSet defect says nothing about /CIDSet,

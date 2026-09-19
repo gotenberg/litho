@@ -38,11 +38,17 @@ func TestMatchTrueTypeEncodingClaimsThePDFUAClauses(t *testing.T) {
 }
 
 // TestMatchFontFixesClaimsThePDFUAWidthClause pins the same for the glyph
-// width rule, which ISO 14289-1, 7.21.5 restates from ISO 19005-2, 6.2.11.5.
+// width rule, which ISO 14289-1, 7.21.5 and ISO 14289-2, 8.4.5.6 both restate
+// from ISO 19005-2, 6.2.11.5.
+//
+// Claiming is necessary and NOT sufficient: this test passed for three months
+// while the repair was dead, because [fixFontIssues] gated the rewrite on its
+// own clause list that knew only the PDF/A spellings. See
+// TestFixFontIssues_RepairsWidthsReportedUnderPDFUA for the arm that covers it.
 func TestMatchFontFixesClaimsThePDFUAWidthClause(t *testing.T) {
 	t.Parallel()
 
-	for _, clause := range []string{"6.3.6", "6.2.11.5", "6.2.10.5", "7.21.5"} {
+	for _, clause := range []string{"6.3.6", "6.2.11.5", "6.2.10.5", "7.21.5", "8.4.5.6"} {
 		v := compliance.Violation{
 			Rule:    compliance.Rule{Clause: clause, TestNumber: 1},
 			Context: "font F1 on page 1: glyph width mismatch",
