@@ -19,6 +19,12 @@ func matchCatalogCleanup(v compliance.Violation) bool {
 		clausePrefix(v, "6.1.11") { // Perms dict (PDF/A-1)
 		return true
 	}
+	// ISO 19005-1 6.1.13 test 1: the part-1 ban on catalog /OCProperties.
+	// Exact specification, clause and test, never a prefix: parts 2 and 3
+	// spell their implementation limits at the same clause number.
+	if forbiddenOCPropertiesViolation(v.Rule) {
+		return true
+	}
 	// One requirement, several spellings. The optional-content configuration
 	// clause is ISO 19005-4 6.10 (claimed by the prefix above), ISO 19005-2 and
 	// 19005-3 6.9, ISO 14289-1 7.10 and ISO 14289-2 8.7, and the last of those
@@ -112,8 +118,42 @@ func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		fixes = append(fixes, "removed /Encrypt from trailer")
 	}
 
-	// 6.10: Repair the optional-content configuration dictionaries.
-	if ocpObj, ok := catalogDict["OCProperties"]; ok {
+	// ISO 19005-1 6.1.13 test 1: PDF/A-1 forbids optional content, and the
+	// catalog /OCProperties entry is the whole of what the rule tests
+	// (`isOptionalContentPresent == false`; litho's detector reads the key's
+	// presence alone). Deleting it is therefore the only way to produce a
+	// conforming part-1 file, exactly as [fixTransparency] flattens
+	// transparency regardless of PreserveContent because part 1 forbids that
+	// outright too.
+	//
+	// On a file that genuinely uses optional content this makes the affected
+	// content unconditionally visible: 8 of the 19 corpus carriers carry /OC
+	// entries. That IS what "no optional content" means for part 1, and
+	// refusing would mean declining to produce a conforming file at all. The
+	// /OC entries themselves are left in place: the rule does not test them,
+	// and removing them is a larger change than the rule requires.
+	//
+	// Gated on the VIOLATION, never on the profile string: parts 2, 3 and 4
+	// permit optional content and never state this rule, so the same file
+	// keeps its /OCProperties when it is validated under them. See
+	// [fixOCGConfigs] for why the part table stays in [compliance].
+	if anyViolation(violations, forbiddenOCPropertiesViolation) {
+		if _, ok := catalogDict["OCProperties"]; ok {
+			newCatalog := make(ast.PdfDict, len(catalogDict))
+			maps.Copy(newCatalog, catalogDict)
+			delete(newCatalog, "OCProperties")
+			if alloc.AllocAt(catalogRef.ObjectNum, newCatalog) {
+				// Keep the local copy current: the repairs below copy from
+				// this dict, and copying from a stale one would restore the
+				// key just removed.
+				catalogDict = newCatalog
+				fixes = append(fixes, "removed /OCProperties from catalog (optional content forbidden in PDF/A-1)")
+			}
+		}
+	} else if ocpObj, ok := catalogDict["OCProperties"]; ok {
+		// 6.10: Repair the optional-content configuration dictionaries.
+		// Skipped when the key is being removed: repairing a configuration
+		// that is about to be deleted reports work the output never carries.
 		ocFixes := fixOCGConfigs(ctx, alloc, doc, catalogDict, catalogRef, ocpObj, violations)
 		fixes = append(fixes, ocFixes...)
 		// Re-read catalog in case it was updated.
@@ -353,13 +393,13 @@ func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	//
 	// /AS is stripped before the names are made unique, so a configuration is
 	// copied at most once per repair.
-	if anyOCGViolation(violations, ocgASViolation) {
+	if anyViolation(violations, ocgASViolation) {
 		if descs := stripOCGUsageApplication(ctx, alloc, doc, newOCP); len(descs) > 0 {
 			fixes = append(fixes, descs...)
 			modified = true
 		}
 	}
-	if anyOCGViolation(violations, ocgNameUniqueViolation) {
+	if anyViolation(violations, ocgNameUniqueViolation) {
 		if descs := uniqueOCGConfigNames(ctx, alloc, doc, newOCP); len(descs) > 0 {
 			fixes = append(fixes, descs...)
 			modified = true
@@ -380,8 +420,8 @@ func fixOCGConfigs(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	return fixes
 }
 
-// anyOCGViolation reports whether the run flagged a rule pred names.
-func anyOCGViolation(violations []compliance.Violation, pred func(compliance.Rule) bool) bool {
+// anyViolation reports whether the run flagged a rule pred names.
+func anyViolation(violations []compliance.Violation, pred func(compliance.Rule) bool) bool {
 	for _, v := range violations {
 		if pred(v.Rule) {
 			return true
@@ -407,6 +447,18 @@ func ocgNameUniqueViolation(r compliance.Rule) bool {
 // configuration dictionary": ISO 19005-2/3 6.9 t4, ISO 14289-1 7.10 t2 and
 // ISO 14289-2 8.7 t2. ISO 19005-4 states no AS test, which is exactly why this
 // is read from the violations: a part-4 file keeps its /AS.
+// forbiddenOCPropertiesViolation identifies ISO 19005-1 6.1.13 test 1, the
+// part-1 ban on a catalog /OCProperties entry.
+//
+// Matched on specification, clause AND test number rather than a clause
+// prefix, because 6.1.13 is a DIFFERENT rule in every other part: ISO 19005-2
+// and 19005-3 spell their implementation limits there (integer, real, string
+// and name caps, object count, q/Q nesting, DeviceN colorants, CID values and
+// page-box size, tests 1 to 11). A prefix match would claim all of those.
+func forbiddenOCPropertiesViolation(r compliance.Rule) bool {
+	return r.Specification == "ISO_19005_1" && r.Clause == "6.1.13" && r.TestNumber == 1
+}
+
 func ocgASViolation(r compliance.Rule) bool {
 	switch r.Specification {
 	case "ISO_19005_2", "ISO_19005_3":

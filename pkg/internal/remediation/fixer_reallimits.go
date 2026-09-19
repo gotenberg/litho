@@ -23,6 +23,21 @@ const pdfAIntLimit = 2147483647
 // impose different caps on integers and reals; both overflows are
 // repaired by the same pass, which clamps operands in place.
 func matchRealLimits(v compliance.Violation) bool {
+	// The clause number alone is not the rule. ISO 19005-1 spells the ban on a
+	// catalog /OCProperties entry at 6.1.13 test 1, where parts 2 and 3 spell
+	// their numeric implementation limits. Without this exclusion the part-1
+	// optional-content violation is claimed here, which marks it handled in the
+	// preliminary residual while this fixer cannot touch it.
+	//
+	// Excluding that one rule rather than requiring a context substring: an
+	// earlier attempt gated on contextContains("out of range") and silently
+	// stopped claiming 14 cells of 6.1.12 test 2, whose violations carry a
+	// different context. A positive context filter has to enumerate every
+	// phrasing the checks emit; an exclusion only has to name the one rule
+	// that does not belong here.
+	if forbiddenOCPropertiesViolation(v.Rule) {
+		return false
+	}
 	return clausePrefix(v, "6.1.12", "6.1.13")
 }
 
