@@ -2233,6 +2233,56 @@ func TestVerifySignatures_CallableAfterRoundTrip(t *testing.T) {
 	}
 }
 
+// [Writer.Sign] is documented as needing to be the last mutation before
+// [Writer.WriteTo]. It is not a mutation at all: it sets a flag, and
+// writeToInternal hands every queued mutation to WriteWithSignature, which
+// applies them before computing the digest. So a mutation queued AFTER Sign is
+// still applied and still covered by the signature.
+//
+// TestWriter_SignAndModify covers the documented order. This covers the
+// reverse, which nothing asserted: if the ordering ever became load-bearing,
+// the title would be dropped here while that test kept passing.
+func TestWriter_SignThenModify(t *testing.T) {
+	data := writerTestPDF()
+	ctx := context.Background()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	w := NewWriter(r)
+	w.Sign(&mockSigner{})
+	w.SetMetadata(Metadata{Title: "Signed Document"})
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+
+	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	meta, err := r2.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("Metadata: %v", err)
+	}
+	if meta["Title"] != "Signed Document" {
+		t.Errorf("Title: got %q, want %q: a mutation queued after Sign was dropped",
+			meta["Title"], "Signed Document")
+	}
+
+	sigs, err := r2.ExtractSignatures(ctx)
+	if err != nil {
+		t.Fatalf("ExtractSignatures: %v", err)
+	}
+	if len(sigs) == 0 {
+		t.Error("expected a signature alongside the later mutation")
+	}
+}
+
 func TestWriter_SignAndModify(t *testing.T) {
 	data := writerTestPDF()
 	ctx := context.Background()

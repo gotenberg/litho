@@ -967,8 +967,13 @@ func (w *Writer) RemoveAttachment(name string) {
 }
 
 // Sign applies a digital signature using the given signer. Signing always uses
-// incremental update (required for ByteRange integrity). Must be the last
-// mutation before [Writer.WriteTo].
+// incremental update (required for ByteRange integrity).
+//
+// Sign registers the signer rather than queueing a mutation, so it may be
+// called at any point: [Writer.WriteTo] applies every queued mutation before
+// computing the digest, and the signature covers the result either way. What it
+// is not compatible with is an operation forcing a full rewrite, which
+// [Writer.WriteTo] rejects with [ErrSignFullRewriteIncompatible].
 func (w *Writer) Sign(signer Signer) {
 	w.signer = signer
 }
