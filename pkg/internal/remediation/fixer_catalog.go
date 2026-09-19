@@ -101,10 +101,33 @@ func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	return fixes, nil
 }
 
+// signatureIsSigned reports whether a signature dictionary carries an actual
+// signature: a /Contents value together with the four-element /ByteRange that
+// fixes which bytes the digest covers (ISO 32000-1, 12.8.1, Table 252). It
+// mirrors how [compliance] decides a signature exists before judging its range.
+// An entry without both signs nothing, so its reference dictionaries carry no
+// integrity to lose.
+func signatureIsSigned(ctx context.Context, doc *document.Document, sigDict ast.PdfDict) bool {
+	if _, ok := sigDict["Contents"]; !ok {
+		return false
+	}
+	byteRange, err := document.ResolveArray(ctx, doc, sigDict["ByteRange"])
+	return err == nil && len(byteRange) == 4
+}
+
 // fixSignatureReferences strips DigestLocation, DigestMethod and
 // DigestValue from every Reference entry under /Perms /DocMDP and
 // /UR3 Signature dicts. ISO 19005-2/4 §6.1.12 test 2 forbids those
 // keys on signature-reference dicts.
+//
+// A SIGNED signature is left alone. Its reference dictionaries are part of the
+// revision the digest covers, so rewriting one moves the /ByteRange and trades
+// §6.1.12 test 2 for §6.4.3 test 1, which reports that the declared range no
+// longer matches the signed revision. Measured on all three
+// PDF_A-2b__veraPDF_test_suite_6-1-12-t02-fail-* fixtures, where the swap kept
+// the violation count at one and so stayed invisible to a count-based gate.
+// Keeping the honest §6.1.12 residual follows [fixSignatureStrip], which leaves
+// a signature it cannot preserve to standard mode rather than destroying it.
 func fixSignatureReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, permsObj ast.PdfObject) []string {
 	permsDict, err := document.ResolveDict(ctx, doc, permsObj)
 	if err != nil || permsDict == nil {
@@ -119,6 +142,9 @@ func fixSignatureReferences(ctx context.Context, alloc *writer.ObjAllocator, doc
 		sigRef, _ := sigObj.(ast.PdfIndirectRef)
 		sigDict, err := document.ResolveDict(ctx, doc, sigObj)
 		if err != nil || sigDict == nil {
+			continue
+		}
+		if signatureIsSigned(ctx, doc, sigDict) {
 			continue
 		}
 		refsObj, ok := sigDict["Reference"]
