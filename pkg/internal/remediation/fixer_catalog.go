@@ -30,7 +30,7 @@ func matchCatalogCleanup(v compliance.Violation) bool {
 	return false
 }
 
-func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, _ string) ([]string, error) {
+func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
@@ -95,8 +95,15 @@ func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		maps.Copy(newCatalog, catalogDict)
 		delete(newCatalog, "NeedsRendering")
 		alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
+		// Keep the local copy current: the repair below may rewrite the catalog
+		// too, and copying from a stale dict would restore the key just removed.
+		catalogDict = newCatalog
 		fixes = append(fixes, "removed /NeedsRendering from catalog")
 	}
+
+	// 6.1.11 (PDF/A-1 only): the embedded-file constructs that profile forbids
+	// outright. Runs last so it builds on whatever the branches above wrote.
+	fixes = append(fixes, removePDFA1EmbeddedFiles(ctx, alloc, doc, opts, profile, catalogDict, catalogRef)...)
 
 	return fixes, nil
 }
