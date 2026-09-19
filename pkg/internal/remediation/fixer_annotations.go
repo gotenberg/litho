@@ -47,7 +47,7 @@ func matchAnnotations(v compliance.Violation) bool {
 	)
 }
 
-func fixAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
+func fixAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
@@ -70,7 +70,7 @@ func fixAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	}
 
 	// Walk pages to fix annotations.
-	pageFixes, err := fixPageAnnotations(ctx, alloc, doc, catalogDict)
+	pageFixes, err := fixPageAnnotations(ctx, alloc, doc, catalogDict, opts, profile)
 	if err != nil {
 		return nil, fmt.Errorf("fixing page annotations: %w", err)
 	}
@@ -86,7 +86,7 @@ type annotPageEntry struct {
 }
 
 // fixPageAnnotations walks the page tree and fixes annotation issues on each page.
-func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict) ([]string, error) {
+func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, opts Options, profile string) ([]string, error) {
 	pagesObj, ok := catalog["Pages"]
 	if !ok {
 		return nil, nil
@@ -125,7 +125,7 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 			continue
 		}
 
-		pageFixes, modified := fixAnnotArray(ctx, alloc, doc, annots, i+1)
+		pageFixes, modified := fixAnnotArray(ctx, alloc, doc, annots, i+1, opts, profile)
 		fixes = append(fixes, pageFixes...)
 
 		if modified && pe.ref.ObjectNum > 0 {
@@ -210,9 +210,25 @@ func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	}
 }
 
+// forbiddenPDFA1AnnotSubtypes are the subtypes ISO 19005-1 6.5.2 t1 forbids on
+// top of the parts-2+ set. Sound and Movie already sit in
+// [forbiddenAnnotSubtypes], so FileAttachment is the only addition: parts 2 and
+// later permit it, which is why it lives in [permittedAnnotSubtypes] and why
+// Part 1 was served only by accident before.
+//
+// Kept separate from the shared tables on purpose. Editing those would change
+// every other profile's verdict, and they are correct as they stand.
+var forbiddenPDFA1AnnotSubtypes = map[ast.PdfName]bool{
+	"FileAttachment": true,
+}
+
 // fixAnnotArray processes each annotation in the array, returning fixes and
 // whether any annotations were removed (requiring the array to be rebuilt).
-func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, annots ast.PdfArray, pageNum int) ([]string, bool) {
+func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, annots ast.PdfArray, pageNum int, opts Options, profile string) ([]string, bool) {
+	// Dropping an attachment annotation destroys content the author attached,
+	// so it is gated like every other repair that cannot preserve what it
+	// touches. Part 1 alone forbids the subtype outright.
+	dropPDFA1Attachments := !opts.PreserveContent && compliance.PDFAPart(profile) == 1
 	var fixes []string
 	removed := false
 
@@ -246,7 +262,8 @@ func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		// (PDF/A-2/3/4 §6.3.1, PDF/A-1 §6.5.2). Mark the slot nil here;
 		// the caller's rebuildAnnotsArray skips nil entries when
 		// rewriting the array.
-		if forbiddenAnnotSubtypes[subtype] || !permittedAnnotSubtypes[subtype] {
+		if forbiddenAnnotSubtypes[subtype] || !permittedAnnotSubtypes[subtype] ||
+			(dropPDFA1Attachments && forbiddenPDFA1AnnotSubtypes[subtype]) {
 			annots[i] = nil
 			removed = true
 			// Null the annotation object as well. Dropping it from /Annots
