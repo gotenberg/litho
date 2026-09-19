@@ -30,7 +30,7 @@ func matchCatalogCleanup(v compliance.Violation) bool {
 	return false
 }
 
-func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
+func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, nil
@@ -77,7 +77,7 @@ func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	if permsObj, ok := catalogDict["Perms"]; ok {
 		pFixes := fixPermsDict(ctx, alloc, doc, catalogDict, catalogRef, permsObj)
 		fixes = append(fixes, pFixes...)
-		if sFixes := fixSignatureReferences(ctx, alloc, doc, permsObj); len(sFixes) > 0 {
+		if sFixes := fixSignatureReferences(ctx, alloc, doc, opts, permsObj); len(sFixes) > 0 {
 			fixes = append(fixes, sFixes...)
 		}
 		// Re-read the catalog in case fixPermsDict rewrote it (an inline /Perms
@@ -120,15 +120,21 @@ func signatureIsSigned(ctx context.Context, doc *document.Document, sigDict ast.
 // /UR3 Signature dicts. ISO 19005-2/4 §6.1.12 test 2 forbids those
 // keys on signature-reference dicts.
 //
-// A SIGNED signature is left alone. Its reference dictionaries are part of the
-// revision the digest covers, so rewriting one moves the /ByteRange and trades
-// §6.1.12 test 2 for §6.4.3 test 1, which reports that the declared range no
-// longer matches the signed revision. Measured on all three
-// PDF_A-2b__veraPDF_test_suite_6-1-12-t02-fail-* fixtures, where the swap kept
-// the violation count at one and so stayed invisible to a count-based gate.
-// Keeping the honest §6.1.12 residual follows [fixSignatureStrip], which leaves
-// a signature it cannot preserve to standard mode rather than destroying it.
-func fixSignatureReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, permsObj ast.PdfObject) []string {
+// In standard mode a SIGNED signature is left alone. Its reference
+// dictionaries are part of the revision the digest covers, so rewriting one
+// moves the /ByteRange and trades §6.1.12 test 2 for §6.4.3 test 1, which
+// reports that the declared range no longer matches the signed revision.
+// Measured on all three PDF_A-2b__veraPDF_test_suite_6-1-12-t02-fail-*
+// fixtures, where the swap kept the violation count at one and so stayed
+// invisible to a count-based gate.
+//
+// Aggressive mode still strips. There the invalidation is intended and
+// completes a chain: the strip breaks the coverage, §6.4.3 test 1 fires, and
+// [fixSignatureStrip] then removes the now-invalidated signature, resolving
+// both rules. Guarding unconditionally severed that chain and cost 18 fixtures
+// their fully-fixed verdict in the remediation-aggressive corpus cell, a drop
+// the gate could not flag because it compares against a much older baseline.
+func fixSignatureReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, permsObj ast.PdfObject) []string {
 	permsDict, err := document.ResolveDict(ctx, doc, permsObj)
 	if err != nil || permsDict == nil {
 		return nil
@@ -144,7 +150,7 @@ func fixSignatureReferences(ctx context.Context, alloc *writer.ObjAllocator, doc
 		if err != nil || sigDict == nil {
 			continue
 		}
-		if signatureIsSigned(ctx, doc, sigDict) {
+		if opts.PreserveContent && signatureIsSigned(ctx, doc, sigDict) {
 			continue
 		}
 		refsObj, ok := sigDict["Reference"]
