@@ -56,7 +56,7 @@ func WriteOutline(
 		"Type":  ast.PdfName("Outlines"),
 		"First": items[0],
 		"Last":  items[len(items)-1],
-		"Count": ast.PdfInt(len(bookmarks)),
+		"Count": ast.PdfInt(visibleOutlineCount(bookmarks)),
 	}
 	alloc.AllocAt(outlineRef.ObjectNum, outlineDict)
 
@@ -115,10 +115,35 @@ func BuildOutline(
 		"Type":  ast.PdfName("Outlines"),
 		"First": items[0],
 		"Last":  items[len(items)-1],
-		"Count": ast.PdfInt(len(bookmarks)),
+		"Count": ast.PdfInt(visibleOutlineCount(bookmarks)),
 	}
 	alloc.AllocAt(outlineRef.ObjectNum, outlineDict)
 	return outlineRef
+}
+
+// visibleOutlineCount returns how many outline items a viewer shows for
+// bookmarks, counting descendants at every level rather than the immediate
+// slice.
+//
+// Per ISO 32000-1, 12.3.3 an outline dictionary's /Count is the total number of
+// visible items at all levels, and an outline item's /Count is the number of
+// its visible descendants. len(bookmarks) is only correct for a flat list: a
+// nested tree reported its top level, so a two-level outline written by
+// [SetBookmarks] claimed fewer items than it contains.
+//
+// litho writes every item open, with /First and /Last and no closed marker, so
+// every descendant is visible and the value is the whole subtree.
+//
+// The walk carries no depth bound of its own. It traverses the same tree
+// [buildOutlineItems] already recurses over, and a tree read back from a
+// document arrives capped at maxOutlineDepth (100) by the outline parser, so
+// this adds no reach the writer did not already have.
+func visibleOutlineCount(bookmarks []models.Bookmark) int {
+	total := 0
+	for i := range bookmarks {
+		total += 1 + visibleOutlineCount(bookmarks[i].Children)
+	}
+	return total
 }
 
 // buildOutlineItems creates outline item objects and returns their refs.
@@ -156,7 +181,7 @@ func buildOutlineItems(alloc *writer.ObjAllocator, bookmarks []models.Bookmark, 
 			if len(childRefs) > 0 {
 				d["First"] = childRefs[0]
 				d["Last"] = childRefs[len(childRefs)-1]
-				d["Count"] = ast.PdfInt(len(bm.Children))
+				d["Count"] = ast.PdfInt(visibleOutlineCount(bm.Children))
 			}
 		}
 
