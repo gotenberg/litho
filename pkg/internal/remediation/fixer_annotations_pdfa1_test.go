@@ -152,13 +152,14 @@ func TestFixAnnotations_KeepsThePDFA1PermittedSubtypes(t *testing.T) {
 	}
 }
 
-// TestFixAnnotations_LaterPartsKeepTheNewerSubtypes pins that the stricter set
-// applies to Part 1 alone. Polygon, Redact and Watermark are all in compliance's
-// annotWhitelistPart23, so parts 2 and later must leave them be.
+// TestFixAnnotations_LaterPartsKeepTheNewerSubtypes pins the types parts 2 and
+// 3 permit. Polygon, Redact and Watermark are all in compliance's
+// annotWhitelistPart23, so those profiles must leave them be.
 //
-// Projection is deliberately absent from this list: remediation permits it while
-// compliance's part-2/3 whitelist does not, so asserting either behaviour here
-// would pin a discrepancy rather than a decision.
+// Projection is absent from this list because parts 2 and 3 FORBID it: it is in
+// compliance's part-4 set, not the part-2/3 one. The discrepancy that once made
+// it untestable (remediation permitting it for every part) is what
+// [permittedAnnotSubtypesFor] now resolves, and a dedicated test covers it.
 func TestFixAnnotations_LaterPartsKeepTheNewerSubtypes(t *testing.T) {
 	t.Parallel()
 
@@ -209,5 +210,163 @@ func TestPDFA1PermittedAnnotSubtypes_MirrorsTheComplianceSet(t *testing.T) {
 		if !want[name] {
 			t.Errorf("%s present: ISO 19005-1 6.5.2 does not permit it", name)
 		}
+	}
+}
+
+// sameSubtypeSet reports whether two subtype tables hold the same names.
+func sameSubtypeSet(a, b map[ast.PdfName]bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for name := range a {
+		if !b[name] {
+			return false
+		}
+	}
+	return true
+}
+
+// TestPermittedAnnotSubtypesFor_SelectsThePartAndLevel pins the selection
+// against compliance's checkForbiddenAnnotType, which is what raises the rule.
+//
+// The bare "PDF/A-4" case is the one worth stating: [compliance.PDFALevel]
+// returns the identifier's raw last byte, so that profile yields '4' rather than
+// an absent level, and the default arm has to catch it.
+func TestPermittedAnnotSubtypesFor_SelectsThePartAndLevel(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		profile string
+		want    map[ast.PdfName]bool
+	}{
+		{"PDF/A-1a", pdfa1PermittedAnnotSubtypes},
+		{"PDF/A-1b", pdfa1PermittedAnnotSubtypes},
+		{"PDF/A-2b", pdfa23PermittedAnnotSubtypes},
+		{"PDF/A-3u", pdfa23PermittedAnnotSubtypes},
+		{"PDF/A-4", pdfa4PermittedAnnotSubtypes},
+		{"PDF/A-4e", pdfa4ePermittedAnnotSubtypes},
+		{"PDF/A-4f", pdfa4fPermittedAnnotSubtypes},
+	} {
+		if got := permittedAnnotSubtypesFor(tc.profile); !sameSubtypeSet(got, tc.want) {
+			t.Errorf("%s selected the wrong table (%d entries)", tc.profile, len(got))
+		}
+	}
+
+	// A non-PDF/A profile must yield nil, or the strict check would fire where
+	// no PDF/A part governs the annotation set at all.
+	for _, profile := range []string{"PDF/UA-1", "PDF/UA-2", "WTPDF-1.0-Reuse", ""} {
+		if permittedAnnotSubtypesFor(profile) != nil {
+			t.Errorf("%s: expected nil, the strict check must not apply", profile)
+		}
+	}
+}
+
+// TestPermittedAnnotSubtypes_MirrorTheCompliancePartTables pins the copies
+// against their sources by size and by the differences that distinguish them.
+// Drift toward over-removal destroys content, so these are asserted rather than
+// sampled.
+func TestPermittedAnnotSubtypes_MirrorTheCompliancePartTables(t *testing.T) {
+	t.Parallel()
+
+	sizes := map[string]struct {
+		set  map[ast.PdfName]bool
+		want int
+	}{
+		"pdfa1":  {pdfa1PermittedAnnotSubtypes, 16},
+		"part23": {pdfa23PermittedAnnotSubtypes, 22},
+		"part4":  {pdfa4PermittedAnnotSubtypes, 22},
+		"part4e": {pdfa4ePermittedAnnotSubtypes, 24},
+		"part4f": {pdfa4fPermittedAnnotSubtypes, 23},
+	}
+	for name, s := range sizes {
+		if len(s.set) != s.want {
+			t.Errorf("%s has %d entries, want %d", name, len(s.set), s.want)
+		}
+	}
+
+	// The part-2/3 and part-4 sets are NOT nested: each permits one type the
+	// other forbids. A superset assumption would silently keep FileAttachment
+	// under part 4, which is the defect this table set exists to repair.
+	if !pdfa23PermittedAnnotSubtypes["FileAttachment"] || pdfa4PermittedAnnotSubtypes["FileAttachment"] {
+		t.Error("FileAttachment must be permitted by parts 2/3 and forbidden by part 4")
+	}
+	if pdfa23PermittedAnnotSubtypes["Projection"] || !pdfa4PermittedAnnotSubtypes["Projection"] {
+		t.Error("Projection must be forbidden by parts 2/3 and permitted by part 4")
+	}
+
+	// The two level variants differ from part 4 by exactly one addition each.
+	if !pdfa4ePermittedAnnotSubtypes["3D"] || !pdfa4ePermittedAnnotSubtypes["RichMedia"] {
+		t.Error("level E must add 3D and RichMedia")
+	}
+	if !pdfa4fPermittedAnnotSubtypes["FileAttachment"] {
+		t.Error("level F must re-add FileAttachment")
+	}
+	// The delta helper must not alias its base.
+	if pdfa4PermittedAnnotSubtypes["3D"] || pdfa4PermittedAnnotSubtypes["FileAttachment"] {
+		t.Error("the part-4 base was mutated by a delta")
+	}
+}
+
+// TestFixAnnotations_Part4DropsFileAttachment covers the 24 corpus cells that
+// reported ISO 19005-4 6.3.1 t1 unrepaired: part 4 and level E forbid
+// FileAttachment, but remediation held one parts-2+ table that permits it.
+func TestFixAnnotations_Part4DropsFileAttachment(t *testing.T) {
+	t.Parallel()
+
+	for _, profile := range []string{"PDF/A-4", "PDF/A-4e"} {
+		if subtypeSurvives(t, "FileAttachment", profile, false) {
+			t.Errorf("%s: FileAttachment survived although the profile forbids it", profile)
+		}
+	}
+}
+
+// TestFixAnnotations_Part4fKeepsFileAttachment is the counterweight: level F
+// re-permits the subtype, so the same repair must leave it alone.
+//
+// Level E's own additions, 3D and RichMedia, are deliberately NOT asserted here.
+// They are removed by the two generic terms in the predicate, which run ungated
+// and predate this table set: "3D" is in [forbiddenAnnotSubtypes], whose comment
+// claims the set is "never permitted in any PDF/A profile" though level E
+// permits it, and "RichMedia" is simply absent from [permittedAnnotSubtypes].
+// That over-removal is real but LATENT: no fixture in the veraPDF corpus carries
+// either subtype, so the corpus gate cannot falsify a fix for it, and an
+// unfalsifiable guard is worse than a recorded defect.
+func TestFixAnnotations_Part4fKeepsFileAttachment(t *testing.T) {
+	t.Parallel()
+
+	if !subtypeSurvives(t, "FileAttachment", "PDF/A-4f", false) {
+		t.Error("PDF/A-4f: FileAttachment was removed although level F permits it")
+	}
+}
+
+// TestFixAnnotations_Parts23DropProjection covers the other side of the
+// two-way difference: parts 2 and 3 forbid Projection while permitting
+// FileAttachment, the reverse of part 4.
+func TestFixAnnotations_Parts23DropProjection(t *testing.T) {
+	t.Parallel()
+
+	for _, profile := range []string{"PDF/A-2b", "PDF/A-3b"} {
+		if subtypeSurvives(t, "Projection", profile, false) {
+			t.Errorf("%s: Projection survived although the profile forbids it", profile)
+		}
+		if !subtypeSurvives(t, "FileAttachment", profile, false) {
+			t.Errorf("%s: FileAttachment was removed although the profile permits it", profile)
+		}
+	}
+}
+
+// TestFixAnnotations_StrictCheckIsGatedAndPDFAOnly is the pair of controls for
+// the gate itself: standard mode declines the removal, and a non-PDF/A profile
+// never reaches the strict set at all.
+func TestFixAnnotations_StrictCheckIsGatedAndPDFAOnly(t *testing.T) {
+	t.Parallel()
+
+	if !subtypeSurvives(t, "FileAttachment", "PDF/A-4", true) {
+		t.Error("PreserveContent: FileAttachment was removed in standard mode")
+	}
+	// Widget is permitted everywhere, so this asserts the non-PDF/A path runs at
+	// all rather than that nothing is ever removed.
+	if !subtypeSurvives(t, "Widget", "PDF/UA-1", false) {
+		t.Error("PDF/UA-1: a permitted subtype was removed")
 	}
 }

@@ -232,14 +232,88 @@ var pdfa1PermittedAnnotSubtypes = map[ast.PdfName]bool{
 	"Popup": true, "Widget": true, "PrinterMark": true, "TrapNet": true,
 }
 
+// pdfa23PermittedAnnotSubtypes mirrors compliance's annotWhitelistPart23
+// (ISO 19005-2/3 §6.3.1). It is NOT a superset of the part-4 set and not a
+// subset of it: part 2/3 permits FileAttachment and forbids Projection, and
+// part 4 does the reverse.
+var pdfa23PermittedAnnotSubtypes = map[ast.PdfName]bool{
+	"Text": true, "Link": true, "FreeText": true, "Line": true,
+	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
+	"Highlight": true, "Underline": true, "Squiggly": true, "StrikeOut": true,
+	"Stamp": true, "Caret": true, "Ink": true, "Popup": true,
+	"FileAttachment": true, "Widget": true, "PrinterMark": true, "TrapNet": true,
+	"Watermark": true, "Redact": true,
+}
+
+// pdfa4PermittedAnnotSubtypes mirrors compliance's annotWhitelistPart4
+// (ISO 19005-4 §6.3.1): the part-2/3 set with FileAttachment dropped and
+// Projection added.
+var pdfa4PermittedAnnotSubtypes = map[ast.PdfName]bool{
+	"Text": true, "Link": true, "FreeText": true, "Line": true,
+	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
+	"Highlight": true, "Underline": true, "Squiggly": true, "StrikeOut": true,
+	"Stamp": true, "Caret": true, "Ink": true, "Popup": true,
+	"Widget": true, "PrinterMark": true, "TrapNet": true, "Watermark": true,
+	"Redact": true, "Projection": true,
+}
+
+// The two conformance levels of part 4 differ from it by exactly one addition
+// each, which is how compliance states them and how the set difference measures
+// them. Writing the deltas rather than two more near-identical literals keeps a
+// future divergence visible instead of buried in twenty repeated names.
+var (
+	pdfa4ePermittedAnnotSubtypes = annotSubtypesWith(pdfa4PermittedAnnotSubtypes, "3D", "RichMedia")
+	pdfa4fPermittedAnnotSubtypes = annotSubtypesWith(pdfa4PermittedAnnotSubtypes, "FileAttachment")
+)
+
+// annotSubtypesWith returns a copy of base with extra added, leaving base
+// untouched so the tables cannot alias one another.
+func annotSubtypesWith(base map[ast.PdfName]bool, extra ...ast.PdfName) map[ast.PdfName]bool {
+	out := make(map[ast.PdfName]bool, len(base)+len(extra))
+	maps.Copy(out, base)
+	for _, name := range extra {
+		out[name] = true
+	}
+	return out
+}
+
+// permittedAnnotSubtypesFor returns the annotation subtypes the profile permits,
+// or nil when the profile is not PDF/A and the stricter check does not apply.
+//
+// The selection mirrors compliance's checkForbiddenAnnotType, which is what
+// raises the violation. [compliance.PDFALevel] returns the identifier's raw last
+// byte, so bare "PDF/A-4" yields '4' rather than an absent level: the default
+// arm has to catch it, exactly as compliance's own level switches do.
+func permittedAnnotSubtypesFor(profile string) map[ast.PdfName]bool {
+	switch compliance.PDFAPart(profile) {
+	case 1:
+		return pdfa1PermittedAnnotSubtypes
+	case 2, 3:
+		return pdfa23PermittedAnnotSubtypes
+	case 4:
+		switch compliance.PDFALevel(profile) {
+		case 'e':
+			return pdfa4ePermittedAnnotSubtypes
+		case 'f':
+			return pdfa4fPermittedAnnotSubtypes
+		default:
+			return pdfa4PermittedAnnotSubtypes
+		}
+	}
+	return nil
+}
+
 // fixAnnotArray processes each annotation in the array, returning fixes and
 // whether any annotations were removed (requiring the array to be rebuilt).
 func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, annots ast.PdfArray, pageNum int, opts Options, profile string) ([]string, bool) {
-	// Part 1 permits a far narrower set of annotation types than later parts,
-	// and removing one destroys content the author placed, so the stricter
-	// check is gated like every other repair that cannot preserve what it
-	// touches.
-	pdfa1Strict := !opts.PreserveContent && compliance.PDFAPart(profile) == 1
+	// Each PDF/A part permits a different set of annotation types: part 2/3
+	// allows FileAttachment and forbids Projection, part 4 does the reverse, and
+	// part 1 is narrower than both. Removing an annotation destroys content the
+	// author placed, so the profile-exact check is gated like every other repair
+	// that cannot preserve what it touches. A nil set means the profile is not
+	// PDF/A, leaving only the generic check below.
+	strictSubtypes := permittedAnnotSubtypesFor(profile)
+	strict := !opts.PreserveContent && strictSubtypes != nil
 	var fixes []string
 	removed := false
 
@@ -274,7 +348,7 @@ func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		// the caller's rebuildAnnotsArray skips nil entries when
 		// rewriting the array.
 		if forbiddenAnnotSubtypes[subtype] || !permittedAnnotSubtypes[subtype] ||
-			(pdfa1Strict && !pdfa1PermittedAnnotSubtypes[subtype]) {
+			(strict && !strictSubtypes[subtype]) {
 			annots[i] = nil
 			removed = true
 			// Null the annotation object as well. Dropping it from /Annots
