@@ -17,6 +17,13 @@ func matchGraphics(v compliance.Violation) bool {
 	return clausePrefix(v, "6.2.9", "6.2.6") || // rendering intent (ExtGState /RI and image /Intent)
 		clausePrefix(v, "6.2.7") || // PostScript XObject (PDF/A-1 §6.2.7)
 		clausePrefix(v, "6.2.5") || // Form XObject /Subtype2, /PS
+		// ISO 19005-1 spells the ExtGState transfer-function rule 6.2.8,
+		// where parts 2, 3 and 4 spell it 6.2.5, so the prefix above cannot
+		// reach it and /TR and /TR2 went unrepaired for PDF/A-1 targets. The
+		// clause is matched WHOLE here because part 1 states only t1 (/TR)
+		// and t2 (/TR2), both repaired below; parts 2 to 4 could not be
+		// matched this way, their 6.2.5 also covering halftone dictionaries.
+		(v.Rule.Specification == "ISO_19005_1" && v.Rule.Clause == "6.2.8") ||
 		clausePrefix(v, "6.2.4.2") || // overprint mode OPM
 		clausePrefix(v, "6.2.8.1") || // Form XObject /OPI
 		clausePrefix(v, "6.2.8.2") || // reference XObject /Ref
