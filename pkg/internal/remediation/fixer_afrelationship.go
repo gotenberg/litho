@@ -13,12 +13,23 @@ import (
 )
 
 // matchAFRelationship matches the file-specification /AFRelationship violations
-// this fixer repairs: every associated file shall carry /AFRelationship under
-// PDF/A-2/3/4 §6.8, and a file specification referenced by a FileAttachment
-// annotation shall carry it under PDF/UA-2 §8.9.2.4.10.
+// this fixer repairs. Exactly three rules state the requirement:
+//
+//   - ISO 19005-3 §6.8 t3, covered by the clause below. ISO 19005-2 states no
+//     AFRelationship requirement at all, so "PDF/A-2/3/4 §6.8" was wrong.
+//   - ISO 14289-2 §8.9.2.4.10 t1, a file specification referenced by a
+//     FileAttachment annotation.
+//   - ISO 19005-4 §6.9 t4, which numbers the SAME requirement differently and
+//     so went unclaimed while [fixAFRelationship] already knew how to repair it.
+//
+// The part-4 arm matches on the full specification, clause and test number.
+// Never clausePrefix: clause 6.9 is an AcroForm rule in ISO 19005-1, the
+// optional-content configuration rules in ISO 19005-2 and -3, and the embedded
+// file rules in ISO 19005-4.
 func matchAFRelationship(v compliance.Violation) bool {
 	return v.Rule.Clause == "6.8" ||
-		(v.Rule.Specification == "ISO_14289_2" && v.Rule.Clause == "8.9.2.4.10")
+		(v.Rule.Specification == "ISO_14289_2" && v.Rule.Clause == "8.9.2.4.10") ||
+		(v.Rule.Specification == "ISO_19005_4" && v.Rule.Clause == "6.9" && v.Rule.TestNumber == 4)
 }
 
 // fixAFRelationship adds /AFRelationship /Unspecified to every file specification
