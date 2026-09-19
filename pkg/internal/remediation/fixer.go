@@ -128,6 +128,7 @@ var registry = []fixer{
 	{name: "string-limit", safety: safetyResource, matches: matchStringLimit, apply: fixStringLimit},
 	{name: "page-boxes", safety: safetyResource, matches: matchPageBoxes, apply: fixPageBoxes},
 	{name: "page-resources", safety: safetyResource, matches: matchPageResources, apply: fixPageResources},
+	{name: "nested-resources", safety: safetyResource, matches: matchNestedResources, apply: fixNestedResources},
 	{name: "embedded-subtype", safety: safetyResource, matches: matchEmbeddedSubtype, apply: fixEmbeddedSubtype},
 	{name: "filespec-fuf", safety: safetyResource, matches: matchFileSpecFUF, apply: fixFileSpecFUF},
 	{name: "page-tabs", safety: safetyResource, matches: matchPageTabs, apply: fixPageTabs},
