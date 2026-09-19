@@ -18,10 +18,14 @@ func TestMatchFileStructure_ClaimsThePartOneStreamRules(t *testing.T) {
 	t.Parallel()
 
 	for _, rule := range []compliance.Rule{
-		{Specification: "ISO_19005_1", Clause: "6.1.7", TestNumber: 1, Object: "CosStream",
-			Description: "The value of the Length key specified in the stream dictionary shall match the number of bytes"},
-		{Specification: "ISO_19005_1", Clause: "6.1.7", TestNumber: 2, Object: "CosStream",
-			Description: "The stream keyword shall be followed either by a CARRIAGE RETURN (0Dh) and LINE FEED (0Ah)"},
+		{
+			Specification: "ISO_19005_1", Clause: "6.1.7", TestNumber: 1, Object: "CosStream",
+			Description: "The value of the Length key specified in the stream dictionary shall match the number of bytes",
+		},
+		{
+			Specification: "ISO_19005_1", Clause: "6.1.7", TestNumber: 2, Object: "CosStream",
+			Description: "The stream keyword shall be followed either by a CARRIAGE RETURN (0Dh) and LINE FEED (0Ah)",
+		},
 	} {
 		if !matchFileStructure(compliance.Violation{Rule: rule}) {
 			t.Errorf("must claim %s/%s t%d", rule.Specification, rule.Clause, rule.TestNumber)

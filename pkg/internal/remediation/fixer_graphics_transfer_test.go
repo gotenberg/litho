@@ -9,16 +9,26 @@ import (
 // The ExtGState transfer-function requirement, in the four spellings the parts
 // give it. Part 1 says 6.2.8; parts 2, 3 and 4 say 6.2.5.
 var transferFunctionRules = []compliance.Rule{
-	{Specification: "ISO_19005_1", Clause: "6.2.8", TestNumber: 1, Object: "PDExtGState",
-		Description: "An ExtGState dictionary shall not contain the TR key"},
-	{Specification: "ISO_19005_1", Clause: "6.2.8", TestNumber: 2, Object: "PDExtGState",
-		Description: "An ExtGState dictionary shall not contain the TR2 key with a value other than Default"},
-	{Specification: "ISO_19005_2", Clause: "6.2.5", TestNumber: 1, Object: "PDExtGState",
-		Description: "An ExtGState dictionary shall not contain the TR key"},
-	{Specification: "ISO_19005_3", Clause: "6.2.5", TestNumber: 2, Object: "PDExtGState",
-		Description: "An ExtGState dictionary shall not contain the TR2 key with a value other than Default"},
-	{Specification: "ISO_19005_4", Clause: "6.2.5", TestNumber: 1, Object: "PDExtGState",
-		Description: "A graphics state parameter dictionary shall not contain the TR key"},
+	{
+		Specification: "ISO_19005_1", Clause: "6.2.8", TestNumber: 1, Object: "PDExtGState",
+		Description: "An ExtGState dictionary shall not contain the TR key",
+	},
+	{
+		Specification: "ISO_19005_1", Clause: "6.2.8", TestNumber: 2, Object: "PDExtGState",
+		Description: "An ExtGState dictionary shall not contain the TR2 key with a value other than Default",
+	},
+	{
+		Specification: "ISO_19005_2", Clause: "6.2.5", TestNumber: 1, Object: "PDExtGState",
+		Description: "An ExtGState dictionary shall not contain the TR key",
+	},
+	{
+		Specification: "ISO_19005_3", Clause: "6.2.5", TestNumber: 2, Object: "PDExtGState",
+		Description: "An ExtGState dictionary shall not contain the TR2 key with a value other than Default",
+	},
+	{
+		Specification: "ISO_19005_4", Clause: "6.2.5", TestNumber: 1, Object: "PDExtGState",
+		Description: "A graphics state parameter dictionary shall not contain the TR key",
+	},
 }
 
 // TestMatchGraphics_ClaimsTransferFunctionsInEverySpelling pins the part-1
@@ -52,14 +62,22 @@ func TestMatchGraphics_IgnoresTheBitsPerComponentTests(t *testing.T) {
 	t.Parallel()
 
 	for _, rule := range []compliance.Rule{
-		{Specification: "ISO_19005_1", Clause: "6.2.4", TestNumber: 4, Object: "PDXImage",
-			Description: "If an Image dictionary contains the BitsPerComponent key, its value shall be 1, 2, 4 or 8"},
-		{Specification: "ISO_19005_2", Clause: "6.2.8", TestNumber: 4, Object: "PDXImage",
-			Description: "If an Image dictionary contains the BitsPerComponent key, its value shall be 1, 2, 4, 8 or 16"},
-		{Specification: "ISO_19005_2", Clause: "6.2.8", TestNumber: 5, Object: "PDMaskImage",
-			Description: "If an image mask dictionary contains the BitsPerComponent key, its value shall be 1"},
-		{Specification: "ISO_14289_1", Clause: "7.2", TestNumber: 2, Object: "PDOutline",
-			Description: "Natural language in the Outline entries shall be determined"},
+		{
+			Specification: "ISO_19005_1", Clause: "6.2.4", TestNumber: 4, Object: "PDXImage",
+			Description: "If an Image dictionary contains the BitsPerComponent key, its value shall be 1, 2, 4 or 8",
+		},
+		{
+			Specification: "ISO_19005_2", Clause: "6.2.8", TestNumber: 4, Object: "PDXImage",
+			Description: "If an Image dictionary contains the BitsPerComponent key, its value shall be 1, 2, 4, 8 or 16",
+		},
+		{
+			Specification: "ISO_19005_2", Clause: "6.2.8", TestNumber: 5, Object: "PDMaskImage",
+			Description: "If an image mask dictionary contains the BitsPerComponent key, its value shall be 1",
+		},
+		{
+			Specification: "ISO_14289_1", Clause: "7.2", TestNumber: 2, Object: "PDOutline",
+			Description: "Natural language in the Outline entries shall be determined",
+		},
 	} {
 		if matchGraphics(compliance.Violation{Rule: rule}) {
 			t.Errorf("must not claim %s/%s t%d", rule.Specification, rule.Clause, rule.TestNumber)

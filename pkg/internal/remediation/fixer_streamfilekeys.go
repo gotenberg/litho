@@ -62,7 +62,7 @@ func parseStreamKeysContext(s string) (int, []ast.PdfName, bool) {
 	}
 
 	var keys []ast.PdfName
-	for _, field := range strings.Fields(m[2]) {
+	for field := range strings.FieldsSeq(m[2]) {
 		if k, ok := streamFileKeys[field]; ok {
 			keys = append(keys, k)
 		}
