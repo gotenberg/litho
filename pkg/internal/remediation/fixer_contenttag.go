@@ -12,8 +12,21 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
+// matchContentTag claims content that is neither tagged as real content nor
+// marked as an artifact. ISO 14289-2 §8.2.2 and ISO 14289-1 §7.1 test 3 state
+// the same requirement in the two standards, so both are claimed. Only the
+// §8.2.2 wording ("shall be an artifact") reaches the description test, so the
+// PDF/UA-1 twin ("shall be marked as Artifact or tagged as real content") was
+// silently unclaimed: [matchAutoTag] composes this matcher and its contract
+// already names §7.1, so the omission left auto-tagging unreachable for a
+// PDF/UA-1 document whose only signal was untagged content.
+//
+// The §7.1 claim names its test number rather than calling [clausePrefix],
+// which is a string prefix test: "7.1" also prefixes 7.10, 7.11, 7.18.x and
+// 7.21.x, every one of which belongs to a different fixer.
 func matchContentTag(v compliance.Violation) bool {
-	return clausePrefix(v, "8.2.2") || // PDF/UA content marking
+	return clausePrefix(v, "8.2.2") || // PDF/UA-2 content marking
+		(v.Rule.Clause == "7.1" && v.Rule.TestNumber == 3) || // ISO 14289-1 twin
 		descriptionContains(v, "shall be an artifact")
 }
 

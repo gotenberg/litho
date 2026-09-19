@@ -5,8 +5,42 @@ import (
 	"context"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
+
+// TestMatchContentTag_ClaimsBothStandards pins the ISO 14289-1 §7.1 test 3
+// claim alongside the ISO 14289-2 §8.2.2 one. The clauses state the same
+// requirement, but only the §8.2.2 wording ("shall be an artifact") reaches the
+// description test, so the PDF/UA-1 twin went unclaimed and [matchAutoTag],
+// which composes this matcher, never fired for a document whose only signal was
+// untagged content. Measured at 1488 unremediated corpus fixtures.
+//
+// The rejected clauses are the point of the test number: [clausePrefix] is a
+// raw strings.HasPrefix, so a claim spelled clausePrefix(v, "7.1") also
+// swallows 7.10, 7.11, 7.18.x and 7.21.x, each owned by a different fixer.
+func TestMatchContentTag_ClaimsBothStandards(t *testing.T) {
+	t.Parallel()
+	if !matchContentTag(compliance.Violation{Rule: compliance.Rule_14289_1_7_1_t03}) {
+		t.Error("must match ISO 14289-1 §7.1 t3 (PDF/UA-1 content marking)")
+	}
+	if !matchContentTag(compliance.Violation{Rule: compliance.Rule_14289_2_8_2_2_t01}) {
+		t.Error("must match ISO 14289-2 §8.2.2 t1 (PDF/UA-2 content marking)")
+	}
+	for _, r := range []compliance.Rule{
+		{Clause: "7.1", TestNumber: 1},
+		{Clause: "7.1", TestNumber: 10},
+		{Clause: "7.10", TestNumber: 1},
+		{Clause: "7.11", TestNumber: 1},
+		{Clause: "7.18.1", TestNumber: 2},
+		{Clause: "7.21.7", TestNumber: 1},
+	} {
+		if matchContentTag(compliance.Violation{Rule: r}) {
+			t.Errorf("clause %s test %d belongs to another fixer and must not match",
+				r.Clause, r.TestNumber)
+		}
+	}
+}
 
 // contentTagPDF builds a two-page tagged-skeleton PDF: catalog with
 // StructTreeRoot (object 5) holding a Document element (object 6), pages at
