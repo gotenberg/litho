@@ -48,6 +48,9 @@ func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		// Fix XObjects in page Resources (SMask on images, Group on forms).
 		totalFixed += fixXObjectTransparency(ctx, doc, alloc, page.Resources)
 
+		// Fix ExtGState inside the resources of a pattern the page declares.
+		totalFixed += fixPatternTransparency(ctx, doc, alloc, page.Resources)
+
 		// Remove page-level transparency group.
 		pageDict := livePageDict(ctx, alloc, doc, page)
 		if groupObj, ok := pageDict["Group"]; ok {
@@ -71,6 +74,70 @@ func fixTransparency(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	}
 
 	return []string{fmt.Sprintf("normalized %d transparency properties to opaque (CA/ca=1.0, BM=Normal, SMask=None)", totalFixed)}, nil
+}
+
+// fixPatternTransparency fixes transparency in the resources of every pattern a
+// page declares.
+//
+// ISO 19005-1 §6.4 forbids transparency wherever it renders, and the compliance
+// check reaches a tiling pattern's own resources, but this repair walk did not:
+// it covered page resources, Form XObject resources and annotation appearance
+// resources, leaving an /ExtGState inside a Pattern flagged and unrepaired.
+//
+// A tiling pattern (PatternType 1) is a STREAM whose dictionary carries
+// /Resources; a shading pattern (PatternType 2) is a plain dictionary with
+// none. Both are resolved and branched on by type, for the same reason
+// [recurseColorSpacePatch] does it.
+//
+// visited breaks reference cycles: a pattern's resources may name the pattern
+// itself, and an unguarded walk would revisit it without bound.
+func fixPatternTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict) int {
+	if resources == nil {
+		return 0
+	}
+
+	patObj, ok := resources["Pattern"]
+	if !ok {
+		return 0
+	}
+	patDict, err := document.ResolveDict(ctx, doc, patObj)
+	if err != nil || patDict == nil {
+		return 0
+	}
+
+	visited := make(map[int]bool, len(patDict))
+	fixed := 0
+	for _, entry := range patDict {
+		if ref, isRef := entry.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
+			if visited[ref.ObjectNum] {
+				continue
+			}
+			visited[ref.ObjectNum] = true
+		}
+
+		resolved, err := document.ResolveObject(ctx, doc, entry)
+		if err != nil || resolved == nil {
+			continue
+		}
+
+		var patRes ast.PdfObject
+		switch v := resolved.(type) {
+		case ast.PdfStream:
+			patRes = v.Dict["Resources"]
+		case ast.PdfDict:
+			patRes = v["Resources"]
+		default:
+			continue
+		}
+
+		res, err := document.ResolveDict(ctx, doc, patRes)
+		if err != nil || res == nil {
+			continue
+		}
+		fixed += fixExtGStateDict(ctx, doc, alloc, res)
+	}
+
+	return fixed
 }
 
 // fixExtGStateDict finds and fixes transparency properties in a Resources/ExtGState dict.
