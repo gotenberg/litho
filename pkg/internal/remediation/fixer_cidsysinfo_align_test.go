@@ -188,24 +188,37 @@ func TestAlignCMapWModeLeavesAnAgreeingDictionary(t *testing.T) {
 	}
 }
 
-// TestMatchCIDSystemInfoClaimsThePDFUAClauses pins that the alignment repair is
-// offered to PDF/UA as well.
+// TestMatchCIDSystemInfoClaimsEverySpelling pins that the alignment repair is
+// offered under every specification that states the requirement.
 //
 // ISO 14289-1, 7.21.3.1 t1 and ISO 14289-2, 8.4.5.3.1 t1 restate the
 // CIDSystemInfo relationship word for word, and 7.21.3.3 t2 / 8.4.5.4 t2 do the
 // same for the CMap /WMode. Claiming only the PDF/A clause numbers left the
 // fixer idle on every PDF/UA document that needed it.
-func TestMatchCIDSystemInfoClaimsThePDFUAClauses(t *testing.T) {
+//
+// ISO 19005-1 states both at 6.3.3.1 t1 and 6.3.3.3 t2 and was omitted in the
+// same pass that added the PDF/UA rows, so the fixer sat idle on PDF/A-1 too:
+// the same file was repaired as PDF/A-2b ("aligned /CIDSystemInfo with the
+// CMap") and left reporting 6.3.3.1 t1 as PDF/A-1b.
+//
+// A matcher-level assertion is sufficient HERE, and only because
+// [fixCIDSystemInfo] ignores its violations argument and this file holds no
+// internal clause gate: claiming therefore implies repairing. That is NOT true
+// of every fixer. fixFontIssues gates its rewrite on a second clause list, so
+// its matcher test passed for three months while the repair was dead.
+func TestMatchCIDSystemInfoClaimsEverySpelling(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
 		clause  string
 		context string
 	}{
+		{"6.3.3.1", "font C0_0 on page 1 (CIDFont Registry=(adobe) ...)"},
 		{"6.2.11.3.1", "font C0_0 on page 1 (CIDFont Registry=(adobe) ...)"},
 		{"6.2.10.3.1", "font C0_0 on page 1 (CIDFont Registry=(adobe) ...)"},
 		{"7.21.3.1", "font C0_0 on page 1 (CIDFont Registry=(adobe) ...)"},
 		{"8.4.5.3.1", "font C0_0 on page 1 (CIDFont Registry=(adobe) ...)"},
+		{"6.3.3.3", "font C0_0 on page 1: CMap dict WMode=1 but stream WMode=0"},
 		{"6.2.11.3.3", "font C0_0 on page 1: CMap dict WMode=1 but stream WMode=0"},
 		{"7.21.3.3", "font C0_0 on page 1: CMap dict WMode=1 but stream WMode=0"},
 		{"8.4.5.4", "font C0_0 on page 1: CMap dict WMode=1 but stream WMode=0"},
@@ -220,16 +233,40 @@ func TestMatchCIDSystemInfoClaimsThePDFUAClauses(t *testing.T) {
 	}
 }
 
-// TestMatchCIDSystemInfoIgnoresAnUnrelatedClause is the control against the
+// TestMatchCIDSystemInfoDeclinesWhatItCannotRepair is the control against the
 // fixer claiming work it cannot do.
-func TestMatchCIDSystemInfoIgnoresAnUnrelatedClause(t *testing.T) {
+//
+// The CMap clauses carry three tests and this fixer repairs only t2. Embedding
+// a missing CMap (t1) and rewriting a /UseCMap chain (t3) are capabilities
+// litho does not have, so the clause arm returns contextContains "WMode" rather
+// than true. The contexts below are the ones [cmapEmbeddingRules] actually
+// emits (compliance/fonts_cmap.go:403, :440, :468), not invented strings: a
+// control written against an imagined message proves nothing about the gate.
+func TestMatchCIDSystemInfoDeclinesWhatItCannotRepair(t *testing.T) {
 	t.Parallel()
 
-	v := compliance.Violation{
-		Rule:    compliance.Rule{Clause: "6.2.11.5", TestNumber: 1},
-		Context: "font C0_0 on page 1: .notdef glyph width mismatch",
-	}
-	if matchCIDSystemInfo(v) {
-		t.Error("a width violation was claimed by the CIDSystemInfo fixer")
+	for _, tc := range []struct {
+		name    string
+		clause  string
+		test    int
+		context string
+	}{
+		{"an unrelated width clause", "6.2.11.5", 1,
+			"font C0_0 on page 1: .notdef glyph width mismatch"},
+		{"CMap embedding, which litho cannot do", "6.3.3.3", 1,
+			`font C0_0 on page 1: CMap "Adobe-Japan1-UCS2" is not predefined and not embedded`},
+		{"a non-embedded /UseCMap base", "6.3.3.3", 1,
+			`font C0_0 on page 1: CMap uses non-embedded CMap "Adobe-Korea1-2" via /UseCMap`},
+		{"a /UseCMap chain, part 2's t3", "6.2.11.3.3", 3,
+			`font C0_0 on page 1: CMap chain references non-predefined CMap "Adobe-Japan1-2"`},
+	} {
+		v := compliance.Violation{
+			Rule:    compliance.Rule{Clause: tc.clause, TestNumber: tc.test},
+			Context: tc.context,
+		}
+		if matchCIDSystemInfo(v) {
+			t.Errorf("%s: %s-t%02d was claimed by the CIDSystemInfo fixer, which cannot repair it",
+				tc.name, tc.clause, tc.test)
+		}
 	}
 }

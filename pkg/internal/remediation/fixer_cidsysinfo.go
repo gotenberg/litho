@@ -14,20 +14,26 @@ import (
 )
 
 // matchCIDSystemInfo matches composite-font CIDSystemInfo mismatches
-// reported by ISO 19005-2/3 §6.2.11.3.1 and ISO 19005-4 §6.2.10.3.1.
+// reported by ISO 19005-1 §6.3.3.1, ISO 19005-2/3 §6.2.11.3.1 and
+// ISO 19005-4 §6.2.10.3.1.
 func matchCIDSystemInfo(v compliance.Violation) bool {
 	// An embedded CMap whose dictionary contradicts its own program is the same
-	// kind of disagreement, settled the same way (ISO 19005-4, 6.2.10.3.3 t2 /
-	// ISO 19005-2, 6.2.11.3.3 t2 / ISO 14289-1, 7.21.3.3 t2 /
-	// ISO 14289-2, 8.4.5.4 t2).
-	if clausePrefix(v, "6.2.10.3.3", "6.2.11.3.3", "7.21.3.3", "8.4.5.4") {
+	// kind of disagreement, settled the same way (ISO 19005-1, 6.3.3.3 t2 /
+	// ISO 19005-4, 6.2.10.3.3 t2 / ISO 19005-2, 6.2.11.3.3 t2 /
+	// ISO 14289-1, 7.21.3.3 t2 / ISO 14289-2, 8.4.5.4 t2).
+	if clausePrefix(v, "6.3.3.3", "6.2.10.3.3", "6.2.11.3.3", "7.21.3.3", "8.4.5.4") {
 		return contextContains(v, "WMode")
 	}
 	// PDF/UA restates the CIDSystemInfo relationship word for word
 	// (ISO 14289-1, 7.21.3.1 t1 / ISO 14289-2, 8.4.5.3.1 t1), and the repair is
 	// the same one. Claiming only the PDF/A clauses left the alignment fixer
 	// idle on every PDF/UA document that needed it.
-	if !clausePrefix(v, "6.2.10.3.1", "6.2.11.3.1", "7.21.3.1", "8.4.5.3.1") {
+	//
+	// ISO 19005-1 states both requirements at 6.3.3.1 t1 and 6.3.3.3 t2, and
+	// they were omitted here while the PDF/UA restatements were added. The
+	// checker reports them (fonts_cmap.go:34 passes the part-1 rule), so the
+	// fixer sat idle on every PDF/A-1 document that needed it.
+	if !clausePrefix(v, "6.3.3.1", "6.2.10.3.1", "6.2.11.3.1", "7.21.3.1", "8.4.5.3.1") {
 		return false
 	}
 	return contextContains(v, "CIDFont") || contextContains(v, "CMap")
