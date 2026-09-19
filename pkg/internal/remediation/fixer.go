@@ -148,6 +148,7 @@ var registry = []fixer{
 	{name: "lzw", safety: safetyContent, matches: matchLZW, apply: fixLZW},
 	{name: "signature-strip", safety: safetyContent, matches: matchSignatureStrip, apply: fixSignatureStrip},
 	{name: "embedded-compliance", safety: safetyContent, matches: matchEmbeddedCompliance, apply: fixEmbeddedCompliance},
+	{name: "stream-file-keys", safety: safetyContent, matches: matchStreamFileKeys, apply: fixStreamFileKeys},
 	{name: "aggressive", safety: safetyContent, matches: matchAggressive, apply: fixAggressive},
 	{name: "aggressive-limits", safety: safetyContent, matches: matchAggressiveLimits, apply: fixAggressiveLimits},
 }
