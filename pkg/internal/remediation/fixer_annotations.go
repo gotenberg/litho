@@ -210,25 +210,36 @@ func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	}
 }
 
-// forbiddenPDFA1AnnotSubtypes are the subtypes ISO 19005-1 6.5.2 t1 forbids on
-// top of the parts-2+ set. Sound and Movie already sit in
-// [forbiddenAnnotSubtypes], so FileAttachment is the only addition: parts 2 and
-// later permit it, which is why it lives in [permittedAnnotSubtypes] and why
-// Part 1 was served only by accident before.
+// pdfa1PermittedAnnotSubtypes lists the PDF 1.4 annotation types ISO 19005-1
+// §6.5.2 permits. It mirrors compliance's pdfa1AnnotWhitelist, which is what
+// raises the violation, so anything outside this set is forbidden in Part 1.
 //
-// Kept separate from the shared tables on purpose. Editing those would change
-// every other profile's verdict, and they are correct as they stand.
-var forbiddenPDFA1AnnotSubtypes = map[ast.PdfName]bool{
-	"FileAttachment": true,
+// Modelled as a PERMITTED set rather than a forbidden one deliberately. §6.5.2
+// t1 has two clauses, "annotation types not defined in PDF Reference shall not
+// be permitted" and "additionally, the FileAttachment, Sound and Movie types",
+// and an earlier attempt enumerated forbidden subtypes and named only
+// FileAttachment. That left Polygon, PolyLine, Caret, Watermark and Redact
+// unrepaired on 40 corpus cells which had nothing else wrong with them. A
+// whitelist cannot fail open that way.
+//
+// It is a copy because the compliance table is unexported, and the copy is the
+// hazard: drift toward OVER-removal destroys content the author placed. A test
+// pins the two sets together, and neither should change without the other.
+var pdfa1PermittedAnnotSubtypes = map[ast.PdfName]bool{
+	"Text": true, "Link": true, "FreeText": true, "Line": true,
+	"Square": true, "Circle": true, "Highlight": true, "Underline": true,
+	"Squiggly": true, "StrikeOut": true, "Stamp": true, "Ink": true,
+	"Popup": true, "Widget": true, "PrinterMark": true, "TrapNet": true,
 }
 
 // fixAnnotArray processes each annotation in the array, returning fixes and
 // whether any annotations were removed (requiring the array to be rebuilt).
 func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, annots ast.PdfArray, pageNum int, opts Options, profile string) ([]string, bool) {
-	// Dropping an attachment annotation destroys content the author attached,
-	// so it is gated like every other repair that cannot preserve what it
-	// touches. Part 1 alone forbids the subtype outright.
-	dropPDFA1Attachments := !opts.PreserveContent && compliance.PDFAPart(profile) == 1
+	// Part 1 permits a far narrower set of annotation types than later parts,
+	// and removing one destroys content the author placed, so the stricter
+	// check is gated like every other repair that cannot preserve what it
+	// touches.
+	pdfa1Strict := !opts.PreserveContent && compliance.PDFAPart(profile) == 1
 	var fixes []string
 	removed := false
 
@@ -263,7 +274,7 @@ func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		// the caller's rebuildAnnotsArray skips nil entries when
 		// rewriting the array.
 		if forbiddenAnnotSubtypes[subtype] || !permittedAnnotSubtypes[subtype] ||
-			(dropPDFA1Attachments && forbiddenPDFA1AnnotSubtypes[subtype]) {
+			(pdfa1Strict && !pdfa1PermittedAnnotSubtypes[subtype]) {
 			annots[i] = nil
 			removed = true
 			// Null the annotation object as well. Dropping it from /Annots
