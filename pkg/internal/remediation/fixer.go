@@ -86,6 +86,7 @@ var registry = []fixer{
 	{name: "single-doc-root", safety: safetyStructural, matches: matchSingleDocRoot, apply: fixSingleDocRoot},
 	{name: "struct-dest", safety: safetyStructural, matches: matchStructDest, apply: fixStructDest},
 	{name: "struct-parent", safety: safetyStructural, matches: matchStructParent, apply: fixStructParent},
+	{name: "annot-nesting", safety: safetyStructural, matches: matchAnnotNesting, apply: fixAnnotNesting},
 	{name: "note-id", safety: safetyStructural, matches: matchNoteID, apply: fixNoteID},
 	{name: "table-sections", safety: safetyStructural, matches: matchTableSections, apply: fixTableSections},
 	{name: "table-cells", safety: safetyStructural, matches: matchTableCells, apply: fixTableCells},
