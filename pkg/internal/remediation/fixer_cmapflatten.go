@@ -27,9 +27,9 @@ const maxCMapChainDepth = 5
 // 3). The embedding rule requires the base CMap to be embedded or predefined,
 // filed under the same clauses at test 1, and ISO 19005-1 states it at 6.3.3.3.
 //
-// Both are settled by editing one dictionary entry, so one fixer owns them.
-// The context gate separates them from the WMode disagreement filed under the
-// same clauses, which [matchCIDSystemInfo] claims and settles differently.
+// All three repairs edit one dictionary entry, so one fixer owns them. The
+// context gate separates them from the WMode disagreement filed under the same
+// clauses, which [matchCIDSystemInfo] claims and settles differently.
 func matchCMapFlatten(v compliance.Violation) bool {
 	if !clausePrefix(v, "6.3.3.3", "6.2.10.3.3", "6.2.11.3.3", "7.21.3.3", "8.4.5.4") {
 		return false
@@ -39,13 +39,16 @@ func matchCMapFlatten(v compliance.Violation) bool {
 }
 
 // fixCMapFlatten repairs the /UseCMap entry of every embedded encoding CMap a
-// Type 0 font uses.
+// Type 0 font uses. Three shapes, three repairs, and the difference between
+// them is what keeps the repair honest:
 //
-// A chain of embedded streams is inlined, so nothing is referenced. A name
-// that can never denote a CMap is dropped, because it resolves to nothing and
-// so contributes nothing. A name that does denote a CMap is left alone: the
-// mappings it contributes are real, and litho ships no way to embed them.
-func fixCMapFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
+//   - a chain of embedded streams is inlined, so nothing is referenced.
+//   - a name that can never denote a CMap is dropped: it resolves to nothing,
+//     so it contributes nothing.
+//   - a name that denotes a real predefined CMap litho ships is EMBEDDED,
+//     because the mappings it contributes are real and ISO 19005-1, 6.3.3.3
+//     wants them in the file.
+func fixCMapFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	// Sorted so the fix list is identical across runs: Index.Entries is a map.
 	nums := make([]int, 0, len(doc.Index.Entries))
 	for objNum := range doc.Index.Entries {
@@ -83,12 +86,17 @@ func fixCMapFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		}
 		done[encRef.ObjectNum] = true
 
-		if flattenOneCMap(ctx, alloc, doc, encRef) {
+		name := fontBaseName(fontDict)
+		switch {
+		case flattenOneCMap(ctx, alloc, doc, encRef):
 			fixes = append(fixes, fmt.Sprintf(
-				"inlined the /UseCMap chain into the embedded CMap of font %s", fontBaseName(fontDict)))
-		} else if dropUnresolvableUseCMap(ctx, alloc, doc, encRef) {
+				"inlined the /UseCMap chain into the embedded CMap of font %s", name))
+		case dropUnresolvableUseCMap(ctx, alloc, doc, encRef):
 			fixes = append(fixes, fmt.Sprintf(
-				"dropped a /UseCMap naming no CMap from the embedded CMap of font %s", fontBaseName(fontDict)))
+				"dropped a /UseCMap naming no CMap from the embedded CMap of font %s", name))
+		case embedNamedUseCMap(ctx, alloc, doc, encRef, profile):
+			fixes = append(fixes, fmt.Sprintf(
+				"embedded the predefined CMap a /UseCMap named, for font %s", name))
 		}
 	}
 	return fixes, nil
@@ -154,8 +162,8 @@ func flattenOneCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 //
 // Only that shape is dropped. H, Identity-H and UniKS-UTF16-H are real
 // predefined CMaps whose mappings a reader does resolve, and removing one
-// would take those mappings with it, so they are left exactly as written even
-// under a profile that reports them. [compliance.IsCIDSystemInfoShapedCMapName]
+// would take those mappings with it, so they are left for
+// [embedNamedUseCMap] or left alone. [compliance.IsCIDSystemInfoShapedCMapName]
 // is the checker's own test, so the repair cannot reach further than the
 // report.
 func dropUnresolvableUseCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, encRef ast.PdfIndirectRef) bool {
@@ -182,6 +190,88 @@ func dropUnresolvableUseCMap(ctx context.Context, alloc *writer.ObjAllocator, do
 	dict := make(ast.PdfDict, len(stream.Dict))
 	maps.Copy(dict, stream.Dict)
 	delete(dict, "UseCMap")
+	return alloc.AllocAt(encRef.ObjectNum, ast.NewStream(dict, raw))
+}
+
+// embedNamedUseCMap writes the predefined CMap a /UseCMap names into the file
+// and points the entry at it, reporting whether it did.
+//
+// ISO 19005-1, 6.3.3.3 requires every CMap but Identity-H and Identity-V
+// embedded, so under part 1 a name is a violation however legitimate the CMap
+// it denotes. Parts 2 and later, and PDF/UA, PERMIT the Table 118 names by
+// name (ISO 19005-2, 6.2.11.3.3), so embedding there would rewrite a document
+// for no compliance gain. Hence the part check: it follows the rule, not
+// litho's checker.
+//
+// The mapping comes from litho's bundled copy of the CMap, so the stream says
+// exactly what the name said. A name litho does not ship is left alone:
+// writing a CMap it cannot read would fabricate the mapping the font depends
+// on.
+func embedNamedUseCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, encRef ast.PdfIndirectRef, profile string) bool {
+	if compliance.PDFAPart(profile) != 1 {
+		return false
+	}
+	if _, pending := alloc.Pending()[encRef.ObjectNum]; pending {
+		return false
+	}
+	stream, err := document.ResolveStream(ctx, doc, encRef)
+	if err != nil || stream.Dict == nil {
+		return false
+	}
+	name, err := document.ResolveName(ctx, doc, stream.Dict["UseCMap"])
+	if err != nil || name == "" {
+		return false
+	}
+	// A CIDSystemInfo-shaped name denotes nothing, and
+	// [dropUnresolvableUseCMap] settles that one.
+	//
+	// The Identity check is defence in depth, not a load-bearing guard:
+	// litho ships no bundled data for Identity-H or Identity-V, so
+	// [cmap.EmbedPredefined] already declines them, and removing this line
+	// changes no observable behaviour today. It states the exemption ISO
+	// 19005-1, 6.3.3.3 grants those two, so the intent survives a change to
+	// what litho bundles.
+	if name == "Identity-H" || name == "Identity-V" ||
+		compliance.IsCIDSystemInfoShapedCMapName(string(name)) {
+		return false
+	}
+
+	prog, ok, err := cmap.EmbedPredefined(ctx, string(name))
+	if err != nil {
+		doc.Logger.Debug("remediation: cannot render the named CMap, /UseCMap left as written",
+			slog.String("cmap", string(name)), slog.Any("err", err))
+		return false
+	}
+	if !ok {
+		return false
+	}
+
+	reg, ord, sup, ok := cmap.PredefinedCMapCIDSystemInfo(string(name), false)
+	if !ok {
+		return false
+	}
+	baseRef := alloc.Alloc(ast.NewStream(ast.PdfDict{
+		"Type":     ast.PdfName("CMap"),
+		"CMapName": name,
+		"WMode":    ast.PdfInt(0),
+		"CIDSystemInfo": ast.PdfDict{
+			"Registry":   ast.PdfString(reg),
+			"Ordering":   ast.PdfString(ord),
+			"Supplement": ast.PdfInt(sup),
+		},
+	}, prog))
+
+	// Only the reference changes: the using CMap's own program is carried
+	// across untouched, so the entries describing how it is stored stay too.
+	raw, err := stream.Bytes(ctx)
+	if err != nil {
+		doc.Logger.Debug("remediation: cannot carry a CMap body across to embed /UseCMap",
+			slog.Int("obj", encRef.ObjectNum), slog.Any("err", err))
+		return false
+	}
+	dict := make(ast.PdfDict, len(stream.Dict))
+	maps.Copy(dict, stream.Dict)
+	dict["UseCMap"] = baseRef
 	return alloc.AllocAt(encRef.ObjectNum, ast.NewStream(dict, raw))
 }
 
