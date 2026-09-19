@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-09-19T09:08:47Z",
+  "captured_at": "2026-09-19T10:05:36Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -114,13 +114,13 @@
           "metrics": {
             "disagreement": 0,
             "fully_fixed": 21,
-            "litho_fixed": 3207,
-            "litho_post": 1340,
+            "litho_fixed": 3224,
+            "litho_post": 1323,
             "litho_pre": 4547,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 3205,
-            "verapdf_post": 1340,
+            "verapdf_fixed": 3222,
+            "verapdf_post": 1323,
             "verapdf_pre": 4545,
             "verapdf_regressed": 0
           }
@@ -132,13 +132,13 @@
           "metrics": {
             "disagreement": 0,
             "fully_fixed": 21,
-            "litho_fixed": 3351,
-            "litho_post": 1196,
+            "litho_fixed": 3368,
+            "litho_post": 1179,
             "litho_pre": 4547,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 3349,
-            "verapdf_post": 1196,
+            "verapdf_fixed": 3366,
+            "verapdf_post": 1179,
             "verapdf_pre": 4545,
             "verapdf_regressed": 0
           }
@@ -227,37 +227,37 @@
           "skipped": 0
         },
         "remediation": {
-          "matched": 32835,
-          "mismatched": 6180,
+          "matched": 32881,
+          "mismatched": 6134,
           "skipped": 0,
           "metrics": {
             "disagreement": 14,
-            "fully_fixed": 32835,
-            "litho_fixed": 163042,
-            "litho_post": 7107,
+            "fully_fixed": 32881,
+            "litho_fixed": 163088,
+            "litho_post": 7061,
             "litho_pre": 170149,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 163144,
-            "verapdf_post": 7121,
+            "verapdf_fixed": 163190,
+            "verapdf_post": 7075,
             "verapdf_pre": 170261,
             "verapdf_regressed": 4
           }
         },
         "remediation-aggressive": {
-          "matched": 33660,
-          "mismatched": 5355,
+          "matched": 33706,
+          "mismatched": 5309,
           "skipped": 0,
           "metrics": {
             "disagreement": 14,
-            "fully_fixed": 33660,
-            "litho_fixed": 164129,
-            "litho_post": 6020,
+            "fully_fixed": 33706,
+            "litho_fixed": 164175,
+            "litho_post": 5974,
             "litho_pre": 170149,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 164231,
-            "verapdf_post": 6034,
+            "verapdf_fixed": 164277,
+            "verapdf_post": 5988,
             "verapdf_pre": 170261,
             "verapdf_regressed": 4
           }
