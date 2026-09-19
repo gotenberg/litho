@@ -19,10 +19,14 @@ func matchFormTooltip(v compliance.Violation) bool {
 		descriptionContains(v, "labelling")
 }
 
-// fixFormTooltip adds /TU (tooltip) entries to form fields that lack them.
+// fixFormTooltip adds /TU (tooltip) entries to form fields that lack them, and
+// a /Contents entry to a merged widget that needs one.
+//
 // PDF/UA-1 §7.18.4 and PDF/UA-2 §8.10.2.3 require widget annotations / form
-// fields to expose a description for assistive technology, either via /TU on
-// the field or /Contents on the widget annotation.
+// fields to expose a description for assistive technology. The two do not
+// accept the same entry: §8.10.2.3 test 1 is answered by a Lbl structure
+// element or by /Contents on the annotation and NOT by /TU, so a widget given
+// only a tooltip still fails it. That is why /Contents is written below as well.
 func fixFormTooltip(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -47,8 +51,18 @@ func fixFormTooltip(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		return nil, nil
 	}
 
+	// An annotation's /StructParent keys the structure tree's /ParentTree to
+	// the element that encloses it, which ISO 14289-2 §8.9.4.2 makes relevant
+	// to the /Contents written below. Resolved once for the whole walk.
+	var parentTree ast.PdfObject
+	if stObj, ok := catalog.Dict["StructTreeRoot"]; ok {
+		if st, stErr := document.ResolveDict(ctx, doc, stObj); stErr == nil && st != nil {
+			parentTree = st["ParentTree"]
+		}
+	}
+
 	var count int
-	walkFormTooltipFields(ctx, alloc, doc, fields, &count, make(map[int]bool))
+	walkFormTooltipFields(ctx, alloc, doc, parentTree, fields, &count, make(map[int]bool))
 
 	if count == 0 {
 		return nil, nil
@@ -56,10 +70,60 @@ func fixFormTooltip(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	return []string{fmt.Sprintf("added /TU tooltip to %d form field(s)", count)}, nil
 }
 
+// enclosingAlt returns the /Alt of the structure element enclosing a widget
+// annotation, which ISO 14289-2 §8.9.4.2 defines as the element the
+// annotation's /StructParent names through the /ParentTree.
+//
+// §8.9.4.2 test 1 requires a widget's /Contents and that /Alt to hold identical
+// values, so a /Contents derived from the field name repairs §8.10.2.3 and
+// introduces §8.9.4.2 in the same pass wherever an /Alt already says something
+// else. The string is returned unchanged rather than decoded and re-encoded, so
+// the two entries stay byte-identical.
+//
+// An /Alt present but EMPTY reports true with an empty string: the clause binds
+// on the entry existing, not on it saying anything, and treating empty as
+// absent reintroduced the mismatch on
+// PDF_UA-1__7.18.1-t03-fail-c.pdf. The /Alt may also be an indirect reference
+// (PDF_UA-1__7.18.1-t03-pass-b.pdf), which is why the value is resolved.
+func enclosingAlt(ctx context.Context, doc *document.Document, parentTree ast.PdfObject, field ast.PdfDict) (ast.PdfString, bool) {
+	if parentTree == nil {
+		return "", false
+	}
+	spObj, ok := field["StructParent"]
+	if !ok {
+		return "", false
+	}
+	key, err := document.ResolveInt(ctx, doc, spObj)
+	if err != nil {
+		return "", false
+	}
+	elemObj, err := document.LookupNumberTree(ctx, doc, parentTree, int(key))
+	if err != nil || elemObj == nil {
+		return "", false
+	}
+	elem, err := document.ResolveDict(ctx, doc, elemObj)
+	if err != nil || elem == nil {
+		return "", false
+	}
+	altObj, ok := elem["Alt"]
+	if !ok {
+		return "", false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, altObj)
+	if err != nil {
+		return "", false
+	}
+	alt, isStr := resolved.(ast.PdfString)
+	if !isStr {
+		return "", false
+	}
+	return alt, true
+}
+
 // walkFormTooltipFields recursively walks form field tree and patches each
 // field that lacks a tooltip-equivalent entry. seen processes each field object
 // once, so a shared or cyclic /Kids tree cannot force exponential work.
-func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fields ast.PdfArray, count *int, seen map[int]bool) {
+func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, parentTree ast.PdfObject, fields ast.PdfArray, count *int, seen map[int]bool) {
 	for _, fieldObj := range fields {
 		if ctx.Err() != nil {
 			return
@@ -81,7 +145,7 @@ func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc 
 		// Recurse into /Kids first.
 		if kidsObj, ok := field["Kids"]; ok {
 			if kids, err := document.ResolveArray(ctx, doc, kidsObj); err == nil {
-				walkFormTooltipFields(ctx, alloc, doc, kids, count, seen)
+				walkFormTooltipFields(ctx, alloc, doc, parentTree, kids, count, seen)
 			}
 		}
 
@@ -111,7 +175,22 @@ func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc 
 		// field+widget dict), set both /TU and /Contents on the same dict.
 		if subtype, _ := field["Subtype"].(ast.PdfName); subtype == "Widget" {
 			if _, hasContents := field["Contents"]; !hasContents {
-				newField["Contents"] = nameStr
+				// Per ISO 14289-2, 8.9.4.2, /Contents shall equal the /Alt of
+				// the enclosing structure element. Preferring the field name
+				// there repairs 8.10.2.3 and creates 8.9.4.2 in one pass.
+				//
+				// An EMPTY /Alt is copied as an empty /Contents rather than
+				// skipped. 8.10.2.3 asks only that the entry be present when
+				// no Lbl element labels the widget, and /TU does not answer it
+				// (see [checkWidgetLabel] and the empty /Contents case in
+				// TestCheckWidgetAA), so writing nothing leaves 8.10.2.3
+				// unfixed while writing the field name breaks 8.9.4.2. The
+				// empty copy satisfies both.
+				if alt, hasAlt := enclosingAlt(ctx, doc, parentTree, field); hasAlt {
+					newField["Contents"] = alt
+				} else {
+					newField["Contents"] = nameStr
+				}
 			}
 		}
 		if fieldRef.ObjectNum > 0 {
