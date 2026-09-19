@@ -19,30 +19,32 @@ import (
 // a chain deeper than the one the checker reports.
 const maxCMapChainDepth = 5
 
-// matchCMapFlatten claims the rules that forbid a CMap referencing a CMap
-// ISO 32000-1, 9.7.5.2, Table 118 does not name: ISO 19005-2 and 19005-3,
-// 6.2.11.3.3 test 3, ISO 19005-4, 6.2.10.3.3 test 3, ISO 14289-1, 7.21.3.3
-// test 3 and ISO 14289-2, 8.4.5.4 test 3.
+// matchCMapFlatten claims the two rules a /UseCMap entry can break.
 //
-// ISO 19005-1, 6.3.3.3 states no usecmap rule at all, so the spelling is
-// carried for the same reason as its siblings and simply never fires there.
+// The chain rule rejects a reference to a CMap ISO 32000-1, 9.7.5.2, Table 118
+// does not name (ISO 19005-2 and 19005-3, 6.2.11.3.3 test 3, ISO 19005-4,
+// 6.2.10.3.3 test 3, ISO 14289-1, 7.21.3.3 test 3, ISO 14289-2, 8.4.5.4 test
+// 3). The embedding rule requires the base CMap to be embedded or predefined,
+// filed under the same clauses at test 1, and ISO 19005-1 states it at 6.3.3.3.
 //
-// The context gate separates this from the WMode disagreement filed under the
+// Both are settled by editing one dictionary entry, so one fixer owns them.
+// The context gate separates them from the WMode disagreement filed under the
 // same clauses, which [matchCIDSystemInfo] claims and settles differently.
 func matchCMapFlatten(v compliance.Violation) bool {
 	if !clausePrefix(v, "6.3.3.3", "6.2.10.3.3", "6.2.11.3.3", "7.21.3.3", "8.4.5.4") {
 		return false
 	}
-	return contextContains(v, "references non-predefined")
+	return contextContains(v, "references non-predefined") ||
+		contextContains(v, "uses non-embedded CMap")
 }
 
-// fixCMapFlatten inlines the /UseCMap chain of every embedded encoding CMap a
-// Type 0 font uses, so no reference to a non-predefined CMap is left.
+// fixCMapFlatten repairs the /UseCMap entry of every embedded encoding CMap a
+// Type 0 font uses.
 //
-// Only a chain of embedded streams can be settled this way. A /UseCMap naming
-// a CMap has nothing to inline: the named resource is not in the file, and
-// writing one would mean fabricating a character collection litho does not
-// ship.
+// A chain of embedded streams is inlined, so nothing is referenced. A name
+// that can never denote a CMap is dropped, because it resolves to nothing and
+// so contributes nothing. A name that does denote a CMap is left alone: the
+// mappings it contributes are real, and litho ships no way to embed them.
 func fixCMapFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	// Sorted so the fix list is identical across runs: Index.Entries is a map.
 	nums := make([]int, 0, len(doc.Index.Entries))
@@ -80,9 +82,13 @@ func fixCMapFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 			continue
 		}
 		done[encRef.ObjectNum] = true
+
 		if flattenOneCMap(ctx, alloc, doc, encRef) {
 			fixes = append(fixes, fmt.Sprintf(
 				"inlined the /UseCMap chain into the embedded CMap of font %s", fontBaseName(fontDict)))
+		} else if dropUnresolvableUseCMap(ctx, alloc, doc, encRef) {
+			fixes = append(fixes, fmt.Sprintf(
+				"dropped a /UseCMap naming no CMap from the embedded CMap of font %s", fontBaseName(fontDict)))
 		}
 	}
 	return fixes, nil
@@ -135,6 +141,48 @@ func flattenOneCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		delete(dict, k)
 	}
 	return alloc.AllocAt(encRef.ObjectNum, ast.NewStream(dict, merged))
+}
+
+// dropUnresolvableUseCMap removes a /UseCMap whose value is a name that can
+// never denote a CMap, reporting whether it rewrote the dictionary.
+//
+// ISO 19005-1, 6.3.3.3 and the test 1 of its restatements require the base
+// CMap to be embedded or predefined. A name shaped
+// "Adobe-<Registry>-<Supplement>" is a character collection, not one of the
+// CMaps ISO 32000-1, 9.7.5.2, Table 118 names, so no reader resolves it: the
+// entry contributes no mapping and dropping it costs none.
+//
+// Only that shape is dropped. H, Identity-H and UniKS-UTF16-H are real
+// predefined CMaps whose mappings a reader does resolve, and removing one
+// would take those mappings with it, so they are left exactly as written even
+// under a profile that reports them. [compliance.IsCIDSystemInfoShapedCMapName]
+// is the checker's own test, so the repair cannot reach further than the
+// report.
+func dropUnresolvableUseCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, encRef ast.PdfIndirectRef) bool {
+	if _, pending := alloc.Pending()[encRef.ObjectNum]; pending {
+		return false
+	}
+	stream, err := document.ResolveStream(ctx, doc, encRef)
+	if err != nil || stream.Dict == nil {
+		return false
+	}
+	name, err := document.ResolveName(ctx, doc, stream.Dict["UseCMap"])
+	if err != nil || name == "" || !compliance.IsCIDSystemInfoShapedCMapName(string(name)) {
+		return false
+	}
+
+	// The body is carried across untouched, so the entries describing how it
+	// is stored stay with it. Only the description changes.
+	raw, err := stream.Bytes(ctx)
+	if err != nil {
+		doc.Logger.Debug("remediation: cannot carry a CMap body across to drop /UseCMap",
+			slog.Int("obj", encRef.ObjectNum), slog.Any("err", err))
+		return false
+	}
+	dict := make(ast.PdfDict, len(stream.Dict))
+	maps.Copy(dict, stream.Dict)
+	delete(dict, "UseCMap")
+	return alloc.AllocAt(encRef.ObjectNum, ast.NewStream(dict, raw))
 }
 
 // useCMapChain returns the programs a CMap builds on, nearest first. It stops

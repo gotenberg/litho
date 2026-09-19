@@ -1,6 +1,7 @@
 package remediation
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -46,6 +47,26 @@ func cmapChainPDF() []byte {
 	)
 }
 
+// namedUseCMapPDF is the corpus shape of the Adobe-Korea1-2 carriers: an
+// embedded CMap whose /UseCMap is a NAME rather than a reference, so there is
+// no second stream to inline.
+func namedUseCMapPDF(useName string) []byte {
+	prog := chainCMapProgram("MyCMap", 0x0000, 0x00FF, 0)
+	return buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "+
+			"/Resources << /Font << /F1 4 0 R >> >> >>",
+		"<< /Type /Font /Subtype /Type0 /BaseFont /Probe /Encoding 6 0 R "+
+			"/DescendantFonts [5 0 R] >>",
+		"<< /Type /Font /Subtype /CIDFontType2 /BaseFont /Probe "+
+			"/CIDSystemInfo << /Registry (Adobe) /Ordering (Korea1) /Supplement 2 >> >>",
+		fmt.Sprintf("<< /Type /CMap /CMapName /MyCMap /WMode 0 /UseCMap /%s "+
+			"/CIDSystemInfo << /Registry (Adobe) /Ordering (Korea1) /Supplement 2 >> "+
+			"/Length %d >>\nstream\n%s\nendstream", useName, len(prog), prog),
+	)
+}
+
 // flattenedCMap reads back the encoding CMap the fixer persisted at object 6.
 func flattenedCMap(t *testing.T, alloc *writer.ObjAllocator) (ast.PdfStream, bool) {
 	t.Helper()
@@ -88,7 +109,6 @@ func TestFixCMapFlatten_InlinesTheChain(t *testing.T) {
 			t.Errorf("%s survived onto a stream carrying decoded bytes", gone)
 		}
 	}
-	// The CMap must still say what it is.
 	if name, _ := stream.Dict["CMapName"].(ast.PdfName); name != "UsingCMap" {
 		t.Errorf("/CMapName is %q, want UsingCMap: renaming asserts a collection the glyphs lack", name)
 	}
@@ -118,10 +138,84 @@ func TestFixCMapFlatten_InlinesTheChain(t *testing.T) {
 	}
 }
 
-// TestMatchCMapFlattenClaimsOnlyTheChainRule pins the context gate. The same
+// TestFixCMapFlatten_DropsOnlyAnUnresolvableUseCMapName is the arm that keeps
+// this repair honest.
+//
+// A /UseCMap naming a character collection resolves to nothing, so dropping it
+// costs no mapping. A /UseCMap naming a real predefined CMap resolves to
+// mappings a reader uses, and dropping it would take them away. veraPDF cannot
+// tell the two apart: it is satisfied by the entry being gone either way, and
+// under ISO 19005-1, 6.3.3.3 it reports even the legitimate names. A fixer that
+// deleted every name would therefore score HIGHER on the corpus while
+// corrupting files. Only this test separates them.
+func TestFixCMapFlatten_DropsOnlyAnUnresolvableUseCMapName(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name    string
+		useName string
+		drop    bool
+	}{
+		{"a character collection names no CMap", "Adobe-Korea1-2", true},
+		{"another collection identifier", "Adobe-Japan1-4", true},
+		// ISO 32000-1, Table 118 names all of these, and litho bundles H and V.
+		{"H is a real predefined CMap", "H", false},
+		{"Identity-H is predefined", "Identity-H", false},
+		{"UniKS-UTF16-H is predefined", "UniKS-UTF16-H", false},
+		// Shaped like a collection but not Adobe's, so not the case this claims.
+		{"a three-part name that is not Adobe's", "Foo-Bar-2", false},
+	} {
+		src := namedUseCMapPDF(tc.useName)
+		doc, alloc := newTestDoc(t, src)
+
+		fixes, err := fixCMapFlatten(ctx, alloc, doc, Options{}, nil, "PDF/UA-1")
+		if err != nil {
+			t.Errorf("%s: fixCMapFlatten: %v", tc.name, err)
+			continue
+		}
+
+		stream, written := flattenedCMap(t, alloc)
+		if !tc.drop {
+			if written {
+				t.Errorf("%s: /UseCMap /%s was removed, taking the mappings it resolves to with it",
+					tc.name, tc.useName)
+			}
+			if len(fixes) != 0 {
+				t.Errorf("%s: reported a fix for a CMap it must leave alone: %v", tc.name, fixes)
+			}
+			continue
+		}
+		if !written {
+			t.Errorf("%s: /UseCMap /%s names no CMap and was left in place", tc.name, tc.useName)
+			continue
+		}
+		if _, still := stream.Dict["UseCMap"]; still {
+			t.Errorf("%s: the dictionary was rewritten but /UseCMap survived", tc.name)
+		}
+		// A dictionary-only change: the body is carried across untouched, so
+		// the entries describing how it is stored must stay with it.
+		for _, keep := range []ast.PdfName{"Length", "CMapName", "CIDSystemInfo", "WMode"} {
+			if _, present := stream.Dict[keep]; !present {
+				t.Errorf("%s: %s was dropped by a change that only removes /UseCMap", tc.name, keep)
+			}
+		}
+		got, err := stream.Bytes(ctx)
+		if err != nil {
+			t.Errorf("%s: reading the rewritten CMap: %v", tc.name, err)
+			continue
+		}
+		want := chainCMapProgram("MyCMap", 0x0000, 0x00FF, 0)
+		if !bytes.Equal(bytes.TrimSpace(got), bytes.TrimSpace([]byte(want))) {
+			t.Errorf("%s: the CMap program changed; dropping a name must not touch the body", tc.name)
+		}
+	}
+}
+
+// TestMatchCMapFlattenClaimsBothUseCMapRules pins the context gate. The same
 // clauses also carry the WMode disagreement, which a different fixer settles,
 // and claiming it here would run this fixer on documents it cannot help.
-func TestMatchCMapFlattenClaimsOnlyTheChainRule(t *testing.T) {
+func TestMatchCMapFlattenClaimsBothUseCMapRules(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -139,13 +233,19 @@ func TestMatchCMapFlattenClaimsOnlyTheChainRule(t *testing.T) {
 			`font F1 on page 1: CMap chain references non-predefined CMap "Adobe-Korea1-2"`, true},
 		{"ISO 14289-2 chain", "8.4.5.4",
 			`font F1 on page 1: CMap chain references non-predefined CMap "Adobe-Korea1-2"`, true},
+		{"ISO 19005-1 embedding", "6.3.3.3",
+			`font F1 on page 1: CMap uses non-embedded CMap "Adobe-Korea1-2" via /UseCMap`, true},
+		{"ISO 19005-2 embedding", "6.2.11.3.3",
+			`font F1 on page 1: CMap uses non-embedded CMap "Adobe-Korea1-2" via /UseCMap`, true},
+		{"ISO 14289-2 embedding", "8.4.5.4",
+			`font F1 on page 1: CMap uses non-embedded CMap "Adobe-Korea1-2" via /UseCMap`, true},
 		{"the WMode disagreement under the same clause", "6.2.11.3.3",
 			"font F1 on page 1: CMap dict WMode=1 but stream WMode=0", false},
 		{"an unrelated font clause", "6.2.11.5",
 			`font F1 on page 1: CMap chain references non-predefined CMap "X"`, false},
 	} {
 		v := compliance.Violation{
-			Rule:    compliance.Rule{Clause: tc.clause, TestNumber: 3},
+			Rule:    compliance.Rule{Clause: tc.clause, TestNumber: 1},
 			Context: tc.context,
 		}
 		if got := matchCMapFlatten(v); got != tc.want {

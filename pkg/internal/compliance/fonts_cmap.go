@@ -163,12 +163,17 @@ var table116CMapNames = map[string]bool{
 	"V":                true,
 }
 
-// isCIDSystemInfoShapedCMapName reports whether name has the form
+// IsCIDSystemInfoShapedCMapName reports whether name has the form
 // "Adobe-<Registry>-<Supplement>" (e.g. "Adobe-Korea1-2"): a CIDSystemInfo
 // identifier, never a valid predefined CMap name from ISO 32000-1 Table 118.
 // A /UseCMap or /Encoding given such a name references a CMap that is neither
 // predefined nor embedded.
-func isCIDSystemInfoShapedCMapName(name string) bool {
+//
+// Remediation asks this before dropping a named /UseCMap, so the repair and
+// the check that reports it decide by the same rule. A real predefined name
+// such as H denotes a CMap that does contribute mappings, and this reports
+// false for it.
+func IsCIDSystemInfoShapedCMapName(name string) bool {
 	if name == "" || name[len(name)-1] < '0' || name[len(name)-1] > '9' {
 		return false
 	}
@@ -434,7 +439,7 @@ func checkCMapEmbedding(ctx context.Context, doc *document.Document, type0Dict a
 		case PDFAPart(profile) == 1:
 			unembedded = useName != "Identity-H" && useName != "Identity-V"
 		case PDFAPart(profile) >= 2 || IsPDFUA(profile):
-			unembedded = isCIDSystemInfoShapedCMapName(string(useName))
+			unembedded = IsCIDSystemInfoShapedCMapName(string(useName))
 		}
 		if unembedded {
 			results = append(results, failf(ruleT1,
