@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-09-19T05:59:25Z",
+  "captured_at": "2026-09-19T06:32:51Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -245,19 +245,19 @@
           }
         },
         "remediation-aggressive": {
-          "matched": 33494,
-          "mismatched": 5521,
+          "matched": 33510,
+          "mismatched": 5505,
           "skipped": 0,
           "metrics": {
             "disagreement": 14,
-            "fully_fixed": 33494,
-            "litho_fixed": 163916,
-            "litho_post": 6233,
+            "fully_fixed": 33510,
+            "litho_fixed": 163964,
+            "litho_post": 6185,
             "litho_pre": 170149,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 164018,
-            "verapdf_post": 6247,
+            "verapdf_fixed": 164066,
+            "verapdf_post": 6199,
             "verapdf_pre": 170261,
             "verapdf_regressed": 4
           }
