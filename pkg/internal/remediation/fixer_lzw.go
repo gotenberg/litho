@@ -6,11 +6,14 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // matchLZW claims the LZWDecode ban in every spelling the parts give it.
@@ -26,8 +29,10 @@ import (
 //
 // 6.1.7.2 and 6.1.6.2 forbid more than LZWDecode: a filter absent from ISO
 // 32000 Table 6, and a Crypt filter whose decode parameters name anything but
-// Identity. [fixLZW] repairs neither, so a violation reporting one of those
-// stays in the residual rather than being silenced.
+// Identity. [fixLZW] now also repairs the first of those in its narrowest form,
+// a Table 6 name misspelled by CASE ([fixFilterNameCase]); a Crypt filter with
+// non-Identity parameters is still unrepaired and stays in the residual rather
+// than being silenced.
 //
 // The inline-image spellings stay outside this matcher's reach on purpose:
 // ISO 19005-4 6.1.9 names the Inline Image /F key, and rewriting a
@@ -37,8 +42,14 @@ func matchLZW(v compliance.Violation) bool {
 	return clause == "6.1.10" || clause == "6.1.7.2" || clause == "6.1.6.2"
 }
 
+// fixLZW re-encodes every LZWDecode stream as FlateDecode, and normalises a
+// stream /Filter name that differs from a Table 6 spelling only by case.
+//
+// Both repairs answer the same clause. The LZW half rewrites the bytes; the
+// case half rewrites only the name, and only when the bytes prove it right.
 func fixLZW(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	var count int
+	renamed := make(map[int]string)
 
 	for objNum, entry := range doc.Index.Entries {
 		if err := ctx.Err(); err != nil {
@@ -77,6 +88,9 @@ func fixLZW(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 		}
 
 		if !isLZW {
+			if desc := fixFilterNameCase(ctx, alloc, objNum, stream, filterObj); desc != "" {
+				renamed[objNum] = desc
+			}
 			continue
 		}
 
@@ -104,8 +118,91 @@ func fixLZW(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 		count++
 	}
 
-	if count == 0 {
-		return nil, nil
+	var fixes []string
+	if count > 0 {
+		fixes = append(fixes, fmt.Sprintf("re-encoded %d LZW streams as FlateDecode", count))
 	}
-	return []string{fmt.Sprintf("re-encoded %d LZW streams as FlateDecode", count)}, nil
+	// Sorted: doc.Index.Entries is a map, and identical input must produce
+	// identical output.
+	for _, objNum := range slices.Sorted(maps.Keys(renamed)) {
+		fixes = append(fixes, renamed[objNum])
+	}
+	return fixes, nil
+}
+
+// canonicalStreamFilters lists the stream filter names ISO 32000-2, Table 6
+// defines, which ISO 19005-2/3 §6.1.7.2 and ISO 19005-4 §6.1.6.2 restrict a
+// conforming file to. It mirrors compliance's standardFilters, which is the
+// authority for the verdict; this copy supplies only the canonical SPELLING to
+// repair towards, so the two must stay in sync.
+//
+//nolint:gochecknoglobals // static spec table, mirrors compliance.standardFilters
+var canonicalStreamFilters = []ast.PdfName{
+	"ASCIIHexDecode",
+	"ASCII85Decode",
+	"LZWDecode",
+	"FlateDecode",
+	"RunLengthDecode",
+	"CCITTFaxDecode",
+	"JBIG2Decode",
+	"DCTDecode",
+	"JPXDecode",
+	"Crypt",
+}
+
+// canonicalFilterSpelling returns the Table 6 name that differs from name only
+// by case. A name already spelled canonically yields false: there is nothing to
+// repair, which is what keeps this away from the LZWDecode streams the caller
+// re-encodes instead.
+//
+// PDF names are case-sensitive (ISO 32000-1, 7.3.5), so /Flatedecode is not
+// /FlateDecode. It is "a filter not listed in Table 6", exactly what the clause
+// forbids, and compliance's own comment names this case as the example.
+func canonicalFilterSpelling(name ast.PdfName) (ast.PdfName, bool) {
+	for _, want := range canonicalStreamFilters {
+		if name == want {
+			return "", false
+		}
+		if strings.EqualFold(string(name), string(want)) {
+			return want, true
+		}
+	}
+	return "", false
+}
+
+// fixFilterNameCase rewrites a stream /Filter whose name differs from a Table 6
+// spelling only by case, but ONLY when the stream actually decodes under the
+// canonical name. The decode is the proof; the name alone is not.
+//
+// The check must be [filter.DecodeStreamChecked], never a nil error from
+// DecodeStream. Decoding is best-effort: an unsupported filter is SKIPPED and
+// its bytes pass through unchanged, so DecodeStream reports success having
+// decoded nothing. Measured on 6-1-6-2-t01-fail-b object 11, where
+// /Flatedecode returned err=nil with the raw 37 bytes untouched, byte for byte.
+//
+// Only a single-name /Filter is repaired. An array would need each element
+// verified in chain order, and the corpus carries no such case, so the gate
+// could not falsify that code.
+func fixFilterNameCase(ctx context.Context, alloc *writer.ObjAllocator, objNum int, stream ast.PdfStream, filterObj ast.PdfObject) string {
+	name, ok := filterObj.(ast.PdfName)
+	if !ok {
+		return ""
+	}
+	canonical, ok := canonicalFilterSpelling(name)
+	if !ok {
+		return ""
+	}
+
+	newDict := make(ast.PdfDict, len(stream.Dict))
+	maps.Copy(newDict, stream.Dict)
+	newDict["Filter"] = canonical
+
+	// The raw bytes carry across unchanged, so /Length stays correct.
+	candidate := ast.NewLazyStream(newDict, stream.Bytes)
+	if _, incomplete, err := filter.DecodeStreamChecked(ctx, candidate); err != nil || incomplete {
+		return ""
+	}
+
+	alloc.AllocAt(objNum, candidate)
+	return fmt.Sprintf("renamed non-standard filter /%s to /%s on object %d", name, canonical, objNum)
 }
