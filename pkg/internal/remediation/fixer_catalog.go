@@ -19,6 +19,43 @@ func matchCatalogCleanup(v compliance.Violation) bool {
 		clausePrefix(v, "6.1.11") { // Perms dict (PDF/A-1)
 		return true
 	}
+	// One requirement, four spellings. "Each optional content configuration
+	// dictionary ... shall contain the Name key" is ISO 19005-4 6.10 (claimed
+	// by the prefix above), ISO 19005-2 and 19005-3 6.9, ISO 14289-1 7.10 and
+	// ISO 14289-2 8.7. Only the part-4 spelling reached [fixOCGConfigs], so the
+	// same file was repaired as PDF/A-4 and left flagged as PDF/A-2b.
+	//
+	// Test 1 only: [fixOCGConfigs] adds a missing /Name and implements neither
+	// the uniqueness of test 2, the /Order array of test 3, nor the /AS ban, so
+	// claiming those would report them handled while they persist.
+	//
+	// Exact specification and clause, never clausePrefix: ISO 19005-1 spells an
+	// AcroForm NeedAppearances rule 6.9 and ISO 19005-4 an embedded-file rule
+	// 6.9, and the prefix "7.1" already swallows 7.10 in [matchXMP].
+	//
+	// Each arm MATCHES and falls through; none of them returns a negative.
+	// Written as `return v.Rule.Clause == "6.9"` this claimed the OCG rule and
+	// silently UN-claimed every other test-1 violation in the same
+	// specification, because the false short-circuited the 6.1.12 Perms and
+	// Signature-Reference block below. That cost 12 corpus cells, and the
+	// count-based gate could not see it: 46 newly matched cells hid 12 newly
+	// broken ones behind a net improvement.
+	if v.Rule.TestNumber == 1 {
+		switch v.Rule.Specification {
+		case "ISO_19005_2", "ISO_19005_3":
+			if v.Rule.Clause == "6.9" {
+				return true
+			}
+		case "ISO_14289_1":
+			if v.Rule.Clause == "7.10" {
+				return true
+			}
+		case "ISO_14289_2":
+			if v.Rule.Clause == "8.7" {
+				return true
+			}
+		}
+	}
 	// PDF/A-2 §6.1.12 covers Perms and Signature Reference restrictions.
 	if clausePrefix(v, "6.1.12") &&
 		(contextContains(v, "Perms dictionary") ||
@@ -320,7 +357,7 @@ func ensureOCGConfigName(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		d = resolved
 	}
 
-	if _, ok := d["Name"]; ok {
+	if ocgConfigHasName(ctx, doc, d) {
 		return nil, false
 	}
 
@@ -334,6 +371,33 @@ func ensureOCGConfigName(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	}
 
 	return newD, true
+}
+
+// ocgConfigHasName reports whether an optional-content configuration already
+// carries the /Name its profile requires, mirroring the compliance check that
+// raises the violation: the key must be present and resolve to a non-empty
+// string.
+//
+// Testing only for the key left veraPDF's 7.10-t01-fail-a flagged after its
+// clause was routed here, because its default configuration carries
+// `/Name ()`: present, and empty. The checker calls hasNonEmptyName, so the
+// violation was reported while the repair declined.
+//
+// doc may be nil when a caller repairs a dictionary it already holds, so a
+// direct string is read without resolving.
+func ocgConfigHasName(ctx context.Context, doc *document.Document, d ast.PdfDict) bool {
+	nameObj, ok := d["Name"]
+	if !ok {
+		return false
+	}
+	if s, ok := nameObj.(ast.PdfString); ok {
+		return string(s) != ""
+	}
+	if doc == nil {
+		return false
+	}
+	s, err := document.ResolveString(ctx, doc, nameObj)
+	return err == nil && string(s) != ""
 }
 
 // fixAlternatePresentations removes /AlternatePresentations from catalog /Names.
