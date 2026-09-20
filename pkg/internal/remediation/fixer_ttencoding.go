@@ -51,12 +51,16 @@ func fixTrueTypeEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		if entry.Type != 1 || objNum == 0 {
 			continue
 		}
-		obj, err := doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation})
-		if err != nil || obj == nil {
-			continue
-		}
-		fontDict, ok := obj.(ast.PdfDict)
-		if !ok {
+		// Alloc-aware read. The registry drives every fixer against one
+		// allocator and never flushes between them, and the font fixers ahead
+		// of this one (cid-gidmap, font-keys, tounicode-ranges, fonts,
+		// font-widths) rewrite the same object. Rebuilding the dictionary from
+		// the on-disk copy discards whatever they left pending, and the
+		// fix-to-fixpoint loop then repairs the damage on the next round, so
+		// the only symptom is a fix reported twice.
+		ref := ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation}
+		fontDict := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+		if fontDict == nil {
 			continue
 		}
 		if typ, _ := fontDict["Type"].(ast.PdfName); typ != "Font" {
@@ -105,8 +109,11 @@ func fixTrueTypeEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 			alloc.AllocAt(objNum, newFont)
 			count++
 		case ast.PdfIndirectRef:
-			encDict, err := document.ResolveDict(ctx, doc, enc)
-			if err != nil || encDict == nil {
+			// Alloc-aware for the same reason as the font dictionary above:
+			// this writes the encoding object back, so it must not rebuild it
+			// from a stale copy.
+			encDict := resolveFromAllocOrDoc(ctx, alloc, doc, enc)
+			if encDict == nil {
 				continue
 			}
 			patched, changed := patchEncodingDict(encDict, valid)
