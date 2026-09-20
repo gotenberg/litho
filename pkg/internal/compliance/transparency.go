@@ -105,13 +105,44 @@ func checkResourceTransparency1(ctx context.Context, doc *document.Document, res
 			if st, _ := document.ResolveName(ctx, doc, fd["Subtype"]); st != "Type3" {
 				continue
 			}
-			fontRes, err := document.ResolveDict(ctx, doc, fd["Resources"])
-			if err != nil || fontRes == nil {
+			if fontRes, resErr := document.ResolveDict(ctx, doc, fd["Resources"]); resErr == nil && fontRes != nil {
+				// A Type 3 glyph draws through its own CharProc, whose operators
+				// are not in hand here, so its resources stay unscoped.
+				results = append(results, checkResourceTransparency1(ctx, doc, fontRes, pageNum, visited, depth+1, nil)...)
+			}
+
+			// A glyph procedure is itself a content stream (ISO 32000-1, 9.6.5),
+			// so an /ExtGState it declares in its OWN /Resources is rendered
+			// content and §6.4 reaches it. Unlike the font's /Resources above,
+			// the glyph's operators ARE in hand, so the survey is scoped to what
+			// the glyph selects, exactly as walkNestedResources1 scopes a form.
+			//
+			// This walk is deliberately outside the /Resources branch: a font
+			// that declares no /Resources of its own still has glyph procedures
+			// that may declare theirs.
+			charProcs, procErr := document.ResolveDict(ctx, doc, fd["CharProcs"])
+			if procErr != nil || charProcs == nil {
 				continue
 			}
-			// A Type 3 glyph draws through its own CharProc, whose operators
-			// are not in hand here, so its resources stay unscoped.
-			results = append(results, checkResourceTransparency1(ctx, doc, fontRes, pageNum, visited, depth+1, nil)...)
+			for _, glyph := range sortedNames(charProcs) {
+				entry := charProcs[glyph]
+				if ref, ok := entry.(ast.PdfIndirectRef); ok {
+					if visited[ref.ObjectNum] {
+						continue
+					}
+					visited[ref.ObjectNum] = true
+				}
+				stream, streamErr := document.ResolveStream(ctx, doc, entry)
+				if streamErr != nil {
+					continue
+				}
+				procRes, nestedErr := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+				if nestedErr != nil || procRes == nil {
+					continue
+				}
+				results = append(results, checkResourceTransparency1(ctx, doc, procRes, pageNum, visited, depth+1,
+					formDrawnResources(ctx, doc, stream))...)
+			}
 		}
 	}
 	return results
