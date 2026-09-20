@@ -1821,7 +1821,7 @@ func checkType0NotdefWidth(ctx context.Context, doc *document.Document, fontDict
 
 	expected := float64(bw) * 1000.0 / float64(unitsPerEm)
 	if widthsInconsistent(declared, expected) {
-		return failf(rule, "font %s on page %d: .notdef glyph width mismatch (declared=%.1f, font=%.1f)",
+		return failf(rule, "font %s on page %d: .notdef glyph "+WidthMismatchContext+" (declared=%.1f, font=%.1f)",
 			fontName, pageNum, declared, expected)
 	}
 	return nil

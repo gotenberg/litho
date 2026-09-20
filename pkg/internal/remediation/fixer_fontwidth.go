@@ -23,8 +23,16 @@ const widthFixTolerance = 1.0
 // ISO 19005-2/3 §6.2.11.5, ISO 19005-4 §6.2.10.5). The checker reports each as
 // "... width mismatch", the one context substring common to every profile and to
 // both the simple-font (/Widths) and CIDFont (/W) variants.
+//
+// This is the only matcher in the registry that carries NO rule identity: a
+// violation is claimed on the Context substring alone. That is precise in
+// practice because nine emit sites, all in the width checker, are the only
+// producers of the phrase, but it is a free-text contract between two packages.
+// It reads [compliance.WidthMismatchContext] rather than a local copy so the
+// two cannot drift, and TestWidthMismatchContext_IsTheWordingTheFixerMatches
+// fails if the wording changes.
 func matchFontWidth(v compliance.Violation) bool {
-	return contextContains(v, "width mismatch")
+	return contextContains(v, compliance.WidthMismatchContext)
 }
 
 // fixFontWidth rewrites a CIDFontType2's /W widths to match the advance widths

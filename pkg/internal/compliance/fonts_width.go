@@ -14,6 +14,16 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography/encodings"
 )
 
+// WidthMismatchContext is the wording every glyph-width failure carries in
+// its Violation Context.
+//
+// It is exported because remediation's matchFontWidth claims a width
+// violation on this substring alone, carrying no rule identity at all, and
+// nine emit sites across this file and fonts.go must not drift from it.
+// Same reasoning as [PDFUA2ExpectedRev]: one symbol, so the checker and the
+// fixer cannot disagree about the wording.
+const WidthMismatchContext = "width mismatch"
+
 // widthTolerance is the maximum allowed difference between PDF-declared
 // and binary font widths, in 1/1000 text space units.
 const widthTolerance = 1.0
@@ -376,7 +386,7 @@ func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict 
 			continue
 		}
 		if widthsInconsistent(pdfWidth, expected) {
-			return failf(rule, "font %s on page %d: char %d width mismatch (PDF=%.1f%s, font=%.1f)",
+			return failf(rule, "font %s on page %d: char %d "+WidthMismatchContext+" (PDF=%.1f%s, font=%.1f)",
 				fontName, pageNum, code, pdfWidth, source, expected)
 		}
 	}
@@ -524,7 +534,7 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 		}
 		expectedWidth := bw * 1000.0 / float64(unitsPerEm)
 		if widthsInconsistent(pdfWidth, expectedWidth) {
-			return failf(rule, "font %s on page %d: char %d width mismatch (PDF=%.1f, font=%.1f)",
+			return failf(rule, "font %s on page %d: char %d "+WidthMismatchContext+" (PDF=%.1f, font=%.1f)",
 				fontName, pageNum, charCode, pdfWidth, expectedWidth)
 		}
 	}
@@ -571,7 +581,7 @@ func checkSimpleFontUncoveredWidths(ctx context.Context, doc *document.Document,
 		}
 		expectedWidth := bw * 1000.0 / float64(unitsPerEm)
 		if widthsInconsistent(missingWidth, expectedWidth) {
-			return failf(rule, "font %s on page %d: char %d width mismatch (PDF=%.1f from /MissingWidth, font=%.1f)",
+			return failf(rule, "font %s on page %d: char %d "+WidthMismatchContext+" (PDF=%.1f from /MissingWidth, font=%.1f)",
 				fontName, pageNum, code, missingWidth, expectedWidth)
 		}
 	}
@@ -626,7 +636,7 @@ func checkSimpleFontCode0Width(ctx context.Context, doc *document.Document, font
 
 	expectedWidth := bw * 1000.0 / float64(unitsPerEm)
 	if widthsInconsistent(pdfWidth, expectedWidth) {
-		return failf(rule, "font %s on page %d: char 0 width mismatch (PDF=%.1f, font=%.1f)",
+		return failf(rule, "font %s on page %d: char 0 "+WidthMismatchContext+" (PDF=%.1f, font=%.1f)",
 			fontName, pageNum, pdfWidth, expectedWidth)
 	}
 	return nil
@@ -969,7 +979,7 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 		pdfWidth *= fmScale
 		glyphWidth := cpWidth * fmScale
 		if widthsInconsistent(pdfWidth, glyphWidth) {
-			return failf(rule, "font %s on page %d: char %d (%s) width mismatch (PDF=%.1f, glyph=%.1f)",
+			return failf(rule, "font %s on page %d: char %d (%s) "+WidthMismatchContext+" (PDF=%.1f, glyph=%.1f)",
 				fontName, pageNum, int(firstChar)+i, glyphName, pdfWidth, glyphWidth)
 		}
 	}
@@ -1081,7 +1091,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				}
 				expectedWidth := bw * 1000.0 / float64(unitsPerEm)
 				if widthsInconsistent(pdfWidth, expectedWidth) {
-					return failf(rule, "font %s on page %d: CID %d width mismatch (PDF=%.1f, font=%.1f)",
+					return failf(rule, "font %s on page %d: CID %d "+WidthMismatchContext+" (PDF=%.1f, font=%.1f)",
 						fontName, pageNum, cid, pdfWidth, expectedWidth)
 				}
 			}
@@ -1128,7 +1138,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				}
 				expectedWidth := bw * 1000.0 / float64(unitsPerEm)
 				if widthsInconsistent(pdfWidth, expectedWidth) {
-					return failf(rule, "font %s on page %d: CID %d width mismatch (PDF=%.1f, font=%.1f)",
+					return failf(rule, "font %s on page %d: CID %d "+WidthMismatchContext+" (PDF=%.1f, font=%.1f)",
 						fontName, pageNum, cid, pdfWidth, expectedWidth)
 				}
 			}
@@ -1192,7 +1202,7 @@ func checkCIDDefaultWidths(ctx context.Context, doc *document.Document, cidFontD
 		}
 		expectedWidth := bw * 1000.0 / float64(unitsPerEm)
 		if widthsInconsistent(dw, expectedWidth) {
-			return failf(rule, "font %s on page %d: CID %d width mismatch (PDF=%.1f, font=%.1f)",
+			return failf(rule, "font %s on page %d: CID %d "+WidthMismatchContext+" (PDF=%.1f, font=%.1f)",
 				fontName, pageNum, cid, dw, expectedWidth)
 		}
 	}
