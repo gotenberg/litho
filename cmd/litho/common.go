@@ -232,10 +232,29 @@ func reorderArgs(fs *flag.FlagSet, args []string) []string {
 //	"even"      → [2, 4, 6, ...]
 //	"odd"       → [1, 3, 5, ...]
 //	"last"      → [pageCount]
+//
+// A specification that names no page in this document is an error, never an
+// empty slice. "even" on a one-page document selects nothing, and an empty
+// selection cannot be handed to the page operations: [pdf.Writer.RotatePages]
+// and the three stamps document an empty variadic as EVERY page, so returning
+// one silently inverts the request. Measured before this guard existed:
+// `rotate -angle 90 -pages even` on a one-page file rotated page 1 and exited 0.
+// Only "even" and "odd" can select nothing. A comma or range part yields at
+// least one page or fails ("1,,2" fails in Atoi), and "last" already rejects a
+// page-less document.
 func parsePages(spec string, pageCount int) ([]int, error) {
 	spec = strings.TrimSpace(spec)
 	if spec == "" {
 		return nil, fmt.Errorf("empty page specification")
+	}
+
+	// Callers that want every page pass no -pages flag at all and never reach
+	// here, so refusing an empty selection cannot break that path.
+	selected := func(pages []int) ([]int, error) {
+		if len(pages) == 0 {
+			return nil, fmt.Errorf("page specification %q selects no pages in a %d-page document", spec, pageCount)
+		}
+		return pages, nil
 	}
 
 	switch strings.ToLower(spec) {
@@ -244,13 +263,13 @@ func parsePages(spec string, pageCount int) ([]int, error) {
 		for i := 2; i <= pageCount; i += 2 {
 			pages = append(pages, i)
 		}
-		return pages, nil
+		return selected(pages)
 	case "odd":
 		var pages []int
 		for i := 1; i <= pageCount; i += 2 {
 			pages = append(pages, i)
 		}
-		return pages, nil
+		return selected(pages)
 	case "last":
 		if pageCount < 1 {
 			return nil, fmt.Errorf("document has no pages")
