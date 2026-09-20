@@ -93,3 +93,39 @@ func FuzzParseStreamDataFormatChecked(f *testing.F) {
 		_, _ = ParseStreamDataFormatChecked(context.Background(), data)
 	})
 }
+
+// FuzzParseStreamDataWithOverflows covers the fourth variant, which was the one
+// [ParseStreamData*] entry point with no target of its own.
+//
+// It is not a wrapper: alongside the operations it returns the value of every
+// integer literal the parser had to read as a real because it overflows 64 bits
+// ([parser.Parser.IntegerOverflows]), so it carries a code path the other three
+// never enter. Compliance reaches it on attacker-controlled content from three
+// places (check.go, file_limits.go, content_state.go), and an overflowing
+// literal is exactly what a crafted stream supplies.
+func FuzzParseStreamDataWithOverflows(f *testing.F) {
+	for _, s := range seedStreams {
+		f.Add([]byte(s))
+	}
+	// Literals past 2^63, which is the condition the overflow slice exists to
+	// report: a plain seed corpus never produces one.
+	f.Add([]byte("99999999999999999999 0 0 1 0 0 cm\n"))
+	f.Add([]byte("BT 18446744073709551616 Tz (x) Tj ET\n"))
+	f.Add([]byte("-99999999999999999999 w\n"))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > maxFuzzInput {
+			return
+		}
+		_, _, _ = ParseStreamDataWithOverflows(context.Background(), data)
+	})
+}
+
+// Do not assert that overflow values imply operations. It reads like an
+// invariant and is false: the slice reports every overflowing literal the
+// parser READ, and a trailing operand run with no operator produces no
+// operation at all, the same way repairMalformedNumbers drops a trailing run
+// that "invokes nothing". Fuzzing found it in under a second with the bare
+// literal 09227000000000000000, and `99999999999999999999` reproduces it
+// deterministically: ops=0, overflows=1. Adding `0 0 1 0 0 cm` after it gives
+// ops=1, overflows=1. The parser is right; the tempting assertion is not.

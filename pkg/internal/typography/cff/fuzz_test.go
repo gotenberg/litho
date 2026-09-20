@@ -44,5 +44,11 @@ func FuzzCFF(f *testing.F) {
 		_, _ = ValidCIDs(data)
 		_ = ReadUnitsPerEm(data)
 		_, _ = GlyphWidths(ctx, data)
+		// The CID-keyed twin of GlyphWidths, and unreachable from every reader
+		// above: nothing in this package calls it, so without this line the
+		// FDArray-and-Private-dict width path had no crash-freedom coverage at
+		// all. The cid_fdarray_matrix.cff seed already loaded above is the
+		// fixture that drives it.
+		_, _ = CIDWidths(ctx, data)
 	})
 }
