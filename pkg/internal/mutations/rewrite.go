@@ -95,25 +95,11 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 		}
 	}
 
-	// Handle encryption.
+	// Shared with [Split] and [Merge] so the three write paths cannot drift:
+	// see [applyEncryption] for the ordering the sweep depends on.
 	if cfg.EncryptCfg != nil {
-		docID := GenerateDocumentID()
-		encryptor, encDict, err := crypto.NewEncryptor(*cfg.EncryptCfg, docID)
-		if err != nil {
-			return fmt.Errorf("creating encryptor: %w", err)
-		}
-
-		// Encrypt all pending objects.
-		if err := EncryptPendingObjects(ctx, alloc, encryptor); err != nil {
-			return fmt.Errorf("encrypting objects: %w", err)
-		}
-
-		// Add /Encrypt to trailer.
-		encRef := alloc.Alloc(encDict)
-		trailer["Encrypt"] = encRef
-		trailer["ID"] = ast.PdfArray{
-			ast.PdfString(string(docID)),
-			ast.PdfString(string(docID)),
+		if err := applyEncryption(ctx, alloc, trailer, cfg.EncryptCfg); err != nil {
+			return err
 		}
 	}
 

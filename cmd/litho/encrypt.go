@@ -15,6 +15,33 @@ var encryptAlgorithms = map[string]pdf.EncryptAlgorithm{
 	"aes256":  pdf.EncryptAES256,
 }
 
+// encryptWriteOptions builds the write options that encrypt a command's
+// output, or none when no password was supplied. The bool reports whether the
+// flags were usable: an unknown algorithm is a usage error, not a silent
+// fallback to writing the output in the clear.
+//
+// Either password alone is enough to ask for encryption. An empty user
+// password with an owner password set is the standard "opens without a
+// password, but permissions apply" document of ISO 32000-1, 7.6.3.
+func encryptWriteOptions(userPwd, ownerPwd, algorithm string, stderr io.Writer) ([]pdf.WriteOption, bool) {
+	if userPwd == "" && ownerPwd == "" {
+		return nil, true
+	}
+
+	algo, ok := encryptAlgorithms[algorithm]
+	if !ok {
+		fmt.Fprintf(stderr, "unknown algorithm %q. Valid: rc4-128, aes128, aes256\n", algorithm)
+		return nil, false
+	}
+
+	return []pdf.WriteOption{pdf.WithEncryption(pdf.EncryptConfig{
+		UserPassword:  userPwd,
+		OwnerPassword: ownerPwd,
+		Algorithm:     algo,
+		Permissions:   -1,
+	})}, true
+}
+
 func runEncrypt(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("encrypt", flag.ContinueOnError)
 	fs.SetOutput(stderr)

@@ -32,6 +32,7 @@ type writeOpts struct {
 	logger          *slog.Logger
 	bookmarks       *BookmarkOptions
 	pipelineTempDir string
+	encrypt         *EncryptConfig
 }
 
 // WithFullRewrite forces a clean rewrite of the entire file instead of an
@@ -41,6 +42,40 @@ func WithFullRewrite() WriteOption {
 	return func(o *writeOpts) {
 		o.fullRewrite = true
 	}
+}
+
+// WithEncryption encrypts the output with cfg. It applies to
+// [Writer.WriteTo], [Split] and [Merge].
+//
+// The standalone operations need it because a source's encryption cannot
+// survive them unaided: the reader decrypts every object as it resolves it,
+// so the graph they copy is already plaintext and the output is written in
+// the clear. Omitting the option preserves exactly that behaviour.
+//
+// Encryption describes the OUTPUT, not the input. [Merge] may therefore take
+// sources opened under different passwords and write them all under the
+// single key derived from cfg.
+//
+// On [Writer.WriteTo] this is equivalent to [Writer.Encrypt] and likewise
+// forces a full rewrite, since every string and stream must be encrypted.
+func WithEncryption(cfg EncryptConfig) WriteOption {
+	return func(o *writeOpts) {
+		o.encrypt = &cfg
+	}
+}
+
+// internalEncrypt translates the requested encryption into the internal
+// config the write engine consumes, or nil when none was requested.
+//
+// Converting here is what lets [Split] and [Merge] hand the value straight to
+// the mutations layer while [crypto.EncryptConfig] stays out of every public
+// signature.
+func (o writeOpts) internalEncrypt() *crypto.EncryptConfig {
+	if o.encrypt == nil {
+		return nil
+	}
+	internal := o.encrypt.toInternal()
+	return &internal
 }
 
 // WithVersion sets the PDF version in the output header (e.g., "2.0").
@@ -1750,6 +1785,13 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	for _, o := range opts {
 		o(&cfg)
 	}
+	// Before the guard below, never after. The guard reads w.encryptCfg, so
+	// applying [WithEncryption] later would let Sign + WithEncryption past it
+	// and silently drop one of the two.
+	if internal := cfg.internalEncrypt(); internal != nil {
+		w.encryptCfg = internal
+		w.forceRewrite = true
+	}
 	// Signing an encrypted source is also rejected: the incremental signing
 	// flow would append the signature dictionary's strings in plaintext
 	// where the source's crypto handler requires ciphertext.
@@ -2035,6 +2077,10 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 // outline is handled in the output (default: keep and remap existing,
 // drop orphans). Pass [WithWriteLogger] to receive structured debug logs
 // from the split engine.
+//
+// The output is written in the clear unless [WithEncryption] is passed, even
+// when src is encrypted: see that option for why a source's encryption cannot
+// carry across on its own.
 func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ...WriteOption) (err error) {
 	defer recoverToError(src.logger(), "pdf.Split", &err)
 	cfg := writeOpts{}
@@ -2058,7 +2104,7 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 
 	version := cfg.version
 	bookmarkCfg := buildSplitBookmarkConfig(src, cfg.bookmarks)
-	return mutations.Split(ctx, src.doc, allPages, pages, dst, version, cfg.xrefStream, bookmarkCfg)
+	return mutations.Split(ctx, src.doc, allPages, pages, dst, version, cfg.xrefStream, bookmarkCfg, cfg.internalEncrypt())
 }
 
 // Merge combines multiple PDF documents into a single output written to dst.
@@ -2068,6 +2114,10 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 // (default: concatenate with offset page indexes). Pass [WithWriteLogger] to
 // receive structured debug logs from the merge engine (logs are emitted via
 // the first source's document logger).
+//
+// The output is written in the clear unless [WithEncryption] is passed, even
+// when the sources are encrypted. Sources opened under different passwords
+// are written under the single key that option supplies.
 func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteOption) (err error) {
 	var lg *slog.Logger
 	if len(sources) > 0 {
@@ -2103,7 +2153,7 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 	}
 
 	bookmarkCfg := buildMergeBookmarkConfig(sources, cfg.bookmarks)
-	return mutations.Merge(ctx, mergeSources, dst, cfg.version, cfg.xrefStream, bookmarkCfg)
+	return mutations.Merge(ctx, mergeSources, dst, cfg.version, cfg.xrefStream, bookmarkCfg, cfg.internalEncrypt())
 }
 
 // buildSplitBookmarkConfig translates the public BookmarkOptions into the

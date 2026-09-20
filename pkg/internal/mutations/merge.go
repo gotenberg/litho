@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/crypto"
 )
 
 // MergeSource represents one input document for a merge operation.
@@ -20,7 +21,13 @@ type MergeSource struct {
 // Merge combines multiple PDF documents into a single output written to dst.
 // Pages are concatenated in order. bookmarkCfg controls how bookmarks are
 // produced for the output.
-func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version string, xrefStream bool, bookmarkCfg BookmarkConfig) error {
+//
+// A non-nil encryptCfg encrypts the output. Passing nil writes it in the
+// clear, which is what a merge of encrypted sources produced before the
+// parameter existed. Encryption is a property of the output alone: each
+// source is decrypted as it resolves, so sources under different passwords
+// merge into one file under the single key derived here.
+func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version string, xrefStream bool, bookmarkCfg BookmarkConfig, encryptCfg *crypto.EncryptConfig) error {
 	if len(sources) == 0 {
 		return fmt.Errorf("no sources to merge")
 	}
@@ -177,6 +184,14 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 
 	if version == "" {
 		version = "1.4"
+	}
+
+	// Last, after every alloc.Alloc above: see [applyEncryption] on why an
+	// object allocated after the sweep is written in the clear.
+	if encryptCfg != nil {
+		if err := applyEncryption(ctx, alloc, trailer, encryptCfg); err != nil {
+			return fmt.Errorf("encrypting merge output: %w", err)
+		}
 	}
 
 	return writer.WriteRewrite(ctx, dst, writer.RewriteConfig{

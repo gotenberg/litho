@@ -2110,6 +2110,16 @@ func TestWriter_SignWithFullRewriteOps_ReturnsIncompatible(t *testing.T) {
 		{"remove-encryption", func(w *Writer, _ *[]WriteOption) { w.RemoveEncryption() }},
 		{"clear-metadata", func(w *Writer, _ *[]WriteOption) { w.ClearMetadata() }},
 		{"with-full-rewrite", func(_ *Writer, opts *[]WriteOption) { *opts = append(*opts, WithFullRewrite()) }},
+		// WithEncryption reaches w.encryptCfg from inside WriteTo rather than
+		// from a setter called beforehand, so it is the one arm here that can
+		// regress by ORDERING alone: applied after the guard instead of before
+		// it, the write proceeds and silently drops either the signature or
+		// the encryption.
+		{"with-encryption", func(_ *Writer, opts *[]WriteOption) {
+			*opts = append(*opts, WithEncryption(EncryptConfig{
+				UserPassword: "u", OwnerPassword: "o", Algorithm: EncryptAES256, Permissions: -1,
+			}))
+		}},
 	}
 
 	for _, tc := range cases {

@@ -15,13 +15,23 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	pages := fs.String("pages", "", "Page range (required)")
+	userPwd := fs.String("user-password", "", "Encrypt the output with this user password")
+	ownerPwd := fs.String("owner-password", "", "Owner password for the encrypted output")
+	algorithm := fs.String("algorithm", "aes256", "Algorithm for the encrypted output: rc4-128, aes128, aes256")
 
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
 	}
 
 	if fs.NArg() < 1 || *output == "" || *pages == "" {
-		fmt.Fprintln(stderr, "Usage: litho split <file> --pages RANGE -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho split <file> --pages RANGE [--user-password X] -o out.pdf")
+		return exitError
+	}
+
+	// Resolved before the output file is created, so a bad algorithm fails
+	// without leaving a partial file behind.
+	writeOpts, ok := encryptWriteOptions(*userPwd, *ownerPwd, *algorithm, stderr)
+	if !ok {
 		return exitError
 	}
 
@@ -50,7 +60,7 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 		return exitError
 	}
 
-	if err := pdf.Split(ctx, r, pageList, dst); err != nil {
+	if err := pdf.Split(ctx, r, pageList, dst, writeOpts...); err != nil {
 		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "splitting: %v\n", err)
 		return exitError

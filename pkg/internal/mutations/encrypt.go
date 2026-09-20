@@ -9,6 +9,40 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/crypto"
 )
 
+// applyEncryption encrypts every pending object and installs the /Encrypt
+// dictionary and the matching /ID in the trailer. cfg must be non-nil.
+//
+// Order is load-bearing twice over. Every object the output will hold must
+// already be in the allocator when this runs: [EncryptPendingObjects] walks
+// what is pending, so an object allocated afterwards is written in plaintext
+// inside a file whose trailer declares encryption, which no conforming reader
+// can recover. And the /Encrypt dictionary is allocated after that sweep
+// because ISO 32000-1, 7.6.1 exempts it from encryption: encrypting it would
+// leave the handler unable to read the parameters it needs to decrypt.
+//
+// The trailer /ID is replaced rather than carried from the source. The
+// standard security handler derives the file encryption key from the first
+// /ID element (ISO 32000-1, 7.6.3.3), so a preserved /ID and a freshly
+// generated key disagree and every string and stream decrypts to garbage.
+func applyEncryption(ctx context.Context, alloc *writer.ObjAllocator, trailer ast.PdfDict, cfg *crypto.EncryptConfig) error {
+	docID := GenerateDocumentID()
+	encryptor, encDict, err := crypto.NewEncryptor(*cfg, docID)
+	if err != nil {
+		return fmt.Errorf("creating encryptor: %w", err)
+	}
+
+	if err := EncryptPendingObjects(ctx, alloc, encryptor); err != nil {
+		return fmt.Errorf("encrypting objects: %w", err)
+	}
+
+	trailer["Encrypt"] = alloc.Alloc(encDict)
+	trailer["ID"] = ast.PdfArray{
+		ast.PdfString(string(docID)),
+		ast.PdfString(string(docID)),
+	}
+	return nil
+}
+
 // EncryptPendingObjects encrypts all string and stream objects in the allocator.
 func EncryptPendingObjects(ctx context.Context, alloc *writer.ObjAllocator, enc *crypto.Encryptor) error {
 	for objNum, obj := range alloc.Pending() {

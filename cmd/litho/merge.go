@@ -14,6 +14,9 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	fs.SetOutput(stderr)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
+	userPwd := fs.String("user-password", "", "Encrypt the output with this user password")
+	ownerPwd := fs.String("owner-password", "", "Owner password for the encrypted output")
+	algorithm := fs.String("algorithm", "aes256", "Algorithm for the encrypted output: rc4-128, aes128, aes256")
 
 	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return exitError
@@ -21,7 +24,14 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 
 	files := fs.Args()
 	if len(files) < 2 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho merge <file1> <file2> [file...] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho merge <file1> <file2> [file...] [--user-password X] -o out.pdf")
+		return exitError
+	}
+
+	// Resolved before the output file is created, so a bad algorithm fails
+	// without leaving a partial file behind.
+	writeOpts, ok := encryptWriteOptions(*userPwd, *ownerPwd, *algorithm, stderr)
+	if !ok {
 		return exitError
 	}
 
@@ -53,7 +63,7 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 		return exitError
 	}
 
-	if err := pdf.Merge(ctx, readers, dst); err != nil {
+	if err := pdf.Merge(ctx, readers, dst, writeOpts...); err != nil {
 		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "merging: %v\n", err)
 		return exitError

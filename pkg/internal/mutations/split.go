@@ -10,12 +10,18 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/crypto"
 )
 
 // Split extracts the specified 1-based pages from a document into a new PDF
 // written to dst. Pages are included in the order given; duplicates are allowed.
 // bookmarkCfg controls how bookmarks are produced for the output.
-func Split(ctx context.Context, doc *document.Document, allPages []*document.Page, pages []int, dst io.Writer, version string, xrefStream bool, bookmarkCfg BookmarkConfig) error {
+//
+// A non-nil encryptCfg encrypts the output. Passing nil writes it in the
+// clear, which is what a split of an encrypted source produced before the
+// parameter existed: the reader decrypts every object as it resolves it, so
+// the copied graph is plaintext whatever the source was.
+func Split(ctx context.Context, doc *document.Document, allPages []*document.Page, pages []int, dst io.Writer, version string, xrefStream bool, bookmarkCfg BookmarkConfig, encryptCfg *crypto.EncryptConfig) error {
 	if len(pages) == 0 {
 		return fmt.Errorf("no pages specified")
 	}
@@ -165,6 +171,14 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 
 	if version == "" {
 		version = doc.Version
+	}
+
+	// Last, after every alloc.Alloc above: see [applyEncryption] on why an
+	// object allocated after the sweep is written in the clear.
+	if encryptCfg != nil {
+		if err := applyEncryption(ctx, alloc, trailer, encryptCfg); err != nil {
+			return fmt.Errorf("encrypting split output: %w", err)
+		}
 	}
 
 	return writer.WriteRewrite(ctx, dst, writer.RewriteConfig{
