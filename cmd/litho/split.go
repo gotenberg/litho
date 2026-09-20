@@ -42,6 +42,8 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	}
 	defer closer()
 
+	warnEncryptionDropped(stderr, len(writeOpts) > 0, r)
+
 	pageCount, err := r.PageCount(ctx)
 	if err != nil {
 		fmt.Fprintf(stderr, "reading page count: %v\n", err)

@@ -57,6 +57,8 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 		}
 	}()
 
+	warnEncryptionDropped(stderr, len(writeOpts) > 0, readers...)
+
 	dst, closeDst, err := createOutput(*output)
 	if err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)

@@ -42,6 +42,37 @@ func encryptWriteOptions(userPwd, ownerPwd, algorithm string, stderr io.Writer) 
 	})}, true
 }
 
+// warnEncryptionDropped reports on stderr that an encrypted input is about to
+// become an unencrypted output. encrypting says whether the command was asked
+// to encrypt, in which case there is nothing to warn about.
+//
+// The reader decrypts every object as it resolves it, so a page operation
+// copies a plaintext object graph and the output carries no /Encrypt dictionary
+// unless one is requested. That is the documented behaviour, not a defect, but
+// it is a confidentiality downgrade the user cannot see: they supplied a
+// password to READ the file and got an unprotected one back. Only the silence
+// is fixed here; the default is deliberate.
+//
+// Variadic because a merge has several inputs and an insert has two, and any
+// encrypted input means the output loses protection the input had.
+//
+// The message names both remedies because they differ per command: split and
+// merge take --user-password, while delete, insert and rotate have no
+// encryption flag and must re-encrypt the result.
+func warnEncryptionDropped(stderr io.Writer, encrypting bool, readers ...*pdf.Reader) {
+	if encrypting {
+		return
+	}
+	for _, r := range readers {
+		if r == nil || !r.IsEncrypted() {
+			continue
+		}
+		fmt.Fprintln(stderr, "warning: the input is encrypted but the output will not be. "+
+			"Pass --user-password to encrypt the output, or run litho encrypt on it.")
+		return
+	}
+}
+
 func runEncrypt(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("encrypt", flag.ContinueOnError)
 	fs.SetOutput(stderr)
