@@ -246,8 +246,22 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	baseName := fontBaseName(fontDict)
 
 	if modified {
-		newFont := make(ast.PdfDict, len(fontDict))
-		maps.Copy(newFont, fontDict)
+		// Build on the latest version of the font dictionary: an earlier repair
+		// in this same pass may already have rewritten it. The caller reads the
+		// dictionary once from the document and hands that value here, so
+		// copying it would discard what a peer wrote. fonts runs at registry
+		// 144, after cid-gidmap (110), font-keys (111), tounicode-ranges (114)
+		// and nested-resources (131), every one of which writes font
+		// dictionaries. [fixType0Font] and [fixSimpleFontToUnicode] already
+		// read this way; this one did not.
+		targetFont := fontDict
+		if allocated, ok := alloc.Pending()[fontRef.ObjectNum]; ok {
+			if d, isDict := allocated.(ast.PdfDict); isDict {
+				targetFont = d
+			}
+		}
+		newFont := make(ast.PdfDict, len(targetFont))
+		maps.Copy(newFont, targetFont)
 		newFont["Widths"] = newWidths
 		// A direct font dictionary has no object number, so nothing can be
 		// written and the repair must not be reported.
