@@ -74,6 +74,12 @@ func TestMatchGraphics_IgnoresTheBitsPerComponentTests(t *testing.T) {
 			Specification: "ISO_19005_2", Clause: "6.2.8", TestNumber: 5, Object: "PDMaskImage",
 			Description: "If an image mask dictionary contains the BitsPerComponent key, its value shall be 1",
 		},
+		// Part 4 spells the same two rules 6.2.7.1, which the 6.2.7 arm
+		// claimed by prefix while this control pinned only parts 1 and 2.
+		// Nothing rewrites /BitsPerComponent: the value describes the image
+		// samples, so changing it without re-encoding them corrupts the image.
+		compliance.Rule_19005_4_6_2_7_1_t04,
+		compliance.Rule_19005_4_6_2_7_1_t05,
 		{
 			Specification: "ISO_14289_1", Clause: "7.2", TestNumber: 2, Object: "PDOutline",
 			Description: "Natural language in the Outline entries shall be determined",

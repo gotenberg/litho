@@ -15,7 +15,14 @@ import (
 
 func matchGraphics(v compliance.Violation) bool {
 	return clausePrefix(v, "6.2.9", "6.2.6") || // rendering intent (ExtGState /RI and image /Intent)
-		clausePrefix(v, "6.2.7") || // PostScript XObject (PDF/A-1 §6.2.7)
+		// Only ISO 19005-1 spells a clause 6.2.7, the PostScript XObject ban
+		// this fixer repairs by replacing the XObject with an empty Form.
+		// Matched WHOLE and scoped to part 1: ISO 19005-4 numbers its image
+		// rules 6.2.7.1 and its JPEG2000 rules 6.2.7.3, so a prefix claimed
+		// both families. Nothing here rewrites /BitsPerComponent, which
+		// describes the image samples and cannot change without re-encoding
+		// them, and nothing re-encodes JPX data at all.
+		(v.Rule.Specification == "ISO_19005_1" && v.Rule.Clause == "6.2.7") ||
 		clausePrefix(v, "6.2.5") || // Form XObject /Subtype2, /PS
 		// ISO 19005-1 spells the ExtGState transfer-function rule 6.2.8,
 		// where parts 2, 3 and 4 spell it 6.2.5, so the prefix above cannot
