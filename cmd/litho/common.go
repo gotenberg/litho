@@ -22,6 +22,12 @@ const (
 )
 
 // openPDF opens a PDF from a file path. Use "-" to read from stdin.
+//
+// The two routes differ in memory, which matters for a large document. A path
+// streams: [pdf.OpenFile] hands the open file to the parser as an io.ReaderAt,
+// so the document is never held whole. Stdin cannot do that, because a pipe has
+// no size and no seek and the parser needs both, so the bytes are buffered and
+// memory matches the size of the document. Prefer a path for a large file.
 // The caller must close the returned Reader when done.
 func openPDF(ctx context.Context, path, password string) (*pdf.Reader, func(), error) {
 	if path == "-" {
