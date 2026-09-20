@@ -177,6 +177,24 @@ func hash2B(password, salt, udata []byte) []byte {
 	return k[:32]
 }
 
+// Authenticate tries password as both the user and the owner password and,
+// on success, sets h.EncryptionKey and h.Authenticated. It reports
+// [ErrInvalidPassword] when neither matches, and leaves h.Authenticated false.
+//
+// V=5 follows ISO 32000-2, 7.6.4.3 Algorithm 2.A: the password is UTF-8
+// truncated to 127 bytes, validated against /U and then /O, with the file key
+// recovered from /UE or /OE. A /U, /O or /UE too short to carry the hash and
+// its two salts yields [ErrUnsupportedEncryption] rather than a false
+// rejection, because the dictionary is malformed rather than the password
+// wrong.
+//
+// V<5 follows ISO 32000-1 Algorithms 3.3 then 3.1 and 3.2 (3.4/3.5 for R>=3).
+// Owner recovery runs first, and both the recovered string AND the supplied
+// password are tested, so an owner password authenticates a document whose
+// user password is unknown.
+//
+// [NewHandler] already calls this with a blank password, so h.Authenticated
+// may be true before any explicit call.
 func (h *Handler) Authenticate(password string) error {
 	pwBytes := []byte(password)
 
