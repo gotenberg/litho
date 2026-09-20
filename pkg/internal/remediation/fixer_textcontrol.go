@@ -85,11 +85,37 @@ func stripControlBytesFromOps(ops []content.Operation, fonts map[string]textFont
 	removed := 0
 	modified := false
 	var currentFont string
+	// The text font is part of the graphics state, so Q restores it
+	// (ISO 32000-1, 8.4.2 and Table 104). currentFont is the only state this
+	// loop carries, so one stack covers it; enumerate before you fix, because
+	// a font-only restore in tagging's collector missed the leading it also
+	// tracked and cost a second commit.
+	//
+	// Both directions are wrong without this, and both were measured. A simple
+	// font selected inside q…Q outliving the Q makes the composite guard
+	// consult the wrong name and STRIP a multi-byte string: the CIDs
+	// <0041 0020 0042> came back as "A B", their 0x00 high bytes eaten, which
+	// is the corruption that cost issue2856.pdf a third of its text. A
+	// composite font outliving the Q does the opposite and SKIPS a simple
+	// string whose control byte should have gone.
+	var fontStack []string
 	for i := range ops {
 		op := ops[i].Operator
 		if op == "Tf" && len(ops[i].Operands) > 0 {
 			if name, ok := ops[i].Operands[0].(ast.PdfName); ok {
 				currentFont = string(name)
+			}
+		}
+		// Placed before the show-text guard below on purpose: that guard
+		// continues on every non-showing operator, q and Q included, so a
+		// restore written after it would never run.
+		if op == "q" {
+			fontStack = append(fontStack, currentFont)
+		}
+		if op == "Q" {
+			if n := len(fontStack); n > 0 {
+				currentFont = fontStack[n-1]
+				fontStack = fontStack[:n-1]
 			}
 		}
 		if op != "Tj" && op != "TJ" && op != "'" && op != "\"" {
