@@ -66,10 +66,16 @@ func fixImageXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 
 	var notes []string
 
-	for name, entryObj := range xobjDict {
+	// Sorted rather than ranged: the notes below name the image they describe,
+	// so Go's randomised map order would vary the order of the fix descriptions
+	// the caller reports, and those reach `litho remediate` both as printed
+	// lines and as the JSON "fixed" array. The dict rewrites themselves are
+	// keyed by object number and so are order-independent; only the report is.
+	for _, name := range sortedDictKeys(xobjDict) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		entryObj := xobjDict[name]
 
 		ref, ok := entryObj.(ast.PdfIndirectRef)
 		if !ok {
