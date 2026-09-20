@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -111,6 +112,82 @@ func TestSplit_NoWarningForAPlainInput(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), encryptionWarning) {
 		t.Errorf("warned on an unencrypted input; stderr = %q", stderr.String())
+	}
+}
+
+// TestMerge_WarnsWhenAnySourceIsEncrypted covers the multi-input half of
+// warnEncryptionDropped, which is the only reason it is variadic.
+//
+// The encrypted file goes SECOND on purpose. Checking only the first reader
+// would pass a test that put it first, and a merge silently stripping
+// protection from a later input is exactly the downgrade the warning reports.
+func TestMerge_WarnsWhenAnySourceIsEncrypted(t *testing.T) {
+	plain := onePageTempPDF(t)
+	enc := encryptTempPDF(t, onePageTempPDF(t), "pw")
+	out := filepath.Join(t.TempDir(), "merged.pdf")
+
+	var stdout, stderr bytes.Buffer
+	rc := run(context.Background(),
+		[]string{"merge", "-p", "pw", "-o", out, plain, enc}, &stdout, &stderr)
+	if rc != exitOK {
+		t.Fatalf("exit %d, stderr: %s", rc, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), encryptionWarning) {
+		t.Errorf("no warning although a later source was encrypted; stderr = %q", stderr.String())
+	}
+}
+
+// TestInsert_WarnsWhenOnlyTheSourceIsEncrypted pins that the SOURCE reader is
+// consulted, not only the target.
+//
+// Target plain, source encrypted: the warning can only come from the second
+// reader, so this fails if insert checks the document it inserts INTO and
+// ignores the one it takes pages FROM.
+func TestInsert_WarnsWhenOnlyTheSourceIsEncrypted(t *testing.T) {
+	target := onePageTempPDF(t)
+	source := encryptTempPDF(t, onePageTempPDF(t), "pw")
+	out := filepath.Join(t.TempDir(), "inserted.pdf")
+
+	var stdout, stderr bytes.Buffer
+	rc := run(context.Background(), []string{
+		"insert", "-p", "pw", "-source", source, "-pos", "0", "-o", out, target,
+	}, &stdout, &stderr)
+	if rc != exitOK {
+		t.Fatalf("exit %d, stderr: %s", rc, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), encryptionWarning) {
+		t.Errorf("no warning although the source was encrypted; stderr = %q", stderr.String())
+	}
+}
+
+// TestSplit_OwnerPasswordAloneEncrypts pins what encryptWriteOptions documents:
+// either password alone asks for encryption.
+//
+// An empty user password with an owner password set is the standard "opens
+// without a password, but permissions apply" document of ISO 32000-1, 7.6.3, so
+// the output carries /Encrypt and still opens freely. That is why this cannot
+// reuse an assertion requiring the open to fail.
+func TestSplit_OwnerPasswordAloneEncrypts(t *testing.T) {
+	plain := onePageTempPDF(t)
+	out := filepath.Join(t.TempDir(), "split.pdf")
+
+	var stdout, stderr bytes.Buffer
+	rc := run(context.Background(), []string{
+		"split", "-pages", "1", "-owner-password", "ow", "-o", out, plain,
+	}, &stdout, &stderr)
+	if rc != exitOK {
+		t.Fatalf("exit %d, stderr: %s", rc, stderr.String())
+	}
+
+	written, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("reading output: %v", err)
+	}
+	if !bytes.Contains(written, []byte("/Encrypt")) {
+		t.Error("an owner password alone did not encrypt the output")
+	}
+	if strings.Contains(stderr.String(), encryptionWarning) {
+		t.Errorf("warned about dropping encryption while encrypting; stderr = %q", stderr.String())
 	}
 }
 
