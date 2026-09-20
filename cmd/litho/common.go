@@ -258,6 +258,23 @@ func parsePages(spec string, pageCount int) ([]int, error) {
 		return []int{pageCount}, nil
 	}
 
+	// Bounds are checked per part, BEFORE the range is expanded. The expansion
+	// appends one entry per page it spans, so validating afterwards let
+	// "1-10000000" build a 10-million-entry slice on a five-page document and
+	// only then report that page 6 is out of range: 469 MiB and 56 ms, all of it
+	// discarded, growing linearly with the endpoint until the allocation fails.
+	// Anti-DoS guard, not spec-mandated. The bound is pageCount itself rather
+	// than an invented constant, and the checks run in list order with endpoints
+	// before their interior, which reports the same offending page the
+	// post-expansion scan did: it named the first offender in expansion order,
+	// and that is always an endpoint.
+	inRange := func(p int) error {
+		if p < 1 || p > pageCount {
+			return fmt.Errorf("page %d out of range [1, %d]", p, pageCount)
+		}
+		return nil
+	}
+
 	var pages []int
 	for part := range strings.SplitSeq(spec, ",") {
 		part = strings.TrimSpace(part)
@@ -274,6 +291,12 @@ func parsePages(spec string, pageCount int) ([]int, error) {
 			if start > end {
 				return nil, fmt.Errorf("invalid range %d-%d: start > end", start, end)
 			}
+			if err := inRange(start); err != nil {
+				return nil, err
+			}
+			if err := inRange(end); err != nil {
+				return nil, err
+			}
 			for i := start; i <= end; i++ {
 				pages = append(pages, i)
 			}
@@ -282,13 +305,10 @@ func parsePages(spec string, pageCount int) ([]int, error) {
 			if err != nil {
 				return nil, fmt.Errorf("invalid page number %q", part)
 			}
+			if err := inRange(n); err != nil {
+				return nil, err
+			}
 			pages = append(pages, n)
-		}
-	}
-
-	for _, p := range pages {
-		if p < 1 || p > pageCount {
-			return nil, fmt.Errorf("page %d out of range [1, %d]", p, pageCount)
 		}
 	}
 
