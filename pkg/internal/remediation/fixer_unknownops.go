@@ -25,10 +25,16 @@ func matchUnknownOps(v compliance.Violation) bool {
 		descriptionContains(v, "operator \"")
 }
 
-// fixUnknownOps strips operators absent from [validOperators] from every
-// page content stream and every Form XObject referenced through page
-// Resources. Viewers ignore these tokens per ISO 32000 §A.2, so removal
-// has no visible effect and only eliminates the PDF/A violation.
+// fixUnknownOps strips operators absent from [validOperators] from every page
+// content stream, every Form XObject referenced through page Resources, and
+// every annotation appearance stream. Viewers ignore these tokens per
+// ISO 32000 §A.2, so removing a genuine one has no visible effect and only
+// eliminates the PDF/A violation.
+//
+// That premise holds for a real operator alone, so each of the three streams
+// runs [repairMalformedNumbers] first: a numeric literal the parser could not
+// read surfaces as an operator, and stripping it takes the operands of the
+// operator that follows. See the worked Tm example on that function.
 func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -51,8 +57,12 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		}
 		total += n
 		repaired += r
-		total += stripUnknownInResources(ctx, alloc, doc, page.Resources, visited)
-		total += stripUnknownInAnnotations(ctx, alloc, doc, page.Dict, visited)
+		n, r = stripUnknownInResources(ctx, alloc, doc, page.Resources, visited)
+		total += n
+		repaired += r
+		n, r = stripUnknownInAnnotations(ctx, alloc, doc, page.Dict, visited)
+		total += n
+		repaired += r
 	}
 
 	var fixes []string
@@ -109,19 +119,19 @@ func stripUnknownFromStream(ctx context.Context, alloc *writer.ObjAllocator, doc
 // 19005-2, 6.2.2 prohibition reaches it, but it hangs off /Annots[]/AP rather
 // than the page resources this fixer walked, and veraPDF reports an operator
 // there that litho left in place.
-func stripUnknownInAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict, visited map[int]bool) int {
+func stripUnknownInAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict, visited map[int]bool) (int, int) {
 	if pageDict == nil {
-		return 0
+		return 0, 0
 	}
 	annots, err := document.ResolveArray(ctx, doc, pageDict["Annots"])
 	if err != nil || len(annots) == 0 {
-		return 0
+		return 0, 0
 	}
 
-	total := 0
+	total, repaired := 0, 0
 	for _, annotObj := range annots {
 		if err := ctx.Err(); err != nil {
-			return total
+			return total, repaired
 		}
 		annot, err := document.ResolveDict(ctx, doc, annotObj)
 		if err != nil || annot == nil {
@@ -137,11 +147,13 @@ func stripUnknownInAnnotations(ctx context.Context, alloc *writer.ObjAllocator, 
 				continue
 			}
 			for _, entry := range appearanceEntries(ctx, doc, apObj) {
-				total += stripUnknownFromStreamObject(ctx, alloc, doc, entry, visited)
+				n, r := stripUnknownFromStreamObject(ctx, alloc, doc, entry, visited)
+				total += n
+				repaired += r
 			}
 		}
 	}
-	return total
+	return total, repaired
 }
 
 // appearanceEntries returns the objects an /AP entry names: the entry itself
@@ -163,12 +175,13 @@ func appearanceEntries(ctx context.Context, doc *document.Document, apObj ast.Pd
 }
 
 // stripUnknownFromStreamObject rewrites one appearance stream without the
-// operators outside [validOperators], returning how many it removed. The
-// replacement body is decoded content, so /Filter and /DecodeParms go with it.
-func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, visited map[int]bool) int {
+// operators outside [validOperators], returning how many it removed and how
+// many malformed numbers it folded back. The replacement body is decoded
+// content, so /Filter and /DecodeParms go with it.
+func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, visited map[int]bool) (int, int) {
 	ref, isRef := obj.(ast.PdfIndirectRef)
 	if !isRef || ref.ObjectNum == 0 || visited[ref.ObjectNum] {
-		return 0
+		return 0, 0
 	}
 	visited[ref.ObjectNum] = true
 
@@ -179,16 +192,23 @@ func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocato
 	// what they queued. ref is known non-zero from the guard above.
 	stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, obj)
 	if !ok {
-		return 0
+		return 0, 0
 	}
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
-		return 0
+		return 0, 0
 	}
 	ops, err := content.ParseStreamData(ctx, data)
 	if err != nil {
-		return 0
+		return 0, 0
 	}
+
+	// An appearance stream is a content stream (ISO 32000-1, 12.5.5), so a
+	// mangled operand splits its operand run exactly as it does on a page and
+	// stripping the token takes the next operator's arguments with it. The page
+	// path has repaired that since the Tm on pdfjs issue15604.pdf lost four of
+	// its six operands; this path read the same bodies without it.
+	ops, repaired := repairMalformedNumbers(ops)
 
 	removed := 0
 	for i, op := range ops {
@@ -200,8 +220,11 @@ func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocato
 			removed++
 		}
 	}
-	if removed == 0 {
-		return 0
+	// Seeded from the repair, not from removed alone: a stream whose only defect
+	// is a malformed number still has to be written back, or the repair happens
+	// in memory and is discarded.
+	if removed == 0 && repaired == 0 {
+		return 0, 0
 	}
 
 	newData := serializeOps(filterOps(ops))
@@ -214,25 +237,26 @@ func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocato
 	}
 	newDict["Length"] = ast.PdfInt(len(newData))
 	alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, newData))
-	return removed
+	return removed, repaired
 }
 
 // stripUnknownInResources recurses into a page's /Resources/XObject
 // entries to process Form XObjects that may hold their own content
-// streams with bad operators.
-func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, visited map[int]bool) int {
+// streams with bad operators. Returns how many operators it removed and how
+// many malformed numbers it folded back.
+func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, visited map[int]bool) (int, int) {
 	if resources == nil {
-		return 0
+		return 0, 0
 	}
 	xoObj, ok := resources["XObject"]
 	if !ok {
-		return 0
+		return 0, 0
 	}
 	xoDict, err := document.ResolveDict(ctx, doc, xoObj)
 	if err != nil || xoDict == nil {
-		return 0
+		return 0, 0
 	}
-	total := 0
+	total, totalRepaired := 0, 0
 	for _, entry := range xoDict {
 		ref, ok := entry.(ast.PdfIndirectRef)
 		if !ok || ref.ObjectNum == 0 || visited[ref.ObjectNum] {
@@ -264,8 +288,15 @@ func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, do
 		if err != nil {
 			continue
 		}
+		// A form XObject holds a content stream (ISO 32000-1, 8.10.2), so a
+		// mangled operand costs it the next operator's arguments here just as it
+		// does on a page. Repaired before the strip, for the same reason and in
+		// the same order as the page path.
+		ops, repaired := repairMalformedNumbers(ops)
 		removed := 0
-		modified := false
+		// Seeded from the repair: a form whose only defect is a malformed number
+		// still has to be written back, or the repair is discarded.
+		modified := repaired > 0
 		for i, op := range ops {
 			if op.Operator == "" || op.Operator == "BX" || op.Operator == "EX" {
 				continue
@@ -295,13 +326,16 @@ func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, do
 		newDict["Length"] = ast.PdfInt(len(newData))
 		alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, newData))
 		total += removed
+		totalRepaired += repaired
 
 		// Recurse into nested Form XObjects.
 		if nestedRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && nestedRes != nil {
-			total += stripUnknownInResources(ctx, alloc, doc, nestedRes, visited)
+			n, r := stripUnknownInResources(ctx, alloc, doc, nestedRes, visited)
+			total += n
+			totalRepaired += r
 		}
 	}
-	return total
+	return total, totalRepaired
 }
 
 // repairMalformedNumbers folds tokens the content parser surfaced as operators,
