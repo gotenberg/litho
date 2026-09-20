@@ -95,6 +95,19 @@ func FuzzParser(f *testing.F) {
 	f.Add([]byte("endobj"))
 	f.Add([]byte("stream\nendstream"))
 
+	// Adversarial: a declared /Length the file does not back.
+	//
+	// The existing stream seeds above both tell the truth (5 and 0), so the
+	// fast path in tryFastStreamLength always succeeded and its rejection
+	// branch was reached only by mutation. These four seed the rejection
+	// directly: the declared length is what sizes the lazy stream's
+	// make([]byte, length), so a value the file cannot back must fall back to
+	// scanEndstream rather than be trusted.
+	f.Add([]byte("1 0 obj\n<< /Length 999999999 >>\nstream\nshort\nendstream\nendobj"))
+	f.Add([]byte("1 0 obj\n<< /Length 9223372036854775807 >>\nstream\nshort\nendstream\nendobj"))
+	f.Add([]byte("1 0 obj\n<< /Length -5 >>\nstream\nHello\nendstream\nendobj"))
+	f.Add([]byte("1 0 obj\n<< /Length 2 >>\nstream\nHello\nendstream\nendobj"))
+
 	// Adversarial: huge number strings
 	f.Add([]byte("99999999999999999999999999999999"))
 	f.Add([]byte("1.79769313486231570e+308"))
