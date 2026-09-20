@@ -40,8 +40,31 @@ var validOperators = map[string]bool{
 // These are only applied when PreserveContent is false.
 func matchAggressive(v compliance.Violation) bool {
 	switch v.Rule.Clause {
-	case "6.3.3", "6.5.3", "6.9": // annotation/form appearances
+	case "6.3.3", "6.5.3": // annotation/form appearances
+		// Both carry exactly one meaning in every part that spells them,
+		// PDAnnot, so neither needs scoping.
 		return true
+	case "6.9":
+		// Only ISO 19005-1 spells the form-appearance rules 6.9: the
+		// NeedAppearances flag and the widget appearance dictionary. Parts 2
+		// and 3 give that number to the optional content configuration
+		// dictionary, and part 4 to embedded files.
+		//
+		// Matching the bare clause sent 13 such cells to
+		// [fixAnnotationAppearances], which writes an /AP into every
+		// annotation that lacks one. That repairs no optional-content or
+		// embedded-file rule, and unlike a claim on a no-op fixer it MUTATES
+		// the document on an unrelated trigger. Four of the 13 had no other
+		// claimant at all: parts 2 and 3 test 3, the /Order completeness rule
+		// [matchCatalogCleanup] refuses for the same reason, and part 4 tests
+		// 1 and 5.
+		//
+		// No negative arm here. Returning false would skip the Op_Undefined
+		// check below, which is the short-circuit that cost 12 corpus cells in
+		// [matchCatalogCleanup]; this arm matches, or falls through.
+		if v.Rule.Specification == "ISO_19005_1" {
+			return true
+		}
 	case "6.2.9", "6.2.6": // rendering intent in content streams
 		return true
 	case "6.2.2": // unknown content stream operators
