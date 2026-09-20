@@ -206,6 +206,77 @@ func TestMerge_WithEncryption(t *testing.T) {
 	}
 }
 
+// TestMerge_WithEncryptionAcrossDifferentPasswords pins what [WithEncryption]'s
+// godoc claims and no other test exercises: encryption describes the OUTPUT, so
+// sources opened under DIFFERENT passwords merge into one file under the single
+// key the option supplies.
+//
+// Every other merge test here uses the same fixture twice, which cannot tell
+// that apart from "all sources must share a key". The two source passwords are
+// also asserted NOT to open the result, because a merged file that still
+// answered to an input's password would mean a source key leaked into the
+// output.
+func TestMerge_WithEncryptionAcrossDifferentPasswords(t *testing.T) {
+	ctx := context.Background()
+
+	encryptWith := func(password string) []byte {
+		t.Helper()
+		r, err := Open(ctx, bytes.NewReader(threePagePDF()), int64(len(threePagePDF())))
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		w := NewWriter(r)
+		w.Encrypt(EncryptConfig{
+			UserPassword:  password,
+			OwnerPassword: password + "-owner",
+			Algorithm:     EncryptAES256,
+			Permissions:   -1,
+		})
+		var buf bytes.Buffer
+		if err := w.WriteTo(ctx, &buf); err != nil {
+			t.Fatalf("WriteTo (encrypt %s): %v", password, err)
+		}
+		return buf.Bytes()
+	}
+
+	alphaBytes, betaBytes := encryptWith("alpha"), encryptWith("beta")
+
+	alpha, err := Open(ctx, bytes.NewReader(alphaBytes), int64(len(alphaBytes)), WithPassword("alpha"))
+	if err != nil {
+		t.Fatalf("Open alpha: %v", err)
+	}
+	beta, err := Open(ctx, bytes.NewReader(betaBytes), int64(len(betaBytes)), WithPassword("beta"))
+	if err != nil {
+		t.Fatalf("Open beta: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := Merge(ctx, []*Reader{alpha, beta}, &out, WithEncryption(EncryptConfig{
+		UserPassword:  "merged",
+		OwnerPassword: "merged-owner",
+		Algorithm:     EncryptAES256,
+		Permissions:   -1,
+	})); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+
+	r := assertPasswordProtected(t, ctx, out.Bytes(), "merged")
+
+	for _, stale := range []string{"alpha", "beta"} {
+		if _, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()), WithPassword(stale)); err == nil {
+			t.Errorf("a source password (%q) opens the merged output", stale)
+		}
+	}
+
+	n, err := r.PageCount(ctx)
+	if err != nil {
+		t.Fatalf("PageCount: %v", err)
+	}
+	if n != 6 {
+		t.Errorf("page count: got %d, want 6", n)
+	}
+}
+
 func TestMerge_WithoutEncryptionStaysReadable(t *testing.T) {
 	ctx := context.Background()
 	data := threePagePDF()
