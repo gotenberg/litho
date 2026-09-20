@@ -16,6 +16,28 @@ func matchFileStructure(v compliance.Violation) bool {
 	if v.Rule == compliance.Rule_14289_1_6_1_t01 {
 		return true
 	}
+
+	// Two rules sit inside the clause ranges below that the full rewrite
+	// cannot reach, and no other fixer claims either. [fixFileStructure]
+	// repairs nothing itself, so claiming one asserts a repair that does not
+	// happen and drops the violation out of the residual. Matched on the whole
+	// rule rather than the clause: that is the identity, and it cannot drift
+	// when a neighbouring prefix widens.
+	switch v.Rule {
+	case compliance.Rule_19005_4_6_1_9_t01:
+		// Parts 2 and 3 spell the object and generation spacing rule 6.1.9,
+		// which re-serialisation does repair. ISO 19005-4 gives that number to
+		// the Inline Image /F key instead, and a content stream's body is
+		// carried across as bytes, so a BI...ID...EI sequence is beyond the
+		// rewrite. [fixHexString] documents that limit from measurement.
+		return false
+	case compliance.Rule_19005_4_6_1_6_1_t03:
+		// A 3D stream /Subtype shall be U3D or PRC. The rewrite copies
+		// dictionary values verbatim, so a wrong /Subtype survives it, and
+		// litho ships no repair for a 3D stream.
+		return false
+	}
+
 	clause := v.Rule.Clause
 	return strings.HasPrefix(clause, "6.1.2") || // header format
 		strings.HasPrefix(clause, "6.1.4") || // xref table spacing
