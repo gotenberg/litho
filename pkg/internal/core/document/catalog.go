@@ -381,8 +381,23 @@ func ResolvePages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page
 }
 
 // maxPageTreeDepth caps recursion so a malformed document with a
-// self-referential /Kids chain cannot exhaust the goroutine stack. Real
-// PDFs never nest page trees more than a handful of levels.
+// self-referential /Kids chain cannot exhaust the goroutine stack. Anti-DoS
+// guard, not spec-mandated: ISO 32000-1, 7.7.3.2 makes the page tree a strict
+// tree and real PDFs never nest one more than a handful of levels. Measured
+// over the integration corpus: 5170 of its 5171 files parse, and the deepest
+// page tree among them is 4.
+//
+// This is the home note for the bound. Two other packages cap the same /Kids
+// descent at 100: compliance/check.go (collectPagesRecursive) and
+// remediation/fixer_annotations.go (collectPageRefs and its siblings). They
+// bound THE SAME structure for the same purpose, so the spread is a real
+// inconsistency rather than loose wording: a page tree nested 101 to 256 deep
+// would be traversed here and silently truncated there. No corpus file nests
+// deeper than 100, so the spread is unreachable, which is why the values are
+// documented rather than realigned; changing one would alter behaviour for no
+// measured reason. If they are ever unified, bind by reference rather than
+// copying the number, the way remediation/fixer_lang.go takes
+// compliance.MaxStructTreeWalkDepth.
 const maxPageTreeDepth = 256
 
 func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources ast.PdfDict, inheritedMediaBox, inheritedCropBox ast.PdfArray, inheritedRotate int, pages *[]*Page, visited, done map[int]bool, depth int) error {

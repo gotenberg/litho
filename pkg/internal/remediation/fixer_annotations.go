@@ -150,6 +150,18 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	return fixes, nil
 }
 
+// maxPageTreeDepth bounds the page-tree walks in this package. Anti-DoS guard,
+// not spec-mandated: ISO 32000-1, 7.7.3.2 makes the page tree a strict tree, so
+// a crafted /Kids chain is the only way to reach any depth, and 100 sits far
+// above the deepest tree in the corpus (4).
+//
+// core/document/catalog.go bounds the same descent at 256 and carries the home
+// note for this cap; compliance/check.go uses 100 as here.
+//
+// One consumer borrows it for a different shape: findInheritedResources in
+// fixer_pageresources.go walks /Parent UPWARD rather than descending /Kids. The
+// limit is right either way, since both directions are shallow, but the name
+// describes the descent. See the note at that use site.
 const maxPageTreeDepth = 100
 
 // collectPageRefs recursively collects page dicts with their indirect refs.

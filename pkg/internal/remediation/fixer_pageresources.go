@@ -79,6 +79,13 @@ func fixPageResources(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 
 // findInheritedResources walks /Parent upward and returns the first
 // /Resources dict it finds. Returns nil when the chain ends without one.
+//
+// The bound reads maxPageTreeDepth, which is named for the /Kids DESCENT in
+// fixer_annotations.go, while this walk ascends /Parent. That is a name
+// mismatch, not a wrong limit: a page tree is a handful of levels deep in
+// either direction (4 across the corpus), so the same number bounds both. The
+// loop also terminates on the first node without a /Parent, and a cyclic chain
+// is capped rather than detected, which is why the bound is what stops it.
 func findInheritedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict) ast.PdfObject {
 	current := pageDict
 	for range maxPageTreeDepth {

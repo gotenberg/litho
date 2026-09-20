@@ -289,8 +289,13 @@ func collectPages(ctx context.Context, doc *document.Document, catalog ast.PdfDi
 	return pages
 }
 
-// maxPageTreeDepth limits recursion when walking the page tree. Page trees are
-// typically shallow (a few levels deep), so 100 is conservative.
+// maxPageTreeDepth limits recursion when walking the page tree. Anti-DoS guard,
+// not spec-mandated: page trees are typically shallow (a few levels deep), so
+// 100 is conservative.
+//
+// core/document/catalog.go bounds the same /Kids descent at 256 and carries the
+// home note for this cap, including why the two are documented rather than
+// realigned. remediation/fixer_annotations.go uses 100 as well.
 const maxPageTreeDepth = 100
 
 // collectPagesRecursive walks the page tree, appending leaf page dicts. seen
