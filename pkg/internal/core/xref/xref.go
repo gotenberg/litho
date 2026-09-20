@@ -201,14 +201,14 @@ func ParseXRefStream(ctx context.Context, stream ast.PdfStream, indexMap map[int
 	return prev, nil
 }
 
-// ParseXRefTable parses a traditional plain-text cross-reference table and its
-// trailer dictionary. It populates indexMap with the parsed entries and returns
-// the trailer dictionary, the byte offset of the previous xref section, and
-// any error encountered.
 // freeListHeadGeneration is the generation number ISO 32000-1, 7.5.4 gives the
 // head of the free list, which is always object 0.
 const freeListHeadGeneration = 65535
 
+// ParseXRefTable parses a traditional plain-text cross-reference table and its
+// trailer dictionary. It populates indexMap with the parsed entries and returns
+// the trailer dictionary, the byte offset of the previous xref section, and
+// any error encountered.
 func ParseXRefTable(ctx context.Context, lex *lexer.Lexer, indexMap map[int]XRefEntry) (ast.PdfDict, int64, error) {
 	tok, err := lex.NextToken()
 	if err != nil {

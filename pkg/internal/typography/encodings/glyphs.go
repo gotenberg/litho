@@ -517,7 +517,6 @@ func hasHexLetter(s string) bool {
 	return false
 }
 
-// GlyphToRuneSimple resolves a glyph name without RecoverGlyphName fallback.
 // IsSyntheticGlyphName reports whether name is one of the code-point spellings
 // some producers invent and [GlyphToRuneFull] decodes for text extraction:
 // "Gxx" (two hex digits), "gXXXX" (four hex digits), "Cdd"/"Cddd" (decimal) or
@@ -546,6 +545,7 @@ func IsSyntheticGlyphName(name string) bool {
 	return false
 }
 
+// GlyphToRuneSimple resolves a glyph name without [RecoverGlyphName] fallback.
 func GlyphToRuneSimple(name string) (rune, bool) {
 	if r, ok := GlyphToRune[name]; ok {
 		return r, true
