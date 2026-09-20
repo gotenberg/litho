@@ -47,8 +47,17 @@ func fixAnnotFlags(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			continue
 		}
 
-		annots, err := document.ResolveArray(ctx, doc, annotsObj)
-		if err != nil || len(annots) == 0 {
+		// Alloc-aware, and the helper matches the object KIND: liveArray for an
+		// array, since the resolveFromAllocOrDoc calls elsewhere here return
+		// dicts. This value is rebuilt wholesale by [installInlineAnnots] and
+		// written back at the array's own object number, so reading it from
+		// the document discards a peer's pending edit. annotations (registry
+		// 121) nils forbidden annotation slots and compacts the array before
+		// writing it at that same object, and annot-flags is registry 124, so
+		// a stale copy here restores annotations that were deliberately
+		// removed.
+		annots := liveArray(ctx, alloc, doc, annotsObj)
+		if len(annots) == 0 {
 			continue
 		}
 
