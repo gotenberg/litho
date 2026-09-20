@@ -849,6 +849,23 @@ func (r *Reader) Metadata(ctx context.Context) (_ map[string]string, err error) 
 	return semantics.Metadata(ctx, r.doc)
 }
 
+// DeclaredPDFX reports the PDF/X conformance level the document DECLARES, or
+// the empty profile when it declares none. Absence is not an error.
+//
+// This reads an identifier; it does not validate. litho has no PDF/X validator,
+// so a returned profile says what the file claims, never whether the claim
+// holds. Do not treat it as a verdict.
+//
+// The identifier lives in the Info dictionary for PDF/X-1a and PDF/X-3
+// (/GTS_PDFXVersion with /GTS_PDFXConformance) and in XMP for PDF/X-4 and later
+// (pdfxid:GTS_PDFXVersion), where an Info key left behind is itself a
+// non-conformance, so XMP wins when a document carries both. Sub-levels such as
+// X-4p or X-5n are never inferred from the identifier alone.
+func (r *Reader) DeclaredPDFX(ctx context.Context) (_ models.PDFXProfile, err error) {
+	defer recoverToError(r.logger(), "Reader.DeclaredPDFX", &err)
+	return semantics.DeclaredPDFX(ctx, r.doc), nil
+}
+
 // Bookmarks extracts the hierarchical outline (table of contents) from the document.
 func (r *Reader) Bookmarks(ctx context.Context) (_ []models.Bookmark, err error) {
 	defer recoverToError(r.logger(), "Reader.Bookmarks", &err)

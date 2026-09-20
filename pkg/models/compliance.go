@@ -94,6 +94,45 @@ func (p PDFUAProfile) IsValid() bool {
 	return false
 }
 
+// PDFXProfile identifies a specific PDF/X conformance level, as a document
+// DECLARES it. litho reads the declaration; it does not validate against it.
+// Values are immutable and safe for concurrent use.
+type PDFXProfile string
+
+// PDF/X profile constants covering the ten live ISO 15930 conformance levels.
+//
+// PDF/X-2 (ISO 15930-5:2003) is deliberately absent: it was a partial-exchange
+// variant that saw effectively no adoption and is superseded by X-5.
+const (
+	PDFX1a  PDFXProfile = "PDF/X-1a"
+	PDFX3   PDFXProfile = "PDF/X-3"
+	PDFX4   PDFXProfile = "PDF/X-4"
+	PDFX4p  PDFXProfile = "PDF/X-4p"
+	PDFX5g  PDFXProfile = "PDF/X-5g"
+	PDFX5pg PDFXProfile = "PDF/X-5pg"
+	PDFX5n  PDFXProfile = "PDF/X-5n"
+	PDFX6   PDFXProfile = "PDF/X-6"
+	PDFX6p  PDFXProfile = "PDF/X-6p"
+	PDFX6n  PDFXProfile = "PDF/X-6n"
+)
+
+// String returns the canonical string form of the profile, e.g. "PDF/X-4".
+// The zero value renders as the empty string.
+func (p PDFXProfile) String() string { return string(p) }
+
+// IsValid reports whether p matches one of the documented PDF/X profile
+// constants. Use this to validate user input before passing the value on.
+func (p PDFXProfile) IsValid() bool {
+	switch p {
+	case PDFX1a, PDFX3,
+		PDFX4, PDFX4p,
+		PDFX5g, PDFX5pg, PDFX5n,
+		PDFX6, PDFX6p, PDFX6n:
+		return true
+	}
+	return false
+}
+
 // FacturXLevel identifies a Factur-X conformance level. The levels match
 // the values that appear verbatim in the XMP `fx:ConformanceLevel`
 // property defined by the Factur-X 1.0.07 specification. ZUGFeRD 2.x
