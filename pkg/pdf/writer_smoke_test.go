@@ -162,14 +162,22 @@ func TestWriter_RoundTrip_Encrypt(t *testing.T) {
 		t.Errorf("ExtractText after decrypt: %v", err)
 	}
 
-	// Reopen with wrong password must fail with the sentinel.
-	_, err = Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()), WithPassword("wrong"))
-	if err != nil && err != ErrInvalidPassword {
-		// Owner password "owner" may still unlock. If any password string
-		// other than the exact user or owner is accepted, that's a bug
-		// elsewhere, but the behavior contract here is just "no panic".
-		t.Logf("Reopen with wrong password returned %v (informational)", err)
+	// This document's user password is EMPTY, so it needs no password at all and
+	// any string opens it. That is not a bypass: an empty user password means
+	// "no password required", and the owner password restricts permissions
+	// rather than access.
+	//
+	// The comment here used to claim a wrong password "must fail with the
+	// sentinel" and then only t.Logf the result, so it asserted nothing and
+	// would have passed even if Open had started accepting passwords on a
+	// protected document. Measured: with this fixture, "wrong" opens and err is
+	// nil, so the rejection path cannot be tested here at all. It is covered by
+	// TestOpen_WrongPasswordReturnsTheSentinel, which uses a real user password.
+	r3, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()), WithPassword("wrong"))
+	if err != nil {
+		t.Fatalf("an empty user password must open whatever string is supplied, got %v", err)
 	}
+	r3.Close()
 }
 
 func TestWriter_RoundTrip_EncryptThenDecrypt(t *testing.T) {
