@@ -14,7 +14,12 @@ import (
 func matchCatalogCleanup(v compliance.Violation) bool {
 	if (v.Rule.Clause == "6.1.3" && v.Rule.TestNumber == 2) || // Encrypt in trailer
 		clausePrefix(v, "6.4.2") || // NeedsRendering catalog key
-		clausePrefix(v, "6.10") || // OCG config
+		// OCG config. ISO 19005-4 6.10 t3 is the /Order completeness rule and is
+		// excluded for the same reason the switch below excludes test 3 for
+		// every other spelling: nothing in [fixOCGConfigs] completes /Order.
+		// The ARM is narrowed rather than short-circuited with a negative, so
+		// evaluation still falls through to every arm after it.
+		(clausePrefix(v, "6.10") && v.Rule != compliance.Rule_19005_4_6_10_t03) ||
 		clausePrefix(v, "6.11") || // AlternatePresentations
 		clausePrefix(v, "6.1.11") { // Perms dict (PDF/A-1)
 		return true
@@ -37,6 +42,10 @@ func matchCatalogCleanup(v compliance.Violation) bool {
 	// test 2. It does NOT repair the /Order array of test 3, so test 3 is not
 	// claimed: claiming a rule this fixer cannot complete would report it
 	// handled while it survives.
+	//
+	// That exclusion reaches part 4 through the narrowed 6.10 arm above, not
+	// through this switch. Written only here it held for parts 2 and 3 and was
+	// bypassed for part 4, whose spelling matched the prefix first.
 	//
 	// Test 3 was implemented and MEASURED to be a false fix. litho's own
 	// [compliance] check inspects only /D and collects OCGs only from

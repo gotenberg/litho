@@ -76,17 +76,23 @@ func TestEnsureOCGConfigNameTreatsAnEmptyNameAsMissing(t *testing.T) {
 //
 // That control pinned these five rules as must-NOT-claim, on the stated premise
 // that "[fixOCGConfigs] adds a missing /Name and nothing else". The premise no
-// longer holds: [uniqueOCGConfigNames] repairs test 2, [completeOCGOrder] test
-// 3 and [stripOCGUsageApplication] the /AS ban, which the UA specifications
-// spell as their own test 2. The claim and the repair moved together, and each
-// repair is proven by its own test in fixer_ocgfamily_test.go; a claim widened
-// without them would report these handled while they survive.
+// longer holds: [uniqueOCGConfigNames] repairs test 2 and
+// [stripOCGUsageApplication] the /AS ban, which the UA specifications spell as
+// their own test 2. The claim and the repair moved together, and each repair is
+// proven by its own test in fixer_ocgfamily_test.go; a claim widened without
+// them would report these handled while they survive.
+//
+// Test 3, the /Order completeness, is NOT repaired and NOT claimed in any
+// spelling. An earlier revision of this comment credited it to a
+// completeOCGOrder helper, which does not exist: that repair was implemented,
+// measured as a false fix and removed, and the dangling reference outlived it.
 func TestMatchCatalogCleanup_ClaimsTheRestOfTheOCGClause(t *testing.T) {
 	t.Parallel()
 
 	for _, rule := range []compliance.Rule{
-		compliance.Rule_19005_2_6_9_t02, // unique /Name
-		compliance.Rule_19005_2_6_9_t04, // /AS shall not appear
+		compliance.Rule_19005_4_6_10_t02, // part 4 unique /Name, pinned nowhere else
+		compliance.Rule_19005_2_6_9_t02,  // unique /Name
+		compliance.Rule_19005_2_6_9_t04,  // /AS shall not appear
 		compliance.Rule_19005_3_6_9_t02,
 		compliance.Rule_19005_3_6_9_t04,
 		compliance.Rule_14289_1_7_10_t02,

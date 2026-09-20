@@ -177,15 +177,22 @@ func TestFixCatalogCleanup_MakesDuplicateNamesUnique(t *testing.T) {
 // must not be made: a claimed-but-unrepaired rule is reported handled while it
 // survives.
 //
-// ISO 19005-4 6.10 t3 is NOT asserted here. The pre-existing
-// clausePrefix(v, "6.10") arm has always claimed it, and narrowing that is a
-// separate change with its own measurement.
+// ISO 19005-4 spells the same requirement 6.10 t3, and the exclusion did not
+// reach it: clausePrefix(v, "6.10") matches in an arm above the specification
+// switch, so part 4 returned true before the switch was ever consulted. The
+// same deliberate scope, applied to three specifications and bypassed on the
+// fourth.
+//
+// Asserted here now, with the measurement the earlier note asked for.
+// [fixOCGConfigs] calls only ensureOCGConfigName, stripOCGUsageApplication and
+// uniqueOCGConfigNames, none of which touches /Order.
 func TestMatchCatalogCleanup_DoesNotClaimTheOrderItCannotComplete(t *testing.T) {
 	t.Parallel()
 
 	for _, rule := range []compliance.Rule{
 		compliance.Rule_19005_2_6_9_t03,
 		compliance.Rule_19005_3_6_9_t03,
+		compliance.Rule_19005_4_6_10_t03,
 	} {
 		if matchCatalogCleanup(compliance.Violation{Rule: rule}) {
 			t.Errorf("must not claim %s/%s t%d: fixOCGConfigs does not complete /Order",
