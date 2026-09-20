@@ -325,9 +325,15 @@ func Metadata(ctx context.Context, doc *document.Document) (map[string]string, e
 	// Scan the raw file for Info fields that may exist in older Info
 	// dict versions. Incremental updates occasionally point /Info at a
 	// stale object (e.g. a number left by a rewriter) or drop fields
-	// entirely; the raw scan recovers Title, Creator, Producer,
-	// Keywords, CreationDate, and ModDate from the bytes of older Info
-	// dicts when the in-memory metadata map is missing them.
+	// entirely; the raw scan recovers Title, Author, Subject, Keywords,
+	// Creator, Producer and CreationDate from the bytes of older Info dicts
+	// when the in-memory metadata map is missing them. ModDate is scanned
+	// too, but on different terms: a date the document itself states wins,
+	// and only when none does is the newest scanned value taken.
+	//
+	// The full list matters to anyone testing a write: every one of these
+	// survives in a superseded object after an incremental update, so an
+	// assertion that a field was PRESERVED passes whatever the writer did.
 	scanRawInfoFields(ctx, doc, metadata)
 
 	// Catalog /Lang: the document-level language tag (per ISO 32000-2, 14.9.2).
