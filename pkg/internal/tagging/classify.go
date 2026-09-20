@@ -429,6 +429,14 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 	var images []imageBlock
 	var cur *textBlock
 	curFont := 0.0
+	// The text state, including the font and its size, belongs to the graphics
+	// state, so Q restores it (ISO 32000-1, 8.4.2 and Table 104). Without this
+	// a size raised inside q…Q stayed in effect afterwards, and since fontSize
+	// drives bodyFontSize and the fontSize >= body*headingSizeRatio test, the
+	// leak promoted ordinary body text to a heading. Same defect class as the
+	// one fixed in collectFontUsage; this collector feeds layout heuristics
+	// rather than a verdict, which is why it was left for its own measurement.
+	var fontStack []float64
 	textY, textX, leading := 0.0, 0.0, 0.0
 	sizeChars := make(map[float64]int) // dominant-size accumulator for the current block
 
@@ -467,6 +475,13 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 			// The parser surfaces a whole inline image (BI..EI) as one op.
 			if cur == nil {
 				images = append(images, imageBlock{startByte: r.Start, endByte: r.End, name: "inline"})
+			}
+		case "q":
+			fontStack = append(fontStack, curFont)
+		case "Q":
+			if n := len(fontStack); n > 0 {
+				curFont = fontStack[n-1]
+				fontStack = fontStack[:n-1]
 			}
 		case "BT":
 			flush()
