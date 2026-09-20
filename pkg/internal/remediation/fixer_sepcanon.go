@@ -263,8 +263,14 @@ func eachColorSpaceArrayMutable(ctx context.Context, alloc *writer.ObjAllocator,
 			}
 			visited[ref.ObjectNum] = true
 		}
-		arr, err := document.ResolveArray(ctx, doc, entry)
-		if err != nil || len(arr) == 0 {
+		// Read alloc-first. Colour-space objects are written earlier by
+		// output-intent and output-intent-cleanup, and again by graphics,
+		// transparency and group-cs, all ahead of sep-canon in the registry, so
+		// rebuilding the Separation from the on-disk array would discard those
+		// writes when this one lands. liveArray performs the ref/direct split
+		// itself and yields nil when the value is unresolvable.
+		arr := liveArray(ctx, alloc, doc, entry)
+		if len(arr) == 0 {
 			continue
 		}
 
