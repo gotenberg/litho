@@ -232,6 +232,92 @@ func TestWriter_Redact_ClearsTheMetadataCopy(t *testing.T) {
 	}
 }
 
+// redactableWithCatalogPieceInfoPDF puts a second copy of the redacted word in
+// the CATALOG's /PieceInfo, where nothing the redaction composes will reach it.
+//
+// That is a real leak vector, not a contrived one: token_scan.go names
+// /PieceInfo among the structures that "survive a page edit, and several
+// survive a full rewrite as well", and producers really do leave original text
+// in private application data.
+//
+// It survives on purpose. ClearMetadata only empties /Info and deletes the
+// catalog's /Metadata; strip_page_copies drops /Thumb and /PieceInfo from the
+// PAGE, and deliberately leaves the CATALOG's alone because ISO 19005-4, 6.1.3
+// forbids a trailer /Info unless the catalog carries /PieceInfo. Meanwhile
+// ScanOutputForTokens walks outward from the catalog, so it finds the copy.
+//
+// The word appears TWICE: once drawn on the page, once here.
+func redactableWithCatalogPieceInfoPDF() []byte {
+	body := "BT /F1 12 Tf 100 700 Td (SECRET) Tj ET BT /F1 12 Tf 100 600 Td (KEEP) Tj ET"
+
+	return []byte("%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /PieceInfo 9 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
+		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
+		"5 0 obj\n<< /Font << /F1 4 0 R >> >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+		"/Resources 5 0 R /Contents 6 0 R >>\nendobj\n" +
+		"6 0 obj\n<< /Length " + strconv.Itoa(len(body)) + " >>\nstream\n" + body + "\nendstream\nendobj\n" +
+		"9 0 obj\n<< /SomeApp << /LastModified (D:20240101000000Z) /Private (SECRET) >> >>\nendobj\n" +
+		"trailer\n<< /Size 10 /Root 1 0 R >>\n%%EOF\n")
+}
+
+// TestWriter_Redact_FailsClosedWhenACopySurvives pins the security property the
+// whole feature rests on, and the one refusal path nothing else covered.
+//
+// Redact promises TWO refusals, "both leaving the Writer exactly as it was".
+// ErrRedactionRefused is covered below; this is the other: the passes succeed,
+// verification still finds a copy, and the document must not be writable. The
+// point of rolling the Writer back here -- where SanitizeDocument deliberately
+// leaves its edits queued so the survivor can be named -- is that a caller who
+// ignores the error cannot go on to write a half-redacted file.
+//
+// The occurrence COUNT is what makes this precise. Asserting only that "SECRET"
+// is still present would pass if the page had been cleared and just the
+// /PieceInfo copy remained. Two copies going in and two coming out is what
+// shows the page edit was rolled back rather than partially applied.
+func TestWriter_Redact_FailsClosedWhenACopySurvives(t *testing.T) {
+	ctx := context.Background()
+	data := redactableWithCatalogPieceInfoPDF()
+
+	if n := bytes.Count(data, []byte("SECRET")); n != 2 {
+		t.Fatalf("fixture holds %d copies of the word, want 2 (page + /PieceInfo)", n)
+	}
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+
+	report, err := w.Redact(ctx, []RedactRegion{coversSecret})
+	if !errors.Is(err, ErrRedactionIncomplete) {
+		t.Fatalf("err = %v, want ErrRedactionIncomplete", err)
+	}
+	if report == nil || len(report.SurvivingCopies) == 0 {
+		t.Fatal("the report names no surviving copy, so a caller cannot act on it")
+	}
+	var named bool
+	for _, hit := range report.SurvivingCopies {
+		if hit.Token == "SECRET" {
+			named = true
+		}
+	}
+	if !named {
+		t.Errorf("surviving copies do not name the word: %+v", report.SurvivingCopies)
+	}
+
+	// The Writer must be exactly as it was: writing now yields the original
+	// document, both copies intact.
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo after a failed-closed redaction: %v", err)
+	}
+	if n := bytes.Count(out.Bytes(), []byte("SECRET")); n != 2 {
+		t.Errorf("output holds %d copies, want 2: the redaction was not rolled back", n)
+	}
+}
+
 // TestWriter_Redact_RefusesPartialCoverage pins fail-closed at the public
 // boundary, and pins that a refusal leaves the Writer usable and UNCHANGED.
 //
