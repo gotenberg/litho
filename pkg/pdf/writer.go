@@ -390,7 +390,17 @@ func NewTTFFont(data []byte) (StampFont, error) {
 		return StampFont{}, fmt.Errorf("%w: data too short (%d bytes)", ErrInvalidFont, len(data))
 	}
 	if err := mutations.ValidateTTFForStamp(data); err != nil {
-		return StampFont{}, err
+		// Wrap with the public sentinel. [ErrInvalidFont] is documented as
+		// covering data that is "too short or structurally invalid", but only
+		// the length check above ever returned it: every parse failure came
+		// back as a bare string or as the internal truetype sentinel, so a
+		// caller could not match a malformed font with errors.Is. Measured
+		// before the fix, four of five failure shapes were unmatchable.
+		//
+		// %v rather than %w, matching the boundary style in reader.go: it keeps
+		// the pkg/internal error value out of the public chain while still
+		// naming the cause in the message.
+		return StampFont{}, fmt.Errorf("%w: %v", ErrInvalidFont, err)
 	}
 	// Copy to detach from caller-owned memory.
 	cp := make([]byte, len(data))
