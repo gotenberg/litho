@@ -115,6 +115,53 @@ func TestPipe_BooleanStageFlagDoesNotSwallowTheNextStage(t *testing.T) {
 	}
 }
 
+// TestPipe_WritesToTheOutputPathItWasGiven pins the sibling half of the
+// splitting defect, in parsePipeGlobals rather than splitStageGroups.
+//
+// parsePipeGlobals scans every token claiming -o and -p, with no notion of what
+// a flag consumes. A stage flag whose VALUE is "-o" was therefore read as the
+// global output flag, the token after it was taken as the filename, and the
+// real -o fell through to the stage. Measured: the command exited 0 while
+// writing a file named "-o" into the working directory and setting the title to
+// a filesystem path.
+//
+// That is worse than the splitStageGroups defect, which at least failed loudly.
+// A caller is unlikely to pass "-o" as a title, so this is about the failure
+// MODE rather than the likelihood: exiting 0 having written the wrong file in
+// the wrong place is the one outcome a CLI must never produce.
+//
+// The fix cannot be a look-behind ("was the previous token a flag?"), because
+// the legitimate -o here also follows one. It needs the token consumed as a
+// value to be marked consumed, so the next token is examined normally.
+func TestPipe_WritesToTheOutputPathItWasGiven(t *testing.T) {
+	src := writeTempPDF(t, untaggedTextPDF())
+	dir := t.TempDir()
+	out := filepath.Join(dir, "piped.pdf")
+
+	// The defect writes a file named for the flag into the WORKING directory,
+	// which under go test is the package source tree. Run from a temp directory
+	// so a failing assertion cannot leave one behind: cleanup at the end of the
+	// test is not enough, because the first assertion below stops the test.
+	t.Chdir(t.TempDir())
+
+	rc, errOut := runPipeArgs(t, []string{
+		"pipe", src, "set-metadata", "-title", "-o", "-o", out,
+	})
+	if rc != exitOK {
+		t.Fatalf("pipe: exit %d, stderr: %s", rc, errOut)
+	}
+	if _, err := os.Stat(out); err != nil {
+		t.Fatalf("nothing written to the -o path: %v", err)
+	}
+	if got := readMetadata(t, out)["Title"]; got != "-o" {
+		t.Errorf("Title = %q, want %q: the flag value was not passed through", got, "-o")
+	}
+	if _, err := os.Stat("-o"); err == nil {
+		t.Error(`a file named "-o" was created in the working directory`)
+		_ = os.Remove("-o")
+	}
+}
+
 // TestPipe_UnknownStageIsAnError pins the default arm of addStage.
 func TestPipe_UnknownStageIsAnError(t *testing.T) {
 	src := writeTempPDF(t, untaggedTextPDF())

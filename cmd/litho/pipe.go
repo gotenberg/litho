@@ -89,8 +89,24 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 
 // parsePipeGlobals extracts input file, -p, -o from args, returning the
 // remaining args as stage arguments.
+//
+// A token consumed as a stage flag's VALUE is never examined as a global.
+// Without that, `set-metadata -title -o out.pdf` read the title's own value as
+// the output flag and took the token after it as the filename, leaving the real
+// -o to fall through to the stage: the command exited 0 having written a file
+// named "-o" into the working directory, with the title set to a path.
+//
+// A look-behind ("was the previous token a flag?") cannot express this, because
+// the legitimate -o also follows a flag. The token consumed as a value has to be
+// marked consumed, so the one after it is examined normally.
 func parsePipeGlobals(args []string) (inputFile, password, outputFile string, rest []string) {
+	consumed := false
 	for i := 0; i < len(args); i++ {
+		if consumed {
+			consumed = false
+			rest = append(rest, args[i])
+			continue
+		}
 		switch {
 		case args[i] == "-o" && i+1 < len(args):
 			outputFile = args[i+1]
@@ -102,6 +118,7 @@ func parsePipeGlobals(args []string) (inputFile, password, outputFile string, re
 			inputFile = args[i]
 		default:
 			rest = append(rest, args[i])
+			consumed = expectsValue(args[i])
 		}
 	}
 	return
