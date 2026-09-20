@@ -20,6 +20,11 @@ func matchXMP(v compliance.Violation) bool {
 	return clausePrefix(v,
 		"6.6.2", "6.6.4", // XMP metadata streams, version ID (parts 2-4)
 		"6.7.2", "6.7.3", // XMP metadata, version/conformance (part 1)
+		// Part 1 spelling of the xpacket header attributes parts 2 to 4 state
+		// as 6.6.2.1 t2 and t3, reached above by the "6.6.2" prefix.
+		// stripForbiddenXPacketAttrs already removes both, so only the claim
+		// was missing. No 6.7.5.x exists in any part, so the prefix is exact.
+		"6.7.5",
 		"6.7.8", "6.7.9", // extension schemas, namespace validation (part 1)
 		"6.7.11",      // version identification (part 1)
 		"5",           // PDF/UA identification

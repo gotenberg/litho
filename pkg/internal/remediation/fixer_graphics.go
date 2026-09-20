@@ -34,6 +34,15 @@ func matchGraphics(v compliance.Violation) bool {
 		clausePrefix(v, "6.2.4.2") || // overprint mode OPM
 		clausePrefix(v, "6.2.8.1") || // Form XObject /OPI
 		clausePrefix(v, "6.2.8.2") || // reference XObject /Ref
+		// ISO 14289-1 §7.20 t1 restates ISO 19005-1 §6.2.6 t1 word for word:
+		// a conforming file shall not contain any reference XObjects. The
+		// PDF/A spelling was claimed and the PDF/UA one was not, so a UA-1
+		// target kept a /Ref this fixer deletes for every other profile.
+		//
+		// Matched by rule, not by clause: §7.20 t2 wants form XObject content
+		// incorporated into the structure tree, which deleting /Ref does
+		// nothing for.
+		v.Rule == compliance.Rule_14289_1_7_20_t01 ||
 		clausePrefix(v, "6.2.10") && descriptionContains(v, "blend mode") || // BM (parts 2+)
 		descriptionContains(v, "Alternates") || // image /Alternates
 		descriptionContains(v, "Interpolate") || // image /Interpolate
