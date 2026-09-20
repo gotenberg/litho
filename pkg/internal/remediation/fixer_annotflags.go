@@ -11,8 +11,11 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
+// ISO 19005-2, 19005-3 and 19005-4 number the annotation /F flag 6.3.2. ISO
+// 19005-1 gives that number to the font dictionary keys and numbers its own
+// annotation /F rule 6.5.3, which the description arm claims instead.
 func matchAnnotFlags(v compliance.Violation) bool {
-	return clausePrefix(v, "6.3.2") ||
+	return (clausePrefix(v, "6.3.2") && v.Rule.Specification != "ISO_19005_1") ||
 		(descriptionContains(v, "annotation") && descriptionContains(v, "F key"))
 }
 
