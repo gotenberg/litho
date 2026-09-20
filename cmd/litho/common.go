@@ -181,7 +181,15 @@ func reorderArgs(fs *flag.FlagSet, args []string) []string {
 	var flags, positional []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
-		if strings.HasPrefix(arg, "-") {
+		// A bare "-" is the stdin marker and therefore a POSITIONAL, not a
+		// flag. Filing it under flags put it AHEAD of the real flags, and
+		// flag.Parse treats a lone "-" as a terminator, so everything after it
+		// stopped being parsed: `litho metadata - -f json` opened "-f" as a
+		// PDF. openPDF documents "-" as stdin and createOutput as stdout, so
+		// this is a supported input, not an exotic one. A "-" that is a flag's
+		// VALUE never reaches here, being consumed by the valueFlags branch
+		// below.
+		if strings.HasPrefix(arg, "-") && arg != "-" {
 			flags = append(flags, arg)
 			name := strings.TrimLeft(arg, "-")
 			if strings.Contains(name, "=") {
