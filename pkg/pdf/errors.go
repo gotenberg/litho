@@ -106,6 +106,26 @@ var (
 	// the document with [WithPassword] before writing.
 	ErrEncryptedNotAuthenticated = errors.New("source document is encrypted and not authenticated; reopen with WithPassword before writing")
 
+	// ErrRedactionRefused is returned by [Writer.Redact] when a region
+	// selects content that cannot be removed exactly: an operator the region
+	// covers only partly, a painted path that straddles the region or was
+	// stroked or took part in a clip, content drawn by a form XObject, or an
+	// image whose samples cannot be rewritten. Removing more than was asked
+	// changes the page outside the region, and reporting success over content
+	// still in the file is worse than refusing, so litho refuses and names the
+	// construct. The [Writer] is left exactly as it was.
+	ErrRedactionRefused = errors.New("redaction refused: the region covers content that cannot be removed exactly")
+
+	// ErrRedactionIncomplete is returned by [Writer.Redact] when the
+	// document-wide passes ran but the verification scan still found a copy of
+	// a removed string, or could not read an object and so cannot prove it
+	// clean. Clearing a page is not clearing a document: the same text lives
+	// in the structure tree, annotation values, outlines and metadata.
+	// [RedactReport.SurvivingCopies] and [RedactReport.UnreadableObjects] name
+	// where, and the [Writer] is left untouched so a caller that ignores the
+	// error cannot write a half-redacted document.
+	ErrRedactionIncomplete = errors.New("redaction incomplete: a copy of the removed text survives in the document")
+
 	// ErrRemediationBrokePDF is returned by [Writer.RemediatePDFA] and
 	// [Writer.RemediatePDFUA] when applied fixes cause the output to
 	// regress beyond the configured [RegressionTolerance] and rolling back
