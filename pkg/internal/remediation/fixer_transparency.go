@@ -721,6 +721,21 @@ func fixAppearanceStream(ctx context.Context, doc *document.Document, alloc *wri
 		visited[ref.ObjectNum] = true
 	}
 
+	// Re-read through the allocator and ignore the stream the caller passed in.
+	// fixAnnotationTransparency resolves appearance streams with
+	// document.ResolveObject at two sites, once for /N, /R and /D and again for
+	// each state in an appearance subdictionary, so the value arriving here is
+	// the pre-repair copy. repairAppearanceStream writes these same objects
+	// from need-appearances, ahead of transparency, and rebuilding work from
+	// the stale copy would discard that write. Defending at the write site
+	// covers both call sites at once, and the body below rides the same live
+	// value.
+	if isRef && ref.ObjectNum > 0 {
+		if live, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, entry); ok {
+			stream = live
+		}
+	}
+
 	work := make(ast.PdfDict, len(stream.Dict))
 	maps.Copy(work, stream.Dict)
 
