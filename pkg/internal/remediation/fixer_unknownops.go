@@ -172,8 +172,13 @@ func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocato
 	}
 	visited[ref.ObjectNum] = true
 
-	stream, err := document.ResolveStream(ctx, doc, obj)
-	if err != nil {
+	// Read alloc-first, for the same reason as the resources walk below: an
+	// appearance stream is a Form XObject (ISO 32000-1, 12.5.5), so graphics,
+	// transparency and nested-resources reach it from registry entries ahead of
+	// unknown-ops, and rebuilding the body from the on-disk copy would discard
+	// what they queued. ref is known non-zero from the guard above.
+	stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, obj)
+	if !ok {
 		return 0
 	}
 	data, err := doc.DecodeStream(ctx, stream)
@@ -235,11 +240,11 @@ func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, do
 		}
 		visited[ref.ObjectNum] = true
 
-		rawObj, err := doc.Resolve(ctx, ref)
-		if err != nil {
-			continue
-		}
-		stream, ok := rawObj.(ast.PdfStream)
+		// Read alloc-first. graphics, transparency and nested-resources all
+		// write XObject streams from registry entries ahead of unknown-ops, so
+		// rebuilding the body from the on-disk copy below would discard their
+		// edits when this one lands.
+		stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, ref)
 		if !ok {
 			continue
 		}
