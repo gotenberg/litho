@@ -132,9 +132,23 @@ func fixPatternTransparency(ctx context.Context, doc *document.Document, alloc *
 			visited[ref.ObjectNum] = true
 		}
 
-		resolved, err := document.ResolveObject(ctx, doc, entry)
-		if err != nil || resolved == nil {
-			continue
+		// Read alloc-first, the shape walkIndirectObjects uses for an object
+		// whose kind is not known in advance: recurseColorSpacePatch writes
+		// pattern objects from output-intent, far ahead of transparency, and
+		// rebuilding work from the stale original below would clobber that
+		// write on AllocAt. A pattern entry is a stream (PatternType 1) or a
+		// dictionary (PatternType 2), so the pending object is taken raw and
+		// the type switches below branch on it unchanged.
+		var resolved ast.PdfObject
+		if ref, isRef := entry.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
+			resolved = alloc.Pending()[ref.ObjectNum]
+		}
+		if resolved == nil {
+			direct, err := document.ResolveObject(ctx, doc, entry)
+			if err != nil || direct == nil {
+				continue
+			}
+			resolved = direct
 		}
 
 		var patRes ast.PdfObject
