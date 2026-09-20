@@ -833,6 +833,14 @@ func (w *Writer) FlattenForm() {
 // ISO 14289-1, 7.1. One consequence is visible to callers:
 // [Reader.ExtractText] omits the stamped text unless [WithArtifacts] is
 // passed, the same way it treats any other artifact.
+//
+// The default font is a standard font and is NOT embedded, which
+// ISO 14289-1, 7.21.4.1 requires of every font used for rendering. A stamp
+// that has to survive PDF/UA validation needs a TTF supplied through
+// [TextStamp.Font]: litho embeds the whole font program with a matching
+// ToUnicode CMap. Measured on an autotagged page, stamping with the default
+// font adds a 7.21.4.1 violation naming the stamp font, and supplying a TTF
+// removes it.
 func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 	if stamp.Text == "" {
 		return ErrEmptyText
