@@ -93,6 +93,32 @@ func TestMatchLZW_DoesNotSwallowNeighbouringClauses(t *testing.T) {
 			Specification: "ISO_19005_4", Clause: "6.1.9", TestNumber: 1, Object: "CosIIFilter",
 			Description: "The value of the F key in the Inline Image dictionary shall not be LZW, LZWDecode, Crypt",
 		},
+		// The same trap one part over, and the one the literal list missed:
+		// parts 2 and 3 give 6.1.10 to the Inline Image /F key (CosIIFilter),
+		// while part 1 gives it to the stream filter (CosFilter) this fixer
+		// does repair. Matching the bare clause claims all three, so an
+		// inline-image violation was routed to a fixer whose own doc comment
+		// says rewriting a BI...ID...EI sequence is beyond it. Measured: 36
+		// sole cells under PDF_A-2*/3*.
+		{
+			Specification: "ISO_19005_2", Clause: "6.1.10", TestNumber: 1, Object: "CosIIFilter",
+			Description: "The value of the F key in the Inline Image dictionary shall not be LZW, LZWDecode, Crypt, a value not listed in ISO 32000-1:2008, Table 6, or an array containing any such value",
+		},
+		{
+			Specification: "ISO_19005_3", Clause: "6.1.10", TestNumber: 1, Object: "CosIIFilter",
+			Description: "The value of the F key in the Inline Image dictionary shall not be LZW, LZWDecode, Crypt, a value not listed in ISO 32000-1:2008, Table 6, or an array containing any such value",
+		},
+		// And the twin inside the ONE part this fixer does repair, which is
+		// why Specification and Clause together are still not enough. Part 1
+		// splits 6.1.10 by test number: t01 is the stream filter (CosFilter,
+		// claimed above) and t02 is the inline image, carrying the SAME
+		// description word for word. Match on the description or the clause
+		// and the two are indistinguishable; only the test number separates
+		// them.
+		{
+			Specification: "ISO_19005_1", Clause: "6.1.10", TestNumber: 2, Object: "CosIIFilter",
+			Description: "The LZWDecode filter shall not be permitted",
+		},
 	} {
 		if matchLZW(compliance.Violation{Rule: rule}) {
 			t.Errorf("must not claim %s/%s t%d (%s)",

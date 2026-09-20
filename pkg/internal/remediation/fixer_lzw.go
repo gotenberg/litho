@@ -35,11 +35,33 @@ import (
 // than being silenced.
 //
 // The inline-image spellings stay outside this matcher's reach on purpose:
-// ISO 19005-4 6.1.9 names the Inline Image /F key, and rewriting a
-// BI...ID...EI sequence is beyond what re-encoding stream objects can do.
+// they name the Inline Image /F key, and rewriting a BI...ID...EI sequence is
+// beyond what re-encoding stream objects can do. Every part has one, and they
+// collide with the stream-filter spellings rather than sitting clear of them:
+// ISO 19005-1 splits 6.1.10 by TEST NUMBER (t01 the stream filter, t02 the
+// inline image, carrying the SAME description word for word), parts 2 and 3
+// give 6.1.10 entirely to the inline image while their stream filter is
+// 6.1.7.2, and part 4 calls it 6.1.9.
+//
+// So matching the clause alone claimed three rules this fixer documents itself
+// as unable to repair, and matching Specification and Clause together would
+// still claim ISO 19005-1 t02. A clause number is not a rule id: the identity
+// is Specification, Clause and TestNumber together, which is why this is an
+// explicit allow-list rather than a set of literals. Comparing descriptions
+// would not separate part 1's two either.
 func matchLZW(v compliance.Violation) bool {
-	clause := v.Rule.Clause
-	return clause == "6.1.10" || clause == "6.1.7.2" || clause == "6.1.6.2"
+	spec, clause, test := v.Rule.Specification, v.Rule.Clause, v.Rule.TestNumber
+	switch {
+	case spec == "ISO_19005_1" && clause == "6.1.10" && test == 1:
+		return true
+	case spec == "ISO_19005_2" && clause == "6.1.7.2" && test == 1:
+		return true
+	case spec == "ISO_19005_3" && clause == "6.1.7.2" && test == 1:
+		return true
+	case spec == "ISO_19005_4" && clause == "6.1.6.2" && test == 1:
+		return true
+	}
+	return false
 }
 
 // fixLZW re-encodes every LZWDecode stream as FlateDecode, and normalises a
