@@ -107,6 +107,8 @@ dispatch:
 		return runMerge(ctx, globalArgs, stdout, stderr)
 	case "insert":
 		return runInsert(ctx, globalArgs, stdout, stderr)
+	case "redact":
+		return runRedact(ctx, globalArgs, stdout, stderr)
 	case "encrypt":
 		return runEncrypt(ctx, globalArgs, stdout, stderr)
 	case "decrypt":
@@ -175,6 +177,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  split         Extract pages into a new PDF")
 	fmt.Fprintln(w, "  merge         Merge multiple PDFs into one")
 	fmt.Fprintln(w, "  insert        Insert pages from another PDF")
+	fmt.Fprintln(w, "  redact        Remove content under page regions")
 	fmt.Fprintln(w, "  encrypt       Encrypt a PDF with password")
 	fmt.Fprintln(w, "  decrypt       Remove encryption from a PDF")
 	fmt.Fprintln(w, "  set-metadata  Set document metadata fields")
