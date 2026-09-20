@@ -105,8 +105,14 @@ func patchPageDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 			}
 			visited[ref.ObjectNum] = true
 		}
-		arr, err := document.ResolveArray(ctx, doc, entry)
-		if err != nil || len(arr) < 2 {
+		// Read alloc-first. Colour-space objects are written earlier by
+		// output-intent and output-intent-cleanup, and again by graphics,
+		// transparency and group-cs, every one of them ahead of devicen in the
+		// registry, so rebuilding from the on-disk array below would discard
+		// those writes when this one lands. liveArray performs the ref/direct
+		// split itself and yields nil when the value is unresolvable.
+		arr := liveArray(ctx, alloc, doc, entry)
+		if len(arr) < 2 {
 			continue
 		}
 		name, ok := arr[0].(ast.PdfName)
