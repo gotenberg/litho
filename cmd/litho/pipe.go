@@ -109,12 +109,24 @@ func parsePipeGlobals(args []string) (inputFile, password, outputFile string, re
 
 // splitStageGroups splits args into groups where each group starts with
 // a known stage name.
+//
+// A token in a flag's VALUE position is never a stage boundary, however much it
+// looks like one. Every name in [stageCmds] is an ordinary word a caller may
+// pass as a title or a stamp: `set-metadata -title rotate` used to split after
+// -title, leaving the stage holding a flag with no argument and failing the
+// whole command with "flag needs an argument: -title". All thirteen names broke
+// that way, while the --flag=value form was unaffected, which made it a
+// confusing failure to hit.
+//
+// One sharp edge remains, because removing it needs per-flag arity the splitter
+// does not have: merge takes POSITIONAL file arguments, so a file literally
+// named for a stage still starts a new group.
 func splitStageGroups(args []string) [][]string {
 	var groups [][]string
 	var current []string
 
-	for _, arg := range args {
-		if isStageCmd(arg) {
+	for i, arg := range args {
+		if isStageCmd(arg) && (i == 0 || !expectsValue(args[i-1])) {
 			if len(current) > 0 {
 				groups = append(groups, current)
 			}
@@ -127,6 +139,23 @@ func splitStageGroups(args []string) [][]string {
 		groups = append(groups, current)
 	}
 	return groups
+}
+
+// boolStageFlags names every stage flag that takes no value.
+//
+// A value-expecting flag consumes the token after it, so that token cannot be a
+// stage. A boolean consumes nothing, so the token after it is a genuine stage
+// and must still start a group: `remediate -profile PDF/A-2b -aggressive rotate`
+// runs two stages, not one. -aggressive is the only boolean among them.
+var boolStageFlags = map[string]bool{"aggressive": true}
+
+// expectsValue reports whether arg is a stage flag that consumes the next
+// token. The --flag=value form carries its own value and consumes nothing.
+func expectsValue(arg string) bool {
+	if !strings.HasPrefix(arg, "-") || strings.Contains(arg, "=") {
+		return false
+	}
+	return !boolStageFlags[strings.TrimLeft(arg, "-")]
 }
 
 var stageCmds = map[string]bool{
