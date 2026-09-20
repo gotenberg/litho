@@ -50,11 +50,23 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		return exitError
 	}
 
+	// Documents a stage opened for itself, such as the merge sources. They stay
+	// live until WriteTo executes the stage that reads them, so they are closed
+	// here rather than in addStage.
+	var stageClosers []func()
+	defer func() {
+		for _, c := range stageClosers {
+			c()
+		}
+	}()
+
 	for _, group := range groups {
 		stageName := group[0]
 		stageFlags := group[1:]
 
-		if err := addStage(ctx, pipeline, r, stageName, stageFlags, password); err != nil {
+		closers, err := addStage(ctx, pipeline, r, stageName, stageFlags, password)
+		stageClosers = append(stageClosers, closers...)
+		if err != nil {
 			fmt.Fprintf(stderr, "pipe stage %q: %v\n", stageName, err)
 			return exitError
 		}
@@ -194,14 +206,21 @@ var stageCmds = map[string]bool{
 func isStageCmd(s string) bool { return stageCmds[s] }
 
 // addStage parses stage-specific flags and appends the stage to the pipeline.
-func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string, args []string, password string) error {
+//
+// It returns the cleanup functions of every document it opened. They belong to
+// the caller, not to this function: [pdf.Pipeline.Merge] keeps the readers it
+// is given (it copies the slice, not the documents) and the stage reads them
+// when [pdf.Pipeline.WriteTo] executes, so closing them here would be a
+// use-after-close. Release them after the write, as the standalone merge
+// command does with its own.
+func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string, args []string, password string) ([]func(), error) {
 	switch name {
 	case "rotate":
 		fs := flag.NewFlagSet("rotate", flag.ContinueOnError)
 		angle := fs.Int("angle", 0, "Rotation angle (multiple of 90)")
 		pages := fs.String("pages", "", "Page range")
 		if err := fs.Parse(args); err != nil {
-			return err
+			return nil, err
 		}
 		p.Apply(func(ctx context.Context, w *pdf.Writer) error {
 			pageCount, _ := src.PageCount(ctx)
@@ -220,45 +239,53 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		fs := flag.NewFlagSet("split", flag.ContinueOnError)
 		pages := fs.String("pages", "", "Page range (required)")
 		if err := fs.Parse(args); err != nil {
-			return err
+			return nil, err
 		}
 		if *pages == "" {
-			return fmt.Errorf("--pages is required")
+			return nil, fmt.Errorf("--pages is required")
 		}
 		pageCount, _ := src.PageCount(ctx)
 		pageNums, err := parsePages(*pages, pageCount)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		p.Split(pageNums)
 
 	case "merge":
 		fs := flag.NewFlagSet("merge", flag.ContinueOnError)
 		if err := fs.Parse(args); err != nil {
-			return err
+			return nil, err
 		}
 		mergeFiles := fs.Args()
 		if len(mergeFiles) == 0 {
-			return fmt.Errorf("merge requires at least one file argument")
+			return nil, fmt.Errorf("merge requires at least one file argument")
 		}
 		var others []*pdf.Reader
+		var closers []func()
 		for _, f := range mergeFiles {
-			r, _, err := openPDF(ctx, f, password)
+			r, closer, err := openPDF(ctx, f, password)
 			if err != nil {
-				return fmt.Errorf("opening merge source %q: %w", f, err)
+				// Release what this stage already opened before giving up, so a
+				// bad source among several does not strand the good ones.
+				for _, c := range closers {
+					c()
+				}
+				return nil, fmt.Errorf("opening merge source %q: %w", f, err)
 			}
 			others = append(others, r)
+			closers = append(closers, closer)
 		}
 		p.Merge(others)
+		return closers, nil
 
 	case "delete":
 		fs := flag.NewFlagSet("delete", flag.ContinueOnError)
 		pages := fs.String("pages", "", "Page range (required)")
 		if err := fs.Parse(args); err != nil {
-			return err
+			return nil, err
 		}
 		if *pages == "" {
-			return fmt.Errorf("--pages is required")
+			return nil, fmt.Errorf("--pages is required")
 		}
 		p.Apply(func(ctx context.Context, w *pdf.Writer) error {
 			pageCount, _ := src.PageCount(ctx)
@@ -275,7 +302,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		ownerPw := fs.String("owner-password", "", "Owner password")
 		algo := fs.String("algorithm", "aes256", "Algorithm: rc4-128, aes128, aes256")
 		if err := fs.Parse(args); err != nil {
-			return err
+			return nil, err
 		}
 		p.Apply(func(_ context.Context, w *pdf.Writer) error {
 			a, ok := encryptAlgorithms[*algo]
@@ -305,7 +332,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		creator := fs.String("creator", "", "Creator")
 		producer := fs.String("producer", "", "Producer")
 		if err := fs.Parse(args); err != nil {
-			return err
+			return nil, err
 		}
 		p.Apply(func(_ context.Context, w *pdf.Writer) error {
 			w.SetMetadata(pdf.Metadata{
@@ -324,7 +351,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		var fields fieldFlags
 		fs.Var(&fields, "field", "Field name=value (repeatable)")
 		if err := fs.Parse(args); err != nil {
-			return err
+			return nil, err
 		}
 		p.Apply(func(_ context.Context, w *pdf.Writer) error {
 			for _, kv := range fields {
@@ -354,10 +381,10 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		y := fs.Float64("y", 0, "Y position")
 		pages := fs.String("pages", "", "Page range")
 		if err := fs.Parse(args); err != nil {
-			return err
+			return nil, err
 		}
 		if *text == "" {
-			return fmt.Errorf("--text is required")
+			return nil, fmt.Errorf("--text is required")
 		}
 		p.Apply(func(ctx context.Context, w *pdf.Writer) error {
 			stamp := pdf.TextStamp{
@@ -398,14 +425,14 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		height := fs.Float64("height", 0, "Height")
 		pages := fs.String("pages", "", "Page range")
 		if err := fs.Parse(args); err != nil {
-			return err
+			return nil, err
 		}
 		if *image == "" {
-			return fmt.Errorf("--image is required")
+			return nil, fmt.Errorf("--image is required")
 		}
 		imgData, err := os.ReadFile(*image)
 		if err != nil {
-			return fmt.Errorf("reading image: %w", err)
+			return nil, fmt.Errorf("reading image: %w", err)
 		}
 		mimeType := *mime
 		if mimeType == "" {
@@ -438,10 +465,10 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		profile := fs.String("profile", "", "Compliance profile (required)")
 		aggressive := fs.Bool("aggressive", false, "Enable aggressive fixers")
 		if err := fs.Parse(args); err != nil {
-			return err
+			return nil, err
 		}
 		if *profile == "" {
-			return fmt.Errorf("--profile is required")
+			return nil, fmt.Errorf("--profile is required")
 		}
 		p.Apply(func(ctx context.Context, w *pdf.Writer) error {
 			var opts []pdf.RemediateOption
@@ -466,8 +493,8 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		})
 
 	default:
-		return fmt.Errorf("unknown stage %q", name)
+		return nil, fmt.Errorf("unknown stage %q", name)
 	}
 
-	return nil
+	return nil, nil
 }
