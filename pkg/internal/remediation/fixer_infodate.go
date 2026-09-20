@@ -34,8 +34,13 @@ func fixInfoDate(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	if !ok {
 		return nil, nil
 	}
-	infoDict, err := document.ResolveDict(ctx, doc, infoObj)
-	if err != nil || infoDict == nil {
+	// Read through the allocator. trailer-id trims /Info to /ModDate alone for
+	// ISO 19005-4 6.1.3 and queues the trimmed dictionary at this same object
+	// number, and info-date is the very next registry entry: rebuilding from
+	// the on-disk copy below would restore the keys that trim just removed and
+	// put forbidden /Info entries back into the output.
+	infoDict := liveInfoDict(ctx, alloc, doc)
+	if infoDict == nil {
 		return nil, nil
 	}
 
