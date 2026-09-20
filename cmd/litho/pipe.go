@@ -75,12 +75,21 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// but the output file, so discard it in the assignment rather than binding
 	// a name with no use.
 	_, err = pipeline.WriteTo(ctx, dst)
-	if closeErr := closeDst(); closeErr != nil {
-		fmt.Fprintf(stderr, "pipe: closing output: %v\n", closeErr)
+	if err != nil {
+		// Withdraw the file createOutput already made. Every other
+		// output-producing command in this package does this on a failed write
+		// and pipe did not, so a stage that failed during the write left a
+		// partial document on disk beside a non-zero exit: the caller sees the
+		// failure and still finds something that looks like a result. A stage
+		// that fails while it is being BUILT never reaches here, which is why
+		// only the write-time failures leaked.
+		abandonOutput(outputFile, closeDst)
+		fmt.Fprintf(stderr, "pipe: %v\n", err)
 		return exitError
 	}
-	if err != nil {
-		fmt.Fprintf(stderr, "pipe: %v\n", err)
+
+	if closeErr := closeDst(); closeErr != nil {
+		fmt.Fprintf(stderr, "pipe: closing output: %v\n", closeErr)
 		return exitError
 	}
 

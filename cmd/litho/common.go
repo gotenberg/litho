@@ -108,7 +108,7 @@ func abandonOutput(path string, closeDst func() error) {
 	if path == "" || path == "-" {
 		return
 	}
-	os.Remove(path) //nolint:errcheck // best-effort withdrawal of a file that is already unusable
+	os.Remove(path) //nolint:errcheck,gosec // best-effort withdrawal of a file that is already unusable; path is the caller's own -o flag, the same value createOutput opens above, not untrusted input
 }
 
 // runSimpleMutation handles commands that open a PDF, apply a single

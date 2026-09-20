@@ -179,6 +179,45 @@ func TestPipe_UnknownStageIsAnError(t *testing.T) {
 	}
 }
 
+// TestPipe_FailedWriteLeavesNoOutputFile pins the cleanup contract that every
+// other output-producing command in this package already honours.
+//
+// Eighteen commands call abandonOutput when WriteTo fails; runPipe called it
+// zero times. createOutput has already created the file by then, so a stage
+// that fails during the write left a partial document on disk next to a
+// non-zero exit: the caller sees failure and still finds a file that looks like
+// a result.
+//
+// Both cases below fail INSIDE pipeline.WriteTo rather than while the stage is
+// being built, which is what puts them after createOutput. A stage that fails
+// earlier, stamp-image with an unreadable -image for instance, never reaches
+// that point and was always clean, which is why the defect hid.
+func TestPipe_FailedWriteLeavesNoOutputFile(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		field string
+	}{
+		{"field that does not exist", "name=Jane"},
+		{"malformed assignment", "nameJane"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := writeTempPDF(t, untaggedTextPDF())
+			out := filepath.Join(t.TempDir(), "piped.pdf")
+
+			rc, errOut := runPipeArgs(t, []string{
+				"pipe", src, "set-form", "-field", tc.field, "-o", out,
+			})
+			if rc == exitOK {
+				t.Fatalf("pipe succeeded with -field %q on a document that has no form; stderr: %s",
+					tc.field, errOut)
+			}
+			if _, err := os.Stat(out); err == nil {
+				t.Errorf("%s exists: a failed pipe must not leave an output file", out)
+			}
+		})
+	}
+}
+
 // TestPipe_MissingOutputIsAUsageError pins that -o is required.
 func TestPipe_MissingOutputIsAUsageError(t *testing.T) {
 	src := writeTempPDF(t, untaggedTextPDF())
