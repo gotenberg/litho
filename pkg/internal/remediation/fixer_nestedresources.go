@@ -147,11 +147,15 @@ func fixFormXObjectResources(ctx context.Context, alloc *writer.ObjAllocator, do
 		if !isRef || ref.ObjectNum == 0 || refCount[ref.ObjectNum] != 1 {
 			continue
 		}
-		resolved, err := document.ResolveObject(ctx, doc, entry)
-		if err != nil {
-			continue
-		}
-		stream, ok := resolved.(ast.PdfStream)
+		// Alloc-aware read. A form XObject stream is among the most rewritten
+		// objects in this package (aggressive, images, output-intent,
+		// need-appearances, unknown-ops, graphics and transparency all write
+		// one), and the registry drives every fixer against ONE allocator with
+		// no flush between them. Rebuilding the dictionary from the on-disk
+		// copy discards whatever an earlier fixer left pending. The refCount
+		// guard above does not cover this: it declines a SHARED XObject, which
+		// says nothing about whether a peer fixer already wrote this one.
+		stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, entry)
 		if !ok || stream.Dict == nil {
 			continue
 		}
@@ -196,8 +200,13 @@ func fixType3FontResources(ctx context.Context, alloc *writer.ObjAllocator, doc 
 		if !isRef || ref.ObjectNum == 0 {
 			continue
 		}
-		fd, err := document.ResolveDict(ctx, doc, entry)
-		if err != nil || fd == nil {
+		// Alloc-aware read. nested-resources (registry 131) runs after
+		// cid-gidmap, font-keys and tounicode-ranges, and after transparency's
+		// own Type 3 pass at 107, every one of which rewrites this same font
+		// dictionary. Rebuilding it from the on-disk copy discards whatever
+		// they left pending.
+		fd := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+		if fd == nil {
 			continue
 		}
 		if subtype, _ := fd["Subtype"].(ast.PdfName); subtype != "Type3" {
