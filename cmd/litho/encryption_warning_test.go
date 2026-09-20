@@ -160,6 +160,34 @@ func TestInsert_WarnsWhenOnlyTheSourceIsEncrypted(t *testing.T) {
 	}
 }
 
+// TestDelete_WarnsBeforeAFailedWrite pins the ordering warnEncryptionDropped
+// documents: the warning is emitted BEFORE the work, so it is seen even when
+// the command later fails.
+//
+// Deleting the only page of a one-page document is refused ("cannot delete all
+// 1 pages"), which makes this a real failure after a real warning rather than a
+// contrived one. Warning after the write would print nothing on this path, and
+// the user would lose both the result and the notice that the protection on
+// their input was about to be dropped.
+func TestDelete_WarnsBeforeAFailedWrite(t *testing.T) {
+	enc := encryptTempPDF(t, onePageTempPDF(t), "pw")
+	out := filepath.Join(t.TempDir(), "out.pdf")
+
+	var stdout, stderr bytes.Buffer
+	rc := run(context.Background(),
+		[]string{"delete", "-p", "pw", "-pages", "1", "-o", out, enc}, &stdout, &stderr)
+
+	// A precondition, not decoration: if deleting a sole page ever became
+	// legal this test must fail loudly rather than pass for the wrong reason.
+	if rc == exitOK {
+		t.Fatalf("deleting the only page succeeded, so nothing failed after the warning; stderr: %s",
+			stderr.String())
+	}
+	if !strings.Contains(stderr.String(), encryptionWarning) {
+		t.Errorf("no warning before the failing write; stderr = %q", stderr.String())
+	}
+}
+
 // TestSplit_OwnerPasswordAloneEncrypts pins what encryptWriteOptions documents:
 // either password alone asks for encryption.
 //
