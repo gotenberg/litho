@@ -243,14 +243,32 @@ func trimDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		if !ok {
 			continue
 		}
-		csDict, err := document.ResolveDict(ctx, doc, csObj)
-		if err != nil || csDict == nil {
+		// Alloc-aware, dict kind: the parent dictionary is rebuilt and written
+		// back at csRef.ObjectNum below, so reading it from the document
+		// discards a peer's pending edit to that same object.
+		var csDict ast.PdfDict
+		if csRef, isRef := csObj.(ast.PdfIndirectRef); isRef {
+			csDict = resolveFromAllocOrDoc(ctx, alloc, doc, csRef)
+		} else if d, derr := document.ResolveDict(ctx, doc, csObj); derr == nil {
+			csDict = d
+		}
+		if csDict == nil {
 			continue
 		}
-		for _, entry := range csDict {
+		// Inline colour spaces accumulate: rebuilding the parent once per
+		// entry would keep only the last, the trap [fixExtGStateDict] records.
+		var inlineUpdates ast.PdfDict
+		for csName, entry := range csDict {
 			ref, isRef := entry.(ast.PdfIndirectRef)
-			arr, err := document.ResolveArray(ctx, doc, entry)
-			if err != nil || len(arr) < 2 {
+			// Alloc-aware, and the helper matches the object KIND: liveArray
+			// for an array, since resolveFromAllocOrDoc above returns a dict.
+			// The array is rebuilt wholesale below and written back at
+			// ref.ObjectNum, so reading it from the document discards a peer's
+			// pending edit. aggressive-limits is the LAST registry entry
+			// (fixer.go:157), so every colour-space writer precedes it, and
+			// devicen (:115) rewrites DeviceN arrays at these same objects.
+			arr := liveArray(ctx, alloc, doc, entry)
+			if len(arr) < 2 {
 				continue
 			}
 			name, ok := arr[0].(ast.PdfName)
@@ -271,19 +289,27 @@ func trimDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *
 				count++
 				continue
 			}
-			// Inline; update the parent dict.
-			newCS := make(ast.PdfDict, len(csDict))
-			maps.Copy(newCS, csDict)
-			for k, v := range csDict {
-				if rv, isRef := v.(ast.PdfIndirectRef); isRef && rv == ref {
-					newCS[k] = newArr
-				}
+			// Inline: key the replacement by NAME. Matching an indirect
+			// reference equal to ref cannot work here, because an inline entry
+			// leaves ref at its zero value, so the trimmed array was dropped
+			// and the untouched dictionary still counted as a repair.
+			if inlineUpdates == nil {
+				inlineUpdates = ast.PdfDict{}
 			}
-			if csRef, ok := csObj.(ast.PdfIndirectRef); ok && csRef.ObjectNum > 0 {
-				alloc.AllocAt(csRef.ObjectNum, newCS)
-				count++
-			}
+			inlineUpdates[csName] = newArr
 		}
+		if len(inlineUpdates) == 0 {
+			continue
+		}
+		csRef, isRef := csObj.(ast.PdfIndirectRef)
+		if !isRef || csRef.ObjectNum == 0 {
+			continue
+		}
+		newCS := make(ast.PdfDict, len(csDict))
+		maps.Copy(newCS, csDict)
+		maps.Copy(newCS, inlineUpdates)
+		alloc.AllocAt(csRef.ObjectNum, newCS)
+		count += len(inlineUpdates)
 	}
 	return count, nil
 }
