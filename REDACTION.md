@@ -205,7 +205,25 @@ Per CONTRIBUTING: redaction is destructive and security-critical, so it is expli
   row; what is missing is composing it into a redaction flow rather than any new code. Until the
   remaining vectors are cleaned and composed, the scan continues to tell you the document is dirty
   without cleaning it.
-- **PR5 — CLI.** `litho redact --region <page:x,y,w,h>...` or `--apply-marks`.
+- **PR5 — public surface + CLI. Landed for the region source, not for `--apply-marks`.**
+  `Writer.Redact(ctx, regions)` runs eagerly rather than queueing, because a caller has to
+  learn whether the document may be written at all before writing it, and it forces a full
+  rewrite because the verification scan answers for the file a full rewrite would produce —
+  an incremental update would append the edits and leave every superseded object, the
+  original content stream among them, in the file. It composes what PR4 left uncomposed:
+  `RedactPageRegions` per page, then `ClearMetadata` (the `/Info` copy no token-driven pass
+  reaches), then `SanitizeDocument`. Both failures are public and both leave the `Writer`
+  untouched: `ErrRedactionRefused` when content cannot be removed exactly, and
+  `ErrRedactionIncomplete` when verification still finds a copy, with
+  `RedactReport.SurvivingCopies` naming where. The composition is pinned by a test that
+  fails when `ClearMetadata` is removed, so it cannot rot into a no-op.
+  `litho redact --region page:x,y,width,height` (repeatable) reports per vector in text or
+  JSON, and creates the output file only after the redaction succeeds, so a refusal leaves
+  nothing on disk. Note the flag takes width and height while `RedactRegion.Rect` is
+  `[llx, lly, urx, ury]`; the conversion is explicit in `parseRedactRegion`.
+  **`--apply-marks` is NOT built**: the table above measures the document's own `/Redact`
+  annotations at 4 files in 5171, none carrying `/QuadPoints`, so the caller-supplied
+  region is the source with evidence behind it.
 
 ## Limits and honest scope
 
