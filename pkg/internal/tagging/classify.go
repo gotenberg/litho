@@ -159,10 +159,14 @@ func alreadyTagged(ctx context.Context, doc *document.Document) (bool, error) {
 // merged into one element by baseline proximity, so a wrapped paragraph or
 // heading is a single element. Content order is taken as reading order.
 //
-// Known limitations deferred to later passes: text inside Form XObjects (Do)
-// is not descended into; font size is read from Tf only, ignoring Tm/CTM scale,
-// so a base font scaled large reads as body; a text object mixing sizes is
-// classified by its dominant size; and tables, figures, lists, and multi-column
+// Font size is transform-aware: it is the Tf size scaled by the text matrix and
+// the CTM (ISO 32000-1, 9.4.4), so text enlarged by a cm or by Tm's own scale
+// reads as the heading it looks like. See textVScale. Baselines deliberately
+// stay in text space; the reason is on [textBlock].
+//
+// Known limitations deferred to later passes: text inside Form XObjects (Do) is
+// not descended into for classification; a text object mixing sizes is
+// classified by its dominant size; and tables, lists, and multi-column
 // reading-order segmentation are not done. Content not placed in a structure
 // element (graphics, and text the heuristic misses) is marked as an artifact by
 // [Emit] so the output stays fully marked.
