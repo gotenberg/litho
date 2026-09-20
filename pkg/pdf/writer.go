@@ -590,6 +590,11 @@ func (w *Writer) RotatePages(rotation int, pages ...int) error {
 // DeletePages removes the specified 1-based pages from the document.
 // Forces a full rewrite. The mutation is queued and applied when
 // [Writer.WriteTo] is called.
+//
+// Returns [ErrEmptyPageList] when no pages are given. This is the only page
+// operation that refuses an empty list: [Writer.RotatePages],
+// [Writer.InsertPages] and the three stamps all document an empty list as
+// every page, which deletion cannot mean because it would leave no document.
 func (w *Writer) DeletePages(pages ...int) error {
 	if len(pages) == 0 {
 		return ErrEmptyPageList

@@ -55,8 +55,9 @@ var (
 	// multiple of 90.
 	ErrInvalidRotation = errors.New("rotation must be a multiple of 90")
 
-	// ErrEmptyPageList is returned when a page operation receives an
-	// empty page list.
+	// ErrEmptyPageList is returned by [Writer.DeletePages] when it receives an
+	// empty page list. It is the only page operation that returns it: the
+	// others document an empty list as every page.
 	ErrEmptyPageList = errors.New("empty page list")
 
 	// ErrNilSource is returned when a nil [Reader] is passed where a
