@@ -189,7 +189,32 @@ func documentElementNeedingNS(ctx context.Context, alloc *writer.ObjAllocator, d
 	// Only a Document element carries the §8.2.5.2 t2 obligation. Other
 	// root children (e.g. Note) may be valid only in the PDF 1.7
 	// namespace, so retagging them to 2.0 would create a new violation.
-	if name, err := document.ResolveName(ctx, doc, docElem["S"]); err != nil || name != "Document" {
+	//
+	// There are TWO ways to be that Document, and each check misses what the
+	// other catches, so both arms are required.
+	//
+	// The RESOLVED role catches a private /S mapped TO Document: /S
+	// /PDFDocument under /RoleMap << /PDFDocument /Document >>. The validator
+	// resolves through the map (ISO 32000-1, 14.8.4) and reports §8.2.5.2 t2,
+	// so a raw comparison skipped the element, added /Namespaces to the root
+	// and left the Document untagged.
+	//
+	// The RAW /S catches the opposite shape, a literally named Document whose
+	// /RoleMap sends the name elsewhere: veraPDF's PDF_UA-1__7.1-t07-fail-a
+	// maps /Document to /Book, and resolving alone follows it away from
+	// Document and skips the element. Declaring the PDF 2.0 namespace IS the
+	// repair there, because [equivalentType] consults the legacy /RoleMap only
+	// for the empty and PDF 1.7 namespaces: once the element declares 2.0 the
+	// mapping no longer applies and the name reads as the standard Document
+	// again. Resolving alone cost that file three violations it did not have
+	// (§8.2.5.2 t1, §8.2.4 t4 and ISO/TS 32005 Table 5
+	// StructTreeRoot-Document) across PDF_UA-2 and both WTPDF levels.
+	//
+	// Reading the map from stDict is safe because the rolemap fixer, the only
+	// one that edits /RoleMap, is registered after this one.
+	roleMap := compliance.LoadRoleMap(ctx, doc, stDict)
+	if structType(ctx, doc, docElem) != "Document" &&
+		resolvedStructType(ctx, doc, docElem, roleMap) != "Document" {
 		return ast.PdfIndirectRef{}, nil, false
 	}
 	if nsObj, hasNS := docElem["NS"]; hasNS && !namespaceIsPDF1(ctx, alloc, doc, nsObj) {

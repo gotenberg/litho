@@ -237,6 +237,136 @@ func TestFixStructTree_UA2NamespacesPresentRepointsDocNS(t *testing.T) {
 	}
 }
 
+// roleMappedDocumentPDF builds the shape the veraPDF corpus actually carries:
+// a structure tree whose root child spells a PRIVATE type that the /RoleMap
+// sends to Document.
+//
+// Measured on PDF_A-1a__veraPDF_test_suite_6-7-11-t01-fail-a and four siblings:
+// StructTreeRoot /K [10 0 R] /RoleMap 12 0 R, no /Namespaces, obj 10 is
+// /S /PDFDocument, and obj 12 maps /PDFDocument -> /Document (and
+// /Rectangle -> /Figure). Every one of the five is identical in shape.
+func roleMappedDocumentPDF() []byte {
+	return buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /K [5 0 R] /RoleMap 6 0 R >>",
+		"<< /Type /StructElem /S /PDFDocument /P 4 0 R >>",
+		"<< /PDFDocument /Document /Rectangle /Figure >>",
+	)
+}
+
+// TestFixStructTree_UA2RoleMappedDocumentGetsPDF2NS pins that the Document
+// element is found through the /RoleMap, not by the name its /S spells.
+//
+// ISO 14289-2, 8.2.5.2 t2 obliges the root Document element to declare the
+// PDF 2.0 namespace. The validator decides what "is a Document" means by
+// resolving /S through /RoleMap (ISO 32000-1, 14.8.4), so it reports the
+// violation here. [documentElementNeedingNS] compared the RAW /S against
+// "Document", so it answered no, and the repair wrote /Namespaces onto the
+// root while silently leaving the element untagged: claimed, fired, and not
+// repaired.
+//
+// The asymmetry is measurable in the gate rather than inferred. All five
+// carriers are clean under every PDF/A profile and come back post=1 with
+// residual exactly ['8.2.5.2-t02'] under PDF_UA-2 and both WTPDF levels,
+// which is 15 cells that litho and veraPDF already agree on.
+//
+// [resolvedStructType] is the shared resolver whose own godoc records this
+// same mistake costing a spurious 7.2 t18 in the list fixer.
+func TestFixStructTree_UA2RoleMappedDocumentGetsPDF2NS(t *testing.T) {
+	doc, alloc := newTestDoc(t, roleMappedDocumentPDF())
+
+	if _, err := fixStructTree(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-2"); err != nil {
+		t.Fatalf("fixStructTree: %v", err)
+	}
+
+	// The root gains /Namespaces on this branch whether or not the element is
+	// recognised, so asserting it first keeps the real failure below specific:
+	// the repair ran, and only the element was skipped.
+	stDict := pendingDict(t, alloc, 4)
+	if _, ok := stDict["Namespaces"].(ast.PdfArray); !ok {
+		t.Fatalf("StructTreeRoot /Namespaces missing after fix: %v", stDict["Namespaces"])
+	}
+
+	docElem := pendingDict(t, alloc, 5)
+	if uri := resolveNSString(t, alloc, docElem["NS"]); uri != pdf2NamespaceURI {
+		t.Errorf("role-mapped Document namespace: got %q, want %q", uri, pdf2NamespaceURI)
+	}
+}
+
+// TestFixStructTree_UA2LiteralDocumentMappedAwayStillGetsNS pins the arm that
+// resolving through the /RoleMap does NOT cover.
+//
+// Shape measured on veraPDF's PDF_UA-1__7.1-t07-fail-a.pdf, which
+// fixer_rolemap.go already names: StructTreeRoot /K [18 0 R] with
+// /RoleMap << /Document /Book >> and no /Namespaces, where object 18 is
+// literally /S /Document.
+//
+// Following the map sends a literally-named Document AWAY from Document (to
+// Book, which is standard nowhere), so a guard that only resolves rejects the
+// very element the rule is about. Writing /NS is what repairs this file:
+// [equivalentType] consults the legacy /RoleMap only for the empty and PDF 1.7
+// namespaces (accessibility_structure.go:547), so declaring the PDF 2.0
+// namespace escapes the harmful Document->Book mapping and the element reads as
+// a standard Document again.
+//
+// Measured: replacing the raw-name check with resolution alone dropped this
+// file from fully-fixed to three violations (8.2.5.2-t01, 8.2.4-t04 and
+// Table 5. StructTreeRoot-Document-t01) across PDF_UA-2 and both WTPDF levels.
+// The two checks identify overlapping but different sets, so the guard needs
+// BOTH arms.
+func TestFixStructTree_UA2LiteralDocumentMappedAwayStillGetsNS(t *testing.T) {
+	pdf := buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /K [5 0 R] /RoleMap 6 0 R >>",
+		"<< /Type /StructElem /S /Document /P 4 0 R >>",
+		// The producer maps the standard name to a custom one.
+		"<< /Document /Book >>",
+	)
+	doc, alloc := newTestDoc(t, pdf)
+
+	if _, err := fixStructTree(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-2"); err != nil {
+		t.Fatalf("fixStructTree: %v", err)
+	}
+
+	docElem := pendingDict(t, alloc, 5)
+	if uri := resolveNSString(t, alloc, docElem["NS"]); uri != pdf2NamespaceURI {
+		t.Errorf("literal Document mapped to Book: got namespace %q, want %q", uri, pdf2NamespaceURI)
+	}
+}
+
+// TestFixStructTree_UA2LeavesARoleMappedNonDocumentAlone is the control that
+// keeps the fix narrow.
+//
+// Only a Document carries the 8.2.5.2 t2 obligation. Other root children may
+// be valid ONLY in the PDF 1.7 namespace, so retagging one to 2.0 replaces a
+// reported violation with a new one. A repair that simply tagged whatever the
+// root's /K names would pass the test above and fail here, which is what makes
+// this a control rather than a restatement.
+func TestFixStructTree_UA2LeavesARoleMappedNonDocumentAlone(t *testing.T) {
+	pdf := buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /K [5 0 R] /RoleMap 6 0 R >>",
+		// Resolves to Figure, not Document.
+		"<< /Type /StructElem /S /Rectangle /P 4 0 R >>",
+		"<< /PDFDocument /Document /Rectangle /Figure >>",
+	)
+	doc, alloc := newTestDoc(t, pdf)
+
+	if _, err := fixStructTree(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-2"); err != nil {
+		t.Fatalf("fixStructTree: %v", err)
+	}
+
+	if obj, written := alloc.Pending()[5]; written {
+		t.Errorf("a root child resolving to Figure was rewritten: %v", obj)
+	}
+}
+
 func TestFixStructTree_UA2NonDocumentChildUntouched(t *testing.T) {
 	// A single Note child in the PDF 1.7 namespace must not be retagged:
 	// Note does not exist in the PDF 2.0 namespace.
