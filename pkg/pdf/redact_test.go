@@ -47,6 +47,108 @@ func redactableTextPDF(info string) []byte {
 // coversSecret is the region that takes the whole "SECRET" run.
 var coversSecret = RedactRegion{Page: 1, Rect: [4]float64{90, 690, 300, 730}}
 
+// twoPageRedactablePDF builds a two-page document drawing "ALPHA" on page 1 and
+// "BETA" on page 2, both at the same coordinates.
+//
+// Same coordinates on purpose: it means a region can only be distinguished by
+// the PAGE it names, so a redaction that ignored Page and applied every region
+// everywhere would clear both runs and be caught.
+func twoPageRedactablePDF() []byte {
+	one := "BT /F1 12 Tf 100 700 Td (ALPHA) Tj ET"
+	two := "BT /F1 12 Tf 100 700 Td (BETA) Tj ET"
+
+	return []byte("%PDF-1.7\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"2 0 obj\n<< /Type /Pages /Kids [3 0 R 7 0 R] /Count 2 >>\nendobj\n" +
+		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
+		"5 0 obj\n<< /Font << /F1 4 0 R >> >>\nendobj\n" +
+		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+		"/Resources 5 0 R /Contents 6 0 R >>\nendobj\n" +
+		"6 0 obj\n<< /Length " + strconv.Itoa(len(one)) + " >>\nstream\n" + one + "\nendstream\nendobj\n" +
+		"7 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] " +
+		"/Resources 5 0 R /Contents 8 0 R >>\nendobj\n" +
+		"8 0 obj\n<< /Length " + strconv.Itoa(len(two)) + " >>\nstream\n" + two + "\nendstream\nendobj\n" +
+		"trailer\n<< /Size 9 /Root 1 0 R >>\n%%EOF\n")
+}
+
+// redactAndWrite runs a redaction and returns the written bytes.
+func redactAndWrite(t *testing.T, src []byte, regions []RedactRegion) []byte {
+	t.Helper()
+	ctx := context.Background()
+
+	r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+	if _, err := w.Redact(ctx, regions); err != nil {
+		t.Fatalf("Redact: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	return out.Bytes()
+}
+
+// TestWriter_Redact_RoutesARegionToThePageItNames is the test that every
+// single-page case above cannot make: that Page is honoured.
+//
+// Both pages draw at the same coordinates, so a redaction that applied regions
+// to every page, or to the wrong one, clears "ALPHA" as well. Clearing content
+// on a page the caller did not name is a worse failure than clearing nothing:
+// it destroys data while reporting success.
+func TestWriter_Redact_RoutesARegionToThePageItNames(t *testing.T) {
+	out := redactAndWrite(t, twoPageRedactablePDF(),
+		[]RedactRegion{{Page: 2, Rect: [4]float64{90, 690, 300, 730}}})
+
+	if bytes.Contains(out, []byte("BETA")) {
+		t.Error("page 2 was named but its text survived")
+	}
+	if !bytes.Contains(out, []byte("ALPHA")) {
+		t.Error("page 1 was not named yet its text was removed")
+	}
+}
+
+// TestWriter_Redact_ClearsSeveralPagesInOneCall covers the per-page loop and the
+// ascending page order groupRedactRegions imposes, which one page cannot reach.
+func TestWriter_Redact_ClearsSeveralPagesInOneCall(t *testing.T) {
+	// Deliberately out of order: the grouping sorts, so the same input must
+	// drive the same sequence of edits whichever order the caller passes.
+	out := redactAndWrite(t, twoPageRedactablePDF(), []RedactRegion{
+		{Page: 2, Rect: [4]float64{90, 690, 300, 730}},
+		{Page: 1, Rect: [4]float64{90, 690, 300, 730}},
+	})
+
+	for _, gone := range []string{"ALPHA", "BETA"} {
+		if bytes.Contains(out, []byte(gone)) {
+			t.Errorf("%q survived a redaction naming its page", gone)
+		}
+	}
+}
+
+// TestWriter_Redact_RejectsAPageOutOfRange pins the bounds check. A region
+// naming a page the document does not have is a caller error, and silently
+// ignoring it would report a redaction that never happened.
+func TestWriter_Redact_RejectsAPageOutOfRange(t *testing.T) {
+	ctx := context.Background()
+	data := twoPageRedactablePDF()
+
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	w := NewWriter(r)
+
+	for _, page := range []int{0, 3, -1} {
+		_, err := w.Redact(ctx, []RedactRegion{{Page: page, Rect: [4]float64{90, 690, 300, 730}}})
+		if !errors.Is(err, ErrInvalidPageNumber) {
+			t.Errorf("page %d: err = %v, want ErrInvalidPageNumber", page, err)
+		}
+	}
+}
+
 // TestWriter_Redact_RemovesTheCoveredTextFromTheOutput is the headline
 // contract: litho could already DETECT text sitting under a redaction mark
 // (Reader.ExtractRedactedText) and could not remove it, which REDACTION.md
