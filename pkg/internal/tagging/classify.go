@@ -379,13 +379,22 @@ func mergeByOffset(a, b []*Element) []*Element {
 // the strings it showed (a proxy for text quantity), and the baselines of its
 // first and last text lines (used to merge adjacent lines into paragraphs).
 //
-// Baselines are tracked from the text positioning operators only
-// (Tm translation, Td/TD/T*/TL). The CTM (cm) translation and scale, Tm's own
-// vertical scale and shear, text rise (Ts, intentionally: it is a per-glyph
-// offset, not a line advance), and rotation are all ignored, so the baseline is
-// the true device Y only for upright, unit-scale, non-cm-repositioned text. The
-// merge pass guards against the resulting errors by refusing to merge across
-// any intervening operator (see classifyBlocks).
+// The font size IS transform-aware: it is the Tf size scaled by the text matrix
+// and the CTM (ISO 32000-1, 9.4.4), so 12pt drawn under a doubling cm is
+// recorded as 24 and reads as the heading it looks like. See textVScale.
+//
+// Baselines are deliberately NOT, and the asymmetry is the design. They are
+// tracked from the text positioning operators only (Tm translation, Td/TD/T*,
+// TL), leaving them in text space; the CTM translation and scale, text rise
+// (Ts, a per-glyph offset rather than a line advance) and rotation do not move
+// them. Mapping them to device space would silently redefine rowBaselineTol and
+// colAlignTol, which are absolute point tolerances, and a page under a 0.1 scale
+// would collapse unrelated rows into one and fabricate a table. The two
+// adjacency tests that compare a baseline gap against a size (lineAdjacent,
+// listItemAdjacent) stay consistent because q/Q/cm may not appear inside a text
+// object (ISO 32000-1, 8.2, Table 31), so one block has one CTM, and
+// classifyBlocks refuses to merge across the non-blank bytes any intervening cm
+// leaves behind (see blankGap).
 type textBlock struct {
 	startByte, endByte int
 	fontSize           float64
@@ -430,23 +439,31 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 	var cur *textBlock
 	curFont := 0.0
 	// The text state belongs to the graphics state, so Q restores every
-	// parameter of it (ISO 32000-1, 8.4.2 and Table 104). This loop tracks two
-	// of them, the font size and the leading, so the frame carries both: save
-	// exactly what you track, the rule savedTextState follows in
-	// collectFontUsage.
+	// parameter of it (ISO 32000-1, 8.4.2 and Table 104), and so does the CTM.
+	// This loop tracks three of them, the font size, the leading and the CTM,
+	// so the frame carries all three: save exactly what you track, the rule
+	// savedTextState follows in collectFontUsage.
 	//
-	// The two leaks differ in how they show. A size raised inside q…Q used to
-	// stay in effect after the Q, and since fontSize drives bodyFontSize and
-	// the fontSize >= body*headingSizeRatio test, that promoted ordinary body
-	// text to a heading. A leaked leading moves a baseline instead:
+	// The leaks differ in how they show. A size raised inside q…Q used to stay
+	// in effect after the Q, and since fontSize drives bodyFontSize and the
+	// fontSize >= body*headingSizeRatio test, that promoted ordinary body text
+	// to a heading. A leaked leading moves a baseline instead:
 	// textY -= leading feeds cur.lastY and cur.y, which lineAdjacent compares,
-	// so a paragraph that should merge splits in two.
+	// so a paragraph that should merge splits in two. A leaked CTM mis-sizes
+	// every glyph drawn after the Q.
 	type textStateFrame struct {
 		font    float64
 		leading float64
+		ctm     [6]float64
 	}
 	var stateStack []textStateFrame
 	textY, textX, leading := 0.0, 0.0, 0.0
+	// ctm is graphics state and rides the q/Q stack; tm is text-object state,
+	// set absolutely by Tm and reset to identity by BT (ISO 32000-1, 9.4.2), so
+	// q/Q must NOT save it. Together they scale the Tf size into the size a
+	// reader sees (9.4.4).
+	ctm := [6]float64{1, 0, 0, 1, 0, 0}
+	tm := [6]float64{1, 0, 0, 1, 0, 0}
 	sizeChars := make(map[float64]int) // dominant-size accumulator for the current block
 
 	flush := func() {
@@ -486,16 +503,43 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 				images = append(images, imageBlock{startByte: r.Start, endByte: r.End, name: "inline"})
 			}
 		case "q":
-			stateStack = append(stateStack, textStateFrame{font: curFont, leading: leading})
+			stateStack = append(stateStack, textStateFrame{font: curFont, leading: leading, ctm: ctm})
 		case "Q":
 			if n := len(stateStack); n > 0 {
-				curFont, leading = stateStack[n-1].font, stateStack[n-1].leading
+				curFont, leading, ctm = stateStack[n-1].font, stateStack[n-1].leading, stateStack[n-1].ctm
 				stateStack = stateStack[:n-1]
+			}
+		case "cm":
+			// New CTM = the operand matrix times the current one (ISO 32000-1,
+			// 8.4.4). Same multiplication order as handleConcatMatrix in the
+			// graphics machine and as ExtractLines, so the three walks agree.
+			if len(op.Operands) == 6 {
+				var m [6]float64
+				ok := true
+				for k := range m {
+					v, good := toFloat(op.Operands[k])
+					if !good {
+						ok = false
+						break
+					}
+					m[k] = v
+				}
+				if ok {
+					ctm = [6]float64{
+						m[0]*ctm[0] + m[1]*ctm[2],
+						m[0]*ctm[1] + m[1]*ctm[3],
+						m[2]*ctm[0] + m[3]*ctm[2],
+						m[2]*ctm[1] + m[3]*ctm[3],
+						m[4]*ctm[0] + m[5]*ctm[2] + ctm[4],
+						m[4]*ctm[1] + m[5]*ctm[3] + ctm[5],
+					}
+				}
 			}
 		case "BT":
 			flush()
 			cur = &textBlock{startByte: r.Start, endByte: r.End}
 			textY, textX, leading = 0, 0, 0 // BT resets the text and line matrices to identity
+			tm = [6]float64{1, 0, 0, 1, 0, 0}
 		case "ET":
 			extend(r.End)
 			flush()
@@ -513,6 +557,14 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 				}
 				if f, ok := toFloat(op.Operands[4]); ok {
 					textX = f
+				}
+				// Tm SETS the text matrix, it does not concatenate
+				// (ISO 32000-1, 9.4.2). Operands 0-3 carry the scale and shear
+				// that decide how large the Tf size actually draws.
+				for k := range 6 {
+					if f, ok := toFloat(op.Operands[k]); ok {
+						tm[k] = f
+					}
 				}
 			}
 			extend(r.End)
@@ -559,7 +611,7 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 						cur.firstText = firstShownPrefix(op)
 					}
 					cur.textLen += n
-					sizeChars[roundHalf(curFont)] += n
+					sizeChars[roundHalf(curFont*textVScale(tm, ctm))] += n
 					cur.lastY = textY
 					if !cur.hasY {
 						cur.y, cur.x, cur.hasY = textY, textX, true
@@ -597,6 +649,23 @@ func pageImageXObjectNames(ctx context.Context, doc *document.Document, page *do
 		}
 	}
 	return names
+}
+
+// textVScale returns how much the text matrix and the CTM magnify a glyph
+// vertically, so a Tf size becomes the size a reader sees (ISO 32000-1, 9.4.4:
+// a glyph reaches the page through the text matrix and then the CTM).
+//
+// A matrix [a b c d e f] maps (x, y) to (ax+cy+e, bx+dy+f), so text space's
+// vertical unit (0, 1) leaves tm as (tm.c, tm.d) and arrives in user space as
+// (tm.c*ctm.a + tm.d*ctm.c, tm.c*ctm.b + tm.d*ctm.d). Its length is the factor.
+//
+// The length rather than d alone: under rotation the vertical extent moves into
+// the other component, and reading d would report a quarter-turned heading as
+// zero-sized. With no rotation or shear this is exactly |tm.d * ctm.d|.
+func textVScale(tm, ctm [6]float64) float64 {
+	x := tm[2]*ctm[0] + tm[3]*ctm[2]
+	y := tm[2]*ctm[1] + tm[3]*ctm[3]
+	return math.Hypot(x, y)
 }
 
 // dominantSize returns the rounded font size that painted the most characters,
