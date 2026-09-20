@@ -216,15 +216,28 @@ func fixType3FontTransparency(ctx context.Context, doc *document.Document, alloc
 
 	fixed := 0
 	for _, entry := range fontDict {
+		var fontRef ast.PdfIndirectRef
 		if ref, isRef := entry.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
 			if visited[ref.ObjectNum] {
 				continue
 			}
 			visited[ref.ObjectNum] = true
+			fontRef = ref
 		}
 
-		fd, err := document.ResolveDict(ctx, doc, entry)
-		if err != nil || fd == nil {
+		// Read through the allocator. patchType3FontColorSpace writes Type 3
+		// font dictionaries from output-intent, far ahead of transparency, and
+		// the document still holds the pre-repair copy, so rebuilding work from
+		// it below would discard that write. The ref/direct split is
+		// load-bearing: a font dictionary stored inline has no object number,
+		// and resolving a zero reference would find nothing.
+		var fd ast.PdfDict
+		if fontRef.ObjectNum > 0 {
+			fd = resolveFromAllocOrDoc(ctx, alloc, doc, fontRef)
+		} else if direct, err := document.ResolveDict(ctx, doc, entry); err == nil {
+			fd = direct
+		}
+		if fd == nil {
 			continue
 		}
 		subtype, err := document.ResolveName(ctx, doc, fd["Subtype"])
