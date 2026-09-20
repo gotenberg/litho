@@ -279,8 +279,18 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 	if ref, ok := descArr[0].(ast.PdfIndirectRef); ok {
 		cidRef = ref
 	}
-	cidFont, err := document.ResolveDict(ctx, doc, descArr[0])
-	if err != nil || cidFont == nil {
+	// Alloc-aware read. What is built from this is handed to [persistCIDFont],
+	// which writes it back at cidRef.ObjectNum, so the read and the write sit
+	// in different functions and neither looks wrong on its own. cid-gidmap
+	// (registry 110) writes this same descendant alloc-aware and runs first,
+	// so reading the document here discards its /CIDToGIDMap repair.
+	var cidFont ast.PdfDict
+	if cidRef.ObjectNum > 0 {
+		cidFont = resolveFromAllocOrDoc(ctx, alloc, doc, cidRef)
+	} else if d, derr := document.ResolveDict(ctx, doc, descArr[0]); derr == nil {
+		cidFont = d
+	}
+	if cidFont == nil {
 		return nil
 	}
 
