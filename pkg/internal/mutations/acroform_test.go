@@ -35,7 +35,6 @@ func TestCollectRootFields_NamesOnlySurvivingRoots(t *testing.T) {
 	lone := alloc.Alloc(ast.PdfDict{"Subtype": ast.PdfName("Widget"), "FT": ast.PdfName("Btn")})
 	link := alloc.Alloc(ast.PdfDict{"Subtype": ast.PdfName("Link")})
 	dropped := alloc.Alloc(ast.PdfDict{"T": ast.PdfString("gone"), "FT": ast.PdfName("Tx")})
-	_ = dropped
 
 	kept := []ast.PdfObject{
 		widgetPage(alloc, kidA, link),

@@ -25,7 +25,6 @@ func prefixedLinearizedPDF(prefix string) []byte {
 	build := func(fileLength int) []byte {
 		var buf bytes.Buffer
 		buf.WriteString(prefix)
-		headerAt := buf.Len()
 		buf.WriteString("%PDF-1.5\n")
 
 		offs := make([]int, len(objs)+2)
@@ -44,14 +43,13 @@ func prefixedLinearizedPDF(prefix string) []byte {
 		fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 2 0 R >>\nstartxref\n%d\n%%%%EOF\n",
 			len(objs)+2, xref)
 
-		// /L is measured from the header, so the prefix is not counted.
-		_ = headerAt
 		return buf.Bytes()
 	}
 
 	// /L states the length of the file that contains it, so writing a longer
 	// number lengthens the file. Iterate to the fixed point where the declared
-	// value equals the length actually produced.
+	// value equals the length actually produced. /L is measured from the
+	// header, so the prefix is subtracted here rather than counted.
 	data := build(0)
 	for range 8 {
 		want := len(data) - len(prefix)

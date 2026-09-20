@@ -480,12 +480,20 @@ func TestPatchExistingXMP_CorrectsPDFUAIDPart(t *testing.T) {
 		t.Errorf("fix description missing, got %v", fixes)
 	}
 
-	// Idempotence: a correct part reports no fix.
+	// Idempotence: a correct part reports no fix AND leaves the packet alone.
+	// The packet is worth asserting on its own, because a second pass that
+	// corrupted the XMP while still reporting no fix satisfies the report
+	// check by itself. Comparing exactly is safe here: patchExistingXMP takes
+	// its xmp:CreateDate and xmp:ModifyDate from the info argument rather than
+	// the clock, and this one carries neither.
 	patched2, fixes2 := patchExistingXMP(patched, 0, "", 2, infoMetadata{Title: "t"})
 	if slices.Contains(fixes2, "set pdfuaid:part to 2") {
 		t.Errorf("already-correct part must not report a fix, got %v", fixes2)
 	}
-	_ = patched2
+	if patched2 != patched {
+		t.Errorf("second pass rewrote the packet:\n--- first ---\n%s\n--- second ---\n%s",
+			patched, patched2)
+	}
 }
 
 // TestExtractUnknownNamespaceProperties_Typing pins the extension-schema
