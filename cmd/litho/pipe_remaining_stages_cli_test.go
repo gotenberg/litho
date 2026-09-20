@@ -123,7 +123,7 @@ func TestPipe_StampImageStageEmbedsTheImage(t *testing.T) {
 // TestPipe_StampTextStageMarksTheStampAsAnArtifact asserts through `text
 // -artifacts`, and the flag is the point rather than a detail.
 //
-// Stamps declare themselves artifacts (ISO 32000-1, 14.8.2.2 — a watermark
+// Stamps declare themselves artifacts (ISO 32000-1, 14.8.2.2: a watermark
 // carries no meaning for a reader), so ExtractText OMITS them unless
 // WithArtifacts is passed. Asserting with a plain `text` would report the stamp
 // missing and pass only when the stage silently did nothing; checking BOTH

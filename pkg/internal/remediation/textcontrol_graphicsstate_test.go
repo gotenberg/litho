@@ -28,7 +28,7 @@ import (
 // outside the q; F2 is simple and selected inside it. After the Q the font is
 // F1 again, so the CIDs shown there must survive untouched.
 func TestStripControlBytesFromOps_RestoresTheFontOnQ(t *testing.T) {
-	// <0041 0020 0042> — three 2-byte CIDs, each carrying a 0x00 high byte,
+	// <0041 0020 0042>: three 2-byte CIDs, each carrying a 0x00 high byte,
 	// exactly the bytes the control-byte strip would eat.
 	cids := ast.PdfString([]byte{0x00, 0x41, 0x00, 0x20, 0x00, 0x42})
 
