@@ -406,8 +406,18 @@ func fixExtGStateDict(ctx context.Context, doc *document.Document, alloc *writer
 		return 0, 0, false
 	}
 
-	gsDict, err := document.ResolveDict(ctx, doc, gsObj)
-	if err != nil || gsDict == nil {
+	// Alloc-aware read. graphics (registry 106) and transparency (107) are
+	// CONSECUTIVE registry entries that write the same /ExtGState objects, and
+	// the registry drives every fixer against ONE allocator with no flush
+	// between them. Rebuilding this dictionary from the on-disk copy discards
+	// whatever graphics just wrote to it.
+	var gsDict ast.PdfDict
+	if ref, isRef := gsObj.(ast.PdfIndirectRef); isRef {
+		gsDict = resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+	} else if d, derr := document.ResolveDict(ctx, doc, gsObj); derr == nil {
+		gsDict = d
+	}
+	if gsDict == nil {
 		return 0, 0, false
 	}
 
@@ -424,8 +434,16 @@ func fixExtGStateDict(ctx context.Context, doc *document.Document, alloc *writer
 			gsRef = ref
 		}
 
-		gs, err := document.ResolveDict(ctx, doc, gsEntry)
-		if err != nil || gs == nil {
+		// Alloc-aware for the same reason, and this is the load-bearing one:
+		// the entry is written back at gsRef.ObjectNum below, so reading it
+		// from the document drops a peer's pending edit to that same object.
+		var gs ast.PdfDict
+		if gsRef.ObjectNum > 0 {
+			gs = resolveFromAllocOrDoc(ctx, alloc, doc, gsRef)
+		} else if d, derr := document.ResolveDict(ctx, doc, gsEntry); derr == nil {
+			gs = d
+		}
+		if gs == nil {
 			continue
 		}
 
