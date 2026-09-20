@@ -574,12 +574,12 @@ func fixXObjectTransparency(ctx context.Context, doc *document.Document, alloc *
 			}
 		}
 
-		resolved, err := document.ResolveObject(ctx, doc, xoEntry)
-		if err != nil {
-			continue
-		}
-
-		stream, ok := resolved.(ast.PdfStream)
+		// Read through the allocator. graphics rewrites these same XObject
+		// streams one registry entry earlier, and the document still holds the
+		// pre-repair copy, so rebuilding newDict from it below would discard
+		// that write. The /Resources read further down inherits the same
+		// working copy.
+		stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, xoRef, xoEntry)
 		if !ok {
 			continue
 		}
