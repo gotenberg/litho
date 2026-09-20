@@ -1664,7 +1664,10 @@ func TestStampText_MultipleStampsPreserveContents(t *testing.T) {
 		t.Fatalf("Open output: %v", err)
 	}
 	defer r2.Close()
-	got, err := r2.ExtractText(ctx, 1)
+	// WithArtifacts: a stamp is marked as an /Artifact, so the two stamped
+	// strings are absent from a default extraction by design. The page's own
+	// "56" would still be there, which is why all three are asserted together.
+	got, err := r2.ExtractText(ctx, 1, WithArtifacts())
 	if err != nil {
 		t.Fatalf("ExtractText: %v", err)
 	}
@@ -2732,7 +2735,10 @@ func TestWriter_StampText(t *testing.T) {
 		t.Fatalf("Open stamped: %v", err)
 	}
 
-	text, err := r2.ExtractText(ctx, 1)
+	// WithArtifacts: the stamp is /Artifact-marked, so a default extraction
+	// omits it. [TestStampText_ExtractionHonoursTheArtifactMarking] pins that
+	// omission; this test is about the stamp reaching the page at all.
+	text, err := r2.ExtractText(ctx, 1, WithArtifacts())
 	if err != nil {
 		t.Fatalf("ExtractText: %v", err)
 	}
@@ -2772,7 +2778,9 @@ func TestWriter_StampText_AllPages(t *testing.T) {
 	}
 
 	for i := 1; i <= 3; i++ {
-		text, err := r2.ExtractText(ctx, i)
+		// WithArtifacts: the stamp is /Artifact-marked and a default
+		// extraction omits it. What this asserts is that every page got one.
+		text, err := r2.ExtractText(ctx, i, WithArtifacts())
 		if err != nil {
 			t.Fatalf("ExtractText page %d: %v", i, err)
 		}

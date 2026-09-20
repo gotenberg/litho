@@ -74,7 +74,8 @@ func numeric(obj ast.PdfObject) (float64, bool) {
 // together.
 //
 // contentOps must be a self-contained sequence of operators, typically
-// wrapped in q/Q to avoid leaking graphics state into the host page.
+// wrapped in q/Q to avoid leaking graphics state into the host page. It is
+// marked as an /Artifact here, so callers pass the bare drawing operators.
 func applyStampToPages(
 	ctx context.Context,
 	doc *document.Document,
@@ -87,6 +88,25 @@ func applyStampToPages(
 	if contentOps == "" {
 		return nil
 	}
+
+	// A stamp is appended after any structure tree was built, so it can never
+	// be tagged as real content. ISO 32000-1, 14.8.2.2 names watermarks among
+	// the artifacts, and ISO 14289-1, 7.1 test 3 requires page content to be
+	// one or the other, so stamping a tagged document without this marking
+	// broke its PDF/UA conformance: measured, an autotagged page went from 4
+	// violations to 7, this clause plus "text outside the structure tree".
+	//
+	// Marked HERE rather than in the three builders. contentOps is
+	// materialised TWICE below, once as the shared stream and once as the
+	// translated copy a non-origin MediaBox needs, and every stamp kind
+	// funnels through this function, so one wrap covers both sites and any
+	// stamp added later.
+	//
+	// A bare /Artifact is what both sides recognise: compliance's
+	// classifyMarker keys on the tag name alone and needs no property list,
+	// and the extractor's artifact stripping does the same.
+	contentOps = "/Artifact BMC " + contentOps + " EMC"
+
 	stampStream := ast.NewStream(ast.PdfDict{}, []byte(contentOps))
 	stampRef := alloc.Alloc(stampStream)
 

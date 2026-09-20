@@ -827,6 +827,12 @@ func (w *Writer) FlattenForm() {
 // pages. A diagonal, semi-transparent watermark is a [TextStamp] with a
 // Rotation and an Opacity below 1. Uses incremental update. The mutation
 // is queued and applied when [Writer.WriteTo] is called.
+//
+// The stamp is marked as an /Artifact, which ISO 32000-1, 14.8.2.2 names a
+// watermark to be and which keeps a tagged document conformant with
+// ISO 14289-1, 7.1. One consequence is visible to callers:
+// [Reader.ExtractText] omits the stamped text unless [WithArtifacts] is
+// passed, the same way it treats any other artifact.
 func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 	if stamp.Text == "" {
 		return ErrEmptyText
@@ -847,6 +853,9 @@ func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 // If no pages are specified, the stamp is applied to all pages. Uses
 // incremental update. The mutation is queued and applied when
 // [Writer.WriteTo] is called.
+//
+// The stamp is marked as an /Artifact, so it does not cost a tagged document
+// its ISO 14289-1, 7.1 conformance.
 func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
 	if len(stamp.Data) == 0 {
 		return ErrEmptyData
@@ -879,6 +888,10 @@ func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
 // 1-based pages. If no pages are specified, the stamp is applied to all
 // pages. Uses incremental update. The mutation is queued and applied when
 // [Writer.WriteTo] is called.
+//
+// The stamp is marked as an /Artifact, so it does not cost a tagged document
+// its ISO 14289-1, 7.1 conformance, and any text it carries is omitted from
+// [Reader.ExtractText] unless [WithArtifacts] is passed.
 func (w *Writer) StampPDF(stamp PDFStamp, pages ...int) error {
 	if stamp.Source == nil {
 		return ErrNilSource
