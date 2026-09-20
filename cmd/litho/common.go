@@ -206,8 +206,18 @@ func reorderArgs(fs *flag.FlagSet, args []string) []string {
 	return append(flags, positional...)
 }
 
-// parsePages parses a page range specification into a sorted slice of
-// 1-based page numbers. Supported syntax:
+// parsePages parses a page range specification into a slice of 1-based page
+// numbers, in the order the specification lists them.
+//
+// It does NOT sort or deduplicate: "3,1" returns [3, 1] and "1,1" returns
+// [1, 1]. The comment here claimed "sorted" for a long time and the body never
+// did it. Callers are unaffected because the page operations treat the list as
+// a SET, measured on a three-page document: `delete --pages 1,1` removes one
+// page and `delete --pages 3,1` removes both, while `rotate --pages 3,1`
+// rotates pages 1 and 3 and leaves 2 alone. Sort here only if a caller appears
+// that needs ordering, and give it a test that compares VALUES.
+//
+// Supported syntax:
 //
 //	"1"         → [1]
 //	"1-3"       → [1, 2, 3]

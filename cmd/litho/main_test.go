@@ -160,6 +160,11 @@ func TestParsePages(t *testing.T) {
 		{"3-1", 5, nil, true},
 		{"", 5, nil, true},
 		{"abc", 5, nil, true},
+		// parsePages neither sorts nor deduplicates, and the page operations
+		// treat its result as a SET, so these two pin the real contract rather
+		// than the "sorted slice" the doc comment used to promise.
+		{"3,1", 5, []int{3, 1}, false},
+		{"1,1", 5, []int{1, 1}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.spec, func(t *testing.T) {
@@ -168,8 +173,20 @@ func TestParsePages(t *testing.T) {
 				t.Errorf("parsePages(%q, %d) err=%v, wantErr=%t", tt.spec, tt.pageCount, err, tt.wantErr)
 				return
 			}
-			if err == nil && len(got) != len(tt.want) {
-				t.Errorf("parsePages(%q, %d) = %v, want %v", tt.spec, tt.pageCount, got, tt.want)
+			if err != nil {
+				return
+			}
+			// Compare VALUES, not just the length. This assertion read
+			// `len(got) != len(tt.want)` for a long time, which made every want
+			// slice above decorative: parsePages("1-3", 5) could have returned
+			// [9, 9, 9] and passed.
+			if len(got) != len(tt.want) {
+				t.Fatalf("parsePages(%q, %d) = %v, want %v", tt.spec, tt.pageCount, got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("parsePages(%q, %d) = %v, want %v", tt.spec, tt.pageCount, got, tt.want)
+				}
 			}
 		})
 	}
