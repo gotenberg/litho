@@ -23,11 +23,30 @@ type Metadata struct {
 
 // SetMetadata creates or replaces the /Info dictionary.
 func SetMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, meta Metadata) error {
-	// Resolve the existing Info dict if any.
+	// Resolve the existing Info dict if any, through the allocator.
+	//
+	// Mutations queued on one writer share a single allocator and are applied
+	// in order with no flush between them, so an earlier [ClearMetadata] in the
+	// same write has already emptied this object. The contract that an empty
+	// field preserves "the existing value" has to mean the value as it now
+	// stands, not the one the file carried on disk: reading the document put
+	// every field the caller asked to clear straight back into the output, and
+	// reported success doing it. Clearing metadata is a privacy action, so that
+	// restored exactly what was meant to be destroyed.
+	//
+	// [ResolveFromAllocOrDoc] rather than [LiveCatalogDict]: that one ignores a
+	// pending value that is empty, because a catalog with no entries is not a
+	// catalog. An /Info dictionary with no entries IS valid, and is precisely
+	// what ClearMetadata leaves behind, so the empty guard must not apply here.
 	var infoDict ast.PdfDict
 	if infoObj, ok := doc.Index.Trailer["Info"]; ok {
-		existing, err := document.ResolveDict(ctx, doc, infoObj)
-		if err == nil && existing != nil {
+		var existing ast.PdfDict
+		if ref, isRef := infoObj.(ast.PdfIndirectRef); isRef {
+			existing = ResolveFromAllocOrDoc(ctx, alloc, doc, ref)
+		} else if d, err := document.ResolveDict(ctx, doc, infoObj); err == nil {
+			existing = d
+		}
+		if existing != nil {
 			infoDict = make(ast.PdfDict, len(existing))
 			maps.Copy(infoDict, existing)
 		}
