@@ -244,8 +244,14 @@ func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 			}
 			visited[ref.ObjectNum] = true
 		}
-		arr, err := document.ResolveArray(ctx, doc, entry)
-		if err != nil || len(arr) < 2 {
+		// Read alloc-first. Colour-space objects are written earlier by
+		// output-intent and output-intent-cleanup, and again by graphics,
+		// transparency and group-cs, all ahead of icc-dedup in the registry.
+		// Matching the on-disk profile instead would substitute a colour space
+		// the document no longer uses, discarding the earlier write rather than
+		// merely missing it. liveArray performs the ref/direct split itself.
+		arr := liveArray(ctx, alloc, doc, entry)
+		if len(arr) < 2 {
 			continue
 		}
 		name, ok := arr[0].(ast.PdfName)
