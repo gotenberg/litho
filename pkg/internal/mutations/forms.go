@@ -44,7 +44,7 @@ func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	if !ok {
 		return fmt.Errorf("trailer missing /Root")
 	}
-	catalogDict, err := CatalogDict(ctx, doc, catalogRef)
+	catalogDict, err := LiveCatalogDict(ctx, alloc, doc, catalogRef)
 	if err != nil {
 		return err
 	}
@@ -409,7 +409,7 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	if !ok {
 		return fmt.Errorf("trailer missing /Root")
 	}
-	catalogDict, err := CatalogDict(ctx, doc, catalogRef)
+	catalogDict, err := LiveCatalogDict(ctx, alloc, doc, catalogRef)
 	if err != nil {
 		return err
 	}

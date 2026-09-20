@@ -66,20 +66,9 @@ func WriteOutline(
 		return fmt.Errorf("trailer missing /Root indirect reference")
 	}
 
-	// Read the current catalog from the allocator if already modified,
-	// otherwise from the document.
-	var catalogDict ast.PdfDict
-	if pending, ok := alloc.Pending()[catalogRef.ObjectNum]; ok {
-		if d, ok := pending.(ast.PdfDict); ok {
-			catalogDict = d
-		}
-	}
-	if catalogDict == nil {
-		d, err := CatalogDict(ctx, doc, catalogRef)
-		if err != nil {
-			return err
-		}
-		catalogDict = d
+	catalogDict, err := LiveCatalogDict(ctx, alloc, doc, catalogRef)
+	if err != nil {
+		return err
 	}
 
 	newCatalog := make(ast.PdfDict, len(catalogDict)+1)

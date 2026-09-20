@@ -69,6 +69,29 @@ func CatalogDict(ctx context.Context, doc *document.Document, ref ast.PdfIndirec
 	return nil, ErrCatalogUnreadable
 }
 
+// LiveCatalogDict returns the catalog a mutation should edit, preferring the
+// version an earlier mutation left pending in the allocator.
+//
+// Mutations queued on one writer share a single allocator and are applied in
+// order with no flush between them, so a mutation that rewrites the whole
+// catalog must start from the pending copy or it discards what the mutations
+// before it wrote there. Attaching a file and then flattening the form lost the
+// attachment's /Names and /AF exactly that way, and nothing put them back:
+// unlike the remediation registry, mutations have no fix-to-fixpoint loop to
+// reapply a discarded write, so the loss reaches the output file.
+//
+// [CatalogDict] stays the fallback, so the reference recovery and the
+// empty-catalog rule documented there still apply. A pending value that is not
+// a non-empty dictionary is ignored for that same reason.
+func LiveCatalogDict(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef) (ast.PdfDict, error) {
+	if pending, ok := alloc.Pending()[ref.ObjectNum]; ok {
+		if d, isDict := pending.(ast.PdfDict); isDict && len(d) > 0 {
+			return d, nil
+		}
+	}
+	return CatalogDict(ctx, doc, ref)
+}
+
 // ResolveFromAllocOrDoc checks the allocator for a pending version of the
 // object, falling back to the document. Returns nil if not found.
 func ResolveFromAllocOrDoc(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef) ast.PdfDict {
