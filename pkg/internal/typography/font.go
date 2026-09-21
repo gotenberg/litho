@@ -161,6 +161,18 @@ func (f *Font) VerticalMetrics(charCode int) (w1, vX, vY float64) {
 	return f.DW2[1], halfW0, f.DW2[0]
 }
 
+// maxCIDValue is the largest CID a CIDFont can address. Per ISO 32000-1,
+// 9.7.4.3 a CID is a 16-bit value, so a /W or /W2 range naming a larger one
+// describes glyphs no font can hold.
+//
+// This is a spec bound doing anti-DoS duty, because the range forms expand to
+// one map entry per CID they name and nothing else stops them. Measured before
+// it existed: /W2 [0 5000000 ...] built 5,000,001 entries costing 640 MB, which
+// extrapolates to roughly 275 GB for the 2147483647 a crafted file can state,
+// from about 40 bytes of array. pkg/internal/compliance/file_limits.go records
+// the same limit as maxCID for the validator's own use.
+const maxCIDValue = 65535
+
 // parseCIDVerticalWidths decodes a /W2 array into a flat CID → [w1Y, vX, vY] map.
 // The /W2 array uses similar forms to /W but with 3 values per CID:
 //   - Individual form: c1 [w1_1 vx_1 vy_1 w1_2 vx_2 vy_2 ...]
@@ -194,7 +206,16 @@ func parseCIDVerticalWidths(w2Arr ast.PdfArray) map[int][3]float64 {
 			vx := document.Float(w2Arr[i+1])
 			vy := document.Float(w2Arr[i+2])
 			i += 3
-			for cid := startCID; cid <= endCID; cid++ {
+			// The range is file-supplied and sizes nothing but this loop, so
+			// bound it to the CID space before walking it.
+			lo, hi := startCID, endCID
+			if lo < 0 {
+				lo = 0
+			}
+			if hi > maxCIDValue {
+				hi = maxCIDValue
+			}
+			for cid := lo; cid <= hi; cid++ {
 				metrics[cid] = [3]float64{w1, vx, vy}
 			}
 		default:
@@ -231,7 +252,16 @@ func parseCIDWidths(wArr ast.PdfArray) map[int]float64 {
 			}
 			w := document.Float(wArr[i])
 			i++
-			for cid := startCID; cid <= endCID; cid++ {
+			// The range is file-supplied and sizes nothing but this loop, so
+			// bound it to the CID space before walking it.
+			lo, hi := startCID, endCID
+			if lo < 0 {
+				lo = 0
+			}
+			if hi > maxCIDValue {
+				hi = maxCIDValue
+			}
+			for cid := lo; cid <= hi; cid++ {
 				widths[cid] = w
 			}
 		default:
