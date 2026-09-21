@@ -122,11 +122,14 @@ func buildSignedCMS(t *testing.T, key *ecdsa.PrivateKey, cert *x509.Certificate,
 	return mustMarshal(t, ci)
 }
 
-func testSigningCert(t *testing.T) (*ecdsa.PrivateKey, *x509.Certificate) {
-	t.Helper()
+// testSigningCert takes a [testing.TB] rather than a *testing.T so a fuzz
+// target's setup, which is handed a *testing.F, can build the same seed
+// certificate the unit tests use.
+func testSigningCert(tb testing.TB) (*ecdsa.PrivateKey, *x509.Certificate) {
+	tb.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		t.Fatalf("GenerateKey: %v", err)
+		tb.Fatalf("GenerateKey: %v", err)
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(0x4242),
@@ -138,11 +141,11 @@ func testSigningCert(t *testing.T) (*ecdsa.PrivateKey, *x509.Certificate) {
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	if err != nil {
-		t.Fatalf("CreateCertificate: %v", err)
+		tb.Fatalf("CreateCertificate: %v", err)
 	}
 	cert, err := x509.ParseCertificate(der)
 	if err != nil {
-		t.Fatalf("ParseCertificate: %v", err)
+		tb.Fatalf("ParseCertificate: %v", err)
 	}
 	return key, cert
 }
