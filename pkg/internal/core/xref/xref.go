@@ -175,6 +175,20 @@ func ParseXRefStream(ctx context.Context, stream ast.PdfStream, indexMap map[int
 		startObj := int(startInt)
 		count := int(countInt)
 
+		// Three zero /W widths mean the stream carries no entry data, so this
+		// subsection describes no readable entry: the loop below defaults every
+		// absent field, so each entry would come out as type 1 at offset 0, and
+		// offset 0 can never locate an object. Walking it anyway costs one map
+		// insert per declared count, and that count is file-supplied.
+		//
+		// entrySize 0 also disables the only exit below: offset never advances,
+		// so offset+entrySize > len(data) can never become true. Measured: an
+		// EMPTY stream with /Index [0 5000000] built 5,000,000 entries in 573ms
+		// from a 43-byte dictionary, straight into the document's live index.
+		if entrySize == 0 {
+			continue
+		}
+
 		for j := range count {
 			if offset+entrySize > len(data) {
 				return 0, fmt.Errorf("%w: stream data too short", ErrMalformedXRef)
