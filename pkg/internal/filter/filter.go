@@ -315,6 +315,18 @@ func decodeFlateDecode(ctx context.Context, data []byte) ([]byte, error) {
 		return nil, copyErr
 	}
 
+	// Cancellation is not a damaged stream either. limitedCopy reports
+	// ctx.Err() between chunks, so a chunk has always been buffered by then and
+	// the tolerance below keeps it and reports success: the caller was told a
+	// cancelled decode produced a complete stream, truncated wherever
+	// cancellation landed. decodeLZW, decodeCCITTFax and decodeBrotli all
+	// propagate it. Tested with a context whose Err reports cancellation only
+	// after the first chunk, since one cancelled up front leaves an empty
+	// buffer and is handled correctly either way.
+	if copyErr != nil && ctx.Err() != nil {
+		return nil, copyErr
+	}
+
 	// Tolerate read errors that leave valid partial data. Damaged PDFs
 	// frequently have truncated zlib streams or bad checksums, but the
 	// decompressed bytes up to that point are usable.
