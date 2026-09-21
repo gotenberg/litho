@@ -18,6 +18,16 @@ const (
 	XRefTypeCompressed = 2 // Type 2: object in an object stream
 )
 
+// maxXRefFieldWidth bounds a single /W field width in a cross-reference stream.
+// Anti-DoS guard, not spec-mandated: ISO 32000-1, Table 17 states no ceiling,
+// but [readInt] decodes each field into an int64 by shifting one byte at a time,
+// so a width above eight shifts the leading bytes straight out and cannot be
+// represented. A crafted /W of three huge widths would otherwise make entrySize
+// large enough to overflow, and the "stream data too short" check bounds only
+// the upper end of the slice. Eight bytes covers every real document: the
+// widest field any producer needs is a byte offset, which is already an int64.
+const maxXRefFieldWidth = 8
+
 // XRefEntry represents a single cross-reference entry describing the location
 // and status of a PDF object (byte offset, generation number, and entry type).
 type XRefEntry struct {
@@ -101,6 +111,21 @@ func ParseXRefStream(ctx context.Context, stream ast.PdfStream, indexMap map[int
 	w0 := int(w0Int)
 	w1 := int(w1Int)
 	w2 := int(w2Int)
+	// Per ISO 32000-1, Table 17 each /W element is a NON-NEGATIVE integer field
+	// width. The entry loop slices entryData by these three values, so a crafted
+	// negative one indexes out of range: /W[0] breaks entryData[0:w0], /W[1]
+	// breaks entryData[w0:w0+w1] and /W[2] breaks entryData[w0+w1:w0+w1+w2].
+	// Bounding each width also keeps entrySize from summing to a negative, which
+	// the "stream data too short" check below cannot catch: it bounds the upper
+	// end only. maxXRefFieldWidth is an anti-DoS guard, not spec-mandated: a
+	// field wider than eight bytes cannot fit the int64 the entry is decoded
+	// into, so no real document needs one.
+	if w0 < 0 || w1 < 0 || w2 < 0 {
+		return 0, fmt.Errorf("%w: /W has a negative field width", ErrMalformedXRef)
+	}
+	if w0 > maxXRefFieldWidth || w1 > maxXRefFieldWidth || w2 > maxXRefFieldWidth {
+		return 0, fmt.Errorf("%w: /W field width exceeds %d bytes", ErrMalformedXRef, maxXRefFieldWidth)
+	}
 	entrySize := w0 + w1 + w2
 
 	sizeObj, ok := stream.Dict["Size"]
@@ -121,6 +146,15 @@ func ParseXRefStream(ctx context.Context, stream ast.PdfStream, indexMap map[int
 		}
 	} else {
 		indexArray = ast.PdfArray{ast.PdfInt(0), ast.PdfInt(size)}
+	}
+
+	// Per ISO 32000-1, Table 17 the /Index array is a sequence of PAIRS, so an
+	// odd length is malformed. The walk below reads indexArray[i+1] two at a
+	// time and would index past the end on a crafted file. Refusing is the only
+	// honest answer: dropping the unpaired element would invent a subsection
+	// count the document never stated.
+	if len(indexArray)%2 != 0 {
+		return 0, fmt.Errorf("%w: /Index has an odd number of entries", ErrMalformedXRef)
 	}
 
 	data, err := decodeStreamData(ctx, stream)
