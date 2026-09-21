@@ -78,8 +78,14 @@ var (
 	// structurally invalid.
 	ErrInvalidFont = errors.New("invalid font data")
 
-	// ErrSourceIndexOutOfRange is returned when a source index exceeds
-	// the number of available sources.
+	// ErrSourceIndexOutOfRange guards the text-element callback that
+	// [Writer.Merge] hands to bookmark generation, which is the only place
+	// it is produced. No exported method returns it: the callback's caller
+	// logs the failure at Debug through the document logger and skips the
+	// page, so the value never reaches a caller. The index it checks is a
+	// loop variable over the same sources the callback captured, so it is
+	// in range by construction. Split does not carry this guard at all,
+	// because its own callbacks ignore the index.
 	ErrSourceIndexOutOfRange = errors.New("source index out of range")
 
 	// ErrWriterConsumed is returned by [Writer.WriteTo] when the Writer
