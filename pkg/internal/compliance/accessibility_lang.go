@@ -143,6 +143,9 @@ type markedContentProps struct {
 	parentTree     ast.PdfDict
 	owners         ast.PdfArray
 	ownersResolved bool
+	// ownersComplete reports whether the ParentTree read that filled owners
+	// finished. A read the depth bound stopped cannot say what owns an MCID.
+	ownersComplete bool
 }
 
 // dict returns the property list op carries, or nil when it carries none or the
@@ -253,9 +256,14 @@ func (s *spanLangScan) ops(ctx context.Context, ops []content.Operation, owner, 
 		return nil
 	}
 	props := markedContentProps{doc: s.doc, page: owner}
+	// Completeness is not threaded here: this scan asks only whether a language
+	// covers a sequence, and a truncated read withholds languages rather than
+	// inventing a missing one. Measured on a ParentTree nested past the bound,
+	// which adds no span-language finding.
+	entries, _ := pageParentTreeEntries(ctx, s.doc, s.parentTree, owner)
 	owners := structElemLang{
 		doc:     s.doc,
-		entries: pageParentTreeEntries(ctx, s.doc, s.parentTree, owner),
+		entries: entries,
 		cache:   make(map[int]bool),
 	}
 
@@ -438,17 +446,22 @@ func structElemChainHasLang(ctx context.Context, doc *document.Document, elem as
 // pageParentTreeEntries returns the ParentTree array a page's /StructParents key
 // selects, or nil when the page declares none or the lookup fails. The array is
 // indexed by marked-content identifier (ISO 32000-1 §14.7.4.4).
-func pageParentTreeEntries(ctx context.Context, doc *document.Document, parentTree, page ast.PdfDict) ast.PdfArray {
+//
+// complete reports whether the lookup read the tree whole. A page that declares
+// no entry returns nil and complete: nothing owns its marked content, and that
+// is an answer. A read [maxEFNameTreeDepth] stopped returns nil and incomplete,
+// which is not.
+func pageParentTreeEntries(ctx context.Context, doc *document.Document, parentTree, page ast.PdfDict) (entries ast.PdfArray, complete bool) {
 	if parentTree == nil {
-		return nil
+		return nil, true
 	}
 	spObj, ok := page["StructParents"]
 	if !ok {
-		return nil
+		return nil, true
 	}
 	key, err := document.ResolveInt(ctx, doc, spObj)
 	if err != nil {
-		return nil
+		return nil, true
 	}
 	return numberTreeLookup(ctx, doc, parentTree, int(key), 0, make(map[int]bool))
 }
@@ -853,7 +866,10 @@ func structElemsShowingText(ctx context.Context, doc *document.Document, catalog
 	}
 
 	forEachPageContentOps(ctx, doc, catalog, func(_ int, page ast.PdfDict, ops []content.Operation) bool {
-		arr := pageParentTreeEntries(ctx, doc, ptDict, page)
+		// Truncation empties arr, which drops elements from BOTH textElems and
+		// inlineLang. The caller tests textElems for PRESENCE, so the two shrink
+		// together and no finding is manufactured.
+		arr, _ := pageParentTreeEntries(ctx, doc, ptDict, page)
 		for mcid, covered := range mcidsShowingText(ctx, ops) {
 			if mcid >= len(arr) {
 				continue
@@ -1039,8 +1055,14 @@ func markedContentHasMCID(ctx context.Context, props *markedContentProps, op con
 		return false
 	}
 	if !props.ownersResolved {
-		props.owners = pageParentTreeEntries(ctx, props.doc, props.parentTree, props.page)
+		props.owners, props.ownersComplete = pageParentTreeEntries(ctx, props.doc, props.parentTree, props.page)
 		props.ownersResolved = true
+	}
+	// A read the depth bound stopped cannot show this MCID has no owner. Count
+	// the content as owned: the §7.2 t34 finding the caller draws from a false
+	// answer here would be manufactured by the bound rather than by the file.
+	if !props.ownersComplete {
+		return true
 	}
 	if mcid >= len(props.owners) {
 		return false

@@ -54,7 +54,13 @@ func checkOrphanMCIDs(ctx context.Context, doc *document.Document, catalog ast.P
 		if len(mcids) == 0 {
 			continue
 		}
-		covered := parentTreeMCIDs(ctx, doc, treeRoot, page)
+		// A ParentTree the walk could not read whole says nothing about which
+		// MCIDs it covers. Reporting the ones it never reached as unreachable
+		// fails a conforming file on an anti-DoS bound, so abstain instead.
+		covered, determined := parentTreeMCIDs(ctx, doc, treeRoot, page)
+		if !determined {
+			continue
+		}
 		for _, mcid := range mcids {
 			if !covered[mcid] {
 				results = append(results, failf(rule,
@@ -112,31 +118,36 @@ func collectNonArtifactMCIDs(ctx context.Context, ops []content.Operation) []int
 
 // parentTreeMCIDs returns the set of MCIDs the ParentTree covers for the
 // given page: the page /StructParents key selects a Nums entry whose array
-// is indexed by MCID.
-func parentTreeMCIDs(ctx context.Context, doc *document.Document, treeRoot, page ast.PdfDict) map[int]bool {
-	covered := make(map[int]bool)
+// is indexed by MCID. It also reports whether that coverage is determined.
+//
+// A page naming no /StructParents, an unresolvable key and an absent ParentTree
+// all leave the set empty and determined: the file genuinely covers nothing, so
+// its content is genuinely unreachable. A walk stopped by [maxEFNameTreeDepth]
+// is the one case that is not an answer.
+func parentTreeMCIDs(ctx context.Context, doc *document.Document, treeRoot, page ast.PdfDict) (covered map[int]bool, determined bool) {
+	covered = make(map[int]bool)
 	spObj, ok := page["StructParents"]
 	if !ok {
-		return covered
+		return covered, true
 	}
 	key, err := document.ResolveInt(ctx, doc, spObj)
 	if err != nil {
-		return covered
+		return covered, true
 	}
 	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
 	if err != nil || ptDict == nil {
-		return covered
+		return covered, true
 	}
-	arr := numberTreeLookup(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
-	if arr == nil {
-		return covered
+	arr, complete := numberTreeLookup(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
+	if !complete {
+		return covered, false
 	}
 	for mcid, elem := range arr {
 		if !isNullObject(elem) {
 			covered[mcid] = true
 		}
 	}
-	return covered
+	return covered, true
 }
 
 // parentTreeMCIDReach maps each MCID the page's ParentTree entry names to
@@ -157,7 +168,11 @@ func parentTreeMCIDReach(ctx context.Context, doc *document.Document, treeRoot, 
 	if err != nil || ptDict == nil {
 		return reach
 	}
-	for mcid, elem := range numberTreeLookup(ctx, doc, ptDict, int(key), 0, make(map[int]bool)) {
+	// A truncated read needs no signal here: an MCID absent from this map counts
+	// as tagged where the map is read, so stopping early can only withhold a
+	// finding, never invent one.
+	entries, _ := numberTreeLookup(ctx, doc, ptDict, int(key), 0, make(map[int]bool))
+	for mcid, elem := range entries {
 		if !isNullObject(elem) {
 			reach[mcid] = structElemReachesRoot(ctx, doc, elem)
 		}
@@ -231,11 +246,17 @@ func mcidValue(ctx context.Context, doc *document.Document, obj ast.PdfObject) (
 }
 
 // numberTreeLookup resolves a key in a number tree (Nums leaves, Kids
-// recursion) to its array value. Depth is capped by [maxEFNameTreeDepth],
-// the shared anti-DoS guard for tree walks.
-func numberTreeLookup(ctx context.Context, doc *document.Document, node ast.PdfDict, key, depth int, seen map[int]bool) ast.PdfArray {
+// recursion) to its array value, reporting whether it read the tree whole.
+// Depth is capped by [maxEFNameTreeDepth], the shared anti-DoS guard for tree
+// walks.
+//
+// A nil array means the key is absent only when complete is true. Stopping at
+// the cap yields nil as well, and a caller that reads the two as the same thing
+// fails a conforming file: absence from a walk that stopped early is not
+// evidence the file names nothing.
+func numberTreeLookup(ctx context.Context, doc *document.Document, node ast.PdfDict, key, depth int, seen map[int]bool) (entries ast.PdfArray, complete bool) {
 	if depth > maxEFNameTreeDepth || ctx.Err() != nil {
-		return nil
+		return nil, false
 	}
 	if numsObj, ok := node["Nums"]; ok {
 		nums, err := document.ResolveArray(ctx, doc, numsObj)
@@ -245,14 +266,19 @@ func numberTreeLookup(ctx context.Context, doc *document.Document, node ast.PdfD
 				if kerr != nil || int(k) != key {
 					continue
 				}
+				// The key is here, so the answer is whole whether or not its
+				// value resolves to an array.
 				arr, aerr := document.ResolveArray(ctx, doc, nums[i+1])
 				if aerr == nil {
-					return arr
+					return arr, true
 				}
-				return nil
+				return nil, true
 			}
 		}
 	}
+	// A kid that stopped early leaves the whole lookup incomplete: the key may
+	// sit in the part that went unread.
+	complete = true
 	if kidsObj, ok := node["Kids"]; ok {
 		kids, err := document.ResolveArray(ctx, doc, kidsObj)
 		if err == nil {
@@ -267,13 +293,17 @@ func numberTreeLookup(ctx context.Context, doc *document.Document, node ast.PdfD
 				if kerr != nil || kd == nil {
 					continue
 				}
-				if arr := numberTreeLookup(ctx, doc, kd, key, depth+1, seen); arr != nil {
-					return arr
+				arr, kidComplete := numberTreeLookup(ctx, doc, kd, key, depth+1, seen)
+				if arr != nil {
+					return arr, kidComplete
+				}
+				if !kidComplete {
+					complete = false
 				}
 			}
 		}
 	}
-	return nil
+	return nil, complete
 }
 
 // isNullObject reports whether obj is a PDF null (or Go nil).
