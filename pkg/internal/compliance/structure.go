@@ -1982,7 +1982,7 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 					if i > 1 {
 						langVal = ast.PdfString(rest[1 : i-1])
 					}
-				} else if rest[0] == '<' && rest[0] != '<' || (len(rest) > 1 && rest[0] == '<' && rest[1] != '<') {
+				} else if len(rest) > 1 && rest[0] == '<' && rest[1] != '<' {
 					// Hex string.
 					end := strings.Index(rest[1:], ">")
 					if end > 0 {
