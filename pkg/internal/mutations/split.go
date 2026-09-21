@@ -48,7 +48,14 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 		splitDestOverrides(ctx, doc, keptPages, removed, overrides)
 		if srcCatalog, err := document.ResolveCatalog(ctx, doc); err == nil && srcCatalog != nil {
 			dropped := droppedPageAnnots(ctx, doc, allPages, removed)
-			maps.Copy(overrides, fieldKidOverrides(ctx, doc, srcCatalog.Dict, dropped))
+			// The truncation flag is dropped here on purpose. Split copies
+			// outward from the pages it keeps, so an unextracted page is not
+			// reachable from the copied root however deep the field tree runs;
+			// measured across chain depths well past the bound, split never
+			// carried the excluded page. Only delete, which rewrites whatever
+			// the catalog reaches, has to refuse.
+			fieldOverrides, _ := fieldKidOverrides(ctx, doc, srcCatalog.Dict, dropped)
+			maps.Copy(overrides, fieldOverrides)
 		}
 	}
 	if len(overrides) > 0 {

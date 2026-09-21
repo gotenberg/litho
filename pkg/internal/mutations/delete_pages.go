@@ -103,23 +103,32 @@ func rebuildPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	}
 
 	if len(removed) > 0 {
-		pruneCatalogDestinations(ctx, alloc, doc, catalogRef, catalogDict, removed)
+		destsTruncated := pruneCatalogDestinations(ctx, alloc, doc, catalogRef, catalogDict, removed)
 
 		// A field keeps the widgets that present it on each page, and every
 		// widget names its page in /P, so a widget left behind keeps the page
 		// too. Delete reuses the source object numbers in place, which is
 		// exactly what fieldKidOverrides is keyed by.
 		dropped := droppedPageAnnots(ctx, doc, allPages, removed)
-		for objNum, patched := range fieldKidOverrides(ctx, doc, catalogDict, dropped) {
+		fieldOverrides, fieldsTruncated := fieldKidOverrides(ctx, doc, catalogDict, dropped)
+		for objNum, patched := range fieldOverrides {
 			alloc.AllocAt(objNum, patched)
 		}
 
 		if err := pruneStructTree(ctx, alloc, doc, catalogDict, removed); err != nil {
 			return fmt.Errorf("pruning the structure tree: %w", err)
 		}
-		pruneOutlineDestinations(ctx, alloc, doc, catalogDict, removed)
+		outlineTruncated := pruneOutlineDestinations(ctx, alloc, doc, catalogDict, removed)
 		pruneArticleBeads(ctx, alloc, doc, catalogDict, removed)
-		pruneWebCaptureSets(ctx, alloc, doc, catalogDict, removed)
+		webTruncated := pruneWebCaptureSets(ctx, alloc, doc, catalogDict, removed)
+
+		// Each prune unhooks one kind of reference to the page. Any of them
+		// stopping short leaves a reference the rewrite will follow, so the page
+		// and its content would ship inside a document reporting one fewer page.
+		// Refuse before anything is written rather than delete it halfway.
+		if destsTruncated || fieldsTruncated || outlineTruncated || webTruncated {
+			return fmt.Errorf("pruning references to the removed pages: %w", ErrPagePruneIncomplete)
+		}
 	}
 
 	return nil

@@ -626,7 +626,7 @@ func (w *Writer) DeletePages(pages ...int) error {
 			if err := mutations.DeletePages(ctx, alloc, doc, resolvedPages, pages); err != nil {
 				// Translate at the boundary so a caller can match the refusal
 				// with errors.Is without importing pkg/internal.
-				if errors.Is(err, mutations.ErrStructTreeTooDeepToPrune) {
+				if errors.Is(err, mutations.ErrPagePruneIncomplete) {
 					return fmt.Errorf("%w: %w", ErrPageDeletionIncomplete, err)
 				}
 				return err

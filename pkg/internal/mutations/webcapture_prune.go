@@ -28,29 +28,33 @@ func pruneWebCaptureSets(
 	doc *document.Document,
 	catalogDict ast.PdfDict,
 	removed map[int]bool,
-) {
+) bool {
 	namesObj, hasNames := catalogDict["Names"]
 	if !hasNames {
-		return
+		return false
 	}
 	names, err := document.ResolveDict(ctx, doc, namesObj)
 	if err != nil || names == nil {
-		return
+		return false
 	}
 
 	newNames := make(ast.PdfDict, len(names))
 	maps.Copy(newNames, names)
 	changed := false
+	truncated := false
 
 	for _, key := range webCaptureTrees {
 		root, hasTree := names[key]
 		if !hasTree {
 			continue
 		}
-		newRoot, dropped := pruneDestNameTree(ctx, alloc, doc, root,
+		newRoot, dropped, treeTruncated := pruneDestNameTree(ctx, alloc, doc, root,
 			func(value ast.PdfObject) bool {
 				return contentSetIsEmptied(ctx, alloc, doc, value, removed)
 			}, 0)
+		if treeTruncated {
+			truncated = true
+		}
 		if !dropped {
 			continue
 		}
@@ -60,11 +64,12 @@ func pruneWebCaptureSets(
 		}
 	}
 	if !changed {
-		return
+		return truncated
 	}
 	if ref, isRef := namesObj.(ast.PdfIndirectRef); isRef {
 		alloc.AllocAt(ref.ObjectNum, newNames)
 	}
+	return truncated
 }
 
 // contentSetIsEmptied filters a content set's /O array down to the objects that

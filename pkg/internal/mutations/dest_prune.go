@@ -235,22 +235,23 @@ func fieldKidOverrides(
 	doc *document.Document,
 	catalogDict ast.PdfDict,
 	droppedAnnots map[int]bool,
-) map[int]ast.PdfObject {
+) (map[int]ast.PdfObject, bool) {
 	overrides := make(map[int]ast.PdfObject)
 	if len(droppedAnnots) == 0 {
-		return overrides
+		return overrides, false
 	}
 	acroForm, err := document.ResolveDict(ctx, doc, catalogDict["AcroForm"])
 	if err != nil || acroForm == nil {
-		return overrides
+		return overrides, false
 	}
 	fields, err := document.ResolveArray(ctx, doc, acroForm["Fields"])
 	if err != nil {
-		return overrides
+		return overrides, false
 	}
 
 	kept := make(ast.PdfArray, 0, len(fields))
 	rootsChanged := false
+	truncated := false
 	for _, entry := range fields {
 		if ref, isRef := entry.(ast.PdfIndirectRef); isRef && droppedAnnots[ref.ObjectNum] {
 			// A field merged with its only widget (ISO 32000-1, 12.5.6.19):
@@ -258,7 +259,9 @@ func fieldKidOverrides(
 			rootsChanged = true
 			continue
 		}
-		pruneFieldKids(ctx, doc, entry, droppedAnnots, overrides, 0)
+		if pruneFieldKids(ctx, doc, entry, droppedAnnots, overrides, 0) {
+			truncated = true
+		}
 		kept = append(kept, entry)
 	}
 	if rootsChanged {
@@ -269,10 +272,11 @@ func fieldKidOverrides(
 			overrides[ref.ObjectNum] = newForm
 		}
 	}
-	return overrides
+	return overrides, truncated
 }
 
-// pruneFieldKids filters one field's /Kids and recurses into the survivors.
+// pruneFieldKids filters one field's /Kids and recurses into the survivors,
+// reporting whether the walk stopped at its depth bound with kids unread.
 func pruneFieldKids(
 	ctx context.Context,
 	doc *document.Document,
@@ -280,8 +284,10 @@ func pruneFieldKids(
 	droppedAnnots map[int]bool,
 	overrides map[int]ast.PdfObject,
 	depth int,
-) {
-	pruneFieldKidsAt(ctx, doc, fieldObj, droppedAnnots, overrides, make(map[int]bool), depth)
+) bool {
+	truncated := false
+	pruneFieldKidsAt(ctx, doc, fieldObj, droppedAnnots, overrides, make(map[int]bool), depth, &truncated)
+	return truncated
 }
 
 // pruneFieldKidsAt is [pruneFieldKids] carrying the fields already walked.
@@ -310,8 +316,12 @@ func pruneFieldKidsAt(
 	overrides map[int]ast.PdfObject,
 	visited map[int]bool,
 	depth int,
+	truncated *bool,
 ) {
+	// Stopping here leaves the widgets below still listed in their field's
+	// /Kids, and each names its page in /P, so the deleted page stays reachable.
 	if depth > maxFieldParentDepth {
+		*truncated = true
 		return
 	}
 	ref, isRef := fieldObj.(ast.PdfIndirectRef)
@@ -340,7 +350,7 @@ func pruneFieldKidsAt(
 		if kidRef, kidIsRef := kid.(ast.PdfIndirectRef); kidIsRef && droppedAnnots[kidRef.ObjectNum] {
 			continue
 		}
-		pruneFieldKidsAt(ctx, doc, kid, droppedAnnots, overrides, visited, depth+1)
+		pruneFieldKidsAt(ctx, doc, kid, droppedAnnots, overrides, visited, depth+1, truncated)
 		kept = append(kept, kid)
 	}
 	if len(kept) == len(kids) {
@@ -430,19 +440,22 @@ func splitDestOverrides(ctx context.Context, doc *document.Document, keptPages [
 // around the hole. The destination has to go regardless: it reaches the deleted
 // page, which is enough to write that page into the output, as govdocs
 // thread_000_000761.pdf did with 2196 bytes of it.
+// It reports whether the walk stopped at its depth bound with items unread.
 func pruneOutlineDestinations(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
 	doc *document.Document,
 	catalogDict ast.PdfDict,
 	removed map[int]bool,
-) {
+) bool {
 	root, err := document.ResolveDict(ctx, doc, catalogDict["Outlines"])
 	if err != nil || root == nil {
-		return
+		return false
 	}
 	visited := make(map[int]bool)
-	pruneOutlineItems(ctx, alloc, doc, root["First"], removed, visited, 0)
+	truncated := false
+	pruneOutlineItems(ctx, alloc, doc, root["First"], removed, visited, 0, &truncated)
+	return truncated
 }
 
 // pruneOutlineItems walks one sibling chain and recurses into each item's
@@ -455,8 +468,12 @@ func pruneOutlineItems(
 	removed map[int]bool,
 	visited map[int]bool,
 	depth int,
+	truncated *bool,
 ) {
+	// Stopping here leaves the items below holding /Dest and /A that name the
+	// deleted page, which is enough to write that page into the output.
 	if depth > maxOutlineDepth {
+		*truncated = true
 		return
 	}
 	for current := itemObj; current != nil; {
@@ -477,7 +494,7 @@ func pruneOutlineItems(
 			delete(newItem, "A")
 			alloc.AllocAt(ref.ObjectNum, newItem)
 		}
-		pruneOutlineItems(ctx, alloc, doc, item["First"], removed, visited, depth+1)
+		pruneOutlineItems(ctx, alloc, doc, item["First"], removed, visited, depth+1, truncated)
 		current = item["Next"]
 	}
 }
@@ -522,8 +539,13 @@ type nameTreeDropFunc func(value ast.PdfObject) bool
 // Nodes keep their shape: only the /Names pairs change. A /Limits left wider
 // than the keys that remain still contains every key below it, which is all a
 // lookup needs (ISO 32000-1, 7.9.6).
-func pruneDestNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, drop nameTreeDropFunc, depth int) (ast.PdfObject, bool) {
-	return pruneDestNameTreeAt(ctx, alloc, doc, nodeObj, drop, make(map[int]bool), depth)
+// The third result reports that the walk stopped at its depth bound with part
+// of the tree unread, so absence of a drop is not evidence there was nothing to
+// drop.
+func pruneDestNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, drop nameTreeDropFunc, depth int) (ast.PdfObject, bool, bool) {
+	truncated := false
+	obj, dropped := pruneDestNameTreeAt(ctx, alloc, doc, nodeObj, drop, make(map[int]bool), depth, &truncated)
+	return obj, dropped, truncated
 }
 
 // pruneDestNameTreeAt is [pruneDestNameTree] carrying the nodes already walked.
@@ -534,8 +556,11 @@ func pruneDestNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 // because this walk fans out and a node whose /Kids names the same child twice
 // costs 2^depth. Each kid is written back at its own index, so a repeated visit
 // produces the same output and only the work explodes.
-func pruneDestNameTreeAt(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, drop nameTreeDropFunc, visited map[int]bool, depth int) (ast.PdfObject, bool) {
+func pruneDestNameTreeAt(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, drop nameTreeDropFunc, visited map[int]bool, depth int, truncated *bool) (ast.PdfObject, bool) {
+	// Stopping here leaves the destinations below naming the deleted page, and
+	// the rewrite copies whatever the catalog reaches.
 	if depth > maxDestTreeDepth {
+		*truncated = true
 		return nodeObj, false
 	}
 	if ref, isRef := nodeObj.(ast.PdfIndirectRef); isRef {
@@ -564,7 +589,7 @@ func pruneDestNameTreeAt(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		if kids, err := document.ResolveArray(ctx, doc, kidsObj); err == nil {
 			newKids := make(ast.PdfArray, len(kids))
 			for i, kid := range kids {
-				newKid, kidChanged := pruneDestNameTreeAt(ctx, alloc, doc, kid, drop, visited, depth+1)
+				newKid, kidChanged := pruneDestNameTreeAt(ctx, alloc, doc, kid, drop, visited, depth+1, truncated)
 				newKids[i] = newKid
 				changed = changed || kidChanged
 			}
@@ -613,10 +638,11 @@ func pruneCatalogDestinations(
 	catalogRef ast.PdfIndirectRef,
 	catalogDict ast.PdfDict,
 	removed map[int]bool,
-) {
+) bool {
 	newCatalog := make(ast.PdfDict, len(catalogDict))
 	maps.Copy(newCatalog, catalogDict)
 	changed := false
+	truncated := false
 
 	// /OpenAction names the view the document opens on (ISO 32000-1, 12.3.2 and
 	// Table 28), as a destination or a /GoTo action. Left pointing at a deleted
@@ -654,10 +680,13 @@ func pruneCatalogDestinations(
 	if namesObj, hasNames := catalogDict["Names"]; hasNames {
 		if names, err := document.ResolveDict(ctx, doc, namesObj); err == nil && names != nil {
 			if destsRoot, hasDestsRoot := names["Dests"]; hasDestsRoot {
-				newRoot, dropped := pruneDestNameTree(ctx, alloc, doc, destsRoot,
+				newRoot, dropped, destsTruncated := pruneDestNameTree(ctx, alloc, doc, destsRoot,
 					func(value ast.PdfObject) bool {
 						return destTargetsRemoved(ctx, doc, value, removed, 0)
 					}, 0)
+				if destsTruncated {
+					truncated = true
+				}
 				if dropped {
 					changed = true
 					if _, rootIsRef := destsRoot.(ast.PdfIndirectRef); !rootIsRef {
@@ -678,4 +707,5 @@ func pruneCatalogDestinations(
 	if changed {
 		alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 	}
+	return truncated
 }

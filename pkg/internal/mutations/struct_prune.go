@@ -66,7 +66,7 @@ func pruneStructTree(
 	// rather than a half-pruned one. Pruning /K alone is not enough either, which
 	// is why /ParentTree counts here too.
 	if kids.Truncated || tree.Truncated {
-		return ErrStructTreeTooDeepToPrune
+		return ErrPagePruneIncomplete
 	}
 
 	if !changed {

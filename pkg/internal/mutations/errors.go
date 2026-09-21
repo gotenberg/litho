@@ -322,18 +322,22 @@ var ErrSanitizationIncomplete = errors.New("document still holds removed text af
 // to be provable, so the mutation reports the overlap instead.
 var ErrSpansOverlap = errors.New("byte spans overlap")
 
-// ErrStructTreeTooDeepToPrune reports a structure tree whose nesting passes
-// maxStructTreeDepth, so the page prune could not reach the bottom of it.
+// ErrPagePruneIncomplete reports a delete-time prune that stopped at its depth
+// bound with part of the graph unread.
 //
-// A structure element names its page in /Pg, and the rewrite copies whatever the
-// catalog reaches, so an element the walk never visited keeps the page it names
-// and that page's content stream in the output. The result is a document
-// reporting one fewer page while still carrying the deleted page's bytes, which
-// is the shape a caller deleting a page to remove what is on it least expects.
+// Deleting a page means unhooking every reference that reaches it, and each
+// prune owns one kind: the structure tree through /Pg, the outline through
+// /Dest and /A, the named-destination trees, and a field's /Kids through its
+// widgets' /P. Each walk is bounded, and each bound stops the walk without
+// telling anyone. The rewrite then copies whatever the catalog still reaches,
+// so a reference the walk never visited keeps the page and its content stream
+// in the output: the result is a document reporting one fewer page while still
+// carrying that page's bytes, which is the shape a caller deleting a page to
+// remove what is on it least expects.
 //
 // Reporting beats performing the deletion halfway, the same judgement
 // [ErrSanitizationIncomplete] records: the error reaches the writer before
 // anything is written, so the caller gets no document rather than one that
-// silently kept what it asked to remove. Real trees nest a few dozen levels, so
-// no ordinary document reaches this.
-var ErrStructTreeTooDeepToPrune = errors.New("structure tree nests deeper than the page prune can walk")
+// silently kept what it asked to remove. Real documents nest a few dozen levels
+// in any of these structures, so none of them reaches this.
+var ErrPagePruneIncomplete = errors.New("a page-delete prune stopped at its depth bound, so the deleted page would survive in the output")

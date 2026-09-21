@@ -137,17 +137,20 @@ var (
 	ErrRedactionIncomplete = errors.New("redaction incomplete: a copy of the removed text survives in the document")
 
 	// ErrPageDeletionIncomplete is returned by [Writer.WriteTo] when
-	// [Writer.DeletePages] could not walk the document's structure tree to the
-	// bottom, because it nests deeper than the prune's depth bound.
+	// [Writer.DeletePages] could not walk one of the document's reference
+	// structures to the bottom, because it nests deeper than that prune's depth
+	// bound.
 	//
-	// A structure element names its page in /Pg, and the rewrite copies whatever
-	// the catalog reaches, so an element below the bound keeps the deleted page
-	// and its content stream alive. Writing that file would report one fewer
-	// page while still carrying the page's bytes, which is worse than refusing
-	// for a caller deleting a page to remove what is on it. Nothing is written.
-	// Real structure trees nest a few dozen levels, so no ordinary document
-	// reaches this.
-	ErrPageDeletionIncomplete = errors.New("page deletion incomplete: the structure tree nests deeper than the prune can walk, so the deleted page would survive in the output")
+	// Deleting a page means unhooking every reference that reaches it: the
+	// structure tree through /Pg, the outline through /Dest and /A, the named
+	// destination trees, and a field's /Kids through its widgets' /P. The
+	// rewrite copies whatever the catalog still reaches, so a reference left
+	// behind keeps the deleted page and its content stream alive. Writing that
+	// file would report one fewer page while still carrying the page's bytes,
+	// which is worse than refusing for a caller deleting a page to remove what
+	// is on it. Nothing is written. Real documents nest a few dozen levels in
+	// any of these structures, so none of them reaches this.
+	ErrPageDeletionIncomplete = errors.New("page deletion incomplete: a prune stopped at its depth bound, so the deleted page would survive in the output")
 
 	// ErrRemediationBrokePDF is returned by [Writer.RemediatePDFA] and
 	// [Writer.RemediatePDFUA] when applied fixes cause the output to
