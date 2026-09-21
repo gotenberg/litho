@@ -164,6 +164,13 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 		n, char, ok = font.ToUnicode.Map(data)
 	}
 	if ok {
+		if n == 0 {
+			// [cmap.CMap.Map] reports at least one byte for a match, so
+			// this only fires if that contract ever breaks. Keep the
+			// floor the fallback paths below apply: processText advances
+			// by n and would not terminate on a zero.
+			n = 1
+		}
 		return char, n, false
 	}
 

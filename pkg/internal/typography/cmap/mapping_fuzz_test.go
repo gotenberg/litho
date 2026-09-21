@@ -44,20 +44,27 @@ func FuzzCMapMapping(f *testing.F) {
 	f.Add([]byte(unicodeCMap), []byte{0xFF, 0xFF}) // outside every range
 	f.Add([]byte(cidCMap), []byte("A\x81\x45"))
 	f.Add([]byte("begincmap\nendcmap\n"), []byte("abc")) // no codespace at all
+	f.Add([]byte(zeroWidthCMapSrc), []byte("AB"))        // "<>" declares no code at all
 	f.Add([]byte{}, []byte{})
 
-	f.Fuzz(func(_ *testing.T, cmapSrc, codes []byte) {
+	f.Fuzz(func(t *testing.T, cmapSrc, codes []byte) {
 		if len(cmapSrc) > 1<<20 || len(codes) > 1<<16 {
 			return
 		}
 		ctx := context.Background()
 
 		if cm, err := Parse(ctx, cmapSrc); err == nil && cm != nil {
-			// Walk the string the way a caller does, consuming what Map reports
-			// so a zero-length consume cannot loop forever unnoticed.
+			// Walk the string the way a caller does. A match reports at least
+			// one byte, so assert that rather than step over a zero: skipping
+			// it keeps this target from hanging but also hides the very defect
+			// that hangs a real caller, which is what walking the string is
+			// meant to expose.
 			for pos := 0; pos < len(codes); {
 				n, _, ok := cm.Map(codes[pos:])
-				if !ok || n <= 0 {
+				if ok && n <= 0 {
+					t.Fatalf("Map reported a match consuming %d bytes at offset %d", n, pos)
+				}
+				if !ok {
 					pos++
 					continue
 				}

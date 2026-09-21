@@ -164,7 +164,12 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 				}
 				lowStr, ok1 := lowObj.(ast.PdfString)
 				highStr, ok2 := highObj.(ast.PdfString)
-				if ok1 && ok2 {
+				// Per ISO 32000-1, 9.7.6.2, a codespace range is one to
+				// four bytes wide. An empty "<>" hex string declares no
+				// range at all, and storing it as a zero-width entry
+				// makes every later lookup consume no bytes. The bfrange
+				// handler below applies the same floor.
+				if ok1 && ok2 && len(lowStr) > 0 {
 					c.CodeSpaceRanges = append(c.CodeSpaceRanges, CodeSpaceRange{
 						Low:  []byte(lowStr),
 						High: []byte(highStr),
@@ -333,6 +338,10 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 //
 // When no codespace ranges are defined, falls back to longest-prefix match
 // (up to 4 bytes) for backwards compatibility.
+//
+// A reported match always consumes at least one byte. Callers walk a string
+// by advancing the width Map returns, so a zero-width match would loop
+// forever on the same code.
 func (c *CMap) Map(data []byte) (int, string, bool) {
 	if len(c.CodeSpaceRanges) > 0 {
 		return c.mapWithCodeSpaces(data)
@@ -349,7 +358,11 @@ func (c *CMap) mapWithCodeSpaces(data []byte) (int, string, bool) {
 	lengths := c.codeLengths()
 
 	for _, n := range slices.Backward(lengths) {
-		if n > len(data) {
+		// A malformed CMap can declare a zero-width codespace, which
+		// would match the empty prefix of any string and report a
+		// mapping that consumes nothing. [CIDMap.next] mirrors this
+		// loop and guards the same case.
+		if n == 0 || n > len(data) {
 			continue
 		}
 		candidate := data[:n]
