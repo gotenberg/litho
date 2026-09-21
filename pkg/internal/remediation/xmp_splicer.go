@@ -575,16 +575,24 @@ func ensureNamespaceDecl(xmp []byte, prefix, uri string) ([]byte, error) {
 func canonicalizePrefix(xmp []byte, canonical, uri string) []byte {
 	out := xmp
 	for _, quote := range []byte{'"', '\''} {
-		marker := fmt.Appendf(nil, `="%s"`, uri)
-		altMarker := fmt.Appendf(nil, `='%s'`, uri)
-		if quote == '\'' {
-			marker = altMarker
-		}
-		for {
-			idx := bytes.Index(out, marker)
-			if idx < 0 {
+		marker := fmt.Appendf(nil, `=%c%s%c`, quote, uri, quote)
+		// A cursor that only ever moves forward past declarations this pass
+		// leaves alone. Restarting at the buffer start ended the walk on the
+		// first already-canonical declaration it met, so a packet that declared
+		// the canonical prefix BEFORE the alias kept the alias untouched.
+		//
+		// The walk terminates because each rewrite below strictly reduces the
+		// number of non-canonical declarations bound to uri (a rename makes one
+		// canonical, a drop removes one, and rewriteQualifiedName never creates
+		// an xmlns declaration), while the branch that rewrites nothing
+		// advances scan.
+		scan := 0
+		for scan < len(out) {
+			rel := bytes.Index(out[scan:], marker)
+			if rel < 0 {
 				break
 			}
+			idx := scan + rel
 			// Walk backward to locate the prefix in `xmlns:PREFIX=`.
 			nameEnd := idx
 			nameStart := nameEnd - 1
@@ -605,16 +613,10 @@ func canonicalizePrefix(xmp []byte, canonical, uri string) []byte {
 				prefix = string(declName[p+1:])
 			}
 			if prefix == "" || prefix == canonical {
-				// Either a default-namespace declaration (xmlns=) or
-				// already canonical: advance past this marker and
-				// continue.
-				next := idx + len(marker)
-				if next >= len(out) {
-					break
-				}
-				rewrittenHead := append([]byte(nil), out[:next]...)
-				out = append(rewrittenHead, out[next:]...)
-				break
+				// Either a default-namespace declaration (xmlns=) or already
+				// canonical: step over it and keep looking.
+				scan = idx + len(marker)
+				continue
 			}
 			// If the canonical prefix is already bound to this URI on the
 			// element, renaming the alias would create a second
@@ -643,6 +645,11 @@ func canonicalizePrefix(xmp []byte, canonical, uri string) []byte {
 			// Rewrite uses: prefix:local → canonical:local. Walk the
 			// buffer finding word boundaries.
 			out = rewriteQualifiedName(out, prefix, canonical)
+
+			// Resume at the declaration just edited: a drop shortened the
+			// buffer, and a rename left one that now reads canonical, so the
+			// branch above steps over it on the next pass.
+			scan = nameStart
 		}
 	}
 	return out

@@ -335,6 +335,44 @@ func TestCanonicalizePrefix_DropsAliasWhenCanonicalPresent(t *testing.T) {
 	}
 }
 
+// TestCanonicalizePrefix_CanonicalDeclaredFirst pins the order independence the
+// function's own comment claims. On finding a declaration that is already
+// canonical it says "advance past this marker and continue", but it rebuilds the
+// buffer byte-identically and then breaks, so the walk stops at the first
+// `="uri"` occurrence in the packet.
+//
+// When the canonical declaration is written before the alias, that first match
+// IS the canonical one, so no alias is ever canonicalized and the aliased
+// property keeps resolving through a prefix ISO 19005 does not permit. The two
+// neighbouring tests both place the alias first, which is the only reason they
+// pass.
+func TestCanonicalizePrefix_CanonicalDeclaredFirst(t *testing.T) {
+	xmp := []byte(`<?xpacket begin=""?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about=""
+        xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/"
+        xmlns:pdfuaia="http://www.aiim.org/pdfua/ns/id/">
+      <pdfuaid:part>1</pdfuaid:part>
+      <pdfuaia:amd>A</pdfuaia:amd>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`)
+
+	got := string(canonicalizePrefix(xmp, "pdfuaid", pdfuaidNS))
+
+	if strings.Contains(got, "pdfuaia") {
+		t.Errorf("alias survived because the canonical declaration came first:\n%s", got)
+	}
+	if n := strings.Count(got, "xmlns:pdfuaid="); n != 1 {
+		t.Errorf("want exactly 1 xmlns:pdfuaid declaration, got %d:\n%s", n, got)
+	}
+	if !strings.Contains(got, "<pdfuaid:amd>") {
+		t.Errorf("aliased property should be rewritten to the canonical prefix:\n%s", got)
+	}
+}
+
 func TestCanonicalizePrefix_RenamesWhenAliasOnly(t *testing.T) {
 	// Only the alias prefix is present (no canonical declaration). The alias
 	// is renamed to the canonical prefix and its usages rewritten.
