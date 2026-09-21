@@ -61,7 +61,30 @@ func ExtractPortfolioItems(ctx context.Context, doc *document.Document) ([]model
 // When seen is non-nil, the object number of every embedded file stream reached
 // is recorded in it. Entries are never suppressed: a portfolio may list one
 // stream under several names, and each is its own item.
+//
+// seen is NOT a cycle guard, despite its name and type: it records file STREAM
+// object numbers for the caller, is keyed on a different population than the
+// nodes this walk descends, and one caller passes nil. The visited set below is
+// what ends a cycle.
 func collectEmbeddedFiles(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, files *[]models.EmbeddedFile, seen map[int]bool) error {
+	return collectEmbeddedFilesAt(ctx, doc, nodeObj, files, seen, make(map[int]bool))
+}
+
+// collectEmbeddedFilesAt walks one name-tree node. visited marks each node by
+// object number: a name tree is a strict tree, so a /Kids entry reached twice is
+// malformed, and without the set a node naming itself recurses until the
+// goroutine stack is exhausted. A stack overflow is a fatal runtime error, not a
+// panic, so the recover() at every pkg/pdf entry point cannot convert it.
+func collectEmbeddedFilesAt(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, files *[]models.EmbeddedFile, seen, visited map[int]bool) error {
+	// A direct dictionary carries no object number and cannot name itself, so
+	// it closes no cycle and needs no mark.
+	if ref, ok := nodeObj.(ast.PdfIndirectRef); ok {
+		if visited[ref.ObjectNum] {
+			return nil
+		}
+		visited[ref.ObjectNum] = true
+	}
+
 	nodeDict, err := document.ResolveDict(ctx, doc, nodeObj)
 	if err != nil {
 		return err
@@ -80,7 +103,7 @@ func collectEmbeddedFiles(ctx context.Context, doc *document.Document, nodeObj a
 			return nil
 		}
 		for _, kid := range kidsArr {
-			if err := collectEmbeddedFiles(ctx, doc, kid, files, seen); err != nil {
+			if err := collectEmbeddedFilesAt(ctx, doc, kid, files, seen, visited); err != nil {
 				return err
 			}
 		}
