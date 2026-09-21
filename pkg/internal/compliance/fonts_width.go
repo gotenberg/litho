@@ -1062,8 +1062,16 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				if cid == 0 {
 					continue
 				}
+				// A CID is 16 bits (ISO 32000-1, 9.7.4.3). Testing that
+				// separately from usage matters: fused into the clause below it
+				// was skipped whenever usedCIDs was nil, and the uint16
+				// narrowing then aliased CID 65537 onto CID 1, reporting a width
+				// mismatch against a CID no font can hold.
+				if cid < 0 || cid > maxCID {
+					continue
+				}
 				// Usage-scoped: skip CIDs the document never renders.
-				if usedCIDs != nil && (cid < 0 || cid > 0xFFFF || !usedCIDs[uint16(cid)]) {
+				if usedCIDs != nil && !usedCIDs[uint16(cid)] {
 					continue
 				}
 				covered[uint16(cid)] = true //nolint:gosec // G115: guarded by the 16-bit range check above.
@@ -1113,13 +1121,26 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 			if pdfWidth < math.MinInt32 || pdfWidth > math.MaxInt32 {
 				continue
 			}
-			for cid := cidStart; cid <= cidEnd; cid++ {
+			// A CID is 16 bits (ISO 32000-1, 9.7.4.3), so a range naming more
+			// describes no glyph. Bounding it here stops two things: a walk as
+			// long as the file cares to declare, and the uint16 narrowing
+			// below, which would alias an out-of-range CID onto a real one.
+			lo, hi := cidStart, cidEnd
+			if lo < 0 {
+				lo = 0
+			}
+			if hi > maxCID {
+				hi = maxCID
+			}
+			for cid := lo; cid <= hi; cid++ {
 				// Skip .notdef (CID 0), no visible outlines.
 				if cid == 0 {
 					continue
 				}
-				// Usage-scoped: skip CIDs the document never renders.
-				if usedCIDs != nil && (cid < 0 || cid > 0xFFFF || !usedCIDs[uint16(cid)]) {
+				// Usage-scoped: skip CIDs the document never renders. The
+				// range check the fused form used to carry here is dead now
+				// that lo and hi are bounded above.
+				if usedCIDs != nil && !usedCIDs[uint16(cid)] {
 					continue
 				}
 				covered[uint16(cid)] = true //nolint:gosec // G115: guarded by the 16-bit range check above.
