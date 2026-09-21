@@ -31,6 +31,7 @@ func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	// scan reads as empty without -invisible: pdfjs JBIG2Globals.pdf extracts
 	// 0 words by default and 1459 with it.
 	invisible := fs.Bool("invisible", false, "Include invisible text (rendering mode 3), such as an OCR layer")
+	clipPath := fs.Bool("clip-path", false, "Include text the graphics-state clipping path (W/W*) excludes")
 	clipped := fs.Bool("clipped", false, "Include text outside the visible CropBox")
 	artifacts := fs.Bool("artifacts", false, "Include text marked as an /Artifact (headers, footers, watermarks)")
 	hidden := fs.Bool("hidden", false, "Include all of the above")
@@ -76,7 +77,7 @@ func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 		res := textResult{File: path}
 		for _, p := range pageNums {
-			text, err := r.ExtractText(ctx, p, textOptions(*hidden, *invisible, *clipped, *artifacts)...)
+			text, err := r.ExtractText(ctx, p, textOptions(*hidden, *invisible, *clipPath, *clipped, *artifacts)...)
 			if err != nil {
 				fmt.Fprintf(stderr, "%s page %d: %v\n", path, p, err)
 				text = ""
@@ -112,13 +113,16 @@ func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 // textOptions turns the extraction flags into reader options. The reader
 // already knows how to include each kind of unpainted text; the text command
 // simply had no way to ask, so an OCR layer was unreachable from the CLI.
-func textOptions(hidden, invisible, clipped, artifacts bool) []pdf.ExtractTextOption {
+func textOptions(hidden, invisible, clipPath, clipped, artifacts bool) []pdf.ExtractTextOption {
 	var opts []pdf.ExtractTextOption
 	if hidden {
 		opts = append(opts, pdf.WithHiddenText())
 	}
 	if invisible {
 		opts = append(opts, pdf.WithInvisibleText())
+	}
+	if clipPath {
+		opts = append(opts, pdf.WithClipPathText())
 	}
 	if clipped {
 		opts = append(opts, pdf.WithClippedText())

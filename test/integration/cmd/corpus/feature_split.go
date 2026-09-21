@@ -171,14 +171,14 @@ func runSplit(ctx context.Context, pdfPath string) (splitOutput, error) {
 	}
 
 	if numPages >= 1 {
-		text, err := out.ExtractText(ctx, 1, pdf.WithInvisibleText(), pdf.WithArtifacts())
+		text, err := out.ExtractText(ctx, 1, pdf.WithInvisibleText(), pdf.WithClipPathText(), pdf.WithArtifacts())
 		if err != nil && !errors.Is(err, pdf.ErrRequiresOCR) {
 			return splitOutput{}, fmt.Errorf("output page 1: %w", err)
 		}
 		result.OutFirst = text
 	}
 	if numPages >= 2 {
-		text, err := out.ExtractText(ctx, 2, pdf.WithInvisibleText(), pdf.WithArtifacts())
+		text, err := out.ExtractText(ctx, 2, pdf.WithInvisibleText(), pdf.WithClipPathText(), pdf.WithArtifacts())
 		if err != nil && !errors.Is(err, pdf.ErrRequiresOCR) {
 			return splitOutput{}, fmt.Errorf("output page 2: %w", err)
 		}
@@ -199,7 +199,7 @@ func runSplit(ctx context.Context, pdfPath string) (splitOutput, error) {
 // an error, letting the caller emit a Skipped Verdict instead of a
 // mismatch: there is no digital text to round-trip in either case.
 func extractOrSkip(ctx context.Context, r *pdf.Reader, page int) (text string, skipReason string, err error) {
-	text, err = r.ExtractText(ctx, page, pdf.WithInvisibleText(), pdf.WithArtifacts())
+	text, err = r.ExtractText(ctx, page, pdf.WithInvisibleText(), pdf.WithClipPathText(), pdf.WithArtifacts())
 	if err == nil {
 		return text, "", nil
 	}

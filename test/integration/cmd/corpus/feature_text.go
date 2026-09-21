@@ -286,6 +286,7 @@ func extractTextPages(ctx context.Context, pdfPath string, lastPage int) ([]text
 		page := textOutputPage{PageNumber: i}
 		text, err := r.ExtractText(ctx, i,
 			pdf.WithInvisibleText(),
+			pdf.WithClipPathText(),
 			pdf.WithArtifacts(),
 		)
 		if err != nil {

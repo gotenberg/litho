@@ -250,7 +250,7 @@ func (f *mergeEmptyFeature) runMergeEmpty(ctx context.Context, pdfPath string) (
 	}
 	outText := make([]string, 0, outPages)
 	for i := 1; i <= outPages; i++ {
-		text, err := out.ExtractText(ctx, i, pdf.WithInvisibleText(), pdf.WithArtifacts())
+		text, err := out.ExtractText(ctx, i, pdf.WithInvisibleText(), pdf.WithClipPathText(), pdf.WithArtifacts())
 		if err != nil && !errors.Is(err, pdf.ErrRequiresOCR) {
 			return mergeEmptyOutput{}, fmt.Errorf("output page %d: %w", i, err)
 		}

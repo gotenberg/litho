@@ -618,15 +618,16 @@ type ExtractTextOption func(*extractTextOpts)
 type extractTextOpts struct {
 	includeHidden    bool
 	includeInvisible bool
+	includeClipPath  bool
 	includeClipped   bool
 	includeArtifacts bool
 }
 
-// WithHiddenText includes every category of normally-stripped text, so it
-// reaches one category the granular options cannot: text clipped away by the
-// graphics-state path (W/W*). [WithInvisibleText] also un-strips that
-// category, [WithClippedText] covers CropBox clipping only, and
-// [WithArtifacts] covers /Artifact content.
+// WithHiddenText includes every category of normally-stripped text: invisible
+// text, text excluded by the graphics-state clipping path, text outside the
+// CropBox, and /Artifact content. It is the shortcut for passing
+// [WithInvisibleText], [WithClipPathText], [WithClippedText] and
+// [WithArtifacts] together.
 func WithHiddenText() ExtractTextOption {
 	return func(o *extractTextOpts) {
 		o.includeHidden = true
@@ -634,13 +635,27 @@ func WithHiddenText() ExtractTextOption {
 }
 
 // WithInvisibleText includes text that uses rendering mode 3 (invisible) or
-// white-on-white colors. It also un-strips text clipped away by the
-// graphics-state path (W/W*), which no other granular option reaches, so a
-// forensic caller gets both categories. Useful for forensic analysis of
-// hidden content.
+// white-on-white colors. Useful for forensic analysis of hidden content, and
+// for reading the OCR layer a scanned page carries.
+//
+// It covers that category alone. Text the graphics-state clipping path
+// excludes is [WithClipPathText]; text outside the CropBox is
+// [WithClippedText].
 func WithInvisibleText() ExtractTextOption {
 	return func(o *extractTextOpts) {
 		o.includeInvisible = true
+	}
+}
+
+// WithClipPathText includes text that the graphics-state clipping path (W/W*,
+// ISO 32000-1, 8.5.4) excludes from the painted page.
+//
+// This is a different category from [WithClippedText], which is about the
+// CropBox: a producer can clip text away with a path while leaving it well
+// inside the page box, so reaching it needs an option of its own.
+func WithClipPathText() ExtractTextOption {
+	return func(o *extractTextOpts) {
+		o.includeClipPath = true
 	}
 }
 
@@ -698,7 +713,7 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 	// the granular options override individual flags.
 	config := typography.ExtractionConfig{
 		StripInvisible: !o.includeHidden && !o.includeInvisible,
-		StripHidden:    !o.includeHidden && !o.includeInvisible,
+		StripHidden:    !o.includeHidden && !o.includeClipPath,
 		StripClipped:   !o.includeHidden && !o.includeClipped,
 		StripArtifacts: !o.includeHidden && !o.includeArtifacts,
 	}

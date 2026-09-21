@@ -82,7 +82,8 @@
 //     [WithOCREngine], [WithFilterPlugin], [WithCIISchemas],
 //     [WithSchematron], [WithLenient].
 //   - [Reader.ExtractText] takes [ExtractTextOption]: [WithHiddenText],
-//     [WithInvisibleText], [WithClippedText], [WithArtifacts].
+//     [WithInvisibleText], [WithClipPathText], [WithClippedText],
+//     [WithArtifacts].
 //   - [Writer.WriteTo], [Split], and [Merge] take [WriteOption]:
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],
 //     [WithBookmarks], [WithPipelineTempDir].

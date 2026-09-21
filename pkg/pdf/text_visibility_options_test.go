@@ -30,8 +30,8 @@ import (
 // typography.textIsClipped marks a glyph Hidden when a clip is in force and
 // the glyph origin falls outside its bounds, so the run sits at y=100 while
 // the clip admits only y>=600. Note the naming: this is the W/W*
-// graphics-state path, which the extractor calls Hidden, NOT the CropBox
-// clipping that [WithClippedText] is named for.
+// graphics-state path, which the extractor calls Hidden and which
+// [WithClipPathText] reaches, NOT the CropBox clipping of [WithClippedText].
 func visibilityPDF() []byte {
 	const content = "BT /F1 12 Tf 100 700 Td (ALPHA) Tj ET\n" +
 		"q BT 3 Tr /F1 12 Tf 100 650 Td (BETA) Tj ET Q\n" +
@@ -111,30 +111,22 @@ func TestExtractText_VisibilityFixtureIsolatesOneStripperPerRun(t *testing.T) {
 }
 
 // TestExtractText_VisibilityOptionsWiring pins which option un-strips which
-// category, including the asymmetry the option names hide.
+// category, one option per category.
 //
-// [Reader.ExtractText] builds a typography.ExtractionConfig from four flags,
-// and one of them has no option of its own: StripHidden, the W/W*
-// graphics-state clip, is cleared by [WithInvisibleText]. [WithClippedText]
-// clears StripClipped, which is CropBox clipping only. So a caller asking for
-// invisible text also receives path-clipped text, and a caller asking for
-// clipped text does not.
+// [Reader.ExtractText] builds a typography.ExtractionConfig from four strip
+// flags, and each now has an option of its own: StripInvisible is cleared by
+// [WithInvisibleText], StripHidden (the W/W* graphics-state clip) by
+// [WithClipPathText], StripClipped (the CropBox) by [WithClippedText], and
+// StripArtifacts by [WithArtifacts]. [WithHiddenText] clears all four.
 //
-// This test records today's wiring rather than endorsing it. Whether W/W*
-// clipping ought to belong to [WithClippedText] is an open question, and the
-// reason it stays open is that closing it properly means adding a public
-// option of its own: there are four strip flags and only three granular
-// options, so nothing targets the graphics-state clip except by riding
-// [WithInvisibleText]. New public API is not a change to make unasked.
+// Before [WithClipPathText] existed there were four flags and three options,
+// so StripHidden rode [WithInvisibleText]: asking for invisible text silently
+// also returned path-clipped text, and no caller could ask for one without the
+// other. The separation is what these subtests pin, in both directions.
 //
-// The corpus gate cannot referee that decision either way, so it offers no
-// cover: every text-producing gate feature passes [WithInvisibleText], which
-// leaves StripHidden false, so the filter never runs there. A rewiring would
-// come back byte-identical and prove nothing.
-//
-// Pinning the wiring here means such a change turns this test red instead of
-// passing unnoticed, which is exactly how the option godocs drifted: of these
-// four options, only [WithArtifacts] was exercised by any test.
+// Each category is asserted present under its own option AND absent under its
+// neighbour. Asserting only the positive half would still pass if two options
+// were wired to the same flag, which is the exact defect this replaced.
 func TestExtractText_VisibilityOptionsWiring(t *testing.T) {
 	t.Parallel()
 
@@ -166,25 +158,34 @@ func TestExtractText_VisibilityOptionsWiring(t *testing.T) {
 		t.Fatalf("precondition: path-clipped text survived a default extraction, so the fixture does not exercise StripHidden: %q", base)
 	}
 
-	t.Run("WithInvisibleText also returns path-clipped text", func(t *testing.T) {
+	t.Run("WithInvisibleText returns the mode-3 run only", func(t *testing.T) {
 		got := extract(t, WithInvisibleText())
 		if !strings.Contains(got, "BETA") {
 			t.Errorf("WithInvisibleText did not return the Tr 3 run: %q", got)
 		}
+		if strings.Contains(got, "GAMMA") {
+			t.Errorf("WithInvisibleText returned the W/W* path-clipped run: %q\n"+
+				"That category belongs to WithClipPathText; the two options must not share a flag", got)
+		}
+	})
+
+	t.Run("WithClipPathText returns the path-clipped run only", func(t *testing.T) {
+		got := extract(t, WithClipPathText())
 		if !strings.Contains(got, "GAMMA") {
-			t.Errorf("WithInvisibleText did not return the W/W* path-clipped run: %q\n"+
-				"It clears StripHidden as well as StripInvisible. If that moved to "+
-				"WithClippedText on purpose, update both godocs and this test together", got)
+			t.Errorf("WithClipPathText did not return the W/W* path-clipped run: %q", got)
+		}
+		if strings.Contains(got, "BETA") {
+			t.Errorf("WithClipPathText returned the Tr 3 run: %q", got)
 		}
 	})
 
 	t.Run("WithClippedText returns neither", func(t *testing.T) {
-		// The discriminating case: GAMMA carries Hidden only, so this subtest
-		// goes red the moment StripHidden is rewired to includeClipped.
+		// CropBox clipping is a third category, and this fixture contains
+		// none of it: the option must move nothing here.
 		got := extract(t, WithClippedText())
 		if strings.Contains(got, "GAMMA") {
 			t.Errorf("WithClippedText returned the W/W* path-clipped run: %q\n"+
-				"That is a behaviour change: it covers CropBox clipping (StripClipped) only", got)
+				"It covers CropBox clipping (StripClipped) only", got)
 		}
 		if strings.Contains(got, "BETA") {
 			t.Errorf("WithClippedText returned the Tr 3 run: %q", got)
