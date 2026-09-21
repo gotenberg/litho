@@ -1812,6 +1812,12 @@ func (w *Writer) copyFromPreSerialized(dst io.Writer) error {
 // clear metadata, or [WithFullRewrite]); combining them returns
 // [ErrSignFullRewriteIncompatible] instead of silently dropping the
 // requested operation.
+//
+// Signing an already-encrypted source returns the same error even when
+// the caller asks for nothing else: the incremental signing flow would
+// append the signature dictionary's strings in plaintext where the
+// source's crypto handler requires ciphertext. Encrypted-then-signed
+// output is permitted by the specification but not yet implemented.
 func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (err error) {
 	defer recoverToError(w.logger(), "Writer.WriteTo", &err)
 	if w.consumed {
