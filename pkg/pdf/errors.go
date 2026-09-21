@@ -136,6 +136,19 @@ var (
 	// error cannot write a half-redacted document.
 	ErrRedactionIncomplete = errors.New("redaction incomplete: a copy of the removed text survives in the document")
 
+	// ErrPageDeletionIncomplete is returned by [Writer.WriteTo] when
+	// [Writer.DeletePages] could not walk the document's structure tree to the
+	// bottom, because it nests deeper than the prune's depth bound.
+	//
+	// A structure element names its page in /Pg, and the rewrite copies whatever
+	// the catalog reaches, so an element below the bound keeps the deleted page
+	// and its content stream alive. Writing that file would report one fewer
+	// page while still carrying the page's bytes, which is worse than refusing
+	// for a caller deleting a page to remove what is on it. Nothing is written.
+	// Real structure trees nest a few dozen levels, so no ordinary document
+	// reaches this.
+	ErrPageDeletionIncomplete = errors.New("page deletion incomplete: the structure tree nests deeper than the prune can walk, so the deleted page would survive in the output")
+
 	// ErrRemediationBrokePDF is returned by [Writer.RemediatePDFA] and
 	// [Writer.RemediatePDFUA] when applied fixes cause the output to
 	// regress beyond the configured [RegressionTolerance] and rolling back

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -605,6 +606,12 @@ func (w *Writer) RotatePages(rotation int, pages ...int) error {
 // operation that refuses an empty list: [Writer.RotatePages],
 // [Writer.InsertPages] and the three stamps all document an empty list as
 // every page, which deletion cannot mean because it would leave no document.
+//
+// [Writer.WriteTo] reports [ErrPageDeletionIncomplete] when the document's
+// structure tree nests deeper than the page prune can walk. Elements below that
+// bound keep the deleted page alive through their /Pg, so the output would
+// carry the page's content while reporting one fewer page. Nothing is written
+// in that case.
 func (w *Writer) DeletePages(pages ...int) error {
 	if len(pages) == 0 {
 		return ErrEmptyPageList
@@ -616,7 +623,15 @@ func (w *Writer) DeletePages(pages ...int) error {
 			if err != nil {
 				return fmt.Errorf("resolving pages: %w", err)
 			}
-			return mutations.DeletePages(ctx, alloc, doc, resolvedPages, pages)
+			if err := mutations.DeletePages(ctx, alloc, doc, resolvedPages, pages); err != nil {
+				// Translate at the boundary so a caller can match the refusal
+				// with errors.Is without importing pkg/internal.
+				if errors.Is(err, mutations.ErrStructTreeTooDeepToPrune) {
+					return fmt.Errorf("%w: %w", ErrPageDeletionIncomplete, err)
+				}
+				return err
+			}
+			return nil
 		},
 	})
 	return nil

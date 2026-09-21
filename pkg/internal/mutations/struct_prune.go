@@ -31,17 +31,18 @@ func pruneStructTree(
 	doc *document.Document,
 	catalogDict ast.PdfDict,
 	removed map[int]bool,
-) {
+) error {
 	root, err := document.ResolveDict(ctx, doc, catalogDict["StructTreeRoot"])
 	if err != nil || root == nil {
-		return
+		return nil
 	}
 
 	newRoot := make(ast.PdfDict, len(root))
 	maps.Copy(newRoot, root)
 	changed := false
 
-	if kids := pruneStructKids(ctx, alloc, doc, root["K"], removed, false, 0); kids.Changed {
+	kids := pruneStructKids(ctx, alloc, doc, root["K"], removed, false, 0)
+	if kids.Changed {
 		changed = true
 		// A queued /K array was already rewritten in place; storing the returned
 		// reference again would write the reference AS the array object, which
@@ -50,19 +51,31 @@ func pruneStructTree(
 			newRoot["K"] = kids.Value
 		}
 	}
-	if tree := pruneParentTree(ctx, alloc, doc, root["ParentTree"], removed, 0); tree.Changed {
+	tree := pruneParentTree(ctx, alloc, doc, root["ParentTree"], removed, 0)
+	if tree.Changed {
 		changed = true
 		if !tree.Queued {
 			newRoot["ParentTree"] = tree.Value
 		}
 	}
 
+	// Either walk stopping short leaves elements naming a removed page, and the
+	// rewrite copies whatever the catalog reaches, so the page and its content
+	// would ship inside a document reporting one fewer page. Refuse: the error
+	// reaches [writer] before anything is written, so the caller gets no file
+	// rather than a half-pruned one. Pruning /K alone is not enough either, which
+	// is why /ParentTree counts here too.
+	if kids.Truncated || tree.Truncated {
+		return ErrStructTreeTooDeepToPrune
+	}
+
 	if !changed {
-		return
+		return nil
 	}
 	if ref, isRef := catalogDict["StructTreeRoot"].(ast.PdfIndirectRef); isRef {
 		alloc.AllocAt(ref.ObjectNum, newRoot)
 	}
+	return nil
 }
 
 // onRemovedPage reports whether a dictionary's /Pg names a page the operation
@@ -85,6 +98,12 @@ type structKidsResult struct {
 	Changed   bool
 	Survivors int
 	Queued    bool
+	// Truncated reports that the walk stopped at [maxStructTreeDepth] with
+	// subtree left unread. Everything below that point keeps whatever /Pg it
+	// named, so a page the caller asked to delete survives in the output along
+	// with its content stream. The caller must refuse rather than report a
+	// deletion it did not perform.
+	Truncated bool
 }
 
 // pruneStructKids filters a /K entry, which ISO 32000-1, Table 323 allows to be
@@ -101,7 +120,10 @@ func pruneStructKids(
 	ownerOnRemovedPage bool,
 	depth int,
 ) structKidsResult {
-	return pruneStructKidsAt(ctx, alloc, doc, kidsObj, removed, make(map[int]structElemVerdict), ownerOnRemovedPage, depth)
+	truncated := false
+	res := pruneStructKidsAt(ctx, alloc, doc, kidsObj, removed, make(map[int]structElemVerdict), ownerOnRemovedPage, depth, &truncated)
+	res.Truncated = truncated
+	return res
 }
 
 // structElemVerdict is what pruning one element decided, remembered so an
@@ -131,14 +153,23 @@ func pruneStructKidsAt(
 	memo map[int]structElemVerdict,
 	ownerOnRemovedPage bool,
 	depth int,
+	truncated *bool,
 ) structKidsResult {
-	if depth > maxStructTreeDepth || kidsObj == nil {
+	// The two conditions are not the same thing and must not share a branch. An
+	// element with no /K is a leaf, which every tagged tree is full of; the depth
+	// bound is a subtree this walk never read. Marking the leaf truncated would
+	// make the delete refuse on ordinary documents.
+	if depth > maxStructTreeDepth {
+		*truncated = true
+		return structKidsResult{Value: kidsObj, Survivors: 1}
+	}
+	if kidsObj == nil {
 		return structKidsResult{Value: kidsObj, Survivors: 1}
 	}
 
 	arr, err := document.ResolveArray(ctx, doc, kidsObj)
 	if err != nil {
-		drop, changed := pruneStructKidAt(ctx, alloc, doc, kidsObj, removed, memo, ownerOnRemovedPage, depth)
+		drop, changed := pruneStructKidAt(ctx, alloc, doc, kidsObj, removed, memo, ownerOnRemovedPage, depth, truncated)
 		if drop {
 			return structKidsResult{Changed: true}
 		}
@@ -148,7 +179,7 @@ func pruneStructKidsAt(
 	kept := make(ast.PdfArray, 0, len(arr))
 	changed := false
 	for _, kid := range arr {
-		drop, kidChanged := pruneStructKidAt(ctx, alloc, doc, kid, removed, memo, ownerOnRemovedPage, depth)
+		drop, kidChanged := pruneStructKidAt(ctx, alloc, doc, kid, removed, memo, ownerOnRemovedPage, depth, truncated)
 		if drop {
 			changed = true
 			continue
@@ -177,6 +208,7 @@ func pruneStructKidAt(
 	memo map[int]structElemVerdict,
 	ownerOnRemovedPage bool,
 	depth int,
+	truncated *bool,
 ) (drop, changed bool) {
 	// A bare integer is a marked-content identifier in the owner's own page
 	// content (ISO 32000-1, 14.7.4.2). It survives exactly as long as that page.
@@ -199,7 +231,7 @@ func pruneStructKidAt(
 		}
 		return onRemovedPage(dict, removed), false
 	}
-	return pruneStructElementAt(ctx, alloc, doc, kid, dict, removed, memo, depth)
+	return pruneStructElementAt(ctx, alloc, doc, kid, dict, removed, memo, depth, truncated)
 }
 
 // pruneStructElement filters one element's own /K and decides whether the
@@ -219,6 +251,7 @@ func pruneStructElementAt(
 	removed map[int]bool,
 	memo map[int]structElemVerdict,
 	depth int,
+	truncated *bool,
 ) (drop, changed bool) {
 	// An element named twice answers with the verdict it already reached, so a
 	// /K that fans out is pruned once. Only an indirect element can be named
@@ -232,7 +265,7 @@ func pruneStructElementAt(
 
 	pageGone := onRemovedPage(element, removed)
 
-	kids := pruneStructKidsAt(ctx, alloc, doc, element["K"], removed, memo, pageGone, depth+1)
+	kids := pruneStructKidsAt(ctx, alloc, doc, element["K"], removed, memo, pageGone, depth+1, truncated)
 	survivors := kids.Survivors
 	if _, hasKids := element["K"]; !hasKids {
 		survivors = 0
@@ -287,7 +320,10 @@ func pruneParentTree(
 	removed map[int]bool,
 	depth int,
 ) structKidsResult {
-	return pruneParentTreeAt(ctx, alloc, doc, nodeObj, removed, make(map[int]bool), depth)
+	truncated := false
+	res := pruneParentTreeAt(ctx, alloc, doc, nodeObj, removed, make(map[int]bool), depth, &truncated)
+	res.Truncated = truncated
+	return res
 }
 
 // pruneParentTreeAt is [pruneParentTree] carrying the nodes already walked.
@@ -306,8 +342,15 @@ func pruneParentTreeAt(
 	removed map[int]bool,
 	visited map[int]bool,
 	depth int,
+	truncated *bool,
 ) structKidsResult {
-	if depth > maxStructTreeDepth || nodeObj == nil {
+	// Split for the same reason as the /K walk: a nil node is an absent subtree,
+	// the depth bound is one this walk declined to read.
+	if depth > maxStructTreeDepth {
+		*truncated = true
+		return structKidsResult{Value: nodeObj}
+	}
+	if nodeObj == nil {
 		return structKidsResult{Value: nodeObj}
 	}
 	if ref, isRef := nodeObj.(ast.PdfIndirectRef); isRef {
@@ -330,7 +373,7 @@ func pruneParentTreeAt(
 			newKids := make(ast.PdfArray, len(kids))
 			kidsChanged := false
 			for i, kid := range kids {
-				res := pruneParentTreeAt(ctx, alloc, doc, kid, removed, visited, depth+1)
+				res := pruneParentTreeAt(ctx, alloc, doc, kid, removed, visited, depth+1, truncated)
 				newKids[i] = kid
 				if !res.Changed {
 					continue

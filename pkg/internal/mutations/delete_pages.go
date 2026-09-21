@@ -114,7 +114,9 @@ func rebuildPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			alloc.AllocAt(objNum, patched)
 		}
 
-		pruneStructTree(ctx, alloc, doc, catalogDict, removed)
+		if err := pruneStructTree(ctx, alloc, doc, catalogDict, removed); err != nil {
+			return fmt.Errorf("pruning the structure tree: %w", err)
+		}
 		pruneOutlineDestinations(ctx, alloc, doc, catalogDict, removed)
 		pruneArticleBeads(ctx, alloc, doc, catalogDict, removed)
 		pruneWebCaptureSets(ctx, alloc, doc, catalogDict, removed)
