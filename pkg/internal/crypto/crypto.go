@@ -52,7 +52,19 @@ func dictString(dict ast.PdfDict, key ast.PdfName) []byte {
 	return nil
 }
 
-// NewHandler initializes a new encryption handler and attempts to authenticate with a blank password.
+// NewHandler initializes a new encryption handler and attempts to authenticate
+// with a blank password.
+//
+// It currently cannot fail: the body has a single return, and the blank-password
+// attempt below is discarded on purpose, so a malformed or unsupported /Encrypt
+// dictionary yields a handler with Authenticated false rather than an error. The
+// caller then supplies a real password and learns the outcome from
+// [Handler.Authenticate], which is where [ErrUnsupportedEncryption] and
+// [ErrInvalidPassword] come from.
+//
+// The error result is kept, and callers should keep checking it: everything here
+// reads untrusted dictionary entries, which is exactly where a failure path grows
+// the first time one of them has to be rejected up front.
 func NewHandler(encryptDict ast.PdfDict, trailer ast.PdfDict) (*Handler, error) {
 	v := dictInt(encryptDict, "V", 0)
 	// /R defaults to V's revision when /R is missing; R selects the
