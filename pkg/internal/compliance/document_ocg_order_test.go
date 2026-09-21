@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -91,5 +92,72 @@ func TestCheckOCGOrderCompleteness_NamesTheLowestMissingOCG(t *testing.T) {
 		if msg := got[0].Context; msg != "OCG object 4 not referenced in Order array" {
 			t.Fatalf("message = %q, want the lowest missing OCG object number", msg)
 		}
+	}
+}
+
+// ocgOrderViolations reports the Order-completeness verdict for a catalog whose
+// /D config carries the given /Order entry, with objects 4 and 5 as the OCGs.
+func ocgOrderViolations(t *testing.T, ctx context.Context, order string, extra ...string) []Violation {
+	t.Helper()
+
+	objs := append([]string{
+		"<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [4 0 R 5 0 R] " +
+			"/D << /Order " + order + " >> >> >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /OCG /Name (Layer 1) >>",
+		"<< /Type /OCG /Name (Layer 2) >>",
+	}, extra...)
+
+	doc, _ := objsDocPDF(t, objs...)
+	catalog, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 1})
+	if err != nil {
+		t.Fatalf("resolve catalog: %v", err)
+	}
+	return checkOCGOrderCompleteness(ctx, doc, catalog, 2)
+}
+
+// TestCheckOCGOrderCompleteness_DeepNestingDoesNotFabricate pins that nesting
+// /Order past maxOCGOrderDepth does not fail a file that lists every OCG.
+//
+// The bound stopped the collection and the completeness loop then read every
+// OCG it had not reached as unreferenced. Measured on a file naming both OCGs
+// at every level: 20 levels reported nothing, 21 reported "OCG object 4 not
+// referenced in Order array", and so did 40. ISO 19005-2 §6.9 t3 asks what the
+// file contains, so an anti-DoS cap must not answer it.
+func TestCheckOCGOrderCompleteness_DeepNestingDoesNotFabricate(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Either side of the bound, and far past it.
+	nestings := []int{maxOCGOrderDepth, maxOCGOrderDepth + 1, maxOCGOrderDepth * 3}
+	for _, nest := range nestings {
+		order := strings.Repeat("[", nest) + "4 0 R 5 0 R" + strings.Repeat("]", nest)
+		if got := ocgOrderViolations(t, ctx, order); len(got) > 0 {
+			t.Errorf("/Order nested %d levels: violations = %d, want 0, both OCGs are listed (%v)",
+				nest, len(got), got)
+		}
+	}
+}
+
+// TestCheckOCGOrderCompleteness_CyclicOrderStillJudged pins that a grouping
+// naming itself is walked once rather than spending the depth budget on the
+// cycle.
+//
+// This is what keeps abstaining on a truncated read from becoming a way to hide
+// a real violation. Without the visited set the cycle exhausts the bound, the
+// walk reports itself incomplete, and object 5, an OCG /Order genuinely never
+// names, goes unreported.
+func TestCheckOCGOrderCompleteness_CyclicOrderStillJudged(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Object 6 is a grouping holding OCG 4 and itself.
+	got := ocgOrderViolations(t, ctx, "6 0 R", "[4 0 R 6 0 R]")
+	if len(got) != 1 {
+		t.Fatalf("violations = %d, want 1: object 5 is an OCG /Order never names (%v)", len(got), got)
+	}
+	if msg := got[0].Context; msg != "OCG object 5 not referenced in Order array" {
+		t.Fatalf("message = %q, want object 5 named", msg)
 	}
 }

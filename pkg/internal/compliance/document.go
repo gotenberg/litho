@@ -622,9 +622,15 @@ func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, cata
 		return nil
 	}
 
-	// Collect OCG refs in the Order array (can be nested).
+	// Collect OCG refs in the Order array (can be nested). A walk the depth
+	// bound stopped read only part of /Order, and this clause asks whether
+	// /Order names every OCG, which a partial read cannot answer: counting the
+	// OCGs it never reached as unreferenced lets an anti-DoS bound fail a
+	// conforming file. Abstain instead.
 	orderOCGs := make(map[int]bool)
-	collectOrderOCGRefs(ctx, doc, orderObj, orderOCGs, 0)
+	if !collectOrderOCGRefs(ctx, doc, orderObj, orderOCGs, make(map[int]bool), 0) {
+		return nil
+	}
 
 	// Check that all OCGs are referenced. Sorted so a file omitting several
 	// always names the same one.
@@ -639,13 +645,19 @@ func checkOCGOrderCompleteness(ctx context.Context, doc *document.Document, cata
 
 // maxOCGOrderDepth bounds recursion into the attacker-nested /Order array of
 // an optional-content configuration. Anti-DoS guard, not spec-mandated: real
-// /Order nesting is a handful of levels deep; 20 is far beyond that.
+// /Order nesting is a handful of levels deep; 20 is far beyond that. Nesting
+// past the bound makes the read incomplete rather than partial-but-trusted, and
+// [checkOCGOrderCompleteness] abstains on an incomplete read: a cap on what
+// litho reads must not decide what litho reports.
 const maxOCGOrderDepth = 20
 
-// collectOrderOCGRefs recursively collects OCG indirect refs from an Order array.
-func collectOrderOCGRefs(ctx context.Context, doc *document.Document, obj ast.PdfObject, result map[int]bool, depth int) {
+// collectOrderOCGRefs recursively collects OCG indirect refs from an Order
+// array, reporting whether it read that array whole. A walk stopped by
+// maxOCGOrderDepth reports false, and absence from a partial read is not
+// evidence that the file omits an OCG.
+func collectOrderOCGRefs(ctx context.Context, doc *document.Document, obj ast.PdfObject, result, visited map[int]bool, depth int) (complete bool) {
 	if depth > maxOCGOrderDepth {
-		return
+		return false
 	}
 	// An array first, resolving it: /Order is an array and its nested groupings
 	// are arrays, and ISO 32000-1, 7.3.10 lets any of them be written
@@ -655,10 +667,28 @@ func collectOrderOCGRefs(ctx context.Context, doc *document.Document, obj ast.Pd
 	// transparent.pdf all write /Order as "N 0 R", and litho reported an
 	// ISO 19005-2 §6.9 t3 violation on each that veraPDF does not.
 	if arr, err := document.ResolveArray(ctx, doc, obj); err == nil {
-		for _, item := range arr {
-			collectOrderOCGRefs(ctx, doc, item, result, depth+1)
+		// Walk a grouping written indirectly once. ResolveObject's cycle guard
+		// is per-resolution, so a grouping that names itself resolves afresh on
+		// every frame and would otherwise spend the whole depth budget on one
+		// cycle, truncating the read of an /Order that is in fact complete.
+		// Marks persist because result is keyed on object number and is
+		// path-independent: a grouping reached twice contributes the same OCGs
+		// both times, so skipping the repeat loses nothing.
+		if ref, isRef := obj.(ast.PdfIndirectRef); isRef {
+			if visited[ref.ObjectNum] {
+				return true
+			}
+			visited[ref.ObjectNum] = true
 		}
-		return
+		// Every element is walked even once one has truncated, so the collected
+		// set stays as full as the bound allows.
+		complete = true
+		for _, item := range arr {
+			if !collectOrderOCGRefs(ctx, doc, item, result, visited, depth+1) {
+				complete = false
+			}
+		}
+		return complete
 	}
 	// Anything else that is a reference is an OCG. A title string, which
 	// ISO 32000-1, 8.11.4.5 allows as the first element of a nested grouping,
@@ -666,4 +696,5 @@ func collectOrderOCGRefs(ctx context.Context, doc *document.Document, obj ast.Pd
 	if ref, ok := obj.(ast.PdfIndirectRef); ok {
 		result[ref.ObjectNum] = true
 	}
+	return true
 }
