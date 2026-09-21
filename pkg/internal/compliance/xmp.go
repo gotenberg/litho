@@ -3533,7 +3533,8 @@ func propTypeToContainerType(t xmpPropType) xmpContainerType {
 		return xmpContSeq
 	case xmpPropBag:
 		return xmpContBag
-	case xmpPropText, xmpPropURI, xmpPropInteger, xmpPropReal, xmpPropBoolean, xmpPropDate, xmpPropStruct, xmpPropAny:
+	case xmpPropText, xmpPropURI, xmpPropInteger, xmpPropReal, xmpPropBoolean, xmpPropDate,
+		xmpPropGPSCoordinate, xmpPropStruct, xmpPropAny:
 		return xmpContSimple
 	}
 	return xmpContSimple

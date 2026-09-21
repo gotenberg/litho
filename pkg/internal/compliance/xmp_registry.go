@@ -7,12 +7,13 @@ type xmpPropType int
 
 const (
 	// Simple value types: stored as text content or attributes.
-	xmpPropText    xmpPropType = iota // Plain text string.
-	xmpPropURI                        // URI string.
-	xmpPropInteger                    // Integer value.
-	xmpPropReal                       // Real/float value.
-	xmpPropBoolean                    // Boolean (True/False).
-	xmpPropDate                       // ISO 8601 date.
+	xmpPropText          xmpPropType = iota // Plain text string.
+	xmpPropURI                              // URI string.
+	xmpPropInteger                          // Integer value.
+	xmpPropReal                             // Real/float value.
+	xmpPropBoolean                          // Boolean (True/False).
+	xmpPropDate                             // ISO 8601 date.
+	xmpPropGPSCoordinate                    // EXIF GPS coordinate ("DDD,MM,SSk").
 
 	// Container types: wrapped in rdf:Alt, rdf:Seq, or rdf:Bag.
 	xmpPropAlt    // rdf:Alt (language alternatives).
@@ -152,10 +153,10 @@ var xmpPropertyRegistry = map[string]map[string]xmpPropType{
 		"GPSAltitudeRef": xmpPropInteger, "GPSAreaInformation": xmpPropText,
 		"GPSDestBearing": xmpPropReal, "GPSDestBearingRef": xmpPropText,
 		"GPSDestDistance": xmpPropReal, "GPSDestDistanceRef": xmpPropText,
-		"GPSDestLatitude": xmpPropText, "GPSDestLongitude": xmpPropText,
+		"GPSDestLatitude": xmpPropGPSCoordinate, "GPSDestLongitude": xmpPropGPSCoordinate,
 		"GPSDifferential": xmpPropInteger, "GPSDOP": xmpPropReal,
 		"GPSImgDirection": xmpPropReal, "GPSImgDirectionRef": xmpPropText,
-		"GPSLatitude": xmpPropText, "GPSLongitude": xmpPropText,
+		"GPSLatitude": xmpPropGPSCoordinate, "GPSLongitude": xmpPropGPSCoordinate,
 		"GPSMapDatum": xmpPropText, "GPSMeasureMode": xmpPropText,
 		"GPSProcessingMethod": xmpPropText, "GPSSatellites": xmpPropText,
 		"GPSSpeed": xmpPropReal, "GPSSpeedRef": xmpPropText,
@@ -319,8 +320,10 @@ func isContainerPropType(t xmpPropType) bool {
 }
 
 // isSimplePropType returns true if the type is a simple value (not a container or struct).
+// The simple types are the leading run of the enum, so the bound names the last
+// of them rather than a count.
 func isSimplePropType(t xmpPropType) bool {
-	return t <= xmpPropDate
+	return t <= xmpPropGPSCoordinate
 }
 
 // isValidXMPInteger returns true if s is a valid XMP integer value.
@@ -532,9 +535,15 @@ func isValidXMPRational(s string) bool {
 }
 
 // isValidXMPGPSCoordinate returns true if s is a valid GPS coordinate value.
-// Format: "DDD,MM,SSk" or "DDD,MM.MMk" where k is N/S/E/W.
+// Format: "DDD,MM,SSk" or "DDD,MM.MMk" where k is N/S/E/W, per the EXIF schema
+// of the XMP Specification part 2 (ISO 16684), which types exif:GPSLatitude and
+// its siblings as GPSCoordinate rather than plain Text.
 //
-//nolint:unused // API for EXIF GPS validation; used indirectly via container element checks.
+// The check is deliberately the hemisphere suffix rather than the full grammar:
+// a value litho rejects here is reported under the property-type rule
+// ([xmpPropertyTypeRule]), so a stricter reading risks a false positive against
+// veraPDF on producers this corpus does not carry. The two coordinates in the
+// corpus, "67,19,26S" and "43,40,53W", satisfy either reading.
 func isValidXMPGPSCoordinate(s string) bool {
 	s = strings.TrimSpace(s)
 	if len(s) < 5 {
@@ -557,6 +566,8 @@ func validateXMPValue(propType xmpPropType, value string) bool {
 		return isValidXMPBoolean(value)
 	case xmpPropDate:
 		return isValidXMPDate(value)
+	case xmpPropGPSCoordinate:
+		return isValidXMPGPSCoordinate(value)
 	case xmpPropURI:
 		return isValidXMPURI(value)
 	case xmpPropText:
