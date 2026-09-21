@@ -126,13 +126,32 @@ func (d *Decoder) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io
 }
 
 // applyDecodeFilter applies a single filter, checking plugins first.
+//
+// A plugin returns its whole output in one slice, so [limitedCopy] never sees
+// it and maxDecompressedSize bounded every built-in filter and no plugin at
+// all. The filter a document names decided whether the bomb guard applied: a
+// blank 17000x17000 JPEG 2000 image encodes to 1,204 bytes and decodes to 289
+// MB, past the same cap that refuses a FlateDecode stream of that size.
+//
+// The bound here cannot prevent the plugin's own allocation, which has already
+// happened by the time it returns. It stops those bytes propagating and keeps
+// litho from holding a second copy, and it holds for third-party plugins that
+// know nothing of this package's limits.
 func (d *Decoder) applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName, parms ast.PdfDict) ([]byte, error) {
 	if p, ok := d.plugins[filterName]; ok {
 		pubParms, err := d.marshalParms(ctx, filterName, parms)
 		if err != nil {
 			return nil, err
 		}
-		return p.Decode(data, pubParms)
+		decoded, err := p.Decode(data, pubParms)
+		if err != nil {
+			return nil, err
+		}
+		// Matches limitedCopy: a stream exactly at the cap is kept.
+		if len(decoded) > maxDecompressedSize {
+			return nil, fmt.Errorf("%s: %w", filterName, ErrDecompressionBomb)
+		}
+		return decoded, nil
 	}
 
 	// Fall back to built-in decoder.
