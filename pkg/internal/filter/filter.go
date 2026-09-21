@@ -304,6 +304,17 @@ func decodeFlateDecode(ctx context.Context, data []byte) ([]byte, error) {
 	copyErr := limitedCopy(ctx, buf, r)
 	closeErr := r.Close()
 
+	// A decompression bomb is not a damaged stream. The tolerance below keeps
+	// whatever decoded when a stream is truncated or its checksum is broken,
+	// and it decides that on buf.Len() > 0 -- which a bomb always satisfies,
+	// since limitedCopy only reports one after 256 MB has been buffered. So
+	// ErrDecompressionBomb was never returned from this path: the caller got
+	// a stream silently truncated at the cap and no signal that it was, while
+	// decodeLZW, decodeCCITTFax and decodeBrotli all propagate the same error.
+	if errors.Is(copyErr, ErrDecompressionBomb) {
+		return nil, copyErr
+	}
+
 	// Tolerate read errors that leave valid partial data. Damaged PDFs
 	// frequently have truncated zlib streams or bad checksums, but the
 	// decompressed bytes up to that point are usable.
