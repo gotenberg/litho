@@ -422,9 +422,33 @@ func joinChoiceValue(ctx context.Context, doc *document.Document, arr ast.PdfArr
 }
 
 func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, inheritedFT string, formData map[string]string, calcScripts map[string]string, order *[]string, seen map[string]bool) error {
+	return traverseFieldsAt(ctx, doc, fields, parentName, inheritedFT, formData, calcScripts, order, seen, make(map[int]bool))
+}
+
+// traverseFieldsAt is traverseFields carrying the field objects on the CURRENT
+// path. A /Kids entry naming an ancestor is a cycle: unguarded, a field whose
+// /Kids named itself recursed until the goroutine stack was exhausted, a fatal
+// runtime error no recover() converts, reached from Reader.FormData and
+// Reader.FormFields.
+//
+// seen is NOT that guard, despite its name and type: it de-duplicates the
+// reported ORDER, is keyed on the qualified name rather than on identity, and
+// is shared across both calls in ExtractFormData so a field listed in /Fields
+// and reached again from a page widget is reported once. A cyclic /Kids grows
+// fullName at every level, so seen can never match and never bounded anything.
+//
+// onPath is cleared on the way back out rather than kept. This walk collects
+// per fully qualified name, which depends on the path taken, so the same field
+// under a second parent is a different entry that must still be recorded: a
+// mark that outlived its path would silently drop form data.
+func traverseFieldsAt(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, inheritedFT string, formData map[string]string, calcScripts map[string]string, order *[]string, seen map[string]bool, onPath map[int]bool) error {
 	for _, fieldObj := range fields {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("traversing form fields: %w", err)
+		}
+		var fieldNum int
+		if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
+			fieldNum = ref.ObjectNum
 		}
 		fieldDict, err := document.ResolveDict(ctx, doc, fieldObj)
 		if err != nil || fieldDict == nil {
@@ -522,14 +546,29 @@ func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 			}
 		}
 
-		// Traverse children (/Kids)
+		// Traverse children (/Kids), unless this field already sits on the path.
 		hasKids := false
 		if kidsObj, ok := fieldDict["Kids"]; ok {
 			kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
 			if err == nil && kidsArr != nil {
+				// hasKids is set even when the descent is skipped: it records
+				// that this field HAS children, which is what stops it being
+				// reported as a terminal field below. Skipping a cycle must
+				// bound the walk without changing what gets reported.
 				hasKids = true
-				if err := traverseFields(ctx, doc, kidsArr, fullName, currentFT, formData, calcScripts, order, seen); err != nil {
-					return fmt.Errorf("traversing child fields: %w", err)
+				// A direct dictionary carries no object number and cannot name
+				// itself, so it closes no cycle and needs no mark.
+				if fieldNum == 0 || !onPath[fieldNum] {
+					if fieldNum != 0 {
+						onPath[fieldNum] = true
+					}
+					err := traverseFieldsAt(ctx, doc, kidsArr, fullName, currentFT, formData, calcScripts, order, seen, onPath)
+					if fieldNum != 0 {
+						delete(onPath, fieldNum)
+					}
+					if err != nil {
+						return fmt.Errorf("traversing child fields: %w", err)
+					}
 				}
 			}
 		}
