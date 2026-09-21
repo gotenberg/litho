@@ -687,41 +687,42 @@ func rewriteQualifiedName(xmp []byte, oldPrefix, newPrefix string) []byte {
 func rewriteNamespaceURI(xmp []byte, prefix, uri string) []byte {
 	out := xmp
 	for _, quote := range []byte{'"', '\''} {
-		prefixMarker := fmt.Sprintf(`xmlns:%s=%c`, prefix, quote)
-		for {
-			idx := bytes.Index(out, []byte(prefixMarker))
-			if idx < 0 {
+		prefixMarker := fmt.Appendf(nil, `xmlns:%s=%c`, prefix, quote)
+		replacement := fmt.Sprintf(`xmlns:%s=%c%s%c`, prefix, quote, uri, quote)
+		// A cursor that only ever moves forward. Searching from the buffer
+		// start after each edit re-found the declaration just written, which
+		// both stopped the walk at the first binding and, where the rewrite
+		// could not converge, repeated it without end.
+		scan := 0
+		for scan < len(out) {
+			rel := bytes.Index(out[scan:], prefixMarker)
+			if rel < 0 {
 				break
 			}
+			idx := scan + rel
 			valueStart := idx + len(prefixMarker)
 			end := bytes.IndexByte(out[valueStart:], quote)
 			if end < 0 {
 				break
 			}
-			currentURI := string(out[valueStart : valueStart+end])
-			if currentURI == uri {
-				// Move past this correct binding and keep searching.
-				out = append([]byte(nil), out...)
-				// No replacement, skip past it by searching from after.
-				scanFrom := valueStart + end + 1
-				if scanFrom >= len(out) {
-					break
-				}
-				// Replace only the first occurrence of the marker before
-				// scanFrom with a sentinel that won't match, then restore.
-				// Simpler: reconstruct out so the next search skips past.
-				out = append(append([]byte{}, out[:idx]...),
-					append(fmt.Appendf(nil, `xmlns:%s=%c%s%c`, prefix, quote, currentURI, quote),
-						out[valueStart+end+1:]...)...)
-				// To avoid an infinite loop, break scanning on matching
-				// URIs. Earlier iterations have already handled every
-				// mismatch; reaching a match means the remaining
-				// occurrences are correct too for the scanned bytes.
-				break
+			declEnd := valueStart + end + 1
+			if string(out[valueStart:valueStart+end]) == uri {
+				scan = declEnd
+				continue
 			}
-			replacement := fmt.Sprintf(`xmlns:%s=%c%s%c`, prefix, quote, uri, quote)
-			out = append(append([]byte{}, out[:idx]...),
-				append([]byte(replacement), out[valueStart+end+1:]...)...)
+
+			rewritten := make([]byte, 0, len(out)-(declEnd-idx)+len(replacement))
+			rewritten = append(rewritten, out[:idx]...)
+			rewritten = append(rewritten, replacement...)
+			rewritten = append(rewritten, out[declEnd:]...)
+			out = rewritten
+			// Resume past the text just written rather than re-reading it.
+			// A uri carrying the quote byte that delimits it reads back as a
+			// truncated prefix, which never equals uri, so re-reading to
+			// decide whether to stop never terminates. No caller passes such
+			// a uri (every one passes a package constant), but the walk must
+			// not depend on that.
+			scan = idx + len(replacement)
 		}
 	}
 	return out
@@ -938,7 +939,12 @@ func xmpToUTF8(data []byte) ([]byte, bool) {
 
 	// Stream payloads often carry a trailing newline before endstream;
 	// trim ASCII whitespace so an odd byte count cannot mask a UTF-16
-	// packet (the parity of the CONTENT is what matters).
+	// packet (the parity of the CONTENT is what matters). The untrimmed
+	// slice is kept for the pass-through returns below: an unconverted
+	// packet is promised back untouched, and returning the trimmed one
+	// drops bytes from any caller that uses the result without consulting
+	// the flag.
+	orig := data
 	for len(data) > 0 {
 		switch data[len(data)-1] {
 		case 0x0A, 0x0D, 0x20, 0x09:
@@ -948,7 +954,7 @@ func xmpToUTF8(data []byte) ([]byte, bool) {
 		break
 	}
 	if len(data) < 2 {
-		return data, false
+		return orig, false
 	}
 	var be bool
 	start := 2
@@ -967,7 +973,7 @@ func xmpToUTF8(data []byte) ([]byte, bool) {
 		be = false
 		start = 0
 	default:
-		return data, false
+		return orig, false
 	}
 	units := make([]uint16, 0, (len(data)-start)/2)
 	for i := start; i+1 < len(data); i += 2 {

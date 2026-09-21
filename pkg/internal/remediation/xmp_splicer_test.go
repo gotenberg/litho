@@ -432,6 +432,12 @@ func TestXMPToUTF8(t *testing.T) {
 		{"utf32 bomless LE", []byte{'<', 0x00, 0x00, 0x00, '?', 0x00, 0x00, 0x00}, "<?", true},
 		{"utf32 bomless LE leading newline", []byte{0x0A, 0x00, 0x00, 0x00, '<', 0x00, 0x00, 0x00, '?', 0x00, 0x00, 0x00}, "\n<?", true},
 		{"utf8 passthrough", []byte("<?xpacket"), "<?xpacket", false},
+		// The trailing-whitespace trim exists to stop an odd byte count masking
+		// a UTF-16 packet, so it must not survive into a pass-through return:
+		// the godoc promises UTF-8 packets come back untouched, and a stream
+		// payload carrying the usual newline before endstream is the common
+		// shape that would otherwise come back silently shortened.
+		{"utf8 passthrough with trailing newline", []byte("<?xpacket\n"), "<?xpacket\n", false},
 		{"utf16 BE not misread as utf32", []byte{0x00, '<', 0x00, '?', 0x00, 'x', 0x00, 'p'}, "<?xp", true},
 		{"empty", nil, "", false},
 	}
@@ -442,5 +448,59 @@ func TestXMPToUTF8(t *testing.T) {
 				t.Errorf("got %q changed=%v, want %q changed=%v", out, changed, tc.want, tc.changed)
 			}
 		})
+	}
+}
+
+// TestEnsureNamespaceDecl_RewritesEveryWrongBinding pins the promise both
+// functions make: rewriteNamespaceURI replaces every xmlns:prefix declaration
+// whose URI differs, and ensureNamespaceDecl advertises that as happening
+// across the entire buffer.
+//
+// The scan restarted at the buffer start after each replacement, so the next
+// pass re-found the declaration it had just corrected and stopped there. A
+// packet whose second rdf:Description repeated the same wrong binding kept it,
+// which leaves properties under that prefix resolving to a namespace no
+// validator recognizes.
+func TestEnsureNamespaceDecl_RewritesEveryWrongBinding(t *testing.T) {
+	xmp := []byte(`<?xpacket begin=""?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description rdf:about="" xmlns:pdfaid="http://example.com/wrong-one/"/>
+    <rdf:Description rdf:about="" xmlns:pdfaid="http://example.com/wrong-two/"/>
+  </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>`)
+
+	out, err := ensureNamespaceDecl(xmp, "pdfaid", pdfaidNS)
+	if err != nil {
+		t.Fatalf("ensureNamespaceDecl: %v", err)
+	}
+	got := string(out)
+	if n := strings.Count(got, `xmlns:pdfaid="`+pdfaidNS+`"`); n != 2 {
+		t.Errorf("want both bindings rewritten to the canonical URI, got %d:\n%s", n, got)
+	}
+	if strings.Contains(got, "example.com/wrong") {
+		t.Errorf("a wrong binding survived the rewrite:\n%s", got)
+	}
+}
+
+// TestRewriteNamespaceURI_TerminatesWhenURIContainsItsDelimiter guards a loop
+// that had no exit.
+//
+// The rewriter re-read the value it had just written to decide whether to stop.
+// When the replacement URI contains the quote byte that delimits it, that
+// re-read returns a truncated prefix which never equals the URI, so the old
+// loop spliced a slightly longer buffer forever. No production caller passes
+// such a URI: all of them pass package constants. A loop with no exit is still
+// a trap for the next caller, and it wedges any fuzz target that reaches it
+// rather than failing outright.
+//
+// A regression does not fail the assertion below, it hangs. The package test
+// timeout is what reports it.
+func TestRewriteNamespaceURI_TerminatesWhenURIContainsItsDelimiter(t *testing.T) {
+	xmp := []byte(`<rdf:Description xmlns:pdfaid="http://example.com/wrong/"/>`)
+	got := string(rewriteNamespaceURI(xmp, "pdfaid", `http://example.com/a"b/`))
+	if !strings.Contains(got, `http://example.com/a"b/`) {
+		t.Errorf("replacement URI missing from the result:\n%s", got)
 	}
 }
