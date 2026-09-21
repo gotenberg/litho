@@ -49,7 +49,21 @@ type deviceCSUsage struct {
 }
 
 // maxFormXObjectDepth is the maximum recursion depth for scanning Form XObject
-// content streams and their nested resources.
+// content streams and their nested resources. Anti-DoS guard, not spec-mandated:
+// ISO 32000-1 sets no limit on how deeply one form may invoke another, so a
+// crafted file could nest them until the goroutine stack is exhausted.
+//
+// It bounds CHAIN LENGTH only. Cycles are broken by the visited sets the callers
+// own, not by this cap: [checkFormXObjectFonts] and [checkType3CharProcFonts]
+// key on object number, [scanFormXObjectCS] on the resolved dict's pointer. A
+// depth bound survives a cycle without detecting it, so both are needed.
+//
+// Ten is safe for real documents: a form invoking a form is already unusual, and
+// the depth is the invocation chain rather than the resource tree, so legitimate
+// nesting stops far short. This is the package-wide bound, read by thirteen
+// recursion sites across nine files (fonts, transparency, colour, file limits,
+// accessibility); the same name in typography/extract.go is a separate constant
+// for the text-extraction walk.
 const maxFormXObjectDepth = 10
 
 // checkDeviceColorSpaces validates that device-dependent colour spaces
