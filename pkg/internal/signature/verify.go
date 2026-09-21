@@ -250,7 +250,8 @@ func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.C
 		// public key. This is independent of CertChainValid (trust) and
 		// of revocation: a signature can be cryptographically valid yet
 		// chain-untrusted, or vice versa.
-		if sig.ByteRange[1] > 0 && sig.ByteRange[3] >= 0 {
+		if sig.ByteRange[1] > 0 && sig.ByteRange[3] >= 0 &&
+			byteRangeReadable(sig.ByteRange, doc.FileSize()) {
 			chunk1, e1 := doc.ReadFileBytes(ctx, sig.ByteRange[0], sig.ByteRange[1])
 			chunk2, e2 := doc.ReadFileBytes(ctx, sig.ByteRange[2], sig.ByteRange[3])
 			if e1 != nil || e2 != nil {

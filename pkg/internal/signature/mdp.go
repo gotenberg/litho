@@ -96,12 +96,22 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 
 	result.MDPPolicy = sig.MDPPolicy
 
+	fileSize := doc.FileSize()
+
+	// A /ByteRange naming bytes the file does not contain describes no signed
+	// revision. Adding such a pair can also overflow int64 into a negative
+	// signedEnd, which passes the comparison below and then reads the whole
+	// file as appended data.
+	if !byteRangeReadable(sig.ByteRange, fileSize) {
+		result.MDPInfo = "signature /ByteRange does not describe bytes this file contains"
+		return
+	}
+
 	// The signature's ByteRange defines which bytes were signed.
 	// ByteRange = [off1, len1, off2, len2]
 	// The signed range ends at off2 + len2. Any bytes after that are
 	// incremental updates appended after signing.
 	signedEnd := sig.ByteRange[2] + sig.ByteRange[3]
-	fileSize := doc.FileSize()
 
 	if signedEnd >= fileSize {
 		// No modifications after signing.

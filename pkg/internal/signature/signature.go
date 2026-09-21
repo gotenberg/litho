@@ -265,7 +265,8 @@ func extractSigsRecursiveAt(ctx context.Context, doc *document.Document, fields 
 						sig.MDPPolicy = extractMDPPolicy(ctx, doc, vDict)
 
 						// Calculate hash of the physical bytes defined by ByteRange
-						if sig.ByteRange[1] > 0 && sig.ByteRange[3] > 0 {
+						if sig.ByteRange[1] > 0 && sig.ByteRange[3] > 0 &&
+							byteRangeReadable(sig.ByteRange, doc.FileSize()) {
 							chunk1, err1 := doc.ReadFileBytes(ctx, sig.ByteRange[0], sig.ByteRange[1])
 							chunk2, err2 := doc.ReadFileBytes(ctx, sig.ByteRange[2], sig.ByteRange[3])
 
@@ -298,4 +299,30 @@ func extractSigsRecursiveAt(ctx context.Context, doc *document.Document, fields 
 			}
 		}
 	}
+}
+
+// byteRangeReadable reports whether a signature's /ByteRange names bytes this
+// file actually contains.
+//
+// ISO 32000-1, 12.8.1 defines /ByteRange as pairs of offsets and lengths into
+// the file itself, so a pair naming more bytes than the file holds describes
+// nothing readable. The four values are taken verbatim from the signature
+// dictionary, and each length then sizes a make([]byte, n) inside
+// [document.Document.ReadFileBytes]. Measured before this bound existed: a
+// 609-byte file declaring /ByteRange [0 200000000 0 1] allocated 190 MB and
+// returned no error, and both halves allocate, so naming the pair twice doubles
+// it. The file size is the natural bound, not an arbitrary cap. Requiring each
+// pair to fit also keeps offset+length from overflowing int64 in callers that
+// add the two.
+func byteRangeReadable(br [4]int64, size int64) bool {
+	return byteRangePairReadable(br[0], br[1], size) &&
+		byteRangePairReadable(br[2], br[3], size)
+}
+
+// byteRangePairReadable reports whether one offset and length pair lies inside
+// a file of the given size. Testing the offset against the size before
+// subtracting keeps size-offset from going negative, and refusing a negative
+// length means no pair a caller adds can overflow int64.
+func byteRangePairReadable(offset, length, size int64) bool {
+	return offset >= 0 && length >= 0 && offset <= size && length <= size-offset
 }

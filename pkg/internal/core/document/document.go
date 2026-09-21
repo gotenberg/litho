@@ -905,6 +905,10 @@ func (d *Document) ReadFileBytes(ctx context.Context, offset int64, length int64
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	// A length taken from the file can be negative, and make panics on one.
+	if length < 0 {
+		return nil, fmt.Errorf("reading %d bytes at offset %d: negative length", length, offset)
+	}
 	buf := make([]byte, length)
 	_, err := d.r.ReadAt(buf, offset)
 	if err != nil && err != io.EOF {
