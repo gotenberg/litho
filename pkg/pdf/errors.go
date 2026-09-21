@@ -21,8 +21,11 @@ var (
 	// ErrInternalPanic is returned when an unexpected panic was recovered
 	// at a public API boundary while processing document bytes. Internal
 	// code is not supposed to panic; this sentinel exists so a crafted or
-	// corrupt input cannot crash the host process. The recovered value
-	// and a stack trace are logged at Error via the document logger.
+	// corrupt input cannot crash the host process through a panic. A fatal
+	// runtime error is not recoverable in Go, so a stack overflow or an
+	// out-of-memory kill ends the process without ever producing this
+	// error. The recovered value and a stack trace are logged at Error via
+	// the document logger.
 	ErrInternalPanic = errors.New("internal panic recovered while processing the document")
 
 	// ErrDamagedXRef is returned when the cross-reference table is

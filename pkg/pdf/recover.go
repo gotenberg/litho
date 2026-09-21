@@ -10,7 +10,15 @@ import (
 // into a wrapped [ErrInternalPanic], logged at Error with the recovered
 // value and a stack trace. Internal code must not panic; this boundary
 // is defense-in-depth so a crafted or corrupt document cannot crash the
-// host process. It is deferred at the top of public methods that process
+// host process through a panic.
+//
+// A fatal runtime error is not a panic and does not reach here: recover
+// reports nothing for a stack overflow or an out-of-memory kill, so no
+// boundary can convert one and the process dies. Those have to be
+// prevented at the source, which is why the parser bounds how deeply it
+// recurses into nested objects rather than relying on recovery.
+//
+// It is deferred at the top of public methods that process
 // document bytes:
 //
 //	func (r *Reader) ExtractText(...) (_ string, err error) {
