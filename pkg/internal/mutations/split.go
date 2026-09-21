@@ -116,7 +116,9 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	if catalogDict2, err := document.ResolveDict(ctx, doc, srcCatalogRef); hasSrcCatalog && err == nil && catalogDict2 != nil {
 		srcs := []acroFormSource{{Doc: doc, Catalog: catalogDict2, Copier: copier}}
 		rebuildAcroForm(ctx, alloc, pageRefs, srcs, catalogDict)
-		rebuildEmbeddedFiles(ctx, alloc, srcs, catalogDict)
+		if err := rebuildEmbeddedFiles(ctx, alloc, srcs, catalogDict); err != nil {
+			return err
+		}
 	}
 
 	// Handle bookmarks for the output.

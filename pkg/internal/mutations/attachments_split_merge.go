@@ -30,7 +30,7 @@ func rebuildEmbeddedFiles(
 	alloc *writer.ObjAllocator,
 	sources []acroFormSource,
 	dst ast.PdfDict,
-) {
+) error {
 	var entries []EFEntry
 	var associated ast.PdfArray
 	used := make(map[string]int)
@@ -39,7 +39,12 @@ func rebuildEmbeddedFiles(
 		names, err := document.ResolveDict(ctx, src.Doc, src.Catalog["Names"])
 		if err == nil && names != nil {
 			var srcEntries []EFEntry
-			collectSourceEmbeddedFiles(ctx, src.Doc, names["EmbeddedFiles"], 0, &srcEntries)
+			// Losing an attachment is the bug this function exists to fix, so
+			// a source tree it cannot read whole is refused rather than carried
+			// across short.
+			if collectSourceEmbeddedFiles(ctx, src.Doc, names["EmbeddedFiles"], 0, &srcEntries) {
+				return fmt.Errorf("reading a source document's attachments: %w", ErrAttachmentTreeIncomplete)
+			}
 			for _, e := range srcEntries {
 				copied, err := src.Copier.CopyObject(ctx, e.Ref)
 				if err != nil {
@@ -75,6 +80,7 @@ func rebuildEmbeddedFiles(
 	if len(associated) > 0 {
 		dst["AF"] = alloc.Alloc(associated)
 	}
+	return nil
 }
 
 // uniqueEFName returns name, or name with a counter appended when an earlier
@@ -104,8 +110,12 @@ func uniqueEFName(used map[string]int, name string) string {
 // a SOURCE document while the allocator holds the OUTPUT, and the two number
 // their objects independently, so resolving through it would answer with an
 // unrelated output object that happens to share a number.
-func collectSourceEmbeddedFiles(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, depth int, out *[]EFEntry) {
-	collectSourceEmbeddedFilesAt(ctx, doc, nodeObj, depth, make(map[int]bool), out)
+// It reports whether the walk stopped at [maxAttachmentTreeDepth] with part of
+// the source tree unread; [rebuildEmbeddedFiles] writes the destination's whole
+// tree from what this collects, so a truncated read loses attachments.
+func collectSourceEmbeddedFiles(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, depth int, out *[]EFEntry) (truncated bool) {
+	collectSourceEmbeddedFilesAt(ctx, doc, nodeObj, depth, make(map[int]bool), out, &truncated)
+	return truncated
 }
 
 // collectSourceEmbeddedFilesAt is [collectSourceEmbeddedFiles] carrying the set
@@ -127,8 +137,12 @@ func collectSourceEmbeddedFilesAt(
 	depth int,
 	seen map[int]bool,
 	out *[]EFEntry,
+	truncated *bool,
 ) {
+	// The destination tree is rebuilt from out, so anything left uncollected
+	// here is an attachment the split or merge drops.
 	if depth > maxAttachmentTreeDepth {
+		*truncated = true
 		return
 	}
 	if ref, ok := nodeObj.(ast.PdfIndirectRef); ok {
@@ -143,7 +157,7 @@ func collectSourceEmbeddedFilesAt(
 	}
 	if kids, err := document.ResolveArray(ctx, doc, node["Kids"]); err == nil && kids != nil {
 		for _, kid := range kids {
-			collectSourceEmbeddedFilesAt(ctx, doc, kid, depth+1, seen, out)
+			collectSourceEmbeddedFilesAt(ctx, doc, kid, depth+1, seen, out, truncated)
 		}
 		return
 	}

@@ -207,6 +207,10 @@ func locateInvoiceAttachment(ctx context.Context, alloc *writer.ObjAllocator, do
 		return hybridInvoiceName{}, ast.PdfIndirectRef{}, nil
 	}
 	var entries []mutations.EFEntry
+	// The truncation flag is ignored on purpose: this SEARCHES the collected
+	// entries for a known invoice filename and never rebuilds the tree, so a
+	// short read means the invoice is not found and the repair does nothing.
+	// Only the callers that rebuild have to refuse.
 	mutations.CollectEmbeddedFileEntries(ctx, alloc, doc, efObj, 0, &entries)
 	for _, want := range hybridInvoiceNames {
 		for _, e := range entries {

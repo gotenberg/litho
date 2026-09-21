@@ -341,3 +341,19 @@ var ErrSpansOverlap = errors.New("byte spans overlap")
 // silently kept what it asked to remove. Real documents nest a few dozen levels
 // in any of these structures, so none of them reaches this.
 var ErrPagePruneIncomplete = errors.New("a page-delete prune stopped at its depth bound, so the deleted page would survive in the output")
+
+// ErrAttachmentTreeIncomplete reports an EmbeddedFiles name tree the walk could
+// not read to the bottom, because it nests deeper than maxAttachmentTreeDepth.
+//
+// Adding, removing, splitting and merging all rebuild the whole tree from what
+// the walk collected, so an entry below the bound is absent from the collection
+// and therefore absent from the rebuilt tree: it is destroyed, not kept. The
+// same truncation makes a removal match nothing and report success having
+// removed nothing.
+//
+// Reporting beats performing the edit halfway, the judgement
+// [ErrSanitizationIncomplete] already records. Every measured outcome here is
+// silent data loss or a false success, so a caller that gets an error can
+// decide what to do, where one that gets neither cannot. Real trees nest two or
+// three levels, so no ordinary document reaches this.
+var ErrAttachmentTreeIncomplete = errors.New("embedded-files tree nests deeper than the attachment walk can read, so rebuilding it would drop entries")

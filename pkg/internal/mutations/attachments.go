@@ -28,8 +28,14 @@ type EFEntry struct {
 // at nodeObj into key-value pairs, following /Kids intermediate nodes.
 // Pending allocator versions take precedence so repeated mutations see
 // each other's edits.
-func CollectEmbeddedFileEntries(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, depth int, out *[]EFEntry) {
-	collectEmbeddedFileEntriesAt(ctx, alloc, doc, nodeObj, depth, make(map[int]bool), out)
+// It reports whether the walk stopped at [maxAttachmentTreeDepth] with part of
+// the tree unread. A caller that REBUILDS the tree from out must refuse on a
+// truncated read, because the entries it never reached would be dropped. A
+// caller that only SEARCHES out may ignore it: a missed entry is a search that
+// finds nothing, not a tree that loses something.
+func CollectEmbeddedFileEntries(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, nodeObj ast.PdfObject, depth int, out *[]EFEntry) (truncated bool) {
+	collectEmbeddedFileEntriesAt(ctx, alloc, doc, nodeObj, depth, make(map[int]bool), out, &truncated)
+	return truncated
 }
 
 // collectEmbeddedFileEntriesAt is [CollectEmbeddedFileEntries] carrying the set
@@ -54,8 +60,12 @@ func collectEmbeddedFileEntriesAt(
 	depth int,
 	seen map[int]bool,
 	out *[]EFEntry,
+	truncated *bool,
 ) {
+	// Everything below this point goes uncollected, and every caller that
+	// rebuilds the tree from out would write it back without those entries.
 	if depth > maxAttachmentTreeDepth {
+		*truncated = true
 		return
 	}
 	var node ast.PdfDict
@@ -75,7 +85,7 @@ func collectEmbeddedFileEntriesAt(
 	if kidsObj, ok := node["Kids"]; ok {
 		if kids, err := document.ResolveArray(ctx, doc, kidsObj); err == nil {
 			for _, kid := range kids {
-				collectEmbeddedFileEntriesAt(ctx, alloc, doc, kid, depth+1, seen, out)
+				collectEmbeddedFileEntriesAt(ctx, alloc, doc, kid, depth+1, seen, out, truncated)
 			}
 			return
 		}
@@ -230,7 +240,12 @@ func AddAttachmentWithOptions(ctx context.Context, alloc *writer.ObjAllocator, d
 	// idempotent: name-tree keys must be unique per ISO 32000-2 §7.9.6.
 	var entries []EFEntry
 	if efObj, ok := namesDict["EmbeddedFiles"]; ok {
-		CollectEmbeddedFileEntries(ctx, alloc, doc, efObj, 0, &entries)
+		// The tree below is rebuilt from entries, so a truncated read would
+		// write back a tree missing everything past the bound: adding one
+		// attachment would destroy the others.
+		if CollectEmbeddedFileEntries(ctx, alloc, doc, efObj, 0, &entries) {
+			return fmt.Errorf("reading the existing attachments: %w", ErrAttachmentTreeIncomplete)
+		}
 	}
 	var replacedRef ast.PdfObject
 	for i := range entries {
@@ -497,7 +512,12 @@ func removeAttachmentFromNameTree(ctx context.Context, alloc *writer.ObjAllocato
 	// entries, remembering their filespec refs so the catalog /AF array
 	// loses the now-dangling associated-file pointers too.
 	var entries []EFEntry
-	CollectEmbeddedFileEntries(ctx, alloc, doc, efObj, 0, &entries)
+	// A truncated read has two failure modes here, both silent: the rebuilt
+	// tree loses every entry past the bound, and a target sitting past it
+	// matches nothing so the removal reports success having removed nothing.
+	if CollectEmbeddedFileEntries(ctx, alloc, doc, efObj, 0, &entries) {
+		return fmt.Errorf("reading the attachments: %w", ErrAttachmentTreeIncomplete)
+	}
 	var kept []EFEntry
 	removedRefs := make(map[ast.PdfIndirectRef]bool)
 	for _, e := range entries {

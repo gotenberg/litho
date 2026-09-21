@@ -996,10 +996,22 @@ func textStampToOptions(s TextStamp) mutations.TextStampOptions {
 // [Writer.WriteTo] drains the queue, so the caller must leave the slice
 // untouched until then. Reusing the buffer in between puts the later
 // contents in the file.
+// [Writer.WriteTo] reports [ErrAttachmentTreeIncomplete] when the existing
+// /EmbeddedFiles tree nests deeper than the attachment walk reads: the tree is
+// rebuilt from that walk, so adding one attachment would drop the others.
+// Nothing is written in that case.
 func (w *Writer) AddAttachment(name string, data []byte, mimeType string) {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
-			return mutations.AddAttachment(ctx, alloc, doc, name, data, mimeType)
+			if err := mutations.AddAttachment(ctx, alloc, doc, name, data, mimeType); err != nil {
+				// Translate at the boundary so a caller can match with
+				// errors.Is without importing pkg/internal.
+				if errors.Is(err, mutations.ErrAttachmentTreeIncomplete) {
+					return fmt.Errorf("%w: %w", ErrAttachmentTreeIncomplete, err)
+				}
+				return err
+			}
+			return nil
 		},
 	})
 }
@@ -1029,14 +1041,23 @@ type AssociatedFile struct {
 //
 // For generic attachments with no compliance requirement, prefer
 // [Writer.AddAttachment].
+// [Writer.WriteTo] reports [ErrAttachmentTreeIncomplete] on a tree too deep to
+// read, for the reason given on [Writer.AddAttachment].
 func (w *Writer) AddAssociatedFile(af AssociatedFile) {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
-			return mutations.AddAttachmentWithOptions(ctx, alloc, doc, af.Name, af.Data, mutations.AttachmentOptions{
+			err := mutations.AddAttachmentWithOptions(ctx, alloc, doc, af.Name, af.Data, mutations.AttachmentOptions{
 				MimeType:       af.MimeType,
 				AFRelationship: af.Relationship,
 				AddToCatalogAF: true,
 			})
+			if err != nil {
+				if errors.Is(err, mutations.ErrAttachmentTreeIncomplete) {
+					return fmt.Errorf("%w: %w", ErrAttachmentTreeIncomplete, err)
+				}
+				return err
+			}
+			return nil
 		},
 	})
 }
@@ -1044,10 +1065,21 @@ func (w *Writer) AddAssociatedFile(af AssociatedFile) {
 // RemoveAttachment removes a file from the document's /EmbeddedFiles name
 // tree by its filename. Uses incremental update. The mutation is queued and
 // applied when [Writer.WriteTo] is called.
+// [Writer.WriteTo] reports [ErrAttachmentTreeIncomplete] when the tree nests
+// deeper than the attachment walk reads. That truncation has two silent
+// outcomes, which is why it refuses rather than proceeding: the rebuilt tree
+// loses every entry past the bound, and a target sitting past it matches
+// nothing, so the removal would report success having removed nothing.
 func (w *Writer) RemoveAttachment(name string) {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
-			return mutations.RemoveAttachment(ctx, alloc, doc, name)
+			if err := mutations.RemoveAttachment(ctx, alloc, doc, name); err != nil {
+				if errors.Is(err, mutations.ErrAttachmentTreeIncomplete) {
+					return fmt.Errorf("%w: %w", ErrAttachmentTreeIncomplete, err)
+				}
+				return err
+			}
+			return nil
 		},
 	})
 }
@@ -2161,7 +2193,15 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 
 	version := cfg.version
 	bookmarkCfg := buildSplitBookmarkConfig(src, cfg.bookmarks)
-	return mutations.Split(ctx, src.doc, allPages, pages, dst, version, cfg.xrefStream, bookmarkCfg, cfg.internalEncrypt())
+	if err := mutations.Split(ctx, src.doc, allPages, pages, dst, version, cfg.xrefStream, bookmarkCfg, cfg.internalEncrypt()); err != nil {
+		// Translate at the boundary so a caller can match with errors.Is
+		// without importing pkg/internal.
+		if errors.Is(err, mutations.ErrAttachmentTreeIncomplete) {
+			return fmt.Errorf("%w: %w", ErrAttachmentTreeIncomplete, err)
+		}
+		return err
+	}
+	return nil
 }
 
 // Merge combines multiple PDF documents into a single output written to dst.
@@ -2210,7 +2250,17 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 	}
 
 	bookmarkCfg := buildMergeBookmarkConfig(sources, cfg.bookmarks)
-	return mutations.Merge(ctx, mergeSources, dst, cfg.version, cfg.xrefStream, bookmarkCfg, cfg.internalEncrypt())
+	if err := mutations.Merge(ctx, mergeSources, dst, cfg.version, cfg.xrefStream, bookmarkCfg, cfg.internalEncrypt()); err != nil {
+		// Translate at the boundary so a caller can match with errors.Is
+		// without importing pkg/internal. A merge rebuilds one attachment tree
+		// from every source, so a source the walk cannot read whole would lose
+		// its attachments silently.
+		if errors.Is(err, mutations.ErrAttachmentTreeIncomplete) {
+			return fmt.Errorf("%w: %w", ErrAttachmentTreeIncomplete, err)
+		}
+		return err
+	}
+	return nil
 }
 
 // buildSplitBookmarkConfig translates the public BookmarkOptions into the

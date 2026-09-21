@@ -152,6 +152,20 @@ var (
 	// any of these structures, so none of them reaches this.
 	ErrPageDeletionIncomplete = errors.New("page deletion incomplete: a prune stopped at its depth bound, so the deleted page would survive in the output")
 
+	// ErrAttachmentTreeIncomplete is returned by [Writer.WriteTo],
+	// [Split] and [Merge] when the document's /EmbeddedFiles name tree nests
+	// deeper than the attachment walk reads.
+	//
+	// Adding, removing, splitting and merging all rebuild that tree from what
+	// the walk collected, so an entry below the bound would be absent from the
+	// rebuilt tree: adding one attachment would destroy the others, and a split
+	// or merge would carry none of them across. The same truncation makes
+	// [Writer.RemoveAttachment] match nothing and report success having removed
+	// nothing. Every outcome is silent data loss or a false success, so litho
+	// refuses and writes nothing. Real trees nest two or three levels, so no
+	// ordinary document reaches this.
+	ErrAttachmentTreeIncomplete = errors.New("attachment tree incomplete: the embedded-files tree nests deeper than the attachment walk reads, so rebuilding it would drop entries")
+
 	// ErrRemediationBrokePDF is returned by [Writer.RemediatePDFA] and
 	// [Writer.RemediatePDFUA] when applied fixes cause the output to
 	// regress beyond the configured [RegressionTolerance] and rolling back

@@ -141,7 +141,9 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	// Re-attach the interactive form, naming every field that kept a widget
 	// across all the sources.
 	rebuildAcroForm(ctx, alloc, allPageRefs, formSources, catalogDict)
-	rebuildEmbeddedFiles(ctx, alloc, formSources, catalogDict)
+	if err := rebuildEmbeddedFiles(ctx, alloc, formSources, catalogDict); err != nil {
+		return err
+	}
 
 	// Handle bookmarks for the merged output.
 	if bookmarkCfg.Handling != BookmarkNone {
