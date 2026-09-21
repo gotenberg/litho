@@ -66,6 +66,13 @@ type Parser struct {
 	// the token, which is stable under lookahead buffering.
 	ends         []int64
 	trackOffsets bool
+
+	// depth is how many nested objects [Parser.ParseObject] is currently
+	// inside. Every recursive path reaches it again, so counting there covers
+	// dictionaries, arrays and object header chains with one counter: a
+	// dictionary value and an array element are both parsed by ParseObject,
+	// and `N G obj` reaches it through parseIndirectObject.
+	depth int
 }
 
 // NewParser creates a new Parser that reads PDF objects from the given lexer.
@@ -170,11 +177,49 @@ func (p *Parser) Expect(expectedType lexer.TokenType) (lexer.Token, error) {
 	return tok, nil
 }
 
+// maxParseNestingDepth bounds how deeply [Parser.ParseObject] recurses into
+// nested objects. Anti-DoS guard, not spec-mandated: ISO 32000-1 sets no
+// nesting limit, but the recursion is otherwise bounded by the goroutine stack
+// alone, and a stack overflow is a fatal runtime error rather than a panic, so
+// the recover boundary every pkg/pdf entry point installs cannot convert it and
+// the process dies. Measured without the guard: a dictionary nested 850,000
+// deep, a 7.3 MB file, killed the process through pdf.Open, and an object
+// header chain did the same past 1,000,000.
+//
+// The deepest nesting measured across a sample of all seven corpora is 156
+// (govdocs thread_200_200087.pdf), with a 99th percentile of 55, so this value
+// leaves real documents about two orders of magnitude of headroom while sitting
+// far below the depth that exhausts the stack. That sample reads raw file bytes
+// and cannot see inside compressed content streams, which is why the bound is
+// generous rather than tight.
+const maxParseNestingDepth = 10000
+
 // ParseObject reads the next complete PDF object from the token stream.
 // The context enables cancellation at natural checkpoints (per dict key,
 // per array element, per stream scan iteration) without adding overhead
 // to the per-token lexer loop.
+//
+// Nesting is counted here rather than in the container parsers because every
+// recursive path returns through this function: a dictionary value and an
+// array element are both read by it, and `N G obj` reaches it again through
+// [Parser.parseIndirectObject]. The count is restored on the way out rather
+// than by a defer, which this path takes often enough to notice, and the
+// restore has to survive an error return because the content-stream reader
+// drives one parser across a whole page.
 func (p *Parser) ParseObject(ctx context.Context) (ast.PdfObject, error) {
+	p.depth++
+	obj, err := p.parseObject(ctx)
+	p.depth--
+	return obj, err
+}
+
+// parseObject holds the body of [Parser.ParseObject], which wraps it to keep
+// the nesting count correct on every return path.
+func (p *Parser) parseObject(ctx context.Context) (ast.PdfObject, error) {
+	if p.depth > maxParseNestingDepth {
+		return nil, fmt.Errorf("object nested deeper than %d: %w", maxParseNestingDepth, errNestingTooDeep)
+	}
+
 	t0, err := p.Peek(0)
 	if err != nil {
 		return nil, err
@@ -418,6 +463,14 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 
 		valObj, err := p.parseDictValue(ctx, key, &deferredContents)
 		if err != nil {
+			// Nesting past [maxParseNestingDepth] is a refusal, not a damaged
+			// value to recover from. Closing the dict here would hand back a
+			// truncated object as though it were whole, which is the silent
+			// wrong answer a depth bound produces when it stops the walk
+			// without reporting that it did.
+			if errors.Is(err, errNestingTooDeep) {
+				return nil, err
+			}
 			// Value missing: close the dict with what we have.
 			break
 		}
@@ -898,6 +951,12 @@ func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 
 		obj, err := p.ParseObject(ctx)
 		if err != nil {
+			// Nesting past [maxParseNestingDepth] is a refusal rather than a
+			// bad element to skip: continuing would return an array whose
+			// contents were silently cut short.
+			if errors.Is(err, errNestingTooDeep) {
+				return nil, err
+			}
 			// Tolerate malformed array elements (e.g., operators inside
 			// TJ arrays): skip the bad token and continue parsing.
 			//

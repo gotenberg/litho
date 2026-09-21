@@ -15,3 +15,11 @@ var errUnexpectedKeyword = errors.New("unexpected keyword")
 // that. Dictionary parsing skips it exactly as it skips a stray keyword, rather
 // than discarding every key the dictionary holds.
 var errUnexpectedDelimiter = errors.New("unexpected delimiter")
+
+// errNestingTooDeep marks input whose object nesting passes
+// [maxParseNestingDepth]. Refusing the object is the only available answer:
+// the recursion is otherwise bounded by the goroutine stack alone, and a stack
+// overflow is a fatal runtime error rather than a panic, so the recover
+// boundary that every pkg/pdf entry point installs cannot convert it and the
+// process dies.
+var errNestingTooDeep = errors.New("object nesting too deep")
