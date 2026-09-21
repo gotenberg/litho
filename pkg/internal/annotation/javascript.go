@@ -42,7 +42,37 @@ func ExtractDocumentScripts(ctx context.Context, doc *document.Document) ([]stri
 	return scripts, nil
 }
 
+// maxJSNameTreeDepth bounds the walk over the document-level JavaScript name
+// tree. Anti-DoS guard, not spec-mandated: ISO 32000-1, 7.9.6 describes a
+// balanced name tree and no real document nests one deeply. The value matches
+// maxNameTreeDepth in core/document, which bounds this same structure for key
+// lookup, and maxNameTreeWalkDepth in remediation/fixer_embedded.go.
+const maxJSNameTreeDepth = 64
+
 func extractJSTree(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, scripts *[]string) error {
+	return extractJSTreeAt(ctx, doc, nodeObj, scripts, make(map[int]bool), 0)
+}
+
+// extractJSTreeAt collects the scripts at and below one name-tree node.
+//
+// visited marks each node by object number. A name tree is a strict tree, so a
+// /Kids entry reached twice is malformed: without the set, a node naming itself
+// recurses until the goroutine stack is exhausted, and a stack overflow is a
+// fatal runtime error that no recover() can convert into an error. The set also
+// ends the 2^depth fan-out a node whose /Kids lists the same child twice would
+// otherwise cause, which is the hazard searchNameTreeAt records for the lookup
+// walk over this same structure.
+func extractJSTreeAt(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, scripts *[]string, visited map[int]bool, depth int) error {
+	if depth > maxJSNameTreeDepth {
+		return nil
+	}
+	if ref, ok := nodeObj.(ast.PdfIndirectRef); ok {
+		if visited[ref.ObjectNum] {
+			return nil
+		}
+		visited[ref.ObjectNum] = true
+	}
+
 	nodeDict, err := document.ResolveDict(ctx, doc, nodeObj)
 	if err != nil {
 		return fmt.Errorf("resolving JS name tree node: %w", err)
@@ -56,7 +86,7 @@ func extractJSTree(ctx context.Context, doc *document.Document, nodeObj ast.PdfO
 		kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
 		if err == nil && kidsArr != nil {
 			for _, kid := range kidsArr {
-				if err := extractJSTree(ctx, doc, kid, scripts); err != nil {
+				if err := extractJSTreeAt(ctx, doc, kid, scripts, visited, depth+1); err != nil {
 					return fmt.Errorf("traversing JS name tree kids: %w", err)
 				}
 			}
