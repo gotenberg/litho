@@ -622,17 +622,22 @@ type extractTextOpts struct {
 	includeArtifacts bool
 }
 
-// WithHiddenText includes all normally-stripped text: invisible, clipped,
-// and artifact text. This is a shortcut that enables [WithInvisibleText],
-// [WithClippedText], and [WithArtifacts] simultaneously.
+// WithHiddenText includes every category of normally-stripped text, so it
+// reaches one category the granular options cannot: text clipped away by the
+// graphics-state path (W/W*). [WithInvisibleText] also un-strips that
+// category, [WithClippedText] covers CropBox clipping only, and
+// [WithArtifacts] covers /Artifact content.
 func WithHiddenText() ExtractTextOption {
 	return func(o *extractTextOpts) {
 		o.includeHidden = true
 	}
 }
 
-// WithInvisibleText includes text that uses rendering mode 3 (invisible)
-// or white-on-white colors. Useful for forensic analysis of hidden content.
+// WithInvisibleText includes text that uses rendering mode 3 (invisible) or
+// white-on-white colors. It also un-strips text clipped away by the
+// graphics-state path (W/W*), which no other granular option reaches, so a
+// forensic caller gets both categories. Useful for forensic analysis of
+// hidden content.
 func WithInvisibleText() ExtractTextOption {
 	return func(o *extractTextOpts) {
 		o.includeInvisible = true
