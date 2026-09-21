@@ -142,6 +142,12 @@ func probeLinearization(r io.ReaderAt, fileSize, headerOffset int64) *Linearizat
 	return params
 }
 
+// minBytesPerPage is the fewest bytes a page can occupy in a file. Per ISO
+// 32000-1, 7.5.4 a cross-reference entry is exactly 20 bytes, and a page needs
+// at least its own entry, so the file length divided by this is a natural
+// ceiling on any page count the file states.
+const minBytesPerPage = 20
+
 // parseHintStream reads and decodes the primary hint stream, then extracts the
 // Page Offset Hint Table entries.
 func parseHintStream(r io.ReaderAt, size int64, params *LinearizationParams) ([]PageOffsetEntry, error) {
@@ -168,8 +174,30 @@ func parseHintStream(r io.ReaderAt, size int64, params *LinearizationParams) ([]
 		return nil, fmt.Errorf("failed to decode hint stream: %w", err)
 	}
 
+	// The file itself bounds the page count: a /N larger than the file could
+	// hold is not a page count, whatever the hint stream says. Refusing costs
+	// nothing, because [NewDocument] already drops a hint table whose stream
+	// fails to parse, so the document opens without one exactly as it does for
+	// any other malformed hint stream.
+	if int64(params.NumPages) > size/minBytesPerPage {
+		return nil, fmt.Errorf("hint stream declares %d pages, more than a %d-byte file can hold",
+			params.NumPages, size)
+	}
+
 	return parsePageOffsetTable(decoded, params.NumPages)
 }
+
+// maxHintTablePages bounds the entries the Page Offset Hint Table may claim.
+// Anti-DoS guard, not spec-mandated: ISO 32000-1, Table F.3 states no ceiling,
+// but the count comes from the linearization dictionary's /N and sizes an
+// allocation directly. Measured without it, a 40-byte hint stream declaring
+// 20,000,000 pages allocated 458 MB, and a negative count panicked in make.
+//
+// The deepest page count across the corpus is 2322, with a median of 3, so a
+// million leaves real documents three orders of magnitude of headroom while
+// capping the table near 25 MB. It sits below [maxTrailerObjectCount] because a
+// page needs at least one object.
+const maxHintTablePages = 1 << 20
 
 // parsePageOffsetTable decodes the bit-packed Page Offset Hint Table
 // (ISO 32000-1:2008, Table F.3).
@@ -195,6 +223,11 @@ func parseHintStream(r io.ReaderAt, size int64, params *LinearizationParams) ([]
 //	  - page length deltas        (item5 bits each)
 //	  ... (more arrays we skip for now)
 func parsePageOffsetTable(data []byte, numPages int) ([]PageOffsetEntry, error) {
+	// Checked before the header so a crafted count cannot reach the allocation
+	// below, and so a negative one is refused rather than panicking in make.
+	if numPages < 0 || numPages > maxHintTablePages {
+		return nil, fmt.Errorf("hint stream declares %d pages, outside 0 to %d", numPages, maxHintTablePages)
+	}
 	if len(data) < 28 { // minimum header size
 		return nil, fmt.Errorf("hint stream data too short (%d bytes)", len(data))
 	}
