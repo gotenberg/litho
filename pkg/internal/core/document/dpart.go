@@ -31,12 +31,27 @@ func ResolveDPartMap(ctx context.Context, doc *Document) (map[int]map[string]str
 	}
 
 	pageDPMMap := make(map[int]map[string]string)
-	traverseDPart(ctx, doc, dprDict, make(map[string]string), pageDPMMap)
+
+	// A DPart node may name itself or an ancestor as its kid. The cycle guard
+	// inside ResolveObject is per-resolution, so re-resolving that reference
+	// from a fresh frame succeeds every time and nothing below stops the walk:
+	// a 425-byte file whose only DPart node is its own kid recursed until the
+	// goroutine stack was exhausted, which is a fatal runtime error that the
+	// recover() at every pkg/pdf entry point cannot convert into an error.
+	//
+	// The visited set bounds the walk to the file's distinct DPart objects, a
+	// natural bound rather than an arbitrary depth cap, and it detects the
+	// cycle instead of merely outlasting it.
+	visited := make(map[int]bool)
+	if ref, ok := dprObj.(ast.PdfIndirectRef); ok {
+		visited[ref.ObjectNum] = true
+	}
+	traverseDPart(ctx, doc, dprDict, make(map[string]string), pageDPMMap, visited)
 
 	return pageDPMMap, nil
 }
 
-func traverseDPart(ctx context.Context, doc *Document, node ast.PdfDict, inheritedDPM map[string]string, pageDPMMap map[int]map[string]string) {
+func traverseDPart(ctx context.Context, doc *Document, node ast.PdfDict, inheritedDPM map[string]string, pageDPMMap map[int]map[string]string, visited map[int]bool) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -94,14 +109,34 @@ func traverseDPart(ctx context.Context, doc *Document, node ast.PdfDict, inherit
 						if kidRef.ObjectNum != 0 {
 							pageDPMMap[kidRef.ObjectNum] = currentDPM
 						}
-					} else {
+					} else if enterDPart(visited, kidRef.ObjectNum) {
 						// It's another DPart node
-						traverseDPart(ctx, doc, kidDict, currentDPM, pageDPMMap)
+						traverseDPart(ctx, doc, kidDict, currentDPM, pageDPMMap, visited)
 					}
 				}
 			}
 		} else if kDict, ok := kRes.(ast.PdfDict); ok {
-			traverseDPart(ctx, doc, kDict, currentDPM, pageDPMMap)
+			var kObjNum int
+			if ref, ok := kObj.(ast.PdfIndirectRef); ok {
+				kObjNum = ref.ObjectNum
+			}
+			if enterDPart(visited, kObjNum) {
+				traverseDPart(ctx, doc, kDict, currentDPM, pageDPMMap, visited)
+			}
 		}
 	}
+}
+
+// enterDPart reports whether the walk may descend into a node, marking it
+// visited when it may. A node with no object number is a direct dictionary:
+// direct values cannot name themselves, so they close no cycle and need no mark.
+func enterDPart(visited map[int]bool, objNum int) bool {
+	if objNum == 0 {
+		return true
+	}
+	if visited[objNum] {
+		return false
+	}
+	visited[objNum] = true
+	return true
 }
