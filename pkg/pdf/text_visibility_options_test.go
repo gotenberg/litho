@@ -121,9 +121,18 @@ func TestExtractText_VisibilityFixtureIsolatesOneStripperPerRun(t *testing.T) {
 // clipped text does not.
 //
 // This test records today's wiring rather than endorsing it. Whether W/W*
-// clipping ought to belong to [WithClippedText] is an open question that
-// changes extraction output on a corpus-scored path, so it needs a deliberate
-// decision. Pinning it here means such a change turns this test red instead of
+// clipping ought to belong to [WithClippedText] is an open question, and the
+// reason it stays open is that closing it properly means adding a public
+// option of its own: there are four strip flags and only three granular
+// options, so nothing targets the graphics-state clip except by riding
+// [WithInvisibleText]. New public API is not a change to make unasked.
+//
+// The corpus gate cannot referee that decision either way, so it offers no
+// cover: every text-producing gate feature passes [WithInvisibleText], which
+// leaves StripHidden false, so the filter never runs there. A rewiring would
+// come back byte-identical and prove nothing.
+//
+// Pinning the wiring here means such a change turns this test red instead of
 // passing unnoticed, which is exactly how the option godocs drifted: of these
 // four options, only [WithArtifacts] was exercised by any test.
 func TestExtractText_VisibilityOptionsWiring(t *testing.T) {
