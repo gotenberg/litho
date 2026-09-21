@@ -12,6 +12,18 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
+// maxParentTreeMCID bounds a marked-content id read from a structure element.
+// It is an anti-DoS guard, not a spec limit: ISO 32000-2, 14.7.4.4 puts no
+// ceiling on an MCID, but the ParentTree is indexed BY that id, so one element
+// saying /K 12000000 sizes a 12,000,001 entry array and then writes a null into
+// every slot. Measured: a 578-byte file allocated 183 MB that way, and at
+// 16 bytes per entry an id near the int32 maximum reaches tens of gigabytes.
+// The largest id measured over the 5171 corpus files is 12522 (govdocs
+// thread_000_000314.pdf, pdfjs 9757, p99 8877), reading raw and Flate-compressed
+// content streams, so this leaves ~84x headroom and caps one page's array at
+// about 16 MiB.
+const maxParentTreeMCID = 1 << 20
+
 // matchParentTree matches the PDF/UA untagged-content violations the
 // ParentTree rebuild repairs: ISO 14289-1 §7.1 t3 and ISO 14289-2 §8.2.2 t1
 // fire when marked content is not reachable through the ParentTree even
@@ -167,13 +179,13 @@ func structElemMCIDs(ctx context.Context, doc *document.Document, kObj ast.PdfOb
 	collect := func(item ast.PdfObject) {
 		switch v := item.(type) {
 		case ast.PdfInt:
-			if v >= 0 {
+			if v >= 0 && v <= maxParentTreeMCID {
 				out = append(out, int(v))
 			}
 		default:
 			if d, err := document.ResolveDict(ctx, doc, item); err == nil && d != nil {
 				if t, _ := document.ResolveName(ctx, doc, d["Type"]); t == "MCR" {
-					if n, ok := d["MCID"].(ast.PdfInt); ok && n >= 0 {
+					if n, ok := d["MCID"].(ast.PdfInt); ok && n >= 0 && n <= maxParentTreeMCID {
 						out = append(out, int(n))
 					}
 				}

@@ -191,7 +191,9 @@ func planListContentRepair(ctx context.Context, doc *document.Document, node str
 	var hasLBody, unsupported bool
 	for _, item := range kids {
 		if n, isInt := item.(ast.PdfInt); isInt {
-			if n < 0 {
+			// An id past [maxParentTreeMCID] would size the rebuilt ParentTree
+			// slot array, so decline the repair as for a negative one.
+			if n < 0 || n > maxParentTreeMCID {
 				unsupported = true
 				continue
 			}
