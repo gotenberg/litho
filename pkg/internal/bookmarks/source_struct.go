@@ -63,9 +63,14 @@ func GenerateFromStructTree(
 	// Resolve RoleMap if present: non-standard type → standard type.
 	roleMap := resolveRoleMap(ctx, doc, strTree["RoleMap"])
 
-	// Walk the tree and collect heading candidates.
+	// Walk the tree and collect heading candidates. visited marks each struct
+	// element by object number: the structure tree is a tree, so a /K entry
+	// reached twice is malformed, and without the set an element naming itself
+	// recurses until the goroutine stack is exhausted. That is a fatal runtime
+	// error, not a panic, so the recover() at Reader.GenerateBookmarks cannot
+	// convert it into an error.
 	var candidates []headingCandidate
-	walkStructElem(ctx, doc, strTree, 0, roleMap, pageRefToNum, mcidTextByPage, opts, &candidates)
+	walkStructElem(ctx, doc, strTree, 0, roleMap, pageRefToNum, mcidTextByPage, opts, make(map[int]bool), &candidates)
 
 	if len(candidates) == 0 {
 		return nil, nil
@@ -93,6 +98,7 @@ func walkStructElem(
 	pageRefToNum map[ast.PdfIndirectRef]int,
 	mcidTextByPage map[int]map[int]string,
 	opts Options,
+	visited map[int]bool,
 	out *[]headingCandidate,
 ) {
 	if err := ctx.Err(); err != nil {
@@ -134,7 +140,7 @@ func walkStructElem(
 
 	// Recurse into children.
 	if kObj, ok := elem["K"]; ok {
-		walkStructK(ctx, doc, kObj, currentPage, roleMap, pageRefToNum, mcidTextByPage, opts, out)
+		walkStructK(ctx, doc, kObj, currentPage, roleMap, pageRefToNum, mcidTextByPage, opts, visited, out)
 	}
 }
 
@@ -149,8 +155,19 @@ func walkStructK(
 	pageRefToNum map[ast.PdfIndirectRef]int,
 	mcidTextByPage map[int]map[int]string,
 	opts Options,
+	visited map[int]bool,
 	out *[]headingCandidate,
 ) {
+	// Every walkStructElem call below the root arrives through here, so marking
+	// the reference at this point is what ends a cycle. A direct dictionary
+	// carries no object number and cannot name itself, so it needs no mark.
+	if ref, ok := kObj.(ast.PdfIndirectRef); ok {
+		if visited[ref.ObjectNum] {
+			return
+		}
+		visited[ref.ObjectNum] = true
+	}
+
 	resolved, err := document.ResolveObject(ctx, doc, kObj)
 	if err != nil {
 		return
@@ -159,12 +176,12 @@ func walkStructK(
 	switch v := resolved.(type) {
 	case ast.PdfArray:
 		for _, kid := range v {
-			walkStructK(ctx, doc, kid, currentPage, roleMap, pageRefToNum, mcidTextByPage, opts, out)
+			walkStructK(ctx, doc, kid, currentPage, roleMap, pageRefToNum, mcidTextByPage, opts, visited, out)
 		}
 	case ast.PdfDict:
 		// If it has /S, it's a struct element. Recurse.
 		if _, hasS := v["S"]; hasS {
-			walkStructElem(ctx, doc, v, currentPage, roleMap, pageRefToNum, mcidTextByPage, opts, out)
+			walkStructElem(ctx, doc, v, currentPage, roleMap, pageRefToNum, mcidTextByPage, opts, visited, out)
 		}
 		// MCR / OBJR dicts don't have /S and aren't struct elements.
 	}
@@ -180,8 +197,11 @@ func collectStructText(
 	pageRefToNum map[ast.PdfIndirectRef]int,
 	mcidTextByPage map[int]map[int]string,
 ) string {
+	// A fresh visited set per heading. Sharing the walk's would make a kid that
+	// two elements legitimately reference readable for the first heading only,
+	// which is why widgetFieldRoot keeps two sets rather than one.
 	var sb strings.Builder
-	collectTextFromK(ctx, doc, elem["K"], currentPage, pageRefToNum, mcidTextByPage, &sb)
+	collectTextFromK(ctx, doc, elem["K"], currentPage, pageRefToNum, mcidTextByPage, make(map[int]bool), &sb)
 	return sb.String()
 }
 
@@ -192,10 +212,20 @@ func collectTextFromK(
 	currentPage int,
 	pageRefToNum map[ast.PdfIndirectRef]int,
 	mcidTextByPage map[int]map[int]string,
+	visited map[int]bool,
 	sb *strings.Builder,
 ) {
 	if kObj == nil {
 		return
+	}
+	// This walk is reached from walkStructElem BEFORE the descent, so a heading
+	// whose /K names itself exhausts the stack here and never reaches the
+	// walkStructElem/walkStructK cycle at all. Separate recursion, separate set.
+	if ref, ok := kObj.(ast.PdfIndirectRef); ok {
+		if visited[ref.ObjectNum] {
+			return
+		}
+		visited[ref.ObjectNum] = true
 	}
 	resolved, err := document.ResolveObject(ctx, doc, kObj)
 	if err != nil {
@@ -235,11 +265,11 @@ func collectTextFromK(
 
 		// Recurse into nested /K.
 		if subK, ok := v["K"]; ok {
-			collectTextFromK(ctx, doc, subK, pg, pageRefToNum, mcidTextByPage, sb)
+			collectTextFromK(ctx, doc, subK, pg, pageRefToNum, mcidTextByPage, visited, sb)
 		}
 	case ast.PdfArray:
 		for _, item := range v {
-			collectTextFromK(ctx, doc, item, currentPage, pageRefToNum, mcidTextByPage, sb)
+			collectTextFromK(ctx, doc, item, currentPage, pageRefToNum, mcidTextByPage, visited, sb)
 		}
 	}
 }
