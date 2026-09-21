@@ -275,6 +275,20 @@ func widgetFieldIdentity(ctx context.Context, doc *document.Document, annotObj a
 // field. parentFT carries the field type down the tree, which a kid inherits
 // when it does not state its own (ISO 32000-1, 12.7.3.1).
 func findAndSetField(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fields ast.PdfArray, parentName, parentFT, targetName, value string) (bool, error) {
+	return findAndSetFieldAt(ctx, doc, alloc, fields, parentName, parentFT, targetName, value, make(map[int]bool))
+}
+
+// findAndSetFieldAt is findAndSetField carrying the field objects on the CURRENT
+// path. A /Kids entry naming an ancestor is a cycle: unguarded, a field whose
+// /Kids named itself recursed until the goroutine stack was exhausted, which is
+// a fatal runtime error no recover() converts, and every level appended another
+// segment to the qualified name it was building.
+//
+// onPath is cleared on the way back out rather than kept, because this walk
+// SEARCHES and matches on the fully qualified name. The same field reached under
+// a different parent has a different name, so a mark that outlived its path
+// would not merely save work: it would make a legitimate match unfindable.
+func findAndSetFieldAt(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fields ast.PdfArray, parentName, parentFT, targetName, value string, onPath map[int]bool) (bool, error) {
 	for _, fieldObj := range fields {
 		var fieldRef ast.PdfIndirectRef
 		if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
@@ -325,11 +339,23 @@ func findAndSetField(ctx context.Context, doc *document.Document, alloc *writer.
 			return true, nil
 		}
 
-		// Recurse into /Kids.
+		// Recurse into /Kids, unless this field already sits on the path.
 		if kidsObj, ok := fieldDict["Kids"]; ok {
+			num := fieldRef.ObjectNum
+			if num != 0 && onPath[num] {
+				continue
+			}
 			kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
 			if err == nil && kidsArr != nil {
-				found, err := findAndSetField(ctx, doc, alloc, kidsArr, fullName, fieldFT, targetName, value)
+				// A direct dictionary carries no object number and cannot name
+				// itself, so it closes no cycle and needs no mark.
+				if num != 0 {
+					onPath[num] = true
+				}
+				found, err := findAndSetFieldAt(ctx, doc, alloc, kidsArr, fullName, fieldFT, targetName, value, onPath)
+				if num != 0 {
+					delete(onPath, num)
+				}
 				if err != nil {
 					return false, err
 				}
