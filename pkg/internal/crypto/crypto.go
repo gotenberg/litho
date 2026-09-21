@@ -272,7 +272,18 @@ func (h *Handler) Authenticate(password string) error {
 		}
 	}
 
+	// /Length is read from the file and is untrusted. ISO 32000-1, Table 20
+	// bounds the standard security handler's key to 40 through 128 bits in
+	// multiples of 8, and every legacy key below is sliced out of a 16-byte MD5
+	// digest. A document declaring /Length 256 sliced that digest to 32 and one
+	// declaring a negative length sliced it to -1: both panicked, and only the
+	// recover boundary in pkg/pdf kept the panic from reaching the caller.
+	// Reject the dictionary instead, because no password opens a document whose
+	// declared key length this handler cannot produce.
 	keyLen := h.Length / 8
+	if keyLen < 5 || keyLen > md5.Size {
+		return ErrUnsupportedEncryption
+	}
 	encKey := ownerKey[:keyLen]
 
 	decryptedO := make([]byte, len(h.oVal))
@@ -329,12 +340,12 @@ func (h *Handler) Authenticate(password string) error {
 		if h.R >= 3 {
 			for range 50 {
 				md2 := md5.New() //nolint:gosec,errcheck // Key length is always >0 per PDF spec
-				md2.Write(key[:h.Length/8])
+				md2.Write(key[:keyLen])
 				key = md2.Sum(nil)
 			}
 		}
 
-		candidateKey := key[:h.Length/8]
+		candidateKey := key[:keyLen]
 
 		// Verify the key (Algorithm 3.2, checking against the U string).
 		var expectedU []byte
