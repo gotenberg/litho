@@ -254,6 +254,41 @@ func normaliseICCProfileID(data []byte) []byte {
 // pdfObjectEqual compares two PDF objects for structural equality,
 // resolving indirect references.
 func pdfObjectEqual(ctx context.Context, doc *document.Document, a, b ast.PdfObject) bool {
+	return pdfObjectEqualAt(ctx, doc, a, b, make(map[[2]int]bool))
+}
+
+// pdfObjectEqualAt is pdfObjectEqual carrying the object pairs already under
+// comparison. Both operands are resolved and then walked element-wise, and
+// ResolveObject's cycle guard is per-resolution, so an array naming itself
+// compared with itself recursed until the goroutine stack was exhausted. That
+// is a fatal runtime error no recover() converts, on the ValidatePDFA,
+// ValidatePDFUA and ValidateWTPDF paths.
+//
+// The key is the PAIR, not one operand. Keyed on a single object number, a
+// walk that had compared object 6 under one dictionary key would skip it under
+// the next and report two DIFFERING dictionaries equal: a false compliance
+// verdict rather than a hang.
+//
+// A pair seen again answers EQUAL. Two objects already under comparison are
+// equal unless something else proves otherwise, so a cyclic but identical pair
+// compares equal instead of unequal. Marks are never cleared, which is safe
+// here though not in every walk (see findAndSetField, which searches on a
+// path-dependent name): a false result short-circuits the caller before any
+// sibling branch can observe the mark.
+func pdfObjectEqualAt(ctx context.Context, doc *document.Document, a, b ast.PdfObject, seen map[[2]int]bool) bool {
+	// Mark before resolving: the references are gone once a and b are
+	// reassigned below. Only an indirect pair can close a cycle, since a direct
+	// value cannot name itself.
+	if aRef, ok := a.(ast.PdfIndirectRef); ok {
+		if bRef, ok := b.(ast.PdfIndirectRef); ok {
+			key := [2]int{aRef.ObjectNum, bRef.ObjectNum}
+			if seen[key] {
+				return true
+			}
+			seen[key] = true
+		}
+	}
+
 	// Resolve indirect refs.
 	a, _ = document.ResolveObject(ctx, doc, a) // Best-effort dereference for comparison; unresolvable objects compare as-is.
 	b, _ = document.ResolveObject(ctx, doc, b) // Best-effort dereference for comparison; unresolvable objects compare as-is.
@@ -280,7 +315,7 @@ func pdfObjectEqual(ctx context.Context, doc *document.Document, a, b ast.PdfObj
 			return false
 		}
 		for i := range va {
-			if !pdfObjectEqual(ctx, doc, va[i], vb[i]) {
+			if !pdfObjectEqualAt(ctx, doc, va[i], vb[i], seen) {
 				return false
 			}
 		}
@@ -292,7 +327,7 @@ func pdfObjectEqual(ctx context.Context, doc *document.Document, a, b ast.PdfObj
 		}
 		for k, valA := range va {
 			valB, exists := vb[k]
-			if !exists || !pdfObjectEqual(ctx, doc, valA, valB) {
+			if !exists || !pdfObjectEqualAt(ctx, doc, valA, valB, seen) {
 				return false
 			}
 		}
