@@ -64,7 +64,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		stageName := group[0]
 		stageFlags := group[1:]
 
-		closers, err := addStage(ctx, pipeline, r, stageName, stageFlags, password)
+		closers, err := addStage(ctx, pipeline, r, stageName, stageFlags, password, stderr)
 		stageClosers = append(stageClosers, closers...)
 		if err != nil {
 			fmt.Fprintf(stderr, "pipe stage %q: %v\n", stageName, err)
@@ -213,10 +213,18 @@ func isStageCmd(s string) bool { return stageCmds[s] }
 // when [pdf.Pipeline.WriteTo] executes, so closing them here would be a
 // use-after-close. Release them after the write, as the standalone merge
 // command does with its own.
-func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string, args []string, password string) ([]func(), error) {
+//
+// stderr receives each stage FlagSet's own output. A FlagSet defaults to the
+// process's os.Stderr, which contradicts [run]'s contract that every byte goes
+// to the writers the caller passed: a stage's flag error printed its message
+// and usage past any capture the caller had installed, while only the wrapping
+// "pipe stage" line reached the writer. Every other command in this package
+// wires its FlagSet the same way.
+func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string, args []string, password string, stderr io.Writer) ([]func(), error) {
 	switch name {
 	case "rotate":
 		fs := flag.NewFlagSet("rotate", flag.ContinueOnError)
+		fs.SetOutput(stderr)
 		angle := fs.Int("angle", 0, "Rotation angle (multiple of 90)")
 		pages := fs.String("pages", "", "Page range")
 		if err := fs.Parse(args); err != nil {
@@ -237,6 +245,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 
 	case "split":
 		fs := flag.NewFlagSet("split", flag.ContinueOnError)
+		fs.SetOutput(stderr)
 		pages := fs.String("pages", "", "Page range (required)")
 		if err := fs.Parse(args); err != nil {
 			return nil, err
@@ -253,6 +262,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 
 	case "merge":
 		fs := flag.NewFlagSet("merge", flag.ContinueOnError)
+		fs.SetOutput(stderr)
 		if err := fs.Parse(args); err != nil {
 			return nil, err
 		}
@@ -280,6 +290,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 
 	case "delete":
 		fs := flag.NewFlagSet("delete", flag.ContinueOnError)
+		fs.SetOutput(stderr)
 		pages := fs.String("pages", "", "Page range (required)")
 		if err := fs.Parse(args); err != nil {
 			return nil, err
@@ -298,6 +309,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 
 	case "encrypt":
 		fs := flag.NewFlagSet("encrypt", flag.ContinueOnError)
+		fs.SetOutput(stderr)
 		userPw := fs.String("user-password", "", "User password")
 		ownerPw := fs.String("owner-password", "", "Owner password")
 		algo := fs.String("algorithm", "aes256", "Algorithm: rc4-128, aes128, aes256")
@@ -325,6 +337,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 
 	case "set-metadata":
 		fs := flag.NewFlagSet("set-metadata", flag.ContinueOnError)
+		fs.SetOutput(stderr)
 		title := fs.String("title", "", "Title")
 		author := fs.String("author", "", "Author")
 		subject := fs.String("subject", "", "Subject")
@@ -348,6 +361,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 
 	case "set-form":
 		fs := flag.NewFlagSet("set-form", flag.ContinueOnError)
+		fs.SetOutput(stderr)
 		var fields fieldFlags
 		fs.Var(&fields, "field", "Field name=value (repeatable)")
 		if err := fs.Parse(args); err != nil {
@@ -372,6 +386,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 
 	case "stamp-text":
 		fs := flag.NewFlagSet("stamp-text", flag.ContinueOnError)
+		fs.SetOutput(stderr)
 		text := fs.String("text", "", "Stamp text (required)")
 		opacity := fs.Float64("opacity", 1.0, "Opacity 0.0-1.0")
 		rotation := fs.Float64("rotation", 0, "Rotation degrees")
@@ -416,6 +431,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 
 	case "stamp-image":
 		fs := flag.NewFlagSet("stamp-image", flag.ContinueOnError)
+		fs.SetOutput(stderr)
 		image := fs.String("image", "", "Image file path (required)")
 		mime := fs.String("mime", "", "MIME type (auto-detected if empty)")
 		opacity := fs.Float64("opacity", 1.0, "Opacity")
@@ -462,6 +478,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 
 	case "remediate":
 		fs := flag.NewFlagSet("remediate", flag.ContinueOnError)
+		fs.SetOutput(stderr)
 		profile := fs.String("profile", "", "Compliance profile (required)")
 		aggressive := fs.Bool("aggressive", false, "Enable aggressive fixers")
 		if err := fs.Parse(args); err != nil {
