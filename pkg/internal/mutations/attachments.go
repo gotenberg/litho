@@ -294,6 +294,22 @@ func AddAttachmentWithOptions(ctx context.Context, alloc *writer.ObjAllocator, d
 		newCatalog["AF"] = afArr
 	}
 
+	// /AF and /AFRelationship are associated-file keys (ISO 32000-2, 14.13),
+	// introduced by ISO 19005-3 as an extension to PDF 1.7. Writing them onto
+	// a document that declares less leaves the file describing itself wrongly.
+	//
+	// This write is incremental, so the header cannot be corrected: it is byte
+	// zero of the bytes being preserved. ISO 32000-1, 7.5.2 provides the
+	// catalog /Version for exactly that case, and litho's reader honors it
+	// (document.initCatalogVersion). The key is ADDED when absent, unlike
+	// [writer.RewriteConfig], where a full rewrite can fix the header and an
+	// absent catalog entry already means "whatever the header says".
+	if opts.AFRelationship != "" || opts.AddToCatalogAF {
+		if raised := writer.AtLeastVersion(doc.Version, writer.MinAssociatedFilesVersion); raised != doc.Version {
+			newCatalog["Version"] = ast.PdfName(raised)
+		}
+	}
+
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 
 	return nil

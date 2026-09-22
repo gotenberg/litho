@@ -39,6 +39,26 @@ const minAESV3Version = "1.7"
 // this file actually relies on.
 const aesV3ExtensionLevel = 3
 
+// MinAssociatedFilesVersion is the earliest PDF version litho declares for the
+// associated-file keys /AF and /AFRelationship.
+//
+// ISO 32000-2, 14.13 standardises them, but ISO 19005-3 introduced them as an
+// extension to PDF 1.7, and that is the reading litho already applies
+// elsewhere: remediation pins a PDF/A-3 target to 1.7 while writing catalog
+// /AF. Declaring 2.0 for an attachment would contradict the version litho's
+// own remediation assigns to the same construct.
+const MinAssociatedFilesVersion = "1.7"
+
+// AtLeastVersion returns whichever of v and floor names the later PDF version.
+//
+// Exported for callers outside this package that write a construct carrying a
+// version requirement and must declare it. An incremental update cannot
+// rewrite the header, so such a caller records the result in the catalog
+// /Version instead (ISO 32000-1, 7.5.2); see [MinAssociatedFilesVersion].
+func AtLeastVersion(v, floor string) string {
+	return atLeastVersion(v, floor)
+}
+
 // maxVersionComponent bounds one parsed version component. It is an overflow
 // guard, not a spec limit: ISO 32000-1, 7.5.2 writes the header version as a
 // single digit either side of the period, so a component beyond this comes
