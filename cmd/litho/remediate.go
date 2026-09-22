@@ -49,13 +49,14 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	format := fs.String("f", "text", "Output format: text or json")
 	invoice := fs.String("invoice", "", "Cross-Industry Invoice XML to embed (Factur-X / ZUGFeRD profiles)")
 	level := fs.String("level", "", "Factur-X conformance level: MINIMUM, BASIC WL, BASIC, EN 16931, EXTENDED, XRECHNUNG")
+	compact := registerCompactFlag(fs)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || *profile == "" {
-		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--compact] -o out.pdf")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Profiles: "+strings.Join(remediateProfileNames(), ", "))
 		return exitError
@@ -98,13 +99,21 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		return exitError
 	}
 
+	// Remediation forces a full rewrite for most documents but not all, so the
+	// flag is accepted the way pipe accepts it: it applies when a rewrite
+	// happens. PDF/A-1 is the exception that must be refused outright, since
+	// packing would hand back a file that no longer conforms to the profile
+	// this command was asked to produce.
+	compactOK := *compact && !compactForbiddenByProfile(*profile)
+	warnCompactProfileRefused(stderr, *compact, *profile)
+
 	dst, closeDst, err := createOutput(*output)
 	if err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)
 		return exitError
 	}
 
-	if err := w.WriteTo(ctx, dst); err != nil {
+	if err := w.WriteTo(ctx, dst, compactWriteOptions(compactOK)...); err != nil {
 		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "writing output: %v\n", err)
 		return exitError

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -39,6 +40,47 @@ func warnCompactSkipped(stderr io.Writer, compact, encrypting bool) {
 	}
 	fmt.Fprintln(stderr, "warning: --compact does not apply to an encrypted output, so the output is not compacted. "+
 		"Compact the document first, then encrypt the result.")
+}
+
+// compactForbiddenByProfile reports whether packing would cost the named
+// compliance profile its conformance.
+//
+// ISO 19005-1, 6.1.4 forbids cross-reference streams in PDF/A-1 outright, and
+// packing requires one: a traditional table has no type field and cannot name
+// a compressed object. Every other profile litho remediates to permits both
+// constructs. Measured on one file carrying an object stream and a
+// cross-reference stream against the same file without them, PDF/A-1b gains
+// exactly one violation, clause 6.1.4, while PDF/A-2b, PDF/A-3b and PDF/UA-1
+// gain none.
+//
+// Factur-X and the ZUGFeRD variants remediate to a PDF/A-3 base whatever
+// generation the variant names, so none of them is affected. An unknown
+// profile is not forbidden here: [runRemediate] rejects it before the write,
+// and answering "forbidden" would silence compaction for a typo.
+func compactForbiddenByProfile(profile string) bool {
+	p, ok := pdfaProfiles[profile]
+	if !ok {
+		return false
+	}
+	return p == models.PDFA1a || p == models.PDFA1b
+}
+
+// warnCompactProfileRefused reports that --compact was asked for and will not
+// happen, because packing would cost the target profile its conformance.
+//
+// Ignoring the flag silently would hand back a larger file with no reason
+// given. Honoring it silently would be worse: the caller would receive a
+// smaller file that no longer conforms to the profile they asked the command
+// to produce, which defeats remediation entirely.
+//
+// A warning rather than an error, matching [warnCompactSkipped]: the command
+// still produced the conformant document it was asked for, only a larger one.
+func warnCompactProfileRefused(stderr io.Writer, compact bool, profile string) {
+	if !compact || !compactForbiddenByProfile(profile) {
+		return
+	}
+	fmt.Fprintf(stderr, "warning: --compact does not apply to %s, so the output is not compacted. "+
+		"ISO 19005-1, 6.1.4 forbids the cross-reference stream that object streams require.\n", profile)
 }
 
 // compactWriteOptions returns the write options -compact selects, or none when
