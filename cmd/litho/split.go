@@ -35,6 +35,12 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	if !ok {
 		return exitError
 	}
+	// Captured BEFORE the compaction options join the slice. Both warnings
+	// below ask whether the OUTPUT is encrypted, and once writeOpts also
+	// carries compaction options its length stops answering that: --compact
+	// alone would make it non-empty, which suppresses the encryption warning
+	// and fires the compaction one on a file that was compacted fine.
+	encrypting := len(writeOpts) > 0
 	writeOpts = append(writeOpts, compactWriteOptions(*compact)...)
 
 	r, closer, err := openPDF(ctx, fs.Arg(0), *password)
@@ -44,8 +50,9 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	}
 	defer closer()
 
-	warnEncryptionDropped(stderr, len(writeOpts) > 0, r)
+	warnEncryptionDropped(stderr, encrypting, r)
 	warnXFADropped(ctx, stderr, r)
+	warnCompactSkipped(stderr, *compact, encrypting)
 
 	pageCount, err := r.PageCount(ctx)
 	if err != nil {

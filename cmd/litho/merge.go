@@ -35,6 +35,12 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	if !ok {
 		return exitError
 	}
+	// Captured BEFORE the compaction options join the slice. Both warnings
+	// below ask whether the OUTPUT is encrypted, and once writeOpts also
+	// carries compaction options its length stops answering that: --compact
+	// alone would make it non-empty, which suppresses the encryption warning
+	// and fires the compaction one on a file that was compacted fine.
+	encrypting := len(writeOpts) > 0
 	writeOpts = append(writeOpts, compactWriteOptions(*compact)...)
 
 	var readers []*pdf.Reader
@@ -59,8 +65,9 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 		}
 	}()
 
-	warnEncryptionDropped(stderr, len(writeOpts) > 0, readers...)
+	warnEncryptionDropped(stderr, encrypting, readers...)
 	warnXFADropped(ctx, stderr, readers...)
+	warnCompactSkipped(stderr, *compact, encrypting)
 
 	dst, closeDst, err := createOutput(*output)
 	if err != nil {

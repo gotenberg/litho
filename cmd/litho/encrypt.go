@@ -105,6 +105,10 @@ func runEncrypt(ctx context.Context, args []string, _stdout, stderr io.Writer) i
 	}
 	defer closer()
 
+	// This command always encrypts its output, so asking to compact it is
+	// always a request the write engine will refuse.
+	warnCompactSkipped(stderr, *compact, true)
+
 	w := pdf.NewWriter(r)
 	w.Encrypt(pdf.EncryptConfig{
 		UserPassword:  *userPwd,

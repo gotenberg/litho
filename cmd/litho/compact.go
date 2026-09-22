@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"io"
 
 	"github.com/gotenberg/litho/pkg/pdf"
 )
@@ -16,6 +18,27 @@ import (
 func registerCompactFlag(fs *flag.FlagSet) *bool {
 	return fs.Bool("compact", false,
 		"Shrink the output by packing objects into object streams and merging duplicate streams")
+}
+
+// warnCompactSkipped reports that --compact was asked for and will not happen,
+// because the output is encrypted.
+//
+// The write engine refuses to compact an encrypted document: encryption runs
+// over every object before serialization, so packing afterwards would place
+// ciphertext strings inside a stream that is encrypted again, which
+// ISO 32000-1, 7.5.7 forbids, and dedup would compare ciphertext keyed per
+// object number and find nothing. That refusal is correct, but silent, and a
+// caller who passed the flag would otherwise receive an uncompacted file with
+// no indication why.
+//
+// A warning rather than an error, matching [warnEncryptionDropped]: the
+// command still produces a correct document, only a larger one.
+func warnCompactSkipped(stderr io.Writer, compact, encrypting bool) {
+	if !compact || !encrypting {
+		return
+	}
+	fmt.Fprintln(stderr, "warning: --compact does not apply to an encrypted output, so the output is not compacted. "+
+		"Compact the document first, then encrypt the result.")
 }
 
 // compactWriteOptions returns the write options -compact selects, or none when

@@ -72,6 +72,19 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		return exitError
 	}
 
+	// An encrypt stage makes the final output encrypted, which the write
+	// engine refuses to compact. splitStageGroups guarantees the first token
+	// of a group is the stage name, so this reads the pipeline rather than
+	// guessing at the argument list.
+	encryptsOutput := false
+	for _, g := range groups {
+		if len(g) > 0 && g[0] == "encrypt" {
+			encryptsOutput = true
+			break
+		}
+	}
+	warnCompactSkipped(stderr, compact, encryptsOutput)
+
 	// Documents a stage opened for itself, such as the merge sources. They stay
 	// live until WriteTo executes the stage that reads them, so they are closed
 	// here rather than in addStage.
