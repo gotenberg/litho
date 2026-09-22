@@ -113,6 +113,21 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 		// the file as using xref streams (ISO 19005-1, 6.1.4).
 		version = atLeastVersion(version, minXRefStreamVersion)
 	}
+	if encrypted {
+		// The same rule as above applied to encryption: AESV2 is a PDF 1.6
+		// crypt filter and AESV3 an ISO 32000-2 one, so a file selecting
+		// either while declaring 1.4 misdescribes itself. The catalog needs
+		// raising too, since its /Version overrides the header, and AES-256
+		// needs the /Extensions entry that names it as an extension to 1.7
+		// rather than a feature of it.
+		if floor := encryptionVersionFloor(cfg.Allocator, cfg.Trailer); floor != "" {
+			version = atLeastVersion(version, floor)
+			raiseCatalogVersion(cfg.Allocator, cfg.Trailer, floor)
+			if floor == minAESV3Version {
+				ensureADBEExtension(cfg.Allocator, cfg.Trailer, minAESV3Version, aesV3ExtensionLevel)
+			}
+		}
+	}
 
 	var offset int64
 

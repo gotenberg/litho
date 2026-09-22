@@ -833,14 +833,31 @@ func (w *Writer) AutoTag() {
 // EncryptAlgorithm values are immutable and safe for concurrent use.
 type EncryptAlgorithm int
 
+// Each algorithm carries a minimum PDF version, and the output declares it:
+// a file selecting a handler its declared version does not define misdescribes
+// itself. RC4 needs nothing beyond PDF 1.4, AES-128 raises the output to 1.6,
+// and AES-256 raises it to 1.7 and records the Adobe extension that defines
+// it. See [EncryptAES256] for why 1.7 rather than 2.0.
 const (
-	// EncryptRC4_40 uses 40-bit RC4 (V=1, R=2). Weak. Legacy only.
+	// EncryptRC4_40 uses 40-bit RC4 (V=1, R=2), a PDF 1.1 handler. Weak.
+	// Legacy only.
 	EncryptRC4_40 EncryptAlgorithm = iota
-	// EncryptRC4_128 uses 128-bit RC4 (V=2, R=3). Weak. Legacy only.
+	// EncryptRC4_128 uses 128-bit RC4 (V=2, R=3), a PDF 1.4 handler. Weak.
+	// Legacy only.
 	EncryptRC4_128
-	// EncryptAES128 uses 128-bit AES-CBC (V=4, R=4).
+	// EncryptAES128 uses 128-bit AES-CBC (V=4, R=4) through the AESV2 crypt
+	// filter, which ISO 32000-1, Table 25 introduces in PDF 1.6. The output
+	// declares at least that version.
 	EncryptAES128
-	// EncryptAES256 uses 256-bit AES-CBC (V=5, R=6). Recommended.
+	// EncryptAES256 uses 256-bit AES-CBC (V=5, R=6) through the AESV3 crypt
+	// filter. Recommended.
+	//
+	// ISO 32000-2 defines this handler, but the output declares PDF 1.7 plus
+	// an /Extensions entry naming Adobe extension level 3 rather than PDF
+	// 2.0. AES-256 is an extension to 1.7, not a feature of it, and declaring
+	// 2.0 would overstate a document whose body is unchanged. This matches
+	// what other producers write: qpdf emits the same 1.7-plus-extension
+	// pair.
 	EncryptAES256
 )
 

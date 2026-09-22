@@ -14,6 +14,31 @@ import (
 // parse the cross-reference at all.
 const minXRefStreamVersion = "1.5"
 
+// minAESV2Version is the earliest PDF version defining the AESV2 crypt filter
+// that 128-bit AES encryption selects (ISO 32000-1, 7.6.5 and Table 25).
+// Keyed on the filter method rather than /V, which is less precise: /V 4 means
+// crypt filters generally, a PDF 1.5 feature, while AESV2 specifically arrived
+// in 1.6.
+const minAESV2Version = "1.6"
+
+// minAESV3Version is the base version litho declares for the AESV3 crypt
+// filter that 256-bit AES selects.
+//
+// ISO 32000-2 defines /V 5 /R 6 outright, so 2.0 would also be defensible, but
+// it overstates the file: only the /Encrypt dictionary is 2.0, and the body
+// remains whatever the source was. Adobe introduced AES-256 as an extension to
+// PDF 1.7, and that is what the ecosystem writes: qpdf 12.4.1 emits %PDF-1.7
+// with an /ADBE extension dictionary rather than %PDF-2.0. litho matches it,
+// which means the base version is only half the declaration; see
+// [ensureADBEExtension] for the other half.
+const minAESV3Version = "1.7"
+
+// aesV3ExtensionLevel is the Adobe extension level that introduced the AESV3
+// crypt filter with /R 6. qpdf writes a later blanket level (8) covering
+// everything it can emit; 3 is the narrower claim, naming only the extension
+// this file actually relies on.
+const aesV3ExtensionLevel = 3
+
 // maxVersionComponent bounds one parsed version component. It is an overflow
 // guard, not a spec limit: ISO 32000-1, 7.5.2 writes the header version as a
 // single digit either side of the period, so a component beyond this comes
@@ -134,4 +159,118 @@ func raiseCatalogVersion(alloc *ObjAllocator, trailer ast.PdfDict, floor string)
 		return noop
 	}
 	return func() { alloc.AllocAt(root.ObjectNum, catalog) }
+}
+
+// encryptionVersionFloor returns the earliest PDF version that defines the
+// encryption the trailer selects, or "" when it needs nothing later than the
+// document already declares.
+//
+// The crypt filter method is what carries the requirement, not /V: /V 4 means
+// crypt filters, a PDF 1.5 feature, while the AESV2 method specifically
+// arrived in 1.6 (ISO 32000-1, Table 25) and AESV3 in ISO 32000-2. The RC4
+// algorithms select /V 1 or /V 2 and write no /CF dictionary at all, so they
+// answer "" here and keep the source's version, which is correct: /V 2 is a
+// PDF 1.4 construct.
+func encryptionVersionFloor(alloc *ObjAllocator, trailer ast.PdfDict) string {
+	if alloc == nil || trailer == nil {
+		return ""
+	}
+	encrypt, ok := resolvePending(alloc, trailer["Encrypt"])
+	if !ok {
+		return ""
+	}
+	cf, ok := resolvePending(alloc, encrypt["CF"])
+	if !ok {
+		return ""
+	}
+	std, ok := resolvePending(alloc, cf["StdCF"])
+	if !ok {
+		return ""
+	}
+	switch std["CFM"] {
+	case ast.PdfName("AESV3"):
+		return minAESV3Version
+	case ast.PdfName("AESV2"):
+		return minAESV2Version
+	}
+	return ""
+}
+
+// resolvePending returns obj as a dictionary, following one level of
+// indirection through the allocator. [applyEncryption] stores the /Encrypt
+// dictionary as an indirect reference, while a nested /CF sits inline.
+func resolvePending(alloc *ObjAllocator, obj ast.PdfObject) (ast.PdfDict, bool) {
+	switch v := obj.(type) {
+	case ast.PdfDict:
+		return v, true
+	case ast.PdfIndirectRef:
+		dict, ok := alloc.Pending()[v.ObjectNum].(ast.PdfDict)
+		return dict, ok
+	}
+	return nil, false
+}
+
+// ensureADBEExtension records in the catalog the Adobe extension level that
+// legitimises AES-256 under a PDF 1.7 base version.
+//
+// Declaring 1.7 alone would misdescribe the file just as 1.4 did: /V 5 is not
+// a PDF 1.7 construct, it is an extension to it, and ISO 32000-1, 7.12 gives
+// /Extensions as the way a file names the extension it relies on. qpdf writes
+// the same pair.
+//
+// Existing entries are raised, never lowered. A source that already declares a
+// later base version or a higher extension level knows something this writer
+// does not, and overwriting it would narrow a claim the document depends on.
+func ensureADBEExtension(alloc *ObjAllocator, trailer ast.PdfDict, baseVersion string, level int) {
+	if alloc == nil || trailer == nil {
+		return
+	}
+	root, ok := trailer["Root"].(ast.PdfIndirectRef)
+	if !ok {
+		return
+	}
+	catalog, ok := alloc.Pending()[root.ObjectNum].(ast.PdfDict)
+	if !ok {
+		return
+	}
+
+	adbe := ast.PdfDict{
+		"BaseVersion":    ast.PdfName(baseVersion),
+		"ExtensionLevel": ast.PdfInt(level),
+	}
+	extensions := ast.PdfDict{}
+	if existing, ok := resolvePending(alloc, catalog["Extensions"]); ok {
+		extensions = make(ast.PdfDict, len(existing)+1)
+		maps.Copy(extensions, existing)
+		if prior, ok := resolvePending(alloc, existing["ADBE"]); ok {
+			adbe = mergeADBE(prior, baseVersion, level)
+		}
+	}
+	extensions["ADBE"] = adbe
+
+	// Replaced rather than mutated, for the reason [raiseCatalogVersion] gives.
+	next := make(ast.PdfDict, len(catalog)+1)
+	maps.Copy(next, catalog)
+	next["Extensions"] = extensions
+	alloc.AllocAt(root.ObjectNum, next)
+}
+
+// mergeADBE returns prior with its base version and extension level raised to
+// at least the given values, leaving every other entry untouched.
+func mergeADBE(prior ast.PdfDict, baseVersion string, level int) ast.PdfDict {
+	merged := make(ast.PdfDict, len(prior)+2)
+	maps.Copy(merged, prior)
+
+	base := baseVersion
+	if name, ok := prior["BaseVersion"].(ast.PdfName); ok {
+		base = atLeastVersion(string(name), baseVersion)
+	}
+	merged["BaseVersion"] = ast.PdfName(base)
+
+	if n, ok := prior["ExtensionLevel"].(ast.PdfInt); ok && int(n) > level {
+		merged["ExtensionLevel"] = n
+	} else {
+		merged["ExtensionLevel"] = ast.PdfInt(level)
+	}
+	return merged
 }
