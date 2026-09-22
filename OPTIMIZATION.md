@@ -6,6 +6,29 @@ These four are grouped because they are all _output-side_ transforms on the writ
 
 > None of these is gated on the rendering bundle. Font subsetting in particular needs font-_table_ surgery, not glyph-outline rasterization (see below), so it is independent of [RENDERING.md](RENDERING.md).
 
+## Size profile (measured 2026-09-22)
+
+The hypothesis above is measured. The populations are all 5171 corpus files plus real Gotenberg container output (`gotenberg/gotenberg:snapshot`, Skia/PDF m152). Nothing below was built; this records where the bytes go.
+
+| Population                         | Font programs | Images | `/ObjStm` opportunity | Dedup floor |
+| ---------------------------------- | ------------- | ------ | --------------------- | ----------- |
+| Gotenberg output (one report page) | **75.9%**     | 0%     | 15.9%                 | 0%          |
+| facturx, not packed (57 MB)        | **66.9%**     | 3.8%   | 1.6%                  | 0.2%        |
+| pdfjs, not packed (311 MB)         | 19.6%         | 50.1%  | 4.7%                  | 0.8%        |
+| verapdf, not packed (143 MB)       | 12.9%         | 1.1%   | 4.2%                  | 18.0%       |
+| govdocs, not packed (619 MB)       | 8.6%          | 53.8%  | 4.7%                  | 1.0%        |
+| All 5171 files (1479 MB)           | 12.9%         | 43.5%  | 4.1%                  | 3.4%        |
+
+Three findings qualify the plan below.
+
+**Font programs dominate Gotenberg output.** They are 75.9% of a one-page report and 21.4% of a six-section text document. Font mass is a fixed cost that amortizes with document length, so an image-heavy document falls to 1.6%. Typical Gotenberg output is short, which makes the fixed cost the common case.
+
+**Object compaction wins less than the plan assumes.** The `/ObjStm` opportunity is 1.5% to 4.7% on real-world files and 15.9% on Chromium output, not a broad structural win. Chromium emits neither `/ObjStm` nor `/Linearized`, so the headroom is real but small.
+
+**The dedup floor is about 1% on real-world corpora.** veraPDF's 18.0% is an artifact of machine-generated fixture variants sharing identical objects, and veraPDF alone accounts for 59% of all duplicate mass measured. Do not size generalized dedup from it.
+
+PR3's CFF claim stays unverified. Chromium embedded `/FontFile2` and never `/FontFile3` for system fonts on macOS and Linux alike, and the 150 facturx invoices carry 404 font streams that are all `/FontFile2`. Four webfont probes failed to load an OTF at all, so this neither confirms nor refutes "Chromium output commonly embeds CFF". Measure a webfont-bearing page before dropping or keeping the CFF subsetter.
+
 ## What exists in litho today
 
 | Optimization                                | Status                                                                                                                                                                                                                                                |
