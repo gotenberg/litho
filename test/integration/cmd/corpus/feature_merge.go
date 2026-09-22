@@ -119,6 +119,12 @@ type mergeOutput struct {
 	OutText    []string       `json:"out_text,omitempty"`
 	InputBM    []bookmarkLeaf `json:"input_bm,omitempty"`
 	LithoOutBM []bookmarkLeaf `json:"litho_out_bm,omitempty"`
+
+	// Catalog-level facts about both sides, shared with the split feature.
+	// Merge is the verb that can actually exercise them: runMerge has no
+	// two-page floor, so the single-page fixtures that split skips are
+	// reachable here.
+	catalogFacts
 }
 
 // bookmarkLeaf is the (title, page) pair we compare. Page=0 leaves
@@ -254,14 +260,19 @@ func runMerge(ctx context.Context, pdfPath string) (mergeOutput, error) {
 	}
 	lithoOutLeaves := collectBookmarkLeaves(normalizeLithoTree(outBM), nil)
 
-	return mergeOutput{
+	result := mergeOutput{
 		InputPages: inputPages,
 		OutPages:   outPages,
 		InputText:  inputText,
 		OutText:    outText,
 		InputBM:    inputLeaves,
 		LithoOutBM: lithoOutLeaves,
-	}, nil
+	}
+	// src is sources[0], whose catalog entries merge.go carries; src2 is the
+	// same document reopened, so reading the input side from src is correct.
+	result.catalogFacts = readCatalogFacts(ctx, src, out)
+
+	return result, nil
 }
 
 func (f *mergeFeature) Compare(fixtureID string, output []byte) Verdict {
@@ -317,7 +328,23 @@ func (f *mergeFeature) Compare(fixtureID string, output []byte) Verdict {
 		return Verdict{FixtureID: fixtureID, Reason: reason}
 	}
 
-	return Verdict{FixtureID: fixtureID, Match: true, Score: 1.0}
+	// Measured across the corpus: 2 of pdfcpu's merge fixtures carry the shape
+	// that trips the field collector, against 0 reachable through split, which
+	// skips single-page inputs. This is where the invariant is load-bearing.
+	if reason := checkCatalogInvariants("merge", got.catalogFacts); reason != "" {
+		return Verdict{
+			FixtureID: fixtureID,
+			Reason:    reason,
+			Metrics:   catalogInvariantMetrics(got.catalogFacts),
+		}
+	}
+
+	return Verdict{
+		FixtureID: fixtureID,
+		Match:     true,
+		Score:     1.0,
+		Metrics:   catalogInvariantMetrics(got.catalogFacts),
+	}
 }
 
 // collectBookmarkLeaves flattens a normalized outline tree into a
