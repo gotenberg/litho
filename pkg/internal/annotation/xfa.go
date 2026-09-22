@@ -166,7 +166,12 @@ func collectXFAElement(decoder *xml.Decoder, path string, result map[string]stri
 	for {
 		tok, err := decoder.Token()
 		if err != nil {
-			return textBuf.String(), nil
+			// Trimmed exactly as the well-formed path below trims. A truncated
+			// packet ends the token stream mid-element, and returning the
+			// buffer raw stored an untrimmed value in a map whose every other
+			// value is trimmed, so one field's spacing depended on where the
+			// file happened to be cut.
+			return strings.TrimSpace(textBuf.String()), nil
 		}
 
 		switch t := tok.(type) {

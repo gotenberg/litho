@@ -176,6 +176,67 @@ func TestParseXFADatasets_InvalidXML(t *testing.T) {
 	}
 }
 
+// TestParseXFADatasets_TruncatedValueIsTrimmed pins the leaf-text contract on
+// the path a truncated packet takes.
+//
+// collectXFAElement returns strings.TrimSpace of the text it gathered when an
+// element closes normally, but its decoder-error path returned the buffer RAW.
+// A packet cut mid-element therefore produced one untrimmed value inside a map
+// whose every other value was trimmed, so a field's spacing depended on where
+// the file happened to end. TestParseXFADatasets_WhitespaceHandling pins the
+// well-formed half of the same contract.
+//
+// FuzzParseXFADatasets found this on "<datasets><data><A> 000000" after 4,486
+// executions; that input is kept as a regression seed under testdata/fuzz.
+func TestParseXFADatasets_TruncatedValueIsTrimmed(t *testing.T) {
+	result, err := parseXFADatasets([]byte("<datasets><data><A> 000000"))
+	if err != nil {
+		t.Fatalf("parseXFADatasets: %v", err)
+	}
+
+	got, ok := result["A"]
+	if !ok {
+		t.Fatalf("missing key A in %v", result)
+	}
+	if got != "000000" {
+		t.Errorf("value = %q, want %q: a truncated element's text was not trimmed", got, "000000")
+	}
+}
+
+// TestParseXFADatasets_DotInElementNameIsAmbiguous documents a limitation of
+// the flat dotted map rather than asserting a fix for it.
+//
+// XML allows "." inside an element name (a NameChar, though not a
+// NameStartChar), so <A.B> is well formed and the walk keys it "A.B" - exactly
+// the key a <B> nested inside an <A> produces. The two are indistinguishable
+// once flattened. Resolving it would change the shape [pdf.Reader.FormData]
+// returns, for a construct no corpus file contains, so the behaviour is pinned
+// here as known instead.
+//
+// FuzzParseXFADatasets found this with "<datasets><data><A.>0000", and the
+// finding was in the target's own assertion, which had rejected a dot in that
+// position as malformed. The input is deliberately NOT kept as a regression
+// seed: it pins nothing about litho.
+func TestParseXFADatasets_DotInElementNameIsAmbiguous(t *testing.T) {
+	dotted, err := parseXFADatasets([]byte(
+		`<datasets><data><A.B>v</A.B></data></datasets>`))
+	if err != nil {
+		t.Fatalf("parseXFADatasets (dotted name): %v", err)
+	}
+	nested, err := parseXFADatasets([]byte(
+		`<datasets><data><A><B>v</B></A></data></datasets>`))
+	if err != nil {
+		t.Fatalf("parseXFADatasets (nested): %v", err)
+	}
+
+	if dotted["A.B"] != "v" {
+		t.Errorf("dotted name: got %v, want key A.B = %q", dotted, "v")
+	}
+	if nested["A.B"] != "v" {
+		t.Errorf("nested elements: got %v, want key A.B = %q", nested, "v")
+	}
+}
+
 func TestParseXFADatasets_NamespacedElements(t *testing.T) {
 	// Real XFA data often uses namespace prefixes on data elements.
 	xml := `<?xml version="1.0" encoding="UTF-8"?>
