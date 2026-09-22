@@ -11,8 +11,13 @@ import (
 )
 
 // checkDocumentGroup validates document-level properties for PDF/A and PDF/UA:
-//   - PDF/A-1: PDF version must be 1.4 or lower; /OCProperties forbidden.
-//   - PDF/A-4: PDF version must be 2.0.
+//   - PDF/A-1: /OCProperties forbidden. The version NUMBER is deliberately not
+//     checked: §6.1.2 governs the header's FORMAT, not its value, so a part-1
+//     file declaring a later version is not a violation here. See
+//     [checkVersionPart1], which says so and returns nothing.
+//   - PDF/A-4: the catalog /Version entry, WHEN PRESENT, must be 2.n. An
+//     absent entry conforms, because [checkVersionPart4] defers to §6.1.2 for
+//     the header rather than falling back to it.
 //   - PDF/A parts 2+/4: /AlternatePresentations forbidden in /Names,
 //     /Requirements key forbidden in catalog.
 //   - PDF/A parts 2+/4: /OCProperties must have /AS array if /OCGs present;
