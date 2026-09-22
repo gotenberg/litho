@@ -202,6 +202,20 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		needsRewrite = true
 	}
 
+	// requiredVersion above only reaches the output through the writer's
+	// full-rewrite config. An incremental update preserves the original bytes
+	// and cannot re-emit the header, so a profile needing a later version
+	// than the source declares has one place left to say so: the catalog
+	// /Version (ISO 32000-1, 7.5.2), which litho's own reader honors (see
+	// document.initCatalogVersion).
+	if !needsRewrite && catalogCarriesVersion(profile) && requiredVersion != "" {
+		if raised := writer.AtLeastVersion(doc.Version, requiredVersion); raised != doc.Version {
+			if declareCatalogVersion(ctx, alloc, doc, raised) {
+				fixed = append(fixed, fmt.Sprintf("declared PDF version %s in the document catalog", raised))
+			}
+		}
+	}
+
 	doc.Logger.Debug("remediate completed",
 		slog.String("profile", profile),
 		slog.Int("fixed", len(fixed)),
