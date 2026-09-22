@@ -319,7 +319,16 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 		_, _ = vm.RunString(`var this = { getField: getField };`) //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
 
 		// Inject Document-level scripts first (best-effort: malformed JS is non-fatal)
-		docScripts, _ := ExtractDocumentScripts(ctx, doc) //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
+		docScripts, scriptsErr := ExtractDocumentScripts(ctx, doc)
+		if scriptsErr != nil {
+			// Not a goja failure like the calls around it. This one is the
+			// name-tree walk declining to yield scripts at all, a malformed
+			// /Names dictionary or a tree past maxDocumentScriptsSize. Field
+			// calculations still run, they just run without the
+			// document-level scripts.
+			doc.Logger.Debug("extracting document-level JavaScript; continuing without it",
+				slog.Any("err", scriptsErr))
+		}
 		for _, script := range docScripts {
 			_, _ = vm.RunString(script) //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
 		}
