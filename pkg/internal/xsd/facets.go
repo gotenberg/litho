@@ -71,27 +71,40 @@ func ValidateValue(value string, t Type) []FacetViolation {
 // most-derived last" order so the most-derived restriction wins when
 // XSD lets a redeclaration tighten (e.g. a deeper maxLength). Returns
 // the underlying built-in type the chain bottoms out on.
+//
+// The walk is iterative and bounded by [maxTypeDerivationDepth]. A
+// schema may declare a simpleType that restricts itself, directly or
+// through another type, and the loader resolves such a base without
+// complaint: the recursive form this replaced then exhausted the
+// goroutine stack, which Go cannot recover from. Like the extension
+// walks in validate.go the bound TRUNCATES rather than reports, so a
+// pathological chain yields the facets gathered so far.
 func collectAllFacets(t Type) ([]Facet, *BuiltinType) {
-	var ordered []Facet
+	var chain []*SimpleType
+	var base *BuiltinType
+
 	cur := t
-	for cur != nil {
-		switch ct := cur.(type) {
-		case *BuiltinType:
-			return ordered, ct
-		case *SimpleType:
-			// Walk base first so we collect upstream facets ahead of
-			// the local ones, matching XSD's "most-derived wins" rule
-			// when both layers declare the same facet kind.
-			upstream, base := collectAllFacets(ct.Base)
-			out := make([]Facet, 0, len(upstream)+len(ct.Facets))
-			out = append(out, upstream...)
-			out = append(out, ct.Facets...)
-			return out, base
-		default:
-			return ordered, nil
+	for depth := 0; cur != nil && depth < maxTypeDerivationDepth; depth++ {
+		st, ok := cur.(*SimpleType)
+		if !ok {
+			// A built-in ends the chain and names the lexical space.
+			// Any other kind ends it with no lexical space at all.
+			if bt, isBuiltin := cur.(*BuiltinType); isBuiltin {
+				base = bt
+			}
+			break
 		}
+		// Prepend so the chain reads base first, which is the order the
+		// facets must be applied in for "most-derived wins" to hold.
+		chain = append([]*SimpleType{st}, chain...)
+		cur = st.Base
 	}
-	return ordered, nil
+
+	var ordered []Facet
+	for _, link := range chain {
+		ordered = append(ordered, link.Facets...)
+	}
+	return ordered, base
 }
 
 // applyWhitespace honours the xs:whiteSpace facet semantics:

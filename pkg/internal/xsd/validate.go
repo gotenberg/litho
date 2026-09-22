@@ -349,15 +349,15 @@ func newMatcher(ct *ComplexType, _ *Schema) contentMatcher {
 // collectExtendedParticles flattens the xs:extension chain rooted at
 // ct into a single particle list. Base particles appear before
 // derived particles, matching the way an extending complex type
-// appends to the base's content model. Cycles cannot occur because
-// the loader rejects xs:include cycles at load time, but a sane
-// upper bound on the walk depth still guards against pathological
-// schemas.
+// appends to the base's content model.
+//
+// The loader rejects xs:include cycles, but it does NOT reject a type
+// whose base chain returns to itself, so the bound is load bearing
+// rather than merely defensive: see [maxTypeDerivationDepth].
 func collectExtendedParticles(ct *ComplexType) []Particle {
-	const maxDepth = 64
 	var chain []*ComplexType
 	cur := ct
-	for depth := 0; cur != nil && depth < maxDepth; depth++ {
+	for depth := 0; cur != nil && depth < maxTypeDerivationDepth; depth++ {
 		chain = append([]*ComplexType{cur}, chain...)
 		if base, ok := cur.Base.(*ComplexType); ok {
 			cur = base
@@ -382,10 +382,9 @@ func collectExtendedParticles(ct *ComplexType) []Particle {
 // attribute validation so an extending complex type honours every
 // attribute declared on its base alongside the local additions.
 func collectExtendedAttributes(ct *ComplexType) []AttributeUse {
-	const maxDepth = 64
 	var chain []*ComplexType
 	cur := ct
-	for depth := 0; cur != nil && depth < maxDepth; depth++ {
+	for depth := 0; cur != nil && depth < maxTypeDerivationDepth; depth++ {
 		chain = append([]*ComplexType{cur}, chain...)
 		if base, ok := cur.Base.(*ComplexType); ok {
 			cur = base

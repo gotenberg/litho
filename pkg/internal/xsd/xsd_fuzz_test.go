@@ -58,3 +58,41 @@ func FuzzXSDValidate(f *testing.F) {
 		_, _ = Validate(context.Background(), schema, payload)
 	})
 }
+
+// FuzzXSDLoadThenValidate drives a FUZZED schema through validation, which
+// neither target above can do: FuzzXSDLoad stops at Load, and Load cannot reach
+// the facet walk (collectAllFacets has exactly two callers, ValidateValue and
+// itself, and ValidateValue runs only from Validate). FuzzXSDValidate holds the
+// schema fixed and acyclic.
+//
+// The comment on FuzzXSDValidate reasons that fuzzing both halves "would mostly
+// produce schemas that fail to load and leave the validator unreached". That is
+// true of malformed schemas and exactly wrong for the dangerous ones: a
+// simpleType restricting itself LOADS without error, and the validator then
+// walked its base chain until the goroutine stack passed 1 GB and the process
+// died. Loading cleanly is what made it dangerous.
+//
+// The cyclic schemas are seeded rather than left to mutation because a valid
+// XSD carrying a self-referential base is not a shape byte mutation discovers.
+func FuzzXSDLoadThenValidate(f *testing.F) {
+	const payload = `<Root xmlns="urn:t">far too long to pass</Root>`
+
+	f.Add([]byte(minimalXSD), []byte(validInstance))
+	f.Add([]byte(selfRestrictingXSD), []byte(payload))     // Loads, then used to overflow.
+	f.Add([]byte(mutuallyRestrictingXSD), []byte(payload)) // A two-step cycle.
+	f.Add([]byte(minimalXSD[:len(minimalXSD)/2]), []byte(payload))
+	f.Add([]byte(""), []byte(""))
+
+	f.Fuzz(func(_ *testing.T, schemaSrc, doc []byte) {
+		if len(schemaSrc) > 1<<20 || len(doc) > 1<<20 {
+			return
+		}
+		schema, err := Load(context.Background(), fstest.MapFS{
+			"schema.xsd": &fstest.MapFile{Data: schemaSrc},
+		}, "schema.xsd")
+		if err != nil || schema == nil {
+			return
+		}
+		_, _ = Validate(context.Background(), schema, doc)
+	})
+}

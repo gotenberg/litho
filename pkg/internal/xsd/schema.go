@@ -66,6 +66,23 @@ type Type interface {
 	isType()
 }
 
+// maxTypeDerivationDepth bounds every walk up a type's base chain: the
+// simpleType restriction chain in facets.go and the complexType
+// extension chains in validate.go. It is an anti-DoS guard, not a limit
+// XSD imposes.
+//
+// Nothing rejects a schema whose base chain returns to itself. The
+// loader resolves each base through [Schema.Types] and checks only that
+// the name resolves, so a simpleType restricting itself (directly, or
+// through a second type) links without complaint. Unbounded, the facet
+// walk recursed until the goroutine stack passed its 1 GB limit, which
+// Go reports as a fatal error and no recover can catch.
+//
+// 64 sits far above real schemas: the bundled CII schemas nest at most
+// a few restrictions deep, and a chain longer than this describes no
+// document a validator could usefully judge.
+const maxTypeDerivationDepth = 64
+
 // BuiltinType is the marker representation of an XS-namespace
 // primitive (xs:string, xs:int, xs:date, ...). The loader populates a
 // stub instance for each known built-in in [BuiltinTypes]. PR2 will
