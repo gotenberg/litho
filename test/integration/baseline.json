@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-09-21T10:56:54Z",
+  "captured_at": "2026-09-22T10:48:09Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -173,7 +173,15 @@
         "merge": {
           "matched": 31,
           "mismatched": 2,
-          "skipped": 6
+          "skipped": 6,
+          "metrics": {
+            "acroform_checked": 31,
+            "acroform_invented": 0,
+            "lexicons_checked": 0,
+            "lexicons_dropped": 0,
+            "portfolio_checked": 0,
+            "portfolio_dropped": 0
+          }
         },
         "merge-empty": {
           "matched": 31,
@@ -188,7 +196,15 @@
         "split": {
           "matched": 33,
           "mismatched": 0,
-          "skipped": 18
+          "skipped": 18,
+          "metrics": {
+            "acroform_checked": 33,
+            "acroform_invented": 0,
+            "lexicons_checked": 0,
+            "lexicons_dropped": 0,
+            "portfolio_checked": 0,
+            "portfolio_dropped": 0
+          }
         },
         "text": {
           "matched": 32,
@@ -203,6 +219,19 @@
     },
     "pdfjs": {
       "features": {
+        "merge-catalog": {
+          "matched": 1171,
+          "mismatched": 0,
+          "skipped": 31,
+          "metrics": {
+            "acroform_checked": 1171,
+            "acroform_invented": 0,
+            "lexicons_checked": 0,
+            "lexicons_dropped": 0,
+            "portfolio_checked": 0,
+            "portfolio_dropped": 0
+          }
+        },
         "metadata": {
           "matched": 1189,
           "mismatched": 1,
