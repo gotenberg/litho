@@ -201,7 +201,20 @@ func rootFieldOf(alloc *writer.ObjAllocator, annotRef ast.PdfIndirectRef) (ast.P
 // without its required /FT: malformed, but it is still the field its page
 // paints, and dropping it would strand the widget. Requiring the subtype keeps
 // every other annotation, a link or a popup, out of the rebuilt field list.
+//
+// An annotation subtype other than /Widget settles it before /T is read,
+// because /T means two unrelated things. On a field it is the partial field
+// name; on a markup annotation it is the title of the pop-up window,
+// conventionally the author (Table 170). Without this, a /Polygon carrying
+// /T (author) is collected as a field root and split and merge write an
+// /AcroForm onto a document that has no form at all: measured on pdfjs
+// issue20062.pdf, whose only annotation is such a polygon, where a merge turned
+// nothing into a field named "author". A non-terminal field node carries no
+// /Subtype, so it still qualifies through /T.
 func isFieldRoot(dict ast.PdfDict) bool {
+	if subtype, ok := dict["Subtype"].(ast.PdfName); ok && subtype != "Widget" {
+		return false
+	}
 	if _, ok := dict["FT"]; ok {
 		return true
 	}
