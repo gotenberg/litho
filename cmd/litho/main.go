@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -87,6 +88,45 @@ dispatch:
 		defer cancel()
 	}
 
+	code := runCommand(ctx, cmd, globalArgs, stdout, stderr)
+
+	return timeoutStatus(code, ctx.Err())
+}
+
+// timeoutStatus maps a finished command's status onto what the process
+// reports, turning a failure the deadline caused into exitTimeout.
+//
+// exitTimeout was declared alongside the other codes and returned by nothing,
+// while --timeout is an advertised flag, so an expired deadline surfaced as
+// exitError and read like a corrupt file or a bad argument. 124 is the status
+// timeout(1) reports, which is why a caller recognises it.
+//
+// Only a FAILURE converts, and that narrowness is the whole point: a run that
+// produced a real verdict before the deadline expired keeps it, since
+// `--timeout 1ms validate` on a non-conformant file exits 2 having reported its
+// violations first, and calling that a timeout would throw the answer away.
+// context.Canceled is deliberately not mapped, because this command installs no
+// cancellation of its own.
+//
+// It is a separate function because the narrowness cannot be pinned end to
+// end. An already-expired deadline makes every command fail before it can
+// reach a verdict, so the case that distinguishes this rule from "any status
+// becomes 124" is a race in an integration test and an ordinary table row
+// here.
+func timeoutStatus(code int, ctxErr error) int {
+	if code == exitError && errors.Is(ctxErr, context.DeadlineExceeded) {
+		return exitTimeout
+	}
+	return code
+}
+
+// runCommand dispatches to the subcommand cmd names.
+//
+// It is split from [run] so that the status every command returns passes
+// through a single place, which is what lets the deadline check above see it.
+// The switch returns directly from thirty-nine cases, and post-processing each
+// one would be thirty-nine chances to miss one.
+func runCommand(ctx context.Context, cmd string, globalArgs []string, stdout, stderr io.Writer) int {
 	switch cmd {
 	case "info":
 		return runInfo(ctx, globalArgs, stdout, stderr)
