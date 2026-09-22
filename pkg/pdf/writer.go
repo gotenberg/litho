@@ -2128,6 +2128,18 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 			slog.String("requested_version", cfg.version))
 	}
 
+	// The compaction options need the same notice for a stronger reason.
+	// Packing and dedup run inside the full-rewrite engine, and
+	// writer.IncrementalConfig carries no field for either, so the incremental
+	// path has nothing to honor them with. An ignored compaction produces a
+	// file byte-identical to one written without the option, which a caller
+	// cannot tell apart from compaction that ran and found nothing to save.
+	if (cfg.packObjectStreams || cfg.dedupStreams) && !cfg.fullRewrite && !w.forceRewrite {
+		logger.Debug("compaction ignored: packing and dedup apply only to a full rewrite; this write is incremental",
+			slog.Bool("pack_object_streams", cfg.packObjectStreams),
+			slog.Bool("dedup_streams", cfg.dedupStreams))
+	}
+
 	// Signing requires its own two-pass incremental flow.
 	if w.signer != nil {
 		mutFuncs := make([]mutations.MutationFunc, len(w.mutations))

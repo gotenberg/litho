@@ -11,14 +11,26 @@ import (
 
 // registerCompactFlag adds -compact to fs and returns the bound value.
 //
-// Only commands that always rewrite the whole file register it. Object-stream
-// packing and stream dedup both run on the full-rewrite path, so offering the
-// flag on a command that appends an incremental update would advertise an
-// option that silently does nothing. That rules out rotate, set-metadata and
-// autotag, none of which forces a rewrite.
+// Object-stream packing and stream dedup both run on the full-rewrite path.
+// [pdf.WithObjectStreams] states the rule: an incremental update appends to
+// the original bytes and leaves their packing untouched, and the incremental
+// write config carries no compaction field to honor in the first place. A
+// command that never rewrites must therefore not offer the flag at all, which
+// is why rotate, set-metadata and autotag do not register it.
+//
+// Two commands sit between those cases. pipe and remediate rewrite the whole
+// file for most inputs and append an incremental update for the rest, so the
+// flag is real for them but conditional. Remediating a document that needs no
+// structural repair leaves the write incremental, and the output is then
+// byte-identical with the flag and without it. Refusing the flag there would
+// deny compaction to every input that does rewrite, so the help text states
+// the condition rather than promising a result the command cannot always
+// deliver. [pdf.Writer.WriteTo] logs the ignored option at Debug when it
+// happens.
 func registerCompactFlag(fs *flag.FlagSet) *bool {
 	return fs.Bool("compact", false,
-		"Shrink the output by packing objects into object streams and merging duplicate streams")
+		"Shrink the output by packing objects into object streams and merging "+
+			"duplicate streams, when the command rewrites the whole file")
 }
 
 // warnCompactSkipped reports that --compact was asked for and will not happen,
