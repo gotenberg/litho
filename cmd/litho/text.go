@@ -36,8 +36,8 @@ func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	artifacts := fs.Bool("artifacts", false, "Include text marked as an /Artifact (headers, footers, watermarks)")
 	hidden := fs.Bool("hidden", false, "Include all of the above")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	files := fs.Args()

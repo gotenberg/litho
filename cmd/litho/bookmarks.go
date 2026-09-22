@@ -23,8 +23,8 @@ func runBookmarks(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	password := fs.String("p", "", "PDF password")
 	generate := fs.Bool("generate", false, "Auto-generate bookmarks from detected headings instead of the existing outline")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	files := fs.Args()

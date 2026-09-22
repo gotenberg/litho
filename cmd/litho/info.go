@@ -40,8 +40,8 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	checkStreams := fs.Bool("streams", false, "Report streams litho cannot decode (JBIG2/JPX without a plugin, or unknown filters)")
 	checkPerms := fs.Bool("permissions", false, "Show the document permission flags")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	files := fs.Args()

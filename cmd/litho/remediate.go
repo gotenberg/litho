@@ -50,8 +50,8 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	invoice := fs.String("invoice", "", "Cross-Industry Invoice XML to embed (Factur-X / ZUGFeRD profiles)")
 	level := fs.String("level", "", "Factur-X conformance level: MINIMUM, BASIC WL, BASIC, EN 16931, EXTENDED, XRECHNUNG")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || *profile == "" {

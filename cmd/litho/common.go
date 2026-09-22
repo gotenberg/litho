@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -20,6 +21,27 @@ const (
 	exitValidationFail = 2
 	exitTimeout        = 124
 )
+
+// parseCommandFlags parses a command's flags and reports whether the caller
+// should carry on. When it should not, exit holds the status to return.
+//
+// [flag.ContinueOnError] makes Parse return [flag.ErrHelp] for -h, --help and
+// -help, and every command used to treat that like any other parse failure. So
+// `litho info -h` printed its usage and exited 1 while `litho --help` exited 0:
+// two spellings of the same request disagreeing inside one binary. The flag
+// package draws the distinction itself, since [flag.ExitOnError] exits 0 on
+// ErrHelp and 2 on anything else.
+func parseCommandFlags(fs *flag.FlagSet, args []string) (exit int, ok bool) {
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
+		// Parse has already written the usage or the message to the writer the
+		// command gave the FlagSet, so there is nothing left to print here.
+		if errors.Is(err, flag.ErrHelp) {
+			return exitOK, false
+		}
+		return exitError, false
+	}
+	return exitOK, true
+}
 
 // openPDF opens a PDF from a file path. Use "-" to read from stdin.
 //
@@ -126,8 +148,8 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" {

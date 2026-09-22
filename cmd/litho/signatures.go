@@ -22,8 +22,8 @@ func runSignatures(ctx context.Context, args []string, stdout, stderr io.Writer)
 	password := fs.String("p", "", "PDF password")
 	verify := fs.Bool("verify", false, "Verify signatures against system root certificates")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	files := fs.Args()

@@ -28,8 +28,8 @@ func runSetForm(ctx context.Context, args []string, _stdout, stderr io.Writer) i
 	var fields fieldFlags
 	fs.Var(&fields, "field", "Field assignment name=value (repeatable)")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || len(fields) == 0 {

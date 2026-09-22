@@ -22,8 +22,8 @@ func runSign(_ context.Context, args []string, _stdout, stderr io.Writer) int {
 	_ = fs.String("cert", "", "Certificate PEM file")
 	_ = fs.String("key", "", "Private key PEM file")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	fmt.Fprintln(stderr, "signing requires a custom Signer implementation")

@@ -18,8 +18,8 @@ func runMetadata(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	password := fs.String("p", "", "PDF password")
 	rawXMP := fs.Bool("xmp", false, "Dump the raw XMP metadata packet instead of the Info dictionary")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	files := fs.Args()

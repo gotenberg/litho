@@ -26,8 +26,8 @@ func runStampImage(ctx context.Context, args []string, _stdout, stderr io.Writer
 	opacity := fs.Float64("opacity", 1.0, "Opacity (0.0-1.0)")
 	pages := fs.String("pages", "", "Page range (default: all)")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || *imagePath == "" {

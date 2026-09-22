@@ -17,8 +17,8 @@ func runRotate(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 	angle := fs.Int("angle", 0, "Rotation to set, in degrees (multiple of 90, required). Replaces any rotation the page already has")
 	pages := fs.String("pages", "", "Page range (default: all)")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	// -angle 0 is a real request: it clears /Rotate on an already-rotated

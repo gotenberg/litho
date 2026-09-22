@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,15 +12,32 @@ import (
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
+// pipeUsage writes the pipe command's own usage. pipe parses its arguments by
+// hand rather than owning a FlagSet, so this stands in for the usage a FlagSet
+// would print for any other command.
+func pipeUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: litho pipe <file> <stage> [stage-flags] ... -o out.pdf")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Stages: rotate, split, merge, delete, encrypt, decrypt, autotag,")
+	fmt.Fprintln(w, "        set-metadata, set-form, flatten-form, stamp-text,")
+	fmt.Fprintln(w, "        stamp-image, remediate")
+}
+
 // runPipe implements `litho pipe <file> <stage> [flags] <stage> [flags] ... -o out.pdf`.
 // Stages reuse the same names and flags as individual mutation commands.
 func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
+	// pipe owns no FlagSet, so the [flag.ErrHelp] path the other commands take
+	// through parseCommandFlags never runs here: `litho pipe -h` fell into the
+	// "too few arguments" arm below and exited 1 while `litho info -h` exited
+	// 0. Only the LEADING token counts, because a -h further along may be a
+	// flag's value rather than a request, and the per-flag arity needed to tell
+	// those apart is exactly what splitStageGroups documents it lacks.
+	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help" || args[0] == "-help") {
+		pipeUsage(stderr)
+		return exitOK
+	}
 	if len(args) < 2 {
-		fmt.Fprintln(stderr, "Usage: litho pipe <file> <stage> [stage-flags] ... -o out.pdf")
-		fmt.Fprintln(stderr)
-		fmt.Fprintln(stderr, "Stages: rotate, split, merge, delete, encrypt, decrypt, autotag,")
-		fmt.Fprintln(stderr, "        set-metadata, set-form, flatten-form, stamp-text,")
-		fmt.Fprintln(stderr, "        stamp-image, remediate")
+		pipeUsage(stderr)
 		return exitError
 	}
 
@@ -67,6 +85,13 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		closers, err := addStage(ctx, pipeline, r, stageName, stageFlags, password, stderr)
 		stageClosers = append(stageClosers, closers...)
 		if err != nil {
+			// Asking a stage for its flags is a request, not a failure. The
+			// stage FlagSet has already written its usage to stderr, and
+			// wrapping it in a "pipe stage" error would report a help request
+			// as a broken command.
+			if errors.Is(err, flag.ErrHelp) {
+				return exitOK
+			}
 			fmt.Fprintf(stderr, "pipe stage %q: %v\n", stageName, err)
 			return exitError
 		}

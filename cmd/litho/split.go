@@ -19,8 +19,8 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	ownerPwd := fs.String("owner-password", "", "Owner password for the encrypted output")
 	algorithm := fs.String("algorithm", "aes256", "Algorithm for the encrypted output: rc4-128, aes128, aes256")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || *pages == "" {

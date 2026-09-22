@@ -71,8 +71,8 @@ func runValidate(ctx context.Context, args []string, stdout, stderr io.Writer) i
 	password := fs.String("p", "", "PDF password")
 	profile := fs.String("profile", "", "Compliance profile (e.g., PDF/A-2b, PDF/UA-1)")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	files := fs.Args()

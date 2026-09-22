@@ -20,8 +20,8 @@ func runForms(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	format := fs.String("f", "text", "Output format: text or json")
 	password := fs.String("p", "", "PDF password")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	files := fs.Args()

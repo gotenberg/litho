@@ -91,8 +91,8 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	var regionSpecs regionFlags
 	fs.Var(&regionSpecs, "region", "Region to clear, page:x,y,width,height (repeatable, required)")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || len(regionSpecs) == 0 {

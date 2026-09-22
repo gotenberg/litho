@@ -20,8 +20,8 @@ func runAttach(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 	mime := fs.String("mime", "", "MIME type (auto-detected from extension if omitted)")
 	relationship := fs.String("relationship", "", "AFRelationship for PDF/A-3+ associated files (Source, Data, Alternative, Supplement, EncryptedPayload, FormData, Schema, Unspecified)")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || *name == "" || *dataPath == "" {

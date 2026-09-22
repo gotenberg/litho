@@ -20,8 +20,8 @@ func runSetBookmarks(ctx context.Context, args []string, _stdout, stderr io.Writ
 	fromJSON := fs.String("from-json", "", "JSON file with bookmark definitions (required unless --generate)")
 	generate := fs.Bool("generate", false, "Auto-generate bookmarks from detected headings (instead of --from-json)")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || (*fromJSON == "" && !*generate) {

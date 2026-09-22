@@ -27,8 +27,8 @@ func runGeo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	pagesFlag := fs.String("pages", "", "Page range (e.g., 1-3,5,last)")
 	geojson := fs.Bool("geojson", false, "Emit GeoJSON (text mode) via GeoData.ToGeoJSON()")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	files := fs.Args()

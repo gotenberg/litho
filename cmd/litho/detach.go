@@ -16,8 +16,8 @@ func runDetach(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 	password := fs.String("p", "", "PDF password")
 	name := fs.String("name", "", "Attachment name to remove (required)")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || *name == "" {

@@ -27,8 +27,8 @@ func runStampText(ctx context.Context, args []string, _stdout, stderr io.Writer)
 	y := fs.Float64("y", 0, "Y position in points from bottom-left")
 	pages := fs.String("pages", "", "Page range (default: all)")
 
-	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
-		return exitError
+	if code, ok := parseCommandFlags(fs, args); !ok {
+		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || *text == "" {
