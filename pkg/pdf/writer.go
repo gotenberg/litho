@@ -27,13 +27,14 @@ import (
 type WriteOption func(*writeOpts)
 
 type writeOpts struct {
-	fullRewrite     bool
-	version         string
-	xrefStream      bool
-	logger          *slog.Logger
-	bookmarks       *BookmarkOptions
-	pipelineTempDir string
-	encrypt         *EncryptConfig
+	fullRewrite       bool
+	version           string
+	xrefStream        bool
+	packObjectStreams bool
+	logger            *slog.Logger
+	bookmarks         *BookmarkOptions
+	pipelineTempDir   string
+	encrypt           *EncryptConfig
 }
 
 // WithFullRewrite forces a clean rewrite of the entire file instead of an
@@ -92,6 +93,28 @@ func WithVersion(version string) WriteOption {
 func WithXRefStream() WriteOption {
 	return func(o *writeOpts) {
 		o.xrefStream = true
+	}
+}
+
+// WithObjectStreams packs eligible objects into compressed object streams
+// (ISO 32000-1, 7.5.7), which removes the per-object "N 0 obj"/"endobj"
+// overhead and compresses the dictionaries themselves.
+//
+// It applies to the full-rewrite path only. An incremental update appends to
+// the original bytes and leaves their packing untouched, so the option has no
+// effect there. Packing implies a cross-reference stream, since a traditional
+// table cannot name a compressed object, and litho writes one whether or not
+// [WithXRefStream] was passed.
+//
+// An encrypted output is never packed. Encryption runs over every object
+// before serialization, so packing afterwards would place ciphertext strings
+// inside a stream that is itself encrypted, and ISO 32000-1, 7.5.7 requires
+// that strings in an object stream are not encrypted separately. Combining
+// this option with [WithEncryption] writes an unpacked file rather than an
+// unreadable one.
+func WithObjectStreams() WriteOption {
+	return func(o *writeOpts) {
+		o.packObjectStreams = true
 	}
 }
 
@@ -1968,7 +1991,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 			(w.encryptCfg != nil) != w.preSerializedEncrypt ||
 			w.decrypt != w.preSerializedDecrypt ||
 			w.signer != nil ||
-			cfg.fullRewrite || cfg.version != "" || cfg.xrefStream
+			cfg.fullRewrite || cfg.version != "" || cfg.xrefStream || cfg.packObjectStreams
 		if !stale {
 			return w.copyFromPreSerialized(dst)
 		}
@@ -2078,13 +2101,14 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 			}
 		}
 		return mutations.FullRewrite(ctx, dst, mutations.FullRewriteConfig{
-			Doc:             w.reader.doc,
-			EncryptCfg:      w.encryptCfg,
-			Decrypt:         w.decrypt,
-			Version:         cfg.version,
-			RequiredVersion: w.requiredVersion,
-			XRefStream:      cfg.xrefStream,
-			Overrides:       overrides,
+			Doc:               w.reader.doc,
+			EncryptCfg:        w.encryptCfg,
+			Decrypt:           w.decrypt,
+			Version:           cfg.version,
+			RequiredVersion:   w.requiredVersion,
+			XRefStream:        cfg.xrefStream,
+			PackObjectStreams: cfg.packObjectStreams,
+			Overrides:         overrides,
 		})
 	}
 
@@ -2193,7 +2217,7 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 
 	version := cfg.version
 	bookmarkCfg := buildSplitBookmarkConfig(src, cfg.bookmarks)
-	if err := mutations.Split(ctx, src.doc, allPages, pages, dst, version, cfg.xrefStream, bookmarkCfg, cfg.internalEncrypt()); err != nil {
+	if err := mutations.Split(ctx, src.doc, allPages, pages, dst, version, cfg.xrefStream, cfg.packObjectStreams, bookmarkCfg, cfg.internalEncrypt()); err != nil {
 		// Translate at the boundary so a caller can match with errors.Is
 		// without importing pkg/internal.
 		if errors.Is(err, mutations.ErrAttachmentTreeIncomplete) {
@@ -2250,7 +2274,7 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 	}
 
 	bookmarkCfg := buildMergeBookmarkConfig(sources, cfg.bookmarks)
-	if err := mutations.Merge(ctx, mergeSources, dst, cfg.version, cfg.xrefStream, bookmarkCfg, cfg.internalEncrypt()); err != nil {
+	if err := mutations.Merge(ctx, mergeSources, dst, cfg.version, cfg.xrefStream, cfg.packObjectStreams, bookmarkCfg, cfg.internalEncrypt()); err != nil {
 		// Translate at the boundary so a caller can match with errors.Is
 		// without importing pkg/internal. A merge rebuilds one attachment tree
 		// from every source, so a source the walk cannot read whole would lose

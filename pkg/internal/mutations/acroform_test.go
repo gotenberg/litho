@@ -140,7 +140,7 @@ func TestSplitMerge_KeepAcroForm(t *testing.T) {
 	}
 
 	var split bytes.Buffer
-	if err := Split(ctx, doc, pages, []int{1}, &split, "", false, DefaultSplitBookmarkConfig(), nil); err != nil {
+	if err := Split(ctx, doc, pages, []int{1}, &split, "", false, false, DefaultSplitBookmarkConfig(), nil); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
 	if n, hasDA := acroFormOf(t, split.Bytes()); n != 1 || !hasDA {
@@ -153,7 +153,7 @@ func TestSplitMerge_KeepAcroForm(t *testing.T) {
 
 	var merged bytes.Buffer
 	err = Merge(ctx, []MergeSource{{Doc: doc, Pages: pages}, {Doc: doc2, Pages: pages2}},
-		&merged, "", false, DefaultMergeBookmarkConfig(), nil)
+		&merged, "", false, false, DefaultMergeBookmarkConfig(), nil)
 	if err != nil {
 		t.Fatalf("Merge: %v", err)
 	}

@@ -11,12 +11,24 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
-// XRefRecord tracks the byte offset of a written object.
+// XRefRecord tracks where a written object lives.
+//
+// An object is either written directly, at Offset, or packed inside an object
+// stream, in which case Compressed is set and ObjStmNum/ObjStmIndex name the
+// containing stream and the object's position in it (ISO 32000-1, 7.5.8.3,
+// type 2). Only a cross-reference STREAM can express the packed form: a
+// traditional table has no type field, so [WriteXRefTable] cannot represent it.
 type XRefRecord struct {
 	ObjNum     int
 	Offset     int64
 	Generation int
 	Free       bool
+	// Compressed marks an object held inside an object stream. Offset and
+	// Generation are ignored for such an entry; a compressed object always
+	// has generation 0 (ISO 32000-1, 7.5.7).
+	Compressed  bool
+	ObjStmNum   int
+	ObjStmIndex int
 }
 
 // WriteXRefTable writes a traditional cross-reference table, trailer
@@ -125,21 +137,29 @@ func WriteXRefStream(ctx context.Context, w io.Writer, records []XRefRecord, tra
 		return records[i].ObjNum < records[j].ObjNum
 	})
 
-	// Determine field widths. Type is always 1 byte. Field2 and Field3
-	// widths are determined by the maximum values.
-	var maxOffset int64
-	var maxGen int
+	// Determine field widths. Type is always 1 byte. Field 2 holds an offset
+	// for a type-1 entry and the containing stream's object number for a
+	// type-2 one; field 3 holds a generation or the index within that stream
+	// (ISO 32000-1, Table 18). Both fields are shared across entry types, so
+	// each width must cover the maximum of every value that lands in it: a
+	// width taken from offsets alone truncates a larger object-stream number,
+	// and one taken from generations alone truncates an index above 255.
+	var maxField2, maxField3 int64
 	for _, rec := range records {
-		if rec.Offset > maxOffset {
-			maxOffset = rec.Offset
+		f2, f3 := rec.Offset, int64(rec.Generation)
+		if rec.Compressed {
+			f2, f3 = int64(rec.ObjStmNum), int64(rec.ObjStmIndex)
 		}
-		if rec.Generation > maxGen {
-			maxGen = rec.Generation
+		if f2 > maxField2 {
+			maxField2 = f2
+		}
+		if f3 > maxField3 {
+			maxField3 = f3
 		}
 	}
 
-	w1 := bytesNeeded(maxOffset)
-	w2 := bytesNeeded(int64(maxGen))
+	w1 := bytesNeeded(maxField2)
+	w2 := bytesNeeded(maxField3)
 	if w2 == 0 {
 		w2 = 1
 	}
@@ -151,13 +171,22 @@ func WriteXRefStream(ctx context.Context, w io.Writer, records []XRefRecord, tra
 		if err := ctx.Err(); err != nil {
 			return 0, fmt.Errorf("encoding xref entry for object %d: %w", rec.ObjNum, err)
 		}
-		if rec.Free {
+		switch {
+		case rec.Free:
 			data = append(data, 0) // type 0: free
-		} else {
+			data = appendBigEndian(data, rec.Offset, w1)
+			data = appendBigEndian(data, int64(rec.Generation), w2)
+		case rec.Compressed:
+			// Type 2: field 2 is the object stream's number, field 3 the
+			// index within it (ISO 32000-1, 7.5.8.3).
+			data = append(data, 2)
+			data = appendBigEndian(data, int64(rec.ObjStmNum), w1)
+			data = appendBigEndian(data, int64(rec.ObjStmIndex), w2)
+		default:
 			data = append(data, 1) // type 1: normal
+			data = appendBigEndian(data, rec.Offset, w1)
+			data = appendBigEndian(data, int64(rec.Generation), w2)
 		}
-		data = appendBigEndian(data, rec.Offset, w1)
-		data = appendBigEndian(data, int64(rec.Generation), w2)
 	}
 
 	// Compress with FlateDecode.

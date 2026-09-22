@@ -20,6 +20,10 @@ type FullRewriteConfig struct {
 	Version         string
 	RequiredVersion string
 	XRefStream      bool
+	// PackObjectStreams packs eligible objects into /Type /ObjStm streams.
+	// The write engine forces a cross-reference stream when it packs, and
+	// refuses to pack an encrypted document; see [writer.PackObjectStreams].
+	PackObjectStreams bool
 	// Overrides pre-seeds the copier so edits made against the source
 	// document's object numbers (remediation patches and pre-applied
 	// user mutations) are used in place of the original objects during
@@ -116,10 +120,11 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 	}
 
 	return writer.WriteRewrite(ctx, dst, writer.RewriteConfig{
-		Version:       version,
-		Allocator:     alloc,
-		Trailer:       trailer,
-		UseXRefStream: cfg.XRefStream,
+		Version:           version,
+		Allocator:         alloc,
+		Trailer:           trailer,
+		UseXRefStream:     cfg.XRefStream,
+		PackObjectStreams: cfg.PackObjectStreams,
 	})
 }
 

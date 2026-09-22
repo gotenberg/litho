@@ -48,7 +48,7 @@ Six probes failed to exercise the webfont path itself, so it stays unverified ra
 | Linearization (fast web view)               | **Read-only.** Parsed via `pkg/internal/core/document/linearization.go`. **No writer produces linearized output.**                                                                                                                                    |
 | Font subsetting                             | **TrueType stamp fonts only.** `pkg/internal/mutations/stamp_font_subset.go` (`subsetTTF`: `glyf`/`loca`/`head` rewrite) subsets fonts litho _embeds_ for stamps. **No CFF subsetter, no document-font subsetting.**                                  |
 | Image recompression / downsampling          | **Missing.** `graphics/image/decode.go` decodes; nothing re-encodes or downsamples.                                                                                                                                                                   |
-| Object compaction (GC, xref/object streams) | **Partial.** `WithFullRewrite` drops orphaned/incremental-history objects (GC); `WithXRefStream` writes a compressed xref; ICC-profile dedup exists (`remediation/fixer_icc_dedup.go`). **No `/ObjStm` emission, no general duplicate-object dedup.** |
+| Object compaction (GC, xref/object streams) | **Partial.** `WithFullRewrite` drops orphaned/incremental-history objects (GC); `WithXRefStream` writes a compressed xref; ICC-profile dedup exists (`remediation/fixer_icc_dedup.go`). **`/ObjStm` emission ships** as `WithObjectStreams` on the full-rewrite path, including `Split` and `Merge`, and declines rather than grow a file it cannot shrink. **No general duplicate-object dedup, and no CLI flag exposes packing yet.** |
 
 ## The four optimizations
 

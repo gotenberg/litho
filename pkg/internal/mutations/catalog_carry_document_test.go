@@ -79,7 +79,7 @@ func TestSplitMerge_KeepDocumentLevelEntries(t *testing.T) {
 	}
 
 	var split bytes.Buffer
-	if err := Split(ctx, doc, pages, []int{1}, &split, "", false,
+	if err := Split(ctx, doc, pages, []int{1}, &split, "", false, false,
 		DefaultSplitBookmarkConfig(), nil); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestSplitMerge_KeepDocumentLevelEntries(t *testing.T) {
 
 	var merged bytes.Buffer
 	if err := Merge(ctx, []MergeSource{{Doc: doc, Pages: pages}, {Doc: doc2, Pages: pages2}},
-		&merged, "", false, DefaultMergeBookmarkConfig(), nil); err != nil {
+		&merged, "", false, false, DefaultMergeBookmarkConfig(), nil); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 	check("merge", merged.Bytes())
@@ -116,7 +116,7 @@ func TestSplitMerge_StillRefusePageKeyedEntries(t *testing.T) {
 	}
 
 	var split bytes.Buffer
-	if err := Split(ctx, doc, pages, []int{1}, &split, "", false,
+	if err := Split(ctx, doc, pages, []int{1}, &split, "", false, false,
 		DefaultSplitBookmarkConfig(), nil); err != nil {
 		t.Fatalf("Split: %v", err)
 	}

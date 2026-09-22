@@ -20,6 +20,11 @@ type RewriteConfig struct {
 	Trailer ast.PdfDict
 	// UseXRefStream forces xref stream format instead of a traditional table.
 	UseXRefStream bool
+	// PackObjectStreams packs eligible objects into /Type /ObjStm streams
+	// (ISO 32000-1, 7.5.7). Packing implies a cross-reference stream, since
+	// a traditional table cannot express a type-2 entry, and is refused
+	// outright for an encrypted document; see [PackObjectStreams].
+	PackObjectStreams bool
 }
 
 // WriteRewrite emits a complete PDF file to dst from the objects in the
@@ -43,6 +48,34 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 	offset += int64(n)
 	if err != nil {
 		return fmt.Errorf("writing header: %w", err)
+	}
+
+	// Pack before enumerating. Packing both removes objects from the
+	// allocator's pending set and allocates the streams that now hold them,
+	// and Pending returns that live map, so an enumeration taken earlier
+	// would name objects this file no longer writes directly.
+	useXRefStream := cfg.UseXRefStream
+	var packed []PackedObject
+	if cfg.PackObjectStreams {
+		if _, encrypted := cfg.Trailer["Encrypt"]; encrypted {
+			// Encryption has already run over every pending object, so the
+			// strings are ciphertext already and the stream holding them
+			// would be encrypted a second time. ISO 32000-1, 7.5.7 forbids
+			// encrypting strings inside an object stream separately, so the
+			// file is written unpacked instead of incorrectly.
+			packed = nil
+		} else {
+			p, err := PackObjectStreams(ctx, cfg.Allocator)
+			if err != nil {
+				return fmt.Errorf("packing object streams: %w", err)
+			}
+			packed = p
+			if len(packed) > 0 {
+				// A traditional cross-reference table has no type field and
+				// cannot name a compressed object (ISO 32000-1, 7.5.8.3).
+				useXRefStream = true
+			}
+		}
 	}
 
 	// Serialize all pending objects in order.
@@ -74,6 +107,17 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 		offset += written
 	}
 
+	// Objects living inside an object stream are named by a type-2 entry
+	// instead of a byte offset (ISO 32000-1, 7.5.8.3).
+	for _, p := range packed {
+		records = append(records, XRefRecord{
+			ObjNum:      p.ObjNum,
+			Compressed:  true,
+			ObjStmNum:   p.ObjStmNum,
+			ObjStmIndex: p.ObjStmIndex,
+		})
+	}
+
 	// Build trailer.
 	trailer := make(ast.PdfDict, len(cfg.Trailer)+1)
 	for k, v := range cfg.Trailer {
@@ -87,7 +131,7 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 	// Write xref.
 	xrefOffset := offset
 
-	if cfg.UseXRefStream {
+	if useXRefStream {
 		if _, err := WriteXRefStream(ctx, dst, records, trailer, cfg.Allocator, xrefOffset); err != nil {
 			return fmt.Errorf("writing xref stream: %w", err)
 		}
