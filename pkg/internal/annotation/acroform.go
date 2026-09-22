@@ -221,7 +221,16 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 	// precedence when both exist, per the PDF spec's fallback semantics).
 	var xfaData map[string]string
 	if acroFormDict != nil {
-		xfaData, _ = extractXFAData(ctx, doc, acroFormDict)
+		var xfaErr error
+		xfaData, xfaErr = extractXFAData(ctx, doc, acroFormDict)
+		if xfaErr != nil {
+			// An XFA packet that is malformed, unresolvable or past
+			// maxXFADataSize must not cost the caller the AcroForm fields.
+			// The two are separate layers and the AcroForm half is still
+			// readable, so report it alone rather than failing the form.
+			doc.Logger.Debug("extracting XFA data; returning AcroForm fields only",
+				slog.Any("err", xfaErr))
+		}
 	}
 
 	xfaOnly := func() ([]models.FormField, error) {
