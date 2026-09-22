@@ -1180,6 +1180,43 @@ func (r *Reader) HasAcroForm(ctx context.Context) (has bool) {
 	return err == nil && len(fieldsArr) > 0
 }
 
+// HasXFAForm reports whether the document carries XFA form data, the XML
+// form description of ISO 32000-1, 12.7.8 held in /AcroForm /XFA.
+//
+// [Reader.HasAcroForm] cannot answer this: it returns false for a document
+// whose catalog sets /NeedsRendering, because the AcroForm there wraps XFA
+// rather than describing widgets, so "no AcroForm" and "an XFA form" are
+// indistinguishable through it. Callers that rebuild a document need the
+// difference, since the page operations copy widgets and carry no XFA: the
+// form data of a dynamic XFA document does not survive them.
+//
+// True for a hybrid document too, which carries both /XFA and real widget
+// fields. Such a document keeps its widgets through a rebuild and loses only
+// the XFA layer.
+func (r *Reader) HasXFAForm(ctx context.Context) (has bool) {
+	// Resolves the catalog out of file-controlled bytes, so it needs the same
+	// panic boundary as [Reader.HasAcroForm], and like that method its
+	// signature carries no error to report one through. Recover with a nil
+	// error pointer: the panic is still logged at Error with a stack, and the
+	// answer falls back to false.
+	defer recoverToError(r.logger(), "Reader.HasXFAForm", nil)
+
+	resolved, err := document.ResolveCatalog(ctx, r.doc)
+	if err != nil || resolved == nil || resolved.Dict == nil {
+		return false
+	}
+	acroFormObj, ok := resolved.Dict["AcroForm"]
+	if !ok {
+		return false
+	}
+	acroForm, err := document.ResolveDict(ctx, r.doc, acroFormObj)
+	if err != nil || acroForm == nil {
+		return false
+	}
+	_, hasXFA := acroForm["XFA"]
+	return hasXFA
+}
+
 // HasFormFields reports whether the document carries any interactive form
 // field, whether the interactive form lists it or only a page presents it.
 //
