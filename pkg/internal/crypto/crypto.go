@@ -475,6 +475,13 @@ func (h *Handler) DecryptFunc(objNum, genNum int) func([]byte) ([]byte, error) {
 // aesDecrypt performs AES-CBC decryption with PKCS7 unpadding.
 // The IV is the first 16 bytes of data.
 //
+// Decryption is IN PLACE: the bytes after the IV are overwritten with their
+// plaintext, so data must not be a buffer the caller intends to read again.
+// Every caller reaches here through [Handler.DecryptFunc] and supplies a buffer
+// it has just allocated (a freshly read stream body, or a fresh []byte from a
+// string), so nothing observes the overwrite today. A caller that passed a
+// shared or cached slice would.
+//
 // Data that cannot be an AES ciphertext comes back unchanged rather than as an
 // error. ISO 32000-1, 7.6.2 encrypts with a 16 byte initialisation vector
 // followed by whole cipher blocks, so bytes shorter than one block, or leaving a
