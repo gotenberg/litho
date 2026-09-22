@@ -33,6 +33,14 @@ const minAESV2Version = "1.6"
 // [ensureADBEExtension] for the other half.
 const minAESV3Version = "1.7"
 
+// isoPDF2Version is the first PDF version that defines the AESV3 crypt filter
+// natively, so a file already declaring it needs no Adobe extension to explain
+// /V 5. Below it the extension is what makes the handler legible; at or above
+// it the extension is noise, and a /BaseVersion of 1.7 would contradict what
+// the file declares. qpdf draws the same line: it writes /ADBE when encrypting
+// a 1.4 source and omits it entirely on a 2.0 one.
+const isoPDF2Version = "2.0"
+
 // aesV3ExtensionLevel is the Adobe extension level that introduced the AESV3
 // crypt filter with /R 6. qpdf writes a later blanket level (8) covering
 // everything it can emit; 3 is the narrower claim, naming only the extension

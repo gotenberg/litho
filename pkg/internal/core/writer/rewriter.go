@@ -123,7 +123,12 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 		if floor := encryptionVersionFloor(cfg.Allocator, cfg.Trailer); floor != "" {
 			version = atLeastVersion(version, floor)
 			raiseCatalogVersion(cfg.Allocator, cfg.Trailer, floor)
-			if floor == minAESV3Version {
+			// The extension declares what PDF 1.7 does not define on its own.
+			// A file already declaring 2.0 defines AESV3 natively, so writing
+			// /ADBE there is noise, and its /BaseVersion of 1.7 would
+			// contradict the version the file declares. qpdf agrees: it emits
+			// the extension for a 1.4 source and none for a 2.0 one.
+			if floor == minAESV3Version && atLeastVersion(version, isoPDF2Version) != version {
 				ensureADBEExtension(cfg.Allocator, cfg.Trailer, minAESV3Version, aesV3ExtensionLevel)
 			}
 		}

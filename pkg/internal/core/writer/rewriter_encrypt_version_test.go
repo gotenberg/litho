@@ -72,8 +72,14 @@ func TestWriteRewrite_EncryptionDeclaresItsOwnVersion(t *testing.T) {
 		// RC4 selects /V 1 or /V 2 and writes no /CF at all. /V 2 is PDF 1.4,
 		// so the source version is already honest and must not move.
 		{"RC4 leaves the version alone", "", "1.4", "%PDF-1.4", false},
-		// The floor never lowers a document that already declares more.
-		{"a later source version survives AES-256", "AESV3", "2.0", "%PDF-2.0", true},
+		// The floor never lowers a document that already declares more, and a
+		// document already declaring 2.0 needs NO extension: ISO 32000-2
+		// defines AESV3 natively, so /ADBE would be noise there and its
+		// /BaseVersion of 1.7 would contradict the 2.0 the file declares.
+		// This row asserted true until the composition of two shipped fixes
+		// exposed it; qpdf draws the same line, emitting the extension for a
+		// 1.4 source and none for a 2.0 one.
+		{"a 2.0 source needs no extension", "AESV3", "2.0", "%PDF-2.0", false},
 		{"a later source version survives AES-128", "AESV2", "1.7", "%PDF-1.7", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
