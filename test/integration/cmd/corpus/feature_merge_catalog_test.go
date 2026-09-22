@@ -39,7 +39,7 @@ func mergeCatalogFixture(t *testing.T, facts catalogFacts) (*mergeFeature, []byt
 // the mismatch, and the message must name merge rather than split.
 func TestMergeFeature_Compare_CatalogViolationFailsTheFixture(t *testing.T) {
 	t.Parallel()
-	f, out := mergeCatalogFixture(t, catalogFacts{InAcroForm: false, OutAcroForm: true})
+	f, out := mergeCatalogFixture(t, catalogFacts{OutAcroForm: true})
 	v := f.Compare("doc", out)
 	if v.Match {
 		t.Fatalf("expected mismatch, got %+v", v)
@@ -88,7 +88,7 @@ func TestMergeFeature_Compare_SinglePageFixtureIsExercised(t *testing.T) {
 		OutPages:     2,
 		InputText:    []string{"A"},
 		OutText:      []string{"A", "A"},
-		catalogFacts: catalogFacts{InAcroForm: false, OutAcroForm: true},
+		catalogFacts: catalogFacts{OutAcroForm: true},
 	})
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
@@ -129,11 +129,13 @@ func TestMergeFeature_Compare_EarlyFailureCarriesNoMetrics(t *testing.T) {
 }
 
 // TestMergeFeature_Compare_PreservedFormIsNotReported is the control against
-// the invariant firing on every form-bearing document. A genuine /AcroForm
-// surviving the merge must pass.
+// the invariant firing on every form-bearing document. A document that already
+// owns fields must pass whether or not an /AcroForm listed them: measured on
+// pdfjs, three fixtures own widgets with no usable /AcroForm entry and a merge
+// rebuilds the form for them, which is repair.
 func TestMergeFeature_Compare_PreservedFormIsNotReported(t *testing.T) {
 	t.Parallel()
-	f, out := mergeCatalogFixture(t, catalogFacts{InAcroForm: true, OutAcroForm: true})
+	f, out := mergeCatalogFixture(t, catalogFacts{InFormFields: true, OutAcroForm: true})
 	v := f.Compare("doc", out)
 	if !v.Match {
 		t.Fatalf("a preserved form was reported as a violation: %+v", v)

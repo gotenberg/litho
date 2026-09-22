@@ -18,7 +18,15 @@ import (
 // Embedded anonymously, so the JSON stays flat and a feature's output shape is
 // unchanged by adopting it.
 type catalogFacts struct {
-	InAcroForm   bool `json:"in_acroform"`
+	// InFormFields is [pdf.Reader.HasFormFields], not HasAcroForm. A document
+	// can own real fields with no /AcroForm listing them, and rebuilding the
+	// form for those is repair rather than invention.
+	InFormFields bool `json:"in_form_fields"`
+	// InXFA separates a dynamic-XFA input from a formless one. HasAcroForm
+	// answers false for both (reader.go returns false when /NeedsRendering is
+	// set), so without this an XFA document losing its XFA layer while keeping
+	// its widgets reads as a document that gained a form.
+	InXFA        bool `json:"in_xfa"`
 	OutAcroForm  bool `json:"out_acroform"`
 	InPortfolio  bool `json:"in_portfolio"`
 	OutPortfolio bool `json:"out_portfolio"`
@@ -34,7 +42,10 @@ type catalogFacts struct {
 // IsPortfolio.
 func readCatalogFacts(ctx context.Context, src, out *pdf.Reader) catalogFacts {
 	var f catalogFacts
-	f.InAcroForm = src.HasAcroForm(ctx)
+	if v, err := src.HasFormFields(ctx); err == nil {
+		f.InFormFields = v
+	}
+	f.InXFA = src.HasXFAForm(ctx)
 	f.OutAcroForm = out.HasAcroForm(ctx)
 	if v, err := src.IsPortfolio(ctx); err == nil {
 		f.InPortfolio = v
@@ -66,13 +77,29 @@ func readCatalogFacts(ctx context.Context, src, out *pdf.Reader) catalogFacts {
 // hold for both. The doubling that a self-merge does cause belongs to the
 // /EmbeddedFiles name tree, which these invariants do not read.
 func checkCatalogInvariants(verb string, got catalogFacts) string {
-	// An input with no interactive form must not acquire one. A markup
-	// annotation carries /T as its pop-up title (ISO 32000-1, Table 170) while
-	// a form field carries /T as its partial name (Table 220), so a field
-	// collector keying on /T alone writes an /AcroForm onto documents that
-	// never had a form.
-	if !got.InAcroForm && got.OutAcroForm {
-		return fmt.Sprintf("%s invented an /AcroForm on an input that carried none", verb)
+	// A document that owns no form field at all must not come back owning a
+	// form. /T is the pop-up title on a markup annotation (ISO 32000-1,
+	// Table 170) and the partial field name on a form field (Table 220), so a
+	// field collector keying on /T alone writes an /AcroForm onto a document
+	// that never had a form.
+	//
+	// The input side asks HasFormFields, NOT HasAcroForm, and skips XFA
+	// inputs. Measured on pdfjs, HasAcroForm alone reports six false
+	// positives, in three distinct shapes, none of them a defect:
+	//
+	//   issue12963   27 widget fields and no /AcroForm at all
+	//   issue14203   10 parentless widgets with /T and /FT, no /AcroForm
+	//   issue15597   /AcroForm present but spelled /Field, so /Fields is
+	//                absent and HasAcroForm is correctly false
+	//   xfa_*  (3)   dynamic XFA: HasAcroForm is false because
+	//                /NeedsRendering is set, and the merge keeps the widgets
+	//                while dropping the XFA layer, which is a documented
+	//                downgrade rather than an invention
+	//
+	// Rebuilding a form for fields the document already owns is repair. Only a
+	// document with no fields and no XFA can have one invented for it.
+	if !got.InFormFields && !got.InXFA && got.OutAcroForm {
+		return fmt.Sprintf("%s invented an /AcroForm on an input that carried no form field", verb)
 	}
 	if got.InPortfolio && !got.OutPortfolio {
 		return fmt.Sprintf(
@@ -107,7 +134,7 @@ func catalogInvariantMetrics(got catalogFacts) map[string]int {
 		"lexicons_checked":  0,
 		"lexicons_dropped":  0,
 	}
-	if !got.InAcroForm && got.OutAcroForm {
+	if !got.InFormFields && !got.InXFA && got.OutAcroForm {
 		m["acroform_invented"] = 1
 	}
 	if got.InPortfolio {

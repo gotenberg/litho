@@ -23,11 +23,59 @@ func TestCheckCatalogInvariants_CleanIsSilent(t *testing.T) {
 // (ISO 32000-1, Table 170) and the partial field name on a form field
 // (Table 220), so a collector keying on /T alone turns an annotated page into
 // a form and writes an /AcroForm onto a document that never had one.
+//
+// The input here owns no field and carries no XFA, which is the only state in
+// which a form can be said to have been invented.
 func TestCheckCatalogInvariants_RejectsInventedAcroForm(t *testing.T) {
 	t.Parallel()
-	reason := checkCatalogInvariants("split", catalogFacts{InAcroForm: false, OutAcroForm: true})
+	reason := checkCatalogInvariants("split", catalogFacts{
+		InFormFields: false,
+		InXFA:        false,
+		OutAcroForm:  true,
+	})
 	if !strings.Contains(reason, "invented an /AcroForm") {
 		t.Errorf("got %q, want an 'invented an /AcroForm' reason", reason)
+	}
+}
+
+// TestCheckCatalogInvariants_OrphanedWidgetsAreRepairNotInvention is the first
+// of three regression controls for false positives this predicate produced
+// while it asked HasAcroForm instead of HasFormFields.
+//
+// A document can own real fields that no /AcroForm lists. Measured on pdfjs:
+// issue12963 carries 27 such widgets with no /AcroForm at all, issue14203 has
+// 10 parentless widgets with /T and /FT, and issue15597 spells the key /Field
+// so /Fields is absent and HasAcroForm is correctly false. Rebuilding the form
+// for fields the document already owns is repair.
+func TestCheckCatalogInvariants_OrphanedWidgetsAreRepairNotInvention(t *testing.T) {
+	t.Parallel()
+	reason := checkCatalogInvariants("merge", catalogFacts{
+		InFormFields: true,
+		InXFA:        false,
+		OutAcroForm:  true,
+	})
+	if reason != "" {
+		t.Errorf("orphaned-widget repair reported as a violation: %q", reason)
+	}
+}
+
+// TestCheckCatalogInvariants_XFADowngradeIsNotInvention is the second control.
+//
+// HasAcroForm returns false for a dynamic XFA document because its catalog
+// sets /NeedsRendering and the AcroForm there wraps XFA rather than describing
+// widgets. A merge keeps the widgets and drops the XFA layer, so the output
+// reports a form the input appeared not to have. That is the documented
+// downgrade [pdf.Reader.HasXFAForm] exists to name, not an invention.
+// Measured on pdfjs xfa_filled_imm1344e, xfa_issue13855 and xfa_issue14071.
+func TestCheckCatalogInvariants_XFADowngradeIsNotInvention(t *testing.T) {
+	t.Parallel()
+	reason := checkCatalogInvariants("merge", catalogFacts{
+		InFormFields: false,
+		InXFA:        true,
+		OutAcroForm:  true,
+	})
+	if reason != "" {
+		t.Errorf("XFA downgrade reported as an invented form: %q", reason)
 	}
 }
 
@@ -36,22 +84,12 @@ func TestCheckCatalogInvariants_RejectsInventedAcroForm(t *testing.T) {
 // the wrong operation would send a reader to the wrong code path.
 func TestCheckCatalogInvariants_NamesTheVerb(t *testing.T) {
 	t.Parallel()
-	facts := catalogFacts{InAcroForm: false, OutAcroForm: true}
+	facts := catalogFacts{InFormFields: false, InXFA: false, OutAcroForm: true}
 	if r := checkCatalogInvariants("merge", facts); !strings.HasPrefix(r, "merge ") {
 		t.Errorf("merge reason: got %q", r)
 	}
 	if r := checkCatalogInvariants("split", facts); !strings.HasPrefix(r, "split ") {
 		t.Errorf("split reason: got %q", r)
-	}
-}
-
-// TestCheckCatalogInvariants_AllowsPreservedForm is the control for the
-// invented-form test. A genuine form surviving the rewrite must not be
-// reported.
-func TestCheckCatalogInvariants_AllowsPreservedForm(t *testing.T) {
-	t.Parallel()
-	if reason := checkCatalogInvariants("split", catalogFacts{InAcroForm: true, OutAcroForm: true}); reason != "" {
-		t.Errorf("preserved form: got %q, want empty", reason)
 	}
 }
 
@@ -64,7 +102,11 @@ func TestCheckCatalogInvariants_AllowsPreservedForm(t *testing.T) {
 // asserting In implies Out would fail honest fixtures.
 func TestCheckCatalogInvariants_AllowsFormWithNoSurvivingWidget(t *testing.T) {
 	t.Parallel()
-	if reason := checkCatalogInvariants("split", catalogFacts{InAcroForm: true, OutAcroForm: false}); reason != "" {
+	reason := checkCatalogInvariants("split", catalogFacts{
+		InFormFields: true,
+		OutAcroForm:  false,
+	})
+	if reason != "" {
 		t.Errorf("form with no surviving widget: got %q, want empty", reason)
 	}
 }
@@ -121,6 +163,33 @@ func TestCatalogInvariantMetrics_KeysSurviveACleanRun(t *testing.T) {
 	}
 }
 
+// TestCatalogInvariantMetrics_AgreeWithThePredicate keeps the counter and the
+// verdict from drifting apart: every shape that the predicate clears must
+// report zero inventions, and the one it rejects must report one.
+func TestCatalogInvariantMetrics_AgreeWithThePredicate(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		facts catalogFacts
+		want  int
+	}{
+		{"invented", catalogFacts{OutAcroForm: true}, 1},
+		{"orphaned widgets", catalogFacts{InFormFields: true, OutAcroForm: true}, 0},
+		{"xfa downgrade", catalogFacts{InXFA: true, OutAcroForm: true}, 0},
+		{"no form either side", catalogFacts{}, 0},
+	}
+	for _, tc := range cases {
+		m := catalogInvariantMetrics(tc.facts)
+		reason := checkCatalogInvariants("merge", tc.facts)
+		if m["acroform_invented"] != tc.want {
+			t.Errorf("%s: acroform_invented = %d, want %d", tc.name, m["acroform_invented"], tc.want)
+		}
+		if (reason != "") != (tc.want == 1) {
+			t.Errorf("%s: predicate says %q but metric says %d", tc.name, reason, m["acroform_invented"])
+		}
+	}
+}
+
 // TestCatalogInvariantMetrics_ReachabilityIsSeparateFromViolation checks the
 // *_checked counters report whether the corpus could exercise the invariant at
 // all. No corpus file carries /Collection, so portfolio_dropped=0 must read as
@@ -164,7 +233,7 @@ func TestSplitFeature_Compare_CatalogViolationFailsTheFixture(t *testing.T) {
 		InputLast:    "Last",
 		OutFirst:     "First",
 		OutLast:      "Last",
-		catalogFacts: catalogFacts{InAcroForm: false, OutAcroForm: true},
+		catalogFacts: catalogFacts{OutAcroForm: true},
 	})
 	v := f.Compare("doc", out)
 	if v.Match {

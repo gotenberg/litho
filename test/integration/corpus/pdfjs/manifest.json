@@ -5,7 +5,8 @@
   "profile_mode": "none",
   "goldens": {
     "text": "goldens/text",
-    "metadata": "goldens/metadata"
+    "metadata": "goldens/metadata",
+    "merge-catalog": "goldens/text"
   },
   "skips": {
     "bug1393476": "infinite loop in xref parsing",
