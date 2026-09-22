@@ -19,11 +19,16 @@ func FuzzTrueType(f *testing.F) {
 	// coverage-expanding input in 19 million executions, against 523 for the
 	// CFF target beside it.
 	f.Add(minimalSfnt())
-	// The seed above carries a format 0 cmap and no post table, which leaves
-	// the format 6 and 12 subtable readers and the glyph-name reader
-	// unreachable: a mutation cannot invent a consistent subtable of a
-	// different format. This one carries all three.
+	// The seed above declares (3,0) Windows Symbol, which parseCmap's candidate
+	// scoring matches no case for and drops, so its format 0 subtable reaches
+	// the SYMBOL resolver and never parseCmapFormat0. This one adds a format 12
+	// subtable and a post table naming a glyph.
 	f.Add(richSfnt())
+	// And this one reaches parseCmapFormat6, which neither seed above can:
+	// richSfnt pairs its format 6 subtable with a (3,10) record, and (3,10)
+	// outranks (1,0) four to one, so format 12 always wins the candidate sort.
+	// A LONE (1,0) record has nothing to lose to.
+	f.Add(macSfnt())
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {
@@ -140,9 +145,16 @@ func TestMinimalSfntIsAccepted(t *testing.T) {
 	}
 }
 
-// richSfnt builds a font exercising the cmap subtable formats and the post
-// table that [minimalSfnt] leaves out: a format 6 trimmed mapping, a format 12
+// richSfnt builds a font carrying a format 6 trimmed mapping, a format 12
 // grouped mapping, and a version 2.0 post table naming its glyphs.
+//
+// It reaches the format 12 reader and the post reader. It does NOT reach the
+// format 6 reader, measured: parseCmap scores its candidates and takes only the
+// best one, and this font's (3,10) record scores 4 against the (1,0) record's
+// 1, so the format 6 subtable is present but permanently shadowed. [macSfnt]
+// is the seed that reaches it. An earlier comment here claimed both readers
+// were reached; TestRichSfntReachesTheOtherFormats asserted the subtable COUNT
+// rather than which reader ran, so the claim stood untested.
 func richSfnt() []byte {
 	maxp := make([]byte, 6)
 	binary.BigEndian.PutUint32(maxp[0:], 0x00005000)
@@ -232,5 +244,45 @@ func TestRichSfntReachesTheOtherFormats(t *testing.T) {
 	}
 	if names[1] != "Alpha" {
 		t.Errorf("post name for glyph 1 = %q, want %q", names[1], "Alpha")
+	}
+}
+
+// macSfnt builds a font whose ONLY cmap record is (1,0) Macintosh Roman,
+// carrying a format 6 trimmed subtable.
+//
+// parseCmap keeps a single best candidate: (3,10) scores 4, (3,1) scores 3,
+// platform 0 scores 2, (1,0) scores 1, and anything else is dropped. Every
+// other seed and test in this package declares (3,1), (3,10) or (3,0), so the
+// format 6 reader was reached by nothing at all. A lone (1,0) record has no
+// higher-priority competitor, which is what makes it the way in.
+func macSfnt() []byte {
+	maxp := make([]byte, 6)
+	binary.BigEndian.PutUint32(maxp[0:], 0x00005000) // version 0.5
+	binary.BigEndian.PutUint16(maxp[4:], 3)          // numGlyphs
+
+	return buildTableDirectory(map[string][]byte{
+		"cmap": buildCmapTable(1, 0, buildCmapFormat6(65, []uint16{1, 2})),
+		"maxp": maxp,
+	})
+}
+
+// TestMacSfntReachesTheFormat6Reader asserts REACHABILITY, not shape.
+//
+// Its sibling TestRichSfntReachesTheOtherFormats checks CmapSubtableCount,
+// which says a subtable EXISTS and nothing about which reader consumed it:
+// that is why a seed advertised as reaching the format 6 reader sat at 0.0%
+// coverage while its test passed. The mapping asserted below can only be
+// produced by parseCmapFormat6 actually running.
+func TestMacSfntReachesTheFormat6Reader(t *testing.T) {
+	t.Parallel()
+
+	gidMap, err := GlyphToUnicode(context.Background(), macSfnt())
+	if err != nil {
+		t.Fatalf("GlyphToUnicode: %v", err)
+	}
+	for gid, want := range map[uint16]rune{1: 'A', 2: 'B'} {
+		if got, ok := gidMap[gid]; !ok || got != want {
+			t.Errorf("GID %d = %q (present %t), want %q", gid, got, ok, want)
+		}
 	}
 }

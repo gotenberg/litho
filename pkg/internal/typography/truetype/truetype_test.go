@@ -511,3 +511,85 @@ func TestGlyphToUnicode_Format4_RangeSegment(t *testing.T) {
 		}
 	}
 }
+
+// buildCmapFormat0 builds a Format 0 "byte encoding" subtable: a six-byte
+// header followed by exactly 256 one-byte glyph IDs indexed by character code.
+func buildCmapFormat0(codeToGID map[uint8]uint8) []byte {
+	const size = 6 + 256
+	data := make([]byte, size)
+	binary.BigEndian.PutUint16(data[0:2], 0)    // format
+	binary.BigEndian.PutUint16(data[2:4], size) // length
+	binary.BigEndian.PutUint16(data[4:6], 0)    // language
+	for code, gid := range codeToGID {
+		data[6+int(code)] = gid
+	}
+	return data
+}
+
+// buildCmapFormat6 builds a Format 6 "trimmed table" subtable mapping
+// len(gids) contiguous character codes starting at firstCode.
+func buildCmapFormat6(firstCode uint16, gids []uint16) []byte {
+	size := 10 + len(gids)*2
+	data := make([]byte, size)
+	binary.BigEndian.PutUint16(data[0:2], 6)                  // format
+	binary.BigEndian.PutUint16(data[2:4], uint16(size))       //nolint:gosec // test subtable, far below 2^16
+	binary.BigEndian.PutUint16(data[4:6], 0)                  // language
+	binary.BigEndian.PutUint16(data[6:8], firstCode)          // firstCode
+	binary.BigEndian.PutUint16(data[8:10], uint16(len(gids))) //nolint:gosec // test subtable, far below 2^16
+	for i, gid := range gids {
+		binary.BigEndian.PutUint16(data[10+i*2:], gid)
+	}
+	return data
+}
+
+// TestGlyphToUnicode_Format0 reaches the Format 0 reader, which nothing in this
+// repository did: measured at 0.0% across the whole test suite before this.
+//
+// parseCmap keeps only its best-scoring candidate, and every other test here
+// declares (3,1) or (3,10) while the minimalSfnt fuzz seed declares (3,0),
+// which matches no case in the scoring switch and is dropped entirely. A lone
+// (1,0) Macintosh Roman record is the only route to this reader.
+func TestGlyphToUnicode_Format0(t *testing.T) {
+	subtable := buildCmapFormat0(map[uint8]uint8{65: 1, 66: 2})
+	fontData := buildTableDirectory(map[string][]byte{
+		"cmap": buildCmapTable(1, 0, subtable),
+	})
+
+	gidMap, err := GlyphToUnicode(context.Background(), fontData)
+	if err != nil {
+		t.Fatalf("GlyphToUnicode: %v", err)
+	}
+	for gid, want := range map[uint16]rune{1: 'A', 2: 'B'} {
+		if got, ok := gidMap[gid]; !ok || got != want {
+			t.Errorf("GID %d = %q (present %t), want %q", gid, got, ok, want)
+		}
+	}
+	// Every unmapped code holds glyph 0, and the reader skips a zero glyph ID:
+	// zero means "no glyph", not "maps to .notdef".
+	if _, ok := gidMap[0]; ok {
+		t.Error("GID 0 is present; a zero glyph ID must not be recorded")
+	}
+}
+
+// TestGlyphToUnicode_Format6 reaches the Format 6 reader, also at 0.0% before
+// this. See TestGlyphToUnicode_Format0 for why a (1,0) record is required.
+func TestGlyphToUnicode_Format6(t *testing.T) {
+	// firstCode 65 with three entries: 'A'->1, 'B'->2, 'C'->0 (unmapped).
+	subtable := buildCmapFormat6(65, []uint16{1, 2, 0})
+	fontData := buildTableDirectory(map[string][]byte{
+		"cmap": buildCmapTable(1, 0, subtable),
+	})
+
+	gidMap, err := GlyphToUnicode(context.Background(), fontData)
+	if err != nil {
+		t.Fatalf("GlyphToUnicode: %v", err)
+	}
+	for gid, want := range map[uint16]rune{1: 'A', 2: 'B'} {
+		if got, ok := gidMap[gid]; !ok || got != want {
+			t.Errorf("GID %d = %q (present %t), want %q", gid, got, ok, want)
+		}
+	}
+	if _, ok := gidMap[0]; ok {
+		t.Error("GID 0 is present; the third entry's zero glyph ID must be skipped")
+	}
+}
