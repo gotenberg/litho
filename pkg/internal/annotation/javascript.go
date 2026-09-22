@@ -49,8 +49,38 @@ func ExtractDocumentScripts(ctx context.Context, doc *document.Document) ([]stri
 // lookup, and maxNameTreeWalkDepth in remediation/fixer_embedded.go.
 const maxJSNameTreeDepth = 64
 
+// maxDocumentScriptsSize bounds the total script text collected from the name
+// tree. Anti-DoS guard, not spec-mandated.
+//
+// maxJSNameTreeDepth and the visited set bound how many NODES are walked.
+// Neither says anything about the bytes each node contributes: every /JS entry
+// may be a stream decoding under its own decompression cap, so without this the
+// total grows with the number of entries a file names rather than with anything
+// a document could legitimately script. Measured on a leaf of 20 compressed
+// streams, 328 KB of input collected 160 MB.
+//
+// 4 MB is chosen against the corpora rather than by round number. Of 59 files
+// naming /JavaScript, 30 carry document-level scripts, and the largest totals
+// 60,881 bytes across 65 scripts (pdfjs issue20914.pdf), so this leaves better
+// than 60x headroom over the heaviest real document.
+const maxDocumentScriptsSize = 4 << 20
+
 func extractJSTree(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, scripts *[]string) error {
-	return extractJSTreeAt(ctx, doc, nodeObj, scripts, make(map[int]bool), 0)
+	total := 0
+	return extractJSTreeAt(ctx, doc, nodeObj, scripts, make(map[int]bool), 0, &total)
+}
+
+// addScript records one script and enforces maxDocumentScriptsSize across the
+// whole walk. total is threaded through the recursion rather than recomputed
+// per node so the bound is on the sum, which is the quantity a crafted file
+// controls.
+func addScript(scripts *[]string, total *int, s string) error {
+	*scripts = append(*scripts, s)
+	*total += len(s)
+	if *total > maxDocumentScriptsSize {
+		return fmt.Errorf("document JavaScript exceeds %d MB limit", maxDocumentScriptsSize>>20)
+	}
+	return nil
 }
 
 // extractJSTreeAt collects the scripts at and below one name-tree node.
@@ -62,7 +92,7 @@ func extractJSTree(ctx context.Context, doc *document.Document, nodeObj ast.PdfO
 // ends the 2^depth fan-out a node whose /Kids lists the same child twice would
 // otherwise cause, which is the hazard searchNameTreeAt records for the lookup
 // walk over this same structure.
-func extractJSTreeAt(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, scripts *[]string, visited map[int]bool, depth int) error {
+func extractJSTreeAt(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, scripts *[]string, visited map[int]bool, depth int, total *int) error {
 	if depth > maxJSNameTreeDepth {
 		return nil
 	}
@@ -86,7 +116,7 @@ func extractJSTreeAt(ctx context.Context, doc *document.Document, nodeObj ast.Pd
 		kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
 		if err == nil && kidsArr != nil {
 			for _, kid := range kidsArr {
-				if err := extractJSTreeAt(ctx, doc, kid, scripts, visited, depth+1); err != nil {
+				if err := extractJSTreeAt(ctx, doc, kid, scripts, visited, depth+1, total); err != nil {
 					return fmt.Errorf("traversing JS name tree kids: %w", err)
 				}
 			}
@@ -111,11 +141,15 @@ func extractJSTreeAt(ctx context.Context, doc *document.Document, nodeObj ast.Pd
 								jsRes, err := document.ResolveObject(ctx, doc, jsObj)
 								if err == nil {
 									if str, ok := jsRes.(ast.PdfString); ok {
-										*scripts = append(*scripts, document.DecodePdfString(str))
+										if err := addScript(scripts, total, document.DecodePdfString(str)); err != nil {
+											return err
+										}
 									} else if stream, ok := jsRes.(ast.PdfStream); ok {
 										data, err := doc.DecodeStream(ctx, stream)
 										if err == nil {
-											*scripts = append(*scripts, string(data))
+											if err := addScript(scripts, total, string(data)); err != nil {
+												return err
+											}
 										}
 									}
 								}
