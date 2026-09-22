@@ -299,6 +299,15 @@ type RemediationReport struct {
 	// Each element is a compliance.Violation. If content-modifying fixers
 	// were rolled back, the violations they had claimed to handle move back
 	// here.
+	//
+	// A non-empty Residual does not stop the output from ASSERTING the
+	// profile. The identification schemas are themselves requirements
+	// (ISO 19005-1, 6.7.11 and ISO 14289-1, clause 5), so remediation writes
+	// pdfaid or pdfuaid to satisfy them, and a document still failing other
+	// clauses carries that claim regardless: a PDF/A-2b run leaving seven
+	// font-embedding violations emits pdfaid:part 2 and pdfaid:conformance B
+	// all the same. Read this field rather than trusting what the document
+	// says about itself.
 	Residual []error
 	// RolledBack lists human-readable descriptions of content-modifying
 	// fixes that were applied, failed the post-remediation integrity probe,
@@ -1204,7 +1213,10 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 }
 
 // RemediatePDFUA validates the document against the given PDF/UA profile,
-// applies targeted fixes, and queues the result for writing.
+// applies targeted fixes, and queues the result for writing. The report
+// describes what was fixed and what could not be fixed automatically; see
+// [RemediationReport.Residual], which the output's own pdfuaid claim does not
+// account for.
 func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediatePDFUA", &err)
 	cfg, remOpts := remediateConfig(opts)
