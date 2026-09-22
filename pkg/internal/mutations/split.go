@@ -228,9 +228,23 @@ func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *wri
 	// describe pages the output does not have. Carrying them needs the same kind
 	// of remapping resolveSplitBookmarks does for the outline, which is a
 	// larger change than this list. The 6.8.3.3 failure that leaves is honest.
+	//
+	// /Collection marks a PDF Portfolio (ISO 32000-1, 12.3.5), whose payload is
+	// the embedded file set rebuildEmbeddedFiles already carries. Measured: a
+	// split of a portfolio kept its attachment and lost the entry, so the output
+	// held the contents of a container while denying it was one, and
+	// [pdf.Reader.IsPortfolio] answered false over them.
+	//
+	// /PronunciationLexicon is an array of PLS documents describing the whole
+	// document's pronunciation (ISO 32000-2, 14.9.6), named by no page.
+	// Measured: a one-lexicon document came out of a split and a merge with
+	// none.
+	//
+	// Both are page-independent by the rule above, and neither needs remapping.
 	keepKeys := []ast.PdfName{
 		"ViewerPreferences", "PageLayout", "PageMode", "Lang", "MarkInfo",
 		"Metadata", "OutputIntents", "OCProperties", "Extensions", "Version",
+		"Collection", "PronunciationLexicon",
 	}
 	for _, key := range keepKeys {
 		if val, ok := catalogDict[key]; ok {
