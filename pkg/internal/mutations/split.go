@@ -240,11 +240,26 @@ func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *wri
 	// Measured: a one-lexicon document came out of a split and a merge with
 	// none.
 	//
-	// Both are page-independent by the rule above, and neither needs remapping.
+	// /SpiderInfo records a web capture (ISO 32000-1, 14.10.2), describing how
+	// the document was captured rather than any page in it. Measured: lost by
+	// split on 4 of 4 corpus files carrying it, and by merge, while rotate
+	// keeps it because rotate edits in place.
+	//
+	// All three are page-independent by the rule above, and none needs
+	// remapping.
+	//
+	// /DPartRoot, /Requirements and a catalog /AA are deliberately NOT here,
+	// for two different reasons. /DPartRoot is page-KEYED like the pair above:
+	// [document.ResolveDPartMap] returns a map from PAGE object number to that
+	// page's inherited metadata, so carrying the tree whole would describe
+	// pages the output does not have. /Requirements and /AA are page-
+	// independent but forbidden by the profiles litho targets, and litho's own
+	// remediation deletes both (ISO 19005-2/3, 6.11; part 4, 6.12), so
+	// carrying them would re-emit a key this codebase removes elsewhere.
 	keepKeys := []ast.PdfName{
 		"ViewerPreferences", "PageLayout", "PageMode", "Lang", "MarkInfo",
 		"Metadata", "OutputIntents", "OCProperties", "Extensions", "Version",
-		"Collection", "PronunciationLexicon",
+		"Collection", "PronunciationLexicon", "SpiderInfo",
 	}
 	for _, key := range keepKeys {
 		if val, ok := catalogDict[key]; ok {

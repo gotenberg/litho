@@ -24,7 +24,8 @@ func documentLevelPDF() []byte {
 
 	return []byte("%PDF-1.7\n" +
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /Collection 7 0 R " +
-		"/PronunciationLexicon [8 0 R] /Names 6 0 R >>\nendobj\n" +
+		"/PronunciationLexicon [8 0 R] /Names 6 0 R /SpiderInfo 9 0 R >>\nendobj\n" +
+		"9 0 obj\n<< /V 1.0 /C [] >>\nendobj\n" +
 		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
 		"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n" +
 		"4 0 obj\n<< /Length " + strconv.Itoa(len(data)) + " >>\nstream\n" + data + "\nendstream\nendobj\n" +
@@ -32,7 +33,7 @@ func documentLevelPDF() []byte {
 		"6 0 obj\n<< /EmbeddedFiles << /Names [(part.csv) 5 0 R] >> >>\nendobj\n" +
 		"7 0 obj\n<< /Type /Collection /View /D >>\nendobj\n" +
 		"8 0 obj\n<< /Length " + strconv.Itoa(len(pls)) + " >>\nstream\n" + pls + "\nendstream\nendobj\n" +
-		"trailer\n<< /Size 9 /Root 1 0 R /ID [<0102> <0304>] >>\n%%EOF\n")
+		"trailer\n<< /Size 10 /Root 1 0 R /ID [<0102> <0304>] >>\n%%EOF\n")
 }
 
 // TestSplitMerge_KeepDocumentLevelEntries pins /Collection and
@@ -55,9 +56,9 @@ func TestSplitMerge_KeepDocumentLevelEntries(t *testing.T) {
 	check := func(what string, b []byte) {
 		t.Helper()
 		catalog, _ := catalogKeysOf(t, b)
-		for _, key := range []ast.PdfName{"Collection", "PronunciationLexicon"} {
+		for _, key := range []ast.PdfName{"Collection", "PronunciationLexicon", "SpiderInfo"} {
 			if _, ok := catalog[key]; !ok {
-				t.Errorf("%s dropped /%s", what, key)
+				t.Errorf("%s dropped %s", what, key)
 			}
 		}
 		// The payload the portfolio describes must still be there, so the
@@ -122,7 +123,7 @@ func TestSplitMerge_StillRefusePageKeyedEntries(t *testing.T) {
 	out, _ := catalogKeysOf(t, split.Bytes())
 	for _, key := range []ast.PdfName{"StructTreeRoot", "PageLabels"} {
 		if _, ok := out[key]; ok {
-			t.Errorf("split carried page-keyed /%s without remapping it", key)
+			t.Errorf("split carried page-keyed %s without remapping it", key)
 		}
 	}
 }
