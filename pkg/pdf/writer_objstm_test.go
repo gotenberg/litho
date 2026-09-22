@@ -111,6 +111,58 @@ func TestWriter_WithObjectStreams_SurvivesEitherWritePath(t *testing.T) {
 	}
 }
 
+// TestMerge_WithDedup_MergesDuplicateStreams exercises dedup end to end.
+//
+// A self-merge is the fixture that makes this discriminating: it puts two
+// copies of every content stream in one document, so dedup has something real
+// to merge. threePagePDF on its own carries three DISTINCT content streams and
+// would let the test pass while merging nothing.
+func TestMerge_WithDedup_MergesDuplicateStreams(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	data := threePagePDF()
+
+	selfMerge := func(opts ...WriteOption) []byte {
+		t.Helper()
+		a, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		defer a.Close()
+		b, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		defer b.Close()
+
+		var out bytes.Buffer
+		if err := Merge(ctx, []*Reader{a, b}, &out, opts...); err != nil {
+			t.Fatalf("Merge: %v", err)
+		}
+		return out.Bytes()
+	}
+
+	plain := selfMerge()
+	deduped := selfMerge(WithDedup())
+
+	if len(deduped) >= len(plain) {
+		t.Errorf("dedup did not shrink a self-merge: %d bytes vs %d", len(deduped), len(plain))
+	}
+
+	r, err := Open(ctx, bytes.NewReader(deduped), int64(len(deduped)))
+	if err != nil {
+		t.Fatalf("reopening the deduplicated merge: %v", err)
+	}
+	defer r.Close()
+	got, err := r.PageCount(ctx)
+	if err != nil {
+		t.Fatalf("PageCount: %v", err)
+	}
+	if got != 6 {
+		t.Errorf("deduplicated self-merge has %d pages, want 6", got)
+	}
+}
+
 // TestSplit_WithObjectStreams_Packs covers the second full-rewrite entry
 // point. Split takes the option through a separate parameter chain from
 // WriteTo, so passing it there silently doing nothing is exactly the failure

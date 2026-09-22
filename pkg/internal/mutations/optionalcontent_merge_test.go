@@ -164,7 +164,7 @@ func TestMergeKeepsOptionalContentGroupIdentity(t *testing.T) {
 	}
 
 	var merged bytes.Buffer
-	if err := Merge(ctx, docs, &merged, "", false, false, DefaultMergeBookmarkConfig(), nil); err != nil {
+	if err := Merge(ctx, docs, &merged, "", false, CompactOptions{}, DefaultMergeBookmarkConfig(), nil); err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
 

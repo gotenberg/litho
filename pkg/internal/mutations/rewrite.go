@@ -12,6 +12,27 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/crypto"
 )
 
+// CompactOptions selects which output-compaction passes a full rewrite runs.
+//
+// Grouped rather than passed as separate booleans: [Split] and [Merge] take
+// these positionally, and three or more adjacent bools at a call site are
+// transposable without the compiler noticing. Later passes described in
+// OPTIMIZATION.md (image recompression, font subsetting, linearization) extend
+// this struct instead of lengthening those signatures again.
+//
+// Every pass here is refused for an encrypted document, because encryption
+// runs over the object set before serialization; see [writer.PackObjectStreams]
+// and [writer.DedupStreams] for what each would otherwise corrupt.
+type CompactOptions struct {
+	// PackObjectStreams packs eligible objects into /Type /ObjStm streams.
+	// The write engine forces a cross-reference stream when it packs, since
+	// a traditional table cannot name a compressed object.
+	PackObjectStreams bool
+	// DedupStreams merges byte-identical stream objects, repointing every
+	// reference at one survivor.
+	DedupStreams bool
+}
+
 // FullRewriteConfig holds the parameters for a full document rewrite.
 type FullRewriteConfig struct {
 	Doc             *document.Document
@@ -20,10 +41,8 @@ type FullRewriteConfig struct {
 	Version         string
 	RequiredVersion string
 	XRefStream      bool
-	// PackObjectStreams packs eligible objects into /Type /ObjStm streams.
-	// The write engine forces a cross-reference stream when it packs, and
-	// refuses to pack an encrypted document; see [writer.PackObjectStreams].
-	PackObjectStreams bool
+	// Compact selects the output-compaction passes the rewrite runs.
+	Compact CompactOptions
 	// Overrides pre-seeds the copier so edits made against the source
 	// document's object numbers (remediation patches and pre-applied
 	// user mutations) are used in place of the original objects during
@@ -124,7 +143,8 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 		Allocator:         alloc,
 		Trailer:           trailer,
 		UseXRefStream:     cfg.XRefStream,
-		PackObjectStreams: cfg.PackObjectStreams,
+		PackObjectStreams: cfg.Compact.PackObjectStreams,
+		DedupStreams:      cfg.Compact.DedupStreams,
 	})
 }
 

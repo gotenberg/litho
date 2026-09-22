@@ -27,7 +27,7 @@ type MergeSource struct {
 // parameter existed. Encryption is a property of the output alone: each
 // source is decrypted as it resolves, so sources under different passwords
 // merge into one file under the single key derived here.
-func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version string, xrefStream, packObjStm bool, bookmarkCfg BookmarkConfig, encryptCfg *crypto.EncryptConfig) error {
+func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version string, xrefStream bool, compact CompactOptions, bookmarkCfg BookmarkConfig, encryptCfg *crypto.EncryptConfig) error {
 	if len(sources) == 0 {
 		return fmt.Errorf("no sources to merge")
 	}
@@ -201,7 +201,8 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		Allocator:         alloc,
 		Trailer:           trailer,
 		UseXRefStream:     xrefStream,
-		PackObjectStreams: packObjStm,
+		PackObjectStreams: compact.PackObjectStreams,
+		DedupStreams:      compact.DedupStreams,
 	})
 }
 

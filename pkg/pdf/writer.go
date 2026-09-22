@@ -31,6 +31,7 @@ type writeOpts struct {
 	version           string
 	xrefStream        bool
 	packObjectStreams bool
+	dedupStreams      bool
 	logger            *slog.Logger
 	bookmarks         *BookmarkOptions
 	pipelineTempDir   string
@@ -72,6 +73,16 @@ func WithEncryption(cfg EncryptConfig) WriteOption {
 // Converting here is what lets [Split] and [Merge] hand the value straight to
 // the mutations layer while [crypto.EncryptConfig] stays out of every public
 // signature.
+// compactOptions maps the public write options onto the mutations layer's
+// compaction selector, keeping that internal type out of every public
+// signature the same way [writeOpts.internalEncrypt] does.
+func (o writeOpts) compactOptions() mutations.CompactOptions {
+	return mutations.CompactOptions{
+		PackObjectStreams: o.packObjectStreams,
+		DedupStreams:      o.dedupStreams,
+	}
+}
+
 func (o writeOpts) internalEncrypt() *crypto.EncryptConfig {
 	if o.encrypt == nil {
 		return nil
@@ -115,6 +126,26 @@ func WithXRefStream() WriteOption {
 func WithObjectStreams() WriteOption {
 	return func(o *writeOpts) {
 		o.packObjectStreams = true
+	}
+}
+
+// WithDedup merges byte-identical stream objects in the output, pointing every
+// reference at one survivor. A document that embeds the same image, font
+// program or ICC profile more than once carries one copy instead.
+//
+// Only streams are merged. Two identical dictionaries are left alone, because
+// structure elements, form fields and annotations are resolved by object
+// number, and collapsing a pair of those changes what the document means
+// rather than how it is stored.
+//
+// Like [WithObjectStreams] this applies to the full-rewrite path only, and an
+// encrypted output is never deduplicated: encryption derives a per-object key
+// from the object number (ISO 32000-1, 7.6.2), so identical plaintext streams
+// already differ as ciphertext and merging them would hand a reader bytes
+// decrypted under the wrong key.
+func WithDedup() WriteOption {
+	return func(o *writeOpts) {
+		o.dedupStreams = true
 	}
 }
 
@@ -1991,7 +2022,8 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 			(w.encryptCfg != nil) != w.preSerializedEncrypt ||
 			w.decrypt != w.preSerializedDecrypt ||
 			w.signer != nil ||
-			cfg.fullRewrite || cfg.version != "" || cfg.xrefStream || cfg.packObjectStreams
+			cfg.fullRewrite || cfg.version != "" || cfg.xrefStream ||
+			cfg.packObjectStreams || cfg.dedupStreams
 		if !stale {
 			return w.copyFromPreSerialized(dst)
 		}
@@ -2101,14 +2133,14 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 			}
 		}
 		return mutations.FullRewrite(ctx, dst, mutations.FullRewriteConfig{
-			Doc:               w.reader.doc,
-			EncryptCfg:        w.encryptCfg,
-			Decrypt:           w.decrypt,
-			Version:           cfg.version,
-			RequiredVersion:   w.requiredVersion,
-			XRefStream:        cfg.xrefStream,
-			PackObjectStreams: cfg.packObjectStreams,
-			Overrides:         overrides,
+			Doc:             w.reader.doc,
+			EncryptCfg:      w.encryptCfg,
+			Decrypt:         w.decrypt,
+			Version:         cfg.version,
+			RequiredVersion: w.requiredVersion,
+			XRefStream:      cfg.xrefStream,
+			Compact:         cfg.compactOptions(),
+			Overrides:       overrides,
 		})
 	}
 
@@ -2217,7 +2249,7 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 
 	version := cfg.version
 	bookmarkCfg := buildSplitBookmarkConfig(src, cfg.bookmarks)
-	if err := mutations.Split(ctx, src.doc, allPages, pages, dst, version, cfg.xrefStream, cfg.packObjectStreams, bookmarkCfg, cfg.internalEncrypt()); err != nil {
+	if err := mutations.Split(ctx, src.doc, allPages, pages, dst, version, cfg.xrefStream, cfg.compactOptions(), bookmarkCfg, cfg.internalEncrypt()); err != nil {
 		// Translate at the boundary so a caller can match with errors.Is
 		// without importing pkg/internal.
 		if errors.Is(err, mutations.ErrAttachmentTreeIncomplete) {
@@ -2274,7 +2306,7 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 	}
 
 	bookmarkCfg := buildMergeBookmarkConfig(sources, cfg.bookmarks)
-	if err := mutations.Merge(ctx, mergeSources, dst, cfg.version, cfg.xrefStream, cfg.packObjectStreams, bookmarkCfg, cfg.internalEncrypt()); err != nil {
+	if err := mutations.Merge(ctx, mergeSources, dst, cfg.version, cfg.xrefStream, cfg.compactOptions(), bookmarkCfg, cfg.internalEncrypt()); err != nil {
 		// Translate at the boundary so a caller can match with errors.Is
 		// without importing pkg/internal. A merge rebuilds one attachment tree
 		// from every source, so a source the walk cannot read whole would lose

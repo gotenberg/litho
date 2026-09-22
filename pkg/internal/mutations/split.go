@@ -21,7 +21,7 @@ import (
 // clear, which is what a split of an encrypted source produced before the
 // parameter existed: the reader decrypts every object as it resolves it, so
 // the copied graph is plaintext whatever the source was.
-func Split(ctx context.Context, doc *document.Document, allPages []*document.Page, pages []int, dst io.Writer, version string, xrefStream, packObjStm bool, bookmarkCfg BookmarkConfig, encryptCfg *crypto.EncryptConfig) error {
+func Split(ctx context.Context, doc *document.Document, allPages []*document.Page, pages []int, dst io.Writer, version string, xrefStream bool, compact CompactOptions, bookmarkCfg BookmarkConfig, encryptCfg *crypto.EncryptConfig) error {
 	if len(pages) == 0 {
 		return fmt.Errorf("no pages specified")
 	}
@@ -195,7 +195,8 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 		Allocator:         alloc,
 		Trailer:           trailer,
 		UseXRefStream:     xrefStream,
-		PackObjectStreams: packObjStm,
+		PackObjectStreams: compact.PackObjectStreams,
+		DedupStreams:      compact.DedupStreams,
 	})
 }
 

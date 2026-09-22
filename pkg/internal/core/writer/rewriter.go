@@ -25,6 +25,11 @@ type RewriteConfig struct {
 	// a traditional table cannot express a type-2 entry, and is refused
 	// outright for an encrypted document; see [PackObjectStreams].
 	PackObjectStreams bool
+	// DedupStreams merges byte-identical stream objects before writing,
+	// repointing references at one survivor. Refused for an encrypted
+	// document for the reason [DedupStreams] gives. Note that it rewrites
+	// references inside Trailer in place.
+	DedupStreams bool
 }
 
 // WriteRewrite emits a complete PDF file to dst from the objects in the
@@ -54,27 +59,35 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 	// allocator's pending set and allocates the streams that now hold them,
 	// and Pending returns that live map, so an enumeration taken earlier
 	// would name objects this file no longer writes directly.
+	// Encryption has already run over every pending object by the time a
+	// rewrite reaches this point, so both compaction passes are refused for
+	// an encrypted document: packing would encrypt an object stream's
+	// strings a second time, which ISO 32000-1, 7.5.7 forbids, and dedup
+	// would compare ciphertext keyed per object number and find nothing.
+	// The file is written uncompacted rather than incorrectly.
+	_, encrypted := cfg.Trailer["Encrypt"]
+
+	// Dedup first. Packing removes objects from the pending set and
+	// serializes their bodies, so a later dedup would neither see the full
+	// population nor be able to repoint what it merged.
+	if cfg.DedupStreams && !encrypted {
+		if _, err := DedupStreams(ctx, cfg.Allocator, cfg.Trailer); err != nil {
+			return fmt.Errorf("deduplicating streams: %w", err)
+		}
+	}
+
 	useXRefStream := cfg.UseXRefStream
 	var packed []PackedObject
-	if cfg.PackObjectStreams {
-		if _, encrypted := cfg.Trailer["Encrypt"]; encrypted {
-			// Encryption has already run over every pending object, so the
-			// strings are ciphertext already and the stream holding them
-			// would be encrypted a second time. ISO 32000-1, 7.5.7 forbids
-			// encrypting strings inside an object stream separately, so the
-			// file is written unpacked instead of incorrectly.
-			packed = nil
-		} else {
-			p, err := PackObjectStreams(ctx, cfg.Allocator)
-			if err != nil {
-				return fmt.Errorf("packing object streams: %w", err)
-			}
-			packed = p
-			if len(packed) > 0 {
-				// A traditional cross-reference table has no type field and
-				// cannot name a compressed object (ISO 32000-1, 7.5.8.3).
-				useXRefStream = true
-			}
+	if cfg.PackObjectStreams && !encrypted {
+		p, err := PackObjectStreams(ctx, cfg.Allocator)
+		if err != nil {
+			return fmt.Errorf("packing object streams: %w", err)
+		}
+		packed = p
+		if len(packed) > 0 {
+			// A traditional cross-reference table has no type field and
+			// cannot name a compressed object (ISO 32000-1, 7.5.8.3).
+			useXRefStream = true
 		}
 	}
 

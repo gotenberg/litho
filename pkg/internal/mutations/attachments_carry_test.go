@@ -71,7 +71,7 @@ func TestSplitMerge_KeepEmbeddedFiles(t *testing.T) {
 	}
 
 	var split bytes.Buffer
-	if err := Split(ctx, doc, pages, []int{1}, &split, "", false, false, DefaultSplitBookmarkConfig(), nil); err != nil {
+	if err := Split(ctx, doc, pages, []int{1}, &split, "", false, CompactOptions{}, DefaultSplitBookmarkConfig(), nil); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
 	keys, afCount := embeddedNames(t, split.Bytes())
@@ -88,7 +88,7 @@ func TestSplitMerge_KeepEmbeddedFiles(t *testing.T) {
 
 	var merged bytes.Buffer
 	err = Merge(ctx, []MergeSource{{Doc: doc, Pages: pages}, {Doc: doc2, Pages: pages2}},
-		&merged, "", false, false, DefaultMergeBookmarkConfig(), nil)
+		&merged, "", false, CompactOptions{}, DefaultMergeBookmarkConfig(), nil)
 	if err != nil {
 		t.Fatalf("Merge: %v", err)
 	}
