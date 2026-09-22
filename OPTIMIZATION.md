@@ -21,9 +21,13 @@ The hypothesis above is measured. The populations are all 5171 corpus files plus
 
 The 669 files that are already object-stream packed hold 22.1% of their bytes in font programs, so they raise the aggregate rather than dilute it. Measuring them needs a reader that decodes `/ObjStm`: a raw object scan cannot see a FontDescriptor packed inside one, and it undercounts packed-file font mass by up to 24 percentage points. The 16.7% figure is a floor, since 8 of 392 packed pdfjs files did not open.
 
-Four findings qualify the plan below.
+Six findings qualify the plan below.
 
 **Font programs dominate Gotenberg output.** They are 75.9% of a one-page report and 21.4% of a six-section text document. Font mass is a fixed cost that amortizes with document length, so an image-heavy document falls to 1.6%. Typical Gotenberg output is short, which makes the fixed cost the common case.
+
+**That share is not subsetting headroom, and PR3 pays on third-party input instead.** Every font Chromium embeds already carries a subset tag: 100% of font bytes across the sampled output, at 40 to 193 glyphs against a full face's thousands. Skia has already done PR3's work on the one population this document leads with. The opportunity is in files litho did not produce. Across 150 Factur-X invoices, 93.0% of font bytes are full unsubsetted faces, 36.18 MB at a median of 3,763 glyphs, and the declared-used to embedded-glyph ratio has a median of 0.228 and reaches 0.015 in the largest instances: a 644,261 byte Times New Roman carrying 4,685 glyphs to serve about 70 on a one-page invoice. The same measure gives pdfjs 55.2% full, pdfcpu 23.7% and govdocs 15.0%. Treat the ratio as a floor rather than a promised saving, since `/FirstChar` to `/LastChar` and `/W` are declared ranges and a subset must still keep `.notdef`, composite components and hinting.
+
+**The Chromium-side residual is merging subsets, not creating them.** Skia emits a separate subset per face instantiation, so one mixed document carries three Helvetica-Bold subsets and two Helvetica subsets, 25.9% of its font bytes. Across the sampled output that redundancy is 10.7%, and it is 0% on the container output itself, so it depends on how many style variants a page uses. Exact-duplicate dedup cannot reach it because each subset differs in bytes by construction, and a merge must emit the glyph union, so the achievable saving is below that figure.
 
 **Object compaction wins less than the plan assumes.** The `/ObjStm` opportunity is 1.5% to 4.7% on real-world files and 15.9% on Chromium output, not a broad structural win. Chromium emits neither `/ObjStm` nor `/Linearized`, so the headroom is real but small.
 
