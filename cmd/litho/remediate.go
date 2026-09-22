@@ -50,13 +50,15 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	invoice := fs.String("invoice", "", "Cross-Industry Invoice XML to embed (Factur-X / ZUGFeRD profiles)")
 	level := fs.String("level", "", "Factur-X conformance level: MINIMUM, BASIC WL, BASIC, EN 16931, EXTENDED, XRECHNUNG")
 	compact := registerCompactFlag(fs)
+	strict := fs.Bool("strict", false,
+		"Exit 2 when violations remain that could not be fixed")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || *profile == "" {
-		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--compact] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho remediate <file> --profile PROFILE [--aggressive] [--compact] [--strict] -o out.pdf")
 		fmt.Fprintln(stderr)
 		fmt.Fprintln(stderr, "Profiles: "+strings.Join(remediateProfileNames(), ", "))
 		return exitError
@@ -134,7 +136,11 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 
 	switch *format {
 	case "json":
-		return jsonOut(stdout, stderr, result)
+		// Not a direct return: the strict verdict below applies to both
+		// formats, and returning here once skipped it for JSON callers.
+		if code := jsonOut(stdout, stderr, result); code != exitOK {
+			return code
+		}
 	default:
 		fmt.Fprintf(stdout, "Profile:  %s\n", result.Profile)
 		fmt.Fprintf(stdout, "Fixed:    %d\n", len(result.Fixed))
@@ -149,7 +155,38 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		}
 	}
 
+	// Remediation writes the profile's identification metadata whatever else
+	// remains (ISO 19005-1, 6.7.11 and ISO 14289-1, clause 5 make those
+	// entries requirements in their own right), so a document with fatal
+	// residuals still ASSERTS a conformance it does not have. Exiting 0 tells
+	// a pipeline the file is ready, and only the report says otherwise.
+	//
+	// The status mirrors validate rather than inventing one: exitValidationFail
+	// means the document did not conform, and exitError stays reserved for the
+	// command itself failing. Off by default, so an existing caller reading the
+	// report keeps the exit code it already gets.
+	if *strict && len(fatalResiduals(report)) > 0 {
+		return exitValidationFail
+	}
 	return exitOK
+}
+
+// fatalResiduals returns the residual violations that fail conformance.
+//
+// Severity is worth filtering on for one profile family only. The warning
+// grade covers four Factur-X and CII rules, a collapsed Schematron bucket and
+// three lenient-profile tolerances, while every PDF/A and PDF/UA rule is fatal
+// under the binary conformance model. So this narrows the set only on the
+// invoice profiles, which is exactly where a soft tolerance must not fail a
+// build, and is an identity everywhere else.
+func fatalResiduals(report *pdf.RemediationReport) []pdf.Violation {
+	var out []pdf.Violation
+	for _, v := range report.ResidualViolations() {
+		if v.Severity == pdf.SeverityFatal {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // remediateFacturX embeds the supplied invoice XML and remediates the
