@@ -11,7 +11,10 @@ import (
 
 // RewriteConfig holds the parameters for a full file rewrite.
 type RewriteConfig struct {
-	// Version is the PDF version string (e.g., "1.4", "2.0").
+	// Version is the PDF version string (e.g., "1.4", "2.0"). It is raised to
+	// minXRefStreamVersion when the output uses a cross-reference stream,
+	// which that construct requires, in the header and in the catalog
+	// /Version entry when the source carried one.
 	Version string
 	// Allocator holds all objects to be written.
 	Allocator *ObjAllocator
@@ -19,11 +22,14 @@ type RewriteConfig struct {
 	// /Size is set automatically.
 	Trailer ast.PdfDict
 	// UseXRefStream forces xref stream format instead of a traditional table.
+	// A cross-reference stream is a PDF 1.5 construct (ISO 32000-1, 7.5.8),
+	// so selecting one raises the version the output declares.
 	UseXRefStream bool
 	// PackObjectStreams packs eligible objects into /Type /ObjStm streams
 	// (ISO 32000-1, 7.5.7). Packing implies a cross-reference stream, since
 	// a traditional table cannot express a type-2 entry, and is refused
-	// outright for an encrypted document; see [PackObjectStreams].
+	// outright for an encrypted document; see [PackObjectStreams]. Both are
+	// PDF 1.5 constructs, so a packed file declares at least that version.
 	PackObjectStreams bool
 	// DedupStreams merges byte-identical stream objects before writing,
 	// repointing references at one survivor. Refused for an encrypted
@@ -40,25 +46,15 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 		return fmt.Errorf("rewrite canceled: %w", err)
 	}
 
-	version := cfg.Version
-	if version == "" {
-		version = "1.4"
-	}
-
-	var offset int64
-
-	// Write header.
-	header := fmt.Sprintf("%%PDF-%s\n%%\xe2\xe3\xcf\xd3\n", version)
-	n, err := io.WriteString(dst, header)
-	offset += int64(n)
-	if err != nil {
-		return fmt.Errorf("writing header: %w", err)
-	}
-
-	// Pack before enumerating. Packing both removes objects from the
-	// allocator's pending set and allocates the streams that now hold them,
-	// and Pending returns that live map, so an enumeration taken earlier
-	// would name objects this file no longer writes directly.
+	// Compact before the header goes out and before the objects are
+	// enumerated. Packing decides whether this file needs a cross-reference
+	// stream, and that decision sets the minimum version the header must
+	// declare, so it cannot run once the header is already on the wire.
+	// Packing also removes objects from the allocator's pending set and
+	// allocates the streams that now hold them, and Pending returns that live
+	// map, so an enumeration taken earlier would name objects this file no
+	// longer writes directly. Neither compaction pass writes to dst.
+	//
 	// Encryption has already run over every pending object by the time a
 	// rewrite reaches this point, so both compaction passes are refused for
 	// an encrypted document: packing would encrypt an object stream's
@@ -66,6 +62,15 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 	// would compare ciphertext keyed per object number and find nothing.
 	// The file is written uncompacted rather than incorrectly.
 	_, encrypted := cfg.Trailer["Encrypt"]
+
+	// The catalog /Version overrides the header (ISO 32000-1, 7.5.2), so a
+	// file whose catalog says 1.4 keeps reporting 1.4 however the header
+	// reads. Raise it before packing, which would otherwise seal it inside a
+	// compressed stream, and undo the raise if packing then declines.
+	restoreCatalogVersion := func() {}
+	if cfg.UseXRefStream || (cfg.PackObjectStreams && !encrypted) {
+		restoreCatalogVersion = raiseCatalogVersion(cfg.Allocator, cfg.Trailer, minXRefStreamVersion)
+	}
 
 	// Dedup first. Packing removes objects from the pending set and
 	// serializes their bodies, so a later dedup would neither see the full
@@ -89,6 +94,34 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 			// cannot name a compressed object (ISO 32000-1, 7.5.8.3).
 			useXRefStream = true
 		}
+	}
+	if !useXRefStream {
+		// Packing declined, so the output carries nothing that needs 1.5 and
+		// must come out byte-identical to an uncompacted rewrite.
+		restoreCatalogVersion()
+	}
+
+	version := cfg.Version
+	if version == "" {
+		version = "1.4"
+	}
+	if useXRefStream {
+		// Object streams and cross-reference streams are both PDF 1.5
+		// constructs (ISO 32000-1, 7.5.7 and 7.5.8). Declaring anything
+		// earlier contradicts the file's own contents: a 1.4 reader cannot
+		// parse the cross-reference, and litho's own PDF/A-1 check reports
+		// the file as using xref streams (ISO 19005-1, 6.1.4).
+		version = atLeastVersion(version, minXRefStreamVersion)
+	}
+
+	var offset int64
+
+	// Write header.
+	header := fmt.Sprintf("%%PDF-%s\n%%\xe2\xe3\xcf\xd3\n", version)
+	n, err := io.WriteString(dst, header)
+	offset += int64(n)
+	if err != nil {
+		return fmt.Errorf("writing header: %w", err)
 	}
 
 	// Serialize all pending objects in order.

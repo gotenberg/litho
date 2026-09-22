@@ -80,6 +80,11 @@ func packable(objNum int, obj ast.PdfObject) bool {
 // encrypted separately. [WriteRewrite] enforces this by refusing to pack when
 // the trailer carries /Encrypt.
 //
+// An object stream is a PDF 1.5 construct, as is the cross-reference stream
+// its type-2 entries require (ISO 32000-1, 7.5.7 and 7.5.8). [WriteRewrite]
+// raises the version the output declares to match, so a document that must
+// keep an earlier version is one the caller should not pack.
+//
 // Objects are packed in ascending object-number order so the output is
 // deterministic, as the reproducible-output rule requires.
 func PackObjectStreams(ctx context.Context, alloc *ObjAllocator) ([]PackedObject, error) {

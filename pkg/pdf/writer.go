@@ -100,7 +100,9 @@ func WithVersion(version string) WriteOption {
 }
 
 // WithXRefStream forces cross-reference stream format (PDF 1.5+) instead
-// of a traditional xref table.
+// of a traditional xref table. The output declares at least PDF 1.5
+// accordingly, since a reader honoring an earlier declaration cannot parse a
+// cross-reference stream at all.
 func WithXRefStream() WriteOption {
 	return func(o *writeOpts) {
 		o.xrefStream = true
@@ -116,6 +118,14 @@ func WithXRefStream() WriteOption {
 // effect there. Packing implies a cross-reference stream, since a traditional
 // table cannot name a compressed object, and litho writes one whether or not
 // [WithXRefStream] was passed.
+//
+// Object streams and cross-reference streams are both PDF 1.5 constructs, so
+// a packed output declares at least PDF 1.5 even when the source declared
+// less, in the header and in the catalog /Version entry when the source
+// carried one. A document that must keep an earlier version must not be
+// packed: ISO 19005-1 is written against PDF 1.4 and its 6.1.4 forbids
+// cross-reference streams outright, so packing a PDF/A-1 file costs it
+// conformance.
 //
 // An encrypted output is never packed. Encryption runs over every object
 // before serialization, so packing afterwards would place ciphertext strings
