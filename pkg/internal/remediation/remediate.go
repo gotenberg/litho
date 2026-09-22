@@ -146,6 +146,17 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 	// Pin the output PDF version to the value required by each PDF/A
 	// family: part 1 → 1.4, parts 2 and 3 → 1.7, part 4 → 2.0. The
 	// writer honours this in both full-rewrite and incremental output.
+	// The version each profile requires of its output. Note the reach: this
+	// value travels through [Report.RequiredVersion] into the writer's
+	// full-rewrite config, and the INCREMENTAL path ignores it, because an
+	// incremental update preserves the original bytes and cannot re-emit the
+	// header. A profile whose remediation does not force a rewrite therefore
+	// keeps the source's declared version whatever this says. Measured on a
+	// %PDF-1.4 source: WTPDF-1.0-Reuse rewrites and comes out 2.0, while
+	// PDF/UA-1, PDF/UA-2 and WTPDF-1.0-Accessibility stay incremental and
+	// come out 1.4. Raising those would mean writing a catalog /Version
+	// (ISO 32000-1, 7.5.2), which the values below cannot express: some are
+	// CAPS (PDF/A-1, PDF/UA-1 pin a later source DOWN) and some are FLOORS.
 	var requiredVersion string
 	switch {
 	case strings.HasPrefix(profile, "PDF/A-4"):
@@ -159,6 +170,25 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		// %PDF-1.n with n in 0..7, so a PDF 2.0 source is pinned down
 		// to 1.7, the highest conforming version.
 		requiredVersion = "1.7"
+	case strings.HasPrefix(profile, "PDF/UA-2"):
+		// ISO 14289-2 builds on PDF 2.0, and litho says so itself:
+		// [compliance.Rule_14289_2_6_2_t01] is checked with checkVersionIs2,
+		// which accepts only "2.n". Remediation writes PDF 2.0 structure
+		// namespaces (/Namespaces, /NS) for this profile, so leaving the
+		// source's version would declare a file that its own contents
+		// contradict.
+		requiredVersion = "2.0"
+	case strings.HasPrefix(profile, "WTPDF"):
+		// WTPDF 1.0 adopts the ISO 14289-2 requirements wholesale, differing
+		// only by the rules it does not state and the Declaration it adds
+		// (see [compliance.ValidateWTPDF]), so it carries PDF/UA-2's version
+		// requirement too.
+		//
+		// A separate case rather than a PDF/UA-2 prefix: validation
+		// normalises a WTPDF run to the PDF/UA-2 identifier, but
+		// [RemediateWTPDF] passes the WTPDF level through verbatim, so a
+		// PDF/UA-2 test would never match here.
+		requiredVersion = "2.0"
 	}
 
 	// Trailer mutations (e.g. /ID insertion) don't allocate objects but
