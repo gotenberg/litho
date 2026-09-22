@@ -13,19 +13,23 @@ The hypothesis above is measured. The populations are all 5171 corpus files plus
 | Population                         | Font programs | Images | `/ObjStm` opportunity | Dedup floor |
 | ---------------------------------- | ------------- | ------ | --------------------- | ----------- |
 | Gotenberg output (one report page) | **75.9%**     | 0%     | 15.9%                 | 0%          |
-| facturx, not packed (57 MB)        | **66.9%**     | 3.8%   | 1.6%                  | 0.2%        |
+| facturx, not packed (57 MB)        | **66.9%**     | 4.8%   | 1.6%                  | 0.2%        |
 | pdfjs, not packed (311 MB)         | 19.6%         | 50.1%  | 4.7%                  | 0.8%        |
 | verapdf, not packed (143 MB)       | 12.9%         | 1.1%   | 4.2%                  | 18.0%       |
 | govdocs, not packed (619 MB)       | 8.6%          | 53.8%  | 4.7%                  | 1.0%        |
-| All 5171 files (1479 MB)           | 12.9%         | 43.5%  | 4.1%                  | 3.4%        |
+| All 5171 files (1479 MB)           | **16.7%**     | 43.5%  | 4.1%                  | 3.4%        |
 
-Three findings qualify the plan below.
+The 669 files that are already object-stream packed hold 22.1% of their bytes in font programs, so they raise the aggregate rather than dilute it. Measuring them needs a reader that decodes `/ObjStm`: a raw object scan cannot see a FontDescriptor packed inside one, and it undercounts packed-file font mass by up to 24 percentage points. The 16.7% figure is a floor, since 8 of 392 packed pdfjs files did not open.
+
+Four findings qualify the plan below.
 
 **Font programs dominate Gotenberg output.** They are 75.9% of a one-page report and 21.4% of a six-section text document. Font mass is a fixed cost that amortizes with document length, so an image-heavy document falls to 1.6%. Typical Gotenberg output is short, which makes the fixed cost the common case.
 
 **Object compaction wins less than the plan assumes.** The `/ObjStm` opportunity is 1.5% to 4.7% on real-world files and 15.9% on Chromium output, not a broad structural win. Chromium emits neither `/ObjStm` nor `/Linearized`, so the headroom is real but small.
 
 **The dedup floor is about 1% on real-world corpora.** veraPDF's 18.0% is an artifact of machine-generated fixture variants sharing identical objects, and veraPDF alone accounts for 59% of all duplicate mass measured. Do not size generalized dedup from it.
+
+**PR2 has less headroom than the image share suggests.** Across 645 MB of image streams: `DCTDecode` 48.9%, `FlateDecode` 31.1%, `CCITTFaxDecode` 10.0%, and `JPXDecode` plus `JBIG2Decode` 6.3%. Nearly half is already JPEG, and the JPX and JBIG2 share is the transcode-or-leave case this document already names, now sized. Recompression headroom concentrates in the Flate third: on pdfcpu, Flate images at a compressed-to-raw ratio of 0.5 to 1.0 are 17.3% of image bytes, while facturx images are almost entirely compressed already, with 1.5% showing any headroom and none poorly compressed. Score headroom as compressed bits over `w*h*components*bpc`, not as absolute bits per pixel: a fixed bits-per-pixel bucket judges a bilevel scan by a truecolour yardstick.
 
 PR3's CFF claim needs rescoping. The `gotenberg/gotenberg:snapshot` image ships 319 font files, 315 `.ttf` plus 4 `.ttc` and zero `.otf`, with TrueType sfnt magic on every one of a 200-file sample. Its families are DejaVu, Liberation, Carlito, Caladea and Noto. Chromium therefore cannot embed CFF from the system font stack in production, and the only path to a `/FontFile3` is a CFF webfont supplied by the caller's own HTML. Measured output agrees: Chromium emitted `/FontFile2` and never `/FontFile3` on macOS and Linux alike, and the 150 facturx invoices carry 404 font streams that are all `/FontFile2`.
 
