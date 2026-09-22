@@ -25,6 +25,14 @@ import (
 )
 
 // Font represents a resolved PDF font.
+//
+// A Font is read-only once [ResolveFont] returns. [document.Document] caches
+// one per font object number and hands the same pointer to every caller, so a
+// write to a field, or to one of the maps a field holds, is visible to every
+// other holder and to the concurrent readers the document's contract permits.
+// Resolve a new Font rather than editing a resolved one. [cmap.CMap] and the
+// buffer [document.Document.CachedFontProgram] returns carry the same
+// contract for the same reason.
 type Font struct {
 	Subtype            string
 	Encoding           map[byte]rune
