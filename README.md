@@ -146,6 +146,19 @@ litho sign --cert cert.pem --key key.pem -o signed.pdf document.pdf
 
 Run `litho` with no arguments to list every subcommand, or `litho <command>` to see its flags.
 
+### Exit codes
+
+| Code  | Meaning                                                                      |
+| ----- | ---------------------------------------------------------------------------- |
+| `0`   | Success.                                                                     |
+| `1`   | The command failed: a missing file, an invalid flag, an unreadable document. |
+| `2`   | The document did not conform.                                                |
+| `124` | The `--timeout` deadline expired, the status `timeout(1)` reports.           |
+
+`2` is deliberately distinct from `1`, so a caller can tell "litho could not run" from "the document is not conformant". `validate` reports it for a file with violations, and `remediate --strict` and `pipe --strict` for one they could not fully repair; those two still write their output, since the status is a verdict rather than a refusal to produce a document.
+
+A command that reached a verdict before its deadline expired keeps that verdict: only a failure becomes `124`.
+
 ## Optional CGO plugins
 
 litho decodes the standard PDF stream filters in pure Go. The two image filters that need an external C library are opt-in plugins:
