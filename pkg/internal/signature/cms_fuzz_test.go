@@ -1,6 +1,7 @@
 package signature
 
 import (
+	"crypto/x509"
 	"testing"
 	"time"
 )
@@ -105,4 +106,104 @@ func FuzzParseOCSPResponse(f *testing.F) {
 	f.Fuzz(func(_ *testing.T, data []byte) {
 		_, _ = parseOCSPResponse(data)
 	})
+}
+
+// FuzzVerifyCMSSignature drives the full detached-signature verifier, which no
+// target reached: a coverage profile over the four targets above reported
+// verifyCMSSignature at 0.0%. Each of them parses one COMPONENT of a CMS blob;
+// this one runs the composition -- ContentInfo, SignedData, the signer lookup,
+// the messageDigest comparison and the public-key check -- and it is reachable
+// from the exported VerifySignatures.
+//
+// Both inputs are attacker controlled and mutually independent. der is the
+// signature dictionary's /Contents (verify.go:137, der := []byte(sig.Contents))
+// and content is the concatenation of the two ByteRange chunks read back out of
+// the file, so nothing makes one agree with the other.
+//
+// The certificates are parsed from the SAME blob rather than pinned to a test
+// certificate, because that is what VerifySignatures does at verify.go:139. A
+// fixed certificate would pair a known-good signer with arbitrary SignedData,
+// a combination the production path never builds.
+//
+// It asserts only that the verifier does not panic. The godoc promises a signer
+// certificate alongside a nil error, but the sole caller discards it
+// (verify.go:266, _, verifyErr := ...), so asserting on it would test the
+// comment rather than anything the code depends on.
+func FuzzVerifyCMSSignature(f *testing.F) {
+	for _, s := range cmsSeeds(f) {
+		f.Add(s, []byte("the signed byte range"))
+		f.Add(s, []byte{})
+	}
+
+	f.Fuzz(func(_ *testing.T, der, content []byte) {
+		// A parse failure leaves certs nil, which is the shape
+		// VerifySignatures itself handles at its len(certs) == 0 check.
+		certs, _ := parsePKCS7Certificates(der)
+		_, _ = verifyCMSSignature(der, content, certs)
+	})
+}
+
+// FuzzVerifyCMSSignatureContent fuzzes the CONTENT half against a signature
+// that actually parses, and exists because the target above cannot reach the
+// verifier's body.
+//
+// Measured: 5.7M executions of FuzzVerifyCMSSignature covered 4 of 25 blocks --
+// the two asn1.Unmarshal calls and their two error returns. h.Write(content)
+// never ran once. Random mutation destroys ASN.1 framing long before it can
+// produce a SignedData carrying SignerInfos, so the signer lookup, the
+// messageDigest comparison and CheckSignature stayed dark.
+//
+// The seeds could not have helped: cmsSeeds builds with buildTestPKCS7, whose
+// SignedData has no SignerInfos field at all. It is a certificate carrier
+// written for parsePKCS7Certificates, and reusing it here was the mistake.
+//
+// So hold the signature fixed and valid and fuzz the byte range it covers.
+// That is also the realistic attack: forging a signature is hard, editing the
+// bytes it is supposed to cover is not.
+func FuzzVerifyCMSSignatureContent(f *testing.F) {
+	// Built once. Generating a P-256 key per execution would cost far more
+	// than the verification under test.
+	key, cert := testSigningCert(f)
+	const signed = "the document bytes covered by the signature ByteRange"
+	der := buildSignedCMS(f, key, cert, []byte(signed))
+	// The unit tests pass the signer explicitly and are proven to reach the
+	// deep paths; recovering it from the blob instead would silently strand
+	// this target at the "signer certificate not found" return.
+	certs := []*x509.Certificate{cert}
+
+	f.Add([]byte(signed))                  // matches: reaches CheckSignature and the success return
+	f.Add([]byte(signed[:len(signed)/2]))  // a truncated byte range
+	f.Add([]byte(signed + "!"))            // one byte too many
+	f.Add([]byte("tampered content!!!!!")) // the unit test's tampered case
+	f.Add([]byte{})
+	f.Add(make([]byte, 4096))
+
+	f.Fuzz(func(_ *testing.T, content []byte) {
+		if len(content) > 1<<20 {
+			return
+		}
+		_, _ = verifyCMSSignature(der, content, certs)
+	})
+}
+
+// TestVerifyCMSContentSeedReachesTheDigestCheck pins that the fuzzed seed
+// actually enters the verifier rather than stopping at a parse or lookup
+// error. Without this, a change to buildSignedCMS could strand the target at
+// an early return and it would still report a clean run.
+func TestVerifyCMSContentSeedReachesTheDigestCheck(t *testing.T) {
+	t.Parallel()
+
+	key, cert := testSigningCert(t)
+	content := []byte("the document bytes covered by the signature ByteRange")
+	der := buildSignedCMS(t, key, cert, content)
+	certs := []*x509.Certificate{cert}
+
+	if _, err := verifyCMSSignature(der, content, certs); err != nil {
+		t.Fatalf("the matching seed must verify, else the target never reaches CheckSignature: %v", err)
+	}
+	// A different byte range must fail at the messageDigest comparison, which
+	// is the block the der-fuzzing target could never reach.
+	if _, err := verifyCMSSignature(der, []byte("different bytes entirely"), certs); err == nil {
+		t.Fatal("a mismatched byte range verified: the digest comparison was not reached")
+	}
 }

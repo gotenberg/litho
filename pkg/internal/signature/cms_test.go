@@ -21,7 +21,7 @@ var (
 	oidEcdsaWithSHA256 = asn1.ObjectIdentifier{1, 2, 840, 10045, 4, 3, 2}
 )
 
-func mustMarshal(t *testing.T, v any) []byte {
+func mustMarshal(t testing.TB, v any) []byte {
 	t.Helper()
 	b, err := asn1.Marshal(v)
 	if err != nil {
@@ -33,7 +33,12 @@ func mustMarshal(t *testing.T, v any) []byte {
 // buildSignedCMS produces a detached PKCS#7/CMS SignedData over content,
 // signed with ECDSA-SHA256 and carrying the contentType + messageDigest
 // signed attributes, mirroring how a real PDF signer builds /Contents.
-func buildSignedCMS(t *testing.T, key *ecdsa.PrivateKey, cert *x509.Certificate, content []byte) []byte {
+//
+// It takes a [testing.TB] for the same reason [testSigningCert] does: a fuzz
+// target's setup is handed a *testing.F and needs the same signature the unit
+// tests verify. buildTestPKCS7 is not a substitute, its SignedData carries no
+// SignerInfos at all.
+func buildSignedCMS(t testing.TB, key *ecdsa.PrivateKey, cert *x509.Certificate, content []byte) []byte {
 	t.Helper()
 
 	digest := sha256.Sum256(content)
