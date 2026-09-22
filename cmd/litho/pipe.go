@@ -590,6 +590,24 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 				}
 				return err
 			}
+			// WTPDF reaches the standalone command but never reached here.
+			// The commit that wired the profile into the CLI touched
+			// remediate.go and validate.go and left this stage alone, so
+			// `pipe ... remediate -profile WTPDF-1.0-Reuse` answered "unknown
+			// profile" for a level litho remediates perfectly well.
+			//
+			// Factur-X stays out on purpose rather than by oversight: it needs
+			// the invoice XML and conformance level that this stage has no
+			// flags to accept, and inventing them here would be a feature, not
+			// a wiring fix. The error names the profile and claims nothing
+			// about what else is available, so it stays honest either way.
+			if wtpdfP, ok := wtpdfProfiles[*profile]; ok {
+				rep, err := w.RemediateWTPDF(ctx, wtpdfP, opts...)
+				if rep != nil && residual != nil {
+					*residual = append(*residual, rep.Residual...)
+				}
+				return err
+			}
 			return fmt.Errorf("unknown profile %q", *profile)
 		})
 
