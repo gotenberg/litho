@@ -39,6 +39,34 @@ func extractXFAData(ctx context.Context, doc *document.Document, acroFormDict as
 	return parseXFADatasets(xmlData)
 }
 
+// maxXFADataSize bounds the decoded XFA payload one /AcroForm may carry. It is
+// an anti-DoS guard, not spec-mandated.
+//
+// Per ISO 32000-1, Table 224 the /XFA value may be an array alternating packet
+// names with their streams, and the per-stream decompression cap says nothing
+// about their sum: every entry decodes under its own maxDecompressedSize, so a
+// file grows the assembled buffer with the number of entries it names rather
+// than with anything the form could legitimately hold. Measured on an array of
+// 20 compressed streams, 328 KB of input assembled 160 MB.
+//
+// It bounds both shapes /XFA takes. The single-stream shape carries the same
+// payload as the array, so bounding only the array would let a file evade the
+// limit by writing one stream instead of several and fall back to the 256 MB
+// decompression cap, sixteen times this one.
+//
+// 16 MB is chosen against the corpora rather than by round number. The 17
+// XFA-bearing files across all of them assemble at most 2.34 MB (pdfjs
+// xfa_filled_imm1344e.pdf, a 20-entry array in a 3.02 MB file) and none names
+// more than 30 entries, so this leaves better than 6x headroom over the
+// heaviest real form. That is wider headroom than the page-content bound takes,
+// because 17 files is a thin sample to call a ceiling.
+//
+// It is deliberately not compliance's maxXFAScanBytes, which is 1 MB. That
+// bound reads only far enough to find the dynamic-render setting, which every
+// real file places in its first packet inside 163 bytes, so it may legitimately
+// stop below the size of a valid form. This one has to hold a whole form.
+const maxXFADataSize = 16 << 20
+
 // assembleXFAXML resolves the /XFA value into a single XML byte slice.
 //
 // The /XFA value can be either:
@@ -51,6 +79,9 @@ func assembleXFAXML(ctx context.Context, doc *document.Document, xfaObj ast.PdfO
 		data, err := doc.DecodeStream(ctx, v)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode XFA stream: %w", err)
+		}
+		if len(data) > maxXFADataSize {
+			return nil, fmt.Errorf("XFA data exceeds %d MB limit", maxXFADataSize>>20)
 		}
 		return data, nil
 
@@ -84,7 +115,13 @@ func assembleXFAArray(ctx context.Context, doc *document.Document, arr ast.PdfAr
 			continue
 		}
 
+		// No separator between packets: they concatenate into one XML
+		// document, unlike the page content streams this loop otherwise
+		// mirrors, which are joined with a newline.
 		buf = append(buf, data...)
+		if len(buf) > maxXFADataSize {
+			return nil, fmt.Errorf("XFA data exceeds %d MB limit", maxXFADataSize>>20)
+		}
 	}
 
 	return buf, nil
