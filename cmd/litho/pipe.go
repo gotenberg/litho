@@ -472,6 +472,13 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		opacity := fs.Float64("opacity", 1.0, "Opacity 0.0-1.0")
 		rotation := fs.Float64("rotation", 0, "Rotation degrees")
 		color := fs.String("color", "", "Hex color (#rrggbb)")
+		// The stage lacked this flag while the shared stamp path tells a caller
+		// to "supply a TTF with -font" when WinAnsi cannot express the text, so
+		// a pipeline was handed advice its own surface then rejected with
+		// "flag provided but not defined". It is also the only way to stamp and
+		// keep PDF/A conformance: the default standard font is not embedded,
+		// which ISO 19005-2, 6.2.11.4.1 forbids.
+		fontPath := fs.String("font", "", "Path to a TTF font file")
 		fontSize := fs.Float64("font-size", 36, "Font size")
 		x := fs.Float64("x", 0, "X position")
 		y := fs.Float64("y", 0, "Y position")
@@ -497,6 +504,21 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 					return err
 				}
 				stamp.Color = c
+			}
+			// Loaded here rather than at stage-build time to match the color
+			// branch above: this stage reports argument problems from inside
+			// the closure, and the standalone command's earlier load is its own
+			// convention, not one worth splitting this switch over.
+			if *fontPath != "" {
+				data, err := os.ReadFile(*fontPath) //nolint:gosec // path comes from the -font CLI flag, not untrusted input
+				if err != nil {
+					return fmt.Errorf("reading font file: %w", err)
+				}
+				f, err := pdf.NewTTFFont(data)
+				if err != nil {
+					return fmt.Errorf("loading font: %w", err)
+				}
+				stamp.Font = f
 			}
 			var pageNums []int
 			if *pages != "" {
