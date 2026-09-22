@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -27,21 +28,47 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	var globalArgs []string
 	var timeout time.Duration
 
-	for i, arg := range args {
+	// An index loop, not a range: --timeout consumes the argument after it,
+	// and only an explicit index can step past that value. A range loop
+	// advances by one whatever the body does, so the duration stayed in argv
+	// and was read as the command name: the syntax printUsage itself
+	// documents, "litho --timeout 30s info f.pdf", failed with "unknown
+	// command: 30s" and no deadline was ever installed.
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
 		switch {
 		case arg == "--help" || arg == "-h":
 			printUsage(stdout)
 			return exitOK
-		case arg == "--timeout" && i+1 < len(args):
+		case arg == "--timeout" || strings.HasPrefix(arg, "--timeout="):
+			value, split := strings.CutPrefix(arg, "--timeout=")
+			if !split {
+				if i+1 >= len(args) {
+					fmt.Fprintln(stderr, "--timeout needs a duration, for example --timeout 30s")
+					return exitError
+				}
+				i++
+				value = args[i]
+			}
 			var err error
-			timeout, err = time.ParseDuration(args[i+1])
+			timeout, err = time.ParseDuration(value)
 			if err != nil {
-				fmt.Fprintf(stderr, "invalid timeout %q: %v\n", args[i+1], err)
+				fmt.Fprintf(stderr, "invalid timeout %q: %v\n", value, err)
 				return exitError
 			}
-			// Skip next arg (the duration value).
-			continue
-		case len(arg) > 0 && arg[0] != '-':
+			if timeout < 0 {
+				fmt.Fprintf(stderr, "invalid timeout %q: a duration must not be negative\n", value)
+				return exitError
+			}
+		case len(arg) > 0 && arg[0] == '-':
+			// Rejected, not skipped. An unrecognised flag used to match no
+			// case and fall out of the switch, running the command as though
+			// it had never been typed, so a misspelled --timout produced no
+			// deadline and no complaint.
+			fmt.Fprintf(stderr, "unknown global flag: %s\n\n", arg)
+			printUsage(stderr)
+			return exitError
+		case len(arg) > 0:
 			cmd = arg
 			globalArgs = args[i+1:]
 			goto dispatch

@@ -72,6 +72,78 @@ func TestRun_UnknownCommand(t *testing.T) {
 	}
 }
 
+// TestRun_GlobalTimeout pins the "litho --timeout D <command>" syntax that
+// printUsage advertises. The global loop advanced by one argument per
+// iteration while --timeout has to consume two, so the duration landed in
+// the command slot: every invocation in litho's own synopsis exited 1 with
+// "unknown command: 30s". The "=" spelling matched no case at all and was
+// dropped in silence, which is why an unparseable value passed there too.
+func TestRun_GlobalTimeout(t *testing.T) {
+	path := writeTempPDF(t, minimalPDF())
+
+	for _, tt := range []struct {
+		name string
+		args []string
+		want int
+	}{
+		{"space form", []string{"--timeout", "30s", "info", path}, exitOK},
+		{"equals form", []string{"--timeout=30s", "info", path}, exitOK},
+		{"space form rejects a bad duration", []string{"--timeout", "bogus", "info", path}, exitError},
+		{"equals form rejects a bad duration", []string{"--timeout=bogus", "info", path}, exitError},
+		{"negative is not silently ignored", []string{"--timeout", "-5s", "info", path}, exitError},
+		{"missing value", []string{"--timeout"}, exitError},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			rc := run(context.Background(), tt.args, &stdout, &stderr)
+			if rc != tt.want {
+				t.Fatalf("run(%q) = %d, want %d. stdout: %q stderr: %q",
+					tt.args, rc, tt.want, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+// TestRun_GlobalTimeoutReachesTheCommand is the control for
+// TestRun_GlobalTimeout. An exit code alone passes even when the flag is
+// parsed and then discarded, which is exactly what the "=" spelling did, so
+// this asserts the command behind the flag actually produced its output.
+func TestRun_GlobalTimeoutReachesTheCommand(t *testing.T) {
+	path := writeTempPDF(t, minimalPDF())
+
+	var stdout, stderr bytes.Buffer
+	rc := run(context.Background(), []string{"--timeout", "30s", "info", path}, &stdout, &stderr)
+	if rc != exitOK {
+		t.Fatalf("run = %d, want %d. stderr: %q", rc, exitOK, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Pages:       1") {
+		t.Errorf("info did not run behind the flag, got: %q", stdout.String())
+	}
+}
+
+// TestRun_UnknownGlobalFlag pins that a flag the loop does not recognise is
+// an error. Such a flag used to match no case, fall out of the switch, and
+// let the command run as if it had not been typed, so a misspelled --timout
+// silently produced no deadline.
+func TestRun_UnknownGlobalFlag(t *testing.T) {
+	path := writeTempPDF(t, minimalPDF())
+
+	for _, args := range [][]string{
+		{"--bogus", "info", path},
+		{"-x", "info", path},
+		{"--timout", "30s", "info", path},
+	} {
+		var stdout, stderr bytes.Buffer
+		rc := run(context.Background(), args, &stdout, &stderr)
+		if rc != exitError {
+			t.Errorf("run(%q) = %d, want %d. stdout: %q", args, rc, exitError, stdout.String())
+		}
+		if !strings.Contains(stderr.String(), "unknown global flag") {
+			t.Errorf("run(%q) stderr = %q, want it to name the flag", args, stderr.String())
+		}
+	}
+}
+
 func TestInfo_MinimalPDF(t *testing.T) {
 	path := writeTempPDF(t, minimalPDF())
 	var stdout, stderr bytes.Buffer
