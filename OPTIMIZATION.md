@@ -27,7 +27,9 @@ Three findings qualify the plan below.
 
 **The dedup floor is about 1% on real-world corpora.** veraPDF's 18.0% is an artifact of machine-generated fixture variants sharing identical objects, and veraPDF alone accounts for 59% of all duplicate mass measured. Do not size generalized dedup from it.
 
-PR3's CFF claim stays unverified. Chromium embedded `/FontFile2` and never `/FontFile3` for system fonts on macOS and Linux alike, and the 150 facturx invoices carry 404 font streams that are all `/FontFile2`. Four webfont probes failed to load an OTF at all, so this neither confirms nor refutes "Chromium output commonly embeds CFF". Measure a webfont-bearing page before dropping or keeping the CFF subsetter.
+PR3's CFF claim needs rescoping. The `gotenberg/gotenberg:snapshot` image ships 319 font files, 315 `.ttf` plus 4 `.ttc` and zero `.otf`, with TrueType sfnt magic on every one of a 200-file sample. Its families are DejaVu, Liberation, Carlito, Caladea and Noto. Chromium therefore cannot embed CFF from the system font stack in production, and the only path to a `/FontFile3` is a CFF webfont supplied by the caller's own HTML. Measured output agrees: Chromium emitted `/FontFile2` and never `/FontFile3` on macOS and Linux alike, and the 150 facturx invoices carry 404 font streams that are all `/FontFile2`.
+
+Six probes failed to exercise the webfont path itself, so it stays unverified rather than refuted. A TrueType webfont loads and embeds correctly, but every CFF OpenType font fell back to Times: two system OTFs, over `file://` and `data:`, with and without a `format()` hint, by installed family name, and as a subsetted rebuild with the `CFF ` table verified present. Keep the CFF subsetter in the plan, and size it by asking how often callers supply a CFF webfont, since nothing in the image can supply one.
 
 ## What exists in litho today
 
