@@ -119,6 +119,61 @@ func TestDiffBaseline_Improvement(t *testing.T) {
 	}
 }
 
+// TestDiffBaseline_SplitCatalogViolationsAreCostMetrics pins the DIRECTION of
+// the split catalog counters.
+//
+// They count violations, so an increase must land in regressions. The
+// comparator's default rule is good-when-higher, which would report split
+// inventing an /AcroForm on more fixtures as an improvement: the one reading
+// that lets the defect these counters exist to catch pass as progress.
+func TestDiffBaseline_SplitCatalogViolationsAreCostMetrics(t *testing.T) {
+	t.Parallel()
+	cell := func(invented, checked int) *Baseline {
+		return &Baseline{Corpora: map[string]baselineCorpus{
+			"pdfcpu": {Features: map[string]baselineFeature{
+				"split": {Matched: 33, Metrics: map[string]int{
+					"acroform_invented": invented,
+					"acroform_checked":  checked,
+				}},
+			}},
+		}}
+	}
+
+	regs, imps, _ := diffBaseline(cell(0, 33), cell(2, 33))
+	if len(imps) != 0 {
+		t.Errorf("more invented forms surfaced as an improvement: %v", imps)
+	}
+	if len(regs) != 1 {
+		t.Fatalf("regressions: got %d (%v), want 1", len(regs), regs)
+	}
+	if !strings.Contains(regs[0], "acroform_invented: got 2, baseline 0") {
+		t.Errorf("regression line: %s", regs[0])
+	}
+
+	regs, imps, _ = diffBaseline(cell(2, 33), cell(0, 33))
+	if len(regs) != 0 {
+		t.Errorf("fewer invented forms surfaced as a regression: %v", regs)
+	}
+	if len(imps) != 1 {
+		t.Fatalf("improvements: got %d (%v), want 1", len(imps), imps)
+	}
+
+	// Control against over-correcting: the *_checked sibling is NOT a cost
+	// metric, so losing coverage is the regression direction. Without this the
+	// test would pass just as well if every split metric had been marked
+	// good-when-lower.
+	regs, imps, _ = diffBaseline(cell(0, 33), cell(0, 12))
+	if len(imps) != 0 {
+		t.Errorf("lost coverage surfaced as an improvement: %v", imps)
+	}
+	if len(regs) != 1 {
+		t.Fatalf("checked-drop regressions: got %d (%v), want 1", len(regs), regs)
+	}
+	if !strings.Contains(regs[0], "acroform_checked: got 12, baseline 33") {
+		t.Errorf("checked regression line: %s", regs[0])
+	}
+}
+
 // TestDiffBaseline_MissingCorpus: a corpus in the baseline that did
 // not run in the current invocation surfaces as missing. Each feature
 // in the missing corpus gets its own line so the operator sees which

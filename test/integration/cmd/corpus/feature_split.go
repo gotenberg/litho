@@ -73,6 +73,16 @@ type splitOutput struct {
 	OutLast    string               `json:"out_last,omitempty"`
 	InputBM    []normalizedBookmark `json:"input_bookmarks,omitempty"`
 	OutBM      []normalizedBookmark `json:"out_bookmarks,omitempty"`
+
+	// Catalog-level facts about both sides. The text and bookmark fields
+	// above reopen the output but never read its catalog, so a document-level
+	// entry could be dropped or invented with no cell moving.
+	InAcroForm   bool `json:"in_acroform"`
+	OutAcroForm  bool `json:"out_acroform"`
+	InPortfolio  bool `json:"in_portfolio"`
+	OutPortfolio bool `json:"out_portfolio"`
+	InLexicons   int  `json:"in_lexicons"`
+	OutLexicons  int  `json:"out_lexicons"`
 }
 
 func (f *splitFeature) Run(ctx context.Context, pdfPath, _ string) ([]byte, error) {
@@ -191,6 +201,25 @@ func runSplit(ctx context.Context, pdfPath string) (splitOutput, error) {
 	}
 	result.OutBM = normalizeLithoTree(outBM)
 
+	// Read the catalog facts from both sides. Errors are not fatal here: a
+	// reader that declines to answer leaves the field false or zero, which
+	// Compare treats as "nothing to assert" rather than as a violation. That
+	// matches how feature_metadata.go reads IsPortfolio.
+	result.InAcroForm = src.HasAcroForm(ctx)
+	result.OutAcroForm = out.HasAcroForm(ctx)
+	if v, err := src.IsPortfolio(ctx); err == nil {
+		result.InPortfolio = v
+	}
+	if v, err := out.IsPortfolio(ctx); err == nil {
+		result.OutPortfolio = v
+	}
+	if lx, err := src.ExtractPronunciationLexicons(ctx); err == nil {
+		result.InLexicons = len(lx)
+	}
+	if lx, err := out.ExtractPronunciationLexicons(ctx); err == nil {
+		result.OutLexicons = len(lx)
+	}
+
 	return result, nil
 }
 
@@ -232,10 +261,74 @@ func (f *splitFeature) Compare(fixtureID string, output []byte) Verdict {
 	}
 
 	if reason := checkSplitBookmarks(got.OutBM, got.InputBM); reason != "" {
-		return Verdict{FixtureID: fixtureID, Reason: reason}
+		return Verdict{FixtureID: fixtureID, Reason: reason, Metrics: splitCatalogMetrics(got)}
 	}
 
-	return Verdict{FixtureID: fixtureID, Match: true, Score: 1.0}
+	if reason := checkSplitCatalog(got); reason != "" {
+		return Verdict{FixtureID: fixtureID, Reason: reason, Metrics: splitCatalogMetrics(got)}
+	}
+
+	return Verdict{FixtureID: fixtureID, Match: true, Score: 1.0, Metrics: splitCatalogMetrics(got)}
+}
+
+// checkSplitCatalog enforces the contract copyCatalogEntries states for
+// itself: page-independent catalog entries describe the document, so a subset
+// of its pages still carries them. Returns "" when every invariant holds.
+//
+// These are invariants rather than a catalog diff, for the reason
+// [splitFeature] gives about deriving the oracle from the input: a split
+// legitimately drops page-KEYED entries (/StructTreeRoot, /PageLabels), so an
+// exact catalog comparison would fail every tagged fixture by design.
+func checkSplitCatalog(got splitOutput) string {
+	// An input with no interactive form must not acquire one. A markup
+	// annotation carries /T as its pop-up title (ISO 32000-1, Table 170) while
+	// a form field carries /T as its partial name (Table 220), so a field
+	// collector keying on /T alone writes an /AcroForm onto documents that
+	// never had a form.
+	if !got.InAcroForm && got.OutAcroForm {
+		return "split invented an /AcroForm on an input that carried none"
+	}
+	if got.InPortfolio && !got.OutPortfolio {
+		return "split dropped /Collection, so the output holds the embedded files while denying it is a portfolio"
+	}
+	if got.OutLexicons < got.InLexicons {
+		return fmt.Sprintf("split dropped /PronunciationLexicon entries: input %d, output %d",
+			got.InLexicons, got.OutLexicons)
+	}
+	return ""
+}
+
+// splitCatalogMetrics reports how often each invariant was REACHABLE, not only
+// how often it fired. A metric emitted only on violation sits at zero on a
+// clean run and then disappears from the baseline entirely, which deletes its
+// own bar: the next run cannot tell "measured, zero violations" from "no
+// longer measured". The *_checked counters keep the coverage visible, so a
+// corpus that carries no portfolio at all reads as untested rather than clean.
+func splitCatalogMetrics(got splitOutput) map[string]int {
+	m := map[string]int{
+		"acroform_checked":  1,
+		"acroform_invented": 0,
+		"portfolio_checked": 0,
+		"portfolio_dropped": 0,
+		"lexicons_checked":  0,
+		"lexicons_dropped":  0,
+	}
+	if !got.InAcroForm && got.OutAcroForm {
+		m["acroform_invented"] = 1
+	}
+	if got.InPortfolio {
+		m["portfolio_checked"] = 1
+		if !got.OutPortfolio {
+			m["portfolio_dropped"] = 1
+		}
+	}
+	if got.InLexicons > 0 {
+		m["lexicons_checked"] = 1
+		if got.OutLexicons < got.InLexicons {
+			m["lexicons_dropped"] = got.InLexicons - got.OutLexicons
+		}
+	}
+	return m
 }
 
 // checkSplitBookmarks enforces the two split-output invariants:

@@ -54,6 +54,17 @@ var costMetrics = map[string]bool{
 	"verapdf_regressed": true,
 	"litho_regressed":   true,
 	"disagreement":      true,
+
+	// The split catalog invariants count VIOLATIONS, so more is worse. Without
+	// an entry here the default good-when-higher rule would report split
+	// inventing an /AcroForm on more fixtures as an improvement, which is the
+	// one reading that would let the defect these counters exist to catch pass
+	// as progress. Their *_checked siblings stay on the default rule on
+	// purpose: those count fixtures exercised, so a drop is lost coverage and
+	// belongs in the regression column.
+	"acroform_invented": true,
+	"portfolio_dropped": true,
+	"lexicons_dropped":  true,
 }
 
 // uncomparedMetrics lists raw inventory totals that shift with any
