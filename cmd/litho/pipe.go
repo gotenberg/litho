@@ -16,11 +16,13 @@ import (
 // hand rather than owning a FlagSet, so this stands in for the usage a FlagSet
 // would print for any other command.
 func pipeUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: litho pipe <file> <stage> [stage-flags] ... [--compact] -o out.pdf")
+	fmt.Fprintln(w, "Usage: litho pipe <file> <stage> [stage-flags] ... [--compact] [--strict] -o out.pdf")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "  --compact   Shrink the output by packing objects into object streams")
 	fmt.Fprintln(w, "              and merging duplicate streams. Applies to the final write,")
 	fmt.Fprintln(w, "              and only when a stage rewrites the whole file.")
+	fmt.Fprintln(w, "  --strict    Exit 2 when a remediate stage leaves violations it could")
+	fmt.Fprintln(w, "              not fix. The output is still written.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Stages: rotate, split, merge, delete, encrypt, decrypt, autotag,")
 	fmt.Fprintln(w, "        set-metadata, set-form, flatten-form, stamp-text,")
@@ -46,7 +48,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	}
 
 	// Extract -o, -p, and input file before stage parsing.
-	inputFile, password, outputFile, compact, stageArgs := parsePipeGlobals(args)
+	inputFile, password, outputFile, compact, strict, stageArgs := parsePipeGlobals(args)
 	if inputFile == "" {
 		fmt.Fprintln(stderr, "pipe: missing input file")
 		return exitError
@@ -85,6 +87,12 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	}
 	warnCompactSkipped(stderr, compact, encryptsOutput)
 
+	// Residual violations left by any remediate stage, judged after the write
+	// when --strict was passed. Stages run sequentially, [pdf.Pipeline.WriteTo]
+	// iterating its stage list with no goroutines, so a stage closure appending
+	// here needs no synchronisation.
+	var remediationResidual []error
+
 	// Documents a stage opened for itself, such as the merge sources. They stay
 	// live until WriteTo executes the stage that reads them, so they are closed
 	// here rather than in addStage.
@@ -99,7 +107,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		stageName := group[0]
 		stageFlags := group[1:]
 
-		closers, err := addStage(ctx, pipeline, r, stageName, stageFlags, password, stderr)
+		closers, err := addStage(ctx, pipeline, r, stageName, stageFlags, password, stderr, &remediationResidual)
 		stageClosers = append(stageClosers, closers...)
 		if err != nil {
 			// Asking a stage for its flags is a request, not a failure. The
@@ -152,6 +160,16 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		return exitError
 	}
 
+	// A remediate stage asserts the profile in the output whatever it could
+	// not repair, exactly as the standalone command does, so a pipeline that
+	// ends in one reports success for a document that does not conform.
+	// --strict answers on the exit code alone: pipe prints nothing but the
+	// document, and -o - streams that document to stdout, so a report written
+	// there would corrupt the result.
+	if strict && len(fatalResiduals(&pdf.RemediationReport{Residual: remediationResidual})) > 0 {
+		return exitValidationFail
+	}
+
 	return exitOK
 }
 
@@ -167,7 +185,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 // A look-behind ("was the previous token a flag?") cannot express this, because
 // the legitimate -o also follows a flag. The token consumed as a value has to be
 // marked consumed, so the one after it is examined normally.
-func parsePipeGlobals(args []string) (inputFile, password, outputFile string, compact bool, rest []string) {
+func parsePipeGlobals(args []string) (inputFile, password, outputFile string, compact, strict bool, rest []string) {
 	consumed := false
 	for i := 0; i < len(args); i++ {
 		if consumed {
@@ -192,6 +210,12 @@ func parsePipeGlobals(args []string) (inputFile, password, outputFile string, co
 		// global there would mis-split the stage groups.
 		case args[i] == "-compact" || args[i] == "--compact":
 			compact = true
+		// The same shape as -compact, for the same reasons: a global boolean
+		// that advances nothing, must not set consumed, and stays out of
+		// boolStageFlags. No stage defines -strict, so it collides with no
+		// stage flag spelling.
+		case args[i] == "-strict" || args[i] == "--strict":
+			strict = true
 		case inputFile == "" && !strings.HasPrefix(args[i], "-"):
 			inputFile = args[i]
 		default:
@@ -277,7 +301,7 @@ func isStageCmd(s string) bool { return stageCmds[s] }
 // and usage past any capture the caller had installed, while only the wrapping
 // "pipe stage" line reached the writer. Every other command in this package
 // wires its FlagSet the same way.
-func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string, args []string, password string, stderr io.Writer) ([]func(), error) {
+func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string, args []string, password string, stderr io.Writer, residual *[]error) ([]func(), error) {
 	switch name {
 	case "rotate":
 		fs := flag.NewFlagSet("rotate", flag.ContinueOnError)
@@ -549,12 +573,21 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 			if *aggressive {
 				opts = append(opts, pdf.WithAggressiveFixes())
 			}
+			// The report was discarded here because this command prints
+			// nothing. That answered the PRINTING question only: the exit code
+			// is a separate channel, and --strict needs the residuals to judge.
 			if pdfaP, ok := pdfaProfiles[*profile]; ok {
-				_, err := w.RemediatePDFA(ctx, pdfaP, opts...)
+				rep, err := w.RemediatePDFA(ctx, pdfaP, opts...)
+				if rep != nil && residual != nil {
+					*residual = append(*residual, rep.Residual...)
+				}
 				return err
 			}
 			if pdfuaP, ok := pdfuaProfiles[*profile]; ok {
-				_, err := w.RemediatePDFUA(ctx, pdfuaP, opts...)
+				rep, err := w.RemediatePDFUA(ctx, pdfuaP, opts...)
+				if rep != nil && residual != nil {
+					*residual = append(*residual, rep.Residual...)
+				}
 				return err
 			}
 			return fmt.Errorf("unknown profile %q", *profile)
