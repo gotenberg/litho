@@ -16,7 +16,11 @@ import (
 // hand rather than owning a FlagSet, so this stands in for the usage a FlagSet
 // would print for any other command.
 func pipeUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: litho pipe <file> <stage> [stage-flags] ... -o out.pdf")
+	fmt.Fprintln(w, "Usage: litho pipe <file> <stage> [stage-flags] ... [--compact] -o out.pdf")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  --compact   Shrink the output by packing objects into object streams")
+	fmt.Fprintln(w, "              and merging duplicate streams. Applies to the final write,")
+	fmt.Fprintln(w, "              and only when a stage rewrites the whole file.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Stages: rotate, split, merge, delete, encrypt, decrypt, autotag,")
 	fmt.Fprintln(w, "        set-metadata, set-form, flatten-form, stamp-text,")
@@ -42,7 +46,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	}
 
 	// Extract -o, -p, and input file before stage parsing.
-	inputFile, password, outputFile, stageArgs := parsePipeGlobals(args)
+	inputFile, password, outputFile, compact, stageArgs := parsePipeGlobals(args)
 	if inputFile == "" {
 		fmt.Fprintln(stderr, "pipe: missing input file")
 		return exitError
@@ -111,7 +115,12 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// The per-stage report is diagnostic only and this command prints nothing
 	// but the output file, so discard it in the assignment rather than binding
 	// a name with no use.
-	_, err = pipeline.WriteTo(ctx, dst)
+	// Pipeline.WriteTo forwards these to the final document write: the
+	// executor keeps them as finalOpts for a split or merge stage, and the
+	// terminal flush passes them straight to Writer.WriteTo. They do not
+	// reach the intermediate temp files, which is correct, since compacting
+	// a spill that the next stage reopens and rewrites is wasted work.
+	_, err = pipeline.WriteTo(ctx, dst, compactWriteOptions(compact)...)
 	if err != nil {
 		// Withdraw the file createOutput already made. Every other
 		// output-producing command in this package does this on a failed write
@@ -145,7 +154,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 // A look-behind ("was the previous token a flag?") cannot express this, because
 // the legitimate -o also follows a flag. The token consumed as a value has to be
 // marked consumed, so the one after it is examined normally.
-func parsePipeGlobals(args []string) (inputFile, password, outputFile string, rest []string) {
+func parsePipeGlobals(args []string) (inputFile, password, outputFile string, compact bool, rest []string) {
 	consumed := false
 	for i := 0; i < len(args); i++ {
 		if consumed {
@@ -160,6 +169,16 @@ func parsePipeGlobals(args []string) (inputFile, password, outputFile string, re
 		case args[i] == "-p" && i+1 < len(args):
 			password = args[i+1]
 			i++
+		// A global boolean, so it advances nothing and must not set
+		// consumed: -o and -p step over their value, this one has none, and
+		// marking it consumed would swallow the following token the way a
+		// stage flag's value once swallowed the real -o.
+		//
+		// It is also deliberately NOT in boolStageFlags. That map keeps a
+		// boolean STAGE flag from eating the next stage name, and listing a
+		// global there would mis-split the stage groups.
+		case args[i] == "-compact" || args[i] == "--compact":
+			compact = true
 		case inputFile == "" && !strings.HasPrefix(args[i], "-"):
 			inputFile = args[i]
 		default:
