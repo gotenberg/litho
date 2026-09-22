@@ -82,6 +82,14 @@ make corpus-check
 
 Cells with `[no golden]` (typically corpora not provisioned for a feature) are excluded so capturing the baseline on a partially provisioned tree does not pin missing-golden states. The check is silent about corpora that exist in the current run but not the baseline; new corpora become regression-gated only after the next `make corpus-baseline` commit.
 
+> **`make corpus-baseline` rewrites the whole file, including cells it did not measure.** The narrowing variables above flow into it, so `make corpus-baseline CORPUS_NAME=pdfjs` scores one corpus and writes a baseline containing only that corpus, silently dropping the other six. To refresh part of the matrix, call the tool directly with `-merge`, which replaces only the cells the run measured and preserves the rest:
+>
+> ```bash
+> go run ./test/integration/cmd/corpus baseline --corpus=pdfjs --feature=merge-catalog --merge
+> ```
+>
+> Verify afterwards that the cell count did not shrink. Refreshing the bar is also the only way to protect a gain: improvements are non-fatal, so a cell that improved stays unprotected until the baseline is recaptured and committed.
+
 ## Features
 
 | Feature                  | Golden source              | What it compares                                                                                                                               |
@@ -95,19 +103,27 @@ Cells with `[no golden]` (typically corpora not provisioned for a feature) are e
 | `split`                  | litho-self (live)          | Round-trips Split([1,last]); compares output text + bookmarks against litho's input extraction                                                 |
 | `merge`                  | litho-self + pdfcpu (live) | Merges each PDF with itself; checks page count, per-page text, and bookmark leaf multiset against the derived oracle AND pdfcpu's merge result |
 | `merge-empty`            | litho-self + pdfcpu (live) | Two-input companion: merges each PDF with `empty.pdf`; exercises the real cross-document resource-merging path same as `merge` checks          |
+| `merge-catalog`          | litho-self (live)          | Merges each PDF with itself and asserts only the document-level catalog entries; no text or bookmark comparison, so it is cheap enough to run on a large corpus |
 
 All three captured goldens live under the corpus's `testdata/goldens/` directory and are produced by the provisioning Docker image. `remediation` has no captured golden: it shells out to `verapdf` at run time on the remediated buffer. Needs `verapdf` on PATH.
 
 Not every corpus runs every feature. Each corpus is the oracle for the feature it ships goldens for; running the others on it would be redundant.
 
-| Corpus    | text | metadata | compliance | remediation | bookmarks | split | merge | merge-empty | role                                                            |
-| --------- | ---- | -------- | ---------- | ----------- | --------- | ----- | ----- | ----------- | --------------------------------------------------------------- |
-| `pdfjs`   | ✓    | ✓        | —          | —           | —         | —     | —     | —           | text + metadata oracle (PDF.js renderer is the ground truth)    |
-| `verapdf` | —    | —        | ✓          | ✓           | —         | —     | —     | —           | compliance + remediation oracle (VeraPDF is the ground truth)   |
-| `govdocs` | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | —           | real-world canary; compliance/remediation use each file's claim |
-| `pdf20`   | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | —           | PDF 2.0 canary (claims fall under PDF/A-4\* or PDF/UA-2)        |
-| `pdfcpu`  | ✓    | ✓        | —          | —           | ✓         | ✓     | ✓     | ✓           | bookmark/merge/split canary; sourced from pdfcpu's sample tree  |
-| `litho`   | —    | —        | ✓          | ✓           | —         | —     | —     | —           | rule-masking oracle; hand-built multi-violation fixtures        |
+| Corpus    | text | metadata | compliance | remediation | bookmarks | split | merge | merge-empty | merge-catalog | role                                                            |
+| --------- | ---- | -------- | ---------- | ----------- | --------- | ----- | ----- | ----------- | ------------- | --------------------------------------------------------------- |
+| `pdfjs`   | ✓    | ✓        | —          | —           | —         | —     | —     | —           | ✓             | text + metadata oracle (PDF.js renderer is the ground truth)    |
+| `verapdf` | —    | —        | ✓          | ✓           | —         | —     | —     | —           | —             | compliance + remediation oracle (VeraPDF is the ground truth)   |
+| `govdocs` | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | —           | —             | real-world canary; compliance/remediation use each file's claim |
+| `pdf20`   | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | —           | —             | PDF 2.0 canary (claims fall under PDF/A-4\* or PDF/UA-2)        |
+| `pdfcpu`  | ✓    | ✓        | —          | —           | ✓         | ✓     | ✓     | ✓           | —             | bookmark/merge/split canary; sourced from pdfcpu's sample tree  |
+| `litho`   | —    | —        | ✓          | ✓           | —         | —     | —     | —           | —             | rule-masking oracle; hand-built multi-violation fixtures        |
+
+`merge-catalog` runs on `pdfjs` because that is where the annotation shapes it
+guards against actually occur: measured across all 5171 corpus fixtures, 49
+pdfjs files carry an annotation that a field collector can mistake for a form
+field, against 2 in `pdfcpu`. It is deliberately absent from `litho` and
+`verapdf`, whose manifests set `profile_mode: expand` — a catalog cannot vary
+by profile, so those corpora would score the same document 8 and 15 times over.
 
 ### Comparison notes
 
