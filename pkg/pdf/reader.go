@@ -591,7 +591,17 @@ func OpenFile(ctx context.Context, path string, opts ...OpenOption) (*Reader, er
 	return r, nil
 }
 
-// Version returns the PDF version string from the file header (e.g., "1.4", "2.0").
+// Version returns the PDF version the document declares, e.g. "1.4" or "2.0".
+//
+// This is the RESOLVED version, not the header. Per ISO 32000-1, 7.5.2 a
+// catalog /Version entry is used instead of the version in the header, and the
+// reader applies that when it opens the file, so a document whose header reads
+// %PDF-1.4 and whose catalog says /2.0 reports "2.0" here.
+//
+// The distinction is not academic: an incremental update cannot rewrite the
+// header, since that is byte zero of the bytes it preserves, so the catalog is
+// the only place a later version can be declared. Read this rather than the
+// leading bytes when you want what the document claims to be.
 func (r *Reader) Version() string {
 	return r.doc.Version
 }
