@@ -21,7 +21,9 @@ The hypothesis above is measured. The populations are all 5171 corpus files plus
 
 The 669 files that are already object-stream packed hold 22.1% of their bytes in font programs, so they raise the aggregate rather than dilute it. Measuring them needs a reader that decodes `/ObjStm`: a raw object scan cannot see a FontDescriptor packed inside one, and it undercounts packed-file font mass by up to 24 percentage points. The 16.7% figure is a floor, since 8 of 392 packed pdfjs files did not open.
 
-Six findings qualify the plan below.
+Seven findings qualify the plan below.
+
+**A full rewrite unpacks object streams and cannot re-emit them.** No write path emits `/ObjStm`; the symbol appears only in the reader, rebuild and xref packages. The incremental path preserves existing packing because it copies the original bytes, but every operation that forces a full rewrite loses it. Measured on 48 packed, unencrypted, multi-page files, deleting a single page dropped every object stream in 48 of 48 cases, and 28 of those 48 outputs were larger than their input despite carrying one page fewer: median ratio 1.035, 1.36 at the 90th percentile, and 2.19 at worst, where 74,481 bytes became 162,918. The forcing operations are delete, insert, encrypt, decrypt, flatten-form and clearing metadata. Object stream emission is therefore not only a size win on files that lack it, it is what stops the writer from degrading files that already have it.
 
 **Font programs dominate Gotenberg output.** They are 75.9% of a one-page report and 21.4% of a six-section text document. Font mass is a fixed cost that amortizes with document length, so an image-heavy document falls to 1.6%. Typical Gotenberg output is short, which makes the fixed cost the common case.
 
