@@ -18,13 +18,14 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	userPwd := fs.String("user-password", "", "Encrypt the output with this user password")
 	ownerPwd := fs.String("owner-password", "", "Owner password for the encrypted output")
 	algorithm := fs.String("algorithm", "aes256", "Algorithm for the encrypted output: rc4-128, aes128, aes256")
+	compact := registerCompactFlag(fs)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || *pages == "" {
-		fmt.Fprintln(stderr, "Usage: litho split <file> --pages RANGE [--user-password X] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho split <file> --pages RANGE [--user-password X] [--compact] -o out.pdf")
 		return exitError
 	}
 
@@ -34,6 +35,7 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	if !ok {
 		return exitError
 	}
+	writeOpts = append(writeOpts, compactWriteOptions(*compact)...)
 
 	r, closer, err := openPDF(ctx, fs.Arg(0), *password)
 	if err != nil {

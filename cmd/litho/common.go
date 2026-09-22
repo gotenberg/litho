@@ -139,14 +139,41 @@ func abandonOutput(path string, closeDst func() error) {
 	os.Remove(path) //nolint:errcheck,gosec // best-effort withdrawal of a file that is already unusable; path is the caller's own -o flag, the same value createOutput opens above, not untrusted input
 }
 
+// simpleMutationOption adjusts what [runSimpleMutation] offers a command.
+type simpleMutationOption func(*simpleMutationConfig)
+
+type simpleMutationConfig struct {
+	compact bool
+}
+
+// withCompactFlag gives the command a -compact flag.
+//
+// Opt-in rather than automatic because the three commands sharing this helper
+// do not agree: decrypt and flatten-form always rewrite the whole file, while
+// autotag queues a mutation and leaves an incremental update. Compaction only
+// runs on a full rewrite, so offering the flag to autotag would advertise an
+// option that does nothing.
+func withCompactFlag() simpleMutationOption {
+	return func(c *simpleMutationConfig) { c.compact = true }
+}
+
 // runSimpleMutation handles commands that open a PDF, apply a single
 // mutation via mutate, and write the result. The usage string is shown
 // when required args are missing.
-func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmdName, usage string, mutate func(*pdf.Writer)) int {
+func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmdName, usage string, mutate func(*pdf.Writer), opts ...simpleMutationOption) int {
+	var cmdCfg simpleMutationConfig
+	for _, o := range opts {
+		o(&cmdCfg)
+	}
+
 	fs := flag.NewFlagSet(cmdName, flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
+	var compact *bool
+	if cmdCfg.compact {
+		compact = registerCompactFlag(fs)
+	}
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
@@ -173,7 +200,12 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 		return exitError
 	}
 
-	if err := w.WriteTo(ctx, dst); err != nil {
+	var writeOpts []pdf.WriteOption
+	if compact != nil {
+		writeOpts = compactWriteOptions(*compact)
+	}
+
+	if err := w.WriteTo(ctx, dst, writeOpts...); err != nil {
 		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "writing output: %v\n", err)
 		return exitError

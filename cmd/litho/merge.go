@@ -17,6 +17,7 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	userPwd := fs.String("user-password", "", "Encrypt the output with this user password")
 	ownerPwd := fs.String("owner-password", "", "Owner password for the encrypted output")
 	algorithm := fs.String("algorithm", "aes256", "Algorithm for the encrypted output: rc4-128, aes128, aes256")
+	compact := registerCompactFlag(fs)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
@@ -24,7 +25,7 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 
 	files := fs.Args()
 	if len(files) < 2 || *output == "" {
-		fmt.Fprintln(stderr, "Usage: litho merge <file1> <file2> [file...] [--user-password X] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho merge <file1> <file2> [file...] [--user-password X] [--compact] -o out.pdf")
 		return exitError
 	}
 
@@ -34,6 +35,7 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	if !ok {
 		return exitError
 	}
+	writeOpts = append(writeOpts, compactWriteOptions(*compact)...)
 
 	var readers []*pdf.Reader
 	var closers []func()

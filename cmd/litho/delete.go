@@ -15,13 +15,14 @@ func runDelete(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	pages := fs.String("pages", "", "Page range (required)")
+	compact := registerCompactFlag(fs)
 
 	if code, ok := parseCommandFlags(fs, args); !ok {
 		return code
 	}
 
 	if fs.NArg() < 1 || *output == "" || *pages == "" {
-		fmt.Fprintln(stderr, "Usage: litho delete <file> --pages RANGE -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho delete <file> --pages RANGE [--compact] -o out.pdf")
 		return exitError
 	}
 
@@ -60,7 +61,7 @@ func runDelete(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 		return exitError
 	}
 
-	if err := w.WriteTo(ctx, dst); err != nil {
+	if err := w.WriteTo(ctx, dst, compactWriteOptions(*compact)...); err != nil {
 		abandonOutput(*output, closeDst)
 		fmt.Fprintf(stderr, "writing output: %v\n", err)
 		return exitError
