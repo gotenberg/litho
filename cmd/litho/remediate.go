@@ -71,6 +71,9 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 	defer closer()
 
+	// This command has no encryption flag, so it can never be encrypting.
+	warnEncryptionDropped(stderr, false, r)
+
 	w := pdf.NewWriter(r)
 
 	var remOpts []pdf.RemediateOption

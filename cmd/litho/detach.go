@@ -32,6 +32,9 @@ func runDetach(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 	}
 	defer closer()
 
+	// This command has no encryption flag, so it can never be encrypting.
+	warnEncryptionDropped(stderr, false, r)
+
 	w := pdf.NewWriter(r)
 	w.RemoveAttachment(*name)
 

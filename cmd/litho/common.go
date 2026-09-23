@@ -170,7 +170,8 @@ func abandonOutput(path string, closeDst func() error) {
 type simpleMutationOption func(*simpleMutationConfig)
 
 type simpleMutationConfig struct {
-	compact bool
+	compact               bool
+	skipEncryptionWarning bool
 }
 
 // withCompactFlag gives the command a -compact flag.
@@ -182,6 +183,17 @@ type simpleMutationConfig struct {
 // option that does nothing.
 func withCompactFlag() simpleMutationOption {
 	return func(c *simpleMutationConfig) { c.compact = true }
+}
+
+// withoutEncryptionWarning suppresses the dropped-encryption warning.
+//
+// Opt-OUT rather than opt-in, so the default is the safe one: a command added
+// to this helper later warns about the confidentiality downgrade without
+// anyone remembering to ask for it. Only decrypt uses this, because producing
+// an unprotected document is precisely what it was asked to do, and reporting
+// that as a loss would name the requested outcome a problem.
+func withoutEncryptionWarning() simpleMutationOption {
+	return func(c *simpleMutationConfig) { c.skipEncryptionWarning = true }
 }
 
 // runSimpleMutation handles commands that open a PDF, apply a single
@@ -217,6 +229,12 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 		return exitError
 	}
 	defer closer()
+
+	// None of these commands has an encryption flag, so none can ever be
+	// encrypting. decrypt opts out: see [withoutEncryptionWarning].
+	if !cmdCfg.skipEncryptionWarning {
+		warnEncryptionDropped(stderr, false, r)
+	}
 
 	w := pdf.NewWriter(r)
 	mutate(w)

@@ -117,6 +117,11 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 	defer closer()
 
+	// Redaction is the case that matters most: the caller proved they hold the
+	// password, removed confidential content, and got back a document anyone
+	// can open. This command has no encryption flag, so it is never encrypting.
+	warnEncryptionDropped(stderr, false, r)
+
 	w := pdf.NewWriter(r)
 
 	// Before the output file exists: a refused redaction must leave nothing

@@ -44,6 +44,9 @@ func runSetForm(ctx context.Context, args []string, _stdout, stderr io.Writer) i
 	}
 	defer closer()
 
+	// This command has no encryption flag, so it can never be encrypting.
+	warnEncryptionDropped(stderr, false, r)
+
 	w := pdf.NewWriter(r)
 
 	for _, f := range fields {

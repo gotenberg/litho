@@ -11,5 +11,6 @@ func runDecrypt(ctx context.Context, args []string, _ io.Writer, stderr io.Write
 	return runSimpleMutation(ctx, args, stderr, "decrypt",
 		"Usage: litho decrypt <file> -p PASSWORD [--compact] -o out.pdf",
 		func(w *pdf.Writer) { w.RemoveEncryption() },
-		withCompactFlag())
+		withCompactFlag(),
+		withoutEncryptionWarning())
 }

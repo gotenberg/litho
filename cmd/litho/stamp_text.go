@@ -75,6 +75,9 @@ func runStampText(ctx context.Context, args []string, _stdout, stderr io.Writer)
 	}
 	defer closer()
 
+	// This command has no encryption flag, so it can never be encrypting.
+	warnEncryptionDropped(stderr, false, r)
+
 	w := pdf.NewWriter(r)
 
 	var pageList []int
