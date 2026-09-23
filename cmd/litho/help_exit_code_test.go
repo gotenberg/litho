@@ -119,3 +119,72 @@ func TestPipe_StageHelpExitsOK(t *testing.T) {
 		t.Errorf("stderr = %q, want no error wrapper around a help request", errOut)
 	}
 }
+
+// TestPipe_StageHelpWithoutAnOutputFlag pins the ordering a caller actually
+// types. The test above passes -o BEFORE the stage, which is the only form that
+// used to work.
+//
+// Two defects kept `litho pipe doc.pdf rotate -h` from reaching the ErrHelp
+// branch. -h was absent from boolStageFlags, so parsePipeGlobals treated it as
+// a valued flag and consumed the following token: `rotate -h -o out.pdf` lost
+// its -o and reported "-o output file is required" for a command that supplied
+// one. And the -o check ran before the stage loop, so even with nothing to
+// consume, a help request with no -o failed instead of printing usage.
+//
+// Asking for help is not a request to write a document, so no -o is required.
+func TestPipe_StageHelpWithoutAnOutputFlag(t *testing.T) {
+	src := writeTempPDF(t, untaggedTextPDF())
+
+	for _, spelling := range []string{"-h", "--help", "-help"} {
+		t.Run(spelling, func(t *testing.T) {
+			rc, errOut := runPipeArgs(t, []string{"pipe", src, "rotate", spelling})
+			if rc != exitOK {
+				t.Errorf("exit %d, want %d; stderr: %s", rc, exitOK, strings.TrimSpace(errOut))
+			}
+			if !strings.Contains(errOut, "Usage of rotate:") {
+				t.Errorf("stderr = %q, want the stage usage", errOut)
+			}
+			if strings.Contains(errOut, "-o output file is required") {
+				t.Errorf("a help request demanded an output file; stderr: %q", errOut)
+			}
+		})
+	}
+}
+
+// TestPipe_StageHelpWithATrailingOutputFlag pins the remaining ordering: -o
+// after the stage must also reach the usage text rather than an error.
+//
+// It does NOT prove the -o is parsed rather than eaten, and an earlier version
+// of this comment claimed that it did. Measured by unregistering h/help: this
+// test still passes, because the ErrHelp branch returns exitOK before the
+// missing -o is ever examined, so a swallowed -o has no observable effect on
+// the help path. The entry that stops the swallowing is pinned by
+// TestPipe_HelpAsAFlagValueDoesNotSwallowTheNextStage, where a lost stage
+// changes the output document.
+func TestPipe_StageHelpWithATrailingOutputFlag(t *testing.T) {
+	src := writeTempPDF(t, untaggedTextPDF())
+	out := filepath.Join(t.TempDir(), "piped.pdf")
+
+	rc, errOut := runPipeArgs(t, []string{"pipe", src, "rotate", "-h", "-o", out})
+	if rc != exitOK {
+		t.Errorf("exit %d, want %d; stderr: %s", rc, exitOK, strings.TrimSpace(errOut))
+	}
+	if strings.Contains(errOut, "-o output file is required") {
+		t.Errorf("the -o after -h was consumed as its value; stderr: %q", errOut)
+	}
+}
+
+// TestPipe_MissingOutputStillFailsAfterTheMove guards the deferral. Moving the
+// -o check past the stage loop must not stop it firing for a real pipeline that
+// forgot the flag.
+func TestPipe_MissingOutputStillFailsAfterTheMove(t *testing.T) {
+	src := writeTempPDF(t, untaggedTextPDF())
+
+	rc, errOut := runPipeArgs(t, []string{"pipe", src, "rotate", "-angle", "90"})
+	if rc == exitOK {
+		t.Fatalf("a pipeline with no -o succeeded; stderr: %s", errOut)
+	}
+	if !strings.Contains(errOut, "-o") {
+		t.Errorf("stderr = %q, want it to name the missing -o flag", strings.TrimSpace(errOut))
+	}
+}

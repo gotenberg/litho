@@ -56,10 +56,6 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		fmt.Fprintln(stderr, "pipe: missing input file")
 		return exitError
 	}
-	if outputFile == "" {
-		fmt.Fprintln(stderr, "pipe: -o output file is required")
-		return exitError
-	}
 
 	r, closer, err := openPDF(ctx, inputFile, password)
 	if err != nil {
@@ -146,6 +142,18 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 
 	if err := pipeline.Validate(); err != nil {
 		fmt.Fprintf(stderr, "pipe: %v\n", err)
+		return exitError
+	}
+
+	// Checked here rather than beside the input file, because the stage loop
+	// above answers a help request by returning exitOK and a help request
+	// carries no -o: `litho pipe doc.pdf attach -h` reported "-o output file is
+	// required" and exited 1, so the ErrHelp branch that exists to serve stage
+	// help was unreachable in the natural argument order. Nothing between that
+	// check's old home and this point can succeed and exit, so every genuinely
+	// missing -o still fails here with the same message and status.
+	if outputFile == "" {
+		fmt.Fprintln(stderr, "pipe: -o output file is required")
 		return exitError
 	}
 
@@ -295,7 +303,17 @@ func splitStageGroups(args []string) [][]string {
 // treat `rotate` as -generate's value, run ONE stage instead of two, and exit 0
 // having never rotated anything. Adding a boolean stage flag means adding it
 // here in the same change.
-var boolStageFlags = map[string]bool{"aggressive": true, "generate": true}
+//
+// h and help are here although no stage declares them: every FlagSet answers
+// them implicitly, and they take no value. Without them `pipe doc attach -h -o
+// out.pdf` consumed the -o as -h's value and reported "-o output file is
+// required" for a command that supplied one, and `set-metadata -title -h
+// rotate` swallowed the rotate stage. TrimLeft strips every leading dash, so
+// these two entries cover -h, -help and --help.
+var boolStageFlags = map[string]bool{
+	"aggressive": true, "generate": true,
+	"h": true, "help": true,
+}
 
 // expectsValue reports whether arg is a stage flag that consumes the next
 // token. The --flag=value form carries its own value and consumes nothing.

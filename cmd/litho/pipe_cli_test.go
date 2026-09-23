@@ -126,6 +126,41 @@ func TestPipe_BooleanStageFlagDoesNotSwallowTheNextStage(t *testing.T) {
 	}
 }
 
+// TestPipe_HelpAsAFlagValueDoesNotSwallowTheNextStage is the -h analogue of the
+// test above, and it is the ONLY place the h/help entries in boolStageFlags are
+// observable.
+//
+// -h is a flag like any other to splitStageGroups: unregistered, expectsValue
+// reports that it consumes the following token, so the `rotate` after it is
+// read as -h's value and never starts a group. set-metadata's FlagSet then
+// stops at the first non-flag and ignores the rest, so the rotation silently
+// does not happen and the command still exits 0.
+//
+// The stage-help tests cannot cover this. A help request returns exitOK from
+// the ErrHelp branch before the missing -o is ever examined, so an eaten -o
+// produces no observable error there: measured, unregistering h/help leaves
+// every one of those tests passing. This assertion is self-controlling
+// instead. If the rotate stage is swallowed the rotation reads 0, not 90.
+func TestPipe_HelpAsAFlagValueDoesNotSwallowTheNextStage(t *testing.T) {
+	src := writeTempPDF(t, untaggedTextPDF())
+	out := filepath.Join(t.TempDir(), "piped.pdf")
+
+	rc, errOut := runPipeArgs(t, []string{
+		"pipe", src, "set-metadata", "-title", "-h",
+		"rotate", "-angle", "90", "-o", out,
+	})
+	if rc != exitOK {
+		t.Fatalf("pipe: exit %d, stderr: %s", rc, errOut)
+	}
+	if got := readMetadata(t, out)["Title"]; got != "-h" {
+		t.Errorf("Title = %q, want %q: -h stopped being usable as a flag VALUE", got, "-h")
+	}
+	if got := pageRotations(t, out)[0]; got != "90" {
+		t.Errorf("rotation = %q, want 90: the rotate stage after `-title -h` was swallowed, "+
+			"so the pipeline ran one stage and reported success", got)
+	}
+}
+
 // TestPipe_WritesToTheOutputPathItWasGiven pins the sibling half of the
 // splitting defect, in parsePipeGlobals rather than splitStageGroups.
 //
