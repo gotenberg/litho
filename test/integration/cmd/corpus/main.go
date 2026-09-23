@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -18,7 +19,7 @@ func main() {
 	}
 
 	if len(os.Args) < 2 {
-		printUsage()
+		printUsage(os.Stderr)
 		os.Exit(2)
 	}
 	os.Exit(dispatch(os.Args[1], os.Args[2:]))
@@ -44,29 +45,34 @@ func dispatch(cmd string, args []string) int {
 	case "scan-claims":
 		return runScanClaims(args)
 	case "-h", "--help", "help":
-		printUsage()
+		printUsage(os.Stderr)
 		return 0
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n", cmd)
-		printUsage()
+		printUsage(os.Stderr)
 		return 2
 	}
 }
 
-func printUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: corpus <init|run|baseline|check> [flags]")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Subcommands:")
-	fmt.Fprintln(os.Stderr, "  init          Provision corpora via Docker (downloads PDFs and goldens)")
-	fmt.Fprintln(os.Stderr, "  run           Compare litho against golden references across the matrix")
-	fmt.Fprintln(os.Stderr, "  baseline      Run the matrix and write the per-cell match counts to a baseline file")
-	fmt.Fprintln(os.Stderr, "  check         Run the matrix and fail if any cell regressed against the baseline")
-	fmt.Fprintln(os.Stderr, "  scan-claims   Emit a claims.csv mapping each PDF to its claimed profile")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Common run flags:")
-	fmt.Fprintln(os.Stderr, "  --corpus=pdfjs,verapdf        Restrict to named corpora")
-	fmt.Fprintln(os.Stderr, "  --feature=text,compliance     Restrict to named features")
-	fmt.Fprintln(os.Stderr, "  --profile=PDF_A-2b            Restrict to fixtures under one profile")
-	fmt.Fprintln(os.Stderr, "  --format=text|json            Output format")
-	fmt.Fprintln(os.Stderr, "  --workers=N                   Parallel workers (default: GOMAXPROCS)")
+// printUsage writes the usage block to w.
+//
+// Takes a writer rather than addressing os.Stderr directly so a test can read
+// the real text instead of a rebuilt copy of it, the way cmd/litho's printUsage
+// does. See [TestUsageNamesEveryDispatchableSubcommand].
+func printUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: corpus <init|run|baseline|check|scan-claims> [flags]")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Subcommands:")
+	fmt.Fprintln(w, "  init          Provision corpora via Docker (downloads PDFs and goldens)")
+	fmt.Fprintln(w, "  run           Compare litho against golden references across the matrix")
+	fmt.Fprintln(w, "  baseline      Run the matrix and write the per-cell match counts to a baseline file")
+	fmt.Fprintln(w, "  check         Run the matrix and fail if any cell regressed against the baseline")
+	fmt.Fprintln(w, "  scan-claims   Emit a claims.csv mapping each PDF to its claimed profile")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Common run flags:")
+	fmt.Fprintln(w, "  --corpus=pdfjs,verapdf        Restrict to named corpora")
+	fmt.Fprintln(w, "  --feature=text,compliance     Restrict to named features")
+	fmt.Fprintln(w, "  --profile=PDF_A-2b            Restrict to fixtures under one profile")
+	fmt.Fprintln(w, "  --format=text|json            Output format")
+	fmt.Fprintln(w, "  --workers=N                   Parallel workers (default: GOMAXPROCS)")
 }
