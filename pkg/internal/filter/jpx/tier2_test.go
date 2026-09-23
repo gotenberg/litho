@@ -339,7 +339,8 @@ func TestDecodePackets_Truncated(t *testing.T) {
 // reads every packet its progression names and exactly the bytes it holds. A
 // misread header field desynchronises everything after it, so exact
 // consumption is a strong check. The recipes, all from a 23x19 RGB image or
-// three components subsampled 1x1, 2x2 and 2x2:
+// three components subsampled 1x1, 2x2 and 2x2 (24x20 for rpcl_sub and
+// cprl_sub, 23x19 for the offset streams):
 //
 //	tiles_sop_eph   -SOP -EPH -TP R -t 12,10 -r 8,2,1 -n 3
 //	rpcl_sub        -p RPCL -c [8,8],[4,4] -n 3 -r 3,1 -mct 0

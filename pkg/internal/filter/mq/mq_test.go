@@ -98,3 +98,15 @@ func TestQeTable_TransitionsStayInTheTable(t *testing.T) {
 		}
 	}
 }
+
+// TestNewContext starts contexts in the states ITU-T T.800, Table D.7 uses,
+// and clamps an index past the table to its last row.
+func TestNewContext(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ index, want uint8 }{{0, 0}, {3, 3}, {4, 4}, {46, 46}, {47, 46}, {255, 46}} {
+		if cx := NewContext(tc.index); cx.index != tc.want || cx.mps != 0 {
+			t.Errorf("NewContext(%d) = %+v, want index %d, MPS 0", tc.index, cx, tc.want)
+		}
+	}
+}

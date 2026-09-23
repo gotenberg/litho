@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 )
 
 // tileDecoder decodes one tile: its coding parameters after the precedence
@@ -178,4 +179,134 @@ func (d *tileDecoder) readPacket(s packetSlot) error {
 		}
 	}
 	return nil
+}
+
+// stepSize returns the quantization exponent and mantissa of sub-band b of tc
+// (T.800, A.6.4). Derived quantization scales the NLLL exponent by the
+// sub-band's decomposition level (E-5).
+func (tc *tileComponent) stepSize(b *band) step {
+	q := tc.quant
+	if q.style == quantDerived {
+		s := q.steps[0]
+		s.exponent += b.level - tc.style.levels
+		return s
+	}
+	return q.steps[b.step]
+}
+
+// magnitudeBits returns Mb for sub-band b of tc (T.800, E-2): the guard bits
+// plus the sub-band's exponent, less one.
+func (tc *tileComponent) magnitudeBits(b *band) int {
+	return tc.quant.guards + tc.stepSize(b).exponent - 1
+}
+
+// maxReversibleBits is the most magnitude bit-planes a sub-band of the 5-3
+// reversible path may have: its coefficients are held in int32. It is an
+// implementation limit, not spec-mandated; a 16-bit image needs about 19.
+const maxReversibleBits = 31
+
+// Base 2 logarithms of the sub-band gains of T.800, Table E.1, by
+// orientation.
+var logGain = [4]int{bandLL: 0, bandHL: 1, bandLH: 1, bandHH: 2}
+
+// decodeBlocks decodes every code-block of the tile (T.800, Annex D) and
+// reconstructs its coefficients into the tile-components' planes (E.1).
+func (d *tileDecoder) decodeBlocks(ctx context.Context, cs *codestream) error {
+	t := &t1{}
+	n := 0
+	for c := range d.comps {
+		tc := &d.comps[c]
+		w, h := tc.x1-tc.x0, tc.y1-tc.y0
+		tc.coeffs = plane{stride: w}
+		if tc.style.reversible {
+			tc.coeffs.ints = make([]int32, w*h)
+		} else {
+			tc.coeffs.floats = make([]float32, w*h)
+		}
+		for r := range tc.resolutions {
+			res := &tc.resolutions[r]
+			if tc.style.reversible {
+				for i := range res.bands {
+					if mb := tc.magnitudeBits(&res.bands[i]); mb > maxReversibleBits {
+						return fmt.Errorf("%w: reversible sub-band of %d magnitude bit-planes", ErrUnsupported, mb)
+					}
+				}
+			}
+			for k := range res.precincts {
+				for i := range res.precincts[k].bands {
+					b := &res.bands[i]
+					for j := range res.precincts[k].bands[i].blocks {
+						if n++; n%256 == 0 {
+							if err := ctx.Err(); err != nil {
+								return err
+							}
+						}
+						cb := &res.precincts[k].bands[i].blocks[j]
+						if err := tc.decodeBlock(t, b, cb, cs.components[c].precision); err != nil {
+							return fmt.Errorf("code-block of component %d, level %d: %w", c, r, err)
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// decodeBlock decodes code-block cb of sub-band b and writes its reconstructed
+// coefficients into the sub-band's plane. With r = 1/2 as the reconstruction
+// parameter, a coefficient decoded to fewer than Mb bit-planes is placed at
+// the middle of the interval its bits leave open (T.800, E-6 and E-8).
+func (tc *tileComponent) decodeBlock(t *t1, b *band, cb *codeBlock, precision int) error {
+	mb := tc.magnitudeBits(b)
+	if err := t.decode(cb, b.orient, mb+tc.roi, tc.style.cbStyle); err != nil {
+		return err
+	}
+	if cb.passes == 0 {
+		return nil
+	}
+	// E-3 and E-4: the step size of an irreversible sub-band.
+	st := tc.stepSize(b)
+	delta := math.Ldexp(1+float64(st.mantissa)/2048, precision+logGain[b.orient]-st.exponent)
+	stride := tc.coeffs.stride
+	for j := range t.w * t.h {
+		v, nb := t.coefficient(j, mb, tc.roi, cb.zeroPlanes)
+		if v == 0 {
+			continue
+		}
+		at := (b.offY+cb.y0-b.y0+j/t.w)*stride + b.offX + cb.x0 - b.x0 + j%t.w
+		if tc.style.reversible {
+			// E-7 and E-8. The half step is below every decoded bit, so the
+			// value stays within Mb bits.
+			if nb < mb {
+				half := int64(1) << (mb - nb - 1)
+				if v < 0 {
+					half = -half
+				}
+				v += half
+			}
+			if v > math.MaxInt32 || v < math.MinInt32 {
+				return fmt.Errorf("%w: coefficient %d beyond %d bits", ErrMalformed, v, maxReversibleBits)
+			}
+			tc.coeffs.ints[at] = int32(v)
+			continue
+		}
+		// E-6.
+		mag := math.Abs(float64(v)) + math.Ldexp(0.5, mb-nb)
+		if v < 0 {
+			mag = -mag
+		}
+		tc.coeffs.floats[at] = float32(mag * delta)
+	}
+	return nil
+}
+
+// inverseTransform is the IDWT procedure of T.800, F.3.1: starting from the
+// NLLL sub-band, each level reconstructs, in place, the level above from the
+// one below and its three high sub-bands, until the tile-component itself.
+func (tc *tileComponent) inverseTransform() {
+	for r := 1; r < len(tc.resolutions); r++ {
+		res, below := &tc.resolutions[r], &tc.resolutions[r-1]
+		reconstructLevel(&tc.coeffs, res.x0, res.y0, res.x1, res.y1, below.x1-below.x0, below.y1-below.y0)
+	}
 }

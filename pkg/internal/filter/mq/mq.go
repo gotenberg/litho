@@ -74,6 +74,14 @@ type Context struct {
 	mps   uint8
 }
 
+// NewContext returns a context in probability state index with MPS 0. ITU-T
+// T.800, Table D.7 starts some contexts away from state 0. An index past the
+// last row of the table selects the last row, so a Context cannot index
+// outside it.
+func NewContext(index uint8) Context {
+	return Context{index: min(index, uint8(len(qeTable)-1))}
+}
+
 // Decoder decodes binary decisions from one arithmetically coded segment.
 //
 // A Decoder is not safe for concurrent use. The contexts it adapts belong to

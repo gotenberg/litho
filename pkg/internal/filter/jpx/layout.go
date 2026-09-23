@@ -27,6 +27,9 @@ type tileComponent struct {
 	x0, y0, x1, y1 int
 	style          *codingStyle
 	quant          *quantization
+	// coeffs holds the tile-component's coefficients, first as sub-bands,
+	// then as samples once inverseTransform has run.
+	coeffs plane
 	// roi is the RGN shift, 0 without an RGN marker segment.
 	roi         int
 	resolutions []resolution
@@ -57,6 +60,9 @@ type band struct {
 	// step is the index of the sub-band's quantization step size in the order
 	// of T.800, F.3.1.
 	step int
+	// offX and offY place the sub-band in the tile-component's plane: beside,
+	// below or diagonal to the resolution level below its own.
+	offX, offY int
 }
 
 // precinct is one precinct of a resolution level: its code-blocks in each
@@ -160,6 +166,15 @@ func layoutComponent(tc *tileComponent, budget *blockBudget) error {
 			}
 			b.level = nl - r + 1
 			b.step = 1 + 3*(r-1) + i
+			// The level below this one fills lw x lh at the top left.
+			below := &tc.resolutions[r-1]
+			lw, lh := below.x1-below.x0, below.y1-below.y0
+			if b.orient != bandLH {
+				b.offX = lw
+			}
+			if b.orient != bandHL {
+				b.offY = lh
+			}
 			// B-15 with the offsets of Table B.1: HL is high-pass across,
 			// LH down, HH both.
 			xo, yo := 0, 0
