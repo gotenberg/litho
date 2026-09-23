@@ -263,3 +263,64 @@ func TestParsePages(t *testing.T) {
 		})
 	}
 }
+
+// TestRun_GlobalFlagsCompose pins that the two value-consuming globals do not
+// eat each other.
+//
+// run parses globals by hand in an index loop, and each of --timeout and
+// --log-level steps the index past its own value. The loop's own comment
+// records what happens when that goes wrong: a range loop advanced by one
+// whatever the body did, so the duration stayed in argv and was read as the
+// command name, and `litho --timeout 30s info f.pdf` died with "unknown
+// command: 30s". TestRun_GlobalTimeout and the TestLogLevel_ tests each cover
+// one flag alone; nothing covered the pair, and a second value-consuming flag
+// is exactly where that class returns.
+//
+// The failure mode is silent: a swallowed flag leaves exit 0 and a command that
+// simply ignored what it was told. So exit code alone is not enough, and every
+// row asserts the observable EFFECT of each flag.
+//
+// The 1ns row is the strongest, and it is stable rather than lucky: measured
+// 12/12 runs at exactly rc=124 with exactly one debug record. 124 can only come
+// from the deadline and the record can only come from the logger, so one
+// invocation proves both flags were parsed.
+func TestRun_GlobalFlagsCompose(t *testing.T) {
+	path := writeTempPDF(t, minimalPDF())
+
+	for _, tt := range []struct {
+		name       string
+		args       []string
+		wantExit   int
+		wantDebug  bool
+		wantStderr string
+	}{
+		{"space form, timeout first", []string{"--timeout", "30s", "--log-level", "debug", "info", path}, exitOK, true, ""},
+		{"space form, log-level first", []string{"--log-level", "debug", "--timeout", "30s", "info", path}, exitOK, true, ""},
+		{"equals form", []string{"--timeout=30s", "--log-level=debug", "info", path}, exitOK, true, ""},
+		{"mixed forms", []string{"--timeout", "30s", "--log-level=debug", "info", path}, exitOK, true, ""},
+
+		// Both effects in one run: the deadline expires AND the logger speaks.
+		{"an expired deadline still logs", []string{"--timeout", "1ns", "--log-level", "debug", "info", path}, exitTimeout, true, ""},
+
+		// Each flag must receive its OWN token. A swallowed value would make
+		// the wrong parser complain, or none at all.
+		{"log-level keeps its own value", []string{"--timeout", "30s", "--log-level", "bogus", "info", path}, exitError, false, "invalid log level"},
+		{"timeout keeps its own value", []string{"--log-level", "debug", "--timeout", "bogus", "info", path}, exitError, false, "invalid timeout"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			rc := run(context.Background(), tt.args, &stdout, &stderr)
+			if rc != tt.wantExit {
+				t.Fatalf("run(%q) = %d, want %d; stderr: %q", tt.args, rc, tt.wantExit, stderr.String())
+			}
+			if got := strings.Contains(stderr.String(), "level=DEBUG"); got != tt.wantDebug {
+				t.Errorf("debug records present = %v, want %v: --log-level did not survive alongside --timeout; stderr: %q",
+					got, tt.wantDebug, stderr.String())
+			}
+			if tt.wantStderr != "" && !strings.Contains(stderr.String(), tt.wantStderr) {
+				t.Errorf("stderr = %q, want it to contain %q: the value reached the wrong parser",
+					stderr.String(), tt.wantStderr)
+			}
+		})
+	}
+}
