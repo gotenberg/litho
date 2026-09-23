@@ -11,7 +11,12 @@ test/integration/
 │   ├── entrypoint.sh           Dispatches to <corpus>/download.sh then shared goldens
 │   ├── lib/
 │   │   ├── gen-references.mjs  PDF.js text + metadata generator (shared)
-│   │   └── run-verapdf.sh      VeraPDF per-profile runner (shared)
+│   │   ├── gen-bookmarks.sh    pdfcpu bookmark exporter (shared)
+│   │   ├── gen-merges.sh       pdfcpu merge oracle (shared)
+│   │   ├── gen-merge-empty.sh  pdfcpu merge-with-empty oracle (shared)
+│   │   ├── run-verapdf.sh      VeraPDF per-profile runner (shared)
+│   │   ├── run-mustang.sh      Mustang Factur-X validity runner (shared)
+│   │   └── run-kosit.sh        KoSIT Schematron runner (shared)
 │   ├── pdfjs/
 │   │   ├── download.sh
 │   │   └── manifest.json
@@ -27,6 +32,9 @@ test/integration/
 │   ├── pdfcpu/
 │   │   ├── download.sh
 │   │   └── manifest.json
+│   ├── facturx/
+│   │   ├── download.sh
+│   │   └── manifest.json
 │   └── litho/                  Self-authored fixtures, committed (not downloaded)
 │       ├── download.sh         Copies pdfs/ into the output dir
 │       ├── manifest.json
@@ -40,7 +48,7 @@ test/integration/
 │       ├── text/<fixture>.json
 │       ├── metadata/<fixture>.json
 │       └── compliance/<profile>.json
-└── cmd/corpus/                 CLI (init, run, scan-claims)
+└── cmd/corpus/                 CLI (init, run, baseline, check, scan-claims)
 ```
 
 ## Running
@@ -92,31 +100,34 @@ Cells with `[no golden]` (typically corpora not provisioned for a feature) are e
 
 ## Features
 
-| Feature                  | Golden source              | What it compares                                                                                                                                                                        |
-| ------------------------ | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `text`                   | PDF.js (captured at init)  | Per-page text extraction against PDF.js's reference text                                                                                                                                |
-| `metadata`               | PDF.js (captured at init)  | Info dict + linearization/form flags                                                                                                                                                    |
-| `compliance`             | VeraPDF (captured at init) | Litho's validation verdict against VeraPDF's, per profile                                                                                                                               |
-| `remediation`            | VeraPDF (live at run time) | Remediates with litho, then validates the output with both litho and VeraPDF; reports the diff                                                                                          |
-| `remediation-aggressive` | VeraPDF (live at run time) | Same as `remediation` with `WithAggressiveFixes` enabled                                                                                                                                |
-| `bookmarks`              | pdfcpu (captured at init)  | Outline tree (title, page, children) against pdfcpu's `bookmarks export`                                                                                                                |
-| `split`                  | litho-self (live)          | Round-trips Split([1,last]); compares output text + bookmarks against litho's input extraction, then asserts the document-level catalog entries survived                                |
-| `merge`                  | litho-self + pdfcpu (live) | Merges each PDF with itself; checks page count, per-page text, and bookmark leaf multiset against the derived oracle AND pdfcpu's merge result, then the document-level catalog entries |
-| `merge-empty`            | litho-self + pdfcpu (live) | Two-input companion: merges each PDF with `empty.pdf`; exercises the real cross-document resource-merging path same as `merge` checks                                                   |
-| `merge-catalog`          | litho-self (live)          | Merges each PDF with itself and asserts only the document-level catalog entries; no text or bookmark comparison, so it is cheap enough to run on a large corpus                         |
+| Feature                  | Golden source              | What it compares                                                                                                                                                                                                                               |
+| ------------------------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `text`                   | PDF.js (captured at init)  | Per-page text extraction against PDF.js's reference text                                                                                                                                                                                       |
+| `metadata`               | PDF.js (captured at init)  | Info dict + linearization/form flags                                                                                                                                                                                                           |
+| `compliance`             | VeraPDF (captured at init) | Litho's validation verdict against VeraPDF's, per profile                                                                                                                                                                                      |
+| `remediation`            | VeraPDF (live at run time) | Remediates with litho, then validates the output with both litho and VeraPDF; reports the diff                                                                                                                                                 |
+| `remediation-aggressive` | VeraPDF (live at run time) | Same as `remediation` with `WithAggressiveFixes` enabled                                                                                                                                                                                       |
+| `bookmarks`              | pdfcpu (captured at init)  | Outline tree (title, page, children) against pdfcpu's `bookmarks export`                                                                                                                                                                       |
+| `split`                  | litho-self (live)          | Round-trips Split([1,last]); compares output text + bookmarks against litho's input extraction, then asserts the document-level catalog entries survived                                                                                       |
+| `merge`                  | litho-self + pdfcpu (live) | Merges each PDF with itself; checks page count, per-page text, and bookmark leaf multiset against the derived oracle AND pdfcpu's merge result, then the document-level catalog entries                                                        |
+| `merge-empty`            | litho-self + pdfcpu (live) | Two-input companion: merges each PDF with `empty.pdf`; exercises the real cross-document resource-merging path same as `merge` checks                                                                                                          |
+| `merge-catalog`          | litho-self (live)          | Merges each PDF with itself and asserts only the document-level catalog entries; no text or bookmark comparison, so it is cheap enough to run on a large corpus                                                                                |
+| `facturx-validity`       | Mustang (captured at init) | Litho's `ValidateFacturX` verdict against Mustang's. Scores the hybrid-invoice carrier rules (filename, `AFRelationship`, `fx:*` XMP, extension schema, embedded CII XSD); the PDF/A-3 base layer is scored by `compliance` against VeraPDF    |
+| `facturx-schematron`     | KoSIT (captured at init)   | Litho's Schematron rule firings against KoSIT's. KoSIT routes each fixture to XRechnung Schematron, generic EN 16931 CII Schematron, or "no scenario applicable"; a skip surfaces as `[not applicable]` rather than counting against the score |
 
-All three captured goldens live under the corpus's `testdata/goldens/` directory and are produced by the provisioning Docker image. `remediation` has no captured golden: it shells out to `verapdf` at run time on the remediated buffer. Needs `verapdf` on PATH.
+All captured goldens live under the corpus's `testdata/goldens/` directory and are produced by the provisioning Docker image. `remediation` has no captured golden: it shells out to `verapdf` at run time on the remediated buffer. Needs `verapdf` on PATH.
 
 Not every corpus runs every feature. Each corpus is the oracle for the feature it ships goldens for; running the others on it would be redundant.
 
-| Corpus    | text | metadata | compliance | remediation | bookmarks | split | merge | merge-empty | merge-catalog | role                                                            |
-| --------- | ---- | -------- | ---------- | ----------- | --------- | ----- | ----- | ----------- | ------------- | --------------------------------------------------------------- |
-| `pdfjs`   | ✓    | ✓        | —          | —           | —         | —     | —     | —           | ✓             | text + metadata oracle (PDF.js renderer is the ground truth)    |
-| `verapdf` | —    | —        | ✓          | ✓           | —         | —     | —     | —           | —             | compliance + remediation oracle (VeraPDF is the ground truth)   |
-| `govdocs` | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | —           | —             | real-world canary; compliance/remediation use each file's claim |
-| `pdf20`   | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | —           | —             | PDF 2.0 canary (claims fall under PDF/A-4\* or PDF/UA-2)        |
-| `pdfcpu`  | ✓    | ✓        | —          | —           | ✓         | ✓     | ✓     | ✓           | —             | bookmark/merge/split canary; sourced from pdfcpu's sample tree  |
-| `litho`   | —    | —        | ✓          | ✓           | —         | —     | —     | —           | —             | rule-masking oracle; hand-built multi-violation fixtures        |
+| Corpus    | text | metadata | compliance | remediation | bookmarks | split | merge | merge-empty | merge-catalog | role                                                                                                                            |
+| --------- | ---- | -------- | ---------- | ----------- | --------- | ----- | ----- | ----------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `pdfjs`   | ✓    | ✓        | —          | —           | —         | —     | —     | —           | ✓             | text + metadata oracle (PDF.js renderer is the ground truth)                                                                    |
+| `verapdf` | —    | —        | ✓          | ✓           | —         | —     | —     | —           | —             | compliance + remediation oracle (VeraPDF is the ground truth)                                                                   |
+| `govdocs` | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | —           | —             | real-world canary; compliance/remediation use each file's claim                                                                 |
+| `pdf20`   | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | —           | —             | PDF 2.0 canary (claims fall under PDF/A-4\* or PDF/UA-2)                                                                        |
+| `pdfcpu`  | ✓    | ✓        | —          | —           | ✓         | ✓     | ✓     | ✓           | —             | bookmark/merge/split canary; sourced from pdfcpu's sample tree                                                                  |
+| `facturx` | ✓    | ✓        | ✓          | ✓           | —         | —     | —     | —           | —             | Factur-X / ZUGFeRD hybrid-invoice oracle; the only corpus running `facturx-validity` (Mustang) and `facturx-schematron` (KoSIT) |
+| `litho`   | —    | —        | ✓          | ✓           | —         | —     | —     | —           | —             | rule-masking oracle; hand-built multi-violation fixtures                                                                        |
 
 `merge-catalog` runs on `pdfjs` because that is where the annotation shapes it
 guards against actually occur: measured across all 5171 corpus fixtures, 49
@@ -143,20 +154,21 @@ Cross-tool comparisons live behind small normalisations so equivalent inputs do 
 
 ## Corpora
 
-| Corpus    | Fixtures                          | Source                                                                 |
-| --------- | --------------------------------- | ---------------------------------------------------------------------- |
-| `pdfjs`   | ~1,100 PDFs (1 fixture each)      | Mozilla's PDF.js test suite                                            |
-| `verapdf` | ~2,600 PDFs × 15 profiles         | VeraPDF corpus, flattened from the per-profile directories             |
-| `govdocs` | ~1,500 PDFs (1 fixture per claim) | Govdocs1 random-sample of five fixed thread archives (real-world PDFs) |
-| `pdf20`   | ~30 PDFs (1 fixture per claim)    | PDF Association's `pdf20examples` (CC-BY-SA-4.0 PDF 2.0 samples)       |
-| `pdfcpu`  | ~50 PDFs (1 fixture each)         | pdfcpu's `pkg/samples/bookmarks` + `pkg/testdata` (Apache-2.0)         |
-| `litho`   | 5 PDFs × 8 profiles               | Self-authored, committed in-tree; see `corpus/litho/README.md`         |
+| Corpus    | Fixtures                          | Source                                                                                                                                                                  |
+| --------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pdfjs`   | ~1,100 PDFs (1 fixture each)      | Mozilla's PDF.js test suite                                                                                                                                             |
+| `verapdf` | ~2,600 PDFs × 15 profiles         | VeraPDF corpus, flattened from the per-profile directories                                                                                                              |
+| `govdocs` | ~1,100 PDFs (1 fixture per claim) | Govdocs1 random-sample of five fixed thread archives (real-world PDFs)                                                                                                  |
+| `pdf20`   | ~30 PDFs (1 fixture per claim)    | PDF Association's `pdf20examples` (CC-BY-SA-4.0 PDF 2.0 samples)                                                                                                        |
+| `pdfcpu`  | ~50 PDFs (1 fixture each)         | pdfcpu's `pkg/samples/bookmarks` + `pkg/testdata` (Apache-2.0)                                                                                                          |
+| `facturx` | ~150 PDFs (1 fixture per claim)   | ZUGFeRD/corpus (Apache-2.0): real, sample and intentionally-broken Factur-X / ZUGFeRD invoices, flattened from the `ZUGFeRDv2`, `XML-Rechnung` and `ZUGFeRDv1` subtrees |
+| `litho`   | 69 PDFs × 8 profiles              | Self-authored, committed in-tree; see `corpus/litho/README.md`                                                                                                          |
 
 Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 
 - `expand` (verapdf): every PDF yields one fixture per declared profile, ID = `<profile>/<basename>`.
 - `none` (pdfjs): one fixture per PDF, ID = `<basename>`.
-- `auto` (govdocs, pdf20): one fixture per PDF, profile read from the document's XMP claim. Files claiming `PDF_A-Nx` or `PDF_UA-N` get ID = `<profile>/<basename>` and run compliance/remediation. Files with no claim get ID = `<basename>` and run only the profile-agnostic features (text, metadata).
+- `auto` (govdocs, pdf20, facturx): one fixture per PDF, profile read from the document's XMP claim. Files claiming `PDF_A-Nx` or `PDF_UA-N` get ID = `<profile>/<basename>` and run compliance/remediation. Files with no claim get ID = `<basename>` and run only the profile-agnostic features (text, metadata).
 
 Auto-mode provisioning runs the in-tree `corpus scan-claims` helper after download, writing `<testdata_root>/claims.csv` keyed `<basename>,<profile>`. `run-verapdf.sh` consumes that file and validates each PDF only against the profile it claims (one VeraPDF invocation per profile, hard-linked staging buckets), so cost scales with corpus size, not corpus size × profile count. The runner picks up the same CSV on `corpus run` to skip the live XMP scan. Delete the CSV (or `make clean-corpus`) to force a re-scan.
 
