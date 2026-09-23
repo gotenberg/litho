@@ -161,6 +161,74 @@ func TestPipe_HelpAsAFlagValueDoesNotSwallowTheNextStage(t *testing.T) {
 	}
 }
 
+// TestPipe_EveryBooleanStageFlagIsRegistered enforces the invariant
+// boolStageFlags' own comment states and nothing checked.
+//
+// That comment says "Adding a boolean stage flag means adding it here in the
+// same change", which is a rule kept by memory alone. An allow list nobody
+// enforces is how `c9c20cd8` happened on the neighbouring map: the set it
+// mirrored grew and the list did not. Forgetting a boolean here is silent in
+// the same way: expectsValue reports the flag consumes the next token, so the
+// stage after it is read as its value and never runs, and the command exits 0.
+//
+// Each stage's FlagSet is asked for its own usage, which only became reachable
+// in `0d231199`. flag.PrintDefaults writes "-name" for a boolean and
+// "-name type" for a valued flag, so a single-field line naming a flag is a
+// boolean.
+//
+// autotag, decrypt and flatten-form are skipped because they declare no
+// FlagSet at all (a bare p.Apply), so there is nothing to introspect and their
+// help request cannot succeed.
+func TestPipe_EveryBooleanStageFlagIsRegistered(t *testing.T) {
+	src := writeTempPDF(t, untaggedTextPDF())
+
+	flagless := map[string]bool{"autotag": true, "decrypt": true, "flatten-form": true}
+
+	names := make([]string, 0, len(stageCmds))
+	for name := range stageCmds {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	discovered := map[string]string{}
+	for _, name := range names {
+		if flagless[name] {
+			continue
+		}
+		var stdout, stderr bytes.Buffer
+		if rc := run(context.Background(), []string{"pipe", src, name, "-h"}, &stdout, &stderr); rc != exitOK {
+			t.Errorf("%s: stage help exited %d, so its flags could not be inspected; stderr: %s",
+				name, rc, strings.TrimSpace(stderr.String()))
+			continue
+		}
+		for line := range strings.SplitSeq(stderr.String(), "\n") {
+			f := strings.Fields(line)
+			if len(f) != 1 || !strings.HasPrefix(f[0], "-") {
+				continue
+			}
+			flagName := strings.TrimPrefix(f[0], "-")
+			discovered[flagName] = name
+			if !boolStageFlags[flagName] {
+				t.Errorf("stage %s declares boolean flag -%s, absent from boolStageFlags: "+
+					"splitStageGroups will read the token after it as its value, so the next stage "+
+					"is swallowed and the pipeline exits 0 having skipped it", name, flagName)
+			}
+		}
+	}
+
+	// The control. Without it a parser that matched nothing would report zero
+	// unregistered booleans and pass while checking no stage at all.
+	for _, want := range []struct{ flag, stage string }{
+		{"aggressive", "remediate"},
+		{"generate", "set-bookmarks"},
+	} {
+		if got := discovered[want.flag]; got != want.stage {
+			t.Errorf("did not discover -%s on %s (found on %q): the usage parser matched nothing, "+
+				"so the check above inspected no flags", want.flag, want.stage, got)
+		}
+	}
+}
+
 // TestPipe_WritesToTheOutputPathItWasGiven pins the sibling half of the
 // splitting defect, in parsePipeGlobals rather than splitStageGroups.
 //
