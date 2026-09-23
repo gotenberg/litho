@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -257,6 +258,57 @@ func TestPipe_NewStagesRejectTheirMissingRequiredFlags(t *testing.T) {
 			}
 			if errOut == "" {
 				t.Errorf("%s failed silently: nothing on stderr", tc.desc)
+			}
+			// The standalone commands' own helpers assert this, and pipe must
+			// match: a caller that sees a non-zero exit must not also find
+			// something on disk that looks like a result.
+			if _, err := os.Stat(out); err == nil {
+				t.Errorf("%s left %s behind", tc.desc, out)
+			}
+		})
+	}
+}
+
+// TestPipe_NewStagesLeaveNoOutputWhenTheyFailDuringTheWrite covers the half the
+// table above cannot reach.
+//
+// A stage that fails while it is being BUILT returns before createOutput, so no
+// file ever exists and the assertion there passes for free. Only a stage that
+// fails INSIDE Pipeline.WriteTo has a file on disk to leave behind, and that is
+// the defect `aadb8373` fixed: runPipe was the only output-producing command
+// that never called abandonOutput, so a mid-write failure left a partial
+// document beside a non-zero exit.
+//
+// Both rows below pass their build-time checks and fail in the writer: -pos is
+// only rejected when negative, and -stamp-page is resolved against the stamp
+// document during the stamp itself.
+func TestPipe_NewStagesLeaveNoOutputWhenTheyFailDuringTheWrite(t *testing.T) {
+	for _, tc := range []struct {
+		desc  string
+		stage func(src string) []string
+	}{
+		{"insert, a position past the end", func(src string) []string {
+			return []string{"insert", "-source", src, "-pos", "999"}
+		}},
+		{"stamp-pdf, a stamp page that does not exist", func(src string) []string {
+			return []string{"stamp-pdf", "-stamp", src, "-stamp-page", "99"}
+		}},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			src := onePageTempPDF(t)
+			out := filepath.Join(t.TempDir(), "out.pdf")
+
+			args := append([]string{"pipe", src}, tc.stage(src)...)
+			args = append(args, "-o", out)
+
+			rc, errOut := runPipeArgs(t, args)
+			if rc == exitOK {
+				t.Fatalf("%s succeeded, so the write never failed and this row "+
+					"cannot observe abandonOutput; stderr: %s", tc.desc, errOut)
+			}
+			if _, err := os.Stat(out); err == nil {
+				t.Errorf("%s left a partial document at %s: the write failed after "+
+					"createOutput and abandonOutput did not withdraw it", tc.desc, out)
 			}
 		})
 	}
