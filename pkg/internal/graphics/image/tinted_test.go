@@ -24,45 +24,127 @@ func tintedImagePDF(cs string, samples []byte) []string {
 	}
 }
 
-// TestDecodeImage_DeviceNWithMoreColorantsThanThreeIsRefused pins the silent
-// corruption this guard exists to stop.
+// TestDecodeImage_DeviceNTintArityIsChecked pins that a tint transform whose
+// input count does not match the colorant count is refused BY NAME.
 //
-// resolveColorSpace answers "DeviceRGB" for a DeviceN space, which assumes three
-// components. A seven-colorant image holds seven bytes a pixel, so three bytes a
-// pixel is SHORTER than the data: the length check passes, the decoder reads
-// bytes 0,1,2 as the first pixel and 3,4,5 as the second, and colorants are
-// scrambled across pixel boundaries while 4/7 of the stream is never read. No
-// error is reported, so nothing downstream can tell.
-//
-// Measured on 135 images in thread_400_400932.pdf: /Im18 is 57x1 over seven
-// colorants, its decoded stream is 399 bytes = 57*7 exactly, litho wanted 171,
-// and 171 <= 399 so every one of them decoded "successfully". DecodeImage feeds
-// mutations.blankImage, which re-encodes these pixels back into the document.
-func TestDecodeImage_DeviceNWithMoreColorantsThanThreeIsRefused(t *testing.T) {
+// Per ISO 32000-1, 8.6.6.5 the transform takes one input per colorant. A file
+// declaring seven colorants and a one-input transform is malformed, and letting
+// it reach [function.Function.Eval] reports "wrong number of inputs: got 7,
+// want 1", which names neither the colour space nor the image. The refusal here
+// names both counts.
+func TestDecodeImage_DeviceNTintArityIsChecked(t *testing.T) {
 	t.Parallel()
 
 	const cs = "[/DeviceN [/Cyan /Magenta /Yellow /Black /Spot1 /Spot2 /Spot3]" +
 		" /DeviceRGB 5 0 R]"
-	// 4 pixels x 7 colorants = 28 bytes, comfortably more than the 12 a
-	// three-component read demands.
 	samples := make([]byte, 4*7)
 	for i := range samples {
 		samples[i] = byte(i * 9)
 	}
 
+	// A type 2 function takes exactly one input, so this is the mismatch.
 	objs := append(tintedImagePDF(cs, samples),
-		"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0] /C1 [1 1 1] /N 1 >>")
+		"<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1] /C0 [0 0 0] /C1 [1 1 1] /N 1 >>")
 	ctx, doc, page := imagePDF(t, objs)
 
 	_, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
 	if err == nil {
-		t.Fatal("DecodeImage silently read a 7-colorant DeviceN image as 3-component RGB")
+		t.Fatal("DecodeImage accepted a 7-colorant space with a one-input tint transform")
 	}
-	if !strings.Contains(err.Error(), "DeviceN") {
+	if !strings.Contains(err.Error(), "devicen") {
 		t.Errorf("refusal does not name the colour space family: %v", err)
 	}
 	if !strings.Contains(err.Error(), "7") {
 		t.Errorf("refusal does not name the colorant count: %v", err)
+	}
+}
+
+// TestDecodeImage_DeviceNDecodesThroughItsTintTransform pins the decode this
+// replaces the old refusal with.
+//
+// A DeviceN image carries one sample per colorant and the transform converts
+// the whole tuple at once (ISO 32000-1, 8.6.6.5), so it cannot be reduced to a
+// 256-entry table the way a Separation can. Before this it was refused
+// outright, and before THAT it was read as three-component RGB, which strides
+// a seven-colorant image across pixel boundaries.
+//
+// The table is a two-input, one-output sampled function over a DeviceGray
+// alternate, and the expected greys are computed from the algorithm rather than
+// from this decoder: with the first input varying fastest, cells are
+// (0,0)=0 (1,0)=85 (0,1)=170 (1,1)=255.
+func TestDecodeImage_DeviceNDecodesThroughItsTintTransform(t *testing.T) {
+	t.Parallel()
+
+	const cs = "[/DeviceN [/A /B] /DeviceGray 5 0 R]"
+	// Four pixels, two colorants each: (0,0) (255,0) (0,255) (255,255).
+	samples := []byte{0, 0, 255, 0, 0, 255, 255, 255}
+	table := []byte{0, 85, 170, 255}
+
+	objs := append(tintedImagePDF(cs, samples),
+		fmt.Sprintf("<< /FunctionType 0 /Domain [0 1 0 1] /Range [0 1]"+
+			" /Size [2 2] /BitsPerSample 8 /Length %d >>\nstream\n%s\nendstream",
+			len(table), table))
+	ctx, doc, page := imagePDF(t, objs)
+
+	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("DecodeImage refused a DeviceN image: %v", err)
+	}
+	if got := img.Bounds(); got.Dx() != 4 || got.Dy() != 1 {
+		t.Fatalf("bounds = %v, want 4x1", got)
+	}
+
+	for _, tc := range []struct {
+		x    int
+		want uint8
+		note string
+	}{
+		{0, 0, "tuple (0,0)"},
+		{1, 85, "tuple (255,0): the FIRST colorant varies fastest"},
+		{2, 170, "tuple (0,255)"},
+		{3, 255, "tuple (255,255)"},
+	} {
+		r, g, b, _ := img.At(tc.x, 0).RGBA()
+		if uint8(r>>8) != tc.want || uint8(g>>8) != tc.want || uint8(b>>8) != tc.want {
+			t.Errorf("pixel %d [%s] = (%d,%d,%d), want grey %d",
+				tc.x, tc.note, r>>8, g>>8, b>>8, tc.want)
+		}
+	}
+}
+
+// TestDecodeImage_DeviceNRepeatedTuplesUseTheCache pins that a repeated tuple
+// decodes to the same colour, which is what the tuple cache trades memory for.
+//
+// The cache exists because the transform cannot be tabulated over 256^N: the
+// largest corpus image is 540x534 over seven colorants and holds 31,400
+// distinct tuples, so evaluating per distinct tuple rather than per pixel turns
+// 36.9 million corner visits into 4.0 million.
+func TestDecodeImage_DeviceNRepeatedTuplesUseTheCache(t *testing.T) {
+	t.Parallel()
+
+	const cs = "[/DeviceN [/A /B] /DeviceGray 5 0 R]"
+	// The same two tuples alternating, so every pixel after the first two is a
+	// cache hit.
+	samples := []byte{0, 0, 255, 255, 0, 0, 255, 255}
+	table := []byte{0, 85, 170, 255}
+
+	objs := append(tintedImagePDF(cs, samples),
+		fmt.Sprintf("<< /FunctionType 0 /Domain [0 1 0 1] /Range [0 1]"+
+			" /Size [2 2] /BitsPerSample 8 /Length %d >>\nstream\n%s\nendstream",
+			len(table), table))
+	ctx, doc, page := imagePDF(t, objs)
+
+	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("DecodeImage: %v", err)
+	}
+	for _, p := range [][2]int{{0, 2}, {1, 3}} {
+		ra, _, _, _ := img.At(p[0], 0).RGBA()
+		rb, _, _, _ := img.At(p[1], 0).RGBA()
+		if ra != rb {
+			t.Errorf("pixels %d and %d hold the same tuple but decoded to %d and %d",
+				p[0], p[1], ra>>8, rb>>8)
+		}
 	}
 }
 
@@ -216,16 +298,20 @@ func TestDecodeImage_SeparationRefusalsSurvive(t *testing.T) {
 	}
 }
 
-// TestDecodeImage_DeviceNWithThreeColorantsStillDecodes pins that the guard is
-// keyed on the COUNT, not on the family.
+// TestDecodeImage_DeviceNThreeColorantsGoThroughTheTransform pins that a
+// three-colorant DeviceN is transformed rather than passed through.
 //
-// Where a DeviceN space names exactly three colorants the substituted stride is
-// right by accident, and treating the tints as RGB is the documented behaviour
-// of resolveColorSpace. Refusing those would regress images that decode today:
-// the pdfjs fixtures colorspace_atan.pdf, colorspace_cos.pdf and
-// colorspace_sin.pdf are each a 256x256 FlateDecode image over
-// /DeviceN [/X /Y /Z], and they must keep working.
-func TestDecodeImage_DeviceNWithThreeColorantsStillDecodes(t *testing.T) {
+// This case used to decode by accident: resolveColorSpace substitutes
+// "DeviceRGB", which assumes three components, so the stride happened to be
+// right and the tints were emitted AS IF they were RGB. The pdfjs fixtures
+// colorspace_atan.pdf, colorspace_cos.pdf and colorspace_sin.pdf are exactly
+// that shape, and all three rendered at MEAN_LUM 112.47 with a black corner
+// against poppler's ~226: litho produced the same picture for three DIFFERENT
+// tint programs, which is the tell that the transform was ignored.
+//
+// Here the transform maps every tuple to full red, so a passthrough would show
+// the raw samples instead and the assertion fails.
+func TestDecodeImage_DeviceNThreeColorantsGoThroughTheTransform(t *testing.T) {
 	t.Parallel()
 
 	const cs = "[/DeviceN [/X /Y /Z] /DeviceRGB 5 0 R]"
@@ -235,8 +321,11 @@ func TestDecodeImage_DeviceNWithThreeColorantsStillDecodes(t *testing.T) {
 		0, 0, 255,
 		255, 255, 255,
 	}
+	// Three inputs, three outputs, constant red whatever the tuple.
+	program := "{ pop pop pop 1 0 0 }"
 	objs := append(tintedImagePDF(cs, samples),
-		"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0] /C1 [1 1 1] /N 1 >>")
+		fmt.Sprintf("<< /FunctionType 4 /Domain [0 1 0 1 0 1] /Range [0 1 0 1 0 1]"+
+			" /Length %d >>\nstream\n%s\nendstream", len(program), program))
 	ctx, doc, page := imagePDF(t, objs)
 
 	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
@@ -246,9 +335,12 @@ func TestDecodeImage_DeviceNWithThreeColorantsStillDecodes(t *testing.T) {
 	if got := img.Bounds(); got.Dx() != 4 || got.Dy() != 1 {
 		t.Fatalf("bounds = %v, want 4x1", got)
 	}
-	r, g, b, _ := img.At(0, 0).RGBA()
-	if r>>8 != 255 || g>>8 != 0 || b>>8 != 0 {
-		t.Errorf("first pixel = (%d,%d,%d), want the samples read straight through", r>>8, g>>8, b>>8)
+	for x := range 4 {
+		r, g, b, _ := img.At(x, 0).RGBA()
+		if r>>8 != 255 || g>>8 != 0 || b>>8 != 0 {
+			t.Errorf("pixel %d = (%d,%d,%d), want the TRANSFORM's red, not the raw samples",
+				x, r>>8, g>>8, b>>8)
+		}
 	}
 }
 

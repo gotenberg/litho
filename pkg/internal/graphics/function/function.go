@@ -114,6 +114,15 @@ func New(ctx context.Context, doc *document.Document, obj ast.PdfObject) (*Funct
 // Outputs reports how many values [Function.Eval] returns.
 func (f *Function) Outputs() int { return f.outputs }
 
+// Inputs reports how many values [Function.Eval] requires, which /Domain
+// declares as one pair per input.
+//
+// A caller feeding a colour space checks this rather than discovering the
+// mismatch inside Eval: ISO 32000-1, 8.6.6.5 gives a DeviceN tint transform one
+// input per colorant, and a file that breaks that should be refused by name
+// rather than by a generic arity error from two layers down.
+func (f *Function) Inputs() int { return len(f.domain) / 2 }
+
 // initSampled reads the sample table of a type 0 function.
 //
 // Per ISO 32000-1, 7.10.2 the samples are packed most significant bit first

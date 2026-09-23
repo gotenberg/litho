@@ -23,6 +23,30 @@ const (
 	// dimensions to force ~40 GB allocations.
 	maxImagePixels = 100_000_000
 
+	// maxTintColorants bounds the colorant count of a DeviceN image.
+	// [decodeDeviceN] evaluates the tint transform once per distinct pixel
+	// tuple and the sampled evaluator visits 2^N corners each time, so the
+	// count drives the work exponentially. Twelve leaves room beyond the
+	// widest in the corpora (seven: CMYK plus three spots) while keeping a
+	// single evaluation to 4096 corners. Anti-DoS, not spec-mandated: ISO
+	// 32000-1, 8.6.6.5 puts no limit on /DeviceN colorants.
+	maxTintColorants = 12
+
+	// maxDeviceNWork bounds pixels x 2^colorants, the worst-case corner
+	// visits when every pixel holds a distinct tuple and the memo below never
+	// hits. The largest DeviceN image in the corpora is 540x534 over seven
+	// colorants, which is 36.9 million, so 1<<28 accepts it with room while
+	// refusing a megapixel image over twelve colorants outright. Anti-DoS,
+	// not spec-mandated.
+	maxDeviceNWork = 1 << 28
+
+	// maxTintMemo bounds the tuple cache [decodeDeviceN] keeps. Distinct
+	// tuples are bounded only by the pixel count, so an unbounded map on
+	// adversarial input is a memory hazard; past this size the decoder keeps
+	// evaluating but stops growing the cache. 65536 covers the corpora, whose
+	// worst image holds 31,400 distinct tuples. Anti-DoS, not spec-mandated.
+	maxTintMemo = 1 << 16
+
 	// maxImageBytes caps the decoded byte stream. Four bytes per pixel
 	// is the worst case (RGBA), so this matches the pixel cap and
 	// bounds [io.ReadAll] on the streaming decoder output.
@@ -60,9 +84,12 @@ func validateImageDimensions(width, height int) error {
 // stretched, because [decodeIndexed] looks it up directly and a stretched index
 // addresses the wrong colour.
 //
-// The result needs no cap of its own: [validateImageDimensions] holds
-// width*height to maxImagePixels and samplesPerPixel is at most 4, so the
-// expansion cannot exceed maxImageBytes however small the packed input was.
+// The expansion is width*height*samplesPerPixel bytes. For a device colour
+// space samplesPerPixel is at most 4, so [validateImageDimensions] alone holds
+// the result under maxImageBytes however small the packed input was. A DeviceN
+// image breaks that arithmetic: it carries one sample per colorant, up to
+// maxTintColorants, so [decodeDeviceN] bounds its own pixel count before
+// calling here rather than relying on the four-component reasoning.
 func unpackSamples(data []byte, width, height, samplesPerPixel, bpc int, scale bool) ([]byte, error) {
 	if bpc == 8 {
 		return data, nil
@@ -435,6 +462,113 @@ func decodeSeparation(
 		for x := range width {
 			img.Set(x, y, lut[unpacked[idx]])
 			idx++
+		}
+	}
+	return img, nil
+}
+
+// decodeDeviceN builds the image of a DeviceN colour space by mapping each
+// pixel's colorant tuple through the space's tint transform into its alternate
+// space, then to RGB.
+//
+// Per ISO 32000-1, 8.6.6.5 a DeviceN image carries one component per colorant
+// and the tint transform converts the whole tuple at once, so unlike a
+// Separation it cannot be reduced to a 256-entry table: the tuple space is
+// 256^N. The transform is evaluated once per DISTINCT tuple instead, which is
+// what makes this affordable. The largest such image in the corpora is
+// 540x534 over seven colorants yet holds only 31,400 distinct tuples, so the
+// cache turns 36.9 million corner visits into 4.0 million, a factor of nine.
+//
+// A JPEG is not decoded here. [jpegSampleSpace] measures the sample shape from
+// the codestream, and that count need not equal the colorant count, so the two
+// DeviceN JPEGs in the corpora decode correctly through the ordinary path and
+// are left alone.
+func decodeDeviceN(
+	ctx context.Context,
+	doc *document.Document,
+	dict ast.PdfDict,
+	cs ast.PdfArray,
+	data []byte,
+	width, height, bitsPerComp, colorants int,
+) (image.Image, error) {
+	if len(cs) < 4 {
+		return nil, fmt.Errorf("devicen colour space has %d entries, want [/DeviceN names alternate tint]", len(cs))
+	}
+	if colorants < 1 || colorants > maxTintColorants {
+		return nil, fmt.Errorf("devicen image declares %d colorants, outside the 1 to %d this decoder evaluates",
+			colorants, maxTintColorants)
+	}
+	if work := int64(width) * int64(height) * int64(1) << uint(colorants); work > maxDeviceNWork {
+		return nil, fmt.Errorf("devicen image of %dx%d over %d colorants needs up to %d tint evaluations, above the %d safety cap",
+			width, height, colorants, work, int64(maxDeviceNWork))
+	}
+
+	alternate := resolveColorSpace(ctx, doc, ast.PdfDict{"ColorSpace": cs[2]})
+	altComps := imageComponents(alternate)
+	if altComps == 0 {
+		return nil, fmt.Errorf("devicen image over unsupported alternate colour space %q", alternate)
+	}
+
+	tint, err := function.New(ctx, doc, cs[3])
+	if err != nil {
+		return nil, fmt.Errorf("devicen image tint transform: %w", err)
+	}
+	// Per ISO 32000-1, 8.6.6.5 the transform takes one input per colorant.
+	// Checking here names the colour space and both counts; letting the
+	// mismatch reach [function.Function.Eval] instead reports a bare arity
+	// error that mentions neither.
+	if tint.Inputs() != colorants {
+		return nil, fmt.Errorf("devicen tint transform takes %d inputs for a %d-colorant space",
+			tint.Inputs(), colorants)
+	}
+	if tint.Outputs() != altComps {
+		return nil, fmt.Errorf("devicen tint transform yields %d values for a %d-component alternate space %q",
+			tint.Outputs(), altComps, alternate)
+	}
+
+	unpacked, err := unpackSamples(data, width, height, colorants, bitsPerComp, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(unpacked) < width*height*colorants {
+		return nil, fmt.Errorf("decoded data too short for devicen image: got %d, want %d",
+			len(unpacked), width*height*colorants)
+	}
+
+	// /Decode remaps each colorant before the transform sees it (ISO 32000-1,
+	// 8.9.5.2). No corpus DeviceN image declares one, so these tables are the
+	// identity in practice, but a file may.
+	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, dict, colorants), colorants)
+
+	memo := make(map[string]color.RGBA)
+	inputs := make([]float64, colorants)
+	tuple := make([]byte, colorants)
+
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	offset := 0
+	for y := range height {
+		for x := range width {
+			for c := range colorants {
+				tuple[c] = dec[c][unpacked[offset+c]]
+			}
+			offset += colorants
+
+			key := string(tuple)
+			rgb, seen := memo[key]
+			if !seen {
+				for c := range colorants {
+					inputs[c] = float64(tuple[c]) / 255
+				}
+				out, err := tint.Eval(inputs)
+				if err != nil {
+					return nil, fmt.Errorf("evaluating devicen tint transform: %w", err)
+				}
+				rgb = alternateToRGB(alternate, out)
+				if len(memo) < maxTintMemo {
+					memo[key] = rgb
+				}
+			}
+			img.Set(x, y, rgb)
 		}
 	}
 	return img, nil
@@ -867,39 +1001,33 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 		bitsPerComp = 8
 	}
 
-	// A DeviceN image whose colorant count is not the three
-	// [resolveColorSpace] substitutes cannot be strided by that substitution.
-	// Too few colorants reports complete data as truncated; too many passes the
-	// length check and reads colorants across pixel boundaries, returning a
-	// scrambled picture with no error at all. Refusing says which it is.
+	// A Separation or DeviceN image holds ink tints per pixel, not colours, so
+	// it is decoded through its tint transform into the alternate space rather
+	// than through the "DeviceRGB" [resolveColorSpace] substitutes for it
+	// (ISO 32000-1, 8.6.6.4 and 8.6.6.5). This runs before the sample stride is
+	// taken from colorSpace because that substitution is what the transform
+	// replaces: it assumes three components, which strides a one-colorant image
+	// three times too far and reads a seven-colorant one across pixel
+	// boundaries.
 	//
-	// Three exemptions, each for its own reason. A Separation image is decoded
-	// through its tint transform by [decodeSeparation] just below, whatever its
-	// filter, so its single colorant is the shape that path expects rather than
-	// a mismatch. A JPEG is exempt because [jpegSampleSpace] measures the shape
-	// from the codestream and has already overwritten colorSpace. An indexed
-	// image is exempt because its samples are indices and the base count sizes
-	// the colour TABLE, not the stride.
-	if !isIndexed && filterName != "DCTDecode" {
-		if _, family, colorants, ok := tintedColorSpace(ctx, doc, stream.Dict); ok &&
-			family != "Separation" && colorants != imageComponents(colorSpace) {
-			return nil, fmt.Errorf("image in a %s colour space of %d colorant(s) read as %q: litho does not evaluate the tint transform",
-				family, colorants, colorSpace)
-		}
-	}
-
-	// A Separation image holds one ink tint per pixel, not a colour, so it is
-	// decoded through its tint transform into the alternate space rather than
-	// through the substituted "DeviceRGB" (ISO 32000-1, 8.6.6.4). This runs
-	// before the sample stride is taken from colorSpace because that
-	// substitution is what the tint transform replaces, and it covers the
-	// DCTDecode case too, where [jpegSampleSpace] has already relabelled the
-	// samples "DeviceGray" and would otherwise emit the tint as luminance: on
-	// every tint transform measured, tint 0 is paper white and full tint is
-	// near black, so reading a tint as a grey level renders the image inverted.
+	// The two families differ on JPEGs. A Separation is decoded whatever its
+	// filter, because [jpegSampleSpace] relabels a one-byte-per-pixel codestream
+	// "DeviceGray" and would otherwise emit the tint as luminance, rendering the
+	// image inverted: every tint transform measured maps tint 0 to paper white
+	// and full tint to near black. A DeviceN JPEG is left to the ordinary path,
+	// because the codestream's component count need not equal the colorant count
+	// and the two such images in the corpora already decode correctly there.
+	//
+	// An indexed image is excluded throughout: its samples are indices and the
+	// base count sizes the colour TABLE, not the stride.
 	if !isIndexed {
-		if arr, family, _, ok := tintedColorSpace(ctx, doc, stream.Dict); ok && family == "Separation" {
-			return decodeSeparation(ctx, doc, stream.Dict, arr, decodedData, width, height, bitsPerComp)
+		if arr, family, colorants, ok := tintedColorSpace(ctx, doc, stream.Dict); ok {
+			switch {
+			case family == "Separation":
+				return decodeSeparation(ctx, doc, stream.Dict, arr, decodedData, width, height, bitsPerComp)
+			case family == "DeviceN" && filterName != "DCTDecode":
+				return decodeDeviceN(ctx, doc, stream.Dict, arr, decodedData, width, height, bitsPerComp, colorants)
+			}
 		}
 	}
 
