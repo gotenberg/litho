@@ -899,6 +899,17 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 	colorSpace := resolveColorSpace(ctx, doc, stream.Dict)
 	bitsPerComp := statedBitsPerComponent(ctx, doc, stream.Dict)
 
+	// resolveColorSpace answers DeviceRGB for a missing /ColorSpace, but a
+	// JPXDecode image may leave it out and take its colour from the JPEG 2000
+	// data instead (ISO 32000-1, 7.4.9).
+	if _, stated := stream.Dict["ColorSpace"]; !stated && usesJPXDecode(ctx, doc, stream.Dict) {
+		cs, err := jpxColorSpace(ctx, doc, stream)
+		if err != nil {
+			return nil, fmt.Errorf("image %q: %w", name, err)
+		}
+		colorSpace = cs
+	}
+
 	// A stencil mask is not a picture. ISO 32000-1, 8.9.6.2 gives an image mask
 	// exactly one component at one bit per sample and forbids /ColorSpace, so
 	// neither an absent entry nor a wrongly present one may drive the unpacking.

@@ -236,11 +236,15 @@ func readHeader(body []byte) (*fileHeader, error) {
 			}
 		}
 	}
-	// T.800, I.5.3.4 and I.5.3.5: a Palette box and a Component Mapping box
-	// come together or not at all.
-	if (hdr.palette == nil) != (hdr.mapping == nil) {
-		return nil, fmt.Errorf("%w: a Palette box requires a Component Mapping box and vice versa", ErrMalformed)
-	}
+	// T.800, I.5.3.4 and I.5.3.5 pair a Palette box with a Component Mapping
+	// box. A header holding one without the other is read anyway: without a
+	// mapping, I.5.3.5 maps each component directly to a channel, and a
+	// mapping without a palette fails only for a channel that looks one up
+	// (see [Image.Channels]). Six govdocs streams put the Component Mapping
+	// box outside the JP2 Header box. Each is an /Indexed image, whose index
+	// samples ISO 32000-1, 7.4.9 reads with the JPEG 2000 colour
+	// specification ignored, palette included (T.800, I.3.4); pdf.js decodes
+	// them.
 	return hdr, nil
 }
 

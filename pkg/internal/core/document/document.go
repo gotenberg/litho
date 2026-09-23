@@ -328,21 +328,77 @@ func (d *Document) NewStreamReader(ctx context.Context, stream ast.PdfStream) (i
 // The JBIG2Globals stream of a JBIG2Decode parameter dictionary is resolved
 // the same way: ISO 32000-1, Table 12 makes it a stream, so it is always an
 // indirect reference, and the JBIG2Decode filter reads the global segments
-// from it.
+// from it. So is the /ColorSpace of a JPXDecode image, which decides how that
+// filter reads the JPEG 2000 data (7.4.9).
 func (d *Document) resolveStreamFilterKeys(ctx context.Context, stream ast.PdfStream) ast.PdfStream {
 	stream = d.resolveFilterKeys(ctx, stream)
 	if stream.Dict == nil {
 		return stream
 	}
-	parms, changed := d.resolveJBIG2Globals(ctx, stream.Dict["DecodeParms"])
-	if !changed {
+	parms, parmsChanged := d.resolveJBIG2Globals(ctx, stream.Dict["DecodeParms"])
+	cs, csChanged := d.resolveJPXColorSpace(ctx, stream.Dict)
+	if !parmsChanged && !csChanged {
 		return stream
 	}
 	resolvedDict := make(ast.PdfDict, len(stream.Dict))
 	maps.Copy(resolvedDict, stream.Dict)
-	resolvedDict["DecodeParms"] = parms
+	if parmsChanged {
+		resolvedDict["DecodeParms"] = parms
+	}
+	if csChanged {
+		resolvedDict["ColorSpace"] = cs
+	}
 	stream.Dict = resolvedDict
 	return stream
+}
+
+// resolveJPXColorSpace resolves the /ColorSpace of a stream decoded by
+// JPXDecode far enough for the filter to tell an Indexed space from any other:
+// an indirect value, and an indirect family name heading an array (ISO
+// 32000-1, 8.6.3). Under an Indexed space the JPEG 2000 samples are palette
+// indices, so the filter must not look them up in the JPEG 2000 palette
+// (7.4.9). Other streams, and a value that will not resolve, are left alone.
+func (d *Document) resolveJPXColorSpace(ctx context.Context, dict ast.PdfDict) (ast.PdfObject, bool) {
+	if !chainHas(dict["Filter"], "JPXDecode") {
+		return nil, false
+	}
+	cs, changed := dict["ColorSpace"], false
+	if ref, isRef := cs.(ast.PdfIndirectRef); isRef {
+		obj, err := d.Resolve(ctx, ref)
+		if err != nil {
+			d.Logger.Debug("cannot resolve the ColorSpace of a JPXDecode image", "error", err)
+			return nil, false
+		}
+		cs, changed = obj, true
+	}
+	if arr, isArray := cs.(ast.PdfArray); isArray && len(arr) > 0 {
+		if ref, isRef := arr[0].(ast.PdfIndirectRef); isRef {
+			family, err := d.Resolve(ctx, ref)
+			if err != nil {
+				d.Logger.Debug("cannot resolve the ColorSpace family of a JPXDecode image", "error", err)
+				return nil, false
+			}
+			arr = slices.Clone(arr)
+			arr[0] = family
+			cs, changed = arr, true
+		}
+	}
+	return cs, changed
+}
+
+// chainHas reports whether a resolved /Filter value names filter.
+func chainHas(value ast.PdfObject, name ast.PdfName) bool {
+	switch v := value.(type) {
+	case ast.PdfName:
+		return v == name
+	case ast.PdfArray:
+		for _, item := range v {
+			if n, ok := item.(ast.PdfName); ok && n == name {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // resolveJBIG2Globals resolves the JBIG2Globals entry of a /DecodeParms value,

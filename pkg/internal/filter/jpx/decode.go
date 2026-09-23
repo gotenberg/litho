@@ -23,9 +23,15 @@ const maxSamples = 1 << 27
 const maxSampleBits = 31
 
 // Image is a decoded JPEG 2000 image: one sample plane per codestream
-// component.
+// component, with what its JP2 header says of them.
 type Image struct {
 	Components []Component
+	// Colour is the colour specification of the JP2 header, the zero value
+	// for a bare codestream or a header whose methods are all unknown.
+	Colour Colour
+	header *fileHeader
+	// x0, y0, x1 and y1 bound the image area on the reference grid (B.2).
+	x0, y0, x1, y1 int
 }
 
 // Component is one decoded component (T.800, B.2): Width x Height samples in
@@ -45,17 +51,13 @@ type Component struct {
 //
 // Decode is safe for concurrent use: it keeps no state between calls.
 func Decode(ctx context.Context, data []byte) (*Image, error) {
-	stream, _, err := readFile(data)
+	img, cs, err := describe(data)
 	if err != nil {
 		return nil, err
 	}
-	cs, err := parseCodestream(stream)
-	if err != nil {
-		return nil, err
-	}
-	img, err := newImage(cs)
-	if err != nil {
-		return nil, err
+	for i := range img.Components {
+		c := &img.Components[i]
+		c.Samples = make([]int32, c.Width*c.Height)
 	}
 	budget := &blockBudget{}
 	for _, t := range cs.tiles {
@@ -69,10 +71,45 @@ func Decode(ctx context.Context, data []byte) (*Image, error) {
 	return img, nil
 }
 
-// newImage allocates the component planes of the image area (T.800, B-1 and
-// B-2).
+// Describe reads a JP2 file, or a bare codestream, without decoding its
+// samples. The image it returns has components whose Samples are nil, and the
+// colour specification and channels [Decode] would give.
+func Describe(data []byte) (*Image, error) {
+	img, _, err := describe(data)
+	return img, err
+}
+
+// describe parses data and returns its image without samples, and the
+// codestream.
+func describe(data []byte) (*Image, *codestream, error) {
+	stream, hdr, err := readFile(data)
+	if err != nil {
+		return nil, nil, err
+	}
+	cs, err := parseCodestream(stream)
+	if err != nil {
+		return nil, nil, err
+	}
+	img, err := newImage(cs)
+	if err != nil {
+		return nil, nil, err
+	}
+	img.header = hdr
+	if hdr != nil {
+		switch hdr.colour.method {
+		case methodEnumerated:
+			img.Colour.Enumerated = int(hdr.colour.enumerated)
+		case methodICC, methodAnyICC:
+			img.Colour.ICC = hdr.colour.profile
+		}
+	}
+	return img, cs, nil
+}
+
+// newImage lays out the components of the image area (T.800, B-1 and B-2),
+// checking their samples against maxSamples before any are allocated.
 func newImage(cs *codestream) (*Image, error) {
-	img := &Image{Components: make([]Component, len(cs.components))}
+	img := &Image{Components: make([]Component, len(cs.components)), x0: cs.x0, y0: cs.y0, x1: cs.x1, y1: cs.y1}
 	total := 0
 	for i, comp := range cs.components {
 		if comp.precision > maxSampleBits {
@@ -86,10 +123,6 @@ func newImage(cs *codestream) (*Image, error) {
 			return nil, fmt.Errorf("%w: image of more than %d samples", ErrLimit, maxSamples)
 		}
 		total += c.Width * c.Height
-	}
-	for i := range img.Components {
-		c := &img.Components[i]
-		c.Samples = make([]int32, c.Width*c.Height)
 	}
 	return img, nil
 }

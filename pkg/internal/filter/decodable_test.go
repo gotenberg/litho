@@ -11,7 +11,7 @@ func TestDecodable(t *testing.T) {
 	decodable := []ast.PdfName{
 		"FlateDecode", "Fl", "LZWDecode", "LZW", "ASCIIHexDecode", "AHx",
 		"ASCII85Decode", "A85", "CCITTFaxDecode", "CCF", "BrotliDecode",
-		"RunLengthDecode", "RL", "DCTDecode", "DCT", "JBIG2Decode", "Crypt",
+		"RunLengthDecode", "RL", "DCTDecode", "DCT", "JBIG2Decode", "JPXDecode", "Crypt",
 	}
 	for _, n := range decodable {
 		if !Decodable(n) {
@@ -19,8 +19,8 @@ func TestDecodable(t *testing.T) {
 		}
 	}
 
-	// JPX needs its plugin; unknown filters are not decodable.
-	undecodable := []ast.PdfName{"JPXDecode", "FooDecode", ""}
+	// Unknown filters are not decodable.
+	undecodable := []ast.PdfName{"FooDecode", ""}
 	for _, n := range undecodable {
 		if Decodable(n) {
 			t.Errorf("Decodable(%q) = true, want false", n)

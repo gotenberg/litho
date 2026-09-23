@@ -1547,11 +1547,11 @@ func (r *Reader) ExtractRedactedText(ctx context.Context, pageNum int) (_ []mode
 }
 
 // UndecodableStreams reports in-use stream objects whose /Filter chain
-// contains a filter litho cannot decode: JPXDecode when the jpx plugin (see
-// [WithFilterPlugin]) is not registered, or an unknown filter. JBIG2Decode is
-// decoded natively. Text, image, and validation results for those
-// objects are necessarily incomplete; registering the matching plugin
-// makes them decodable. Returns an empty slice when every stream is
+// contains a filter litho cannot decode: one neither a built-in decoder nor a
+// registered plugin (see [WithFilterPlugin]) handles, such as an unknown
+// filter. JBIG2Decode and JPXDecode are decoded natively. Text, image, and
+// validation results for those objects are necessarily incomplete;
+// registering a plugin for the filter makes them decodable. Returns an empty slice when every stream is
 // decodable. The check inspects filter names and does not decode the
 // streams.
 func (r *Reader) UndecodableStreams(ctx context.Context) (_ []models.StreamDiagnostic, err error) {

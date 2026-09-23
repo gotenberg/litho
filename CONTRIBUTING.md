@@ -4,7 +4,7 @@ litho is a pure-Go PDF Conforming Processor. Two rules override everything else:
 
 - Module: `github.com/gotenberg/litho`
 - Go: 1.27.0+
-- Optional: Docker (corpus provisioning), CGO + libopenjp2 (JPXDecode), CGO + libjbig2dec (an optional JBIG2Decode override)
+- Optional: Docker (corpus provisioning), CGO + libopenjp2 or libjbig2dec (optional JPXDecode and JBIG2Decode overrides)
 
 ## Quick start
 
@@ -139,7 +139,7 @@ Behavior-focused tests assert observable contracts (non-nil output, expected tex
 
 ### Fuzzing
 
-Fuzz tests exist for the lexer and parser. Any function whose leading argument is attacker-controlled `[]byte` (stream filter `Decode`, predictors, font/CMap table parsers, image decoders) ships a `Fuzz*` target in a `*_fuzz_test.go` beside it, seeded with one valid and one truncated input, asserting it never panics. Pure-Go decoders only; CGO plugin decoders (jpx, jbig2) are exempt.
+Fuzz tests exist for the lexer and parser. Any function whose leading argument is attacker-controlled `[]byte` (stream filter `Decode`, predictors, font/CMap table parsers, image decoders) ships a `Fuzz*` target in a `*_fuzz_test.go` beside it, seeded with one valid and one truncated input, asserting it never panics. Pure-Go decoders only; the CGO plugins in `pkg/plugins` are exempt.
 
 See:
 
@@ -183,7 +183,7 @@ Stage specific files. Never `git add -A`.
 
 ### Optional CGO plugins
 
-Filter plugins in `pkg/plugins/` provide opt-in support for PDF stream filters backed by external C libraries. JBIG2Decode is decoded natively (`pkg/internal/filter/jbig2`); its plugin, when registered, takes precedence. Without CGO or without the library installed, a plugin's `Decode` method returns `ErrUnsupportedFilter`, and an unregistered JPXDecode is skipped.
+Filter plugins in `pkg/plugins/` provide opt-in decoders backed by external C libraries. JBIG2Decode and JPXDecode are decoded natively (`pkg/internal/filter/jbig2`, `pkg/internal/filter/jpx`); a registered plugin takes precedence over the built-in decoder. Without CGO or without the library installed, a plugin's `Decode` method returns `ErrUnsupportedFilter`.
 
 | Plugin              | C library   | Install                 | Filter      |
 | ------------------- | ----------- | ----------------------- | ----------- |

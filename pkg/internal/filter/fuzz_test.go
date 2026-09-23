@@ -13,6 +13,7 @@ import (
 var pureGoFilters = []ast.PdfName{
 	"FlateDecode", "LZWDecode", "ASCIIHexDecode", "ASCII85Decode",
 	"CCITTFaxDecode", "BrotliDecode", "RunLengthDecode", "DCTDecode",
+	"JBIG2Decode", "JPXDecode",
 }
 
 // FuzzApplyDecodeFilter feeds arbitrary bytes to each pure-Go stream
@@ -36,7 +37,7 @@ func FuzzApplyDecodeFilter(f *testing.F) {
 		for _, name := range pureGoFilters {
 			// Result and error are intentionally discarded: no input
 			// may make a decoder panic.
-			_, _ = applyDecodeFilter(ctx, data, name, ast.PdfDict{})
+			_, _ = applyDecodeFilter(ctx, data, name, ast.PdfDict{}, nil)
 		}
 	})
 }

@@ -127,7 +127,6 @@ func TestReadFile_Rejects(t *testing.T) {
 		{"reserved LBox", slices.Concat(signatureBox, fileTypeBox, header, reserved)},
 		{"box past the end", slices.Concat(signatureBox, fileTypeBox, header, overlong)},
 		{"stray bytes", slices.Concat(signatureBox, fileTypeBox, header, codestream, []byte{0, 0, 0})},
-		{"palette without mapping", slices.Concat(signatureBox, fileTypeBox, boxOf(boxHeader, imageHeaderBox, greyBox, boxOf(boxPalette, []byte{0, 1, 1, 7, 0})), codestream)},
 		{"palette of 1025 entries", slices.Concat(signatureBox, fileTypeBox, boxOf(boxHeader, imageHeaderBox, greyBox, boxOf(boxPalette, []byte{0x04, 0x01, 1, 7}), boxOf(boxComponentMapping, []byte{0, 0, 1, 0})), codestream)},
 		{"palette shorter than its entries", slices.Concat(signatureBox, fileTypeBox, boxOf(boxHeader, imageHeaderBox, greyBox, boxOf(boxPalette, []byte{0, 2, 1, 7, 0}), boxOf(boxComponentMapping, []byte{0, 0, 1, 0})), codestream)},
 		{"mapping type 2", slices.Concat(signatureBox, fileTypeBox, boxOf(boxHeader, imageHeaderBox, greyBox, boxOf(boxPalette, []byte{0, 1, 1, 7, 0}), boxOf(boxComponentMapping, []byte{0, 0, 2, 0})), codestream)},

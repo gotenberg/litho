@@ -1,9 +1,8 @@
 // Package plugins defines extension interfaces for the litho PDF reader.
 //
-// Filter plugins allow opt-in support for PDF stream filters that require
-// external C libraries: JPXDecode via libopenjp2, which returns
-// ErrUnsupportedFilter without its plugin. JBIG2Decode is decoded natively; a
-// registered jbig2 plugin, backed by libjbig2dec, takes precedence over the
+// Filter plugins supply decoders for PDF stream filters backed by external C
+// libraries: JPXDecode via libopenjp2 and JBIG2Decode via libjbig2dec. litho
+// decodes both natively; a registered plugin takes precedence over the
 // built-in decoder.
 //
 // Usage:

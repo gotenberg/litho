@@ -6,7 +6,7 @@ litho implements ISO 32000 (PDF 1.4 through 2.0) in pure Go. It extracts text an
 
 - Module: `github.com/gotenberg/litho`
 - Go: 1.27.0+
-- No CGO required. An optional CGO plugin adds JPXDecode.
+- No CGO required. Optional CGO plugins can take over JPXDecode and JBIG2Decode.
 
 ## Features
 
@@ -173,14 +173,14 @@ A command that reached a verdict before its deadline expired keeps that verdict:
 
 ## Optional CGO plugins
 
-litho decodes the standard PDF stream filters in pure Go, JBIG2Decode included. JPXDecode needs an external C library, through an opt-in plugin; the jbig2 plugin remains available and, when registered, takes precedence over the built-in JBIG2 decoder:
+litho decodes the standard PDF stream filters in pure Go, JBIG2Decode and JPXDecode included. Two opt-in plugins remain available and, when registered, take precedence over the built-in decoders:
 
 | Plugin              | C library                             | Filter      |
 | ------------------- | ------------------------------------- | ----------- |
 | `pkg/plugins/jpx`   | libopenjp2 (`brew install openjpeg`)  | JPXDecode   |
 | `pkg/plugins/jbig2` | libjbig2dec (`brew install jbig2dec`) | JBIG2Decode |
 
-Without the jpx plugin, CGO or the library, litho skips JPXDecode and reports the stream through `Reader.UndecodableStreams`, or `litho info --streams`. Register a plugin when opening a document:
+A stream behind a filter litho cannot decode, such as an unknown one, is reported through `Reader.UndecodableStreams`, or `litho info --streams`. Register a plugin when opening a document:
 
 ```go
 import "github.com/gotenberg/litho/pkg/plugins/jpx"

@@ -30,23 +30,23 @@ func filteredImagePDF(entries string, data []byte, extra ...string) []string {
 //
 // The filter pipeline skips a filter it cannot decode and hands back the
 // still-encoded bytes. An 8x8 image with no /ColorSpace is read as RGB, which
-// wants 192 bytes, so a codestream of 231 bytes passed the length check and its
-// bytes came back as pixels with no error. litho/pdfs/jpx_2b.pdf holds seven
-// images of exactly this shape.
+// wants 192 bytes, so 231 encoded bytes passed the length check and came back
+// as pixels with no error. litho/pdfs/jpx_2b.pdf held seven JPXDecode images of
+// exactly this shape while JPXDecode needed a plugin.
 func TestDecodeImage_UndecodableFilterIsRefusedEvenWhenLongEnough(t *testing.T) {
 	t.Parallel()
 
-	codestream := bytes.Repeat([]byte{0xFF, 0x4F, 0xFF, 0x51, 0x00, 0x2F, 0x00}, 33)
-	ctx, doc, page := imagePDF(t, filteredImagePDF("/Filter /JPXDecode", codestream))
+	encoded := bytes.Repeat([]byte{0xFF, 0x4F, 0xFF, 0x51, 0x00, 0x2F, 0x00}, 33)
+	ctx, doc, page := imagePDF(t, filteredImagePDF("/Filter /NoSuchDecode", encoded))
 
 	_, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
 	if err == nil {
-		t.Fatal("DecodeImage read 231 still-encoded JPXDecode bytes as an 8x8 RGB picture")
+		t.Fatal("DecodeImage read 231 still-encoded bytes as an 8x8 RGB picture")
 	}
 	if !errors.Is(err, filter.ErrUnsupportedFilter) {
 		t.Errorf("refusal does not wrap ErrUnsupportedFilter: %v", err)
 	}
-	if !strings.Contains(err.Error(), "JPXDecode") {
+	if !strings.Contains(err.Error(), "NoSuchDecode") {
 		t.Errorf("refusal does not name the filter: %v", err)
 	}
 }
@@ -73,9 +73,9 @@ func TestDecodeImage_UndecodableFilterIsNamedNotBlamedOnTheData(t *testing.T) {
 			want:    "NoSuchStencilDecode",
 		},
 		{
-			name:    "JPX behind a decodable filter",
-			entries: "/ColorSpace /DeviceGray /BitsPerComponent 8 /Filter [/FlateDecode /JPXDecode]",
-			want:    "JPXDecode",
+			name:    "unknown filter behind a decodable filter",
+			entries: "/ColorSpace /DeviceGray /BitsPerComponent 8 /Filter [/FlateDecode /NoSuchDecode]",
+			want:    "NoSuchDecode",
 			notWant: "FlateDecode",
 		},
 		{
@@ -87,8 +87,8 @@ func TestDecodeImage_UndecodableFilterIsNamedNotBlamedOnTheData(t *testing.T) {
 			// The decode path resolves an indirect /Filter, so the check must too.
 			name:    "indirect /Filter",
 			entries: "/ColorSpace /DeviceGray /BitsPerComponent 8 /Filter 5 0 R",
-			extra:   []string{"/JPXDecode"},
-			want:    "JPXDecode",
+			extra:   []string{"/NoSuchDecode"},
+			want:    "NoSuchDecode",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -124,13 +124,13 @@ func (p stubPlugin) Decode(_ []byte, _ map[string]any) ([]byte, error) { return 
 
 // TestDecodeImage_FilterARegisteredPluginHandlesIsNotRefused pins that the
 // refusal is keyed on what the document can decode, not on the filter name: a
-// registered plugin makes JPXDecode decodable, and its output must be used.
+// registered plugin makes a filter decodable, and its output must be used.
 func TestDecodeImage_FilterARegisteredPluginHandlesIsNotRefused(t *testing.T) {
 	t.Parallel()
 
-	ctx, doc, page := imagePDF(t, filteredImagePDF("/Filter /JPXDecode", []byte("codestream")))
+	ctx, doc, page := imagePDF(t, filteredImagePDF("/Filter /VendorDecode", []byte("encoded")))
 	doc.Filters = filter.NewDecoder([]plugins.FilterDecoder{
-		stubPlugin{name: "JPXDecode", out: bytes.Repeat([]byte{0x80}, 8*8*3)},
+		stubPlugin{name: "VendorDecode", out: bytes.Repeat([]byte{0x80}, 8*8*3)},
 	})
 
 	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))

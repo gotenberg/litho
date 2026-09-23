@@ -74,7 +74,7 @@ func (d *Decoder) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byt
 		return nil, err
 	}
 	for i, f := range filters {
-		decoded, err := d.applyDecodeFilter(ctx, data, f, parms[i])
+		decoded, err := d.applyDecodeFilter(ctx, data, f, parms[i], stream.Dict)
 		if err != nil {
 			return nil, err
 		}
@@ -137,7 +137,7 @@ func (d *Decoder) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io
 // happened by the time it returns. It stops those bytes propagating and keeps
 // litho from holding a second copy, and it holds for third-party plugins that
 // know nothing of this package's limits.
-func (d *Decoder) applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName, parms ast.PdfDict) ([]byte, error) {
+func (d *Decoder) applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName, parms, dict ast.PdfDict) ([]byte, error) {
 	if p, ok := d.plugins[filterName]; ok {
 		pubParms, err := d.marshalParms(ctx, filterName, parms)
 		if err != nil {
@@ -155,7 +155,7 @@ func (d *Decoder) applyDecodeFilter(ctx context.Context, data []byte, filterName
 	}
 
 	// Fall back to built-in decoder.
-	return applyDecodeFilter(ctx, data, filterName, parms)
+	return applyDecodeFilter(ctx, data, filterName, parms, dict)
 }
 
 // marshalParms converts an internal ast.PdfDict to a public map[string]any

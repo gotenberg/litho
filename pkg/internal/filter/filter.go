@@ -60,9 +60,7 @@ var bufPool = sync.Pool{
 }
 
 // Decodable reports whether the built-in decoders can handle the named
-// stream filter without a plugin. It mirrors the decodable cases of
-// applyDecodeFilter: JPXDecode is excluded because the built-in
-// implementation returns ErrUnsupportedFilter (it needs the jpx plugin), and
+// stream filter without a plugin. It mirrors the cases of applyDecodeFilter;
 // unknown filters are excluded. Keep this in sync with applyDecodeFilter.
 func Decodable(name ast.PdfName) bool {
 	switch name {
@@ -75,6 +73,7 @@ func Decodable(name ast.PdfName) bool {
 		"RunLengthDecode", "RL",
 		"DCTDecode", "DCT",
 		"JBIG2Decode",
+		"JPXDecode",
 		"Crypt":
 		return true
 	}
@@ -114,7 +113,7 @@ func DecodeStreamChecked(ctx context.Context, stream ast.PdfStream) (data []byte
 		return nil, false, err
 	}
 	for i, f := range filters {
-		decoded, derr := applyDecodeFilter(ctx, data, f, parms[i])
+		decoded, derr := applyDecodeFilter(ctx, data, f, parms[i], stream.Dict)
 		if derr != nil {
 			if errors.Is(derr, ErrUnsupportedFilter) {
 				// Best-effort: skip an unsupported filter and continue
@@ -194,7 +193,7 @@ func DecodeStreamUpTo(ctx context.Context, stream ast.PdfStream, stop ast.PdfNam
 		if f == stop {
 			return data, true, nil
 		}
-		decoded, derr := applyDecodeFilter(ctx, data, f, parms[i])
+		decoded, derr := applyDecodeFilter(ctx, data, f, parms[i], stream.Dict)
 		if derr != nil {
 			return nil, false, fmt.Errorf("decoding %s before %s: %w", f, stop, derr)
 		}
@@ -234,7 +233,9 @@ func extractDecodeParms(dict ast.PdfDict, numFilters int) []ast.PdfDict {
 }
 
 // applyDecodeFilter applies a single decoding filter with optional DecodeParms.
-func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName, parms ast.PdfDict) ([]byte, error) {
+// dict is the dictionary of the stream being decoded, which JPXDecode reads
+// (ISO 32000-1, 7.4.9); every other filter reads only its parameters.
+func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName, parms, dict ast.PdfDict) ([]byte, error) {
 	switch filterName {
 	case "FlateDecode", "Fl":
 		decoded, err := decodeFlateDecode(ctx, data)
@@ -269,7 +270,7 @@ func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName,
 		return decodeDCT(data, parms)
 
 	case "JPXDecode":
-		return decodeJPX(data)
+		return decodeJPX(ctx, data, dict)
 
 	case "JBIG2Decode":
 		return decodeJBIG2(ctx, data, parms)

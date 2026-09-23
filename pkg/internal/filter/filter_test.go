@@ -231,7 +231,7 @@ func TestDecodeStream_UnsupportedFilter(t *testing.T) {
 }
 
 func TestApplyDecodeFilter_ASCIIHex(t *testing.T) {
-	result, err := applyDecodeFilter(context.Background(), []byte("48656c6c6f>"), "ASCIIHexDecode", nil)
+	result, err := applyDecodeFilter(context.Background(), []byte("48656c6c6f>"), "ASCIIHexDecode", nil, nil)
 	if err != nil {
 		t.Fatalf("ApplyDecodeFilter failed: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestDecodeASCII85(t *testing.T) {
 }
 
 func TestApplyDecodeFilter_ASCII85(t *testing.T) {
-	result, err := applyDecodeFilter(context.Background(), []byte("87cURD]i,\"Ebo7~>"), "ASCII85Decode", nil)
+	result, err := applyDecodeFilter(context.Background(), []byte("87cURD]i,\"Ebo7~>"), "ASCII85Decode", nil, nil)
 	if err != nil {
 		t.Fatalf("ApplyDecodeFilter failed: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestApplyDecodeFilter_ASCII85(t *testing.T) {
 }
 
 func TestApplyDecodeFilter_ASCII85_Abbreviation(t *testing.T) {
-	result, err := applyDecodeFilter(context.Background(), []byte("87cURD]i,\"Ebo7~>"), "A85", nil)
+	result, err := applyDecodeFilter(context.Background(), []byte("87cURD]i,\"Ebo7~>"), "A85", nil, nil)
 	if err != nil {
 		t.Fatalf("ApplyDecodeFilter failed: %v", err)
 	}
@@ -786,7 +786,7 @@ func TestBrotli_RoundTrip(t *testing.T) {
 		t.Fatalf("encode failed: %v", err)
 	}
 
-	decoded, err := applyDecodeFilter(context.Background(), encoded, "BrotliDecode", nil)
+	decoded, err := applyDecodeFilter(context.Background(), encoded, "BrotliDecode", nil, nil)
 	if err != nil {
 		t.Fatalf("decode failed: %v", err)
 	}

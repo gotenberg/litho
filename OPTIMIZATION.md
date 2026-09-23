@@ -62,7 +62,7 @@ Six probes failed to exercise the webfont path itself, so it stays unverified ra
 
 Re-encode oversized images: downsample to a target DPI (from the image's placed size via the content interpreter), and/or transcode/recompress. Decode exists; the new parts are re-encode (the pure-Go stdlib `image/jpeg` writer + `compress/zlib` for Flate — **no CGO**) and the placed-size→DPI analysis. One image re-encode path serves this, [COLOR-MANAGEMENT.md](COLOR-MANAGEMENT.md) recoloring, and [REDACTION.md](REDACTION.md) pixel-blanking.
 
-**Limit:** JBIG2 and JPX images cannot be re-encoded — the plugins are decode-only and no encoder exists in any binding. Such images can only be transcoded to a supported filter (Flate/DCT, lossy for bilevel JBIG2) or left as-is; downsampling them in their native filter is impossible. (Same caveat drives [REDACTION.md](REDACTION.md)'s forced-transcode-or-refuse.)
+**Limit:** JBIG2 and JPX images cannot be re-encoded — litho decodes both but encodes neither, and no encoder exists in any plugin binding. Such images can only be transcoded to a supported filter (Flate/DCT, lossy for bilevel JBIG2) or left as-is; downsampling them in their native filter is impossible. (Same caveat drives [REDACTION.md](REDACTION.md)'s forced-transcode-or-refuse.)
 
 ### 3. Document font subsetting
 
