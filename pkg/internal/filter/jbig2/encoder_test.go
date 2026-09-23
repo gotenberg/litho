@@ -241,13 +241,16 @@ func encGather(values []uint32) uint32 {
 // and returns the coded bytes.
 func encodeGeneric(bm *Bitmap, template int, tpgdon bool, at [][2]int) []byte {
 	e := newMQEncoder()
-	encodeGenericWith(e, bm, template, tpgdon, at, make([]encContext, 1<<(len(encTemplates[template])+len(at))))
+	encodeGenericWith(e, bm, template, tpgdon, at, make([]encContext, 1<<(len(encTemplates[template])+len(at))), nil)
 	return e.flush()
 }
 
 // encodeGenericWith codes bm into e with the given contexts, which a symbol
 // dictionary shares across its bitmaps and may hand to the next dictionary.
-func encodeGenericWith(e *mqEncoder, bm *Bitmap, template int, tpgdon bool, at [][2]int, contexts []encContext) {
+//
+// skip, when not nil, marks pixels that are not coded (T.88 6.2.5.6); bm must
+// hold 0 at each of them, which is what the decoder reproduces.
+func encodeGenericWith(e *mqEncoder, bm *Bitmap, template int, tpgdon bool, at [][2]int, contexts []encContext, skip *Bitmap) {
 	offsets := append(append([][2]int{}, encTemplates[template]...), at...)
 	sltp := encGather(encSLTP[template])
 	var ltp uint32
@@ -268,6 +271,9 @@ func encodeGenericWith(e *mqEncoder, bm *Bitmap, template int, tpgdon bool, at [
 			}
 		}
 		for x := range bm.Width {
+			if skip != nil && skip.pixel(x, y) != 0 {
+				continue
+			}
 			for i, o := range offsets {
 				values[i] = bm.pixel(x+o[0], y+o[1])
 			}
@@ -720,7 +726,7 @@ func symbolDictSegment(number uint32, refs []uint32, syms []*Bitmap, numIn int, 
 		for ; i < len(syms) && syms[i].Height == h; i++ {
 			iadw.encode(e, int64(syms[i].Width-width), false)
 			width = syms[i].Width
-			encodeGenericWith(e, syms[i], template, false, at, gb)
+			encodeGenericWith(e, syms[i], template, false, at, gb, nil)
 		}
 		iadw.encode(e, 0, true)
 	}
@@ -750,4 +756,144 @@ func symbolDictSegment(number uint32, refs []uint32, syms []*Bitmap, numIn int, 
 	h = append(h, 1)
 	h = binary.BigEndian.AppendUint32(h, uint32(len(data)))
 	return concat(h, data)
+}
+
+// encGrayAT transcribes ITU-T T.88 Table C.4: the AT pixels of the gray-scale
+// bitplanes, A1 at (3, -1) for templates 0 and 1 and (2, -1) for 2 and 3.
+func encGrayAT(template int) [][2]int {
+	a1 := [2]int{3, -1}
+	if template >= 2 {
+		a1 = [2]int{2, -1}
+	}
+	return append([][2]int{a1}, [][2]int{{-3, -1}, {2, -2}, {-2, -2}}[:atCount(template)-1]...)
+}
+
+// encodeGrayScale codes a gray-scale image, T.88 C.5 run backwards: bitplanes
+// from the most significant, each Gray-coded as its value XOR the plane
+// above, all continuing one arithmetic stream and one set of contexts.
+// Skipped cells hold 0 in every plane and are not coded.
+func encodeGrayScale(values []int, width, height, bits, template int, skip *Bitmap) []byte {
+	at := encGrayAT(template)
+	contexts := make([]encContext, 1<<(len(encTemplates[template])+len(at)))
+	e := newMQEncoder()
+	for j := bits - 1; j >= 0; j-- {
+		plane, err := newBitmap(width, height)
+		if err != nil {
+			panic(err)
+		}
+		for y := range height {
+			for x := range width {
+				v := values[y*width+x]
+				bit := uint32(v>>uint(j)) & 1
+				if j < bits-1 {
+					bit ^= uint32(v>>uint(j+1)) & 1
+				}
+				plane.setPixel(x, y, bit)
+			}
+		}
+		encodeGenericWith(e, plane, template, false, at, contexts, skip)
+	}
+	return e.flush()
+}
+
+// patternDictSegment codes equal-sized patterns as a pattern dictionary
+// segment, T.88 7.4.4, with their collective bitmap arithmetically coded and
+// the AT pixels of Table 27.
+func patternDictSegment(number uint32, patterns []*Bitmap, template int) []byte {
+	w, h := patterns[0].Width, patterns[0].Height
+	collective, err := newBitmap(w*len(patterns), h)
+	if err != nil {
+		panic(err)
+	}
+	for i, p := range patterns {
+		for y := range h {
+			for x := range w {
+				collective.setPixel(i*w+x, y, p.pixel(x, y))
+			}
+		}
+	}
+	at := [][2]int{{-w, 0}, {-3, -1}, {2, -2}, {-2, -2}}[:atCount(template)]
+	data := []byte{byte(template << 1), byte(w), byte(h)}
+	data = binary.BigEndian.AppendUint32(data, uint32(len(patterns)-1))
+	data = append(data, encodeGeneric(collective, template, false, at)...)
+	return segmentBytes(number, typePatternDictionary, 1, data)
+}
+
+// encHalftone describes a halftone region for the test encoder.
+type encHalftone struct {
+	width, height    int
+	template         int
+	enableSkip       bool
+	combineOp        int
+	defPixel         uint32
+	gridW, gridH     int
+	gridX, gridY     int32
+	vectorX, vectorY uint16
+}
+
+// encCell transcribes T.88 6.6.5.2 step 1 a i: a grid cell's top left
+// corner, from 1/256-pixel units by an arithmetic shift.
+func encCell(h encHalftone, ng, mg int) (int, int) {
+	gx, gy := int(h.gridX), int(h.gridY)
+	rx, ry := int(h.vectorX), int(h.vectorY)
+	return (gx + mg*ry + ng*rx) >> 8, (gy + mg*rx - ng*ry) >> 8
+}
+
+// halftoneSkip transcribes T.88 6.6.5.1: a cell is skipped when its pattern
+// would fall wholly outside the region.
+func halftoneSkip(h encHalftone, pw, ph int) *Bitmap {
+	skip, err := newBitmap(h.gridW, h.gridH)
+	if err != nil {
+		panic(err)
+	}
+	for mg := range h.gridH {
+		for ng := range h.gridW {
+			x, y := encCell(h, ng, mg)
+			if x+pw <= 0 || x >= h.width || y+ph <= 0 || y >= h.height {
+				skip.setPixel(ng, mg, 1)
+			}
+		}
+	}
+	return skip
+}
+
+// halftoneSegment codes a halftone region, T.88 7.4.5, referring to the
+// pattern dictionary segment dict, drawn at the page origin with gray-scale
+// values values (row by row) and arithmetically coded bitplanes.
+func halftoneSegment(number, dict uint32, h encHalftone, values []int, numPatterns, pw, ph int) []byte {
+	var skip *Bitmap
+	if h.enableSkip {
+		skip = halftoneSkip(h, pw, ph)
+		for mg := range h.gridH {
+			for ng := range h.gridW {
+				if skip.pixel(ng, mg) != 0 {
+					values[mg*h.gridW+ng] = 0
+				}
+			}
+		}
+	}
+	data := binary.BigEndian.AppendUint32(nil, uint32(h.width))
+	data = binary.BigEndian.AppendUint32(data, uint32(h.height))
+	data = append(data, make([]byte, 8)...)
+	// The region replaces the page area it covers, so the page holds exactly
+	// the halftone region; HCOMBOP, in the flags below, is what the patterns
+	// are drawn with.
+	data = append(data, combineReplace)
+	flags := byte(h.template<<1) | byte(h.combineOp<<4) | byte(h.defPixel<<7)
+	if h.enableSkip {
+		flags |= 8
+	}
+	data = append(data, flags)
+	data = binary.BigEndian.AppendUint32(data, uint32(h.gridW))
+	data = binary.BigEndian.AppendUint32(data, uint32(h.gridH))
+	data = binary.BigEndian.AppendUint32(data, uint32(h.gridX))
+	data = binary.BigEndian.AppendUint32(data, uint32(h.gridY))
+	data = binary.BigEndian.AppendUint16(data, h.vectorX)
+	data = binary.BigEndian.AppendUint16(data, h.vectorY)
+	data = append(data, encodeGrayScale(values, h.gridW, h.gridH, symbolCodeLen(numPatterns), h.template, skip)...)
+
+	head := binary.BigEndian.AppendUint32(nil, number)
+	head = append(head, typeImmediateHalftone, 1<<5, byte(dict), 1)
+	head = binary.BigEndian.AppendUint32(head, uint32(len(data)))
+	return concat(head, data)
 }

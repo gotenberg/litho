@@ -57,13 +57,14 @@ func genericATBytes(template int) int {
 }
 
 // genericParams holds the parameters of the generic region decoding procedure
-// that the arithmetic path uses (T.88, Table 2). USESKIP is always 0 here:
-// generic region segments fix it so (Table 34), and only halftone regions set
-// it.
+// that the arithmetic path uses (T.88, Table 2). USESKIP is expressed by a
+// non-nil skip bitmap; only the gray-scale planes of a halftone region set it
+// (Table C.4), since generic region, symbol and pattern bitmaps fix it to 0.
 type genericParams struct {
 	width, height int
 	template      int
 	tpgdon        bool
+	skip          *Bitmap
 	// at holds the (x, y) offsets of the adaptive template pixels A1 to A4;
 	// only A1 is used unless template is 0.
 	at [4][2]int
@@ -196,7 +197,8 @@ func decodeGeneric(ctx context.Context, p genericParams, dec *mq.Decoder, cx []m
 			}
 
 			var bit uint32
-			if dec.Decode(&cx[context]) != 0 {
+			// 6.2.5.7 step 3 d i: a skipped pixel is 0 and is not decoded.
+			if (p.skip == nil || p.skip.pixel(x, y) == 0) && dec.Decode(&cx[context]) != 0 {
 				bit = 1
 				bm.setPixel(x, y, 1)
 			}

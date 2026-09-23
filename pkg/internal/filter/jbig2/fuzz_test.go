@@ -49,6 +49,10 @@ func FuzzDecode(f *testing.F) {
 		encodeRefinement(refinedImage(ref, 1), ref, 0, true, [2][2]int{{-1, -1}, {-1, -1}})), []byte(nil))
 	// The Huffman variants: Annex H.1 page 1's dictionaries and text region.
 	f.Add(concat(raw[1], raw[0], raw[2], raw[3]), []byte(nil))
+	// Pattern dictionaries and halftone regions: Annex H.1 pages 1 (MMR) and
+	// 2 (arithmetic) whole.
+	f.Add(concat(raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7]), []byte(nil))
+	f.Add(concat(raw[0], raw[8], raw[9], raw[10], raw[11], raw[12], raw[13], raw[14]), []byte(nil))
 	f.Add([]byte{}, []byte{})
 
 	f.Fuzz(func(t *testing.T, data, globals []byte) {

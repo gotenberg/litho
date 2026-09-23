@@ -94,6 +94,8 @@ type decoder struct {
 	seen map[uint32]bool
 	// tables holds the Huffman tables of code table segments (7.4.13).
 	tables map[uint32]*huffTable
+	// patterns holds the pattern dictionaries, for halftone regions.
+	patterns map[uint32]*patternDict
 }
 
 // auxRegion is an auxiliary buffer: an intermediate region's bitmap and the
@@ -142,8 +144,11 @@ func (d *decoder) process(ctx context.Context, seg segment) error {
 	case typeSymbolDictionary:
 		err = d.symbolDictionary(ctx, seg)
 	case typeIntermediateGeneric, typeImmediateGeneric, typeImmediateLosslessGeneric,
-		typeIntermediateText, typeImmediateText, typeImmediateLosslessText:
+		typeIntermediateText, typeImmediateText, typeImmediateLosslessText,
+		typeIntermediateHalftone, typeImmediateHalftone, typeImmediateLosslessHalf:
 		err = d.directRegion(ctx, seg)
+	case typePatternDictionary:
+		err = d.patternDictionary(ctx, seg)
 	case typeIntermediateRefinement, typeImmediateRefinement, typeImmediateLosslessRefine:
 		err = d.refinementRegion(ctx, seg)
 	case typeTables:
@@ -153,8 +158,6 @@ func (d *decoder) process(ctx context.Context, seg segment) error {
 		// changes nothing a decoder produces.
 	case typeExtension:
 		err = checkExtension(seg)
-	case typePatternDictionary, typeIntermediateHalftone, typeImmediateHalftone, typeImmediateLosslessHalf:
-		err = fmt.Errorf("%w: segment %d of type %d", ErrUnsupported, seg.number, seg.kind)
 	default:
 		// 7.3: every other value is reserved and must not be used.
 		err = fmt.Errorf("%w: segment %d has the reserved type %d", ErrMalformed, seg.number, seg.kind)
@@ -317,13 +320,18 @@ func (d *decoder) directRegion(ctx context.Context, seg segment) error {
 	switch seg.kind {
 	case typeIntermediateText, typeImmediateText, typeImmediateLosslessText:
 		bm, info, err = d.textRegion(ctx, seg)
+	case typeIntermediateHalftone, typeImmediateHalftone, typeImmediateLosslessHalf:
+		var dict *patternDict
+		if dict, err = referredPatternDict(seg, d.patterns); err == nil {
+			bm, info, err = decodeHalftone(ctx, seg, dict, &d.budget)
+		}
 	default:
 		bm, info, err = d.genericRegion(ctx, seg)
 	}
 	if err != nil {
 		return err
 	}
-	if seg.kind == typeIntermediateText || seg.kind == typeIntermediateGeneric {
+	if seg.kind == typeIntermediateText || seg.kind == typeIntermediateGeneric || seg.kind == typeIntermediateHalftone {
 		d.keepAux(seg.number, &auxRegion{bm: bm, info: info})
 		return nil
 	}
@@ -469,6 +477,20 @@ func (d *decoder) refinementRegion(ctx context.Context, seg segment) error {
 		// Step 5 c: the refined area replaces that part of the page.
 		return d.drawRegion(bm, info.x, info.y, combineReplace)
 	}
+}
+
+// patternDictionary decodes a pattern dictionary segment (T.88, 7.4.4) and
+// keeps its patterns for the halftone regions that refer to it.
+func (d *decoder) patternDictionary(ctx context.Context, seg segment) error {
+	dict, err := decodePatternDict(ctx, seg, &d.budget)
+	if err != nil {
+		return err
+	}
+	if d.patterns == nil {
+		d.patterns = make(map[uint32]*patternDict)
+	}
+	d.patterns[seg.number] = dict
+	return nil
 }
 
 // codeTable decodes a code table segment (T.88, 7.4.13 and B.2) and keeps its
