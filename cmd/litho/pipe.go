@@ -89,7 +89,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		if g[0] == "encrypt" {
 			encryptsOutput = true
 		}
-		if pageOpStages[g[0]] {
+		if !silentStages[g[0]] {
 			dropsEncryption = true
 		}
 	}
@@ -331,17 +331,24 @@ var stageCmds = map[string]bool{
 
 func isStageCmd(s string) bool { return stageCmds[s] }
 
-// pageOpStages names the stages whose standalone commands warn that an
-// encrypted input yields an unprotected output.
+// silentStages names the stages whose standalone command deliberately does NOT
+// warn that an encrypted input yields an unprotected output.
 //
-// It is the set `80cb8803` wired [warnEncryptionDropped] into, the page
-// operations, and it is deliberately not every stage that drops encryption:
-// autotag, set-metadata and flatten-form drop it too and their standalone
-// commands stay silent, so warning for them here would replace one entry-point
-// divergence with its mirror image. Parity with the standalone command is the
-// rule; widening the set is a separate decision about those commands.
-var pageOpStages = map[string]bool{
-	"delete": true, "insert": true, "merge": true, "rotate": true, "split": true,
+// A DENY list, and the inversion is the point. This was an allow list of the
+// five page operations, correct when `10c8949f` wrote it because only those
+// five warned. `80742794` then extended the warning to every other
+// output-producing command, and the allow list was not widened with it: ten
+// stages went back to warning standalone and staying silent through pipe,
+// which is the divergence `10c8949f` existed to close. An allow list has to be
+// edited every time the standalone set grows; a deny list is right by default.
+//
+// decrypt is the only member: producing an unprotected document is exactly what
+// it was asked to do, so [runSimpleMutation] opts it out via
+// [withoutEncryptionWarning] and pipe must match. encrypt needs no entry, since
+// it sets encryptsOutput and [warnEncryptionDropped] returns early when the
+// output carries protection.
+var silentStages = map[string]bool{
+	"decrypt": true,
 }
 
 // addStage parses stage-specific flags and appends the stage to the pipeline.

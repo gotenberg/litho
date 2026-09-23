@@ -111,38 +111,80 @@ func TestPipe_NoWarningForAPlainInput(t *testing.T) {
 	}
 }
 
-// TestPipe_SilentForStagesWhoseStandaloneCommandIsSilent pins the OTHER half of
-// parity, and it is the reason pageOpStages exists rather than a blanket check.
+// TestPipe_WarnsForEveryStageWhoseStandaloneCommandWarns covers the ten stages
+// that regressed, and it replaces a test that had inverted into a lock on the
+// bug.
 //
-// autotag, set-metadata and flatten-form drop encryption too (measured: an
-// autotag output opens with no password), and their standalone commands say
-// nothing, because `80cb8803` scoped the warning to page operations. Warning
-// for them here would fix one entry-point divergence by creating its mirror
-// image, so this test fails if that happens.
-func TestPipe_SilentForStagesWhoseStandaloneCommandIsSilent(t *testing.T) {
+// Its predecessor asserted pipe stays SILENT for autotag, set-metadata and
+// flatten-form, which was correct when written: `10c8949f` matched pipe to the
+// five page operations, the only commands warning at the time. `80742794` then
+// gave every other output-producing command the warning without widening
+// pipe's allow list, so those three (and seven more) warned standalone and
+// stayed silent through pipe. The old test did not fail. It defended the
+// divergence, because its premise had changed underneath it.
+//
+// Measured before the fix, all ten: standalone emits the warning, pipe does
+// not. A test written against a true premise can become a defender of the
+// defect when the premise moves, which is why this one asserts PARITY with the
+// standalone command rather than a hardcoded expectation per stage.
+func TestPipe_WarnsForEveryStageWhoseStandaloneCommandWarns(t *testing.T) {
 	for _, tc := range []struct {
 		desc  string
-		stage []string
+		stage func(f encFixtures) []string
 	}{
-		{"autotag", []string{"autotag"}},
-		{"set-metadata", []string{"set-metadata", "-title", "T"}},
-		{"flatten-form", []string{"flatten-form"}},
+		{"set-metadata", func(encFixtures) []string { return []string{"set-metadata", "-title", "T"} }},
+		{"stamp-text", func(encFixtures) []string { return []string{"stamp-text", "-text", "DRAFT"} }},
+		{"attach", func(f encFixtures) []string { return []string{"attach", "-name", "table.csv", "-data", f.data} }},
+		{"detach", func(encFixtures) []string { return []string{"detach", "-name", "absent.csv"} }},
+		{"set-bookmarks", func(encFixtures) []string { return []string{"set-bookmarks", "-generate"} }},
+		{"autotag", func(encFixtures) []string { return []string{"autotag"} }},
+		{"flatten-form", func(encFixtures) []string { return []string{"flatten-form"} }},
+		{"remediate", func(encFixtures) []string { return []string{"remediate", "-profile", "PDF/A-2b"} }},
+		{"stamp-image", func(f encFixtures) []string { return []string{"stamp-image", "-image", f.png} }},
+		{"stamp-pdf", func(f encFixtures) []string { return []string{"stamp-pdf", "-stamp", f.stampPDF} }},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			enc := encryptTempPDF(t, twoPageTempPDF(t), "s3cret")
+			f := newEncFixtures(t)
 			out := filepath.Join(t.TempDir(), "out.pdf")
 
-			args := append([]string{"pipe", "-p", "s3cret", enc}, tc.stage...)
+			args := append([]string{"pipe", "-p", "s3cret", f.doc}, tc.stage(f)...)
 			args = append(args, "-o", out)
 
 			rc, errOut := runPipeArgs(t, args)
 			if rc != exitOK {
 				t.Fatalf("exit %d, stderr: %s", rc, errOut)
 			}
-			if strings.Contains(errOut, encryptionWarning) {
-				t.Errorf("pipe warned for %s, but the standalone command does not: "+
-					"parity now diverges in the opposite direction; stderr: %q", tc.desc, errOut)
+			if !strings.Contains(errOut, encryptionWarning) {
+				t.Errorf("pipe %s dropped the input's protection silently while the standalone "+
+					"command reports it; stderr: %q", tc.desc, errOut)
+			}
+			if !opensWithoutAPassword(t, out) {
+				t.Error("the output is still encrypted, so no downgrade happened here")
 			}
 		})
+	}
+}
+
+// TestPipe_DecryptStageStaysSilent is the control that keeps the deny list
+// honest, and the reason silentStages exists rather than warning on every
+// stage.
+//
+// decrypt is the one command whose standalone form deliberately says nothing,
+// because producing an unprotected document is what it was asked for. Warning
+// here would report the requested outcome as a loss, which is the mirror-image
+// divergence.
+func TestPipe_DecryptStageStaysSilent(t *testing.T) {
+	enc := encryptTempPDF(t, twoPageTempPDF(t), "s3cret")
+	out := filepath.Join(t.TempDir(), "out.pdf")
+
+	rc, errOut := runPipeArgs(t, []string{"pipe", "-p", "s3cret", enc, "decrypt", "-o", out})
+	if rc != exitOK {
+		t.Fatalf("exit %d, stderr: %s", rc, errOut)
+	}
+	if strings.Contains(errOut, encryptionWarning) {
+		t.Errorf("the decrypt stage warned about the downgrade it was asked to perform; stderr: %q", errOut)
+	}
+	if !opensWithoutAPassword(t, out) {
+		t.Error("decrypt did not remove the protection, so this control proves nothing")
 	}
 }
