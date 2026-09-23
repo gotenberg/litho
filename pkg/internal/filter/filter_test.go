@@ -80,9 +80,9 @@ func TestDecodeStream_FlateNoPredictor(t *testing.T) {
 
 func TestDecodeStreamChecked_IncompleteOnUnsupportedFilter(t *testing.T) {
 	raw := []byte("payload")
-	// Chain: FlateDecode (supported) then JBIG2Decode (no plugin -> skipped).
+	// Chain: FlateDecode (supported) then a filter no decoder knows (skipped).
 	stream := ast.NewStream(ast.PdfDict{
-		"Filter": ast.PdfArray{ast.PdfName("FlateDecode"), ast.PdfName("JBIG2Decode")},
+		"Filter": ast.PdfArray{ast.PdfName("FlateDecode"), ast.PdfName("NoSuchDecode")},
 	}, zlibCompress(raw))
 
 	data, incomplete, err := DecodeStreamChecked(context.Background(), stream)

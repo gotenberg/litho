@@ -37,7 +37,7 @@ func runInfo(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	format := fs.String("f", "text", "Output format: text or json")
 	password := fs.String("p", "", "PDF password")
-	checkStreams := fs.Bool("streams", false, "Report streams litho cannot decode (JBIG2/JPX without a plugin, or unknown filters)")
+	checkStreams := fs.Bool("streams", false, "Report streams litho cannot decode (JPX without a plugin, or unknown filters)")
 	checkPerms := fs.Bool("permissions", false, "Show the document permission flags")
 
 	if code, ok := parseCommandFlags(fs, args); !ok {

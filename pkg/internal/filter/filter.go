@@ -61,10 +61,9 @@ var bufPool = sync.Pool{
 
 // Decodable reports whether the built-in decoders can handle the named
 // stream filter without a plugin. It mirrors the decodable cases of
-// applyDecodeFilter: JBIG2Decode and JPXDecode are excluded because the
-// built-in implementations return ErrUnsupportedFilter (they need the
-// jbig2 / jpx plugins), and unknown filters are excluded. Keep this in
-// sync with applyDecodeFilter.
+// applyDecodeFilter: JPXDecode is excluded because the built-in
+// implementation returns ErrUnsupportedFilter (it needs the jpx plugin), and
+// unknown filters are excluded. Keep this in sync with applyDecodeFilter.
 func Decodable(name ast.PdfName) bool {
 	switch name {
 	case "FlateDecode", "Fl",
@@ -75,6 +74,7 @@ func Decodable(name ast.PdfName) bool {
 		"BrotliDecode",
 		"RunLengthDecode", "RL",
 		"DCTDecode", "DCT",
+		"JBIG2Decode",
 		"Crypt":
 		return true
 	}
@@ -272,7 +272,7 @@ func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName,
 		return decodeJPX(data)
 
 	case "JBIG2Decode":
-		return decodeJBIG2(data, parms)
+		return decodeJBIG2(ctx, data, parms)
 
 	case "Crypt":
 		return decodeCrypt(data, parms)

@@ -15,14 +15,13 @@ type StreamDiagnostic struct {
 	// ObjectNum is the stream's object number.
 	ObjectNum int
 	// Filters are the undecodable filter names in the chain (e.g.
-	// "JBIG2Decode" when the jbig2 plugin is not registered).
+	// "JPXDecode" when the jpx plugin is not registered).
 	Filters []string
 }
 
 // UndecodableStreams reports in-use stream objects whose /Filter chain
 // contains a filter that neither the built-in decoders nor a registered
-// plugin can handle (the JBIG2/JPX-without-plugin and unknown-filter
-// cases). It is the static, whole-document equivalent of
+// plugin can handle (the JPX-without-plugin and unknown-filter cases). It is the static, whole-document equivalent of
 // [filter.DecodeStreamChecked]'s incomplete signal, computed from the
 // filter names without decoding the streams. Results are sorted by
 // object number.

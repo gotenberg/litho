@@ -324,7 +324,79 @@ func (d *Document) NewStreamReader(ctx context.Context, stream ast.PdfStream) (i
 // anything, so a stream whose /Filter is a reference decoded to nothing:
 // pdfjs bug1727053.pdf writes /Filter 3 0 R for its embedded font program,
 // which left the whole 751 KB TrueType program unreadable.
+//
+// The JBIG2Globals stream of a JBIG2Decode parameter dictionary is resolved
+// the same way: ISO 32000-1, Table 12 makes it a stream, so it is always an
+// indirect reference, and the JBIG2Decode filter reads the global segments
+// from it.
 func (d *Document) resolveStreamFilterKeys(ctx context.Context, stream ast.PdfStream) ast.PdfStream {
+	stream = d.resolveFilterKeys(ctx, stream)
+	if stream.Dict == nil {
+		return stream
+	}
+	parms, changed := d.resolveJBIG2Globals(ctx, stream.Dict["DecodeParms"])
+	if !changed {
+		return stream
+	}
+	resolvedDict := make(ast.PdfDict, len(stream.Dict))
+	maps.Copy(resolvedDict, stream.Dict)
+	resolvedDict["DecodeParms"] = parms
+	stream.Dict = resolvedDict
+	return stream
+}
+
+// resolveJBIG2Globals resolves the JBIG2Globals entry of a /DecodeParms value,
+// a dictionary or an array of them, to the stream it refers to, with that
+// stream's own filter keys resolved. The globals stream is not searched for a
+// JBIG2Globals of its own, so a stream naming itself cannot recurse.
+func (d *Document) resolveJBIG2Globals(ctx context.Context, parms ast.PdfObject) (ast.PdfObject, bool) {
+	resolveDict := func(dict ast.PdfDict) (ast.PdfDict, bool) {
+		ref, isRef := dict["JBIG2Globals"].(ast.PdfIndirectRef)
+		if !isRef {
+			return dict, false
+		}
+		obj, err := d.Resolve(ctx, ref)
+		if err != nil {
+			d.Logger.Debug("cannot resolve JBIG2Globals", "error", err)
+			return dict, false
+		}
+		globals, isStream := obj.(ast.PdfStream)
+		if !isStream {
+			return dict, false
+		}
+		out := maps.Clone(dict)
+		out["JBIG2Globals"] = d.resolveFilterKeys(ctx, globals)
+		return out, true
+	}
+	switch v := parms.(type) {
+	case ast.PdfDict:
+		return resolveDict(v)
+	case ast.PdfArray:
+		var out ast.PdfArray
+		for i, item := range v {
+			dict, isDict := item.(ast.PdfDict)
+			if !isDict {
+				continue
+			}
+			resolved, changed := resolveDict(dict)
+			if !changed {
+				continue
+			}
+			if out == nil {
+				out = slices.Clone(v)
+			}
+			out[i] = resolved
+		}
+		if out != nil {
+			return out, true
+		}
+	}
+	return parms, false
+}
+
+// resolveFilterKeys resolves a stream's /Filter and /DecodeParms entries, as
+// [Document.resolveStreamFilterKeys] describes, without the JBIG2Globals step.
+func (d *Document) resolveFilterKeys(ctx context.Context, stream ast.PdfStream) ast.PdfStream {
 	if stream.Dict == nil {
 		return stream
 	}

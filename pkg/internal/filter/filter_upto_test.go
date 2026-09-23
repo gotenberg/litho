@@ -101,7 +101,7 @@ func TestDecodeStreamUpTo_UndecodableOuterFilterErrors(t *testing.T) {
 	t.Parallel()
 
 	stream := ast.NewStream(ast.PdfDict{
-		"Filter": ast.PdfArray{ast.PdfName("JBIG2Decode"), ast.PdfName("JPXDecode")},
+		"Filter": ast.PdfArray{ast.PdfName("NoSuchDecode"), ast.PdfName("JPXDecode")},
 	}, []byte("not a codestream"))
 
 	if _, _, err := DecodeStreamUpTo(context.Background(), stream, "JPXDecode"); err == nil {

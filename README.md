@@ -6,7 +6,7 @@ litho implements ISO 32000 (PDF 1.4 through 2.0) in pure Go. It extracts text an
 
 - Module: `github.com/gotenberg/litho`
 - Go: 1.27.0+
-- No CGO required. Optional CGO plugins add JPXDecode and JBIG2Decode.
+- No CGO required. An optional CGO plugin adds JPXDecode.
 
 ## Features
 
@@ -173,19 +173,19 @@ A command that reached a verdict before its deadline expired keeps that verdict:
 
 ## Optional CGO plugins
 
-litho decodes the standard PDF stream filters in pure Go. The two image filters that need an external C library are opt-in plugins:
+litho decodes the standard PDF stream filters in pure Go, JBIG2Decode included. JPXDecode needs an external C library, through an opt-in plugin; the jbig2 plugin remains available and, when registered, takes precedence over the built-in JBIG2 decoder:
 
 | Plugin              | C library                             | Filter      |
 | ------------------- | ------------------------------------- | ----------- |
 | `pkg/plugins/jpx`   | libopenjp2 (`brew install openjpeg`)  | JPXDecode   |
 | `pkg/plugins/jbig2` | libjbig2dec (`brew install jbig2dec`) | JBIG2Decode |
 
-Without CGO or the library, litho skips the filter and reports the stream through `Reader.UndecodableStreams`, or `litho info --streams`. Register a plugin when opening a document:
+Without the jpx plugin, CGO or the library, litho skips JPXDecode and reports the stream through `Reader.UndecodableStreams`, or `litho info --streams`. Register a plugin when opening a document:
 
 ```go
-import "github.com/gotenberg/litho/pkg/plugins/jbig2"
+import "github.com/gotenberg/litho/pkg/plugins/jpx"
 
-r, err := pdf.OpenFile(ctx, "doc.pdf", pdf.WithFilterPlugin(jbig2.New()))
+r, err := pdf.OpenFile(ctx, "doc.pdf", pdf.WithFilterPlugin(jpx.New()))
 ```
 
 ## Development

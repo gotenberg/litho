@@ -143,7 +143,7 @@ var ErrInlineImageInRegion = errors.New("region covers an inline image")
 // read.
 //
 // Blanking decodes the samples, overwrites the covered ones and re-encodes. A
-// filter litho cannot decode (JBIG2 and JPX without their plugins), a sample
+// filter litho cannot decode (JPX without its plugin, or an unknown filter), a sample
 // depth it does not unpack, or an indexed image whose colour table it cannot
 // read (a base colour space litho assigns no component count, or a /Lab base
 // missing the /WhitePoint ISO 32000-1, Table 65 requires) leaves nothing to

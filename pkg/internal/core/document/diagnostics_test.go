@@ -19,7 +19,8 @@ func TestUndecodableFilters(t *testing.T) {
 		want   []string
 	}{
 		{"flate only", ast.PdfName("FlateDecode"), nil},
-		{"flate then jbig2", ast.PdfArray{ast.PdfName("FlateDecode"), ast.PdfName("JBIG2Decode")}, []string{"JBIG2Decode"}},
+		{"flate then jbig2", ast.PdfArray{ast.PdfName("FlateDecode"), ast.PdfName("JBIG2Decode")}, nil},
+		{"flate then unknown", ast.PdfArray{ast.PdfName("FlateDecode"), ast.PdfName("BarDecode")}, []string{"BarDecode"}},
 		{"jpx", ast.PdfName("JPXDecode"), []string{"JPXDecode"}},
 		{"unknown filter", ast.PdfName("FooDecode"), []string{"FooDecode"}},
 		{"no filter", nil, nil},
@@ -51,9 +52,9 @@ func equalStrings(a, b []string) bool {
 }
 
 func TestUndecodableStreams_EndToEnd(t *testing.T) {
-	// A single in-use stream object filtered by JBIG2Decode, which the
-	// built-in decoders cannot handle without the jbig2 plugin.
-	data := []byte("%PDF-1.7\n1 0 obj\n<< /Length 4 /Filter /JBIG2Decode >>\nstream\nDATA\nendstream\nendobj\n")
+	// A single in-use stream object filtered by JPXDecode, which the
+	// built-in decoders cannot handle without the jpx plugin.
+	data := []byte("%PDF-1.7\n1 0 obj\n<< /Length 4 /Filter /JPXDecode >>\nstream\nDATA\nendstream\nendobj\n")
 	doc := &Document{
 		r:    bytes.NewReader(data),
 		size: int64(len(data)),
@@ -73,7 +74,7 @@ func TestUndecodableStreams_EndToEnd(t *testing.T) {
 	if len(diags) != 1 {
 		t.Fatalf("got %d diagnostics, want 1: %+v", len(diags), diags)
 	}
-	if diags[0].ObjectNum != 1 || !equalStrings(diags[0].Filters, []string{"JBIG2Decode"}) {
-		t.Errorf("diag = %+v, want {ObjectNum:1, Filters:[JBIG2Decode]}", diags[0])
+	if diags[0].ObjectNum != 1 || !equalStrings(diags[0].Filters, []string{"JPXDecode"}) {
+		t.Errorf("diag = %+v, want {ObjectNum:1, Filters:[JPXDecode]}", diags[0])
 	}
 }

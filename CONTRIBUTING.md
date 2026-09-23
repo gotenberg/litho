@@ -4,7 +4,7 @@ litho is a pure-Go PDF Conforming Processor. Two rules override everything else:
 
 - Module: `github.com/gotenberg/litho`
 - Go: 1.27.0+
-- Optional: Docker (corpus provisioning), CGO + libopenjp2 (JPXDecode), CGO + libjbig2dec (JBIG2Decode)
+- Optional: Docker (corpus provisioning), CGO + libopenjp2 (JPXDecode), CGO + libjbig2dec (an optional JBIG2Decode override)
 
 ## Quick start
 
@@ -183,7 +183,7 @@ Stage specific files. Never `git add -A`.
 
 ### Optional CGO plugins
 
-Filter plugins in `pkg/plugins/` provide opt-in support for PDF stream filters backed by external C libraries. Without CGO or without the library installed, the plugin's `Decode` method returns `ErrUnsupportedFilter` and litho gracefully skips the filter.
+Filter plugins in `pkg/plugins/` provide opt-in support for PDF stream filters backed by external C libraries. JBIG2Decode is decoded natively (`pkg/internal/filter/jbig2`); its plugin, when registered, takes precedence. Without CGO or without the library installed, a plugin's `Decode` method returns `ErrUnsupportedFilter`, and an unregistered JPXDecode is skipped.
 
 | Plugin              | C library   | Install                 | Filter      |
 | ------------------- | ----------- | ----------------------- | ----------- |

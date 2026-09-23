@@ -68,9 +68,9 @@ func TestDecodeImage_UndecodableFilterIsNamedNotBlamedOnTheData(t *testing.T) {
 		notWant string
 	}{
 		{
-			name:    "JBIG2 stencil",
-			entries: "/ImageMask true /Filter /JBIG2Decode",
-			want:    "JBIG2Decode",
+			name:    "stencil behind an unknown filter",
+			entries: "/ImageMask true /Filter /NoSuchStencilDecode",
+			want:    "NoSuchStencilDecode",
 		},
 		{
 			name:    "JPX behind a decodable filter",
