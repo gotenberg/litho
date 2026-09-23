@@ -138,6 +138,9 @@ litho rotate --angle 90 -o rotated.pdf document.pdf
 litho merge -o merged.pdf a.pdf b.pdf
 litho stamp-text --text "DRAFT" -o stamped.pdf document.pdf
 
+# Chain operations in one command.
+litho pipe document.pdf rotate --angle 90 stamp-text --text "DRAFT" -o out.pdf
+
 # Redact, encrypt and sign.
 litho redact --region 1:72,700,200,24 -o redacted.pdf document.pdf
 litho encrypt --user-password secret -o encrypted.pdf document.pdf
