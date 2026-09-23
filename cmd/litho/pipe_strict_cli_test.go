@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -100,5 +101,66 @@ func TestPipeUsage_AdvertisesStrict(t *testing.T) {
 	pipeUsage(&buf)
 	if !bytes.Contains(buf.Bytes(), []byte("--strict")) {
 		t.Errorf("pipe usage does not mention --strict:\n%s", buf.String())
+	}
+}
+
+// TestPipeUsage_AdvertisesEveryStage applies that rule to the larger claim on
+// the same screen, and in both directions.
+//
+// pipeUsage prints a "Stages:" list and nothing compared it to stageCmds, so
+// the two drift silently. A stage the help omits is one nobody finds. A name
+// the help invents sends a caller to "unknown stage" for a surface litho
+// advertises. `d561fa5a` grew the set from thirteen to eighteen and both lists
+// had to be edited by hand; only a check makes that safe.
+//
+// Measured when written: 18 names each way, symmetric difference empty. This
+// is protection rather than a defect found.
+func TestPipeUsage_AdvertisesEveryStage(t *testing.T) {
+	t.Parallel()
+
+	var buf bytes.Buffer
+	pipeUsage(&buf)
+
+	// The list heads a line and continues on indented ones. Stopping at the
+	// first unindented line keeps a section added later out of the stage set.
+	advertised := map[string]bool{}
+	inList := false
+	for line := range strings.SplitSeq(buf.String(), "\n") {
+		rest, isHead := strings.CutPrefix(line, "Stages:")
+		switch {
+		case isHead:
+			inList, line = true, rest
+		case inList && strings.HasPrefix(line, " "):
+		default:
+			inList = false
+			continue
+		}
+		for _, name := range strings.Split(line, ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				advertised[name] = true
+			}
+		}
+	}
+
+	// The control. A parser that matched nothing would report every stage
+	// missing below, which reads like a real failure; naming two proves the
+	// list was actually read.
+	for _, name := range []string{"rotate", "remediate"} {
+		if !advertised[name] {
+			t.Fatalf("parsed no %q out of the usage, so the comparison below means nothing:\n%s",
+				name, buf.String())
+		}
+	}
+
+	for name := range stageCmds {
+		if !advertised[name] {
+			t.Errorf("stage %q dispatches but the usage never names it: a stage nobody finds", name)
+		}
+	}
+	for name := range advertised {
+		if !stageCmds[name] {
+			t.Errorf("usage advertises %q but no stage answers it: a caller following the help "+
+				"gets \"unknown stage\"", name)
+		}
 	}
 }
