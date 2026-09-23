@@ -119,6 +119,33 @@ func createOutput(path string) (io.Writer, func() error, error) {
 	return f, f.Close, nil
 }
 
+// reportWriter returns where a command's human-readable report belongs, given
+// the path its document went to.
+//
+// A command that writes its document to stdout must not also print there.
+// [createOutput] maps "-" and an empty path to os.Stdout, so `remediate -o -`
+// appended "Profile: ..." after %%EOF, inside the bytes the caller was
+// capturing, and `redact -o -` appended "Removed 0 text run(s), ...". litho
+// reopens such a file without complaint, because trailing bytes after %%EOF
+// are tolerated, so the contamination is silent: the caller gets a document
+// that looks fine and carries text it never asked for.
+//
+// Diagnostics move to stderr in that case, which is the ordinary convention
+// and keeps both halves: the report still reaches the caller, and the document
+// on stdout stays a document. The predicate deliberately matches
+// [createOutput]'s, since the two answer the same question and drifting apart
+// would reopen the bug.
+//
+// Sixteen other document-writing commands avoid the question by printing
+// nothing on success. remediate and redact are the only two that report, so
+// they are the only two that have to choose a stream.
+func reportWriter(outputPath string, stdout, stderr io.Writer) io.Writer {
+	if outputPath == "" || outputPath == "-" {
+		return stderr
+	}
+	return stdout
+}
+
 // abandonOutput closes a failed write and removes what it left behind.
 //
 // createOutput truncates the destination the moment it opens it, so a write

@@ -134,23 +134,27 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		result.Residual = append(result.Residual, e.Error())
 	}
 
+	// -o - writes the document to stdout, so the report goes to stderr rather
+	// than landing inside the bytes the caller is capturing. See [reportWriter].
+	reportOut := reportWriter(*output, stdout, stderr)
+
 	switch *format {
 	case "json":
 		// Not a direct return: the strict verdict below applies to both
 		// formats, and returning here once skipped it for JSON callers.
-		if code := jsonOut(stdout, stderr, result); code != exitOK {
+		if code := jsonOut(reportOut, stderr, result); code != exitOK {
 			return code
 		}
 	default:
-		fmt.Fprintf(stdout, "Profile:  %s\n", result.Profile)
-		fmt.Fprintf(stdout, "Fixed:    %d\n", len(result.Fixed))
+		fmt.Fprintf(reportOut, "Profile:  %s\n", result.Profile)
+		fmt.Fprintf(reportOut, "Fixed:    %d\n", len(result.Fixed))
 		for _, f := range result.Fixed {
-			fmt.Fprintf(stdout, "  %s\n", f)
+			fmt.Fprintf(reportOut, "  %s\n", f)
 		}
 		if len(result.Residual) > 0 {
-			fmt.Fprintf(stdout, "Residual: %d\n", len(result.Residual))
+			fmt.Fprintf(reportOut, "Residual: %d\n", len(result.Residual))
 			for _, r := range result.Residual {
-				fmt.Fprintf(stdout, "  %s\n", r)
+				fmt.Fprintf(reportOut, "  %s\n", r)
 			}
 		}
 	}
