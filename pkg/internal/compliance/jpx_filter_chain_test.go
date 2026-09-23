@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
+	"encoding/ascii85"
 	"encoding/binary"
 	"fmt"
 	"testing"
@@ -87,6 +88,22 @@ func flateEncoded(t *testing.T, data []byte) []byte {
 	return buf.Bytes()
 }
 
+// ascii85Encoded encodes data the way a PDF /ASCII85Decode stream stores it,
+// including the ~> end-of-data marker.
+func ascii85Encoded(t *testing.T, data []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	enc := ascii85.NewEncoder(&buf)
+	if _, err := enc.Write(data); err != nil {
+		t.Fatalf("encoding the codestream: %v", err)
+	}
+	if err := enc.Close(); err != nil {
+		t.Fatalf("closing the encoder: %v", err)
+	}
+	buf.WriteString("~>")
+	return buf.Bytes()
+}
+
 // TestCheckJPXImageBehindOuterFilter pins that a JPEG2000 violation is
 // reported whatever precedes JPXDecode in the filter chain.
 //
@@ -117,6 +134,15 @@ func TestCheckJPXImageBehindOuterFilter(t *testing.T) {
 			name:   "behind FlateDecode",
 			filter: "[/FlateDecode /JPXDecode]",
 			data:   flateEncoded(t, codestream),
+		},
+		{
+			// The comment above names this chain as issue11004.pdf's and the
+			// table did not carry it, so the case the file documents was the
+			// one case left unexercised. Measured when added: it already
+			// passed, so this is protection rather than a fix.
+			name:   "behind ASCII85Decode",
+			filter: "[/ASCII85Decode /JPXDecode]",
+			data:   ascii85Encoded(t, codestream),
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
