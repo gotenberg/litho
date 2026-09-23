@@ -7,13 +7,15 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter/mq"
 )
 
-// maxDecodedPixels bounds the total area of all the regions one Decode call
-// decodes. It is an anti-DoS guard, not spec-mandated: each region is capped
-// by maxBitmapPixels, but a short stream can declare many regions, and an
-// arithmetically coded region costs time in proportion to its area however
-// few bytes back it, since the decoder reads 1-bits past the end of its data.
-// Four page-sized areas leave room for a page drawn in overlapping regions and
-// intermediate buffers, while refusing thousands of empty full-size regions.
+// maxDecodedPixels bounds the total area one Decode call decodes or draws:
+// every region, every symbol bitmap, and every symbol instance a text region
+// draws. It is an anti-DoS guard, not spec-mandated: each bitmap is capped by
+// maxBitmapPixels, but a short stream can declare many of them, and
+// arithmetically coded data costs time in proportion to the area it covers
+// however few bytes back it, since the decoder reads 1-bits past the end of
+// its data. Four page-sized areas leave room for a page drawn in overlapping
+// regions and intermediate buffers, while refusing thousands of empty
+// full-size ones.
 const maxDecodedPixels = 4 * maxBitmapPixels
 
 // Decode decodes one page of JBIG2 data in the embedded organisation (ITU-T
@@ -80,7 +82,42 @@ type decoder struct {
 	// or 0 before the first.
 	stripeEnd int
 	ended     bool
-	decoded   int64
+	budget    budget
+	// dicts holds the decoded symbol dictionaries, by segment number, for the
+	// segments that refer to them.
+	dicts map[uint32]*symbolDict
+	// aux holds the auxiliary buffers of intermediate region segments (8.2 step
+	// 5 b), by the number of the segment they are currently associated with.
+	aux map[uint32]*auxRegion
+	// seen records every segment processed so far, so that a reference to one
+	// the data never held can be told apart from one to a tables segment.
+	seen map[uint32]bool
+}
+
+// auxRegion is an auxiliary buffer: an intermediate region's bitmap and the
+// region information giving where it will eventually be drawn.
+type auxRegion struct {
+	bm   *Bitmap
+	info regionInfo
+}
+
+// budget counts the area of the bitmaps one Decode call decodes or draws
+// against maxDecodedPixels.
+type budget struct {
+	used int64
+}
+
+// charge counts width x height pixels, refusing any single area above
+// maxBitmapPixels and any total above maxDecodedPixels.
+func (b *budget) charge(width, height int64) error {
+	if areaExceeds(width, height, maxBitmapPixels) {
+		return fmt.Errorf("%w: region of %dx%d pixels exceeds %d", ErrLimit, width, height, maxBitmapPixels)
+	}
+	b.used += width * height
+	if b.used > maxDecodedPixels {
+		return fmt.Errorf("%w: regions total more than %d pixels", ErrLimit, int64(maxDecodedPixels))
+	}
+	return nil
 }
 
 // process decodes one segment and applies it to the page (T.88, 8.2).
@@ -88,6 +125,10 @@ func (d *decoder) process(ctx context.Context, seg segment) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	if d.seen == nil {
+		d.seen = make(map[uint32]bool)
+	}
+	d.seen[seg.number] = true
 	var err error
 	switch seg.kind {
 	case typePageInformation:
@@ -96,17 +137,22 @@ func (d *decoder) process(ctx context.Context, seg segment) error {
 		err = d.endOfStripe(seg)
 	case typeEndOfPage, typeEndOfFile:
 		d.ended = true
-	case typeImmediateGeneric, typeImmediateLosslessGeneric:
-		err = d.immediateGeneric(ctx, seg)
+	case typeSymbolDictionary:
+		err = d.symbolDictionary(ctx, seg)
+	case typeIntermediateGeneric, typeImmediateGeneric, typeImmediateLosslessGeneric,
+		typeIntermediateText, typeImmediateText, typeImmediateLosslessText:
+		err = d.directRegion(ctx, seg)
+	case typeIntermediateRefinement, typeImmediateRefinement, typeImmediateLosslessRefine:
+		err = d.refinementRegion(ctx, seg)
+	case typeTables:
+		// A tables segment only defines Huffman codes for the segments that
+		// refer to it (7.4.13), and only the Huffman variants use them.
 	case typeProfiles:
 		// A profiles segment lists what the stream conforms to (7.4.12); it
 		// changes nothing a decoder produces.
 	case typeExtension:
 		err = checkExtension(seg)
-	case typeSymbolDictionary, typeIntermediateText, typeImmediateText, typeImmediateLosslessText,
-		typePatternDictionary, typeIntermediateHalftone, typeImmediateHalftone, typeImmediateLosslessHalf,
-		typeIntermediateGeneric, typeIntermediateRefinement, typeImmediateRefinement, typeImmediateLosslessRefine,
-		typeTables:
+	case typePatternDictionary, typeIntermediateHalftone, typeImmediateHalftone, typeImmediateLosslessHalf:
 		err = fmt.Errorf("%w: segment %d of type %d", ErrUnsupported, seg.number, seg.kind)
 	default:
 		// 7.3: every other value is reserved and must not be used.
@@ -202,9 +248,141 @@ func (d *decoder) growPage(height int64) error {
 	return nil
 }
 
-// immediateGeneric decodes an immediate generic region segment (T.88, 7.4.6)
-// and combines it with the page (8.2 step 5 a).
-func (d *decoder) immediateGeneric(ctx context.Context, seg segment) error {
+// referredSymbols concatenates the symbols the dictionaries seg refers to
+// export, in referral order (T.88, Tables 28 and 31).
+//
+// Referred-to segments that are not symbol dictionaries are skipped: a tables
+// segment matters only to the Huffman variants. A referred-to segment the data
+// never held is malformed (7.2.5 allows references only to earlier segments),
+// and is reported as such rather than as the out-of-range symbol IDs that
+// decoding without its symbols would run into.
+func (d *decoder) referredSymbols(seg segment) ([]*symbolDict, []*Bitmap, error) {
+	var dicts []*symbolDict
+	for _, n := range seg.referred {
+		if dict, ok := d.dicts[n]; ok {
+			dicts = append(dicts, dict)
+			continue
+		}
+		if !d.seen[n] {
+			return nil, nil, fmt.Errorf("%w: refers to segment %d, which the data does not contain", ErrMalformed, n)
+		}
+	}
+	var n int64
+	for _, dict := range dicts {
+		n += int64(len(dict.exported))
+	}
+	if n > maxSymbols {
+		return nil, nil, fmt.Errorf("%w: referred-to dictionaries export %d symbols, more than %d", ErrLimit, n, maxSymbols)
+	}
+	syms := make([]*Bitmap, 0, n)
+	for _, dict := range dicts {
+		syms = append(syms, dict.exported...)
+	}
+	return dicts, syms, nil
+}
+
+// symbolDictionary decodes a symbol dictionary segment (T.88, 7.4.2) and keeps
+// its exported symbols for the segments that refer to it.
+func (d *decoder) symbolDictionary(ctx context.Context, seg segment) error {
+	dicts, syms, err := d.referredSymbols(seg)
+	if err != nil {
+		return err
+	}
+	var last *symbolDict
+	if len(dicts) > 0 {
+		last = dicts[len(dicts)-1]
+	}
+	dict, err := decodeSymbolDict(ctx, seg, syms, last, &d.budget)
+	if err != nil {
+		return err
+	}
+	if d.dicts == nil {
+		d.dicts = make(map[uint32]*symbolDict)
+	}
+	d.dicts[seg.number] = dict
+	return nil
+}
+
+// directRegion decodes a generic or text region segment. An intermediate one
+// becomes an auxiliary buffer (T.88, 8.2 step 5 b); an immediate one is
+// combined with the page (step 5 a).
+func (d *decoder) directRegion(ctx context.Context, seg segment) error {
+	if d.page == nil {
+		return fmt.Errorf("%w: region before page information", ErrMalformed)
+	}
+	var bm *Bitmap
+	var info regionInfo
+	var err error
+	switch seg.kind {
+	case typeIntermediateText, typeImmediateText, typeImmediateLosslessText:
+		bm, info, err = d.textRegion(ctx, seg)
+	default:
+		bm, info, err = d.genericRegion(ctx, seg)
+	}
+	if err != nil {
+		return err
+	}
+	if seg.kind == typeIntermediateText || seg.kind == typeIntermediateGeneric {
+		d.keepAux(seg.number, &auxRegion{bm: bm, info: info})
+		return nil
+	}
+	return d.drawRegion(bm, info.x, info.y, info.combineOp)
+}
+
+// genericRegion decodes a generic region segment (T.88, 7.4.6).
+func (d *decoder) genericRegion(ctx context.Context, seg segment) (*Bitmap, regionInfo, error) {
+	info, err := parseRegionInfo(seg.data)
+	if err != nil {
+		return nil, regionInfo{}, err
+	}
+	if seg.rows >= 0 {
+		// 7.4.6.4: a region of unknown length may hold fewer rows than its
+		// header states, and its trailing row count says how many.
+		if seg.rows > info.height {
+			return nil, regionInfo{}, fmt.Errorf("%w: row count %d exceeds the region height %d", ErrMalformed, seg.rows, info.height)
+		}
+		info.height = seg.rows
+	}
+	if err := d.budget.charge(info.width, info.height); err != nil {
+		return nil, regionInfo{}, err
+	}
+	bm, err := decodeGenericSegment(ctx, seg.data, int(info.width), int(info.height))
+	return bm, info, err
+}
+
+// textRegion decodes a text region segment (T.88, 7.4.3.2), which starts from
+// reset statistics (step 3).
+func (d *decoder) textRegion(ctx context.Context, seg segment) (*Bitmap, regionInfo, error) {
+	ts, err := parseTextSegment(seg.data)
+	if err != nil {
+		return nil, regionInfo{}, err
+	}
+	if ts.huffman {
+		return nil, regionInfo{}, fmt.Errorf("%w: Huffman-coded text region", ErrUnsupported)
+	}
+	_, syms, err := d.referredSymbols(seg)
+	if err != nil {
+		return nil, regionInfo{}, err
+	}
+	if areaExceeds(ts.info.width, ts.info.height, maxBitmapPixels) {
+		return nil, regionInfo{}, fmt.Errorf("%w: text region of %dx%d pixels exceeds %d", ErrLimit, ts.info.width, ts.info.height, maxBitmapPixels)
+	}
+	p := ts.params
+	p.width, p.height = int(ts.info.width), int(ts.info.height)
+	p.syms = syms
+	st := &arithState{
+		dec:    mq.NewDecoder(seg.data[ts.dataStart:]),
+		iaid:   newIAID(symbolCodeLen(len(syms))),
+		gr:     make([]mq.Context, refineContexts(p.refTemplate)),
+		budget: &d.budget,
+	}
+	bm, err := decodeText(ctx, p, st)
+	return bm, ts.info, err
+}
+
+// refinementRegion decodes a generic refinement region segment (T.88, 7.4.7)
+// and applies it as 8.2 steps 5 c to 5 e describe.
+func (d *decoder) refinementRegion(ctx context.Context, seg segment) error {
 	if d.page == nil {
 		return fmt.Errorf("%w: region before page information", ErrMalformed)
 	}
@@ -212,41 +390,97 @@ func (d *decoder) immediateGeneric(ctx context.Context, seg segment) error {
 	if err != nil {
 		return err
 	}
-	height := info.height
-	if seg.rows >= 0 {
-		// 7.4.6.4: a region of unknown length may hold fewer rows than its
-		// header states, and its trailing row count says how many.
-		if seg.rows > info.height {
-			return fmt.Errorf("%w: row count %d exceeds the region height %d", ErrMalformed, seg.rows, info.height)
+	if areaExceeds(info.width, info.height, maxBitmapPixels) {
+		return fmt.Errorf("%w: refinement region of %dx%d pixels exceeds %d", ErrLimit, info.width, info.height, maxBitmapPixels)
+	}
+	c := &cursor{b: seg.data, off: regionInfoSize}
+	flags := c.u8()
+	p := refineParams{
+		width:    int(info.width),
+		height:   int(info.height),
+		template: int(flags & 1),
+		tpgron:   flags&2 != 0,
+	}
+	if p.template == 0 {
+		for i := range 2 {
+			p.at[i][0] = c.s8()
+			p.at[i][1] = c.s8()
 		}
-		height = seg.rows
 	}
-	if err := d.charge(info.width, height); err != nil {
-		return err
+	if c.err != nil {
+		return c.err
 	}
-	bm, err := decodeGenericSegment(ctx, seg.data, int(info.width), int(height))
+
+	// 7.4.7.4: the reference is the referred-to intermediate region's buffer,
+	// or, with no referred-to segment, the page area the region covers.
+	var ref *auxRegion
+	switch len(seg.referred) {
+	case 0:
+		if seg.kind == typeIntermediateRefinement {
+			return fmt.Errorf("%w: intermediate refinement region refers to no region", ErrMalformed)
+		}
+		if d.heightUnknown {
+			if err := d.growPage(info.y + info.height); err != nil {
+				return err
+			}
+		}
+		p.reference = d.page.area(info.x, info.y, p.width, p.height)
+	case 1:
+		ref = d.aux[seg.referred[0]]
+		if ref == nil {
+			return fmt.Errorf("%w: refinement region refers to segment %d, which holds no intermediate region", ErrMalformed, seg.referred[0])
+		}
+		p.reference = ref.bm
+	default:
+		return fmt.Errorf("%w: refinement region refers to %d segments", ErrMalformed, len(seg.referred))
+	}
+
+	// 7.4.7.5 step 2: the statistics start reset. Table 35 aligns the
+	// reference with the region, GRREFERENCEDX and GRREFERENCEDY 0.
+	st := &arithState{
+		dec:    mq.NewDecoder(seg.data[c.off:]),
+		gr:     make([]mq.Context, refineContexts(p.template)),
+		budget: &d.budget,
+	}
+	bm, err := decodeRefinement(ctx, p, st)
 	if err != nil {
 		return err
 	}
+	switch {
+	case seg.kind == typeIntermediateRefinement:
+		// Step 5 e: the refined buffer replaces the one it refines and moves to
+		// this segment.
+		delete(d.aux, seg.referred[0])
+		d.keepAux(seg.number, &auxRegion{bm: bm, info: ref.info})
+		return nil
+	case ref != nil:
+		// Step 5 d: draw the refined buffer where the buffer it refines was
+		// to go, with this segment's operator, then discard it.
+		delete(d.aux, seg.referred[0])
+		return d.drawRegion(bm, ref.info.x, ref.info.y, info.combineOp)
+	default:
+		// Step 5 c: the refined area replaces that part of the page.
+		return d.drawRegion(bm, info.x, info.y, combineReplace)
+	}
+}
+
+// keepAux associates an auxiliary buffer with segment n.
+func (d *decoder) keepAux(n uint32, a *auxRegion) {
+	if d.aux == nil {
+		d.aux = make(map[uint32]*auxRegion)
+	}
+	d.aux[n] = a
+}
+
+// drawRegion combines a region bitmap with the page at (x, y), first growing
+// a page of unknown height to hold it.
+func (d *decoder) drawRegion(bm *Bitmap, x, y int64, op int) error {
 	if d.heightUnknown {
-		if err := d.growPage(info.y + height); err != nil {
+		if err := d.growPage(y + int64(bm.Height)); err != nil {
 			return err
 		}
 	}
-	return d.page.combine(bm, info.x, info.y, info.combineOp)
-}
-
-// charge counts a region's area against maxDecodedPixels before it is
-// decoded.
-func (d *decoder) charge(width, height int64) error {
-	if areaExceeds(width, height, maxBitmapPixels) {
-		return fmt.Errorf("%w: region of %dx%d pixels exceeds %d", ErrLimit, width, height, maxBitmapPixels)
-	}
-	d.decoded += width * height
-	if d.decoded > maxDecodedPixels {
-		return fmt.Errorf("%w: regions total more than %d pixels", ErrLimit, int64(maxDecodedPixels))
-	}
-	return nil
+	return d.page.combine(bm, x, y, op)
 }
 
 // decodeGenericSegment decodes the data part of a generic region segment

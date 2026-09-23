@@ -3,6 +3,7 @@ package jbig2
 import (
 	"encoding/binary"
 	"math/rand/v2"
+	"sort"
 )
 
 // This file holds a test-only JBIG2 generic region encoder. It exists so the
@@ -204,10 +205,16 @@ func encGather(values []uint32) uint32 {
 // encodeGeneric codes bm with template-based arithmetic coding, T.88 6.2.5,
 // and returns the coded bytes.
 func encodeGeneric(bm *Bitmap, template int, tpgdon bool, at [][2]int) []byte {
-	offsets := append(append([][2]int{}, encTemplates[template]...), at...)
-	contexts := make([]encContext, 1<<len(offsets))
-	sltp := encGather(encSLTP[template])
 	e := newMQEncoder()
+	encodeGenericWith(e, bm, template, tpgdon, at, make([]encContext, 1<<(len(encTemplates[template])+len(at))))
+	return e.flush()
+}
+
+// encodeGenericWith codes bm into e with the given contexts, which a symbol
+// dictionary shares across its bitmaps and may hand to the next dictionary.
+func encodeGenericWith(e *mqEncoder, bm *Bitmap, template int, tpgdon bool, at [][2]int, contexts []encContext) {
+	offsets := append(append([][2]int{}, encTemplates[template]...), at...)
+	sltp := encGather(encSLTP[template])
 	var ltp uint32
 	values := make([]uint32, len(offsets))
 	for y := range bm.Height {
@@ -232,7 +239,6 @@ func encodeGeneric(bm *Bitmap, template int, tpgdon bool, at [][2]int) []byte {
 			e.encode(&contexts[encGather(values)], bm.pixel(x, y))
 		}
 	}
-	return e.flush()
 }
 
 // genericStream wraps coded generic region data in an embedded JBIG2 stream: a
@@ -313,4 +319,400 @@ func sltpImage(template int) *Bitmap {
 		}
 	}
 	return bm
+}
+
+// encInt is a test-only arithmetic integer encoder, ITU-T T.88 Table A.1: a
+// sign bit, then a prefix naming the range, then the offset within it.
+type encInt struct {
+	cx [512]encContext
+}
+
+// encIntRanges transcribes Table A.1 by magnitude: values from lo upward are
+// coded with prefix, then n bits of the magnitude minus lo.
+//
+//nolint:gochecknoglobals // test-only transcription of ITU-T T.88 Table A.1
+var encIntRanges = []struct {
+	lo     int64
+	prefix []uint32
+	n      int
+}{
+	{0, []uint32{0}, 2},
+	{4, []uint32{1, 0}, 4},
+	{20, []uint32{1, 1, 0}, 6},
+	{84, []uint32{1, 1, 1, 0}, 8},
+	{340, []uint32{1, 1, 1, 1, 0}, 12},
+	{4436, []uint32{1, 1, 1, 1, 1}, 32},
+}
+
+func (ei *encInt) put(e *mqEncoder, prev *int, bit uint32) {
+	e.encode(&ei.cx[*prev], bit)
+	if *prev < 256 {
+		*prev = *prev<<1 | int(bit)
+	} else {
+		*prev = (*prev<<1|int(bit))&511 | 256
+	}
+}
+
+// encode codes v, or OOB when oob is true (Table A.1: OOB is 1000).
+func (ei *encInt) encode(e *mqEncoder, v int64, oob bool) {
+	prev := 1
+	if oob {
+		for _, b := range []uint32{1, 0, 0, 0} {
+			ei.put(e, &prev, b)
+		}
+		return
+	}
+	var sign uint32
+	mag := v
+	if v < 0 {
+		sign, mag = 1, -v
+	}
+	ei.put(e, &prev, sign)
+	r := encIntRanges[0]
+	for _, candidate := range encIntRanges {
+		if mag >= candidate.lo {
+			r = candidate
+		}
+	}
+	for _, b := range r.prefix {
+		ei.put(e, &prev, b)
+	}
+	off := mag - r.lo
+	for i := r.n - 1; i >= 0; i-- {
+		ei.put(e, &prev, uint32(off>>uint(i))&1)
+	}
+}
+
+// encIAID codes fixed-length symbol IDs, ITU-T T.88 A.3.
+type encIAID struct {
+	codeLen int
+	cx      []encContext
+}
+
+func newEncIAID(codeLen int) *encIAID {
+	return &encIAID{codeLen: codeLen, cx: make([]encContext, 1<<(codeLen+1))}
+}
+
+func (ea *encIAID) encode(e *mqEncoder, id int) {
+	prev := 1
+	for i := ea.codeLen - 1; i >= 0; i-- {
+		bit := uint32(id>>uint(i)) & 1
+		e.encode(&ea.cx[prev], bit)
+		prev = prev<<1 | int(bit)
+	}
+}
+
+// encRefineTemplates transcribes ITU-T T.88 Figures 12 and 13 again: the
+// refined bitmap's pixels, then the reference's, as (x, y) offsets, with the
+// AT pixels RA1 and RA2 of template 0 listed last in each group.
+//
+//nolint:gochecknoglobals // test-only transcription of ITU-T T.88 Figures 12 and 13
+var encRefineTemplates = [2]struct{ refined, reference [][2]int }{
+	{
+		refined:   [][2]int{{0, -1}, {1, -1}, {-1, 0}},
+		reference: [][2]int{{0, -1}, {1, -1}, {-1, 0}, {0, 0}, {1, 0}, {-1, 1}, {0, 1}, {1, 1}},
+	},
+	{
+		refined:   [][2]int{{-1, -1}, {0, -1}, {1, -1}, {-1, 0}},
+		reference: [][2]int{{0, -1}, {-1, 0}, {0, 0}, {1, 0}, {0, 1}, {1, 1}},
+	},
+}
+
+// encodeRefinement codes target as a refinement of reference, aligned at the
+// origin, T.88 6.3.5.6, and returns the coded bytes. at holds RA1 and RA2 for
+// template 0.
+func encodeRefinement(target, reference *Bitmap, template int, tpgron bool, at [2][2]int) []byte {
+	t := encRefineTemplates[template]
+	refined := append([][2]int{}, t.refined...)
+	ref := append([][2]int{}, t.reference...)
+	if template == 0 {
+		refined = append(refined, at[0])
+		ref = append(ref, at[1])
+	}
+	gather := func(x, y int) uint32 {
+		values := make([]uint32, 0, len(refined)+len(ref))
+		for _, o := range refined {
+			values = append(values, target.pixel(x+o[0], y+o[1]))
+		}
+		for _, o := range ref {
+			values = append(values, reference.pixel(x+o[0], y+o[1]))
+		}
+		return encGather(values)
+	}
+	// Figures 14 and 15: every template pixel 0 but the reference pixel under
+	// the one being coded.
+	sltpValues := make([]uint32, len(refined)+len(ref))
+	for i, o := range ref {
+		if o == [2]int{0, 0} && i < len(t.reference) {
+			sltpValues[len(refined)+i] = 1
+		}
+	}
+	sltp := encGather(sltpValues)
+
+	// predicted reports the TPGR prediction of Figure 16: the value of a
+	// uniform 3x3 reference block centred on (x, y).
+	predicted := func(x, y int) (uint32, bool) {
+		v := reference.pixel(x, y)
+		for dy := -1; dy <= 1; dy++ {
+			for dx := -1; dx <= 1; dx++ {
+				if reference.pixel(x+dx, y+dy) != v {
+					return 0, false
+				}
+			}
+		}
+		return v, true
+	}
+
+	contexts := make([]encContext, 1<<(len(refined)+len(ref)))
+	e := newMQEncoder()
+	var ltp uint32
+	for y := range target.Height {
+		if tpgron {
+			// A row may be declared typical when every predictable pixel in it
+			// has its predicted value.
+			typical := uint32(1)
+			for x := range target.Width {
+				if v, ok := predicted(x, y); ok && target.pixel(x, y) != v {
+					typical = 0
+					break
+				}
+			}
+			e.encode(&contexts[sltp], typical^ltp)
+			ltp = typical
+		}
+		for x := range target.Width {
+			if ltp == 1 {
+				if _, ok := predicted(x, y); ok {
+					continue
+				}
+			}
+			e.encode(&contexts[gather(x, y)], target.pixel(x, y))
+		}
+	}
+	return e.flush()
+}
+
+// refinementStream wraps a refinement in an embedded JBIG2 stream: a page the
+// reference's size, an immediate generic region drawing the reference, then
+// an immediate refinement region referring to no segment, which T.88 7.4.7.4
+// refines against the page area it covers and 8.2 step 5 c draws with REPLACE.
+func refinementStream(reference *Bitmap, template int, tpgron bool, at [2][2]int, coded []byte) []byte {
+	w, h := reference.Width, reference.Height
+	page := binary.BigEndian.AppendUint32(nil, uint32(w))
+	page = binary.BigEndian.AppendUint32(page, uint32(h))
+	page = append(page, make([]byte, 11)...)
+
+	genericAT := encNominalAT[0]
+	generic := binary.BigEndian.AppendUint32(nil, uint32(w))
+	generic = binary.BigEndian.AppendUint32(generic, uint32(h))
+	generic = append(generic, make([]byte, 9)...)
+	generic = append(generic, 0)
+	for _, a := range genericAT {
+		generic = append(generic, byte(int8(a[0])), byte(int8(a[1])))
+	}
+	generic = append(generic, encodeGeneric(reference, 0, false, genericAT)...)
+
+	region := binary.BigEndian.AppendUint32(nil, uint32(w))
+	region = binary.BigEndian.AppendUint32(region, uint32(h))
+	region = append(region, make([]byte, 8)...)
+	region = append(region, combineReplace)
+	flags := byte(template)
+	if tpgron {
+		flags |= 2
+	}
+	region = append(region, flags)
+	if template == 0 {
+		for _, a := range at {
+			region = append(region, byte(int8(a[0])), byte(int8(a[1])))
+		}
+	}
+	region = append(region, coded...)
+
+	return concat(
+		segmentBytes(0, typePageInformation, 1, page),
+		segmentBytes(1, typeImmediateGeneric, 1, generic),
+		segmentBytes(2, typeImmediateRefinement, 1, region),
+	)
+}
+
+// dotsImage draws isolated dots three pixels apart. Around a lone dot the
+// refinement template sees only the reference pixel under the one being coded,
+// which is exactly the SLTP pattern of Figures 14 and 15, so a refinement of
+// this image codes pixels in the SLTP context.
+func dotsImage(width, height int) *Bitmap {
+	bm, err := newBitmap(width, height)
+	if err != nil {
+		panic(err)
+	}
+	for y := 1; y < height; y += 3 {
+		for x := 1 + y%2; x < width; x += 3 {
+			bm.setPixel(x, y, 1)
+		}
+	}
+	return bm
+}
+
+// refinedImage derives a refinement target from ref: most of it unchanged,
+// so TPGR rows occur, with a band of flipped pixels, a filled block and a few
+// dots removed.
+func refinedImage(ref *Bitmap, seed uint64) *Bitmap {
+	out, err := newBitmap(ref.Width, ref.Height)
+	if err != nil {
+		panic(err)
+	}
+	copy(out.Data, ref.Data)
+	r := rand.New(rand.NewPCG(seed, ^seed))
+	for y := ref.Height / 3; y < ref.Height/3+4 && y < ref.Height; y++ {
+		for x := range ref.Width {
+			if r.IntN(4) == 0 {
+				out.setPixel(x, y, 1^out.pixel(x, y))
+			}
+		}
+	}
+	for y := 2 * ref.Height / 3; y < 2*ref.Height/3+6 && y < ref.Height; y++ {
+		for x := 5; x < 20 && x < ref.Width; x++ {
+			out.setPixel(x, y, 1)
+		}
+	}
+	for range 20 {
+		out.setPixel(r.IntN(ref.Width), r.IntN(ref.Height), 0)
+	}
+	return out
+}
+
+// encInstance is one symbol instance to code: a symbol and the (S, T)
+// coordinates of its reference corner.
+type encInstance struct {
+	id   int
+	s, t int64
+}
+
+// encAdvance returns how far T.88 6.4.5 moves CURS for a symbol before placing
+// it (step 3 c vi) and after (step 3 c x), from its reference corner and the
+// strip direction: the gap between instances is coded, not the distance
+// between their corners.
+func encAdvance(p textParams, w, h int64) (before, after int64) {
+	right := p.refCorner == cornerTopRight || p.refCorner == cornerBottomRight
+	bottom := p.refCorner == cornerBottomLeft || p.refCorner == cornerBottomRight
+	if !p.transposed {
+		if right {
+			return w - 1, 0
+		}
+		return 0, w - 1
+	}
+	if bottom {
+		return h - 1, 0
+	}
+	return 0, h - 1
+}
+
+// encodeText codes instances as a text region with arithmetic coding, T.88
+// 6.4.5 run backwards: instances are grouped into strips of p.strips by T,
+// ordered by S within a strip, and each strip ends with an OOB delta S.
+func encodeText(p textParams, instances []encInstance) []byte {
+	type strip struct {
+		base int64
+		list []encInstance
+	}
+	floorDiv := func(a, b int64) int64 {
+		q := a / b
+		if a%b != 0 && (a < 0) != (b < 0) {
+			q--
+		}
+		return q
+	}
+	byBase := map[int64]*strip{}
+	var strips []*strip
+	for _, in := range instances {
+		base := floorDiv(in.t, p.strips) * p.strips
+		st, ok := byBase[base]
+		if !ok {
+			st = &strip{base: base}
+			byBase[base] = st
+			strips = append(strips, st)
+		}
+		st.list = append(st.list, in)
+	}
+	sort.Slice(strips, func(i, j int) bool { return strips[i].base < strips[j].base })
+
+	e := newMQEncoder()
+	var iadt, iafs, iads, iait encInt
+	iaid := newEncIAID(symbolCodeLen(len(p.syms)))
+	iadt.encode(e, 0, false)
+	var stripT, firstS int64
+	for _, st := range strips {
+		sort.SliceStable(st.list, func(i, j int) bool { return st.list[i].s < st.list[j].s })
+		iadt.encode(e, (st.base-stripT)/p.strips, false)
+		stripT = st.base
+		var curS int64
+		for i, in := range st.list {
+			sym := p.syms[in.id]
+			before, after := encAdvance(p, int64(sym.Width), int64(sym.Height))
+			start := in.s - before
+			if i == 0 {
+				iafs.encode(e, start-firstS, false)
+				firstS = start
+			} else {
+				iads.encode(e, start-curS-p.dsOffset, false)
+			}
+			if p.strips > 1 {
+				iait.encode(e, in.t-stripT, false)
+			}
+			iaid.encode(e, in.id)
+			curS = in.s + after
+		}
+		iads.encode(e, 0, true)
+	}
+	return e.flush()
+}
+
+// symbolDictSegment codes syms, which must come grouped by height, as a
+// symbol dictionary segment with arithmetic coding and direct bitmaps
+// (SDREFAGG 0) over numIn input symbols, exporting exactly the new symbols
+// (T.88 6.5.5 and 7.4.2). gb carries the generic contexts in and out, so two
+// calls can share them the way E.3.8 lets dictionaries do.
+func symbolDictSegment(number uint32, refs []uint32, syms []*Bitmap, numIn int, used, retain bool, gb []encContext) []byte {
+	const template = 2
+	at := encNominalAT[template]
+	e := newMQEncoder()
+	var iadh, iadw, iaex encInt
+	height := 0
+	for i := 0; i < len(syms); {
+		h := syms[i].Height
+		iadh.encode(e, int64(h-height), false)
+		height = h
+		width := 0
+		for ; i < len(syms) && syms[i].Height == h; i++ {
+			iadw.encode(e, int64(syms[i].Width-width), false)
+			width = syms[i].Width
+			encodeGenericWith(e, syms[i], template, false, at, gb)
+		}
+		iadw.encode(e, 0, true)
+	}
+	iaex.encode(e, int64(numIn), false)
+	iaex.encode(e, int64(len(syms)), false)
+
+	flags := uint16(template << 10)
+	if used {
+		flags |= 0x100
+	}
+	if retain {
+		flags |= 0x200
+	}
+	data := binary.BigEndian.AppendUint16(nil, flags)
+	for _, a := range at {
+		data = append(data, byte(int8(a[0])), byte(int8(a[1])))
+	}
+	data = binary.BigEndian.AppendUint32(data, uint32(len(syms)))
+	data = binary.BigEndian.AppendUint32(data, uint32(len(syms)))
+	data = append(data, e.flush()...)
+
+	h := binary.BigEndian.AppendUint32(nil, number)
+	h = append(h, typeSymbolDictionary, byte(len(refs)<<5))
+	for _, r := range refs {
+		h = append(h, byte(r))
+	}
+	h = append(h, 1)
+	h = binary.BigEndian.AppendUint32(h, uint32(len(data)))
+	return concat(h, data)
 }

@@ -36,6 +36,17 @@ func FuzzDecode(f *testing.F) {
 	src := testImage(40, 24, 7)
 	at := [][2]int{{4, -2}, {-5, -1}, {1, -3}, {-6, -3}}
 	f.Add(genericStream(src.Width, src.Height, 0, true, at, encodeGeneric(src, 0, true, at)), []byte(nil))
+	// Symbol dictionaries, text regions with refinement, and globals: Annex
+	// H.1 page 3 and the ISO 32000-1 example.
+	f.Add(concat(raw[15], raw[16], raw[17], raw[18], raw[19]), []byte(nil))
+	if page, err := os.ReadFile("testdata/iso32000_jbig2_page.jb2"); err == nil {
+		if globals, err := os.ReadFile("testdata/iso32000_jbig2_globals.jb2"); err == nil {
+			f.Add(page, globals)
+		}
+	}
+	ref := testImage(24, 16, 3)
+	f.Add(refinementStream(ref, 0, true, [2][2]int{{-1, -1}, {-1, -1}},
+		encodeRefinement(refinedImage(ref, 1), ref, 0, true, [2][2]int{{-1, -1}, {-1, -1}})), []byte(nil))
 	f.Add([]byte{}, []byte{})
 
 	f.Fuzz(func(t *testing.T, data, globals []byte) {

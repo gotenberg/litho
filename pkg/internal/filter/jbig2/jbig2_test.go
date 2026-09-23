@@ -265,7 +265,9 @@ func TestDecode_Refusals(t *testing.T) {
 		{"no page information", segmentBytes(0, typeEndOfPage, 1, nil), ErrMalformed},
 		{"page larger than the pixel cap", pageInfo(0xFFFFFFFF, 0xFFFFFFFE), ErrLimit},
 		{"reserved segment type", concat(pageInfo(8, 8), segmentBytes(1, 1, 1, nil)), ErrMalformed},
-		{"symbol dictionary", concat(pageInfo(8, 8), segmentBytes(1, typeSymbolDictionary, 1, nil)), ErrUnsupported},
+		{"pattern dictionary", concat(pageInfo(8, 8), segmentBytes(1, typePatternDictionary, 1, nil)), ErrUnsupported},
+		{"Huffman symbol dictionary", concat(pageInfo(8, 8), segmentBytes(1, typeSymbolDictionary, 1, []byte{0, 1, 0, 0, 0, 0, 0, 0, 0, 0})), ErrUnsupported},
+		{"truncated symbol dictionary", concat(pageInfo(8, 8), segmentBytes(1, typeSymbolDictionary, 1, nil)), ErrMalformed},
 		{"necessary extension", concat(pageInfo(8, 8), segmentBytes(1, typeExtension, 1, []byte{0xA0, 0, 0, 1})), ErrUnsupported},
 		{"data length past the end", concat(pageInfo(8, 8), []byte{0, 0, 0, 1, typeEndOfPage, 0, 1, 0, 0, 0, 9}), ErrMalformed},
 		{"referred-to count 5", []byte{0, 0, 0, 1, typeEndOfPage, 0xA0, 1, 0, 0, 0, 0}, ErrMalformed},
@@ -286,16 +288,16 @@ func TestDecode_Refusals(t *testing.T) {
 func TestDecode_ChargeBoundsTotalArea(t *testing.T) {
 	t.Parallel()
 
-	d := &decoder{}
+	b := &budget{}
 	for i := range 4 {
-		if err := d.charge(10_000, 10_000); err != nil {
+		if err := b.charge(10_000, 10_000); err != nil {
 			t.Fatalf("region %d of a page-sized area refused: %v", i+1, err)
 		}
 	}
-	if err := d.charge(1, 1); !errors.Is(err, ErrLimit) {
+	if err := b.charge(1, 1); !errors.Is(err, ErrLimit) {
 		t.Errorf("pixel past four page-sized areas: err = %v, want ErrLimit", err)
 	}
-	if err := (&decoder{}).charge(0xFFFFFFFF, 0xFFFFFFFF); !errors.Is(err, ErrLimit) {
+	if err := (&budget{}).charge(0xFFFFFFFF, 0xFFFFFFFF); !errors.Is(err, ErrLimit) {
 		t.Errorf("2^32-1 square region: err = %v, want ErrLimit", err)
 	}
 }

@@ -124,3 +124,18 @@ func (b *Bitmap) combine(src *Bitmap, x, y int64, op int) error {
 	}
 	return nil
 }
+
+// area returns a copy of the width x height part of b whose top left corner
+// is (x, y). Pixels of that area outside b are 0.
+func (b *Bitmap) area(x, y int64, width, height int) *Bitmap {
+	out := &Bitmap{Width: width, Height: height, Stride: (width + 7) / 8}
+	out.Data = make([]byte, out.Stride*height)
+	for ay := range height {
+		for ax := range width {
+			if refPixel(b, x+int64(ax), y+int64(ay)) != 0 {
+				out.setPixel(ax, ay, 1)
+			}
+		}
+	}
+	return out
+}
