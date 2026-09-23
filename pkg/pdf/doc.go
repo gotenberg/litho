@@ -86,14 +86,21 @@
 //     [WithArtifacts].
 //   - [Writer.WriteTo], [Split], and [Merge] take [WriteOption]:
 //     [WithFullRewrite], [WithVersion], [WithXRefStream], [WithWriteLogger],
-//     [WithBookmarks], [WithPipelineTempDir].
+//     [WithBookmarks], [WithPipelineTempDir], [WithEncryption],
+//     [WithObjectStreams], [WithDedup].
 //   - [Writer.RemediatePDFA], [Writer.RemediatePDFUA], and
 //     [Writer.RemediateFacturX] take [RemediateOption]: [WithLanguage],
-//     [WithAggressiveFixes], [WithRegressionTolerance].
+//     [WithAggressiveFixes], [WithRegressionTolerance], [WithFigureAltText],
+//     [WithDocumentID].
 //
 // [WithFullRewrite], [WithVersion], and [WithXRefStream] are advanced
 // serialization controls. The defaults suit most callers:
 // content-modifying operations escalate to a full rewrite on their own.
+//
+// [WithEncryption] is how an output becomes encrypted. No operation preserves
+// a source's encryption, so an edited document is written in the clear unless
+// this option asks otherwise. [WithObjectStreams] and [WithDedup] shrink a
+// full rewrite, and both decline on an encrypted output.
 //
 // # Embedding files
 //
