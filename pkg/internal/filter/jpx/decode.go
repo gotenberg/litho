@@ -28,11 +28,22 @@ func Decode(ctx context.Context, data []byte) (*Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := parseCodestream(stream); err != nil {
+	cs, err := parseCodestream(stream)
+	if err != nil {
 		return nil, err
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, err
+	budget := &blockBudget{}
+	for _, t := range cs.tiles {
+		if t == nil {
+			continue
+		}
+		d, err := cs.newTileDecoder(t, budget)
+		if err != nil {
+			return nil, err
+		}
+		if err := d.decodePackets(ctx, cs); err != nil {
+			return nil, fmt.Errorf("tile %d: %w", t.index, err)
+		}
 	}
-	return nil, fmt.Errorf("%w: packet decoding is not implemented", ErrUnsupported)
+	return nil, fmt.Errorf("%w: code-block decoding is not implemented", ErrUnsupported)
 }

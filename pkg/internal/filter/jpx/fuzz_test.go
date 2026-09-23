@@ -3,6 +3,8 @@ package jpx
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -13,10 +15,22 @@ import (
 func FuzzDecode(f *testing.F) {
 	// Seeds reach both entry points and the tile-part loop: the J.10
 	// codestream bare, wrapped in a JP2 file, and truncated inside its
-	// tile-part.
+	// tile-part. The OpenJPEG codestreams reach every progression order,
+	// POC, PPM, PPT, SOP, EPH and the code-block styles.
 	f.Add(annexJ10)
 	f.Add(slices.Concat(signatureBox, fileTypeBox, boxOf(boxHeader, imageHeaderBox, greyBox), boxOf(boxCodestream, annexJ10)))
 	f.Add(annexJ10[:90])
+	names, err := filepath.Glob("testdata/*.j2k")
+	if err != nil {
+		f.Fatal(err)
+	}
+	for _, name := range names {
+		data, err := os.ReadFile(name)
+		if err != nil {
+			f.Fatal(err)
+		}
+		f.Add(data)
+	}
 	f.Fuzz(func(t *testing.T, data []byte) {
 		img, err := Decode(context.Background(), data)
 		if err != nil {
