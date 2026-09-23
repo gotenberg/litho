@@ -119,6 +119,15 @@ func (f *Function) Outputs() int { return f.outputs }
 // Per ISO 32000-1, 7.10.2 the samples are packed most significant bit first
 // with no padding between them, /Encode defaults to [0 Size-1] per input and
 // /Decode defaults to /Range.
+//
+// The FIRST input varies fastest in the table: the sample for indices
+// (i0, i1, ... ) sits at i0 + i1*Size[0] + i2*Size[0]*Size[1] and so on, which
+// is what [Function.evalSampled] compounds its stride to match. One input makes
+// the two possible orderings identical, so nothing below a two-input function
+// can tell a correct index from a transposed one. Confirmed against a real
+// 7-colorant tint table, where reading it this way makes each single-colorant
+// corner return its own ink (/Cyan gives 0,173,239 and /Magenta 236,0,140)
+// while the transpose returns colours no colorant explains.
 func (f *Function) initSampled(ctx context.Context, doc *document.Document, dict ast.PdfDict, stream ast.PdfStream, isStream bool) error {
 	if !isStream {
 		return fmt.Errorf("%w: a type 0 function shall be a stream", ErrMalformed)
