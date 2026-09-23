@@ -168,14 +168,23 @@ func collectPageContents(ctx context.Context, doc *document.Document, page *docu
 		return nil, nil
 	}
 
+	// Resolved BEFORE the switch, not inside it. Per ISO 32000-1, 7.7.3.3
+	// /Contents is "a stream or an array of streams", and either spelling may
+	// itself be written as an indirect reference. Switching on the UNRESOLVED
+	// object sent every `/Contents N 0 R` into the stream case, so a reference
+	// naming an ARRAY failed as "expected PdfStream, got ast.PdfArray" and
+	// redaction, excision and stamping all refused a legal page. Measured at 26
+	// of 1091 govdocs documents; [tagging.pageContentBytes] resolves first and
+	// was never affected, which is what made the omission visible.
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return nil, err
+	}
+
 	var buf bytes.Buffer
-	switch v := obj.(type) {
-	case ast.PdfIndirectRef:
-		stream, err := document.ResolveStream(ctx, doc, v)
-		if err != nil {
-			return nil, err
-		}
-		data, err := doc.DecodeStream(ctx, stream)
+	switch v := resolved.(type) {
+	case ast.PdfStream:
+		data, err := doc.DecodeStream(ctx, v)
 		if err != nil {
 			return nil, err
 		}
