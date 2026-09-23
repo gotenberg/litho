@@ -5,10 +5,23 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
 )
+
+// logLevels maps the --log-level values onto slog levels.
+//
+// An immutable lookup table, like the other package-level maps here. "off" is
+// absent on purpose: it selects no logger at all rather than a level, and the
+// parse handles it before this lookup.
+var logLevels = map[string]slog.Level{
+	"error": slog.LevelError,
+	"warn":  slog.LevelWarn,
+	"info":  slog.LevelInfo,
+	"debug": slog.LevelDebug,
+}
 
 func main() {
 	os.Exit(run(context.Background(), os.Args[1:], os.Stdout, os.Stderr))
@@ -28,6 +41,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	cmd := ""
 	var globalArgs []string
 	var timeout time.Duration
+	var logger *slog.Logger
 
 	// An index loop, not a range: --timeout consumes the argument after it,
 	// and only an explicit index can step past that value. A range loop
@@ -61,6 +75,31 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 				fmt.Fprintf(stderr, "invalid timeout %q: a duration must not be negative\n", value)
 				return exitError
 			}
+		case arg == "--log-level" || strings.HasPrefix(arg, "--log-level="):
+			// Consumes the next argument in the space form, so this arm steps
+			// the index exactly as --timeout does above.
+			value, split := strings.CutPrefix(arg, "--log-level=")
+			if !split {
+				if i+1 >= len(args) {
+					fmt.Fprintln(stderr, "--log-level needs a level, for example --log-level debug")
+					return exitError
+				}
+				i++
+				value = args[i]
+			}
+			if value == "off" {
+				logger = nil
+				break
+			}
+			level, ok := logLevels[value]
+			if !ok {
+				fmt.Fprintf(stderr, "invalid log level %q. Valid: off, error, warn, info, debug\n", value)
+				return exitError
+			}
+			// stderr, never stdout: a command may be streaming the document
+			// there under -o -, and diagnostics mixed into it would corrupt
+			// the result.
+			logger = slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: level}))
 		case len(arg) > 0 && arg[0] == '-':
 			// Rejected, not skipped. An unrecognised flag used to match no
 			// case and fall out of the switch, running the command as though
@@ -86,6 +125,14 @@ dispatch:
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
+	}
+
+	// Carried on the context rather than in a package-level variable: run is
+	// called concurrently by this package's own parallel tests, and a mutable
+	// global would be a data race under -race. The package-level maps here are
+	// immutable lookup tables, which is a different thing.
+	if logger != nil {
+		ctx = withCLILogger(ctx, logger)
 	}
 
 	code := runCommand(ctx, cmd, globalArgs, stdout, stderr)
@@ -214,7 +261,7 @@ func runCommand(ctx context.Context, cmd string, globalArgs []string, stdout, st
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: litho [--timeout DURATION] <command> [flags] [file...]")
+	fmt.Fprintln(w, "Usage: litho [--timeout DURATION] [--log-level LEVEL] <command> [flags] [file...]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Inspection:")
 	fmt.Fprintln(w, "  info          Quick document summary")
@@ -265,5 +312,6 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Global flags:")
 	fmt.Fprintln(w, "  --timeout D   Timeout duration (e.g., 30s, 5m)")
+	fmt.Fprintln(w, "  --log-level L Library diagnostics on stderr: off, error, warn, info, debug")
 	fmt.Fprintln(w, "  --help, -h    Show this help")
 }

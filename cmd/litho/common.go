@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -43,6 +44,40 @@ func parseCommandFlags(fs *flag.FlagSet, args []string) (exit int, ok bool) {
 	return exitOK, true
 }
 
+// cliLoggerKey addresses the logger --log-level installs on the context.
+type cliLoggerKey struct{}
+
+// withCLILogger returns ctx carrying logger, for [openPDF] to hand the library.
+func withCLILogger(ctx context.Context, logger *slog.Logger) context.Context {
+	return context.WithValue(ctx, cliLoggerKey{}, logger)
+}
+
+// cliLoggerFrom returns the logger --log-level installed, or nil.
+//
+// nil is the ordinary case and means the library keeps its own default, which
+// discards everything: pkg/internal/core/document substitutes a NopLogger when
+// no logger is supplied, so every doc.Logger call in the library is a no-op for
+// a CLI run that did not ask for diagnostics.
+func cliLoggerFrom(ctx context.Context) *slog.Logger {
+	logger, _ := ctx.Value(cliLoggerKey{}).(*slog.Logger)
+	return logger
+}
+
+// openOptions builds the options every open shares.
+//
+// The logger is threaded here rather than at the 38 call sites, which is the
+// whole reason openPDF exists as a chokepoint.
+func openOptions(ctx context.Context, password string) []pdf.OpenOption {
+	var opts []pdf.OpenOption
+	if password != "" {
+		opts = append(opts, pdf.WithPassword(password))
+	}
+	if logger := cliLoggerFrom(ctx); logger != nil {
+		opts = append(opts, pdf.WithLogger(logger))
+	}
+	return opts
+}
+
 // openPDF opens a PDF from a file path. Use "-" to read from stdin.
 //
 // The two routes differ in memory, which matters for a large document. A path
@@ -57,22 +92,14 @@ func openPDF(ctx context.Context, path, password string) (*pdf.Reader, func(), e
 		if err != nil {
 			return nil, nil, fmt.Errorf("reading stdin: %w", err)
 		}
-		var opts []pdf.OpenOption
-		if password != "" {
-			opts = append(opts, pdf.WithPassword(password))
-		}
-		r, err := pdf.Open(ctx, newBytesReaderAt(data), int64(len(data)), opts...)
+		r, err := pdf.Open(ctx, newBytesReaderAt(data), int64(len(data)), openOptions(ctx, password)...)
 		if err != nil {
 			return nil, nil, err
 		}
 		return r, func() {}, nil
 	}
 
-	var opts []pdf.OpenOption
-	if password != "" {
-		opts = append(opts, pdf.WithPassword(password))
-	}
-	r, err := pdf.OpenFile(ctx, path, opts...)
+	r, err := pdf.OpenFile(ctx, path, openOptions(ctx, password)...)
 	if err != nil {
 		return nil, nil, err
 	}
