@@ -49,14 +49,31 @@ import (
 //   - An image whose samples cannot be rewritten reports one of
 //     [ErrInlineImageInRegion] (its pixels live in the content stream, so there
 //     is no object to replace), [ErrImageNotAddressable],
-//     [ErrImageNotDecodable], [ErrImagePlacementDegenerate] or
-//     [ErrImageCarriesSampleEntries].
+//     [ErrImageNotDecodable], [ErrImagePlacementDegenerate],
+//     [ErrImageCarriesSampleEntries] or [ErrImageIsStencilMask], which is the
+//     mask carrying /SMask, the one stencil blanking cannot keep a mask.
 //   - A region that meets an image but falls between its sample centres reports
 //     [ErrImageRegionCoversNoSample]: it covers picture the caller asked to
 //     clear while clearing none of it, so returning success would leave that
 //     content in the file.
 //   - A Do the machine cannot follow reports [ErrXObjectUnresolved], because
 //     content it cannot place is content it cannot rule out of the region.
+//   - An annotation inside the region that cannot be detached reports
+//     [ErrAnnotationNotPlaceable] (an unreadable /Rect cannot be ruled out of
+//     the region either), [ErrAnnotationStraddlesRegion] (an annotation is
+//     atomic, so removing one reaching outside takes behaviour the caller never
+//     selected), [ErrAnnotationIsFormWidget] (a /Parent written inline, or a
+//     widget written directly into /Annots, so there is nothing to rewrite) or
+//     [ErrFormNotAddressable] (the AcroForm, or the catalog carrying it inline,
+//     has no object number for the replacement to take).
+//   - A structure element describing both removed and surviving content reports
+//     [ErrStructElementPartlyRemoved], and one with no object number of its own
+//     reports [ErrStructElementNotAddressable]. The tree holds a second copy of
+//     the page's text, so neither may be walked past.
+//   - A byte span outside the content reports [ErrSpanOutOfRange], and two
+//     spans covering the same bytes report [ErrSpansOverlap]. Either means the
+//     parse and the bytes being rewritten have diverged, so the excision would
+//     cut whatever occupies those offsets now.
 //   - A page with no object number of its own reports [ErrPageNotAddressable].
 //
 // Refusing beats removing more than was asked, and beats reporting success over
