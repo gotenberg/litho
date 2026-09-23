@@ -65,7 +65,7 @@ func runMerge(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 		}
 	}()
 
-	warnEncryptionDropped(stderr, encrypting, readers...)
+	warnEncryptionDroppedOfferingPassword(stderr, encrypting, readers...)
 	warnXFADropped(ctx, stderr, readers...)
 	warnCompactSkipped(stderr, *compact, encrypting)
 

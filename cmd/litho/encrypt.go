@@ -56,10 +56,49 @@ func encryptWriteOptions(userPwd, ownerPwd, algorithm string, stderr io.Writer) 
 // Variadic because a merge has several inputs and an insert has two, and any
 // encrypted input means the output loses protection the input had.
 //
-// The message names both remedies because they differ per command: split and
-// merge take --user-password, while delete, insert and rotate have no
-// encryption flag and must re-encrypt the result.
+// This is the form for a command that has no encryption flag of its own, which
+// is fourteen of the seventeen emitters. One message used to advise "Pass
+// --user-password to encrypt the output" for every one of them. That was true
+// of the five page operations it was written for, and became wrong when
+// `80742794` widened the warning to every output-producing command: those
+// fourteen reject the flag with "flag provided but not defined", so the warning
+// answered a confidentiality downgrade with a command that fails. Advice a
+// command refuses is worse than no advice.
+//
+// README.md already documents three remedies, one per family. The two variants
+// below carry the other two, so the message a caller sees and the manual agree.
 func warnEncryptionDropped(stderr io.Writer, encrypting bool, readers ...*pdf.Reader) {
+	warnEncryptionDroppedWithRemedy(stderr, encrypting,
+		"Run litho encrypt on the result to protect it again.", readers...)
+}
+
+// warnEncryptionDroppedOfferingPassword is the form for split and merge, the
+// only commands that accept --user-password directly.
+//
+// Their encrypting argument is true exactly when a password was supplied, in
+// which case the warning never fires, so naming the flag reaches only the
+// caller who has it available and did not use it.
+func warnEncryptionDroppedOfferingPassword(stderr io.Writer, encrypting bool, readers ...*pdf.Reader) {
+	warnEncryptionDroppedWithRemedy(stderr, encrypting,
+		"Pass --user-password to encrypt the output, or run litho encrypt on the result.", readers...)
+}
+
+// warnEncryptionDroppedAddingEncryptStage is the form for pipe, whose
+// --user-password belongs to its encrypt STAGE rather than to pipe itself:
+// `litho pipe --user-password X` is rejected, `litho pipe ... encrypt
+// --user-password X` is not.
+//
+// Symmetric to the split and merge variant. Pipe sets encryptsOutput when an
+// encrypt stage is present and the warning then returns early, so naming the
+// stage reaches only the caller who omitted it.
+func warnEncryptionDroppedAddingEncryptStage(stderr io.Writer, encrypting bool, readers ...*pdf.Reader) {
+	warnEncryptionDroppedWithRemedy(stderr, encrypting,
+		"Add an encrypt stage, or run litho encrypt on the result.", readers...)
+}
+
+// warnEncryptionDroppedWithRemedy carries the shared body. remedy completes the
+// sentence and must name only what the calling command actually accepts.
+func warnEncryptionDroppedWithRemedy(stderr io.Writer, encrypting bool, remedy string, readers ...*pdf.Reader) {
 	if encrypting {
 		return
 	}
@@ -67,8 +106,7 @@ func warnEncryptionDropped(stderr io.Writer, encrypting bool, readers ...*pdf.Re
 		if r == nil || !r.IsEncrypted() {
 			continue
 		}
-		fmt.Fprintln(stderr, "warning: the input is encrypted but the output will not be. "+
-			"Pass --user-password to encrypt the output, or run litho encrypt on it.")
+		fmt.Fprintln(stderr, "warning: the input is encrypted but the output will not be. "+remedy)
 		return
 	}
 }

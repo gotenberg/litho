@@ -50,7 +50,7 @@ func runSplit(ctx context.Context, args []string, _stdout, stderr io.Writer) int
 	}
 	defer closer()
 
-	warnEncryptionDropped(stderr, encrypting, r)
+	warnEncryptionDroppedOfferingPassword(stderr, encrypting, r)
 	warnXFADropped(ctx, stderr, r)
 	warnCompactSkipped(stderr, *compact, encrypting)
 

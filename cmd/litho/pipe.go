@@ -137,7 +137,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// output and said nothing. Emitted before the write, so it is seen even if
 	// the write later fails, exactly as the standalone commands do.
 	if dropsEncryption {
-		warnEncryptionDropped(stderr, encryptsOutput, append([]*pdf.Reader{r}, stageReaders...)...)
+		warnEncryptionDroppedAddingEncryptStage(stderr, encryptsOutput, append([]*pdf.Reader{r}, stageReaders...)...)
 	}
 
 	if err := pipeline.Validate(); err != nil {
@@ -363,8 +363,8 @@ func isStageCmd(s string) bool { return stageCmds[s] }
 // decrypt is the only member: producing an unprotected document is exactly what
 // it was asked to do, so [runSimpleMutation] opts it out via
 // [withoutEncryptionWarning] and pipe must match. encrypt needs no entry, since
-// it sets encryptsOutput and [warnEncryptionDropped] returns early when the
-// output carries protection.
+// it sets encryptsOutput and [warnEncryptionDroppedAddingEncryptStage] returns
+// early when the output carries protection.
 var silentStages = map[string]bool{
 	"decrypt": true,
 }
