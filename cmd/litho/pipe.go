@@ -77,7 +77,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// engine refuses to compact. splitStageGroups guarantees the first token
 	// of a group is the stage name, so this reads the pipeline rather than
 	// guessing at the argument list.
-	encryptsOutput, dropsEncryption := false, false
+	encryptsOutput, dropsEncryption, dropsXFA := false, false, false
 	for _, g := range groups {
 		if len(g) == 0 {
 			continue
@@ -87,6 +87,9 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		}
 		if !silentStages[g[0]] {
 			dropsEncryption = true
+		}
+		if xfaDroppingStages[g[0]] {
+			dropsXFA = true
 		}
 	}
 	warnCompactSkipped(stderr, compact, encryptsOutput)
@@ -138,6 +141,19 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// the write later fails, exactly as the standalone commands do.
 	if dropsEncryption {
 		warnEncryptionDroppedAddingEncryptStage(stderr, encryptsOutput, append([]*pdf.Reader{r}, stageReaders...)...)
+	}
+
+	// The same form-data loss the standalone split and merge report, which pipe
+	// performed silently: `litho split` on an XFA document warns, while
+	// `litho pipe ... split` wrote the identical output and said nothing.
+	// Measured with [pdf.Reader.HasXFAForm] on the output of every stage, not
+	// by scanning bytes, because a byte scan cannot see an /ObjStm.
+	//
+	// Pipe already writes the encryption warning to this stream, so the "pipe
+	// prints nothing but the document" rule that discards a remediate report
+	// does not apply: the channel was here and only this notice was missing.
+	if dropsXFA {
+		warnXFADropped(ctx, stderr, append([]*pdf.Reader{r}, stageReaders...)...)
 	}
 
 	if err := pipeline.Validate(); err != nil {
@@ -367,6 +383,23 @@ func isStageCmd(s string) bool { return stageCmds[s] }
 // early when the output carries protection.
 var silentStages = map[string]bool{
 	"decrypt": true,
+}
+
+// xfaDroppingStages names the stages that discard an input's /XFA form data.
+//
+// An ALLOW list where [silentStages] is a deny list, and the inversion is
+// measured rather than stylistic. Every stage drops encryption, so naming the
+// exceptions is right there. Only split and merge drop XFA: rotate, insert,
+// delete and autotag were each measured keeping /XFA through a rewrite, so a
+// deny list here would warn about form data that is still in the output.
+//
+// remediate is absent deliberately. It removes /XFA because ISO 19005-2/3,
+// 6.4.2 forbids the key in the profile the caller ASKED for, and its fixer
+// reports "removed /XFA from AcroForm" in the standalone report, which makes it
+// the decrypt case rather than a silent loss. flatten-form is absent for the
+// reason its standalone command is: removing the form is the point of the verb.
+var xfaDroppingStages = map[string]bool{
+	"split": true, "merge": true,
 }
 
 // addStage parses stage-specific flags and appends the stage to the pipeline.
