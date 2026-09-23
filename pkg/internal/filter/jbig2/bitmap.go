@@ -139,3 +139,22 @@ func (b *Bitmap) area(x, y int64, width, height int) *Bitmap {
 	}
 	return out
 }
+
+// columns returns a copy of the columns x to x+width-1 of b, all its rows.
+func (b *Bitmap) columns(x, width int64) (*Bitmap, error) {
+	if x < 0 || width < 0 || x+width > int64(b.Width) {
+		return nil, fmt.Errorf("%w: columns %d to %d of a %d-pixel-wide bitmap", ErrMalformed, x, x+width-1, b.Width)
+	}
+	out, err := newBitmap(int(width), b.Height)
+	if err != nil {
+		return nil, err
+	}
+	for y := range b.Height {
+		for cx := range int(width) {
+			if b.pixel(int(x)+cx, y) != 0 {
+				out.setPixel(cx, y, 1)
+			}
+		}
+	}
+	return out, nil
+}

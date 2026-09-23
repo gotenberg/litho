@@ -39,6 +39,7 @@ type retainedContexts struct {
 // symbolHeader is the symbol dictionary segment data header of ITU-T T.88,
 // 7.4.2.1.
 type symbolHeader struct {
+	flags         uint16
 	huffman       bool
 	refagg        bool
 	contextUsed   bool
@@ -56,6 +57,7 @@ func parseSymbolHeader(data []byte) (symbolHeader, error) {
 	c := &cursor{b: data}
 	flags := c.u16()
 	h := symbolHeader{
+		flags:         flags,
 		huffman:       flags&1 != 0,
 		refagg:        flags&2 != 0,
 		contextUsed:   flags&0x100 != 0,
@@ -85,15 +87,12 @@ func parseSymbolHeader(data []byte) (symbolHeader, error) {
 }
 
 // decodeSymbolDict decodes a symbol dictionary segment, ITU-T T.88, 7.4.2.2,
-// whose input symbols are inSyms and whose last referred-to dictionary, if
-// any, is last.
-func decodeSymbolDict(ctx context.Context, seg segment, inSyms []*Bitmap, last *symbolDict, b *budget) (*symbolDict, error) {
+// whose input symbols are inSyms, whose last referred-to dictionary, if any,
+// is last, and whose referred-to tables segments supply tables.
+func decodeSymbolDict(ctx context.Context, seg segment, inSyms []*Bitmap, last *symbolDict, tables []*huffTable, b *budget) (*symbolDict, error) {
 	h, err := parseSymbolHeader(seg.data)
 	if err != nil {
 		return nil, err
-	}
-	if h.huffman {
-		return nil, fmt.Errorf("%w: Huffman-coded symbol dictionary", ErrUnsupported)
 	}
 	if h.numNew > maxSymbols || h.numExported > maxSymbols || int64(len(inSyms)) > maxSymbols {
 		return nil, fmt.Errorf("%w: symbol dictionary of %d new and %d exported symbols over %d input symbols exceeds %d",
@@ -117,15 +116,32 @@ func decodeSymbolDict(ctx context.Context, seg segment, inSyms []*Bitmap, last *
 		st.gb = make([]mq.Context, genericContexts(h.template))
 		st.gr = make([]mq.Context, refineContexts(h.refTemplate))
 	}
-	st.iaid = newIAID(symbolCodeLen(len(inSyms) + int(h.numNew)))
-
-	newSyms, err := decodeSymbols(ctx, h, inSyms, st)
-	if err != nil {
-		return nil, err
-	}
-	exported, err := exportSymbols(h, inSyms, newSyms, st)
-	if err != nil {
-		return nil, err
+	var newSyms, exported []*Bitmap
+	if h.huffman {
+		hs, err := newHuffSymbols(h, seg.data[h.dataStart:], tables, st.gr, b)
+		if err != nil {
+			return nil, err
+		}
+		if newSyms, err = decodeSymbolsHuffman(ctx, h, inSyms, hs); err != nil {
+			return nil, err
+		}
+		exported, err = exportSymbols(h, inSyms, newSyms, func() (int64, error) {
+			return hs.exRun.value(hs.r, "export run length")
+		})
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		st.iaid = newIAID(symbolCodeLen(len(inSyms) + int(h.numNew)))
+		if newSyms, err = decodeSymbols(ctx, h, inSyms, st); err != nil {
+			return nil, err
+		}
+		exported, err = exportSymbols(h, inSyms, newSyms, func() (int64, error) {
+			return st.iaex.value(st.dec, "export run length")
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 	dict := &symbolDict{exported: exported}
 	if h.contextRetain {
@@ -254,9 +270,10 @@ func decodeSymbolBitmap(ctx context.Context, h symbolHeader, width, height int, 
 }
 
 // exportSymbols decodes the export flags, ITU-T T.88 6.5.10, as runs of
-// alternating value starting with not-exported, and returns the exported
-// symbols in input-then-new order.
-func exportSymbols(h symbolHeader, inSyms, newSyms []*Bitmap, st *arithState) ([]*Bitmap, error) {
+// alternating value starting with not-exported, read by nextRun (IAEX, or
+// Table B.1 in the Huffman variant), and returns the exported symbols in
+// input-then-new order.
+func exportSymbols(h symbolHeader, inSyms, newSyms []*Bitmap, nextRun func() (int64, error)) ([]*Bitmap, error) {
 	total := int64(len(inSyms) + len(newSyms))
 	exported := make([]*Bitmap, 0, h.numExported)
 	var index int64
@@ -267,7 +284,7 @@ func exportSymbols(h symbolHeader, inSyms, newSyms []*Bitmap, st *arithState) ([
 		if runs > total+1 {
 			return nil, fmt.Errorf("%w: export flags never cover the %d symbols", ErrMalformed, total)
 		}
-		run, err := st.iaex.value(st.dec, "export run length")
+		run, err := nextRun()
 		if err != nil {
 			return nil, err
 		}
@@ -290,4 +307,237 @@ func exportSymbols(h symbolHeader, inSyms, newSyms []*Bitmap, st *arithState) ([
 		return nil, fmt.Errorf("%w: dictionary exports %d symbols, its header declares %d", ErrMalformed, len(exported), h.numExported)
 	}
 	return exported, nil
+}
+
+// huffSymbols is the state of a Huffman-coded symbol dictionary: its reader,
+// the tables 7.4.2.1.6 selects, and the fixed tables its aggregations use.
+type huffSymbols struct {
+	r                              *bitReader
+	dh, dw, bmSize, aggInst, exRun *huffTable
+	// agg holds the fields of an aggregation's text region, Table 17.
+	agg    huffText
+	idLen  int
+	budget *budget
+}
+
+// pickTable returns standard table B.n for a selection value mapped in
+// choices, or the next user-supplied table for the value 3 (or 1 for a
+// one-bit selection), which T.88 7.4.2.1.6 and 7.4.3.1.6 hand out in the
+// order the tables segments are referred to.
+func pickTable(sel int, choices map[int]int, userSel int, user []*huffTable, next *int) (*huffTable, error) {
+	if sel == userSel {
+		if *next >= len(user) {
+			return nil, fmt.Errorf("%w: segment selects more user tables than it refers to", ErrMalformed)
+		}
+		t := user[*next]
+		*next++
+		return t, nil
+	}
+	n, ok := choices[sel]
+	if !ok {
+		return nil, fmt.Errorf("%w: Huffman table selection %d is not permitted", ErrMalformed, sel)
+	}
+	return standardTable(n)
+}
+
+func newHuffSymbols(h symbolHeader, data []byte, user []*huffTable, gr []mq.Context, b *budget) (*huffSymbols, error) {
+	hs := &huffSymbols{r: &bitReader{data: data}, budget: b}
+	next := 0
+	var err error
+	if hs.dh, err = pickTable(int(h.flags>>2&3), map[int]int{0: 4, 1: 5}, 3, user, &next); err != nil {
+		return nil, err
+	}
+	if hs.dw, err = pickTable(int(h.flags>>4&3), map[int]int{0: 2, 1: 3}, 3, user, &next); err != nil {
+		return nil, err
+	}
+	if hs.bmSize, err = pickTable(int(h.flags>>6&1), map[int]int{0: 1}, 1, user, &next); err != nil {
+		return nil, err
+	}
+	if hs.aggInst, err = pickTable(int(h.flags>>7&1), map[int]int{0: 1}, 1, user, &next); err != nil {
+		return nil, err
+	}
+	if hs.exRun, err = standardTable(1); err != nil {
+		return nil, err
+	}
+	// Table 17: the text region of an aggregation uses fixed tables.
+	hs.agg = huffText{r: hs.r, gr: gr, budget: b}
+	for _, pick := range []struct {
+		dst **huffTable
+		n   int
+	}{{&hs.agg.fs, 6}, {&hs.agg.ds, 8}, {&hs.agg.dt, 11}, {&hs.agg.rdw, 15}, {&hs.agg.rdh, 15}, {&hs.agg.rdx, 15}, {&hs.agg.rdy, 15}, {&hs.agg.rsize, 1}} {
+		if *pick.dst, err = standardTable(pick.n); err != nil {
+			return nil, err
+		}
+	}
+	return hs, nil
+}
+
+// decodeSymbolsHuffman decodes the height classes of a Huffman-coded
+// dictionary, ITU-T T.88 6.5.5 step 4: symbol by symbol when SDREFAGG is 1,
+// otherwise as one collective bitmap per class (6.5.9).
+func decodeSymbolsHuffman(ctx context.Context, h symbolHeader, inSyms []*Bitmap, hs *huffSymbols) ([]*Bitmap, error) {
+	all := make([]*Bitmap, len(inSyms), int64(len(inSyms))+h.numNew)
+	copy(all, inSyms)
+	// 6.5.8.2.3: fixed-length IDs over every symbol the dictionary can see.
+	hs.idLen = max(symbolCodeLen(len(inSyms)+int(h.numNew)), 1)
+	hs.agg.idLen = hs.idLen
+	decoded := func() int64 { return int64(len(all) - len(inSyms)) }
+	var height, empty int64
+	for decoded() < h.numNew {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		before := len(all)
+		dh, err := hs.dh.value(hs.r, "height class delta height")
+		if err != nil {
+			return nil, err
+		}
+		height += dh
+		if height < 0 || height > maxBitmapPixels {
+			return nil, fmt.Errorf("%w: height class height %d", ErrMalformed, height)
+		}
+		var width, total int64
+		var widths []int64
+		for {
+			dw, ok, err := hs.dw.decode(hs.r)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				break
+			}
+			if decoded()+int64(len(widths)) >= h.numNew {
+				return nil, fmt.Errorf("%w: height classes hold more than the %d symbols declared", ErrMalformed, h.numNew)
+			}
+			width += dw
+			total += width
+			if width < 0 || areaExceeds(width, height, maxBitmapPixels) || areaExceeds(total, height, maxBitmapPixels) {
+				return nil, fmt.Errorf("%w: symbol of %dx%d pixels", ErrMalformed, width, height)
+			}
+			if !h.refagg {
+				widths = append(widths, width)
+				continue
+			}
+			bs, err := decodeSymbolBitmapHuffman(ctx, h, int(width), int(height), all, hs)
+			if err != nil {
+				return nil, fmt.Errorf("symbol %d: %w", decoded(), err)
+			}
+			all = append(all, bs)
+		}
+		if !h.refagg {
+			syms, err := collectiveSymbols(widths, total, height, hs)
+			if err != nil {
+				return nil, err
+			}
+			all = append(all, syms...)
+		}
+		if len(all) == before {
+			if empty++; empty > h.numNew {
+				return nil, fmt.Errorf("%w: more empty height classes than symbols", ErrMalformed)
+			}
+		}
+	}
+	return all[len(inSyms):], nil
+}
+
+// collectiveSymbols decodes a height class collective bitmap, ITU-T T.88
+// 6.5.9, and cuts it into the class's symbols, left to right (6.5.5 step 4 d).
+func collectiveSymbols(widths []int64, total, height int64, hs *huffSymbols) ([]*Bitmap, error) {
+	size, err := hs.bmSize.value(hs.r, "collective bitmap size")
+	if err != nil {
+		return nil, err
+	}
+	hs.r.align()
+	if err := hs.budget.charge(total, height); err != nil {
+		return nil, err
+	}
+	stride := (total + 7) / 8
+	var collective *Bitmap
+	if size == 0 {
+		// Step 3: stored uncompressed, rows padded to whole bytes, which is
+		// exactly the Bitmap layout.
+		size = stride * height
+		if size > int64(len(hs.r.data)-hs.r.pos) {
+			return nil, fmt.Errorf("%w: uncompressed collective bitmap of %d bytes, %d remain", ErrMalformed, size, len(hs.r.data)-hs.r.pos)
+		}
+		if collective, err = newBitmap(int(total), int(height)); err != nil {
+			return nil, err
+		}
+		copy(collective.Data, hs.r.data[hs.r.pos:hs.r.pos+int(size)])
+	} else {
+		if size < 0 || size > int64(len(hs.r.data)-hs.r.pos) {
+			return nil, fmt.Errorf("%w: collective bitmap of %d bytes, %d remain", ErrMalformed, size, len(hs.r.data)-hs.r.pos)
+		}
+		// Table 19: MMR with a known byte count, so EOFB may be absent.
+		if collective, err = decodeMMR(int(total), int(height), hs.r.data[hs.r.pos:hs.r.pos+int(size)]); err != nil {
+			return nil, err
+		}
+	}
+	hs.r.pos += int(size)
+
+	syms := make([]*Bitmap, len(widths))
+	var x int64
+	for i, w := range widths {
+		if syms[i], err = collective.columns(x, w); err != nil {
+			return nil, err
+		}
+		x += w
+	}
+	return syms, nil
+}
+
+// decodeSymbolBitmapHuffman decodes a refined or aggregated symbol in a
+// Huffman-coded dictionary, ITU-T T.88 6.5.8.2.
+func decodeSymbolBitmapHuffman(ctx context.Context, h symbolHeader, width, height int, syms []*Bitmap, hs *huffSymbols) (*Bitmap, error) {
+	instances, err := hs.aggInst.value(hs.r, "aggregation instance count")
+	if err != nil {
+		return nil, err
+	}
+	switch {
+	case instances > 1:
+		return decodeText(ctx, textParams{
+			width: width, height: height,
+			numInstances: instances,
+			strips:       1,
+			syms:         syms,
+			combineOp:    combineOr,
+			refCorner:    cornerTopLeft,
+			refine:       true,
+			refTemplate:  h.refTemplate,
+			refAT:        h.refAT,
+		}, &hs.agg)
+	case instances == 1:
+		// 6.5.8.2.2: a fixed-length ID, then RDX and RDY with Table B.15 and
+		// the refinement's size with Table B.1.
+		id, err := hs.agg.symbolID()
+		if err != nil {
+			return nil, err
+		}
+		if id >= int64(len(syms)) {
+			return nil, fmt.Errorf("%w: symbol ID %d of %d symbols", ErrMalformed, id, len(syms))
+		}
+		rdx, err := hs.agg.rdx.value(hs.r, "refinement X offset")
+		if err != nil {
+			return nil, err
+		}
+		rdy, err := hs.agg.rdy.value(hs.r, "refinement Y offset")
+		if err != nil {
+			return nil, err
+		}
+		block, err := hs.agg.refinementBlock()
+		if err != nil {
+			return nil, err
+		}
+		st := &arithState{dec: mq.NewDecoder(block), gr: hs.agg.gr, budget: hs.budget}
+		return decodeRefinement(ctx, refineParams{
+			width: width, height: height,
+			template:  h.refTemplate,
+			reference: syms[id],
+			dx:        rdx,
+			dy:        rdy,
+			at:        h.refAT,
+		}, st)
+	default:
+		return nil, fmt.Errorf("%w: aggregation of %d symbol instances", ErrMalformed, instances)
+	}
 }

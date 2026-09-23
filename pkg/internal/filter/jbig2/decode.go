@@ -92,6 +92,8 @@ type decoder struct {
 	// seen records every segment processed so far, so that a reference to one
 	// the data never held can be told apart from one to a tables segment.
 	seen map[uint32]bool
+	// tables holds the Huffman tables of code table segments (7.4.13).
+	tables map[uint32]*huffTable
 }
 
 // auxRegion is an auxiliary buffer: an intermediate region's bitmap and the
@@ -145,8 +147,7 @@ func (d *decoder) process(ctx context.Context, seg segment) error {
 	case typeIntermediateRefinement, typeImmediateRefinement, typeImmediateLosslessRefine:
 		err = d.refinementRegion(ctx, seg)
 	case typeTables:
-		// A tables segment only defines Huffman codes for the segments that
-		// refer to it (7.4.13), and only the Huffman variants use them.
+		err = d.codeTable(seg)
 	case typeProfiles:
 		// A profiles segment lists what the stream conforms to (7.4.12); it
 		// changes nothing a decoder produces.
@@ -292,7 +293,7 @@ func (d *decoder) symbolDictionary(ctx context.Context, seg segment) error {
 	if len(dicts) > 0 {
 		last = dicts[len(dicts)-1]
 	}
-	dict, err := decodeSymbolDict(ctx, seg, syms, last, &d.budget)
+	dict, err := decodeSymbolDict(ctx, seg, syms, last, d.referredTables(seg), &d.budget)
 	if err != nil {
 		return err
 	}
@@ -357,9 +358,6 @@ func (d *decoder) textRegion(ctx context.Context, seg segment) (*Bitmap, regionI
 	if err != nil {
 		return nil, regionInfo{}, err
 	}
-	if ts.huffman {
-		return nil, regionInfo{}, fmt.Errorf("%w: Huffman-coded text region", ErrUnsupported)
-	}
 	_, syms, err := d.referredSymbols(seg)
 	if err != nil {
 		return nil, regionInfo{}, err
@@ -370,10 +368,19 @@ func (d *decoder) textRegion(ctx context.Context, seg segment) (*Bitmap, regionI
 	p := ts.params
 	p.width, p.height = int(ts.info.width), int(ts.info.height)
 	p.syms = syms
+	gr := make([]mq.Context, refineContexts(p.refTemplate))
+	if ts.huffman {
+		src, err := newHuffText(ts, seg.data[ts.dataStart:], len(syms), d.referredTables(seg), gr, &d.budget)
+		if err != nil {
+			return nil, regionInfo{}, err
+		}
+		bm, err := decodeText(ctx, p, src)
+		return bm, ts.info, err
+	}
 	st := &arithState{
 		dec:    mq.NewDecoder(seg.data[ts.dataStart:]),
 		iaid:   newIAID(symbolCodeLen(len(syms))),
-		gr:     make([]mq.Context, refineContexts(p.refTemplate)),
+		gr:     gr,
 		budget: &d.budget,
 	}
 	bm, err := decodeText(ctx, p, st)
@@ -462,6 +469,32 @@ func (d *decoder) refinementRegion(ctx context.Context, seg segment) error {
 		// Step 5 c: the refined area replaces that part of the page.
 		return d.drawRegion(bm, info.x, info.y, combineReplace)
 	}
+}
+
+// codeTable decodes a code table segment (T.88, 7.4.13 and B.2) and keeps its
+// table for the segments that refer to it.
+func (d *decoder) codeTable(seg segment) error {
+	t, err := parseCodeTable(seg.data)
+	if err != nil {
+		return err
+	}
+	if d.tables == nil {
+		d.tables = make(map[uint32]*huffTable)
+	}
+	d.tables[seg.number] = t
+	return nil
+}
+
+// referredTables returns the tables of the code table segments seg refers to,
+// in referral order, the order 7.4.2.1.6 and 7.4.3.1.6 assign them in.
+func (d *decoder) referredTables(seg segment) []*huffTable {
+	var tables []*huffTable
+	for _, n := range seg.referred {
+		if t, ok := d.tables[n]; ok {
+			tables = append(tables, t)
+		}
+	}
+	return tables
 }
 
 // keepAux associates an auxiliary buffer with segment n.

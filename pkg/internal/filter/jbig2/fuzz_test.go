@@ -47,6 +47,8 @@ func FuzzDecode(f *testing.F) {
 	ref := testImage(24, 16, 3)
 	f.Add(refinementStream(ref, 0, true, [2][2]int{{-1, -1}, {-1, -1}},
 		encodeRefinement(refinedImage(ref, 1), ref, 0, true, [2][2]int{{-1, -1}, {-1, -1}})), []byte(nil))
+	// The Huffman variants: Annex H.1 page 1's dictionaries and text region.
+	f.Add(concat(raw[1], raw[0], raw[2], raw[3]), []byte(nil))
 	f.Add([]byte{}, []byte{})
 
 	f.Fuzz(func(t *testing.T, data, globals []byte) {

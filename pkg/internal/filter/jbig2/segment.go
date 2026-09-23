@@ -87,6 +87,15 @@ func (c *cursor) s8() int {
 	return v
 }
 
+// s32 reads a four-byte signed value, in two's complement (T.88, 5.4.4).
+func (c *cursor) s32() int64 {
+	v := int64(c.u32())
+	if v >= 1<<31 {
+		v -= 1 << 32
+	}
+	return v
+}
+
 func (c *cursor) u16() uint16 {
 	if v := c.take(2); v != nil {
 		return binary.BigEndian.Uint16(v)

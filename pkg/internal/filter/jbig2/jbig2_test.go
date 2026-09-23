@@ -266,7 +266,7 @@ func TestDecode_Refusals(t *testing.T) {
 		{"page larger than the pixel cap", pageInfo(0xFFFFFFFF, 0xFFFFFFFE), ErrLimit},
 		{"reserved segment type", concat(pageInfo(8, 8), segmentBytes(1, 1, 1, nil)), ErrMalformed},
 		{"pattern dictionary", concat(pageInfo(8, 8), segmentBytes(1, typePatternDictionary, 1, nil)), ErrUnsupported},
-		{"Huffman symbol dictionary", concat(pageInfo(8, 8), segmentBytes(1, typeSymbolDictionary, 1, []byte{0, 1, 0, 0, 0, 0, 0, 0, 0, 0})), ErrUnsupported},
+		{"user Huffman table with no tables segment", concat(pageInfo(8, 8), segmentBytes(1, typeSymbolDictionary, 1, []byte{0, 0x0D, 0, 0, 0, 1, 0, 0, 0, 1})), ErrMalformed},
 		{"truncated symbol dictionary", concat(pageInfo(8, 8), segmentBytes(1, typeSymbolDictionary, 1, nil)), ErrMalformed},
 		{"necessary extension", concat(pageInfo(8, 8), segmentBytes(1, typeExtension, 1, []byte{0xA0, 0, 0, 1})), ErrUnsupported},
 		{"data length past the end", concat(pageInfo(8, 8), []byte{0, 0, 0, 1, typeEndOfPage, 0, 1, 0, 0, 0, 9}), ErrMalformed},
