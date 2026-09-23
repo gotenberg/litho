@@ -42,6 +42,7 @@ func TestConcurrentReaderSurface(t *testing.T) {
 		call func(context.Context)
 	}{
 		{"Bookmarks", func(c context.Context) { _, _ = r.Bookmarks(c) }},
+		{"DeclaredPDFX", func(c context.Context) { _, _ = r.DeclaredPDFX(c) }},
 		{"DSSInfo", func(c context.Context) { _, _ = r.DSSInfo(c) }},
 		{"EmbeddedFiles", func(c context.Context) { _, _ = r.EmbeddedFiles(c) }},
 		{"ExtractFormulas", func(c context.Context) { _, _ = r.ExtractFormulas(c) }},
@@ -51,6 +52,7 @@ func TestConcurrentReaderSurface(t *testing.T) {
 		{"FormFields", func(c context.Context) { _, _ = r.FormFields(c) }},
 		{"HasAcroForm", func(c context.Context) { _ = r.HasAcroForm(c) }},
 		{"HasFormFields", func(c context.Context) { _, _ = r.HasFormFields(c) }},
+		{"HasXFAForm", func(c context.Context) { _ = r.HasXFAForm(c) }},
 		{"IsPortfolio", func(c context.Context) { _, _ = r.IsPortfolio(c) }},
 		{"Metadata", func(c context.Context) { _, _ = r.Metadata(c) }},
 		{"PageCount", func(c context.Context) { _, _ = r.PageCount(c) }},
