@@ -38,9 +38,13 @@ func pipeTextOf(t *testing.T, path string, artifacts bool) string {
 // stage names as substrings: the substring count is wrong because the stage
 // names appear in doc comments and as flag VALUES (a blast-radius test passes
 // `-title=rotate` precisely to prove a flag value is not a stage boundary).
-// Nine of the thirteen already run; decrypt, flatten-form, stamp-image and
-// stamp-text did not, so a defect in the code they share with the others would
-// sit unobserved. No corpus gate reaches cmd/litho, so nothing else watches it.
+// Nine of the thirteen stages that existed when this was written already ran;
+// decrypt, flatten-form, stamp-image and stamp-text did not, so a defect in the
+// code they share with the others would sit unobserved. No corpus gate reaches
+// cmd/litho, so nothing else watches it.
+//
+// The set has since grown to eighteen. The five output-producing stages added
+// later are covered in pipe_output_stages_cli_test.go.
 //
 // Each stage is asserted through a SIBLING SUBCOMMAND rather than by scanning
 // the output bytes. litho writes an incremental update, so a superseded object

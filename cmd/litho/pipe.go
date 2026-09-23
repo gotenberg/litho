@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
 )
 
@@ -24,9 +26,10 @@ func pipeUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --strict    Exit 2 when a remediate stage leaves violations it could")
 	fmt.Fprintln(w, "              not fix. The output is still written.")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Stages: rotate, split, merge, delete, encrypt, decrypt, autotag,")
-	fmt.Fprintln(w, "        set-metadata, set-form, flatten-form, stamp-text,")
-	fmt.Fprintln(w, "        stamp-image, remediate")
+	fmt.Fprintln(w, "Stages: rotate, split, merge, delete, insert, encrypt, decrypt,")
+	fmt.Fprintln(w, "        autotag, set-metadata, set-form, flatten-form,")
+	fmt.Fprintln(w, "        set-bookmarks, attach, detach, stamp-text, stamp-image,")
+	fmt.Fprintln(w, "        stamp-pdf, remediate")
 }
 
 // runPipe implements `litho pipe <file> <stage> [flags] <stage> [flags] ... -o out.pdf`.
@@ -233,9 +236,10 @@ func parsePipeGlobals(args []string) (inputFile, password, outputFile string, co
 // looks like one. Every name in [stageCmds] is an ordinary word a caller may
 // pass as a title or a stamp: `set-metadata -title rotate` used to split after
 // -title, leaving the stage holding a flag with no argument and failing the
-// whole command with "flag needs an argument: -title". All thirteen names broke
-// that way, while the --flag=value form was unaffected, which made it a
-// confusing failure to hit.
+// whole command with "flag needs an argument: -title". Every name in the set
+// broke that way, while the --flag=value form was unaffected, which made it a
+// confusing failure to hit. Stated without a count on purpose: the set has
+// grown once already, and a number here goes stale silently.
 //
 // One sharp edge remains, because removing it needs per-flag arity the splitter
 // does not have: merge takes POSITIONAL file arguments, so a file literally
@@ -265,8 +269,14 @@ func splitStageGroups(args []string) [][]string {
 // A value-expecting flag consumes the token after it, so that token cannot be a
 // stage. A boolean consumes nothing, so the token after it is a genuine stage
 // and must still start a group: `remediate -profile PDF/A-2b -aggressive rotate`
-// runs two stages, not one. -aggressive is the only boolean among them.
-var boolStageFlags = map[string]bool{"aggressive": true}
+// runs two stages, not one.
+//
+// Every boolean a stage defines has to be listed here, and the cost of
+// forgetting one is silent: `set-bookmarks -generate rotate -angle 90` would
+// treat `rotate` as -generate's value, run ONE stage instead of two, and exit 0
+// having never rotated anything. Adding a boolean stage flag means adding it
+// here in the same change.
+var boolStageFlags = map[string]bool{"aggressive": true, "generate": true}
 
 // expectsValue reports whether arg is a stage flag that consumes the next
 // token. The --flag=value form carries its own value and consumes nothing.
@@ -277,11 +287,27 @@ func expectsValue(arg string) bool {
 	return !boolStageFlags[strings.TrimLeft(arg, "-")]
 }
 
+// stageCmds names every command that also runs as a pipeline stage.
+//
+// Two output-producing commands are deliberately absent, so that this set reads
+// as a decision rather than an oversight:
+//
+// sign, because a signature covers the bytes it was computed over. A stage
+// after it rewrites the document and voids it, and pipe cannot guarantee it
+// runs last, so the honest surface is the standalone command.
+//
+// redact, because its value is the report: RedactReport names the copies that
+// survived and the objects it could not prove clean, and Redact refuses with
+// [pdf.ErrRedactionIncomplete] rather than writing a half-cleared file. pipe
+// prints nothing but the document (-o - streams it to stdout), so a redact
+// stage would either discard that report or corrupt the output by printing it.
+// Weakening a security contract to gain a stage is the wrong trade.
 var stageCmds = map[string]bool{
 	"rotate": true, "split": true, "merge": true, "delete": true,
-	"encrypt": true, "decrypt": true, "set-metadata": true,
-	"set-form": true, "flatten-form": true, "stamp-text": true,
-	"stamp-image": true, "remediate": true, "autotag": true,
+	"insert": true, "encrypt": true, "decrypt": true, "set-metadata": true,
+	"set-form": true, "flatten-form": true, "set-bookmarks": true,
+	"attach": true, "detach": true, "stamp-text": true,
+	"stamp-image": true, "stamp-pdf": true, "remediate": true, "autotag": true,
 }
 
 func isStageCmd(s string) bool { return stageCmds[s] }
@@ -632,6 +658,170 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 			}
 			return fmt.Errorf("unknown profile %q", *profile)
 		})
+
+	case "attach":
+		fs := flag.NewFlagSet("attach", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		name := fs.String("name", "", "Attachment name as stored in the PDF (required)")
+		dataPath := fs.String("data", "", "Path to the file to attach (required)")
+		mime := fs.String("mime", "", "MIME type (auto-detected from extension if omitted)")
+		relationship := fs.String("relationship", "", "AFRelationship for PDF/A-3+ associated files (Source, Data, Alternative, Supplement, EncryptedPayload, FormData, Schema, Unspecified)")
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		if *name == "" || *dataPath == "" {
+			return nil, fmt.Errorf("--name and --data are required")
+		}
+		data, err := os.ReadFile(*dataPath)
+		if err != nil {
+			return nil, fmt.Errorf("reading attachment file: %w", err)
+		}
+		mimeType := *mime
+		if mimeType == "" {
+			mimeType = mimeFromExt(*dataPath)
+		}
+		p.Apply(func(_ context.Context, w *pdf.Writer) error {
+			// The standalone command's two writer calls, kept apart for the
+			// same reason: an associated file carries an /AFRelationship that
+			// PDF/A-3 and Factur-X require, and a plain attachment has none.
+			if *relationship != "" {
+				w.AddAssociatedFile(pdf.AssociatedFile{
+					Name:         *name,
+					Data:         data,
+					MimeType:     mimeType,
+					Relationship: *relationship,
+				})
+				return nil
+			}
+			w.AddAttachment(*name, data, mimeType)
+			return nil
+		})
+
+	case "detach":
+		fs := flag.NewFlagSet("detach", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		name := fs.String("name", "", "Attachment name to remove (required)")
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		if *name == "" {
+			return nil, fmt.Errorf("--name is required")
+		}
+		p.Apply(func(_ context.Context, w *pdf.Writer) error {
+			w.RemoveAttachment(*name)
+			return nil
+		})
+
+	case "insert":
+		fs := flag.NewFlagSet("insert", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		source := fs.String("source", "", "Source PDF file (required)")
+		pos := fs.Int("pos", -1, "0-based insertion position (required)")
+		sourcePages := fs.String("source-pages", "", "Source page range (default: all)")
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		if *source == "" || *pos < 0 {
+			return nil, fmt.Errorf("--source and a --pos of 0 or more are required")
+		}
+		// Opened with the global password, as the standalone command opens its
+		// source with the same -p it opened the target with.
+		srcReader, srcCloser, err := openPDF(ctx, *source, password)
+		if err != nil {
+			return nil, fmt.Errorf("opening insert source %q: %w", *source, err)
+		}
+		p.Apply(func(ctx context.Context, w *pdf.Writer) error {
+			var srcPageList []int
+			if *sourcePages != "" {
+				srcPageCount, err := srcReader.PageCount(ctx)
+				if err != nil {
+					return fmt.Errorf("reading source page count: %w", err)
+				}
+				srcPageList, err = parsePages(*sourcePages, srcPageCount)
+				if err != nil {
+					return err
+				}
+			}
+			return w.InsertPages(*pos, srcReader, srcPageList...)
+		})
+		// The reader stays live until WriteTo executes this stage, so the
+		// closer belongs to the caller. See this function's doc comment.
+		return []func(){srcCloser}, nil
+
+	case "set-bookmarks":
+		fs := flag.NewFlagSet("set-bookmarks", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		fromJSON := fs.String("from-json", "", "JSON file with bookmark definitions (required unless --generate)")
+		generate := fs.Bool("generate", false, "Auto-generate bookmarks from detected headings (instead of --from-json)")
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		if *fromJSON == "" && !*generate {
+			return nil, fmt.Errorf("--from-json or --generate is required")
+		}
+		// Read and parsed before the pipeline runs: a malformed JSON file is an
+		// argument error, and reporting it here names the stage rather than
+		// surfacing as a mid-write failure that abandons the output.
+		var bookmarks []models.Bookmark
+		if !*generate {
+			data, err := os.ReadFile(*fromJSON)
+			if err != nil {
+				return nil, fmt.Errorf("reading bookmark file: %w", err)
+			}
+			if err := json.Unmarshal(data, &bookmarks); err != nil {
+				return nil, fmt.Errorf("parsing bookmark JSON: %w", err)
+			}
+		}
+		p.Apply(func(_ context.Context, w *pdf.Writer) error {
+			if *generate {
+				w.GenerateBookmarks(defaultBookmarkGenOptions(), pdf.BookmarkReplace)
+				return nil
+			}
+			w.SetBookmarks(bookmarks)
+			return nil
+		})
+
+	case "stamp-pdf":
+		fs := flag.NewFlagSet("stamp-pdf", flag.ContinueOnError)
+		fs.SetOutput(stderr)
+		stampPath := fs.String("stamp", "", "Path to stamp PDF file (required)")
+		stampPage := fs.Int("stamp-page", 1, "1-based page number in the stamp PDF")
+		x := fs.Float64("x", 0, "X position in points from bottom-left")
+		y := fs.Float64("y", 0, "Y position in points from bottom-left")
+		pages := fs.String("pages", "", "Page range (default: all)")
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		if *stampPath == "" {
+			return nil, fmt.Errorf("--stamp is required")
+		}
+		// No password, matching the standalone command: the global -p
+		// authenticates the document being piped, and the overlay is a
+		// different file that need not share it.
+		stampReader, stampCloser, err := openPDF(ctx, *stampPath, "")
+		if err != nil {
+			return nil, fmt.Errorf("opening stamp PDF: %w", err)
+		}
+		p.Apply(func(ctx context.Context, w *pdf.Writer) error {
+			var pageNums []int
+			if *pages != "" {
+				pageCount, err := src.PageCount(ctx)
+				if err != nil {
+					return fmt.Errorf("reading page count: %w", err)
+				}
+				pageNums, err = parsePages(*pages, pageCount)
+				if err != nil {
+					return err
+				}
+			}
+			return w.StampPDF(pdf.PDFStamp{
+				Source: stampReader,
+				Page:   *stampPage,
+				X:      *x,
+				Y:      *y,
+			}, pageNums...)
+		})
+		return []func(){stampCloser}, nil
 
 	case "autotag":
 		p.Apply(func(_ context.Context, w *pdf.Writer) error {

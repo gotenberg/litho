@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -50,15 +51,25 @@ func TestPipe_RunsTwoStagesInOrder(t *testing.T) {
 //	flag needs an argument: -title
 //	pipe stage "set-metadata": flag needs an argument: -title
 //
-// This is not an exotic input. Measured against every name in stageCmds, all
-// thirteen break: rotate, split, merge, delete, encrypt, decrypt, autotag,
-// remediate, set-metadata, set-form, flatten-form, stamp-text and stamp-image
-// are all ordinary words for a document title or a stamp.
+// This is not an exotic input. Every name in stageCmds is an ordinary word a
+// caller may pass as a document title or a stamp: rotate, merge, delete,
+// insert, attach and detach all read as plain English.
+//
+// The loop measures every name the map holds rather than a hand-picked few, so
+// a stage added later is covered the day it is added. It carries no count on
+// purpose: the set grew from thirteen to eighteen, and a number written here
+// would have gone stale with nothing to catch it.
 //
 // The --flag=value form is immune, because the value never becomes a token of
 // its own, which is what makes the failure so confusing to hit.
 func TestPipe_AcceptsAStageNameAsAFlagValue(t *testing.T) {
-	for _, title := range []string{"rotate", "merge", "delete", "stamp-text"} {
+	titles := make([]string, 0, len(stageCmds))
+	for name := range stageCmds {
+		titles = append(titles, name)
+	}
+	sort.Strings(titles)
+
+	for _, title := range titles {
 		src := writeTempPDF(t, untaggedTextPDF())
 		out := filepath.Join(t.TempDir(), "piped.pdf")
 
