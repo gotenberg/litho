@@ -81,11 +81,16 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// engine refuses to compact. splitStageGroups guarantees the first token
 	// of a group is the stage name, so this reads the pipeline rather than
 	// guessing at the argument list.
-	encryptsOutput := false
+	encryptsOutput, dropsEncryption := false, false
 	for _, g := range groups {
-		if len(g) > 0 && g[0] == "encrypt" {
+		if len(g) == 0 {
+			continue
+		}
+		if g[0] == "encrypt" {
 			encryptsOutput = true
-			break
+		}
+		if pageOpStages[g[0]] {
+			dropsEncryption = true
 		}
 	}
 	warnCompactSkipped(stderr, compact, encryptsOutput)
@@ -95,6 +100,11 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// iterating its stage list with no goroutines, so a stage closure appending
 	// here needs no synchronisation.
 	var remediationResidual []error
+
+	// Documents a page-operation stage opened for itself, so the encryption
+	// warning below can see them. merge has many sources and insert has two
+	// inputs, and any encrypted one means the output loses protection it had.
+	var stageReaders []*pdf.Reader
 
 	// Documents a stage opened for itself, such as the merge sources. They stay
 	// live until WriteTo executes the stage that reads them, so they are closed
@@ -110,7 +120,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		stageName := group[0]
 		stageFlags := group[1:]
 
-		closers, err := addStage(ctx, pipeline, r, stageName, stageFlags, password, stderr, &remediationResidual)
+		closers, err := addStage(ctx, pipeline, r, stageName, stageFlags, password, stderr, &remediationResidual, &stageReaders)
 		stageClosers = append(stageClosers, closers...)
 		if err != nil {
 			// Asking a stage for its flags is a request, not a failure. The
@@ -123,6 +133,15 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 			fmt.Fprintf(stderr, "pipe stage %q: %v\n", stageName, err)
 			return exitError
 		}
+	}
+
+	// The same confidentiality downgrade the standalone page operations report,
+	// which pipe performed silently: `litho delete -p pw` on an encrypted file
+	// warns, while `litho pipe -p pw ... delete` wrote the identical plaintext
+	// output and said nothing. Emitted before the write, so it is seen even if
+	// the write later fails, exactly as the standalone commands do.
+	if dropsEncryption {
+		warnEncryptionDropped(stderr, encryptsOutput, append([]*pdf.Reader{r}, stageReaders...)...)
 	}
 
 	if err := pipeline.Validate(); err != nil {
@@ -312,6 +331,19 @@ var stageCmds = map[string]bool{
 
 func isStageCmd(s string) bool { return stageCmds[s] }
 
+// pageOpStages names the stages whose standalone commands warn that an
+// encrypted input yields an unprotected output.
+//
+// It is the set `80cb8803` wired [warnEncryptionDropped] into, the page
+// operations, and it is deliberately not every stage that drops encryption:
+// autotag, set-metadata and flatten-form drop it too and their standalone
+// commands stay silent, so warning for them here would replace one entry-point
+// divergence with its mirror image. Parity with the standalone command is the
+// rule; widening the set is a separate decision about those commands.
+var pageOpStages = map[string]bool{
+	"delete": true, "insert": true, "merge": true, "rotate": true, "split": true,
+}
+
 // addStage parses stage-specific flags and appends the stage to the pipeline.
 //
 // It returns the cleanup functions of every document it opened. They belong to
@@ -327,7 +359,7 @@ func isStageCmd(s string) bool { return stageCmds[s] }
 // and usage past any capture the caller had installed, while only the wrapping
 // "pipe stage" line reached the writer. Every other command in this package
 // wires its FlagSet the same way.
-func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string, args []string, password string, stderr io.Writer, residual *[]error) ([]func(), error) {
+func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string, args []string, password string, stderr io.Writer, residual *[]error, opened *[]*pdf.Reader) ([]func(), error) {
 	switch name {
 	case "rotate":
 		fs := flag.NewFlagSet("rotate", flag.ContinueOnError)
@@ -391,6 +423,9 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 			}
 			others = append(others, r)
 			closers = append(closers, closer)
+		}
+		if opened != nil {
+			*opened = append(*opened, others...)
 		}
 		p.Merge(others)
 		return closers, nil
@@ -744,6 +779,9 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 			}
 			return w.InsertPages(*pos, srcReader, srcPageList...)
 		})
+		if opened != nil {
+			*opened = append(*opened, srcReader)
+		}
 		// The reader stays live until WriteTo executes this stage, so the
 		// closer belongs to the caller. See this function's doc comment.
 		return []func(){srcCloser}, nil
