@@ -182,13 +182,18 @@ func jpegSampleSpace(decodedLen, width, height int) (string, bool) {
 // than colour components (ISO 32000-1, 8.9.5.2), and [decodeIndexed] looks each
 // index up directly without ever consulting the array.
 //
+// The question is asked of the colour space, not of the colour table. An indexed
+// image whose table cannot be read is still an indexed image, and [DecodeImage]
+// refuses it rather than returning pixels, so answering "the array was applied"
+// would describe pixels that were never produced.
+//
 // A JPEG was excluded too, while the DCTDecode branch returned image/jpeg's
 // output without building the /Decode tables. That branch is gone: a JPEG now
 // takes the ordinary sample path, where the array is applied like any other
 // image's. An Adobe-inverted CMYK JPEG carrying /Decode [1 0 1 0 1 0 1 0]
 // therefore arrives already inverted, and the entry is redundant on re-encode.
 func AppliesDecodeArray(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
-	_, indexed := resolveIndexedPalette(ctx, doc, dict)
+	_, _, indexed := indexedColorSpace(ctx, doc, dict)
 	return !indexed
 }
 
@@ -267,6 +272,46 @@ func buildDecodeLUTs(dec []float64, components int) [][256]byte {
 // bound is here because the value is read from the file.
 const maxPaletteEntries = 256
 
+// indexedColorSpace reports the [/Indexed base hival lookup] array of an image's
+// colour space and the name of its base space, or ok=false when the image is not
+// in an indexed space at all. The base is empty when the array is too short to
+// name one.
+//
+// Whether a space IS indexed is a different question from whether its colour
+// table could be READ, and one flag used to answer both. Per ISO 32000-1, 8.6.6.3
+// an indexed image holds one index per pixel whatever its base is, so an indexed
+// image with an unreadable table must not be re-read in its base space: that
+// strides the samples by the base's component count and reports complete data as
+// truncated.
+func indexedColorSpace(ctx context.Context, doc *document.Document, dict ast.PdfDict) (ast.PdfArray, string, bool) {
+	csObj, ok := dict["ColorSpace"]
+	if !ok {
+		return nil, "", false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, csObj)
+	if err != nil {
+		doc.Logger.Debug("resolving indexed color space", slog.Any("err", err))
+		return nil, "", false
+	}
+	arr, ok := resolved.(ast.PdfArray)
+	if !ok || len(arr) == 0 {
+		return nil, "", false
+	}
+	family, err := document.ResolveObject(ctx, doc, arr[0])
+	if err != nil {
+		return nil, "", false
+	}
+	if name, ok := family.(ast.PdfName); !ok || name != "Indexed" {
+		return nil, "", false
+	}
+
+	var base string
+	if len(arr) >= 2 {
+		base = resolveColorSpace(ctx, doc, ast.PdfDict{"ColorSpace": arr[1]})
+	}
+	return arr, base, true
+}
+
 // palette holds a resolved indexed colour space: the device space its entries
 // are written in, and the lookup table itself.
 type palette struct {
@@ -286,28 +331,10 @@ type palette struct {
 // (pdfjs 160F-2019.pdf and S2.pdf among them), so no palette image could be
 // decoded at all.
 func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast.PdfDict) (palette, bool) {
-	csObj, ok := dict["ColorSpace"]
-	if !ok {
-		return palette{}, false
-	}
-	resolved, err := document.ResolveObject(ctx, doc, csObj)
-	if err != nil {
-		doc.Logger.Debug("resolving indexed color space", slog.Any("err", err))
-		return palette{}, false
-	}
-	arr, ok := resolved.(ast.PdfArray)
+	arr, base, ok := indexedColorSpace(ctx, doc, dict)
 	if !ok || len(arr) < 4 {
 		return palette{}, false
 	}
-	family, err := document.ResolveObject(ctx, doc, arr[0])
-	if err != nil {
-		return palette{}, false
-	}
-	if name, ok := family.(ast.PdfName); !ok || name != "Indexed" {
-		return palette{}, false
-	}
-
-	base := resolveColorSpace(ctx, doc, ast.PdfDict{"ColorSpace": arr[1]})
 	comps := imageComponents(base)
 	if comps == 0 {
 		return palette{}, false
@@ -508,6 +535,19 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 	// components (ISO 32000-1, 8.9.5.2), and the default [0 2^n-1] is the
 	// identity, which is what every indexed image in the corpora states.
 	pal, isIndexed := resolveIndexedPalette(ctx, doc, stream.Dict)
+	if !isIndexed {
+		// An unreadable colour table leaves an indexed image with nothing to
+		// decode, and its samples are indices either way (ISO 32000-1, 8.6.6.3).
+		// Reading them in the base space instead strides three or four times too
+		// far, so complete data was reported as "too short for RGB image: got N,
+		// want 3N". That blames the file for a base colour space litho does not
+		// support. Measured on 4 images whose base is /Lab, which collapses to
+		// DeviceRGB in [resolveColorSpace] because no component count is known
+		// for it.
+		if _, base, indexed := indexedColorSpace(ctx, doc, stream.Dict); indexed {
+			return nil, fmt.Errorf("indexed image over base color space %q has no readable color table", base)
+		}
+	}
 
 	// The samples of a JPEG are described by the codestream, not the dictionary,
 	// so their shape is measured before anything is built from it. Their depth
