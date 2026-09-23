@@ -57,6 +57,24 @@ func blankImage(
 	if err != nil {
 		return fmt.Errorf("resolving image %q: %w", box.Name, err)
 	}
+	// A stencil mask supplies a shape, not a picture: ISO 32000-1, 8.9.6.2
+	// paints its unmasked samples with the current fill colour. Blanking
+	// re-encodes to 8-bit DeviceRGB under a dictionary carrying no /ImageMask,
+	// so the result would stop being a mask, stop taking the fill colour, and
+	// change what the page RENDERS rather than only how the samples are stored.
+	//
+	// Refusing by name replaces the accident this refused by before. The decoder
+	// read a stencil as three-component colour, so a complete mask failed as
+	// "decoded data too short" and one whose data happened to be long enough was
+	// blanked after its mask bits had been read as colour. The decoder reads
+	// stencils correctly now, which is why the refusal has to be stated here
+	// rather than left to a length check that no longer fires.
+	//
+	// The error is discarded deliberately: an /ImageMask that cannot be resolved
+	// is treated as absent, leaving the image to the checks below.
+	if mask, _ := document.ResolveBool(ctx, doc, stream.Dict["ImageMask"]); mask {
+		return fmt.Errorf("%w: %q", ErrImageIsStencilMask, box.Name)
+	}
 	for _, key := range maskEntries {
 		if _, present := stream.Dict[key]; present {
 			return fmt.Errorf("%w: %q carries /%s", ErrImageCarriesSampleEntries, box.Name, key)

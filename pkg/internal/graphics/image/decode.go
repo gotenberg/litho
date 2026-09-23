@@ -447,6 +447,27 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 	colorSpace := resolveColorSpace(ctx, doc, stream.Dict)
 	bitsPerComp := statedBitsPerComponent(ctx, doc, stream.Dict)
 
+	// A stencil mask is not a picture. ISO 32000-1, 8.9.6.2 gives an image mask
+	// exactly one component at one bit per sample and forbids /ColorSpace, so
+	// neither an absent entry nor a wrongly present one may drive the unpacking.
+	// resolveColorSpace answers "DeviceRGB" when the entry is missing, which
+	// strides the samples three times too far: a 2312x3307 mask carries 955,723
+	// bytes and was asked for 2,867,169, so every complete stencil failed as
+	// "decoded data too short" while one padded to the larger size decoded with
+	// its mask bits read as colour components.
+	//
+	// DeviceGray is the decode-side answer, not a claim about the image's colour:
+	// under the default /Decode [0 1] a 0 sample reads as painted and a 1 as
+	// unpainted, which is the bitmap an OCR engine wants. What the image REPORTS
+	// is untouched, since imageMeta reads the dictionary itself.
+	//
+	// The error is discarded deliberately: an /ImageMask that cannot be resolved
+	// is treated as absent, leaving the image decoded as its dictionary
+	// describes, which is exactly the behaviour before this branch existed.
+	if mask, _ := document.ResolveBool(ctx, doc, stream.Dict["ImageMask"]); mask {
+		colorSpace, bitsPerComp = "DeviceGray", 1
+	}
+
 	filterName := imageFilterName(ctx, doc, stream.Dict)
 
 	// Stream through filters and read all decoded bytes for pixel construction
