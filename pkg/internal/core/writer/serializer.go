@@ -53,7 +53,7 @@ func Serialize(ctx context.Context, w io.Writer, obj ast.PdfObject) (int64, erro
 	case ast.PdfStream:
 		return serializeStream(ctx, w, v)
 	default:
-		return 0, fmt.Errorf("unsupported PDF object type %T", obj)
+		return 0, fmt.Errorf("%w: %T", ErrUnsupportedObject, obj)
 	}
 }
 
