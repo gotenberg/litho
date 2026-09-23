@@ -29,7 +29,14 @@ func runStampPDF(ctx context.Context, args []string, _stdout, stderr io.Writer) 
 		return exitError
 	}
 
-	stampReader, stampCloser, err := openPDF(ctx, *stampPath, "")
+	// Opened with the same -p as the target, as insert and merge open their
+	// own second documents. The stamp used to be opened with no password at
+	// all, which made an encrypted overlay unusable: there is no
+	// --stamp-password, so `stamp-pdf -p pw -stamp enc.pdf` answered "invalid
+	// PDF password" for a caller who had supplied the right one. A password is
+	// a no-op on an unencrypted file, so the ordinary plaintext stamp is
+	// unaffected.
+	stampReader, stampCloser, err := openPDF(ctx, *stampPath, *password)
 	if err != nil {
 		fmt.Fprintf(stderr, "opening stamp PDF: %v\n", err)
 		return exitError
@@ -50,10 +57,11 @@ func runStampPDF(ctx context.Context, args []string, _stdout, stderr io.Writer) 
 	}
 	defer closer()
 
-	// The stamp document is opened with no password, so it can never be an
-	// authenticated encrypted file: only the target can carry protection to
-	// lose. This command has no encryption flag, so it is never encrypting.
-	warnEncryptionDropped(stderr, false, r)
+	// Both inputs, because either can now carry protection the output will not:
+	// the stamp is opened with the same -p as the target. Variadic for exactly
+	// this reason, as insert passes its target and source. This command has no
+	// encryption flag, so it is never encrypting.
+	warnEncryptionDropped(stderr, false, r, stampReader)
 
 	w := pdf.NewWriter(r)
 

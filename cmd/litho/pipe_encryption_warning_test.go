@@ -165,6 +165,35 @@ func TestPipe_WarnsForEveryStageWhoseStandaloneCommandWarns(t *testing.T) {
 	}
 }
 
+// TestPipe_WarnsWhenOnlyTheStampStageSourceIsEncrypted pins the pipe half of
+// the stamp-password change, and it is the only place the stage's
+// `*opened = append(*opened, stampReader)` is observable.
+//
+// The piped document is PLAINTEXT and the stamp is encrypted, so runPipe's
+// warning can fire only if the stamp reader reached stageReaders. A stage that
+// opened the stamp correctly but never handed the reader back would produce an
+// unprotected document in silence, which is the same shape as the merge
+// closers that leaked before `aadb8373`.
+func TestPipe_WarnsWhenOnlyTheStampStageSourceIsEncrypted(t *testing.T) {
+	plain := writeTempPDF(t, untaggedTextPDF())
+	stamp := encryptTempPDF(t, writeTempPDF(t, untaggedTextPDF()), "s3cret")
+	out := filepath.Join(t.TempDir(), "out.pdf")
+
+	rc, errOut := runPipeArgs(t, []string{
+		"pipe", "-p", "s3cret", plain, "stamp-pdf", "-stamp", stamp, "-o", out,
+	})
+	if rc != exitOK {
+		t.Fatalf("exit %d, stderr: %s", rc, errOut)
+	}
+	if !strings.Contains(errOut, encryptionWarning) {
+		t.Errorf("the stamp's protection was dropped silently: the stage opened it but never "+
+			"handed the reader to runPipe; stderr: %q", errOut)
+	}
+	if !opensWithoutAPassword(t, out) {
+		t.Error("the output is encrypted, so nothing was dropped and this row proves nothing")
+	}
+}
+
 // TestPipe_DecryptStageStaysSilent is the control that keeps the deny list
 // honest, and the reason silentStages exists rather than warning on every
 // stage.

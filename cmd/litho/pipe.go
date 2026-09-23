@@ -858,10 +858,10 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 		if *stampPath == "" {
 			return nil, fmt.Errorf("--stamp is required")
 		}
-		// No password, matching the standalone command: the global -p
-		// authenticates the document being piped, and the overlay is a
-		// different file that need not share it.
-		stampReader, stampCloser, err := openPDF(ctx, *stampPath, "")
+		// The global password, matching the standalone command and the insert
+		// stage above. Opening the overlay with no password made an encrypted
+		// stamp unreachable from either surface.
+		stampReader, stampCloser, err := openPDF(ctx, *stampPath, password)
 		if err != nil {
 			return nil, fmt.Errorf("opening stamp PDF: %w", err)
 		}
@@ -884,6 +884,11 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 				Y:      *y,
 			}, pageNums...)
 		})
+		if opened != nil {
+			*opened = append(*opened, stampReader)
+		}
+		// The reader stays live until WriteTo executes this stage, so the
+		// closer belongs to the caller. See this function's doc comment.
 		return []func(){stampCloser}, nil
 
 	case "autotag":
