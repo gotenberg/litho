@@ -60,6 +60,18 @@ func (d *Document) StreamHasUndecodableFilter(stream ast.PdfStream) bool {
 	return len(d.undecodableFilters(stream)) > 0
 }
 
+// UndecodableFilters returns the names in the stream's /Filter chain that
+// neither a built-in decoder nor a registered plugin can decode, in chain
+// order. [Document.NewStreamReader] skips such a filter and hands back its
+// input still encoded, so a caller that interprets the bytes must refuse
+// instead of reading them.
+//
+// An indirect /Filter is resolved first, exactly as the decode path resolves
+// it, so the answer describes the chain that decode would actually run.
+func (d *Document) UndecodableFilters(ctx context.Context, stream ast.PdfStream) []string {
+	return d.undecodableFilters(d.resolveStreamFilterKeys(ctx, stream))
+}
+
 // undecodableFilters returns the names in the stream's /Filter chain that
 // no built-in decoder or registered plugin can decode.
 func (d *Document) undecodableFilters(stream ast.PdfStream) []string {

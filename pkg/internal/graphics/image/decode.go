@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"math"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -920,6 +921,19 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 	}
 
 	filterName := imageFilterName(ctx, doc, stream.Dict)
+
+	// The filter pipeline skips a filter it cannot decode and returns that
+	// filter's input still encoded, so every length check below would compare
+	// codestream bytes against a sample count. A short codestream was reported
+	// as "decoded data too short", blaming the file for a decoder litho lacks.
+	// One long enough passed and was read as pixels with no error at all:
+	// litho/pdfs/jpx_2b.pdf holds seven 8x8 JPXDecode images of 212 to 235
+	// encoded bytes against the 192 an RGB read wants, and each decoded into a
+	// picture made of codestream bytes.
+	if bad := doc.UndecodableFilters(ctx, stream); len(bad) > 0 {
+		return nil, fmt.Errorf("image %q is encoded with %s, which litho cannot decode: %w",
+			name, strings.Join(bad, ", "), filter.ErrUnsupportedFilter)
+	}
 
 	// Stream through filters and read all decoded bytes for pixel construction
 	// below. Streaming decompression avoids holding both compressed and
