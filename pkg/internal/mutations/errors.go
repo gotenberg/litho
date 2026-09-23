@@ -188,19 +188,25 @@ var ErrImageRegionCoversNoSample = errors.New("region covers an image but none o
 // image. Translating the indexed case is possible and is not done yet.
 var ErrImageCarriesSampleEntries = errors.New("image carries decode or mask entries")
 
-// ErrImageIsStencilMask reports an image mask the region covers.
+// ErrImageIsStencilMask reports an image mask the region covers that blanking
+// cannot rewrite, which is now only one carrying /SMask.
 //
-// A stencil mask carries no colour of its own: ISO 32000-1, 8.9.6.2 paints its
-// unmasked samples with the current fill colour and the mask supplies only the
-// shape. Blanking re-encodes the samples as 8-bit DeviceRGB under a fresh
-// dictionary that carries no /ImageMask, so the replacement would stop being a
-// mask, stop taking the fill colour, and change what the page renders rather
-// than only how its samples are stored.
+// An ordinary stencil is no longer refused. A mask supplies a shape rather than
+// a picture, and ISO 32000-1, 8.9.6.2 paints its unmasked samples with the
+// current fill colour, so [blankImage] clears one by keeping it a mask: the
+// replacement is still /ImageMask at one bit a sample, and the covered samples
+// are set UNPAINTED. Blanking it the way a picture is blanked would be wrong
+// twice over. Re-encoding to 8-bit DeviceRGB would stop it being a mask and
+// stop it taking the fill colour, and painting the covered samples black, which
+// is what clearing a picture does, would mark the page in whatever colour
+// happened to be in force instead of removing the shape.
 //
-// Blanking one in place means keeping it a mask and setting its bits, which is
-// not built. Until it is, refusing states the problem; the alternative is a
-// picture that changes outside the region the caller named.
-var ErrImageIsStencilMask = errors.New("region covers an image mask")
+// A mask carrying /SMask is what remains. No clause in ISO 32000-1 gives a soft
+// mask a meaning on a stencil, so dropping it would change rendering for a
+// viewer that honours it, and carrying it onto the one-bit replacement would
+// assert a meaning the spec does not define. Refusing beats guessing, which is
+// the judgement [ErrImageCarriesSampleEntries] records for /Mask.
+var ErrImageIsStencilMask = errors.New("region covers an image mask carrying a soft mask")
 
 // ErrStructElementPartlyRemoved reports a structure element that describes both
 // marked content a redaction removed and marked content it kept.

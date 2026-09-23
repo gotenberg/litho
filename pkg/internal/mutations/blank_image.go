@@ -22,6 +22,20 @@ import (
 // (ISO 32000-1, Table 89).
 var maskEntries = []ast.PdfName{"Mask", "ColorKeyMask"}
 
+// blankedPicture and blankedStencil are the sample values a cleared pixel takes.
+//
+// A picture is cleared to opaque black, which replaces the samples that were
+// there. A stencil has no colour of its own: ISO 32000-1, 8.9.6.2 paints its
+// unmasked samples with the current fill colour, so the value that REMOVES its
+// shape is the one leaving the pixel unpainted, which the decode reports as
+// white. Clearing a stencil to black would set every covered sample to "paint
+// me" and mark the page in whatever colour was in force, adding ink instead of
+// taking the shape away.
+var (
+	blankedPicture = []byte{0, 0, 0}
+	blankedStencil = []byte{255, 255, 255}
+)
+
 // blankImage overwrites the samples of one image that the zones cover and
 // replaces the image's stream object with the result.
 //
@@ -30,12 +44,19 @@ var maskEntries = []ast.PdfName{"Mask", "ColorKeyMask"}
 // the image the caller never selected. Overwriting the covered samples clears
 // exactly what was asked for and leaves the rest of the picture where it was.
 //
-// The samples come back as 8-bit DeviceRGB under /FlateDecode whatever they
-// were before, which is what lets a JPX or DCT image be cleared at all: there
-// is no encoder for those filters, so the blanked image has to be written in a
-// filter litho can produce. Any /SMask is carried over untouched, because a
+// A picture's samples come back as 8-bit DeviceRGB under /FlateDecode whatever
+// they were before, which is what lets a JPX or DCT image be cleared at all:
+// there is no encoder for those filters, so the blanked image has to be written
+// in a filter litho can produce. Any /SMask is carried over untouched, because a
 // soft mask is a separate grayscale image that stays valid against the new
 // samples and dropping it would change transparency outside the region.
+//
+// A stencil mask is rewritten as a stencil mask instead. It supplies a shape
+// rather than a picture, so transcoding it to DeviceRGB would stop it taking the
+// current fill colour and change what the page renders rather than only how its
+// samples are stored. The replacement keeps /ImageMask at one bit a sample and
+// carries no /Decode, because the decode already folded that array into the
+// pixels; see [packStencilBits].
 func blankImage(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -57,23 +78,23 @@ func blankImage(
 	if err != nil {
 		return fmt.Errorf("resolving image %q: %w", box.Name, err)
 	}
-	// A stencil mask supplies a shape, not a picture: ISO 32000-1, 8.9.6.2
-	// paints its unmasked samples with the current fill colour. Blanking
-	// re-encodes to 8-bit DeviceRGB under a dictionary carrying no /ImageMask,
-	// so the result would stop being a mask, stop taking the fill colour, and
-	// change what the page RENDERS rather than only how the samples are stored.
-	//
-	// Refusing by name replaces the accident this refused by before. The decoder
-	// read a stencil as three-component colour, so a complete mask failed as
-	// "decoded data too short" and one whose data happened to be long enough was
-	// blanked after its mask bits had been read as colour. The decoder reads
-	// stencils correctly now, which is why the refusal has to be stated here
-	// rather than left to a length check that no longer fires.
-	//
+
 	// The error is discarded deliberately: an /ImageMask that cannot be resolved
-	// is treated as absent, leaving the image to the checks below.
-	if mask, _ := document.ResolveBool(ctx, doc, stream.Dict["ImageMask"]); mask {
-		return fmt.Errorf("%w: %q", ErrImageIsStencilMask, box.Name)
+	// is treated as absent, leaving the image on the picture path, which is the
+	// behaviour that held before stencils were handled at all.
+	maskFlag, _ := document.ResolveBool(ctx, doc, stream.Dict["ImageMask"])
+	isStencil := bool(maskFlag)
+
+	// A soft mask on a stencil has no defined meaning: ISO 32000-1, Table 89
+	// gives /SMask a stream of alpha values describing a picture's samples, and
+	// a mask has none to describe. Carrying it onto the one-bit replacement
+	// would assert that meaning, and dropping it would change rendering for a
+	// viewer that honoured it, so this refuses rather than choose. A picture
+	// keeps its /SMask, which is the case the entry is defined for.
+	if isStencil {
+		if _, present := stream.Dict["SMask"]; present {
+			return fmt.Errorf("%w: %q", ErrImageIsStencilMask, box.Name)
+		}
 	}
 	for _, key := range maskEntries {
 		if _, present := stream.Dict[key]; present {
@@ -106,7 +127,12 @@ func blankImage(
 	canvas := image.NewNRGBA(bounds)
 	draw.Draw(canvas, bounds, img, bounds.Min, draw.Src)
 
-	blanked, err := blankCoveredSamples(canvas, box, zones)
+	fill := blankedPicture
+	if isStencil {
+		fill = blankedStencil
+	}
+
+	blanked, err := blankCoveredSamples(canvas, box, zones, fill)
 	if err != nil {
 		return fmt.Errorf("%q: %w", box.Name, err)
 	}
@@ -119,30 +145,52 @@ func blankImage(
 		return fmt.Errorf("%w: %q", ErrImageRegionCoversNoSample, box.Name)
 	}
 
-	rgb := make([]byte, 0, w*h*3)
-	for y := range h {
-		for x := range w {
-			i := canvas.PixOffset(bounds.Min.X+x, bounds.Min.Y+y)
-			rgb = append(rgb, canvas.Pix[i], canvas.Pix[i+1], canvas.Pix[i+2])
+	var (
+		dict       ast.PdfDict
+		compressed []byte
+	)
+	if isStencil {
+		compressed, err = flateCompress(packStencilBits(canvas, w, h))
+		if err != nil {
+			return fmt.Errorf("compressing blanked image mask %q: %w", box.Name, err)
 		}
-	}
-	compressed, err := flateCompress(rgb)
-	if err != nil {
-		return fmt.Errorf("compressing blanked image %q: %w", box.Name, err)
-	}
-
-	dict := ast.PdfDict{
-		"Type":             ast.PdfName("XObject"),
-		"Subtype":          ast.PdfName("Image"),
-		"Width":            ast.PdfInt(w),
-		"Height":           ast.PdfInt(h),
-		"ColorSpace":       ast.PdfName("DeviceRGB"),
-		"BitsPerComponent": ast.PdfInt(8),
-		"Filter":           ast.PdfName("FlateDecode"),
-	}
-	// A soft mask is its own image and still describes these samples.
-	if smask, present := stream.Dict["SMask"]; present {
-		dict["SMask"] = smask
+		// No /ColorSpace: ISO 32000-1, Table 89 does not allow the entry on a
+		// mask, which paints with the fill colour in force rather than one of
+		// its own. No /Decode either, for the reason packStencilBits states.
+		dict = ast.PdfDict{
+			"Type":             ast.PdfName("XObject"),
+			"Subtype":          ast.PdfName("Image"),
+			"Width":            ast.PdfInt(w),
+			"Height":           ast.PdfInt(h),
+			"ImageMask":        ast.PdfBool(true),
+			"BitsPerComponent": ast.PdfInt(1),
+			"Filter":           ast.PdfName("FlateDecode"),
+		}
+	} else {
+		rgb := make([]byte, 0, w*h*3)
+		for y := range h {
+			for x := range w {
+				i := canvas.PixOffset(bounds.Min.X+x, bounds.Min.Y+y)
+				rgb = append(rgb, canvas.Pix[i], canvas.Pix[i+1], canvas.Pix[i+2])
+			}
+		}
+		compressed, err = flateCompress(rgb)
+		if err != nil {
+			return fmt.Errorf("compressing blanked image %q: %w", box.Name, err)
+		}
+		dict = ast.PdfDict{
+			"Type":             ast.PdfName("XObject"),
+			"Subtype":          ast.PdfName("Image"),
+			"Width":            ast.PdfInt(w),
+			"Height":           ast.PdfInt(h),
+			"ColorSpace":       ast.PdfName("DeviceRGB"),
+			"BitsPerComponent": ast.PdfInt(8),
+			"Filter":           ast.PdfName("FlateDecode"),
+		}
+		// A soft mask is its own image and still describes these samples.
+		if smask, present := stream.Dict["SMask"]; present {
+			dict["SMask"] = smask
+		}
 	}
 
 	if !alloc.AllocAt(ref.ObjectNum, ast.NewStream(dict, compressed)) {
@@ -151,15 +199,49 @@ func blankImage(
 	return nil
 }
 
-// blankCoveredSamples paints every sample whose centre falls inside a zone
-// opaque black, and reports how many it painted.
+// packStencilBits re-packs the canvas as one-bit stencil samples, inverting the
+// unpacking [pdfimage.DecodeImage] applied.
+//
+// Per ISO 32000-1, 8.9.3 samples are packed with the high-order bit first and
+// each row padded to a byte boundary, which is the layout filter.BitSample
+// reads. The decode folded any /Decode array into the pixels and reported a
+// painted sample as 0 and an unpainted one as 255, so the replacement carries no
+// /Decode and writes the default [0 1] meaning directly: a 0 bit paints, a 1 bit
+// does not. A source mask whose /Decode was [1 0] therefore comes back the other
+// way round, which is why the array must not be carried over.
+func packStencilBits(canvas *image.NRGBA, w, h int) []byte {
+	bounds := canvas.Bounds()
+	rowBytes := (w + 7) / 8
+	out := make([]byte, rowBytes*h)
+
+	for y := range h {
+		for x := range w {
+			i := canvas.PixOffset(bounds.Min.X+x, bounds.Min.Y+y)
+			// A one-bit sample decodes to exactly 0 or 255, so nothing lands in
+			// between; the comparison rounds rather than truncates so a future
+			// source of intermediate values degrades sensibly.
+			if canvas.Pix[i] < 128 {
+				continue
+			}
+			out[y*rowBytes+x/8] |= 0x80 >> (x % 8)
+		}
+	}
+	return out
+}
+
+// blankCoveredSamples paints every sample whose centre falls inside a zone with
+// fill, and reports how many it painted.
+//
+// fill is the caller's because what clears a sample depends on what the image
+// is: opaque black replaces a picture's colour, while a stencil is cleared by
+// leaving the sample unpainted. See [blankedPicture] and [blankedStencil].
 //
 // Each candidate sample is carried forward through the CTM and tested against
 // the zones individually. Inverse-mapping the region and clearing its bounding
 // box would be cheaper and wrong: under a rotated placement that box covers
 // samples the region never touched, and blanking those destroys content outside
 // what the caller asked to clear.
-func blankCoveredSamples(canvas *image.NRGBA, box graphics.ImageBox, zones []heuristics.Zone) (int, error) {
+func blankCoveredSamples(canvas *image.NRGBA, box graphics.ImageBox, zones []heuristics.Zone, fill []byte) (int, error) {
 	bounds := canvas.Bounds()
 	w, h := bounds.Dx(), bounds.Dy()
 
@@ -168,7 +250,6 @@ func blankCoveredSamples(canvas *image.NRGBA, box graphics.ImageBox, zones []heu
 		return 0, ErrImagePlacementDegenerate
 	}
 
-	black := []byte{0, 0, 0}
 	blanked := 0
 	for py := minPy; py <= maxPy; py++ {
 		for px := minPx; px <= maxPx; px++ {
@@ -193,7 +274,7 @@ func blankCoveredSamples(canvas *image.NRGBA, box graphics.ImageBox, zones []heu
 			}
 
 			i := canvas.PixOffset(bounds.Min.X+px, bounds.Min.Y+py)
-			copy(canvas.Pix[i:i+3], black)
+			copy(canvas.Pix[i:i+3], fill)
 			blanked++
 		}
 	}
