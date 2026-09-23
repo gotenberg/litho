@@ -78,6 +78,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// of a group is the stage name, so this reads the pipeline rather than
 	// guessing at the argument list.
 	encryptsOutput, dropsEncryption, dropsXFA := false, false, false
+	var compactRefusedProfile string
 	for _, g := range groups {
 		if len(g) == 0 {
 			continue
@@ -91,8 +92,24 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		if xfaDroppingStages[g[0]] {
 			dropsXFA = true
 		}
+		// A remediate stage names the profile the caller asked for, and
+		// PDF/A-1 forbids the cross-reference stream that packing requires.
+		// The standalone command refuses --compact there; pipe honoured it and
+		// wrote a document that no longer conformed to the profile it had just
+		// remediated to, exit 0 and silent. Measured on one file: ISO 19005-1,
+		// 6.1.4 test 3, exactly one violation the uncompacted pipeline lacks.
+		if g[0] == "remediate" {
+			if p := stageProfileValue(g); compactForbiddenByProfile(p) {
+				compactRefusedProfile = p
+			}
+		}
 	}
 	warnCompactSkipped(stderr, compact, encryptsOutput)
+
+	// Reported after the encryption case and applied after both warnings, so
+	// each one still judges the flag as the caller passed it.
+	warnCompactProfileRefused(stderr, compact, compactRefusedProfile)
+	compact = compact && !compactForbiddenByProfile(compactRefusedProfile)
 
 	// Residual violations left by any remediate stage, judged after the write
 	// when --strict was passed. Stages run sequentially, [pdf.Pipeline.WriteTo]
@@ -338,6 +355,29 @@ func expectsValue(arg string) bool {
 		return false
 	}
 	return !boolStageFlags[strings.TrimLeft(arg, "-")]
+}
+
+// stageProfileValue returns the --profile a stage group carries, or "".
+//
+// All four spellings, because the CLI accepts all four: `-profile X`,
+// `--profile X`, `-profile=X` and `--profile=X`. [splitStageGroups] keeps a
+// stage's flags verbatim in its group, so the value is readable here without
+// the stage's own FlagSet, which addStage builds later and keeps inside a
+// closure runPipe cannot reach.
+func stageProfileValue(group []string) string {
+	for i, arg := range group {
+		name, value, hasEq := strings.Cut(arg, "=")
+		if name != "-profile" && name != "--profile" {
+			continue
+		}
+		if hasEq {
+			return value
+		}
+		if i+1 < len(group) {
+			return group[i+1]
+		}
+	}
+	return ""
 }
 
 // stageCmds names every command that also runs as a pipeline stage.
