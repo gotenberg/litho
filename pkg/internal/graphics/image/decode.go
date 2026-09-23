@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/internal/graphics/function"
 )
 
 const (
@@ -327,41 +328,139 @@ func indexedColorSpace(ctx context.Context, doc *document.Document, dict ast.Pdf
 // three-byte stride passes the length check on the first 3/7 of the stream and
 // reads colorants across pixel boundaries: measured on 135 images in one govdocs
 // document, every one of which decoded without error.
-func tintedColorSpace(ctx context.Context, doc *document.Document, dict ast.PdfDict) (string, int, bool) {
+func tintedColorSpace(ctx context.Context, doc *document.Document, dict ast.PdfDict) (ast.PdfArray, string, int, bool) {
 	csObj, ok := dict["ColorSpace"]
 	if !ok {
-		return "", 0, false
+		return nil, "", 0, false
 	}
 	resolved, err := document.ResolveObject(ctx, doc, csObj)
 	if err != nil {
 		doc.Logger.Debug("resolving image colour space", slog.Any("err", err))
-		return "", 0, false
+		return nil, "", 0, false
 	}
 	arr, ok := resolved.(ast.PdfArray)
 	if !ok || len(arr) < 2 {
-		return "", 0, false
+		return nil, "", 0, false
 	}
 	family, err := document.ResolveObject(ctx, doc, arr[0])
 	if err != nil {
-		return "", 0, false
+		return nil, "", 0, false
 	}
 	name, ok := family.(ast.PdfName)
 	if !ok {
-		return "", 0, false
+		return nil, "", 0, false
 	}
 
 	switch name {
 	case "Separation":
-		return "Separation", 1, true
+		return arr, "Separation", 1, true
 	case "DeviceN":
 		names, err := document.ResolveArray(ctx, doc, arr[1])
 		if err != nil || len(names) == 0 {
 			doc.Logger.Debug("resolving DeviceN colorant array", slog.Any("err", err))
-			return "", 0, false
+			return nil, "", 0, false
 		}
-		return "DeviceN", len(names), true
+		return arr, "DeviceN", len(names), true
 	}
-	return "", 0, false
+	return nil, "", 0, false
+}
+
+// decodeSeparation builds the image of a Separation colour space by mapping
+// each one-byte tint through the space's tint transform into its alternate
+// space, then to RGB.
+//
+// Per ISO 32000-1, 8.6.6.4 a Separation image carries ONE component whose value
+// is ink coverage, and the tint transform of the colour space array converts it
+// to the alternate space. litho substitutes "DeviceRGB" for the space itself so
+// samples can be read for non-visual extraction, and that substitution is wrong
+// twice over here: it strides three bytes where the image holds one, and where a
+// JPEG's shape is measured instead it emits the tint as a grey LEVEL. Every tint
+// transform measured in the corpora maps tint 0 to paper white and full tint to
+// near black, so the grey reading renders the image inverted.
+//
+// The transform is evaluated once per possible byte rather than once per pixel:
+// the samples are 8-bit after unpacking, so 256 evaluations cover any image.
+func decodeSeparation(
+	ctx context.Context,
+	doc *document.Document,
+	dict ast.PdfDict,
+	cs ast.PdfArray,
+	data []byte,
+	width, height, bitsPerComp int,
+) (image.Image, error) {
+	if len(cs) < 4 {
+		return nil, fmt.Errorf("separation colour space has %d entries, want [/Separation name alternate tint]", len(cs))
+	}
+
+	alternate := resolveColorSpace(ctx, doc, ast.PdfDict{"ColorSpace": cs[2]})
+	altComps := imageComponents(alternate)
+	if altComps == 0 {
+		return nil, fmt.Errorf("separation image over unsupported alternate colour space %q", alternate)
+	}
+
+	tint, err := function.New(ctx, doc, cs[3])
+	if err != nil {
+		return nil, fmt.Errorf("separation image tint transform: %w", err)
+	}
+	if tint.Outputs() != altComps {
+		return nil, fmt.Errorf("separation tint transform yields %d values for a %d-component alternate space %q",
+			tint.Outputs(), altComps, alternate)
+	}
+
+	unpacked, err := unpackSamples(data, width, height, 1, bitsPerComp, true)
+	if err != nil {
+		return nil, err
+	}
+	if len(unpacked) < width*height {
+		return nil, fmt.Errorf("decoded data too short for separation image: got %d, want %d", len(unpacked), width*height)
+	}
+
+	// /Decode remaps the tint before the transform sees it (ISO 32000-1,
+	// 8.9.5.2). No corpus Separation image declares one, so these tables are
+	// the identity in practice, but a file may.
+	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, dict, 1), 1)
+
+	var lut [256]color.RGBA
+	for s := range 256 {
+		out, err := tint.Eval([]float64{float64(dec[0][s]) / 255})
+		if err != nil {
+			return nil, fmt.Errorf("evaluating separation tint transform: %w", err)
+		}
+		lut[s] = alternateToRGB(alternate, out)
+	}
+
+	img := image.NewRGBA(image.Rect(0, 0, width, height))
+	idx := 0
+	for y := range height {
+		for x := range width {
+			img.Set(x, y, lut[unpacked[idx]])
+			idx++
+		}
+	}
+	return img, nil
+}
+
+// alternateToRGB converts one colour expressed in a device alternate space to
+// RGB. Values arrive in [0, 1] as the tint transform's /Range defines them.
+func alternateToRGB(alternate string, v []float64) color.RGBA {
+	unit := func(f float64) uint8 {
+		return uint8(min(max(f, 0), 1)*255 + 0.5)
+	}
+	switch alternate {
+	case "DeviceGray":
+		g := unit(v[0])
+		return color.RGBA{R: g, G: g, B: g, A: 255}
+	case "DeviceCMYK":
+		c, m, yy, k := min(max(v[0], 0), 1), min(max(v[1], 0), 1), min(max(v[2], 0), 1), min(max(v[3], 0), 1)
+		return color.RGBA{
+			R: uint8((1 - c) * (1 - k) * 255),
+			G: uint8((1 - m) * (1 - k) * 255),
+			B: uint8((1 - yy) * (1 - k) * 255),
+			A: 255,
+		}
+	default:
+		return color.RGBA{R: unit(v[0]), G: unit(v[1]), B: unit(v[2]), A: 255}
+	}
 }
 
 // indexedBaseComponents returns the samples-per-pixel of an indexed image's
@@ -768,21 +867,39 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 		bitsPerComp = 8
 	}
 
-	// A Separation or DeviceN image whose colorant count is not the three
+	// A DeviceN image whose colorant count is not the three
 	// [resolveColorSpace] substitutes cannot be strided by that substitution.
 	// Too few colorants reports complete data as truncated; too many passes the
 	// length check and reads colorants across pixel boundaries, returning a
 	// scrambled picture with no error at all. Refusing says which it is.
 	//
-	// A JPEG is exempt because [jpegSampleSpace] measures the shape from the
-	// codestream and has already overwritten colorSpace, so those images are
-	// strided correctly. An indexed image is exempt because its samples are
-	// indices and the base count sizes the colour TABLE, not the stride.
+	// Three exemptions, each for its own reason. A Separation image is decoded
+	// through its tint transform by [decodeSeparation] just below, whatever its
+	// filter, so its single colorant is the shape that path expects rather than
+	// a mismatch. A JPEG is exempt because [jpegSampleSpace] measures the shape
+	// from the codestream and has already overwritten colorSpace. An indexed
+	// image is exempt because its samples are indices and the base count sizes
+	// the colour TABLE, not the stride.
 	if !isIndexed && filterName != "DCTDecode" {
-		if family, colorants, ok := tintedColorSpace(ctx, doc, stream.Dict); ok &&
-			colorants != imageComponents(colorSpace) {
+		if _, family, colorants, ok := tintedColorSpace(ctx, doc, stream.Dict); ok &&
+			family != "Separation" && colorants != imageComponents(colorSpace) {
 			return nil, fmt.Errorf("image in a %s colour space of %d colorant(s) read as %q: litho does not evaluate the tint transform",
 				family, colorants, colorSpace)
+		}
+	}
+
+	// A Separation image holds one ink tint per pixel, not a colour, so it is
+	// decoded through its tint transform into the alternate space rather than
+	// through the substituted "DeviceRGB" (ISO 32000-1, 8.6.6.4). This runs
+	// before the sample stride is taken from colorSpace because that
+	// substitution is what the tint transform replaces, and it covers the
+	// DCTDecode case too, where [jpegSampleSpace] has already relabelled the
+	// samples "DeviceGray" and would otherwise emit the tint as luminance: on
+	// every tint transform measured, tint 0 is paper white and full tint is
+	// near black, so reading a tint as a grey level renders the image inverted.
+	if !isIndexed {
+		if arr, family, _, ok := tintedColorSpace(ctx, doc, stream.Dict); ok && family == "Separation" {
+			return decodeSeparation(ctx, doc, stream.Dict, arr, decodedData, width, height, bitsPerComp)
 		}
 	}
 

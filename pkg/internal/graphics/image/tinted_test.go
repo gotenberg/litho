@@ -2,6 +2,7 @@ package image
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"testing"
 
@@ -65,30 +66,153 @@ func TestDecodeImage_DeviceNWithMoreColorantsThanThreeIsRefused(t *testing.T) {
 	}
 }
 
-// TestDecodeImage_SeparationIsRefusedWithItsOwnReason pins that a Separation
-// image is refused for the right reason rather than for a wrong length.
+// TestDecodeImage_SeparationDecodesThroughItsTintTransform pins that a
+// Separation image is decoded through its tint transform.
 //
-// A Separation space has exactly one component (ISO 32000-1, 8.6.6.4), so its
-// stream is one byte a pixel. Read as three, complete data came back as "decoded
-// data too short for RGB image", blaming the file. Measured at ratio exactly
-// 3.0000 on thread_200_200192.pdf and thread_200_200196.pdf.
-func TestDecodeImage_SeparationIsRefusedWithItsOwnReason(t *testing.T) {
+// A Separation space has exactly one component whose value is ink coverage
+// (ISO 32000-1, 8.6.6.4). Read as the substituted three-component "DeviceRGB",
+// complete data came back as "decoded data too short for RGB image" at a ratio
+// of exactly 3.0000, blaming the file; where a JPEG's shape was measured
+// instead, the tint was emitted as a grey LEVEL and the image rendered
+// INVERTED, because every tint transform measured maps tint 0 to paper white
+// and full tint to near black.
+//
+// The expected colours are computed from the transform, not from this decoder:
+// C0 white to C1 black with N=1 is rgb = (1-t) per channel.
+func TestDecodeImage_SeparationDecodesThroughItsTintTransform(t *testing.T) {
 	t.Parallel()
 
 	const cs = "[/Separation /Spot1 /DeviceRGB 5 0 R]"
-	objs := append(tintedImagePDF(cs, []byte{10, 20, 30, 40}),
-		"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0] /C1 [1 1 1] /N 1 >>")
+	objs := append(tintedImagePDF(cs, []byte{0, 64, 128, 255}),
+		"<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1]"+
+			" /C0 [1 1 1] /C1 [0 0 0] /N 1 >>")
 	ctx, doc, page := imagePDF(t, objs)
 
-	_, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
-	if err == nil {
-		t.Fatal("DecodeImage accepted a 1-colorant Separation image as 3-component RGB")
+	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("DecodeImage refused a Separation image: %v", err)
 	}
-	if strings.Contains(err.Error(), "too short") {
-		t.Errorf("refusal still blames the data length: %v", err)
+	if got := img.Bounds(); got.Dx() != 4 || got.Dy() != 1 {
+		t.Fatalf("bounds = %v, want 4x1", got)
 	}
-	if !strings.Contains(err.Error(), "Separation") {
-		t.Errorf("refusal does not name the colour space family: %v", err)
+
+	// Tint 0 is NO ink, so it must render as paper white, not black. That sign
+	// is the whole defect: measured on thread_200_200192.pdf, three images and
+	// 687,592 pixels came back with not one pixel above luminance 192, against
+	// poppler's MEAN_LUM=221.91 for the same page.
+	for _, tc := range []struct {
+		x    int
+		want color.RGBA
+	}{
+		{0, color.RGBA{R: 255, G: 255, B: 255, A: 255}},
+		{1, color.RGBA{R: 191, G: 191, B: 191, A: 255}},
+		{2, color.RGBA{R: 127, G: 127, B: 127, A: 255}},
+		{3, color.RGBA{R: 0, G: 0, B: 0, A: 255}},
+	} {
+		r, g, b, a := img.At(tc.x, 0).RGBA()
+		got := color.RGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: uint8(a >> 8)}
+		if got != tc.want {
+			t.Errorf("pixel %d = %v, want %v", tc.x, got, tc.want)
+		}
+	}
+}
+
+// TestDecodeImage_SeparationOverCMYKAlternate pins the alternate-space
+// conversion, where the tint yields four values rather than three.
+func TestDecodeImage_SeparationOverCMYKAlternate(t *testing.T) {
+	t.Parallel()
+
+	const cs = "[/Separation /Black /DeviceCMYK 5 0 R]"
+	objs := append(tintedImagePDF(cs, []byte{0, 128, 255, 255}),
+		"<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1 0 1]"+
+			" /C0 [0 0 0 0] /C1 [0 0 0 1] /N 1 >>")
+	ctx, doc, page := imagePDF(t, objs)
+
+	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("DecodeImage: %v", err)
+	}
+	for _, tc := range []struct {
+		x    int
+		want uint8
+	}{{0, 255}, {1, 127}, {2, 0}} {
+		r, g, b, _ := img.At(tc.x, 0).RGBA()
+		if uint8(r>>8) != tc.want || uint8(g>>8) != tc.want || uint8(b>>8) != tc.want {
+			t.Errorf("pixel %d = (%d,%d,%d), want grey %d", tc.x, r>>8, g>>8, b>>8, tc.want)
+		}
+	}
+}
+
+// TestDecodeImage_SeparationWithSampledTint pins a type 0 tint transform, the
+// commonest kind: 74 of the 112 Separation images in govdocs use one.
+func TestDecodeImage_SeparationWithSampledTint(t *testing.T) {
+	t.Parallel()
+
+	samples := []byte{255, 255, 255, 128, 128, 128, 0, 0, 0}
+	const cs = "[/Separation /Spot1 /DeviceRGB 5 0 R]"
+	objs := append(tintedImagePDF(cs, []byte{0, 128, 255, 255}),
+		fmt.Sprintf("<< /FunctionType 0 /Domain [0 1] /Range [0 1 0 1 0 1]"+
+			" /Size [3] /BitsPerSample 8 /Encode [0 2] /Length %d >>\nstream\n%s\nendstream",
+			len(samples), samples))
+	ctx, doc, page := imagePDF(t, objs)
+
+	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("DecodeImage: %v", err)
+	}
+	for _, tc := range []struct {
+		x    int
+		want uint8
+	}{{0, 255}, {1, 127}, {2, 0}} {
+		r, _, _, _ := img.At(tc.x, 0).RGBA()
+		if uint8(r>>8) != tc.want {
+			t.Errorf("pixel %d = %d, want %d", tc.x, r>>8, tc.want)
+		}
+	}
+}
+
+// TestDecodeImage_SeparationRefusalsSurvive pins the cases the tint path still
+// refuses, so decoding one Separation image does not become decoding anything
+// shaped vaguely like one.
+func TestDecodeImage_SeparationRefusalsSurvive(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		cs   string
+		fn   string
+		want string
+	}{
+		{
+			"an alternate space with no component count",
+			"[/Separation /Spot1 [/Lab << /WhitePoint [0.9505 1 1.089] >>] 5 0 R]",
+			"<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1] /C0 [0 0 0] /C1 [1 1 1] /N 1 >>",
+			"unsupported alternate",
+		},
+		{
+			"a stitching tint transform, which this decoder does not evaluate",
+			"[/Separation /Spot1 /DeviceRGB 5 0 R]",
+			"<< /FunctionType 3 /Domain [0 1] /Range [0 1 0 1 0 1] /Bounds [] /Encode [0 1] /Functions [] >>",
+			"tint transform",
+		},
+		{
+			"a tint transform whose outputs do not fit the alternate space",
+			"[/Separation /Spot1 /DeviceCMYK 5 0 R]",
+			"<< /FunctionType 2 /Domain [0 1] /Range [0 1 0 1 0 1] /C0 [0 0 0] /C1 [1 1 1] /N 1 >>",
+			"yields 3 values",
+		},
+	} {
+		objs := append(tintedImagePDF(tc.cs, []byte{0, 64, 128, 255}), tc.fn)
+		ctx, doc, page := imagePDF(t, objs)
+
+		_, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+		if err == nil {
+			t.Errorf("%s: DecodeImage accepted it", tc.name)
+			continue
+		}
+		if !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: refusal %q does not mention %q", tc.name, err, tc.want)
+		}
 	}
 }
 
@@ -170,7 +294,7 @@ func TestTintedColorSpace(t *testing.T) {
 			"", 0, false,
 		},
 	} {
-		family, count, ok := tintedColorSpace(ctx, doc, tc.dict)
+		_, family, count, ok := tintedColorSpace(ctx, doc, tc.dict)
 		if ok != tc.wantOK || family != tc.wantFamily || count != tc.wantCount {
 			t.Errorf("%s: got (%q, %d, %v), want (%q, %d, %v)",
 				tc.name, family, count, ok, tc.wantFamily, tc.wantCount, tc.wantOK)
