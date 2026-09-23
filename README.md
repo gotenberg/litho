@@ -141,13 +141,14 @@ litho stamp-text --text "DRAFT" -o stamped.pdf document.pdf
 # Chain operations in one command.
 litho pipe document.pdf rotate --angle 90 stamp-text --text "DRAFT" -o out.pdf
 
-# Redact, encrypt and sign.
+# Redact and encrypt.
 litho redact --region 1:72,700,200,24 -o redacted.pdf document.pdf
 litho encrypt --user-password secret -o encrypted.pdf document.pdf
-litho sign --cert cert.pem --key key.pem -o signed.pdf document.pdf
 ```
 
-Run `litho` with no arguments to list every subcommand, or `litho <command>` to see its flags.
+Run `litho` with no arguments to list every subcommand, or `litho <command> -h` to see its flags.
+
+Signing is library-only. `Writer.Sign` takes a `pdf.Signer`, which the CLI cannot supply without additional crypto dependencies, so `litho sign` refuses with that explanation and exits `1`.
 
 ### Encrypted documents
 
