@@ -149,6 +149,14 @@ litho sign --cert cert.pem --key key.pem -o signed.pdf document.pdf
 
 Run `litho` with no arguments to list every subcommand, or `litho <command>` to see its flags.
 
+### Encrypted documents
+
+Editing an encrypted document produces an unprotected one. litho opens the file with the password supplied, writes out a decrypted object graph, and emits no `/Encrypt` dictionary unless one is requested. No command preserves the source's encryption. Every command that writes a document warns on stderr when the input carried protection the output will not.
+
+`decrypt` is the deliberate exception and stays silent, because producing an unprotected document is what it was asked to do.
+
+Re-protect the result in one of three ways. `split` and `merge` accept `--user-password` directly. `pipe` accepts an `encrypt` stage, which applies to the document it writes. Any other command can be followed by `litho encrypt`.
+
 ### Exit codes
 
 | Code  | Meaning                                                                      |
