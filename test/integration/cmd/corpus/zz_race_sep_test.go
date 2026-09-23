@@ -81,6 +81,17 @@ func TestRaceSeparationRemediation(t *testing.T) {
 		})
 	}
 	wg.Wait()
+
+	// Non-vacuity, asserted rather than assumed. Every failure path in
+	// remediate returns an empty sha, so a break anywhere in the chain (open,
+	// remediate, write, reopen) collapses shas to {""}, which is still ONE
+	// entry and which the determinism check below reads as success.
+	//
+	// Measured, not supposed: forcing remediate to produce nothing took this
+	// test from 6.41s to 0.01s and it still reported PASS.
+	if shas[""] {
+		t.Fatal("the target never remediated, so the determinism check proves nothing")
+	}
 	if len(shas) > 1 {
 		t.Errorf("target remediation non-deterministic: %d distinct outputs", len(shas))
 	}
