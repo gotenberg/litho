@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"io"
 	"log/slog"
+	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -312,12 +313,45 @@ func indexedColorSpace(ctx context.Context, doc *document.Document, dict ast.Pdf
 	return arr, base, true
 }
 
+// indexedBaseComponents returns the samples-per-pixel of an indexed image's
+// BASE colour space.
+//
+// It is deliberately not [imageComponents]. That one answers for the space the
+// samples are written in, and a base litho cannot read must keep answering 0
+// there so a direct image in it is refused rather than misread. An indexed
+// image is different: its samples are indices, and the base count sizes the
+// colour TABLE, not the sample stride. Per ISO 32000-1, 8.6.5 Lab takes three
+// components, which is the count [remediation.colorSpaceComponents] already
+// assigns it.
+func indexedBaseComponents(base string) int {
+	if base == "Lab" {
+		return 3
+	}
+	return imageComponents(base)
+}
+
+// labParams carries the parts of a [/Lab] colour space dictionary the palette
+// needs, per ISO 32000-1, 8.6.5.4.
+type labParams struct {
+	// whiteX, whiteY, whiteZ are /WhitePoint, the diffuse white the L*a*b*
+	// values are relative to. Required by the spec, so an absent one leaves
+	// the palette unresolved rather than guessing an illuminant.
+	whiteX, whiteY, whiteZ float64
+	// aMin, aMax, bMin, bMax are /Range. Its default is [-100 100 -100 100],
+	// but real files carry other spans: the two pdfjs documents that exposed
+	// this both declare [-128 127 -128 127].
+	aMin, aMax, bMin, bMax float64
+}
+
 // palette holds a resolved indexed colour space: the device space its entries
 // are written in, and the lookup table itself.
 type palette struct {
 	base   string
 	comps  int
 	lookup []byte
+	// lab is set only when base is "Lab". Its entries are not device values,
+	// so they cannot be written out as RGB the way every other base can.
+	lab labParams
 }
 
 // resolveIndexedPalette reports the palette of an [/Indexed base hival lookup]
@@ -335,9 +369,17 @@ func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast
 	if !ok || len(arr) < 4 {
 		return palette{}, false
 	}
-	comps := imageComponents(base)
+	comps := indexedBaseComponents(base)
 	if comps == 0 {
 		return palette{}, false
+	}
+
+	var lab labParams
+	if base == "Lab" {
+		lab, ok = resolveLabParams(ctx, doc, arr[1])
+		if !ok {
+			return palette{}, false
+		}
 	}
 
 	hival, isNum := document.Number(mustResolve(ctx, doc, arr[2]))
@@ -370,7 +412,7 @@ func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast
 	if len(lookup) > want {
 		lookup = lookup[:want]
 	}
-	return palette{base: base, comps: comps, lookup: lookup}, true
+	return palette{base: base, comps: comps, lookup: lookup, lab: lab}, true
 }
 
 // mustResolve resolves obj, returning it unchanged when resolution fails. The
@@ -396,6 +438,101 @@ func (p palette) entry(i byte) [4]byte {
 	return out
 }
 
+// resolveLabParams reads the /WhitePoint and /Range of a [/Lab dict] colour
+// space, and reports whether it is usable as an indexed base.
+//
+// /WhitePoint is required by ISO 32000-1, Table 65, and the conversion is
+// meaningless without an illuminant, so an absent or malformed one leaves the
+// palette unresolved rather than substituting a guess. /Range is optional and
+// defaults to [-100 100 -100 100] per the same table.
+func resolveLabParams(ctx context.Context, doc *document.Document, obj ast.PdfObject) (labParams, bool) {
+	arr, err := document.ResolveArray(ctx, doc, obj)
+	if err != nil || len(arr) < 2 {
+		doc.Logger.Debug("resolving indexed /Lab base colour space", slog.Any("err", err))
+		return labParams{}, false
+	}
+	dict, err := document.ResolveDict(ctx, doc, arr[1])
+	if err != nil || dict == nil {
+		doc.Logger.Debug("resolving /Lab colour space dictionary", slog.Any("err", err))
+		return labParams{}, false
+	}
+
+	white, err := document.ResolveArray(ctx, doc, dict["WhitePoint"])
+	if err != nil || len(white) != 3 {
+		doc.Logger.Debug("ignoring /Lab colour space with no usable /WhitePoint",
+			slog.Int("len", len(white)))
+		return labParams{}, false
+	}
+	p := labParams{
+		whiteX: document.Float(white[0]),
+		whiteY: document.Float(white[1]),
+		whiteZ: document.Float(white[2]),
+		aMin:   -100, aMax: 100, bMin: -100, bMax: 100,
+	}
+	// A zero or negative tristimulus scales every component to zero or flips
+	// its sign, so the whole image would read as black or as nonsense.
+	if p.whiteX <= 0 || p.whiteY <= 0 || p.whiteZ <= 0 {
+		doc.Logger.Debug("ignoring /Lab colour space with a non-positive /WhitePoint")
+		return labParams{}, false
+	}
+
+	if rng, err := document.ResolveArray(ctx, doc, dict["Range"]); err == nil && len(rng) == 4 {
+		p.aMin, p.aMax = document.Float(rng[0]), document.Float(rng[1])
+		p.bMin, p.bMax = document.Float(rng[2]), document.Float(rng[3])
+	}
+	return p, true
+}
+
+// labEntryToRGB converts one palette entry written in a Lab space to sRGB.
+//
+// The entry bytes are scaled onto the component ranges per ISO 32000-1, 8.6.6.3
+// (L* over [0, 100], a* and b* over /Range), turned into XYZ by the g() of
+// 8.6.5.4, and then matrixed to sRGB. The matrix is chosen by the declared
+// white rather than adapted to one: no chromatic adaptation is applied, which
+// is what PDF.js does for the same construct.
+//
+// Clamping before the transfer function is load-bearing rather than tidy. The
+// matrix yields negative channels for colours outside the sRGB gamut, which
+// real palettes hold, math.Sqrt of a negative is NaN, and a float-to-uint8
+// conversion outside [0, 255] is not defined to saturate: uint8(-1.0) is 255,
+// so an out-of-gamut entry would come out as its opposite.
+func labEntryToRGB(e [4]byte, p labParams) (uint8, uint8, uint8) {
+	decode := func(v byte, lo, hi float64) float64 {
+		return lo + float64(v)*(hi-lo)/255
+	}
+	lStar := decode(e[0], 0, 100)
+	aStar := decode(e[1], p.aMin, p.aMax)
+	bStar := decode(e[2], p.bMin, p.bMax)
+
+	g := func(x float64) float64 {
+		if x >= 6.0/29.0 {
+			return x * x * x
+		}
+		return (108.0 / 841.0) * (x - 4.0/29.0)
+	}
+	m := (lStar + 16) / 116
+	x := p.whiteX * g(m+aStar/500)
+	y := p.whiteY * g(m)
+	z := p.whiteZ * g(m-bStar/200)
+
+	var r, gr, b float64
+	if p.whiteZ < 1 {
+		r = x*3.1339 + y*-1.617 + z*-0.4906
+		gr = x*-0.9785 + y*1.916 + z*0.0333
+		b = x*0.072 + y*-0.229 + z*1.4057
+	} else {
+		r = x*3.2406 + y*-1.5372 + z*-0.4986
+		gr = x*-0.9689 + y*1.8758 + z*0.0415
+		b = x*0.0557 + y*-0.204 + z*1.057
+	}
+
+	channel := func(v float64) uint8 {
+		v = min(max(v, 0), 1)
+		return uint8(math.Sqrt(v) * 255)
+	}
+	return channel(r), channel(gr), channel(b)
+}
+
 // decodeIndexed builds the image of an indexed colour space, mapping each
 // one-byte sample through the palette into the base space.
 func decodeIndexed(data []byte, width, height int, pal palette) (image.Image, error) {
@@ -419,6 +556,9 @@ func decodeIndexed(data []byte, width, height int, pal palette) (image.Image, er
 					B: uint8((1 - yy) * (1 - k) * 255),
 					A: 255,
 				})
+			case "Lab":
+				r, g, b := labEntryToRGB(e, pal.lab)
+				img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
 			default:
 				img.Set(x, y, color.RGBA{R: e[0], G: e[1], B: e[2], A: 255})
 			}

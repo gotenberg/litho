@@ -22,6 +22,10 @@ func FuzzDecodeIndexed(f *testing.F) {
 		{[]byte{3, 2, 1, 0}, []byte{}, 4, 2, 2},
 		{[]byte{}, []byte{1, 2, 3}, 3, 1, 1},
 		{[]byte{255}, []byte{7}, 1, 1, 1},
+		// A Lab table: its entries run through floating-point conversion
+		// rather than straight out as bytes, so out-of-gamut entries and a
+		// short table reach math.Sqrt and the clamp on attacker-chosen data.
+		{[]byte{0, 1, 2, 3}, []byte{255, 128, 128, 0, 0, 255, 128, 255, 0, 0, 128, 128}, 3, 2, 2},
 	} {
 		f.Add(seed.data, seed.lookup, seed.comps, seed.w, seed.h)
 	}
@@ -53,6 +57,38 @@ func FuzzDecodeIndexed(f *testing.F) {
 			pal.base = "DeviceGray"
 		case 4:
 			pal.base = "DeviceCMYK"
+		}
+
+		// Run every three-component case through the Lab path as well. Its
+		// entries are scaled onto component ranges and matrixed rather than
+		// copied out, so it is the one base where a table byte reaches
+		// floating-point arithmetic: a NaN or an out-of-range float there
+		// would convert to a wrong byte rather than fail, and the opacity
+		// and bounds invariants below have to hold for it too. The white
+		// point is the D50 one the corpus documents declare.
+		if comps == 3 {
+			labPal := pal
+			labPal.base = "Lab"
+			labPal.lab = labParams{
+				whiteX: 0.964203, whiteY: 1.0, whiteZ: 0.824905,
+				aMin: -128, aMax: 127, bMin: -128, bMax: 127,
+			}
+			labImg, labErr := decodeIndexed(data, w, h, labPal)
+			if labErr == nil {
+				b := labImg.Bounds()
+				if b.Dx() != w || b.Dy() != h {
+					t.Fatalf("Lab bounds %v for a %dx%d image", b, w, h)
+				}
+				for y := range h {
+					for x := range w {
+						if _, _, _, a := labImg.At(x, y).RGBA(); a>>8 != 255 {
+							t.Fatalf("Lab pixel (%d,%d) has alpha %d", x, y, a>>8)
+						}
+					}
+				}
+			} else if labImg != nil {
+				t.Fatalf("decodeIndexed returned a Lab image alongside %v", labErr)
+			}
 		}
 
 		img, err := decodeIndexed(data, w, h, pal)
