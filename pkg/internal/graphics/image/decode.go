@@ -313,6 +313,57 @@ func indexedColorSpace(ctx context.Context, doc *document.Document, dict ast.Pdf
 	return arr, base, true
 }
 
+// tintedColorSpace reports the family and colorant count of a Separation or
+// DeviceN colour space, or ok=false for anything else.
+//
+// Per ISO 32000-1, 8.6.6.4 a Separation space has exactly one component, and per
+// 8.6.6.5 a DeviceN space has one per name in its colorant array. Both hold INK
+// TINTS rather than device colours, and [resolveColorSpace] answers "DeviceRGB"
+// for them so the samples can be read for non-visual extraction.
+//
+// That substitution silently assumes three components. Where the real count is
+// three the stride is right by accident; where it is not, the samples are strided
+// wrongly. A seven-colorant DeviceN image holds seven bytes a pixel, so a
+// three-byte stride passes the length check on the first 3/7 of the stream and
+// reads colorants across pixel boundaries: measured on 135 images in one govdocs
+// document, every one of which decoded without error.
+func tintedColorSpace(ctx context.Context, doc *document.Document, dict ast.PdfDict) (string, int, bool) {
+	csObj, ok := dict["ColorSpace"]
+	if !ok {
+		return "", 0, false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, csObj)
+	if err != nil {
+		doc.Logger.Debug("resolving image colour space", slog.Any("err", err))
+		return "", 0, false
+	}
+	arr, ok := resolved.(ast.PdfArray)
+	if !ok || len(arr) < 2 {
+		return "", 0, false
+	}
+	family, err := document.ResolveObject(ctx, doc, arr[0])
+	if err != nil {
+		return "", 0, false
+	}
+	name, ok := family.(ast.PdfName)
+	if !ok {
+		return "", 0, false
+	}
+
+	switch name {
+	case "Separation":
+		return "Separation", 1, true
+	case "DeviceN":
+		names, err := document.ResolveArray(ctx, doc, arr[1])
+		if err != nil || len(names) == 0 {
+			doc.Logger.Debug("resolving DeviceN colorant array", slog.Any("err", err))
+			return "", 0, false
+		}
+		return "DeviceN", len(names), true
+	}
+	return "", 0, false
+}
+
 // indexedBaseComponents returns the samples-per-pixel of an indexed image's
 // BASE colour space.
 //
@@ -715,6 +766,24 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 			colorSpace = measured
 		}
 		bitsPerComp = 8
+	}
+
+	// A Separation or DeviceN image whose colorant count is not the three
+	// [resolveColorSpace] substitutes cannot be strided by that substitution.
+	// Too few colorants reports complete data as truncated; too many passes the
+	// length check and reads colorants across pixel boundaries, returning a
+	// scrambled picture with no error at all. Refusing says which it is.
+	//
+	// A JPEG is exempt because [jpegSampleSpace] measures the shape from the
+	// codestream and has already overwritten colorSpace, so those images are
+	// strided correctly. An indexed image is exempt because its samples are
+	// indices and the base count sizes the colour TABLE, not the stride.
+	if !isIndexed && filterName != "DCTDecode" {
+		if family, colorants, ok := tintedColorSpace(ctx, doc, stream.Dict); ok &&
+			colorants != imageComponents(colorSpace) {
+			return nil, fmt.Errorf("image in a %s colour space of %d colorant(s) read as %q: litho does not evaluate the tint transform",
+				family, colorants, colorSpace)
+		}
 	}
 
 	samplesPerPixel := 1
