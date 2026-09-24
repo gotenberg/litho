@@ -2,6 +2,7 @@ package image
 
 import (
 	"context"
+	"image"
 	"log/slog"
 	"sort"
 
@@ -114,32 +115,68 @@ const maxXObjectDepth = 16
 // once. An image named twice in one resource dictionary stays two entries: the
 // listing is keyed by resource name, and both names are real placements.
 func ExtractImagesRecursive(ctx context.Context, doc *document.Document, page *document.Page) []models.ImageMeta {
-	seen := make(map[int]bool)
-	images := collectImages(ctx, doc, page.Resources, seen, 0)
-	return append(images, collectAnnotationImages(ctx, doc, page, seen)...)
+	var images []models.ImageMeta
+	walkPageImages(ctx, doc, page, func(name string, stream ast.PdfStream) bool {
+		if meta, ok := imageMeta(ctx, doc, name, stream); ok {
+			images = append(images, meta)
+		}
+		return true
+	})
+	return images
 }
 
-// collectAnnotationImages reports the images an annotation draws through its
+// imageVisitor receives each image stream a walk reaches, under the resource
+// name it is found by, and reports whether the walk goes on.
+type imageVisitor func(name string, stream ast.PdfStream) bool
+
+// walkPageImages visits the image XObjects a page shows, in the order
+// [ExtractImagesRecursive] lists them: its resources, then its annotations'
+// normal appearances.
+func walkPageImages(ctx context.Context, doc *document.Document, page *document.Page, visit imageVisitor) {
+	seen := make(map[int]bool)
+	if walkImages(ctx, doc, page.Resources, seen, 0, visit) {
+		walkAnnotationImages(ctx, doc, page, seen, visit)
+	}
+}
+
+// findImage returns the image the page shows under name: the first entry of
+// that name [ExtractImagesRecursive] lists.
+func findImage(ctx context.Context, doc *document.Document, page *document.Page, name string) (ast.PdfStream, bool) {
+	var found ast.PdfStream
+	ok := false
+	walkPageImages(ctx, doc, page, func(n string, stream ast.PdfStream) bool {
+		if n != name {
+			return true
+		}
+		if _, listed := imageMeta(ctx, doc, n, stream); !listed {
+			return true
+		}
+		found, ok = stream, true
+		return false
+	})
+	return found, ok
+}
+
+// walkAnnotationImages visits the images an annotation draws through its
 // normal appearance stream.
 //
 // Only /N is walked: /D is the down appearance, shown while the pointer is
 // held, and /R the rollover, so neither is what the page shows at rest
 // (ISO 32000-1, 12.5.5, Table 168). An annotation the viewer does not draw is
 // skipped, which is what the Hidden and NoView flags of Table 165 mean.
-func collectAnnotationImages(ctx context.Context, doc *document.Document, page *document.Page, seen map[int]bool) []models.ImageMeta {
+func walkAnnotationImages(ctx context.Context, doc *document.Document, page *document.Page, seen map[int]bool, visit imageVisitor) bool {
 	annotsObj, ok := page.Dict["Annots"]
 	if !ok {
-		return nil
+		return true
 	}
 	annots, err := document.ResolveArray(ctx, doc, annotsObj)
 	if err != nil || annots == nil {
-		return nil
+		return true
 	}
 
-	var images []models.ImageMeta
 	for _, annotObj := range annots {
 		if ctx.Err() != nil {
-			return images
+			return false
 		}
 		annotDict, err := document.ResolveDict(ctx, doc, annotObj)
 		if err != nil || annotDict == nil {
@@ -165,9 +202,11 @@ func collectAnnotationImages(ctx context.Context, doc *document.Document, page *
 		if err != nil || resources == nil {
 			continue
 		}
-		images = append(images, collectImages(ctx, doc, resources, seen, 1)...)
+		if !walkImages(ctx, doc, resources, seen, 1, visit) {
+			return false
+		}
 	}
-	return images
+	return true
 }
 
 // Annotation flags that keep a viewer from drawing the annotation at all
@@ -246,22 +285,27 @@ func normalAppearance(ctx context.Context, doc *document.Document, annotDict ast
 	return ast.PdfStream{}, none, false
 }
 
-// collectImages walks a resource dictionary, reporting its Image XObjects and
+// walkImages walks a resource dictionary, visiting its Image XObjects and
 // descending into its form XObjects, tiling patterns and soft-mask groups.
-func collectImages(ctx context.Context, doc *document.Document, resources ast.PdfDict, seen map[int]bool, depth int) []models.ImageMeta {
-	if depth > maxXObjectDepth || ctx.Err() != nil {
-		return nil
+func walkImages(ctx context.Context, doc *document.Document, resources ast.PdfDict, seen map[int]bool, depth int, visit imageVisitor) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	if depth > maxXObjectDepth {
+		return true
 	}
 
-	images := collectNestedResourceImages(ctx, doc, resources, seen, depth)
+	if !walkNestedResourceImages(ctx, doc, resources, seen, depth, visit) {
+		return false
+	}
 
 	xobjObj, ok := resources["XObject"]
 	if !ok {
-		return images
+		return true
 	}
 	xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
 	if err != nil || xobjDict == nil {
-		return images
+		return true
 	}
 
 	// Sorted, so the listing does not depend on Go's map order.
@@ -284,8 +328,8 @@ func collectImages(ctx context.Context, doc *document.Document, resources ast.Pd
 
 		switch subtype {
 		case "Image":
-			if meta, ok := imageMeta(ctx, doc, nameStr, stream); ok {
-				images = append(images, meta)
+			if !visit(nameStr, stream) {
+				return false
 			}
 		case "Form":
 			// Only a form is remembered. One invoked from several places holds
@@ -302,13 +346,15 @@ func collectImages(ctx context.Context, doc *document.Document, resources ast.Pd
 			if err != nil || nested == nil {
 				continue
 			}
-			images = append(images, collectImages(ctx, doc, nested, seen, depth+1)...)
+			if !walkImages(ctx, doc, nested, seen, depth+1, visit) {
+				return false
+			}
 		}
 	}
-	return images
+	return true
 }
 
-// collectNestedResourceImages reports the images reachable from a resource
+// walkNestedResourceImages visits the images reachable from a resource
 // dictionary other than through its /XObject entry.
 //
 // A tiling pattern is a content stream with its own resources (ISO 32000-1,
@@ -318,8 +364,7 @@ func collectImages(ctx context.Context, doc *document.Document, resources ast.Pd
 // issue18956.pdf shows a 728x90 image through an /ExtGState soft mask and
 // nothing else, and issue16395.pdf paints its images through a pattern, so both
 // listed no images at all while poppler drew them.
-func collectNestedResourceImages(ctx context.Context, doc *document.Document, resources ast.PdfDict, seen map[int]bool, depth int) []models.ImageMeta {
-	var images []models.ImageMeta
+func walkNestedResourceImages(ctx context.Context, doc *document.Document, resources ast.PdfDict, seen map[int]bool, depth int, visit imageVisitor) bool {
 	for _, key := range []ast.PdfName{"Pattern", "ExtGState"} {
 		entryObj, ok := resources[key]
 		if !ok {
@@ -337,11 +382,13 @@ func collectNestedResourceImages(ctx context.Context, doc *document.Document, re
 
 		for _, nameStr := range names {
 			if ctx.Err() != nil {
-				return images
+				return false
 			}
 			obj := entries[ast.PdfName(nameStr)]
 			if key == "Pattern" {
-				images = append(images, resourcesOfStream(ctx, doc, obj, seen, depth)...)
+				if !walkStreamResources(ctx, doc, obj, seen, depth, visit) {
+					return false
+				}
 				continue
 			}
 			state, err := document.ResolveDict(ctx, doc, obj)
@@ -354,33 +401,35 @@ func collectNestedResourceImages(ctx context.Context, doc *document.Document, re
 				// dictionary and means no mask at all.
 				continue
 			}
-			images = append(images, resourcesOfStream(ctx, doc, smask["G"], seen, depth)...)
+			if !walkStreamResources(ctx, doc, smask["G"], seen, depth, visit) {
+				return false
+			}
 		}
 	}
-	return images
+	return true
 }
 
-// resourcesOfStream walks the /Resources of the stream obj names, once per
+// walkStreamResources walks the /Resources of the stream obj names, once per
 // stream object.
-func resourcesOfStream(ctx context.Context, doc *document.Document, obj ast.PdfObject, seen map[int]bool, depth int) []models.ImageMeta {
+func walkStreamResources(ctx context.Context, doc *document.Document, obj ast.PdfObject, seen map[int]bool, depth int, visit imageVisitor) bool {
 	if obj == nil {
-		return nil
+		return true
 	}
 	if ref, isRef := obj.(ast.PdfIndirectRef); isRef {
 		if seen[ref.ObjectNum] {
-			return nil
+			return true
 		}
 		seen[ref.ObjectNum] = true
 	}
 	stream, err := document.ResolveStream(ctx, doc, obj)
 	if err != nil || stream.Dict == nil {
-		return nil
+		return true
 	}
 	nested, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
 	if err != nil || nested == nil {
-		return nil
+		return true
 	}
-	return collectImages(ctx, doc, nested, seen, depth+1)
+	return walkImages(ctx, doc, nested, seen, depth+1, visit)
 }
 
 // usesJPXDecode reports whether the image stream is JPEG 2000 encoded.
@@ -452,5 +501,8 @@ func imageMeta(ctx context.Context, doc *document.Document, name string, stream 
 		ColorSpace:       resolveColorSpace(ctx, doc, stream.Dict),
 		BitsPerComponent: bitsPerComp,
 		Open:             doc.OpenFunc(stream),
+		Decode: func(ctx context.Context) (image.Image, error) {
+			return decodeImageStream(ctx, doc, ast.PdfName(name), stream)
+		},
 	}, true
 }

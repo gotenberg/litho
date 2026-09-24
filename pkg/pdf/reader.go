@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"image"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -1440,13 +1441,71 @@ func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) (_ []mode
 // only the page's own resources missed the nested ones on 583 pages of the pdfjs
 // and govdocs corpora. An image reached from more than one place is reported
 // once. An image named twice in one resource dictionary stays two entries.
+//
+// Each entry's Decode decodes that image's pixels as [Reader.DecodeImage]
+// does, with the same errors. Two form XObjects may each name an image Im0, so
+// a Filename can repeat on a page: Decode decodes the entry it belongs to.
 func (r *Reader) ExtractImages(ctx context.Context, pageNum int) (_ []models.ImageMeta, err error) {
 	defer recoverToError(r.logger(), "Reader.ExtractImages", &err)
 	targetPage, err := r.resolvePage(ctx, pageNum)
 	if err != nil {
 		return nil, err
 	}
-	return pdfimage.ExtractImagesRecursive(ctx, r.doc, targetPage), nil
+	metas := pdfimage.ExtractImagesRecursive(ctx, r.doc, targetPage)
+	for i := range metas {
+		metas[i].Decode = r.imageDecoder(pageNum, metas[i].Filename, metas[i].Decode)
+	}
+	return metas, nil
+}
+
+// imageDecoder wraps the Decode function of an image [Reader.ExtractImages]
+// lists in the panic boundary and the error contract of [Reader.DecodeImage].
+func (r *Reader) imageDecoder(pageNum int, name string, decode func(context.Context) (image.Image, error)) func(context.Context) (image.Image, error) {
+	return func(ctx context.Context) (_ image.Image, err error) {
+		defer recoverToError(r.logger(), "ImageMeta.Decode", &err)
+		img, err := decode(ctx)
+		if err != nil {
+			return nil, imageDecodeError(pageNum, name, err)
+		}
+		return img, nil
+	}
+}
+
+// DecodeImage decodes the image the given 1-based page shows under name into
+// pixels: its samples through the stream's filters, read in its colour space
+// with its /Decode array applied. name is the Filename [Reader.ExtractImages]
+// reports; a name the page's own resources hold names that image, and
+// otherwise the first image of that name the listing holds, since an image
+// drawn through a form XObject is not in the page's own resources. To decode
+// an entry whose Filename repeats on the page, call its Decode function.
+//
+// It returns [ErrImageNotFound] when the page shows no image of that name and
+// [ErrImageNotDecodable] when litho cannot decode its samples.
+func (r *Reader) DecodeImage(ctx context.Context, pageNum int, name string) (_ image.Image, err error) {
+	defer recoverToError(r.logger(), "Reader.DecodeImage", &err)
+	targetPage, err := r.resolvePage(ctx, pageNum)
+	if err != nil {
+		return nil, err
+	}
+	img, err := pdfimage.DecodeImage(ctx, r.doc, targetPage, ast.PdfName(name))
+	if err != nil {
+		return nil, imageDecodeError(pageNum, name, err)
+	}
+	return img, nil
+}
+
+// imageDecodeError translates an image decoding error into the public contract
+// of [Reader.DecodeImage].
+func imageDecodeError(pageNum int, name string, err error) error {
+	switch {
+	case errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded):
+		return fmt.Errorf("page %d, image %q: %w", pageNum, name, err)
+	case errors.Is(err, pdfimage.ErrImageNotFound):
+		return fmt.Errorf("page %d, image %q: %w", pageNum, name, ErrImageNotFound)
+	}
+	// The cause is formatted rather than wrapped: its sentinels are internal,
+	// and the public contract is ErrImageNotDecodable.
+	return fmt.Errorf("page %d, image %q: %w: %v", pageNum, name, ErrImageNotDecodable, err)
 }
 
 // ExtractLines extracts stroked line segments from the content stream of

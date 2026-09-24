@@ -102,7 +102,10 @@ type Annotation struct {
 // ImageMeta represents metadata for an extracted Image XObject.
 // The raw encoded stream can be accessed lazily via Open, which returns an
 // [io.ReadCloser] that decodes through the PDF filter pipeline on read. The
-// caller must close the returned reader.
+// caller must close the returned reader. Decode turns this image's samples
+// into pixels on demand. Filename can repeat on one page, since two form
+// XObjects may each name an image Im0, so Decode is the way to decode this
+// entry rather than another image of the same name.
 // Values must not be shared across goroutines without synchronization.
 type ImageMeta struct {
 	Filename         string                                           `json:"filename"`
@@ -111,6 +114,7 @@ type ImageMeta struct {
 	ColorSpace       string                                           `json:"colorSpace"`
 	BitsPerComponent int                                              `json:"bitsPerComponent"`
 	Open             func(ctx context.Context) (io.ReadCloser, error) `json:"-"`
+	Decode           func(ctx context.Context) (image.Image, error)   `json:"-"`
 }
 
 // Line represents a stroked line segment on a page, in absolute page coordinates.

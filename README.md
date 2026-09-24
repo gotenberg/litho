@@ -14,7 +14,7 @@ litho implements ISO 32000 (PDF 1.4 through 2.0) in pure Go. It extracts text an
 
 - Text, with spatial layout inference and an optional OCR hand-off.
 - Positioned text elements, tables, and stroked lines.
-- Images, annotations, form fields, and field values.
+- Images, decoded to pixels on request, annotations, form fields, and field values.
 - Bookmarks, embedded files, and digital signatures with LTV verification.
 - PDF 2.0 data: geospatial tie points, measurements, 3D models, MathML formulas, and pronunciation lexicons.
 - Document metadata from the Info dictionary and the raw XMP packet.

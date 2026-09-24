@@ -50,6 +50,16 @@ var (
 	// retry with a different engine or skip the page.
 	ErrOCRFailed = errors.New("OCR engine failed")
 
+	// ErrImageNotFound is returned by [Reader.DecodeImage] when the page shows
+	// no image under the requested name.
+	ErrImageNotFound = errors.New("image not found on the page")
+
+	// ErrImageNotDecodable is returned by [Reader.DecodeImage] when litho
+	// cannot turn an image's samples into pixels: a filter it does not know, a
+	// colour space or depth it does not handle, or damaged data. The message
+	// carries the reason.
+	ErrImageNotDecodable = errors.New("image cannot be decoded")
+
 	// ErrInvalidPageNumber is returned when a page number is outside the
 	// valid range [1, pageCount].
 	ErrInvalidPageNumber = errors.New("page number out of bounds")

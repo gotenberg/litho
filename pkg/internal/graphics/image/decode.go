@@ -2,6 +2,7 @@ package image
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -852,36 +853,52 @@ func decodeIndexed(data []byte, width, height int, pal palette) (image.Image, er
 	return img, nil
 }
 
-// DecodeImage decodes a named Image XObject from a page into a Go image.Image.
-// The name parameter is the resource key (e.g., "Im0") under the page's
-// /Resources /XObject dictionary.
+// ErrImageNotFound reports that a page shows no image under the requested
+// name.
+var ErrImageNotFound = errors.New("image not found")
+
+// DecodeImage decodes a named Image XObject a page shows into a Go
+// image.Image. The name is a resource key, such as "Im0".
+//
+// A name the page's own /Resources /XObject dictionary holds names that image.
+// Otherwise the name is looked up as [ExtractImagesRecursive] lists the page's
+// images, through form XObjects, patterns, soft masks and annotation
+// appearances, and the first image of that name is decoded: callers pick names
+// from that listing, and an image drawn through a form is not in the page's
+// own dictionary.
 func DecodeImage(ctx context.Context, doc *document.Document, page *document.Page, name ast.PdfName) (image.Image, error) {
-	xobjObj, ok := page.Resources["XObject"]
-	if !ok {
-		return nil, fmt.Errorf("page has no /XObject resources")
-	}
-
-	xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
+	stream, err := lookupImage(ctx, doc, page, name)
 	if err != nil {
 		return nil, err
 	}
-	if xobjDict == nil {
-		return nil, fmt.Errorf("/XObject is not a dictionary")
-	}
+	return decodeImageStream(ctx, doc, name, stream)
+}
 
-	obj, ok := xobjDict[name]
-	if !ok {
-		return nil, fmt.Errorf("image %q not found in /XObject", name)
+// lookupImage finds the image stream DecodeImage decodes.
+func lookupImage(ctx context.Context, doc *document.Document, page *document.Page, name ast.PdfName) (ast.PdfStream, error) {
+	if xobjDict, err := document.ResolveDict(ctx, doc, page.Resources["XObject"]); err == nil && xobjDict != nil {
+		if obj, ok := xobjDict[name]; ok {
+			stream, err := document.ResolveStream(ctx, doc, obj)
+			if err != nil {
+				return ast.PdfStream{}, err
+			}
+			if stream.Dict == nil {
+				return ast.PdfStream{}, fmt.Errorf("image %q is not a stream", name)
+			}
+			return stream, nil
+		}
 	}
+	if stream, ok := findImage(ctx, doc, page, string(name)); ok {
+		return stream, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return ast.PdfStream{}, err
+	}
+	return ast.PdfStream{}, fmt.Errorf("image %q: %w", name, ErrImageNotFound)
+}
 
-	stream, err := document.ResolveStream(ctx, doc, obj)
-	if err != nil {
-		return nil, err
-	}
-	if stream.Dict == nil {
-		return nil, fmt.Errorf("image %q is not a stream", name)
-	}
-
+// decodeImageStream decodes the Image XObject stream that name refers to.
+func decodeImageStream(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream) (image.Image, error) {
 	width, err := resolveInt(ctx, doc, stream.Dict, "Width")
 	if err != nil {
 		return nil, err
