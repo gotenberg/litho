@@ -583,10 +583,17 @@ func recurseColorSpacePatch(ctx context.Context, alloc *writer.ObjAllocator, doc
 
 		// Resolve the raw object: XObject Form and TilingPattern entries
 		// are streams, ShadingPattern entries are dicts, so pre-resolve
-		// and branch on type.
-		rawObj, err := doc.Resolve(ctx, ref)
-		if err != nil || rawObj == nil {
-			continue
+		// and branch on type. Read alloc-first: fixOutputIntent's dedup pass
+		// has already rewritten a form whose inline /ColorSpace duplicated the
+		// new intent, and the rebuilt object is written back at ref below, so
+		// the document's copy would restore the duplicate.
+		rawObj, pending := alloc.Pending()[ref.ObjectNum]
+		if !pending {
+			resolved, err := doc.Resolve(ctx, ref)
+			if err != nil || resolved == nil {
+				continue
+			}
+			rawObj = resolved
 		}
 		if stream, isStream := rawObj.(ast.PdfStream); isStream {
 			resObj, hasRes := stream.Dict["Resources"]

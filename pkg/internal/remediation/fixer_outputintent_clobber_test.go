@@ -83,3 +83,54 @@ func TestPatchResourceColorSpace_KeepsTheDedupOutputIntentQueued(t *testing.T) {
 			"dedup pass's write", live["CS0"], csDictObj)
 	}
 }
+
+// TestRecurseColorSpacePatch_KeepsTheDedupOutputIntentQueuedInAForm pins that
+// the default colour space injection into a Form XObject starts from the form
+// the same fixer's dedup pass already rewrote.
+//
+// fixOutputIntent's dedup pass rewrites form 4, whose /Resources and
+// /ColorSpace are inline, to substitute its duplicated /CS0. The injection then
+// walked the page's /XObject entries, read form 4 from the document and wrote
+// it back with the default added, restoring the ICCBased space that duplicates
+// the output intent (ISO 19005-4, 6.2.4.2 test 3).
+func TestRecurseColorSpacePatch_KeepsTheDedupOutputIntentQueuedInAForm(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	const formContent = "q /CS0 cs 1 0 0 sc 0 0 10 10 re f Q\n"
+	srgb := deflateAt(t, sRGBICCProfile, zlib.BestCompression)
+	doc, alloc := newTestDoc(t, assemblePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Fm0 4 0 R >> >> >>",
+		fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 100 100]"+
+			" /Resources << /ColorSpace << /CS0 [/ICCBased 5 0 R] >> >> /Length %d >>\nstream\n%s\nendstream",
+			len(formContent), formContent),
+		iccObj(srgb, 3),
+	}))
+
+	const formObj = 4
+
+	if _, err := fixOutputIntent(ctx, alloc, doc, Options{}, nil, ""); err != nil {
+		t.Fatalf("fixOutputIntent: %v", err)
+	}
+
+	form, ok := alloc.Pending()[formObj].(ast.PdfStream)
+	if !ok {
+		t.Fatalf("form %d is pending as %T, want a stream; pending = %v",
+			formObj, alloc.Pending()[formObj], alloc.Pending())
+	}
+	body, err := form.Bytes(ctx)
+	if err != nil || string(body) != formContent {
+		t.Fatalf("form %d body is %q (%v), want %q", formObj, body, err, formContent)
+	}
+	cs := formColourSpace(t, form.Dict)
+	if _, has := cs["DefaultCMYK"]; !has {
+		t.Fatalf("form %d carries no /DefaultCMYK: the injection never rewrote it, so this "+
+			"test proves nothing; /ColorSpace = %v", formObj, cs)
+	}
+	if name, _ := cs["CS0"].(ast.PdfName); name != "DeviceRGB" {
+		t.Errorf("/CS0 in form %d is %v, want /DeviceRGB: recurseColorSpacePatch rebuilt the "+
+			"form from the document and discarded the dedup pass's write", formObj, cs["CS0"])
+	}
+}

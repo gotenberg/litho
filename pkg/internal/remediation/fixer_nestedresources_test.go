@@ -112,7 +112,7 @@ func TestFixNestedResources_LeavesASharedXObjectAlone(t *testing.T) {
 func TestResourcesForStream_MirrorsTheDetectorsSkips(t *testing.T) {
 	t.Parallel()
 
-	doc, _ := newTestDoc(t, nestedFormPDF())
+	doc, alloc := newTestDoc(t, nestedFormPDF())
 	page := ast.PdfDict{
 		"ColorSpace": ast.PdfDict{"CS0": ast.PdfName("DeviceGray")},
 		"Properties": ast.PdfDict{"MC0": ast.PdfDict{}},
@@ -132,7 +132,7 @@ func TestResourcesForStream_MirrorsTheDetectorsSkips(t *testing.T) {
 		{"a name the page does not define is left alone", "q /CS9 cs 0.5 sc", 0},
 		{"a font the stream selects is copied", "BT /F1 12 Tf ET", 1},
 	} {
-		_, added := resourcesForStream(context.Background(), doc, []byte(tc.content), nil, page)
+		_, added := resourcesForStream(context.Background(), alloc, doc, []byte(tc.content), nil, page)
 		if added != tc.want {
 			t.Errorf("%s: added %d, want %d", tc.name, added, tc.want)
 		}

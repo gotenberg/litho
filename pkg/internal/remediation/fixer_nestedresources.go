@@ -171,8 +171,12 @@ func fixFormXObjectResources(ctx context.Context, alloc *writer.ObjAllocator, do
 		if err != nil || len(data) == 0 {
 			continue
 		}
-		own, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-		newRes, added := resourcesForStream(ctx, doc, data, own, pageRes)
+		// The copy goes inline into the form, so an indirect /Resources is read
+		// alloc-first: output-intent injects a default colour space into it at
+		// its own object number, and copying the document's version would
+		// orphan that write.
+		own := liveDictValue(ctx, alloc, doc, stream.Dict["Resources"])
+		newRes, added := resourcesForStream(ctx, alloc, doc, data, own, pageRes)
 		if added == 0 {
 			continue
 		}
@@ -221,7 +225,10 @@ func fixType3FontResources(ctx context.Context, alloc *writer.ObjAllocator, doc 
 			continue
 		}
 
-		own, _ := document.ResolveDict(ctx, doc, fd["Resources"])
+		// Alloc-first for the reason given in fixFormXObjectResources: output-
+		// intent reaches a Type 3 font's /Resources through
+		// patchType3FontColorSpace.
+		own := liveDictValue(ctx, alloc, doc, fd["Resources"])
 		newRes := own
 		added := 0
 		for _, cpObj := range charProcs {
@@ -233,7 +240,7 @@ func fixType3FontResources(ctx context.Context, alloc *writer.ObjAllocator, doc 
 			if err != nil || len(data) == 0 {
 				continue
 			}
-			res, n := resourcesForStream(ctx, doc, data, newRes, pageRes)
+			res, n := resourcesForStream(ctx, alloc, doc, data, newRes, pageRes)
 			if n > 0 {
 				newRes = res
 				added += n
@@ -254,7 +261,13 @@ func fixType3FontResources(ctx context.Context, alloc *writer.ObjAllocator, doc 
 
 // resourcesForStream returns own extended with every name the stream
 // references that only the page's resources define, and how many were added.
-func resourcesForStream(ctx context.Context, doc *document.Document, data []byte, own, pageRes ast.PdfDict) (ast.PdfDict, int) {
+//
+// Each sub-dictionary of own it extends is read alloc-first, because the
+// extended copy replaces it inline: icc-dedup, devicen and sep-canon rewrite an
+// indirect /ColorSpace dictionary at its own object number ahead of
+// nested-resources, and copying the document's version would orphan that
+// write.
+func resourcesForStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, data []byte, own, pageRes ast.PdfDict) (ast.PdfDict, int) {
 	ops, err := content.ParseStreamData(ctx, data)
 	if err != nil {
 		doc.Logger.Debug("remediation.nestedresources: cannot parse content stream", "error", err)
@@ -294,7 +307,7 @@ func resourcesForStream(ctx context.Context, doc *document.Document, data []byte
 			continue
 		}
 
-		if ownSub, err := document.ResolveDict(ctx, doc, result[category]); err == nil && ownSub != nil {
+		if ownSub := liveDictValue(ctx, alloc, doc, result[category]); ownSub != nil {
 			if _, exists := ownSub[name]; exists {
 				continue
 			}
@@ -310,8 +323,8 @@ func resourcesForStream(ctx context.Context, doc *document.Document, data []byte
 			continue
 		}
 
-		sub, err := document.ResolveDict(ctx, doc, result[category])
-		if err != nil || sub == nil {
+		sub := liveDictValue(ctx, alloc, doc, result[category])
+		if sub == nil {
 			sub = make(ast.PdfDict)
 		}
 		newSub := make(ast.PdfDict, len(sub)+1)

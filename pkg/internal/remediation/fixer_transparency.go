@@ -454,7 +454,22 @@ func fixType3CharProcTransparency(ctx context.Context, doc *document.Document, a
 //
 //   - verapdf: 14 of 16 §6.4 carriers store the whole chain inline, and the
 //     repair silently wrote nothing for all of them.
+//   - pdfcpu pkg_testdata__FOSDEM14_HPC_devroom_14_GoCUDA: at PDF/A-1b all 19
+//     pages lost the /DefaultCMYK output-intent reported injecting, because
+//     this rebuilt their indirect /Resources from the parsed copy.
+//   - pdfjs bug1019475_1, issue14864, issue14982, issue18894: the same at
+//     PDF/A-1b, 8 pages of issue14864 among them.
 func fixExtGStateDict(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict, owner ast.PdfDict) (int, int, bool) {
+	// Start from the owner's /Resources as queued, not the walk's parsed copy:
+	// an inline chain rebuilds this dictionary and writes it back below, and
+	// output-intent (registry 68) injects a default colour space into the same
+	// /Resources ahead of transparency (107). An owner that inherits its
+	// resources has no entry of its own, and the walk's copy is all there is.
+	if owner != nil {
+		if live := liveDictValue(ctx, alloc, doc, owner["Resources"]); live != nil {
+			resources = live
+		}
+	}
 	gsObj, ok := resources["ExtGState"]
 	if !ok {
 		return 0, 0, false
