@@ -151,6 +151,26 @@ Run `litho` with no arguments to list every subcommand, or `litho <command> -h` 
 
 Signing is library-only. `Writer.Sign` takes a `pdf.Signer`, which the CLI cannot supply without additional crypto dependencies, so `litho sign` refuses with that explanation and exits `1`.
 
+### Resource limits
+
+Every document is read under five budgets that keep a crafted file from asking for unbounded memory or work. Global flags, placed before the command, change them for every document the command reads, each input of a multi-input command and each `pipe` stage included:
+
+| Flag                        | Bounds                                              | Default     |
+| --------------------------- | --------------------------------------------------- | ----------- |
+| `--max-stream-bytes`        | Decoded bytes of one stream                         | `256MiB`    |
+| `--max-image-pixels`        | Pixels of one image                                 | `100000000` |
+| `--max-embedded-file-bytes` | Size of an embedded PDF that PDF/A validation opens | `50MiB`     |
+| `--max-form-depth`          | Form XObjects nested below a page                   | `10`        |
+| `--max-cached-objects`      | Parsed objects kept in memory                       | `50000`     |
+
+A byte count takes a plain integer or a `KiB`, `MiB` or `GiB` suffix, the others a plain integer, and `0` keeps the default. A value that does not parse, or one past its ceiling, exits `1`.
+
+```bash
+litho --max-stream-bytes 64MiB --max-image-pixels 25000000 images document.pdf
+```
+
+The library takes the same budgets through `pdf.WithLimits`; `pdf.Limits` documents what each one bounds and the error a document past it returns.
+
 ### Encrypted documents
 
 Editing an encrypted document produces an unprotected one. litho opens the file with the password supplied, writes out a decrypted object graph, and emits no `/Encrypt` dictionary unless one is requested. No command preserves the source's encryption. Every command that writes a document warns on stderr when the input carried protection the output will not.

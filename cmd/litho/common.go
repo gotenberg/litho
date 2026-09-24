@@ -65,8 +65,11 @@ func cliLoggerFrom(ctx context.Context) *slog.Logger {
 
 // openOptions builds the options every open shares.
 //
-// The logger is threaded here rather than at the 38 call sites, which is the
-// whole reason openPDF exists as a chokepoint.
+// The logger and the resource limits are threaded here rather than at the 38
+// call sites, which is the whole reason openPDF exists as a chokepoint: every
+// command, and each input of a multi-input command or a pipe stage, opens
+// through it, and the library carries the limits into every document it
+// re-reads from those.
 func openOptions(ctx context.Context, password string) []pdf.OpenOption {
 	var opts []pdf.OpenOption
 	if password != "" {
@@ -74,6 +77,9 @@ func openOptions(ctx context.Context, password string) []pdf.OpenOption {
 	}
 	if logger := cliLoggerFrom(ctx); logger != nil {
 		opts = append(opts, pdf.WithLogger(logger))
+	}
+	if limits, ok := cliLimitsFrom(ctx); ok {
+		opts = append(opts, pdf.WithLimits(limits))
 	}
 	return opts
 }

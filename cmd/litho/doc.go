@@ -12,9 +12,14 @@
 //     attachments, auto-tagging, and PDF/A or PDF/UA remediation.
 //   - pipe chains several operations on one document.
 //
-// Global flags precede the command: --timeout bounds the run and
-// --log-level sends library diagnostics to stderr. Run litho -h for the
-// command list and litho <command> -h for a command's flags.
+// Global flags precede the command: --timeout bounds the run,
+// --log-level sends library diagnostics to stderr, and --max-stream-bytes,
+// --max-image-pixels, --max-embedded-file-bytes, --max-form-depth and
+// --max-cached-objects set the resource limits every document the command
+// reads is held to (pdf.Limits). A byte count takes a KiB, MiB or GiB
+// suffix, and 0 keeps a limit's default. Run litho -h for the command list,
+// the limits and their defaults, and litho <command> -h for a command's
+// flags.
 //
 // The exit status is 0 on success, 1 on error, 2 when the document does
 // not conform (validate, or remediate and pipe under --strict), and 124

@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 // logLevels maps the --log-level values onto slog levels.
@@ -42,6 +44,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	var globalArgs []string
 	var timeout time.Duration
 	var logger *slog.Logger
+	var limits pdf.Limits
+	limitsSet := false
 
 	// An index loop, not a range: --timeout consumes the argument after it,
 	// and only an explicit index can step past that value. A range loop
@@ -100,6 +104,26 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			// there under -o -, and diagnostics mixed into it would corrupt
 			// the result.
 			logger = slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: level}))
+		case limitFlagFor(arg) != nil:
+			// Consumes the next argument in the space form, as --timeout does.
+			// A value past a budget's ceiling parses here and is refused by the
+			// library when the command opens its document, which names the
+			// field and the ceiling.
+			f := limitFlagFor(arg)
+			value, split := strings.CutPrefix(arg, "--"+f.name+"=")
+			if !split {
+				if i+1 >= len(args) {
+					fmt.Fprintf(stderr, "--%s needs a number, for example --%s %s\n", f.name, f.name, limitExample(f))
+					return exitError
+				}
+				i++
+				value = args[i]
+			}
+			if err := f.set(&limits, value); err != nil {
+				fmt.Fprintf(stderr, "invalid --%s %q: %v\n", f.name, value, err)
+				return exitError
+			}
+			limitsSet = true
 		case len(arg) > 0 && arg[0] == '-':
 			// Rejected, not skipped. An unrecognised flag used to match no
 			// case and fall out of the switch, running the command as though
@@ -133,6 +157,9 @@ dispatch:
 	// immutable lookup tables, which is a different thing.
 	if logger != nil {
 		ctx = withCLILogger(ctx, logger)
+	}
+	if limitsSet {
+		ctx = withCLILimits(ctx, limits)
 	}
 
 	code := runCommand(ctx, cmd, globalArgs, stdout, stderr)
@@ -261,7 +288,7 @@ func runCommand(ctx context.Context, cmd string, globalArgs []string, stdout, st
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: litho [--timeout DURATION] [--log-level LEVEL] <command> [flags] [file...]")
+	fmt.Fprintln(w, "Usage: litho [--timeout DURATION] [--log-level LEVEL] [--max-LIMIT N] <command> [flags] [file...]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Inspection:")
 	fmt.Fprintln(w, "  info          Quick document summary")
@@ -314,4 +341,6 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --timeout D   Timeout duration (e.g., 30s, 5m)")
 	fmt.Fprintln(w, "  --log-level L Library diagnostics on stderr: off, error, warn, info, debug")
 	fmt.Fprintln(w, "  --help, -h    Show this help")
+	fmt.Fprintln(w)
+	printLimitUsage(w)
 }
