@@ -284,20 +284,9 @@ func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName,
 }
 
 func decodeFlateDecode(ctx context.Context, data []byte) ([]byte, error) {
-	r, err := zlib.NewReader(bytes.NewReader(data))
+	r, err := openFlate(data)
 	if err != nil {
-		// Fallback: try raw deflate (no zlib header). Some corrupt PDFs
-		// have damaged headers but valid deflate data.
-		r = flate.NewReader(bytes.NewReader(data))
-		// Verify we can read at least some data.
-		probe := make([]byte, 1)
-		if _, probeErr := r.Read(probe); probeErr != nil {
-			r.Close()
-			return nil, err // return original zlib error
-		}
-		// Reset: re-create reader to include the probed byte.
-		r.Close()
-		r = flate.NewReader(bytes.NewReader(data))
+		return nil, err
 	}
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
@@ -346,6 +335,63 @@ func decodeFlateDecode(ctx context.Context, data []byte) ([]byte, error) {
 	result := make([]byte, buf.Len())
 	copy(result, buf.Bytes())
 	return result, nil
+}
+
+// openFlate returns a reader of FlateDecode data: zlib, or raw deflate when
+// the zlib header is damaged but deflate data follows it, as in some corrupt
+// PDFs.
+func openFlate(data []byte) (io.ReadCloser, error) {
+	r, err := zlib.NewReader(bytes.NewReader(data))
+	if err == nil {
+		return r, nil
+	}
+	fr := flate.NewReader(bytes.NewReader(data))
+	// Verify we can read at least some data.
+	probe := make([]byte, 1)
+	if _, probeErr := fr.Read(probe); probeErr != nil {
+		fr.Close()
+		return nil, err // return original zlib error
+	}
+	// Reset: re-create reader to include the probed byte.
+	fr.Close()
+	return flate.NewReader(bytes.NewReader(data)), nil
+}
+
+// tolerantReader ends a stream where its decoder fails, once the decoder has
+// produced data, if tolerate accepts the error: the tolerance
+// decodeFlateDecode and decodeLZW apply to a whole buffer, applied to the
+// streaming path. Without it the same stream decoded through DecodeStream and
+// failed through NewStreamReader, which every image decode takes: an image
+// whose FlateDecode data stops short, or ends in a wrong checksum, failed with
+// "unexpected EOF" where PDF.js paints it.
+type tolerantReader struct {
+	r        io.Reader
+	c        io.Closer
+	tolerate func(error) bool
+	produced bool
+}
+
+func (t *tolerantReader) Read(p []byte) (int, error) {
+	n, err := t.r.Read(p)
+	if n > 0 {
+		t.produced = true
+	}
+	if err != nil && err != io.EOF && t.produced && t.tolerate(err) {
+		return n, io.EOF
+	}
+	return n, err
+}
+
+// Close closes the decoder, forgiving a checksum it reports at the end of
+// data it produced, as decodeFlateDecode does.
+func (t *tolerantReader) Close() error {
+	if t.c == nil {
+		return nil
+	}
+	if err := t.c.Close(); err != nil && (!t.produced || !t.tolerate(err)) {
+		return err
+	}
+	return nil
 }
 
 func decodeLZW(ctx context.Context, data []byte, parms ast.PdfDict) ([]byte, error) {
@@ -539,7 +585,11 @@ func NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, 
 			if err != nil {
 				return nil, err
 			}
-			return zlib.NewReader(bytes.NewReader(raw))
+			r, err := openFlate(raw)
+			if err != nil {
+				return nil, err
+			}
+			return &tolerantReader{r: r, c: r, tolerate: func(error) bool { return true }}, nil
 		case "LZWDecode", "LZW":
 			earlyChange := 1
 			if parms[0] != nil {
@@ -551,7 +601,10 @@ func NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, 
 			if err != nil {
 				return nil, err
 			}
-			return io.NopCloser(newLZWReader(bytes.NewReader(raw), earlyChange)), nil
+			return &tolerantReader{
+				r:        newLZWReader(bytes.NewReader(raw), earlyChange),
+				tolerate: func(err error) bool { return err == io.ErrUnexpectedEOF },
+			}, nil
 		case "BrotliDecode":
 			raw, err := stream.Bytes(ctx)
 			if err != nil {
