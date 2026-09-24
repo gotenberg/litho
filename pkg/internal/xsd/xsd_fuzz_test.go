@@ -2,6 +2,9 @@ package xsd
 
 import (
 	"context"
+	"errors"
+	"regexp"
+	"regexp/syntax"
 	"testing"
 	"testing/fstest"
 )
@@ -94,5 +97,42 @@ func FuzzXSDLoadThenValidate(f *testing.F) {
 			return
 		}
 		_, _ = Validate(context.Background(), schema, doc)
+	})
+}
+
+// FuzzTranslatePattern asserts the Appendix F translator never panics and
+// never hands the compiler a malformed expression. A pattern is read from
+// the schema, which FuzzXSDLoadThenValidate mutates as a whole; aiming at
+// the translator alone reaches its grammar far faster.
+func FuzzTranslatePattern(f *testing.F) {
+	f.Add(`[a-z-[aeiou]]{2}(\d+|\p{Lu}.)?`)
+	f.Add(`[a-z-[aeiou`) // Truncated inside the subtracted class.
+	f.Add(`[^\w-[\s]]*\P{Cn}a{02,3}`)
+	f.Add(`((a|b)*`)
+	f.Add(`\`)
+
+	f.Fuzz(func(t *testing.T, pattern string) {
+		if len(pattern) > 1<<12 {
+			return
+		}
+		translated, err := translatePattern(pattern)
+		if err != nil {
+			return
+		}
+		// The only compile failures a translation may leave are Go's own
+		// limits, which a valid Appendix F pattern can exceed: the 1000
+		// repetitions of a count, the size of the compiled program, and
+		// its nesting.
+		_, err = regexp.Compile("^(?:" + translated + ")$")
+		if err == nil {
+			return
+		}
+		if se, ok := errors.AsType[*syntax.Error](err); ok {
+			switch se.Code {
+			case syntax.ErrInvalidRepeatSize, syntax.ErrLarge, syntax.ErrNestingDepth:
+				return
+			}
+		}
+		t.Fatalf("translatePattern(%q) = %q, which does not compile: %v", pattern, translated, err)
 	})
 }

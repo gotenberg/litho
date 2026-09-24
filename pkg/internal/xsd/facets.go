@@ -226,8 +226,9 @@ func applyFacet(value string, f Facet, base *BuiltinType) *FacetViolation {
 
 // patternCache memoises compiled regular expressions across calls so
 // repeated validation against the same SimpleType does not pay the
-// regexp compile cost per value. The cache keys on the raw pattern
-// source, never the compiled regex pointer.
+// translation and compile cost per value. The cache keys on the raw
+// pattern source, never the compiled regex pointer, and holds a nil
+// *regexp.Regexp for a pattern that does not translate or compile.
 //
 //nolint:gochecknoglobals // process-wide compile cache.
 var patternCache sync.Map // map[string]*regexp.Regexp
@@ -248,19 +249,19 @@ func validatePatterns(value string, step []Facet) *FacetViolation {
 		}
 		re := patternFor(p.Value)
 		if re == nil {
-			// Treat an uncompilable pattern as a permissive match: the
-			// step's verdict is unknown once one of its branches is. A
-			// real XSD validator would reject the schema; the loader has
-			// no regex compile step, so the cost surfaces here and the
-			// validator errs on the side of false negatives rather than
-			// runtime panics.
+			// Treat a pattern that does not translate as a permissive
+			// match: the step's verdict is unknown once one of its
+			// branches is. A real XSD validator would reject the schema;
+			// the loader has no regex compile step, so the cost surfaces
+			// here and the validator errs on the side of false negatives
+			// rather than runtime panics.
 			//
 			// Deliberate leniency: 4.3.4.2 requires {value} to be a valid
-			// regular expression. Go's RE2 syntax is not the Appendix F
-			// dialect either, so the escapes \i and \c and block escapes
-			// such as \p{IsBasicLatin} fail to compile and land here.
-			// Character class subtraction compiles with another meaning:
-			// [a-z-[aeiou]] matches "a]" and rejects "b".
+			// regular expression, and a pattern that is not one lands
+			// here. So does a valid one [translatePattern] does not
+			// support: the escapes \i, \I, \c and \C, the block escapes
+			// such as \p{IsBasicLatin}, and a count above the 1000
+			// repetitions Go's regexp compiles.
 			return nil
 		}
 		if re.MatchString(value) {
@@ -288,16 +289,23 @@ func validatePatterns(value string, step []Facet) *FacetViolation {
 	}
 }
 
+// patternFor returns the compiled form of the XML Schema pattern raw, or
+// nil when it does not translate ([translatePattern]) or compile.
 func patternFor(raw string) *regexp.Regexp {
 	if cached, ok := patternCache.Load(raw); ok {
 		return cached.(*regexp.Regexp)
 	}
-	// XSD patterns are implicitly anchored at both ends (XML Schema Part
-	// 2, Appendix F); Go's regexp package matches anywhere by default, so
-	// wrap.
-	re, err := regexp.Compile("^(?:" + raw + ")$")
-	if err != nil {
-		return nil
+	// A failure at either stage caches nil: the verdict is the same the
+	// next time, and [validatePatterns] documents what it does with it.
+	var re *regexp.Regexp
+	if translated, err := translatePattern(raw); err == nil {
+		// XSD patterns are implicitly anchored at both ends (XML Schema
+		// Part 2, Appendix F: a regular expression denotes a set of whole
+		// strings); Go's regexp package matches anywhere by default, so
+		// wrap.
+		if compiled, err := regexp.Compile("^(?:" + translated + ")$"); err == nil {
+			re = compiled
+		}
 	}
 	patternCache.Store(raw, re)
 	return re
