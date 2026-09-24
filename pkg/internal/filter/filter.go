@@ -5,12 +5,12 @@ import (
 	"compress/flate"
 	"compress/zlib"
 	"context"
-	"encoding/ascii85"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
-	"strings"
+	"math"
 	"sync"
 
 	"github.com/andybalholm/brotli"
@@ -457,72 +457,151 @@ func decodeLZW(ctx context.Context, data []byte, parms ast.PdfDict) ([]byte, err
 	return result, nil
 }
 
+// isWhiteSpace reports whether c is one of the six white-space characters of
+// ISO 32000-1, 7.2.2, Table 1: NUL, HORIZONTAL TAB, LINE FEED, FORM FEED,
+// CARRIAGE RETURN and SPACE. ASCIIHexDecode (7.4.2) and ASCII85Decode (7.4.3)
+// both ignore "all white-space characters (see 7.2)", and only these.
+func isWhiteSpace(c byte) bool {
+	switch c {
+	case 0x00, '\t', '\n', '\f', '\r', ' ':
+		return true
+	}
+	return false
+}
+
 // decodeASCIIHex decodes ISO 32000-1, 7.4.2: one byte per pair of hexadecimal
 // digits, white space ignored, and a GREATER-THAN SIGN as EOD. Any other
-// character is an error, which hex.DecodeString reports.
+// character "shall cause an error", reported as [ErrInvalidASCIIHex].
+//
+// # Corpus evidence
+//
+//   - All corpora: of the 124 ASCIIHexDecode streams, every one holding NUL or
+//     FORM FEED also holds a byte 7.4.2 rejects, all in fuzzed pdfjs files, so
+//     ignoring the two changes no decoded stream.
 func decodeASCIIHex(data []byte) ([]byte, error) {
-	val := string(data)
-	idx := strings.Index(val, ">")
-	if idx != -1 {
-		val = val[:idx]
+	if idx := bytes.IndexByte(data, '>'); idx != -1 {
+		data = data[:idx]
 	}
 
-	// TODO: 7.4.2 ignores "all white-space characters (see 7.2)", and Table 1
-	// also lists NUL (00h) and FORM FEED (0Ch). Only SP, HT, LF and CR are
-	// stripped here, so a stream holding either byte fails with "invalid
-	// byte" instead of decoding.
-	val = strings.Map(func(r rune) rune {
-		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
-			return -1
+	// Filtered byte by byte: strings.Map and bytes.Map read UTF-8, so a byte of
+	// 80h or above would turn into the three bytes of U+FFFD and the error
+	// would name a byte the data does not hold.
+	digits := make([]byte, 0, len(data)+1)
+	for _, c := range data {
+		if !isWhiteSpace(c) {
+			digits = append(digits, c)
 		}
-		return r
-	}, val)
+	}
 
 	// 7.4.2: "If the filter encounters the EOD marker after reading an odd
 	// number of hexadecimal digits, it shall behave as if a 0 (zero) followed
 	// the last digit." The digit is supplied without an EOD marker too, so
 	// data truncated before its ">" still decodes.
-	if len(val)%2 != 0 {
-		val += "0"
+	if len(digits)%2 != 0 {
+		digits = append(digits, '0')
 	}
-	decoded, err := hex.DecodeString(val)
-	if err != nil {
-		return nil, err
+	decoded := make([]byte, len(digits)/2)
+	if _, err := hex.Decode(decoded, digits); err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrInvalidASCIIHex, err)
 	}
 	return decoded, nil
 }
 
-// decodeASCII85 decodes ISO 32000-1, 7.4.3. The encoding ends at its "~>"
-// EOD marker and ignores white space. A z inside a group and a final partial
-// group of one character are errors, which ascii85.Decode reports.
+// decodeASCII85 decodes ISO 32000-1, 7.4.3: each group of five characters
+// from ! through u is a base-85 number written as four bytes, a z standing
+// for a whole group gives four zero bytes, white space is ignored, and the
+// sequence ~> is EOD. Every other character, and each of the conditions 7.4.3
+// says "shall never occur in a correctly encoded byte sequence", is reported
+// as [ErrInvalidASCII85]: a group whose value exceeds 2^32 - 1, a z inside a
+// group, and a final partial group of one character.
 //
-// TODO: 7.4.3 makes "any character sequences that represent impossible
-// combinations in the ASCII base-85 encoding" an error, a group whose value
-// exceeds 2^32 - 1 among them. ascii85.Decode accumulates in a uint32 and
-// wraps instead, so "uuuuu" decodes to four wrong bytes.
+// encoding/ascii85 is not used. It accumulates a group in a uint32, so a group
+// past 2^32 - 1 wraps and decodes to four wrong bytes, and it skips every byte
+// up to SPACE where 7.4.3 ignores only the white space of Table 1.
+//
+// The error fails the whole stream, as ASCIIHexDecode's does: the tolerance
+// that keeps the output of a truncated FlateDecode stream belongs to the
+// reader-based decoders, and a later filter in the chain never runs.
+//
+// # Corpus evidence
+//
+//   - All corpora: 30 of the 4,520 ASCII85Decode streams hold a group past
+//     2^32 - 1, all in fuzzed pdfjs files. Every other one decodes to the
+//     bytes encoding/ascii85 gave.
+//   - pdfjs poppler-90-0-fuzzed.pdf, poppler-395-0-fuzzed.pdf: 8 of those 30
+//     decoded because the group wrapped, and now fail. They are page content,
+//     Type 3 glyph procedures and a CMap, all fuzzed bytes.
+//   - All corpora: a control character outside Table 1 appears only in
+//     ASCII85Decode streams that already failed on another error, so
+//     rejecting it changes no decoded stream.
 func decodeASCII85(data []byte) ([]byte, error) {
 	// 7.4.3 names the 2-character sequence ~> as the EOD marker, so nothing
-	// after it is data. Go's decoder does not know the marker, so cut there.
+	// after it is data.
 	if idx := bytes.Index(data, []byte("~>")); idx != -1 {
 		data = data[:idx]
 	}
 
-	// 7.4.3: the filter "shall ignore all white-space characters (see 7.2)".
-	// ascii85.Decode also skips every byte up to SPACE, which covers the NUL
-	// and FORM FEED this list omits.
-	data = bytes.Map(func(r rune) rune {
-		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
-			return -1
+	out := make([]byte, 0, len(data))
+	var group uint32
+	// n counts the digits in group, and start is the offset of its first.
+	n, start := 0, 0
+	for i, c := range data {
+		switch {
+		case isWhiteSpace(c):
+			continue
+		case c == 'z' && n == 0:
+			out = append(out, 0, 0, 0, 0)
+			continue
+		case c == 'z':
+			return nil, fmt.Errorf("%w: z inside the group at offset %d", ErrInvalidASCII85, start)
+		case c < '!' || c > 'u':
+			return nil, fmt.Errorf("%w: byte %#02x at offset %d", ErrInvalidASCII85, c, i)
 		}
-		return r
-	}, data)
-
-	dst := make([]byte, 4*len(data))
-	ndst, _, err := ascii85.Decode(dst, data, true)
-	if err != nil {
-		return nil, fmt.Errorf("ascii85 decode: %w", err)
+		if n == 0 {
+			start = i
+		}
+		var ok bool
+		if group, ok = ascii85Digit(group, uint32(c-'!')); !ok {
+			return nil, fmt.Errorf("%w: the group at offset %d exceeds 2^32 - 1", ErrInvalidASCII85, start)
+		}
+		if n++; n == 5 {
+			out = binary.BigEndian.AppendUint32(out, group)
+			group, n = 0, 0
+		}
 	}
-	return dst[:ndst], nil
+
+	switch n {
+	case 0:
+		return out, nil
+	case 1:
+		return nil, fmt.Errorf("%w: final partial group of one character at offset %d", ErrInvalidASCII85, start)
+	}
+	// 7.4.3: an encoder given k bytes pads them with 4 - k zero bytes and
+	// writes the first k + 1 characters of their group, so n - 1 bytes are
+	// due. Completing the group with u, the largest digit, gives them back:
+	// the value lands at most 85^(5-n) - 1 above the encoded one, inside the
+	// zeroed low bytes, where completing with ! would borrow from the bytes
+	// kept. No encoder writes a partial group that completes past 2^32 - 1,
+	// so one that does is an impossible combination too.
+	for range 5 - n {
+		var ok bool
+		if group, ok = ascii85Digit(group, 'u'-'!'); !ok {
+			return nil, fmt.Errorf("%w: the final partial group at offset %d exceeds 2^32 - 1", ErrInvalidASCII85, start)
+		}
+	}
+	var word [4]byte
+	binary.BigEndian.PutUint32(word[:], group)
+	return append(out, word[:n-1]...), nil
+}
+
+// ascii85Digit appends base-85 digit d to the group value v, and reports false
+// when the result exceeds 2^32 - 1, which ISO 32000-1, 7.4.3 says never occurs
+// in a correctly encoded group.
+func ascii85Digit(v, d uint32) (uint32, bool) {
+	if v > (math.MaxUint32-d)/85 {
+		return 0, false
+	}
+	return v*85 + d, true
 }
 
 func decodeCCITTFax(ctx context.Context, data []byte, parms ast.PdfDict) ([]byte, error) {
