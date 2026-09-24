@@ -602,6 +602,23 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (_
 	}, nil
 }
 
+// adoptConfiguration gives r, a reader just opened on a rewrite of src's
+// document, the reading configuration src was opened with: its filter
+// plugins, default CMYK profile, OCR engine, loaded schemas and leniency. A
+// [Pipeline] reads back every intermediate file it writes, and a stage after
+// that must read the document as the caller asked. The password is not
+// carried, since intermediate files are written in the clear. r must not be
+// in use yet: these fields are set once, before concurrent use begins.
+func (r *Reader) adoptConfiguration(src *Reader) {
+	r.doc.Filters = src.doc.Filters
+	r.doc.CMYKProfile = src.doc.CMYKProfile
+	r.ocr = src.ocr
+	r.ciiSchema = src.ciiSchema
+	r.schSchema = src.schSchema
+	r.schPhase = src.schPhase
+	r.lenient = src.lenient
+}
+
 // OpenFile opens a PDF directly from the filesystem. The returned [Reader]
 // holds a reference to the underlying file; the caller must call
 // [Reader.Close] when done.

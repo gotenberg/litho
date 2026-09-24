@@ -295,10 +295,11 @@ func (ex *executor) reopenAsCurrent(ctx context.Context, f *os.File) error {
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("seeking intermediate file: %w", err)
 	}
-	next, err := Open(ctx, f, stat.Size())
+	next, err := Open(ctx, f, stat.Size(), WithLogger(ex.cur.doc.Logger))
 	if err != nil {
 		return fmt.Errorf("reopening intermediate file: %w", err)
 	}
+	next.adoptConfiguration(ex.cur)
 	if ex.curOwned && ex.cur != nil {
 		if closeErr := ex.cur.Close(); closeErr != nil {
 			ex.logger.Debug("closing previous reader failed", slog.Any("err", closeErr))
