@@ -527,10 +527,8 @@ func decodeSeparation(
 // 540x534 over seven colorants yet holds only 31,400 distinct tuples, so the
 // cache turns 36.9 million corner visits into 4.0 million, a factor of nine.
 //
-// A JPEG is not decoded here. [jpegSampleSpace] measures the sample shape from
-// the codestream, and that count need not equal the colorant count, so the two
-// DeviceN JPEGs in the corpora decode correctly through the ordinary path and
-// are left alone.
+// A JPEG is decoded here only when its codestream holds one component per
+// colorant; [jpegSampleSpace] measures that shape.
 func decodeDeviceN(
 	ctx context.Context,
 	doc *document.Document,
@@ -622,6 +620,44 @@ func decodeDeviceN(
 	return img, nil
 }
 
+// tintTable converts the colour table of an indexed space over a Separation or
+// DeviceN space, whose entries hold one tint per colorant, into RGB entries
+// through the space's tint transform (ISO 32000-1, 8.6.6.4 and 8.6.6.5).
+// Reading the tints as RGB, three bytes an entry, misread every entry of the
+// five-colorant tables of govdocs thread_300_300659 and thread_400_400932.
+func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, colorants int, table []byte) ([]byte, error) {
+	if len(cs) < 4 {
+		return nil, fmt.Errorf("tinted colour space has %d entries, want [family names alternate tint]", len(cs))
+	}
+	alternate := resolveColorSpace(ctx, doc, ast.PdfDict{"ColorSpace": cs[2]})
+	altComps := imageComponents(alternate)
+	if altComps == 0 {
+		return nil, fmt.Errorf("tinted colour space over unsupported alternate colour space %q", alternate)
+	}
+	tint, err := function.New(ctx, doc, cs[3])
+	if err != nil {
+		return nil, fmt.Errorf("tint transform: %w", err)
+	}
+	if tint.Inputs() != colorants || tint.Outputs() != altComps {
+		return nil, fmt.Errorf("tint transform maps %d inputs to %d values for %d colorants over %q",
+			tint.Inputs(), tint.Outputs(), colorants, alternate)
+	}
+	out := make([]byte, 0, len(table)/colorants*3)
+	in := make([]float64, colorants)
+	for i := 0; i+colorants <= len(table); i += colorants {
+		for c := range colorants {
+			in[c] = float64(table[i+c]) / 255
+		}
+		v, err := tint.Eval(in)
+		if err != nil {
+			return nil, fmt.Errorf("evaluating tint transform: %w", err)
+		}
+		rgb := alternateToRGB(alternate, v)
+		out = append(out, rgb.R, rgb.G, rgb.B)
+	}
+	return out, nil
+}
+
 // alternateToRGB converts one colour expressed in a device alternate space to
 // RGB. Values arrive in [0, 1] as the tint transform's /Range defines them.
 func alternateToRGB(alternate string, v []float64) color.RGBA {
@@ -705,6 +741,12 @@ func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast
 	if comps == 0 {
 		return palette{}, false
 	}
+	// A Separation or DeviceN base, which resolveColorSpace names DeviceRGB,
+	// holds one tint per colorant in each entry (ISO 32000-1, 8.6.6.3).
+	tintArr, _, colorants, tinted := tintedColorSpace(ctx, doc, ast.PdfDict{"ColorSpace": arr[1]})
+	if tinted {
+		comps = colorants
+	}
 
 	var lab labParams
 	if base == "Lab" {
@@ -743,6 +785,14 @@ func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast
 	want := (int(hival) + 1) * comps
 	if len(lookup) > want {
 		lookup = lookup[:want]
+	}
+	if tinted {
+		rgb, err := tintTable(ctx, doc, tintArr, colorants, lookup)
+		if err != nil {
+			doc.Logger.Debug("converting an indexed colour table of tints", slog.Any("err", err))
+			return palette{}, false
+		}
+		return palette{base: "DeviceRGB", comps: 3, lookup: rgb}, true
 	}
 	// A CalRGB or CalGray base, which resolveColorSpace names DeviceRGB or
 	// DeviceGray, holds CIE-based entries: convert them once here, into a copy,
@@ -1131,9 +1181,11 @@ func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.Pdf
 	// filter, because [jpegSampleSpace] relabels a one-byte-per-pixel codestream
 	// "DeviceGray" and would otherwise emit the tint as luminance, rendering the
 	// image inverted: every tint transform measured maps tint 0 to paper white
-	// and full tint to near black. A DeviceN JPEG is left to the ordinary path,
-	// because the codestream's component count need not equal the colorant count
-	// and the two such images in the corpora already decode correctly there.
+	// and full tint to near black. A DeviceN JPEG is decoded here when its
+	// codestream holds one component per colorant, and left to the ordinary
+	// path otherwise, since the samples cannot then be tints. Reading a
+	// one-colorant /Black JPEG as DeviceGray inverted both images of govdocs
+	// thread_000_000340 against PDF.js, which applies the tint transform.
 	//
 	// An indexed image is excluded throughout: its samples are indices and the
 	// base count sizes the colour TABLE, not the stride.
@@ -1142,7 +1194,7 @@ func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.Pdf
 			switch {
 			case family == "Separation":
 				return decodeSeparation(ctx, doc, stream.Dict, arr, decodedData, width, height, bitsPerComp)
-			case family == "DeviceN" && filterName != "DCTDecode":
+			case family == "DeviceN" && (filterName != "DCTDecode" || imageComponents(colorSpace) == colorants):
 				return decodeDeviceN(ctx, doc, stream.Dict, arr, decodedData, width, height, bitsPerComp, colorants)
 			}
 		}

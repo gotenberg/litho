@@ -393,3 +393,44 @@ func TestTintedColorSpace(t *testing.T) {
 		}
 	}
 }
+
+// inverseTint is a tint transform into DeviceGray that paints tint 1 black.
+const inverseTint = "<< /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >>"
+
+// TestDecodeImage_DeviceNJPEG applies the tint transform to a DeviceN JPEG
+// whose codestream holds one component per colorant, instead of reading the
+// tint as a grey level.
+func TestDecodeImage_DeviceNJPEG(t *testing.T) {
+	t.Parallel()
+
+	cs := "[/DeviceN [/Black] /DeviceGray " + inverseTint + "]"
+	ctx, doc, page := imagePDF(t, jpegPDF(cs, 8, solidJPEG(t, 8, color.Gray{Y: 200}, true)))
+	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("DecodeImage: %v", err)
+	}
+	r, _, _, _ := img.At(4, 4).RGBA()
+	if !near(uint8(r>>8), 55) {
+		t.Errorf("tint 200 = %d, want about 55", r>>8)
+	}
+}
+
+// TestDecodeImage_IndexedOverSeparation converts the entries of a colour
+// table over a Separation space through its tint transform: each entry holds
+// one tint, not three RGB bytes.
+func TestDecodeImage_IndexedOverSeparation(t *testing.T) {
+	t.Parallel()
+
+	base := "[/Separation /Spot /DeviceGray " + inverseTint + "]"
+	ctx, doc, page := imagePDF(t, indexedImagePDF(base, "<004080FF>", []byte{0, 1, 2, 3}))
+	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("DecodeImage: %v", err)
+	}
+	for i, want := range []uint8{255, 191, 127, 0} {
+		r, g, b, _ := img.At(i%2, i/2).RGBA()
+		if !near(uint8(r>>8), want) || r != g || g != b {
+			t.Errorf("index %d = (%d,%d,%d), want grey %d", i, r>>8, g>>8, b>>8, want)
+		}
+	}
+}
