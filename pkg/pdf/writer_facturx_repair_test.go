@@ -13,12 +13,17 @@ import (
 // RepairFacturX handles: no catalog /AF, no /AFRelationship, /F without
 // /UF, wrong stream /Subtype.
 func defectiveInvoicePDF() []byte {
+	return defectiveInvoicePDFWith("<x/>\n")
+}
+
+// defectiveInvoicePDFWith is defectiveInvoicePDF with payload as the invoice.
+func defectiveInvoicePDFWith(payload string) []byte {
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R /Names << /EmbeddedFiles << /Names [(factur-x.xml) 4 0 R] >> >> >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
 		"<< /Type /Filespec /F (factur-x.xml) /EF << /F 5 0 R >> >>",
-		"<< /Type /EmbeddedFile /Subtype /application#2Foctet-stream /Length 5 >>\nstream\n<x/>\n\nendstream",
+		fmt.Sprintf("<< /Type /EmbeddedFile /Subtype /application#2Foctet-stream /Length %d >>\nstream\n%s\nendstream", len(payload), payload),
 	}
 	var buf bytes.Buffer
 	buf.WriteString("%PDF-1.7\n")

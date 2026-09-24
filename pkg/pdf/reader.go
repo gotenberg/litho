@@ -619,6 +619,20 @@ func (r *Reader) adoptConfiguration(src *Reader) {
 	r.lenient = src.lenient
 }
 
+// reopenFile opens path, a file litho wrote from r's document, with the
+// reading configuration r was opened with (see adoptConfiguration). The
+// remediation gates judge their output through it, and a judge that dropped
+// the caller's schemas, leniency or filter plugins would report residuals the
+// caller's own reader does not see.
+func (r *Reader) reopenFile(ctx context.Context, path string) (*Reader, error) {
+	next, err := OpenFile(ctx, path, WithLogger(r.doc.Logger))
+	if err != nil {
+		return nil, err
+	}
+	next.adoptConfiguration(r)
+	return next, nil
+}
+
 // OpenFile opens a PDF directly from the filesystem. The returned [Reader]
 // holds a reference to the underlying file; the caller must call
 // [Reader.Close] when done.

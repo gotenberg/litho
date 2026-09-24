@@ -1464,7 +1464,7 @@ func (w *Writer) stagedBaseline(ctx context.Context) (integritySnap, error) {
 		return integritySnap{}, fmt.Errorf("closing staged baseline file: %w", closeErr)
 	}
 
-	r, err := OpenFile(ctx, path)
+	r, err := w.reader.reopenFile(ctx, path)
 	if err != nil {
 		return integritySnap{}, fmt.Errorf("reopening staged document: %w", err)
 	}
@@ -1633,7 +1633,7 @@ func (w *Writer) remediate(
 		}
 		tmpFile.Close()
 
-		r2, openErr := OpenFile(ctx, tmpPath)
+		r2, openErr := w.reader.reopenFile(ctx, tmpPath)
 		if openErr != nil {
 			doc.Logger.Debug("remediate: re-open failed", slog.Any("err", openErr))
 			return tmpPath, nil, integritySnap{}, attemptBroken
@@ -1810,7 +1810,7 @@ func (w *Writer) remediationRound(
 ) (string, []error, []string, bool) {
 	logger := w.reader.doc.Logger
 
-	r2, err := OpenFile(ctx, path)
+	r2, err := w.reader.reopenFile(ctx, path)
 	if err != nil {
 		logger.Debug("remediate: round reopen failed", slog.Any("err", err))
 		return "", nil, nil, false
@@ -1843,7 +1843,7 @@ func (w *Writer) remediationRound(
 	}
 	tmpFile.Close()
 
-	r3, err := OpenFile(ctx, tmpPath)
+	r3, err := w.reader.reopenFile(ctx, tmpPath)
 	if err != nil {
 		removeTempFile(logger, tmpPath)
 		logger.Debug("remediate: round reopen of output failed", slog.Any("err", err))
