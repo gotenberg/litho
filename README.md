@@ -186,7 +186,7 @@ r, err := pdf.OpenFile(ctx, "doc.pdf", pdf.WithFilterPlugin(myDecoder))
 make fmt && make lint # zero-warnings policy
 make test-unit        # go test -race ./...
 make bench            # go test -bench=. -benchmem ./...
-make corpus           # score against the VeraPDF, PDF.js, and pdfcpu corpora
+make corpus           # score against the veraPDF, PDF.js, and pdfcpu corpora
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the coding, safety, and documentation rules.

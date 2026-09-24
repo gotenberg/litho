@@ -51,7 +51,7 @@ one deliberately rather than diffing it against a fresh build.
 ## Fixtures
 
 | Fixture                | Home profile | Focus                                                            |
-| ---------------------- | ------------ | ---------------------------------------------------------------- | --- | --- | --- | --- | --- | --- |
+| ---------------------- | ------------ | ---------------------------------------------------------------- |
 | `complex_1b.pdf`       | PDF/A-1b     | Part-1 prohibitions: transparency, embedded files, OCG           |
 | `complex_2a.pdf`       | PDF/A-2a     | Level-A tagging: role map, structure hierarchy, language         |
 | `complex_2b.pdf`       | PDF/A-2b     | Broadest mix; annotations, optional content, filters             |
@@ -64,7 +64,6 @@ one deliberately rather than diffing it against a fresh build.
 | `gstate_2b.pdf`        | PDF/A-2b     | Transfer functions and halftones in six graphics states          |
 | `limits_2b.pdf`        | PDF/A-2b     | Implementation limits: real, string, name, nesting, DeviceN      |
 | `megafont_2b.pdf`      | PDF/A-2b     | Font embedding and glyph-width scoping                           |
-| `metafilter_1b.pdf`    | 3            | 6                                                                | 3   | 4   | 3   | 6   | 8   | 7   |
 | `multipage_2b.pdf`     | PDF/A-2b     | Three pages, a violation class unique to each                    |
 | `fontdict_2b.pdf`      | PDF/A-2b     | Font dictionary required keys; page box implementation limits    |
 | `structnest_ua1.pdf`   | PDF/UA-1     | Clause 7.2: table, list and TOC nesting; per-element language    |
@@ -609,7 +608,7 @@ coverage opportunity:
   `TFoot` boundary, and it is guarded by `isPDFUA2RelatedFlavour`, so a
   PDF/UA-1 run never evaluates it.
 - `7.2/15` is reachable, and litho did not implement it when this fixture
-  landed. `d61d0ba` implemented it, and the two tools now agree on the
+  landed. `19c31ab` implemented it, and the two tools now agree on the
   intersecting grid that reaches it. See
   [Closed since, not planted](#closed-since-not-planted).
 
@@ -1105,7 +1104,7 @@ first sight wrongly reports the conforming parts of the third.
 
 The category is the one field of the clause whose value is constrained rather
 than merely required. litho used to check only that `pdfaProperty:category` was
-present, so the `sideways` category above was a divergence until `da8cf69`
+present, so the `sideways` category above was a divergence until `009d8fa`
 compared the value the way veraPDF does. Both tools now report it once, as
 `6.6.2.3.3/9` at PDF/A-2b and `6.7.8/10` at PDF/A-1b.
 
@@ -1174,14 +1173,14 @@ veraPDF, which is what proves the four controls silent.
 The page shows one line of text rather than nothing. An empty content stream
 presents no text item, and ISO 14289-1, 7.2 t34 takes a text item as its
 subject, so a blank page used to make litho and veraPDF disagree for a reason
-that has nothing to do with extension schemas. `188946e` closed that, and a
+that has nothing to do with extension schemas. `6f22ce2` closed that, and a
 text-free page now agrees too. The line stays because it is what makes both
 tools report `7.2/34` once at PDF/UA-1: without it both go quiet, and the
 fixture covers one cell less.
 
 `6.7.8/6` stays unreached, and so does the wrong-prefix half of every test.
 The first is a litho gap, described under
-[Known divergences](#known-divergences). The second is not: `c104d24` brought
+[Known divergences](#known-divergences). The second is not: `591cb06` brought
 the two tools into agreement on it, so it is a coverage opportunity, described
 under [Closed since, not planted](#closed-since-not-planted).
 
@@ -1372,7 +1371,7 @@ requirement at all: 6.1.3 already reduces the information dictionary to
 `xmpDocInfoSyncRulePart4` in `pkg/internal/compliance/xmp_docinfo.go` routed
 every part-4 sync mismatch to them. The two rule numbers collided with a real
 clause that means something else, and their `Object` read `CIDSystemInfo`.
-`0bb0f82` dropped them. The fixture now reports `6.7.3/2`, `/3` and `/5` at
+`da2cec0` dropped them. The fixture now reports `6.7.3/2`, `/3` and `/5` at
 PDF/A-4, the three identification tests, on both tools.
 
 **`7.2/34` at PDF/UA-1.** litho reported it, veraPDF reported nothing. The
@@ -1384,7 +1383,7 @@ structure tree and its page shows no text, so veraPDF has no subject.
 `pkg/internal/compliance/accessibility_lang.go` returned
 `fail(langRule, "catalog")` as soon as the catalog carried no
 `/StructTreeRoot`, without asking whether the document showed any text.
-`188946e` made a text item a precondition. Both tools now stay quiet here,
+`6f22ce2` made a text item a precondition. Both tools now stay quiet here,
 and two files differing only in their content stream confirm the boundary:
 with one `Tj` both report `7.2/34`, with an empty stream neither does.
 
@@ -1610,21 +1609,21 @@ now agrees, so each is a coverage opportunity rather than a gap. None is in a
 committed fixture yet.
 
 **`6.7.8/6`, the property container.** `pdfaSchema:property` holding an
-`rdf:Bag` or a bare value instead of an `rdf:Seq`. `817080d` wired the rule,
+`rdf:Bag` or a bare value instead of an `rdf:Seq`. `15607c4` wired the rule,
 which the container check had named as validated elsewhere while nothing
 validated it. An `rdf:Alt` there is accepted by both tools; until that commit it
 also made litho report the entry's schema, namespaceURI and prefix as missing,
 because an unrecognised container left its children attributed to the enclosing
 schemas container. The part-2 spelling is `6.6.2.3.3/5`.
 
-**`6.7.8/9` and `6.7.8/18`, a value type nothing defines.** `fa8e408`
+**`6.7.8/9` and `6.7.8/18`, a value type nothing defines.** `24ebd6b`
 implemented `isValueTypeDefined` against the vocabulary veraPDF predefines: 26
 types for part 1 and 36 for parts 2 and 3, so `Colorant` and `Timecode` are
 undefined under part 1 and defined under the later parts. A type the same schema
 entry declares resolves in either order; one declared by a different entry
 resolves for neither. The part-2 spellings are `6.6.2.3.3/8` and `6.6.2.3.3/17`.
 
-**`8.2.5.26/1`, a table cell intersection at PDF/UA-2.** `8d6c3ab` widened the
+**`8.2.5.26/1`, a table cell intersection at PDF/UA-2.** `82b6bb0` widened the
 PDF/UA-1 scan to PDF/UA-2. Both tests scope to `SETableCell` and read
 `hasIntersection != true`, so one scan serves both; the `THead`/`TBody`/`TFoot`
 row-span limit that had been given as the reason for keeping them apart belongs
@@ -1639,7 +1638,7 @@ every rule of the offending level and then return before the walk that finds
 everything else, so one prefix defect both over-reported and masked. It was
 also nondeterministic: the scan ranged the `xmpExpectedPrefix` map and returned
 on its first hit, so a packet misprefixed at two levels reported one level's
-set on eleven of twelve runs and the other's on the twelfth. `c104d24` narrowed
+set on eleven of twelve runs and the other's on the twelfth. `591cb06` narrowed
 the report to the fields that actually carry the wrong prefix, dropped the
 early return, and fixed the visit order. A single misprefixed
 `pdfaSchema:schema` now draws `6.7.8/3` from both tools and nothing else; the
@@ -1653,7 +1652,7 @@ way, starting at `6.6.2.3.3/2`.
 then places every cell and marks an intersection when two cells claim the same
 slot. A first row of `TH(RowSpan 2)`, `TH`, `TH(RowSpan 2)` over a second row
 holding one `TH(ColSpan 2)` puts that cell's second column on a slot the first
-row's last cell already carries down. `d61d0ba` implemented the check, and both
+row's last cell already carries down. `19c31ab` implemented the check, and both
 tools now report `7.2/15` twice on that grid and nothing on two conforming span
 layouts beside it.
 
@@ -1662,7 +1661,7 @@ layouts beside it.
 which matches ISO 32000-1 Table 153: an outline item dictionary defines no
 `/Lang` entry. `walkOutlineItemsForLang` in
 `pkg/internal/compliance/accessibility_lang.go` exempted an item carrying one
-anyway. `2c3be3f` removed the exemption. Two files differing only in that entry
+anyway. `902aa09` removed the exemption. Two files differing only in that entry
 now report `7.2/2` on both tools, and a catalog `/Lang` silences both.
 `structnest_ua1.pdf` uses a plain outline item, which reaches the same test.
 

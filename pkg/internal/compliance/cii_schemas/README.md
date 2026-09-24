@@ -36,7 +36,7 @@ curl -fsSL https://raw.githubusercontent.com/ConnectingEurope/eInvoicing-EN16931
   -o pkg/internal/compliance/cii_schemas/LICENSE-en16931.txt
 ```
 
-Then `make test-unit` and adjust any drifted assertions (rare; the schema changes annually but the high-level structure is stable).
+Then run `make test-unit` and adjust any drifted assertions (rare; the schema changes annually but the high-level structure is stable).
 
 When a new Factur-X profile or ZUGFeRD 1.0 XSD revision is published upstream, refresh from the canonical Git mirror:
 
@@ -52,8 +52,8 @@ cp /tmp/zf/validator/src/main/resources/schema/ZF_10/*.xsd \
 
 ## License
 
-UN/CEFACT publishes the source XSDs under a perpetual permission-to-redistribute-with-attribution clause, reproduced verbatim in the `<!-- Copyright (C) UN/CEFACT ... -->` header at the top of each XSD. The CEN packaging adds EUPL-1.2 on top; the upstream `LICENSE.txt` is mirrored here as `LICENSE-en16931.txt`. Both notices must be preserved on redistribution.
+UN/CEFACT publishes the source XSDs under a perpetual permission-to-redistribute-with-attribution clause, reproduced verbatim in the `<!-- Copyright (C) UN/CEFACT ... -->` header at the top of each XSD. The CEN packaging adds EUPL-1.2 on top; the upstream `LICENSE.txt` is mirrored here as `LICENSE-en16931.txt`. Preserve both notices on redistribution.
 
 ## Why not auto-download
 
-A `make` target that fetches at build time was considered and rejected: it pins network availability into the build, and reproducing a tagged release ten years from now should not require GitHub still serving the same path. Bundle once, bump deliberately.
+litho rejects a `make` target that fetches at build time: it pins network availability into the build, and reproducing a tagged release ten years from now should not require GitHub still serving the same path. Bundle once, bump deliberately.

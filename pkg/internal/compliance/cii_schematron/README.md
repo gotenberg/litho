@@ -1,12 +1,12 @@
 # Bundled CII Schematron
 
-`Reader.ValidateFacturX` reads its default Schematron rule set from this directory via `embed.FS`. The auto-dispatch picks `en16931/` for Factur-X 1.0+ / ZUGFeRD 2.1+ payloads; legacy ZUGFeRD 1.0 / 2.0 fall back to the structural CII spine and XSD rules with no Schematron pass.
+`Reader.ValidateFacturX` reads its default Schematron rule sets from this directory via `embed.FS`. The auto-dispatch picks `en16931/` for Factur-X 1.0+ / ZUGFeRD 2.1+ payloads and `zugferd1p0/` for legacy ZUGFeRD 1.0; legacy ZUGFeRD 2.0 falls back to the structural CII spine and XSD rules with no Schematron pass.
 
 ## Current bundles
 
 `en16931/EN16931-CII-validation.sch` is the **preprocessed** EN 16931 CII Schematron published by CEN at <https://github.com/ConnectingEurope/eInvoicing-EN16931>. Preprocessing expands the upstream `abstract="true"` patterns into concrete rules, leaving a single self-contained file the loader can consume without abstract-pattern support.
 
-`xrechnung/XRechnung-CII-validation.sch` plus `xrechnung/common.sch` are the German CIUS rules published by KoSIT at <https://github.com/itplr-kosit/xrechnung-schematron>. The include reference was rewritten from `../common.sch` to `common.sch` so both files sit next to each other inside the bundle directory; the rule content is otherwise verbatim.
+`xrechnung/XRechnung-CII-validation.sch` plus `xrechnung/common.sch` are the German CIUS rules published by KoSIT at <https://github.com/itplr-kosit/xrechnung-schematron>. The bundle rewrites the include reference from `../common.sch` to `common.sch` so both files sit next to each other inside the bundle directory; the rule content is otherwise verbatim.
 
 `facturx_profiles/FACTUR-X_*.sch` are the per-profile schematrons published by FNFE-MPE with Factur-X 1.0.07. They go through `cmd/gen-facturx-schematron` to inline external code-list lookups (`document('FACTUR-X_*_codedb.xml')/...`) the antchfx XPath engine cannot resolve.
 
@@ -14,7 +14,7 @@
 
 `peppol/PEPPOL-EN16931-CII.sch` is OpenPEPPOL's PEPPOL BIS 3.0 rule set for CII (<https://github.com/OpenPEPPOL/peppol-bis-invoice-3>). It ships **opt-in** because R001 / R010 / R020 require a PEPPOL business-process identifier that Factur-X / ZUGFeRD documents legitimately omit; the validator does not auto-overlay it. Callers that want PEPPOL coverage thread `compliance.WithPeppolSchematron(s)` after `cii_schematron.LoadPeppol(ctx)`.
 
-EN 16931 covers the cross-EU baseline (BR-\* and BR-CO-\* business rules: totals consistency, mandatory cardinalities, code-list cross-checks). XRechnung adds the German-specific BR-DE-\* rules on top. The validator auto-routes XRECHNUNG-level documents to the XRechnung schema and everything else to EN 16931. ZUGFeRD 1.0 documents take the dedicated `zugferd1p0/` pass.
+EN 16931 covers the cross-EU baseline (BR-\* and BR-CO-\* business rules: totals consistency, mandatory cardinalities, code-list cross-checks). XRechnung adds the German-specific BR-DE-\* rules on top. The validator auto-routes XRECHNUNG-level documents to the XRechnung schema, a document whose `fx:ConformanceLevel` matches a `facturx_profiles/` rule set to that profile, and everything else to EN 16931. ZUGFeRD 1.0 documents take the dedicated `zugferd1p0/` pass.
 
 ## How to bump
 
@@ -30,7 +30,7 @@ curl -fsSL https://raw.githubusercontent.com/ConnectingEurope/eInvoicing-EN16931
 When KoSIT publishes a newer XRechnung release:
 
 ```sh
-# Pull from the tagged release ZIP, NOT the master branch sources -
+# Pull from the tagged release ZIP, NOT the master branch sources:
 # the release pipeline merges PEPPOL-EN16931-* rules into the
 # XRechnung schematron before publishing, and the master branch
 # sources drop them entirely.
@@ -65,11 +65,11 @@ curl -fsSL "https://raw.githubusercontent.com/OpenPEPPOL/peppol-bis-invoice-3/${
   -o pkg/internal/compliance/cii_schematron/peppol/PEPPOL-EN16931-CII.sch
 ```
 
-Then `make test-unit` and adjust any drifted assertions. The Schematron evolves a few times a year as CEN, KoSIT (XRechnung publisher), FNFE-MPE, and OpenPEPPOL revise their business rules.
+Then run `make test-unit` and adjust any drifted assertions. The Schematron evolves a few times a year as CEN, KoSIT (XRechnung publisher), FNFE-MPE, and OpenPEPPOL revise their business rules.
 
 ## License
 
-Each rule set ships under its upstream licence; the project-level files are kept alongside the bundle:
+Each rule set ships under its upstream license; the bundle keeps the project-level license files beside it:
 
 - EN 16931: EUPL-1.2 (`LICENSE-en16931.txt`).
 - XRechnung: Apache-2.0 (`LICENSE-xrechnung.txt`).
