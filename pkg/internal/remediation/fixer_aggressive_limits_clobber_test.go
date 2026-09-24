@@ -12,7 +12,7 @@ import (
 // DeviceN array with NINE colorants, stored INDIRECTLY at object 5.
 //
 // Nine is not decoration. [trimDeviceNColorants] skips any array whose name
-// list is `<= pdfADeviceNComponents`, so the existing deviceNPDF fixture, which
+// list is `<= pdfA1DeviceNComponents`, so the existing deviceNPDF fixture, which
 // declares two, never reaches the write at all. A fixture that cannot reach the
 // write proves nothing, which is the dead-fixture failure this suite has hit
 // twice.
@@ -79,10 +79,10 @@ func TestTrimDeviceNColorants_KeepsAnEarlierFixersPendingColourSpaceWrite(t *tes
 		t.Fatalf("precondition: object %d must be a /DeviceN array, got %v", csObj, onDisk[0])
 	}
 	names, err := document.ResolveArray(ctx, doc, onDisk[1])
-	if err != nil || len(names) <= pdfADeviceNComponents {
+	if err != nil || len(names) <= pdfA1DeviceNComponents {
 		t.Fatalf("precondition: the fixture must declare MORE than %d colorants or the "+
 			"trim never runs and this test proves nothing; got %d (%v)",
-			pdfADeviceNComponents, len(names), err)
+			pdfA1DeviceNComponents, len(names), err)
 	}
 	if alt, _ := onDisk[2].(ast.PdfName); alt != "DeviceCMYK" {
 		t.Fatalf("precondition: the fixture's alternate space must be /DeviceCMYK, "+
@@ -98,7 +98,7 @@ func TestTrimDeviceNColorants_KeepsAnEarlierFixersPendingColourSpaceWrite(t *tes
 		t.Fatalf("AllocAt(%d) refused the earlier fixer's pending write", csObj)
 	}
 
-	if _, err := fixAggressiveLimits(ctx, alloc, doc, Options{}, nil, ""); err != nil {
+	if _, err := fixAggressiveLimits(ctx, alloc, doc, Options{}, pdfA1DeviceNViolation, "PDF/A-1b"); err != nil {
 		t.Fatalf("fixAggressiveLimits: %v", err)
 	}
 
@@ -115,10 +115,10 @@ func TestTrimDeviceNColorants_KeepsAnEarlierFixersPendingColourSpaceWrite(t *tes
 		t.Fatalf("element 1 is %T, want the colorant name array; the repair did not "+
 			"run as expected", got[1])
 	}
-	if len(gotNames) != pdfADeviceNComponents {
+	if len(gotNames) != pdfA1DeviceNComponents {
 		t.Fatalf("object %d carries %d colorants, want %d: the repair never trimmed it, "+
 			"so this test proves nothing about clobbering; array = %v",
-			csObj, len(gotNames), pdfADeviceNComponents, got)
+			csObj, len(gotNames), pdfA1DeviceNComponents, got)
 	}
 
 	if alt, _ := got[2].(ast.PdfName); alt != "DeviceRGB" {

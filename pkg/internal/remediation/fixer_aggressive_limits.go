@@ -25,16 +25,21 @@ const (
 	// so the cap binds PDF/A-1 alone. The detector is
 	// compliance.maxDictCap1.
 	pdfADictMax = 4095
-	// pdfADeviceNComponents is the 8-component cap on DeviceN colour
+	// pdfA1DeviceNComponents is the 8-component cap on DeviceN colour
 	// spaces (ISO 19005-1, 6.1.12 test 9, from PDF Reference 1.4, Table
-	// C.1). ISO 19005-2/3, 6.1.13 test 9 allows 32, the ISO 32000-1, Table
-	// C.1 value.
-	pdfADeviceNComponents = 8
+	// C.1).
+	pdfA1DeviceNComponents = 8
+	// pdfA23DeviceNComponents is the 32-colourant cap of ISO 19005-2/3,
+	// 6.1.13 test 9, the ISO 32000-1, Table C.1 value. ISO 19005-4 states no
+	// DeviceN limit. Both caps mirror compliance.checkDeviceNCS, which raises
+	// the violation.
+	pdfA23DeviceNComponents = 32
 )
 
 // matchAggressiveLimits matches implementation-limit violations that
 // can only be fixed by dropping content: q/Q stack overflow, oversized
-// dictionary, over-component DeviceN, and out-of-range CID maps.
+// dictionary, over-component DeviceN, and out-of-range CID values, which
+// no repair answers yet (see [limitRepairsFor]).
 func matchAggressiveLimits(v compliance.Violation) bool {
 	if !clausePrefix(v, "6.1.12", "6.1.13") {
 		return false
@@ -45,43 +50,95 @@ func matchAggressiveLimits(v compliance.Violation) bool {
 		contextContains(v, "CID value") && contextContains(v, "exceeds")
 }
 
-// fixAggressiveLimits walks the document and enforces every PDF/A
-// structural limit that requires discarding material to satisfy.
-// Gated on [Options.PreserveContent]=false because each repair below
-// is a lossy content rewrite: paths flatten, dictionaries lose entries,
-// spot colours drop, out-of-range character codes map to nothing.
+// fixAggressiveLimits enforces the PDF/A implementation limits that can only
+// be met by discarding material. Gated on [Options.PreserveContent]=false
+// because each repair below is a lossy content rewrite: paths flatten,
+// dictionaries lose entries, spot colours drop.
 //
-// TODO: the profile is ignored, so every repair runs with the PDF/A-1
-// limits. A PDF/A-2 or PDF/A-3 violation that matches, such as q/Q nesting
-// under 6.1.13 test 8, also truncates any dictionary above [pdfADictMax],
-// which those parts do not cap, and trims any DeviceN above 8 colorants,
-// where 6.1.13 test 9 allows 32.
-func fixAggressiveLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, _ string) ([]string, error) {
+// Each repair runs only when the profile's part states the limit and a
+// violation of that very rule is among those matched, so one violation never
+// triggers an unrelated repair. See [limitRepairsFor].
+func fixAggressiveLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, violations []compliance.Violation, profile string) ([]string, error) {
 	if opts.PreserveContent {
 		return nil, nil
 	}
 
+	repairs := limitRepairsFor(violations, profile)
 	var fixes []string
 
-	if n, err := flattenGraphicsStack(ctx, alloc, doc); err != nil {
-		return fixes, err
-	} else if n > 0 {
-		fixes = append(fixes, fmt.Sprintf("flattened q/Q nesting on %d page(s)", n))
+	if repairs.qNesting {
+		if n, err := flattenGraphicsStack(ctx, alloc, doc); err != nil {
+			return fixes, err
+		} else if n > 0 {
+			fixes = append(fixes, fmt.Sprintf("flattened q/Q nesting on %d page(s)", n))
+		}
 	}
 
-	if n, err := truncateOversizedDicts(ctx, alloc, doc); err != nil {
-		return fixes, err
-	} else if n > 0 {
-		fixes = append(fixes, fmt.Sprintf("truncated %d dictionary(ies) to 4095 entries", n))
+	if repairs.dictCap {
+		if n, err := truncateOversizedDicts(ctx, alloc, doc); err != nil {
+			return fixes, err
+		} else if n > 0 {
+			fixes = append(fixes, fmt.Sprintf("truncated %d dictionary(ies) to %d entries", n, pdfADictMax))
+		}
 	}
 
-	if n, err := trimDeviceNColorants(ctx, alloc, doc); err != nil {
-		return fixes, err
-	} else if n > 0 {
-		fixes = append(fixes, fmt.Sprintf("reduced %d DeviceN colour space(s) to 8 components", n))
+	if repairs.deviceNMax > 0 {
+		if n, err := trimDeviceNColorants(ctx, alloc, doc, repairs.deviceNMax); err != nil {
+			return fixes, err
+		} else if n > 0 {
+			fixes = append(fixes, fmt.Sprintf("reduced %d DeviceN colour space(s) to %d components", n, repairs.deviceNMax))
+		}
 	}
 
 	return fixes, nil
+}
+
+// limitRepairs selects the repairs one fixAggressiveLimits run performs.
+type limitRepairs struct {
+	// qNesting flattens q/Q nesting past [pdfAGraphicsDepth].
+	qNesting bool
+	// dictCap truncates dictionaries past [pdfADictMax].
+	dictCap bool
+	// deviceNMax is the colourant count DeviceN spaces are trimmed to, or 0
+	// when no trim applies.
+	deviceNMax int
+}
+
+// limitRepairsFor maps the matched violations to the repairs they call for
+// under profile. A repair is selected only by the rule that states its limit
+// in the profile's own part:
+//
+//   - q/Q nesting: ISO 19005-1, 6.1.12 test 8 and ISO 19005-2/3, 6.1.13
+//     test 8, 28 levels in each. ISO 19005-4 states no nesting limit.
+//   - dictionary entries: ISO 19005-1, 6.1.12 test 6 alone, from PDF
+//     Reference 1.4, Table C.1. ISO 32000-1, Table C.1 lists no dictionary
+//     limit and ISO 19005-2/3 6.1.13 has no such test, so a part 2 or 3
+//     dictionary above 4095 entries conforms and keeps every entry.
+//   - DeviceN colourants: 8 under ISO 19005-1, 6.1.12 test 9, and 32 under
+//     ISO 19005-2/3, 6.1.13 test 9. Trimming a part 2 or 3 space to the
+//     part 1 cap would drop up to 24 colourants the profile permits.
+//
+// A CID-value violation (6.1.12 test 10, 6.1.13 test 10) matches this fixer
+// too, but no repair here answers it, so it selects none.
+func limitRepairsFor(violations []compliance.Violation, profile string) limitRepairs {
+	part := compliance.PDFAPart(profile)
+	var r limitRepairs
+	for _, v := range violations {
+		switch {
+		case part == 1 && v.Rule == compliance.Rule_19005_1_6_1_12_t08,
+			part == 2 && v.Rule == compliance.Rule_19005_2_6_1_13_t08,
+			part == 3 && v.Rule == compliance.Rule_19005_3_6_1_13_t08:
+			r.qNesting = true
+		case part == 1 && v.Rule == compliance.Rule_19005_1_6_1_12_t06:
+			r.dictCap = true
+		case part == 1 && v.Rule == compliance.Rule_19005_1_6_1_12_t09:
+			r.deviceNMax = pdfA1DeviceNComponents
+		case part == 2 && v.Rule == compliance.Rule_19005_2_6_1_13_t09,
+			part == 3 && v.Rule == compliance.Rule_19005_3_6_1_13_t09:
+			r.deviceNMax = pdfA23DeviceNComponents
+		}
+	}
+	return r
 }
 
 // flattenGraphicsStack appends balancing Q operators to any page content
@@ -221,10 +278,10 @@ func truncateDict(d ast.PdfDict) ast.PdfDict {
 	return out
 }
 
-// trimDeviceNColorants caps a DeviceN/NChannel /Names array at
-// pdfADeviceNComponents. The tint-transform function won't be accurate
-// for the reduced component set; aggressive mode accepts that loss.
-func trimDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (int, error) {
+// trimDeviceNColorants caps a DeviceN/NChannel /Names array at limit
+// colourants. The tint-transform function won't be accurate for the reduced
+// component set; aggressive mode accepts that loss.
+func trimDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, limit int) (int, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return 0, nil
@@ -290,11 +347,11 @@ func trimDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *
 				continue
 			}
 			namesArr, err := document.ResolveArray(ctx, doc, arr[1])
-			if err != nil || len(namesArr) <= pdfADeviceNComponents {
+			if err != nil || len(namesArr) <= limit {
 				continue
 			}
-			newNames := make(ast.PdfArray, pdfADeviceNComponents)
-			copy(newNames, namesArr[:pdfADeviceNComponents])
+			newNames := make(ast.PdfArray, limit)
+			copy(newNames, namesArr[:limit])
 			newArr := make(ast.PdfArray, len(arr))
 			copy(newArr, arr)
 			newArr[1] = newNames

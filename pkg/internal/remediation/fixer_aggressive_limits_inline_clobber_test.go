@@ -21,7 +21,7 @@ import (
 // the second to fire at all.
 //
 // Nine colorants, for the same reason as the sibling fixture: the trim skips
-// any name list `<= pdfADeviceNComponents`.
+// any name list `<= pdfA1DeviceNComponents`.
 func deviceNInlineColourSpacePDF() []byte {
 	return assemblePDF([]string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
@@ -76,9 +76,9 @@ func TestTrimDeviceNColorants_InlineColourSpaceIsTrimmedAndKeepsAPeerWrite(t *te
 			"is never reached; got %T", onDisk["CSN"])
 	}
 	names, ok := inline[1].(ast.PdfArray)
-	if !ok || len(names) <= pdfADeviceNComponents {
+	if !ok || len(names) <= pdfA1DeviceNComponents {
 		t.Fatalf("precondition: the fixture must declare more than %d colorants or the "+
-			"trim never runs; got %v", pdfADeviceNComponents, inline[1])
+			"trim never runs; got %v", pdfA1DeviceNComponents, inline[1])
 	}
 	if _, present := onDisk["Marker"]; present {
 		t.Fatalf("precondition: the fixture must NOT declare /Marker, else it proves nothing")
@@ -92,7 +92,7 @@ func TestTrimDeviceNColorants_InlineColourSpaceIsTrimmedAndKeepsAPeerWrite(t *te
 		t.Fatalf("AllocAt(%d) refused the earlier fixer's pending write", csObj)
 	}
 
-	if _, err := fixAggressiveLimits(ctx, alloc, doc, Options{}, nil, ""); err != nil {
+	if _, err := fixAggressiveLimits(ctx, alloc, doc, Options{}, pdfA1DeviceNViolation, "PDF/A-1b"); err != nil {
 		t.Fatalf("fixAggressiveLimits: %v", err)
 	}
 
@@ -109,12 +109,12 @@ func TestTrimDeviceNColorants_InlineColourSpaceIsTrimmedAndKeepsAPeerWrite(t *te
 			"does not carry the colour space at all", got["CSN"])
 	} else if trimmed, isArr := arr[1].(ast.PdfArray); !isArr {
 		t.Errorf("/CSN element 1 is %T, want the colorant name array", arr[1])
-	} else if len(trimmed) != pdfADeviceNComponents {
+	} else if len(trimmed) != pdfA1DeviceNComponents {
 		t.Errorf("the inline colour space still declares %d colorants, want %d: "+
 			"trimDeviceNColorants wrote the parent dictionary and counted a repair "+
 			"without applying the trim, because the substitution at :277-281 matches "+
 			"only an indirect reference equal to ref, and ref is the zero value on "+
-			"the inline path; /CSN = %v", len(trimmed), pdfADeviceNComponents, arr)
+			"the inline path; /CSN = %v", len(trimmed), pdfA1DeviceNComponents, arr)
 	}
 
 	if _, kept := got["Marker"]; !kept {
