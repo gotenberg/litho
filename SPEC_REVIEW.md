@@ -50,7 +50,7 @@ Spec-noncompliant output or failed spec-mandated operations.
 | Lexer accepts scientific notation (`1e2`); a parsed token will round-trip into noncompliant output  | `pkg/internal/core/lexer/lexer.go:147-167`   | ISO 32000-1 §7.3.3   |
 | Odd-length hex string padded with `0` in-place; round-trip emits the padded form                    | `pkg/internal/core/parser/parser.go:961-966` | ISO 32000-2 §7.3.4.3 |
 | Missing `endobj` silently tolerated with no spec basis                                              | `pkg/internal/core/parser/parser.go:222-227` | ISO 32000-1 §7.5.6   |
-| CCITT `/K=0` (Group3-1D) and `/K>0` (Group3-mixed) collapse into one ccitt.SubFormat                | `pkg/internal/filter/filter.go:336-339`      | ISO 32000-1 Table 11 |
+| Resolved: CCITT `/K=0` (Group3-1D) and `/K>0` (Group3-mixed) collapsed into one ccitt.SubFormat     | `pkg/internal/filter/ccitt/decode.go`        | ISO 32000-1 Table 11 |
 
 Re-verification notes (second pass):
 
@@ -58,7 +58,10 @@ Re-verification notes (second pass):
   missing `endobj` were each re-read at the cited line and remain open.
 - Lexer scientific-notation accept logic spans `147-167` (first pass
   cited `147-168`; line 168 is the closing brace).
-- The CCITT `/K` finding was not re-opened in the second pass.
+- The CCITT `/K` finding is resolved: `pkg/internal/filter/ccitt` decodes
+  Group 4, Group 3 one-dimensional and Group 3 mixed coding each as its `/K`
+  names, with end-of-line codes optional as Table 11 makes them, in place of
+  `golang.org/x/image/ccitt`, which had no mixed coding and demanded them.
 
 ## Theme B — Remediation injects synthetic defaults the spec does not sanction
 

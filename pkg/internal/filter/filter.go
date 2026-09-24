@@ -14,9 +14,9 @@ import (
 	"sync"
 
 	"github.com/andybalholm/brotli"
-	"golang.org/x/image/ccitt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/filter/ccitt"
 )
 
 // maxDecompressedSize caps the output of any single stream decompression to
@@ -477,68 +477,50 @@ func decodeASCII85(data []byte) ([]byte, error) {
 }
 
 func decodeCCITTFax(ctx context.Context, data []byte, parms ast.PdfDict) ([]byte, error) {
-	// Extract parameters from /DecodeParms (PDF spec Table 11).
-	k := 0          // /K: <0 = Group 4, 0 = Group 3 1D, >0 = Group 3 mixed
-	columns := 1728 // /Columns: image width in pixels
-	rows := 0       // /Rows: image height (0 = unknown)
-	blackIs1 := false
-	align := false
-
+	// ISO 32000-1, Table 11, with its defaults.
+	p := ccitt.DefaultParams()
 	if parms != nil {
-		if v, ok := parms["K"]; ok {
-			k = pdfInt(v)
-		}
-		if v, ok := parms["Columns"]; ok {
-			columns = pdfInt(v)
-		}
-		if v, ok := parms["Rows"]; ok {
-			rows = pdfInt(v)
-		}
-		if v, ok := parms["BlackIs1"]; ok {
-			switch b := v.(type) {
-			case ast.PdfBool:
-				blackIs1 = bool(b)
-			case ast.PdfInt:
-				blackIs1 = int(b) != 0
-			}
-		}
-		if v, ok := parms["EncodedByteAlign"]; ok {
-			switch b := v.(type) {
-			case ast.PdfBool:
-				align = bool(b)
-			case ast.PdfInt:
-				align = int(b) != 0
-			}
-		}
+		p.K = pdfIntOr(parms["K"], p.K)
+		p.Columns = pdfIntOr(parms["Columns"], p.Columns)
+		p.Rows = pdfIntOr(parms["Rows"], p.Rows)
+		p.EndOfLine = pdfBoolOr(parms["EndOfLine"], p.EndOfLine)
+		p.EncodedByteAlign = pdfBoolOr(parms["EncodedByteAlign"], p.EncodedByteAlign)
+		p.EndOfBlock = pdfBoolOr(parms["EndOfBlock"], p.EndOfBlock)
+		p.BlackIs1 = pdfBoolOr(parms["BlackIs1"], p.BlackIs1)
 	}
+	out, err := ccitt.Decode(ctx, data, p)
+	switch {
+	case err == nil:
+		return out, nil
+	case errors.Is(err, ccitt.ErrUnsupported):
+		return nil, fmt.Errorf("%w: ccitt decode: %w", ErrUnsupportedFilter, err)
+	case errors.Is(err, ccitt.ErrLimit):
+		// The decoder's cap on its output is maxDecompressedSize, so it
+		// reports the bomb every other decoder reports.
+		return nil, fmt.Errorf("%w: ccitt decode: %w", ErrDecompressionBomb, err)
+	}
+	return nil, fmt.Errorf("ccitt decode: %w", err)
+}
 
-	// Map PDF /K to ccitt.SubFormat.
-	sf := ccitt.Group3
-	if k < 0 {
-		sf = ccitt.Group4
+// pdfIntOr returns an integer parameter, or def when it is absent or not an
+// integer.
+func pdfIntOr(v ast.PdfObject, def int) int {
+	if n, ok := v.(ast.PdfInt); ok {
+		return int(n)
 	}
+	return def
+}
 
-	height := rows
-	if height <= 0 {
-		height = ccitt.AutoDetectHeight
+// pdfBoolOr returns a boolean parameter, or def when it is absent. A number
+// counts as true when it is not 0, as some producers write the flags.
+func pdfBoolOr(v ast.PdfObject, def bool) bool {
+	switch b := v.(type) {
+	case ast.PdfBool:
+		return bool(b)
+	case ast.PdfInt:
+		return b != 0
 	}
-
-	opts := &ccitt.Options{
-		Align:  align,
-		Invert: blackIs1,
-	}
-
-	r := ccitt.NewReader(bytes.NewReader(data), ccitt.MSB, sf, columns, height, opts)
-	buf := bufPool.Get().(*bytes.Buffer)
-	buf.Reset()
-	defer bufPool.Put(buf)
-	err := limitedCopy(ctx, buf, r)
-	if err != nil {
-		return nil, fmt.Errorf("ccitt decode: %w", err)
-	}
-	result := make([]byte, buf.Len())
-	copy(result, buf.Bytes())
-	return result, nil
+	return def
 }
 
 func decodeBrotli(ctx context.Context, data []byte) ([]byte, error) {

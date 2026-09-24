@@ -844,3 +844,33 @@ func TestNewStreamReader_Brotli(t *testing.T) {
 		t.Errorf("got %q, want %q", decoded, original)
 	}
 }
+
+// TestDecodeCCITTFax_Group3 decodes the Group 3 codings the previous decoder
+// refused: one-dimensional rows without end-of-line codes, which ISO 32000-1,
+// Table 11 makes optional, and mixed coding, whose tag bits name each row's
+// coding. Both rows are three white, two black, three white pixels.
+func TestDecodeCCITTFax_Group3(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		k    int
+		bits []byte
+	}{
+		// 1000 11 1000, twice.
+		{"one-dimensional", 0, []byte{0b10001110, 0b00100011, 0b10000000}},
+		// tag 1, 1000 11 1000; tag 0, V0 V0 V0.
+		{"mixed", 1, []byte{0b11000111, 0b00001110}},
+	} {
+		parms := ast.PdfDict{"K": ast.PdfInt(tc.k), "Columns": ast.PdfInt(8), "Rows": ast.PdfInt(2)}
+		got, err := decodeCCITTFax(context.Background(), tc.bits, parms)
+		if err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+			continue
+		}
+		if !bytes.Equal(got, []byte{0b11100111, 0b11100111}) {
+			t.Errorf("%s: %08b, want 11100111 twice", tc.name, got)
+		}
+	}
+	if _, err := decodeCCITTFax(context.Background(), nil, ast.PdfDict{"Columns": ast.PdfInt(1 << 30)}); !errors.Is(err, ErrDecompressionBomb) {
+		t.Errorf("a width past the cap: %v, want %v", err, ErrDecompressionBomb)
+	}
+}

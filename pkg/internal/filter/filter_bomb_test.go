@@ -21,9 +21,9 @@ import (
 // stream truncated at the cap, a nil error, and no incomplete flag, because
 // DecodeStreamChecked raises that only for ErrUnsupportedFilter.
 //
-// decodeLZW, decodeCCITTFax and decodeBrotli all propagate the same error from
-// the same helper. FlateDecode was the one caller that did not, and it is the
-// filter most PDFs use.
+// decodeLZW and decodeBrotli propagate the same error from the same helper,
+// and decodeCCITTFax maps its decoder's own cap onto it. FlateDecode was the
+// one caller that did not, and it is the filter most PDFs use.
 //
 // No test asserted this cap for any filter before this one.
 func TestDecodeStream_FlateOverTheCapIsRefused(t *testing.T) {
