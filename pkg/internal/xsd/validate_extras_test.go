@@ -159,6 +159,47 @@ func TestValidate_Extension_MergesBaseAttributes(t *testing.T) {
 	}
 }
 
+const tokenXSD = `<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="PartyType">
+    <xs:sequence>
+      <xs:element name="Name" type="xs:token"/>
+      <xs:element name="Count" type="xs:integer"/>
+    </xs:sequence>
+    <xs:attribute name="schemeID" type="xs:token" use="required"/>
+  </xs:complexType>
+  <xs:element name="Party" type="PartyType"/>
+</xs:schema>`
+
+// TestValidate_TokenWhiteSpace pins XML Schema Part 2, 4.3.6 end to end: an
+// element or attribute typed xs:token is collapsed before its lexical space
+// is checked, so a wrapped name and a double-spaced scheme are valid. Before
+// the built-in's own whiteSpace was applied, each drew a lexical violation.
+func TestValidate_TokenWhiteSpace(t *testing.T) {
+	s := loadTestSchema(t, tokenXSD)
+	doc := []byte("<Party xmlns=\"urn:t\" schemeID=\"0088  GLN\">" +
+		"<Name>Acme\n  Trading\tGmbH</Name><Count> 3 </Count></Party>")
+	got, err := Validate(context.Background(), s, doc)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %v, want no violations", got)
+	}
+
+	// The control: collapse keeps interior space, so a split integer
+	// still fails its lexical space.
+	bad := []byte(`<Party xmlns="urn:t" schemeID="0088"><Name>Acme</Name><Count>1 2</Count></Party>`)
+	got, err = Validate(context.Background(), s, bad)
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if !containsRule(got, RuleLexical) {
+		t.Errorf("got %v, want a lexical violation on the split integer", got)
+	}
+}
+
 const uriAttrXSD = `<?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="urn:t" elementFormDefault="qualified">

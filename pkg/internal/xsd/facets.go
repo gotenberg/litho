@@ -32,15 +32,16 @@ func (v FacetViolation) Error() string {
 // every facet collected up the chain in source order. Returns nil
 // when the value passes every check.
 //
-// Whitespace facet normalisation runs before the lexical validator so
-// downstream facets see the same whitespace-collapsed form the lexical
-// space expects.
+// White space is normalized first, under the mode [effectiveWhiteSpace]
+// derives, and every check then sees the normalized value: per XML Schema
+// Part 1, 3.1.4 it is the normalized value that is validated. "A\nB" and
+// "A  B" as xs:token are therefore the valid value "A B".
 func ValidateValue(value string, t Type) []FacetViolation {
 	if t == nil {
 		return nil
 	}
 	facets, base := collectAllFacets(t)
-	normalized := applyWhitespace(value, facets)
+	normalized := applyWhitespace(value, facets, base)
 
 	var out []FacetViolation
 	if base != nil {
@@ -107,31 +108,43 @@ func collectAllFacets(t Type) ([]Facet, *BuiltinType) {
 	return ordered, base
 }
 
-// applyWhitespace honours the xs:whiteSpace facet semantics:
-// "preserve" leaves value untouched, "replace" maps tab/cr/lf to
-// space, "collapse" additionally collapses runs of spaces and trims.
-// When multiple WhiteSpace facets appear, the last one wins (which
-// matches XSD's "most-derived restriction" rule under the collect
-// order above).
+// applyWhitespace normalizes value under the mode [effectiveWhiteSpace]
+// derives: per XML Schema Part 2, 4.3.6, preserve leaves it untouched,
+// replace maps tab, line feed and carriage return to space, and collapse
+// also joins runs of spaces and trims both ends.
+func applyWhitespace(value string, facets []Facet, base *BuiltinType) string {
+	switch effectiveWhiteSpace(facets, base) {
+	case whiteSpaceReplace:
+		return whitespaceReplace(value)
+	case whiteSpaceCollapse:
+		return whitespaceCollapse(value)
+	case whiteSpacePreserve:
+	}
+	return value
+}
+
+// effectiveWhiteSpace returns the whiteSpace in force for a type whose
+// restriction chain carries facets and bottoms out on base: the mode the
+// built-in fixes ([builtinWhiteSpace]), tightened by every whiteSpace facet
+// the chain declares.
 //
-// The three modes are those of XML Schema Part 2, 4.3.6. That clause also
-// fixes collapse on every atomic type not derived from string, which is not
-// applied here; see the TODO on [validateLexical].
-func applyWhitespace(value string, facets []Facet) string {
-	mode := ""
+// Per XML Schema Part 2, 4.3.6.4 a step may not loosen the mode of the step
+// it restricts, so on a valid schema the strongest mode is the most-derived
+// one. A schema that loosens it anyway, preserve under token for instance,
+// is in error. The looser facet is then ignored rather than blamed on the
+// instance, as is a value outside the three 4.3.6 allows.
+func effectiveWhiteSpace(facets []Facet, base *BuiltinType) whiteSpaceMode {
+	mode := builtinWhiteSpace(base)
 	for _, f := range facets {
-		if ws, ok := f.(WhiteSpace); ok {
-			mode = ws.Value
+		ws, ok := f.(WhiteSpace)
+		if !ok {
+			continue
+		}
+		if declared, known := parseWhiteSpaceMode(ws.Value); known && declared > mode {
+			mode = declared
 		}
 	}
-	switch mode {
-	case "replace":
-		return whitespaceReplace(value)
-	case "collapse":
-		return whitespaceCollapse(value)
-	default:
-		return value
-	}
+	return mode
 }
 
 func whitespaceReplace(v string) string {

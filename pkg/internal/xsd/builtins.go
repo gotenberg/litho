@@ -102,14 +102,9 @@ func IsBuiltin(qn QName) bool {
 // Edition) defines, in 3.2 for the primitive types and 3.3 for the derived
 // ones. The clause sits on each case and check.
 //
-// TODO: 4.3.6 fixes whiteSpace to collapse for every atomic type but string
-// and the types derived from it, and token itself collapses, so white space
-// is normalised before a value is held against its lexical space.
-// [ValidateValue] applies only the whiteSpace facets a schema declares, never
-// a built-in's own. "A\nB" and "A  B" as xs:token, or "A\tB" as
-// xs:normalizedString, are therefore reported, although they normalise to
-// valid values. Element text is trimmed before it reaches here, so only
-// interior white space and attribute values are affected.
+// value must already be white-space normalized: the lexical spaces hold no
+// white space a normalization removes, and [ValidateValue] applies the mode
+// [builtinWhiteSpace] fixes before it calls here.
 func validateLexical(value string, base *BuiltinType) *FacetViolation {
 	if base == nil {
 		return nil
@@ -184,6 +179,53 @@ func validateLexical(value string, base *BuiltinType) *FacetViolation {
 	return nil
 }
 
+// whiteSpaceMode is one of the three whiteSpace values of XML Schema Part 2,
+// 4.3.6. The modes are ordered: each one normalizes everything the one below
+// it does, and more.
+type whiteSpaceMode int
+
+const (
+	whiteSpacePreserve whiteSpaceMode = iota
+	whiteSpaceReplace
+	whiteSpaceCollapse
+)
+
+// parseWhiteSpaceMode reads the value attribute of an xs:whiteSpace facet.
+// It reports false for anything but the three values 4.3.6 allows.
+func parseWhiteSpaceMode(value string) (whiteSpaceMode, bool) {
+	switch value {
+	case "preserve":
+		return whiteSpacePreserve, true
+	case "replace":
+		return whiteSpaceReplace, true
+	case "collapse":
+		return whiteSpaceCollapse, true
+	}
+	return whiteSpacePreserve, false
+}
+
+// builtinWhiteSpace returns the whiteSpace a built-in type fixes. Per XML
+// Schema Part 2, 4.3.6, it is preserve for string and collapse for every
+// other atomic type. normalizedString replaces (3.3.1), token collapses
+// (3.3.2), and the types derived from token inherit collapse. A nil or
+// foreign base names no built-in, so nothing is normalized.
+//
+// anyType and anySimpleType preserve: per XML Schema Part 1, 3.1.4 a value
+// validated against the simple ur-type is normalized "as in the preserve
+// case".
+func builtinWhiteSpace(base *BuiltinType) whiteSpaceMode {
+	if base == nil || base.Name.Namespace != XSNamespace {
+		return whiteSpacePreserve
+	}
+	switch base.Name.Local {
+	case "string", "anyType", "anySimpleType":
+		return whiteSpacePreserve
+	case "normalizedString":
+		return whiteSpaceReplace
+	}
+	return whiteSpaceCollapse
+}
+
 func lexErr(base *BuiltinType, value, reason string) *FacetViolation {
 	return &FacetViolation{
 		Facet:  nil,
@@ -245,11 +287,10 @@ func checkDecimal(value string, base *BuiltinType) *FacetViolation {
 
 // checkInteger checks XML Schema Part 2, 3.3.13.1, "a finite-length sequence
 // of decimal digits (#x30-#x39) with an optional leading sign", then the
-// range a derived type fixes. The trim stands in for the whiteSpace collapse
-// 4.3.6 fixes on every numeric type.
+// range a derived type fixes. Base 10 keeps big.Int from reading a base
+// prefix or an underscore, neither of which is an integer literal.
 func checkInteger(value string, base *BuiltinType, minInt, maxInt *big.Int) *FacetViolation {
-	v := strings.TrimSpace(value)
-	n, ok := new(big.Int).SetString(v, 10)
+	n, ok := new(big.Int).SetString(value, 10)
 	if !ok {
 		return lexErr(base, value, "not an integer literal")
 	}

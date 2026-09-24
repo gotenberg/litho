@@ -145,6 +145,96 @@ func TestValidateValue_WhiteSpaceNormalization(t *testing.T) {
 	}
 }
 
+// TestValidateValue_BuiltinWhiteSpace pins XML Schema Part 2, 4.3.6: every
+// built-in normalizes white space under the mode it fixes before its lexical
+// space and facets are checked, even when the schema declares no whiteSpace
+// facet. The token cases are the ones a CII attribute or element typed
+// xs:token meets when a producer wraps or pads the text.
+func TestValidateValue_BuiltinWhiteSpace(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		t      Type
+		value  string
+		wantOK bool
+	}{
+		{"token collapses a line feed", builtin("token"), "A\nB", true},
+		{"token collapses a run of spaces", builtin("token"), "A  B", true},
+		{"token trims both ends", builtin("token"), " \tA B\r\n", true},
+		{"normalizedString replaces a tab", builtin("normalizedString"), "A\tB", true},
+		{"integer collapses surrounding space", builtin("integer"), " 42\n", true},
+		{"decimal collapses surrounding space", builtin("decimal"), "\t1.5 ", true},
+		{"boolean collapses surrounding space", builtin("boolean"), " true ", true},
+		{"date collapses surrounding space", builtin("date"), " 2026-05-17 ", true},
+		{"collapse keeps interior space in an integer", builtin("integer"), "4 2", false},
+		{
+			"token length counts the collapsed value",
+			&SimpleType{Base: builtin("token"), Facets: []Facet{MaxLength{Value: 3}}},
+			"A  B", true,
+		},
+		{
+			"token enumeration matches the collapsed value",
+			&SimpleType{Base: builtin("token"), Facets: []Facet{Enumeration{Value: "EUR"}}},
+			"  EUR\n", true,
+		},
+		{
+			"token pattern matches the collapsed value",
+			&SimpleType{Base: builtin("token"), Facets: []Facet{Pattern{Value: "[A-Z] [A-Z]"}}},
+			"A\n\nB", true,
+		},
+		{
+			"normalizedString replaces without collapsing",
+			&SimpleType{Base: builtin("normalizedString"), Facets: []Facet{Length{Value: 4}}},
+			"A\t\tB", true,
+		},
+		{
+			"string preserves a tab",
+			&SimpleType{Base: builtin("string"), Facets: []Facet{Pattern{Value: "A B"}}},
+			"A\tB", false,
+		},
+		{
+			"string preserves surrounding space",
+			&SimpleType{Base: builtin("string"), Facets: []Facet{Length{Value: 3}}},
+			" A ", true,
+		},
+		{
+			"a declared collapse on string still applies",
+			&SimpleType{Base: builtin("string"), Facets: []Facet{WhiteSpace{Value: "collapse"}, Length{Value: 3}}},
+			" A  B ", true,
+		},
+		{
+			"a declared preserve cannot loosen token",
+			&SimpleType{Base: builtin("token"), Facets: []Facet{WhiteSpace{Value: "preserve"}}},
+			"A  B", true,
+		},
+		{
+			"a declared replace under a derived collapse keeps collapse",
+			&SimpleType{
+				Base: &SimpleType{
+					Base:   builtin("string"),
+					Facets: []Facet{WhiteSpace{Value: "collapse"}},
+				},
+				Facets: []Facet{WhiteSpace{Value: "replace"}, Length{Value: 3}},
+			},
+			" A  B ", true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := ValidateValue(tc.value, tc.t)
+			if tc.wantOK && len(got) != 0 {
+				t.Errorf("ValidateValue(%q) = %v, want no violation", tc.value, got)
+			}
+			if !tc.wantOK && len(got) == 0 {
+				t.Errorf("ValidateValue(%q) = no violation, want one", tc.value)
+			}
+		})
+	}
+}
+
 func TestValidateValue_BaseChainAccumulatesFacets(t *testing.T) {
 	// Derived type tightens an upstream maxLength. Validation should
 	// accumulate both facets and apply the tighter one (10 -> 5).
