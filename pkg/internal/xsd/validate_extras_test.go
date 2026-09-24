@@ -158,3 +158,30 @@ func TestValidate_Extension_MergesBaseAttributes(t *testing.T) {
 		t.Errorf("expected RuleAttribute from inherited base attribute, got %v", got)
 	}
 }
+
+const uriAttrXSD = `<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="LinkType">
+    <xs:sequence>
+      <xs:element name="ID" type="xs:string"/>
+    </xs:sequence>
+    <xs:attribute name="href" type="xs:anyURI" use="required"/>
+  </xs:complexType>
+  <xs:element name="Link" type="LinkType"/>
+</xs:schema>`
+
+// TestValidate_Attributes_EmptyAnyURI pins XML Schema Part 2, 3.2.17.1: an
+// empty attribute is a valid anyURI, because RFC 2396, 4 makes every part of
+// a URI reference optional. The required attribute is present, so nothing
+// fires.
+func TestValidate_Attributes_EmptyAnyURI(t *testing.T) {
+	s := loadTestSchema(t, uriAttrXSD)
+	got, err := Validate(context.Background(), s, []byte(`<Link xmlns="urn:t" href=""><ID>1</ID></Link>`))
+	if err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %v, want no violations for an empty anyURI", got)
+	}
+}

@@ -22,7 +22,7 @@ func TestValidateLexical_StringFamily(t *testing.T) {
 		{"token rejects trailing space", "token", "hello ", true},
 		{"token rejects double space", "token", "hello  world", true},
 		{"token accepts single space", "token", "hello world", false},
-		{"anyURI rejects empty", "anyURI", "", true},
+		{"anyURI accepts empty", "anyURI", "", false},
 		{"anyURI accepts arbitrary", "anyURI", "http://example.com/x", false},
 	}
 	for _, tc := range tests {

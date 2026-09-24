@@ -169,18 +169,16 @@ func validateLexical(value string, base *BuiltinType) *FacetViolation {
 	case "time":
 		return checkTime(value, base)
 	case "anyURI":
-		// XSD lets anyURI be permissive: any string that survives
-		// percent-encoding is acceptable. Practically all CII
-		// IDSchemeAgencyID values pass; reject only the empty form.
+		// Per 3.2.17.1 the lexical space holds every sequence that the
+		// escaping of XLink 5.4 turns into an RFC 2396 URI reference. RFC
+		// 2396, 4 makes both the URI and the fragment of a reference
+		// optional, and 4.2 reads the empty reference as the current
+		// document, so the empty string is a valid anyURI.
 		//
-		// TODO: 3.2.17.1 admits every sequence that escapes to a legal RFC
-		// 2396 URI reference, and RFC 2396 makes both the URI and the
-		// fragment of a reference optional, so the empty string is a valid
-		// anyURI. Rejecting it flags an empty attribute a conforming
-		// validator accepts.
-		if value == "" {
-			return lexErr(base, value, "empty anyURI")
-		}
+		// Deliberate leniency: the few sequences no escaping repairs, such
+		// as a "%" not followed by two hex digits or a second "#", are not
+		// checked. 3.2.17 itself notes that the definition "imposes only
+		// very modest obligations" on a minimally conforming processor.
 		return nil
 	}
 	return nil
