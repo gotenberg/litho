@@ -129,15 +129,38 @@ func (p *Parser) Position() int64 {
 	return p.lex.Reader().Position()
 }
 
-func (p *Parser) recordViolation(msg string) {
+// recordViolation records the format violation "compliance: msg" under the
+// sentinel of its class, which a consumer matches with [errors.Is].
+func (p *Parser) recordViolation(class error, msg string) {
 	if p.checkFormat {
-		p.FormatViolations = append(p.FormatViolations, fmt.Errorf("compliance: %s", msg))
+		p.FormatViolations = append(p.FormatViolations, NewFormatViolation(class, "compliance: "+msg))
 	}
 }
 
-// recordViolationErr is [Parser.recordViolation] for a violation that has a
-// sentinel, which it wraps so a consumer can match it with [errors.Is]. The
-// message reads exactly as recordViolation would write it.
+// formatViolationError is a format violation whose message is not built from
+// the sentinel of its class, so it cannot be a wrapped fmt.Errorf.
+type formatViolationError struct {
+	msg   string
+	class error
+}
+
+func (e *formatViolationError) Error() string { return e.msg }
+
+func (e *formatViolationError) Unwrap() error { return e.class }
+
+// NewFormatViolation returns a format violation that reads msg and matches
+// class under [errors.Is]. The message is what callers show, and the class is
+// how they tell violations apart, so rewording a message cannot move a
+// violation to another rule. Code outside the parser that judges raw bytes,
+// such as the document's object header and xref table checks, builds its
+// violations with it too.
+func NewFormatViolation(class error, msg string) error {
+	return &formatViolationError{msg: msg, class: class}
+}
+
+// recordViolationErr is [Parser.recordViolation] for a violation whose message
+// is built from its sentinel: it records err, the sentinel or an error
+// wrapping it, as "compliance: " followed by err's message.
 func (p *Parser) recordViolationErr(err error) {
 	if p.checkFormat {
 		p.FormatViolations = append(p.FormatViolations, fmt.Errorf("compliance: %w", err))
@@ -321,7 +344,7 @@ func (p *Parser) parseObject(ctx context.Context) (ast.PdfObject, error) {
 			// leniency and remain a parse error here, matching prior
 			// behaviour, to avoid shifting text extraction.
 			if p.checkFormat && strings.ContainsAny(t0.Value, "eE") {
-				p.recordViolation("number uses scientific notation, which ISO 32000-1 §7.3.3 does not permit")
+				p.recordViolation(ErrNumberExponent, "number uses scientific notation, which ISO 32000-1 §7.3.3 does not permit")
 			}
 			return ast.PdfReal(f), nil
 		}
@@ -687,7 +710,7 @@ func (p *Parser) consumeStreamEOL(reader *ioat.Reader) error {
 		if b2 != '\n' {
 			_ = reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 			if p.checkFormat {
-				p.recordViolation("stream keyword followed by CR only (must be CR+LF or LF)")
+				p.recordViolation(ErrStreamKeywordEOL, "stream keyword followed by CR only (must be CR+LF or LF)")
 			}
 		}
 	case '\n':
@@ -695,7 +718,7 @@ func (p *Parser) consumeStreamEOL(reader *ioat.Reader) error {
 	default:
 		_ = reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 		if p.checkFormat {
-			p.recordViolation("stream keyword not followed by EOL")
+			p.recordViolation(ErrStreamKeywordEOL, "stream keyword not followed by EOL")
 		}
 	}
 	return nil
@@ -833,14 +856,14 @@ func (p *Parser) recordStreamLengthViolations(dict ast.PdfDict, dataLen int64, u
 		}
 	}
 	if !usedLength && declaredLength > 0 {
-		p.recordViolation(fmt.Sprintf(
+		p.recordViolation(ErrStreamLengthMismatch, fmt.Sprintf(
 			"stream /Length %d does not match actual byte count %d",
 			declaredLength, dataLen))
 		return
 	}
 	if declaredLength == 0 {
 		if _, hasLength := dict["Length"]; !hasLength {
-			p.recordViolation("stream missing /Length key")
+			p.recordViolation(ErrStreamMissingLength, "stream missing /Length key")
 		}
 	}
 }

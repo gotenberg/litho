@@ -7,25 +7,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// TestStreamEOLDiscriminator pins which stream defect messages
-// [isStreamEOLViolation] treats as EOL defects, and the per-part rule
-// [streamEOLRule] returns for them.
+// TestStreamEOLDiscriminator pins the per-part rule [streamEOLRule] returns
+// for a stream-keyword EOL defect. Which violations are such defects is the
+// parser's [parser.ErrStreamKeywordEOL] class, pinned in package parser.
 func TestStreamEOLDiscriminator(t *testing.T) {
-	eol := []string{
-		"stream keyword followed by CR only (must be CR+LF or LF)",
-		"stream keyword not followed by EOL",
-	}
-	for _, m := range eol {
-		if !isStreamEOLViolation(m) {
-			t.Errorf("isStreamEOLViolation(%q) = false, want true", m)
-		}
-	}
-	for _, m := range []string{"stream missing /Length key", "stream length does not match /Length"} {
-		if isStreamEOLViolation(m) {
-			t.Errorf("isStreamEOLViolation(%q) = true, want false (Length defect)", m)
-		}
-	}
-
 	for profile, want := range map[string]Rule{
 		"PDF/A-1b": Rule_19005_1_6_1_7_t02,
 		"PDF/A-2b": Rule_19005_2_6_1_7_1_t02,

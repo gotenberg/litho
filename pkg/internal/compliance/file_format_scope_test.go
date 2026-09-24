@@ -1,8 +1,11 @@
 package compliance
 
 import (
-	"errors"
+	"fmt"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/parser"
 )
 
 // TestFormatViolationScope pins which part states which raw-byte format
@@ -23,17 +26,24 @@ import (
 func TestFormatViolationScope(t *testing.T) {
 	t.Parallel()
 
-	const (
-		xrefSpacing   = "compliance: xref subsection header has 2 spaces between start and count (must be 1)"
-		xrefEOL       = "compliance: xref keyword not followed by EOL"
-		streamCR      = "stream keyword followed by CR only (must be CR+LF or LF)"
-		streamLength  = "stream /Length 57 does not match actual byte count 56"
-		streamNoLenth = "stream missing /Length key"
+	var (
+		xrefSpacing = parser.NewFormatViolation(document.ErrXRefSubsectionSpacing,
+			"compliance: xref subsection header has 2 spaces between start and count (must be 1)")
+		xrefEOL      = parser.NewFormatViolation(document.ErrXRefEOLMarkers, "compliance: xref keyword not followed by EOL")
+		streamCR     = parser.NewFormatViolation(parser.ErrStreamKeywordEOL, "stream keyword followed by CR only (must be CR+LF or LF)")
+		streamLength = parser.NewFormatViolation(parser.ErrStreamLengthMismatch,
+			"stream /Length 57 does not match actual byte count 56")
+		streamNoLenth = parser.NewFormatViolation(parser.ErrStreamMissingLength, "stream missing /Length key")
+		objHeader     = parser.NewFormatViolation(document.ErrObjectHeaderFormat,
+			"compliance: obj header 4: 2 white-space characters between object number and generation (must be 1)")
+		hexChar    = fmt.Errorf("compliance: %w", fmt.Errorf("%w %q", parser.ErrHexStringInvalidChar, '!'))
+		hexOdd     = fmt.Errorf("compliance: %w", parser.ErrHexStringOddDigits)
+		misleading = fmt.Errorf("compliance: xref stream: %w", fmt.Errorf("%w %q", parser.ErrHexStringInvalidChar, 'g'))
 	)
 
 	for _, tc := range []struct {
 		name    string
-		msg     string
+		msg     error
 		profile string
 		want    Rule
 	}{
@@ -48,10 +58,16 @@ func TestFormatViolationScope(t *testing.T) {
 		{"stream keyword EOL at part 4", streamCR, "PDF/A-4", Rule{}},
 		{"length mismatch is swept elsewhere", streamLength, "PDF/A-2b", Rule{}},
 		{"a missing /Length is not swept", streamNoLenth, "PDF/A-2b", Rule_19005_2_6_1_7_1_t01},
+		{"an object header is swept elsewhere", objHeader, "PDF/A-2b", Rule{}},
+		{"a hex string with an invalid character", hexChar, "PDF/A-2b", Rule_19005_2_6_1_6_t02},
+		{"a hex string with an odd digit count", hexOdd, "PDF/A-2b", Rule_19005_2_6_1_6_t01},
+		// The class decides, not the text: this message names an xref and a
+		// stream, which the substring match read as an xref defect.
+		{"the class decides, not the message", misleading, "PDF/A-2b", Rule_19005_2_6_1_6_t02},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			vctx := &validationCtx{formatViolations: []error{errors.New(tc.msg)}}
+			vctx := &validationCtx{formatViolations: []error{tc.msg}}
 			got := checkFormatViolations(vctx, tc.profile)
 			if tc.want == (Rule{}) {
 				if len(got) != 0 {

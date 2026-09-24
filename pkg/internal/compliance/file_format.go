@@ -1,8 +1,8 @@
 package compliance
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
@@ -84,14 +85,13 @@ func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, c
 			if n == maxHexStringViolationsPerPage {
 				break
 			}
-			msg := v.Error()
 			rule := oddRule
-			if bytes.Contains([]byte(msg), []byte("invalid character")) {
+			if errors.Is(v, parser.ErrHexStringInvalidChar) {
 				rule = charRule
 			}
 			results = append(results, Violation{
 				Rule:    rule,
-				Context: fmt.Sprintf("page %d: %s", i+1, msg),
+				Context: fmt.Sprintf("page %d: %s", i+1, v.Error()),
 			})
 		}
 	}
@@ -114,32 +114,36 @@ func checkFormatViolations(vctx *validationCtx, profile string) []Violation {
 
 	var results []Violation
 	hexRule := hexStringRule(profile)
-	objRule := objHeaderRule(profile)
 	streamRule := streamFormatRule(profile)
 	xrefRule := xrefFormatRule(profile)
 
 	for _, violation := range vctx.formatViolations {
-		msg := violation.Error()
-
-		// Object headers are judged by checkObjHeaderByteFormat, which sweeps
-		// every cross-reference entry. What resolution happened to record here
-		// is a subset of that, so passing it on would report the same defect
-		// twice for any object that missed the cache.
-		if containsObjHeaderPattern(msg) && !containsXRefPattern(msg) && !containsStreamPattern(msg) {
-			continue
-		}
-
+		// The violations are told apart by the sentinel of their class, never
+		// by their message, so rewording a message cannot move a violation to
+		// another rule. A violation of no class checked here, a hex string
+		// with an odd digit count among them, keeps the hex string rule.
+		//
+		// TODO: a parser.ErrNumberExponent violation falls through to the hex
+		// string rule too, here and in checkContentStreamHexStrings, as it did
+		// when the message was matched. No ISO 19005 clause states it, so it
+		// likely belongs nowhere; it is kept to leave every verdict unchanged.
 		rule := hexRule
-		//nolint:gocritic // if-else chain uses function-call predicates; switch is not applicable.
-		if containsXRefPattern(msg) {
+		switch {
+		case errors.Is(violation, document.ErrObjectHeaderFormat):
+			// Object headers are judged by checkObjHeaderByteFormat, which
+			// sweeps every cross-reference entry. What resolution happened to
+			// record here is a subset of that, so passing it on would report
+			// the same defect twice for any object that missed the cache.
+			continue
+		case errors.Is(violation, document.ErrXRefFormat):
 			rule = xrefRule
 			if PDFAPart(profile) == 1 {
 				// ISO 19005-1, 6.1.4 splits the table in two:
 				// t1 subsectionHeaderSpaceSeparated, t2 xrefEOLMarkersComplyPDFA.
-				if isXrefEOLViolation(msg) {
+				if errors.Is(violation, document.ErrXRefEOLMarkers) {
 					rule = Rule_19005_1_6_1_4_t02
 				}
-			} else if !isXrefEOLViolation(msg) {
+			} else if !errors.Is(violation, document.ErrXRefEOLMarkers) {
 				// Parts 2 and up kept only xrefEOLMarkersComplyPDFA and dropped
 				// the subsection-header spacing requirement, so a spacing defect
 				// has no rule to answer to. Measured: veraPDF 1.30.2 reports
@@ -147,16 +151,17 @@ func checkFormatViolations(vctx *validationCtx, profile string) []Violation {
 				// the subsection header.
 				continue
 			}
-		} else if containsStreamPattern(msg) {
-			if isStreamLengthMismatch(msg) {
+		case errors.Is(violation, parser.ErrStreamFormat):
+			if errors.Is(violation, parser.ErrStreamLengthMismatch) {
 				// checkStreamLengths sweeps every stream and states this rule
 				// there, so passing resolution's copy on states it twice. A
 				// stream with no /Length key at all is not swept, and its
-				// message is not this one.
+				// violation is of another class.
 				continue
 			}
 			eolRule := streamEOLRule(profile)
-			if isStreamEOLViolation(msg) && eolRule.Specification == "" {
+			keywordEOL := errors.Is(violation, parser.ErrStreamKeywordEOL)
+			if keywordEOL && eolRule.Specification == "" {
 				// ISO 19005-4, 6.1.6.1 states only Length == realLength and the
 				// F/FFilter/FDecodeParms prohibition. Part 4 dropped the
 				// stream-keyword EOL requirement, so there is no rule to answer
@@ -166,34 +171,20 @@ func checkFormatViolations(vctx *validationCtx, profile string) []Violation {
 			rule = streamRule
 			// PDF/A-1/2/3 attribute a stream-keyword EOL defect to a dedicated
 			// rule (t02), distinct from the /Length-mismatch rule (t01).
-			if eolRule.Specification != "" && isStreamEOLViolation(msg) {
+			if keywordEOL {
 				rule = eolRule
 			}
-		} else if containsObjHeaderPattern(msg) {
-			rule = objRule
-		} else if bytes.Contains([]byte(msg), []byte("invalid character")) {
+		case errors.Is(violation, parser.ErrHexStringInvalidChar):
 			rule = hexStringInvalidCharRule(profile)
 		}
 
 		results = append(results, Violation{
 			Rule:    rule,
-			Context: msg,
+			Context: violation.Error(),
 		})
 	}
 
 	return results
-}
-
-// containsXRefPattern returns true if the error message relates to xref
-// table formatting (subsection header separator, EOL after xref keyword).
-func containsXRefPattern(msg string) bool {
-	return bytes.Contains([]byte(msg), []byte("xref"))
-}
-
-// containsStreamPattern returns true if the error message relates to
-// stream formatting (Length mismatch, EOL after stream keyword, indirect Length).
-func containsStreamPattern(msg string) bool {
-	return bytes.Contains([]byte(msg), []byte("stream"))
 }
 
 // streamEOLRule returns the "stream keyword not followed by a valid EOL" rule
@@ -210,42 +201,6 @@ func streamEOLRule(profile string) Rule {
 	default:
 		return Rule{}
 	}
-}
-
-// isStreamLengthMismatch reports the parser message for a declared /Length that
-// disagrees with the bytes found. It deliberately does not match "stream missing
-// /Length key": [checkStreamLengths] skips a stream with no /Length, so that one
-// still has to come through here.
-func isStreamLengthMismatch(msg string) bool {
-	b := []byte(msg)
-	return bytes.Contains(b, []byte("stream /Length")) &&
-		bytes.Contains(b, []byte("does not match actual byte count"))
-}
-
-// isStreamEOLViolation reports whether a format-violation message describes the
-// stream keyword not being followed by a valid EOL, as opposed to a /Length
-// defect (which keeps the t01 attribution).
-func isStreamEOLViolation(msg string) bool {
-	b := []byte(msg)
-	return bytes.Contains(b, []byte("stream keyword")) &&
-		(bytes.Contains(b, []byte("CR only")) || bytes.Contains(b, []byte("not followed by EOL")))
-}
-
-// containsObjHeaderPattern returns true if the error message relates to
-// object header formatting (obj/endobj keywords, header line).
-func containsObjHeaderPattern(msg string) bool {
-	for _, pat := range []string{"obj", "endobj", "header"} {
-		if bytes.Contains([]byte(msg), []byte(pat)) {
-			return true
-		}
-	}
-	return false
-}
-
-// isXrefEOLViolation returns true if the violation message relates to
-// the EOL marker after the xref keyword (t02), not subsection header spacing (t01).
-func isXrefEOLViolation(msg string) bool {
-	return bytes.Contains([]byte(msg), []byte("EOL")) || bytes.Contains([]byte(msg), []byte("not followed by"))
 }
 
 // checkObjHeaderByteFormat performs a direct raw-byte scan of every indirect
@@ -359,10 +314,10 @@ func checkXRefTableByteFormat(doc *document.Document, profile string) []Violatio
 		if PDFAPart(profile) == 1 {
 			// ISO 19005-1, 6.1.4 distinguishes t01 (subsection header spacing)
 			// from t02 (EOL after the xref keyword).
-			if isXrefEOLViolation(v.Error()) {
+			if errors.Is(v, document.ErrXRefEOLMarkers) {
 				rule = Rule_19005_1_6_1_4_t02
 			}
-		} else if !isXrefEOLViolation(v.Error()) {
+		} else if !errors.Is(v, document.ErrXRefEOLMarkers) {
 			// Parts 2 and up kept only xrefEOLMarkersComplyPDFA. They have no
 			// subsection-header spacing requirement, so a spacing defect has no
 			// rule to answer to. Measured: veraPDF 1.30.2 reports nothing at all

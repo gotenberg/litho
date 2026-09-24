@@ -1,6 +1,9 @@
 package parser
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 // errUnexpectedKeyword marks a bare keyword token found where an object was
 // expected. A space inside a name produces one: `/AASGAA+Arial,Unicode MS`
@@ -35,3 +38,29 @@ var ErrHexStringOddDigits = errors.New("hex string has odd number of digits")
 // that is neither a hexadecimal digit nor white space (ISO 19005-2, 6.1.6
 // t2). The parser drops the character when it reads the value.
 var ErrHexStringInvalidChar = errors.New("hex string contains invalid character")
+
+// ErrStreamFormat is the class of the stream format violations recorded under
+// [Parser.WithFormatChecking]: [ErrStreamLengthMismatch],
+// [ErrStreamKeywordEOL] and [ErrStreamMissingLength] each match it under
+// [errors.Is]. ISO 32000-1, 7.3.8 states the stream syntax they check.
+var ErrStreamFormat = errors.New("stream format violation")
+
+// ErrStreamLengthMismatch marks a format violation recorded under
+// [Parser.WithFormatChecking] for a stream whose /Length disagrees with the
+// bytes before endstream (ISO 32000-1, 7.3.8.2; ISO 19005-2, 6.1.7.1 t1).
+var ErrStreamLengthMismatch = fmt.Errorf("%w: /Length does not match the stream data", ErrStreamFormat)
+
+// ErrStreamKeywordEOL marks a format violation recorded under
+// [Parser.WithFormatChecking] for a stream keyword not followed by CR+LF or LF
+// (ISO 32000-1, 7.3.8.1; ISO 19005-2, 6.1.7.1 t2).
+var ErrStreamKeywordEOL = fmt.Errorf("%w: stream keyword not followed by CR+LF or LF", ErrStreamFormat)
+
+// ErrStreamMissingLength marks a format violation recorded under
+// [Parser.WithFormatChecking] for a stream dictionary with no /Length, an
+// entry ISO 32000-1, 7.3.8.2, Table 5 requires.
+var ErrStreamMissingLength = fmt.Errorf("%w: stream dictionary has no /Length", ErrStreamFormat)
+
+// ErrNumberExponent marks a format violation recorded under
+// [Parser.WithFormatChecking] for a real number written with an exponent,
+// which the syntax of ISO 32000-1, 7.3.3 does not provide.
+var ErrNumberExponent = errors.New("number uses scientific notation")
