@@ -1203,13 +1203,13 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	// resolveColorSpace answers DeviceRGB for a missing /ColorSpace, but a
 	// JPXDecode image may leave it out and take its colour from the JPEG 2000
 	// data instead (ISO 32000-1, 7.4.9).
-	var jpxProfile []byte
+	var jpxCol jpxColour
 	if _, stated := stream.Dict["ColorSpace"]; !stated && usesJPXDecode(ctx, doc, stream.Dict) {
-		cs, profile, err := jpxColorSpace(ctx, doc, stream)
+		jpxCol, err = jpxColorSpace(ctx, doc, stream, renderingIntent(ctx, doc, stream.Dict))
 		if err != nil {
 			return nil, fmt.Errorf("image %q: %w", name, err)
 		}
-		colorSpace, jpxProfile = cs, profile
+		colorSpace = jpxCol.space
 	}
 
 	// A stencil mask is not a picture. ISO 32000-1, 8.9.6.2 gives an image mask
@@ -1275,6 +1275,9 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	}
 	if len(decodedData) > maxImageBytes {
 		return nil, fmt.Errorf("decoded image stream exceeds %d-byte safety cap", maxImageBytes)
+	}
+	if jpxCol.ycc && !bool(isMask) {
+		yccToRGB(decodedData, jpxCol.neutral)
 	}
 
 	// Resolved before the samples are unpacked, because an indexed image holds
@@ -1453,10 +1456,9 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	// /ColorSpace it wrongly states.
 	var conv *converter
 	if !isMask {
-		intent := renderingIntent(ctx, doc, stream.Dict)
-		t := embeddedTransform(doc, jpxProfile, components, intent)
+		t := jpxCol.transform
 		if t == nil {
-			t = colorTransform(ctx, doc, stream.Dict["ColorSpace"], colorSpace, components, intent, cc)
+			t = colorTransform(ctx, doc, stream.Dict["ColorSpace"], colorSpace, components, renderingIntent(ctx, doc, stream.Dict), cc)
 		}
 		conv = newConverter(t)
 	}

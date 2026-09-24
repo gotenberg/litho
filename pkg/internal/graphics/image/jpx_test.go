@@ -109,53 +109,169 @@ func TestDecodeImage_JPXIndexed(t *testing.T) {
 	}
 }
 
+// jp2Box wraps body in a JP2 box of the given type (T.800, I.4).
+func jp2Box(kind string, body ...[]byte) []byte {
+	b := slices.Concat(body...)
+	n := len(b) + 8
+	return slices.Concat([]byte{byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)}, []byte(kind), b)
+}
+
+// j10JP2 wraps the J.10 codestream, one 8-bit component 1 wide and 9 high,
+// in a JP2 file whose header holds boxes after its Image Header box.
+func j10JP2(t *testing.T, boxes ...[]byte) []byte {
+	t.Helper()
+	return slices.Concat(
+		jp2Box("jP  ", []byte{0x0D, 0x0A, 0x87, 0x0A}),
+		jp2Box("ftyp", []byte("jp2 \x00\x00\x00\x00jp2 ")),
+		jp2Box("jp2h", append([][]byte{jp2Box("ihdr", []byte{0, 0, 0, 9, 0, 0, 0, 1, 0, 1, 7, 7, 0, 0})}, boxes...)...),
+		jp2Box("jp2c", readTestJPX(t, "testdata/annex_j10.j2k")),
+	)
+}
+
+// enumeratedColr is a Colour Specification box of the enumerated method with
+// the given precedence and approximation.
+func enumeratedColr(space byte, prec int8, approx byte) []byte {
+	return jp2Box("colr", []byte{1, byte(prec), approx, 0, 0, 0, space})
+}
+
+// palette3 is a Palette box of 256 entries, entry j being column(j), with its
+// Component Mapping box sending the one component through all three columns.
+func palette3(column func(j int) [3]byte) []byte {
+	pclr := []byte{1, 0, 3, 7, 7, 7}
+	for j := range 256 {
+		c := column(j)
+		pclr = append(pclr, c[0], c[1], c[2])
+	}
+	return slices.Concat(jp2Box("pclr", pclr), jp2Box("cmap", []byte{0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 2}))
+}
+
 // palettedJ10Bytes wraps the J.10 codestream in a JP2 file mapping its
 // component through a 256-entry sRGB palette, entry j being (255 - j, j/2, 0).
 // No column maps an index to itself, so a palette lookup never passes for the
 // index.
 func palettedJ10Bytes(t *testing.T) []byte {
 	t.Helper()
-	box := func(kind string, body ...[]byte) []byte {
-		b := slices.Concat(body...)
-		n := len(b) + 8
-		return slices.Concat([]byte{byte(n >> 24), byte(n >> 16), byte(n >> 8), byte(n)}, []byte(kind), b)
-	}
-	pclr := []byte{1, 0, 3, 7, 7, 7}
-	for j := range 256 {
-		pclr = append(pclr, byte(255-j), byte(j/2), 0)
-	}
-	return slices.Concat(
-		box("jP  ", []byte{0x0D, 0x0A, 0x87, 0x0A}),
-		box("ftyp", []byte("jp2 \x00\x00\x00\x00jp2 ")),
-		box("jp2h",
-			box("ihdr", []byte{0, 0, 0, 9, 0, 0, 0, 1, 0, 1, 7, 7, 0, 0}),
-			box("colr", []byte{1, 0, 0, 0, 0, 0, 16}),
-			box("pclr", pclr),
-			box("cmap", []byte{0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 2})),
-		box("jp2c", readTestJPX(t, "testdata/annex_j10.j2k")),
-	)
+	return j10JP2(t, enumeratedColr(16, 0, 0), palette3(func(j int) [3]byte { return [3]byte{byte(255 - j), byte(j / 2), 0} }))
 }
 
-// TestDecodeImage_JPXUnsupportedColour refuses a JPXDecode image without
-// /ColorSpace whose data names CIEJab, which would need a conversion litho
-// does not make, or names sRGB over one colour channel, rather than reading
-// its samples in a space they do not fill.
+// TestDecodeImage_JPXUnsupportedColour reads a JPXDecode image without
+// /ColorSpace whose data names no colour space litho supports in the device
+// space of its colour channel count, as ISO 32000-1, 7.4.9 says to: CIEJab
+// over three channels as DeviceRGB, and sRGB over one as DeviceGray. Two
+// channels have no device space and are refused.
 func TestDecodeImage_JPXUnsupportedColour(t *testing.T) {
 	t.Parallel()
 
-	jab := palettedJ10Bytes(t)
-	i := strings.Index(string(jab), "colr")
-	jab[i+10] = 19
-	// Without its Component Mapping box the palette is not used, and the one
-	// component is the image's only colour channel.
-	grey := palettedJ10Bytes(t)
-	i = strings.Index(string(grey), "cmap")
-	copy(grey[i:], "skip")
-	for name, data := range map[string][]byte{"CIEJab": jab, "sRGB over one channel": grey} {
-		ctx, doc, page := imagePDF(t, jpxPDF(1, 9, "", data))
-		if _, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0")); !errors.Is(err, jpx.ErrUnsupported) {
-			t.Errorf("%s: DecodeImage = %v, want %v", name, err, jpx.ErrUnsupported)
+	var two []byte
+	two = append(two, 1, 0, 2, 7, 7)
+	for j := range 256 {
+		two = append(two, byte(j), byte(j))
+	}
+	for _, tc := range []struct {
+		name string
+		data []byte
+		want [3]uint32
+	}{
+		{"CIEJab over three channels", j10JP2(t, enumeratedColr(jpx.ColourCIEJab, 0, 0), palette3(func(j int) [3]byte { return [3]byte{byte(255 - j), byte(j / 2), 0} })), [3]uint32{154, 50, 0}},
+		{"sRGB over one channel", j10JP2(t, enumeratedColr(jpx.ColourSRGB, 0, 0)), [3]uint32{101, 101, 101}},
+	} {
+		ctx, doc, page := imagePDF(t, jpxPDF(1, 9, "", tc.data))
+		img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+		if err != nil {
+			t.Errorf("%s: DecodeImage: %v", tc.name, err)
+			continue
 		}
+		r, g, b, _ := img.At(0, 0).RGBA()
+		if got := [3]uint32{r >> 8, g >> 8, b >> 8}; got != tc.want {
+			t.Errorf("%s: pixel %v, want %v", tc.name, got, tc.want)
+		}
+	}
+
+	data := j10JP2(t, enumeratedColr(jpx.ColourSRGB, 0, 0), jp2Box("pclr", two), jp2Box("cmap", []byte{0, 0, 1, 0, 0, 0, 1, 1}))
+	ctx, doc, page := imagePDF(t, jpxPDF(1, 9, "", data))
+	if _, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0")); !errors.Is(err, jpx.ErrUnsupported) {
+		t.Errorf("two channels: DecodeImage = %v, want %v", err, jpx.ErrUnsupported)
+	}
+}
+
+// TestDecodeImage_JPXColourSpecificationOrder reads a JPXDecode image without
+// /ColorSpace through the colour specification ISO 32000-1, 7.4.9 selects:
+// the one of highest precedence, then best approximation (ISO/IEC 15444-2,
+// M.11.7.2), then first in the file, passing over one litho cannot read. The
+// greyscale specification reads the first sample as grey 101, the ICC profile
+// as L* 25, grey 59.
+func TestDecodeImage_JPXColourSpecificationOrder(t *testing.T) {
+	t.Parallel()
+
+	icc := func(prec int8, approx byte, profile []byte) []byte {
+		return jp2Box("colr", []byte{2, byte(prec), approx}, profile)
+	}
+	flat := flatProfile("GRAY", 25)
+	for _, tc := range []struct {
+		name  string
+		boxes [][]byte
+		want  uint32
+	}{
+		{"first in the file", [][]byte{enumeratedColr(jpx.ColourGreyscale, 0, 0), icc(0, 0, flat)}, 101},
+		{"first in the file, the profile", [][]byte{icc(0, 0, flat), enumeratedColr(jpx.ColourGreyscale, 0, 0)}, 59},
+		{"an unreadable profile passed over", [][]byte{icc(0, 0, []byte("not a profile")), icc(0, 0, flat)}, 59},
+		{"CIEJab passed over", [][]byte{enumeratedColr(jpx.ColourCIEJab, 0, 0), icc(0, 0, flat)}, 59},
+		{"higher precedence", [][]byte{enumeratedColr(jpx.ColourGreyscale, 0, 1), icc(1, 1, flat)}, 59},
+		{"negative precedence", [][]byte{icc(-1, 1, flat), enumeratedColr(jpx.ColourGreyscale, 0, 1)}, 101},
+		{"better approximation", [][]byte{icc(0, 4, flat), enumeratedColr(jpx.ColourGreyscale, 0, 1)}, 101},
+	} {
+		ctx, doc, page := imagePDF(t, jpxPDF(1, 9, "", j10JP2(t, tc.boxes...)))
+		img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+		if err != nil {
+			t.Errorf("%s: DecodeImage: %v", tc.name, err)
+			continue
+		}
+		if got := greyAt(img, 0, 0); got < tc.want-1 || got > tc.want+1 {
+			t.Errorf("%s: grey %d, want %d", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestDecodeImage_JPXSYCC reads JPXDecode images without /ColorSpace whose
+// data is in enumerated sYCC (ISO/IEC 15444-2, Table M.25) as sRGB.
+//
+// ycc420.jp2 is what OpenJPEG 2.5 codes from eight 16x16 patches of known
+// colour taken to 8-bit sYCC, its chroma subsampled 2x2, and it names sYCC
+// itself. Every patch comes back within 2 levels of its colour, the rounding
+// of the 8-bit sYCC samples; pdf.js reads each within 1 level of litho.
+//
+// The palette case pins the transform: entry j is Y j, Cb 192, Cr 100.
+func TestDecodeImage_JPXSYCC(t *testing.T) {
+	t.Parallel()
+
+	ctx, doc, page := imagePDF(t, jpxPDF(64, 32, "", readTestJPX(t, "testdata/ycc420.jp2")))
+	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("ycc420.jp2: DecodeImage: %v", err)
+	}
+	for i, want := range [][3]int{{255, 0, 0}, {0, 255, 0}, {0, 0, 255}, {255, 255, 0}, {0, 255, 255}, {255, 0, 255}, {128, 128, 128}, {200, 120, 40}} {
+		x, y := i%4*16+8, i/4*16+8
+		r, g, b, _ := img.At(x, y).RGBA()
+		got := [3]int{int(r >> 8), int(g >> 8), int(b >> 8)}
+		for c := range 3 {
+			if d := got[c] - want[c]; d < -2 || d > 2 {
+				t.Errorf("ycc420.jp2 patch %d: %v, want %v", i, got, want)
+				break
+			}
+		}
+	}
+
+	data := j10JP2(t, enumeratedColr(jpx.ColourSYCC, 0, 0), palette3(func(j int) [3]byte { return [3]byte{byte(j), 192, 100} }))
+	ctx, doc, page = imagePDF(t, jpxPDF(1, 9, "", data))
+	img, err = DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("palette: DecodeImage: %v", err)
+	}
+	// Y 101: R = 101 + 1.402 x -28, G = 101 - 0.34414 x 64 - 0.71414 x -28,
+	// B = 101 + 1.772 x 64.
+	r, g, b, _ := img.At(0, 0).RGBA()
+	if got, want := [3]uint32{r >> 8, g >> 8, b >> 8}, [3]uint32{62, 99, 214}; got != want {
+		t.Errorf("palette: pixel %v, want %v", got, want)
 	}
 }
 

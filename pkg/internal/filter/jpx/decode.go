@@ -26,11 +26,12 @@ const maxSampleBits = 31
 // component, with what its JP2 header says of them.
 type Image struct {
 	Components []Component
-	// Colour is the colour specification of the JP2 header, the zero value
-	// for a bare codestream or a header whose methods are all unknown.
-	Colour Colour
-	header *fileHeader
-	cs     *codestream
+	// Colours holds the colour specifications of the JP2 header in the order
+	// a reader tries them, most preferred first, and none for a bare
+	// codestream or a header whose methods are all unknown.
+	Colours []Colour
+	header  *fileHeader
+	cs      *codestream
 	// x0, y0, x1 and y1 bound the image area on the reference grid (B.2).
 	x0, y0, x1, y1 int
 }
@@ -90,12 +91,7 @@ func Describe(data []byte) (*Image, error) {
 	}
 	img.header, img.cs = hdr, cs
 	if hdr != nil {
-		switch hdr.colour.method {
-		case methodEnumerated:
-			img.Colour.Enumerated = int(hdr.colour.enumerated)
-		case methodICC, methodAnyICC:
-			img.Colour.ICC = hdr.colour.profile
-		}
+		img.Colours = rankColours(hdr.colours)
 	}
 	return img, nil
 }

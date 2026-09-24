@@ -56,8 +56,8 @@ func TestChannels_Palette(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
-	if img.Colour.Enumerated != ColourSRGB || img.Colour.ICC != nil {
-		t.Errorf("colour = %+v, want sRGB", img.Colour)
+	if len(img.Colours) != 1 || img.Colours[0].Enumerated != ColourSRGB || img.Colours[0].ICC != nil {
+		t.Errorf("colours = %+v, want sRGB", img.Colours)
 	}
 	chs, err := img.Channels()
 	if err != nil {

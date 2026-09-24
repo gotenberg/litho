@@ -27,9 +27,9 @@ var (
 
 // TestReadFile_JP2 reads the header boxes of a JP2 file that wraps the J.10
 // codestream: a vendor colour box the reader must skip (T.800, Table I.9),
-// then the enumerated greyscale box it uses, an ICC box it must ignore as not
-// the first known one (I.3.3), a palette with an 8-bit and a signed 10-bit
-// column (I.5.3.4), its component mapping and a channel definition.
+// then an enumerated greyscale box and an ICC box it keeps in that order, a
+// palette with an 8-bit and a signed 10-bit column (I.5.3.4), its component
+// mapping and a channel definition.
 func TestReadFile_JP2(t *testing.T) {
 	t.Parallel()
 
@@ -49,8 +49,9 @@ func TestReadFile_JP2(t *testing.T) {
 	if !bytes.Equal(stream, annexJ10) {
 		t.Errorf("codestream differs from the one wrapped")
 	}
-	if hdr.colour.method != methodEnumerated || hdr.colour.enumerated != 17 {
-		t.Errorf("colour = %+v, want enumerated greyscale", hdr.colour)
+	if len(hdr.colours) != 2 || hdr.colours[0].method != methodEnumerated || hdr.colours[0].enumerated != 17 ||
+		hdr.colours[1].method != methodICC || string(hdr.colours[1].profile) != "ICC" {
+		t.Errorf("colours = %+v, want enumerated greyscale then the ICC profile", hdr.colours)
 	}
 	p := hdr.palette
 	if p == nil || p.entries != 2 || len(p.columns) != 2 {
@@ -89,8 +90,8 @@ func TestReadFile_BoxLengths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("readFile: %v", err)
 	}
-	if !bytes.Equal(stream, annexJ10) || hdr.colour.enumerated != 17 {
-		t.Errorf("stream of %d bytes, colour %+v", len(stream), hdr.colour)
+	if !bytes.Equal(stream, annexJ10) || len(hdr.colours) != 1 || hdr.colours[0].enumerated != 17 {
+		t.Errorf("stream of %d bytes, colours %+v", len(stream), hdr.colours)
 	}
 }
 

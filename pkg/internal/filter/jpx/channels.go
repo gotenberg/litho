@@ -16,14 +16,48 @@ const (
 	ColourCIEJab    = 19
 )
 
-// Colour is the colour specification a JP2 reader uses (T.800, I.3.3): the
-// first Colour Specification box whose method it knows.
+// Colour is one colour specification of the image (T.800, I.5.3.3).
 type Colour struct {
 	// Enumerated is the EnumCS of an enumerated specification, and 0
 	// otherwise.
 	Enumerated int
 	// ICC is the profile of an ICC specification, and nil otherwise.
 	ICC []byte
+}
+
+// rankColours returns the colour specifications in the order ISO 32000-1,
+// 7.4.9 has a PDF reader try them: highest precedence first, then best
+// approximation, 1 being accurate and 4 poor (ISO/IEC 15444-2, M.11.7.2), and
+// file order among equals. A JP2 file sets both fields to 0 (T.800, I.5.3.3),
+// which keeps its boxes in file order, the first being the one a JP2 reader
+// uses (I.3.3).
+func rankColours(specs []colourSpec) []Colour {
+	ranked := slices.Clone(specs)
+	slices.SortStableFunc(ranked, func(a, b colourSpec) int {
+		if a.precedence != b.precedence {
+			return b.precedence - a.precedence
+		}
+		return approximationRank(a.approximation) - approximationRank(b.approximation)
+	})
+	colours := make([]Colour, len(ranked))
+	for i, c := range ranked {
+		switch c.method {
+		case methodEnumerated:
+			colours[i].Enumerated = int(c.enumerated)
+		case methodICC, methodAnyICC:
+			colours[i].ICC = c.profile
+		}
+	}
+	return colours
+}
+
+// approximationRank orders APPROX values best first. The JP2 value 0 and the
+// reserved values state no approximation and rank after every stated one.
+func approximationRank(approx int) int {
+	if approx >= 1 && approx <= 4 {
+		return approx
+	}
+	return 5
 }
 
 // Channel types, T.800 Table I.16.
@@ -98,6 +132,22 @@ func (img *Image) Channels() ([]Channel, error) {
 		chs[d.channel].Kind, chs[d.channel].Association = d.kind, d.association
 	}
 	return chs, nil
+}
+
+// Depth returns the bit depth of the values channel ch carries: its palette
+// column's when it looks one up, else its component's, and 0 for a channel
+// the image does not hold.
+func (img *Image) Depth(ch Channel) int {
+	if ch.Component < 0 || ch.Component >= len(img.Components) {
+		return 0
+	}
+	if ch.PaletteColumn < 0 {
+		return img.Components[ch.Component].Precision
+	}
+	if img.header == nil || img.header.palette == nil || ch.PaletteColumn >= len(img.header.palette.columns) {
+		return 0
+	}
+	return img.header.palette.columns[ch.PaletteColumn].precision
 }
 
 // DefaultSize returns the default image dimensions (T.800, I.5.3.1.1): the

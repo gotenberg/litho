@@ -75,9 +75,9 @@ func boxName(kind uint32) string {
 // fileHeader holds what the JP2 Header box says about turning codestream
 // components into image channels (T.800, I.5.3).
 type fileHeader struct {
-	// colour is the first Colour Specification box, the only one a JP2
-	// reader uses (T.800, I.3.3).
-	colour colourSpec
+	// colours holds the Colour Specification boxes whose method this
+	// package knows, in file order.
+	colours []colourSpec
 	// palette is the Palette box, or nil.
 	palette *palette
 	// mapping is the Component Mapping box, or nil, which maps component i
@@ -98,6 +98,10 @@ const (
 // colourSpec is one Colour Specification box (T.800, I.5.3.3).
 type colourSpec struct {
 	method int
+	// precedence and approximation are the PREC and APPROX fields, which a
+	// JP2 file sets to 0 and a JPX file uses to rank its boxes (ISO/IEC
+	// 15444-2, M.11.7.2).
+	precedence, approximation int
 	// enumerated is the EnumCS value when method is methodEnumerated.
 	enumerated uint32
 	// profile is the ICC profile when method is methodICC or methodAnyICC.
@@ -197,21 +201,17 @@ func readHeader(body []byte) (*fileHeader, error) {
 		return nil, fmt.Errorf("JP2 Header box: %w", err)
 	}
 	hdr := &fileHeader{}
-	haveColour := false
 	for _, b := range boxes {
 		switch b.kind {
 		case boxColour:
-			if haveColour {
-				continue
-			}
 			c, ok, err := readColour(b.body)
 			if err != nil {
 				return nil, err
 			}
 			// T.800, Table I.9: a reader ignores a box whose method it does
-			// not know, so the first box it does know is the one used.
+			// not know.
 			if ok {
-				hdr.colour, haveColour = c, true
+				hdr.colours = append(hdr.colours, c)
 			}
 		case boxPalette:
 			if hdr.palette != nil {
@@ -254,7 +254,11 @@ func readColour(body []byte) (colourSpec, bool, error) {
 	if len(body) < 3 {
 		return colourSpec{}, false, fmt.Errorf("%w: Colour Specification box of %d bytes", ErrMalformed, len(body))
 	}
-	c := colourSpec{method: int(body[0])}
+	c := colourSpec{method: int(body[0]), precedence: int(body[1]), approximation: int(body[2])}
+	// PREC is a signed byte (ISO/IEC 15444-2, Table M.24).
+	if c.precedence >= 128 {
+		c.precedence -= 256
+	}
 	switch c.method {
 	case methodEnumerated:
 		if len(body) < 7 {
