@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/semantics"
 )
 
@@ -19,14 +20,15 @@ var (
 	ErrNotAPDF = errors.New("not a valid PDF document (missing %PDF- header)")
 
 	// ErrInternalPanic is returned when an unexpected panic was recovered
-	// at a public API boundary while processing document bytes. Internal
+	// while processing document bytes, at a public API boundary or on a
+	// worker goroutine such as a compliance check group. Internal
 	// code is not supposed to panic; this sentinel exists so a crafted or
 	// corrupt input cannot crash the host process through a panic. A fatal
 	// runtime error is not recoverable in Go, so a stack overflow or an
 	// out-of-memory kill ends the process without ever producing this
 	// error. The recovered value and a stack trace are logged at Error via
 	// the document logger.
-	ErrInternalPanic = errors.New("internal panic recovered while processing the document")
+	ErrInternalPanic = document.ErrInternalPanic
 
 	// ErrDamagedXRef is returned when the cross-reference table is
 	// corrupted or missing and could not be reconstructed.

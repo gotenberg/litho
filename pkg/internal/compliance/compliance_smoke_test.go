@@ -3,6 +3,7 @@ package compliance
 import (
 	"bytes"
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -179,8 +180,9 @@ func TestValidate_Concurrent_SameDocument(t *testing.T) {
 }
 
 // TestValidate_ContextCancellation ensures the validation engine
-// honors a cancelled context and returns promptly. This is the
-// observable contract callers rely on for request-scoped deadlines.
+// honors a cancelled context: it returns promptly with the context error,
+// never with a partial violation list that would read as a verdict. This
+// is the observable contract callers rely on for request-scoped deadlines.
 func TestValidate_ContextCancellation(t *testing.T) {
 	t.Parallel()
 	data := minimalPDFForCompliance()
@@ -192,11 +194,12 @@ func TestValidate_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel before calling
 
-	// The engine may return a ctx error or a partial violation list;
-	// either behavior is acceptable, as long as the call returns
-	// without blocking or panicking.
-	_, _ = ValidatePDFA(ctx, doc, models.PDFA2b)
-	_, _ = ValidatePDFUA(ctx, doc, models.PDFUA1)
+	if _, err := ValidatePDFA(ctx, doc, models.PDFA2b); !errors.Is(err, context.Canceled) {
+		t.Errorf("ValidatePDFA err = %v, want context.Canceled", err)
+	}
+	if _, err := ValidatePDFUA(ctx, doc, models.PDFUA1); !errors.Is(err, context.Canceled) {
+		t.Errorf("ValidatePDFUA err = %v, want context.Canceled", err)
+	}
 }
 
 // pdfWithFontsAndContent returns a 3-page PDF with a Helvetica font

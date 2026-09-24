@@ -95,7 +95,11 @@ func runValidationViolations(ctx context.Context, doc *document.Document, profil
 
 	resolveAllObjects(ctx, doc)
 
-	violations := runCheckGroups(ctx, doc, catalog, profile, groups)
+	violations, err := runCheckGroups(ctx, doc, catalog, profile, groups)
+	if err != nil {
+		doc.Logger.Debug("compliance: check groups did not complete", "profile", profile, "error", err)
+		return nil, err
+	}
 
 	// Systemic zero-Rule filter: dozens of per-part rule selectors
 	// legitimately return Rule{} for parts whose profile drops the rule,

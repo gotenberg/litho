@@ -15,4 +15,11 @@ var (
 
 	// ErrObjectNotFound indicates an object number referenced in the xref has no entry.
 	ErrObjectNotFound = errors.New("object not found in xref")
+
+	// ErrInternalPanic is the sentinel a recovered panic wraps. The public API
+	// boundary returns it, and so does a worker goroutine that recovers its own
+	// panic, since the boundary's recover runs on the calling goroutine and
+	// never sees one raised on another. pkg/pdf re-exports it as
+	// pdf.ErrInternalPanic.
+	ErrInternalPanic = errors.New("internal panic recovered while processing the document")
 )

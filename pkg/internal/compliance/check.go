@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+	"runtime"
+	"runtime/debug"
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -197,37 +200,83 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 	return vctx
 }
 
-// runCheckGroups executes all check groups concurrently against the document,
-// collecting violations until context cancellation or all groups complete.
-// The document resolver is safe for concurrent use, and the validation context
-// is read-only during check execution (pageCtx.parsedOps uses sync.Once).
-func runCheckGroups(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, groups []checkGroup) []Violation {
+// runCheckGroups executes the check groups concurrently and returns their
+// violations in group order, so the output does not depend on scheduling. The
+// document resolver is safe for concurrent use, and the validation context is
+// read-only during check execution (pageCtx.parsedOps uses sync.Once).
+//
+// Fan-out is bounded by the profile's fixed group list. A group that panics is
+// recovered on its own goroutine, logged at Error with its stack, and reported
+// as an error wrapping [document.ErrInternalPanic]: the public API boundary's
+// recover runs on the calling goroutine and cannot see a panic raised on
+// another, which would otherwise end the process. Collection selects on
+// ctx.Done(). A cancelled run still waits for every group to return, so no
+// goroutine outlives the call, and it returns the context error instead of the
+// partial violations the groups stopped at, which would read as a complete
+// verdict.
+func runCheckGroups(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, groups []checkGroup) ([]Violation, error) {
 	vctx := buildValidationCtx(ctx, doc, catalog, profile)
 
 	type result struct {
 		index      int
 		violations []Violation
+		err        error
 	}
 
 	ch := make(chan result, len(groups))
 	for i, g := range groups {
 		go func() {
-			ch <- result{index: i, violations: g(ctx, vctx)}
+			res := result{index: i}
+			defer func() {
+				if rec := recover(); rec != nil {
+					name := runtime.FuncForPC(reflect.ValueOf(g).Pointer()).Name()
+					doc.Logger.Error("compliance: recovered panic in check group",
+						"group", name,
+						"profile", profile,
+						"panic", rec,
+						"stack", string(debug.Stack()),
+					)
+					res.violations = nil
+					res.err = fmt.Errorf("%w in compliance check group %s: %v", document.ErrInternalPanic, name, rec)
+				}
+				ch <- res
+			}()
+			res.violations = g(ctx, vctx)
 		}()
 	}
 
-	// Collect results in submission order for deterministic output.
 	collected := make([][]Violation, len(groups))
-	for range groups {
-		r := <-ch
-		collected[r.index] = r.violations
+	errs := make([]error, len(groups))
+	for pending := len(groups); pending > 0; pending-- {
+		select {
+		case r := <-ch:
+			collected[r.index] = r.violations
+			errs[r.index] = r.err
+		case <-ctx.Done():
+			// The channel is buffered, so the remaining groups never block on
+			// their send. Waiting for them anyway keeps them from outliving
+			// the call; each one checks ctx and returns promptly.
+			for ; pending > 0; pending-- {
+				<-ch
+			}
+			return nil, fmt.Errorf("compliance: check groups canceled: %w", ctx.Err())
+		}
+	}
+
+	// A group that saw the cancellation returns early with what it had, and
+	// its result can win the select above over ctx.Done(), so check again.
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("compliance: check groups canceled: %w", err)
+	}
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
 	}
 
 	var violations []Violation
 	for _, vs := range collected {
 		violations = append(violations, vs...)
 	}
-	return violations
+	return violations, nil
 }
 
 // violationsToErrors converts a slice of Violation into a slice of error.
