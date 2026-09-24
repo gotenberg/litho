@@ -162,6 +162,38 @@ func TestDecodeImage_DecodeArrayInverts(t *testing.T) {
 	}
 }
 
+// TestDecodeImage_DecodeArrayLength keeps the leading pairs of a /Decode array
+// longer than two numbers per component, as pdfjs issue20668.pdf writes one,
+// and ignores one too short to give every component a range.
+func TestDecodeImage_DecodeArrayLength(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		decode ast.PdfArray
+		want   uint8
+	}{
+		{"trailing entry", ast.PdfArray{ast.PdfInt(1), ast.PdfInt(0), ast.PdfInt(0)}, 255},
+		{"one number", ast.PdfArray{ast.PdfInt(1)}, 0},
+	} {
+		stream := ast.NewStream(ast.PdfDict{
+			"Subtype":          ast.PdfName("Image"),
+			"Width":            ast.PdfInt(1),
+			"Height":           ast.PdfInt(1),
+			"ColorSpace":       ast.PdfName("DeviceGray"),
+			"BitsPerComponent": ast.PdfInt(8),
+			"Decode":           tc.decode,
+		}, []byte{0})
+		doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
+		page := &document.Page{Resources: ast.PdfDict{"XObject": ast.PdfDict{"Im0": stream}}}
+		img, err := DecodeImage(context.Background(), doc, page, "Im0")
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if got := img.At(0, 0).(color.Gray).Y; got != tc.want {
+			t.Errorf("%s: pixel = %d, want %d", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestBuildDecodeLUTs_IdentityWhenAbsent(t *testing.T) {
 	// No /Decode array must yield exact identity tables so output is
 	// byte-for-byte unchanged for images that do not declare one.

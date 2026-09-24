@@ -141,7 +141,52 @@ func buildJPEGXObject(data []byte) (ast.PdfStream, int, int, error) {
 		"BitsPerComponent": ast.PdfInt(8),
 		"Filter":           ast.PdfName("DCTDecode"),
 	}
+	if cs == 4 && adobeMarked(data) {
+		// Photoshop, and the writers that follow it, store an Adobe-marked
+		// CMYK JPEG inverted, while the DCTDecode filter hands its samples on
+		// as stored (ISO 32000-1, 7.4.8). A /Decode array that inverts every
+		// component (8.9.5.2) restores the colours; without it the stamp
+		// renders as its negative.
+		dict["Decode"] = ast.PdfArray{
+			ast.PdfInt(1), ast.PdfInt(0), ast.PdfInt(1), ast.PdfInt(0),
+			ast.PdfInt(1), ast.PdfInt(0), ast.PdfInt(1), ast.PdfInt(0),
+		}
+	}
 	return ast.NewStream(dict, data), w, h, nil
+}
+
+// adobeMarked reports whether a JPEG carries the Adobe APP14 segment before
+// its first scan.
+func adobeMarked(data []byte) bool {
+	if len(data) < 2 || data[0] != 0xFF || data[1] != 0xD8 {
+		return false
+	}
+	i := 2
+	for i < len(data) && data[i] == 0xFF {
+		for i < len(data) && data[i] == 0xFF {
+			i++
+		}
+		if i >= len(data) {
+			return false
+		}
+		marker := data[i]
+		i++
+		if marker >= 0xD0 && marker <= 0xD8 {
+			continue
+		}
+		if marker == 0xDA || marker == 0xD9 || i+2 > len(data) {
+			return false
+		}
+		segLen := int(binary.BigEndian.Uint16(data[i : i+2]))
+		if segLen < 2 || i+segLen > len(data) {
+			return false
+		}
+		if marker == 0xEE && segLen >= 7 && string(data[i+2:i+7]) == "Adobe" {
+			return true
+		}
+		i += segLen
+	}
+	return false
 }
 
 // readJPEGDimensions scans a JPEG byte stream for the SOF (Start Of Frame)

@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"image/jpeg"
+	"os"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -89,4 +90,43 @@ func TestDecodeDCT(t *testing.T) {
 			t.Fatalf("unexpected error with DecodeParms: %v", err)
 		}
 	})
+}
+
+// TestDecodeDCT_CMYKAsStored hands on the samples an Adobe-marked CMYK JPEG
+// stores. testdata/cmyk_adobe.jpg was written by Pillow from a 16x8 image whose
+// left half is CMYK (10, 60, 200, 30) and right half (250, 5, 90, 160); Pillow,
+// like Photoshop, stores CMYK inverted, so the data holds 255 minus each. PDF.js
+// reads the same stored values: embedded without a /Decode array the image
+// renders near black, and with /Decode [1 0 1 0 1 0 1 0] as the orange of the
+// left half.
+func TestDecodeDCT_CMYKAsStored(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile("testdata/cmyk_adobe.jpg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := decodeDCT(data, nil)
+	if err != nil {
+		t.Fatalf("decodeDCT: %v", err)
+	}
+	if len(got) != 16*8*4 {
+		t.Fatalf("%d bytes, want %d", len(got), 16*8*4)
+	}
+	for _, tc := range []struct {
+		x    int
+		want [4]int
+	}{
+		{0, [4]int{245, 195, 55, 225}},
+		{15, [4]int{5, 250, 165, 95}},
+	} {
+		p := got[tc.x*4 : tc.x*4+4]
+		for c := range 4 {
+			// JPEG is lossy: allow the rounding of the inverse DCT.
+			if d := int(p[c]) - tc.want[c]; d < -2 || d > 2 {
+				t.Errorf("pixel %d = %v, want %v", tc.x, p, tc.want)
+				break
+			}
+		}
+	}
 }

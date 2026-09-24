@@ -243,7 +243,7 @@ func imageComponents(colorSpace string) int {
 }
 
 // resolveDecodeArray reads the image /Decode array as 2*components
-// numbers, or returns nil when it is absent or malformed. Per ISO
+// numbers, or returns nil when it is absent or too short. Per ISO
 // 32000-1 §8.9.5.2 the /Decode array remaps each sample from the raw
 // [0, 2^bpc-1] range onto [Dmin, Dmax]; honoring it renders inverted or
 // remapped images (e.g. Adobe-inverted CMYK, /Decode [1 0 ...]) with
@@ -258,14 +258,20 @@ func resolveDecodeArray(ctx context.Context, doc *document.Document, dict ast.Pd
 		doc.Logger.Debug("resolving image /Decode array", slog.Any("err", err))
 		return nil
 	}
-	if len(arr) != 2*components {
+	// ISO 32000-1, Table 89 wants exactly two numbers per component. A longer
+	// array keeps its leading pairs, which name every component unambiguously:
+	// pdfjs issue20668.pdf gives its CMYK JPEGs /Decode [1 0 1 0 1 0 1 0 0],
+	// and PDF.js inverts them by those pairs, so ignoring the array rendered
+	// the images as their negatives. A shorter array leaves components without
+	// a range and stays ignored.
+	if len(arr) < 2*components {
 		doc.Logger.Debug("ignoring image /Decode array with unexpected length",
 			slog.Int("len", len(arr)), slog.Int("want", 2*components))
 		return nil
 	}
-	dec := make([]float64, len(arr))
-	for i, v := range arr {
-		dec[i] = document.Float(v)
+	dec := make([]float64, 2*components)
+	for i := range dec {
+		dec[i] = document.Float(arr[i])
 	}
 	return dec
 }

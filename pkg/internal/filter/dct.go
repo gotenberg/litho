@@ -38,10 +38,22 @@ func decodeDCT(data []byte, _parms ast.PdfDict) ([]byte, error) {
 		return out, nil
 
 	case *image.CMYK:
+		// image/jpeg follows the convention of a stand-alone Photoshop JPEG
+		// file, whose CMYK samples are stored inverted, and undoes it: every
+		// channel it returns is 255 minus the sample the data holds. The
+		// DCTDecode filter hands on the samples themselves: ISO 32000-1, 7.4.8
+		// defers to the rules of Adobe Technical Note #5116, under which the
+		// YUVK transform yields CMYK from YUV as 255 minus RGB and passes K
+		// through, and applies no inversion otherwise. A PDF producer that
+		// embeds an inverted JPEG says so with a /Decode array. Reading the
+		// samples inverted rendered 670 corpus images, 639 of them govdocs,
+		// as their negatives against PDF.js: white paper came out black.
 		out := make([]byte, 0, w*h*4)
 		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 			off := m.PixOffset(bounds.Min.X, y)
-			out = append(out, m.Pix[off:off+w*4]...)
+			for _, v := range m.Pix[off : off+w*4] {
+				out = append(out, 255-v)
+			}
 		}
 		return out, nil
 
