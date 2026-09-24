@@ -36,12 +36,27 @@ type Page struct {
 	// carries that same map. Treat it as read-only, and copy it before
 	// changing anything, since writing through it edits the reader's own
 	// state for every later caller. The rest of this struct is values.
-	DPM      map[string]string `json:"dpm,omitempty"`
-	MediaBox [4]float64        `json:"mediaBox"`
-	CropBox  [4]float64        `json:"cropBox"`
-	BleedBox [4]float64        `json:"bleedBox"`
-	TrimBox  [4]float64        `json:"trimBox"`
-	ArtBox   [4]float64        `json:"artBox"`
+	DPM map[string]string `json:"dpm,omitempty"`
+	// MediaBox is the media box as the page, or the page tree node it inherits
+	// from, writes it, in default user space units before /UserUnit applies.
+	// It is the zero rectangle when the file declares none: the US Letter
+	// fallback reaches Width and Height only.
+	MediaBox [4]float64 `json:"mediaBox"`
+	// CropBox is the effective crop box. CropBox, BleedBox, TrimBox and
+	// ArtBox are the effective page boundaries, not the entries as written.
+	// An absent box takes its ISO 32000-1, Table 30 default: the media box for
+	// the crop box, the crop box for the bleed, trim and art boxes. A box that
+	// extends beyond the media box is reduced to its intersection with it, as
+	// ISO 32000-1, 14.11.2.1 requires, and a box whose intersection with it
+	// encloses no area takes its default. None is clipped to the crop box,
+	// which has no defined relationship with the other boundaries.
+	CropBox [4]float64 `json:"cropBox"`
+	// BleedBox is the effective bleed box. See CropBox for the rules.
+	BleedBox [4]float64 `json:"bleedBox"`
+	// TrimBox is the effective trim box. See CropBox for the rules.
+	TrimBox [4]float64 `json:"trimBox"`
+	// ArtBox is the effective art box. See CropBox for the rules.
+	ArtBox [4]float64 `json:"artBox"`
 }
 
 // TextElement represents a spatially positioned piece of text on a page.

@@ -1064,10 +1064,19 @@ var pageBoundaryKeys = []ast.PdfName{"MediaBox", "CropBox", "BleedBox", "TrimBox
 // checkPageBoundaries validates §6.1.13 t11: page boundary box dimensions must
 // be within [3, 14400] units in both directions.
 //
+// It judges each box as the file writes it, read from the page dictionaries
+// and the page tree root, and never the effective boxes on [document.Page].
+// Those are reduced to their intersection with the media box (ISO 32000-1,
+// 14.11.2.1), so a declared 14405-unit trim box on a 500-unit page would read
+// as 500 units and pass a limit ISO 19005-2, 6.1.13 places on the file.
+//
 // # Corpus evidence
 //
 //   - All corpora: an unguarded zero Rule here would serialize as a
 //     clause-less "-t00" residual in 21 cells.
+//   - verapdf PDF_A-2b__veraPDF_test_suite_6-1-13-t09-fail-b.pdf: declares
+//     14405-unit bleed, trim and art boxes on a 500-unit media box, and only
+//     the declared entries fail it.
 func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	part := PDFAPart(profile)
 	// Page boundary size limits apply to PDF/A-2 and -3 only: PDF/A-4 builds

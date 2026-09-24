@@ -217,6 +217,75 @@ func TestPageBoxes_NonInheritableDefaultToCropBox(t *testing.T) {
 	assertBox(t, "ArtBox", arrToFloats(p.ArtBox), [4]float64{10, 10, 602, 782})
 }
 
+// TestPageBoxes_ClampedToMediaBox pins that the bleed, trim and art boxes are
+// reduced to their intersection with the media box and with nothing else (ISO
+// 32000-1, 14.11.2.1), while the page dictionary keeps the declared entries.
+func TestPageBoxes_ClampedToMediaBox(t *testing.T) {
+	p := onlyPage(t, buildPageBoxPDF(
+		"[0 0 612 792]",
+		"",
+		map[string]string{
+			"CropBox":  "[10 10 602 782]",
+			"BleedBox": "[-10 -10 622 802]",
+			"TrimBox":  "[0 0 700 700]",
+			"ArtBox":   "[5 5 607 787]",
+		},
+	))
+
+	assertBox(t, "CropBox", arrToFloats(p.CropBox), [4]float64{10, 10, 602, 782})
+	assertBox(t, "BleedBox", arrToFloats(p.BleedBox), [4]float64{0, 0, 612, 792})
+	assertBox(t, "TrimBox", arrToFloats(p.TrimBox), [4]float64{0, 0, 612, 700})
+	// Wider than the crop box, inside the media box: the crop box has no defined
+	// relationship with the other boundaries, so nothing clips it.
+	assertBox(t, "ArtBox", arrToFloats(p.ArtBox), [4]float64{5, 5, 607, 787})
+
+	declared, ok := p.Dict["TrimBox"].(ast.PdfArray)
+	if !ok {
+		t.Fatalf("page dict /TrimBox is %T, want the declared array", p.Dict["TrimBox"])
+	}
+	assertBox(t, "declared TrimBox", arrToFloats(declared), [4]float64{0, 0, 700, 700})
+}
+
+// TestPageBoxes_DefaultsFollowTheEffectiveCropBox pins that an absent bleed,
+// trim or art box takes the crop box after the crop box itself is clamped, so
+// a crop box larger than the page does not leak through the defaults.
+func TestPageBoxes_DefaultsFollowTheEffectiveCropBox(t *testing.T) {
+	p := onlyPage(t, buildPageBoxPDF(
+		"[0 0 612 792]",
+		"[-20 -20 700 900]",
+		nil,
+	))
+
+	for name, box := range map[string]ast.PdfArray{
+		"CropBox":  p.CropBox,
+		"BleedBox": p.BleedBox,
+		"TrimBox":  p.TrimBox,
+		"ArtBox":   p.ArtBox,
+	} {
+		assertBox(t, name, arrToFloats(box), [4]float64{0, 0, 612, 792})
+	}
+}
+
+// TestPageBoxes_DisjointBoxTakesTheCropBox pins that a boundary missing the
+// media box entirely falls back to its Table 30 default, the crop box, rather
+// than the media box or an empty rectangle.
+func TestPageBoxes_DisjointBoxTakesTheCropBox(t *testing.T) {
+	p := onlyPage(t, buildPageBoxPDF(
+		"[0 0 612 792]",
+		"",
+		map[string]string{
+			"CropBox":  "[10 10 602 782]",
+			"BleedBox": "[900 900 1000 1000]",
+			"TrimBox":  "[612 0 700 792]",
+			"ArtBox":   "[0 0 0 0]",
+		},
+	))
+
+	assertBox(t, "BleedBox", arrToFloats(p.BleedBox), [4]float64{10, 10, 602, 782})
+	assertBox(t, "TrimBox", arrToFloats(p.TrimBox), [4]float64{10, 10, 602, 782})
+	assertBox(t, "ArtBox", arrToFloats(p.ArtBox), [4]float64{10, 10, 602, 782})
+}
+
 func assertBox(t *testing.T, name string, got, want [4]float64) {
 	t.Helper()
 	if got != want {

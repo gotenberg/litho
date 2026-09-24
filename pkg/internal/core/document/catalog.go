@@ -22,15 +22,23 @@ type PageTree struct {
 }
 
 // Page represents a single page in the PDF document.
+//
+// MediaBox is the media box as the page or its nearest ancestor writes it.
+// CropBox, BleedBox, TrimBox and ArtBox are the effective boundaries: the
+// default ISO 32000-1, 7.7.3.3, Table 30 gives each applied, then each reduced
+// to its intersection with the media box as ISO 32000-1, 14.11.2.1 requires
+// (see [clampToMediaBox]). A check that must judge a boundary as the file
+// declares it reads Dict, which holds the page's own entries verbatim, and not
+// these fields. An inherited crop box is declared on an ancestor /Pages node.
 type Page struct {
 	Ref       ast.PdfIndirectRef
 	Dict      ast.PdfDict
 	Resources ast.PdfDict
-	MediaBox  ast.PdfArray
-	CropBox   ast.PdfArray      // Inherited; defaults to MediaBox (ISO 32000-1, Table 30)
-	BleedBox  ast.PdfArray      // Non-inherited; defaults to CropBox
-	TrimBox   ast.PdfArray      // Non-inherited; defaults to CropBox
-	ArtBox    ast.PdfArray      // Non-inherited; defaults to CropBox
+	MediaBox  ast.PdfArray      // Inherited; as written
+	CropBox   ast.PdfArray      // Inherited; defaults to MediaBox; clamped to MediaBox
+	BleedBox  ast.PdfArray      // Non-inherited; defaults to CropBox; clamped to MediaBox
+	TrimBox   ast.PdfArray      // Non-inherited; defaults to CropBox; clamped to MediaBox
+	ArtBox    ast.PdfArray      // Non-inherited; defaults to CropBox; clamped to MediaBox
 	Rotate    int               // Inherited; clockwise degrees (0, 90, 180, 270)
 	UserUnit  float64           // Non-inherited; default 1.0 (PDF 1.6+, ISO 32000-1, Table 30)
 	DPM       map[string]string // Document Part Metadata
@@ -570,19 +578,20 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			}
 		}
 	case "Page":
-		// The crop box defaults to the media box (ISO 32000-1, 14.11.2.1).
-		effectiveCropBox := clampToMediaBox(currentCropBox, currentMediaBox)
+		// The crop box defaults to the media box (ISO 32000-1, 7.7.3.3,
+		// Table 30) and is reduced to its intersection with it (ISO 32000-1,
+		// 14.11.2.1).
+		effectiveCropBox := clampToMediaBox(currentCropBox, currentMediaBox, currentMediaBox)
 
-		// BleedBox, TrimBox, ArtBox are non-inheritable and default to the
-		// crop box (ISO 32000-1, 7.7.3.3, Table 30).
-		//
-		// TODO: 14.11.2.1 reduces the bleed, trim and art boxes, like the crop
-		// box, "to their intersection with the media box" when they extend
-		// beyond it. Only the crop box is clamped, so a stated bleed, trim or
-		// art box larger than the page is reported as written.
-		bleedBox := resolveBoxArray(ctx, doc, node, "BleedBox", effectiveCropBox)
-		trimBox := resolveBoxArray(ctx, doc, node, "TrimBox", effectiveCropBox)
-		artBox := resolveBoxArray(ctx, doc, node, "ArtBox", effectiveCropBox)
+		// BleedBox, TrimBox and ArtBox are not inheritable and each defaults
+		// to the crop box (ISO 32000-1, 7.7.3.3, Table 30). ISO 32000-1,
+		// 14.11.2.1 reduces each, like the crop box, to its intersection with
+		// the media box, and with nothing else: the crop box "has no defined
+		// relationship with any of the other boundaries", so a bleed box wider
+		// than the crop box but inside the media box stays as written.
+		bleedBox := clampToMediaBox(resolveBoxArray(ctx, doc, node, "BleedBox"), currentMediaBox, effectiveCropBox)
+		trimBox := clampToMediaBox(resolveBoxArray(ctx, doc, node, "TrimBox"), currentMediaBox, effectiveCropBox)
+		artBox := clampToMediaBox(resolveBoxArray(ctx, doc, node, "ArtBox"), currentMediaBox, effectiveCropBox)
 
 		// UserUnit (PDF 1.6+, ISO 32000-1, 7.7.3.3, Table 30): a positive,
 		// non-inheritable scaling factor. Default is 1.0 (1 unit = 1/72
@@ -611,37 +620,65 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 	return nil
 }
 
-// clampToMediaBox returns the region a viewer actually shows: the crop box
-// intersected with the media box, or the media box when there is no crop box.
+// clampToMediaBox returns the region a page boundary effectively covers: box
+// reduced to its intersection with the media box, or def, the boundary's
+// default, when box is absent or covers nothing.
 //
-// ISO 32000-1, 14.11.2 requires the crop box to lie within the media box, so a
-// producer that writes one larger than the page describes a region that does not
-// exist. Taking it verbatim overstates the page. The size feeds stamp placement
-// and clipping, so the overstatement is not only cosmetic.
+// ISO 32000-1, 14.11.2.1 says the crop, bleed, trim and art boxes "shall not
+// ordinarily extend beyond the boundaries of the media box. If they do, they
+// are effectively reduced to their intersection with the media box." A producer
+// that writes one larger than the page describes a region that does not exist,
+// and taking it verbatim overstates the page. The crop box size feeds stamp
+// placement and clipping, so the overstatement is not only cosmetic. def is the
+// default ISO 32000-1, 7.7.3.3, Table 30 gives the boundary: the media box for
+// the crop box, the crop box for the other three.
+//
+// A rectangle is an array of four numbers (ISO 32000-1, 7.9.5), so box counts
+// as absent unless it has exactly four entries, which is also how poppler reads
+// a five-entry bleed box. A media box that is not four entries leaves nothing
+// to intersect with, and box stays as written.
+//
+// Deliberate leniency: a box that misses the media box, meets it only along an
+// edge, or encloses no area itself has an intersection with no area, which
+// 14.11.2.1 would make an empty boundary. An empty region describes no page, so
+// the box is treated as absent and its Table 30 default applies. poppler
+// agrees for a zero-area box and, for one that misses the media box, collapses
+// it onto the media box edge, a zero-area rectangle no consumer can use.
 //
 // # Corpus evidence
 //
 //   - govdocs thread_200_200062: declares a 612x792 media box and a 614x794 crop
 //     box. Taken verbatim, litho answered 614x794 where poppler answers 612x792.
-func clampToMediaBox(crop, media ast.PdfArray) ast.PdfArray {
-	if len(crop) != 4 {
-		return media
+//   - All corpora: 47 pages in 12 files declare 56 bleed, trim or art boxes
+//     that extend beyond the media box. Taken verbatim, all 56 differed from
+//     poppler, which reports the intersection. Clamped, all five boxes of each
+//     of those pages match poppler.
+//   - All corpora: no declared bleed, trim or art box misses the media box
+//     entirely or has other than four entries, so the fallbacks to the
+//     default change no page.
+//   - govdocs thread_300_300104.pdf: every page declares a 699x879 bleed box
+//     on a 612x792 media box.
+//   - verapdf PDF_A-2b__veraPDF_test_suite_6-1-13-t09-fail-b.pdf: declares
+//     14405-unit bleed, trim and art boxes on a 500-unit media box. The
+//     ISO 19005-2, 6.1.13 size check reads the declared entries from the page
+//     dictionary, not these effective boxes, and still fails the file.
+func clampToMediaBox(box, media, def ast.PdfArray) ast.PdfArray {
+	if len(box) != 4 {
+		return def
 	}
 	if len(media) != 4 {
-		return crop
+		return box
 	}
-	cx0, cy0, cx1, cy1 := boxCorners(crop)
+	bx0, by0, bx1, by1 := boxCorners(box)
 	mx0, my0, mx1, my1 := boxCorners(media)
 
-	x0, y0 := math.Max(cx0, mx0), math.Max(cy0, my0)
-	x1, y1 := math.Min(cx1, mx1), math.Min(cy1, my1)
-	// A crop box that misses the media box entirely describes nothing; the
-	// media box is the honest answer rather than an empty page.
+	x0, y0 := math.Max(bx0, mx0), math.Max(by0, my0)
+	x1, y1 := math.Min(bx1, mx1), math.Min(by1, my1)
 	if x1 <= x0 || y1 <= y0 {
-		return media
+		return def
 	}
-	if x0 == cx0 && y0 == cy0 && x1 == cx1 && y1 == cy1 {
-		return crop
+	if x0 == bx0 && y0 == by0 && x1 == bx1 && y1 == by1 {
+		return box
 	}
 	return ast.PdfArray{ast.PdfReal(x0), ast.PdfReal(y0), ast.PdfReal(x1), ast.PdfReal(y1)}
 }
@@ -770,19 +807,17 @@ func inferPageTreeNodeType(ctx context.Context, doc *Document, node ast.PdfDict)
 	return ""
 }
 
-// resolveBoxArray extracts a named rectangle array from a page dict,
-// falling back to the provided default if the key is absent.
-func resolveBoxArray(ctx context.Context, doc *Document, dict ast.PdfDict, key ast.PdfName, fallback ast.PdfArray) ast.PdfArray {
+// resolveBoxArray returns the rectangle a page dict declares under key, or nil
+// when the entry is absent or is not an array. The caller applies the default
+// and the media box intersection (see [clampToMediaBox]).
+func resolveBoxArray(ctx context.Context, doc *Document, dict ast.PdfDict, key ast.PdfName) ast.PdfArray {
 	obj, ok := dict[key]
 	if !ok {
-		return fallback
+		return nil
 	}
 	arr, err := ResolveArray(ctx, doc, obj)
-	if err != nil {
-		return fallback
-	}
-	if len(arr) < 4 {
-		return fallback
+	if err != nil || arr == nil {
+		return nil
 	}
 	return ResolveRectangle(ctx, doc, arr)
 }

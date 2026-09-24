@@ -1438,7 +1438,12 @@ func (r *Reader) DSSInfo(ctx context.Context) (_ *models.DSSInfo, err error) {
 // CropBox (the visible area) and accounting for /Rotate and /UserUnit. A page
 // whose box is missing or encloses no area reports the US Letter size that
 // mainstream readers substitute, 612 x 792 before /UserUnit and /Rotate apply.
-// The MediaBox and CropBox fields still report what the file declares.
+//
+// The box fields never gain that fallback. MediaBox reports the media box the
+// file declares. CropBox, BleedBox, TrimBox and ArtBox report the effective
+// boundaries: an absent box takes its default from ISO 32000-1, Table 30, and
+// a box extending beyond the media box is reduced to its intersection with it
+// (ISO 32000-1, 14.11.2.1). See [models.Page] for the exact rules.
 //
 // # Corpus evidence
 //
@@ -1466,8 +1471,8 @@ func (r *Reader) Page(ctx context.Context, pageNum int) (_ models.Page, err erro
 	// mainstream reader uses: pdf.js falls back to its LETTER_SIZE_MEDIABOX and
 	// poppler reports 612 x 792.
 	//
-	// The MediaBox and CropBox fields still report what the file declares. Only
-	// the effective dimensions gain the fallback.
+	// Only the effective dimensions gain the fallback: MediaBox still reports
+	// what the file declares, and the other boxes are measured against it.
 	if w == 0 || h == 0 {
 		w, h = defaultPageWidth, defaultPageHeight
 	}
