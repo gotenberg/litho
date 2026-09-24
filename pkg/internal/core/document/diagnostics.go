@@ -73,7 +73,18 @@ func (d *Document) UndecodableFilters(ctx context.Context, stream ast.PdfStream)
 }
 
 // undecodableFilters returns the names in the stream's /Filter chain that
-// no built-in decoder or registered plugin can decode.
+// no built-in decoder or registered plugin can decode, which decoding skips
+// with or without plugins registered.
+//
+// A filter a registered plugin claims is not listed, although the plugin may
+// decline a stream. A declined stream goes to the built-in decoder, and fails
+// with [filter.ErrUnsupportedFilter] when litho has none rather than come back
+// still encoded by a filter this answer called decodable.
+//
+// TODO: a built-in decoder that meets a feature it lacks (a JPEG 2000 or
+// JBIG2 construct, a CCITT mode, a Crypt sub-filter) reports
+// ErrUnsupportedFilter too, and decoding skips that filter although its name
+// is decodable. The name alone cannot predict it.
 func (d *Document) undecodableFilters(stream ast.PdfStream) []string {
 	var bad []string
 	for _, name := range streamFilterNames(stream) {

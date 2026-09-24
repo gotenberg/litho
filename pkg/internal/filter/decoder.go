@@ -35,54 +35,39 @@ func NewDecoder(pp []plugins.FilterDecoder) *Decoder {
 // Handles reports whether a plugin is registered for the named filter.
 // A nil *Decoder handles nothing.
 func (d *Decoder) Handles(name ast.PdfName) bool {
-	if d == nil {
-		return false
-	}
-	_, ok := d.plugins[name]
+	_, ok := d.plugin(name)
 	return ok
+}
+
+// plugin returns the plugin registered for the named filter. A nil *Decoder
+// has none.
+func (d *Decoder) plugin(name ast.PdfName) (plugins.FilterDecoder, bool) {
+	if d == nil {
+		return nil, false
+	}
+	p, ok := d.plugins[name]
+	return p, ok
 }
 
 // DecodeStream decodes a PDF stream, consulting registered plugins for
 // filter names they handle before falling back to built-in decoders.
+//
+// A filter neither a plugin nor a built-in decoder handles is skipped, as the
+// package-level [DecodeStream] skips it, so registering a plugin for one filter
+// leaves every other filter decoding as it did without plugins. A stream a
+// plugin declines goes to the built-in decoder for its filter, and fails with
+// [ErrUnsupportedFilter] when litho has none (see [Decoder.applyDecodeFilter]).
 func (d *Decoder) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
-	if d == nil {
-		return DecodeStream(ctx, stream)
-	}
+	data, _, err := d.DecodeStreamChecked(ctx, stream)
+	return data, err
+}
 
-	filterObj, hasFilter := stream.Dict["Filter"]
-	if !hasFilter {
-		return stream.Bytes(ctx)
-	}
-
-	var filters []ast.PdfName
-	switch f := filterObj.(type) {
-	case ast.PdfName:
-		filters = append(filters, f)
-	case ast.PdfArray:
-		for _, item := range f {
-			if name, ok := item.(ast.PdfName); ok {
-				filters = append(filters, name)
-			}
-		}
-	default:
-		return nil, fmt.Errorf("invalid type for /Filter: %T", filterObj)
-	}
-
-	parms := extractDecodeParms(stream.Dict, len(filters))
-
-	data, err := stream.Bytes(ctx)
-	if err != nil {
-		return nil, err
-	}
-	for i, f := range filters {
-		decoded, err := d.applyDecodeFilter(ctx, data, f, parms[i], stream.Dict)
-		if err != nil {
-			return nil, err
-		}
-		data = decoded
-	}
-
-	return data, nil
+// DecodeStreamChecked is [Decoder.DecodeStream] that also reports whether
+// decoding was complete, with the contract of the package-level
+// [DecodeStreamChecked]: incomplete is true when a filter in the chain was
+// skipped and the returned bytes remain encoded by it.
+func (d *Decoder) DecodeStreamChecked(ctx context.Context, stream ast.PdfStream) (data []byte, incomplete bool, err error) {
+	return decodeChain(ctx, stream, d)
 }
 
 // NewStreamReader returns an io.ReadCloser that lazily decodes a PDF stream,
@@ -126,12 +111,16 @@ func (d *Decoder) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io
 	return io.NopCloser(bytes.NewReader(data)), nil
 }
 
-// applyDecodeFilter applies a single filter, checking plugins first.
+// applyDecodeFilter applies a single filter, checking plugins first. A nil d
+// checks none.
 //
 // A plugin that returns [plugins.ErrUnsupportedFilter] declines the stream,
 // and the built-in decoder for the filter runs instead. When there is none,
-// the stream fails with [ErrUnsupportedFilter], exactly as
-// [Decoder.DecodeStream] fails on a filter no plugin claims.
+// the stream fails with [ErrUnsupportedFilter], as
+// [github.com/gotenberg/litho/pkg/pdf.WithFilterPlugin] documents, rather
+// than be skipped like a filter no plugin claims: the diagnostics report a
+// claimed filter as decodable, and a skip would hand a caller that trusted
+// them bytes still encoded by it.
 //
 // A plugin returns its whole output in one slice, so [limitedCopy] never sees
 // it and maxDecompressedSize bounded every built-in filter and no plugin at
@@ -144,13 +133,15 @@ func (d *Decoder) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io
 // litho from holding a second copy, and it holds for third-party plugins that
 // know nothing of this package's limits.
 func (d *Decoder) applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName, parms, dict ast.PdfDict) ([]byte, error) {
-	if p, ok := d.plugins[filterName]; ok {
+	if p, ok := d.plugin(filterName); ok {
 		pubParms, err := d.marshalParms(ctx, filterName, parms)
 		if err != nil {
 			return nil, err
 		}
 		decoded, err := p.Decode(data, pubParms)
 		switch {
+		case errors.Is(err, plugins.ErrUnsupportedFilter) && !Decodable(filterName):
+			return nil, fmt.Errorf("%w: %s: %w", ErrUnsupportedFilter, filterName, errPluginDeclined)
 		case errors.Is(err, plugins.ErrUnsupportedFilter):
 			// Declined: fall through to the built-in decoder.
 		case err != nil:

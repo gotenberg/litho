@@ -93,7 +93,10 @@ func WithOCREngine(engine models.OCREngine) OpenOption {
 // the built-in decoder for that name. A plugin whose Decode returns
 // [plugins.ErrUnsupportedFilter] declines that stream, and the built-in
 // decoder for the filter decodes it instead. When litho has no built-in
-// decoder for the filter, decoding that stream fails.
+// decoder for the filter, decoding that stream fails. A plugin changes
+// nothing for the filters it does not claim: one litho cannot decode is
+// reported by [Reader.UndecodableStreams] and left encoded, as it is when no
+// plugin is registered.
 //
 // Example:
 //

@@ -284,10 +284,9 @@ func (d *Document) LockValidationRun() func() {
 // Context is checked between decompression chunks to allow cancellation.
 func (d *Document) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 	stream = d.resolveStreamFilterKeys(ctx, stream)
-	if d.Filters != nil {
-		return d.Filters.DecodeStream(ctx, stream)
-	}
-	data, incomplete, err := filter.DecodeStreamChecked(ctx, stream)
+	// A nil d.Filters consults no plugin, so one call covers both paths and
+	// a skipped filter is logged whether or not plugins are registered.
+	data, incomplete, err := d.Filters.DecodeStreamChecked(ctx, stream)
 	if incomplete {
 		// The bytes are only partially decoded: an unsupported filter in
 		// the chain was skipped, so they remain filter-encoded. Surface

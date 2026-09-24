@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -281,32 +282,156 @@ func TestDecoder_PluginDeclineFallsBackToBuiltin(t *testing.T) {
 	}
 }
 
-// TestDecoder_PluginDeclineWithoutBuiltinFails pins that a declined stream
-// behind a filter litho does not know fails with the error such a filter
-// gets when no plugin claims it.
-func TestDecoder_PluginDeclineWithoutBuiltinFails(t *testing.T) {
-	stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("VendorDecode")}, []byte("raw"))
+// TestDecoder_UndecodableFilterMatchesThePackageLevelPath pins that
+// registering a plugin changes nothing for a filter it does not claim.
+//
+// A filter no decoder knows used to be skipped by the package-level path,
+// which returned the bytes still encoded and flagged them incomplete, while a
+// [Decoder] holding any plugin failed the whole stream with
+// [ErrUnsupportedFilter]. Registering a plugin for one filter therefore
+// changed what every other undecodable filter did, and an explicit null
+// /Filter, which the package-level path reads as no filter, failed as an
+// invalid type.
+func TestDecoder_UndecodableFilterMatchesThePackageLevelPath(t *testing.T) {
+	t.Parallel()
 
-	unclaimed := NewDecoder([]plugins.FilterDecoder{&mockPlugin{name: "OtherDecode"}})
-	_, wantErr := unclaimed.DecodeStream(context.Background(), stream)
-	if !errors.Is(wantErr, ErrUnsupportedFilter) {
-		t.Fatalf("control: an unclaimed unknown filter returned %v, want ErrUnsupportedFilter", wantErr)
+	for _, tc := range []struct {
+		name       string
+		filter     ast.PdfObject
+		raw        []byte
+		want       string
+		incomplete bool
+	}{
+		{"unknown filter", ast.PdfName("VendorDecode"), []byte("raw"), "raw", true},
+		{"unknown filter after a decodable one", ast.PdfArray{ast.PdfName("ASCIIHexDecode"), ast.PdfName("VendorDecode")}, []byte("616263>"), "abc", true},
+		{"unknown filter before a decodable one", ast.PdfArray{ast.PdfName("VendorDecode"), ast.PdfName("ASCIIHexDecode")}, []byte("616263>"), "abc", true},
+		{"null filter", ast.PdfNull{}, []byte("plain"), "plain", false},
+		{"decodable filter", ast.PdfName("ASCIIHexDecode"), []byte("616263>"), "abc", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			stream := ast.NewStream(ast.PdfDict{"Filter": tc.filter}, tc.raw)
+			wantData, wantIncomplete, wantErr := DecodeStreamChecked(context.Background(), stream)
+			if wantErr != nil || string(wantData) != tc.want || wantIncomplete != tc.incomplete {
+				t.Fatalf("control: package-level path = (%q, %v, %v), want (%q, %v, nil)",
+					wantData, wantIncomplete, wantErr, tc.want, tc.incomplete)
+			}
+
+			other := &mockPlugin{name: "OtherDecode", result: []byte("unused")}
+			d := NewDecoder([]plugins.FilterDecoder{other})
+			data, incomplete, err := d.DecodeStreamChecked(context.Background(), stream)
+			if err != nil {
+				t.Fatalf("with an unrelated plugin: %v, want the package-level result", err)
+			}
+			if string(data) != string(wantData) || incomplete != wantIncomplete {
+				t.Errorf("with an unrelated plugin = (%q, %v), want the package-level (%q, %v)",
+					data, incomplete, wantData, wantIncomplete)
+			}
+			if other.called {
+				t.Error("a plugin was consulted for a filter it does not claim")
+			}
+
+			if _, isNull := tc.filter.(ast.PdfNull); isNull {
+				// NewStreamReader rejects a null /Filter on both paths alike;
+				// the eager path is the one that diverged.
+				return
+			}
+			rc, err := d.NewStreamReader(context.Background(), stream)
+			if err != nil {
+				t.Fatalf("NewStreamReader with an unrelated plugin: %v", err)
+			}
+			defer rc.Close()
+			streamed, err := io.ReadAll(rc)
+			if err != nil {
+				t.Fatalf("reading the stream: %v", err)
+			}
+			if string(streamed) != string(wantData) {
+				t.Errorf("NewStreamReader with an unrelated plugin read %q, want %q", streamed, wantData)
+			}
+		})
 	}
+}
 
-	p := &mockPlugin{name: "VendorDecode", err: plugins.ErrUnsupportedFilter}
+// TestDecoder_UndecodableFilterBesideAClaimedOneIsSkipped pins the same
+// contract on the plugin path proper: in a chain a plugin takes part in, a
+// filter nobody decodes is skipped, not fatal to the stream.
+func TestDecoder_UndecodableFilterBesideAClaimedOneIsSkipped(t *testing.T) {
+	t.Parallel()
+
+	p := &mockPlugin{name: "VendorDecode", result: []byte("decoded")}
 	d := NewDecoder([]plugins.FilterDecoder{p})
-	out, err := d.DecodeStream(context.Background(), stream)
-	if !p.called {
-		t.Fatal("the plugin was not consulted")
+	stream := ast.NewStream(ast.PdfDict{
+		"Filter": ast.PdfArray{ast.PdfName("VendorDecode"), ast.PdfName("NoSuchDecode")},
+	}, []byte("raw"))
+
+	data, incomplete, err := d.DecodeStreamChecked(context.Background(), stream)
+	if err != nil {
+		t.Fatalf("DecodeStreamChecked: %v, want the unknown filter skipped", err)
 	}
-	if !errors.Is(err, ErrUnsupportedFilter) {
-		t.Fatalf("DecodeStream error = %v, want ErrUnsupportedFilter", err)
+	if !p.called || string(data) != "decoded" || !incomplete {
+		t.Errorf("DecodeStreamChecked = (%q, incomplete %v), plugin called %v; want (%q, true), true",
+			data, incomplete, p.called, "decoded")
 	}
-	if err.Error() != wantErr.Error() {
-		t.Errorf("DecodeStream error = %q, want the unclaimed-filter error %q", err, wantErr)
+
+	rc, err := d.NewStreamReader(context.Background(), stream)
+	if err != nil {
+		t.Fatalf("NewStreamReader: %v", err)
 	}
-	if out != nil {
-		t.Errorf("returned %d bytes alongside the error", len(out))
+	defer rc.Close()
+	streamed, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("reading the stream: %v", err)
+	}
+	if string(streamed) != "decoded" {
+		t.Errorf("NewStreamReader read %q, want %q", streamed, "decoded")
+	}
+}
+
+// TestDecoder_PluginDeclineWithoutBuiltinFails pins the promise of
+// pdf.WithFilterPlugin and [plugins.ErrUnsupportedFilter]: a declined stream
+// behind a filter litho does not know fails, on the eager and the streaming
+// path, and is not skipped like a filter no plugin claims.
+//
+// The diagnostics count a claimed filter as decodable, so a skip here would
+// hand the image decoder, which consults them first, still-encoded bytes to
+// read as pixels.
+func TestDecoder_PluginDeclineWithoutBuiltinFails(t *testing.T) {
+	t.Parallel()
+
+	for name, declineErr := range map[string]error{
+		"bare":    plugins.ErrUnsupportedFilter,
+		"wrapped": fmt.Errorf("vendor codec: %w", plugins.ErrUnsupportedFilter),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("VendorDecode")}, []byte("raw"))
+			p := &mockPlugin{name: "VendorDecode", err: declineErr}
+			d := NewDecoder([]plugins.FilterDecoder{p})
+
+			out, incomplete, err := d.DecodeStreamChecked(context.Background(), stream)
+			if !p.called {
+				t.Fatal("the plugin was not consulted")
+			}
+			if !errors.Is(err, ErrUnsupportedFilter) {
+				t.Fatalf("DecodeStreamChecked error = %v, want ErrUnsupportedFilter", err)
+			}
+			if !strings.Contains(err.Error(), "VendorDecode") {
+				t.Errorf("error %q does not name the filter", err)
+			}
+			if out != nil || incomplete {
+				t.Errorf("returned (%d bytes, incomplete %v) alongside the error", len(out), incomplete)
+			}
+
+			rc, err := d.NewStreamReader(context.Background(), stream)
+			if !errors.Is(err, ErrUnsupportedFilter) {
+				if rc != nil {
+					rc.Close()
+				}
+				t.Fatalf("NewStreamReader error = %v, want ErrUnsupportedFilter", err)
+			}
+		})
 	}
 }
 

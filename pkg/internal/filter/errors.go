@@ -38,4 +38,9 @@ var (
 	// outside the encoding, a group whose value exceeds 2^32 - 1, a z inside
 	// a group, or a final partial group of one character.
 	ErrInvalidASCII85 = errors.New("ascii85: invalid data")
+
+	// errPluginDeclined marks, alongside [ErrUnsupportedFilter], a stream a
+	// plugin declined for a filter litho has no built-in decoder for. It
+	// fails the stream where a bare ErrUnsupportedFilter skips the filter.
+	errPluginDeclined = errors.New("declined by its plugin, and litho has no built-in decoder for it")
 )

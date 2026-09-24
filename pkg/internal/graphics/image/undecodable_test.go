@@ -146,3 +146,33 @@ func TestDecodeImage_FilterARegisteredPluginHandlesIsNotRefused(t *testing.T) {
 		t.Errorf("pixel (0,0) = (%d,%d,%d), want the plugin's grey 128", r>>8, g>>8, b>>8)
 	}
 }
+
+// decliningPlugin claims one filter name and declines every stream.
+type decliningPlugin struct{ name string }
+
+func (p decliningPlugin) FilterName() string { return p.name }
+
+func (decliningPlugin) Decode(_ []byte, _ map[string]any) ([]byte, error) {
+	return nil, plugins.ErrUnsupportedFilter
+}
+
+// TestDecodeImage_FilterAPluginDeclinesIsRefused pins the other side of the
+// plugin contract: the refusal above lets a claimed filter through, so a
+// plugin that declines a filter litho has no decoder for must fail the
+// decode. Skipping the filter instead would hand the 192 still-encoded bytes
+// back as an 8x8 RGB picture.
+func TestDecodeImage_FilterAPluginDeclinesIsRefused(t *testing.T) {
+	t.Parallel()
+
+	encoded := bytes.Repeat([]byte{0x80}, 8*8*3)
+	ctx, doc, page := imagePDF(t, filteredImagePDF("/Filter /VendorDecode", encoded))
+	doc.Filters = filter.NewDecoder([]plugins.FilterDecoder{decliningPlugin{name: "VendorDecode"}})
+
+	_, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err == nil {
+		t.Fatal("DecodeImage read a stream its plugin declined as a picture")
+	}
+	if !errors.Is(err, filter.ErrUnsupportedFilter) {
+		t.Errorf("refusal does not wrap ErrUnsupportedFilter: %v", err)
+	}
+}

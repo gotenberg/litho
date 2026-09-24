@@ -123,6 +123,16 @@ func DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 // contract matches DecodeStream (best-effort), so callers that ignore
 // incomplete behave exactly as before.
 func DecodeStreamChecked(ctx context.Context, stream ast.PdfStream) (data []byte, incomplete bool, err error) {
+	return decodeChain(ctx, stream, nil)
+}
+
+// decodeChain runs the /Filter chain of stream, consulting the plugins of d
+// before the built-in decoders. A nil d consults none, so the package-level
+// functions and a [Decoder] share one loop and treat a filter litho cannot
+// decode the same way: before, a Decoder failed the whole stream on a filter
+// no plugin claimed, where the package-level path skipped it, so registering
+// a plugin for one filter changed what every other undecodable filter did.
+func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder) (data []byte, incomplete bool, err error) {
 	filters, err := streamFilterNames(stream.Dict)
 	if err != nil {
 		return nil, false, err
@@ -137,16 +147,20 @@ func DecodeStreamChecked(ctx context.Context, stream ast.PdfStream) (data []byte
 		return nil, false, err
 	}
 	for i, f := range filters {
-		decoded, derr := applyDecodeFilter(ctx, data, f, parms[i], stream.Dict)
+		decoded, derr := d.applyDecodeFilter(ctx, data, f, parms[i], stream.Dict)
 		if derr != nil {
-			if errors.Is(derr, ErrUnsupportedFilter) {
-				// Best-effort: skip an unsupported filter and continue
-				// with the current data so text extraction still works
-				// when only part of a chain is supported (e.g. a plugin
-				// is not loaded). The returned bytes are then only
-				// partially decoded (still encoded by the skipped filter);
-				// incomplete records that so a caller can avoid treating
-				// them as fully decoded.
+			// Best-effort: skip an unsupported filter and continue with the
+			// current data so text extraction still works when only part of
+			// a chain is supported. The returned bytes are then only
+			// partially decoded (still encoded by the skipped filter), and
+			// incomplete records that so a caller can avoid treating them as
+			// fully decoded.
+			//
+			// A stream a plugin declined for a filter litho has no decoder
+			// for is not skipped: the diagnostics count a filter a plugin
+			// claims as decodable, so a caller that consulted them before
+			// decoding would read the still-encoded bytes as decoded.
+			if errors.Is(derr, ErrUnsupportedFilter) && !errors.Is(derr, errPluginDeclined) {
 				incomplete = true
 				continue
 			}
