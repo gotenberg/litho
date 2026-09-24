@@ -77,7 +77,7 @@ Any length, count, or offset read from the PDF is untrusted. Before `make([]T, n
 
 ### Panic boundary
 
-Internal code never panics (see [Parser safety](#parser-safety)) and never calls `recover()`. As defense-in-depth against crafted input, every exported `pkg/pdf` entry point that processes document bytes installs a top-level `recover()` that converts an unexpected panic into a wrapped sentinel logged at Error via `doc.Logger` with the recovered value and a stack. The boundary is a safety net, not a license to panic.
+Internal code never panics (see [Parser safety](#parser-safety)) and never calls `recover()`, except in a goroutine worker (see [Goroutine lifecycle](#goroutine-lifecycle)). As defense-in-depth against crafted input, every exported `pkg/pdf` entry point that processes document bytes installs a top-level `recover()` that converts an unexpected panic into a wrapped sentinel logged at Error via `doc.Logger` with the recovered value and a stack. The boundary is a safety net, not a license to panic.
 
 ### Resource limits
 
@@ -85,7 +85,7 @@ Every defensive cap (recursion depth, buffer size, decompression output, iterati
 
 ### Goroutine lifecycle
 
-Every goroutine has a defined exit condition and cannot outlive its parent call. `ctx` propagates into every goroutine, and result collection selects on `ctx.Done()` so cancellation short-circuits. Each worker recovers panics into an error result and logs them, so one bad worker cannot crash the host. Fan-out is bounded by a fixed count or a worker pool, never one goroutine per untrusted-input element.
+Every goroutine has a defined exit condition and cannot outlive its parent call. `ctx` propagates into every goroutine, and result collection selects on `ctx.Done()` so cancellation short-circuits. Each worker recovers panics into an error result wrapping `document.ErrInternalPanic` (re-exported as `pdf.ErrInternalPanic`) and logs them, so one bad worker cannot crash the host: the entry point's `recover()` runs on the calling goroutine and never sees a worker's panic. Fan-out is bounded by a fixed count or a worker pool, never one goroutine per untrusted-input element.
 
 ### Deterministic output
 
@@ -109,6 +109,8 @@ Every exported type and function has a Godoc comment starting with its identifie
 // Violation records a single rule violation with context.
 type Violation struct { ... }
 ```
+
+Test, fuzz, benchmark and example functions are exempt, since go doc never renders them. Give one a doc comment when it carries corpus evidence or a reason the code does not show, and start it with the function name.
 
 Every package has a `doc.go` with a `// Package foo ...` comment.
 
