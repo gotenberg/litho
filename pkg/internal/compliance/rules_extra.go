@@ -1,7 +1,8 @@
 package compliance
 
-// Hand-maintained, litho-specific rules with no standalone profile entry:
-// the hybrid-invoice, CII and CII schema families.
+// Hand-maintained rules that cmd/gen-rules does not generate: the
+// litho-specific hybrid-invoice, CII and CII schema families, and the two
+// WTPDF 1.0 declaration rules, whose profile the generator does not read.
 //
 // It also defines the parts 2 and 3 spellings of a requirement veraPDF
 // enumerates only for part 4. Those two are never emitted, on purpose. See
@@ -335,5 +336,31 @@ var (
 		TestNumber:    3,
 		Object:        "PDContentStream",
 		Description:   "A content stream's named resources shall be defined by a resource dictionary, which shall enumerate the named resources needed by the operators in the content stream and the names by which they can be referred to",
+	}
+
+	// Rule_WTPDF_1_0_6_1_2_t01 is the one rule WTPDF 1.0 states of its own
+	// for the reuse conformance level (WTPDF 1.0, 6.1.2): a PDF Declaration
+	// that names the level. Everything else the level requires is ISO
+	// 14289-2, so this rule carries the WTPDF_1_0 specification and the rest
+	// of a WTPDF run reports ISO_14289_2 clauses.
+	Rule_WTPDF_1_0_6_1_2_t01 = Rule{
+		Specification: "WTPDF_1_0",
+		Clause:        "6.1.2",
+		TestNumber:    1,
+		Object:        "MainXMPPackage",
+		Description:   "File conforming to the WTPDF 1.0 conformance level for reuse shall include a PDF Declaration with the URI identifier \"http://pdfa.org/declarations/wtpdf#reuse1.0\" as its pdfd:conformsTo entry",
+	}
+
+	// Rule_WTPDF_1_0_6_1_3_t01 is the one rule WTPDF 1.0 states of its own
+	// for the accessibility conformance level (WTPDF 1.0, 6.1.3): a PDF
+	// Declaration that names the level. As with
+	// [Rule_WTPDF_1_0_6_1_2_t01], everything else the level requires is
+	// ISO 14289-2.
+	Rule_WTPDF_1_0_6_1_3_t01 = Rule{
+		Specification: "WTPDF_1_0",
+		Clause:        "6.1.3",
+		TestNumber:    1,
+		Object:        "MainXMPPackage",
+		Description:   "File conforming to the WTPDF 1.0 conformance level for accessibility shall include a PDF Declaration with the URI identifier \"http://pdfa.org/declarations/wtpdf#accessibility1.0\" as its pdfd:conformsTo entry",
 	}
 )

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"go/parser"
 	"go/token"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -123,6 +124,29 @@ func TestGenerate_Deterministic(t *testing.T) {
 	}
 	if !bytes.Equal(first, second) {
 		t.Error("generate output is not deterministic between runs")
+	}
+}
+
+// TestGenerate_MatchesCommittedRulesFile pins that the committed rules.go is
+// exactly what the generator writes from the vendored profiles. rules.go says
+// DO NOT EDIT, and a declaration added to it by hand is lost on the next
+// regeneration, so a hand-maintained rule belongs in rules_extra.go.
+func TestGenerate_MatchesCommittedRulesFile(t *testing.T) {
+	dir := findRepoProfilesDir(t)
+	allRules, profiles, err := parseProfiles(dir)
+	if err != nil {
+		t.Fatalf("parseProfiles: %v", err)
+	}
+	want, err := generate(allRules, profiles)
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join("..", "..", "pkg", "internal", "compliance", "rules.go"))
+	if err != nil {
+		t.Fatalf("reading the committed rules.go: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Error("rules.go differs from the generator's output: move hand-written rules to rules_extra.go, or run go run ./cmd/gen-rules")
 	}
 }
 
