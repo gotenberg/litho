@@ -50,6 +50,62 @@ func TestValidateValue_EnumerationFacet(t *testing.T) {
 	}
 }
 
+// TestValidateValue_EnumerationMostDerivedStep pins XML Schema Part 2, 4.3.5:
+// a derived step that enumerates a subset of its base's values restricts the
+// type to that subset. Before, every step's values joined one set, so a
+// value the derived step leaves out still passed.
+func TestValidateValue_EnumerationMostDerivedStep(t *testing.T) {
+	t.Parallel()
+
+	currencies := &SimpleType{
+		Name: QName{Namespace: "urn:t", Local: "Currency"},
+		Base: builtin("token"),
+		Facets: []Facet{
+			Enumeration{Value: "EUR"},
+			Enumeration{Value: "USD"},
+			Enumeration{Value: "GBP"},
+		},
+	}
+	euro := &SimpleType{
+		Name:   QName{Namespace: "urn:t", Local: "EuroOnly"},
+		Base:   currencies,
+		Facets: []Facet{Enumeration{Value: "EUR"}},
+	}
+	// A step with no enumeration inherits its base's set unchanged.
+	short := &SimpleType{
+		Name:   QName{Namespace: "urn:t", Local: "ShortCurrency"},
+		Base:   currencies,
+		Facets: []Facet{MaxLength{Value: 3}},
+	}
+
+	tests := []struct {
+		name   string
+		t      Type
+		value  string
+		wantOK bool
+	}{
+		{"derived set admits its member", euro, "EUR", true},
+		{"derived set rejects a base-only member", euro, "USD", false},
+		{"derived set rejects a foreign value", euro, "BTC", false},
+		{"base set still admits its members", currencies, "USD", true},
+		{"a step without enumeration inherits the base set", short, "GBP", true},
+		{"a step without enumeration still rejects outside the base set", short, "BTC", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := ValidateValue(tc.value, tc.t)
+			if tc.wantOK && len(got) != 0 {
+				t.Errorf("ValidateValue(%q) = %v, want no violation", tc.value, got)
+			}
+			if !tc.wantOK && len(got) != 1 {
+				t.Errorf("ValidateValue(%q) = %v, want one enumeration violation", tc.value, got)
+			}
+		})
+	}
+}
+
 func TestValidateValue_LengthFacets(t *testing.T) {
 	tests := []struct {
 		name   string

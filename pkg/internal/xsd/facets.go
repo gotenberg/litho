@@ -29,7 +29,7 @@ func (v FacetViolation) Error() string {
 // ValidateValue checks value against the lexical space and all facets
 // of t. The function walks t's restriction chain, picks the underlying
 // built-in lexical validator, runs it against value, then evaluates
-// every facet collected up the chain in source order. Returns nil
+// the facets of every step of the chain, base first. Returns nil
 // when the value passes every check.
 //
 // White space is normalized first, under the mode [effectiveWhiteSpace]
@@ -40,8 +40,8 @@ func ValidateValue(value string, t Type) []FacetViolation {
 	if t == nil {
 		return nil
 	}
-	facets, base := collectAllFacets(t)
-	normalized := applyWhitespace(value, facets, base)
+	steps, base := collectAllFacets(t)
+	normalized := applyWhitespace(value, steps, base)
 
 	var out []FacetViolation
 	if base != nil {
@@ -49,29 +49,29 @@ func ValidateValue(value string, t Type) []FacetViolation {
 			out = append(out, *v)
 		}
 	}
-	// Enumeration is an allow-list: every Enumeration facet contributes
-	// to a single check, so evaluate them once outside the per-facet
+	// Enumeration is an allow-list: the Enumeration facets of a step
+	// form one set, so they are evaluated together outside the per-facet
 	// loop below.
-	if v := validateEnumeration(normalized, facets); v != nil {
+	if v := validateEnumeration(normalized, steps); v != nil {
 		out = append(out, *v)
 	}
-	for _, f := range facets {
-		switch f.(type) {
-		case WhiteSpace, Enumeration:
-			continue
-		}
-		if v := applyFacet(normalized, f, base); v != nil {
-			out = append(out, *v)
+	for _, step := range steps {
+		for _, f := range step {
+			if v := applyFacet(normalized, f, base); v != nil {
+				out = append(out, *v)
+			}
 		}
 	}
 	return out
 }
 
 // collectAllFacets walks t's base chain through SimpleType
-// restrictions, accumulating facets in the conventional "base first,
-// most-derived last" order so the most-derived restriction wins when
-// XSD lets a redeclaration tighten (e.g. a deeper maxLength). Returns
-// the underlying built-in type the chain bottoms out on.
+// restrictions and returns the facets of each derivation step, in the
+// conventional "base first, most-derived last" order, plus the
+// underlying built-in type the chain bottoms out on. The steps stay
+// apart because XML Schema Part 2 combines facets differently within a
+// step and across steps: the enumerations of one step form one set
+// (4.3.5.3), and its patterns are alternatives (4.3.4.3).
 //
 // The walk is iterative and bounded by [maxTypeDerivationDepth]. A
 // schema may declare a simpleType that restricts itself, directly or
@@ -80,7 +80,7 @@ func ValidateValue(value string, t Type) []FacetViolation {
 // goroutine stack, which Go cannot recover from. Like the extension
 // walks in validate.go the bound TRUNCATES rather than reports, so a
 // pathological chain yields the facets gathered so far.
-func collectAllFacets(t Type) ([]Facet, *BuiltinType) {
+func collectAllFacets(t Type) ([][]Facet, *BuiltinType) {
 	var chain []*SimpleType
 	var base *BuiltinType
 
@@ -101,19 +101,19 @@ func collectAllFacets(t Type) ([]Facet, *BuiltinType) {
 		cur = st.Base
 	}
 
-	var ordered []Facet
+	steps := make([][]Facet, 0, len(chain))
 	for _, link := range chain {
-		ordered = append(ordered, link.Facets...)
+		steps = append(steps, link.Facets)
 	}
-	return ordered, base
+	return steps, base
 }
 
 // applyWhitespace normalizes value under the mode [effectiveWhiteSpace]
 // derives: per XML Schema Part 2, 4.3.6, preserve leaves it untouched,
 // replace maps tab, line feed and carriage return to space, and collapse
 // also joins runs of spaces and trims both ends.
-func applyWhitespace(value string, facets []Facet, base *BuiltinType) string {
-	switch effectiveWhiteSpace(facets, base) {
+func applyWhitespace(value string, steps [][]Facet, base *BuiltinType) string {
+	switch effectiveWhiteSpace(steps, base) {
 	case whiteSpaceReplace:
 		return whitespaceReplace(value)
 	case whiteSpaceCollapse:
@@ -124,7 +124,7 @@ func applyWhitespace(value string, facets []Facet, base *BuiltinType) string {
 }
 
 // effectiveWhiteSpace returns the whiteSpace in force for a type whose
-// restriction chain carries facets and bottoms out on base: the mode the
+// restriction chain has steps and bottoms out on base: the mode the
 // built-in fixes ([builtinWhiteSpace]), tightened by every whiteSpace facet
 // the chain declares.
 //
@@ -133,15 +133,17 @@ func applyWhitespace(value string, facets []Facet, base *BuiltinType) string {
 // one. A schema that loosens it anyway, preserve under token for instance,
 // is in error. The looser facet is then ignored rather than blamed on the
 // instance, as is a value outside the three 4.3.6 allows.
-func effectiveWhiteSpace(facets []Facet, base *BuiltinType) whiteSpaceMode {
+func effectiveWhiteSpace(steps [][]Facet, base *BuiltinType) whiteSpaceMode {
 	mode := builtinWhiteSpace(base)
-	for _, f := range facets {
-		ws, ok := f.(WhiteSpace)
-		if !ok {
-			continue
-		}
-		if declared, known := parseWhiteSpaceMode(ws.Value); known && declared > mode {
-			mode = declared
+	for _, step := range steps {
+		for _, f := range step {
+			ws, ok := f.(WhiteSpace)
+			if !ok {
+				continue
+			}
+			if declared, known := parseWhiteSpaceMode(ws.Value); known && declared > mode {
+				mode = declared
+			}
 		}
 	}
 	return mode
@@ -182,14 +184,13 @@ func whitespaceCollapse(v string) string {
 
 // applyFacet dispatches to the per-kind validator. Unknown facet
 // kinds return nil so the engine remains forward-compatible with
-// future facet additions.
+// future facet additions. WhiteSpace and Enumeration return nil too:
+// [ValidateValue] applies them across a whole chain.
 func applyFacet(value string, f Facet, base *BuiltinType) *FacetViolation {
 	switch fc := f.(type) {
 	case Pattern:
 		return validatePattern(value, fc)
-	case Enumeration:
-		// Enumeration is collected per entry; the caller folds them
-		// into an allow-list check below.
+	case WhiteSpace, Enumeration:
 		return nil
 	case Length:
 		return validateExactLength(value, fc.Value, f)
@@ -270,27 +271,32 @@ func patternFor(raw string) *regexp.Regexp {
 	return re
 }
 
-// validateEnumeration runs the allow-list check across every
-// Enumeration facet supplied. Exposed separately from [applyFacet]
-// because the allow-list semantics need to see the full set of
-// enumeration values at once.
+// validateEnumeration runs the allow-list check of a restriction chain.
+// Exposed separately from [applyFacet] because the allow-list semantics
+// need to see the full set of enumeration values at once.
 //
 // XML Schema Part 2, 4.3.5.3 makes the enumerations of one step a single
-// set, and 4.3.5.4 accepts a value that is one of them. The comparison is on
-// literals, which matches values for the string-derived types CII
-// enumerates; a numeric enumeration of 1 would reject 1.0.
+// set, and 4.3.5.4 accepts a value that is one of them. The set of the
+// most-derived step that declares one decides alone: 4.3.5 restricts the
+// value space of that step's type to its set, and 4.3.5.5 makes it an error
+// for the set to reach outside the value space of its base, which the
+// enumerations of the steps below already restrict. On a valid schema the
+// most-derived set is therefore the intersection of all of them, and a
+// member a schema adds beyond its base's set is the schema's error, not the
+// instance's.
 //
-// TODO: the values of every step join one set here, so a value a derived
-// step leaves out still passes. 4.3.5 constrains the value space of the type
-// that states the facet to its own set, and 4.3.5.5 keeps that set within
-// the base's, so the most-derived enumeration decides.
-func validateEnumeration(value string, facets []Facet) *FacetViolation {
+// The comparison is on literals, which matches values for the
+// string-derived types CII enumerates; a numeric enumeration of 1 would
+// reject 1.0.
+func validateEnumeration(value string, steps [][]Facet) *FacetViolation {
 	var values []string
-	for _, f := range facets {
-		if e, ok := f.(Enumeration); ok {
-			values = append(values, e.Value)
-			if e.Value == value {
-				return nil
+	for i := len(steps) - 1; i >= 0 && len(values) == 0; i-- {
+		for _, f := range steps[i] {
+			if e, ok := f.(Enumeration); ok {
+				values = append(values, e.Value)
+				if e.Value == value {
+					return nil
+				}
 			}
 		}
 	}

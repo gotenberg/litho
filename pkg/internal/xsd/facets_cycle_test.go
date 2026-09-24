@@ -77,15 +77,15 @@ func TestCollectAllFacets_CyclicChainStillCollects(t *testing.T) {
 	a.Base = b
 	b.Base = a
 
-	facets, base := collectAllFacets(a)
+	steps, base := collectAllFacets(a)
 	if base != nil {
 		t.Errorf("base = %v, want nil: a cyclic chain reaches no built-in", base)
 	}
-	if len(facets) == 0 {
-		t.Error("facets are empty: the walk should return what it gathered before the bound")
+	if len(steps) == 0 {
+		t.Error("steps are empty: the walk should return what it gathered before the bound")
 	}
-	if len(facets) > maxTypeDerivationDepth {
-		t.Errorf("facets = %d, want at most %d: the walk is not bounded", len(facets), maxTypeDerivationDepth)
+	if len(steps) > maxTypeDerivationDepth {
+		t.Errorf("steps = %d, want at most %d: the walk is not bounded", len(steps), maxTypeDerivationDepth)
 	}
 }
 
@@ -99,19 +99,19 @@ func TestCollectAllFacets_AcyclicOrderUnchanged(t *testing.T) {
 	upstream := &SimpleType{Name: QName{Local: "Upstream"}, Base: builtin, Facets: []Facet{MaxLength{Value: 9}}}
 	derived := &SimpleType{Name: QName{Local: "Derived"}, Base: upstream, Facets: []Facet{MaxLength{Value: 3}}}
 
-	facets, base := collectAllFacets(derived)
+	steps, base := collectAllFacets(derived)
 	if base != builtin {
 		t.Fatalf("base = %v, want the built-in the chain bottoms out on", base)
 	}
-	if len(facets) != 2 {
-		t.Fatalf("facets = %d, want 2", len(facets))
+	if len(steps) != 2 || len(steps[0]) != 1 || len(steps[1]) != 1 {
+		t.Fatalf("steps = %#v, want two steps of one facet each", steps)
 	}
-	first, ok := facets[0].(MaxLength)
+	first, ok := steps[0][0].(MaxLength)
 	if !ok || first.Value != 9 {
-		t.Errorf("facets[0] = %#v, want the UPSTREAM MaxLength(9): base-first order was lost", facets[0])
+		t.Errorf("steps[0] = %#v, want the UPSTREAM MaxLength(9): base-first order was lost", steps[0])
 	}
-	last, ok := facets[1].(MaxLength)
+	last, ok := steps[1][0].(MaxLength)
 	if !ok || last.Value != 3 {
-		t.Errorf("facets[1] = %#v, want the DERIVED MaxLength(3)", facets[1])
+		t.Errorf("steps[1] = %#v, want the DERIVED MaxLength(3)", steps[1])
 	}
 }
