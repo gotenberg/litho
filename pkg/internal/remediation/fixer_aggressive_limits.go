@@ -39,16 +39,20 @@ const (
 
 // matchAggressiveLimits matches implementation-limit violations that
 // can only be fixed by dropping content: q/Q stack overflow, oversized
-// dictionary, over-component DeviceN, and out-of-range CID values, which
-// no repair answers yet (see [limitRepairsFor]).
+// dictionary and over-component DeviceN.
+//
+// An out-of-range CID value (ISO 19005-1, 6.1.12 test 10; ISO 19005-2/3,
+// 6.1.13 test 10) is not matched: no repair here answers it (see
+// [limitRepairsFor]), and file-structure and real-limits claim it already. A
+// content-tier claim only put it on [Report.ContentResidual], which a rollback
+// appends to the residual it revalidates, listing it twice.
 func matchAggressiveLimits(v compliance.Violation) bool {
 	if !clausePrefix(v, "6.1.12", "6.1.13") {
 		return false
 	}
 	return contextContains(v, "q/Q nesting depth") ||
 		contextContains(v, "dict capacity") ||
-		contextContains(v, "DeviceN has") ||
-		contextContains(v, "CID value") && contextContains(v, "exceeds")
+		contextContains(v, "DeviceN has")
 }
 
 // fixAggressiveLimits enforces the PDF/A implementation limits that can only
@@ -119,8 +123,7 @@ type limitRepairs struct {
 //     ISO 19005-2/3, 6.1.13 test 9. Trimming a part 2 or 3 space to the
 //     part 1 cap would drop up to 24 colourants the profile permits.
 //
-// A CID-value violation (6.1.12 test 10, 6.1.13 test 10) matches this fixer
-// too, but no repair here answers it, so it selects none.
+// Any other rule selects nothing.
 func limitRepairsFor(violations []compliance.Violation, profile string) limitRepairs {
 	part := compliance.PDFAPart(profile)
 	var r limitRepairs

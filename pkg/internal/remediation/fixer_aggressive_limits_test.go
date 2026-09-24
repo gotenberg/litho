@@ -221,3 +221,51 @@ func TestFixAggressiveLimits_PreserveContentRunsNoRepair(t *testing.T) {
 		t.Errorf("PreserveContent: got %+v, want %+v", got, want)
 	}
 }
+
+// TestMatchAggressiveLimits_LeavesCIDValuesUnclaimedByTheContentTier pins that
+// aggressive-limits does not claim an out-of-range CID value (ISO 19005-1,
+// 6.1.12 test 10; ISO 19005-2/3, 6.1.13 test 10), which none of its repairs
+// answers, and that the violation keeps the claims it had elsewhere, so the
+// preliminary residual does not change.
+//
+// The claim put the violation on the content tier's list, which a rollback
+// appends to the residual it revalidates, so a rolled-back run listed it
+// twice. The rows for the limits the fixer does repair are the control: the
+// match still reaches each of them.
+func TestMatchAggressiveLimits_LeavesCIDValuesUnclaimedByTheContentTier(t *testing.T) {
+	t.Parallel()
+
+	const cidContext = "font F1 on page 1: CID value 70000 exceeds maximum 65,535"
+	for _, rule := range []compliance.Rule{
+		compliance.Rule_19005_1_6_1_12_t10,
+		compliance.Rule_19005_2_6_1_13_t10,
+		compliance.Rule_19005_3_6_1_13_t10,
+	} {
+		v := compliance.Violation{Rule: rule, Context: cidContext}
+		if matchAggressiveLimits(v) {
+			t.Errorf("%s-t%02d: aggressive-limits claims a CID value it has no repair for",
+				rule.Clause, rule.TestNumber)
+		}
+		plan := classify([]compliance.Violation{v})
+		if len(plan) == 0 {
+			t.Errorf("%s-t%02d: no fixer claims the CID value any more, so it moved into "+
+				"the preliminary residual", rule.Clause, rule.TestNumber)
+		}
+		for _, entry := range plan {
+			if entry.f.safety == safetyContent {
+				t.Errorf("%s-t%02d: content-tier fixer %s claims the CID value, so a rollback "+
+					"lists it twice", rule.Clause, rule.TestNumber, entry.f.name)
+			}
+		}
+	}
+
+	for _, v := range []compliance.Violation{
+		{Rule: compliance.Rule_19005_1_6_1_12_t08, Context: "page 1: q/Q nesting depth 30 exceeds 28"},
+		{Rule: compliance.Rule_19005_1_6_1_12_t06, Context: "object 8: dict capacity 4096 exceeds 4095"},
+		{Rule: compliance.Rule_19005_2_6_1_13_t09, Context: "page 1, ColorSpace CS0: DeviceN has 33 components (max 32)"},
+	} {
+		if !matchAggressiveLimits(v) {
+			t.Errorf("control: %s-t%02d (%s) is no longer matched", v.Rule.Clause, v.Rule.TestNumber, v.Context)
+		}
+	}
+}
