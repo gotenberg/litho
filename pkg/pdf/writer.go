@@ -581,12 +581,22 @@ type Writer struct {
 	// re-applying the already-drained mutation state.
 	consumed bool
 	// rewriteOverrides holds per-object replacements produced during
-	// remediation, keyed by source object number. They are forwarded to
-	// the full-rewrite copier so the renumbered output reflects the
-	// patched data instead of the original.
+	// remediation and redaction, keyed by source object number. They are
+	// forwarded to the full-rewrite copier so the renumbered output reflects
+	// the patched data instead of the original. Each stage that produces
+	// them starts from the ones already here, so a later stage builds on an
+	// earlier one instead of discarding it.
 	rewriteOverrides map[int]ast.PdfObject
 	signer           Signer
 	requiredVersion  string
+
+	// redactions records the regions of every successful [Writer.Redact]
+	// call, in call order, and redactedTokens the text they removed. WriteTo
+	// re-checks the fully composed output against them, because a stage
+	// queued before or after Redact can rebuild content from the source
+	// document and restore what Redact removed.
+	redactions     [][]RedactRegion
+	redactedTokens []string
 
 	// preSerializedPath is the path to a temp file holding the fully
 	// serialized PDF when remediation pre-serializes for accurate
@@ -596,10 +606,11 @@ type Writer struct {
 	// queued afterwards (a new mutation, Sign, Encrypt, decrypt) or a
 	// serialization-shaping write option invalidates the fast path, and
 	// WriteTo re-serializes so the late edit is not silently dropped.
-	preSerializedPath      string
-	preSerializedMutations int
-	preSerializedEncrypt   bool
-	preSerializedDecrypt   bool
+	preSerializedPath       string
+	preSerializedMutations  int
+	preSerializedRedactions int
+	preSerializedEncrypt    bool
+	preSerializedDecrypt    bool
 }
 
 // mutation is a deferred modification applied during WriteTo.
@@ -1440,9 +1451,12 @@ func probeIntegrity(ctx context.Context, r *Reader) (integritySnap, error) {
 // `litho pipe f delete -pages 1 remediate -profile PDF/A-2b` reported
 // "remediation broke the PDF beyond the configured regression tolerance: page
 // count changed from 41 to 40" and rolled back a remediation that had done
-// nothing wrong. The extra serialization only happens when something is queued.
+// nothing wrong. An earlier stage's overrides are staged too: remediating a
+// redacted document measured the text Redact had removed, and refused the
+// remediation for "dropping" it. The extra serialization only happens when
+// something is staged.
 func (w *Writer) stagedBaseline(ctx context.Context) (integritySnap, error) {
-	if len(w.mutations) == 0 {
+	if len(w.mutations) == 0 && len(w.rewriteOverrides) == 0 {
 		return probeIntegrity(ctx, w.reader)
 	}
 
@@ -1563,6 +1577,11 @@ func (w *Writer) remediate(
 	// with no rotation at all. The mutations stay queued: they are idempotent,
 	// applying them again at write time reaches the same result, and a
 	// remediation rollback must be able to put the Writer back as it was.
+	//
+	// The overrides an earlier stage produced go in first, for the same
+	// reason: remediation replaced them wholesale, so remediating a redacted
+	// document wrote the unredacted source back.
+	seedAllocator(alloc, w.rewriteOverrides)
 	for i, m := range w.mutations {
 		if err := m.apply(ctx, alloc, doc); err != nil {
 			return nil, fmt.Errorf("applying staged mutation %d before remediation: %w", i, err)
@@ -1913,6 +1932,7 @@ func removeTempFile(logger *slog.Logger, path string) {
 func (w *Writer) markPreSerialized(path string) {
 	w.preSerializedPath = path
 	w.preSerializedMutations = len(w.mutations)
+	w.preSerializedRedactions = len(w.redactions)
 	w.preSerializedEncrypt = w.encryptCfg != nil
 	w.preSerializedDecrypt = w.decrypt
 }
@@ -1958,6 +1978,10 @@ func (w *Writer) copyFromPreSerialized(dst io.Writer) error {
 // append the signature dictionary's strings in plaintext where the
 // source's crypto handler requires ciphertext. Encrypted-then-signed
 // output is permitted by the specification but not yet implemented.
+//
+// After [Writer.Redact], WriteTo checks the output against every removed
+// string before writing a byte, and returns [ErrRedactionRefused] or
+// [ErrRedactionIncomplete] rather than write a file that still holds one.
 func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (err error) {
 	defer recoverToError(w.logger(), "Writer.WriteTo", &err)
 	if w.consumed {
@@ -2057,7 +2081,11 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 	// edit. The remediation overrides persist in w.rewriteOverrides, so a
 	// fresh serialization keeps the applied fixes.
 	if w.preSerializedPath != "" {
+		// A Redact after remediation makes it stale too: the temp file holds
+		// the unredacted document. One before remediation does not, since the
+		// temp file went through the same write-time redaction check.
 		stale := len(w.mutations) != w.preSerializedMutations ||
+			len(w.redactions) != w.preSerializedRedactions ||
 			(w.encryptCfg != nil) != w.preSerializedEncrypt ||
 			w.decrypt != w.preSerializedDecrypt ||
 			w.signer != nil ||
@@ -2098,6 +2126,12 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 		if w.reader.doc.Rebuilt || w.reader.doc.HeaderOffset > 0 || w.reader.doc.IsEncrypted {
 			cfg.fullRewrite = true
 		}
+	}
+	// A redacted document is always rewritten in full, whatever cleared
+	// forceRewrite since: an incremental update keeps every superseded object
+	// in the file, the original content stream among them.
+	if len(w.redactions) > 0 {
+		cfg.fullRewrite = true
 	}
 
 	// Swap the document logger for the duration of the write so every
@@ -2183,6 +2217,11 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 				overrides = mutAlloc.Pending()
 			}
 		}
+		enforced, enforceErr := w.enforceRedactions(ctx, overrides)
+		if enforceErr != nil {
+			return enforceErr
+		}
+		overrides = enforced
 		return mutations.FullRewrite(ctx, dst, mutations.FullRewriteConfig{
 			Doc:             w.reader.doc,
 			EncryptCfg:      w.encryptCfg,

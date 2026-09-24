@@ -177,9 +177,15 @@ func redactPageRegions(
 		return RedactReport{}, ErrPageNotAddressable
 	}
 
+	// Read the page as earlier stages staged it, not as the source holds it: a
+	// stage that rewrote /Contents (auto-tagging, remediation, an earlier
+	// redaction) queued a new stream, and editing the original instead would
+	// write back content that stage had already changed or removed.
+	page = latestPage(ctx, alloc, doc, page)
+
 	// The spans below index this buffer, so the parse and the later excision
 	// both have to read the page the same way.
-	data, err := collectPageContents(ctx, doc, page)
+	data, err := collectLatestPageContents(ctx, alloc, doc, page)
 	if err != nil {
 		return RedactReport{}, fmt.Errorf("assembling page content: %w", err)
 	}

@@ -14,9 +14,9 @@ import (
 // ExcisePageSpans removes byte spans from a page's content and writes what
 // remains back as the page's only content stream.
 //
-// The spans address the buffer [collectPageContents] returns for this page, so
-// derive them by parsing that same buffer with
-// [content.ParseStreamDataWithOffsets]. Offsets taken over any other assembly
+// The spans address the buffer [collectLatestPageContents] returns for this
+// page, the page as alloc stages it, so derive them by parsing that same
+// buffer with [content.ParseStreamDataWithOffsets]. Offsets taken over any other assembly
 // of the page describe different bytes: litho assembles page content in more
 // than one way, and the variants differ in their separators and in which
 // streams they include, so a span from one applied to another removes content
@@ -25,7 +25,7 @@ import (
 // It refuses where other mutations skip. A page inlined in a /Kids array
 // (ISO 32000-1, 7.7.3.2) has no object number to write back to, so the content
 // would survive in a document whose caller believes it gone; that reports
-// [ErrPageNotAddressable] instead. [collectPageContents] refuses on the same
+// [ErrPageNotAddressable] instead. [collectLatestPageContents] refuses on the same
 // grounds, failing on a stream it cannot decode rather than offering a partial
 // buffer to excise against.
 //
@@ -48,7 +48,7 @@ func ExcisePageSpans(
 		return ErrPageNotAddressable
 	}
 
-	data, err := collectPageContents(ctx, doc, page)
+	data, err := collectLatestPageContents(ctx, alloc, doc, page)
 	if err != nil {
 		return fmt.Errorf("assembling page content: %w", err)
 	}

@@ -3,7 +3,9 @@ package pdf
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
+	"slices"
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -115,6 +117,15 @@ type RedactReport struct {
 //
 // Regions on several pages are applied together. Passing none is a no-op.
 //
+// The redaction holds whatever else the Writer does before or after it:
+// another Redact, remediation, auto-tagging. Each builds on the others' edits,
+// and [Writer.WriteTo] scans the output it is about to write for every removed
+// string. A stage can still rebuild a page from the source document
+// (auto-tagging marks up the original content stream), so when a removed
+// string is back, WriteTo applies the regions again on top of everything else
+// and scans once more. If a copy still survives, WriteTo refuses with
+// [ErrRedactionIncomplete] and writes nothing.
+//
 // What this does NOT do: re-subset embedded fonts whose glyphs now describe
 // only removed text (see [RedactReport.FontsFullyRemovedOnPage]), and it cannot
 // remove content a form XObject draws or an inline image's samples, which it
@@ -142,10 +153,14 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
 
-	// Apply whatever an earlier stage queued, so the passes below read the
-	// document as the caller has staged it rather than the untouched source.
-	// The mutations stay queued: they are idempotent, and a refusal has to be
-	// able to put the Writer back as it was.
+	// Start from what earlier stages produced, remediation or an earlier
+	// Redact, and replay whatever an earlier stage queued, so the passes below
+	// read the document as the caller has staged it rather than the untouched
+	// source. Starting empty replaced those stages' work: a second Redact
+	// dropped the first, and a Redact after remediation undid its fixes. The
+	// mutations stay queued: they are idempotent, and a refusal has to be able
+	// to put the Writer back as it was.
+	seedAllocator(alloc, w.rewriteOverrides)
 	for i, m := range w.mutations {
 		if applyErr := m.apply(ctx, alloc, doc); applyErr != nil {
 			return nil, fmt.Errorf("applying staged mutation %d before redaction: %w", i, applyErr)
@@ -212,7 +227,90 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 	// rewrite and produced files whose trailer pointed at the wrong object.
 	w.rewriteOverrides = alloc.Pending()
 	w.forceRewrite = true
+	w.recordRedaction(regions, report.RemovedText)
 	return report, nil
+}
+
+// seedAllocator queues every override at its own object number, so a stage
+// allocating on top of them builds on the work an earlier stage produced.
+// Object numbers are visited in order so the same Writer state always drives
+// the same sequence of edits.
+func seedAllocator(alloc *writer.ObjAllocator, overrides map[int]ast.PdfObject) {
+	for _, objNum := range slices.Sorted(maps.Keys(overrides)) {
+		alloc.AllocAt(objNum, overrides[objNum])
+	}
+}
+
+// recordRedaction remembers a successful redaction so [Writer.WriteTo] can
+// check the composed output against it.
+func (w *Writer) recordRedaction(regions []RedactRegion, removed []string) {
+	w.redactions = append(w.redactions, slices.Clone(regions))
+	w.redactedTokens = appendNewTokens(w.redactedTokens, removed)
+}
+
+// appendNewTokens appends each token of add that tokens does not hold yet.
+func appendNewTokens(tokens, add []string) []string {
+	for _, tok := range add {
+		if !slices.Contains(tokens, tok) {
+			tokens = append(tokens, tok)
+		}
+	}
+	return tokens
+}
+
+// enforceRedactions checks the output [Writer.WriteTo] is about to write
+// against every recorded redaction, and returns the overrides to write.
+//
+// A redaction lives in the rewrite overrides, but a stage can still rebuild a
+// page from the source document around it: auto-tagging marks up the original
+// content stream, whether queued before or after Redact or run as a
+// remediation fixer, and its /Contents then carries the text Redact removed.
+// So the composed output is scanned for every removed token. When one is
+// back, the recorded regions are applied again on top of the composed state
+// and the output is sanitized and scanned once more. A copy that survives that
+// is refused with [ErrRedactionIncomplete], and nothing is written: reporting
+// success over content still in the file is the failure redaction exists to
+// prevent.
+func (w *Writer) enforceRedactions(ctx context.Context, overrides map[int]ast.PdfObject) (map[int]ast.PdfObject, error) {
+	if len(w.redactedTokens) == 0 {
+		return overrides, nil
+	}
+	doc := w.reader.doc
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	seedAllocator(alloc, overrides)
+
+	scan, err := mutations.ScanOutputForTokens(ctx, alloc, doc, w.redactedTokens)
+	if err != nil {
+		return nil, fmt.Errorf("%w: scanning the composed output: %w", ErrRedactionIncomplete, err)
+	}
+	if scan.Clean() {
+		return overrides, nil
+	}
+	doc.Logger.Debug("writer: a later stage restored redacted content, re-applying the redactions",
+		slog.Int("hits", len(scan.Hits)), slog.Int("unreadable", len(scan.Unreadable)))
+
+	pages, err := w.reader.resolvePages(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolving pages: %w", err)
+	}
+	tokens := slices.Clone(w.redactedTokens)
+	for _, regions := range w.redactions {
+		byPage, order, err := groupRedactRegions(regions, len(pages))
+		if err != nil {
+			return nil, err
+		}
+		for _, pageNum := range order {
+			pageReport, redactErr := mutations.RedactPageRegions(ctx, alloc, doc, pages[pageNum-1], byPage[pageNum])
+			if redactErr != nil {
+				return nil, fmt.Errorf("%w: re-applying page %d at write time: %w", ErrRedactionRefused, pageNum, redactErr)
+			}
+			tokens = appendNewTokens(tokens, pageReport.RemovedText)
+		}
+	}
+	if _, sanErr := mutations.SanitizeDocument(ctx, alloc, doc, tokens); sanErr != nil {
+		return nil, fmt.Errorf("%w: %w", ErrRedactionIncomplete, sanErr)
+	}
+	return alloc.Pending(), nil
 }
 
 // groupRedactRegions collects the regions of each page, and returns the pages

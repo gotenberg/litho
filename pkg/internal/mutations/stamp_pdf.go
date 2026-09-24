@@ -163,7 +163,22 @@ func pageToFormXObject(
 // the body before filter decoding, and handing a FlateDecode page's compressed
 // bytes to an unfiltered stream made the stamp draw nothing.
 func collectPageContents(ctx context.Context, doc *document.Document, page *document.Page) ([]byte, error) {
-	obj, ok := page.Dict["Contents"]
+	return collectContents(ctx, nil, doc, page.Dict)
+}
+
+// collectLatestPageContents is [collectPageContents] for the page as earlier
+// stages staged it: the page dict and every content stream resolve through
+// alloc first. A stage that rewrites /Contents queues a new stream object the
+// source document has never seen, so reading the source here would edit the
+// original content and silently discard that stage's work.
+func collectLatestPageContents(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) ([]byte, error) {
+	return collectContents(ctx, alloc, doc, latestPageDict(alloc, page))
+}
+
+// collectContents decodes the /Contents of pageDict. A nil alloc reads the
+// source document only.
+func collectContents(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict) ([]byte, error) {
+	obj, ok := pageDict["Contents"]
 	if !ok {
 		return nil, nil
 	}
@@ -176,7 +191,7 @@ func collectPageContents(ctx context.Context, doc *document.Document, page *docu
 	// redaction, excision and stamping all refused a legal page. Measured at 26
 	// of 1091 govdocs documents; [tagging.pageContentBytes] resolves first and
 	// was never affected, which is what made the omission visible.
-	resolved, err := document.ResolveObject(ctx, doc, obj)
+	resolved, err := resolveAllocFirst(ctx, alloc, doc, obj)
 	if err != nil {
 		return nil, err
 	}
@@ -195,9 +210,13 @@ func collectPageContents(ctx context.Context, doc *document.Document, page *docu
 			if !ok {
 				continue
 			}
-			stream, err := document.ResolveStream(ctx, doc, ref)
+			item, err := resolveAllocFirst(ctx, alloc, doc, ref)
 			if err != nil {
 				return nil, err
+			}
+			stream, ok := item.(ast.PdfStream)
+			if !ok {
+				return nil, fmt.Errorf("/Contents element %d %d R is %T, not a stream", ref.ObjectNum, ref.GenNum, item)
 			}
 			data, err := doc.DecodeStream(ctx, stream)
 			if err != nil {
@@ -220,4 +239,19 @@ func collectPageContents(ctx context.Context, doc *document.Document, page *docu
 		return nil, fmt.Errorf("unsupported /Contents type %T", obj)
 	}
 	return buf.Bytes(), nil
+}
+
+// resolveAllocFirst resolves obj, preferring the object alloc has queued at
+// its number. A nil alloc resolves against the source document only.
+func resolveAllocFirst(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject) (ast.PdfObject, error) {
+	if ref, ok := obj.(ast.PdfIndirectRef); ok && alloc != nil {
+		if pending, ok := alloc.Pending()[ref.ObjectNum]; ok {
+			return pending, nil
+		}
+	}
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return nil, fmt.Errorf("resolving content object: %w", err)
+	}
+	return resolved, nil
 }

@@ -240,6 +240,27 @@ func latestPageDict(alloc *writer.ObjAllocator, page *document.Page) ast.PdfDict
 	return page.Dict
 }
 
+// latestPage returns page as earlier stages staged it. Its dict comes from
+// alloc when one is queued there, and so do its resources when that dict names
+// its own; inherited resources it does not name stay those of the source.
+func latestPage(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) *document.Page {
+	p := *page
+	p.Dict = latestPageDict(alloc, page)
+	if res, ok := p.Dict["Resources"]; ok {
+		obj, err := resolveAllocFirst(ctx, alloc, doc, res)
+		if err != nil {
+			// Keeping the source's resources is safe: they are what the page
+			// resolved to before any stage touched it, and a caller that needs
+			// the staged ones fails on its own lookup rather than on this one.
+			doc.Logger.Debug("latestPage: staged /Resources did not resolve, keeping the source's",
+				slog.Int("page", page.Ref.ObjectNum), slog.Any("err", err))
+		} else if d, ok := obj.(ast.PdfDict); ok {
+			p.Resources = d
+		}
+	}
+	return &p
+}
+
 // mergeStampResources reads the current /Resources sub-dictionaries from
 // baseDict and returns a new /Resources dict that includes the stamp's
 // additions. Existing resources are preserved.

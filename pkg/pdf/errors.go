@@ -133,7 +133,9 @@ var (
 	// image whose samples cannot be rewritten. Removing more than was asked
 	// changes the page outside the region, and reporting success over content
 	// still in the file is worse than refusing, so litho refuses and names the
-	// construct. The [Writer] is left exactly as it was.
+	// construct. The [Writer] is left exactly as it was. [Writer.WriteTo]
+	// returns it too when a region it re-applies at write time, over a page a
+	// later stage rebuilt, can no longer be removed exactly.
 	ErrRedactionRefused = errors.New("redaction refused: the region covers content that cannot be removed exactly")
 
 	// ErrRedactionIncomplete is returned by [Writer.Redact] when the
@@ -143,7 +145,9 @@ var (
 	// in the structure tree, annotation values, outlines and metadata.
 	// [RedactReport.SurvivingCopies] and [RedactReport.UnreadableObjects] name
 	// where, and the [Writer] is left untouched so a caller that ignores the
-	// error cannot write a half-redacted document.
+	// error cannot write a half-redacted document. [Writer.WriteTo] returns it,
+	// writing nothing, when a removed string survives in the output it is about
+	// to write, for example one a later stage put back.
 	ErrRedactionIncomplete = errors.New("redaction incomplete: a copy of the removed text survives in the document")
 
 	// ErrPageDeletionIncomplete is returned by [Writer.WriteTo] when
