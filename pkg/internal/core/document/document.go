@@ -24,9 +24,9 @@ import (
 //
 // Concurrent use. Document is safe for concurrent use by multiple
 // goroutines after construction completes. All mutable caches
-// (objectCache, fontCache, cmapCache, objStmCache) and the compliance
-// scratch state (ComplianceMode, formatViolations) are protected by
-// internal locks. The format-violation record is keyed by object number
+// (objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache)
+// and the compliance scratch state (ComplianceMode, formatViolations) are
+// protected by internal locks. The format-violation record is keyed by object number
 // and written once per object, so concurrent resolutions of the same
 // object contribute one entry, not one per goroutine.
 // Concurrent read paths ([Resolve], [ResolveDict], [ResolveArray], etc.)
@@ -50,9 +50,11 @@ type Document struct {
 	objStmCacheBytes int                 // decoded bytes held in objStmCache, bounded by maxObjStmCacheBytes
 	fontProgCache    map[int][]byte      // decoded font programs by FontFile stream object number
 	fontProgBytes    int                 // decoded bytes held in fontProgCache, bounded by maxFontProgCacheBytes
+	colorCache       map[[2]int]any      // colour transforms by profile object number and rendering intent
+	colorCacheBytes  int                 // bytes held in colorCache, bounded by maxColorCacheBytes
 	sortedOffsets    []int64             // ascending normal-object offsets, for O(log N) endobj scan-capping
 	sortedOffsetsLen int                 // len(Index.Entries) when sortedOffsets was built; rebuild on change
-	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, sortedOffsets, formatViolations, and the lazy Index.Entries augmentation
+	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache, sortedOffsets, formatViolations, and the lazy Index.Entries augmentation
 	runMu            sync.Mutex          // serializes compliance-engine validation runs
 	xrefAugment      sync.Once           // guards the one-shot raw-bytes augmentation of Index
 	maxCacheSize     int                 // evict all objects when cache exceeds this size
@@ -151,6 +153,11 @@ type Document struct {
 	// Nil when no plugins are registered. Set once during construction,
 	// then read-only.
 	Filters *filter.Decoder
+
+	// CMYKProfile is the ICC profile DeviceCMYK colours are read in when the
+	// document states no output intent for them. Nil selects litho's
+	// built-in profile. Set once during construction, then read-only.
+	CMYKProfile []byte
 }
 
 // ComplianceMode reports whether parser-level format violation
@@ -920,6 +927,8 @@ func (d *Document) ClearCaches() {
 	d.objStmCacheBytes = 0
 	d.fontProgCache = nil
 	d.fontProgBytes = 0
+	d.colorCache = nil
+	d.colorCacheBytes = 0
 	d.formatViolations = nil
 	d.integerOverflows = nil
 	d.mu.Unlock()
@@ -972,6 +981,46 @@ func (d *Document) SetCachedFontProgram(objNum int, data []byte) {
 	}
 	d.fontProgCache[objNum] = data
 	d.fontProgBytes += len(data)
+}
+
+// maxColorCacheBytes bounds the bytes of colour transforms retained by
+// [Document.SetCachedColorTransform]. It is an anti-DoS guard, not
+// spec-mandated: a crafted file could declare many profiles with large lookup
+// tables, so the cache evicts rather than grow without bound. The densest
+// table in common use, 33 points over four inputs, builds a transform of
+// about 29 MB, and a document rarely holds more than one or two profiles.
+const maxColorCacheBytes = 64 << 20
+
+// CachedColorTransform returns the colour transform cached for the profile
+// stream object number and rendering intent. A nil value records a profile
+// that could not be used.
+func (d *Document) CachedColorTransform(objNum, intent int) (any, bool) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	t, ok := d.colorCache[[2]int{objNum, intent}]
+	return t, ok
+}
+
+// SetCachedColorTransform stores a colour transform of size bytes keyed by
+// its profile stream object number and rendering intent, bounding the total
+// with an evict-all policy. A transform larger than the budget is not
+// cached, so it cannot force repeated evictions.
+func (d *Document) SetCachedColorTransform(objNum, intent int, t any, size int) {
+	if size > maxColorCacheBytes {
+		return
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	key := [2]int{objNum, intent}
+	if _, ok := d.colorCache[key]; ok {
+		return
+	}
+	if d.colorCache == nil || d.colorCacheBytes+size > maxColorCacheBytes {
+		d.colorCache = make(map[[2]int]any)
+		d.colorCacheBytes = 0
+	}
+	d.colorCache[key] = t
+	d.colorCacheBytes += size
 }
 
 // CachedCMap returns a previously cached parsed CMap for the given stream

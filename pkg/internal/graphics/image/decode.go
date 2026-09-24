@@ -15,6 +15,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	"github.com/gotenberg/litho/pkg/internal/graphics/function"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 )
 
 const (
@@ -517,13 +518,14 @@ func decodeSeparation(
 	// the identity in practice, but a file may.
 	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, dict, 1), 1)
 
+	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, renderingIntent(ctx, doc, dict)))
 	var lut [256]color.RGBA
 	for s := range 256 {
 		out, err := tint.Eval([]float64{float64(dec[0][s]) / 255})
 		if err != nil {
 			return nil, fmt.Errorf("evaluating separation tint transform: %w", err)
 		}
-		lut[s] = alternateToRGB(alternate, out)
+		lut[s] = alternateToRGB(alternate, conv, out)
 	}
 
 	img := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -608,6 +610,7 @@ func decodeDeviceN(
 	// identity in practice, but a file may.
 	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, dict, colorants), colorants)
 
+	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, renderingIntent(ctx, doc, dict)))
 	memo := make(map[string]color.RGBA)
 	inputs := make([]float64, colorants)
 	tuple := make([]byte, colorants)
@@ -631,7 +634,7 @@ func decodeDeviceN(
 				if err != nil {
 					return nil, fmt.Errorf("evaluating devicen tint transform: %w", err)
 				}
-				rgb = alternateToRGB(alternate, out)
+				rgb = alternateToRGB(alternate, conv, out)
 				if len(memo) < maxTintMemo {
 					memo[key] = rgb
 				}
@@ -647,7 +650,7 @@ func decodeDeviceN(
 // through the space's tint transform (ISO 32000-1, 8.6.6.4 and 8.6.6.5).
 // Reading the tints as RGB, three bytes an entry, misread every entry of the
 // five-colorant tables of govdocs thread_300_300659 and thread_400_400932.
-func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, colorants int, table []byte) ([]byte, error) {
+func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, colorants int, table []byte, intent icc.Intent) ([]byte, error) {
 	if len(cs) < 4 {
 		return nil, fmt.Errorf("tinted colour space has %d entries, want [family names alternate tint]", len(cs))
 	}
@@ -664,6 +667,7 @@ func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, col
 		return nil, fmt.Errorf("tint transform maps %d inputs to %d values for %d colorants over %q",
 			tint.Inputs(), tint.Outputs(), colorants, alternate)
 	}
+	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, intent))
 	out := make([]byte, 0, len(table)/colorants*3)
 	in := make([]float64, colorants)
 	for i := 0; i+colorants <= len(table); i += colorants {
@@ -674,17 +678,26 @@ func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, col
 		if err != nil {
 			return nil, fmt.Errorf("evaluating tint transform: %w", err)
 		}
-		rgb := alternateToRGB(alternate, v)
+		rgb := alternateToRGB(alternate, conv, v)
 		out = append(out, rgb.R, rgb.G, rgb.B)
 	}
 	return out, nil
 }
 
 // alternateToRGB converts one colour expressed in a device alternate space to
-// RGB. Values arrive in [0, 1] as the tint transform's /Range defines them.
-func alternateToRGB(alternate string, v []float64) color.RGBA {
+// RGB, through conv when the alternate space is colour managed. Values arrive
+// in [0, 1] as the tint transform's /Range defines them.
+func alternateToRGB(alternate string, conv *converter, v []float64) color.RGBA {
 	unit := func(f float64) uint8 {
 		return uint8(min(max(f, 0), 1)*255 + 0.5)
+	}
+	if conv != nil {
+		var px [4]byte
+		for i := range px[:conv.t.Components()] {
+			px[i] = unit(v[i])
+		}
+		r, g, b := conv.convert(px[:conv.t.Components()])
+		return color.RGBA{R: r, G: g, B: b, A: 255}
 	}
 	switch alternate {
 	case "DeviceGray":
@@ -808,13 +821,26 @@ func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast
 	if len(lookup) > want {
 		lookup = lookup[:want]
 	}
+	intent := renderingIntent(ctx, doc, dict)
 	if tinted {
-		rgb, err := tintTable(ctx, doc, tintArr, colorants, lookup)
+		rgb, err := tintTable(ctx, doc, tintArr, colorants, lookup, intent)
 		if err != nil {
 			doc.Logger.Debug("converting an indexed colour table of tints", slog.Any("err", err))
 			return palette{}, false
 		}
 		return palette{base: "DeviceRGB", comps: 3, lookup: rgb}, true
+	}
+	// An ICCBased or DeviceCMYK base holds entries in a profiled space, which
+	// are converted once here. A short table is padded in the base space
+	// first, so its missing entries read as the base's zero, as they did
+	// before conversion.
+	if conv := newConverter(colorTransform(ctx, doc, arr[1], base, comps, intent)); conv != nil {
+		if len(lookup) < want {
+			padded := make([]byte, want)
+			copy(padded, lookup)
+			lookup = padded
+		}
+		return palette{base: "DeviceRGB", comps: 3, lookup: conv.convertTable(lookup)}, true
 	}
 	// A CalRGB or CalGray base, which resolveColorSpace names DeviceRGB or
 	// DeviceGray, holds CIE-based entries: convert them once here, into a copy,
@@ -1196,7 +1222,8 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	// The error is discarded deliberately: an /ImageMask that cannot be resolved
 	// is treated as absent, leaving the image decoded as its dictionary
 	// describes, which is exactly the behaviour before this branch existed.
-	if mask, _ := document.ResolveBool(ctx, doc, stream.Dict["ImageMask"]); mask {
+	isMask, _ := document.ResolveBool(ctx, doc, stream.Dict["ImageMask"])
+	if isMask {
 		colorSpace, bitsPerComp = "DeviceGray", 1
 	}
 
@@ -1412,6 +1439,15 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 		return nil, captureNative(native, decodedData, dec, components, width, height, validRows)
 	}
 
+	// An ICCBased image is read through its profile and a DeviceCMYK one
+	// through the document's CMYK profile (see [colorTransform]). A stencil
+	// mask holds coverage, not colour, whatever /ColorSpace it wrongly states.
+	var conv *converter
+	if !isMask {
+		conv = newConverter(colorTransform(ctx, doc, stream.Dict["ColorSpace"], colorSpace, components, renderingIntent(ctx, doc, stream.Dict)))
+	}
+	var px [4]byte
+
 	switch colorSpace {
 	case "DeviceRGB":
 		img := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -1425,7 +1461,11 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 				r := dec[0][decodedData[idx]]
 				g := dec[1][decodedData[idx+1]]
 				b := dec[2][decodedData[idx+2]]
-				if isCal {
+				switch {
+				case conv != nil:
+					px[0], px[1], px[2] = r, g, b
+					r, g, b = conv.convert(px[:3])
+				case isCal:
 					r, g, b = cal.convertRGB(r, g, b)
 				}
 				img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
@@ -1441,7 +1481,15 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 			return nil, fmt.Errorf("decoded data too short for grayscale image: got %d, want %d", len(decodedData), expectedLen)
 		}
 		grey := dec[0]
-		if isCal {
+		switch {
+		case conv != nil:
+			// A grey profile maps onto the neutral axis, where the three sRGB
+			// channels agree to within a level.
+			for s, v := range grey {
+				px[0] = v
+				_, grey[s], _ = conv.convert(px[:1])
+			}
+		case isCal:
 			for s, v := range grey {
 				grey[s] = cal.convertGrey(v)
 			}
@@ -1464,15 +1512,20 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 		idx := 0
 		for y := range height {
 			for x := range width {
-				c := float64(dec[0][decodedData[idx]]) / 255.0
-				m := float64(dec[1][decodedData[idx+1]]) / 255.0
-				yy := float64(dec[2][decodedData[idx+2]]) / 255.0
-				k := float64(dec[3][decodedData[idx+3]]) / 255.0
+				for c := range 4 {
+					px[c] = dec[c][decodedData[idx+c]]
+				}
+				idx += 4
+				if conv != nil {
+					r, g, b := conv.convert(px[:])
+					img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
+					continue
+				}
+				c, m, yy, k := float64(px[0])/255, float64(px[1])/255, float64(px[2])/255, float64(px[3])/255
 				r := uint8((1 - c) * (1 - k) * 255)
 				g := uint8((1 - m) * (1 - k) * 255)
 				b := uint8((1 - yy) * (1 - k) * 255)
 				img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
-				idx += 4
 			}
 		}
 		return finishRows(img, validRows), nil

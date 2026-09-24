@@ -94,6 +94,13 @@ func matteRGB(ctx context.Context, doc *document.Document, dict ast.PdfDict, mat
 	for i, v := range matte {
 		comp[i] = uint8(min(max(v*255+0.5, 0), 255))
 	}
+	// The matte is converted as the image's samples are, so a colour-managed
+	// image unblends against the colour its pixels were blended with.
+	space := resolveColorSpace(ctx, doc, dict)
+	if conv := newConverter(colorTransform(ctx, doc, dict["ColorSpace"], space, len(comp), renderingIntent(ctx, doc, dict))); conv != nil {
+		r, g, b := conv.convert(comp)
+		return r, g, b, true
+	}
 	cal, isCal := resolveCalSpace(ctx, doc, dict["ColorSpace"])
 	switch {
 	case len(comp) == 1 && isCal && cal.grey:

@@ -200,7 +200,9 @@ func TestDecodeImage_SeparationDecodesThroughItsTintTransform(t *testing.T) {
 }
 
 // TestDecodeImage_SeparationOverCMYKAlternate pins the alternate-space
-// conversion, where the tint yields four values rather than three.
+// conversion, where the tint yields four values rather than three, read
+// through the built-in CMYK profile: LittleCMS 2.17 gives the same colours
+// for K at 0, 128 and 255.
 func TestDecodeImage_SeparationOverCMYKAlternate(t *testing.T) {
 	t.Parallel()
 
@@ -216,11 +218,11 @@ func TestDecodeImage_SeparationOverCMYKAlternate(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		x    int
-		want uint8
-	}{{0, 255}, {1, 127}, {2, 0}} {
+		want [3]uint32
+	}{{0, [3]uint32{255, 255, 255}}, {1, [3]uint32{147, 149, 151}}, {2, [3]uint32{35, 31, 32}}} {
 		r, g, b, _ := img.At(tc.x, 0).RGBA()
-		if uint8(r>>8) != tc.want || uint8(g>>8) != tc.want || uint8(b>>8) != tc.want {
-			t.Errorf("pixel %d = (%d,%d,%d), want grey %d", tc.x, r>>8, g>>8, b>>8, tc.want)
+		if got := [3]uint32{r >> 8, g >> 8, b >> 8}; got != tc.want {
+			t.Errorf("pixel %d = %v, want %v", tc.x, got, tc.want)
 		}
 	}
 }
