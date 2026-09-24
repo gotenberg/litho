@@ -9,11 +9,15 @@
 // Helvetica, and Calibri. Every other name resolves to nil, and the caller
 // takes its usual fallback path.
 //
-// The tables are intentionally partial. The ASCII range follows the
-// CID + 29 offset used by [typography.Font.CIDIdentityFallback], so
-// only Latin-Extended and beyond codepoints need to be listed. Each
-// entry keys on the CID (GID in the host font) and maps to the
-// Unicode rune the font renders at that position. Values were
-// captured from Microsoft's Arial 5.x and Calibri 6.x. Expanding
-// coverage later is additive and safe.
+// The tables are intentionally partial. Each entry keys on the CID (GID in
+// the host font) and maps to the Unicode rune the font renders at that
+// position. The Arial table lists only codepoints beyond ASCII, whose range
+// follows the CID + 29 offset used by [typography.Font.CIDIdentityFallback];
+// its values were captured from Microsoft's Arial 5.x. The Calibri table is
+// the one PDF.js builds for a non-embedded Calibri, composed from two PDF.js
+// lookup tables that cmd/gen-stdfonts generates into pdfjs_glyphs.go from
+// PDF.js's src/core/standard_fonts.js at a pinned commit. Those tables are
+// Copyright Mozilla Foundation and distributed under the Apache License,
+// Version 2.0, reproduced in LICENSE-pdfjs. Regenerate them with go
+// generate rather than editing them.
 package stdfonts

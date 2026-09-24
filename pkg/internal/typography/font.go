@@ -1726,6 +1726,7 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 	if mapName == "Identity" {
 		if !isCJKOrdering(ctx, doc, fontDict) {
 			font.CIDIdentityFallback = true
+			applyCalibriGlyphMap(ctx, doc, fontDict, cidDict, font)
 		}
 		return
 	}
@@ -1734,6 +1735,75 @@ func applyCIDToGIDIdentityFallback(ctx context.Context, doc *document.Document, 
 	// Parse the stream and combine with the embedded font's GID→Unicode
 	// cmap to build a CID→Unicode mapping.
 	applyCIDToGIDStream(ctx, doc, fontDict, font, mapObj)
+}
+
+// applyCalibriGlyphMap overlays PDF.js's glyph table for Calibri on a Type0
+// font that draws a non-embedded Calibri face through /CIDToGIDMap /Identity.
+//
+// Under /Identity a CID is the glyph index of the font program (ISO 32000-1,
+// 9.7.4.2), so the codes of such a font are glyph IDs of the Calibri program
+// installed where the file was produced, and the file does not ship that
+// program. [ResolveFont] comes here only when no /ToUnicode CMap parsed, and
+// then none of the methods of ISO 32000-1, 9.10.2 applies: the font is
+// composite, and its Identity-H or Identity-V CMap and Identity ordering are
+// excluded from the predefined CMap route. The clause leaves the character to
+// the reader. litho follows PDF.js (fonts.js, fallbackToSystemFont), the
+// reader its text extraction is measured against: its glyph table for
+// Calibri resolves the glyph IDs, where reading each code as a code point,
+// as the Identity fallback does otherwise, yields unrelated characters.
+//
+// The gate is PDF.js's own: no embedded program, a CIDFontType2 under an
+// Identity CMap, and a Calibri face name. litho also accepts the name with a
+// subset prefix, as [normalizeBase14Name] does for widths, where PDF.js
+// requires the bare face name.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9195.pdf: written by Fineco Software v2.05, its three
+//     non-embedded faces, Calibri, Calibri,Bold and Calibri,Italic, state
+//     /CIDToGIDMap /Identity and carry a /ToUnicode CMap written in UTF-16,
+//     which litho does not parse. The page matched 1 of the 151 words of the
+//     PDF.js golden and matches all 151 with the table.
+//   - All corpora: the three faces of issue9195.pdf are the only non-embedded
+//     Calibri faces under an explicit /CIDToGIDMap /Identity, and no
+//     non-embedded Calibri face carries a subset prefix.
+func applyCalibriGlyphMap(ctx context.Context, doc *document.Document, fontDict, cidDict ast.PdfDict, font *Font) {
+	if cidFontHasEmbeddedProgram(ctx, doc, fontDict) || !isIdentityEncoding(ctx, doc, fontDict) {
+		return
+	}
+	subtype, err := document.ResolveName(ctx, doc, cidDict["Subtype"])
+	if err != nil {
+		doc.Logger.Debug("resolving CIDFont Subtype for the Calibri glyph map", slog.Any("err", err))
+		return
+	}
+	if subtype != "CIDFontType2" {
+		return
+	}
+	name, err := document.ResolveName(ctx, doc, fontDict["BaseFont"])
+	if err != nil {
+		doc.Logger.Debug("resolving BaseFont for the Calibri glyph map", slog.Any("err", err))
+		return
+	}
+	if !isCalibriFace(string(name)) {
+		return
+	}
+	m := stdfonts.CMap(string(name))
+	if font.GIDToUnicode == nil {
+		font.GIDToUnicode = make(map[uint16]rune, len(m))
+	}
+	maps.Copy(font.GIDToUnicode, m)
+}
+
+// isCalibriFace reports whether baseFont names one of the four Calibri faces
+// of [stdFontMap] (Calibri, Calibri-Bold, Calibri-Italic, Calibri-BoldItalic),
+// the four PDF.js maps to a standard font, once [canonicalFontName] has
+// removed a subset prefix and turned a comma style suffix into a hyphen one.
+func isCalibriFace(baseFont string) bool {
+	name := canonicalFontName(baseFont)
+	if _, ok := stdFontMap[name]; !ok {
+		return false
+	}
+	return name == "Calibri" || strings.HasPrefix(name, "Calibri-")
 }
 
 // cidFontHasEmbeddedProgram reports whether a Type0 font's descendant

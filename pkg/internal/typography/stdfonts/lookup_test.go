@@ -39,13 +39,18 @@ func TestCMapSeparatesTheBundledFamilies(t *testing.T) {
 		// the check below vacuous if the two ever became the same map.
 		t.Logf("both tables hold %d entries", len(arial))
 	}
-	// Arial GID 179 is the left double quotation mark. Calibri does not key
-	// that GID to the same rune, which is the whole reason for two tables.
+	// Arial GID 179 is the left double quotation mark. The Calibri table
+	// takes that GID from PDF.js's standard map too, but not GID 4, where
+	// Arial draws "!" (the CID + 29 path) and Calibri draws "A", which is the
+	// whole reason for two tables.
 	if arial[179] != '“' {
 		t.Errorf("Arial GID 179 = %q, want %q", arial[179], '“')
 	}
-	if calibri[179] == arial[179] && calibri[179] != 0 {
-		t.Errorf("the two families resolved GID 179 identically (%q)", arial[179])
+	if _, ok := arial[4]; ok {
+		t.Errorf("the Arial table keys GID 4 (%q), which the CID + 29 path covers", arial[4])
+	}
+	if calibri[4] != 'A' {
+		t.Errorf("Calibri GID 4 = %q, want %q", calibri[4], 'A')
 	}
 }
 

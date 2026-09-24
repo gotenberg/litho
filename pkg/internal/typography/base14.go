@@ -35,11 +35,8 @@ func isCourier(name string) bool {
 		name == "Courier-Oblique" || name == "Courier-BoldOblique"
 }
 
-// normalizeBase14Name strips subset prefixes (e.g., "ABCDEF+Helvetica") and
-// normalizes comma-separated variants (e.g., "Helvetica,Bold") to the
-// canonical Standard 14 name.
-// stdFontMap maps common font names to their Standard 14 equivalents.
-// Maps common font names to their Standard 14 metric equivalents.
+// stdFontMap maps common font names to their Standard 14 metric equivalents.
+// It keys on the spelling [canonicalFontName] returns.
 var stdFontMap = map[string]string{
 	// Standard 14 identity mappings
 	"Times-Roman": "Times-Roman", "Helvetica": "Helvetica", "Courier": "Courier",
@@ -88,15 +85,21 @@ var stdFontMap = map[string]string{
 	"Cambria-Italic": "Times-Italic", "Cambria-BoldItalic": "Times-BoldItalic",
 }
 
-func normalizeBase14Name(name string) string {
-	// Strip 6-letter subset prefix: "ABCDEF+Helvetica" → "Helvetica".
+// canonicalFontName strips a subset prefix ("ABCDEF+Helvetica" becomes
+// "Helvetica") and turns a comma style suffix into a hyphen one
+// ("Helvetica,Bold" becomes "Helvetica-Bold").
+func canonicalFontName(name string) string {
 	if idx := strings.Index(name, "+"); idx >= 0 && idx <= 6 {
 		name = name[idx+1:]
 	}
-	// Normalize comma variants: "Helvetica,Bold" → "Helvetica-Bold".
-	name = strings.ReplaceAll(name, ",", "-")
+	return strings.ReplaceAll(name, ",", "-")
+}
 
-	// Map through the standard font alias table.
+// normalizeBase14Name returns the Standard 14 name whose metrics stand in for
+// name: its [canonicalFontName] mapped through [stdFontMap], or the canonical
+// name itself when the map has no entry.
+func normalizeBase14Name(name string) string {
+	name = canonicalFontName(name)
 	if mapped, ok := stdFontMap[name]; ok {
 		return mapped
 	}
