@@ -3,6 +3,8 @@ package icc
 import (
 	"encoding/binary"
 	"errors"
+	"math"
+	"math/rand/v2"
 	"testing"
 )
 
@@ -53,6 +55,38 @@ func TestConvert(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestSRGBTable_MatchesTheFormula pins that the table encoding gives what the
+// sRGB formula gives: around every step between levels, where a misplaced
+// threshold would show, across the range, and past both ends.
+func TestSRGBTable_MatchesTheFormula(t *testing.T) {
+	t.Parallel()
+
+	s := srgb()
+	check := func(v float64) {
+		if got, want := s.encode(v), encode(v); got != want {
+			t.Fatalf("encode(%v) = %d, want %d", v, got, want)
+		}
+	}
+	for _, v := range []float64{0, 1, -1, 2, math.Inf(1), math.Inf(-1), math.SmallestNonzeroFloat64, 0.0031308, math.Nextafter(1, 0)} {
+		check(v)
+	}
+	for _, rise := range s.rise {
+		v := rise
+		for range 8 {
+			v = math.Nextafter(v, 0)
+		}
+		for range 16 {
+			check(v)
+			v = math.Nextafter(v, 2)
+		}
+	}
+	rng := rand.New(rand.NewPCG(1, 2))
+	for range 100_000 {
+		check(rng.Float64())
+		check(math.Exp(-rng.Float64() * 30))
 	}
 }
 

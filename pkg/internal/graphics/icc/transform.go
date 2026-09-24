@@ -3,6 +3,7 @@ package icc
 import (
 	"fmt"
 	"math"
+	"sync"
 )
 
 // Intent is an ICC rendering intent (ICC.1:2010, 6.2), the values of the
@@ -33,12 +34,15 @@ var xyzToSRGB = [9]float64{
 //
 // Transform is safe for concurrent use: it keeps no state between calls.
 type Transform struct {
-	n        int
+	n int
+	// input tabulates the first stage for each component: the tone curve, or
+	// the table's input curve, at each of the 256 values a byte takes. It
+	// gives what evaluating the curve would, without evaluating it per pixel.
+	input    [][256]float64
 	lut      *pipeline
-	trc      [3]curve
 	colorant [9]float64
-	grey     curve
 	labGrey  bool
+	srgb     *srgbTable
 }
 
 // NewTransform builds the transform from the profile's data colour space to
@@ -53,7 +57,7 @@ func (p *Profile) NewTransform(intent Intent) (*Transform, error) {
 	if p.PCS != "XYZ " && p.PCS != "Lab " {
 		return nil, fmt.Errorf("%w: connection space %q", ErrUnsupported, p.PCS)
 	}
-	t := &Transform{n: n}
+	t := &Transform{n: n, srgb: srgb()}
 	tag := [4]string{"A2B0", "A2B1", "A2B2", "A2B1"}[intent&3]
 	b, ok := p.tags[tag]
 	if !ok {
@@ -68,6 +72,14 @@ func (p *Profile) NewTransform(intent Intent) (*Transform, error) {
 			return nil, fmt.Errorf("%w: table of %d inputs and %d outputs for %d components", ErrMalformed, lut.in, lut.out, n)
 		}
 		t.lut = lut
+		t.input = make([][256]float64, n)
+		for i := range n {
+			var c curve
+			if i < len(lut.a) {
+				c = lut.a[i]
+			}
+			t.input[i] = tabulate(c)
+		}
 		return t, nil
 	}
 	switch n {
@@ -76,15 +88,16 @@ func (p *Profile) NewTransform(intent Intent) (*Transform, error) {
 		if err != nil {
 			return nil, err
 		}
-		t.grey, t.labGrey = c, p.PCS == "Lab "
+		t.input, t.labGrey = [][256]float64{tabulate(c)}, p.PCS == "Lab "
 		return t, nil
 	case 3:
+		t.input = make([][256]float64, 3)
 		for i, sig := range []string{"rTRC", "gTRC", "bTRC"} {
 			c, err := p.curveTag(sig)
 			if err != nil {
 				return nil, err
 			}
-			t.trc[i] = c
+			t.input[i] = tabulate(c)
 		}
 		for i, sig := range []string{"rXYZ", "gXYZ", "bXYZ"} {
 			xyz, ok := p.xyzTag(sig)
@@ -96,6 +109,20 @@ func (p *Profile) NewTransform(intent Intent) (*Transform, error) {
 		return t, nil
 	}
 	return nil, fmt.Errorf("%w: a %q profile without an AToB table", ErrMalformed, p.Space)
+}
+
+// tabulate evaluates c at each byte value, scaled to 0 to 1; a nil c is the
+// identity.
+func tabulate(c curve) [256]float64 {
+	var table [256]float64
+	for j := range table {
+		x := float64(j) / 255
+		if c != nil {
+			x = c.eval(x)
+		}
+		table[j] = x
+	}
+	return table
 }
 
 // curveTag reads a tone curve tag.
@@ -116,7 +143,7 @@ func (t *Transform) Components() int {
 // Size returns roughly how many bytes the transform holds, for a cache that
 // bounds what it keeps.
 func (t *Transform) Size() int {
-	size := 512
+	size := 512 + 8*256*len(t.input)
 	add := func(cs ...curve) {
 		for _, c := range cs {
 			if s, ok := c.(sampled); ok {
@@ -124,8 +151,6 @@ func (t *Transform) Size() int {
 			}
 		}
 	}
-	add(t.trc[:]...)
-	add(t.grey)
 	if p := t.lut; p != nil {
 		add(p.a...)
 		add(p.m...)
@@ -144,28 +169,28 @@ func (t *Transform) Convert(in []byte) (uint8, uint8, uint8) {
 	case t.lut != nil:
 		var v [maxOutputs]float64
 		for i := range t.n {
-			v[i] = float64(in[i]) / 255
+			v[i] = t.input[i][in[i]]
 		}
 		t.lut.eval(&v)
 		xyz = t.lut.pcs(v[:3])
-	case t.grey != nil:
+	case t.n == 1:
 		// The grey tone curve gives Y under an XYZ connection space and L*
 		// under a Lab one (ICC.1:2010, F.2).
-		y := t.grey.eval(float64(in[0]) / 255)
+		y := t.input[0][in[0]]
 		if t.labGrey {
 			xyz = labToXYZ(y*100, 0, 0)
 		} else {
 			xyz = [3]float64{y * d50[0], y * d50[1], y * d50[2]}
 		}
 	default:
-		r, g, b := t.trc[0].eval(float64(in[0])/255), t.trc[1].eval(float64(in[1])/255), t.trc[2].eval(float64(in[2])/255)
+		r, g, b := t.input[0][in[0]], t.input[1][in[1]], t.input[2][in[2]]
 		m := &t.colorant
 		xyz = [3]float64{m[0]*r + m[1]*g + m[2]*b, m[3]*r + m[4]*g + m[5]*b, m[6]*r + m[7]*g + m[8]*b}
 	}
-	m := &xyzToSRGB
-	return encode(m[0]*xyz[0] + m[1]*xyz[1] + m[2]*xyz[2]),
-		encode(m[3]*xyz[0] + m[4]*xyz[1] + m[5]*xyz[2]),
-		encode(m[6]*xyz[0] + m[7]*xyz[1] + m[8]*xyz[2])
+	m, s := &xyzToSRGB, t.srgb
+	return s.encode(m[0]*xyz[0] + m[1]*xyz[1] + m[2]*xyz[2]),
+		s.encode(m[3]*xyz[0] + m[4]*xyz[1] + m[5]*xyz[2]),
+		s.encode(m[6]*xyz[0] + m[7]*xyz[1] + m[8]*xyz[2])
 }
 
 // pcs reads the pipeline's normalized outputs in its PCS encoding and returns
@@ -205,4 +230,59 @@ func encode(v float64) uint8 {
 		v = 1.055*math.Pow(v, 1/2.4) - 0.055
 	}
 	return uint8(math.Round(clamp01(v) * 255))
+}
+
+// srgbSteps is how many equal steps srgbTable.start divides the linear range
+// into. The transfer function is steepest at 0, where 1/4096 spans 0.8 of a
+// level, so encoding a value from its step's level takes at most one step up.
+const srgbSteps = 4096
+
+// srgbTable gives what encode gives without a power function per call.
+type srgbTable struct {
+	// start is the level of each step's lowest value.
+	start [srgbSteps + 1]uint8
+	// rise[k] is the least value encode takes above level k.
+	rise [255]float64
+}
+
+// srgb builds the table once. Each rise is found by bisecting encode itself
+// over the ordered float64 values from 0 to 1, so the table reads exactly as
+// encode does wherever encode does not decrease.
+var srgb = sync.OnceValue(func() *srgbTable {
+	s := &srgbTable{}
+	for i := range s.start {
+		s.start[i] = encode(float64(i) / srgbSteps)
+	}
+	for k := range s.rise {
+		// encode(0) is 0 and encode(1) is 255, so the least value above
+		// level k lies in (lo, hi].
+		lo, hi := math.Float64bits(0), math.Float64bits(1)
+		for hi-lo > 1 {
+			mid := lo + (hi-lo)/2
+			if int(encode(math.Float64frombits(mid))) > k {
+				hi = mid
+			} else {
+				lo = mid
+			}
+		}
+		s.rise[k] = math.Float64frombits(hi)
+	}
+	return s
+})
+
+// encode is encode through the table. A NaN, which clamp01 lets through,
+// reads as 0.
+func (s *srgbTable) encode(v float64) uint8 {
+	if !(v > 0) {
+		return 0
+	}
+	if v >= 1 {
+		return 255
+	}
+	// v*srgbSteps is exact: srgbSteps is a power of two.
+	k := s.start[int(v*srgbSteps)]
+	for k < 255 && v >= s.rise[k] {
+		k++
+	}
+	return k
 }

@@ -253,12 +253,10 @@ func checkShape(in, out, grid int) error {
 // (ICC.1:2010, Table 19).
 const maxOutputs = 15
 
-// eval runs the pipeline on the normalized inputs in v, and leaves its
-// normalized outputs there.
+// eval runs the pipeline past its input curves on v, which holds their
+// normalized outputs, and leaves its normalized outputs there. A [Transform]
+// tabulates the input curves, which only ever see a byte.
 func (p *pipeline) eval(v *[maxOutputs]float64) {
-	for i, c := range p.a {
-		v[i] = c.eval(v[i])
-	}
 	if p.clut != nil {
 		p.clut.eval(v)
 	}
