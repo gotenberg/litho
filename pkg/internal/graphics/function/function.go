@@ -49,7 +49,7 @@ type Function struct {
 	expN   float64
 
 	// Type 4.
-	program []byte
+	program *postscript.Program
 }
 
 // New compiles the PDF function object obj.
@@ -236,8 +236,8 @@ func (f *Function) initExponential(ctx context.Context, doc *document.Document, 
 	return nil
 }
 
-// initPostScript reads a type 4 function, whose program
-// [postscript.Execute] runs.
+// initPostScript reads and compiles a type 4 function, whose program
+// [postscript.Program.Execute] runs.
 func (f *Function) initPostScript(ctx context.Context, doc *document.Document, stream ast.PdfStream, isStream bool) error {
 	if !isStream {
 		return fmt.Errorf("%w: a type 4 function shall be a stream", ErrMalformed)
@@ -249,7 +249,11 @@ func (f *Function) initPostScript(ctx context.Context, doc *document.Document, s
 	if err != nil {
 		return fmt.Errorf("decoding function program: %w", err)
 	}
-	f.program = data
+	program, err := postscript.Compile(data)
+	if err != nil {
+		return fmt.Errorf("compiling type 4 program: %w", err)
+	}
+	f.program = program
 	return nil
 }
 
@@ -269,7 +273,7 @@ func (f *Function) Eval(inputs []float64) ([]float64, error) {
 	case 2:
 		return f.evalExponential(clamped[0]), nil
 	case 4:
-		out, err := postscript.Execute(clamped, f.program)
+		out, err := f.program.Execute(clamped)
 		if err != nil {
 			return nil, fmt.Errorf("evaluating type 4 function: %w", err)
 		}

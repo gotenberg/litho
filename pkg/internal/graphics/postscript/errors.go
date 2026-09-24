@@ -16,4 +16,13 @@ var (
 
 	// ErrSyntax indicates a syntax error in the PostScript program.
 	ErrSyntax = errors.New("postscript: syntax error")
+
+	// ErrStackOverflow indicates the operand stack grew past
+	// [maxStackDepth] entries. ISO 32000-1, 7.10.5.2 lists it among the
+	// errors a conforming reader shall detect.
+	ErrStackOverflow = errors.New("postscript: stack overflow")
+
+	// ErrBlockTooDeep indicates the program nests { } blocks more than
+	// [maxBlockDepth] levels deep.
+	ErrBlockTooDeep = errors.New("postscript: blocks nested too deep")
 )

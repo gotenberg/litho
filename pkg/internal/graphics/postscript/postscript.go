@@ -7,10 +7,25 @@ import (
 	"strings"
 )
 
+// maxStackDepth is the operand stack bound. ISO 32000-1, 7.10.5.1: an
+// implementation "shall provide a stack with room for at least 100 entries.
+// No implementation shall be required to provide a larger stack, and it shall
+// be an error to overflow the stack." Without it, a few hundred bytes of
+// `n copy` steps double the stack each time and exhaust memory.
+const maxStackDepth = 100
+
+// maxBlockDepth caps how deeply { } blocks may nest. It is an anti-DoS guard,
+// not spec-mandated: 7.10.5 sets no nesting limit, but the parser and the
+// if/ifelse executor recurse once per level, and a Go stack overflow is a
+// fatal error no recover can catch. Real programs nest a few if/ifelse levels,
+// so 100 leaves ample headroom while bounding the recursion.
+const maxBlockDepth = 100
+
 // token represents a parsed element in a Type 4 PostScript program.
 type token struct {
 	kind  tokenKind
-	value string
+	value string  // operator name when kind == tokenOperator
+	num   float64 // parsed value when kind == tokenNumber
 	block []token // populated when kind == tokenBlock
 }
 
@@ -22,23 +37,52 @@ const (
 	tokenBlock // { ... }
 )
 
-// Execute evaluates a Type 4 PostScript calculator function.
-// The inputs are pushed onto the stack, the program is executed,
-// and the remaining stack values are returned as outputs.
-func Execute(inputs []float64, program []byte) ([]float64, error) {
+// Program is a compiled Type 4 PostScript calculator program.
+//
+// Concurrency: a Program is immutable once [Compile] returns, so concurrent
+// [Program.Execute] calls are safe.
+type Program struct {
+	tokens []token
+}
+
+// Compile parses a Type 4 program once, so a caller evaluating it many times
+// (a tint transform builds a lookup table from hundreds of samples) pays the
+// parse once.
+func Compile(program []byte) (*Program, error) {
 	tokens, err := tokenize(string(program))
 	if err != nil {
 		return nil, fmt.Errorf("tokenizing postscript program: %w", err)
+	}
+	return &Program{tokens: tokens}, nil
+}
+
+// Execute evaluates the program. The inputs are pushed onto the stack, the
+// program is executed, and the remaining stack values are returned as
+// outputs.
+func (p *Program) Execute(inputs []float64) ([]float64, error) {
+	if len(inputs) > maxStackDepth {
+		return nil, fmt.Errorf("%w: %d inputs exceed %d entries", ErrStackOverflow, len(inputs), maxStackDepth)
 	}
 
 	stack := make([]float64, 0, len(inputs)+8)
 	stack = append(stack, inputs...)
 
-	if err := execTokens(tokens, &stack); err != nil {
+	if err := execTokens(p.tokens, &stack); err != nil {
 		return nil, fmt.Errorf("executing postscript program: %w", err)
 	}
 
 	return stack, nil
+}
+
+// Execute compiles and evaluates a Type 4 PostScript calculator function in
+// one call. A caller evaluating the same program repeatedly should [Compile]
+// it once instead.
+func Execute(inputs []float64, program []byte) ([]float64, error) {
+	p, err := Compile(program)
+	if err != nil {
+		return nil, err
+	}
+	return p.Execute(inputs)
 }
 
 // tokenize parses a PostScript Type 4 program into a flat token list.
@@ -49,18 +93,19 @@ func tokenize(src string) ([]token, error) {
 	if len(src) >= 2 && src[0] == '{' && src[len(src)-1] == '}' {
 		src = src[1 : len(src)-1]
 	}
-	tokens, _, err := parseTokens(src, false)
+	tokens, _, err := parseTokens(src, 0)
 	return tokens, err
 }
 
-// parseTokens reads tokens from s. If inBlock is true, it stops at the
-// matching '}'. It returns the tokens and the remaining unconsumed string.
-func parseTokens(s string, inBlock bool) ([]token, string, error) {
+// parseTokens reads tokens from s. At depth 0 it reads the whole program;
+// inside a block it stops at the matching '}'. It returns the tokens and the
+// remaining unconsumed string.
+func parseTokens(s string, depth int) ([]token, string, error) {
 	var tokens []token
 	for {
 		s = strings.TrimLeft(s, " \t\n\r")
 		if len(s) == 0 {
-			if inBlock {
+			if depth > 0 {
 				return nil, "", fmt.Errorf("%w: unterminated block", ErrSyntax)
 			}
 			return tokens, "", nil
@@ -69,14 +114,17 @@ func parseTokens(s string, inBlock bool) ([]token, string, error) {
 		ch := s[0]
 
 		if ch == '}' {
-			if !inBlock {
+			if depth == 0 {
 				return nil, "", fmt.Errorf("%w: unexpected '}'", ErrSyntax)
 			}
 			return tokens, s[1:], nil
 		}
 
 		if ch == '{' {
-			inner, rest, err := parseTokens(s[1:], true)
+			if depth >= maxBlockDepth {
+				return nil, "", fmt.Errorf("%w: more than %d levels", ErrBlockTooDeep, maxBlockDepth)
+			}
+			inner, rest, err := parseTokens(s[1:], depth+1)
 			if err != nil {
 				return nil, "", fmt.Errorf("parsing nested block: %w", err)
 			}
@@ -93,9 +141,8 @@ func parseTokens(s string, inBlock bool) ([]token, string, error) {
 		word := s[:end]
 		s = s[end:]
 
-		// Try to parse as a number.
-		if _, err := strconv.ParseFloat(word, 64); err == nil {
-			tokens = append(tokens, token{kind: tokenNumber, value: word})
+		if v, err := strconv.ParseFloat(word, 64); err == nil {
+			tokens = append(tokens, token{kind: tokenNumber, num: v})
 		} else {
 			tokens = append(tokens, token{kind: tokenOperator, value: word})
 		}
@@ -297,10 +344,13 @@ func execOp(op string, stack *[]float64, _ []token) error {
 		if err != nil {
 			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
-		n := int(count)
-		if len(*stack) < n {
+		// Compare as a float before converting: a negative count would slice
+		// past the end, and int() of NaN or a huge value is not a usable
+		// count.
+		if math.IsNaN(count) || count < 0 || count > float64(len(*stack)) {
 			return fmt.Errorf("postscript op %q: %w", op, ErrStackUnderflow)
 		}
+		n := int(count)
 		*stack = append(*stack, (*stack)[len(*stack)-n:]...)
 
 	case "index":
@@ -453,11 +503,7 @@ func execTokens(tokens []token, stack *[]float64) error {
 	for _, tok := range tokens {
 		switch tok.kind {
 		case tokenNumber:
-			v, err := strconv.ParseFloat(tok.value, 64)
-			if err != nil {
-				return fmt.Errorf("%w: bad number %q", ErrSyntax, tok.value)
-			}
-			*stack = append(*stack, v)
+			*stack = append(*stack, tok.num)
 
 		case tokenBlock:
 			blocks = append(blocks, tok.block)
@@ -508,6 +554,13 @@ func execTokens(tokens []token, stack *[]float64) error {
 					return err
 				}
 			}
+		}
+
+		// Checking after every token is enough to bound memory: the stack
+		// holds at most maxStackDepth entries going into any operator, and
+		// no single operator more than doubles it.
+		if len(*stack) > maxStackDepth {
+			return fmt.Errorf("%w: more than %d entries", ErrStackOverflow, maxStackDepth)
 		}
 	}
 

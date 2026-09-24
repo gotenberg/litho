@@ -6,10 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/postscript"
 )
 
 // funcPDF builds a one-page document whose objects are objs, and returns a
@@ -215,6 +217,29 @@ func TestPostScriptFunction(t *testing.T) {
 	near(t, out[0], 0.75, "postscript[0]")
 	near(t, out[1], 0.25, "postscript[1]")
 	near(t, out[2], 0.25, "postscript[2]")
+}
+
+// TestPostScriptFunction_CompilesOnce pins that New compiles the program, so
+// a program the parser refuses fails at New and never reaches Eval.
+//
+// Eval used to re-tokenize the raw program on every call, and the tokenizer
+// recursed once per '{' with no bound. A Separation image evaluates its tint
+// transform for every sample, so one crafted program either overflowed the
+// goroutine stack (a fatal error) or cost a full parse per sample.
+func TestPostScriptFunction_CompilesOnce(t *testing.T) {
+	t.Parallel()
+
+	program := "{ " + strings.Repeat("{", 1000) + strings.Repeat("}", 1000) + " }"
+	ctx, doc := funcPDF(t, []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [] /Count 0 >>",
+		fmt.Sprintf("<< /FunctionType 4 /Domain [0 1] /Range [0 1]"+
+			" /Length %d >>\nstream\n%s\nendstream", len(program), program),
+	})
+	_, err := New(ctx, doc, ast.PdfIndirectRef{ObjectNum: 3})
+	if !errors.Is(err, postscript.ErrBlockTooDeep) {
+		t.Fatalf("New = %v, want postscript.ErrBlockTooDeep", err)
+	}
 }
 
 // TestStitchingFunctionIsRefused pins that type 3 is refused rather than
