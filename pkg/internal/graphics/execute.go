@@ -207,7 +207,13 @@ func (m *Machine) UnknownOperators() []UnknownOperator {
 // ImageBox is the page-space box an image XObject paints, named by the resource
 // that invoked it.
 type ImageBox struct {
-	Name                   string
+	Name string
+	// ObjNum is the object number of the image XObject the Do painted, or 0
+	// when its resource entry was not an indirect reference. Two names can
+	// reach one object, and one name can reach different objects in different
+	// resource dictionaries, so the number is what says two placements paint
+	// the same image.
+	ObjNum                 int
 	MinX, MinY, MaxX, MaxY float64
 	// CTM is the matrix in force at the Do, which maps the image's unit square
 	// onto the page (ISO 32000-1, 8.9.5.2). The box above is only that square's
@@ -264,7 +270,7 @@ func handleDoXObject(ctx context.Context, m *Machine, state *State, op content.O
 		m.unresolvedXObjects++
 		return
 	}
-	stream, ok := m.resolveXObject(ctx, name)
+	stream, objNum, ok := m.resolveXObject(ctx, name)
 	if !ok {
 		m.unresolvedXObjects++
 		return
@@ -277,7 +283,9 @@ func handleDoXObject(ctx context.Context, m *Machine, state *State, op content.O
 	if subtype != "Image" {
 		return
 	}
-	m.imageBoxes = append(m.imageBoxes, imageBoxFromCTM(string(name), state.CTM))
+	box := imageBoxFromCTM(string(name), state.CTM)
+	box.ObjNum = objNum
+	m.imageBoxes = append(m.imageBoxes, box)
 }
 
 // InlineImageName stands in for the resource name an inline image does not
@@ -306,27 +314,31 @@ func handleInlineImage(_ context.Context, m *Machine, state *State, _ content.Op
 
 // resolveXObject looks a name up in the current /XObject resources, reporting
 // whether it could be reached at all.
-func (m *Machine) resolveXObject(ctx context.Context, name ast.PdfName) (ast.PdfStream, bool) {
+func (m *Machine) resolveXObject(ctx context.Context, name ast.PdfName) (ast.PdfStream, int, bool) {
 	if m.Resources == nil {
-		return ast.PdfStream{}, false
+		return ast.PdfStream{}, 0, false
 	}
 	xobjObj, ok := m.Resources["XObject"]
 	if !ok {
-		return ast.PdfStream{}, false
+		return ast.PdfStream{}, 0, false
 	}
 	xobjDict, err := document.ResolveDict(ctx, m.Doc, xobjObj)
 	if err != nil || xobjDict == nil {
-		return ast.PdfStream{}, false
+		return ast.PdfStream{}, 0, false
 	}
 	target, ok := xobjDict[name]
 	if !ok {
-		return ast.PdfStream{}, false
+		return ast.PdfStream{}, 0, false
 	}
 	stream, err := document.ResolveStream(ctx, m.Doc, target)
 	if err != nil || stream.Dict == nil {
-		return ast.PdfStream{}, false
+		return ast.PdfStream{}, 0, false
 	}
-	return stream, true
+	objNum := 0
+	if ref, isRef := target.(ast.PdfIndirectRef); isRef {
+		objNum = ref.ObjectNum
+	}
+	return stream, objNum, true
 }
 
 // imageBoxFromCTM maps the unit square onto the page through ctm and returns its
@@ -353,6 +365,55 @@ func imageBoxFromCTM(name string, ctm [6]float64) ImageBox {
 		box.MaxY = math.Max(box.MaxY, ys[i])
 	}
 	return box
+}
+
+// ShowAdvance records how one show-text operator moved the text matrix: Tm as
+// the glyphs started and as they ended, with the text state that scaled them.
+// Per ISO 32000-1, 9.4.4 the advance is a translation in text space, so a
+// caller putting it back needs the matrix it was taken in.
+type ShowAdvance struct {
+	Before, After [6]float64
+	// FontSize is Tfs and HorizontalScale is Th, the Tz percentage divided by
+	// 100. A TJ number displaces by -n/1000 x Tfs x Th horizontally, or by
+	// -n/1000 x Tfs vertically (ISO 32000-1, 9.4.3).
+	FontSize, HorizontalScale float64
+	// Vertical is set when the font writes in vertical mode (/WMode 1).
+	Vertical bool
+}
+
+// TextSpaceAdvance returns the operator's advance as a text-space translation
+// (tx, ty): the displacement that, applied to the matrix the glyphs started
+// in, gives the matrix they ended in. It reports false when that matrix
+// cannot be inverted.
+func (a ShowAdvance) TextSpaceAdvance() (tx, ty float64, ok bool) {
+	dx := a.After[4] - a.Before[4]
+	dy := a.After[5] - a.Before[5]
+	det := a.Before[0]*a.Before[3] - a.Before[1]*a.Before[2]
+	if det == 0 {
+		return 0, 0, dx == 0 && dy == 0
+	}
+	tx = (dx*a.Before[3] - dy*a.Before[2]) / det
+	ty = (dy*a.Before[0] - dx*a.Before[1]) / det
+	return tx, ty, true
+}
+
+// RecordShowAdvance stores the advance of the show-text operator at op. It
+// does nothing unless [Machine.RecordShowAdvances] is set.
+func (m *Machine) RecordShowAdvance(op int, advance ShowAdvance) {
+	if !m.RecordShowAdvances {
+		return
+	}
+	if m.showAdvances == nil {
+		m.showAdvances = make(map[int]ShowAdvance)
+	}
+	m.showAdvances[op] = advance
+}
+
+// ShowAdvances returns the recorded advance of each show-text operator of the
+// page's own content stream, keyed by its index in the operation slice. It is
+// empty unless [Machine.RecordShowAdvances] was set before extraction.
+func (m *Machine) ShowAdvances() map[int]ShowAdvance {
+	return m.showAdvances
 }
 
 // ImageBoxes returns where images painted, in the order the content stream drew

@@ -129,8 +129,11 @@ var (
 	// ErrRedactionRefused is returned by [Writer.Redact] when a region
 	// selects content that cannot be removed exactly: an operator the region
 	// covers only partly, a painted path that straddles the region or was
-	// stroked or took part in a clip, content drawn by a form XObject, or an
-	// image whose samples cannot be rewritten. Removing more than was asked
+	// stroked or took part in a clip, content drawn by a form XObject, an
+	// image whose samples cannot be rewritten, an image also painted where
+	// the regions do not cover the same samples (blanking rewrites the image,
+	// so that other place would lose them too), or a removed run whose advance
+	// later text depends on and cannot be kept. Removing more than was asked
 	// changes the page outside the region, and reporting success over content
 	// still in the file is worse than refusing, so litho refuses and names the
 	// construct. The [Writer] is left exactly as it was. [Writer.WriteTo]

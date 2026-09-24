@@ -107,6 +107,15 @@ type Machine struct {
 	// reads. See [Machine.PathBoxes].
 	RecordPathBoxes bool
 	pathBoxes       []PathBox
+	// RecordShowAdvances makes the text extractor remember how far each
+	// show-text operator of the page's own content stream moved the text
+	// matrix. Off by default for the same reason as [Machine.RecordImageBoxes].
+	// A caller that removes a show operator needs it: the operator's advance
+	// is what positions every later glyph on the same line, so removing it
+	// without putting the advance back moves text the caller never selected.
+	// See [Machine.ShowAdvances].
+	RecordShowAdvances bool
+	showAdvances       map[int]ShowAdvance
 	// FormDepth is the nesting level of the content stream being executed: 0 for
 	// the page's own, one deeper per form XObject a caller recurses into. The
 	// machine cannot know this by itself, because a form's operators arrive

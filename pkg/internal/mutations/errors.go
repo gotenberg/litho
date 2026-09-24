@@ -54,6 +54,20 @@ var ErrSpanOutOfRange = errors.New("byte span lies outside the content")
 // instead of removing more than the caller asked for.
 var ErrPartialOperatorCoverage = errors.New("region covers an operator only partly")
 
+// ErrImageShared is returned by [CheckBlankedImageUses] when a blanked image
+// is also painted somewhere the regions do not cover the same samples. A
+// blanking rewrites the image object in place, so that other placement would
+// lose samples no region selected. Removing more than was asked changes the
+// page outside the region, so the redaction refuses and names the image.
+var ErrImageShared = errors.New("blanked image is also painted where the regions do not cover it")
+
+// ErrTextAdvanceUnknown is returned when a show-text operator selected for
+// removal has an advance that later text on its line depends on, and that
+// advance cannot be put back: it was not recorded, or it was drawn at a font
+// size, horizontal scale or text matrix that no TJ number can reproduce.
+// Removing the operator anyway would move text outside the region.
+var ErrTextAdvanceUnknown = errors.New("advance of the removed text cannot be preserved")
+
 // ErrRegionCoversAnImage reported a region that meets an image the page paints.
 //
 // SUPERSEDED, and nothing returns it. It dates from when removal could only

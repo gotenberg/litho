@@ -31,6 +31,7 @@ var notARedactionRefusal = map[string]string{
 	"ErrSanitizationIncomplete":        "SanitizeDocument",
 	"ErrPagePruneIncomplete":           "DeletePages",
 	"ErrAttachmentTreeIncomplete":      "the attachment walks",
+	"ErrImageShared":                   "CheckBlankedImageUses, document-wide rather than per page",
 }
 
 // TestRedactPageRegionsDocNamesEveryRefusal pins the refusal list on

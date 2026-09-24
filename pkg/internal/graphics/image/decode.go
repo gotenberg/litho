@@ -1039,6 +1039,17 @@ func DecodeImageSamples(ctx context.Context, doc *document.Document, page *docum
 	return decodeImagePixels(ctx, doc, name, stream, cc)
 }
 
+// DecodeStreamSamples is [DecodeImageSamples] for an image stream the caller
+// already holds, read against page's own resources.
+//
+// A caller that edits an image and then edits it again has to read its own
+// earlier result, which exists only in its allocator and which a lookup by name
+// through the document would miss: it would return the original, and the
+// second edit would silently undo the first.
+func DecodeStreamSamples(ctx context.Context, doc *document.Document, page *document.Page, name ast.PdfName, stream ast.PdfStream) (image.Image, error) {
+	return decodeImagePixels(ctx, doc, name, stream, pageColorContext(page))
+}
+
 // NativeSamples are the samples of an image in its own colour space: one byte
 // per component per pixel, in rows, with the image's /Decode array applied.
 type NativeSamples struct {
@@ -1063,6 +1074,23 @@ func DecodeImageNative(ctx context.Context, doc *document.Document, page *docume
 	if err != nil {
 		return NativeSamples{}, false, err
 	}
+	return decodeNative(ctx, doc, name, stream, cc)
+}
+
+// DecodeStreamNative is [DecodeImageNative] for an image stream the caller
+// already holds, read against page's own resources. See [DecodeStreamSamples]
+// for why a caller needs it.
+func DecodeStreamNative(ctx context.Context, doc *document.Document, page *document.Page, name ast.PdfName, stream ast.PdfStream) (NativeSamples, bool, error) {
+	return decodeNative(ctx, doc, name, stream, pageColorContext(page))
+}
+
+// pageColorContext reads an image against the resources and dictionary of the
+// page that paints it.
+func pageColorContext(page *document.Page) colorContext {
+	return colorContext{resources: page.Resources, page: page.Dict}
+}
+
+func decodeNative(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, cc colorContext) (NativeSamples, bool, error) {
 	want, ok := nativeComponents(ctx, doc, stream.Dict)
 	if !ok {
 		return NativeSamples{}, false, nil
@@ -1146,7 +1174,7 @@ func lookupImage(ctx context.Context, doc *document.Document, page *document.Pag
 			if stream.Dict == nil {
 				return ast.PdfStream{}, colorContext{}, fmt.Errorf("image %q is not a stream", name)
 			}
-			return stream, colorContext{resources: page.Resources, page: page.Dict}, nil
+			return stream, pageColorContext(page), nil
 		}
 	}
 	if stream, resources, ok := findImage(ctx, doc, page, string(name)); ok {

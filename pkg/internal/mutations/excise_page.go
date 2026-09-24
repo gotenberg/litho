@@ -38,7 +38,23 @@ func ExcisePageSpans(
 	page *document.Page,
 	spans []content.ByteRange,
 ) error {
-	if len(spans) == 0 {
+	edits := make([]SpanEdit, len(spans))
+	for i, s := range spans {
+		edits[i] = SpanEdit{Span: s}
+	}
+	return EditPageSpans(ctx, alloc, doc, page, edits)
+}
+
+// EditPageSpans is [ExcisePageSpans] where a span can be replaced as well as
+// removed; see [EditSpans].
+func EditPageSpans(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	page *document.Page,
+	edits []SpanEdit,
+) error {
+	if len(edits) == 0 {
 		return nil
 	}
 
@@ -53,9 +69,9 @@ func ExcisePageSpans(
 		return fmt.Errorf("assembling page content: %w", err)
 	}
 
-	out, err := ExciseSpans(data, spans)
+	out, err := EditSpans(data, edits)
 	if err != nil {
-		return fmt.Errorf("excising page content: %w", err)
+		return fmt.Errorf("editing page content: %w", err)
 	}
 
 	// Read the page dict alloc-first so an edit an earlier stage queued at this

@@ -251,7 +251,7 @@ func resolveAllocFirst(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	}
 	resolved, err := document.ResolveObject(ctx, doc, obj)
 	if err != nil {
-		return nil, fmt.Errorf("resolving content object: %w", err)
+		return nil, fmt.Errorf("resolving object: %w", err)
 	}
 	return resolved, nil
 }

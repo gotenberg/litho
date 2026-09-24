@@ -66,19 +66,23 @@ func blankImage(
 	page *document.Page,
 	box graphics.ImageBox,
 	zones []heuristics.Zone,
-) error {
+) (int, error) {
 	if box.Name == graphics.InlineImageName {
-		return ErrInlineImageInRegion
+		return 0, ErrInlineImageInRegion
 	}
 
 	ref, ok := imageXObjectRef(ctx, doc, page, box.Name)
 	if !ok {
-		return fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
+		return 0, fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
 	}
 
-	stream, err := document.ResolveStream(ctx, doc, ref)
+	// Alloc-first: an image an earlier placement or an earlier Redact already
+	// blanked is queued there, and blanking the source's copy instead would
+	// write the original samples back over that work. Two regions clearing two
+	// placements of one image kept only the second.
+	stream, err := latestImageStream(ctx, alloc, doc, ref)
 	if err != nil {
-		return fmt.Errorf("resolving image %q: %w", box.Name, err)
+		return 0, fmt.Errorf("resolving image %q: %w", box.Name, err)
 	}
 
 	// The error is discarded deliberately: an /ImageMask that cannot be resolved
@@ -95,12 +99,12 @@ func blankImage(
 	// keeps its /SMask, which is the case the entry is defined for.
 	if isStencil {
 		if _, present := stream.Dict["SMask"]; present {
-			return fmt.Errorf("%w: %q", ErrImageIsStencilMask, box.Name)
+			return 0, fmt.Errorf("%w: %q", ErrImageIsStencilMask, box.Name)
 		}
 	}
 	for _, key := range maskEntries {
 		if _, present := stream.Dict[key]; present {
-			return fmt.Errorf("%w: %q carries /%s", ErrImageCarriesSampleEntries, box.Name, key)
+			return 0, fmt.Errorf("%w: %q carries /%s", ErrImageCarriesSampleEntries, box.Name, key)
 		}
 	}
 	// /Decode is only a problem when the decode did not already fold it into
@@ -110,31 +114,31 @@ func blankImage(
 	// would change the picture outside the region as well as inside.
 	if _, present := stream.Dict["Decode"]; present &&
 		!pdfimage.AppliesDecodeArray(ctx, doc, stream.Dict) {
-		return fmt.Errorf("%w: %q carries a /Decode the decode does not apply",
+		return 0, fmt.Errorf("%w: %q carries a /Decode the decode does not apply",
 			ErrImageCarriesSampleEntries, box.Name)
 	}
 
 	if !isStencil {
-		native, ok, err := pdfimage.DecodeImageNative(ctx, doc, page, ast.PdfName(box.Name))
+		native, ok, err := pdfimage.DecodeStreamNative(ctx, doc, page, ast.PdfName(box.Name), stream)
 		if err != nil {
-			return fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
+			return 0, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
 		}
 		if ok {
-			return blankNative(alloc, ref, stream, box, zones, native)
+			return ref.ObjectNum, blankNative(alloc, ref, stream, box, zones, native)
 		}
 	}
 
 	// The samples as stored: the replacement keeps the image's soft mask, so a
 	// /Matte on it still describes them.
-	img, err := pdfimage.DecodeImageSamples(ctx, doc, page, ast.PdfName(box.Name))
+	img, err := pdfimage.DecodeStreamSamples(ctx, doc, page, ast.PdfName(box.Name), stream)
 	if err != nil {
-		return fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
+		return 0, fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
 	}
 
 	bounds := img.Bounds()
 	w, h := bounds.Dx(), bounds.Dy()
 	if w <= 0 || h <= 0 {
-		return fmt.Errorf("%w: %q has no samples", ErrImageNotDecodable, box.Name)
+		return 0, fmt.Errorf("%w: %q has no samples", ErrImageNotDecodable, box.Name)
 	}
 
 	// Work on NRGBA for a predictable byte order, matching buildPNGXObject.
@@ -148,7 +152,7 @@ func blankImage(
 
 	blanked, err := blankCoveredSamples(canvas, box, zones, fill)
 	if err != nil {
-		return fmt.Errorf("%q: %w", box.Name, err)
+		return 0, fmt.Errorf("%q: %w", box.Name, err)
 	}
 	if blanked == 0 {
 		// The region met the image and cleared none of it. That is not "nothing
@@ -156,7 +160,7 @@ func blankImage(
 		// inside that area covers picture the caller asked to clear while no
 		// sample centre falls in it. Returning nil here would report success
 		// over content still in the file.
-		return fmt.Errorf("%w: %q", ErrImageRegionCoversNoSample, box.Name)
+		return 0, fmt.Errorf("%w: %q", ErrImageRegionCoversNoSample, box.Name)
 	}
 
 	var (
@@ -166,7 +170,7 @@ func blankImage(
 	if isStencil {
 		compressed, err = flateCompress(packStencilBits(canvas, w, h))
 		if err != nil {
-			return fmt.Errorf("compressing blanked image mask %q: %w", box.Name, err)
+			return 0, fmt.Errorf("compressing blanked image mask %q: %w", box.Name, err)
 		}
 		// No /ColorSpace: ISO 32000-1, Table 89 does not allow the entry on a
 		// mask, which paints with the fill colour in force rather than one of
@@ -190,7 +194,7 @@ func blankImage(
 		}
 		compressed, err = flateCompress(rgb)
 		if err != nil {
-			return fmt.Errorf("compressing blanked image %q: %w", box.Name, err)
+			return 0, fmt.Errorf("compressing blanked image %q: %w", box.Name, err)
 		}
 		dict = ast.PdfDict{
 			"Type":             ast.PdfName("XObject"),
@@ -208,9 +212,9 @@ func blankImage(
 	}
 
 	if !alloc.AllocAt(ref.ObjectNum, ast.NewStream(dict, compressed)) {
-		return fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
+		return 0, fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
 	}
-	return nil
+	return ref.ObjectNum, nil
 }
 
 // blankNative clears the covered samples of a picture in its own colour space
@@ -401,6 +405,20 @@ func clampSample(i, size int) int {
 // imageXObjectRef returns the indirect reference the page's resources use for
 // the named image, which is the object the replacement has to take the place
 // of. An image written directly into the resource dictionary has none.
+// latestImageStream resolves an image XObject, preferring the version alloc
+// has queued at its object number.
+func latestImageStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef) (ast.PdfStream, error) {
+	obj, err := resolveAllocFirst(ctx, alloc, doc, ref)
+	if err != nil {
+		return ast.PdfStream{}, err
+	}
+	stream, ok := obj.(ast.PdfStream)
+	if !ok {
+		return ast.PdfStream{}, fmt.Errorf("object %d is %T, not a stream", ref.ObjectNum, obj)
+	}
+	return stream, nil
+}
+
 func imageXObjectRef(ctx context.Context, doc *document.Document, page *document.Page, name string) (ast.PdfIndirectRef, bool) {
 	xobjObj, present := page.Resources["XObject"]
 	if !present {

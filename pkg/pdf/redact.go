@@ -117,6 +117,13 @@ type RedactReport struct {
 //
 // Regions on several pages are applied together. Passing none is a no-op.
 //
+// Everything outside the regions stays where it was. Text after a removed run
+// on the same line keeps its position, because the run's advance is put back
+// in its place. An image is blanked by rewriting it, so an image also painted
+// somewhere the regions do not cover the same samples, on another page, twice
+// on one page, or by an annotation or a form, is refused rather than blanked
+// there too.
+//
 // The redaction holds whatever else the Writer does before or after it:
 // another Redact, remediation, auto-tagging. Each builds on the others' edits,
 // and [Writer.WriteTo] scans the output it is about to write for every removed
@@ -175,6 +182,7 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 	restoreTrailer := func() { doc.Index.Trailer = preTrailer }
 
 	report := &RedactReport{}
+	var blanked []int
 	for _, pageNum := range order {
 		pageReport, redactErr := mutations.RedactPageRegions(
 			ctx, alloc, doc, pages[pageNum-1], byPage[pageNum])
@@ -183,6 +191,16 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 			return nil, fmt.Errorf("%w: page %d: %w", ErrRedactionRefused, pageNum, redactErr)
 		}
 		mergePageRedaction(report, pageNum, pageReport)
+		blanked = appendNewObjects(blanked, pageReport.BlankedImageObjects)
+	}
+
+	// Blanking rewrites an image in place, so it is exact only when every
+	// place that paints the image had the same samples covered. That needs
+	// every page's regions at once, which is why it runs here rather than per
+	// page.
+	if useErr := mutations.CheckBlankedImageUses(ctx, alloc, doc, pages, byPage, blanked); useErr != nil {
+		restoreTrailer()
+		return nil, fmt.Errorf("%w: %w", ErrRedactionRefused, useErr)
 	}
 
 	// Nothing was selected, so there is nothing to sanitize and nothing to
@@ -246,6 +264,17 @@ func seedAllocator(alloc *writer.ObjAllocator, overrides map[int]ast.PdfObject) 
 func (w *Writer) recordRedaction(regions []RedactRegion, removed []string) {
 	w.redactions = append(w.redactions, slices.Clone(regions))
 	w.redactedTokens = appendNewTokens(w.redactedTokens, removed)
+}
+
+// appendNewObjects appends each object number of add that objs does not hold
+// yet.
+func appendNewObjects(objs, add []int) []int {
+	for _, objNum := range add {
+		if !slices.Contains(objs, objNum) {
+			objs = append(objs, objNum)
+		}
+	}
+	return objs
 }
 
 // appendNewTokens appends each token of add that tokens does not hold yet.

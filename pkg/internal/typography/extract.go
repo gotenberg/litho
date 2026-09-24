@@ -192,6 +192,12 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 
 		before := len(*elements)
 
+		// The operator has already run, so for ' and " the line move and the
+		// spacing it sets are in Tm: what is taken here is the glyphs' own
+		// advance, the part a caller removing the operator has to put back.
+		isShow := op.Operator == "Tj" || op.Operator == "TJ" || op.Operator == "'" || op.Operator == "\""
+		showStart := state.Text.Tm
+
 		switch op.Operator {
 		case "Tf":
 			// syncFont above has already resolved this font and captured its
@@ -228,6 +234,17 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 			if err := handleDoOp(ctx, doc, machine, resources, op, elements, visited, depth, annotAppearances); err != nil {
 				return err
 			}
+		}
+
+		if isShow && depth == 0 {
+			end := machine.Current()
+			machine.RecordShowAdvance(opIdx, graphics.ShowAdvance{
+				Before:          showStart,
+				After:           end.Text.Tm,
+				FontSize:        end.Text.Tfs,
+				HorizontalScale: end.Text.Tz / 100,
+				Vertical:        currentFont != nil && currentFont.WMode == 1,
+			})
 		}
 
 		// Name the operation that drew each new element, so a caller can map an

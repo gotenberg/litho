@@ -24,16 +24,39 @@ import (
 // file, and a span adjusted on its behalf removes bytes it never chose. Given
 // no spans the data is returned unchanged.
 func ExciseSpans(data []byte, spans []content.ByteRange) ([]byte, error) {
-	if len(spans) == 0 {
+	edits := make([]SpanEdit, len(spans))
+	for i, s := range spans {
+		edits[i] = SpanEdit{Span: s}
+	}
+	return EditSpans(data, edits)
+}
+
+// SpanEdit replaces the bytes of Span with Replacement. An empty Replacement
+// removes them.
+type SpanEdit struct {
+	Span        content.ByteRange
+	Replacement []byte
+}
+
+// EditSpans is [ExciseSpans] where a span can also be replaced rather than
+// removed: removing an operator can change what the operators after it do
+// (a show-text operator carries the advance that positions the next one), and
+// replacing it with an operator that keeps that effect is what leaves the rest
+// of the page where it was. The same rules hold: edits may arrive in any
+// order, and a span outside the data or overlapping another is reported.
+func EditSpans(data []byte, edits []SpanEdit) ([]byte, error) {
+	if len(edits) == 0 {
 		return data, nil
 	}
 
-	sorted := make([]content.ByteRange, len(spans))
-	copy(sorted, spans)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Start < sorted[j].Start })
+	sorted := make([]SpanEdit, len(edits))
+	copy(sorted, edits)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Span.Start < sorted[j].Span.Start })
 
 	prevEnd := 0
-	for _, s := range sorted {
+	grow := 0
+	for _, e := range sorted {
+		s := e.Span
 		if s.Start < 0 || s.Start > s.End || s.End > len(data) {
 			return nil, fmt.Errorf("%w: [%d,%d) in %d bytes", ErrSpanOutOfRange, s.Start, s.End, len(data))
 		}
@@ -41,15 +64,15 @@ func ExciseSpans(data []byte, spans []content.ByteRange) ([]byte, error) {
 			return nil, fmt.Errorf("%w: [%d,%d) starts before %d", ErrSpansOverlap, s.Start, s.End, prevEnd)
 		}
 		prevEnd = s.End
+		grow += len(e.Replacement)
 	}
 
-	// Excision only ever shrinks the stream, so the input length bounds the
-	// output and one allocation serves.
-	out := make([]byte, 0, len(data))
+	out := make([]byte, 0, len(data)+grow)
 	cursor := 0
-	for _, s := range sorted {
-		out = append(out, data[cursor:s.Start]...)
-		cursor = s.End
+	for _, e := range sorted {
+		out = append(out, data[cursor:e.Span.Start]...)
+		out = append(out, e.Replacement...)
+		cursor = e.Span.End
 	}
 	return append(out, data[cursor:]...), nil
 }

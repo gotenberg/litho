@@ -3,6 +3,7 @@ package mutations
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -38,8 +39,12 @@ import (
 // It removes operators, so it refuses whatever it cannot remove exactly:
 //
 //   - A region covering only part of what one operator draws reports
-//     [ErrPartialOperatorCoverage]. Excision deletes byte ranges and cannot
-//     rewrite an operator, so removing that one would take the rest of its text.
+//     [ErrPartialOperatorCoverage]. Excision takes whole operators and cannot
+//     split one, so removing that one would take the rest of its text.
+//   - A removed show-text operator whose advance later text on its line
+//     depends on, and which no TJ number can reproduce, reports
+//     [ErrTextAdvanceUnknown]. The removal puts that advance back otherwise,
+//     so the rest of the line stays where it was.
 //   - A painted path reaching outside the region reports
 //     [ErrPathStraddlesRegion], one painted by a stroking operator reports
 //     [ErrRegionCoversAStrokedPath], and one a W or W* took part in reports
@@ -131,6 +136,12 @@ type RedactReport struct {
 	// BlankedImages names the image XObjects whose covered samples were
 	// overwritten.
 	BlankedImages []string
+	// BlankedImageObjects holds the object number of each image XObject
+	// blanked, once each. An image is rewritten in place, so every other place
+	// that paints the same object shows the blanked samples too; a caller hands
+	// these to [CheckBlankedImageUses] to refuse a blanking that would reach
+	// past the regions.
+	BlankedImageObjects []int
 	// RemovedPaths counts the painted paths removed. Paths carry no text, so
 	// there is nothing for a scan to look for; the count is for the caller's
 	// report of what it did.
@@ -208,6 +219,9 @@ func redactPageRegions(
 	// A filled path inside the region is content to remove, and a stroked or
 	// clipping one is content to refuse over. Both need its geometry.
 	machine.RecordPathBoxes = true
+	// A removed show operator takes its advance with it, and later text on the
+	// same line is positioned by that advance. See [removedShowReplacement].
+	machine.RecordShowAdvances = true
 
 	elements, origins, fontRefs, err := typography.ExtractElementsWithAttribution(ctx, doc, machine, page, ops)
 	if err != nil {
@@ -250,10 +264,14 @@ func redactPageRegions(
 		if !covered {
 			continue
 		}
-		if err := blankImage(ctx, alloc, doc, page, box, zones); err != nil {
+		objNum, err := blankImage(ctx, alloc, doc, page, box, zones)
+		if err != nil {
 			return RedactReport{}, err
 		}
 		report.BlankedImages = append(report.BlankedImages, box.Name)
+		if !slices.Contains(report.BlankedImageObjects, objNum) {
+			report.BlankedImageObjects = append(report.BlankedImageObjects, objNum)
+		}
 	}
 
 	// Before any content is excised, so a refusal here happens while the page is
@@ -416,7 +434,22 @@ func redactPageRegions(
 		return report, nil
 	}
 
-	if err := ExcisePageSpans(ctx, alloc, doc, page, spans); err != nil {
+	removedOps := make(map[int]bool, len(selected))
+	for _, origin := range selected {
+		removedOps[origin] = true
+	}
+	edits := make([]SpanEdit, 0, len(spans))
+	for _, origin := range selected {
+		replacement, err := removedShowReplacement(ctx, ops, origin, removedOps, machine.ShowAdvances())
+		if err != nil {
+			return RedactReport{}, err
+		}
+		edits = append(edits, SpanEdit{Span: ranges[origin], Replacement: replacement})
+	}
+	for _, span := range vectorSpans {
+		edits = append(edits, SpanEdit{Span: span})
+	}
+	if err := EditPageSpans(ctx, alloc, doc, page, edits); err != nil {
 		return RedactReport{}, err
 	}
 	// After the content is gone, not before: a page that refused partway
