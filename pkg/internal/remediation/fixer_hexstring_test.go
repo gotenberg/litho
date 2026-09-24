@@ -3,6 +3,7 @@ package remediation
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -10,7 +11,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // hexStringPDF builds a one-page document whose content stream shows text
@@ -148,6 +151,48 @@ func TestMatchHexStringClaimsBothMalformedReports(t *testing.T) {
 	other := violationFor("6.2.2", 2, "page 1: compliance: "+oddHexDigits)
 	if matchHexString(other) {
 		t.Error("an unrelated clause was claimed")
+	}
+}
+
+// TestHasMalformedHexViolationMatchesTheParserSentinels pins the page-level
+// match: a page is rewritten when the detector's own parse records a violation
+// wrapping one of the two hex-string sentinels, and for no other parse
+// violation. The match is structural, so the same wording in an error that
+// wraps neither sentinel is not claimed.
+func TestHasMalformedHexViolationMatchesTheParserSentinels(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	for _, tt := range []struct {
+		name     string
+		content  string
+		violated bool
+		want     bool
+	}{
+		{"odd digit count", "BT <484> Tj ET", true, true},
+		{"invalid character", "BT <41!4> Tj ET", true, true},
+		{"well-formed", "BT <4848> Tj ET", false, false},
+		// The parser records a scientific-notation real as a format
+		// violation too, which the hex fixer does not repair.
+		{"another parse violation", "1.5e2 0 Td", true, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, violations := content.ParseStreamDataFormatChecked(ctx, []byte(tt.content))
+			if violated := len(violations) > 0; violated != tt.violated {
+				t.Fatalf("the parse recorded %v, want violations = %v", violations, tt.violated)
+			}
+			if got := hasMalformedHexViolation(violations); got != tt.want {
+				t.Errorf("hasMalformedHexViolation(%v) = %v, want %v", violations, got, tt.want)
+			}
+		})
+	}
+
+	if !hasMalformedHexViolation([]error{fmt.Errorf("page 1: %w", parser.ErrHexStringOddDigits)}) {
+		t.Error("a wrapped sentinel is not matched")
+	}
+	if hasMalformedHexViolation([]error{errors.New("compliance: " + oddHexDigits), nil}) {
+		t.Error("the wording alone was matched, without the sentinel")
 	}
 }
 

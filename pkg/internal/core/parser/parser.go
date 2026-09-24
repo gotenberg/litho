@@ -135,6 +135,15 @@ func (p *Parser) recordViolation(msg string) {
 	}
 }
 
+// recordViolationErr is [Parser.recordViolation] for a violation that has a
+// sentinel, which it wraps so a consumer can match it with [errors.Is]. The
+// message reads exactly as recordViolation would write it.
+func (p *Parser) recordViolationErr(err error) {
+	if p.checkFormat {
+		p.FormatViolations = append(p.FormatViolations, fmt.Errorf("compliance: %w", err))
+	}
+}
+
 // Peek returns the token n positions ahead without consuming it.
 func (p *Parser) Peek(n int) (lexer.Token, error) {
 	for p.buffered() <= n {
@@ -1423,7 +1432,7 @@ func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
 			nonWhiteSpace++
 			isHex := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
 			if !isHex && !reported {
-				p.recordViolation(fmt.Sprintf("hex string contains invalid character %q", r))
+				p.recordViolationErr(fmt.Errorf("%w %q", ErrHexStringInvalidChar, r))
 				reported = true
 			}
 		}
@@ -1445,7 +1454,7 @@ func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
 	}, val)
 
 	if p.checkFormat && nonWhiteSpace%2 != 0 {
-		p.recordViolation("hex string has odd number of digits")
+		p.recordViolationErr(ErrHexStringOddDigits)
 	}
 	if len(val)%2 != 0 {
 		val += "0"

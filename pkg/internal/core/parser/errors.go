@@ -23,3 +23,15 @@ var errUnexpectedDelimiter = errors.New("unexpected delimiter")
 // boundary that every pkg/pdf entry point installs cannot convert it and the
 // process dies.
 var errNestingTooDeep = errors.New("object nesting too deep")
+
+// ErrHexStringOddDigits marks a format violation recorded under
+// [Parser.WithFormatChecking] for a hexadecimal string with an odd number of
+// non-white-space characters (ISO 19005-2, 6.1.6 t1). The parser still reads
+// the value, assuming a missing final digit is 0 (ISO 32000-1, 7.3.4.3).
+var ErrHexStringOddDigits = errors.New("hex string has odd number of digits")
+
+// ErrHexStringInvalidChar marks a format violation recorded under
+// [Parser.WithFormatChecking] for a hexadecimal string holding a character
+// that is neither a hexadecimal digit nor white space (ISO 19005-2, 6.1.6
+// t2). The parser drops the character when it reads the value.
+var ErrHexStringInvalidChar = errors.New("hex string contains invalid character")

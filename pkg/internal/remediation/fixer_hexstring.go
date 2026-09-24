@@ -2,21 +2,24 @@ package remediation
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // oddHexDigits and invalidHexChar are the parser's wordings for the two ways a
 // hexadecimal string is written wrongly, both of which the fixer below repairs
-// by re-serialising the page.
-const (
-	oddHexDigits   = "hex string has odd number of digits"
-	invalidHexChar = "hex string contains invalid character"
+// by re-serialising the page. A [compliance.Violation] carries the parser's
+// finding only as text in its Context, so [matchHexString] reads these; they
+// come from the parser's sentinels so the two cannot drift apart.
+var (
+	oddHexDigits   = parser.ErrHexStringOddDigits.Error()
+	invalidHexChar = parser.ErrHexStringInvalidChar.Error()
 )
 
 // matchHexString matches a malformed hex string inside a page content stream:
@@ -100,7 +103,8 @@ func repairPageHexStrings(ctx context.Context, alloc *writer.ObjAllocator, doc *
 }
 
 // hasMalformedHexViolation reports whether any parse violation is one of the
-// two the fixer repairs.
+// two the fixer repairs: one wrapping [parser.ErrHexStringOddDigits] or
+// [parser.ErrHexStringInvalidChar].
 //
 // A stray non-hexadecimal character used to be repaired only as a side effect:
 // the old parity test counted hex digits, so "<41!4>" read as odd and the page
@@ -118,11 +122,7 @@ func repairPageHexStrings(ctx context.Context, alloc *writer.ObjAllocator, doc *
 //     verdict.
 func hasMalformedHexViolation(violations []error) bool {
 	for _, v := range violations {
-		if v == nil {
-			continue
-		}
-		msg := v.Error()
-		if strings.Contains(msg, oddHexDigits) || strings.Contains(msg, invalidHexChar) {
+		if errors.Is(v, parser.ErrHexStringOddDigits) || errors.Is(v, parser.ErrHexStringInvalidChar) {
 			return true
 		}
 	}
