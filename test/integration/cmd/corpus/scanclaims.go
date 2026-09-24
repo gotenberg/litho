@@ -133,6 +133,17 @@ func scanClaimsParallel(pdfs []string, allow map[string]bool, workers int) []cla
 	return rows
 }
 
+// maxClaimsLineBytes bounds one line of claims.csv. It is an anti-DoS guard
+// for test tooling, not a format limit: bufio.Scanner refuses a longer line
+// rather than growing its buffer without end, and loadClaimsCSV then returns
+// the read error. A line is a PDF basename and a profile directory name, so
+// a megabyte is thousands of times past any line runScanClaims writes.
+//
+// # Corpus evidence
+//
+//   - facturx: the longest of its 150 claims.csv lines is 111 bytes.
+const maxClaimsLineBytes = 1024 * 1024
+
 // loadClaimsCSV reads a claims.csv produced by runScanClaims and
 // returns a basename->profile map. Lines without a comma or with empty
 // fields are skipped silently so partially-corrupted CSVs degrade to
@@ -145,7 +156,7 @@ func loadClaimsCSV(path string) (map[string]string, error) {
 	defer f.Close()
 	out := make(map[string]string)
 	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxClaimsLineBytes)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {

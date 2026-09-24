@@ -157,6 +157,20 @@ func loadFixturesAuto(m *Manifest, pdfs []string) ([]Fixture, error) {
 	return fixtures, nil
 }
 
+// maxClaimXMPBytes bounds the XMP packet detectClaimedProfile reads. It is an
+// anti-DoS guard for test tooling, not spec-mandated: the packet length comes
+// from the file. A longer packet is truncated, not refused, and the claim is
+// read from its first megabyte, more than three times the largest real
+// packet. It matches maxPDFXPacketBytes in package semantics, which reads the
+// document's packet for the PDF/X identifier.
+//
+// # Corpus evidence
+//
+//   - All corpora: 3959 files carry a catalog XMP packet, and the largest is
+//     285,452 bytes (govdocs thread_300_300501.pdf), so every packet is read
+//     whole.
+const maxClaimXMPBytes = 1 << 20
+
 // detectClaimedProfile opens pdfPath, reads its XMP packet, and returns
 // the profile directory name the document claims via pdfaid:part /
 // pdfaid:conformance / pdfuaid:part. Empty when the document has no
@@ -187,8 +201,7 @@ func detectClaimedProfile(ctx context.Context, pdfPath string) string {
 		return ""
 	}
 	defer rc.Close()
-	const limit = 1 << 20 // 1 MiB cap, an anti-DoS guard, not spec-mandated: XMP packets larger than this are pathological
-	data, err := io.ReadAll(io.LimitReader(rc, limit))
+	data, err := io.ReadAll(io.LimitReader(rc, maxClaimXMPBytes))
 	if err != nil {
 		return ""
 	}
