@@ -3,6 +3,7 @@ package filter
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -127,6 +128,11 @@ func (d *Decoder) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io
 
 // applyDecodeFilter applies a single filter, checking plugins first.
 //
+// A plugin that returns [plugins.ErrUnsupportedFilter] declines the stream,
+// and the built-in decoder for the filter runs instead. When there is none,
+// the stream fails with [ErrUnsupportedFilter], exactly as
+// [Decoder.DecodeStream] fails on a filter no plugin claims.
+//
 // A plugin returns its whole output in one slice, so [limitedCopy] never sees
 // it and maxDecompressedSize bounded every built-in filter and no plugin at
 // all. The filter a document names decided whether the bomb guard applied: a
@@ -144,17 +150,19 @@ func (d *Decoder) applyDecodeFilter(ctx context.Context, data []byte, filterName
 			return nil, err
 		}
 		decoded, err := p.Decode(data, pubParms)
-		if err != nil {
+		switch {
+		case errors.Is(err, plugins.ErrUnsupportedFilter):
+			// Declined: fall through to the built-in decoder.
+		case err != nil:
 			return nil, err
-		}
-		// Matches limitedCopy: a stream exactly at the cap is kept.
-		if len(decoded) > maxDecompressedSize {
+		case len(decoded) > maxDecompressedSize:
+			// Matches limitedCopy: a stream exactly at the cap is kept.
 			return nil, fmt.Errorf("%s: %w", filterName, ErrDecompressionBomb)
+		default:
+			return decoded, nil
 		}
-		return decoded, nil
 	}
 
-	// Fall back to built-in decoder.
 	return applyDecodeFilter(ctx, data, filterName, parms, dict)
 }
 

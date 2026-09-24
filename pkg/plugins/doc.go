@@ -4,7 +4,8 @@
 // decodes every standard filter natively, JBIG2Decode and JPXDecode included,
 // so a plugin either makes a filter litho does not know decodable or replaces
 // a built-in decoder: a registered plugin takes precedence for its filter
-// name.
+// name. A plugin declines a stream by returning [ErrUnsupportedFilter], which
+// hands that stream back to the built-in decoder.
 //
 // Usage:
 //

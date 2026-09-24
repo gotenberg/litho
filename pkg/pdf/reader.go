@@ -90,7 +90,10 @@ func WithOCREngine(engine models.OCREngine) OpenOption {
 // WithFilterPlugin registers a [plugins.FilterDecoder] plugin for stream
 // decompression. Multiple plugins can be registered; each handles the
 // filter name returned by its FilterName method, and takes precedence over
-// the built-in decoder for that name.
+// the built-in decoder for that name. A plugin whose Decode returns
+// [plugins.ErrUnsupportedFilter] declines that stream, and the built-in
+// decoder for the filter decodes it instead. When litho has no built-in
+// decoder for the filter, decoding that stream fails.
 //
 // Example:
 //

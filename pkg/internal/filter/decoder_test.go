@@ -5,6 +5,8 @@ import (
 	"compress/zlib"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -221,5 +223,107 @@ func TestDecoder_HandlesIsFalseForAnUnregisteredName(t *testing.T) {
 	var nilDecoder *Decoder
 	if nilDecoder.Handles("JPXDecode") {
 		t.Error("a nil Decoder reported a filter as handled")
+	}
+}
+
+// zlibBytes returns data compressed as a FlateDecode stream body.
+func zlibBytes(t *testing.T, data []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	w := zlib.NewWriter(&buf)
+	if _, err := w.Write(data); err != nil {
+		t.Fatalf("zlib write: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("zlib close: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// TestDecoder_PluginDeclineFallsBackToBuiltin pins the decline contract of
+// [plugins.ErrUnsupportedFilter]: a plugin that returns it, bare or wrapped,
+// hands the stream to the built-in decoder for its filter, on both the eager
+// and the streaming path.
+func TestDecoder_PluginDeclineFallsBackToBuiltin(t *testing.T) {
+	for name, declineErr := range map[string]error{
+		"bare":    plugins.ErrUnsupportedFilter,
+		"wrapped": fmt.Errorf("vendor codec: %w", plugins.ErrUnsupportedFilter),
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := &mockPlugin{name: "FlateDecode", err: declineErr}
+			d := NewDecoder([]plugins.FilterDecoder{p})
+			stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("FlateDecode")}, zlibBytes(t, []byte("hello")))
+
+			got, err := d.DecodeStream(context.Background(), stream)
+			if err != nil {
+				t.Fatalf("DecodeStream: %v", err)
+			}
+			if !p.called {
+				t.Fatal("the plugin was not consulted before the built-in decoder")
+			}
+			if string(got) != "hello" {
+				t.Errorf("DecodeStream = %q, want the built-in FlateDecode output %q", got, "hello")
+			}
+
+			rc, err := d.NewStreamReader(context.Background(), stream)
+			if err != nil {
+				t.Fatalf("NewStreamReader: %v", err)
+			}
+			defer rc.Close()
+			streamed, err := io.ReadAll(rc)
+			if err != nil {
+				t.Fatalf("reading the stream: %v", err)
+			}
+			if string(streamed) != "hello" {
+				t.Errorf("NewStreamReader read %q, want %q", streamed, "hello")
+			}
+		})
+	}
+}
+
+// TestDecoder_PluginDeclineWithoutBuiltinFails pins that a declined stream
+// behind a filter litho does not know fails with the error such a filter
+// gets when no plugin claims it.
+func TestDecoder_PluginDeclineWithoutBuiltinFails(t *testing.T) {
+	stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("VendorDecode")}, []byte("raw"))
+
+	unclaimed := NewDecoder([]plugins.FilterDecoder{&mockPlugin{name: "OtherDecode"}})
+	_, wantErr := unclaimed.DecodeStream(context.Background(), stream)
+	if !errors.Is(wantErr, ErrUnsupportedFilter) {
+		t.Fatalf("control: an unclaimed unknown filter returned %v, want ErrUnsupportedFilter", wantErr)
+	}
+
+	p := &mockPlugin{name: "VendorDecode", err: plugins.ErrUnsupportedFilter}
+	d := NewDecoder([]plugins.FilterDecoder{p})
+	out, err := d.DecodeStream(context.Background(), stream)
+	if !p.called {
+		t.Fatal("the plugin was not consulted")
+	}
+	if !errors.Is(err, ErrUnsupportedFilter) {
+		t.Fatalf("DecodeStream error = %v, want ErrUnsupportedFilter", err)
+	}
+	if err.Error() != wantErr.Error() {
+		t.Errorf("DecodeStream error = %q, want the unclaimed-filter error %q", err, wantErr)
+	}
+	if out != nil {
+		t.Errorf("returned %d bytes alongside the error", len(out))
+	}
+}
+
+// TestDecoder_PluginErrorOnBuiltinFilterFails is the control for the decline
+// path: an error that is not [plugins.ErrUnsupportedFilter] fails the stream
+// even when a built-in decoder could have read it.
+func TestDecoder_PluginErrorOnBuiltinFilterFails(t *testing.T) {
+	testErr := errors.New("plugin failed")
+	p := &mockPlugin{name: "FlateDecode", err: testErr}
+	d := NewDecoder([]plugins.FilterDecoder{p})
+	stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("FlateDecode")}, zlibBytes(t, []byte("hello")))
+
+	out, err := d.DecodeStream(context.Background(), stream)
+	if !errors.Is(err, testErr) {
+		t.Fatalf("DecodeStream error = %v, want the plugin's error", err)
+	}
+	if out != nil {
+		t.Errorf("returned %q alongside the error: the built-in decoder ran", out)
 	}
 }
