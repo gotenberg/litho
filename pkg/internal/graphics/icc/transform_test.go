@@ -1,0 +1,127 @@
+package icc
+
+import (
+	"encoding/binary"
+	"errors"
+	"testing"
+)
+
+// TestConvert converts colours through profiles built to exercise each kind
+// of transform, and matches LittleCMS 2.17 (relative colorimetric into its
+// built-in sRGB, unoptimised) to within one level.
+func TestConvert(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		profile []byte
+		cases   [][2][]byte
+	}{
+		{"matrix and tone curves", rgbProfile(), [][2][]byte{
+			{{0, 0, 0}, {0, 0, 0}}, {{255, 255, 255}, {255, 255, 255}},
+			{{128, 64, 200}, {129, 70, 200}}, {{10, 240, 30}, {3, 244, 30}},
+		}},
+		{"grey tone curve", greyProfile(), [][2][]byte{
+			{{0}, {34, 34, 34}}, {{64}, {102, 102, 102}}, {{128}, {158, 158, 158}}, {{255}, {255, 255, 255}},
+		}},
+		{"lut16 into Lab", cmykProfile(), [][2][]byte{
+			{{0, 0, 0, 0}, {255, 255, 255}}, {{255, 0, 0, 0}, {0, 202, 255}},
+			{{0, 255, 0, 0}, {255, 130, 183}}, {{0, 0, 255, 0}, {205, 178, 30}},
+			{{0, 0, 0, 255}, {27, 27, 27}}, {{64, 128, 32, 90}, {157, 113, 131}},
+			{{200, 10, 150, 20}, {82, 156, 131}},
+		}},
+		{"extended-range lutAtoB into XYZ", extendedProfile(), [][2][]byte{
+			{{0, 0, 0}, {0, 0, 0}}, {{255, 255, 255}, {255, 255, 255}},
+			{{128, 128, 128}, {98, 98, 98}}, {{192, 0, 0}, {231, 0, 0}},
+		}},
+	} {
+		p, err := Parse(tc.profile)
+		if err != nil {
+			t.Fatalf("%s: Parse: %v", tc.name, err)
+		}
+		tr, err := p.NewTransform(RelativeColorimetric)
+		if err != nil {
+			t.Fatalf("%s: NewTransform: %v", tc.name, err)
+		}
+		for _, c := range tc.cases {
+			r, g, b := tr.Convert(c[0])
+			got := [3]byte{r, g, b}
+			for i := range 3 {
+				if d := int(got[i]) - int(c[1][i]); d < -1 || d > 1 {
+					t.Errorf("%s: %v = %v, want %v", tc.name, c[0], got, c[1])
+					break
+				}
+			}
+		}
+	}
+}
+
+// TestParse_Refuses names each profile it cannot read with its sentinel.
+func TestParse_Refuses(t *testing.T) {
+	t.Parallel()
+
+	noSignature := rgbProfile()
+	copy(noSignature[36:], "xxxx")
+	pastEnd := rgbProfile()
+	binary.BigEndian.PutUint32(pastEnd[128+4+4:], 1<<20)
+	for name, data := range map[string][]byte{
+		"too short":         make([]byte, 100),
+		"no file signature": noSignature,
+		"tag past its end":  pastEnd,
+	} {
+		if _, err := Parse(data); !errors.Is(err, ErrMalformed) {
+			t.Errorf("%s: %v, want %v", name, err, ErrMalformed)
+		}
+	}
+}
+
+// TestNewTransform_Limits refuses a CLUT past maxCLUTEntries before reading
+// it: 255 points over eight inputs.
+func TestNewTransform_Limits(t *testing.T) {
+	t.Parallel()
+
+	b := []byte("mft2\x00\x00\x00\x00")
+	b = append(b, 8, 3, 255, 0)
+	b = append(b, make([]byte, 40)...)
+	data := buildProfile("CMYK", "Lab ", 2, map[string][]byte{"A2B0": b})
+	p, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.NewTransform(RelativeColorimetric); !errors.Is(err, ErrLimit) {
+		t.Errorf("%v, want %v", err, ErrLimit)
+	}
+}
+
+// TestBuiltinCMYK converts through the built-in CMYK profile under every
+// intent and matches LittleCMS 2.17 to within one level: the process inks
+// land on the familiar SWOP cyan, magenta, yellow and rich black.
+func TestBuiltinCMYK(t *testing.T) {
+	t.Parallel()
+
+	cases := [][2][]byte{
+		{{0, 0, 0, 0}, {255, 255, 255}}, {{255, 0, 0, 0}, {0, 174, 239}},
+		{{0, 255, 0, 0}, {236, 0, 140}}, {{0, 0, 255, 0}, {255, 242, 0}},
+		{{0, 0, 0, 255}, {35, 31, 32}}, {{255, 255, 255, 255}, {0, 0, 0}},
+		{{64, 128, 32, 90}, {135, 99, 124}}, {{200, 10, 150, 20}, {0, 163, 130}},
+	}
+	for _, intent := range []Intent{Perceptual, RelativeColorimetric, Saturation, AbsoluteColorimetric} {
+		tr, err := BuiltinCMYK(intent)
+		if err != nil {
+			t.Fatalf("intent %d: %v", intent, err)
+		}
+		if tr.Components() != 4 {
+			t.Fatalf("intent %d: %d components, want 4", intent, tr.Components())
+		}
+		for _, c := range cases {
+			r, g, b := tr.Convert(c[0])
+			got := [3]byte{r, g, b}
+			for i := range 3 {
+				if d := int(got[i]) - int(c[1][i]); d < -1 || d > 1 {
+					t.Errorf("intent %d: %v = %v, want %v", intent, c[0], got, c[1])
+					break
+				}
+			}
+		}
+	}
+}
