@@ -29,21 +29,21 @@ import (
 // by maxOutput in package ccitt, which matches it, and a linearization hint
 // stream by maxHintStreamSize in package document, which decodes that stream
 // itself and also matches it. RunLengthDecode, which expands its input up to
-// 64 times, is outside it.
+// 64 times, is bounded as it decodes, by [decodeRunLength].
 //
 // 256 MB leaves about ten times the largest output the capped filters produce
 // for real documents.
 //
 // # Corpus evidence
 //
-//   - All corpora: no stream of the 5163 files that open trips the cap, and
-//     the largest output it bounds is 26,614,380 bytes (pdfjs images.pdf, one
+//   - All corpora: the largest FlateDecode, LZWDecode or BrotliDecode output of
+//     the 5163 files that open is 26,614,380 bytes (pdfjs images.pdf, one
 //     FlateDecode stream).
-//   - pdfjs issue17190_1.pdf: the largest output of a chain without an image
-//     codec, a 19522x27655 image of one byte per pixel, reaches 539,880,910
-//     bytes through FlateDecode then RunLengthDecode. Its FlateDecode stage
-//     yields 19,201,892 bytes and the RunLengthDecode stage runs outside the
-//     cap.
+//   - pdfjs issue17190_1.pdf: the one stream past the cap, a 19522x27655 image
+//     of one byte per pixel that reaches 539,880,910 bytes through FlateDecode
+//     then RunLengthDecode. Its FlateDecode stage yields 19,201,892 bytes, so
+//     the RunLengthDecode stage trips the cap, and the image decoder's pixel
+//     cap refuses the image before any decode.
 //   - pdfjs issue17190.pdf: the largest CCITTFaxDecode output is 69,749,526
 //     bytes.
 const maxDecompressedSize = 256 << 20 // 256 MB
@@ -318,7 +318,7 @@ func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName,
 		return decodeBrotli(ctx, data)
 
 	case "RunLengthDecode", "RL":
-		return decodeRunLength(data)
+		return decodeRunLength(data, maxDecompressedSize)
 
 	case "DCTDecode", "DCT":
 		return decodeDCT(ctx, data, parms, dict)

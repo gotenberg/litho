@@ -5,12 +5,18 @@ import (
 	"fmt"
 )
 
-// decodeRunLength implements the RunLengthDecode filter (PDF spec 7.4.5).
+// decodeRunLength implements the RunLengthDecode filter (ISO 32000-1, 7.4.5).
 // It uses the PackBits compression scheme:
 //   - A length byte n in 0–127 means copy the next (n+1) literal bytes.
 //   - A length byte n in 129–255 means repeat the next byte (257-n) times.
 //   - Byte 128 (0x80) is the EOD marker and terminates the stream.
-func decodeRunLength(data []byte) ([]byte, error) {
+//
+// Two input bytes can ask for 128 output bytes, so the output grows 64 times
+// faster than the input. It is bounded by limit, the stream budget, while it
+// is decoded: a run that would take the output past limit fails the stream
+// with [ErrDecompressionBomb] before it is written, so the buffer never holds
+// more than limit bytes.
+func decodeRunLength(data []byte, limit int64) ([]byte, error) {
 	var buf bytes.Buffer
 	i := 0
 
@@ -25,6 +31,9 @@ func decodeRunLength(data []byte) ([]byte, error) {
 			if i+count > len(data) {
 				return nil, fmt.Errorf("runlength decode: need %d literal bytes at offset %d but only %d remain", count, i, len(data)-i)
 			}
+			if int64(buf.Len()+count) > limit {
+				return nil, fmt.Errorf("RunLengthDecode output exceeds %d bytes: %w", limit, ErrDecompressionBomb)
+			}
 			buf.Write(data[i : i+count])
 			i += count
 
@@ -34,6 +43,9 @@ func decodeRunLength(data []byte) ([]byte, error) {
 				return nil, fmt.Errorf("runlength decode: missing repeat byte at offset %d", i)
 			}
 			count := 257 - int(n)
+			if int64(buf.Len()+count) > limit {
+				return nil, fmt.Errorf("RunLengthDecode output exceeds %d bytes: %w", limit, ErrDecompressionBomb)
+			}
 			b := data[i]
 			i++
 			for range count {
