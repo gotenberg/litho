@@ -237,16 +237,22 @@ func eachColorSpaceArrayMutable(ctx context.Context, alloc *writer.ObjAllocator,
 	if !ok {
 		return
 	}
-	resDict, err := document.ResolveDict(ctx, doc, resObj)
-	if err != nil || resDict == nil {
+	// Both containers are read alloc-first because an inline rewrite copies
+	// them and writes the copy back: output-intent rewrites an indirect
+	// /Resources with the /ColorSpace dictionary inlined into it, and devicen,
+	// one entry earlier, rewrites the /ColorSpace dictionary that holds an
+	// inline DeviceN. Reading the document would discard that write, or follow
+	// a /ColorSpace reference the pending /Resources no longer holds.
+	resDict := liveDictValue(ctx, alloc, doc, resObj)
+	if resDict == nil {
 		return
 	}
 	csObj, ok := resDict["ColorSpace"]
 	if !ok {
 		return
 	}
-	csDict, err := document.ResolveDict(ctx, doc, csObj)
-	if err != nil || csDict == nil {
+	csDict := liveDictValue(ctx, alloc, doc, csObj)
+	if csDict == nil {
 		return
 	}
 

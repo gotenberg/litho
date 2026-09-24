@@ -84,16 +84,22 @@ func patchPageDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 	if !ok {
 		return 0
 	}
-	resDict, err := document.ResolveDict(ctx, doc, resObj)
-	if err != nil || resDict == nil {
+	// Both containers are read alloc-first because an inline repair copies them
+	// and writes the copy back: output-intent rewrites an indirect /Resources
+	// with the /ColorSpace dictionary inlined into it, and name-utf8 rewrites
+	// any indirect dictionary, both ahead of devicen. Reading the document
+	// would discard that write, or follow a /ColorSpace reference the pending
+	// /Resources no longer holds and patch an object the output never reads.
+	resDict := liveDictValue(ctx, alloc, doc, resObj)
+	if resDict == nil {
 		return 0
 	}
 	csObj, ok := resDict["ColorSpace"]
 	if !ok {
 		return 0
 	}
-	csDict, err := document.ResolveDict(ctx, doc, csObj)
-	if err != nil || csDict == nil {
+	csDict := liveDictValue(ctx, alloc, doc, csObj)
+	if csDict == nil {
 		return 0
 	}
 

@@ -109,3 +109,127 @@ func TestDedupICCInResources_KeepsAnEarlierFixersPendingColourSpaceWrite(t *test
 			"uses, and discarded the earlier fixer's write; pending = %v", csObj, got)
 	}
 }
+
+// iccDedupObjects returns objects 1 to 7 of the ICC-dedup fixtures below: the
+// catalog, the page tree, a page whose /Resources value is resources, the
+// OutputIntent, its CMYK profile at object 5, the same profile again at object
+// 6 for the page to use, and the page content at object 7.
+func iccDedupObjects(t *testing.T, resources string) []string {
+	t.Helper()
+
+	const content = "q /CS0 cs 0 0 0 1 sc 10 10 100 100 re f Q\n"
+	cmyk := deflateAt(t, cmykICCProfile, zlib.BestCompression)
+	return []string{
+		"<< /Type /Catalog /Pages 2 0 R /OutputIntents [4 0 R] >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 7 0 R /Resources " + resources + " >>",
+		"<< /Type /OutputIntent /S /GTS_PDFA1 /OutputConditionIdentifier (Coated FOGRA39)" +
+			" /DestOutputProfile 5 0 R >>",
+		iccObj(cmyk, 4),
+		iccObj(cmyk, 4),
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+	}
+}
+
+// TestDedupICCInResources_KeepsAnEarlierFixersPendingColourSpaceDictWrite pins
+// that the redundant-ICC substitution rebuilds an indirect /ColorSpace
+// dictionary from the copy an earlier fixer queued, not from the document.
+//
+// The peer is real and adjacent: devicen runs two entries ahead of icc-dedup
+// and writes the /Colorants repair of an inline DeviceN into the same
+// dictionary at its own object number. Object 8 holds both colour spaces
+// inline, so each fixer rebuilds the whole dictionary.
+func TestDedupICCInResources_KeepsAnEarlierFixersPendingColourSpaceDictWrite(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	objs := append(iccDedupObjects(t, "<< /ColorSpace 8 0 R >>"),
+		"<< /CS0 [/ICCBased 6 0 R] /CSN [/DeviceN [/Cyan /SPOT] /DeviceCMYK 9 0 R] >>",
+		"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [1 1 0 0] /N 1 >>",
+	)
+	doc, alloc := newTestDoc(t, assemblePDF(objs))
+
+	const csDictObj = 8
+
+	if _, err := fixDeviceNColorants(ctx, alloc, doc, Options{}, nil, ""); err != nil {
+		t.Fatalf("fixDeviceNColorants: %v", err)
+	}
+	seeded, ok := alloc.Pending()[csDictObj].(ast.PdfDict)
+	if !ok || !hasColorants(seeded["CSN"]) {
+		t.Fatalf("control: devicen did not queue the /Colorants repair at object %d, so there "+
+			"is no earlier edit to lose; pending = %v", csDictObj, alloc.Pending())
+	}
+
+	if _, err := fixICCDedup(ctx, alloc, doc, Options{}, nil, ""); err != nil {
+		t.Fatalf("fixICCDedup: %v", err)
+	}
+
+	got, ok := alloc.Pending()[csDictObj].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("object %d is no longer a pending dict: %T", csDictObj, alloc.Pending()[csDictObj])
+	}
+	if name, _ := got["CS0"].(ast.PdfName); name != "DeviceCMYK" {
+		t.Fatalf("/CS0 in object %d is %v, want /DeviceCMYK: the substitution did not rewrite "+
+			"the dictionary, so this test proves nothing about clobbering", csDictObj, got["CS0"])
+	}
+	if !hasColorants(got["CSN"]) {
+		t.Errorf("/CSN lost its /Colorants: dedupICCInResources rebuilt the /ColorSpace "+
+			"dictionary from the document and discarded devicen's write; /CSN = %v", got["CSN"])
+	}
+}
+
+// TestDedupICCInResources_KeepsAnEarlierFixersPendingResourcesWrite pins that
+// the redundant-ICC substitution rebuilds an indirect /Resources dictionary
+// from the copy output-intent queued, and lands where the output reads it.
+//
+// The /Resources dictionary is object 8. With the /ColorSpace dictionary inline
+// in it, reading object 8 from the document drops the /DefaultRGB output-intent
+// injected. With the /ColorSpace dictionary at object 9, output-intent inlines
+// a copy of it into object 8, so following the document's reference to object 9
+// writes the substitution where the output no longer looks.
+func TestDedupICCInResources_KeepsAnEarlierFixersPendingResourcesWrite(t *testing.T) {
+	t.Parallel()
+
+	const cs = "<< /CS0 [/ICCBased 6 0 R] >>"
+	for _, tc := range []struct {
+		name  string
+		extra []string
+		res   string
+	}{
+		{name: "inline colour space dict", res: "<< /ColorSpace " + cs + " >>"},
+		{name: "indirect colour space dict", res: "<< /ColorSpace 9 0 R >>", extra: []string{cs}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			objs := append(iccDedupObjects(t, "8 0 R"), tc.res)
+			objs = append(objs, tc.extra...)
+			doc, alloc := newTestDoc(t, assemblePDF(objs))
+
+			const resObj = 8
+
+			if n := injectTestDefaultRGB(t, alloc, doc); n == 0 {
+				t.Fatal("control: output-intent patched no page, so there is no earlier edit to lose")
+			}
+			if _, has := liveResourceColourSpace(t, alloc, doc, resObj)["DefaultRGB"]; !has {
+				t.Fatalf("control: output-intent did not queue /DefaultRGB for /Resources %d; pending = %v",
+					resObj, alloc.Pending())
+			}
+
+			if _, err := fixICCDedup(ctx, alloc, doc, Options{}, nil, ""); err != nil {
+				t.Fatalf("fixICCDedup: %v", err)
+			}
+
+			got := liveResourceColourSpace(t, alloc, doc, resObj)
+			if _, has := got["DefaultRGB"]; !has {
+				t.Errorf("/DefaultRGB is gone: dedupICCInResources rebuilt /Resources %d from the "+
+					"document and discarded output-intent's write; /ColorSpace = %v", resObj, got)
+			}
+			if name, _ := got["CS0"].(ast.PdfName); name != "DeviceCMYK" {
+				t.Errorf("/CS0 is %v in the /ColorSpace the output reads, want /DeviceCMYK: the "+
+					"substitution was written where the pending /Resources no longer points", got["CS0"])
+			}
+		})
+	}
+}

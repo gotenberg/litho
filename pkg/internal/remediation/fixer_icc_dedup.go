@@ -218,16 +218,23 @@ func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	if !ok {
 		return 0
 	}
-	resDict, err := document.ResolveDict(ctx, doc, resObj)
-	if err != nil || resDict == nil {
+	// Both containers are read alloc-first because an inline substitution
+	// copies them and writes the copy back: output-intent rewrites an indirect
+	// /Resources with the /ColorSpace dictionary inlined into it, and devicen
+	// and sep-canon rewrite the /ColorSpace dictionary that holds an inline
+	// colour space, all ahead of icc-dedup. Reading the document would discard
+	// that write, or follow a /ColorSpace reference the pending /Resources no
+	// longer holds and substitute in an object the output never reads.
+	resDict := liveDictValue(ctx, alloc, doc, resObj)
+	if resDict == nil {
 		return 0
 	}
 	csObj, ok := resDict["ColorSpace"]
 	if !ok {
 		return 0
 	}
-	csDict, err := document.ResolveDict(ctx, doc, csObj)
-	if err != nil || csDict == nil {
+	csDict := liveDictValue(ctx, alloc, doc, csObj)
+	if csDict == nil {
 		return 0
 	}
 
@@ -317,12 +324,12 @@ func dedupICCInXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	if !ok {
 		return 0
 	}
-	resDict, err := document.ResolveDict(ctx, doc, resObj)
-	if err != nil || resDict == nil {
+	resDict := liveDictValue(ctx, alloc, doc, resObj)
+	if resDict == nil {
 		return 0
 	}
-	xoDict, err := document.ResolveDict(ctx, doc, resDict["XObject"])
-	if err != nil || xoDict == nil {
+	xoDict := liveDictValue(ctx, alloc, doc, resDict["XObject"])
+	if xoDict == nil {
 		return 0
 	}
 	count := 0
@@ -331,11 +338,12 @@ func dedupICCInXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		if !ok || ref.ObjectNum == 0 {
 			continue
 		}
-		raw, err := doc.Resolve(ctx, ref)
-		if err != nil {
-			continue
-		}
-		stream, ok := raw.(ast.PdfStream)
+		// Read alloc-first: output-intent rewrites a form to inject a default
+		// colour space into its /Resources, and graphics and transparency
+		// rewrite forms too, all ahead of icc-dedup. The rebuilt dictionary
+		// is written back at the form's object number, so starting from the
+		// document's copy would discard those writes.
+		stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, ref)
 		if !ok {
 			continue
 		}

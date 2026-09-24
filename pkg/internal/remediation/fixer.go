@@ -249,6 +249,23 @@ func liveArray(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Do
 	return arr
 }
 
+// liveDictValue is the dictionary counterpart of [liveArray]: it resolves a
+// value that is either an inline dictionary or a reference to one, reading the
+// replacement an earlier fixer queued at that object number before the
+// document's copy. A fixer that copies a /Resources or /ColorSpace dictionary
+// and writes the copy back must start from this view, or its write discards the
+// earlier fixer's edit. Returns nil when the value is not a readable dictionary.
+func liveDictValue(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject) ast.PdfDict {
+	if ref, ok := obj.(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 {
+		return resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+	}
+	d, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil {
+		return nil
+	}
+	return d
+}
+
 // resolveStreamFromAllocOrDoc returns the patched stream queued in alloc
 // when one exists at ref.ObjectNum, otherwise falls back to the source
 // document's resolver. Fixers that chain patches to the /Metadata stream

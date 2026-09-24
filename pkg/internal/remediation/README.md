@@ -30,7 +30,7 @@ Rules:
 - Check `ctx.Err()` at loop boundaries.
 - Log skipped resolution failures at Debug via `doc.Logger`, never swallow silently.
 - Copy dicts before mutating (`maps.Copy` then modify, then `AllocAt`).
-- Read through the allocator first (`resolveFromAllocOrDoc`, `livePageDict`, `liveArray`): a fixer that re-reads the source document clobbers fixes queued by earlier fixers.
+- Read through the allocator first (`resolveFromAllocOrDoc`, `livePageDict`, `liveArray`, `liveDictValue`, `resolveStreamFromAllocOrDoc`): a fixer that re-reads the source document clobbers fixes queued by earlier fixers. This holds for every container a fixer copies and writes back, parents included: a `/Resources` or `/ColorSpace` dictionary rebuilt around an inline repair is such a container.
 - Return stable, grep-friendly fix descriptions.
 
 ## Registry ordering

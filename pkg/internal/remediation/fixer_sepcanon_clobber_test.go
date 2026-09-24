@@ -100,3 +100,135 @@ func TestEachColorSpaceArrayMutable_KeepsAnEarlierFixersPendingSeparationWrite(t
 			"fixer's write; array = %v", got)
 	}
 }
+
+// Inline colour spaces for the sep-canon fixtures below. /CSA is seen first
+// and becomes canonical, so /CSB is the one canonicalised to /DeviceCMYK and
+// tint transform 5 0 R. /CSN is a DeviceN missing /Colorants, for devicen.
+const (
+	sepCanonCSA = "/CSA [/Separation /SPOT /DeviceCMYK 5 0 R]"
+	sepCanonCSB = "/CSB [/Separation /SPOT /DeviceRGB 6 0 R]"
+	sepCanonCSN = "/CSN [/DeviceN [/Cyan /SPOT] /DeviceCMYK 7 0 R]"
+)
+
+// sepCanonPDF builds a one-page document whose /Resources value is resources,
+// with the tint transforms of sepCanonCSA, sepCanonCSB and sepCanonCSN at
+// objects 5, 6 and 7, and extra appended from object 8.
+func sepCanonPDF(resources, obj4 string, extra ...string) []byte {
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources " + resources + " >>",
+		obj4,
+		"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [0 0 0 1] /N 1 >>",
+		"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0] /C1 [1 1 1] /N 1 >>",
+		"<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0 0] /C1 [1 1 0 0] /N 1 >>",
+	}
+	return assemblePDF(append(objs, extra...))
+}
+
+// canonicalisedCSB fails the test unless /CSB carries the canonical alternate
+// space, the mark that sep-canon rewrote the dictionary holding it.
+func canonicalisedCSB(t *testing.T, cs ast.PdfDict) {
+	t.Helper()
+
+	arr, ok := cs["CSB"].(ast.PdfArray)
+	if !ok || len(arr) < 4 {
+		t.Fatalf("/CSB is %T %v, want a /Separation array", cs["CSB"], cs["CSB"])
+	}
+	if alt, _ := arr[2].(ast.PdfName); alt != "DeviceCMYK" {
+		t.Fatalf("/CSB still carries alternate space %v: the canonicalisation did not land "+
+			"where the output reads it, so this test proves nothing about clobbering", arr[2])
+	}
+}
+
+// TestEachColorSpaceArrayMutable_KeepsAnEarlierFixersPendingColourSpaceDictWrite
+// pins that sep-canon rebuilds an indirect /ColorSpace dictionary from the copy
+// an earlier fixer queued, not from the document.
+//
+// The peer is real and adjacent: devicen runs one entry ahead of sep-canon and
+// writes the /Colorants repair of an inline DeviceN into the same dictionary at
+// its own object number, 4 here. The /Separation canonicalised is inline in
+// that dictionary, so sep-canon rebuilds the whole dictionary too.
+func TestEachColorSpaceArrayMutable_KeepsAnEarlierFixersPendingColourSpaceDictWrite(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	doc, alloc := newTestDoc(t, sepCanonPDF("<< /ColorSpace 4 0 R >>",
+		"<< "+sepCanonCSA+" "+sepCanonCSB+" "+sepCanonCSN+" >>"))
+
+	const csDictObj = 4
+
+	if _, err := fixDeviceNColorants(ctx, alloc, doc, Options{}, nil, ""); err != nil {
+		t.Fatalf("fixDeviceNColorants: %v", err)
+	}
+	seeded, ok := alloc.Pending()[csDictObj].(ast.PdfDict)
+	if !ok || !hasColorants(seeded["CSN"]) {
+		t.Fatalf("control: devicen did not queue the /Colorants repair at object %d, so there "+
+			"is no earlier edit to lose; pending = %v", csDictObj, alloc.Pending())
+	}
+
+	if _, err := fixSepCanon(ctx, alloc, doc, Options{}, nil, ""); err != nil {
+		t.Fatalf("fixSepCanon: %v", err)
+	}
+
+	got, ok := alloc.Pending()[csDictObj].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("object %d is no longer a pending dict: %T", csDictObj, alloc.Pending()[csDictObj])
+	}
+	canonicalisedCSB(t, got)
+	if !hasColorants(got["CSN"]) {
+		t.Errorf("/CSN lost its /Colorants: eachColorSpaceArrayMutable rebuilt the /ColorSpace "+
+			"dictionary from the document and discarded devicen's write; /CSN = %v", got["CSN"])
+	}
+}
+
+// TestEachColorSpaceArrayMutable_KeepsAnEarlierFixersPendingResourcesWrite pins
+// that sep-canon rebuilds an indirect /Resources dictionary from the copy
+// output-intent queued, and lands where the output reads it.
+//
+// The /Resources dictionary is object 4. With the /ColorSpace dictionary inline
+// in it, reading object 4 from the document drops the /DefaultRGB output-intent
+// injected. With the /ColorSpace dictionary at object 8, output-intent inlines
+// a copy of it into object 4, so following the document's reference to object 8
+// writes the canonical /Separation where the output no longer looks.
+func TestEachColorSpaceArrayMutable_KeepsAnEarlierFixersPendingResourcesWrite(t *testing.T) {
+	t.Parallel()
+
+	const cs = "<< " + sepCanonCSA + " " + sepCanonCSB + " >>"
+	for _, tc := range []struct {
+		name  string
+		obj4  string
+		extra []string
+	}{
+		{name: "inline colour space dict", obj4: "<< /ColorSpace " + cs + " >>"},
+		{name: "indirect colour space dict", obj4: "<< /ColorSpace 8 0 R >>", extra: []string{cs}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			doc, alloc := newTestDoc(t, sepCanonPDF("4 0 R", tc.obj4, tc.extra...))
+
+			const resObj = 4
+
+			if n := injectTestDefaultRGB(t, alloc, doc); n == 0 {
+				t.Fatal("control: output-intent patched no page, so there is no earlier edit to lose")
+			}
+			if _, has := liveResourceColourSpace(t, alloc, doc, resObj)["DefaultRGB"]; !has {
+				t.Fatalf("control: output-intent did not queue /DefaultRGB for /Resources %d; pending = %v",
+					resObj, alloc.Pending())
+			}
+
+			if _, err := fixSepCanon(ctx, alloc, doc, Options{}, nil, ""); err != nil {
+				t.Fatalf("fixSepCanon: %v", err)
+			}
+
+			got := liveResourceColourSpace(t, alloc, doc, resObj)
+			if _, has := got["DefaultRGB"]; !has {
+				t.Errorf("/DefaultRGB is gone: eachColorSpaceArrayMutable rebuilt /Resources %d "+
+					"from the document and discarded output-intent's write; /ColorSpace = %v", resObj, got)
+			}
+			canonicalisedCSB(t, got)
+		})
+	}
+}
