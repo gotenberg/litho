@@ -340,3 +340,33 @@ func TestHash2B_Revision6Vector(t *testing.T) {
 		t.Errorf("hash2B(empty, salt) = %x, want %x", got, want)
 	}
 }
+
+// TestSameParameters pins that two handlers built from the same encryption
+// dictionary and /ID compare equal, and that a different /O, /P or /ID, each
+// an input of ISO 32000-1, 7.6.3.3, Algorithm 2, does not.
+func TestSameParameters(t *testing.T) {
+	t.Parallel()
+	build := func(o string, p int, id string) *Handler {
+		h, err := NewHandler(ast.PdfDict{
+			"Filter": ast.PdfName("Standard"), "V": ast.PdfInt(1), "R": ast.PdfInt(2),
+			"P": ast.PdfInt(p), "O": ast.PdfString(o), "U": ast.PdfString("u"),
+		}, ast.PdfDict{"ID": ast.PdfArray{ast.PdfString(id)}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return h
+	}
+	h := build("o", -4, "id")
+	if !h.SameParameters(build("o", -4, "id")) {
+		t.Error("identical parameters compare unequal")
+	}
+	for name, other := range map[string]*Handler{
+		"/O":  build("x", -4, "id"),
+		"/P":  build("o", -44, "id"),
+		"/ID": build("o", -4, "other"),
+	} {
+		if h.SameParameters(other) {
+			t.Errorf("a different %s compares equal", name)
+		}
+	}
+}

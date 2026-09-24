@@ -161,19 +161,34 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 		return
 	}
 
-	if len(appendedObjects) == 0 {
-		result.MDPValid = true
-		result.MDPInfo = fmt.Sprintf("no new objects after signing (P=%d)", sig.MDPPolicy)
-		return
+	violation := classifyModifications(appendedObjects, sig.MDPPolicy)
+
+	// Table 254 permits annotation deletion only at P=3, and P=1 already
+	// refuses the page rewrite a deletion needs. At P=2 a deletion appends
+	// nothing the classifier forbids, so the signed revision's /Annots are
+	// compared with the current ones. That runs even when nothing was
+	// appended: a cross-reference section alone can free an annotation.
+	var unchecked string
+	if violation == "" && sig.MDPPolicy == 2 {
+		rev, err := doc.Revision(ctx, signedEnd)
+		if err == nil {
+			violation, err = removedAnnotation(ctx, doc, rev)
+		}
+		if err != nil {
+			unchecked = fmt.Sprintf("; annotation removals not checked: %v", err)
+		}
 	}
 
-	violation := classifyModifications(appendedObjects, sig.MDPPolicy)
-	if violation != "" {
+	switch {
+	case violation != "":
 		result.MDPValid = false
 		result.MDPInfo = fmt.Sprintf("P=%d violation: %s", sig.MDPPolicy, violation)
-	} else {
+	case len(appendedObjects) == 0:
 		result.MDPValid = true
-		result.MDPInfo = fmt.Sprintf("P=%d: %d appended objects are within policy", sig.MDPPolicy, len(appendedObjects))
+		result.MDPInfo = fmt.Sprintf("no new objects after signing (P=%d)%s", sig.MDPPolicy, unchecked)
+	default:
+		result.MDPValid = true
+		result.MDPInfo = fmt.Sprintf("P=%d: %d appended objects are within policy%s", sig.MDPPolicy, len(appendedObjects), unchecked)
 	}
 }
 
@@ -367,11 +382,9 @@ func isAllowedP2(obj appendedObject) bool {
 	case "Catalog", "Pages", "Page":
 		// Adding a field or a signature rewrites the catalog and the page that
 		// lists its widget, and instantiating a template adds a page.
-		//
-		// TODO: deleting an annotation rewrites only the page's /Annots, so a
-		// deletion Table 254 forbids at P=2 passes here as a page change.
-		// Telling the two apart needs the signed revision's /Annots, which
-		// this classifier does not read.
+		// Deleting an annotation rewrites the page too, which Table 254
+		// forbids at P=2: removedAnnotation finds it by comparing the page's
+		// /Annots with the signed revision's.
 		return true
 	case "":
 		// Objects without /Type include form field values, appearance streams,

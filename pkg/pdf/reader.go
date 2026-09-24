@@ -1441,7 +1441,11 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // than comparing revisions, so a forbidden change made through a permitted
 // object type goes unreported. An appended object stream is not itself a
 // change: the objects it holds are classified as if written outside it, and
-// one whose objects cannot be read is reported.
+// one whose objects cannot be read is reported. At P=2 the check also reads
+// the revision the signature covers and reports an annotation, other than a
+// form field widget, that a page of that revision lists and the current page
+// no longer does; when that revision cannot be read, MDPInfo says removals
+// were not checked.
 func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) (_ []models.SignatureValidation, err error) {
 	defer recoverToError(r.logger(), "Reader.VerifySignatures", &err)
 	return signature.VerifySignatures(ctx, r.doc, roots)

@@ -464,6 +464,22 @@ func (h *Handler) PermissionFlags() int {
 	return h.pVal
 }
 
+// SameParameters reports whether h and other were built from the same
+// encryption dictionary entries and the same first /ID string.
+//
+// The file encryption key is computed from a password and those values alone
+// (ISO 32000-1, 7.6.3.3, Algorithm 2; ISO 32000-2, 7.6.4.3, Algorithm 2.A for
+// the AES-256 handler), so a password that authenticates one handler yields
+// the other's key too. Two revisions of one file carry the same values unless
+// an update rewrote the encryption dictionary or the /ID.
+func (h *Handler) SameParameters(other *Handler) bool {
+	return h.V == other.V && h.R == other.R && h.Length == other.Length &&
+		h.CFM == other.CFM && h.pVal == other.pVal && h.encMeta == other.encMeta &&
+		bytes.Equal(h.oVal, other.oVal) && bytes.Equal(h.uVal, other.uVal) &&
+		bytes.Equal(h.oeVal, other.oeVal) && bytes.Equal(h.ueVal, other.ueVal) &&
+		bytes.Equal(h.id, other.id)
+}
+
 // ObjKey generates the specific encryption key for an object.
 // Per ISO 32000-1 §7.6.3.1 (Algorithm 1) the four-byte 'sAlT' suffix
 // is only appended when the chosen cipher is AES (V=4 with /CFM AESV2,

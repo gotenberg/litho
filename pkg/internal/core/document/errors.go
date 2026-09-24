@@ -19,6 +19,11 @@ var (
 	// ErrObjectNotFound indicates an object number referenced in the xref has no entry.
 	ErrObjectNotFound = errors.New("object not found in xref")
 
+	// ErrNoRevision indicates the bytes before an offset do not end in a
+	// revision that can be read: no cross-reference section and trailer end
+	// them (ISO 32000-1, 7.5.6).
+	ErrNoRevision = errors.New("no revision ends at this offset")
+
 	// ErrInternalPanic is the sentinel a recovered panic wraps. The public API
 	// boundary returns it, and so does a worker goroutine that recovers its own
 	// panic, since the boundary's recover runs on the calling goroutine and
