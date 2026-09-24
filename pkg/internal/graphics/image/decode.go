@@ -926,6 +926,19 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 	return decodeImageStream(ctx, doc, name, stream)
 }
 
+// DecodeImageSamples decodes a named Image XObject as [DecodeImage] does, but
+// leaves an image whose soft mask carries a /Matte as its samples hold it,
+// preblended with the matte colour. A caller that writes the pixels back
+// beside the same soft mask needs them that way: undone, a viewer would undo
+// the preblending a second time.
+func DecodeImageSamples(ctx context.Context, doc *document.Document, page *document.Page, name ast.PdfName) (image.Image, error) {
+	stream, err := lookupImage(ctx, doc, page, name)
+	if err != nil {
+		return nil, err
+	}
+	return decodeImagePixels(ctx, doc, name, stream)
+}
+
 // lookupImage finds the image stream DecodeImage decodes.
 func lookupImage(ctx context.Context, doc *document.Document, page *document.Page, name ast.PdfName) (ast.PdfStream, error) {
 	if xobjDict, err := document.ResolveDict(ctx, doc, page.Resources["XObject"]); err == nil && xobjDict != nil {
@@ -951,6 +964,16 @@ func lookupImage(ctx context.Context, doc *document.Document, page *document.Pag
 
 // decodeImageStream decodes the Image XObject stream that name refers to.
 func decodeImageStream(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream) (image.Image, error) {
+	img, err := decodeImagePixels(ctx, doc, name, stream)
+	if err != nil {
+		return nil, err
+	}
+	return unpreblend(ctx, doc, name, stream.Dict, img), nil
+}
+
+// decodeImagePixels decodes the samples of an Image XObject stream into
+// pixels, taking no account of its soft mask.
+func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream) (image.Image, error) {
 	width, err := resolveInt(ctx, doc, stream.Dict, "Width")
 	if err != nil {
 		return nil, err

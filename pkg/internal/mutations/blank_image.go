@@ -112,7 +112,9 @@ func blankImage(
 			ErrImageCarriesSampleEntries, box.Name)
 	}
 
-	img, err := pdfimage.DecodeImage(ctx, doc, page, ast.PdfName(box.Name))
+	// The samples as stored: the replacement keeps the image's soft mask, so a
+	// /Matte on it still describes them.
+	img, err := pdfimage.DecodeImageSamples(ctx, doc, page, ast.PdfName(box.Name))
 	if err != nil {
 		return fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
 	}
