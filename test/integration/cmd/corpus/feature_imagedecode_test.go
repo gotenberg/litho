@@ -181,3 +181,26 @@ func TestImageDecodeFeature_Compare(t *testing.T) {
 		t.Errorf("blank: got Skipped false, want true")
 	}
 }
+
+// TestPairImages pairs as many golden images as a pairing admits. Golden 12
+// and 9 against decoded 11 and 14: taking golden 12's nearest, 11, leaves 9
+// with 14, five levels away, while 12 with 14 and 9 with 11 pairs both.
+// Identical signatures pair with each other whatever the order.
+func TestPairImages(t *testing.T) {
+	sig := func(v float64) imageSignature {
+		return imageSignature{Width: 1, Height: 1, Grid: [2]int{1, 1}, Sig: []float64{v, v, v}}
+	}
+	for _, tc := range []struct {
+		name      string
+		want, got []imageSignature
+		pairs     []int
+	}{
+		{"augmenting", []imageSignature{sig(12), sig(9)}, []imageSignature{sig(11), sig(14)}, []int{1, 0}},
+		{"exact first", []imageSignature{sig(10), sig(12)}, []imageSignature{sig(12), sig(10)}, []int{1, 0}},
+		{"too far", []imageSignature{sig(10)}, []imageSignature{sig(20)}, []int{-1}},
+	} {
+		if got := pairImages(tc.want, tc.got); !slices.Equal(got, tc.pairs) {
+			t.Errorf("%s: pairs %v, want %v", tc.name, got, tc.pairs)
+		}
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -200,7 +201,7 @@ func signatureOf(img image.Image) imageSignature {
 	return imageSignature{Width: w, Height: h, Grid: [2]int{gw, gh}, Sig: sig}
 }
 
-// Compare pairs each golden image with an unused image litho decoded on the
+// Compare pairs each golden image with a distinct image litho decoded on the
 // same page, of the same size, whose signature lies within imageTolerance.
 func (f *imageDecodeFeature) Compare(fixtureID string, output []byte) Verdict {
 	golden := f.golden(fixtureID)
@@ -226,28 +227,18 @@ func (f *imageDecodeFeature) Compare(fixtureID string, output []byte) Verdict {
 	var mismatches []json.RawMessage
 	for _, gp := range golden.Pages {
 		litho := byPage[gp.Page]
-		used := make([]bool, len(litho))
-		for i, im := range litho {
+		for _, im := range litho {
 			if im.Failed != "" {
 				failed++
-				used[i] = true
 			}
 		}
-		for _, want := range gp.Images {
-			best, bestDiff := -1, math.Inf(1)
-			for i, im := range litho {
-				if used[i] || im.Width != want.Width || im.Height != want.Height || im.Grid != want.Grid {
-					continue
-				}
-				if d := signatureDistance(im.Sig, want.Sig); d < bestDiff {
-					best, bestDiff = i, d
-				}
-			}
-			if best >= 0 && bestDiff <= imageTolerance {
-				used[best] = true
+		for i, j := range pairImages(gp.Images, litho) {
+			if j >= 0 {
 				matched++
 				continue
 			}
+			want := gp.Images[i]
+			best, bestDiff := nearestImage(want, litho)
 			mismatches = append(mismatches, imageMismatch(gp.Page, want, litho, best, bestDiff))
 		}
 	}
@@ -264,6 +255,123 @@ func (f *imageDecodeFeature) Compare(fixtureID string, output []byte) Verdict {
 	return v
 }
 
+// pairImages pairs the golden images of a page with distinct decoded images
+// of the same size whose signatures lie within imageTolerance, as many as can
+// be, and returns, for each golden image, the index of its partner or -1.
+// Identical signatures pair first and each remaining golden image takes its
+// nearest free partner; augmenting paths then re-pair wherever that leaves a
+// golden image out that a different pairing admits. Taking each golden image's
+// nearest partner in turn instead let an early image take the only partner of
+// a later one, and left 34 of the tiny strips of govdocs thread_200_200823
+// unmatched against images litho decodes within tolerance.
+func pairImages(want, got []imageSignature) []int {
+	pair := make([]int, len(want))
+	owner := make([]int, len(got))
+	for i := range pair {
+		pair[i] = -1
+	}
+	for j := range owner {
+		owner[j] = -1
+	}
+	link := func(i, j int) {
+		pair[i], owner[j] = j, i
+	}
+	key := func(s imageSignature) string {
+		return fmt.Sprint(s.Width, s.Height, s.Grid, s.Sig)
+	}
+	exact := make(map[string][]int)
+	for j, im := range got {
+		if im.Failed == "" {
+			exact[key(im)] = append(exact[key(im)], j)
+		}
+	}
+	for i, w := range want {
+		if js := exact[key(w)]; len(js) > 0 {
+			link(i, js[0])
+			exact[key(w)] = js[1:]
+		}
+	}
+	// neighbours lists the decoded images within tolerance of golden image i,
+	// nearest first, computed once per image and only for the images the
+	// search reaches: a page can hold thousands of identical strips, which the
+	// exact pass pairs without ever listing them.
+	cache := make(map[int][]int)
+	neighbours := func(i int) []int {
+		if js, ok := cache[i]; ok {
+			return js
+		}
+		type near struct {
+			d float64
+			j int
+		}
+		var ns []near
+		w := want[i]
+		for j, im := range got {
+			if im.Failed != "" || im.Width != w.Width || im.Height != w.Height || im.Grid != w.Grid {
+				continue
+			}
+			if d := signatureDistance(im.Sig, w.Sig); d <= imageTolerance {
+				ns = append(ns, near{d, j})
+			}
+		}
+		sort.SliceStable(ns, func(a, b int) bool { return ns[a].d < ns[b].d })
+		js := make([]int, len(ns))
+		for k, n := range ns {
+			js[k] = n.j
+		}
+		cache[i] = js
+		return js
+	}
+	for i := range want {
+		if pair[i] >= 0 {
+			continue
+		}
+		for _, j := range neighbours(i) {
+			if owner[j] < 0 {
+				link(i, j)
+				break
+			}
+		}
+	}
+	var visited []bool
+	var augment func(i int) bool
+	augment = func(i int) bool {
+		for _, j := range neighbours(i) {
+			if visited[j] {
+				continue
+			}
+			visited[j] = true
+			if owner[j] < 0 || augment(owner[j]) {
+				link(i, j)
+				return true
+			}
+		}
+		return false
+	}
+	for i := range want {
+		if pair[i] < 0 {
+			visited = make([]bool, len(got))
+			augment(i)
+		}
+	}
+	return pair
+}
+
+// nearestImage returns the decoded image of want's size whose signature lies
+// nearest, paired or not, and its distance, or -1 when none decoded.
+func nearestImage(want imageSignature, got []imageSignature) (int, float64) {
+	best, bestDiff := -1, math.Inf(1)
+	for j, im := range got {
+		if im.Failed != "" || im.Width != want.Width || im.Height != want.Height || im.Grid != want.Grid {
+			continue
+		}
+		if d := signatureDistance(im.Sig, want.Sig); d < bestDiff {
+			best, bestDiff = j, d
+		}
+	}
+	return best, bestDiff
+}
+
 // signatureDistance returns the largest difference between two signatures'
 // cell means.
 func signatureDistance(a, b []float64) float64 {
@@ -277,22 +385,24 @@ func signatureDistance(a, b []float64) float64 {
 	return d
 }
 
-// imageMismatch describes a golden image nothing matched.
+// imageMismatch describes a golden image nothing matched: the nearest image
+// litho decoded at its size, and an image of its size litho failed to decode,
+// which is the likelier partner when there is one.
 func imageMismatch(page int, want imageSignature, litho []imageSignature, best int, bestDiff float64) json.RawMessage {
 	entry := map[string]any{"page": page, "width": want.Width, "height": want.Height}
-	switch {
-	case best >= 0:
+	if best >= 0 {
 		entry["closest"] = litho[best].Name
 		entry["distance"] = math.Round(bestDiff*10) / 10
-	default:
-		for _, im := range litho {
-			if im.Failed != "" && im.Width == want.Width && im.Height == want.Height {
-				entry["closest"] = im.Name
-				entry["failed"] = im.Failed
-				break
-			}
+	}
+	for _, im := range litho {
+		if im.Failed != "" && im.Width == want.Width && im.Height == want.Height {
+			entry["failed_image"] = im.Name
+			entry["failed"] = im.Failed
+			break
 		}
-		if _, ok := entry["closest"]; !ok {
+	}
+	if _, ok := entry["closest"]; !ok {
+		if _, failed := entry["failed"]; !failed {
 			entry["closest"] = "no decoded image of that size"
 		}
 	}
