@@ -91,6 +91,8 @@ func parseStreamKeysContext(s string) (int, []ast.PdfName, bool) {
 //
 //   - All corpora: the fixtures carrying these keys declare /Length 0 on those
 //     streams, so nothing retrievable is lost.
+//   - All corpora: no stream this fixer rewrites is queued by an earlier fixer
+//     first, at PDF/A-1b, 2b or 4, so the allocator read changes no output.
 func fixStreamFileKeys(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, violations []compliance.Violation, _ string) ([]string, error) {
 	if opts.PreserveContent {
 		return nil, nil
@@ -118,8 +120,11 @@ func fixStreamFileKeys(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 			break
 		}
 
-		stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
-		if err != nil || stream.Dict == nil {
+		// Alloc-first: both rules bind on every stream and lzw runs first, so
+		// the named stream may already be queued re-encoded. Rewriting the
+		// document's copy would put the LZWDecode body back.
+		stream, ok := liveStream(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+		if !ok {
 			continue
 		}
 
