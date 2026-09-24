@@ -13,8 +13,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/pkg/plugins/jbig2"
-	"github.com/gotenberg/litho/pkg/plugins/jpx"
 )
 
 // pdfcpuBookmarkFile is the layout emitted by `pdfcpu bookmarks export`.
@@ -274,10 +272,7 @@ func extractBookmarks(ctx context.Context, pdfPath string) ([]models.Bookmark, e
 	if err != nil {
 		return nil, fmt.Errorf("stat: %w", err)
 	}
-	r, err := pdf.Open(ctx, f, info.Size(),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	r, err := pdf.Open(ctx, f, info.Size())
 	if err != nil {
 		return nil, fmt.Errorf("pdf.Open: %w", err)
 	}

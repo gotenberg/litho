@@ -1,20 +1,12 @@
 // Package plugins defines extension interfaces for the litho PDF reader.
 //
-// Filter plugins supply decoders for PDF stream filters backed by external C
-// libraries: JPXDecode via libopenjp2 and JBIG2Decode via libjbig2dec. litho
-// decodes both natively; a registered plugin takes precedence over the
-// built-in decoder.
+// A filter plugin supplies the decoder for one PDF stream filter. litho
+// decodes every standard filter natively, JBIG2Decode and JPXDecode included,
+// so a plugin either makes a filter litho does not know decodable or replaces
+// a built-in decoder: a registered plugin takes precedence for its filter
+// name.
 //
 // Usage:
 //
-//	import (
-//	    "github.com/gotenberg/litho/pkg/pdf"
-//	    "github.com/gotenberg/litho/pkg/plugins/jbig2"
-//	    "github.com/gotenberg/litho/pkg/plugins/jpx"
-//	)
-//
-//	reader, err := pdf.OpenFile(ctx, "doc.pdf",
-//	    pdf.WithFilterPlugin(jbig2.New()),
-//	    pdf.WithFilterPlugin(jpx.New()),
-//	)
+//	reader, err := pdf.OpenFile(ctx, "doc.pdf", pdf.WithFilterPlugin(myDecoder))
 package plugins

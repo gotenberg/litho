@@ -13,8 +13,6 @@ import (
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/pkg/plugins/jbig2"
-	"github.com/gotenberg/litho/pkg/plugins/jpx"
 )
 
 // mergeFeature is a canary for [pdf.Merge] using the merge-self
@@ -162,10 +160,7 @@ func runMerge(ctx context.Context, pdfPath string) (mergeOutput, error) {
 		return mergeOutput{}, fmt.Errorf("stat: %w", err)
 	}
 
-	src, err := pdf.Open(ctx, in, info.Size(),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	src, err := pdf.Open(ctx, in, info.Size())
 	if err != nil {
 		return mergeOutput{}, fmt.Errorf("pdf.Open: %w", err)
 	}
@@ -217,10 +212,7 @@ func runMerge(ctx context.Context, pdfPath string) (mergeOutput, error) {
 		return mergeOutput{}, fmt.Errorf("reopen for second source: %w", err)
 	}
 	defer in2.Close()
-	src2, err := pdf.Open(ctx, in2, info.Size(),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	src2, err := pdf.Open(ctx, in2, info.Size())
 	if err != nil {
 		return mergeOutput{}, fmt.Errorf("pdf.Open (second): %w", err)
 	}
@@ -231,10 +223,7 @@ func runMerge(ctx context.Context, pdfPath string) (mergeOutput, error) {
 		return mergeOutput{}, fmt.Errorf("pdf.Merge: %w", err)
 	}
 
-	out, err := pdf.Open(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	out, err := pdf.Open(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	if err != nil {
 		return mergeOutput{}, fmt.Errorf("reopen merge output: %w", err)
 	}

@@ -11,8 +11,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/pkg/plugins/jbig2"
-	"github.com/gotenberg/litho/pkg/plugins/jpx"
 )
 
 // verapdfReport is VeraPDF's JSON output shape. One report file per
@@ -296,10 +294,7 @@ func validateWithLitho(ctx context.Context, pdfPath, profileDir string) (bool, [
 		return false, []string{fmt.Sprintf("stat: %v", err)}
 	}
 
-	r, err := pdf.Open(ctx, f, info.Size(),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	r, err := pdf.Open(ctx, f, info.Size())
 	if err != nil {
 		return false, []string{fmt.Sprintf("pdf.Open: %v", err)}
 	}

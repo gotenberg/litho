@@ -85,12 +85,12 @@ func WithOCREngine(engine models.OCREngine) OpenOption {
 
 // WithFilterPlugin registers a [plugins.FilterDecoder] plugin for stream
 // decompression. Multiple plugins can be registered; each handles the
-// filter name returned by its FilterName method.
+// filter name returned by its FilterName method, and takes precedence over
+// the built-in decoder for that name.
 //
 // Example:
 //
-//	import "github.com/gotenberg/litho/pkg/plugins/jbig2"
-//	reader, err := pdf.OpenFile(ctx, "doc.pdf", pdf.WithFilterPlugin(jbig2.New()))
+//	reader, err := pdf.OpenFile(ctx, "doc.pdf", pdf.WithFilterPlugin(myDecoder))
 func WithFilterPlugin(p plugins.FilterDecoder) OpenOption {
 	return func(o *openOpts) {
 		o.filters = append(o.filters, p)

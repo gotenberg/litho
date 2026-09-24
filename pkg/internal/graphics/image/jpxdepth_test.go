@@ -15,10 +15,8 @@ import (
 // A wrong answer is worse than the refusal it replaced, so the rule is pinned
 // here rather than left to the two call sites.
 //
-// It is tested on the helper rather than through DecodeImage on purpose: JPEG
-// 2000 needs the CGO plugin, so an end-to-end decode fails at the filter stage
-// whether or not this rule is applied, and such a test would pass even with the
-// rule deleted.
+// It is tested on the helper here, and end to end by
+// TestDecodeImage_JPXStatedDepth now that JPXDecode decodes natively.
 func TestStatedBitsPerComponent(t *testing.T) {
 	t.Parallel()
 

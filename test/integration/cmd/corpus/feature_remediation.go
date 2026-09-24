@@ -15,8 +15,6 @@ import (
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/pkg/plugins/jbig2"
-	"github.com/gotenberg/litho/pkg/plugins/jpx"
 )
 
 // remediationFeature remediates each fixture with litho, then validates
@@ -386,10 +384,7 @@ func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Co
 	if err != nil {
 		return fmt.Errorf("read: %w", err)
 	}
-	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	r, err := pdf.Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return fmt.Errorf("pdf.Open: %w", err)
 	}
@@ -414,10 +409,7 @@ func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Co
 		return nil
 	}
 
-	r2, err := pdf.Open(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	r2, err := pdf.Open(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	if err != nil {
 		out.LithoPost = out.LithoPre
 		out.VeraPost = out.VeraPre

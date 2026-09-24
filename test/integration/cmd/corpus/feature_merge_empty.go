@@ -12,8 +12,6 @@ import (
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/pkg/plugins/jbig2"
-	"github.com/gotenberg/litho/pkg/plugins/jpx"
 )
 
 // mergeEmptyFeature is the two-input companion to [mergeFeature].
@@ -153,10 +151,7 @@ func (f *mergeEmptyFeature) runMergeEmpty(ctx context.Context, pdfPath string) (
 	if err != nil {
 		return mergeEmptyOutput{}, fmt.Errorf("stat: %w", err)
 	}
-	src, err := pdf.Open(ctx, in, info.Size(),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	src, err := pdf.Open(ctx, in, info.Size())
 	if err != nil {
 		return mergeEmptyOutput{}, fmt.Errorf("pdf.Open: %w", err)
 	}
@@ -210,10 +205,7 @@ func (f *mergeEmptyFeature) runMergeEmpty(ctx context.Context, pdfPath string) (
 	if err != nil {
 		return mergeEmptyOutput{}, fmt.Errorf("stat partner: %w", err)
 	}
-	partnerR, err := pdf.Open(ctx, partner, pInfo.Size(),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	partnerR, err := pdf.Open(ctx, partner, pInfo.Size())
 	if err != nil {
 		return mergeEmptyOutput{}, fmt.Errorf("pdf.Open (partner): %w", err)
 	}
@@ -235,10 +227,7 @@ func (f *mergeEmptyFeature) runMergeEmpty(ctx context.Context, pdfPath string) (
 		return mergeEmptyOutput{}, fmt.Errorf("pdf.Merge: %w", err)
 	}
 
-	out, err := pdf.Open(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	out, err := pdf.Open(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	if err != nil {
 		return mergeEmptyOutput{}, fmt.Errorf("reopen merge output: %w", err)
 	}

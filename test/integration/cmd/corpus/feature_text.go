@@ -10,8 +10,6 @@ import (
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/pkg/plugins/jbig2"
-	"github.com/gotenberg/litho/pkg/plugins/jpx"
 )
 
 // pdfjsReference is the golden layout produced by PDF.js's reference
@@ -260,10 +258,7 @@ func extractTextPages(ctx context.Context, pdfPath string, lastPage int) ([]text
 		return nil, 0, fmt.Errorf("stat: %w", err)
 	}
 
-	r, err := pdf.Open(ctx, f, info.Size(),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	r, err := pdf.Open(ctx, f, info.Size())
 	if err != nil {
 		return nil, 0, fmt.Errorf("pdf.Open: %w", err)
 	}

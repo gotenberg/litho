@@ -41,11 +41,6 @@ linters:
       - common-false-positives
       - legacy
       - std-error-handling
-    rules:
-      - linters:
-          - dupword
-        path: "pkg/plugins/jbig2/decoder_cgo\\.go"
-        text: "NULL,"
 formatters:
   enable:
     - gci

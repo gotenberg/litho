@@ -10,8 +10,6 @@ import (
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/pkg/plugins/jbig2"
-	"github.com/gotenberg/litho/pkg/plugins/jpx"
 )
 
 // splitFeature is a self-consistency canary for [pdf.Split]: every
@@ -108,10 +106,7 @@ func runSplit(ctx context.Context, pdfPath string) (splitOutput, error) {
 		return splitOutput{}, fmt.Errorf("stat: %w", err)
 	}
 
-	src, err := pdf.Open(ctx, in, info.Size(),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	src, err := pdf.Open(ctx, in, info.Size())
 	if err != nil {
 		return splitOutput{}, fmt.Errorf("pdf.Open: %w", err)
 	}
@@ -154,10 +149,7 @@ func runSplit(ctx context.Context, pdfPath string) (splitOutput, error) {
 		return splitOutput{}, fmt.Errorf("pdf.Split: %w", err)
 	}
 
-	out, err := pdf.Open(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	out, err := pdf.Open(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	if err != nil {
 		return splitOutput{}, fmt.Errorf("reopen split output: %w", err)
 	}

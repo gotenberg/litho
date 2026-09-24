@@ -158,3 +158,22 @@ func TestDecodeImage_JPXUnsupportedColour(t *testing.T) {
 		}
 	}
 }
+
+// TestDecodeImage_JPXStatedDepth decodes a JPXDecode image whose dictionary
+// states /BitsPerComponent 4. ISO 32000-1, Table 89 says the entry is ignored
+// for a JPXDecode image, and the filter hands on 8 bits per sample, so reading
+// the output as packed 4-bit samples would scramble every pixel.
+func TestDecodeImage_JPXStatedDepth(t *testing.T) {
+	t.Parallel()
+
+	ctx, doc, page := imagePDF(t, jpxPDF(1, 9, "/BitsPerComponent 4", readTestJPX(t, "testdata/annex_j10.j2k")))
+	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("DecodeImage: %v", err)
+	}
+	for y, v := range []uint32{101, 103, 104, 105, 96, 97, 96, 102, 109} {
+		if got := greyAt(img, 0, y); got != v {
+			t.Errorf("row %d grey %d, want %d", y, got, v)
+		}
+	}
+}

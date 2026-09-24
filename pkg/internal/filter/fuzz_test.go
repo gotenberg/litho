@@ -7,8 +7,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// pureGoFilters are the stream filters decoded without a CGO plugin or a
-// crypt handler. FuzzApplyDecodeFilter runs each fuzz input through all
+// pureGoFilters are the stream filters decoded without a crypt handler. FuzzApplyDecodeFilter runs each fuzz input through all
 // of them and asserts none panics.
 var pureGoFilters = []ast.PdfName{
 	"FlateDecode", "LZWDecode", "ASCIIHexDecode", "ASCII85Decode",

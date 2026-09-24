@@ -4,7 +4,7 @@ litho is a pure-Go PDF Conforming Processor. Two rules override everything else:
 
 - Module: `github.com/gotenberg/litho`
 - Go: 1.27.0+
-- Optional: Docker (corpus provisioning), CGO + libopenjp2 or libjbig2dec (optional JPXDecode and JBIG2Decode overrides)
+- Optional: Docker (corpus provisioning)
 
 ## Quick start
 
@@ -139,7 +139,7 @@ Behavior-focused tests assert observable contracts (non-nil output, expected tex
 
 ### Fuzzing
 
-Fuzz tests exist for the lexer and parser. Any function whose leading argument is attacker-controlled `[]byte` (stream filter `Decode`, predictors, font/CMap table parsers, image decoders) ships a `Fuzz*` target in a `*_fuzz_test.go` beside it, seeded with one valid and one truncated input, asserting it never panics. Pure-Go decoders only; the CGO plugins in `pkg/plugins` are exempt.
+Fuzz tests exist for the lexer and parser. Any function whose leading argument is attacker-controlled `[]byte` (stream filter `Decode`, predictors, font/CMap table parsers, image decoders) ships a `Fuzz*` target in a `*_fuzz_test.go` beside it, seeded with one valid and one truncated input, asserting it never panics.
 
 See:
 
@@ -181,22 +181,6 @@ Stage specific files. Never `git add -A`.
 | `github.com/antchfx/xpath`      | XPath 1.0 evaluator backing the Schematron engine     |
 | `github.com/antchfx/xmlquery`   | XML DOM + XPath navigator paired with `antchfx/xpath` |
 
-### Optional CGO plugins
+### Filter plugins
 
-Filter plugins in `pkg/plugins/` provide opt-in decoders backed by external C libraries. JBIG2Decode and JPXDecode are decoded natively (`pkg/internal/filter/jbig2`, `pkg/internal/filter/jpx`); a registered plugin takes precedence over the built-in decoder. Without CGO or without the library installed, a plugin's `Decode` method returns `ErrUnsupportedFilter`.
-
-| Plugin              | C library   | Install                 | Filter      |
-| ------------------- | ----------- | ----------------------- | ----------- |
-| `pkg/plugins/jpx`   | libopenjp2  | `brew install openjpeg` | JPXDecode   |
-| `pkg/plugins/jbig2` | libjbig2dec | `brew install jbig2dec` | JBIG2Decode |
-
-Register plugins via `pdf.WithFilterPlugin` when opening a document:
-
-```go
-reader, err := pdf.OpenFile(ctx, "doc.pdf",
-    pdf.WithFilterPlugin(jpx.New()),
-    pdf.WithFilterPlugin(jbig2.New()),
-)
-```
-
-To run tests with CGO plugins enabled: `CGO_ENABLED=1 go test ./pkg/plugins/...`
+litho decodes every standard stream filter in pure Go, JBIG2Decode and JPXDecode included, and ships no plugin. `pkg/plugins` defines `FilterDecoder`, which a caller implements to decode a filter litho does not know or to replace a built-in decoder; `pdf.WithFilterPlugin` registers one, and it takes precedence over the built-in decoder for its filter name.

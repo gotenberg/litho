@@ -9,8 +9,6 @@ import (
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/pkg/plugins/jbig2"
-	"github.com/gotenberg/litho/pkg/plugins/jpx"
 )
 
 // mergeCatalogFeature merges each input with itself and asserts only the
@@ -99,12 +97,7 @@ func runMergeCatalog(ctx context.Context, pdfPath string) (mergeCatalogOutput, e
 		return mergeCatalogOutput{}, fmt.Errorf("stat: %w", err)
 	}
 
-	opts := []pdf.OpenOption{
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	}
-
-	src, err := pdf.Open(ctx, in, info.Size(), opts...)
+	src, err := pdf.Open(ctx, in, info.Size())
 	if err != nil {
 		return skip(fmt.Sprintf("litho cannot open the input: %v", err), 0)
 	}
@@ -129,7 +122,7 @@ func runMergeCatalog(ctx context.Context, pdfPath string) (mergeCatalogOutput, e
 		return mergeCatalogOutput{}, fmt.Errorf("reopen for second source: %w", err)
 	}
 	defer in2.Close()
-	src2, err := pdf.Open(ctx, in2, info.Size(), opts...)
+	src2, err := pdf.Open(ctx, in2, info.Size())
 	if err != nil {
 		return skip(fmt.Sprintf("litho cannot open the second source: %v", err), inputPages)
 	}
@@ -140,7 +133,7 @@ func runMergeCatalog(ctx context.Context, pdfPath string) (mergeCatalogOutput, e
 		return skip(fmt.Sprintf("litho cannot merge the input: %v", err), inputPages)
 	}
 
-	out, err := pdf.Open(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()), opts...)
+	out, err := pdf.Open(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	if err != nil {
 		return skip(fmt.Sprintf("litho cannot reopen its own merge output: %v", err), inputPages)
 	}

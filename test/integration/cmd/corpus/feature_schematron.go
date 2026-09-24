@@ -13,8 +13,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/models"
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/pkg/plugins/jbig2"
-	"github.com/gotenberg/litho/pkg/plugins/jpx"
 )
 
 // kositReport mirrors the JSON shape emitted by lib/run-kosit.sh.
@@ -250,10 +248,7 @@ func validateFacturXFailures(ctx context.Context, pdfPath string) ([]string, err
 		return nil, fmt.Errorf("stat: %w", err)
 	}
 
-	r, err := pdf.Open(ctx, f, info.Size(),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	r, err := pdf.Open(ctx, f, info.Size())
 	if err != nil {
 		return nil, fmt.Errorf("pdf.Open: %w", err)
 	}

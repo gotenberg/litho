@@ -8,8 +8,6 @@ import (
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/pkg/plugins/jbig2"
-	"github.com/gotenberg/litho/pkg/plugins/jpx"
 )
 
 // metadataFeature compares document-level metadata (Info dict fields,
@@ -168,10 +166,7 @@ func extractMetadata(ctx context.Context, pdfPath string) (pdfjsRefInfo, error) 
 		return pdfjsRefInfo{}, fmt.Errorf("stat: %w", err)
 	}
 
-	r, err := pdf.Open(ctx, f, info.Size(),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	r, err := pdf.Open(ctx, f, info.Size())
 	if err != nil {
 		return pdfjsRefInfo{}, fmt.Errorf("pdf.Open: %w", err)
 	}

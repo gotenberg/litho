@@ -13,8 +13,6 @@ import (
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/pdf"
-	"github.com/gotenberg/litho/pkg/plugins/jbig2"
-	"github.com/gotenberg/litho/pkg/plugins/jpx"
 )
 
 // Fixture is one PDF plus the identifier the goldens are keyed on.
@@ -168,10 +166,7 @@ func detectClaimedProfile(ctx context.Context, pdfPath string) string {
 	if err != nil {
 		return ""
 	}
-	r, err := pdf.Open(ctx, f, info.Size(),
-		pdf.WithFilterPlugin(jbig2.New()),
-		pdf.WithFilterPlugin(jpx.New()),
-	)
+	r, err := pdf.Open(ctx, f, info.Size())
 	if err != nil {
 		return ""
 	}
