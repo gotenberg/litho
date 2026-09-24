@@ -292,8 +292,8 @@ func validatePatterns(value string, step []Facet) *FacetViolation {
 			// Deliberate leniency: 4.3.4.2 requires {value} to be a valid
 			// regular expression, and a pattern that is not one lands
 			// here. So does a valid one [translatePattern] does not
-			// support: the escapes \i, \I, \c and \C, the block escapes
-			// such as \p{IsBasicLatin}, and a count above the 1000
+			// support: a block escape naming a block of a later Unicode
+			// than the Appendix F.1.1 table, and a count above the 1000
 			// repetitions Go's regexp compiles.
 			return nil
 		}

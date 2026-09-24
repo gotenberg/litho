@@ -50,8 +50,14 @@ var (
 // for. Every character class expression is therefore computed as a set of
 // ranges and written out explicitly.
 //
-// The name-character escapes \i, \I, \c and \C, and the block escapes
-// \p{IsX}, are not translated: each reports errPatternUnsupported.
+// A block escape \p{IsX} whose name the Appendix F.1.1 block table does not
+// list reports errPatternUnsupported: F.1.1 encourages blocks of later
+// Unicode versions, which litho does not know.
+//
+// # Corpus evidence
+//
+//   - All corpora: no bundled schema declares an xs:pattern, so the name and
+//     block escapes change no XSD verdict on the 159 files that embed XML.
 func translatePattern(pattern string) (string, error) {
 	t := &patternTranslator{src: []rune(pattern)}
 	if err := t.regExp(); err != nil {
@@ -366,10 +372,8 @@ func (t *patternTranslator) escape() (rune, goClassEscape, error) {
 		return '\t', "", nil
 	case '\\', '|', '.', '?', '*', '+', '(', ')', '{', '}', '-', '[', ']', '^':
 		return c, "", nil
-	case 's', 'S', 'd', 'D', 'w', 'W':
+	case 's', 'S', 'i', 'I', 'c', 'C', 'd', 'D', 'w', 'W':
 		return 0, multiCharEscapes[c], nil
-	case 'i', 'I', 'c', 'C':
-		return 0, "", fmt.Errorf("%w: \\%c needs the XML 1.0 name character tables", errPatternUnsupported, c)
 	case 'p', 'P':
 		esc, err := t.categoryEscape(c == 'P')
 		return 0, esc, err
@@ -391,11 +395,16 @@ func (t *patternTranslator) categoryEscape(complement bool) (goClassEscape, erro
 	if !t.accept('}') {
 		return "", fmt.Errorf("%w: unterminated category escape", errPatternSyntax)
 	}
-	if strings.HasPrefix(name, "Is") {
-		return "", fmt.Errorf("%w: block escape \\p{%s}", errPatternUnsupported, name)
-	}
-	classes, ok := categoryEscapes[name]
-	if !ok {
+	// [27] charProp ::= IsCategory | IsBlock, and no category starts with
+	// the "Is" of [36] IsBlock.
+	block, isBlock := strings.CutPrefix(name, "Is")
+	var classes [2]goClassEscape
+	var known bool
+	if isBlock {
+		if classes, known = blockEscapes[block]; !known {
+			return "", fmt.Errorf("%w: block escape \\p{%s} names no block of the Appendix F.1.1 table", errPatternUnsupported, name)
+		}
+	} else if classes, known = categoryEscapes[name]; !known {
 		return "", fmt.Errorf("%w: unknown category %q", errPatternSyntax, name)
 	}
 	if complement {
@@ -420,18 +429,49 @@ const wildcardEscape goClassEscape = `[^\n\r]`
 //   - \w is [#x0000-#x10FFFF]-[\p{P}\p{Z}\p{C}]. Every code point belongs to
 //     exactly one general category, so that is L, M, N and S, plus the
 //     surrogates of Cs, which no Go string decodes to.
+//   - \i is Letter | '_' | ':', and \c is NameChar, from XML 1.0 (Second
+//     Edition): productions [84] Letter ::= BaseChar | Ideographic and [4]
+//     NameChar ::= Letter | Digit | '.' | '-' | '_' | ':' | CombiningChar |
+//     Extender, over the Appendix B classes pattern_tables.go mirrors. Go's
+//     unicode tables are not reused: they follow a later Unicode, and the
+//     XML 1.0 classes were frozen on Unicode 2.0.
 //
 // Each upper-case escape is the complement of its lower-case one.
 //
 //nolint:gochecknoglobals // immutable spec table.
-var multiCharEscapes = map[rune]goClassEscape{
-	's': `[\t\n\r ]`,
-	'S': `[^\t\n\r ]`,
-	'd': `\p{Nd}`,
-	'D': `\P{Nd}`,
-	'w': `[\p{L}\p{M}\p{N}\p{S}]`,
-	'W': `[^\p{L}\p{M}\p{N}\p{S}]`,
-}
+var multiCharEscapes = func() map[rune]goClassEscape {
+	letter := slices.Concat(xmlBaseChar, xmlIdeographic)
+	nameStart := slices.Concat(letter, runeSet{{'_', '_'}, {':', ':'}}).normalize()
+	nameChar := slices.Concat(nameStart, xmlDigit, xmlCombiningChar, xmlExtender,
+		runeSet{{'.', '.'}, {'-', '-'}}).normalize()
+	return map[rune]goClassEscape{
+		's': `[\t\n\r ]`,
+		'S': `[^\t\n\r ]`,
+		'i': goClassEscape(nameStart.goClass()),
+		'I': goClassEscape(nameStart.complement().goClass()),
+		'c': goClassEscape(nameChar.goClass()),
+		'C': goClassEscape(nameChar.complement().goClass()),
+		'd': `\p{Nd}`,
+		'D': `\P{Nd}`,
+		'w': `[\p{L}\p{M}\p{N}\p{S}]`,
+		'W': `[^\p{L}\p{M}\p{N}\p{S}]`,
+	}
+}()
+
+// blockEscapes holds the Go classes for \p{IsX} and \P{IsX}, keyed by the
+// block name X of the Appendix F.1.1 table xsdBlocks mirrors. The ranges
+// are the table's even where Unicode has since moved a block end, as it did
+// for CJKUnifiedIdeographsExtensionA.
+//
+//nolint:gochecknoglobals // immutable spec table.
+var blockEscapes = func() map[string][2]goClassEscape {
+	out := make(map[string][2]goClassEscape, len(xsdBlocks))
+	for name, set := range xsdBlocks {
+		set = set.normalize()
+		out[name] = [2]goClassEscape{goClassEscape(set.goClass()), goClassEscape(set.complement().goClass())}
+	}
+	return out
+}()
 
 // categoryEscapes mirrors the general categories of Appendix F.1.1,
 // productions [28] to [35], as the Go classes for \p{X} and \P{X}. Go

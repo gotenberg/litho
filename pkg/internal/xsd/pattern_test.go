@@ -170,6 +170,58 @@ func TestPatternFor_AppendixF(t *testing.T) {
 			[]string{"EUR"},
 			[]string{"EURO", "xEUR"},
 		},
+		{
+			// F.1.1: \i is Letter | '_' | ':' and \c is NameChar, as XML
+			// 1.0 (Second Edition) defines them: an XML name.
+			"name escapes", `\i\c*`,
+			[]string{"a", "_x", ":ns", "é-1.2", "ab·", "Ωμέγα", "中文"},
+			[]string{"", "1a", "-a", ".a", "a b", "a/b"},
+		},
+		{
+			// The XML 1.0 classes stop at Unicode 2.0: ǅ (U+01C5) is a
+			// titlecase letter the BaseChar ranges leave out, and ࡀ
+			// (U+0840, Mandaic) postdates them.
+			"name escapes follow XML 1.0 Appendix B", `\i`,
+			[]string{"A", "ı"},
+			[]string{"ǅ", "ࡀ", "·", "0"},
+		},
+		{
+			"name character complement", `\C+`,
+			[]string{" ", "/@!", "\u00d7"},
+			[]string{"a", "-", "·"},
+		},
+		{
+			"name start complement in a class", `[\I-[\d]]`,
+			[]string{"-", "·", " "},
+			[]string{"a", "_", "1"},
+		},
+		{
+			"block escape", `\p{IsBasicLatin}+`,
+			[]string{"abc", "\x00~"},
+			[]string{"é", "aé"},
+		},
+		{
+			"complement block escape", `\P{IsGreek}`,
+			[]string{"a", "ऄ"},
+			[]string{"Ω", "\u0370"},
+		},
+		{
+			"block escape in a class", `[\p{IsHiragana}\p{IsKatakana}]+`,
+			[]string{"ひらがな", "カタカナ"},
+			[]string{"漢字"},
+		},
+		{
+			// The table ends CJKUnifiedIdeographsExtensionA at U+4DB5,
+			// where later Unicode moved it to U+4DBF.
+			"block ranges are the table's", `\p{IsCJKUnifiedIdeographsExtensionA}`,
+			[]string{"\u3400", "\u4db5"},
+			[]string{"\u4db6", "\u4dbf"},
+		},
+		{
+			"block listed twice", `\p{IsSpecials}`,
+			[]string{"\ufeff", "\ufff0", "\ufffd"},
+			[]string{"\ufefe", "\uffef"},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -207,10 +259,9 @@ func TestTranslatePattern_Refusals(t *testing.T) {
 		pattern string
 		want    error
 	}{
-		{"name start escape", `\i\c*`, errPatternUnsupported},
-		{"name escape complement", `[\C]`, errPatternUnsupported},
-		{"block escape", `\p{IsBasicLatin}+`, errPatternUnsupported},
-		{"block escape in a class", `[\P{IsGreek}]`, errPatternUnsupported},
+		{"block of a later Unicode", `\p{IsCyrillicSupplement}`, errPatternUnsupported},
+		{"block name in another case", `\p{Isbasiclatin}`, errPatternUnsupported},
+		{"block name with spaces", `\p{IsBasic Latin}`, errPatternUnsupported},
 		{"unknown category", `\p{Xx}`, errPatternSyntax},
 		{"surrogate category", `\p{Cs}`, errPatternSyntax},
 		{"unterminated category", `\p{L`, errPatternSyntax},
@@ -281,9 +332,14 @@ func TestEscapeTables_Sets(t *testing.T) {
 		`\s`: {multiCharEscapes['s'], multiCharEscapes['S']},
 		`\d`: {multiCharEscapes['d'], multiCharEscapes['D']},
 		`\w`: {multiCharEscapes['w'], multiCharEscapes['W']},
+		`\i`: {multiCharEscapes['i'], multiCharEscapes['I']},
+		`\c`: {multiCharEscapes['c'], multiCharEscapes['C']},
 	}
 	for name, classes := range categoryEscapes {
 		pairs[`\p{`+name+`}`] = classes
+	}
+	for name, classes := range blockEscapes {
+		pairs[`\p{Is`+name+`}`] = classes
 	}
 	for name, pair := range pairs {
 		in, err := pair[0].set()
@@ -301,6 +357,53 @@ func TestEscapeTables_Sets(t *testing.T) {
 		}
 		if overlap := in.minus(out.complement()); len(overlap) != 0 {
 			t.Errorf("%s: escape and complement share %v", name, overlap[:min(len(overlap), 4)])
+		}
+	}
+}
+
+// TestPatternTables_Transcription pins the size of each transcribed spec
+// table, so a table that loses or gains an entry fails here rather than as a
+// changed match set, and checks the block table's ranges are ordered,
+// disjoint and within the Basic Multilingual Plane the table covers.
+func TestPatternTables_Transcription(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		table runeSet
+		want  int
+	}{
+		"[85] BaseChar":      {xmlBaseChar, 202},
+		"[86] Ideographic":   {xmlIdeographic, 3},
+		"[87] CombiningChar": {xmlCombiningChar, 95},
+		"[88] Digit":         {xmlDigit, 15},
+		"[89] Extender":      {xmlExtender, 11},
+	} {
+		if len(tc.table) != tc.want {
+			t.Errorf("%s: %d entries, want %d", name, len(tc.table), tc.want)
+		}
+		for _, r := range tc.table {
+			if r.lo > r.hi {
+				t.Errorf("%s: range %U-%U is out of order", name, r.lo, r.hi)
+			}
+		}
+	}
+
+	if len(xsdBlocks) != 84 {
+		t.Errorf("block table: %d names, want 84", len(xsdBlocks))
+	}
+	var all runeSet
+	for name, set := range xsdBlocks {
+		for _, r := range set {
+			if r.lo > r.hi || r.hi > 0xFFFD {
+				t.Errorf("block %s: range %U-%U is out of order or past the BMP", name, r.lo, r.hi)
+			}
+		}
+		all = append(all, set...)
+	}
+	slices.SortFunc(all, func(a, b runeRange) int { return int(a.lo - b.lo) })
+	for i := 1; i < len(all); i++ {
+		if all[i].lo <= all[i-1].hi {
+			t.Errorf("blocks overlap: %U-%U and %U-%U", all[i-1].lo, all[i-1].hi, all[i].lo, all[i].hi)
 		}
 	}
 }
