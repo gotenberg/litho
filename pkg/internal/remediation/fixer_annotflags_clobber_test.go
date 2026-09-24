@@ -13,13 +13,13 @@ import (
 //
 // Both halves are required to reach the write under test. [installInlineAnnots]
 // only runs when something was repaired INLINE, which needs an annotation that
-// is not an indirect object (fixer_annotflags.go:122-125), and it writes the
-// array at its own object number only when /Annots is a reference (:165-166).
-// An all-indirect fixture takes the :110 path instead and never touches the
-// array at all.
+// is not an indirect object, and it writes the array at its own object number
+// only when /Annots is a reference. An all-indirect fixture takes the
+// per-annotation write in [fixAnnotFlags] instead and never touches the array
+// at all.
 //
 // The inline /Link declares no /F, so currentF is 0, the already-correct
-// shortcut at :99 is skipped, and it is collected into inlineFixed. The
+// shortcut is skipped, and it is collected into inlineFixed. The
 // indirect /FileAttachment already carries /F 4 (Print set, nothing forbidden)
 // so it is skipped outright, keeping the array write the only thing under test.
 func annotFlagsInlinePDF() []byte {
@@ -35,22 +35,24 @@ func annotFlagsInlinePDF() []byte {
 // TestFixAnnotFlags_KeepsAnEarlierFixersPendingAnnotsArray pins that repairing
 // an inline annotation does not resurrect annotations an earlier fixer removed.
 //
-// [fixAnnotFlags] reads the page's /Annots array with document.ResolveArray
-// (fixer_annotflags.go:50), consulting no alloc-aware helper, and hands that
-// value to [installInlineAnnots], which rebuilds it wholesale with
-// copy(newArr, annots) at :157-158 and writes it back at the array's own object
-// number at :166. The same stale value also reaches the page write at :180.
+// [fixAnnotFlags] hands the page's /Annots array to [installInlineAnnots],
+// which rebuilds it wholesale with copy(newArr, annots) and writes it back at
+// the array's own object number, or into the page when /Annots is inline. It
+// used to read that array with document.ResolveArray, consulting no
+// alloc-aware helper, so an indirect array was rebuilt from the parsed file
+// rather than from an earlier fixer's pending copy.
 //
-// THE PEER IS annotations @121, WHICH RUNS FIRST. fixAnnotArray nils forbidden
-// annotation slots and rebuildAnnotsArray compacts them, then the result is
-// written at that same array object (fixer_annotations.go:140). annot-flags is
-// registry entry 124. So a stale rebuild here restores annotations that @121
-// deliberately removed, which is an output correctness regression rather than a
-// wasted object.
+// THE PEER IS annotations, WHICH RUNS FIRST. fixAnnotArray nils forbidden
+// annotation slots and rebuildAnnotsArray compacts them, then
+// fixPageAnnotations writes the result at that same array object, and
+// annotations precedes annot-flags in the registry. So the stale rebuild
+// restored annotations that the annotations fixer had deliberately removed,
+// which is an output correctness regression rather than a wasted object.
 //
-// The matched helper is liveArray (fixer.go:239), for an ARRAY. The sibling
-// fixer already does exactly that: fixer_aggressive.go:125 reads
-// liveArray(ctx, alloc, doc, annotsObj) before the same kind of write at :543.
+// The matched helper is liveArray, for an ARRAY, and fixAnnotFlags now reads
+// the array through it. The sibling fixer did exactly that already:
+// fixAnnotationAppearances reads liveArray(ctx, alloc, doc, annotsObj) before
+// installInlineAppearances makes the same kind of write.
 //
 // The marker is the array's LENGTH, because that is what removal changes and
 // what a stale rebuild restores: newArr is sized from the stale array, so a
@@ -82,7 +84,7 @@ func TestFixAnnotFlags_KeepsAnEarlierFixersPendingAnnotsArray(t *testing.T) {
 			"removal to be meaningful; got %T", onDisk[1])
 	}
 
-	// Stand in for annotations @121: the forbidden annotation has been removed
+	// Stand in for the annotations fixer: the forbidden annotation has been removed
 	// and the array compacted, exactly what rebuildAnnotsArray produces.
 	peer := ast.PdfArray{onDisk[0]}
 	if !alloc.AllocAt(annotsObj, peer) {

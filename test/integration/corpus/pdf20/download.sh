@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # pdf20/download.sh: clone the PDF Association's pdf20examples
 # repository and flatten its tree into a single pdfs/ directory. The
-# upstream project ships ~30 BSD-licensed PDFs that exercise PDF 2.0
-# (ISO 32000-2) features (associated files, namespaces, page-level
-# output intents, RichMedia, etc.). They are the smallest curated
-# set of real PDF 2.0 documents we can use as a canary alongside the
-# (almost exclusively PDF 1.x) Govdocs corpus.
+# upstream project ships seven PDFs under CC BY-SA 4.0 (its LICENSE.md)
+# that exercise PDF 2.0 (ISO 32000-2) features (UTF-8 strings,
+# page-level output intents, incremental saves, an offset start,
+# etc.). They are the smallest curated set of real PDF 2.0 documents
+# available as a canary alongside the (almost exclusively PDF 1.x)
+# Govdocs corpus.
 #
 # Usage: pdf20/download.sh <output_pdfs_dir>
 set -euo pipefail

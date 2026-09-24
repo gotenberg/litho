@@ -13,10 +13,11 @@ import (
 // TestStripUnknownFromStreamObject_KeepsAnEarlierFixersPendingStreamWrite pins
 // that the appearance-stream path reads the stream through the allocator.
 //
-// [stripUnknownFromStreamObject] used to read the appearance stream with
-// document.ResolveStream (fixer_unknownops.go) and write the stripped result
-// back at that stream's own object number. It consulted no alloc-aware helper,
-// so an earlier fixer's edit to the same stream was discarded.
+// [stripUnknownFromStreamObject] writes the stripped appearance stream back at
+// that stream's own object number. It used to read the stream with
+// document.ResolveStream, consulting no alloc-aware helper, so an earlier
+// fixer's edit to the same stream was discarded. It now reads through
+// resolveStreamFromAllocOrDoc.
 //
 // THIS IS THE SIBLING PATH, and it needs its own test rather than inheriting
 // the one written for stripUnknownInResources. That function reaches XObject
@@ -28,10 +29,9 @@ import (
 //
 // Peer and ordering are the same as the resources path and are structural:
 // graphics writes XObject streams in fixXObjects, transparency in
-// fixXObjectTransparency, nested-resources in fixFormXObjectResources, at
-// fixer.go:106, :107 and :131 respectively, all ahead of unknown-ops at :142.
-// An appearance stream is a Form XObject (ISO 32000-1, 12.5.5), so those
-// writers reach it too.
+// fixXObjectTransparency, nested-resources in fixFormXObjectResources, all
+// from registry entries ahead of unknown-ops. An appearance stream is a Form
+// XObject (ISO 32000-1, 12.5.5), so those writers reach it too.
 //
 // appearanceOpsPDF is already proven live by the package itself: object 7 is
 // the /AP /N stream, stored INDIRECTLY, and repairedAppearance asserts

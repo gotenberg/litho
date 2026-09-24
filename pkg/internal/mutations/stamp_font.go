@@ -129,10 +129,16 @@ func parseTTF(data []byte) (*embeddedTTF, error) {
 		ascent:         ascent,
 		descent:        descent,
 		italicAngle:    italicAngle,
-		// Flag 4 (Nonsymbolic) covers most Latin fonts; flag 32 is Symbolic.
-		// Nonsymbolic is the default because the stamp emits WinAnsi
-		// encoding indirectly via the unicode→GID map.
-		flags: 32, // Symbolic (safe default for any glyph set)
+		// Per ISO 32000-1, 9.8.2, Table 123, bit 3 (value 4) is Symbolic and
+		// bit 6 (value 32) is Nonsymbolic, and exactly one of the two shall be
+		// set. The flag selects glyphs only in a simple font, whose codes a
+		// viewer maps through an encoding and the font's cmap (9.6.6.4). The
+		// stamp font is a Type0 font whose Identity-H codes are glyph IDs,
+		// mapped through CIDToGIDMap Identity (see embedTTFFont), so no viewer
+		// consults the cmap and the flag changes no drawn glyph. Nonsymbolic
+		// matches how encodeTextAsGIDs uses the font: it looks each rune up in
+		// the font's Unicode cmap, as for a text font, not a symbol set.
+		flags: 32, // Nonsymbolic
 	}, nil
 }
 

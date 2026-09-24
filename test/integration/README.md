@@ -74,7 +74,8 @@ make clean-corpus
 make corpus-baseline
 
 # Fail if any (corpus, feature) cell regressed against the baseline.
-# Used by CI to gate merges; improvements are non-fatal but noted.
+# The merge gate: the repo has no CI, so run it before pushing.
+# Improvements are non-fatal but noted.
 make corpus-check
 ```
 
@@ -147,7 +148,7 @@ Cross-tool comparisons live behind small normalisations so equivalent inputs do 
 
 - **Bookmarks: tab inside a UTF-16BE title is a known difference.** pdfcpu strips horizontal tabs from outline titles ("1`\t`Preface" → "1Preface"); litho preserves them. Both are pointing at the same source byte; the canary leaves this case visible (1 fixture in the pdfcpu corpus, `adobe_supplement_iso32000_1.pdf`) because collapsing whitespace symmetrically would mask genuine title differences.
 
-- **Text on pdfcpu skews low for layout reasons, not extraction quality.** The pdfcpu corpus runs around 62% word-match against PDF.js, much lower than the govdocs or pdfjs corpora. Triage shows the gap is dominated by layout-style disagreements rather than litho bugs:
+- **Text on pdfcpu skews low for layout reasons, not extraction quality.** The pdfcpu corpus runs around 62% word-match against PDF.js (32 of 51 fixtures in the baseline), far below the pdfjs corpus (1,027 of 1,190, about 86%) and close to govdocs (623 of 1,091, about 57%). Triage shows the gap to pdfjs is dominated by layout-style disagreements rather than litho bugs:
   - Right-margin page numbers separated from the left-margin doc number by 375 pt on the same Y line: litho inserts a space (correct), PDF.js concatenates.
   - Line-wrap hyphenation: litho preserves `Edi-` + newline + `tion`, PDF.js joins.
   - Subscript / superscript Y-drops in technical notation: both tools fire heuristics differently around the small Y offset.
@@ -162,7 +163,7 @@ Cross-tool comparisons live behind small normalisations so equivalent inputs do 
 | `pdfjs`   | ~1,200 PDFs (1 fixture each)      | Mozilla's PDF.js test suite                                                                                                                                             |
 | `verapdf` | ~2,600 PDFs × 15 profiles         | veraPDF corpus, flattened from the per-profile directories                                                                                                              |
 | `govdocs` | ~1,100 PDFs (1 fixture per claim) | Govdocs1 random-sample of five fixed thread archives (real-world PDFs)                                                                                                  |
-| `pdf20`   | ~30 PDFs (1 fixture per claim)    | PDF Association's `pdf20examples` (CC-BY-SA-4.0 PDF 2.0 samples)                                                                                                        |
+| `pdf20`   | 7 PDFs (1 fixture per claim)      | PDF Association's `pdf20examples` (CC-BY-SA-4.0 PDF 2.0 samples)                                                                                                        |
 | `pdfcpu`  | ~50 PDFs (1 fixture each)         | pdfcpu's `pkg/samples/bookmarks` + `pkg/testdata` (Apache-2.0)                                                                                                          |
 | `facturx` | ~150 PDFs (1 fixture per claim)   | ZUGFeRD/corpus (Apache-2.0): real, sample and intentionally-broken Factur-X / ZUGFeRD invoices, flattened from the `ZUGFeRDv2`, `XML-Rechnung` and `ZUGFeRDv1` subtrees |
 | `litho`   | 69 PDFs × 8 profiles              | Self-authored, committed in-tree; see `corpus/litho/README.md`                                                                                                          |
@@ -175,7 +176,7 @@ Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 
 Auto-mode provisioning runs the in-tree `corpus scan-claims` helper after download, writing `<testdata_root>/claims.csv` keyed `<basename>,<profile>`. `run-verapdf.sh` consumes that file and validates each PDF only against the profile it claims (one veraPDF invocation per profile, hard-linked staging buckets), so cost scales with corpus size, not corpus size × profile count. The runner picks up the same CSV on `corpus run` to skip the live XMP scan. Delete the CSV (or `make clean-corpus`) to force a re-scan.
 
-Known limitation: the current govdocs sample (1,091 files) and the pdf20 examples contain zero PDF/A or PDF/UA claims (verified by byte-scanning for `pdfaid`), so their `claims.csv` files are legitimately empty and the compliance/remediation features run no fixtures there. Real-world compliance coverage needs a corpus sampled from documents that actually claim a profile; until one is added, the verapdf corpus is the only compliance oracle.
+Known limitation: the current govdocs sample (1,091 files) and the pdf20 examples contain zero PDF/A or PDF/UA claims (verified by byte-scanning for `pdfaid`), so their `claims.csv` files are legitimately empty and the compliance/remediation features run no fixtures there. Compliance is scored on three corpora instead: `verapdf` and `litho`, whose fixtures are built to exercise specific rules, and `facturx`, whose invoices claim PDF/A-3. veraPDF is the ground truth for all three. A general real-world sample of documents that claim PDF/A or PDF/UA is still missing.
 
 Adding a new corpus means dropping `corpus/<name>/download.sh` + `manifest.json`, then adding the matching `COPY <name>/ ./<name>/` and `chmod +x <name>/download.sh` lines to `corpus/Dockerfile` so the provisioning image can reach the script. Nothing else changes: the CLI discovers corpora by scanning for `manifest.json`.
 

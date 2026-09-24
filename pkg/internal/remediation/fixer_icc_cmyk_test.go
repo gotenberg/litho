@@ -58,21 +58,21 @@ func pdfWithCMYKICCVersion(version byte) []byte {
 // TestFixCorruptICC_ReplacesCMYKProfileWithCMYK pins that replacing an
 // unusable CMYK profile keeps the output intent's colour space.
 //
-// [replaceICCProfile] hardcodes sRGBICCProfile and nComponents = 3
-// (fixer_icc.go:129-130), so a CMYK output intent comes back declaring N 3 and
-// an RGB profile while its /OutputConditionIdentifier still names a CMYK
-// condition. The result is an output intent that contradicts itself, and
-// ISO 19005 requires the intent to describe the destination colour space it
-// actually converts to.
+// [replaceICCProfile] used to hardcode sRGBICCProfile and nComponents = 3, so a
+// CMYK output intent came back declaring N 3 and an RGB profile while its
+// /OutputConditionIdentifier still named a CMYK condition. The result was an
+// output intent that contradicts itself, and ISO 19005 requires the intent to
+// describe the destination colour space it actually converts to.
 //
-// The package already ships the parts: cmykICCProfile is embedded alongside
-// sRGBICCProfile (fixer_outputintent.go:18-21) and fixOutputIntent already
-// pairs it with nComponents 4 at :278 and :345. Only this call site is missing.
+// It now takes the colour space fixCorruptICC decoded and picks
+// cmykICCProfile with nComponents 4 for "CMYK", the pairing fixOutputIntent
+// already used, and sRGB otherwise.
 //
 // SCOPE. This is asserted for the INVALID-HEADER branch only, where
 // fixCorruptICC has decoded the profile and computed
-// colorSpace := string(data[16:20]). The truncated branch (len < 128) cannot
-// know the original colour space, so sRGB stays the right default there and
+// colorSpace := string(data[16:20]). The truncated branch (fewer than 128
+// bytes) cannot know the original colour space, so it passes an empty colour
+// space, sRGB stays the default there, and
 // TestFixCorruptICC_ReplacesTruncatedProfile, which pins "RGB ", must stay
 // green.
 func TestFixCorruptICC_ReplacesCMYKProfileWithCMYK(t *testing.T) {

@@ -13,18 +13,19 @@ import (
 // TestFixSimpleFont_KeepsAPeerFixersPendingFontWrite pins that the simple-font
 // width repair keeps a peer fixer's pending write to the same font dictionary.
 //
-// [fixSimpleFont] builds its write from the fontDict its CALLER read out of the
-// document (fixer_fonts.go), not from the allocator:
+// [fixSimpleFont] receives the fontDict its CALLER, fixFontIssues, read out of
+// the document. It used to build its write from that value alone:
 //
 //	newFont := make(ast.PdfDict, len(fontDict))
 //	maps.Copy(newFont, fontDict)
 //	newFont["Widths"] = newWidths
 //	alloc.AllocAt(fontRef.ObjectNum, newFont)
 //
-// It never consults alloc.Pending(), so an earlier fixer's edit to the same
-// font object is dropped. fonts runs at registry 144, after cid-gidmap (110),
-// font-keys (111), tounicode-ranges (114) and nested-resources (131), all of
-// which write font dictionaries.
+// It never consulted alloc.Pending(), so an earlier fixer's edit to the same
+// font object was dropped. It now copies the dictionary pending at
+// fontRef.ObjectNum when there is one. fonts follows cid-gidmap, font-keys,
+// tounicode-ranges and nested-resources in the registry, all of which write
+// font dictionaries.
 //
 // This path needs a real embedded font program before it writes anything, which
 // is why the first fonts clobber test could not reach it: without a cmap,

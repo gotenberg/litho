@@ -129,8 +129,10 @@ func WithCIISchemas(fsys fs.FS, rootPath string) OpenOption {
 // [Reader.ValidateFacturX] and [Reader.ValidateZUGFeRD] run a
 // business-rule pass over the embedded CII XML. When phase is
 // non-empty, only that phase's active patterns evaluate; pass "" to
-// run every pattern. Violations surface as compliance.Violation
-// entries under the CII_SCH clause.
+// run every pattern. A fired assertion appears in the result under
+// the CII_SCH clause; [FacturXReport.Structured], from
+// [Reader.ValidateFacturXReport] or [Reader.ValidateZUGFeRDReport],
+// returns it as a [Violation] value.
 //
 // fsys is any [io/fs.FS]: an embed.FS for bundled rule sets, an
 // os.DirFS for a path on disk. rootPath is the Schematron root file

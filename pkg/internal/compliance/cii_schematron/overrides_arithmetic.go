@@ -26,7 +26,10 @@ import (
 // when the rule passes for the matched context node and false when
 // it fires.
 
-const monetaryTolerance = 1.0 // EN 16931 cent-level tolerance per BR-CO-* family.
+// monetaryTolerance is the ±1 window, in whole currency units rather than
+// cents, that the EN 16931 schematron literals of BR-CO-17 and BR-S-09 allow
+// between a declared and a computed VAT amount.
+const monetaryTolerance = 1.0
 
 // brCO17VATCalc implements BR-CO-17 (FX-SCH-A-000052): the VAT
 // category tax amount equals the VAT category taxable amount

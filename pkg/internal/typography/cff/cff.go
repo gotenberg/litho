@@ -1200,9 +1200,10 @@ func parsePrivateDict(data []byte) (nominalWidthX, defaultWidthX float64, subrsO
 			operands = append(operands, float64(int32(binary.BigEndian.Uint32(data[i+1:i+5])))) //nolint:gosec // intentional two's-complement conversion
 			i += 5
 		case b == 30:
-			// Real number (nibble-encoded). A Computer Modern subset writes
-			// nominalWidthX as 384.778, and rounding it shifts every advance the
-			// charstrings derive from it by three quarters of a unit.
+			// Real number (nibble-encoded), kept fractional. A Computer Modern
+			// subset writes nominalWidthX as 384.778: rounding it to 385 would
+			// shift every advance the charstrings derive from it by 0.222 of a
+			// unit, and truncating it to 384 by 0.778.
 			val, end := parseRealNumber(data, i+1)
 			operands = append(operands, val)
 			i = end

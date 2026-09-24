@@ -13,9 +13,9 @@ import (
 // (object 8), which dedupPDF does not: it writes /CS0 inline as
 // [/ICCBased 6 0 R]. That difference decides everything here. With an inline
 // array the `ref, isRef := entry.(ast.PdfIndirectRef)` test in
-// dedupICCInResources is false, the AllocAt at fixer_icc_dedup.go:267 never
-// fires, and the code falls through to rewriting the /ColorSpace dict, the
-// /Resources dict or the page instead. Both existing suites assert
+// dedupICCInResources is false, the AllocAt at the array's own object number
+// never fires, and the code falls through to rewriting the /ColorSpace dict,
+// the /Resources dict or the page instead. Both existing suites assert
 // alloc.Pending()[3], the PAGE, which is exactly that fallback.
 //
 // Object 5 is the OutputIntent profile, 6 the matching page profile, 8 the
@@ -46,23 +46,23 @@ func indirectCS0PDF(t *testing.T) []byte {
 // the redundant-ICC substitution judges the colour space an earlier fixer
 // already queued, not the on-disk copy.
 //
-// [dedupICCInResources] reads the colour-space array with document.ResolveArray
-// (fixer_icc_dedup.go:247) and writes the substitute back at that array's own
-// object number (:267). It consults no alloc-aware helper, so an earlier
-// fixer's edit to the same colour-space object is invisible to it.
+// [dedupICCInResources] writes the substitute back at the colour-space array's
+// own object number. It used to read that array with document.ResolveArray,
+// consulting no alloc-aware helper, so an earlier fixer's edit to the same
+// colour-space object was invisible to it. It now reads the array with
+// liveArray.
 //
 // Peer and ordering are measured: colour-space objects are written earlier by
-// output-intent (fixer.go:68) and output-intent-cleanup (:70), and by graphics
-// (:106), transparency (:107) and group-cs (:108). icc-dedup runs at :117,
-// after all of them.
+// output-intent and output-intent-cleanup, and by graphics, transparency and
+// group-cs. icc-dedup follows all of them in the registry.
 //
-// THIS DEFECT SHOWS UP AS AN UNWANTED SUBSTITUTION, NOT A LOST EDIT, which is
+// THE DEFECT SHOWED UP AS AN UNWANTED SUBSTITUTION, NOT A LOST EDIT, which is
 // why the test is shaped differently from the other clobber tests. Reading the
-// document copy, the fixer still sees the CMYK profile that duplicates the
-// OutputIntent and collapses /CS0 to /DeviceCMYK. Reading the allocator, it
-// would see the peer's sRGB profile, find no duplicate, and correctly leave the
-// colour space alone. So the failure replaces a colour space the document no
-// longer uses.
+// document copy, the fixer still saw the CMYK profile that duplicates the
+// OutputIntent and collapsed /CS0 to /DeviceCMYK. Reading the allocator, it
+// sees the peer's sRGB profile, finds no duplicate, and correctly leaves the
+// colour space alone. So the failure replaced a colour space the document no
+// longer used.
 //
 // The CONTROL runs the same fixture unseeded to prove the substitution path
 // actually reaches object 8; without it, "nothing was written" could mean the

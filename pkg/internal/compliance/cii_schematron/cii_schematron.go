@@ -176,10 +176,12 @@ var (
 // in place of [LoadDefault] when the document's fx:ConformanceLevel
 // selects one of MINIMUM, BASIC WL, BASIC, EN 16931, or EXTENDED.
 //
-// level is matched case-insensitively against the canonical Factur-X
-// 1.0.07 spelling. Returns (nil, nil) when level is empty or
-// unrecognised so callers can fall back to the generic EN 16931
-// schematron without branching on the absence.
+// level must equal one of the canonical Factur-X 1.0.07 spellings
+// exactly, case and spacing included: "MINIMUM", "BASIC WL", "BASIC",
+// "EN 16931", or "EXTENDED". Returns (nil, nil) when level is empty or
+// any other string, including a differently cased canonical name, so
+// callers can fall back to the generic EN 16931 schematron without
+// branching on the absence.
 //
 // Concurrency: results memoise per level behind a [sync.Mutex];
 // concurrent callers see one parse cost per level per process.

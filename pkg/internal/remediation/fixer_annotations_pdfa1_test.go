@@ -339,9 +339,9 @@ func TestFixAnnotations_Part4DropsFileAttachment(t *testing.T) {
 //
 // Level E's own additions, 3D and RichMedia, are deliberately NOT asserted here.
 // They are removed by the two generic terms in the predicate, which run ungated
-// and predate this table set: "3D" is in [forbiddenAnnotSubtypes], whose comment
-// claims the set is "never permitted in any PDF/A profile" though level E
-// permits it, and "RichMedia" is simply absent from [permittedAnnotSubtypes].
+// and predate this table set: "3D" is in [forbiddenAnnotSubtypes], which the
+// predicate applies without consulting the level though level E permits it,
+// and "RichMedia" is simply absent from [permittedAnnotSubtypes].
 // That over-removal is real but LATENT: nothing can falsify a fix for it yet,
 // and an unfalsifiable guard is worse than a recorded defect.
 //

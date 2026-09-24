@@ -295,11 +295,11 @@ type RemediationReport struct {
 	// Fixed lists human-readable descriptions of applied fixes that were
 	// kept in the output.
 	Fixed []string
-	// Residual contains violations that could not be fixed automatically.
-	// Each element is a compliance.Violation, and
-	// [RemediationReport.ResidualViolations] returns them as structured
-	// [Violation] values. If content-modifying fixers were rolled back, the
-	// violations they had claimed to handle move back here.
+	// Residual contains violations that could not be fixed automatically,
+	// in the flat error form the Validate methods return.
+	// [RemediationReport.ResidualViolations] returns the same findings as
+	// structured [Violation] values. If content-modifying fixers were rolled
+	// back, the violations they had claimed to handle move back here.
 	//
 	// A non-empty Residual does not stop the output from ASSERTING the
 	// profile. The identification schemas are themselves requirements

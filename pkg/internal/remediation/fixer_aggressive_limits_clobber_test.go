@@ -12,14 +12,16 @@ import (
 // DeviceN array with NINE colorants, stored INDIRECTLY at object 5.
 //
 // Nine is not decoration. [trimDeviceNColorants] skips any array whose name
-// list is `<= pdfADeviceNComponents` (fixer_aggressive_limits.go:261), so the
-// existing deviceNPDF fixture, which declares two, never reaches the write at
-// all. A fixture that cannot reach the write proves nothing, which is the
-// dead-fixture failure this suite has hit twice.
+// list is `<= pdfADeviceNComponents`, so the existing deviceNPDF fixture, which
+// declares two, never reaches the write at all. A fixture that cannot reach the
+// write proves nothing, which is the dead-fixture failure this suite has hit
+// twice.
 //
-// The array is indirect because the write at :270 is guarded by
-// `isRef && ref.ObjectNum > 0`. Inline would take the :283 branch instead and
-// exercise a different object.
+// The array is indirect because trimDeviceNColorants writes the array at its
+// own object number only under `isRef && ref.ObjectNum > 0`. An inline array
+// takes the other branch, which writes the parent /ColorSpace dictionary
+// instead and so exercises a different object (see
+// deviceNInlineColourSpacePDF).
 func deviceNManyColorantsPDF() []byte {
 	return assemblePDF([]string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
@@ -37,27 +39,25 @@ func deviceNManyColorantsPDF() []byte {
 // that the 8-component trim preserves a peer fixer's pending edit to the same
 // colour-space object.
 //
-// [trimDeviceNColorants] reads the DeviceN array with document.ResolveArray
-// (fixer_aggressive_limits.go:252), rebuilds it wholesale with copy(newArr,
-// arr) at :266-268, and writes the result back at that array's own object
-// number via alloc.AllocAt at :270. It consults no alloc-aware helper for the
-// array, so an earlier fixer's edit to the same object is discarded. The
-// catalog read at :218 IS alloc-aware (resolveFromAllocOrDoc), which makes the
-// omission on the array easy to miss: the function is half defended.
+// [trimDeviceNColorants] rebuilds the DeviceN array wholesale with
+// copy(newArr, arr) and writes the result back at that array's own object
+// number via alloc.AllocAt. It used to read the array with
+// document.ResolveArray, consulting no alloc-aware helper, so an earlier
+// fixer's edit to the same object was discarded. The catalog read was already
+// alloc-aware (resolveFromAllocOrDoc), which made the omission on the array
+// easy to miss: the function was half defended.
 //
 // THE HELPER MUST MATCH THE OBJECT KIND. resolveFromAllocOrDoc returns a dict
-// and cannot make an array read live. The fix for an array is liveArray
-// (fixer.go:239), which is exactly what the three confirmed peers already use:
-// devicen at fixer_devicen.go:114, sep-canon at fixer_sepcanon.go:272 and
-// icc-dedup at fixer_icc_dedup.go:253, each on the same `entry` value drawn
-// from a /ColorSpace dictionary.
+// and cannot make an array read live. The array read now goes through
+// liveArray, as in the three peers that read the same `entry` value drawn from
+// a /ColorSpace dictionary: patchPageDeviceN (devicen),
+// eachColorSpaceArrayMutable (sep-canon) and dedupICCInResources (icc-dedup).
 //
-// Peer and ordering are measured, not assumed. aggressive-limits is registry
-// entry 157, the LAST in the ordered slice (fixer.go:158 closes it), so every
-// colour-space writer precedes it: output-intent (:68) and
-// output-intent-cleanup (:70), graphics (:106), transparency (:107), group-cs
-// (:108), and above all devicen (:115), which rewrites DeviceN arrays at the
-// very object numbers this function then rebuilds.
+// Peer and ordering are measured, not assumed. aggressive-limits is the LAST
+// entry of the ordered registry slice in fixer.go, so every colour-space
+// writer precedes it: output-intent and output-intent-cleanup, graphics,
+// transparency, group-cs, and above all devicen, which rewrites DeviceN arrays
+// at the very object numbers this function then rebuilds.
 //
 // The marker is the ALTERNATE SPACE, element 2, because that is what a
 // colour-space fixer realistically rewrites and the fixture declares

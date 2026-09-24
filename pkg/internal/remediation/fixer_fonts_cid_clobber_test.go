@@ -12,23 +12,25 @@ import (
 // TestFixType0Font_KeepsAPeerFixersPendingCIDFontWrite pins that the Type 0
 // font repair keeps a peer fixer's pending write to the descendant CIDFont.
 //
-// The stale read and the write that consumes it live in DIFFERENT functions
-// here, which is why neither looks guilty on its own:
+// The read and the write that consumes it live in DIFFERENT functions here,
+// which is why neither looked guilty on its own:
 //
-//	fixType0Font   :282  cidFont := document.ResolveDict(...)   stale
-//	               :323  maps.Copy(newCID, cidFont)
-//	               :349  persistCIDFont(alloc, ..., newCID, cidRef, ...)
-//	persistCIDFont :424  alloc.AllocAt(cidRef.ObjectNum, newCID)
+//	fixType0Font    reads the descendant into cidFont
+//	                maps.Copy(newCID, cidFont)
+//	                persistCIDFont(alloc, ..., newCID, cidRef, ...)
+//	persistCIDFont  alloc.AllocAt(cidRef.ObjectNum, newCID)
 //
-// persistCIDFont takes newCID as a parameter and contains no stale read;
-// fixType0Font contains no write of that object. A per-function audit clears
-// both, and the pair is still a clobber.
+// persistCIDFont takes newCID as a parameter and contains no read;
+// fixType0Font contains no write of that object. A per-function audit cleared
+// both, and the pair was still a clobber, because fixType0Font read the
+// descendant with document.ResolveDict. It now reads an indirect descendant
+// with resolveFromAllocOrDoc.
 //
-// The ordering makes it reachable rather than theoretical: cid-gidmap (registry
-// 110) scans for Subtype == CIDFontType2, this very object, reads it
-// alloc-aware and writes /CIDToGIDMap; fonts (144) then rebuilds it from the
-// on-disk copy. cid-sysinfo (147) writes it too but reads alloc-aware and runs
-// later, so it is defended.
+// The ordering makes it reachable rather than theoretical: cid-gidmap, which
+// precedes fonts in the registry, scans for Subtype == CIDFontType2, this very
+// object, reads it alloc-aware and writes /CIDToGIDMap; fonts then rebuilt it
+// from the on-disk copy. cid-sysinfo writes it too but reads alloc-aware and
+// runs later, so it is defended.
 //
 // The marker is /DW2 because the fixture does NOT declare one. A key already
 // present on disk would survive in the stale copy as well, and the test would
@@ -57,7 +59,7 @@ func TestFixType0Font_KeepsAPeerFixersPendingCIDFontWrite(t *testing.T) {
 		t.Fatalf("precondition: the fixture must NOT declare /DW2, else the marker proves nothing")
 	}
 
-	// Stand in for cid-gidmap (110): copy the descendant, add one key, AllocAt
+	// Stand in for cid-gidmap: copy the descendant, add one key, AllocAt
 	// the same object number.
 	peer := make(ast.PdfDict, len(cidFont)+1)
 	maps.Copy(peer, cidFont)

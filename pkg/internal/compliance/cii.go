@@ -46,8 +46,10 @@ type ciiPresence struct {
 // (urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100).
 // Factur-X 1.0+ / ZUGFeRD 2.1+ and ZUGFeRD 2.0 share that schema;
 // legacy ZUGFeRD 1.0 uses urn:ferd:CrossIndustryDocument:invoice:1p0:*
-// instead, so its CII spine rules and Schematron pass have to stay
-// off to avoid emitting false positives.
+// instead, so the CII spine rules and the plain-EN 16931 / XRechnung
+// profile probes stay off for it to avoid emitting false positives.
+// Its XSD and Schematron passes run through [variantHasAnyCIIPayload]
+// against dedicated 1p0 bundles.
 func variantHasCIIv100Payload(v hybridInvoiceVariant) bool {
 	return v.namespaceURI == variantFacturX.namespaceURI ||
 		v.namespaceURI == variantZUGFeRD20.namespaceURI
@@ -567,9 +569,11 @@ func scanCIIProfileID(payload []byte) string {
 // evaluate surface as a parallel advisory slice; each entry wraps
 // [ErrSchematronRuleSkipped] so callers can branch on the sentinel
 // without scanning message text. The variant guard mirrors
-// checkInvoiceCIIXSD: only the Factur-X 1.0+ / ZUGFeRD 2.1+ variant
-// carries a CII payload that the EN 16931 / XRechnung Schematron
-// knows how to validate.
+// checkInvoiceCIIXSD: [variantHasAnyCIIPayload] admits every variant
+// that carries a CII payload, the v100 family (Factur-X 1.0+ /
+// ZUGFeRD 2.1+ and ZUGFeRD 2.0) and legacy ZUGFeRD 1.0, because the
+// caller pairs the variant with the matching schema, the dedicated
+// 1p0 bundle for ZUGFeRD 1.0.
 func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, schema *schematron.Schema, phase string, overlay bool, overrides map[string]schematron.RuleOverride) ([]Violation, []error) {
 	if schema == nil {
 		return nil, nil

@@ -11,8 +11,17 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// forbiddenAnnotSubtypes lists annotation subtypes that are never permitted
-// in any PDF/A profile (parts 2+/4).
+// forbiddenAnnotSubtypes lists annotation subtypes that fixAnnotArray removes
+// whatever the profile and level, even when [Options.PreserveContent] is set,
+// unlike the profile-exact check beside it.
+//
+// Sound, Movie, and Screen are outside the permitted set of every PDF/A part
+// (ISO 19005-1, 6.5.2 and ISO 19005-2/3/4, 6.3.1). 3D is outside it for parts
+// 1 to 3 and for part 4 at the base and F levels, but ISO 19005-4 6.3.1
+// permits it at level E (see pdfa4ePermittedAnnotSubtypes). The removal does
+// not consult the level, so whenever the fixer runs on a PDF/A-4e document it
+// deletes that document's 3D annotations too: an over-removal that
+// TestFixAnnotations_Part4fKeepsFileAttachment records.
 var forbiddenAnnotSubtypes = map[ast.PdfName]bool{
 	"Sound": true, "Movie": true, "Screen": true, "3D": true,
 }

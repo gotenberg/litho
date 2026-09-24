@@ -36,23 +36,23 @@ func simpleFontShowingACodePDF() []byte {
 // repair COMPOSES with an earlier fixer's write to the same font dictionary.
 // This test passes today and is here to keep it that way.
 //
-// [fixFontIssues] reads the font dictionary once from the document
-// (fixer_fonts.go) and hands that value to three writers, which looks like the
-// stale-read-then-AllocAt shape that produced several real defects elsewhere in
-// this package. It is not one here: [fixSimpleFontToUnicode] rebuilds its write
-// from alloc.Pending() at the write site and ignores the parameter, so the
-// earlier write survives. Nothing enforces that from outside the function, and
-// the registry gives it plenty to survive: fonts runs at 144, after cid-gidmap
-// (110), font-keys (111), tounicode-ranges (114) and nested-resources (131),
+// [fixFontIssues] reads the font dictionary once from the document and hands
+// that value to three writers, which looks like the stale-read-then-AllocAt
+// shape that produced several real defects elsewhere in this package. It is
+// not one here: [fixSimpleFontToUnicode] rebuilds its write from the
+// dictionary pending in alloc at the write site, falling back to the parameter
+// only when nothing is pending, so the earlier write survives. Nothing enforces
+// that from outside the function, and the registry gives it plenty to survive:
+// fonts follows cid-gidmap, font-keys, tounicode-ranges and nested-resources,
 // every one of which rewrites font dictionaries.
 //
 // The pending write below stands in for any of them, because provoking a real
 // peer needs a second violation on the same object.
 //
-// NOTE the limit of this test: it exercises the /ToUnicode path only.
-// [fixSimpleFont] builds its write from the stale parameter instead, and
-// reaching that write needs an embedded font program, so it is neither proven
-// nor cleared by what follows.
+// NOTE the limit of this test: it exercises the /ToUnicode path only. The
+// width write in [fixSimpleFont] needs an embedded font program to reach, so
+// TestFixSimpleFont_KeepsAPeerFixersPendingFontWrite covers it separately, and
+// TestFixType0Font_KeepsAPeerFixersPendingCIDFontWrite covers the Type 0 path.
 func TestFixFontIssues_KeepsAPeerFixersPendingFontWrite(t *testing.T) {
 	t.Parallel()
 

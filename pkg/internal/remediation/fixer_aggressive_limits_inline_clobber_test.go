@@ -15,13 +15,13 @@ import (
 //
 // That pairing is the only shape that reaches the branch under test.
 // [trimDeviceNColorants] writes at ref.ObjectNum when the array itself is
-// indirect (fixer_aggressive_limits.go:270) and falls through to the parent
-// dictionary otherwise (:283), which it writes at csRef.ObjectNum. So the array
-// must be inline to skip the first write, and the dictionary must be indirect
-// for the second to fire at all.
+// indirect, and otherwise collects the trimmed array under its colour-space
+// name and writes the parent dictionary at csRef.ObjectNum. So the array must
+// be inline to skip the first write, and the dictionary must be indirect for
+// the second to fire at all.
 //
 // Nine colorants, for the same reason as the sibling fixture: the trim skips
-// any name list `<= pdfADeviceNComponents` (:261).
+// any name list `<= pdfADeviceNComponents`.
 func deviceNInlineColourSpacePDF() []byte {
 	return assemblePDF([]string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
@@ -43,14 +43,18 @@ func deviceNInlineColourSpacePDF() []byte {
 // each is reported on its own rather than one hiding the other:
 //
 //	TRIM APPLIED    the rebuilt dictionary must actually carry the shortened
-//	                colorant list. :283 writes newCS and counts a repair, so a
-//	                dictionary written back untrimmed is a repair reported
-//	                without being performed.
-//	PEER PRESERVED  csDict is read with document.ResolveDict at :246 and copied
-//	                wholesale into newCS at :275-276, so an earlier fixer's
-//	                pending edit to that same dictionary is discarded. The
-//	                matching helper for a dict is resolveFromAllocOrDoc, which
-//	                this function already uses for the catalog at :218.
+//	                colorant list. The inline branch writes newCS and counts a
+//	                repair, so a dictionary written back untrimmed is a repair
+//	                reported without being performed. That was the historical
+//	                defect: the substitution matched only an indirect
+//	                reference equal to ref, which is the zero value on the
+//	                inline path. The replacement is now keyed by colour-space
+//	                name.
+//	PEER PRESERVED  csDict is copied wholesale into newCS. It used to be read
+//	                with document.ResolveDict, so an earlier fixer's pending
+//	                edit to that same dictionary was discarded. It is now read
+//	                with resolveFromAllocOrDoc, the matching helper for a dict,
+//	                which the function also uses for the catalog.
 //
 // The marker is a key the fixture does not declare, so its presence can only
 // come from the pending copy.

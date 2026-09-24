@@ -12,30 +12,30 @@ import (
 // TestFixInfoDate_KeepsAnEarlierFixersPendingInfoWrite pins that the /Info date
 // repair keeps an earlier fixer's pending write to /Info.
 //
-// [fixInfoDate] reads the trailer /Info with document.ResolveDict, rebuilds it
-// with maps.Copy and writes the copy back at the same object number. It
-// consults no alloc-aware helper, so an earlier fixer's edit to /Info is
-// discarded.
+// [fixInfoDate] rebuilds the trailer /Info with maps.Copy and writes the copy
+// back at the same object number. It used to read /Info with
+// document.ResolveDict, consulting no alloc-aware helper, so an earlier
+// fixer's edit to /Info was discarded.
 //
 // Peer and ordering are measured, and this is the tightest adjacency the
-// program has found: the registry declares trailer-id and info-date on
-// CONSECUTIVE lines, fixer.go:61 and :62, with nothing between them. They are
-// also the ONLY two /Info writers in the package.
+// program has found: trailer-id and info-date are CONSECUTIVE registry
+// entries, with nothing between them. They are also the ONLY two /Info writers
+// in the package.
 //
-// What makes this a correctness defect rather than a lost edit:
-// enforceInfoDictLimits (trailer-id, fixer_trailerid.go:78) trims /Info to
-// /ModDate alone for ISO 19005-4 6.1.3 tests 4-5, then info-date rebuilds the
-// dictionary from the on-disk copy one entry later and RESTORES the very keys
-// the trim removed. The output then carries /Info entries PDF/A-4 forbids.
+// What made this a correctness defect rather than a lost edit:
+// enforceInfoDictLimits (trailer-id) trims /Info to /ModDate alone for
+// ISO 19005-4 6.1.3 tests 4-5, then info-date rebuilt the dictionary from the
+// on-disk copy one entry later and RESTORED the very keys the trim removed. The
+// output then carried /Info entries PDF/A-4 forbids.
 //
 // The defect needs no invented marker key: /CreationDate reappearing IS the
 // violation. The seed is exactly what the trim produces, so this test also
 // documents that shape.
 //
-// liveInfoDict (fixer_xmp.go:243) already solves this for xmp-metadata at
-// registry 63, and its own comment says so: it prefers "an in-flight patched
-// version from alloc so earlier fixers (e.g. info-date) see their changes".
-// info-date itself does not use it.
+// liveInfoDict already solved this for xmp-metadata, and its own comment says
+// so: it prefers "an in-flight patched version from alloc so earlier fixers
+// (e.g. info-date) see their changes". info-date now reads /Info through it
+// too.
 func TestFixInfoDate_KeepsAnEarlierFixersPendingInfoWrite(t *testing.T) {
 	t.Parallel()
 
@@ -62,7 +62,7 @@ func TestFixInfoDate_KeepsAnEarlierFixersPendingInfoWrite(t *testing.T) {
 			"repair never runs and this test proves nothing")
 	}
 
-	// Stand in for enforceInfoDictLimits at trailer-id (registry 61): trim
+	// Stand in for enforceInfoDictLimits at trailer-id: trim
 	// /Info to /ModDate alone, which is exactly what the PDF/A-4 repair emits.
 	trimmed := ast.PdfDict{"ModDate": modDate}
 	if !alloc.AllocAt(infoObj, trimmed) {

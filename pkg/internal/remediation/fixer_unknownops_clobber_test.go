@@ -13,18 +13,18 @@ import (
 // TestStripUnknownInResources_KeepsAnEarlierFixersPendingStreamWrite pins that
 // the resources path reads each XObject stream through the allocator.
 //
-// [stripUnknownInResources] walks resources["XObject"]. It used to read each
-// stream with document.ResolveStream and write the stripped result back at
-// that stream's own object number (fixer_unknownops.go), and its sibling
-// [stripUnknownFromStreamObject] did the same. Neither consulted an
-// alloc-aware helper, so an earlier fixer's edit to the same XObject stream was
-// discarded.
+// [stripUnknownInResources] walks resources["XObject"] and writes each
+// stripped result back at that stream's own object number. It used to read
+// each stream with doc.Resolve plus a type assertion to ast.PdfStream, while
+// its sibling [stripUnknownFromStreamObject] read appearance streams with
+// document.ResolveStream. Neither consulted an alloc-aware helper, so an
+// earlier fixer's edit to the same XObject stream was discarded. Both now read
+// through resolveStreamFromAllocOrDoc.
 //
 // Peer and ordering are measured STRUCTURALLY, not by token: graphics writes
 // XObject streams in fixXObjects (two sites), transparency writes them in
 // fixXObjectTransparency, and nested-resources writes them in
-// fixFormXObjectResources. Their registry entries are fixer.go:106, :107 and
-// :131, all ahead of unknown-ops at :142.
+// fixFormXObjectResources, all from registry entries ahead of unknown-ops.
 //
 // The fixture is already live and the package proves it: compressedFormPDF
 // stores the form INDIRECTLY as /Fm0 5 0 R, and the existing

@@ -1,11 +1,19 @@
 package stdfonts
 
-// calibriGIDToUnicode maps Calibri's standard TrueType glyph IDs to
-// Unicode codepoints. Calibri uses a different GID ordering from
-// Arial (space is at GID 3, but accented Latin capitals start
-// immediately after .notdef and several Latin-Extended-B letters
-// appear in the first few hundred GIDs), so ASCII digits and
-// punctuation do not follow the GID + 29 convention.
+// calibriGIDToUnicode maps the glyph IDs that non-embedded Calibri
+// text uses to Unicode codepoints. Calibri places space at GID 3 like
+// Arial, which the GID + 29 offset path already covers, but it orders
+// the rest differently: each accented Latin capital follows its base
+// letter (À at GID 5, right after A at GID 4), several
+// Latin-Extended-B letters appear in the first few hundred GIDs, and
+// ASCII digits and punctuation sit far above 128, so they do not
+// follow the GID + 29 convention.
+//
+// The GID 1 entry is not the font's own mapping: in the full Calibri
+// program GID 1 is a zero-width control glyph. It maps to space because
+// non-embedded Calibri text can carry GID 1 where a space belongs, and
+// PDF.js renders it as a space for that reason
+// (getSupplementalGlyphMapForCalibri).
 //
 // Like the Arial table, this is intentionally partial, additive and
 // safe to extend. GIDs missing from the map fall through to the
@@ -16,8 +24,14 @@ package stdfonts
 //   - All corpora: the entries were captured by exercising the
 //     non-embedded-Calibri fixtures of the corpus against the reference
 //     output, so the table is corpus-driven.
+//   - All corpora: all 175 embedded Calibri programs that keep the full
+//     glyph set carry a zero-width glyph at GID 1 and the space glyph,
+//     463 FUnits wide, at GID 3.
+//   - pdfjs issue15443.pdf: its non-embedded Calibri text writes GID 1
+//     between two words, and the PDF.js reference output reads a space.
 var calibriGIDToUnicode = map[uint16]rune{
-	// Basic punctuation / digits the Calibri subset places below GID 128.
+	// Space, then the ASCII punctuation and digits, which Calibri places
+	// far above GID 128.
 	0x0001: 0x0020, // space
 	0x0358: 0x002E, // . FULL STOP (GID 856)
 	0x03EC: 0x0030, // 0 (GID 1004)

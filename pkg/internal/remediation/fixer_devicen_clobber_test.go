@@ -12,21 +12,21 @@ import (
 // the DeviceN /Colorants repair keeps an earlier fixer's pending write to the
 // same colour-space object.
 //
-// [patchPageDeviceN] reads the DeviceN colour-space array with
-// document.ResolveArray (fixer_devicen.go), hands that value to
-// [buildPatchedDeviceN], and writes the result back at the array's own object
-// number. It consults no alloc-aware helper, so an earlier fixer's edit to the
-// same colour-space object is discarded.
+// [patchPageDeviceN] hands the DeviceN colour-space array to
+// [buildPatchedDeviceN] and writes the result back at the array's own object
+// number. It used to read that array with document.ResolveArray, consulting no
+// alloc-aware helper, so an earlier fixer's edit to the same colour-space
+// object was discarded. It now reads the array with liveArray.
 //
 // Peer and ordering are measured, not assumed. Colour-space objects are written
-// earlier by output-intent (fixer.go:68) and output-intent-cleanup (:70)
-// through injectDefaultColorSpace, patchResourceColorSpace and
-// recurseColorSpacePatch, and later-but-still-earlier by graphics (:106),
-// transparency (:107) and group-cs (:108). devicen runs at :115, after all of
-// them.
+// earlier by output-intent and output-intent-cleanup through
+// injectDefaultColorSpace, patchResourceColorSpace and recurseColorSpacePatch,
+// and later-but-still-earlier by graphics, transparency and group-cs. devicen
+// follows all of them in the registry.
 //
-// The value that decides the bytes is the STALE one: buildPatchedDeviceN takes
-// the array as a PARAMETER, so passing it alloc changes nothing.
+// The READ decides the bytes: buildPatchedDeviceN takes the array as a
+// PARAMETER, so passing it alloc would change nothing. Only reading the array
+// alloc-first keeps the peer's edit.
 //
 // The marker is the ALTERNATE SPACE, element 2 of the array, because that is
 // what a colour-space fixer would realistically rewrite, and because the

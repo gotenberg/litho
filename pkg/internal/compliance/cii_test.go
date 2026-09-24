@@ -181,16 +181,15 @@ func TestValidateCIIBytes_MissingGrandTotal(t *testing.T) {
 // degenerate payload under the ZUGFeRD 2.0 variant and asserts it does not
 // panic.
 func TestValidateCIIBytes_LegacyVariantSkipsChecks(t *testing.T) {
-	// ZUGFeRD 1.0 / 2.0 use a different CII schema; the structural
-	// rules must not fire on those variants. Pass payload that would
-	// fail every spine rule under the Factur-X variant.
+	// ZUGFeRD 2.0 shares the CII v100 schema with Factur-X, so
+	// checkInvoiceCII runs the spine rules on it; only legacy
+	// ZUGFeRD 1.0, whose 1p0 payload differs, short-circuits there
+	// (see variantHasCIIv100Payload).
 	got := validateCIIBytes([]byte(`<root/>`), variantZUGFeRD20, false)
-	// The function returns early without any work, but the entry
-	// point is checkInvoiceCII which short-circuits on variant. The
-	// pure-function variant runs unconditionally, so test the entry
-	// guard via the variant.namespaceURI check in checkInvoiceCII
-	// instead. Here the test only confirms validateCIIBytes does not
-	// panic on degenerate input.
+	// validateCIIBytes applies no variant guard of its own and uses
+	// the variant only to label its messages, so the degenerate root
+	// fails here as it would under Factur-X. The test only confirms
+	// it does not panic.
 	if len(got) == 0 {
 		t.Logf("unexpected zero violations on degenerate input under ZUGFeRD 2.0 variant; entry-guard test lives in checkInvoiceCII")
 	}
