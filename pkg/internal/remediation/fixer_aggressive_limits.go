@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -278,9 +279,29 @@ func truncateDict(d ast.PdfDict) ast.PdfDict {
 	return out
 }
 
-// trimDeviceNColorants caps a DeviceN/NChannel /Names array at limit
-// colourants. The tint-transform function won't be accurate for the reduced
-// component set; aggressive mode accepts that loss.
+// trimDeviceNColorants caps the colourant names of every DeviceN colour space
+// a page's /Resources /ColorSpace dictionary declares at limit, keeping the
+// first limit. The tint-transform function won't be accurate for
+// the reduced component set; aggressive mode accepts that loss.
+//
+// Every level is read through the allocator and written back where it lives:
+// an indirect array at its own object number, an inline one into its
+// /ColorSpace dictionary, an inline /ColorSpace into its /Resources, and
+// inline /Resources into the page. aggressive-limits is the last registry
+// entry, so every colour-space writer precedes it: devicen rewrites DeviceN
+// arrays at their object numbers, and output-intent rewrites /Resources with
+// the /ColorSpace dictionary inlined, leaving the indirect one unused. A read
+// from the document there trims a dictionary the output no longer references.
+// A space counts as trimmed only when its write lands.
+//
+// # Corpus evidence
+//
+//   - litho limits_2b.pdf and verapdf 6-1-12-t09-fail-a.pdf: the DeviceN
+//     array, its /ColorSpace and the /Resources are all inline in the page,
+//     the shape the trim used to give up on, so both kept their 33 and 12
+//     colourants and their test 9 violation in aggressive mode. Trimmed,
+//     neither output draws test 9 from litho or veraPDF, and
+//     6-1-12-t09-fail-a.pdf passes veraPDF at PDF/A-1b.
 func trimDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, limit int) (int, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -306,64 +327,30 @@ func trimDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		if !ok {
 			continue
 		}
-		resDict, err := document.ResolveDict(ctx, doc, resObj)
-		if err != nil || resDict == nil {
-			continue
-		}
+		resDict := liveDictValue(ctx, alloc, doc, resObj)
 		csObj, ok := resDict["ColorSpace"]
 		if !ok {
 			continue
 		}
-		// Alloc-aware, dict kind: the parent dictionary is rebuilt and written
-		// back at csRef.ObjectNum below, so reading it from the document
-		// discards a peer's pending edit to that same object.
-		var csDict ast.PdfDict
-		if csRef, isRef := csObj.(ast.PdfIndirectRef); isRef {
-			csDict = resolveFromAllocOrDoc(ctx, alloc, doc, csRef)
-		} else if d, derr := document.ResolveDict(ctx, doc, csObj); derr == nil {
-			csDict = d
-		}
+		csDict := liveDictValue(ctx, alloc, doc, csObj)
 		if csDict == nil {
 			continue
 		}
 		// Inline colour spaces accumulate: rebuilding the parent once per
 		// entry would keep only the last, the trap fixExtGStateDict records.
+		// Keyed by NAME, since an inline entry has no object number.
 		var inlineUpdates ast.PdfDict
-		for csName, entry := range csDict {
-			ref, isRef := entry.(ast.PdfIndirectRef)
-			// Alloc-aware, and the helper matches the object KIND: liveArray
-			// for an array, since resolveFromAllocOrDoc above returns a dict.
-			// The array is rebuilt wholesale below and written back at
-			// ref.ObjectNum, so reading it from the document discards a peer's
-			// pending edit. aggressive-limits is the LAST registry entry
-			// (fixer.go:157), so every colour-space writer precedes it, and
-			// devicen (:115) rewrites DeviceN arrays at these same objects.
-			arr := liveArray(ctx, alloc, doc, entry)
-			if len(arr) < 2 {
+		for _, csName := range slices.Sorted(maps.Keys(csDict)) {
+			entry := csDict[csName]
+			newArr, trimmed := trimDeviceNArray(ctx, alloc, doc, entry, limit)
+			if !trimmed {
 				continue
 			}
-			name, ok := arr[0].(ast.PdfName)
-			if !ok || (name != "DeviceN" && name != "NChannel") {
-				continue
-			}
-			namesArr, err := document.ResolveArray(ctx, doc, arr[1])
-			if err != nil || len(namesArr) <= limit {
-				continue
-			}
-			newNames := make(ast.PdfArray, limit)
-			copy(newNames, namesArr[:limit])
-			newArr := make(ast.PdfArray, len(arr))
-			copy(newArr, arr)
-			newArr[1] = newNames
-			if isRef && ref.ObjectNum > 0 {
+			if ref, isRef := entry.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
 				alloc.AllocAt(ref.ObjectNum, newArr)
 				count++
 				continue
 			}
-			// Inline: key the replacement by NAME. Matching an indirect
-			// reference equal to ref cannot work here, because an inline entry
-			// leaves ref at its zero value, so the trimmed array was dropped
-			// and the untouched dictionary still counted as a repair.
 			if inlineUpdates == nil {
 				inlineUpdates = ast.PdfDict{}
 			}
@@ -372,15 +359,66 @@ func trimDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		if len(inlineUpdates) == 0 {
 			continue
 		}
-		csRef, isRef := csObj.(ast.PdfIndirectRef)
-		if !isRef || csRef.ObjectNum == 0 {
-			continue
-		}
 		newCS := make(ast.PdfDict, len(csDict))
 		maps.Copy(newCS, csDict)
 		maps.Copy(newCS, inlineUpdates)
-		alloc.AllocAt(csRef.ObjectNum, newCS)
-		count += len(inlineUpdates)
+		if writePageColorSpace(alloc, pe, resObj, resDict, csObj, newCS) {
+			count += len(inlineUpdates)
+		}
 	}
 	return count, nil
+}
+
+// trimDeviceNArray returns the DeviceN colour space entry, read through the
+// allocator, with its colourant names cut to the first limit, and false when
+// entry is no DeviceN space or already within limit. The array is
+// read alloc-first because devicen, which precedes this fixer, rewrites
+// DeviceN arrays at their own object numbers, and the copy replaces the array.
+func trimDeviceNArray(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, entry ast.PdfObject, limit int) (ast.PdfArray, bool) {
+	arr := liveArray(ctx, alloc, doc, entry)
+	if len(arr) < 2 {
+		return nil, false
+	}
+	name, ok := arr[0].(ast.PdfName)
+	if !ok || (name != "DeviceN" && name != "NChannel") {
+		return nil, false
+	}
+	names := liveArray(ctx, alloc, doc, arr[1])
+	if len(names) <= limit {
+		return nil, false
+	}
+	newNames := make(ast.PdfArray, limit)
+	copy(newNames, names[:limit])
+	newArr := make(ast.PdfArray, len(arr))
+	copy(newArr, arr)
+	newArr[1] = newNames
+	return newArr, true
+}
+
+// writePageColorSpace writes newCS where the page's /ColorSpace dictionary
+// lives: at its own object number, else into the /Resources it sits in, at the
+// /Resources object number or, when those are inline too, into the page.
+// resDict and pe.dict are the live dictionaries the caller read, so the copies
+// keep every earlier fixer's edit. Returns false when nothing addressable holds
+// the dictionary, a page without an object number.
+func writePageColorSpace(alloc *writer.ObjAllocator, pe annotPageEntry, resObj ast.PdfObject, resDict ast.PdfDict, csObj ast.PdfObject, newCS ast.PdfDict) bool {
+	if ref, ok := csObj.(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 {
+		alloc.AllocAt(ref.ObjectNum, newCS)
+		return true
+	}
+	newRes := make(ast.PdfDict, len(resDict))
+	maps.Copy(newRes, resDict)
+	newRes["ColorSpace"] = newCS
+	if ref, ok := resObj.(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 {
+		alloc.AllocAt(ref.ObjectNum, newRes)
+		return true
+	}
+	if pe.ref.ObjectNum == 0 {
+		return false
+	}
+	newPage := make(ast.PdfDict, len(pe.dict))
+	maps.Copy(newPage, pe.dict)
+	newPage["Resources"] = newRes
+	alloc.AllocAt(pe.ref.ObjectNum, newPage)
+	return true
 }

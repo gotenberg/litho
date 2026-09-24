@@ -16,9 +16,10 @@ import (
 // That pairing is the only shape that reaches the branch under test.
 // [trimDeviceNColorants] writes at ref.ObjectNum when the array itself is
 // indirect, and otherwise collects the trimmed array under its colour-space
-// name and writes the parent dictionary at csRef.ObjectNum. So the array must
-// be inline to skip the first write, and the dictionary must be indirect for
-// the second to fire at all.
+// name and writes the parent dictionary where it lives. So the array must be
+// inline to skip the first write, and the dictionary must be indirect for the
+// second to land at its own object number, the one the peer edited. The inline
+// dictionary shapes are pinned in the resources clobber tests.
 //
 // Nine colorants, for the same reason as the sibling fixture: the trim skips
 // any name list `<= pdfA1DeviceNComponents`.
