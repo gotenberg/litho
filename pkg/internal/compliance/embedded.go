@@ -733,13 +733,40 @@ type embeddedDepthKey struct{}
 
 // maxEmbeddedDepth is the maximum recursion depth for embedded PDF validation.
 // An embedded PDF containing another embedded PDF would be depth 2. Anti-DoS
-// guard, not spec-mandated: it stops a file from nesting validation runs
+// guard, not spec-mandated: ISO 19005-2, 6.8 and ISO 19005-4, 6.9 require an
+// embedded file to conform to PDF/A itself, which carries the requirement down
+// every level of nesting, so a file could otherwise chain validation runs
 // without end.
+//
+// The embedded files of a PDF at depth 2 are not validated and raise no
+// violation. Two levels leave one level of headroom over the nesting real
+// documents use.
+//
+// # Corpus evidence
+//
+//   - All corpora: 38 of the 5163 files that open embed a PDF (23 verapdf,
+//     11 facturx, 4 pdfjs), and none of the 41 embedded PDFs embeds another,
+//     so the deepest nesting is 1.
 const maxEmbeddedDepth = 2
 
 // maxEmbeddedFileSize is the maximum size of a decoded embedded file stream
-// that will be validated (50 MB). Larger files are skipped to prevent OOM.
-// Anti-DoS guard, not spec-mandated.
+// that will be validated. Larger files are skipped, with no violation, so a
+// crafted attachment cannot make validation hold a huge document in memory and
+// parse it. Anti-DoS guard, not spec-mandated: ISO 32000-1, 7.11.4 puts no
+// bound on an embedded file stream.
+//
+// 50 MB leaves better than nine times the largest embedded file in real
+// documents, and better than sixty times the largest embedded PDF.
+//
+// # Corpus evidence
+//
+//   - All corpora: 275 files embed 552 files, the largest 5,599,569 bytes
+//     and not a PDF (verapdf PDF_A-4__veraPDF_test_suite_6-3-1-t01-fail-e.pdf
+//     and three PDF_A-4e siblings).
+//   - facturx xmlrechnung__FX_EN16931_Elektron.pdf,
+//     xmlrechnung__FX_XRECHNUNG_Elektron.pdf and
+//     v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Elektron.pdf: the
+//     largest embedded PDF, 843,023 bytes.
 const maxEmbeddedFileSize = 50 * 1024 * 1024
 
 // checkEmbeddedFileCompliance validates that all embedded files are
@@ -749,8 +776,9 @@ const maxEmbeddedFileSize = 50 * 1024 * 1024
 // comply with 19005-1 or -2). rule selects the violation and accepted
 // lists the profiles whose pass clears a file.
 //
-// Safety limits prevent abuse: maximum 50 MB per file, maximum recursion depth
-// of 2, and context cancellation is checked per file.
+// Safety limits prevent abuse: [maxEmbeddedFileSize] per file,
+// [maxEmbeddedDepth] levels of nesting, and context cancellation is checked
+// per file.
 func checkEmbeddedFileCompliance(ctx context.Context, doc *document.Document, fileSpecs []fileSpecEntry, rule Rule, accepted []models.PDFAProfile) []Violation {
 	if len(fileSpecs) == 0 {
 		return nil

@@ -570,6 +570,22 @@ func (d *Document) parseObjectStream(ctx context.Context, objStmNum int, visited
 	return &objStmData{decoded: decoded, first: int(firstInt), objNums: objNums, offsets: offsets}, nil
 }
 
+// maxObjStmHeaderPrealloc bounds the header pairs [parseObjStmHeader]
+// allocates room for before it reads any. It is an anti-DoS guard, not
+// spec-mandated: ISO 32000-1, 7.5.7 puts no bound on /N, which comes from the
+// file. It caps the allocation, not the count: a stream holding more pairs
+// still has every one read, and its slices grow as they fill.
+//
+// 65,536 pairs cost a megabyte of up-front allocation, and an object stream
+// that large is already rare.
+//
+// # Corpus evidence
+//
+//   - All corpora: 662 files use object streams, and the largest /N outside
+//     one file is 4390 (govdocs thread_400_400628.pdf).
+//   - pdfjs bug1978317.pdf: the one stream past the bound, /N 65,542.
+const maxObjStmHeaderPrealloc = 1 << 16
+
 // parseObjStmHeader reads up to n objNum/offset header pairs from the decoded
 // object-stream bytes, returning the object number and offset of each object. It
 // stops early at end of data, so a bogus /N cannot force a long loop. The
@@ -583,8 +599,8 @@ func parseObjStmHeader(ctx context.Context, decoded []byte, n int) (objNums, off
 	if capHint < 0 || capHint > len(decoded) {
 		capHint = len(decoded)
 	}
-	objNums = make([]int, 0, min(capHint, 1<<16))
-	offsets = make([]int, 0, min(capHint, 1<<16))
+	objNums = make([]int, 0, min(capHint, maxObjStmHeaderPrealloc))
+	offsets = make([]int, 0, min(capHint, maxObjStmHeaderPrealloc))
 
 	for i := range n {
 		if i%4096 == 0 {

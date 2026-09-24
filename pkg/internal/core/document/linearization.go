@@ -323,6 +323,24 @@ func decodeHintStreamData(ctx context.Context, stream ast.PdfStream) ([]byte, er
 	return decompressFlate(data)
 }
 
+// maxHintStreamSize bounds the decoded primary hint stream. It is an anti-DoS
+// guard, not spec-mandated: ISO 32000-1, Annex F puts no bound on the hint
+// stream, and a few kilobytes of FlateDecode data can expand into gigabytes.
+//
+// It is the same limit as maxDecompressedSize in package filter, the cap on
+// one decompression filter's output, and holds the same value. It is defined
+// here because [decompressFlate] decodes the hint stream with its own zlib
+// reader rather than through the filter package, so that cap never sees it.
+//
+// A hint table costs a few bits per page and per shared object, so the limit
+// sits orders of magnitude above any hint stream a real document carries.
+//
+// # Corpus evidence
+//
+//   - All corpora: 849 files carry a hint stream, and the largest FlateDecode
+//     one decodes to 51,715 bytes (pdfjs bug810214.pdf).
+const maxHintStreamSize = 256 << 20 // 256 MB
+
 // decompressFlate decompresses FlateDecode (zlib) data.
 func decompressFlate(data []byte) ([]byte, error) {
 	r, err := zlib.NewReader(bytes.NewReader(data))
@@ -330,15 +348,14 @@ func decompressFlate(data []byte) ([]byte, error) {
 		return nil, err
 	}
 
-	const maxDecompressed = 256 << 20 // 256 MB
 	var buf bytes.Buffer
-	limited := io.LimitReader(r, maxDecompressed+1)
+	limited := io.LimitReader(r, maxHintStreamSize+1)
 	_, copyErr := io.Copy(&buf, limited)
 	if closeErr := r.Close(); closeErr != nil {
 		return nil, fmt.Errorf("failed to close zlib reader: %w", closeErr)
 	}
-	if buf.Len() > maxDecompressed {
-		return nil, fmt.Errorf("decompressed hint stream exceeds %d MB limit", maxDecompressed>>20)
+	if buf.Len() > maxHintStreamSize {
+		return nil, fmt.Errorf("decompressed hint stream exceeds %d MB limit", maxHintStreamSize>>20)
 	}
 	if copyErr != nil && copyErr != io.EOF && copyErr != io.ErrUnexpectedEOF {
 		return nil, copyErr

@@ -576,6 +576,24 @@ func headerExistsBeyondScanLimit(r io.ReaderAt, size int64) bool {
 	return bytes.Contains(buf[:n], []byte("%PDF-"))
 }
 
+// maxObjectCacheEntries is the number of parsed objects a [Document] keeps
+// before its object cache is emptied and starts again. It is an anti-DoS
+// guard, not spec-mandated: the object count comes from the file, and a
+// crafted file with millions of objects would otherwise keep every one the
+// resolver parsed.
+//
+// Eviction costs a re-parse, never a wrong answer, so the value only has to
+// cover the object table of ordinary documents. Fifty thousand holds every
+// object of all but rare outliers, which then evict rather than grow.
+//
+// # Corpus evidence
+//
+//   - All corpora: 5162 of the 5163 files that open hold at most 50,000
+//     objects, so their cache never evicts. The median holds 20 and the
+//     next largest 37,864 (pdfjs issue19281.pdf).
+//   - pdfjs bug1978317.pdf: the one file past the cap, 65,563 objects.
+const maxObjectCacheEntries = 50_000
+
 // NewDocument creates a new [Document] by parsing the XRef chains.
 // If logger is nil, a no-op logger is used.
 //
@@ -648,7 +666,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		objectCache:  make(map[int]ast.PdfObject),
 		fontCache:    make(map[int]any),
 		cmapCache:    make(map[int]any),
-		maxCacheSize: 50_000, // evict when cache exceeds 50k objects
+		maxCacheSize: maxObjectCacheEntries,
 		Logger:       logger,
 		Version:      version,
 		HeaderOffset: headerOffset,

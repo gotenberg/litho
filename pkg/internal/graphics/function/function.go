@@ -16,6 +16,15 @@ import (
 //
 //   - All corpora: the largest tint transform sample table is 255 entries,
 //     far below the maxSampleCount bound.
+//   - All corpora: 336 files hold 10,516 function objects. The widest /Range
+//     declares 4 outputs, and the widest /C0 holds 5 values (govdocs
+//     thread_400_400932.pdf).
+//   - pdfjs issue21089.pdf: the widest /Domain outside test fixtures, 8
+//     inputs, the tint transform of an 8-colorant DeviceN space.
+//   - verapdf PDF_A-1b__veraPDF_test_suite_6-1-12-t09-fail-a.pdf, litho
+//     limits_2b.pdf: tint transforms of 12 and 33 inputs, built to break the
+//     PDF/A DeviceN limits. The 33-input one is the only function past
+//     maxInputs.
 const (
 	// maxSampleCount bounds the sample table of a type 0 function. /Size and
 	// /BitsPerSample both come from the file, so their product is untrusted.
@@ -24,13 +33,19 @@ const (
 	// few megabytes. Anti-DoS, not spec-mandated.
 	maxSampleCount = 1 << 20
 
-	// maxOutputs bounds /Range. A colour function feeds a device space, so
-	// four outputs covers DeviceCMYK and anything wider is malformed rather
-	// than merely unusual. Anti-DoS, not spec-mandated.
+	// maxOutputs bounds /Range, and /C0 and /C1 of a type 2 function.
+	// Anti-DoS, not spec-mandated: ISO 32000-1, 7.10 puts no bound on a
+	// function's outputs. The widest colour space a function feeds is DeviceN:
+	// a shading's function returns one value per component of the shading's
+	// colour space (ISO 32000-1, 8.7.4.5), and ISO 19005-2, 6.1.13 caps a
+	// DeviceN space at 32 colorants, mirroring the architectural limit of ISO
+	// 32000-1, Annex C, Table C.1. A tint transform returns only the
+	// components of its alternate space, four at most.
 	maxOutputs = 32
 
 	// maxInputs bounds /Domain for the same reason. A Separation tint takes
-	// one input and a DeviceN tint one per colorant.
+	// one input and a DeviceN tint one per colorant (ISO 32000-1, 8.6.6.5),
+	// so the 32-colorant limit is also the widest input a function takes.
 	maxInputs = 32
 )
 

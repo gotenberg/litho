@@ -13,6 +13,17 @@ import (
 // guard, not spec-mandated: the ring is circular by construction (ISO 32000-1,
 // 12.4.3), so a crafted /N that never returns to the first bead must not spin
 // forever. The walk also tracks visited beads, so this only bounds ring length.
+//
+// A ring longer than this is handled as if it ended there. A bead is one
+// rectangle of an article on one page, so a hundred thousand beads is more
+// than three orders of magnitude past the longest real article. The thread
+// reader in package semantics walks the same ring with its visited set alone,
+// which the object count already bounds.
+//
+// # Corpus evidence
+//
+//   - All corpora: 36 files carry 417 threads, and the longest ring holds 68
+//     beads (govdocs thread_400_400594.pdf).
 const maxBeadsPerThread = 100000
 
 // pruneArticleBeads unlinks the article beads that sit on pages the operation

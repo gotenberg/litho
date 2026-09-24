@@ -27,9 +27,29 @@ func fallbackFont() *Font {
 }
 
 // maxFormXObjectDepth is the maximum recursion depth for nested Form XObjects.
-// This prevents stack overflows and excessive processing time from circular
-// references or deeply nested XObjects in malformed PDFs. It is an anti-DoS
-// guard, not spec-mandated.
+// This prevents stack overflows and excessive processing time from deeply
+// nested XObjects in malformed PDFs. It is an anti-DoS guard, not
+// spec-mandated: ISO 32000-1, 8.10 puts no limit on nesting.
+//
+// It bounds the invocation chain only. A cycle is broken by the visited set
+// [extractTextRecursive] carries down the chain, not by this cap. Text in a
+// form nested deeper than ten is not extracted. Real documents nest far
+// shallower: a form invoking a form is already uncommon.
+//
+// The same name in package compliance is a separate constant with the same
+// value, bounding the validation walks. maxTextScanDepth in package tagging
+// matches this one, so a form too deep for the tagging scan is too deep for
+// extraction too. maxXObjectDepth in package graphics/image allows 16, so an
+// image listing reaches forms nested 11 to 16 deep whose text this walk skips.
+//
+// # Corpus evidence
+//
+//   - All corpora: of the 5157 files whose text extraction runs, 1315 invoke
+//     a form and 47 a form inside a form. Outside two veraPDF q/Q nesting
+//     fixtures the deepest chain is 4 (pdfjs issue14562.pdf).
+//   - verapdf PDF_A-1b__veraPDF_test_suite_6-1-12-t08-pass-c.pdf: the only
+//     file the cap cuts short, a chain of 33 forms whose innermost form paints
+//     a rectangle and no text. Its sibling pass-a.pdf nests 9 deep.
 const maxFormXObjectDepth = 10
 
 // collectAnnotAppearanceObjects returns the set of object numbers referenced by
