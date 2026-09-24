@@ -205,18 +205,33 @@ func iccProfileData(ctx context.Context, doc *document.Document, stream ast.PdfS
 	return data
 }
 
-// dedupICCInResources walks a page's resources and rewrites /CSx =
-// [/ICCBased ref] entries whose stream matches one of profiles. The paired
-// device colour space is chosen by the profile's component count.
+// dedupICCInResources applies [dedupICCInOwner] to a page and queues the
+// rebuilt page dictionary when the substitution has to reach it.
+func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, profiles [][]byte, visited map[int]bool) int {
+	count, newPage := dedupICCInOwner(ctx, alloc, doc, pe.dict, profiles, visited)
+	if newPage != nil && pe.ref.ObjectNum > 0 {
+		alloc.AllocAt(pe.ref.ObjectNum, newPage)
+	}
+	return count
+}
+
+// dedupICCInOwner walks the resources of owner, the page or Form XObject
+// dictionary carrying /Resources, and rewrites /CSx = [/ICCBased ref] entries
+// whose stream matches one of profiles. The paired device colour space is
+// chosen by the profile's component count. It returns the number of colour
+// spaces replaced and, when /Resources and /ColorSpace are both inline, a copy
+// of owner carrying the rewritten /Resources. The caller queues that copy,
+// because only it knows the owner's object kind: a form's dictionary must be
+// written back with its stream body.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue20722.pdf: rewriting /DefaultRGB to /DeviceRGB lost every
 //     character of 77 pages, page 1 of 223 entirely.
-func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, profiles [][]byte, visited map[int]bool) int {
-	resObj, ok := pe.dict["Resources"]
+func dedupICCInOwner(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, owner ast.PdfDict, profiles [][]byte, visited map[int]bool) (int, ast.PdfDict) {
+	resObj, ok := owner["Resources"]
 	if !ok {
-		return 0
+		return 0, nil
 	}
 	// Both containers are read alloc-first because an inline substitution
 	// copies them and writes the copy back: output-intent rewrites an indirect
@@ -227,15 +242,15 @@ func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	// longer holds and substitute in an object the output never reads.
 	resDict := liveDictValue(ctx, alloc, doc, resObj)
 	if resDict == nil {
-		return 0
+		return 0, nil
 	}
 	csObj, ok := resDict["ColorSpace"]
 	if !ok {
-		return 0
+		return 0, nil
 	}
 	csDict := liveDictValue(ctx, alloc, doc, csObj)
 	if csDict == nil {
-		return 0
+		return 0, nil
 	}
 
 	inlineUpdates := make(map[ast.PdfName]ast.PdfObject)
@@ -289,7 +304,7 @@ func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	}
 
 	if len(inlineUpdates) == 0 {
-		return 0
+		return 0, nil
 	}
 
 	newCS := make(ast.PdfDict, len(csDict))
@@ -297,28 +312,31 @@ func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	maps.Copy(newCS, inlineUpdates)
 	if csRef, ok := csObj.(ast.PdfIndirectRef); ok && csRef.ObjectNum > 0 {
 		alloc.AllocAt(csRef.ObjectNum, newCS)
-		return len(inlineUpdates)
+		return len(inlineUpdates), nil
 	}
 	newRes := make(ast.PdfDict, len(resDict))
 	maps.Copy(newRes, resDict)
 	newRes["ColorSpace"] = newCS
 	if resRef, ok := resObj.(ast.PdfIndirectRef); ok && resRef.ObjectNum > 0 {
 		alloc.AllocAt(resRef.ObjectNum, newRes)
-		return len(inlineUpdates)
+		return len(inlineUpdates), nil
 	}
-	newPage := make(ast.PdfDict, len(pe.dict))
-	maps.Copy(newPage, pe.dict)
-	newPage["Resources"] = newRes
-	if pe.ref.ObjectNum > 0 {
-		alloc.AllocAt(pe.ref.ObjectNum, newPage)
-	}
-	return len(inlineUpdates)
+	newOwner := make(ast.PdfDict, len(owner))
+	maps.Copy(newOwner, owner)
+	newOwner["Resources"] = newRes
+	return len(inlineUpdates), newOwner
 }
 
 // dedupICCInXObjects walks every Form XObject reachable from a page's
-// /Resources/XObject sub-dict and applies dedupICCInResources to its
+// /Resources/XObject sub-dict and applies dedupICCInOwner to its
 // own /Resources. PDF/A §6.2.4.2 test 3 also covers Form XObject
 // ColorSpace entries, not just page-level ones.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-4-2-t03-fail-c, 6-2-4-2-t03-fail-d, 6-2-4-2-t03-fail-f: at
+//     PDF/A-4 each form was written back as a bare dictionary without its
+//     content stream, and revalidating the output reported no residual.
 func dedupICCInXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, profiles profileSet, visited map[int]bool) int {
 	resObj, ok := pe.dict["Resources"]
 	if !ok {
@@ -341,8 +359,8 @@ func dedupICCInXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		// Read alloc-first: output-intent rewrites a form to inject a default
 		// colour space into its /Resources, and graphics and transparency
 		// rewrite forms too, all ahead of icc-dedup. The rebuilt dictionary
-		// is written back at the form's object number, so starting from the
-		// document's copy would discard those writes.
+		// below is written back at the form's object number, so starting from
+		// the document's copy would discard those writes.
 		stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, ref)
 		if !ok {
 			continue
@@ -356,8 +374,15 @@ func dedupICCInXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		if own := blendingProfile(ctx, alloc, doc, stream.Dict); own != nil {
 			formProfiles.blending = own
 		}
-		formPE := annotPageEntry{ref: ref, dict: stream.Dict}
-		count += dedupICCInResources(ctx, alloc, doc, formPE, formProfiles.all(), visited)
+		n, newDict := dedupICCInOwner(ctx, alloc, doc, stream.Dict, formProfiles.all(), visited)
+		if newDict != nil {
+			// A Form XObject is a stream (ISO 32000-1, 8.10.1), so its rebuilt
+			// dictionary goes back with the stream's own body. Writing the
+			// dictionary alone replaced the form with a dictionary and
+			// dropped its content.
+			alloc.AllocAt(ref.ObjectNum, ast.NewLazyStream(newDict, stream.Bytes))
+		}
+		count += n
 	}
 	return count
 }

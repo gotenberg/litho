@@ -233,3 +233,108 @@ func TestDedupICCInResources_KeepsAnEarlierFixersPendingResourcesWrite(t *testin
 		})
 	}
 }
+
+// TestDedupICCInXObjects_RewritesTheFormAsAStream pins that the redundant-ICC
+// substitution inside a Form XObject whose /Resources and /ColorSpace are both
+// inline writes the form back as a STREAM, keeping its content, and keeps an
+// earlier fixer's pending rewrite of that form.
+//
+// dedupICCInResources falls back to rewriting the dictionary that carries
+// /Resources, which for a form is the stream's own dictionary. It wrote that
+// dictionary back bare at the form's object number, so the output replaced a
+// Form XObject (ISO 32000-1, 8.10.1: a form is a stream) with a dictionary and
+// dropped its content. It also read the form from the document, so a form
+// output-intent had already given a /DefaultRGB lost it.
+func TestDedupICCInXObjects_RewritesTheFormAsAStream(t *testing.T) {
+	t.Parallel()
+
+	const formContent = "q /CS0 cs 0 0 0 1 sc 0 0 10 10 re f Q\n"
+	form := fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 100 100]"+
+		" /Resources << /ColorSpace << /CS0 [/ICCBased 6 0 R] >> >> /Length %d >>\nstream\n%s\nendstream",
+		len(formContent), formContent)
+
+	for _, tc := range []struct {
+		name string
+		peer bool
+	}{
+		{name: "alone", peer: false},
+		{name: "after output-intent rewrote the form", peer: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			objs := append(iccDedupObjects(t, "<< /XObject << /Fm0 8 0 R >> >>"), form)
+			doc, alloc := newTestDoc(t, assemblePDF(objs))
+
+			const formObj = 8
+
+			if tc.peer {
+				injectTestDefaultRGB(t, alloc, doc)
+				seeded, ok := alloc.Pending()[formObj].(ast.PdfStream)
+				if !ok || !formColourSpaceHas(t, seeded.Dict, "DefaultRGB") {
+					t.Fatalf("control: output-intent did not queue /DefaultRGB in form %d, so there "+
+						"is no earlier edit to lose; pending = %v", formObj, alloc.Pending()[formObj])
+				}
+			}
+
+			if _, err := fixICCDedup(ctx, alloc, doc, Options{}, nil, ""); err != nil {
+				t.Fatalf("fixICCDedup: %v", err)
+			}
+
+			var dict ast.PdfDict
+			switch got := alloc.Pending()[formObj].(type) {
+			case ast.PdfStream:
+				dict = got.Dict
+				body, err := got.Bytes(ctx)
+				if err != nil {
+					t.Fatalf("reading the rewritten form body: %v", err)
+				}
+				if string(body) != formContent {
+					t.Errorf("the form body is %q, want %q", body, formContent)
+				}
+			case ast.PdfDict:
+				dict = got
+				t.Errorf("form %d was rewritten as a %T: a Form XObject is a stream, and its "+
+					"content is gone", formObj, got)
+			default:
+				t.Fatalf("form %d was never rewritten (%T), so the substitution path is not "+
+					"reached and this test proves nothing", formObj, got)
+			}
+			cs := formColourSpace(t, dict)
+			if name, _ := cs["CS0"].(ast.PdfName); name != "DeviceCMYK" {
+				t.Fatalf("/CS0 in form %d is %v, want /DeviceCMYK: the substitution did not "+
+					"rewrite the form", formObj, cs["CS0"])
+			}
+			if _, has := cs["DefaultRGB"]; tc.peer && !has {
+				t.Errorf("/DefaultRGB is gone from form %d: dedupICCInXObjects read the form from "+
+					"the document and discarded output-intent's write; /ColorSpace = %v", formObj, cs)
+			}
+		})
+	}
+}
+
+// formColourSpace returns the inline /Resources /ColorSpace dictionary of a
+// form XObject dictionary.
+func formColourSpace(t *testing.T, dict ast.PdfDict) ast.PdfDict {
+	t.Helper()
+
+	res, ok := dict["Resources"].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("form /Resources is %T, want an inline dict", dict["Resources"])
+	}
+	cs, ok := res["ColorSpace"].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("form /ColorSpace is %T, want an inline dict", res["ColorSpace"])
+	}
+	return cs
+}
+
+// formColourSpaceHas reports whether a form XObject dictionary's inline
+// /ColorSpace defines key.
+func formColourSpaceHas(t *testing.T, dict ast.PdfDict, key ast.PdfName) bool {
+	t.Helper()
+
+	_, has := formColourSpace(t, dict)[key]
+	return has
+}
