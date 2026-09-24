@@ -26,7 +26,7 @@ func TestWriteXRefTable_EntryWidth(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if _, _, err := WriteXRefTable(context.Background(), &buf, records, trailer); err != nil {
+	if _, err := WriteXRefTable(context.Background(), &buf, records, trailer); err != nil {
 		t.Fatalf("WriteXRefTable: %v", err)
 	}
 

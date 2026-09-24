@@ -24,12 +24,23 @@ func TestWriteXRefTable_Basic(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	_, _, err := WriteXRefTable(context.Background(), &buf, records, trailer)
+	written, err := WriteXRefTable(context.Background(), &buf, records, trailer)
 	if err != nil {
 		t.Fatalf("WriteXRefTable: %v", err)
 	}
 
 	out := buf.String()
+	if written != int64(len(out)) {
+		t.Errorf("WriteXRefTable reported %d bytes written, wrote %d", written, len(out))
+	}
+	// The caller owns the tail: it records the table's offset and writes
+	// startxref and %%EOF after the call.
+	if strings.Contains(out, "startxref") || strings.Contains(out, "%%EOF") {
+		t.Errorf("WriteXRefTable wrote the file tail the caller owns:\n%s", out)
+	}
+	if !strings.HasSuffix(out, ">>\n") {
+		t.Errorf("output does not end with the trailer dictionary and a newline:\n%q", out)
+	}
 
 	// Check structure.
 	if !strings.HasPrefix(out, "xref\n") {
@@ -61,7 +72,7 @@ func TestWriteXRefTable_NonConsecutive(t *testing.T) {
 	trailer := ast.PdfDict{"Size": ast.PdfInt(6)}
 
 	var buf bytes.Buffer
-	_, _, err := WriteXRefTable(context.Background(), &buf, records, trailer)
+	_, err := WriteXRefTable(context.Background(), &buf, records, trailer)
 	if err != nil {
 		t.Fatalf("WriteXRefTable: %v", err)
 	}

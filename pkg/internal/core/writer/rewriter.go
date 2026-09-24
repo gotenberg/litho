@@ -201,7 +201,7 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 			return fmt.Errorf("writing xref stream: %w", err)
 		}
 	} else {
-		if _, _, err := WriteXRefTable(ctx, dst, records, trailer); err != nil {
+		if _, err := WriteXRefTable(ctx, dst, records, trailer); err != nil {
 			return fmt.Errorf("writing xref table: %w", err)
 		}
 	}

@@ -31,10 +31,17 @@ type XRefRecord struct {
 	ObjStmIndex int
 }
 
-// WriteXRefTable writes a traditional cross-reference table, trailer
-// dictionary, and startxref pointer to w. Returns the byte offset of the
-// "xref" keyword (for use in the startxref line) and the total bytes written.
-func WriteXRefTable(ctx context.Context, w io.Writer, records []XRefRecord, trailer ast.PdfDict) (xrefOffset int64, written int64, err error) {
+// WriteXRefTable writes a traditional cross-reference table and its trailer
+// to w: the "xref" keyword line, one subsection per run of consecutive object
+// numbers in records (a header line, then one 20-byte entry per record), the
+// "trailer" keyword line, and the serialized trailer dictionary followed by a
+// newline. It sorts records by object number in place.
+//
+// It writes neither the startxref pointer nor the %%EOF marker: the caller
+// takes the table's offset from its own write position before the call and
+// writes both after it. Returns the bytes written, including those of a
+// partial write that ends in an error.
+func WriteXRefTable(ctx context.Context, w io.Writer, records []XRefRecord, trailer ast.PdfDict) (written int64, err error) {
 	sort.Slice(records, func(i, j int) bool {
 		return records[i].ObjNum < records[j].ObjNum
 	})
@@ -59,7 +66,7 @@ func WriteXRefTable(ctx context.Context, w io.Writer, records []XRefRecord, trai
 	n, err := io.WriteString(w, "xref\n")
 	total += int64(n)
 	if err != nil {
-		return 0, total, err
+		return total, err
 	}
 
 	// Write each subsection.
@@ -68,12 +75,12 @@ func WriteXRefTable(ctx context.Context, w io.Writer, records []XRefRecord, trai
 		n, err := io.WriteString(w, header)
 		total += int64(n)
 		if err != nil {
-			return 0, total, err
+			return total, err
 		}
 
 		for _, entry := range sub.entries {
 			if err := ctx.Err(); err != nil {
-				return 0, total, fmt.Errorf("writing xref entry for object %d: %w", entry.ObjNum, err)
+				return total, fmt.Errorf("writing xref entry for object %d: %w", entry.ObjNum, err)
 			}
 			// Per ISO 32000-1, 7.5.4, an entry is exactly 20 bytes including its
 			// two-byte end-of-line. With CRLF the type keyword is followed by the
@@ -88,7 +95,7 @@ func WriteXRefTable(ctx context.Context, w io.Writer, records []XRefRecord, trai
 			n, err := io.WriteString(w, line)
 			total += int64(n)
 			if err != nil {
-				return 0, total, err
+				return total, err
 			}
 		}
 	}
@@ -97,22 +104,22 @@ func WriteXRefTable(ctx context.Context, w io.Writer, records []XRefRecord, trai
 	n, err = io.WriteString(w, "trailer\n")
 	total += int64(n)
 	if err != nil {
-		return 0, total, err
+		return total, err
 	}
 
 	n2, err := Serialize(ctx, w, trailer)
 	total += n2
 	if err != nil {
-		return 0, total, err
+		return total, err
 	}
 
 	n, err = io.WriteString(w, "\n")
 	total += int64(n)
 	if err != nil {
-		return 0, total, err
+		return total, err
 	}
 
-	return 0, total, nil // xrefOffset is set by the caller from the write position
+	return total, nil
 }
 
 // WriteXRefStream writes a PDF 1.5+ cross-reference stream to w. The stream

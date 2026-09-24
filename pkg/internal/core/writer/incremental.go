@@ -124,7 +124,7 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 			return fmt.Errorf("writing xref stream: %w", err)
 		}
 	} else {
-		if _, _, err := WriteXRefTable(ctx, dst, records, trailer); err != nil {
+		if _, err := WriteXRefTable(ctx, dst, records, trailer); err != nil {
 			return fmt.Errorf("writing xref table: %w", err)
 		}
 	}
