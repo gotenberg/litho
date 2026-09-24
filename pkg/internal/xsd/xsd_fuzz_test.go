@@ -83,6 +83,9 @@ func FuzzXSDLoadThenValidate(f *testing.F) {
 	f.Add([]byte(minimalXSD), []byte(validInstance))
 	f.Add([]byte(selfRestrictingXSD), []byte(payload))     // Loads, then used to overflow.
 	f.Add([]byte(mutuallyRestrictingXSD), []byte(payload)) // A two-step cycle.
+	f.Add([]byte(mutuallyExtendingSimpleContentXSD), []byte(payload))
+	f.Add([]byte(simpleContentXSD), []byte(`<Invoice xmlns="urn:t"><Small scale="x">1,5</Small></Invoice>`))
+	f.Add([]byte(leafTextXSD), []byte(`<Invoice xmlns="urn:t" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Party xsi:nil="true"><Name/></Party></Invoice>`))
 	f.Add([]byte(minimalXSD[:len(minimalXSD)/2]), []byte(payload))
 	f.Add([]byte(""), []byte(""))
 
@@ -108,6 +111,7 @@ func FuzzTranslatePattern(f *testing.F) {
 	f.Add(`[a-z-[aeiou]]{2}(\d+|\p{Lu}.)?`)
 	f.Add(`[a-z-[aeiou`) // Truncated inside the subtracted class.
 	f.Add(`[^\w-[\s]]*\P{Cn}a{02,3}`)
+	f.Add(`\i\c*[\I-[\p{IsBasicLatin}]]\P{IsGreek}[\C\p{IsSpecials}]`)
 	f.Add(`((a|b)*`)
 	f.Add(`\`)
 

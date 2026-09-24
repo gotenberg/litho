@@ -259,6 +259,29 @@ func TestValidateValue_ComplexTypeWithSimpleContent(t *testing.T) {
 	}
 }
 
+// mutuallyExtendingSimpleContentXSD holds two complex types whose simple
+// content extends the other. Like a self-restricting simpleType it loads,
+// since the loader checks only that each base resolves.
+const mutuallyExtendingSimpleContentXSD = `<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" elementFormDefault="qualified">
+  <xs:complexType name="A"><xs:simpleContent><xs:extension base="B"/></xs:simpleContent></xs:complexType>
+  <xs:complexType name="B">
+    <xs:simpleContent>
+      <xs:restriction base="A"><xs:maxLength value="5"/><xs:attribute name="a" use="required"/></xs:restriction>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="Root" type="A"/>
+</xs:schema>`
+
+func TestValidate_CyclicSimpleContentTerminates(t *testing.T) {
+	t.Parallel()
+
+	s := loadTestSchema(t, mutuallyExtendingSimpleContentXSD)
+	if _, err := Validate(context.Background(), s, []byte(`<Root xmlns="urn:t">far too long to pass</Root>`)); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
 // TestCollectAllFacets_CyclicSimpleContentTerminates pins that a simple
 // content chain returning to itself stays under the same bound as a
 // simpleType chain: see [maxTypeDerivationDepth].
