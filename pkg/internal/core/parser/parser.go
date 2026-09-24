@@ -450,9 +450,38 @@ func (p *Parser) parseDict(ctx context.Context) (ast.PdfObject, error) {
 }
 
 // parseDictBody reads the key/value pairs between `<<` and `>>` into an
-// [ast.PdfDict]. It tolerates EOF and a premature `endobj` as implicit
-// close markers so it still returns a partial dict for malformed input
-// (the top-level parser continues, lenient by design).
+// [ast.PdfDict]. It tolerates EOF, a premature `endobj` and a `stream`
+// keyword as implicit close markers so it still returns a partial dict for
+// malformed input (the top-level parser continues, lenient by design).
+//
+// Deliberate leniency: ISO 32000-1, 7.3.7 writes a dictionary as a sequence of
+// key-value pairs whose keys are names, and a malformed pair costs that pair
+// here rather than the dictionary. Damaged files still carry readable pairs
+// around the damage, and closing the dictionary at the first bad token threw
+// away every pair after it. A token that breaks the alternation is dropped and
+// parsing resumes at the next name that starts a pair:
+//
+//   - A bare keyword or a stray delimiter where a key belongs is dropped. A
+//     space inside a name leaves one (`/Arial,Unicode MS` lexes as a name and
+//     the keyword MS), and so does an array closed twice.
+//   - A non-name object where a key belongs, a stray value, is dropped.
+//   - A bare keyword or a stray delimiter where a value belongs drops the key
+//     it follows. White space inside a key leaves one: a NUL ends a name
+//     (ISO 32000-1, 7.2.2, Table 1), so `<< /Ty\x00pe /Catalog /Pages 2 0 R >>`
+//     lexes as the key Ty, the keyword pe, the names Catalog and Pages, and
+//     a reference.
+//
+// After any of these the next name is not taken as a key on trust: a keyword
+// that split a key leaves the key's value next, and one that stood in for a
+// value leaves the next key. [Parser.nameRunStartsWithKey] decides which from
+// what follows.
+//
+// PDF.js (src/core/parser.js, Parser.getObj) skips a non-name token where a key
+// belongs and reads whatever follows a key as its value, a bare keyword
+// included. It therefore stays in step when a keyword replaced a value and
+// pairs every later entry out of step when a keyword split a key: it reads the
+// catalog above as a key Catalog with the value /Pages and loses the page
+// tree, which litho keeps.
 //
 // # Corpus evidence
 //
@@ -461,12 +490,31 @@ func (p *Parser) parseDict(ctx context.Context) (ast.PdfObject, error) {
 //     the dictionary.
 //   - pdfjs poppler-937-0-fuzzed.pdf: lost its page tree to a
 //     `/Kids 3 0 R]` while a stray delimiter dropped the dictionary.
+//   - pdfjs poppler-742-0-fuzzed.pdf: writes `/Type Annot` in a push button's
+//     widget, which came back empty and hid the /AA entry ISO 19005-2, 6.4.1
+//     forbids. A `/Type Border` in another widget's /BS closed the widget
+//     itself, which lost its /MK, /Parent, /Ff, /V and /DA.
+//   - pdfjs poppler-90-0-fuzzed.pdf: writes `/Columns \xa04` in an inline
+//     image's /DP, which lost the /BlackIs1 true after it.
+//   - pdfjs issue11678.pdf: object 21's dictionary runs into binary image
+//     data, where a literal string spans 184 KB, and its parse stopped by
+//     chance at a keyword in a value position. It now runs 62 KB further and
+//     adds 97 findings to the two ISO 19005-2, 6.1.6 hex string tests the
+//     file already failed. veraPDF reports neither test on it.
+//   - All corpora: the parser met a keyword or a stray delimiter where a
+//     value belongs in 7 dictionaries of 3 files. No file changes its page
+//     count or its text, and every file but poppler-742-0-fuzzed.pdf and
+//     issue11678.pdf reports the same violations under PDF/A-2b, veraPDF
+//     files under their own profile.
 func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 	dict := make(ast.PdfDict)
 	// A /Contents string is parsed undecrypted and settled once the whole
 	// dictionary is known, because /Type may follow it. See
 	// [Parser.settleSignatureContents].
 	deferredContents := false
+	// resync is set once a malformed entry has put the key/value alternation
+	// in doubt, and cleared at the next name.
+	resync := false
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("parsing dict: %w", err)
@@ -475,42 +523,54 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 		if err != nil {
 			return nil, err
 		}
-		if t.Type == lexer.TokenEOF {
+		closed, err := p.closeDict(t)
+		if err != nil {
+			return nil, err
+		}
+		if closed {
 			break
 		}
-		if t.Type == lexer.TokenKeyword && t.Value == "endobj" {
-			break
-		}
-		if t.Type == lexer.TokenDelimiter && t.Value == ">>" {
-			if _, err := p.Expect(lexer.TokenDelimiter); err != nil {
-				return nil, err
+
+		if resync && t.Type == lexer.TokenName {
+			resync = false
+			if !p.nameRunStartsWithKey() {
+				// The name is the value of the entry the malformed token
+				// damaged, not a key.
+				if _, err := p.Consume(); err != nil {
+					return nil, err
+				}
+				continue
 			}
-			break
 		}
 
 		keyObj, err := p.ParseObject(ctx)
 		if err != nil {
-			// A stray keyword where a key is expected (e.g. `/Name MS`, where a
-			// space inside a name splits it into a name plus the bare keyword
-			// `MS`) has already been consumed. Skip it and keep the dict rather
-			// than discarding the whole object; qpdf and veraPDF recover the
-			// same way. Other errors (EOF, lexer failures) are not recoverable.
-			// A stray delimiter lands here the same way: an array closed
-			// twice leaves a bare `]` among the keys, and a dictionary
-			// closed with a single `>` leaves that. Both are already
-			// consumed, and dropping the dictionary over one costs every
-			// key it holds.
-			if errors.Is(err, errUnexpectedKeyword) || errors.Is(err, errUnexpectedDelimiter) {
+			// The stray token is already consumed. Other errors (EOF, lexer
+			// failures) are not recoverable.
+			if isStrayToken(err) {
+				resync = true
 				continue
 			}
 			return nil, err
 		}
 		key, ok := keyObj.(ast.PdfName)
 		if !ok {
-			// Skip non-name keys gracefully rather than failing.
+			resync = true
 			continue
 		}
 
+		t, err = p.Peek(0)
+		if err != nil {
+			return nil, err
+		}
+		// A key with no value before a close marker is dropped.
+		closed, err = p.closeDict(t)
+		if err != nil {
+			return nil, err
+		}
+		if closed {
+			break
+		}
 		valObj, err := p.parseDictValue(ctx, key, &deferredContents)
 		if err != nil {
 			// Nesting past [maxParseNestingDepth] is a refusal, not a damaged
@@ -521,7 +581,12 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 			if errors.Is(err, errNestingTooDeep) {
 				return nil, err
 			}
-			// Value missing: close the dict with the pairs read so far.
+			if isStrayToken(err) {
+				resync = true
+				continue
+			}
+			// A value that fails for any other reason, such as a string that
+			// does not decrypt, closes the dict with the pairs read so far.
 			break
 		}
 		dict[key] = valObj
@@ -532,6 +597,114 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 		}
 	}
 	return dict, nil
+}
+
+// closeDict reports whether t ends the dictionary being read, consuming it
+// when it is the `>>` that closes it. EOF, `endobj` and `stream` end a
+// dictionary whose `>>` is missing and are left for the caller: `endobj` for
+// [Parser.parseIndirectObject], and `stream` for [Parser.parseDict], which
+// reads the stream body that follows. Recovery from a malformed entry must
+// never run past them, since the bytes after `stream` are not tokens.
+//
+// # Corpus evidence
+//
+//   - pdfjs poppler-742-0-fuzzed.pdf: closes the dictionary of form XObject
+//     44 with a single `>` before `stream`. Read as a stray keyword, `stream`
+//     sent the dictionary on through the compressed data, and the object came
+//     back a plain dictionary with no content.
+func (p *Parser) closeDict(t lexer.Token) (bool, error) {
+	switch {
+	case t.Type == lexer.TokenEOF:
+		return true, nil
+	case t.Type == lexer.TokenKeyword && (t.Value == "endobj" || t.Value == "stream"):
+		return true, nil
+	case t.Type == lexer.TokenDelimiter && t.Value == ">>":
+		if _, err := p.Expect(lexer.TokenDelimiter); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
+// isStrayToken reports whether err is [Parser.ParseObject] meeting a token
+// that cannot start an object: a bare keyword, or a delimiter other than `<<`
+// and `[`. ParseObject has already consumed that one token, so a container
+// that drops it loses nothing else.
+func isStrayToken(err error) bool {
+	return errors.Is(err, errUnexpectedKeyword) || errors.Is(err, errUnexpectedDelimiter)
+}
+
+// maxDictResyncLookahead bounds how many consecutive names
+// [Parser.nameRunStartsWithKey] reads ahead. Anti-DoS guard, not
+// spec-mandated: every token read ahead stays buffered until the dictionary
+// consumes it, so an unbounded run would let one malformed entry buffer a
+// file's worth of names at once. The run only grows through entries whose
+// value is itself a name, and 1024 names is 512 of those in a row, far more
+// than any dictionary ISO 32000-1 defines holds. Past the bound the name is
+// taken as a key, the reading PDF.js always makes.
+const maxDictResyncLookahead = 1024
+
+// nameRunStartsWithKey decides, after a malformed dictionary entry, whether
+// the name at the head of the token buffer starts a pair or is the value of
+// the entry the malformed token damaged.
+//
+// It reads the run of consecutive names that begins there and picks the
+// alignment under which the run pairs up with what follows it (ISO 32000-1,
+// 7.3.7: key, value, key, value). A run followed by a token that starts a
+// value (a number, a string, `<<`, `[`, true, false or null) ends on a key,
+// so its first name is a key when the run is odd. A run followed by anything
+// else (`>>`, EOF, `endobj`, `stream`, or another stray token) ends on a
+// value, so its first name is a key when the run is even.
+//
+// In `/Ty pe /Catalog /Pages 2 0 R >>` the run /Catalog /Pages is followed by
+// a number, so /Pages is a key and /Catalog is the value of the split key. In
+// `/Key junk /Type /Font >>` the run /Type /Font is followed by `>>`, so /Type
+// is a key.
+//
+// # Corpus evidence
+//
+//   - pdfjs poppler-742-0-fuzzed.pdf: writes a border style as
+//     `<< Type /Border /W 2 /S /B >>`, a key without its solidus. Taking the
+//     next name as a key paired /Border with /W and left 2 where a key
+//     belongs; the run /Border /W before 2 makes /Border the lost value, so
+//     /W 2 and /S /B survive.
+func (p *Parser) nameRunStartsWithKey() bool {
+	run := 0
+	for {
+		t, err := p.Peek(run)
+		if err != nil {
+			// A read failure ends the dictionary as a close marker would.
+			return run%2 == 0
+		}
+		if t.Type != lexer.TokenName {
+			if startsValue(t) {
+				return run%2 == 1
+			}
+			return run%2 == 0
+		}
+		run++
+		if run > maxDictResyncLookahead {
+			return true
+		}
+	}
+}
+
+// startsValue reports whether t begins a dictionary value other than a name:
+// a number, a string, a dictionary, an array, a boolean or null (ISO 32000-1,
+// 7.3). An indirect reference begins with a number.
+func startsValue(t lexer.Token) bool {
+	switch t.Type {
+	case lexer.TokenNumber, lexer.TokenString, lexer.TokenHexString:
+		return true
+	case lexer.TokenDelimiter:
+		return t.Value == "<<" || t.Value == "["
+	case lexer.TokenKeyword:
+		return t.Value == "true" || t.Value == "false" || t.Value == "null"
+	case lexer.TokenEOF, lexer.TokenError, lexer.TokenName:
+		return false
+	}
+	return false
 }
 
 // parseDictValue reads the value of key. A /Contents whose value is a string

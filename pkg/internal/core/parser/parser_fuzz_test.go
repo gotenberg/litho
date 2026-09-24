@@ -112,6 +112,11 @@ func FuzzParser(f *testing.F) {
 	f.Add([]byte("99999999999999999999999999999999"))
 	f.Add([]byte("1.79769313486231570e+308"))
 
+	// Adversarial: malformed dictionary entries the parser resynchronises past.
+	f.Add([]byte("<< /Ty\x00pe /Catalog /Pages 2 0 R >>"))
+	f.Add([]byte("<< /A junk /B /C /D ] /E ) >>"))
+	f.Add([]byte("1 0 obj\n<< /Length 5 /X junk stream\nHello\nendstream\nendobj"))
+
 	// Adversarial: mixed valid/invalid
 	f.Add([]byte("<< /Type /Page >> endobj extra garbage"))
 	f.Add([]byte("1 0 R extra tokens after ref"))
