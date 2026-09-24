@@ -108,7 +108,7 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 // key forbidden. XObjects are streams, so the scanner resolves them via
 // ResolveStream. checkedForRef prevents reporting the same object twice.
 func scanFormXObjectsUA(ctx context.Context, doc *document.Document, res ast.PdfDict, results *[]Violation, checkedForRef map[int]bool, depth int) {
-	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return
 	}
 

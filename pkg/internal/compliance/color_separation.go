@@ -134,7 +134,7 @@ func scanSeparationDeviceNInResources(ctx context.Context, doc *document.Documen
 // did, never less. A scope whose stream will not decode or parse yields no
 // survey at all and is judged in full, as an unsurveyed one was.
 func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation, depth int, visited map[string]bool, used *usedResources, referencedXObjects, contentCSNames map[string]bool, inherited map[string]inheritedCS) {
-	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return
 	}
 

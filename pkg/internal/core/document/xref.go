@@ -151,7 +151,7 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 			if !ok {
 				return fmt.Errorf("expected xref stream, got %T", obj)
 			}
-			pVal, err := xref.ParseXRefStream(ctx, stream, d.Index.Entries)
+			pVal, err := xref.ParseXRefStream(ctx, stream, d.Index.Entries, d.builtinFilters())
 			if err != nil {
 				return fmt.Errorf("parsing xref stream at offset %d: %w", currentOffset, err)
 			}
@@ -409,7 +409,7 @@ func (d *Document) parseHybridXRefStream(ctx context.Context, offset int64, skip
 	}
 
 	hybridEntries := make(map[int]xref.XRefEntry)
-	if _, err := xref.ParseXRefStream(ctx, stream, hybridEntries); err != nil {
+	if _, err := xref.ParseXRefStream(ctx, stream, hybridEntries, d.builtinFilters()); err != nil {
 		return fmt.Errorf("parsing hybrid xref stream entries at offset %d: %w", offset, err)
 	}
 

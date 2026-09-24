@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // cancelAfter reports a live context for the first n calls to Err() and a
@@ -60,7 +61,7 @@ func TestLimitedCopy_ReportsCancellationWithDataAlreadyBuffered(t *testing.T) {
 
 	ctx := &cancelAfter{Context: context.Background(), n: 1}
 	var buf bytes.Buffer
-	err := limitedCopy(ctx, &buf, bytes.NewReader(make([]byte, 4<<20)))
+	err := limitedCopy(ctx, &buf, bytes.NewReader(make([]byte, 4<<20)), limits.DefaultMaxStreamBytes)
 
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("limitedCopy error = %v, want context.Canceled", err)

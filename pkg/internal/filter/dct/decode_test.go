@@ -100,7 +100,7 @@ func segment(t *testing.T, data []byte, m byte) int {
 
 func decode(t *testing.T, data []byte, stated int) ([]byte, int, int, int) {
 	t.Helper()
-	out, n, w, h, err := Decode(context.Background(), data, -1, stated)
+	out, n, w, h, err := Decode(context.Background(), data, -1, stated, DefaultMaxSamples)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
@@ -212,8 +212,23 @@ func TestDecode_Refuses(t *testing.T) {
 		"arithmetic coding":  {arithmetic, ErrUnsupported},
 		"65535 x 65535 grey": {huge, ErrLimit},
 	} {
-		if _, _, _, _, err := Decode(context.Background(), tc.data, -1, 0); !errors.Is(err, tc.want) {
+		if _, _, _, _, err := Decode(context.Background(), tc.data, -1, 0, DefaultMaxSamples); !errors.Is(err, tc.want) {
 			t.Errorf("%s: %v, want %v", name, err, tc.want)
 		}
+	}
+}
+
+// TestDecode_CapScales pins that the cap Decode is given bounds the frame: a
+// 23x17 grey JPEG decodes under a cap of exactly its samples and is refused
+// under one sample less.
+func TestDecode_CapScales(t *testing.T) {
+	t.Parallel()
+
+	data := encoded(t, 23, 17, true)
+	if _, _, _, _, err := Decode(context.Background(), data, -1, 0, 23*17); err != nil {
+		t.Fatalf("Decode under a cap of its samples: %v", err)
+	}
+	if _, _, _, _, err := Decode(context.Background(), data, -1, 0, 23*17-1); !errors.Is(err, ErrLimit) {
+		t.Errorf("Decode under a cap one sample short: err = %v, want ErrLimit", err)
 	}
 }

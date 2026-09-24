@@ -86,13 +86,13 @@ func FuzzParseXRefStream(f *testing.F) {
 			index = []int{start, count}
 		}
 		stream := fuzzXRefStream(w0, w1, w2, size, index, body)
-		_, _ = ParseXRefStream(context.Background(), stream, make(map[int]XRefEntry))
+		_, _ = ParseXRefStream(context.Background(), stream, make(map[int]XRefEntry), nil)
 
 		// An odd-length /Index is the shape the two-at-a-time walk has to
 		// survive, and it cannot be expressed through the pair above.
 		if withIndex {
 			odd := fuzzXRefStream(w0, w1, w2, size, []int{start}, body)
-			_, _ = ParseXRefStream(context.Background(), odd, make(map[int]XRefEntry))
+			_, _ = ParseXRefStream(context.Background(), odd, make(map[int]XRefEntry), nil)
 		}
 	})
 }

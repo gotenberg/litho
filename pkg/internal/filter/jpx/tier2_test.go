@@ -483,7 +483,7 @@ func TestDecodePackets_StepLimit(t *testing.T) {
 	}
 	main := slices.Concat(seg(markerSIZ, sizBody(1, 1, 1, 1, 1)...), seg(markerCOD, cod...), seg(markerQCD, 0x40, 0x40), seg(markerPOC, poc...))
 	b := codestreamOf(main, tilePart(0, 0, nil, make([]byte, 0xFFFF)))
-	if _, err := Decode(context.Background(), b); !errors.Is(err, ErrLimit) {
+	if _, err := Decode(context.Background(), b, DefaultMaxSamples); !errors.Is(err, ErrLimit) {
 		t.Errorf("Decode = %v, want %v", err, ErrLimit)
 	}
 }
@@ -503,7 +503,7 @@ func TestDecodePackets_PositionStepLimit(t *testing.T) {
 	}
 	main := slices.Concat(seg(markerSIZ, sizBody(8192, 1, 8192, 1, 1)...), seg(markerCOD, cod...), seg(markerQCD, 0x40, 0x40), seg(markerPOC, poc...))
 	b := codestreamOf(main, tilePart(0, 0, nil, make([]byte, 8192)))
-	if _, err := Decode(context.Background(), b); !errors.Is(err, ErrLimit) {
+	if _, err := Decode(context.Background(), b, DefaultMaxSamples); !errors.Is(err, ErrLimit) {
 		t.Errorf("Decode = %v, want %v", err, ErrLimit)
 	}
 }
@@ -515,7 +515,7 @@ func TestDecodePackets_MissingEPH(t *testing.T) {
 
 	b := slices.Clone(annexJ10)
 	b[58] |= 0x04
-	if _, err := Decode(context.Background(), b); !errors.Is(err, ErrMalformed) {
+	if _, err := Decode(context.Background(), b, DefaultMaxSamples); !errors.Is(err, ErrMalformed) {
 		t.Errorf("Decode = %v, want %v", err, ErrMalformed)
 	}
 }

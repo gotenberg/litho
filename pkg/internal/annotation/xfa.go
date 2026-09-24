@@ -44,15 +44,15 @@ func extractXFAData(ctx context.Context, doc *document.Document, acroFormDict as
 //
 // Per ISO 32000-1, Table 224 the /XFA value may be an array alternating packet
 // names with their streams, and the per-stream decompression cap says nothing
-// about their sum: every entry decodes under its own maxDecompressedSize, so a
+// about their sum: every entry decodes under its own stream budget, so a
 // file grows the assembled buffer with the number of entries it names rather
 // than with anything the form could legitimately hold. Measured on an array of
 // 20 compressed streams, 328 KB of input assembled 160 MB.
 //
 // It bounds both shapes /XFA takes. The single-stream shape carries the same
 // payload as the array, so bounding only the array would let a file evade the
-// limit by writing one stream instead of several and fall back to the 256 MB
-// decompression cap, sixteen times this one.
+// limit by writing one stream instead of several and fall back to the stream
+// budget, sixteen times this one by default.
 //
 // 16 MB is chosen against real forms rather than by round number, and leaves
 // better than 6x headroom over the heaviest one. That is wider headroom than

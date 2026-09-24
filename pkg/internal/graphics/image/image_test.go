@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 func TestResolveColorSpace_DirectName(t *testing.T) {
@@ -355,7 +356,7 @@ func TestValidateImageDimensions(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateImageDimensions(tc.w, tc.h)
+			err := validateImageDimensions(tc.w, tc.h, limits.DefaultMaxImagePixels)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("validateImageDimensions(%d, %d) err=%v, wantErr=%v", tc.w, tc.h, err, tc.wantErr)
 			}

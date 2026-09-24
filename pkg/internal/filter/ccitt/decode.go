@@ -3,6 +3,8 @@ package ccitt
 import (
 	"context"
 	"fmt"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // maxColumns bounds the width of a row. It is an anti-DoS guard, not
@@ -11,11 +13,13 @@ import (
 // scan of an A0 sheet is under 40,000 pixels wide.
 const maxColumns = 1 << 17
 
-// maxOutput bounds the bytes one Decode call returns. It is an anti-DoS guard,
-// not spec-mandated: a few bytes of two-dimensional coding describe a whole
-// white row, so a small stream can ask for an enormous image. It matches
-// maxDecompressedSize in package filter, the cap on every decoder's output.
-const maxOutput = 256 << 20
+// defaultMaxOutput bounds the bytes one Decode call returns when [Params]
+// leaves MaxOutput zero. It is an anti-DoS guard, not spec-mandated: a few
+// bytes of two-dimensional coding describe a whole white row, so a small
+// stream can ask for an enormous image. It is the default stream budget,
+// [limits.DefaultMaxStreamBytes], which package filter hands on as MaxOutput
+// from the document's own budget.
+const defaultMaxOutput = limits.DefaultMaxStreamBytes
 
 // ctxRows is how many rows are decoded between checks of the context.
 const ctxRows = 256
@@ -39,6 +43,10 @@ type Params struct {
 	EndOfBlock bool
 	// BlackIs1 makes 1 bits black; by default 0 bits are.
 	BlackIs1 bool
+	// MaxOutput bounds the bytes the call returns, or 0 for
+	// defaultMaxOutput. It is not a Table 11 parameter: the caller sets it
+	// from its resource budget.
+	MaxOutput int64
 }
 
 // DefaultParams returns the parameters an empty parameter dictionary
@@ -94,8 +102,12 @@ func decode(ctx context.Context, data []byte, p Params, block bool) ([]byte, int
 	if p.Rows < 0 {
 		return nil, 0, fmt.Errorf("%w: %d rows", ErrMalformed, p.Rows)
 	}
+	maxOutput := p.MaxOutput
+	if maxOutput <= 0 {
+		maxOutput = defaultMaxOutput
+	}
 	rowBytes := (p.Columns + 7) / 8
-	if p.Rows > maxOutput/rowBytes {
+	if int64(p.Rows) > maxOutput/int64(rowBytes) {
 		return nil, 0, fmt.Errorf("%w: %d rows of %d columns", ErrLimit, p.Rows, p.Columns)
 	}
 	d := &decoder{r: bitReader{data: data}, p: p}
@@ -106,7 +118,7 @@ func decode(ctx context.Context, data []byte, p Params, block bool) ([]byte, int
 				return nil, 0, err
 			}
 		}
-		if len(out)+rowBytes > maxOutput {
+		if int64(len(out)+rowBytes) > maxOutput {
 			return nil, 0, fmt.Errorf("%w: more than %d bytes of rows", ErrLimit, maxOutput)
 		}
 		ok, err := d.row()

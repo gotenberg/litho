@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
 
@@ -13,7 +14,7 @@ import (
 // outside -short and not in parallel with one another.
 
 // TestDecoder_PluginOutputOverTheCapIsRefused pins the bound on the plugin
-// path. maxDecompressedSize was enforced only inside limitedCopy, which reads
+// path. The stream budget was enforced only inside limitedCopy, which reads
 // an io.Reader in chunks; a plugin hands back one finished slice and never
 // touches it, so JBIG2Decode and JPXDecode were the two filter names a
 // document could use to escape the decompression-bomb guard entirely.
@@ -27,8 +28,8 @@ func TestDecoder_PluginOutputOverTheCapIsRefused(t *testing.T) {
 		t.Skip("allocates 256 MB")
 	}
 
-	p := &mockPlugin{name: "JPXDecode", result: make([]byte, maxDecompressedSize+1)}
-	d := NewDecoder([]plugins.FilterDecoder{p})
+	p := &mockPlugin{name: "JPXDecode", result: make([]byte, limits.DefaultMaxStreamBytes+1)}
+	d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
 
 	stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("JPXDecode")}, []byte("raw"))
 	out, err := d.DecodeStream(context.Background(), stream)
@@ -48,16 +49,16 @@ func TestDecoder_PluginOutputAtTheCapIsKept(t *testing.T) {
 		t.Skip("allocates 256 MB")
 	}
 
-	p := &mockPlugin{name: "JPXDecode", result: make([]byte, maxDecompressedSize)}
-	d := NewDecoder([]plugins.FilterDecoder{p})
+	p := &mockPlugin{name: "JPXDecode", result: make([]byte, limits.DefaultMaxStreamBytes)}
+	d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
 
 	stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("JPXDecode")}, []byte("raw"))
 	out, err := d.DecodeStream(context.Background(), stream)
 	if err != nil {
 		t.Fatalf("a plugin returning exactly the cap: %v, want success", err)
 	}
-	if len(out) != maxDecompressedSize {
-		t.Errorf("decoded %d bytes, want %d", len(out), maxDecompressedSize)
+	if len(out) != limits.DefaultMaxStreamBytes {
+		t.Errorf("decoded %d bytes, want %d", len(out), limits.DefaultMaxStreamBytes)
 	}
 }
 
@@ -67,7 +68,7 @@ func TestDecoder_SmallPluginOutputStillDecodes(t *testing.T) {
 	t.Parallel()
 
 	p := &mockPlugin{name: "JPXDecode", result: []byte("pixels")}
-	d := NewDecoder([]plugins.FilterDecoder{p})
+	d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
 
 	stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("JPXDecode")}, []byte("raw"))
 	out, err := d.DecodeStream(context.Background(), stream)

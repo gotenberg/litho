@@ -52,7 +52,7 @@ func TestChannels_Palette(t *testing.T) {
 
 	cmap := boxOf(boxComponentMapping, []byte{0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 2})
 	cdef := boxOf(boxChannelDefinition, []byte{0, 3, 0, 0, 0, 0, 0, 3, 0, 1, 0, 0, 0, 2, 0, 2, 0, 0, 0, 1})
-	img, err := Decode(context.Background(), paletteFile(256, cmap, cdef))
+	img, err := Decode(context.Background(), paletteFile(256, cmap, cdef), DefaultMaxSamples)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestChannels_Direct(t *testing.T) {
 	t.Parallel()
 
 	for name, data := range map[string][]byte{"codestream": annexJ10, "palette without mapping": paletteFile(16)} {
-		img, err := Decode(context.Background(), data)
+		img, err := Decode(context.Background(), data, DefaultMaxSamples)
 		if err != nil {
 			t.Fatalf("%s: Decode: %v", name, err)
 		}
@@ -123,7 +123,7 @@ func TestChannels_DescribedTwice(t *testing.T) {
 
 	cmap := boxOf(boxComponentMapping, []byte{0, 0, 1, 0, 0, 0, 0, 0})
 	cdef := boxOf(boxChannelDefinition, []byte{0, 3, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 2, 0, 0})
-	img, err := Decode(context.Background(), paletteFile(256, cmap, cdef))
+	img, err := Decode(context.Background(), paletteFile(256, cmap, cdef), DefaultMaxSamples)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestChannels_Opacity(t *testing.T) {
 
 	cmap := boxOf(boxComponentMapping, []byte{0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1})
 	cdef := boxOf(boxChannelDefinition, []byte{0, 3, 0, 0, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 2, 0, 0})
-	img, err := Decode(context.Background(), paletteFile(256, cmap, cdef))
+	img, err := Decode(context.Background(), paletteFile(256, cmap, cdef), DefaultMaxSamples)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestChannels_Rejects(t *testing.T) {
 		"definition of a missing channel": paletteFile(256, boxOf(boxComponentMapping, []byte{0, 0, 1, 0}),
 			boxOf(boxChannelDefinition, []byte{0, 1, 0, 1, 0, 0, 0, 1})),
 	} {
-		img, err := Decode(context.Background(), data)
+		img, err := Decode(context.Background(), data, DefaultMaxSamples)
 		if err != nil {
 			t.Fatalf("%s: Decode: %v", name, err)
 		}
@@ -175,7 +175,7 @@ func TestChannels_Rejects(t *testing.T) {
 			t.Errorf("%s: Channels = %v, want %v", name, err, ErrMalformed)
 		}
 	}
-	img, err := Decode(context.Background(), paletteFile(100, boxOf(boxComponentMapping, []byte{0, 0, 1, 0})))
+	img, err := Decode(context.Background(), paletteFile(100, boxOf(boxComponentMapping, []byte{0, 0, 1, 0})), DefaultMaxSamples)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
@@ -198,7 +198,7 @@ func TestRender_Subsampled(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	img, err := Decode(context.Background(), data)
+	img, err := Decode(context.Background(), data, DefaultMaxSamples)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestRender_Tiled(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		img, err := Decode(context.Background(), data)
+		img, err := Decode(context.Background(), data, DefaultMaxSamples)
 		if err != nil {
 			t.Fatalf("%s: Decode: %v", name, err)
 		}
@@ -277,7 +277,7 @@ func TestRender_Tiled(t *testing.T) {
 	}
 }
 
-// TestRender_GridLimit refuses a grid past maxSamples before allocating it.
+// TestRender_GridLimit refuses a grid past DefaultMaxSamples before allocating it.
 // Components 254 and 255 apart share no separation, so the default grid is
 // the full image area while each component holds a few hundred samples a
 // side: a few hundred bytes would otherwise ask for gigabytes. The 8200x8200
@@ -288,7 +288,7 @@ func TestRender_GridLimit(t *testing.T) {
 	for _, size := range []uint32{60000, 8200} {
 		b := sizBody(size, size, size, size, 2)
 		b[37], b[38], b[40], b[41] = 254, 254, 255, 255
-		img, err := Describe(codestreamOf(slices.Concat(seg(markerSIZ, b...), seg(markerCOD, codBody...), seg(markerQCD, qcdBody...)), tilePart(0, 0, nil, nil)))
+		img, err := Describe(codestreamOf(slices.Concat(seg(markerSIZ, b...), seg(markerCOD, codBody...), seg(markerQCD, qcdBody...)), tilePart(0, 0, nil, nil)), DefaultMaxSamples)
 		if err != nil {
 			t.Fatalf("%d: Describe: %v", size, err)
 		}
@@ -313,7 +313,7 @@ func TestDefaultSize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	img, err := newImage(cs)
+	img, err := newImage(cs, DefaultMaxSamples)
 	if err != nil {
 		t.Fatal(err)
 	}

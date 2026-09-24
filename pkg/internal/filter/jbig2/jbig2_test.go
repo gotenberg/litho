@@ -131,7 +131,7 @@ func TestDecode_AnnexH1GenericRegion(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			bm, err := Decode(context.Background(), concat(raw[tc.page], raw[tc.generic]), nil)
+			bm, err := Decode(context.Background(), concat(raw[tc.page], raw[tc.generic]), nil, DefaultMaxBitmapPixels)
 			if err != nil {
 				t.Fatalf("Decode: %v", err)
 			}
@@ -179,7 +179,7 @@ func TestDecode_UnknownLengthGenericRegion(t *testing.T) {
 	golden := annexH1Golden(t)
 
 	full := concat(raw[8], withUnknownLength(t, raw[11], 44))
-	bm, err := Decode(context.Background(), full, nil)
+	bm, err := Decode(context.Background(), full, nil, DefaultMaxBitmapPixels)
 	if err != nil {
 		t.Fatalf("Decode with every row: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestDecode_UnknownLengthGenericRegion(t *testing.T) {
 	// With 20 rows the region stops at page row 11+20; below it the page
 	// keeps its default pixel value 0.
 	short := concat(raw[8], withUnknownLength(t, raw[11], 20))
-	bm, err = Decode(context.Background(), short, nil)
+	bm, err = Decode(context.Background(), short, nil, DefaultMaxBitmapPixels)
 	if err != nil {
 		t.Fatalf("Decode with 20 rows: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestDecode_UnknownLengthGenericRegion(t *testing.T) {
 	}
 
 	// A row count above the stated height is malformed.
-	if _, err := Decode(context.Background(), concat(raw[8], withUnknownLength(t, raw[11], 45)), nil); !errors.Is(err, ErrMalformed) {
+	if _, err := Decode(context.Background(), concat(raw[8], withUnknownLength(t, raw[11], 45)), nil, DefaultMaxBitmapPixels); !errors.Is(err, ErrMalformed) {
 		t.Errorf("row count 45 over a 44-row region: err = %v, want ErrMalformed", err)
 	}
 }
@@ -235,7 +235,7 @@ func TestDecode_StripedPageOfUnknownHeight(t *testing.T) {
 	binary.BigEndian.PutUint16(pageInfo[dataAt+17:], 0x8000|56)
 
 	stream := concat(pageInfo, raw[11], segmentBytes(12, typeEndOfStripe, 2, binary.BigEndian.AppendUint32(nil, 55)))
-	bm, err := Decode(context.Background(), stream, nil)
+	bm, err := Decode(context.Background(), stream, nil, DefaultMaxBitmapPixels)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
@@ -276,14 +276,14 @@ func TestDecode_Refusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if _, err := Decode(context.Background(), tc.data, nil); !errors.Is(err, tc.want) {
+			if _, err := Decode(context.Background(), tc.data, nil, DefaultMaxBitmapPixels); !errors.Is(err, tc.want) {
 				t.Errorf("err = %v, want %v", err, tc.want)
 			}
 		})
 	}
 }
 
-// TestDecode_ChargeBoundsTotalArea pins maxDecodedPixels: regions are charged
+// TestDecode_ChargeBoundsTotalArea pins maxDecodedAreas: regions are charged
 // before they are decoded, so a stream of many full-size regions is refused
 // without decoding them.
 func TestDecode_ChargeBoundsTotalArea(t *testing.T) {
@@ -338,5 +338,35 @@ func TestBitmapCombine(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestDecode_CapScales pins that the cap Decode is given moves every bitmap
+// bound with it: the 64x56 page of Annex H.1 decodes under a cap of exactly
+// its area and is refused under one pixel less, and the total the budget
+// admits is four of those caps.
+func TestDecode_CapScales(t *testing.T) {
+	t.Parallel()
+
+	raw := annexH1(t)
+	stream := concat(raw[8], raw[11])
+	if _, err := Decode(context.Background(), stream, nil, 64*56); err != nil {
+		t.Fatalf("Decode under a cap of the page's area: %v", err)
+	}
+	if _, err := Decode(context.Background(), stream, nil, 64*56-1); !errors.Is(err, ErrLimit) {
+		t.Errorf("Decode under a cap one pixel short: err = %v, want ErrLimit", err)
+	}
+
+	b := &budget{area: 100}
+	for i := range 4 {
+		if err := b.charge(10, 10); err != nil {
+			t.Fatalf("area %d of a 100-pixel cap refused: %v", i+1, err)
+		}
+	}
+	if err := b.charge(1, 1); !errors.Is(err, ErrLimit) {
+		t.Errorf("pixel past four 100-pixel areas: err = %v, want ErrLimit", err)
+	}
+	if err := (&budget{area: 100}).charge(11, 10); !errors.Is(err, ErrLimit) {
+		t.Errorf("110-pixel region under a 100-pixel cap: err = %v, want ErrLimit", err)
 	}
 }

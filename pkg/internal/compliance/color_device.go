@@ -48,23 +48,25 @@ type deviceCSUsage struct {
 	initialGray bool
 }
 
-// maxFormXObjectDepth is the maximum recursion depth for scanning Form XObject
-// content streams and their nested resources. Anti-DoS guard, not spec-mandated:
-// ISO 32000-1 sets no limit on how deeply one form may invoke another, so a
-// crafted file could nest them until the goroutine stack is exhausted.
+// formTooDeep reports whether a content scope depth levels below the page is
+// deeper than the document's form budget, limits.Limits.MaxFormDepth. The
+// page's own content, or an annotation's appearance, is at 0 and a form it
+// paints at 1; a tiling pattern and a Type 3 glyph description count as a
+// level each, as a form does. Anti-DoS guard, not spec-mandated: ISO 32000-1
+// sets no limit on how deeply one form may invoke another, so a crafted file
+// could nest them until the goroutine stack is exhausted.
 //
 // It bounds CHAIN LENGTH only. Cycles are broken by the visited sets the callers
 // own, not by this cap: [checkFormXObjectFonts] and [checkType3CharProcFonts]
 // key on object number, [scanFormXObjectCS] on the resolved dict's pointer. A
 // depth bound survives a cycle without detecting it, so both are needed.
 //
-// Ten is safe for real documents: a form invoking a form is already unusual, and
-// the depth is the invocation chain rather than the resource tree, so legitimate
-// nesting stops far short. This is the package-wide bound, read by thirteen
-// recursion sites across nine files (fonts, transparency, colour, file limits,
-// accessibility); the same name in typography/extract.go is a separate constant
-// for the text-extraction walk.
-const maxFormXObjectDepth = 10
+// Every recursion site of the package reads it (fonts, transparency, colour,
+// file limits, accessibility), and text extraction, image listing and
+// auto-tagging read the same budget, so the walks agree on which forms exist.
+func formTooDeep(doc *document.Document, depth int) bool {
+	return depth > doc.Limits().MaxFormDepth
+}
 
 // checkDeviceColorSpaces validates that device-dependent colour spaces
 // (DeviceRGB, DeviceCMYK, DeviceGray) are only used when allowed.

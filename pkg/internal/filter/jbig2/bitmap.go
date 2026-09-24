@@ -1,15 +1,27 @@
 package jbig2
 
-import "fmt"
+import (
+	"fmt"
 
-// maxBitmapPixels bounds the area of any bitmap this package allocates: a
-// page, a region, or an auxiliary buffer. It is an anti-DoS guard, not
-// spec-mandated: T.88 allows dimensions up to 2^32-1 each, so a 20-byte
-// header could otherwise demand a multi-terabyte buffer. It matches
-// maxImagePixels in pkg/internal/graphics/image, the cap every decoded image
-// already meets, so no page this package produces is one the image decoder
-// would then refuse. At one bit per pixel it is 12.5 MB.
-const maxBitmapPixels = 100_000_000
+	"github.com/gotenberg/litho/pkg/internal/limits"
+)
+
+// DefaultMaxBitmapPixels bounds the area of any bitmap this package decodes
+// under the default image budget: a page, a region, a symbol, or an auxiliary
+// buffer. It is an anti-DoS guard, not spec-mandated: T.88 allows dimensions
+// up to 2^32-1 each, so a 20-byte header could otherwise demand a
+// multi-terabyte buffer. It is the default image budget,
+// [limits.DefaultMaxImagePixels], the cap every decoded image already meets,
+// so no page this package produces is one the image decoder would then refuse.
+// [Decode] takes the cap scaled with the document's budget
+// ([limits.Limits.ScaleImageCap]). At one bit per pixel it is 12.5 MB.
+const DefaultMaxBitmapPixels = limits.DefaultMaxImagePixels
+
+// maxAllocPixels bounds the area of any bitmap [newBitmap] allocates, whatever
+// cap [Decode] was given: the bitmap cap at the ceiling of the image budget.
+// Every caller checks its area against the cap Decode was given first, so this
+// only keeps an allocation bounded should one caller not.
+const maxAllocPixels = limits.MaxImagePixelsCeiling
 
 // Bitmap is a bi-level image stored one bit per pixel, rows top to bottom,
 // each row packed most significant bit first and padded to a whole byte. A 1
@@ -24,13 +36,13 @@ type Bitmap struct {
 }
 
 // newBitmap allocates a width x height bitmap with every pixel 0. It refuses
-// negative dimensions and any area above maxBitmapPixels before allocating.
+// negative dimensions and any area above maxAllocPixels before allocating.
 func newBitmap(width, height int) (*Bitmap, error) {
 	if width < 0 || height < 0 {
 		return nil, fmt.Errorf("%w: bitmap of %dx%d pixels", ErrMalformed, width, height)
 	}
-	if areaExceeds(int64(width), int64(height), maxBitmapPixels) {
-		return nil, fmt.Errorf("%w: bitmap of %dx%d pixels exceeds %d", ErrLimit, width, height, maxBitmapPixels)
+	if areaExceeds(int64(width), int64(height), maxAllocPixels) {
+		return nil, fmt.Errorf("%w: bitmap of %dx%d pixels exceeds %d", ErrLimit, width, height, maxAllocPixels)
 	}
 	stride := (width + 7) / 8
 	return &Bitmap{Width: width, Height: height, Stride: stride, Data: make([]byte, stride*height)}, nil

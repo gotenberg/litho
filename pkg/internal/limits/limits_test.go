@@ -1,0 +1,101 @@
+package limits_test
+
+import (
+	"errors"
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/filter/dct"
+	"github.com/gotenberg/litho/pkg/internal/filter/jbig2"
+	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
+	"github.com/gotenberg/litho/pkg/internal/limits"
+)
+
+// TestDefault_KeepsThePreviousCaps pins every default, and every codec cap
+// scaled from the image budget, to the constant it replaced, so the default
+// configuration reads documents exactly as before.
+func TestDefault_KeepsThePreviousCaps(t *testing.T) {
+	t.Parallel()
+
+	want := limits.Limits{
+		MaxStreamBytes:       256 << 20,
+		MaxImagePixels:       100_000_000,
+		MaxEmbeddedFileBytes: 50 * 1024 * 1024,
+		MaxFormDepth:         10,
+		MaxCachedObjects:     50_000,
+	}
+	if got := limits.Default(); got != want {
+		t.Errorf("Default() = %+v, want %+v", got, want)
+	}
+	if got := (limits.Limits{}).WithDefaults(); got != want {
+		t.Errorf("zero Limits with defaults = %+v, want %+v", got, want)
+	}
+
+	d := limits.Default()
+	for name, c := range map[string]struct{ base, was int64 }{
+		"jbig2 bitmap": {jbig2.DefaultMaxBitmapPixels, 100_000_000},
+		"jpx samples":  {jpx.DefaultMaxSamples, 1 << 27},
+		"dct samples":  {dct.DefaultMaxSamples, 1 << 27},
+	} {
+		if c.base != c.was {
+			t.Errorf("%s default = %d, want %d", name, c.base, c.was)
+		}
+		if got := d.ScaleImageCap(c.base); got != c.was {
+			t.Errorf("%s scaled at the default budget = %d, want %d", name, got, c.was)
+		}
+	}
+}
+
+// TestScaleImageCap_MovesWithTheBudget pins that a codec cap follows the image
+// budget in proportion, and never falls to zero.
+func TestScaleImageCap_MovesWithTheBudget(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		pixels, base, want int64
+	}{
+		{50_000_000, 1 << 27, 1 << 26},
+		{200_000_000, 1 << 27, 1 << 28},
+		{limits.MaxImagePixelsCeiling, 100_000_000, limits.MaxImagePixelsCeiling},
+		{1, 1 << 27, 1},
+		{1, 100, 1},
+	} {
+		if got := (limits.Limits{MaxImagePixels: tc.pixels}).ScaleImageCap(tc.base); got != tc.want {
+			t.Errorf("ScaleImageCap(%d) under %d pixels = %d, want %d", tc.base, tc.pixels, got, tc.want)
+		}
+	}
+}
+
+// TestValidate_RefusesNegativeAndPastCeiling pins [limits.ErrInvalid] for each
+// budget below zero or above its ceiling, and accepts zero and the ceilings.
+func TestValidate_RefusesNegativeAndPastCeiling(t *testing.T) {
+	t.Parallel()
+
+	ceilings := limits.Limits{
+		MaxStreamBytes:       limits.MaxStreamBytesCeiling,
+		MaxImagePixels:       limits.MaxImagePixelsCeiling,
+		MaxEmbeddedFileBytes: limits.MaxEmbeddedFileBytesCeiling,
+		MaxFormDepth:         limits.MaxFormDepthCeiling,
+		MaxCachedObjects:     limits.MaxCachedObjectsCeiling,
+	}
+	for _, l := range []limits.Limits{{}, limits.Default(), ceilings} {
+		if err := l.Validate(); err != nil {
+			t.Errorf("Validate(%+v) = %v, want nil", l, err)
+		}
+	}
+	for _, l := range []limits.Limits{
+		{MaxStreamBytes: -1},
+		{MaxImagePixels: -1},
+		{MaxEmbeddedFileBytes: -1},
+		{MaxFormDepth: -1},
+		{MaxCachedObjects: -1},
+		{MaxStreamBytes: limits.MaxStreamBytesCeiling + 1},
+		{MaxImagePixels: limits.MaxImagePixelsCeiling + 1},
+		{MaxEmbeddedFileBytes: limits.MaxEmbeddedFileBytesCeiling + 1},
+		{MaxFormDepth: limits.MaxFormDepthCeiling + 1},
+		{MaxCachedObjects: limits.MaxCachedObjectsCeiling + 1},
+	} {
+		if err := l.Validate(); !errors.Is(err, limits.ErrInvalid) {
+			t.Errorf("Validate(%+v) = %v, want ErrInvalid", l, err)
+		}
+	}
+}

@@ -216,7 +216,7 @@ func decodeGeneric(ctx context.Context, p genericParams, dec *mq.Decoder, cx []m
 
 // rowsPerCancelCheck is how many bitmap rows a decoding loop decodes between
 // checks of its context for cancellation. A row costs at most a few hundred
-// microseconds at the widths maxBitmapPixels allows, so 16 rows keep the
+// microseconds at the widths DefaultMaxBitmapPixels allows, so 16 rows keep the
 // latency of a cancellation well under a tenth of a second.
 const rowsPerCancelCheck = 16
 
@@ -240,7 +240,9 @@ func decodeMMRBlock(ctx context.Context, width, height int, data []byte) (*Bitma
 	if width == 0 || height == 0 {
 		return bm, 0, nil
 	}
-	rows, used, err := ccitt.DecodeBlock(ctx, data, ccitt.Params{K: -1, Columns: width, Rows: height, BlackIs1: true})
+	// The rows are the bitmap, whose area its caller has already bounded, so
+	// they need no output cap of their own beyond its size.
+	rows, used, err := ccitt.DecodeBlock(ctx, data, ccitt.Params{K: -1, Columns: width, Rows: height, BlackIs1: true, MaxOutput: int64(bm.Stride) * int64(height)})
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, 0, err

@@ -17,48 +17,24 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter/ccitt"
+	"github.com/gotenberg/litho/pkg/internal/filter/dct"
+	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
-// maxDecompressedSize caps the output of one decompression filter applied to
-// one stream at 256 MB. It is an anti-DoS guard, not spec-mandated: ISO
-// 32000-1, 7.4 puts no bound on a filter's output, so a few kilobytes of
-// FlateDecode data can expand into gigabytes.
-//
-// It bounds FlateDecode, LZWDecode and BrotliDecode through [limitedCopy], and
-// a plugin's output in [Decoder.applyDecodeFilter]. CCITTFaxDecode is bounded
-// by maxOutput in package ccitt, which matches it, and a linearization hint
-// stream by maxHintStreamSize in package document, which decodes that stream
-// itself and also matches it. RunLengthDecode, which expands its input up to
-// 64 times, is bounded as it decodes, by [decodeRunLength].
-//
-// 256 MB leaves about ten times the largest output the capped filters produce
-// for real documents.
-//
-// # Corpus evidence
-//
-//   - All corpora: the largest FlateDecode, LZWDecode or BrotliDecode output of
-//     the 5163 files that open is 26,614,380 bytes (pdfjs images.pdf, one
-//     FlateDecode stream).
-//   - pdfjs issue17190_1.pdf: the one stream past the cap, a 19522x27655 image
-//     of one byte per pixel that reaches 539,880,910 bytes through FlateDecode
-//     then RunLengthDecode. Its FlateDecode stage yields 19,201,892 bytes, so
-//     the RunLengthDecode stage trips the cap, and the image decoder's pixel
-//     cap refuses the image before any decode.
-//   - pdfjs issue17190.pdf: the largest CCITTFaxDecode output is 69,749,526
-//     bytes.
-const maxDecompressedSize = 256 << 20 // 256 MB
-
-// limitedCopy copies from r to buf in 1 MB chunks up to maxDecompressedSize.
-// Context is checked between chunks so callers can cancel long decompression.
-func limitedCopy(ctx context.Context, buf *bytes.Buffer, r io.Reader) error {
+// limitedCopy copies from r to buf in 1 MB chunks up to limit bytes, the
+// stream budget [limits.DefaultMaxStreamBytes] describes, and fails with
+// [ErrDecompressionBomb] once buf holds more. Context is checked between
+// chunks so callers can cancel long decompression.
+func limitedCopy(ctx context.Context, buf *bytes.Buffer, r io.Reader, limit int64) error {
 	const chunk = 1 << 20 // 1 MB
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		_, err := io.CopyN(buf, r, chunk)
-		if buf.Len() > maxDecompressedSize {
-			return ErrDecompressionBomb
+		if int64(buf.Len()) > limit {
+			return fmt.Errorf("output exceeds %d bytes: %w", limit, ErrDecompressionBomb)
 		}
 		if err == io.EOF {
 			return nil
@@ -111,6 +87,9 @@ func Decodable(name ast.PdfName) bool {
 // Decoding is best-effort: an unsupported filter in the chain is skipped.
 // Use [DecodeStreamChecked] when the caller needs to know whether decoding
 // was complete.
+//
+// The package-level functions decode under [limits.Default]. A caller with a
+// document decodes through a [Decoder] carrying the document's budgets.
 func DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 	data, _, err := DecodeStreamChecked(ctx, stream)
 	return data, err
@@ -126,8 +105,9 @@ func DecodeStreamChecked(ctx context.Context, stream ast.PdfStream) (data []byte
 	return decodeChain(ctx, stream, nil)
 }
 
-// decodeChain runs the /Filter chain of stream, consulting the plugins of d
-// before the built-in decoders. A nil d consults none, so the package-level
+// decodeChain runs the /Filter chain of stream under the budgets of d,
+// consulting its plugins before the built-in decoders. A nil d consults none
+// and decodes under the default budgets, so the package-level
 // functions and a [Decoder] share one loop and treat a filter litho cannot
 // decode the same way: before, a Decoder failed the whole stream on a filter
 // no plugin claimed, where the package-level path skipped it, so registering
@@ -217,27 +197,7 @@ func streamFilterNames(dict ast.PdfDict) ([]ast.PdfName, error) {
 // an error rather than a skip: its output is the only route to stop's input,
 // so continuing would judge the wrong bytes.
 func DecodeStreamUpTo(ctx context.Context, stream ast.PdfStream, stop ast.PdfName) (data []byte, found bool, err error) {
-	filters, err := streamFilterNames(stream.Dict)
-	if err != nil {
-		return nil, false, err
-	}
-	parms := extractDecodeParms(stream.Dict, len(filters))
-
-	data, err = stream.Bytes(ctx)
-	if err != nil {
-		return nil, false, err
-	}
-	for i, f := range filters {
-		if f == stop {
-			return data, true, nil
-		}
-		decoded, derr := applyDecodeFilter(ctx, data, f, parms[i], stream.Dict)
-		if derr != nil {
-			return nil, false, fmt.Errorf("decoding %s before %s: %w", f, stop, derr)
-		}
-		data = decoded
-	}
-	return data, false, nil
+	return (*Decoder)(nil).DecodeStreamUpTo(ctx, stream, stop)
 }
 
 // extractDecodeParms returns a slice of DecodeParms dicts, one per filter.
@@ -286,20 +246,26 @@ func extractDecodeParms(dict ast.PdfDict, numFilters int) []ast.PdfDict {
 	return result
 }
 
-// applyDecodeFilter applies a single decoding filter with optional DecodeParms.
-// dict is the dictionary of the stream being decoded, which JPXDecode reads
-// (ISO 32000-1, 7.4.9); every other filter reads only its parameters.
-func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName, parms, dict ast.PdfDict) ([]byte, error) {
+// applyDecodeFilter applies a single decoding filter with optional DecodeParms,
+// under the budgets of lim. dict is the dictionary of the stream being
+// decoded, which JPXDecode reads (ISO 32000-1, 7.4.9); every other filter
+// reads only its parameters.
+//
+// The general-purpose filters are bounded by the stream budget, the image
+// codecs by caps scaled from the pixel budget ([limits.Limits.ScaleImageCap]):
+// a DCTDecode, JPXDecode or JBIG2Decode image of four bytes a pixel is
+// entitled to more output than the stream budget holds.
+func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName, parms, dict ast.PdfDict, lim limits.Limits) ([]byte, error) {
 	switch filterName {
 	case "FlateDecode", "Fl":
-		decoded, err := decodeFlateDecode(ctx, data)
+		decoded, err := decodeFlateDecode(ctx, data, lim.MaxStreamBytes)
 		if err != nil {
 			return nil, err
 		}
 		return applyPredictor(decoded, extractPredictorParams(parms))
 
 	case "LZWDecode", "LZW":
-		decoded, err := decodeLZW(ctx, data, parms)
+		decoded, err := decodeLZW(ctx, data, parms, lim.MaxStreamBytes)
 		if err != nil {
 			return nil, err
 		}
@@ -312,22 +278,22 @@ func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName,
 		return decodeASCII85(data)
 
 	case "CCITTFaxDecode", "CCF":
-		return decodeCCITTFax(ctx, data, parms)
+		return decodeCCITTFax(ctx, data, parms, lim.MaxStreamBytes)
 
 	case "BrotliDecode":
-		return decodeBrotli(ctx, data)
+		return decodeBrotli(ctx, data, lim.MaxStreamBytes)
 
 	case "RunLengthDecode", "RL":
-		return decodeRunLength(data, maxDecompressedSize)
+		return decodeRunLength(data, lim.MaxStreamBytes)
 
 	case "DCTDecode", "DCT":
-		return decodeDCT(ctx, data, parms, dict)
+		return decodeDCT(ctx, data, parms, dict, lim.ScaleImageCap(dct.DefaultMaxSamples))
 
 	case "JPXDecode":
-		return decodeJPX(ctx, data, dict)
+		return decodeJPX(ctx, data, dict, lim.ScaleImageCap(jpx.DefaultMaxSamples))
 
 	case "JBIG2Decode":
-		return decodeJBIG2(ctx, data, parms)
+		return decodeJBIG2(ctx, data, parms, lim)
 
 	case "Crypt":
 		return decodeCrypt(data, parms)
@@ -337,7 +303,7 @@ func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName,
 	}
 }
 
-func decodeFlateDecode(ctx context.Context, data []byte) ([]byte, error) {
+func decodeFlateDecode(ctx context.Context, data []byte, limit int64) ([]byte, error) {
 	r, err := openFlate(data)
 	if err != nil {
 		return nil, err
@@ -345,18 +311,18 @@ func decodeFlateDecode(ctx context.Context, data []byte) ([]byte, error) {
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer bufPool.Put(buf)
-	copyErr := limitedCopy(ctx, buf, r)
+	copyErr := limitedCopy(ctx, buf, r, limit)
 	closeErr := r.Close()
 
 	// A decompression bomb is not a damaged stream. The tolerance below keeps
 	// whatever decoded when a stream is truncated or its checksum is broken,
 	// and it decides that on buf.Len() > 0, which a bomb always satisfies,
-	// since limitedCopy only reports one after 256 MB has been buffered. So
+	// since limitedCopy only reports one after the budget has been buffered. So
 	// ErrDecompressionBomb was never returned from this path: the caller got
 	// a stream silently truncated at the cap and no signal that it was, while
 	// decodeLZW, decodeCCITTFax and decodeBrotli all propagate the same error.
 	if errors.Is(copyErr, ErrDecompressionBomb) {
-		return nil, copyErr
+		return nil, fmt.Errorf("FlateDecode %w", copyErr)
 	}
 
 	// Cancellation is not a damaged stream either. limitedCopy reports
@@ -448,7 +414,7 @@ func (t *tolerantReader) Close() error {
 	return nil
 }
 
-func decodeLZW(ctx context.Context, data []byte, parms ast.PdfDict) ([]byte, error) {
+func decodeLZW(ctx context.Context, data []byte, parms ast.PdfDict, limit int64) ([]byte, error) {
 	// PDF spec: LZW uses MSB-first order, literal width 8 (codes 0–255),
 	// ClearTable=256, EOD=257. /EarlyChange defaults to 1.
 	earlyChange := 1
@@ -462,7 +428,10 @@ func decodeLZW(ctx context.Context, data []byte, parms ast.PdfDict) ([]byte, err
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer bufPool.Put(buf)
-	err := limitedCopy(ctx, buf, r)
+	err := limitedCopy(ctx, buf, r, limit)
+	if errors.Is(err, ErrDecompressionBomb) {
+		return nil, fmt.Errorf("LZWDecode %w", err)
+	}
 	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return nil, err
 	}
@@ -618,9 +587,10 @@ func ascii85Digit(v, d uint32) (uint32, bool) {
 	return v*85 + d, true
 }
 
-func decodeCCITTFax(ctx context.Context, data []byte, parms ast.PdfDict) ([]byte, error) {
+func decodeCCITTFax(ctx context.Context, data []byte, parms ast.PdfDict, limit int64) ([]byte, error) {
 	// ISO 32000-1, Table 11, with its defaults.
 	p := ccitt.DefaultParams()
+	p.MaxOutput = limit
 	if parms != nil {
 		p.K = pdfIntOr(parms["K"], p.K)
 		p.Columns = pdfIntOr(parms["Columns"], p.Columns)
@@ -637,7 +607,7 @@ func decodeCCITTFax(ctx context.Context, data []byte, parms ast.PdfDict) ([]byte
 	case errors.Is(err, ccitt.ErrUnsupported):
 		return nil, fmt.Errorf("%w: ccitt decode: %w", ErrUnsupportedFilter, err)
 	case errors.Is(err, ccitt.ErrLimit):
-		// The decoder's cap on its output is maxDecompressedSize, so it
+		// The decoder's cap on its output is the stream budget, so it
 		// reports the bomb every other decoder reports.
 		return nil, fmt.Errorf("%w: ccitt decode: %w", ErrDecompressionBomb, err)
 	}
@@ -665,12 +635,12 @@ func pdfBoolOr(v ast.PdfObject, def bool) bool {
 	return def
 }
 
-func decodeBrotli(ctx context.Context, data []byte) ([]byte, error) {
+func decodeBrotli(ctx context.Context, data []byte, limit int64) ([]byte, error) {
 	r := brotli.NewReader(bytes.NewReader(data))
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer bufPool.Put(buf)
-	err := limitedCopy(ctx, buf, r)
+	err := limitedCopy(ctx, buf, r, limit)
 	if err != nil {
 		return nil, fmt.Errorf("brotli decode: %w", err)
 	}
@@ -680,73 +650,12 @@ func decodeBrotli(ctx context.Context, data []byte) ([]byte, error) {
 }
 
 // NewStreamReader returns an io.ReadCloser that lazily decodes a PDF stream
-// through its filter pipeline. For single FlateDecode or LZWDecode filters
-// without predictor parameters, the decoded data is streamed without full
-// buffering. For other filter configurations, the stream is decoded eagerly
-// into a buffer on the first call.
+// through its filter pipeline, as [Decoder.NewStreamReader] does with no
+// plugin and the default budgets.
 //
 // The caller must close the returned reader when done.
 func NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
-	// streamFilterNames reads a null /Filter as absent, as [DecodeStream]
-	// does. This path used to reject it as an invalid type, so the same
-	// stream decoded eagerly and failed to open lazily.
-	filters, err := streamFilterNames(stream.Dict)
-	if err != nil {
-		return nil, err
-	}
-	if len(filters) == 0 {
-		data, err := stream.Bytes(ctx)
-		if err != nil {
-			return nil, err
-		}
-		return io.NopCloser(bytes.NewReader(data)), nil
-	}
-
-	parms := extractDecodeParms(stream.Dict, len(filters))
-
-	// Fast path: single Flate or LZW filter without predictor, true streaming.
-	if len(filters) == 1 && extractPredictorParams(parms[0]) == nil {
-		switch filters[0] {
-		case "FlateDecode", "Fl":
-			raw, err := stream.Bytes(ctx)
-			if err != nil {
-				return nil, err
-			}
-			r, err := openFlate(raw)
-			if err != nil {
-				return nil, err
-			}
-			return &tolerantReader{r: r, c: r, tolerate: func(error) bool { return true }}, nil
-		case "LZWDecode", "LZW":
-			earlyChange := 1
-			if parms[0] != nil {
-				if ec, ok := parms[0]["EarlyChange"]; ok {
-					earlyChange = pdfInt(ec)
-				}
-			}
-			raw, err := stream.Bytes(ctx)
-			if err != nil {
-				return nil, err
-			}
-			return &tolerantReader{
-				r:        newLZWReader(bytes.NewReader(raw), earlyChange),
-				tolerate: func(err error) bool { return err == io.ErrUnexpectedEOF },
-			}, nil
-		case "BrotliDecode":
-			raw, err := stream.Bytes(ctx)
-			if err != nil {
-				return nil, err
-			}
-			return io.NopCloser(brotli.NewReader(bytes.NewReader(raw))), nil
-		}
-	}
-
-	// Slow path: decode fully and wrap in a reader.
-	data, err := DecodeStream(ctx, stream)
-	if err != nil {
-		return nil, err
-	}
-	return io.NopCloser(bytes.NewReader(data)), nil
+	return (*Decoder)(nil).NewStreamReader(ctx, stream)
 }
 
 // ApplyEncodeFilter applies a single encoding filter to the byte slice.

@@ -65,10 +65,10 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 // nested Form XObjects and tiling patterns. The §6.4 restrictions cover every
 // graphics state used to render the page, so the walk follows resources through
 // nested XObjects and patterns rather than stopping at the page dict. visited
-// breaks resource cycles; depth is capped by [maxFormXObjectDepth] (anti-DoS
-// guard shared with the device-colour scan).
+// breaks resource cycles; depth is capped by the form budget ([formTooDeep]),
+// the anti-DoS guard every form walk shares.
 func checkResourceTransparency1(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, visited map[int]bool, depth int, drawn *drawnResources) []Violation {
-	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return nil
 	}
 
@@ -751,15 +751,15 @@ func imageSoftMasked(ctx context.Context, doc *document.Document, dict ast.PdfDi
 // transparency the content stream actually draws: an ExtGState with a
 // non-isolating blend mode, a soft mask, or a non-opaque constant alpha; an
 // Image XObject with a /SMask; or a Form XObject with a transparency /Group. It
-// recurses into Form XObject resources, bounded by [maxFormXObjectDepth] and a
-// visited set of form-dict identities, so nested transparency is detected while
-// cyclic references cannot loop.
+// recurses into Form XObject resources, bounded by the form budget
+// ([formTooDeep]) and a visited set of form-dict identities, so nested
+// transparency is detected while cyclic references cannot loop.
 //
 // drawn narrows the scan to the names the content stream invokes; see
 // [drawnResources]. A nil drawn admits every name, for callers that hold no
 // content stream to consult.
 func resourcesUseTransparency(ctx context.Context, doc *document.Document, res ast.PdfDict, depth int, visited map[string]bool, drawn *drawnResources) bool {
-	if res == nil || depth > maxFormXObjectDepth || ctx.Err() != nil {
+	if res == nil || formTooDeep(doc, depth) || ctx.Err() != nil {
 		return false
 	}
 

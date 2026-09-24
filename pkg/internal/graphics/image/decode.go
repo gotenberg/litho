@@ -31,12 +31,12 @@ import (
 //   - All corpora: the worst DeviceN image holds 31,400 distinct tuples, which
 //     maxTintMemo covers.
 const (
-	// maxImagePixels caps how many pixels a single Image XObject may
-	// declare before [DecodeImage] refuses to allocate. 100 megapixels
-	// covers print-resolution photographs (8K display tops out at
-	// ~33 MP) yet rejects adversarial PDFs that declare 100k×100k
-	// dimensions to force ~40 GB allocations. Anti-DoS, not spec-mandated.
-	maxImagePixels = 100_000_000
+	// maxBytesPerPixel is how many bytes of decoded samples a pixel may
+	// take, the RGBA worst case. The pixel budget,
+	// limits.Limits.MaxImagePixels, times it caps the decoded byte stream
+	// and bounds [io.ReadAll] on the streaming decoder output. Anti-DoS, not
+	// spec-mandated.
+	maxBytesPerPixel = 4
 
 	// maxTintColorants bounds the colorant count of a DeviceN image.
 	// [decodeDeviceN] evaluates the tint transform once per distinct pixel
@@ -60,23 +60,18 @@ const (
 	// evaluating but stops growing the cache. 65536 covers the distinct tuple
 	// counts real images hold. Anti-DoS, not spec-mandated.
 	maxTintMemo = 1 << 16
-
-	// maxImageBytes caps the decoded byte stream. Four bytes per pixel
-	// is the worst case (RGBA), so this matches the pixel cap and
-	// bounds [io.ReadAll] on the streaming decoder output. Anti-DoS, not
-	// spec-mandated.
-	maxImageBytes = 4 * maxImagePixels
 )
 
 // validateImageDimensions rejects degenerate or out-of-policy image
 // sizes. Width and height must both be positive and their product must
-// fit under [maxImagePixels].
-func validateImageDimensions(width, height int) error {
+// fit under maxPixels, the document's pixel budget; an image past it fails
+// with [ErrImageTooLarge].
+func validateImageDimensions(width, height int, maxPixels int64) error {
 	if width <= 0 || height <= 0 {
 		return fmt.Errorf("invalid image dimensions: %dx%d", width, height)
 	}
-	if int64(width)*int64(height) > maxImagePixels {
-		return fmt.Errorf("image %dx%d exceeds %d-pixel safety cap", width, height, maxImagePixels)
+	if int64(width)*int64(height) > maxPixels {
+		return fmt.Errorf("%w: %dx%d is more than %d pixels", ErrImageTooLarge, width, height, maxPixels)
 	}
 	return nil
 }
@@ -101,7 +96,8 @@ func validateImageDimensions(width, height int) error {
 //
 // The expansion is width*height*samplesPerPixel bytes. For a device colour
 // space samplesPerPixel is at most 4, so [validateImageDimensions] alone holds
-// the result under maxImageBytes however small the packed input was. A DeviceN
+// the result under maxBytesPerPixel bytes a pixel however small the packed
+// input was. A DeviceN
 // image breaks that arithmetic: it carries one sample per colorant, up to
 // maxTintColorants, so [decodeDeviceN] bounds its own pixel count before
 // calling here rather than relying on the four-component reasoning.
@@ -1063,10 +1059,6 @@ func decodeIndexed(data []byte, width, height int, pal palette) (image.Image, er
 	return img, nil
 }
 
-// ErrImageNotFound reports that a page shows no image under the requested
-// name.
-var ErrImageNotFound = errors.New("image not found")
-
 // DecodeImage decodes a named Image XObject a page shows into a Go
 // image.Image. The name is a resource key, such as "Im0".
 //
@@ -1301,7 +1293,8 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 		return nil, err
 	}
 
-	if err := validateImageDimensions(width, height); err != nil {
+	lim := doc.Limits()
+	if err := validateImageDimensions(width, height, lim.MaxImagePixels); err != nil {
 		return nil, err
 	}
 
@@ -1371,15 +1364,16 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	// Cap the decoded read so a flate/lzw bomb cannot blow memory
 	// before the dimension check below catches the mismatch. The +1 makes
 	// "exactly maxImageBytes" valid while detecting overflow.
-	decodedData, err := io.ReadAll(io.LimitReader(rc, int64(maxImageBytes)+1))
+	maxImageBytes := maxBytesPerPixel * lim.MaxImagePixels
+	decodedData, err := io.ReadAll(io.LimitReader(rc, maxImageBytes+1))
 	if closeErr := rc.Close(); closeErr != nil {
 		doc.Logger.Debug("closing image stream reader", slog.Any("err", closeErr))
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading decoded image stream: %w", err)
 	}
-	if len(decodedData) > maxImageBytes {
-		return nil, fmt.Errorf("decoded image stream exceeds %d-byte safety cap", maxImageBytes)
+	if int64(len(decodedData)) > maxImageBytes {
+		return nil, fmt.Errorf("%w: its decoded samples exceed %d bytes", ErrImageTooLarge, maxImageBytes)
 	}
 	if jpxCol.ycc && !bool(isMask) {
 		yccToRGB(decodedData, jpxCol.neutral)

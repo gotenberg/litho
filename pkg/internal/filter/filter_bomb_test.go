@@ -8,12 +8,13 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // TestDecodeStream_FlateOverTheCapIsRefused pins that a decompression bomb is
 // reported rather than silently truncated.
 //
-// limitedCopy stops at maxDecompressedSize and returns ErrDecompressionBomb,
+// limitedCopy stops at the stream budget and returns ErrDecompressionBomb,
 // but decodeFlateDecode then ran it through the tolerance that salvages
 // damaged streams, which keeps whatever decoded whenever buf.Len() > 0. A bomb
 // always satisfies that, since it is only reported after 256 MB has been
@@ -37,7 +38,7 @@ func TestDecodeStream_FlateOverTheCapIsRefused(t *testing.T) {
 	var buf bytes.Buffer
 	w := zlib.NewWriter(&buf)
 	chunk := make([]byte, 1<<20)
-	for range (maxDecompressedSize >> 20) + 2 {
+	for range (limits.DefaultMaxStreamBytes >> 20) + 2 {
 		if _, err := w.Write(chunk); err != nil {
 			t.Fatalf("building the stream: %v", err)
 		}

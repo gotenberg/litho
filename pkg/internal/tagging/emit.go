@@ -296,14 +296,6 @@ func pageSpans(data []byte, leaves []leafEntry, textXObjects map[string]bool) ([
 	return spans, elemRefs
 }
 
-// maxTextScanDepth bounds how far formPaintsText follows nested Form XObjects.
-// This is an anti-DoS guard, not a spec limit: a crafted file can chain forms
-// far deeper than any real one. It matches maxFormXObjectDepth in
-// pkg/internal/typography/extract.go, which bounds the same nesting during
-// extraction, so a form deep enough to escape this scan carries no text the
-// extractor would reach either.
-const maxTextScanDepth = 10
-
 // textBearingXObjects returns the page's Form XObject resource names whose
 // content paints text. Their invocations must not be swept into an /Artifact.
 func textBearingXObjects(ctx context.Context, doc *document.Document, page *document.Page) map[string]bool {
@@ -343,6 +335,12 @@ func textBearingXObjects(ctx context.Context, doc *document.Document, page *docu
 // DAG, not a tree, and re-deciding each subtree per path costs time exponential
 // in the nesting depth.
 //
+// depth is how many forms sit between the page and entry, so entry itself is
+// depth+1 forms below the page. A form deeper than the document's form budget
+// (limits.Limits.MaxFormDepth) is not read: text extraction reads the same
+// budget, so a form deep enough to escape this scan carries no text the
+// extractor would reach either.
+//
 // complete reports whether the answer was reached without the depth cap cutting
 // the search short. Only a complete answer is memoised: a false produced by
 // running out of depth says nothing about the same form reached higher up,
@@ -359,7 +357,7 @@ func textBearingXObjects(ctx context.Context, doc *document.Document, page *docu
 //     exhausted the search. It never returned within any run of the corpus
 //     harness.
 func formPaintsText(ctx context.Context, doc *document.Document, entry ast.PdfObject, visited map[int]bool, answers map[int]bool, depth int) (paints, complete bool) {
-	if depth > maxTextScanDepth {
+	if depth+1 > doc.Limits().MaxFormDepth {
 		return false, false
 	}
 	objNum := 0

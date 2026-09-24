@@ -6,6 +6,9 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/filter"
+	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/internal/semantics"
 )
 
@@ -224,6 +227,23 @@ var (
 	// profile given to [WithDefaultCMYKProfile] is not a CMYK ICC profile
 	// litho can convert colours through.
 	ErrInvalidCMYKProfile = errors.New("invalid default CMYK profile")
+
+	// ErrInvalidLimits is returned, wrapped in an error naming the field, by
+	// [Open] and [OpenFile] when a budget given to [WithLimits] is negative or
+	// above its ceiling. See [Limits].
+	ErrInvalidLimits = limits.ErrInvalid
+
+	// ErrStreamTooLarge is returned, wrapped, when decoding a stream would
+	// produce more than [Limits.MaxStreamBytes] bytes: by [Reader.DecodeImage]
+	// and an image's Decode function alongside [ErrImageNotDecodable], and by
+	// the Open function of an image or an embedded file.
+	ErrStreamTooLarge = filter.ErrDecompressionBomb
+
+	// ErrImageTooLarge is returned, wrapped alongside [ErrImageNotDecodable],
+	// by [Reader.DecodeImage] and an image's Decode function when the image
+	// declares more than [Limits.MaxImagePixels] pixels, or its decoded
+	// samples take more than four bytes a pixel of that budget.
+	ErrImageTooLarge = pdfimage.ErrImageTooLarge
 
 	// ErrSchematronRuleSkipped is returned by [Reader.ValidateFacturX]
 	// and [Reader.ValidateZUGFeRD] as an advisory entry in the

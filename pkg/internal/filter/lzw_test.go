@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // TestDecodeLZW_RealPDFStream verifies the decoder against a real PDF
@@ -27,7 +29,7 @@ func TestDecodeLZW_RealPDFStream(t *testing.T) {
 		t.Fatalf("read fixture: %v", err)
 	}
 
-	decoded, err := decodeLZW(context.Background(), encoded, nil)
+	decoded, err := decodeLZW(context.Background(), encoded, nil, limits.DefaultMaxStreamBytes)
 	if err != nil {
 		t.Fatalf("decodeLZW: %v", err)
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
 	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // Document represents a parsed PDF document. It holds a reference to the
@@ -39,6 +40,9 @@ import (
 // The [Document.Authenticate] method must be called before concurrent
 // use begins; it is part of the setup phase in [NewDocument] and
 // [pdf.Open] and is not safe to call in parallel with reads.
+//
+// The resource budgets ([Document.Limits]) are set by [NewDocument] and
+// only read afterwards, so they need no lock.
 type Document struct {
 	r                io.ReaderAt
 	size             int64
@@ -58,6 +62,7 @@ type Document struct {
 	runMu            sync.Mutex          // serializes compliance-engine validation runs
 	xrefAugment      sync.Once           // guards the one-shot raw-bytes augmentation of Index
 	maxCacheSize     int                 // evict all objects when cache exceeds this size
+	limits           limits.Limits       // resource budgets, set by NewDocument, read-only after
 	Crypto           *crypto.Handler
 	OCConfig         *OCConfig
 	IsEncrypted      bool
@@ -149,9 +154,12 @@ type Document struct {
 	// written with cross-reference streams has no traditional table at all.
 	XRefSectionOffsets []int64
 
-	// Filters holds registered filter plugins for stream decoding.
-	// Nil when no plugins are registered. Set once during construction,
-	// then read-only.
+	// Filters decodes the document's streams: it holds the registered filter
+	// plugins, if any, and bounds every decode by the document's budgets.
+	// [NewDocument] sets it with no plugin, and pdf.Open replaces it once,
+	// before concurrent use begins, when plugins are registered; read-only
+	// after. A nil Filters consults no plugin and decodes under the default
+	// budgets.
 	Filters *filter.Decoder
 
 	// CMYKProfile is the ICC profile DeviceCMYK colours are read in when the
@@ -304,20 +312,26 @@ func (d *Document) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]by
 //
 // The filters this skips past are the built-in ones (a JPEG2000 or JBIG2
 // codestream is what a chain ends with, never what it passes through), so the
-// document's plugin decoder is not consulted and the result does not vary with
-// which optional plugins are registered.
+// document's plugins are not consulted and the result does not vary with
+// which optional plugins are registered. The document's budgets still apply.
 func (d *Document) DecodeStreamUpTo(ctx context.Context, stream ast.PdfStream, stop ast.PdfName) ([]byte, bool, error) {
 	stream = d.resolveStreamFilterKeys(ctx, stream)
-	return filter.DecodeStreamUpTo(ctx, stream, stop)
+	return d.Filters.DecodeStreamUpTo(ctx, stream, stop)
 }
 
 // NewStreamReader returns a lazy [io.ReadCloser] using the document's filter decoder.
 func (d *Document) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
 	stream = d.resolveStreamFilterKeys(ctx, stream)
-	if d.Filters != nil {
-		return d.Filters.NewStreamReader(ctx, stream)
-	}
-	return filter.NewStreamReader(ctx, stream)
+	return d.Filters.NewStreamReader(ctx, stream)
+}
+
+// builtinFilters returns a decoder that consults no plugin and decodes under
+// the document's budgets. The cross-reference and object streams decode
+// through it: they are read during construction, before pdf.Open registers
+// any plugin, and a plugin must not decide how an object stream read later
+// resolves the objects it holds.
+func (d *Document) builtinFilters() *filter.Decoder {
+	return filter.NewDecoder(nil, d.Limits())
 }
 
 // resolveStreamFilterKeys returns stream with its /Filter and /DecodeParms
@@ -575,26 +589,35 @@ func headerExistsBeyondScanLimit(r io.ReaderAt, size int64) bool {
 	return bytes.Contains(buf[:n], []byte("%PDF-"))
 }
 
-// maxObjectCacheEntries is the number of parsed objects a [Document] keeps
-// before its object cache is emptied and starts again. It is an anti-DoS
-// guard, not spec-mandated: the object count comes from the file, and a
-// crafted file with millions of objects would otherwise keep every one the
-// resolver parsed.
-//
-// Eviction costs a re-parse, never a wrong answer, so the value only has to
-// cover the object table of ordinary documents. Fifty thousand holds every
-// object of all but rare outliers, which then evict rather than grow.
-//
-// # Corpus evidence
-//
-//   - All corpora: 5162 of the 5163 files that open hold at most 50,000
-//     objects, so their cache never evicts. The median holds 20 and the
-//     next largest 37,864 (pdfjs issue19281.pdf).
-//   - pdfjs bug1978317.pdf: the one file past the cap, 65,563 objects.
-const maxObjectCacheEntries = 50_000
+// Option configures a [Document] as [NewDocument] builds it.
+type Option func(*options)
+
+// options holds what the Options of one NewDocument call set.
+type options struct {
+	limits limits.Limits
+}
+
+// WithLimits sets the resource budgets the document is read under. A zero
+// budget reads as its default. The caller validates lim first
+// ([limits.Limits.Validate]): NewDocument trusts it.
+func WithLimits(lim limits.Limits) Option {
+	return func(o *options) {
+		o.limits = lim
+	}
+}
+
+// Limits returns the resource budgets the document is read under, every
+// one filled in. A nil or zero-value Document has the defaults.
+func (d *Document) Limits() limits.Limits {
+	if d == nil {
+		return limits.Default()
+	}
+	return d.limits.WithDefaults()
+}
 
 // NewDocument creates a new [Document] by parsing the XRef chains.
-// If logger is nil, a no-op logger is used.
+// If logger is nil, a no-op logger is used. The object cache holds at most
+// [limits.Limits.MaxCachedObjects] entries of the budgets [WithLimits] sets.
 //
 // # Corpus evidence
 //
@@ -609,7 +632,13 @@ const maxObjectCacheEntries = 50_000
 //     full rewrite then dropped /Encrypt while copying those bytes verbatim,
 //     turning a readable file into an unreadable one and reporting success.
 //     The caches are reset once the crypto handler exists for that reason.
-func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Logger) (*Document, error) {
+func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Logger, opts ...Option) (*Document, error) {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+	lim := o.limits.WithDefaults()
+
 	// Validate PDF Header. Scan up to headerScanLimit bytes so files
 	// with a leading prefix (UTF-8 BOM, explanatory comment) are still
 	// accepted.
@@ -665,7 +694,9 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		objectCache:  make(map[int]ast.PdfObject),
 		fontCache:    make(map[int]any),
 		cmapCache:    make(map[int]any),
-		maxCacheSize: maxObjectCacheEntries,
+		maxCacheSize: lim.MaxCachedObjects,
+		limits:       lim,
+		Filters:      filter.NewDecoder(nil, lim),
 		Logger:       logger,
 		Version:      version,
 		HeaderOffset: headerOffset,
@@ -678,7 +709,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	linParams := probeLinearization(r, size, doc.HeaderOffset)
 	if linParams != nil {
 		doc.Linearization = linParams
-		hintEntries, err := parseHintStream(r, size, linParams)
+		hintEntries, err := parseHintStream(r, size, linParams, lim.MaxStreamBytes)
 		if err == nil && len(hintEntries) > 0 {
 			doc.HintTable = hintEntries
 		}
@@ -978,8 +1009,8 @@ func (d *Document) ClearCaches() {
 // [Document.SetCachedFontProgram]. It is an anti-DoS guard, not spec-mandated: a
 // crafted file could declare many large font programs, so the cache evicts
 // rather than grow without bound. 64 MB leaves ample headroom over the
-// heaviest real document while staying well under the 256 MB single-stream
-// decompression cap.
+// heaviest real document while staying well under the default stream budget,
+// [limits.DefaultMaxStreamBytes].
 //
 // # Corpus evidence
 //

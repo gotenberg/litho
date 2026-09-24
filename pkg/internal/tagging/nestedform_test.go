@@ -85,7 +85,7 @@ func TestTextBearingXObjects_FollowsNestedForms(t *testing.T) {
 
 // TestFormPaintsText_CycleTerminates pins that two forms invoking each other do
 // not spin the scan. A crafted file can nest forms arbitrarily, so the walk
-// tracks visited object numbers and stops at maxTextScanDepth.
+// tracks visited object numbers and stops at the form budget.
 func TestFormPaintsText_CycleTerminates(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

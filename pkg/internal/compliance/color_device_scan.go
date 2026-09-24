@@ -212,7 +212,9 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.PdfStream, depth int, visited map[string]bool, entryCS inheritedCS, part int, parentRes ast.PdfDict) deviceCSUsage {
 	var usage deviceCSUsage
 
-	if depth >= maxFormXObjectDepth {
+	// depth is the level of the scope that paints the form, so the form's own
+	// content sits one deeper.
+	if formTooDeep(doc, depth+1) {
 		return usage
 	}
 

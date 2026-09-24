@@ -34,7 +34,7 @@ func TestDecode_AnnexH1FullPages(t *testing.T) {
 			for _, i := range tc.segs {
 				stream = append(stream, raw[i]...)
 			}
-			got, err := Decode(context.Background(), stream, nil)
+			got, err := Decode(context.Background(), stream, nil, DefaultMaxBitmapPixels)
 			if err != nil {
 				t.Fatalf("Decode: %v", err)
 			}
@@ -209,7 +209,7 @@ func TestDecode_HalftoneRoundTrip(t *testing.T) {
 			// Skipped cells hold 0 after coding (halftoneSegment zeroes them),
 			// and pattern 0 drawn wholly outside the region changes nothing.
 			want := drawHalftone(h, patterns, values)
-			got, err := Decode(context.Background(), stream, nil)
+			got, err := Decode(context.Background(), stream, nil, DefaultMaxBitmapPixels)
 			if err != nil {
 				t.Fatalf("Decode: %v", err)
 			}

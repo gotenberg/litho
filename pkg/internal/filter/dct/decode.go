@@ -7,17 +7,18 @@ import (
 	"math"
 )
 
-// maxSamples bounds the samples of one image, over all components. It is an
-// anti-DoS guard, not spec-mandated: a JPEG header of a few bytes can declare
-// 65535 x 65535 pixels, and every sample costs two bytes of coefficients, a
-// byte of reconstructed plane and a byte of output. 2^27 is the bound
-// package jpx sets for the same reason, and admits the largest JPEG real
-// documents carry.
+// DefaultMaxSamples bounds the samples of one image, over all components,
+// under the default image budget. It is an anti-DoS guard, not spec-mandated:
+// a JPEG header of a few bytes can declare 65535 x 65535 pixels, and every
+// sample costs two bytes of coefficients, a byte of reconstructed plane and a
+// byte of output. 2^27 is the bound package jpx sets for the same reason, and
+// admits the largest JPEG real documents carry. [Decode] takes the cap scaled
+// with the document's image budget (limits.Limits.ScaleImageCap).
 //
 // # Corpus evidence
 //
 //   - All corpora: the largest JPEG is 10248 x 3712 in three components.
-const maxSamples = 1 << 27
+const DefaultMaxSamples = 1 << 27
 
 // maxCategory is the largest DC difference category a Huffman value may
 // name. T.81, Table F.1 goes to 11 for 8-bit samples; the value is a byte of
@@ -69,6 +70,7 @@ type decoder struct {
 	adobe             bool
 	adobeTransform    byte
 	statedHeight      int
+	maxSamples        int64
 	blocksSinceCtx    int
 	sawFrame, sawScan bool
 }
@@ -80,7 +82,9 @@ type decoder struct {
 // transform says so, and CMYK is not inverted. colorTransform is the
 // filter's /ColorTransform, or -1 when absent; an Adobe APP14 marker in the
 // data overrides it. statedHeight is the /Height of the image the data is
-// for, or 0 when unknown.
+// for, or 0 when unknown. maxSamples caps the samples of the image over all
+// its components, [DefaultMaxSamples] under the default image budget; a frame
+// past it fails with [ErrLimit] before anything is allocated.
 //
 // Decode tolerates the damage other readers render through: a scan whose
 // data ends early keeps the blocks decoded before the end, a component
@@ -88,8 +92,8 @@ type decoder struct {
 // is taken from a DNL marker, and a frame that declares more lines than the
 // image states, a placeholder a streaming encoder never corrected, is decoded
 // to the stated height.
-func Decode(ctx context.Context, data []byte, colorTransform, statedHeight int) ([]byte, int, int, int, error) {
-	d := &decoder{data: data, statedHeight: statedHeight}
+func Decode(ctx context.Context, data []byte, colorTransform, statedHeight int, maxSamples int64) ([]byte, int, int, int, error) {
+	d := &decoder{data: data, statedHeight: statedHeight, maxSamples: maxSamples}
 	if len(data) < 4 || data[0] != 0xFF || data[1] != 0xD8 {
 		return nil, 0, 0, 0, fmt.Errorf("%w: no start-of-image marker", ErrMalformed)
 	}
@@ -210,7 +214,7 @@ func (d *decoder) frame(b []byte, progressive bool) error {
 	if d.width == 0 || d.height == 0 {
 		return fmt.Errorf("%w: %dx%d image", ErrMalformed, d.width, d.height)
 	}
-	if d.width*d.height > maxSamples/n {
+	if int64(d.width)*int64(d.height) > d.maxSamples/int64(n) {
 		return fmt.Errorf("%w: %dx%d image of %d components", ErrLimit, d.width, d.height, n)
 	}
 	d.hmax, d.vmax = 1, 1

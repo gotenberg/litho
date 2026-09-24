@@ -142,8 +142,8 @@ func decodeHalftone(ctx context.Context, seg segment, dict *patternDict, b *budg
 	if len(dict.patterns) == 0 {
 		return nil, regionInfo{}, fmt.Errorf("%w: halftone region over an empty pattern dictionary", ErrMalformed)
 	}
-	if areaExceeds(h.gridW, h.gridH, maxBitmapPixels) {
-		return nil, regionInfo{}, fmt.Errorf("%w: halftone grid of %dx%d cells exceeds %d", ErrLimit, h.gridW, h.gridH, maxBitmapPixels)
+	if limit := b.areaCap(); areaExceeds(h.gridW, h.gridH, limit) {
+		return nil, regionInfo{}, fmt.Errorf("%w: halftone grid of %dx%d cells exceeds %d", ErrLimit, h.gridW, h.gridH, limit)
 	}
 	pw, ph := int64(dict.patterns[0].Width), int64(dict.patterns[0].Height)
 

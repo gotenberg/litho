@@ -30,7 +30,7 @@ func TestParseXRefStream_ZeroWidthSubsectionWalksNothing(t *testing.T) {
 	// Refusing would be wrong: zero widths are legal per Table 17, and
 	// TestParseXRefStream_MalformedDictionaryIsRefusedNotPanicked already pins
 	// that such a stream is accepted. The subsection is skipped, not rejected.
-	if _, err := ParseXRefStream(context.Background(), stream, entries); err != nil {
+	if _, err := ParseXRefStream(context.Background(), stream, entries, nil); err != nil {
 		t.Fatalf("refused the stream instead of walking no entries: %v", err)
 	}
 	if len(entries) != 0 {
@@ -49,7 +49,7 @@ func TestParseXRefStream_RealWidthsStillPopulate(t *testing.T) {
 	stream := malformedStream(1, 2, 1, ast.PdfArray{ast.PdfInt(0), ast.PdfInt(1)}, body)
 	entries := make(map[int]XRefEntry)
 
-	if _, err := ParseXRefStream(context.Background(), stream, entries); err != nil {
+	if _, err := ParseXRefStream(context.Background(), stream, entries, nil); err != nil {
 		t.Fatalf("refused a well-formed stream: %v", err)
 	}
 	if len(entries) != 1 {
@@ -73,7 +73,7 @@ func TestParseXRefStream_PartlyZeroWidthsStillWalk(t *testing.T) {
 	stream := malformedStream(0, 2, 1, ast.PdfArray{ast.PdfInt(0), ast.PdfInt(1)}, body)
 	entries := make(map[int]XRefEntry)
 
-	if _, err := ParseXRefStream(context.Background(), stream, entries); err != nil {
+	if _, err := ParseXRefStream(context.Background(), stream, entries, nil); err != nil {
 		t.Fatalf("refused a stream with one zero width: %v", err)
 	}
 	if len(entries) != 1 {

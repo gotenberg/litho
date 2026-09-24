@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // FuzzNewDocument drives whole-document construction from crafted bytes.
@@ -184,7 +186,7 @@ func TestLinearizedSeedReachesTheHintTable(t *testing.T) {
 
 	// parseHintStream runs the whole chain: stream parse, FlateDecode, then
 	// parsePageOffsetTable over the decompressed bytes.
-	if _, err := parseHintStream(bytes.NewReader(data), int64(len(data)), params); err != nil {
+	if _, err := parseHintStream(bytes.NewReader(data), int64(len(data)), params, limits.DefaultMaxStreamBytes); err != nil {
 		t.Fatalf("parseHintStream: %v", err)
 	}
 }

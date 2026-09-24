@@ -165,7 +165,7 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 //     /Interpolate 15 times against 57 plain XObjects (72 findings from
 //     veraPDF, 57 from litho).
 func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, part int, profile string, results *[]Violation, visited map[string]bool, depth int, referencedNames map[string]bool) {
-	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return
 	}
 

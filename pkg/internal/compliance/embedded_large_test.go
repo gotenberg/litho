@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -54,7 +55,7 @@ func (f *failingReader) Read(p []byte) (int, error) {
 // TestReadEmbeddedFile_HeaderDecides pins that an embedded file is judged a
 // PDF or not from its header alone, and that only a PDF is read past it.
 //
-// The limit here stands in for maxEmbeddedFileSize, and each body is a lazy
+// The limit here stands in for the embedded-file budget, and each body is a lazy
 // stream far longer than it, so a read of the whole file would never end.
 func TestReadEmbeddedFile_HeaderDecides(t *testing.T) {
 	t.Parallel()
@@ -151,7 +152,7 @@ func TestReadEmbeddedFile_HeaderDecides(t *testing.T) {
 }
 
 // TestEmbeddedFileCompliance_LargeNonPDFStillFails pins ISO 19005-2, 6.8 on
-// an attachment past maxEmbeddedFileSize. The whole file was decoded before
+// an attachment past the embedded-file budget. The whole file was decoded before
 // its size was checked, and a file over the cap was skipped with no
 // violation, so a large attachment that is not a PDF escaped the clause.
 //
@@ -169,7 +170,7 @@ func TestEmbeddedFileCompliance_LargeNonPDFStillFails(t *testing.T) {
 	if _, err := io.WriteString(w, "GIF89a"); err != nil {
 		t.Fatalf("zlib write: %v", err)
 	}
-	if _, err := io.CopyN(w, zeroReader{}, maxEmbeddedFileSize); err != nil {
+	if _, err := io.CopyN(w, zeroReader{}, limits.DefaultMaxEmbeddedFileBytes); err != nil {
 		t.Fatalf("zlib write: %v", err)
 	}
 	if err := w.Close(); err != nil {
@@ -204,5 +205,5 @@ func TestEmbeddedFileCompliance_LargeNonPDFStillFails(t *testing.T) {
 			return
 		}
 	}
-	t.Errorf("no 6.8 t5 violation for a %d-byte attachment that is not a PDF", maxEmbeddedFileSize+len("GIF89a"))
+	t.Errorf("no 6.8 t5 violation for a %d-byte attachment that is not a PDF", limits.DefaultMaxEmbeddedFileBytes+len("GIF89a"))
 }

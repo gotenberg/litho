@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
 	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
 
@@ -112,9 +113,9 @@ func TestUndecodableFilters_AgreeWithDecoding(t *testing.T) {
 
 	decoders := map[string]*filter.Decoder{
 		"no plugin":        nil,
-		"unrelated plugin": filter.NewDecoder([]plugins.FilterDecoder{vendorPlugin{name: "OtherDecode"}}),
-		"decoding plugin":  filter.NewDecoder([]plugins.FilterDecoder{vendorPlugin{name: "VendorDecode", out: []byte("decoded")}}),
-		"declining plugin": filter.NewDecoder([]plugins.FilterDecoder{vendorPlugin{name: "VendorDecode", decline: true}}),
+		"unrelated plugin": filter.NewDecoder([]plugins.FilterDecoder{vendorPlugin{name: "OtherDecode"}}, limits.Limits{}),
+		"decoding plugin":  filter.NewDecoder([]plugins.FilterDecoder{vendorPlugin{name: "VendorDecode", out: []byte("decoded")}}, limits.Limits{}),
+		"declining plugin": filter.NewDecoder([]plugins.FilterDecoder{vendorPlugin{name: "VendorDecode", decline: true}}, limits.Limits{}),
 	}
 	chains := map[string]ast.PdfObject{
 		"vendor filter":           ast.PdfName("VendorDecode"),

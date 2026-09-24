@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // pureGoFilters are the stream filters decoded without a crypt handler. FuzzApplyDecodeFilter runs each fuzz input through all
@@ -36,7 +37,7 @@ func FuzzApplyDecodeFilter(f *testing.F) {
 		for _, name := range pureGoFilters {
 			// Result and error are intentionally discarded: no input
 			// may make a decoder panic.
-			_, _ = applyDecodeFilter(ctx, data, name, ast.PdfDict{}, nil)
+			_, _ = applyDecodeFilter(ctx, data, name, ast.PdfDict{}, nil, limits.Default())
 		}
 	})
 }

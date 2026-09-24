@@ -80,7 +80,8 @@
 //
 //   - [Open] / [OpenFile] take [OpenOption]: [WithLogger], [WithPassword],
 //     [WithOCREngine], [WithFilterPlugin], [WithCIISchemas],
-//     [WithSchematron], [WithLenient], [WithDefaultCMYKProfile].
+//     [WithSchematron], [WithLenient], [WithDefaultCMYKProfile],
+//     [WithLimits].
 //   - [Reader.ExtractText] takes [ExtractTextOption]: [WithHiddenText],
 //     [WithInvisibleText], [WithClipPathText], [WithClippedText],
 //     [WithArtifacts].
@@ -101,6 +102,24 @@
 // a source's encryption, so an edited document is written in the clear unless
 // this option asks otherwise. [WithObjectStreams] and [WithDedup] shrink a
 // full rewrite, and both decline on an encrypted output.
+//
+// # Resource limits
+//
+// A crafted document can ask for far more memory or work than its size
+// suggests, so every [Reader] runs under five budgets: the decoded bytes of
+// one stream, the pixels of one image, the size of an embedded PDF validation
+// opens, the nesting of form XObjects, and the entries of the object cache.
+// [DefaultLimits] suits ordinary documents. A service that reads untrusted
+// input can lower them, and one that handles unusually large images can raise
+// them, through [WithLimits]:
+//
+//	reader, err := pdf.OpenFile(ctx, "scan.pdf", pdf.WithLimits(pdf.Limits{
+//		MaxStreamBytes: 64 << 20,
+//		MaxImagePixels: 25_000_000,
+//	}))
+//
+// A stream or an image past its budget fails with [ErrStreamTooLarge] or
+// [ErrImageTooLarge]; see [Limits] for what each budget bounds.
 //
 // # Embedding files
 //

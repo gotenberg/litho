@@ -18,7 +18,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
-	"github.com/gotenberg/litho/pkg/internal/filter"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // Float safely extracts a float64 from a [ast.PdfObject].
@@ -457,9 +457,12 @@ var pdfDocEncoding = map[byte]rune{
 // maxObjStmCacheBytes bounds the total decoded object-stream bytes retained by
 // [Document.cacheObjStm]. It is an anti-DoS guard, not spec-mandated: a crafted
 // file could pack many large object streams, so the cache evicts rather than
-// grow without bound. 256 MB matches the single-stream decompression cap, so
-// the cache never holds more than one worst-case decode's worth of memory.
-const maxObjStmCacheBytes = 256 << 20
+// grow without bound. 256 MB matches the default stream budget,
+// [limits.DefaultMaxStreamBytes], so the cache never holds more than one
+// worst-case decode's worth of memory under the defaults. It stays fixed when
+// a caller raises that budget: the cache then evicts sooner, which costs a
+// re-decode, never a wrong answer.
+const maxObjStmCacheBytes = limits.DefaultMaxStreamBytes
 
 // objStmData is a decoded object stream plus its parsed header: the object
 // number and byte offset (relative to /First) of each contained object.
@@ -549,7 +552,7 @@ func (d *Document) parseObjectStream(ctx context.Context, objStmNum int, visited
 		return nil, fmt.Errorf("object %d is not a stream", objStmNum)
 	}
 
-	decoded, err := filter.DecodeStream(ctx, stream)
+	decoded, err := d.builtinFilters().DecodeStream(ctx, stream)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode object stream %d: %w", objStmNum, err)
 	}

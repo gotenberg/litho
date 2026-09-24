@@ -348,11 +348,11 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 // to the fonts it selects (for example a non-embedded font referenced only from
 // a Do-invoked form, ISO 19005-2 §6.2.11.4.1); litho's page pass walks
 // /Resources/Font on the page only, so such a font is otherwise never reached.
-// Recursion into nested forms is bounded by [maxFormXObjectDepth]; visited
-// guards resource cycles; checkedObjs deduplicates against fonts already checked
-// on the page and across forms.
+// Recursion into nested forms is bounded by the form budget ([formTooDeep]);
+// visited guards resource cycles; checkedObjs deduplicates against fonts
+// already checked on the page and across forms.
 func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
-	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return nil
 	}
 	xobjDict, _ := document.ResolveDict(ctx, doc, res["XObject"])
@@ -426,7 +426,7 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 //     glyph from an unembedded ZapfDingbats, which veraPDF reports under
 //     ISO 19005-2, 6.2.11.4.1 and litho never reached.
 func checkPatternFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
-	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return nil
 	}
 	patternDict, _ := document.ResolveDict(ctx, doc, res["Pattern"])
@@ -493,10 +493,10 @@ func checkPatternFonts(ctx context.Context, doc *document.Document, ops []conten
 //
 // Only the procedures for character codes the stream actually shows are
 // walked, so a glyph that is never painted brings no font into scope.
-// Recursion is bounded by [maxFormXObjectDepth]; visited holds the object
-// numbers already descended into, which breaks a resource cycle through nested
-// Type3 fonts. Object numbers are unique document-wide, so sharing one visited
-// set with the Form XObject walk cannot confuse a font for a form.
+// Recursion is bounded by the form budget ([formTooDeep]); visited holds the
+// object numbers already descended into, which breaks a resource cycle through
+// nested Type3 fonts. Object numbers are unique document-wide, so sharing one
+// visited set with the Form XObject walk cannot confuse a font for a form.
 //
 // # Corpus evidence
 //
@@ -504,7 +504,7 @@ func checkPatternFonts(ctx context.Context, doc *document.Document, ops []conten
 //     Helvetica through two nested Type3 fonts, and its name warns of the
 //     resource cycle the visited set breaks.
 func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
-	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return nil
 	}
 	fontDict, _ := document.ResolveDict(ctx, doc, res["Font"])

@@ -56,7 +56,7 @@ func TestFixFilterNameCase_RenamesWhenTheBytesActuallyDecode(t *testing.T) {
 	}
 	alloc := writer.NewObjAllocator(20)
 
-	desc := fixFilterNameCase(context.Background(), alloc, 11, ast.NewStream(dict, body), dict["Filter"])
+	desc := fixFilterNameCase(context.Background(), alloc, nil, 11, ast.NewStream(dict, body), dict["Filter"])
 	if desc == "" {
 		t.Fatal("a case-wrong filter whose bytes decode must be repaired")
 	}
@@ -102,7 +102,7 @@ func TestFixFilterNameCase_LeavesItAloneWhenTheBytesDoNotDecode(t *testing.T) {
 	}
 	alloc := writer.NewObjAllocator(20)
 
-	desc := fixFilterNameCase(context.Background(), alloc, 11, ast.NewStream(dict, body), dict["Filter"])
+	desc := fixFilterNameCase(context.Background(), alloc, nil, 11, ast.NewStream(dict, body), dict["Filter"])
 	if desc != "" {
 		t.Errorf("must not rename when the bytes do not decode: %q", desc)
 	}
@@ -159,7 +159,7 @@ func TestFixFilterNameCase_IgnoresArrayValuedFilter(t *testing.T) {
 	}
 	alloc := writer.NewObjAllocator(20)
 
-	if desc := fixFilterNameCase(context.Background(), alloc, 11, ast.NewStream(dict, body), dict["Filter"]); desc != "" {
+	if desc := fixFilterNameCase(context.Background(), alloc, nil, 11, ast.NewStream(dict, body), dict["Filter"]); desc != "" {
 		t.Errorf("an array-valued /Filter is out of scope, got %q", desc)
 	}
 	if _, ok := pendingStream(t, alloc, 11); ok {

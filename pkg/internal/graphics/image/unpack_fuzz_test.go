@@ -1,6 +1,10 @@
 package image
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
+)
 
 // FuzzUnpackSamples feeds arbitrary packed sample data and a declared shape to
 // the sub-byte sample unpacker.
@@ -42,7 +46,7 @@ func FuzzUnpackSamples(f *testing.F) {
 		// DecodeImage runs validateImageDimensions well before the unpack,
 		// so a non-positive or over-cap dimension cannot arrive here, and a
 		// panic manufactured by one would be a by-design-unreachable finding.
-		if validateImageDimensions(w, h) != nil {
+		if validateImageDimensions(w, h, limits.DefaultMaxImagePixels) != nil {
 			return
 		}
 		// samplesPerPixel comes from imageComponents, which returns 1, 3 or 4

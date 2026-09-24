@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // TestDecodeJBIG2_ISO32000Example decodes the JBIG2Decode example of ISO
@@ -32,7 +33,7 @@ func TestDecodeJBIG2_ISO32000Example(t *testing.T) {
 	}
 
 	parms := ast.PdfDict{"JBIG2Globals": ast.NewStream(ast.PdfDict{}, globals)}
-	got, err := decodeJBIG2(context.Background(), page, parms)
+	got, err := decodeJBIG2(context.Background(), page, parms, limits.Default())
 	if err != nil {
 		t.Fatalf("decodeJBIG2: %v", err)
 	}
@@ -42,7 +43,7 @@ func TestDecodeJBIG2_ISO32000Example(t *testing.T) {
 
 	// Without its globals the page refers to a symbol dictionary it does not
 	// hold, which is malformed rather than unsupported.
-	if _, err := decodeJBIG2(context.Background(), page, nil); err == nil || errors.Is(err, ErrUnsupportedFilter) {
+	if _, err := decodeJBIG2(context.Background(), page, nil, limits.Default()); err == nil || errors.Is(err, ErrUnsupportedFilter) {
 		t.Errorf("page without its globals: err = %v, want a decoding error that is not ErrUnsupportedFilter", err)
 	}
 }
@@ -63,10 +64,10 @@ func TestDecodeJBIG2_Refusals(t *testing.T) {
 	ext = binary.BigEndian.AppendUint32(ext, 4)
 	ext = append(ext, 0xA0, 0, 0, 1)
 
-	if _, err := decodeJBIG2(context.Background(), append(page, ext...), nil); !errors.Is(err, ErrUnsupportedFilter) {
+	if _, err := decodeJBIG2(context.Background(), append(page, ext...), nil, limits.Default()); !errors.Is(err, ErrUnsupportedFilter) {
 		t.Errorf("necessary extension: err = %v, want ErrUnsupportedFilter", err)
 	}
-	if _, err := decodeJBIG2(context.Background(), []byte{0x00, 0x01, 0x02, 0x03}, nil); err == nil || errors.Is(err, ErrUnsupportedFilter) {
+	if _, err := decodeJBIG2(context.Background(), []byte{0x00, 0x01, 0x02, 0x03}, nil, limits.Default()); err == nil || errors.Is(err, ErrUnsupportedFilter) {
 		t.Errorf("corrupt data: err = %v, want a decoding error that is not ErrUnsupportedFilter", err)
 	}
 }

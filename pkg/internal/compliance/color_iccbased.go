@@ -154,7 +154,7 @@ func nestedScopeUsage(ctx context.Context, doc *document.Document, stream ast.Pd
 // scanICCBasedRecursive scans Form XObject sub-resources recursively for
 // ICCBased colour spaces.
 func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Violation, depth int, visited map[string]bool, used *usedResources, referencedXObjects map[string]bool, inherited map[string]inheritedCS) {
-	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return
 	}
 

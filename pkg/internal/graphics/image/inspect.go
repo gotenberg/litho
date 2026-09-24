@@ -90,13 +90,6 @@ func ExtractImages(ctx context.Context, doc *document.Document, page *document.P
 	return images
 }
 
-// maxXObjectDepth bounds the descent into nested form XObjects. It is an
-// anti-DoS guard, not spec-mandated: ISO 32000-1, 8.10 puts no limit on
-// nesting, and a crafted file whose form invokes itself would otherwise
-// recurse without end. The visited set already breaks a cycle; the depth caps
-// a merely deep chain.
-const maxXObjectDepth = 16
-
 // ExtractImagesRecursive returns the images a page shows, including those drawn
 // through a form XObject or an annotation's appearance.
 //
@@ -296,11 +289,17 @@ func normalAppearance(ctx context.Context, doc *document.Document, annotDict ast
 
 // walkImages walks a resource dictionary, visiting its Image XObjects and
 // descending into its form XObjects, tiling patterns and soft-mask groups.
+//
+// depth is how many forms the resources sit below the page: 0 for the page's
+// own, 1 for a form the page paints or an annotation's appearance. Resources
+// deeper than the document's form budget, limits.Limits.MaxFormDepth, are
+// not walked, which bounds a merely deep chain; ISO 32000-1, 8.10 puts no
+// limit on nesting. The seen set breaks a cycle.
 func walkImages(ctx context.Context, doc *document.Document, resources ast.PdfDict, seen map[int]bool, depth int, visit imageVisitor) bool {
 	if ctx.Err() != nil {
 		return false
 	}
-	if depth > maxXObjectDepth {
+	if depth > doc.Limits().MaxFormDepth {
 		return true
 	}
 

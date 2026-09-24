@@ -45,7 +45,7 @@ func TestDecode_AnnexH1Page3(t *testing.T) {
 
 	raw := annexH1(t)
 	want := readPBM(t, "testdata/t88_annex_h1_page3.pbm")
-	got, err := Decode(context.Background(), concat(raw[15], raw[16], raw[17], raw[18], raw[19]), nil)
+	got, err := Decode(context.Background(), concat(raw[15], raw[16], raw[17], raw[18], raw[19]), nil, DefaultMaxBitmapPixels)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestDecode_ISO32000Example(t *testing.T) {
 		t.Fatalf("reading the example: %v %v", errP, errG)
 	}
 	want := readPBM(t, "testdata/iso32000_jbig2.pbm")
-	got, err := Decode(context.Background(), page, globals)
+	got, err := Decode(context.Background(), page, globals, DefaultMaxBitmapPixels)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestDecode_RefinementRoundTrip(t *testing.T) {
 
 						target := refinedImage(ref.bm, 5)
 						stream := refinementStream(ref.bm, template, tpgron, at, encodeRefinement(target, ref.bm, template, tpgron, at))
-						got, err := Decode(context.Background(), stream, nil)
+						got, err := Decode(context.Background(), stream, nil, DefaultMaxBitmapPixels)
 						if err != nil {
 							t.Fatalf("Decode: %v", err)
 						}

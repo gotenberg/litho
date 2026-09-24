@@ -79,7 +79,7 @@ func TestParseXRefStream_MalformedDictionaryIsRefusedNotPanicked(t *testing.T) {
 					t.Fatalf("panicked instead of refusing: %v", r)
 				}
 			}()
-			_, err := ParseXRefStream(context.Background(), tt.stream, make(map[int]XRefEntry))
+			_, err := ParseXRefStream(context.Background(), tt.stream, make(map[int]XRefEntry), nil)
 			if !errors.Is(err, ErrMalformedXRef) {
 				t.Errorf("err = %v, want errors.Is(err, ErrMalformedXRef)", err)
 			}
@@ -99,7 +99,7 @@ func TestParseXRefStream_MalformedDictionaryIsRefusedNotPanicked(t *testing.T) {
 	for _, tt := range accepted {
 		t.Run("accepts "+tt.name, func(t *testing.T) {
 			entries := make(map[int]XRefEntry)
-			if _, err := ParseXRefStream(context.Background(), tt.stream, entries); err != nil {
+			if _, err := ParseXRefStream(context.Background(), tt.stream, entries, nil); err != nil {
 				t.Fatalf("refused a valid stream: %v", err)
 			}
 		})

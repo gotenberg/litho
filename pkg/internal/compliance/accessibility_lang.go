@@ -250,14 +250,14 @@ type spanLangScan struct {
 // page, or a Form XObject's stream dictionary), which names its property lists
 // and its /StructParents; res resolves the XObjects it draws. covered reports
 // whether the sequence enclosing the stream already supplies a language, and
-// depth caps the invocation chain at [maxFormXObjectDepth].
+// depth caps the invocation chain at the form budget ([formTooDeep]).
 //
 // # Corpus evidence
 //
 //   - pdfjs issue19971.pdf: veraPDF reports each /Span with /ActualText in the
 //     Form XObject the page draws, as it does for the page's own stream.
 func (s *spanLangScan) ops(ctx context.Context, ops []content.Operation, owner, res ast.PdfDict, covered bool, depth int) []Violation {
-	if depth > maxFormXObjectDepth {
+	if formTooDeep(s.doc, depth) {
 		return nil
 	}
 	props := markedContentProps{doc: s.doc, page: owner}
@@ -1023,10 +1023,10 @@ func documentShowsUndeterminedText(ctx context.Context, doc *document.Document, 
 // opsShowUndeterminedText reports whether ops paint text no /Lang covers,
 // directly or through a Form XObject they invoke. covered carries the enclosing
 // scope's answer into a nested stream, seen skips an XObject already scanned,
-// and depth caps the invocation chain at [maxFormXObjectDepth], so a cyclic or
-// deeply nested chain cannot loop.
+// and depth caps the invocation chain at the form budget ([formTooDeep]), so
+// a cyclic or deeply nested chain cannot loop.
 func opsShowUndeterminedText(ctx context.Context, doc *document.Document, ops []content.Operation, props *markedContentProps, res ast.PdfDict, covered, mcidCovers bool, seen map[int]bool, depth int) bool {
-	if depth > maxFormXObjectDepth {
+	if formTooDeep(doc, depth) {
 		return false
 	}
 	// One entry per open marked-content sequence, true once the sequence or one

@@ -58,6 +58,7 @@ type openOpts struct {
 	schSchema *schematron.Schema
 	lenient   bool   // relax Factur-X/ZUGFeRD consumer-path tolerances
 	cmyk      []byte // nil unless WithDefaultCMYKProfile was supplied
+	limits    Limits // zero fields keep their defaults (WithLimits)
 }
 
 // WithLogger injects a structured logger for debug-level diagnostic output.
@@ -546,6 +547,10 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (_
 		opt(&o)
 	}
 	defer recoverToError(o.logger, "pdf.Open", &err)
+	lim := o.limits.internal()
+	if err := lim.Validate(); err != nil {
+		return nil, err
+	}
 	if o.ciiFS != nil {
 		schema, err := xsd.Load(ctx, o.ciiFS, o.ciiRoot)
 		if err != nil {
@@ -566,7 +571,7 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (_
 		o.schSchema = schSchema
 	}
 
-	doc, err := document.NewDocument(ctx, r, size, o.logger)
+	doc, err := document.NewDocument(ctx, r, size, o.logger, document.WithLimits(lim))
 	if err != nil {
 		switch {
 		case errors.Is(err, document.ErrMissingHeader):
@@ -595,7 +600,7 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (_
 	}
 
 	if len(o.filters) > 0 {
-		doc.Filters = filter.NewDecoder(o.filters)
+		doc.Filters = filter.NewDecoder(o.filters, doc.Limits())
 	}
 	doc.CMYKProfile = o.cmyk
 
@@ -616,6 +621,9 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (_
 // that must read the document as the caller asked. The password is not
 // carried, since intermediate files are written in the clear. r must not be
 // in use yet: these fields are set once, before concurrent use begins.
+//
+// The resource budgets are not adopted here: they govern the parse itself,
+// which is over by now, so r must be opened with [Reader.reopenOptions].
 func (r *Reader) adoptConfiguration(src *Reader) {
 	r.doc.Filters = src.doc.Filters
 	r.doc.CMYKProfile = src.doc.CMYKProfile
@@ -632,12 +640,22 @@ func (r *Reader) adoptConfiguration(src *Reader) {
 // the caller's schemas, leniency or filter plugins would report residuals the
 // caller's own reader does not see.
 func (r *Reader) reopenFile(ctx context.Context, path string) (*Reader, error) {
-	next, err := OpenFile(ctx, path, WithLogger(r.doc.Logger))
+	next, err := OpenFile(ctx, path, r.reopenOptions()...)
 	if err != nil {
 		return nil, err
 	}
 	next.adoptConfiguration(r)
 	return next, nil
+}
+
+// reopenOptions returns the options a document litho wrote from r's is opened
+// with before [Reader.adoptConfiguration] completes it: r's logger, and the
+// resource budgets r was opened with. The budgets bound the parse, the object
+// cache and the construction-time decodes, so they cannot be adopted after the
+// open the way the other settings are, and a re-read that fell back to the
+// defaults would ignore a budget the caller lowered.
+func (r *Reader) reopenOptions() []OpenOption {
+	return []OpenOption{WithLogger(r.doc.Logger), WithLimits(limitsFromInternal(r.doc.Limits()))}
 }
 
 // OpenFile opens a PDF directly from the filesystem. The returned [Reader]
@@ -1611,6 +1629,10 @@ func imageDecodeError(pageNum int, name string, err error) error {
 		return fmt.Errorf("page %d, image %q: %w", pageNum, name, err)
 	case errors.Is(err, pdfimage.ErrImageNotFound):
 		return fmt.Errorf("page %d, image %q: %w", pageNum, name, ErrImageNotFound)
+	case errors.Is(err, ErrImageTooLarge) || errors.Is(err, ErrStreamTooLarge):
+		// A budget the caller can raise ([Limits]) refused the image, and its
+		// sentinel is public, so the cause is wrapped alongside the contract.
+		return fmt.Errorf("page %d, image %q: %w: %w", pageNum, name, ErrImageNotDecodable, err)
 	}
 	// The cause is formatted rather than wrapped: its sentinels are internal,
 	// and the public contract is ErrImageNotDecodable.

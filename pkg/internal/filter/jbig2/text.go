@@ -192,7 +192,7 @@ func decodeText(ctx context.Context, p textParams, src textSource) (*Bitmap, err
 // deltas, ITU-T T.88 6.4.11 step 6 and Table 12, reading the bitmap from st.
 func refineSymbol(ctx context.Context, p textParams, symbol *Bitmap, rdw, rdh, rdx, rdy int64, st *arithState) (*Bitmap, error) {
 	w, h := int64(symbol.Width)+rdw, int64(symbol.Height)+rdh
-	if w < 0 || h < 0 || areaExceeds(w, h, maxBitmapPixels) {
+	if w < 0 || h < 0 || areaExceeds(w, h, st.budget.areaCap()) {
 		return nil, fmt.Errorf("%w: refined symbol of %dx%d pixels", ErrMalformed, w, h)
 	}
 	// Table 12 gives GRREFERENCEDX as RDWI/2 + RDXI. T.88 (2000) does not

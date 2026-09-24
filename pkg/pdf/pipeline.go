@@ -295,7 +295,7 @@ func (ex *executor) reopenAsCurrent(ctx context.Context, f *os.File) error {
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("seeking intermediate file: %w", err)
 	}
-	next, err := Open(ctx, f, stat.Size(), WithLogger(ex.cur.doc.Logger))
+	next, err := Open(ctx, f, stat.Size(), ex.cur.reopenOptions()...)
 	if err != nil {
 		return fmt.Errorf("reopening intermediate file: %w", err)
 	}

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
 )
 
 // annexJ10Samples are the samples of testdata/annex_j10.j2k, the codestream of
@@ -59,7 +60,7 @@ func palettedJ10(t *testing.T, extra ...[]byte) []byte {
 func TestDecodeJPX_Samples(t *testing.T) {
 	t.Parallel()
 
-	got, err := decodeJPX(context.Background(), readJPX(t, "testdata/annex_j10.j2k"), nil)
+	got, err := decodeJPX(context.Background(), readJPX(t, "testdata/annex_j10.j2k"), nil, jpx.DefaultMaxSamples)
 	if err != nil || !bytes.Equal(got, annexJ10Samples) {
 		t.Errorf("decodeJPX = %v, %v; want %v", got, err, annexJ10Samples)
 	}
@@ -74,7 +75,7 @@ func TestDecodeJPX_Palette(t *testing.T) {
 	t.Parallel()
 
 	data := palettedJ10(t)
-	got, err := decodeJPX(context.Background(), data, nil)
+	got, err := decodeJPX(context.Background(), data, nil, jpx.DefaultMaxSamples)
 	if err != nil {
 		t.Fatalf("decodeJPX: %v", err)
 	}
@@ -86,7 +87,7 @@ func TestDecodeJPX_Palette(t *testing.T) {
 		t.Errorf("without /ColorSpace: %v, want %v", got, want)
 	}
 	indexed := ast.PdfDict{"ColorSpace": ast.PdfArray{ast.PdfName("Indexed"), ast.PdfName("DeviceRGB"), ast.PdfInt(255), ast.PdfString("")}}
-	got, err = decodeJPX(context.Background(), data, indexed)
+	got, err = decodeJPX(context.Background(), data, indexed, jpx.DefaultMaxSamples)
 	if err != nil || !bytes.Equal(got, annexJ10Samples) {
 		t.Errorf("under /Indexed: %v, %v; want %v", got, err, annexJ10Samples)
 	}
@@ -100,7 +101,7 @@ func TestDecodeJPX_ColourOrder(t *testing.T) {
 	t.Parallel()
 
 	cdef := box("cdef", []byte{0, 3, 0, 0, 0, 0, 0, 3, 0, 1, 0, 0, 0, 2, 0, 2, 0, 0, 0, 1})
-	got, err := decodeJPX(context.Background(), palettedJ10(t, cdef), nil)
+	got, err := decodeJPX(context.Background(), palettedJ10(t, cdef), nil, jpx.DefaultMaxSamples)
 	if err != nil {
 		t.Fatalf("decodeJPX: %v", err)
 	}
@@ -126,7 +127,7 @@ func TestDecodeJPX_Opacity(t *testing.T) {
 		{"testdata/rgba.jp2", func(x, y int) []byte { return []byte{byte(x * 28), byte(y * 36), byte(x * y * 7)} }},
 		{"testdata/grey_alpha.jp2", func(x, y int) []byte { return []byte{byte(x*25 + y*10)} }},
 	} {
-		got, err := decodeJPX(context.Background(), readJPX(t, tc.name), nil)
+		got, err := decodeJPX(context.Background(), readJPX(t, tc.name), nil, jpx.DefaultMaxSamples)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.name, err)
 		}
@@ -147,7 +148,7 @@ func TestDecodeJPX_Opacity(t *testing.T) {
 func TestDecodeJPX_Scaling(t *testing.T) {
 	t.Parallel()
 
-	got, err := decodeJPX(context.Background(), readJPX(t, "jpx/testdata/signed12.j2k"), nil)
+	got, err := decodeJPX(context.Background(), readJPX(t, "jpx/testdata/signed12.j2k"), nil, jpx.DefaultMaxSamples)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +169,7 @@ func TestDecodeJPX_Scaling(t *testing.T) {
 func TestDecodeJPX_Subsampled(t *testing.T) {
 	t.Parallel()
 
-	got, err := decodeJPX(context.Background(), readJPX(t, "jpx/testdata/cprl_sub.j2k"), nil)
+	got, err := decodeJPX(context.Background(), readJPX(t, "jpx/testdata/cprl_sub.j2k"), nil, jpx.DefaultMaxSamples)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,9 +194,9 @@ func TestDecodeJPX_Malformed(t *testing.T) {
 	t.Parallel()
 
 	for _, data := range [][]byte{{}, {0xFF, 0x4F, 0xFF, 0x51, 0x00}} {
-		_, err := decodeJPX(context.Background(), data, nil)
+		_, err := decodeJPX(context.Background(), data, nil, jpx.DefaultMaxSamples)
 		if err == nil || errors.Is(err, ErrUnsupportedFilter) {
-			t.Errorf("decodeJPX(% X) = %v, want a malformed-data error", data, err)
+			t.Errorf("decodeJPX(% X, jpx.DefaultMaxSamples) = %v, want a malformed-data error", data, err)
 		}
 	}
 }

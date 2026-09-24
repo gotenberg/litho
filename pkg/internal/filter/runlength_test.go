@@ -5,6 +5,8 @@ import (
 	"errors"
 	"runtime"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 func TestDecodeRunLength(t *testing.T) {
@@ -62,7 +64,7 @@ func TestDecodeRunLength(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := decodeRunLength(tt.input, maxDecompressedSize)
+			got, err := decodeRunLength(tt.input, limits.DefaultMaxStreamBytes)
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")

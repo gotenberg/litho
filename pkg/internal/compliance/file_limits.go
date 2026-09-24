@@ -208,7 +208,7 @@ func checkContentStreamLimits(ctx context.Context, doc *document.Document, part 
 //   - pdfjs issue6342.pdf: hides twelve out-of-range reals in the form its page
 //     invokes at operator 11.
 func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream ast.PdfStream, objNum int, maxStr int, profile string, res ast.PdfDict, visited map[int]bool, depth int) []Violation {
-	if depth > maxFormXObjectDepth || ctx.Err() != nil {
+	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return nil
 	}
 	data, err := doc.DecodeStream(ctx, stream)
@@ -267,7 +267,7 @@ func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream
 
 // scanInvokedFormLimits scans the content streams of the Form XObjects a Do
 // operator names in res. visited guards a resource cycle and against scanning
-// one form twice, and depth caps the chain at [maxFormXObjectDepth].
+// one form twice, and depth caps the chain at the form budget ([formTooDeep]).
 func scanInvokedFormLimits(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, maxStr int, profile string, visited map[int]bool, depth int) []Violation {
 	xobjDict, err := document.ResolveDict(ctx, doc, res["XObject"])
 	if err != nil || len(xobjDict) == 0 {

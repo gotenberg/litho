@@ -18,7 +18,8 @@ import (
 //   - CMYK:        4 bytes per pixel
 //
 // dict is the image dictionary, whose /Height bounds a frame that declares
-// more lines than the image has.
+// more lines than the image has. maxSamples caps the frame the lenient decoder
+// reads, scaled from the image budget.
 //
 // # Corpus evidence
 //
@@ -28,7 +29,7 @@ import (
 //   - All corpora: reading CMYK samples inverted rendered 670 images, 639
 //     of them govdocs, as their negatives against PDF.js: white paper came
 //     out black.
-func decodeDCT(ctx context.Context, data []byte, parms, dict ast.PdfDict) ([]byte, error) {
+func decodeDCT(ctx context.Context, data []byte, parms, dict ast.PdfDict, maxSamples int64) ([]byte, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("dct decode: empty input")
 	}
@@ -47,7 +48,7 @@ func decodeDCT(ctx context.Context, data []byte, parms, dict ast.PdfDict) ([]byt
 		if v, ok := dict["Height"].(ast.PdfInt); ok {
 			height = int(v)
 		}
-		out, _, _, _, lerr := dct.Decode(ctx, data, colorTransform, height)
+		out, _, _, _, lerr := dct.Decode(ctx, data, colorTransform, height, maxSamples)
 		if lerr == nil {
 			return out, nil
 		}

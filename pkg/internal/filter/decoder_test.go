@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 	"github.com/gotenberg/litho/pkg/plugins"
 )
 
@@ -51,7 +52,7 @@ func TestDecoder_NilDelegatesToPackageLevel(t *testing.T) {
 
 func TestDecoder_PluginCalledForRegisteredFilter(t *testing.T) {
 	p := &mockPlugin{name: "TestFilter", result: []byte("decoded")}
-	d := NewDecoder([]plugins.FilterDecoder{p})
+	d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
 
 	stream := ast.NewStream(ast.PdfDict{
 		"Filter": ast.PdfName("TestFilter"),
@@ -71,7 +72,7 @@ func TestDecoder_PluginCalledForRegisteredFilter(t *testing.T) {
 
 func TestDecoder_FallsBackToBuiltinForUnregisteredFilter(t *testing.T) {
 	p := &mockPlugin{name: "TestFilter", result: []byte("decoded")}
-	d := NewDecoder([]plugins.FilterDecoder{p})
+	d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
 
 	// Use FlateDecode, not registered as a plugin. Should use built-in.
 	var buf bytes.Buffer
@@ -98,7 +99,7 @@ func TestDecoder_FallsBackToBuiltinForUnregisteredFilter(t *testing.T) {
 func TestDecoder_PluginErrorPropagated(t *testing.T) {
 	testErr := errors.New("plugin failed")
 	p := &mockPlugin{name: "FailFilter", err: testErr}
-	d := NewDecoder([]plugins.FilterDecoder{p})
+	d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
 
 	stream := ast.NewStream(ast.PdfDict{
 		"Filter": ast.PdfName("FailFilter"),
@@ -112,7 +113,7 @@ func TestDecoder_PluginErrorPropagated(t *testing.T) {
 
 func TestDecoder_MarshalParmsConvertsTypes(t *testing.T) {
 	p := &mockPlugin{name: "TestFilter", result: []byte("ok")}
-	d := NewDecoder([]plugins.FilterDecoder{p})
+	d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
 
 	stream := ast.NewStream(ast.PdfDict{
 		"Filter": ast.PdfName("TestFilter"),
@@ -145,7 +146,7 @@ func TestDecoder_MarshalParmsConvertsTypes(t *testing.T) {
 
 func TestDecoder_NewStreamReaderDelegatesToPackageLevelForBuiltins(t *testing.T) {
 	p := &mockPlugin{name: "TestFilter", result: []byte("ok")}
-	d := NewDecoder([]plugins.FilterDecoder{p})
+	d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
 
 	// FlateDecode stream. Should use the fast path (no plugin needed).
 	var buf bytes.Buffer
@@ -170,15 +171,21 @@ func TestDecoder_NewStreamReaderDelegatesToPackageLevelForBuiltins(t *testing.T)
 	}
 }
 
-func TestNewDecoder_NilWhenEmpty(t *testing.T) {
-	d := NewDecoder(nil)
-	if d != nil {
-		t.Error("expected nil Decoder for empty plugins")
-	}
-
-	d = NewDecoder([]plugins.FilterDecoder{})
-	if d != nil {
-		t.Error("expected nil Decoder for empty slice")
+// TestNewDecoder_NoPluginsHandlesNothing pins that a Decoder built without
+// plugins exists, since it carries the document's budgets, and claims no
+// filter.
+func TestNewDecoder_NoPluginsHandlesNothing(t *testing.T) {
+	for _, pp := range [][]plugins.FilterDecoder{nil, {}} {
+		d := NewDecoder(pp, limits.Limits{})
+		if d == nil {
+			t.Fatal("NewDecoder returned nil for no plugins")
+		}
+		if d.Handles("FlateDecode") {
+			t.Error("a Decoder without plugins claims FlateDecode")
+		}
+		if got := d.limits(); got != limits.Default() {
+			t.Errorf("zero limits read as %+v, want the defaults", got)
+		}
 	}
 }
 
@@ -193,7 +200,7 @@ func TestNewDecoder_DuplicateNameLastWins(t *testing.T) {
 	first := &mockPlugin{name: "JPXDecode", result: []byte("first")}
 	second := &mockPlugin{name: "JPXDecode", result: []byte("second")}
 
-	d := NewDecoder([]plugins.FilterDecoder{first, second})
+	d := NewDecoder([]plugins.FilterDecoder{first, second}, limits.Limits{})
 	if d == nil {
 		t.Fatal("NewDecoder returned nil for two plugins")
 	}
@@ -217,7 +224,7 @@ func TestNewDecoder_DuplicateNameLastWins(t *testing.T) {
 // TestDecoder_HandlesIsFalseForAnUnregisteredName is the control for the
 // Handles guard, including the documented nil-Decoder case.
 func TestDecoder_HandlesIsFalseForAnUnregisteredName(t *testing.T) {
-	d := NewDecoder([]plugins.FilterDecoder{&mockPlugin{name: "JPXDecode"}})
+	d := NewDecoder([]plugins.FilterDecoder{&mockPlugin{name: "JPXDecode"}}, limits.Limits{})
 	if d.Handles("JBIG2Decode") {
 		t.Error("an unregistered filter name reported as handled")
 	}
@@ -252,7 +259,7 @@ func TestDecoder_PluginDeclineFallsBackToBuiltin(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			p := &mockPlugin{name: "FlateDecode", err: declineErr}
-			d := NewDecoder([]plugins.FilterDecoder{p})
+			d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
 			stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("FlateDecode")}, zlibBytes(t, []byte("hello")))
 
 			got, err := d.DecodeStream(context.Background(), stream)
@@ -319,7 +326,7 @@ func TestDecoder_UndecodableFilterMatchesThePackageLevelPath(t *testing.T) {
 			}
 
 			other := &mockPlugin{name: "OtherDecode", result: []byte("unused")}
-			d := NewDecoder([]plugins.FilterDecoder{other})
+			d := NewDecoder([]plugins.FilterDecoder{other}, limits.Limits{})
 			data, incomplete, err := d.DecodeStreamChecked(context.Background(), stream)
 			if err != nil {
 				t.Fatalf("with an unrelated plugin: %v, want the package-level result", err)
@@ -355,7 +362,7 @@ func TestDecoder_UndecodableFilterBesideAClaimedOneIsSkipped(t *testing.T) {
 	t.Parallel()
 
 	p := &mockPlugin{name: "VendorDecode", result: []byte("decoded")}
-	d := NewDecoder([]plugins.FilterDecoder{p})
+	d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
 	stream := ast.NewStream(ast.PdfDict{
 		"Filter": ast.PdfArray{ast.PdfName("VendorDecode"), ast.PdfName("NoSuchDecode")},
 	}, []byte("raw"))
@@ -403,7 +410,7 @@ func TestDecoder_PluginDeclineWithoutBuiltinFails(t *testing.T) {
 
 			stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("VendorDecode")}, []byte("raw"))
 			p := &mockPlugin{name: "VendorDecode", err: declineErr}
-			d := NewDecoder([]plugins.FilterDecoder{p})
+			d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
 
 			out, incomplete, err := d.DecodeStreamChecked(context.Background(), stream)
 			if !p.called {
@@ -436,7 +443,7 @@ func TestDecoder_PluginDeclineWithoutBuiltinFails(t *testing.T) {
 func TestDecoder_PluginErrorOnBuiltinFilterFails(t *testing.T) {
 	testErr := errors.New("plugin failed")
 	p := &mockPlugin{name: "FlateDecode", err: testErr}
-	d := NewDecoder([]plugins.FilterDecoder{p})
+	d := NewDecoder([]plugins.FilterDecoder{p}, limits.Limits{})
 	stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("FlateDecode")}, zlibBytes(t, []byte("hello")))
 
 	out, err := d.DecodeStream(context.Background(), stream)

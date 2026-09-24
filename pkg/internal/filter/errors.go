@@ -1,9 +1,6 @@
 package filter
 
-import (
-	"errors"
-	"fmt"
-)
+import "errors"
 
 // Sentinel errors for stream filter failure states.
 var (
@@ -11,8 +8,11 @@ var (
 	// encoding filter that this library does not implement.
 	ErrUnsupportedFilter = errors.New("unsupported filter")
 
-	// ErrDecompressionBomb is returned when a stream exceeds maxDecompressedSize.
-	ErrDecompressionBomb = fmt.Errorf("decompressed stream exceeds %d MB limit", maxDecompressedSize>>20)
+	// ErrDecompressionBomb is returned, wrapped in an error naming the filter
+	// and the budget, when a filter's output would exceed the stream budget
+	// (limits.Limits.MaxStreamBytes). pkg/pdf re-exports it as
+	// pdf.ErrStreamTooLarge.
+	ErrDecompressionBomb = errors.New("decoded stream exceeds the stream size limit")
 
 	// ErrUnsupportedPredictor indicates a predictor configuration the
 	// un-filter cannot reverse, such as a BitsPerComponent the TIFF

@@ -13,6 +13,7 @@ import (
 	"github.com/andybalholm/brotli"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 func zlibCompress(data []byte) []byte {
@@ -231,7 +232,7 @@ func TestDecodeStream_UnsupportedFilter(t *testing.T) {
 }
 
 func TestApplyDecodeFilter_ASCIIHex(t *testing.T) {
-	result, err := applyDecodeFilter(context.Background(), []byte("48656c6c6f>"), "ASCIIHexDecode", nil, nil)
+	result, err := applyDecodeFilter(context.Background(), []byte("48656c6c6f>"), "ASCIIHexDecode", nil, nil, limits.Default())
 	if err != nil {
 		t.Fatalf("ApplyDecodeFilter failed: %v", err)
 	}
@@ -284,7 +285,7 @@ func TestDecodeASCII85(t *testing.T) {
 }
 
 func TestApplyDecodeFilter_ASCII85(t *testing.T) {
-	result, err := applyDecodeFilter(context.Background(), []byte("87cURD]i,\"Ebo7~>"), "ASCII85Decode", nil, nil)
+	result, err := applyDecodeFilter(context.Background(), []byte("87cURD]i,\"Ebo7~>"), "ASCII85Decode", nil, nil, limits.Default())
 	if err != nil {
 		t.Fatalf("ApplyDecodeFilter failed: %v", err)
 	}
@@ -294,7 +295,7 @@ func TestApplyDecodeFilter_ASCII85(t *testing.T) {
 }
 
 func TestApplyDecodeFilter_ASCII85_Abbreviation(t *testing.T) {
-	result, err := applyDecodeFilter(context.Background(), []byte("87cURD]i,\"Ebo7~>"), "A85", nil, nil)
+	result, err := applyDecodeFilter(context.Background(), []byte("87cURD]i,\"Ebo7~>"), "A85", nil, nil, limits.Default())
 	if err != nil {
 		t.Fatalf("ApplyDecodeFilter failed: %v", err)
 	}
@@ -670,7 +671,7 @@ func TestDecodeCCITTFax_Group4_AllWhite(t *testing.T) {
 		"Rows":    ast.PdfInt(1),
 	}
 
-	decoded, err := decodeCCITTFax(context.Background(), data, parms)
+	decoded, err := decodeCCITTFax(context.Background(), data, parms, limits.DefaultMaxStreamBytes)
 	if err != nil {
 		t.Fatalf("decodeCCITTFax Group4 all-white failed: %v", err)
 	}
@@ -695,7 +696,7 @@ func TestDecodeCCITTFax_Group4_TwoRows(t *testing.T) {
 		"Rows":    ast.PdfInt(2),
 	}
 
-	decoded, err := decodeCCITTFax(context.Background(), data, parms)
+	decoded, err := decodeCCITTFax(context.Background(), data, parms, limits.DefaultMaxStreamBytes)
 	if err != nil {
 		t.Fatalf("decodeCCITTFax Group4 2-row all-white failed: %v", err)
 	}
@@ -720,7 +721,7 @@ func TestDecodeCCITTFax_Group4_WhiteThenBlack(t *testing.T) {
 		"Rows":    ast.PdfInt(2),
 	}
 
-	decoded, err := decodeCCITTFax(context.Background(), data, parms)
+	decoded, err := decodeCCITTFax(context.Background(), data, parms, limits.DefaultMaxStreamBytes)
 	if err != nil {
 		t.Fatalf("decodeCCITTFax Group4 white+black failed: %v", err)
 	}
@@ -810,7 +811,7 @@ func TestBrotli_RoundTrip(t *testing.T) {
 		t.Fatalf("encode failed: %v", err)
 	}
 
-	decoded, err := applyDecodeFilter(context.Background(), encoded, "BrotliDecode", nil, nil)
+	decoded, err := applyDecodeFilter(context.Background(), encoded, "BrotliDecode", nil, nil, limits.Default())
 	if err != nil {
 		t.Fatalf("decode failed: %v", err)
 	}
@@ -861,7 +862,7 @@ func TestDecodeCCITTFax_Group3(t *testing.T) {
 		{"mixed", 1, []byte{0b11000111, 0b00001110}},
 	} {
 		parms := ast.PdfDict{"K": ast.PdfInt(tc.k), "Columns": ast.PdfInt(8), "Rows": ast.PdfInt(2)}
-		got, err := decodeCCITTFax(context.Background(), tc.bits, parms)
+		got, err := decodeCCITTFax(context.Background(), tc.bits, parms, limits.DefaultMaxStreamBytes)
 		if err != nil {
 			t.Errorf("%s: %v", tc.name, err)
 			continue
@@ -870,7 +871,7 @@ func TestDecodeCCITTFax_Group3(t *testing.T) {
 			t.Errorf("%s: %08b, want 11100111 twice", tc.name, got)
 		}
 	}
-	if _, err := decodeCCITTFax(context.Background(), nil, ast.PdfDict{"Columns": ast.PdfInt(1 << 30)}); !errors.Is(err, ErrDecompressionBomb) {
+	if _, err := decodeCCITTFax(context.Background(), nil, ast.PdfDict{"Columns": ast.PdfInt(1 << 30)}, limits.DefaultMaxStreamBytes); !errors.Is(err, ErrDecompressionBomb) {
 		t.Errorf("a width past the cap: %v, want %v", err, ErrDecompressionBomb)
 	}
 }

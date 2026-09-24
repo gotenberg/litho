@@ -83,6 +83,10 @@ Internal code never panics (see [Parser safety](#parser-safety)) and never calls
 
 Every defensive cap (recursion depth, buffer size, decompression output, iteration count) is a named const at package scope with a comment stating it is an anti-DoS guard, not spec-mandated, and why the chosen value is safe for real documents. See `maxPageTreeDepth` in `catalog.go` and `maxNameTreeDepth` in `nametree.go`. No bare numeric literals as limits. The same conceptual limit must not be defined with divergent values across packages without a documented cross-reference.
 
+Five caps are resource budgets a caller configures through `pdf.Limits` (`pdf.WithLimits`, and the `--max-*` CLI flags): the decoded bytes of one stream, the pixels of one image, the embedded PDF compliance opens, the nesting of form XObjects, and the object cache. Their defaults are the named consts of `pkg/internal/limits`, and code reads the document's value at run time through `Document.Limits`, never the const, so a lowered budget reaches every walk. A codec cap that bounds pixels or samples scales with the image budget (`Limits.ScaleImageCap`).
+
+A new cap stays an internal const, unless it bounds a resource a caller has reason to trade against what litho reads: then it joins `Limits`, with a default equal to the const it replaces, a ceiling, a CLI flag, and a test that lowers it through the public API. A recursion guard that protects litho's own stack never joins it, since a Go stack overflow is fatal and no recover catches it.
+
 ### Goroutine lifecycle
 
 Every goroutine has a defined exit condition and cannot outlive its parent call. `ctx` propagates into every goroutine, and result collection selects on `ctx.Done()` so cancellation short-circuits. Each worker recovers panics into an error result wrapping `document.ErrInternalPanic` (re-exported as `pdf.ErrInternalPanic`) and logs them, so one bad worker cannot crash the host: the entry point's `recover()` runs on the calling goroutine and never sees a worker's panic. Fan-out is bounded by a fixed count or a worker pool, never one goroutine per untrusted-input element.

@@ -6,6 +6,10 @@ import (
 	"testing"
 )
 
+// fuzzSmallCap is the lowered bitmap cap [FuzzDecode] also decodes under. It
+// admits the 64x56 pages of the seeds.
+const fuzzSmallCap = 1 << 12
+
 // FuzzDecode feeds arbitrary page and global segment data to the decoder. The
 // contract is crash-freedom: every input either decodes to a bitmap whose
 // buffer matches its dimensions or returns an error.
@@ -56,7 +60,12 @@ func FuzzDecode(f *testing.F) {
 	f.Add([]byte{}, []byte{})
 
 	f.Fuzz(func(t *testing.T, data, globals []byte) {
-		bm, err := Decode(context.Background(), data, globals)
+		// A small cap takes the refusals a lowered image budget moves: whatever
+		// decodes under it stays inside it.
+		if small, err := Decode(context.Background(), data, globals, fuzzSmallCap); err == nil && int64(small.Width)*int64(small.Height) > fuzzSmallCap {
+			t.Fatalf("%dx%d page decoded under a %d-pixel cap", small.Width, small.Height, int64(fuzzSmallCap))
+		}
+		bm, err := Decode(context.Background(), data, globals, DefaultMaxBitmapPixels)
 		if err != nil {
 			return
 		}

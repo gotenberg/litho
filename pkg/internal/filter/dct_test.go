@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/filter/dct"
 )
 
 func TestDecodeDCT(t *testing.T) {
@@ -25,7 +26,7 @@ func TestDecodeDCT(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		got, err := decodeDCT(context.Background(), buf.Bytes(), nil, nil)
+		got, err := decodeDCT(context.Background(), buf.Bytes(), nil, nil, dct.DefaultMaxSamples)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -48,7 +49,7 @@ func TestDecodeDCT(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		got, err := decodeDCT(context.Background(), buf.Bytes(), nil, nil)
+		got, err := decodeDCT(context.Background(), buf.Bytes(), nil, nil, dct.DefaultMaxSamples)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -60,14 +61,14 @@ func TestDecodeDCT(t *testing.T) {
 	})
 
 	t.Run("empty input", func(t *testing.T) {
-		_, err := decodeDCT(context.Background(), nil, nil, nil)
+		_, err := decodeDCT(context.Background(), nil, nil, nil, dct.DefaultMaxSamples)
 		if err == nil {
 			t.Fatal("expected error for empty input")
 		}
 	})
 
 	t.Run("corrupt input", func(t *testing.T) {
-		_, err := decodeDCT(context.Background(), []byte{0xFF, 0xD8, 0x00, 0x01}, nil, nil)
+		_, err := decodeDCT(context.Background(), []byte{0xFF, 0xD8, 0x00, 0x01}, nil, nil, dct.DefaultMaxSamples)
 		if err == nil {
 			t.Fatal("expected error for corrupt JPEG")
 		}
@@ -86,7 +87,7 @@ func TestDecodeDCT(t *testing.T) {
 		parms := ast.PdfDict{
 			"ColorTransform": ast.PdfInt(1),
 		}
-		_, err := decodeDCT(context.Background(), buf.Bytes(), parms, nil)
+		_, err := decodeDCT(context.Background(), buf.Bytes(), parms, nil, dct.DefaultMaxSamples)
 		if err != nil {
 			t.Fatalf("unexpected error with DecodeParms: %v", err)
 		}
@@ -107,7 +108,7 @@ func TestDecodeDCT_CMYKAsStored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := decodeDCT(context.Background(), data, nil, nil)
+	got, err := decodeDCT(context.Background(), data, nil, nil, dct.DefaultMaxSamples)
 	if err != nil {
 		t.Fatalf("decodeDCT: %v", err)
 	}
@@ -152,7 +153,7 @@ func TestDecodeDCT_Lenient(t *testing.T) {
 
 	sos := bytes.Index(data, []byte{0xFF, 0xDA})
 	cut := data[:sos+(len(data)-sos)/2]
-	if got, err := decodeDCT(context.Background(), cut, nil, nil); err != nil || len(got) != 64*16*3 {
+	if got, err := decodeDCT(context.Background(), cut, nil, nil, dct.DefaultMaxSamples); err != nil || len(got) != 64*16*3 {
 		t.Errorf("truncated: %d bytes, %v; want %d", len(got), err, 64*16*3)
 	}
 
@@ -160,7 +161,7 @@ func TestDecodeDCT_Lenient(t *testing.T) {
 	sof := bytes.Index(tall, []byte{0xFF, 0xC0})
 	tall[sof+5], tall[sof+6] = 0xFF, 0xFF
 	dict := ast.PdfDict{"Height": ast.PdfInt(16)}
-	if got, err := decodeDCT(context.Background(), tall, nil, dict); err != nil || len(got) != 64*16*3 {
+	if got, err := decodeDCT(context.Background(), tall, nil, dict, dct.DefaultMaxSamples); err != nil || len(got) != 64*16*3 {
 		t.Errorf("placeholder height: %d bytes, %v; want %d", len(got), err, 64*16*3)
 	}
 }

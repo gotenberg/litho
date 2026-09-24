@@ -51,7 +51,7 @@ func jpxColorSpace(ctx context.Context, doc *document.Document, stream ast.PdfSt
 	if err != nil {
 		return jpxColour{}, fmt.Errorf("reading the JPEG 2000 data: %w", err)
 	}
-	img, err := jpx.Describe(data)
+	img, err := jpx.Describe(data, doc.Limits().ScaleImageCap(jpx.DefaultMaxSamples))
 	if err != nil {
 		return jpxColour{}, fmt.Errorf("reading the JPEG 2000 header: %w", err)
 	}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter/jbig2"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // decodeJBIG2 decodes a JBIG2Decode stream (ISO 32000-1, 7.4.7): the segments
@@ -24,21 +25,24 @@ import (
 // [ErrUnsupportedFilter], the way the pipeline expects of any filter it cannot
 // decode; malformed data is an error of its own.
 //
+// The bitmap cap scales with the image budget of lim, and the globals stream
+// decodes under its stream budget.
+//
 // # Corpus evidence
 //
 //   - pdfjs bitmap-template1.pdf: a DeviceGray JBIG2 image with no /Decode,
 //     whose foreground poppler draws dark at 158,888 of its 159,600 pixels,
 //     the rest being resampled edges.
-func decodeJBIG2(ctx context.Context, data []byte, parms ast.PdfDict) ([]byte, error) {
+func decodeJBIG2(ctx context.Context, data []byte, parms ast.PdfDict, lim limits.Limits) ([]byte, error) {
 	var globals []byte
 	if stream, ok := parms["JBIG2Globals"].(ast.PdfStream); ok {
-		decoded, err := DecodeStream(ctx, stream)
+		decoded, err := NewDecoder(nil, lim).DecodeStream(ctx, stream)
 		if err != nil {
 			return nil, fmt.Errorf("decoding JBIG2Globals: %w", err)
 		}
 		globals = decoded
 	}
-	bm, err := jbig2.Decode(ctx, data, globals)
+	bm, err := jbig2.Decode(ctx, data, globals, lim.ScaleImageCap(jbig2.DefaultMaxBitmapPixels))
 	if err != nil {
 		if errors.Is(err, jbig2.ErrUnsupported) {
 			return nil, fmt.Errorf("%w: JBIG2Decode: %w", ErrUnsupportedFilter, err)

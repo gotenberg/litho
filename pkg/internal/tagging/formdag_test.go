@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // formDAGPDF builds a page whose forms nest as a directed acyclic graph: each of
@@ -191,7 +192,7 @@ func TestFormPaintsText_DepthCappedAnswerNotMemoised(t *testing.T) {
 
 	// Starting past the cap answers false without looking, and says nothing
 	// about the form itself.
-	paints, complete := formPaintsText(ctx, doc, outer, make(map[int]bool), answers, maxTextScanDepth+1)
+	paints, complete := formPaintsText(ctx, doc, outer, make(map[int]bool), answers, limits.DefaultMaxFormDepth)
 	if paints || complete {
 		t.Errorf("beyond the depth cap: paints=%v complete=%v, want false and incomplete", paints, complete)
 	}

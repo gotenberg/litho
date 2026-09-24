@@ -106,7 +106,7 @@ func TestDecode_BrokenRow(t *testing.T) {
 func TestDecode_Limits(t *testing.T) {
 	t.Parallel()
 
-	for _, p := range []Params{{Columns: 0}, {Columns: maxColumns + 1}, {Columns: 8, Rows: maxOutput + 1}} {
+	for _, p := range []Params{{Columns: 0}, {Columns: maxColumns + 1}, {Columns: 8, Rows: defaultMaxOutput + 1}, {Columns: 8, Rows: 2, MaxOutput: 1}} {
 		if _, err := Decode(context.Background(), nil, p); !errors.Is(err, ErrLimit) {
 			t.Errorf("%+v: %v, want %v", p, err, ErrLimit)
 		}

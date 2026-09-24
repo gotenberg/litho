@@ -26,32 +26,6 @@ func fallbackFont() *Font {
 	}
 }
 
-// maxFormXObjectDepth is the maximum recursion depth for nested Form XObjects.
-// This prevents stack overflows and excessive processing time from deeply
-// nested XObjects in malformed PDFs. It is an anti-DoS guard, not
-// spec-mandated: ISO 32000-1, 8.10 puts no limit on nesting.
-//
-// It bounds the invocation chain only. A cycle is broken by the visited set
-// [extractTextRecursive] carries down the chain, not by this cap. Text in a
-// form nested deeper than ten is not extracted. Real documents nest far
-// shallower: a form invoking a form is already uncommon.
-//
-// The same name in package compliance is a separate constant with the same
-// value, bounding the validation walks. maxTextScanDepth in package tagging
-// matches this one, so a form too deep for the tagging scan is too deep for
-// extraction too. maxXObjectDepth in package graphics/image allows 16, so an
-// image listing reaches forms nested 11 to 16 deep whose text this walk skips.
-//
-// # Corpus evidence
-//
-//   - All corpora: of the 5157 files whose text extraction runs, 1315 invoke
-//     a form and 47 a form inside a form. Outside two veraPDF q/Q nesting
-//     fixtures the deepest chain is 4 (pdfjs issue14562.pdf).
-//   - verapdf PDF_A-1b__veraPDF_test_suite_6-1-12-t08-pass-c.pdf: the only
-//     file the cap cuts short, a chain of 33 forms whose innermost form paints
-//     a rectangle and no text. Its sibling pass-a.pdf nests 9 deep.
-const maxFormXObjectDepth = 10
-
 // collectAnnotAppearanceObjects returns the set of object numbers referenced by
 // annotation appearance streams (/AP) on this page. These streams render visual
 // overlays (stamps, widgets, markup) and are excluded from text extraction to
@@ -115,8 +89,11 @@ func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, 
 // extractTextRecursive recursively extracts text from operations, supporting
 // Form XObjects. The visited set tracks indirect reference object numbers to
 // break circular references, and depth guards against non-circular but
-// excessively deep nesting. annotAppearances contains object numbers of
-// annotation appearance streams to skip.
+// excessively deep nesting: it is how many forms the operations sit below the
+// page, 0 for the page's own, and a form deeper than the document's form
+// budget (limits.DefaultMaxFormDepth by default) has no text extracted.
+// annotAppearances contains object numbers of annotation appearance streams to
+// skip.
 //
 // It is a thin dispatcher: the actual per-operator work lives in per-operator
 // helpers ([handleTfOp], [handleShowTextOp], [handleTJOp], [handleDoOp]) so
@@ -126,7 +103,7 @@ func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, 
 // When origins is non-nil, one entry is appended to it per element appended to
 // elements, naming the index in ops of the operation that drew it.
 func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, origins *[]int, fontRefs *[]int) error {
-	if depth > maxFormXObjectDepth {
+	if depth > doc.Limits().MaxFormDepth {
 		if doc != nil {
 			doc.Logger.Debug("form xobject max depth reached",
 				slog.Int("depth", depth),

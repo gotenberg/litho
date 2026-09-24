@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
+	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // LinearizationParams holds the parameters extracted from a Linearization
@@ -153,8 +154,9 @@ func probeLinearization(r io.ReaderAt, fileSize, headerOffset int64) *Linearizat
 const minBytesPerPage = 20
 
 // parseHintStream reads and decodes the primary hint stream, then extracts the
-// Page Offset Hint Table entries.
-func parseHintStream(r io.ReaderAt, size int64, params *LinearizationParams) ([]PageOffsetEntry, error) {
+// Page Offset Hint Table entries. limit is the stream budget the decoded hint
+// stream must stay within.
+func parseHintStream(r io.ReaderAt, size int64, params *LinearizationParams, limit int64) ([]PageOffsetEntry, error) {
 	if params.HintStreamOffset <= 0 || params.HintStreamLength <= 0 {
 		return nil, fmt.Errorf("invalid hint stream offsets")
 	}
@@ -173,7 +175,7 @@ func parseHintStream(r io.ReaderAt, size int64, params *LinearizationParams) ([]
 	}
 
 	// Decode the stream data (may be FlateDecode compressed).
-	decoded, err := decodeHintStreamData(context.Background(), stream)
+	decoded, err := decodeHintStreamData(context.Background(), stream, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode hint stream: %w", err)
 	}
@@ -294,8 +296,9 @@ func parsePageOffsetTable(data []byte, numPages int) ([]PageOffsetEntry, error) 
 	return entries, nil
 }
 
-// decodeHintStreamData decodes the hint stream, handling FlateDecode.
-func decodeHintStreamData(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
+// decodeHintStreamData decodes the hint stream, handling FlateDecode, within
+// limit bytes.
+func decodeHintStreamData(ctx context.Context, stream ast.PdfStream, limit int64) ([]byte, error) {
 	filterObj, hasFilter := stream.Dict["Filter"]
 	if !hasFilter {
 		return stream.Bytes(ctx)
@@ -320,42 +323,30 @@ func decodeHintStreamData(ctx context.Context, stream ast.PdfStream) ([]byte, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to read hint stream data: %w", err)
 	}
-	return decompressFlate(data)
+	return decompressFlate(data, limit)
 }
 
-// maxHintStreamSize bounds the decoded primary hint stream. It is an anti-DoS
-// guard, not spec-mandated: ISO 32000-1, Annex F puts no bound on the hint
-// stream, and a few kilobytes of FlateDecode data can expand into gigabytes.
-//
-// It is the same limit as maxDecompressedSize in package filter, the cap on
-// one decompression filter's output, and holds the same value. It is defined
-// here because [decompressFlate] decodes the hint stream with its own zlib
-// reader rather than through the filter package, so that cap never sees it.
-//
-// A hint table costs a few bits per page and per shared object, so the limit
-// sits orders of magnitude above any hint stream a real document carries.
-//
-// # Corpus evidence
-//
-//   - All corpora: 849 files carry a hint stream, and the largest FlateDecode
-//     one decodes to 51,715 bytes (pdfjs bug810214.pdf).
-const maxHintStreamSize = 256 << 20 // 256 MB
-
-// decompressFlate decompresses FlateDecode (zlib) data.
-func decompressFlate(data []byte) ([]byte, error) {
+// decompressFlate decompresses FlateDecode (zlib) data of at most limit bytes.
+// The hint stream is decoded with this zlib reader rather than through the
+// filter package, so the stream budget is applied here: ISO 32000-1, Annex F
+// puts no bound on the hint stream, and a few kilobytes of FlateDecode data
+// can expand into gigabytes (see limits.DefaultMaxStreamBytes). A hint table
+// costs a few bits per page and per shared object, so the budget sits orders
+// of magnitude above any hint stream a real document carries.
+func decompressFlate(data []byte, limit int64) ([]byte, error) {
 	r, err := zlib.NewReader(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
 
 	var buf bytes.Buffer
-	limited := io.LimitReader(r, maxHintStreamSize+1)
+	limited := io.LimitReader(r, limit+1)
 	_, copyErr := io.Copy(&buf, limited)
 	if closeErr := r.Close(); closeErr != nil {
 		return nil, fmt.Errorf("failed to close zlib reader: %w", closeErr)
 	}
-	if buf.Len() > maxHintStreamSize {
-		return nil, fmt.Errorf("decompressed hint stream exceeds %d MB limit", maxHintStreamSize>>20)
+	if int64(buf.Len()) > limit {
+		return nil, fmt.Errorf("decompressed hint stream exceeds %d bytes: %w", limit, filter.ErrDecompressionBomb)
 	}
 	if copyErr != nil && copyErr != io.EOF && copyErr != io.ErrUnexpectedEOF {
 		return nil, copyErr

@@ -49,7 +49,7 @@ func TestParseXRefStream_Basic(t *testing.T) {
 	}, data)
 
 	indexMap := make(map[int]XRefEntry)
-	prev, err := ParseXRefStream(context.Background(), stream, indexMap)
+	prev, err := ParseXRefStream(context.Background(), stream, indexMap, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestParseXRefStream_WithPrev(t *testing.T) {
 	}, data)
 
 	indexMap := make(map[int]XRefEntry)
-	prev, err := ParseXRefStream(context.Background(), stream, indexMap)
+	prev, err := ParseXRefStream(context.Background(), stream, indexMap, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestParseXRefStream_WithIndex(t *testing.T) {
 	}, data)
 
 	indexMap := make(map[int]XRefEntry)
-	_, err := ParseXRefStream(context.Background(), stream, indexMap)
+	_, err := ParseXRefStream(context.Background(), stream, indexMap, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestParseXRefStream_NoOverwrite(t *testing.T) {
 	indexMap := map[int]XRefEntry{
 		0: {Offset: 999, Type: 1},
 	}
-	_, err := ParseXRefStream(context.Background(), stream, indexMap)
+	_, err := ParseXRefStream(context.Background(), stream, indexMap, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestParseXRefStream_MissingW(t *testing.T) {
 	stream := ast.NewStream(ast.PdfDict{
 		"Size": ast.PdfInt(1),
 	}, []byte{0x01, 0x00, 0x0A, 0x00})
-	_, err := ParseXRefStream(context.Background(), stream, make(map[int]XRefEntry))
+	_, err := ParseXRefStream(context.Background(), stream, make(map[int]XRefEntry), nil)
 	if err == nil {
 		t.Error("expected error for missing /W")
 	}
@@ -165,7 +165,7 @@ func TestParseXRefStream_MissingSize(t *testing.T) {
 	stream := ast.NewStream(ast.PdfDict{
 		"W": ast.PdfArray{ast.PdfInt(1), ast.PdfInt(2), ast.PdfInt(1)},
 	}, []byte{})
-	_, err := ParseXRefStream(context.Background(), stream, make(map[int]XRefEntry))
+	_, err := ParseXRefStream(context.Background(), stream, make(map[int]XRefEntry), nil)
 	if err == nil {
 		t.Error("expected error for missing /Size")
 	}

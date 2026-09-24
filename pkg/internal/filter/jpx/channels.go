@@ -190,7 +190,7 @@ func (img *Image) Render(ctx context.Context, chs []Channel, conv func(v int32, 
 	if n == 0 {
 		return nil, fmt.Errorf("%w: no channel to render", ErrMalformed)
 	}
-	if w > maxSamples || h > maxSamples || w*h > maxSamples/n {
+	if limit := img.maxSamples; int64(w) > limit || int64(h) > limit || int64(w)*int64(h) > limit/int64(n) {
 		return nil, fmt.Errorf("%w: %dx%d grid points of %d channels", ErrLimit, w, h, n)
 	}
 	for i, ch := range chs {

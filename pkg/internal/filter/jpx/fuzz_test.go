@@ -9,6 +9,9 @@ import (
 	"testing"
 )
 
+// fuzzSmallSamples is the lowered sample cap [FuzzDecode] also decodes under.
+const fuzzSmallSamples = 1 << 12
+
 // FuzzDecode feeds arbitrary data to the decoder, then renders every channel
 // of what it decodes, as the JPXDecode filter does. The contract is
 // crash-freedom: every input either decodes to components whose sample planes
@@ -40,7 +43,20 @@ func FuzzDecode(f *testing.F) {
 		}
 	}
 	f.Fuzz(func(t *testing.T, data []byte) {
-		img, err := Decode(context.Background(), data)
+		// A small cap takes the refusals a lowered image budget moves: what
+		// decodes under it holds no more samples than it allows.
+		if small, err := Decode(context.Background(), data, fuzzSmallSamples); err != nil {
+			sentinel(t, err)
+		} else {
+			var n int64
+			for _, c := range small.Components {
+				n += int64(len(c.Samples))
+			}
+			if n > fuzzSmallSamples {
+				t.Fatalf("%d samples decoded under a %d-sample cap", n, int64(fuzzSmallSamples))
+			}
+		}
+		img, err := Decode(context.Background(), data, DefaultMaxSamples)
 		if err != nil {
 			sentinel(t, err)
 			return

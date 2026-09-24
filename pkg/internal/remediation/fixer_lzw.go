@@ -110,7 +110,7 @@ func fixLZW(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 		}
 
 		if !isLZW {
-			if desc := fixFilterNameCase(ctx, alloc, objNum, stream, filterObj); desc != "" {
+			if desc := fixFilterNameCase(ctx, alloc, doc, objNum, stream, filterObj); desc != "" {
 				renamed[objNum] = desc
 			}
 			continue
@@ -210,7 +210,7 @@ func canonicalFilterSpelling(name ast.PdfName) (ast.PdfName, bool) {
 //     for /Flatedecode with the raw 37 bytes untouched, byte for byte.
 //   - All corpora: no file carries a case-misspelled name inside a /Filter
 //     array, so the gate could not falsify an array repair.
-func fixFilterNameCase(ctx context.Context, alloc *writer.ObjAllocator, objNum int, stream ast.PdfStream, filterObj ast.PdfObject) string {
+func fixFilterNameCase(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, objNum int, stream ast.PdfStream, filterObj ast.PdfObject) string {
 	name, ok := filterObj.(ast.PdfName)
 	if !ok {
 		return ""
@@ -226,7 +226,9 @@ func fixFilterNameCase(ctx context.Context, alloc *writer.ObjAllocator, objNum i
 
 	// The raw bytes carry across unchanged, so /Length stays correct.
 	candidate := ast.NewLazyStream(newDict, stream.Bytes)
-	if _, incomplete, err := filter.DecodeStreamChecked(ctx, candidate); err != nil || incomplete {
+	// The built-in decoders under the document's budgets: the proof is that
+	// litho decodes the canonical name, not that a plugin claims it.
+	if _, incomplete, err := filter.NewDecoder(nil, doc.Limits()).DecodeStreamChecked(ctx, candidate); err != nil || incomplete {
 		return ""
 	}
 

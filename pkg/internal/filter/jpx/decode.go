@@ -6,20 +6,23 @@ import (
 	"math"
 )
 
-// maxSamples bounds the samples an image holds, summed over its components,
-// and the values one Render call returns, one per channel per grid point. It
-// is an anti-DoS guard, not spec-mandated: a codestream of a few hundred bytes
-// can describe a huge flat image, or components so unevenly subsampled that
-// the default grid dwarfs them, and every sample costs decoding time. 2^27
-// admits the largest image real documents carry and a 400 dpi A3 page in
-// colour. It is below maxImageBytes in graphics/image, 400 million one-byte
-// samples, because Decode holds each sample in four bytes.
+// DefaultMaxSamples bounds the samples an image holds, summed over its
+// components, and the values one Render call returns, one per channel per grid
+// point, under the default image budget. It is an anti-DoS guard, not
+// spec-mandated: a codestream of a few hundred bytes can describe a huge flat
+// image, or components so unevenly subsampled that the default grid dwarfs
+// them, and every sample costs decoding time. 2^27 admits the largest image
+// real documents carry and a 400 dpi A3 page in colour. It is below the image
+// decoder's four bytes a pixel of the default budget, 400 million one-byte
+// samples, because Decode holds each sample in four bytes. [Describe] and
+// [Decode] take the cap scaled with the document's image budget
+// (limits.Limits.ScaleImageCap).
 //
 // # Corpus evidence
 //
 //   - All corpora: the largest image decoded, 6642x5338 in three components,
 //     holds 106 million samples.
-const maxSamples = 1 << 27
+const DefaultMaxSamples = 1 << 27
 
 // maxSampleBits is the deepest component this package returns: samples are
 // int32. It is an implementation limit, not spec-mandated; T.800, Table A.11
@@ -42,6 +45,9 @@ type Image struct {
 	cs      *codestream
 	// x0, y0, x1 and y1 bound the image area on the reference grid (B.2).
 	x0, y0, x1, y1 int
+	// maxSamples is the cap [Describe] was given, which [Image.Render]
+	// applies to its grid too.
+	maxSamples int64
 }
 
 // Component is one decoded component (T.800, B.2): Width x Height samples in
@@ -58,11 +64,11 @@ type Component struct {
 }
 
 // Decode decodes a JP2 file, or a bare codestream, and returns its image with
-// every component's samples.
+// every component's samples. maxSamples caps them as [Describe] says.
 //
 // Decode is safe for concurrent use: it keeps no state between calls.
-func Decode(ctx context.Context, data []byte) (*Image, error) {
-	img, err := Describe(data)
+func Decode(ctx context.Context, data []byte, maxSamples int64) (*Image, error) {
+	img, err := Describe(data, maxSamples)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +90,12 @@ func Decode(ctx context.Context, data []byte) (*Image, error) {
 // samples. The image it returns has components whose Samples are nil, and the
 // colour specification and channels [Decode] would give; [Image.Render]
 // decodes it.
-func Describe(data []byte) (*Image, error) {
+//
+// maxSamples caps the samples of the image, summed over its components, and
+// the values [Image.Render] returns; [DefaultMaxSamples] is the cap of the
+// default image budget. An image past it fails with [ErrLimit] before any
+// sample is allocated.
+func Describe(data []byte, maxSamples int64) (*Image, error) {
 	stream, hdr, err := readFile(data)
 	if err != nil {
 		return nil, err
@@ -93,7 +104,7 @@ func Describe(data []byte) (*Image, error) {
 	if err != nil {
 		return nil, err
 	}
-	img, err := newImage(cs)
+	img, err := newImage(cs, maxSamples)
 	if err != nil {
 		return nil, err
 	}
@@ -106,9 +117,9 @@ func Describe(data []byte) (*Image, error) {
 
 // newImage lays out the components of the image area (T.800, B-1 and B-2),
 // checking their samples against maxSamples before any are allocated.
-func newImage(cs *codestream) (*Image, error) {
-	img := &Image{Components: make([]Component, len(cs.components)), x0: cs.x0, y0: cs.y0, x1: cs.x1, y1: cs.y1}
-	total := 0
+func newImage(cs *codestream, maxSamples int64) (*Image, error) {
+	img := &Image{Components: make([]Component, len(cs.components)), x0: cs.x0, y0: cs.y0, x1: cs.x1, y1: cs.y1, maxSamples: maxSamples}
+	var total int64
 	for i, comp := range cs.components {
 		if comp.precision > maxSampleBits {
 			return nil, fmt.Errorf("%w: component %d is %d bits deep", ErrUnsupported, i, comp.precision)
@@ -117,10 +128,11 @@ func newImage(cs *codestream) (*Image, error) {
 		c.Precision, c.Signed, c.DX, c.DY = comp.precision, comp.signed, comp.dx, comp.dy
 		c.x0, c.y0 = ceilDiv(cs.x0, comp.dx), ceilDiv(cs.y0, comp.dy)
 		c.Width, c.Height = ceilDiv(cs.x1, comp.dx)-c.x0, ceilDiv(cs.y1, comp.dy)-c.y0
-		if c.Width > maxSamples || c.Height > maxSamples || total+c.Width*c.Height > maxSamples {
+		w, h := int64(c.Width), int64(c.Height)
+		if w > maxSamples || h > maxSamples || total+w*h > maxSamples {
 			return nil, fmt.Errorf("%w: image of more than %d samples", ErrLimit, maxSamples)
 		}
-		total += c.Width * c.Height
+		total += w * h
 	}
 	return img, nil
 }

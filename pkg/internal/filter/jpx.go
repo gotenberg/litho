@@ -19,8 +19,11 @@ import (
 // Opacity channels are left out: ISO 32000-1, 7.4.9 matches the colour
 // channels, not the channels, to the components of the colour space, and a
 // soft mask carried in the data (SMaskInData) is a separate image.
-func decodeJPX(ctx context.Context, data []byte, dict ast.PdfDict) ([]byte, error) {
-	img, err := jpx.Describe(data)
+//
+// maxSamples caps the samples of the image and of its rendered grid, scaled
+// from the image budget.
+func decodeJPX(ctx context.Context, data []byte, dict ast.PdfDict, maxSamples int64) ([]byte, error) {
+	img, err := jpx.Describe(data, maxSamples)
 	if err != nil {
 		return nil, jpxError(err)
 	}

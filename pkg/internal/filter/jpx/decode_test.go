@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"os"
 	"slices"
 	"strconv"
@@ -16,7 +17,7 @@ import (
 func TestDecode_AnnexJ10(t *testing.T) {
 	t.Parallel()
 
-	img, err := Decode(context.Background(), annexJ10)
+	img, err := Decode(context.Background(), annexJ10, DefaultMaxSamples)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
@@ -123,7 +124,7 @@ func TestDecode_Lossless(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			img, err := Decode(context.Background(), data)
+			img, err := Decode(context.Background(), data, DefaultMaxSamples)
 			if err != nil {
 				t.Fatalf("Decode: %v", err)
 			}
@@ -168,7 +169,7 @@ func TestDecode_Irreversible(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	img, err := Decode(context.Background(), data)
+	img, err := Decode(context.Background(), data, DefaultMaxSamples)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
@@ -203,7 +204,7 @@ func TestDecode_ReversibleLossy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	img, err := Decode(context.Background(), data)
+	img, err := Decode(context.Background(), data, DefaultMaxSamples)
 	if err != nil {
 		t.Fatalf("Decode: %v", err)
 	}
@@ -216,5 +217,35 @@ func TestDecode_ReversibleLossy(t *testing.T) {
 		if differing(img.Components[c].Samples, src[c]) == 0 {
 			t.Errorf("component %d decodes losslessly, so the test reaches no truncated code-block", c)
 		}
+	}
+}
+
+// TestDescribe_CapScales pins that the cap Describe is given bounds the image
+// and its rendered grid: the J.10 codestream describes under a cap of exactly
+// its samples and is refused under one sample less.
+func TestDescribe_CapScales(t *testing.T) {
+	t.Parallel()
+
+	img, err := Describe(annexJ10, DefaultMaxSamples)
+	if err != nil {
+		t.Fatalf("Describe: %v", err)
+	}
+	var samples int64
+	for _, c := range img.Components {
+		samples += int64(c.Width) * int64(c.Height)
+	}
+	exact, err := Describe(annexJ10, samples)
+	if err != nil {
+		t.Fatalf("Describe under a cap of its %d samples: %v", samples, err)
+	}
+	chs, err := exact.Channels()
+	if err != nil {
+		t.Fatalf("Channels: %v", err)
+	}
+	if _, err := exact.Render(context.Background(), chs[:1], func(v int32, _ int, _ bool) byte { return byte(v) }); err != nil {
+		t.Errorf("Render one channel under a cap of its %d samples: %v", samples, err)
+	}
+	if _, err := Describe(annexJ10, samples-1); !errors.Is(err, ErrLimit) {
+		t.Errorf("Describe under a cap one sample short: err = %v, want ErrLimit", err)
 	}
 }

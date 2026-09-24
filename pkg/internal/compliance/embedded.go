@@ -753,29 +753,6 @@ type embeddedDepthKey struct{}
 //     so the deepest nesting is 1.
 const maxEmbeddedDepth = 2
 
-// maxEmbeddedFileSize is the maximum size of a decoded embedded PDF that will
-// be validated. A larger embedded PDF is not validated and raises no
-// violation, so a crafted attachment cannot make validation hold a huge
-// document in memory and parse it. Anti-DoS guard, not spec-mandated: ISO
-// 32000-1, 7.11.4 puts no bound on an embedded file stream.
-//
-// The cap does not spare a large file that is not a PDF: its header decides
-// that, and [readEmbeddedFile] reads only the header to find out.
-//
-// 50 MB leaves better than nine times the largest embedded file in real
-// documents, and better than sixty times the largest embedded PDF.
-//
-// # Corpus evidence
-//
-//   - All corpora: 275 files embed 552 files, the largest 5,599,569 bytes
-//     and not a PDF (verapdf PDF_A-4__veraPDF_test_suite_6-3-1-t01-fail-e.pdf
-//     and three PDF_A-4e siblings).
-//   - facturx xmlrechnung__FX_EN16931_Elektron.pdf,
-//     xmlrechnung__FX_XRECHNUNG_Elektron.pdf and
-//     v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Elektron.pdf: the
-//     largest embedded PDF, 843,023 bytes.
-const maxEmbeddedFileSize = 50 * 1024 * 1024
-
 // embeddedHeaderScanLen is how many leading bytes of an embedded file are
 // searched for the "%PDF-" header. ISO 32000-1, 7.5.2 puts the header on the
 // first line; the window is the one document.NewDocument scans
@@ -857,9 +834,13 @@ func copyEmbedded(ctx context.Context, buf *bytes.Buffer, r io.Reader, n int64, 
 // comply with 19005-1 or -2). rule selects the violation and accepted
 // lists the profiles whose pass clears a file.
 //
-// Safety limits prevent abuse: [maxEmbeddedFileSize] per file,
-// [maxEmbeddedDepth] levels of nesting, and context cancellation is checked
-// per file.
+// Safety limits prevent abuse: the document's embedded-file budget
+// (limits.Limits.MaxEmbeddedFileBytes) per file, [maxEmbeddedDepth] levels
+// of nesting, and context cancellation is checked per file. A larger embedded
+// PDF is not validated and raises no violation, so a crafted attachment cannot
+// make validation hold a huge document in memory and parse it; the budget
+// does not spare a large file that is not a PDF, since [readEmbeddedFile]
+// judges that from its header alone.
 func checkEmbeddedFileCompliance(ctx context.Context, doc *document.Document, fileSpecs []fileSpecEntry, rule Rule, accepted []models.PDFAProfile) []Violation {
 	if len(fileSpecs) == 0 {
 		return nil
@@ -926,7 +907,8 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 			"object", fs.objNum, "error", err)
 		return nil
 	}
-	data, isPDF, tooLarge, err := readEmbeddedFile(ctx, rc, maxEmbeddedFileSize, doc.Logger)
+	lim := doc.Limits()
+	data, isPDF, tooLarge, err := readEmbeddedFile(ctx, rc, lim.MaxEmbeddedFileBytes, doc.Logger)
 	if closeErr := rc.Close(); closeErr != nil {
 		doc.Logger.Debug("compliance.embedded: closing embedded stream",
 			"object", fs.objNum, "error", closeErr)
@@ -946,15 +928,17 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 	}
 	if tooLarge {
 		doc.Logger.Debug("compliance.embedded: embedded PDF too large, skipping",
-			"object", fs.objNum, "limit", maxEmbeddedFileSize)
+			"object", fs.objNum, "limit", lim.MaxEmbeddedFileBytes)
 		return nil
 	}
 
 	doc.Logger.Debug("compliance.embedded: validating embedded PDF",
 		"object", fs.objNum, "size", len(data))
 
-	// Parse the embedded PDF.
-	embDoc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	// Parse the embedded PDF under the budgets of the document that carries
+	// it: a caller who lowered them for the outer file meant them for what it
+	// embeds too.
+	embDoc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, document.WithLimits(lim))
 	if err != nil {
 		doc.Logger.Debug("compliance.embedded: cannot parse embedded PDF",
 			"object", fs.objNum, "error", err)
