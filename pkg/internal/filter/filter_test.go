@@ -533,6 +533,30 @@ func TestExtractDecodeParms_Array(t *testing.T) {
 	}
 }
 
+// TestExtractDecodeParms_ArrayUnderSingleFilter ignores an array of
+// parameters under the single filter of an image, which ISO 32000-1, Table 5
+// gives a dictionary, and keeps it for any other stream and under a filter
+// array.
+func TestExtractDecodeParms_ArrayUnderSingleFilter(t *testing.T) {
+	dict := ast.PdfDict{
+		"Subtype":     ast.PdfName("Image"),
+		"Filter":      ast.PdfName("FlateDecode"),
+		"DecodeParms": ast.PdfArray{ast.PdfDict{"Predictor": ast.PdfInt(15)}},
+	}
+	if result := extractDecodeParms(dict, 1); result[0] != nil {
+		t.Errorf("image: parms = %v, want none", result[0])
+	}
+	dict["Filter"] = ast.PdfArray{ast.PdfName("FlateDecode")}
+	if result := extractDecodeParms(dict, 1); result[0] == nil {
+		t.Error("image under a one-filter array: lost its parameters")
+	}
+	dict["Filter"] = ast.PdfName("FlateDecode")
+	delete(dict, "Subtype")
+	if result := extractDecodeParms(dict, 1); result[0] == nil {
+		t.Error("xref-like stream: lost its parameters")
+	}
+}
+
 func TestExtractDecodeParms_Missing(t *testing.T) {
 	dict := ast.PdfDict{}
 	result := extractDecodeParms(dict, 2)

@@ -219,6 +219,17 @@ func extractDecodeParms(dict ast.PdfDict, numFilters int) []ast.PdfDict {
 			result[0] = dp
 		}
 	case ast.PdfArray:
+		// ISO 32000-1, Table 5 gives a single filter a parameter dictionary and
+		// an array of them only to a filter array. PDF.js and qpdf ignore an
+		// array under a single filter, and pdfjs issue8895.pdf shows why: its
+		// one FlateDecode image states [<< /Predictor 15 ... >>] over samples
+		// with no predictor bytes, and applying the entry scrambled the rows.
+		// Only an image follows them: there a wrong reading costs a picture,
+		// while on an xref or object stream it would cost the document, so
+		// those keep reading the array leniently.
+		if _, single := dict["Filter"].(ast.PdfName); single && dict["Subtype"] == ast.PdfName("Image") {
+			return result
+		}
 		for i, item := range dp {
 			if i >= numFilters {
 				break
