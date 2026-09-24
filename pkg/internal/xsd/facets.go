@@ -56,7 +56,19 @@ func ValidateValue(value string, t Type) []FacetViolation {
 		out = append(out, *v)
 	}
 	for _, step := range steps {
+		patternsDone := false
 		for _, f := range step {
+			if _, isPattern := f.(Pattern); isPattern {
+				// The patterns of a step are alternatives, checked
+				// together where the first one appears.
+				if !patternsDone {
+					patternsDone = true
+					if v := validatePatterns(normalized, step); v != nil {
+						out = append(out, *v)
+					}
+				}
+				continue
+			}
 			if v := applyFacet(normalized, f, base); v != nil {
 				out = append(out, *v)
 			}
@@ -184,13 +196,11 @@ func whitespaceCollapse(v string) string {
 
 // applyFacet dispatches to the per-kind validator. Unknown facet
 // kinds return nil so the engine remains forward-compatible with
-// future facet additions. WhiteSpace and Enumeration return nil too:
-// [ValidateValue] applies them across a whole chain.
+// future facet additions. WhiteSpace, Enumeration and Pattern return
+// nil too: [ValidateValue] applies them across a whole chain or step.
 func applyFacet(value string, f Facet, base *BuiltinType) *FacetViolation {
 	switch fc := f.(type) {
-	case Pattern:
-		return validatePattern(value, fc)
-	case WhiteSpace, Enumeration:
+	case WhiteSpace, Enumeration, Pattern:
 		return nil
 	case Length:
 		return validateExactLength(value, fc.Value, f)
@@ -222,38 +232,60 @@ func applyFacet(value string, f Facet, base *BuiltinType) *FacetViolation {
 //nolint:gochecknoglobals // process-wide compile cache.
 var patternCache sync.Map // map[string]*regexp.Regexp
 
-// validatePattern applies XML Schema Part 2, 4.3.4.4: a literal is
-// facet-valid when it is among the strings the regular expression denotes.
-//
-// TODO: 4.3.4.3 ORs the patterns of one derivation step ("combined as if
-// they appeared in a single regular expression as separate branches") and
-// ANDs only those of different steps. Every Pattern is checked on its own
-// here, so a value matching one of two same-step patterns is reported.
-func validatePattern(value string, fc Pattern) *FacetViolation {
-	re := patternFor(fc.Value)
-	if re == nil {
-		// Treat an uncompilable pattern as a permissive match. A real
-		// XSD validator would reject the schema; the loader has no
-		// regex compile step, so the cost surfaces here and the
-		// validator errs on the side of false negatives rather than
-		// runtime panics.
-		//
-		// Deliberate leniency: 4.3.4.2 requires {value} to be a valid
-		// regular expression. Go's RE2 syntax is not the Appendix F
-		// dialect either, so the escapes \i and \c and block escapes such
-		// as \p{IsBasicLatin} fail to compile and land here. Character
-		// class subtraction compiles with another meaning: [a-z-[aeiou]]
-		// matches "a]" and rejects "b".
-		return nil
+// validatePatterns applies the patterns of one derivation step, the
+// facets of step that are a [Pattern]. Per XML Schema Part 2, 4.3.4.3 they
+// combine "as if they appeared in a single regular expression as separate
+// branches", so a literal is facet-valid (4.3.4.4) when it matches any one
+// of them. The patterns of different steps each constrain the literal, as
+// the note to 4.3.4.3 states: [ValidateValue] calls here once per step.
+func validatePatterns(value string, step []Facet) *FacetViolation {
+	var first Pattern
+	var sources []string
+	for _, f := range step {
+		p, ok := f.(Pattern)
+		if !ok {
+			continue
+		}
+		re := patternFor(p.Value)
+		if re == nil {
+			// Treat an uncompilable pattern as a permissive match: the
+			// step's verdict is unknown once one of its branches is. A
+			// real XSD validator would reject the schema; the loader has
+			// no regex compile step, so the cost surfaces here and the
+			// validator errs on the side of false negatives rather than
+			// runtime panics.
+			//
+			// Deliberate leniency: 4.3.4.2 requires {value} to be a valid
+			// regular expression. Go's RE2 syntax is not the Appendix F
+			// dialect either, so the escapes \i and \c and block escapes
+			// such as \p{IsBasicLatin} fail to compile and land here.
+			// Character class subtraction compiles with another meaning:
+			// [a-z-[aeiou]] matches "a]" and rejects "b".
+			return nil
+		}
+		if re.MatchString(value) {
+			return nil
+		}
+		if len(sources) == 0 {
+			first = p
+		}
+		sources = append(sources, p.Value)
 	}
-	if !re.MatchString(value) {
+	switch len(sources) {
+	case 0:
+		return nil
+	case 1:
 		return &FacetViolation{
-			Facet:  fc,
+			Facet:  first,
 			Value:  value,
-			Reason: fmt.Sprintf("does not match pattern %q", fc.Value),
+			Reason: fmt.Sprintf("does not match pattern %q", first.Value),
 		}
 	}
-	return nil
+	return &FacetViolation{
+		Facet:  first,
+		Value:  value,
+		Reason: fmt.Sprintf("does not match any of patterns %q", sources),
+	}
 }
 
 func patternFor(raw string) *regexp.Regexp {

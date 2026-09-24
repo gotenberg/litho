@@ -50,6 +50,65 @@ func TestValidateValue_EnumerationFacet(t *testing.T) {
 	}
 }
 
+// TestValidateValue_PatternsPerStep pins XML Schema Part 2, 4.3.4.3: the
+// patterns of one derivation step are ORed, as branches of one regular
+// expression, and the patterns of different steps are ANDed. Before, every
+// pattern was checked on its own, so a value matching one of two same-step
+// patterns was reported.
+func TestValidateValue_PatternsPerStep(t *testing.T) {
+	t.Parallel()
+
+	// One step, two alternatives: a 3-letter code or a 3-digit code.
+	code := &SimpleType{
+		Name:   QName{Namespace: "urn:t", Local: "Code"},
+		Base:   builtin("token"),
+		Facets: []Facet{Pattern{Value: "[A-Z]{3}"}, Pattern{Value: "[0-9]{3}"}},
+	}
+	// A second step narrows the first: letters must start with E.
+	euroCode := &SimpleType{
+		Name:   QName{Namespace: "urn:t", Local: "EuroCode"},
+		Base:   code,
+		Facets: []Facet{Pattern{Value: "E.*"}},
+	}
+	// A step whose patterns sit around another facet still ORs them.
+	split := &SimpleType{
+		Base: builtin("string"),
+		Facets: []Facet{
+			Pattern{Value: "a+"},
+			MaxLength{Value: 4},
+			Pattern{Value: "b+"},
+		},
+	}
+
+	tests := []struct {
+		name  string
+		t     Type
+		value string
+		want  int
+	}{
+		{"same step: first alternative", code, "EUR", 0},
+		{"same step: second alternative", code, "978", 0},
+		{"same step: neither alternative", code, "EU1", 1},
+		{"across steps: both hold", euroCode, "EUR", 0},
+		{"across steps: base holds, derived fails", euroCode, "USD", 1},
+		{"across steps: derived holds, base fails", euroCode, "E1", 1},
+		{"across steps: both fail", euroCode, "x", 2},
+		{"alternatives around another facet: second", split, "bbb", 0},
+		{"alternatives around another facet: neither", split, "abab", 1},
+		{"alternatives around another facet: length too", split, "ccccc", 2},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := ValidateValue(tc.value, tc.t)
+			if len(got) != tc.want {
+				t.Errorf("ValidateValue(%q) = %v, want %d violation(s)", tc.value, got, tc.want)
+			}
+		})
+	}
+}
+
 // TestValidateValue_EnumerationMostDerivedStep pins XML Schema Part 2, 4.3.5:
 // a derived step that enumerates a subset of its base's values restricts the
 // type to that subset. Before, every step's values joined one set, so a
