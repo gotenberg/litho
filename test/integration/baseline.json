@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-09-24T08:10:23Z",
+  "captured_at": "2026-09-24T08:33:05Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -229,12 +229,12 @@
     "pdfjs": {
       "features": {
         "imagedecode": {
-          "matched": 327,
-          "mismatched": 33,
+          "matched": 328,
+          "mismatched": 32,
           "skipped": 831,
           "metrics": {
-            "decode_failed": 45,
-            "images_match": 3947
+            "decode_failed": 41,
+            "images_match": 3951
           }
         },
         "merge-catalog": {
