@@ -127,8 +127,11 @@ func TestParseArray_ClosedByEndobj(t *testing.T) {
 	}
 }
 
+// TestParseDict_NullByteInName locks that a NUL ends a dictionary key: ISO
+// 32000-1, 7.2.2, Table 1 makes NUL white space and 7.3.5 ends a name there,
+// so "/Ty\x00pe" is the key Ty followed by the keyword pe, and the dictionary
+// never gains a /Type entry.
 func TestParseDict_NullByteInName(t *testing.T) {
-	// Null byte inside a name should be stripped.
 	p := newParser("<< /Ty\x00pe /Ca\x00talog >>")
 	obj, err := p.ParseObject(context.Background())
 	if err != nil {
@@ -140,8 +143,8 @@ func TestParseDict_NullByteInName(t *testing.T) {
 		t.Fatalf("expected PdfDict, got %T", obj)
 	}
 
-	if dict["Type"] != ast.PdfName("Catalog") {
-		t.Errorf("Type = %v, want Catalog", dict["Type"])
+	if v, ok := dict["Type"]; ok {
+		t.Errorf("Type = %v, want no /Type entry", v)
 	}
 }
 

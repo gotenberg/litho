@@ -12,15 +12,49 @@ func newLexer(input string) *Lexer {
 	return NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 }
 
-func TestNullBytesInName(t *testing.T) {
-	// "/Ty\x00pe" should be read as "/Type". Null bytes stripped inside names.
-	lex := newLexer("/Ty\x00pe")
-	tok, err := lex.NextToken()
-	if err != nil {
-		t.Fatalf("NextToken failed: %v", err)
+// lexAll returns every token of input up to EOF.
+func lexAll(t *testing.T, input string) []Token {
+	t.Helper()
+	lex := newLexer(input)
+	var tokens []Token
+	for {
+		tok, err := lex.NextToken()
+		if err != nil {
+			t.Fatalf("NextToken failed: %v", err)
+		}
+		if tok.Type == TokenEOF {
+			return tokens
+		}
+		tokens = append(tokens, tok)
 	}
-	if tok.Type != TokenName || tok.Value != "/Type" {
-		t.Errorf("got %v %q, want Name /Type", tok.Type, tok.Value)
+}
+
+// TestNullByteEndsName locks the ISO 32000-1 reading of a NUL inside a name:
+// 7.2.2, Table 1 makes NUL a white-space character and 7.3.5 ends a name at
+// white space, so "/Ty\x00pe" is the name Ty followed by the keyword pe, not
+// the name Type. PDF.js, veraPDF, pdfcpu and qpdf read it the same way.
+func TestNullByteEndsName(t *testing.T) {
+	cases := []struct {
+		input string
+		want  []Token
+	}{
+		{"/Ty\x00pe", []Token{{TokenName, "/Ty"}, {TokenKeyword, "pe"}}},
+		{"/\x00He\x00lve\x00tica", []Token{{TokenName, "/"}, {TokenKeyword, "He"}, {TokenKeyword, "lve"}, {TokenKeyword, "tica"}}},
+		{"/Type\x00/Page", []Token{{TokenName, "/Type"}, {TokenName, "/Page"}}},
+		{"/F1\x00\x0012 Tf", []Token{{TokenName, "/F1"}, {TokenNumber, "12"}, {TokenKeyword, "Tf"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			got := lexAll(t, tc.input)
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %d tokens %q, want %d %q", len(got), got, len(tc.want), tc.want)
+			}
+			for i, want := range tc.want {
+				if got[i] != want {
+					t.Errorf("token %d: got %v %q, want %v %q", i, got[i].Type, got[i].Value, want.Type, want.Value)
+				}
+			}
+		})
 	}
 }
 
@@ -39,15 +73,6 @@ func TestNullByteBetweenTokens(t *testing.T) {
 	}
 	if tok3.Type != TokenKeyword || tok3.Value != "obj" {
 		t.Errorf("token 3: got %v %q, want Keyword obj", tok3.Type, tok3.Value)
-	}
-}
-
-func TestNullByteInsideName_Multiple(t *testing.T) {
-	// Multiple null bytes should all be stripped from names.
-	lex := newLexer("/\x00He\x00lve\x00tica")
-	tok, _ := lex.NextToken()
-	if tok.Type != TokenName || tok.Value != "/Helvetica" {
-		t.Errorf("got %v %q, want Name /Helvetica", tok.Type, tok.Value)
 	}
 }
 

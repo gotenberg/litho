@@ -276,6 +276,24 @@ func splitNumberEndobj(val string) (string, bool) {
 }
 
 // NextToken reads and returns the next PDF token from the input stream.
+//
+// A NUL byte is white space inside a name as everywhere else (ISO 32000-1,
+// 7.2.2, Table 1 and 7.3.5), so it ends the name instead of being skipped.
+// PDF.js, veraPDF, pdfcpu and qpdf end a name at a NUL the same way.
+//
+// # Corpus evidence
+//
+//   - All corpora: two files carry a NUL inside a name in an object body, a
+//     content stream or a CMap. Ending the name there changes neither file's
+//     page count nor its extracted text, and every other file opens, counts
+//     its pages, extracts text and validates exactly as before.
+//   - pdfjs issue9195.pdf: its producer, Fineco Software v2.05, writes the
+//     ToUnicode CMap in UTF-16LE, so a NUL follows every character and every
+//     name reads "/\x00C\x00I\x00D...". The CMap's keywords split on the same
+//     NULs, so skipping them inside names never made the CMap readable.
+//   - pdfjs poppler-90-0-fuzzed.pdf: fuzzed content-stream bytes. Ending the
+//     name at the NUL exposes 28 more undefined operators under ISO 19005-2,
+//     6.2.2 t1 in a file that already fails that test 1157 times.
 func (l *Lexer) NextToken() (Token, error) {
 	for {
 		c, err := l.reader.ReadByte()
@@ -319,17 +337,11 @@ func (l *Lexer) NextToken() (Token, error) {
 					}
 					return Token{Type: TokenError, Value: err.Error()}, err
 				}
-				// Null bytes inside names are silently stripped (Acrobat compat).
-				//
-				// Deliberate leniency: ISO 32000-1, 7.3.5 builds a name from
-				// "any characters (8-bit values) except null", and 7.2.2, Table 1
-				// makes NUL a white-space character, which ends the token, so
-				// "/Ty\x00pe" is the name Ty followed by the keyword pe. The
-				// byte is dropped and the name continues, giving Type. No file
-				// or Acrobat measurement backing the attribution is recorded.
-				if cc == 0x00 {
-					continue
-				}
+				// ISO 32000-1, 7.2.2, Table 1 makes NUL a white-space
+				// character, and 7.3.5 builds a name from "any characters
+				// (8-bit values) except null" and ends it at white space, so
+				// a NUL ends the name like any other white space: "/Ty\x00pe"
+				// is the name Ty followed by the keyword pe.
 				if isWhitespace(cc) || isDelimiter(cc) {
 					_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 					break
