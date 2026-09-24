@@ -110,14 +110,35 @@ func TestDecodeIndexedShortLookup(t *testing.T) {
 	}
 }
 
-// TestDecodeIndexedTruncatedSamples pins that a sample run shorter than the
-// declared size is reported rather than read past.
+// TestDecodeIndexedTruncatedSamples pins what a sample run shorter than the
+// declared size decodes to: the whole rows it holds, and black past them, as
+// PDF.js paints it. A run short of one whole row is refused.
 func TestDecodeIndexedTruncatedSamples(t *testing.T) {
 	t.Parallel()
 
-	ctx, doc, page := imagePDF(t, indexedImagePDF("/DeviceRGB", "<FF0000 00FF00>", []byte{0, 1}))
+	ctx, doc, page := imagePDF(t, indexedImagePDF("/DeviceRGB", "<FF0000 00FF00>", []byte{0, 1, 1}))
 
+	img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+	if err != nil {
+		t.Fatalf("DecodeImage: %v", err)
+	}
+	for _, tc := range []struct {
+		x, y    int
+		r, g, b uint32
+	}{
+		{0, 0, 255, 0, 0},
+		{1, 0, 0, 255, 0},
+		{0, 1, 0, 0, 0},
+		{1, 1, 0, 0, 0},
+	} {
+		r, g, b, _ := img.At(tc.x, tc.y).RGBA()
+		if r>>8 != tc.r || g>>8 != tc.g || b>>8 != tc.b {
+			t.Errorf("pixel (%d,%d) = (%d,%d,%d), want (%d,%d,%d)", tc.x, tc.y, r>>8, g>>8, b>>8, tc.r, tc.g, tc.b)
+		}
+	}
+
+	ctx, doc, page = imagePDF(t, indexedImagePDF("/DeviceRGB", "<FF0000 00FF00>", []byte{0}))
 	if _, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0")); err == nil {
-		t.Error("a 2x2 image with two samples decoded without error")
+		t.Error("a 2x2 image with one sample decoded without error")
 	}
 }

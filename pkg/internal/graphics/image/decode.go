@@ -149,6 +149,46 @@ func unpackSamples(data []byte, width, height, samplesPerPixel, bpc int, scale b
 	return out, nil
 }
 
+// padShortSamples returns data padded with zeros to the packed rows of a
+// width x height image, and how many whole rows data held. An unsupported
+// depth leaves data as it is, for unpackSamples to refuse.
+func padShortSamples(data []byte, width, height, samplesPerPixel, bpc int) ([]byte, int) {
+	var rowBytes int
+	switch bpc {
+	case 1, 2, 4:
+		rowBytes = (width*samplesPerPixel*bpc + 7) / 8
+	case 8:
+		rowBytes = width * samplesPerPixel
+	case 16:
+		rowBytes = width * samplesPerPixel * 2
+	default:
+		return data, height
+	}
+	need := rowBytes * height
+	if rowBytes == 0 || len(data) >= need {
+		return data, height
+	}
+	padded := make([]byte, need)
+	copy(padded, data)
+	return padded, len(data) / rowBytes
+}
+
+// finishRows paints the rows of img from row on black, and returns img.
+func finishRows(img image.Image, row int) image.Image {
+	b := img.Bounds()
+	for y := b.Min.Y + row; y < b.Max.Y; y++ {
+		for x := b.Min.X; x < b.Max.X; x++ {
+			switch m := img.(type) {
+			case *image.Gray:
+				m.SetGray(x, y, color.Gray{})
+			case *image.RGBA:
+				m.SetRGBA(x, y, color.RGBA{A: 255})
+			}
+		}
+	}
+	return img
+}
+
 // imageFilterName returns the name of the first filter an image declares, or
 // "" when it declares none.
 func imageFilterName(ctx context.Context, doc *document.Document, dict ast.PdfDict) string {
@@ -1093,13 +1133,36 @@ func decodeImageStream(ctx context.Context, doc *document.Document, name ast.Pdf
 		}
 	}
 
+	// Data that stops short of the rows the dictionary states is not refused
+	// while it holds a whole row: the rows it holds are painted and the rest
+	// left black, which is what PDF.js paints. Nothing in ISO 32000-1, 8.9.5
+	// says what a short image shows, and refusing it lost the whole picture
+	// for a few missing bytes. With the filters keeping what a truncated
+	// stream holds, this took the images litho failed to decode on the
+	// govdocs pages PDF.js paints images on from 375 to 3.
+	validRows := height
+	if filterName != "DCTDecode" {
+		decodedData, validRows = padShortSamples(decodedData, width, height, samplesPerPixel, bitsPerComp)
+		if validRows == 0 {
+			return nil, fmt.Errorf("decoded data too short for one row of the %dx%d image: got %d bytes", width, height, len(decodedData))
+		}
+		if validRows < height {
+			doc.Logger.Debug("painting the rows short image data lacks black",
+				slog.String("image", string(name)), slog.Int("rows", validRows), slog.Int("height", height))
+		}
+	}
+
 	decodedData, err = unpackSamples(decodedData, width, height, samplesPerPixel, bitsPerComp, !isIndexed)
 	if err != nil {
 		return nil, err
 	}
 
 	if isIndexed {
-		return decodeIndexed(decodedData, width, height, pal)
+		img, err := decodeIndexed(decodedData, width, height, pal)
+		if err != nil {
+			return nil, err
+		}
+		return finishRows(img, validRows), nil
 	}
 
 	// Apply the /Decode array (ISO 32000-1 §8.9.5.2) via per-component
@@ -1136,7 +1199,7 @@ func decodeImageStream(ctx context.Context, doc *document.Document, name ast.Pdf
 				idx += 3
 			}
 		}
-		return img, nil
+		return finishRows(img, validRows), nil
 
 	case "DeviceGray":
 		img := image.NewGray(image.Rect(0, 0, width, height))
@@ -1157,7 +1220,7 @@ func decodeImageStream(ctx context.Context, doc *document.Document, name ast.Pdf
 				idx++
 			}
 		}
-		return img, nil
+		return finishRows(img, validRows), nil
 
 	case "DeviceCMYK":
 		img := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -1179,7 +1242,7 @@ func decodeImageStream(ctx context.Context, doc *document.Document, name ast.Pdf
 				idx += 4
 			}
 		}
-		return img, nil
+		return finishRows(img, validRows), nil
 
 	default:
 		return nil, fmt.Errorf("unsupported color space %q for image decode", colorSpace)
