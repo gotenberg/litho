@@ -175,6 +175,16 @@ type Element struct {
 	MinOccurs int
 	// MaxOccurs is 1 by default, [MaxUnbounded] when xs:maxOccurs="unbounded".
 	MaxOccurs int
+	// Nillable reports nillable="true". Per XML Schema Part 1, 3.3.4 only
+	// a nillable element may carry xsi:nil, and one whose xsi:nil is true
+	// has empty content that is not validated against its type.
+	Nillable bool
+	// Default and Fixed carry the element's value constraint, empty when
+	// it has none. Per XML Schema Part 1, 3.3.4 (cvc-elt clause 5.1) an
+	// element with no content takes it as its value. A fixed element's
+	// content is not compared with Fixed.
+	Default string
+	Fixed   string
 }
 
 // AttributeUse models an xs:attribute occurrence on a complex type.

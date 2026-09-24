@@ -270,6 +270,17 @@ func checkBoolean(value string, base *BuiltinType) *FacetViolation {
 	return lexErr(base, value, "not one of true|false|1|0")
 }
 
+// isTrueBoolean reports whether value is an xs:boolean literal for true:
+// per XML Schema Part 2, 3.2.2.1 "true" or "1", once collapsed as 4.3.6
+// fixes for boolean.
+func isTrueBoolean(value string) bool {
+	switch whitespaceCollapse(value) {
+	case "true", "1":
+		return true
+	}
+	return false
+}
+
 // checkDecimal checks XML Schema Part 2, 3.2.3.1: "a finite-length sequence
 // of decimal digits (#x30-#x39) separated by a period", with an optional
 // leading sign. An exponent, a fraction or a base prefix is not a decimal

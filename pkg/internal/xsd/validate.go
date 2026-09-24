@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/xml"
 	"errors"
@@ -51,8 +52,8 @@ const (
 // EOF) is returned as the second value distinct from violations so
 // callers can tell "ran-but-failed-rules" apart from "could-not-run".
 //
-// The walk checks element ordering, cardinality, leaf types,
-// attributes, xs:choice content, and unknown elements. An xs:any
+// The walk checks element ordering, cardinality, leaf values,
+// attributes, xsi:nil, xs:choice content, and unknown elements. An xs:any
 // wildcard accepts its child and skips the subtree.
 //
 // The walker honours ctx cancellation at element boundaries: a
@@ -102,6 +103,9 @@ type frame struct {
 	// matching EndElement; only used on a leaf so its value can be
 	// validated on close.
 	pendingText strings.Builder
+	// nilled reports an xsi:nil of true on a nillable element. The frame
+	// is then a leaf whatever its type, since it must stay empty.
+	nilled bool
 }
 
 // contentMatcher abstracts the per-content-model stepping logic so
@@ -163,10 +167,14 @@ func (v *validator) onStart(start xml.StartElement) {
 		// subtree (children silently propagate as more placeholders
 		// so cascading false violations do not pile up).
 		if parent.element != nil {
+			reason := fmt.Sprintf("element %s appears inside simple-type content", nameOf(start.Name))
+			if parent.nilled {
+				reason = fmt.Sprintf("element %s appears inside an element whose xsi:nil is true", nameOf(start.Name))
+			}
 			v.violations = append(v.violations, Violation{
 				Rule:   RuleStructure,
 				Path:   v.path() + "/" + nameOf(start.Name),
-				Reason: fmt.Sprintf("element %s appears inside simple-type content", nameOf(start.Name)),
+				Reason: reason,
 			})
 		}
 		v.pushPlaceholder(start)
@@ -198,24 +206,64 @@ func (v *validator) onEnd(_ xml.EndElement) {
 	if top.matcher != nil {
 		v.violations = append(v.violations, top.matcher.finalize(v.path())...)
 	} else if top.element != nil {
-		// Simple-type leaf: validate the accumulated text against
-		// the type's lexical space and facets.
-		text := strings.TrimSpace(top.pendingText.String())
-		if text != "" {
-			for _, fv := range ValidateValue(text, top.element.Type) {
-				rule := RuleFacet
-				if fv.Facet == nil {
-					rule = RuleLexical
-				}
-				v.violations = append(v.violations, Violation{
-					Rule:   rule,
-					Path:   v.path(),
-					Reason: fv.Reason,
-				})
-			}
-		}
+		v.violations = append(v.violations, leafViolations(top, v.path())...)
 	}
 	v.stack = v.stack[:len(v.stack)-1]
+}
+
+// leafViolations validates the text of a leaf frame against the lexical
+// space and facets of its type.
+//
+// The text is handed over as the document holds it: [ValidateValue]
+// normalizes it under the type's own whiteSpace (XML Schema Part 2, 4.3.6),
+// so an xs:string keeps its spaces and an xs:token loses them. Empty text
+// is validated too, which an xs:string or xs:token admits and an xs:decimal
+// does not. Two cases change the value, both from XML Schema Part 1, 3.3.4
+// (cvc-elt): an element with no content takes the default or fixed value of
+// its declaration (clause 5.1), and an element whose xsi:nil is true must
+// have no character content (clause 3.2.1) and is not validated against its
+// type (cvc-type clause 3.1.3).
+//
+// # Corpus evidence
+//
+//   - All corpora: validating empty text changes no XSD violation on the 159
+//     files that embed XML. Through the Factur-X and ZUGFeRD validators they
+//     hold 53 empty xs:token values in 23 files, 64 xs:string in 21 and 3
+//     xs:base64Binary in 3, types that all admit the empty string, and no
+//     empty xs:decimal.
+//   - All corpora: keeping the white space of an xs:string changes none
+//     either. 244 xs:string values in 83 files are padded and 88 more hold a
+//     line break or a run of spaces, but no string type of the bundled
+//     schemas declares a facet.
+//   - All corpora: none of those files carries xsi:nil.
+func leafViolations(top *frame, path string) []Violation {
+	text := top.pendingText.String()
+	if top.nilled {
+		if text == "" {
+			return nil
+		}
+		return []Violation{{
+			Rule:   RuleStructure,
+			Path:   path,
+			Reason: "element whose xsi:nil is true has character content",
+		}}
+	}
+	if text == "" {
+		text = cmp.Or(top.element.Fixed, top.element.Default)
+	}
+	var out []Violation
+	for _, fv := range ValidateValue(text, top.element.Type) {
+		rule := RuleFacet
+		if fv.Facet == nil {
+			rule = RuleLexical
+		}
+		out = append(out, Violation{
+			Rule:   rule,
+			Path:   path,
+			Reason: fv.Reason,
+		})
+	}
+	return out
 }
 
 func (v *validator) onCharData(t xml.CharData) {
@@ -266,15 +314,50 @@ func (v *validator) findRootElement(qn QName) (*Element, bool) {
 // validation runs at frame open since every attribute is bound to its
 // element by the time the StartElement event arrives.
 func (v *validator) pushFrame(start xml.StartElement, el *Element) {
-	f := &frame{element: el, name: start.Name}
+	path := v.pathWith(start.Name)
+	nilled, vio := nilState(start, el, path)
+	if vio != nil {
+		v.violations = append(v.violations, *vio)
+	}
+	f := &frame{element: el, name: start.Name, nilled: nilled}
 	if ct, ok := el.Type.(*ComplexType); ok {
-		if _, simple := ct.Content.(SimpleContent); !simple {
+		// Per XML Schema Part 1, 3.4.4 (cvc-complex-type clause 2) the
+		// content model is not checked on a nilled element, only its
+		// attributes are.
+		if _, simple := ct.Content.(SimpleContent); !simple && !nilled {
 			f.matcher = newMatcher(ct, v.schema)
 		}
-		v.violations = append(v.violations,
-			validateAttributes(start, ct, v.pathWith(start.Name))...)
+		v.violations = append(v.violations, validateAttributes(start, ct, path)...)
 	}
 	v.stack = append(v.stack, f)
+}
+
+// xsiNamespace is the XML Schema instance namespace, which xsi:nil lives
+// in (XML Schema Part 1, 2.6).
+const xsiNamespace = "http://www.w3.org/2001/XMLSchema-instance"
+
+// nilState reads the xsi:nil attribute of start, per XML Schema Part 1,
+// 3.3.4 (cvc-elt clause 3): it may appear on a nillable element only, and
+// its value is an xs:boolean (2.6.2). It reports whether the element is
+// nilled, and the violation the attribute raises, if any.
+func nilState(start xml.StartElement, el *Element, path string) (bool, *Violation) {
+	for _, a := range start.Attr {
+		if a.Name.Space != xsiNamespace || a.Name.Local != "nil" {
+			continue
+		}
+		if !el.Nillable {
+			return false, &Violation{
+				Rule:   RuleAttribute,
+				Path:   path + "/@xsi:nil",
+				Reason: "xsi:nil on an element that is not nillable",
+			}
+		}
+		if fvs := ValidateValue(a.Value, &BuiltinType{Name: QName{Namespace: XSNamespace, Local: "boolean"}}); len(fvs) > 0 {
+			return false, &Violation{Rule: RuleAttribute, Path: path + "/@xsi:nil", Reason: fvs[0].Reason}
+		}
+		return isTrueBoolean(a.Value), nil
+	}
+	return false, nil
 }
 
 // pathWith renders the path that the new frame will own once pushed.

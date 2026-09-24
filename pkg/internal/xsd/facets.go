@@ -46,8 +46,8 @@ func (v FacetViolation) Error() string {
 //
 //   - All corpora: through the Factur-X and ZUGFeRD validators, the 159
 //     files that embed XML reach this function in 141 files with the text of
-//     the CII xs:simpleContent types, 3734 xs:decimal, 4338 xs:token, 2709
-//     xs:string and 7 xs:base64Binary values, and with 2355 values of their
+//     the CII xs:simpleContent types, 3734 xs:decimal, 4391 xs:token, 2773
+//     xs:string and 10 xs:base64Binary values, and with 2355 values of their
 //     attributes. The rest are 144 xs:boolean values and 15 values of the
 //     ZUGFeRD 1.0 xs:union DateMandatoryDateTimeType, which names no
 //     built-in.

@@ -292,6 +292,9 @@ type rawElement struct {
 	Type        string          `xml:"type,attr"`
 	MinOccurs   string          `xml:"minOccurs,attr"`
 	MaxOccurs   string          `xml:"maxOccurs,attr"`
+	Nillable    string          `xml:"nillable,attr"`
+	Default     string          `xml:"default,attr"`
+	Fixed       string          `xml:"fixed,attr"`
 	ComplexType *rawComplexType `xml:"complexType"`
 	SimpleType  *rawSimpleType  `xml:"simpleType"`
 	Ref         string          `xml:"ref,attr"`
@@ -468,6 +471,9 @@ func buildElement(tns string, prefixes map[string]string, raw *rawElement) (*Ele
 		Name:      QName{Namespace: tns, Local: raw.Name},
 		MinOccurs: occursOrDefault(raw.MinOccurs, 1),
 		MaxOccurs: occursOrDefault(raw.MaxOccurs, 1),
+		Nillable:  isTrueBoolean(raw.Nillable),
+		Default:   raw.Default,
+		Fixed:     raw.Fixed,
 	}
 	switch {
 	case raw.Type != "":
