@@ -117,6 +117,21 @@ func TestValidateValue_FractionAndTotalDigits(t *testing.T) {
 		{"totalDigits=4 rejects 5", []Facet{TotalDigits{Value: 4}}, "123.45", 1},
 		{"totalDigits ignores sign", []Facet{TotalDigits{Value: 3}}, "-100", 0},
 		{"totalDigits ignores leading zero", []Facet{TotalDigits{Value: 3}}, "0.123", 0},
+		// Per 4.3.11 and 4.3.12 the facets bound the value, so trailing
+		// fractional zeros and leading zeros are "still permitted".
+		{"fractionDigits=1 accepts 1.50", []Facet{FractionDigits{Value: 1}}, "1.50", 0},
+		{"fractionDigits=0 accepts 7.000", []Facet{FractionDigits{Value: 0}}, "7.000", 0},
+		{"fractionDigits=0 accepts 7.", []Facet{FractionDigits{Value: 0}}, "7.", 0},
+		{"fractionDigits=1 rejects 1.25", []Facet{FractionDigits{Value: 1}}, "1.25", 1},
+		{"totalDigits=1 accepts 1.000", []Facet{TotalDigits{Value: 1}}, "1.000", 0},
+		{"totalDigits=5 accepts 000123.4500", []Facet{TotalDigits{Value: 5}}, "000123.4500", 0},
+		{"totalDigits=4 rejects 000123.4500", []Facet{TotalDigits{Value: 4}}, "000123.4500", 1},
+		{"totalDigits=1 accepts zero", []Facet{TotalDigits{Value: 1}}, "-0.000", 0},
+		// 0.0012 is 12 × 10^-4: n = 4 bounds totalDigits as well.
+		{"totalDigits=3 rejects 0.0012", []Facet{TotalDigits{Value: 3}}, "0.0012", 1},
+		{"totalDigits=4 accepts 0.0012", []Facet{TotalDigits{Value: 4}}, "0.0012", 0},
+		// A non-decimal value draws the lexical violation alone.
+		{"digit facets leave a non-decimal to the lexical check", []Facet{TotalDigits{Value: 1}, FractionDigits{Value: 0}}, "12.5x", 1},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -447,76 +447,57 @@ func parseDecimal(s string) (*big.Rat, bool) {
 }
 
 // validateFractionDigits applies XML Schema Part 2, 4.3.12.3: the value is
-// expressible as i × 10^-n with 0 <= n <= fractionDigits.
-//
-// TODO: 4.3.12 restricts the value space, not the lexical space, and states
-// that "trailing fractional zero digits" are "still permitted". Every digit
-// after the point is counted here, so "1.50" fails fractionDigits 1.
+// expressible as i × 10^-n with 0 <= n <= fractionDigits. Per 4.3.12 the
+// facet bounds the value, not the literal, so trailing fractional zeros are
+// "still permitted": "1.50" is 1.5 and passes fractionDigits 1.
 func validateFractionDigits(value string, maxDigits int, fc Facet) *FacetViolation {
-	digits := fractionalDigitCount(value)
-	if digits <= maxDigits {
+	digits, ok := decimalDigitCounts(value)
+	if !ok || digits.fraction <= maxDigits {
 		return nil
 	}
 	return &FacetViolation{
 		Facet: fc, Value: value,
-		Reason: fmt.Sprintf("%d fractional digits exceed maximum %d", digits, maxDigits),
+		Reason: fmt.Sprintf("%d fractional digits exceed maximum %d", digits.fraction, maxDigits),
 	}
 }
 
 // validateTotalDigits applies XML Schema Part 2, 4.3.11.3: the value is
 // expressible as i × 10^-n with |i| < 10^totalDigits and
-// 0 <= n <= totalDigits. See significantDigitCount for how it departs.
+// 0 <= n <= totalDigits. Per 4.3.11 leading zeros and trailing fractional
+// zeros are "still permitted": "1.000" is 1 and passes totalDigits 1.
 func validateTotalDigits(value string, maxDigits int, fc Facet) *FacetViolation {
-	digits := significantDigitCount(value)
-	if digits <= maxDigits {
+	digits, ok := decimalDigitCounts(value)
+	if !ok || digits.total <= maxDigits {
 		return nil
 	}
 	return &FacetViolation{
 		Facet: fc, Value: value,
-		Reason: fmt.Sprintf("%d significant digits exceed maximum %d", digits, maxDigits),
+		Reason: fmt.Sprintf("%d significant digits exceed maximum %d", digits.total, maxDigits),
 	}
 }
 
-func fractionalDigitCount(s string) int {
-	s = strings.TrimSpace(s)
-	idx := strings.IndexByte(s, '.')
-	if idx < 0 {
-		return 0
-	}
-	count := 0
-	for i := idx + 1; i < len(s); i++ {
-		if s[i] >= '0' && s[i] <= '9' {
-			count++
-		}
-	}
-	return count
+// digitCounts holds the two digit counts the decimal digit facets bound.
+type digitCounts struct {
+	// fraction is the least n for which the value is i × 10^-n: the
+	// fractional digits once trailing zeros are dropped.
+	fraction int
+	// total is the least totalDigits the value satisfies: the integer
+	// digits once leading zeros are dropped, plus fraction. It is at least
+	// fraction, which 4.3.11.3 also bounds, and 0 for the value zero.
+	total int
 }
 
-func significantDigitCount(s string) int {
-	s = strings.TrimSpace(s)
-	s = strings.TrimLeft(s, "+-")
-	count := 0
-	leadingZeros := true
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == '.' {
-			leadingZeros = false
-			continue
-		}
-		if c < '0' || c > '9' {
-			continue
-		}
-		if leadingZeros && c == '0' {
-			continue
-		}
-		leadingZeros = false
-		count++
+// decimalDigitCounts reads the counts off a decimal literal (XML Schema Part
+// 2, 3.2.3.1). It reports false when value is not one: 4.1.5 applies the
+// digit facets to types derived from decimal alone, whose lexical check then
+// reports the value, and a digit facet on any other type is a schema error
+// the instance is not blamed for.
+func decimalDigitCounts(value string) (digitCounts, bool) {
+	if !isDecimalNumeral(value) {
+		return digitCounts{}, false
 	}
-	// Trailing zeros after the decimal point count toward the total here.
-	//
-	// TODO: XML Schema Part 2, 4.3.11 bounds the value, not the literal,
-	// and states that "trailing fractional zero digits" are "still
-	// permitted", so they must not count. "1.000" is 1, which totalDigits
-	// 3 admits, yet it counts four digits here and fails.
-	return count
+	whole, fraction, _ := strings.Cut(trimSign(value), ".")
+	whole = strings.TrimLeft(whole, "0")
+	fraction = strings.TrimRight(fraction, "0")
+	return digitCounts{fraction: len(fraction), total: len(whole) + len(fraction)}, true
 }
