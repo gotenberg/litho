@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-09-24T08:33:05Z",
+  "captured_at": "2026-09-24T08:53:15Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -89,7 +89,7 @@
           "mismatched": 55,
           "skipped": 528,
           "metrics": {
-            "decode_failed": 3,
+            "decode_failed": 0,
             "images_match": 71060
           }
         },
@@ -229,12 +229,12 @@
     "pdfjs": {
       "features": {
         "imagedecode": {
-          "matched": 328,
-          "mismatched": 32,
+          "matched": 333,
+          "mismatched": 27,
           "skipped": 831,
           "metrics": {
-            "decode_failed": 41,
-            "images_match": 3951
+            "decode_failed": 30,
+            "images_match": 3960
           }
         },
         "merge-catalog": {
