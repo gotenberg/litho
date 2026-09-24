@@ -12,23 +12,22 @@ import (
 )
 
 // forbiddenAnnotSubtypes lists annotation subtypes that fixAnnotArray removes
-// whatever the profile and level, even when [Options.PreserveContent] is set,
-// unlike the profile-exact check beside it.
+// even when [Options.PreserveContent] is set, unlike the profile-exact check
+// beside it.
 //
 // Sound, Movie, and Screen are outside the permitted set of every PDF/A part
 // (ISO 19005-1, 6.5.2 and ISO 19005-2/3/4, 6.3.1). 3D is outside it for parts
 // 1 to 3 and for part 4 at the base and F levels, but ISO 19005-4 6.3.1
-// permits it at level E (see pdfa4ePermittedAnnotSubtypes). The removal does
-// not consult the level, so whenever the fixer runs on a PDF/A-4e document it
-// deletes that document's 3D annotations too: an over-removal that
-// TestFixAnnotations_Part4fKeepsFileAttachment records.
+// permits it at level E (Annex B, see pdfa4ePermittedAnnotSubtypes), so
+// fixAnnotArray consults the profile's own table before this one.
 var forbiddenAnnotSubtypes = map[ast.PdfName]bool{
 	"Sound": true, "Movie": true, "Screen": true, "3D": true,
 }
 
 // permittedAnnotSubtypes lists subtypes defined in ISO 32000-1 that are
 // allowed by PDF/A-2/3/4 §6.3.1. Any subtype outside this set plus any
-// entry in [forbiddenAnnotSubtypes] must be removed.
+// entry in [forbiddenAnnotSubtypes] must be removed, unless the profile's own
+// table permits it: RichMedia is absent here and permitted by PDF/A-4e.
 var permittedAnnotSubtypes = map[ast.PdfName]bool{
 	"Text": true, "Link": true, "FreeText": true, "Line": true,
 	"Square": true, "Circle": true, "Polygon": true, "PolyLine": true,
@@ -377,8 +376,15 @@ func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		// (PDF/A-2/3/4 §6.3.1, PDF/A-1 §6.5.2). Mark the slot nil here;
 		// the caller's rebuildAnnotsArray skips nil entries when
 		// rewriting the array.
-		if forbiddenAnnotSubtypes[subtype] || !permittedAnnotSubtypes[subtype] ||
-			(strict && !strictSubtypes[subtype]) {
+		//
+		// A subtype the profile's own table permits is kept in both modes.
+		// The two generic terms serve every part and level at once, so they
+		// forbid 3D and RichMedia, which ISO 19005-4 6.3.1 permits at
+		// conformance level E (Annex B): without this exemption a PDF/A-4e
+		// run deleted them whenever any other annotation violation brought
+		// the fixer in.
+		permittedByProfile := strictSubtypes[subtype]
+		if !permittedByProfile && (forbiddenAnnotSubtypes[subtype] || !permittedAnnotSubtypes[subtype] || strict) {
 			annots[i] = nil
 			removed = true
 			// Null the annotation object as well. Dropping it from /Annots

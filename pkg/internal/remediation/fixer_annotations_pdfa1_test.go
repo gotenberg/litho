@@ -336,24 +336,63 @@ func TestFixAnnotations_Part4DropsFileAttachment(t *testing.T) {
 
 // TestFixAnnotations_Part4fKeepsFileAttachment is the counterweight: level F
 // re-permits the subtype, so the same repair must leave it alone.
-//
-// Level E's own additions, 3D and RichMedia, are deliberately NOT asserted here.
-// They are removed by the two generic terms in the predicate, which run ungated
-// and predate this table set: "3D" is in [forbiddenAnnotSubtypes], which the
-// predicate applies without consulting the level though level E permits it,
-// and "RichMedia" is simply absent from [permittedAnnotSubtypes].
-// That over-removal is real but LATENT: nothing can falsify a fix for it yet,
-// and an unfalsifiable guard is worse than a recorded defect.
-//
-// # Corpus evidence
-//
-//   - verapdf: no fixture carries either subtype, so the corpus gate cannot
-//     falsify a fix for the over-removal.
 func TestFixAnnotations_Part4fKeepsFileAttachment(t *testing.T) {
 	t.Parallel()
 
 	if !subtypeSurvives(t, "FileAttachment", "PDF/A-4f", false) {
 		t.Error("PDF/A-4f: FileAttachment was removed although level F permits it")
+	}
+}
+
+// TestFixAnnotations_Part4eKeeps3DAndRichMedia pins level E's own additions.
+// ISO 19005-4 6.3.1 permits 3D and RichMedia annotations in a PDF/A-4e file
+// (Annex B) and forbids them everywhere else, so the same fixture must survive
+// under PDF/A-4e and be removed under every other profile, in both modes.
+//
+// Both modes matter because the two generic terms that removed them, 3D in
+// [forbiddenAnnotSubtypes] and RichMedia's absence from
+// [permittedAnnotSubtypes], run even when [Options.PreserveContent] is set.
+// The removal rows are the control: a fixer that never ran would keep the
+// annotation under PDF/A-4e too.
+//
+// # Corpus evidence
+//
+//   - litho: annotkinds_ua2.pdf, remediated as PDF/A-4e, lost its 3D and
+//     RichMedia annotations along with the Screen and Sound ones its 6.3.1
+//     violation was about. The verapdf PDF/A-4e fixtures carry either subtype
+//     but none raises an annotation violation, so the fixer never runs on them.
+func TestFixAnnotations_Part4eKeeps3DAndRichMedia(t *testing.T) {
+	t.Parallel()
+
+	for _, subtype := range []string{"3D", "RichMedia"} {
+		for _, preserve := range []bool{false, true} {
+			if !subtypeSurvives(t, subtype, "PDF/A-4e", preserve) {
+				t.Errorf("PDF/A-4e (preserve=%v): %s was removed although level E permits it",
+					preserve, subtype)
+			}
+			for _, profile := range []string{"PDF/A-1b", "PDF/A-2b", "PDF/A-3b", "PDF/A-4", "PDF/A-4f"} {
+				if subtypeSurvives(t, subtype, profile, preserve) {
+					t.Errorf("%s (preserve=%v): %s survived although the profile forbids it",
+						profile, preserve, subtype)
+				}
+			}
+		}
+	}
+}
+
+// TestFixAnnotations_Part4eStillDropsForbiddenSubtypes is the control on the
+// exemption's reach: level E adds two subtypes, not a blanket pass, so the
+// subtypes every part forbids still go, in both modes.
+func TestFixAnnotations_Part4eStillDropsForbiddenSubtypes(t *testing.T) {
+	t.Parallel()
+
+	for _, subtype := range []string{"Sound", "Movie", "Screen", "Unknown"} {
+		for _, preserve := range []bool{false, true} {
+			if subtypeSurvives(t, subtype, "PDF/A-4e", preserve) {
+				t.Errorf("PDF/A-4e (preserve=%v): %s survived although ISO 19005-4 6.3.1 forbids it",
+					preserve, subtype)
+			}
+		}
 	}
 }
 
