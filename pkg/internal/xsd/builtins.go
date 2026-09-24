@@ -270,19 +270,11 @@ func checkBoundedInt(value string, base *BuiltinType, minLit, maxLit string) *Fa
 	return checkInteger(value, base, minInt, maxInt)
 }
 
-// checkDate checks value against the XSD date lexical form CCYY-MM-DD,
-// after stripping any timezone suffix. The helpers below check the
-// byte-level shape; checkDate then checks the month and day ranges.
-//
-// XML Schema Part 2, 3.2.9.1 gives the form as '-'? yyyy '-' mm '-' dd
-// zzzzzz?, with the year, month, day and timezone written as for dateTime
-// (3.2.7.1).
-//
-// TODO: the check covers only the first ten characters and a flat 1 to 31
-// day range. 3.2.7 caps the day by its month and year ("cannot even be 29
-// for month 02 and year 2002") and 3.2.7.1 prohibits '0000', yet
-// "2024-02-30", "0000-01-01" and "2024-01-15abc" pass. The '-'? sign and a
-// year of more than four digits, which 3.2.7.1 allows, are rejected.
+// checkDate checks value against the XSD date lexical form, XML Schema Part
+// 2, 3.2.9.1: '-'? yyyy '-' mm '-' dd zzzzzz?, with the year, month, day and
+// timezone written as for dateTime (3.2.7.1). [parseTemporal] does the work,
+// so the day is capped by its month and year (3.2.7), year 0000 is rejected,
+// and a signed or longer-than-four-digit year is accepted.
 func checkDate(value string, base *BuiltinType) *FacetViolation {
 	// Per XML Schema Part 2, 3.2.9.1 a date is '-'? yyyy '-' mm '-' dd
 	// zzzzzz?, the year written as for dateTime (3.2.7.1): negative, or
@@ -293,13 +285,9 @@ func checkDate(value string, base *BuiltinType) *FacetViolation {
 	return nil
 }
 
-// checkDateTime checks the shape of XML Schema Part 2, 3.2.7.1: '-'? yyyy
-// '-' mm '-' dd 'T' hh ':' mm ':' ss ('.' s+)? (zzzzzz)?.
-//
-// TODO: only the separators and digits of the first 19 characters are
-// checked. Month, day, hour, minute and second ranges are not, and whatever
-// follows the seconds is accepted, so "2024-13-45T99:99:99" and
-// "2024-01-15T10:00:00junk" pass.
+// checkDateTime checks value against XML Schema Part 2, 3.2.7.1: '-'? yyyy
+// '-' mm '-' dd 'T' hh ':' mm ':' ss ('.' s+)? (zzzzzz)?. [parseTemporal]
+// checks every field's range and rejects trailing text.
 func checkDateTime(value string, base *BuiltinType) *FacetViolation {
 	// Per XML Schema Part 2, 3.2.7.1 a dateTime is '-'? yyyy '-' mm '-'
 	// dd 'T' hh ':' mm ':' ss ('.' s+)? zzzzzz?.
@@ -309,12 +297,9 @@ func checkDateTime(value string, base *BuiltinType) *FacetViolation {
 	return nil
 }
 
-// checkTime checks the shape of XML Schema Part 2, 3.2.8.1: "the left
+// checkTime checks value against XML Schema Part 2, 3.2.8.1: "the left
 // truncated lexical representation for dateTime", hh:mm:ss.sss with an
-// optional timezone.
-//
-// TODO: as in checkDateTime, the ranges and anything past the seconds go
-// unchecked, so "25:61:61" passes.
+// optional timezone. [parseTemporal] checks the field ranges.
 func checkTime(value string, base *BuiltinType) *FacetViolation {
 	// Per XML Schema Part 2, 3.2.8.1 a time is hh ':' mm ':' ss ('.'
 	// s+)? zzzzzz?, the left truncation of dateTime.
@@ -325,12 +310,9 @@ func checkTime(value string, base *BuiltinType) *FacetViolation {
 }
 
 // splitTimezone separates the body of a date/time lexical value from
-// its optional timezone suffix ("Z" or +HH:MM/-HH:MM). The suffix is
-// recognised by shape only; full RFC 3339 timezone arithmetic is out
-// of scope.
-//
+// its optional timezone suffix ("Z" or +HH:MM/-HH:MM), by shape only.
 // The shape is XML Schema Part 2, 3.2.7.3: (('+' | '-') hh ':' mm) | 'Z'.
-// The magnitude limit of 14 hours stated there is not checked.
+// [parseTimezoneOffset] checks the suffix's digits and its 14-hour limit.
 func splitTimezone(value string) (body string, tz string) {
 	if i := strings.LastIndexAny(value, "+-"); i > 0 && len(value)-i == 6 && value[i+3] == ':' {
 		return value[:i], value[i:]
