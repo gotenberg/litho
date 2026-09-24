@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-09-24T06:38:49Z",
+  "captured_at": "2026-09-24T08:10:23Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -85,12 +85,12 @@
     "govdocs": {
       "features": {
         "imagedecode": {
-          "matched": 478,
-          "mismatched": 85,
+          "matched": 508,
+          "mismatched": 55,
           "skipped": 528,
           "metrics": {
-            "decode_failed": 375,
-            "images_match": 56915
+            "decode_failed": 3,
+            "images_match": 71060
           }
         },
         "metadata": {
@@ -229,12 +229,12 @@
     "pdfjs": {
       "features": {
         "imagedecode": {
-          "matched": 315,
-          "mismatched": 45,
+          "matched": 327,
+          "mismatched": 33,
           "skipped": 831,
           "metrics": {
-            "decode_failed": 54,
-            "images_match": 3867
+            "decode_failed": 45,
+            "images_match": 3947
           }
         },
         "merge-catalog": {
