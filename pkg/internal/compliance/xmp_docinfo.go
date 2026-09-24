@@ -57,7 +57,7 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 	}
 
 	for _, pair := range syncPairs {
-		infoVal := xmpGetInfoString(ctx, doc, infoDict, pair.infoKey)
+		infoVal := xmpInfoString(ctx, doc, infoDict, pair.infoKey)
 		if infoVal == "" {
 			// An Info entry that is present but empty is still present: every
 			// §6.7.3 test reads "Key == null || Key == XMPKey", and an empty
@@ -209,8 +209,10 @@ func xmpInfoValueIsNull(ctx context.Context, doc *document.Document, infoDict as
 	return isNull
 }
 
-// xmpGetInfoString retrieves a string value from the document info dict.
-func xmpGetInfoString(ctx context.Context, doc *document.Document, infoDict ast.PdfDict, key string) string {
+// xmpInfoString returns the decoded string value of key in the document info
+// dictionary, resolving an indirect value. It returns "" when the key is
+// absent, does not resolve to a string, or holds an empty one.
+func xmpInfoString(ctx context.Context, doc *document.Document, infoDict ast.PdfDict, key string) string {
 	valObj, ok := infoDict[ast.PdfName(key)]
 	if !ok {
 		return ""
