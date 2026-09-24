@@ -50,6 +50,9 @@ func matchCIDSystemInfo(v compliance.Violation) bool {
 //   - pdfjs issue18117.pdf: embeds /Uni-Utf8-H, whose codes are one to four
 //     bytes, and relabelling it produced an odd-length code tail and glyphs
 //     that resolve to .notdef (ISO 19005-2, 6.2.11.8 t1 and 6.2.11.4.1 t2).
+//   - All corpora: no font or CMap this fixer rewrites is queued by an earlier
+//     fixer first, at PDF/A-1b, 2b, 4 or PDF/UA-1, so reading through the
+//     allocator changes no output.
 func fixCIDSystemInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	count := 0
 	aligned := 0
@@ -61,9 +64,16 @@ func fixCIDSystemInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 		if entry.Type != 1 || objNum == 0 {
 			continue
 		}
-		obj, err := doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation})
-		if err != nil || obj == nil {
-			continue
+		// Alloc-first: the relabelled font is written back whole, and earlier
+		// fixers (name-utf8, font-keys, fonts) rewrite Type 0 font
+		// dictionaries too.
+		obj, pending := alloc.Pending()[objNum]
+		if !pending {
+			resolved, err := doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation})
+			if err != nil || resolved == nil {
+				continue
+			}
+			obj = resolved
 		}
 		fontDict, ok := obj.(ast.PdfDict)
 		if !ok {
@@ -133,8 +143,10 @@ func alignCMapWMode(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	if !isRef || encRef.ObjectNum == 0 {
 		return 0
 	}
-	stream, err := document.ResolveStream(ctx, doc, fontDict["Encoding"])
-	if err != nil {
+	// Alloc-first, since the whole stream is written back: name-utf8 may
+	// already have queued this CMap with a repaired /CMapName.
+	stream, ok := liveStream(ctx, alloc, doc, encRef)
+	if !ok {
 		return 0
 	}
 	data, err := doc.DecodeStream(ctx, stream)
