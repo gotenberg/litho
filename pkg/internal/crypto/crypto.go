@@ -45,6 +45,49 @@ func dictInt(dict ast.PdfDict, key ast.PdfName, defaultVal int) int {
 	return defaultVal
 }
 
+// keyLengthBits returns the key length, in bits, that an encryption
+// dictionary declares for the RC4 and AES-128 handlers.
+//
+// ISO 32000-1, Table 20 gives the encryption dictionary a /Length "only if V
+// is 2 or 3", defaulting to 40. From V 4 the length belongs to the crypt filter
+// (Table 25), so a V 4 dictionary may carry none at the top level, and taking
+// the 40-bit default there cut an AESV2 key, which is 128 bits, to 5 bytes:
+// even the right password then failed to open the file. The stream filter's
+// /Length is read instead, defaulting to 128, and a top-level /Length is still
+// honoured first because producers write both and pdf.js
+// (CipherTransformFactory) reads it the same way.
+//
+// Table 25 notes that the standard security handler expresses a crypt
+// filter's /Length in bytes ("16 means 128"), where the public-key handler
+// uses bits. A value under 40 cannot be a bit length in the allowed range of
+// 40 to 128, so it is read as bytes, which is the same rule pdf.js applies.
+//
+// Only an absent entry falls back. A declared value outside the range, zero
+// among them, is kept, so the key derivation refuses it as unsupported rather
+// than treating a malformed dictionary as one that said nothing.
+func keyLengthBits(encryptDict ast.PdfDict, v int) int {
+	if _, declared := encryptDict["Length"]; declared {
+		return dictInt(encryptDict, "Length", 0)
+	}
+	if v < 4 {
+		return 40
+	}
+	n := 128
+	if cf, ok := encryptDict["CF"].(ast.PdfDict); ok {
+		if stmf, ok := encryptDict["StmF"].(ast.PdfName); ok {
+			if filter, ok := cf[stmf].(ast.PdfDict); ok {
+				if _, declared := filter["Length"]; declared {
+					n = dictInt(filter, "Length", 0)
+				}
+			}
+		}
+	}
+	if n < 40 {
+		n *= 8
+	}
+	return n
+}
+
 func dictString(dict ast.PdfDict, key ast.PdfName) []byte {
 	if val, ok := dict[key].(ast.PdfString); ok {
 		return []byte(val)
@@ -71,7 +114,7 @@ func NewHandler(encryptDict ast.PdfDict, trailer ast.PdfDict) (*Handler, error) 
 	// algorithm variants in ISO 32000-1 §7.6.3.3/§7.6.3.4. V=2 R=3 is
 	// common (RC4 128-bit + 50-pass MD5 + Algorithm 3.5 verification).
 	r := dictInt(encryptDict, "R", v)
-	length := dictInt(encryptDict, "Length", 40)
+	length := keyLengthBits(encryptDict, v)
 	// /P is a required entry (ISO 32000-1 Table 22). When a malformed
 	// document omits it, default to all-permissions-granted (0xFFFFFFFC,
 	// i.e. -4 in two's complement: reserved bits 1-2 clear, every
