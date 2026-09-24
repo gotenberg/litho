@@ -185,6 +185,10 @@ type appendedObject struct {
 	FT      string // /FT value for form fields, empty otherwise
 	IsXRef  bool   // true if this is an xref table/stream (not a content object)
 	IsAnnot bool   // true if this is an annotation dictionary
+
+	// Unread is set on an object stream whose objects could not be read, and
+	// says why. The objects it holds are then unknown.
+	Unread string
 }
 
 // objectHeaderRe matches "N G obj" headers in the appended data.
@@ -193,6 +197,13 @@ var objectHeaderRe = regexp.MustCompile(`(\d+)\s+\d+\s+obj\b`)
 // parseAppendedObjects scans the bytes between signedEnd and fileEnd for
 // indirect object definitions and records the entries classifyModifications
 // reads.
+//
+// An object stream is not recorded itself: the objects it holds are, each
+// described exactly as an object written outside a stream would be. ISO
+// 32000-1, 7.5.7 lets a writer store any object other than a stream in one, so
+// an incremental update that compresses its objects (7.5.8 introduced both
+// together) changes the document through the objects inside and never through
+// the container.
 func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd, fileEnd int64) ([]appendedObject, error) {
 	data, err := doc.ReadFileBytes(ctx, signedEnd, fileEnd-signedEnd)
 	if err != nil {
@@ -203,7 +214,12 @@ func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd
 
 	// Find all object headers.
 	matches := objectHeaderRe.FindAllIndex(data, -1)
-	for _, loc := range matches {
+	for i, loc := range matches {
+		if i%100 == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
 		// Parse the object starting at the header position.
 		offset := signedEnd + int64(loc[0])
 		lex := lexer.NewLexer(ioat.NewReader(doc.RawReader(), fileEnd, offset))
@@ -213,34 +229,69 @@ func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd
 			continue
 		}
 
-		ao := appendedObject{}
-
-		// Extract object number from the match.
-		header := string(data[loc[0]:loc[1]])
-		var objNum int
-		if _, err := fmt.Sscanf(header, "%d", &objNum); err == nil {
-			ao.ObjNum = objNum
+		// Extract the object and generation numbers from the match.
+		var objNum, genNum int
+		if _, err := fmt.Sscanf(string(data[loc[0]:loc[1]]), "%d %d", &objNum, &genNum); err != nil {
+			doc.Logger.Debug("reading appended object header", slog.Any("err", err))
 		}
 
-		switch v := obj.(type) {
-		case ast.PdfDict:
-			ao.Type = dictName(v, "Type")
-			ao.FT = dictName(v, "FT")
-			if isAnnotationDict(v) {
-				ao.IsAnnot = true
-				ao.Subtype = dictName(v, "Subtype")
-			}
-		case ast.PdfStream:
-			ao.Type = dictName(v.Dict, "Type")
-			if ao.Type == "XRef" {
-				ao.IsXRef = true
-			}
+		if stream, ok := obj.(ast.PdfStream); ok && dictName(stream.Dict, "Type") == "ObjStm" {
+			objects = append(objects, appendedObjectStream(ctx, doc, stream, offset, fileEnd, objNum, genNum)...)
+			continue
 		}
-
-		objects = append(objects, ao)
+		objects = append(objects, describeAppended(objNum, obj))
 	}
 
 	return objects, nil
+}
+
+// appendedObjectStream describes the objects an appended object stream holds.
+// When they cannot be read, it returns the stream alone, marked Unread, so the
+// classifier reports objects it could not check rather than passing them.
+func appendedObjectStream(ctx context.Context, doc *document.Document, stream ast.PdfStream, offset, fileEnd int64, objNum, genNum int) []appendedObject {
+	if doc.Crypto != nil {
+		// ISO 32000-1, 7.5.7: in an encrypted file the object stream is
+		// encrypted as a whole, under its own object's key (7.6.2), and the
+		// strings inside it are not encrypted again. Only the stream bytes
+		// need the key, so the object is parsed again with it.
+		lex := lexer.NewLexer(ioat.NewReader(doc.RawReader(), fileEnd, offset))
+		p := parser.NewParser(lex).WithDecryption(doc.Crypto.DecryptFunc(objNum, genNum))
+		obj, err := p.ParseObject(ctx)
+		if s, ok := obj.(ast.PdfStream); err == nil && ok {
+			stream = s
+		}
+	}
+
+	contained, err := doc.DecodeObjectStream(ctx, objNum, stream)
+	if err != nil {
+		return []appendedObject{{ObjNum: objNum, Type: "ObjStm", Unread: err.Error()}}
+	}
+	objects := make([]appendedObject, 0, len(contained))
+	for _, c := range contained {
+		objects = append(objects, describeAppended(c.Num, c.Object))
+	}
+	return objects
+}
+
+// describeAppended records the entries classifyModifications reads from an
+// appended object.
+func describeAppended(objNum int, obj ast.PdfObject) appendedObject {
+	ao := appendedObject{ObjNum: objNum}
+	switch v := obj.(type) {
+	case ast.PdfDict:
+		ao.Type = dictName(v, "Type")
+		ao.FT = dictName(v, "FT")
+		if isAnnotationDict(v) {
+			ao.IsAnnot = true
+			ao.Subtype = dictName(v, "Subtype")
+		}
+	case ast.PdfStream:
+		ao.Type = dictName(v.Dict, "Type")
+		if ao.Type == "XRef" {
+			ao.IsXRef = true
+		}
+	}
+	return ao
 }
 
 // classifyModifications checks whether the appended objects violate the MDP policy.
@@ -262,6 +313,9 @@ func classifyModifications(objects []appendedObject, policy int) string {
 			// entry in that section deletes an object, and this classifier
 			// does not read the entries.
 			continue
+		}
+		if obj.Unread != "" {
+			return fmt.Sprintf("object %d is an object stream whose objects could not be read to check them: %s", obj.ObjNum, obj.Unread)
 		}
 
 		switch policy {

@@ -1439,7 +1439,9 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // and MDPInfo names the first object that does not, or why the appended data
 // could not be read. The check classifies each appended object by type rather
 // than comparing revisions, so a forbidden change made through a permitted
-// object type goes unreported.
+// object type goes unreported. An appended object stream is not itself a
+// change: the objects it holds are classified as if written outside it, and
+// one whose objects cannot be read is reported.
 func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) (_ []models.SignatureValidation, err error) {
 	defer recoverToError(r.logger(), "Reader.VerifySignatures", &err)
 	return signature.VerifySignatures(ctx, r.doc, roots)

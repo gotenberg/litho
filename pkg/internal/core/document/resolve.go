@@ -551,7 +551,13 @@ func (d *Document) parseObjectStream(ctx context.Context, objStmNum int, visited
 	if !ok {
 		return nil, fmt.Errorf("object %d is not a stream", objStmNum)
 	}
+	return d.decodeObjectStreamHeader(ctx, objStmNum, stream)
+}
 
+// decodeObjectStreamHeader decompresses the object stream objStmNum and parses
+// its header. objStmNum only names the stream in errors: stream is read as
+// given, whichever revision it came from.
+func (d *Document) decodeObjectStreamHeader(ctx context.Context, objStmNum int, stream ast.PdfStream) (*objStmData, error) {
 	decoded, err := d.builtinFilters().DecodeStream(ctx, stream)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode object stream %d: %w", objStmNum, err)
@@ -581,6 +587,102 @@ func (d *Document) parseObjectStream(ctx context.Context, objStmNum int, visited
 		return nil, fmt.Errorf("reading object stream %d header: %w", objStmNum, err)
 	}
 	return &objStmData{decoded: decoded, first: int(firstInt), objNums: objNums, offsets: offsets}, nil
+}
+
+// CompressedObject is one object an object stream holds.
+type CompressedObject struct {
+	// Num is the object number the stream's header gives the object.
+	Num int
+
+	// Object is the object's value.
+	Object ast.PdfObject
+}
+
+// DecodeObjectStream decodes stream as the object stream objStmNum and parses
+// every object it holds (ISO 32000-1, 7.5.7), in the order its header lists
+// them. An object that does not parse is left out.
+//
+// stream is read as given, not resolved through the cross-reference table, so
+// a caller can read an object stream the table no longer points at, such as
+// one an incremental update wrote and a later update superseded. Nothing is
+// cached, and the decode runs under the document's stream budget like any
+// other.
+//
+// /N, /First and the header offsets come from the file, so each is checked
+// against the decoded bytes before it is used. Each object is parsed only
+// within its own bytes, from its offset up to the next higher offset in the
+// header, and objects sharing an offset are parsed once. The work is then one
+// pass over the decoded bytes whatever the header says: a header pointing
+// every pair at one large object, or at the successive openings of a deeply
+// nested one, would otherwise cost a full parse per pair. 7.5.7 requires the
+// offsets in increasing order, and a header that breaks the rule is still read
+// with each object bounded by the nearest offset above its own.
+func (d *Document) DecodeObjectStream(ctx context.Context, objStmNum int, stream ast.PdfStream) ([]CompressedObject, error) {
+	data, err := d.decodeObjectStreamHeader(ctx, objStmNum, stream)
+	if err != nil {
+		return nil, err
+	}
+	// 7.5.7, Table 16: /First is "the byte offset in the decoded stream of
+	// the first compressed object", so it lies inside the decoded bytes.
+	if data.first < 0 || data.first > len(data.decoded) {
+		return nil, fmt.Errorf("object stream %d: /First %d lies outside its %d decoded bytes", objStmNum, data.first, len(data.decoded))
+	}
+	body := len(data.decoded) - data.first
+
+	starts := make([]int, 0, len(data.offsets))
+	for _, off := range data.offsets {
+		if off >= 0 && off <= body {
+			starts = append(starts, off)
+		}
+	}
+	slices.Sort(starts)
+	starts = slices.Compact(starts)
+
+	parsed := make(map[int]ast.PdfObject, len(starts))
+	objects := make([]CompressedObject, 0, len(starts))
+	for i, num := range data.objNums {
+		if i%100 == 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+		}
+		off := data.offsets[i]
+		if num < 0 || off < 0 || off > body {
+			continue
+		}
+		obj, seen := parsed[off]
+		if !seen {
+			end := body
+			if j, found := slices.BinarySearch(starts, off); found && j+1 < len(starts) {
+				end = starts[j+1]
+			}
+			obj = d.parseCompressedObject(ctx, data, objStmNum, num, off, end)
+			parsed[off] = obj
+		}
+		if obj != nil {
+			objects = append(objects, CompressedObject{Num: num, Object: obj})
+		}
+	}
+	return objects, nil
+}
+
+// parseCompressedObject parses the object stored at [off, end) of data's body,
+// the bytes after /First. It returns nil when those bytes hold no object.
+func (d *Document) parseCompressedObject(ctx context.Context, data *objStmData, objStmNum, objNum, off, end int) ast.PdfObject {
+	limit := data.first + end
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data.decoded[:limit]), int64(limit), int64(data.first+off)))
+	obj, err := parser.NewParser(lex).ParseObject(ctx)
+	if err != nil {
+		// A damaged object leaves its neighbours readable, and the caller
+		// asked for the objects the stream holds, so it is left out.
+		d.Logger.Debug("parsing compressed object",
+			slog.Int("obj", objNum),
+			slog.Int("stream_obj", objStmNum),
+			slog.Any("err", err),
+		)
+		return nil
+	}
+	return obj
 }
 
 // maxObjStmHeaderPrealloc bounds the header pairs [parseObjStmHeader]
