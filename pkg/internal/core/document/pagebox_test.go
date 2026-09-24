@@ -219,7 +219,8 @@ func TestPageBoxes_NonInheritableDefaultToCropBox(t *testing.T) {
 
 // TestPageBoxes_ClampedToMediaBox pins that the bleed, trim and art boxes are
 // reduced to their intersection with the media box and with nothing else (ISO
-// 32000-1, 14.11.2.1), while the page dictionary keeps the declared entries.
+// 32000-1, 14.11.2.1), while the page dictionary and the Declared fields keep
+// the entries as written.
 func TestPageBoxes_ClampedToMediaBox(t *testing.T) {
 	p := onlyPage(t, buildPageBoxPDF(
 		"[0 0 612 792]",
@@ -244,6 +245,8 @@ func TestPageBoxes_ClampedToMediaBox(t *testing.T) {
 		t.Fatalf("page dict /TrimBox is %T, want the declared array", p.Dict["TrimBox"])
 	}
 	assertBox(t, "declared TrimBox", arrToFloats(declared), [4]float64{0, 0, 700, 700})
+	assertBox(t, "DeclaredTrimBox", arrToFloats(p.DeclaredTrimBox), [4]float64{0, 0, 700, 700})
+	assertBox(t, "DeclaredBleedBox", arrToFloats(p.DeclaredBleedBox), [4]float64{-10, -10, 622, 802})
 }
 
 // TestPageBoxes_DefaultsFollowTheEffectiveCropBox pins that an absent bleed,

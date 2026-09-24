@@ -1477,7 +1477,9 @@ func (r *Reader) DSSInfo(ctx context.Context) (_ *models.DSSInfo, err error) {
 // file declares. CropBox, BleedBox, TrimBox and ArtBox report the effective
 // boundaries: an absent box takes its default from ISO 32000-1, Table 30, and
 // a box extending beyond the media box is reduced to its intersection with it
-// (ISO 32000-1, 14.11.2.1). See [models.Page] for the exact rules.
+// (ISO 32000-1, 14.11.2.1). DeclaredCropBox, DeclaredBleedBox,
+// DeclaredTrimBox and DeclaredArtBox report the entries those four are derived
+// from, as written, and nil when absent. See [models.Page] for the exact rules.
 //
 // # Corpus evidence
 //
@@ -1539,6 +1541,11 @@ func (r *Reader) Page(ctx context.Context, pageNum int) (_ models.Page, err erro
 		BleedBox:    boxToRect(p.BleedBox),
 		TrimBox:     boxToRect(p.TrimBox),
 		ArtBox:      boxToRect(p.ArtBox),
+
+		DeclaredCropBox:  declaredRect(p.DeclaredCropBox),
+		DeclaredBleedBox: declaredRect(p.DeclaredBleedBox),
+		DeclaredTrimBox:  declaredRect(p.DeclaredTrimBox),
+		DeclaredArtBox:   declaredRect(p.DeclaredArtBox),
 	}, nil
 }
 
@@ -1826,6 +1833,19 @@ func boxToRect(arr ast.PdfArray) [4]float64 {
 		return [4]float64{}
 	}
 	return [4]float64{document.Float(arr[0]), document.Float(arr[1]), document.Float(arr[2]), document.Float(arr[3])}
+}
+
+// declaredRect converts a page boundary as the file declares it to the
+// rectangle [models.Page] reports, or nil when the entry is absent or does not
+// have the four elements of a rectangle (ISO 32000-1, 7.9.5). The effective
+// boxes read such an entry as absent too, so a nil declared box always means
+// its effective box took its ISO 32000-1, Table 30 default.
+func declaredRect(arr ast.PdfArray) *[4]float64 {
+	if len(arr) != 4 {
+		return nil
+	}
+	rect := boxToRect(arr)
+	return &rect
 }
 
 // runOCR extracts the largest image from the page, decodes it, and passes it

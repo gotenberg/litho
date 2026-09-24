@@ -27,21 +27,26 @@ type PageTree struct {
 // CropBox, BleedBox, TrimBox and ArtBox are the effective boundaries: the
 // default ISO 32000-1, 7.7.3.3, Table 30 gives each applied, then each reduced
 // to its intersection with the media box as ISO 32000-1, 14.11.2.1 requires
-// (see [clampToMediaBox]). A check that must judge a boundary as the file
-// declares it reads Dict, which holds the page's own entries verbatim, and not
-// these fields. An inherited crop box is declared on an ancestor /Pages node.
+// (see [clampToMediaBox]). DeclaredCropBox, DeclaredBleedBox, DeclaredTrimBox
+// and DeclaredArtBox hold the entries those four are derived from, as written
+// and nil when absent. An inherited crop box is declared on an ancestor /Pages
+// node. Dict holds the page's own entries verbatim.
 type Page struct {
-	Ref       ast.PdfIndirectRef
-	Dict      ast.PdfDict
-	Resources ast.PdfDict
-	MediaBox  ast.PdfArray      // Inherited; as written
-	CropBox   ast.PdfArray      // Inherited; defaults to MediaBox; clamped to MediaBox
-	BleedBox  ast.PdfArray      // Non-inherited; defaults to CropBox; clamped to MediaBox
-	TrimBox   ast.PdfArray      // Non-inherited; defaults to CropBox; clamped to MediaBox
-	ArtBox    ast.PdfArray      // Non-inherited; defaults to CropBox; clamped to MediaBox
-	Rotate    int               // Inherited; clockwise degrees (0, 90, 180, 270)
-	UserUnit  float64           // Non-inherited; default 1.0 (PDF 1.6+, ISO 32000-1, Table 30)
-	DPM       map[string]string // Document Part Metadata
+	Ref              ast.PdfIndirectRef
+	Dict             ast.PdfDict
+	Resources        ast.PdfDict
+	MediaBox         ast.PdfArray      // Inherited; as written
+	CropBox          ast.PdfArray      // Inherited; defaults to MediaBox; clamped to MediaBox
+	BleedBox         ast.PdfArray      // Non-inherited; defaults to CropBox; clamped to MediaBox
+	TrimBox          ast.PdfArray      // Non-inherited; defaults to CropBox; clamped to MediaBox
+	ArtBox           ast.PdfArray      // Non-inherited; defaults to CropBox; clamped to MediaBox
+	DeclaredCropBox  ast.PdfArray      // Inherited; as written; nil when no node declares one
+	DeclaredBleedBox ast.PdfArray      // As written; nil when absent
+	DeclaredTrimBox  ast.PdfArray      // As written; nil when absent
+	DeclaredArtBox   ast.PdfArray      // As written; nil when absent
+	Rotate           int               // Inherited; clockwise degrees (0, 90, 180, 270)
+	UserUnit         float64           // Non-inherited; default 1.0 (PDF 1.6+, ISO 32000-1, Table 30)
+	DPM              map[string]string // Document Part Metadata
 }
 
 // BuildPageMap constructs a reverse-lookup map from each page's [ast.PdfIndirectRef]
@@ -589,9 +594,12 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		// the media box, and with nothing else: the crop box "has no defined
 		// relationship with any of the other boundaries", so a bleed box wider
 		// than the crop box but inside the media box stays as written.
-		bleedBox := clampToMediaBox(resolveBoxArray(ctx, doc, node, "BleedBox"), currentMediaBox, effectiveCropBox)
-		trimBox := clampToMediaBox(resolveBoxArray(ctx, doc, node, "TrimBox"), currentMediaBox, effectiveCropBox)
-		artBox := clampToMediaBox(resolveBoxArray(ctx, doc, node, "ArtBox"), currentMediaBox, effectiveCropBox)
+		declaredBleedBox := resolveBoxArray(ctx, doc, node, "BleedBox")
+		declaredTrimBox := resolveBoxArray(ctx, doc, node, "TrimBox")
+		declaredArtBox := resolveBoxArray(ctx, doc, node, "ArtBox")
+		bleedBox := clampToMediaBox(declaredBleedBox, currentMediaBox, effectiveCropBox)
+		trimBox := clampToMediaBox(declaredTrimBox, currentMediaBox, effectiveCropBox)
+		artBox := clampToMediaBox(declaredArtBox, currentMediaBox, effectiveCropBox)
 
 		// UserUnit (PDF 1.6+, ISO 32000-1, 7.7.3.3, Table 30): a positive,
 		// non-inheritable scaling factor. Default is 1.0 (1 unit = 1/72
@@ -604,16 +612,20 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		}
 
 		*pages = append(*pages, &Page{
-			Ref:       nodeRef,
-			Dict:      node,
-			Resources: currentResources,
-			MediaBox:  currentMediaBox,
-			CropBox:   effectiveCropBox,
-			BleedBox:  bleedBox,
-			TrimBox:   trimBox,
-			ArtBox:    artBox,
-			Rotate:    currentRotate,
-			UserUnit:  userUnit,
+			Ref:              nodeRef,
+			Dict:             node,
+			Resources:        currentResources,
+			MediaBox:         currentMediaBox,
+			CropBox:          effectiveCropBox,
+			BleedBox:         bleedBox,
+			TrimBox:          trimBox,
+			ArtBox:           artBox,
+			DeclaredCropBox:  currentCropBox,
+			DeclaredBleedBox: declaredBleedBox,
+			DeclaredTrimBox:  declaredTrimBox,
+			DeclaredArtBox:   declaredArtBox,
+			Rotate:           currentRotate,
+			UserUnit:         userUnit,
 		})
 	}
 

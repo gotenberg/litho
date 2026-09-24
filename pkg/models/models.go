@@ -35,7 +35,9 @@ type Page struct {
 	// the page tree is resolved once per reader and every Page handed out
 	// carries that same map. Treat it as read-only, and copy it before
 	// changing anything, since writing through it edits the reader's own
-	// state for every later caller. The rest of this struct is values.
+	// state for every later caller. The rest of this struct is values, and
+	// each declared box points at an array the call allocates for this Page
+	// alone.
 	DPM map[string]string `json:"dpm,omitempty"`
 	// MediaBox is the media box as the page, or the page tree node it inherits
 	// from, writes it, in default user space units before /UserUnit applies.
@@ -57,6 +59,34 @@ type Page struct {
 	TrimBox [4]float64 `json:"trimBox"`
 	// ArtBox is the effective art box. See CropBox for the rules.
 	ArtBox [4]float64 `json:"artBox"`
+	// DeclaredCropBox is the crop box as the file writes it, before the
+	// default and the intersection that make CropBox. DeclaredCropBox,
+	// DeclaredBleedBox, DeclaredTrimBox and DeclaredArtBox are the entries as
+	// written, in the units and corner order of the file, so a box that
+	// extends beyond the media box, which ISO 32000-1, 14.11.2.1 reduces in
+	// the effective box, reads here at its declared size. Each is nil when the
+	// entry is absent, or is not an array of four elements, which the
+	// effective box also reads as absent (ISO 32000-1, 7.9.5). A declared box
+	// has no default: nil tells a missing entry apart from one that equals
+	// its default. MediaBox needs no declared counterpart, since it already
+	// reports the entry as written.
+	//
+	// The crop box is inheritable (ISO 32000-1, 7.7.3.3, Table 30), so
+	// DeclaredCropBox is the entry of the page or, when the page has none, of
+	// the nearest page tree node above it that has one.
+	DeclaredCropBox *[4]float64 `json:"declaredCropBox,omitempty"`
+	// DeclaredBleedBox is the bleed box as the file writes it on the page, nil
+	// when absent. It is not inheritable (ISO 32000-1, 7.7.3.3, Table 30). See
+	// DeclaredCropBox for the rules.
+	DeclaredBleedBox *[4]float64 `json:"declaredBleedBox,omitempty"`
+	// DeclaredTrimBox is the trim box as the file writes it on the page, nil
+	// when absent. It is not inheritable (ISO 32000-1, 7.7.3.3, Table 30). See
+	// DeclaredCropBox for the rules.
+	DeclaredTrimBox *[4]float64 `json:"declaredTrimBox,omitempty"`
+	// DeclaredArtBox is the art box as the file writes it on the page, nil
+	// when absent. It is not inheritable (ISO 32000-1, 7.7.3.3, Table 30). See
+	// DeclaredCropBox for the rules.
+	DeclaredArtBox *[4]float64 `json:"declaredArtBox,omitempty"`
 }
 
 // TextElement represents a spatially positioned piece of text on a page.

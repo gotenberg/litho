@@ -3,6 +3,7 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/models"
@@ -97,5 +98,120 @@ func TestPageBoundarySizeCheckJudgesTheDeclaredBox(t *testing.T) {
 				t.Errorf("6.1.13 t11 fired = %v, want %v for /TrimBox %s", fired, c.want, c.trimBox)
 			}
 		})
+	}
+}
+
+// TestPageReportsDeclaredBoundaries pins that [Reader.Page] reports each page
+// boundary as the file writes it beside the effective one: a box extending
+// beyond the media box keeps its declared size, a crop box inherited from the
+// page tree (ISO 32000-1, 7.7.3.3, Table 30) is the ancestor's entry, and an
+// absent box, or one without the four elements of a rectangle (ISO 32000-1,
+// 7.9.5), is nil rather than its default.
+func TestPageReportsDeclaredBoundaries(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	data := buildTestPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 /MediaBox [0 0 612 792] /CropBox [-20 -20 700 900] >>",
+		"<< /Type /Page /Parent 2 0 R /BleedBox [-9 -9 621 801] /ArtBox [1 1 600 700 9] >>",
+		"<< /Type /Page /Parent 2 0 R /CropBox [10 10 602 782] /TrimBox [36 36 576 756] >>",
+	}, "")
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+
+	first, err := r.Page(ctx, 1)
+	if err != nil {
+		t.Fatalf("Page(1): %v", err)
+	}
+	second, err := r.Page(ctx, 2)
+	if err != nil {
+		t.Fatalf("Page(2): %v", err)
+	}
+
+	for _, c := range []struct {
+		name string
+		got  *[4]float64
+		want *[4]float64
+	}{
+		{"page 1 DeclaredCropBox, inherited as written", first.DeclaredCropBox, &[4]float64{-20, -20, 700, 900}},
+		{"page 1 DeclaredBleedBox, beyond the media box", first.DeclaredBleedBox, &[4]float64{-9, -9, 621, 801}},
+		{"page 1 DeclaredTrimBox, absent", first.DeclaredTrimBox, nil},
+		{"page 1 DeclaredArtBox, five elements", first.DeclaredArtBox, nil},
+		{"page 2 DeclaredCropBox, its own entry", second.DeclaredCropBox, &[4]float64{10, 10, 602, 782}},
+		{"page 2 DeclaredBleedBox, absent", second.DeclaredBleedBox, nil},
+		{"page 2 DeclaredTrimBox", second.DeclaredTrimBox, &[4]float64{36, 36, 576, 756}},
+		{"page 2 DeclaredArtBox, absent", second.DeclaredArtBox, nil},
+	} {
+		switch {
+		case c.want == nil && c.got != nil:
+			t.Errorf("%s = %v, want nil", c.name, *c.got)
+		case c.want != nil && c.got == nil:
+			t.Errorf("%s = nil, want %v", c.name, *c.want)
+		case c.want != nil && *c.got != *c.want:
+			t.Errorf("%s = %v, want %v", c.name, *c.got, *c.want)
+		}
+	}
+
+	// The effective boxes of the same pages are clamped and defaulted, so the
+	// declared ones are the only place the written values survive.
+	for _, c := range []struct {
+		name      string
+		got, want [4]float64
+	}{
+		{"page 1 CropBox", first.CropBox, [4]float64{0, 0, 612, 792}},
+		{"page 1 BleedBox", first.BleedBox, [4]float64{0, 0, 612, 792}},
+		{"page 1 TrimBox", first.TrimBox, [4]float64{0, 0, 612, 792}},
+		{"page 1 ArtBox", first.ArtBox, [4]float64{0, 0, 612, 792}},
+		{"page 2 BleedBox", second.BleedBox, [4]float64{10, 10, 602, 782}},
+	} {
+		if c.got != c.want {
+			t.Errorf("%s = %v, want %v", c.name, c.got, c.want)
+		}
+	}
+}
+
+// TestPageDeclaredBoundariesJSON pins the JSON a [models.Page] serializes to: a
+// declared box is written under its own key when the file declares it and
+// left out when it does not, beside the effective boxes, which are always
+// written.
+func TestPageDeclaredBoundariesJSON(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	data := pageBoxPDF("/MediaBox [0 0 612 792] /TrimBox [0 0 700 700]")
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	p, err := r.Page(ctx, 1)
+	if err != nil {
+		t.Fatalf("Page: %v", err)
+	}
+
+	raw, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("json.Marshal: %v", err)
+	}
+	var got map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+
+	for key, want := range map[string]string{
+		"trimBox":         "[0,0,612,700]",
+		"declaredTrimBox": "[0,0,700,700]",
+		"cropBox":         "[0,0,612,792]",
+	} {
+		if string(got[key]) != want {
+			t.Errorf("%s = %s, want %s. JSON: %s", key, got[key], want, raw)
+		}
+	}
+	for _, key := range []string{"declaredCropBox", "declaredBleedBox", "declaredArtBox"} {
+		if v, ok := got[key]; ok {
+			t.Errorf("%s = %s, want it left out for an absent box. JSON: %s", key, v, raw)
+		}
 	}
 }
