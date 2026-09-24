@@ -1163,7 +1163,11 @@ func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.Pdf
 				return nil, fmt.Errorf("decoded JPEG is %d bytes, which is not 1, 3 or 4 per pixel of %dx%d",
 					len(decodedData), width, height)
 			}
-			colorSpace = measured
+			// A Lab JPEG holds its three components as they are: the shape
+			// confirms the space rather than replacing it.
+			if colorSpace != "Lab" || measured != "DeviceRGB" {
+				colorSpace = measured
+			}
 		}
 		bitsPerComp = 8
 	}
@@ -1200,8 +1204,23 @@ func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.Pdf
 		}
 	}
 
+	// A Lab image holds L*, a* and b* per pixel (ISO 32000-1, 8.6.5.4), which
+	// the palette path already converts to sRGB for an indexed image. Read as
+	// RGB, the white of the one direct Lab image in the corpora, a govdocs
+	// JPEG, came out pink.
+	var lab labParams
+	isLab := false
+	if !isIndexed && colorSpace == "Lab" {
+		if lab, isLab = resolveLabParams(ctx, doc, stream.Dict["ColorSpace"]); !isLab {
+			return nil, fmt.Errorf("image %q is in a Lab colour space with no usable /WhitePoint", name)
+		}
+	}
+
 	samplesPerPixel := 1
-	if !isIndexed {
+	switch {
+	case isLab:
+		samplesPerPixel = 3
+	case !isIndexed:
 		samplesPerPixel = imageComponents(colorSpace)
 		if samplesPerPixel == 0 {
 			return nil, fmt.Errorf("unsupported color space %q for image decode", colorSpace)
@@ -1236,6 +1255,14 @@ func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.Pdf
 		img, err := decodeIndexed(decodedData, width, height, pal)
 		if err != nil {
 			return nil, err
+		}
+		return finishRows(img, validRows), nil
+	}
+	if isLab {
+		img := image.NewRGBA(image.Rect(0, 0, width, height))
+		for i := range width * height {
+			r, g, b := labEntryToRGB([4]byte{decodedData[3*i], decodedData[3*i+1], decodedData[3*i+2]}, lab)
+			img.SetRGBA(i%width, i/width, color.RGBA{R: r, G: g, B: b, A: 255})
 		}
 		return finishRows(img, validRows), nil
 	}
