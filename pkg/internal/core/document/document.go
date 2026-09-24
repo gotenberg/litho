@@ -137,6 +137,14 @@ type Document struct {
 	// serialized by d.mu.
 	integerOverflows map[int][]float64
 
+	// declaredStarts lists, by ascending offset, where the cross-reference
+	// table places each in-use uncompressed object. [Document.objectEnd]
+	// reads it to bound a parse. It is taken from the table the file declares
+	// before any resolution can augment it from a raw-byte scan, and left empty
+	// for a rebuilt index, which has no table behind it. Written once during
+	// construction and read-only thereafter.
+	declaredStarts []objectStart
+
 	// XRefTableOffsets records the byte offsets of traditional xref tables
 	// encountered during parsing. Written once during construction and
 	// read-only thereafter.
@@ -780,6 +788,10 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	// Runs once the index is final, whichever path filled it, because all of
 	// them take object numbers straight from the file.
 	doc.pruneUnrepresentableEntries()
+
+	if !doc.Rebuilt {
+		doc.declaredStarts = declaredObjectStarts(doc.Index.Entries)
+	}
 
 	doc.Logger.Debug("xref parsed",
 		slog.Int("entries", len(doc.Index.Entries)),

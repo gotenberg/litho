@@ -109,6 +109,45 @@ func (p *Parser) WithOffsetTracking() *Parser {
 	return p
 }
 
+// WithObjectEnd ends the data the parser reads at end, the byte offset where
+// the next indirect object starts. ISO 32000-1, 7.5.3 makes the body of a file
+// a sequence of indirect objects and 7.3.10 brackets each value between obj and
+// endobj, so no object runs on into the next one.
+//
+// Deliberate leniency: a literal string (ISO 32000-1, 7.3.4.2) or a dictionary
+// (7.3.7) still open at end has no meaning under ISO 32000-1, and litho reads
+// it as damage that ends there rather than failing the object. The unterminated
+// string is dropped and the dictionary keeps the pairs before it, as it does
+// when the file itself ends. Damaged files leave such a construct open: binary
+// data written into a dictionary opens a string whose closing parenthesis, if
+// one ever balances it, lies many objects further on, and reading on to it
+// parses whatever those objects hold as values of this one. veraPDF refuses the
+// dictionary outright at its first key that is not a name ("invalid pdf
+// dictionary", COSParser.getDictionary), and PDF.js reads the string on to its
+// closing parenthesis wherever that falls (Lexer.getString).
+//
+// The bound comes from the cross-reference table, never from the bytes: a
+// literal string may hold "1 0 obj" or "endobj" (7.3.4.2 allows any text with
+// balanced parentheses), so searching the data for either would cut a valid
+// string short. A stream's data is exempt, see [Parser.parseStreamAfterDict].
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11678.pdf: names Microsoft Word for Office 365 as its
+//     producer, and object 21's dictionary runs into binary image data, where
+//     a literal string opens 1.6 KB before object 22 and closes 184 KB later.
+//     Parsing on past it read the bytes of 13 other objects as object 21's
+//     values and reported 97 findings of ISO 19005-2, 6.1.6 t1 and t2 against
+//     the hex strings found there, which veraPDF does not report. Its PDF/A-2b
+//     run now reports 38 violations instead of 135.
+//   - All corpora: bounding every uncompressed object at the next one changes
+//     no other file's parse, page count, text or violations under PDF/A-2b,
+//     veraPDF files under their own profile.
+func (p *Parser) WithObjectEnd(end int64) *Parser {
+	p.lex.Reader().SetLimit(end)
+	return p
+}
+
 // PeekEnd returns the end byte offset of the token n positions ahead, or -1
 // if offset tracking is disabled or n is out of range. The offset is the
 // reader position just past the token's last byte.
@@ -326,6 +365,11 @@ func (p *Parser) parseObject(ctx context.Context) (ast.PdfObject, error) {
 
 	switch t0.Type {
 	case lexer.TokenEOF, lexer.TokenError:
+		// Peek records every lexer error but one: the data ending inside a
+		// token, which leaves nothing further to read.
+		if t0.Type == lexer.TokenError && p.err == nil {
+			return nil, fmt.Errorf("%s: %w", t0.Value, errTruncatedToken)
+		}
 		return nil, fmt.Errorf("unexpected token type: %v", t0.Type)
 	case lexer.TokenKeyword:
 		switch t0.Value {
@@ -471,7 +515,9 @@ func (p *Parser) parseDict(ctx context.Context) (ast.PdfObject, error) {
 // parseDictBody reads the key/value pairs between `<<` and `>>` into an
 // [ast.PdfDict]. It tolerates EOF, a premature `endobj` and a `stream`
 // keyword as implicit close markers so it still returns a partial dict for
-// malformed input (the top-level parser continues, lenient by design).
+// malformed input (the top-level parser continues, lenient by design). A token
+// the data ends inside, such as a literal string still open at the end set by
+// [Parser.WithObjectEnd], closes it the same way.
 //
 // Deliberate leniency: ISO 32000-1, 7.3.7 writes a dictionary as a sequence of
 // key-value pairs whose keys are names, and a malformed pair costs that pair
@@ -517,9 +563,10 @@ func (p *Parser) parseDict(ctx context.Context) (ast.PdfObject, error) {
 //     image's /DP, which lost the /BlackIs1 true after it.
 //   - pdfjs issue11678.pdf: object 21's dictionary runs into binary image
 //     data, where a literal string spans 184 KB, and its parse stopped by
-//     chance at a keyword in a value position. It now runs 62 KB further and
-//     adds 97 findings to the two ISO 19005-2, 6.1.6 hex string tests the
-//     file already failed. veraPDF reports neither test on it.
+//     chance at a keyword in a value position. Keeping the pairs after a
+//     malformed entry ran it 62 KB further and added 97 findings to the two
+//     ISO 19005-2, 6.1.6 hex string tests, which veraPDF reports neither of,
+//     until [Parser.WithObjectEnd] ended the object where object 22 starts.
 //   - All corpora: the parser met a keyword or a stray delimiter where a
 //     value belongs in 7 dictionaries of 3 files. No file changes its page
 //     count or its text, and every file but poppler-742-0-fuzzed.pdf and
@@ -569,6 +616,12 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 			if isStrayToken(err) {
 				resync = true
 				continue
+			}
+			// The data ends inside the token, which closes the dictionary as
+			// the end of the data does: the unterminated token is the damage,
+			// not the pairs before it.
+			if errors.Is(err, errTruncatedToken) {
+				break
 			}
 			return nil, err
 		}
@@ -801,6 +854,12 @@ func isSignatureDict(dict ast.PdfDict) bool {
 // parseStreamAfterDict consumes the `stream` keyword, the stream body
 // (via fast or slow path), and returns a lazy [ast.PdfStream]. The caller
 // has already confirmed the next token is `stream`.
+//
+// The stream data is exempt from any end [Parser.WithObjectEnd] set: /Length
+// delimits it (ISO 32000-1, 7.3.8.2), and the lazy stream reads it straight
+// from the file. A table offset that lands inside the data is the weaker claim
+// of the two, since the header found there can belong to a file the stream
+// embeds uncompressed.
 func (p *Parser) parseStreamAfterDict(ctx context.Context, dict ast.PdfDict) (ast.PdfObject, error) {
 	if _, err := p.Expect(lexer.TokenKeyword); err != nil {
 		return nil, err
@@ -815,6 +874,7 @@ func (p *Parser) parseStreamAfterDict(ctx context.Context, dict ast.PdfDict) (as
 	}
 
 	reader := p.lex.Reader()
+	reader.ClearLimit()
 	if err := p.consumeStreamEOL(reader); err != nil {
 		return nil, err
 	}

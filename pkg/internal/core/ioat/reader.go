@@ -7,8 +7,13 @@ import "io"
 // Reader from the same [io.ReaderAt], which is position-independent and
 // concurrent-safe.
 type Reader struct {
-	r      io.ReaderAt
-	size   int64
+	r    io.ReaderAt
+	size int64
+
+	// limit is where the data ends for reads: size, unless [Reader.SetLimit]
+	// moved it closer.
+	limit int64
+
 	offset int64
 	buf    []byte
 	bufPos int
@@ -24,18 +29,47 @@ func NewReader(r io.ReaderAt, size int64, offset int64) *Reader {
 	return &Reader{
 		r:      r,
 		size:   size,
+		limit:  size,
 		offset: offset,
 		buf:    make([]byte, defaultBufSize),
 	}
 }
 
-// fill reads more data into the buffer from the underlying ReaderAt.
+// SetLimit ends the data at limit: a read that reaches it reports [io.EOF], as
+// though the underlying reader stopped there. A limit outside [0, size]
+// restores the size given to [NewReader], which [Reader.ClearLimit] also does.
+// Buffered bytes past a lowered limit are dropped, so the byte before the
+// current position can no longer be unread.
+func (b *Reader) SetLimit(limit int64) {
+	if limit < 0 || limit > b.size {
+		limit = b.size
+	}
+	if b.offset > limit {
+		b.offset = b.Position()
+		b.bufPos = 0
+		b.bufLen = 0
+	}
+	b.limit = limit
+}
+
+// ClearLimit lifts a limit [Reader.SetLimit] set, so reads run on to the size
+// given to [NewReader].
+func (b *Reader) ClearLimit() {
+	b.limit = b.size
+}
+
+// fill reads more data into the buffer from the underlying ReaderAt, never
+// past the limit.
 func (b *Reader) fill() error {
-	if b.offset >= b.size {
+	if b.offset >= b.limit {
 		return io.EOF
 	}
 
-	n, err := b.r.ReadAt(b.buf, b.offset)
+	buf := b.buf
+	if remaining := b.limit - b.offset; remaining < int64(len(buf)) {
+		buf = buf[:remaining]
+	}
+	n, err := b.r.ReadAt(buf, b.offset)
 	b.bufPos = 0
 	b.bufLen = n
 	b.offset += int64(n)
@@ -110,7 +144,7 @@ func (b *Reader) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekCurrent:
 		abs = b.offset - int64(b.bufLen-b.bufPos) + offset
 	case io.SeekEnd:
-		abs = b.size + offset
+		abs = b.limit + offset
 	default:
 		return 0, ErrSeekInvalidWhence
 	}

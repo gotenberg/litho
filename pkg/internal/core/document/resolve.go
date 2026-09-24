@@ -2,6 +2,7 @@ package document
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -908,6 +909,76 @@ func objectHeaderMatches(r io.ReaderAt, offset int64, expected int) bool {
 	return s[i] == ' ' && s[i+1] == 'o' && s[i+2] == 'b' && s[i+3] == 'j'
 }
 
+// objectStart is the byte offset the cross-reference table gives an in-use
+// uncompressed object, with the object's number.
+type objectStart struct {
+	offset int64
+	num    int
+}
+
+// declaredObjectStarts returns the offset of every in-use uncompressed object
+// in entries, in ascending order.
+func declaredObjectStarts(entries map[int]xref.XRefEntry) []objectStart {
+	starts := make([]objectStart, 0, len(entries))
+	for num, entry := range entries {
+		if entry.Type == xref.XRefTypeNormal && !entry.Free {
+			starts = append(starts, objectStart{offset: entry.Offset, num: num})
+		}
+	}
+	slices.SortFunc(starts, func(a, b objectStart) int {
+		if c := cmp.Compare(a.offset, b.offset); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.num, b.num)
+	})
+	return starts
+}
+
+// maxObjectEndProbes bounds how many later objects [Document.objectEnd] checks
+// for a header before it gives up on bounding a parse. Anti-DoS guard, not
+// spec-mandated: each check is one small read, and a table whose offsets all
+// miss their headers would otherwise have every resolution check every object
+// after it, a cost quadratic in the object count. A table that places the next
+// object correctly needs one check, and one that points a few objects astray
+// still finds a header within the bound. Past it the parse runs to the end of
+// the file, as it did before any bound.
+//
+// # Corpus evidence
+//
+//   - All corpora: of the 561,861 declared objects followed by another one,
+//     561,804 find its header at the first check, 16 at the second and 6
+//     more within the bound.
+//   - pdfjs issue9418.pdf: its table misplaces a run of 20 objects, and the
+//     13 objects past the bound are all in it.
+//   - pdfjs colors.pdf: writes every header as "3\n0\nobj", which
+//     [objectHeaderMatches] does not read, so 13 of its 14 objects find no
+//     header at all, as do 9 objects in 7 other files.
+const maxObjectEndProbes = 8
+
+// objectEnd returns the offset the parse of the object at offset must not
+// read past (see [parser.Parser.WithObjectEnd]): the start of the next object
+// the cross-reference table places after it, or the end of the file.
+//
+// A later offset bounds the object only when the bytes there open the header
+// of the object the table names, "N G obj" (ISO 32000-1, 7.3.10). A table
+// offset that misses its header says nothing about where this object ends, and
+// ending the parse there would cut a sound object short.
+func (d *Document) objectEnd(offset int64) int64 {
+	starts := d.declaredStarts
+	i, _ := slices.BinarySearchFunc(starts, offset, func(s objectStart, off int64) int {
+		if s.offset <= off {
+			return -1
+		}
+		return 1
+	})
+	for probes := 0; i < len(starts) && probes < maxObjectEndProbes; i, probes = i+1, probes+1 {
+		if objectHeaderMatches(d.r, starts[i].offset, starts[i].num) {
+			return starts[i].offset
+		}
+	}
+	return d.size
+}
+
 // scanIndirectObjects returns an xref entry for every "N G obj" header
 // found in the raw document bytes. The scan reads the file in chunks
 // with a small overlap so that markers straddling chunk boundaries are
@@ -1114,7 +1185,7 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		}
 
 		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, entry.Offset))
-		p := parser.NewParser(lex)
+		p := parser.NewParser(lex).WithObjectEnd(d.objectEnd(entry.Offset))
 		if d.Crypto != nil {
 			// Key the per-object cipher on the generation the cross-reference
 			// gives the object, not the one the caller put in the reference.

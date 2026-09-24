@@ -161,3 +161,68 @@ func TestNewReader_WithOffset(t *testing.T) {
 		t.Errorf("ReadByte with offset 4 = %c, want E", b)
 	}
 }
+
+// TestSetLimit pins that a limit ends the data a read sees and that
+// ClearLimit restores the rest.
+func TestSetLimit(t *testing.T) {
+	data := []byte("ABCDEFGH")
+	r := NewReader(bytes.NewReader(data), int64(len(data)), 0)
+	r.SetLimit(3)
+
+	got, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if string(got) != "ABC" {
+		t.Errorf("read %q under limit 3, want %q", got, "ABC")
+	}
+
+	r.ClearLimit()
+	got, err = io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if string(got) != "DEFGH" {
+		t.Errorf("read %q after ClearLimit, want %q", got, "DEFGH")
+	}
+}
+
+// TestSetLimitDropsBufferedBytes pins that lowering the limit below bytes
+// already buffered hides them too: a limit set after the first read would
+// otherwise take effect only at the next refill.
+func TestSetLimitDropsBufferedBytes(t *testing.T) {
+	data := []byte("ABCDEFGH")
+	r := NewReader(bytes.NewReader(data), int64(len(data)), 0)
+	if b, _ := r.ReadByte(); b != 'A' {
+		t.Fatalf("ReadByte = %c, want A", b)
+	}
+	r.SetLimit(3)
+
+	got, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+	if string(got) != "BC" {
+		t.Errorf("read %q under limit 3, want %q", got, "BC")
+	}
+	if pos, err := r.Seek(0, io.SeekEnd); err != nil || pos != 3 {
+		t.Errorf("Seek(0, SeekEnd) = %d, %v, want the limit 3", pos, err)
+	}
+}
+
+// TestSetLimitOutsideSizeRestoresSize pins that a limit the data cannot hold
+// reads as no limit.
+func TestSetLimitOutsideSizeRestoresSize(t *testing.T) {
+	data := []byte("ABCDEFGH")
+	for _, limit := range []int64{-1, 100} {
+		r := NewReader(bytes.NewReader(data), int64(len(data)), 0)
+		r.SetLimit(limit)
+		got, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatalf("ReadAll: %v", err)
+		}
+		if string(got) != string(data) {
+			t.Errorf("read %q under limit %d, want %q", got, limit, data)
+		}
+	}
+}

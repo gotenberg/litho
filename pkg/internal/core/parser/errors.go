@@ -19,6 +19,11 @@ var errUnexpectedKeyword = errors.New("unexpected keyword")
 // than discarding every key the dictionary holds.
 var errUnexpectedDelimiter = errors.New("unexpected delimiter")
 
+// errTruncatedToken marks a token the data ends inside, such as a literal
+// string whose closing parenthesis never comes. The data ends at the end of the
+// file, or at the end of the object when [Parser.WithObjectEnd] bounds it.
+var errTruncatedToken = errors.New("data ends inside a token")
+
 // errNestingTooDeep marks input whose object nesting passes
 // [maxParseNestingDepth]. Refusing the object is the only available answer:
 // the recursion is otherwise bounded by the goroutine stack alone, and a stack
