@@ -42,14 +42,14 @@ func TestAppliesDecodeArray(t *testing.T) {
 			true,
 		},
 		{
-			"an indexed space does not: the array remaps indices",
+			"an indexed space does too: the decode maps its indices",
 			ast.PdfDict{
 				"ColorSpace": ast.PdfArray{
 					ast.PdfName("Indexed"), ast.PdfName("DeviceRGB"),
 					ast.PdfInt(1), ast.PdfString("\xff\x00\x00\x00\xff\x00"),
 				},
 			},
-			false,
+			true,
 		},
 		{
 			// The filter no longer enters into it at all; only the colour space

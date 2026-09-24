@@ -173,6 +173,27 @@ func padShortSamples(data []byte, width, height, samplesPerPixel, bpc int) ([]by
 	return padded, len(data) / rowBytes
 }
 
+// indexDecode maps the indices of an indexed image through its /Decode array
+// in place (ISO 32000-1, 8.9.5.2), rounding each to the nearest index. The
+// default [0 2^n-1] leaves them as they are; pdfjs issue10339_reduced.pdf
+// states [255 0], which reverses the table, and reading the indices unmapped
+// painted every pixel from the wrong end of it.
+func indexDecode(ctx context.Context, doc *document.Document, dict ast.PdfDict, indices []byte, bpc int) {
+	dec := resolveDecodeArray(ctx, doc, dict, 1)
+	if dec == nil || bpc < 1 || bpc > 8 {
+		return
+	}
+	top := float64(int(1)<<bpc - 1)
+	var lut [256]byte
+	for s := range lut {
+		v := dec[0] + float64(s)*(dec[1]-dec[0])/top
+		lut[s] = byte(min(max(math.Round(v), 0), 255))
+	}
+	for i, v := range indices {
+		indices[i] = lut[v]
+	}
+}
+
 // finishRows paints the rows of img from row on black, and returns img.
 func finishRows(img image.Image, row int) image.Image {
 	b := img.Bounds()
@@ -249,14 +270,12 @@ func jpegSampleSpace(decodedLen, width, height int) (string, bool) {
 // from the new image and the result renders the same; where it has not, the
 // pixels still need it and dropping it changes the picture.
 //
-// Only an indexed image is excluded: its /Decode remaps palette INDICES rather
-// than colour components (ISO 32000-1, 8.9.5.2), and [decodeIndexed] looks each
-// index up directly without ever consulting the array.
-//
-// The question is asked of the colour space, not of the colour table. An indexed
-// image whose table cannot be read is still an indexed image, and [DecodeImage]
-// refuses it rather than returning pixels, so answering "the array was applied"
-// would describe pixels that were never produced.
+// An indexed image's /Decode remaps palette INDICES rather than colour
+// components (ISO 32000-1, 8.9.5.2), and the decode applies it to the indices
+// before looking them up, so its pixels carry it too. One whose colour table
+// cannot be read is the exception: [DecodeImage] refuses it rather than
+// returning pixels, so answering "the array was applied" would describe pixels
+// that were never produced.
 //
 // A JPEG was excluded too, while the DCTDecode branch returned image/jpeg's
 // output without building the /Decode tables. That branch is gone: a JPEG now
@@ -264,8 +283,11 @@ func jpegSampleSpace(decodedLen, width, height int) (string, bool) {
 // image's. An Adobe-inverted CMYK JPEG carrying /Decode [1 0 1 0 1 0 1 0]
 // therefore arrives already inverted, and the entry is redundant on re-encode.
 func AppliesDecodeArray(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
-	_, _, indexed := indexedColorSpace(ctx, doc, dict)
-	return !indexed
+	if _, _, indexed := indexedColorSpace(ctx, doc, dict); indexed {
+		_, readable := resolveIndexedPalette(ctx, doc, dict)
+		return readable
+	}
+	return true
 }
 
 // imageComponents returns the samples-per-pixel for the color spaces the
@@ -1123,8 +1145,7 @@ func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.Pdf
 	// or four times too far and mis-read every sub-byte indexed image.
 	//
 	// An indexed image's /Decode array remaps the index range, not colour
-	// components (ISO 32000-1, 8.9.5.2), and the default [0 2^n-1] is the
-	// identity, which is what every indexed image in the corpora states.
+	// components (ISO 32000-1, 8.9.5.2): see indexDecode.
 	pal, isIndexed := resolveIndexedPalette(ctx, doc, stream.Dict)
 	if !isIndexed {
 		// An unreadable colour table leaves an indexed image with nothing to
@@ -1252,6 +1273,7 @@ func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.Pdf
 	}
 
 	if isIndexed {
+		indexDecode(ctx, doc, stream.Dict, decodedData, bitsPerComp)
 		img, err := decodeIndexed(decodedData, width, height, pal)
 		if err != nil {
 			return nil, err

@@ -357,3 +357,25 @@ func TestValidateImageDimensions(t *testing.T) {
 		})
 	}
 }
+
+// TestDecodeImage_IndexedDecodeArray maps the indices of an indexed image
+// through its /Decode array before the lookup: [255 0] reverses the table.
+func TestDecodeImage_IndexedDecodeArray(t *testing.T) {
+	table := make([]byte, 256*3)
+	table[0], table[255*3+2] = 255, 255 // entry 0 red, entry 255 blue
+	stream := ast.NewStream(ast.PdfDict{
+		"Subtype":          ast.PdfName("Image"),
+		"Width":            ast.PdfInt(2),
+		"Height":           ast.PdfInt(1),
+		"ColorSpace":       ast.PdfArray{ast.PdfName("Indexed"), ast.PdfName("DeviceRGB"), ast.PdfInt(255), ast.PdfString(table)},
+		"BitsPerComponent": ast.PdfInt(8),
+		"Decode":           ast.PdfArray{ast.PdfInt(255), ast.PdfInt(0)},
+	}, []byte{0, 255})
+	doc := &document.Document{Logger: slog.New(slog.DiscardHandler)}
+	page := &document.Page{Resources: ast.PdfDict{"XObject": ast.PdfDict{"Im0": stream}}}
+	img, err := DecodeImage(context.Background(), doc, page, "Im0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPixels(t, img, [][3]int{{0, 0, 255}, {255, 0, 0}})
+}

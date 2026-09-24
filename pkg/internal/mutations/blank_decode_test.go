@@ -78,17 +78,23 @@ func TestBlankImage_PlainDecodeArrayNoLongerRefuses(t *testing.T) {
 	}
 }
 
-func TestBlankImage_IndexedDecodeStillRefuses(t *testing.T) {
-	// An indexed image's /Decode remaps palette indices (ISO 32000-1, 8.9.5.2)
-	// and decodeIndexed never consults it, so the decoded pixels do not carry
-	// the mapping and dropping it would change the picture.
+func TestBlankImage_IndexedDecodeIsFolded(t *testing.T) {
+	// An indexed image's /Decode remaps palette indices (ISO 32000-1, 8.9.5.2),
+	// and the decoder maps the indices through it before the lookup, so the
+	// decoded pixels carry the mapping and the entry is dropped like any other.
 	doc, page := blankDictFixture(t,
 		"[/Indexed /DeviceRGB 255 <FF0000 00FF00>]", "/Decode [0 255] ", " ")
 	alloc := writer.NewObjAllocator(20)
 
-	_, err := RedactPageRegions(context.Background(), alloc, doc, page, theImageRegion)
-	if !errors.Is(err, ErrImageCarriesSampleEntries) {
-		t.Errorf("err = %v, want ErrImageCarriesSampleEntries for an indexed /Decode", err)
+	if _, err := RedactPageRegions(context.Background(), alloc, doc, page, theImageRegion); err != nil {
+		t.Fatalf("RedactPageRegions refused an indexed image whose /Decode the decoder applied: %v", err)
+	}
+	replaced, ok := alloc.Pending()[7].(ast.PdfStream)
+	if !ok {
+		t.Fatalf("object 7 was not replaced: %T", alloc.Pending()[7])
+	}
+	if _, present := replaced.Dict["Decode"]; present {
+		t.Errorf("the replacement carries /Decode, which would apply the mapping twice")
 	}
 }
 

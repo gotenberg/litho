@@ -182,12 +182,12 @@ var ErrImageRegionCoversNoSample = errors.New("region covers an image but none o
 // outside the region as well as inside it. Both are always refused.
 //
 // /Decode is refused only when the decode did not apply it, which
-// [pdfimage.AppliesDecodeArray] answers, and that is now just the indexed case:
-// its array remaps palette indices the decoder never consults. Everywhere else
-// the mapping is already in the pixels and the entry is redundant, so the image
-// is blanked rather than refused. A JPEG was refused here too until DecodeImage
-// stopped double-decoding; it now takes the ordinary sample path like any other
-// image. Translating the indexed case is possible and is not done yet.
+// [pdfimage.AppliesDecodeArray] answers. The decoder now applies it to every
+// image it returns pixels for, an indexed one's indices included, so the
+// mapping is already in the pixels and the entry is redundant: the image is
+// blanked rather than refused. A JPEG was refused here until DecodeImage
+// stopped double-decoding, and an indexed image until the decoder mapped its
+// indices.
 var ErrImageCarriesSampleEntries = errors.New("image carries decode or mask entries")
 
 // ErrImageIsStencilMask reports an image mask the region covers that blanking
