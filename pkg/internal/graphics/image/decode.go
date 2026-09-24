@@ -704,6 +704,12 @@ func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast
 	if len(lookup) > want {
 		lookup = lookup[:want]
 	}
+	// A CalRGB or CalGray base, which resolveColorSpace names DeviceRGB or
+	// DeviceGray, holds CIE-based entries: convert them once here, into a copy,
+	// since a decoded lookup stream may be shared.
+	if cal, ok := resolveCalSpace(ctx, doc, arr[1]); ok && comps == calComponents(cal) {
+		lookup = cal.convertTable(lookup)
+	}
 	return palette{base: base, comps: comps, lookup: lookup, lab: lab}, true
 }
 
@@ -1102,6 +1108,14 @@ func decodeImageStream(ctx context.Context, doc *document.Document, name ast.Pdf
 	components := imageComponents(colorSpace)
 	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, stream.Dict, components), components)
 
+	// A CalRGB or CalGray image holds CIE-based samples, which resolveColorSpace
+	// names DeviceRGB or DeviceGray for their component count. A JPEG whose
+	// codestream disagrees with the space's count keeps the device reading.
+	cal, isCal := resolveCalSpace(ctx, doc, stream.Dict["ColorSpace"])
+	if isCal && calComponents(cal) != components {
+		isCal = false
+	}
+
 	switch colorSpace {
 	case "DeviceRGB":
 		img := image.NewRGBA(image.Rect(0, 0, width, height))
@@ -1115,6 +1129,9 @@ func decodeImageStream(ctx context.Context, doc *document.Document, name ast.Pdf
 				r := dec[0][decodedData[idx]]
 				g := dec[1][decodedData[idx+1]]
 				b := dec[2][decodedData[idx+2]]
+				if isCal {
+					r, g, b = cal.convertRGB(r, g, b)
+				}
 				img.Set(x, y, color.RGBA{R: r, G: g, B: b, A: 255})
 				idx += 3
 			}
@@ -1127,10 +1144,16 @@ func decodeImageStream(ctx context.Context, doc *document.Document, name ast.Pdf
 		if len(decodedData) < expectedLen {
 			return nil, fmt.Errorf("decoded data too short for grayscale image: got %d, want %d", len(decodedData), expectedLen)
 		}
+		grey := dec[0]
+		if isCal {
+			for s, v := range grey {
+				grey[s] = cal.convertGrey(v)
+			}
+		}
 		idx := 0
 		for y := range height {
 			for x := range width {
-				img.Set(x, y, color.Gray{Y: dec[0][decodedData[idx]]})
+				img.Set(x, y, color.Gray{Y: grey[decodedData[idx]]})
 				idx++
 			}
 		}
