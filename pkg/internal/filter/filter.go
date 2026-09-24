@@ -97,12 +97,33 @@ func DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 
 // DecodeStreamChecked is [DecodeStream] that also reports whether decoding
 // was complete. incomplete is true when an unsupported filter in the chain
-// was skipped, leaving the returned bytes still encoded by that filter, so
-// a caller must not treat them as fully decoded. The byte and error
-// contract matches DecodeStream (best-effort), so callers that ignore
-// incomplete behave exactly as before.
+// was skipped, leaving the returned bytes still encoded by that filter, or
+// when a filter met damaged data and handed on only the bytes it decoded
+// before the damage (see [keepsDamagedPrefix]), so a caller must not treat
+// them as the whole decoded stream. The byte and error contract matches
+// DecodeStream (best-effort), so callers that ignore incomplete behave exactly
+// as before. [Decoder.DecodeStreamReport] tells the two cases apart.
 func DecodeStreamChecked(ctx context.Context, stream ast.PdfStream) (data []byte, incomplete bool, err error) {
-	return decodeChain(ctx, stream, nil)
+	data, report, err := decodeChain(ctx, stream, nil)
+	return data, report.Incomplete(), err
+}
+
+// DecodeReport records how completely a stream decoded. The zero value
+// reports a complete decode.
+type DecodeReport struct {
+	// Skipped lists, in chain order, the filters decoding skipped because
+	// litho cannot decode them. Each left its input still encoded.
+	Skipped []ast.PdfName
+	// Damaged lists, in chain order, the filters that met damaged data and
+	// handed on only the bytes decoded before the damage (see
+	// [keepsDamagedPrefix]).
+	Damaged []ast.PdfName
+}
+
+// Incomplete reports whether the decoded bytes fall short of the whole
+// decoded stream, either still encoded by a skipped filter or cut at damage.
+func (r DecodeReport) Incomplete() bool {
+	return len(r.Skipped) > 0 || len(r.Damaged) > 0
 }
 
 // decodeChain runs the /Filter chain of stream under the budgets of d,
@@ -112,10 +133,10 @@ func DecodeStreamChecked(ctx context.Context, stream ast.PdfStream) (data []byte
 // decode the same way: before, a Decoder failed the whole stream on a filter
 // no plugin claimed, where the package-level path skipped it, so registering
 // a plugin for one filter changed what every other undecodable filter did.
-func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder) (data []byte, incomplete bool, err error) {
+func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder) (data []byte, report DecodeReport, err error) {
 	filters, err := streamFilterNames(stream.Dict)
 	if err != nil {
-		return nil, false, err
+		return nil, report, err
 	}
 
 	// Extract per-filter DecodeParms. The value can be a single dict (applied
@@ -124,16 +145,21 @@ func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder) (data []
 
 	data, err = stream.Bytes(ctx)
 	if err != nil {
-		return nil, false, err
+		return nil, report, err
 	}
 	for i, f := range filters {
 		decoded, derr := d.applyDecodeFilter(ctx, data, f, parms[i], stream.Dict)
+		if derr != nil && keepsDamagedPrefix(decoded, derr) {
+			data = decoded
+			report.Damaged = append(report.Damaged, f)
+			continue
+		}
 		if derr != nil {
 			// Best-effort: skip an unsupported filter and continue with the
 			// current data so text extraction still works when only part of
 			// a chain is supported. The returned bytes are then only
 			// partially decoded (still encoded by the skipped filter), and
-			// incomplete records that so a caller can avoid treating them as
+			// the report records that so a caller can avoid treating them as
 			// fully decoded.
 			//
 			// A stream a plugin declined for a filter litho has no decoder
@@ -141,15 +167,45 @@ func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder) (data []
 			// claims as decodable, so a caller that consulted them before
 			// decoding would read the still-encoded bytes as decoded.
 			if errors.Is(derr, ErrUnsupportedFilter) && !errors.Is(derr, errPluginDeclined) {
-				incomplete = true
+				report.Skipped = append(report.Skipped, f)
 				continue
 			}
-			return nil, incomplete, derr
+			return nil, report, derr
 		}
 		data = decoded
 	}
 
-	return data, incomplete, nil
+	return data, report, nil
+}
+
+// keepsDamagedPrefix reports whether a filter that failed with err handed on
+// decoded, the bytes it decoded before the damage, for the chain to keep.
+//
+// ISO 32000-1, 7.4.2 says a character outside the ASCIIHexDecode encoding
+// "shall cause an error", and 7.4.3 says the same of ASCII85Decode, adding a
+// group past 2^32 - 1, a z inside a group and a final partial group of one
+// character. Leniency: litho relaxes both clauses as it relaxes FlateDecode
+// and LZWDecode data that stops short. The bytes of the digit pairs or groups
+// before the damage are handed to the next filter, and the stream is reported
+// incomplete ([DecodeStreamChecked]) rather than failed, so a damaged stream
+// yields what it holds up to the damage, as a viewer renders it. When nothing
+// decoded before the damage the error stands, as it does for FlateDecode. The
+// two ASCII filters share the rule whatever the damage, a bad character as
+// much as a bad group, so neither decides by the kind of error.
+//
+// Every other filter either keeps a damaged stream's output itself or fails.
+//
+// # Corpus evidence
+//
+//   - All corpora: 109 ASCII streams, 57 ASCIIHexDecode and 52 ASCII85Decode,
+//     meet damage after at least one digit pair or group and now hand on those
+//     bytes where they failed: 104 in pdfjs poppler-90-0-fuzzed.pdf, 3 in
+//     PDFBOX-3148-2-fuzzed.pdf and 2 in poppler-395-0-fuzzed.pdf, all fuzzed.
+//     26 more meet it before anything decodes, and still fail.
+//   - All corpora: none of the 109 is an image, and no image decodes
+//     differently.
+func keepsDamagedPrefix(decoded []byte, err error) bool {
+	return len(decoded) > 0 && (errors.Is(err, ErrInvalidASCIIHex) || errors.Is(err, ErrInvalidASCII85))
 }
 
 // streamFilterNames returns the stream's /Filter entries in the order they
@@ -195,7 +251,9 @@ func streamFilterNames(dict ast.PdfDict) ([]ast.PdfName, error) {
 //
 // Unlike [DecodeStreamChecked], a filter before stop that cannot be decoded is
 // an error rather than a skip: its output is the only route to stop's input,
-// so continuing would judge the wrong bytes.
+// so continuing would judge the wrong bytes. A filter that keeps the prefix of
+// damaged data ([keepsDamagedPrefix]) hands it on as DecodeStreamChecked does,
+// since those bytes are stop's input as far as it goes.
 func DecodeStreamUpTo(ctx context.Context, stream ast.PdfStream, stop ast.PdfName) (data []byte, found bool, err error) {
 	return (*Decoder)(nil).DecodeStreamUpTo(ctx, stream, stop)
 }
@@ -454,40 +512,62 @@ func isWhiteSpace(c byte) bool {
 
 // decodeASCIIHex decodes ISO 32000-1, 7.4.2: one byte per pair of hexadecimal
 // digits, white space ignored, and a GREATER-THAN SIGN as EOD. Any other
-// character "shall cause an error", reported as [ErrInvalidASCIIHex].
+// character "shall cause an error", reported as [ErrInvalidASCIIHex] alongside
+// the bytes of the digit pairs before it, which the filter chain keeps (see
+// [keepsDamagedPrefix]). The error names the byte as the data holds it, as a
+// [hex.InvalidByteError].
 //
 // # Corpus evidence
 //
 //   - All corpora: of the 124 ASCIIHexDecode streams, every one holding NUL or
-//     FORM FEED also holds a byte 7.4.2 rejects, all in fuzzed pdfjs files, so
-//     ignoring the two changes no decoded stream.
+//     FORM FEED also holds a byte 7.4.2 rejects, all in fuzzed pdfjs files.
+//   - pdfjs poppler-90-0-fuzzed.pdf: object 287 is the one such stream whose
+//     decoding the two change. Read as white space, they let it keep 75 bytes
+//     before the byte 7.4.2 rejects, where rejecting them would keep 58.
 func decodeASCIIHex(data []byte) ([]byte, error) {
-	if idx := bytes.IndexByte(data, '>'); idx != -1 {
-		data = data[:idx]
-	}
-
-	// Filtered byte by byte: strings.Map and bytes.Map read UTF-8, so a byte of
-	// 80h or above would turn into the three bytes of U+FFFD and the error
-	// would name a byte the data does not hold.
-	digits := make([]byte, 0, len(data)+1)
-	for _, c := range data {
-		if !isWhiteSpace(c) {
-			digits = append(digits, c)
+	out := make([]byte, 0, len(data)/2+1)
+	var high byte
+	odd := false
+	for i, c := range data {
+		if c == '>' {
+			break
 		}
+		if isWhiteSpace(c) {
+			continue
+		}
+		v, ok := hexDigit(c)
+		if !ok {
+			return out, fmt.Errorf("%w: %w at offset %d", ErrInvalidASCIIHex, hex.InvalidByteError(c), i)
+		}
+		if odd {
+			out = append(out, high<<4|v)
+		} else {
+			high = v
+		}
+		odd = !odd
 	}
 
 	// 7.4.2: "If the filter encounters the EOD marker after reading an odd
 	// number of hexadecimal digits, it shall behave as if a 0 (zero) followed
 	// the last digit." The digit is supplied without an EOD marker too, so
 	// data truncated before its ">" still decodes.
-	if len(digits)%2 != 0 {
-		digits = append(digits, '0')
+	if odd {
+		out = append(out, high<<4)
 	}
-	decoded := make([]byte, len(digits)/2)
-	if _, err := hex.Decode(decoded, digits); err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidASCIIHex, err)
+	return out, nil
+}
+
+// hexDigit returns the value of the hexadecimal digit c, in either case.
+func hexDigit(c byte) (byte, bool) {
+	switch {
+	case c >= '0' && c <= '9':
+		return c - '0', true
+	case c >= 'a' && c <= 'f':
+		return c - 'a' + 10, true
+	case c >= 'A' && c <= 'F':
+		return c - 'A' + 10, true
 	}
-	return decoded, nil
+	return 0, false
 }
 
 // decodeASCII85 decodes ISO 32000-1, 7.4.3: each group of five characters
@@ -502,21 +582,23 @@ func decodeASCIIHex(data []byte) ([]byte, error) {
 // past 2^32 - 1 wraps and decodes to four wrong bytes, and it skips every byte
 // up to SPACE where 7.4.3 ignores only the white space of Table 1.
 //
-// The error fails the whole stream, as ASCIIHexDecode's does: the tolerance
-// that keeps the output of a truncated FlateDecode stream belongs to the
-// reader-based decoders, and a later filter in the chain never runs.
+// The error comes alongside the bytes of the whole groups before the offending
+// character, which the filter chain keeps (see [keepsDamagedPrefix]). A group
+// the error interrupts contributes nothing, since its value is unknown.
 //
 // # Corpus evidence
 //
 //   - All corpora: 30 of the 4,520 ASCII85Decode streams hold a group past
-//     2^32 - 1, all in fuzzed pdfjs files. Every other one decodes to the
-//     bytes encoding/ascii85 gave.
+//     2^32 - 1, all in fuzzed pdfjs files. The 4,452 that decode without an
+//     error decode to the bytes encoding/ascii85 gives.
 //   - pdfjs poppler-90-0-fuzzed.pdf, poppler-395-0-fuzzed.pdf: 8 of those 30
-//     decoded because the group wrapped, and now fail. They are page content,
-//     Type 3 glyph procedures and a CMap, all fuzzed bytes.
-//   - All corpora: a control character outside Table 1 appears only in
-//     ASCII85Decode streams that already failed on another error, so
-//     rejecting it changes no decoded stream.
+//     decoded in full because the group wrapped. They are page content, Type 3
+//     glyph procedures and a CMap, all fuzzed bytes.
+//   - All corpora: a control character outside Table 1 appears in 32
+//     ASCII85Decode streams, each of which also fails on another error.
+//   - pdfjs poppler-90-0-fuzzed.pdf: object 144 is the one such stream whose
+//     decoding rejecting the character changes. It opens with one, so nothing
+//     decodes, where skipping it would keep 4 bytes.
 func decodeASCII85(data []byte) ([]byte, error) {
 	// 7.4.3 names the 2-character sequence ~> as the EOD marker, so nothing
 	// after it is data.
@@ -536,16 +618,16 @@ func decodeASCII85(data []byte) ([]byte, error) {
 			out = append(out, 0, 0, 0, 0)
 			continue
 		case c == 'z':
-			return nil, fmt.Errorf("%w: z inside the group at offset %d", ErrInvalidASCII85, start)
+			return out, fmt.Errorf("%w: z inside the group at offset %d", ErrInvalidASCII85, start)
 		case c < '!' || c > 'u':
-			return nil, fmt.Errorf("%w: byte %#02x at offset %d", ErrInvalidASCII85, c, i)
+			return out, fmt.Errorf("%w: byte %#02x at offset %d", ErrInvalidASCII85, c, i)
 		}
 		if n == 0 {
 			start = i
 		}
 		var ok bool
 		if group, ok = ascii85Digit(group, uint32(c-'!')); !ok {
-			return nil, fmt.Errorf("%w: the group at offset %d exceeds 2^32 - 1", ErrInvalidASCII85, start)
+			return out, fmt.Errorf("%w: the group at offset %d exceeds 2^32 - 1", ErrInvalidASCII85, start)
 		}
 		if n++; n == 5 {
 			out = binary.BigEndian.AppendUint32(out, group)
@@ -557,7 +639,7 @@ func decodeASCII85(data []byte) ([]byte, error) {
 	case 0:
 		return out, nil
 	case 1:
-		return nil, fmt.Errorf("%w: final partial group of one character at offset %d", ErrInvalidASCII85, start)
+		return out, fmt.Errorf("%w: final partial group of one character at offset %d", ErrInvalidASCII85, start)
 	}
 	// 7.4.3: an encoder given k bytes pads them with 4 - k zero bytes and
 	// writes the first k + 1 characters of their group, so n - 1 bytes are
@@ -569,7 +651,7 @@ func decodeASCII85(data []byte) ([]byte, error) {
 	for range 5 - n {
 		var ok bool
 		if group, ok = ascii85Digit(group, 'u'-'!'); !ok {
-			return nil, fmt.Errorf("%w: the final partial group at offset %d exceeds 2^32 - 1", ErrInvalidASCII85, start)
+			return out, fmt.Errorf("%w: the final partial group at offset %d exceeds 2^32 - 1", ErrInvalidASCII85, start)
 		}
 	}
 	var word [4]byte

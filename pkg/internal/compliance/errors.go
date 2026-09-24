@@ -18,6 +18,11 @@ var ErrUnknownProfile = errors.New("compliance: unknown profile")
 // filter itself is reported by the §6.1.6.2 filter check.
 var errUndecodableContent = errors.New("compliance: content stream has an undecodable filter")
 
+// errDamagedFontProgram is returned by [decodeFontProgram] for a program whose
+// filter chain met damaged data and kept only the bytes before the damage.
+// The font checks treat it as a program that will not decode.
+var errDamagedFontProgram = errors.New("compliance: font program data is damaged")
+
 // ErrSchematronRuleSkipped marks an advisory entry in the violations
 // slice returned by [ValidateFacturX] and [ValidateZUGFeRD]. It fires
 // when a Schematron rule's XPath could not be compiled or evaluated;

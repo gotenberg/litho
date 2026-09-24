@@ -291,17 +291,27 @@ func (d *Document) LockValidationRun() func() {
 // DecodeStream decodes a [ast.PdfStream] through the document's filter pipeline.
 // Context is checked between decompression chunks to allow cancellation.
 func (d *Document) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
+	data, _, err := d.DecodeStreamReport(ctx, stream)
+	return data, err
+}
+
+// DecodeStreamReport is [Document.DecodeStream] that also reports which
+// filters left the returned bytes short of the whole decoded stream, with the
+// contract of [filter.Decoder.DecodeStreamReport].
+func (d *Document) DecodeStreamReport(ctx context.Context, stream ast.PdfStream) ([]byte, filter.DecodeReport, error) {
 	stream = d.resolveStreamFilterKeys(ctx, stream)
 	// A nil d.Filters consults no plugin, so one call covers both paths and
 	// a skipped filter is logged whether or not plugins are registered.
-	data, incomplete, err := d.Filters.DecodeStreamChecked(ctx, stream)
-	if incomplete {
-		// The bytes are only partially decoded: an unsupported filter in
-		// the chain was skipped, so they remain filter-encoded. Surface
-		// it at Debug rather than silently returning them as plaintext.
-		d.Logger.Debug("stream only partially decoded; an unsupported filter in the chain was skipped, returned bytes remain filter-encoded")
+	data, report, err := d.Filters.DecodeStreamReport(ctx, stream)
+	if report.Incomplete() {
+		// The bytes are only partially decoded: a skipped filter left them
+		// filter-encoded, or a filter met damaged data and handed on what it
+		// decoded before the damage. Surface it at Debug rather than silently
+		// returning them as the whole stream.
+		d.Logger.Debug("stream only partially decoded",
+			slog.Any("skipped", report.Skipped), slog.Any("damaged", report.Damaged))
 	}
-	return data, err
+	return data, report, err
 }
 
 // DecodeStreamUpTo decodes stream through its filter chain, stopping before

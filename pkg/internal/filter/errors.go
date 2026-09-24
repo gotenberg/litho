@@ -30,13 +30,17 @@ var (
 
 	// ErrInvalidASCIIHex is returned when ASCIIHexDecode data holds a
 	// character that is neither a hexadecimal digit, white space, nor the EOD
-	// marker, which ISO 32000-1, 7.4.2 makes an error.
+	// marker, which ISO 32000-1, 7.4.2 makes an error. A stream decode returns
+	// it only when nothing decoded before that character: otherwise the bytes
+	// before it are kept and the stream is reported incomplete.
 	ErrInvalidASCIIHex = errors.New("asciihex: invalid data")
 
 	// ErrInvalidASCII85 is returned when ASCII85Decode data holds a character
 	// or a character sequence ISO 32000-1, 7.4.3 makes an error: a character
 	// outside the encoding, a group whose value exceeds 2^32 - 1, a z inside
-	// a group, or a final partial group of one character.
+	// a group, or a final partial group of one character. A stream decode
+	// returns it only when no group decoded before the damage: otherwise the
+	// bytes before it are kept and the stream is reported incomplete.
 	ErrInvalidASCII85 = errors.New("ascii85: invalid data")
 
 	// errPluginDeclined marks, alongside [ErrUnsupportedFilter], a stream a

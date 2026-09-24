@@ -86,8 +86,18 @@ func (d *Decoder) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byt
 // DecodeStreamChecked is [Decoder.DecodeStream] that also reports whether
 // decoding was complete, with the contract of the package-level
 // [DecodeStreamChecked]: incomplete is true when a filter in the chain was
-// skipped and the returned bytes remain encoded by it.
+// skipped and the returned bytes remain encoded by it, or when a filter met
+// damaged data and handed on only what it decoded before the damage.
 func (d *Decoder) DecodeStreamChecked(ctx context.Context, stream ast.PdfStream) (data []byte, incomplete bool, err error) {
+	data, report, err := decodeChain(ctx, stream, d)
+	return data, report.Incomplete(), err
+}
+
+// DecodeStreamReport is [Decoder.DecodeStream] that also reports which
+// filters left the returned bytes short of the whole decoded stream: those it
+// skipped, and those that met damaged data. On an error the report covers the
+// filters that ran before it.
+func (d *Decoder) DecodeStreamReport(ctx context.Context, stream ast.PdfStream) ([]byte, DecodeReport, error) {
 	return decodeChain(ctx, stream, d)
 }
 
@@ -112,7 +122,7 @@ func (d *Decoder) DecodeStreamUpTo(ctx context.Context, stream ast.PdfStream, st
 			return data, true, nil
 		}
 		decoded, derr := applyDecodeFilter(ctx, data, f, parms[i], stream.Dict, lim)
-		if derr != nil {
+		if derr != nil && !keepsDamagedPrefix(decoded, derr) {
 			return nil, false, fmt.Errorf("decoding %s before %s: %w", f, stop, derr)
 		}
 		data = decoded

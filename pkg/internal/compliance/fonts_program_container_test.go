@@ -78,7 +78,8 @@ func TestFontEmbedding_ProgramContainer(t *testing.T) {
 // TestFontEmbedding_UndecodableProgramStaysEmbedded pins the conservative side:
 // bytes that will not decode say nothing about which container they hold, and
 // veraPDF still counts the font as embedded, so firing here would be a false
-// positive.
+// positive. The filter chain keeps the byte decoded before the damage, and
+// that fragment must not be judged as the program.
 //
 // # Corpus evidence
 //

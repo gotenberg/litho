@@ -22,10 +22,11 @@ type StreamDiagnostic struct {
 // UndecodableStreams reports in-use stream objects whose /Filter chain
 // contains a filter that neither the built-in decoders nor a registered
 // plugin can handle, such as an unknown filter. It is the static,
-// whole-document equivalent of
-// [filter.DecodeStreamChecked]'s incomplete signal, computed from the
-// filter names without decoding the streams. Results are sorted by
-// object number.
+// whole-document equivalent of the skip [filter.DecodeStreamChecked] reports
+// as incomplete, computed from the filter names without decoding the streams.
+// Damaged data, which DecodeStreamChecked also reports as incomplete, is not
+// listed: its filter decodes, and hands on what the data holds before the
+// damage. Results are sorted by object number.
 func (d *Document) UndecodableStreams(ctx context.Context) ([]StreamDiagnostic, error) {
 	var diags []StreamDiagnostic
 	for objNum, entry := range d.XRefEntriesSnapshot() {

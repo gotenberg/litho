@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"slices"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -84,30 +85,37 @@ func TestDecodeASCIIHex_EOD(t *testing.T) {
 // TestDecodeASCIIHex_Invalid covers the characters ISO 32000-1, 7.4.2 makes an
 // error, among them control characters Table 1 does not list as white space.
 // The error names the byte the data holds, where decoding through strings.Map
-// named the first byte of U+FFFD.
+// named the first byte of U+FFFD, and comes with the bytes of the digit pairs
+// before it, a digit left without its pair contributing nothing.
 func TestDecodeASCIIHex_Invalid(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name  string
-		input string
-		bad   byte
+		name   string
+		input  string
+		bad    byte
+		prefix string
 	}{
-		{"letter past F", "48G5>", 'G'},
-		{"VERTICAL TAB", "48\v65>", '\v'},
-		{"SOH", "48\x0165>", 0x01},
-		{"byte 80h", "48\x8065>", 0x80},
-		{"byte FFh", "\xff>", 0xff},
+		{"letter past F", "48G5>", 'G', "H"},
+		{"VERTICAL TAB", "48\v65>", '\v', "H"},
+		{"SOH", "48\x0165>", 0x01, "H"},
+		{"byte 80h", "48\x8065>", 0x80, "H"},
+		{"byte FFh", "\xff>", 0xff, ""},
+		{"after an odd digit", "48 6 5 6X6C>", 'X', "He"},
+		{"before any digit", "Z48>", 'Z', ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := decodeASCIIHex([]byte(tt.input))
+			got, err := decodeASCIIHex([]byte(tt.input))
 			if !errors.Is(err, ErrInvalidASCIIHex) {
 				t.Fatalf("decodeASCIIHex(%q) error = %v, want %v", tt.input, err, ErrInvalidASCIIHex)
 			}
 			var invalid hex.InvalidByteError
 			if !errors.As(err, &invalid) || byte(invalid) != tt.bad {
 				t.Errorf("decodeASCIIHex(%q) error = %v, want it to name byte %#02x", tt.input, err, tt.bad)
+			}
+			if string(got) != tt.prefix {
+				t.Errorf("decodeASCIIHex(%q) returned %q alongside its error, want %q", tt.input, got, tt.prefix)
 			}
 		})
 	}
@@ -199,27 +207,30 @@ func TestDecodeASCII85_Groups(t *testing.T) {
 // TestDecodeASCII85_Invalid covers the characters and the character sequences
 // ISO 32000-1, 7.4.3 makes an error. A group past 2^32 - 1 used to wrap and
 // decode to four wrong bytes, and a control character Table 1 does not list as
-// white space used to be skipped.
+// white space used to be skipped. The error comes with the bytes of the whole
+// groups before the damage; a group it interrupts contributes nothing.
 func TestDecodeASCII85_Invalid(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name  string
-		input string
+		name   string
+		input  string
+		prefix string
 	}{
-		{"group of 2^32", "s8W-\"~>"},
-		{"group of uuuuu", "uuuuu~>"},
-		{"overflowing group after a valid one", "87cURuuuuu~>"},
-		{"overflowing group without EOD", "uuuuu"},
-		{"final partial group completing past 2^32 - 1", "87cURuu~>"},
-		{"final partial group of one character", "87cUR!~>"},
-		{"z inside a group", "87z~>"},
-		{"z ending a group", "!!!!z~>"},
-		{"character past u", "87cU{~>"},
-		{"lone tilde", "87cUR~"},
-		{"tilde not followed by >", "87cUR~ >"},
-		{"VERTICAL TAB", "87cUR\v~>"},
-		{"SOH", "87c\x01URD]i,\"Ebo7~>"},
-		{"byte 80h", "87c\x80URD]i,\"Ebo7~>"},
+		{"group of 2^32", "s8W-\"~>", ""},
+		{"group of uuuuu", "uuuuu~>", ""},
+		{"overflowing group after a valid one", "87cURuuuuu~>", "Hell"},
+		{"overflowing group without EOD", "uuuuu", ""},
+		{"final partial group completing past 2^32 - 1", "87cURuu~>", "Hell"},
+		{"final partial group of one character", "87cUR!~>", "Hell"},
+		{"z inside a group", "87z~>", ""},
+		{"z ending a group", "!!!!z~>", ""},
+		{"z inside a group after z", "z87z~>", "\x00\x00\x00\x00"},
+		{"character past u", "87cU{~>", ""},
+		{"lone tilde", "87cUR~", "Hell"},
+		{"tilde not followed by >", "87cUR~ >", "Hell"},
+		{"VERTICAL TAB", "87cUR\v~>", "Hell"},
+		{"SOH", "87c\x01URD]i,\"Ebo7~>", ""},
+		{"byte 80h", "87cURD]i,\"\x80Ebo7~>", "Hello Wo"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -228,59 +239,138 @@ func TestDecodeASCII85_Invalid(t *testing.T) {
 			if !errors.Is(err, ErrInvalidASCII85) {
 				t.Fatalf("decodeASCII85(%q) = %x, %v, want %v", tt.input, got, err, ErrInvalidASCII85)
 			}
-			if got != nil {
-				t.Errorf("decodeASCII85(%q) returned %x alongside its error", tt.input, got)
+			if string(got) != tt.prefix {
+				t.Errorf("decodeASCII85(%q) returned %q alongside its error, want %q", tt.input, got, tt.prefix)
 			}
 		})
 	}
 }
 
-// TestDecodeStream_ASCII85Overflow checks what a caller of each decoding
-// entry point sees when an ASCII85Decode group exceeds 2^32 - 1 ahead of
-// FlateDecode: an error wrapping [ErrInvalidASCII85], no bytes, and no skip.
-// The tolerance that keeps a truncated FlateDecode stream's output does not
-// reach it, and it is not [ErrUnsupportedFilter], which a chain skips.
-func TestDecodeStream_ASCII85Overflow(t *testing.T) {
+// TestDecodeStream_ASCIIDamageKeepsPrefix checks what a caller of each decoding
+// entry point sees when ASCII85Decode or ASCIIHexDecode data is damaged ahead
+// of FlateDecode: the bytes decoded before the damage are kept and handed to
+// FlateDecode, which reads them as it reads any truncated input, and the
+// stream is reported incomplete. The damage is not [ErrUnsupportedFilter]: the
+// filter is not skipped, and its encoded bytes never reach FlateDecode.
+//
+// Before, the damage failed the whole stream and no byte came back.
+func TestDecodeStream_ASCIIDamageKeepsPrefix(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	compressed := zlibCompress([]byte("litho refuses an ASCII85Decode group past 2^32 - 1"))
-	// A group past 2^32 - 1 between otherwise valid data, starting on a group
-	// boundary: the first half is a whole number of groups.
+	plain := bytes.Repeat([]byte("litho keeps what an ASCII filter decoded before the damage. "), 40)
+	compressed := zlibCompress(plain)
+	// The damage starts on a group boundary, so the first half is exactly
+	// the prefix both filters decode.
 	half := len(compressed) / 2 &^ 3
-	data := encodeASCII85(compressed[:half])
-	data = append(data, "uuuuu"...)
-	data = append(data, encodeASCII85(compressed[half:])...)
-	data = append(data, "~>"...)
-	stream := ast.NewStream(ast.PdfDict{
-		"Filter": ast.PdfArray{ast.PdfName("ASCII85Decode"), ast.PdfName("FlateDecode")},
-	}, data)
 
-	got, incomplete, err := DecodeStreamChecked(ctx, stream)
-	if !errors.Is(err, ErrInvalidASCII85) || errors.Is(err, ErrUnsupportedFilter) {
-		t.Fatalf("DecodeStreamChecked error = %v, want %v and not %v", err, ErrInvalidASCII85, ErrUnsupportedFilter)
-	}
-	if got != nil || incomplete {
-		t.Errorf("DecodeStreamChecked = %d bytes, incomplete %v, want no bytes and not incomplete", len(got), incomplete)
+	for _, tc := range []struct {
+		name    string
+		filter  ast.PdfName
+		encoded []byte
+		wantErr error
+	}{
+		{
+			name:   "ASCII85Decode group past 2^32 - 1",
+			filter: "ASCII85Decode",
+			encoded: slices.Concat(encodeASCII85(compressed[:half]), []byte("uuuuu"),
+				encodeASCII85(compressed[half:]), []byte("~>")),
+			wantErr: ErrInvalidASCII85,
+		},
+		{
+			name:   "ASCII85Decode character outside the encoding",
+			filter: "A85",
+			encoded: slices.Concat(encodeASCII85(compressed[:half]), []byte("{"),
+				encodeASCII85(compressed[half:]), []byte("~>")),
+			wantErr: ErrInvalidASCII85,
+		},
+		{
+			name:   "ASCIIHexDecode character outside the encoding",
+			filter: "ASCIIHexDecode",
+			encoded: slices.Concat([]byte(hex.EncodeToString(compressed[:half])), []byte("G"),
+				[]byte(hex.EncodeToString(compressed[half:])), []byte(">")),
+			wantErr: ErrInvalidASCIIHex,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			// The ASCII filter alone hands on the prefix, flagged incomplete.
+			alone := ast.NewStream(ast.PdfDict{"Filter": tc.filter}, tc.encoded)
+			got, incomplete, err := DecodeStreamChecked(ctx, alone)
+			if err != nil || !incomplete || !bytes.Equal(got, compressed[:half]) {
+				t.Fatalf("DecodeStreamChecked(%s) = %d bytes, incomplete %v, %v; want the %d bytes before the damage, incomplete",
+					tc.filter, len(got), incomplete, err, half)
+			}
+
+			// FlateDecode after it behaves as it does on the truncated input
+			// directly: the tolerance of decodeFlateDecode keeps what inflates.
+			truncated := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("FlateDecode")}, compressed[:half])
+			want, truncIncomplete, err := DecodeStreamChecked(ctx, truncated)
+			if err != nil || truncIncomplete || len(want) == 0 || !bytes.HasPrefix(plain, want) {
+				t.Fatalf("control: FlateDecode on the truncated input = %d bytes, incomplete %v, %v; want a prefix of the plain text",
+					len(want), truncIncomplete, err)
+			}
+			chained := ast.NewStream(ast.PdfDict{
+				"Filter": ast.PdfArray{tc.filter, ast.PdfName("FlateDecode")},
+			}, tc.encoded)
+			got, incomplete, err = DecodeStreamChecked(ctx, chained)
+			if err != nil || !incomplete || !bytes.Equal(got, want) {
+				t.Errorf("DecodeStreamChecked(%s, FlateDecode) = %d bytes, incomplete %v, %v; want the %d bytes FlateDecode gives the truncated input, incomplete",
+					tc.filter, len(got), incomplete, err, len(want))
+			}
+
+			var d *Decoder
+			if got, err := d.DecodeStream(ctx, chained); err != nil || !bytes.Equal(got, want) {
+				t.Errorf("(*Decoder)(nil).DecodeStream = %d bytes, %v; want %d bytes", len(got), err, len(want))
+			}
+			// The report names the damaged filter, and skips none.
+			if _, report, err := d.DecodeStreamReport(ctx, chained); err != nil ||
+				!slices.Equal(report.Damaged, []ast.PdfName{tc.filter}) || len(report.Skipped) != 0 {
+				t.Errorf("DecodeStreamReport = %+v, %v; want %s damaged and nothing skipped", report, err, tc.filter)
+			}
+
+			rc, err := NewStreamReader(ctx, chained)
+			if err != nil {
+				t.Fatalf("NewStreamReader: %v", err)
+			}
+			streamed, err := io.ReadAll(rc)
+			if closeErr := rc.Close(); closeErr != nil {
+				t.Errorf("closing the reader: %v", closeErr)
+			}
+			if err != nil || !bytes.Equal(streamed, want) {
+				t.Errorf("NewStreamReader read %d bytes, %v; want %d bytes", len(streamed), err, len(want))
+			}
+
+			upTo, found, err := DecodeStreamUpTo(ctx, chained, "FlateDecode")
+			if err != nil || !found || !bytes.Equal(upTo, compressed[:half]) {
+				t.Errorf("DecodeStreamUpTo = %d bytes, found %v, %v; want the %d bytes before the damage", len(upTo), found, err, half)
+			}
+		})
 	}
 
-	if _, _, err := DecodeStreamUpTo(ctx, stream, "FlateDecode"); !errors.Is(err, ErrInvalidASCII85) {
-		t.Errorf("DecodeStreamUpTo error = %v, want %v", err, ErrInvalidASCII85)
-	}
-
-	rc, err := NewStreamReader(ctx, stream)
-	if err == nil {
-		if closeErr := rc.Close(); closeErr != nil {
-			t.Errorf("closing the reader: %v", closeErr)
+	// Damage before the first whole group leaves nothing to keep, and the
+	// error stands, as it does for FlateDecode data that inflates to nothing.
+	t.Run("nothing before the damage", func(t *testing.T) {
+		t.Parallel()
+		for filterName, encoded := range map[ast.PdfName]string{
+			"ASCII85Decode":  "uuuuu87cUR~>",
+			"ASCIIHexDecode": "G48>",
+		} {
+			stream := ast.NewStream(ast.PdfDict{
+				"Filter": ast.PdfArray{filterName, ast.PdfName("FlateDecode")},
+			}, []byte(encoded))
+			got, incomplete, err := DecodeStreamChecked(ctx, stream)
+			if !errors.Is(err, ErrInvalidASCII85) && !errors.Is(err, ErrInvalidASCIIHex) || errors.Is(err, ErrUnsupportedFilter) {
+				t.Errorf("%s: DecodeStreamChecked error = %v, want the filter's own error", filterName, err)
+			}
+			if got != nil || incomplete {
+				t.Errorf("%s: DecodeStreamChecked = %d bytes, incomplete %v, want no bytes", filterName, len(got), incomplete)
+			}
+			if _, _, err := DecodeStreamUpTo(ctx, stream, "FlateDecode"); err == nil {
+				t.Errorf("%s: DecodeStreamUpTo kept nothing and reported no error", filterName)
+			}
 		}
-	}
-	if !errors.Is(err, ErrInvalidASCII85) {
-		t.Errorf("NewStreamReader error = %v, want %v", err, ErrInvalidASCII85)
-	}
-
-	var d *Decoder
-	if _, err := d.DecodeStream(ctx, stream); !errors.Is(err, ErrInvalidASCII85) {
-		t.Errorf("(*Decoder)(nil).DecodeStream error = %v, want %v", err, ErrInvalidASCII85)
-	}
+	})
 }
 
 // TestDecodeStream_ASCIIHexFormFeed decodes an ASCIIHexDecode stream laid out

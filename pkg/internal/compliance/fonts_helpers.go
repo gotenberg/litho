@@ -6,6 +6,7 @@ import (
 	"compress/zlib"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -570,6 +571,10 @@ func fontFile3ParsesForFont(ctx context.Context, doc *document.Document, fontSub
 //   - govdocs: on one 4 MB government document the program decode ran 11248
 //     times over 66 distinct streams and accounted for roughly three quarters
 //     of the whole validation.
+//   - pdfjs poppler-395-0-fuzzed.pdf: its /FontFile2 keeps 37 bytes before a
+//     byte ASCIIHexDecode rejects. They open with 00 7F 00 00, no sfnt
+//     version, so judged as the program they would fail a font veraPDF
+//     passes as embedded.
 func decodeFontProgram(ctx context.Context, doc *document.Document, obj ast.PdfObject, stream ast.PdfStream) ([]byte, error) {
 	ref, indirect := obj.(ast.PdfIndirectRef)
 	if indirect {
@@ -577,9 +582,17 @@ func decodeFontProgram(ctx context.Context, doc *document.Document, obj ast.PdfO
 			return data, nil
 		}
 	}
-	data, err := doc.DecodeStream(ctx, stream)
+	data, report, err := doc.DecodeStreamReport(ctx, stream)
 	if err != nil {
 		return nil, err
+	}
+	// The filter chain keeps the bytes an ASCII filter decoded before damaged
+	// data, which are a fragment of the program rather than the program. A
+	// program whose bytes will not decode says nothing about its container, and
+	// veraPDF counts the font as embedded (see [streamHoldsFontProgram]), so
+	// the fragment reads as a program that will not decode.
+	if len(report.Damaged) > 0 {
+		return nil, fmt.Errorf("%w: %s data is damaged", errDamagedFontProgram, report.Damaged[0])
 	}
 	// The filter keeps what it inflated before corrupt deflate data, which is
 	// not the program the file embeds; see [deflateDataCorrupt]. Such a program

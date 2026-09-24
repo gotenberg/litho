@@ -12,18 +12,29 @@ const maxASCIIFuzzInput = 1 << 20
 
 // FuzzDecodeASCIIHex feeds arbitrary bytes to decodeASCIIHex, which must not
 // panic, and checks that the hexadecimal encoding of those bytes decodes back
-// to them.
+// to them. Bytes returned alongside an error are the digit pairs the data
+// opens with.
 func FuzzDecodeASCIIHex(f *testing.F) {
 	f.Add([]byte("48656C6C6F>"))
 	f.Add([]byte("48656C6C6")) // Truncated: no EOD marker, odd digit count.
+	f.Add([]byte("4865G6C6F>"))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > maxASCIIFuzzInput {
 			return
 		}
-		// Result and error are intentionally discarded: the contract under
-		// test is that no input makes the decoder panic.
-		_, _ = decodeASCIIHex(data)
+		if prefix, err := decodeASCIIHex(data); err != nil {
+			var digits []byte
+			for _, c := range data {
+				if !isWhiteSpace(c) {
+					digits = append(digits, c)
+				}
+			}
+			n := 2 * len(prefix)
+			if n > len(digits) || !bytes.EqualFold(digits[:n], []byte(hex.EncodeToString(prefix))) {
+				t.Fatalf("decodeASCIIHex(%q) returned %x alongside %v, which the data does not open with", data, prefix, err)
+			}
+		}
 
 		enc := append([]byte(hex.EncodeToString(data)), '>')
 		got, err := decodeASCIIHex(enc)
@@ -35,18 +46,23 @@ func FuzzDecodeASCIIHex(f *testing.F) {
 
 // FuzzDecodeASCII85 feeds arbitrary bytes to decodeASCII85, which must not
 // panic. Data it accepts holds only white space and groups within 2^32 - 1,
-// where encoding/ascii85 decodes correctly, so the two must agree on it. The
-// base-85 encoding of the input must also decode back to it.
+// where encoding/ascii85 decodes correctly, so the two must agree on it. Bytes
+// returned alongside an error hold whole groups only. The base-85 encoding of
+// the input must also decode back to it.
 func FuzzDecodeASCII85(f *testing.F) {
 	f.Add([]byte("87cURD]i,\"Ebo7~>"))
 	f.Add([]byte("87cURD]i,\"Eb")) // Truncated: no EOD marker, final partial group.
 	f.Add([]byte("s8W-\"~>"))      // A group of 2^32.
+	f.Add([]byte("87cURuuuuu~>"))  // A group of 2^32 after a valid one.
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > maxASCIIFuzzInput {
 			return
 		}
 		got, err := decodeASCII85(data)
+		if err != nil && len(got)%4 != 0 {
+			t.Fatalf("decodeASCII85(%q) returned %d bytes alongside %v, not whole groups", data, len(got), err)
+		}
 		if err == nil {
 			src := data
 			if i := bytes.Index(src, []byte("~>")); i != -1 {
