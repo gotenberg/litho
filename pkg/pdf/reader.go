@@ -1409,6 +1409,16 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // When a Document Security Store (DSS) is present, embedded OCSP responses,
 // CRLs, and RFC 3161 timestamp tokens are used for Long-Term Validation
 // (LTV), enabling offline verification of signatures with expired certificates.
+//
+// A signature with a DocMDP or FieldMDP transform also reports its access
+// permissions as MDPPolicy, the /P of ISO 32000-1, 12.8.2.2, Table 254: P=1
+// permits no change, P=2 permits filling in forms, instantiating page
+// templates and signing, and P=3 also permits annotation changes. MDPValid
+// reports whether the objects appended after signing stay within that policy,
+// and MDPInfo names the first object that does not, or why the appended data
+// could not be read. The check classifies each appended object by type rather
+// than comparing revisions, so a forbidden change made through a permitted
+// object type goes unreported.
 func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) (_ []models.SignatureValidation, err error) {
 	defer recoverToError(r.logger(), "Reader.VerifySignatures", &err)
 	return signature.VerifySignatures(ctx, r.doc, roots)

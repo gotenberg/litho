@@ -10,11 +10,11 @@ import "errors"
 // through the result it is given, so a violation surfaces as
 // models.SignatureValidation.MDPValid false beside an
 // models.SignatureValidation.MDPInfo naming the policy and the offending
-// object ("P=2 violation: object 12 (field:Sig) is not a form field or
-// signature"). That verdict reaches callers through Reader.VerifySignatures,
-// which returns the validations rather than an error, because one document can
-// carry several signatures and a policy breach in one is a finding about that
-// signature rather than a failure of the call.
+// object ("P=2 violation: object 12 (Annot:Text) is an annotation, which P=2
+// permits only as a form field widget"). That verdict reaches callers through
+// Reader.VerifySignatures, which returns the validations rather than an error,
+// because one document can carry several signatures and a policy breach in one
+// is a finding about that signature rather than a failure of the call.
 //
 // Kept rather than deleted: unused code here may be deliberate, and removing it
 // is a maintainer's call. Wiring it instead would change a live verification

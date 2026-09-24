@@ -3,6 +3,7 @@ package signature
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -73,16 +74,9 @@ func extractMDPPolicy(ctx context.Context, doc *document.Document, sigDict ast.P
 		// default of 2. Table 256 gives the FieldMDP transform parameters no
 		// P entry, so only DocMDP falls back to the default. A FieldMDP /P is
 		// still read when a producer writes one.
-		//
-		// TODO: Table 254 types P as a number, so /P 1.0 is a valid P=1. Only
-		// an integer is read here, and a real P falls back to the default 2,
-		// which permits changes the author forbade.
 		if pObj, ok := tpDict["P"]; ok {
-			if pInt, ok := pObj.(ast.PdfInt); ok {
-				p := int(pInt)
-				if p >= 1 && p <= 3 {
-					return p
-				}
+			if p, ok := mdpPermission(ctx, doc, pObj); ok {
+				return p
 			}
 		}
 
@@ -92,6 +86,38 @@ func extractMDPPolicy(ctx context.Context, doc *document.Document, sigDict ast.P
 	}
 
 	return 0
+}
+
+// mdpPermission reads a transform's /P entry as one of the three DocMDP access
+// permissions, and reports false when it names none of them.
+//
+// ISO 32000-1, 12.8.2.2, Table 254 types P as a number, so a real whose value
+// is exactly 1, 2 or 3 names that permission as the integer does: /P 1.0 is
+// P=1. The table defines no other value and says nothing of one, so a value
+// outside {1, 2, 3}, a fraction such as 2.5, or a non-number reports false and
+// the caller reads it as an absent P, which for DocMDP is the table's default
+// of 2.
+func mdpPermission(ctx context.Context, doc *document.Document, obj ast.PdfObject) (int, bool) {
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		// An unresolvable /P names no permission, and Table 254 gives an
+		// absent P its default, so the caller applies it.
+		doc.Logger.Debug("resolving MDP transform /P", slog.Any("err", err))
+		return 0, false
+	}
+	v, ok := document.Number(resolved)
+	if !ok {
+		return 0, false
+	}
+	switch v {
+	case 1:
+		return 1, true
+	case 2:
+		return 2, true
+	case 3:
+		return 3, true
+	}
+	return 0, false
 }
 
 // evaluateMDP checks whether the document was modified after the signature was
@@ -153,17 +179,20 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 
 // appendedObject holds a parsed object from the post-signature region.
 type appendedObject struct {
-	ObjNum int
-	Type   string // /Type value if present, empty otherwise
-	FT     string // /FT value for form fields, empty otherwise
-	IsXRef bool   // true if this is an xref table/stream (not a content object)
+	ObjNum  int
+	Type    string // /Type value if present, empty otherwise
+	Subtype string // /Subtype value of an annotation, empty otherwise
+	FT      string // /FT value for form fields, empty otherwise
+	IsXRef  bool   // true if this is an xref table/stream (not a content object)
+	IsAnnot bool   // true if this is an annotation dictionary
 }
 
 // objectHeaderRe matches "N G obj" headers in the appended data.
 var objectHeaderRe = regexp.MustCompile(`(\d+)\s+\d+\s+obj\b`)
 
 // parseAppendedObjects scans the bytes between signedEnd and fileEnd for
-// indirect object definitions and extracts their /Type values.
+// indirect object definitions and records the entries classifyModifications
+// reads.
 func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd, fileEnd int64) ([]appendedObject, error) {
 	data, err := doc.ReadFileBytes(ctx, signedEnd, fileEnd-signedEnd)
 	if err != nil {
@@ -197,6 +226,10 @@ func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd
 		case ast.PdfDict:
 			ao.Type = dictName(v, "Type")
 			ao.FT = dictName(v, "FT")
+			if isAnnotationDict(v) {
+				ao.IsAnnot = true
+				ao.Subtype = dictName(v, "Subtype")
+			}
 		case ast.PdfStream:
 			ao.Type = dictName(v.Dict, "Type")
 			if ao.Type == "XRef" {
@@ -217,9 +250,10 @@ func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd
 // change, P=2 permits filling in forms, instantiating page templates and
 // signing, and P=3 adds annotation creation, deletion and modification.
 // 12.8.2.2.2 lets a reader "compare the signed and current versions of the
-// document". This classifier sees only the /Type and /FT of each appended
-// object, so it approximates that comparison: it cannot tell a filled-in
-// field from another change to an object of the same type.
+// document". This classifier sees only the /Type, the /FT and, on an
+// annotation, the /Subtype of each appended object, so it approximates that
+// comparison: it cannot tell a filled-in field from another change to an
+// object of the same type.
 func classifyModifications(objects []appendedObject, policy int) string {
 	for _, obj := range objects {
 		if obj.IsXRef {
@@ -238,6 +272,9 @@ func classifyModifications(objects []appendedObject, policy int) string {
 		case 2:
 			// Table 254, P=2: form filling, page templates and signing.
 			if !isAllowedP2(obj) {
+				if obj.IsAnnot {
+					return fmt.Sprintf("object %d (%s) is an annotation, which P=2 permits only as a form field widget", obj.ObjNum, objDescription(obj))
+				}
 				return fmt.Sprintf("object %d (%s) is not a form field or signature", obj.ObjNum, objDescription(obj))
 			}
 
@@ -262,21 +299,25 @@ func classifyModifications(objects []appendedObject, policy int) string {
 // either touches the catalog's form and the page's /Annots, while a template
 // adds a page.
 func isAllowedP2(obj appendedObject) bool {
+	if obj.IsAnnot {
+		// Table 254 permits annotation creation, deletion and modification
+		// only at P=3. Filling in forms and signing touch only widget
+		// annotations, which carry a field's appearance (12.5.6.19), a
+		// signature field's included (12.7.4.5). Any other annotation added or
+		// rewritten after signing is a change P=2 forbids.
+		return obj.Subtype == "Widget"
+	}
 	switch obj.Type {
 	case "Sig", "SigRef":
-		return true
-	case "Annot":
-		// A widget annotation is a form field's appearance (12.5.6.19).
-		//
-		// TODO: Table 254 permits annotation changes only at P=3, and every
-		// /Type /Annot passes here, widget or not, because appendedObject
-		// records no /Subtype. A P=2 certification followed by an appended
-		// comment is reported as within policy, and isAllowedP3's own
-		// annotation branch is unreachable.
 		return true
 	case "Catalog", "Pages", "Page":
 		// Adding a field or a signature rewrites the catalog and the page that
 		// lists its widget, and instantiating a template adds a page.
+		//
+		// TODO: deleting an annotation rewrites only the page's /Annots, so a
+		// deletion Table 254 forbids at P=2 passes here as a page change.
+		// Telling the two apart needs the signed revision's /Annots, which
+		// this classifier does not read.
 		return true
 	case "":
 		// Objects without /Type include form field values, appearance streams,
@@ -302,7 +343,32 @@ func isAllowedP3(obj appendedObject) bool {
 	}
 	// ISO 32000-1, Table 254, P=3 adds "annotation creation, deletion, and
 	// modification" to P=2.
-	return obj.Type == "Annot"
+	return obj.IsAnnot
+}
+
+// isAnnotationDict reports whether a dictionary is an annotation.
+//
+// ISO 32000-1, 12.5.2, Table 164 makes /Type optional on an annotation and
+// /Subtype and /Rect required, so an annotation whose producer omits /Type
+// still carries both. /Subtype is not matched against the annotation types of
+// Table 169: a producer may write a type the table does not list, and that
+// annotation changes the document all the same.
+//
+// # Corpus evidence
+//
+//   - All corpora: 4176 dictionaries in 35 files carry /Subtype and /Rect
+//     without /Type, and all but one name a Table 169 annotation type.
+//   - pdfjs issue18444.pdf: the exception has /Subtype /Arrow and the /AP, /P
+//     and /NM entries of an annotation.
+func isAnnotationDict(dict ast.PdfDict) bool {
+	switch dictName(dict, "Type") {
+	case "Annot":
+		return true
+	case "":
+		_, hasRect := dict["Rect"]
+		return hasRect && dictName(dict, "Subtype") != ""
+	}
+	return false
 }
 
 // dictName extracts a named key from a dictionary, or returns "".
@@ -317,6 +383,12 @@ func dictName(dict ast.PdfDict, key ast.PdfName) string {
 
 // objDescription returns a human-readable description of an appended object.
 func objDescription(obj appendedObject) string {
+	if obj.IsAnnot {
+		if obj.Subtype != "" {
+			return "Annot:" + obj.Subtype
+		}
+		return "Annot"
+	}
 	if obj.Type != "" {
 		return obj.Type
 	}
