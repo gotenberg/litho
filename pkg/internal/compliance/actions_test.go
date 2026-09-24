@@ -152,6 +152,29 @@ func TestIsForbiddenAction(t *testing.T) {
 	})
 }
 
+// TestIsForbiddenActionType pins that the exported verdict is the validator's
+// own for every PDF/A profile, and that a profile outside PDF/A forbids no
+// action type.
+func TestIsForbiddenActionType(t *testing.T) {
+	t.Parallel()
+
+	types := []ast.PdfName{"GoTo", "GoToE", "JavaScript", "SetOCGState", "GoTo3DView", "Launch", "RichMediaExecute"}
+	for _, prof := range []string{"PDF/A-1b", "PDF/A-2b", "PDF/A-3u", "PDF/A-4", "PDF/A-4e", "PDF/A-4f"} {
+		for _, at := range types {
+			if got, want := IsForbiddenActionType(at, prof), isForbiddenAction(at, prof); got != want {
+				t.Errorf("IsForbiddenActionType(%q, %q) = %v, want the validator's %v", at, prof, got, want)
+			}
+		}
+	}
+	for _, prof := range []string{"PDF/UA-1", "PDF/UA-2", "WTPDF-1.0-Reuse", ""} {
+		for _, at := range types {
+			if IsForbiddenActionType(at, prof) {
+				t.Errorf("IsForbiddenActionType(%q, %q) = true, want false: no action-type rule outside PDF/A", at, prof)
+			}
+		}
+	}
+}
+
 // TestAllowedNamedActions pins that [AllowedNamedActions] holds the four page
 // navigation actions and not Print.
 func TestAllowedNamedActions(t *testing.T) {

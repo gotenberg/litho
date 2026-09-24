@@ -11,7 +11,7 @@ import (
 // action whose /N is not one of the four standard named actions (§6.6.1). The
 // forbidden-type behavior must stay intact.
 func TestIsForbiddenAction_NamedActions(t *testing.T) {
-	doc, _ := newTestDoc(t, minimalCatalogPDF(""))
+	doc, alloc := newTestDoc(t, minimalCatalogPDF(""))
 	ctx := context.Background()
 	cases := []struct {
 		name string
@@ -27,7 +27,7 @@ func TestIsForbiddenAction_NamedActions(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := isForbiddenAction(ctx, doc, tc.act); got != tc.want {
+			if got := isForbiddenAction(ctx, alloc, doc, tc.act, "PDF/A-2b"); got != tc.want {
 				t.Errorf("isForbiddenAction(%v) = %v, want %v", tc.act, got, tc.want)
 			}
 		})
@@ -114,5 +114,101 @@ func TestFixJavaScript_KeepsAllowedNamedAction(t *testing.T) {
 				t.Error("allowed Named /OpenAction must be preserved")
 			}
 		}
+	}
+}
+
+// actionSitesPDF builds one page that carries an action of each kind the
+// profiles disagree on, each at its own site so a test can tell which were
+// stripped: a JavaScript /OpenAction (object 6), /Names/JavaScript tree, page
+// /AA/O (object 12) and outline /A, a SetOCGState (object 4) and a GoTo3DView
+// (object 5) link, plus a Launch (object 10) and a non-standard Named action
+// (object 11) that every PDF/A part forbids.
+func actionSitesPDF() []byte {
+	return assemblePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R /OpenAction 6 0 R /Names << /JavaScript 7 0 R >> /Outlines 8 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R 5 0 R 10 0 R 11 0 R] /AA << /O 12 0 R >> >>",
+		"<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A << /S /SetOCGState /State [] >> >>",
+		"<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A << /S /GoTo3DView /V 0 >> >>",
+		"<< /S /JavaScript /JS (open) >>",
+		"<< /Names [(init) << /S /JavaScript /JS (init) >>] >>",
+		"<< /Type /Outlines /First 9 0 R /Last 9 0 R /Count 1 >>",
+		"<< /Title (item) /Parent 8 0 R /A << /S /JavaScript /JS (outline) >> >>",
+		"<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A << /S /Launch /F (a.exe) >> >>",
+		"<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A << /S /Named /N /Print >> >>",
+		"<< /S /JavaScript /JS (page) >>",
+	})
+}
+
+// actionSites records which actions of [actionSitesPDF] survive a
+// fixJavaScript run.
+type actionSites struct {
+	openAction, namesJS, outline, pageAA bool
+	setOCGState, goTo3DView              bool
+	launch, named                        bool
+}
+
+// TestFixJavaScript_StripsOnlyWhatTheProfileForbids pins that each action type
+// is stripped only where the target profile's action-type whitelist excludes
+// it (ISO 19005-1 6.6.1 test 1, ISO 19005-2/3 6.5.1 test 1, ISO 19005-4 6.6.1
+// test 1).
+//
+// The fixer used to strip one fixed list whatever the profile, so a PDF/A-4
+// file lost the JavaScript that every PDF/A-4 conformance permits, and a
+// PDF/A-4e file also lost the SetOCGState and GoTo3DView actions that PDF/A-4e
+// admits. The Launch and Named sites are the positive control: every PDF/A part
+// forbids them, so they prove the fixer ran on every PDF/A row.
+func TestFixJavaScript_StripsOnlyWhatTheProfileForbids(t *testing.T) {
+	t.Parallel()
+
+	all := actionSites{true, true, true, true, true, true, true, true}
+	partsOneToThree := actionSites{}
+	pdfA4 := actionSites{openAction: true, namesJS: true, outline: true, pageAA: true}
+	pdfA4e := actionSites{openAction: true, namesJS: true, outline: true, pageAA: true, setOCGState: true, goTo3DView: true}
+
+	for _, tc := range []struct {
+		profile string
+		want    actionSites
+	}{
+		{"PDF/A-1b", partsOneToThree},
+		{"PDF/A-2b", partsOneToThree},
+		{"PDF/A-3u", partsOneToThree},
+		{"PDF/A-4", pdfA4},
+		{"PDF/A-4f", pdfA4},
+		{"PDF/A-4e", pdfA4e},
+		// PDF/UA states no action-type restriction.
+		{"PDF/UA-1", all},
+	} {
+		t.Run(tc.profile, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			doc, alloc := newTestDoc(t, actionSitesPDF())
+			if _, err := fixJavaScript(ctx, alloc, doc, Options{}, nil, tc.profile); err != nil {
+				t.Fatalf("fixJavaScript: %v", err)
+			}
+
+			live := func(objNum int) ast.PdfDict {
+				return resolveFromAllocOrDoc(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+			}
+			has := func(d ast.PdfDict, key ast.PdfName) bool {
+				_, ok := d[key]
+				return ok
+			}
+			catalog := live(1)
+			got := actionSites{
+				openAction:  has(catalog, "OpenAction"),
+				namesJS:     has(liveDictValue(ctx, alloc, doc, catalog["Names"]), "JavaScript"),
+				outline:     has(live(9), "A"),
+				pageAA:      has(liveDictValue(ctx, alloc, doc, live(3)["AA"]), "O"),
+				setOCGState: has(live(4), "A"),
+				goTo3DView:  has(live(5), "A"),
+				launch:      has(live(10), "A"),
+				named:       has(live(11), "A"),
+			}
+			if got != tc.want {
+				t.Errorf("surviving actions under %s:\n got %+v\nwant %+v", tc.profile, got, tc.want)
+			}
+		})
 	}
 }

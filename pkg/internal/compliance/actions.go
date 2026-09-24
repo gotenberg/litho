@@ -101,6 +101,18 @@ func isForbiddenAction(actionType ast.PdfName, profile string) bool {
 	return !allowedActionTypes(profile)[actionType]
 }
 
+// IsForbiddenActionType reports whether a PDF/A profile forbids an action whose
+// /S is actionType: a type outside the whitelist of ISO 19005-1 6.6.1 test 1,
+// ISO 19005-2/3 6.5.1 test 1 or ISO 19005-4 6.6.1 test 1 for the profile's
+// part and conformance. A profile that is not PDF/A states no action-type
+// restriction, so it forbids none.
+//
+// Exported so the remediation fixer strips exactly the action types the
+// validator flags, as [AllowedNamedActions] does for named actions.
+func IsForbiddenActionType(actionType ast.PdfName, profile string) bool {
+	return PDFAPart(profile) != 0 && isForbiddenAction(actionType, profile)
+}
+
 // AllowedNamedActions lists the named actions permitted by §6.6.1. It is
 // exported so the remediation fixer strips exactly the named actions the
 // validator flags, leaving no room for the two sets to diverge.
