@@ -10,7 +10,6 @@
     "merge-catalog": "goldens/text"
   },
   "skips": {
-    "bug1393476": "infinite loop in xref parsing",
-    "bomb_giant_contents_image_stream": "JBIG2 decompression bomb: CGO call blocks ~20s, cannot be cancelled by context"
+    "bug1393476": "infinite loop in xref parsing"
   }
 }
