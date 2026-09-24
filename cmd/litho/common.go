@@ -85,21 +85,22 @@ func openOptions(ctx context.Context, password string) []pdf.OpenOption {
 // so the document is never held whole. Stdin cannot do that, because a pipe has
 // no size and no seek and the parser needs both, so the bytes are buffered and
 // memory matches the size of the document. Prefer a path for a large file.
-// The caller must close the returned Reader when done.
-func openPDF(ctx context.Context, path, password string) (*pdf.Reader, func(), error) {
+// extra appends options only one command takes. The caller must close the
+// returned Reader when done.
+func openPDF(ctx context.Context, path, password string, extra ...pdf.OpenOption) (*pdf.Reader, func(), error) {
 	if path == "-" {
 		data, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			return nil, nil, fmt.Errorf("reading stdin: %w", err)
 		}
-		r, err := pdf.Open(ctx, newBytesReaderAt(data), int64(len(data)), openOptions(ctx, password)...)
+		r, err := pdf.Open(ctx, newBytesReaderAt(data), int64(len(data)), append(openOptions(ctx, password), extra...)...)
 		if err != nil {
 			return nil, nil, err
 		}
 		return r, func() {}, nil
 	}
 
-	r, err := pdf.OpenFile(ctx, path, openOptions(ctx, password)...)
+	r, err := pdf.OpenFile(ctx, path, append(openOptions(ctx, password), extra...)...)
 	if err != nil {
 		return nil, nil, err
 	}

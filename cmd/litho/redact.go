@@ -7,6 +7,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -87,6 +89,10 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	output := fs.String("o", "", "Output file (required)")
 	password := fs.String("p", "", "PDF password")
 	format := fs.String("f", "text", "Report format: text or json")
+	// Redaction re-encodes an image it cannot keep in its own colour space,
+	// such as an indexed image over DeviceCMYK, as RGB, and this profile is
+	// what its CMYK colours are read in when the document names none.
+	cmykProfile := fs.String("cmyk-profile", "", "ICC profile DeviceCMYK is read in when the document names none (default: built-in SWOP profile)")
 
 	var regionSpecs regionFlags
 	fs.Var(&regionSpecs, "region", "Region to clear, page:x,y,width,height (repeatable, required)")
@@ -96,7 +102,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 
 	if fs.NArg() < 1 || *output == "" || len(regionSpecs) == 0 {
-		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] -o out.pdf")
+		fmt.Fprintln(stderr, "Usage: litho redact <file> --region page:x,y,width,height [--region ...] [--cmyk-profile profile.icc] -o out.pdf")
 		return exitError
 	}
 
@@ -110,7 +116,17 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 		regions = append(regions, region)
 	}
 
-	r, closer, err := openPDF(ctx, fs.Arg(0), *password)
+	var extra []pdf.OpenOption
+	if *cmykProfile != "" {
+		profile, err := os.ReadFile(filepath.Clean(*cmykProfile))
+		if err != nil {
+			fmt.Fprintf(stderr, "reading the CMYK profile: %v\n", err)
+			return exitError
+		}
+		extra = append(extra, pdf.WithDefaultCMYKProfile(profile))
+	}
+
+	r, closer, err := openPDF(ctx, fs.Arg(0), *password, extra...)
 	if err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)
 		return exitError
