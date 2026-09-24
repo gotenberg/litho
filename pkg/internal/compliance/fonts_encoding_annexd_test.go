@@ -8,10 +8,13 @@ import (
 // TestPredefinedEncodingNames_AnnexDGlyphNames pins the codes whose ISO 32000-1,
 // Annex D.2 glyph name is not the Adobe Glyph List name for the Unicode value
 // the same table assigns them. Deriving the name from the rune yields a
-// synthetic uniXXXX no charset holds, so the code resolves to no glyph: govdocs
-// thread_000_000152.pdf shows WinAnsi code 173, whose Annex D name "hyphen"
-// selects a 800-unit glyph against a declared 650, a §6.2.11.5 mismatch
-// veraPDF reports and litho read as U+00AD instead.
+// synthetic uniXXXX no charset holds, so the code resolves to no glyph.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000152.pdf: shows WinAnsi code 173, whose Annex D
+//     name "hyphen" selects a 800-unit glyph against a declared 650, a
+//     §6.2.11.5 mismatch veraPDF reports and litho read as U+00AD instead.
 func TestPredefinedEncodingNames_AnnexDGlyphNames(t *testing.T) {
 	t.Parallel()
 

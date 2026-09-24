@@ -20,10 +20,13 @@ func ocgViolation(rule compliance.Rule) []compliance.Violation {
 //
 // The optional-content rules are spelled 6.9 in parts 2 and 3, but EVERY part-4
 // 6.9 test is an embedded-file rule: t2 the /F and /UF keys, t3 embedded-file
-// conformance, t4 AFRelationship. Forty baseline-mode corpus cells hang on t3
-// alone. An arm written on the clause and test number without the
-// specification would claim all three and report them repaired while they
-// survive.
+// conformance, t4 AFRelationship. An arm written on the clause and test number
+// without the specification would claim all three and report them repaired
+// while they survive.
+//
+// # Corpus evidence
+//
+//   - All corpora: forty baseline-mode cells hang on t3 alone.
 func TestMatchCatalogCleanup_StillDeclinesPart4EmbeddedFileRules(t *testing.T) {
 	t.Parallel()
 
@@ -116,9 +119,13 @@ func TestFixCatalogCleanup_KeepsASWithoutTheViolation(t *testing.T) {
 
 // TestFixCatalogCleanup_MakesDuplicateNamesUnique covers test 2.
 //
-// veraPDF's 6-10-t01-fail-d carries /D and /Configs[0] both named
-// (OCConfigName0). The checker collects /D first, so /D keeps the name and the
-// later configuration is renamed.
+// When /D and a /Configs entry share a name, the checker collects /D first, so
+// /D keeps the name and the later configuration is renamed.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-10-t01-fail-d: carries /D and /Configs[0] both named
+//     (OCConfigName0).
 func TestFixCatalogCleanup_MakesDuplicateNamesUnique(t *testing.T) {
 	doc, alloc := newTestDoc(t, minimalCatalogPDF(
 		"/OCProperties << /Configs [<< /Name (Conf1) /ON [3 0 R] >>] "+
@@ -165,13 +172,11 @@ func TestFixCatalogCleanup_MakesDuplicateNamesUnique(t *testing.T) {
 // TestMatchCatalogCleanup_DoesNotClaimTheOrderItCannotComplete pins the scope
 // this fixer deliberately gave up.
 //
-// The /Order completeness of test 3 WAS implemented, and the corpus measured it
-// as a false fix: litho's checker inspects only /D and collects OCGs only from
-// /OCProperties /OCGs, while veraPDF requires more (complex_ua2 carries a
-// /Configs configuration with its own incomplete /Order). Completing /D alone
-// silenced litho while veraPDF kept reporting, moving litho corpus
-// disagreement from exactly 0 to 10, hidden behind 8 newly matched verapdf
-// cells.
+// The /Order completeness of test 3 WAS implemented, and it measured as a
+// false fix: litho's checker inspects only /D and collects OCGs only from
+// /OCProperties /OCGs, while veraPDF requires more, such as a /Configs
+// configuration with its own incomplete /Order. Completing /D alone silenced
+// litho while veraPDF kept reporting.
 //
 // Until the repair satisfies the RULE rather than litho's detector, the claim
 // must not be made: a claimed-but-unrepaired rule is reported handled while it
@@ -186,6 +191,13 @@ func TestFixCatalogCleanup_MakesDuplicateNamesUnique(t *testing.T) {
 // Asserted here now, with the measurement the earlier note asked for.
 // [fixOCGConfigs] calls only ensureOCGConfigName, stripOCGUsageApplication and
 // uniqueOCGConfigNames, none of which touches /Order.
+//
+// # Corpus evidence
+//
+//   - litho complex_ua2.pdf: carries a /Configs configuration with its own
+//     incomplete /Order.
+//   - litho: completing /D alone moved disagreement from exactly 0 to 10,
+//     hidden behind 8 newly matched cells on the verapdf corpus.
 func TestMatchCatalogCleanup_DoesNotClaimTheOrderItCannotComplete(t *testing.T) {
 	t.Parallel()
 

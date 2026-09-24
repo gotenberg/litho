@@ -19,11 +19,15 @@ import (
 // the two Identity CMaps, and its table reached the Unicode families and
 // Identity but none of the legacy CJK ones, so a font encoded with GB-EUC-H,
 // 90ms-RKSJ-H or the bare H was reported as neither predefined nor embedded.
-// pdfjs issue18466.pdf uses UniGB-UTF16-H and mixedfonts.pdf UniJIS-UTF16-H;
-// veraPDF passes both.
 //
 // PDF/A-1 keeps its own narrower rule: ISO 19005-1, 6.3.3.3 admits only the
 // Identity CMaps, so a predefined CJK name still fails there.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18466.pdf, mixedfonts.pdf: use UniGB-UTF16-H and
+//     UniJIS-UTF16-H respectively, the two Table 116 names the corpora carry,
+//     and veraPDF passes both.
 func TestPredefinedCMapTable116(t *testing.T) {
 	t.Parallel()
 
@@ -84,8 +88,8 @@ func TestPredefinedCMapTable116(t *testing.T) {
 		return false
 	}
 
-	// One name from each family Table 116 lists, including the two the corpus
-	// carries and the bare H that no prefix rule would ever match.
+	// One name from each family Table 116 lists, including UniGB-UTF16-H,
+	// UniJIS-UTF16-H and the bare H that no prefix rule would ever match.
 	predefined := []string{
 		"UniGB-UTF16-H", "UniJIS-UTF16-H", "UniKS-UCS2-V", "UniCNS-UTF16-H",
 		"GB-EUC-H", "GBK2K-V", "B5pc-H", "ETen-B5-V", "90ms-RKSJ-H",

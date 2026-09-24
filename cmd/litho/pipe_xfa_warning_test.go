@@ -27,12 +27,12 @@ func outputHasXFAForm(t *testing.T, path string) bool {
 
 // TestPipe_WarnsWhenAStageDropsXFA pins the entry-point parity gap.
 //
-// `8ef706c8` wired warnXFADropped into the standalone split and merge, the two
+// `3fbae4c9` wired warnXFADropped into the standalone split and merge, the two
 // verbs measured to discard /XFA. pipe runs the identical operations and said
 // nothing, so `litho split` on an XFA document reported the loss while
 // `litho pipe ... split` wrote the same output in silence. This is the third
 // time the same divergence has appeared at this seam: the encryption warning
-// needed `10c8949f` to reach pipe at all and `c9c20cd8` to reach every stage.
+// needed `b59fc758` to reach pipe at all and `a8880277` to reach every stage.
 //
 // The merge row puts the XFA document SECOND on purpose. Checking only the
 // piped input would pass a test that put it first, and a stage source that

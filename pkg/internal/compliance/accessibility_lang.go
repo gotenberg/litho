@@ -251,6 +251,11 @@ type spanLangScan struct {
 // and its /StructParents; res resolves the XObjects it draws. covered reports
 // whether the sequence enclosing the stream already supplies a language, and
 // depth caps the invocation chain at [maxFormXObjectDepth].
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19971.pdf: veraPDF reports each /Span with /ActualText in the
+//     Form XObject the page draws, as it does for the page's own stream.
 func (s *spanLangScan) ops(ctx context.Context, ops []content.Operation, owner, res ast.PdfDict, covered bool, depth int) []Violation {
 	if depth > maxFormXObjectDepth {
 		return nil
@@ -302,9 +307,9 @@ func (s *spanLangScan) ops(ctx context.Context, ops []content.Operation, owner, 
 			}
 		case "Do":
 			// veraPDF builds the marked content of a Form XObject a page draws
-			// as it does the page's own, so pdfjs issue19971.pdf's form reports
-			// each /Span with /ActualText. The form paints inside the sequence the
-			// Do sits in (ISO 32000-1 §14.6), whose language covers it.
+			// as it does the page's own, so a form's /Span with /ActualText
+			// reports too. The form paints inside the sequence the Do sits in
+			// (ISO 32000-1 §14.6), whose language covers it.
 			results = append(results, s.form(ctx, op, res, covered || inScope > 0, depth)...)
 		}
 	}
@@ -400,7 +405,7 @@ func (s *structElemLang) hasLang(ctx context.Context, pd ast.PdfDict) bool {
 		return false
 	}
 	// An /MCID counts only as an integer, as GFOpMarkedContent.getMCID reads it
-	// ([mcidValue]): a null one no longer borrows element 0's /Lang.
+	// (mcidValue): a null one no longer borrows element 0's /Lang.
 	mcid, ok := mcidValue(ctx, s.doc, pd["MCID"])
 	if !ok || mcid < 0 || mcid >= len(s.entries) {
 		return false
@@ -537,10 +542,13 @@ func checkLangRequired(ctx context.Context, doc *document.Document, catalog ast.
 // judges each one, not the catalog's alone: it models the /Metadata of every
 // dictionary in the cross-reference table whose /Type is not /Catalog
 // (GFCosDict.getMetadata over GFCosDocument's indirectObjects), which
-// [xmpCollectMetadataStreams] and [xmpPacketBytes] already mirror. pdfjs
-// bug867484.pdf gives a structure element a packet whose dc:title and
-// dc:description carry only x-default; veraPDF reports it, and litho, which
-// read the catalog's packet only, did not.
+// [xmpCollectMetadataStreams] and [xmpPacketBytes] already mirror.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug867484.pdf: gives a structure element a packet whose dc:title
+//     and dc:description carry only x-default; veraPDF reports it, and litho,
+//     which read the catalog's packet only, did not.
 func documentMetadataLangUndetermined(ctx context.Context, doc *document.Document, catalog ast.PdfDict) bool {
 	if data, ok := readCatalogXMP(ctx, doc, catalog); ok && xmpLangUndetermined(data) {
 		return true
@@ -608,7 +616,7 @@ func langString(ctx context.Context, doc *document.Document, dict ast.PdfDict) (
 // an empty (or whitespace-only) string. Such a value is an invalid Language-Tag,
 // not an absent one: the key exists but its value fails the tag grammar.
 func langPresentButEmpty(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
-	// A /Lang that resolves to null is absent, not empty ([langString]).
+	// A /Lang that resolves to null is absent, not empty (langString).
 	langStr, ok := langString(ctx, doc, dict)
 	if !ok {
 		return false
@@ -616,17 +624,17 @@ func langPresentButEmpty(ctx context.Context, doc *document.Document, dict ast.P
 	return strings.TrimSpace(document.DecodePdfString(langStr)) == ""
 }
 
-// checkStructureTreeLangCoverage verifies that all structure elements can
-// determine their natural language through /Lang inheritance in the structure
-// tree, even when catalog /Lang is absent. An element inherits /Lang from its
-// nearest ancestor that carries a non-empty /Lang value.
 // checkAnnotFormLang reports ISO 14289-1 §7.2 t24/t25: the natural language for
 // text in an annotation's /Contents entry (t24) and in a form field's /TU key
 // (t25) must be determinable. It is called only when the catalog carries no
-// /Lang, so an object supplies its own determinable language only through its
-// own /Lang entry (verapdf-corpus 7.2-t24/t25-pass-a rely on catalog /Lang; the
-// fail files have neither catalog nor object /Lang, and their enclosing
-// structure element carries no /Lang either).
+// /Lang, so an object's language is determinable only through its own /Lang or
+// that of the structure element enclosing it ([objLangDeterminable]).
+//
+// # Corpus evidence
+//
+//   - verapdf 7.2-t24-pass-a, 7.2-t25-pass-a: rely on the catalog /Lang.
+//   - verapdf 7.2-t24-fail-a, 7.2-t25-fail-a: have neither catalog nor object
+//     /Lang, and their enclosing structure element carries no /Lang either.
 func checkAnnotFormLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
 	var results []Violation
 	treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
@@ -673,9 +681,9 @@ func checkAnnotFormLang(ctx context.Context, doc *document.Document, catalog ast
 
 // objLangDeterminable reports whether an annotation or form field supplies a
 // determinable natural language: its own /Lang, or the /Lang of the structure
-// element it is nested in (via /StructParent) or one of that element's
-// ancestors. The catalog-/Lang case is handled by the caller (this runs only
-// when the catalog carries no /Lang).
+// element it is nested in (via /StructParent, see [structElementLang]). The
+// catalog-/Lang case is handled by the caller (this runs only when the catalog
+// carries no /Lang).
 func objLangDeterminable(ctx context.Context, doc *document.Document, treeRoot, obj ast.PdfDict) bool {
 	if resolveNonEmptyLang(ctx, doc, obj) != "" {
 		return true
@@ -686,9 +694,14 @@ func objLangDeterminable(ctx context.Context, doc *document.Document, treeRoot, 
 // structElementLang returns the /Lang of the structure element that obj's
 // /StructParent references directly, or "" if absent. veraPDF determines an
 // annotation's or form field's language from that element's own /Lang only, not
-// from an inherited ancestor value: verapdf-corpus 7.2-t25-fail-a has a /Form
-// element with no /Lang whose parent carries /Lang, and it still fails, while
-// 7.2-t24/t25-pass-b carry /Lang directly on the element and pass.
+// from an inherited ancestor value.
+//
+// # Corpus evidence
+//
+//   - verapdf 7.2-t25-fail-a: a /Form element with no /Lang whose parent
+//     carries /Lang still fails.
+//   - verapdf 7.2-t24-pass-b, 7.2-t25-pass-b: carry /Lang directly on the
+//     element and pass.
 func structElementLang(ctx context.Context, doc *document.Document, treeRoot, obj ast.PdfDict) string {
 	if treeRoot == nil {
 		return ""
@@ -744,6 +757,17 @@ func checkFieldTULang(ctx context.Context, doc *document.Document, treeRoot ast.
 	}
 }
 
+// checkStructureTreeLangCoverage verifies that all structure elements can
+// determine their natural language through /Lang inheritance in the structure
+// tree, even when catalog /Lang is absent. An element inherits /Lang from its
+// nearest ancestor that carries a non-empty /Lang value.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16176.pdf: shows a Tj outside every marked-content sequence,
+//     and veraPDF reports it under §7.2 t34.
+//   - pdfjs bug1755507.pdf: shows three Tj inside a /Part with no /MCID, and
+//     veraPDF reports it under §7.2 t34.
 func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document, catalog ast.PdfDict, langRule, validRule Rule) []Violation {
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil || treeRoot == nil {
@@ -830,11 +854,10 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 	// Text that no structure element owns has no element /Lang to inherit, so
 	// with no catalog /Lang only a marked-content /Lang around it determines its
 	// language, and the walk above never sees it. veraPDF resolves every
-	// SETextItem that way, artifact text included: pdfjs issue16176.pdf shows a
-	// Tj outside every marked-content sequence and bug1755507.pdf three inside a
-	// /Part with no /MCID, and veraPDF reports both under §7.2 t34. Text in an
-	// MCID-bearing sequence belongs to its owning element, which the walk above
-	// already judges, so the scan treats that sequence as covered.
+	// SETextItem that way, artifact text included: text outside every
+	// marked-content sequence, or inside one with no /MCID, draws §7.2 t34.
+	// Text in an MCID-bearing sequence belongs to its owning element, which the
+	// walk above already judges, so the scan treats that sequence as covered.
 	if documentShowsUndeterminedText(ctx, doc, catalog, true) {
 		results = append(results, fail(langRule, "text outside the structure tree")...)
 	}
@@ -850,14 +873,18 @@ func checkStructureTreeLangCoverage(ctx context.Context, doc *document.Document,
 // veraPDF uses: the page /StructParents key selects a ParentTree entry whose
 // array is indexed by marked-content identifier (ISO 32000-1 §14.7.4.4,
 // GFOp_BDC.getStructElem). An element that owns only images, line art or
-// nothing at all is not a subject: in verapdf-corpus 7.2-t22-fail-a the /Figure
-// owning MCID 6 carries no /Lang, yet veraPDF reports no t34 because that
-// sequence draws an image XObject rather than text.
+// nothing at all is not a subject.
 //
 // An element reached only through a direct (non-indirect) /K entry has no object
 // number and cannot be named here, so it is never a subject. Under-reporting is
 // the safe direction: veraPDF's own link runs through the ParentTree, which can
 // only name indirect elements.
+//
+// # Corpus evidence
+//
+//   - verapdf 7.2-t22-fail-a: the /Figure owning MCID 6 carries no /Lang, yet
+//     veraPDF reports no t34 because that sequence draws an image XObject
+//     rather than text.
 func structElemsShowingText(ctx context.Context, doc *document.Document, catalog, treeRoot ast.PdfDict) (elems, inlineLang map[int]bool) {
 	elems, inlineLang = make(map[int]bool), make(map[int]bool)
 	ptDict, err := document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
@@ -958,7 +985,7 @@ func documentShowsUndeterminedText(ctx context.Context, doc *document.Document, 
 	var parentTree ast.PdfDict
 	if mcidCovers {
 		// Best-effort: a missing or unresolvable tree or ParentTree leaves it nil,
-		// and then no MCID owns its text ([markedContentHasMCID]).
+		// and then no MCID owns its text (markedContentHasMCID).
 		treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 		if treeRoot != nil {
 			parentTree, _ = document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
@@ -1033,11 +1060,6 @@ func opsShowUndeterminedText(ctx context.Context, doc *document.Document, ops []
 	return false
 }
 
-// markedContentLangPresent reports whether the property list of a marked-content
-// operator carries a /Lang key. Presence is what counts, not the value: veraPDF
-// takes the language as determined from the first enclosing sequence holding the
-// key even when the tag is empty or malformed, and judges that value under UA-1
-// §7.2 t29 instead (see [checkMarkedContentLang]).
 // markedContentHasMCID reports whether a BDC operator's property list carries an
 // integer /MCID ([mcidValue]) that ties its content to a structure element: the
 // ParentTree entry the page's (or Form XObject's) /StructParents selects maps
@@ -1071,6 +1093,11 @@ func markedContentHasMCID(ctx context.Context, props *markedContentProps, op con
 	return isRef
 }
 
+// markedContentLangPresent reports whether the property list of a marked-content
+// operator carries a /Lang key. Presence is what counts, not the value: veraPDF
+// takes the language as determined from the first enclosing sequence holding the
+// key even when the tag is empty or malformed, and judges that value under UA-1
+// §7.2 t29 instead (see [checkMarkedContentLang]).
 func markedContentLangPresent(ctx context.Context, props *markedContentProps, op content.Operation) bool {
 	pd := props.dict(ctx, op)
 	if pd == nil {
@@ -1236,7 +1263,7 @@ func walkStructKidsWithLang(ctx context.Context, doc *document.Document, obj ast
 
 func visitStructElemWithLang(ctx context.Context, doc *document.Document, elem ast.PdfDict, path string, seen map[int]bool, depth, objNum int, ancestorLang bool, fn structLangVisitor) {
 	// A structure element with no /S still carries its /Lang to its kids, and
-	// its kids still show text veraPDF judges ([isStructElemDict]).
+	// its kids still show text veraPDF judges (isStructElemDict).
 	if !isStructElemDict(ctx, doc, elem) {
 		return
 	}
@@ -1274,7 +1301,7 @@ func checkOutlineLang(ctx context.Context, doc *document.Document, catalog ast.P
 
 	// If the catalog declares /Lang at all, outline entries inherit it and
 	// their language is determinable. A present-but-empty /Lang is an invalid
-	// Language-Tag (reported once as §7.2 t29 in [checkLangRequired]), not an
+	// Language-Tag (reported once as §7.2 t29 in checkLangRequired), not an
 	// undeterminable-language defect, so it must not also fire t2 per outline.
 	// A catalog /Lang that resolves to null declares nothing (ISO 32000-1, 7.3.7
 	// and 7.3.10): veraPDF reports each outline item then, measured.
@@ -1296,6 +1323,11 @@ func checkOutlineLang(ctx context.Context, doc *document.Document, catalog ast.P
 // /Next or /First cycle would otherwise recurse forever (a 700-byte file
 // exhausts the goroutine stack, which is not recoverable in Go), and a long flat
 // /Next chain must not recurse one frame per sibling.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue10880.pdf: points /Outlines /First at a page object; veraPDF
+//     reports it and litho, which stopped at the missing /Title, did not.
 func walkOutlineItemsForLang(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, results *[]Violation, depth int, visited map[int]bool) {
 	if depth > maxStructTreeWalkDepth {
 		return
@@ -1315,11 +1347,10 @@ func walkOutlineItemsForLang(ctx context.Context, doc *document.Document, itemOb
 		// item, whatever keys it carries. ISO 32000-1, Table 153 requires /Title,
 		// but veraPDF models an item without one (OutlinesHelper walks
 		// PDOutlineDictionary.getOutlineItem, which asks only isDictionaryBased),
-		// and a non-dictionary value ends the chain. pdfjs issue10880.pdf points
-		// /Outlines /First at a page object: veraPDF reports it and litho, which
-		// stopped at the missing /Title, did not. Measured against veraPDF on an
-		// untitled item, on a page in that place, and on an untitled item followed
-		// by a titled one.
+		// and a non-dictionary value ends the chain, so a page object in that
+		// place is an item too. Measured against veraPDF on an untitled item, on
+		// a page in that place, and on an untitled item followed by a titled
+		// one.
 		resolved, err := document.ResolveObject(ctx, doc, itemObj)
 		if err != nil {
 			return
@@ -1357,7 +1388,7 @@ func validateStructureLangs(ctx context.Context, doc *document.Document, catalog
 	var results []Violation
 	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
 		// An absent /Lang, or one that resolves to null or to no string, carries
-		// no tag to validate ([langString]).
+		// no tag to validate (langString).
 		langStr, ok := langString(ctx, doc, elem)
 		if !ok {
 			return
@@ -1397,10 +1428,15 @@ func IsValidLangTag(tag string) bool {
 // IsValidUALangTag reports whether a /Lang text string passes the PDF/UA
 // Language-Tag test (ISO 14289-1, 7.2 t29; ISO 14289-2, 8.4.4 t2) as veraPDF
 // runs it: the grammar of [IsValidLangTag] against the value as written, with
-// nothing trimmed and no byte dropped. "EN-US\x00" (pdfjs issue12706.pdf) and
-// "EN-US " fail it and veraPDF reports both, while [IsValidLangTag], which
-// trims and decodes for display, lets them through. An empty value fails too,
-// so a caller that treats it apart checks it first.
+// nothing trimmed and no byte dropped. "EN-US\x00" and "EN-US " fail it and
+// veraPDF reports both, while [IsValidLangTag], which trims and decodes for
+// display, lets them through. An empty value fails too, so a caller that treats
+// it apart checks it first.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12706.pdf: writes the /Lang "EN-US\x00", which veraPDF
+//     reports.
 func IsValidUALangTag(s ast.PdfString) bool {
 	return !document.ContainsUndefinedPDFDocBytes(s) && langTagAlphaNum.MatchString(document.DecodePdfString(s))
 }
@@ -1412,19 +1448,27 @@ func IsValidUALangTag(s ast.PdfString) bool {
 // ISO 19005-1, 6.8.4 t1 and ISO 19005-2/3, 6.7.4 t1 read the value as written:
 // veraPDF admits an empty value or one matching
 // /^[a-zA-Z]{1,8}(-[a-zA-Z]{1,8})*$/, with nothing trimmed and no byte
-// dropped, the same way [IsValidUALangTag] reads the PDF/UA restatement. [document.DecodePdfString] drops an undefined
-// PDFDocEncoding byte by design, so "EN-US\x00" reached the grammar as a legal
-// "EN-US": govdocs thread_100_100172, thread_100_100195, thread_200_200961 and
-// thread_300_300346 write exactly that and veraPDF reports every one.
+// dropped, the same way [IsValidUALangTag] reads the PDF/UA restatement.
+// [document.DecodePdfString] drops an undefined PDFDocEncoding byte by design,
+// so "EN-US\x00" reached the grammar as a legal "EN-US".
 //
 // A BOM-prefixed value is exempt from the byte test, as
 // [document.ContainsUndefinedPDFDocBytes] states, because its bytes are UTF-16
-// code units and not PDFDocEncoding: veraPDF passes the BOM'd "en-GB" of its
-// own 6-8-4-t01-pass-f fixture. Such a value is still held to the grammar after
-// decoding, which is what already reports the BOM'd "EN-US\x00" of govdocs
-// thread_000_000153 and thread_200_200295.
+// code units and not PDFDocEncoding: veraPDF passes a BOM'd "en-GB". Such a
+// value is still held to the grammar after decoding, which is what reports a
+// BOM'd "EN-US\x00".
 //
 // An empty or all-whitespace value states no tag, which every profile permits.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100172, thread_100_100195, thread_200_200961,
+//     thread_300_300346: write "EN-US\x00" exactly, and veraPDF reports every
+//     one.
+//   - verapdf 6-8-4-t01-pass-f: veraPDF passes the BOM'd "en-GB" of its own
+//     fixture.
+//   - govdocs thread_000_000153, thread_200_200295: the grammar after decoding
+//     already reports their BOM'd "EN-US\x00".
 func pdfaLangTagInvalid(s ast.PdfString, part int) bool {
 	decoded := document.DecodePdfString(s)
 	if strings.TrimSpace(decoded) == "" {

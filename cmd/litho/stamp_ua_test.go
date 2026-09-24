@@ -29,10 +29,10 @@ func uaViolations(t *testing.T, path string) string {
 // TestStampText_DoesNotBreakContentMarking pins that stamping a tagged document
 // leaves it as conformant as it found it, for the one clause stamping controls.
 //
-// ISO 14289-1 §7.1 test 3 requires every piece of page content to be either
+// ISO 14289-1, 7.1 test 3 requires every piece of page content to be either
 // tagged as real content or marked as an artifact. A stamp is neither: it is
 // appended to the content stream after the structure tree was built, so it
-// belongs to no marked-content sequence at all. ISO 32000-1 §14.8.2.2 names
+// belongs to no marked-content sequence at all. ISO 32000-1, 14.8.2.2 names
 // watermarks as artifacts, which is what the stamp has to declare itself to be.
 //
 // Measured before the fix, stamping an autotagged page took PDF/UA-1 from 4
@@ -41,8 +41,12 @@ func uaViolations(t *testing.T, path string) string {
 // the missing artifact marking. The third is a separate defect that artifact
 // marking does not address, so this test does not assert it away.
 //
-// The corpus gate scores neither stamping nor this clause, so this test is the
-// only thing standing between the repair and a silent regression.
+// This test is the only thing standing between the repair and a silent
+// regression.
+//
+// # Corpus evidence
+//
+//   - All corpora: the corpus gate scores neither stamping nor this clause.
 func TestStampText_DoesNotBreakContentMarking(t *testing.T) {
 	dir := t.TempDir()
 	src := writeTempPDF(t, untaggedTextPDF())

@@ -13,7 +13,11 @@ import (
 // cyclicFieldParentPDF is [formPDF] with the field's /Parent pointing back at
 // its own widget, so the chain 6 -> 5 -> 6 never reaches a root.
 //
-// A /Parent cycle is not hypothetical: one corpus file carries 16 of them.
+// A /Parent cycle is not hypothetical: real files carry them.
+//
+// # Corpus evidence
+//
+//   - All corpora: one file carries 16 /Parent cycles.
 func cyclicFieldParentPDF() []byte {
 	return []byte("%PDF-1.7\n" +
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [5 0 R] /DA (0 g) >> >>\nendobj\n" +

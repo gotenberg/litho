@@ -6,8 +6,8 @@ import "testing"
 // ICCBased colour space's /N match the component count its profile header
 // implies. Only ISO 19005-1, 6.2.3.2 test 2 does. Parts 2 to 4 spell 6.2.4.2
 // test 1 as "the profile shall conform to ICC.1:1998-09 ... or ISO 15076-1",
-// which iccBasedProfileRule already answers for, so a component-count mismatch
-// reported there accused the profile of a defect it does not have.
+// which [iccBasedProfileRule] already answers for, so a component-count
+// mismatch reported there accused the profile of a defect it does not have.
 func TestICCBasedNRule_OnlyPart1(t *testing.T) {
 	t.Parallel()
 

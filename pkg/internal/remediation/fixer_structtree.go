@@ -166,6 +166,13 @@ func ensureDocumentElementNS(ctx context.Context, alloc *writer.ObjAllocator, do
 // and returns it when it is a Document element whose /NS is missing or
 // names the PDF 1.7 namespace. /K may be the element reference itself or a
 // one-element array holding it.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.1-t07-fail-a: maps /Document to /Book, and resolving
+//     alone cost that file three violations it did not have (§8.2.5.2 t1,
+//     §8.2.4 t4 and ISO/TS 32005 Table 5 StructTreeRoot-Document) across
+//     PDF_UA-2 and both WTPDF levels.
 func documentElementNeedingNS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, stDict ast.PdfDict) (ast.PdfIndirectRef, ast.PdfDict, bool) {
 	kObj, hasK := stDict["K"]
 	if !hasK {
@@ -200,15 +207,13 @@ func documentElementNeedingNS(ctx context.Context, alloc *writer.ObjAllocator, d
 	// and left the Document untagged.
 	//
 	// The RAW /S catches the opposite shape, a literally named Document whose
-	// /RoleMap sends the name elsewhere: veraPDF's PDF_UA-1__7.1-t07-fail-a
-	// maps /Document to /Book, and resolving alone follows it away from
-	// Document and skips the element. Declaring the PDF 2.0 namespace IS the
-	// repair there, because [equivalentType] consults the legacy /RoleMap only
-	// for the empty and PDF 1.7 namespaces: once the element declares 2.0 the
-	// mapping no longer applies and the name reads as the standard Document
-	// again. Resolving alone cost that file three violations it did not have
-	// (§8.2.5.2 t1, §8.2.4 t4 and ISO/TS 32005 Table 5
-	// StructTreeRoot-Document) across PDF_UA-2 and both WTPDF levels.
+	// /RoleMap sends the name elsewhere (/Document to /Book, say): resolving
+	// alone follows it away from Document and skips the element. Declaring
+	// the PDF 2.0 namespace IS the repair there, because compliance's
+	// equivalentType consults the legacy /RoleMap only for the empty and PDF
+	// 1.7 namespaces: once the element declares 2.0 the mapping no longer
+	// applies and the name reads as the standard Document again. Resolving
+	// alone adds violations the file did not have.
 	//
 	// Reading the map from stDict is safe because the rolemap fixer, the only
 	// one that edits /RoleMap, is registered after this one.

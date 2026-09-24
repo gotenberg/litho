@@ -100,7 +100,12 @@ func TestCheckLangRequired_AncestorLangCoversDescendant(t *testing.T) {
 // TestCheckLangRequired_ImageOnlyElementIsNotATextItem covers the object ISO
 // 14289-1 §7.2 t34 names, SETextItem. A /Figure whose marked content draws an
 // image XObject shows no text, so veraPDF builds an SEImageXObjectItem and
-// reports nothing, even with no /Lang in reach (verapdf-corpus 7.2-t22-fail-a).
+// reports nothing, even with no /Lang in reach.
+//
+// # Corpus evidence
+//
+//   - verapdf 7.2-t22-fail-a: a /Figure whose marked content draws an image
+//     XObject carries no /Lang in reach, and veraPDF reports no t34.
 func TestCheckLangRequired_ImageOnlyElementIsNotATextItem(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -182,11 +187,11 @@ func TestCheckLangRequired_NoLangAnywhereFiresT34(t *testing.T) {
 	}
 }
 
-// TestCheckLangRequired_InlineMarkedContentLangSuppressesT34 pins the guard that
-// keeps litho off veraPDF's answer for files whose only /Lang sits on a BDC
-// property list. veraPDF reads that tag when it resolves an SETextItem's
-// language; litho does not map a structure element back to the BDC wrapping its
-// marked content, so it reports nothing rather than risk a false positive.
+// TestCheckLangRequired_InlineMarkedContentLangSuppressesT34 pins that a /Lang
+// on the BDC property list wrapping an element's text determines that text's
+// language. veraPDF reads that tag when it resolves an SETextItem's language,
+// and litho resolves it through the marked-content sequence that owns the
+// element's text ([structElemsShowingText]), so it reports nothing.
 func TestCheckLangRequired_InlineMarkedContentLangSuppressesT34(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -338,9 +343,14 @@ func TestCheckOutlineLang_CatalogLangCoversOutline(t *testing.T) {
 
 // TestCheckOutlineLang_EveryReachableItem pins that §7.2 t2 judges every
 // dictionary reached through /First and /Next, titled or not. veraPDF models
-// each one as a PDOutline (OutlinesHelper asks only isDictionaryBased), and pdfjs
-// issue10880.pdf points /Outlines /First at a page object, which veraPDF
-// reports. Every case was measured against veraPDF.
+// each one as a PDOutline (OutlinesHelper asks only isDictionaryBased), so a
+// page object in that place is reported too. Every case was measured against
+// veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue10880.pdf: points /Outlines /First at a page object, which
+//     veraPDF reports.
 func TestCheckOutlineLang_EveryReachableItem(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

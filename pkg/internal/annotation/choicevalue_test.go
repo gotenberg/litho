@@ -52,9 +52,15 @@ func assembleFormPDF(objs []string) []byte {
 //
 // Per ISO 32000-1, 12.7.4.4, Table 230 a choice field's /V is a text string, or
 // an array of them when more than one option is selected. Only the scalar forms
-// were read, so pdfjs annotation-choice-widget.pdf, which holds
-// ["Ipsum" "Amet" "Consectetur" "Elit"], reported an empty value for that field
-// while pikepdf and every viewer show four selections.
+// were read, so a multi-select list box reported an empty value while pikepdf
+// and every viewer show its selections.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation-choice-widget.pdf: holds
+//     ["Ipsum" "Amet" "Consectetur" "Elit"], and litho reported an empty
+//     value for that field while pikepdf and every viewer show four
+//     selections.
 func TestMultiSelectChoiceFieldValue(t *testing.T) {
 	t.Parallel()
 
@@ -87,11 +93,15 @@ func TestMultiSelectChoiceFieldValue(t *testing.T) {
 // TestCheckboxValueIsAlwaysValidUTF8 pins that a field value written as a name
 // reaches the caller as a usable string.
 //
-// A name is a byte sequence (ISO 32000-1, 7.3.5), and pdfjs issue19753.pdf gives
-// a checkbox a UTF-16BE one. Returning the raw bytes put a string that is not
-// valid UTF-8 into [models.FormField], and the JSON encoder rendered it as
+// A name is a byte sequence (ISO 32000-1, 7.3.5), and a producer can give a
+// checkbox a UTF-16BE one. Returning the raw bytes put a string that is not
+// valid UTF-8 into models.FormField, and the JSON encoder rendered it as
 // replacement characters. ASCII appearance states must stay byte-identical, so
 // they keep matching the /AP key that names them.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19753.pdf: gives a checkbox a UTF-16BE name.
 func TestCheckboxValueIsAlwaysValidUTF8(t *testing.T) {
 	t.Parallel()
 

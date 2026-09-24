@@ -218,8 +218,13 @@ func TestResolveFont_NonStandard14NoEncoding(t *testing.T) {
 // standard 14 non-symbolic font with an /Encoding dict containing only
 // /Differences (no /BaseEncoding) overlays StandardEncoding for unmapped
 // slots, per ISO 32000-2 §9.6.6.4. The previous WinAnsi overlay turned
-// byte 0xD0 (StandardEncoding emdash → U+2014) into 'Ð' on
-// Mac-authored govdocs filings.
+// byte 0xD0 (StandardEncoding emdash → U+2014) into 'Ð' on Mac-authored
+// filings.
+//
+// # Corpus evidence
+//
+//   - govdocs: its Mac-authored filings showed the 'Ð' the previous WinAnsi
+//     overlay produced for byte 0xD0.
 func TestResolveFont_Standard14DifferencesNoBaseEncoding(t *testing.T) {
 	fontDict := ast.PdfDict{
 		"Type":     ast.PdfName("Font"),

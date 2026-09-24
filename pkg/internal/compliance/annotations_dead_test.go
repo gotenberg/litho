@@ -7,6 +7,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
+// TestAnnotColorArrays pins ISO 19005-1 §6.5.3 t3 on /C and /IC colour arrays
+// against RGB, non-RGB and unparseable OutputIntent colour spaces.
 func TestAnnotColorArrays(t *testing.T) {
 	withC := ast.PdfDict{"C": ast.PdfArray{}}
 	withIC := ast.PdfDict{"IC": ast.PdfArray{}}

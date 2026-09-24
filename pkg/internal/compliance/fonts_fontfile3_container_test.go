@@ -17,9 +17,15 @@ import (
 // differs per font subtype: see [fontFile3ParsesForFont].
 //
 // Every row was measured against veraPDF 1.30.2 by moving the same program
-// bytes between declarations. The /TrueType rows matter most: pdfjs
-// issue4668.pdf declares "Type1C" over a TrueType sfnt and veraPDF reports it
-// embedded, so that pairing shall stay silent.
+// bytes between declarations. The /TrueType rows matter most: veraPDF reports
+// a TrueType sfnt declared "Type1C" as embedded, so that pairing shall stay
+// silent.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue4668.pdf: declares "Type1C" over a TrueType sfnt, and veraPDF
+//     reports it embedded, because a TrueType font parses /FontFile3 as an
+//     sfnt whatever the subtype names.
 func TestFontFile3ContainerMatchesFont(t *testing.T) {
 	t.Parallel()
 
@@ -72,8 +78,8 @@ func TestFontFile3ContainerMatchesFont(t *testing.T) {
 		{"a Type1 font cannot read an sfnt as Type1C", simple("Type1", "Type1C", sfnt), true},
 		{"a Type1 font reads OpenType as an sfnt", simple("Type1", "OpenType", sfnt), false},
 		{"a Type1 font cannot read a CFF as OpenType", simple("Type1", "OpenType", cff), true},
-		// pdfjs issue4668.pdf: a TrueType font parses /FontFile3 as an sfnt
-		// whatever the subtype names, so this pairing stays embedded.
+		// A TrueType font parses /FontFile3 as an sfnt whatever the subtype
+		// names, so this pairing stays embedded.
 		{"a TrueType font reads an sfnt named Type1C", simple("TrueType", "Type1C", sfnt), false},
 		{"a TrueType font cannot read a CFF", simple("TrueType", "Type1C", cff), true},
 		{"a CIDFont reads CIDFontType0C as CFF", composite("CIDFontType0C", cff), false},

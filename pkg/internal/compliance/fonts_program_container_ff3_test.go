@@ -19,11 +19,15 @@ import (
 //
 // The container the /Subtype names is enforced, but only for the fonts that
 // read it. veraPDF picks the parser from the font, so a simple TrueType font
-// parses /FontFile3 as an sfnt whatever the subtype says (pdfjs issue4668.pdf
-// declares /Type1C over a TrueType sfnt and is embedded), while the /Type1 font
+// parses /FontFile3 as an sfnt whatever the subtype says, while the /Type1 font
 // this fixture builds dispatches on the subtype and cannot read the other
 // container: see [fontFile3ParsesForFont] and
 // [TestFontFile3ContainerMatchesFont], where every pairing was measured.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue4668.pdf: declares /Type1C over a TrueType sfnt and is
+//     embedded.
 func TestFontEmbedding_FontFile3Container(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

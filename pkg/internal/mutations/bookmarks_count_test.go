@@ -106,8 +106,9 @@ func TestWriteOutline_RootCountCountsEveryVisibleItem(t *testing.T) {
 	}
 }
 
-// A flat list must keep counting as its own length: the recursive count has to
-// generalise the old behaviour, not replace it.
+// TestVisibleOutlineCount_FlatListCountsItsLength pins that a flat list keeps
+// counting as its own length: the recursive count has to generalise the old
+// behaviour, not replace it.
 func TestVisibleOutlineCount_FlatListCountsItsLength(t *testing.T) {
 	flat := []models.Bookmark{
 		{Title: "one", PageNumber: 1},

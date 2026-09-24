@@ -96,7 +96,7 @@ func WithPhase(id string) EvalOption {
 //
 // Use this to handle rules whose XPath the engine cannot compile or
 // evaluate. The companion package cii_schematron ships
-// [cii_schematron.BuiltinRuleOverrides] with overrides for known
+// cii_schematron.BuiltinRuleOverrides with overrides for known
 // holes in the EN 16931 / XRechnung rule sets.
 func WithRuleOverrides(overrides map[string]RuleOverride) EvalOption {
 	return func(o *evalOpts) { o.overrides = overrides }
@@ -137,10 +137,10 @@ func Validate(ctx context.Context, schema *Schema, payload []byte, opts ...EvalO
 	ns := namespaceMap(schema)
 	cache := newExprCache(ns)
 
-	// Schema-level lets evaluate against the document root once and
-	// stay constant for every pattern below. Their literal values
-	// substitute into pattern lets, rule contexts, and assertion
-	// tests before XPath compilation.
+	// Schema-level lets resolve once and stay constant for every
+	// pattern below. Their XPath text substitutes into pattern lets,
+	// rule contexts, and assertion tests before XPath compilation
+	// (see [resolveLevelLets]).
 	//
 	// XRechnung and similar schemas adopt a "variable-pattern"
 	// convention: declare constants in a dedicated pattern whose
@@ -276,8 +276,8 @@ func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cach
 }
 
 // evaluateRule applies every assertion in rule against the single
-// context node n. Let bindings declared on the rule are pre-evaluated
-// and substituted into each assertion's test expression before
+// context node n. Let bindings declared on the rule are substituted
+// textually into each assertion's test expression before
 // compilation; assertions whose test expression fails to compile or
 // evaluate get silently skipped so a single unsupported XPath
 // construct does not abort the whole pass.
@@ -286,9 +286,8 @@ func evaluatePattern(ctx context.Context, doc *xmlquery.Node, pat *Pattern, cach
 // schemas (EN 16931, XRechnung) lean on XPath 2.0 functions and
 // xsl:function helpers that antchfx/xpath does not implement. A
 // per-rule abort would leave most documents producing zero
-// violations - worse than no Schematron at all. PR-followup
-// territory: surface skipped rules via a logger hook so callers can
-// audit coverage.
+// violations, which is worse than no Schematron at all. The second
+// return lists the skipped rules so callers can audit coverage.
 func evaluateRule(ctx context.Context, rule *Rule, n *xmlquery.Node, cache *exprCache, inherited map[string]string, overrides map[string]RuleOverride) ([]Violation, []SkippedRule) {
 	// Rule lets stack on top of the inherited schema + pattern lets.
 	// The inherited map is copied (not mutated) so concurrent calls
@@ -328,7 +327,7 @@ func evaluateRule(ctx context.Context, rule *Rule, n *xmlquery.Node, cache *expr
 
 // runAssertion evaluates a single assertion: a registered override
 // wins over the XPath engine, otherwise the test compiles and runs
-// against the bundled antchfx/xpath, with one wrinkle - a top-level
+// against the bundled antchfx/xpath, with one wrinkle: a top-level
 // XPath 2.0 quantifier (every / some) is peeled off and evaluated in
 // Go before handing the body to antchfx. antchfx misparses bare
 // quantifiers (the resulting iterator is always empty) and the
@@ -568,7 +567,7 @@ func positionalXPath(n *xmlquery.Node) string {
 // prefixRelativePaths walks expr and prepends "prefix/" to every
 // top-level relative path-start. Absolute paths ("/abs", "//abs"),
 // variables ("$var"), string literals, numeric literals, function
-// calls, and paths inside a predicate "[...]" are left alone -
+// calls, and paths inside a predicate "[...]" are left alone:
 // predicates resolve relative to the matched step, not the rule
 // context.
 //
@@ -1082,7 +1081,7 @@ func (c *exprCache) compile(expr string) (*xpath.Expr, error) {
 // a prefix referenced before its declaration surfaces as a regular
 // XPath compile error instead of a silent rewrite.
 //
-// "*" is only replaced when it occupies a path-step position - never
+// "*" is only replaced when it occupies a path-step position, never
 // as the multiplication operator. The walker recognises a path-step
 // "*" when it follows ":" (after a name prefix), or when the
 // preceding character is "/", or start-of-input. Anywhere else the

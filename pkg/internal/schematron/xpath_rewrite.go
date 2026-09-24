@@ -106,7 +106,7 @@ func rewriteCast(expr, fullName, replacement string) string {
 }
 
 // elideCastInStep drops a numeric or string cast that sits directly
-// after a path-step "/" - XPath 1.0 forbids a function call in that
+// after a path-step "/". XPath 1.0 forbids a function call in that
 // position, but XPath 2.0 (and the EN 16931 Schematron's BR-CO-17 in
 // particular) uses the form to type-cast a path step in place:
 //
@@ -203,7 +203,7 @@ func rewriteRoundAsFloor(expr string) string {
 // antchfx/xpath v1.3.6 evaluates not("") as false rather than true:
 // the engine's string-to-boolean coercion only fires for some code
 // paths, so "not(empty-string)" silently stays at the default false.
-// That breaks every "//*[not(normalize-space())]" rule context -
+// That breaks every "//*[not(normalize-space())]" rule context:
 // FX-SCH-A-000372's PEPPOL-EN16931-R008 "Document MUST not contain
 // empty elements" rule is the canonical victim. The string-length
 // form sidesteps the bug because antchfx coerces the integer to a
@@ -263,8 +263,8 @@ func rewriteNotNormalizeSpace(expr string) string {
 // "not(xs:decimal(optional-field))" idiom to detect a missing
 // field, and the rewriter converts the xs:decimal cast to number()
 // before this pass. Without the unwrap the test silently flips
-// from "field absent" to false on every fixture, producing dozens
-// of false positives once the arithmetic disjuncts run.
+// from "field absent" to false, producing false positives once the
+// arithmetic disjuncts run.
 //
 // The unwrap keeps XPath 1.0 semantics for the "missing" case:
 // not(empty-node-set) is true. For numerically-zero values the
@@ -276,6 +276,12 @@ func rewriteNotNormalizeSpace(expr string) string {
 // The rewrite only fires when the cast wraps a plain path: function
 // calls, comparisons, and arithmetic stay untouched so callers that
 // rely on the cast for non-existence semantics keep their behaviour.
+//
+// # Corpus evidence
+//
+//   - All corpora: without the unwrap the test flipped from "field
+//     absent" to false on every fixture, producing dozens of false
+//     positives once the arithmetic disjuncts ran.
 func rewriteNotNumericCast(expr string) string {
 	if !strings.Contains(expr, "not") || !strings.Contains(expr, "number(") {
 		return expr

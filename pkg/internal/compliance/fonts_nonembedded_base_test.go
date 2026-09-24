@@ -25,10 +25,12 @@ import (
 // behind. veraPDF draws the same line, loading the standard metrics only when
 // the font dictionary carries no non-empty /FontDescriptor.
 //
-// govdocs thread_000_000578.pdf shows Times-Bold and thread_000_000885.pdf
-// Palatino-Roman that way, both with a /FontDescriptor, no program and a
-// /Differences array naming none of the codes they draw; veraPDF reports ISO
-// 14289-1 §7.21.7 t1 on every glyph.
+// # Corpus evidence
+//
+//   - govdocs thread_000_000578.pdf, thread_000_000885.pdf: show Times-Bold
+//     and Palatino-Roman respectively, both with a /FontDescriptor, no program
+//     and a /Differences array naming none of the codes they draw. veraPDF
+//     reports ISO 14289-1 §7.21.7 t1 on every glyph.
 func TestImplicitBaseNeedsAProgram(t *testing.T) {
 	t.Parallel()
 

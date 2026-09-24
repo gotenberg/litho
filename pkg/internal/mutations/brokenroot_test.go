@@ -12,8 +12,13 @@ import (
 )
 
 // misrootedDoc builds a one-page document whose catalog is object 2 while the
-// trailer /Root points at the /Info dictionary in object 1, the shape of pdfjs
-// issue9418.pdf after its damaged incremental update.
+// trailer /Root points at the /Info dictionary in object 1, the shape a damaged
+// incremental update leaves.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9418.pdf: has this shape after its damaged incremental
+//     update.
 func misrootedDoc(t *testing.T) (*document.Document, *writer.ObjAllocator) {
 	t.Helper()
 
@@ -71,10 +76,16 @@ func TestCatalogRefRecoversFromAMisrootedTrailer(t *testing.T) {
 // TestAddAttachmentTargetsTheRecoveredCatalog pins that an attachment lands in
 // the catalog rather than in the object a damaged /Root names.
 //
-// `litho attach` on pdfjs issue9418.pdf exited 0 and reported success while
-// writing /Names into the /Info dictionary. The real catalog kept none of it, so
-// `litho attachments` on that same output reported no attachments: the file was
-// silently lost and the information dictionary corrupted in one round-trip.
+// Writing into the object a damaged /Root names put /Names into the /Info
+// dictionary while reporting success. The real catalog kept none of it: the
+// file was silently lost and the information dictionary corrupted in one
+// round-trip.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9418.pdf: `litho attach` exited 0 and reported success while
+//     writing /Names into the /Info dictionary, and `litho attachments` on
+//     that same output reported no attachments.
 func TestAddAttachmentTargetsTheRecoveredCatalog(t *testing.T) {
 	t.Parallel()
 

@@ -13,7 +13,7 @@ func TestParseCharStringNames_Empty(t *testing.T) {
 
 func TestParseCharStringNames_Synthetic(t *testing.T) {
 	// Build a minimal Type 1 font program: clear-text preamble plus a
-	// plaintext "private section" that we eexec-encrypt on the way out.
+	// plaintext "private section" the test eexec-encrypts on the way out.
 	plaintext := []byte(
 		"xxxx" + // 4-byte salt: decryption strips these
 			"/Private 10 dict dup begin\n" +
@@ -65,7 +65,7 @@ func TestParseCharStringNames_LenPrefixSkipsBinaryTokens(t *testing.T) {
 	}
 }
 
-// encryptEexec is the inverse of decryptEexec. It is test-only so
+// encryptEexec is the inverse of [decryptEexec]. It is test-only so
 // the unit tests can construct synthetic encrypted fixtures without
 // depending on external fonts.
 func encryptEexec(plain []byte) []byte {

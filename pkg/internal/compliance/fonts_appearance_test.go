@@ -53,7 +53,7 @@ func firesRule(t *testing.T, data []byte, clause string, test int) bool {
 	return false
 }
 
-// TestAppearanceFont_SubsetCharSetReached pins Project C: a Type1 subset used
+// TestAppearanceFont_SubsetCharSetReached pins that a Type1 subset used
 // only inside an annotation appearance stream, with no page /Font, must still be
 // checked for /CharSet presence (§6.3.5 t2). Before the appearance-font pass the
 // font was unreachable and the defect was silently missed.
@@ -74,10 +74,13 @@ func TestAppearanceFont_CharSetPresentNoFire(t *testing.T) {
 
 // nestedAppearanceFontPDF builds a one-page PDF whose page declares NO /Font and
 // whose appearance stream declares none either: the only font hangs off a Form
-// XObject the appearance invokes with a Do. That is the shape pdfjs
-// bug854315.pdf writes, where veraPDF reaches the font through
+// XObject the appearance invokes with a Do. veraPDF reaches such a font through
 // annots[0]/appearance[0]/contentStream[0]/operators[N]/xObject[0]/contentStream[0]
 // and litho stopped at the appearance's own /Resources/Font.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug854315.pdf: writes this shape.
 func nestedAppearanceFontPDF(fdExtra string) []byte {
 	inner := "BT /F0 12 Tf (Hi) Tj ET"
 	innerStream := fmt.Sprintf(

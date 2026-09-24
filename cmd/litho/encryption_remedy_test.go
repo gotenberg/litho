@@ -44,7 +44,7 @@ var warningFlagPattern = regexp.MustCompile(`--[a-z][a-z0-9-]*`)
 // the per-family remedies: a warning may only name a flag its own command
 // accepts.
 //
-// Measured on the single-message version: `80742794` widened the warning from
+// Measured on the single-message version: `bbed371f` widened the warning from
 // the five page operations to every output-producing command without changing
 // its text, so fourteen of the seventeen emitters advised --user-password while
 // rejecting it. `litho rotate -p pw --user-password new` exits 1 with "flag

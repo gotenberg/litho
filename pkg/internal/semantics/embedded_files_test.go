@@ -188,10 +188,15 @@ func afAttachmentPDF() []byte {
 // through /AF is listed.
 //
 // ISO 32000-2, 14.13 associates a file with the document through /AF, and a
-// producer may use it as the only route: pdfjs bug1937438_mml_from_latex.pdf
-// attaches two stylesheets that way with no name tree, and litho's own
-// compliance engine flags them under PDF/A-1 clause 6.1.11 while
+// producer may use it as the only route, with no name tree. litho's own
+// compliance engine flagged such files under PDF/A-1 clause 6.1.11 while
 // `litho attachments` reported none.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1937438_mml_from_latex.pdf: attaches two stylesheets through
+//     /AF with no name tree, and the compliance engine flags them under PDF/A-1
+//     clause 6.1.11 while `litho attachments` reported none.
 func TestExtractEmbeddedFilesFindsAssociatedFile(t *testing.T) {
 	t.Parallel()
 

@@ -79,13 +79,18 @@ func parseStreamKeysContext(s string) (int, []ast.PdfName, bool) {
 // The keys say the stream's bytes live in an external file. A conforming file
 // may not depend on one, and the external bytes are not in the document to
 // inline, so deleting the keys is the repair the clause asks for: it leaves the
-// stream's own data authoritative. Measured on the corpus fixtures, those
-// streams carry /Length 0, so nothing retrievable is lost. It is still content
-// the author described, so PreserveContent refuses.
+// stream's own data authoritative. Real carriers declare /Length 0 on those
+// streams, so nothing retrievable is lost. It is still content the author
+// described, so PreserveContent refuses.
 //
 // Only the dictionary changes. The raw bytes are carried across with
 // [ast.PdfStream.Bytes], which returns them after decryption but BEFORE filter
 // decoding, so the surviving /Filter entry keeps describing them correctly.
+//
+// # Corpus evidence
+//
+//   - All corpora: the fixtures carrying these keys declare /Length 0 on those
+//     streams, so nothing retrievable is lost.
 func fixStreamFileKeys(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, violations []compliance.Violation, _ string) ([]string, error) {
 	if opts.PreserveContent {
 		return nil, nil

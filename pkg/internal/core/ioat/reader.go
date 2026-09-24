@@ -18,7 +18,8 @@ type Reader struct {
 // defaultBufSize balances syscall overhead and per-Reader memory at 32 KB.
 const defaultBufSize = 32768
 
-// NewReader creates a new concurrent-safe buffered reader.
+// NewReader returns a buffered [Reader] over the first size bytes of r,
+// positioned at offset. The returned Reader is not safe for concurrent use.
 func NewReader(r io.ReaderAt, size int64, offset int64) *Reader {
 	return &Reader{
 		r:      r,
@@ -71,7 +72,7 @@ func (b *Reader) UnreadByte() error {
 	return nil
 }
 
-// Read implements io.Reader.
+// Read implements [io.Reader].
 func (b *Reader) Read(p []byte) (n int, err error) {
 	if len(p) == 0 {
 		return 0, nil
@@ -95,7 +96,7 @@ func (b *Reader) Position() int64 {
 	return b.offset - int64(b.bufLen-b.bufPos)
 }
 
-// ReaderAt returns the underlying io.ReaderAt.
+// ReaderAt returns the underlying [io.ReaderAt].
 func (b *Reader) ReaderAt() io.ReaderAt {
 	return b.r
 }

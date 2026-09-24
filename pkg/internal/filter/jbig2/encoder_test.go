@@ -343,7 +343,12 @@ func testImage(width, height int, seed uint64) *Bitmap {
 // Without this a wrong SLTP context goes unnoticed: the SLTP neighbourhood is
 // one fixed 10 to 16 pixel pattern that noise almost never draws, so both the
 // right and the wrong context stay otherwise unused and adapt identically.
-// Real scans draw it, which is how a corpus image exposed the difference.
+// Real scans draw it.
+//
+// # Corpus evidence
+//
+//   - All corpora: an image that draws the SLTP neighbourhood is how a wrong
+//     SLTP context was exposed.
 func sltpImage(template int) *Bitmap {
 	const width, height = 101, 64
 	bm, err := newBitmap(width, height)

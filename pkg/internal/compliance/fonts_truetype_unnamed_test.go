@@ -68,9 +68,13 @@ func nonSymbolicTTF() string {
 // ISO 32000-1, 9.6.6.4 reaches a non-symbolic TrueType glyph through the name
 // the encoding gives the code, and WinAnsiEncoding names nothing below 32.
 // veraPDF (TrueTypeFontProgram.containsCode) reads such a code as .notdef and
-// reports the glyph absent: govdocs thread_300_300708.pdf shows code 31 through
-// an embedded TimesNewRomanPSMT. A Differences-only dictionary stays unjudged,
-// since litho takes an implicit base encoding there and veraPDF takes none.
+// reports the glyph absent. A Differences-only dictionary stays unjudged, since
+// litho takes an implicit base encoding there and veraPDF takes none.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300708.pdf: shows code 31 through an embedded
+//     TimesNewRomanPSMT, and veraPDF reports the glyph absent.
 func TestTrueTypeUnnamedCodeGlyphPresence(t *testing.T) {
 	t.Parallel()
 

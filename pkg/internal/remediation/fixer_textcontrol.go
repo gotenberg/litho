@@ -81,6 +81,16 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 // Operators whose entire operand becomes empty are cleared so the
 // serialiser drops them. Returns the count of removed bytes plus a
 // flag indicating whether any op changed.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue2856.pdf: eating the 0x00 high bytes of multi-byte strings is
+//     the corruption that cost this file a third of its text.
+//   - pdfjs issue2856.pdf: byte-level stripping under a composite font turned
+//     "A different method" into "㼼8E8AG@8" and cost issue2856 a third of its
+//     text.
+//   - verapdf: skipping composite fonts leaves ~56 .notdef references unfixed,
+//     which is the safe side of the trade.
 func stripControlBytesFromOps(ops []content.Operation, fonts map[string]textFontInfo) (int, bool) {
 	removed := 0
 	modified := false
@@ -94,8 +104,7 @@ func stripControlBytesFromOps(ops []content.Operation, fonts map[string]textFont
 	// Both directions are wrong without this, and both were measured. A simple
 	// font selected inside q…Q outliving the Q makes the composite guard
 	// consult the wrong name and STRIP a multi-byte string: the CIDs
-	// <0041 0020 0042> came back as "A B", their 0x00 high bytes eaten, which
-	// is the corruption that cost issue2856.pdf a third of its text. A
+	// <0041 0020 0042> came back as "A B", their 0x00 high bytes eaten. A
 	// composite font outliving the Q does the opposite and SKIPS a simple
 	// string whose control byte should have gone.
 	var fontStack []string
@@ -126,15 +135,14 @@ func stripControlBytesFromOps(ops []content.Operation, fonts map[string]textFont
 		// half of an ordinary code, not a glyph reference: under
 		// Identity-H every CID under U+2000 carries a 0x00 high byte.
 		// Dropping those bytes deletes half of each code and slides the
-		// rest of the string, which turned "A different method" into
-		// "㼼8E8AG@8" and cost issue2856 a third of its text.
+		// rest of the string into garbage.
 		//
 		// TODO: a composite font could still be repaired by dropping whole
 		// codes rather than bytes, which needs the /Encoding CMap's
 		// codespace ranges to know each code's width (ISO 32000-1, 9.7.6.2);
 		// Identity-H is two bytes but a predefined CMap may mix widths.
-		// Skipping leaves ~56 .notdef references unfixed across the veraPDF
-		// corpus, which is the safe side of the trade.
+		// Skipping leaves those .notdef references unfixed, which is the safe
+		// side of the trade.
 		info := fonts[currentFont]
 		if info.composite {
 			continue

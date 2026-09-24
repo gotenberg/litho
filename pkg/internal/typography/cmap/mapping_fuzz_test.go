@@ -80,8 +80,8 @@ func FuzzCMapMapping(f *testing.F) {
 }
 
 // TestCMapMappingSeedsMap pins that the seeds reach the mapper rather than
-// failing to parse: a CMap that does not parse leaves Map unreached and the
-// target inert.
+// failing to parse: a CMap that does not parse leaves [CMap.Map] unreached
+// and the target inert.
 func TestCMapMappingSeedsMap(t *testing.T) {
 	t.Parallel()
 

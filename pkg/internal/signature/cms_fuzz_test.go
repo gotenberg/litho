@@ -111,8 +111,8 @@ func FuzzParseOCSPResponse(f *testing.F) {
 // FuzzVerifyCMSSignature drives the full detached-signature verifier, which no
 // target reached: a coverage profile over the four targets above reported
 // verifyCMSSignature at 0.0%. Each of them parses one COMPONENT of a CMS blob;
-// this one runs the composition -- ContentInfo, SignedData, the signer lookup,
-// the messageDigest comparison and the public-key check -- and it is reachable
+// this one runs the composition (ContentInfo, SignedData, the signer lookup,
+// the messageDigest comparison and the public-key check), and it is reachable
 // from the exported VerifySignatures.
 //
 // Both inputs are attacker controlled and mutually independent. der is the
@@ -147,7 +147,7 @@ func FuzzVerifyCMSSignature(f *testing.F) {
 // that actually parses, and exists because the target above cannot reach the
 // verifier's body.
 //
-// Measured: 5.7M executions of FuzzVerifyCMSSignature covered 4 of 25 blocks --
+// Measured: 5.7M executions of FuzzVerifyCMSSignature covered 4 of 25 blocks:
 // the two asn1.Unmarshal calls and their two error returns. h.Write(content)
 // never ran once. Random mutation destroys ASN.1 framing long before it can
 // produce a SignedData carrying SignerInfos, so the signer lookup, the

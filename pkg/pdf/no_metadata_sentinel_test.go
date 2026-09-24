@@ -46,17 +46,22 @@ func bareDocumentPDF() []byte {
 // [ErrNoMetadata] is not declared here: it is a RE-EXPORT of
 // semantics.ErrNoMetadata, and [Reader.Metadata] is a pass-through that returns
 // that error unwrapped. So the alias is the whole contract, and it can be
-// severed - repointed at a fresh errors.New, or the error wrapped on its way
-// out - without any internal test noticing, because semantics keeps asserting
+// severed (repointed at a fresh errors.New, or the error wrapped on its way
+// out) without any internal test noticing, because semantics keeps asserting
 // its own value and stays green.
 //
 // It is not decorative either: cmd/litho's metadata command branches on
 // errors.Is(err, pdf.ErrNoMetadata) to tell "this document has none" from a
-// real extraction failure, and no corpus gate reaches cmd/litho.
+// real extraction failure.
 //
 // Both directions are asserted deliberately. Checking only that a bare
 // document errors would pass on any error at all; checking only that a
 // metadata-bearing document succeeds would pass if the sentinel vanished.
+//
+// # Corpus evidence
+//
+//   - All corpora: no corpus gate reaches cmd/litho, so none of them exercises
+//     the metadata command's branch on the sentinel.
 func TestMetadata_BareDocumentReturnsTheSentinel(t *testing.T) {
 	t.Parallel()
 

@@ -112,7 +112,11 @@ func zugferdExtSchemaXMP(props []string) []byte {
 // Seq as a separate declaration. Recording only at the end of the enclosing
 // block kept the last item alone, so the ZUGFeRD schema resolved just
 // ConformanceLevel and its three earlier properties reported a false
-// ISO 19005-3 §6.6.2.3.1 t2 on all 150 Factur-X corpus files.
+// ISO 19005-3 §6.6.2.3.1 t2.
+//
+// # Corpus evidence
+//
+//   - facturx: the false §6.6.2.3.1 t2 fired on all 150 files.
 func TestXMPExtSchemaMultiPropertySeq(t *testing.T) {
 	props := []string{"DocumentFileName", "DocumentType", "Version", "ConformanceLevel"}
 
@@ -184,10 +188,14 @@ const itextExtNS = "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#"
 
 // TestXMPExtSchemaAttributeForm pins RDF/XML §2.5 attribute-form extension
 // schemas as equivalent to the child-element spelling. Reading child elements
-// alone made every field of an iText-written Factur-X schema look absent, so
-// one file reported 20 false violations: §6.6.2.3.3 t2-t4 and t7-t10 for the
-// missing fields, plus §6.6.2.3.1 t1 because the declared namespace never
-// registered. veraPDF accepts both spellings.
+// alone made every field of an iText-written Factur-X schema look absent,
+// which reported §6.6.2.3.3 t2-t4 and t7-t10 for the missing fields, plus
+// §6.6.2.3.1 t1 because the declared namespace never registered. veraPDF
+// accepts both spellings.
+//
+// # Corpus evidence
+//
+//   - facturx: one iText-written file reported 20 false violations.
 func TestXMPExtSchemaAttributeForm(t *testing.T) {
 	ctx := context.Background()
 	props := []string{"DocumentFileName", "DocumentType", "Version", "ConformanceLevel"}

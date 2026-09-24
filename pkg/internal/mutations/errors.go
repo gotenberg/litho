@@ -26,11 +26,14 @@ var ErrCatalogUnreadable = errors.New("document catalog could not be read")
 // The rewrite copies the object graph from the catalog down, so a page tree
 // litho failed to read is simply absent from the copy. Substituting an empty
 // one (ISO 32000-1, 7.7.3.2 requires the catalog to name a page tree) keeps the
-// output structurally valid but silently discards every page: `litho attach` on
-// an encrypted pdfjs file turned a 47 KB one-page document into a 1.9 KB
-// zero-page one and exited 0, while `litho rotate` on the same file failed.
-// Report the loss instead, and reserve the empty tree for a catalog that never
-// named one.
+// output structurally valid but silently discards every page. Report the loss
+// instead, and reserve the empty tree for a catalog that never named one.
+//
+// # Corpus evidence
+//
+//   - pdfjs: `litho attach` on an encrypted file turned a 47 KB one-page
+//     document into a 1.9 KB zero-page one and exited 0, while `litho rotate`
+//     on the same file failed.
 var ErrPageTreeNotReproduced = errors.New("source page tree could not be reproduced in the rewrite")
 
 // ErrSpanOutOfRange reports a byte span that does not lie within the content it
@@ -75,7 +78,7 @@ var ErrTextAdvanceUnknown = errors.New("advance of the removed text cannot be pr
 // at all and the honest answer was to refuse. Blanking the covered pixels is
 // the operation it said litho could not do yet, and [RedactPageRegions] does it
 // now: see [blankImage], which rewrites the covered samples in place and
-// records the XObject in RedactionReport.BlankedImages.
+// records the XObject in [RedactReport.BlankedImages].
 //
 // The cases where an image still cannot be cleared each have their own
 // sentinel, so this one covers nothing the others do not:

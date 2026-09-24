@@ -155,11 +155,15 @@ var StandardEncoding = map[byte]rune{
 
 // MacExpertEncoding is used for specialized typographic character sets
 // (small caps, old-style figures, etc.). Defined in PDF spec Appendix D, Table D.4.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-3-8-t01-pass-b.pdf: its only shown code is 32, so leaving
+//     space out of the table made the file look non-conforming.
 var MacExpertEncoding = map[byte]rune{
 	// Table D.4 opens with space at octal 040, the one code MacExpertEncoding
 	// shares with the text encodings. Leaving it out reads code 32 as naming no
-	// glyph, which is how veraPDF's 6-3-8-t01-pass-b.pdf, whose only shown code
-	// is 32, came to look non-conforming.
+	// glyph.
 	0x20: 0x0020, // space
 	0x21: 0xF721, // exclamsmall
 	0x22: 0xF6F8, // Hungarumlautsmall

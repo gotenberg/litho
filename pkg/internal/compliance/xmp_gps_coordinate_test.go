@@ -8,8 +8,12 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// gpsXMP wraps a single exif GPS property value in a minimal XMP packet, shaped
-// like the veraPDF 6-7-2-t17 fixtures that carry these properties.
+// gpsXMP wraps a single exif GPS property value in a minimal XMP packet.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-7-2-t17 fixtures: carry these properties, and the packet is
+//     shaped like them.
 func gpsXMP(prop, value string) []byte {
 	return fmt.Appendf(nil, `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
@@ -45,8 +49,13 @@ func gpsTypeViolations(t *testing.T, prop, value string, part int) []Violation {
 // they held, because ISO 16684-1 makes Text any sequence of Unicode characters
 // and the type check returns true for it unconditionally.
 //
-// The valid coordinates below are the two the veraPDF corpus actually carries,
-// so a stricter reading of the grammar would still pass them.
+// # Corpus evidence
+//
+//   - verapdf: the valid coordinates below are the two the corpus actually
+//     carries, so a stricter reading of the grammar would still pass them.
+//   - verapdf: the fail fixtures for these clauses carry an empty value, and
+//     another rule decides them, so the empty case must stay silent or those
+//     cells would move.
 func TestXMPGPSCoordinateType(t *testing.T) {
 	t.Parallel()
 
@@ -77,9 +86,8 @@ func TestXMPGPSCoordinateType(t *testing.T) {
 	})
 
 	// An empty value never reaches the type check: xmpCheckPropertyTypes guards
-	// with pv.value != "". The veraPDF fail fixtures for these clauses carry
-	// exactly that shape, and they are decided by another rule, so this must
-	// stay silent or those cells would move.
+	// with pv.value != "". Another rule decides that shape, so this must stay
+	// silent.
 	t.Run("an empty value stays silent", func(t *testing.T) {
 		t.Parallel()
 		for _, prop := range props {

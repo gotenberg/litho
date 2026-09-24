@@ -73,8 +73,11 @@ func spanLangDoc(t *testing.T, opts spanLangOpts) (*document.Document, ast.PdfDi
 }
 
 // spanStream wraps a /Span property list in a tagged /P sequence carrying
-// marked-content identifier 0, the shape every verapdf-corpus 7.2-t30/t31/t32
-// file uses.
+// marked-content identifier 0.
+//
+// # Corpus evidence
+//
+//   - verapdf 7.2-t30, 7.2-t31, 7.2-t32: every file uses this shape.
 func spanStream(paraProps, spanProps string) string {
 	return fmt.Sprintf("/P << /MCID 0%s >> BDC\n/Span << %s >> BDC\nBT (x) Tj ET\nEMC\nEMC\n", paraProps, spanProps)
 }

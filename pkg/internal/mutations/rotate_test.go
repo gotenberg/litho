@@ -237,7 +237,12 @@ func TestRotatePages_NormalisesAngle(t *testing.T) {
 // Such a page is inlined in its /Kids array (ISO 32000-1, 7.7.3.2) and has no
 // object number for an incremental update to replace. Writing it back at object
 // 0 emitted a body every reader ignores, so litho reported success over a file
-// whose /Rotate was nowhere: pdfjs issue9540.
+// whose /Rotate was nowhere.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9540.pdf: inlines a page in its /Kids array, and rotating it
+//     reported success over a file whose /Rotate was nowhere.
 func TestRotatePages_InlinePageIsReported(t *testing.T) {
 	alloc := writer.NewObjAllocator(10)
 	pages := []*document.Page{{Dict: ast.PdfDict{"Type": ast.PdfName("Page")}}}

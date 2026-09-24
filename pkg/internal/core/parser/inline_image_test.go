@@ -64,7 +64,7 @@ func TestSkipInlineImage_FalseEIInData(t *testing.T) {
 }
 
 func TestSkipInlineImage_FalseEIFollowedByNUL(t *testing.T) {
-	// FlateDecoded inline image data whose bytes contain "\rEI\x00" — a
+	// FlateDecoded inline image data whose bytes contain "\rEI\x00": a
 	// false terminator, because a genuine EI is followed by SPACE/LF/CR,
 	// never NUL. The real terminator "\nEI " comes later. Regression for
 	// spurious ISO 19005 §6.2.2 undefined-operator violations, where litho

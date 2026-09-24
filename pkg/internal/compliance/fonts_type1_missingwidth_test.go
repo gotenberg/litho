@@ -69,10 +69,14 @@ func type1WidthProgram(preamble string, widths map[string]int) string {
 // [checkSimpleFontUncoveredWidths] already made on the GID-keyed path.
 //
 // The Type 1 path skipped those codes outright, so a whole class of fonts went
-// unjudged: pdfjs bug1157493.pdf shows a Courier glyph of 600 units at a code
-// its /Widths never reaches, and veraPDF reports "Glyph width 600 in the
-// embedded font program is not consistent with the Widths entry of the font
-// dictionary (value 0)".
+// unjudged.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1157493.pdf: shows a Courier glyph of 600 units at a code its
+//     /Widths never reaches, and veraPDF reports "Glyph width 600 in the
+//     embedded font program is not consistent with the Widths entry of the
+//     font dictionary (value 0)".
 func TestType1WidthsUncoveredCodeUsesMissingWidth(t *testing.T) {
 	t.Parallel()
 

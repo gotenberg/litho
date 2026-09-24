@@ -142,9 +142,13 @@ func TestNewHandler_MissingP_DefaultsToAllPermissions(t *testing.T) {
 }
 
 // TestAuthenticate_V2R3_BlankUserPassword guards against the gating bug
-// that keyed Algorithm 3.4/3.5 on /V instead of /R. Govdocs PDFs commonly
+// that keyed Algorithm 3.4/3.5 on /V instead of /R. Real PDFs commonly
 // declare V=2 R=3 (RC4-128 + 50-pass MD5 + 16-byte U match), so the V=2
 // path must still run the R≥3 algorithms.
+//
+// # Corpus evidence
+//
+//   - govdocs: files commonly declare V=2 R=3.
 func TestAuthenticate_V2R3_BlankUserPassword(t *testing.T) {
 	cfg := EncryptConfig{
 		UserPassword:  "",

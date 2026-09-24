@@ -40,8 +40,12 @@ func widgetDoc(t *testing.T, objs []string) (context.Context, *document.Document
 // only from the page is found.
 //
 // A summary that answers "does this document have a form" from the catalog
-// alone says no for a document whose fields litho lists: pdfjs issue12963.pdf
-// carries 27 of them and states no /AcroForm at all.
+// alone says no for a document whose fields litho lists.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12963.pdf: carries 27 fields that litho lists and states no
+//     /AcroForm at all.
 func TestHasPageWidgetFieldFindsAnUnregisteredField(t *testing.T) {
 	t.Parallel()
 

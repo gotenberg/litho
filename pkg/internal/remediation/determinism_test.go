@@ -12,9 +12,13 @@ import (
 // serializes its keys in a stable order.
 //
 // CLAUDE.md's contract: identical input and options produce identical output
-// bytes. Ranging the map instead emitted an /Artifact as "/Attached /Type
-// /Subtype" on one run and "/Type /Subtype /Attached" on the next
-// (pdfjs issue11678.pdf).
+// bytes. Ranging the map instead emitted the same /Artifact dictionary in a
+// different key order from one run to the next.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11678.pdf: ranging the map emitted an /Artifact as "/Attached
+//     /Type /Subtype" on one run and "/Type /Subtype /Attached" on the next.
 func TestWriteOperand_DictIsOrdered(t *testing.T) {
 	dict := ast.PdfDict{
 		"Type":     ast.PdfName("Pagination"),

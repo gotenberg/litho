@@ -15,9 +15,8 @@ import (
 // canonical; /CSB then differs at indices 2 and 3 and is the one rewritten.
 // /CSB is stored INDIRECTLY (object 6) because that is the only shape in which
 // eachColorSpaceArrayMutable takes its isRef branch and calls
-// alloc.AllocAt(ref.ObjectNum, newArr) at fixer_sepcanon.go:274. Stored inline
-// it would splice into the /ColorSpace dict instead and the seeded object would
-// never be written at all.
+// alloc.AllocAt(ref.ObjectNum, newArr). Stored inline it would splice into the
+// /ColorSpace dict instead and the seeded object would never be written at all.
 func twoSeparationsPDF() []byte {
 	return assemblePDF([]string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
@@ -32,11 +31,13 @@ func twoSeparationsPDF() []byte {
 	})
 }
 
-// [eachColorSpaceArrayMutable] reads each colour-space array with
-// document.ResolveArray (fixer_sepcanon.go:266), hands it to the caller's patch
-// closure, and writes the result back at the array's own object number (:274).
-// It consults no alloc-aware helper, so an earlier fixer's edit to that array
-// is discarded.
+// TestEachColorSpaceArrayMutable_KeepsAnEarlierFixersPendingSeparationWrite
+// pins that sep-canon reads a colour-space array through the allocator.
+//
+// [eachColorSpaceArrayMutable] used to read each colour-space array with
+// document.ResolveArray, hand it to the caller's patch closure, and write the
+// result back at the array's own object number. It consulted no alloc-aware
+// helper, so an earlier fixer's edit to that array was discarded.
 //
 // Peer and ordering are measured: colour-space objects are written earlier by
 // output-intent (fixer.go:68) and output-intent-cleanup (:70), and by graphics

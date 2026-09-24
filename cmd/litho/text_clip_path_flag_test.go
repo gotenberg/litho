@@ -54,8 +54,11 @@ func clipPathTextPDF() []byte {
 // be reached only by riding -invisible or by -hidden. -clip-path gives it an
 // option of its own; -invisible must no longer return it.
 //
-// No corpus gate reaches cmd/litho, so a CLI test is the only thing watching
-// this flag.
+// A CLI test is the only thing watching this flag.
+//
+// # Corpus evidence
+//
+//   - All corpora: no corpus gate reaches cmd/litho.
 func TestText_ClipPathFlagReachesPathClippedText(t *testing.T) {
 	path := writeTempPDF(t, clipPathTextPDF())
 

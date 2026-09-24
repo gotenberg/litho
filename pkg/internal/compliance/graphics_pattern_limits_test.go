@@ -11,13 +11,17 @@ import (
 // TestPatternContentStreamRealLimit pins ISO 19005-1, 6.1.12 t2 on a real a
 // tiling pattern writes. The pattern paints its cell with a content stream of
 // its own (ISO 32000-1, 8.7.3.1), so an operand there is judged exactly as one
-// written on the page: the rule object is CosReal, and veraPDF reports
-// pdfjs 22060_A1_01_Plans.pdf six times over patterns /R21 and /R24 while that
-// file's 136 KB page stream stays inside the limit.
+// written on the page: the rule object is CosReal.
 //
 // Only a pattern a scn or SCN selects is judged. veraPDF passes a fixture whose
 // unselected pattern carries the same out-of-range real, so the walk is gated
 // on selection rather than on declaration.
+//
+// # Corpus evidence
+//
+//   - pdfjs 22060_A1_01_Plans.pdf: veraPDF reports it six times over patterns
+//     /R21 and /R24 while the file's 136 KB page stream stays inside the
+//     limit.
 func TestPatternContentStreamRealLimit(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

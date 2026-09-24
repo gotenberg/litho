@@ -53,9 +53,13 @@ func defaultColourSpacePDF(t *testing.T) []byte {
 //
 // /DefaultRGB remaps DeviceRGB to a calibrated space (ISO 32000-1, 8.6.5.6), so
 // rewriting it to /DeviceRGB defines the entry as the space it exists to
-// redirect. pdfjs issue20722.pdf came out of remediation with 77 of its 223
-// pages losing text, page 1 losing all 531 characters, and the substitution
-// also undid the //Default injection the same remediation pass performs.
+// redirect, which blanks text, and the substitution also undid the //Default
+// injection the same remediation pass performs.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20722.pdf: came out of remediation with 77 of its 223 pages
+//     losing text, page 1 losing all 531 characters.
 func TestFixICCDedupLeavesDefaultColourSpaces(t *testing.T) {
 	t.Parallel()
 

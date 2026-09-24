@@ -73,9 +73,13 @@ func TestExtractJSTree_BoundsAcrossNodes(t *testing.T) {
 // TestExtractJSTree_AcceptsARealisticDocument is the control. The bound tests
 // above would pass just as well on a build that refused every script.
 //
-// 128 KB is above the largest document-level JavaScript measured anywhere in
-// the corpora (60,881 bytes across 65 scripts), so a bound that rejected this
-// would be rejecting real documents.
+// 128 KB is above the largest document-level JavaScript real documents carry,
+// so a bound that rejected this would be rejecting real documents.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest document-level JavaScript is 60,881 bytes
+//     across 65 scripts.
 func TestExtractJSTree_AcceptsARealisticDocument(t *testing.T) {
 	const realistic = 128 << 10
 

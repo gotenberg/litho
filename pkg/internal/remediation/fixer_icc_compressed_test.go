@@ -167,7 +167,12 @@ func TestHasMatchingOutputIntentReadsAPlainProfile(t *testing.T) {
 // output-intent subtype for every part, so a GTS_PDFX intent leaves the device
 // colour spaces uncovered however good its profile is. Counting it made litho
 // decline to install the intent the file needs, and veraPDF still reported
-// 6.2.4.3 on veraPDF test-suite 6-2-3-t01-fail-a and -fail-c.
+// 6.2.4.3.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-3-t01-fail-a, 6-2-3-t01-fail-c: veraPDF still reported
+//     6.2.4.3 while a GTS_PDFX intent counted as coverage.
 func TestHasMatchingOutputIntentIgnoresNonPDFASubtypes(t *testing.T) {
 	t.Parallel()
 

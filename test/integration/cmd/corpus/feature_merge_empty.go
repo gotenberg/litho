@@ -26,7 +26,7 @@ import (
 // Assertions per fixture:
 //
 //   - Output page count == input.N + 1.
-//   - Output page[i].text == input page[i].text for i in [0, N) — the
+//   - Output page[i].text == input page[i].text for i in [0, N): the
 //     first N pages of the merge result must be byte-equal text to the
 //     input as litho already saw it.
 //   - Output page[N].text matches the empty partner's extracted text
@@ -34,7 +34,7 @@ import (
 //   - Output bookmark leaves match the input's leaves with NO page
 //     offset (the second source is empty and contributes no
 //     destinations; pdfcpu's per-file wrapper drops out via the
-//     title filter we already use in [mergeFeature]).
+//     title filter [mergeFeature] already uses).
 //   - pdfcpu's captured merge output yields the same filtered leaf
 //     multiset as litho's.
 //

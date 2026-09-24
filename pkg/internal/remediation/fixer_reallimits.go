@@ -22,6 +22,11 @@ const pdfAIntLimit = 2147483647
 // from content streams. ISO 19005-1 §6.1.12 and ISO 19005-2/4 §6.1.13
 // impose different caps on integers and reals; both overflows are
 // repaired by the same pass, which clamps operands in place.
+//
+// # Corpus evidence
+//
+//   - All corpora: gating on contextContains("out of range") silently stopped
+//     claiming 14 cells of 6.1.12 test 2.
 func matchRealLimits(v compliance.Violation) bool {
 	// The clause number alone is not the rule. ISO 19005-1 spells the ban on a
 	// catalog /OCProperties entry at 6.1.13 test 1, where parts 2 and 3 spell
@@ -31,10 +36,10 @@ func matchRealLimits(v compliance.Violation) bool {
 	//
 	// Excluding that one rule rather than requiring a context substring: an
 	// earlier attempt gated on contextContains("out of range") and silently
-	// stopped claiming 14 cells of 6.1.12 test 2, whose violations carry a
-	// different context. A positive context filter has to enumerate every
-	// phrasing the checks emit; an exclusion only has to name the one rule
-	// that does not belong here.
+	// stopped claiming 6.1.12 test 2, whose violations carry a different
+	// context. A positive context filter has to enumerate every phrasing the
+	// checks emit; an exclusion only has to name the one rule that does not
+	// belong here.
 	if forbiddenOCPropertiesViolation(v.Rule) {
 		return false
 	}
@@ -44,7 +49,7 @@ func matchRealLimits(v compliance.Violation) bool {
 // fixRealLimits clamps out-of-range numeric values in two places:
 //
 //  1. Every page-level content stream, whose operands live in a parse
-//     tree that lets us rewrite in place.
+//     tree the fixer rewrites in place.
 //  2. Every indirect object's body. PDF/A §6.1.12 / §6.1.13 apply to
 //     bare numeric literals anywhere in the file, not just page content.
 //

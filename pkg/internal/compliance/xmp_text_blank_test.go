@@ -18,8 +18,12 @@ func pdfDescription(body string) []byte {
 // satisfies the Text type. Per ISO 16684-1, Text is a sequence of Unicode
 // characters with no non-blank requirement, so a blank value conforms to the
 // type its predefined schema gives it and ISO 19005-2 §6.6.2.3.1 t2 has
-// nothing to report. Acrobat Distiller 6.0.1 emits pdf:Keywords=' ' (govdocs
-// thread_300_300483.pdf, thread_400_400924.pdf) and veraPDF passes it.
+// nothing to report.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300483.pdf, thread_400_400924.pdf: Acrobat Distiller
+//     6.0.1 emits pdf:Keywords=' ', and veraPDF passes it.
 func TestXMPTextType_BlankValueAccepted(t *testing.T) {
 	data := pdfDescription(`pdf:Keywords=" "`)
 

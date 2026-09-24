@@ -73,6 +73,15 @@ func indirectObjCountRule(profile string) Rule {
 
 // checkNumericLimits validates §6.1.12/6.1.13: numeric value limits for
 // names, strings, integers, reals, arrays, dicts, and indirect objects.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5599.pdf: writes /ID 77777777777777777 in its trailer, which
+//     veraPDF reports against its root/trailer[0] and litho did not look at.
+//   - pdfjs bug1980958.pdf: is 219 damaged bytes whose synthesized trailer
+//     /Size is 2147483648, a value that appears nowhere in it.
+//   - All corpora: a violation carrying the zero Rule serialized as a
+//     clause-less "-t00" residual.
 func checkNumericLimits(ctx context.Context, doc *document.Document, profile string) []Violation {
 	part := PDFAPart(profile)
 	var results []Violation
@@ -111,12 +120,10 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 
 	// The trailer dictionary is not an indirect object, so the walk above never
 	// reaches it, yet ISO 19005-2 §6.1.13 constrains every number "a conforming
-	// file shall not contain" wherever it is written. pdfjs issue5599.pdf writes
-	// /ID 77777777777777777 there, which veraPDF reports against its
-	// root/trailer[0] and litho did not look at. A trailer litho made up because
-	// the file has none holds litho's numbers, not the file's, so it is left
-	// alone: pdfjs bug1980958.pdf is 219 damaged bytes whose synthesized /Size
-	// is 2147483648, a value that appears nowhere in it.
+	// file shall not contain" wherever it is written, and veraPDF reports one
+	// in the trailer against its root/trailer[0]. A trailer litho made up
+	// because the file has none holds litho's numbers, not the file's, so it is
+	// left alone.
 	if !doc.TrailerSynthesized {
 		results = append(results, checkObjectNumericLimits(doc.Index.Trailer, "trailer", part, profile, nil)...)
 	}
@@ -127,8 +134,8 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 
 	// PDF/A-4 drops most ISO 32000-1 implementation limits, so several
 	// rule selectors in this file legitimately return the zero Rule for
-	// part 4. A violation carrying it must never escape: it serialized
-	// as a clause-less "-t00" residual in the corpus.
+	// part 4. A violation carrying it must never escape: it serializes
+	// as a clause-less "-t00" residual.
 	return slices.DeleteFunc(results, func(v Violation) bool { return v.Rule.Specification == "" })
 }
 
@@ -193,8 +200,12 @@ func checkContentStreamLimits(ctx context.Context, doc *document.Document, part 
 // ISO 19005-2 §6.1.13 constrains every number a conforming file contains, and a
 // form's content stream is as much part of the file as the page's. veraPDF
 // reaches them (its context path runs page/contentStream/operators[N]/xObject),
-// and litho stopped at the page: pdfjs issue6342.pdf hides twelve out-of-range
-// reals in the form its page invokes at operator 11.
+// while litho stopped at the page.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue6342.pdf: hides twelve out-of-range reals in the form its page
+//     invokes at operator 11.
 func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream ast.PdfStream, objNum int, maxStr int, profile string, res ast.PdfDict, visited map[int]bool, depth int) []Violation {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return nil
@@ -310,9 +321,13 @@ func countOverflows(values []float64) map[float64]int {
 // integer. ISO 32000-1, 7.3.3 makes a signed run of digits an integer object
 // whatever its magnitude, so a literal past the 64-bit range, which the parser
 // can only hold as a real, is judged against the integer limit (ISO 19005-2,
-// 6.1.13 t1). veraPDF reads it as an integer too: pdfjs issue20872.pdf writes
-// four 309-digit coordinates and veraPDF reports t1 for each. overflow counts
-// those literals by value; each one matched is consumed.
+// 6.1.13 t1). veraPDF reads it as an integer too. overflow counts those
+// literals by value; each one matched is consumed.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20872.pdf: writes four 309-digit coordinates, and veraPDF
+//     reports t1 for each.
 func checkNumberLimits(fval float64, part int, profile, where string, overflow map[float64]int) []Violation {
 	if overflow[fval] == 0 {
 		return checkRealLimits(fval, part, profile, where)

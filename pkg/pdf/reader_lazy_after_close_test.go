@@ -37,7 +37,7 @@ func embeddedFilePDF() []byte {
 	return b.Bytes()
 }
 
-// TestLazyAccessorAfterCloseErrorsCleanly pins that using an [EmbeddedFile.Open]
+// TestLazyAccessorAfterCloseErrorsCleanly pins that using an EmbeddedFile.Open
 // accessor after the reader is closed fails with an error rather than panicking
 // or handing back wrong bytes.
 //

@@ -15,10 +15,14 @@ import (
 // ISO 32000-1, 7.7.3.3 lets a page split its content across an array of
 // streams, and a truncated part says nothing about the rest. Returning an error
 // for the whole page threw away every operator the readable parts hold, so each
-// content-driven check saw an empty page: pdfjs issue17190_1.pdf carries 77
-// parts with one unreadable, and litho reported none of the colour or font
-// defects veraPDF 1.30.2 raises from the other 76. Viewers render what they can,
-// and [content.ParsePageContent] already skips the part and keeps going.
+// content-driven check saw an empty page. Viewers render what they can, and
+// [content.ParsePageContent] already skips the part and keeps going.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue17190_1.pdf: carries 77 parts with one unreadable, and litho
+//     reported none of the colour or font defects veraPDF 1.30.2 raises from
+//     the other 76.
 func TestResolvePageContentBytesKeepsTheReadableParts(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

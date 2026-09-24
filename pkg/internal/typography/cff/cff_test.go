@@ -230,8 +230,12 @@ func TestParsePrivateDict_Empty(t *testing.T) {
 // Dropping the operand leaves the width 0 and offsets every glyph advance by
 // the true value; rounding it offsets each advance by up to half a unit, which
 // is enough to move a comparison against a declared /Widths entry across the
-// one-unit tolerance ISO 19005-2 §6.2.11.5 is judged with. A Computer Modern
-// subset in govdocs thread_200_200836.pdf declares nominalWidthX 384.778.
+// one-unit tolerance ISO 19005-2 §6.2.11.5 is judged with.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200836.pdf: a Computer Modern subset declares
+//     nominalWidthX 384.778.
 func TestParsePrivateDict_RealNumberWidth(t *testing.T) {
 	// nominalWidthX = 392.49 encoded as op 30: nibbles 3 9 2 . 4 9 END.
 	dict := []byte{0x1e, 0x39, 0x2a, 0x49, 0xff}
@@ -656,19 +660,19 @@ func TestExtractEncoding_PredefinedStandard(t *testing.T) {
 func buildMinimalCFF(t *testing.T) []byte {
 	t.Helper()
 
-	// Layout we want to produce:
+	// Layout to produce:
 	//   header (4 bytes)
 	//   Name INDEX
-	//   Top DICT INDEX (referencing offsets we patch in)
-	//   String INDEX (one custom entry: "MyFont")
+	//   Top DICT INDEX (referencing offsets patched in below)
+	//   String INDEX (one custom entry: "A")
 	//   Global Subr INDEX (empty)
 	//   CharStrings INDEX (2 entries, minimal endchar charstrings)
 	//   Charset (format 0, one SID)
 	//   Private DICT
 	//
-	// To avoid the chicken-and-egg of self-referential offsets we build the
-	// later sections first and then construct the Top DICT with the right
-	// absolute offsets.
+	// Building the later sections first, then the Top DICT with the right
+	// absolute offsets, avoids the chicken-and-egg of self-referential
+	// offsets.
 
 	header := []byte{0x01, 0x00, 0x04, 0x01}
 
@@ -687,9 +691,9 @@ func buildMinimalCFF(t *testing.T) []byte {
 	// Private DICT: defaultWidthX = 0, nominalWidthX = 0 (omitted).
 	privateDict := []byte{}
 
-	// We need to know absolute offsets to reference from the Top DICT.
-	// Build the Top DICT with placeholder offsets first to learn its size,
-	// then rebuild with the real offsets.
+	// The Top DICT references absolute offsets, which depend on its own
+	// size. Build it with placeholder offsets first to learn that size, then
+	// rebuild with the real offsets.
 	build := func(charsetOff, charStringsOff, privateOff int32) []byte {
 		dict := []byte{}
 		dict = append(dict, encodeCFFInt(charsetOff)...)
@@ -717,13 +721,9 @@ func buildMinimalCFF(t *testing.T) []byte {
 	// Rebuild Top DICT with real offsets, padded to the original size.
 	dict := build(charsetOff, charStringsOff, privateOff)
 	for len(dict) < len(placeholder) {
-		// Pad with no-op operands that get discarded by the next operator.
-		// Use integer 0 (single byte 139) followed by an unknown operator
-		// is risky; instead, append a leading 0 operand and re-emit the
-		// last operator. Simpler: just push extra integer operands that
-		// the operator preceding will overwrite. We append a harmless
-		// integer 0 before the next operator slot, but since the dict
-		// is already complete, prepend.
+		// Pad with leading integer 0 operands (byte 139). The charset
+		// operator reads only its last operand, so the extra ones change
+		// nothing.
 		dict = append([]byte{139}, dict...)
 	}
 	topDictINDEX = encodeINDEX(t, [][]byte{dict})

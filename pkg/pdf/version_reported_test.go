@@ -78,7 +78,7 @@ func TestAddAssociatedFile_RaisesTheReportedVersion(t *testing.T) {
 	// The header MUST still read 1.4: this path queues a mutation rather than
 	// forcing a rewrite, and an incremental update cannot re-emit byte zero.
 	// Asserting both halves is what proves the catalog /Version is carrying
-	// the declaration, which is the contract [Reader.Version] documents.
+	// the declaration, which is the contract Reader.Version documents.
 	if !bytes.HasPrefix(out.Bytes(), []byte("%PDF-1.4")) {
 		t.Errorf("header is %q, want the source's %%PDF-1.4 unchanged: an incremental "+
 			"update cannot rewrite it, so a moved header means a different path ran",

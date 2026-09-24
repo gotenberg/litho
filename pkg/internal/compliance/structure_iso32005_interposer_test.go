@@ -7,9 +7,14 @@ import "testing"
 //
 // Remediation moves elements under new parents, and a move can create a
 // containment fault the input never had: wrapping a document's top-level
-// elements in a Document turned a stray LI into "Table 5. Document-LI" in 12
-// corpus files. The answer is read out of the matrix the validator applies, so
-// the two cannot drift.
+// elements in a Document turns a stray LI into "Table 5. Document-LI". The
+// answer is read out of the matrix the validator applies, so the two cannot
+// drift.
+//
+// # Corpus evidence
+//
+//   - All corpora: wrapping the top-level elements in a Document turned a
+//     stray LI into "Table 5. Document-LI" in 12 files.
 func TestISO32005Interposer(t *testing.T) {
 	t.Parallel()
 

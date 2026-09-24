@@ -10,16 +10,24 @@ import (
 // and the values one Render call returns, one per channel per grid point. It
 // is an anti-DoS guard, not spec-mandated: a codestream of a few hundred bytes
 // can describe a huge flat image, or components so unevenly subsampled that
-// the default grid dwarfs them, and every sample costs decoding time. The
-// largest image the corpora decode, 6642x5338 in three components, holds 106
-// million samples; 2^27 admits it and a 400 dpi A3 page in colour. It is below
-// maxImageBytes in graphics/image, 400 million one-byte samples, because
-// Decode holds each sample in four bytes.
+// the default grid dwarfs them, and every sample costs decoding time. 2^27
+// admits the largest image real documents carry and a 400 dpi A3 page in
+// colour. It is below maxImageBytes in graphics/image, 400 million one-byte
+// samples, because Decode holds each sample in four bytes.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest image decoded, 6642x5338 in three components,
+//     holds 106 million samples.
 const maxSamples = 1 << 27
 
 // maxSampleBits is the deepest component this package returns: samples are
 // int32. It is an implementation limit, not spec-mandated; T.800, Table A.11
-// allows 38 bits, and the corpora hold nothing deeper than 16.
+// allows 38 bits.
+//
+// # Corpus evidence
+//
+//   - All corpora: no component is deeper than 16 bits.
 const maxSampleBits = 31
 
 // Image is a decoded JPEG 2000 image: one sample plane per codestream

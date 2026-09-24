@@ -93,13 +93,19 @@ func TestParseStream_EncryptedStreamNotTrimmed(t *testing.T) {
 // TestParseStream_CountedNewlineTerminatesComment pins the reason a counted
 // trailing newline matters: it can be the only thing ending a comment.
 //
-// pdfjs annotation-as.pdf splits a page's content into a /Contents array whose
-// first part is the single comment "% CANON_PFINF_TYPE2_TEXTON\n", declared as
-// /Length 27 with the separator written after it. Trimming the counted newline
-// left the comment unterminated, and a comment runs to the end of the line
-// (ISO 32000-1, 7.2.4), so on concatenation it swallowed the "q" that opened the
-// next part. The unbalanced q/Q pair moved the rest of the page out of view and
-// `litho split` produced a page whose text no reader could find.
+// Trimming a counted newline that ends a comment leaves the comment
+// unterminated, and a comment runs to the end of the line (ISO 32000-1, 7.2.4),
+// so on concatenation it swallows whatever opens the next part of a /Contents
+// array.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation-as.pdf: splits a page's content into a /Contents array
+//     whose first part is the single comment "% CANON_PFINF_TYPE2_TEXTON\n",
+//     declared as /Length 27 with the separator written after it. Trimming
+//     the counted newline swallowed the "q" that opened the next part. The
+//     unbalanced q/Q pair moved the rest of the page out of view and
+//     `litho split` produced a page whose text no reader could find.
 func TestParseStream_CountedNewlineTerminatesComment(t *testing.T) {
 	t.Parallel()
 
@@ -128,8 +134,12 @@ func TestParseStream_CountedNewlineTerminatesComment(t *testing.T) {
 // exact /Length is preserved even when its binary entry table ends in a real
 // 0x0A/0x0D byte. Trimming it (as for a plain textual stream) shortens the
 // table, fails the xref parse, and forces a raw-scan rebuild that loses every
-// compressed object — comments.pdf's 200-object ObjStm, holding the page-tree
-// root, vanished and 0 of 14 pages resolved.
+// compressed object.
+//
+// # Corpus evidence
+//
+//   - pdfjs comments.pdf: its 200-object ObjStm, holding the page-tree root,
+//     vanished and 0 of 14 pages resolved.
 func TestParseStream_XRefStreamNotTrimmed(t *testing.T) {
 	t.Parallel()
 

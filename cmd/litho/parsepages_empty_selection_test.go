@@ -11,7 +11,7 @@ import (
 
 // An empty page selection must be an error, never an empty slice.
 //
-// [pdf.Writer.RotatePages] and the three stamps document an empty variadic as
+// pdf.Writer.RotatePages and the three stamps document an empty variadic as
 // EVERY page, so a selection that names nothing inverts the request instead of
 // doing nothing. Only "even" and "odd" can select nothing: a comma or range part
 // yields at least one page or fails, and "last" already rejects a page-less

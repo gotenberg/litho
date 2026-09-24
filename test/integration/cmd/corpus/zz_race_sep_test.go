@@ -15,11 +15,16 @@ import (
 
 // TestRaceSeparationRemediation guards Separation canonicalisation
 // determinism. The fixer once picked the canonical (alt, tintFunc) per colorant
-// by iterating the /ColorSpace dict in Go's randomised map order, so
-// 6-2-4-4-t03-fail-d intermittently produced different remediated bytes (and an
-// occasional 6.2.4.4-t02 litho-over) across runs. This remediates that fixture
-// many times concurrently and asserts byte-identical output with no 6.2.4.4
-// residual every time.
+// by iterating the /ColorSpace dict in Go's randomised map order, so the same
+// input could produce different remediated bytes across runs. This remediates
+// one affected fixture many times concurrently and asserts byte-identical
+// output with no 6.2.4.4 residual every time.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-4-4-t03-fail-d: intermittently produced different
+//     remediated bytes, and an occasional 6.2.4.4-t02 litho-over, across
+//     runs. It is the fixture this test remediates.
 func TestRaceSeparationRemediation(t *testing.T) {
 	dir := "../../testdata/verapdf/pdfs"
 	others, _ := filepath.Glob(filepath.Join(dir, "*6-2-4-*"))

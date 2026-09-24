@@ -9,11 +9,18 @@ import (
 //
 // The bytes are document-supplied: the /XFA value is a stream, or an array of
 // name/stream pairs, which [assembleXFAXML] concatenates and FlateDecodes
-// before handing them here, and [pdf.Reader.FormData] reaches it through
+// before handing them here, and pdf.Reader.FormData reaches it through
 // ExtractFormData. CONTRIBUTING requires a target beside any function whose
 // leading argument is attacker-controlled []byte, and this package had none at
 // all. The eight existing tests are hand-written well-formed packets nested at
 // most four levels deep, so nothing exercised malformed or adversarial input.
+//
+// # Corpus evidence
+//
+//   - All corpora: the deepest XFA packet parses in 1ms, which backs the
+//     "no reach" adjudication of the unbounded recursion.
+//   - All corpora: no file holds the dotted-name edge the flat map cannot
+//     distinguish, so the map's shape stays as it is.
 func FuzzParseXFADatasets(f *testing.F) {
 	for _, seed := range []string{
 		`<xfa:datasets xmlns:xfa="http://www.xfa.org/schema/xfa-data/1.0/"><xfa:data><form><field>v</field></form></xfa:data></xfa:datasets>`,
@@ -34,7 +41,7 @@ func FuzzParseXFADatasets(f *testing.F) {
 		// Cap the packet size. walkXFADataTree/collectXFAElement recurse with
 		// NO depth bound, and that mechanism is already adjudicated "real
 		// mechanism, no reach, do not change": the path building is quadratic
-		// in depth while the deepest packet in the corpora parses in 1ms.
+		// in depth while real packets are shallow enough to parse fast.
 		// Fuzzing past the cap would red this target on a known non-defect
 		// instead of on anything new. At 8 KB the shallowest possible nesting,
 		// three bytes per level, bounds depth near 2700, which the recorded
@@ -66,11 +73,12 @@ func FuzzParseXFADatasets(f *testing.F) {
 			// TestParseXFADatasets_DotInElementNameIsAmbiguous: the flat
 			// dotted map cannot distinguish a root element named "A.B" from a
 			// "B" nested inside an "A". Changing that means changing the shape
-			// [pdf.Reader.FormData] returns, for an edge no corpus file holds.
+			// pdf.Reader.FormData returns, for an edge real files do not hold.
 			// collectXFAElement returns strings.TrimSpace of a leaf's text, so
-			// every stored value is trimmed. Its error path at xfa.go:169
-			// returns the buffer untrimmed, which this asserts is unreachable
-			// or a defect rather than tolerating the difference.
+			// every stored value is trimmed. Its decoder-error path once
+			// returned the buffer untrimmed (see
+			// TestParseXFADatasets_TruncatedValueIsTrimmed), and this asserts
+			// every value is trimmed rather than tolerating the difference.
 			if v != strings.TrimSpace(v) {
 				t.Fatalf("value %q for key %q is not trimmed", v, k)
 			}

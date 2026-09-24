@@ -182,7 +182,7 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 		version = doc.Version
 	}
 
-	// Last, after every alloc.Alloc above: see [applyEncryption] on why an
+	// Last, after every alloc.Alloc above: see applyEncryption on why an
 	// object allocated after the sweep is written in the clear.
 	if encryptCfg != nil {
 		if err := applyEncryption(ctx, alloc, trailer, encryptCfg); err != nil {
@@ -202,6 +202,11 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 
 // copyCatalogEntries copies select catalog-level entries that should survive
 // a split operation (ViewerPreferences, PageLayout, PageMode, Lang, MarkInfo).
+//
+// # Corpus evidence
+//
+//   - All corpora: split lost /SpiderInfo on 4 of 4 files carrying it, and
+//     merge lost it too, while rotate keeps it because rotate edits in place.
 func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *writer.Copier, dst ast.PdfDict) {
 	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
@@ -235,7 +240,7 @@ func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *wri
 	// the embedded file set rebuildEmbeddedFiles already carries. Measured: a
 	// split of a portfolio kept its attachment and lost the entry, so the output
 	// held the contents of a container while denying it was one, and
-	// [pdf.Reader.IsPortfolio] answered false over them.
+	// pdf.Reader.IsPortfolio answered false over them.
 	//
 	// /PronunciationLexicon is an array of PLS documents describing the whole
 	// document's pronunciation (ISO 32000-2, 14.9.6), named by no page.
@@ -243,16 +248,15 @@ func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *wri
 	// none.
 	//
 	// /SpiderInfo records a web capture (ISO 32000-1, 14.10.2), describing how
-	// the document was captured rather than any page in it. Measured: lost by
-	// split on 4 of 4 corpus files carrying it, and by merge, while rotate
-	// keeps it because rotate edits in place.
+	// the document was captured rather than any page in it. Split and merge
+	// dropped it, while rotate keeps it because rotate edits in place.
 	//
 	// All three are page-independent by the rule above, and none needs
 	// remapping.
 	//
 	// /DPartRoot, /Requirements and a catalog /AA are deliberately NOT here,
 	// for two different reasons. /DPartRoot is page-KEYED like the pair above:
-	// [document.ResolveDPartMap] returns a map from PAGE object number to that
+	// document.ResolveDPartMap returns a map from PAGE object number to that
 	// page's inherited metadata, so carrying the tree whole would describe
 	// pages the output does not have. /Requirements and /AA are page-
 	// independent but forbidden by the profiles litho targets, and litho's own

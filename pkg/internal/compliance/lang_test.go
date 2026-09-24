@@ -2,6 +2,8 @@ package compliance
 
 import "testing"
 
+// TestIsValidLangTag pins which language tags [IsValidLangTag] accepts and
+// which it rejects.
 func TestIsValidLangTag(t *testing.T) {
 	t.Parallel()
 

@@ -10,8 +10,12 @@ import "testing"
 // FontFile3 still holds a glyph program, so veraPDF reports the font as
 // embedded and answers the subtype under 6.3.2 alone. Asking the permission
 // question in the embedding check made litho add a 6.3.4 test 1 "font not
-// embedded" finding veraPDF never raises, on six cells of the remediation
-// differential.
+// embedded" finding veraPDF never raises.
+//
+// # Corpus evidence
+//
+//   - All corpora: the extra 6.3.4 test 1 finding showed on six cells of the
+//     remediation differential.
 func TestFontFileSubtypeSeparatesEmbeddingFromPermission(t *testing.T) {
 	t.Parallel()
 

@@ -53,6 +53,11 @@ func TestMatchLZW_ClaimsEverySpellingOfTheBan(t *testing.T) {
 // ISO 19005-4 6.1.9 is the sharpest case: parts 2 and 3 spell an
 // object/generation spacing rule 6.1.9, while part 4 gives the same number to
 // the Inline Image /F key. A clause number is not a rule id.
+//
+// # Corpus evidence
+//
+//   - All corpora: matching the bare 6.1.10 clause routed inline-image
+//     violations to this fixer in 36 sole cells under PDF_A-2*/3*.
 func TestMatchLZW_DoesNotSwallowNeighbouringClauses(t *testing.T) {
 	t.Parallel()
 
@@ -98,8 +103,7 @@ func TestMatchLZW_DoesNotSwallowNeighbouringClauses(t *testing.T) {
 		// while part 1 gives it to the stream filter (CosFilter) this fixer
 		// does repair. Matching the bare clause claims all three, so an
 		// inline-image violation was routed to a fixer whose own doc comment
-		// says rewriting a BI...ID...EI sequence is beyond it. Measured: 36
-		// sole cells under PDF_A-2*/3*.
+		// says rewriting a BI...ID...EI sequence is beyond it.
 		{
 			Specification: "ISO_19005_2", Clause: "6.1.10", TestNumber: 1, Object: "CosIIFilter",
 			Description: "The value of the F key in the Inline Image dictionary shall not be LZW, LZWDecode, Crypt, a value not listed in ISO 32000-1:2008, Table 6, or an array containing any such value",

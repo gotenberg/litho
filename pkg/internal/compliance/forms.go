@@ -354,13 +354,21 @@ func contentsHexBounds(ctx context.Context, doc *document.Document, objOffset in
 //
 // Every section counts, not just the traditional tables. Keying this on
 // traditional tables alone left the offset list empty for a file written with
-// cross-reference streams, 47 of the 61 signed files across the corpora, so the
-// anchor collapsed onto off itself and the %%EOF scan started mid-dictionary.
-// A single-revision file survived that by accident, its only %%EOF being the
-// one the proper anchor reaches, which held for 33 of the 39 signature objects
-// measured. The other 6 sit more than maxSigEOFScan past their /Contents, so
-// the scan found no marker and [computeSignatureByteRange] bailed. pdfjs
-// xfa_filled_imm1344e.pdf is one, its signed revision spanning 2.5 MB.
+// cross-reference streams, so the anchor collapsed onto off itself and the
+// %%EOF scan started mid-dictionary. A single-revision file survived that by
+// accident, its only %%EOF being the one the proper anchor reaches. Where that
+// %%EOF sits more than maxSigEOFScan past the /Contents, the scan found no
+// marker and [computeSignatureByteRange] bailed.
+//
+// # Corpus evidence
+//
+//   - All corpora: 47 of the 61 signed files are written with cross-reference
+//     streams.
+//   - All corpora: the accidental single-revision survival held for 33 of the
+//     39 signature objects measured. The other 6 sit more than maxSigEOFScan
+//     past their /Contents.
+//   - pdfjs xfa_filled_imm1344e.pdf: one of those 6, its signed revision
+//     spanning 2.5 MB.
 func nextXRefOffset(doc *document.Document, off int64) int64 {
 	best := off
 	found := false

@@ -9,11 +9,11 @@ import (
 	"unicode/utf16"
 )
 
-// maxXMPDepth caps the element nesting level while walking XMP. Real
-// packets rarely nest deeper than ~10 levels (x:xmpmeta → rdf:RDF →
-// rdf:Description → property → rdf:Alt → rdf:li). A cap of 1000 leaves
-// two orders of magnitude of headroom and bounds CPU on pathological
-// input from a malicious producer.
+// maxXMPDepth caps the element nesting level while walking XMP. Anti-DoS
+// guard, not spec-mandated: real packets rarely nest deeper than ~10 levels
+// (x:xmpmeta → rdf:RDF → rdf:Description → property → rdf:Alt → rdf:li). A
+// cap of 1000 leaves two orders of magnitude of headroom and bounds CPU on
+// pathological input from a malicious producer.
 const maxXMPDepth = 1000
 
 // xmpPropertyForm describes how an XMP property is expressed in the
@@ -310,6 +310,12 @@ func removeXMPProperty(xmp []byte, loc xmpPropertyLocation) []byte {
 // still see it as missing. Falls back to the first rdf:Description when no
 // tag binds the namespace; callers run [ensureNamespaceDecl] first so that
 // fallback receives the declaration.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15833.pdf: a component packet declaring only prism gained
+//     pdfaid:conformance="B" with the prefix unbound and started failing
+//     ISO 19005-2, 6.6.2.1 t4.
 func insertAttributeAtDescription(xmp []byte, prefix, uri, attrSuffix string) ([]byte, error) {
 	offset := 0
 	for offset < len(xmp) {
@@ -332,7 +338,7 @@ func insertAttributeAtDescription(xmp []byte, prefix, uri, attrSuffix string) ([
 	// together with its binding. Writing the attribute alone leaves the prefix
 	// unbound, which stops the packet being well-formed XML: a component packet
 	// declaring only prism gained pdfaid:conformance="B" and started failing
-	// ISO 19005-2, 6.6.2.1 t4 (issue15833.pdf).
+	// ISO 19005-2, 6.6.2.1 t4.
 	idx := bytes.Index(xmp, []byte("<rdf:Description"))
 	if idx < 0 {
 		return append([]byte(nil), xmp...), errXMPPropertyNotFound
@@ -936,6 +942,11 @@ func (l xmpPropertyLocation) String() string {
 // BOM-less packets pass through untouched: the splicer's byte-range
 // operations require UTF-8 (ISO 19005-2/3 §6.6.2.1 and ISO 19005-4 §6.7.2.1
 // demand it of conforming files anyway).
+//
+// # Corpus evidence
+//
+//   - verapdf 6-7-9-t04: the fixture family ships BOM-less UTF-16BE packets,
+//     where a NUL before '<' pins the byte order.
 func xmpToUTF8(data []byte) ([]byte, bool) {
 	// UTF-32 first: a UTF-32LE packet opens "<\x00\x00\x00", whose first two
 	// bytes ("<\x00") also satisfy the UTF-16LE BOM-less test below, so the
@@ -972,8 +983,7 @@ func xmpToUTF8(data []byte) ([]byte, bool) {
 		be = false
 	case data[0] == 0x00 && data[1] == '<':
 		// BOM-less UTF-16BE: every packet opens with "<?xpacket" or
-		// "<?xml", so a NUL before '<' pins the byte order (the
-		// 6-7-9-t04 fixture family ships exactly this shape).
+		// "<?xml", so a NUL before '<' pins the byte order.
 		be = true
 		start = 0
 	case data[0] == '<' && data[1] == 0x00:
@@ -999,9 +1009,14 @@ func xmpToUTF8(data []byte) ([]byte, bool) {
 // three-NUL-per-code-point pattern that ASCII-range XMP content exhibits
 // across its first two code points; UTF-16 and UTF-8 packets never match it.
 // Keying on the pattern rather than a leading "<" tolerates a leading
-// whitespace code point (the 6-7-9-t04 UTF-32LE fixture opens with an encoded
-// newline before "<?xpacket"). Like the UTF-16 path, this defeats the
-// byte-range splicer, which requires UTF-8 (ISO 19005-4 §6.7.2.1).
+// whitespace code point, such as an encoded newline before "<?xpacket". Like
+// the UTF-16 path, this defeats the byte-range splicer, which requires UTF-8
+// (ISO 19005-4 §6.7.2.1).
+//
+// # Corpus evidence
+//
+//   - verapdf 6-7-9-t04: the UTF-32LE fixture opens with an encoded newline
+//     before "<?xpacket".
 func xmpUTF32ToUTF8(data []byte) ([]byte, bool) {
 	if len(data) < 8 {
 		return nil, false

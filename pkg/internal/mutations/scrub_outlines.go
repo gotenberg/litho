@@ -129,7 +129,8 @@ func scrubOutlineItems(
 		if outlineTitleQuotes(ctx, doc, item, tokens) {
 			newItem := make(ast.PdfDict, len(item))
 			maps.Copy(newItem, item)
-			// Emptied rather than deleted: /Title is required (Table 153).
+			// Emptied rather than deleted: /Title is required (ISO 32000-1,
+			// Table 153).
 			newItem["Title"] = document.EncodePdfString("")
 			if !alloc.AllocAt(ref.ObjectNum, newItem) {
 				return fmt.Errorf("%w: object %d", ErrOutlineItemNotAddressable, ref.ObjectNum)

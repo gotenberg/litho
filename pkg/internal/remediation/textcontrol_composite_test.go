@@ -12,11 +12,15 @@ import (
 //
 // A Type 0 font addresses glyphs with multi-byte codes (ISO 32000-1, 9.7.6),
 // so under Identity-H every CID below U+2000 carries a 0x00 high byte.
-// Stripping those bytes deletes half of each code and slides the remainder:
-// "A different method" extracted as "㼼8E8AG@8" and issue2856.pdf lost a third
-// of its text.
+// Stripping those bytes deletes half of each code and slides the remainder into
+// garbage.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue2856.pdf: "A different method" extracted as "㼼8E8AG@8" and the
+//     file lost a third of its text.
 func TestStripControlBytesFromOps_CompositeFont(t *testing.T) {
-	// <0041 0020 0042> — three 2-byte CIDs, each with a 0x00 high byte.
+	// <0041 0020 0042>: three 2-byte CIDs, each with a 0x00 high byte.
 	cids := ast.PdfString([]byte{0x00, 0x41, 0x00, 0x20, 0x00, 0x42})
 
 	composite := []content.Operation{

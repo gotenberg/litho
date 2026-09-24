@@ -13,9 +13,9 @@ import (
 // TestResolvePageContentBytes_UndecodableFilterSkipped covers the §6.2.2
 // false-positive guard: a content stream whose /Filter chain contains an
 // undecodable filter (here a misspelled "Flatedecode") stays filter-encoded, so
-// resolvePageContentBytes reports errUndecodableContent instead of returning the
-// still-encoded bytes for operator parsing. A stream with no filter decodes
-// normally.
+// [resolvePageContentBytes] reports [errUndecodableContent] instead of
+// returning the still-encoded bytes for operator parsing. A stream with no
+// filter decodes normally.
 func TestResolvePageContentBytes_UndecodableFilterSkipped(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -54,8 +54,12 @@ func TestResolvePageContentBytes_UndecodableFilterSkipped(t *testing.T) {
 // TestResolvePageContentBytes_UndecodablePartSkipped pins that an undecodable
 // part of a /Contents array costs only that part. ISO 32000-1, 7.7.3.3 makes the
 // array one content stream split into parts, and veraPDF judges the parts it can
-// read: pdfjs bomb_giant.pdf follows its text with /JBIG2Decode parts, and
-// veraPDF reports the text's defects whichever order the parts take.
+// read.
+//
+// # Corpus evidence
+//
+//   - pdfjs bomb_giant.pdf: follows its text with /JBIG2Decode parts, and
+//     veraPDF reports the text's defects whichever order the parts take.
 func TestResolvePageContentBytes_UndecodablePartSkipped(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

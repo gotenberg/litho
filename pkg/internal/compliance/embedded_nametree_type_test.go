@@ -14,18 +14,22 @@ import (
 //
 // ISO 32000-1, 7.11.4 defines that tree as mapping name strings to file
 // specification dictionaries, so position identifies one where the
-// cross-reference sweep's /Type test cannot. pdfjs issue9367.pdf writes three
-// specs as /Type /F, and litho saw none of them: veraPDF reports all three
-// under 6.1.11 t1 at part 1 and under 6.8 / 6.9 at parts 2 to 4.
+// cross-reference sweep's /Type test cannot.
 //
 // The two controls are what keep this honest. A spec both the sweep and the
 // tree reach must still be stated once, and a wrong-/Type dictionary the tree
 // does NOT name must stay invisible, because the sweep's /Type test is its only
 // discriminator over every object in a file.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9367.pdf: writes three specs as /Type /F, and litho saw none
+//     of them. veraPDF reports all three under 6.1.11 t1 at part 1 and under
+//     6.8 / 6.9 at parts 2 to 4.
 func TestNameTreeFileSpecJudgedByPosition(t *testing.T) {
 	t.Parallel()
 
-	// notdefCount returns how many ISO 19005-1 6.1.11 t1 violations a document
+	// count returns how many ISO 19005-1 6.1.11 t1 violations a document
 	// carrying the given objects reports. The rule fires once per file
 	// specification holding /EF, so it counts the specs litho found.
 	count := func(t *testing.T, objs ...string) int {

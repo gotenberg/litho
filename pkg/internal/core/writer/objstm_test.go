@@ -196,10 +196,14 @@ func TestPackObjectStreams_RefusesFewerThanTwo(t *testing.T) {
 }
 
 // TestPackObjectStreams_DeclinesWhenItWouldNotShrink covers the never-worse
-// guard. Measured on the corpus, two roughly 1 KB files of five short objects
-// each came out 42 bytes LARGER packed, because the stream dictionary and
-// Flate header cost more than the object wrappers they replace. Growth is the
-// regression this packing exists to remove.
+// guard. For a few short objects the stream dictionary and Flate header cost
+// more than the object wrappers they replace. Growth is the regression this
+// packing exists to remove.
+//
+// # Corpus evidence
+//
+//   - All corpora: two roughly 1 KB files of five short objects each came out
+//     42 bytes LARGER packed.
 func TestPackObjectStreams_DeclinesWhenItWouldNotShrink(t *testing.T) {
 	t.Parallel()
 	alloc := NewObjAllocator(0)

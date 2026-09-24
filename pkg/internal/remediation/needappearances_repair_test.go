@@ -15,8 +15,11 @@ import (
 
 // badAppearancePDF builds a page with one checked widget whose appearance stream
 // carries neither /Subtype nor /BBox, and an /AcroForm that relies on
-// /NeedAppearances to have it drawn. pdfjs checkbox-bad-appearance.pdf is shaped
-// this way.
+// /NeedAppearances to have it drawn.
+//
+// # Corpus evidence
+//
+//   - pdfjs checkbox-bad-appearance.pdf: is shaped this way.
 func badAppearancePDF() []byte {
 	appearance := "q 0 0 0.4 rg BT /F3 12 Tf 0 0 Td (4) Tj ET Q"
 
@@ -52,9 +55,13 @@ func badAppearancePDF() []byte {
 // stored streams: the viewer stops regenerating and draws what the file holds.
 // An appearance stream is a form XObject (ISO 32000-1, 12.5.5) and Table 95
 // requires /Subtype /Form and /BBox, which a producer expecting regeneration can
-// omit. On pdfjs checkbox-bad-appearance.pdf the file came out conformant with
-// its tick gone: the mark that said the box was checked simply stopped being
-// drawn.
+// omit. Such a file then comes out conformant with its tick gone: the mark that
+// says the box is checked simply stops being drawn.
+//
+// # Corpus evidence
+//
+//   - pdfjs checkbox-bad-appearance.pdf: came out conformant with its tick
+//     gone.
 func TestNeedAppearancesRepairKeepsTheAppearanceDrawable(t *testing.T) {
 	t.Parallel()
 

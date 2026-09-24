@@ -142,7 +142,11 @@ func TestISO32005_RootForbiddenChild(t *testing.T) {
 
 // TestISO32005_NonStructTransparent pins NonStruct transparency: a
 // Caption wrapped in a NonStruct inside Document still has Document as
-// its Table 5 effective parent (PDF_UA-1__7.2-t26-fail-a golden).
+// its Table 5 effective parent.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.2-t26-fail-a: the golden file for this shape.
 func TestISO32005_NonStructTransparent(t *testing.T) {
 	vs := iso32005Violations(t,
 		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
@@ -316,14 +320,19 @@ func iso32005HasClause(vs []Violation, clause string) bool {
 //
 // Both shapes are verified against live veraPDF 1.30.2 at PDF/UA-2:
 //
-//   - /RoleMap << /Document /Book >> over a single /Document root child is
-//     the golden PDF_UA-1__7.1-t07-fail-a shape. Book is not a standard type,
-//     so the root holds zero Document elements and the root-count rule FIRES.
-//     veraPDF reports "Table 5. StructTreeRoot-Document" test 1 on both the
-//     golden and this exact object graph.
+//   - /RoleMap << /Document /Book >> over a single /Document root child. Book
+//     is not a standard type, so the root holds zero Document elements and
+//     the root-count rule FIRES. veraPDF reports "Table 5.
+//     StructTreeRoot-Document" test 1 on this exact object graph.
 //   - /RoleMap << /Span /Custom >> over a Span inside a Document makes the
 //     Span a Custom, which Table 5 does not govern, so "Document shall not
 //     contain Span" does NOT fire. veraPDF is silent on that graph.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.1-t07-fail-a: the golden file with the
+//     /RoleMap << /Document /Book >> shape, on which veraPDF also reports
+//     "Table 5. StructTreeRoot-Document" test 1.
 func TestISO32005_RoleMapResolvedBeforeTable5(t *testing.T) {
 	const rootCount = "Table 5. StructTreeRoot-Document"
 	const docSpan = "Table 5. Document-Span"
@@ -431,8 +440,12 @@ func TestISO32005_NamespaceVocabularyGatesTable5(t *testing.T) {
 }
 
 // TestISO32005_OBJRIsContent pins OBJR counting as a content item for
-// "Table 5. Document-content" (PDF_UA-1__7.18.4-t01-fail-a golden: the
-// rule fails with a single OBJR kid).
+// "Table 5. Document-content": the rule fails with a single OBJR kid.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.18.4-t01-fail-a: the golden file, where the rule
+//     fails with a single OBJR kid.
 func TestISO32005_OBJRIsContent(t *testing.T) {
 	vs := iso32005Violations(t,
 		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",

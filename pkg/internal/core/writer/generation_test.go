@@ -40,9 +40,12 @@ func writeUpdateWithGenerations(t *testing.T, gen func(objNum int) int) []byte {
 // TestWriteIncrementalKeepsSourceGeneration checks that replacing an object
 // keeps the generation its references name. An indirect reference identifies an
 // object by number AND generation (ISO 32000-1, 7.3.10), so writing "4 0 obj"
-// over a source "4 3 obj" leaves every "4 3 R" pointing at nothing: pdfjs
-// bug1393476.pdf came out of a rotate that litho reported and no other reader
-// could see.
+// over a source "4 3 obj" leaves every "4 3 R" pointing at nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1393476.pdf: came out of a rotate that litho reported and no
+//     other reader could see.
 func TestWriteIncrementalKeepsSourceGeneration(t *testing.T) {
 	appended := writeUpdateWithGenerations(t, func(objNum int) int {
 		if objNum == 4 {

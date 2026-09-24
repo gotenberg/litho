@@ -52,9 +52,15 @@ func cmykIntentPDF(t *testing.T) []byte {
 //
 // ISO 19005-1, 6.2.3.3 admits DeviceRGB only when the output intent's
 // destination profile is an RGB profile, so an existing CMYK intent leaves the
-// page uncovered. Treating any intent as coverage left veraPDF test-suite
-// 6-2-3-3-t01-fail-b, whose sole intent is a GTS_PDFA1 CMYK profile over
-// DeviceRGB content, still failing after remediation.
+// page uncovered. Treating any intent as coverage left a file whose sole intent
+// is a GTS_PDFA1 CMYK profile over DeviceRGB content still failing after
+// remediation.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-3-3-t01-fail-b: its sole intent is a GTS_PDFA1 CMYK profile
+//     over DeviceRGB content, and treating any intent as coverage left it
+//     still failing after remediation.
 func TestFixOutputIntentAddsRGBOverACMYKIntent(t *testing.T) {
 	t.Parallel()
 

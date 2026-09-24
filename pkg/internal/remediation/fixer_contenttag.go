@@ -35,6 +35,11 @@ func matchContentTag(v compliance.Violation) bool {
 // tagging: the entire page content becomes one structure element child.
 // Not ideal for accessibility, but satisfies the spec requirement that
 // all content must be tagged or artifact.
+//
+// # Corpus evidence
+//
+//   - All corpora: attaching the MCR straight to the Document accounted for
+//     158 of the 173 files where PDF/UA-2 remediation introduced a violation.
 func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -179,8 +184,8 @@ func fixContentTag(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		// Document. ISO/TS 32005 Table 5 forbids a Document from holding a
 		// direct content item ("Table 5. Document-content"), so attaching the
 		// MCR straight to it repaired the untagged content and introduced a
-		// structure fault in its place: 158 of the 173 files where PDF/UA-2
-		// remediation introduced a violation were this one line.
+		// structure fault in its place, the dominant source of violations
+		// PDF/UA-2 remediation introduced.
 		//
 		// P is the wrapper because it may hold content (it is outside Table 5's
 		// noContent set) and, unlike Div, Part and NonStruct, it is not a
@@ -367,7 +372,7 @@ func resolveContentBytesAt(ctx context.Context, alloc *writer.ObjAllocator, doc 
 			all = append(all, data...)
 			all = append(all, '\n')
 
-			// Bounded for the reason given on [content.MaxPageContentSize]: the
+			// Bounded for the reason given on content.MaxPageContentSize: the
 			// per-stream decompression cap says nothing about their sum, so a
 			// page naming thousands of streams grows this buffer with the file's
 			// object count rather than with anything the page could draw.

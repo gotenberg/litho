@@ -7,6 +7,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
+// TestCheckAnnotColorArrays pins when [checkAnnotColorArrays] reports a /C or
+// /IC array: against a known non-RGB OutputIntent and with no output profile
+// at all, but not against an RGB or an unparseable one.
 func TestCheckAnnotColorArrays(t *testing.T) {
 	t.Parallel()
 	withC := ast.PdfDict{"C": ast.PdfArray{ast.PdfReal(1), ast.PdfReal(0), ast.PdfReal(0)}}
@@ -44,6 +47,8 @@ func TestCheckAnnotColorArrays(t *testing.T) {
 	}
 }
 
+// TestCheckForbiddenAnnotType pins the annotation subtype whitelist of each
+// PDF/A part and conformance level.
 func TestCheckForbiddenAnnotType(t *testing.T) {
 	t.Parallel()
 	ctx := testCtx()
@@ -109,6 +114,8 @@ func TestCheckForbiddenAnnotType(t *testing.T) {
 	}
 }
 
+// TestCheckFlagValues1 pins the PDF/A-1 annotation flag values: Print set and
+// Hidden, Invisible and NoView clear.
 func TestCheckFlagValues1(t *testing.T) {
 	t.Parallel()
 
@@ -137,6 +144,8 @@ func TestCheckFlagValues1(t *testing.T) {
 	}
 }
 
+// TestCheckFlagValues2Plus pins the PDF/A-2+ annotation flag values, which also
+// require ToggleNoView clear.
 func TestCheckFlagValues2Plus(t *testing.T) {
 	t.Parallel()
 
@@ -164,6 +173,8 @@ func TestCheckFlagValues2Plus(t *testing.T) {
 	}
 }
 
+// TestCheckAnnotOpacity pins that [checkAnnotOpacity] accepts an absent /CA or
+// one of 1.0 and reports any other value.
 func TestCheckAnnotOpacity(t *testing.T) {
 	t.Parallel()
 	ctx := testCtx()
@@ -205,6 +216,8 @@ func TestCheckAnnotOpacity(t *testing.T) {
 	})
 }
 
+// TestLinkExemptFromAP pins that only a Link annotation, and only under PDF/A
+// parts 2 to 4, is exempt from the appearance dictionary requirement.
 func TestLinkExemptFromAP(t *testing.T) {
 	t.Parallel()
 
@@ -232,6 +245,8 @@ func TestLinkExemptFromAP(t *testing.T) {
 	}
 }
 
+// TestApExtraKeys pins which appearance dictionary entries [apExtraKeys] lists
+// besides /N.
 func TestApExtraKeys(t *testing.T) {
 	t.Parallel()
 
@@ -281,6 +296,8 @@ func TestApExtraKeys(t *testing.T) {
 	})
 }
 
+// TestForbiddenAnnotTypeRule pins the forbidden-annotation-type clause
+// [forbiddenAnnotTypeRule] selects for each PDF/A part.
 func TestForbiddenAnnotTypeRule(t *testing.T) {
 	t.Parallel()
 

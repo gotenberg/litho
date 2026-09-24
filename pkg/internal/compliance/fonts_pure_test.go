@@ -2,6 +2,8 @@ package compliance
 
 import "testing"
 
+// TestIsPredefinedCMap pins which CMap names [isPredefinedCMap] accepts,
+// rejecting CIDSystemInfo ordering identifiers and unknown names.
 func TestIsPredefinedCMap(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -36,6 +38,8 @@ func TestIsPredefinedCMap(t *testing.T) {
 	}
 }
 
+// TestIsSubsetFont pins the six-uppercase-letter subset tag [isSubsetFont]
+// recognises in a /BaseFont.
 func TestIsSubsetFont(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -63,6 +67,8 @@ func TestIsSubsetFont(t *testing.T) {
 	}
 }
 
+// TestExtractCMapStreamWMode pins the /WMode value [ExtractCMapStreamWMode]
+// reads from CMap data, and -1 when none is stated.
 func TestExtractCMapStreamWMode(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -89,6 +95,8 @@ func TestExtractCMapStreamWMode(t *testing.T) {
 	}
 }
 
+// TestExtractUseCMap pins the parent CMap name [extractUseCMap] reads from a
+// usecmap operator.
 func TestExtractUseCMap(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -112,6 +120,8 @@ func TestExtractUseCMap(t *testing.T) {
 	}
 }
 
+// TestIsPUAHex pins which hex tokens [isPUAHex] reads as a Private Use Area
+// scalar, surrogate pairs included.
 func TestIsPUAHex(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -149,6 +159,8 @@ func TestIsPUAHex(t *testing.T) {
 	}
 }
 
+// TestContainsPUAMapping pins that [containsPUAMapping] tests bfchar and
+// bfrange destinations, packed lines included, and never source codes.
 func TestContainsPUAMapping(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -180,6 +192,8 @@ func TestContainsPUAMapping(t *testing.T) {
 	}
 }
 
+// TestPuaSourceCodes pins the source codes [puaSourceCodes] reports for PUA
+// destinations, bfrange array destinations judged per code.
 func TestPuaSourceCodes(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

@@ -111,8 +111,13 @@ func TestChannels_Direct(t *testing.T) {
 }
 
 // TestChannels_DescribedTwice keeps the first description of a channel the
-// Channel Definition box describes twice, as one corpus file does with an
+// Channel Definition box describes twice, as a real file does with an
 // opacity channel it also calls premultiplied.
+//
+// # Corpus evidence
+//
+//   - All corpora: one file describes an opacity channel twice, the second
+//     time as premultiplied.
 func TestChannels_DescribedTwice(t *testing.T) {
 	t.Parallel()
 

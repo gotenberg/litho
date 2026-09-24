@@ -282,7 +282,7 @@ func attrValue(n *xmlquery.Node, name string) string {
 	return ""
 }
 
-// childText returns the trimmed text content of the first direct
+// childText returns the text content of the first direct
 // child of n whose local name matches name. Empty string when
 // nothing matches. Nil-safe via [findChild].
 func childText(n *xmlquery.Node, name string) string {

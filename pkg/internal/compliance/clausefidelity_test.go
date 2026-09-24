@@ -2,8 +2,8 @@ package compliance
 
 import "testing"
 
-// These selectors must emit the clause id for the ISO 19005 part being
-// validated. A PDF/A-2 or PDF/A-3 violation reports its own part's clause, not
+// TestPartDispatchedRuleSelectors pins that these selectors emit the clause id
+// for the ISO 19005 part being validated. A PDF/A-2 or PDF/A-3 violation reports its own part's clause, not
 // the PDF/A-1 equivalent, even when the construct is forbidden across parts.
 // The verdict was already correct under the part-1 id; only the reported clause
 // was off, so the rule attribution traces to the right standard.

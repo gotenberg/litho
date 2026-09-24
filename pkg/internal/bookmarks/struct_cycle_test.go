@@ -69,14 +69,14 @@ func structBookmarks(t *testing.T, objs []string) []string {
 }
 
 // TestGenerateFromStructTree_NonHeadingCycleTerminates pins the mutual
-// recursion: walkStructElem hands /K to walkStructK, which hands any dict
-// carrying /S back to walkStructElem.
+// recursion: [walkStructElem] hands /K to [walkStructK], which hands any dict
+// carrying /S back to [walkStructElem].
 //
-// The element is deliberately NOT a heading. walkStructElem calls
-// collectStructText at the heading branch BEFORE it descends, so a heading
-// element with the same cycle dies inside collectTextFromK instead and never
+// The element is deliberately NOT a heading. [walkStructElem] calls
+// [collectStructText] at the heading branch BEFORE it descends, so a heading
+// element with the same cycle dies inside [collectTextFromK] instead and never
 // reaches this one. Measured before the guard: frames alternating
-// walkStructK <-> walkStructElem until "fatal error: stack overflow".
+// [walkStructK] <-> [walkStructElem] until "fatal error: stack overflow".
 func TestGenerateFromStructTree_NonHeadingCycleTerminates(t *testing.T) {
 	t.Parallel()
 
@@ -90,9 +90,9 @@ func TestGenerateFromStructTree_NonHeadingCycleTerminates(t *testing.T) {
 }
 
 // TestGenerateFromStructTree_HeadingCycleTerminates pins the OTHER recursion.
-// collectTextFromK walks nested /K to gather a heading's text and recursed
+// [collectTextFromK] walks nested /K to gather a heading's text and recursed
 // without a visited set of its own: measured before the guard as frames of
-// collectTextFromK alone, never reaching the walk above it.
+// [collectTextFromK] alone, never reaching the walk above it.
 func TestGenerateFromStructTree_HeadingCycleTerminates(t *testing.T) {
 	t.Parallel()
 
@@ -132,7 +132,7 @@ func TestGenerateFromStructTree_AcyclicTreeStillYieldsBookmark(t *testing.T) {
 // could plausibly break: one content node legitimately referenced by two
 // elements. Both headings must still read its text.
 //
-// This is why collectStructText allocates a fresh set per heading instead of
+// This is why [collectStructText] allocates a fresh set per heading instead of
 // sharing the walk's. With a shared set the second element would find object 7
 // already marked, collect nothing, and be dropped for having empty text, and
 // the assertion below is what separates that from correct nesting: the H2 is a

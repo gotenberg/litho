@@ -78,7 +78,7 @@ func TestExtractAdvanceWidth_NegativeInt(t *testing.T) {
 	// -50 = 251..254 first byte + second.
 	//   -50 fits in -107..107: byte = -50 + 139 = 89.
 	// -200: not in -107..107; use 251..254 encoding.
-	//   -(-200) = 200; 200 - 108 = 92. first byte 251+0=251, second 92. No wait:
+	//   -(-200) = 200; 200 - 108 = 92. first byte 251+0=251, second 92.
 	//   For bytes 251-254: value = -((b - 251) * 256) - next - 108.
 	//   So b = 251, next = N gives value = -N - 108. For -200: N = 92.
 	cs := []byte{89, 251, 92, csOpHsbw}
@@ -96,7 +96,7 @@ func TestExtractAdvanceWidth_Empty(t *testing.T) {
 
 func TestExtractAdvanceWidth_NoMetricOp(t *testing.T) {
 	// Charstring that starts with hstem (op 1) instead of hsbw: invalid
-	// for Type 1 per spec, skipped by our extractor.
+	// for Type 1 per spec, skipped by the extractor.
 	cs := []byte{189, 248, 136, csOpHstem}
 	if _, ok := extractAdvanceWidth(cs); ok {
 		t.Error("expected false when leading operator is not hsbw/sbw")
@@ -147,7 +147,7 @@ func TestParseCharStringWidths_Synthetic(t *testing.T) {
 	}
 }
 
-// encryptCharString is the test-only inverse of decryptCharString.
+// encryptCharString is the test-only inverse of [decryptCharString].
 func encryptCharString(plain []byte, lenIV int) []byte {
 	body := make([]byte, lenIV+len(plain))
 	for i := range lenIV {

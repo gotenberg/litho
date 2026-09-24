@@ -16,11 +16,14 @@ import (
 // ISO 32000-1, 9.7.6.2 splits a Type 0 font's string into character codes by
 // its encoding CMap's codespace ranges, and the /ToUnicode CMap is keyed by
 // those codes, so a PUA entry for a code nothing shows is out of scope for
-// ISO 14289-2, 8.4.3. litho judged such a font by the whole /ToUnicode and
-// reported pdfjs issue15292.pdf, whose AgfaRotis fonts map codes E000 and up
-// into the PUA but show none of them; veraPDF passes it. Measured against
-// veraPDF: showing a code the CMap maps to "A" passes, showing the code it maps
-// into the PUA fails.
+// ISO 14289-2, 8.4.3. litho judged such a font by the whole /ToUnicode.
+// Measured against veraPDF: showing a code the CMap maps to "A" passes,
+// showing the code it maps into the PUA fails.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15292.pdf: its AgfaRotis fonts map codes E000 and up into the
+//     PUA but show none of them. litho reported it and veraPDF passes it.
 func TestPUAActualText_EmbeddedEncodingCMap(t *testing.T) {
 	t.Parallel()
 

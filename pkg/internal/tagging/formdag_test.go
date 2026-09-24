@@ -81,17 +81,22 @@ func formDAGPDF(levels, branching int) []byte {
 //
 // The scan tracked the forms on the current path to break cycles and removed
 // each on the way out, which is right for a cycle and wrong for a DAG: every
-// distinct path re-walked and re-inflated the same subtree. pdfjs
-// issue6961.pdf nests ten levels wide enough that `litho remediate -profile
-// PDF/UA-1` ran over 50 minutes at 142% CPU without finishing, and it never
-// completed in any corpus run.
+// distinct path re-walked and re-inflated the same subtree.
 //
 // The fixture is 4 forms per level over 10 levels: 4^10 visits followed as a
 // tree against 40 with a memo. The assertion counts memoised decisions rather
 // than measuring elapsed time, because these streams are tiny and uncompressed,
-// so a million trivial recursions still finish in under a second here while the
-// real file re-inflates a 29 KB Flate stream at every one of them. Wall clock
+// so a million trivial recursions still finish in under a second here while a
+// real file re-inflates its Flate streams at every one of them. Wall clock
 // would have made this test pass with the memo removed.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue6961.pdf: nests ten levels wide enough that `litho remediate
+//     -profile PDF/UA-1` ran over 50 minutes at 142% CPU without finishing,
+//     and it never completed in any corpus run.
+//   - pdfjs issue6961.pdf: re-inflates a 29 KB Flate stream at every one of
+//     the tree walk's visits.
 func TestTextBearingXObjects_SharedFormsDecodedOnce(t *testing.T) {
 	t.Parallel()
 

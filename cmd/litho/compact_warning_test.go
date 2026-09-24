@@ -14,8 +14,8 @@ import (
 // alone made it non-empty, which suppressed the encryption warning entirely and
 // fired the compaction one on a file that compacted fine.
 //
-// Nothing caught it. The full suite, the linter and a corpus gate all passed,
-// because no test asserted that the two warnings coexist. These do.
+// Nothing caught it. The full suite and the linter passed, because no test
+// asserted that the two warnings coexist. These do.
 
 const (
 	warnEncrypted = "input is encrypted"
@@ -28,6 +28,12 @@ const (
 // asking for compaction must not silence it. That warning is the one that
 // matters more: it tells the caller their protected document just became an
 // unprotected one.
+//
+// # Corpus evidence
+//
+//   - All corpora: the corpus gate passed while --compact suppressed the
+//     encryption warning, because no test asserted that the two warnings
+//     coexist.
 func TestCompactWarning_DoesNotSuppressTheEncryptionWarning(t *testing.T) {
 	enc := encryptTempPDF(t, onePageTempPDF(t), "secret")
 	out := filepath.Join(t.TempDir(), "out.pdf")

@@ -14,11 +14,15 @@ import (
 // encoding left every code unnamed, so no glyph could be credited with a
 // Unicode value and ISO 14289-1, 7.21.7 t1 fired on each one.
 //
-// Measured against veraPDF on pdfjs bug859204.pdf, which writes /Encoding /NULL
-// over an embedded Type 1 whose built-in names are all in the Adobe Glyph List:
-// veraPDF passes all eleven codes the page shows, litho reported 7.21.7 t1. The
-// two encodings that already worked are held alongside it so the fallback stays
-// confined to the unknown name.
+// The two encodings that already worked are held alongside it so the fallback
+// stays confined to the unknown name.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug859204.pdf: writes /Encoding /NULL over an embedded Type 1
+//     whose built-in names are all in the Adobe Glyph List. Measured against
+//     veraPDF, it passes all eleven codes the page shows, where litho reported
+//     7.21.7 t1. The fixture declares the same /Flags 6, a symbolic serif font.
 func TestSimpleFontEncoding_UnknownNameKeepsTheBuiltInEncoding(t *testing.T) {
 	t.Parallel()
 
@@ -36,7 +40,7 @@ func TestSimpleFontEncoding_UnknownNameKeepsTheBuiltInEncoding(t *testing.T) {
 			t.Parallel()
 
 			const body = "BT /F1 12 Tf 10 50 Td (A) Tj ET"
-			// /Flags 6 is the symbolic serif font bug859204.pdf declares.
+			// /Flags 6 declares a symbolic serif font.
 			data := cyclePDF(
 				"<< /Type /Catalog /Pages 2 0 R >>",
 				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",

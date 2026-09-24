@@ -110,6 +110,14 @@ func collectReferencedCSNames(ctx context.Context, doc *document.Document, resou
 
 // scanXObjectColorSpaces checks XObject resources for device colour space usage.
 // For Form XObjects, it recurses into their content streams and nested resources.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7308.pdf: draws a JBIG2 image mask on a page that sets no
+//     colour at all, which veraPDF reports under ISO 19005-2 §6.2.4.3 t4 and
+//     litho counted as no colour use whatever.
+//   - pdfjs issue11518.pdf: gives its image masks /ColorSpace /DeviceGray
+//     while filling them in an ICCBased space.
 func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, depth int, visited map[string]bool, referencedNames map[string]bool, inherited map[string]inheritedCS, part int) {
 	xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
 	if err != nil || xobjDict == nil {
@@ -137,9 +145,7 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 		// paints its unmasked areas with the current fill colour, so drawing one
 		// selects a colour space exactly as "f" does. When no cs/rg/g/k set the
 		// fill space before the Do, that colour is the initial DeviceGray of
-		// 8.6.8. pdfjs issue7308.pdf draws a JBIG2 image mask on a page that
-		// sets no colour at all, which veraPDF reports under ISO 19005-2
-		// §6.2.4.3 t4 and litho counted as no colour use whatever.
+		// 8.6.8, which veraPDF reports under ISO 19005-2 §6.2.4.3 t4.
 		isMask := false
 		if mask, err := document.ResolveBool(ctx, doc, stream.Dict["ImageMask"]); err == nil && mask {
 			isMask = true
@@ -151,8 +157,6 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 		// Check the XObject's own /ColorSpace entry. An image mask is exempt:
 		// ISO 32000-1, 8.9.5, Table 89 does not allow the entry there, so one a
 		// producer writes anyway selects no colour, and veraPDF ignores it too.
-		// pdfjs issue11518.pdf gives its image masks /ColorSpace /DeviceGray
-		// while filling them in an ICCBased space.
 		csObj := stream.Dict["ColorSpace"]
 		csResolved := ""
 		if !isMask {
@@ -198,6 +202,13 @@ func scanXObjectColorSpaces(ctx context.Context, doc *document.Document, resourc
 // entryCS is the colour-space state the scope inherits (ISO 32000-1 §8.10.2):
 // the state observed at the invoking Do, or [inheritedCSDefault] when this scope
 // is a tiling pattern or an appearance stream that no Do invokes.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue1055r.pdf: draws a form with no /Resources whose stream
+//     invokes a second form by a name only the page declares, and that one
+//     fills with an "rg" operator; veraPDF reports ISO 19005-2 §6.2.4.3 t2 at
+//     .../xObject[0]/contentStream[0]/operators[3]/fillCS[0].
 func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.PdfStream, depth int, visited map[string]bool, entryCS inheritedCS, part int, parentRes ast.PdfDict) deviceCSUsage {
 	var usage deviceCSUsage
 
@@ -278,10 +289,7 @@ func scanFormXObjectCS(ctx context.Context, doc *document.Document, stream ast.P
 	// it draws on the resource dictionary of the content stream that invoked
 	// it, so the names its stream references still resolve. Returning early
 	// here left every nested XObject, shading and pattern of such a form
-	// unscanned. pdfjs issue1055r.pdf draws a form with no /Resources whose
-	// stream invokes a second form by a name only the page declares, and that
-	// one fills with an "rg" operator; veraPDF reports ISO 19005-2 §6.2.4.3 t2
-	// at .../xObject[0]/contentStream[0]/operators[3]/fillCS[0].
+	// unscanned.
 	formRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
 	if err != nil || formRes == nil {
 		formRes = parentRes
@@ -572,13 +580,12 @@ func scanFontColorSpaces(ctx context.Context, doc *document.Document, resources 
 	}
 }
 
-// scanContentStreamDeviceCS parses the content stream of a page and detects
-// device-dependent colour space usage from explicit colour operators. It also
-// returns the names of XObjects invoked by Do, the colour-space names selected
-// by cs/CS, so the resource scan can distinguish colour spaces that are
+// scanContentStreamDeviceCS surveys one page's already-parsed operations and
+// detects device-dependent colour space usage from explicit colour operators.
+// It also returns the names of XObjects invoked by Do, the colour-space names
+// selected by cs/CS, so the resource scan can distinguish colour spaces that are
 // actually referenced from ones merely declared in /Resources/ColorSpace, and
 // the colour-space state in effect at each Do, which a Form XObject inherits.
-// scanContentStreamDeviceCS surveys one page's already-parsed operations.
 //
 // It takes the operations rather than the page, because three separate check
 // groups (colour, graphics, XObject) each survey every page and each used to
@@ -738,6 +745,15 @@ func textModePaints(mode int) (fill, stroke bool) {
 //
 // inheritedXObjectCS records, per XObject name, the state in effect at each Do
 // that invokes it, so a nested form scan starts from the observed state.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18466.pdf: writes "/P12 scn /P12 SCN" without ever selecting
+//     /Pattern, and veraPDF reports nothing for the image inside that
+//     pattern; treating the name as a use judged a pattern the file never
+//     paints.
+//   - pdfjs issue20513.pdf: strokes its text (Tr 1) after only K, and veraPDF
+//     reports DeviceCMYK at strokeCS and no DeviceGray.
 func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *deviceCSUsage, referencedXObjects, referencedCSNames map[string]bool, used *usedResources, inheritedXObjectCS map[string]inheritedCS, entry inheritedCS, patternCSNames map[string]bool) {
 	fillCSSet, strokeCSSet := entry.fill, entry.stroke
 	// Whether the space currently selected is specifically a Pattern space. A
@@ -748,9 +764,8 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 	// that invoked it (ISO 32000-1 §8.10.2): veraPDF judges a pattern a form
 	// selects with a bare scn after the invoking stream chose the Pattern
 	// space. A scope no Do invokes inherits nothing, so a bare scn with no
-	// Pattern space selected anywhere still paints nothing (pdfjs
-	// issue18466.pdf writes "/P12 scn /P12 SCN" without ever selecting
-	// /Pattern, and veraPDF reports nothing for the image inside it).
+	// Pattern space selected anywhere still paints nothing, and veraPDF
+	// reports nothing for the pattern's content.
 	fillPattern, strokePattern := entry.fillPattern, entry.strokePattern
 	// Text rendering mode is part of the text state, which q/Q saves and
 	// restores with the rest of the graphics state (ISO 32000-1, 9.3.1).
@@ -848,8 +863,8 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 			// there flagged an uncalibrated colour space the file never uses.
 			// The other modes paint with the fill colour, the stroke colour or
 			// both, so the space each one needs is the one that must be
-			// selected: pdfjs issue20513.pdf strokes its text (Tr 1) after only
-			// K, and veraPDF reports DeviceCMYK at strokeCS and no DeviceGray.
+			// selected: stroked text (Tr 1) after only K is a DeviceCMYK use
+			// at strokeCS, and no DeviceGray one.
 			fills, strokes := textModePaints(textRender)
 			if (fills && !fillCSSet) || (strokes && !strokeCSSet) {
 				usage.initialGray = true
@@ -873,10 +888,9 @@ func scanContentColorOps(ctx context.Context, ops []content.Operation, usage *de
 			// The operand names a pattern only when a Pattern space is current
 			// on the side it sets: scn sets the fill colour, SCN the stroke
 			// colour (ISO 32000-1 §8.6.8). A name with no Pattern space
-			// selected is malformed and paints nothing. pdfjs issue18466.pdf
-			// writes "/P12 scn /P12 SCN" without ever selecting /Pattern, and
-			// veraPDF reports nothing for the image inside that pattern;
-			// treating the name as a use judged a pattern the file never paints.
+			// selected is malformed and paints nothing, and veraPDF reports
+			// nothing for the content inside that pattern; treating the name
+			// as a use judged a pattern the file never paints.
 			stroking := op.Operator == "SC" || op.Operator == "SCN"
 			patternSelected := fillPattern
 			if stroking {
@@ -1130,9 +1144,12 @@ func mark3DStreamCS(ctx context.Context, doc *document.Document, stream ast.PdfS
 // resolveShadingDict returns a shading's dictionary whichever form it takes.
 // Per ISO 32000-1, 8.7.4.5, a shading of type 1 to 3 is a dictionary while a
 // mesh shading of type 4 to 7 is a stream carrying the same entries in its
-// stream dictionary. Resolving only the dictionary form dropped every mesh:
-// pdfjs issue17848.pdf paints a type 4 shading whose /ColorSpace is DeviceRGB,
-// and litho counted no device colour space for the page at all.
+// stream dictionary. Resolving only the dictionary form dropped every mesh.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue17848.pdf: paints a type 4 shading whose /ColorSpace is
+//     DeviceRGB, and litho counted no device colour space for the page at all.
 func resolveShadingDict(ctx context.Context, doc *document.Document, obj ast.PdfObject) ast.PdfDict {
 	if d, err := document.ResolveDict(ctx, doc, obj); err == nil && d != nil {
 		return d
@@ -1183,6 +1200,17 @@ func scanShadingColorSpaces(ctx context.Context, doc *document.Document, resourc
 // scanPatternColorSpaces checks Pattern resources for device colour space usage.
 // Tiling patterns (Type 1) have their own content streams and resources that may
 // use device-dependent colour spaces.
+//
+// # Corpus evidence
+//
+//   - pdfjs coons-allflags-withfunction.pdf, tensor-allflags-withfunction.pdf:
+//     each select a PatternType 2 whose /Shading is a type 6 or 7 stream in
+//     DeviceRGB, and with no /OutputIntents litho counted no device colour
+//     space for the page at all while it resolved only the dictionary form.
+//   - govdocs thread_200_200567.pdf: draws 71 /ImageMask true images inside 71
+//     PaintType 2 cells whose base is [/Pattern /ICCBased], writes no gray
+//     operator anywhere, and carries no /OutputIntent, and veraPDF reports all
+//     71 under ISO 19005-2 §6.2.4.3 t4 with a synthesised DeviceGray imageCS.
 func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict, usage *deviceCSUsage, depth int, visited map[string]bool, used *usedResources, part int) {
 	patternDict, err := document.ResolveDict(ctx, doc, resources["Pattern"])
 	if err != nil || patternDict == nil {
@@ -1210,12 +1238,9 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 				if shadingObj, ok := patDict["Shading"]; ok {
 					// A mesh shading of type 4 to 7 is a STREAM, so resolving
 					// only the dictionary form drops it here exactly as it did
-					// on the sh path (see [resolveShadingDict]): pdfjs
-					// coons-allflags-withfunction.pdf and
-					// tensor-allflags-withfunction.pdf each select a
+					// on the sh path (see resolveShadingDict), and a
 					// PatternType 2 whose /Shading is a type 6 or 7 stream in
-					// DeviceRGB, and with no /OutputIntents litho counted no
-					// device colour space for the page at all.
+					// a device space counted no device colour space at all.
 					if sd := resolveShadingDict(ctx, doc, shadingObj); sd != nil {
 						if csObj, ok := sd["ColorSpace"]; ok {
 							markDeviceCS(resolveCSName(ctx, doc, csObj), usage)
@@ -1243,13 +1268,11 @@ func scanPatternColorSpaces(ctx context.Context, doc *document.Document, resourc
 		// mask. A mask carries no colour space and paints with the current fill
 		// colour (ISO 32000-1, 8.9.6.2), which inside one of these cells is the
 		// scn/SCN colour in the underlying space, so it is no more a DeviceGray
-		// use than the operator is. veraPDF disagrees there: govdocs
-		// thread_200_200567.pdf draws 71 /ImageMask true images inside 71
-		// PaintType 2 cells whose base is [/Pattern /ICCBased], writes no gray
-		// operator anywhere, and carries no /OutputIntent, and veraPDF reports
-		// all 71 under ISO 19005-2 §6.2.4.3 t4 with a synthesised DeviceGray
-		// imageCS. Skipping the cell is still right; do not read the sentence
-		// above as covering masks.
+		// use than the operator is. veraPDF disagrees there: it reports an
+		// image mask in such a cell under ISO 19005-2 §6.2.4.3 t4 with a
+		// synthesised DeviceGray imageCS, even with no gray operator anywhere.
+		// Skipping the cell is still right; do not read the sentence above as
+		// covering masks.
 		paintType, _ := document.ResolveInt(ctx, doc, stream.Dict["PaintType"])
 		if paintType == 2 {
 			continue

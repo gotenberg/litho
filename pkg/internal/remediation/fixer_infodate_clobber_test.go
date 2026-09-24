@@ -9,6 +9,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
+// TestFixInfoDate_KeepsAnEarlierFixersPendingInfoWrite pins that the /Info date
+// repair keeps an earlier fixer's pending write to /Info.
+//
 // [fixInfoDate] reads the trailer /Info with document.ResolveDict, rebuilds it
 // with maps.Copy and writes the copy back at the same object number. It
 // consults no alloc-aware helper, so an earlier fixer's edit to /Info is

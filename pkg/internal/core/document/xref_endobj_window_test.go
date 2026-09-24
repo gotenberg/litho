@@ -15,10 +15,14 @@ import (
 // an incremental update can leave that far past the object: a superseded
 // definition keeps its bytes in the file but loses its xref entry, so the
 // window runs on through it and the backward scan finds the dead object's
-// "endobj". pdfjs issue15096.pdf supersedes object 264, whose abandoned copy
-// ends "endobj " (a space, not an EOL), and litho reported that against object
-// 263 under ISO 19005-2 §6.1.9 t1. veraPDF, which reads only the object in use,
-// reports nothing.
+// "endobj".
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15096.pdf: supersedes object 264, whose abandoned copy ends
+//     "endobj " (a space, not an EOL), and litho reported that against object
+//     263 under ISO 19005-2 §6.1.9 t1. veraPDF, which reads only the object in
+//     use, reports nothing.
 func TestValidateEndobjFormat_SupersededObjectBytes(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

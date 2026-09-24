@@ -20,8 +20,12 @@ func jpxImagePDF(filter, bpcEntry string) []string {
 //
 // Per ISO 32000-1, Table 89 the entry is optional for a JPXDecode image and
 // shall be ignored if present, because the depth belongs to the codestream.
-// pdfjs issue12213.pdf states 4 for an image poppler reads as 8, so reporting
-// the stated value handed the caller a number the spec says means nothing.
+// Reporting the stated value hands the caller a number the spec says means
+// nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12213.pdf: states 4 for an image poppler reads as 8.
 func TestImageMetaIgnoresBitsPerComponentForJPX(t *testing.T) {
 	t.Parallel()
 

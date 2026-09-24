@@ -34,6 +34,9 @@ func nsTestDoc(t *testing.T) (*document.Document, ast.PdfDict) {
 
 func ref(n int) ast.PdfIndirectRef { return ast.PdfIndirectRef{ObjectNum: n} }
 
+// TestNSRoleResolver pins how the namespace role resolver maps a structure
+// type and namespace to its standard type, through /RoleMapNS, the legacy
+// /RoleMap, and an element's own /NS.
 func TestNSRoleResolver(t *testing.T) {
 	ctx := context.Background()
 	doc, root := nsTestDoc(t)
@@ -77,6 +80,8 @@ func TestNSRoleResolver(t *testing.T) {
 	}
 }
 
+// TestDocumentNamespaceRule pins that a Document in the PDF 1.7 namespace
+// fails ISO 14289-2 §8.2.5.2 t2 and one in the PDF 2.0 namespace conforms.
 func TestDocumentNamespaceRule(t *testing.T) {
 	ctx := context.Background()
 

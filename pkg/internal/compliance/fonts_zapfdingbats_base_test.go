@@ -16,9 +16,13 @@ import (
 // built-in encoding, and ZapfDingbats is symbolic whether or not a font
 // descriptor says so; its built-in names (a1 to a191) carry no Unicode value.
 // litho read a descriptor-less ZapfDingbats as non-symbolic and gave it
-// StandardEncoding, so govdocs thread_300_300031.pdf's code 110, which its
-// /Differences does not name, read as the letter n. veraPDF reports the glyph
-// under ISO 14289-1 §7.21.7 t1.
+// StandardEncoding, so a code its /Differences does not name read as a Latin
+// letter. veraPDF reports the glyph under ISO 14289-1 §7.21.7 t1.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300031.pdf: its code 110, which its /Differences does
+//     not name, read as the letter n, and veraPDF reports the glyph.
 func TestToUnicode_ZapfDingbatsImplicitBase(t *testing.T) {
 	t.Parallel()
 

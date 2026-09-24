@@ -17,9 +17,13 @@ import (
 // content is present but unparseable, because litho cannot prove non-use. A
 // stream that fails to DECODE never reached that fallback: the error was
 // discarded and the page looked like one with no content at all, so every font
-// on it was skipped as unused. pdfjs issue17190_1.pdf declares one unembedded
-// TrueType font behind a truncated Flate stream, and veraPDF 1.30.2 reports the
-// embedding failure while litho reported nothing at all.
+// on it was skipped as unused.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue17190_1.pdf: declares one unembedded TrueType font behind a
+//     truncated Flate stream, and veraPDF 1.30.2 reports the embedding
+//     failure while litho reported nothing at all.
 func TestFontEmbeddingCheckedWhenContentWillNotDecode(t *testing.T) {
 	t.Parallel()
 

@@ -19,22 +19,25 @@ package compliance
 // Note #5946 does resolve them, by splitting on the underscore and mapping each
 // component. That algorithm governs OpenType glyph naming, not the glyph lists
 // 9.10.2 names: glyphlist.txt carries ff, fi and ffi but no f_f, f_i or f_f_i.
-// veraPDF reads it the same way, reporting pdfjs issue11016_reduced.pdf, whose
-// Calibre-Medium subset binds code 31 to f_f, as "The glyph can not be mapped
-// to Unicode".
-//
-// veraPDF ships two files that turn on the TeX names: 6-2-11-7-2-t01-fail-a.pdf
-// and 6-3-8-t01-fail-a.pdf both embed CMEX10 whose sole glyph is
-// integraldisplay, and both are reported failing the same way.
+// veraPDF reads it the same way, reporting such a glyph as "The glyph can not
+// be mapped to Unicode".
 //
 // Generated as the names in [encodings.GlyphToRune] and encodings.extendedAGL
 // that the Adobe Glyph List (glyphlist.txt 2.0, read through
 // fontTools.agl.LEGACY_AGL2UV) does not carry, less two sets that are admitted
 // in their own right. The first is [encodings.SymbolGlyphsUnicode]. The second
 // is the a1 to a191 series of the Adobe ZapfDingbats glyph list
-// (zapfdingbats.txt), which veraPDF resolves: govdocs thread_000_000859.pdf
-// binds code 1 to a71 through /Differences on an unembedded ZapfDingbats and
-// veraPDF reports nothing.
+// (zapfdingbats.txt), which veraPDF resolves.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11016_reduced.pdf: its Calibre-Medium subset binds code 31 to
+//     f_f, and veraPDF reports it as "The glyph can not be mapped to Unicode".
+//   - verapdf 6-2-11-7-2-t01-fail-a.pdf, 6-3-8-t01-fail-a.pdf: the two files
+//     that turn on the TeX names. Both embed CMEX10 whose sole glyph is
+//     integraldisplay, and both are reported failing the same way.
+//   - govdocs thread_000_000859.pdf: binds code 1 to a71 through /Differences
+//     on an unembedded ZapfDingbats, and veraPDF reports nothing.
 var nonAGLGlyphNames = map[string]bool{
 	"Complexes":             true,
 	"Integers":              true,

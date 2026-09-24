@@ -29,10 +29,16 @@ func TestMatchAFRelationship_ClaimsThePartFourSpelling(t *testing.T) {
 
 // TestMatchAFRelationship_StillClaimsWhatItAlreadyDid is the regression pin.
 //
-// Widening a matcher has already cost 12 corpus cells once this session, when a
-// new arm returned a negative and short-circuited the clauses below it. Every
-// unit test passed while those cells broke, because each asserted only the NEW
-// claim. This asserts the OLD ones survive.
+// Widening a matcher can break claims it already made, when a new arm returns
+// a negative and short-circuits the clauses below it. Every unit test passes
+// while that happens if each asserts only the NEW claim. This asserts the OLD
+// ones survive.
+//
+// # Corpus evidence
+//
+//   - All corpora: a widened matcher once cost 12 corpus cells when a new arm
+//     returned a negative and short-circuited the clauses below it, while
+//     every unit test passed.
 func TestMatchAFRelationship_StillClaimsWhatItAlreadyDid(t *testing.T) {
 	t.Parallel()
 

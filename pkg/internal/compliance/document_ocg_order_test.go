@@ -16,8 +16,12 @@ import (
 // makes /Order an array; its nested groupings are arrays too. Reading the
 // reference itself as an OCG recorded the array's own object number and
 // descended no further, so every OCG the file does list looked absent and
-// ISO 19005-2 §6.9 t3 fired: pdfjs cmykjpeg.pdf, issue11144_reduced.pdf and
-// transparent.pdf all write /Order as "N 0 R", and veraPDF reports none of them.
+// ISO 19005-2 §6.9 t3 fired.
+//
+// # Corpus evidence
+//
+//   - pdfjs cmykjpeg.pdf, issue11144_reduced.pdf, transparent.pdf: all write
+//     /Order as "N 0 R", and veraPDF reports none of them.
 func TestCheckOCGOrderCompleteness_IndirectOrder(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -118,7 +122,7 @@ func ocgOrderViolations(t *testing.T, ctx context.Context, order string, extra .
 }
 
 // TestCheckOCGOrderCompleteness_DeepNestingDoesNotFabricate pins that nesting
-// /Order past maxOCGOrderDepth does not fail a file that lists every OCG.
+// /Order past [maxOCGOrderDepth] does not fail a file that lists every OCG.
 //
 // The bound stopped the collection and the completeness loop then read every
 // OCG it had not reached as unreferenced. Measured on a file naming both OCGs

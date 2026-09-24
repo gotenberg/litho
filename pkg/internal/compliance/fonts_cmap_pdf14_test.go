@@ -18,8 +18,12 @@ import (
 // holding the CIDFont at Adobe-<collection> throughout: UniGB, UniJIS, UniKS and
 // UniCNS in -UTF16-, -UTF8- and -UTF32- forms all report, while the UCS2, EUC,
 // RKSJ and GBK names of the same collections pass. Parts 2 and later predefine
-// the whole family and report none of them. pdfjs issue18466.pdf carries
-// UniGB-UTF16-H over Adobe-GB1; eight pdfjs files share the shape.
+// the whole family and report none of them.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18466.pdf: carries UniGB-UTF16-H over Adobe-GB1.
+//   - pdfjs: eight files share that shape.
 func TestCMapUnicodeTransformFormatIsNotPDF14(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

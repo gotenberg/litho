@@ -60,9 +60,16 @@ func metadataOf(t *testing.T, data []byte) map[string]string {
 //
 // The raw scan exists to recover fields an unusable /Info cannot supply.
 // Preferring the newest date found anywhere second-guessed documents that
-// answered the question, and disagreed with pdf.js, poppler and Acrobat on 9
-// corpus fixtures: two Factur-X files whose XMP timestamp is written one second
-// after the /Info one, six govdocs files, and pdfjs bug1064894.pdf.
+// answered the question, and disagreed with pdf.js, poppler and Acrobat.
+//
+// # Corpus evidence
+//
+//   - All corpora: the newest-date rule disagreed with pdf.js, poppler and
+//     Acrobat on 9 fixtures.
+//   - facturx: two of them are files whose XMP timestamp is written one second
+//     after the /Info one.
+//   - govdocs: six of them.
+//   - pdfjs bug1064894.pdf: the ninth.
 func TestStatedModDateWinsOverTheRawScan(t *testing.T) {
 	t.Parallel()
 

@@ -209,12 +209,17 @@ func TestPipelineRemediateAfterDeleteIsNotAFalseRegression(t *testing.T) {
 //
 // The path applied the queued mutations and then seeded the remediation
 // overrides "last so they win", so a mutation touching the same page was
-// discarded. pdfjs bug1708041.pdf came out of
-// `litho pipe f remediate -profile PDF/A-2b rotate -angle 90` with no rotation
-// on any of its six pages, while the two commands run separately rotated it.
+// discarded.
 //
 // Driving w.rewriteOverrides directly keeps the test on the ordering itself
 // rather than on which fixers a given profile happens to run.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1708041.pdf: came out of
+//     `litho pipe f remediate -profile PDF/A-2b rotate -angle 90` with no
+//     rotation on any of its six pages, while the two commands run separately
+//     rotated it.
 func TestIncrementalWriteComposesOverridesWithMutations(t *testing.T) {
 	t.Parallel()
 

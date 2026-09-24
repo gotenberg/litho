@@ -84,15 +84,20 @@ func appearanceResourceFires(t *testing.T, apRes, pageRes string, part int) bool
 // defines.
 //
 // An appearance stream is a content stream (ISO 32000-1, 12.5.5), so the rule
-// reaches it, and veraPDF 1.30.2 reports it there: pdfjs issue14438.pdf runs
-// /OC /MC0 BDC in 2 of its 19 appearance streams whose own /Resources define no
-// /MC0, and veraPDF fails exactly those 2 while litho reported none.
+// reaches it, and veraPDF 1.30.2 reports it there.
 //
-// The page's resources fill in per name, which was measured on that file by
-// adding /MC0 to the page alone (veraPDF fell silent) and then by giving the
-// appearance stream a /Properties holding a different name while the page kept
-// /MC0 (still silent). A page-defined name is therefore not reported at all,
-// not even as the inherited-resource test.
+// The page's resources fill in per name, which was measured by adding /MC0 to
+// the page alone (veraPDF fell silent) and then by giving the appearance stream
+// a /Properties holding a different name while the page kept /MC0 (still
+// silent). A page-defined name is therefore not reported at all, not even as
+// the inherited-resource test.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14438.pdf: runs /OC /MC0 BDC in 2 of its 19 appearance
+//     streams whose own /Resources define no /MC0, and veraPDF fails exactly
+//     those 2 while litho reported none. Both per-name measurements were made
+//     on this file.
 func TestAppearanceStreamUndefinedResourceName(t *testing.T) {
 	t.Parallel()
 

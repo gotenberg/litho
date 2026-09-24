@@ -14,9 +14,11 @@ import (
 // (object 5). Object 6 is a shading pattern: a plain dictionary with no
 // /Resources at all, which the walk must skip rather than trip over.
 //
-// This is the shape the corpus actually carries: the veraPDF fixtures describe
-// it as "A Type1 Pattern uses an ExtGState, which contains the /ca key with
-// value 0.5 and is used for rendering on the page".
+// # Corpus evidence
+//
+//   - verapdf: the fixtures carry this shape and describe it as "A Type1
+//     Pattern uses an ExtGState, which contains the /ca key with value 0.5 and
+//     is used for rendering on the page".
 func patternTransparencyPDF() []byte {
 	return buildStructPDF(
 		"<< /Type /Catalog /Pages 2 0 R >>",

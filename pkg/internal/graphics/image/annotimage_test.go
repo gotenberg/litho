@@ -25,9 +25,14 @@ func annotImageObjs(annot string) []string {
 //
 // An annotation's normal appearance is a form XObject the page draws
 // (ISO 32000-1, 12.5.5) and its resources are its own, not the page's. Walking
-// only the page resources missed them entirely: pdfjs firefox_logo.pdf shows a
-// 512x543 image through a /Stamp annotation and nothing else, so `litho images`
-// reported an empty page while poppler drew one.
+// only the page resources missed them entirely, so a page showing an image only
+// through an annotation was reported empty.
+//
+// # Corpus evidence
+//
+//   - pdfjs firefox_logo.pdf: shows a 512x543 image through a /Stamp
+//     annotation and nothing else, so `litho images` reported an empty page
+//     while poppler drew one.
 func TestExtractImagesRecursiveFindsAnnotationImages(t *testing.T) {
 	t.Parallel()
 

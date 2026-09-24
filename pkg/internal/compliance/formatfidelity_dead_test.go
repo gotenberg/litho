@@ -7,6 +7,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
+// TestStreamEOLDiscriminator pins which stream defect messages
+// [isStreamEOLViolation] treats as EOL defects, and the per-part rule
+// [streamEOLRule] returns for them.
 func TestStreamEOLDiscriminator(t *testing.T) {
 	eol := []string{
 		"stream keyword followed by CR only (must be CR+LF or LF)",
@@ -37,6 +40,9 @@ func TestStreamEOLDiscriminator(t *testing.T) {
 	}
 }
 
+// TestMixedHeadingT03 pins that a PDF/UA-1 structure tree mixing the generic
+// H heading with numbered Hn headings fails ISO 14289-1 §7.4.4 t2 and t3
+// together.
 func TestMixedHeadingT03(t *testing.T) {
 	doc, _ := objsDocPDF(t,
 		"<< /Type /Catalog /Pages 2 0 R >>",

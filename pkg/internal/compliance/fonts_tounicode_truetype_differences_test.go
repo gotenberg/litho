@@ -14,11 +14,19 @@ import (
 // §9.10.2 derives a Unicode value from each without reading the program's cmap.
 //
 // veraPDF hangs ISO 19005-1 §6.3.8 t1 on its Glyph object and tests
-// `toUnicode != null`, so it passes the shape: pdfjs issue8613.pdf shows two
-// unembedded MSSansSerif fonts whose /Differences names the whole range, and
-// govdocs thread_300_300859.pdf an embedded ZJLCSM+Symbol whose only shown code
-// is named /bullet. litho reported both, and the same fonts again under
-// ISO 19005-2 §6.2.11.7.2.
+// `toUnicode != null`, so it passes the shape.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue8613.pdf: shows two unembedded MSSansSerif fonts whose
+//     /Differences names the whole range. litho reported it, and the same
+//     fonts again under ISO 19005-2 §6.2.11.7.2.
+//   - govdocs thread_300_300859.pdf: shows an embedded ZJLCSM+Symbol whose
+//     only shown code is named /bullet. litho reported it, and the same font
+//     again under ISO 19005-2 §6.2.11.7.2.
+//   - govdocs: veraPDF reports 16 files where a shown code /Differences never
+//     names falls to the base encoding, the shape the restriction control
+//     holds.
 func TestToUnicodeTrueTypeDifferencesNamesEveryShownCode(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -60,7 +68,7 @@ func TestToUnicodeTrueTypeDifferencesNamesEveryShownCode(t *testing.T) {
 			// never names falls to the base encoding, which for a TrueType only
 			// implies a name. ISO 32000-1 §9.6.6.4 resolves it through the
 			// program's own cmap, which this check cannot read, and veraPDF
-			// reports 16 govdocs files of exactly that shape.
+			// reports that shape.
 			if got := build(profile, "[ 33 /bullet ]", used(33, 34)); len(got) == 0 {
 				t.Error("a shown code /Differences does not name must still require /ToUnicode")
 			}

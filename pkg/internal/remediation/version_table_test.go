@@ -83,6 +83,13 @@ func assertRequiredVersion(t *testing.T, want string, run func(*document.Documen
 	}
 }
 
+// TestRemediate_RequiredVersionPerProfile pins the output PDF version each
+// profile's remediation requires.
+//
+// # Corpus evidence
+//
+//   - All corpora: no fixture exercises either WTPDF level, so this test is the
+//     only coverage those two arms have.
 func TestRemediate_RequiredVersionPerProfile(t *testing.T) {
 	ctx := context.Background()
 
@@ -132,8 +139,7 @@ func TestRemediate_RequiredVersionPerProfile(t *testing.T) {
 	// a PDF/UA-2 prefix: validation normalises a WTPDF run to the PDF/UA-2
 	// identifier, but RemediateWTPDF passes the level through verbatim.
 	//
-	// No corpus fixture exercises either level, so this test is the only
-	// coverage these two arms have.
+	// This test is the only coverage these two arms have.
 	t.Run("WTPDF", func(t *testing.T) {
 		for _, tc := range []struct {
 			profile models.WTPDFProfile

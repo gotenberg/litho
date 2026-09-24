@@ -8,7 +8,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// Mutations queued on one [pkg/pdf.Writer] share ONE allocator and are applied
+// TestFlattenForm_KeepsAnEarlierMutationsCatalogWrite pins that a flatten
+// queued after an attachment keeps the catalog entries the attachment wrote.
+//
+// Mutations queued on one pkg/pdf Writer share ONE allocator and are applied
 // in order with no flush between them, so a mutation that rewrites a whole
 // dictionary must read it through the allocator or it discards whatever an
 // earlier mutation wrote to the same object.
@@ -21,8 +24,12 @@ import (
 // Worth pinning because nothing else catches it. Remediation survives this
 // class through the fix-to-fixpoint loop in pkg/pdf, which reopens the output
 // and reapplies a discarded repair; mutations have no such loop, so a clobber
-// here is permanent and reaches the output file. The corpus gate scores
-// neither attachments nor flatten, so it cannot see this either.
+// here is permanent and reaches the output file.
+//
+// # Corpus evidence
+//
+//   - All corpora: the gate scores neither attachments nor flatten, so it
+//     cannot see this either.
 func TestFlattenForm_KeepsAnEarlierMutationsCatalogWrite(t *testing.T) {
 	ctx := context.Background()
 	doc := attachDoc(t,

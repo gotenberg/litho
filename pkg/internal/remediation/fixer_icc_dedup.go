@@ -208,6 +208,11 @@ func iccProfileData(ctx context.Context, doc *document.Document, stream ast.PdfS
 // dedupICCInResources walks a page's resources and rewrites /CSx =
 // [/ICCBased ref] entries whose stream matches one of profiles. The paired
 // device colour space is chosen by the profile's component count.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20722.pdf: rewriting /DefaultRGB to /DeviceRGB lost every
+//     character of 77 pages, page 1 of 223 entirely.
 func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, profiles [][]byte, visited map[int]bool) int {
 	resObj, ok := pe.dict["Resources"]
 	if !ok {
@@ -230,10 +235,10 @@ func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	for key, entry := range csDict {
 		// A default colour space exists to remap the device space of the same
 		// name to a calibrated one (ISO 32000-1, 8.6.5.6), so rewriting
-		// /DefaultRGB to /DeviceRGB defines it as the very space it redirects.
-		// pdfjs issue20722.pdf lost every character of 77 pages that way, page
-		// 1 of 223 entirely, and it undoes the //Default injection this same
-		// remediation pass performs to cover device colour usage.
+		// /DefaultRGB to /DeviceRGB defines it as the very space it redirects,
+		// which can blank whole pages of text, and it undoes the //Default
+		// injection this same remediation pass performs to cover device colour
+		// usage.
 		if isDefaultColourSpaceKey(key) {
 			continue
 		}

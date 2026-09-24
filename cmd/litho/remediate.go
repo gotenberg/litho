@@ -138,7 +138,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 
 	// -o - writes the document to stdout, so the report goes to stderr rather
-	// than landing inside the bytes the caller is capturing. See [reportWriter].
+	// than landing inside the bytes the caller is capturing. See reportWriter.
 	reportOut := reportWriter(*output, stdout, stderr)
 
 	switch *format {

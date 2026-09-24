@@ -176,7 +176,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	}
 
 	// -o - writes the document to stdout, so the report goes to stderr rather
-	// than landing inside the bytes the caller is capturing. See [reportWriter].
+	// than landing inside the bytes the caller is capturing. See reportWriter.
 	return printRedactReport(reportWriter(*output, stdout, stderr), stderr, *format, fs.Arg(0), report)
 }
 

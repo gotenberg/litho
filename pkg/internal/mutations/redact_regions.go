@@ -107,7 +107,7 @@ func RedactPageRegions(
 	// registers no objects at all, or a caller that handled the error would
 	// still write a half-edited document. Restore is lossless here because
 	// every edit is a fresh object handed to AllocAt, never an AST mutated in
-	// place, which is the condition [writer.ObjAllocator.Snapshot] documents.
+	// place, which is the condition writer.ObjAllocator.Snapshot documents.
 	snap := alloc.Snapshot()
 	report, err := redactPageRegions(ctx, alloc, doc, page, regions)
 	if err != nil {
@@ -220,7 +220,7 @@ func redactPageRegions(
 	// clipping one is content to refuse over. Both need its geometry.
 	machine.RecordPathBoxes = true
 	// A removed show operator takes its advance with it, and later text on the
-	// same line is positioned by that advance. See [removedShowReplacement].
+	// same line is positioned by that advance. See removedShowReplacement.
 	machine.RecordShowAdvances = true
 
 	elements, origins, fontRefs, err := typography.ExtractElementsWithAttribution(ctx, doc, machine, page, ops)
@@ -251,7 +251,7 @@ func redactPageRegions(
 	// An image cannot be cleared by removing operators: a single Do carries the
 	// whole picture, so dropping it would take the parts the region never
 	// selected. Blanking the covered samples clears exactly what was asked, and
-	// refuses when it cannot. See [blankImage].
+	// refuses when it cannot. See blankImage.
 	for _, box := range machine.ImageBoxes() {
 		painted := heuristics.ZoneFromRect([4]float64{box.MinX, box.MinY, box.MaxX, box.MaxY})
 		covered := false
@@ -294,7 +294,7 @@ func redactPageRegions(
 	// whole: every glyph it drew has to agree about the regions.
 	//
 	// The glyphs are also where the removed text lives. One element is one
-	// glyph on this path ([typography.CoalesceElements] merges them into runs
+	// glyph on this path (typography.CoalesceElements merges them into runs
 	// and is deliberately not called here), so the run an operator drew is its
 	// glyphs joined in the order they were appended.
 	type coverage struct {
@@ -303,7 +303,7 @@ func redactPageRegions(
 		mcids           []int
 		// fontRef is the font every glyph of this operator was drawn with: one
 		// show-text operator paints with whatever Tf last selected. It holds
-		// [typography.FontUnattributable] until a glyph names a font, so an
+		// typography.FontUnattributable until a glyph names a font, so an
 		// operator drawn with a font that has no object number is never
 		// mistaken for one drawn with object zero.
 		fontRef int
@@ -390,9 +390,10 @@ func redactPageRegions(
 	}
 	sort.Ints(report.FontsFullyRemovedOnPage)
 
-	// ExcisePageSpans sorts and rejects overlaps, so the two sets need no
+	// EditPageSpans sorts and rejects overlaps, so the two sets need no
 	// ordering here. A path run that somehow enclosed a show-text operator
 	// would be caught there as an overlap rather than silently merged.
+	//
 	// Which marked content went and which stayed. An identifier can appear on
 	// both sides when it covers operators the region split between, and the
 	// scrub has to see that rather than clear an element describing both.

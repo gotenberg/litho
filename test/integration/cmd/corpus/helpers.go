@@ -8,24 +8,31 @@ import (
 )
 
 // perFileTimeout caps how long a single fixture may take through any
-// feature. Large documents take a couple of seconds even on the happy
-// path and parallel corpus runs add contention, so the ceiling sits
-// well above the per-file happy-path cost.
+// feature. Anti-hang guard: large documents take a couple of seconds even
+// on the happy path and parallel corpus runs add contention, so the
+// ceiling sits well above the per-file happy-path cost.
 const perFileTimeout = 20 * time.Second
 
 // prepareFixtureTimeout caps one fixture's remediation inside a feature's
 // prepare stage. It is an anti-hang guard, not a performance target: the
 // scoring path bounds fixtures with [perFileTimeout], but the prepare
 // goroutines ran unbounded, so a single non-returning remediate wedged the
-// whole matrix run behind wg.Wait() with no ceiling and no diagnostic. A
-// whole corpus averages well under a second per fixture, so this leaves two
-// orders of magnitude of headroom for the slowest real document.
+// whole matrix run behind wg.Wait() with no ceiling and no diagnostic. Three
+// minutes leaves two orders of magnitude of headroom over the average
+// fixture, room for the slowest real document.
+//
+// # Corpus evidence
+//
+//   - All corpora: a whole corpus averages well under a second per fixture.
 const prepareFixtureTimeout = 3 * time.Minute
 
 // veraPDFBatchTimeout caps one batched VeraPDF invocation over a staging
 // directory. Anti-hang guard: a wedged JVM or an unclosed stdout pipe would
-// otherwise block forever, since the prepare context has no deadline. The
-// largest bucket validates in a couple of minutes.
+// otherwise block forever, since the prepare context has no deadline.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest bucket validates in a couple of minutes.
 const veraPDFBatchTimeout = 30 * time.Minute
 
 // veraPDFSingleTimeout caps the one-file VeraPDF retry used when the batch
@@ -177,7 +184,7 @@ type cachedRun struct {
 
 // stripUndefinedControls removes the bytes PDFDocEncoding leaves
 // undefined (ISO 32000-1 Table D.2: 0x00-0x08, 0x0B, 0x0E-0x17, 0x7F)
-// from a string. Litho's [document.DecodePdfString] drops these bytes
+// from a string. Litho's document.DecodePdfString drops these bytes
 // at decode time, so litho-extracted /Info dict fields come out
 // clean ("Title" rather than "Title\x00"). PDF.js passes them through
 // as raw runes (U+0000, etc.) and the captured golden carries the
@@ -186,7 +193,7 @@ type cachedRun struct {
 // genuine field differences.
 //
 // Mirrors the four defined low controls (HT, LF, FF, CR) that
-// [pdfDocEncodingUndefined] preserves: they round-trip through both
+// document's pdfDocEncodingUndefined preserves: they round-trip through both
 // engines and remain meaningful inside strings.
 func stripUndefinedControls(s string) string {
 	if s == "" {

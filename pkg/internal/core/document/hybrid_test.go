@@ -66,8 +66,7 @@ func buildHybridPDF() ([]byte, int64, int64) {
 	writeEntry(2, 1, int64(off2), 0)
 	// Obj 3: normal at off3new (the CORRECT offset).
 	writeEntry(3, 1, int64(off3new), 0)
-	// Obj 4: this stream itself (will be filled in after we know the offset).
-	// We'll use a placeholder and fix it after.
+	// Obj 4: this stream itself, written once its offset is known.
 
 	off4 := buf.Len()
 	// Fix object 4's entry to point to itself.

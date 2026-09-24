@@ -225,8 +225,8 @@ func encryptionVersionFloor(alloc *ObjAllocator, trailer ast.PdfDict) string {
 }
 
 // resolvePending returns obj as a dictionary, following one level of
-// indirection through the allocator. [applyEncryption] stores the /Encrypt
-// dictionary as an indirect reference, while a nested /CF sits inline.
+// indirection through the allocator. mutations.applyEncryption stores the
+// /Encrypt dictionary as an indirect reference, while a nested /CF sits inline.
 func resolvePending(alloc *ObjAllocator, obj ast.PdfObject) (ast.PdfDict, bool) {
 	switch v := obj.(type) {
 	case ast.PdfDict:

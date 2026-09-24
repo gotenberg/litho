@@ -54,9 +54,12 @@ func embeddedNames(t *testing.T, b []byte) ([]string, int) {
 // operations.
 //
 // They hang off the catalog name tree (ISO 32000-1, 7.7.4) and both operations
-// build a fresh catalog, so every attachment used to be lost: all 150 facturx
-// fixtures came out of a merge without the ZUGFeRD-invoice.xml that IS the
-// invoice.
+// build a fresh catalog, so every attachment used to be lost.
+//
+// # Corpus evidence
+//
+//   - facturx: all 150 fixtures came out of a merge without the
+//     ZUGFeRD-invoice.xml that IS the invoice.
 func TestSplitMerge_KeepEmbeddedFiles(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -142,8 +145,12 @@ func indirectKeyAttachmentPDF() []byte {
 //
 // A key may be indirect like any other object. Asserting the type directly
 // skipped the entry, and because the collected set is what gets rewritten, both
-// collectors turned that into DELETION: pdfjs issue18444.pdf lost
-// quitecommands.xml on any attach, split or merge.
+// collectors turned that into DELETION.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18444.pdf: the file lost quitecommands.xml on any attach,
+//     split or merge.
 func TestCollectEmbeddedFiles_ResolvesIndirectKeys(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

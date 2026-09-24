@@ -55,9 +55,12 @@ func TestMatchGraphics_ClaimsTransferFunctionsInEverySpelling(t *testing.T) {
 }
 
 // TestMatchGraphics_IgnoresTheBitsPerComponentTests is the negative control.
-// Those tests share a clause with rules this fixer does claim, carry no corpus
-// cells, and have no repair here: claiming them would assert coverage that does
-// not exist.
+// Those tests share a clause with rules this fixer does claim and have no
+// repair here: claiming them would assert coverage that does not exist.
+//
+// # Corpus evidence
+//
+//   - All corpora: the /BitsPerComponent tests carry no corpus cells.
 func TestMatchGraphics_IgnoresTheBitsPerComponentTests(t *testing.T) {
 	t.Parallel()
 

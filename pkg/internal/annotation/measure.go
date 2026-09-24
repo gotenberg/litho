@@ -159,8 +159,8 @@ func parseRLMeasure(ctx context.Context, doc *document.Document, measureObj ast.
 
 // parseNumberFormatArray extracts the first number format dictionary from an
 // array and returns the unit, conversion factor, and decimal count.
-// PDF spec: the value is an array of Number Format dictionaries; we take
-// the first entry which defines the primary display format.
+// PDF spec: the value is an array of Number Format dictionaries; the first
+// entry defines the primary display format and is the one taken.
 func parseNumberFormatArray(ctx context.Context, doc *document.Document, obj ast.PdfObject) models.ScaleAxis {
 	arr, err := document.ResolveArray(ctx, doc, obj)
 	if err != nil || arr == nil {

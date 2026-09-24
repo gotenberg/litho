@@ -56,6 +56,12 @@ type FullRewriteConfig struct {
 
 // FullRewrite performs a complete rewrite of the document, applying the
 // override set and optionally encrypting or decrypting the output.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18986.pdf, issue9418.pdf: the xref wrongly marks the catalog
+//     object free, or points /Root at a non-catalog, so copying the trailer
+//     /Root yielded a rootless output with no pages.
 func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) error {
 	doc := cfg.Doc
 	alloc := writer.NewObjAllocator(0)
@@ -67,10 +73,10 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 	// Copy the catalog (root of the object graph). Prefer the trailer /Root,
 	// but only when it resolves to a real catalog. A file whose xref wrongly
 	// marks the catalog object free, or points /Root at a non-catalog, resolves
-	// the ref to null; copying that ref yields a rootless output with no pages
-	// (pdfjs issue18986/issue9418). In that case copy the recovered catalog
-	// dict the reader synthesises, so the rewrite reproduces what the reader
-	// reads, the same way it recovers a trailer that lost /Root entirely.
+	// the ref to null; copying that ref yields a rootless output with no pages.
+	// In that case copy the recovered catalog dict the reader synthesises, so
+	// the rewrite reproduces what the reader reads, the same way it recovers a
+	// trailer that lost /Root entirely.
 	catalogRef, hasRef := CatalogRef(ctx, doc)
 	var newCatalogRef ast.PdfIndirectRef
 	if hasRef && catalogRefResolves(ctx, doc, catalogRef) {
@@ -118,17 +124,17 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 		}
 	}
 
-	// Shared with [Split] and [Merge] so the three write paths cannot drift:
-	// see [applyEncryption] for the ordering the sweep depends on.
+	// Shared with Split and Merge so the three write paths cannot drift: see
+	// applyEncryption for the ordering the sweep depends on.
 	if cfg.EncryptCfg != nil {
 		if err := applyEncryption(ctx, alloc, trailer, cfg.EncryptCfg); err != nil {
 			return err
 		}
 	}
 
-	// Decryption: the reader already decrypted all objects during resolution.
-	// The copier copies the decrypted data. We just omit /Encrypt from the
-	// trailer (which we already did by not copying it).
+	// Decryption: the reader already decrypted all objects during resolution,
+	// and the copier copies the decrypted data. All that remains is to omit
+	// /Encrypt from the trailer, which the trailer built above never copies.
 
 	version := cfg.Version
 	if version == "" && cfg.RequiredVersion != "" {
@@ -168,9 +174,7 @@ func catalogRefResolves(ctx context.Context, doc *document.Document, ref ast.Pdf
 // pointing at a null object is not a document: pikepdf refuses the file with
 // "unable to find page tree". A damaged source produces exactly that, and
 // faithfully so, because ISO 32000-1, 7.3.9 makes a reference to a missing
-// object equivalent to null. pdfjs poppler-937-0-fuzzed.pdf, whose /Kids array
-// opens with a NUL byte instead of "[", rewrote 1666 bytes into 344 whose whole
-// body was "1 0 obj null" under a catalog naming it.
+// object equivalent to null.
 //
 // An empty tree rather than a refusal, because the reader already reports the
 // document as zero pages: the rewrite then says the same thing in a form every
@@ -181,6 +185,12 @@ func catalogRefResolves(ctx context.Context, doc *document.Document, ref ast.Pdf
 // says the file does define the page tree and litho merely failed to load it,
 // an empty tree would answer a question the source never asked, so report
 // [ErrPageTreeNotReproduced] instead. See [pageTreeWasLost].
+//
+// # Corpus evidence
+//
+//   - pdfjs poppler-937-0-fuzzed.pdf: its /Kids array opens with a NUL byte
+//     instead of "[", and the rewrite turned its 1666 bytes into 344 whose
+//     whole body was "1 0 obj null" under a catalog naming it.
 func ensurePageTree(alloc *writer.ObjAllocator, catalogRef ast.PdfIndirectRef, pageTreeLost bool) error {
 	catalog, ok := alloc.Pending()[catalogRef.ObjectNum].(ast.PdfDict)
 	if !ok || pageTreeResolves(alloc, catalog["Pages"]) {
@@ -213,9 +223,14 @@ func ensurePageTree(alloc *writer.ObjAllocator, catalogRef ast.PdfIndirectRef, p
 // empty page tree exists for: ISO 32000-1, 7.3.9 makes that reference null, the
 // document has no pages to begin with, and pikepdf rejects it outright. An
 // object the cross-reference table does list is different. litho merely failed
-// to load it, as on an encrypted pdfjs file whose page tree sits in an object
-// stream that would not decode, and substituting an empty tree there hands back
-// a document stripped of every page.
+// to load it, as when an encrypted file's page tree sits in an object stream
+// that does not decode, and substituting an empty tree there hands back a
+// document stripped of every page.
+//
+// # Corpus evidence
+//
+//   - pdfjs: an encrypted file's page tree sits in an object stream that would
+//     not decode, while its cross-reference table lists the page tree as live.
 func pageTreeWasLost(ctx context.Context, doc *document.Document) bool {
 	resolved, err := document.ResolveCatalog(ctx, doc)
 	if err != nil || resolved == nil || resolved.Dict == nil {

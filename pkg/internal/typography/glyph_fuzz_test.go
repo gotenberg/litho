@@ -25,7 +25,7 @@ import (
 //
 // A package-level coverage census cannot see this. cmap's own FuzzCMapMapping
 // drives the parser to 100% of cmap.go, and the typography package "has fuzz
-// targets" -- yet the consumer between them was untouched.
+// targets", yet the consumer between them was untouched.
 
 // wellFormedToUnicode is a one-byte codespace with a single bfchar, so the
 // mapper resolves rather than falling through every branch.
@@ -35,7 +35,7 @@ const wellFormedToUnicode = "begincmap\n" +
 	"endcmap\n"
 
 // twoByteToUnicode declares a two-byte codespace so Map reports n == 2. The
-// Type0 branches in decodeNextChar and the two-byte charCode in processText are
+// Type0 branches in [decodeNextChar] and the two-byte charCode in [processText] are
 // reachable only through a CMap of this shape, and no mutation of a one-byte
 // codespace produces one.
 const twoByteToUnicode = "begincmap\n" +
@@ -43,22 +43,26 @@ const twoByteToUnicode = "begincmap\n" +
 	"1 beginbfchar\n<0041> <0041>\nendbfchar\n" +
 	"endcmap\n"
 
-// zeroWidthCMapSrcForFuzz is the shape that hung ExtractText. "<>" is a
+// zeroWidthCMapSrcForFuzz is the shape that hung [ExtractText]. "<>" is a
 // syntactically valid empty hex string, so the CMap parses; before the parse
 // guard landed it produced a codespace of width zero and a mapping keyed by the
 // empty string, which together made Map report a match consuming no bytes.
-// Seeding it keeps a regression in that guard inside this target rather than
-// leaving it to the corpus, which never carried such a file.
+// Seeding it keeps a regression in that guard inside this target.
+//
+// # Corpus evidence
+//
+//   - All corpora: no corpus file carries such a CMap, so the corpus cannot
+//     catch a regression in the guard.
 const zeroWidthCMapSrcForFuzz = "begincmap\n" +
 	"1 begincodespacerange\n<> <>\nendcodespacerange\n" +
 	"1 beginbfchar\n<> <0041>\nendbfchar\n" +
 	"endcmap\n"
 
-// fuzzFont builds the font decodeNextChar consults. Every field it branches on
+// fuzzFont builds the font [decodeNextChar] consults. Every field it branches on
 // comes from the fuzzer, and the two optional maps are behind flags rather than
 // always present: LigatureOverrides is consulted FIRST, so setting it
 // unconditionally hides the Encoding and fallback paths behind it, and a
-// non-nil GIDToUnicode with CIDWidths forces resolveGlyphFallback down its GID
+// non-nil GIDToUnicode with CIDWidths forces [resolveGlyphFallback] down its GID
 // branch and hides the CIDIdentityFallback one. Gating each keeps both sides
 // of those decisions reachable.
 func fuzzFont(cm *cmap.CMap, subtype string, code byte, r rune, cidFallback, suppress, withLigature, withGIDTable bool, cidOffset int) *Font {
@@ -83,8 +87,8 @@ func fuzzFont(cm *cmap.CMap, subtype string, code byte, r rune, cidFallback, sup
 	return f
 }
 
-// FuzzDecodeNextChar asserts the byte count decodeNextChar reports is always a
-// usable stride. processText advances the string by it, so n < 1 loops forever
+// FuzzDecodeNextChar asserts the byte count [decodeNextChar] reports is always a
+// usable stride. [processText] advances the string by it, so n < 1 loops forever
 // and n > len(data) slices past the end: both are the caller's crash, not this
 // function's, which is why the invariant is asserted here rather than left to
 // the loop to discover.
@@ -205,8 +209,8 @@ func TestGlyphFuzzSeedsReachTheLoop(t *testing.T) {
 }
 
 // TestTwoByteSeedReachesTheType0Paths pins the seed that exists solely to make
-// Map report n == 2. Without it the Type0 branches in decodeNextChar and the
-// two-byte charCode in processText are unreachable, and the target would look
+// Map report n == 2. Without it the Type0 branches in [decodeNextChar] and the
+// two-byte charCode in [processText] are unreachable, and the target would look
 // healthy while never entering them.
 func TestTwoByteSeedReachesTheType0Paths(t *testing.T) {
 	t.Parallel()

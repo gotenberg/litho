@@ -158,8 +158,8 @@ type kidWidget struct {
 // 12.7.3.1), so dropping it from the page alone leaves the field naming an
 // annotation no page carries. Removing it there is one hop: the field is the
 // direct parent, and nothing further up has to be walked. That matters, because
-// /Parent chains in the wild are not always trees — 16 of them cycle in one
-// corpus file — and a walk would need the cycle guard [rootFieldOf] carries.
+// /Parent chains in the wild are not always trees, and a walk would need the
+// cycle guard [rootFieldOf] carries.
 //
 // A field whose last kid goes keeps the field and loses the /Kids entry rather
 // than being removed itself. Roughly half the fields carrying /Kids have exactly
@@ -171,6 +171,10 @@ type kidWidget struct {
 //
 // Parents are read alloc-first and grouped, so two widgets under one field, or a
 // field pruned again for a later page, compose rather than overwrite each other.
+//
+// # Corpus evidence
+//
+//   - All corpora: one file carries 16 /Parent chains that cycle.
 func pruneKidWidgets(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,

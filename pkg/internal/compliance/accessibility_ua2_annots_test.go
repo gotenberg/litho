@@ -27,6 +27,9 @@ func ua2AnnotViolations(t *testing.T, annotObj string, extra ...string) []Violat
 	return checkPDFUA2AnnotationConstraints(context.Background(), doc, cat, "PDF/UA-2")
 }
 
+// TestOCConfigAS_UA2 pins that an /AS in an optional content configuration
+// reports ISO 14289-2 §8.7 t2 under PDF/UA-2 and ISO 14289-1 §7.10 t2 under
+// PDF/UA-1.
 func TestOCConfigAS_UA2(t *testing.T) {
 	ctx := context.Background()
 	doc, cat := objsDocPDF(t,
@@ -42,6 +45,8 @@ func TestOCConfigAS_UA2(t *testing.T) {
 	}
 }
 
+// TestUA2ForbiddenAnnots pins that a TrapNet annotation is forbidden outright
+// (ISO 14289-2 §8.9.2.4.15 t1).
 func TestUA2ForbiddenAnnots(t *testing.T) {
 	// TrapNet is forbidden outright.
 	if got := ua2AnnotViolations(t, "<< /Type /Annot /Subtype /TrapNet >>"); !hasRule(got, Rule_14289_2_8_9_2_4_15_t01) {
@@ -49,6 +54,9 @@ func TestUA2ForbiddenAnnots(t *testing.T) {
 	}
 }
 
+// TestUA2ArtifactRequiredAnnots pins that a Popup (ISO 14289-2 §8.9.2.4.9 t1)
+// and a PrinterMark (§8.9.2.4.14 t1) fail in the structure tree and pass as
+// artifacts.
 func TestUA2ArtifactRequiredAnnots(t *testing.T) {
 	// Popup and PrinterMark must be artifacts: in the structure tree they fail.
 	if got := ua2AnnotViolations(t, "<< /Type /Annot /Subtype /Popup /StructParent 0 >>"); !hasRule(got, Rule_14289_2_8_9_2_4_9_t01) {
@@ -65,6 +73,8 @@ func TestUA2ArtifactRequiredAnnots(t *testing.T) {
 	}
 }
 
+// TestUA2AnnotContentsRequired pins that Ink, 3D and RichMedia annotations
+// need a /Contents entry (ISO 14289-2 §8.9.2.4.8 t1 and §8.9.2.4.19 t1 and t2).
 func TestUA2AnnotContentsRequired(t *testing.T) {
 	cases := []struct {
 		subtype string
@@ -84,6 +94,8 @@ func TestUA2AnnotContentsRequired(t *testing.T) {
 	}
 }
 
+// TestUA2StampNameOrContents pins that a Stamp annotation needs a /Name or a
+// /Contents entry (ISO 14289-2 §8.9.2.4.7 t1).
 func TestUA2StampNameOrContents(t *testing.T) {
 	if got := ua2AnnotViolations(t, "<< /Type /Annot /Subtype /Stamp >>"); !hasRule(got, Rule_14289_2_8_9_2_4_7_t01) {
 		t.Errorf("Stamp without /Name or /Contents: got %v, want includes §8.9.2.4.7 t1", got)
@@ -96,6 +108,9 @@ func TestUA2StampNameOrContents(t *testing.T) {
 	}
 }
 
+// TestUA2ZeroSizeWidgetArtifact pins that a zero-size widget in the structure
+// tree fails ISO 14289-2 §8.9.2.4.13 t1, while one outside it, or a sized one
+// inside it, passes.
 func TestUA2ZeroSizeWidgetArtifact(t *testing.T) {
 	// Zero-size widget in the structure tree must be an artifact.
 	if got := ua2AnnotViolations(t, "<< /Type /Annot /Subtype /Widget /Rect [10 10 10 10] /StructParent 0 >>"); !hasRule(got, Rule_14289_2_8_9_2_4_13_t01) {
@@ -111,6 +126,8 @@ func TestUA2ZeroSizeWidgetArtifact(t *testing.T) {
 	}
 }
 
+// TestUA2ScreenContents pins that a Screen annotation needs a /Contents entry
+// (ISO 14289-2 §8.9.2.4.12 t1).
 func TestUA2ScreenContents(t *testing.T) {
 	if got := ua2AnnotViolations(t, "<< /Type /Annot /Subtype /Screen >>"); !hasRule(got, Rule_14289_2_8_9_2_4_12_t01) {
 		t.Errorf("Screen without /Contents: got %v, want includes §8.9.2.4.12 t1", got)
@@ -120,6 +137,8 @@ func TestUA2ScreenContents(t *testing.T) {
 	}
 }
 
+// TestUA2FileAttachmentAFRelationship pins that a FileAttachment annotation's
+// file specification needs /AFRelationship (ISO 14289-2 §8.9.2.4.10 t1).
 func TestUA2FileAttachmentAFRelationship(t *testing.T) {
 	annot := "<< /Type /Annot /Subtype /FileAttachment /FS 5 0 R >>"
 	if got := ua2AnnotViolations(t, annot, "<< /Type /Filespec /F (a.txt) >>"); !hasRule(got, Rule_14289_2_8_9_2_4_10_t01) {
@@ -130,6 +149,9 @@ func TestUA2FileAttachmentAFRelationship(t *testing.T) {
 	}
 }
 
+// TestUA2AnnotArtifactFlags pins ISO 14289-2 §8.9.2.2: in the structure tree,
+// an Invisible annotation fails t1 and a NoView one without ToggleNoView fails
+// t2, while an artifact passes.
 func TestUA2AnnotArtifactFlags(t *testing.T) {
 	flagViolations := func(annotObj string) []Violation {
 		doc, cat := objsDocPDF(t,

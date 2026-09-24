@@ -57,7 +57,7 @@ func (f *splitFeature) LoadGoldens(_ string) error { return nil }
 
 // HasGolden returns true for every fixture: every PDF is a candidate
 // for a split round-trip. Per-PDF skips (single-page, OCR-only) are
-// emitted from [Run] / [Compare].
+// emitted from [splitFeature.Run] / [splitFeature.Compare].
 func (f *splitFeature) HasGolden(_ string) bool { return true }
 
 type splitOutput struct {

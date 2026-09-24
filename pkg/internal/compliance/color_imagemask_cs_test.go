@@ -9,10 +9,15 @@ import (
 // TestColorScope_ImageMaskColorSpaceIgnored pins that a /ColorSpace written on
 // an image mask selects no colour: ISO 32000-1, 8.9.5, Table 89 does not allow
 // the entry on a mask, whose unmasked areas take the current fill colour
-// (8.9.6.2). pdfjs issue11518.pdf gives its masks /ColorSpace /DeviceGray while
-// filling them in an ICCBased space, and veraPDF reports no device colour. With
-// no fill space selected the initial DeviceGray still counts. Every case was
-// measured against veraPDF.
+// (8.9.6.2). A mask can carry /ColorSpace /DeviceGray while it is filled in an
+// ICCBased space, and that mask uses no device colour. With no fill space
+// selected the initial DeviceGray still counts. Every case was measured against
+// veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11518.pdf: gives its masks /ColorSpace /DeviceGray while
+//     filling them in an ICCBased space, and veraPDF reports no device colour.
 func TestColorScope_ImageMaskColorSpaceIgnored(t *testing.T) {
 	t.Parallel()
 

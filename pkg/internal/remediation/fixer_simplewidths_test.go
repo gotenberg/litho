@@ -50,7 +50,7 @@ func cmapTableWindowsBMP(subtable []byte) []byte {
 // enough for a CIDFont whose /W is CID-indexed. A SIMPLE font resolves its
 // codes through the program's cmap, so without one
 // [compliance.ExpectedSimpleFontWidths] returns ok=false and the width repair
-// is unreachable — the branch this fixture exists to cover.
+// is unreachable, which is the branch this fixture exists to cover.
 //
 // Records stay sorted by tag, as the sfnt format expects.
 func probeTrueTypeWithCmap(advance, code, gid uint16) []byte {
@@ -95,7 +95,7 @@ func probeTrueTypeWithCmap(advance, code, gid uint16) []byte {
 // glyph probeTrueTypeWithCmap gives the advance.
 //
 // /Flags 32 is non-symbolic (bit 6). With the symbolic bit set,
-// [compliance.isSymbolicFont] would divert to the (3,0) symbol cmap this
+// compliance.isSymbolicFont would divert to the (3,0) symbol cmap this
 // fixture does not carry, and the metrics would not resolve.
 func simpleWidthsPDF(declared int, advance uint16) []byte {
 	program := probeTrueTypeWithCmap(advance, 'A', 1)
@@ -134,14 +134,19 @@ func simpleWidthAfterFix(t *testing.T, alloc *writer.ObjAllocator) (float64, boo
 // TestFixFontIssues_RepairsSimpleFontWidthsUnderPDFUA covers the SIMPLE-font
 // /Widths branch, which the Type0 /W test does not reach.
 //
-// The two branches sit behind one gate but are different code:
-// fixer_fonts.go:197-247 rewrites /Widths for a simple font, :327-347 rewrites
-// /W and /DW for a Type0 font. Of the corpus carriers that exercise the PDF/UA
-// width rules, 15 of 20 are simple fonts and only 5 are Type0, and the fixture
-// used to verify the repair end to end was /Subtype /Type1 — so the corpus and
-// the probe cover the SIMPLE branch while
-// TestFixFontIssues_RepairsWidthsReportedUnderPDFUA covers the Type0 one.
+// The two branches sit behind one gate but are different code: fixSimpleFont
+// in fixer_fonts.go rewrites /Widths for a simple font, and fixType0Font
+// rewrites /W and /DW for a Type0 font. Most real carriers of the PDF/UA width
+// rules are simple fonts, so real files and this probe cover the SIMPLE branch
+// while TestFixFontIssues_RepairsWidthsReportedUnderPDFUA covers the Type0 one.
 // Neither alone covers both.
+//
+// # Corpus evidence
+//
+//   - All corpora: of the carriers that exercise the PDF/UA width rules, 15 of
+//     20 are simple fonts and only 5 are Type0.
+//   - All corpora: the fixture used to verify the repair end to end was
+//     /Subtype /Type1.
 func TestFixFontIssues_RepairsSimpleFontWidthsUnderPDFUA(t *testing.T) {
 	t.Parallel()
 

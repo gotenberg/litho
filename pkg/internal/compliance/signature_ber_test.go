@@ -9,8 +9,13 @@ import (
 // TestParseCMSSignatureBER pins that a SignedData written in BER with
 // indefinite lengths, as openssl cms -sign -stream writes it, reads like its
 // DER form: one certificate, one signer, so ISO 19005-2, 6.4.3 t2 and t3 both
-// pass, as veraPDF finds on pdfjs issue16553.pdf. Zero padding after the value,
-// which a signature /Contents carries, is ignored.
+// pass, as veraPDF finds. Zero padding after the value, which a signature
+// /Contents carries, is ignored.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16553.pdf: veraPDF finds one certificate and one signer in
+//     its BER SignedData.
 func TestParseCMSSignatureBER(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, b64 string }{

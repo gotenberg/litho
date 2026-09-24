@@ -3,9 +3,12 @@ package compliance
 import "testing"
 
 // extSchemaFieldlessType declares property1 of a fieldless custom value type.
-// The optional usage string appends a property usage block. Models the
-// 6-6-2-3-3-t03-fail-b fixture, whose original uses fs:property1 and whose
-// remediated output drops the usage.
+// The optional usage string appends a property usage block.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-6-2-3-3-t03-fail-b: the fixture this models. Its original
+//     uses fs:property1 and its remediated output drops the usage.
 func extSchemaFieldlessType(usage string) []byte {
 	return xmpPacket(`<rdf:Description rdf:about=""
       xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"
@@ -42,8 +45,12 @@ func extSchemaFieldlessType(usage string) []byte {
 
 // TestXMPExtensionPropertyTypes_FieldlessTypeUnused pins Bug A: §6.6.2.3.1 t2 is
 // a usage rule, so a fieldless custom value type whose property is never used
-// (the remediated 6-6-2-3-3-t03-fail-b output, which veraPDF judges compliant)
 // must not be flagged.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-6-2-3-3-t03-fail-b: veraPDF judges the remediated output, where
+//     the property is never used, compliant.
 func TestXMPExtensionPropertyTypes_FieldlessTypeUnused(t *testing.T) {
 	var got []Violation
 	xmpCheckExtensionPropertyTypes(extSchemaFieldlessType(""), 2, &got)
@@ -53,9 +60,13 @@ func TestXMPExtensionPropertyTypes_FieldlessTypeUnused(t *testing.T) {
 }
 
 // TestXMPExtensionPropertyTypes_FieldlessTypeUsed is the positive control: when
-// fs:property1 is used (the original 6-6-2-3-3-t03-fail-b), the fieldless type
-// cannot satisfy the usage and the property fails §6.6.2.3.1 t2, matching
-// veraPDF's non-compliant verdict on the original.
+// fs:property1 is used, the fieldless type cannot satisfy the usage and the
+// property fails §6.6.2.3.1 t2.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-6-2-3-3-t03-fail-b: the original uses fs:property1, and
+//     veraPDF's verdict on it is non-compliant.
 func TestXMPExtensionPropertyTypes_FieldlessTypeUsed(t *testing.T) {
 	usage := `
     <rdf:Description rdf:about=""

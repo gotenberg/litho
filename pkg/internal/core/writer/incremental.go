@@ -43,7 +43,6 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 		return fmt.Errorf("incremental update canceled: %w", err)
 	}
 
-	// Copy original file bytes.
 	src := io.NewSectionReader(cfg.Source, 0, cfg.SourceSize)
 	n, err := io.Copy(dst, src)
 	if err != nil {
@@ -130,7 +129,6 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 		}
 	}
 
-	// Write startxref + %%EOF.
 	tail := fmt.Sprintf("startxref\n%d\n%%%%EOF\n", xrefOffset)
 	_, err = io.WriteString(dst, tail)
 	if err != nil {

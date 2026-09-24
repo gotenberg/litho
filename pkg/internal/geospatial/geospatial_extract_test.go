@@ -40,9 +40,14 @@ func viewportPage(measure ast.PdfDict) *document.Page {
 // TestExtractGeoData_ViewportGEO covers the whole document-driven path, which
 // no test reached: measured at 0.0% for ExtractGeoData, parseMeasureDict,
 // parseGCS and parseGPTS, while the package's pure helpers (computeGeoBounds,
-// extractEPSGFromWKT, GeoDataToGeoJSON) were fully covered. The corpus cannot
-// close this: it carries no geospatial data at all, and tests must not depend
-// on it, so a constructed page is the only route.
+// extractEPSGFromWKT, GeoDataToGeoJSON) were fully covered. Tests must not
+// depend on the provisioned test files, so a constructed page is the only
+// route.
+//
+// # Corpus evidence
+//
+//   - All corpora: no file carries geospatial data at all, so they cannot
+//     close this gap.
 func TestExtractGeoData_ViewportGEO(t *testing.T) {
 	page := viewportPage(geoMeasure(ast.PdfDict{
 		"Type": ast.PdfName("GEOGCS"),
@@ -170,7 +175,7 @@ func TestExtractGeoData_NotGeo(t *testing.T) {
 
 // TestExtractGeoData_NoSources pins that a page declaring neither a viewport
 // nor an XObject yields nil rather than an empty non-nil slice, which is what
-// [pdf.Reader.ExtractGeoData] documents as "no geospatial data".
+// pdf.Reader.ExtractGeoData documents as "no geospatial data".
 func TestExtractGeoData_NoSources(t *testing.T) {
 	page := &document.Page{Dict: ast.PdfDict{"Type": ast.PdfName("Page")}}
 

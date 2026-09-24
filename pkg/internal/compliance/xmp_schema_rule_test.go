@@ -9,9 +9,12 @@ import "testing"
 // "isPredefinedInXMP2005 || isDefinedInMainPackage || isDefinedInCurrentPackage"
 // (test 1) and "isValueTypeCorrect" (test 2). A property whose schema is
 // declared nowhere fails the second for the same reason as the first: there is
-// no declared type to hold its value to. Reporting only test 1 left litho
-// answering two findings on a remediated 6-6-4-t01-fail-a where veraPDF answers
-// three.
+// no declared type to hold its value to.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-6-4-t01-fail-a: reporting only test 1 left litho answering two
+//     findings on the remediated file where veraPDF answers three.
 func TestXMPSchemaRuleAnswersBothTests(t *testing.T) {
 	t.Parallel()
 

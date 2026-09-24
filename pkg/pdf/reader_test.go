@@ -312,8 +312,8 @@ func TestConcurrentMixedMethods(t *testing.T) {
 
 		go func() {
 			defer wg.Done()
-			// Metadata returns an error for our minimal PDF (no /Info dict);
-			// Only matters that it doesn't panic or race.
+			// Metadata returns an error for the minimal PDF (no /Info dict);
+			// it only matters that it doesn't panic or race.
 			_, _ = r.Metadata(context.Background())
 		}()
 

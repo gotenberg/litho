@@ -14,9 +14,9 @@ import (
 //
 // [bookmarks.Options.Scorer] is only defaulted when nil, so injecting one takes
 // the heading HEURISTIC out of these tests entirely. What is uncovered here is
-// the reconstruct PLUMBING - which page numbers the provider is asked for and
-// which numbers the resulting bookmarks carry - and the heuristic has its own
-// tests in the bookmarks package. Without this the fixture would have to satisfy
+// the reconstruct PLUMBING: which page numbers the provider is asked for and
+// which numbers the resulting bookmarks carry. The heuristic has its own tests
+// in the bookmarks package. Without this the fixture would have to satisfy
 // font-size clustering and a 0.5 score cut to produce anything at all, and a
 // fixture that fails to would leave these tests asserting nothing.
 type alwaysHeading struct{}

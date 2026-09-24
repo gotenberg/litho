@@ -10,10 +10,11 @@ import (
 
 // OCREngine is an integration interface for Optical Character Recognition.
 // Developers can inject a wrapper for Tesseract, Google Cloud Vision, or any
-// other OCR backend via [pdf.WithOCREngine] so the engine can automatically
-// extract text from scanned image pages.
+// other OCR backend via [github.com/gotenberg/litho/pkg/pdf.WithOCREngine] so
+// the engine can automatically extract text from scanned image pages.
 // Implementations must be safe for concurrent use.
 type OCREngine interface {
+	// Extract returns the text recognized in img.
 	Extract(img image.Image) (string, error)
 }
 
@@ -320,9 +321,9 @@ type PageOffsetEntry struct {
 }
 
 // StreamDiagnostic identifies an in-use stream litho cannot fully decode,
-// reported by [pdf.Reader.UndecodableStreams]. Filters lists the
-// undecodable filter names in the stream's /Filter chain, such as a filter
-// name no decoder knows.
+// reported by [github.com/gotenberg/litho/pkg/pdf.Reader.UndecodableStreams].
+// Filters lists the undecodable filter names in the stream's /Filter chain,
+// such as a filter name no decoder knows.
 // Values must not be shared across goroutines without synchronization.
 type StreamDiagnostic struct {
 	ObjectNum int      `json:"objectNum"`

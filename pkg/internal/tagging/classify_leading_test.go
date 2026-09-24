@@ -35,7 +35,7 @@ func qRestoresLeadingPDF() []byte {
 // TestClassify_QRestoresTheTextLeading pins the second text-state parameter
 // pageTextBlocks tracks.
 //
-// 734e5a43 gave the loop a q/Q stack for the font size but not for the leading,
+// e4f3ccfb gave the loop a q/Q stack for the font size but not for the leading,
 // which the same loop sets from TL and TD and consumes as textY -= leading.
 // textY becomes cur.lastY and cur.y, which feed lineAdjacent, so a leading
 // raised inside q…Q and leaked past the Q moves a baseline and splits a

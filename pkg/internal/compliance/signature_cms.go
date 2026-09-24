@@ -52,6 +52,12 @@ type cmsSignatureInfo struct {
 // input. A blob that does not parse yields errCMSUnparseable, and the caller
 // reports both tests failing, which is what veraPDF does: with no SignedData
 // there is no certificate and no signer.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16553.pdf: signs with indefinite BER lengths, its /Contents
+//     opening 30 80, and veraPDF finds the certificate and the one signer it
+//     holds.
 func parseCMSSignature(blob []byte) (cmsSignatureInfo, error) {
 	var info cmsSignatureInfo
 	if len(blob) == 0 || len(blob) > maxCMSBlobSize {
@@ -59,9 +65,8 @@ func parseCMSSignature(blob []byte) (cmsSignatureInfo, error) {
 	}
 
 	// RFC 5652 allows BER, and a streaming signer writes indefinite lengths
-	// that encoding/asn1 rejects: pdfjs issue16553.pdf signs with one, its
-	// /Contents opening 30 80, and veraPDF finds the certificate and the one
-	// signer it holds. Rewrite the lengths before decoding.
+	// that encoding/asn1 rejects, while veraPDF reads them. Rewrite the
+	// lengths before decoding.
 	der, err := berToDER(blob)
 	if err != nil {
 		return info, errCMSUnparseable

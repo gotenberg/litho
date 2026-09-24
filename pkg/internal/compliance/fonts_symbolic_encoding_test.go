@@ -30,7 +30,11 @@ func cmapFormat4Single(code, gid uint16) []byte {
 
 // symbolicTTFWithUnicodeCmap builds a three-glyph TrueType program with a (3,0)
 // subtable sending 0xF005 to GID 1 (352 units wide) and a (3,1) subtable sending
-// U+0020 to GID 2 (930 units wide), as pdfjs issue2618.pdf's program does.
+// U+0020 to GID 2 (930 units wide).
+//
+// # Corpus evidence
+//
+//   - pdfjs issue2618.pdf: its program has this shape.
 func symbolicTTFWithUnicodeCmap() string {
 	sym := cmapFormat4Single(0xF005, 1)
 	uni := cmapFormat4Single(0x0020, 2)
@@ -91,10 +95,14 @@ func symbolicTTFWithUnicodeCmap() string {
 //
 // ISO 32000-1, 9.6.6.4 takes that route "when the font has no Encoding entry, or
 // the font descriptor's Symbolic flag is set (in which case the Encoding entry
-// is ignored)". pdfjs issue2618.pdf's symbolic font /R641 names code 5 "space"
-// in its /Differences; litho followed the name through the program's Unicode
-// cmap to a 930-unit glyph and reported a width mismatch, while the (3,0)
-// subtable draws a 352-unit glyph, matching /Widths, and veraPDF passes.
+// is ignored)".
+//
+// # Corpus evidence
+//
+//   - pdfjs issue2618.pdf: its symbolic font /R641 names code 5 "space" in its
+//     /Differences. litho followed the name through the program's Unicode
+//     cmap to a 930-unit glyph and reported a width mismatch, while the (3,0)
+//     subtable draws a 352-unit glyph, matching /Widths, and veraPDF passes.
 func TestSymbolicTrueTypeIgnoresEncoding(t *testing.T) {
 	t.Parallel()
 

@@ -78,9 +78,14 @@ func fixToUnicodeRangeIssues(ctx context.Context, alloc *writer.ObjAllocator, do
 // validator holding to it (veraPDF clamps the range to its first-byte block)
 // finds no Unicode value for the glyphs it was meant to cover. libHaru writes
 // its identity map as <0000> <D7FF> <0000>, which then credits only codes 00
-// to FF (pdfjs issue20232.pdf). The CMap is replaced at its own object number,
-// so every font sharing it is repaired, and [cmap.ConformBfRanges] only returns
-// a rewrite that reads exactly as before, so extracted text cannot change.
+// to FF. The CMap is replaced at its own object number, so every font sharing
+// it is repaired, and [cmap.ConformBfRanges] only returns a rewrite that reads
+// exactly as before, so extracted text cannot change.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20232.pdf: carries the libHaru identity map, credited only
+//     for codes 00 to FF.
 func fixToUnicodeRanges(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef) []string {
 	// Build on the latest version of the font dictionary: an earlier repair
 	// may already have attached a generated /ToUnicode.

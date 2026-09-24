@@ -76,9 +76,13 @@ func TestMergeFeature_Compare_CleanFixtureCarriesMetrics(t *testing.T) {
 // feature_split skips inputs under two pages, so a single-page document never
 // reaches its catalog check. runMerge has no such floor: it merges the file
 // against itself and skips only empty input or one past mergeMaxPages.
-// Measured across the corpus, 71 of the 85 files carrying the shape that trips
-// the field collector are single-page, and issue20062.pdf, the fixture
-// isFieldRoot's godoc names as the reproducer, is one of them.
+//
+// # Corpus evidence
+//
+//   - All corpora: 71 of the 85 files carrying the shape that trips the
+//     field collector are single-page.
+//   - pdfjs issue20062.pdf: the fixture isFieldRoot's godoc names as the
+//     reproducer is one of those single-page files.
 func TestMergeFeature_Compare_SinglePageFixtureIsExercised(t *testing.T) {
 	t.Parallel()
 	f := newMergeFeature()
@@ -130,9 +134,13 @@ func TestMergeFeature_Compare_EarlyFailureCarriesNoMetrics(t *testing.T) {
 
 // TestMergeFeature_Compare_PreservedFormIsNotReported is the control against
 // the invariant firing on every form-bearing document. A document that already
-// owns fields must pass whether or not an /AcroForm listed them: measured on
-// pdfjs, three fixtures own widgets with no usable /AcroForm entry and a merge
-// rebuilds the form for them, which is repair.
+// owns fields must pass whether or not an /AcroForm listed them: a merge that
+// rebuilds the form for widgets no usable /AcroForm entry lists is repair.
+//
+// # Corpus evidence
+//
+//   - pdfjs: three fixtures own widgets with no usable /AcroForm entry, and a
+//     merge rebuilds the form for them.
 func TestMergeFeature_Compare_PreservedFormIsNotReported(t *testing.T) {
 	t.Parallel()
 	f, out := mergeCatalogFixture(t, catalogFacts{InFormFields: true, OutAcroForm: true})

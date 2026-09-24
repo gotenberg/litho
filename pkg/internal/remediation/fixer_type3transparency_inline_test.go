@@ -8,12 +8,14 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
+// TestFixType3FontTransparency_ReachesAFontDictStoredInline pins the direct arm
+// of the font lookup.
+//
 // [fixType3FontTransparency] resolves each /Font entry through a ref/direct
 // split: an indirect entry is read through the allocator, a directly stored
 // dictionary through the document. Every other fixture in this package reaches
 // its Type 3 font through an indirect reference (/F1 10 0 R), so without this
-// test the direct arm is never executed, and the corpus gate cannot cover it
-// either unless a carrier happens to store the font inline.
+// test the direct arm is never executed.
 //
 // The split is load-bearing rather than cosmetic: collapsing it to a single
 // alloc-aware read would hand the helper a ZERO object number for an inline
@@ -24,6 +26,11 @@ import (
 // arm ran is one level down: the /ExtGState it reaches through /Resources is
 // indirect, so it is repaired at its own object number. A broken direct arm
 // leaves fd nil, the loop continues, and nothing is written at all.
+//
+// # Corpus evidence
+//
+//   - All corpora: the gate cannot cover the direct arm either unless a carrier
+//     happens to store the font inline.
 func TestFixType3FontTransparency_ReachesAFontDictStoredInline(t *testing.T) {
 	t.Parallel()
 

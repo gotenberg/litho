@@ -45,7 +45,7 @@ func untaggedHeadingPDF() []byte {
 // TestWriter_AutoTag_ResolvesStructureViolations is the end-to-end proof: an
 // untagged page fails the PDF/UA structure and content-marking rules; after
 // AutoTag and a write, re-validating reports none of them (residuals like
-// /Lang, title, and the XMP identifier remain — AutoTag does not own those).
+// /Lang, title, and the XMP identifier remain: AutoTag does not own those).
 func TestWriter_AutoTag_ResolvesStructureViolations(t *testing.T) {
 	ctx := context.Background()
 	data := untaggedHeadingPDF()

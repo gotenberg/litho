@@ -39,7 +39,7 @@ func FuzzUnpackSamples(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, data []byte, w, h, spp, bpc int, scale bool) {
 		// Mirror the caller's guarantees rather than fuzzing past them.
-		// DecodeImage runs validateImageDimensions 84 lines before the unpack,
+		// DecodeImage runs validateImageDimensions well before the unpack,
 		// so a non-positive or over-cap dimension cannot arrive here, and a
 		// panic manufactured by one would be a by-design-unreachable finding.
 		if validateImageDimensions(w, h) != nil {

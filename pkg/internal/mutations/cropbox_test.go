@@ -20,9 +20,14 @@ func box(v ...float64) ast.PdfArray {
 //
 // /CropBox is inheritable (ISO 32000-1, 7.7.3.4) and defines the region a
 // viewer displays (14.11.2). Materialising only Resources, MediaBox and Rotate
-// dropped it: veraPDF 6-1-13-t09-fail-c crops a 2x2 /MediaBox to a 4x4 region
-// on its /Pages node, and merging or splitting the file redisplayed the page at
-// 2x2.
+// dropped it, so a page cropped on its /Pages node was redisplayed at its
+// /MediaBox after a merge or split.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-1-13-t09-fail-c: crops a 2x2 /MediaBox to a 4x4 region on its
+//     /Pages node, and merging or splitting the file redisplayed the page at
+//     2x2.
 func TestMaterializeInheritedAttrs_CarriesCropBox(t *testing.T) {
 	page := &document.Page{
 		MediaBox: box(0, 0, 2, 2),

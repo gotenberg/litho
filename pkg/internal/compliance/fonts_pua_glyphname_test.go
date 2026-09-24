@@ -17,10 +17,14 @@ import (
 // the code, and otherwise the Unicode value of its encoding's glyph name
 // (PDSimpleFont.toUnicode), which ISO 32000-1, 9.10.2 derives through the Adobe
 // Glyph List. That list assigns 192 names to the PUA, dotlessj among them
-// (U+F6BE). govdocs thread_300_300849.pdf shows code 26 of a TeX-cmex9 font
-// whose encoding names it dotlessj and which has no /ToUnicode; veraPDF reports
-// ISO 14289-2, 8.4.3, and litho, which read PUA values from /ToUnicode alone,
-// did not. Measured against veraPDF on fixtures of each shape.
+// (U+F6BE). litho read PUA values from /ToUnicode alone. Measured against
+// veraPDF on fixtures of each shape.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300849.pdf: shows code 26 of a TeX-cmex9 font whose
+//     encoding names it dotlessj and which has no /ToUnicode. veraPDF reports
+//     ISO 14289-2, 8.4.3, and litho did not.
 func TestPUAActualText_GlyphNameReachesPUA(t *testing.T) {
 	t.Parallel()
 

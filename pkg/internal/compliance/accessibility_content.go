@@ -79,6 +79,14 @@ const (
 //   - t1: Artifact content must not appear inside tagged content
 //   - t2: Tagged content must not appear inside Artifact
 //   - t3: All painting operators must be inside a marked content span
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1019475_1.pdf: wraps its text in /H1 <</MCID 0>> BDC under a
+//     catalog with no StructTreeRoot, and veraPDF reports it as untagged.
+//   - govdocs thread_000_000632.pdf: wraps an image in /Artifact <</MCID 31>>
+//     BDC that its /S /Artifact element owns, and veraPDF reports t1 and t2;
+//     with the MCID left out of the ParentTree it reports neither.
 func checkContentMarking(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !IsPDFUA(profile) {
 		return nil
@@ -136,7 +144,7 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 				return markerArtifact
 			}
 			// Check for an integer MCID in the properties dict (second operand):
-			// any other /MCID tags nothing ([mcidValue]).
+			// any other /MCID tags nothing (mcidValue).
 			if len(op.Operands) >= 2 {
 				if d, ok := op.Operands[1].(ast.PdfDict); ok {
 					if _, isMCID := mcidValue(ctx, doc, d["MCID"]); isMCID {
@@ -157,8 +165,7 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		// veraPDF (GFSEGroupedContent.isTaggedContent) walks that element's parent
 		// chain and calls the content tagged only on reaching the StructTreeRoot.
 		// With no structure tree there is no owner, so MCID-marked content is
-		// untagged. pdfjs bug1019475_1.pdf wraps its text in /H1 <</MCID 0>> BDC
-		// under a catalog with no StructTreeRoot, and veraPDF reports it.
+		// untagged, and veraPDF reports it.
 		structTree, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 		// An /MCID the ParentTree maps tags its content only when the structure
 		// element it names reaches the structure tree root through /P. veraPDF
@@ -167,7 +174,7 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		// /P, a non-dictionary /P or a /P loop leaves its content untagged; ISO
 		// 32000-1, 14.7.2, Table 355 makes /P required. Measured against veraPDF on
 		// each of those shapes. An MCID the ParentTree does not map is
-		// [checkOrphanMCIDs]'s business, and stays tagged here.
+		// checkOrphanMCIDs's business, and stays tagged here.
 		var mcidReach map[int]bool
 		if structTree != nil {
 			mcidReach = parentTreeMCIDReach(ctx, doc, structTree, page)
@@ -236,10 +243,8 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 					// maps to an element reaching the root is itself tagged
 					// content (veraPDF isTaggedContent climbs the MCID's owner),
 					// so it is both an Artifact inside tagged content and tagged
-					// content inside an Artifact. govdocs thread_000_000632.pdf
-					// wraps an image in /Artifact <</MCID 31>> BDC that its /S
-					// /Artifact element owns, and veraPDF reports t1 and t2; with
-					// the MCID left out of the ParentTree it reports neither.
+					// content inside an Artifact, and veraPDF reports t1 and t2;
+					// with the MCID left out of the ParentTree it reports neither.
 					// Measured with an owner of /S /Artifact and of /S /P.
 					if kind == markerArtifact && structTree != nil {
 						if mcid := inlineBDCMCID(ctx, doc, op); mcid >= 0 {

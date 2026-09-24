@@ -96,7 +96,7 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 		// characters or triggering space insertion.
 		//
 		// Chunk segmentation: elements that share a
-		// [models.TextElement.Chunk] came from the same content-stream
+		// models.TextElement.Chunk came from the same content-stream
 		// text-operator chain. Small gaps inside a chunk are glyph
 		// advancement or kerning adjustments that viewers do not turn
 		// into spaces. Large gaps inside a chunk (e.g. a sizeable TJ
@@ -159,9 +159,9 @@ func ReconstructText(ctx context.Context, elements []models.TextElement, beads [
 //
 //   - Both elements are horizontal LTR (no rotation, no vertical
 //     writing mode) so RTL scripts and column layouts are excluded.
-//   - The gap is more negative than negativeSpaceFactor × fontSize so
+//   - The gap is more negative than [negativeSpaceFactor] × fontSize so
 //     normal kerning never qualifies.
-//   - The X-position regresses by at least negativeSpaceJumpMin
+//   - The X-position regresses by at least [negativeSpaceJumpMin]
 //     user-space units, which weeds out single-glyph backward shifts
 //     that come from microtypography or inline ligature corrections.
 //

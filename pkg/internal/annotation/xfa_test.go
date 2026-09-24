@@ -207,16 +207,20 @@ func TestParseXFADatasets_TruncatedValueIsTrimmed(t *testing.T) {
 // the flat dotted map rather than asserting a fix for it.
 //
 // XML allows "." inside an element name (a NameChar, though not a
-// NameStartChar), so <A.B> is well formed and the walk keys it "A.B" - exactly
+// NameStartChar), so <A.B> is well formed and the walk keys it "A.B", exactly
 // the key a <B> nested inside an <A> produces. The two are indistinguishable
-// once flattened. Resolving it would change the shape [pdf.Reader.FormData]
-// returns, for a construct no corpus file contains, so the behaviour is pinned
-// here as known instead.
+// once flattened. Resolving it would change the shape pdf.Reader.FormData
+// returns, for a construct real files do not contain, so the behaviour is
+// pinned here as known instead.
 //
 // FuzzParseXFADatasets found this with "<datasets><data><A.>0000", and the
 // finding was in the target's own assertion, which had rejected a dot in that
 // position as malformed. The input is deliberately NOT kept as a regression
 // seed: it pins nothing about litho.
+//
+// # Corpus evidence
+//
+//   - All corpora: no file contains this construct.
 func TestParseXFADatasets_DotInElementNameIsAmbiguous(t *testing.T) {
 	dotted, err := parseXFADatasets([]byte(
 		`<datasets><data><A.B>v</A.B></data></datasets>`))

@@ -27,8 +27,12 @@ func widgetAltPDF(altEntry string) []byte {
 // regression the fixer itself caused: writing the field name into /Contents to
 // satisfy ISO 14289-2 §8.10.2.3 violated §8.9.4.2 test 1, which requires
 // /Contents and the enclosing structure element's /Alt to hold identical
-// values. Measured on PDF_UA-1__7.18.1-t03-{fail-c,pass-b}.pdf, where
-// remediation cleared all six original violations and created this one.
+// values.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.18.1-t03-{fail-c,pass-b}.pdf: remediation cleared
+//     all six original violations and created this one.
 func TestFixFormTooltip_ContentsMatchesEnclosingAlt(t *testing.T) {
 	t.Parallel()
 	doc, alloc := newTestDoc(t, widgetAltPDF(" /Alt (spoken label)"))
@@ -68,13 +72,18 @@ func TestFixFormTooltip_ContentsFallsBackToFieldName(t *testing.T) {
 	}
 }
 
-// TestFixFormTooltip_EmptyAltIsCopied covers the shape that took two attempts.
-// PDF_UA-1__7.18.1-t03-fail-c.pdf encloses its widget in a /Form element whose
-// /Alt is the EMPTY string. Treating empty as "no /Alt" falls back to the field
-// name and recreates the §8.9.4.2 mismatch; skipping /Contents altogether
-// instead leaves §8.10.2.3 t1 unfixed, because that clause wants the entry
-// present when no Lbl labels the widget and is not answered by /TU. Copying the
-// empty value satisfies both clauses at once.
+// TestFixFormTooltip_EmptyAltIsCopied covers the shape that took two attempts:
+// a widget enclosed in a /Form element whose /Alt is the EMPTY string.
+// Treating empty as "no /Alt" falls back to the field name and recreates the
+// §8.9.4.2 mismatch; skipping /Contents altogether instead leaves §8.10.2.3 t1
+// unfixed, because that clause wants the entry present when no Lbl labels the
+// widget and is not answered by /TU. Copying the empty value satisfies both
+// clauses at once.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.18.1-t03-fail-c.pdf: encloses its widget in a /Form
+//     element whose /Alt is the EMPTY string.
 func TestFixFormTooltip_EmptyAltIsCopied(t *testing.T) {
 	t.Parallel()
 	doc, alloc := newTestDoc(t, widgetAltPDF(" /Alt ()"))
@@ -96,9 +105,13 @@ func TestFixFormTooltip_EmptyAltIsCopied(t *testing.T) {
 	}
 }
 
-// TestFixFormTooltip_IndirectAlt covers the other corpus shape,
-// PDF_UA-1__7.18.1-t03-pass-b.pdf, whose /Alt is an indirect reference rather
-// than a direct string.
+// TestFixFormTooltip_IndirectAlt covers an enclosing /Alt written as an
+// indirect reference rather than a direct string.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.18.1-t03-pass-b.pdf: its /Alt is an indirect
+//     reference, the other shape the corpus carries.
 func TestFixFormTooltip_IndirectAlt(t *testing.T) {
 	t.Parallel()
 	doc, alloc := newTestDoc(t, buildStructPDF(

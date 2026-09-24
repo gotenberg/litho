@@ -50,8 +50,12 @@ func runCatalogCleanup(t *testing.T, data []byte, profile string, preserve bool)
 
 // TestRemovePDFA1EmbeddedFiles_StripsBothConstructs pins the repair of
 // ISO 19005-1 6.1.11: t2 forbids the /EmbeddedFiles name entry and t1 forbids
-// /EF on a file specification. 70 corpus cells reported these with litho and
-// veraPDF in complete agreement, unrepaired even in aggressive mode.
+// /EF on a file specification. Both went unrepaired even in aggressive mode.
+//
+// # Corpus evidence
+//
+//   - All corpora: 70 cells reported these with litho and veraPDF in complete
+//     agreement, unrepaired even in aggressive mode.
 func TestRemovePDFA1EmbeddedFiles_StripsBothConstructs(t *testing.T) {
 	t.Parallel()
 

@@ -12,8 +12,8 @@ import (
 // TestEmbeddedFilesReportedOncePerObject covers the count ISO 19005-1 6.1.11
 // carries. Its object is a file specification, so a file specification holding
 // /EF is one violation, and the /Names /EmbeddedFiles key is one more. litho
-// used to state the whole clause twice, in checkEmbeddedGroup and in
-// checkEmbeddedFiles, and reported every offending object twice.
+// used to state the whole clause twice, in [checkEmbeddedGroup] and in
+// [checkEmbeddedFiles], and reported every offending object twice.
 func TestEmbeddedFilesReportedOncePerObject(t *testing.T) {
 	t.Parallel()
 

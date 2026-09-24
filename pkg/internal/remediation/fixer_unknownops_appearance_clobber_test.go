@@ -10,19 +10,21 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// [stripUnknownFromStreamObject] reads the appearance stream with
-// document.ResolveStream (fixer_unknownops.go:175) and writes the stripped
-// result back at that stream's own object number (:211). It consults no
-// alloc-aware helper, so an earlier fixer's edit to the same stream is
-// discarded.
+// TestStripUnknownFromStreamObject_KeepsAnEarlierFixersPendingStreamWrite pins
+// that the appearance-stream path reads the stream through the allocator.
+//
+// [stripUnknownFromStreamObject] used to read the appearance stream with
+// document.ResolveStream (fixer_unknownops.go) and write the stripped result
+// back at that stream's own object number. It consulted no alloc-aware helper,
+// so an earlier fixer's edit to the same stream was discarded.
 //
 // THIS IS THE SIBLING PATH, and it needs its own test rather than inheriting
 // the one written for stripUnknownInResources. That function reaches XObject
-// streams through the page's /Resources and takes a DIFFERENT read, at :238,
-// via doc.Resolve plus a type assertion -- which is why a census grepping for
-// document.ResolveStream finds :175 but not :238 at all. One registry entry,
-// one defect class, TWO read sites, and a test that covers only one of them
-// would leave the other fixed on shape alone.
+// streams through the page's /Resources and took a DIFFERENT read, via
+// doc.Resolve plus a type assertion, which is why a census grepping for
+// document.ResolveStream found one read site but not the other at all. One
+// registry entry, one defect class, TWO read sites, and a test that covers
+// only one of them would leave the other fixed on shape alone.
 //
 // Peer and ordering are the same as the resources path and are structural:
 // graphics writes XObject streams in fixXObjects, transparency in

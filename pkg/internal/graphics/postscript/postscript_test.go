@@ -397,10 +397,9 @@ func TestNestedIfElse(t *testing.T) {
 }
 
 func TestCMYKTintTransform(t *testing.T) {
-	// Typical Separation tint transform: tint → (0, tint*0.78, tint*0.55, 0)
+	// A four-output tint transform shaped like a Separation's.
 	program := []byte("{ dup 0.78 mul exch 0.55 mul 0 exch 0 exch }")
-	// Input: 1.0 → expected (0, 0.78, 0.55, 0)
-	// Wait, let me trace: stack starts [1.0]
+	// For input 1.0 the stack starts [1.0]:
 	// dup → [1.0, 1.0]
 	// 0.78 → [1.0, 1.0, 0.78]
 	// mul → [1.0, 0.78]
@@ -412,7 +411,8 @@ func TestCMYKTintTransform(t *testing.T) {
 	// 0 → [0.78, 0, 0.55, 0]
 	// exch → [0.78, 0, 0, 0.55]
 	// Result: [0.78, 0, 0, 0.55]
-	// Hmm, that's not standard CMYK order. Let me just verify execution works.
+	// That is not CMYK order, so the test checks only that execution yields
+	// four outputs.
 	result, err := Execute([]float64{1.0}, program)
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)

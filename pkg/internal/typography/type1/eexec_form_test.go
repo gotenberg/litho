@@ -9,10 +9,14 @@ import "testing"
 // encrypted section starts with a four-byte random salt, so a binary payload
 // begins with an arbitrary byte that is a hexadecimal digit better than one
 // time in twelve. Deciding on the first byte alone hex-decoded such a payload
-// into noise and left the program with no readable glyph: govdocs
-// thread_300_300035.pdf opens its binary section with 0x32 ('2'), which cost
-// litho every charstring name and width in the font, and with them the
-// ISO 19005-2 §6.2.11.5 mismatch veraPDF reports on its code 109.
+// into noise and left the program with no readable glyph.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300035.pdf: opens its binary section with 0x32
+//     ('2'), which cost litho every charstring name and width in the font,
+//     and with them the ISO 19005-2 §6.2.11.5 mismatch veraPDF reports on
+//     its code 109.
 func TestNormaliseEexec_BinarySaltLooksHex(t *testing.T) {
 	t.Parallel()
 

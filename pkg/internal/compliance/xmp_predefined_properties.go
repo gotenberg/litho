@@ -262,6 +262,12 @@ var xmpPredefinedCommon = map[string]map[string]string{
 // §6.7.9). Where the 2004 and 2005 editions disagree on a property's
 // presence or value type, the 2004 form belongs here.
 //
+// # Corpus evidence
+//
+//   - verapdf: nine files carrying xmpDM properties passed ISO 19005-1
+//     §6.7.9 t2 (isPredefinedInXMP2004) before the 2005-only schemas were
+//     listed here with no properties.
+//
 //nolint:gochecknoglobals // static spec table
 var xmpPredefined2004Extra = map[string]map[string]string{
 	"http://www.aiim.org/pdfa/ns/id/": {
@@ -282,11 +288,10 @@ var xmpPredefined2004Extra = map[string]map[string]string{
 	// Schemas the 2005 edition introduced, listed here with no properties so
 	// part 1 knows the namespace yet predefines nothing under it. Without the
 	// entry the namespace falls out of the catalog entirely and every property
-	// it carries is waved through as belonging to a known schema, which is how
-	// nine veraPDF test-suite files carrying xmpDM properties passed ISO 19005-1
-	// §6.7.9 t2 (isPredefinedInXMP2004). A property in one of these still
-	// passes when an extension schema declares it, which the caller checks
-	// first.
+	// it carries is waved through as belonging to a known schema, so an xmpDM
+	// property passed ISO 19005-1 §6.7.9 t2 (isPredefinedInXMP2004). A
+	// property in one of these still passes when an extension schema declares
+	// it, which the caller checks first.
 	"http://ns.adobe.com/xmp/1.0/DynamicMedia/":    {},
 	"http://ns.adobe.com/exif/1.0/aux/":            {},
 	"http://ns.adobe.com/camera-raw-settings/1.0/": {},

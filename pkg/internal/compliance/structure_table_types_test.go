@@ -12,9 +12,12 @@ import (
 // (GFSETable.getTR): the /RoleMap applies first, and Div, Part, and NonStruct
 // wrappers are looked through.
 //
-// govdocs thread_100_100945.pdf groups its rows in TableHead and TableBody,
-// which its role map maps to THead and TBody. litho found no rows in them and
-// passed three tables veraPDF reports under ISO 14289-2 §8.2.5.26 t3.
+// # Corpus evidence
+//
+//   - govdocs thread_100_100945.pdf: groups its rows in TableHead and
+//     TableBody, which its role map maps to THead and TBody. litho found no
+//     rows in them and passed three tables veraPDF reports under ISO 14289-2
+//     §8.2.5.26 t3.
 func TestTableRegularity_ByStandardType(t *testing.T) {
 	t.Parallel()
 

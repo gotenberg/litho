@@ -39,7 +39,7 @@ var patternRe = regexp.MustCompile(`document\('([^']+)'\)/codedb/cl\[@id=(\d+)\]
 
 // errExitf prints to stderr and exits with code 1. The generator
 // runs offline as part of the maintainer workflow, so a fail-fast
-// posture is fine - no need to thread error returns out.
+// posture is fine: no need to thread error returns out.
 func errExitf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, format+"\n", args...)
 	os.Exit(1)

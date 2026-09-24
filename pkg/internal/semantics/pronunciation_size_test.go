@@ -99,9 +99,12 @@ func TestExtractPronunciationLexicons_BoundsTotal(t *testing.T) {
 // TestExtractPronunciationLexicons_AcceptsALargeLexicon is the control. The
 // bound test would pass just as well on a build that refused every lexicon.
 //
-// No corpus file carries /PronunciationLexicon at all, so there is no measured
-// real maximum to sit under. 1 MB is far past the kilobytes a real PLS document
-// runs to, and must still be accepted.
+// There is no measured real maximum to sit under. 1 MB is far past the
+// kilobytes a real PLS document runs to, and must still be accepted.
+//
+// # Corpus evidence
+//
+//   - All corpora: no file carries /PronunciationLexicon at all.
 func TestExtractPronunciationLexicons_AcceptsALargeLexicon(t *testing.T) {
 	const size = 1 << 20
 

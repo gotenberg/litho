@@ -136,7 +136,6 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 
 	var offset int64
 
-	// Write header.
 	header := fmt.Sprintf("%%PDF-%s\n%%\xe2\xe3\xcf\xd3\n", version)
 	n, err := io.WriteString(dst, header)
 	offset += int64(n)
@@ -207,7 +206,6 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 		}
 	}
 
-	// Write startxref + %%EOF.
 	tail := fmt.Sprintf("startxref\n%d\n%%%%EOF\n", xrefOffset)
 	if _, err := io.WriteString(dst, tail); err != nil {
 		return fmt.Errorf("writing startxref: %w", err)

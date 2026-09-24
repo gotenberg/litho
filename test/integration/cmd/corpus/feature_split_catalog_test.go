@@ -42,11 +42,17 @@ func TestCheckCatalogInvariants_RejectsInventedAcroForm(t *testing.T) {
 // of three regression controls for false positives this predicate produced
 // while it asked HasAcroForm instead of HasFormFields.
 //
-// A document can own real fields that no /AcroForm lists. Measured on pdfjs:
-// issue12963 carries 27 such widgets with no /AcroForm at all, issue14203 has
-// 10 parentless widgets with /T and /FT, and issue15597 spells the key /Field
-// so /Fields is absent and HasAcroForm is correctly false. Rebuilding the form
-// for fields the document already owns is repair.
+// A document can own real fields that no /AcroForm lists: widgets with no
+// /AcroForm at all, or an /AcroForm whose /Fields key is misspelled so
+// HasAcroForm is correctly false. Rebuilding the form for fields the document
+// already owns is repair.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12963: carries 27 such widgets with no /AcroForm at all.
+//   - pdfjs issue14203: has 10 parentless widgets with /T and /FT.
+//   - pdfjs issue15597: spells the key /Field, so /Fields is absent and
+//     HasAcroForm is correctly false.
 func TestCheckCatalogInvariants_OrphanedWidgetsAreRepairNotInvention(t *testing.T) {
 	t.Parallel()
 	reason := checkCatalogInvariants("merge", catalogFacts{
@@ -66,7 +72,11 @@ func TestCheckCatalogInvariants_OrphanedWidgetsAreRepairNotInvention(t *testing.
 // widgets. A merge keeps the widgets and drops the XFA layer, so the output
 // reports a form the input appeared not to have. That is the documented
 // downgrade [pdf.Reader.HasXFAForm] exists to name, not an invention.
-// Measured on pdfjs xfa_filled_imm1344e, xfa_issue13855 and xfa_issue14071.
+//
+// # Corpus evidence
+//
+//   - pdfjs xfa_filled_imm1344e, xfa_issue13855, xfa_issue14071: the
+//     downgrade was measured on these three dynamic XFA documents.
 func TestCheckCatalogInvariants_XFADowngradeIsNotInvention(t *testing.T) {
 	t.Parallel()
 	reason := checkCatalogInvariants("merge", catalogFacts{
@@ -192,8 +202,12 @@ func TestCatalogInvariantMetrics_AgreeWithThePredicate(t *testing.T) {
 
 // TestCatalogInvariantMetrics_ReachabilityIsSeparateFromViolation checks the
 // *_checked counters report whether the corpus could exercise the invariant at
-// all. No corpus file carries /Collection, so portfolio_dropped=0 must read as
+// all. On a corpus with no /Collection, portfolio_dropped=0 must read as
 // "never tested" rather than as "tested and clean".
+//
+// # Corpus evidence
+//
+//   - All corpora: no corpus file carries /Collection.
 func TestCatalogInvariantMetrics_ReachabilityIsSeparateFromViolation(t *testing.T) {
 	t.Parallel()
 	none := catalogInvariantMetrics(catalogFacts{})

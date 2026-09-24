@@ -52,7 +52,7 @@ var validPDFOperators = map[string]bool{
 // inline images for PDF/A conformance. ISO 19005-1 §6.1.10 forbids
 // LZWDecode (and its inline abbreviation LZW) and Crypt; the abbreviated
 // filter names are those of ISO 32000-1 Table 92 (and the full names of
-// Table 6). Parts 2/3 use the positive allowedInlineImageFilters set.
+// Table 6). Parts 2 to 4 use the positive [allowedInlineImageFilters] set.
 //
 //nolint:gochecknoglobals // package-level lookup table.
 var forbiddenInlineImageFilters = map[string]bool{
@@ -178,6 +178,17 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 
 // resolvePageContentBytes decodes and concatenates the content streams of a page,
 // returning the raw bytes suitable for both parsing and inline image scanning.
+//
+// # Corpus evidence
+//
+//   - pdfjs bomb_giant.pdf: follows its text part with three /JBIG2Decode
+//     parts, and veraPDF reports the text's unembedded font and untagged
+//     content while litho dropped the page. Measured against veraPDF with the
+//     undecodable part before and after the readable one, and with an unknown
+//     filter name in its place.
+//   - pdfjs issue17190_1.pdf: carries 77 parts, one of them unreadable, and
+//     litho reported none of the colour and font defects veraPDF raises from
+//     the other 76 while a truncated part lost the whole page.
 func resolvePageContentBytes(ctx context.Context, doc *document.Document, page ast.PdfDict) ([]byte, error) {
 	contentsObj, ok := page["Contents"]
 	if !ok {
@@ -222,11 +233,7 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 		//
 		// It skips that part only, not the page: ISO 32000-1, 7.7.3.3 makes the
 		// array one content stream split into parts, and veraPDF judges the
-		// parts it can read. pdfjs bomb_giant.pdf follows its text part with
-		// three /JBIG2Decode parts, and veraPDF reports the text's unembedded
-		// font and untagged content while litho dropped the page. Measured
-		// against veraPDF with the undecodable part before and after the
-		// readable one, and with an unknown filter name in its place.
+		// parts it can read.
 		if doc.StreamHasUndecodableFilter(s) {
 			undecodablePart = true
 			continue
@@ -236,11 +243,9 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 			// ISO 32000-1, 7.7.3.3 lets a page split its content across an
 			// array of streams, and one truncated part says nothing about the
 			// rest. Losing the whole page for it threw away every operator the
-			// other parts hold: pdfjs issue17190_1.pdf carries 77 parts, one of
-			// them unreadable, and litho reported none of the colour and font
-			// defects veraPDF raises from the other 76. Viewers render what
-			// they can, and [content.ParsePageContent] already skips the part
-			// and keeps going.
+			// other parts hold. Viewers render what they can, and
+			// content.ParsePageContent already skips the part and keeps
+			// going.
 			doc.Logger.Debug("compliance: content stream part failed to decode; skipping",
 				slog.Any("err", err))
 			lastErr = err
@@ -250,7 +255,7 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 		allData = append(allData, data...)
 		allData = append(allData, '\n')
 
-		// Bounded for the reason given on [content.MaxPageContentSize]: the
+		// Bounded for the reason given on content.MaxPageContentSize: the
 		// per-stream decompression cap does not bound the sum across a
 		// /Contents array, and this buffer feeds every page-scoped check.
 		// Stopping here leaves the page looking unreadable, which the callers
@@ -278,6 +283,13 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 // Image) operators and checks whether any forbidden filters (LZW, Crypt) are
 // used. The scan looks for the BI keyword followed by inline image dictionary
 // key/value pairs, checking /F and /Filter entries.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-1-9-t01-fail-c: its inline image writes /F /Lzw, and once the
+//     file is remediated to PDF/A-2a veraPDF fails it as "a value not listed in
+//     Table 6" (verified live), so a name outside Table 6 is forbidden in parts
+//     2 to 4.
 func checkInlineImageFilters(data []byte, part, pageNum int) []Violation {
 	var results []Violation
 
@@ -321,8 +333,7 @@ func checkInlineImageFilters(data []byte, part, pageNum int) []Violation {
 			} else {
 				// Parts 2/3/4: the /F value must be a valid Table-6/92
 				// abbreviation and not LZW. A non-Table-6 name (e.g. "Lzw")
-				// fails "a value not listed in Table 6" (verified live on
-				// /F /Lzw in 6-1-9-t01-fail-c remediated to A-2a).
+				// fails "a value not listed in Table 6".
 				allowed, known := allowedInlineImageFilters[filterVal]
 				forbidden = !known || !allowed
 			}
@@ -358,9 +369,9 @@ func findInlineImageID(data []byte, start int) int {
 	return -1
 }
 
-// extractInlineImageFilter extracts the filter value from inline image
+// extractInlineImageFilters extracts the filter values from inline image
 // dictionary bytes. It looks for /F or /Filter keys and returns the
-// corresponding name value.
+// corresponding name values.
 func extractInlineImageFilters(dictBytes []byte) []string {
 	// Tokenize the dictionary bytes looking for /F or /Filter keys.
 	// Inline image dictionaries use abbreviated key names. The value may be a
@@ -400,6 +411,11 @@ func inlineFilterName(tok string) string {
 
 // tokenizeInlineDict performs a simple tokenization of inline image dictionary
 // bytes, splitting on whitespace and recognizing /Name tokens.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14256.pdf: comments out lines of its inline image
+//     dictionaries, so a key written inside a comment must not be read.
 func tokenizeInlineDict(data []byte) []string {
 	var tokens []string
 	i := 0
@@ -410,8 +426,7 @@ func tokenizeInlineDict(data []byte) []string {
 			i++
 		case c == '%':
 			// A comment runs to the end of the line (ISO 32000-1, 7.2.4); a
-			// key written inside one is no key. pdfjs issue14256.pdf comments
-			// out lines of its inline image dictionaries.
+			// key written inside one is no key.
 			for i < len(data) && data[i] != '\n' && data[i] != '\r' {
 				i++
 			}

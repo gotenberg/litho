@@ -11,9 +11,11 @@ import (
 // TestHeadingNesting_ByStandardType pins that ISO 14289-1 §7.4.2 t1 reads a
 // heading's level from its standard type, as veraPDF's SEHn object does.
 //
-// govdocs thread_000_000838.pdf maps "Heading 1" to "Heading 5" onto H1 to H5
-// through its role map and skips levels; veraPDF reports each skip, while litho
-// read the names as written and found no heading at all.
+// # Corpus evidence
+//
+//   - govdocs thread_000_000838.pdf: maps "Heading 1" to "Heading 5" onto H1
+//     to H5 through its role map and skips levels; veraPDF reports each skip,
+//     while litho read the names as written and found no heading at all.
 func TestHeadingNesting_ByStandardType(t *testing.T) {
 	t.Parallel()
 

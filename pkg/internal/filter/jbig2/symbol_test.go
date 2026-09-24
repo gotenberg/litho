@@ -134,8 +134,13 @@ func TestIAID_RoundTrip(t *testing.T) {
 // The dotted image puts pixels in the SLTP context of Figures 14 and 15. These
 // streams were also decoded by PDFium (through pdf.js 6.3) when this test was
 // written, and it reproduced every target. poppler and CoreGraphics were not
-// used: on the TPGR fixtures of the pdf.js corpus both disagree with PDFium,
-// litho and the image every other fixture of that set encodes.
+// used: on TPGR fixtures both disagree with PDFium and litho.
+//
+// # Corpus evidence
+//
+//   - pdfjs: on the TPGR fixtures, poppler and CoreGraphics both disagree
+//     with PDFium, litho and the image every other fixture of that set
+//     encodes.
 func TestDecode_RefinementRoundTrip(t *testing.T) {
 	t.Parallel()
 

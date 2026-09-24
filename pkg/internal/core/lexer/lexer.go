@@ -11,12 +11,14 @@ import (
 // maxStringAccum is the maximum number of bytes the lexer accumulates for a
 // single string literal or hex string token. Malformed PDFs can contain
 // unterminated strings that would otherwise cause the lexer to scan the
-// entire file into memory. 10 MB is well above any legitimate string size.
+// entire file into memory. Anti-DoS guard, not spec-mandated: 10 MB is well
+// above any legitimate string size.
 const maxStringAccum = 10 << 20 // 10 MB
 
 // TokenType represents the category of a lexed PDF token.
 type TokenType int
 
+// Token types produced by the lexer.
 const (
 	TokenEOF TokenType = iota
 	TokenError
@@ -173,15 +175,22 @@ func isNumber(s string) bool {
 // ISO 32000-2, 7.3.3 gives no meaning to such a token. Adobe Reader reads it as
 // the number 0 rather than as a keyword, and pdf.js follows, naming this very
 // case: its Lexer.getNumber returns 0 for a sign run that whitespace or a
-// delimiter ends, "consistent with Adobe Reader (fixes issue9252.pdf,
-// issue15604.pdf, bug1753983.pdf, bug1953099.pdf)". Reading it as a keyword
-// instead turns it into a content stream operator, and pdfjs bug1753983.pdf
-// then draws a "-" operator litho reports as undefined under ISO 19005-4,
-// 6.2.2; veraPDF reports nothing. It also mis-binds the operands around it,
-// since an operator ends the operand list a number would have joined.
+// delimiter ends, "consistent with Adobe Reader". Reading it as a keyword
+// instead turns it into a content stream operator that litho reports as
+// undefined under ISO 19005-4, 6.2.2. It also mis-binds the operands around
+// it, since an operator ends the operand list a number would have joined.
 //
 // Kept to a token of signs and dots alone. pdf.js throws on "-f", where a
 // regular character follows the sign, and that stays a keyword here.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9252.pdf, issue15604.pdf, bug1753983.pdf, bug1953099.pdf:
+//     pdf.js's Lexer.getNumber comment lists these files as the ones its
+//     sign-run-as-0 reading fixes.
+//   - pdfjs bug1753983.pdf: read as a keyword, its sign run draws a "-"
+//     operator litho reports as undefined under ISO 19005-4, 6.2.2, and
+//     veraPDF reports nothing.
 func isDigitlessNumber(s string) bool {
 	if s == "" {
 		return false
@@ -237,16 +246,24 @@ const endobjKeyword = "endobj"
 //
 // ISO 32000-1, 7.2.2 ends a token at a delimiter or white-space character, and
 // "e" is neither, so "7559endobj" lexes as one keyword and the object holding
-// it resolves to nothing. Producers do emit it: pdfjs issue3566.pdf writes
-// object 120 as "120 0 obj\n7559endobj", and that object is the /Length of the
-// Type1C font program in object 14, so the whole stream became unreadable and
-// the checks keyed on its extent went silent. litho still reports the missing
-// separator (ISO 19005-2, 6.1.9 t1 judges the raw bytes), so accepting the
-// number here loses no finding; veraPDF reads the same file the same way.
+// it resolves to nothing. Producers do emit it, and when that object is a
+// stream's /Length the whole stream becomes unreadable and the checks keyed on
+// its extent go silent. litho still reports the missing separator (ISO
+// 19005-2, 6.1.9 t1 judges the raw bytes), so accepting the number here loses
+// no finding.
 //
 // Only the endobj keyword is split. A number run together with any other
-// keyword is left alone, because nothing in the corpora shows one and a wider
-// rule would start guessing at token boundaries.
+// keyword is left alone, because a wider rule would start guessing at token
+// boundaries.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue3566.pdf: writes object 120 as "120 0 obj\n7559endobj", and
+//     that object is the /Length of the Type1C font program in object 14, so
+//     the whole stream became unreadable and the checks keyed on its extent
+//     went silent. veraPDF reads the file the same way litho now does.
+//   - All corpora: no file runs a number together with any keyword other
+//     than endobj.
 func splitNumberEndobj(val string) (string, bool) {
 	num, ok := strings.CutSuffix(val, endobjKeyword)
 	if !ok || num == "" {

@@ -10,12 +10,16 @@ import (
 // stating no pdfaSchema:namespaceURI reaches nothing, so the custom value types
 // it declares resolve for nobody, its own properties included. ISO 19005-1
 // §6.7.8 t9 and ISO 19005-2/3 §6.6.2.3.3 t8 both read isValueTypeDefined.
+// The rule asks whether the CUSTOM type resolves, not whether the entry around
+// it is well formed.
 //
-// Two controlled edits to the veraPDF test suite's
-// 6-6-2-3-3-t01-fail-a.pdf established the shape: restoring the namespaceURI
-// clears the finding, and naming the predefined "Text" instead of the custom
-// type clears it as well. So the rule asks whether the CUSTOM type resolves,
-// not whether the entry around it is well formed.
+// # Corpus evidence
+//
+//   - verapdf 6-6-2-3-3-t01-fail-a.pdf: two controlled edits established the
+//     shape. Restoring the namespaceURI clears the finding, and naming the
+//     predefined "Text" instead of the custom type clears it as well.
+//   - pdfjs bug2025674.pdf: declares a "Closed Choice of" wrapper around a
+//     predefined type with no namespaceURI, and veraPDF passes it.
 func TestExtensionSchema_NamespacelessEntryDefinesNoType(t *testing.T) {
 	t.Parallel()
 
@@ -67,7 +71,6 @@ func TestExtensionSchema_NamespacelessEntryDefinesNoType(t *testing.T) {
 		{"no namespaceURI, predefined value type", "", "Text", false},
 		// veraPDF simplifies a choice qualifier before the lookup, so a
 		// "Closed Choice of" wrapper around a predefined type still resolves.
-		// pdfjs bug2025674.pdf declares exactly that and veraPDF passes it.
 		{"no namespaceURI, choice of a predefined type", "", "Closed Choice of Integer", false},
 	}
 	for _, tc := range cases {

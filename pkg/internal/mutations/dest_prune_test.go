@@ -89,8 +89,11 @@ func deleteFirstPage(t *testing.T) *writer.ObjAllocator {
 // 32000-1, 12.3.2.2 requires the first element of an explicit destination to be
 // a page in the document, and the reference itself keeps the page reachable, so
 // the writer carries the removed page and its content stream into the output.
-// Deleting page 1 of govdocs thread_100_100852.pdf left the page behind with
-// all 1191 bytes of its content.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100852.pdf: deleting page 1 left the page behind with
+//     all 1191 bytes of its content.
 func TestDeletePagesPrunesDestinationsToRemovedPages(t *testing.T) {
 	t.Parallel()
 
@@ -244,9 +247,13 @@ func TestRemovedPageSetKeepsRepeatedPages(t *testing.T) {
 //
 // A widget names its page in /P (ISO 32000-1, 12.5.6.19) and its field lists it
 // in /Kids, so a widget left behind is a live reference that carries the deleted
-// page into the output. Deleting page 1 of govdocs thread_100_100852.pdf kept
-// the page and all 1191 bytes of its content this way, reachable as
-// /Pages/Kids[0]/Annots[0]/Parent/Kids[4]/P.
+// page into the output.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100852.pdf: deleting page 1 kept the page and all 1191
+//     bytes of its content through a widget left behind, reachable as
+//     /Pages/Kids[0]/Annots[0]/Parent/Kids[4]/P.
 func TestDeletePagesDropsWidgetsOfRemovedPages(t *testing.T) {
 	t.Parallel()
 

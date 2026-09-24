@@ -53,8 +53,12 @@ func webCapturePDF(t *testing.T) []byte {
 //
 // A content set lists what one capture produced in /O (ISO 32000-1, Table 356),
 // so one naming a deleted page is a live reference that keeps the page in the
-// output: govdocs thread_400_400742.pdf held 730 bytes of it after every other
-// path had been closed.
+// output.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400742.pdf: held 730 bytes of a deleted page through
+//     a content set after every other path had been closed.
 func TestDeletePagesPrunesWebCaptureSets(t *testing.T) {
 	t.Parallel()
 

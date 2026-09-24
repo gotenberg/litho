@@ -7,6 +7,11 @@ import "testing"
 // controls (HT, LF, FF, CR) survive the strip. The govdocs metadata
 // canary depends on every variant landing the same value on both
 // sides of the comparison.
+//
+// # Corpus evidence
+//
+//   - govdocs: 0x03 (ETX) shows up as a Producer prefix on some fixtures,
+//     which the etx-prefix case reproduces.
 func TestStripUndefinedControls(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -19,7 +24,7 @@ func TestStripUndefinedControls(t *testing.T) {
 		{"trailing-null", "Hello\x00", "Hello"},
 		{"leading-null-padding", "\x00\x00\x00Hello", "Hello"},
 		{"interior-controls", "Title\x05foo\x07bar", "Titlefoobar"},
-		// 0x03 (ETX) shows up as a Producer prefix on some govdocs fixtures.
+		// 0x03 (ETX) as a Producer prefix.
 		{"etx-prefix", "\x03 version 2.51-b", " version 2.51-b"},
 		// 0x7F (DEL) is undefined too.
 		{"del", "a\x7fb", "ab"},
@@ -28,8 +33,8 @@ func TestStripUndefinedControls(t *testing.T) {
 		{"newline", "a\nb", "a\nb"},
 		{"ff", "a\x0cb", "a\x0cb"},
 		{"cr", "a\rb", "a\rb"},
-		// 0x18-0x1F are PDFDocEncoding diacritics, NOT undefined. We do
-		// not strip the U+0018-U+001F runes here even though litho's
+		// 0x18-0x1F are PDFDocEncoding diacritics, NOT undefined. The
+		// U+0018-U+001F runes are not stripped here even though litho's
 		// PDFDocEncoding decoder maps the bytes to glyphs; if the
 		// caller never decoded, the rune survives.
 		{"keep-0x18", "x\x18y", "x\x18y"},

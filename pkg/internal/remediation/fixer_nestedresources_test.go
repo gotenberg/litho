@@ -10,9 +10,12 @@ import (
 
 // nestedFormPDF builds a page whose /Resources declare a colour space /CS0 and
 // a form XObject (object 4) that paints with /CS0 but carries NO /Resources of
-// its own. That is the shape veraPDF's 6-2-2-t02-fail-b has, and the shape
-// ISO 19005-2/3/4 6.2.2 t2 reports as resolved "only through inherited
-// Resources".
+// its own. That is the shape ISO 19005-2/3/4 6.2.2 t2 reports as resolved "only
+// through inherited Resources".
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-2-t02-fail-b: has this shape.
 func nestedFormPDF() []byte {
 	return buildStructPDF(
 		"<< /Type /Catalog /Pages 2 0 R >>",
@@ -30,7 +33,12 @@ func nestedFormPDF() []byte {
 // page-resources already claims this violation but repairs PAGES, pinning an
 // inherited dictionary onto the page dict. Here the page already declares
 // /CS0; it is the form XObject that lacks a /Resources entry, so the page-level
-// repair measured inert and the cells stayed flagged.
+// repair cannot reach it.
+//
+// # Corpus evidence
+//
+//   - All corpora: the page-level repair measured inert on these cells, and
+//     they stayed flagged.
 func TestFixNestedResources_GivesAFormXObjectItsOwnResources(t *testing.T) {
 	t.Parallel()
 
@@ -64,12 +72,17 @@ func TestFixNestedResources_GivesAFormXObjectItsOwnResources(t *testing.T) {
 	}
 }
 
-// TestFixNestedResources_LeavesASharedXObjectAlone guards the hazard the corpus
-// cannot falsify.
+// TestFixNestedResources_LeavesASharedXObjectAlone guards a hazard no real
+// file exercises.
 //
 // Two pages may bind the same name to different objects, so copying one page's
-// binding into an XObject both share would be wrong. Every carrying fixture in
-// the corpus is single-page, so only this test can catch a regression here.
+// binding into an XObject both share would be wrong. Only this test can catch a
+// regression here.
+//
+// # Corpus evidence
+//
+//   - All corpora: every fixture carrying this violation is single-page, so the
+//     corpus cannot falsify this hazard.
 func TestFixNestedResources_LeavesASharedXObjectAlone(t *testing.T) {
 	t.Parallel()
 

@@ -15,7 +15,7 @@ import (
 
 // minimalFontPDF is a single-page PDF that declares a Helvetica Type1
 // font and a content stream drawing "Hello". Used to drive the full
-// extractTextRecursive path (Tf, Tj, font resolution, text-matrix
+// [extractTextRecursive] path (Tf, Tj, font resolution, text-matrix
 // update, element emission) without spinning up pkg/pdf.
 func minimalFontPDF() []byte {
 	return []byte(
@@ -38,7 +38,7 @@ func minimalFontPDF() []byte {
 			"startxref\n326\n%%EOF\n")
 }
 
-// TestExtractElements_MinimalPDF runs ExtractElements against a crafted
+// TestExtractElements_MinimalPDF runs [ExtractElements] against a crafted
 // PDF with a known text string. The assertion is behavioral: the
 // returned elements contain "Hello" somewhere in their Text fields,
 // and the element count is non-zero. Exact counts, positions, and
@@ -89,9 +89,13 @@ func TestExtractElements_MinimalPDF(t *testing.T) {
 
 // TestExtractElements_MalformedTfNoOperands pins the operand guard: a Tf
 // operator with no operands, which a malformed content stream can carry, must
-// not panic. Before the guard, extractTextRecursive read op.Operands[0] and
-// crashed with "index out of range [0] with length 0". Reproduces pdfjs
-// bug1130815.pdf, which reached this path through ExtractTables.
+// not panic. Before the guard, [extractTextRecursive] read op.Operands[0] and
+// crashed with "index out of range [0] with length 0".
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1130815.pdf: the test reproduces it, and it reached this path
+//     through ExtractTables.
 func TestExtractElements_MalformedTfNoOperands(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -116,7 +120,7 @@ func TestExtractElements_MalformedTfNoOperands(t *testing.T) {
 	}
 }
 
-// TestExtractText_MinimalPDF runs the higher-level ExtractText which
+// TestExtractText_MinimalPDF runs the higher-level [ExtractText] which
 // reconstructs a string from the element list. Asserts the text is
 // present.
 func TestExtractText_MinimalPDF(t *testing.T) {
@@ -208,7 +212,7 @@ func ftoa(n int) string {
 }
 
 // TestExtractElements_ContextCancellation honors a cancelled context.
-// The per-op cancellation check in extractTextRecursive fires every
+// The per-op cancellation check in [extractTextRecursive] fires every
 // 100 operators. For a 1-op content stream the outer ctx.Err() check
 // at function entry is what catches this.
 func TestExtractElements_ContextCancellation(t *testing.T) {

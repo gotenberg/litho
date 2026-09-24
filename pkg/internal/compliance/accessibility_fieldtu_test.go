@@ -5,13 +5,18 @@ import (
 	"testing"
 )
 
-// TestCheckFormFieldTU_KidWidgetTU pins ISO 14289-1, 7.18.1 t3 against the shape
-// veraPDF's PDF_UA-1__7.18.1-t03-fail-d fixture uses: a radio group whose FIELD
-// carries no /TU, whose kid widgets each carry a /TU of their own.
+// TestCheckFormFieldTU_KidWidgetTU pins ISO 14289-1, 7.18.1 t3 on a radio
+// group whose FIELD carries no /TU, whose kid widgets each carry a /TU of their
+// own.
 //
 // /TU is a field key (ISO 32000-1, Table 220). A kid widget is a pure annotation,
 // so its /TU says nothing about the field, and honouring it passed a file the
 // rule exists to catch.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.18.1-t03-fail-d: a radio group whose field carries
+//     no /TU and whose kid widgets each carry one, the shape this test builds.
 func TestCheckFormFieldTU_KidWidgetTU(t *testing.T) {
 	ctx := context.Background()
 

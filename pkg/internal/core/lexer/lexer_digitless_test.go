@@ -9,11 +9,15 @@ import (
 //
 // ISO 32000-2, 7.3.3 gives "-" no meaning. Adobe Reader reads it as 0 and
 // pdf.js follows: its Lexer.getNumber returns 0 for a sign run that whitespace
-// or a delimiter ends, naming issue9252.pdf, issue15604.pdf and bug1753983.pdf,
-// all three of which litho's corpus carries. Reading it as a keyword makes it a
-// content stream operator, which litho then reports as undefined under
-// ISO 19005-4, 6.2.2 while veraPDF reports nothing, and which mis-binds the
-// operands around it: an operator ends the operand list a number would join.
+// or a delimiter ends. Reading it as a keyword makes it a content stream
+// operator, which litho then reports as undefined under ISO 19005-4, 6.2.2
+// while veraPDF reports nothing, and which mis-binds the operands around it:
+// an operator ends the operand list a number would join.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9252.pdf, issue15604.pdf, bug1753983.pdf: pdf.js's
+//     Lexer.getNumber names all three, and the corpus carries all three.
 func TestNextToken_DigitlessNumber(t *testing.T) {
 	t.Parallel()
 

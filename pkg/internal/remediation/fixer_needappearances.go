@@ -81,13 +81,19 @@ func fixNeedAppearances(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 // viewer stops regenerating them and draws what the file holds. An appearance
 // stream is a form XObject (ISO 32000-1, 12.5.5) and Table 95 makes /Subtype
 // /Form and /BBox required, but a producer that expected regeneration can leave
-// both out and never notice. pdfjs checkbox-bad-appearance.pdf does, so removing
-// the flag to satisfy ISO 19005-2, 6.9 turned a visible tick into nothing: the
-// file became conformant and lost the mark that said the box was checked.
+// both out and never notice. Removing the flag to satisfy ISO 19005-2, 6.9 then
+// turns a visible tick into nothing: the file becomes conformant and loses the
+// mark that says the box is checked.
 //
 // Only missing entries are added. A stream that declares its own box is placed
 // by it, and 12.5.5 maps that box onto /Rect, so overriding it would move the
 // appearance.
+//
+// # Corpus evidence
+//
+//   - pdfjs checkbox-bad-appearance.pdf: its appearance streams leave out
+//     /Subtype and /BBox, so removing the flag turned a visible tick into
+//     nothing.
 func normaliseWidgetAppearances(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) int {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -206,15 +212,22 @@ func annotRectSize(ctx context.Context, doc *document.Document, annot ast.PdfDic
 // damaged incremental update points it at a non-catalog. Per ISO 32000-1 §7.5.5
 // Table 15 /Root shall be the catalog, so such a file is malformed, and the
 // reader already recovers from it. Fixers wrote their repairs into whatever
-// object /Root named, so pdfjs issue9418.pdf (whose final trailer points /Root
-// at the /Info dictionary) had /MarkInfo, /Lang, /Metadata, /StructTreeRoot and
-// /ViewerPreferences merged into its document information dictionary while the
-// real catalog kept none of them. Remediation reported those repairs as applied
-// and then listed the very same violations as residual, never converging.
+// object /Root named, so a file whose final trailer points /Root at the /Info
+// dictionary had its catalog repairs merged into its document information
+// dictionary while the real catalog kept none of them. Remediation reported
+// those repairs as applied and then listed the very same violations as
+// residual, never converging.
 //
 // The raw trailer ref remains the fallback: when recovery finds no catalog at
 // all, a reference the file at least names beats no reference. ok is false only
 // when neither yields one.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9418.pdf: its final trailer points /Root at the /Info
+//     dictionary, and /MarkInfo, /Lang, /Metadata, /StructTreeRoot and
+//     /ViewerPreferences were merged into that dictionary while the real
+//     catalog kept none of them.
 func catalogRefForFixer(ctx context.Context, doc *document.Document) (ast.PdfIndirectRef, bool) {
 	if ref, ok := doc.CatalogRef(ctx); ok {
 		return ref, true
@@ -252,12 +265,17 @@ const maxAppearanceNestDepth = 3
 //
 // ISO 32000-1, 12.7.3.3 lets a producer store a placeholder appearance and set
 // the flag, leaving the viewer to draw /V. Removing the flag to satisfy ISO
-// 19005-2, 6.9 then makes that placeholder authoritative: pdfjs issue12233.pdf
-// keeps 12-to-45 byte appearances that paint no glyphs at all, and remediation
-// silently dropped the field values "Man", "150" and "Red" from the page.
+// 19005-2, 6.9 then makes that placeholder authoritative, and remediation
+// silently drops the field values from the page.
 //
 // Only a field whose stored appearance shows no text counts. One that already
 // draws its value loses nothing when the viewer stops regenerating.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12233.pdf: keeps 12-to-45 byte appearances that paint no
+//     glyphs at all, and remediation silently dropped the field values "Man",
+//     "150" and "Red" from the page.
 func needAppearancesShowsAValue(ctx context.Context, doc *document.Document) bool {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -334,13 +352,17 @@ const passwordFieldFlag = 1 << 13
 // thing a regenerating viewer would.
 //
 // A stored appearance can be STALE, which is the whole reason a producer sets
-// the flag (ISO 32000-1, 12.7.3.3): pdfjs bug1796741.pdf holds the value
-// "Dlrow SJ.fdp Olleh" behind an appearance painting "Hello PDF.js World", and
-// bug1844583.pdf the reverse. Dropping the flag there makes the document display
-// data the field does not hold.
+// the flag (ISO 32000-1, 12.7.3.3). Dropping the flag over a stale appearance
+// makes the document display data the field does not hold.
 //
 // A password field is exempt: Table 231 has it echo a masking character instead
 // of the value, so its appearance is meant to differ.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1796741.pdf: holds the value "Dlrow SJ.fdp Olleh" behind an
+//     appearance painting "Hello PDF.js World".
+//   - pdfjs bug1844583.pdf: holds the reverse of bug1796741.pdf.
 func appearanceShowsValue(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
 	if fieldFlags(ctx, doc, annot)&passwordFieldFlag != 0 {
 		return true

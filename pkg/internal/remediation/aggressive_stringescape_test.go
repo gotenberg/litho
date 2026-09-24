@@ -40,12 +40,17 @@ func roundTripOperand(t *testing.T, in []byte) []byte {
 // ISO 32000-2, 7.3.4.2 has a reader normalise an end-of-line marker inside a
 // literal string to a single LF: a lone CR becomes LF, and a CR LF pair becomes
 // one LF, losing a byte. A content stream rewritten with the carriage return
-// written raw therefore comes back saying something else. On pdfjs
-// issue18645.pdf, whose font draws every code from 0x01 up, the code 0x0D
-// selecting "C" was read back as 0x0A and drew "9" instead, three times over.
+// written raw therefore comes back saying something else: a character code
+// 0x0D is read back as 0x0A and selects a different glyph.
 //
 // The test asserts the PARSE rather than the bytes on the wire: the bytes
 // matched before this repair and the value still did not survive them.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18645.pdf: its font draws every code from 0x01 up, and the
+//     code 0x0D selecting "C" was read back as 0x0A and drew "9" instead,
+//     three times over.
 func TestSerializeOpsPreservesCarriageReturn(t *testing.T) {
 	t.Parallel()
 

@@ -31,7 +31,7 @@ var fieldValueKeys = []ast.PdfName{"V", "DV"}
 // The widget's /AP goes with it. An appearance stream draws the old value, so
 // clearing /V alone leaves it on screen; unlike a markup annotation, a widget's
 // appearance is one litho can regenerate from the field value
-// (see formNeedsAppearances and generatedAppearance), so dropping it is
+// (see [formNeedsAppearances] and [generatedAppearance]), so dropping it is
 // recoverable rather than destructive.
 //
 // It refuses when the dictionary stating the value has no indirect reference,
@@ -88,7 +88,7 @@ func scrubPageWidgets(
 		annotRef, isRef := entry.(ast.PdfIndirectRef)
 		if !isRef {
 			// A direct widget cannot have its /AP dropped in place. It is
-			// reported by [ScrubAnnotationText] when it carries text of its
+			// reported by ScrubAnnotationText when it carries text of its
 			// own; here there is nothing to rewrite.
 			continue
 		}

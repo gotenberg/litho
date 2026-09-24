@@ -145,13 +145,12 @@ func (r PdfIndirectRef) String() string {
 }
 
 // PdfStream represents a PDF stream object. Stream data is loaded lazily:
-// the raw bytes are only read from the underlying PDF file when [PdfStream.Bytes]
-// is called for the first time and cached for subsequent calls.
+// the raw bytes are read through the stream's loader when [PdfStream.Bytes]
+// is called. Caching belongs to the loader, as [NewLazyStream] documents.
 //
-// PdfStream is a value type, but it is safe to copy: the lazy loader closure
-// captures its caching state as pointer-like variables in the enclosing scope,
-// so all copies share the same cache. Do not refactor the closure construction
-// in [NewLazyStream] without preserving this shared-state guarantee.
+// PdfStream is a value type, but it is safe to copy: all copies share the same
+// loader closure, so a loader that memoises through captured variables shares
+// its cache across every copy.
 type PdfStream struct {
 	Dict PdfDict
 	open func(context.Context) ([]byte, error) // lazy loader, returns raw (possibly encrypted) stream bytes

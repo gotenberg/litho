@@ -28,7 +28,7 @@ type vriEntry struct {
 	OCSPs []ocspBasicResponse
 }
 
-// ocspBasicResponse holds the parsed fields we need from an OCSP BasicResponse.
+// ocspBasicResponse holds the parsed fields litho needs from an OCSP BasicResponse.
 type ocspBasicResponse struct {
 	ProducedAt  time.Time
 	Responses   []singleResponse

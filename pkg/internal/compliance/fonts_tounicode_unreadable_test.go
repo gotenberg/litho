@@ -14,9 +14,13 @@ import (
 // t2, ISO 19005-2 §6.2.11.7.2 t2). The rule constrains "the Unicode values
 // specified in the ToUnicode CMap"; an unreadable entry specifies none, so the
 // constraint is vacuous. Japanese producers write the CMap name /Identity-H
-// where ISO 32000-1 §9.10.3 prescribes a stream (pdfjs javauninstall-7r.pdf,
-// font HGPGothicE), which litho reported as a value violation while veraPDF
-// passed the file.
+// where ISO 32000-1 §9.10.3 prescribes a stream, which litho reported as a
+// value violation while veraPDF passed the file.
+//
+// # Corpus evidence
+//
+//   - pdfjs javauninstall-7r.pdf: font HGPGothicE writes /ToUnicode
+//     /Identity-H, and veraPDF passes the file.
 func TestToUnicodeCMapValues_UnreadableIsVacuous(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

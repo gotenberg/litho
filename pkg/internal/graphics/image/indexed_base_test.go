@@ -25,8 +25,11 @@ const unreadableBase = "[/Bogus << >>]"
 // data came back as "decoded data too short for RGB image: got 1560, want 4680",
 // blaming the file for a colour space litho does not support.
 //
-// Measured on 4 images in 2 pdfjs documents (issue10339_reduced.pdf and
-// issue2761.pdf), every one of them /Indexed over a /Lab base.
+// # Corpus evidence
+//
+//   - pdfjs issue10339_reduced.pdf, issue2761.pdf: 4 images in these 2
+//     documents were refused this way, every one of them /Indexed over a /Lab
+//     base.
 func TestDecodeImage_IndexedOverUnreadableBaseIsRefused(t *testing.T) {
 	t.Parallel()
 

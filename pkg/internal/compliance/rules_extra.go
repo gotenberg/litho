@@ -307,15 +307,16 @@ var (
 		Description:   "Schematron assertion with warning or info severity fired on the embedded invoice",
 	}
 
-	// Parts 2/3 spellings of the undefined-named-resource test, defined but
-	// never emitted, and deliberately so.
+	// Rule_19005_2_6_2_2_t03 and Rule_19005_3_6_2_2_t03 are the Parts 2/3
+	// spellings of the undefined-named-resource test, defined but never
+	// emitted, and deliberately so.
 	//
 	// ISO 19005-4 §6.2.2 adds test 3: every named resource an operator
 	// references shall be defined in the resource dictionary. Parts 2 and 3
 	// state §6.2.2 with tests 1 and 2 alone, and ISO 19005-1 carries no
 	// resource-completeness rule at all, since an undefined colour space name
 	// conforms to PDF/A-1b. Emitting these under parts 1 to 3 would reject
-	// documents those parts permit, so missingResourceRule gates the test to
+	// documents those parts permit, so [missingResourceRule] gates the test to
 	// part 4 and returns the zero Rule for every other part.
 	//
 	// They stay defined rather than deleted so the divergence stays visible.

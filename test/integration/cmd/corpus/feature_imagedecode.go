@@ -261,9 +261,14 @@ func (f *imageDecodeFeature) Compare(fixtureID string, output []byte) Verdict {
 // Identical signatures pair first and each remaining golden image takes its
 // nearest free partner; augmenting paths then re-pair wherever that leaves a
 // golden image out that a different pairing admits. Taking each golden image's
-// nearest partner in turn instead let an early image take the only partner of
-// a later one, and left 34 of the tiny strips of govdocs thread_200_200823
-// unmatched against images litho decodes within tolerance.
+// nearest partner in turn instead lets an early image take the only partner of
+// a later one.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200823: pairing each golden image with its nearest
+//     partner in turn left 34 of its tiny strips unmatched against images
+//     litho decodes within tolerance.
 func pairImages(want, got []imageSignature) []int {
 	pair := make([]int, len(want))
 	owner := make([]int, len(got))

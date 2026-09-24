@@ -11,7 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// resolveSplitBookmarks computes the final bookmark tree to write for a Split
+// resolveSplitBookmarks computes the final bookmark tree to write for a [Split]
 // operation. The keptPages slice contains the source page numbers in the
 // order they were kept.
 func resolveSplitBookmarks(
@@ -114,7 +114,7 @@ func reconstructFromKeptPages(
 	}, cfg.Generation)
 }
 
-// resolveMergeBookmarks computes the final bookmark tree for a Merge
+// resolveMergeBookmarks computes the final bookmark tree for a [Merge]
 // operation. cumulativeOffsets[i] is the page count BEFORE source i.
 func resolveMergeBookmarks(
 	ctx context.Context,
@@ -200,7 +200,7 @@ func resolveMergeBookmarks(
 	return all
 }
 
-// generateForMergeSource auto-generates bookmarks for one source in a Merge
+// generateForMergeSource auto-generates bookmarks for one source in a [Merge]
 // operation, with page numbers offset by the cumulative count.
 func generateForMergeSource(
 	ctx context.Context,

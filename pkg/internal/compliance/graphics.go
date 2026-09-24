@@ -152,14 +152,19 @@ func checkFormXObjectResources(ctx context.Context, doc *document.Document, page
 // page paints. A tiling pattern draws its cell with a content stream of its own
 // (ISO 32000-1, 8.7.3.1), so the operand limits and resource rules apply there
 // as they do on the page. ISO 19005-1, 6.1.12 t2 states the real-magnitude
-// limit over CosReal, which is every real the file writes: pdfjs
-// 22060_A1_01_Plans.pdf keeps its 136 KB page stream inside the limit and holds
-// -39455.5 in patterns /R21 and /R24, and veraPDF reports it there six times.
+// limit over CosReal, which is every real the file writes, pattern cells
+// included.
 //
 // Only a pattern a scn or SCN selects is judged, the same scope
 // [scanPatternImages] uses. veraPDF passes a pattern the page declares and
 // never paints, measured on a fixture whose unselected pattern carries the same
 // out-of-range real.
+//
+// # Corpus evidence
+//
+//   - pdfjs 22060_A1_01_Plans.pdf: keeps its 136 KB page stream inside the
+//     limit and holds -39455.5 in patterns /R21 and /R24, and veraPDF reports
+//     it there six times.
 func checkPatternResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part, pageNum int, used *usedResources) []Violation {
 	if pageRes == nil || used == nil {
 		return nil
@@ -301,9 +306,13 @@ func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Docum
 // The named-resource test runs here too, for the one part that states it.
 // An earlier note left it out as unmeasured against the reference validator;
 // it has since been measured. veraPDF 1.30.2 fails ISO 19005-4, 6.2.2 t3 on
-// appearance streams: pdfjs issue14438.pdf runs /OC /MC0 BDC in 2 of its 19
-// appearance streams, whose own /Resources carry no /Properties, and veraPDF
-// reports exactly those 2.
+// appearance streams.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14438.pdf: runs /OC /MC0 BDC in 2 of its 19 appearance
+//     streams, whose own /Resources carry no /Properties, and veraPDF reports
+//     exactly those 2.
 func checkAnnotationAppearanceOps(ctx context.Context, doc *document.Document, page ast.PdfDict, part, pageNum int) []Violation {
 	rule := undefinedOperatorRule(part)
 	if rule.Specification == "" && missingResourceRule(part).Specification == "" {
@@ -425,11 +434,15 @@ func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, strea
 // every name the stream does not define itself.
 //
 // The fallback is per name rather than per category, measured against veraPDF
-// 1.30.2 on pdfjs issue14438.pdf. Defining /MC0 on the page alone silences
-// §6.2.2 t3, and so does giving the appearance stream a /Properties holding a
-// different name while the page defines /MC0. ISO 32000-1, 12.5.5 leaves an
-// appearance stream's resources to the stream, so the page fills the gaps
-// rather than replacing them.
+// 1.30.2. Defining /MC0 on the page alone silences §6.2.2 t3, and so does
+// giving the appearance stream a /Properties holding a different name while the
+// page defines /MC0. ISO 32000-1, 12.5.5 leaves an appearance stream's
+// resources to the stream, so the page fills the gaps rather than replacing
+// them.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14438.pdf: the file both /MC0 measurements were made on.
 func appearanceResources(ctx context.Context, doc *document.Document, streamRes, pageRes ast.PdfDict) ast.PdfDict {
 	if streamRes == nil {
 		return pageRes
@@ -494,6 +507,12 @@ func checkFormXObjectExtGState(ctx context.Context, doc *document.Document, page
 }
 
 // checkExtGStateGraphics validates all ExtGState entries in a page's resources.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100666.pdf: references ExtGState object 190 from 30
+//     pages, and veraPDF reports its /TR once. It backs judging a shared
+//     dictionary once.
 func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resources ast.PdfDict, profile string, part, pageNum int, judged map[int]bool) []Violation {
 	gsDict, err := document.ResolveDict(ctx, doc, resources["ExtGState"])
 	if err != nil || gsDict == nil {
@@ -510,8 +529,7 @@ func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resourc
 		// One ExtGState dictionary, one finding: these rules forbid keys OF THE
 		// DICTIONARY (ISO 19005-2 §6.2.5 among them), so a state 30 pages share
 		// is one violation, not 30. veraPDF states each against its single
-		// PDExtGState: govdocs thread_100_100666.pdf references object 190 from
-		// 30 pages and veraPDF reports its /TR once. See [objectJudgedOnce].
+		// PDExtGState. See [objectJudgedOnce].
 		if objectJudgedOnce(gsObj, judged) {
 			continue
 		}

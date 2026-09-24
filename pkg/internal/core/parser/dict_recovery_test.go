@@ -10,10 +10,14 @@ import (
 // dictionary's keys costs only that token.
 //
 // A stray keyword was already tolerated; a stray delimiter was not, and the
-// asymmetry cost the whole dictionary. Damaged files produce both: pdfjs
-// poppler-742-0-fuzzed.pdf closes its /AcroForm with `/Q 0 > >>` and lost every
-// form field, and poppler-937-0-fuzzed.pdf writes `/Kids 3 0 R]` and lost its
-// page tree. qpdf and poppler read both.
+// asymmetry cost the whole dictionary. Damaged files produce both.
+//
+// # Corpus evidence
+//
+//   - pdfjs poppler-742-0-fuzzed.pdf: closes its /AcroForm with `/Q 0 > >>`
+//     and lost every form field. qpdf and poppler read it.
+//   - pdfjs poppler-937-0-fuzzed.pdf: writes `/Kids 3 0 R]` and lost its page
+//     tree. qpdf and poppler read it.
 func TestParseDictKeepsKeysAfterStrayDelimiter(t *testing.T) {
 	for _, tc := range []struct {
 		name string

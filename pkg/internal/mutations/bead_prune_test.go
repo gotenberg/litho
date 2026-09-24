@@ -63,10 +63,14 @@ func articleThreadPDF(t *testing.T) []byte {
 // the ring and the rest of the article stays connected.
 //
 // A bead names its page in /P and chains through /N and /V (ISO 32000-1,
-// 12.4.3), so one left in the ring keeps its page in the output: govdocs
-// thread_100_100184.pdf held 3649 bytes of its deleted page this way. Unlike
-// split, delete keeps the catalog and its /Threads, so the article is meant to
-// go on working and the ring is spliced rather than dropped.
+// 12.4.3), so one left in the ring keeps its page in the output. Unlike split,
+// delete keeps the catalog and its /Threads, so the article is meant to go on
+// working and the ring is spliced rather than dropped.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100184.pdf: held 3649 bytes of its deleted page
+//     through a bead left in the ring.
 func TestDeletePagesSplicesArticleBeads(t *testing.T) {
 	t.Parallel()
 

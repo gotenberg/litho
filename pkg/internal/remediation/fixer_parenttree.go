@@ -18,10 +18,16 @@ import (
 // saying /K 12000000 sizes a 12,000,001 entry array and then writes a null into
 // every slot. Measured: a 578-byte file allocated 183 MB that way, and at
 // 16 bytes per entry an id near the int32 maximum reaches tens of gigabytes.
-// The largest id measured over the 5171 corpus files is 12522 (govdocs
-// thread_000_000314.pdf, pdfjs 9757, p99 8877), reading raw and Flate-compressed
-// content streams, so this leaves ~84x headroom and caps one page's array at
-// about 16 MiB.
+// The cap sits far above the ids real content streams carry, and it bounds one
+// page's array at about 16 MiB.
+//
+// # Corpus evidence
+//
+//   - All corpora, 5171 files: the largest id is 12522 and the p99 is 8877,
+//     reading raw and Flate-compressed content streams, so the cap leaves ~84x
+//     headroom.
+//   - govdocs thread_000_000314.pdf: carries that largest id, 12522.
+//   - pdfjs: the largest id is 9757.
 const maxParentTreeMCID = 1 << 20
 
 // matchParentTree matches the PDF/UA untagged-content violations the

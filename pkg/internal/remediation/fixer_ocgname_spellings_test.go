@@ -14,8 +14,13 @@ import (
 // "Each optional content configuration dictionary ... shall contain the Name
 // key" carries four clause numbers: ISO 19005-4 6.10, ISO 19005-2 and 19005-3
 // 6.9, ISO 14289-1 7.10 and ISO 14289-2 8.7. Only 6.10 reached
-// [fixOCGConfigs], so one veraPDF fixture was repaired as PDF/A-4 ("added
-// /Name to OCG default config /D") and left flagged as PDF/A-2b.
+// [fixOCGConfigs], so a file could be repaired as PDF/A-4 and left flagged as
+// PDF/A-2b.
+//
+// # Corpus evidence
+//
+//   - verapdf: one fixture was repaired as PDF/A-4 ("added /Name to OCG default
+//     config /D") and left flagged as PDF/A-2b.
 func TestMatchCatalogCleanup_ClaimsEveryOCGNameSpelling(t *testing.T) {
 	t.Parallel()
 
@@ -37,9 +42,15 @@ func TestMatchCatalogCleanup_ClaimsEveryOCGNameSpelling(t *testing.T) {
 //
 // The check tested key PRESENCE (`if _, ok := d["Name"]; ok`), while
 // compliance calls hasNonEmptyName, which resolves the value and rejects an
-// empty string. veraPDF's 7.10-t01-fail-a carries `/D << /Name () >>`, so the
-// violation was reported and the repair declined: routing the clause to this
-// fixer cleared 32 of 46 cells and left the 14 empty-name ones flagged.
+// empty string. A configuration carrying `/D << /Name () >>` was therefore
+// reported and the repair declined.
+//
+// # Corpus evidence
+//
+//   - verapdf 7.10-t01-fail-a: carries `/D << /Name () >>`, so the violation
+//     was reported and the repair declined.
+//   - All corpora: routing the clause to this fixer cleared 32 of 46 cells and
+//     left the 14 empty-name ones flagged.
 func TestEnsureOCGConfigNameTreatsAnEmptyNameAsMissing(t *testing.T) {
 	t.Parallel()
 
@@ -111,11 +122,17 @@ func TestMatchCatalogCleanup_ClaimsTheRestOfTheOCGClause(t *testing.T) {
 // switch on the specification. That claimed the OCG rule and silently
 // UN-claimed every other test-1 violation in ISO 19005-2 and 19005-3, because
 // returning false short-circuited the 6.1.12 Perms and Signature-Reference
-// block that follows it. Twelve corpus cells stopped being repaired.
+// block that follows it.
 //
-// The corpus check could not see it: 46 newly matched cells hid the 12 newly
+// The aggregate gate could not see it: newly matched cells hid the newly
 // broken ones behind a net improvement, and only a comparison against the
 // previous capture's per-fixture verdicts surfaced it.
+//
+// # Corpus evidence
+//
+//   - All corpora: twelve cells stopped being repaired.
+//   - All corpora: 46 newly matched cells hid the 12 newly broken ones behind a
+//     net improvement.
 func TestMatchCatalogCleanup_StillClaimsPermsAfterTheOCGArm(t *testing.T) {
 	t.Parallel()
 

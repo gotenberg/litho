@@ -395,8 +395,7 @@ func (rep FacturXReport) Warnings() []Violation {
 //
 //  1. The schema set passed via [WithCIISchemas] when the caller
 //     overrode the default.
-//  2. The bundled D16B set from
-//     [pkg/internal/compliance/cii_schemas] otherwise.
+//  2. The bundled D16B set from [cii_schemas] otherwise.
 //
 // A bundle load error is logged at debug and the XSD pass is skipped
 // rather than failing the validation call, so a botched bump in the
@@ -406,7 +405,7 @@ func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXVa
 	var opts []compliance.FacturXValidateOption
 
 	// Strict by default: relax the consumer-path tolerances only when the
-	// caller opted in via [WithLenient].
+	// caller opted in via WithLenient.
 	opts = append(opts, compliance.WithFacturXLenient(r.lenient))
 
 	// XSD layer: caller-supplied override first, bundled default
@@ -499,7 +498,7 @@ func (r *Reader) facturXValidateOpts(ctx context.Context) []compliance.FacturXVa
 			r.doc.Logger.Debug("schematron: bundled ZUGFeRD 1.0 rules unavailable", "err", err)
 		}
 		// PEPPOL BIS 3.0 stays opt-in via
-		// [compliance.WithPeppolSchematron]: the rule set is scoped
+		// compliance.WithPeppolSchematron: the rule set is scoped
 		// to documents declaring a PEPPOL business process
 		// (R001 "Business process MUST be provided", R010/R020
 		// electronic address checks), so wiring it as a default
@@ -775,7 +774,6 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 		return "", err
 	}
 
-	// Extract raw content stream operations
 	ops, err := content.ParsePageContent(ctx, r.doc, targetPage.Dict)
 	if err != nil {
 		return "", err
@@ -1014,6 +1012,7 @@ type BookmarkGenerationOptions struct {
 // from the engine's shape to [HeadingCandidate] before each Score call.
 // Implementations must be safe for concurrent use.
 type HeadingScorer interface {
+	// Score returns the heading likelihood of candidate, in [0, 1].
 	Score(candidate HeadingCandidate) float64
 }
 
@@ -1275,7 +1274,7 @@ func (r *Reader) HasAcroForm(ctx context.Context) (has bool) {
 // the XFA layer.
 func (r *Reader) HasXFAForm(ctx context.Context) (has bool) {
 	// Resolves the catalog out of file-controlled bytes, so it needs the same
-	// panic boundary as [Reader.HasAcroForm], and like that method its
+	// panic boundary as Reader.HasAcroForm, and like that method its
 	// signature carries no error to report one through. Recover with a nil
 	// error pointer: the panic is still logged at Error with a stack, and the
 	// answer falls back to false.
@@ -1303,8 +1302,13 @@ func (r *Reader) HasXFAForm(ctx context.Context) (has bool) {
 // [Reader.HasAcroForm] answers the narrower question its name states, and keeps
 // the XFA handling that goes with it, so it is asked first and its answer is
 // taken as final when it says yes. The page scan only adds the fields no
-// /AcroForm lists: pdfjs issue12963.pdf carries 27 of them and no /AcroForm, so
-// the narrower answer read "no" for a document whose fields litho lists.
+// /AcroForm lists: a document can present widget fields on its pages with no
+// /AcroForm at all, and the narrower answer reads "no" for it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12963.pdf: carries 27 widget fields and no /AcroForm, so
+//     [Reader.HasAcroForm] read "no" for a document whose fields litho lists.
 func (r *Reader) HasFormFields(ctx context.Context) (_ bool, err error) {
 	defer recoverToError(r.logger(), "Reader.HasFormFields", &err)
 	if r.HasAcroForm(ctx) {
@@ -1325,7 +1329,7 @@ func (r *Reader) IsPortfolio(ctx context.Context) (_ bool, err error) {
 // name tree plus the files carried by FileAttachment annotations, which readers
 // list alongside them. Each item includes the original filename, MIME type, and
 // a lazy Open accessor. Callers can recursively pass embedded PDFs back into
-// pdf.Open. A file reached from both places is returned once.
+// [Open]. A file reached from both places is returned once.
 func (r *Reader) EmbeddedFiles(ctx context.Context) (_ []models.EmbeddedFile, err error) {
 	defer recoverToError(r.logger(), "Reader.EmbeddedFiles", &err)
 	return semantics.ExtractEmbeddedFiles(ctx, r.doc)
@@ -1416,7 +1420,17 @@ func (r *Reader) DSSInfo(ctx context.Context) (_ *models.DSSInfo, err error) {
 
 // Page returns the geometry and metadata for the given 1-based page number.
 // Width and Height are effective dimensions in PDF points, derived from the
-// CropBox (the visible area) and accounting for /Rotate and /UserUnit.
+// CropBox (the visible area) and accounting for /Rotate and /UserUnit. A page
+// whose box is missing or encloses no area reports the US Letter size that
+// mainstream readers substitute, 612 x 792 before /UserUnit and /Rotate apply.
+// The MediaBox and CropBox fields still report what the file declares.
+//
+// # Corpus evidence
+//
+//   - pdfjs boundingBox_invalid.pdf: the first page declares /MediaBox
+//     [0 0 0 0], and poppler reports 612 x 792 for it.
+//   - govdocs thread_400_400739.pdf: has no /MediaBox anywhere, and poppler
+//     reports 612 x 792 for it.
 func (r *Reader) Page(ctx context.Context, pageNum int) (_ models.Page, err error) {
 	defer recoverToError(r.logger(), "Reader.Page", &err)
 	p, err := r.resolvePage(ctx, pageNum)
@@ -1435,9 +1449,7 @@ func (r *Reader) Page(ctx context.Context, pageNum int) (_ models.Page, err erro
 	// says nothing about what to report when it is missing, and answering 0 by 0
 	// describes a page no viewer would draw. Substitute the size every
 	// mainstream reader uses: pdf.js falls back to its LETTER_SIZE_MEDIABOX and
-	// poppler reports 612 x 792 for pdfjs boundingBox_invalid.pdf, whose first
-	// page declares /MediaBox [0 0 0 0], and for govdocs thread_400_400739.pdf,
-	// which has no /MediaBox anywhere.
+	// poppler reports 612 x 792.
 	//
 	// The MediaBox and CropBox fields still report what the file declares. Only
 	// the effective dimensions gain the fallback.
@@ -1506,14 +1518,19 @@ func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) (_ []mode
 // ExtractImages returns metadata for the images the given 1-based page shows,
 // without decoding pixel data.
 //
-// An image drawn through a form XObject counts (ISO 32000-1, 8.10.1): reporting
-// only the page's own resources missed the nested ones on 583 pages of the pdfjs
-// and govdocs corpora. An image reached from more than one place is reported
-// once. An image named twice in one resource dictionary stays two entries.
+// An image drawn through a form XObject counts (ISO 32000-1, 8.10.1), so the
+// listing reaches past the page's own resources into the forms the page draws.
+// An image reached from more than one place is reported once. An image named
+// twice in one resource dictionary stays two entries.
 //
 // Each entry's Decode decodes that image's pixels as [Reader.DecodeImage]
 // does, with the same errors. Two form XObjects may each name an image Im0, so
 // a Filename can repeat on a page: Decode decodes the entry it belongs to.
+//
+// # Corpus evidence
+//
+//   - All corpora: reporting only the page's own resources missed the images
+//     nested in form XObjects on 583 pages of the pdfjs and govdocs corpora.
 func (r *Reader) ExtractImages(ctx context.Context, pageNum int) (_ []models.ImageMeta, err error) {
 	defer recoverToError(r.logger(), "Reader.ExtractImages", &err)
 	targetPage, err := r.resolvePage(ctx, pageNum)
@@ -1770,7 +1787,6 @@ func (r *Reader) runOCR(ctx context.Context, page *document.Page, images []model
 		return "", fmt.Errorf("page %d: %w", pageNum, ErrRequiresOCR)
 	}
 
-	// Decode the image stream.
 	img, err := pdfimage.DecodeImage(ctx, r.doc, page, ast.PdfName(bestName))
 	if err != nil {
 		return "", fmt.Errorf("page %d: %w: image decode failed: %v", pageNum, ErrOCRFailed, err)

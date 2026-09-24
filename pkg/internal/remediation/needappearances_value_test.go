@@ -79,9 +79,14 @@ func runNeedAppearances(t *testing.T, data []byte) []string {
 //
 // ISO 19005-2, 6.9 forbids /NeedAppearances, but removing it hands authority to
 // the stored appearance. A producer may store a placeholder and let the viewer
-// draw /V (ISO 32000-1, 12.7.3.3): pdfjs issue12233.pdf keeps 12-to-45 byte
-// appearances that paint nothing, and remediation dropped the values "Man",
-// "150" and "Red" from the page while reporting the flag removed.
+// draw /V (ISO 32000-1, 12.7.3.3), and removing the flag then drops the values
+// from the page while reporting the flag removed.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12233.pdf: keeps 12-to-45 byte appearances that paint
+//     nothing, and remediation dropped the values "Man", "150" and "Red" from
+//     the page while reporting the flag removed.
 func TestNeedAppearancesKeptWhenItIsWhatDrawsTheValue(t *testing.T) {
 	t.Parallel()
 
@@ -103,8 +108,12 @@ func TestNeedAppearancesRemovedWhenTheAppearanceDrawsTheValue(t *testing.T) {
 }
 
 // staleAppearancePDF builds a form whose stored appearance paints text that is
-// not the field's value, the shape of pdfjs bug1796741.pdf. password marks the
-// field as one whose value is deliberately masked.
+// not the field's value. password marks the field as one whose value is
+// deliberately masked.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1796741.pdf: has this shape.
 func staleAppearancePDF(password bool) []byte {
 	body := "/Tx BMC\nBT /Helv 9 Tf (Hello PDF.js World) Tj ET\nEMC\n"
 	ff := ""
@@ -143,10 +152,16 @@ func staleAppearancePDF(password bool) []byte {
 // remove.
 //
 // The flag exists precisely because the stored appearance may be out of date
-// (ISO 32000-1, 12.7.3.3). pdfjs bug1796741.pdf holds "Dlrow SJ.fdp Olleh"
-// behind an appearance painting "Hello PDF.js World", and bug1844583.pdf the
-// reverse: removing the flag made both documents display data the field does not
-// hold.
+// (ISO 32000-1, 12.7.3.3), and removing it then makes the document display
+// data the field does not hold.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1796741.pdf: holds "Dlrow SJ.fdp Olleh" behind an appearance
+//     painting "Hello PDF.js World", and removing the flag made it display data
+//     the field does not hold.
+//   - pdfjs bug1844583.pdf: holds the reverse of bug1796741.pdf, with the same
+//     result.
 func TestNeedAppearancesKeptWhenTheAppearanceIsStale(t *testing.T) {
 	t.Parallel()
 

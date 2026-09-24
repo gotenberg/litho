@@ -10,6 +10,12 @@ import (
 )
 
 // ExtractAnnotations extracts annotations from a specific page.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11287.pdf: writes /Annots null on one page, and calling that
+//     an error made litho the only reader that could not list annotations for
+//     the document.
 func ExtractAnnotations(ctx context.Context, doc *document.Document, page *document.Page, pageMap map[ast.PdfIndirectRef]int) ([]models.Annotation, error) {
 	annotsObj, ok := page.Dict["Annots"]
 	if !ok {
@@ -21,11 +27,10 @@ func ExtractAnnotations(ctx context.Context, doc *document.Document, page *docum
 		return nil, fmt.Errorf("failed to resolve /Annots: %w", err)
 	}
 	if annotsArr == nil {
-		// [document.ResolveArray] reports a nil array only for null, and per
+		// document.ResolveArray reports a nil array only for null, and per
 		// ISO 32000-1, 7.3.7 a dictionary entry whose value is null is
-		// equivalent to the entry being absent. pdfjs issue11287 writes
-		// /Annots null on one page; calling that an error made litho the only
-		// reader that could not list annotations for the document.
+		// equivalent to the entry being absent, so a null /Annots is no
+		// annotations rather than an error.
 		return nil, nil
 	}
 

@@ -39,8 +39,12 @@ func TestNextNormalObjectOffset(t *testing.T) {
 
 // cyclicPrevPDF returns a PDF whose xref trailer /Prev points back at the xref
 // table's own offset (109), forming a self-referential chain. The trailer sits
-// after the xref, so adding /Prev leaves the offset unchanged. Reproduces pdfjs
-// bug1393476, which hung the reader before the /Prev cycle guard.
+// after the xref, so adding /Prev leaves the offset unchanged.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1393476: the shape this fixture reproduces, which hung the
+//     reader before the /Prev cycle guard.
 func cyclicPrevPDF() []byte {
 	return []byte(
 		"%PDF-1.4\n" +

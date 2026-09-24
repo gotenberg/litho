@@ -9,11 +9,15 @@ import (
 // /OpenAction resolving to null is no destination (ISO 14289-2, 8.8 t1).
 //
 // ISO 32000-1, 7.3.7 treats a null dictionary value as an absent entry, and
-// 7.3.10 makes a reference to an undefined object a reference to null. pdfjs
-// issue16839.pdf writes /OpenAction 0 0 R, the free-list head; litho reported
-// it as a destination that is not a structure destination while veraPDF, which
-// builds no destination from it, reported nothing. The control keeps a real
-// page destination failing the rule.
+// 7.3.10 makes a reference to an undefined object a reference to null, so
+// veraPDF builds no destination from such an /OpenAction. The control keeps a
+// real page destination failing the rule.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16839.pdf: writes /OpenAction 0 0 R, the free-list head;
+//     litho reported it as a destination that is not a structure destination
+//     while veraPDF, which builds no destination from it, reported nothing.
 func TestCheckStructureDestinations_NullOpenAction(t *testing.T) {
 	t.Parallel()
 

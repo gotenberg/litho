@@ -65,10 +65,16 @@ func ttfWithAdvances(unitsPerEm uint16, advances []uint16) string {
 //
 // ISO 32000-2, 9.7.4.3 makes /DW the width of every CID /W does not cover, and
 // gives it the default 1000. litho skipped the whole font when /W was absent,
-// so such a CIDFont was never width-checked. pdfjs issue6612.pdf embeds a
-// CIDFontType2 with /DW 595 and no /W whose glyphs advance 1229 at 2048 units
-// per em, which is 600.098; veraPDF reports every shown glyph and fontTools
-// confirms the advance.
+// so such a CIDFont was never width-checked.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue6612.pdf: embeds a CIDFontType2 with /DW 595 and no /W whose
+//     glyphs advance 1229 at 2048 units per em, which is 600.098. veraPDF
+//     reports every shown glyph and fontTools confirms the advance.
+//   - pdfjs JBIG2Globals.pdf, complex_ttf_font.pdf: map CID 40 into a
+//     two-glyph program and CID 988 into a 143-glyph one respectively, and
+//     veraPDF reports neither zero advance.
 func TestCIDFontDefaultWidth(t *testing.T) {
 	t.Parallel()
 
@@ -143,9 +149,7 @@ func TestCIDFontDefaultWidth(t *testing.T) {
 
 	// A zero advance is missing information rather than a zero-wide glyph: the
 	// CID may reach past the program's glyph count or land on a blank the
-	// program gave no metrics for. veraPDF reports none of these. pdfjs
-	// JBIG2Globals.pdf maps CID 40 into a two-glyph program and
-	// complex_ttf_font.pdf CID 988 into a 143-glyph one.
+	// program gave no metrics for. veraPDF reports none of these.
 	t.Run("a zero advance is not a mismatch", func(t *testing.T) {
 		t.Parallel()
 		if fires(t, pdf("/DW 500", 0)) {

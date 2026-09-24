@@ -95,7 +95,7 @@ func FuzzParseStreamDataFormatChecked(f *testing.F) {
 }
 
 // FuzzParseStreamDataWithOverflows covers the fourth variant, which was the one
-// [ParseStreamData*] entry point with no target of its own.
+// ParseStreamData* entry point with no target of its own.
 //
 // It is not a wrapper: alongside the operations it returns the value of every
 // integer literal the parser had to read as a real because it overflows 64 bits

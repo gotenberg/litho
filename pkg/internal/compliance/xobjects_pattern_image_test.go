@@ -10,10 +10,14 @@ import (
 
 // TestPatternImageInterpolate pins ISO 19005-2, 6.2.8 t3 and ISO 19005-1, 6.2.4
 // t3 on an image a tiling pattern draws: the pattern's content paints wherever
-// a scn selects it (ISO
-// 32000-1, 8.7.3.1), so its image is used and its /Interpolate true is judged,
-// as on pdfjs bug1771477.pdf. A pattern the page declares but never selects
+// a scn selects it (ISO 32000-1, 8.7.3.1), so its image is used and its
+// /Interpolate true is judged. A pattern the page declares but never selects
 // paints nothing and is not judged. Every case was measured against veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1771477.pdf: draws an image with /Interpolate true inside a
+//     tiling pattern.
 func TestPatternImageInterpolate(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -47,7 +47,7 @@ func TestPage_JSONRoundTrip(t *testing.T) {
 
 func TestTextElement_JSONRoundTrip(t *testing.T) {
 	// SpaceWidth is intentionally zero here: it has json:"-" and is covered
-	// by [TestTextElement_SpaceWidthNotSerialized].
+	// by TestTextElement_SpaceWidthNotSerialized.
 	assertRoundTrip(t, TextElement{
 		Text:          "Hello",
 		X:             100,
@@ -393,11 +393,9 @@ func TestPDFUAProfile_JSONValue(t *testing.T) {
 	}
 }
 
-//
-// Each case asserts the JSON byte shape of a zero-value instance of the
-// type. Any field rename, tag change, or `omitempty` regression will break
-// one of these goldens.
-
+// TestModels_EmptySchema asserts the JSON byte shape of a zero-value instance
+// of each type. Any field rename, tag change, or `omitempty` regression will
+// break one of these goldens.
 func TestModels_EmptySchema(t *testing.T) {
 	tests := []struct {
 		name string

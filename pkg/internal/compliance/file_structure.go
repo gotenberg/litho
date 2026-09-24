@@ -260,21 +260,32 @@ func checkHeaderBytes(buf []byte, profile string) []Violation {
 // The presence rule and the linearized-consistency rule are separate tests over
 // the same key, so a trailer with no /ID answers both: it fails presence, and
 // its absent value cannot equal the /ID the last trailer carries.
+//
+// # Corpus evidence
+//
+//   - pdfjs, 1201 files: 4 synthesize a trailer, and all four were reported
+//     here.
+//   - verapdf, 2601 files: 0 synthesize a trailer.
+//   - pdfjs issue11330.pdf, issue14269.pdf, issue15833.pdf: each holds an /ID
+//     in its bytes inside a /Type /XRef stream dictionary that the rebuild
+//     could not recover, and veraPDF passes issue11330 with a real verdict.
+//   - pdfjs bug1980958.pdf: is 219 damaged bytes with no /ID anywhere, so the
+//     report there was true but unevidenced, and veraPDF does not evaluate the
+//     rule on it at all.
+//   - pdfjs issue11330.pdf: recovers no trailer and is still judged
+//     linearized.
+//   - pdfjs issue5599.pdf, issue11651.pdf: write /ID 77777777777777777 and
+//     /ID null, and both fail t1 under parts 1 and 2 alike.
 func checkTrailerID(ctx context.Context, doc *document.Document, profile string) []Violation {
 	// A trailer litho made up because the file has none holds litho's entries,
 	// not the file's, so it answers nothing about the identifier the file
-	// carries. [checkNumericLimits] already declines to judge such a trailer for
-	// the same reason. Measured: 4 of 1201 pdfjs files synthesize one and all
-	// four reported here, while 0 of 2601 veraPDF files do. issue11330.pdf,
-	// issue14269.pdf and issue15833.pdf each hold an /ID in their bytes inside a
-	// /Type /XRef stream dictionary that the rebuild could not recover, and
-	// veraPDF passes issue11330 with a real verdict. The fourth, bug1980958.pdf,
-	// is 219 damaged bytes with no /ID anywhere, so the report there was true
-	// but unevidenced, and veraPDF does not evaluate the rule on it at all.
+	// carries. checkNumericLimits already declines to judge such a trailer for
+	// the same reason. The file can hold an /ID the rebuild could not recover,
+	// and a report on a file with no /ID at all is true but unevidenced.
 	//
 	// The linearized consistency test below goes the same way: recovering no
 	// trailer leaves nothing to compare, and such a file can still be judged
-	// linearized (issue11330.pdf is).
+	// linearized.
 	if doc.TrailerSynthesized {
 		return nil
 	}
@@ -287,10 +298,9 @@ func checkTrailerID(ctx context.Context, doc *document.Document, profile string)
 	var results []Violation
 	idObj, hasID := trailer["ID"]
 	// File identifiers are an array of two byte strings (ISO 32000-1, 14.4), and
-	// veraPDF reads any other value, null included, as no identifier at all:
-	// pdfjs issue5599.pdf writes /ID 77777777777777777 and issue11651.pdf
-	// /ID null, and both fail t1 under parts 1 and 2 alike. An indirect
-	// reference to an array is an identifier (measured).
+	// veraPDF reads any other value, null included, as no identifier at all,
+	// under parts 1 and 2 alike. An indirect reference to an array is an
+	// identifier (measured).
 	resolvedID, _ := document.ResolveObject(ctx, doc, idObj)
 	_, isArray := resolvedID.(ast.PdfArray)
 	switch {
@@ -333,18 +343,23 @@ func checkTrailerID(ctx context.Context, doc *document.Document, profile string)
 // The distinction only shows when veraPDF does not judge the file linearized,
 // because a linearized file resolves the identifier from its first-page section
 // and passes. PDFParser.isLinearized requires /L to equal the file's real
-// length, so trailing bytes after the last %%EOF defeat it: measured both ways
-// on govdocs thread_200_200432.pdf, whose /L misses its size by the 2 bytes it
-// carries past %%EOF. Trimming those 2 bytes turns veraPDF's t1 from fail to
-// pass, and appending 2 bytes to thread_000_000012.pdf turns it from pass to
-// fail. [document.Document.Linearization] answers that same question, being nil
-// for a stale /L, so a non-nil value is the linearized case. It measures the
-// length from the header while veraPDF measures the whole stream, which only
-// parts company on a file carrying a prefix before %PDF-.
+// length, so trailing bytes after the last %%EOF defeat it.
+// [document.Document.Linearization] answers that same question, being nil for a
+// stale /L, so a non-nil value is the linearized case. It measures the length
+// from the header while veraPDF measures the whole stream, which only parts
+// company on a file carrying a prefix before %PDF-.
 //
-// Censused over 4963 corpus files: 4 files answer differently (govdocs
-// thread_100_100820, thread_200_200432, thread_200_200932, thread_400_400299),
-// veraPDF reports every one, and NO file loses a violation litho reports today.
+// # Corpus evidence
+//
+//   - govdocs thread_200_200432.pdf: its /L misses its size by the 2 bytes it
+//     carries past %%EOF, and trimming those 2 bytes turns veraPDF's t1 from
+//     fail to pass.
+//   - govdocs thread_000_000012.pdf: appending 2 bytes turns veraPDF's t1 from
+//     pass to fail.
+//   - All corpora, 4963 files: 4 files answer differently (govdocs
+//     thread_100_100820, thread_200_200432, thread_200_200932,
+//     thread_400_400299), veraPDF reports every one, and NO file loses a
+//     violation litho reports today.
 func trailerAnsweringID(doc *document.Document) ast.PdfDict {
 	if doc.Linearization != nil {
 		return doc.Index.Trailer
@@ -678,7 +693,7 @@ func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast
 		namesDict, err := document.ResolveDict(ctx, doc, namesObj)
 		if err == nil && namesDict != nil {
 			// A direct null is absent (ISO 32000-1, 7.3.7), a reference counts,
-			// as veraPDF's knownKey reads it ([knownKey]). Measured.
+			// as veraPDF's knownKey reads it. Measured.
 			if knownKey(namesDict, "EmbeddedFiles") {
 				results = append(results, fail(embeddedFilesNameRule(profile),
 					"EmbeddedFiles key present in Names dictionary")...)
@@ -688,7 +703,7 @@ func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast
 
 	// Check file specification dictionaries for /EF key.
 	//
-	// Discovery goes through [collectFileSpecs] rather than a cross-reference
+	// Discovery goes through collectFileSpecs rather than a cross-reference
 	// sweep. The xref map holds only indirect objects, and ISO 32000-1 §7.11.3
 	// does not require a file specification to be one, so a sweep never sees a
 	// filespec written inline. That let a producer evade the clause outright:
@@ -712,6 +727,11 @@ func checkEmbeddedFiles(ctx context.Context, doc *document.Document, catalog ast
 }
 
 // checkXRefFormat validates §6.1.4: xref streams are forbidden in PDF/A-1.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400545.pdf: a hybrid-reference file litho passed,
+//     for which veraPDF answers containsXRefStream true.
 func checkXRefFormat(doc *document.Document, profile string) []Violation {
 	if PDFAPart(profile) != 1 {
 		return nil
@@ -737,8 +757,7 @@ func checkXRefFormat(doc *document.Document, profile string) []Violation {
 		// the classic table supplies every entry, so none is compressed, and the
 		// trailer is its own dictionary rather than the stream's. The file uses
 		// an xref stream all the same, which is what this clause forbids, and
-		// veraPDF answers containsXRefStream true for govdocs
-		// thread_400_400545.pdf, a hybrid file litho passed.
+		// veraPDF answers containsXRefStream true for a hybrid file.
 		if _, hybrid := trailer["XRefStm"]; hybrid {
 			return fail(xrefStreamForbiddenRule(profile), "document uses xref streams")
 		}
@@ -796,7 +815,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 			continue
 		}
 
-		// Phase 1: Read a small header window (up to 4 KiB) from the xref
+		// Read a small header window (up to 4 KiB) from the xref
 		// offset to find the "stream" keyword position within the object.
 		const headerBufSize = 4096
 		headerBuf, err := doc.ReadFileBytes(ctx, entry.Offset, headerBufSize)
@@ -810,7 +829,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 			continue // not a stream, or header too small to find it
 		}
 
-		// Phase 2: byte-exact §6.1.7.1 t1. The real length is the number of
+		// Byte-exact §6.1.7.1 t1: the real length is the number of
 		// bytes from the stream data start up to (but not including) the EOL
 		// marker preceding endstream (ISO 19005-2 §6.1.7.1 t1). Read a window
 		// spanning a few bytes before the declared end through where endstream
@@ -861,12 +880,16 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 // to an undefined object as a reference to the null object. veraPDF reads any
 // /Length that is not a number as null, which matches no real extent: measured
 // on a name, a string, a boolean, an array, a dictionary, a stream, null, a free
-// entry and an undefined object. pdfjs issue19510.pdf gives its XRef stream
-// /Length 9 0 R, and object 9 is the page's content stream; veraPDF reports it,
-// and litho, which skipped any /Length it could not read as an integer, did not.
-// Such a /Length reads as 0 here, as a null one already did. A real stays
-// unjudged, as before: veraPDF passes one equal to the extent, and how it reads
-// a fractional one was not measured.
+// entry and an undefined object. litho used to skip any /Length it could not
+// read as an integer. Such a /Length reads as 0 here, as a null one already
+// did. A real stays unjudged, as before: veraPDF passes one equal to the
+// extent, and how it reads a fractional one was not measured.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19510.pdf: gives its XRef stream /Length 9 0 R, and object 9
+//     is the page's content stream. veraPDF reports it, and litho, which
+//     skipped any /Length it could not read as an integer, did not.
 func declaredStreamLength(ctx context.Context, doc *document.Document, lengthObj ast.PdfObject) (ast.PdfInt, bool) {
 	resolved, err := document.ResolveObject(ctx, doc, lengthObj)
 	if err != nil {
@@ -919,6 +942,13 @@ func insideStringOrComment(buf []byte, pos int) bool {
 // begins (immediately after the "stream" keyword and its required EOL).
 // Returns -1 if the "stream" keyword is not found in buf or when ctx is
 // cancelled mid-scan; outer callers re-check ctx.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue13823.pdf: its cross-reference stream dictionary holds
+//     /XRef(stream), which placed the data start inside the dictionary and
+//     reported its correct /Length as wrong. veraPDF lexes the string as a
+//     string.
 func findStreamDataStart(ctx context.Context, buf []byte) int {
 	// Scan for the "stream" keyword. Skip occurrences that are part of
 	// "endstream" or part of a PDF name or other token
@@ -944,9 +974,8 @@ func findStreamDataStart(ctx context.Context, buf []byte) int {
 		}
 
 		// A "stream" inside a literal string or a comment of the dictionary is
-		// no keyword (ISO 32000-1, 7.3.4.2 and 7.2.4). pdfjs issue13823.pdf's
-		// cross-reference stream dictionary holds /XRef(stream), which placed
-		// the data start inside the dictionary and reported its correct /Length
+		// no keyword (ISO 32000-1, 7.3.4.2 and 7.2.4). Reading it as one places
+		// the data start inside the dictionary and reports a correct /Length
 		// as wrong; veraPDF lexes the string as a string.
 		if insideStringOrComment(buf, absIdx) {
 			searchFrom = absIdx + 6
@@ -1000,6 +1029,12 @@ func isPdfWhitespaceOrDelim(b byte) bool {
 // declared end fails when the last declared byte is itself an EOL that belongs
 // before endstream (the length counted the EOL); it passes when the last byte
 // is real data (no EOL present, a §6.1.7.1 t2 concern reported separately).
+//
+// # Corpus evidence
+//
+//   - pdfjs issue4461.pdf: an empty stream whose endstream follows the
+//     keyword's EOL alone fails t1 whatever its /Length, while a second EOL
+//     before endstream passes, measured with LF and CRLF.
 func streamLengthMatches(win []byte, expOff, esRel int) bool {
 	switch esRel - expOff {
 	case 0:
@@ -1007,8 +1042,8 @@ func streamLengthMatches(win []byte, expOff, esRel int) bool {
 		// ends the stream keyword. veraPDF takes that EOL for the one before
 		// endstream as well and measures the stream at -1 bytes, so an empty
 		// stream whose endstream follows that EOL alone fails t1 whatever its
-		// /Length, while a second EOL before endstream passes (pdfjs
-		// issue4461.pdf; measured with LF and CRLF).
+		// /Length, while a second EOL before endstream passes (measured with
+		// LF and CRLF).
 		return esRel >= 1 && win[esRel-1] != '\n' && win[esRel-1] != '\r'
 	case 1:
 		return expOff < len(win) && (win[expOff] == '\n' || win[expOff] == '\r')
@@ -1028,12 +1063,17 @@ var pageBoundaryKeys = []ast.PdfName{"MediaBox", "CropBox", "BleedBox", "TrimBox
 
 // checkPageBoundaries validates §6.1.13 t11: page boundary box dimensions must
 // be within [3, 14400] units in both directions.
+//
+// # Corpus evidence
+//
+//   - All corpora: an unguarded zero Rule here would serialize as a
+//     clause-less "-t00" residual in 21 cells.
 func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	part := PDFAPart(profile)
 	// Page boundary size limits apply to PDF/A-2 and -3 only: PDF/A-4 builds
 	// on PDF 2.0, which drops the ISO 32000-1 media-box implementation limit,
 	// so ISO 19005-4 carries no equivalent rule. An unguarded zero Rule here
-	// would also serialize as a clause-less "-t00" residual (21 cells).
+	// would also serialize as a clause-less "-t00" residual.
 	if part < 2 {
 		return nil
 	}

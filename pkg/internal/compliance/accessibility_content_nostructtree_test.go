@@ -13,10 +13,14 @@ import (
 // veraPDF decides tagging from the structure element owning the content
 // (GFSEGroupedContent.isTaggedContent walks its parent chain and is true only
 // on reaching the StructTreeRoot), so with no structure tree there is no owner
-// and the content is untagged. pdfjs bug1019475_1.pdf wraps its text in
-// /H1 <</MCID 0>> BDC sequences under a catalog with no StructTreeRoot; veraPDF
-// reports it and litho, counting any /MCID as tagged, did not. The control keeps
-// the same content tagged once a structure tree exists.
+// and the content is untagged. litho used to count any /MCID as tagged. The
+// control keeps the same content tagged once a structure tree exists.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1019475_1.pdf: wraps its text in /H1 <</MCID 0>> BDC sequences
+//     under a catalog with no StructTreeRoot; veraPDF reports it and litho,
+//     counting any /MCID as tagged, did not.
 func TestCheckContentMarking_MCIDWithoutStructTree(t *testing.T) {
 	t.Parallel()
 

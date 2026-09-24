@@ -22,7 +22,8 @@ func trueTypePDF(flags int) []byte {
 	)
 }
 
-// A non-symbolic TrueType font with no /Encoding is exactly what the fixer is
+// TestFixTrueTypeEncoding_AddsEncodingToNonSymbolic pins the core repair. A
+// non-symbolic TrueType font with no /Encoding is exactly what the fixer is
 // for: ISO 19005-2, 6.2.11.6 t2 requires it to name MacRoman or WinAnsi.
 func TestFixTrueTypeEncoding_AddsEncodingToNonSymbolic(t *testing.T) {
 	doc, alloc := newTestDoc(t, trueTypePDF(32))
@@ -39,9 +40,10 @@ func TestFixTrueTypeEncoding_AddsEncodingToNonSymbolic(t *testing.T) {
 	}
 }
 
-// ISO 19005-2, 6.2.11.6 t3 forbids a symbolic TrueType font an /Encoding entry,
-// so normalising one onto it would introduce a violation. The fixer previously
-// ignored the symbolic flag and did exactly that.
+// TestFixTrueTypeEncoding_LeavesSymbolicAlone pins that a symbolic font keeps
+// no /Encoding. ISO 19005-2, 6.2.11.6 t3 forbids a symbolic TrueType font an
+// /Encoding entry, so normalising one onto it would introduce a violation. The
+// fixer previously ignored the symbolic flag and did exactly that.
 func TestFixTrueTypeEncoding_LeavesSymbolicAlone(t *testing.T) {
 	doc, alloc := newTestDoc(t, trueTypePDF(4))
 
@@ -59,6 +61,7 @@ func TestFixTrueTypeEncoding_LeavesSymbolicAlone(t *testing.T) {
 	}
 }
 
+// TestFixTrueTypeEncoding_NoDescriptorIsTreatedNonSymbolic pins the fallback.
 // A font with no readable descriptor cannot be established as symbolic, so it
 // keeps the non-symbolic treatment rather than being skipped silently.
 func TestFixTrueTypeEncoding_NoDescriptorIsTreatedNonSymbolic(t *testing.T) {

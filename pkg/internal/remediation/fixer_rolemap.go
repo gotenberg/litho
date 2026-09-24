@@ -27,6 +27,22 @@ func matchRoleMap(v compliance.Violation) bool {
 // (PDF 2.0 / PDF/UA-2) document is left to its namespace mechanism: a standard
 // *name* there may belong to a custom namespace and still need its mapping, so
 // the standard-type drop does not apply on name alone.
+//
+// # Corpus evidence
+//
+//   - verapdf 7.1-t05-fail-d: dropping a cycle-closing source left another
+//     entry pointing at an unmapped name, failing ISO 14289-1 §7.1 t5.
+//   - verapdf PDF_UA-2__8.2.4-t02-fail-a: its self-mapping /LI -> /LI became
+//     /LI -> /P, which litho reported as a remapped standard type and which
+//     turned every list item into a paragraph, so <L> then held <P> and <P>
+//     held <LBody>.
+//   - litho complex_ua1: repaired at PDF/UA-2, breaking /Bar -> /Foo by
+//     deletion left /MyType -> /Foo -> /Bar dangling.
+//   - verapdf PDF_UA-1__7.1-t07-fail-a.pdf: maps /Document to /Book, a
+//     standard source mapped to a custom name.
+//   - govdocs thread_300_300708.pdf: maps /H4 -> /P. Dropping it alone turned
+//     paragraphs into the document's FIRST heading, an H4, which fails the
+//     heading sequence of ISO 14289-1, 7.4.2 test 1.
 func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -82,20 +98,21 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 
 	var cyclesBroken, standardsDropped int
 
-	// Standard-type sources removed in pass 2, against the target each declared,
-	// so the elements that used them can be retagged rather than left to resolve
-	// to a different type than the file meant.
+	// Standard-type sources removed in the standard-type pass, against the
+	// target each declared, so the elements that used them can be retagged
+	// rather than left to resolve to a different type than the file meant.
 	dropped := make(map[ast.PdfName]ast.PdfName)
 
-	// Pass 1: break every circular mapping. Follow each source's chain; if it
-	// returns to that source, the entry closes a cycle. In a non-namespaced
-	// document remap that source to the nearest standard type (P) rather than
-	// dropping it: dropping would leave any other entry that targets this source
-	// pointing at an unmapped name, which fails the "maps to a standard type"
-	// rule (ISO 14289-1 §7.1 t5, qpdf-corpus 7.1-t05-fail-d). A namespaced
-	// (PDF 2.0) document keeps the drop, since a standard NAME there may belong
-	// to a custom namespace and P must not be assumed standard for it. Sorted
-	// iteration makes the broken edge deterministic; the step bound caps the walk.
+	// The cycle pass breaks every circular mapping. Follow each source's chain;
+	// if it returns to that source, the entry closes a cycle. In a
+	// non-namespaced document remap that source to the nearest standard type
+	// (P) rather than dropping it: dropping would leave any other entry that
+	// targets this source pointing at an unmapped name, which fails the "maps
+	// to a standard type" rule (ISO 14289-1 §7.1 t5). A namespaced (PDF 2.0)
+	// document keeps the drop, since a standard NAME there may belong to a
+	// custom namespace and P must not be assumed standard for it. Sorted
+	// iteration makes the broken edge deterministic; the step bound caps the
+	// walk.
 	for _, src := range srcs {
 		if _, ok := keep[src]; !ok {
 			continue
@@ -107,11 +124,10 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 				// Remapping a standard type is forbidden outright
 				// (ISO 14289-1, 7.1 t7), and nothing is left dangling: a chain
 				// aimed at this source now ends on the standard name itself,
-				// which is exactly where it should end. The self-mapping
-				// /LI -> /LI of PDF_UA-2__8.2.4-t02-fail-a became /LI -> /P,
-				// which litho reported as a remapped standard type and which
-				// turned every list item into a paragraph, so <L> then held
-				// <P> and <P> held <LBody>.
+				// which is exactly where it should end. Redirecting a
+				// self-mapping such as /LI -> /LI to /P made litho report a
+				// remapped standard type and turned every list item into a
+				// paragraph.
 				if compliance.IsStandardStructType(src, profile) {
 					delete(keep, src)
 					delete(targets, src)
@@ -123,8 +139,6 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 				// entry aimed at it pointing at an unmapped name, which trades
 				// the circular-mapping violation for an
 				// is-not-mapped-to-a-standard-type one (ISO 14289-2, 8.2.4 t1).
-				// Measured on complex_ua1 repaired at PDF/UA-2, where breaking
-				// /Bar -> /Foo left /MyType -> /Foo -> /Bar dangling.
 				keep[src] = ast.PdfName("P")
 				targets[src] = "P"
 				cyclesBroken++
@@ -137,11 +151,12 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		}
 	}
 
-	// Pass 2: drop redundant standard-type sources only in non-namespaced
-	// documents. Standardness is profile-aware and shared with the compliance
-	// checker (compliance.IsStandardStructType): a PDF 2.0 type such as Title is
-	// non-standard under PDF/A-1/2/3 and PDF/UA-1, so its mapping to a standard
-	// type is a required repair there, not a forbidden standard-to-standard remap.
+	// The standard-type pass drops redundant standard-type sources only in
+	// non-namespaced documents. Standardness is profile-aware and shared with
+	// the compliance checker (compliance.IsStandardStructType): a PDF 2.0 type
+	// such as Title is non-standard under PDF/A-1/2/3 and PDF/UA-1, so its
+	// mapping to a standard type is a required repair there, not a forbidden
+	// standard-to-standard remap.
 	if !namespaced {
 		for _, src := range srcs {
 			if _, ok := keep[src]; !ok {
@@ -155,11 +170,10 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 			}
 			if compliance.IsStandardStructType(src, profile) {
 				// Retag only towards a target that is itself standard. A
-				// standard source mapped to a CUSTOM name (veraPDF's
-				// PDF_UA-1__7.1-t07-fail-a.pdf maps /Document to /Book) is
-				// already the standard type its /S names; rewriting it to the
-				// custom name would leave an element of an unmapped type and
-				// trade this violation for ISO 14289-1 7.1 test 5. Dropping
+				// standard source mapped to a CUSTOM name (/Document to /Book,
+				// say) is already the standard type its /S names; rewriting it
+				// to the custom name would leave an element of an unmapped type
+				// and trade this violation for ISO 14289-1 7.1 test 5. Dropping
 				// the mapping alone is the whole repair there.
 				if compliance.IsStandardStructType(targets[src], profile) {
 					dropped[src] = targets[src]
@@ -178,10 +192,9 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	// target the producer declared, which keeps the meaning the file already
 	// had and leaves only the forbidden mapping removed.
 	//
-	// govdocs thread_300_300708.pdf maps /H4 -> /P. Dropping it alone turned
-	// paragraphs into the document's FIRST heading, an H4, which fails the
-	// heading sequence of ISO 14289-1, 7.4.2 test 1: a repair introducing a
-	// violation the input did not have.
+	// Dropping a mapping such as /H4 -> /P alone turns paragraphs into
+	// headings, which can break the heading sequence of ISO 14289-1, 7.4.2
+	// test 1: a repair introducing a violation the input did not have.
 	retagged := retagDroppedRoles(ctx, alloc, doc, dropped)
 
 	// PDF/A-1 targets: every Annot structure element needs a role mapping
@@ -224,14 +237,14 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	return fixes, nil
 }
 
-// retagDroppedRoles rewrites /S on every element that used a role mapping pass 2
-// removed, setting it to the target that mapping declared. It returns the number
-// of elements rewritten.
+// retagDroppedRoles rewrites /S on every element that used a role mapping the
+// standard-type pass removed, setting it to the target that mapping declared.
+// It returns the number of elements rewritten.
 //
 // Only a mapping whose target resolves to a non-empty name is followed: an
 // unreadable target names no role to retag to, and rewriting /S to an empty name
 // would destroy the element. A source equal to its target needs no rewrite, and
-// would be a self-mapping pass 1 has already broken.
+// would be a self-mapping the cycle pass has already broken.
 func retagDroppedRoles(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, dropped map[ast.PdfName]ast.PdfName) int {
 	srcs := make([]ast.PdfName, 0, len(dropped))
 	for src, dst := range dropped {

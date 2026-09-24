@@ -13,6 +13,11 @@ import (
 //   - §7.18.4 t01: Widget annotations must be nested within a Form tag
 //   - §7.18.5 t01: Link annotations must be nested within a Link tag
 //   - §7.18.8 t01: PrinterMark annotations must NOT be in the logical structure
+//
+// # Corpus evidence
+//
+//   - litho annotstruct_ua2: its two Popups both carry a /Parent, and veraPDF
+//     reports §7.18.1 t1 on the unnested one.
 func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-1" {
 		return nil
@@ -67,10 +72,9 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 
 			// A Popup is not exempt, with or without a /Parent. ISO 14289-1
 			// §7.18.1 t1 excludes only Widget, PrinterMark and Link, and
-			// veraPDF follows the clause: measured on annotstruct_ua2, whose
-			// two Popups both carry a /Parent and whose unnested one draws the
-			// rule. litho used to exempt a parented Popup as auxiliary to its
-			// markup annotation, which the clause does not say.
+			// veraPDF follows the clause: it reports an unnested Popup that
+			// carries a /Parent. litho used to exempt a parented Popup as
+			// auxiliary to its markup annotation, which the clause does not say.
 
 			parentType, nestType := annotStructParentTypes(ctx, typeState, treeRoot, annot)
 
@@ -323,7 +327,7 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 
 			switch subtype {
 			case "Widget":
-				// A field widget, as veraPDF's isFieldWidget decides ([isFieldWidget]).
+				// A field widget, as veraPDF's isFieldWidget decides (isFieldWidget).
 				if isFieldWidget(ctx, doc, annot) && stdType != "Form" {
 					results = append(results, failf(Rule_14289_2_8_10_1_t01,
 						"field Widget annotation enclosed by %s instead of Form", encl)...)

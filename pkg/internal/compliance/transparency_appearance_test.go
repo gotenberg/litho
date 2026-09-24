@@ -11,8 +11,14 @@ import (
 // not only in an ExtGState on the appearance form itself. An appearance
 // routinely paints a soft-masked image or draws a transparency-group form, and
 // veraPDF counts either toward the page's containsTransparency for ISO 19005-2
-// §6.2.10 t2: pdfjs annotation-as.pdf carries image /SMask entries and
-// stamps.pdf a /Group /S /Transparency, both inside annotation appearances.
+// §6.2.10 t2.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation-as.pdf: carries image /SMask entries inside annotation
+//     appearances.
+//   - pdfjs stamps.pdf: carries a /Group /S /Transparency inside annotation
+//     appearances.
 func TestCheckAnnotationTransparency_AppearanceResourceTree(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

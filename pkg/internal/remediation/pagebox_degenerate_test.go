@@ -9,9 +9,13 @@ import (
 
 // TestDegenerateBoxRepairKeepsContent pins how a box enclosing no area is
 // repaired. Growing it to the 3-unit minimum at its lower-left corner is
-// conforming but leaves the page's content outside the page: pdfjs
-// boundingBox_invalid.pdf lost the text of two pages that way, and litho's own
-// regression gate then refused to remediate the file at all.
+// conforming but leaves the page's content outside the page, and the text drawn
+// there is lost.
+//
+// # Corpus evidence
+//
+//   - pdfjs boundingBox_invalid.pdf: lost the text of two pages that way, and
+//     litho's own regression gate then refused to remediate the file at all.
 func TestDegenerateBoxRepairKeepsContent(t *testing.T) {
 	t.Parallel()
 
@@ -32,9 +36,9 @@ func TestDegenerateBoxRepairKeepsContent(t *testing.T) {
 	}
 
 	// The replacement takes the largest width and the largest height
-	// independently. Choosing whole box with the greatest AREA is not enough:
-	// 800x600 and 600x800 tie on area, and picking either one crops content the
-	// other would have kept.
+	// independently. Choosing the whole box with the greatest AREA is not
+	// enough: 800x600 and 600x800 tie on area, and picking either one crops
+	// content the other would have kept.
 	entries := []annotPageEntry{
 		{dict: ast.PdfDict{"MediaBox": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(800), ast.PdfInt(600)}}},
 		{dict: ast.PdfDict{"MediaBox": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(600), ast.PdfInt(800)}}},

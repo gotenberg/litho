@@ -18,9 +18,13 @@ import (
 // producer may omit /Subtype and readers still draw it through the annotation.
 // Flattening moves it into the page's /XObject resources, where Do resolves it
 // by dictionary and Table 95 makes /Subtype /Form and /BBox required. Copying it
-// unchanged left pdfjs checkbox-bad-appearance.pdf with a "/FlatAP20 Do" every
-// reader skipped, so a checked box lost its tick on a page that still reported
-// a successful flatten.
+// unchanged left a Do every reader skipped, so a checked box lost its tick on a
+// page that still reported a successful flatten.
+//
+// # Corpus evidence
+//
+//   - pdfjs checkbox-bad-appearance.pdf: the unchanged copy left a
+//     "/FlatAP20 Do" every reader skipped.
 func TestAsFormXObjectSuppliesMissingEntries(t *testing.T) {
 	t.Parallel()
 
@@ -79,8 +83,12 @@ func TestAsFormXObjectLeavesADeclaredBoxAlone(t *testing.T) {
 }
 
 // badAppearanceFormPDF builds a page with one checked widget whose appearance
-// stream declares neither /Subtype nor /BBox, as pdfjs
-// checkbox-bad-appearance.pdf does.
+// stream declares neither /Subtype nor /BBox.
+//
+// # Corpus evidence
+//
+//   - pdfjs checkbox-bad-appearance.pdf: its appearance stream declares
+//     neither /Subtype nor /BBox.
 func badAppearanceFormPDF() []byte {
 	appearance := "q 0 0 0.4 rg BT /F3 12 Tf 0 0 Td (4) Tj ET Q"
 

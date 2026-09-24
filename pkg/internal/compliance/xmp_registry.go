@@ -354,7 +354,7 @@ func isValidXMPInteger(s string) bool {
 
 // isValidXMPReal returns true if s is a valid XMP real/float value.
 // Format: optional sign, digits, optional decimal point followed by digits.
-// For EXIF properties that accept rationals, use isValidXMPRealOrRational.
+// For EXIF properties that accept rationals, use [isValidXMPRealOrRational].
 func isValidXMPReal(s string) bool {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -412,8 +412,8 @@ func isValidXMPRealOrRational(s string) bool {
 // isValidXMPDate returns true if s is a valid XMP date value.
 // Accepts ISO 8601 formats: YYYY, YYYY-MM, YYYY-MM-DD, YYYY-MM-DDThh:mm,
 // YYYY-MM-DDThh:mm:ss, with optional fractional seconds and timezone (Z or
-// ±hh:mm). Also accepts PDF date format (D:YYYY...) since some producers
-// write PDF-format dates into XMP properties.
+// ±hh:mm). Rejects the PDF date format (D:YYYY...), which some producers
+// write into XMP properties.
 func isValidXMPDate(s string) bool {
 	s = strings.TrimSpace(s)
 	if len(s) < 4 {
@@ -542,8 +542,12 @@ func isValidXMPRational(s string) bool {
 // The check is deliberately the hemisphere suffix rather than the full grammar:
 // a value litho rejects here is reported under the property-type rule
 // ([xmpPropertyTypeRule]), so a stricter reading risks a false positive against
-// veraPDF on producers this corpus does not carry. The two coordinates in the
-// corpus, "67,19,26S" and "43,40,53W", satisfy either reading.
+// veraPDF on producers no measurement covers.
+//
+// # Corpus evidence
+//
+//   - verapdf: carries only two coordinates, "67,19,26S" and "43,40,53W",
+//     and both satisfy either reading.
 func isValidXMPGPSCoordinate(s string) bool {
 	s = strings.TrimSpace(s)
 	if len(s) < 5 {
@@ -556,6 +560,11 @@ func isValidXMPGPSCoordinate(s string) bool {
 
 // validateXMPValue checks if a text value matches the expected XMP property type format.
 // Returns true if valid or if the type doesn't have a format constraint.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300483.pdf: Acrobat Distiller 6.0.1 emits
+//     pdf:Keywords=' ', a blank Text value, and veraPDF passes it.
 func validateXMPValue(propType xmpPropType, value string) bool {
 	switch propType {
 	case xmpPropInteger:
@@ -573,8 +582,7 @@ func validateXMPValue(propType xmpPropType, value string) bool {
 	case xmpPropText:
 		// Per ISO 16684-1, Text is any sequence of Unicode characters, so every
 		// value matches the type: a blank one is a conforming Text value, not a
-		// type mismatch. Acrobat Distiller 6.0.1 emits pdf:Keywords=' ' (govdocs
-		// thread_300_300483.pdf) and veraPDF passes it.
+		// type mismatch.
 		return true
 	case xmpPropAlt, xmpPropSeq, xmpPropBag, xmpPropStruct, xmpPropAny:
 		return true // Containers and structs validated separately.

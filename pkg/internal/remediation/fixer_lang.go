@@ -92,13 +92,22 @@ func fixCatalogLang(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 // unknown", and [compliance.IsValidLangTag] accepts it on that basis. PDF/UA
 // does not: ISO 14289-1, 7.2 and ISO 14289-2, 8.4.4 require the default
 // language to be identified, which is why litho and veraPDF both report an
-// empty catalog /Lang on PDF_UA-1__7.2-t29-fail-n while the fixer, asking the
-// lenient question, replaced nothing.
+// empty catalog /Lang that the fixer, asking the lenient question, would
+// never replace.
+//
 // The WTPDF levels adopt ISO 14289-2 and state 8.4.4 with it, so they
 // require a declared language too. Asking [compliance.IsPDFUA] rather than
 // testing the string keeps that true for every profile built on ISO 14289:
 // a "PDF/UA" prefix test left the marked-content language fix dark under a
-// WTPDF run, which a corpus differential caught as one fewer file repaired.
+// WTPDF run.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.2-t29-fail-n: litho and veraPDF both report its
+//     empty catalog /Lang, while the fixer asking the lenient question
+//     replaced nothing.
+//   - All corpora: a corpus differential caught the "PDF/UA" prefix test
+//     under a WTPDF run as one fewer file repaired.
 func requiresDeclaredLang(profile string) bool {
 	return compliance.IsPDFUA(profile)
 }

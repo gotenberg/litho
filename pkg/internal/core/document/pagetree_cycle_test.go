@@ -10,8 +10,12 @@ import (
 
 // buildLoopingPageTreePDF builds a page tree whose root lists a sound page
 // first and a looping /Pages chain second: 2 -> [4 (Page), 3], 3 -> 5 -> 6 -> 3.
-// This mirrors the PDF.js "Pages loop" fixture, whose golden reports the first
-// page with its text and an error only for the cyclic branch.
+//
+// # Corpus evidence
+//
+//   - pdfjs Pages-tree-refs.pdf: the "Pages loop" test case this fixture
+//     mirrors, whose golden reports the first page with its text and an error
+//     only for the cyclic branch.
 func buildLoopingPageTreePDF() []byte {
 	objs := []string{
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",

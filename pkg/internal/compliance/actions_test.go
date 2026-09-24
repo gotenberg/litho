@@ -7,6 +7,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
+// TestWalkFormFields_FieldAAJudgesFormFieldsOnly pins which dictionaries ISO
+// 19005-2 §6.4.1 t2 judges as form fields when it reports a field /AA.
 func TestWalkFormFields_FieldAAJudgesFormFieldsOnly(t *testing.T) {
 	t.Parallel()
 
@@ -40,6 +42,8 @@ func TestWalkFormFields_FieldAAJudgesFormFieldsOnly(t *testing.T) {
 	}
 }
 
+// TestCheckPageActions_ForbiddenAAStillChecksActionTypes pins that a forbidden
+// page /AA is reported and its actions are still judged for their type.
 func TestCheckPageActions_ForbiddenAAStillChecksActionTypes(t *testing.T) {
 	t.Parallel()
 
@@ -67,6 +71,8 @@ func TestCheckPageActions_ForbiddenAAStillChecksActionTypes(t *testing.T) {
 	}
 }
 
+// TestIsForbiddenAction pins the per-profile action-type whitelists of
+// [isForbiddenAction].
 func TestIsForbiddenAction(t *testing.T) {
 	t.Parallel()
 
@@ -146,6 +152,8 @@ func TestIsForbiddenAction(t *testing.T) {
 	})
 }
 
+// TestAllowedNamedActions pins that [AllowedNamedActions] holds the four page
+// navigation actions and not Print.
 func TestAllowedNamedActions(t *testing.T) {
 	t.Parallel()
 	expected := []ast.PdfName{"NextPage", "PrevPage", "FirstPage", "LastPage"}
@@ -159,6 +167,7 @@ func TestAllowedNamedActions(t *testing.T) {
 	}
 }
 
+// TestActionKeysPresent pins the key list [actionKeysPresent] formats.
 func TestActionKeysPresent(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

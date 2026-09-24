@@ -35,7 +35,7 @@ func pipeUsage(w io.Writer) {
 // runPipe implements `litho pipe <file> <stage> [flags] <stage> [flags] ... -o out.pdf`.
 // Stages reuse the same names and flags as individual mutation commands.
 func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int {
-	// pipe owns no FlagSet, so the [flag.ErrHelp] path the other commands take
+	// pipe owns no FlagSet, so the flag.ErrHelp path the other commands take
 	// through parseCommandFlags never runs here: `litho pipe -h` fell into the
 	// "too few arguments" arm below and exited 1 while `litho info -h` exited
 	// 0. Only the LEADING token counts, because a -h further along may be a
@@ -112,7 +112,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	compact = compact && !compactForbiddenByProfile(compactRefusedProfile)
 
 	// Residual violations left by any remediate stage, judged after the write
-	// when --strict was passed. Stages run sequentially, [pdf.Pipeline.WriteTo]
+	// when --strict was passed. Stages run sequentially, pdf.Pipeline.WriteTo
 	// iterating its stage list with no goroutines, so a stage closure appending
 	// here needs no synchronisation.
 	var remediationResidual []error
@@ -163,7 +163,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// The same form-data loss the standalone split and merge report, which pipe
 	// performed silently: `litho split` on an XFA document warns, while
 	// `litho pipe ... split` wrote the identical output and said nothing.
-	// Measured with [pdf.Reader.HasXFAForm] on the output of every stage, not
+	// Measured with pdf.Reader.HasXFAForm on the output of every stage, not
 	// by scanning bytes, because a byte scan cannot see an /ObjStm.
 	//
 	// Pipe already writes the encryption warning to this stream, so the "pipe
@@ -409,11 +409,11 @@ func isStageCmd(s string) bool { return stageCmds[s] }
 // warn that an encrypted input yields an unprotected output.
 //
 // A DENY list, and the inversion is the point. This was an allow list of the
-// five page operations, correct when `10c8949f` wrote it because only those
-// five warned. `80742794` then extended the warning to every other
+// five page operations, correct when `b59fc758` wrote it because only those
+// five warned. `bbed371f` then extended the warning to every other
 // output-producing command, and the allow list was not widened with it: ten
 // stages went back to warning standalone and staying silent through pipe,
-// which is the divergence `10c8949f` existed to close. An allow list has to be
+// which is the divergence `b59fc758` existed to close. An allow list has to be
 // edited every time the standalone set grows; a deny list is right by default.
 //
 // decrypt is the only member: producing an unprotected document is exactly what

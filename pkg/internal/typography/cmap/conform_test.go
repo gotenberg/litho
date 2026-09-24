@@ -8,6 +8,16 @@ import (
 	"testing"
 )
 
+// TestConformBfRanges checks that [ConformBfRanges] splits bfrange entries
+// crossing a first-byte boundary into conforming groups without changing the
+// lenient mapping, and leaves a conforming or unreadable CMap as written.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5751.pdf: the source of the range crossing a first-byte
+//     boundary, and veraPDF credits none of its codes.
+//   - pdfjs issue20232.pdf: the source of the identity range, libHaru's
+//     identity map spanning 216 first-byte blocks.
 func TestConformBfRanges(t *testing.T) {
 	t.Parallel()
 
@@ -22,7 +32,7 @@ func TestConformBfRanges(t *testing.T) {
 		changed bool
 	}{
 		{
-			// pdfjs issue5751.pdf: veraPDF credits none of these codes.
+			// veraPDF credits none of these codes.
 			name:    "range crossing a first-byte boundary",
 			groups:  "1 beginbfrange\n<01ED> <0206> <0061>\nendbfrange\n",
 			want:    []string{"2 beginbfrange", "<01ED> <01FF> <0061>", "<0200> <0206> <0074>"},
@@ -41,7 +51,7 @@ func TestConformBfRanges(t *testing.T) {
 			changed: true,
 		},
 		{
-			// pdfjs issue20232.pdf: libHaru's identity map, 216 first-byte blocks.
+			// libHaru's identity map, 216 first-byte blocks.
 			name:    "identity range regrouped at 100 entries",
 			groups:  "1 beginbfrange\n<0000> <D7FF> <0000>\nendbfrange\n",
 			want:    []string{"100 beginbfrange", "16 beginbfrange", "<0000> <00FF> <0000>", "<D700> <D7FF> <D700>"},

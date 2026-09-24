@@ -49,7 +49,6 @@ func (c *Copier) Mapping() map[int]int {
 // CopyRef resolves an indirect reference from the source document, deep-copies
 // the object graph, and returns the new reference in the destination namespace.
 func (c *Copier) CopyRef(ctx context.Context, ref ast.PdfIndirectRef) (ast.PdfIndirectRef, error) {
-	// Already mapped?
 	if dstNum, ok := c.mapping[ref.ObjectNum]; ok {
 		return ast.PdfIndirectRef{ObjectNum: dstNum, GenNum: 0}, nil
 	}
@@ -89,7 +88,6 @@ func (c *Copier) CopyRef(ctx context.Context, ref ast.PdfIndirectRef) (ast.PdfIn
 		}
 	}
 
-	// Deep-copy.
 	copied, err := c.CopyObject(ctx, srcObj)
 	if err != nil {
 		return dstRef, err

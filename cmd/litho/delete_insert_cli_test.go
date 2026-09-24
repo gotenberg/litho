@@ -32,14 +32,18 @@ func pageOpFails(t *testing.T, out string, args []string) string {
 
 // TestDelete_RemovesTheNamedPage pins what the command is for.
 //
-// delete is one of the commands the corpus gate never scores, and its only
-// other CLI coverage drives it to test the encryption warning, asserting
-// nothing about deletion. DeletePages itself is covered at package level; what
-// had nothing behind it is that the command reaches it with the right page.
+// The only other CLI coverage of delete drives it to test the encryption
+// warning, asserting nothing about deletion. DeletePages itself is covered at
+// package level; what had nothing behind it is that the command reaches it
+// with the right page.
 //
 // The count is read back through the pages command rather than from the output
 // bytes: litho writes an incremental update, so the superseded page objects are
 // still in the file.
+//
+// # Corpus evidence
+//
+//   - All corpora: the corpus gate never scores delete.
 func TestDelete_RemovesTheNamedPage(t *testing.T) {
 	src := twoPageTempPDF(t)
 	out := filepath.Join(t.TempDir(), "deleted.pdf")

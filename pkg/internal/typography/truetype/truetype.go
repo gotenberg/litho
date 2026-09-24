@@ -212,7 +212,7 @@ func NumGlyphs(data []byte) (int, error) {
 }
 
 // CharCodeToGID extracts a character code → glyph ID mapping from the cmap
-// table. This is the inverse of GlyphToUnicode: it maps Unicode code points
+// table. This is the inverse of [GlyphToUnicode]: it maps Unicode code points
 // (used as character codes in PDF TrueType fonts) to glyph IDs.
 func CharCodeToGID(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 	gidToRune, err := GlyphToUnicode(ctx, data)
@@ -316,7 +316,7 @@ func PostGlyphNames(ctx context.Context, data []byte) (map[uint16]string, error)
 
 	postData, err := TableData(data, records, "post")
 	if err != nil {
-		// post table is optional for our purposes.
+		// The post table is optional: a font without one has no names.
 		if errors.Is(err, ErrTableNotFound) {
 			return nil, nil
 		}
@@ -580,8 +580,8 @@ func parseCmapFormat12(ctx context.Context, data []byte) (map[uint16]rune, error
 	return result, nil
 }
 
-// Standard Macintosh glyph names for post format 1.0 (258 names).
-// Per the Apple TrueType spec, format 1.0 uses this fixed order.
+// macGlyphNames lists the standard Macintosh glyph names for post format 1.0
+// (258 names). Per the Apple TrueType spec, format 1.0 uses this fixed order.
 var macGlyphNames = [258]string{
 	".notdef", ".null", "nonmarkingreturn", "space", "exclam", "quotedbl", "numbersign",
 	"dollar", "percent", "ampersand", "quotesingle", "parenleft", "parenright", "asterisk",

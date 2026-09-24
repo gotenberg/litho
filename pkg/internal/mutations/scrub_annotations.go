@@ -50,7 +50,7 @@ func ScrubAnnotationText(
 	// otherwise leave the earlier ones queued: a caller that handled the error
 	// would still write a document scrubbed halfway. Restore is lossless here
 	// because every edit is a fresh dictionary handed to AllocAt rather than an
-	// AST mutated in place, the condition [writer.ObjAllocator.Snapshot]
+	// AST mutated in place, the condition writer.ObjAllocator.Snapshot
 	// documents.
 	snap := alloc.Snapshot()
 	scrubbed, err := scrubAnnotationText(ctx, alloc, doc, tokens)

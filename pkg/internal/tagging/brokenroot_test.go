@@ -14,7 +14,11 @@ import (
 // assemblePDFRootAt writes the given object bodies into a valid PDF whose
 // trailer /Root names rootObjNum, letting a test point /Root at something that
 // is not the catalog. Object 1 is the /Info dictionary and object 2 the
-// catalog, mirroring pdfjs issue9418.pdf.
+// catalog, mirroring a real damaged file.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9418.pdf: the file this layout mirrors.
 func assemblePDFRootAt(objs []string, rootObjNum int) []byte {
 	var buf bytes.Buffer
 	buf.WriteString("%PDF-1.7\n")
@@ -61,7 +65,7 @@ func brokenRootDoc(t *testing.T, catalogExtras string) *document.Document {
 // catalog is tagged is recognized as tagged even when the trailer /Root points
 // somewhere else.
 //
-// Per ISO 32000-1 §7.5.5 Table 15 /Root shall be the catalog, so such a file is
+// Per ISO 32000-1, 7.5.5, Table 15 /Root shall be the catalog, so such a file is
 // malformed and the reader recovers by scanning. Reading the raw /Root instead
 // made alreadyTagged inspect a non-catalog, find no structure and report an
 // untagged document, which lets AutoTag overwrite an existing structure tree.
@@ -82,10 +86,15 @@ func TestAlreadyTaggedFollowsTheRecoveredCatalog(t *testing.T) {
 // TestAutoTagWiresTheRecoveredCatalog pins that the structure tree is wired into
 // the real catalog, and that the object the broken /Root names is left alone.
 //
-// On pdfjs issue9418.pdf the trailer names the /Info dictionary, so tagging
-// merged /StructTreeRoot and /MarkInfo into the document information dictionary
-// while the catalog kept neither: the repair was reported as applied and the
-// same violations came back as residual, round after round.
+// When the trailer names the /Info dictionary, tagging merged /StructTreeRoot
+// and /MarkInfo into the document information dictionary while the catalog
+// kept neither: the repair was reported as applied and the same violations came
+// back as residual, round after round.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9418.pdf: its trailer names the /Info dictionary, and tagging
+//     wrote into /Info round after round while the catalog kept neither entry.
 func TestAutoTagWiresTheRecoveredCatalog(t *testing.T) {
 	t.Parallel()
 

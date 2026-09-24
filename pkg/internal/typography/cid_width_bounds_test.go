@@ -22,7 +22,7 @@ import (
 // much gets built. Measured before the bound, in isolation: endCID 5,000,000
 // produced 5,000,001 entries costing 288.6 MB, and the 2147483647 a file may
 // state extrapolates past 100 GB from an array of roughly 30 bytes. The walk is
-// reached from Reader.ExtractText by way of ResolveFont.
+// reached from Reader.ExtractText by way of [ResolveFont].
 func TestParseCIDWidths_RefusesARangePastTheCIDSpace(t *testing.T) {
 	t.Parallel()
 

@@ -319,7 +319,7 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 
 	var notes []string
 
-	// Sorted, for the reason given in [fixExtGState].
+	// Sorted, for the reason given in fixExtGState.
 	for _, name := range slices.Sorted(maps.Keys(xobjDict)) {
 		entryObj := xobjDict[name]
 		if err := ctx.Err(); err != nil {

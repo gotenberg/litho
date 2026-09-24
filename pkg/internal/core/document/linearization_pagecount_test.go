@@ -72,8 +72,11 @@ func TestParsePageOffsetTable_RejectsImpossiblePageCount(t *testing.T) {
 
 // TestParsePageOffsetTable_OrdinaryPageCountStillParses is the control. A guard
 // that refused everything would satisfy the test above while breaking every
-// linearized document, so these are counts real files carry: the deepest page
-// count measured across the corpus is 2322, with a median of 3.
+// linearized document, so these are counts real files carry.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest page count is 2322, with a median of 3.
 func TestParsePageOffsetTable_OrdinaryPageCountStillParses(t *testing.T) {
 	t.Parallel()
 

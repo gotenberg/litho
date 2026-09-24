@@ -89,7 +89,7 @@ func hasMarkedContent(ctx context.Context, doc *document.Document) (bool, error)
 }
 
 // containsMarkedContentOp reports whether data contains a BDC or BMC token,
-// the operators that begin a marked-content sequence (ISO 32000-1 §14.6). It
+// the operators that begin a marked-content sequence (ISO 32000-1, 14.6). It
 // mirrors the byte scan in the content-tag remediation fixer.
 func containsMarkedContentOp(data []byte) bool {
 	for i := 0; i+2 < len(data); i++ {
@@ -105,18 +105,24 @@ func containsMarkedContentOp(data []byte) bool {
 // the trailer /Root when it resolves to a catalog and recovers by scanning when
 // it does not.
 //
-// Per ISO 32000-1 §7.5.5 Table 15 /Root shall be the catalog, so a file whose
+// Per ISO 32000-1, 7.5.5, Table 15 /Root shall be the catalog, so a file whose
 // damaged incremental update points it elsewhere is malformed. Reading the raw
-// /Root regardless made tagging address a non-catalog: on pdfjs issue9418.pdf,
-// whose final trailer names the /Info dictionary, [alreadyTagged] inspected
-// /Info, found no structure and reported an untagged document, and wireCatalog
-// wrote /StructTreeRoot and /MarkInfo into /Info while the real catalog kept
+// /Root regardless made tagging address a non-catalog: when the final trailer
+// names the /Info dictionary, [alreadyTagged] inspected /Info, found no
+// structure and reported an untagged document, and wireCatalog wrote
+// /StructTreeRoot and /MarkInfo into /Info while the real catalog kept
 // neither. The false "untagged" verdict is the more dangerous half: on a file
 // whose real catalog is tagged, it lets AutoTag overwrite the existing tree,
 // which is precisely what alreadyTagged exists to prevent.
 //
 // The raw trailer ref remains the fallback: when recovery finds no catalog at
 // all, a reference the file at least names beats no reference.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9418.pdf: its final trailer names the /Info dictionary, and
+//     reading the raw /Root made tagging inspect and write into /Info while
+//     the real catalog kept neither /StructTreeRoot nor /MarkInfo.
 func catalogRefForTagging(ctx context.Context, doc *document.Document) (ast.PdfIndirectRef, bool) {
 	if ref, ok := doc.CatalogRef(ctx); ok {
 		return ref, true
@@ -800,7 +806,7 @@ func listItemAdjacent(a, b elemMeta) bool {
 // sit on operator boundaries, so the Lbl cannot be split out of the
 // item's first show-text operand. ISO/TS 32005 permits LI > LBody
 // without an Lbl, and a missing Lbl keeps the PDF/UA-2 ListNumbering
-// requirement (ISO 14289-2 §8.2.5.25) out of scope.
+// requirement (ISO 14289-2, 8.2.5.25) out of scope.
 func listify(elems []*Element, metas []elemMeta) []*Element {
 	var out []*Element
 	for i := 0; i < len(elems); {
@@ -921,14 +927,19 @@ func bodyFontSize(blocks []textBlock) float64 {
 // first heading in the document must be H1, and no heading may jump more than
 // one level past the deepest level seen so far. Ranking the distinct sizes and
 // handing each block its rank satisfies neither, because the first heading a
-// page happens to contain is rarely the largest one on it. govdocs
-// thread_000_000337.pdf tagged to H6 first and drew 7.4.2 test 1 from litho's
-// own validator, one of 35 files where remediation introduced that violation.
+// page happens to contain is rarely the largest one on it, so remediation
+// introduced the very violation litho's own validator reports.
 //
 // A monotone stack of the sizes still open gives the level instead. A heading
 // closes every open heading its own size or smaller, then sits one level below
 // whatever remains, so the first heading always lands on H1, a larger heading
 // re-opens at a shallower level, and the level can only ever grow by one.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000337.pdf: tagged to H6 first and drew 7.4.2 test 1
+//     from litho's own validator, one of 35 files where remediation
+//     introduced that violation.
 func headingLevels(blocks []textBlock, body float64) []int {
 	levels := make([]int, len(blocks))
 	var open []float64
@@ -972,9 +983,6 @@ func toFloat(o ast.PdfObject) (float64, bool) {
 	}
 }
 
-// showTextLen returns the byte length of the strings a text-showing operator
-// paints, a proxy for text quantity (not a decoded character count: multi-byte
-// or CID-encoded strings overcount, which only skews the relative weighting).
 // firstShownPrefix returns up to firstTextPrefixLen raw bytes of the
 // first string an op shows, for list-marker detection.
 func firstShownPrefix(op content.Operation) string {
@@ -1006,6 +1014,9 @@ func firstShownPrefix(op content.Operation) string {
 	return string(s)
 }
 
+// showTextLen returns the byte length of the strings a text-showing operator
+// paints, a proxy for text quantity (not a decoded character count: multi-byte
+// or CID-encoded strings overcount, which only skews the relative weighting).
 func showTextLen(op content.Operation) int {
 	switch op.Operator {
 	case "Tj", "'":

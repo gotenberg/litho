@@ -166,13 +166,13 @@ func TestPipe_HelpAsAFlagValueDoesNotSwallowTheNextStage(t *testing.T) {
 //
 // That comment says "Adding a boolean stage flag means adding it here in the
 // same change", which is a rule kept by memory alone. An allow list nobody
-// enforces is how `c9c20cd8` happened on the neighbouring map: the set it
+// enforces is how `a8880277` happened on the neighbouring map: the set it
 // mirrored grew and the list did not. Forgetting a boolean here is silent in
 // the same way: expectsValue reports the flag consumes the next token, so the
 // stage after it is read as its value and never runs, and the command exits 0.
 //
 // Each stage's FlagSet is asked for its own usage, which only became reachable
-// in `0d231199`. flag.PrintDefaults writes "-name" for a boolean and
+// in `28f54f79`. flag.PrintDefaults writes "-name" for a boolean and
 // "-name type" for a valued flag, so a single-field line naming a flag is a
 // boolean.
 //

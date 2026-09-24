@@ -8,7 +8,7 @@ import (
 )
 
 // BookmarkHandling controls how bookmarks are produced for the output of
-// Split or Merge.
+// [Split] or [Merge].
 type BookmarkHandling int
 
 const (
@@ -26,10 +26,10 @@ const (
 )
 
 // TextElementProvider returns the text elements of a single page in a
-// specific source. sourceIdx is 0 for Split and 0..N-1 for Merge.
+// specific source. sourceIdx is 0 for [Split] and 0..N-1 for [Merge].
 type TextElementProvider func(ctx context.Context, sourceIdx, pageNum int) ([]models.TextElement, error)
 
-// BookmarkConfig is the internal config consumed by Split and Merge.
+// BookmarkConfig is the internal config consumed by [Split] and [Merge].
 type BookmarkConfig struct {
 	Handling              BookmarkHandling
 	OrphanPolicy          OrphanHandling
@@ -40,7 +40,7 @@ type BookmarkConfig struct {
 	TextElements          TextElementProvider
 }
 
-// DefaultSplitBookmarkConfig returns the default config for Split.
+// DefaultSplitBookmarkConfig returns the default config for [Split].
 func DefaultSplitBookmarkConfig() BookmarkConfig {
 	return BookmarkConfig{
 		Handling:              BookmarkUpdate,
@@ -49,7 +49,7 @@ func DefaultSplitBookmarkConfig() BookmarkConfig {
 	}
 }
 
-// DefaultMergeBookmarkConfig returns the default config for Merge.
+// DefaultMergeBookmarkConfig returns the default config for [Merge].
 func DefaultMergeBookmarkConfig() BookmarkConfig {
 	return BookmarkConfig{
 		Handling: BookmarkUpdate,

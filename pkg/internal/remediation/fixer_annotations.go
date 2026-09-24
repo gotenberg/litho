@@ -153,7 +153,7 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 // maxPageTreeDepth bounds the page-tree walks in this package. Anti-DoS guard,
 // not spec-mandated: ISO 32000-1, 7.7.3.2 makes the page tree a strict tree, so
 // a crafted /Kids chain is the only way to reach any depth, and 100 sits far
-// above the deepest tree in the corpus (4).
+// above the depth real page trees reach.
 //
 // core/document/catalog.go bounds the same descent at 256 and carries the home
 // note for this cap; compliance/check.go uses 100 as here.
@@ -162,6 +162,10 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 // fixer_pageresources.go walks /Parent UPWARD rather than descending /Kids. The
 // limit is right either way, since both directions are shallow, but the name
 // describes the descent. See the note at that use site.
+//
+// # Corpus evidence
+//
+//   - All corpora: the deepest page tree is 4.
 const maxPageTreeDepth = 100
 
 // collectPageRefs recursively collects page dicts with their indirect refs.
@@ -231,12 +235,17 @@ func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 // be permitted" and "additionally, the FileAttachment, Sound and Movie types",
 // and an earlier attempt enumerated forbidden subtypes and named only
 // FileAttachment. That left Polygon, PolyLine, Caret, Watermark and Redact
-// unrepaired on 40 corpus cells which had nothing else wrong with them. A
-// whitelist cannot fail open that way.
+// unrepaired. A whitelist cannot fail open that way.
 //
 // It is a copy because the compliance table is unexported, and the copy is the
 // hazard: drift toward OVER-removal destroys content the author placed. A test
 // pins the two sets together, and neither should change without the other.
+//
+// # Corpus evidence
+//
+//   - All corpora: the forbidden-subtype enumeration left Polygon, PolyLine,
+//     Caret, Watermark and Redact unrepaired on 40 corpus cells which had
+//     nothing else wrong with them.
 var pdfa1PermittedAnnotSubtypes = map[ast.PdfName]bool{
 	"Text": true, "Link": true, "FreeText": true, "Line": true,
 	"Square": true, "Circle": true, "Highlight": true, "Underline": true,

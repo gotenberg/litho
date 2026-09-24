@@ -67,7 +67,7 @@ type Zone struct {
 	minX, minY, maxX, maxY float64
 }
 
-// ZoneFromRect normalises a PDF /Rect array into a Zone.
+// ZoneFromRect normalises a PDF /Rect array into a [Zone].
 // PDF rects may have coordinates in any order.
 func ZoneFromRect(r [4]float64) Zone {
 	z := Zone{minX: r[0], minY: r[1], maxX: r[2], maxY: r[3]}
@@ -163,7 +163,7 @@ func ZonesOverlap(a, b Zone) bool {
 }
 
 // ZoneBounds returns the zone's edges, so a caller working in another
-// coordinate space can carry its corners there. A Zone is otherwise opaque:
+// coordinate space can carry its corners there. A [Zone] is otherwise opaque:
 // build one with [ZoneFromRect] or [ElementZone] and compare with
 // [ZonesOverlap] or [ZoneContains].
 func ZoneBounds(z Zone) (minX, minY, maxX, maxY float64) {

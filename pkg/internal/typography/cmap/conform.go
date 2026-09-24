@@ -212,7 +212,7 @@ func appendConformingRuns(out []bfRangeEntry, e bfRangeEntry) []bfRangeEntry {
 }
 
 // writeBfRangeGroups writes entries as bfrange groups of at most
-// maxBfRangeEntriesPerGroup entries.
+// [maxBfRangeEntriesPerGroup] entries.
 func writeBfRangeGroups(w *bytes.Buffer, entries []bfRangeEntry) {
 	for i := 0; i < len(entries); i += maxBfRangeEntriesPerGroup {
 		chunk := entries[i:min(i+maxBfRangeEntriesPerGroup, len(entries))]

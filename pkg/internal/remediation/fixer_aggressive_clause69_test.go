@@ -9,7 +9,7 @@ import (
 // TestMatchAggressive_LeavesThePartsTwoAndThreeOptionalContentAlone pins the
 // half of clause 6.9 that has nothing to do with appearances.
 //
-// [matchAggressive] tests `case "6.3.3", "6.5.3", "6.9"` on the clause alone,
+// [matchAggressive] tested `case "6.3.3", "6.5.3", "6.9"` on the clause alone,
 // and a clause number is not a rule id. ISO 19005-1 spells the form-appearance
 // rules 6.9, but ISO 19005-2 and 19005-3 give that number to the optional
 // content configuration dictionary: /Name, its uniqueness, the /Order array
@@ -22,8 +22,8 @@ import (
 //
 // Test 3 is the sharpest of the four: it is the /Order completeness rule that
 // [matchCatalogCleanup] deliberately refuses because fixOCGConfigs cannot
-// complete /Order, and that refusal was extended to part 4 in the commit before
-// this one. Here aggressive claims it as the SOLE claimant.
+// complete /Order, and that refusal was extended to part 4 in an earlier
+// commit. There aggressive claimed it as the SOLE claimant.
 func TestMatchAggressive_LeavesThePartsTwoAndThreeOptionalContentAlone(t *testing.T) {
 	t.Parallel()
 

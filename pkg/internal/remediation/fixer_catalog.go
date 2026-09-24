@@ -11,12 +11,29 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
+// matchCatalogCleanup matches the catalog-level violations [fixCatalogCleanup]
+// repairs: the trailer /Encrypt, /NeedsRendering, the optional-content
+// configuration rules and the part-1 /OCProperties ban,
+// /AlternatePresentations, and the /Perms and signature-reference
+// restrictions.
+//
+// # Corpus evidence
+//
+//   - litho complex_ua2: carries a /Configs configuration with its own
+//     incomplete /Order that litho never looks at. Claiming test 3 and
+//     completing /D alone silenced litho while veraPDF kept reporting: litho
+//     corpus disagreement moved from exactly 0 to 10 across two fixtures.
+//   - verapdf: the same test 3 false fix gained 8 cells and hid the litho
+//     corpus regression.
+//   - All corpora: written as `return v.Rule.Clause == "6.9"`, the OCG arm
+//     cost 12 corpus cells, and the count-based gate could not see it: 46
+//     newly matched cells hid 12 newly broken ones behind a net improvement.
 func matchCatalogCleanup(v compliance.Violation) bool {
 	if (v.Rule.Clause == "6.1.3" && v.Rule.TestNumber == 2) || // Encrypt in trailer
 		clausePrefix(v, "6.4.2") || // NeedsRendering catalog key
 		// OCG config. ISO 19005-4 6.10 t3 is the /Order completeness rule and is
 		// excluded for the same reason the switch below excludes test 3 for
-		// every other spelling: nothing in [fixOCGConfigs] completes /Order.
+		// every other spelling: nothing in fixOCGConfigs completes /Order.
 		// The ARM is narrowed rather than short-circuited with a negative, so
 		// evaluation still falls through to every arm after it.
 		(clausePrefix(v, "6.10") && v.Rule != compliance.Rule_19005_4_6_10_t03) ||
@@ -34,10 +51,10 @@ func matchCatalogCleanup(v compliance.Violation) bool {
 	// clause is ISO 19005-4 6.10 (claimed by the prefix above), ISO 19005-2 and
 	// 19005-3 6.9, ISO 14289-1 7.10 and ISO 14289-2 8.7, and the last of those
 	// also reaches a WTPDF run, which reports PDF/UA-2 clauses as its own.
-	// Only the part-4 spelling reached [fixOCGConfigs], so the same file was
+	// Only the part-4 spelling reached fixOCGConfigs, so the same file was
 	// repaired as PDF/A-4 and left flagged as PDF/A-2b.
 	//
-	// [fixOCGConfigs] repairs the /Name of test 1, the uniqueness of test 2 and
+	// fixOCGConfigs repairs the /Name of test 1, the uniqueness of test 2 and
 	// the /AS ban of test 4, which the UA specifications spell as their own
 	// test 2. It does NOT repair the /Order array of test 3, so test 3 is not
 	// claimed: claiming a rule this fixer cannot complete would report it
@@ -48,14 +65,12 @@ func matchCatalogCleanup(v compliance.Violation) bool {
 	// bypassed for part 4, whose spelling matched the prefix first.
 	//
 	// Test 3 was implemented and MEASURED to be a false fix. litho's own
-	// [compliance] check inspects only /D and collects OCGs only from
-	// /OCProperties /OCGs; veraPDF requires more. complex_ua2 carries a
-	// /Configs configuration with its own incomplete /Order that litho never
-	// looks at, so completing /D alone silenced litho while veraPDF kept
-	// reporting: litho corpus disagreement moved from exactly 0 to 10 across
-	// two fixtures, while the verapdf corpus gained 8 cells and hid it.
-	// Repairing to satisfy the DETECTOR rather than the rule is what made that
-	// look correct.
+	// compliance check inspects only /D and collects OCGs only from
+	// /OCProperties /OCGs; veraPDF requires more. A /Configs configuration can
+	// carry its own incomplete /Order that litho never looks at, so completing
+	// /D alone silenced litho while veraPDF kept reporting. Repairing to
+	// satisfy the DETECTOR rather than the rule is what made that look
+	// correct.
 	//
 	// The test numbers are written out rather than taken as a range, so a test
 	// this fixer does not implement cannot be claimed by arriving later.
@@ -63,15 +78,14 @@ func matchCatalogCleanup(v compliance.Violation) bool {
 	// Exact specification and clause, never clausePrefix: ISO 19005-1 spells an
 	// AcroForm NeedAppearances rule 6.9, and EVERY part-4 6.9 test is an
 	// embedded-file rule (t2 the F and UF keys, t3 embedded-file conformance,
-	// t4 AFRelationship). The prefix "7.1" already swallows 7.10 in [matchXMP].
+	// t4 AFRelationship). The prefix "7.1" already swallows 7.10 in matchXMP.
 	//
 	// Each arm MATCHES and falls through; none of them returns a negative.
 	// Written as `return v.Rule.Clause == "6.9"` this claimed the OCG rule and
 	// silently UN-claimed every other test-1 violation in the same
 	// specification, because the false short-circuited the 6.1.12 Perms and
-	// Signature-Reference block below. That cost 12 corpus cells, and the
-	// count-based gate could not see it: 46 newly matched cells hid 12 newly
-	// broken ones behind a net improvement.
+	// Signature-Reference block below. A count-based gate cannot see that
+	// while the newly matched cells outnumber the newly broken ones.
 	switch v.Rule.Specification {
 	case "ISO_19005_2", "ISO_19005_3":
 		if v.Rule.Clause == "6.9" {
@@ -106,6 +120,15 @@ func matchCatalogCleanup(v compliance.Violation) bool {
 	return false
 }
 
+// fixCatalogCleanup repairs the catalog and trailer constructs
+// [matchCatalogCleanup] claims, then removes the embedded-file constructs
+// PDF/A-1 forbids.
+//
+// # Corpus evidence
+//
+//   - All corpora: 8 of the 19 corpus carriers of the ISO 19005-1 6.1.13 test
+//     1 /OCProperties ban carry /OC entries, whose content deleting the key
+//     makes unconditionally visible.
 func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, violations []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -131,21 +154,21 @@ func fixCatalogCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	// catalog /OCProperties entry is the whole of what the rule tests
 	// (`isOptionalContentPresent == false`; litho's detector reads the key's
 	// presence alone). Deleting it is therefore the only way to produce a
-	// conforming part-1 file, exactly as [fixTransparency] flattens
+	// conforming part-1 file, exactly as fixTransparency flattens
 	// transparency regardless of PreserveContent because part 1 forbids that
 	// outright too.
 	//
 	// On a file that genuinely uses optional content this makes the affected
-	// content unconditionally visible: 8 of the 19 corpus carriers carry /OC
-	// entries. That IS what "no optional content" means for part 1, and
-	// refusing would mean declining to produce a conforming file at all. The
-	// /OC entries themselves are left in place: the rule does not test them,
-	// and removing them is a larger change than the rule requires.
+	// content unconditionally visible. That IS what "no optional content"
+	// means for part 1, and refusing would mean declining to produce a
+	// conforming file at all. The /OC entries themselves are left in place:
+	// the rule does not test them, and removing them is a larger change than
+	// the rule requires.
 	//
 	// Gated on the VIOLATION, never on the profile string: parts 2, 3 and 4
 	// permit optional content and never state this rule, so the same file
 	// keeps its /OCProperties when it is validated under them. See
-	// [fixOCGConfigs] for why the part table stays in [compliance].
+	// fixOCGConfigs for why the part table stays in compliance.
 	if anyViolation(violations, forbiddenOCPropertiesViolation) {
 		if _, ok := catalogDict["OCProperties"]; ok {
 			newCatalog := make(ast.PdfDict, len(catalogDict))
@@ -240,17 +263,23 @@ func signatureIsSigned(ctx context.Context, doc *document.Document, sigDict ast.
 // In standard mode a SIGNED signature is left alone. Its reference
 // dictionaries are part of the revision the digest covers, so rewriting one
 // moves the /ByteRange and trades §6.1.12 test 2 for §6.4.3 test 1, which
-// reports that the declared range no longer matches the signed revision.
-// Measured on all three PDF_A-2b__veraPDF_test_suite_6-1-12-t02-fail-*
-// fixtures, where the swap kept the violation count at one and so stayed
-// invisible to a count-based gate.
+// reports that the declared range no longer matches the signed revision. The
+// swap keeps the violation count unchanged, so a count-based gate cannot see
+// it.
 //
 // Aggressive mode still strips. There the invalidation is intended and
 // completes a chain: the strip breaks the coverage, §6.4.3 test 1 fires, and
 // [fixSignatureStrip] then removes the now-invalidated signature, resolving
-// both rules. Guarding unconditionally severed that chain and cost 18 fixtures
-// their fully-fixed verdict in the remediation-aggressive corpus cell, a drop
-// the gate could not flag because it compares against a much older baseline.
+// both rules. Guarding unconditionally severed that chain.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-2b__veraPDF_test_suite_6-1-12-t02-fail-*: on all three
+//     fixtures the §6.1.12-for-§6.4.3 swap kept the violation count at one
+//     and so stayed invisible to a count-based gate.
+//   - All corpora: guarding unconditionally cost 18 fixtures their fully-fixed
+//     verdict in the remediation-aggressive corpus cell, a drop the gate could
+//     not flag because it compares against a much older baseline.
 func fixSignatureReferences(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, permsObj ast.PdfObject) []string {
 	permsDict, err := document.ResolveDict(ctx, doc, permsObj)
 	if err != nil || permsDict == nil {
@@ -452,10 +481,6 @@ func ocgNameUniqueViolation(r compliance.Rule) bool {
 	return false
 }
 
-// ocgASViolation matches "the AS key shall not appear in any optional content
-// configuration dictionary": ISO 19005-2/3 6.9 t4, ISO 14289-1 7.10 t2 and
-// ISO 14289-2 8.7 t2. ISO 19005-4 states no AS test, which is exactly why this
-// is read from the violations: a part-4 file keeps its /AS.
 // forbiddenOCPropertiesViolation identifies ISO 19005-1 6.1.13 test 1, the
 // part-1 ban on a catalog /OCProperties entry.
 //
@@ -468,6 +493,10 @@ func forbiddenOCPropertiesViolation(r compliance.Rule) bool {
 	return r.Specification == "ISO_19005_1" && r.Clause == "6.1.13" && r.TestNumber == 1
 }
 
+// ocgASViolation matches "the AS key shall not appear in any optional content
+// configuration dictionary": ISO 19005-2/3 6.9 t4, ISO 14289-1 7.10 t2 and
+// ISO 14289-2 8.7 t2. ISO 19005-4 states no AS test, which is exactly why this
+// is read from the violations: a part-4 file keeps its /AS.
 func ocgASViolation(r compliance.Rule) bool {
 	switch r.Specification {
 	case "ISO_19005_2", "ISO_19005_3":
@@ -645,8 +674,6 @@ func ocgConfigName(ctx context.Context, doc *document.Document, d ast.PdfDict) s
 	return ""
 }
 
-// ensureOCGConfigName adds /Name to an OCG config dict if missing.
-// Returns true if a modification was made.
 // ensureOCGConfigName gives an optional-content configuration dictionary the
 // /Name its profile requires, reporting the replacement the caller must install
 // and whether anything changed.
@@ -655,12 +682,16 @@ func ocgConfigName(ctx context.Context, doc *document.Document, d ast.PdfDict) s
 // may be a DIRECT dictionary inside /OCProperties, which no object number
 // addresses. Writing only through the allocator dropped that case on the floor
 // while still reporting the fix, so the catalog was rewritten with the /Name
-// still missing and the next run found the same defect: remediating
-// complex_1b.pdf repeatedly grew it by 1125 bytes a pass, forever, and never
-// added the /Name.
+// still missing and the next run found the same defect: repeated remediation
+// grew the file every pass, forever, and never added the /Name.
 //
 // A nil replacement with a true result means the change went through the
 // allocator and the caller has nothing to install.
+//
+// # Corpus evidence
+//
+//   - litho complex_1b.pdf: remediating it repeatedly grew it by 1125 bytes a
+//     pass, forever, and never added the /Name.
 func ensureOCGConfigName(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, label string) (ast.PdfDict, bool) {
 	ref, isRef := obj.(ast.PdfIndirectRef)
 
@@ -697,13 +728,17 @@ func ensureOCGConfigName(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 // raises the violation: the key must be present and resolve to a non-empty
 // string.
 //
-// Testing only for the key left veraPDF's 7.10-t01-fail-a flagged after its
-// clause was routed here, because its default configuration carries
-// `/Name ()`: present, and empty. The checker calls hasNonEmptyName, so the
+// Testing only for the key left a default configuration carrying `/Name ()`
+// flagged: present, and empty. The checker calls hasNonEmptyName, so the
 // violation was reported while the repair declined.
 //
 // doc may be nil when a caller repairs a dictionary it already holds, so a
 // direct string is read without resolving.
+//
+// # Corpus evidence
+//
+//   - verapdf 7.10-t01-fail-a: stayed flagged after its clause was routed
+//     here, because its default configuration carries `/Name ()`.
 func ocgConfigHasName(ctx context.Context, doc *document.Document, d ast.PdfDict) bool {
 	nameObj, ok := d["Name"]
 	if !ok {

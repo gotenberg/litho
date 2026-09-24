@@ -39,6 +39,8 @@ func validCII() string {
 </rsm:CrossIndustryInvoice>`
 }
 
+// TestValidateCIIBytes_HappyPath pins that the baseline payload from [validCII]
+// passes every spine rule.
 func TestValidateCIIBytes_HappyPath(t *testing.T) {
 	got := validateCIIBytes([]byte(validCII()), variantFacturX, false)
 	if len(got) != 0 {
@@ -49,6 +51,8 @@ func TestValidateCIIBytes_HappyPath(t *testing.T) {
 	}
 }
 
+// TestValidateCIIBytes_NotWellFormed pins that a malformed payload reports the
+// well-formedness rule alone.
 func TestValidateCIIBytes_NotWellFormed(t *testing.T) {
 	got := validateCIIBytes([]byte("<rsm:CrossIndustryInvoice><unbalanced>"), variantFacturX, false)
 	if len(got) != 1 || got[0].Rule != Rule_cii_WellFormed {
@@ -56,6 +60,8 @@ func TestValidateCIIBytes_NotWellFormed(t *testing.T) {
 	}
 }
 
+// TestValidateCIIBytes_StrictRejectsHTMLEntity pins that strict parsing rejects
+// an HTML named entity and lenient parsing tolerates it.
 func TestValidateCIIBytes_StrictRejectsHTMLEntity(t *testing.T) {
 	// An HTML named entity (&nbsp;) is undefined in XML/CII. Strict
 	// parsing (the default) rejects it as not-well-formed; lenient
@@ -76,6 +82,8 @@ func TestValidateCIIBytes_StrictRejectsHTMLEntity(t *testing.T) {
 	}
 }
 
+// TestValidateCIIBytes_WrongRoot pins that a root outside the CII namespace
+// reports the root-element rule alone.
 func TestValidateCIIBytes_WrongRoot(t *testing.T) {
 	payload := `<?xml version="1.0"?><foo:Invoice xmlns:foo="urn:bogus"/>`
 	got := validateCIIBytes([]byte(payload), variantFacturX, false)
@@ -84,6 +92,8 @@ func TestValidateCIIBytes_WrongRoot(t *testing.T) {
 	}
 }
 
+// TestValidateCIIBytes_MissingDocumentContext pins that a payload without
+// rsm:ExchangedDocumentContext reports the document-context rule.
 func TestValidateCIIBytes_MissingDocumentContext(t *testing.T) {
 	payload := strings.Replace(validCII(),
 		`<rsm:ExchangedDocumentContext>
@@ -97,6 +107,8 @@ func TestValidateCIIBytes_MissingDocumentContext(t *testing.T) {
 	}
 }
 
+// TestValidateCIIBytes_MissingDocumentID pins that a payload without the
+// exchanged document ID reports the exchanged-document rule.
 func TestValidateCIIBytes_MissingDocumentID(t *testing.T) {
 	payload := strings.Replace(validCII(),
 		`<ram:ID>INV-001</ram:ID>`, "", 1)
@@ -106,6 +118,8 @@ func TestValidateCIIBytes_MissingDocumentID(t *testing.T) {
 	}
 }
 
+// TestValidateCIIBytes_MissingIssueDateTime pins that a payload without
+// ram:IssueDateTime reports the exchanged-document rule.
 func TestValidateCIIBytes_MissingIssueDateTime(t *testing.T) {
 	payload := strings.Replace(validCII(),
 		`<ram:IssueDateTime>
@@ -117,6 +131,8 @@ func TestValidateCIIBytes_MissingIssueDateTime(t *testing.T) {
 	}
 }
 
+// TestValidateCIIBytes_MissingTradeTransaction pins that a payload without
+// rsm:SupplyChainTradeTransaction reports the trade-transaction rule.
 func TestValidateCIIBytes_MissingTradeTransaction(t *testing.T) {
 	payload := strings.Replace(validCII(),
 		`<rsm:SupplyChainTradeTransaction>`, `<rsm:OtherSection>`, 1)
@@ -128,6 +144,8 @@ func TestValidateCIIBytes_MissingTradeTransaction(t *testing.T) {
 	}
 }
 
+// TestValidateCIIBytes_MissingSellerName pins that a payload without the seller
+// name reports the seller-trade-party rule.
 func TestValidateCIIBytes_MissingSellerName(t *testing.T) {
 	payload := strings.Replace(validCII(),
 		`<ram:Name>Acme Co</ram:Name>`, ``, 1)
@@ -137,6 +155,8 @@ func TestValidateCIIBytes_MissingSellerName(t *testing.T) {
 	}
 }
 
+// TestValidateCIIBytes_MissingCurrency pins that a payload without
+// ram:InvoiceCurrencyCode reports the invoice-currency rule.
 func TestValidateCIIBytes_MissingCurrency(t *testing.T) {
 	payload := strings.Replace(validCII(),
 		`<ram:InvoiceCurrencyCode>EUR</ram:InvoiceCurrencyCode>`, ``, 1)
@@ -146,6 +166,8 @@ func TestValidateCIIBytes_MissingCurrency(t *testing.T) {
 	}
 }
 
+// TestValidateCIIBytes_MissingGrandTotal pins that a payload without
+// ram:GrandTotalAmount reports the grand-total rule.
 func TestValidateCIIBytes_MissingGrandTotal(t *testing.T) {
 	payload := strings.Replace(validCII(),
 		`<ram:GrandTotalAmount currencyID="EUR">100.00</ram:GrandTotalAmount>`, ``, 1)
@@ -155,6 +177,9 @@ func TestValidateCIIBytes_MissingGrandTotal(t *testing.T) {
 	}
 }
 
+// TestValidateCIIBytes_LegacyVariantSkipsChecks runs [validateCIIBytes] on a
+// degenerate payload under the ZUGFeRD 2.0 variant and asserts it does not
+// panic.
 func TestValidateCIIBytes_LegacyVariantSkipsChecks(t *testing.T) {
 	// ZUGFeRD 1.0 / 2.0 use a different CII schema; the structural
 	// rules must not fire on those variants. Pass payload that would
@@ -164,8 +189,8 @@ func TestValidateCIIBytes_LegacyVariantSkipsChecks(t *testing.T) {
 	// point is checkInvoiceCII which short-circuits on variant. The
 	// pure-function variant runs unconditionally, so test the entry
 	// guard via the variant.namespaceURI check in checkInvoiceCII
-	// instead. Here we just confirm validateCIIBytes does not panic
-	// on degenerate input.
+	// instead. Here the test only confirms validateCIIBytes does not
+	// panic on degenerate input.
 	if len(got) == 0 {
 		t.Logf("unexpected zero violations on degenerate input under ZUGFeRD 2.0 variant; entry-guard test lives in checkInvoiceCII")
 	}

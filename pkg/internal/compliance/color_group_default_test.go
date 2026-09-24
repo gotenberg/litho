@@ -12,8 +12,12 @@ import (
 // (ISO 32000-1, 8.6.5.6; ISO 19005-2, 6.2.4.3): a page's own or inherited
 // resources for a page group, the form's own resources for a form group. The
 // page's defaults do not cover a form's group, even when the form has no
-// /Resources. pdfjs bug1019475_1.pdf gives its page a DeviceRGB group beside a
-// DefaultRGB. Every case was measured against veraPDF.
+// /Resources. Every case was measured against veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1019475_1.pdf: gives its page a DeviceRGB group beside a
+//     DefaultRGB.
 func TestColorScope_GroupCoveredByDefaultSpace(t *testing.T) {
 	t.Parallel()
 

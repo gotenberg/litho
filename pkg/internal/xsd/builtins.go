@@ -13,8 +13,9 @@ import (
 // type="xs:string" or base="xs:decimal" resolve without a separate
 // lookup table.
 //
-// PR2 attaches lexical-space validators and facet implementations to
-// these types. For PR1 they exist as opaque [BuiltinType] markers.
+// The types themselves stay opaque [BuiltinType] markers:
+// [validateLexical] checks a value against each one's lexical space,
+// and [ValidateValue] applies the facets a restriction adds.
 //
 //nolint:gochecknoglobals // immutable type registry.
 var builtinNames = []string{
@@ -225,10 +226,9 @@ func checkBoundedInt(value string, base *BuiltinType, minLit, maxLit string) *Fa
 	return checkInteger(value, base, minInt, maxInt)
 }
 
-// XSD date lexical space (without timezone): CCYY-MM-DD with optional
-// negative sign on the year. The pure-Go time package's parser is
-// forgiving on length so the helpers below check byte-level shape
-// before handing off to Parse for component validation.
+// checkDate checks value against the XSD date lexical form CCYY-MM-DD,
+// after stripping any timezone suffix. The helpers below check the
+// byte-level shape; checkDate then checks the month and day ranges.
 func checkDate(value string, base *BuiltinType) *FacetViolation {
 	s, _ := splitTimezone(value)
 	if len(s) < 10 || s[4] != '-' || s[7] != '-' {
@@ -271,9 +271,9 @@ func checkTime(value string, base *BuiltinType) *FacetViolation {
 }
 
 // splitTimezone separates the body of a date/time lexical value from
-// its optional timezone suffix ("Z" or +HH:MM/-HH:MM). PR2 only checks
-// that the timezone shape is plausible; full RFC 3339 timezone
-// arithmetic is out of scope.
+// its optional timezone suffix ("Z" or +HH:MM/-HH:MM). The suffix is
+// recognised by shape only; full RFC 3339 timezone arithmetic is out
+// of scope.
 func splitTimezone(value string) (body string, tz string) {
 	if i := strings.LastIndexAny(value, "+-"); i > 0 && len(value)-i == 6 && value[i+3] == ':' {
 		return value[:i], value[i:]

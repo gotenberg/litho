@@ -20,15 +20,21 @@ import (
 // Per ISO 32000-1 §7.5.5 Table 15 /Root shall be the catalog, so a file whose
 // damaged incremental update points it elsewhere is malformed, and the reader
 // already recovers from it. Taking the raw /Root at face value made every
-// catalog-editing mutation address whatever object it named: on pdfjs
-// issue9418.pdf, whose final trailer points /Root at the /Info dictionary,
-// `litho attach` reported success and wrote /Names into /Info, leaving the real
-// catalog untouched, so `litho attachments` on that same output reported no
-// attachments. The mutation was lost, and the /Info dictionary corrupted.
+// catalog-editing mutation address whatever object it named, so a mutation
+// could report success while writing into the wrong object, losing the edit and
+// corrupting that object.
 //
 // The raw trailer ref remains the fallback: when recovery finds no catalog at
 // all, a reference the file at least names beats no reference. ok is false only
 // when neither yields one.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9418.pdf: the final trailer points /Root at the /Info
+//     dictionary. `litho attach` reported success and wrote /Names into /Info,
+//     leaving the real catalog untouched, so `litho attachments` on that same
+//     output reported no attachments. The mutation was lost, and the /Info
+//     dictionary corrupted.
 func CatalogRef(ctx context.Context, doc *document.Document) (ast.PdfIndirectRef, bool) {
 	if ref, ok := doc.CatalogRef(ctx); ok {
 		return ref, true
@@ -43,18 +49,26 @@ func CatalogRef(ctx context.Context, doc *document.Document) (ast.PdfIndirectRef
 // reference [CatalogRef] chose.
 //
 // Recovering the reference is not enough when the cross-reference table
-// misdirects it. On pdfjs issue18986.pdf the catalog's entry addresses the
-// offset of an unrelated empty dictionary, so resolving the reference yields
-// "<<>>" with no error. `litho set-bookmarks` copied those zero entries, wrote
-// "<< /Outlines 9 0 R >>" over the catalog, and reported success: the output
-// lost /Type, /Pages and every other key, leaving a document with no page tree
-// that pikepdf rejects and litho's own `bookmarks` reads as empty.
+// misdirects it. A catalog entry that addresses an unrelated empty dictionary
+// resolves to "<<>>" with no error, and a mutation that copies those zero
+// entries writes a catalog with no /Type, no /Pages and no page tree over the
+// real one while reporting success.
 //
 // The catalog the reader recovers is the fallback, so the update keeps the
 // entries the document actually has. An empty result is treated as a failure
 // rather than an empty catalog: a catalog with no entries is not a catalog
 // (ISO 32000-1, 7.7.2 requires /Type and /Pages), and writing one back destroys
 // the document.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18986.pdf: the catalog's entry addresses the offset of an
+//     unrelated empty dictionary, so resolving the reference yields "<<>>"
+//     with no error. `litho set-bookmarks` copied those zero entries, wrote
+//     "<< /Outlines 9 0 R >>" over the catalog, and reported success: the
+//     output lost /Type, /Pages and every other key, leaving a document with
+//     no page tree that pikepdf rejects and litho's own `bookmarks` reads as
+//     empty.
 func CatalogDict(ctx context.Context, doc *document.Document, ref ast.PdfIndirectRef) (ast.PdfDict, error) {
 	dict, err := document.ResolveDict(ctx, doc, ref)
 	if err == nil && len(dict) > 0 {

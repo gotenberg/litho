@@ -17,9 +17,13 @@ import (
 // absent: the standard 14 names are a shorthand for metrics a reader already
 // holds. A font that embeds its own glyphs has left the shorthand behind and
 // owes its own metrics, which is why veraPDF's isStandard is false for it.
-// litho exempted on the /BaseFont name alone. pdfjs issue11150_reduced.pdf
-// names /Symbol and embeds a /FontFile while declaring none of the three, and
-// veraPDF reports ISO 19005-4, 6.2.10.2 t4, t5 and t6 on it.
+// litho exempted on the /BaseFont name alone.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11150_reduced.pdf: names /Symbol and embeds a /FontFile
+//     while declaring none of the three, and veraPDF reports ISO 19005-4,
+//     6.2.10.2 t4, t5 and t6 on it.
 func TestStandard14EmbeddedRequiresMetrics(t *testing.T) {
 	t.Parallel()
 

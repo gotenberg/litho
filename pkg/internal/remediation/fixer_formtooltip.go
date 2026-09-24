@@ -82,9 +82,15 @@ func fixFormTooltip(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 //
 // An /Alt present but EMPTY reports true with an empty string: the clause binds
 // on the entry existing, not on it saying anything, and treating empty as
-// absent reintroduced the mismatch on
-// PDF_UA-1__7.18.1-t03-fail-c.pdf. The /Alt may also be an indirect reference
-// (PDF_UA-1__7.18.1-t03-pass-b.pdf), which is why the value is resolved.
+// absent reintroduced the mismatch. The /Alt may also be an indirect
+// reference, which is why the value is resolved.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.18.1-t03-fail-c.pdf: treating an empty /Alt as
+//     absent reintroduced the mismatch.
+//   - verapdf PDF_UA-1__7.18.1-t03-pass-b.pdf: its /Alt is an indirect
+//     reference.
 func enclosingAlt(ctx context.Context, doc *document.Document, parentTree ast.PdfObject, field ast.PdfDict) (ast.PdfString, bool) {
 	if parentTree == nil {
 		return "", false
@@ -182,7 +188,7 @@ func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc 
 				// An EMPTY /Alt is copied as an empty /Contents rather than
 				// skipped. 8.10.2.3 asks only that the entry be present when
 				// no Lbl element labels the widget, and /TU does not answer it
-				// (see [checkWidgetLabel] and the empty /Contents case in
+				// (see checkWidgetLabel and the empty /Contents case in
 				// TestCheckWidgetAA), so writing nothing leaves 8.10.2.3
 				// unfixed while writing the field name breaks 8.9.4.2. The
 				// empty copy satisfies both.

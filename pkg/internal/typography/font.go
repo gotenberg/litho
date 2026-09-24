@@ -287,6 +287,22 @@ func copyEncoding(src map[byte]rune) map[byte]rune {
 }
 
 // ResolveFont extracts and resolves a [Font] from a PDF font dictionary.
+//
+// # Corpus evidence
+//
+//   - govdocs: fonts that ship only a Mac Roman cmap subtable are common in
+//     its older Mac-authored scanned filings.
+//   - pdfjs noembed-eucjp.pdf, noembed-sjis.pdf: synthesising text for their
+//     reference-only Type0 fonts from the bundled predefined CMaps produces
+//     characters that do not match the glyphs drawn.
+//   - pdfjs noembed-eucjp.pdf, noembed-sjis.pdf, noembed-jis7.pdf,
+//     noembed-identity.pdf: synthesising through Adobe-Japan1/GB1/CNS1/Korea1
+//     emits characters that do not match what the host's system font would
+//     draw.
+//   - pdfjs SimFang-variant.pdf, issue20489.pdf: reference-only fonts with a
+//     CJK BaseFont name (font "Fcpdf0" in issue20489.pdf), which emit
+//     WinAnsi-decoded garbage or synthesised Chinese that does not match the
+//     rendered glyph unless the encoding is cleared.
 func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (*Font, error) {
 	subtypeObj, ok := fontDict["Subtype"]
 	if !ok {
@@ -327,8 +343,8 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// laid out at WinAnsi-style byte positions for PostScript-printed
 	// docs (Universal-NewswithCommPi, OCR symbols, math notation), so
 	// those bytes need the WinAnsi fallback. Pulling the flag before
-	// defaultEncoding selection lets us route Type 1 symbolic fonts
-	// past the StandardEncoding default below.
+	// defaultEncoding selection routes Type 1 symbolic fonts past the
+	// StandardEncoding default below.
 	symbolicByFlags := fontIsSymbolicByFlags(ctx, doc, fontDict)
 
 	// Default encoding selection. ISO 32000-1 §9.6.6.1 makes
@@ -415,8 +431,8 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// embedded cmap subtables decide the implicit base. Microsoft
 	// Unicode subtables expose the Latin-1 range that aligns with
 	// WinAnsi (already the litho default). Fonts that only ship a Mac
-	// Roman subtable (older Mac-authored documents, common in govdocs
-	// scanned filings) put accented glyphs at MacRoman byte positions:
+	// Roman subtable (older Mac-authored documents) put accented glyphs
+	// at MacRoman byte positions:
 	// byte 0xD0 is en-dash, 0x96 is ñ, 0xA9 is ©. Switching to
 	// MacRomanEncoding on the cmap signal surfaces those bytes as
 	// real characters instead of WinAnsi look-alikes.
@@ -438,7 +454,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 			// stream carries no information litho can decode without
 			// that font. Synthesising text from bundled predefined
 			// CMaps produces characters that do not match the glyphs
-			// actually drawn (noembed-eucjp, noembed-sjis).
+			// actually drawn.
 			if hasEmbeddedFontFile(ctx, doc, fontDict) {
 				if cm := cmap.LoadPredefinedCMap(encName); cm != nil {
 					font.ToUnicode = cm
@@ -483,7 +499,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// array that only spans a narrow range, yet use byte codes outside
 	// that range for math/symbol glyphs. Reading the widths straight
 	// from the embedded font program gives the space-insertion
-	// heuristic in [ReconstructText] accurate per-glyph spans.
+	// heuristic in ReconstructText accurate per-glyph spans.
 	if subtypeName == "Type1" || subtypeName == "MMType1" {
 		applyType1CharStringWidths(ctx, doc, fontDict, font)
 	}
@@ -492,8 +508,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// an embedded font program. Reference-only CJK fonts carry no
 	// glyph data, so synthesising through Adobe-Japan1/GB1/CNS1/Korea1
 	// emits characters that do not match what the host's system font
-	// would draw (noembed-eucjp, noembed-sjis, noembed-jis7,
-	// noembed-identity).
+	// would draw.
 	if subtypeName == "Type0" && font.ToUnicode == nil && font.GIDToUnicode == nil && !font.CIDIdentityFallback {
 		if hasEmbeddedFontFile(ctx, doc, fontDict) {
 			applyAdobeCIDFallback(ctx, doc, fontDict, font)
@@ -521,8 +536,7 @@ func ResolveFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDi
 	// Chinese text extracts; reference-only fonts (no embedded program)
 	// cannot be extracted without a host CJK font, so clearing Encoding
 	// avoids emitting WinAnsi-decoded garbage or synthesised Chinese that
-	// does not match the rendered glyph (SimFang-variant, issue20489
-	// "Fcpdf0").
+	// does not match the rendered glyph.
 	if font.ToUnicode == nil && (subtypeName == "TrueType" || subtypeName == "Type1") {
 		if bfObj, ok := fontDict["BaseFont"]; ok {
 			bfName, _ := document.ResolveName(ctx, doc, bfObj)
@@ -706,7 +720,7 @@ func resolveEncoding(ctx context.Context, doc *document.Document, fontDict ast.P
 							// Type1 fonts stack ligature components with
 							// underscores ("f_t", "T_h"). When no single
 							// rune mapping exists the decomposed string
-							// lives in [Font.LigatureOverrides] and beats
+							// lives in Font.LigatureOverrides and beats
 							// the byte's default-encoding rune during
 							// extraction.
 							if font.LigatureOverrides == nil {
@@ -956,7 +970,7 @@ func extractFontDescriptorMetrics(ctx context.Context, doc *document.Document, f
 	}
 
 	// Text extraction positions a glyph by its whole-unit advance, as it has
-	// always done; the fractional part [ExtractBinaryWidths] now preserves
+	// always done; the fractional part ExtractBinaryWidths now preserves
 	// matters only to the width-consistency check, which reads the program
 	// directly.
 	font.HmtxWidths = make(map[uint16]uint16, len(widths))
@@ -1914,13 +1928,19 @@ func hasCJKFontName(s string) bool {
 // TODO: [applyCIDToGIDIdentityFallback] turns [Font.CIDIdentityFallback] on for
 // an explicit /CIDToGIDMap /Identity without calling this, so that path reads a
 // CID as a code point with no offset. An absent /CIDToGIDMap already means
-// Identity (ISO 32000-1, 9.7.4.2), so writing the key changes extracted text:
-// "Dotless Forms" becomes "'RWOHVV )RUPV" (ThuluthFeatures.pdf), and a PDF/A
-// fixer writes that key. Calling this from there fixes the shift but moves two
-// pdfjs text goldens (issue11242_reduced, issue15719), whose expectations were
-// captured against the short-circuit, so the offset heuristics need settling
-// first: the +29 guess for a non-embedded font overrides /W evidence that the
-// font already states (Tahoma declares CIDs 1-3).
+// Identity (ISO 32000-1, 9.7.4.2), so writing the key changes extracted text,
+// and a PDF/A fixer writes that key. Calling this from there fixes the shift
+// but moves two text goldens whose expectations were captured against the
+// short-circuit, so the offset heuristics need settling first: the +29 guess
+// for a non-embedded font overrides /W evidence that the font already states
+// (Tahoma declares CIDs 1-3).
+//
+// # Corpus evidence
+//
+//   - pdfjs ThuluthFeatures.pdf: writing the /CIDToGIDMap /Identity key turns
+//     the extracted "Dotless Forms" into "'RWOHVV )RUPV".
+//   - pdfjs issue11242_reduced.pdf, issue15719.pdf: the two text goldens that
+//     calling this from [applyCIDToGIDIdentityFallback] moves.
 func applyCIDIdentityHeuristics(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
 	// Skipped when the CIDFont has an explicit /CIDToGIDMap stream: the
 	// stream already remaps CIDs to subset GIDs, so the CID values carry
@@ -1947,7 +1967,7 @@ func applyCIDIdentityHeuristics(ctx context.Context, doc *document.Document, fon
 	// embedding. The CID + 29 heuristic covers ASCII; extended-Latin
 	// positions (e.g. GID 207 = Ó in Arial, GID 179-182 = smart quotes) do
 	// not follow a linear offset and need an explicit lookup.
-	// [stdfonts.CMap] provides the curated subset.
+	// stdfonts.CMap provides the curated subset.
 	if cidFontHasEmbeddedProgram(ctx, doc, fontDict) {
 		return
 	}
@@ -1967,11 +1987,11 @@ func applyCIDIdentityHeuristics(ctx context.Context, doc *document.Document, fon
 }
 
 // detectCIDOffset infers the CID-to-Unicode offset from the /W (widths) map.
-// Non-embedded TrueType fonts commonly use GIDs starting at 29 for space
-// (U+0020), meaning CID + 29 = Unicode. Detection requires:
-//   - CID 3 has a space-like width (200-350 units)
-//   - CIDs 0-2 are absent from the widths map
-//   - The lowest CID is 3 (no CIDs below 3 have widths)
+// Non-embedded TrueType fonts commonly place space (U+0020) at GID 3,
+// meaning CID + 29 = Unicode. Detection requires:
+//   - at least 5 CIDs in the widths map
+//   - CID 3 has a space-like width (200-300 units)
+//   - CIDs 0-2 are absent or have negligible width (< 10 units)
 func detectCIDOffset(cidWidths map[int]float64) int {
 	if len(cidWidths) < 5 {
 		return 0
@@ -2021,7 +2041,12 @@ func fontIsSymbolicByFlags(ctx context.Context, doc *document.Document, fontDict
 // it is present, even alongside a Microsoft Unicode subtable, because
 // high-byte glyphs are positioned at MacRoman slots (0x96 = ñ, 0xA9 = ©,
 // 0xD0 = en-dash). Without this override these bytes surface as WinAnsi
-// look-alikes on Mac-authored govdocs filings.
+// look-alikes on Mac-authored documents.
+//
+// # Corpus evidence
+//
+//   - govdocs: its Mac-authored filings surface these bytes as WinAnsi
+//     look-alikes without this override.
 func applyTrueTypeBuiltinEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, font *Font) {
 	fdDict := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fdDict == nil {

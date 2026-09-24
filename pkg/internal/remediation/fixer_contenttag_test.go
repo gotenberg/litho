@@ -14,11 +14,16 @@ import (
 // requirement, but only the §8.2.2 wording ("shall be an artifact") reaches the
 // description test, so the PDF/UA-1 twin went unclaimed and [matchAutoTag],
 // which composes this matcher, never fired for a document whose only signal was
-// untagged content. Measured at 1488 unremediated corpus fixtures.
+// untagged content.
 //
 // The rejected clauses are the point of the test number: [clausePrefix] is a
 // raw strings.HasPrefix, so a claim spelled clausePrefix(v, "7.1") also
 // swallows 7.10, 7.11, 7.18.x and 7.21.x, each owned by a different fixer.
+//
+// # Corpus evidence
+//
+//   - All corpora: the unclaimed PDF/UA-1 twin left 1488 corpus fixtures
+//     unremediated.
 func TestMatchContentTag_ClaimsBothStandards(t *testing.T) {
 	t.Parallel()
 	if !matchContentTag(compliance.Violation{Rule: compliance.Rule_14289_1_7_1_t03}) {

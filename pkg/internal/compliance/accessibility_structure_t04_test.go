@@ -11,13 +11,8 @@ import (
 //
 // It asserts TODAY'S behaviour, not the desired behaviour. Both shapes are
 // believed wrong, and neither is fixed here, because nothing available in this
-// repository can adjudicate THESE SHAPES. The corpus does cover the rule: it
-// carries PDF_UA-2__8.2.4-t04-fail-a.pdf and -t04-pass-a.pdf, provisioned, with
-// veraPDF 1.30.1's verdicts recorded in the PDF_UA-2 golden, and litho already
-// agrees there. What the suite does not contain is either shape below, so
-// `make corpus-check` guards against a regression on the real fixtures while
-// saying nothing about a change aimed at these. veraPDF itself is not invoked
-// by any target here, so its verdict on these two shapes comes from an earlier
+// repository can adjudicate THESE SHAPES. veraPDF itself is not invoked by any
+// target here, so its verdict on these two shapes comes from an earlier
 // session's live run and cannot be re-checked locally. Changing a compliance
 // verdict on that basis alone would be guessing.
 //
@@ -51,6 +46,16 @@ import (
 // Keeping this as a test rather than a note means a later session with a
 // veraPDF oracle sees the exact inputs, and any change to either verdict has
 // to be deliberate rather than silent.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-2__8.2.4-t04-fail-a.pdf, PDF_UA-2__8.2.4-t04-pass-a.pdf:
+//     cover the rule, provisioned, with veraPDF 1.30.1's verdicts recorded in
+//     the PDF_UA-2 golden, and litho already agrees there.
+//   - verapdf: the suite contains neither ns17_to_Book nor
+//     noNS_chain_Foo_Sect, so `make corpus-check` guards against a regression
+//     on the real fixtures while saying nothing about a change aimed at these
+//     two shapes.
 func TestCheckNamespaceRoleMapping_T04KnownDivergences(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

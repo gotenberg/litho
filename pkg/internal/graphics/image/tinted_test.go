@@ -115,10 +115,16 @@ func TestDecodeImage_DeviceNDecodesThroughItsTintTransform(t *testing.T) {
 // TestDecodeImage_DeviceNRepeatedTuplesUseTheCache pins that a repeated tuple
 // decodes to the same colour, which is what the tuple cache trades memory for.
 //
-// The cache exists because the transform cannot be tabulated over 256^N: the
-// largest corpus image is 540x534 over seven colorants and holds 31,400
-// distinct tuples, so evaluating per distinct tuple rather than per pixel turns
-// 36.9 million corner visits into 4.0 million.
+// The cache exists because the transform cannot be tabulated over 256^N, and a
+// real image holds far fewer distinct tuples than pixels, so evaluating per
+// distinct tuple rather than per pixel cuts the corner visits several times
+// over.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest DeviceN image is 540x534 over seven colorants
+//     and holds 31,400 distinct tuples, so evaluating per distinct tuple
+//     rather than per pixel turns 36.9 million corner visits into 4.0 million.
 func TestDecodeImage_DeviceNRepeatedTuplesUseTheCache(t *testing.T) {
 	t.Parallel()
 
@@ -156,11 +162,19 @@ func TestDecodeImage_DeviceNRepeatedTuplesUseTheCache(t *testing.T) {
 // complete data came back as "decoded data too short for RGB image" at a ratio
 // of exactly 3.0000, blaming the file; where a JPEG's shape was measured
 // instead, the tint was emitted as a grey LEVEL and the image rendered
-// INVERTED, because every tint transform measured maps tint 0 to paper white
-// and full tint to near black.
+// INVERTED, because a real tint transform maps tint 0 to paper white and full
+// tint to near black.
 //
 // The expected colours are computed from the transform, not from this decoder:
 // C0 white to C1 black with N=1 is rgb = (1-t) per channel.
+//
+// # Corpus evidence
+//
+//   - All corpora: every tint transform measured maps tint 0 to paper white and
+//     full tint to near black.
+//   - govdocs thread_200_200192.pdf: before the fix, three images and 687,592
+//     pixels came back with not one pixel above luminance 192, against
+//     poppler's MEAN_LUM=221.91 for the same page.
 func TestDecodeImage_SeparationDecodesThroughItsTintTransform(t *testing.T) {
 	t.Parallel()
 
@@ -179,9 +193,8 @@ func TestDecodeImage_SeparationDecodesThroughItsTintTransform(t *testing.T) {
 	}
 
 	// Tint 0 is NO ink, so it must render as paper white, not black. That sign
-	// is the whole defect: measured on thread_200_200192.pdf, three images and
-	// 687,592 pixels came back with not one pixel above luminance 192, against
-	// poppler's MEAN_LUM=221.91 for the same page.
+	// is the whole defect: read the other way, a page of such images comes
+	// back far darker than poppler paints it.
 	for _, tc := range []struct {
 		x    int
 		want color.RGBA
@@ -228,7 +241,11 @@ func TestDecodeImage_SeparationOverCMYKAlternate(t *testing.T) {
 }
 
 // TestDecodeImage_SeparationWithSampledTint pins a type 0 tint transform, the
-// commonest kind: 74 of the 112 Separation images in govdocs use one.
+// commonest kind.
+//
+// # Corpus evidence
+//
+//   - govdocs: 74 of the 112 Separation images use a type 0 tint transform.
 func TestDecodeImage_SeparationWithSampledTint(t *testing.T) {
 	t.Parallel()
 
@@ -305,14 +322,18 @@ func TestDecodeImage_SeparationRefusalsSurvive(t *testing.T) {
 //
 // This case used to decode by accident: resolveColorSpace substitutes
 // "DeviceRGB", which assumes three components, so the stride happened to be
-// right and the tints were emitted AS IF they were RGB. The pdfjs fixtures
-// colorspace_atan.pdf, colorspace_cos.pdf and colorspace_sin.pdf are exactly
-// that shape, and all three rendered at MEAN_LUM 112.47 with a black corner
-// against poppler's ~226: litho produced the same picture for three DIFFERENT
-// tint programs, which is the tell that the transform was ignored.
+// right and the tints were emitted AS IF they were RGB. Three DIFFERENT tint
+// programs over that shape produced the same picture, which is the tell that
+// the transform was ignored.
 //
 // Here the transform maps every tuple to full red, so a passthrough would show
 // the raw samples instead and the assertion fails.
+//
+// # Corpus evidence
+//
+//   - pdfjs colorspace_atan.pdf, colorspace_cos.pdf, colorspace_sin.pdf: are
+//     exactly this shape, and all three rendered at MEAN_LUM 112.47 with a
+//     black corner against poppler's ~226.
 func TestDecodeImage_DeviceNThreeColorantsGoThroughTheTransform(t *testing.T) {
 	t.Parallel()
 

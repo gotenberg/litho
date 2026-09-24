@@ -8,9 +8,14 @@ import "testing"
 // Symbol-set name.
 //
 // litho borrowed the text-extraction resolver, which also decodes spellings
-// producers invent. govdocs thread_300_300084.pdf shows codes its embedded Type 1
-// program names G4F and G56; litho read them as U+004F and U+0056 and excused
-// the font, while veraPDF reports every such glyph under ISO 14289-2, 8.4.5.8.
+// producers invent, while veraPDF reports every such glyph under ISO 14289-2,
+// 8.4.5.8.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300084.pdf: shows codes its embedded Type 1 program
+//     names G4F and G56. litho read them as U+004F and U+0056 and excused the
+//     font, while veraPDF reports every such glyph.
 func TestGlyphNameHasUnicode_AGLSpecOnly(t *testing.T) {
 	t.Parallel()
 

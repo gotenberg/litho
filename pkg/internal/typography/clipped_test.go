@@ -10,7 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// extractBody runs the extractor over body using minimalFontPDF's resources.
+// extractBody runs the extractor over body using [minimalFontPDF]'s resources.
 func extractBody(t *testing.T, body string) []elementView {
 	t.Helper()
 	ctx := context.Background()

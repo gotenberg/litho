@@ -45,8 +45,12 @@ func stripCmapTable(t *testing.T, data []byte) []byte {
 // to contain "at least" a Microsoft Unicode (3,1) or Macintosh Roman (1,0)
 // subtable. litho read only the parsed subtable set, and a font with no cmap
 // table makes the parse return an error rather than an empty set, so the check
-// passed silently: pdfjs TrueType_without_cmap.pdf embeds exactly such a font
-// and veraPDF reports it.
+// passed silently.
+//
+// # Corpus evidence
+//
+//   - pdfjs TrueType_without_cmap.pdf: embeds a non-symbolic TrueType with no
+//     cmap table, and veraPDF reports it.
 func TestTrueTypeNonSymbolicCmap_NoCmapTable(t *testing.T) {
 	t.Parallel()
 

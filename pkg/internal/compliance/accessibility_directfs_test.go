@@ -12,11 +12,16 @@ import (
 // TestPDFUAFileSpecFUFSeesDirectFileSpec pins that ISO 14289-1 7.11 reaches a
 // file specification written as a direct dictionary.
 //
-// checkPDFUAFileSpecFUF documented itself as covering FileAttachment
+// [checkPDFUAFileSpecFUF] documented itself as covering FileAttachment
 // annotations, but found file specifications by sweeping the cross-reference
-// map, which lists only indirect objects. pdfjs issue14203.pdf attaches
-// example.tex through an annotation whose /FS is inline and carries /F without
-// /UF: veraPDF 1.30.2 reports one failed check for 7.11 t1, litho reported none.
+// map, which lists only indirect objects, so it missed an annotation whose /FS
+// is inline.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14203.pdf: attaches example.tex through an annotation whose
+//     /FS is inline and carries /F without /UF; veraPDF 1.30.2 reports one
+//     failed check for 7.11 t1, litho reported none.
 func TestPDFUAFileSpecFUFSeesDirectFileSpec(t *testing.T) {
 	t.Parallel()
 

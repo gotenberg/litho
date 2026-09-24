@@ -11,9 +11,15 @@ import (
 // no PDF /Encoding) resolves single-byte character codes through the font's own
 // cmap: the (3,0) Microsoft Symbol subtable, whose codes live in one of the
 // ranges [symbolCodeRanges] lists, or failing that the (1,0) Macintosh
-// subtable. Returns nil when the
-// font carries neither subtable, so the caller can decline to resolve rather
-// than guess.
+// subtable. Returns nil when the font carries neither subtable, so the caller
+// can decline to resolve rather than guess.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400573.pdf: its SymbolMT subset declares a 48-byte
+//     (3,0) subtable where 42 bytes remain, the subtable holds only 0xF021
+//     and 0xF022, and veraPDF reports no glyph-level finding for that font at
+//     all.
 func SymbolCharCodeToGID(ctx context.Context, data []byte) (map[uint16]uint16, error) {
 	records, err := ParseTableDirectory(data)
 	if err != nil {
@@ -64,9 +70,7 @@ func SymbolCharCodeToGID(ctx context.Context, data []byte) (map[uint16]uint16, e
 	// malformed (the OpenType cmap length field is the subtable's byte size),
 	// and its segments cannot be trusted to list every code the font maps. A
 	// caller would read a code missing from such a partial map as a missing
-	// glyph: govdocs thread_400_400573.pdf's SymbolMT subset declares a 48-byte
-	// (3,0) subtable where 42 bytes remain, it holds only 0xF021 and 0xF022, and
-	// veraPDF reports no glyph-level finding for that font at all.
+	// glyph.
 	if len(sub) >= 4 { //nolint:mnd // format and length fields
 		if format := binary.BigEndian.Uint16(sub[0:2]); format == 4 || format == 6 {
 			if declared := int(binary.BigEndian.Uint16(sub[2:4])); declared > len(sub) {

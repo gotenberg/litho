@@ -55,11 +55,16 @@ func runToUnicodeRanges(t *testing.T, data []byte) (*writer.ObjAllocator, []stri
 	return alloc, first, second
 }
 
-// TestFixToUnicodeRangesSplitsACrossingRange pins the repair of pdfjs
-// issue5751.pdf: its /ToUnicode maps c, e, n, p and s through the single entry
-// <01ED> <0206> <0061>, which crosses a first-byte boundary (Adobe Technical
-// Note #5411, 1.4.1), so veraPDF credits none of them (ISO 14289-2, 8.4.5.8).
-// The CMap is rewritten in place and still maps every code it mapped.
+// TestFixToUnicodeRangesSplitsACrossingRange pins the repair of a /ToUnicode
+// that maps several glyphs through a single entry crossing a first-byte
+// boundary (Adobe Technical Note #5411, 1.4.1), so veraPDF credits none of them
+// (ISO 14289-2, 8.4.5.8). The CMap is rewritten in place and still maps every
+// code it mapped.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5751.pdf: its /ToUnicode maps c, e, n, p and s through the
+//     single entry <01ED> <0206> <0061>.
 func TestFixToUnicodeRangesSplitsACrossingRange(t *testing.T) {
 	t.Parallel()
 

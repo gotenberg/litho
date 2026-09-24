@@ -95,11 +95,11 @@ func TestIsClipped_NoCropBox(t *testing.T) {
 }
 
 // TestIsClipped_ViaExtractElements is an integration-level test that
-// exercises the full ExtractElements path with a CropBox set.
+// exercises the full [ExtractElements] path with a CropBox set.
 func TestIsClipped_ViaExtractElements(t *testing.T) {
-	// We need a page with a CropBox and a machine that processes Tj ops.
-	// Since we can't easily construct a full font pipeline, we test the
-	// boxRectFromArray and clipping logic directly, which is the new code path.
+	// A page whose machine processes Tj ops would need a full font pipeline,
+	// so the test checks boxRectFromArray and the clipping bounds directly,
+	// which is the new code path.
 
 	cropBox := ast.PdfArray{ast.PdfInt(100), ast.PdfInt(100), ast.PdfInt(500), ast.PdfInt(700)}
 	page := &document.Page{

@@ -93,9 +93,9 @@ func WithFacturXLenient(lenient bool) FacturXValidateOption {
 //
 // The schema set must be the Factur-X / ZUGFeRD 2.1+ CII D16B
 // hierarchy; passing a different schema set will surface every
-// element as a root or structure violation. PR5 leaves bundling of
-// the canonical XSDs to the caller (use [xsd.Load] with an embed.FS
-// or os.DirFS) so litho keeps no UN/CEFACT artefacts in-tree.
+// element as a root or structure violation. The caller bundles the
+// canonical XSDs (use [xsd.Load] with an embed.FS or os.DirFS), so
+// litho keeps no UN/CEFACT artefacts in-tree.
 func WithFacturXXSD(s *xsd.Schema) FacturXValidateOption {
 	return func(o *facturXValidateOpts) { o.xsdSchema = s }
 }
@@ -210,7 +210,7 @@ func WithPeppolSchematron(s *schematron.Schema) FacturXValidateOption {
 // IBAN checksum is the canonical example).
 //
 // The companion package cii_schematron ships
-// [cii_schematron.BuiltinRuleOverrides]; callers can pass that map
+// cii_schematron.BuiltinRuleOverrides; callers can pass that map
 // directly or merge it with their own entries.
 func WithFacturXSchematronOverrides(m map[string]schematron.RuleOverride) FacturXValidateOption {
 	return func(o *facturXValidateOpts) { o.schematronOverrides = m }
@@ -309,7 +309,7 @@ var (
 // PDF/A-3 violations of the archival base plus any hybrid-invoice
 // rule violations as [Violation] values.
 //
-// The function holds the document's validation run mutex during the
+// ValidateFacturX holds the document's validation run mutex during the
 // PDF/A-3 pass; see [ValidatePDFA] for the concurrency contract.
 func ValidateFacturX(ctx context.Context, doc *document.Document, opts ...FacturXValidateOption) ([]error, error) {
 	return validateHybridInvoice(ctx, doc, variantFacturX, opts...)
@@ -644,7 +644,7 @@ func readInvoiceXMP(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	if err != nil {
 		return nil
 	}
-	// Decode first: [ast.PdfStream.Bytes] hands back the raw body, so a
+	// Decode first: ast.PdfStream.Bytes hands back the raw body, so a
 	// /Metadata stream carrying a filter (ISO 32000-1, 14.3.2 permits one)
 	// yields compressed bytes in which none of the invoice properties can be
 	// found, and every XMP clause of the variant fires on a conformant file.
@@ -761,7 +761,7 @@ func readElementText(dec *xml.Decoder) (string, error) {
 }
 
 // tagPDFA3Base appends a single hybrid-invoice violation flagging the
-// PDF/A-3 base as non-compliant when ValidatePDFA returned any errors.
+// PDF/A-3 base as non-compliant when [ValidatePDFA] returned any errors.
 // The original PDF/A violations propagate verbatim alongside this tag
 // so callers can pinpoint the specific base failures.
 func tagPDFA3Base(pdfaErrs []error, v hybridInvoiceVariant) []Violation {

@@ -70,6 +70,11 @@ func unselectedPages(allPages, selected []*document.Page) map[int]bool {
 // Named and byte-string destinations resolve through the tables this file
 // prunes, so they need no separate check: an entry that survives points at a
 // page that survives.
+//
+// # Corpus evidence
+//
+//   - All corpora, 5163 files: one file uses the integer page-number form of
+//     an explicit destination, which is why it is left alone.
 func destTargetsRemoved(ctx context.Context, doc *document.Document, dest ast.PdfObject, removed map[int]bool, depth int) bool {
 	if depth > maxDestChainDepth || dest == nil {
 		return false
@@ -96,10 +101,9 @@ func destTargetsRemoved(ctx context.Context, doc *document.Document, dest ast.Pd
 		// [document.ResolveDestinationPage]) because producers write it that
 		// way. It cannot be checked here: this pass knows which page objects
 		// went, not which index each one held, so an integer destination is
-		// left alone. It is rare enough to leave alone (one file across the
-		// 5163-file corpora) and the page it names is still a page; remapping
-		// the index would need the original page order threaded through every
-		// caller of this pass.
+		// left alone. It is rare enough to leave alone and the page it names is
+		// still a page; remapping the index would need the original page order
+		// threaded through every caller of this pass.
 		ref, isRef := d[0].(ast.PdfIndirectRef)
 		return isRef && removed[ref.ObjectNum]
 	}
@@ -225,11 +229,14 @@ func droppedPageAnnots(ctx context.Context, doc *document.Document, allPages []*
 //
 // A field groups the widgets that present it on each page (ISO 32000-1,
 // 12.7.3.1), and every widget names its page in /P. Keeping a widget whose page
-// is gone therefore keeps the page: extracting nine pages of govdocs
-// thread_100_100852.pdf dragged 47 unextracted pages and 510 KB of their content
-// into the output, reachable as
-// /Pages/Kids[0]/Annots[0]/Parent/Kids[4]/P. Only the dead widgets go; the field
-// itself stays, because it may carry the value the form was filled with.
+// is gone therefore keeps the page. Only the dead widgets go; the field itself
+// stays, because it may carry the value the form was filled with.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100852.pdf: extracting nine pages dragged 47
+//     unextracted pages and 510 KB of their content into the output, reachable
+//     as /Pages/Kids[0]/Annots[0]/Parent/Kids[4]/P.
 func fieldKidOverrides(
 	ctx context.Context,
 	doc *document.Document,
@@ -372,11 +379,15 @@ func pruneFieldKidsAt(
 //
 // Pruning after the copy would be too late. The copier walks references, so a
 // link naming an unextracted page pulls that page, and its content stream, into
-// the output: extracting nine pages of govdocs thread_100_100852.pdf carried
-// seventeen unextracted ones along, and the text of page 26 was recoverable
-// from a file that was supposed to hold pages 2 to 10.
+// the output.
 // It adds to overrides rather than replacing it, so a page already patched
-// there (by [parentlessPageOverrides]) keeps that edit.
+// there (by [pageCopyOverrides]) keeps that edit.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100852.pdf: extracting nine pages carried seventeen
+//     unextracted ones along, and the text of page 26 was recoverable from a
+//     file that was supposed to hold pages 2 to 10.
 func splitDestOverrides(ctx context.Context, doc *document.Document, keptPages []*document.Page, removed map[int]bool, overrides map[int]ast.PdfObject) {
 	for _, page := range keptPages {
 		pageDict := page.Dict
@@ -438,9 +449,13 @@ func splitDestOverrides(ctx context.Context, doc *document.Document, keptPages [
 // 153), so a bookmark that keeps its title and its place in the tree is valid,
 // while unlinking it would mean repairing /First, /Last, /Next, /Prev and /Count
 // around the hole. The destination has to go regardless: it reaches the deleted
-// page, which is enough to write that page into the output, as govdocs
-// thread_000_000761.pdf did with 2196 bytes of it.
+// page, which is enough to write that page into the output.
 // It reports whether the walk stopped at its depth bound with items unread.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000761.pdf: an outline destination wrote 2196 bytes
+//     of the deleted page into the output.
 func pruneOutlineDestinations(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -631,6 +646,11 @@ func pruneDestNameTreeAt(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 
 // pruneCatalogDestinations drops the named destinations that point at pages a
 // rebuild removed, rewriting the catalog when either table changes.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400912.pdf: an /OpenAction left pointing at a deleted
+//     page held on to 17204 bytes of the page the deletion had just removed.
 func pruneCatalogDestinations(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -647,8 +667,7 @@ func pruneCatalogDestinations(
 	// /OpenAction names the view the document opens on (ISO 32000-1, 12.3.2 and
 	// Table 28), as a destination or a /GoTo action. Left pointing at a deleted
 	// page it opens the file on a page that is not there, and the reference keeps
-	// that page in the output: govdocs thread_400_400912.pdf held on to 17204
-	// bytes of the page it had just deleted.
+	// that page in the output.
 	if openAction, hasOpen := catalogDict["OpenAction"]; hasOpen {
 		targets := destTargetsRemoved(ctx, doc, openAction, removed, 0)
 		if !targets {

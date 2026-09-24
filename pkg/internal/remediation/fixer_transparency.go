@@ -205,9 +205,9 @@ func fixPatternTransparency(ctx context.Context, doc *document.Document, alloc *
 // check reaches here ([compliance] walks page.Resources /Font to the Type 3 font
 // dictionary), but this repair walk did not: it covered page resources, Form
 // XObject resources, Pattern resources and annotation appearance resources,
-// leaving an /ExtGState inside a Type 3 font flagged and unrepaired. Measured on
-// the corpus, the carriers declare NO /ExtGState on the page at all, so the
-// existing walks find nothing to fix.
+// leaving an /ExtGState inside a Type 3 font flagged and unrepaired. A carrier
+// can declare NO /ExtGState on the page at all, and then the existing walks find
+// nothing to fix.
 //
 // The target is the FONT dictionary's own /Resources, which ISO 32000-1, 9.6.5
 // scopes to the font's CharProcs. [fixType3FontResources] already walks this
@@ -218,6 +218,17 @@ func fixPatternTransparency(ctx context.Context, doc *document.Document, alloc *
 // /BM, /CA and /ca together: ISO 19005-1 §6.4 t1, t4, t5 and t6 respectively.
 //
 // visited breaks reference cycles: two font names may share one font object.
+//
+// # Corpus evidence
+//
+//   - All corpora: the carriers declare NO /ExtGState on the page at all, so
+//     the existing walks find nothing to fix.
+//   - All corpora: the carriers declare /Resources, /ExtGState and the /GS
+//     entry all inline on the font, so there is nothing below the font to
+//     rewrite.
+//   - verapdf 6-2-10-t04-fail-b: the font holds one non-conforming /CA and its
+//     three /CharProcs streams hold one each, so repairing only the font leaves
+//     three behind, which veraPDF reports and litho does not.
 func fixType3FontTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict, visited map[int]bool, depth int) int {
 	if resources == nil || depth > maxTransparencyResourceDepth {
 		return 0
@@ -260,9 +271,9 @@ func fixType3FontTransparency(ctx context.Context, doc *document.Document, alloc
 		}
 
 		// The font's own /Resources, when it declares one. The font object is
-		// the nearest indirect ancestor: the corpus carriers declare
-		// /Resources, /ExtGState and the /GS entry all inline on it, so there
-		// is nothing below the font to rewrite.
+		// the nearest indirect ancestor: /Resources, /ExtGState and the /GS
+		// entry are typically all inline on it, so there is nothing below the
+		// font to rewrite.
 		if own, err := document.ResolveDict(ctx, doc, fd["Resources"]); err == nil && own != nil {
 			work := make(ast.PdfDict, len(fd))
 			maps.Copy(work, fd)
@@ -278,10 +289,8 @@ func fixType3FontTransparency(ctx context.Context, doc *document.Document, alloc
 		}
 
 		// A glyph procedure may carry /Resources of its own, and the font's
-		// own /Resources does not cover it. Measured on veraPDF 6-2-10-t04-fail-b:
-		// the font holds one non-conforming /CA and its three /CharProcs
-		// streams hold one each, so repairing only the font leaves three
-		// behind, which veraPDF reports and litho does not.
+		// own /Resources does not cover it, so repairing only the font leaves
+		// the glyph procedures' graphics states behind.
 		fixed += fixType3CharProcTransparency(ctx, doc, alloc, fd, visited, depth)
 	}
 
@@ -291,9 +300,13 @@ func fixType3FontTransparency(ctx context.Context, doc *document.Document, alloc
 // maxTransparencyResourceDepth caps recursion through nested resource
 // dictionaries. Anti-DoS guard, not spec-mandated: a crafted file can nest Form
 // XObjects arbitrarily and each level costs a resolve plus a dictionary copy.
-// Ten is far beyond any real document (the veraPDF corpus peaks at two) while
-// keeping the work bounded. It does not replace the visited set: a depth bound
-// survives a cycle without ever detecting it.
+// Ten is far beyond any real document while keeping the work bounded. It does
+// not replace the visited set: a depth bound survives a cycle without ever
+// detecting it.
+//
+// # Corpus evidence
+//
+//   - verapdf: the resource nesting peaks at two.
 const maxTransparencyResourceDepth = 10
 
 // fixResourceTransparency repairs every transparency construct reachable from
@@ -304,14 +317,18 @@ const maxTransparencyResourceDepth = 10
 // transparency wherever it renders: a resource dictionary reached through a
 // page, a Form XObject, a glyph procedure or an annotation appearance is
 // equally rendered content. Applying a different subset per site is what left
-// each site leaking a different location, measured on the veraPDF §6.4 test 3
-// carriers (a group survived in an appearance form, in a form nested inside a
-// form, and in a form a Type 3 font declares).
+// each site leaking a different location.
 //
 // owner is the caller's working copy of the dictionary that holds res under
 // /Resources; see [fixExtGStateDict] for how a fully inline chain is written.
 // visited is shared across the whole document so an object repaired once is
 // never rebuilt from the stale original and written again.
+//
+// # Corpus evidence
+//
+//   - verapdf: on the §6.4 test 3 carriers, a group survived in an appearance
+//     form, in a form nested inside a form, and in a form a Type 3 font
+//     declares.
 func fixResourceTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, res ast.PdfDict, owner ast.PdfDict, visited map[int]bool, depth int) (int, int, bool) {
 	if res == nil || depth > maxTransparencyResourceDepth {
 		return 0, 0, false
@@ -329,13 +346,20 @@ func fixResourceTransparency(ctx context.Context, doc *document.Document, alloc 
 // glyph procedure a Type 3 font declares.
 //
 // ISO 32000-1, 9.6.5 scopes a Type 3 font's /Resources to its /CharProcs, but
-// a glyph procedure is a content stream and may declare /Resources of its own;
-// the veraPDF carriers type theirs as Form XObjects with a full resource
-// dictionary. Those are separate indirect objects, so each is written
-// directly: the ancestor to rewrite is the glyph stream itself.
+// a glyph procedure is a content stream and may declare /Resources of its own,
+// and producers type theirs as Form XObjects with a full resource dictionary.
+// Those are separate indirect objects, so each is written directly: the
+// ancestor to rewrite is the glyph stream itself.
 //
 // visited breaks reference cycles and shared glyph procedures: two names in
 // /CharProcs may address one stream.
+//
+// # Corpus evidence
+//
+//   - verapdf: the carriers type their glyph procedures as Form XObjects with a
+//     full resource dictionary.
+//   - All corpora: no carrier exercises a transparency group on a glyph
+//     procedure, so the unit tests are its only evidence.
 func fixType3CharProcTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, visited map[int]bool, depth int) int {
 	if depth > maxTransparencyResourceDepth {
 		return 0
@@ -370,8 +394,7 @@ func fixType3CharProcTransparency(ctx context.Context, doc *document.Document, a
 
 		// A glyph procedure typed as a Form XObject may carry its own
 		// transparency group, which ISO 19005-1 §6.4 test 3 forbids wherever it
-		// renders. No corpus carrier exercises this, so the unit tests are its
-		// only evidence.
+		// renders.
 		if groupObj, ok := stream.Dict["Group"]; ok && isTransparencyGroup(ctx, doc, groupObj) {
 			delete(work, "Group")
 			changed = true
@@ -413,9 +436,8 @@ func fixType3CharProcTransparency(ctx context.Context, doc *document.Document, a
 // /Resources, /ExtGState and each graphics state parameter dictionary be direct
 // objects; when every one of them is, there is no indirect reference at or
 // below /ExtGState to rewrite and the repair can only be written through the
-// enclosing page, Type 3 font, Form XObject or pattern. Measured on the corpus,
-// 14 of 16 veraPDF §6.4 carriers store the whole chain inline, and the repair
-// silently wrote nothing for all of them.
+// enclosing page, Type 3 font, Form XObject or pattern. Producers commonly
+// store the whole chain inline, and the repair silently wrote nothing for them.
 //
 // The returned bool reports that owner was updated in place. The caller writes
 // owner itself, so a caller already rewriting that object (fixXObjectTransparency
@@ -427,6 +449,11 @@ func fixType3CharProcTransparency(ctx context.Context, doc *document.Document, a
 // once its [writer.ObjAllocator.AllocAt] returns true. Neither counts repairs
 // merely attempted: AllocAt refuses object 0, and an earlier version reported
 // every refusal, and every case with nothing to write through, as a success.
+//
+// # Corpus evidence
+//
+//   - verapdf: 14 of 16 §6.4 carriers store the whole chain inline, and the
+//     repair silently wrote nothing for all of them.
 func fixExtGStateDict(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict, owner ast.PdfDict) (int, int, bool) {
 	gsObj, ok := resources["ExtGState"]
 	if !ok {

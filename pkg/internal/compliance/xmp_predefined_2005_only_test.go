@@ -16,8 +16,12 @@ import (
 //
 // litho's 2004 catalog carried no entry at all for these namespaces, which let
 // the caller treat them as some other known schema's business and wave the
-// property through: nine veraPDF test-suite files carrying a bare xmpDM
-// property passed §6.7.9 t2, and 203 across the whole corpus.
+// property through.
+//
+// # Corpus evidence
+//
+//   - verapdf: nine files carrying a bare xmpDM property passed §6.7.9 t2.
+//   - All corpora: 203 files carrying a bare xmpDM property passed §6.7.9 t2.
 func TestXMPPredefinedProperties_SchemasTheEditionsDisagreeOn(t *testing.T) {
 	t.Parallel()
 

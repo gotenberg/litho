@@ -30,9 +30,12 @@ func parseOps(t *testing.T, src string) []content.Operation {
 // content stream (ISO 32000-1 §9.6.5) that may select fonts from the Type3
 // font's own /Resources, and the page walk stops at the Type3 font itself, so
 // an unembedded font used there would otherwise never answer ISO 19005-2
-// §6.2.11.4.1. veraPDF reports it on pdfjs
-// ContentStreamCycleType3insideType3.pdf, which reaches an unembedded
-// Helvetica through two nested Type3 fonts.
+// §6.2.11.4.1, which veraPDF reports.
+//
+// # Corpus evidence
+//
+//   - pdfjs ContentStreamCycleType3insideType3.pdf: reaches an unembedded
+//     Helvetica through two nested Type3 fonts, and veraPDF reports it.
 func TestCheckType3CharProcFonts_NestedUnembeddedFont(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -85,8 +88,12 @@ func TestCheckType3CharProcFonts_NestedUnembeddedFont(t *testing.T) {
 // glyph programs are its /CharProcs. Per ISO 32000-1 §9.6.5 a code is drawn by
 // mapping it through /Encoding to a name and that name through /CharProcs, so
 // a code the encoding leaves undefined paints nothing. veraPDF reports that as
-// ISO 19005-2 §6.2.11.4.1 t2 on pdfjs Type3WordSpacing.pdf, which shows a
-// space its font never defines.
+// ISO 19005-2 §6.2.11.4.1 t2.
+//
+// # Corpus evidence
+//
+//   - pdfjs Type3WordSpacing.pdf: shows a space its font never defines, and
+//     veraPDF reports it.
 func TestCheckType3GlyphPresence(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

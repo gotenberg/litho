@@ -16,13 +16,17 @@ import (
 // ISO 14289-2, 8.4.3 asks whether real content maps to a Private Use Area
 // value, and veraPDF raises it per Glyph object, so an entry for a code nothing
 // renders is out of scope. litho read any PUA entry anywhere in a Type 0 font's
-// /ToUnicode as a violation whenever the document carried no /ActualText, which
-// reported 19 pdfjs files veraPDF passes: bug1473809.pdf and mixedfonts.pdf each
-// map 37 codes into the PUA and show none of them.
+// /ToUnicode as a violation whenever the document carried no /ActualText.
 //
 // Identity-H and Identity-V make the character code the CID, so the codes the
 // CMap is keyed by are exactly the ones litho decodes. Any other encoding needs
 // a CMap this check does not carry and keeps the conservative answer.
+//
+// # Corpus evidence
+//
+//   - pdfjs: the whole-CMap reading reported 19 files veraPDF passes.
+//   - pdfjs bug1473809.pdf, mixedfonts.pdf: each maps 37 codes into the PUA
+//     and shows none of them.
 func TestPUAActualText_ScopedToShownCodes(t *testing.T) {
 	t.Parallel()
 

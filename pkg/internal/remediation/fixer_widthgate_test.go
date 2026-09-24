@@ -39,16 +39,20 @@ func cidWidthAfterFix(t *testing.T, alloc *writer.ObjAllocator) (float64, bool) 
 //
 // ISO 14289-1, 7.21.5 and ISO 14289-2, 8.4.5.6 restate the ISO 19005-2, 6.2.11.5
 // requirement that /Widths agree with the embedded program. [matchFontFixes]
-// learned 7.21.5 in 5ea5b54e, so the fixer ran on PDF/UA documents, but
-// [fixFontIssues] gated the rewrite on its own clause list, written in f17f6792,
-// which knew only the PDF/A spellings. The repair was invoked and did nothing:
-// PDF_A-2b__veraPDF_test_suite_6-2-11-5-t01-fail-a reported "corrected /Widths"
-// under PDF/A-2b while the same file under PDF/UA-1 and PDF/UA-2 reported no
-// width fix and kept reporting the mismatch.
+// learned 7.21.5 in 2eb351fa, so the fixer ran on PDF/UA documents, but
+// [fixFontIssues] gated the rewrite on its own clause list, written in 39a382e2,
+// which knew only the PDF/A spellings. The repair was invoked and did nothing
+// under a PDF/UA profile while the same file repaired under PDF/A.
 //
 // A matcher-level assertion cannot catch that. TestMatchFontFixesClaimsThePDFUAWidthClause
 // passed throughout, which is why this arm drives [fixFontIssues] end to end and
 // asserts the persisted /W value.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-2b__veraPDF_test_suite_6-2-11-5-t01-fail-a: reported
+//     "corrected /Widths" under PDF/A-2b while the same file under PDF/UA-1 and
+//     PDF/UA-2 reported no width fix and kept reporting the mismatch.
 func TestFixFontIssues_RepairsWidthsReportedUnderPDFUA(t *testing.T) {
 	t.Parallel()
 

@@ -5,9 +5,13 @@ import (
 	"testing"
 )
 
-// proxyRewrittenRDF is issue15833.pdf's packet in miniature: a web proxy
-// rewrote every namespace URI, so the rdf prefix names something that is not
-// the RDF namespace. The packet is still well-formed XML.
+// proxyRewrittenRDF is a packet whose namespace URIs a web proxy rewrote, so
+// the rdf prefix names something that is not the RDF namespace. The packet is
+// still well-formed XML.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15833.pdf: the constant is this file's packet in miniature.
 const proxyRewrittenRDF = `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
 <rdf:RDF xmlns:rdf="http://libdb.example.edu:80/rwt/ACS/http/P75Y/1999/02/22-rdf-syntax-ns#">

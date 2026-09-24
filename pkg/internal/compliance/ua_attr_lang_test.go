@@ -15,7 +15,12 @@ import (
 // has no /Lang and no ancestor /Lang, so its language is undeterminable even
 // though a SIBLING element carries /Lang. veraPDF reports the source-specific
 // test per element; litho previously suppressed all coverage once any element
-// had /Lang (verapdf-corpus 7.2-t21/t22/t23-fail-a).
+// had /Lang.
+//
+// # Corpus evidence
+//
+//   - verapdf 7.2-t21-fail-a, 7.2-t22-fail-a, 7.2-t23-fail-a: the files litho
+//     passed while it suppressed all coverage once any element had /Lang.
 func TestUAAttributeLangDetermined(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

@@ -106,7 +106,7 @@ func ParseCharStringNames(data []byte) []string {
 
 // eexecRegion returns the byte slice that starts at the first byte
 // after "currentfile eexec" keyword in data. When the keyword is
-// absent the whole input is returned; decryptEexec copes with
+// absent the whole input is returned; [decryptEexec] copes with
 // unparseable input by returning nil, which short-circuits the
 // caller.
 func eexecRegion(data []byte) []byte {

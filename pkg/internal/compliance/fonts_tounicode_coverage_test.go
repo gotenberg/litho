@@ -14,10 +14,14 @@ import (
 //
 // A shown code the CMap leaves out falls back to the glyph name the encoding
 // gives it, as veraPDF's PDSimpleFont.toUnicode does, and a name with no
-// Unicode value leaves the glyph without one. govdocs thread_300_300068.pdf
-// shows code 2 of an MTSY font whose /Differences name it circlecopyrt, a TeX
-// spelling no glyph list carries, while its /ToUnicode maps codes 1 and 3 only;
-// veraPDF reports the glyph and litho accepted the font for having a CMap.
+// Unicode value leaves the glyph without one.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300068.pdf: shows code 2 of an MTSY font whose
+//     /Differences name it circlecopyrt, a TeX spelling no glyph list
+//     carries, while its /ToUnicode maps codes 1 and 3 only. veraPDF reports
+//     the glyph and litho accepted the font for having a CMap.
 func TestToUnicode_CodeTheCMapLeavesOut(t *testing.T) {
 	t.Parallel()
 

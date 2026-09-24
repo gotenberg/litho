@@ -54,7 +54,11 @@ func FuzzBitsAt(f *testing.F) {
 //
 // Both a one-input and a two-input table are driven, because the multilinear
 // path visits 2^m corners and compounds a stride per input: a one-input fuzz
-// exercises neither. A DeviceN tint transform in the corpora takes seven.
+// exercises neither. A DeviceN tint transform takes one input per colorant.
+//
+// # Corpus evidence
+//
+//   - All corpora: a DeviceN tint transform takes seven inputs.
 func FuzzEvalSampled(f *testing.F) {
 	f.Add([]byte{255, 128, 0}, 3, 1, 0.5, 0.0, false)
 	f.Add([]byte{0}, 1, 1, 0.0, 0.0, false)

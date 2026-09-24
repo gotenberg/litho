@@ -52,7 +52,7 @@ func runPipeCompactProfile(t *testing.T, args []string) ([]byte, string) {
 // TestPipe_CompactRefusedForAPDFA1RemediateStage pins a conformance defect, not
 // a missing notice.
 //
-// `b6ced949` made the standalone remediate refuse --compact for PDF/A-1,
+// `81e88565` made the standalone remediate refuse --compact for PDF/A-1,
 // because ISO 19005-1, 6.1.4 forbids the cross-reference stream that object
 // streams require. pipe accepted the same pipeline and packed it anyway, so
 // `litho pipe doc remediate --profile PDF/A-1b --compact` returned 0 and wrote

@@ -70,9 +70,13 @@ func annotsOfFirstPage(t *testing.T, data []byte) []struct {
 //
 // The outline walk resolved named destinations and the annotation walk did not,
 // so the same document answered the question one way for its bookmarks and
-// another for its links. Eleven pdfjs files land here, including
-// link-annotation-border.pdf whose 26 links all reported no page, and
-// issue14864.pdf whose destination name carries non-ASCII text.
+// another for its links.
+//
+// # Corpus evidence
+//
+//   - pdfjs: eleven files land here.
+//   - pdfjs link-annotation-border.pdf: all 26 of its links reported no page.
+//   - pdfjs issue14864.pdf: its destination name carries non-ASCII text.
 func TestLinkAnnotationResolvesNamedDestinations(t *testing.T) {
 	t.Parallel()
 
@@ -106,8 +110,13 @@ func TestLinkAnnotationResolvesNamedDestinations(t *testing.T) {
 
 // TestAnnotsNullReadsAsNoAnnotations pins that /Annots null is the same as no
 // /Annots at all. Per ISO 32000-1, 7.3.7 a dictionary entry whose value is null
-// is equivalent to the entry being absent; reporting an error made litho the
-// only reader that could not list annotations for pdfjs issue11287.pdf.
+// is equivalent to the entry being absent, so reporting an error for it is
+// wrong.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11287.pdf: reporting an error made litho the only reader
+//     that could not list its annotations.
 func TestAnnotsNullReadsAsNoAnnotations(t *testing.T) {
 	t.Parallel()
 

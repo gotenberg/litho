@@ -14,7 +14,8 @@ import (
 // "blend" subroutines. Using the larger ceiling lets legitimate CFF2
 // charstrings through while rejecting adversarial fonts that push
 // thousands of operands between stack-clearing operators to force an
-// unbounded slice growth.
+// unbounded slice growth. Anti-DoS guard: the value is the CFF2 spec
+// maximum, so no conforming charstring reaches it.
 const maxCharstringStack = 513
 
 // ExtractEncoding extracts the CFF encoding as a byte code → glyph name map.
@@ -286,7 +287,7 @@ func GlyphToUnicode(ctx context.Context, data []byte) (map[uint16]rune, error) {
 	}
 
 	// For CID fonts, SIDs are CIDs, not glyph name indices.
-	// We can't map CIDs to Unicode without a predefined CMap (handled elsewhere).
+	// CIDs cannot map to Unicode without a predefined CMap (handled elsewhere).
 	if info.isCID {
 		return nil, nil
 	}
@@ -578,7 +579,7 @@ func parseTopDict(data []byte) topDictInfo {
 			operands = append(operands, int32(binary.BigEndian.Uint32(data[i+1:i+5]))) //nolint:gosec // intentional two's-complement conversion for CFF binary parsing
 			i += 5
 		case b == 30:
-			// Real number: skip (not needed for our operators).
+			// Real number: skip (the offset operators read here take none).
 			i++
 			for i < len(data) {
 				nibble := data[i]
@@ -598,7 +599,7 @@ func parseTopDict(data []byte) topDictInfo {
 // GID 0 is always .notdef (SID 0).
 func parseCharset(data []byte, pos int, numGlyphs int) ([]int, error) {
 	if pos < 0 || pos >= len(data) {
-		// Predefined charset offsets (0/1/2) are resolved by [resolveCharset]
+		// Predefined charset offsets (0/1/2) are resolved by resolveCharset
 		// before reaching here, so pos is a byte offset into data. A pos past
 		// the end is a malformed offset: return no charset rather than read
 		// out of bounds.
@@ -713,7 +714,7 @@ func ReadUnitsPerEm(data []byte) uint16 {
 // and returns the first element (horizontal scale). Returns 0 if absent.
 // Handles both integer and real (nibble-encoded) number operands.
 func parseFontMatrixScale(dictData []byte) float64 {
-	// We need to track the last few operands as float64 to handle reals.
+	// Track operands as float64 to handle reals.
 	operands := make([]float64, 0, 6) //nolint:mnd // A CFF DICT operator takes at most six operands (FontMatrix); a capacity hint, not a limit.
 
 	for i := 0; i < len(dictData); {

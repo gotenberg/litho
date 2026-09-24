@@ -143,10 +143,13 @@ func TestDecodeImage_OneBitHonoursAnInvertedDecodeArray(t *testing.T) {
 	}
 }
 
-// TestDecodeImage_BitsPerComponentThreeIsRefused pins the corpus case: one file
-// declares 3, which ISO 32000-1, 8.9.5.1 Table 89 does not permit and which has
-// no defined packing, so it must be refused rather than strided as though it
-// were 4.
+// TestDecodeImage_BitsPerComponentThreeIsRefused pins that a depth of 3, which
+// ISO 32000-1, 8.9.5.1 Table 89 does not permit and which has no defined
+// packing, is refused rather than strided as though it were 4.
+//
+// # Corpus evidence
+//
+//   - All corpora: one file declares /BitsPerComponent 3.
 func TestDecodeImage_BitsPerComponentThreeIsRefused(t *testing.T) {
 	t.Parallel()
 

@@ -24,10 +24,14 @@ func inlineAnnotPDF() []byte {
 // annotation written inline in /Annots.
 //
 // ISO 32000-1, 12.5.2 does not require an annotation to be an indirect object,
-// and pdfjs bug1905623.pdf carries an inline /Link on page 203. The repair only
-// wrote through the allocator, which has no object number to address for a
-// direct dictionary, so it was counted and discarded: litho reported "added /F
-// flag to 1 annotations" on every run and the output never carried /F.
+// and real producers write inline ones. The repair only wrote through the
+// allocator, which has no object number to address for a direct dictionary, so
+// it was counted and discarded: litho reported "added /F flag to 1
+// annotations" on every run and the output never carried /F.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1905623.pdf: carries an inline /Link on page 203.
 func TestFixAnnotFlagsRepairsInlineAnnotation(t *testing.T) {
 	t.Parallel()
 

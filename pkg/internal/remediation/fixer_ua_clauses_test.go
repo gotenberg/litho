@@ -26,9 +26,14 @@ func uaClauseViolation(clause, context string) compliance.Violation {
 //
 // ISO 14289-1, 7.21.6 test 2 and ISO 14289-2, 8.4.5.7 test 2 restate
 // ISO 19005-2, 6.2.11.6 test 2 word for word. Claiming only the PDF/A clause
-// numbers left the repair idle on PDF/UA documents: PDF_UA-2__8.4.5.7-t02
-// declares /BaseEncoding /Identity on a non-symbolic TrueType font, which the
-// fixer knows how to normalise.
+// numbers left the repair idle on PDF/UA documents, including a non-symbolic
+// TrueType font declaring /BaseEncoding /Identity, which the fixer knows how to
+// normalise.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-2__8.4.5.7-t02: declares /BaseEncoding /Identity on a
+//     non-symbolic TrueType font, which the fixer knows how to normalise.
 func TestMatchTrueTypeEncodingClaimsThePDFUAClauses(t *testing.T) {
 	t.Parallel()
 
@@ -133,10 +138,12 @@ func uaToUnicodeDrawnPDF() []byte {
 // stayed unreachable in production. Asserting both together is what shows the
 // routing leads somewhere that works.
 //
-// Measured before this was claimed: PDF_UA-1__7.21.7-t01-fail-a and
-// PDF_UA-2__8.4.5.8-t01-fail-a are repaired in full when validated as PDF/A-2u,
-// where the clause is spelled 6.2.11.7.2, and come back "Fixed: 0, Residual: 1"
-// under their own profile.
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.21.7-t01-fail-a and PDF_UA-2__8.4.5.8-t01-fail-a:
+//     measured before this was claimed, both are repaired in full when
+//     validated as PDF/A-2u, where the clause is spelled 6.2.11.7.2, and come
+//     back "Fixed: 0, Residual: 1" under their own profile.
 func TestClassifyRoutesThePDFUAToUnicodeClauseToTheFontFixer(t *testing.T) {
 	t.Parallel()
 

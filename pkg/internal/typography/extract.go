@@ -28,7 +28,8 @@ func fallbackFont() *Font {
 
 // maxFormXObjectDepth is the maximum recursion depth for nested Form XObjects.
 // This prevents stack overflows and excessive processing time from circular
-// references or deeply nested XObjects in malformed PDFs.
+// references or deeply nested XObjects in malformed PDFs. It is an anti-DoS
+// guard, not spec-mandated.
 const maxFormXObjectDepth = 10
 
 // collectAnnotAppearanceObjects returns the set of object numbers referenced by
@@ -97,10 +98,11 @@ func collectAnnotAppearanceObjects(ctx context.Context, doc *document.Document, 
 // excessively deep nesting. annotAppearances contains object numbers of
 // annotation appearance streams to skip.
 //
-// This function is a thin dispatcher: the actual per-operator work lives in
-// per-operator helpers (handleTfOp, handleShowTextOp, handleTJOp, handleDoOp)
-// so that each piece of the extraction state machine can be audited in
+// It is a thin dispatcher: the actual per-operator work lives in per-operator
+// helpers ([handleTfOp], [handleShowTextOp], [handleTJOp], [handleDoOp]) so
+// that each piece of the extraction state machine can be audited in
 // isolation.
+//
 // When origins is non-nil, one entry is appended to it per element appended to
 // elements, naming the index in ops of the operation that drew it.
 func extractTextRecursive(ctx context.Context, doc *document.Document, machine *graphics.Machine, resources ast.PdfDict, ops []content.Operation, elements *[]models.TextElement, visited map[int]bool, depth int, annotAppearances map[int]bool, origins *[]int, fontRefs *[]int) error {
@@ -118,7 +120,7 @@ func extractTextRecursive(ctx context.Context, doc *document.Document, machine *
 
 	// Make resources available to the machine for pattern resolution, and tell
 	// it how deep this stream sits so recorded geometry can say whether the page
-	// or a form drew it. [handleDoOp] puts both back after it recurses.
+	// or a form drew it. handleDoOp puts both back after it recurses.
 	machine.Doc = doc
 	machine.Resources = resources
 	machine.FormDepth = depth
@@ -370,7 +372,7 @@ func handleTfOp(
 	}
 
 	// Fall back to a default font rather than aborting the page. Text may
-	// be garbled, but extraction continues. Best-effort is our contract.
+	// be garbled, but extraction continues. Best-effort is the contract.
 	//
 	// The stand-in is not in the file, so there is nothing to attribute its
 	// glyphs to.
@@ -382,11 +384,10 @@ func handleTfOp(
 	return fallbackFont(), FontUnattributable
 }
 
-// resolveFontFromResources looks up a font name in the resource dict's
-// /Font sub-dict, consulting the document's font cache first and
-// populating it on cache miss. Returns nil if the font cannot be resolved.
 // resolveFontFromResources returns the font a resource name binds, and the
-// object number of the font dictionary behind it.
+// object number of the font dictionary behind it. It looks the name up in the
+// resource dict's /Font sub-dict, consulting the document's font cache first
+// and populating it on cache miss.
 //
 // The object number is what identifies a font across the document: a resource
 // name is scoped to one page's resources, so two pages may bind /F1 to
@@ -442,7 +443,7 @@ func resolveFontFromResources(ctx context.Context, doc *document.Document, resou
 	return font, objNum
 }
 
-// handleShowTextOp processes Tj ("), and " operators. strIndex selects the
+// handleShowTextOp processes the Tj, ' and " operators. strIndex selects the
 // operand that holds the PdfString: 0 for Tj and ', 2 for the
 // word/char-spacing form ".
 func handleShowTextOp(ctx context.Context, machine *graphics.Machine, currentFont *Font, op content.Operation, strIndex int, elements *[]models.TextElement) error {
@@ -652,9 +653,14 @@ type ExtractionConfig struct {
 // extractElements does the work behind [ExtractElements] and
 // [ExtractElementsWithOrigins]. It reports origins only when asked, so the
 // common path allocates nothing extra.
+//
+// # Corpus evidence
+//
+//   - pdfjs ShowText-ShadingPattern.pdf: repeats "Helvetica" many points past
+//     the right margin, and that runaway tail must stay clipped.
 func extractElements(ctx context.Context, doc *document.Document, machine *graphics.Machine, page *document.Page, ops []content.Operation, recordOrigins, recordFonts bool) ([]models.TextElement, []int, []int, error) {
-	// Collect annotation appearance object numbers so we can skip them during
-	// text extraction. Annotation appearances are visual overlays, not page content.
+	// Collect annotation appearance object numbers to skip them during text
+	// extraction. Annotation appearances are visual overlays, not page content.
 	annotAppearances := collectAnnotAppearanceObjects(ctx, doc, page.Dict)
 
 	// Pre-allocate with a capacity estimate: roughly 1 text element per 3 operators.
@@ -719,9 +725,8 @@ func extractElements(ctx context.Context, doc *document.Document, machine *graph
 		// neighbour; without this relaxation "Checkliste Service"
 		// becomes "Checkliste Servic". The chain is capped at one glyph
 		// per non-clipped run and at a small absolute overshoot (a few
-		// points), so a long runaway tail cannot propagate back in:
-		// ShowText-ShadingPattern repeats "Helvetica" many points past
-		// the margin and must stay clipped.
+		// points), so a long runaway tail past the margin cannot
+		// propagate back in and stays clipped.
 		const edgeOvershoot = 3.0
 		originallyClipped := make([]bool, len(elements))
 		for i := range elements {

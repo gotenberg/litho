@@ -117,6 +117,13 @@ func TestCheckHeaderBytesPart1Lenient(t *testing.T) {
 	}
 }
 
+// TestFindStreamDataStart covers where [findStreamDataStart] places the start
+// of stream data after the stream keyword and its EOL.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue13823.pdf: a string in the dictionary spells the keyword,
+//     the shape the literal-string case covers.
 func TestFindStreamDataStart(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -162,7 +169,7 @@ func TestFindStreamDataStart(t *testing.T) {
 			want: 6,
 		},
 		{
-			// pdfjs issue13823.pdf: a string in the dictionary spells the keyword.
+			// A string in the dictionary spells the keyword.
 			name: "stream inside a literal string",
 			buf:  "39 0 obj\n<</XRef(stream)/Length 5>>stream\r\nhello",
 			want: len("39 0 obj\n<</XRef(stream)/Length 5>>stream\r\n"),

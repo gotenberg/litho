@@ -11,15 +11,19 @@ import (
 // first Type 3 transparency repair.
 //
 // ISO 32000-1, 7.3.7 lets /Resources, /ExtGState and the graphics state
-// parameter dictionary all be direct objects. 14 of the 16 veraPDF §6.4
-// carriers do exactly that, and the repair wrote nothing for every one of them
-// because it could only rewrite an indirect /GS entry or an indirect
-// /ExtGState. The enclosing Type 3 font object is the nearest indirect object,
-// so the repair has to be written there.
+// parameter dictionary all be direct objects, and the repair wrote nothing for
+// such a chain because it could only rewrite an indirect /GS entry or an
+// indirect /ExtGState. The enclosing Type 3 font object is the nearest
+// indirect object, so the repair has to be written there.
 //
 // The assertion is on the OWNING OBJECT's contents, not on the count the fixer
 // returns: the count was always correct, which is precisely why four green
 // tests coexisted with a repair that never wrote.
+//
+// # Corpus evidence
+//
+//   - verapdf: 14 of the 16 §6.4 carriers write the whole chain direct, and
+//     the repair wrote nothing for every one of them.
 func TestFixExtGState_FullyInlineChainIsWritten(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -125,17 +129,24 @@ func TestFixExtGState_EveryInlineEntryIsKept(t *testing.T) {
 // TestFixType3CharProcs_GlyphStreamResourcesAreRepaired covers the shape that
 // survived two gates.
 //
-// veraPDF 6-2-10-t04-fail-b holds FOUR non-conforming /CA values: one in the
-// Type 3 font's own /Resources (obj 10) and one in each of its three
-// /CharProcs glyph streams (obj 16, 17, 18), which are Form XObjects with
-// their own resource dictionaries. Repairing only the font leaves three
-// behind. litho's detector shares the blind spot, so litho reported the file
-// clean while veraPDF still failed it, which is what drove the corpus
-// disagreement metric up rather than down.
+// A Type 3 font may carry non-conforming /CA values both in its own
+// /Resources and in its /CharProcs glyph streams, which are Form XObjects with
+// their own resource dictionaries. Repairing only the font leaves the glyph
+// streams behind. litho's detector shares the blind spot, so litho reported
+// such a file clean while veraPDF still failed it.
 //
 // The font here declares BOTH its own /Resources and glyph resources: an
 // earlier `continue` on the font's /Resources meant /CharProcs was never
 // reached when the font had one.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-10-t04-fail-b: holds FOUR non-conforming /CA values, one in
+//     the Type 3 font's own /Resources (obj 10) and one in each of its three
+//     /CharProcs glyph streams (obj 16, 17, 18). Repairing only the font left
+//     three behind, and litho reported the file clean while veraPDF still
+//     failed it, which drove the corpus disagreement metric up rather than
+//     down.
 func TestFixType3CharProcs_GlyphStreamResourcesAreRepaired(t *testing.T) {
 	doc, alloc := newTestDoc(t, type3CharProcPDF())
 	pageRes := ast.PdfDict{"Font": ast.PdfDict{"F1": ast.PdfIndirectRef{ObjectNum: 10}}}
@@ -182,9 +193,12 @@ func TestFixType3CharProcs_GlyphStreamResourcesAreRepaired(t *testing.T) {
 	}
 }
 
-// type3CharProcPDF mirrors veraPDF 6-2-10-t04-fail-b: a Type 3 font with its
-// own /Resources AND /CharProcs glyph streams that carry their own, every
-// level stored inline.
+// type3CharProcPDF builds a Type 3 font with its own /Resources AND /CharProcs
+// glyph streams that carry their own, every level stored inline.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-10-t04-fail-b: the fixture mirrors its shape.
 func type3CharProcPDF() []byte {
 	return []byte(
 		"%PDF-1.4\n" +
@@ -202,9 +216,13 @@ func type3CharProcPDF() []byte {
 			"trailer\n<< /Size 18 /Root 1 0 R >>\n%%EOF\n")
 }
 
-// inlineType3PDF builds the corpus shape: the Type 3 font (obj 10) declares
-// /Resources inline, that dict declares /ExtGState inline, and /GS0 is an
-// inline dictionary too, so nothing below the font object is indirect.
+// inlineType3PDF builds a Type 3 font (obj 10) that declares /Resources
+// inline, whose dict declares /ExtGState inline, and whose /GS0 is an inline
+// dictionary too, so nothing below the font object is indirect.
+//
+// # Corpus evidence
+//
+//   - All corpora: this is the shape the corpus carries.
 func inlineType3PDF(gs string) []byte {
 	return []byte(
 		"%PDF-1.4\n" +

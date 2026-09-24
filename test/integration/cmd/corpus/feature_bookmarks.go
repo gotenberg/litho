@@ -179,7 +179,7 @@ func normalizeLithoTree(in []models.Bookmark) []normalizedBookmark {
 // The C1 rewrite is what keeps the canary honest. PDFDocEncoding
 // (ISO 32000-1 Table D.2) maps bytes 0x80-0x9F to typographic glyphs
 // (en dash, em dash, smart quotes, etc.); litho applies this mapping
-// at decode time, matching PDF.js's [PDFStringTranslateTable]. pdfcpu
+// at decode time, matching PDF.js's PDFStringTranslateTable. pdfcpu
 // emits the raw byte as a C1 control rune (U+0085, U+0090, ...), so a
 // title containing the en-dash byte 0x85 surfaces as "Annex A – Foo"
 // in litho and "Annex A  Foo" in the pdfcpu golden. Both sides
@@ -202,7 +202,7 @@ func normalizeBookmarkTitle(s string) string {
 
 // pdfDocC1Glyphs mirrors the 0x80-0x9F slice of PDFDocEncoding
 // (ISO 32000-1 Table D.2) promoted from byte → rune to rune → rune.
-// Kept in sync by hand with litho's [document.DecodePdfString] table;
+// Kept in sync by hand with litho's document.DecodePdfString table;
 // the entries are immutable so duplication is cheap.
 var pdfDocC1Glyphs = map[rune]rune{
 	0x0080: 0x2022, // BULLET
@@ -241,8 +241,8 @@ var pdfDocC1Glyphs = map[rune]rune{
 
 // diffBookmarks returns "" when got and want are structurally equal or
 // a short path-qualified description of the first divergence otherwise.
-// The pre-order traversal halts on the first miss; we want a stable,
-// readable reason in [Verdict.Reason], not an exhaustive diff.
+// The pre-order traversal halts on the first miss, so [Verdict.Reason]
+// carries a stable, readable reason rather than an exhaustive diff.
 func diffBookmarks(path string, got, want []normalizedBookmark) string {
 	if len(got) != len(want) {
 		return fmt.Sprintf("%s: len got=%d want=%d", path, len(got), len(want))

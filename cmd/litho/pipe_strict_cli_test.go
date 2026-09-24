@@ -110,7 +110,7 @@ func TestPipeUsage_AdvertisesStrict(t *testing.T) {
 // pipeUsage prints a "Stages:" list and nothing compared it to stageCmds, so
 // the two drift silently. A stage the help omits is one nobody finds. A name
 // the help invents sends a caller to "unknown stage" for a surface litho
-// advertises. `d561fa5a` grew the set from thirteen to eighteen and both lists
+// advertises. `e4f99d9f` grew the set from thirteen to eighteen and both lists
 // had to be edited by hand; only a check makes that safe.
 //
 // Measured when written: 18 names each way, symmetric difference empty. This

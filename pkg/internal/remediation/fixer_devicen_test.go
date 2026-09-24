@@ -73,7 +73,13 @@ func populatedColorants(t *testing.T, data []byte) ast.PdfDict {
 // ISO 19005-2, 6.2.4.4 test 2 requires every Separation of the same name to
 // share an alternate space and a tint transform. The fixer synthesised a
 // degenerate transform for each missing colorant, so populating /Colorants to
-// satisfy test 1 made four corpus files newly fail test 2.
+// satisfy test 1 made files that already defined the colorant newly fail test
+// 2.
+//
+// # Corpus evidence
+//
+//   - All corpora: the synthesised transform made four corpus files newly fail
+//     test 2.
 func TestFixDeviceNColorantsReusesTheDocumentDefinition(t *testing.T) {
 	t.Parallel()
 

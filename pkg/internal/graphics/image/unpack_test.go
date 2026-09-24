@@ -99,10 +99,16 @@ func TestUnpackSamples_SixteenBitTakesTheHighByte(t *testing.T) {
 	}
 }
 
+// TestUnpackSamples_RejectsBitsPerComponentThree pins that a depth of 3 is
+// refused.
+//
+// # Corpus evidence
+//
+//   - All corpora: one image declares /BitsPerComponent 3.
 func TestUnpackSamples_RejectsBitsPerComponentThree(t *testing.T) {
-	// Not a hypothetical: one corpus image declares 3, which ISO 32000-1,
-	// 8.9.5.1 Table 89 does not permit and which has no defined packing. It has
-	// to be refused rather than strided as though it were 4.
+	// Not a hypothetical: real files declare 3, which ISO 32000-1, 8.9.5.1
+	// Table 89 does not permit and which has no defined packing. It has to be
+	// refused rather than strided as though it were 4.
 	if _, err := unpackSamples([]byte{0xFF, 0xFF}, 2, 1, 1, 3, true); err == nil {
 		t.Errorf("BitsPerComponent 3 was accepted, but it has no defined packing")
 	}

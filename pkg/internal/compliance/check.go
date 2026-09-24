@@ -39,7 +39,7 @@ type pageCtx struct {
 	ops       []content.Operation
 	opsOnce   sync.Once
 	// overflow counts, by value, the integer literals past the 64-bit range
-	// that the parse of ops read as reals (see [checkNumberLimits]). Set with
+	// that the parse of ops read as reals (see checkNumberLimits). Set with
 	// ops and read-only after.
 	overflow    map[float64]int
 	parseFailed bool // true only when ParseStreamData errored (not for empty content)
@@ -47,7 +47,7 @@ type pageCtx struct {
 	// contentUnreadable is true when the content stream could not be resolved
 	// or decoded at all, including the undecodable-filter case that
 	// parseFailed deliberately excludes. A survey that must stay conservative
-	// when it cannot see what a page paints (see [pageDrawnResources]) keys on
+	// when it cannot see what a page paints (see pageDrawnResources) keys on
 	// this rather than on empty operations, which a blank page also produces.
 	contentUnreadable bool
 }
@@ -135,6 +135,13 @@ func init() { //nolint:gochecknoinits // breaks initialization cycle.
 // buildValidationCtx pre-computes the shared validation context from the
 // document catalog. Pages are collected once and resources resolved with
 // inherited fallback from the Pages tree root.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue17190_1.pdf: holds one unembedded TrueType font behind a
+//     truncated Flate stream, and litho reported none of the embedding
+//     violation veraPDF raises while an undecodable /Contents read as a page
+//     with no content.
 func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) *validationCtx {
 	vctx := &validationCtx{
 		doc:     doc,
@@ -169,10 +176,9 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 			// litho cannot read, which is the case the per-font and per-colour
 			// skips call "present but unparseable" and answer conservatively.
 			// Discarding the error left it looking like a page with no content
-			// at all, so every font declared on it was skipped as unused:
-			// pdfjs issue17190_1.pdf holds one unembedded TrueType font behind a
-			// truncated Flate stream, and litho reported none of the embedding
-			// violation veraPDF raises.
+			// at all, so every font declared on it was skipped as unused and
+			// an unembedded font behind a truncated stream drew none of the
+			// embedding violation veraPDF raises.
 			//
 			// An undecodable FILTER is excluded. veraPDF does not parse that
 			// stream either, so checking every declared font against it would

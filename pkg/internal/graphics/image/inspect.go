@@ -12,8 +12,8 @@ import (
 )
 
 // ExtractImages scans a page's own resources for Image XObjects and returns
-// their metadata without decoding or saving pixel data. This is used by the OCR
-// triage heuristic to quickly evaluate whether a page is a scanned image, which
+// their metadata without decoding or saving pixel data. The OCR triage
+// heuristic uses it to quickly evaluate whether a page is a scanned image, which
 // is why it stays shallow: a scanned page states its image at the top level, and
 // descending would change which pages the heuristic sends to OCR.
 //
@@ -103,17 +103,24 @@ const maxXObjectDepth = 16
 // ISO 32000-1, 8.10.1 lets a page draw its content through a form XObject, and
 // producers put images there routinely. [ExtractImages] reports only the page's
 // own resources, which is what the OCR heuristic wants, so a caller listing a
-// page's images saw none of the nested ones: across the pdfjs and govdocs
-// corpora that under-reported 583 pages.
+// page's images saw none of the nested ones.
 //
 // An annotation's normal appearance is a form XObject the page draws too
 // (ISO 32000-1, 12.5.5), and its resources are its own rather than the page's.
-// pdfjs firefox_logo.pdf shows a 512x543 image that way and nothing else, so
-// the page listed no images at all while poppler drew one.
+// A page that shows an image only that way would otherwise list no images at
+// all while poppler draws one.
 //
 // A form invoked from several places is walked once, so its images are reported
 // once. An image named twice in one resource dictionary stays two entries: the
 // listing is keyed by resource name, and both names are real placements.
+//
+// # Corpus evidence
+//
+//   - All corpora: across the pdfjs and govdocs corpora, reporting only the
+//     page's own resources under-reported 583 pages.
+//   - pdfjs firefox_logo.pdf: shows a 512x543 image through an annotation
+//     appearance and nothing else, so the page listed no images at all while
+//     poppler drew one.
 func ExtractImagesRecursive(ctx context.Context, doc *document.Document, page *document.Page) []models.ImageMeta {
 	var images []models.ImageMeta
 	walkPageImages(ctx, doc, page, func(name string, stream ast.PdfStream, resources ast.PdfDict) bool {
@@ -362,10 +369,16 @@ func walkImages(ctx context.Context, doc *document.Document, resources ast.PdfDi
 // A tiling pattern is a content stream with its own resources (ISO 32000-1,
 // 8.7.3.1), and a soft mask names a transparency group XObject in /G that is
 // painted to derive the mask (11.6.5.2, Table 144). Both put images on the page
-// without ever appearing in the page's /XObject dictionary: pdfjs
-// issue18956.pdf shows a 728x90 image through an /ExtGState soft mask and
-// nothing else, and issue16395.pdf paints its images through a pattern, so both
-// listed no images at all while poppler drew them.
+// without ever appearing in the page's /XObject dictionary, so a page that
+// paints its images only this way would otherwise list none while poppler draws
+// them.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18956.pdf: shows a 728x90 image through an /ExtGState soft
+//     mask and nothing else, and listed no images at all while poppler drew it.
+//   - pdfjs issue16395.pdf: paints its images through a pattern, and listed no
+//     images at all while poppler drew them.
 func walkNestedResourceImages(ctx context.Context, doc *document.Document, resources ast.PdfDict, seen map[int]bool, depth int, visit imageVisitor) bool {
 	for _, key := range []ast.PdfName{"Pattern", "ExtGState"} {
 		entryObj, ok := resources[key]
@@ -470,13 +483,19 @@ func usesJPXDecode(ctx context.Context, doc *document.Document, dict ast.PdfDict
 //
 // Per ISO 32000-1, Table 89 /BitsPerComponent is optional for a JPXDecode image
 // and shall be ignored if present, because the depth belongs to the JPEG 2000
-// codestream rather than to the dictionary. pdfjs issue12213.pdf states 4 for an
-// image poppler reads as 8. Honouring that number would report a depth the spec
-// says means nothing, and worse, would drive [unpackSamples] to stride 8-bit
-// codestream output as though it were packed 4-bit and mis-read the whole image.
+// codestream rather than to the dictionary. Honouring a stated number would
+// report a depth the spec says means nothing, and worse, would drive
+// [unpackSamples] to stride 8-bit codestream output as though it were packed
+// at the stated depth and mis-read the whole image.
 //
 // One helper rather than the same clause applied in two places, so the reading
 // cannot drift between what an image reports and what it decodes as.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12213.pdf: states /BitsPerComponent 4 for a JPXDecode image
+//     poppler reads as 8, and honouring it would stride the output as though
+//     it were packed 4-bit.
 func statedBitsPerComponent(ctx context.Context, doc *document.Document, dict ast.PdfDict) int {
 	bpc, _ := resolveInt(ctx, doc, dict, "BitsPerComponent")
 	if bpc == 0 || usesJPXDecode(ctx, doc, dict) {

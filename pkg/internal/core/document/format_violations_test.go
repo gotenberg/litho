@@ -57,14 +57,18 @@ func formatViolationDoc(data []byte, offsets []int64) *Document {
 // often it is resolved. A failed parse is never cached, so every resolution
 // re-reads the header, and appending per parse made the reported count a
 // function of how many times some check happened to ask for the object.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue1045.pdf: object 56's body runs into the endobj keyword with
+//     no EOL between them, the shape the fixture's second object reproduces.
 func TestRecordFormatViolations_UnparseableObjectRecordedOnce(t *testing.T) {
 	t.Parallel()
-	// The body runs into the keyword with no EOL between them, the shape pdfjs
-	// issue1045 carries on its object 56, and "@@@endobj" lexes as one keyword
-	// the parser rejects. A bare number in that shape ("20184endobj") no longer
-	// serves here: [lexer.splitNumberEndobj] now reads it as the number the
-	// producer meant, which is what makes the /Length of a stream written that
-	// way resolvable.
+	// The body runs into the keyword with no EOL between them, and "@@@endobj"
+	// lexes as one keyword the parser rejects. A bare number in that shape
+	// ("20184endobj") no longer serves here: lexer.splitNumberEndobj now reads
+	// it as the number the producer meant, which is what makes the /Length of
+	// a stream written that way resolvable.
 	data, offsets := formatViolationPDF(t, "<< /Type /Catalog >>\n", "@@@")
 	doc := formatViolationDoc(data, offsets)
 	doc.SetComplianceMode(true)

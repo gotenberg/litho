@@ -222,7 +222,7 @@ func checkRequirementsKey(ctx context.Context, doc *document.Document, catalog a
 // checkNeedsRenderingKey validates that the catalog does not contain the
 // forbidden /NeedsRendering key (ISO 19005-2/3/4 §6.4.2).
 func checkNeedsRenderingKey(catalog ast.PdfDict, part int) []Violation {
-	// veraPDF reads the key with knownKey ([knownKey]): a direct null is absent
+	// veraPDF reads the key with knownKey: a direct null is absent
 	// (ISO 32000-1, 7.3.7), a reference counts. Measured.
 	if knownKey(catalog, "NeedsRendering") {
 		return fail(needsRenderingRule(part), "NeedsRendering key present in document catalog")
@@ -235,7 +235,7 @@ func checkNeedsRenderingKey(catalog ast.PdfDict, part int) []Violation {
 // dictionary carries an /AS (usage application) array. ISO 19005-2/3 §6.9 t4
 // requires /AS to be absent: a usage-application array would let viewers toggle
 // content visibility automatically, which PDF/A forbids. PDF/A-4 drops the rule
-// (ISO 19005-4 §6.10 has no AS test), so ocgASRule returns a zero Rule there.
+// (ISO 19005-4 §6.10 has no AS test), so [ocgASRule] returns a zero Rule there.
 func checkOCGUsageApplication(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int) []Violation {
 	rule := ocgASRule(part)
 	if rule.Specification == "" {
@@ -394,7 +394,7 @@ func permsDictRule(part int) Rule {
 // the conformance signal.
 func checkForbiddenOCProperties(catalog ast.PdfDict) []Violation {
 	// A direct null is absent (ISO 32000-1, 7.3.7), a reference counts, as
-	// veraPDF's knownKey reads it ([knownKey]). Measured.
+	// veraPDF's knownKey reads it. Measured.
 	if knownKey(catalog, "OCProperties") {
 		return fail(Rule_19005_1_6_1_13_t01, "catalog contains /OCProperties (optional content forbidden in PDF/A-1)")
 	}
@@ -658,8 +658,14 @@ const maxOCGOrderDepth = 20
 
 // collectOrderOCGRefs recursively collects OCG indirect refs from an Order
 // array, reporting whether it read that array whole. A walk stopped by
-// maxOCGOrderDepth reports false, and absence from a partial read is not
+// [maxOCGOrderDepth] reports false, and absence from a partial read is not
 // evidence that the file omits an OCG.
+//
+// # Corpus evidence
+//
+//   - pdfjs cmykjpeg.pdf, issue11144_reduced.pdf, transparent.pdf: all write
+//     /Order as "N 0 R", and litho reported an ISO 19005-2 §6.9 t3 violation
+//     on each that veraPDF does not while it read the reference as an OCG.
 func collectOrderOCGRefs(ctx context.Context, doc *document.Document, obj ast.PdfObject, result, visited map[int]bool, depth int) (complete bool) {
 	if depth > maxOCGOrderDepth {
 		return false
@@ -668,9 +674,7 @@ func collectOrderOCGRefs(ctx context.Context, doc *document.Document, obj ast.Pd
 	// are arrays, and ISO 32000-1, 7.3.10 lets any of them be written
 	// indirectly. Reading the reference as an OCG instead recorded the array's
 	// own object number and never descended, so every OCG the file does list
-	// looked absent: pdfjs cmykjpeg.pdf, issue11144_reduced.pdf and
-	// transparent.pdf all write /Order as "N 0 R", and litho reported an
-	// ISO 19005-2 §6.9 t3 violation on each that veraPDF does not.
+	// looked absent.
 	if arr, err := document.ResolveArray(ctx, doc, obj); err == nil {
 		// Walk a grouping written indirectly once. ResolveObject's cycle guard
 		// is per-resolution, so a grouping that names itself resolves afresh on

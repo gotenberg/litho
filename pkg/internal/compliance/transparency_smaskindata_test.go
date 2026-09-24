@@ -13,8 +13,13 @@ import (
 // opacity travels inside the JPEG2000 codestream (/SMaskInData 1 or 2, ISO
 // 32000-1 Table 89) counts as transparency, so a page carrying it with no
 // blending colour space fails §6.2.10 t2. An explicit /SMask is not required;
-// keying only on /SMask missed this and passed a file veraPDF rejects (pdfjs
-// isssue18194 @PDF/A-3b). An image with no soft-mask data does not fire.
+// keying only on /SMask missed this. An image with no soft-mask data does not
+// fire.
+//
+// # Corpus evidence
+//
+//   - pdfjs isssue18194 (the file name carries the typo): keying only on
+//     /SMask passed it at PDF/A-3b, where veraPDF rejects it.
 func TestResourcesUseTransparency_JPXSMaskInData(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

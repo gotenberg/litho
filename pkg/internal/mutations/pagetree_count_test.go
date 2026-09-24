@@ -10,17 +10,20 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
+// TestDeletePages_RootCountMatchesAFlattenedTree pins that the root /Count
+// [DeletePages] writes is the number of pages left.
+//
 // A /Pages node's /Count is the number of page objects descended from it at
 // every level (ISO 32000-1, 7.7.3.2), not the length of its /Kids. The two are
 // equal only while the tree is flat, which is what [DeletePages] rebuilds it
 // as, so len() is the right count there and nothing in the file says so.
 //
 // Worth pinning because nothing else can catch it. litho's own reader never
-// consults page-tree /Count: [pkg/pdf.Reader.PageCount] resolves the pages and
-// returns len(pages), and pkg/internal/core/document contains no reference to
-// the key at all. So a wrong /Count is invisible to litho and visible only to
-// other readers, which is exactly how the sibling bug in the OUTLINE /Count
-// survived until 2026-09-19.
+// consults page-tree /Count: pdf.Reader.PageCount in pkg/pdf resolves the
+// pages and returns len(pages), and pkg/internal/core/document contains no
+// reference to the key at all. So a wrong /Count is invisible to litho and
+// visible only to other readers, which is exactly how the sibling bug in the
+// OUTLINE /Count survived until 2026-09-19.
 func TestDeletePages_RootCountMatchesAFlattenedTree(t *testing.T) {
 	ctx := context.Background()
 	data := nestedPageTreePDF(t, false)
@@ -92,9 +95,12 @@ func TestDeletePages_RootCountMatchesAFlattenedTree(t *testing.T) {
 	}
 }
 
+// TestInsertPages_RootCountMatchesAFlattenedTree pins the same for
+// [InsertPages].
+//
 // [InsertPages] derives its /Count from a different expression than its /Kids:
 // totalCount is len(targetPages)+len(copiedRefs) while the array is assembled
-// from three slices (insert_pages.go:97-107). They can drift apart here in a way
+// from three slices in insert_pages.go. They can drift apart here in a way
 // they cannot in [DeletePages], where both come from one slice, so the equality
 // is worth asserting rather than assuming.
 func TestInsertPages_RootCountMatchesAFlattenedTree(t *testing.T) {

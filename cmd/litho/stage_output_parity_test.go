@@ -39,7 +39,7 @@ var nonStageOutputCmds = map[string]string{
 // names and flags as individual mutation commands". They were added by hand;
 // nothing stopped the sixth.
 //
-// The same reasoning drove `10c8949f`, which inverted silentStages from an
+// The same reasoning drove `b59fc758`, which inverted silentStages from an
 // allow list to a deny list because "an allow list has to be edited every time
 // the standalone set grows; a deny list is right by default". stageCmds cannot
 // be inverted, since most commands are read-only reports that should never be

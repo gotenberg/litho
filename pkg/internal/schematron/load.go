@@ -308,9 +308,9 @@ func collapseWhitespace(s string) string {
 
 // stripXMLTags drops any XML tags from s, returning only the text
 // content. The Schematron spec lets assert/report messages embed
-// sch:value-of, sch:name, and inline emphasis elements; PR2 will
-// re-introduce the value-of expansion, but PR1 only needs the bare
-// text for diagnostics.
+// sch:value-of, sch:name, and inline emphasis elements; only the
+// bare text is kept for diagnostics.
+// TODO: expand sch:value-of in messages.
 func stripXMLTags(s string) string {
 	var b strings.Builder
 	b.Grow(len(s))

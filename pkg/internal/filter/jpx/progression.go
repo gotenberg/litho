@@ -11,8 +11,12 @@ import (
 // read them. It is an anti-DoS guard, not spec-mandated: every packet read
 // costs at least a byte, but skipped slots cost nothing, and a POC marker
 // segment of some ten thousand volumes, each spanning every layer of every
-// precinct, would walk trillions of them. The busiest tile in the corpora
-// reads about 5 000 packets; 2^26 slots take well under a second.
+// precinct, would walk trillions of them. 2^26 slots take well under a
+// second.
+//
+// # Corpus evidence
+//
+//   - All corpora: the busiest tile reads about 5 000 packets.
 const maxPacketSteps = 1 << 26
 
 // Progression orders, T.800 Table A.16.

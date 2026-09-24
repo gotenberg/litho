@@ -16,19 +16,27 @@ import (
 // identifier. Anti-DoS guard, not a spec limit: the packet length is taken from
 // the file, so a crafted document could otherwise make this read without end.
 // A real identification packet is a few kilobytes; a megabyte is far past any
-// legitimate one while still reading the whole packet of every corpus fixture.
+// legitimate one.
+//
+// # Corpus evidence
+//
+//   - All corpora: a megabyte still reads the whole packet of every fixture.
 const maxPDFXPacketBytes = 1 << 20
 
 // pdfxXMPIdentifier matches the pdfxid:GTS_PDFXVersion property in both forms
 // XMP allows for a simple value: an attribute on rdf:Description, and a child
-// element. Only the element form appears in the corpus, but both are legal
-// (ISO 16684-1), and this mirrors the shape the PDF/A identification scan uses.
+// element. Both are legal (ISO 16684-1), and this mirrors the shape the PDF/A
+// identification scan uses.
 //
 // The prefix is part of the pattern on purpose. A PDF/A extension schema
 // DECLARES properties by name, so a document can carry
 // <pdfaProperty:name>GTS_PDFXVersion</pdfaProperty:name> while claiming no
 // PDF/X conformance at all. Matching the bare key reports a claim that is not
 // there; anchoring on pdfxid: does not.
+//
+// # Corpus evidence
+//
+//   - All corpora: only the element form appears.
 var pdfxXMPIdentifier = regexp.MustCompile(`pdfxid:GTS_PDFXVersion\s*(?:=\s*"([^"]*)"|>\s*([^<]*))`)
 
 // DeclaredPDFX reports the PDF/X conformance level a document DECLARES, or the
@@ -60,12 +68,17 @@ func DeclaredPDFX(ctx context.Context, doc *document.Document) models.PDFXProfil
 // pdfxFromXMP reads the pdfxid: identifier from the document's XMP packet.
 //
 // The CATALOG's /Metadata stream is the document's metadata (ISO 32000-1,
-// 14.3.2), and it is the only packet consulted. Real files carry many others:
-// issue14562.pdf keeps a pdfxid identifier in a packet hanging off a pattern
-// object while its catalog packet declares nothing, and issue14297.pdf has no
-// catalog /Metadata at all while two resource-level packets declare PDF/X-4.
-// Neither file makes a document-level claim, so neither is reported as one. A
-// byte scan of the whole file says otherwise and is wrong.
+// 14.3.2), and it is the only packet consulted. Real files carry many others,
+// some of them declaring PDF/X on a resource while the catalog packet declares
+// nothing or is absent. Such a file makes no document-level claim, so it is not
+// reported as one. A byte scan of the whole file says otherwise and is wrong.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14562.pdf: keeps a pdfxid identifier in a packet hanging off
+//     a pattern object while its catalog packet declares nothing.
+//   - pdfjs issue14297.pdf: has no catalog /Metadata at all while two
+//     resource-level packets declare PDF/X-4.
 func pdfxFromXMP(ctx context.Context, doc *document.Document) models.PDFXProfile {
 	open, err := XMPOpen(ctx, doc)
 	if err != nil || open == nil {
@@ -101,10 +114,15 @@ func pdfxFromXMP(ctx context.Context, doc *document.Document) models.PDFXProfile
 // pdfxFromInfo reads the Info-dictionary identifier used by X-1a and X-3.
 //
 // /GTS_PDFXConformance is consulted first because it carries the LEVEL while
-// /GTS_PDFXVersion carries the base: the corpus fixtures declaring X-1a pair
-// version "PDF/X-1:2001" with conformance "PDF/X-1a:2001", and reading the
-// version alone would lose the "a" that distinguishes the only X-1 level litho
+// /GTS_PDFXVersion carries the base: an X-1a file pairs version
+// "PDF/X-1:2001" with conformance "PDF/X-1a:2001", and reading the version
+// alone would lose the "a" that distinguishes the only X-1 level litho
 // recognises.
+//
+// # Corpus evidence
+//
+//   - All corpora: the fixtures declaring X-1a pair version "PDF/X-1:2001"
+//     with conformance "PDF/X-1a:2001".
 func pdfxFromInfo(ctx context.Context, doc *document.Document) models.PDFXProfile {
 	infoObj, ok := doc.Index.Trailer["Info"]
 	if !ok {

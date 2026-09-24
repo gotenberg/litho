@@ -50,9 +50,9 @@ const (
 // EOF) is returned as the second value distinct from violations so
 // callers can tell "ran-but-failed-rules" apart from "could-not-run".
 //
-// PR3 covers element ordering, cardinality, leaf-type checks, and
-// unknown-element detection. Attribute validation, xs:choice, and
-// xs:any wildcards land in PR4; CII bundling lands in PR5.
+// The walk checks element ordering, cardinality, leaf types,
+// attributes, xs:choice content, and unknown elements. An xs:any
+// wildcard accepts its child and skips the subtree.
 //
 // The walker honours ctx cancellation at element boundaries: a
 // canceled context terminates the walk and surfaces ctx.Err() as
@@ -512,8 +512,8 @@ func (m *sequenceMatcher) step(name xml.Name) (*Element, *Violation) {
 			return p.Element, nil
 		}
 		// Name does not match the active particle. If the active
-		// particle has reached its minOccurs we can advance and
-		// re-test; otherwise this is a structural violation.
+		// particle has reached its minOccurs the matcher can advance
+		// and re-test; otherwise this is a structural violation.
 		if m.occurrence >= p.Element.MinOccurs {
 			m.satisfy(m.pos, p.Element.MinOccurs)
 			m.advance()
@@ -584,7 +584,7 @@ func occurrenceCount(m *sequenceMatcher, i int) int {
 	if m.satisfied != nil && m.satisfied[i] {
 		// Lost the exact count once satisfied; reporting "at least
 		// minOccurs" without the exact tally is fine for the
-		// finalize path because we only report unsatisfied particles.
+		// finalize path because only unsatisfied particles are reported.
 		return m.particles[i].Element.MinOccurs
 	}
 	return 0

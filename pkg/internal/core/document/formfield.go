@@ -18,9 +18,9 @@ import (
 // A depth bound alone does not make a /Parent walk safe. It stops a cycle
 // without detecting one, so the walk runs to the bound and then reports
 // whichever node it happened to halt on as though that node were the answer.
-// Cycles are real: one corpus file carries 16 of them, while the deepest
-// acyclic chain measured across 5171 files is 7, so every bound in use sits far
-// above anything genuine and only the visited set does real work.
+// Cycles occur in real files while genuine chains stay shallow, so every bound
+// in use sits far above anything genuine and only the visited set does real
+// work.
 //
 // [Document.Resolve] cannot stand in for seen. Its own visited set is scoped to
 // a single call and unwinds on return, and a second visit to the same object
@@ -29,6 +29,11 @@ import (
 // Only an indirect /Parent can close a cycle, since a dictionary written
 // directly into its child cannot refer back to it, so a direct parent is
 // followed without being recorded.
+//
+// # Corpus evidence
+//
+//   - All corpora: one file carries 16 /Parent cycles.
+//   - All corpora, 5171 files: the deepest acyclic /Parent chain is 7.
 func ResolveFieldParent(
 	ctx context.Context,
 	doc *Document,

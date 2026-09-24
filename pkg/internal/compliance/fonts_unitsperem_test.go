@@ -34,10 +34,15 @@ func ttfWithUnitsPerEm(upem uint16) string {
 //
 // The OpenType head table states "Valid range is from 16 to 16384", so a value
 // outside it is a corrupt head, not a scale, and every width divided by it is
-// meaningless. pdfjs issue9462.pdf carries such a font: litho scaled by it,
-// wrote /Widths near 1.5 million into the remediated file, and the output then
-// broke the PDF/A-1 real-number ceiling of 32767 (ISO 19005-1, 6.1.12 test 2) --
-// a repair that introduced a violation the input never had.
+// meaningless. Scaling by it lets a repair write widths past the PDF/A-1
+// real-number ceiling of 32767 (ISO 19005-1, 6.1.12 test 2), introducing a
+// violation the input never had.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9462.pdf: carries such a font. litho scaled by it, wrote
+//     /Widths near 1.5 million into the remediated file, and the output then
+//     broke the PDF/A-1 real-number ceiling.
 func TestExpectedWidthsRejectAnImpossibleUnitsPerEm(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

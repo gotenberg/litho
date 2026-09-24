@@ -18,8 +18,12 @@ import (
 //
 // Measured: three fixtures identical but for the blend mode, none with a page
 // /Group or a PDF/A OutputIntent. veraPDF passes /Normal and reports both
-// /Compatible and /Darken under §6.2.10 t2. govdocs thread_300_300345.pdf is the
-// corpus case, a page whose /GS3 names /Compatible.
+// /Compatible and /Darken under §6.2.10 t2.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300345.pdf: the corpus case, a page whose /GS3 names
+//     /Compatible.
 func TestBlendModeCompatibleIsTransparency(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

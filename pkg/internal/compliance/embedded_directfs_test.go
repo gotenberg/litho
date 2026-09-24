@@ -15,8 +15,12 @@ import (
 // ISO 32000-1, 7.11.3 does not require a file specification to be indirect, and
 // [collectFileSpecs] finds them by sweeping the cross-reference map, which holds
 // only indirect objects. A FileAttachment annotation whose /FS is inline was
-// therefore invisible to every clause 6.8 check: pdfjs issue14203.pdf attaches
-// example.tex that way, and litho passed it while veraPDF failed t2, t3 and t4.
+// therefore invisible to every clause 6.8 check.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14203.pdf: attaches example.tex through an inline /FS, and
+//     litho passed it while veraPDF failed t2, t3 and t4.
 func TestDirectFileSpecInAnnotIsChecked(t *testing.T) {
 	t.Parallel()
 

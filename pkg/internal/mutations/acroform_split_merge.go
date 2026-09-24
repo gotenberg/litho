@@ -26,8 +26,8 @@ import (
 // maxFieldParentDepth in annotation/acroform.go (64), in
 // remediation/fixer_annotappearance.go (32) and in compliance/annotations.go
 // (100). They stay separate and cross-referenced rather than merged into one,
-// because the difference cannot be reached: measured across 5171 corpus files,
-// the deepest ACYCLIC /Parent chain is 7.
+// because the difference cannot be reached: real acyclic /Parent chains stay
+// far shallower than the smallest of them.
 //
 // This constant is borrowed for one walk that is not an ascent at all:
 // pruneFieldKidsAt in dest_prune.go descends /Kids under it. The limit is fine
@@ -35,23 +35,27 @@ import (
 //
 // The number is not what makes any of these walks safe. A bound stops a cycle
 // without detecting one, so the walk runs to the bound and then reports
-// whichever node it halted on as though that were the answer. Cycles are real:
-// 16 /Parent chains in a single corpus file are cyclic. Every one of these
-// walks therefore carries a visited set. Most reach it through one shared hop,
-// [document.ResolveFieldParent], which owns the set and the detection together.
-// [rootFieldOf] below is the exception: it reads the allocator's pending
-// objects rather than the document, so it cannot use that hop and keeps a
-// visited set of its own.
+// whichever node it halted on as though that were the answer. Cycles are real
+// in shipped files. Every one of these walks therefore carries a visited set.
+// Most reach it through one shared hop, [document.ResolveFieldParent], which
+// owns the set and the detection together. [rootFieldOf] below is the
+// exception: it reads the allocator's pending objects rather than the document,
+// so it cannot use that hop and keeps a visited set of its own.
+//
+// # Corpus evidence
+//
+//   - All corpora, 5171 files: the deepest ACYCLIC /Parent chain is 7, so the
+//     differing caps are never reached.
+//   - All corpora: 16 /Parent chains in a single file are cyclic.
 const maxFieldParentDepth = 32
 
 // rebuildAcroForm writes an /AcroForm onto dst describing the form fields that
 // survived into pageRefs, or leaves dst untouched when no widget did.
 //
 // /AcroForm lives in the catalog (ISO 32000-1, 12.7.2), and split and merge
-// build a fresh one, so it used to be dropped along with the interactive form:
-// pdfjs 160F-2019.pdf kept all 76 widget annotations on the page and lost every
-// one of its 9 fields, leaving widgets that render but no longer do anything and
-// breaking the field/widget association PDF/UA requires.
+// build a fresh one, so it used to be dropped along with the interactive form,
+// leaving widgets that render but no longer do anything and breaking the
+// field/widget association PDF/UA requires.
 //
 // The field objects themselves are already in the output: a widget carries
 // /Parent (ISO 32000-1, 12.5.6.19) and the copier follows that chain, so the
@@ -66,6 +70,11 @@ const maxFieldParentDepth = 32
 // shows when the same form is appended twice. Renaming instead would be a
 // policy choice that breaks callers keying on field names, so it is not made
 // here.
+//
+// # Corpus evidence
+//
+//   - pdfjs 160F-2019.pdf: before the rebuild, the output kept all 76 widget
+//     annotations on the page and lost every one of its 9 fields.
 func rebuildAcroForm(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -207,10 +216,13 @@ func rootFieldOf(alloc *writer.ObjAllocator, annotRef ast.PdfIndirectRef) (ast.P
 // name; on a markup annotation it is the title of the pop-up window,
 // conventionally the author (Table 170). Without this, a /Polygon carrying
 // /T (author) is collected as a field root and split and merge write an
-// /AcroForm onto a document that has no form at all: measured on pdfjs
-// issue20062.pdf, whose only annotation is such a polygon, where a merge turned
-// nothing into a field named "author". A non-terminal field node carries no
-// /Subtype, so it still qualifies through /T.
+// /AcroForm onto a document that has no form at all. A non-terminal field node
+// carries no /Subtype, so it still qualifies through /T.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20062.pdf: the only annotation is such a polygon, and a merge
+//     turned nothing into a field named "author".
 func isFieldRoot(dict ast.PdfDict) bool {
 	if subtype, ok := dict["Subtype"].(ast.PdfName); ok && subtype != "Widget" {
 		return false

@@ -16,15 +16,20 @@ import (
 // Attachments hang off the catalog name tree at /Names /EmbeddedFiles (ISO
 // 32000-1, 7.7.4) and the catalog /AF array names the ones a PDF/A-3 or
 // Factur-X document treats as associated files (ISO 32000-2, 14.13). Split and
-// merge build a fresh catalog and copied neither, so every attachment was lost:
-// all 150 facturx fixtures came out of a merge without the ZUGFeRD-invoice.xml
-// that IS the invoice, leaving a file that is no longer a Factur-X document.
+// merge build a fresh catalog and copied neither, so every attachment was lost,
+// and a Factur-X invoice came out as a file that is no longer a Factur-X
+// document.
 //
 // Merging two documents that attach the same name yields one name tree that
 // cannot hold both, since keys in a name tree are unique and sorted (ISO
 // 32000-1, 7.9.6). Later duplicates are suffixed rather than dropped: losing an
 // attachment is the bug being fixed here, so a renamed copy is the better
 // answer, and a merge of a document with itself keeps both payloads.
+//
+// # Corpus evidence
+//
+//   - facturx: all 150 fixtures came out of a merge without the
+//     ZUGFeRD-invoice.xml that IS the invoice.
 func rebuildEmbeddedFiles(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -130,6 +135,10 @@ func collectSourceEmbeddedFiles(ctx context.Context, doc *document.Document, nod
 // It also keeps the answer right. Every entry collected here is written back
 // into a rebuilt tree, so traversing one leaf twice appends it twice and
 // [uniqueEFName] renames the copy, inventing an attachment the file never had.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18444.pdf: writes a name-tree key as an indirect reference.
 func collectSourceEmbeddedFilesAt(
 	ctx context.Context,
 	doc *document.Document,
@@ -167,8 +176,8 @@ func collectSourceEmbeddedFilesAt(
 	}
 	for i := 0; i+1 < len(arr); i += 2 {
 		// The key may be an indirect reference like any other object, and
-		// pdfjs issue18444.pdf writes one: a bare type assertion drops the
-		// entry and the attachment with it.
+		// real producers write one: a bare type assertion drops the entry and
+		// the attachment with it.
 		name, err := document.ResolveString(ctx, doc, arr[i])
 		if err != nil {
 			doc.Logger.Debug("resolving embedded file name", slog.Any("err", err))

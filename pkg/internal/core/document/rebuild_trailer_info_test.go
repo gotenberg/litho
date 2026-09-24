@@ -14,9 +14,11 @@ import (
 // file states /Info, /Root and /Prev. Both startxref offsets are unusable, so
 // the reader falls back to a rebuild.
 //
-// This is the shape of govdocs thread_100_100982.pdf and thread_100_100983.pdf,
-// whose first startxref is a malformed 0 and whose second points into the file
-// body rather than at an xref table.
+// # Corpus evidence
+//
+//   - govdocs thread_100_100982.pdf, thread_100_100983.pdf: the shape this
+//     fixture reproduces. Their first startxref is a malformed 0 and their
+//     second points into the file body rather than at an xref table.
 func stubLastTrailerPDF() []byte {
 	return []byte(
 		"%PDF-1.4\n" +
@@ -46,13 +48,17 @@ func noTrailerPDF() []byte {
 // The xref CHAIN path already carries /Root and /Info forward across sections
 // with [mergeTrailerKeys]; the rebuild path did not, so a file whose last
 // trailer is a stub lost an /Info it plainly declares. ISO 19005-4, 6.1.3 t4
-// and t5 read that entry, and litho reported neither while veraPDF reported
-// both on govdocs thread_100_100982.pdf.
+// and t5 read that entry, so litho reported neither.
 //
 // Only /Info is recovered, and only when a real trailer was found. The
 // synthesized arm is the guard that matters: litho must not furnish a trailer
 // it invented with entries the file never linked, which is the same principle
 // [Document.TrailerSynthesized] already enforces for /ID.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100982.pdf: litho reported neither 6.1.3 t4 nor t5
+//     while veraPDF reported both.
 func TestRebuild_RecoversInfoFromEarlierTrailer(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -127,7 +133,7 @@ func TestRebuild_RecoversInfoFromEarlierTrailer(t *testing.T) {
 func trailerBudgetPDF(t *testing.T) []byte {
 	t.Helper()
 
-	// Mirrors the overlap in [Document.findTrailerInfoRef]. A keyword is read
+	// Mirrors the overlap in Document.findTrailerInfoRef. A keyword is read
 	// by two consecutive chunks when it starts within the trailing overlap of
 	// one chunk yet still ends before that chunk does.
 	const scanOverlap = 16

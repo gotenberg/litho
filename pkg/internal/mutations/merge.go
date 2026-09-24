@@ -125,7 +125,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	}
 
 	// Copy catalog-level entries from the first source. Best effort: if
-	// something fails here we still produce a valid merged document without
+	// something fails here the merged document is still valid, only without
 	// the viewer preferences or language tags from the first source.
 	//
 	// Through the copier that already carried that source's pages. A fresh one
@@ -214,8 +214,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 // content sequence is drawn by matching the group it names against the
 // configuration. Carrying only the first source's entry left every later
 // source's groups absent from /OCGs and from /OFF, so their switched-off layers
-// were drawn: merging pdfjs issue9462.pdf with itself showed the hidden layers
-// of every page after the first.
+// were drawn.
 //
 // Each source's groups are copied through the copier that already carried that
 // source's pages, so the configuration and the pages name the same objects.
@@ -228,6 +227,11 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 // it drives presentation only, and a nested order naming groups from one source
 // says nothing about the others. Usage application dictionaries (/AS) are
 // dropped rather than carried, since a stale one would name groups by reference.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9462.pdf: merging it with itself showed the hidden layers of
+//     every page after the first.
 func mergeOptionalContent(ctx context.Context, sources []MergeSource, copiers []*writer.Copier, dst ast.PdfDict) {
 	var ocgs, off ast.PdfArray
 

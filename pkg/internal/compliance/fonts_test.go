@@ -64,6 +64,15 @@ func TestCheckAnnotationAppearanceFonts_NonEmbeddedFont(t *testing.T) {
 	}
 }
 
+// TestCheckSimpleFontWidths_UsedGlyphGating pins that the simple-font width
+// check judges only the codes a page shows visibly, and that a font with no
+// /Widths is compared against /MissingWidth.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11150_reduced.pdf: declares no /Widths, and veraPDF compares
+//     the program advance against the /MissingWidth default under ISO 19005-2
+//     §6.2.11.5 t1.
 func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -141,9 +150,8 @@ func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 	// ISO 32000-1, 9.6.2.1 and Table 111 give an uncovered code the
 	// descriptor's /MissingWidth, default 0. The rule is not vacuous there, it
 	// compares the program advance against that default, which is what veraPDF
-	// does (pdfjs issue11150_reduced.pdf, ISO 19005-2 §6.2.11.5 t1). The
-	// missing-key rules report the absent array itself and say nothing about
-	// the widths it would have held.
+	// does (ISO 19005-2 §6.2.11.5 t1). The missing-key rules report the absent
+	// array itself and say nothing about the widths it would have held.
 	t.Run("missing Widths compares against MissingWidth", func(t *testing.T) {
 		t.Parallel()
 		usage := &fontUsageInfo{visible: true, charCodes: map[byte]bool{32: true}}
@@ -172,7 +180,11 @@ func TestCheckSimpleFontWidths_UsedGlyphGating(t *testing.T) {
 // subtable, and no glyph names were available) skips the width check instead of
 // assuming identity. Identity misreads a proportional font: code 32 would read
 // GID 32's advance (488) rather than the cmap's space glyph, a false positive
-// veraPDF does not raise (pdfjs issue14117 @PDF/A-3a).
+// veraPDF does not raise.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14117: veraPDF raises no such false positive at PDF/A-3a.
 func TestCheckSimpleFontWidths_UnresolvedMappingSkipped(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -186,6 +198,8 @@ func TestCheckSimpleFontWidths_UnresolvedMappingSkipped(t *testing.T) {
 	}
 }
 
+// TestCheckCIDFontWidths_SkipsNotdef pins that the CID width check skips CID 0
+// in both /W forms and still reports a mismatch on any other CID.
 func TestCheckCIDFontWidths_SkipsNotdef(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

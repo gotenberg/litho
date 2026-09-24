@@ -119,12 +119,19 @@ func TestFixListContent_WrapsContentItem(t *testing.T) {
 	}
 }
 
+// TestFixListContent_SingleContentItemK checks that an LI whose /K is a lone
+// MCID integer gets its content wrapped in an LBody.
+//
+// # Corpus evidence
+//
+//   - All corpora: most list items carrying this violation use the bare
+//     integer form, so a fixer that only reads the array form looks healthy in
+//     unit tests and repairs almost nothing.
 func TestFixListContent_SingleContentItemK(t *testing.T) {
 	// ISO 32000-1 14.7.2: /K may be a single content item instead of an
 	// array. Most real list items carrying this violation use the bare
 	// integer form, which resolveStructKids reports as no kids at all, so a
-	// fixer that only reads the array form looks healthy in unit tests and
-	// repairs almost nothing in the corpus.
+	// fixer that only reads the array form misses them.
 	pdf := buildStructPDF(
 		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",

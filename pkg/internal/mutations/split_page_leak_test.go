@@ -107,10 +107,14 @@ func splitFirstTwoPages(t *testing.T, withBeads bool) []byte {
 //
 // A page's /Parent references its /Pages node, and the copier follows every
 // reference, so copying one page used to copy the node, its /Kids, and through
-// them every page of the source. Extracting nine pages of govdocs
-// thread_100_100852.pdf wrote all 56 into the output: 47 pages the caller never
-// asked for, 510 KB of content that read back as plain text from a file that was
-// supposed to hold pages 2 to 10.
+// them every page of the source.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100852.pdf: extracting nine pages wrote all 56 into
+//     the output: 47 pages the caller never asked for, 510 KB of content that
+//     read back as plain text from a file that was supposed to hold pages 2
+//     to 10.
 func TestSplitDoesNotCarryUnextractedPages(t *testing.T) {
 	t.Parallel()
 
@@ -199,9 +203,13 @@ func TestSplitKeepsInheritedAttributes(t *testing.T) {
 //
 // A bead chains to the next bead of its article through /N, /V and /T, and each
 // bead names its page in /P (ISO 32000-1, 12.4.3), so one bead on a kept page
-// walks the copier through the whole article. govdocs thread_100_100184.pdf
-// leaked 84 pages and 1.2 MB of content this way, from a two-page extraction,
-// after the /Parent path was already closed.
+// walks the copier through the whole article.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100184.pdf: leaked 84 pages and 1.2 MB of content
+//     through its article beads, from a two-page extraction, after the
+//     /Parent path was already closed.
 func TestSplitDoesNotFollowArticleBeads(t *testing.T) {
 	t.Parallel()
 
@@ -265,9 +273,12 @@ func onePagePDF(t *testing.T) []byte {
 // TestInsertPagesDoesNotCarryUnselectedSourcePages pins that inserting a subset
 // of a source document brings only that subset.
 //
-// Inserting one page of govdocs thread_100_100852.pdf into a four-page document
-// produced a five-page file carrying all 55 unselected source pages and 613 KB
-// of their content, so the output was 2 MB where 88 KB was called for.
+// # Corpus evidence
+//
+//   - govdocs thread_100_100852.pdf: inserting one of its pages into a
+//     four-page document produced a five-page file carrying all 55 unselected
+//     source pages and 613 KB of their content, so the output was 2 MB where
+//     88 KB was called for.
 func TestInsertPagesDoesNotCarryUnselectedSourcePages(t *testing.T) {
 	t.Parallel()
 

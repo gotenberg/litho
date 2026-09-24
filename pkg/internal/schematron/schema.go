@@ -11,7 +11,8 @@ type Schema struct {
 	// when the schema omits it.
 	Title string
 	// QueryBinding records the queryBinding attribute on sch:schema.
-	// EN 16931 and XRechnung use "xslt2"; PR2 enforces this.
+	// EN 16931 and XRechnung use "xslt2".
+	// TODO: enforce "xslt2" at load; nothing checks the value yet.
 	QueryBinding string
 	// Namespaces collects every sch:ns child in source order.
 	// Evaluation uses these to resolve XPath prefixes.
@@ -71,7 +72,7 @@ type Pattern struct {
 // report fires when its test evaluates to true.
 type Rule struct {
 	// Context is the raw XPath expression off the sch:rule
-	// context attribute. PR1 keeps it as text; PR2 compiles via
+	// context attribute, kept as text; [Validate] compiles it via
 	// antchfx/xpath.
 	Context string
 	// Asserts and Reports are kept separate so evaluation can apply
@@ -100,9 +101,9 @@ type Assertion struct {
 	Negate  bool
 }
 
-// Let is a sch:let binding: a name plus an XPath expression. PR1
-// keeps the expression as text; PR2 compiles and evaluates lazily
-// per context match.
+// Let is a sch:let binding: a name plus an XPath expression. The
+// expression is kept as text; [Validate] substitutes it into the
+// expressions that reference it before compilation.
 type Let struct {
 	Name  string
 	Value string

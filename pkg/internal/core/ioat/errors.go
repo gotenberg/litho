@@ -2,7 +2,7 @@ package ioat
 
 import "errors"
 
-// Sentinel errors for ioat.Reader operations.
+// Sentinel errors for [Reader] operations.
 var (
 	// ErrUnreadByte is returned when UnreadByte is called at the
 	// beginning of the buffer with no byte to unread.

@@ -10,6 +10,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
+// TestFixSimpleFont_KeepsAPeerFixersPendingFontWrite pins that the simple-font
+// width repair keeps a peer fixer's pending write to the same font dictionary.
+//
 // [fixSimpleFont] builds its write from the fontDict its CALLER read out of the
 // document (fixer_fonts.go), not from the allocator:
 //

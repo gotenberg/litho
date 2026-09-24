@@ -16,18 +16,29 @@ import (
 // golden.
 //
 // The merge feature already applies these invariants, but it is scored on
-// pdfcpu alone, where exactly 2 fixtures carry the annotation shape that trips
-// the field collector. Measured across all 5171 corpus files, pdfjs carries 49
-// such fixtures and verapdf 23. This feature exists to reach them.
+// pdfcpu alone, which carries few fixtures with the annotation shape that
+// trips the field collector. This feature exists to reach the fixtures other
+// corpora carry.
 //
 // It deliberately does NOT compare page text or bookmarks. Dropping the text
-// extraction is what makes it cheap enough to run on a 1200-fixture corpus:
-// the work per fixture is two opens, one merge and one reopen.
+// extraction is what makes it cheap enough to run on a large corpus: the work
+// per fixture is two opens, one merge and one reopen.
 //
 // Like [splitFeature] it derives its oracle from the input at run time, so
 // GoldenSource is "litho-self" and no reference files are needed. The manifest
 // must still declare a non-empty golden path for the runner to schedule it;
 // that path is ignored.
+//
+// # Corpus evidence
+//
+//   - pdfcpu: exactly 2 fixtures carry the annotation shape that trips the
+//     field collector.
+//   - pdfjs: 49 fixtures carry that shape, measured across all 5171 corpus
+//     files.
+//   - verapdf: 23 fixtures carry that shape, measured across all 5171 corpus
+//     files.
+//   - pdfjs: the feature runs on this 1200-fixture corpus, which is what
+//     makes dropping the text extraction worth it.
 type mergeCatalogFeature struct {
 	cache sync.Map // pdfPath -> *cachedRun
 }

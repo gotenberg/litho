@@ -9,9 +9,13 @@ import (
 )
 
 // mislabelledSubsectionPDF builds a three-object PDF whose second xref
-// subsection header claims to start at 4294967296, the shape pdfjs
-// GHOSTSCRIPT-698804-1-fuzzed.pdf carries. Objects 2 and 3 are in the file but
-// the header files them under numbers past 2^32.
+// subsection header claims to start at 4294967296. Objects 2 and 3 are in the
+// file but the header files them under numbers past 2^32.
+//
+// # Corpus evidence
+//
+//   - pdfjs GHOSTSCRIPT-698804-1-fuzzed.pdf: the shape this fixture
+//     reproduces.
 func mislabelledSubsectionPDF(trailerSize int) []byte {
 	body := "%PDF-1.4\n" +
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +

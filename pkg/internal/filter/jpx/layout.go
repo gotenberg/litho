@@ -6,10 +6,13 @@ import "fmt"
 // out. It is an anti-DoS guard, not spec-mandated: T.800, B.7 lets a
 // precinct exponent of 1 shrink code-blocks to a single coefficient, so a
 // short codestream can describe one code-block per sample of a huge image.
-// The largest image in the corpora, 5100x6600 in three components with
-// 64x64 code-blocks, needs about 25 000; four million leaves room for small
-// code-blocks on large images while refusing per-sample layouts of gigapixel
-// ones.
+// Four million leaves room for small code-blocks on large images while
+// refusing per-sample layouts of gigapixel ones.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest image, 5100x6600 in three components with
+//     64x64 code-blocks, needs about 25 000 code-blocks and precincts.
 const maxCodeBlocks = 1 << 22
 
 // Sub-band orientations, T.800 Table B.1.

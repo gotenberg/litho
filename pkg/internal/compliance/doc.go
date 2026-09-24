@@ -40,9 +40,9 @@
 // to cite and would report a verdict the standards do not define.
 //
 // These silent skips always log the underlying error at Debug level so an
-// operator running with [pdf.WithWriteLogger] (or equivalent) can see the
+// operator running with pdf.WithWriteLogger (or equivalent) can see the
 // context. Structural corruption that makes the entire document unparseable
-// is surfaced earlier, at [pdf.Open] time, via [pdf.ErrDamagedXRef] and
+// is surfaced earlier, at pdf.Open time, via pdf.ErrDamagedXRef and
 // related sentinels.
 //
 // When adding a new check, follow this policy:

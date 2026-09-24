@@ -199,7 +199,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, checkedObjs, xobjVisited, 0)...)
 
 		// A tiling pattern's cell is another content stream the page walk above
-		// never enters. See [checkPatternFonts].
+		// never enters. See checkPatternFonts.
 		results = append(results, checkPatternFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, checkedObjs, xobjVisited, 0)...)
 
 		// A Type3 glyph procedure is another content stream that may select
@@ -217,6 +217,12 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 // in a page's /Resources/Font. It records each resolved font object number in
 // checkedObjs so [checkAnnotationAppearanceFonts] does not re-check a font that
 // is also declared on the page.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11678.pdf: its page 2 stream declares /Length 4218 over no
+//     data, and judging glyphs on unparsable content reports a .notdef
+//     against recovered bytes veraPDF never reads.
 func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog ast.PdfDict, p *pageCtx, pageNum int, profile string, checked map[string]bool, checkedObjs map[int]bool, visibleAnywhere map[int]bool) []Violation {
 	resources := p.resources
 	if resources == nil {
@@ -275,7 +281,7 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 		// embedding (§6.2.11.4.1), or width defects veraPDF never raises, since
 		// those rules constrain glyphs actually shown. A font rendered instead by
 		// an annotation appearance or a Form XObject is reached by the dedicated
-		// passes in [checkFontGroup] with that context's usage, so it is left
+		// passes in checkFontGroup with that context's usage, so it is left
 		// unmarked in checkedObjs here to avoid starving them. Only present but
 		// unparseable content forces the conservative "check every declared font"
 		// fallback (litho cannot prove non-use).
@@ -313,11 +319,10 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 		if fontSubtype(ctx, doc, font) == "Type0" {
 			if dictRulesDone {
 				// The dictionary was reported on an earlier page, but this page's
-				// glyphs are still unjudged. See [checkType0UsageRules]. Content
+				// glyphs are still unjudged. See checkType0UsageRules. Content
 				// litho could not parse names no glyphs it can judge: the
 				// conservative "check every declared font" fallback exists for the
-				// dictionary rules, and pdfjs issue11678.pdf, whose page 2 stream
-				// declares /Length 4218 over no data, otherwise reports a .notdef
+				// dictionary rules, and judging glyphs there reports a .notdef
 				// against recovered bytes veraPDF never reads.
 				if descArr, err := document.ResolveArray(ctx, doc, font["DescendantFonts"]); err == nil && len(descArr) > 0 && !parseFailed {
 					if cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0]); err == nil && cidFontDict != nil {
@@ -406,9 +411,7 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 // 8.7.3.3, PatternType 1 with PaintType 1) paints its cell with a content stream
 // of its own, resolved against its own /Resources, and veraPDF descends into it
 // from the scn or SCN operator that selects it, applying the same font rules to
-// the glyphs the cell shows: pdfjs issue15716.pdf fills a rectangle with a
-// pattern whose cell shows a glyph from an unembedded ZapfDingbats, which
-// veraPDF reports under ISO 19005-2, 6.2.11.4.1 and litho never reached.
+// the glyphs the cell shows.
 //
 // Only a pattern that scn or SCN names comes into scope: one merely declared in
 // /Resources/Pattern paints nothing. An uncoloured pattern (PaintType 2) is left
@@ -416,6 +419,12 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 // pattern selected inside a Form XObject is reached through the form walk.
 // Measured against veraPDF on a fixture of each shape. Recursion shares the Form
 // XObject walk's visited set and depth bound.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15716.pdf: fills a rectangle with a pattern whose cell shows a
+//     glyph from an unembedded ZapfDingbats, which veraPDF reports under
+//     ISO 19005-2, 6.2.11.4.1 and litho never reached.
 func checkPatternFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return nil
@@ -480,16 +489,20 @@ func checkPatternFonts(ctx context.Context, doc *document.Document, ops []conten
 // select fonts from the Type3 font's own /Resources, including another Type3
 // font. veraPDF descends through those procedures and applies the same font
 // rules to what they select, so a non-embedded font reached only that way
-// (ISO 19005-2 §6.2.11.4.1) is otherwise never checked: pdfjs
-// ContentStreamCycleType3insideType3.pdf reaches an unembedded Helvetica
-// through two nested Type3 fonts.
+// (ISO 19005-2 §6.2.11.4.1) is otherwise never checked.
 //
 // Only the procedures for character codes the stream actually shows are
 // walked, so a glyph that is never painted brings no font into scope.
 // Recursion is bounded by [maxFormXObjectDepth]; visited holds the object
-// numbers already descended into, which breaks the resource cycle the fixture
-// name warns about. Object numbers are unique document-wide, so sharing one
-// visited set with the Form XObject walk cannot confuse a font for a form.
+// numbers already descended into, which breaks a resource cycle through nested
+// Type3 fonts. Object numbers are unique document-wide, so sharing one visited
+// set with the Form XObject walk cannot confuse a font for a form.
+//
+// # Corpus evidence
+//
+//   - pdfjs ContentStreamCycleType3insideType3.pdf: reaches an unembedded
+//     Helvetica through two nested Type3 fonts, and its name warns of the
+//     resource cycle the visited set breaks.
 func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return nil
@@ -664,6 +677,14 @@ func checkAnnotationAppearanceFonts(ctx context.Context, doc *document.Document,
 // subdictionary of streams) and checks the subset glyph coverage of every font
 // the stream actually uses for rendering. visited guards against parsing the
 // same appearance stream twice.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug854315.pdf: draws a subset CIDFont at
+//     annots[0]/appearance[0]/contentStream[0]/operators[N]/xObject[0]/contentStream[0],
+//     reached only through a Form XObject the appearance invokes.
+//   - pdfjs issue17069.pdf: shows both routes at once, one font named by the
+//     appearance itself and one only by the form it invokes.
 func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apObj ast.PdfObject, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, stateCount int) []Violation {
 	stream, err := document.ResolveStream(ctx, doc, apObj)
 	if err != nil {
@@ -715,13 +736,10 @@ func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apO
 	}
 
 	// A Form XObject the appearance invokes is another content stream the walk
-	// above never enters, and veraPDF reaches its fonts through the appearance:
-	// pdfjs bug854315.pdf draws a subset CIDFont at
-	// annots[0]/appearance[0]/contentStream[0]/operators[N]/xObject[0]/contentStream[0],
-	// and issue17069.pdf shows both routes at once, one font named by the
-	// appearance itself and one only by the form it invokes. The colour scan
-	// already descends the same way (see [scanAnnotationAppearanceCS]).
-	// [checkFormXObjectFonts] carries the Do gating, the depth cap and the
+	// above never enters, and veraPDF reaches its fonts through the appearance.
+	// The colour scan already descends the same way (see
+	// scanAnnotationAppearanceCS).
+	// checkFormXObjectFonts carries the Do gating, the depth cap and the
 	// visited set, so a shared form is walked once.
 	results := checkFormXObjectFonts(ctx, doc, ops, res, treeRoot, pageNum, profile, checkedObjs, visited, 0)
 
@@ -762,6 +780,14 @@ func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.P
 // they hold for the font object wherever it is used. A page pass runs them once
 // per font object: repeating them per page would report the same dictionary
 // defect once for every page that selects the font.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7544.pdf: writes a /CIDFontType2 descendant carrying
+//     /BaseFont, /CIDSystemInfo, /CIDToGIDMap, /FontDescriptor, /Subtype and
+//     /W but no /Type, confirmed in the file's own bytes, and veraPDF reports
+//     §6.2.11.2 t1 against it.
+//   - All corpora: the descendant CIDFont's t3 fires on no file.
 func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool, usage *fontUsageInfo) []Violation {
 	var results []Violation
 
@@ -772,21 +798,19 @@ func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict as
 	if subtype == "Type0" {
 		// A Type0's descendant CIDFont is a font dictionary in its own right,
 		// and ISO 32000-1, 9.7.4, Table 117 requires /Type /Font on it. veraPDF
-		// models it as a PDFont of its own and reports §6.2.11.2 t1 against it:
-		// pdfjs issue7544.pdf writes a /CIDFontType2 descendant carrying
-		// /BaseFont, /CIDSystemInfo, /CIDToGIDMap, /FontDescriptor, /Subtype and
-		// /W but no /Type, confirmed in the file's own bytes.
+		// models it as a PDFont of its own and reports §6.2.11.2 t1 against it
+		// when the descendant carries no /Type.
 		//
 		// Only /Type is judged here. t2 cannot fire, since both CIDFont
-		// subtypes are already valid; t3 fires on no corpus file; and t7 reads
-		// the descriptor that [document.ResolveFontDescriptor] already reaches
+		// subtypes are already valid; t3 is left out; and t7 reads
+		// the descriptor that document.ResolveFontDescriptor already reaches
 		// THROUGH the descendant, so running the whole check again would judge
 		// one descriptor twice.
 		if descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"]); err == nil && len(descArr) > 0 {
 			if cid, err := document.ResolveDict(ctx, doc, descArr[0]); err == nil && cid != nil {
 				// Absent, null and not-a-name are three defects, and only the
 				// last of the cases below is "the file names the wrong type".
-				// See [checkFontRequiredKeys] for why %q on the empty name
+				// See checkFontRequiredKeys for why %q on the empty name
 				// printed a bare slash.
 				typeObj, typePresent := cid["Type"]
 				typeName, typeErr := document.ResolveName(ctx, doc, typeObj)
@@ -1194,7 +1218,7 @@ func glyphNamePUACodes(ctx context.Context, doc *document.Document, fontDict ast
 		mapped = cmapSourceCodeValues(parsed)
 	}
 	// A subset CFF declaring a predefined encoding names only the codes whose
-	// glyph it embeds, so [cffPredefinedEncodingFilled] restores the rest: the
+	// glyph it embeds, so cffPredefinedEncodingFilled restores the rest: the
 	// encoding assigns them whether or not the subset carries the glyph.
 	names := cffPredefinedEncodingFilled(ctx, doc, fontDict,
 		resolveSimpleFontEncoding(ctx, doc, fontDict))
@@ -1366,7 +1390,7 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 
 	// CIDToGIDMap. A font with no recorded usage is treated as visible so the
 	// check still runs when content-stream usage could not be collected. Every
-	// [checkSingleFont] caller supplies usage whenever it can prove non-use, so
+	// checkSingleFont caller supplies usage whenever it can prove non-use, so
 	// isVisible already carries that.
 	results = append(results, checkCIDToGIDMap(ctx, doc, cidFontDict, cidSubtype, fontName, pageNum, profile, isVisible)...)
 
@@ -1391,13 +1415,16 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 // checkType0UsageRules applies the composite-font rules that judge the glyphs
 // one page shows, as opposed to those that judge the font dictionary. A font
 // object's dictionary is reported once, but every page that selects the font
-// shows its own codes, so these run again for each: govdocs
-// thread_100_100870.pdf selects one Times-Roman Identity-H font on fourteen
-// pages, and only page 20 shows CID 0 and a CID its CFF charset does not hold.
-// veraPDF, which builds a glyph per show operator, reports both under
-// ISO 19005-2 §6.2.11.8 and §6.2.11.4.1 t2; litho judged the font on page 9 and
-// never looked again. Simple fonts already work this way through
+// shows its own codes, so these run again for each. veraPDF builds a glyph per
+// show operator. Simple fonts already work this way through
 // [checkFontUsageRules].
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100870.pdf: selects one Times-Roman Identity-H font on
+//     fourteen pages, and only page 20 shows CID 0 and a CID its CFF charset
+//     does not hold. veraPDF reports both under ISO 19005-2 §6.2.11.8 and
+//     §6.2.11.4.1 t2; litho judged the font on page 9 and never looked again.
 func checkType0UsageRules(ctx context.Context, doc *document.Document, fontDict, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo, malformed judgeMalformedCodes) []Violation {
 	results := make([]Violation, 0, 4)
 
@@ -1448,6 +1475,22 @@ func checkType0UsageRules(ctx context.Context, doc *document.Document, fontDict,
 // For simple fonts (Type1/TrueType): resolves encoding and checks each used
 // character code. For TrueType with embedded programs: also checks the font's
 // cmap for GID 0 mappings.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1354114.pdf: shows WinAnsi code 10 through a symbolic
+//     NimbusRomNo9L subset and veraPDF reports it; the same code taken from
+//     StandardEncoding it does not.
+//   - govdocs thread_000_000153.pdf: shows code 127 of an unembedded NewYork
+//     declared /MacRomanEncoding, which veraPDF reports under ISO 14289-1,
+//     7.21.8 t1, so DEL is not exempt when no program is embedded.
+//   - pdfjs issue13107_reduced.pdf: embeds a DejaVuSans subset with no .notdef
+//     glyph whose post table names GID 0 "space", so a code the encoding names
+//     is judged by that name alone.
+//   - pdfjs issue6410.pdf: embeds four nonsymbolic TrueTypes with no /Encoding
+//     whose post 2.0 table sends them down the glyph-name branch. litho named
+//     charCode 32 though all three cmap subtables map it to "space", while
+//     veraPDF judged 149 glyphs there and found no .notdef.
 func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := notdefRule(profile)
 	if rule.Specification == "" {
@@ -1514,9 +1557,8 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 			// MacRomanEncoding, MacExpertEncoding and WinAnsiEncoding only, so
 			// under StandardEncoding, a /Differences-only dictionary or no
 			// /Encoding a code the dictionary leaves alone gets no name and no
-			// report. pdfjs bug1354114.pdf shows WinAnsi code 10 through a
-			// symbolic NimbusRomNo9L subset and veraPDF reports it; the same code
-			// taken from StandardEncoding it does not.
+			// report, while a code WinAnsiEncoding leaves undefined is reported
+			// even through a symbolic subset.
 			embeddedType1 := embedded && (subtype == "Type1" || subtype == "MMType1")
 			type1Table := ""
 			var type1Differences map[byte]string
@@ -1543,9 +1585,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 				// no program, so nothing can define a glyph at 0x7F, and none
 				// of the four predefined tables does. veraPDF agrees, reading
 				// predefinedEncoding[code] in Encoding.getName with no carve
-				// out for DEL: govdocs thread_000_000153.pdf shows code 127 of
-				// an unembedded NewYork declared /MacRomanEncoding, which it
-				// reports under ISO 14289-1, 7.21.8 t1.
+				// out for DEL.
 				if glyphName == "" && namedTable != "" && !symbolic {
 					return failf(rule, "font %s on page %d: charCode %d is undefined in %s, so it maps to .notdef",
 						fontName, pageNum, code, namedTable)
@@ -1577,7 +1617,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 				}
 				enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
 				// A TrueType simple font resolves a glyph through its /Encoding
-				// first (PDF 9.6.6.4): charCode 0 used but absent from an
+				// first (ISO 32000-1, 9.6.6.4): charCode 0 used but absent from an
 				// explicit /Encoding renders .notdef regardless of the font's
 				// cmap. litho's no-post-table path otherwise trusts the cmap and
 				// misses this.
@@ -1590,21 +1630,16 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 					// when the encoding gives none) and tests name != ".notdef"
 					// (ISO 19005-2, 6.2.11.8). A code the encoding names is judged
 					// by that name alone, even when the program stores the glyph at
-					// GID 0: pdfjs issue13107_reduced.pdf embeds a DejaVuSans subset
-					// with no .notdef glyph whose post table names GID 0 "space".
-					// Lowest offending code; see [lowestOffender].
+					// GID 0, as a subset with no .notdef glyph can.
+					// Lowest offending code; see lowestOffender.
 					// A font that declares no /Encoding names no code at all, so an
 					// empty name here is the absence of a declaration rather than
 					// evidence of .notdef: ISO 32000-1, 9.6.6.4 resolves such a
 					// TrueType through the program's own cmap, which the no-names
 					// branch below consults. Condemning the empty name regardless
-					// reported every code a font shows: pdfjs issue6410.pdf embeds
-					// four nonsymbolic TrueTypes with no /Encoding whose post 2.0
-					// table sends them down this branch, and litho named charCode 32
-					// though all three cmap subtables map it to "space", while
-					// veraPDF judged 149 glyphs there and found no .notdef. A
-					// declared encoding that leaves a code undefined still fires,
-					// which is the MacExpertEncoding case above.
+					// reported every code a font shows. A declared encoding that
+					// leaves a code undefined still fires, which is the
+					// MacExpertEncoding case above.
 					declaresEncoding := len(enc) > 0
 					var worst lowestOffender[byte]
 					for code := range usage.charCodes {
@@ -1645,14 +1680,18 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 }
 
 // collectType0CIDs decodes a Type0 font's shown strings into the set of CIDs
-// they reference. It returns (cids, notdef, ok):
+// they reference. It returns (cids, notdef, unmappedZero, ok):
 //   - ok is false when litho cannot decode the /Encoding to CIDs (an embedded
-//     CMap stream, or an unrecognized predefined CMap); the caller skips the
-//     check rather than risk a false positive.
+//     CMap stream it could not parse, or an unrecognized predefined CMap); the
+//     caller skips the check rather than risk a false positive.
 //   - notdef is true when decoding reached a character code that unambiguously
-//     renders as the .notdef glyph (an Identity odd-length tail).
+//     renders as the .notdef glyph (an Identity odd-length tail, or an embedded
+//     CMap mapping a code to a CID beyond 65535).
+//   - unmappedZero is true when an embedded CMap leaves a shown code unmapped,
+//     which selects CID 0.
 //
-// Identity-H/V treats each 2-byte unit as the CID directly. A predefined CMap
+// Identity-H/V treats each 2-byte unit as the CID directly. An embedded CMap
+// stream is decoded through embedded. A predefined CMap
 // (Adobe-Japan1 etc.) is decoded codespace-aware through its bundled bcmap; the
 // resolvable CIDs are returned for the caller's embedded-font charset check,
 // while unmapped codes are skipped to stay free of false positives.
@@ -1669,7 +1708,7 @@ func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInf
 				if !c.Mapped {
 					// A code the CMap leaves unmapped selects CID 0 when litho
 					// holds all its mappings (ISO 32000-1, 9.7.6.3); see
-					// [cmap.CIDMap.UnmappedNotdef]. unmappedZero separates that
+					// cmap.CIDMap.UnmappedNotdef. unmappedZero separates that
 					// from a code written as CID 0: the first reaches no glyph
 					// at all, the second reaches the .notdef glyph, which the
 					// program does contain.
@@ -1715,10 +1754,10 @@ func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInf
 		// An unmapped code is NOT treated as .notdef here: litho does not
 		// resolve a bcmap's usecmap base, so a code could be unmapped merely
 		// because its mapping lives in an unresolved base CMap. Flagging it
-		// would be a false positive. Only the CIDs we can resolve are collected
-		// and verified against the embedded font program by the caller, which
-		// is independent of CMap completeness. This trades a possibly missed
-		// .notdef (a false negative) for zero false positives.
+		// would be a false positive. Only the CIDs litho can resolve are
+		// collected and verified against the embedded font program by the
+		// caller, which is independent of CMap completeness. This trades a
+		// possibly missed .notdef (a false negative) for zero false positives.
 		cm := cmap.LoadPredefinedCIDMap(encName)
 		if cm == nil {
 			return nil, false, false, false
@@ -1735,11 +1774,6 @@ func collectType0CIDs(encName string, embedded *cmap.CIDMap, usage *fontUsageInf
 	}
 }
 
-// checkType0NotdefGlyph checks if a Type0 (composite) font references CID 0
-// (.notdef) in any text operator string, or references a CID that is absent
-// from the embedded font program's charset (also renders as .notdef). It
-// handles Identity-H/V and predefined CMap encodings (see [collectType0CIDs]);
-// embedded CMap streams are not decoded and are left unchecked.
 // type0UsedCIDs resolves the CIDs a Type0 font's text operators reference,
 // through the same /Encoding decoding the notdef check uses (predefined
 // CMaps, Identity, or an embedded CMap stream). Returns nil when the
@@ -1833,10 +1867,16 @@ func checkType0NotdefWidth(ctx context.Context, doc *document.Document, fontDict
 // second reads the program, while the first reads bytes that a damaged content
 // stream can invent. zlib resynchronises on damaged input, so a page whose
 // stream decompresses only partway yields operators and strings the document
-// never held: pdfjs issue11678.pdf inflates one into a hex string with an odd
-// digit count, which under Identity-H looks exactly like a rendered .notdef.
-// litho judges that once per font object, where it has always been judged, and
-// does not re-run it for every page that selects the font.
+// never held, and a hex string with an odd digit count under Identity-H looks
+// exactly like a rendered .notdef. litho judges that once per font object,
+// where it has always been judged, and does not re-run it for every page that
+// selects the font.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11678.pdf: a partly decompressed stream inflates into a hex
+//     string with an odd digit count, which under Identity-H looks exactly
+//     like a rendered .notdef.
 type judgeMalformedCodes bool
 
 const (
@@ -1844,6 +1884,19 @@ const (
 	withoutMalformedCodes judgeMalformedCodes = false
 )
 
+// checkType0NotdefGlyph checks if a Type0 (composite) font references CID 0
+// (.notdef) in any text operator string, or references a CID that is absent
+// from the embedded font program's charset (also renders as .notdef). It
+// handles Identity-H/V, predefined CMap and embedded CMap stream encodings (see
+// [collectType0CIDs]); an encoding litho cannot decode to CIDs is left
+// unchecked. malformed selects whether a code string that does not decode may
+// be judged (see [judgeMalformedCodes]).
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200565.pdf: its 411 show operators are all mode 3,
+//     and veraPDF reports 6.2.11.8 and not 6.2.11.4.1 for a used CID absent
+//     from the CFF charset.
 func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo, malformed judgeMalformedCodes) []Violation {
 	rule := notdefRule(profile)
 	if rule.Specification == "" || usage == nil || len(usage.rawStrings) == 0 {
@@ -1872,7 +1925,7 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		// .notdef rule and the glyph-presence rule apply: the rendered code
 		// resolves to .notdef and to no glyph in the embedded program. The
 		// glyph-presence half needs an embedded program to be missing from;
-		// see [type0HasEmbeddedProgram].
+		// see type0HasEmbeddedProgram.
 		// renderingMode == 3 exempts the glyph-presence half, which asks only
 		// about glyphs referenced for rendering; the .notdef rule carries no
 		// such exemption.
@@ -1891,7 +1944,7 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		// the glyph-presence rule covers as well: veraPDF reports both for it.
 		// A code written as CID 0 reaches the .notdef glyph, which the program
 		// does contain, so that keeps firing the .notdef rule alone (both tools
-		// agree there; see [absentType0CIDs]). renderingMode == 3 exempts the
+		// agree there; see absentType0CIDs). renderingMode == 3 exempts the
 		// glyph-presence half, as in the decode-level branch above.
 		if pr := glyphPresenceRule(profile); unmappedZero && pr.Specification != "" &&
 			usage.visible && type0HasEmbeddedProgram(ctx, doc, fontDict) {
@@ -1943,9 +1996,8 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 				// no glyph is present for it. Glyph presence asks only about
 				// glyphs referenced for rendering, so renderingMode == 3
 				// exempts it, as in the CIDFontType2 branch below; the
-				// .notdef rule keeps firing. veraPDF reports 6.2.11.8 and not
-				// 6.2.11.4.1 on govdocs thread_200_200565.pdf, whose 411 show
-				// operators are all mode 3.
+				// .notdef rule keeps firing, as veraPDF reports 6.2.11.8 and not
+				// 6.2.11.4.1 when every show operator is mode 3.
 				results := failf(rule, "font %s on page %d: CID %d not in font charset (.notdef)", fontName, pageNum, cid)
 				if pr := glyphPresenceRule(profile); pr.Specification != "" && usage.visible {
 					results = append(results, failf(pr,
@@ -2049,6 +2101,12 @@ func type0HasEmbeddedProgram(ctx context.Context, doc *document.Document, fontDi
 // exists in the glyf table (it is present, just empty), so it remains a mappable
 // glyph and the ToUnicode rule still applies. ok is false when litho cannot
 // decode the encoding to CIDs; callers then stay conservative.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5874.pdf: passed §6.3.5 t1 until remediation added the
+//     /CIDToGIDMap /Identity that ISO 19005-1 §6.3.3.2 requires, and the same
+//     bytes then failed.
 func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) (absent map[uint16]bool, subtype string, notdef bool, ok bool) {
 	absent = make(map[uint16]bool)
 	if usage == nil || len(usage.rawStrings) == 0 {
@@ -2105,11 +2163,10 @@ func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.P
 		// ISO 32000-1, Table 117 gives /CIDToGIDMap the default value Identity,
 		// so an absent entry maps CID to GID exactly as the explicit name does
 		// and must be judged the same way. Reading only the explicit name made
-		// the verdict depend on whether the producer wrote a redundant entry:
-		// pdfjs issue5874.pdf passed §6.3.5 t1 until remediation added the
-		// /CIDToGIDMap /Identity that ISO 19005-1 §6.3.3.2 requires, and the
-		// same bytes then failed. A repair that only writes a documented
-		// default cannot change what the file means.
+		// the verdict depend on whether the producer wrote a redundant entry,
+		// so a remediation that added the /CIDToGIDMap /Identity ISO 19005-1
+		// §6.3.3.2 requires flipped a pass to a fail. A repair that only writes
+		// a documented default cannot change what the file means.
 		cidToGIDMap, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"])
 		_, hasCIDToGID := cidFontDict["CIDToGIDMap"]
 		if cidToGIDMap == "Identity" || !hasCIDToGID {
@@ -2155,7 +2212,7 @@ func checkType0GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 		return nil
 	}
 	// A code the encoding CMap maps nowhere reaches no glyph at all. Parts 2 to
-	// 4 report it from [checkType0NotdefGlyph] beside the .notdef rule; PDF/A-1
+	// 4 report it from checkType0NotdefGlyph beside the .notdef rule; PDF/A-1
 	// has no .notdef rule and reaches only this path, so honor the signal here.
 	if !notdef && len(absent) == 0 {
 		encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
@@ -2181,7 +2238,7 @@ func checkType0GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 	}
 	// A non-empty absent set already implies an embedded program (absentType0CIDs
 	// populates it only from decoded program bytes); the decode signal does not,
-	// so recheck. See [type0HasEmbeddedProgram] for why an unembedded font is out
+	// so recheck. See type0HasEmbeddedProgram for why an unembedded font is out
 	// of scope for §6.3.5 t1.
 	if !type0HasEmbeddedProgram(ctx, doc, fontDict) {
 		return nil

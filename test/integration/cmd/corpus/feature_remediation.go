@@ -71,11 +71,11 @@ func (f *remediationFeature) HasGolden(fixtureID string) bool {
 }
 
 // Prepare remediates every fixture and runs VeraPDF in batches keyed
-// by profile. Stage 1 (parallel): for each fixture, apply litho
-// remediation, validate the buffer with litho, and write the result
-// into the profile's staging dir. Stage 2 (sequential, one per
-// profile): run `verapdf -r -f <flavour>` on the staging dir, parse
-// the batch report, and compose the per-fixture verdict.
+// by profile. First, in parallel, it applies litho remediation to each
+// fixture, validates the buffer with litho, and writes the result into
+// the profile's staging dir. Then, sequentially and once per profile, it
+// runs `verapdf -r -f <flavour>` on the staging dir, parses the batch
+// report, and composes the per-fixture verdict.
 func (f *remediationFeature) Prepare(ctx context.Context, fixtures []Fixture) error {
 	if _, err := exec.LookPath("verapdf"); err != nil {
 		return errors.New("verapdf binary not found on PATH (install VeraPDF or run inside the provisioning container)")
@@ -323,7 +323,7 @@ func (f *remediationFeature) Compare(fixtureID string, output []byte) Verdict {
 
 	// Emit every metric unconditionally, zero included. A metric written only
 	// when it fires disappears from the baseline once it reaches zero, and
-	// [diffBaseline] iterates the baseline's own key set, so the bar stops
+	// diffBaseline iterates the baseline's own key set, so the bar stops
 	// gating entirely: a later regression in that metric goes unreported.
 	metrics := map[string]int{
 		"litho_pre":         got.LithoPre,
@@ -474,7 +474,7 @@ func batchValidate(ctx context.Context, dir, flavour string) (map[string]veraVer
 	cmd.Stdout = &stdout
 	if err := cmd.Run(); err != nil {
 		// VeraPDF exits non-zero when files fail compliance. The JSON
-		// is still emitted on stdout. Bail only if we got nothing.
+		// is still emitted on stdout. Bail only if stdout is empty.
 		if stdout.Len() == 0 {
 			return nil, fmt.Errorf("verapdf: %w", err)
 		}
@@ -501,6 +501,12 @@ func batchValidate(ctx context.Context, dir, flavour string) (map[string]veraVer
 }
 
 // jobVerdict converts one VeraPDF validation result into a verdict.
+//
+// # Corpus evidence
+//
+//   - govdocs, 25 files: VeraPDF's rule order is stable batch against batch,
+//     and batch against single permutes 5 of 6, which is why the ids are
+//     sorted.
 func jobVerdict(vr verapdfValidationResult) veraVerdict {
 	rules := failedRules(vr)
 	ids := make([]string, 0, len(rules))
@@ -508,13 +514,12 @@ func jobVerdict(vr verapdfValidationResult) veraVerdict {
 		ids = append(ids, fmt.Sprintf("%s-t%02d", r.Clause, r.TestNumber))
 	}
 	// VeraPDF lists rule summaries in a different order for a single-file run
-	// than for the same file inside a batch, and [singleValidate] retries any
+	// than for the same file inside a batch, and singleValidate retries any
 	// file the batch report drops, so identical failures reach
 	// verapdf_post_rules permuted according to which path the file took.
-	// Measured on 25 govdocs files: batch against batch is stable, batch
-	// against single permutes 5 of 6. Sort as [distinctRuleIDs] already does
-	// for the litho side, so diffing two gate reports shows only what moved.
-	// The count stays len(rules): these ids are reported, not deduplicated.
+	// Sort as distinctRuleIDs already does for the litho side, so diffing two
+	// gate reports shows only what moved. The count stays len(rules): these
+	// ids are reported, not deduplicated.
 	sort.Strings(ids)
 	return veraVerdict{count: len(rules), rules: ids}
 }
@@ -566,7 +571,7 @@ func profileDirToVeraPDFFlavour(profileDir string) (string, bool) {
 		"PDF_UA-2": "ua2",
 		// WTPDF levels ride the ISO 14289-2 rule set; VeraPDF names them
 		// wt1a and wt1r. A profile missing from this map is skipped with
-		// "no verapdf flavour" even when [remediationFeature.remediators]
+		// "no verapdf flavour" even when remediationFeature.remediators
 		// supports it, so both maps move together.
 		"WTPDF-1.0-Accessibility": "wt1a",
 		"WTPDF-1.0-Reuse":         "wt1r",

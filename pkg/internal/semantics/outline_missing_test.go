@@ -21,8 +21,11 @@ func loadDoc(t *testing.T, data []byte) *document.Document {
 
 // buildDanglingOutlinePDF assembles a document whose /Outlines points at an
 // object the xref table declares but the file never writes. The entry's offset
-// lands on the `xref` keyword, so parsing it fails rather than returning null,
-// which is exactly the shape pdfjs issue2618 has.
+// lands on the `xref` keyword, so parsing it fails rather than returning null.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue2618: has exactly this shape.
 func buildDanglingOutlinePDF() []byte {
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R /Outlines 4 0 R >>",
@@ -55,9 +58,13 @@ func buildDanglingOutlinePDF() []byte {
 // null, and 7.3.7 makes a null entry equivalent to an absent one. An object
 // whose declared offset holds no object is indistinguishable from an undefined
 // one. Returning an error here made Bookmarks the only reader call that failed
-// on pdfjs issue2618: info, pages, metadata, annotations, images and forms all
-// read it, poppler and pikepdf both report it as having no outline, and
-// `litho bookmarks` exited non-zero.
+// on such a file, and `litho bookmarks` exited non-zero.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue2618: info, pages, metadata, annotations, images and forms all
+//     read it, poppler and pikepdf both report it as having no outline, and
+//     Bookmarks alone failed.
 func TestResolveOutlineDanglingReference(t *testing.T) {
 	t.Parallel()
 

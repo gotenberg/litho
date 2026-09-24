@@ -133,14 +133,19 @@ func structTreeRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 
 // resolvedStructType returns the role an element stands for, following the
 // /RoleMap the way the validator does (ISO 32000-1, 14.8.4). A fixer that reads
-// the raw /S instead disagrees with the rule it is repairing: govdocs
-// thread_100_100631.pdf maps /LI_Title to /LBody, so the list fixer saw a child
-// it did not recognise, treated an existing list body as an orphan, and wrapped
-// it in a SECOND LBody, leaving an LBody whose parent was an LBody and drawing
-// ISO 14289-1 7.2 test 18, which the input never had.
+// the raw /S instead disagrees with the rule it is repairing: a custom role
+// mapped to /LBody reads as a child the list fixer does not recognise, so it
+// treated an existing list body as an orphan and wrapped it in a SECOND LBody,
+// leaving an LBody whose parent was an LBody and drawing ISO 14289-1 7.2 test
+// 18, which the input never had.
 //
 // The walk is bounded by the map size, so a /RoleMap cycle terminates; the
 // rolemap fixer breaks such cycles, but this must not depend on having run.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100631.pdf: maps /LI_Title to /LBody, and the list
+//     fixer wrapped that existing list body in a SECOND LBody.
 func resolvedStructType(ctx context.Context, doc *document.Document, elem ast.PdfDict, roleMap map[ast.PdfName]ast.PdfName) ast.PdfName {
 	role := structType(ctx, doc, elem)
 	for range len(roleMap) {

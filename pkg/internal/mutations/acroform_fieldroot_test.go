@@ -14,12 +14,16 @@ import (
 // dictionary (ISO 32000-1, Table 220), and the pop-up window title,
 // conventionally the author, on a markup annotation (Table 170). Collecting on
 // /T alone conflated them, so split and merge wrote an /AcroForm onto documents
-// that have no form. Measured on pdfjs issue20062.pdf, whose only annotation is
-// a /Polygon with /T (author) and which carries no /AcroForm, no /Widget and no
-// /FT: merging it with itself produced /Fields naming both polygons.
+// that have no form.
 //
 // The existing control in acroform_test.go is a /Link, which carries no /T at
 // all, so it never reached this branch.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20062.pdf: the only annotation is a /Polygon with /T (the
+//     author), and the file carries no /AcroForm, no /Widget and no /FT.
+//     Merging it with itself produced /Fields naming both polygons.
 func TestCollectRootFields_MarkupAnnotationTitleIsNotAField(t *testing.T) {
 	for _, subtype := range []string{"Polygon", "FreeText", "Text", "Highlight", "Ink", "Square"} {
 		t.Run(subtype, func(t *testing.T) {

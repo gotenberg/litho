@@ -16,10 +16,14 @@ import (
 // Per ISO 32000-1, Table 89 an image's /SMask is either a stream or the name
 // None, and None states the image has no soft mask. Keying only on the entry
 // being present and not null read /SMask /None as transparency and fired
-// §6.2.10 t2 on a page that needs nothing: pdfjs issue14814.pdf draws such an
-// image with no /Group under no OutputIntent, and veraPDF reports nothing.
-// The real-soft-mask case below is the guard that matters, since suppressing
-// both would trade a false positive for a false negative.
+// §6.2.10 t2 on a page that needs nothing. The real-soft-mask case below is
+// the guard that matters, since suppressing both would trade a false positive
+// for a false negative.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14814.pdf: draws an image with /SMask /None with no /Group
+//     under no OutputIntent, and veraPDF reports nothing.
 func TestResourcesUseTransparency_ImageSMaskNone(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

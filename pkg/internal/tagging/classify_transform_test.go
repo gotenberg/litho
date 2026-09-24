@@ -29,14 +29,14 @@ func scaledHeadingPDF() []byte {
 // TestClassify_CMScaleSetsTheEffectiveFontSize pins that a doubling CTM makes
 // 12pt text classify as a heading.
 //
-// pageTextBlocks records fontSize from the Tf operand alone. headingLevels is a
+// pageTextBlocks recorded fontSize from the Tf operand alone. headingLevels is a
 // pure function over those recorded sizes, so a size that never accounts for
 // the transform cannot be recovered downstream: every block reports 12, the
 // body size is 12, and `fontSize >= body*headingSizeRatio` is false everywhere,
 // so the page emits no heading at all.
 //
 // This is the gap the autotag record calls "font size from Tf only". It is a
-// SEPARATE defect from the q/Q restores fixed in 734e5a43 and bfe26e5e: those
+// SEPARATE defect from the q/Q restores fixed in e4f3ccfb and 2616dea4: those
 // leaked a correctly-read size past a Q, this one never reads the size right in
 // the first place. A limitation note that named the wrong mechanism hid the
 // graphics-state bug for months, so this test names the mechanism it covers.

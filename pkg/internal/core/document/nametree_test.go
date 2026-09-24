@@ -275,13 +275,18 @@ func TestSearchNameTree_DirectUnit(t *testing.T) {
 }
 
 // TestSearchNameTree_ByteExactKey pins the contract that name tree
-// lookups use the raw byte string as the key. The pdfcpu bookmark
-// fixture bookmarkDuplicates.pdf shows the real-world need: two
-// destinations sharing the visible title "kid1" are disambiguated by
-// a trailing 0x01 in the named destination identifier. Routing the
-// key through [DecodePdfString] would drop that byte (it is undefined
-// in PDFDocEncoding) and the second lookup would hit the first
+// lookups use the raw byte string as the key. Producers disambiguate
+// two destinations sharing a visible title by a trailing 0x01 in the
+// named destination identifier. Routing the key through
+// [DecodePdfString] would drop that byte (it is undefined in
+// PDFDocEncoding) and the second lookup would hit the first
 // destination's page.
+//
+// # Corpus evidence
+//
+//   - pdfcpu bookmarkDuplicates.pdf: two destinations sharing the visible
+//     title "kid1" are disambiguated by a trailing 0x01 in the named
+//     destination identifier.
 func TestSearchNameTree_ByteExactKey(t *testing.T) {
 	doc := &Document{
 		Index:       xref.Index{Entries: make(map[int]xref.XRefEntry)},

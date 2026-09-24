@@ -10,6 +10,11 @@ import "testing"
 // is a byte, so a table shorter than the indices used is reachable with any
 // input, and reading past it would be an out-of-bounds read on attacker-chosen
 // data. The decoder must never panic and must fill exactly the declared pixels.
+//
+// # Corpus evidence
+//
+//   - pdfjs: the documents with an indexed /Lab base declare the D50 white
+//     point the Lab path is fuzzed with.
 func FuzzDecodeIndexed(f *testing.F) {
 	for _, seed := range []struct {
 		data   []byte
@@ -65,7 +70,7 @@ func FuzzDecodeIndexed(f *testing.F) {
 		// floating-point arithmetic: a NaN or an out-of-range float there
 		// would convert to a wrong byte rather than fail, and the opacity
 		// and bounds invariants below have to hold for it too. The white
-		// point is the D50 one the corpus documents declare.
+		// point is the D50 one real documents declare.
 		if comps == 3 {
 			labPal := pal
 			labPal.base = "Lab"

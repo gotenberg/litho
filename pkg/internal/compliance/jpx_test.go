@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+// TestIsJP2Container pins that [isJP2Container] accepts the 12-byte JP2
+// signature box and rejects anything shorter or different.
 func TestIsJP2Container(t *testing.T) {
 	t.Parallel()
 
@@ -32,6 +34,8 @@ func TestIsJP2Container(t *testing.T) {
 	}
 }
 
+// TestParseJP2Boxes pins how [parseJP2Boxes] splits a box sequence, a zero
+// length reaching to the end and a length past the data stopping the walk.
 func TestParseJP2Boxes(t *testing.T) {
 	t.Parallel()
 
@@ -103,6 +107,8 @@ func TestParseJP2Boxes(t *testing.T) {
 	})
 }
 
+// TestParseCOLR pins how [parseCOLR] reads a colour specification box payload
+// for methods 1 and 2, and rejects a short one.
 func TestParseCOLR(t *testing.T) {
 	t.Parallel()
 
@@ -140,6 +146,8 @@ func TestParseCOLR(t *testing.T) {
 	})
 }
 
+// TestSelectColr pins which colour specification box [selectColr] chooses
+// when a JP2 file carries several.
 func TestSelectColr(t *testing.T) {
 	t.Parallel()
 
@@ -180,6 +188,9 @@ func TestSelectColr(t *testing.T) {
 	}
 }
 
+// TestCheckJP2ContainerColrSpec pins which colour specification tests
+// [checkJP2Container] fires for each box combination, and that an image
+// /ColorSpace waives them.
 func TestCheckJP2ContainerColrSpec(t *testing.T) {
 	t.Parallel()
 
@@ -272,6 +283,8 @@ func TestCheckJP2ContainerColrSpec(t *testing.T) {
 	}
 }
 
+// TestParseJ2KSIZMarker pins that [parseJ2KSIZMarker] reads the component
+// count and depths from a SIZ marker and rejects truncated data.
 func TestParseJ2KSIZMarker(t *testing.T) {
 	t.Parallel()
 
@@ -319,6 +332,8 @@ func TestParseJ2KSIZMarker(t *testing.T) {
 	})
 }
 
+// TestCheckBitDepths pins that [checkBitDepths] fires on inconsistent or
+// out-of-range component bit depths and passes uniform valid ones.
 func TestCheckBitDepths(t *testing.T) {
 	t.Parallel()
 

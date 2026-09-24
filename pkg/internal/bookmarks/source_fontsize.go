@@ -77,7 +77,7 @@ func GenerateFromFontSize(ctx context.Context, pages []PageTextElements, opts Op
 		}
 	}
 	// Even when no font size qualifies, language patterns may still
-	// identify headings. We continue and let the scorer decide.
+	// identify headings. Generation continues and the scorer decides.
 
 	// Cluster sizes into heading levels.
 	levels := clusterSizesToLevels(candidateSizes, 0.10, opts.MaxDepth)

@@ -44,7 +44,7 @@ func FuzzPageSpans(f *testing.F) {
 		// page's operations in order, so a leaf never ends before it starts and
 		// the next never begins before the last ended. Generating reversed
 		// leaves tests a contract no caller can violate, and the span consumer
-		// ([injectMarks]) rejects such input in any case.
+		// (injectMarks) rejects such input in any case.
 		leaves := make([]leafEntry, 0, leafCount)
 		cursor := 0
 		for i := range leafCount {

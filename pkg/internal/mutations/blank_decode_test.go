@@ -54,12 +54,19 @@ func blankDictFixture(t *testing.T, colorSpace, extra, data string) (*document.D
 // lands at (150,650) inside the box imagePageContent places at (50,600)-(250,700).
 var theImageRegion = [][4]float64{{60, 610, 240, 690}}
 
+// TestBlankImage_PlainDecodeArrayNoLongerRefuses pins that an image with a
+// direct colour space and a /Decode array is blanked, and that the replacement
+// drops /Decode.
+//
+// # Corpus evidence
+//
+//   - All corpora: refusing /Decode blocked 51% of sub-8-bpc images.
 func TestBlankImage_PlainDecodeArrayNoLongerRefuses(t *testing.T) {
 	// The relaxation. A direct colour space with /Decode is decoded with the
 	// array already folded into the pixels, and the replacement dictionary does
 	// not carry it, so the image renders as before and there is nothing to
 	// refuse over. Inverted /Decode [1 0] is the routine case on bilevel scans,
-	// which is why this blocked 51% of sub-8-bpc images.
+	// which is why the refusal blocked so many sub-8-bpc images.
 	doc, page := blankDictFixture(t, "/DeviceGray", "/Decode [1 0] ", " ")
 	alloc := writer.NewObjAllocator(20)
 

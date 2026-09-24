@@ -21,6 +21,12 @@ func matchAnnotFlags(v compliance.Violation) bool {
 
 // fixAnnotFlags ensures every annotation (except Popup) has an /F key with the
 // Print flag set, per ISO 19005-2, clause 6.3.2.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1905623.pdf: carries an inline /Link whose /F flag was reported
+//     as added on every run and never appeared in the output while the repair
+//     wrote only through the allocator.
 func fixAnnotFlags(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -52,7 +58,7 @@ func fixAnnotFlags(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 		// Alloc-aware, and the helper matches the object KIND: liveArray for an
 		// array, since the resolveFromAllocOrDoc calls elsewhere here return
-		// dicts. This value is rebuilt wholesale by [installInlineAnnots] and
+		// dicts. This value is rebuilt wholesale by installInlineAnnots and
 		// written back at the array's own object number, so reading it from
 		// the document discards a peer's pending edit. annotations (registry
 		// 121) nils forbidden annotation slots and compacts the array before
@@ -127,9 +133,7 @@ func fixAnnotFlags(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			// ISO 32000-1, 12.5.2 does not require an annotation to be an
 			// indirect object. One written inline in /Annots has no object
 			// number to address, so writing only through the allocator dropped
-			// the repair while still counting it: pdfjs bug1905623.pdf carries
-			// an inline /Link whose /F flag was reported as added on every run
-			// and never appeared in the output. Collect it and install it
+			// the repair while still counting it. Collect it and install it
 			// through the array below.
 			if inlineFixed == nil {
 				inlineFixed = make(map[int]ast.PdfDict, 1)

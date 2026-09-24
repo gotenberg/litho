@@ -14,9 +14,13 @@ import (
 //
 // ISO 19005-2 §6.1.13 t1 forbids any integer outside the 32-bit range that "a
 // conforming file" contains, wherever it is written, and the trailer dictionary
-// is not an indirect object, so the object walk never reached it. pdfjs
-// issue5599.pdf writes /ID 77777777777777777 there and veraPDF reports it
-// against root/trailer[0]; litho saw nothing.
+// is not an indirect object, so the object walk never reached it. veraPDF
+// reports such a value against root/trailer[0].
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5599.pdf: writes /ID 77777777777777777 in its trailer, and
+//     veraPDF reports it against root/trailer[0] while litho saw nothing.
 func TestCheckNumericLimits_TrailerDictionary(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -55,10 +59,15 @@ func TestCheckNumericLimits_TrailerDictionary(t *testing.T) {
 // TestCheckNumericLimits_SynthesizedTrailerIgnored pins that a trailer litho
 // made up is not reported on. A file with no recoverable trailer gets one from
 // [document.Document] built out of whatever the raw scan found, so its entries
-// are litho's numbers rather than the file's: pdfjs bug1980958.pdf is 219
-// damaged bytes with no trailer keyword, no startxref and no /Size, and the
-// synthesized /Size 2147483648 (a bogus object number the scan picked up) is
-// out of the ISO 19005-2 §6.1.13 t1 range while appearing nowhere in the file.
+// are litho's numbers rather than the file's. Such a trailer can state a value
+// out of the ISO 19005-2 §6.1.13 t1 range that appears nowhere in the file.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1980958.pdf: is 219 damaged bytes with no trailer keyword, no
+//     startxref and no /Size, and the synthesized /Size 2147483648 (a bogus
+//     object number the scan picked up) is out of the ISO 19005-2 §6.1.13 t1
+//     range while appearing nowhere in the file.
 func TestCheckNumericLimits_SynthesizedTrailerIgnored(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

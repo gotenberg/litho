@@ -23,16 +23,18 @@ func checkXMPRDFTypePacket(t *testing.T, data []byte, part int) []Violation {
 // TestXMPRDFType_IsAProperty pins that rdf:type written under a top-level
 // rdf:Description is judged like any other property: no predefined schema
 // defines it, so ISO 19005-2/3 §6.6.2.3.1 t1 reports the name and t2 reports the
-// value type it therefore lacks.
+// value type it therefore lacks. litho passed over the whole RDF namespace as
+// structural and stayed silent.
 //
-// Six govdocs files write one (thread_000_000009, thread_000_000365,
-// thread_400_400006, thread_400_400364, thread_400_400723, thread_400_400724)
-// and veraPDF reports both tests for every one. litho passed over the whole RDF
-// namespace as structural and stayed silent.
+// # Corpus evidence
+//
+//   - govdocs thread_000_000009, thread_000_000365, thread_400_400006,
+//     thread_400_400364, thread_400_400723, thread_400_400724: these six
+//     files write one, and veraPDF reports both tests for every one. The
+//     packet below is the form thread_000_000009.pdf carries.
 func TestXMPRDFType_IsAProperty(t *testing.T) {
 	t.Parallel()
 
-	// The form thread_000_000009.pdf carries.
 	data := xmpPacket(`<rdf:Description rdf:about="">
       <rdf:type>dc:description</rdf:type>
     </rdf:Description>`)
@@ -56,9 +58,13 @@ func TestXMPRDFType_IsAProperty(t *testing.T) {
 
 // TestXMPRDFType_StructuralRDFStaysSilent pins the boundary. Everything else the
 // RDF namespace names carries the packet's structure rather than a property, and
-// veraPDF reports none of it. A scan of 3732 packets carrying RDF-namespace
-// names directly under a top-level rdf:Description found rdf:about 16763 times
-// and no element other than rdf:type.
+// veraPDF reports none of it.
+//
+// # Corpus evidence
+//
+//   - All corpora, 3732 packets carrying RDF-namespace names directly under a
+//     top-level rdf:Description: the scan found rdf:about 16763 times and no
+//     element other than rdf:type.
 func TestXMPRDFType_StructuralRDFStaysSilent(t *testing.T) {
 	t.Parallel()
 

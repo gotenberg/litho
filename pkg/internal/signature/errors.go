@@ -8,8 +8,8 @@ import "errors"
 // NOTHING RETURNS IT, and a caller must not reach for [errors.Is] against it.
 // MDP is evaluated rather than refused: evaluateMDP reports every outcome
 // through the result it is given, so a violation surfaces as
-// [models.SignatureValidation.MDPValid] false beside an
-// [models.SignatureValidation.MDPInfo] naming the policy and the offending
+// models.SignatureValidation.MDPValid false beside an
+// models.SignatureValidation.MDPInfo naming the policy and the offending
 // object ("P=2 violation: object 12 (field:Sig) is not a form field or
 // signature"). That verdict reaches callers through Reader.VerifySignatures,
 // which returns the validations rather than an error, because one document can

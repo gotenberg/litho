@@ -152,7 +152,7 @@ func TestWriter_Redact_RejectsAPageOutOfRange(t *testing.T) {
 // TestWriter_Redact_RemovesTheCoveredTextFromTheOutput is the headline
 // contract: litho could already DETECT text sitting under a redaction mark
 // (Reader.ExtractRedactedText) and could not remove it, a gap whose absence
-// is itself a hazard -- litho diagnosed a leak it could not fix.
+// is itself a hazard: litho diagnosed a leak it could not fix.
 //
 // The assertion is on the OUTPUT BYTES, not on extracted text. Extraction
 // reads the page's content stream, so it would report a clean page while a
@@ -206,7 +206,7 @@ func TestWriter_Redact_RemovesTheCoveredTextFromTheOutput(t *testing.T) {
 // So this fixture puts the redacted word in /Info /Title. A Redact that
 // composes ClearMetadata succeeds and the word is gone; one that does not
 // fails closed with ErrRedactionIncomplete. Either way the file is never
-// written dirty -- which is the property, not the particular outcome.
+// written dirty, which is the property, not the particular outcome.
 func TestWriter_Redact_ClearsTheMetadataCopy(t *testing.T) {
 	ctx := context.Background()
 	data := redactableTextPDF("<< /Title (SECRET) >>")
@@ -266,8 +266,8 @@ func redactableWithCatalogPieceInfoPDF() []byte {
 // Redact promises TWO refusals, "both leaving the Writer exactly as it was".
 // ErrRedactionRefused is covered below; this is the other: the passes succeed,
 // verification still finds a copy, and the document must not be writable. The
-// point of rolling the Writer back here -- where SanitizeDocument deliberately
-// leaves its edits queued so the survivor can be named -- is that a caller who
+// point of rolling the Writer back here, where SanitizeDocument deliberately
+// leaves its edits queued so the survivor can be named, is that a caller who
 // ignores the error cannot go on to write a half-redacted file.
 //
 // The occurrence COUNT is what makes this precise. Asserting only that "SECRET"

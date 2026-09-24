@@ -12,9 +12,12 @@ import (
 // font whose /Widths cannot be indexed for the code shown: no array, no
 // /FirstChar, an empty array, or a code past /LastChar. The code then declares
 // the /MissingWidth (ISO 32000-1, 9.6.2.1, Table 111), default 0, which veraPDF
-// weighs the charstring advance against: pdfjs issue11150_reduced.pdf embeds a
-// Symbol program with no /Widths. Each case mirrors one measured against
-// veraPDF.
+// weighs the charstring advance against. Each case mirrors one measured
+// against veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11150_reduced.pdf: embeds a Symbol program with no /Widths.
 func TestType1WidthsWithoutArray(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -71,6 +71,11 @@ const maxFormXObjectDepth = 10
 // checkDeviceColorSpaces takes the already-resolved pages so it can reuse their
 // parsed operations; the page dictionaries are the same ones [collectPages]
 // yields, in the same order.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1019475_1.pdf: gives its page a DeviceRGB transparency group
+//     beside a DefaultRGB, and veraPDF reports no DeviceRGB.
 func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages []pageCtx, part int, hasICC bool, iccColorSpace string, results *[]Violation) {
 	for i := range pages {
 		page := pages[i].dict
@@ -187,8 +192,7 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 		// object PDDeviceRGB at context /Group/colorSpace). The page's effective
 		// resources resolve it like any other device colour space, so a matching
 		// Default colour space there covers it (ISO 32000-1, 8.6.5.6), inherited
-		// from a Pages node or not: pdfjs bug1019475_1.pdf gives its page a
-		// DeviceRGB group beside a DefaultRGB and veraPDF reports no DeviceRGB.
+		// from a Pages node or not, and veraPDF then reports no device colour.
 		// Measured for RGB, CMYK and Gray groups. The "transparency group"
 		// context routes the repair to fixGroupCS, which drops the /CS so the
 		// blending space falls back to the intent profile, rather than to the
@@ -319,10 +323,14 @@ func collectDefaultColorSpaces(ctx context.Context, doc *document.Document, reso
 //
 // A pattern space is written [/Pattern] or [/Pattern base] (ISO 32000-1
 // §8.7.3.3) and is normally reached through a resource name rather than the
-// literal /Pattern: pdfjs tiling-pattern-large-steps.pdf declares
-// /cs1 [/Pattern /DeviceRGB] and selects it with "/cs1 cs", and issue13372.pdf
-// declares /R8 [/Pattern]. Recognising only the literal spelling left every
-// such pattern looking unpainted.
+// literal /Pattern. Recognising only the literal spelling left every such
+// pattern looking unpainted.
+//
+// # Corpus evidence
+//
+//   - pdfjs tiling-pattern-large-steps.pdf: declares /cs1 [/Pattern
+//     /DeviceRGB] and selects it with "/cs1 cs".
+//   - pdfjs issue13372.pdf: declares /R8 [/Pattern].
 func collectPatternCSNames(ctx context.Context, doc *document.Document, resources ast.PdfDict) map[string]bool {
 	csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
 	if err != nil || csDict == nil {

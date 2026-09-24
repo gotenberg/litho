@@ -94,9 +94,12 @@ func cmapNameIsUnicodeTransformFormat(name string) bool {
 // and ISO 19005 parts 2 to 4 word their counterparts the same way. litho
 // carried a prefix list that reached the Unicode CMaps and Identity but none of
 // the legacy CJK families, so a font encoded with GB-EUC-H, 90ms-RKSJ-H or the
-// bare H was reported as neither predefined nor embedded. pdfjs
-// issue18466.pdf (UniGB-UTF16-H) and mixedfonts.pdf (UniJIS-UTF16-H) are the
-// cases the corpus carries.
+// bare H was reported as neither predefined nor embedded.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18466.pdf (UniGB-UTF16-H), mixedfonts.pdf (UniJIS-UTF16-H):
+//     the cases of a Table 116 name the corpora carry.
 //
 //nolint:gochecknoglobals // static lookup table mirroring Table 116.
 var table116CMapNames = map[string]bool{
@@ -209,6 +212,11 @@ func isPredefinedCMap(name string) bool {
 // checkCIDToGIDMap validates that Type 2 CIDFonts have a /CIDToGIDMap entry (rule 3).
 // visible reports whether the font is used for visible rendering: PDF/A-1's
 // 6.3.3.2 t1 exempts an invisible font (renderingMode == 3).
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7835.pdf: shows an unembedded Arial-Black CIDFontType2 with no
+//     /CIDToGIDMap, and veraPDF reports it at part 1.
 func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSubtype, fontName string, pageNum int, profile string, visible bool) []Violation {
 	rule := cidToGIDMapRule(profile)
 	if rule.Specification == "" {
@@ -226,8 +234,7 @@ func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict a
 	// embedded TrueType program's glyph space (ISO 32000-1 §9.7.4, Table 117),
 	// so a CIDFontType2 with no program has nothing to map and fails the
 	// embedding rule instead. ISO 19005-1 §6.3.3.2 t1 reads "renderingMode == 3"
-	// and exempts no unembedded font: pdfjs issue7835.pdf shows an unembedded
-	// Arial-Black CIDFontType2 with no /CIDToGIDMap and veraPDF reports it.
+	// and exempts no unembedded font.
 	if PDFAPart(profile) != 1 {
 		fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
 		if fd == nil || !isFontEmbedded(ctx, doc, fd, cidSubtype, PDFAPart(profile)) {
@@ -270,6 +277,11 @@ func checkCIDToGIDMap(ctx context.Context, doc *document.Document, cidFontDict a
 
 // checkCIDSystemInfo validates CIDSystemInfo consistency between CIDFont and
 // CMap dictionaries (rule 4).
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18466.pdf: carries UniGB-UTF16-H over Adobe-GB1, a UTF-16
+//     name that is no predefined CMap of PDF 1.4.
 func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	rule := cidSystemInfoRule(profile)
 	if rule.Specification == "" {
@@ -316,7 +328,7 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 	} else {
 		// Named (predefined) CMap: its CIDSystemInfo (Registry, Ordering,
 		// Supplement) is fixed by ISO 32000-1 Table 118 and Adobe's registered
-		// CMap resources, resolved by [cmap.PredefinedCMapCIDSystemInfo]. The
+		// CMap resources, resolved by cmap.PredefinedCMapCIDSystemInfo. The
 		// predefined encoding names (UniKS-UTF16-H, 90ms-RKSJ-H, ...) do not
 		// follow a Registry-Ordering-Supplement pattern, so the CIDSystemInfo
 		// comes from the tabulated resource, not the name text. A non-Identity
@@ -338,8 +350,7 @@ func checkCIDSystemInfo(ctx context.Context, doc *document.Document, type0Dict, 
 		// that names no CMap. Measured against veraPDF at PDF/A-1a with one
 		// fixture per family: UniGB, UniJIS, UniKS and UniCNS in -UTF16-, -UTF8-
 		// and -UTF32- all report, while the UCS2, EUC, RKSJ and GBK names of the
-		// same character collections pass. pdfjs issue18466.pdf carries
-		// UniGB-UTF16-H over Adobe-GB1.
+		// same character collections pass.
 		if PDFAPart(profile) == 1 && cmapNameIsUnicodeTransformFormat(string(encName)) {
 			return failf(rule, "font %s on page %d: encoding %q is no predefined CMap of PDF 1.4",
 				fontName, pageNum, string(encName))
@@ -508,7 +519,7 @@ func checkCMapCIDValues(ctx context.Context, doc *document.Document, type0Dict a
 		return nil
 	}
 
-	// Lowest offending CID; see [lowestOffender].
+	// Lowest offending CID; see lowestOffender.
 	var worst lowestOffender[int]
 	for _, cidVal := range cidCMap.Mapping {
 		if cidVal > maxCID {

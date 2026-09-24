@@ -13,9 +13,13 @@ import (
 // encoding code by code ("dup 65 /A put") or simply name a predefined one
 // ("/Encoding StandardEncoding def"). litho read only the first form, so every
 // code the /Differences array left alone stayed unnamed and the glyph behind it
-// could not be judged. govdocs thread_000_000341.pdf embeds AvantGarde-Book
-// that way, naming 110 codes in /Differences and leaving the other 146, the
-// space and the digits among them, to StandardEncoding.
+// could not be judged.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000341.pdf: embeds AvantGarde-Book with a program
+//     that names StandardEncoding, naming 110 codes in /Differences and leaving
+//     the other 146, the space and the digits among them, to StandardEncoding.
 func TestBuiltinProgramEncoding_PredefinedReference(t *testing.T) {
 	t.Parallel()
 
@@ -89,8 +93,13 @@ func TestBuiltinProgramEncoding_PredefinedReference(t *testing.T) {
 // holding a PFB container supplies no encoding. ISO 32000-1, 9.9.1 defines the
 // embedded Type 1 form without the PFB segment headers, and litho already reports
 // such a font as unembedded; reading its encoding anyway gave its glyphs Unicode
-// values. pdfjs bug860632.pdf embeds Helvetica that way with no /Encoding, and
-// veraPDF reports every glyph it shows under ISO 14289-1, 7.21.7 t1.
+// values.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug860632.pdf: embeds Helvetica in a PFB container with no
+//     /Encoding, and veraPDF reports every glyph it shows under ISO 14289-1,
+//     7.21.7 t1.
 func TestBuiltinProgramEncoding_PFBContainerNamesNothing(t *testing.T) {
 	t.Parallel()
 

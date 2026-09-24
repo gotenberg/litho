@@ -32,7 +32,7 @@ func minimalPDFForCompliance() []byte {
 // TestValidate_Smoke_AllProfiles runs every PDF/A and PDF/UA profile
 // against a minimal PDF. The test asserts only the behavioral contract:
 //
-//   - ValidatePDFA / ValidatePDFUA returns without an engine-level error
+//   - [ValidatePDFA] / [ValidatePDFUA] returns without an engine-level error
 //     (the returned []error is the violation list, not a failure of the
 //     validation engine itself).
 //   - Every returned element is a [Violation] (the public error shape).
@@ -47,7 +47,7 @@ func TestValidate_Smoke_AllProfiles(t *testing.T) {
 	ctx := context.Background()
 	data := minimalPDFForCompliance()
 
-	// NOTE: each sub-test opens its own [document.Document]. The
+	// NOTE: each sub-test opens its own document.Document. The
 	// validation engine mutates per-document resolver caches as it
 	// walks the object graph, so a single *Document is not safe to
 	// share across concurrent validators. Giving each sub-test its
@@ -102,7 +102,7 @@ func TestValidate_Smoke_AllProfiles(t *testing.T) {
 // TestValidate_Deterministic asserts that running the same validation
 // twice on the same document produces the same set of violation
 // clauses. The engine runs check groups in parallel; a race condition
-// on the shared validationCtx or result aggregator would show up here
+// on the shared [validationCtx] or result aggregator would show up here
 // as a flaky comparison.
 func TestValidate_Deterministic(t *testing.T) {
 	t.Parallel()

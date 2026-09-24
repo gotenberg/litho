@@ -19,11 +19,17 @@ import (
 // transparent; the colour is c = m + (c' - m)/a. Like PDF.js it is recovered
 // in RGB, and a pixel the mask leaves fully transparent, whose colour the
 // formula does not define, is painted white. Reading the preblended samples as
-// the colour darkened 32 images of eight pdfjs documents against PDF.js,
-// their transparent margins black where it paints them white.
+// the colour darkens the image against PDF.js, its transparent margins black
+// where PDF.js paints them white.
 //
 // An indexed image is left as it is: its components are indices, which a
 // matte colour cannot be blended with.
+//
+// # Corpus evidence
+//
+//   - pdfjs: reading the preblended samples as the colour darkened 32 images of
+//     eight documents against PDF.js, their transparent margins black where it
+//     paints them white.
 func unpreblend(ctx context.Context, doc *document.Document, name ast.PdfName, dict ast.PdfDict, cc colorContext, img image.Image) image.Image {
 	smaskObj, ok := dict["SMask"]
 	if !ok {

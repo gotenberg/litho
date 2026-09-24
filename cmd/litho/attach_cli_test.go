@@ -172,7 +172,11 @@ func TestAttach_MissingNameIsAUsageError(t *testing.T) {
 }
 
 // TestDetach_RemovesTheAttachment closes the round trip: the paired command has
-// no CLI test either, and the corpus gate scores neither.
+// no CLI test either.
+//
+// # Corpus evidence
+//
+//   - All corpora: the corpus gate scores neither attach nor detach.
 func TestDetach_RemovesTheAttachment(t *testing.T) {
 	src := writeTempPDF(t, untaggedTextPDF())
 	data := dataFile(t, "table.csv", "a,b\n1,2\n")

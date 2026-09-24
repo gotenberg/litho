@@ -52,6 +52,12 @@ func CollectEmbeddedFileEntries(ctx context.Context, alloc *writer.ObjAllocator,
 // limit. What this collects is written back as a rebuilt tree, so walking one
 // leaf twice appends it twice, and [uniqueEFName] then renames the second copy
 // to "name (2)": a file would gain an attachment it never carried.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18444.pdf: a name-tree key is an indirect reference, and
+//     before keys were resolved the file lost quitecommands.xml the moment
+//     anything else was attached.
 func collectEmbeddedFileEntriesAt(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -105,8 +111,7 @@ func collectEmbeddedFileEntriesAt(
 		// A name-tree key may be an indirect reference like any other object.
 		// Asserting the type directly skipped those entries, and since the
 		// collected set is what gets rewritten, attaching a new file DELETED
-		// every attachment whose key was indirect: pdfjs issue18444.pdf lost
-		// quitecommands.xml the moment anything else was attached.
+		// every attachment whose key was indirect.
 		s, err := document.ResolveString(ctx, doc, arr[i])
 		if err != nil {
 			doc.Logger.Debug("resolving embedded file name", slog.Any("err", err))

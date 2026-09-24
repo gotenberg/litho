@@ -15,9 +15,13 @@ import (
 //
 // ISO 32000-1, 7.7.3.3 allows a stream or an array of streams. Wrapping an
 // existing array as one element produces an array of arrays, which a
-// conforming reader treats as a non-stream entry and drops: pdfjs
-// issue12963.pdf holds /Contents as a reference to a two-stream array and lost
-// all 1241 characters of its only text page when stamped.
+// conforming reader treats as a non-stream entry and drops.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12963.pdf: /Contents is a reference to a two-stream array,
+//     and the file lost all 1241 characters of its only text page when
+//     stamped.
 func TestAppendPageContents_FlattensIndirectArray(t *testing.T) {
 	ctx := context.Background()
 
@@ -83,9 +87,13 @@ func TestAppendPageContents_FlattensIndirectArray(t *testing.T) {
 //
 // Operators run to the end of the content stream, so a bare "cm" with no
 // enclosing q is still in force when the stamp is appended (ISO 32000-1,
-// 8.4.4). pdfjs bug946506 opens with "16 0 0 16 0 0 cm", which drew a 36pt
-// stamp at 576pt: it ran off the page and extraction recovered only "ZZQ" of
-// "ZZQQ".
+// 8.4.4).
+//
+// # Corpus evidence
+//
+//   - pdfjs bug946506: the content opens with "16 0 0 16 0 0 cm", which drew a
+//     36pt stamp at 576pt. It ran off the page and extraction recovered only
+//     "ZZQ" of "ZZQQ".
 func TestStampText_UnbalancedPageCTMDoesNotScaleStamp(t *testing.T) {
 	ctx := context.Background()
 

@@ -14,9 +14,12 @@ import (
 // latter.
 //
 // Only part 1 states the requirement, the same scope [iccBasedNRule] records.
-// Measured over 1984 /DestOutputProfile streams in the corpora, seven answer the
-// test: five by a genuine mismatch and two by an ICC profile that will not
-// decode, and veraPDF reports all seven.
+//
+// # Corpus evidence
+//
+//   - All corpora, 1984 /DestOutputProfile streams: seven answer the test, five
+//     by a genuine mismatch and two by an ICC profile that will not decode, and
+//     veraPDF reports all seven.
 func TestOutputIntentProfileComponents(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

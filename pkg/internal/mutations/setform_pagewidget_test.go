@@ -79,10 +79,15 @@ func pendingAcroForm(t *testing.T, ctx context.Context, doc *document.Document, 
 // page can be set, and that doing so states it in the interactive form.
 //
 // ISO 32000-1, 12.7.2 lists fields in /AcroForm and 12.5.6.19 puts the widget
-// on the page. Producers write the widget without registering the field: pdfjs
-// issue12963.pdf carries 27 such fields and no /AcroForm at all, so set-form
-// refused every one of them with "no AcroForm in catalog" even though
-// `litho forms` listed them.
+// on the page. Producers write the widget without registering the field, and
+// set-form refused such a field with "no AcroForm in catalog" even though
+// `litho forms` listed it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12963.pdf: carries 27 fields whose widgets sit only on the
+//     page and no /AcroForm at all, so set-form refused every one of them with
+//     "no AcroForm in catalog" even though `litho forms` listed them.
 func TestSetFormFieldOnAPageOnlyWidget(t *testing.T) {
 	t.Parallel()
 

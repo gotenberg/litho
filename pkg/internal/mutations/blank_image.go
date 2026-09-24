@@ -402,9 +402,6 @@ func clampSample(i, size int) int {
 	return i
 }
 
-// imageXObjectRef returns the indirect reference the page's resources use for
-// the named image, which is the object the replacement has to take the place
-// of. An image written directly into the resource dictionary has none.
 // latestImageStream resolves an image XObject, preferring the version alloc
 // has queued at its object number.
 func latestImageStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef) (ast.PdfStream, error) {
@@ -419,6 +416,9 @@ func latestImageStream(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	return stream, nil
 }
 
+// imageXObjectRef returns the indirect reference the page's resources use for
+// the named image, which is the object the replacement has to take the place
+// of. An image written directly into the resource dictionary has none.
 func imageXObjectRef(ctx context.Context, doc *document.Document, page *document.Page, name string) (ast.PdfIndirectRef, bool) {
 	xobjObj, present := page.Resources["XObject"]
 	if !present {

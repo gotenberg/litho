@@ -14,8 +14,11 @@ import (
 // corrupt counts as unembedded (ISO 19005-2, 6.2.11.4.1 t1), and then escapes the
 // /CIDToGIDMap rule that needs an embedded program (6.2.11.3.2 t1), while one
 // whose deflate stream is merely cut short still embeds its glyphs. veraPDF
-// cannot read the corrupt program; pdfjs issue11651.pdf ships one. Every case
-// was measured against veraPDF.
+// cannot read the corrupt program. Every case was measured against veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11651.pdf: ships a font program with corrupt deflate data.
 func TestFontProgramCorruptDeflate(t *testing.T) {
 	t.Parallel()
 

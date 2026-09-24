@@ -32,8 +32,8 @@ func TestLoadPredefinedCIDMap_Unknown(t *testing.T) {
 
 // TestCIDMap_Decode_RoundTrip confirms a mapped code decodes back to its CID,
 // for both 1- and 2-byte codes. The code's byte width is the narrowest one that
-// holds the value without truncation and lands inside a codespace (this is what
-// the buggy package-internal byteLength fails to do for mixed-width CMaps).
+// holds the value without truncation and lands inside a codespace (the rule
+// [byteLength] broke for mixed-width CMaps before it stopped truncating codes).
 func TestCIDMap_Decode_RoundTrip(t *testing.T) {
 	m := LoadPredefinedCIDMap("90ms-RKSJ-H")
 	if m == nil {

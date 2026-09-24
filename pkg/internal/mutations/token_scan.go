@@ -18,9 +18,14 @@ import (
 // maxScannedStreamSize bounds the decoded bytes read from any one stream while
 // scanning. Anti-DoS guard, not spec-mandated: a scan decodes every stream in
 // the document, so a decompression bomb would otherwise be read in full. It
-// mirrors [content.MaxPageContentSize], which is measured against the corpora
-// rather than picked round, and a single stream larger than the heaviest
-// legitimate page is past anything a scan needs to read.
+// mirrors [content.MaxPageContentSize], which is sized against the heaviest
+// real page rather than picked round, and a single stream larger than the
+// heaviest legitimate page is past anything a scan needs to read.
+//
+// # Corpus evidence
+//
+//   - All corpora: [content.MaxPageContentSize] is measured against the
+//     largest real page found across them rather than picked round.
 const maxScannedStreamSize = content.MaxPageContentSize
 
 // maxScanDepth bounds nesting while walking one object. Anti-DoS guard, not
@@ -171,7 +176,7 @@ func ScanOutputForTokens(
 
 	w := newScanWalk(doc, alloc, tokens, true)
 
-	// Mirrors [FullRewrite]: the trailer /Root when it resolves to a real
+	// Mirrors FullRewrite: the trailer /Root when it resolves to a real
 	// catalog, and the catalog the reader recovers when it does not. Reaching
 	// from a root the rewrite would not use answers about a file litho never
 	// writes.
@@ -189,7 +194,7 @@ func ScanOutputForTokens(
 		// Reported against the object number the trailer named, or against zero
 		// when it named none. Zero is not a real object number: ISO 32000-1,
 		// 7.5.4 reserves cross-reference entry zero for the head of the free
-		// list, which is why [writer.ObjAllocator.AllocAt] refuses it. It reads
+		// list, which is why writer.ObjAllocator.AllocAt refuses it. It reads
 		// here as "no object number", never as object zero.
 		w.walk(ctx, catalogRef.ObjectNum, catalog.Dict, 0)
 	}

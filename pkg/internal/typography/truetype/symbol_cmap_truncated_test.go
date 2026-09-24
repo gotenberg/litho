@@ -11,9 +11,14 @@ import (
 //
 // Such a subtable cannot be trusted to list every code the font maps, so a
 // caller reading "absent from the map" as "no glyph" would report glyphs the
-// font may well hold. govdocs thread_400_400573.pdf embeds a SymbolMT subset
-// whose (3,0) subtable declares 48 bytes where 42 remain and holds only 0xF021
-// and 0xF022; veraPDF reports no glyph-level finding for that font at all.
+// font may well hold.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400573.pdf: embeds a SymbolMT subset whose (3,0)
+//     subtable declares 48 bytes where 42 remain and holds only 0xF021 and
+//     0xF022, and veraPDF reports no glyph-level finding for that font at
+//     all.
 func TestSymbolCharCodeToGID_TruncatedSubtable(t *testing.T) {
 	sub := format4Segment(0xF021, 5)
 	binary.BigEndian.PutUint16(sub[2:4], uint16(len(sub)+8)) //nolint:gosec // fixture size is small

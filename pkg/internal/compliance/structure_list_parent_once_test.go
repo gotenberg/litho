@@ -12,9 +12,12 @@ import (
 //
 // veraPDF keys §7.2 t19 on the SEL and t20 on the SELI, and each test reads that
 // element's whole kidsStandardTypes string, so one bad list element is one
-// finding. litho visits children, so it needs the parent's identity to match:
-// govdocs thread_400_400037.pdf holds 21 LI elements with exactly two offending
-// children each, where litho reported 42 and veraPDF 21.
+// finding. litho visits children, so it needs the parent's identity to match.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400037.pdf: holds 21 LI elements with exactly two
+//     offending children each, where litho reported 42 and veraPDF 21.
 func TestListContainmentStatedOncePerParent(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

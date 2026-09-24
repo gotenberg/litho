@@ -42,9 +42,12 @@ func pageCtxsForPages(ctx context.Context, doc *document.Document, pages ...ast.
 //
 // These rules forbid keys OF THE DICTIONARY (ISO 19005-2 §6.2.5 t1 forbids /TR),
 // so the violation belongs to the state, not to each page that selects it.
-// veraPDF states the rule against its single PDExtGState: govdocs
-// thread_100_100666.pdf references object 190 from 30 pages and veraPDF reports
-// its /TR once, where litho reported it 30 times.
+// veraPDF states the rule against its single PDExtGState.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100666.pdf: references object 190 from 30 pages, and
+//     veraPDF reports its /TR once, where litho reported it 30 times.
 func TestSharedExtGStateJudgedOnce(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -14,10 +14,14 @@ import (
 // ISO 32000-1, Table 117 gives the entry the default value Identity, so the two
 // forms describe the same mapping. Reading only the explicit name made the
 // glyph-presence verdict depend on whether the producer had written a redundant
-// entry: pdfjs issue5874.pdf passed ISO 19005-1 §6.3.5 t1 until remediation
-// added the /CIDToGIDMap /Identity that §6.3.3.2 requires, and the same bytes
-// then failed. A repair writing only a documented default must not change what
-// the file means.
+// entry. A repair writing only a documented default must not change what the
+// file means.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5874.pdf: passed ISO 19005-1 §6.3.5 t1 until remediation added
+//     the /CIDToGIDMap /Identity that §6.3.3.2 requires, and the same bytes
+//     then failed.
 func TestAbsentCIDToGIDMapIsIdentity(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

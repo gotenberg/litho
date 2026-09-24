@@ -13,12 +13,16 @@ import (
 // objStmCIDFontPDF builds a PDF whose CIDFontType2 lives inside an object
 // stream, so the font's cross-reference entry is type 2 (ISO 32000-1, 7.5.7
 // and Table 18) instead of a byte offset. Real producers store font
-// dictionaries this way: every pdfjs corpus file carrying the CIDToGIDMap
-// violation keeps its CIDFont compressed.
+// dictionaries this way.
 //
 // The object stream and the cross-reference stream are both unfiltered, which
 // keeps the fixture readable and exercises the same xref entry types a
 // Flate-compressed producer emits.
+//
+// # Corpus evidence
+//
+//   - pdfjs: every corpus file carrying the CIDToGIDMap violation keeps its
+//     CIDFont compressed.
 func objStmCIDFontPDF(fontBody string) []byte {
 	var buf bytes.Buffer
 	offsets := make(map[int]int64)

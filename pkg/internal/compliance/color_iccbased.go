@@ -177,7 +177,7 @@ func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resource
 		}
 		// Only an XObject a Do operator invokes is used. One merely declared in
 		// /Resources/XObject paints nothing, so its colour space is not a use,
-		// which is the scoping [scanXObjectColorSpaces] already applies.
+		// which is the scoping scanXObjectColorSpaces already applies.
 		// Measured: veraPDF reports nothing for a truncated ICC profile on an
 		// image no operator invokes, and reports it as soon as a Do does.
 		// referencedXObjects is nil for a scope whose operations were not

@@ -10,7 +10,11 @@ import (
 // an endstream that follows only the EOL ending the stream keyword has no EOL
 // of its own before it, and veraPDF measures the stream at -1 bytes, so it fails
 // whatever its /Length, while a second EOL makes it a conforming empty stream.
-// pdfjs issue4461.pdf writes one. Every case was measured against veraPDF.
+// Every case was measured against veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue4461.pdf: writes such an empty stream.
 func TestEmptyStreamLength(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

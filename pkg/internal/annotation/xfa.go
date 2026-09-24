@@ -54,17 +54,24 @@ func extractXFAData(ctx context.Context, doc *document.Document, acroFormDict as
 // limit by writing one stream instead of several and fall back to the 256 MB
 // decompression cap, sixteen times this one.
 //
-// 16 MB is chosen against the corpora rather than by round number. The 17
-// XFA-bearing files across all of them assemble at most 2.34 MB (pdfjs
-// xfa_filled_imm1344e.pdf, a 20-entry array in a 3.02 MB file) and none names
-// more than 30 entries, so this leaves better than 6x headroom over the
-// heaviest real form. That is wider headroom than the page-content bound takes,
-// because 17 files is a thin sample to call a ceiling.
+// 16 MB is chosen against real forms rather than by round number, and leaves
+// better than 6x headroom over the heaviest one. That is wider headroom than
+// the page-content bound takes, because the sample of real forms is too thin
+// to call a ceiling.
 //
 // It is deliberately not compliance's maxXFAScanBytes, which is 1 MB. That
-// bound reads only far enough to find the dynamic-render setting, which every
-// real file places in its first packet inside 163 bytes, so it may legitimately
+// bound reads only far enough to find the dynamic-render setting, which real
+// files place near the start of their first packet, so it may legitimately
 // stop below the size of a valid form. This one has to hold a whole form.
+//
+// # Corpus evidence
+//
+//   - All corpora: the 17 XFA-bearing files assemble at most 2.34 MB, and
+//     none names more than 30 entries.
+//   - pdfjs xfa_filled_imm1344e.pdf: the heaviest form, a 20-entry array in a
+//     3.02 MB file.
+//   - All corpora: every XFA-bearing file places the dynamic-render setting
+//     in its first packet, inside 163 bytes.
 const maxXFADataSize = 16 << 20
 
 // assembleXFAXML resolves the /XFA value into a single XML byte slice.
@@ -132,7 +139,7 @@ func assembleXFAArray(ctx context.Context, doc *document.Document, arr ast.PdfAr
 func parseXFADatasets(xmlData []byte) (map[string]string, error) {
 	decoder := xml.NewDecoder(strings.NewReader(string(xmlData)))
 
-	// Walk the token stream until we find the <xfa:data> element inside
+	// Walk the token stream until the <xfa:data> element inside
 	// <xfa:datasets>.
 	inDatasets := false
 	for {

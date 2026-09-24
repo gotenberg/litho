@@ -51,11 +51,11 @@ func ResolveNamedDest(ctx context.Context, doc *Document, name string) (ast.PdfA
 	return nil, nil
 }
 
-// maxNameTreeDepth caps the recursion depth in [searchNameTree]. PDF
-// name trees in real documents rarely exceed a handful of levels; the
-// cap defends against adversarial files that nest /Kids deeply or
-// introduce cycles via indirect references. A search that hits the cap
-// degrades to "not found" rather than overflowing the goroutine stack.
+// maxNameTreeDepth caps the recursion depth in [searchNameTreeAt]. Anti-DoS
+// guard, not spec-mandated: PDF name trees in real documents rarely exceed a
+// handful of levels, and the cap defends against adversarial files that nest
+// /Kids deeply or introduce cycles via indirect references. A search that hits
+// the cap degrades to "not found" rather than overflowing the goroutine stack.
 const maxNameTreeDepth = 64
 
 // searchNameTree recursively searches a name tree node for the given key.
@@ -64,11 +64,16 @@ const maxNameTreeDepth = 64
 //
 // A miss is retried with the /Limits ignored. ISO 32000-1, 7.9.6 requires keys
 // to be ordered by byte value and every /Limits pair to bound its subtree, and
-// producers get it wrong: pdfjs issue14864.pdf sorts by decoded text, so its
-// root claims a maximum of "section*.4" while the subtree holds UTF-16 keys
-// starting 0xFE. Pruning on that discards the whole tree at the root, and two
-// bookmarks that every other reader resolves came back with no destination at
-// all. The rescan costs a full walk only when the fast path already failed.
+// producers get it wrong, for instance by sorting on decoded text. Pruning on
+// such /Limits can discard the whole tree at the root. The rescan costs a full
+// walk only when the fast path already failed.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14864.pdf: sorts by decoded text, so its root claims a maximum
+//     of "section*.4" while the subtree holds UTF-16 keys starting 0xFE.
+//     Pruning on that discarded the whole tree at the root, and two bookmarks
+//     that every other reader resolves came back with no destination at all.
 func searchNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string) (ast.PdfArray, error) {
 	obj, err := lookupNameTree(ctx, doc, nodeObj, key, func(v ast.PdfObject) (ast.PdfObject, error) {
 		arr, err := resolveDestValue(ctx, doc, v)
@@ -244,6 +249,14 @@ func ResolveDestinationPage(ctx context.Context, doc *Document, dest ast.PdfObje
 	return resolveDestinationPage(ctx, doc, dest, pageMap, 0)
 }
 
+// resolveDestinationPage resolves dest as [ResolveDestinationPage] describes,
+// following at most [maxDestIndirectionDepth] /D hops from depth.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300865 and three other govdocs outlines: wrap the
+//     destination in a GoTo action in /Dest, and every one of their bookmarks
+//     reported no page at all until /D was followed.
 func resolveDestinationPage(ctx context.Context, doc *Document, dest ast.PdfObject, pageMap map[ast.PdfIndirectRef]int, depth int) int {
 	if depth > maxDestIndirectionDepth {
 		return 0
@@ -266,10 +279,8 @@ func resolveDestinationPage(ctx context.Context, doc *Document, dest ast.PdfObje
 		// array, a name or a byte string there, and an action belongs in /A.
 		// Real producers write the action anyway, wrapping the destination in
 		// << /Type /Action /S /GoTo /D [...] >>, and every other reader follows
-		// it. Four govdocs outlines (thread_300_300865 and friends) reported no
-		// page at all for every one of their bookmarks. /D holds the destination
-		// in both the action form and the plain << /D ... >> form, so one lookup
-		// covers each.
+		// it. /D holds the destination in both the action form and the plain
+		// << /D ... >> form, so one lookup covers each.
 		if inner, ok := v["D"]; ok {
 			return resolveDestinationPage(ctx, doc, inner, pageMap, depth+1)
 		}
@@ -278,7 +289,7 @@ func resolveDestinationPage(ctx context.Context, doc *Document, dest ast.PdfObje
 
 	// Named destination: look up in the name tree by raw byte key. Name tree
 	// keys are byte strings (ISO 32000-1, 7.9.6); decoding via
-	// [DecodePdfString] would collapse producer-disambiguated destinations like
+	// DecodePdfString would collapse producer-disambiguated destinations like
 	// "kid1" and "kid1\x01" onto the same key and the wrong page would surface.
 	var name string
 	switch v := resolved.(type) {
@@ -304,11 +315,15 @@ func resolveDestinationPage(ctx context.Context, doc *Document, dest ast.PdfObje
 //
 // Deliberate leniency: the integer form is accepted for this document too.
 // It is out of place in a same-document destination, but producers write it
-// anyway (govdocs thread_300_300254.pdf sends a link on page 20 to
-// /Dest [19 /XYZ 87 243 0]), and pdf.js resolves it the same way, with
+// anyway, and pdf.js resolves it the same way, with
 // "else if (Number.isInteger(destRef)) { pageNumber = destRef + 1; }" in
 // web/pdf_link_service.js. The index is bounded by the page map so a number
 // naming no page of this document still reports none.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300254.pdf: sends a link on page 20 to
+//     /Dest [19 /XYZ 87 243 0].
 func pageFromDestArray(arr ast.PdfArray, pageMap map[ast.PdfIndirectRef]int) int {
 	if len(arr) == 0 {
 		return 0
@@ -318,9 +333,9 @@ func pageFromDestArray(arr ast.PdfArray, pageMap map[ast.PdfIndirectRef]int) int
 		if page, ok := pageMap[first]; ok {
 			return page
 		}
-		// The generation is not part of what [Document.Resolve] matches on, so a
+		// The generation is not part of what Document.Resolve matches on, so a
 		// destination naming a generation the page tree does not use still
-		// resolves to that page. [BuildPageMap] records the zero-generation
+		// resolves to that page. BuildPageMap records the zero-generation
 		// alias; this covers the other direction, a destination carrying a
 		// generation the page does not.
 		return pageMap[ast.PdfIndirectRef{ObjectNum: first.ObjectNum}]
@@ -341,11 +356,17 @@ func pageFromDestArray(arr ast.PdfArray, pageMap map[ast.PdfIndirectRef]int) int
 // hit the wrong destination.
 //
 // The key is resolved first because ISO 32000-1, 7.3.10 lets any object be
-// written as an indirect reference, and producers do: pdfjs issue6204.pdf
-// writes its /Names array as [18 0 R 11 0 R 19 0 R 13 0 R], with the keys in
-// objects 18 and 19. Type-switching on the unresolved value yielded the empty
-// string for every entry, so no key ever matched and the file's links all
-// reported no destination.
+// written as an indirect reference, and producers do write name tree keys that
+// way. Type-switching on the unresolved value yields the empty string for every
+// such entry, so no key ever matches.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue6204.pdf: writes its /Names array as
+//     [18 0 R 11 0 R 19 0 R 13 0 R], with the keys in objects 18 and 19.
+//     Type-switching on the unresolved value yielded the empty string for
+//     every entry, so no key ever matched and the file's links all reported
+//     no destination.
 func nameTreeKey(ctx context.Context, doc *Document, obj ast.PdfObject) string {
 	resolved, err := ResolveObject(ctx, doc, obj)
 	if err != nil {

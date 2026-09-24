@@ -15,9 +15,11 @@ import (
 // audits are already gated on; recovering values from a broken packet instead
 // let litho pass tests veraPDF fails.
 //
-// The real file is pdfjs issue18941.pdf, whose packet ends "</x:xmpmeta" with
-// no closing ">". veraPDF reports all six of its Info keys; litho passed three
-// of them by reading values a lenient parse recovered.
+// # Corpus evidence
+//
+//   - pdfjs issue18941.pdf: the real file, whose packet ends "</x:xmpmeta"
+//     with no closing ">". veraPDF reports all six of its Info keys; litho
+//     passed three of them by reading values a lenient parse recovered.
 func TestXMPCheckDocInfoSync_MalformedPacketYieldsNoProperties(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

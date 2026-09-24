@@ -105,7 +105,7 @@ func TestImplicitArrayInStream(t *testing.T) {
 
 // TestLexer_ScientificNotationNumber confirms the lexer tolerates
 // scientific-notation numbers that some producers emit even though
-// PDF spec §7.3.3 does not list the form. Viewers accept them;
+// ISO 32000-1, 7.3.3 does not list the form. Viewers accept them;
 // rejecting them drops the operand into the next operator's stack
 // and corrupts the remainder of the content stream.
 func TestLexer_ScientificNotationNumber(t *testing.T) {

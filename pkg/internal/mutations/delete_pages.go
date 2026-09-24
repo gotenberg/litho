@@ -46,6 +46,12 @@ func DeletePages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 
 // rebuildPageTree replaces the document's page tree with a flat /Pages node
 // containing only the pages at the given 0-based indices (in order).
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100852.pdf: before destinations naming a dropped page
+//     were pruned, deleting page 1 left the page behind with all 1191 bytes of
+//     it.
 func rebuildPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, allPages []*document.Page, keptIndices []int) error {
 	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
@@ -81,8 +87,7 @@ func rebuildPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 
 	// A destination that still names a dropped page is both a broken GoTo and a
 	// live reference to that page, so the writer carries the page and its
-	// content stream into the output: deleting page 1 of govdocs
-	// thread_100_100852.pdf left the page behind with all 1191 bytes of it.
+	// content stream into the output.
 	removed := removedPageSet(allPages, keptIndices)
 
 	// Update each kept page's /Parent to point to the pages node.

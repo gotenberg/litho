@@ -6,10 +6,15 @@ import "testing"
 // the number, not the end of the line.
 //
 // Per ISO 32000-1, 7.5.2 the header line is "%PDF-1.N" and the rest of the line
-// is comment text. Reading to the line break reported pdfjs issue15033.pdf,
-// whose header is "%PDF-1.3%", as version "1.3%": not a version, and it
-// compares against nothing, so the catalog /Version precedence rule could not
-// be applied to it either.
+// is comment text. Reading to the line break turned a header such as
+// "%PDF-1.3%" into version "1.3%": not a version, and it compares against
+// nothing, so the catalog /Version precedence rule could not be applied to it
+// either.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15033.pdf: the header is "%PDF-1.3%", and reading to the line
+//     break reported version "1.3%".
 func TestHeaderVersionReadsOnlyTheNumber(t *testing.T) {
 	t.Parallel()
 

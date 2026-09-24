@@ -63,8 +63,12 @@ func ParseEncoding(data []byte) [256]string {
 
 // ParseEncodingPS is [ParseEncoding] reading the vector's indices as a
 // PostScript interpreter does, radix numbers such as 8#101 included, which is
-// how veraPDF reads them: govdocs thread_100_100480.pdf writes its whole vector
-// that way.
+// how veraPDF reads them.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100480.pdf: writes its whole vector with radix
+//     indices.
 func ParseEncodingPS(data []byte) [256]string {
 	return parseEncoding(data, dupPutRadixRe)
 }

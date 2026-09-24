@@ -20,9 +20,11 @@ import (
 // value (CMap.getUnicode(int)) and never consults that codespace, so it maps
 // 0x0024 through a one-byte bfrange covering 9 to 64 and reports nothing.
 //
-// Measured on pdfjs bug898853.pdf, an Identity-H FrutigerLTStd-Light whose
-// /ToUnicode declares <00> <ff> and carries one-byte bfranges: veraPDF passes
-// it, litho reported ISO 14289-2, 8.4.5.8 t1.
+// # Corpus evidence
+//
+//   - pdfjs bug898853.pdf: an Identity-H FrutigerLTStd-Light whose /ToUnicode
+//     declares <00> <ff> and carries one-byte bfranges. veraPDF passes it,
+//     litho reported ISO 14289-2, 8.4.5.8 t1.
 func TestType0PerGlyphToUnicode_IdentityCodeIsTwoBytes(t *testing.T) {
 	t.Parallel()
 

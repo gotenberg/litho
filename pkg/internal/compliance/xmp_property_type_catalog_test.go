@@ -12,10 +12,13 @@ import (
 // both tests of ISO 19005-2 §6.6.2.3.1 from one SchemasDefinition, so an
 // undefined property has no defined type and t2 fails wherever t1 does.
 //
-// govdocs thread_300_300116.pdf writes photoshop:ColorMode, photoshop:History,
-// photoshop:ICCProfile, exif:NativeDigest, tiff:NativeDigest and pdf:Trapped;
-// veraPDF reports all six under t1 and t2 while litho, whose type registry
-// carries types the catalog does not predefine, reported them under t1 alone.
+// # Corpus evidence
+//
+//   - govdocs thread_300_300116.pdf: writes photoshop:ColorMode,
+//     photoshop:History, photoshop:ICCProfile, exif:NativeDigest,
+//     tiff:NativeDigest and pdf:Trapped. veraPDF reports all six under t1 and
+//     t2 while litho, whose type registry carries types the catalog does not
+//     predefine, reported them under t1 alone.
 func TestXMPPropertyType_UndefinedNameHasNoType(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

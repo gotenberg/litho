@@ -42,9 +42,13 @@ func parseWithDecryption(t *testing.T, src string) ast.PdfDict {
 // document's string encryption, because the digest is computed over the file
 // with that hole excised and the bytes go in as they are. Decrypting them makes
 // noise of the PKCS#7 blob, and under AES it also eats the leading 16-byte
-// initialisation vector: pdfjs xfa_issue14071.pdf carries a 16288-byte
-// signature that litho read back as 16272 bytes of garbage, so no signature on
-// an encrypted document could ever verify.
+// initialisation vector, so no signature on an encrypted document could ever
+// verify.
+//
+// # Corpus evidence
+//
+//   - pdfjs xfa_issue14071.pdf: carries a 16288-byte signature that litho read
+//     back as 16272 bytes of garbage.
 func TestSignatureContentsIsNotDecrypted(t *testing.T) {
 	t.Parallel()
 

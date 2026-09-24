@@ -124,7 +124,6 @@ func iccInputHeaderProblem(hdr iccProfileHeader, part int) string {
 // profiles: the ICC.1 data colour space signatures permitted by
 // ISO 19005-2/3 §6.2.2.
 // Note: ICC colour space signatures are exactly 4 bytes; "RGB " has a trailing space.
-// Note: ICC colour space signatures are exactly 4 bytes; "RGB " has a trailing space.
 var validICCColorSpaces = map[string]bool{ //nolint:gochecknoglobals // constant set.
 	"GRAY": true,
 	"RGB ": true, //nolint:gocritic // ICC colour space signatures are exactly 4 bytes; trailing space is correct.

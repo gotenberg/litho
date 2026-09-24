@@ -18,10 +18,14 @@ var webCaptureTrees = []ast.PdfName{"IDS", "URLS"}
 //
 // A content set lists what one capture produced in /O, pages among them (ISO
 // 32000-1, Table 356), so a set naming a deleted page keeps that page in the
-// output: govdocs thread_400_400742.pdf held 730 bytes of it after the
-// destinations, the structure tree and the article threads had all let go. A set
-// left with nothing leaves the tree, since it describes a capture none of whose
-// output survives.
+// output. A set left with nothing leaves the tree, since it describes a capture
+// none of whose output survives.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400742.pdf: held 730 bytes of a deleted page through
+//     a content set after the destinations, the structure tree and the article
+//     threads had all let go.
 func pruneWebCaptureSets(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,

@@ -116,15 +116,19 @@ func sepScopeFormOwnCSPDF(formOps string) []byte {
 // ISO 19005-2 §6.2.4.4 constrains the Separation arrays a file employs, and a
 // colour space no operator selects employs none. A form's own operations say
 // which of its colour spaces it selects, so judging its whole
-// /Resources/ColorSpace reported a conflict for an array nothing uses.
-//
-// Measured on pdfjs bug1721218_reduced.pdf, whose form declares /CS0 and /CS5
-// without naming either in its 2.8 MB content stream and paints /Sh30, whose
-// colour space is the same object as /CS5: veraPDF 1.30.2 reports the clash
-// once, at the shading, while litho also reported it at the unselected /CS5.
+// /Resources/ColorSpace reported a conflict for an array nothing uses. When a
+// painted shading shares its colour space object with an unselected entry, the
+// clash belongs to the shading alone.
 //
 // The selecting case runs in the same shape so the silent one cannot pass for
 // want of a conflict to find.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1721218_reduced.pdf: its form declares /CS0 and /CS5 without
+//     naming either in its 2.8 MB content stream and paints /Sh30, whose colour
+//     space is the same object as /CS5. veraPDF 1.30.2 reports the clash once,
+//     at the shading, while litho also reported it at the unselected /CS5.
 func TestSeparationDeclaredButUnselectedInsideForm(t *testing.T) {
 	t.Parallel()
 

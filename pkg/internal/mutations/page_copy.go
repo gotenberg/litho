@@ -93,11 +93,7 @@ var pageCopyLinks = []ast.PdfName{"Parent", "B"}
 // before the pages are copied.
 //
 // The copier follows every reference it meets, so one of these links pulls in
-// pages the caller never asked for. Extracting nine pages of govdocs
-// thread_100_100852.pdf wrote all 56 into the output through /Parent: 47 extra
-// pages carrying 510 KB of content that read back as plain text, plus the source
-// page tree, root node /Count 56 and all. thread_100_100184.pdf leaked 84 pages
-// the same way through a single article bead.
+// pages the caller never asked for, along with the source page tree.
 //
 // Nothing usable is lost. Split and merge build their own flat page tree and
 // assign /Parent to every copied page afterwards, and [copyPageForOutput]
@@ -106,6 +102,15 @@ var pageCopyLinks = []ast.PdfName{"Parent", "B"}
 // either (see copyCatalogEntries): they are keyed to pages the output does not
 // have, and with no /Threads in the new catalog to list them, an article that
 // survived would be unreachable anyway.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100852.pdf: extracting nine pages wrote all 56 into
+//     the output through /Parent: 47 extra pages carrying 510 KB of content
+//     that read back as plain text, plus the source page tree, root node
+//     /Count 56 and all.
+//   - govdocs thread_100_100184.pdf: leaked 84 pages the same way through a
+//     single article bead.
 func pageCopyOverrides(pages []*document.Page) map[int]ast.PdfObject {
 	overrides := make(map[int]ast.PdfObject, len(pages))
 	for _, page := range pages {

@@ -12,9 +12,12 @@ import (
 )
 
 // placeholderFormPDF builds a form that relies on /NeedAppearances: the field
-// carries a value and stores an appearance that paints nothing, the shape of
-// pdfjs issue12233.pdf. When draws is set the stored appearance paints the
-// value, so flattening it loses nothing.
+// carries a value and stores an appearance that paints nothing. When draws is
+// set the stored appearance paints the value, so flattening it loses nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12233.pdf: has the placeholder shape.
 func placeholderFormPDF(draws bool) []byte {
 	body := "/Tx BMC\nEMC\n"
 	if draws {
@@ -97,10 +100,14 @@ func flattenPlaceholder(t *testing.T, draws bool) (kept bool, keptHasAP bool) {
 //
 // A form asking viewers to build appearances (ISO 32000-1, 12.7.3.3) stores
 // placeholders. Baking one in writes an empty stream into the page and deletes
-// the widget, so the value leaves the document: pdfjs issue12233.pdf lost "Man",
-// "150" and "Red". Keeping the widget is not enough either, because the
-// placeholder is then what a viewer draws once the form is gone; removing it
-// lets the viewer generate from /V again.
+// the widget, so the value leaves the document. Keeping the widget is not
+// enough either, because the placeholder is then what a viewer draws once the
+// form is gone; removing it lets the viewer generate from /V again.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12233.pdf: baking the placeholders lost "Man", "150" and
+//     "Red".
 func TestFlattenKeepsAValueTheAppearanceCannotCarry(t *testing.T) {
 	t.Parallel()
 
@@ -118,10 +125,13 @@ func TestFlattenKeepsAValueTheAppearanceCannotCarry(t *testing.T) {
 //
 // A field inherits its default appearance from /AcroForm (ISO 32000-1,
 // 12.7.3.3), and flattening removes the form. Leaving the widget behind without
-// the string gives a viewer nothing to draw the value with: litho corpus
-// sigcms_2b.pdf has a text field carrying "not a signature" and no /DA of its
-// own, and removing the form alone dropped it from the page. Confirmed by
-// deleting /AcroForm from the untouched input, which loses the same text.
+// the string gives a viewer nothing to draw the value with.
+//
+// # Corpus evidence
+//
+//   - litho sigcms_2b.pdf: has a text field carrying "not a signature" and no
+//     /DA of its own, and removing the form alone dropped it from the page.
+//     Deleting /AcroForm from the untouched input loses the same text.
 func TestFlattenCarriesTheInheritedDefaultAppearance(t *testing.T) {
 	t.Parallel()
 

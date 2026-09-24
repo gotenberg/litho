@@ -11,8 +11,12 @@ import (
 // anti-DoS guard, not spec-mandated: a JPEG header of a few bytes can declare
 // 65535 x 65535 pixels, and every sample costs two bytes of coefficients, a
 // byte of reconstructed plane and a byte of output. 2^27 is the bound
-// package jpx sets for the same reason, and admits the largest JPEG in the
-// corpora, 10248 x 3712 in three components.
+// package jpx sets for the same reason, and admits the largest JPEG real
+// documents carry.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest JPEG is 10248 x 3712 in three components.
 const maxSamples = 1 << 27
 
 // maxCategory is the largest DC difference category a Huffman value may
@@ -167,6 +171,13 @@ func (d *decoder) decodeSegments(ctx context.Context) error {
 
 // frame reads a start-of-frame segment (T.81, B.2.2) and lays out the
 // component planes.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue8614.pdf: declares 65535 lines with a DNL marker giving
+//     3477, and PDF.js draws it at the stated size.
+//   - pdfjs issue10880.pdf: declares 65280 lines of which its data holds
+//     the 3712 the image states, and PDF.js draws it at the stated size.
 func (d *decoder) frame(b []byte, progressive bool) error {
 	if d.sawFrame {
 		return fmt.Errorf("%w: a second frame", ErrUnsupported)
@@ -190,9 +201,9 @@ func (d *decoder) frame(b []byte, progressive bool) error {
 	if d.height == 0 {
 		d.height = d.lines()
 	}
-	// pdfjs issue8614.pdf declares 65535 lines with a DNL marker giving
-	// 3477, and issue10880.pdf 65280 lines of which its data holds the 3712
-	// the image states; PDF.js draws both at the stated size.
+	// A frame can declare more lines than the image states, a placeholder a
+	// streaming encoder never corrected, and PDF.js draws such an image at
+	// the stated size.
 	if d.statedHeight > 0 && d.height > d.statedHeight {
 		d.height = d.statedHeight
 	}

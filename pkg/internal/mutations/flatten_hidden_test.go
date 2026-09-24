@@ -60,12 +60,16 @@ func hiddenWidgetsPDF() []byte {
 // neither displayed nor printed, and NoView (bit 6) means it is not displayed
 // but still printed. Baking either appearance into the page makes it visible for
 // good, which for a hidden field puts a value on the page nobody could see
-// before. Flattening pdfjs annotation_hidden_noview.pdf drew both its hidden and
-// its no-view text field, where poppler renders neither in the original; after
-// the fix the flattened render is pixel-identical to it.
+// before.
 //
 // Both are kept as annotations rather than dropped: hidden shows nothing either
 // way, but no-view still prints, and dropping it would lose that.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation_hidden_noview.pdf: flattening drew both its hidden and
+//     its no-view text field, where poppler renders neither in the original.
+//     After the fix the flattened render is pixel-identical to it.
 func TestFlattenFormLeavesUndisplayedWidgetsAlone(t *testing.T) {
 	t.Parallel()
 

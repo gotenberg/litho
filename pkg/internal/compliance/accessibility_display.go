@@ -129,6 +129,14 @@ func checkTabOrder(ctx context.Context, doc *document.Document, catalog ast.PdfD
 	return results
 }
 
+// checkXMPTitle validates that the catalog XMP metadata carries a dc:title
+// (ISO 14289-1 §7.1 t9, ISO 14289-2 §8.11.1 t1).
+//
+// # Corpus evidence
+//
+//   - verapdf 7.1-t08-fail-a: has no XMP metadata and fires only the §7.1
+//     metadata-presence check, so firing the dc:title rule as well
+//     over-reports.
 func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	rule := xmpTitleRule(profile)
 
@@ -137,7 +145,7 @@ func checkXMPTitle(ctx context.Context, doc *document.Document, catalog ast.PdfD
 		// No XMP metadata at all: veraPDF scopes the dc:title rule to the XMP
 		// package object, so with no package it does not fire. The missing
 		// metadata itself is reported by the §7.1 metadata-presence check, so
-		// firing here as well over-reports (verapdf-corpus 7.1-t08-fail-a).
+		// firing here as well over-reports.
 		return nil
 	}
 

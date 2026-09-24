@@ -7,12 +7,16 @@ import "testing"
 // entry and its XMP analogue are EQUIVALENT, and the instant comparison parses
 // RFC 3339, which rejects "+03". Leaving it short made the caller fall back to
 // comparing spellings, so a date naming the same instant was reported as a
-// mismatch: verapdf/PDF_UA-1__7.1-t06-fail-a.pdf reported 6.7.3 t1 where
-// veraPDF 1.30.2 reports none.
+// mismatch.
 //
 // veraPDF parses the short form rather than passing vacuously, measured on a
 // fixture whose short-offset date names a DIFFERENT instant: it reports the
 // violation there.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.1-t06-fail-a.pdf: litho reported 6.7.3 t1 where
+//     veraPDF 1.30.2 reports none.
 func TestXMPNormalizeISO8601ShortOffset(t *testing.T) {
 	t.Parallel()
 

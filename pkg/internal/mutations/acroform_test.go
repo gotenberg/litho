@@ -124,8 +124,12 @@ func acroFormOf(t *testing.T, b []byte) (int, bool) {
 //
 // /AcroForm lives in the catalog (ISO 32000-1, 12.7.2) and both operations
 // build a fresh one, so the form used to be dropped while its widget
-// annotations came across with the pages: pdfjs 160F-2019.pdf kept all 76
-// widgets and lost all 9 fields.
+// annotations came across with the pages.
+//
+// # Corpus evidence
+//
+//   - pdfjs 160F-2019.pdf: the output kept all 76 widgets and lost all 9
+//     fields.
 func TestSplitMerge_KeepAcroForm(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -167,9 +171,13 @@ func TestSplitMerge_KeepAcroForm(t *testing.T) {
 //
 // A signature's digest covers the entire file and its /ByteRange names the
 // offsets it spans (ISO 32000-1, 12.8.1). Split and merge rewrite every byte,
-// so a carried signature can never verify: veraPDF reported ISO 19005-2, 6.4.3
-// against a split of docmdp_2b.pdf, a document that then advertised a signature
-// it could not honour.
+// so a carried signature can never verify, and the output advertises a
+// signature it cannot honour.
+//
+// # Corpus evidence
+//
+//   - litho docmdp_2b.pdf: veraPDF reported ISO 19005-2, 6.4.3 against a
+//     split, a document that then advertised a signature it could not honour.
 func TestCollectRootFields_DropsSignatureFields(t *testing.T) {
 	alloc := writer.NewObjAllocator(1)
 

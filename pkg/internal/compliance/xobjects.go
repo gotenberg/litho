@@ -39,8 +39,8 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			continue
 		}
 
-		// Collect Do operator targets from the page content stream so we
-		// only check XObjects that are actually referenced (used).
+		// Collect Do operator targets from the page content stream so only
+		// XObjects that are actually referenced (used) are checked.
 		_, referencedXObjects, _, used, _ := scanContentStreamDeviceCS(ctx, vctx.pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, res))
 
 		scanXObjectResources(ctx, doc, res, i+1, part, profile, &results, visited, 0, referencedXObjects)
@@ -59,10 +59,14 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 // 32000-1, 8.7.3.1), which paint wherever a scn/SCN selects the pattern, so the
 // images and forms that content invokes are used as surely as a page's own.
 // veraPDF reaches them through the pattern the page selects and states the
-// image rules there, ISO 19005-2, 6.2.8 t3 among them: pdfjs bug1771477.pdf
-// draws an image with /Interpolate true inside a tiling pattern. A pattern the
-// page declares but never selects paints nothing and is not judged, as veraPDF
-// does not judge it.
+// image rules there, ISO 19005-2, 6.2.8 t3 among them. A pattern the page
+// declares but never selects paints nothing and is not judged, as veraPDF does
+// not judge it.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1771477.pdf: draws an image with /Interpolate true inside a
+//     tiling pattern.
 func scanPatternImages(ctx context.Context, doc *document.Document, res ast.PdfDict, used *usedResources, pageNum, part int, profile string, results *[]Violation, visited map[string]bool) {
 	patterns, err := document.ResolveDict(ctx, doc, res["Pattern"])
 	if err != nil || patterns == nil || used == nil {
@@ -103,6 +107,11 @@ func scanPatternImages(ctx context.Context, doc *document.Document, res ast.PdfD
 // checkInlineImageInterpolate checks parsed BI operations for inline images
 // with /I true or /Interpolate true. Uses parsed operations instead of raw
 // byte scanning.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14256.pdf: writes both /I and /Interpolate on one inline
+//     image.
 func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []Violation {
 	if len(ops) == 0 {
 		return nil
@@ -134,7 +143,7 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 		// /I is the abbreviation of /Interpolate (ISO 32000-1, 8.9.7, Table
 		// 93). A dictionary that writes both is judged by /I, whichever comes
 		// first: veraPDF passes /I false /Interpolate true and fails
-		// /Interpolate false /I true. pdfjs issue14256.pdf writes both.
+		// /Interpolate false /I true.
 		val, exists := dict["I"]
 		if !exists {
 			val = dict["Interpolate"]
@@ -149,6 +158,12 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 // scanXObjectResources iterates XObject resources, validates each, and recurses
 // into Form XObject sub-resources. At depth 0 (page level), only XObjects
 // referenced by Do operators are checked. Unreferenced XObjects are skipped.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400019.pdf: veraPDF reports a soft mask's
+//     /Interpolate 15 times against 57 plain XObjects (72 findings from
+//     veraPDF, 57 from litho).
 func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, part int, profile string, results *[]Violation, visited map[string]bool, depth int, referencedNames map[string]bool) {
 	if depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return
@@ -198,11 +213,10 @@ func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.P
 
 		// An image's soft mask and stencil mask are image dictionaries in their
 		// own right, and the image rules bind to them too: veraPDF builds a
-		// PDSMaskImage for /SMask and reports its /Interpolate, which govdocs
-		// thread_400_400019.pdf shows 15 times against 57 plain XObjects (72
-		// findings from veraPDF, 57 from litho). Fixtures confirm it states the
-		// rule for /Mask as well. /Mask may instead be a colour-key ARRAY
-		// (ISO 32000-1, 8.9.6.4), which is no image and resolves to no stream.
+		// PDSMaskImage for /SMask and reports its /Interpolate. Fixtures
+		// confirm it states the rule for /Mask as well. /Mask may instead be a
+		// colour-key ARRAY (ISO 32000-1, 8.9.6.4), which is no image and
+		// resolves to no stream.
 		if subtype == "Image" {
 			for _, maskKey := range []ast.PdfName{"SMask", "Mask"} {
 				maskObj, hasMask := xobjDict[maskKey]

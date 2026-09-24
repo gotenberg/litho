@@ -10,8 +10,12 @@ import (
 // TestFormatRealKeepsThePointBeyondInt64 pins that a real too large for a
 // 64-bit integer keeps its decimal point. Trimming it emitted an integer
 // literal no reader could hold, and litho's own parser answered the enclosing
-// dictionary with no keys at all: limits_2b lost its catalog, and its /Pages
-// with it, so neither veraPDF nor pikepdf could open the remediated file.
+// dictionary with no keys at all, so a remediated file could lose its catalog.
+//
+// # Corpus evidence
+//
+//   - litho limits_2b.pdf: lost its catalog, and its /Pages with it, so
+//     neither veraPDF nor pikepdf could open the remediated file.
 func TestFormatRealKeepsThePointBeyondInt64(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

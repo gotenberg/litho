@@ -187,7 +187,6 @@ func xmpDocInfoSyncRulePart1(testNum int, ctx string) []Violation {
 	return nil
 }
 
-// xmpGetInfoString retrieves a string value from the document info dict.
 // xmpInfoKeyPresent returns true if the Info dict has the given key, even if
 // the value can't be resolved as a string.
 func xmpInfoKeyPresent(infoDict ast.PdfDict, key string) bool {
@@ -210,6 +209,7 @@ func xmpInfoValueIsNull(ctx context.Context, doc *document.Document, infoDict as
 	return isNull
 }
 
+// xmpGetInfoString retrieves a string value from the document info dict.
 func xmpGetInfoString(ctx context.Context, doc *document.Document, infoDict ast.PdfDict, key string) string {
 	valObj, ok := infoDict[ast.PdfName(key)]
 	if !ok {
@@ -233,11 +233,16 @@ func xmpGetInfoString(ctx context.Context, doc *document.Document, infoDict ast.
 // on files veraPDF passes.
 //
 // A value written as an attribute or as a plain element carries no container at
-// all and so answers no lookup either. Measured on a nine-cell matrix built from
-// pdfjs issue4706, holding the text equal to the Info entry throughout: a
-// dc:title or dc:description in an rdf:Seq or rdf:Bag reports 6.7.3 t2 or t4,
-// and a dc:creator in an rdf:Bag reports t3, while every rdf:Alt passes whether
-// or not its entry carries xml:lang="x-default".
+// all and so answers no lookup either. An rdf:Alt answers whether or not its
+// entry carries xml:lang="x-default".
+//
+// # Corpus evidence
+//
+//   - pdfjs issue4706: a nine-cell matrix built from it, holding the text
+//     equal to the Info entry throughout, measured the table. A dc:title or
+//     dc:description in an rdf:Seq or rdf:Bag reports 6.7.3 t2 or t4, and a
+//     dc:creator in an rdf:Bag reports t3, while every rdf:Alt passes whether
+//     or not its entry carries xml:lang="x-default".
 var xmpContainerTypedProperties = map[string]map[string]bool{
 	"dc:title":       {"Alt": true},
 	"dc:creator":     {"Alt": true, "Seq": true},
@@ -261,6 +266,11 @@ type xmpSyncResult struct {
 // values. For Alt containers, the x-default language entry is preferred;
 // if absent, the first entry is used. For Seq containers, the first entry
 // is used. Entry counts are tracked for Seq/Bag containers.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20453: writes dc:title with no xmlns:dc binding, and veraPDF
+//     reports the title as absent for exactly that reason.
 func xmpParseForSync(data []byte) *xmpSyncResult {
 	result := make(map[string]string)
 	entryCounts := make(map[string]int)
@@ -312,9 +322,8 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 		// The decoder runs non-strict, so a document that writes dc:title while
 		// declaring no xmlns:dc yields the bare prefix "dc" as the namespace,
 		// which would collide with the canonical key built from the Dublin Core
-		// URI. Keys built from anything that is not a URI are namespaced apart
-		// (measured on pdfjs/issue20453, where veraPDF reports the title as
-		// absent for exactly this reason).
+		// URI. Keys built from anything that is not a URI are namespaced apart,
+		// as veraPDF reports such a title absent.
 		if !strings.Contains(ns, ":") {
 			return "?" + ns + ":" + local
 		}

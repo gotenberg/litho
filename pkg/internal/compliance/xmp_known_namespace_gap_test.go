@@ -12,13 +12,19 @@ import (
 // is not the same as predefining its properties. litho kept a list of XMP
 // namespaces it knows, and the predefined-property audit deferred to
 // [xmpCheckNamespaces] for anything outside the catalog. For a namespace on that
-// list, neither spoke, so the property went unjudged.
+// list, neither spoke, so the property went unjudged. The IPTC Core schema is
+// the case.
 //
-// The IPTC Core schema is the case: govdocs thread_000_000163.pdf writes
-// Iptc4xmpCore:CreatorContactInfo, CountryCode and Location, pdfjs
-// issue18896.pdf adds Iptc4xmpExt:RecDevice, and issue21089.pdf writes the
-// Version value type at top level as stVer:version. The XMP Specification this
-// part admits predefines none of them and veraPDF reports every one.
+// # Corpus evidence
+//
+//   - govdocs thread_000_000163.pdf: writes Iptc4xmpCore:CreatorContactInfo,
+//     CountryCode and Location. The XMP Specification this part admits
+//     predefines none of them, and veraPDF reports every one.
+//   - pdfjs issue18896.pdf: adds Iptc4xmpExt:RecDevice, which the XMP
+//     Specification does not predefine either, and veraPDF reports it.
+//   - pdfjs issue21089.pdf: writes the Version value type at top level as
+//     stVer:version, which the XMP Specification does not predefine either,
+//     and veraPDF reports it.
 func TestXMPKnownNamespace_StillNeedsPredefining(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -71,11 +77,16 @@ func TestXMPKnownNamespace_TypeTestFollows(t *testing.T) {
 }
 
 // TestXMPKnownNamespace_QualifiersAndFieldsAreNotProperties pins the boundary
-// the type test needs. Only a top-level property is a property: the veraPDF test
-// suite's 6-7-2-t07-*-j files hang an xmpidq:Scheme qualifier on each
-// xmp:Identifier item and 6-7-2-t03-fail-i writes the stFnt fields of
-// xmpTPg:Fonts, and veraPDF reports none of them. Reporting them cost five
-// false positives in that corpus before this gate.
+// the type test needs. Only a top-level property is a property: veraPDF reports
+// neither a qualifier nor a struct field.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-7-2-t07-*-j: these files hang an xmpidq:Scheme qualifier on
+//     each xmp:Identifier item, and veraPDF reports none of them.
+//   - verapdf 6-7-2-t03-fail-i: writes the stFnt fields of xmpTPg:Fonts, and
+//     veraPDF reports none of them.
+//   - verapdf: reporting them cost five false positives before this gate.
 func TestXMPKnownNamespace_QualifiersAndFieldsAreNotProperties(t *testing.T) {
 	t.Parallel()
 

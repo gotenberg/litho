@@ -32,8 +32,9 @@ func simpleFontShowingACodePDF() []byte {
 	)
 }
 
-// Pins that the /ToUnicode repair COMPOSES with an earlier fixer's write to the
-// same font dictionary. This test passes today and is here to keep it that way.
+// TestFixFontIssues_KeepsAPeerFixersPendingFontWrite pins that the /ToUnicode
+// repair COMPOSES with an earlier fixer's write to the same font dictionary.
+// This test passes today and is here to keep it that way.
 //
 // [fixFontIssues] reads the font dictionary once from the document
 // (fixer_fonts.go) and hands that value to three writers, which looks like the

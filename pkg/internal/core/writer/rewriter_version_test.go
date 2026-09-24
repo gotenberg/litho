@@ -37,9 +37,9 @@ func firstDiff(a, b string) string {
 // litho's own PDF/A-1 check reports as using xref streams (ISO 19005-1,
 // 6.1.4).
 //
-// Nothing caught it: the suite, the linter, a corpus gate and qpdf all check
-// that the bytes parse, and every modern reader ignores the header version.
-// None of them compares what a file declares against what it contains.
+// Nothing caught it: the suite, the linter and qpdf all check that the bytes
+// parse, and every modern reader ignores the header version. None of them
+// compares what a file declares against what it contains.
 
 // flattenStreams returns out with every inflatable stream payload appended, so
 // an assertion can still find a dictionary that packing moved inside a
@@ -86,7 +86,7 @@ func containsEntry(s, key, value string) bool {
 	return strings.Contains(s, key+" "+value) || strings.Contains(s, key+value)
 }
 
-// rewriteTo writes a document built by build and returns the bytes.
+// rewriteTo writes the document cfg describes and returns the bytes.
 func rewriteTo(t *testing.T, cfg RewriteConfig) string {
 	t.Helper()
 	var buf bytes.Buffer
@@ -98,6 +98,11 @@ func rewriteTo(t *testing.T, cfg RewriteConfig) string {
 
 // TestWriteRewrite_PackedOutputDeclaresPDF15 is the regression: a packed file
 // must declare the version its own contents require.
+//
+// # Corpus evidence
+//
+//   - All corpora: the corpus gate missed the undeclared PDF 1.5 constructs,
+//     because it checks only that the bytes parse.
 func TestWriteRewrite_PackedOutputDeclaresPDF15(t *testing.T) {
 	t.Parallel()
 	alloc := NewObjAllocator(0)
@@ -174,7 +179,7 @@ func TestWriteRewrite_PlainOutputKeepsTheSourceVersion(t *testing.T) {
 
 // TestWriteRewrite_XRefStreamAloneDeclaresPDF15 covers the half of this that
 // predates compaction: a caller selecting a cross-reference stream directly
-// gets the same 1.5 constructs and needs the same declaration. [WithXRefStream]
+// gets the same 1.5 constructs and needs the same declaration. pdf.WithXRefStream
 // has documented "PDF 1.5+" all along without enforcing it.
 func TestWriteRewrite_XRefStreamAloneDeclaresPDF15(t *testing.T) {
 	t.Parallel()

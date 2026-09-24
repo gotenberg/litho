@@ -35,10 +35,14 @@ const maxFieldTreeDepth = 64
 // The field is looked for in the interactive form's /Fields array first
 // (ISO 32000-1, 12.7.2) and then among the widget annotations the pages carry
 // (12.5.6.19). A producer may write the widget without registering the field,
-// leaving it reachable only from the page: pdfjs issue12963.pdf has 27 such
-// fields and no /AcroForm at all. Setting one of those registers it, creating
-// the interactive form when the document states none, so a viewer that reads
-// the form finds the value.
+// leaving it reachable only from the page. Setting one of those registers it,
+// creating the interactive form when the document states none, so a viewer
+// that reads the form finds the value.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12963.pdf: has 27 fields reachable only from the page and no
+//     /AcroForm at all.
 func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name, value string) error {
 	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
@@ -176,9 +180,6 @@ func setPageWidgetField(
 			// ISO 32000-1, 12.7.2: /Fields lists the document's ROOT fields.
 			// Registering the named node instead would rename a nested field,
 			// since a viewer qualifies names from the root down.
-			// ISO 32000-1, 12.7.2: /Fields lists the document's ROOT fields.
-			// Registering the named node instead would rename a nested field,
-			// since a viewer qualifies names from the root down.
 			rootRef, ok := rootFieldRef(ctx, doc, annotObj)
 			if !ok {
 				rootRef = ref
@@ -278,7 +279,7 @@ func findAndSetField(ctx context.Context, doc *document.Document, alloc *writer.
 	return findAndSetFieldAt(ctx, doc, alloc, fields, parentName, parentFT, targetName, value, make(map[int]bool))
 }
 
-// findAndSetFieldAt is findAndSetField carrying the field objects on the CURRENT
+// findAndSetFieldAt is [findAndSetField] carrying the field objects on the CURRENT
 // path. A /Kids entry naming an ancestor is a cycle: unguarded, a field whose
 // /Kids named itself recursed until the goroutine stack was exhausted, which is
 // a fatal runtime error no recover() converts, and every level appended another
@@ -375,12 +376,16 @@ func findAndSetFieldAt(ctx context.Context, doc *document.Document, alloc *write
 // field takes a text string (Table 228). Writing a string for every type, which
 // this used to do, produced a checkbox whose /V was `(LITHOPROBE)` instead of
 // `/LITHOPROBE`, and litho's own form reader then listed NO fields at all: one
-// bad assignment hid the whole form. pdfjs checkbox-bad-appearance.pdf shows it
-// on entirely well-formed input.
+// bad assignment hid the whole form, even on entirely well-formed input.
 //
 // The caller supplies the state name; an unknown one leaves the button off in
 // every viewer, which is the spec's own answer to a value that names no
 // appearance.
+//
+// # Corpus evidence
+//
+//   - pdfjs checkbox-bad-appearance.pdf: shows the hidden form on entirely
+//     well-formed input.
 func setFieldValue(dict ast.PdfDict, fieldFT, value string) {
 	if fieldFT == "Btn" {
 		dict["V"] = ast.PdfName(value)
@@ -482,6 +487,18 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 // single draft and written with exactly one [writer.ObjAllocator.AllocAt]
 // call per page, the same invariant [applyStampToPages] follows, so
 // concurrent mutations cannot clobber each other.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation_hidden_noview.pdf: flattening drew both its hidden and
+//     its no-view text field, and poppler renders neither in the original.
+//   - pdfjs annotation-tx.pdf: holds a text field with a value and no /AP at
+//     all, and flattening removed the widget and with it every character on
+//     the page.
+//   - pdfjs issue12233.pdf: keeps 12-to-45 byte appearances that paint nothing
+//     behind the values "Man", "150" and "Red". Flattening wrote those empty
+//     streams into the page and then deleted the widgets, so the values left
+//     the document entirely.
 func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, page *document.Page, regenerated bool, inheritedDA ast.PdfObject, catalogDict ast.PdfDict) {
 	annotsObj, ok := page.Dict["Annots"]
 	if !ok {
@@ -492,8 +509,8 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		return
 	}
 
-	// Start from the latest pending version of the page dict so we
-	// compose correctly with any prior mutation that has already
+	// Start from the latest pending version of the page dict so the edit
+	// composes correctly with any prior mutation that has already
 	// rewritten this page.
 	baseDict := latestPageDict(alloc, page)
 
@@ -526,9 +543,7 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		// annotation is neither displayed nor printed, and NoView (bit 6) means
 		// it is not displayed but still printed. Baking either one in makes it
 		// visible for good, which for a hidden field puts a value on the page
-		// that nobody could see before: flattening pdfjs
-		// annotation_hidden_noview.pdf drew both its hidden and its no-view text
-		// field, and poppler renders neither in the original.
+		// that nobody could see before.
 		//
 		// The annotation is kept rather than dropped. Hidden shows nothing
 		// either way, but NoView still prints, and dropping it would lose that.
@@ -538,11 +553,10 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		}
 
 		// A widget litho cannot bake into the page keeps its annotation. There is
-		// nothing to draw in its place, so dropping it deletes whatever it showed:
-		// pdfjs annotation-tx.pdf holds a text field with a value and no /AP at
-		// all, which viewers render by generating an appearance from /V and /DA
-		// (ISO 32000-1, 12.7.3.3), and flattening removed the widget and with it
-		// every character on the page.
+		// nothing to draw in its place, so dropping it deletes whatever it showed.
+		// A text field with a value and no /AP at all is rendered by generating
+		// an appearance from /V and /DA (ISO 32000-1, 12.7.3.3), and flattening
+		// it removed the widget and with it every character on the page.
 		apStream, ok := resolveWidgetAppearance(ctx, doc, annotDict)
 		if !ok {
 			// No stored appearance. Draw the value the field holds, the way a
@@ -560,12 +574,10 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		}
 
 		// A form that asks the viewer to build its appearances stores
-		// placeholders, and baking one in loses the value it stands for.
-		// pdfjs issue12233.pdf keeps 12-to-45 byte appearances that paint
-		// nothing behind the values "Man", "150" and "Red": flattening wrote
-		// those empty streams into the page and then deleted the widgets, so
-		// the values left the document entirely. Keeping the widget is not
-		// enough on its own, because the placeholder it carries is what a
+		// placeholders, and baking one in loses the value it stands for:
+		// flattening wrote the empty streams into the page and then deleted the
+		// widgets, so the values left the document entirely. Keeping the widget
+		// is not enough on its own, because the placeholder it carries is what a
 		// viewer would draw once /NeedAppearances goes with the form; the
 		// placeholder has to go too.
 		if regenerated && valueOutlivesAppearance(ctx, doc, annotDict, apStream) {
@@ -730,16 +742,20 @@ func resolveWidgetAppearance(ctx context.Context, doc *document.Document, annotD
 // 32000-1, 12.5.5), so a producer can omit /Subtype and readers still draw it
 // through the annotation. Flattening moves it into the page's /XObject
 // resources, where Do resolves it by dictionary instead, and Table 95 makes
-// /Subtype /Form and /BBox required there. Copying the stream unchanged left
-// pdfjs checkbox-bad-appearance.pdf with a "/FlatAP20 Do" that every reader
-// skipped, so the tick of a checked box vanished from a flattened page that
-// still reported success.
+// /Subtype /Form and /BBox required there. Copying the stream unchanged left a
+// Do that every reader skipped, so the tick of a checked box vanished from a
+// flattened page that still reported success.
 //
 // The box is only synthesised when absent: a stream that declares one is placed
 // by it, and overriding that would move the appearance. Width and height come
 // from /Rect, matching the translation the caller emits, and negative extents
 // are normalised because a rectangle's corners may be given in either order
 // (7.9.5).
+//
+// # Corpus evidence
+//
+//   - pdfjs checkbox-bad-appearance.pdf: the unchanged copy left a
+//     "/FlatAP20 Do" that every reader skipped.
 func asFormXObject(stream ast.PdfStream, width, height float64) ast.PdfStream {
 	_, hasSubtype := stream.Dict["Subtype"]
 	_, hasBBox := stream.Dict["BBox"]
@@ -851,8 +867,12 @@ const (
 //
 // Third name in this package for one walk, beside maxFieldParentDepth (32) in
 // acroform_split_merge.go, which carries the measurement, and maxFieldTreeDepth
-// (64) above. Cross-referenced rather than merged: the deepest real chain is 7,
-// so no document tells these values apart.
+// (64) above. Cross-referenced rather than merged: real chains stay far
+// shallower than either value, so no document tells them apart.
+//
+// # Corpus evidence
+//
+//   - All corpora: the deepest real /Parent chain is 7.
 const maxFieldAncestorDepth = 32
 
 // keepWidget rewrites a widget the flatten is leaving in place so it can still
@@ -863,9 +883,7 @@ const maxFieldAncestorDepth = 32
 // removed: ISO 32000-1, 12.7.3.3 has the viewer generate an appearance when the
 // widget stores none. And the default-appearance string is inherited from the
 // form (same clause), so it is copied onto the widget, which is otherwise left
-// with no font or colour to draw with. litho corpus sigcms_2b.pdf shows the
-// second: its text field carries a value and no /DA of its own, and deleting the
-// form alone dropped "not a signature" from the page.
+// with no font or colour to draw with.
 //
 // Only an indirect widget can be rewritten: one inlined in /Annots has no object
 // number to replace.
@@ -873,6 +891,12 @@ const maxFieldAncestorDepth = 32
 // The form's /DR is not carried across, because a resource dictionary has no
 // place on an annotation. A /DA naming one of the standard 14 fonts, which is
 // what these placeholders use, resolves without it.
+//
+// # Corpus evidence
+//
+//   - litho sigcms_2b.pdf: shows the inherited /DA case. Its text field carries
+//     a value and no /DA of its own, and deleting the form alone dropped
+//     "not a signature" from the page.
 func keepWidget(alloc *writer.ObjAllocator, annotObj ast.PdfObject, annotDict ast.PdfDict, inheritedDA ast.PdfObject) {
 	ref, ok := annotObj.(ast.PdfIndirectRef)
 	if !ok {
@@ -922,14 +946,17 @@ func formDefaultAppearance(ctx context.Context, doc *document.Document, catalogD
 // ISO 32000-1, 12.7.3.3 has a viewer generate the appearance of a variable-text
 // field from /V and /DA when the widget carries no /AP. Flattening drops the
 // widget, so a document whose fields rely on that would lose every value it
-// shows: pdfjs annotation-tx.pdf is exactly this shape, and litho used to keep
-// such widgets rather than lose them. Drawing the value instead lets the flatten
-// finish the job.
+// shows, and litho used to keep such widgets rather than lose them. Drawing the
+// value instead lets the flatten finish the job.
 //
 // The value is drawn on a single line. A text or choice field draws its string;
 // a button draws a check when its value names an on-state. A field of any other
 // type, or one holding nothing to show, reports false so the caller keeps the
 // widget as before.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation-tx.pdf: its fields rely on a generated appearance.
 func generatedAppearance(
 	ctx context.Context,
 	doc *document.Document,
@@ -1002,6 +1029,10 @@ func inheritedFieldTypeAndValue(ctx context.Context, doc *document.Document, ann
 }
 
 // textFieldAppearance draws a single line of text inside the widget's box.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12963.pdf: carries a Cyrillic value WinAnsi cannot express.
 func textFieldAppearance(
 	ctx context.Context,
 	doc *document.Document,
@@ -1036,9 +1067,9 @@ func textFieldAppearance(
 	}
 
 	// The generated appearance draws through a WinAnsi-encoded font, so the
-	// value has to be expressible in it. A value that is not, such as the
-	// Cyrillic one pdfjs issue12963.pdf carries, would otherwise reach a viewer
-	// as raw UTF-8 bytes decoded one by one through CP1252, i.e. mojibake.
+	// value has to be expressible in it. A value that is not, such as a
+	// Cyrillic one, would otherwise reach a viewer as raw UTF-8 bytes decoded
+	// one by one through CP1252, i.e. mojibake.
 	// Declining leaves the widget in place, which is what litho did for every
 	// such field before it could draw any of them.
 	encoded, ok := winAnsiEncode(text)
@@ -1194,7 +1225,7 @@ func winAnsiEncode(s string) ([]byte, bool) {
 	return out, true
 }
 
-// escapePdfString renders b as a PDF literal string, escaping the three
+// escapePdfString renders s as a PDF literal string, escaping the three
 // characters that would otherwise end it or start an escape (ISO 32000-1,
 // 7.3.4.2).
 func escapePdfString(s []byte) string {

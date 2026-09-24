@@ -11,9 +11,12 @@ import (
 // ISO 32000-1, Table D.2 places EURO SIGN there in PDFDocEncoding, where
 // Latin-1 has NO-BREAK SPACE. PDFDocEncoding has no no-break space at all: the
 // typographic characters already occupy 0x80-0x9E, so the euro went to 0xA0.
-// Passing the byte through as U+00A0 turned a euro into a space: pdfjs
-// bug858128.pdf carries one in its /Title, and pdf.js, poppler and pikepdf all
-// read it as the euro sign.
+// Passing the byte through as U+00A0 turned a euro into a space.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug858128.pdf: carries a euro in its /Title, and pdf.js, poppler
+//     and pikepdf all read it as the euro sign.
 func TestPDFDocEncodingEuroSign(t *testing.T) {
 	t.Parallel()
 
@@ -61,12 +64,17 @@ func TestPDFDocEncodingLowRangeUnchanged(t *testing.T) {
 	}
 }
 
-// TestPDFDocEncodingEuroInAString covers the shape the corpus actually carries:
-// the byte sits inside a longer title rather than standing alone.
+// TestPDFDocEncodingEuroInAString covers the shape real files carry: the byte
+// sits inside a longer title rather than standing alone.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug858128.pdf: the fixture's bytes are the ones around the euro in
+//     its /Title.
 func TestPDFDocEncodingEuroInAString(t *testing.T) {
 	t.Parallel()
 
-	// The bytes around the euro in pdfjs bug858128.pdf's /Title.
+	// The bytes around the euro in a real /Title.
 	raw := []byte{'T', 'h', 'e', ' ', 0xE2, 0xA0, 0x1F, 'u', 'n', 'k'}
 	got := DecodePdfString(ast.PdfString(raw))
 	want := "The â€˜unk"

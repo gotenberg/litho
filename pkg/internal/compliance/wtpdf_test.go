@@ -83,10 +83,16 @@ func TestWTPDFDeclarations_ElementForm(t *testing.T) {
 	}
 }
 
+// TestWTPDFDeclarations_AttributeForm pins that a pdfd:conformsTo declaration
+// written as an attribute of rdf:Description is read.
+//
+// # Corpus evidence
+//
+//   - All corpora: no file writes the attribute form, so this test is its
+//     only coverage.
 func TestWTPDFDeclarations_AttributeForm(t *testing.T) {
 	t.Parallel()
-	// No corpus file writes the attribute form, so it is pinned here: XMP
-	// permits a simple property as an attribute of rdf:Description.
+	// XMP permits a simple property as an attribute of rdf:Description.
 	xmp := []byte(`<rdf:Description rdf:about="" xmlns:pdfd="http://pdfa.org/declarations/" ` +
 		`pdfd:conformsTo="http://pdfa.org/declarations/wtpdf#reuse1.0"/>`)
 	got := wtpdfDeclarations(context.Background(), xmp)

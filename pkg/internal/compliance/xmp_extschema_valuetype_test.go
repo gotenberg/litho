@@ -14,11 +14,14 @@ import (
 // [TestExtensionSchemaPrefix_TypeFieldFieldReported] covers the sibling gap in
 // the pdfaType level, found by auditing every field list against its switch.
 //
-// The field was listed in xmpExtensionLevels but xmpExtSchemaRule mapped no
-// rule to it, so a packet carrying it under the wrong prefix reported four
-// violations where veraPDF reports five: the veraPDF test suite's
-// PDF_A-1b__veraPDF_test_suite_6-7-8-t06-fail-a.pdf writes every field under
-// "nonpdfaSchema" and litho was silent on valueType alone.
+// The field was listed in [xmpExtensionLevels] but [xmpExtSchemaRule] mapped no
+// rule to it, so litho was silent on valueType alone.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-1b__veraPDF_test_suite_6-7-8-t06-fail-a.pdf: writes every
+//     field under "nonpdfaSchema", and litho reported four violations where
+//     veraPDF reports five, silent on valueType alone.
 func TestExtensionSchemaPrefix_ValueTypeFieldReported(t *testing.T) {
 	t.Parallel()
 
@@ -100,8 +103,8 @@ func TestExtensionSchemaPrefix_ValueTypeFieldReported(t *testing.T) {
 // pdfaType:field to carry the canonical prefix, exactly as type, namespaceURI,
 // prefix and description do.
 //
-// xmpExtensionLevels listed "field" for the pdfaType level but
-// xmpExtValueTypeRule mapped no rule to it, the same dead-mapping shape that
+// [xmpExtensionLevels] listed "field" for the pdfaType level but
+// [xmpExtValueTypeRule] mapped no rule to it, the same dead-mapping shape that
 // hid pdfaSchema:valueType. Both were found by comparing each level's field
 // list against the cases of the function that maps them.
 func TestExtensionSchemaPrefix_TypeFieldFieldReported(t *testing.T) {

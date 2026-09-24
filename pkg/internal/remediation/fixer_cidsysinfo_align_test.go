@@ -84,11 +84,15 @@ func patchedCIDSystemInfo(t *testing.T, alloc *writer.ObjAllocator) ast.PdfDict 
 // TestAlignCIDSystemInfoFixesLetterCase pins that a Registry differing only in
 // letter case is settled in the CMap's favour.
 //
-// ISO 19005-4, 6.2.10.3.1 test 1 wants the values identical, and
-// 6-2-10-3-1-t01-fail-a writes "adobe" against the CMap's "Adobe": a producer
-// typo naming the same character collection. The fixer could only relabel
-// /Encoding to /Identity-H, which a real CMap forbids, so it left the file
-// failing.
+// ISO 19005-4, 6.2.10.3.1 test 1 wants the values identical, and "adobe"
+// against the CMap's "Adobe" is a producer typo naming the same character
+// collection. The fixer could only relabel /Encoding to /Identity-H, which a
+// real CMap forbids, so it left the file failing.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-10-3-1-t01-fail-a: writes "adobe" against the CMap's
+//     "Adobe".
 func TestAlignCIDSystemInfoFixesLetterCase(t *testing.T) {
 	t.Parallel()
 
@@ -126,10 +130,15 @@ func TestAlignCIDSystemInfoClampsTheSupplement(t *testing.T) {
 // TestAlignCIDSystemInfoLeavesARealMismatch is the control that matters most:
 // a genuinely different character collection must be left alone.
 //
-// 6-2-10-3-1-t01-fail-b declares Ordering "China1" against a Japan1 CMap. The
-// font and the CMap really do disagree, so overwriting the declaration would
-// assert a collection the glyphs do not come from. The violation stays as an
-// honest residual.
+// When the font declares Ordering "China1" against a Japan1 CMap, the font and
+// the CMap really do disagree, so overwriting the declaration would assert a
+// collection the glyphs do not come from. The violation stays as an honest
+// residual.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-10-3-1-t01-fail-b: declares Ordering "China1" against a
+//     Japan1 CMap.
 func TestAlignCIDSystemInfoLeavesARealMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -148,8 +157,11 @@ func TestAlignCIDSystemInfoLeavesARealMismatch(t *testing.T) {
 // corrected to the value its own program declares.
 //
 // ISO 19005-4, 6.2.10.3.3 test 2 requires the two to be identical, and the
-// program is what a viewer executes. 6-2-10-3-3-t02-fail-a claims 1 over a
-// program that says 0.
+// program is what a viewer executes.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-10-3-3-t02-fail-a: claims 1 over a program that says 0.
 func TestAlignCMapWModeFollowsTheProgram(t *testing.T) {
 	t.Parallel()
 

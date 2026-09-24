@@ -26,6 +26,9 @@ func ua2StructDoc(t *testing.T, docKids string, elems ...string) (*document.Docu
 	return objsDocPDF(t, objs...)
 }
 
+// TestUA2NamespaceStructTypes pins the PDF/UA-2 structure type rules for a
+// standard Note (§8.2.5.14 t1), Ruby children (§8.2.5.23 t1) and Warichu
+// children (§8.2.5.24 t1).
 func TestUA2NamespaceStructTypes(t *testing.T) {
 	ctx := context.Background()
 	check := func(docKids string, elems ...string) []Violation {
@@ -79,8 +82,11 @@ func TestUA2NamespaceStructTypes(t *testing.T) {
 	}
 }
 
-// The two /Ref directions of ISO 14289-2, 8.2.5.14 were measured against
-// veraPDF rather than read out of the clause, which names neither: t2 fires
+// TestUA2FENoteRefs pins which /Ref wiring between an element and an FENote
+// fails ISO 14289-2, 8.2.5.14.
+//
+// The two /Ref directions of the clause were measured against veraPDF rather
+// than read out of the clause, which names neither: t2 fires
 // when an element points at the FENote and the note does not point back, t3
 // when the note points at an element that does not point back. A note wired
 // both ways, and a note wired neither way, both conform.

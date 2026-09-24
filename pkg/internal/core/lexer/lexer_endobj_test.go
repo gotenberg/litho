@@ -12,10 +12,15 @@ import (
 //
 // ISO 32000-1, 7.2.2 ends a token at a delimiter or white-space character, so
 // "7559endobj" is one token by the letter of the spec and the object holding it
-// resolves to nothing. pdfjs issue3566.pdf writes object 120 that way and names
-// it as the /Length of the font program in object 14, which left the stream
-// unreadable. Only endobj is split: a number run into any other keyword is
+// resolves to nothing. When that object is a stream's /Length, the stream is
+// left unreadable. Only endobj is split: a number run into any other keyword is
 // still a keyword.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue3566.pdf: writes object 120 that way and names it as the
+//     /Length of the font program in object 14, which left the stream
+//     unreadable.
 func TestNumberRunIntoEndobj(t *testing.T) {
 	t.Parallel()
 

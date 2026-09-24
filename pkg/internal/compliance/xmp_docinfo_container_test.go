@@ -15,10 +15,12 @@ import (
 // not. A property carried by the wrong container leaves the Info entry nothing
 // to match, and the rule fires even though the text is identical on both sides.
 //
-// Measured against veraPDF on a nine-cell matrix built from pdfjs issue4706,
-// with the text held equal to the Info entry throughout. The real files behind
-// it are issue4706 (dc:description in an rdf:Seq, 6.7.3 t4) and issue12213.1
-// (dc:creator in an rdf:Bag, 6.7.3 t3).
+// # Corpus evidence
+//
+//   - pdfjs issue4706: measured against veraPDF on a nine-cell matrix built
+//     from it, with the text held equal to the Info entry throughout. The
+//     file itself writes dc:description in an rdf:Seq (6.7.3 t4).
+//   - pdfjs issue12213.1: writes dc:creator in an rdf:Bag (6.7.3 t3).
 func TestXMPCheckDocInfoSync_ContainerType(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -61,9 +61,13 @@ func pad10(n int) string {
 // for rendering-mode-3 text.
 //
 // The reader has always supported it, but the command exposed no flag, so a
-// searchable scan extracted as empty: pdfjs JBIG2Globals.pdf gave 0 words where
-// poppler gave 1447. The default is deliberately unchanged; what was missing
-// was any way to ask.
+// searchable scan extracted as empty. The default is deliberately unchanged;
+// what was missing was any way to ask.
+//
+// # Corpus evidence
+//
+//   - pdfjs JBIG2Globals.pdf: the text command gave 0 words where poppler
+//     gave 1447.
 func TestText_InvisibleFlagReachesTheOCRLayer(t *testing.T) {
 	path := writeTempPDF(t, invisibleTextPDF())
 

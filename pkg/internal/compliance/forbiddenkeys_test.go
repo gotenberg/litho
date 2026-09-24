@@ -51,6 +51,8 @@ func hasRule(vs []Violation, r Rule) bool {
 	return false
 }
 
+// TestPresStepsForbidden pins that a page /PresSteps fires the part 2 to 4
+// rule and that a page without one stays clean.
 func TestPresStepsForbidden(t *testing.T) {
 	ctx := context.Background()
 	doc, cat := objsDocPDF(t,
@@ -79,6 +81,8 @@ func TestPresStepsForbidden(t *testing.T) {
 	}
 }
 
+// TestFormFieldAAForbidden pins that a form field /AA fires the parts 1 to 3
+// rule whatever it holds, and that part 4 does not emit it.
 func TestFormFieldAAForbidden(t *testing.T) {
 	ctx := context.Background()
 	// A form field carrying an (empty) /AA entry. ISO 19005-1 §6.6.2 and
@@ -122,6 +126,8 @@ func TestFormFieldAAForbidden(t *testing.T) {
 	}
 }
 
+// TestDestOutputProfileRefForbidden pins that /DestOutputProfileRef fires the
+// parts 2 and 3 rule only on a GTS_PDFX output intent.
 func TestDestOutputProfileRefForbidden(t *testing.T) {
 	ctx := context.Background()
 	mk := func(subtype string, withRef bool) (*document.Document, ast.PdfDict) {

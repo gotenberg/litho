@@ -9,12 +9,16 @@ import (
 )
 
 // TestDecodeLZW_RealPDFStream verifies the decoder against a real PDF
-// content stream taken from a govdocs1 fixture (TREATY WITH THE TRIBES
-// OF MIDDLE OREGON, 1855). The stream is 2479 bytes of PDF EarlyChange=1
-// LZW-compressed text-positioning operators that decode to 4499 bytes;
-// it crosses the 9→10 bit-width boundary, exercising the
-// [lzwReader.maybeWiden] alignment that an off-by-one would silently
-// truncate.
+// content stream (TREATY WITH THE TRIBES OF MIDDLE OREGON, 1855). The
+// stream is 2479 bytes of PDF EarlyChange=1 LZW-compressed text-positioning
+// operators that decode to 4499 bytes; it crosses the 9→10 bit-width
+// boundary, exercising the [lzwReader.maybeWiden] alignment that an
+// off-by-one would silently truncate.
+//
+// # Corpus evidence
+//
+//   - govdocs: testdata/lzw_pdfa_stream.bin is a content stream taken from
+//     a govdocs1 file.
 func TestDecodeLZW_RealPDFStream(t *testing.T) {
 	t.Parallel()
 

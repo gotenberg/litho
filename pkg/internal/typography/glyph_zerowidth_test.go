@@ -23,7 +23,7 @@ func zeroWidthToUnicode() *cmap.CMap {
 }
 
 // TestDecodeNextChar_ZeroWidthToUnicodeAdvances pins that the byte count
-// decodeNextChar reports is never zero. processText advances the string by it,
+// [decodeNextChar] reports is never zero. [processText] advances the string by it,
 // so a zero repeats the same code forever.
 func TestDecodeNextChar_ZeroWidthToUnicodeAdvances(t *testing.T) {
 	t.Parallel()
@@ -42,7 +42,7 @@ func TestDecodeNextChar_ZeroWidthToUnicodeAdvances(t *testing.T) {
 
 // TestProcessText_ZeroWidthToUnicodeTerminates is the denial-of-service
 // regression. A crafted /ToUnicode reaches this loop through the public
-// Reader.ExtractText path, and the context poll inside processText only
+// Reader.ExtractText path, and the context poll inside [processText] only
 // returns on cancellation, so an uncancelled run has no escape: before the
 // guards landed this call never returned.
 func TestProcessText_ZeroWidthToUnicodeTerminates(t *testing.T) {
@@ -72,7 +72,7 @@ func TestProcessText_ZeroWidthToUnicodeTerminates(t *testing.T) {
 }
 
 // TestProcessText_WellFormedToUnicodeStillExtracts is the control. A guard
-// that made processText terminate by refusing to decode anything would pass
+// that made [processText] terminate by refusing to decode anything would pass
 // the test above, so pin that a normal font still produces elements.
 func TestProcessText_WellFormedToUnicodeStillExtracts(t *testing.T) {
 	t.Parallel()

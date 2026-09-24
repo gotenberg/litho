@@ -68,13 +68,12 @@ func tableSectionChildRule(parentType ast.PdfName) Rule {
 }
 
 // validateTableColumnConsistency checks that all TR rows in a Table have the
-// same number of columns, accounting for ColSpan attributes on TD/TH cells.
-// PDF/UA-1 §7.2 t43 and PDF/UA-2 §8.2.5.26 t3/t4.
-// validateTableColumnConsistency checks table regularity (§8.2.5.26 / §7.2) and
-// reports whether the table is column-regular. Header determination (t5/t6)
-// assumes a rectangular grid, so an irregular table makes the positional
-// header model meaningless. This function returns false when it fires a
-// regularity violation so the caller skips header determination.
+// same number of columns, accounting for ColSpan attributes on TD/TH cells
+// (PDF/UA-1 §7.2 t43, PDF/UA-2 §8.2.5.26 t3/t4), and reports whether the
+// table is column-regular. Header determination (t5/t6) assumes a rectangular
+// grid, so an irregular table makes the positional header model meaningless.
+// It returns false when it fires a regularity violation so the caller skips
+// header determination.
 func validateTableColumnConsistency(ctx context.Context, state *walkState, tableElem ast.PdfDict) bool {
 	rows := collectTableRows(ctx, state, tableElem)
 	if len(rows) < 2 {
@@ -204,7 +203,6 @@ func computeEffectiveColumns(ctx context.Context, state *walkState, rows []ast.P
 	for ri, row := range rows {
 		colPos := 0 // Current column position in the grid.
 
-		// Get cells for this row.
 		cells := resolveRowCells(ctx, state, row)
 
 		for _, cell := range cells {
@@ -255,9 +253,12 @@ type tableKid struct {
 // types a table is read by. veraPDF reads rows and cells this way
 // (GFSETable.getTR): the /RoleMap applies first (ISO 32000-2:2020, 14.8.6), as
 // [iso32005Key] applies it, and a Div, Part, or NonStruct kid contributes its
-// own kids in its place, as getStructuralSignificanceChildren does. govdocs
-// thread_100_100945.pdf holds its rows in TableHead and TableBody elements its
-// role map maps to THead and TBody.
+// own kids in its place, as getStructuralSignificanceChildren does.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100945.pdf: holds its rows in TableHead and TableBody
+//     elements its role map maps to THead and TBody.
 func tableKids(ctx context.Context, state *walkState, elem ast.PdfDict) []tableKid {
 	return tableKidsAt(ctx, state, elem, 0)
 }
@@ -335,11 +336,17 @@ func sectionRows(ctx context.Context, state *walkState, section ast.PdfDict) []a
 // cellColSpan returns the ColSpan value for a TD/TH cell (default 1).
 //
 // A cell states a span in its own /A attributes or through the classes its /C
-// names (ISO 32000-1, 14.7.5.2), and pdfjs bug1997343 uses the second form: its
-// row-1 header carries /C [/TH-col /colspan-2] with the ClassMap defining
-// /colspan-2 as << /O /Table /ColSpan 2 >>. Reading only /A counted that row as
-// one column against two in every other row and reported a regular table as
-// irregular. /A keeps precedence; /C is consulted only when /A names no span.
+// names (ISO 32000-1, 14.7.5.2). Reading only /A miscounts a row whose span
+// comes from a class and reports a regular table as irregular. /A keeps
+// precedence; /C is consulted only when /A names no span.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1997343: uses the class form. Its row-1 header carries
+//     /C [/TH-col /colspan-2] with the ClassMap defining /colspan-2 as
+//     << /O /Table /ColSpan 2 >>, and reading only /A counted that row as one
+//     column against two in every other row and reported a regular table as
+//     irregular.
 func cellColSpan(ctx context.Context, state *walkState, cell ast.PdfDict) int {
 	return cellSpan(ctx, state, cell, "ColSpan")
 }
@@ -414,7 +421,7 @@ func tableColumnRule(profile string, wider bool) Rule {
 }
 
 // validateTableChildren checks Table children containment. Split from
-// validateTableContainment for readability.
+// [validateTableContainment] for readability.
 func validateTableChildren(state *walkState, typeName ast.PdfName, parentType ast.PdfName) {
 	// A kid with no standard type drops out of veraPDF's kidsStandardTypes, and a
 	// Div, Part, or NonStruct kid contributes its own kids in its place, which

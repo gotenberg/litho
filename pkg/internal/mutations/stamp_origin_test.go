@@ -12,10 +12,15 @@ import (
 //
 // TextStamp documents X and Y as "points from the page's bottom-left corner",
 // but a content stream draws in user space, where (0, 0) is the coordinate
-// origin. Those coincide only when the box starts at (0, 0), and 4% of the
-// corpus files measured do not: govdocs thread_000_000018.pdf uses
-// [-306 -396 306 396], where an unshifted stamp began at the page's centre and
-// ran off the right edge, losing its last character to the crop.
+// origin. Those coincide only when the box starts at (0, 0), which real files
+// do not always do.
+//
+// # Corpus evidence
+//
+//   - All corpora: 4% of the files measured do not start their box at (0, 0).
+//   - govdocs thread_000_000018.pdf: uses [-306 -396 306 396], where an
+//     unshifted stamp began at the page's centre and ran off the right edge,
+//     losing its last character to the crop.
 func TestStampOriginShiftUsesCropBox(t *testing.T) {
 	page := &document.Page{
 		MediaBox: ast.PdfArray{ast.PdfInt(-306), ast.PdfInt(-396), ast.PdfInt(306), ast.PdfInt(396)},

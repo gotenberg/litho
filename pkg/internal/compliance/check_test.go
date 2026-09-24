@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+// TestRuleByPart pins that [ruleByPart] picks the rule for parts 1 to 4 and
+// the zero Rule for any other part.
 func TestRuleByPart(t *testing.T) {
 	t.Parallel()
 
@@ -37,6 +39,8 @@ func TestRuleByPart(t *testing.T) {
 	}
 }
 
+// TestViolationError pins the message [Violation.Error] formats, with and
+// without a context.
 func TestViolationError(t *testing.T) {
 	t.Parallel()
 
@@ -64,6 +68,8 @@ func TestViolationError(t *testing.T) {
 	})
 }
 
+// TestViolationsToErrors pins that [violationsToErrors] returns nil for no
+// violations and one error per violation otherwise.
 func TestViolationsToErrors(t *testing.T) {
 	t.Parallel()
 
@@ -87,6 +93,7 @@ func TestViolationsToErrors(t *testing.T) {
 	})
 }
 
+// TestViolationString pins that [Violation.String] matches [Violation.Error].
 func TestViolationString(t *testing.T) {
 	t.Parallel()
 	v := Violation{
@@ -98,6 +105,7 @@ func TestViolationString(t *testing.T) {
 	}
 }
 
+// TestFailHelpers pins the single-violation slices [fail] and [failf] build.
 func TestFailHelpers(t *testing.T) {
 	t.Parallel()
 
@@ -120,6 +128,8 @@ func TestFailHelpers(t *testing.T) {
 	})
 }
 
+// TestPageCtxParsedOps pins that [pageCtx.parsedOps] returns nil for empty
+// content and the same result on repeated calls.
 func TestPageCtxParsedOps(t *testing.T) {
 	t.Parallel()
 

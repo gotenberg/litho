@@ -78,15 +78,17 @@ func xmpPacket(body string) string {
 		`</rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="w"?>`
 }
 
-// TestDeclaredPDFX_InfoConformanceCarriesTheLevel pins the rule the corpus
-// taught and the spec does not state: for X-1a the Info dictionary splits the
+// TestDeclaredPDFX_InfoConformanceCarriesTheLevel pins a rule real files
+// follow and the spec does not state: for X-1a the Info dictionary splits the
 // declaration, putting the BASE in /GTS_PDFXVersion and the LEVEL in
-// /GTS_PDFXConformance.
+// /GTS_PDFXConformance, as in version "PDF/X-1:2001" with conformance
+// "PDF/X-1a:2001". Reading the version alone loses the "a", and "PDF/X-1" is
+// not one of the ten live levels, so the claim would be dropped entirely.
 //
-// Three veraPDF/pdfjs fixtures declare exactly this pair
-// (version "PDF/X-1:2001", conformance "PDF/X-1a:2001"). Reading the version
-// alone loses the "a", and "PDF/X-1" is not one of the ten live levels, so the
-// claim would be dropped entirely.
+// # Corpus evidence
+//
+//   - All corpora: three fixtures, from the verapdf and pdfjs corpora, declare
+//     exactly this pair.
 func TestDeclaredPDFX_InfoConformanceCarriesTheLevel(t *testing.T) {
 	t.Parallel()
 
@@ -123,8 +125,13 @@ func TestDeclaredPDFX_XMPCarriesX4AndLater(t *testing.T) {
 // TestDeclaredPDFX_XMPWinsOverAStaleInfoKey pins the precedence, which is not
 // arbitrary: from X-4 the Info key is itself a non-conformance, so a document
 // carrying both is an X-4+ file with a leftover key, not an X-1a/X-3 file.
-// Four of the corpus fixtures that declare pdfxid: also still carry the Info
-// key, so this is the common shape rather than a corner case.
+// Real files carry both often enough that this is the common shape rather
+// than a corner case.
+//
+// # Corpus evidence
+//
+//   - All corpora: four of the fixtures that declare pdfxid: also still carry
+//     the Info key.
 func TestDeclaredPDFX_XMPWinsOverAStaleInfoKey(t *testing.T) {
 	t.Parallel()
 
@@ -141,10 +148,13 @@ func TestDeclaredPDFX_XMPWinsOverAStaleInfoKey(t *testing.T) {
 //
 // A PDF/A extension schema DESCRIBES properties by name, so a document can
 // carry <pdfaProperty:name>GTS_PDFXVersion</pdfaProperty:name> while claiming
-// no PDF/X conformance whatsoever. The corpus fixture
-// bug1937438_af_from_latex.pdf does exactly that: one occurrence of the key,
-// zero occurrences of pdfxid:GTS_PDFXVersion. A detector that greps for the
-// bare key reports a claim that is not there; anchoring on the prefix does not.
+// no PDF/X conformance whatsoever. A detector that greps for the bare key
+// reports a claim that is not there; anchoring on the prefix does not.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1937438_af_from_latex.pdf: does exactly that, with one
+//     occurrence of the key and zero occurrences of pdfxid:GTS_PDFXVersion.
 func TestDeclaredPDFX_ExtensionSchemaDeclarationIsNotAClaim(t *testing.T) {
 	t.Parallel()
 
@@ -157,9 +167,13 @@ func TestDeclaredPDFX_ExtensionSchemaDeclarationIsNotAClaim(t *testing.T) {
 }
 
 // TestDeclaredPDFX_NonClaims covers the shapes that must report nothing: no
-// identifier at all, an empty value (a real corpus fixture writes
-// /GTS_PDFXVersion()), and a bare "PDF/X-1", which is not one of the ten live
-// levels and must never be promoted to X-1a.
+// identifier at all, an empty value (/GTS_PDFXVersion()), and a bare
+// "PDF/X-1", which is not one of the ten live levels and must never be
+// promoted to X-1a.
+//
+// # Corpus evidence
+//
+//   - All corpora: a real fixture writes /GTS_PDFXVersion().
 func TestDeclaredPDFX_NonClaims(t *testing.T) {
 	t.Parallel()
 
@@ -184,19 +198,25 @@ func TestDeclaredPDFX_NonClaims(t *testing.T) {
 }
 
 // TestDeclaredPDFX_ResourceLevelPacketIsNotADocumentClaim pins the scope rule
-// that the corpus forced: only the catalog's /Metadata stream carries a
+// that real files forced: only the catalog's /Metadata stream carries a
 // document-level declaration.
 //
 // ISO 32000-1, 14.3.2 makes the catalog's stream the document's metadata.
-// Pages, patterns and XObjects may each carry their own packet, and two corpus
-// fixtures do exactly that while declaring nothing at document level:
-// issue14562.pdf's pdfxid packet hangs off a pattern (object 177, referenced
-// from object 85, which follows a /Type /Pattern dict) and its catalog points
-// at object 2; issue14297.pdf has no catalog /Metadata at all while objects 56
-// and 57 declare PDF/X-4 behind wrapper dicts.
+// Pages, patterns and XObjects may each carry their own packet, and real files
+// do exactly that while declaring nothing at document level.
 //
-// A detector that scans the file for pdfxid reports PDF/X-4 for both. That is
-// the proxy answer, not the right one.
+// A detector that scans the file for pdfxid reports PDF/X-4 for such a file.
+// That is the proxy answer, not the right one.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14562.pdf: its pdfxid packet hangs off a pattern (object 177,
+//     referenced from object 85, which follows a /Type /Pattern dict) and its
+//     catalog points at object 2.
+//   - pdfjs issue14297.pdf: has no catalog /Metadata at all while objects 56
+//     and 57 declare PDF/X-4 behind wrapper dicts.
+//   - pdfjs issue14562.pdf, issue14297.pdf: a scan of the file for pdfxid
+//     reports PDF/X-4 for both.
 func TestDeclaredPDFX_ResourceLevelPacketIsNotADocumentClaim(t *testing.T) {
 	t.Parallel()
 

@@ -26,9 +26,12 @@ func colorScopePDF(resources, content string, extraObjs ...string) []byte {
 // Per ISO 32000-1, 8.7.4.5, a shading of type 1 to 3 is a dictionary while a
 // mesh shading of type 4 to 7 is a stream carrying the same entries in its
 // stream dictionary. litho resolved only the dictionary form, so every mesh
-// shading was skipped and its /ColorSpace never counted: pdfjs issue17848.pdf
-// paints a type 4 shading in DeviceRGB on a page with no OutputIntent, which
-// veraPDF reports under §6.2.4.3 t2.
+// shading was skipped and its /ColorSpace never counted.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue17848.pdf: paints a type 4 shading in DeviceRGB on a page with
+//     no OutputIntent, which veraPDF reports under §6.2.4.3 t2.
 func TestColorScope_MeshShading(t *testing.T) {
 	t.Parallel()
 
@@ -76,8 +79,12 @@ func TestColorScope_MeshShading(t *testing.T) {
 // An image mask carries no colour space of its own: ISO 32000-1, 8.9.6.2 paints
 // its unmasked areas with the current fill colour, so drawing one selects a
 // space exactly as "f" does, and with no cs/rg/g/k before the Do that colour is
-// the initial DeviceGray of 8.6.8. pdfjs issue7308.pdf draws a JBIG2 image mask
-// on a page that sets no colour at all, which veraPDF reports under §6.2.4.3 t4.
+// the initial DeviceGray of 8.6.8.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7308.pdf: draws a JBIG2 image mask on a page that sets no
+//     colour at all, which veraPDF reports under §6.2.4.3 t4.
 func TestColorScope_ImageMaskUsesFillColour(t *testing.T) {
 	t.Parallel()
 

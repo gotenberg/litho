@@ -76,6 +76,20 @@ func readCatalogFacts(ctx context.Context, src, out *pdf.Reader) catalogFacts {
 // therefore carries these entries ONCE, not twice, so the same comparisons
 // hold for both. The doubling that a self-merge does cause belongs to the
 // /EmbeddedFiles name tree, which these invariants do not read.
+//
+// # Corpus evidence
+//
+//   - pdfjs: asking HasAcroForm alone on the input side of the /AcroForm
+//     invariant reports six false positives, in three distinct shapes, none
+//     of them a defect.
+//   - pdfjs issue12963: 27 widget fields and no /AcroForm at all.
+//   - pdfjs issue14203: 10 parentless widgets with /T and /FT, and no
+//     /AcroForm.
+//   - pdfjs issue15597: the /AcroForm is present but spelled /Field, so
+//     /Fields is absent and HasAcroForm is correctly false.
+//   - pdfjs xfa_* (3 files): dynamic XFA, so HasAcroForm is false because
+//     /NeedsRendering is set, and the merge keeps the widgets while dropping
+//     the XFA layer.
 func checkCatalogInvariants(verb string, got catalogFacts) string {
 	// A document that owns no form field at all must not come back owning a
 	// form. /T is the pop-up title on a markup annotation (ISO 32000-1,
@@ -84,17 +98,12 @@ func checkCatalogInvariants(verb string, got catalogFacts) string {
 	// that never had a form.
 	//
 	// The input side asks HasFormFields, NOT HasAcroForm, and skips XFA
-	// inputs. Measured on pdfjs, HasAcroForm alone reports six false
-	// positives, in three distinct shapes, none of them a defect:
-	//
-	//   issue12963   27 widget fields and no /AcroForm at all
-	//   issue14203   10 parentless widgets with /T and /FT, no /AcroForm
-	//   issue15597   /AcroForm present but spelled /Field, so /Fields is
-	//                absent and HasAcroForm is correctly false
-	//   xfa_*  (3)   dynamic XFA: HasAcroForm is false because
-	//                /NeedsRendering is set, and the merge keeps the widgets
-	//                while dropping the XFA layer, which is a documented
-	//                downgrade rather than an invention
+	// inputs. HasAcroForm alone misreads three shapes, none of them a defect:
+	// widget fields with no /AcroForm at all; an /AcroForm whose /Fields key
+	// is misspelled, so HasAcroForm is correctly false; and dynamic XFA,
+	// where HasAcroForm is false because /NeedsRendering is set and the merge
+	// keeps the widgets while dropping the XFA layer, which is a documented
+	// downgrade rather than an invention.
 	//
 	// Rebuilding a form for fields the document already owns is repair. Only a
 	// document with no fields and no XFA can have one invented for it.

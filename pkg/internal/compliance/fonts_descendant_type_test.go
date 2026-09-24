@@ -13,13 +13,19 @@ import (
 // ISO 32000-1, 9.7.4, Table 117 requires /Type /Font on a CIDFont dictionary,
 // and veraPDF models the descendant as a PDFont, reporting §6.2.11.2 t1 against
 // it. litho ran the required-key checks on the Type0 parent and returned before
-// reaching the descendant, so a descendant with no /Type went unreported: pdfjs
-// issue7544.pdf writes exactly that, confirmed in the file's own bytes.
+// reaching the descendant, so a descendant with no /Type went unreported.
 //
 // Only /Type is judged: both CIDFont subtypes are already valid, so t2 cannot
 // fire, and t7 reads a descriptor [document.ResolveFontDescriptor] already
 // reaches through the descendant, so repeating the whole check would judge one
 // descriptor twice.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7544.pdf: writes a descendant with no /Type, confirmed in the
+//     file's own bytes.
+//   - pdfjs issue12823.pdf: writes /DescendantFonts [null], the shape the null
+//     descendant case covers.
 func TestDescendantCIDFontRequiresType(t *testing.T) {
 	t.Parallel()
 
@@ -57,9 +63,9 @@ func TestDescendantCIDFontRequiresType(t *testing.T) {
 
 	t.Run("a null descendant is not reported", func(t *testing.T) {
 		t.Parallel()
-		// pdfjs issue12823.pdf writes /DescendantFonts [null]. Nothing resolves
-		// to a dictionary there, so there is no CIDFont to judge and the
-		// missing-/Type report would name an object the file does not contain.
+		// /DescendantFonts [null] resolves to no dictionary, so there is no
+		// CIDFont to judge and the missing-/Type report would name an object
+		// the file does not contain.
 		if fires(t, "null") {
 			t.Error("a null descendant has no CIDFont dictionary to judge")
 		}

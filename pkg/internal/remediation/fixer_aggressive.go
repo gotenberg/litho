@@ -38,6 +38,14 @@ var validOperators = map[string]bool{
 
 // matchAggressive matches violations that require content modification to fix.
 // These are only applied when PreserveContent is false.
+//
+// # Corpus evidence
+//
+//   - All corpora: matching the bare 6.9 clause sent 13 cells to
+//     [fixAnnotationAppearances]. Four of the 13 had no other claimant: parts
+//     2 and 3 test 3, and part 4 tests 1 and 5.
+//   - All corpora: the same short-circuit, a negative arm skipping every check
+//     after it, cost 12 corpus cells in [matchCatalogCleanup].
 func matchAggressive(v compliance.Violation) bool {
 	switch v.Rule.Clause {
 	case "6.3.3", "6.5.3": // annotation/form appearances
@@ -50,18 +58,18 @@ func matchAggressive(v compliance.Violation) bool {
 		// and 3 give that number to the optional content configuration
 		// dictionary, and part 4 to embedded files.
 		//
-		// Matching the bare clause sent 13 such cells to
-		// [fixAnnotationAppearances], which writes an /AP into every
+		// Matching the bare clause sent those rules to
+		// fixAnnotationAppearances, which writes an /AP into every
 		// annotation that lacks one. That repairs no optional-content or
 		// embedded-file rule, and unlike a claim on a no-op fixer it MUTATES
-		// the document on an unrelated trigger. Four of the 13 had no other
+		// the document on an unrelated trigger. Some of them had no other
 		// claimant at all: parts 2 and 3 test 3, the /Order completeness rule
-		// [matchCatalogCleanup] refuses for the same reason, and part 4 tests
+		// matchCatalogCleanup refuses for the same reason, and part 4 tests
 		// 1 and 5.
 		//
 		// No negative arm here. Returning false would skip the Op_Undefined
-		// check below, which is the short-circuit that cost 12 corpus cells in
-		// [matchCatalogCleanup]; this arm matches, or falls through.
+		// check below, the same short-circuit that once broke
+		// matchCatalogCleanup; this arm matches, or falls through.
 		if v.Rule.Specification == "ISO_19005_1" {
 			return true
 		}
@@ -343,14 +351,19 @@ func serializeOps(ops []content.Operation) []byte {
 	return buf.Bytes()
 }
 
+// writeOperand serialises one content-stream operand into buf in PDF syntax.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11678.pdf: formatting reals with %g, an aggressive content
+//     rewrite turned 5 violations into 64.
 func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) {
 	switch v := obj.(type) {
 	case ast.PdfInt:
 		fmt.Fprintf(buf, "%d", int64(v))
 	case ast.PdfReal:
 		// %g emits exponential form for small magnitudes ("1e-05"), which
-		// ISO 32000-1, 7.3.3 forbids in a PDF real. An aggressive content
-		// rewrite of issue11678.pdf turned 5 violations into 64 that way.
+		// ISO 32000-1, 7.3.3 forbids in a PDF real.
 		buf.WriteString(writer.FormatReal(float64(v)))
 	case ast.PdfName:
 		buf.WriteByte('/')

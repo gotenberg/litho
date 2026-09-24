@@ -48,6 +48,8 @@ func mediaAnnotViolations(t *testing.T, subtype, profile string) []Violation {
 	return checkPDFUA2AnnotationConstraints(context.Background(), doc, cat.Dict, profile)
 }
 
+// TestForbiddenMediaAnnots_UA2 pins that PDF/UA-2 reports a Sound annotation
+// under ISO 14289-2 §8.9.2.4.11 t1 and a Movie annotation under t2.
 func TestForbiddenMediaAnnots_UA2(t *testing.T) {
 	if v := mediaAnnotViolations(t, "Sound", "PDF/UA-2"); len(v) != 1 || v[0].Rule != Rule_14289_2_8_9_2_4_11_t01 {
 		t.Errorf("Sound under UA-2: got %v, want one §8.9.2.4.11 t01", v)
@@ -57,6 +59,8 @@ func TestForbiddenMediaAnnots_UA2(t *testing.T) {
 	}
 }
 
+// TestForbiddenMediaAnnots_AllowedAndOtherProfiles pins that a Text annotation
+// is never flagged and that the media rule stays silent under PDF/UA-1.
 func TestForbiddenMediaAnnots_AllowedAndOtherProfiles(t *testing.T) {
 	// A benign annotation is never flagged.
 	if v := mediaAnnotViolations(t, "Text", "PDF/UA-2"); len(v) != 0 {

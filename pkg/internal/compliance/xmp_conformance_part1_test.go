@@ -11,10 +11,12 @@ import (
 // "B", so a file validated as PDF/A-1 that claims "U" satisfies no level of
 // that part, even though the A > U > B hierarchy lets U cover B from part 2 on.
 //
-// The real file is the veraPDF test suite's
-// PDF_A-2u__veraPDF_test_suite_6-2-11-7-2-t02-fail-a.pdf (part=2,
-// conformance=U): validated at PDF/A-1b, veraPDF reports both §6.7.11 t2 for
-// the part and t3 for the conformance, and litho reported only t2.
+// # Corpus evidence
+//
+//   - verapdf PDF_A-2u__veraPDF_test_suite_6-2-11-7-2-t02-fail-a.pdf: the real
+//     file (part=2, conformance=U). Validated at PDF/A-1b, veraPDF reports
+//     both §6.7.11 t2 for the part and t3 for the conformance, and litho
+//     reported only t2.
 func TestXMPIdentification_LevelUIsNotAPart1Level(t *testing.T) {
 	t.Parallel()
 

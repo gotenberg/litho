@@ -23,7 +23,7 @@ func buildTableDirectory(tables map[string][]byte) []byte {
 	// Offset subtable: sfVersion=0x00010000, numTables, searchRange, entrySelector, rangeShift.
 	binary.BigEndian.PutUint32(buf[0:4], 0x00010000)
 	binary.BigEndian.PutUint16(buf[4:6], uint16(numTables))
-	// searchRange, entrySelector, rangeShift are not validated by our parser, leave as 0.
+	// searchRange, entrySelector, rangeShift are not validated by the parser, leave as 0.
 
 	offset := uint32(headerSize)
 	i := 0
@@ -545,8 +545,8 @@ func buildCmapFormat6(firstCode uint16, gids []uint16) []byte {
 // TestGlyphToUnicode_Format0 reaches the Format 0 reader, which nothing in this
 // repository did: measured at 0.0% across the whole test suite before this.
 //
-// parseCmap keeps only its best-scoring candidate, and every other test here
-// declares (3,1) or (3,10) while the minimalSfnt fuzz seed declares (3,0),
+// [parseCmap] keeps only its best-scoring candidate, and every other test here
+// declares (3,1) or (3,10) while the [minimalSfnt] fuzz seed declares (3,0),
 // which matches no case in the scoring switch and is dropped entirely. A lone
 // (1,0) Macintosh Roman record is the only route to this reader.
 func TestGlyphToUnicode_Format0(t *testing.T) {
@@ -572,7 +572,7 @@ func TestGlyphToUnicode_Format0(t *testing.T) {
 }
 
 // TestGlyphToUnicode_Format6 reaches the Format 6 reader, also at 0.0% before
-// this. See TestGlyphToUnicode_Format0 for why a (1,0) record is required.
+// this. See [TestGlyphToUnicode_Format0] for why a (1,0) record is required.
 func TestGlyphToUnicode_Format6(t *testing.T) {
 	// firstCode 65 with three entries: 'A'->1, 'B'->2, 'C'->0 (unmapped).
 	subtable := buildCmapFormat6(65, []uint16{1, 2, 0})

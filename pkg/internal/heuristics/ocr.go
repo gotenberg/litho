@@ -29,8 +29,8 @@ func RequiresOCR(elements []models.TextElement, images []models.ImageMeta, pageW
 
 	pageArea := pageWidth * pageHeight
 
-	// Check if any single image approximately fills the page. We estimate
-	// rendered dimensions by assuming the image is scaled to fit within
+	// Check if any single image approximately fills the page. Rendered
+	// dimensions are estimated by assuming the image is scaled to fit within
 	// the page (the overwhelmingly common case for scanned documents).
 	// A more precise approach would use the CTM, but for a heuristic
 	// this is sufficient.

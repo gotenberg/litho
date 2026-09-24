@@ -67,6 +67,9 @@ func twoInterpolatedImagesPDF(t *testing.T) []byte {
 	return buf.Bytes()
 }
 
+// TestFixImageIssues_NoteOrderIsDeterministic pins that the image fixer reports
+// its notes in the same order on every run.
+//
 // The fix descriptions name the image they describe, and they reach the caller
 // in the order the fixer produced them: `litho remediate` prints them as lines
 // and serialises them as the JSON "fixed" array, neither of which is sorted

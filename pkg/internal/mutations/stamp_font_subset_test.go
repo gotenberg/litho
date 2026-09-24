@@ -117,8 +117,9 @@ func buildSimpleGlyph() []byte {
 }
 
 // buildCompositeGlyph returns glyf bytes for a composite glyph that
-// references the given component GIDs. flags0 controls whether
-// MORE_COMPONENTS and ARG_*_ARE_WORDS are set on the first component.
+// references the given component GIDs. MORE_COMPONENTS is set on every
+// component but the last, and ARG_1_AND_2_ARE_WORDS is never set, so each
+// component carries 2 argument bytes.
 func buildCompositeGlyph(components []uint16) []byte {
 	// Header: int16 numberOfContours (-1) + 4x int16 bbox = 10 bytes.
 	var b bytes.Buffer
@@ -243,8 +244,7 @@ func TestExpandCompositeClosure_MultipleComponents(t *testing.T) {
 
 func TestTableChecksum_AlignmentPadding(t *testing.T) {
 	// A 5-byte table is treated as 8 bytes with 3 trailing zeros for
-	// checksum computation. Verify the expected sum matches what we
-	// would compute by hand.
+	// checksum computation. The expected sum below is computed by hand.
 	data := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
 	// Word 1 = 0x01020304, word 2 = 0x05000000.
 	want := uint32(0x01020304) + uint32(0x05000000)
@@ -317,8 +317,9 @@ func TestTTFChecksum_HeadAdjustment(t *testing.T) {
 	//   adjustment = 0xB1B0AFBA - checksum(file_with_zero_adjustment)
 	// the whole-file checksum should equal 0xB1B0AFBA.
 	//
-	// We verify this invariant by building a tiny font and running the
-	// patch manually, matching the logic in subsetTTF lines 133-142.
+	// The test verifies this invariant by building a tiny font and running
+	// the patch manually, matching the checksum patch at the end of
+	// subsetTTF.
 	head := make([]byte, 54)
 	// Zero head.checkSumAdjustment is already the default.
 	tables := map[string][]byte{

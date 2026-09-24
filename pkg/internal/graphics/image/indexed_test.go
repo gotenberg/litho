@@ -30,8 +30,13 @@ func indexedImagePDF(base, lookup string, samples []byte) []string {
 // sample is an index into the colour table, not a colour. The decoder took the
 // base space's component count instead, so it demanded three or four bytes for
 // every pixel that holds one and every palette image failed outright with
-// "decoded data too short" (pdfjs 160F-2019.pdf and S2.pdf among them). No
-// palette image could be decoded at all, which is what OCR and redaction need.
+// "decoded data too short". No palette image could be decoded at all, which is
+// what OCR and redaction need.
+//
+// # Corpus evidence
+//
+//   - pdfjs 160F-2019.pdf, S2.pdf: among the palette images that failed with
+//     "decoded data too short".
 func TestDecodeIndexedImage(t *testing.T) {
 	t.Parallel()
 

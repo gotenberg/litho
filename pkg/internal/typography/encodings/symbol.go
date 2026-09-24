@@ -203,7 +203,7 @@ var SymbolGlyphsUnicode = map[string]rune{
 }
 
 // BuildSymbolEncoding builds a byte→rune encoding map for Symbol fonts by
-// resolving glyph names from SymbolSetEncoding through SymbolGlyphsUnicode,
+// resolving glyph names from [SymbolSetEncoding] through [SymbolGlyphsUnicode],
 // then falling back to the standard glyph list.
 func BuildSymbolEncoding() map[byte]rune {
 	enc := make(map[byte]rune, 128)
@@ -224,8 +224,8 @@ func BuildSymbolEncoding() map[byte]rune {
 }
 
 // BuildZapfDingbatsEncoding builds a byte→rune encoding map for ZapfDingbats
-// fonts by resolving glyph names from ZapfDingbatsEncoding through
-// DingbatsGlyphsUnicode.
+// fonts by resolving glyph names from [ZapfDingbatsEncoding] through
+// [DingbatsGlyphsUnicode].
 func BuildZapfDingbatsEncoding() map[byte]rune {
 	enc := make(map[byte]rune, 128)
 	for i := range 256 {

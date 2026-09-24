@@ -111,7 +111,7 @@ func applyPNGPredictor(data []byte, params *predictorParams) ([]byte, error) {
 		filterType := data[srcOff]
 		srcRow := data[srcOff+1:]
 		if len(srcRow) < rowBytes {
-			// Truncated final row: copy what we have.
+			// Truncated final row: copy what remains.
 			srcRow = append(srcRow, make([]byte, rowBytes-len(srcRow))...)
 		}
 

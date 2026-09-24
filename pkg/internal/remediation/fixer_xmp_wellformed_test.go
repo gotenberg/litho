@@ -32,8 +32,12 @@ func wellFormed(t *testing.T, patched string) {
 //
 // dc:description is an rdf:Alt, and the sync spliced that markup straight into
 // the attribute value, leaving a literal '<' inside it. XML 1.0, 2.3 forbids
-// that, so seven govdocs files came out of remediation newly failing
-// 6.6.2.1 tests 4 and 5, confirmed against veraPDF on the remediated file.
+// that, so the output newly failed 6.6.2.1 tests 4 and 5.
+//
+// # Corpus evidence
+//
+//   - govdocs: seven files came out of remediation newly failing 6.6.2.1 tests
+//     4 and 5, confirmed against veraPDF on the remediated file.
 func TestPatchExistingXMPKeepsAttributeFormWellFormed(t *testing.T) {
 	t.Parallel()
 
@@ -58,9 +62,14 @@ func TestPatchExistingXMPKeepsAttributeFormWellFormed(t *testing.T) {
 // TestPatchExistingXMPEscapesAnApostrophe pins that a value carrying an
 // apostrophe cannot close a single-quoted attribute early.
 //
-// govdocs thread_400_400038 has /Keywords "victims--general, victims' rights"
-// and a single-quoted pdf:Keywords attribute. The unescaped apostrophe ended
-// the attribute mid-value and cost the packet its well-formedness.
+// An unescaped apostrophe spliced into a single-quoted pdf:Keywords attribute
+// ends the attribute mid-value and costs the packet its well-formedness.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400038: has /Keywords "victims--general, victims'
+//     rights" and a single-quoted pdf:Keywords attribute, and the unescaped
+//     apostrophe ended the attribute mid-value.
 func TestPatchExistingXMPEscapesAnApostrophe(t *testing.T) {
 	t.Parallel()
 
@@ -118,10 +127,14 @@ func TestPatchExistingXMPLeavesElementFormAlone(t *testing.T) {
 // XML 1.0, 2.11 requires a parser to normalise CR and CRLF to a single LF before
 // the application sees the value, so a literal CR written into the packet is
 // gone by the time any validator compares it. The docinfo-XMP equality rules
-// (ISO 19005-1, 6.7.3) then fail however faithfully the bytes were written:
-// govdocs thread_000_000187.pdf has a CRLF inside /Keywords, litho reported
-// "synced pdf:Keywords with Info /Keywords", and both litho and veraPDF still
-// failed test 5 on the output. A numeric character reference is exempt.
+// (ISO 19005-1, 6.7.3) then fail however faithfully the bytes were written. A
+// numeric character reference is exempt.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000187.pdf: has a CRLF inside /Keywords, litho
+//     reported "synced pdf:Keywords with Info /Keywords", and both litho and
+//     veraPDF still failed test 5 on the output.
 func TestXMLEscapeCarriageReturnRoundTrips(t *testing.T) {
 	t.Parallel()
 

@@ -48,9 +48,13 @@ const linearSteps = 4096
 // to D65 with the Bradford transform, the XYZ to linear sRGB with the matrix
 // of IEC 61966-2-1, and the result through the sRGB transfer function. Reading
 // the samples as DeviceRGB or DeviceGray instead drops the gamma, which
-// differs from the sRGB curve near black: 13,780 images of the govdocs and
-// pdfjs corpora came out up to 10 levels off PDF.js, which converts CalRGB
-// the same way for a D65 white.
+// differs from the sRGB curve near black, and puts the image off PDF.js, which
+// converts CalRGB the same way for a D65 white.
+//
+// # Corpus evidence
+//
+//   - All corpora: 13,780 images of the govdocs and pdfjs corpora came out up
+//     to 10 levels off PDF.js when read as DeviceRGB or DeviceGray.
 type calSpace struct {
 	// gamma[c][s] is sample s of component c, scaled to [0, 1], raised to the
 	// component's gamma.
@@ -66,6 +70,10 @@ type calSpace struct {
 // resolveCalSpace reads a [/CalGray dict] or [/CalRGB dict] colour space, and
 // reports false for any other value, or for a dictionary that fails the
 // requirements of ISO 32000-1, Tables 63 and 64.
+//
+// # Corpus evidence
+//
+//   - All corpora: no file states a /BlackPoint other than [0 0 0].
 func resolveCalSpace(ctx context.Context, doc *document.Document, obj ast.PdfObject) (*calSpace, bool) {
 	arr, err := document.ResolveArray(ctx, doc, obj)
 	if err != nil || len(arr) < 2 {
@@ -88,7 +96,8 @@ func resolveCalSpace(ctx context.Context, doc *document.Document, obj ast.PdfObj
 		return nil, false
 	}
 	// BlackPoint defaults to [0 0 0], which leaves the conversion as it is.
-	// No file in the corpora states another.
+	// Real files do not state another, so one that does is logged and
+	// ignored.
 	if black, ok := numbers(ctx, doc, dict["BlackPoint"], 3); ok && (black[0] != 0 || black[1] != 0 || black[2] != 0) {
 		doc.Logger.Debug("ignoring the /BlackPoint of a CIE-based colour space")
 	}

@@ -12,9 +12,13 @@ import (
 // ISO 32000-1 §12.5.6.19 lets a terminal form field and its widget annotation be
 // a single dictionary, so litho meets its /A and /AA twice: once walking the
 // page's /Annots and once walking the AcroForm /Fields tree. veraPDF builds one
-// PDAction per action object and reports it once. pdfjs 160F-2019.pdf drew 117
-// findings from litho against veraPDF's 54, split exactly 57 and 57 between the
-// two paths over the same 42 merged dictionaries.
+// PDAction per action object and reports it once.
+//
+// # Corpus evidence
+//
+//   - pdfjs 160F-2019.pdf: drew 117 findings from litho against veraPDF's 54,
+//     split exactly 57 and 57 between the two paths over the same 42 merged
+//     dictionaries.
 func TestMergedWidgetFieldActionJudgedOnce(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

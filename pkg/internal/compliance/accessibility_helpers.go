@@ -133,7 +133,7 @@ func walkStructKids(ctx context.Context, doc *document.Document, obj ast.PdfObje
 }
 
 func visitStructElem(ctx context.Context, doc *document.Document, elem ast.PdfDict, path string, seen map[int]bool, depth int, fn func(elem ast.PdfDict, path string)) {
-	// Only visit structure elements ([isStructElemDict]), whether or not they
+	// Only visit structure elements (isStructElemDict), whether or not they
 	// carry the /S their type needs.
 	if isStructElemDict(ctx, doc, elem) {
 		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
@@ -299,13 +299,21 @@ func readCatalogXMP(ctx context.Context, doc *document.Document, catalog ast.Pdf
 // The resolution is shared with the §6.7.3 document-information comparison,
 // which keys off the namespace URI rather than the literal prefix: a producer
 // that binds "dc" to a non-Dublin-Core URI does not satisfy the requirement.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7229.pdf: an rdf:Alt whose x-default entry is empty, and
+//     veraPDF is silent.
+//   - facturx: ZUGFeRD files with an rdf:Alt whose x-default entry is empty,
+//     and veraPDF is silent.
+//   - pdfjs issue20453.pdf: looks like the same shape and veraPDF reports it,
+//     but its dc:title sits on an rdf:Description that binds only xmlns:pdf,
+//     so the prefix is unbound and it is not a dc:title at all.
 func containsDCTitle(xmpData []byte) bool {
 	// Presence, not a non-empty value: an rdf:Alt whose x-default entry is empty
-	// still satisfies the rule (measured on pdfjs/issue7229 and the ZUGFeRD
-	// corpus, where veraPDF is silent). pdfjs/issue20453 looks like the same
-	// shape and does report, but its dc:title sits on an rdf:Description that
-	// binds only xmlns:pdf, so the prefix is unbound and it is not a dc:title at
-	// all: the namespace-keyed lookup below already tells those two apart.
+	// still satisfies the rule, and veraPDF is silent on it. A dc:title whose
+	// prefix no namespace binds is not a dc:title at all: the namespace-keyed
+	// lookup below already tells those two apart.
 	sync := xmpParseForSync(xmpData)
 	return sync != nil && sync.present["dc:title"]
 }

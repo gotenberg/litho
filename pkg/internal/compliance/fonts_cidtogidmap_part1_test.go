@@ -18,9 +18,13 @@ import (
 // ISO 19005-1 §6.3.3.2 t1 reads `... || renderingMode == 3` and grants no
 // embedding escape at all.
 //
-// pdfjs issue7835.pdf and issue18466.pdf and govdocs thread_400_400765.pdf each
-// show an unembedded CIDFontType2 with no /CIDToGIDMap; veraPDF reports all
-// three at PDF/A-1a and litho reported none.
+// # Corpus evidence
+//
+//   - pdfjs issue7835.pdf, issue18466.pdf: each shows an unembedded
+//     CIDFontType2 with no /CIDToGIDMap, and veraPDF reports both at PDF/A-1a
+//     while litho reported neither.
+//   - govdocs thread_400_400765.pdf: shows an unembedded CIDFontType2 with no
+//     /CIDToGIDMap, and veraPDF reports it at PDF/A-1a while litho did not.
 func TestCIDToGIDMapEscapeDiffersByPart(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

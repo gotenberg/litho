@@ -12,6 +12,12 @@ import (
 
 // GlyphToRune maps Adobe standard glyph names to UTF-8 runes.
 // This is a subset containing common Latin characters.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-3-8 and 6-2-11-7-2 test files: adding math symbols and Greek
+//     letters to this table globally caused compliance regressions on these
+//     files, which verify Unicode mapping completeness.
 var GlyphToRune = map[string]rune{
 	"space":          ' ',
 	"exclam":         '!',
@@ -279,8 +285,8 @@ var GlyphToRune = map[string]rune{
 
 	// Math symbols and Greek letters are NOT included here. They live
 	// in the Symbol font table (SymbolGlyphsUnicode). Adding them
-	// globally causes VeraPDF compliance regressions on test files that
-	// verify Unicode mapping completeness (6-3-8, 6-2-11-7-2).
+	// globally causes compliance regressions on files that verify Unicode
+	// mapping completeness.
 }
 
 // runeToGlyph is the reverse mapping, built lazily and thread-safely.
@@ -349,7 +355,7 @@ var texMathGlyphs = map[string]rune{
 	"lessequal":      0x2264,
 	"greaterequal":   0x2265,
 
-	// Standard AGL math-symbol names not in [extendedAGL] (the generator
+	// Standard AGL math-symbol names not in extendedAGL (the generator
 	// dropped Greek/math entries to keep the compliance tables clean).
 	// TeX CMSY/CMMI/MSAM/MSBM fonts rely on them via the /Encoding vector
 	// in their /FontFile preambles. /negationslash is intentionally
@@ -368,12 +374,12 @@ var texMathGlyphs = map[string]rune{
 	// AGL distinguishes /Delta → U+2206 INCREMENT from /Deltagreek →
 	// U+0394. CMMI/CMEX/MSAM math fonts use /Delta for the increment
 	// symbol; Symbol-font resolution still wins for explicitly Symbol-
-	// keyed fonts because it checks [SymbolGlyphsUnicode] first.
+	// keyed fonts because it checks SymbolGlyphsUnicode first.
 	"Delta": 0x2206, // ∆
 }
 
 // GlyphToRuneFull resolves a glyph name to a Unicode rune using the core
-// GlyphToRune map, the extended AGL, and the "uniXXXX" / "uXXXXXXXX" naming
+// [GlyphToRune] map, the extended AGL, and the "uniXXXX" / "uXXXXXXXX" naming
 // convention. Returns (rune, true) on success, (0, false) if unknown.
 func GlyphToRuneFull(name string) (rune, bool) {
 	if r, ok := GlyphToRune[name]; ok {
@@ -452,7 +458,7 @@ func GlyphToRuneFull(name string) (rune, bool) {
 }
 
 // diacriticalModifiers maps modifier suffixes to their Unicode combining
-// diacritical marks. Used by resolveBaseModifier to decompose glyph names
+// diacritical marks. Used by [resolveBaseModifier] to decompose glyph names
 // like "ccaron" → c + combining caron → č (after NFC normalization).
 var diacriticalModifiers = map[string]rune{
 	"acute":        0x0301, // combining acute accent

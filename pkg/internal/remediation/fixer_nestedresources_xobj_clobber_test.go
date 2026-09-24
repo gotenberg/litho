@@ -8,9 +8,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// The stream half of the same contract [fixType3FontResources] breaks with
-// dictionaries: [fixFormXObjectResources] rewrites a form XObject STREAM, so it
-// must read that stream through the allocator too.
+// TestFixNestedResources_KeepsAPeerFixersPendingStreamWrite pins the stream
+// half of the same contract [fixType3FontResources] breaks with dictionaries:
+// [fixFormXObjectResources] rewrites a form XObject STREAM, so it must read
+// that stream through the allocator too.
 //
 // Form XObject streams are among the most written objects in the package.
 // Thirteen sites call AllocAt with a stream at an object number, in aggressive,

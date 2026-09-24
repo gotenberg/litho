@@ -12,9 +12,12 @@ import (
 //
 // veraPDF tests kidsStandardTypes, which applies the /RoleMap before taking a
 // standard name as itself and looks through Div, Part, and NonStruct kids.
-// govdocs thread_100_100184.pdf maps Caption to P and places those elements
-// mid-Sect; litho judged the name as written and reported them, while veraPDF
-// reports nothing.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100184.pdf: maps Caption to P and places those
+//     elements mid-Sect; litho judged the name as written and reported them,
+//     while veraPDF reports nothing.
 func TestCaptionKidPositions(t *testing.T) {
 	t.Parallel()
 

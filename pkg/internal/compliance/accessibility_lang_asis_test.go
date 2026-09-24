@@ -11,8 +11,13 @@ import (
 // veraPDF runs /^[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*$/ on the value itself. litho
 // validated it after [document.DecodePdfString], which drops the bytes
 // PDFDocEncoding leaves undefined, and after trimming white space, so
-// "EN-US\x00" (pdfjs issue12706.pdf) and "EN-US " passed. veraPDF reports both
-// on a one-page file and accepts "EN-US".
+// "EN-US\x00" and "EN-US " passed. veraPDF reports both on a one-page file and
+// accepts "EN-US".
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12706.pdf: writes the /Lang "EN-US\x00", which passed while
+//     litho validated the decoded, trimmed value.
 func TestCheckLangRequired_TagJudgedAsWritten(t *testing.T) {
 	t.Parallel()
 
@@ -45,9 +50,15 @@ func TestCheckLangRequired_TagJudgedAsWritten(t *testing.T) {
 	}
 }
 
-// TestCheckLangRequired_StructElemTagJudgedAsWritten covers the structure
-// element of pdfjs issue12706.pdf, whose /Sect carries /Lang (EN-US\000) under
-// a well-formed catalog /Lang. veraPDF reports it under ISO 14289-2, 8.4.4 t2.
+// TestCheckLangRequired_StructElemTagJudgedAsWritten pins the same as-written
+// reading on a structure element: a /Sect carrying /Lang (EN-US\000) under a
+// well-formed catalog /Lang, which veraPDF reports under ISO 14289-2, 8.4.4 t2.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12706.pdf: its /Sect carries /Lang (EN-US\000) under a
+//     well-formed catalog /Lang, and veraPDF reports it under ISO 14289-2,
+//     8.4.4 t2.
 func TestCheckLangRequired_StructElemTagJudgedAsWritten(t *testing.T) {
 	t.Parallel()
 

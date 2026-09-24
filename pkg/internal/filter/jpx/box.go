@@ -145,9 +145,14 @@ type channelDefinition struct {
 // in which case the header is nil.
 //
 // ISO 32000-1, 7.4.9 says the filter shall expect a full JPX file structure.
-// A bare codestream is accepted anyway: the corpora hold 3 such streams that
-// OpenJPEG decodes, and a codestream carries every parameter decoding needs,
-// so reading one cannot misinterpret a conforming file.
+// A bare codestream is accepted anyway: real documents embed such streams
+// and OpenJPEG decodes them, and a codestream carries every parameter
+// decoding needs, so reading one cannot misinterpret a conforming file.
+//
+// # Corpus evidence
+//
+//   - All corpora: 3 streams are bare codestreams, and OpenJPEG decodes
+//     them.
 func readFile(data []byte) ([]byte, *fileHeader, error) {
 	if bytes.HasPrefix(data, codestreamStart) {
 		return data, nil, nil
@@ -195,6 +200,11 @@ func readFile(data []byte) ([]byte, *fileHeader, error) {
 }
 
 // readHeader reads the boxes of a JP2 Header box (T.800, I.5.3).
+//
+// # Corpus evidence
+//
+//   - govdocs: six streams put the Component Mapping box outside the JP2
+//     Header box. Each is an /Indexed image, and pdf.js decodes them.
 func readHeader(body []byte) (*fileHeader, error) {
 	boxes, err := readBoxes(body)
 	if err != nil {
@@ -240,11 +250,10 @@ func readHeader(body []byte) (*fileHeader, error) {
 	// box. A header holding one without the other is read anyway: without a
 	// mapping, I.5.3.5 maps each component directly to a channel, and a
 	// mapping without a palette fails only for a channel that looks one up
-	// (see [Image.Channels]). Six govdocs streams put the Component Mapping
-	// box outside the JP2 Header box. Each is an /Indexed image, whose index
-	// samples ISO 32000-1, 7.4.9 reads with the JPEG 2000 colour
-	// specification ignored, palette included (T.800, I.3.4); pdf.js decodes
-	// them.
+	// (see Image.Channels). Producers put the Component Mapping box of an
+	// /Indexed image outside the JP2 Header box, and ISO 32000-1, 7.4.9 reads
+	// its index samples with the JPEG 2000 colour specification ignored,
+	// palette included (T.800, I.3.4); pdf.js decodes such images.
 	return hdr, nil
 }
 

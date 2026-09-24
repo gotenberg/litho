@@ -7,8 +7,12 @@ import "testing"
 //
 // An artifact is content with no meaning for a reader (ISO 32000-1, 14.8.2.2),
 // so marking one over an XObject that paints TEXT hides those words from
-// assistive technology. pdfjs TAMReview.pdf keeps most of its text in such
-// XObjects and tagging cut it from 11914 extractable characters to 2266.
+// assistive technology.
+//
+// # Corpus evidence
+//
+//   - pdfjs TAMReview.pdf: keeps most of its text in such XObjects, and
+//     tagging cut it from 11914 extractable characters to 2266.
 func TestPageSpans_LeavesTextXObjectUnmarked(t *testing.T) {
 	// No structure leaves, so the whole stream is one gap.
 	data := []byte("q 1 0 0 1 0 0 cm /ARRS Do Q\n")

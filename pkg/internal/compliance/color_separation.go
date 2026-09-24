@@ -26,11 +26,17 @@ func deviceNComponentRule(part int) Rule {
 	}
 }
 
+// separationConsistencyRule selects §6.2.4.4 t2: all Separation arrays with the
+// same colorant name share alternateSpace and tintTransform.
+//
+// # Corpus evidence
+//
+//   - All corpora: emitting t1 here was a 36-cell litho-only mislabel.
 func separationConsistencyRule(part int) Rule {
 	// §6.2.4.4 t2: all Separation arrays with the same colorant name shall
 	// share alternateSpace and tintTransform. t1 is the separate
 	// Colorants-dictionary presence rule, a distinct sub-test of the same
-	// clause; emitting t1 here was a 36-cell litho-only mislabel.
+	// clause, so this rule must not emit t1.
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_4_4_t02, Rule_19005_3_6_2_4_4_t02, Rule_19005_4_6_2_4_4_t02)
 }
 
@@ -69,7 +75,7 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, pages [
 		// A pattern or a shading takes part only when the page paints with it,
 		// and a colour space only when something selects it. The parsed
 		// operations report both, and they are already cached on the page (see
-		// [pageCtx.parsedOps]), so this costs no second parse.
+		// pageCtx.parsedOps), so this costs no second parse.
 		_, referencedXObjects, contentCSNames, used, inheritedAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
 
 		scanSeparationDeviceNInResources(ctx, doc, resources, part, i, colorantAlternates, colorantTintFuncs, results, used, referencedXObjects, contentCSNames, inheritedAtDo)
@@ -139,7 +145,7 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 		// employs. veraPDF was measured to stay silent on a conflicting colorant
 		// that no cs/CS selects, and to report it as soon as an operator selects
 		// the space, whether or not anything is then painted with it.
-		// [collectReferencedCSNames] is the scoping the device-colour scan
+		// collectReferencedCSNames is the scoping the device-colour scan
 		// already applies, and it also counts a space named by a painted image
 		// or shading.
 		var referenced map[string]bool
@@ -199,7 +205,7 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 			}
 			where := fmt.Sprintf("Image XObject %s", k)
 			// An /Indexed image names its DeviceN one level down; see
-			// [indexedBaseArray].
+			// indexedBaseArray.
 			if base := indexedBaseArray(ctx, doc, imgCS, 0); base != nil {
 				imgCS, where = base, where+" /Indexed base"
 			}
@@ -245,12 +251,17 @@ const maxIndexedBaseDepth = 4
 //
 // ISO 32000-1, 8.6.6.3 makes that base a colour space in its own right, so the
 // constraints on the space apply to it. veraPDF models it the same way and
-// anchors ISO 19005-2 §6.2.4.4 t1 at
-// imageCS[0](52 0 obj PDIndexed)/base[0](51 0 obj PDDeviceN): pdfjs
-// issue9940.pdf paints /Im0 and /Im1 in /Indexed over
-// /DeviceN(/IBM,/None,/None,/None) whose attributes declare no /Colorants entry
-// for IBM, and litho reported nothing because every caller tested only the head
-// of the outer array.
+// anchors ISO 19005-2 §6.2.4.4 t1 at the base of the image's /Indexed space.
+// Every caller used to test only the head of the outer array, so a colorant
+// defect in the base went unreported.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9940.pdf: paints /Im0 and /Im1 in /Indexed over
+//     /DeviceN(/IBM,/None,/None,/None) whose attributes declare no /Colorants
+//     entry for IBM. veraPDF anchors §6.2.4.4 t1 at
+//     imageCS[0](52 0 obj PDIndexed)/base[0](51 0 obj PDDeviceN), and litho
+//     reported nothing.
 func indexedBaseArray(ctx context.Context, doc *document.Document, arr ast.PdfArray, depth int) ast.PdfArray {
 	if depth > maxIndexedBaseDepth || ctx.Err() != nil || len(arr) < 2 {
 		return nil
@@ -292,7 +303,7 @@ func checkSeparationDeviceNArray(ctx context.Context, doc *document.Document, cs
 	case "Indexed":
 		// Only §6.2.4.4 t1 follows the base. The colorant-consistency scan
 		// (t2) keeps its resource-dictionary scope, exactly as the image
-		// XObject site in [scanSeparationDeviceNRecursive] already states,
+		// XObject site in scanSeparationDeviceNRecursive already states,
 		// so an /Indexed base adds no new alternate-space comparisons.
 		base := indexedBaseArray(ctx, doc, arr, 0)
 		if base == nil {
@@ -660,6 +671,12 @@ var deviceNProcessColorants = map[string]bool{
 // array: every spot colorant it names needs an entry in the /Colorants
 // dictionary of its attributes. where identifies the colour space in the
 // violation context.
+//
+// # Corpus evidence
+//
+//   - verapdf veraPDF_test_suite_6-2-4-4-t02-fail-a: veraPDF's §6.2.4.4 t1
+//     summary carries seven failed checks, one per offending colorant, so
+//     reporting every undeclared colorant matches it.
 func checkDeviceNColorants(ctx context.Context, doc *document.Document, arr ast.PdfArray, part, pageIdx int, where string, results *[]Violation) {
 	// §6.2.4.4 t1 exists for parts 2+ only; a zero Rule must never be
 	// emitted (it serializes as a clause-less "-t00" residual).
@@ -691,9 +708,8 @@ func checkDeviceNColorants(ctx context.Context, doc *document.Document, arr ast.
 			continue
 		}
 		// Report every undeclared colorant, not just the first: veraPDF raises
-		// one failed check per offending colorant (its 6.2.4.4 t1 summary on
-		// veraPDF_test_suite_6-2-4-4-t02-fail-a carries seven checks), so
-		// stopping here would under-report a file's actual colorant defects.
+		// one failed check per offending colorant, so stopping here would
+		// under-report a file's actual colorant defects.
 		*results = append(*results, failf(rule,
 			"page %d, %s: DeviceN spot colorant %q has no Colorants entry",
 			pageIdx+1, where, cName)...)

@@ -43,9 +43,13 @@ func type1Program(preamble string, glyphs ...string) string {
 // Its glyph programs live in the eexec /CharStrings dictionary keyed by glyph
 // name (ISO 32000-1, 9.9.1), not in a GID-keyed table, so the GID path reads
 // nothing and every such font went unchecked. A code whose name the dictionary
-// does not hold paints no glyph, which ISO 19005-2 §6.2.11.4.1 t2 forbids:
-// govdocs thread_300_300516.pdf shows code 202 named "blank" and pdfjs
-// issue11477_reduced.pdf shows a space its 61-charstring subset omits.
+// does not hold paints no glyph, which ISO 19005-2 §6.2.11.4.1 t2 forbids.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300516.pdf: shows code 202 named "blank".
+//   - pdfjs issue11477_reduced.pdf: shows a space its 61-charstring subset
+//     omits.
 func TestCheckSimpleGlyphPresence_Type1Program(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

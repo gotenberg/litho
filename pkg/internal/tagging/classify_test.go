@@ -144,7 +144,7 @@ func TestAutoTag_ArtifactsNonTextContent(t *testing.T) {
 	ctx := context.Background()
 	// A stroked rule line sits between two text objects. The text objects
 	// become structure; the stroke must be wrapped as an /Artifact so no
-	// painting operator is left unmarked (ISO 14289-1 §7.1).
+	// painting operator is left unmarked (ISO 14289-1, 7.1).
 	cs := "BT /F1 24 Tf 72 700 Td (Heading) Tj ET\n" +
 		"72 695 m 540 695 l S\n" +
 		"BT /F1 12 Tf 72 670 Td (Body text here now.) Tj ET\n"

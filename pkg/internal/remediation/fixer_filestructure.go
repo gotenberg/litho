@@ -18,7 +18,7 @@ func matchFileStructure(v compliance.Violation) bool {
 	}
 
 	// Two rules sit inside the clause ranges below that the full rewrite
-	// cannot reach, and no other fixer claims either. [fixFileStructure]
+	// cannot reach, and no other fixer claims either. fixFileStructure
 	// repairs nothing itself, so claiming one asserts a repair that does not
 	// happen and drops the violation out of the residual. Matched on the whole
 	// rule rather than the clause: that is the identity, and it cannot drift
@@ -29,7 +29,7 @@ func matchFileStructure(v compliance.Violation) bool {
 		// which re-serialisation does repair. ISO 19005-4 gives that number to
 		// the Inline Image /F key instead, and a content stream's body is
 		// carried across as bytes, so a BI...ID...EI sequence is beyond the
-		// rewrite. [fixHexString] documents that limit from measurement.
+		// rewrite. fixHexString documents that limit from measurement.
 		return false
 	case compliance.Rule_19005_4_6_1_6_1_t03:
 		// A 3D stream /Subtype shall be U3D or PRC. The rewrite copies

@@ -133,7 +133,12 @@ func TestSampledFunctionClampsOutsideDomain(t *testing.T) {
 }
 
 // TestExponentialFunction pins type 2 against the coefficients of a real
-// corpus tint transform (thread_200_200192.pdf), computed independently.
+// tint transform, computed independently.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200192.pdf: carries the tint transform whose
+//     coefficients this test uses.
 func TestExponentialFunction(t *testing.T) {
 	t.Parallel()
 
@@ -245,9 +250,14 @@ func TestPostScriptFunction_CompilesOnce(t *testing.T) {
 // TestStitchingFunctionIsRefused pins that type 3 is refused rather than
 // silently mis-evaluated.
 //
-// No fixture in any corpus uses one (measured: type 0 x47, type 2 x6, type 4 x3
-// across the 20 files holding Separation or DeviceN images), so shipping an
-// untested implementation would be speculation. The refusal names the type.
+// Nothing real exercises type 3, so shipping an untested implementation would
+// be speculation. The refusal names the type.
+//
+// # Corpus evidence
+//
+//   - All corpora: no fixture uses a type 3 function. Across the 20 files
+//     holding Separation or DeviceN images, the functions measured are type 0
+//     x47, type 2 x6 and type 4 x3.
 func TestStitchingFunctionIsRefused(t *testing.T) {
 	t.Parallel()
 

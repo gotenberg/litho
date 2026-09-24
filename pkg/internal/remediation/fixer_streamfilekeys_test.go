@@ -15,8 +15,12 @@ import (
 // stream would pass a single-stream test while rewriting objects no violation
 // named.
 //
-// /Length 0 mirrors the corpus fixtures: the bytes were external, so the
-// embedded stream is empty.
+// /Length 0 mirrors real carriers: the bytes were external, so the embedded
+// stream is empty.
+//
+// # Corpus evidence
+//
+//   - All corpora: the fixtures carrying these keys declare /Length 0.
 func streamFileKeysPDF() []byte {
 	return buildStructPDF(
 		"<< /Type /Catalog /Pages 2 0 R >>",

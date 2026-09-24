@@ -30,7 +30,7 @@ func parseInput(t *testing.T, src string) error {
 // dictionary nested 850,000 deep (a 7.3 MB file) killed the test binary, and
 // the same file opened through pdf.Open killed it too.
 //
-// The same failure mode is why [maxDestIndirectionDepth] exists in
+// The same failure mode is why maxDestIndirectionDepth exists in
 // core/document, where a 700-byte file killed the process through the public
 // Bookmarks and Annotations calls.
 //
@@ -68,11 +68,13 @@ func TestParseObject_NestingIsBounded(t *testing.T) {
 
 // TestParseObject_RealNestingStillParses is the control for the bound above.
 // A guard that refused everything would satisfy that test while breaking every
-// document, so the depths here are the ones real files actually reach.
+// document, so the depths here are the ones real files actually reach, and 200
+// sits above every observed document.
 //
-// The deepest nesting measured across a sample of all seven corpora is 156
-// (govdocs thread_200_200087.pdf), with a 99th percentile of 55 and a median
-// of 3, so 200 sits above every observed document.
+// # Corpus evidence
+//
+//   - All corpora, sampled: the deepest nesting is 156, in govdocs
+//     thread_200_200087.pdf, with a 99th percentile of 55 and a median of 3.
 func TestParseObject_RealNestingStillParses(t *testing.T) {
 	t.Parallel()
 

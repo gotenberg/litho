@@ -40,9 +40,14 @@ func pendingStream(t *testing.T, alloc *writer.ObjAllocator, objNum int) (ast.Pd
 
 // TestFixFilterNameCase_RenamesWhenTheBytesActuallyDecode covers the repair.
 //
-// veraPDF's 6-1-6-2-t01-fail-b carries `/Filter /Flatedecode` on object 11 with
-// a genuinely Flate-compressed body. PDF names are case-sensitive, so that is
-// "a filter not listed in Table 6".
+// A stream may carry `/Filter /Flatedecode` over a genuinely Flate-compressed
+// body. PDF names are case-sensitive, so that is "a filter not listed in Table
+// 6".
+//
+// # Corpus evidence
+//
+//   - verapdf 6-1-6-2-t01-fail-b: carries `/Filter /Flatedecode` on object 11
+//     with a genuinely Flate-compressed body.
 func TestFixFilterNameCase_RenamesWhenTheBytesActuallyDecode(t *testing.T) {
 	body := flateBody(t, "hello optional content")
 	dict := ast.PdfDict{
@@ -78,13 +83,17 @@ func TestFixFilterNameCase_RenamesWhenTheBytesActuallyDecode(t *testing.T) {
 }
 
 // TestFixFilterNameCase_LeavesItAloneWhenTheBytesDoNotDecode is the branch the
-// CORPUS CANNOT EXERCISE.
+// gate CANNOT EXERCISE.
 //
-// Exactly one misspelled-filter stream exists corpus-wide and its bytes do
-// decode, so the gate can only ever confirm the positive path. A name that
-// merely looks like a Table 6 spelling proves nothing about the bytes: renaming
-// on the name alone would declare a stream to be Flate that is not, and the
-// writer would emit a file no reader can inflate.
+// A name that merely looks like a Table 6 spelling proves nothing about the
+// bytes: renaming on the name alone would declare a stream to be Flate that is
+// not, and the writer would emit a file no reader can inflate.
+//
+// # Corpus evidence
+//
+//   - All corpora: exactly one misspelled-filter stream exists corpus-wide and
+//     its bytes do decode, so the CORPUS CANNOT EXERCISE this branch and the
+//     gate can only ever confirm the positive path.
 func TestFixFilterNameCase_LeavesItAloneWhenTheBytesDoNotDecode(t *testing.T) {
 	body := []byte("this is definitely not zlib data, not even close")
 	dict := ast.PdfDict{
@@ -137,7 +146,11 @@ func TestCanonicalFilterSpelling(t *testing.T) {
 // TestFixFilterNameCase_IgnoresArrayValuedFilter records a deliberate limit.
 //
 // An array /Filter would need every element verified in chain order, and the
-// corpus carries no such case, so the gate could not falsify that code.
+// gate could not falsify that code.
+//
+// # Corpus evidence
+//
+//   - All corpora: no file carries an array-valued misspelled /Filter.
 func TestFixFilterNameCase_IgnoresArrayValuedFilter(t *testing.T) {
 	body := flateBody(t, "payload")
 	dict := ast.PdfDict{

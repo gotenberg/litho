@@ -11,11 +11,14 @@ import (
 //
 // The rule's subject is every SEMarkedContent veraPDF builds, and it builds them
 // for the content of a Form XObject a page draws, not only for the page's own
-// stream. pdfjs issue19971.pdf draws a form whose /Span sequences carry
-// /ActualText with no language anywhere; veraPDF reports each one and litho,
-// scanning page content alone, reported none. A /Lang on the sequence the Do
-// sits in covers the form's content, since the form paints inside it (ISO
-// 32000-1 §14.6).
+// stream. A /Lang on the sequence the Do sits in covers the form's content,
+// since the form paints inside it (ISO 32000-1 §14.6).
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19971.pdf: draws a form whose /Span sequences carry
+//     /ActualText with no language anywhere; veraPDF reports each one and
+//     litho, scanning page content alone, reported none.
 func TestSpanLang_FormXObject(t *testing.T) {
 	t.Parallel()
 

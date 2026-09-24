@@ -11,8 +11,12 @@ import (
 // depth-1 simple property values: XMP preserves element text verbatim,
 // and the docinfo synchronization check compares the un-trimmed value
 // against the Info dict, so a pretty-printed whitespace-only pdf:Keywords
-// is NOT equivalent to an empty /Keywords (ISO 19005-1 §6.7.3 t5, verified
-// live on PDF_UA-1__7.1-t01-pass-b retargeted to PDF/A-1b).
+// is NOT equivalent to an empty /Keywords (ISO 19005-1 §6.7.3 t5).
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.1-t01-pass-b: verified live, retargeted to
+//     PDF/A-1b.
 func TestXMPParseForSync_PreservesSimpleWhitespace(t *testing.T) {
 	data := xmpPacket(`<rdf:Description rdf:about=""
       xmlns:pdf="http://ns.adobe.com/pdf/1.3/">
@@ -40,10 +44,14 @@ func TestXMPParseForSync_PreservesSimpleWhitespace(t *testing.T) {
 // TestXMPParseForSync_PreservesWhitespaceOnlyAltValue pins that a
 // whitespace-only rdf:li inside an rdf:Alt container (a title of " ") is
 // captured verbatim, not dropped. Dropping it misreads dc:title as empty and
-// fires a spurious Info/XMP mismatch under §6.7.3 that veraPDF does not raise
-// (verified live on pdfjs bug1142033 @PDF/A-1b, where /Title=" " matches a
-// space-valued dc:title). Structural pretty-print whitespace between the
-// container elements is still ignored because it sits outside any rdf:li.
+// fires a spurious Info/XMP mismatch under §6.7.3 that veraPDF does not raise.
+// Structural pretty-print whitespace between the container elements is still
+// ignored because it sits outside any rdf:li.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1142033: verified live at PDF/A-1b, where /Title=" " matches
+//     a space-valued dc:title.
 func TestXMPParseForSync_PreservesWhitespaceOnlyAltValue(t *testing.T) {
 	data := xmpPacket(`<rdf:Description rdf:about=""
       xmlns:dc="http://purl.org/dc/elements/1.1/">
@@ -116,7 +124,7 @@ func TestXMPCheckDocInfoSync_NoPacket(t *testing.T) {
 // DECLARED, not on its value: an empty /Title against a declared-but-empty
 // dc:title passes, against an undeclared one fails. Values alone cannot tell
 // those apart, because a property carrying no character data leaves no entry in
-// the value map, which is why xmpSyncResult tracks presence separately.
+// the value map, which is why [xmpSyncResult] tracks presence separately.
 func TestXMPCheckDocInfoSync_EmptyInfoEntry(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

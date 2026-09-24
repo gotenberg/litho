@@ -67,11 +67,16 @@ func ttfNamingGID0() string {
 //
 // veraPDF names a simple font's glyph from its encoding (GFGlyph: the /Encoding
 // name for the code, the program only when the encoding gives none) and tests
-// name != ".notdef". pdfjs issue13107_reduced.pdf embeds a DejaVuSans subset
-// with no .notdef glyph at all: its post table names GID 0 "space", and the page
-// shows code 1, which /Differences names "space". litho reported the GID 0 as
-// .notdef at PDF/A-2b, PDF/A-4 and PDF/UA-2 while veraPDF passed all three. The
-// control keeps a code the encoding names ".notdef" failing the rule.
+// name != ".notdef". The control keeps a code the encoding names ".notdef"
+// failing the rule.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue13107_reduced.pdf: embeds a DejaVuSans subset with no
+//     .notdef glyph at all. Its post table names GID 0 "space", and the page
+//     shows code 1, which /Differences names "space". litho reported the GID
+//     0 as .notdef at PDF/A-2b, PDF/A-4 and PDF/UA-2 while veraPDF passed all
+//     three.
 func TestNotdefGlyph_NamedGlyphAtGID0(t *testing.T) {
 	t.Parallel()
 

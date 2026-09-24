@@ -13,8 +13,11 @@ import (
 // nothing that needs the parsed packet: the header's bytes and encoding
 // attributes (t2, t3) and the property audits of 6.6.2.3.1 belong to veraPDF's
 // XMPPackage and XMPProperty objects, which XMPCore builds only from a packet
-// it parsed. govdocs thread_300_300234.pdf ships such a packet. Every case was
-// measured against veraPDF.
+// it parsed. Every case was measured against veraPDF.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300234.pdf: ships such a packet.
 func TestXMPMalformedPacketAnswersForItsSerializationAlone(t *testing.T) {
 	t.Parallel()
 

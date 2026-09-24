@@ -46,11 +46,15 @@ func directAcroFormXFAPDF() []byte {
 // interactive form dictionary is written inline in the catalog.
 //
 // ISO 32000-1, 12.7.2 does not require /AcroForm to be an indirect object, and
-// 11 of the 20 corpus files carrying one write it inline. The repair only wrote
-// through the allocator, which has no object number to address for a direct
-// dictionary, so the rewrite was dropped while success was still reported:
-// litho printed "removed /XFA from AcroForm" on every one of the fixpoint
-// loop's three rounds and the output still carried /XFA.
+// producers commonly write it inline. The repair only wrote through the
+// allocator, which has no object number to address for a direct dictionary, so
+// the rewrite was dropped while success was still reported: litho printed
+// "removed /XFA from AcroForm" on every one of the fixpoint loop's three rounds
+// and the output still carried /XFA.
+//
+// # Corpus evidence
+//
+//   - All corpora: 11 of the 20 files carrying /AcroForm write it inline.
 func TestFixXFARemovesKeyFromInlineAcroForm(t *testing.T) {
 	t.Parallel()
 

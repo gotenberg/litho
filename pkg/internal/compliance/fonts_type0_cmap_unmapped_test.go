@@ -12,9 +12,12 @@ import (
 // TestType0EmbeddedCMapUnmappedCode pins ISO 19005-2, 6.2.11.8 t1 on a Type 0
 // font whose embedded encoding CMap maps no CID for the code shown: the code
 // selects CID 0 (ISO 32000-1, 9.7.6.3), the .notdef glyph, and a bfchar
-// section, which maps to Unicode (9.10.3), does not change that. pdfjs
-// bug920426.pdf writes its encoding CMap with bfchar alone. Every case was
-// measured against veraPDF.
+// section, which maps to Unicode (9.10.3), does not change that. Every case
+// was measured against veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug920426.pdf: writes its encoding CMap with bfchar alone.
 func TestType0EmbeddedCMapUnmappedCode(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

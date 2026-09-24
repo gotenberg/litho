@@ -59,10 +59,15 @@ func openForm(t *testing.T) *document.Document {
 // fields nobody filled in.
 //
 // [ExtractFormData] records a field only when it carries a /V, which is right
-// for "what did the user type" and wrong for "what fields are there": pdfjs
-// issue14301.pdf has 660 named fields and `litho forms` printed
-// "(no form fields)" for it, because only its 320 checkboxes hold a value. It
-// also left no way to discover the names to pass to set-form.
+// for "what did the user type" and wrong for "what fields are there": it hid
+// the unfilled fields from `litho forms`, and left no way to discover the
+// names to pass to set-form.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14301.pdf: has 660 named fields, and `litho forms` printed
+//     "(no form fields)" for it, because only its 320 checkboxes hold a
+//     value.
 func TestExtractFormFieldsListsUnfilledFields(t *testing.T) {
 	t.Parallel()
 

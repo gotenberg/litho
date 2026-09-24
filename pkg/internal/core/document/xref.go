@@ -81,7 +81,7 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 	visited := make(map[int64]struct{})
 
 	// The section furthest into the file answers the /ID rule, whichever order
-	// the /Prev chain visits the sections in: see [xref.Index.HighestOffsetTrailer].
+	// the /Prev chain visits the sections in: see xref.Index.HighestOffsetTrailer.
 	highestOffset := int64(-1)
 
 	for currentOffset != 0 {
@@ -186,16 +186,22 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 //
 // Object numbers reach the index from three untrusted places, none of which
 // bounds them: a classic subsection header, an xref stream's /Index, and the
-// raw-byte rebuild scan. pdfjs GHOSTSCRIPT-698804-1-fuzzed.pdf carries the
-// header "00000004294967296 3" in a 627-byte file. The bogus entries are inert
-// on read, so the file opens everywhere, but every write derives its next object
-// number from the highest one in the index: litho appended "4294967299 0 obj"
-// with a matching /Size, an object number past 2^32 that qpdf refuses outright,
-// turning a file both poppler and pikepdf accept into one pikepdf rejects.
+// raw-byte rebuild scan. Bogus entries are inert on read, so such a file opens
+// everywhere, but every write derives its next object number from the highest
+// one in the index, so one bogus entry sends every appended object past a
+// number other readers accept.
 //
 // See [Document.objectNumberFits] for the bound and why the file size supplies
 // it. Compliance reads benefit too: an entry no file could hold was inflating
 // the object count checked against the ISO 32000-1, Annex C limits.
+//
+// # Corpus evidence
+//
+//   - pdfjs GHOSTSCRIPT-698804-1-fuzzed.pdf: carries the header
+//     "00000004294967296 3" in a 627-byte file. litho appended
+//     "4294967299 0 obj" with a matching /Size, an object number past 2^32 that
+//     qpdf refuses outright, turning a file both poppler and pikepdf accept
+//     into one pikepdf rejects.
 func (d *Document) pruneUnrepresentableEntries() {
 	for objNum := range d.Index.Entries {
 		if d.objectNumberFits(objNum) {
@@ -216,17 +222,23 @@ func (d *Document) pruneUnrepresentableEntries() {
 // is a sparse identifier, not an index (ISO 32000-1, 7.3.10): a file may number
 // five objects 8797 to 8801 and still be 8 kB, because the count of objects and
 // the numbers they carry are independent. Bounding by byte length conflated the
-// two and dropped every such object from [Document.HighestObjectNumber]: on
-// pdfjs issue4573.pdf, 8474 bytes numbering objects up to 8801, it answered 380.
-// Rewriting the catalog at 8797 then pushed the allocator to 8798 and the
-// incremental trailer went out as /Size 8798, which puts the page tree at 8798
-// and everything above it past the end of the table. poppler read the file
-// before litho touched it and afterwards reported "Catalog dictionary does not
-// contain a valid Pages entry".
+// two and dropped every such object from [Document.HighestObjectNumber], so an
+// incremental update allocated numbers already in use and wrote a /Size that
+// cut the table short.
 //
 // A negative number is never valid. The cap stays as an anti-DoS guard so a
 // corrupt xref cannot send allocation somewhere absurd; the entry count remains
 // bounded by the file itself, since every entry costs bytes to list.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue4573.pdf: 8474 bytes numbering objects up to 8801, for which
+//     the byte-length bound answered 380. Rewriting the catalog at 8797 then
+//     pushed the allocator to 8798 and the incremental trailer went out as
+//     /Size 8798, which puts the page tree at 8798 and everything above it
+//     past the end of the table. poppler read the file before litho touched it
+//     and afterwards reported "Catalog dictionary does not contain a valid
+//     Pages entry".
 func (d *Document) objectNumberFits(objNum int) bool {
 	if objNum < 0 {
 		return false
@@ -240,12 +252,10 @@ func (d *Document) objectNumberFits(objNum int) bool {
 //
 // The cross-reference index alone does not answer this, and the gap is ordinary
 // rather than exotic: an xref stream need not list itself, so the object holding
-// it is often absent from the very index it defines. veraPDF 6-1-4-t03-fail-a
-// defines objects 1-22 and indexes 1-21, and litho appended its own object 22
-// straight over the file's /Type /XRef stream; pdfjs bug1019475_1.pdf lost
-// object 586 the same way. A mislabelled subsection header opens the same gap
-// wider: GHOSTSCRIPT-698804-1-fuzzed.pdf indexes only 0 and 1 while defining 1
-// through 6, leaving objects 2-4 looking free.
+// it is often absent from the very index it defines, and an allocation from the
+// index alone lands straight over the file's /Type /XRef stream. A mislabelled
+// subsection header opens the same gap wider, leaving defined objects looking
+// free.
 //
 // The trailer /Size is one greater than the highest object number used (ISO
 // 32000-1, Table 15), which covers exactly the objects the index missed. Taking
@@ -257,13 +267,26 @@ func (d *Document) objectNumberFits(objNum int) bool {
 // applied to /Size here. A file cannot DEFINE an object numbered above its byte
 // count, which is why [Document.pruneUnrepresentableEntries] drops such entries,
 // but it can REFERENCE one, and every caller of this method is choosing the next
-// object number to WRITE. On pdfjs issue16091.pdf the catalog names its page
-// tree 156325 while the trailer declares /Size 156342 in a 107 KB file, so the
-// check rejected /Size, the estimate fell back to the index, and the update's own
-// cross-reference stream was allocated at 156325, on top of the page tree the
-// catalog points at. Every reader then refused the output: poppler with
-// "Top-level pages object is wrong type (stream)" and qpdf with "unable to find
-// /Root dictionary", on a file both of them read before the edit.
+// object number to WRITE. Rejecting such a /Size drops the estimate back to the
+// index, and the update's own objects land on top of ones the file references.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-1-4-t03-fail-a: defines objects 1-22 and indexes 1-21, and
+//     litho appended its own object 22 straight over the file's /Type /XRef
+//     stream.
+//   - pdfjs bug1019475_1.pdf: lost object 586 the same way, to an appended
+//     object written over its unlisted xref stream.
+//   - pdfjs GHOSTSCRIPT-698804-1-fuzzed.pdf: a mislabelled subsection header
+//     indexes only 0 and 1 while the file defines 1 through 6, leaving objects
+//     2-4 looking free.
+//   - pdfjs issue16091.pdf: the catalog names its page tree 156325 while the
+//     trailer declares /Size 156342 in a 107 KB file, so the plausibility check
+//     rejected /Size, the estimate fell back to the index, and the update's own
+//     cross-reference stream was allocated at 156325, on top of the page tree
+//     the catalog points at. Every reader then refused the output: poppler with
+//     "Top-level pages object is wrong type (stream)" and qpdf with "unable to
+//     find /Root dictionary", on a file both of them read before the edit.
 func (d *Document) HighestObjectNumber() int {
 	highest := 0
 	for objNum := range d.Index.Entries {
@@ -287,12 +310,16 @@ func (d *Document) HighestObjectNumber() int {
 // rewriting "3 1 obj" as "3 0 obj" leaves every "3 1 R" in the file pointing at
 // an object that no longer answers. litho could not see this in its own output
 // because its index is keyed by object number alone, which is deliberate
-// leniency on read; pdfjs bug1393476.pdf came out of "litho rotate" reporting
-// the new angle to litho and none at all to poppler or pikepdf.
+// leniency on read.
 //
 // A free entry reports 0. Its generation is the one to use if the number is
 // ever reused (ISO 32000-1, 7.5.4), not the identity of a live object, and
 // nothing references a free object.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1393476.pdf: came out of "litho rotate" reporting the new angle
+//     to litho and none at all to poppler or pikepdf.
 func (d *Document) ObjectGeneration(objNum int) int {
 	entry, ok := d.Index.Entries[objNum]
 	if !ok || entry.Free {
@@ -318,8 +345,12 @@ func (d *Document) DefinesObject(objNum int) bool {
 // number litho allocates. This is an anti-DoS guard, not a spec limit: /Size is
 // file-derived and so untrusted, and a corrupt one must not send object numbers
 // somewhere absurd. 2^23 is orders of magnitude above the object count of any
-// real document (the largest fixture in the corpora holds ~10^5) while still
-// leaving room above any number a file could plausibly reference.
+// real document while still leaving room above any number a file could
+// plausibly reference.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest fixture holds ~10^5 objects.
 const maxTrailerObjectCount = 1 << 23
 
 // trailerObjectCount returns the trailer /Size when it is a usable object count.
@@ -404,6 +435,23 @@ func (d *Document) ValidateObjectHeaderFormat(offset int64, objNum int) []error 
 	return d.validateObjectHeaderFormat(offset, objNum)
 }
 
+// isPDFWhiteSpace reports whether c is one of the six white-space characters
+// ISO 32000-1, Table 1 defines. The object header rule (ISO 19005-2 6.1.9 t1,
+// ISO 19005-4 6.1.8 t1) asks for "a single white-space character" between the
+// object number, the generation number and the obj keyword, not for a space.
+//
+// # Corpus evidence
+//
+//   - pdfjs colors.pdf: writes every header as "3\n0\nobj", which veraPDF
+//     accepts and litho reported twice per object.
+func isPDFWhiteSpace(c byte) bool {
+	switch c {
+	case 0x00, '\t', '\n', '\f', '\r', ' ':
+		return true
+	}
+	return false
+}
+
 // validateObjectHeaderFormat performs raw-byte validation of an indirect object
 // header "N G obj". The spec requires: object number and generation number
 // separated by a single white-space character, generation number and obj
@@ -413,20 +461,6 @@ func (d *Document) ValidateObjectHeaderFormat(offset int64, objNum int) []error 
 // The findings are returned rather than recorded on the document so the
 // caller records them once for the object, whatever the parse that follows
 // them does.
-// isPDFWhiteSpace reports whether c is one of the six white-space characters
-// ISO 32000-1, Table 1 defines. The object header rule (ISO 19005-2 6.1.9 t1,
-// ISO 19005-4 6.1.8 t1) asks for "a single white-space character" between the
-// object number, the generation number and the obj keyword, not for a space:
-// pdfjs colors.pdf writes every header as "3\n0\nobj", which veraPDF accepts
-// and litho reported twice per object.
-func isPDFWhiteSpace(c byte) bool {
-	switch c {
-	case 0x00, '\t', '\n', '\f', '\r', ' ':
-		return true
-	}
-	return false
-}
-
 func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) []error {
 	// Read enough bytes to cover the header: "NNNNNNNNN GGGGG obj\n" ≈ 25 bytes.
 	var buf [40]byte
@@ -547,6 +581,12 @@ func (d *Document) nextNormalObjectOffset(off int64) int64 {
 // validateEndobjFormat scans the object body starting at offset to find
 // "endobj" and validates it is preceded by an EOL marker. It returns the
 // violations found.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15096.pdf: supersedes object 264, whose abandoned copy ends
+//     "endobj " and was reported as object 263's until the window stopped at
+//     the next object header.
 func (d *Document) validateEndobjFormat(offset int64, objNum int) []error {
 	// Cap the scan at the next indirect object's offset so "endobj"
 	// literals embedded in a later object's strings cannot be found. Using a
@@ -569,8 +609,7 @@ func (d *Document) validateEndobjFormat(offset int64, objNum int) []error {
 	// definition keeps its bytes in the file but loses its xref entry, so the
 	// window runs on through it. Stop at the next object header instead, so the
 	// backward scan below cannot reach a dead object's "endobj" and report it
-	// against this one. pdfjs issue15096.pdf supersedes object 264, whose
-	// abandoned copy ends "endobj " and was reported as object 263's.
+	// against this one.
 	if hdr := nextObjectHeader(data); hdr > 0 {
 		data = data[:hdr]
 	}
@@ -695,8 +734,8 @@ func isObjectHeaderAt(data []byte) bool {
 // concurrent resolution is still writing.
 func (d *Document) ValidateXRefTableFormat(offset int64) []error {
 	// Read a generous chunk from the xref table start.
-	// Most xref tables fit in 64KB; we only need to validate the header
-	// and first few entries to detect format issues.
+	// Most xref tables fit in 64KB, and only the header and first few
+	// entries need validating to detect format issues.
 	const maxRead = 65536
 	buf := make([]byte, maxRead)
 	n, _ := d.r.ReadAt(buf, offset)

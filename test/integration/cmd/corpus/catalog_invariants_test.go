@@ -81,13 +81,17 @@ func openCatalogFactsPDF(t *testing.T, ctx context.Context, data []byte) *pdf.Re
 //
 // Everything else in this package hands Compare a hand-built catalogFacts, so
 // the predicate and the metrics are covered while the code that actually reads
-// the two documents is not. The corpus cannot close that gap: no file among
-// the 5171 carries /Collection or /PronunciationLexicon, so the portfolio and
-// lexicon branches never execute there.
+// the two documents is not.
 //
 // The pair is deliberately ASYMMETRIC and asserted in BOTH directions. Passing
 // the same document as src and out would behave identically if the function
 // read both facts from one side, so only the mirrored case can catch a swap.
+//
+// # Corpus evidence
+//
+//   - All corpora, 5171 files: none carries /Collection or
+//     /PronunciationLexicon, so the portfolio and lexicon branches never
+//     execute in a corpus run, which therefore cannot close the gap.
 func TestReadCatalogFacts_ReadsEachSideFromItsOwnDocument(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -134,9 +138,14 @@ func TestReadCatalogFacts_ReadsEachSideFromItsOwnDocument(t *testing.T) {
 // TestReadCatalogFacts_DrivesTheDroppedPortfolioVerdict runs the portfolio
 // branch end to end, from real PDF bytes through to the verdict.
 //
-// Until now that branch had never executed anywhere: not in a test, because
-// every other test builds catalogFacts by hand, and not in the corpus, because
-// no fixture carries /Collection. portfolio_checked has been 0 on every run.
+// Until now that branch had never executed in a test, because every other
+// test builds catalogFacts by hand.
+//
+// # Corpus evidence
+//
+//   - All corpora: no fixture carries /Collection, so the branch never
+//     executed in a corpus run either, and portfolio_checked has been 0 on
+//     every run.
 func TestReadCatalogFacts_DrivesTheDroppedPortfolioVerdict(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -167,7 +176,12 @@ func TestReadCatalogFacts_DrivesTheDroppedPortfolioVerdict(t *testing.T) {
 }
 
 // TestReadCatalogFacts_DrivesTheDroppedLexiconVerdict does the same for the
-// lexicon branch, the other counter that has never left zero.
+// lexicon branch.
+//
+// # Corpus evidence
+//
+//   - All corpora: lexicons_checked, like portfolio_checked, has never left
+//     zero on a corpus run.
 func TestReadCatalogFacts_DrivesTheDroppedLexiconVerdict(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

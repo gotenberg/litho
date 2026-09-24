@@ -11,11 +11,15 @@ import (
 )
 
 // TestStreamLengthSurvivesTruncatedEndstream pins that a correct /Length is
-// honoured when the end-of-stream keyword is damaged. pdfjs issue10004.pdf
-// writes every stream end as a truncated "endstrea"; rejecting those made the
-// fallback scan find no "endstream" at all and return the rest of the file as
-// stream data, so each stream swallowed the bytes after it and remediation grew
-// the file from 757 KB to 12.6 MB.
+// honoured when the end-of-stream keyword is damaged. Rejecting a truncated
+// keyword makes the fallback scan find no "endstream" at all and return the
+// rest of the file as stream data, so each stream swallows the bytes after it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue10004.pdf: writes every stream end as a truncated
+//     "endstrea". Rejecting those made each stream swallow the bytes after it,
+//     and remediation grew the file from 757 KB to 12.6 MB.
 func TestStreamLengthSurvivesTruncatedEndstream(t *testing.T) {
 	t.Parallel()
 	const body = "HELLO-STREAM-BODY"

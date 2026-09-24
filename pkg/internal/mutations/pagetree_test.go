@@ -12,9 +12,12 @@ import (
 
 // danglingPageTreePDF builds a document whose catalog names a page tree the
 // file never defines. ISO 32000-1, 7.3.9 makes that reference equivalent to
-// null, which is how a damaged file reaches the rewrite: pdfjs
-// poppler-937-0-fuzzed.pdf loses its /Kids array to a NUL byte and ends up
-// here.
+// null, which is how a damaged file reaches the rewrite.
+//
+// # Corpus evidence
+//
+//   - pdfjs poppler-937-0-fuzzed.pdf: loses its /Kids array to a NUL byte and
+//     reaches the rewrite with a page tree reference equivalent to null.
 func danglingPageTreePDF() []byte {
 	body := "%PDF-1.4\n"
 	offs := map[int]int{}

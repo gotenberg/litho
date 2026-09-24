@@ -8,6 +8,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
+// TestFixAppearanceStream_KeepsAPeerFixersPendingStreamWrite pins that the
+// appearance-stream repair keeps a peer fixer's pending write to the same
+// appearance object.
+//
 // [fixAppearanceStream] rebuilds the appearance stream dictionary with
 // maps.Copy(work, stream.Dict) and writes it back at the appearance object's
 // own number, but the stream it copies is the one its CALLER passed in, and

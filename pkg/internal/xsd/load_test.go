@@ -214,7 +214,8 @@ func TestLoad_ComplexExtension(t *testing.T) {
 		t.Errorf("Derived.Base: got %T %v, want BaseType", derived.Base, derived.Base)
 	}
 	// Only the extension's own particle is captured; merging with the
-	// base happens at validation time (PR3 territory), not at load.
+	// base happens at validation time (collectExtendedParticles), not at
+	// load.
 	seq, ok := derived.Content.(Sequence)
 	if !ok {
 		t.Fatalf("Derived content: got %T, want Sequence", derived.Content)

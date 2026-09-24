@@ -70,9 +70,13 @@ func hybridXRefPDF(withXRefStm bool) []byte {
 //
 // Neither of litho's two earlier tests could see it: the classic table supplies
 // every entry, so none is compressed, and the trailer is its own dictionary
-// rather than the stream's. govdocs thread_400_400545.pdf is such a file, with
-// `/Prev 219303 /XRefStm 218949` and a `40 0 obj << /Type /XRef ... >>`, and
-// veraPDF answers containsXRefStream true for it while litho passed it.
+// rather than the stream's.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400545.pdf: a hybrid file with
+//     `/Prev 219303 /XRefStm 218949` and a `40 0 obj << /Type /XRef ... >>`.
+//     veraPDF answers containsXRefStream true for it while litho passed it.
 func TestXRefFormatHybridReference(t *testing.T) {
 	t.Parallel()
 

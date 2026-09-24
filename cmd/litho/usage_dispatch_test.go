@@ -19,7 +19,7 @@ import (
 // not the other fails in a way nothing reports. Unlisted, it is undiscoverable,
 // since the usage block is the only place litho enumerates its commands.
 // Listed but undispatchable, it answers "unknown command" to a caller who read
-// the help, which is the defect `32e633d1` fixed for `litho sign` in README.
+// the help, which is the defect `e7222fc8` fixed for `litho sign` in README.
 //
 // Measured when this test was written: 39 listed, 39 dispatchable, no
 // asymmetry. This pins that rather than establishing it.

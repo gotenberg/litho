@@ -177,6 +177,12 @@ func collectLatestPageContents(ctx context.Context, alloc *writer.ObjAllocator, 
 
 // collectContents decodes the /Contents of pageDict. A nil alloc reads the
 // source document only.
+//
+// # Corpus evidence
+//
+//   - govdocs: 26 of 1091 documents write /Contents as a reference naming an
+//     array, which redaction, excision and stamping all refused until the
+//     reference was resolved before the switch.
 func collectContents(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict) ([]byte, error) {
 	obj, ok := pageDict["Contents"]
 	if !ok {
@@ -188,9 +194,9 @@ func collectContents(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	// itself be written as an indirect reference. Switching on the UNRESOLVED
 	// object sent every `/Contents N 0 R` into the stream case, so a reference
 	// naming an ARRAY failed as "expected PdfStream, got ast.PdfArray" and
-	// redaction, excision and stamping all refused a legal page. Measured at 26
-	// of 1091 govdocs documents; [tagging.pageContentBytes] resolves first and
-	// was never affected, which is what made the omission visible.
+	// redaction, excision and stamping all refused a legal page.
+	// tagging.pageContentBytes resolves first and was never affected, which is
+	// what made the omission visible.
 	resolved, err := resolveAllocFirst(ctx, alloc, doc, obj)
 	if err != nil {
 		return nil, err
@@ -227,7 +233,7 @@ func collectContents(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			}
 			buf.Write(data)
 
-			// Bounded for the reason given on [content.MaxPageContentSize]: the
+			// Bounded for the reason given on content.MaxPageContentSize: the
 			// per-stream decompression cap says nothing about their sum, so a
 			// page naming thousands of streams grows this buffer with the file's
 			// object count rather than with anything the page could draw.

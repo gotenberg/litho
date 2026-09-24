@@ -36,10 +36,16 @@ const widthTolerance = 1.0
 // advance of 334 against a declared 333 yields a difference of
 // 1.0000000000000191 rather than 1. The rules admit a difference of one unit,
 // ISO 19005-2, 6.2.11.5 and ISO 14289-2, 8.4.5.6 among them, and veraPDF writes
-// its test as abs(...) <= 1, which that file passes. Comparing strictly against
-// 1.0 turns the last bits of a binary fraction into a violation. A millionth of
-// a text-space unit is far below any metric a font records, so the allowance
-// cannot mask a real mismatch. pdfjs bug921760.pdf is the case.
+// its test as abs(...) <= 1, which such a font passes. Comparing strictly
+// against 1.0 turns the last bits of a binary fraction into a violation. A
+// millionth of a text-space unit is far below any metric a font records, so
+// the allowance cannot mask a real mismatch.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug921760.pdf: the case the allowance was written for, a one-unit
+//     difference the /FontMatrix scale carries past 1, and veraPDF's
+//     abs(...) <= 1 test passes it.
 const widthEpsilon = 1e-6
 
 // widthsInconsistent reports whether a declared width and a program advance
@@ -108,11 +114,15 @@ type simpleFontGlyphs struct {
 
 // The OpenType head table bounds unitsPerEm to 16..16384 ("Valid range is from
 // 16 to 16384"), so a value outside it is a corrupt head, not a scale. Every
-// width derived from one is meaningless: pdfjs issue9462.pdf carries a font
-// whose program yields a nonsense unitsPerEm, and scaling by it produced
-// /Widths near 1.5 million, which then broke the PDF/A-1 real-number ceiling of
-// 32767 (ISO 19005-1, 6.1.12). Fall back to the same 1000 the unreadable-head
-// paths already use.
+// width derived from one is meaningless, and scaling by it can push /Widths
+// past the PDF/A-1 real-number ceiling of 32767 (ISO 19005-1, 6.1.12). Fall
+// back to the same 1000 the unreadable-head paths already use.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9462.pdf: carries a font whose program yields a nonsense
+//     unitsPerEm, and scaling by it produced /Widths near 1.5 million, which
+//     then broke the PDF/A-1 real-number ceiling.
 const (
 	minUnitsPerEm     = 16
 	maxUnitsPerEm     = 16384
@@ -121,6 +131,17 @@ const (
 
 // resolveSimpleFontGlyphs does the work of [simpleFontGlyphMetrics] and also
 // reports whether a symbol cmap subtable decided the codes.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue2618.pdf: its /R641 names code 5 "space". Following that
+//     name through the program's Unicode cmap drew a 930-unit glyph, while the
+//     (3,0) subtable draws the 352-unit one /Widths declares. It backs reading
+//     a symbolic font's codes through its symbol subtable despite an
+//     /Encoding.
+//   - govdocs thread_300_300492.pdf: taking the cmap route for a symbolic
+//     Type 1 or CFF font left every TeX Computer Modern subset in the file with
+//     no mapping and no width check at all.
 func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (simpleFontGlyphs, bool) {
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fd == nil {
@@ -151,11 +172,8 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 	// takes that route "when the font has no Encoding entry, or the font
 	// descriptor's Symbolic flag is set (in which case the Encoding entry is
 	// ignored)". So a symbolic font that carries an /Encoding is read the same
-	// way whenever its program has a symbol subtable. pdfjs issue2618.pdf's /R641
-	// names code 5 "space"; following that name through the program's Unicode
-	// cmap drew a 930-unit glyph, while the (3,0) subtable draws the 352-unit one
-	// /Widths declares, which is the route veraPDF's
-	// TrueTypeFontProgram.getWidth takes too.
+	// way whenever its program has a symbol subtable, which is the route
+	// veraPDF's TrueTypeFontProgram.getWidth takes too.
 	//
 	// With no symbol subtable, a font that has neither an /Encoding nor a
 	// Unicode cmap leaves its codes unresolvable, so an empty (non-nil) map makes
@@ -166,8 +184,8 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 	// The cmap route is an sfnt one. A symbolic Type 1 or CFF font has no cmap
 	// to be missing: its codes resolve through the program's own encoding
 	// (ISO 32000-1 §9.6.6.2), which the glyph-name path below reads, so
-	// short-circuiting it here left every TeX Computer Modern subset in govdocs
-	// thread_300_300492.pdf with no mapping and no width check at all.
+	// short-circuiting it here leaves such a font with no mapping and no width
+	// check at all.
 	if isSfntFontProgram(fontData) && isSymbolicFont(ctx, doc, fd) {
 		if sym := typography.ExtractSymbolCharCodeToGID(ctx, fontData); sym != nil {
 			return simpleFontGlyphs{widths: binaryWidths, unitsPerEm: unitsPerEm, codeToGID: sym, symbolCmap: true}, true
@@ -303,9 +321,18 @@ func buildNameToGID(glyphNames map[uint16]string) map[string]uint16 {
 // [type1WidthGlyphName] picks the glyph as veraPDF does. A glyph the program
 // does not define is taken at the /MissingWidth where that choice is veraPDF's
 // too, and so is a code outside /FirstChar to /LastChar on the dictionary side
-// (ISO 32000-1, 9.6.2.1, Table 111): pdfjs bug1354114.pdf shows WinAnsi code 10,
-// below its /FirstChar, and veraPDF weighs the 500-unit .notdef it selects
-// against 0.
+// (ISO 32000-1, 9.6.2.1, Table 111).
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1354114.pdf: shows WinAnsi code 10, below its /FirstChar, and
+//     veraPDF weighs the 500-unit .notdef it selects against 0.
+//   - pdfjs issue11150_reduced.pdf: embeds a Symbol program with no /Widths
+//     whose code 113 advances 521 units, and veraPDF reports it against 0.
+//   - govdocs thread_300_300705.pdf: shows code 13 through a Helvetica-Light
+//     whose /Widths starts at 32, and veraPDF reports the 278-unit charstring
+//     against the 0 the dictionary implies. Skipping codes the array does not
+//     cover left this whole class of Type 1 fonts unjudged.
 func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
 	if usage == nil || len(usage.charCodes) == 0 || !usage.visible {
 		return nil
@@ -346,18 +373,13 @@ func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict 
 	// as [checkSimpleFontWidths] reads it for a program with a GID-keyed table:
 	// veraPDF reads an array only when /Widths, /FirstChar and /LastChar are all
 	// present and the array is not empty, and weighs every other code at the
-	// /MissingWidth. pdfjs issue11150_reduced.pdf embeds a Symbol program with
-	// no /Widths whose code 113 advances 521 units, and veraPDF reports it
-	// against 0.
+	// /MissingWidth.
 	widths, firstChar, lastChar := type1WidthsArray(ctx, doc, fontDict)
 
 	// A shown code the array does not cover takes the descriptor's
 	// /MissingWidth (ISO 32000-1, Table 111, default 0), which is the same
 	// comparison [checkSimpleFontUncoveredWidths] makes on the GID-keyed path.
-	// Skipping those codes here left a whole class of Type 1 fonts unjudged:
-	// govdocs thread_300_300705.pdf shows code 13 through a Helvetica-Light
-	// whose /Widths starts at 32, and veraPDF reports the 278-unit charstring
-	// against the 0 the dictionary implies.
+	// Skipping those codes here left a whole class of Type 1 fonts unjudged.
 	missingWidth := simpleFontMissingWidth(ctx, doc, fontDict)
 
 	for _, code := range sortedByteKeys(usage.charCodes) {
@@ -412,8 +434,6 @@ func type1WidthsArray(ctx context.Context, doc *document.Document, fontDict ast.
 	return arr, int(fc), int(lc)
 }
 
-// checkSimpleFontWidths compares /Widths array against binary widths for simple fonts.
-// charCodeToGID is the cmap-derived charCode → GID mapping (may be nil for non-TrueType).
 // widthValue resolves a width-array entry and returns its numeric value. A
 // /Widths or /W entry may be an indirect reference (ISO 32000-1 §7.3.10);
 // [document.Float] cannot chase references, so an unresolved one reads as 0 and
@@ -428,6 +448,15 @@ func widthValue(ctx context.Context, doc *document.Document, obj ast.PdfObject) 
 	return document.Float(resolved), true
 }
 
+// checkSimpleFontWidths compares /Widths array against binary widths for simple fonts.
+// charCodeToGID is the cmap-derived charCode → GID mapping (may be nil for non-TrueType).
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11150_reduced.pdf: embeds a Symbol program whose code 113
+//     advances 521 units and declares neither /Widths nor /MissingWidth, so
+//     its declared width is 0 and veraPDF reports the glyph under ISO 19005-2
+//     §6.2.11.5 t1.
 func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, usage *fontUsageInfo) []Violation {
 	// Width consistency is a property of a glyph the document actually
 	// paints: the rule compares the program advance against the declared
@@ -442,12 +471,10 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 	// A font stating no /Widths still declares a width for every code it
 	// shows: ISO 32000-1, 9.6.2.1 and Table 111 give a code the array does not
 	// cover the descriptor's /MissingWidth, default 0. With no array at all
-	// every shown code is uncovered, so they all take that same comparison.
-	// pdfjs issue11150_reduced.pdf embeds a Symbol program whose code 113
-	// advances 521 units and declares neither /Widths nor /MissingWidth, so
-	// its declared width is 0 and veraPDF reports the glyph under ISO 19005-2
-	// §6.2.11.5 t1. The missing-key rules (§6.2.11.2 t4 to t6) report the
-	// absent array itself and say nothing about the widths it would have held.
+	// every shown code is uncovered, so they all take that same comparison,
+	// and veraPDF reports such a glyph under ISO 19005-2 §6.2.11.5 t1. The
+	// missing-key rules (§6.2.11.2 t4 to t6) report the absent array itself
+	// and say nothing about the widths it would have held.
 	widthsObj, hasWidths := fontDict["Widths"]
 	if !hasWidths {
 		return checkSimpleFontUncoveredWidths(ctx, doc, fontDict, binaryWidths, unitsPerEm,
@@ -545,13 +572,18 @@ func checkSimpleFontWidths(ctx context.Context, doc *document.Document, fontDict
 // checkSimpleFontUncoveredWidths applies the glyph-width rule to the shown codes
 // the /Widths array does not cover. Their declared width is the descriptor's
 // /MissingWidth (ISO 32000-1, Table 111, default 0), so the comparison is the
-// same one the array codes get: govdocs thread_100_100945.pdf shows a space at
-// code 32, below its /FirstChar of 48, against a 222-unit program glyph, which
-// veraPDF reports under ISO 19005-2 §6.2.11.5 and litho never looked at.
+// same one the array codes get, and veraPDF reports a mismatch under ISO
+// 19005-2 §6.2.11.5.
 //
 // Only a code that resolves to a glyph with a known program advance is judged.
 // Code 0 is left to [checkSimpleFontCode0Width], which resolves it through the
 // .notdef fallback the other codes do not get.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100945.pdf: shows a space at code 32, below its
+//     /FirstChar of 48, against a 222-unit program glyph, which veraPDF
+//     reports under ISO 19005-2 §6.2.11.5 and litho never looked at.
 func checkSimpleFontUncoveredWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, charCodeToGID map[uint16]uint16, firstChar, widthCount int, usage *fontUsageInfo) []Violation {
 	if charCodeToGID == nil {
 		return nil
@@ -678,6 +710,15 @@ func glyphPresenceRule(profile string) Rule {
 // absent from the program maps to GID 0 in [simpleFontGlyphMetrics], which is
 // the "glyph not present" signal. Codes litho cannot map at all stay unchecked,
 // since glyph presence is then unresolvable.
+//
+// # Corpus evidence
+//
+//   - verapdf: the .notdef fixtures fail the .notdef rule alone, since veraPDF
+//     counts the code 0 glyph as present.
+//   - pdfjs issue8234.pdf: its code 32 meets a (3,0) subtable holding only
+//     0xF021 to 0xF027, and veraPDF reports the glyph absent.
+//   - govdocs thread_300_300708.pdf: veraPDF reports the glyph for its
+//     WinAnsiEncoding code 31 absent, a code the encoding leaves unnamed.
 func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := glyphPresenceRule(profile)
 	if rule.Specification == "" {
@@ -701,8 +742,7 @@ func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontD
 	}
 	for code := range usage.charCodes {
 		// Code 0 references .notdef, which the .notdef rule judges; veraPDF
-		// counts its glyph as present (GFGlyph.initForNotType3), so the veraPDF
-		// suite's .notdef fixtures fail that rule alone.
+		// counts its glyph as present (GFGlyph.initForNotType3).
 		if code == 0 {
 			continue
 		}
@@ -710,16 +750,13 @@ func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontD
 		// A symbolic TrueType font draws a code through its symbol cmap
 		// subtable (ISO 32000-1, 9.6.6.4), so a code that subtable does not hold
 		// selects no glyph: it is resolved, not unknown. veraPDF
-		// (TrueTypeFontProgram.containsCode) reports it absent, as for pdfjs
-		// issue8234.pdf, whose code 32 meets a (3,0) subtable holding only
-		// 0xF021 to 0xF027.
+		// (TrueTypeFontProgram.containsCode) reports it absent.
 		if !mapped && glyphs.symbolCmap {
 			gid, mapped = 0, true
 		}
 		// A non-symbolic TrueType font reaches a glyph only through the name its
 		// encoding gives the code, so a code left unnamed, or named .notdef,
-		// selects none. veraPDF reports it absent, as for govdocs
-		// thread_300_300708.pdf's WinAnsiEncoding code 31.
+		// selects none. veraPDF reports it absent.
 		if !mapped && glyphs.encodingNames != nil {
 			if name := glyphs.encodingNames[code]; name == "" || name == ".notdef" {
 				gid, mapped = 0, true
@@ -737,13 +774,21 @@ func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontD
 // font resolves a code to a glyph name through its encoding, and §9.9.1 places
 // the glyph programs of a Type 1 font in the /CharStrings dictionary keyed by
 // that name, so a name the dictionary does not hold paints no glyph. veraPDF
-// reports it under ISO 19005-2 §6.2.11.4.1 t2: govdocs thread_300_300516.pdf
-// shows code 202, which its /Differences names "blank", against a program whose
-// 229 charstrings define no such glyph.
+// reports it under ISO 19005-2 §6.2.11.4.1 t2.
 //
 // A program whose charstrings will not parse leaves presence unanswerable and
 // goes unchecked, as does a code neither the PDF encoding nor the program's
 // built-in encoding names.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300516.pdf: shows code 202, which its /Differences
+//     names "blank", against a program whose 229 charstrings define no such
+//     glyph, and veraPDF reports it.
+//   - pdfjs bug1354114.pdf, issue6721_reduced.pdf, issue6901.pdf: show
+//     WinAnsi code 10, StandardEncoding code 224, and a code the Type 1 vector
+//     skips, respectively. veraPDF reports all of them, so a code no encoding
+//     names fails whenever either encoding is readable.
 func checkType1GlyphPresence(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
 	if subtype := fontSubtype(ctx, doc, fontDict); subtype != "Type1" && subtype != "MMType1" {
 		return nil
@@ -781,10 +826,7 @@ func checkType1GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 			// A code no encoding in force names has nothing to look up in
 			// /CharStrings, so it selects no glyph at all. Answering that needs
 			// the program's own charset, which this check reads. Both
-			// encodings unreadable leaves the question open instead: pdfjs
-			// bug1354114.pdf shows WinAnsi code 10, issue6721_reduced.pdf
-			// StandardEncoding code 224 and issue6901.pdf a code its Type 1
-			// vector skips, all of which veraPDF reports.
+			// encodings unreadable leaves the question open instead.
 			if len(pdfEnc) == 0 && len(builtin) == 0 {
 				continue
 			}
@@ -811,11 +853,15 @@ func checkType1GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 // that name through /CharProcs to a procedure; a code the encoding leaves
 // undefined, or one naming an absent procedure, paints nothing, which is the
 // same "no glyph in the program" condition the presence rule states. veraPDF
-// reports it under ISO 19005-2 §6.2.11.4.1 t2: pdfjs Type3WordSpacing.pdf
-// shows a space its font defines no procedure for.
+// reports it under ISO 19005-2 §6.2.11.4.1 t2.
 //
 // A font whose /CharProcs or /Encoding will not resolve is left unchecked,
 // since presence is then unanswerable rather than failed.
+//
+// # Corpus evidence
+//
+//   - pdfjs Type3WordSpacing.pdf: shows a space its font defines no procedure
+//     for, and veraPDF reports it.
 func checkType3GlyphPresence(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
 	charProcs, err := document.ResolveDict(ctx, doc, fontDict["CharProcs"])
 	if err != nil || len(charProcs) == 0 {
@@ -994,6 +1040,12 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 // legitimately carry a different advance (a subset placeholder, a zero-advance
 // combining glyph) without affecting any drawn text. usedCIDs nil means usage
 // could not be collected, so every declared CID is checked as a fail-safe.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7901.pdf: pairs an OpenType CFF that is not CID-keyed with a
+//     /CIDToGIDMap /W was written against, and veraPDF, ignoring the map,
+//     reports 15 glyph widths.
 func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, usedCIDs map[uint16]bool) []Violation {
 	// covered records the CIDs /W states a width for. Everything else falls to
 	// /DW, which is checked once the array has been walked.
@@ -1019,9 +1071,7 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 	// A CIDFontType0 has no such map: ISO 32000-1, 9.7.4.2, Table 117 gives the
 	// entry to Type 2 CIDFonts only, and a Type 0 CIDFont selects its glyph
 	// through the CFF charset, or takes the CID as the GID when the CFF is not
-	// CID-keyed. A map it carries is ignored, as veraPDF ignores it: pdfjs
-	// issue7901.pdf pairs an OpenType CFF that is not CID-keyed with a map /W was
-	// written against, and veraPDF reports 15 glyph widths.
+	// CID-keyed. A map it carries is ignored, as veraPDF ignores it.
 	var cidToGID func(uint16) uint16
 	if fontSubtype(ctx, doc, cidFontDict) != "CIDFontType0" {
 		var ok bool
@@ -1178,10 +1228,18 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 // ISO 32000-2, 9.7.4.3 makes /DW the width of every CID /W does not cover, and
 // its own default 1000. A CIDFont may therefore carry no /W at all and still
 // declare a width for every glyph it shows, so skipping the font when /W is
-// absent leaves the widths unchecked. pdfjs issue6612.pdf embeds a
-// CIDFontType2 with /DW 595 and no /W whose glyphs advance 1229 at 2048 units
-// per em, which is 600.098: veraPDF reports the mismatch on every shown glyph
-// and fontTools confirms the program advance, so litho's silence was a miss.
+// absent leaves the widths unchecked.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue6612.pdf: embeds a CIDFontType2 with /DW 595 and no /W whose
+//     glyphs advance 1229 at 2048 units per em, which is 600.098. veraPDF
+//     reports the mismatch on every shown glyph and fontTools confirms the
+//     program advance, so litho's silence was a miss.
+//   - pdfjs JBIG2Globals.pdf, complex_ttf_font.pdf, issue7426.pdf: map CID 40
+//     into a two-glyph program, CID 988 into a 143-glyph one, and reach a
+//     glyph whose hmtx advance is 0, respectively. veraPDF reports none of
+//     them, which backs skipping a zero or missing program advance.
 func checkCIDDefaultWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, usedCIDs, covered map[uint16]bool, cidToGID func(uint16) uint16) []Violation {
 	// Only the rendered CIDs are in scope, and with no recorded usage there is
 	// no set to walk: the rule is raised per shown glyph.
@@ -1216,9 +1274,7 @@ func checkCIDDefaultWidths(ctx context.Context, doc *document.Document, cidFontD
 			// program never gave metrics for. veraPDF reports none of these, and
 			// the /W path above already skips a zero declared width for the same
 			// reason. Whether the glyph exists at all is the coverage rule's
-			// concern. pdfjs JBIG2Globals.pdf maps CID 40 into a two-glyph
-			// program, complex_ttf_font.pdf CID 988 into a 143-glyph one, and
-			// issue7426.pdf reaches a glyph whose hmtx advance is 0.
+			// concern.
 			continue
 		}
 		expectedWidth := bw * 1000.0 / float64(unitsPerEm)
@@ -1292,6 +1348,12 @@ func extractFontProgramData(ctx context.Context, doc *document.Document, fdDict 
 // veraPDF on an Identity-H font showing <017F> past its /ToUnicode range,
 // which it fails at 8.4.5.8 t1 under both 0 Tr and 3 Tr while passing
 // 8.4.5.5.1 under 3 Tr.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug898853.pdf: writes Identity-H codes against a /ToUnicode map
+//     with a one-byte codespace and a one-byte bfrange covering 9 to 64, which
+//     backs reading every Identity code as two bytes.
 func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := perGlyphToUnicodeRule(profile)
 	if rule.Specification == "" {
@@ -1351,8 +1413,7 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 			// "\x00\x24" into two one-byte codes and reported the leading zero
 			// byte as unmapped. veraPDF keys its /ToUnicode entries by code
 			// value (CMap.getUnicode(int)) and never consults that codespace, so
-			// it maps 0x0024 through a one-byte bfrange covering 9 to 64: pdfjs
-			// bug898853.pdf writes Identity-H codes against exactly such a map.
+			// it maps 0x0024 through a one-byte bfrange covering 9 to 64.
 			if identity {
 				consumed = 2
 				if off+consumed > len(b) {

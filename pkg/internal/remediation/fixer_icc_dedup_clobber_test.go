@@ -42,6 +42,10 @@ func indirectCS0PDF(t *testing.T) []byte {
 	})
 }
 
+// TestDedupICCInResources_KeepsAnEarlierFixersPendingColourSpaceWrite pins that
+// the redundant-ICC substitution judges the colour space an earlier fixer
+// already queued, not the on-disk copy.
+//
 // [dedupICCInResources] reads the colour-space array with document.ResolveArray
 // (fixer_icc_dedup.go:247) and writes the substitute back at that array's own
 // object number (:267). It consults no alloc-aware helper, so an earlier

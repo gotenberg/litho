@@ -251,7 +251,7 @@ func buildPNGXObject(alloc *writer.ObjAllocator, data []byte) (ast.PdfStream, in
 	w := bounds.Dx()
 	h := bounds.Dy()
 
-	// Convert to NRGBA so we have predictable byte order.
+	// Convert to NRGBA for a predictable byte order.
 	nrgba := image.NewNRGBA(bounds)
 	draw.Draw(nrgba, bounds, img, bounds.Min, draw.Src)
 

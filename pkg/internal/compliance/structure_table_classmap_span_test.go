@@ -12,12 +12,15 @@ import (
 // /RowSpan either in its own /A attributes or through the classes its /C names
 // (ISO 32000-1, 14.7.5.2), with /A taking precedence.
 //
-// pdfjs bug1997343 is the witness: its row-1 header carries
-// /C [/TH-col /colspan-2] and the StructTreeRoot /ClassMap defines /colspan-2
-// as << /O /Table /ColSpan 2 >>. Reading only /A counted that row as one column
-// against two in every other row, so ISO 14289-2, 8.2.5.26 t3 reported a
-// regular table as irregular. veraPDF builds no SETable for that file and says
-// nothing, which is why the row read as a litho-only clause.
+// # Corpus evidence
+//
+//   - pdfjs bug1997343: the witness. Its row-1 header carries
+//     /C [/TH-col /colspan-2] and the StructTreeRoot /ClassMap defines
+//     /colspan-2 as << /O /Table /ColSpan 2 >>, the shape the "/C as an array
+//     of classes" case uses. Reading only /A counted that row as one column
+//     against two in every other row, so ISO 14289-2, 8.2.5.26 t3 reported a
+//     regular table as irregular. veraPDF builds no SETable for that file and
+//     says nothing, which is why the row read as a litho-only clause.
 func TestCellSpanFromAttributeClass(t *testing.T) {
 	t.Parallel()
 
@@ -51,7 +54,6 @@ func TestCellSpanFromAttributeClass(t *testing.T) {
 			classMap: classMap, wantCol: 2, wantRow: 1,
 		},
 		{
-			// The shape bug1997343 actually uses.
 			name:     "/C as an array of classes",
 			cell:     cell(ast.PdfDict{"C": ast.PdfArray{ast.PdfName("TH-col"), ast.PdfName("colspan-2")}}),
 			classMap: classMap, wantCol: 2, wantRow: 1,

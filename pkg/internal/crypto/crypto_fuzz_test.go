@@ -13,9 +13,9 @@ import (
 //
 // The earlier coverage sweep missed it twice over. It enumerated EXPORTED
 // entry points whose FIRST non-ctx parameter is []byte, and crypto's entry is
-// NewHandler(encryptDict, trailer) -- two dictionaries, no []byte in sight.
+// NewHandler(encryptDict, trailer): two dictionaries, no []byte in sight.
 // A later note dismissed the package on padPassword and truncate, which do
-// encode our own data; the other ten functions were never adjudicated.
+// encode litho's own data; the other ten functions were never adjudicated.
 //
 // One target per function, per this repo's convention: a single body driving
 // several of them can stall the engine while every function is fine.
@@ -73,6 +73,7 @@ func FuzzNewHandler(f *testing.F) {
 // worker death (no signal or "terminated unexpectedly" in any log). With the
 // function covered transitively and healthily, a target that silently stops
 // fuzzing is worse than no target. Do not re-add it without a cause.
+
 // FuzzDecryptFunc asserts the per-object decrypt closure never panics. It is
 // also where aesDecrypt gets its coverage (see the note above), and it reaches
 // the RC4 branch and ObjKey besides. The object and generation numbers are
@@ -87,7 +88,7 @@ func FuzzDecryptFunc(f *testing.F) {
 		h := &Handler{EncryptionKey: encKey, V: v, CFM: cfm, Length: length}
 		decrypt := h.DecryptFunc(objNum, genNum)
 		// The AES branch decrypts in place, so pass a copy: the engine's
-		// buffers must not be modified (see FuzzAESDecrypt).
+		// buffers must not be modified (see the aesDecrypt note above).
 		_, _ = decrypt(append([]byte(nil), data...))
 		_ = h.ObjKey(objNum, genNum)
 	})

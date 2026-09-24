@@ -164,6 +164,15 @@ const xmpPacketHeaderSize = 200
 
 // checkXMPGroup validates XMP metadata compliance for PDF/A profiles.
 // For PDF/UA profiles, it returns nil (XMP checks are not applicable).
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18941.pdf: its packet ends "</x:xmpmeta" with no closing
+//     ">", and veraPDF reports all six of its Info keys as unmatched.
+//     Recovering values from the packet instead passed three of them.
+//   - govdocs thread_300_300234.pdf: ships a packet whose prefixes are
+//     unbound, and veraPDF reports its serialization alone, not the property
+//     types litho recovered from it.
 func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
 	part := vctx.part
@@ -310,10 +319,8 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	if part == 1 || part == 4 {
 		// A packet that is not well-formed yields no properties at all, the same
 		// XMPCore behaviour the property audits above are gated on. Every §6.7.3
-		// analogue then reads as null, so each Info entry present is unmatched:
-		// pdfjs issue18941.pdf, whose packet ends "</x:xmpmeta" with no closing
-		// ">", reports all six of its Info keys on veraPDF. Recovering values
-		// from it instead passed three of them.
+		// analogue then reads as null, so each Info entry present is unmatched,
+		// as veraPDF reports it.
 		syncData := xmpData
 		if !packetParses {
 			syncData = nil
@@ -326,9 +333,8 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	}
 
 	// XMP property types (§6.7.2 / §6.6.2.3.1), a property-level audit gated
-	// like the others: govdocs thread_300_300234.pdf ships a packet whose
-	// prefixes are unbound, and veraPDF reports its serialization alone, not
-	// the property types litho recovered from it.
+	// like the others: for a packet whose prefixes are unbound, veraPDF reports
+	// its serialization alone, not the property types litho recovers from it.
 	if packetParses {
 		xmpCheckPropertyTypes(xmpData, part, metaStream, nil, &results)
 	}
@@ -436,6 +442,19 @@ const maxXMPContainerDepth = 32
 // a page packet carrying bytes= reports nothing while the same attribute in the
 // catalog packet reports §6.7.5 t1. Part 1 therefore returns early: widening it
 // would raise violations no PDF/A-1 validator raises.
+//
+// # Corpus evidence
+//
+//   - pdfcpu adobeImplOfPDFSpec.pdf, adobe_errata.pdf: each hangs a 23 KB
+//     packet off a marked-content property list carrying photoshop:History,
+//     which is not in the XMP 2005 Photoshop schema, and veraPDF reports it
+//     under §6.6.2.3.1 t1 and t2 while litho looked only at the catalog
+//     packet.
+//   - pdfjs issue19319.pdf: carries an xmpMM:DerivedFrom whose stRef fields
+//     include originalDocumentID, which the XMP 2005 ResourceRef does not
+//     define. litho reported it while the packet sat in the catalog and fell
+//     silent once remediation moved the same bytes into an object-level
+//     stream, which is why the field-name audit runs on every packet.
 func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, mainExtensionNS map[string]bool, pooled map[string]map[string]bool) []Violation {
 	if part == 1 {
 		return nil
@@ -468,23 +487,14 @@ func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog a
 
 		// The property-level audits apply to every packet, not only the
 		// catalog's: ISO 19005-2 §6.6.2.3.1 constrains the properties of "all
-		// metadata streams present in the PDF". pdfcpu adobeImplOfPDFSpec.pdf
-		// and adobe_errata.pdf each hang a 23 KB packet off a marked-content
-		// property list carrying photoshop:History, which is not in the XMP 2005
-		// Photoshop schema, and veraPDF reports it under t1 and t2 while litho
-		// looked only at the catalog packet. A packet that does not parse has
-		// nothing to audit, so those run only when the serialization check is
-		// silent.
+		// metadata streams present in the PDF". A packet that does not parse
+		// has nothing to audit, so those run only when the serialization check
+		// is silent.
 		if len(serialization) == 0 {
 			xmpCheckPredefinedProperties(ctx, data, part, mainExtensionNS, pooled, &packet)
 			xmpCheckPropertyTypes(data, part, ast.PdfStream{}, mainExtensionNS, &packet)
 			// The structured value-type field names are a property-level audit
-			// too, so they answer for every packet by the same clause. pdfjs
-			// issue19319.pdf carries an xmpMM:DerivedFrom whose stRef fields
-			// include originalDocumentID, which the XMP 2005 ResourceRef does not
-			// define; litho reported it while the packet sat in the catalog and
-			// fell silent once remediation moved the same bytes into an
-			// object-level stream.
+			// too, so they answer for every packet by the same clause.
 			xmpCheckStructFieldNames(data, part, &packet)
 		}
 
@@ -750,6 +760,12 @@ func xmpPassThroughCharset(_ string, input io.Reader) (io.Reader, error) {
 // xmpWellFormed reports whether data is well-formed XML. An XMP packet
 // is an XML document, so a packet that is not well-formed XML cannot be
 // a valid serialization.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1826783.pdf: carries 1536 bytes of ciphertext as its
+//     /Metadata, which veraPDF rejects under ISO 19005-2 §6.6.2.1 t4 and
+//     litho called well-formed before the root-element requirement.
 func xmpWellFormed(data []byte) bool {
 	dec := xml.NewDecoder(bytes.NewReader(xmpRepairForParse(data)))
 	dec.CharsetReader = xmpPassThroughCharset
@@ -764,9 +780,7 @@ func xmpWellFormed(data []byte) bool {
 			// well-formed document however cleanly they tokenise. Go's
 			// encoding/xml reads any element-free input as one run of character
 			// data and reports no error, so binary that is not XML in any sense
-			// passed: pdfjs bug1826783.pdf carries 1536 bytes of ciphertext as
-			// its /Metadata, which veraPDF rejects under ISO 19005-2 §6.6.2.1
-			// t4 and litho called well-formed.
+			// passed.
 			return rooted
 		}
 		if err != nil {
@@ -874,10 +888,13 @@ const maxXMPCharRefDigits = 8
 // ParseOptions sets FIX_CONTROL_CHARS (ParseOptions.<init> sets bits 8|16), so
 // XMPMetaParser re-parses through FixASCIIControlsReader, which substitutes a
 // space for any character matching Utils.isControlChar (c <= 0x1F or c ==
-// 0x7F, excluding tab, LF and CR). Real producers emit these: Adobe Illustrator
-// writes dc:description values holding "&#x5;" (seen on the govdocs corpus),
-// and reporting them as malformed packets diverges from every validator built
-// on XMPCore.
+// 0x7F, excluding tab, LF and CR). Real producers emit these, and reporting
+// them as malformed packets diverges from every validator built on XMPCore.
+//
+// # Corpus evidence
+//
+//   - govdocs: Adobe Illustrator writes dc:description values holding
+//     "&#x5;".
 func xmpFixControlChars(data []byte) []byte {
 	if !bytes.ContainsFunc(data, func(r rune) bool { return xmpIsControlChar(int(r)) }) &&
 		!bytes.Contains(data, []byte("&#")) {
@@ -942,8 +959,6 @@ func xmpCharRef(data []byte) (value int, width int, ok bool) {
 	return 0, 0, false
 }
 
-// xmpCheckEncoding verifies that the XMP packet is encoded as UTF-8.
-// For PDF/A-4 (§6.7.2.1 t05), UTF-16 encoding is a violation.
 // xmpDetectEncoding returns the byte encoding of an XMP packet. The
 // PDF/A family requires UTF-8 from part 2 onward, so anything else
 // here triggers a clause violation. Detection looks at:
@@ -1058,7 +1073,8 @@ func xmpDecodeToUTF8(data []byte, enc string) ([]byte, error) {
 }
 
 // xmpEncodingRule returns the PDF/A clause that requires the XMP
-// packet to be UTF-8 for the given part. PDF/A-1 (ISO 19005-1) does
+// packet to be UTF-8 for the given part (§6.7.2.1 t05 for PDF/A-4, where
+// UTF-16 is a violation). PDF/A-1 (ISO 19005-1) does
 // not mandate UTF-8 explicitly, so part 1 returns nil and the caller
 // suppresses the violation.
 func xmpEncodingRule(part int, encoding string) []Violation {
@@ -1073,7 +1089,7 @@ func xmpEncodingRule(part int, encoding string) []Violation {
 	return nil
 }
 
-// xmpNormalizeForChecks emits the encoding-violation rule when [data]
+// xmpNormalizeForChecks emits the encoding-violation rule when data
 // is non-UTF-8, then returns the UTF-8 form so subsequent checks
 // (packet header, namespace audit, identification) can parse and
 // validate the values inside the packet. A decoding failure leaves
@@ -1095,13 +1111,19 @@ func xmpNormalizeForChecks(data []byte, part int, results *[]Violation) []byte {
 // xmpCheckNamespaces walks the XMP XML and verifies that every namespace URI
 // used by properties is either a predefined XMP schema or is declared in a
 // PDF/A extension schema within the same XMP packet.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue21089.pdf: names eighteen undeclared namespaces, whose
+//     violations came out in a different order on every run until the set
+//     was sorted.
 func xmpCheckNamespaces(data []byte, part int, results *[]Violation) {
 	usedNamespaces, extensionNamespaces := xmpExtractNamespaces(data)
 
 	// Sorted: a packet naming several undeclared namespaces reports one
 	// violation per namespace, and ranging the set emitted them in Go's
 	// randomized map order, so the same file produced the same findings in a
-	// different order on every run. pdfjs issue21089.pdf names eighteen.
+	// different order on every run.
 	for _, ns := range slices.Sorted(maps.Keys(usedNamespaces)) {
 		if knownXMPNamespaces[ns] || extensionNamespaces[ns] {
 			continue
@@ -1232,8 +1254,12 @@ func xmpExtractNamespaces(data []byte) (used map[string]bool, extensions map[str
 // "isPredefinedInXMP2005 || isDefinedInMainPackage || isDefinedInCurrentPackage"
 // and "isValueTypeCorrect", and an undeclared property fails the second for the
 // same reason it fails the first: with no schema there is no declared type to
-// hold its value to. Answering only the first left the remediated
-// 6-6-4-t01-fail-a reporting two findings where veraPDF reports three.
+// hold its value to.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-6-4-t01-fail-a: answering only the first test left the
+//     remediated file reporting two findings where veraPDF reports three.
 func xmpSchemaRule(part int, ns string) []Violation {
 	const undeclared = "namespace %s not predefined or in extension schema"
 	switch part {
@@ -1265,12 +1291,6 @@ type xmpTopLevelProperty struct {
 	name string
 }
 
-// xmpExtractTopLevelProperties parses XMP XML and returns the top-level
-// properties in document order, deduplicated by namespace and name. Only
-// direct children of a top-level rdf:Description count: ISO 19005 §6.7.9 /
-// §6.6.2.3.1 apply to properties, not to structure fields, so fields of
-// structured values, including ones serialized as nested rdf:Description
-// elements, must stay invisible here.
 // xmpNamespaceHoldsMachinery reports whether a namespace names XMP machinery
 // rather than properties of the document. A packet that declares an extension
 // schema writes pdfaExtension:schemas as a top-level property and its vocabulary
@@ -1293,13 +1313,24 @@ func xmpNamespaceHoldsMachinery(ns string) bool {
 // ordinary property element (RDF 1.1 XML Syntax §2.13 abbreviates exactly that
 // form), and the XMP model keeps it as a property of the RDF namespace. No
 // predefined schema defines it, so ISO 19005-2 §6.6.2.3.1 forbids it unless an
-// extension schema declares it. Six govdocs files write one and veraPDF reports
-// every one; nothing else in 3732 packets carrying RDF-namespace names at that
-// position is written as an element.
+// extension schema declares it.
+//
+// # Corpus evidence
+//
+//   - govdocs: six files write rdf:type as a property element, and veraPDF
+//     reports every one.
+//   - All corpora, 3732 packets carrying RDF-namespace names at that
+//     position: nothing else is written as an element.
 func xmpIsRDFTypeProperty(name xml.Name) bool {
 	return name.Space == xmpRDFNamespace && name.Local == "type"
 }
 
+// xmpExtractTopLevelProperties parses XMP XML and returns the top-level
+// properties in document order, deduplicated by namespace and name. Only
+// direct children of a top-level rdf:Description count: ISO 19005 §6.7.9 /
+// §6.6.2.3.1 apply to properties, not to structure fields, so fields of
+// structured values, including ones serialized as nested rdf:Description
+// elements, must stay invisible here.
 func xmpExtractTopLevelProperties(data []byte) []xmpTopLevelProperty {
 	// Ancestor classification: structural wrappers (document root,
 	// x:xmpmeta, rdf:RDF), a top-level rdf:Description, or content
@@ -1390,6 +1421,17 @@ func xmpExtractTopLevelProperties(data []byte) []xmpTopLevelProperty {
 // the property-name half for namespaces with a predefined catalog.
 // Presence only: value-type correspondence stays with
 // [xmpCheckPropertyTypes].
+//
+// # Corpus evidence
+//
+//   - pdfjs issue2074.pdf: declares an extension schema over the pdf: and
+//     xmpMM: namespaces covering a few names, then uses pdf:Producer and
+//     xmpMM:DocumentID, which the XMP Specification predefines. Reporting
+//     those names instead of falling through to the catalog invented 67
+//     violations veraPDF never makes.
+//   - govdocs thread_000_000163.pdf: writes Iptc4xmpCore:CreatorContactInfo,
+//     CountryCode and Location, none of them predefined by the XMP
+//     Specification this part admits, and veraPDF reports all three.
 func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, extraExtensionNS map[string]bool, pooled map[string]map[string]bool, results *[]Violation) {
 	catalog := xmpPredefinedPropertyCatalog(part)
 	if catalog == nil {
@@ -1428,11 +1470,10 @@ func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, ex
 				continue
 			}
 			// The extension schema legitimises nothing for this name, but a
-			// predefined schema still may: pdfjs issue2074.pdf declares an
-			// extension schema over the pdf: and xmpMM: namespaces covering a
-			// few names, then uses pdf:Producer and xmpMM:DocumentID, which the
-			// XMP Specification predefines. Reporting here instead of falling
-			// through to the catalog invented 67 violations veraPDF never makes.
+			// predefined schema still may: an extension schema over a
+			// predefined namespace can cover a few names while the packet uses
+			// others the XMP Specification predefines, so the name falls
+			// through to the catalog rather than being reported here.
 			undeclaredHere = true
 		}
 		prefixed := p.ns + ":" + p.name
@@ -1446,10 +1487,7 @@ func xmpCheckPredefinedProperties(ctx context.Context, data []byte, part int, ex
 			// names each property: same clause, coarser wording. A namespace it
 			// recognises but the part does not predefine has no such backstop,
 			// so nothing judged the property. That silence covered rdf:type
-			// (see [xmpIsRDFTypeProperty]) and the IPTC Core schema: govdocs
-			// thread_000_000163.pdf writes Iptc4xmpCore:CreatorContactInfo,
-			// CountryCode and Location, none of them predefined by the XMP
-			// Specification this part admits, and veraPDF reports all three.
+			// (see [xmpIsRDFTypeProperty]) and the IPTC Core schema.
 			if undeclaredHere ||
 				(knownXMPNamespaces[p.ns] && !xmpNamespaceHoldsMachinery(p.ns)) {
 				*results = append(*results, xmpSchemaPropertyRule(part, prefixed)...)
@@ -1484,19 +1522,26 @@ func xmpExtensionDeclaredTypes(data []byte) map[string]bool {
 // isDefinedInCurrentPackage / isDefinedInMainPackage pair, whose behaviour three
 // experiments pinned down:
 //
-//   - PER NAME, not per namespace. The veraPDF test suite's 5-t05-fail-a.pdf
-//     declares pdfuaid:part in one entry and pdfuaid:corr in a second for the
-//     same URI, and veraPDF reports part. Delete the second entry and it reports
-//     corr instead while part passes.
+//   - PER NAME, not per namespace: a name counts only when an effective entry
+//     for its URI declares that name.
 //   - A later entry REPLACES an earlier one with the same URI, the rule
-//     [xmpCheckExtensionPropertyResolution] already records for the type map.
-//     That is why part, declared only by the replaced entry, counts for nothing.
-//   - Declarations POOL ACROSS PACKETS. Appending a cs:CProp usage to the
-//     catalog packet of 6-6-2-3-2-t01-pass-d.pdf passes because a page packet
-//     declares CProp; renaming that declaration makes veraPDF report it.
+//     [xmpCheckExtensionPropertyResolution] already records for the type map,
+//     so a name declared only by the replaced entry counts for nothing.
+//   - Declarations POOL ACROSS PACKETS: a declaration in a page packet covers
+//     a usage in the catalog packet.
 //
 // A declaration counts only when its value type resolves, against the types any
 // packet declares, for the same pooling reason.
+//
+// # Corpus evidence
+//
+//   - verapdf 5-t05-fail-a.pdf: declares pdfuaid:part in one entry and
+//     pdfuaid:corr in a second for the same URI, and veraPDF reports part.
+//     Delete the second entry and it reports corr instead while part passes.
+//     part, declared only by the replaced entry, counts for nothing.
+//   - verapdf 6-6-2-3-2-t01-pass-d.pdf: appending a cs:CProp usage to its
+//     catalog packet passes because a page packet declares CProp; renaming
+//     that declaration makes veraPDF report it.
 func xmpPooledDeclaredProperties(ctx context.Context, doc *document.Document, catalog ast.PdfDict, catalogData []byte, part int) map[string]map[string]bool {
 	packets := make([][]byte, 0, 4)
 	if len(catalogData) > 0 {
@@ -2044,13 +2089,20 @@ func dcTitleLangAltMalformed(data []byte) bool {
 //
 // XMPCore frames the packet by the first rdf:RDF element in the RDF namespace
 // (XMPMetaParser.findRootNode), so a packet binding the rdf prefix to another
-// URI holds no property at all: pdfjs issue15833.pdf carries packets rewritten
-// by a library proxy, and veraPDF reports none of them. Measured against veraPDF
-// on a fixture of each shape.
+// URI holds no property at all. Measured against veraPDF on a fixture of each
+// shape.
 //
-// The packet is read through [xmpRepairForParse], as [xmpWellFormed] reads it:
-// govdocs thread_300_300842.pdf writes &#x5; inside its x-default item, which
-// XMPCore repairs and veraPDF reports, while the raw decoder stopped there.
+// The packet is read through [xmpRepairForParse], as [xmpWellFormed] reads it,
+// because XMPCore repairs a control character reference inside an item where
+// the raw decoder stops.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15833.pdf: carries packets rewritten by a library proxy that
+//     bind the rdf prefix to another URI, and veraPDF reports none of them.
+//   - govdocs thread_300_300842.pdf: writes &#x5; inside its x-default item,
+//     which XMPCore repairs and veraPDF reports, while the raw decoder
+//     stopped there.
 func xmpLangAltOnlyXDefault(data []byte) bool {
 	const (
 		frameOutside = iota
@@ -2214,6 +2266,15 @@ func xmpNamespaceBindings(ctx context.Context, data []byte) []xmpNSBinding {
 // Each missing field emits a specific rule (t02–t18).
 // It also validates that extension schema elements use the expected namespace
 // prefix names (e.g., "pdfaSchema" not "nonpdfaSchema").
+//
+// # Corpus evidence
+//
+//   - All corpora, 792-cell pool: a flag in place of the container stack
+//     produced phantom missing-field storms.
+//   - verapdf 6-6-2-3-3-t01-fail-a.pdf: its entry declares CustomValueType
+//     and a property using it but omits pdfaSchema:namespaceURI. veraPDF
+//     reports §6.7.8 t9 there, restoring the URI clears it, and naming a
+//     predefined type instead clears it too.
 func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, results *[]Violation) {
 	// Check that pdfa extension schema namespace URIs use the expected
 	// prefix names. Only a binding that is actually USED on elements
@@ -2301,8 +2362,8 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 	// rdf:li items push. A stack, not a flag: a nested container (the
 	// field Seq inside a valueType definition) must not destroy the
 	// outer container's context, or every definition after the first in
-	// the outer Seq is evaluated at the wrong level (the phantom
-	// missing-field storms of the 792-cell corpus pool).
+	// the outer Seq is evaluated at the wrong level and reports phantom
+	// missing fields.
 	var containerStack []xmpExtSchemaLevel
 	// inCategory marks an open pdfaProperty:category element, whose character
 	// data carries the value the category rule constrains. The text arrives as
@@ -2714,11 +2775,7 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 				//
 				// An entry that states no namespaceURI reaches nothing, so the
 				// custom types it declares resolve for nobody, its own properties
-				// included. Measured on the veraPDF test suite's
-				// 6-6-2-3-3-t01-fail-a.pdf, whose entry declares CustomValueType
-				// and a property using it but omits pdfaSchema:namespaceURI:
-				// veraPDF reports §6.7.8 t9 there, restoring the URI clears it,
-				// and naming a predefined type instead clears it too.
+				// included, as veraPDF measures it.
 				declared := entryDeclared
 				if !currentSchema.hasNamespaceURI {
 					declared = nil
@@ -2813,10 +2870,9 @@ func xmpExtFieldSeqRule(part int) []Violation {
 	return nil
 }
 
-// xmpExtSchemaRule returns the rule for a missing field in a schema definition.
-// Mapping: schema->t03, namespaceURI->t04, prefix->t05, property->t06.
-// xmpExtLevelRules maps each extension-schema level's field name to the rule
-// that reports it, indexed by PDF/A part minus one (parts 1, 2 and 3). Keeping
+// The xmpExt*FieldRules tables map each extension-schema level's field name to
+// the rule that reports it, indexed by PDF/A part minus one (parts 1, 2 and
+// 3). Keeping
 // the mapping in a table rather than nested switches means a field listed in
 // [xmpExtensionLevels] cannot silently lack a rule: pdfaSchema:valueType and
 // pdfaType:field both did, so litho reported four violations where veraPDF
@@ -2938,11 +2994,6 @@ var xmpPredefinedValueTypes = map[string]bool{
 	"Bag Job": true, "Bag Xpath": true, "Bag Locale": true,
 }
 
-// xmpCheckExtensionPropertyTypes validates that extension schema properties
-// declare valueTypes that correspond to either predefined XMP types or custom
-// value types with proper field definitions.  If a property uses a custom
-// valueType that has no field definitions in the extension schema, the property
-// "does not correspond to" its declared type (clause 6.6.2.3.1 test 2).
 // xmpExtSchemaDef holds one pdfaSchema entry parsed from the
 // pdfaExtension:schemas bag: its namespace URI, declared property value
 // types, and declared custom value types.
@@ -2967,6 +3018,12 @@ const xmpExtSchemaItemDepth = 2
 // namespace URI are NOT merged: the effective extension type map is keyed
 // by URI, so a later same-URI entry replaces the earlier one, and callers
 // need document order to resolve which entry wins.
+//
+// # Corpus evidence
+//
+//   - facturx: committing only at the end of the enclosing block reported a
+//     false ISO 19005-2/3 §6.6.2.3.1 t2 on every ZUGFeRD/Factur-X file,
+//     because the four-property zf schema resolved only its final entry.
 func xmpParseExtensionSchemas(data []byte) []xmpExtSchemaDef {
 	var schemas []xmpExtSchemaDef
 	var current *xmpExtSchemaDef
@@ -2986,8 +3043,7 @@ func xmpParseExtensionSchemas(data []byte) []xmpExtSchemaDef {
 	// declarations, so one accumulator has to be committed per Seq item.
 	// Committing only at the end of the enclosing block kept the last item
 	// alone and left every earlier property undeclared, which reported a
-	// false ISO 19005-2/3 §6.6.2.3.1 t2 on every ZUGFeRD/Factur-X file: the
-	// four-property zf schema resolved only its final entry.
+	// false ISO 19005-2/3 §6.6.2.3.1 t2.
 	flushProperty := func() {
 		// Count only an item that carried something. The end of
 		// pdfaSchema:property flushes a second time to catch a declaration
@@ -3161,12 +3217,20 @@ func xmpParseExtensionSchemas(data []byte) []xmpExtSchemaDef {
 // xmpCheckExtensionPropertyTypes flags an extension-schema property whose
 // declared valueType resolves to neither a predefined XMP type nor a custom
 // value type that declares fields, but only when the property is actually used
-// in the packet. ISO 19005-2/3 §6.6.2.3.1 t2 is an XMPProperty (usage) rule:
-// veraPDF flags fs:property1 on the 6-6-2-3-3-t03-fail-b original, where the
-// property is used as a struct whose field is not a member of its fieldless
-// type, yet judges the remediated output (same fieldless declaration, property
-// removed) compliant. Gating on usage matches both verdicts and stops the
-// remediated declaration from reporting a false positive.
+// in the packet. ISO 19005-2/3 §6.6.2.3.1 t2 is an XMPProperty (usage) rule,
+// so a fieldless declaration with no usage is compliant. Gating on usage stops
+// a remediated declaration whose usage was removed from reporting a false
+// positive.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-6-2-3-3-t03-fail-b: veraPDF flags fs:property1 on the
+//     original, where the property is used as a struct whose field is not a
+//     member of its fieldless type, yet judges the remediated output (same
+//     fieldless declaration, property removed) compliant. Gating on usage
+//     matches both verdicts.
+//   - All corpora, 798-cell pool: the literal-string same-schema type lookup
+//     produced phantom findings against pdfd:declarations.
 func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation) {
 	schemas := xmpParseExtensionSchemas(data)
 
@@ -3175,9 +3239,7 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 	// valueType may wrap the custom element type in a container keyword ("Bag
 	// declaration" declares a bag of the custom type "declaration"), and the
 	// type definition may live in any schema entry of the packet, so the lookup
-	// strips the container prefix and searches every schema (the literal-string
-	// same-schema lookup produced a 798-cell phantom pool against
-	// pdfd:declarations).
+	// strips the container prefix and searches every schema.
 	allTypes := make(map[string]bool)
 	for _, s := range schemas {
 		for name, hasFields := range s.typeFields {
@@ -3213,9 +3275,12 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 // entry with the same URI replaces the earlier one. A property declared
 // only by a replaced entry then has no resolvable value type and violates
 // ISO 19005-2/3 §6.6.2.3.1 t2 / ISO 19005-1 §6.7.9 t3.
-// Verified live: PDF_UA-1__5-t04-fail-a under PDF/A-2b fails t2 on
-// pdfuaid:part, declared by the first of two same-URI entries; blanking the
-// second entry clears the failure.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__5-t04-fail-a: verified live under PDF/A-2b, it
+//     fails t2 on pdfuaid:part, declared by the first of two same-URI
+//     entries; blanking the second entry clears the failure.
 func xmpCheckExtensionPropertyResolution(data []byte, part int, results *[]Violation) {
 	schemas := xmpParseExtensionSchemas(data)
 	if len(schemas) == 0 {
@@ -3303,6 +3368,13 @@ var xmpContainerElementType = map[string]map[string]xmpPropType{
 // simple property value formats, container item value formats, Alt container
 // lang attributes, and struct property structure. It flags unknown property
 // names in known (predefined) schemas.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-7-2-t07-*-j: these files carry an xmpidq:Scheme qualifier on
+//     each xmp:Identifier item, and veraPDF reports none of them.
+//   - verapdf 6-7-2-t03-fail-i: carries the stFnt fields of xmpTPg:Fonts,
+//     and veraPDF reports none of them.
 func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, extraExtensionNS map[string]bool, results *[]Violation) {
 	observed := xmpExtractPropertyValues(data)
 	_, extensionNS := xmpExtractNamespaces(data)
@@ -3310,9 +3382,7 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, extraExtensio
 
 	// Only a top-level property is a property. xmpExtractPropertyValues also
 	// records qualifiers and the fields of a nested Description, which this
-	// clause does not judge: the veraPDF test suite's 6-7-2-t07-*-j files carry
-	// an xmpidq:Scheme qualifier on each xmp:Identifier item and 6-7-2-t03-fail-i
-	// carries the stFnt fields of xmpTPg:Fonts, and veraPDF reports none of them.
+	// clause does not judge, and veraPDF reports none of them.
 	topLevel := make(map[string]map[string]bool)
 	for _, p := range xmpExtractTopLevelProperties(data) {
 		if topLevel[p.ns] == nil {
@@ -3394,6 +3464,13 @@ func xmpCheckPropertyTypes(data []byte, part int, _ ast.PdfStream, extraExtensio
 // xmpPropertyTypeDetails reports every way one observed XMP property fails the
 // type its predefined schema gives it. The caller states the rule once for the
 // property, whatever comes back.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300116: litho reported photoshop:ColorMode,
+//     photoshop:History, photoshop:ICCProfile, exif:NativeDigest,
+//     tiff:NativeDigest and pdf:Trapped under t1 alone while veraPDF reports
+//     every one under both tests.
 func xmpPropertyTypeDetails(part int, ns, prop string, pv xmpPropertyValue, registry map[string]xmpPropType) []string {
 	expectedType, known := registry[prop]
 	// veraPDF answers both tests of the clause from one SchemasDefinition: a
@@ -3401,10 +3478,7 @@ func xmpPropertyTypeDetails(part int, ns, prop string, pv xmpPropertyValue, regi
 	// getSchemasDefinition returns null, getisValueTypeCorrect returns null with
 	// it, and t2 fails wherever t1 does. litho's type registry is a superset of
 	// the predefined catalog (207 names for part 2), so a name the catalog
-	// rejects still found a type here and stayed silent: govdocs
-	// thread_300_300116 reports photoshop:ColorMode, photoshop:History,
-	// photoshop:ICCProfile, exif:NativeDigest, tiff:NativeDigest and pdf:Trapped
-	// under t1 alone while veraPDF reports every one under both.
+	// rejects still found a type here and stayed silent.
 	if known {
 		if catalog := xmpPredefinedPropertyCatalog(part); catalog != nil {
 			names, nsKnown := catalog[ns]
@@ -3524,7 +3598,7 @@ func xmpPropertyTypeDetails(part int, ns, prop string, pv xmpPropertyValue, regi
 	return details
 }
 
-// propTypeToContainerType converts a container xmpPropType to xmpContainerType.
+// propTypeToContainerType converts a container [xmpPropType] to [xmpContainerType].
 func propTypeToContainerType(t xmpPropType) xmpContainerType {
 	switch t {
 	case xmpPropAlt:
@@ -3568,16 +3642,20 @@ func xmpPropertyTypeRule(part int, ns, prop, detail string) []Violation {
 // defines, the edition ISO 19005-2 normatively references and the one litho
 // already judges property names against (§6.6.2.3.1 t1 reports a property "not
 // predefined in XMP 2005"). Adobe added members later, and a file using one
-// states a value the referenced type does not define: pdfjs issue15220.pdf
-// writes stRef:originalDocumentID inside xmpMM:DerivedFrom and stEvt:changed
-// inside xmpMM:History, and veraPDF reports both under §6.6.2.3.1 t2. Every
-// name here was confirmed against veraPDF one field per fixture; every later
-// addition it rejects is absent.
+// states a value the referenced type does not define. Every name here was
+// confirmed against veraPDF one field per fixture; every later addition it
+// rejects is absent.
 //
-// The remaining types keep comprehensive field sets: no corpus file exercises
-// them and none was checked against the oracle, so an omitted-but-valid field
-// would be a false positive where a listed-but-invalid one only costs a
-// missed detection.
+// The remaining types keep comprehensive field sets: none was checked against
+// the oracle, so an omitted-but-valid field would be a false positive where a
+// listed-but-invalid one only costs a missed detection.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15220.pdf: writes stRef:originalDocumentID inside
+//     xmpMM:DerivedFrom and stEvt:changed inside xmpMM:History, and veraPDF
+//     reports both under §6.6.2.3.1 t2.
+//   - All corpora: no file exercises the remaining types.
 //
 //nolint:gochecknoglobals // static lookup table mirroring the XMP Specification.
 var xmpStructTypeFields = map[string]map[string]bool{
@@ -3624,7 +3702,14 @@ var xmpStructTypeFields = map[string]map[string]bool{
 // property's container type and never descends into its struct fields, so a
 // misspelled field (stEvt:When for stEvt:when) slips through. The violation is
 // attributed to the enclosing top-level property, matching veraPDF's context
-// node; xmpPropertyTypeRule returns nil for part 4, which drops the requirement.
+// node; [xmpPropertyTypeRule] returns nil for part 4, which drops the requirement.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue13971.pdf: writes both attribute forms, <xmpMM:DerivedFrom
+//     stRef:originalDocumentID=".."/> and an xmpMM:History whose events
+//     carry stEvt:changed, and veraPDF reports each against its enclosing
+//     property.
 func xmpCheckStructFieldNames(data []byte, part int, results *[]Violation) {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.CharsetReader = xmpPassThroughCharset
@@ -3648,9 +3733,7 @@ func xmpCheckStructFieldNames(data []byte, part int, results *[]Violation) {
 	// A struct written with RDF/XML property attributes carries its fields
 	// there, and it sits wherever the value type puts it: as the property
 	// element itself, or as an rdf:li of the array a Seq-valued property holds.
-	// pdfjs issue13971.pdf writes both, <xmpMM:DerivedFrom
-	// stRef:originalDocumentID=".."/> and an xmpMM:History whose events carry
-	// stEvt:changed, and veraPDF reports each against its enclosing property.
+	// veraPDF reports each against its enclosing property.
 	scanAttrFields := func(t xml.StartElement) {
 		if propLocal == "" {
 			return
@@ -3720,6 +3803,16 @@ type xmpPropertyValue struct {
 
 // xmpExtractPropertyValues parses XMP XML and returns the observed container
 // type plus text content for each top-level property.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100847.pdf: carries <xapMM:DerivedFrom
+//     rdf:parseType="Resource"></...>, an empty struct, and litho read its
+//     whitespace as a plain text value.
+//   - govdocs thread_300_300116.pdf: writes <exif:Flash exif:Fired="False"
+//     .../> in one packet and the same struct with sub-elements in another;
+//     litho read the first as plain text and reported a struct property with
+//     a text value that veraPDF does not report.
 func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValue {
 	result := make(map[string]map[string]xmpPropertyValue)
 	decoder := xml.NewDecoder(bytes.NewReader(data))
@@ -3788,19 +3881,12 @@ func xmpExtractPropertyValues(data []byte) map[string]map[string]xmpPropertyValu
 					// the element's own content a struct (RDF/XML Syntax
 					// Specification, 2.3.3), which the XMP Specification uses for
 					// ResourceRef values. It says so whether or not any field
-					// follows, so an empty struct written that way is structured:
-					// govdocs thread_100_100847.pdf carries
-					// <xapMM:DerivedFrom rdf:parseType="Resource"></...> and litho
-					// read its whitespace as a plain text value.
+					// follows, so an empty struct written that way is structured.
 					// A namespace-qualified attribute on the property element is
 					// the other shorthand: RDF/XML property attributes
 					// (RDF 1.1 XML Syntax, 2.5) say the same as a nested
 					// Description carrying those fields, so the value is a
-					// struct. govdocs thread_300_300116.pdf writes
-					// <exif:Flash exif:Fired="False" .../> in one packet and the
-					// same struct with sub-elements in another; litho read the
-					// first as plain text and reported a struct property with a
-					// text value that veraPDF does not report.
+					// struct.
 					for _, attr := range t.Attr {
 						switch attr.Name.Space {
 						case xmpRDFNamespace:

@@ -17,15 +17,20 @@ import (
 // carry a Unicode value, which ISO 32000-1, 9.10.2 derives from the glyph name
 // whatever the font's subtype; veraPDF computes it per Glyph. litho reserved
 // the exemption for Type 1, so an unembedded TrueType with resolvable names was
-// reported: pdfjs bug1727053.pdf shows Arial,Bold with no /ToUnicode and
-// veraPDF reports nothing.
+// reported.
 //
 // The exemption reaches a TrueType only through an /Encoding dictionary, which
 // states its glyph names outright. ISO 32000-1, 9.6.6.4 resolves a TrueType
 // code through the font's own cmap, so a name a predefined table merely implies
 // yields Unicode only when the program carries that glyph, which this check
-// does not establish. Widening it to named encodings suppressed the rule on 16
-// govdocs files veraPDF still reports.
+// does not establish.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1727053.pdf: shows Arial,Bold with no /ToUnicode, and veraPDF
+//     reports nothing.
+//   - govdocs: widening the exemption to named encodings suppressed the rule
+//     on 16 files veraPDF still reports.
 func TestTrueTypeAGLExemption(t *testing.T) {
 	t.Parallel()
 

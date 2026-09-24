@@ -88,9 +88,12 @@ func cidKeyedCFF(cids []uint16) []byte {
 // "for rendering", and text shown in rendering mode 3 is not rendered, so a
 // font every one of whose uses is invisible has no glyph-presence answer to
 // give. The .notdef rule (§6.2.11.8) carries no such exemption and keeps
-// firing: veraPDF reports 6.2.11.8 and not 6.2.11.4.1 on govdocs
-// thread_200_200565.pdf, whose 411 show operators are all mode 3. The
-// CIDFontType2 branch already scoped presence this way.
+// firing. The CIDFontType2 branch already scoped presence this way.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200565.pdf: all 411 show operators are mode 3, and
+//     veraPDF reports 6.2.11.8 and not 6.2.11.4.1.
 func TestCheckType0NotdefGlyph_CIDFontType0RenderModeScope(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

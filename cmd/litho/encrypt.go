@@ -60,7 +60,7 @@ func encryptWriteOptions(userPwd, ownerPwd, algorithm string, stderr io.Writer) 
 // is fourteen of the seventeen emitters. One message used to advise "Pass
 // --user-password to encrypt the output" for every one of them. That was true
 // of the five page operations it was written for, and became wrong when
-// `80742794` widened the warning to every output-producing command: those
+// `bbed371f` widened the warning to every output-producing command: those
 // fourteen reject the flag with "flag provided but not defined", so the warning
 // answered a confidentiality downgrade with a command that fails. Advice a
 // command refuses is worse than no advice.

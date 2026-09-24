@@ -79,8 +79,13 @@ func TestExtensionSchemaPrefix_UsedWrongPrefixStillFires(t *testing.T) {
 // container-stack walk: a second valueType definition following one
 // whose pdfaType:field Seq nested another container keeps its level (a
 // single-flag tracker evaluated it at the wrong level and stormed
-// phantom missing-field violations across 792 corpus cells/profile).
-// A genuinely incomplete SECOND definition still fires.
+// phantom missing-field violations). A genuinely incomplete SECOND
+// definition still fires.
+//
+// # Corpus evidence
+//
+//   - All corpora: the single-flag tracker's phantom missing-field
+//     violations spanned 792 cells per profile.
 func TestExtensionSchema_MultipleDefsAfterNestedContainer(t *testing.T) {
 	packet := func(secondDef string) []byte {
 		return xmpPacket(`<rdf:Description rdf:about=""

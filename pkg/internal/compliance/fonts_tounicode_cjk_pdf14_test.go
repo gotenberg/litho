@@ -21,8 +21,13 @@ import (
 //
 // Measured against veraPDF at PDF/A-1a over an Adobe-GB1 CIDFont carrying no
 // /ToUnicode: GBK-EUC-H and UniGB-UCS2-H report nothing, UniGB-UTF16-H reports
-// the glyph. pdfjs issue18466.pdf is the corpus case (16 glyphs of a
-// FZSSK--GBK1-0 encoded UniGB-UTF16-H); seven pdfjs files share the shape.
+// the glyph.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18466.pdf: 16 glyphs of a FZSSK--GBK1-0 encoded
+//     UniGB-UTF16-H.
+//   - pdfjs: seven files share the shape.
 func TestType0ToUnicodeCJKExemptionNeedsAPDF14CMap(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

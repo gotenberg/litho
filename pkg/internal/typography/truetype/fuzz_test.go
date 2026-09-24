@@ -149,11 +149,11 @@ func TestMinimalSfntIsAccepted(t *testing.T) {
 // grouped mapping, and a version 2.0 post table naming its glyphs.
 //
 // It reaches the format 12 reader and the post reader. It does NOT reach the
-// format 6 reader, measured: parseCmap scores its candidates and takes only the
+// format 6 reader, measured: [parseCmap] scores its candidates and takes only the
 // best one, and this font's (3,10) record scores 4 against the (1,0) record's
 // 1, so the format 6 subtable is present but permanently shadowed. [macSfnt]
 // is the seed that reaches it. An earlier comment here claimed both readers
-// were reached; TestRichSfntReachesTheOtherFormats asserted the subtable COUNT
+// were reached; [TestRichSfntReachesTheOtherFormats] asserted the subtable COUNT
 // rather than which reader ran, so the claim stood untested.
 func richSfnt() []byte {
 	maxp := make([]byte, 6)
@@ -250,7 +250,7 @@ func TestRichSfntReachesTheOtherFormats(t *testing.T) {
 // macSfnt builds a font whose ONLY cmap record is (1,0) Macintosh Roman,
 // carrying a format 6 trimmed subtable.
 //
-// parseCmap keeps a single best candidate: (3,10) scores 4, (3,1) scores 3,
+// [parseCmap] keeps a single best candidate: (3,10) scores 4, (3,1) scores 3,
 // platform 0 scores 2, (1,0) scores 1, and anything else is dropped. Every
 // other seed and test in this package declares (3,1), (3,10) or (3,0), so the
 // format 6 reader was reached by nothing at all. A lone (1,0) record has no
@@ -268,11 +268,11 @@ func macSfnt() []byte {
 
 // TestMacSfntReachesTheFormat6Reader asserts REACHABILITY, not shape.
 //
-// Its sibling TestRichSfntReachesTheOtherFormats checks CmapSubtableCount,
+// Its sibling [TestRichSfntReachesTheOtherFormats] checks [CmapSubtableCount],
 // which says a subtable EXISTS and nothing about which reader consumed it:
 // that is why a seed advertised as reaching the format 6 reader sat at 0.0%
 // coverage while its test passed. The mapping asserted below can only be
-// produced by parseCmapFormat6 actually running.
+// produced by [parseCmapFormat6] actually running.
 func TestMacSfntReachesTheFormat6Reader(t *testing.T) {
 	t.Parallel()
 

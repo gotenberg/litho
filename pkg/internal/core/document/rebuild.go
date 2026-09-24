@@ -29,6 +29,14 @@ var objHeaderRe = regexp.MustCompile(`(\d+)\s+(\d+)\s+obj\b`)
 // a cross-reference table when the original xref data is damaged or missing.
 // It finds every "N G obj" header, records its byte offset, and locates the
 // trailer dictionary. The resulting xref.Index is written into doc.Index.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100982.pdf, thread_100_100983.pdf: both end with
+//     `trailer<</Size N/ID[...]>>` and carry `/Info N 0 R /Root N 0 R /Prev N`
+//     in a trailer near the start, whose own startxref offset is a malformed
+//     0. Without the /Info recovery, ISO 19005-4, 6.1.3 t4 and t5 reported
+//     nothing on them while veraPDF reported both.
 func (d *Document) rebuildXRef(ctx context.Context) error {
 	entries := make(map[int]xref.XRefEntry)
 
@@ -96,24 +104,22 @@ func (d *Document) rebuildXRef(ctx context.Context) error {
 		// Last-resort: synthesize a minimal trailer. The file has
 		// parseable objects but no recoverable trailer, so downstream
 		// recovery has to locate /Root by scanning object bodies.
-		// [ResolveCatalog] walks the entry table looking for a
+		// ResolveCatalog walks the entry table looking for a
 		// dictionary tagged /Type /Catalog, which does not require a
 		// pre-computed /Root.
 		trailer = synthesizeTrailer(entries)
 		d.TrailerSynthesized = true
 	} else if _, hasInfo := trailer["Info"]; !hasInfo {
-		// A damaged file's LAST trailer can be a stub while the real one sits
-		// earlier: govdocs thread_100_100982.pdf and thread_100_100983.pdf both
-		// end with `trailer<</Size N/ID[...]>>` and carry
-		// `/Info N 0 R /Root N 0 R /Prev N` in a trailer near the start, whose
-		// own startxref offset is a malformed 0. The xref CHAIN path already
-		// carries these keys forward across sections with [mergeTrailerKeys];
-		// the rebuild path did not, so a trailer the file plainly has went
-		// missing and ISO 19005-4, 6.1.3 t4 and t5, which read the trailer
-		// /Info, reported nothing while veraPDF reported both.
+		// A damaged file's LAST trailer can be a stub while the real one,
+		// carrying /Info, /Root and /Prev, sits earlier with a malformed
+		// startxref offset of its own. The xref CHAIN path already carries
+		// these keys forward across sections with mergeTrailerKeys; the
+		// rebuild path did not, so a trailer the file plainly has went missing
+		// and ISO 19005-4, 6.1.3 t4 and t5, which read the trailer /Info,
+		// reported nothing.
 		//
 		// Only /Info is recovered. /Root is deliberately left alone: a
-		// synthesized trailer omits it so [ResolveCatalog] scans for
+		// synthesized trailer omits it so ResolveCatalog scans for
 		// /Type /Catalog, and that recovery path carries a documented prior
 		// regression. This branch also never runs for a synthesized trailer,
 		// so a trailer litho invented gains nothing it cannot evidence.
@@ -133,12 +139,17 @@ func (d *Document) rebuildXRef(ctx context.Context) error {
 // It never overrides an entry already recovered (an uncompressed copy, or a
 // later incremental update, supersedes the stream copy) and tolerates
 // unparseable or encrypted streams: recovery is best-effort.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14269.pdf: ordering object streams by object number let an
+//     old revision's stream win, and the file came back with the first
+//     revision's /Annots array, one signature widget short.
 func (d *Document) expandObjectStreamsForRebuild(ctx context.Context, entries map[int]xref.XRefEntry) {
 	// A definition later in the file supersedes an earlier one, which is the
 	// rule the raw scan above already follows for uncompressed headers. Object
 	// streams have to follow it too: ordering them by object number instead
-	// let an OLD revision's stream win, and issue14269.pdf came back with the
-	// first revision's /Annots array, one signature widget short.
+	// lets an OLD revision's stream win.
 	srcOffset := make(map[int]int64, len(entries))
 	stmCandidates := make([]int, 0, len(entries))
 	for objNum, e := range entries {
@@ -214,14 +225,20 @@ const maxRecoveredTrailers = 16
 // findTrailerInfoRef returns the /Info value of the newest trailer in the file
 // that states one, for a rebuild whose recovered trailer has none.
 //
-// The scan runs over the whole file rather than a window near the end: in the
-// files this exists for, the stub trailer is last while the trailer carrying
-// /Info sits about a kilobyte into a hundred-kilobyte document, so a tail
-// window never reaches it. Candidates are examined newest first, matching the
-// rule the rebuild's object scan already follows, and only /Info is read.
+// The scan runs over the whole file rather than a window near the end: the
+// trailer carrying /Info can sit near the start of a large document, behind a
+// stub trailer at the end, so a tail window never reaches it. Candidates are
+// examined newest first, matching the rule the rebuild's object scan already
+// follows, and only /Info is read.
 //
 // The scan reads the whole file, so it checks ctx once per chunk and reports
 // nothing found once the caller cancels.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100982.pdf, thread_100_100983.pdf: the stub trailer
+//     is last while the trailer carrying /Info sits about a kilobyte into a
+//     hundred-kilobyte document.
 func (d *Document) findTrailerInfoRef(ctx context.Context) (ast.PdfObject, bool) {
 	keyword := []byte("trailer")
 	const overlap = 16 // longer than the keyword, so a chunk boundary cannot split it.
@@ -246,7 +263,7 @@ func (d *Document) findTrailerInfoRef(ctx context.Context) (ast.PdfObject, bool)
 			// Chunks overlap so a keyword cannot be split across a boundary,
 			// which means one inside the overlap region is seen twice. Offsets
 			// only ever increase, so dropping a repeat keeps
-			// [maxRecoveredTrailers] a bound on DISTINCT trailers rather than
+			// maxRecoveredTrailers a bound on DISTINCT trailers rather than
 			// on sightings. The object scan above needs no such guard because
 			// it keys a map by object number.
 			if len(offsets) == 0 || off > offsets[len(offsets)-1] {
@@ -286,12 +303,12 @@ func (d *Document) findTrailerInfoRef(ctx context.Context) (ast.PdfObject, bool)
 // cross-reference stream whose dict IS the trailer). Falls back to scanning
 // for the last "trailer" keyword.
 func (d *Document) findLastTrailer(ctx context.Context) (ast.PdfDict, error) {
-	// Try 1: follow the last startxref pointer.
+	// Prefer the trailer the last startxref pointer reaches.
 	if dict := d.findTrailerViaStartXRef(ctx); dict != nil {
 		return dict, nil
 	}
 
-	// Try 2: scan backwards for the last "trailer" keyword.
+	// Fall back to scanning backwards for the last "trailer" keyword.
 	const searchBuf = 4096
 	searchSize := min(d.size, int64(searchBuf))
 

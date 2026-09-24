@@ -34,13 +34,13 @@ func a1EFViolations(t *testing.T, data []byte) int {
 // TestPDFA1EmbeddedFileSeesDirectFileSpec pins that ISO 19005-1 §6.1.11 reaches
 // a file specification written as a direct dictionary.
 //
-// PDF/A-1 forbids embedded files outright, but checkEmbeddedFiles found file
+// PDF/A-1 forbids embedded files outright, but [checkEmbeddedFiles] found file
 // specifications by sweeping the cross-reference map, which lists only indirect
 // objects, while ISO 32000-1 §7.11.3 does not require a file specification to be
 // one. Moving the same /EF-carrying filespec from its own object into an
 // annotation's /FS therefore turned a fatal violation into a silent pass, which
 // is an evasion of the ban rather than a missed corner case. Parts 2, 3 and 4
-// already discovered both forms through collectFileSpecs.
+// already discovered both forms through [collectFileSpecs].
 func TestPDFA1EmbeddedFileSeesDirectFileSpec(t *testing.T) {
 	t.Parallel()
 

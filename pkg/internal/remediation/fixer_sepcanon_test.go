@@ -9,8 +9,12 @@ import (
 // TestObjectsEqual_UncomparableComposites pins the panic fix: a Separation
 // array's /AlternateSpace or tint-function slot can be an inline array, dict,
 // or stream. objectsEqual must treat those as unequal instead of reaching a
-// bare == that panics with "comparing uncomparable type". Reproduces pdfjs
-// issue6127 / issue21089 at PDF/A-2b aggressive remediation.
+// bare == that panics with "comparing uncomparable type".
+//
+// # Corpus evidence
+//
+//   - pdfjs issue6127 and issue21089: the test reproduces both at PDF/A-2b
+//     aggressive remediation.
 func TestObjectsEqual_UncomparableComposites(t *testing.T) {
 	dict := ast.PdfDict{"Type": ast.PdfName("ICCBased")}
 	arr := ast.PdfArray{ast.PdfName("ICCBased"), ast.PdfIndirectRef{ObjectNum: 5}}

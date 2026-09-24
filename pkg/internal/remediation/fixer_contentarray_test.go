@@ -12,7 +12,11 @@ import (
 )
 
 // contentArrayPDF builds a page whose /Contents is a DIRECT array of two
-// streams, which ISO 32000-1, 7.7.3.3 permits and 547 corpus files carry.
+// streams, which ISO 32000-1, 7.7.3.3 permits and real producers write.
+//
+// # Corpus evidence
+//
+//   - All corpora: 547 corpus files carry a direct /Contents array.
 func contentArrayPDF() []byte {
 	a, b := "BT (AA) Tj ET", "BT (BB) Tj ET"
 	return buildStructPDF(

@@ -58,9 +58,12 @@ func onlyPage(t *testing.T, data []byte) *Page {
 // are indirect references measures correctly.
 //
 // ISO 32000-1, 7.3.9 allows an indirect reference wherever a direct object may
-// appear, including inside an array. pdfjs issue7872.pdf writes
-// /MediaBox [4 0 R 5 0 R 6 0 R 7 0 R]; read verbatim the coordinates are
+// appear, including inside an array. Read verbatim, such coordinates are
 // references rather than numbers, so the page measured 0 by 0.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7872.pdf: writes /MediaBox [4 0 R 5 0 R 6 0 R 7 0 R].
 func TestMediaBoxWithIndirectCoordinates(t *testing.T) {
 	t.Parallel()
 

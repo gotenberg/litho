@@ -12,8 +12,12 @@ import (
 // TestCheckTrailerID_NotAnArrayFailsEveryPart pins ISO 19005-1/2/4, 6.1.3 t1 on
 // a trailer /ID that is not an array: file identifiers are an array of two
 // byte strings (ISO 32000-1, 14.4), and veraPDF reads any other value as no
-// identifier at all, under every part. pdfjs issue5599.pdf writes a number and
-// issue11651.pdf null; both were measured at PDF/A-1b, 2b and 4.
+// identifier at all, under every part.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5599.pdf, issue11651.pdf: write a number and null
+//     respectively, and both were measured at PDF/A-1b, 2b and 4.
 func TestCheckTrailerID_NotAnArrayFailsEveryPart(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

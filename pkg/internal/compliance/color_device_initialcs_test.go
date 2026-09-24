@@ -12,7 +12,13 @@ import (
 // §8.4.1). With no OutputIntent that is an uncalibrated colour space use, and
 // ISO 19005-2 §6.2.4.3 t4 (ISO 19005-1 §6.2.3.3 t3) fires. litho previously
 // skipped any page whose effective /Resources resolved to nil, missing it
-// entirely (pdfcpu test.pdf, testRot.pdf, testWithText.pdf).
+// entirely.
+//
+// # Corpus evidence
+//
+//   - pdfcpu test.pdf, testRot.pdf, testWithText.pdf: pages with no
+//     /Resources in their ancestry that litho skipped, missing the implicit
+//     DeviceGray entirely.
 func TestNoResourcesPage_ImplicitDeviceGrayFires(t *testing.T) {
 	t.Parallel()
 	data := cyclePDF(
@@ -31,8 +37,12 @@ func TestNoResourcesPage_ImplicitDeviceGrayFires(t *testing.T) {
 // components within the space a preceding CS selected; with no CS the stroking
 // space is still the initial DeviceGray, so the S that follows paints in
 // DeviceGray and §6.2.4.3 t4 fires. litho previously treated SC as proof that a
-// colour space had been chosen and stayed silent (pdfcpu pike-stanford.pdf,
-// where every page strokes a rule after a bare "0.3 SC").
+// colour space had been chosen and stayed silent.
+//
+// # Corpus evidence
+//
+//   - pdfcpu pike-stanford.pdf: every page strokes a rule after a bare
+//     "0.3 SC", and litho stayed silent.
 func TestStrokeColorWithoutColorSpace_DeviceGrayFires(t *testing.T) {
 	t.Parallel()
 	data := cyclePDF(
@@ -50,9 +60,14 @@ func TestStrokeColorWithoutColorSpace_DeviceGrayFires(t *testing.T) {
 // TestFormXObjectBareScn_NoFalsePositive pins the boundary of the SC/SCN rule.
 // A Form XObject inherits the graphics state in effect at the invoking Do (ISO
 // 32000-1 §8.10.2), so a bare scn inside it may legitimately name a component
-// of the ICCBased space the page selected. litho does not model that inherited
-// state, so it must not report DeviceGray there: veraPDF, which does propagate
-// the state, reports nothing (pdf.js issue19954.pdf).
+// of the ICCBased space the page selected. litho carries that inherited state
+// into the form, so it must not report DeviceGray there: veraPDF, which also
+// propagates the state, reports nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19954.pdf: a bare scn inside a Form XObject after the page
+//     selected an ICCBased space, and veraPDF reports nothing.
 func TestFormXObjectBareScn_NoFalsePositive(t *testing.T) {
 	t.Parallel()
 	data := cyclePDF(

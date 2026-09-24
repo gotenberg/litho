@@ -9,8 +9,12 @@ import (
 )
 
 // headerlessPDF builds a complete one-page document and omits the "%PDF-"
-// line, the shape of pdfjs bug1606566.pdf. Everything else, including the
-// xref table, trailer and startxref, is well formed.
+// line. Everything else, including the xref table, trailer and startxref, is
+// well formed.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1606566.pdf: the shape this fixture reproduces.
 func headerlessPDF(withHeader bool) []byte {
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
@@ -44,10 +48,15 @@ func headerlessPDF(withHeader bool) []byte {
 // still read when the rest of it is a PDF.
 //
 // ISO 32000-1, 7.5.2 requires the header, so the file is invalid and litho
-// rejected it outright. Every other reader accepts it: pdfjs bug1606566.pdf has
-// a complete xref, trailer and startxref and merely lacks the header line, and
-// pdf.js reports one page with a null PDFFormatVersion, poppler warns "May not
-// be a PDF file (continuing anyway)", and pikepdf opens it without complaint.
+// rejected it outright. Every other reader accepts a file that has a complete
+// xref, trailer and startxref and merely lacks the header line.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1606566.pdf: has a complete xref, trailer and startxref and
+//     merely lacks the header line. pdf.js reports one page with a null
+//     PDFFormatVersion, poppler warns "May not be a PDF file (continuing
+//     anyway)", and pikepdf opens it without complaint.
 func TestDocumentWithoutHeaderIsRead(t *testing.T) {
 	t.Parallel()
 

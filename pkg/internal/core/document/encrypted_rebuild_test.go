@@ -50,7 +50,7 @@ func encryptedRebuiltPDF(t *testing.T, author string) []byte {
 		if !ok {
 			continue
 		}
-		// k is an [ast.PdfName], which already renders its leading slash.
+		// k is an ast.PdfName, which already renders its leading slash.
 		if s, isStr := v.(ast.PdfString); isStr {
 			fmt.Fprintf(&encBody, " %v (%s)", k, escapePdfLiteral([]byte(s)))
 			continue
@@ -96,10 +96,14 @@ func escapePdfLiteral(b []byte) string {
 // cache hit that returned the encrypted bytes as the object's value.
 // [Document.Authenticate] already cleared the caches for this reason, but a
 // document that opens on the empty user password authenticates inside
-// [crypto.NewHandler] and never calls it. On pdfjs issue5909_original.pdf, whose
-// final startxref points into a superseded revision, all 43 objects were cached
-// as ciphertext: `litho metadata` printed the encrypted bytes as the /Author and
-// `litho text` found nothing in a document poppler reads in full.
+// [crypto.NewHandler] and never calls it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5909_original.pdf: its final startxref points into a
+//     superseded revision, and all 43 objects were cached as ciphertext.
+//     `litho metadata` printed the encrypted bytes as the /Author and
+//     `litho text` found nothing in a document poppler reads in full.
 func TestEncryptedDocumentRecoveredByRebuildStillDecrypts(t *testing.T) {
 	t.Parallel()
 

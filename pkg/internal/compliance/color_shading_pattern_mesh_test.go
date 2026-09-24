@@ -13,11 +13,15 @@ import (
 // shading pattern (PatternType 2) is a dictionary holding it under /Shading.
 // The pattern branch resolved that /Shading only as a dictionary, so a mesh
 // behind a pattern was dropped and its /ColorSpace never counted: the same gap
-// [TestColorScope_MeshShading] pins for the sh path. pdfjs
-// coons-allflags-withfunction.pdf and tensor-allflags-withfunction.pdf each
-// select a PatternType 2 whose /Shading is a type 6 or 7 stream in DeviceRGB on
-// a page with no OutputIntent, and veraPDF reports both under §6.2.4.3 t2 while
-// litho counted no device colour space for the page at all.
+// [TestColorScope_MeshShading] pins for the sh path.
+//
+// # Corpus evidence
+//
+//   - pdfjs coons-allflags-withfunction.pdf, tensor-allflags-withfunction.pdf:
+//     each selects a PatternType 2 whose /Shading is a type 6 or 7 stream in
+//     DeviceRGB on a page with no OutputIntent. veraPDF reports both under
+//     §6.2.4.3 t2, while litho counted no device colour space for the page at
+//     all.
 func TestColorScope_ShadingPatternMesh(t *testing.T) {
 	t.Parallel()
 

@@ -13,10 +13,17 @@ import (
 // only when it holds a program of the kind its key declares. Per ISO 32000-1,
 // Table 126, /FontFile is a Type 1 program and /FontFile2 a TrueType one, so a
 // PFB container or a TrueType Collection embeds no single program a consumer
-// can read. veraPDF reports each under ISO 19005-2 §6.2.11.4.1 t1: pdfjs
-// bug860632.pdf and issue14462_reduced.pdf embed PFB, issue13193.pdf and
-// issue9262_reduced.pdf a collection, bug866395.pdf an empty stream, and
-// issue15559.pdf a /FontFile2 that is no sfnt at all.
+// can read. veraPDF reports each under ISO 19005-2 §6.2.11.4.1 t1.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug860632.pdf, issue14462_reduced.pdf: embed PFB, and veraPDF
+//     reports them.
+//   - pdfjs issue13193.pdf, issue9262_reduced.pdf: embed a TrueType
+//     Collection, and veraPDF reports them.
+//   - pdfjs bug866395.pdf: embeds an empty stream, and veraPDF reports it.
+//   - pdfjs issue15559.pdf: embeds a /FontFile2 that is no sfnt at all, and
+//     veraPDF reports it.
 func TestFontEmbedding_ProgramContainer(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -70,9 +77,13 @@ func TestFontEmbedding_ProgramContainer(t *testing.T) {
 
 // TestFontEmbedding_UndecodableProgramStaysEmbedded pins the conservative side:
 // bytes that will not decode say nothing about which container they hold, and
-// veraPDF still counts the font as embedded. pdfjs poppler-395-0-fuzzed.pdf
-// carries a /FontFile2 with corrupt ASCIIHex data that veraPDF passes, so
-// firing here would be a false positive.
+// veraPDF still counts the font as embedded, so firing here would be a false
+// positive.
+//
+// # Corpus evidence
+//
+//   - pdfjs poppler-395-0-fuzzed.pdf: carries a /FontFile2 with corrupt
+//     ASCIIHex data that veraPDF passes.
 func TestFontEmbedding_UndecodableProgramStaysEmbedded(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

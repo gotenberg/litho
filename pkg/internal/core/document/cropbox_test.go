@@ -30,9 +30,14 @@ func sameRect(a, b ast.PdfArray) bool {
 //
 // ISO 32000-1, 14.11.2 requires the crop box to lie within the media box, so a
 // producer writing a larger one describes a region that does not exist. Taking
-// it verbatim overstated the page size: govdocs thread_200_200062 declares a
-// 612x792 media box with a 614x794 crop box, and litho answered 614x794 where
-// poppler answers 612x792. The size drives stamp placement and clipping.
+// it verbatim overstates the page size, and the size drives stamp placement and
+// clipping.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200062: declares a 612x792 media box with a 614x794
+//     crop box. Taken verbatim, litho answered 614x794 where poppler answers
+//     612x792.
 func TestClampToMediaBox(t *testing.T) {
 	media := rect(0, 0, 612, 792)
 

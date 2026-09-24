@@ -55,10 +55,14 @@ func TestFixCatalog_RemovesOCPropertiesWhenPartOneFlagsIt(t *testing.T) {
 
 // TestFixCatalog_RemovesOCPropertiesEvenWhenContentUsesIt pins the decision.
 //
-// 8 of the 19 corpus carriers carry /OC entries, so deletion makes that content
+// Real carriers attach /OC entries to content, so deletion makes that content
 // unconditionally visible. PDF/A-1 forbids optional content outright, exactly
 // as it forbids transparency, and [fixTransparency] ignores PreserveContent for
 // the same reason: refusing would mean declining to produce a conforming file.
+//
+// # Corpus evidence
+//
+//   - All corpora: 8 of the 19 carriers carry /OC entries.
 func TestFixCatalog_RemovesOCPropertiesEvenWhenContentUsesIt(t *testing.T) {
 	for _, preserve := range []bool{false, true} {
 		doc, alloc := newTestDoc(t, ocPropertiesPDF("/OC 30 0 R"))
@@ -172,6 +176,11 @@ func TestFixCatalog_KeepsOCPropertiesForOtherParts(t *testing.T) {
 // classify() collects matching violations for EVERY fixer, and each claimed
 // index is marked handled, so an unconditional clause-prefix match reported
 // this rule handled while real-limits cannot touch it.
+//
+// # Corpus evidence
+//
+//   - All corpora: narrowing the matcher with contextContains("out of range")
+//     silently stopped claiming 14 cells of 6.1.12 test 2.
 func TestMatchRealLimits_DeclinesThePartOneOCPropertiesRule(t *testing.T) {
 	if matchRealLimits(ocPropertiesViolation()) {
 		t.Error("real-limits claims the part-1 /OCProperties rule it cannot repair")
@@ -183,8 +192,8 @@ func TestMatchRealLimits_DeclinesThePartOneOCPropertiesRule(t *testing.T) {
 	// them say "out of range".
 	//
 	// REGRESSION GUARD: narrowing this matcher with
-	// contextContains("out of range") silently stopped claiming 14 corpus
-	// cells of 6.1.12 test 2, whose violations read "real %g exceeds +/-%g".
+	// contextContains("out of range") silently stopped claiming 6.1.12
+	// test 2, whose violations read "real %g exceeds +/-%g".
 	// A positive context filter has to enumerate every phrasing the checks
 	// emit; excluding the single rule that does not belong here does not.
 	for _, tc := range []struct {

@@ -13,7 +13,11 @@ import (
 //
 // The UTF-16BE key begins 0xFE, which is greater than every byte of "section",
 // yet the producer places it inside a subtree the root claims ends at
-// "section*.4". This is the shape of pdfjs issue14864.pdf.
+// "section*.4".
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14864.pdf: the shape this fixture reproduces.
 func misorderedNameTreePDF(t *testing.T) []byte {
 	t.Helper()
 
@@ -59,10 +63,14 @@ func misorderedNameTreePDF(t *testing.T) []byte {
 //
 // ISO 32000-1, 7.9.6 orders name-tree keys by byte value and makes each /Limits
 // pair the least and greatest key beneath it. Producers sort by decoded text
-// instead: pdfjs issue14864.pdf puts UTF-16BE keys starting 0xFE under a root
-// claiming a maximum of "section*.4", so pruning on that discarded the entire
-// tree at the root and two bookmarks every other reader resolves came back with
-// no destination at all.
+// instead, and pruning on such /Limits discards the entire tree at the root.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14864.pdf: puts UTF-16BE keys starting 0xFE under a root
+//     claiming a maximum of "section*.4", so pruning discarded the entire tree
+//     at the root and two bookmarks every other reader resolves came back with
+//     no destination at all.
 func TestNamedDestFoundDespiteMisorderedLimits(t *testing.T) {
 	t.Parallel()
 

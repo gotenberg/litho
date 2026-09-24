@@ -28,10 +28,14 @@ func unreadableObjStmPDF() []byte {
 //
 // createOutput truncates the destination the moment it opens it, so a failure
 // partway through left a short or empty file exactly where the caller asked for
-// the result. It is not a PDF and it looks like one: `litho flatten-form -o
-// out.pdf` on pdfjs issue19484_1.pdf, whose object stream will not inflate,
-// left a zero-byte out.pdf behind and reported failure only through the exit
-// code.
+// the result. It is not a PDF and it looks like one, and the failure showed
+// only through the exit code.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19484_1.pdf: its object stream will not inflate, and
+//     `litho flatten-form -o out.pdf` on it left a zero-byte out.pdf behind
+//     and reported failure only through the exit code.
 func TestFailedMutationLeavesNoOutputFile(t *testing.T) {
 	t.Parallel()
 

@@ -83,7 +83,7 @@ func parseLenIV(plain []byte) int {
 // units, i.e. 1/1000 em for a 1000-unit FontMatrix) of every glyph
 // defined in the Type 1 font's /CharStrings dictionary. The returned
 // map is keyed by glyph name and includes entries only for
-// charstrings whose leading operator is [hsbw] or [sbw]; charstrings
+// charstrings whose leading operator is hsbw or sbw; charstrings
 // that begin with anything else (which is spec-non-compliant for
 // Type 1) are skipped silently so a partial map still gets back to
 // the caller.
@@ -263,9 +263,9 @@ func extractAdvanceWidth(plain []byte) (float64, bool) {
 			// fabricate a width.
 			return 0, false
 		default:
-			// Any other single-byte operator means we passed the
-			// metrics prologue without finding a width, which is a
-			// malformed charstring for our purposes.
+			// Any other single-byte operator means the scan passed the
+			// metrics prologue without finding a width: the charstring
+			// is malformed for width extraction.
 			return 0, false
 		}
 	}

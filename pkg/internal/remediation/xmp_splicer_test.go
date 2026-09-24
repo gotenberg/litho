@@ -336,16 +336,16 @@ func TestCanonicalizePrefix_DropsAliasWhenCanonicalPresent(t *testing.T) {
 }
 
 // TestCanonicalizePrefix_CanonicalDeclaredFirst pins the order independence the
-// function's own comment claims. On finding a declaration that is already
-// canonical it says "advance past this marker and continue", but it rebuilds the
-// buffer byte-identically and then breaks, so the walk stops at the first
+// function's own comment claims. On finding a declaration that was already
+// canonical it said "advance past this marker and continue", but it rebuilt the
+// buffer byte-identically and then broke, so the walk stopped at the first
 // `="uri"` occurrence in the packet.
 //
 // When the canonical declaration is written before the alias, that first match
-// IS the canonical one, so no alias is ever canonicalized and the aliased
-// property keeps resolving through a prefix ISO 19005 does not permit. The two
+// IS the canonical one, so no alias was ever canonicalized and the aliased
+// property kept resolving through a prefix ISO 19005 does not permit. The two
 // neighbouring tests both place the alias first, which is the only reason they
-// pass.
+// passed.
 func TestCanonicalizePrefix_CanonicalDeclaredFirst(t *testing.T) {
 	xmp := []byte(`<?xpacket begin=""?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
@@ -449,9 +449,13 @@ func TestInsertAttributeAtDescription_SelectsByURI(t *testing.T) {
 }
 
 // TestXMPToUTF8 pins the UTF-16 transcoding that unblocks the byte-range
-// splicer on UTF-16 packets (the 6-7-9-t04 fixture family ships BOM-less
-// UTF-16BE with a trailing newline; without conversion the pdfaid repairs
-// silently no-op and the UTF-8 requirement stays unrepaired).
+// splicer on UTF-16 packets. Without conversion the pdfaid repairs silently
+// no-op and the UTF-8 requirement stays unrepaired.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-7-9-t04: the fixture family ships BOM-less UTF-16BE with a
+//     trailing newline.
 func TestXMPToUTF8(t *testing.T) {
 	cases := []struct {
 		name    string

@@ -74,10 +74,14 @@ func listFormFields(t *testing.T, path string) []struct {
 
 // TestFlattenForm_RemovesTheFields pins what the command is for.
 //
-// flatten-form has no CLI test at all, and the corpus gate scores neither it
-// nor any other page-mutating command, so the only thing standing behind the
+// flatten-form has no CLI test at all, so the only thing standing behind the
 // wiring is this. The mutation itself is covered at pkg/pdf level; what is
 // asserted here is that the command reaches it and writes the result.
+//
+// # Corpus evidence
+//
+//   - All corpora: the corpus gate scores neither flatten-form nor any other
+//     page-mutating command.
 func TestFlattenForm_RemovesTheFields(t *testing.T) {
 	src := writeTempPDF(t, formFixturePDF())
 	out := filepath.Join(t.TempDir(), "flat.pdf")

@@ -53,7 +53,7 @@ func charProcTransparencyPDF(onFont bool) []byte {
 // TestCharProcResources_TransparencyDetected pins that ISO 19005-1 §6.4 reaches
 // an /ExtGState a Type 3 GLYPH PROCEDURE declares in its own /Resources.
 //
-// checkResourceTransparency1 walks a page's /ExtGState, its /XObject and
+// [checkResourceTransparency1] walks a page's /ExtGState, its /XObject and
 // /Pattern trees, and each Type 3 font's fd["Resources"]. It never resolves
 // fd["CharProcs"], so a glyph stream carrying its own /Resources is outside
 // every path. Per ISO 32000-1 §9.6.5 a glyph procedure is a content stream that

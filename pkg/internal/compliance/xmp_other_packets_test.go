@@ -10,7 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// xmpPacket wraps body in a minimal, well-formed XMP packet.
+// xmpScopePacket wraps body in a minimal, well-formed XMP packet.
 func xmpScopePacket(body string) string {
 	return `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>` +
 		`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF ` +
@@ -26,7 +26,11 @@ func xmpScopePacket(body string) string {
 
 // twoPacketPDF builds a PDF whose catalog carries catalogBody as its XMP and
 // whose page resources hang a second metadata stream carrying otherBody off a
-// marked-content property list, the shape pdfcpu adobe_errata.pdf uses.
+// marked-content property list.
+//
+// # Corpus evidence
+//
+//   - pdfcpu adobe_errata.pdf: uses this shape.
 func twoPacketPDF(catalogBody, otherBody string) []byte {
 	cat := xmpScopePacket(catalogBody)
 	other := xmpScopePacket(otherBody)
@@ -67,10 +71,14 @@ func firesXMPProperty(t *testing.T, data []byte, test int) bool {
 // ISO 19005-2 §6.6.2.3.1 constrains the properties of "all metadata streams
 // present in the PDF", but litho ran the predefined-schema and property-type
 // audits over the catalog packet alone; every other packet got only the
-// packet-level tests. pdfcpu adobeImplOfPDFSpec.pdf and adobe_errata.pdf each
-// hang a 23 KB packet off a marked-content property list carrying
-// photoshop:History, which is not in the XMP 2005 Photoshop schema, and veraPDF
-// reports it under t1 and t2 on both.
+// packet-level tests.
+//
+// # Corpus evidence
+//
+//   - pdfcpu adobeImplOfPDFSpec.pdf, adobe_errata.pdf: each hangs a 23 KB
+//     packet off a marked-content property list carrying photoshop:History,
+//     which is not in the XMP 2005 Photoshop schema, and veraPDF reports it
+//     under t1 and t2 on both.
 func TestXMPOtherPackets_PropertyAudits(t *testing.T) {
 	t.Parallel()
 
@@ -104,10 +112,13 @@ func TestXMPOtherPackets_PropertyAudits(t *testing.T) {
 // That attribute is the RDF/XML shorthand making an element's content a struct
 // (RDF/XML Syntax Specification, 2.3.3), which the XMP Specification uses for
 // ResourceRef values such as xmpMM:DerivedFrom. litho decided struct-ness from
-// the presence of a child element, so an empty one read as a plain text value:
-// govdocs thread_100_100847.pdf writes
-// <xapMM:DerivedFrom rdf:parseType="Resource"></xapMM:DerivedFrom> and veraPDF,
-// whose run on it passes 1.99M checks, reports nothing.
+// the presence of a child element, so an empty one read as a plain text value.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100847.pdf: writes
+//     <xapMM:DerivedFrom rdf:parseType="Resource"></xapMM:DerivedFrom>, and
+//     veraPDF, whose run on it passes 1.99M checks, reports nothing.
 func TestXMPPropertyTypes_EmptyResourceStruct(t *testing.T) {
 	t.Parallel()
 

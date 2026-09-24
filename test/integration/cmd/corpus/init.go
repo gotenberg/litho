@@ -142,10 +142,17 @@ func buildScanClaimsBinary() (string, error) {
 // One golden is legitimately empty. run-verapdf.sh buckets PDFs by the
 // profile each one claims in XMP, so an auto-mode corpus whose scan found
 // no claim at all (claims.csv present, zero rows) gets no VeraPDF report
-// and no cell in the baseline. govdocs and pdf20 are both in that state.
-// Demanding a non-empty compliance directory marked them unprovisioned
-// forever, and every `make corpus-*` shelled out to a multi-minute
-// emulated `docker build` that never needed to run.
+// and no cell in the baseline. Demanding a non-empty compliance directory
+// marked such a corpus unprovisioned forever, and every `make corpus-*`
+// shelled out to a multi-minute emulated `docker build` that never needed
+// to run.
+//
+// # Corpus evidence
+//
+//   - govdocs: its scan finds no profile claim, so it has no VeraPDF report
+//     and no compliance cell.
+//   - pdf20: its scan finds no profile claim either, so it is in the same
+//     state.
 func provisioned(testdataRoot string, m *Manifest) bool {
 	if len(m.Goldens) == 0 {
 		return false

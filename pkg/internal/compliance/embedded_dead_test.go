@@ -86,7 +86,7 @@ func TestMetadataTypeSubtype(t *testing.T) {
 // TestCheckEmbeddedFileMIME_KidsNested pins PDF/A-4 §6.9 t1 for a file
 // specification reachable only through an intermediate /Kids node of the
 // EmbeddedFiles name tree: the check walks every /Type /Filespec object via
-// collectFileSpecs, so nesting cannot hide a stream with a missing or invalid
+// [collectFileSpecs], so nesting cannot hide a stream with a missing or invalid
 // /Subtype. A direct /Names read (the previous implementation) missed these.
 func TestCheckEmbeddedFileMIME_KidsNested(t *testing.T) {
 	ctx := context.Background()

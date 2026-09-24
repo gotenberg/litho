@@ -8,9 +8,13 @@ import (
 )
 
 // sparseObjectNumberPDF builds a small document whose objects carry numbers far
-// above the file's byte length, the shape of pdfjs issue4573.pdf. The trailer
-// /Size is deliberately wrong, as it is there, so the object numbers themselves
-// are the only truth about how high the file reaches.
+// above the file's byte length. The trailer /Size is deliberately wrong, so the
+// object numbers themselves are the only truth about how high the file reaches.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue4573.pdf: the shape this fixture reproduces, including the
+//     wrong trailer /Size 9.
 func sparseObjectNumberPDF() []byte {
 	const (
 		catalogNum = 8797
@@ -35,8 +39,8 @@ func sparseObjectNumberPDF() []byte {
 	for _, num := range []int{catalogNum, pagesNum, pageNum} {
 		fmt.Fprintf(&buf, "%d 1\n%010d 00000 n \n", num, offs[num])
 	}
-	// /Size 9 is what the real file claims, and it is wrong: the objects run to
-	// 8799. A reader that believes it cannot reach the page tree.
+	// /Size 9 is wrong: the objects run to 8799. A reader that believes it
+	// cannot reach the page tree.
 	fmt.Fprintf(&buf, "trailer\n<< /Size 9 /Root %d 0 R >>\nstartxref\n%d\n%%%%EOF\n", catalogNum, start)
 	return buf.Bytes()
 }
@@ -46,10 +50,14 @@ func sparseObjectNumberPDF() []byte {
 //
 // An object number is a sparse identifier, not an index (ISO 32000-1, 7.3.10),
 // so a short file may number its objects high. Bounding the number by the byte
-// length dropped them: for pdfjs issue4573.pdf, 8474 bytes reaching object 8801,
-// litho answered 380. An allocator seeded from that hands out numbers that
+// length dropped them. An allocator seeded from that hands out numbers that
 // collide with objects already in the bytes, and the incremental trailer went
 // out with a /Size below the page tree, which poppler then could not resolve.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue4573.pdf: 8474 bytes reaching object 8801, for which litho
+//     answered 380.
 func TestHighestObjectNumberCountsSparseNumbers(t *testing.T) {
 	t.Parallel()
 

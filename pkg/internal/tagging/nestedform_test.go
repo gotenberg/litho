@@ -48,10 +48,16 @@ func nestedFormPDF() []byte {
 // TestTextBearingXObjects_FollowsNestedForms pins that a form reaching text
 // only through the forms it invokes still counts as painting text.
 //
-// pdfjs issue15629 draws its field values through /X0, which carries no
-// text-showing operator and does nothing but invoke three /Annot_* forms.
-// Judged by its own bytes /X0 looked decorative, so tagging swept it into an
-// /Artifact and the filled-in name stopped extracting.
+// A form that carries no text-showing operator and only invokes other forms
+// looks decorative judged by its own bytes, so tagging swept it into an
+// /Artifact and the filled-in field value it drew stopped extracting.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15629: draws its field values through /X0, which carries no
+//     text-showing operator and does nothing but invoke three /Annot_* forms;
+//     tagging swept /X0 into an /Artifact and the filled-in name stopped
+//     extracting.
 func TestTextBearingXObjects_FollowsNestedForms(t *testing.T) {
 	ctx := context.Background()
 	data := nestedFormPDF()

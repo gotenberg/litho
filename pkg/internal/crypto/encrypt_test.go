@@ -66,7 +66,7 @@ func TestNewEncryptor_AES256_RoundTrip(t *testing.T) {
 		t.Fatalf("NewEncryptor: %v", err)
 	}
 
-	// Verify we can create a Handler from the encrypt dict and authenticate.
+	// Verify that a Handler builds from the encrypt dict and authenticates.
 	trailer := ast.PdfDict{
 		"ID": ast.PdfArray{ast.PdfString(string(docID)), ast.PdfString(string(docID))},
 	}

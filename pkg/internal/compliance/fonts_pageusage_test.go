@@ -69,7 +69,12 @@ func TestPageFont_RenderedNonEmbeddedFires(t *testing.T) {
 // is out of scope for the page pass: veraPDF never builds it, so litho must not
 // check it. The embedding rule was already scoped to visible fonts, but the
 // TrueType encoding rule ran on every declared font and raised a §6.2.11.6 t2
-// false positive veraPDF never reports (25 files across the qpdf corpus).
+// false positive veraPDF never reports.
+//
+// # Corpus evidence
+//
+//   - All corpora: the false positive hit 25 files across what the original
+//     note calls the qpdf corpus.
 func TestPageFont_DeclaredButUnusedSkipped(t *testing.T) {
 	t.Parallel()
 	data := pageFontUsagePDF("BT ET")

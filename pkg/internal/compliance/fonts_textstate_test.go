@@ -7,6 +7,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
+// TestCollectFontUsageRestoresTextStateOnQ pins that Q restores the text font
+// and rendering mode for font usage collection.
+//
 // Per ISO 32000-1, 8.4.2 the graphics state includes the text state, and Table
 // 104 counts the text font and the text rendering mode among its parameters, so
 // Q restores both. Reading Tf as if it outlived the enclosing Q attributed
@@ -85,6 +88,9 @@ func TestCollectFontUsageRestoresTextStateOnQ(t *testing.T) {
 	})
 }
 
+// TestPredefinedEncodingNamesWinAnsiUnusedCodesMapToBullet pins that unused
+// WinAnsiEncoding codes read as the bullet.
+//
 // Per ISO 32000-1, Annex D.2, all unused WinAnsiEncoding codes greater than
 // octal 40 map to the bullet character rather than staying undefined. The rule
 // is specific to WinAnsiEncoding.

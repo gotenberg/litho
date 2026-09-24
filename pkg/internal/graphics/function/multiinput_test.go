@@ -59,11 +59,16 @@ func TestSampledFunctionTwoInputs(t *testing.T) {
 }
 
 // TestSampledFunctionThreeInputs pins that the stride keeps compounding beyond
-// two dimensions, which is the shape a DeviceN tint transform uses: the corpus
-// carries 7-input tables with /Size [3 3 3 3 3 3 3].
+// two dimensions, which is the shape a DeviceN tint transform uses: one input
+// per colorant.
 //
 // Each input is given a distinct scale so a swapped or collapsed stride shows up
 // as a wrong value rather than a coincidence.
+//
+// # Corpus evidence
+//
+//   - All corpora: DeviceN tint transforms carry 7-input tables with /Size
+//     [3 3 3 3 3 3 3].
 func TestSampledFunctionThreeInputs(t *testing.T) {
 	t.Parallel()
 

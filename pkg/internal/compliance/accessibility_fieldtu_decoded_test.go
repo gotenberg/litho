@@ -9,9 +9,14 @@ import (
 // /TU and /Alt text strings by the text they decode to, not by their bytes.
 //
 // A text string holding only the UTF-16 byte order mark <FEFF> decodes to the
-// empty string (ISO 32000-1, 7.9.2.2). pdfjs bug1847733.pdf gives every field
-// such a /TU; veraPDF reads each as empty and reports the widget, while litho
-// counted the two bytes as a tooltip.
+// empty string (ISO 32000-1, 7.9.2.2). veraPDF reads such a /TU as empty and
+// reports the widget, while litho counted the two bytes as a tooltip.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1847733.pdf: gives every field a /TU of <FEFF>; veraPDF reads
+//     each as empty and reports the widget, while litho counted the two bytes
+//     as a tooltip.
 func TestCheckFormFieldTU_DecodedText(t *testing.T) {
 	t.Parallel()
 

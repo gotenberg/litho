@@ -17,12 +17,16 @@ import (
 // content and in every Form XObject it invokes, and fails one whose Unicode
 // value lies in a Private Use Area unless the marked-content sequence around
 // it, or the structure element its MCID names, carries /ActualText
-// (GFGlyph.getactualTextPresent). pdfjs issue14864.pdf draws 114 such glyphs
-// of an Identity-H Type 0 font inside a Form XObject; litho checked page fonts
-// only, and exempted a whole composite font once any /ActualText appeared.
-// Measured against veraPDF on fixtures of each shape: marked content around
-// the Do operator does not cover the form's glyphs, and one covered glyph does
-// not cover its neighbour.
+// (GFGlyph.getactualTextPresent). litho checked page fonts only, and exempted
+// a whole composite font once any /ActualText appeared. Measured against
+// veraPDF on fixtures of each shape: marked content around the Do operator
+// does not cover the form's glyphs, and one covered glyph does not cover its
+// neighbour.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14864.pdf: draws 114 PUA glyphs of an Identity-H Type 0 font
+//     inside a Form XObject.
 func TestPUAActualText_PerGlyphAndInForms(t *testing.T) {
 	t.Parallel()
 

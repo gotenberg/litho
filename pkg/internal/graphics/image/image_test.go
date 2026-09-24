@@ -163,8 +163,13 @@ func TestDecodeImage_DecodeArrayInverts(t *testing.T) {
 }
 
 // TestDecodeImage_DecodeArrayLength keeps the leading pairs of a /Decode array
-// longer than two numbers per component, as pdfjs issue20668.pdf writes one,
-// and ignores one too short to give every component a range.
+// longer than two numbers per component, as real files write one, and ignores
+// one too short to give every component a range.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20668.pdf: writes a /Decode array longer than two numbers per
+//     component.
 func TestDecodeImage_DecodeArrayLength(t *testing.T) {
 	for _, tc := range []struct {
 		name   string

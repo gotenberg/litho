@@ -15,8 +15,13 @@ import (
 // so the xref chain parse fails and litho falls back to the raw-scan rebuild.
 // The rebuild finds only the uncompressed objects (pages 2, page 3, ObjStm 8),
 // so without object-stream expansion the compressed catalog is unrecoverable
-// and the page tree is lost (real files: pdfjs issue11330/issue14269/issue15833,
-// where a slightly-off startxref offset triggers the same rebuild).
+// and the page tree is lost. In real files a slightly-off startxref offset
+// triggers the same rebuild.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11330, issue14269, issue15833: a slightly-off startxref offset
+//     triggers the same rebuild.
 func buildCompressedCatalogRebuildPDF() []byte {
 	var buf bytes.Buffer
 	buf.WriteString("%PDF-1.5\n")

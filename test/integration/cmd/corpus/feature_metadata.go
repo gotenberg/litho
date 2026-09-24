@@ -106,19 +106,24 @@ type metadataMismatch struct {
 // compareMetadata emits one mismatch per differing field. Date fields go
 // through a canonicalising parser so timezone-formatted and raw PDF date
 // strings compare equal.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100981.pdf: has a 1024-byte all-NUL Title, which
+//     PDF.js surfaces as a NULL-padded field while litho's
+//     scanRawInfoFields fallback recovers a real value, so a golden that is
+//     empty after stripping undefined controls is skipped.
 func compareMetadata(file string, golden, litho pdfjsRefInfo) []metadataMismatch {
 	var mm []metadataMismatch
 
 	addStr := func(field, lithoVal, goldenVal string) {
 		// A golden that is empty after stripping undefined controls
 		// has no useful reference to compare against. PDF.js's
-		// /Info dict reads can surface NULL-padded fields (govdocs
-		// thread_100_100981.pdf has a 1024-byte all-NUL Title)
-		// where litho's scanRawInfoFields fallback recovers a real
-		// value from an older incremental-save /Info revision. We
-		// have no way to confirm whether the recovered litho value
-		// is correct or not, but we know the golden carries no
-		// signal — skip rather than flag.
+		// /Info dict reads can surface NULL-padded fields where
+		// litho's scanRawInfoFields fallback recovers a real value
+		// from an older incremental-save /Info revision. Nothing
+		// confirms whether the recovered litho value is correct, but
+		// the golden carries no signal, so skip rather than flag.
 		strippedGolden := stripUndefinedControls(goldenVal)
 		if strippedGolden == "" {
 			return

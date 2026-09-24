@@ -87,9 +87,13 @@ func TestPageContentBytesBoundsTheAccumulatedBuffer(t *testing.T) {
 }
 
 // TestPageContentBytesKeepsALargeLegitimatePage guards the other side: the
-// heaviest real page found across the corpora holds 27.5 MB of decoded content,
-// so the limit must sit well clear of pages that size rather than turning a
+// limit must sit well clear of the heaviest real pages rather than turning a
 // legitimate document into one litho cannot read.
+//
+// # Corpus evidence
+//
+//   - All corpora: the heaviest real page holds 27.5 MB of decoded content,
+//     which the 28 MB fixture just passes.
 func TestPageContentBytesKeepsALargeLegitimatePage(t *testing.T) {
 	t.Parallel()
 

@@ -107,10 +107,15 @@ func repairPageHexStrings(ctx context.Context, alloc *writer.ObjAllocator, doc *
 // was re-serialised, dropping the character with it. Counting non-white-space
 // characters instead (ISO 19005-2, 6.1.6 t1, which veraPDF measures the same
 // way) leaves that string even, so the page was no longer rewritten and its
-// invalid character stayed, costing 30 files their remediated verdict on the
-// veraPDF corpus. The parser already drops the character when it reads the
-// value (ISO 32000-1, 7.3.4.3 assumes a missing final digit is 0), so
-// re-serialising writes what the reader understood.
+// invalid character stayed. The parser already drops the character when it
+// reads the value (ISO 32000-1, 7.3.4.3 assumes a missing final digit is 0),
+// so re-serialising writes what the reader understood.
+//
+// # Corpus evidence
+//
+//   - verapdf: once the parity test counted non-white-space characters, the
+//     invalid character left unrepaired cost 30 files their remediated
+//     verdict.
 func hasMalformedHexViolation(violations []error) bool {
 	for _, v := range violations {
 		if v == nil {

@@ -5,14 +5,17 @@ package stdfonts
 // Arial (space is at GID 3, but accented Latin capitals start
 // immediately after .notdef and several Latin-Extended-B letters
 // appear in the first few hundred GIDs), so ASCII digits and
-// punctuation do not follow the GID + 29 convention. Entries were
-// captured by exercising non-embedded-Calibri fixtures from the
-// corpus against the reference output.
+// punctuation do not follow the GID + 29 convention.
 //
-// Like the Arial table, this is intentionally partial:
-// corpus-driven, additive, safe to extend. GIDs missing from the map
-// fall through to the CID-offset path handled by
-// [typography.Font.CIDIdentityFallback].
+// Like the Arial table, this is intentionally partial, additive and
+// safe to extend. GIDs missing from the map fall through to the
+// CID-offset path handled by [typography.Font.CIDIdentityFallback].
+//
+// # Corpus evidence
+//
+//   - All corpora: the entries were captured by exercising the
+//     non-embedded-Calibri fixtures of the corpus against the reference
+//     output, so the table is corpus-driven.
 var calibriGIDToUnicode = map[uint16]rune{
 	// Basic punctuation / digits the Calibri subset places below GID 128.
 	0x0001: 0x0020, // space

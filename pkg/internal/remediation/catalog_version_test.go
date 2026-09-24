@@ -106,10 +106,14 @@ func TestDeclareCatalogVersion_LeavesPDFUA1Alone(t *testing.T) {
 
 // TestDeclareCatalogVersion_LeavesPDFA4Alone pins the deliberate exclusion.
 // ISO 19005-4 §6.1.2 governs the header, and §6.1.12 is checked with
-// fallbackToHeader false, so an ABSENT catalog entry conforms. Measured on
-// PDF_A-4__veraPDF_test_suite_6-1-2-t01-fail-a.pdf: remediation re-emits the
-// header at 2.0 and writes no catalog entry. Adding one would write a key
-// litho leaves absent by design.
+// fallbackToHeader false, so an ABSENT catalog entry conforms. Remediation
+// re-emits the header at 2.0 instead, so a catalog entry would add a key litho
+// leaves absent by design.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-4__veraPDF_test_suite_6-1-2-t01-fail-a.pdf: remediation
+//     re-emits the header at 2.0 and writes no catalog entry.
 func TestDeclareCatalogVersion_LeavesPDFA4Alone(t *testing.T) {
 	catalog, _ := remediateAt(t, "1.4", func(ctx context.Context, d *document.Document, a *writer.ObjAllocator) (*Report, error) {
 		return RemediatePDFA(ctx, d, a, models.PDFA4, Options{})

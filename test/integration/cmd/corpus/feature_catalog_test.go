@@ -100,10 +100,17 @@ func TestMergeCatalogFeature_Compare_CatalogViolationFails(t *testing.T) {
 // this feature needs most, because it runs on a corpus that actually contains
 // the shape.
 //
-// Measured on pdfjs: six fixtures reported a violation while the predicate
-// asked HasAcroForm. Three own widgets that no usable /AcroForm lists
-// (issue12963, issue14203, issue15597) and three are dynamic XFA
-// (xfa_filled_imm1344e, xfa_issue13855, xfa_issue14071). Neither is a defect.
+// A document owning widgets that no usable /AcroForm lists, and a dynamic XFA
+// document, both report a violation when the predicate asks HasAcroForm.
+// Neither is a defect.
+//
+// # Corpus evidence
+//
+//   - pdfjs: six fixtures reported a violation while the predicate asked
+//     HasAcroForm.
+//   - pdfjs issue12963, issue14203, issue15597: own widgets that no usable
+//     /AcroForm lists.
+//   - pdfjs xfa_filled_imm1344e, xfa_issue13855, xfa_issue14071: dynamic XFA.
 func TestMergeCatalogFeature_Compare_RepairIsNotInvention(t *testing.T) {
 	t.Parallel()
 	f := newMergeCatalogFeature()
@@ -130,8 +137,11 @@ func TestMergeCatalogFeature_Compare_RepairIsNotInvention(t *testing.T) {
 // TestMergeCatalogFeature_Compare_SinglePageIsScored pins the reason this
 // feature exists alongside the split one: a one-page document is merged
 // against itself and fully scored, where feature_split skips it outright.
-// Measured across the corpus, 71 of the 85 files carrying the triggering shape
-// are single-page.
+//
+// # Corpus evidence
+//
+//   - All corpora: 71 of the 85 files carrying the triggering shape are
+//     single-page.
 func TestMergeCatalogFeature_Compare_SinglePageIsScored(t *testing.T) {
 	t.Parallel()
 	f := newMergeCatalogFeature()

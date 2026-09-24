@@ -156,8 +156,9 @@ func structElemHasKids(ctx context.Context, doc *document.Document, elem ast.Pdf
 // field test of PDFormField.isField) or it has a field /Parent. A field type
 // /FT alone makes no field widget, and a /T or /Parent written as null is
 // absent (ISO 32000-1, 7.3.7). A /T naming any object counts ([knownKey]); a
-// /Parent counts only by what it resolves to. veraPDF's ISO 14289-2 §8.10.1 t1 and §8.10.2.3 t1
-// exempt non-field widgets (isFieldWidget == false). Measured against veraPDF.
+// /Parent counts only by what it resolves to. veraPDF's ISO 14289-2 §8.10.1 t1
+// and §8.10.2.3 t1 exempt non-field widgets (isFieldWidget == false). Measured
+// against veraPDF.
 func isFieldWidget(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
 	return knownKey(annot, "T") || nonNullKeyPresent(ctx, doc, annot, "Parent")
 }
@@ -241,7 +242,7 @@ func linkTargetConflict(ctx context.Context, doc *document.Document, treeRoot, a
 // and its getStringKey returns null only for an absent or non-string entry, so
 // an empty /Contents counts.
 func widgetHasContents(ctx context.Context, doc *document.Document, annot ast.PdfDict) bool {
-	// /Contents counts only as a string ([stringKeyPresent]): veraPDF reads it
+	// /Contents counts only as a string (stringKeyPresent): veraPDF reads it
 	// with getStringKey, so a null or name value is absent, measured.
 	return stringKeyPresent(ctx, doc, annot, "Contents")
 }
@@ -296,6 +297,11 @@ func isWidgetOBJR(ctx context.Context, doc *document.Document, obj ast.PdfObject
 //   - t01: Destinations in outline items, OpenAction, and Link annotations
 //     must be structure destinations (array starting with struct element ref).
 //   - t02: GoTo action destinations must be structure destinations.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16839.pdf: writes /OpenAction 0 0 R, the free-list head, and
+//     veraPDF builds no destination from it.
 func checkStructureDestinations(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-2" {
 		return nil
@@ -315,8 +321,7 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 	// Check catalog /OpenAction (t01). A value that resolves to null is no
 	// entry at all: ISO 32000-1, 7.3.7 treats a null dictionary value as an
 	// absent entry, and 7.3.10 makes a reference to an undefined object a
-	// reference to null. pdfjs issue16839.pdf writes /OpenAction 0 0 R, the
-	// free-list head, and veraPDF builds no destination from it.
+	// reference to null, and veraPDF builds no destination from it.
 	oaObj, hasOpenAction := catalog["OpenAction"]
 	if hasOpenAction {
 		if resolved, err := document.ResolveObject(ctx, doc, oaObj); err == nil && isNullObject(resolved) {

@@ -127,8 +127,9 @@ var allowedAAKeys = map[ast.PdfName]bool{
 }
 
 // maxActionChainDepth limits traversal of /Next action chains to prevent
-// infinite loops from circular references. Action chains can be long in
-// complex interactive documents, so 200 provides headroom.
+// infinite loops from circular references. Anti-DoS guard, not spec-mandated:
+// action chains can be long in complex interactive documents, so 200 provides
+// headroom.
 const maxActionChainDepth = 200
 
 // checkActionGroup validates action restrictions for PDF/A (§6.6.1, §6.6.2,
@@ -159,7 +160,7 @@ func checkActionGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	results = append(results, checkPageActions(ctx, doc, catalog, profile, part)...)
 
 	// One action object is judged once, however many parents reach it; see
-	// [actionAlreadyJudged].
+	// objectJudgedOnce.
 	judged := make(map[int]bool)
 
 	// Check annotation /A and /AA.
@@ -195,6 +196,12 @@ func checkCatalogOpenAction(ctx context.Context, doc *document.Document, catalog
 }
 
 // checkCatalogAA checks the catalog /AA dictionary.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-5-2-t01-fail-b.pdf: its catalog /AA/WS holds a JavaScript action,
+//     and veraPDF reports both §6.6.1 t1 for the action and §6.6.2 t3 for the
+//     dictionary.
 func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
 	// veraPDF's PDDocument containsAA is a knownKey test: an /AA written as null
 	// is absent (ISO 32000-1, 7.3.7), one naming any object is present. Measured.
@@ -206,11 +213,11 @@ func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 	// The catalog /AA dictionary is forbidden outright: ISO 19005-1 §6.6.2 t3
 	// and ISO 19005-2/3 §6.5.2 t1. Record that, but do not stop here, exactly as
-	// [checkPageActions] does for a page /AA: the action-type restrictions apply
+	// checkPageActions does for a page /AA: the action-type restrictions apply
 	// to every action in the file, so a forbidden dictionary's actions are still
-	// judged for a disallowed /S. veraPDF reports both on the veraPDF test
-	// suite's 6-5-2-t01-fail-b.pdf, whose catalog /AA/WS holds a JavaScript
-	// action: §6.6.1 t1 for the action and §6.6.2 t3 for the dictionary.
+	// judged for a disallowed /S. veraPDF reports both on a catalog /AA
+	// holding a JavaScript action: §6.6.1 t1 for the action and §6.6.2 t3
+	// for the dictionary.
 	switch part {
 	case 1:
 		results = append(results, fail(Rule_19005_1_6_6_2_t03, "catalog")...)
@@ -466,12 +473,16 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 // A terminal form field merged with its widget annotation is ONE dictionary
 // (ISO 32000-1, 12.5.6.19), so litho reaches its /A and /AA twice: once walking
 // the page's /Annots and once walking the AcroForm /Fields tree. veraPDF builds
-// one PDAction per action object and reports it once, which is why pdfjs
-// 160F-2019.pdf drew 117 findings from litho against 54 from veraPDF, split
-// exactly 57 and 57 between the two paths over the same 42 merged dictionaries.
+// one PDAction per action object and reports it once.
 //
 // Only an indirect action can be shared, so a direct dictionary is always
 // judged: it belongs to the one parent that spells it out.
+//
+// # Corpus evidence
+//
+//   - pdfjs 160F-2019.pdf: drew 117 findings from litho against 54 from
+//     veraPDF, split exactly 57 and 57 between the two paths over the same 42
+//     merged dictionaries.
 func objectJudgedOnce(obj ast.PdfObject, judged map[int]bool) bool {
 	ref, ok := obj.(ast.PdfIndirectRef)
 	if !ok || judged == nil {

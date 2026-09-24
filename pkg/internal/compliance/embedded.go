@@ -48,6 +48,11 @@ var validAFRelationships = map[ast.PdfName]bool{
 //   - PDF/A-2/3: embedded files must be PDF/A compliant, must have /AFRelationship (part 3+).
 //   - PDF/A-4/4e/4f: embedded files must be PDF/A compliant, must have /AFRelationship,
 //     /F and /UF keys, and PDF/A-4f requires /EmbeddedFiles in /Names.
+//
+// # Corpus evidence
+//
+//   - All corpora: no file gives evidence that PDF/A-4 §6.9 t4 reaches a file
+//     specification without /EF, so that check stays scoped to embedded ones.
 func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
 	part := vctx.part
@@ -109,7 +114,7 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		// Check /AFRelationship. PDF/A-3 §6.8 t3 applies to every file
 		// specification dictionary; PDF/A-4 §6.9 t4 stays scoped to
-		// embedded ones (no corpus evidence of the wider scope there).
+		// embedded ones.
 		if part == 3 || fs.hasEF {
 			results = append(results, checkAFRelationship(ctx, doc, fs, part, profile)...)
 		}
@@ -227,14 +232,20 @@ func (fs fileSpecEntry) label() string {
 //
 // The cross-reference map holds only indirect objects, so the scan alone cannot
 // see a filespec written inline. Annotations carrying a direct /FS are gathered
-// separately: pdfjs issue14203.pdf attaches example.tex through one, and every
-// clause 6.8 check skipped it. A direct filespec inside an /AF array stays out
-// of scope, unobserved across 5144 corpus files.
+// separately, since every clause 6.8 check skipped such an attachment. A direct
+// filespec inside an /AF array stays out of scope.
 //
 // The sweep identifies a candidate by /Type alone, which is all it can do over
 // every object in a file, so it misses one whose /Type is wrong. The
 // /Names /EmbeddedFiles tree names its values regardless, and
 // [collectNameTreeFileSpecs] gathers those by position.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14203.pdf: attaches example.tex through an annotation's
+//     direct /FS, and every clause 6.8 check skipped it.
+//   - All corpora, 5144 files: no direct filespec inside an /AF array is
+//     observed, which keeps that shape out of scope.
 func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []fileSpecEntry {
 	var specs []fileSpecEntry
 
@@ -299,13 +310,17 @@ func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.P
 // Table 44 requires /Type on a filespec carrying /EF, so a file writing
 // anything else is malformed: reading its attachments anyway reports the
 // defects they carry instead of hiding them behind the one key the producer got
-// wrong. pdfjs issue9367.pdf names three specs as /Type /F, and veraPDF reports
-// every one under 6.1.11 t1, 6.8 t5, 6.8 t1/t3/t4 and 6.9 t1/t3/t4 across parts
-// 1 to 4 while litho saw none of them.
+// wrong.
 //
 // gathered carries the object numbers the sweep and the annotation walk already
 // returned. A spec both reach would otherwise be stated twice, which is the
 // double-reporting [TestEmbeddedFilesReportedOncePerObject] pins.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9367.pdf: names three specs as /Type /F, and veraPDF reports
+//     every one under 6.1.11 t1, 6.8 t5, 6.8 t1/t3/t4 and 6.9 t1/t3/t4 across
+//     parts 1 to 4 while litho saw none of them.
 func collectNameTreeFileSpecs(ctx context.Context, doc *document.Document, catalog ast.PdfDict, gathered map[int]bool) []fileSpecEntry {
 	namesDict, ok := resolveNamesDict(ctx, doc, catalog)
 	if !ok {
@@ -350,9 +365,13 @@ func collectNameTreeFileSpecs(ctx context.Context, doc *document.Document, catal
 //
 // Only an annotation that is itself an indirect object is considered: a direct
 // filespec inside a direct annotation has no object number anywhere on its path
-// to cite in a violation, and no corpus file carries that pairing. Each
-// annotation is visited once, so an annotation shared by two pages does not
-// report its filespec twice.
+// to cite in a violation. Each annotation is visited once, so an annotation
+// shared by two pages does not report its filespec twice.
+//
+// # Corpus evidence
+//
+//   - All corpora: no file carries a direct filespec inside a direct
+//     annotation.
 func collectDirectAnnotFileSpecs(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []fileSpecEntry {
 	var specs []fileSpecEntry
 	seen := make(map[int]bool)
@@ -399,13 +418,17 @@ const maxAnnotFileSpecDepth = 16
 // inside obj, at any depth. An annotation reaches a filespec by more routes
 // than its own /FS: a Screen annotation's Rendition action holds its media
 // clip's data at /A/R/C/D (ISO 32000-1 §13.2.3), and PDF/A-1 §6.1.11 t1 forbids
-// the /EF key on a file specification wherever it sits. Five veraPDF test-suite
-// files embed a video exactly that way and veraPDF reports every one; litho saw
-// only /FS and passed them.
+// the /EF key on a file specification wherever it sits.
 //
 // Indirect values are skipped: the caller's sweep over the cross-reference table
 // already visits those, and following them here would report the same
 // dictionary twice.
+//
+// # Corpus evidence
+//
+//   - verapdf: five test-suite files embed a video through a Rendition
+//     action's media clip, and veraPDF reports every one; litho saw only /FS
+//     and passed them.
 func directFileSpecsIn(ctx context.Context, doc *document.Document, obj ast.PdfObject, container int, path string, depth int) []fileSpecEntry {
 	if depth > maxAnnotFileSpecDepth || ctx.Err() != nil {
 		return nil
@@ -488,6 +511,13 @@ func afRelationshipRule(part int) Rule {
 // checkCatalogAF validates §6.8 t4: for PDF/A-3+, each file specification dict
 // with an /EF key must be referenced from the catalog's /AF array. This ensures
 // the associated files are properly declared at the document level.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-4e__veraPDF_test_suite_6-3-2-t01-fail-b.pdf: its two /EF
+//     filespecs are reached only through a /RichMedia annotation's /Assets
+//     tree and carry no /AF anywhere in the file, and veraPDF fails
+//     ISO 19005-3, 6.8 t4 (isAssociatedFile == true) on both.
 func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.PdfDict, fileSpecs []fileSpecEntry, part int) []Violation {
 	if len(fileSpecs) == 0 {
 		return nil
@@ -562,10 +592,8 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 					// an external filespec only: an embedded one (/EF) still
 					// needs a real /AF array, exactly as for a direct /FS
 					// above. veraPDF fails ISO 19005-3, 6.8 t4
-					// (isAssociatedFile == true) on the two /EF filespecs of
-					// PDF_A-4e__veraPDF_test_suite_6-3-2-t01-fail-b.pdf, whose
-					// only route is a /RichMedia annotation's /Assets tree and
-					// which carry no /AF anywhere in the file.
+					// (isAssociatedFile == true) on an /EF filespec whose only
+					// route is a /RichMedia annotation's /Assets tree.
 					collectRichMediaFileSpecRefs(ctx, doc, annotDict, fsAnnotRefs)
 				}
 			}
@@ -704,11 +732,14 @@ func catalogAFRule(part int) Rule {
 type embeddedDepthKey struct{}
 
 // maxEmbeddedDepth is the maximum recursion depth for embedded PDF validation.
-// An embedded PDF containing another embedded PDF would be depth 2.
+// An embedded PDF containing another embedded PDF would be depth 2. Anti-DoS
+// guard, not spec-mandated: it stops a file from nesting validation runs
+// without end.
 const maxEmbeddedDepth = 2
 
 // maxEmbeddedFileSize is the maximum size of a decoded embedded file stream
 // that will be validated (50 MB). Larger files are skipped to prevent OOM.
+// Anti-DoS guard, not spec-mandated.
 const maxEmbeddedFileSize = 50 * 1024 * 1024
 
 // checkEmbeddedFileCompliance validates that all embedded files are

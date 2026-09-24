@@ -46,9 +46,14 @@ func documentLevelPDF() []byte {
 // portfolio came out keeping its embedded file while [pdf.Reader.IsPortfolio]
 // answered false over it.
 //
-// The earlier survey could not have found these. It diffed catalog keys across
-// 120 corpus files, and no corpus file carries either key, so only enumerating
-// what a catalog MAY hold reaches them.
+// The earlier survey could not have found these. It diffed the catalog keys
+// real files carry, and no surveyed file carries either key, so only
+// enumerating what a catalog MAY hold reaches them.
+//
+// # Corpus evidence
+//
+//   - All corpora, 120 files: the catalog-key survey found no file carrying
+//     /Collection or /PronunciationLexicon.
 func TestSplitMerge_KeepDocumentLevelEntries(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

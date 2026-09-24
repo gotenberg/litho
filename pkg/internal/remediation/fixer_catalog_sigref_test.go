@@ -44,8 +44,12 @@ func permsOf(t *testing.T, doc *document.Document) ast.PdfObject {
 // of a swap litho used to make: stripping the forbidden digest keys rewrites a
 // reference dictionary inside the revision the signature covers, which moves the
 // /ByteRange and reports ISO 19005-2/3 §6.4.3 test 1 in place of §6.1.12 test 2.
-// Measured on PDF_A-2b__veraPDF_test_suite_6-1-12-t02-fail-a/b/c, where the count
-// stayed at one violation and a count-based gate saw nothing.
+// The violation count stays the same, so a count-based gate sees nothing.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-2b__veraPDF_test_suite_6-1-12-t02-fail-a/b/c: the count
+//     stayed at one violation and a count-based gate saw nothing.
 func TestFixSignatureReferences_StandardModeLeavesASignedSignature(t *testing.T) {
 	t.Parallel()
 	doc, alloc := newTestDoc(t, sigRefPDF(signedSig))
@@ -64,8 +68,12 @@ func TestFixSignatureReferences_StandardModeLeavesASignedSignature(t *testing.T)
 // chain aggressive mode relies on. There the invalidation is intended: the strip
 // breaks the coverage, §6.4.3 t1 fires, and [fixSignatureStrip] removes the
 // invalidated signature, resolving both rules. Guarding unconditionally severed
-// that chain and cost 18 fixtures their fully-fixed verdict in the
-// remediation-aggressive corpus cell.
+// that chain.
+//
+// # Corpus evidence
+//
+//   - All corpora: guarding unconditionally cost 18 fixtures their fully-fixed
+//     verdict in the remediation-aggressive corpus cell.
 func TestFixSignatureReferences_AggressiveModeStripsASignedSignature(t *testing.T) {
 	t.Parallel()
 	doc, alloc := newTestDoc(t, sigRefPDF(signedSig))

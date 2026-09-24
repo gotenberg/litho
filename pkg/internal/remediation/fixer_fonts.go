@@ -18,6 +18,18 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography"
 )
 
+// matchFontFixes matches the font violations [fixFontIssues] repairs: glyph
+// width mismatches, missing or invalid /ToUnicode mappings, CIDSystemInfo
+// mismatches, and incomplete /CIDSet or /CharSet, in their PDF/A and PDF/UA
+// spellings.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.21.7-t01-fail-a, PDF_UA-2__8.4.5.8-t01-fail-a: both
+//     are repaired in full when validated as PDF/A-2u, where the rule is
+//     spelled 6.2.11.7.2, and came back "Fixed: 0, Residual: 1" under their
+//     own profile while the UA spellings of the ToUnicode rules were
+//     unclaimed.
 func matchFontFixes(v compliance.Violation) bool {
 	return clausePrefix(v,
 		"6.2.10.5", "6.2.11.5", "6.3.6", // glyph width mismatch
@@ -32,12 +44,8 @@ func matchFontFixes(v compliance.Violation) bool {
 		// 2 of each restates the U+0000/FEFF/FFFE restriction spelled 6.2.10.7
 		// here. Every other rule family in this list already carries its UA
 		// spelling; this one did not, so the repair was offered to PDF/A
-		// documents and withheld from PDF/UA ones. Measured: the fixture
-		// PDF_UA-1__7.21.7-t01-fail-a and PDF_UA-2__8.4.5.8-t01-fail-a are
-		// repaired in full when validated as PDF/A-2u, where the rule is spelled
-		// 6.2.11.7.2, and came back "Fixed: 0, Residual: 1" under their own
-		// profile. [matchToUnicodeRanges] already claims these four spellings as
-		// one family.
+		// documents and withheld from PDF/UA ones. matchToUnicodeRanges already
+		// claims these four spellings as one family.
 		"7.21.7", "8.4.5.8",
 		"6.2.10.3.1", "6.2.11.3.1", // CIDSystemInfo mismatch
 		"7.21.3.1", "8.4.5.3.1", // the PDF/UA restatements of it
@@ -47,6 +55,19 @@ func matchFontFixes(v compliance.Violation) bool {
 	)
 }
 
+// fixFontIssues repairs the font violations [matchFontFixes] claims, page by
+// page: /Widths, /W and /DW corrections, /CIDSet and /CharSet regeneration,
+// and generated /ToUnicode CMaps. Each regeneration runs only where the
+// violations report the matching disagreement.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug911034.pdf: an uninvited /CIDSet regeneration took it from 0
+//     to 1 violations of ISO 19005-2, 6.2.11.4.2 ("CID 1 in font program not
+//     in /CIDSet").
+//   - verapdf 6-2-10-9-t01-fail-a: under PDF_A-1a and PDF_A-1b, litho accepted
+//     a written /CharSet while veraPDF went on reporting 6.3.5 t2, taking the
+//     corpus disagreement metric 14 -> 16.
 func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, _ string) ([]string, error) {
 	// Width corrections are gated on a reported width mismatch
 	// (ISO 19005-1 §6.3.6, 19005-2 §6.2.10.5/§6.2.11.5). These clauses
@@ -59,21 +80,20 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	// A regenerated /CIDSet or /CharSet is subject to the same hazard as
 	// /Widths: litho's enumeration of the font program's glyphs need not match
 	// the CHECK's, so rewriting one uninvited replaces a conforming set with a
-	// non-conforming one. bug911034.pdf went from 0 to 1 violations of
-	// ISO 19005-2, 6.2.11.4.2 that way ("CID 1 in font program not in
-	// /CIDSet"). Regenerate only where the disagreement is actually reported.
+	// non-conforming one, raising ISO 19005-2, 6.2.11.4.2 on a file that
+	// passed it. Regenerate only where the disagreement is actually reported.
 	hasWidthViolation := false
 	hasCIDSetViolation := false
 	hasCharSetViolation := false
 	needCIDSet := false
 	for _, v := range violations {
 		// The PDF/UA restatements belong here for the same reason they belong
-		// in [matchFontFixes]: ISO 14289-1 7.21.5 and ISO 14289-2 8.4.5.6 state
+		// in matchFontFixes: ISO 14289-1 7.21.5 and ISO 14289-2 8.4.5.6 state
 		// the identical requirement, so a mismatch reported under a UA profile
 		// is just as much a reported mismatch. Claiming the violation without
 		// enabling this flag left the fixer running and repairing nothing: the
-		// matcher learned 7.21.5 in 5ea5b54e while this gate, written in
-		// f17f6792, kept only the PDF/A spellings.
+		// matcher learned 7.21.5 in 2eb351fa while this gate, written in
+		// 39a382e2, kept only the PDF/A spellings.
 		if clausePrefix(v, "6.2.10.5", "6.2.11.5", "6.3.6", "7.21.5", "8.4.5.6") {
 			hasWidthViolation = true
 		}
@@ -97,11 +117,10 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		// was never touched.
 		//
 		// The /CharSet twin, t2, is deliberately NOT repaired. Supplying one
-		// measured as a FALSE FIX: on 6-2-10-9-t01-fail-a under PDF_A-1a and
-		// PDF_A-1b litho accepted the written /CharSet while veraPDF went on
-		// reporting 6.3.5 t2, taking the corpus disagreement metric 14 -> 16.
-		// litho's glyph-name enumeration need not match the checker's, which is
-		// the hazard the /Widths comment above already records.
+		// measured as a FALSE FIX: litho accepted the written /CharSet while
+		// veraPDF went on reporting 6.3.5 t2. litho's glyph-name enumeration
+		// need not match the checker's, which is the hazard the /Widths comment
+		// above already records.
 		if v.Rule.Clause == "6.3.5" && v.Rule.TestNumber == 3 {
 			needCIDSet = true
 		}
@@ -266,7 +285,7 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 		// copying it would discard what a peer wrote. fonts runs at registry
 		// 144, after cid-gidmap (110), font-keys (111), tounicode-ranges (114)
 		// and nested-resources (131), every one of which writes font
-		// dictionaries. [fixType0Font] and [fixSimpleFontToUnicode] already
+		// dictionaries. fixType0Font and fixSimpleFontToUnicode already
 		// read this way; this one did not.
 		targetFont := fontDict
 		if allocated, ok := alloc.Pending()[fontRef.ObjectNum]; ok {
@@ -287,7 +306,7 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	// Fix CharSet if incomplete. Supplying a MISSING one (ISO 19005-1, 6.3.5
 	// t2) was tried and reverted: litho accepted the written /CharSet while
 	// veraPDF kept reporting the rule, which silences the violation on litho's
-	// side without repairing it. See the scan in [fixFontIssues].
+	// side without repairing it. See the scan in fixFontIssues.
 	if _, ok := fdDict["CharSet"]; ok && regenCharSet {
 		if fixed := fixCharSet(ctx, alloc, fdDict, fdRef, fontData); fixed {
 			fixes = append(fixes, fmt.Sprintf("regenerated /CharSet for font %s", baseName))
@@ -297,6 +316,15 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	return fixes
 }
 
+// fixType0Font repairs one Type 0 font: the descendant CIDFont's /W and /DW,
+// its /CIDSet, and a generated /ToUnicode when the code-to-GID route is the
+// identity.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-11-4-1-t02-fail-e: while only /W was repaired it stayed
+//     reporting ".notdef glyph width mismatch (declared=1000.0, font=545.4)"
+//     on every pass with nothing fixed.
 func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, fixWidths, regenCIDSet, createCIDSet bool) []string {
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
@@ -307,7 +335,7 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 	if ref, ok := descArr[0].(ast.PdfIndirectRef); ok {
 		cidRef = ref
 	}
-	// Alloc-aware read. What is built from this is handed to [persistCIDFont],
+	// Alloc-aware read. What is built from this is handed to persistCIDFont,
 	// which writes it back at cidRef.ObjectNum, so the read and the write sit
 	// in different functions and neither looks wrong on its own. cid-gidmap
 	// (registry 110) writes this same descendant alloc-aware and runs first,
@@ -374,9 +402,8 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 
 	// Fix /DW, the width every CID outside /W is drawn with, including the
 	// .notdef the font renders for an unmapped code (ISO 32000-1, 9.7.4.3).
-	// The /W repair above never reaches it, so 6-2-11-4-1-t02-fail-e stayed
-	// reporting ".notdef glyph width mismatch (declared=1000.0, font=545.4)"
-	// on every pass with nothing fixed.
+	// The /W repair above never reaches it, so a .notdef width mismatch stayed
+	// reported on every pass with nothing fixed.
 	if fixWidths {
 		if dw, corrected := correctDefaultCIDWidth(ctx, doc, cidFont, fontData, upm); corrected {
 			newCID["DW"] = dw
@@ -445,19 +472,25 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 	return fixes
 }
 
-// persistCIDWidths writes the corrected /W array at the innermost enclosing
-// object that exists in the file, and reports whether anything was written.
+// persistCIDFont writes the corrected CIDFont, with its /W array, at the
+// innermost enclosing object that exists in the file, and reports whether
+// anything was written.
 //
 // Per ISO 32000-1, Table 121 /DescendantFonts shall hold a reference to the
 // CIDFont dictionary, but producers inline that dictionary, and a direct
 // dictionary has no object number to write at. Writing only when the CIDFont
 // itself was indirect meant the corrected widths were computed, dropped, and
-// still reported as repaired: remediating issue18298.pdf corrected the same
-// three CIDFonts on every pass while the width mismatch stayed in the output.
+// still reported as repaired on every pass while the width mismatch stayed in
+// the output.
 //
 // The corrected array is stored directly inside the copied CIDFont rather than
 // at the /W reference, so a /W array shared by several fonts is not rewritten
 // on behalf of one of them.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18298.pdf: remediating it corrected the same three CIDFonts
+//     on every pass while the width mismatch stayed in the output.
 func persistCIDFont(alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, newCID ast.PdfDict, cidRef ast.PdfIndirectRef, descArr ast.PdfArray) bool {
 	if alloc.AllocAt(cidRef.ObjectNum, newCID) {
 		return true
@@ -553,7 +586,7 @@ func fixCharSet(ctx context.Context, alloc *writer.ObjAllocator, fdDict ast.PdfD
 		return false
 	}
 
-	// [typography.ExtractGlyphNames] is keyed by glyph ID, and ranging a map
+	// typography.ExtractGlyphNames is keyed by glyph ID, and ranging a map
 	// emits the names in a different order on every run. /CharSet is written
 	// into the output, so that order IS the output bytes: the same input
 	// produced "/A/B" and "/B/A" on consecutive remediations, breaking the
@@ -590,6 +623,14 @@ func fixCharSet(ctx context.Context, alloc *writer.ObjAllocator, fdDict ast.PdfD
 	return alloc.AllocAt(fdRef.ObjectNum, newFD)
 }
 
+// fixCIDSet writes into the font descriptor a /CIDSet covering the CIDs the
+// check requires of the font program, and reports whether it wrote one.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug911034.pdf: writing only the outlined CIDs left "CID 1 in font
+//     program not in /CIDSet" as soon as the /CIDToGIDMap fixer supplied the
+//     Identity key that activates the rule.
 func fixCIDSet(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fdDict ast.PdfDict, fdRef ast.PdfIndirectRef, fontData []byte) bool {
 	if err := ctx.Err(); err != nil {
 		return false
@@ -599,9 +640,8 @@ func fixCIDSet(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 	// /CIDToGIDMap the rule is every GID in 1..numGlyphs-1
 	// (ISO 19005-2, 6.2.11.4.2 t2), not merely the CIDs with outlines:
 	// compliance.checkCIDSetCompletenessTrueType walks that whole range.
-	// Writing only the outlined CIDs left "CID 1 in font program not in
-	// /CIDSet" on bug911034.pdf as soon as the /CIDToGIDMap fixer supplied
-	// the Identity key that activates the rule.
+	// Writing only the outlined CIDs leaves a violation as soon as the
+	// /CIDToGIDMap fixer supplies the Identity key that activates the rule.
 	validCIDs := typography.ExtractValidCIDs(fontData)
 	if numGlyphs := typography.ExtractNumGlyphs(fontData); numGlyphs > 0 {
 		validCIDs = make(map[uint16]bool, numGlyphs)
@@ -802,9 +842,6 @@ func utf16HexHasForbidden(hexStr string) bool {
 	return false
 }
 
-// generateToUnicodeCMap builds a minimal ToUnicode CMap stream from a
-// charcode-to-Unicode mapping. The CMap maps 2-byte character codes to
-// Unicode code points using bfchar entries.
 // isValidUnicodeMapping returns true if r is a valid Unicode code point for
 // a ToUnicode CMap entry. Excludes U+0000, BOM markers, and Private Use
 // Area ranges (PUA mappings trigger clause 6.2.11.7.3 violations).
@@ -846,6 +883,9 @@ func isValidUnicodeMapping(r rune) bool {
 	return true
 }
 
+// generateToUnicodeCMap builds a minimal ToUnicode CMap stream from a
+// charcode-to-Unicode mapping. The CMap maps character codes codeBytes wide
+// to Unicode code points using bfchar entries.
 func generateToUnicodeCMap(mapping map[uint16]rune, codeBytes int) []byte {
 	// Sort keys for deterministic output. The codespacerange and bfchar
 	// source codes must share one width: simple fonts address glyphs with
@@ -937,13 +977,6 @@ func identityCIDRoute(ctx context.Context, doc *document.Document, fontDict, cid
 	return false
 }
 
-// overlaySimpleFontEncoding replaces destinations in a pending /ToUnicode
-// mapping with the ones the font dictionary's /Encoding states.
-//
-// [typography.ResolveFont] already resolves a base encoding and its
-// /Differences into code-to-rune form, so the encoding tables are not
-// reproduced here. A symbolic font resolves to no encoding at all, and its
-// codes keep whatever the font program answered.
 // fontIsSymbolic reports whether a font's descriptor sets the symbolic flag,
 // bit 3 of /Flags (ISO 32000-1, Table 123).
 func fontIsSymbolic(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
@@ -973,6 +1006,12 @@ func fontIsSymbolic(ctx context.Context, doc *document.Document, fontDict ast.Pd
 // USED codes, and an /Encoding-derived mapping need not reach every one. A
 // partial map satisfies litho's own presence check while veraPDF still reports
 // the rule, which reports a repair the output does not contain.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-3-8-t01-fail-a: its TeX math fonts are symbolic with no
+//     /Encoding, and a mapping derived from a standard encoding turned "−∞ ∞"
+//     into "−1 1" in extracted text while satisfying the rule.
 func fixSimpleFontToUnicode(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, shownCodes map[byte]bool) []string {
 	if !needsToUnicode(ctx, doc, fontDict) || fontRef.ObjectNum == 0 || len(shownCodes) == 0 {
 		return nil
@@ -981,11 +1020,9 @@ func fixSimpleFontToUnicode(ctx context.Context, doc *document.Document, alloc *
 	// A symbolic font that states no /Encoding is drawn through its built-in
 	// encoding, and ISO 32000-1, 9.6.6.1 says a conforming reader shall not
 	// substitute a standard one for it. Deriving Unicode from a standard
-	// encoding there invents meanings: the TeX math fonts of
-	// 6-3-8-t01-fail-a are symbolic with no /Encoding, and the mapping turned
-	// "−∞ ∞" into "−1 1" in extracted text while satisfying the rule. An
-	// explicit /Encoding, even on a symbolic font, is the producer's own
-	// statement and is trusted.
+	// encoding there invents meanings that satisfy the rule while corrupting
+	// extracted text. An explicit /Encoding, even on a symbolic font, is the
+	// producer's own statement and is trusted.
 	if _, stated := fontDict["Encoding"]; !stated && fontIsSymbolic(ctx, doc, fontDict) {
 		return nil
 	}
@@ -1046,6 +1083,13 @@ func fixSimpleFontToUnicode(ctx context.Context, doc *document.Document, alloc *
 	return []string{fmt.Sprintf("generated /ToUnicode CMap for font %s", fontBaseName(fontDict))}
 }
 
+// overlaySimpleFontEncoding replaces destinations in a pending /ToUnicode
+// mapping with the ones the font dictionary's /Encoding states.
+//
+// [typography.ResolveFont] already resolves a base encoding and its
+// /Differences into code-to-rune form, so the encoding tables are not
+// reproduced here. A symbolic font resolves to no encoding at all, and its
+// codes keep whatever the font program answered.
 func overlaySimpleFontEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, mapping map[uint16]rune) {
 	font, err := typography.ResolveFont(ctx, doc, fontDict)
 	if err != nil || font == nil {

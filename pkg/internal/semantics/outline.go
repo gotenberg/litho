@@ -11,6 +11,16 @@ import (
 )
 
 // ResolveOutline extracts the hierarchical outline (bookmarks) from the document.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue2618: declares object 19 in its xref table at an offset that
+//     lands on the `xref` keyword, and no `19 0 obj` exists anywhere in the
+//     file; erroring made `litho bookmarks` the only command that could not
+//     read a document poppler and pikepdf both report as having no outline.
+//   - pdfjs colors.pdf: points /Outlines at a free object; treating that as a
+//     broken outline made `litho bookmarks` fail on a file poppler and pikepdf
+//     both read as having no outline.
 func ResolveOutline(ctx context.Context, doc *document.Document) ([]models.Bookmark, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -24,11 +34,9 @@ func ResolveOutline(ctx context.Context, doc *document.Document) ([]models.Bookm
 
 	// Resolve the reference before type-checking it. An object litho cannot read
 	// is indistinguishable from one the file never defined, and per ISO 32000-1,
-	// 7.3.9 a reference to an undefined object is a reference to null. pdfjs
-	// issue2618 declares object 19 in its xref table at an offset that lands on
-	// the `xref` keyword, and no `19 0 obj` exists anywhere in the file; erroring
-	// made `litho bookmarks` the only command that could not read a document
-	// poppler and pikepdf both report as simply having no outline.
+	// 7.3.9 a reference to an undefined object is a reference to null. Erroring
+	// on one makes `litho bookmarks` the only command that cannot read a
+	// document poppler and pikepdf both report as simply having no outline.
 	outlinesRes, err := document.ResolveObject(ctx, doc, outlinesObj)
 	if err != nil {
 		doc.Logger.Debug("resolving outlines", slog.Any("err", err))
@@ -42,11 +50,10 @@ func ResolveOutline(ctx context.Context, doc *document.Document) ([]models.Bookm
 	if outlinesDict == nil {
 		// Per ISO 32000-1, 7.3.9, a reference to an undefined object is a
 		// reference to null, and per 7.3.7 an entry whose value is null is
-		// equivalent to the entry being absent. pdfjs colors.pdf points
-		// /Outlines at a free object; treating that as a broken outline made
-		// `litho bookmarks` fail on a file poppler and pikepdf both read as
-		// simply having no outline. A non-dictionary /Outlines still errors
-		// above, since [document.ResolveDict] reports the type mismatch.
+		// equivalent to the entry being absent, so /Outlines pointing at a
+		// free object is no outline rather than a broken one. A
+		// non-dictionary /Outlines still errors above, since
+		// document.ResolveDict reports the type mismatch.
 		return nil, nil
 	}
 

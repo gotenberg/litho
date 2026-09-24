@@ -12,13 +12,16 @@ import (
 // it, which is why its context reads operators[N]/extGState[0], so a state
 // nothing selects is reported nowhere.
 //
-// pdfjs issue20914.pdf declares /GDIModeMask with /BM /Darken and never sets it,
-// while a form applies /Transparent: veraPDF reports the alpha of the second and
-// says nothing about the blend mode of the first. issue6741.pdf is the same
-// shape. litho surveyed the resource dictionary and reported both.
-//
 // This is the rule [drawnResources] already states for ISO 19005-2 §6.2.10 and
 // ISO 19005-4 §6.2.9, applied to the part 1 walk.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20914.pdf: declares /GDIModeMask with /BM /Darken and never
+//     sets it, while a form applies /Transparent. veraPDF reports the alpha of
+//     the second and says nothing about the blend mode of the first, while
+//     litho surveyed the resource dictionary and reported both.
+//   - pdfjs issue6741.pdf: the same shape.
 func TestExtGStateTransparency1ScopedToDrawnStates(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

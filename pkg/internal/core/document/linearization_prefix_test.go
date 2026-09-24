@@ -7,9 +7,13 @@ import (
 	"testing"
 )
 
-// prefixedLinearizedPDF builds a linearized document preceded by prefixBytes of
-// junk, the shape of pdfjs issue11330.pdf, whose first 27 bytes are Java
-// serialization. /L counts from the header, so it excludes the prefix.
+// prefixedLinearizedPDF builds a linearized document preceded by prefix bytes
+// of junk. /L counts from the header, so it excludes the prefix.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11330.pdf: the shape this fixture reproduces, whose first 27
+//     bytes are Java serialization.
 func prefixedLinearizedPDF(prefix string) []byte {
 	const content = "BT /F1 12 Tf 20 700 Td (page) Tj ET\n"
 
@@ -69,9 +73,12 @@ func prefixedLinearizedPDF(prefix string) []byte {
 // stay absolute from byte 0. The linearization probe read from byte 0 instead of
 // the header, so it parsed the prefix rather than the dictionary, and /L was
 // compared against the raw file size rather than the length from the header.
-// pdfjs issue11330.pdf carries 27 bytes of Java serialization and declares
-// /L 129725 in a 129752 byte file; pdf.js reports it linearized and litho did
-// not.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11330.pdf: carries 27 bytes of Java serialization and declares
+//     /L 129725 in a 129752 byte file. pdf.js reports it linearized and litho
+//     did not.
 func TestLinearizedBehindALeadingPrefix(t *testing.T) {
 	t.Parallel()
 

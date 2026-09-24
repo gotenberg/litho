@@ -435,6 +435,19 @@ func setStructuredXMPProperty(buf []byte, nsURI, prefix, localName, value, eleme
 	return buf, false
 }
 
+// patchExistingXMP repairs an existing XMP packet in place for the target
+// profile: prefixes, xpacket attributes, the pdfaid and pdfuaid
+// identification, dates, /Info synchronisation and extension schemas. It
+// returns the patched packet and the fix notes.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15833.pdf: binds the rdf prefix to a proxy-rewritten URI, so
+//     the element insertion finds no rdf:Description while the attribute
+//     insertion, which matches on the prefix alone, still succeeds. The file
+//     came out of remediation reporting pdfaid:part= with nothing in it.
+//   - pdfjs issue15833.pdf: a second attribute injection made the packet
+//     invalid XML with a duplicate attribute.
 func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info infoMetadata) (string, []string) {
 	// Byte-level property surgery assumes a parseable packet. On a packet
 	// that is not well-formed XML (itself an unfixable §6.7.2.1/§6.6.2.1 t04
@@ -537,11 +550,11 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 		// conformance is forbidden), also inject or correct the level.
 		needConformance := conformance != "" && (part != 4 || conformance == "E" || conformance == "F")
 		// Injecting a conformance level next to a part number that could not
-		// be written builds half an identification schema. issue15833.pdf
-		// binds the rdf prefix to a proxy-rewritten URI, so the element
-		// insertion finds no rdf:Description while the attribute insertion,
-		// which matches on the prefix alone, still succeeds. The file came
-		// out of remediation reporting pdfaid:part= with nothing in it.
+		// be written builds half an identification schema. A packet binding
+		// the rdf prefix to a proxy-rewritten URI makes the element insertion
+		// find no rdf:Description while the attribute insertion, which
+		// matches on the prefix alone, still succeeds, and the output then
+		// reports pdfaid:part= with nothing in it.
 		if needConformance && !partPresent &&
 			findXMPProperty(buf, pdfaidNS, "conformance").Form == xmpPropertyNotFound {
 			needConformance = false
@@ -558,7 +571,7 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 				// Guarded like the element form: findXMPProperty cannot always
 				// see an attribute it just wrote, and a second injection makes
 				// the packet invalid XML with a duplicate attribute rather than
-				// merely redundant (issue15833.pdf).
+				// merely redundant.
 				if !bytes.Contains(buf, []byte("pdfaid:conformance=")) {
 					if out, err := insertAttributeAtDescription(buf, "pdfaid", pdfaidNS, fmt.Sprintf(`pdfaid:conformance="%s"`, conformance)); err == nil {
 						buf = out
@@ -1243,9 +1256,14 @@ func generateExtensionSchemaBlock(schemas []extSchemaInfo) string {
 // its namespace, and on packets where it cannot (a schema description mentioning
 // the same name, several Descriptions with different bindings) it reports the
 // property missing even after one was injected. Every fixpoint iteration then
-// injected another: xfa_bug1722030_1.pdf came out with three <pdfaid:part>
-// elements and gained three more per remediation. ISO 16684-1 forbids duplicate
-// properties on one XMP node, so a literal match is reason enough to stop.
+// injected another, so the duplicates grew with each remediation. ISO 16684-1
+// forbids duplicate properties on one XMP node, so a literal match is reason
+// enough to stop.
+//
+// # Corpus evidence
+//
+//   - pdfjs xfa_bug1722030_1.pdf: came out with three <pdfaid:part> elements
+//     and gained three more per remediation.
 func injectPropertyOnce(buf []byte, qname, element string) ([]byte, bool) {
 	if bytes.Contains(buf, []byte("<"+qname+">")) || bytes.Contains(buf, []byte("<"+qname+" ")) {
 		return buf, false
@@ -1319,6 +1337,14 @@ func stripForbiddenXPacketAttrs(buf []byte) ([]byte, []string) {
 	return buf, fixes
 }
 
+// xmlEscape escapes s for XMP character data or an attribute value in either
+// quote style, writing CR as a numeric character reference.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000187.pdf: has a CRLF inside /Keywords, and before
+//     the CR escape litho reported the sync as done while both litho and
+//     veraPDF still failed 6.7.3 test 5 on the output.
 func xmlEscape(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")
 	s = strings.ReplaceAll(s, "<", "&lt;")
@@ -1336,9 +1362,7 @@ func xmlEscape(s string) string {
 	// never equal the XMP property parsed back out, and the docinfo-XMP
 	// equality rules (ISO 19005-1, 6.7.3) keep failing however faithfully the
 	// bytes were written. A numeric character reference is exempt from that
-	// normalisation and parses back as CR. govdocs thread_000_000187.pdf has a
-	// CRLF inside /Keywords: litho reported the sync as done and both litho and
-	// veraPDF still failed 6.7.3 test 5 on the output.
+	// normalisation and parses back as CR.
 	s = strings.ReplaceAll(s, "\r", "&#xD;")
 	return s
 }
@@ -1365,6 +1389,11 @@ func numericField(field string, lo, hi int) (string, bool) {
 // pdfDateToXMP converts a PDF date string (D:YYYYMMDDHHmmSSOHH'mm')
 // to an XMP/ISO 8601 date string (YYYY-MM-DDTHH:mm:ss+HH:MM).
 // Returns an empty string if the input is unparseable.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18122.pdf: carries "D:202403083:4:5 ", whose hour slice is
+//     "3:", and litho injected xmp:CreateDate "2024-03-08T3::4::5 Z".
 func pdfDateToXMP(pdfDate string) string {
 	s := strings.TrimPrefix(pdfDate, "D:")
 	if len(s) < 4 {
@@ -1392,9 +1421,7 @@ func pdfDateToXMP(pdfDate string) string {
 	// Every remaining component is a fixed-width numeric field (ISO 32000-1,
 	// 7.9.4: D:YYYYMMDDHHmmSSOHH'mm). A producer that writes a shorter field
 	// leaves the slice straddling the next separator, and copying it through
-	// yields a value no ISO 8601 parser accepts: pdfjs issue18122.pdf carries
-	// "D:202403083:4:5 ", whose hour slice is "3:", and litho injected
-	// xmp:CreateDate "2024-03-08T3::4::5 Z" -- valid XMP syntax holding an
+	// yields a value no ISO 8601 parser accepts: valid XMP syntax holding an
 	// invalid Date, which ISO 19005-1 6.7.9 test 3 then reports. An
 	// unparseable Info date yields no XMP date at all; the caller skips the
 	// sync on an empty return, which is the right outcome, since writing a
@@ -1442,6 +1469,12 @@ func pdfDateToXMP(pdfDate string) string {
 //
 // uaPart drives only the dc:title fallback, which PDF/UA requires and PDF/A
 // does not; pass 0 to sync what /Info holds and synthesize nothing.
+//
+// # Corpus evidence
+//
+//   - govdocs: seven files came out of remediation newly failing ISO 19005-2,
+//     6.6.2.1 tests 4 and 5 when the dc:description rdf:Alt was written into
+//     an attribute-form property.
 func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []string) {
 	var fixes []string
 	// Sync dc:title with Info /Title. PDF/UA additionally requires a
@@ -1587,8 +1620,8 @@ func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []strin
 	// alternative, so it goes through setStructuredXMPProperty like dc:title:
 	// writing the rdf:Alt into a property a producer wrote in attribute form
 	// puts a literal '<' inside an attribute value, which XML 1.0, 2.3
-	// forbids. Seven govdocs files came out of remediation newly failing
-	// ISO 19005-2, 6.6.2.1 tests 4 and 5 that way.
+	// forbids, and the output then newly fails ISO 19005-2, 6.6.2.1 tests 4
+	// and 5.
 	if info.Subject != "" {
 		escaped := xmlEscape(info.Subject)
 		value := fmt.Sprintf(`<rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt>`, escaped)
@@ -1632,12 +1665,12 @@ func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []strin
 // SyncXMPWithDocInfo rewrites the catalog's XMP packet so the properties that
 // duplicate the document information dictionary carry its current values.
 //
-// It exists for callers that edit /Info directly, notably [pdf.Writer.SetMetadata]:
-// setting a new /Title left the XMP dc:title saying the old one, which is a
-// conformance defect for any profile that requires the two to agree
-// (ISO 19005-2/3, 6.6.3 and ISO 19005-4, 6.7.3, all worded "shall be equivalent
-// to the document information dictionary entry"), and simply wrong for every
-// other reader that prefers XMP.
+// It exists for callers that edit /Info directly, notably
+// pdf.Writer.SetMetadata: setting a new /Title left the XMP dc:title saying the
+// old one, which is a conformance defect for any profile that requires the two
+// to agree (ISO 19005-2/3, 6.6.3 and ISO 19005-4, 6.7.3, all worded "shall be
+// equivalent to the document information dictionary entry"), and simply wrong
+// for every other reader that prefers XMP.
 //
 // Only synchronisation runs, not the rest of the XMP repair: no pdfaid
 // identification is injected and no extension schemas are declared, because a
@@ -1674,7 +1707,7 @@ func SyncXMPWithDocInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		return nil, nil
 	}
 	// The packet must be UTF-8 before any splicing, for the reason given in
-	// [fixXMP]: a UTF-16 packet defeats the byte-range editor silently.
+	// fixXMP: a UTF-16 packet defeats the byte-range editor silently.
 	data, reencoded := xmpToUTF8(data)
 
 	patched, fixes := syncInfoIntoXMP(data, gatherInfoMetadata(ctx, alloc, doc), 0)

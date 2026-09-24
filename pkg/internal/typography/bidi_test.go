@@ -176,7 +176,7 @@ func TestReconstructText_SoftHyphenAcrossLines(t *testing.T) {
 	}
 }
 
-// Ensure the beads parameter is unused here but compiles.
+// Keeps the semantics import in use: these tests pass no beads.
 var _ = []semantics.Bead{}
 
 func joinByIndices(texts []string, indices []int) string {

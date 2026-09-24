@@ -33,10 +33,9 @@ type embeddedTTF struct {
 }
 
 // ValidateTTFForStamp parses enough of a TrueType font to confirm it has
-// the tables required for embedding ([head], [hhea], [maxp], [cmap],
-// [hmtx]). It is exported so the public pdf package can surface parse
-// errors at [pdf.NewTTFFont] call time instead of deferring them to write
-// time.
+// the tables required for embedding (head, hhea, maxp, cmap, hmtx). It is
+// exported so the public pdf package can surface parse errors at
+// pdf.NewTTFFont call time instead of deferring them to write time.
 func ValidateTTFForStamp(data []byte) error {
 	_, err := parseTTF(data)
 	return err
@@ -88,7 +87,7 @@ func parseTTF(data []byte) (*embeddedTTF, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading glyph widths: %w", err)
 	}
-	// An hmtx advance is a whole number; [truetype.GlyphWidths] shares its
+	// An hmtx advance is a whole number; truetype.GlyphWidths shares its
 	// return type with CFF charstring advances, which are real. Keep the
 	// stamped /W array integral so the writer emits the same bytes it always
 	// has.
@@ -131,8 +130,8 @@ func parseTTF(data []byte) (*embeddedTTF, error) {
 		descent:        descent,
 		italicAngle:    italicAngle,
 		// Flag 4 (Nonsymbolic) covers most Latin fonts; flag 32 is Symbolic.
-		// We choose Nonsymbolic by default because we emit WinAnsi encoding
-		// indirectly via the unicode→GID map.
+		// Nonsymbolic is the default because the stamp emits WinAnsi
+		// encoding indirectly via the unicode→GID map.
 		flags: 32, // Symbolic (safe default for any glyph set)
 	}, nil
 }

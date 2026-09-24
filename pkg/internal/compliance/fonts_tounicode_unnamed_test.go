@@ -15,10 +15,13 @@ import (
 // names when there is a program, which litho does not establish, so an embedded
 // font keeps its exemption. With no program there is nothing left to read.
 //
-// The real file is pdfjs bug864847.pdf: an unembedded symbolic Arial-ItalicMT
-// with no /Encoding whose /ToUnicode maps only <20>, shown with codes 72 and
-// 101. veraPDF reports nine glyphs under ISO 19005-2 §6.2.11.7.2 t1, and the
-// same font under §6.3.8 t1 and ISO 14289-1 §7.21.7 t1.
+// # Corpus evidence
+//
+//   - pdfjs bug864847.pdf: the real file, an unembedded symbolic
+//     Arial-ItalicMT with no /Encoding whose /ToUnicode maps only <20>, shown
+//     with codes 72 and 101. veraPDF reports nine glyphs under ISO 19005-2
+//     §6.2.11.7.2 t1, and the same font under §6.3.8 t1 and ISO 14289-1
+//     §7.21.7 t1.
 func TestToUnicode_UnnamedCodeWithoutProgram(t *testing.T) {
 	t.Parallel()
 

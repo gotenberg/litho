@@ -39,7 +39,12 @@ func TestFontFileKeys_CIDFontSubtypeMatrix(t *testing.T) {
 // TestIsFontEmbedded_CIDFontType0RejectsFontFile pins that a CIDFontType0 whose
 // program sits in /FontFile (a Type1 program) is not embedded: /FontFile is not
 // a valid key for a CIDFont, so veraPDF flags §6.2.10.4.1 t1 where litho used to
-// pass (pdfjs issue11740_reduced @PDF/A-4). /FontFile3 embeds it correctly.
+// pass. /FontFile3 embeds it correctly.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11740_reduced.pdf: at PDF/A-4, veraPDF flags §6.2.10.4.1 t1
+//     for its CIDFontType0 program in /FontFile, where litho used to pass.
 func TestIsFontEmbedded_CIDFontType0RejectsFontFile(t *testing.T) {
 	t.Parallel()
 	ctx := testCtx()

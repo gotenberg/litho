@@ -46,10 +46,12 @@ func xmpExtPacket(propName, propVT, used string) []byte {
 // (ISO 19005-1 §6.7.9 t2, ISO 19005-2/3 §6.6.2.3.1 t1: veraPDF's
 // isDefinedInCurrentPackage).
 //
-// Measured: appending a cs:CProp usage to 6-6-2-3-2-t01-pass-d.pdf passes only
-// because one of its page packets declares CProp; renaming that declaration
-// makes veraPDF report the usage, and a property in a namespace nothing
-// declares reports as well.
+// # Corpus evidence
+//
+//   - verapdf 6-6-2-3-2-t01-pass-d.pdf: appending a cs:CProp usage passes
+//     only because one of its page packets declares CProp; renaming that
+//     declaration makes veraPDF report the usage, and a property in a
+//     namespace nothing declares reports as well.
 func TestExtensionSchema_DeclarationIsPerName(t *testing.T) {
 	t.Parallel()
 
@@ -90,10 +92,12 @@ func TestExtensionSchema_DeclarationIsPerName(t *testing.T) {
 // schema entry replaces an earlier one carrying the same namespace URI, the
 // rule [xmpCheckExtensionPropertyResolution] already records for the type map.
 //
-// The veraPDF test suite's PDF_UA-1__5-t05-fail-a.pdf declares pdfuaid:part in
-// its first entry and pdfuaid:corr in a second for the same URI: veraPDF
-// reports part. Deleting the second entry makes it report corr instead, while
-// part passes.
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__5-t05-fail-a.pdf: declares pdfuaid:part in its first
+//     entry and pdfuaid:corr in a second for the same URI, and veraPDF
+//     reports part. Deleting the second entry makes it report corr instead,
+//     while part passes.
 func TestXMPPooledDeclaredProperties_ReplacementWithinAPacket(t *testing.T) {
 	t.Parallel()
 
@@ -131,9 +135,13 @@ func TestXMPPooledDeclaredProperties_ReplacementWithinAPacket(t *testing.T) {
 }
 
 // TestXMPPooledDeclaredProperties_PoolsAcrossPackets pins that a declaration in
-// any metadata packet legitimises a usage in another. Appending a cs:CProp
-// usage to the catalog packet of 6-6-2-3-2-t01-pass-d.pdf passes because a page
-// packet declares CProp; renaming that declaration makes veraPDF report it.
+// any metadata packet legitimises a usage in another.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-6-2-3-2-t01-pass-d.pdf: appending a cs:CProp usage to its
+//     catalog packet passes because a page packet declares CProp; renaming
+//     that declaration makes veraPDF report it.
 func TestXMPPooledDeclaredProperties_PoolsAcrossPackets(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

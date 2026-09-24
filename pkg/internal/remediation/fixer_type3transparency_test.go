@@ -11,9 +11,15 @@ import (
 
 // TestFixType3FontTransparency_ReachesTheFontsOwnExtGState covers the gap.
 //
-// veraPDF's 6-2-10-t04-fail-a and 6-2-9-t04-fail-a declare /Resources inline on
-// the Type 3 font dict (obj 10) with /ExtGState /GS0 << /ca 0.5 >>, and carry no
-// /ExtGState on the page, so every existing walk finds nothing.
+// A file can declare /Resources inline on the Type 3 font dict with an
+// offending /ExtGState and carry no /ExtGState on the page, so every other walk
+// finds nothing.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-10-t04-fail-a and 6-2-9-t04-fail-a: declare /Resources inline
+//     on the Type 3 font dict (obj 10) with /ExtGState /GS0 << /ca 0.5 >>, and
+//     carry no /ExtGState on the page, so every existing walk finds nothing.
 func TestFixType3FontTransparency_ReachesTheFontsOwnExtGState(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -94,7 +100,11 @@ func TestFixType3FontTransparency_EmptyInputRepairsNothing(t *testing.T) {
 
 // type3FontPDF builds a one-page PDF whose page /Resources declares only /Font,
 // and whose Type 3 font (obj 10) declares /Resources inline with an /ExtGState
-// (obj 11) holding /GS0 (obj 12). That mirrors the corpus carriers exactly.
+// (obj 11) holding /GS0 (obj 12).
+//
+// # Corpus evidence
+//
+//   - All corpora: the fixture mirrors the carriers exactly.
 func type3FontPDF(t *testing.T, gs ast.PdfDict) []byte {
 	t.Helper()
 	return type3FontPDFWithSubtype(t, gs, "Type3")

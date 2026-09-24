@@ -40,8 +40,7 @@ func pipeTextOf(t *testing.T, path string, artifacts bool) string {
 // `-title=rotate` precisely to prove a flag value is not a stage boundary).
 // Nine of the thirteen stages that existed when this was written already ran;
 // decrypt, flatten-form, stamp-image and stamp-text did not, so a defect in the
-// code they share with the others would sit unobserved. No corpus gate reaches
-// cmd/litho, so nothing else watches it.
+// code they share with the others would sit unobserved.
 //
 // The set has since grown to eighteen. The five output-producing stages added
 // later are covered in pipe_output_stages_cli_test.go.
@@ -57,6 +56,12 @@ func pipeTextOf(t *testing.T, path string, artifacts bool) string {
 // RemoveEncryption, and the password reaches the source through the GLOBAL -p,
 // parsePipeGlobals -> openPDF. A stage that opened the document without it
 // would fail before RemoveEncryption ever ran.
+//
+// # Corpus evidence
+//
+//   - All corpora: no corpus gate reaches cmd/litho, so nothing but these
+//     tests watches the decrypt, flatten-form, stamp-image and stamp-text
+//     stages.
 func TestPipe_DecryptStageRemovesEncryption(t *testing.T) {
 	src := onePageTempPDF(t)
 	enc := encryptTempPDF(t, src, "s3cret")

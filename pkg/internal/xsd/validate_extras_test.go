@@ -118,7 +118,7 @@ const extensionContentXSD = `<?xml version="1.0" encoding="UTF-8"?>
 func TestValidate_Extension_MergesBaseParticles(t *testing.T) {
 	s := loadTestSchema(t, extensionContentXSD)
 	// Base's Title comes before the derived ID. Order matters
-	// because we expect base-first semantics.
+	// because extension content is base-first.
 	xmlBytes := []byte(`<?xml version="1.0"?>
 <Invoice xmlns="urn:t" kind="A">
   <Title>An invoice</Title>

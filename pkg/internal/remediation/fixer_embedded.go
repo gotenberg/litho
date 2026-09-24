@@ -65,7 +65,9 @@ func fixEmbeddedSubtype(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 }
 
 // maxNameTreeWalkDepth caps name-tree recursion in remediation fixers. Anti-DoS
-// guard mirroring the compliance and core name-tree depth caps (64).
+// guard, not spec-mandated: name trees in real documents rarely exceed a
+// handful of levels. It mirrors the compliance and core name-tree depth caps
+// (64).
 const maxNameTreeWalkDepth = 64
 
 // walkEmbeddedFileTree recurses through an EmbeddedFiles name tree, patching

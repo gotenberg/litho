@@ -64,12 +64,17 @@ func unreadablePageTreePDF() []byte {
 //
 // ISO 32000-1, 7.7.3.1 makes /Pages the page tree root, so the rewrite must give
 // the output catalog one. Doing that unconditionally emptied documents in
-// silence: `litho attach` on an encrypted pdfjs file whose page tree sits in an
-// undecodable object stream turned a 47 KB one-page document into a 1.9 KB
-// zero-page one and exited 0, while `litho rotate` on the same file failed.
+// silence: an encrypted file whose page tree sits in an undecodable object
+// stream came out with no pages while the command exited 0.
 //
 // The empty tree stays correct for a catalog naming an object the file never
 // defines: that document has no pages to lose.
+//
+// # Corpus evidence
+//
+//   - pdfjs: `litho attach` on an encrypted file whose page tree sits in an
+//     undecodable object stream turned a 47 KB one-page document into a 1.9 KB
+//     zero-page one and exited 0, while `litho rotate` on the same file failed.
 func TestFullRewriteRefusesToDropADefinedPageTree(t *testing.T) {
 	t.Parallel()
 

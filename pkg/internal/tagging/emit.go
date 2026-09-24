@@ -26,8 +26,13 @@ const maxTagDepth = 64
 // It tracks [content.MaxPageContentSize] by reference rather than by value.
 // The two were written to match, then drifted when that limit rose from 32 MB
 // to 64 MB, leaving this one to refuse pages the rest of the pipeline reads.
-// The gap was reachable rather than theoretical: page 1 of pdfjs
-// issue21089.pdf decodes to 27.51 MB, within 16% of the stale bound.
+// The gap was reachable rather than theoretical: real pages come close to the
+// stale bound.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue21089.pdf: page 1 decodes to 27.51 MB, within 16% of the
+//     stale 32 MB bound.
 const maxTaggedContentSize = content.MaxPageContentSize
 
 // Emit synthesizes a PDF structure tree from the logical tree rooted at root,
@@ -81,7 +86,7 @@ func Emit(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Documen
 		"K":          docRef,
 		"ParentTree": ast.PdfDict{"Nums": parentNums},
 	}
-	// Per ISO 32000-1 §14.7.4.4, /ParentTreeNextKey is one greater than the
+	// Per ISO 32000-1, 14.7.4.4, /ParentTreeNextKey is one greater than the
 	// largest key in the parent tree, so a later pass can allocate keys.
 	if e.maxParentKey >= 0 {
 		stDict["ParentTreeNextKey"] = ast.PdfInt(e.maxParentKey + 1)
@@ -185,7 +190,7 @@ func (e *emitter) build(ctx context.Context, node *Element, parentRef ast.PdfInd
 // structure leaves become BDC/EMC sequences carrying their MCID, and the
 // remaining regions (graphics, and any text the classifier did not place in
 // the tree) are wrapped as /Artifact. This satisfies the "all content marked
-// or artifact" rule (ISO 14289-1 §7.1). It returns the StructTreeRoot
+// or artifact" rule (ISO 14289-1, 7.1). It returns the StructTreeRoot
 // /ParentTree /Nums array mapping each tagged page's StructParents key to its
 // structure elements in MCID order.
 func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
@@ -239,7 +244,7 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 		// A page inlined in a /Kids array has no object number to replace, so
 		// its marks cannot be written back. Tag the rest of the document rather
 		// than fail it; writing at object 0 produced a body every reader
-		// ignores (see [writer.ObjAllocator.AllocAt]).
+		// ignores (see writer.ObjAllocator.AllocAt).
 		if !e.alloc.AllocAt(page.Ref.ObjectNum, newPage) {
 			e.doc.Logger.Debug("skipping tag marks on a page with no indirect reference",
 				slog.Int("page", pi+1),
@@ -253,6 +258,12 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 // plus an /Artifact span over each non-blank gap before, between, and after
 // them, so no painting operator is left outside marked content. elemRefs maps
 // MCID to its structure element for the page's ParentTree entry.
+//
+// # Corpus evidence
+//
+//   - pdfjs TAMReview.pdf: keeps most of its words inside text-painting Form
+//     XObjects, and sweeping them into an /Artifact dropped the document from
+//     11914 extractable characters to 2266.
 func pageSpans(data []byte, leaves []leafEntry, textXObjects map[string]bool) ([]markSpan, ast.PdfArray) {
 	elemRefs := make(ast.PdfArray, len(leaves))
 	var spans []markSpan
@@ -263,12 +274,10 @@ func pageSpans(data []byte, leaves []leafEntry, textXObjects map[string]bool) ([
 		}
 		// An /Artifact is content with no meaning for a reader
 		// (ISO 32000-1, 14.8.2.2), so marking one over a Form XObject that
-		// paints TEXT hides that text from assistive technology entirely.
-		// pdfjs TAMReview.pdf keeps most of its words inside such XObjects,
-		// and tagging it dropped the document from 11914 extractable
-		// characters to 2266. Leaving the region unmarked keeps an honest
-		// ISO 14289-1, 7.1 residual instead of asserting the words are
-		// decoration.
+		// paints TEXT hides that text from assistive technology entirely, and
+		// real documents keep most of their words inside such XObjects.
+		// Leaving the region unmarked keeps an honest ISO 14289-1, 7.1
+		// residual instead of asserting the words are decoration.
 		if paintsTextXObject(data[start:end], textXObjects) {
 			return
 		}
@@ -322,9 +331,8 @@ func textBearingXObjects(ctx context.Context, doc *document.Document, page *docu
 // text through the forms it invokes.
 //
 // A form that only paints other forms carries no text-showing operator of its
-// own: pdfjs issue15629 draws its field values through /X0, which does nothing
-// but invoke three /Annot_* forms. Judging /X0 by its own bytes marked it
-// decoration and lost the name the form was filled in with. The answer errs
+// own, and a filled-in field can draw its value that way. Judging such a form
+// by its own bytes marks it decoration and loses the value. The answer errs
 // toward "paints text": a form wrongly kept out of an /Artifact leaves an
 // honest ISO 14289-1, 7.1 residual, while one wrongly swept in hides real words
 // from assistive technology.
@@ -333,15 +341,23 @@ func textBearingXObjects(ctx context.Context, doc *document.Document, page *docu
 // 8.10.1 forbids but files still contain. answers memoises the decision per
 // object so a form reached by several paths is decoded once: forms nest as a
 // DAG, not a tree, and re-deciding each subtree per path costs time exponential
-// in the nesting depth. pdfjs issue6961.pdf reaches ten levels, and `litho
-// remediate -profile PDF/UA-1` on it ran for over 50 minutes at 142% CPU,
-// re-inflating the same streams, until the depth cap finally exhausted the
-// search. It never returned within any run of the corpus harness.
+// in the nesting depth.
 //
 // complete reports whether the answer was reached without the depth cap cutting
 // the search short. Only a complete answer is memoised: a false produced by
 // running out of depth says nothing about the same form reached higher up,
 // where the remaining budget would let the search continue.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15629: draws its field values through /X0, which does nothing
+//     but invoke three /Annot_* forms; judging /X0 by its own bytes marked it
+//     decoration and lost the name the form was filled in with.
+//   - pdfjs issue6961.pdf: nests forms ten levels deep, and without the memo
+//     `litho remediate -profile PDF/UA-1` on it ran for over 50 minutes at
+//     142% CPU, re-inflating the same streams, until the depth cap finally
+//     exhausted the search. It never returned within any run of the corpus
+//     harness.
 func formPaintsText(ctx context.Context, doc *document.Document, entry ast.PdfObject, visited map[int]bool, answers map[int]bool, depth int) (paints, complete bool) {
 	if depth > maxTextScanDepth {
 		return false, false

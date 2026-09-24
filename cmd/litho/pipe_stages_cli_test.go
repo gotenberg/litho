@@ -12,7 +12,7 @@ import (
 // range into one, which is why the stage is happy with a single -o: the
 // standalone command has the identical contract, an "Output file (required)"
 // passed to pdf.Split as one destination. Measured both ways below, because the
-// name led me to expect a multi-file output and look for a defect that was
+// name suggests a multi-file output and invites a search for a defect that was
 // never there.
 func TestPipe_SplitStageSelectsThePageRange(t *testing.T) {
 	src := twoPageTempPDF(t)

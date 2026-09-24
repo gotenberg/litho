@@ -39,7 +39,12 @@ func annotsAfterFix(t *testing.T, profile string, preserve bool) (ast.PdfArray, 
 // ISO 19005-1 6.5.2 t1. FileAttachment sits in [permittedAnnotSubtypes] because
 // parts 2 and later allow it, so Part 1 was served only by accident: Sound and
 // Movie were removed through the parts-2+ forbidden set while FileAttachment
-// survived. 44 corpus cells reported it, unrepaired even in aggressive mode.
+// survived, unrepaired even in aggressive mode.
+//
+// # Corpus evidence
+//
+//   - All corpora: 44 corpus cells reported the surviving FileAttachment,
+//     unrepaired even in aggressive mode.
 func TestFixAnnotations_DropsAPDFA1FileAttachment(t *testing.T) {
 	t.Parallel()
 
@@ -119,9 +124,14 @@ func subtypeSurvives(t *testing.T, subtype, profile string, preserve bool) bool 
 //
 // The first attempt enumerated forbidden subtypes and named only
 // FileAttachment, which is the "additionally" clause. The clause before it
-// forbids every type not defined in PDF Reference, and a census of the corpus
-// cells that stayed broken found exactly Polygon, PolyLine, Caret, Watermark
-// and Redact: 40 cells whose only remaining violation was this rule.
+// forbids every type not defined in PDF Reference, Polygon, PolyLine, Caret,
+// Watermark and Redact among them.
+//
+// # Corpus evidence
+//
+//   - All corpora: a census of the corpus cells that stayed broken found
+//     exactly Polygon, PolyLine, Caret, Watermark and Redact: 40 cells whose
+//     only remaining violation was this rule.
 func TestFixAnnotations_DropsEveryPDFA1ForbiddenSubtype(t *testing.T) {
 	t.Parallel()
 
@@ -307,9 +317,13 @@ func TestPermittedAnnotSubtypes_MirrorTheCompliancePartTables(t *testing.T) {
 	}
 }
 
-// TestFixAnnotations_Part4DropsFileAttachment covers the 24 corpus cells that
-// reported ISO 19005-4 6.3.1 t1 unrepaired: part 4 and level E forbid
-// FileAttachment, but remediation held one parts-2+ table that permits it.
+// TestFixAnnotations_Part4DropsFileAttachment covers ISO 19005-4 6.3.1 t1,
+// which stayed unrepaired: part 4 and level E forbid FileAttachment, but
+// remediation held one parts-2+ table that permits it.
+//
+// # Corpus evidence
+//
+//   - All corpora: 24 corpus cells reported ISO 19005-4 6.3.1 t1 unrepaired.
 func TestFixAnnotations_Part4DropsFileAttachment(t *testing.T) {
 	t.Parallel()
 
@@ -328,9 +342,13 @@ func TestFixAnnotations_Part4DropsFileAttachment(t *testing.T) {
 // and predate this table set: "3D" is in [forbiddenAnnotSubtypes], whose comment
 // claims the set is "never permitted in any PDF/A profile" though level E
 // permits it, and "RichMedia" is simply absent from [permittedAnnotSubtypes].
-// That over-removal is real but LATENT: no fixture in the veraPDF corpus carries
-// either subtype, so the corpus gate cannot falsify a fix for it, and an
-// unfalsifiable guard is worse than a recorded defect.
+// That over-removal is real but LATENT: nothing can falsify a fix for it yet,
+// and an unfalsifiable guard is worse than a recorded defect.
+//
+// # Corpus evidence
+//
+//   - verapdf: no fixture carries either subtype, so the corpus gate cannot
+//     falsify a fix for the over-removal.
 func TestFixAnnotations_Part4fKeepsFileAttachment(t *testing.T) {
 	t.Parallel()
 

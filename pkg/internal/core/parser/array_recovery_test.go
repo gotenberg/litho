@@ -25,9 +25,13 @@ func parseOne(t *testing.T, src string) ast.PdfObject {
 //
 // ParseObject consumes a token before dispatching on it, so a bare keyword is
 // already past when it reports one. Consuming again swallowed the element
-// AFTER the bad token: pdfjs bug1953099 writes a lone "-" between two strings
-// in a TJ array and the (e) that followed it vanished, so the word
-// "extensively" came out a letter short.
+// AFTER the bad token.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1953099.pdf: writes a lone "-" between two strings in a TJ
+//     array, and the (e) that followed it vanished, so the word "extensively"
+//     came out a letter short.
 func TestParseArray_KeepsElementAfterMalformedToken(t *testing.T) {
 	cases := []struct {
 		name string

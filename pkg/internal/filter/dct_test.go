@@ -30,7 +30,7 @@ func TestDecodeDCT(t *testing.T) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		// JPEG is lossy. Verify we get 4 pixels (1 byte each for gray).
+		// JPEG is lossy. Verify the decode yields 4 pixels (1 byte each for gray).
 		if len(got) != 4 {
 			t.Fatalf("expected 4 bytes (2x2 gray), got %d", len(got))
 		}

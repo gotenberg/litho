@@ -66,14 +66,19 @@ func type0CMapPDF(t *testing.T, content, encoding, cmapBody string, embed bool) 
 // glyph-presence rule apply. A code written as CID 0 is different: it reaches the
 // .notdef glyph, which the program does contain, and fires the .notdef rule alone.
 // Both readings were measured against veraPDF 1.30.2, which reports the pair for
-// pdfjs bug920426.pdf (a Type 0 font whose encoding CMap is written with bfchar
-// alone) and the .notdef rule alone for an explicit <0000>.
+// an encoding CMap written with bfchar alone and the .notdef rule alone for an
+// explicit <0000>.
 //
 // Rendering mode 3 exempts the glyph-presence half, which asks only about glyphs
 // referenced for rendering; the .notdef rule carries no such exemption.
 //
 // PDF/UA-1 carries the same pair (ISO 14289-1 §7.21.4.1 t2 and §7.21.8 t1) and was
 // measured to behave identically; this table covers the PDF/A parts.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug920426.pdf: a Type 0 font whose encoding CMap is written with
+//     bfchar alone, for which veraPDF 1.30.2 reports both rules.
 func TestUnmappedCodeResolvesToNoGlyph(t *testing.T) {
 	t.Parallel()
 

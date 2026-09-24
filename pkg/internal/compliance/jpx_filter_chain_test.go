@@ -111,10 +111,17 @@ func ascii85Encoded(t *testing.T, data []byte) []byte {
 // input only when JPXDecode is the whole chain. An image behind
 // [/FlateDecode /JPXDecode] therefore reached them compressed, matched neither
 // the JP2 signature nor the raw J2K marker, and every violation went
-// unreported: pdfjs issue12579.pdf writes exactly that chain and
-// issue11004.pdf writes [/ASCII85Decode /JPXDecode]. Measured against the
-// veraPDF test suite fixture for 6.2.8.3 t1, re-wrapping its image in
-// /FlateDecode turned a reported 5-channel violation into "compliant".
+// unreported.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12579.pdf: writes exactly the [/FlateDecode /JPXDecode]
+//     chain.
+//   - pdfjs issue11004.pdf: writes [/ASCII85Decode /JPXDecode]. The table did
+//     not carry that chain until the case below was added; measured when
+//     added, it already passed.
+//   - verapdf: re-wrapping the image of the fixture for 6.2.8.3 t1 in
+//     /FlateDecode turned a reported 5-channel violation into "compliant".
 func TestCheckJPXImageBehindOuterFilter(t *testing.T) {
 	t.Parallel()
 
@@ -136,10 +143,9 @@ func TestCheckJPXImageBehindOuterFilter(t *testing.T) {
 			data:   flateEncoded(t, codestream),
 		},
 		{
-			// The comment above names this chain as issue11004.pdf's and the
-			// table did not carry it, so the case the file documents was the
-			// one case left unexercised. Measured when added: it already
-			// passed, so this is protection rather than a fix.
+			// The table did not carry this chain, so a documented case was
+			// left unexercised. Measured when added: it already passed, so
+			// this is protection rather than a fix.
 			name:   "behind ASCII85Decode",
 			filter: "[/ASCII85Decode /JPXDecode]",
 			data:   ascii85Encoded(t, codestream),

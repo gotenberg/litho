@@ -20,7 +20,7 @@ const maxFlattenedCodes = 1 << 16
 // mappings cannot exceed 100".
 const maxCIDRangeEntriesPerGroup = 100
 
-// maxCodeSpaceBytes is the widest code [FlattenUseCMap] rewrites. CIDCMap keys
+// maxCodeSpaceBytes is the widest code [FlattenUseCMap] rewrites. [CIDCMap] keys
 // codes by big-endian integer value, so a one-byte <41> and a two-byte <0041>
 // collide; requiring one width across the whole chain keeps the merged map
 // unambiguous.
@@ -109,8 +109,9 @@ func FlattenUseCMap(ctx context.Context, using []byte, bases [][]byte) ([]byte, 
 	out = append(out, stripGroups(using[anchor[1]:])...)
 
 	// The rewrite stands only if a reader sees exactly the mapping the chain
-	// produced. Anything less would silently unmap glyphs, and no corpus can
-	// catch that: a validator checks only that the reference is gone.
+	// produced. Anything less would silently unmap glyphs, and validating the
+	// output cannot catch that: a validator checks only that the reference is
+	// gone.
 	back, err := ParseCID(ctx, out)
 	if err != nil || !maps.Equal(back.Mapping, merged) {
 		return using, false, nil

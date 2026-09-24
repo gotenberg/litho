@@ -90,6 +90,18 @@ var markupAnnotationSubtypes = map[ast.PdfName]bool{
 	"Redact": true,
 }
 
+// checkAnnotationAltText validates PDF/UA-1 §7.18.1 t2: an annotation that is
+// not a Widget, not hidden and not outside the crop box carries a non-empty
+// /Contents, or its enclosing structure element carries a non-empty /Alt. It
+// reports nothing under PDF/UA-2, which keys descriptions per subtype.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-3-2-t01-fail-b: its Link, remediated to PDF/UA-1, carries
+//     neither /Contents nor an enclosing-element /Alt, and veraPDF reports it
+//     live, so a Link is not exempt.
+//   - litho annotstruct_ua2: its two Popups carry a /Parent and no /Contents,
+//     and veraPDF reports the rule on both.
 func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	// PDF/UA-2 has no generic "markup annotation needs Contents/Alt" rule: it
 	// keys alternate descriptions per annotation subtype (§8.9.2.4.x, handled by
@@ -145,20 +157,19 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 			// Widget annotations are excluded from this check. Link is NOT
 			// excluded under PDF/UA-1: ISO 14289-1 §7.18.1 t2 exempts only
 			// Widget/hidden/out-of-cropbox, so a Link lacking both /Contents
-			// and an enclosing-element /Alt fails (verified live on the Link in
-			// 6-3-2-t01-fail-b remediated to PDF/UA-1). Under PDF/UA-2 the
-			// markup-subtype filter below still exempts Link (not a markup type).
+			// and an enclosing-element /Alt fails, and veraPDF reports it. Under
+			// PDF/UA-2 the markup-subtype filter below still exempts Link (not a
+			// markup type).
 			if subtype == "Widget" {
 				continue
 			}
 			// A Popup is not exempt, with or without a /Parent. ISO 14289-1
 			// §7.18.1 t2 exempts only Widget, hidden and out-of-cropbox
-			// annotations, and veraPDF follows the clause: measured on
-			// annotstruct_ua2, whose two Popups carry a /Parent, carry no
-			// /Contents and both draw the rule. litho used to treat a parented
-			// Popup as inheriting its parent's content, which the clause does
-			// not say. Under PDF/UA-2 the markup-subtype filter below still
-			// exempts every Popup (Popup is not a markup type).
+			// annotations, and veraPDF follows the clause: it reports a Popup
+			// that carries a /Parent and no /Contents. litho used to treat a
+			// parented Popup as inheriting its parent's content, which the
+			// clause does not say. Under PDF/UA-2 the markup-subtype filter
+			// below still exempts every Popup (Popup is not a markup type).
 
 			// ISO 14289-2 §8.9.2.3 covers markup annotations only, so a
 			// non-markup subtype is out of its scope. A /Contents-less
@@ -175,7 +186,7 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 			}
 
 			// ISO 14289-1 §7.18.1 t2: a non-empty /Contents, or a non-empty /Alt
-			// on the enclosing structure element ([hasNonEmptyStringKey]).
+			// on the enclosing structure element (hasNonEmptyStringKey).
 			if hasNonEmptyStringKey(ctx, doc, annot, "Contents") {
 				continue
 			}
@@ -235,9 +246,9 @@ func checkAnnotContentsAltMatch(ctx context.Context, doc *document.Document, cat
 	return results
 }
 
-// checkWidgetAA validates that Widget annotations do not have /AA (additional actions)
-// entries. For PDF/UA-1, the presence of /AA on a Widget is forbidden per §7.18.
-// For PDF/UA-2, if /AA is present, the Widget must have a /Contents entry (§8.10.2.3 t02).
+// checkWidgetAA validates PDF/UA-2 §8.10.2.3 t02: a Widget annotation that
+// carries /AA (additional actions) must also carry a /Contents entry. PDF/UA-1
+// §7.18 has no Widget /AA rule, so it reports nothing under that profile.
 func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil {
@@ -294,13 +305,13 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 			// ISO 14289-2 §8.10.2.3 t02 applies to a widget linked into the
 			// structure tree and not enclosed by an Artifact: veraPDF gates it on
 			// structParentType == null || isArtifact, read through the structure
-			// parent tree ([annotStructScope]), so a bare /StructParent the
+			// parent tree (annotStructScope), so a bare /StructParent the
 			// parent tree does not map leaves the widget exempt.
 			if parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot); parent == nil || underArtifact {
 				continue
 			}
 			loc := fmt.Sprintf("page %d, widget annot %d", pageIdx+1, annotIdx)
-			// /Contents counts only as a string ([stringKeyPresent]): veraPDF
+			// /Contents counts only as a string (stringKeyPresent): veraPDF
 			// reports a widget whose /Contents is null or a name, measured.
 			if !stringKeyPresent(ctx, doc, annot, "Contents") {
 				results = append(results, Violation{

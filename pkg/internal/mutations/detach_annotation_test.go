@@ -181,10 +181,14 @@ func pendingCatalog(t *testing.T, ctx context.Context, doc *document.Document, a
 // /AF entry naming it.
 //
 // ISO 32000-2, 14.13 associates a file with the document through /AF, and that
-// array may be the only route to it: pdfjs bug1937438_mml_from_latex.pdf
-// attaches two stylesheets that way. Removing only the name tree left both in
-// the output while detach reported success, the same silent failure the
-// FileAttachment route had.
+// array may be the only route to it. Removing only the name tree left such a
+// file in the output while detach reported success, the same silent failure
+// the FileAttachment route had.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1937438_mml_from_latex.pdf: attaches two stylesheets through
+//     /AF only, and removing only the name tree left both in the output.
 func TestDetachRemovesAnAssociatedFile(t *testing.T) {
 	t.Parallel()
 

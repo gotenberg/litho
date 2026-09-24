@@ -67,12 +67,6 @@ func WithEncryption(cfg EncryptConfig) WriteOption {
 	}
 }
 
-// internalEncrypt translates the requested encryption into the internal
-// config the write engine consumes, or nil when none was requested.
-//
-// Converting here is what lets [Split] and [Merge] hand the value straight to
-// the mutations layer while [crypto.EncryptConfig] stays out of every public
-// signature.
 // compactOptions maps the public write options onto the mutations layer's
 // compaction selector, keeping that internal type out of every public
 // signature the same way [writeOpts.internalEncrypt] does.
@@ -83,6 +77,12 @@ func (o writeOpts) compactOptions() mutations.CompactOptions {
 	}
 }
 
+// internalEncrypt translates the requested encryption into the internal
+// config the write engine consumes, or nil when none was requested.
+//
+// Converting here is what lets [Split] and [Merge] hand the value straight to
+// the mutations layer while [crypto.EncryptConfig] stays out of every public
+// signature.
 func (o writeOpts) internalEncrypt() *crypto.EncryptConfig {
 	if o.encrypt == nil {
 		return nil
@@ -296,9 +296,10 @@ type RemediationReport struct {
 	// kept in the output.
 	Fixed []string
 	// Residual contains violations that could not be fixed automatically.
-	// Each element is a compliance.Violation. If content-modifying fixers
-	// were rolled back, the violations they had claimed to handle move back
-	// here.
+	// Each element is a compliance.Violation, and
+	// [RemediationReport.ResidualViolations] returns them as structured
+	// [Violation] values. If content-modifying fixers were rolled back, the
+	// violations they had claimed to handle move back here.
 	//
 	// A non-empty Residual does not stop the output from ASSERTING the
 	// profile. The identification schemas are themselves requirements
@@ -374,7 +375,7 @@ type BookmarkOptions struct {
 	PromoteOrphanChildren bool
 
 	// WrapEachSource wraps each source's bookmarks under a per-source
-	// container labeled by [SourceLabels] (Merge only).
+	// container labeled by [BookmarkOptions.SourceLabels] (Merge only).
 	WrapEachSource bool
 	// SourceLabels provides custom labels for the WrapEachSource roots.
 	// Missing entries fall back to "Document N".
@@ -464,7 +465,7 @@ func NewTTFFont(data []byte) (StampFont, error) {
 		return StampFont{}, fmt.Errorf("%w: data too short (%d bytes)", ErrInvalidFont, len(data))
 	}
 	if err := mutations.ValidateTTFForStamp(data); err != nil {
-		// Wrap with the public sentinel. [ErrInvalidFont] is documented as
+		// Wrap with the public sentinel. ErrInvalidFont is documented as
 		// covering data that is "too short or structurally invalid", but only
 		// the length check above ever returned it: every parse failure came
 		// back as a bare string or as the internal truetype sentinel, so a
@@ -892,8 +893,9 @@ type EncryptConfig struct {
 	// still apply to viewers that enforce them.
 	UserPassword string
 	// OwnerPassword grants full access. Writers should pick a different
-	// value from [UserPassword]; callers that supply identical passwords
-	// get the same effective permissions as an empty-user-password doc.
+	// value from [EncryptConfig.UserPassword]; callers that supply identical
+	// passwords get the same effective permissions as an
+	// empty-user-password doc.
 	OwnerPassword string
 	// Algorithm selects the standard security handler variant.
 	Algorithm EncryptAlgorithm
@@ -1519,6 +1521,21 @@ func evaluateRegression(baseline, post integritySnap, tol RegressionTolerance) s
 	return ""
 }
 
+// remediate runs one remediation engine against the document as the caller
+// has staged it, then gates the result: it serializes and reopens the output,
+// revalidates it, and compares its integrity with the staged baseline. A
+// regression rolls back the content-tier fixers when they left a snapshot, and
+// fails with [ErrRemediationBrokePDF], restoring the Writer, when there is none
+// or the rollback does not recover the output. A clean result runs further
+// rounds, up to maxRemediationRounds, while residuals remain and each round
+// still fixes something.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-1-7-1-t01-fail-a: carries a defect whose sole symptom is a
+//     parser-level format violation. With the object cache still warm from
+//     the baseline probe, remediation skipped it and over-reported the file as
+//     fixed.
 func (w *Writer) remediate(
 	ctx context.Context,
 	tol RegressionTolerance,
@@ -1563,7 +1580,7 @@ func (w *Writer) remediate(
 	// nothing. Clear the caches here so run()'s validation re-parses under
 	// compliance mode and sees a defect whose sole symptom is a format
 	// violation. Otherwise remediation silently skips it and over-reports the
-	// file as fixed (verapdf-corpus 6-1-7-1-t01-fail-a).
+	// file as fixed.
 	doc.ClearCaches()
 
 	// Apply whatever an earlier pipeline stage queued before the fixers run,
@@ -1809,9 +1826,14 @@ func dedupeFixes(fixes []string) []string {
 }
 
 // maxRemediationRounds bounds the fix-to-fixpoint loop, counting the main
-// pass as round one. Anti-livelock guard, not spec-mandated: two extra
-// rounds resolve every fixer-enables-fixer chain the corpus exhibits, and
-// a fixer oscillation must terminate instead of looping.
+// pass as round one. Anti-livelock guard, not spec-mandated: a fixer
+// oscillation must terminate instead of looping, and two extra rounds cover
+// the fixer-enables-fixer chains real documents exhibit.
+//
+// # Corpus evidence
+//
+//   - All corpora: two extra rounds resolve every fixer-enables-fixer chain
+//     the corpora exhibit.
 const maxRemediationRounds = 3
 
 // remediationRound reopens the serialized output at path and runs the
@@ -1992,7 +2014,7 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 		o(&cfg)
 	}
 	// Before the guard below, never after. The guard reads w.encryptCfg, so
-	// applying [WithEncryption] later would let Sign + WithEncryption past it
+	// applying WithEncryption later would let Sign + WithEncryption past it
 	// and silently drop one of the two.
 	if internal := cfg.internalEncrypt(); internal != nil {
 		w.encryptCfg = internal
@@ -2041,10 +2063,6 @@ func copySourceCancellable(ctx context.Context, dst io.Writer, src io.ReaderAt, 
 	return ctx.Err()
 }
 
-// writeToInternal performs the serialization. [Writer.WriteTo] wraps it
-// with the single-use guard and the sign/full-rewrite compatibility
-// check. Remediation calls this directly so its internal probe writes
-// do not trip the single-use guard before the caller's real WriteTo.
 // writeBufferSize is the buffer [Writer.writeToInternal] wraps its destination
 // in. It is a throughput choice, not a limit: the serializer writes a few bytes
 // at a time, so the buffer decides how many of those become one syscall. 64 KiB
@@ -2052,14 +2070,27 @@ func copySourceCancellable(ctx context.Context, dst io.Writer, src io.ReaderAt, 
 // amount regardless of document size.
 const writeBufferSize = 64 << 10
 
+// writeToInternal performs the serialization. [Writer.WriteTo] wraps it
+// with the single-use guard and the sign/full-rewrite compatibility
+// check. Remediation calls this directly so its internal probe writes
+// do not trip the single-use guard before the caller's real WriteTo.
+//
+// # Corpus evidence
+//
+//   - govdocs: write syscalls were 30% of a remediate run against an
+//     unbuffered destination, since each round serializes the document to a
+//     temp file to revalidate it.
+//   - pdfjs bug1708041.pdf: came out of
+//     `litho pipe f remediate -profile PDF/A-2b rotate -angle 90` with no
+//     rotation on any page while the remediation overrides were seeded after
+//     the queued mutations, which let them win at the same object number.
 func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...WriteOption) (err error) {
 	// The serializer emits a write per token: a dictionary key, a delimiter, a
 	// number. Against an unbuffered destination every one of those is a
-	// syscall, which dominated remediation (write syscalls were 30% of a
-	// govdocs remediate, since each round serializes the document to a temp
-	// file to revalidate it). Buffer here rather than at each call site so the
-	// public [Writer.WriteTo] gets it too: a caller passing an *os.File is the
-	// common case and would otherwise pay the same cost.
+	// syscall, which dominated remediation, since each round serializes the
+	// document to a temp file to revalidate it. Buffer here rather than at each
+	// call site so the public Writer.WriteTo gets it too: a caller passing an
+	// *os.File is the common case and would otherwise pay the same cost.
 	buffered := bufio.NewWriterSize(dst, writeBufferSize)
 	defer func() {
 		if flushErr := buffered.Flush(); flushErr != nil && err == nil {
@@ -2113,10 +2144,10 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 	// where conforming readers expect ciphertext and decrypt them into
 	// garbage. Force a full rewrite in all three cases: it re-derives
 	// every offset, drops pre-header junk, and copies the decrypted
-	// object graph without /Encrypt (use [Writer.Encrypt] to re-protect).
+	// object graph without /Encrypt (use Writer.Encrypt to re-protect).
 	// A write with no edits stays a byte-identical pass-through, and the
 	// signing path below is exempt: it is structurally incremental, and
-	// [Writer.WriteTo] rejects unsafe sign combinations.
+	// Writer.WriteTo rejects unsafe sign combinations.
 	hasEdits := len(w.mutations) > 0 || w.trailerDirty || len(w.rewriteOverrides) > 0 ||
 		w.encryptCfg != nil || w.decrypt
 	if hasEdits && w.signer == nil {
@@ -2245,15 +2276,13 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 	// AllocAt with the same keys lands correctly.
 	//
 	// Seeding them last let them win at the same object number, which silently
-	// dropped whatever the caller asked for. pdfjs bug1708041.pdf came out of
-	// `litho pipe f remediate -profile PDF/A-2b rotate -angle 90` with no
-	// rotation on any page. The full-rewrite branch above orders it the same way
-	// for the same reason.
+	// dropped whatever the caller asked for, such as a rotation queued after
+	// remediation. The full-rewrite branch above orders it the same way for the
+	// same reason.
 	for objNum, obj := range w.rewriteOverrides {
 		alloc.AllocAt(objNum, obj)
 	}
 
-	// Apply all batched mutations.
 	for i, m := range w.mutations {
 		if err := m.apply(ctx, alloc, doc); err != nil {
 			return fmt.Errorf("applying mutation %d: %w", i, err)
@@ -2273,7 +2302,6 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 		slog.Int("pending_objects", len(alloc.Pending())),
 	)
 
-	// Find the original startxref offset.
 	startXRef, err := document.FindStartXRef(doc.RawReader(), doc.FileSize())
 	if err != nil {
 		return fmt.Errorf("finding startxref: %w", err)

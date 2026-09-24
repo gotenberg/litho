@@ -9,10 +9,14 @@ import (
 )
 
 // TestWidthValue_ResolvesIndirectReference pins that a width-array entry stored
-// as an indirect reference (ISO 32000-1 §7.3.10 — legal inside /Widths and /W)
+// as an indirect reference (ISO 32000-1 §7.3.10, legal inside /Widths and /W)
 // is resolved. [document.Float] cannot chase references, so it reads such an
-// entry as 0, which fired a spurious glyph-width mismatch (pdfjs issue7855:
-// /Widths held `9 0 R` = 229 for char 105, litho read 0.0, veraPDF resolved it).
+// entry as 0, which fired a spurious glyph-width mismatch.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7855: /Widths held `9 0 R` = 229 for char 105. litho read
+//     0.0, and veraPDF resolved it.
 func TestWidthValue_ResolvesIndirectReference(t *testing.T) {
 	ctx := context.Background()
 	// obj1 catalog, obj2 page, obj3 = the width value 229.
@@ -24,7 +28,7 @@ func TestWidthValue_ResolvesIndirectReference(t *testing.T) {
 
 	ref := ast.PdfIndirectRef{ObjectNum: 3}
 
-	// Plain Float cannot resolve the reference — this is the defect.
+	// Plain Float cannot resolve the reference: this is the defect.
 	if got := document.Float(ref); got != 0 {
 		t.Errorf("document.Float(ref) = %v, want 0 (Float cannot resolve; the bug widthValue fixes)", got)
 	}

@@ -7,11 +7,15 @@ import "testing"
 //
 // ISO 32000-1, 7.9.4 defines the value as D:YYYYMMDDHHmmSSOHH'mm, every field
 // two digits. A producer writing a shorter field leaves each slice straddling
-// the next separator: pdfjs issue18122.pdf carries "D:202403083:4:5 ", whose
-// hour slice is "3:", and litho injected xmp:CreateDate "2024-03-08T3::4::5 Z"
-// -- well-formed XMP holding an invalid Date, which ISO 19005-1 6.7.9 test 3
-// reports. Writing a wrong date is worse than leaving the property absent, and
-// the caller skips the sync on an empty return.
+// the next separator, and copying the slices through yields well-formed XMP
+// holding an invalid Date, which ISO 19005-1 6.7.9 test 3 reports. Writing a
+// wrong date is worse than leaving the property absent, and the caller skips
+// the sync on an empty return.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18122.pdf: carries "D:202403083:4:5 ", whose hour slice is
+//     "3:", and litho injected xmp:CreateDate "2024-03-08T3::4::5 Z".
 func TestPDFDateToXMPRejectsMalformedFields(t *testing.T) {
 	t.Parallel()
 

@@ -43,14 +43,20 @@ type Page struct {
 // A page whose reference carries a generation above zero is also recorded under
 // generation zero. [Document.Resolve] matches on the object number alone (see
 // [Document.xrefEntry] for why), so a reference litho happily resolves to a page
-// has to find that page here too. govdocs thread_400_400594.pdf holds page 12 as
-// "40 2 R" and sends eight outline entries to "40 0 R": the reference resolved,
-// the lookup missed, and every one of those bookmarks reported no page while
-// remediating the same file produced a working outline.
+// has to find that page here too. Without the alias, a destination naming the
+// page under the wrong generation resolves but misses the lookup, and the
+// bookmark reports no page.
 //
 // A document that genuinely reuses an object number for two pages would collide
 // here, and the first page wins. The page tree lists each page once
 // (ISO 32000-1, 7.7.3.2), so that shape is already malformed.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400594.pdf: holds page 12 as "40 2 R" and sends eight
+//     outline entries to "40 0 R". The reference resolved, the lookup missed,
+//     and every one of those bookmarks reported no page while remediating the
+//     same file produced a working outline.
 func BuildPageMap(pages []*Page) map[ast.PdfIndirectRef]int {
 	m := make(map[ast.PdfIndirectRef]int, len(pages))
 	for i, p := range pages {
@@ -118,14 +124,14 @@ func (d *Document) CatalogRef(ctx context.Context) (ast.PdfIndirectRef, bool) {
 			return rootRef, true
 		}
 	}
-	// Pass 1: /Type /Catalog with a resolvable /Pages child.
+	// Prefer a /Type /Catalog with a resolvable /Pages child.
 	if ref, ok := scanForCatalogObjRef(ctx, d, func(dict ast.PdfDict) bool {
 		typeName, _ := ResolveName(ctx, d, dict["Type"]) //nolint:errcheck // a malformed /Type just means "not a catalog".
 		return typeName == "Catalog" && catalogHasPages(ctx, d, dict)
 	}); ok {
 		return ref, true
 	}
-	// Pass 2: any dict with a resolvable /Pages child.
+	// Fall back to any dict with a resolvable /Pages child.
 	return scanForCatalogObjRef(ctx, d, func(dict ast.PdfDict) bool {
 		return catalogHasPages(ctx, d, dict)
 	})
@@ -189,7 +195,7 @@ func catalogHasPages(ctx context.Context, doc *Document, catalog ast.PdfDict) bo
 // The scan is bounded by the xref size and only pays its cost on the
 // error path.
 func scanForCatalog(ctx context.Context, doc *Document) ast.PdfDict {
-	// Pass 1: /Type /Catalog with /Pages child.
+	// Most confident: /Type /Catalog with a /Pages child.
 	if dict := scanObjects(ctx, doc, func(d ast.PdfDict) bool {
 		// Silent error: a missing or malformed /Type just means the
 		// candidate is not a catalog. Move on.
@@ -198,13 +204,13 @@ func scanForCatalog(ctx context.Context, doc *Document) ast.PdfDict {
 	}); dict != nil {
 		return dict
 	}
-	// Pass 2: any dict with a resolvable /Pages child.
+	// Any dict with a resolvable /Pages child.
 	if dict := scanObjects(ctx, doc, func(d ast.PdfDict) bool {
 		return catalogHasPages(ctx, doc, d)
 	}); dict != nil {
 		return dict
 	}
-	// Pass 3: Pages root with no catalog above it. Synthesise one.
+	// Pages root with no catalog above it. Synthesise one.
 	pagesRef := findPagesRoot(ctx, doc)
 	if pagesRef != (ast.PdfIndirectRef{}) {
 		return ast.PdfDict{"Type": ast.PdfName("Catalog"), "Pages": pagesRef}
@@ -380,26 +386,38 @@ func ResolvePages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page
 	return pages, nil
 }
 
-// maxPageTreeDepth caps recursion so a malformed document with a
-// self-referential /Kids chain cannot exhaust the goroutine stack. Anti-DoS
-// guard, not spec-mandated: ISO 32000-1, 7.7.3.2 makes the page tree a strict
-// tree and real PDFs never nest one more than a handful of levels. Measured
-// over the integration corpus: 5170 of its 5171 files parse, and the deepest
-// page tree among them is 4.
+// maxPageTreeDepth caps recursion so a self-referential /Kids chain cannot
+// exhaust the goroutine stack. Anti-DoS guard, not spec-mandated: ISO
+// 32000-1, 7.7.3.2 makes the page tree a strict tree.
 //
 // This is the home note for the bound. Two other packages cap the same /Kids
 // descent at 100: compliance/check.go (collectPagesRecursive) and
 // remediation/fixer_annotations.go (collectPageRefs and its siblings). They
 // bound THE SAME structure for the same purpose, so the spread is a real
 // inconsistency rather than loose wording: a page tree nested 101 to 256 deep
-// would be traversed here and silently truncated there. No corpus file nests
-// deeper than 100, so the spread is unreachable, which is why the values are
+// would be traversed here and silently truncated there. Real documents never
+// nest that deep, so the spread is unreachable, which is why the values are
 // documented rather than realigned; changing one would alter behaviour for no
 // measured reason. If they are ever unified, bind by reference rather than
 // copying the number, the way remediation/fixer_lang.go takes
 // compliance.MaxStructTreeWalkDepth.
+//
+// # Corpus evidence
+//
+//   - All corpora: 5170 of 5171 files parse, and the deepest page tree is 4.
+//   - All corpora: no file nests deeper than 100, so the gap with the
+//     compliance and remediation caps is never reached.
 const maxPageTreeDepth = 256
 
+// traversePageTree walks one page tree node, applying inherited attributes,
+// and appends each leaf page to pages.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200147.pdf: the page tree root states /XObject
+//     <</Im11 ...>> while most pages state a /Resources holding only /Font
+//     and /ColorSpace, so the /Resources merge reports Im11 on every page
+//     and qpdf reports it only on the first.
 func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, nodeRef ast.PdfIndirectRef, inheritedResources ast.PdfDict, inheritedMediaBox, inheritedCropBox ast.PdfArray, inheritedRotate int, pages *[]*Page, visited, done map[int]bool, depth int) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("page tree traversal canceled: %w", err)
@@ -435,10 +453,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 	// that is what qpdf implements: it pushes an ancestor's /Resources onto a
 	// page only when the page states none. The merge instead keeps a page whose
 	// own dictionary is partial working, at the cost of listing a resource the
-	// page cannot legally name. govdocs thread_200_200147.pdf is the shape that
-	// separates the two: its page tree root states /XObject <</Im11 ...>> while
-	// most of its pages state a /Resources holding only /Font and /ColorSpace,
-	// so litho reports Im11 on every page and qpdf on only the first.
+	// page cannot legally name.
 	currentResources := mergeResourceDicts(ctx, doc, inheritedResources, node)
 
 	// Inherit or override MediaBox
@@ -592,10 +607,13 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 //
 // ISO 32000-1, 14.11.2 requires the crop box to lie within the media box, so a
 // producer that writes one larger than the page describes a region that does not
-// exist. Taking it verbatim overstated the page: govdocs thread_200_200062
-// declares a 612x792 media box and a 614x794 crop box, and litho answered
-// 614x794 where poppler answers 612x792. The size feeds stamp placement and
-// clipping, so the overstatement is not only cosmetic.
+// exist. Taking it verbatim overstates the page. The size feeds stamp placement
+// and clipping, so the overstatement is not only cosmetic.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_200_200062: declares a 612x792 media box and a 614x794 crop
+//     box. Taken verbatim, litho answered 614x794 where poppler answers 612x792.
 func clampToMediaBox(crop, media ast.PdfArray) ast.PdfArray {
 	if len(crop) != 4 {
 		return media
@@ -753,12 +771,16 @@ func resolveBoxArray(ctx context.Context, doc *Document, dict ast.PdfDict, key a
 //
 // ISO 32000-1, 7.3.9 permits an indirect reference wherever a direct object may
 // appear, including inside an array, and producers do write rectangles that
-// way: pdfjs issue7872.pdf declares /MediaBox [4 0 R 5 0 R 6 0 R 7 0 R]. Read
-// verbatim those coordinates are references rather than numbers, so the page
-// measured 0 by 0.
+// way. Read verbatim, such coordinates are references rather than numbers, so
+// the page measures 0 by 0.
 //
 // The array is copied only when an element needs resolving, so the ordinary
 // rectangle keeps its backing array.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7872.pdf: declares /MediaBox [4 0 R 5 0 R 6 0 R 7 0 R], and
+//     read verbatim the page measured 0 by 0.
 func ResolveRectangle(ctx context.Context, doc *Document, arr ast.PdfArray) ast.PdfArray {
 	indirect := false
 	for _, elem := range arr {

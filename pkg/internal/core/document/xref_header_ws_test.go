@@ -14,8 +14,13 @@ import (
 // ISO 19005-2 §6.1.9 t1 and ISO 19005-4 §6.1.8 t1 ask for "a single white-space
 // character" between the object number, the generation number and the obj
 // keyword, and ISO 32000-1, Table 1 names six of them. litho required a space,
-// so pdfjs colors.pdf, which writes every header as "3\n0\nobj", was reported
-// twice per object where veraPDF reports nothing.
+// so a file writing every header with newline separators was reported twice
+// per object.
+//
+// # Corpus evidence
+//
+//   - pdfjs colors.pdf: writes every header as "3\n0\nobj" and was reported
+//     twice per object where veraPDF reports nothing.
 func TestValidateObjectHeaderFormat_WhiteSpaceSeparator(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

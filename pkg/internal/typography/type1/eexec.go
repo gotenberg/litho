@@ -86,9 +86,13 @@ func normaliseEexec(data []byte) []byte {
 // begins with a random salt, so a payload whose first four bytes are all
 // hexadecimal digits is hex and any other is binary. Reading one byte is not
 // enough, because a binary salt byte is a hexadecimal digit better than one
-// time in twelve: govdocs thread_300_300035.pdf starts its binary section with
-// 0x32 ('2'), which made litho hex-decode the cipher text into noise and read
-// no glyph at all from the program.
+// time in twelve.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300035.pdf: starts its binary section with 0x32
+//     ('2'), which made litho hex-decode the cipher text into noise and
+//     read no glyph at all from the program.
 func isHexEncoded(data []byte) bool {
 	const probe = 4
 	seen := 0

@@ -99,7 +99,7 @@ func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, c
 }
 
 // checkFormatViolations maps the parser-level format violations collected
-// during resolveAllObjects onto rules. These include hex string format issues
+// during [resolveAllObjects] onto rules. These include hex string format issues
 // (§6.1.6) and object header format issues (§6.1.8/§6.1.9) detected by the
 // parser when ComplianceMode is enabled.
 //
@@ -212,12 +212,9 @@ func streamEOLRule(profile string) Rule {
 	}
 }
 
-// isStreamEOLViolation reports whether a format-violation message describes the
-// stream keyword not being followed by a valid EOL, as opposed to a /Length
-// defect (which keeps the t01 attribution).
 // isStreamLengthMismatch reports the parser message for a declared /Length that
 // disagrees with the bytes found. It deliberately does not match "stream missing
-// /Length key": checkStreamLengths skips a stream with no /Length, so that one
+// /Length key": [checkStreamLengths] skips a stream with no /Length, so that one
 // still has to come through here.
 func isStreamLengthMismatch(msg string) bool {
 	b := []byte(msg)
@@ -225,6 +222,9 @@ func isStreamLengthMismatch(msg string) bool {
 		bytes.Contains(b, []byte("does not match actual byte count"))
 }
 
+// isStreamEOLViolation reports whether a format-violation message describes the
+// stream keyword not being followed by a valid EOL, as opposed to a /Length
+// defect (which keeps the t01 attribution).
 func isStreamEOLViolation(msg string) bool {
 	b := []byte(msg)
 	return bytes.Contains(b, []byte("stream keyword")) &&

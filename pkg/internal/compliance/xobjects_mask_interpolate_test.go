@@ -11,10 +11,14 @@ import (
 //
 // ISO 19005-2 §6.2.8 t3 forbids /Interpolate true on an image dictionary, and
 // veraPDF builds a PDSMaskImage for /SMask and states the rule against it.
-// govdocs thread_400_400019.pdf carries 72 images with /Interpolate true, of
-// which 15 are reached only as a /SMask: veraPDF reported 72 and litho 57,
-// because the XObject walk descended into Form XObjects but never into an
-// image's masks. Fixtures confirm veraPDF states it for /Mask as well.
+// The XObject walk descended into Form XObjects but never into an image's
+// masks. Fixtures confirm veraPDF states it for /Mask as well.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400019.pdf: carries 72 images with /Interpolate
+//     true, of which 15 are reached only as a /SMask. veraPDF reported 72 and
+//     litho 57 before the walk descended into masks.
 func TestMaskImageInterpolateJudged(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

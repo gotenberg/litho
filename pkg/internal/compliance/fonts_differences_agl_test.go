@@ -108,8 +108,13 @@ func TestNonSymbolicTrueTypeDifferencesListed(t *testing.T) {
 // TestNonSymbolicTrueTypeEncodingReportedOnce pins that ISO 19005-2, 6.2.11.6
 // t2 and ISO 19005-1, 6.3.7 t1 are stated once per font: veraPDF tests one
 // expression per font, so a dictionary whose missing /BaseEncoding and whose
-// /Differences both fail it counts one finding, as on pdfjs issue215.pdf.
-// Every case was measured against veraPDF.
+// /Differences both fail it counts one finding. Every case was measured against
+// veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue215.pdf: its missing /BaseEncoding and its /Differences both
+//     fail the rule, and veraPDF counts one finding.
 func TestNonSymbolicTrueTypeEncodingReportedOnce(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

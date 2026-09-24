@@ -17,11 +17,15 @@ import (
 // Per ISO 32000-1, Table 114, an absent /BaseEncoding makes /Differences
 // describe differences from an implicit base encoding, which for an embedded
 // font program is that program's own built-in encoding. Reading only
-// /Differences drops every code the array does not name: govdocs
-// thread_000_000364.pdf lists just codes 9, 10, 13, 127 and 128 there and
-// leaves every printing code to the CFF, so the shown codes resolved to no
-// glyph and the width check (ISO 19005-2 §6.2.11.5) stayed silent on a font
-// veraPDF reports.
+// /Differences drops every code the array does not name, so the shown codes
+// resolve to no glyph and the width check (ISO 19005-2 §6.2.11.5) stays silent
+// on a font veraPDF reports.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000364.pdf: lists just codes 9, 10, 13, 127 and 128
+//     in /Differences and leaves every printing code to the CFF, and veraPDF
+//     reports the font litho left unjudged.
 func TestResolveSimpleFontEncoding_ImplicitBaseEncoding(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

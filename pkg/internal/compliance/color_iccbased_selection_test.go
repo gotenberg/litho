@@ -64,14 +64,18 @@ func iccSelectionCellPDF(cellOps string) []string {
 //
 // A colour space merely declared in /Resources/ColorSpace is used by nothing,
 // and veraPDF 1.30.2 reports nothing for one. Judging a nested scope's whole
-// colour-space dictionary reported a profile the file never employs, which
-// showed up as a false positive on a real file (see
+// colour-space dictionary reported a profile the file never employs (see
 // [TestSeparationDeclaredButUnselectedInsideForm] for the same shape in the
 // Separation scan).
 //
 // Each scope was measured separately: a form the page invokes, an annotation
 // appearance stream, and a tiling pattern cell. The selecting case runs in the
 // same shape so the silent one cannot pass for want of a profile to find.
+//
+// # Corpus evidence
+//
+//   - All corpora: judging a nested scope's whole colour-space dictionary
+//     showed up as a false positive on a real file.
 func TestICCBasedNestedColorSpaceNeedsSelecting(t *testing.T) {
 	t.Parallel()
 

@@ -23,8 +23,9 @@ func dingbatsFont(baseFont string) ast.PdfDict {
 //
 // Measured with -coverpkg across the whole module: BuildSymbolEncoding read
 // 83.3% and BuildZapfDingbatsEncoding 0.0%. The two sit on ADJACENT arms of the
-// same switch, twice (font.go:343/345 and font.go:663/665), so the Symbol case
-// was exercised while the dingbats case never was. A per-package profile hides
+// same switch, twice (the default-encoding selection in [ResolveFont] and the
+// /Differences overlay in [resolveEncoding]), so the Symbol case was exercised
+// while the dingbats case never was. A per-package profile hides
 // this entirely, reporting both as 0.0%, because the callers live in
 // typography while the builders live in typography/encodings.
 //

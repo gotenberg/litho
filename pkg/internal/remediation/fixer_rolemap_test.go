@@ -130,12 +130,16 @@ func TestFixRoleMap_DropsStandardSourceAndSelfLoop_NonNamespaced(t *testing.T) {
 	}
 }
 
-// TestFixRoleMap_CycleRemapAvoidsOrphan pins the fix for verapdf-corpus
-// 7.1-t05-fail-d: a non-namespaced 2-cycle A<->B, where B is also targeted by
-// the cycle. Dropping the edge that closes the cycle would leave the other entry
-// pointing at an unmapped name (ISO 14289-1 §7.1 t5). The fix remaps the closing
-// source to P so every entry terminates at a standard type. Title, non-standard
-// under PDF/UA-1, keeps its mapping.
+// TestFixRoleMap_CycleRemapAvoidsOrphan pins the repair of a non-namespaced
+// 2-cycle A<->B, where B is also targeted by the cycle. Dropping the edge that
+// closes the cycle would leave the other entry pointing at an unmapped name
+// (ISO 14289-1 §7.1 t5). The fix remaps the closing source to P so every entry
+// terminates at a standard type. Title, non-standard under PDF/UA-1, keeps its
+// mapping.
+//
+// # Corpus evidence
+//
+//   - verapdf 7.1-t05-fail-d: carries this 2-cycle.
 func TestFixRoleMap_CycleRemapAvoidsOrphan(t *testing.T) {
 	data := roleMapPDF("<< /A /B /B /A /Title /P >>", false)
 	doc, alloc := newTestDoc(t, data)

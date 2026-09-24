@@ -227,7 +227,7 @@ func TestDiffBaseline_MissingFeature(t *testing.T) {
 }
 
 // TestDiffBaseline_NewCorpus: corpora that appear in the current run
-// but not the baseline are silent — the baseline owns the surface,
+// but not the baseline are silent: the baseline owns the surface, and
 // new corpora are noise until promoted.
 func TestDiffBaseline_NewCorpus(t *testing.T) {
 	t.Parallel()

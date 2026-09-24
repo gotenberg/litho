@@ -28,6 +28,11 @@ func matchDeviceNColorants(v compliance.Violation) bool {
 // degenerate Type 2 function. That keeps the document compliant without
 // altering visible output beyond what the existing tint transform
 // already produced.
+//
+// # Corpus evidence
+//
+//   - All corpora: inventing a degenerate transform for a name already
+//     defined elsewhere traded test 1 for test 2 on four corpus files.
 func fixDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -49,7 +54,7 @@ func fixDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	// document already uses for that ink: ISO 19005-2, 6.2.4.4 test 2 requires
 	// every Separation of the same name to share an alternate space and a tint
 	// transform. Inventing a degenerate transform for a name already defined
-	// elsewhere traded test 1 for test 2 on four corpus files.
+	// elsewhere trades test 1 for test 2.
 	canon := make(map[ast.PdfName]ast.PdfArray)
 	for _, pe := range pageEntries {
 		collectSeparations(ctx, alloc, doc, pe, canon)

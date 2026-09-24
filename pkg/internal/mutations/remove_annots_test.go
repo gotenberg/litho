@@ -138,7 +138,7 @@ func TestRemoveRegionAnnotations_KidWidgetLeavesItsParentsKids(t *testing.T) {
 	// from the page alone would leave the field naming an annotation no page
 	// carries. Object 9 has exactly one kid, which is the common shape: roughly
 	// half the fields carrying /Kids have one. The field stays and loses the
-	// entry rather than being removed itself — it still states its name and
+	// entry rather than being removed itself: it still states its name and
 	// type, and its value is ScrubFormFieldValues' to clear.
 	doc, page := annotPageFixture(t, "[8 0 R]",
 		"8 0 obj\n<< /Type /Annot /Subtype /Widget /Rect [100 695 200 720] /Parent 9 0 R >>\nendobj\n"+

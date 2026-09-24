@@ -9,11 +9,15 @@ import (
 // /Limits are written as indirect references still resolves.
 //
 // ISO 32000-1, 7.3.10 lets any object be an indirect reference, and producers
-// take that literally: pdfjs issue6204.pdf writes its leaf /Names array as
-// [18 0 R 11 0 R 19 0 R 13 0 R], keeping each key in its own object. The key
-// comparison type-switched on the unresolved value, so every entry compared as
-// the empty string, nothing ever matched, and both of the file's links reported
-// no destination.
+// take that literally, keeping each key in its own object. The key comparison
+// type-switched on the unresolved value, so every entry compared as the empty
+// string and nothing ever matched.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue6204.pdf: writes its leaf /Names array as
+//     [18 0 R 11 0 R 19 0 R 13 0 R], and both of the file's links reported no
+//     destination.
 func TestResolveNamedDestIndirectKeys(t *testing.T) {
 	t.Parallel()
 

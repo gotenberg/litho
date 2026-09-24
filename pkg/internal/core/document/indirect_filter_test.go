@@ -15,9 +15,13 @@ import (
 // unless its table says otherwise, and Table 5 places no such restriction on
 // /Filter or /DecodeParms. The filter pipeline receives only the dictionary and
 // cannot resolve anything, so litho returned "invalid type for /Filter" and
-// decoded nothing: pdfjs bug1727053.pdf writes /Filter 3 0 R for a 751 KB
-// embedded TrueType program, which left the font unreadable and made litho
-// report the font as not embedded.
+// decoded nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1727053.pdf: writes /Filter 3 0 R for a 751 KB embedded
+//     TrueType program, which left the font unreadable and made litho report
+//     the font as not embedded.
 func TestDecodeStream_IndirectFilter(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

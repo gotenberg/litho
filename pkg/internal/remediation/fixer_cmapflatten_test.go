@@ -47,9 +47,12 @@ func cmapChainPDF() []byte {
 	)
 }
 
-// namedUseCMapPDF is the corpus shape of the Adobe-Korea1-2 carriers: an
-// embedded CMap whose /UseCMap is a NAME rather than a reference, so there is
-// no second stream to inline.
+// namedUseCMapPDF builds an embedded CMap whose /UseCMap is a NAME rather than
+// a reference, so there is no second stream to inline.
+//
+// # Corpus evidence
+//
+//   - All corpora: this is the shape of the Adobe-Korea1-2 carriers.
 func namedUseCMapPDF(useName string) []byte {
 	prog := chainCMapProgram("MyCMap", 0x0000, 0x00FF, 0)
 	return buildStructPDF(
@@ -80,8 +83,13 @@ func flattenedCMap(t *testing.T, alloc *writer.ObjAllocator) (ast.PdfStream, boo
 }
 
 // TestFixCMapFlatten_InlinesTheChain drives the fixer end to end and checks
-// what the corpus cannot: a validator is satisfied by the reference merely
+// what a validator cannot: a validator is satisfied by the reference merely
 // being gone, so only this asserts the mapping it contributed survived.
+//
+// # Corpus evidence
+//
+//   - All corpora: the corpus gate cannot check that the mapping survived,
+//     because a validator is satisfied by the reference merely being gone.
 func TestFixCMapFlatten_InlinesTheChain(t *testing.T) {
 	t.Parallel()
 
@@ -146,8 +154,13 @@ func TestFixCMapFlatten_InlinesTheChain(t *testing.T) {
 // mappings a reader uses, and dropping it would take them away. veraPDF cannot
 // tell the two apart: it is satisfied by the entry being gone either way, and
 // under ISO 19005-1, 6.3.3.3 it reports even the legitimate names. A fixer that
-// deleted every name would therefore score HIGHER on the corpus while
+// deleted every name would therefore score HIGHER against veraPDF while
 // corrupting files. Only this test separates them.
+//
+// # Corpus evidence
+//
+//   - All corpora: a fixer that deleted every name would score HIGHER on the
+//     corpus while corrupting files.
 func TestFixCMapFlatten_DropsOnlyAnUnresolvableUseCMapName(t *testing.T) {
 	t.Parallel()
 

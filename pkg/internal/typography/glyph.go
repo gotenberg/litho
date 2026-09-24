@@ -69,9 +69,9 @@ func processText(ctx context.Context, str ast.PdfString, font *Font, machine *gr
 		angle := math.Atan2(dirY, dirX)
 
 		// Unresolved single-byte glyphs (char == "") still get a
-		// [models.TextElement] so downstream layout code sees the
-		// width they occupy. [CoalesceElements] drops them before the
-		// public API returns, and [ReconstructText] treats them as
+		// models.TextElement so downstream layout code sees the
+		// width they occupy. CoalesceElements drops them before the
+		// public API returns, and ReconstructText treats them as
 		// phantom anchors for the gap heuristic without emitting
 		// characters or word boundaries.
 		*elements = append(*elements, models.TextElement{
@@ -165,7 +165,7 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 	}
 	if ok {
 		if n == 0 {
-			// [cmap.CMap.Map] reports at least one byte for a match, so
+			// cmap.CMap.Map reports at least one byte for a match, so
 			// this only fires if that contract ever breaks. Keep the
 			// floor the fallback paths below apply: processText advances
 			// by n and would not terminate on a zero.
@@ -199,7 +199,7 @@ func decodeNextChar(font *Font, data []byte) (char string, n int, skip bool) {
 		}
 	}
 
-	// Single-byte fallback paths. [Font.LigatureOverrides] is checked
+	// Single-byte fallback paths. Font.LigatureOverrides is checked
 	// before the regular encoding map because composite /Differences
 	// glyph names decompose to multi-rune strings that the byte→rune
 	// encoding cannot represent.
@@ -344,7 +344,7 @@ func resolveGlyphFallback(font *Font, data []byte, n *int) string {
 		// CIDFonts (Type0) feed 2-byte CIDs to the embedded font's
 		// GID→Unicode cmap. Single-byte simple fonts must not follow
 		// this path: their byte codes are char codes that need to go
-		// through [Font.Encoding] → glyph-name lookups, and treating
+		// through Font.Encoding → glyph-name lookups, and treating
 		// those bytes as raw GIDs resurrects ghost glyphs (e.g. byte
 		// 0x0D, which WinAnsiEncoding leaves unmapped, would resolve
 		// to whichever glyph happens to live at GID 13 in the embedded
@@ -356,7 +356,7 @@ func resolveGlyphFallback(font *Font, data []byte, n *int) string {
 			return string(r)
 		}
 		// Fall through to CIDIdentityFallback when a non-embedded font
-		// overlays a partial GID table via [stdfonts]: the table lists
+		// overlays a partial GID table via stdfonts: the table lists
 		// only the handful of extended-Latin positions that don't
 		// follow CID + 29, so GIDs missing from it should still go
 		// through the offset path instead of resolving to empty.

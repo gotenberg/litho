@@ -41,13 +41,16 @@ func versionedPDF(headerVersion, catalogVersion string) []byte {
 // ISO 32000-1, 7.5.2: the catalog /Version, if present, is used instead of the
 // header version, later or not. Table 28 describes only when a producer writes
 // the entry, so an earlier catalog version still wins on read. pdf.js resolves
-// it the same way ("return this.catalog.version || this.#version") and the
-// metadata golden for pdfjs PDFJS-9279-reduced.pdf, header 1.7 and catalog
-// /1.4, expects 1.4.
+// it the same way ("return this.catalog.version || this.#version").
 //
 // A /Version that is not a version number is ignored: pdf.js validates the
 // same shape and warns, and a caller matching the version against a profile
 // requirement can do nothing with a name like /Nonsense.
+//
+// # Corpus evidence
+//
+//   - pdfjs PDFJS-9279-reduced.pdf: header 1.7 and catalog /1.4, and its
+//     metadata golden expects 1.4.
 func TestCatalogVersionReplacesTheHeaderVersion(t *testing.T) {
 	t.Parallel()
 

@@ -19,10 +19,14 @@ import (
 // supply a glyph the encoding omits (ISO 32000-1, 9.6.6.2); this branch runs
 // exactly when no program is embedded.
 //
-// Measured on govdocs thread_000_000153.pdf: page 8 shows code 127 through an
-// unembedded NewYork declared /MacRomanEncoding, and veraPDF reports 7.21.8 t1
-// while litho stayed silent. The symbolic exemption is held alongside, since a
-// symbolic font resolves codes through its own built-in encoding.
+// The symbolic exemption is held alongside, since a symbolic font resolves
+// codes through its own built-in encoding.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000153.pdf: page 8 shows code 127 through an
+//     unembedded NewYork declared /MacRomanEncoding, and veraPDF reports
+//     7.21.8 t1 while litho stayed silent.
 func TestNotdefGlyph_DELIsUndefinedWithoutAProgram(t *testing.T) {
 	t.Parallel()
 

@@ -19,10 +19,15 @@ import (
 // every name survey in [checkToUnicode] passed such a font.
 //
 // The part split is measured, not assumed: veraPDF runs the same test
-// (`toUnicode != null` on a Glyph) in both profiles, yet on govdocs
-// thread_100_100601.pdf it reports the /a73 glyph at PDF/A-1a and passes it at
-// PDF/A-2u. Extending the carve-out past part 1 reported four files veraPDF
-// passes.
+// (`toUnicode != null` on a Glyph) in both profiles, yet reports such a glyph
+// at PDF/A-1a and passes it at PDF/A-2u.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100601.pdf: veraPDF reports the /a73 glyph at
+//     PDF/A-1a and passes it at PDF/A-2u.
+//   - All corpora: extending the carve-out past part 1 reported four files
+//     veraPDF passes.
 func TestToUnicodeZapfDingbatsPart1(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

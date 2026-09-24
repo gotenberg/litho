@@ -13,14 +13,23 @@ import (
 // matching the subtag grammar, with nothing trimmed and no byte dropped.
 // [document.DecodePdfString] drops an undefined PDFDocEncoding byte by design,
 // so a tag written "EN-US" plus a NUL reached the grammar as a legal "EN-US"
-// and four govdocs files went unreported: thread_100_100172, thread_100_100195,
-// thread_200_200961 and thread_300_300346, each of which veraPDF fails.
+// and went unreported.
 //
 // A BOM-prefixed value keeps its exemption from the byte test, because those
-// bytes are UTF-16 code units rather than PDFDocEncoding. veraPDF passes the
-// BOM'd "en-GB" of its own 6-8-4-t01-pass-f fixture, and a BOM'd value whose
-// payload really carries U+0000 still fails the grammar after decoding, which
-// is what already reports govdocs thread_000_000153 and thread_200_200295.
+// bytes are UTF-16 code units rather than PDFDocEncoding. veraPDF passes a
+// BOM'd "en-GB", and a BOM'd value whose payload really carries U+0000 still
+// fails the grammar after decoding.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100172, thread_100_100195, thread_200_200961,
+//     thread_300_300346: four files whose tag is "EN-US" plus a NUL went
+//     unreported, and veraPDF fails each of them.
+//   - verapdf 6-8-4-t01-pass-f: veraPDF passes the BOM'd "en-GB" of its own
+//     fixture.
+//   - govdocs thread_000_000153, thread_200_200295: a BOM'd value whose
+//     payload carries U+0000 already fails the grammar after decoding, which
+//     is what reports them.
 func TestPDFALangTagJudgedOnBytes(t *testing.T) {
 	t.Parallel()
 

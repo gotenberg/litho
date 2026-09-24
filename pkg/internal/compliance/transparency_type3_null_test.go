@@ -12,8 +12,12 @@ import (
 // painting a soft-masked image makes the page transparent. A Type3 procedure
 // draws XObjects from the font's own /Resources, and an image /SMask is
 // transparency wherever it is painted (ISO 32000-1 §11.6.5); veraPDF counts it
-// toward the page's containsTransparency for ISO 19005-2 §6.2.10 t2, as on
-// pdfjs issue10717.pdf whose /SMask images sit in the Type3 font resources.
+// toward the page's containsTransparency for ISO 19005-2 §6.2.10 t2.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue10717.pdf: its /SMask images sit in the Type3 font
+//     resources, and veraPDF counts them toward containsTransparency.
 func TestCheckType3FontTransparency_SoftMaskedImage(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -55,8 +59,12 @@ func TestCheckType3FontTransparency_SoftMaskedImage(t *testing.T) {
 // as no blending colour space. Per ISO 32000-1 §7.3.9 a reference to a
 // non-existent object is the null object, and per §7.3.7 a null-valued entry is
 // equivalent to an absent one, so a group pointing /CS at a free object still
-// owes ISO 19005-2 §6.2.10 t2 an answer. pdfjs issue11045.pdf does exactly
-// that, and veraPDF fails it.
+// owes ISO 19005-2 §6.2.10 t2 an answer.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11045.pdf: points its group /CS at a free object, and
+//     veraPDF fails it.
 func TestPageHasBlendingCS_NullCS(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

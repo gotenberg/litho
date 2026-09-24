@@ -7,11 +7,15 @@ package stdfonts
 // already handled by [typography.Font.CIDIdentityFallback] +
 // CIDOffset=29 in the per-glyph decoder.
 //
-// The table is intentionally partial: only positions the corpus
-// fixtures exercise appear here. Additions are additive: a missing
-// GID falls back to the CID-offset path and the caller emits the
-// raw codepoint, which at worst stays in the corpus diff but never
-// regresses correctly resolved files.
+// The table is intentionally partial. Additions are additive: a
+// missing GID falls back to the CID-offset path and the caller emits
+// the raw codepoint, which never regresses correctly resolved files.
+//
+// # Corpus evidence
+//
+//   - All corpora: only the positions the corpus fixtures exercise
+//     appear in the table, and a missing GID at worst stays in the
+//     corpus diff.
 var arialGIDToUnicode = map[uint16]rune{
 	// Smart quotes (General Punctuation).
 	179: 0x201C, // " LEFT DOUBLE QUOTATION MARK

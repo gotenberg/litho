@@ -87,9 +87,14 @@ func descendantsRef(direct bool) string {
 // Per ISO 32000-1, Table 121 /DescendantFonts shall hold a reference, so the
 // fixer wrote the corrected widths at the CIDFont's own object number. A direct
 // dictionary has none, so the widths were computed, dropped, and still reported
-// as repaired: remediating issue18298.pdf reported "corrected /W widths" for
-// three CIDFonts on every pass while the ISO 19005-2, 6.2.11.5 width mismatch
+// as repaired on every pass while the ISO 19005-2, 6.2.11.5 width mismatch
 // stayed in the output forever.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18298.pdf: remediating it reported "corrected /W widths" for
+//     three CIDFonts on every pass while the width mismatch stayed in the
+//     output.
 func TestFixType0Font_PersistsWidthsThroughADirectCIDFont(t *testing.T) {
 	t.Parallel()
 

@@ -168,6 +168,9 @@ func TestCheckNamespaceRoleMapping_RoleMapNSChain(t *testing.T) {
 	})
 }
 
+// TestRoleMapChainReachesStandard pins [roleMapChainReachesStandard] on direct,
+// chained, dead-end and circular legacy /RoleMap chains, judging each link
+// against the vocabulary of the namespace it belongs to.
 func TestRoleMapChainReachesStandard(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

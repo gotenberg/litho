@@ -12,8 +12,11 @@ import (
 // 32000-1, Table 106 fills in modes 0, 2, 4 and 6 and strokes in modes 1, 2, 5
 // and 6, so text in a stroking mode with only a stroke space selected uses no
 // DeviceGray, and text that also strokes with only a fill space selected does.
-// pdfjs issue20513.pdf strokes its text after only K. Every case was measured
-// against veraPDF.
+// Every case was measured against veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20513.pdf: strokes its text after only K.
 func TestColorScope_TextRenderModeColour(t *testing.T) {
 	t.Parallel()
 

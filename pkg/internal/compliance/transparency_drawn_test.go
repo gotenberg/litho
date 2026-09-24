@@ -17,10 +17,15 @@ import (
 // contains transparency, which veraPDF answers from the content stream: it
 // raises PDPage.containsTransparency while walking operators, so a soft masked
 // image the page never paints leaves it false. Two files identical but for a
-// single Do settle it, and litho reported both. In the wild pdfjs
-// issue12963.pdf declares eleven soft masked images and draws only FXX15, which
-// carries no /SMask, while issue14847.pdf declares two and draws nothing at
-// all; veraPDF reports neither, at 2b or at 4.
+// single Do settle it, and litho reported both.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12963.pdf: declares eleven soft masked images and draws only
+//     FXX15, which carries no /SMask, and veraPDF reports nothing at 2b or
+//     at 4.
+//   - pdfjs issue14847.pdf: declares two soft masked images and draws nothing
+//     at all, and veraPDF reports nothing at 2b or at 4.
 func TestTransparency_ScopedToDrawnResources(t *testing.T) {
 	t.Parallel()
 

@@ -8,13 +8,18 @@ import (
 )
 
 // TestGlyphWidths_SubrBeforeStem guards the width scanner's subroutine
-// expansion. FrutigerLTStd-Light (a CIDFontType0 CFF extracted from pdfjs
-// bug898853) encodes glyph 'C' (GID 36) as `83 -20 callsubr hstem ...`: the
-// width delta 83 precedes a callsubr that runs before the first stem operator.
-// nominalWidthX is 584, so the true advance is 667; defaultWidthX is 222. A
-// scanner that clears the operand stack on callsubr loses the width and
-// reports 222, which fired a spurious CIDFont /W width-consistency violation
-// (ISO 32000-1 §9.7.4.3; PDF/A 6.2.11.5 / PDF/UA 8.4.5.6) that veraPDF passes.
+// expansion. The FrutigerLTStd-Light fixture (a CIDFontType0 CFF) encodes
+// glyph 'C' (GID 36) as `83 -20 callsubr hstem ...`: the width delta 83
+// precedes a callsubr that runs before the first stem operator. nominalWidthX
+// is 584, so the true advance is 667; defaultWidthX is 222. A scanner that
+// clears the operand stack on callsubr loses the width and reports 222, which
+// fires a spurious CIDFont /W width-consistency violation (ISO 32000-1
+// §9.7.4.3; PDF/A 6.2.11.5 / PDF/UA 8.4.5.6).
+//
+// # Corpus evidence
+//
+//   - pdfjs bug898853.pdf: the source of the FrutigerLTStd-Light fixture. The
+//     stack-clearing scanner fired the /W violation on it, and veraPDF passes.
 func TestGlyphWidths_SubrBeforeStem(t *testing.T) {
 	data, err := os.ReadFile("testdata/frutiger_subr_width.cff")
 	if err != nil {
@@ -70,10 +75,14 @@ func TestExtractCharstringWidth_CallGSubrBeforeStem(t *testing.T) {
 
 // TestReadUnitsPerEm_CIDFDArrayFontMatrix pins that a CID-keyed CFF whose
 // FontMatrix lives in the FDArray font dict (not the Top DICT) reports its true
-// units-per-em. cid_fdarray_matrix.cff (extracted from pdfjs text_clip_cff_cid)
-// has an FD FontMatrix of [0.00048828…] = 1/2048; reading only the Top DICT
-// yields the 1000 default and fires a spurious CIDFont /W width mismatch (CID
-// 20: /W 629 vs a program advance of 1289 = 629 × 2048/1000).
+// units-per-em. cid_fdarray_matrix.cff has an FD FontMatrix of
+// [0.00048828…] = 1/2048; reading only the Top DICT yields the 1000 default
+// and fires a spurious CIDFont /W width mismatch (CID 20: /W 629 vs a program
+// advance of 1289 = 629 × 2048/1000).
+//
+// # Corpus evidence
+//
+//   - pdfjs text_clip_cff_cid.pdf: the source of cid_fdarray_matrix.cff.
 func TestReadUnitsPerEm_CIDFDArrayFontMatrix(t *testing.T) {
 	data, err := os.ReadFile("testdata/cid_fdarray_matrix.cff")
 	if err != nil {
@@ -109,9 +118,13 @@ func TestExtractCharstringWidth_HintmaskWidth(t *testing.T) {
 
 // TestExtractCharstringWidth_FixedOperand pins that a 32-bit fixed (16.16)
 // width operand keeps its fraction. ISO 19005-2 §6.2.11.5 is judged within one
-// unit, so truncating the operand moves a real 1.167-unit mismatch onto the
-// tolerance boundary and hides it: pdfjs issue3566.pdf draws a glyph 457.171
-// wide against a declared 456.
+// unit, so truncating the operand can move a real mismatch onto the tolerance
+// boundary and hide it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue3566.pdf: draws a glyph 457.171 wide against a declared 456,
+//     a real 1.167-unit mismatch that truncating the operand hides.
 func TestExtractCharstringWidth_FixedOperand(t *testing.T) {
 	// 457.171 as 16.16: the integer part in the high half, the fraction in the
 	// low half. Followed by hstem with an odd operand count, so it is the width.

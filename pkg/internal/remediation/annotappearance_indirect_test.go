@@ -12,8 +12,12 @@ import (
 )
 
 // indirectAPPDF builds a page with one widget whose /AP is written as an
-// indirect reference, the way 36 of the 63 widgets in pdfjs bug1778692.pdf are.
-// The appearance it points at draws text.
+// indirect reference. The appearance it points at draws text.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1778692.pdf: 36 of its 63 widgets write /AP as an indirect
+//     reference, the shape this fixture reproduces.
 func indirectAPPDF() []byte {
 	appearance := "q BT /F1 9 Tf 0 g 2 2 Td (Desired Hours) Tj ET Q"
 
@@ -51,9 +55,15 @@ func indirectAPPDF() []byte {
 // Any object may be given indirectly (ISO 32000-1, 7.3.10). Type-asserting the
 // dictionary instead of resolving it made every such annotation look as though
 // it had none, and the fixer replaced a real appearance with a blank form to
-// satisfy ISO 19005-2, 6.3.3. On pdfjs bug1778692.pdf that blanked 36 of 63
-// widgets: the appearance streams drawing text fell from 11 to 2 and 147
-// characters of filled-in values vanished from a file veraPDF called conformant.
+// satisfy ISO 19005-2, 6.3.3, erasing filled-in values from a file that was
+// already conformant.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1778692.pdf: the blank-form replacement blanked 36 of 63
+//     widgets, the appearance streams drawing text fell from 11 to 2, and 147
+//     characters of filled-in values vanished from a file veraPDF called
+//     conformant.
 func TestAnnotAppearanceKeepsAnIndirectAP(t *testing.T) {
 	t.Parallel()
 

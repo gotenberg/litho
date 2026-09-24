@@ -17,9 +17,13 @@ import (
 // embedded (3,0)/(1,0) cmap (ISO 32000-1 §9.6.6.4) and are unresolvable when it
 // is absent. A CFF program has no cmap to be missing: its codes resolve through
 // the program's own encoding (ISO 32000-1 §9.6.6.2). Applying the sfnt
-// short-circuit to it returned an empty mapping, so every TeX Computer Modern
-// subset in govdocs thread_300_300492.pdf went unchecked and litho reported
-// none of the 22 §6.2.11.5 width mismatches veraPDF and fontTools both compute.
+// short-circuit to it returned an empty mapping, so such a font went unchecked.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300492.pdf: every TeX Computer Modern subset went
+//     unchecked, and litho reported none of the 22 §6.2.11.5 width mismatches
+//     veraPDF and fontTools both compute.
 func TestSimpleFontGlyphMetrics_SymbolicCFFResolvesByName(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

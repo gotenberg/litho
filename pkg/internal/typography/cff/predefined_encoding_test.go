@@ -82,7 +82,7 @@ func TestPredefinedEncodingNames(t *testing.T) {
 	t.Run("a custom encoding offset reports nothing", func(t *testing.T) {
 		t.Parallel()
 		// Offset 100 is neither predefined table; the font builds its own
-		// encoding and [ExtractEncoding] is the function that reads it.
+		// encoding and ExtractEncoding is the function that reads it.
 		if got := PredefinedEncodingNames(minimalCFF(100)); got != nil {
 			t.Errorf("custom encoding offset returned %d codes, want nil", len(got))
 		}

@@ -336,13 +336,17 @@ func iso32005StandardKey(ref iso32005Ref) string {
 // dictionaries, and OBJR object references all count. An OBJR is a reference to
 // a content-bearing object, so it is itself a content item: a Document whose
 // only kid is an OBJR contains content directly and fails Table 5's
-// Document-content rule (golden PDF_UA-1__7.18.4-t01-fail-a is that single-OBJR
-// shape). Each kid resolves in its own namespace, so the kid dictionary drives
-// the lookup rather than the type name alone.
+// Document-content rule. Each kid resolves in its own namespace, so the kid
+// dictionary drives the lookup rather than the type name alone.
 //
 // A kid whose own key is in [iso32005PassThroughTypes] contributes its kids and
 // its content items instead of itself, recursively: Table 5 attributes what a
 // Part, Div, or NonStruct wraps to the enclosing element.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.18.4-t01-fail-a: a Document whose only kid is an
+//     OBJR, the golden shape of the Document-content rule.
 func iso32005Kids(ctx context.Context, state *walkState, elem ast.PdfDict) (kidKeys []string, hasContent bool) {
 	return iso32005KidsAt(ctx, state, elem, 0)
 }

@@ -14,9 +14,14 @@ import (
 //
 // Marked-content nesting is independent of the q/Q stack (ISO 32000-1, 14.6),
 // so a span may open in one frame and close in another. Carrying the skip flag
-// in the restored frame silently dropped everything a later Q uncovered:
-// issue13823 lost both of its form XObjects, and TAMReview-style pages lost
-// whole trailing sections.
+// in the restored frame silently dropped everything a later Q uncovered, from
+// whole form XObjects to whole trailing sections of a page.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue13823.pdf: lost both of its form XObjects while the restored
+//     frame carried the skip flag.
+//   - pdfjs TAMReview.pdf: pages shaped like it lost whole trailing sections.
 func TestArtifactSpan_UnbalancedSaveDoesNotOutliveEMC(t *testing.T) {
 	m := NewMachine([4]float64{0, 0, 612, 792})
 	m.StripArtifacts = true

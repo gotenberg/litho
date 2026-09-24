@@ -66,9 +66,14 @@ func compressedFormPDF(t *testing.T) []byte {
 // [ast.PdfStream.Bytes] returns the raw body, before filter decoding. Handing
 // that to the content lexer makes every byte of a FlateDecode form read as an
 // undefined operator (ISO 19005-2, 6.2.2), so the fixer blanked the whole form
-// and wrote the empty result back under the original /Filter. pdfjs
-// issue11678.pdf page 7 lost the figure labels held in two such forms, and the
-// 18 "unknown operators" the run reported were 16 stretches of compressed data.
+// and wrote the empty result back under the original /Filter, losing whatever
+// the form drew.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11678.pdf: page 7 lost the figure labels held in two such
+//     forms, and the 18 "unknown operators" the run reported were 16 stretches
+//     of compressed data.
 func TestFixUnknownOpsDecodesFormXObjects(t *testing.T) {
 	t.Parallel()
 

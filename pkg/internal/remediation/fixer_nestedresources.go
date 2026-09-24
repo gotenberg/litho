@@ -57,8 +57,12 @@ func matchNestedResources(v compliance.Violation) bool {
 //
 // A Form XObject shared by several pages may see a different binding for the
 // same name on each, so only a singly-referenced one is repaired. Deep-copying
-// per page would also be correct and reaches more documents; the corpus cannot
-// tell the two apart, because every carrying fixture is single-page.
+// per page would also be correct and reaches more documents.
+//
+// # Corpus evidence
+//
+//   - All corpora: every fixture carrying this violation is single-page, so the
+//     corpus cannot tell the singly-referenced repair from a per-page deep copy.
 func fixNestedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {

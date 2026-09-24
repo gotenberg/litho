@@ -14,8 +14,13 @@ import (
 // The predefined encoding names (UniKS-UTF16-H, UniJIS-UTF16-H, ...) carry no
 // Registry-Ordering-Supplement text, so their CIDSystemInfo is resolved from the
 // tabulated Adobe values; a CIDFont whose collection matches the CMap must pass,
-// and only a genuine registry/ordering/supplement mismatch fires. Mirrors the
-// pdfcpu korean/japanese samples that veraPDF passes/fails respectively.
+// and only a genuine registry/ordering/supplement mismatch fires.
+//
+// # Corpus evidence
+//
+//   - pdfcpu: the korean sample, UniKS-UTF16-H over an Adobe-Korea1-1 CIDFont,
+//     passes veraPDF, and the japanese sample, UniJIS-UTF16-H over
+//     Adobe-Japan1-7, fails it. The first two cases mirror them.
 func TestCheckCIDSystemInfo_PredefinedCMap(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -39,12 +44,12 @@ func TestCheckCIDSystemInfo_PredefinedCMap(t *testing.T) {
 	}
 
 	// UniKS-UTF16-H is Adobe-Korea1-2; a CIDFont declaring Adobe-Korea1-1 is
-	// compatible (1 <= 2). veraPDF passes this (the pdfcpu korean sample).
+	// compatible (1 <= 2). veraPDF passes this.
 	if v := check("UniKS-UTF16-H", "Korea1", 1); len(v) != 0 {
 		t.Errorf("UniKS-UTF16-H with Adobe-Korea1-1 must pass, got %v", v)
 	}
 	// UniJIS-UTF16-H is Adobe-Japan1-5 at ISO 32000-1; a CIDFont declaring
-	// Adobe-Japan1-7 exceeds it (7 > 5) and fires (the pdfcpu japanese sample).
+	// Adobe-Japan1-7 exceeds it (7 > 5) and fires.
 	if v := check("UniJIS-UTF16-H", "Japan1", 7); len(v) == 0 {
 		t.Error("UniJIS-UTF16-H with Adobe-Japan1-7 must fire (supplement 7 > 5)")
 	}

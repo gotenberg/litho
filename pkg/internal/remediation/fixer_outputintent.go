@@ -26,9 +26,12 @@ var cmykICCProfile []byte
 // Only a GTS_PDFA1 intent counts. ISO 32000-2, Table 401 and ISO 19005-4,
 // 6.2.3 keep GTS_PDFA1 as the PDF/A output-intent subtype for every part, so a
 // GTS_PDFX or ISO_PDFE1 intent leaves the device colour spaces uncovered no
-// matter which profile it carries: veraPDF still reports 6.2.4.3 on
-// 6-2-3-t01-fail-a and -fail-c, whose sole intent is GTS_PDFX with an RGB
-// profile.
+// matter which profile it carries.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-3-t01-fail-a and -fail-c: veraPDF still reports 6.2.4.3 on
+//     both, whose sole intent is GTS_PDFX with an RGB profile.
 func hasMatchingOutputIntent(ctx context.Context, doc *document.Document, arr ast.PdfArray, needsCMYK bool) bool {
 	for _, entry := range arr {
 		oiDict, err := document.ResolveDict(ctx, doc, entry)
@@ -201,6 +204,15 @@ func fixOutputIntentCleanup(ctx context.Context, alloc *writer.ObjAllocator, doc
 // number signals a damaged index that could corrupt newly added objects.
 const maxPlausibleObjNum = 100000
 
+// fixOutputIntent adds a GTS_PDFA1 output intent covering the device colour
+// space the violations flag, and injects a Default colour space into resource
+// dictionaries for the one that intent leaves uncovered.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-3-3-t01-fail-b: its sole intent is a GTS_PDFA1 CMYK profile
+//     over DeviceRGB content, and treating any intent as coverage left it
+//     still failing after remediation.
 func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, profile string) ([]string, error) {
 	// Skip structurally damaged documents where embedding a large ICC
 	// profile risks corruption during serialization.
@@ -267,9 +279,9 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	} else if needsRGB && !hasRGBOI {
 		// An existing CMYK intent does not license DeviceRGB: ISO 19005-1,
 		// 6.2.3.3 admits DeviceRGB only when the output intent's destination
-		// profile is an RGB one. Treating any intent as coverage left
-		// 6-2-3-3-t01-fail-b, whose sole intent is a GTS_PDFA1 CMYK profile
-		// over DeviceRGB content, still failing after remediation.
+		// profile is an RGB one. Treating any intent as coverage left a file
+		// whose sole intent is a GTS_PDFA1 CMYK profile over DeviceRGB
+		// content still failing after remediation.
 		addOI = true
 		addCMYK = false
 	}

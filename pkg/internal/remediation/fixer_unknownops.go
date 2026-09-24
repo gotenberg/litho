@@ -178,6 +178,11 @@ func appearanceEntries(ctx context.Context, doc *document.Document, apObj ast.Pd
 // operators outside [validOperators], returning how many it removed and how
 // many malformed numbers it folded back. The replacement body is decoded
 // content, so /Filter and /DecodeParms go with it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15604.pdf: the page path gained the malformed-number repair
+//     when the Tm on this file lost four of its six operands.
 func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, visited map[int]bool) (int, int) {
 	ref, isRef := obj.(ast.PdfIndirectRef)
 	if !isRef || ref.ObjectNum == 0 || visited[ref.ObjectNum] {
@@ -206,8 +211,8 @@ func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocato
 	// An appearance stream is a content stream (ISO 32000-1, 12.5.5), so a
 	// mangled operand splits its operand run exactly as it does on a page and
 	// stripping the token takes the next operator's arguments with it. The page
-	// path has repaired that since the Tm on pdfjs issue15604.pdf lost four of
-	// its six operands; this path read the same bodies without it.
+	// path has repaired that since a Tm lost four of its six operands; this
+	// path read the same bodies without it.
 	ops, repaired := repairMalformedNumbers(ops)
 
 	removed := 0
@@ -277,7 +282,7 @@ func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, do
 			continue
 		}
 
-		// Decode through the filter pipeline: [ast.PdfStream.Bytes] hands back
+		// Decode through the filter pipeline: ast.PdfStream.Bytes hands back
 		// the raw body, which for a FlateDecode form is compressed bytes the
 		// content lexer reads as a run of undefined operators.
 		data, err := doc.DecodeStream(ctx, stream)
@@ -346,20 +351,25 @@ func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, do
 // decimal point, so "-." is not a number and the parser cannot treat it as one.
 // It becomes an operator, which splits the operand run around it, and stripping
 // it as an undefined operator (ISO 19005-2, 6.2.2) takes that op's operands with
-// it. On pdfjs issue15604.pdf the text matrix
+// it. The text matrix
 //
 //	-. -.002 .002 -. 59.64 760.026 Tm
 //
 // came out as "59.64 760.026 Tm": Tm needs six operands (Table 108) and had two,
-// so no text matrix was ever set and every one of the page's 1027 characters
-// stopped extracting. The premise that stripping an undefined operator is
-// content-preserving holds only for a real operator; a mangled operand is not
-// dead bytes, it is part of the next operator's arguments.
+// so no text matrix was ever set and the page's text stopped extracting. The
+// premise that stripping an undefined operator is content-preserving holds only
+// for a real operator; a mangled operand is not dead bytes, it is part of the
+// next operator's arguments.
 //
 // The salvaged value is the token's longest valid numeric prefix, or zero when
 // it has none: "-." is negative zero, which is the value a tolerant reader
 // already shows, and keeping the operand count right matters more than the
 // digit no producer wrote.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15604.pdf: carries that text matrix, and every one of the
+//     page's 1027 characters stopped extracting.
 func repairMalformedNumbers(ops []content.Operation) ([]content.Operation, int) {
 	var pending []ast.PdfObject
 	out := make([]content.Operation, 0, len(ops))

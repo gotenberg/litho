@@ -17,12 +17,15 @@ import (
 // anything a document could legitimately pronounce. Measured on an array of 20
 // compressed streams, 328 KB of input decoded to 160 MB.
 //
-// Unlike maxPDFXPacketBytes this value rests on no measured maximum: no file in
-// any corpus carries /PronunciationLexicon at all, so there is nothing to size
-// it against. A real lexicon is kilobytes of XML. It matches
+// Unlike maxPDFXPacketBytes this value rests on no measured maximum: there is
+// nothing to size it against. A real lexicon is kilobytes of XML. It matches
 // maxRawInfoScanBytes so this package keeps one generous scale rather than a
 // third arbitrary number, and even at 10 MB the growth is bounded rather than
 // open-ended.
+//
+// # Corpus evidence
+//
+//   - All corpora: no file carries /PronunciationLexicon at all.
 const maxPronunciationLexiconBytes = 10 * 1024 * 1024
 
 // ExtractPronunciationLexicons extracts W3C PLS XML documents from the

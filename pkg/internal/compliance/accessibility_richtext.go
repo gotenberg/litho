@@ -42,7 +42,7 @@ func checkMarkupAnnotRichText(ctx context.Context, doc *document.Document, annot
 
 	// Per ISO 14289-2, 8.9.2.3 t2 an absent /Contents satisfies the rule. veraPDF
 	// reads it with getStringKey, so a null or non-string /Contents is absent
-	// too ([decodedStringKey]), measured.
+	// too (decodedStringKey), measured.
 	plain, ok := decodedStringKey(ctx, doc, annot, "Contents")
 	if !ok {
 		return nil

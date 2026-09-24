@@ -122,7 +122,8 @@ func TestClearMetadata_LeavesTheCatalogAloneWhenThereIsNoMetadata(t *testing.T) 
 	}
 }
 
-// A document with no /Info gains one. That is the same idiom [SetMetadata] uses
+// TestClearMetadata_CreatesAnEmptyInfoWhenTheDocumentHasNone pins that a
+// document with no /Info gains one. That is the same idiom [SetMetadata] uses
 // and documents ("creates or replaces the /Info dictionary"), so this pins the
 // behaviour rather than endorsing it: a function contracted to remove metadata
 // adds a trailer key that was not there.

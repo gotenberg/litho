@@ -20,9 +20,12 @@ func objStm(objStmNum, containedNum int, body string) string {
 //
 // An incrementally updated PDF appends a new revision, so the newer object
 // stream is further down the file but may carry any object number. Ordering
-// the expansion by object number instead let the FIRST revision win:
-// pdfjs issue14269.pdf came back with the original /Annots array and lost one
-// of its two signature widgets.
+// the expansion by object number instead let the FIRST revision win.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14269.pdf: came back with the original /Annots array and lost
+//     one of its two signature widgets.
 func TestRebuild_LaterObjectStreamWins(t *testing.T) {
 	// The old revision's stream is object 3 and sits early; the new revision's
 	// is object 9 and sits later, which is what an incremental update produces.

@@ -257,8 +257,8 @@ func TestWriter_RoundTrip_StampText_Survives(t *testing.T) {
 	// Behavior contract: the page that was stamped still has extractable
 	// text, and the stamp text appears somewhere in it once artifacts are
 	// included. The stamp is /Artifact-marked, so a default extraction omits
-	// it on purpose, which
-	// [TestStampText_ExtractionHonoursTheArtifactMarking] pins separately.
+	// it on purpose, which TestStampText_ExtractionHonoursTheArtifactMarking
+	// pins separately.
 	text, err := r2.ExtractText(ctx, 1, WithArtifacts())
 	if err != nil {
 		t.Fatalf("ExtractText: %v", err)

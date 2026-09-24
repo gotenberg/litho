@@ -33,9 +33,17 @@ func matchAnnotAppearance(v compliance.Violation) bool {
 // PDF/A-1 states the requirement on the widget instead, and states it
 // unconditionally: ISO 19005-1 §6.9 t2 is keyed to veraPDF's PDWidgetAnnot
 // with the test "AP != null" and grants no zero-area exemption, which is why
-// [checkFieldAppearance] deliberately applies none either. An invisible
-// signature field is conventionally /Rect [0 0 0 0], so exempting it here
-// left part 1 reporting a violation this fixer could never answer.
+// compliance.checkFieldAppearance deliberately applies none either. An
+// invisible signature field is conventionally /Rect [0 0 0 0], so exempting it
+// here left part 1 reporting a violation this fixer could never answer.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation-tx.pdf: a blank form given to a valued text field lost
+//     the 12 characters that were the whole page.
+//   - pdfjs bug1847733.pdf: a blank form given to a valued text field lost the
+//     field reading "In order to submit this form, you should open it with
+//     Adobe Acrobat Reader."
 func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -117,13 +125,11 @@ func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 				// A variable-text field with a value has no appearance because
 				// the viewer builds one from /V and /DA (ISO 32000-1, 12.7.3.3).
 				// A blank form satisfies ISO 19005-2, 6.3.3 by replacing that
-				// with nothing: pdfjs annotation-tx.pdf lost the 12 characters
-				// that were the whole page, and bug1847733.pdf lost the field
-				// reading "In order to submit this form, you should open it with
-				// Adobe Acrobat Reader." Drawing the value needs the /DA font out
-				// of /DR and the field's own layout, so until that exists the
-				// violation stays as a residual the caller can see, which is
-				// worth more than a conformant document that lost its content.
+				// with nothing, erasing the field's visible text. Drawing the
+				// value needs the /DA font out of /DR and the field's own
+				// layout, so until that exists the violation stays as a
+				// residual the caller can see, which is worth more than a
+				// conformant document that lost its content.
 				if rendersOwnValue(ctx, doc, annotDict, subtype) {
 					continue
 				}
@@ -185,11 +191,14 @@ func fixAnnotAppearance(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 // The /AP entry is resolved rather than type-asserted: any object may be given
 // as an indirect reference (ISO 32000-1, 7.3.10), and asserting the dictionary
 // directly made every such annotation look as if it had no appearance at all.
-// The fixer then replaced a real appearance with a blank form. On pdfjs
-// bug1778692.pdf 36 of 63 widgets write /AP indirectly, and remediation blanked
-// them: the appearance streams that drew text fell from 11 to 2 and 147
-// characters of filled-in form values disappeared from a document veraPDF then
-// called conformant.
+// The fixer then replaced a real appearance with a blank form.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1778692.pdf: 36 of 63 widgets write /AP indirectly, and
+//     remediation blanked them. The appearance streams that drew text fell
+//     from 11 to 2, and 147 characters of filled-in form values disappeared
+//     from a document veraPDF then called conformant.
 func needsAppearance(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) bool {
 	if _, hasAP := annotDict["AP"]; !hasAP {
 		return true
@@ -288,8 +297,14 @@ func normalizeAP(ctx context.Context, doc *document.Document, annotDict ast.PdfD
 //
 // /FT is inheritable (ISO 32000-1, 12.7.3.1), and a widget that is a child of
 // its field carries none of its own. Reading it off the annotation alone left
-// every button in govdocs thread_400_400580 with an /AP /N stream where
-// ISO 19005-2, 6.3.3 test 3 requires a subdictionary.
+// every such button with an /AP /N stream where ISO 19005-2, 6.3.3 test 3
+// requires a subdictionary.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400580: reading /FT off the annotation alone left
+//     every button with an /AP /N stream where ISO 19005-2, 6.3.3 test 3
+//     requires a subdictionary.
 func inheritedFieldType(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) ast.PdfName {
 	dict := annotDict
 	seen := make(map[int]bool)
@@ -350,9 +365,12 @@ const maxFieldParentDepth = 32
 // 32000-1, 12.7.3.3: their appearance is generated from /V and /DA when none is
 // stored, and both /FT and /V are inheritable (12.7.3.1), so the answer can live
 // on an ancestor. A free text annotation displays the text in /Contents through
-// the same /DA machinery (12.5.6.6), which is why pdfjs issue16021.pdf, whose
-// whole page is a /FreeText reading "Hello World", came out of remediation
-// blank.
+// the same /DA machinery (12.5.6.6), so a blank appearance erases it too.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16021.pdf: its whole page is a /FreeText reading "Hello
+//     World", and it came out of remediation blank.
 func rendersOwnValue(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, subtype ast.PdfName) bool {
 	if subtype == "FreeText" {
 		return hasRenderableValue(ctx, doc, annotDict["Contents"])

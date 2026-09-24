@@ -13,8 +13,11 @@ import (
 // action dictionary in /Dest instead of a destination array.
 //
 // ISO 32000-1, Table 153 allows an array, a name or a byte string there, and an
-// action belongs in /A. Producers write the action anyway; this is the shape of
-// govdocs thread_300_300865.pdf.
+// action belongs in /A. Producers write the action anyway.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300865.pdf: the shape this fixture reproduces.
 func actionInDestPDF(t *testing.T) []byte {
 	t.Helper()
 
@@ -53,9 +56,13 @@ func actionInDestPDF(t *testing.T) []byte {
 // TestOutlineFollowsAnActionInDest pins that a bookmark still resolves when the
 // producer wraps its destination in an action dictionary.
 //
-// litho accepted only an array, a name or a byte string, so four govdocs
-// outlines reported no page at all for every single bookmark: `litho bookmarks`
-// printed page 0 throughout while every other reader resolved them.
+// litho accepted only an array, a name or a byte string, so such outlines
+// reported no page at all for every single bookmark: `litho bookmarks` printed
+// page 0 throughout while every other reader resolved them.
+//
+// # Corpus evidence
+//
+//   - govdocs: four outlines reported no page for every bookmark.
 func TestOutlineFollowsAnActionInDest(t *testing.T) {
 	t.Parallel()
 

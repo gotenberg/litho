@@ -34,6 +34,18 @@ func matchPageBoxes(v compliance.Violation) bool {
 // pdfAPageMax]. Expanding under-sized boxes is lossless, so it always
 // runs; shrinking over-sized boxes can crop visible content and only
 // runs in aggressive mode.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7872.pdf: writes its /MediaBox as an array of indirect
+//     references, which reads as zero-sized unless the coordinates are
+//     resolved.
+//   - pdfjs boundingBox_invalid.pdf: growing a degenerate box at its
+//     lower-left corner lost the text of two pages, which litho's own
+//     regression gate caught, leaving the file unremediable.
+//   - verapdf 6-1-13-t09-fail-c through -f: walking only the leaves left them
+//     unremediable, their box sitting on the "Pages tree" node litho itself
+//     names in the violation.
 func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -71,20 +83,18 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 				continue
 			}
 			// Measure the coordinates, not the references naming them. A page
-			// writing /MediaBox [4 0 R 5 0 R 6 0 R 7 0 R] (ISO 32000-1, 7.3.9,
-			// the shape of pdfjs issue7872.pdf) reads as zero-sized otherwise,
-			// and a valid page then had its box replaced by the fallback, which
-			// crops away everything drawn outside it. The resolved copy drives
-			// the decision only: a box needing no change keeps the form the
-			// producer wrote.
+			// writing /MediaBox [4 0 R 5 0 R 6 0 R 7 0 R] (ISO 32000-1, 7.3.9)
+			// reads as zero-sized otherwise, and a valid page then had its box
+			// replaced by the fallback, which crops away everything drawn
+			// outside it. The resolved copy drives the decision only: a box
+			// needing no change keeps the form the producer wrote.
 			arr = document.ResolveRectangle(ctx, doc, arr)
 			// A degenerate box encloses nothing, and growing it to the 3-unit
 			// minimum at its lower-left corner leaves the page's content
-			// outside the page: pdfjs boundingBox_invalid.pdf lost the text of
-			// two pages that way, which litho's own regression gate caught,
-			// leaving the file unremediable. Every box except /MediaBox
-			// defaults to another box when absent (ISO 32000-1, Table 30), so
-			// dropping it is both lossless and what the producer meant.
+			// outside the page, so the text drawn there is lost. Every box
+			// except /MediaBox defaults to another box when absent (ISO
+			// 32000-1, Table 30), so dropping it is both lossless and what the
+			// producer meant.
 			if isDegenerateBox(arr) {
 				if key != "MediaBox" {
 					delete(newPage, key)
@@ -109,8 +119,8 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	// A box on an interior /Pages node is inherited by every page under it
 	// (ISO 32000-1, 7.7.3.4, Table 30), so it is just as much a page boundary
 	// and 6.1.13 test 11 reports it as one. Walking only the leaves left
-	// 6-1-13-t09-fail-c through -f unremediable, their box sitting on the
-	// "Pages tree" node litho itself names in the violation.
+	// such a box unremediable, sitting on the "Pages tree" node litho itself
+	// names in the violation.
 	nodes := clampPageTreeBoxes(ctx, alloc, doc, pagesObj, opts.PreserveContent, fallbackMedia)
 
 	var fixes []string
@@ -209,15 +219,21 @@ var defaultMediaBox = ast.PdfArray{
 // and the largest height any non-degenerate page box in the document declares,
 // falling back to [defaultMediaBox] when there is none.
 //
-// The two extents are taken independently on purpose. Picking whole box with
-// the largest AREA is not enough: boundingBox_invalid.pdf has an 800x600 page
-// and a 600x800 one, identical in area, and choosing the first still cropped
-// away text drawn at y=700.
+// The two extents are taken independently on purpose. Picking the whole box
+// with the largest AREA is not enough: a landscape page and a portrait page can
+// tie on area, and choosing the first crops away content the other extends to.
+//
 // The box is resolved rather than type-asserted: any object may be written as
 // an indirect reference (ISO 32000-1, 7.3.10), and a page that writes its
 // /MediaBox that way was skipped here. The fallback then came from the default
 // instead of the sibling page, which is exactly the cropping this function
 // exists to avoid: a page beside an indirect 800x600 box was given 612x792.
+//
+// # Corpus evidence
+//
+//   - pdfjs boundingBox_invalid.pdf: has an 800x600 page and a 600x800 one,
+//     identical in area, and choosing the first still cropped away text drawn
+//     at y=700.
 func widestUsableMediaBox(ctx context.Context, doc *document.Document, entries []annotPageEntry) ast.PdfArray {
 	maxW, maxH := 0.0, 0.0
 	for _, pe := range entries {

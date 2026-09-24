@@ -126,7 +126,7 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 
 		// Parts 2/3 and PDF/UA compare /CharSet against the whole font
 		// program, which no page's codes enter into, so
-		// [checkCharSetDeclaredCoverage] states it with the dictionary rules.
+		// checkCharSetDeclaredCoverage states it with the dictionary rules.
 		if PDFAPart(profile) != 1 {
 			return nil
 		}
@@ -156,12 +156,15 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 //
 // It is a property of the font object, not of one page's codes, so it belongs
 // with the dictionary rules for the same reason [checkGlyphWidths] does.
-// Judging it per page multiplied one finding by the pages that select the font:
-// govdocs thread_300_300511.pdf reports glyph "O" of NSNPEK+CMR12 missing from
-// /CharSet on 31 pages, where veraPDF states it once against the font.
+// Judging it per page multiplied one finding by the pages that select the font.
 //
 // Part 1 is a different rule, scoped to the glyphs a page actually renders, and
 // stays with the usage rules in [checkGlyphCoverage].
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300511.pdf: reports glyph "O" of NSNPEK+CMR12 missing
+//     from /CharSet on 31 pages, where veraPDF states it once against the font.
 func checkCharSetDeclaredCoverage(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	if PDFAPart(profile) == 1 {
 		return nil
@@ -292,7 +295,7 @@ func checkCharSetRenderedGlyphs(ctx context.Context, doc *document.Document, fon
 		}
 	}
 
-	// Lowest missing name, for the reason given in [lowestOffender].
+	// Lowest missing name, for the reason given in lowestOffender.
 	var missing lowestOffender[string]
 	for code := range usage.charCodes {
 		name := encoding[code]
@@ -415,13 +418,17 @@ func decodeCIDSetBits(data []byte) map[uint16]bool {
 // veraPDF lists the program's CIDs through its horizontal metrics, one per hmtx
 // long metric (CIDFontType2Program.getCIDList), so it requires every GID below
 // hhea.numberOfHMetrics and not the glyphs past it, which share the last
-// advance: pdfjs issue5202.pdf embeds an IPAexMincho subset whose
-// numberOfHMetrics is 1 beside a six-glyph /CIDSet, and veraPDF passes it. A
-// set bit whose CID the program does not hold fails too (containsCID).
+// advance. A set bit whose CID the program does not hold fails too
+// (containsCID).
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5202.pdf: embeds an IPAexMincho subset whose numberOfHMetrics
+//     is 1 beside a six-glyph /CIDSet, and veraPDF passes it.
+//   - pdfjs issue5874.pdf: embeds a TrueType subset with no /CIDToGIDMap whose
+//     /CIDSet leaves out 18800 of its 19642 glyphs, and veraPDF reports it.
 func checkCIDSetCompletenessTrueType(ctx context.Context, doc *document.Document, cidFontDict, fd ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule) []Violation {
-	// veraPDF's CIDToGIDMapping reads an absent entry as Identity too: pdfjs
-	// issue5874.pdf embeds a TrueType subset with no map whose /CIDSet leaves out
-	// 18800 of its 19642 glyphs, and veraPDF reports it.
+	// veraPDF's CIDToGIDMapping reads an absent entry as Identity too.
 	lookup, ok := cidToGIDMapping(ctx, doc, cidFontDict)
 	if !ok {
 		return nil
@@ -472,9 +479,12 @@ func checkCIDSetCompletenessTrueType(ctx context.Context, doc *document.Document
 // .notdef is a glyph of the program: veraPDF lists the program's CIDs as every
 // CID below the map's length whose GID is below maxp.numGlyphs
 // (CIDFontType2Program.getCIDList and containsCID), and fails a set bit for any
-// other CID. pdfjs issue11768_reduced.pdf maps 15443 CIDs, 68 of them to real
-// glyphs, and its /CIDSet lists only those 68; veraPDF reports it. CID 0 is
-// exempt both ways.
+// other CID. CID 0 is exempt both ways.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11768_reduced.pdf: maps 15443 CIDs, 68 of them to real glyphs,
+//     and its /CIDSet lists only those 68; veraPDF reports it.
 func checkCIDSetStreamMap(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, cidSetBits map[uint16]bool, numGlyphs int, fontName string, pageNum int, rule Rule) []Violation {
 	gids, ok := cidToGIDStreamEntries(ctx, doc, cidFontDict["CIDToGIDMap"])
 	if !ok {
@@ -562,7 +572,7 @@ func checkCIDSetCompletenessTrueTypeRendered(ctx context.Context, doc *document.
 		return nil
 	}
 	cidSetBits := decodeCIDSetBits(cidSetData)
-	// Lowest offending CID; see [lowestOffender].
+	// Lowest offending CID; see lowestOffender.
 	var worst lowestOffender[uint16]
 	for cid := range usedCIDs {
 		if cid == 0 {
@@ -660,7 +670,7 @@ func checkCIDSetCompleteness(ctx context.Context, doc *document.Document, cidFon
 	}
 
 	validCIDs := typography.ExtractValidCIDs(fontData)
-	// Lowest offending CID; see [lowestOffender].
+	// Lowest offending CID; see lowestOffender.
 	var worst lowestOffender[uint16]
 	for cid := range validCIDs {
 		if cid == 0 {
@@ -712,7 +722,7 @@ func checkCIDSetCompletenessCFF(ctx context.Context, doc *document.Document, cid
 	// Decode CIDSet bitfield (may be empty for a zero-length stream).
 	cidSetBits := decodeCIDSetBits(cidSetData)
 
-	// Lowest offending CID; see [lowestOffender].
+	// Lowest offending CID; see lowestOffender.
 	var worst lowestOffender[uint16]
 	for cid := range validCIDs {
 		if cid == 0 {

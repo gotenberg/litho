@@ -89,8 +89,8 @@ func StampText(
 		// text (plus .notdef and any composite-glyph dependencies). The
 		// subsetter reuses the parsed font's Unicode→GID map so text
 		// encoding continues to work with the same embeddedTTF. On any
-		// subsetting failure we fall back to full embedding so the
-		// stamp still renders. Correctness over size.
+		// subsetting failure the stamp falls back to full embedding so it
+		// still renders. Correctness over size.
 		keepGIDs := collectUsedGIDs(opts.Text, f)
 		if subsetBytes, subErr := subsetTTF(opts.TTFBytes, keepGIDs); subErr == nil {
 			f.raw = subsetBytes

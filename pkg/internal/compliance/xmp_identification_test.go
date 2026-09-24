@@ -70,7 +70,10 @@ func TestXMPIdentification_WrongURIIsMissing(t *testing.T) {
 // rule (6.7.3 t01), never the field-level rev rule (t05), which is scoped to a
 // successfully extracted PDFAIdentification object. litho must do the same:
 // report t01, never claim "rev missing" for a rev litho simply could not parse.
-// This is the exact shape of veraPDF corpus fixture 6-7-2-1-t01-fail-d.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-7-2-1-t01-fail-d: this is its exact shape.
 func TestXMPIdentification_UnparseableReportsMissing(t *testing.T) {
 	data := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">
   <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">

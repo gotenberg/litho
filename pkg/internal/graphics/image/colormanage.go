@@ -298,18 +298,17 @@ func embeddedTransform(doc *document.Document, profile []byte, components int, i
 // cmykTransform returns the transform DeviceCMYK samples are read through:
 // the CMYK destination profile of the page's output intents, else of the
 // document's, else the profile the caller supplied, else litho's built-in
-// profile. Nil, which
-// leaves the samples to the device formula, arises only when the built-in
-// profile itself fails.
+// profile. Nil, which leaves the samples to the device formula, arises only
+// when the built-in profile itself fails.
 //
 // ISO 32000-1, 14.11.5 has an output intent's /DestOutputProfile
 // characterise the device a document was prepared for, and ISO 19005-2,
 // 6.2.4.3 admits DeviceCMYK into a PDF/A file on the strength of an output
 // intent with a CMYK destination profile, which is then what those colours
 // mean. ISO 32000-2, 14.11.5 lets a page carry output intents of its own,
-// which replace the document's for that page. A document without one leaves DeviceCMYK uncharacterised, and the
-// naive formula (1-c)(1-k) then paints cyan as (0, 255, 255) where a press
-// prints (0, 174, 239).
+// which replace the document's for that page. A document without one leaves
+// DeviceCMYK uncharacterised, and the naive formula (1-c)(1-k) then paints
+// cyan as (0, 255, 255) where a press prints (0, 174, 239).
 func cmykTransform(ctx context.Context, doc *document.Document, intent icc.Intent, cc colorContext) *icc.Transform {
 	if obj, ok := cc.page["OutputIntents"]; ok {
 		// Not kept under deviceCMYKKey, which answers for every page: the

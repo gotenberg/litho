@@ -12,8 +12,13 @@ import (
 // unchanged came out holding a different number: a Type 2 tint transform whose
 // /C1 was .1000000015 was re-emitted as 0.1, and the copy then disagreed with
 // the original the same file still contained. ISO 19005-2, 6.2.4.4 test 2
-// compares the PDF objects rather than what they compute, so pdfjs
-// issue21089.pdf failed it after remediation.
+// compares the PDF objects rather than what they compute, so such a file
+// fails it after remediation.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue21089.pdf: holds the Type 2 tint transform above and failed
+//     ISO 19005-2, 6.2.4.4 test 2 after remediation.
 func TestFormatRealRoundTripsExactly(t *testing.T) {
 	t.Parallel()
 

@@ -125,8 +125,8 @@ type mergeOutput struct {
 	catalogFacts
 }
 
-// bookmarkLeaf is the (title, page) pair we compare. Page=0 leaves
-// are dropped during collection so untitled outline parents do not
+// bookmarkLeaf is the (title, page) pair the comparison keys on. Page=0
+// leaves are dropped during collection so untitled outline parents do not
 // pollute the multiset.
 type bookmarkLeaf struct {
 	Title string `json:"title"`
@@ -264,6 +264,14 @@ func runMerge(ctx context.Context, pdfPath string) (mergeOutput, error) {
 	return result, nil
 }
 
+// Compare scores a merge-self output: page count, per-page text, the litho
+// and pdfcpu bookmark multisets, then the catalog invariants.
+//
+// # Corpus evidence
+//
+//   - pdfcpu: 2 merge fixtures carry the shape that trips the field
+//     collector, against 0 reachable through split, which skips single-page
+//     inputs.
 func (f *mergeFeature) Compare(fixtureID string, output []byte) Verdict {
 	var got mergeOutput
 	if err := json.Unmarshal(output, &got); err != nil {
@@ -302,9 +310,9 @@ func (f *mergeFeature) Compare(fixtureID string, output []byte) Verdict {
 	}
 
 	// Bookmark multiset, pdfcpu side. The pdfcpu golden is loaded
-	// during LoadGoldens. We collect its leaves with the same input-
-	// title filter so pdfcpu's per-source wrapper containers
-	// ("a.pdf", "b.pdf") get dropped.
+	// during LoadGoldens. Collecting its leaves with the same input-
+	// title filter drops pdfcpu's per-source wrapper containers
+	// ("a.pdf", "b.pdf").
 	f.mu.RLock()
 	pdfcpuTree, ok := f.pdfcpuGolds[baseFixtureID(fixtureID)]
 	f.mu.RUnlock()
@@ -317,9 +325,8 @@ func (f *mergeFeature) Compare(fixtureID string, output []byte) Verdict {
 		return Verdict{FixtureID: fixtureID, Reason: reason}
 	}
 
-	// Measured across the corpus: 2 of pdfcpu's merge fixtures carry the shape
-	// that trips the field collector, against 0 reachable through split, which
-	// skips single-page inputs. This is where the invariant is load-bearing.
+	// Split skips single-page inputs, so merge is where the invariant is
+	// load-bearing.
 	if reason := checkCatalogInvariants("merge", got.catalogFacts); reason != "" {
 		return Verdict{
 			FixtureID: fixtureID,

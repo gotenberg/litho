@@ -12,7 +12,12 @@ import (
 )
 
 // emptyLangPDF builds a tagged document whose catalog and one structure element
-// both carry an empty /Lang, the shape of PDF_UA-1__7.2-t29-fail-n and -fail-o.
+// both carry an empty /Lang.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.2-t29-fail-n, PDF_UA-1__7.2-t29-fail-o: both carry
+//     this shape.
 func emptyLangPDF() []byte {
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R /Lang () /StructTreeRoot 4 0 R /MarkInfo << /Marked true >> >>",

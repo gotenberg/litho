@@ -17,7 +17,7 @@ import (
 //     ISO 19005-2/3, 6.1.7.1 t2. ISO 19005-4, 6.1.6.1 dropped it, so folding it
 //     into t1 would state a defect part 4 does not.
 //   - A declared /Length that disagrees with the bytes is swept by
-//     checkStreamLengths, so resolution's copy of the same finding is dropped
+//     [checkStreamLengths], so resolution's copy of the same finding is dropped
 //     here. A stream with no /Length key at all is NOT swept, and still comes
 //     through.
 func TestFormatViolationScope(t *testing.T) {

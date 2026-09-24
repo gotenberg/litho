@@ -2,6 +2,8 @@ package compliance
 
 import "testing"
 
+// TestSeverityOf pins the severity [SeverityOf] assigns the CII schematron
+// rules and a PDF/A rule.
 func TestSeverityOf(t *testing.T) {
 	cases := []struct {
 		name string

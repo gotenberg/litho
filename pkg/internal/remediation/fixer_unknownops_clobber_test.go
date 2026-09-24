@@ -10,12 +10,15 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// [stripUnknownInResources] walks resources["XObject"], reads each stream with
-// document.ResolveStream and writes the stripped result back at that stream's
-// own object number (fixer_unknownops.go:291). Its sibling
-// [stripUnknownFromStreamObject] does the same at :175 and :211. Neither
-// consults an alloc-aware helper, so an earlier fixer's edit to the same
-// XObject stream is discarded.
+// TestStripUnknownInResources_KeepsAnEarlierFixersPendingStreamWrite pins that
+// the resources path reads each XObject stream through the allocator.
+//
+// [stripUnknownInResources] walks resources["XObject"]. It used to read each
+// stream with document.ResolveStream and write the stripped result back at
+// that stream's own object number (fixer_unknownops.go), and its sibling
+// [stripUnknownFromStreamObject] did the same. Neither consulted an
+// alloc-aware helper, so an earlier fixer's edit to the same XObject stream was
+// discarded.
 //
 // Peer and ordering are measured STRUCTURALLY, not by token: graphics writes
 // XObject streams in fixXObjects (two sites), transparency writes them in

@@ -17,15 +17,18 @@ import (
 // [TestCheckNumericLimits_SynthesizedTrailerIgnored] declines to judge the same
 // trailer for ISO 19005-2 §6.1.13, and this is the same reasoning for §6.1.3.
 //
-// Measured over the corpora: 4 of 1201 pdfjs files synthesize a trailer and all
-// four were reported here, while 0 of 2601 veraPDF files do. issue11330.pdf,
-// issue14269.pdf and issue15833.pdf each carry an /ID inside a /Type /XRef
-// stream dictionary the rebuild could not recover, and veraPDF passes
-// issue11330.pdf with a real verdict.
-//
 // The well-formed case below is the guard that matters: a file whose trailer is
 // genuinely missing /ID must still fire, so the rule is narrowed rather than
 // silenced.
+//
+// # Corpus evidence
+//
+//   - pdfjs, 1201 files: 4 synthesize a trailer, and all four were reported
+//     here.
+//   - verapdf, 2601 files: 0 synthesize a trailer.
+//   - pdfjs issue11330.pdf, issue14269.pdf, issue15833.pdf: each carries an
+//     /ID inside a /Type /XRef stream dictionary the rebuild could not
+//     recover, and veraPDF passes issue11330.pdf with a real verdict.
 func TestTrailerID_SynthesizedTrailerIgnored(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

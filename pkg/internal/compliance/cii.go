@@ -483,7 +483,7 @@ func pickXSD(ctx context.Context, doc *document.Document, catalog ast.PdfDict, v
 // ("urn:cen.eu:en16931:2017") with no CIUS suffix in its
 // GuidelineSpecifiedDocumentContextParameter/ID. Used by the PEPPOL
 // overlay so its rules fire only on the documents the PEPPOL BIS
-// spec targets - Factur-X / XRechnung / other CIUS profiles rely on
+// spec targets: Factur-X / XRechnung / other CIUS profiles rely on
 // their own per-profile bundle.
 func invoiceClaimsPlainEN16931(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant) bool {
 	if !variantHasCIIv100Payload(v) || !invoice.found || invoice.streamDict == nil {
@@ -650,7 +650,7 @@ func checkInvoiceSchematron(ctx context.Context, doc *document.Document, invoice
 //     EN 16931 baseline entry has flag="warning" or flag="info".
 //     The bundled Factur-X profile schematrons rebadge baseline
 //     rules under fresh FX-SCH-A-* ids and lose the baseline's flag
-//     attribute, so rules like [CII-SR-465] would silently flip
+//     attribute, so rules like CII-SR-465 would silently flip
 //     Fatal under per-profile mode. Inheriting the baseline flag
 //     restores the published severity without forcing a regeneration
 //     of the bundled .sch files.

@@ -536,15 +536,19 @@ func resolveFieldType(ctx context.Context, doc *document.Document, annot ast.Pdf
 // annotations, /N must be a stream (test 4). apOnlyN reports whether the
 // appearance dict contains only the /N key: veraPDF skips test 3 when it does
 // not, since test 2 already flags the extra keys.
+//
+// # Corpus evidence
+//
+//   - pdfjs pypdf2332.pdf: points /N at an object past its /Size, and veraPDF
+//     reports ISO 19005-4, 6.3.3 t4 on each such annotation.
 func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfObject, isWidget bool, ft ast.PdfName, part int, loc string, apOnlyN bool) []Violation {
 	resolved, err := document.ResolveObject(ctx, doc, nObj)
 	switch {
 	case errors.Is(err, document.ErrObjectNotFound):
 		// ISO 32000-1, 7.3.10 treats a reference to an undefined object as a
 		// reference to the null object, which is neither an appearance stream
-		// nor a subdictionary. veraPDF judges it so: pdfjs pypdf2332.pdf points
-		// /N at an object past its /Size, and veraPDF reports ISO 19005-4, 6.3.3
-		// t4 on each such annotation.
+		// nor a subdictionary. veraPDF judges it so, and reports ISO 19005-4,
+		// 6.3.3 t4 on an annotation whose /N names an object past the /Size.
 		resolved = ast.PdfNull{}
 	case err != nil:
 		doc.Logger.Debug("compliance: annotations: failed to resolve /N value", "loc", loc, "error", err)
@@ -575,8 +579,8 @@ func checkNValueType(ctx context.Context, doc *document.Document, nObj ast.PdfOb
 	case ast.PdfStream:
 		return nil
 	case ast.PdfDict:
-		// A dict might be acceptable if it's actually a Widget/Btn that we
-		// didn't detect. For non-Widget annotations, this is a violation.
+		// A dict might be acceptable if it's actually a Widget/Btn that litho
+		// did not detect. For non-Widget annotations, this is a violation.
 		if isWidget {
 			// Widget with non-Btn FT: /N should still be a stream.
 			rule := nStreamRule(part)
@@ -665,6 +669,11 @@ func checkAnnotOpacity(ctx context.Context, doc *document.Document, annot ast.Pd
 
 // apExtraKeys returns a formatted string listing keys in the appearance
 // dictionary other than /N.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14301.pdf: reported "[R D]" or "[D R]" for the same
+//     annotation while the extras were printed in dictionary order.
 func apExtraKeys(ap ast.PdfDict) string {
 	var extras []string
 	for k, v := range ap {
@@ -676,8 +685,7 @@ func apExtraKeys(ap ast.PdfDict) string {
 		return ""
 	}
 	// Sorted: the names go straight into the violation message, and ranging the
-	// dictionary printed the same extras in a different order on every run
-	// (pdfjs issue14301.pdf reports "[R D]" or "[D R]" for the same annotation).
+	// dictionary printed the same extras in a different order on every run.
 	slices.Sort(extras)
 	return fmt.Sprintf("%v", extras)
 }

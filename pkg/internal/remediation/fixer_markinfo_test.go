@@ -37,7 +37,11 @@ func TestFixMarkInfo_AddsMarkedTrue(t *testing.T) {
 // a file whose active trailer lost /Root (a damaged incremental update) must
 // still remediate. The fixer recovers the catalog from the object table, the
 // same way the reader and the full-rewrite writer do, instead of aborting with
-// "trailer missing /Root". Reproduces govdocs thread_100_100982 at PDF/UA-1.
+// "trailer missing /Root".
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100982: the test reproduces this file at PDF/UA-1.
 func TestFixMarkInfo_RecoversRootlessTrailer(t *testing.T) {
 	doc, alloc := newTestDoc(t, rootlessCatalogPDF(""))
 

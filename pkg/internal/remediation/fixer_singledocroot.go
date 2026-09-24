@@ -35,6 +35,11 @@ func matchSingleDocRoot(v compliance.Violation) bool {
 //
 // The edit reorders the logical structure without changing page content, so it is
 // registered as safetyStructural.
+//
+// # Corpus evidence
+//
+//   - All corpora: hanging the old roots straight off the new Document made 12
+//     files fail after remediation, a stray LI becoming "Table 5. Document-LI".
 func fixSingleDocRoot(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -79,9 +84,9 @@ func fixSingleDocRoot(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 	// A Document may not hold every structure type. ISO/TS 32005 Table 5
 	// forbids 24 of them directly under it, so hanging the old roots straight
 	// off the new Document repairs the missing root and introduces a
-	// containment fault instead: a stray LI became "Table 5. Document-LI",
-	// which is how 12 corpus files failed after remediation. Where the matrix
-	// forbids the pairing, put the container it does allow in between.
+	// containment fault instead: a stray LI became "Table 5. Document-LI".
+	// Where the matrix forbids the pairing, put the container it does allow in
+	// between.
 	kidArray := make(ast.PdfArray, 0, len(kids))
 	interposed := 0
 	for _, ref := range kids {

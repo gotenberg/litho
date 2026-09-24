@@ -165,9 +165,12 @@ var iccColorSpaceComponents = map[string]int{
 // an OutputIntent's destination profile as well.
 //
 // A profile litho cannot read answers the test no better than a mismatched one:
-// veraPDF reports the same rule for both, and measured over 1984
-// /DestOutputProfile streams in the corpora only seven answer it at all, five
-// by a genuine mismatch and two by being undecodable.
+// veraPDF reports the same rule for both.
+//
+// # Corpus evidence
+//
+//   - All corpora, 1984 /DestOutputProfile streams: only seven answer the test
+//     at all, five by a genuine mismatch and two by being undecodable.
 func checkOutputIntentProfileComponents(ctx context.Context, doc *document.Document, destProfileObj ast.PdfObject, part int, label string, results *[]Violation) {
 	rule := iccBasedNRule(part)
 	if rule.Specification == "" {

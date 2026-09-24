@@ -177,6 +177,7 @@ func isStandardStructType(name ast.PdfName, profile string) bool {
 const MaxStructTreeWalkDepth = 200
 
 // maxStructTreeDepth is the recursion limit for walking the structure tree.
+// It aliases [MaxStructTreeWalkDepth], which states the anti-DoS rationale.
 const maxStructTreeDepth = MaxStructTreeWalkDepth
 
 // maxStructAttrSearchDepth bounds the depth-first searches that look for a
@@ -465,7 +466,7 @@ func checkRoleMap(ctx context.Context, doc *document.Document, structTreeRoot as
 // carries as its /S. It is what scopes the /RoleMap rules to the elements they
 // judge; see [checkRoleMap] for the clauses.
 //
-// The walk is bounded by maxStructTreeDepth and by an object-number visited
+// The walk is bounded by [maxStructTreeDepth] and by an object-number visited
 // set, so a tree that points back at itself terminates.
 func collectUsedStructTypes(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict) map[ast.PdfName]bool {
 	used := make(map[ast.PdfName]bool)
@@ -777,8 +778,12 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 // resolved as [iso32005Kids] resolves it: the /RoleMap applies first (ISO
 // 32000-2:2020, 14.8.6), and a Div, Part, or NonStruct kid contributes its own
 // kids in its place. veraPDF evaluates the rule over the same list
-// (GFPDStructTreeNode.getkidsStandardTypes). govdocs thread_100_100184.pdf maps
-// Caption to P, so its mid-Sect Caption elements are paragraphs.
+// (GFPDStructTreeNode.getkidsStandardTypes).
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100184.pdf: its role map maps Caption to P, so its
+//     mid-Sect Caption elements are paragraphs.
 func validateCaptionKidPositions(ctx context.Context, state *walkState, elem ast.PdfDict) {
 	kidKeys, _ := iso32005Kids(ctx, state, elem)
 	for i := 1; i < len(kidKeys)-1; i++ {
@@ -792,6 +797,19 @@ func validateCaptionKidPositions(ctx context.Context, state *walkState, elem ast
 }
 
 // walkElement validates a single structure element and recurses into children.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000150.pdf: maps LI_Label to Lbl and LI_Title to
+//     LBody, so comparing the PDF/UA-1 containment names as written reported
+//     its list items' kids as foreign to LI.
+//   - verapdf 8.2.5.29 fixtures: litho's reading of the math-in-Formula test
+//     was measured against veraPDF on them and on crafted variants.
+//   - govdocs thread_000_000838.pdf: its "Heading 2", which its role map maps
+//     to H2, is a level-2 heading for ISO 14289-1 §7.4.2.
+//   - govdocs thread_400_400934.pdf: writes its notes as /Footnote, mapped to
+//     /Note, without /ID, and veraPDF reports ISO 14289-1, 7.9 t1 while
+//     litho, reading /S, did not.
 func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parentType ast.PdfName, depth int, lastHeadingLevel int) {
 	if ctx.Err() != nil {
 		return
@@ -837,9 +855,9 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	// veraPDF judges every one of them by standard type: the element's own (its
 	// SETR, SELI and the rest are built from it), its parent's (parentStandardType,
 	// which looks through Div, Part, and NonStruct), and its kids'
-	// (kidsStandardTypes). govdocs thread_000_000150.pdf maps LI_Label to Lbl and
-	// LI_Title to LBody; comparing the names as written reported its list items'
-	// kids as foreign to LI.
+	// (kidsStandardTypes). A role map can map a producer's own list label and
+	// body types to Lbl and LBody, so comparing the names as written would
+	// report those kids as foreign to LI.
 	if state.profile == "PDF/UA-1" {
 		selfType := ast.PdfName(iso32005Key(ctx, state, elem, typeName))
 		parent := ua1ParentType(state.ua1Parent)
@@ -886,7 +904,7 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	// ancestor that stands for Formula or for a MathML type
 	// (hasParentFormulaOrMathML), so the kids of math pass and so does a math
 	// wrapped inside its Formula; litho follows the test, measured against
-	// veraPDF on the veraPDF 8.2.5.29 fixtures and on crafted variants.
+	// veraPDF.
 	if state.profile == "PDF/UA-2" && standsForMathML(ctx, state, elem, typeName) &&
 		!hasFormulaOrMathMLAncestor(ctx, state, elem) {
 		*state.results = append(*state.results,
@@ -929,9 +947,8 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	}
 
 	// Track heading levels and generic/specific heading usage, by standard type:
-	// veraPDF builds its SEHn and SEH objects from the standard type, so govdocs
-	// thread_000_000838.pdf's "Heading 2", which its role map maps to H2, is a
-	// level-2 heading for ISO 14289-1 §7.4.2.
+	// veraPDF builds its SEHn and SEH objects from the standard type, so a custom
+	// type the role map maps to H2 is a level-2 heading for ISO 14289-1 §7.4.2.
 	headingType := iso32005StandardName(ctx, state, elem, typeName)
 	if headingType == "H" {
 		state.hasGenericH = true
@@ -957,10 +974,9 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 	// The Formula and Note requirements bind the structure type an element stands
 	// for, not the name it is written with: veraPDF judges its SEFormula and
 	// SENote objects, which it builds from the standard type the /RoleMap maps
-	// to (ISO 32000-1, 14.7.3). govdocs thread_400_400934.pdf writes its notes as
-	// /Footnote, mapped to /Note, without /ID, and veraPDF reports ISO 14289-1,
-	// 7.9 t1 while litho, reading /S, did not. Measured against veraPDF with a
-	// mapped and an unmapped name for each.
+	// to (ISO 32000-1, 14.7.3). A custom type mapped to /Note is a Note for ISO
+	// 14289-1, 7.9 t1. Measured against veraPDF with a mapped and an unmapped
+	// name for each.
 	standardType := iso32005Key(ctx, state, elem, typeName)
 
 	// §7.7 t1: Formula elements must have non-empty /Alt, or /ActualText (presence suffices).
@@ -1063,6 +1079,12 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 }
 
 // validateListContainment checks PDF/UA list structure rules.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400037.pdf: holds 21 LI elements with exactly two
+//     offending children each, and litho reported 42 findings where veraPDF
+//     reports 21, which is why §7.2 t20 is stated once per LI.
 func validateListContainment(_ context.Context, state *walkState, _ ast.PdfDict, typeName ast.PdfName, parentType ast.PdfName) {
 	// L must contain only LI (and optionally Caption). Stated once for the L,
 	// however many of its children offend: see [walkState.listReported].
@@ -1091,9 +1113,8 @@ func validateListContainment(_ context.Context, state *walkState, _ ast.PdfDict,
 		case "Lbl", "LBody":
 			// OK
 		default:
-			// Stated once for the LI, however many of its children offend.
-			// govdocs thread_400_400037.pdf holds 21 LI elements with exactly
-			// two offending children each: litho reported 42, veraPDF 21.
+			// Stated once for the LI, however many of its children offend,
+			// as veraPDF states it.
 			if !listParentReported(state, 20) {
 				*state.results = append(*state.results,
 					failf(Rule_14289_1_7_2_t20, "LI contains %s instead of Lbl/LBody", typeName)...)
@@ -1359,9 +1380,12 @@ func validateListNumbering(ctx context.Context, state *walkState, lElem ast.PdfD
 // The attribute belongs to the List owner and is inheritable (14.8.5.5), so it
 // is read from the element's /A first, then from the attribute classes its /C
 // names, which /A overrides (14.7.5.2), then from each ancestor in turn.
-// veraPDF resolves it the same way (AttributeHelper.getListNumbering). pdfjs
-// bug1937438_mml_from_latex.pdf states it only through a class its role-mapped
-// lists name.
+// veraPDF resolves it the same way (AttributeHelper.getListNumbering).
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1937438_mml_from_latex.pdf: states ListNumbering only through
+//     a class its role-mapped lists name.
 func listNumbering(ctx context.Context, state *walkState, elem ast.PdfDict) string {
 	cur := elem
 	for range maxStructTreeDepth {
@@ -1551,9 +1575,12 @@ func structClassMap(ctx context.Context, doc *document.Document, structTreeRoot 
 // its own kids. Both levels are read by standard type, as [iso32005Kids] reads
 // them: the /RoleMap applies first (ISO 32000-2:2020, 14.8.6), and a Div, Part,
 // or NonStruct kid contributes its own kids in its place. veraPDF decides
-// containsLabels the same way (GFSEL.getcontainsLabels). govdocs
-// thread_300_300035.pdf labels its items with LI_Label, which its role map
-// maps to Lbl.
+// containsLabels the same way (GFSEL.getcontainsLabels).
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300035.pdf: labels its items with LI_Label, which
+//     its role map maps to Lbl.
 func listContainsLabels(ctx context.Context, state *walkState, elem ast.PdfDict, depth int) bool {
 	kObj, ok := elem["K"]
 	if !ok {
@@ -1599,7 +1626,7 @@ func structParentPresenceRule(profile string) Rule {
 // Unicode PUA values (U+E000-U+F8FF, U+F0000-U+FFFFD, U+100000-U+10FFFD).
 //
 // Which keys are in scope differs by profile, so the caller supplies a rule per
-// key and passes the zero Rule for a key the profile does not judge. PDF/UA-2
+// key and passes the zero [Rule] for a key the profile does not judge. PDF/UA-2
 // splits ActualText (§8.4.3 t02) from Alt (§8.4.3 t03); ISO 19005-4 §6.2.10.8
 // covers ActualText ALONE, so /Alt is out of scope there and firing the same
 // rule for it reported a violation veraPDF does not.

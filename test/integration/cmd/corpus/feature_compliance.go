@@ -212,7 +212,7 @@ type complianceMismatch struct {
 
 // fixtureIDFromVeraPDFName derives the fixture ID from a VeraPDF job's
 // itemDetails.name. Under the flat pdfs/ layout, the path is always
-// "/output/pdfs/<basename>.pdf"; the fixture ID we need is
+// "/output/pdfs/<basename>.pdf"; the fixture ID must be
 // "<profile>/<basename>" to line up with walk-flat-x-profiles.
 func fixtureIDFromVeraPDFName(name, profileDir string) string {
 	base := filepath.Base(name)

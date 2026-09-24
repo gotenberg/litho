@@ -19,17 +19,22 @@ import (
 // page merely declares is modelled nowhere. [checkExtGStateTransparency1] and
 // [resourcesUseTransparency] both scoped themselves that way, but the
 // ExtGState loop inside [checkTransparencyParts2Plus] did not, and it runs
-// first and short-circuits the others.
-//
-// pdfjs issue6741.pdf is the witness: it declares /G1 (/BM /Darken) and /G2
-// (/BM /Lighten), sets only /G0 (/BM /Normal), paints one CCITTFax image whose
-// /SMask is None, and carries no page /Group and no OutputIntent. veraPDF
-// passes it; litho reported §6.2.10 t2. The alpha arms matter too: issue13915
-// and issue14864 tripped the same loop through /CA on states nothing selects,
-// and litho reported 54 and 8 where veraPDF reports 8 and 6.
+// first and short-circuits the others. The alpha arms matter as much as the
+// blend-mode ones: /CA on a state nothing selects trips the same loop.
 //
 // The selected arms are what keep this honest. A gate that simply silenced the
 // loop would satisfy the unselected cases and quietly lose every real report.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue6741.pdf: the witness. It declares /G1 (/BM /Darken) and /G2
+//     (/BM /Lighten), sets only /G0 (/BM /Normal), paints one CCITTFax image
+//     whose /SMask is None, and carries no page /Group and no OutputIntent.
+//     veraPDF passes it; litho reported §6.2.10 t2. The opaque-state case is
+//     its control.
+//   - pdfjs issue13915, issue14864: tripped the same loop through /CA on
+//     states nothing selects, and litho reported 54 and 8 where veraPDF
+//     reports 8 and 6.
 func TestTransparencyParts2Plus_ExtGStateScopedToDrawn(t *testing.T) {
 	t.Parallel()
 
@@ -106,8 +111,8 @@ func TestTransparencyParts2Plus_ExtGStateScopedToDrawn(t *testing.T) {
 
 	t.Run("an opaque state the content selects stays silent", func(t *testing.T) {
 		t.Parallel()
-		// The issue6741 control: /BM /Normal is not transparency, so selecting
-		// it must not fire either.
+		// The control: /BM /Normal is not transparency, so selecting it must
+		// not fire either.
 		if fires(t, pdf("<< /Type /ExtGState /BM /Normal >>", selected), models.PDFA2b, "6.2.10") {
 			t.Error("/BM /Normal is not transparency")
 		}

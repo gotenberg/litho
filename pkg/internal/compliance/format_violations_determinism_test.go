@@ -17,8 +17,12 @@ import (
 // between them, and the parser rejects the body. Object 4 takes its /Length
 // from object 5, so the stream checks resolve it again after the warming
 // pass, and a rejected parse is never cached, so each of those resolutions
-// re-reads the header. That combination is the shape pdfjs issue1045 carries,
-// and it is what made the reported §6.1.9 count move from run to run.
+// re-reads the header. That combination is what made the reported §6.1.9
+// count move from run to run.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue1045: carries this combination.
 func formatDefectPDF() []byte {
 	bodies := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>\n",

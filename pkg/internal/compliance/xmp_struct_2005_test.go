@@ -10,12 +10,16 @@ import (
 // litho already judges property names against that edition: ISO 19005-2,
 // 6.6.2.3.1 t1 reports a property "not predefined in XMP 2005". The structured
 // field sets had been left comprehensive, so a file writing a member Adobe
-// added later passed t2. pdfjs issue15220.pdf writes stRef:originalDocumentID
-// inside xmpMM:DerivedFrom and stEvt:changed inside xmpMM:History, and veraPDF
-// reports both under 6.6.2.3.1 t2.
+// added later passed t2.
 //
 // Every name below was confirmed against veraPDF one field per fixture: the
 // accepted ones pass its t2 and the rejected ones fail it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15220.pdf: writes stRef:originalDocumentID inside
+//     xmpMM:DerivedFrom and stEvt:changed inside xmpMM:History, and veraPDF
+//     reports both under 6.6.2.3.1 t2.
 func TestXMPStructTypeFields2005(t *testing.T) {
 	t.Parallel()
 

@@ -43,8 +43,13 @@ func equal(a, b []int) bool {
 // Levels used to come from ranking the distinct sizes, which answers a
 // different question: the first heading a page contains is rarely its largest,
 // so a page whose opening heading was the sixth-largest tagged to H6 and failed
-// the rule immediately. govdocs thread_000_000337.pdf did exactly that, and
-// auto-tagging introduced 7.4.2 test 1 into 35 files that did not have it.
+// the rule immediately.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000337.pdf: did exactly that.
+//   - All corpora: auto-tagging introduced 7.4.2 test 1 into 35 files that did
+//     not have it.
 func TestHeadingLevelsFollowReadingOrder(t *testing.T) {
 	t.Parallel()
 

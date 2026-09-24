@@ -5,6 +5,8 @@ import (
 	"testing"
 )
 
+// TestExtractXMPPropertyValue pins [extractXMPPropertyValue] on the attribute
+// and element forms, trimmed element text, and a missing property.
 func TestExtractXMPPropertyValue(t *testing.T) {
 	t.Parallel()
 

@@ -85,8 +85,9 @@ func TestObjAllocator_SnapshotRestore(t *testing.T) {
 	}
 }
 
-// Callers that capture a pointer to the pending map before a restore must
-// continue to see a coherent view afterwards. Writer.remediate captures the
+// TestObjAllocator_Restore_MutatesInPlace pins that callers that capture a
+// pointer to the pending map before a restore continue to see a coherent view
+// afterwards. Writer.remediate captures the
 // map reference to feed a queued mutation and needs rollback to update that
 // same map in place.
 func TestObjAllocator_Restore_MutatesInPlace(t *testing.T) {

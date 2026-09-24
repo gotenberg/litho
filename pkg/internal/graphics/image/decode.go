@@ -18,27 +18,38 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 )
 
+// Anti-DoS bounds on what an image dictionary may make the decoder allocate
+// or evaluate.
+//
+// # Corpus evidence
+//
+//   - All corpora: the widest DeviceN image has seven colorants, CMYK plus
+//     three spots, which maxTintColorants leaves room beyond.
+//   - All corpora: the largest DeviceN image is 540x534 over seven colorants,
+//     36.9 million worst-case corner visits, which maxDeviceNWork accepts
+//     with room.
+//   - All corpora: the worst DeviceN image holds 31,400 distinct tuples, which
+//     maxTintMemo covers.
 const (
 	// maxImagePixels caps how many pixels a single Image XObject may
 	// declare before [DecodeImage] refuses to allocate. 100 megapixels
 	// covers print-resolution photographs (8K display tops out at
 	// ~33 MP) yet rejects adversarial PDFs that declare 100k×100k
-	// dimensions to force ~40 GB allocations.
+	// dimensions to force ~40 GB allocations. Anti-DoS, not spec-mandated.
 	maxImagePixels = 100_000_000
 
 	// maxTintColorants bounds the colorant count of a DeviceN image.
 	// [decodeDeviceN] evaluates the tint transform once per distinct pixel
 	// tuple and the sampled evaluator visits 2^N corners each time, so the
 	// count drives the work exponentially. Twelve leaves room beyond the
-	// widest in the corpora (seven: CMYK plus three spots) while keeping a
-	// single evaluation to 4096 corners. Anti-DoS, not spec-mandated: ISO
-	// 32000-1, 8.6.6.5 puts no limit on /DeviceN colorants.
+	// widest real images while keeping a single evaluation to 4096 corners.
+	// Anti-DoS, not spec-mandated: ISO 32000-1, 8.6.6.5 puts no limit on
+	// /DeviceN colorants.
 	maxTintColorants = 12
 
 	// maxDeviceNWork bounds pixels x 2^colorants, the worst-case corner
 	// visits when every pixel holds a distinct tuple and the memo below never
-	// hits. The largest DeviceN image in the corpora is 540x534 over seven
-	// colorants, which is 36.9 million, so 1<<28 accepts it with room while
+	// hits. 1<<28 accepts the largest real DeviceN image with room while
 	// refusing a megapixel image over twelve colorants outright. Anti-DoS,
 	// not spec-mandated.
 	maxDeviceNWork = 1 << 28
@@ -46,13 +57,14 @@ const (
 	// maxTintMemo bounds the tuple cache [decodeDeviceN] keeps. Distinct
 	// tuples are bounded only by the pixel count, so an unbounded map on
 	// adversarial input is a memory hazard; past this size the decoder keeps
-	// evaluating but stops growing the cache. 65536 covers the corpora, whose
-	// worst image holds 31,400 distinct tuples. Anti-DoS, not spec-mandated.
+	// evaluating but stops growing the cache. 65536 covers the distinct tuple
+	// counts real images hold. Anti-DoS, not spec-mandated.
 	maxTintMemo = 1 << 16
 
 	// maxImageBytes caps the decoded byte stream. Four bytes per pixel
 	// is the worst case (RGBA), so this matches the pixel cap and
-	// bounds [io.ReadAll] on the streaming decoder output.
+	// bounds [io.ReadAll] on the streaming decoder output. Anti-DoS, not
+	// spec-mandated.
 	maxImageBytes = 4 * maxImagePixels
 )
 
@@ -93,6 +105,11 @@ func validateImageDimensions(width, height int) error {
 // image breaks that arithmetic: it carries one sample per colorant, up to
 // maxTintColorants, so [decodeDeviceN] bounds its own pixel count before
 // calling here rather than relying on the four-component reasoning.
+//
+// # Corpus evidence
+//
+//   - All corpora: one image declares /BitsPerComponent 3, which is why the
+//     unsupported depths are refused rather than strided.
 func unpackSamples(data []byte, width, height, samplesPerPixel, bpc int, scale bool) ([]byte, error) {
 	if bpc == 8 {
 		return data, nil
@@ -107,8 +124,8 @@ func unpackSamples(data []byte, width, height, samplesPerPixel, bpc int, scale b
 		rowBytes = perRow * 2
 	default:
 		// ISO 32000-1, 8.9.5.1 Table 89 permits 1, 2, 4, 8 and 16 only. A
-		// corpus image declares 3, which has no defined packing at all, so it
-		// is refused rather than strided as though it had one.
+		// depth such as 3 has no defined packing at all, so it is refused
+		// rather than strided as though it had one.
 		return nil, fmt.Errorf("unsupported BitsPerComponent %d for image decode", bpc)
 	}
 
@@ -176,9 +193,14 @@ func padShortSamples(data []byte, width, height, samplesPerPixel, bpc int) ([]by
 
 // indexDecode maps the indices of an indexed image through its /Decode array
 // in place (ISO 32000-1, 8.9.5.2), rounding each to the nearest index. The
-// default [0 2^n-1] leaves them as they are; pdfjs issue10339_reduced.pdf
-// states [255 0], which reverses the table, and reading the indices unmapped
-// painted every pixel from the wrong end of it.
+// default [0 2^n-1] leaves them as they are; an inverted array such as
+// [255 0] reverses the table, and reading the indices unmapped paints every
+// pixel from the wrong end of it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue10339_reduced.pdf: states /Decode [255 0], and reading its
+//     indices unmapped painted every pixel from the wrong end of the table.
 func indexDecode(ctx context.Context, doc *document.Document, dict ast.PdfDict, indices []byte, bpc int) {
 	dec := resolveDecodeArray(ctx, doc, dict, 1)
 	if dec == nil || bpc < 1 || bpc > 8 {
@@ -307,10 +329,16 @@ func imageComponents(colorSpace string) int {
 
 // resolveDecodeArray reads the image /Decode array as 2*components
 // numbers, or returns nil when it is absent or too short. Per ISO
-// 32000-1 §8.9.5.2 the /Decode array remaps each sample from the raw
+// 32000-1, 8.9.5.2 the /Decode array remaps each sample from the raw
 // [0, 2^bpc-1] range onto [Dmin, Dmax]; honoring it renders inverted or
 // remapped images (e.g. Adobe-inverted CMYK, /Decode [1 0 ...]) with
 // correct color instead of the raw samples.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20668.pdf: gives its CMYK JPEGs /Decode
+//     [1 0 1 0 1 0 1 0 0], and PDF.js inverts them by the leading pairs, so
+//     ignoring the over-long array rendered the images as their negatives.
 func resolveDecodeArray(ctx context.Context, doc *document.Document, dict ast.PdfDict, components int) []float64 {
 	obj, ok := dict["Decode"]
 	if !ok {
@@ -322,11 +350,10 @@ func resolveDecodeArray(ctx context.Context, doc *document.Document, dict ast.Pd
 		return nil
 	}
 	// ISO 32000-1, Table 89 wants exactly two numbers per component. A longer
-	// array keeps its leading pairs, which name every component unambiguously:
-	// pdfjs issue20668.pdf gives its CMYK JPEGs /Decode [1 0 1 0 1 0 1 0 0],
-	// and PDF.js inverts them by those pairs, so ignoring the array rendered
-	// the images as their negatives. A shorter array leaves components without
-	// a range and stays ignored.
+	// array keeps its leading pairs, which name every component unambiguously,
+	// and PDF.js inverts an Adobe CMYK JPEG by those pairs, so ignoring the
+	// array renders such an image as its negative. A shorter array leaves
+	// components without a range and stays ignored.
 	if len(arr) < 2*components {
 		doc.Logger.Debug("ignoring image /Decode array with unexpected length",
 			slog.Int("len", len(arr)), slog.Int("want", 2*components))
@@ -424,8 +451,12 @@ func indexedColorSpace(ctx context.Context, doc *document.Document, dict ast.Pdf
 // three the stride is right by accident; where it is not, the samples are strided
 // wrongly. A seven-colorant DeviceN image holds seven bytes a pixel, so a
 // three-byte stride passes the length check on the first 3/7 of the stream and
-// reads colorants across pixel boundaries: measured on 135 images in one govdocs
-// document, every one of which decoded without error.
+// reads colorants across pixel boundaries, with no error to show for it.
+//
+// # Corpus evidence
+//
+//   - govdocs: 135 images in one document were strided across pixel
+//     boundaries this way, and every one of them decoded without error.
 func tintedColorSpace(ctx context.Context, doc *document.Document, dict ast.PdfDict) (ast.PdfArray, string, int, bool) {
 	csObj, ok := dict["ColorSpace"]
 	if !ok {
@@ -472,12 +503,19 @@ func tintedColorSpace(ctx context.Context, doc *document.Document, dict ast.PdfD
 // to the alternate space. litho substitutes "DeviceRGB" for the space itself so
 // samples can be read for non-visual extraction, and that substitution is wrong
 // twice over here: it strides three bytes where the image holds one, and where a
-// JPEG's shape is measured instead it emits the tint as a grey LEVEL. Every tint
-// transform measured in the corpora maps tint 0 to paper white and full tint to
-// near black, so the grey reading renders the image inverted.
+// JPEG's shape is measured instead it emits the tint as a grey LEVEL. A real tint
+// transform maps tint 0 to paper white and full tint to near black, so the grey
+// reading renders the image inverted.
 //
 // The transform is evaluated once per possible byte rather than once per pixel:
 // the samples are 8-bit after unpacking, so 256 evaluations cover any image.
+//
+// # Corpus evidence
+//
+//   - All corpora: every tint transform measured maps tint 0 to paper white and
+//     full tint to near black.
+//   - All corpora: no Separation image declares a /Decode array, so its
+//     /Decode tables are the identity in practice.
 func decodeSeparation(
 	ctx context.Context,
 	doc *document.Document,
@@ -515,8 +553,8 @@ func decodeSeparation(
 	}
 
 	// /Decode remaps the tint before the transform sees it (ISO 32000-1,
-	// 8.9.5.2). No corpus Separation image declares one, so these tables are
-	// the identity in practice, but a file may.
+	// 8.9.5.2). These tables are usually the identity, but a file may declare
+	// one.
 	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, dict, 1), 1)
 
 	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, renderingIntent(ctx, doc, dict), cc))
@@ -548,12 +586,19 @@ func decodeSeparation(
 // and the tint transform converts the whole tuple at once, so unlike a
 // Separation it cannot be reduced to a 256-entry table: the tuple space is
 // 256^N. The transform is evaluated once per DISTINCT tuple instead, which is
-// what makes this affordable. The largest such image in the corpora is
-// 540x534 over seven colorants yet holds only 31,400 distinct tuples, so the
-// cache turns 36.9 million corner visits into 4.0 million, a factor of nine.
+// what makes this affordable: a real image holds far fewer distinct tuples
+// than pixels.
 //
 // A JPEG is decoded here only when its codestream holds one component per
 // colorant; [jpegSampleSpace] measures that shape.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest DeviceN image is 540x534 over seven colorants
+//     yet holds only 31,400 distinct tuples, so the cache turns 36.9 million
+//     corner visits into 4.0 million, a factor of nine.
+//   - All corpora: no DeviceN image declares a /Decode array, so its /Decode
+//     tables are the identity in practice.
 func decodeDeviceN(
 	ctx context.Context,
 	doc *document.Document,
@@ -587,7 +632,7 @@ func decodeDeviceN(
 	}
 	// Per ISO 32000-1, 8.6.6.5 the transform takes one input per colorant.
 	// Checking here names the colour space and both counts; letting the
-	// mismatch reach [function.Function.Eval] instead reports a bare arity
+	// mismatch reach function.Function.Eval instead reports a bare arity
 	// error that mentions neither.
 	if tint.Inputs() != colorants {
 		return nil, fmt.Errorf("devicen tint transform takes %d inputs for a %d-colorant space",
@@ -608,8 +653,8 @@ func decodeDeviceN(
 	}
 
 	// /Decode remaps each colorant before the transform sees it (ISO 32000-1,
-	// 8.9.5.2). No corpus DeviceN image declares one, so these tables are the
-	// identity in practice, but a file may.
+	// 8.9.5.2). These tables are usually the identity, but a file may declare
+	// one.
 	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, dict, colorants), colorants)
 
 	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, renderingIntent(ctx, doc, dict), cc))
@@ -650,8 +695,13 @@ func decodeDeviceN(
 // tintTable converts the colour table of an indexed space over a Separation or
 // DeviceN space, whose entries hold one tint per colorant, into RGB entries
 // through the space's tint transform (ISO 32000-1, 8.6.6.4 and 8.6.6.5).
-// Reading the tints as RGB, three bytes an entry, misread every entry of the
-// five-colorant tables of govdocs thread_300_300659 and thread_400_400932.
+// Reading the tints as RGB, three bytes an entry, misreads every entry of a
+// table whose colorant count is not three.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300659, thread_400_400932: reading the tints as RGB
+//     misread every entry of their five-colorant tables.
 func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, colorants int, table []byte, intent icc.Intent, cc colorContext) ([]byte, error) {
 	if len(cs) < 4 {
 		return nil, fmt.Errorf("tinted colour space has %d entries, want [family names alternate tint]", len(cs))
@@ -726,7 +776,7 @@ func alternateToRGB(alternate string, conv *converter, v []float64) color.RGBA {
 // there so a direct image in it is refused rather than misread. An indexed
 // image is different: its samples are indices, and the base count sizes the
 // colour TABLE, not the sample stride. Per ISO 32000-1, 8.6.5 Lab takes three
-// components, which is the count [remediation.colorSpaceComponents] already
+// components, which is the count remediation.colorSpaceComponents already
 // assigns it.
 func indexedBaseComponents(base string) int {
 	if base == "Lab" {
@@ -737,14 +787,18 @@ func indexedBaseComponents(base string) int {
 
 // labParams carries the parts of a [/Lab] colour space dictionary the palette
 // needs, per ISO 32000-1, 8.6.5.4.
+//
+// # Corpus evidence
+//
+//   - pdfjs: the two documents that exposed the /Range handling both declare
+//     [-128 127 -128 127].
 type labParams struct {
 	// whiteX, whiteY, whiteZ are /WhitePoint, the diffuse white the L*a*b*
 	// values are relative to. Required by the spec, so an absent one leaves
 	// the palette unresolved rather than guessing an illuminant.
 	whiteX, whiteY, whiteZ float64
 	// aMin, aMax, bMin, bMax are /Range. Its default is [-100 100 -100 100],
-	// but real files carry other spans: the two pdfjs documents that exposed
-	// this both declare [-128 127 -128 127].
+	// but real files carry other spans, so the declared one is read.
 	aMin, aMax, bMin, bMax float64
 }
 
@@ -766,9 +820,13 @@ type palette struct {
 // that sample is an index into the table rather than a colour. Reading it as
 // though it were a colour in the base space is what [resolveColorSpace] implies
 // on its own, and the decoder then wanted three or four bytes per pixel for
-// data that holds one: every indexed image failed with "decoded data too short"
-// (pdfjs 160F-2019.pdf and S2.pdf among them), so no palette image could be
-// decoded at all.
+// data that holds one: every indexed image failed with "decoded data too short",
+// so no palette image could be decoded at all.
+//
+// # Corpus evidence
+//
+//   - pdfjs 160F-2019.pdf, S2.pdf: among the indexed images that failed with
+//     "decoded data too short" before the palette was resolved.
 func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast.PdfDict, cc colorContext) (palette, bool) {
 	arr, base, ok := indexedColorSpace(ctx, doc, dict)
 	if !ok || len(arr) < 4 {
@@ -1206,6 +1264,28 @@ func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.Pdf
 // conversion and fills native with the samples of a DeviceGray, DeviceRGB or
 // DeviceCMYK reading, /Decode applied, or reports errNotNative when the
 // samples do not come out that way.
+//
+// # Corpus evidence
+//
+//   - pdfcpu Wonderwall.pdf: a 2312x3307 stencil mask carries 955,723 bytes
+//     and was asked for 2,867,169 while a missing /ColorSpace drove the
+//     unpacking.
+//   - litho jpx_2b.pdf: holds seven 8x8 JPXDecode images of 212 to 235
+//     encoded bytes against the 192 an RGB read wants, and while the filter
+//     pipeline skipped JPXDecode each decoded into a picture made of
+//     codestream bytes.
+//   - pdfjs: 4 images whose indexed base is /Lab were reported "too short for
+//     RGB image" when read in the base space.
+//   - All corpora: every tint transform measured maps tint 0 to paper white
+//     and full tint to near black.
+//   - govdocs thread_000_000340: reading its one-colorant /Black JPEGs as
+//     DeviceGray inverted both images against PDF.js, which applies the tint
+//     transform.
+//   - govdocs: the one direct Lab image in the corpora is a JPEG, whose white
+//     came out pink when read as RGB.
+//   - govdocs: painting the rows short data holds, with the filters keeping
+//     what a truncated stream holds, took the pages PDF.js paints images on
+//     that litho failed to decode from 375 to 3.
 func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, cc colorContext, native *NativeSamples) (image.Image, error) {
 	// A default colour space in the painting resources stands in for a device
 	// space from here on, for every reading of the colour space below.
@@ -1244,10 +1324,9 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	// exactly one component at one bit per sample and forbids /ColorSpace, so
 	// neither an absent entry nor a wrongly present one may drive the unpacking.
 	// resolveColorSpace answers "DeviceRGB" when the entry is missing, which
-	// strides the samples three times too far: a 2312x3307 mask carries 955,723
-	// bytes and was asked for 2,867,169, so every complete stencil failed as
-	// "decoded data too short" while one padded to the larger size decoded with
-	// its mask bits read as colour components.
+	// strides the samples three times too far, so every complete stencil
+	// failed as "decoded data too short" while one padded to the larger size
+	// decoded with its mask bits read as colour components.
 	//
 	// DeviceGray is the decode-side answer, not a claim about the image's colour:
 	// under the default /Decode [0 1] a 0 sample reads as painted and a 1 as
@@ -1268,10 +1347,8 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	// filter's input still encoded, so every length check below would compare
 	// codestream bytes against a sample count. A short codestream was reported
 	// as "decoded data too short", blaming the file for a decoder litho lacks.
-	// One long enough passed and was read as pixels with no error at all:
-	// litho/pdfs/jpx_2b.pdf holds seven 8x8 JPXDecode images of 212 to 235
-	// encoded bytes against the 192 an RGB read wants, and each decoded into a
-	// picture made of codestream bytes.
+	// One long enough passed and was read as pixels with no error at all,
+	// giving a picture made of codestream bytes.
 	if bad := doc.UndecodableFilters(ctx, stream); len(bad) > 0 {
 		return nil, fmt.Errorf("image %q is encoded with %s, which litho cannot decode: %w",
 			name, strings.Join(bad, ", "), filter.ErrUnsupportedFilter)
@@ -1283,7 +1360,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	//
 	// A JPEG comes through here too. It used to take a branch of its own that
 	// handed the stream to image/jpeg, on the premise that the filter pipeline
-	// passed DCTDecode through untouched. It does not: [filter.Decodable] lists
+	// passed DCTDecode through untouched. It does not: filter.Decodable lists
 	// DCTDecode, and the pipeline runs decodeDCT, which returns decoded samples.
 	// image/jpeg was therefore being asked to decode already-decoded bytes and
 	// reported a missing SOI marker, so no JPEG decoded at all.
@@ -1292,7 +1369,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 		return nil, fmt.Errorf("opening image stream: %w", err)
 	}
 	// Cap the decoded read so a flate/lzw bomb cannot blow memory
-	// before we discover the dimension mismatch below. The +1 makes
+	// before the dimension check below catches the mismatch. The +1 makes
 	// "exactly maxImageBytes" valid while detecting overflow.
 	decodedData, err := io.ReadAll(io.LimitReader(rc, int64(maxImageBytes)+1))
 	if closeErr := rc.Close(); closeErr != nil {
@@ -1323,8 +1400,8 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 		// Reading them in the base space instead strides three or four times too
 		// far, so complete data was reported as "too short for RGB image: got N,
 		// want 3N". That blames the file for a base colour space litho does not
-		// support. Measured on 4 images whose base is /Lab, which collapses to
-		// DeviceRGB in [resolveColorSpace] because no component count is known
+		// support. A /Lab base is the case that exposed it: it collapses to
+		// DeviceRGB in resolveColorSpace because no component count is known
 		// for it.
 		if _, base, indexed := indexedColorSpace(ctx, doc, stream.Dict); indexed {
 			return nil, fmt.Errorf("indexed image over base color space %q has no readable color table", base)
@@ -1340,7 +1417,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 		if isIndexed {
 			// An indexed image holds one index per pixel, but decodeDCT returns
 			// whatever the codestream held. A colour JPEG yields three bytes a
-			// pixel, and [decodeIndexed] would then read colour components as
+			// pixel, and decodeIndexed would then read colour components as
 			// indices: its own length check passes, so the picture would come
 			// out wrong with no error at all. Only a one-byte-per-pixel
 			// codestream can be carrying indices.
@@ -1365,7 +1442,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 
 	// A Separation or DeviceN image holds ink tints per pixel, not colours, so
 	// it is decoded through its tint transform into the alternate space rather
-	// than through the "DeviceRGB" [resolveColorSpace] substitutes for it
+	// than through the "DeviceRGB" resolveColorSpace substitutes for it
 	// (ISO 32000-1, 8.6.6.4 and 8.6.6.5). This runs before the sample stride is
 	// taken from colorSpace because that substitution is what the transform
 	// replaces: it assumes three components, which strides a one-colorant image
@@ -1373,14 +1450,14 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	// boundaries.
 	//
 	// The two families differ on JPEGs. A Separation is decoded whatever its
-	// filter, because [jpegSampleSpace] relabels a one-byte-per-pixel codestream
+	// filter, because jpegSampleSpace relabels a one-byte-per-pixel codestream
 	// "DeviceGray" and would otherwise emit the tint as luminance, rendering the
-	// image inverted: every tint transform measured maps tint 0 to paper white
-	// and full tint to near black. A DeviceN JPEG is decoded here when its
-	// codestream holds one component per colorant, and left to the ordinary
-	// path otherwise, since the samples cannot then be tints. Reading a
-	// one-colorant /Black JPEG as DeviceGray inverted both images of govdocs
-	// thread_000_000340 against PDF.js, which applies the tint transform.
+	// image inverted: a real tint transform maps tint 0 to paper white and full
+	// tint to near black. A DeviceN JPEG is decoded here when its codestream
+	// holds one component per colorant, and left to the ordinary path
+	// otherwise, since the samples cannot then be tints. Reading a
+	// one-colorant /Black JPEG as DeviceGray inverts it against PDF.js, which
+	// applies the tint transform.
 	//
 	// An indexed image is excluded throughout: its samples are indices and the
 	// base count sizes the colour TABLE, not the stride.
@@ -1397,8 +1474,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 
 	// A Lab image holds L*, a* and b* per pixel (ISO 32000-1, 8.6.5.4), which
 	// the palette path already converts to sRGB for an indexed image. Read as
-	// RGB, the white of the one direct Lab image in the corpora, a govdocs
-	// JPEG, came out pink.
+	// RGB, the white of a direct Lab JPEG comes out pink.
 	var lab labParams
 	isLab := false
 	if !isIndexed && colorSpace == "Lab" {
@@ -1423,8 +1499,8 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	// left black, which is what PDF.js paints. Nothing in ISO 32000-1, 8.9.5
 	// says what a short image shows, and refusing it lost the whole picture
 	// for a few missing bytes. With the filters keeping what a truncated
-	// stream holds, this took the images litho failed to decode on the
-	// govdocs pages PDF.js paints images on from 375 to 3.
+	// stream holds, this recovers nearly every image litho failed to decode
+	// on a page PDF.js paints.
 	validRows := height
 	if filterName != "DCTDecode" {
 		decodedData, validRows = padShortSamples(decodedData, width, height, samplesPerPixel, bitsPerComp)
@@ -1459,7 +1535,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 		return finishRows(img, validRows), nil
 	}
 
-	// Apply the /Decode array (ISO 32000-1 §8.9.5.2) via per-component
+	// Apply the /Decode array (ISO 32000-1, 8.9.5.2) via per-component
 	// lookup tables. Absent a /Decode array the tables are the identity,
 	// so output is unchanged for images that do not declare one.
 	components := imageComponents(colorSpace)
@@ -1480,7 +1556,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	// An ICCBased image is read through its profile, a JPEG 2000 image with
 	// no /ColorSpace through the profile its own data carries, and a
 	// DeviceCMYK one through the document's CMYK profile (see
-	// [colorTransform]). A stencil mask holds coverage, not colour, whatever
+	// colorTransform). A stencil mask holds coverage, not colour, whatever
 	// /ColorSpace it wrongly states.
 	var conv *converter
 	if !isMask {

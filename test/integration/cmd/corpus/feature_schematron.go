@@ -39,7 +39,7 @@ type schematronGolden struct {
 	Rules   []string
 }
 
-// schematronFeature scores [Reader.ValidateFacturX] against KoSIT. The
+// schematronFeature scores [pdf.Reader.ValidateFacturX] against KoSIT. The
 // XRechnung scenarios bundle KoSIT loads routes each fixture to either
 // XRechnung Schematron, generic EN 16931 CII Schematron, or a "no
 // scenario applicable" outcome. The cell stays focused on Schematron
@@ -233,9 +233,9 @@ func has(list []string, name string) bool {
 // (urn:factur-x.eu:1p0:*) variant and silently skips the schematron
 // pass when the embedded invoice filename does not match. Legacy
 // ZUGFeRD 1.0 and 2.0 fixtures use distinct filenames and namespaces
-// and need the matching entry point; the corpus encodes the
-// generation in the file basename ("v1__", "...2p0...") so the
-// dispatch reads from there.
+// and need the matching entry point. The corpus encodes the
+// generation in the file basename ("v1__", "...2p0..."), but the
+// dispatch reads the embedded invoice filename instead.
 func validateFacturXFailures(ctx context.Context, pdfPath string) ([]string, error) {
 	f, err := os.Open(pdfPath)
 	if err != nil {

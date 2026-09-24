@@ -44,6 +44,12 @@ func matchCIDSystemInfo(v compliance.Violation) bool {
 // exempts those two encodings from the CIDSystemInfo equivalence rule,
 // so relabelling sidesteps Registry/Ordering/Supplement mismatches
 // without touching the CMap or CIDFont dictionaries.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18117.pdf: embeds /Uni-Utf8-H, whose codes are one to four
+//     bytes, and relabelling it produced an odd-length code tail and glyphs
+//     that resolve to .notdef (ISO 19005-2, 6.2.11.8 t1 and 6.2.11.4.1 t2).
 func fixCIDSystemInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	count := 0
 	aligned := 0
@@ -73,12 +79,11 @@ func fixCIDSystemInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 		// Relabelling only sidesteps the CIDSystemInfo rule when the CMap it
 		// replaces already maps two-byte codes to equal CIDs. A real CMap
 		// defines its own codespace, and swapping it for /Identity-H
-		// reinterprets every byte the content stream already holds:
-		// issue18117.pdf embeds /Uni-Utf8-H, whose codes are one to four bytes,
-		// and relabelling it produced an odd-length code tail and glyphs that
-		// resolve to .notdef (ISO 19005-2, 6.2.11.8 t1 and 6.2.11.4.1 t2). An
-		// unfixed CIDSystemInfo mismatch is an honest residual; rewritten text
-		// is not recoverable.
+		// reinterprets every byte the content stream already holds, which can
+		// leave an odd-length code tail and glyphs that resolve to .notdef
+		// (ISO 19005-2, 6.2.11.8 t1 and 6.2.11.4.1 t2). An unfixed
+		// CIDSystemInfo mismatch is an honest residual; rewritten text is not
+		// recoverable.
 		if !encodingIsIdentityCompatible(ctx, doc, fontDict) {
 			// A real CMap cannot be relabelled, but the CIDFont's declared
 			// character collection can be brought into agreement with it.
@@ -116,9 +121,13 @@ func fixCIDSystemInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 //
 // ISO 19005-4, 6.2.10.3.3 test 2 requires the two to be identical. The program
 // is what a viewer executes, so it is the value that survives; the dictionary
-// entry is a description of it, and 6-2-10-3-3-t02-fail-a declares WMode 1 over
-// a program that says 0. The body is carried across untouched, so only the
-// description changes.
+// entry is only a description of it. The body is carried across untouched, so
+// only the description changes.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-10-3-3-t02-fail-a: declares WMode 1 over a program that says
+//     0.
 func alignCMapWMode(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fontDict ast.PdfDict) int {
 	encRef, isRef := fontDict["Encoding"].(ast.PdfIndirectRef)
 	if !isRef || encRef.ObjectNum == 0 {
@@ -263,8 +272,6 @@ func cmapCIDSystemInfo(ctx context.Context, doc *document.Document, fontDict ast
 	return cmap.PredefinedCMapCIDSystemInfo(string(encName), pdf20)
 }
 
-// chooseIdentityEncoding picks Identity-V when the descendant CIDFont
-// is configured for vertical writing, Identity-H otherwise.
 // encodingIsIdentityCompatible reports whether a Type 0 font's /Encoding can be
 // relabelled /Identity-H or /Identity-V without changing which CIDs its content
 // bytes select.
@@ -285,6 +292,8 @@ func encodingIsIdentityCompatible(ctx context.Context, doc *document.Document, f
 	return name == "Identity-H" || name == "Identity-V"
 }
 
+// chooseIdentityEncoding picks Identity-V when the descendant CIDFont
+// is configured for vertical writing, Identity-H otherwise.
 func chooseIdentityEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) ast.PdfName {
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {

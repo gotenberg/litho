@@ -28,7 +28,7 @@ type Handler struct {
 	Length        int
 	CFM           string // Crypt filter method (V4)
 	Authenticated bool
-	// We store the parameters so we can re-authenticate later
+	// The handler keeps the parameters to re-authenticate later.
 	oVal    []byte
 	uVal    []byte
 	oeVal   []byte // V=5 Owner Encryption string
@@ -176,8 +176,6 @@ func NewHandler(encryptDict ast.PdfDict, trailer ast.PdfDict) (*Handler, error) 
 	return h, nil
 }
 
-// Authenticate generates the global encryption key using the provided password
-// and verifies it against the document's U string (Algorithm 3.2).
 // hashV5 computes the password hash for the AES-256 security handler. Revision 6
 // uses the hardened hash of ISO 32000-2 Algorithm 2.B; the deprecated revision 5
 // uses a single SHA-256. udata is the 48-byte /U value when hashing an owner
@@ -365,7 +363,7 @@ func (h *Handler) Authenticate(password string) error {
 		}
 	}
 
-	// We now test both the potentially recovered user password and the original input password
+	// Test both the potentially recovered user password and the original input password.
 	candidates := []string{string(decryptedO), password}
 
 	for _, cand := range candidates {
@@ -442,7 +440,7 @@ func (h *Handler) Authenticate(password string) error {
 			c.XORKeyStream(expectedU, paddingString)
 		}
 
-		// Check if our generated expectedU matches the document's actual U string
+		// Check whether the generated expectedU matches the document's actual U string.
 		match := false
 		if len(h.uVal) >= 16 && len(expectedU) >= 16 {
 			match = bytes.Equal(h.uVal[:16], expectedU[:16])
@@ -532,16 +530,22 @@ func (h *Handler) DecryptFunc(objNum, genNum int) func([]byte) ([]byte, error) {
 // decrypts them. Leniency: such bytes are returned as they are stored.
 //
 // The relaxation is for producers that write a stream in plaintext inside an
-// encrypted file. pdfjs bug1826783.pdf declares /EncryptMetadata true with AESV2
-// yet stores its /Metadata packet as plaintext: 1544 bytes leave 8 past the IV,
-// and passing them through recovers the XMP the producer meant. Erroring instead
+// encrypted file, such as a /Metadata packet under /EncryptMetadata true:
+// passing the bytes through recovers what the producer meant. Erroring instead
 // would lose the stream outright, since [github.com/gotenberg/litho/pkg/internal/core/parser]
-// turns a decryption error into an unreadable stream. 1 of the 5044 corpus files
-// depends on this, and veraPDF, which decrypts regardless, reports the resulting
-// bytes as a malformed XMP packet.
+// turns a decryption error into an unreadable stream.
 //
 // The passthrough serves strings as well as streams: [Handler.DecryptFunc] routes
 // both here for /V 5 and for /V 4 with AESV2 or AESV3.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1826783.pdf: declares /EncryptMetadata true with AESV2 yet
+//     stores its /Metadata packet as plaintext. Its 1544 bytes leave 8 past
+//     the IV, and passing them through recovers the XMP the producer meant.
+//     veraPDF, which decrypts regardless, reports the resulting bytes as a
+//     malformed XMP packet.
+//   - All corpora, 5044 files: 1 file depends on this passthrough.
 func aesDecrypt(key, data []byte) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {

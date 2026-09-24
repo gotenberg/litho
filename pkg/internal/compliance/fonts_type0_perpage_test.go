@@ -44,9 +44,12 @@ func type0TwoPagePDF(t *testing.T, page1, page2 string) []byte {
 // codes. litho gated the whole of the Type0 check on "font object not yet
 // seen", so a font selected on many pages was judged against the first page's
 // codes alone; simple fonts already avoid this through [checkFontUsageRules].
-// govdocs thread_100_100870.pdf selects one Times-Roman Identity-H font on
-// fourteen pages and only page 20 shows CID 0 and a CID its CFF charset does
-// not hold, both of which veraPDF reports and litho did not.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100870.pdf: selects one Times-Roman Identity-H font
+//     on fourteen pages, and only page 20 shows CID 0 and a CID its CFF
+//     charset does not hold, both of which veraPDF reports and litho did not.
 func TestType0Font_UsageJudgedOnEveryPage(t *testing.T) {
 	t.Parallel()
 
@@ -81,11 +84,16 @@ func TestType0Font_UsageJudgedOnEveryPage(t *testing.T) {
 // is deliberately not re-run per page.
 //
 // A code string that does not decode is read from the content stream itself,
-// and a page whose stream decompresses only partway yields bytes zlib invented:
-// pdfjs issue11678.pdf inflates one into a hex string with an odd digit count,
-// which under Identity-H is indistinguishable from a rendered .notdef. veraPDF
-// reports nothing there, so litho keeps judging malformed codes where it always
-// has, once per font object, rather than on every page that selects it.
+// and a page whose stream decompresses only partway yields bytes zlib
+// invented, which under Identity-H can be indistinguishable from a rendered
+// .notdef. veraPDF reports nothing there, so litho keeps judging malformed
+// codes where it always has, once per font object, rather than on every page
+// that selects it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11678.pdf: inflates a partly decompressed page into a hex
+//     string with an odd digit count, and veraPDF reports nothing.
 func TestType0Font_MalformedCodesJudgedOncePerObject(t *testing.T) {
 	t.Parallel()
 

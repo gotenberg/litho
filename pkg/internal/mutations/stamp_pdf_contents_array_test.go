@@ -57,12 +57,16 @@ func contentsRefToArrayPDF(t *testing.T) []byte {
 // `/Contents N 0 R` took the stream branch and a reference naming an array died
 // in ResolveStream as "expected PdfStream, got ast.PdfArray". Because all three
 // callers share this function, redaction, [ExcisePageSpans] and stamp-pdf each
-// refused such a page. Measured at 26 of 1091 govdocs documents, every one of
-// them a file litho otherwise reads.
+// refused such a page.
 //
 // Both halves must arrive: a fix that resolved the reference but then read only
 // the first stream would leave the page half-assembled, and the byte spans
 // redaction computes against this buffer would address the wrong content.
+//
+// # Corpus evidence
+//
+//   - govdocs: 26 of 1091 documents carry a /Contents reference naming an
+//     array, every one of them a file litho otherwise reads.
 func TestCollectPageContents_ContentsRefNamingAnArray(t *testing.T) {
 	t.Parallel()
 

@@ -12,8 +12,13 @@ import (
 // TestUANoMetadataFiresOnlyPresence pins that a PDF/UA-1 file with no catalog
 // /Metadata reports only the missing-metadata requirement (§7.1 t8), not the
 // dc:title (§7.1 t9) or the §5 PDF/UA identifier rule. veraPDF scopes the latter
-// two to the XMP package object, so with no package they do not fire
-// (verapdf-corpus 7.1-t08-fail-a). Firing them was a false positive.
+// two to the XMP package object, so with no package they do not fire. Firing
+// them was a false positive.
+//
+// # Corpus evidence
+//
+//   - verapdf 7.1-t08-fail-a: with no XMP package, veraPDF's dc:title and
+//     identifier rules do not fire on it.
 func TestUANoMetadataFiresOnlyPresence(t *testing.T) {
 	t.Parallel()
 	data := cyclePDF(

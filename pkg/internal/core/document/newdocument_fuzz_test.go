@@ -25,6 +25,11 @@ import (
 // consume whole-file bytes. It is a throughput bound, not a safety one:
 // rebuildXRef scans the input in overlapping chunks, so cost grows with the
 // input while the code paths do not.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1606566.pdf: the headerless shape NewDocument accepts, which
+//     makes the headerless seed a supported shape rather than an exotic one.
 func FuzzNewDocument(f *testing.F) {
 	// A complete tiny document: header, one object, xref table, trailer.
 	valid := "%PDF-1.7\n" +
@@ -38,8 +43,7 @@ func FuzzNewDocument(f *testing.F) {
 	for _, seed := range []string{
 		valid,
 		// No %PDF- header at all. NewDocument accepts this when the tail still
-		// parses, citing pdfjs bug1606566.pdf, so it is a supported shape
-		// rather than an exotic one.
+		// parses, so it is a supported shape rather than an exotic one.
 		strings.TrimPrefix(valid, "%PDF-1.7\n"),
 		// A header pushed beyond headerScanLimit (1024), which must stay
 		// rejected rather than being treated as headerless.

@@ -30,13 +30,16 @@ func maskImagePDF(width, height int, extra string, data []byte) []string {
 // resolveColorSpace answers "DeviceRGB" for a missing entry, which counts three.
 // Striding a 1-bit stencil by three makes a 16-pixel row 6 bytes instead of 2
 // and demands 12 bytes for this image, so a COMPLETE mask failed outright with
-// "decoded data too short". Measured on pdfcpu's Wonderwall.pdf before the fix:
-// a 2312x3307 mask carries 955,723 bytes and was asked for 2,867,169, exactly
-// three times as many.
+// "decoded data too short".
 //
 // The control is the load-bearing half: the same bytes and the same geometry
 // declared /DeviceGray decode fine, so only the stencil-ness differs and
 // neither the filter nor the bit depth can explain the failure.
+//
+// # Corpus evidence
+//
+//   - pdfcpu Wonderwall.pdf: before the fix, a 2312x3307 mask carries 955,723
+//     bytes and was asked for 2,867,169, exactly three times as many.
 func TestDecodeImage_StencilMaskUsesOneSamplePerPixel(t *testing.T) {
 	t.Parallel()
 

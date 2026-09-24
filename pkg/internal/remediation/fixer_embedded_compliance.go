@@ -65,10 +65,9 @@ func parseEmbeddedObjectContext(s string) (int, bool) {
 //
 // ISO 19005-2, 6.8 permits /EF only when the embedded file complies with
 // ISO 19005-1 or 19005-2; ISO 19005-4, 6.9 only when it complies with
-// ISO 19005-1, 19005-2 or 19005-4. The corpus case is a payload that is not a
-// PDF at all (a text or XML attachment), which has no conforming form: the
-// attachment cannot be repaired into compliance, so dropping it is the only
-// repair available.
+// ISO 19005-1, 19005-2 or 19005-4. A payload that is not a PDF at all (a text
+// or XML attachment) has no conforming form: the attachment cannot be repaired
+// into compliance, so dropping it is the only repair available.
 //
 // That destroys content the author deliberately attached, so PreserveContent
 // refuses. PDF/A-3 has no such rule by design, arbitrary attachments being its
@@ -80,6 +79,11 @@ func parseEmbeddedObjectContext(s string) (int, bool) {
 // on /EF, so clearing that one key takes the specification out of scope, while
 // leaving the tree in place avoids introducing the separate PDF/A-4f
 // requirement that /Names carry an /EmbeddedFiles entry.
+//
+// # Corpus evidence
+//
+//   - All corpora: the case that reaches this fixer is a payload that is not a
+//     PDF at all, a text or XML attachment.
 func fixEmbeddedCompliance(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, violations []compliance.Violation, _ string) ([]string, error) {
 	if opts.PreserveContent {
 		return nil, nil

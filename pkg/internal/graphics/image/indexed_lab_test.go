@@ -8,9 +8,14 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// labBase is the base colour space of the two pdfjs documents that exposed the
-// refusal: /Range and /WhitePoint are theirs verbatim. The white point is D50
-// (Z < 1), which selects the D50 matrix in [labEntryToRGB].
+// labBase is a /Lab base colour space as the documents that exposed the
+// refusal write it: /Range and /WhitePoint are theirs verbatim. The white point
+// is D50 (Z < 1), which selects the D50 matrix in [labEntryToRGB].
+//
+// # Corpus evidence
+//
+//   - pdfjs: the two documents that exposed the refusal carry this /Range and
+//     /WhitePoint verbatim.
 const labBase = "[/Lab << /Range [-128.0 127.0 -128.0 127.0]" +
 	" /WhitePoint [0.964203 1.0 0.824905] /BlackPoint [0.0 0.0 0.0] >>]"
 
@@ -19,8 +24,7 @@ const labBase = "[/Lab << /Range [-128.0 127.0 -128.0 127.0]" +
 // Before this it could not: imageComponents knows no count for Lab, so the
 // palette went unresolved, resolveColorSpace collapsed /Indexed to that base and
 // defaulted it to DeviceRGB, and the decoder demanded three bytes for every
-// pixel that holds one index. Measured on 4 images in 2 pdfjs documents
-// (issue10339_reduced.pdf, issue2761.pdf); no other corpus holds one.
+// pixel that holds one index.
 //
 // The expected values are computed from ISO 32000-1, 8.6.6.3 and 8.6.5.4 with
 // the white point above, not eyeballed. Byte 128 maps a* and b* to exactly 0
@@ -28,6 +32,11 @@ const labBase = "[/Lab << /Range [-128.0 127.0 -128.0 127.0]" +
 // comes back 255,254,254 rather than 255,255,255: the D50 matrix and the
 // square-root transfer leave green and blue one short, and asserting pure white
 // would be asserting an intuition over the arithmetic.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue10339_reduced.pdf, issue2761.pdf: 4 images in these 2
+//     documents are /Indexed over a /Lab base; no other corpus holds one.
 func TestDecodeIndexedLabImage(t *testing.T) {
 	t.Parallel()
 
@@ -114,7 +123,7 @@ func TestDecodeIndexedLabClampsOutOfGamut(t *testing.T) {
 //
 // ISO 32000-1, Table 65 makes /WhitePoint required. Substituting a default
 // illuminant would render every pixel in a colour the file never specified,
-// which is worse than the refusal commit aea54967 added.
+// which is worse than the refusal commit deb50538 added.
 func TestDecodeIndexedLabWithoutWhitePointIsRefused(t *testing.T) {
 	t.Parallel()
 
@@ -136,9 +145,13 @@ func TestDecodeIndexedLabWithoutWhitePointIsRefused(t *testing.T) {
 // TestDecodeIndexedLabRangeIsHonoured pins that /Range is read rather than
 // assumed to be the [-100 100] default.
 //
-// Both documents that exposed this declare [-128 127 -128 127]. A decoder that
-// hardcoded the default would scale a* and b* by 200/255 instead of 255/255,
-// shifting every chromatic pixel with no error anywhere.
+// Real documents declare other ranges. A decoder that hardcoded the default
+// would scale a* and b* by 200/255 instead of 255/255, shifting every chromatic
+// pixel with no error anywhere.
+//
+// # Corpus evidence
+//
+//   - pdfjs: both documents that exposed this declare [-128 127 -128 127].
 func TestDecodeIndexedLabRangeIsHonoured(t *testing.T) {
 	t.Parallel()
 

@@ -84,11 +84,15 @@ func flattenedPage(t *testing.T, alloc *writer.ObjAllocator) (ast.PdfDict, []str
 //
 // ISO 32000-1, 12.7.3.3 has a viewer build the appearance of a variable-text
 // field from /V and /DA when the widget stores no /AP. Flattening removes the
-// widget, so litho kept such a widget rather than lose what it showed: pdfjs
-// annotation-tx.pdf holds a text field with a value and no /AP, and flattening
-// it left the form in place. `set-form` produces the same shape, writing /V and
-// asking for regeneration without building an /AP, so set-form followed by
-// flatten-form was a no-op.
+// widget, so litho kept such a widget rather than lose what it showed, and
+// flattening left the form in place. `set-form` produces the same shape,
+// writing /V and asking for regeneration without building an /AP, so set-form
+// followed by flatten-form was a no-op.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation-tx.pdf: holds a text field with a value and no /AP,
+//     and flattening it left the form in place.
 func TestFlattenDrawsATextFieldWithNoAppearance(t *testing.T) {
 	t.Parallel()
 
@@ -220,9 +224,14 @@ func TestEscapePdfString(t *testing.T) {
 //
 // The generated appearance draws through a WinAnsi-encoded font (ISO 32000-1,
 // Annex D.2), which covers Latin text and nothing else. Writing the value's
-// UTF-8 bytes anyway would reach a viewer decoded one byte per character: pdfjs
-// issue12963.pdf carries the Cyrillic value "СУВОРОВ", which would have been
-// drawn as mojibake. Keeping the widget preserves the value instead.
+// UTF-8 bytes anyway would reach a viewer decoded one byte per character, so a
+// Cyrillic value would be drawn as mojibake. Keeping the widget preserves the
+// value instead.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12963.pdf: carries the Cyrillic value "СУВОРОВ", which would
+//     have been drawn as mojibake.
 func TestFlattenKeepsAValueItCannotEncode(t *testing.T) {
 	t.Parallel()
 

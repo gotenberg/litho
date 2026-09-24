@@ -46,9 +46,9 @@ func InsertPages(
 	}
 
 	// Copy source page objects into the target allocator. copyPageForOutput
-	// carries the Resources, MediaBox, and Rotate the source pages inherited
-	// from their own tree, since the flat target tree gives them nothing to
-	// inherit.
+	// carries the Resources, MediaBox, CropBox and Rotate the source pages
+	// inherited from their own tree, since the flat target tree gives them
+	// nothing to inherit.
 	copier := writer.NewCopier(srcDoc, alloc)
 	overrides := pageCopyOverrides(pagesToInsert)
 	if removed := unselectedPages(srcPages, pagesToInsert); len(removed) > 0 {

@@ -110,7 +110,7 @@ func fixListContent(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 
 	// PDF/UA-2 judges a structure element by the namespace it belongs to
 	// (ISO 14289-2 §8.2.4), so the new LBody is bound to the PDF 2.0 standard
-	// namespace the same way [fixSingleDocRoot] binds the Document it creates.
+	// namespace the same way fixSingleDocRoot binds the Document it creates.
 	var nsRef ast.PdfIndirectRef
 	var haveNS, stDirty bool
 	if compliance.PDFUAPart(profile) == 2 {
@@ -191,7 +191,7 @@ func planListContentRepair(ctx context.Context, doc *document.Document, node str
 	var hasLBody, unsupported bool
 	for _, item := range kids {
 		if n, isInt := item.(ast.PdfInt); isInt {
-			// An id past [maxParentTreeMCID] would size the rebuilt ParentTree
+			// An id past maxParentTreeMCID would size the rebuilt ParentTree
 			// slot array, so decline the repair as for a negative one.
 			if n < 0 || n > maxParentTreeMCID {
 				unsupported = true

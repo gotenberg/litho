@@ -24,6 +24,11 @@ type DecryptFunc func([]byte) ([]byte, error)
 // Note on UnreadByte: throughout this file, UnreadByte errors on ioat.Reader
 // are intentionally discarded. Every call is preceded by a successful ReadByte,
 // which guarantees bufPos > 0 and UnreadByte cannot fail.
+//
+// # Corpus evidence
+//
+//   - govdocs: parsing one page of 1.5 million operators spent 1.58 GB in
+//     the tokens = tokens[1:] reslice that the head index replaced.
 type Parser struct {
 	lex    *lexer.Lexer
 	tokens []lexer.Token
@@ -33,8 +38,7 @@ type Parser struct {
 	// Consuming used to reslice with tokens = tokens[1:], which walks the
 	// slice header forward through the backing array and never comes back:
 	// capacity fell by one per token, so append allocated a fresh array every
-	// few tokens and the buffer was never reused. Parsing one govdocs page of
-	// 1.5 million operators spent 1.58 GB there. Advancing an index instead
+	// few tokens and the buffer was never reused. Advancing an index instead
 	// lets the drained buffer rewind to the start of the array it already has.
 	head int
 
@@ -186,12 +190,16 @@ func (p *Parser) Expect(expectedType lexer.TokenType) (lexer.Token, error) {
 // deep, a 7.3 MB file, killed the process through pdf.Open, and an object
 // header chain did the same past 1,000,000.
 //
-// The deepest nesting measured across a sample of all seven corpora is 156
-// (govdocs thread_200_200087.pdf), with a 99th percentile of 55, so this value
-// leaves real documents about two orders of magnitude of headroom while sitting
-// far below the depth that exhausts the stack. That sample reads raw file bytes
-// and cannot see inside compressed content streams, which is why the bound is
-// generous rather than tight.
+// The value leaves real documents about two orders of magnitude of headroom
+// while sitting far below the depth that exhausts the stack.
+//
+// # Corpus evidence
+//
+//   - All corpora, sampled: the deepest nesting is 156, in govdocs
+//     thread_200_200087.pdf, with a 99th percentile of 55.
+//   - All corpora: the sample reads raw file bytes and cannot see inside
+//     compressed content streams, which is why the bound is generous rather
+//     than tight.
 const maxParseNestingDepth = 10000
 
 // ParseObject reads the next complete PDF object from the token stream.
@@ -406,8 +414,16 @@ func (p *Parser) parseDict(ctx context.Context) (ast.PdfObject, error) {
 
 // parseDictBody reads the key/value pairs between `<<` and `>>` into an
 // [ast.PdfDict]. It tolerates EOF and a premature `endobj` as implicit
-// close markers so we still return a partial dict for malformed input
+// close markers so it still returns a partial dict for malformed input
 // (the top-level parser continues, lenient by design).
+//
+// # Corpus evidence
+//
+//   - pdfjs poppler-742-0-fuzzed.pdf: ends its /AcroForm with `/Q 0 > >>`
+//     and lost the whole interactive form while a stray delimiter dropped
+//     the dictionary.
+//   - pdfjs poppler-937-0-fuzzed.pdf: lost its page tree to a
+//     `/Kids 3 0 R]` while a stray delimiter dropped the dictionary.
 func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 	dict := make(ast.PdfDict)
 	// A /Contents string is parsed undecrypted and settled once the whole
@@ -446,10 +462,7 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 			// twice leaves a bare `]` among the keys, and a dictionary
 			// closed with a single `>` leaves that. Both are already
 			// consumed, and dropping the dictionary over one costs every
-			// key it holds. pdfjs poppler-742-0-fuzzed.pdf ends its
-			// /AcroForm with `/Q 0 > >>` and lost the whole interactive
-			// form; poppler-937-0-fuzzed.pdf lost its page tree to a
-			// `/Kids 3 0 R]`.
+			// key it holds.
 			if errors.Is(err, errUnexpectedKeyword) || errors.Is(err, errUnexpectedDelimiter) {
 				continue
 			}
@@ -471,7 +484,7 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 			if errors.Is(err, errNestingTooDeep) {
 				return nil, err
 			}
-			// Value missing: close the dict with what we have.
+			// Value missing: close the dict with the pairs read so far.
 			break
 		}
 		dict[key] = valObj
@@ -517,9 +530,13 @@ func (p *Parser) parseDictValue(ctx context.Context, key ast.PdfName, deferred *
 // ISO 32000-1, 7.6.2 exempts the signature value from the document's string
 // encryption: the digest covers the file with the signature hole excised, so
 // the bytes in that hole are written as they are. Decrypting them yields noise,
-// and for AES the 16-byte initialisation vector is eaten as well, which is what
-// gave pdfjs xfa_issue14071.pdf a 16288-byte PKCS#7 blob that came back 16272
-// bytes long and no longer opened with a DER SEQUENCE tag.
+// and for AES the 16-byte initialisation vector is eaten as well, so the PKCS#7
+// blob comes back 16 bytes short and no longer opens with a DER SEQUENCE tag.
+//
+// # Corpus evidence
+//
+//   - pdfjs xfa_issue14071.pdf: its 16288-byte PKCS#7 blob came back 16272
+//     bytes long when decrypted and no longer opened with a DER SEQUENCE tag.
 func (p *Parser) settleSignatureContents(dict ast.PdfDict) error {
 	s, ok := dict["Contents"].(ast.PdfString)
 	if !ok {
@@ -563,7 +580,7 @@ func (p *Parser) parseStreamAfterDict(ctx context.Context, dict ast.PdfDict) (as
 	// The parser must not have any lookahead tokens at this point: the
 	// next bytes belong to the raw stream body, not the token stream.
 	// Peek(0) of "stream" consumed its token via Expect() above; any
-	// additional tokens in the buffer mean we read past the stream start.
+	// additional tokens in the buffer mean the parser read past the stream start.
 	if p.buffered() > 0 {
 		return nil, fmt.Errorf("parser read ahead too far before stream data")
 	}
@@ -609,16 +626,22 @@ func (p *Parser) parseStreamAfterDict(ctx context.Context, dict ast.PdfDict) (as
 // "endstream" and states it shall not be included in the stream length. A
 // surviving marker therefore proves /Length stopped at the last data byte, so
 // that byte is data even when it is itself a CR or LF and nothing may be trimmed.
-// pdfjs annotation-as.pdf declares /Length 27 for the content stream part
-// "% CANON_PFINF_TYPE2_TEXTON\n" and writes the separator after it; trimming the
-// counted newline left the comment unterminated, and since a comment runs to the
-// end of the line (7.2.4) it swallowed the "q" that opened the next part of the
-// same /Contents array. The unbalanced q/Q pair moved the rest of the page out of
-// view, so `litho split` produced a page whose text no reader could find.
+// Trimming a counted newline that ends a comment leaves the comment
+// unterminated, and since a comment runs to the end of the line (7.2.4) it
+// swallows whatever opens the next part of the same /Contents array.
 //
 // Absence proves nothing: a producer that folded the marker into /Length is
 // indistinguishable from one whose data simply ends in a newline, so the trim
 // still runs there.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation-as.pdf: declares /Length 27 for the content stream
+//     part "% CANON_PFINF_TYPE2_TEXTON\n" and writes the separator after it.
+//     Trimming the counted newline left the comment unterminated, so it
+//     swallowed the "q" that opened the next part of the same /Contents
+//     array. The unbalanced q/Q pair moved the rest of the page out of view,
+//     so `litho split` produced a page whose text no reader could find.
 func separatorPrecedesEndstream(src io.ReaderAt, off int64) bool {
 	var b [1]byte
 	if _, err := src.ReadAt(b[:], off); err != nil {
@@ -687,6 +710,15 @@ func (p *Parser) readStreamBody(ctx context.Context, reader *ioat.Reader, dict a
 // past the stream body without scanning. Returns the byte count and true
 // on success; zero and false on any mismatch. This is the hot path for
 // well-formed documents with large streams (images, embedded files).
+//
+// # Corpus evidence
+//
+//   - pdfjs issue10004.pdf: writes every one of its 29 stream ends as a
+//     truncated "endstrea" followed by "endobj". Rejecting those discarded 29
+//     correct /Length values, and the fallback scan then found no "endstream"
+//     anywhere and returned the rest of the file as stream data, so each
+//     stream swallowed ~750 KB of unrelated bytes and the file grew 757 KB ->
+//     12.6 MB.
 func tryFastStreamLength(reader *ioat.Reader, dict ast.PdfDict, streamStart int64) (int64, bool) {
 	lengthObj, ok := dict["Length"]
 	if !ok {
@@ -712,11 +744,8 @@ func tryFastStreamLength(reader *ioat.Reader, dict ast.PdfDict, streamStart int6
 	// A damaged end-of-stream keyword still marks the end. The check exists to
 	// catch a WRONG /Length, and a marker sitting at exactly the declared
 	// offset corroborates the length whether or not the keyword survived
-	// intact. pdfjs issue10004.pdf writes every one of its 29 stream ends as a
-	// truncated "endstrea" followed by "endobj": rejecting those discarded 29
-	// correct /Length values, and the fallback scan then found no "endstream"
-	// anywhere and returned the rest of the file as stream data, so each stream
-	// swallowed ~750 KB of unrelated bytes and the file grew 757 KB -> 12.6 MB.
+	// intact. Rejecting a truncated keyword discards a correct /Length, and the
+	// fallback scan then returns the rest of the file as stream data.
 	if !strings.HasPrefix(verifyStr, "endstr") && !strings.HasPrefix(verifyStr, "endobj") {
 		return 0, false
 	}
@@ -763,7 +792,7 @@ func (p *Parser) scanEndstream(ctx context.Context, reader *ioat.Reader) (int64,
 			}
 			continue
 		}
-		// Match broke. Anything we matched so far is stream data.
+		// Match broke. Anything matched so far is stream data.
 		if matchLen > 0 {
 			dataLen += int64(matchLen)
 			matchLen = 0
@@ -925,6 +954,14 @@ func cryptParmsIsIdentity(parms ast.PdfObject) bool {
 	return name == "Identity"
 }
 
+// parseArray reads the elements of an array up to its closing `]`, tolerating
+// EOF, a premature endobj and malformed elements.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1953099.pdf: writes a lone "-" between two strings in a TJ
+//     array. Consuming that bad keyword twice swallowed the (e) that followed
+//     it, so the word "extensively" came out a letter short.
 func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 	var arr ast.PdfArray
 	for {
@@ -962,10 +999,7 @@ func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 			//
 			// ParseObject consumes a token before dispatching on it, so a bare
 			// keyword is already past by the time it reports one. Consuming
-			// again would swallow the element AFTER the bad token: pdfjs
-			// bug1953099 writes a lone "-" between two strings in a TJ array,
-			// and the (e) that followed it vanished, so the word "extensively"
-			// came out a letter short.
+			// again would swallow the element AFTER the bad token.
 			if errors.Is(err, errUnexpectedKeyword) {
 				continue
 			}
@@ -1058,7 +1092,7 @@ func (p *Parser) parseString(val string) (ast.PdfString, error) {
 // binary image data until the EI terminator is found.
 func (p *Parser) SkipInlineImage(ctx context.Context) error {
 	ascii85 := false
-	// Phase 1: Consume inline image dictionary entries until the ID keyword.
+	// Consume inline image dictionary entries until the ID keyword.
 	// Entries are key/value pairs (e.g., /W 100 /H 50 /BPC 8 /CS /RGB).
 	// Track the /F filter to know whether the image data is ASCII85-encoded,
 	// which changes how the EI terminator scan must handle PDF delimiters.
@@ -1090,7 +1124,7 @@ func (p *Parser) SkipInlineImage(ctx context.Context) error {
 			}
 			continue
 		}
-		// Consume the token (key or value). We don't need the data.
+		// Consume the token (key or value); its data is not needed.
 		if _, err := p.Consume(); err != nil {
 			return fmt.Errorf("inline image dict entry: %w", err)
 		}
@@ -1101,17 +1135,16 @@ func (p *Parser) SkipInlineImage(ctx context.Context) error {
 		return fmt.Errorf("parser read ahead too far before inline image data")
 	}
 
-	// Phase 2: Skip the single whitespace byte that follows ID (per PDF spec).
+	// Skip the single whitespace byte that follows ID (per PDF spec).
 	reader := p.lex.Reader()
 	if _, err := reader.ReadByte(); err != nil {
 		return fmt.Errorf("failed to read post-ID whitespace: %w", err)
 	}
 
-	// Phase 3: Scan forward for the EI terminator.
-	// Per the PDF spec, image data ends when we find a whitespace byte
-	// followed by "EI" followed by whitespace, a delimiter, or EOF.
-	// Raw bytes 'E' and 'I' can occur inside image data, so we must
-	// validate the trailing context to avoid false matches.
+	// Scan forward for the EI terminator. Per the PDF spec, image data ends
+	// at a whitespace byte followed by "EI" followed by whitespace, a
+	// delimiter, or EOF. Raw bytes 'E' and 'I' can occur inside image data,
+	// so the scan validates the trailing context to avoid false matches.
 	return scanToEI(reader, ctx, ascii85)
 }
 
@@ -1136,13 +1169,13 @@ func filterNamesContainASCII85(obj ast.PdfObject) bool {
 
 // ParseInlineImageDict reads an inline image's dictionary key/value pairs
 // (between BI and ID), skips the binary image data (ID to EI), and returns
-// the properties as a PdfDict. Called after the BI operator has been consumed.
+// the properties as an [ast.PdfDict]. Called after the BI operator has been consumed.
 // Dictionary keys are PDF names (e.g., /W, /H, /BPC, /CS) and values are
 // parsed as normal PDF objects.
 func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) {
 	dict := ast.PdfDict{}
 
-	// Phase 1: Parse key/value pairs until the ID keyword.
+	// Parse key/value pairs until the ID keyword.
 	for {
 		tok, err := p.Peek(0)
 		if err != nil {
@@ -1200,13 +1233,13 @@ func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) 
 		return nil, fmt.Errorf("parser read ahead too far before inline image data")
 	}
 
-	// Phase 2: Skip the single whitespace byte that follows ID (per PDF spec).
+	// Skip the single whitespace byte that follows ID (per PDF spec).
 	reader := p.lex.Reader()
 	if _, err := reader.ReadByte(); err != nil {
 		return nil, fmt.Errorf("failed to read post-ID whitespace: %w", err)
 	}
 
-	// Phase 3: Scan forward for the EI terminator.
+	// Scan forward for the EI terminator.
 	ascii85 := false
 	if f, ok := dict["F"]; ok {
 		ascii85 = filterNamesContainASCII85(f)

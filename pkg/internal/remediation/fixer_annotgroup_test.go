@@ -7,14 +7,19 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// TestFixAnnotation_AppearanceStreamsOwnGroupIsRemoved covers the location that
-// holds ISO 19005-1 §6.4 test 3 on the corpus carriers.
+// TestFixAnnotation_AppearanceStreamsOwnGroupIsRemoved covers the location
+// where real files hold ISO 19005-1 §6.4 test 3: the appearance stream itself.
 //
 // An appearance stream is a Form XObject (ISO 32000-1, 12.5.5), so a /Group
 // with /S /Transparency on it is forbidden exactly as on any other form. The
 // previous walk repaired the graphics states inside the appearance's
 // /Resources but never the group on the stream itself, which left the rule
 // standing on every file that hides its group there.
+//
+// # Corpus evidence
+//
+//   - All corpora: the carriers of ISO 19005-1 §6.4 test 3 hold the group on
+//     the appearance stream itself.
 func TestFixAnnotation_AppearanceStreamsOwnGroupIsRemoved(t *testing.T) {
 	doc, alloc := newTestDoc(t, annotGroupPDF(`/AP << /N 20 0 R >>`))
 
@@ -62,8 +67,12 @@ func TestFixAnnotation_StateSubdictionaryIsWalked(t *testing.T) {
 
 // TestFixAnnotation_DownAndRolloverAreWalked covers /D and /R.
 //
-// No corpus fixture uses either, so this test is the ONLY evidence for that
-// branch. Recorded as such rather than left to a gate that cannot reach it.
+// This test is the ONLY evidence for that branch. Recorded as such rather than
+// left to a gate that cannot reach it.
+//
+// # Corpus evidence
+//
+//   - All corpora: no corpus fixture uses /D or /R.
 func TestFixAnnotation_DownAndRolloverAreWalked(t *testing.T) {
 	for _, which := range []string{"D", "R"} {
 		t.Run("/"+which, func(t *testing.T) {
@@ -126,9 +135,14 @@ func TestFixAnnotation_SharedAppearanceIsWrittenOnce(t *testing.T) {
 
 // TestFixXObject_NestedFormGroupIsRemoved pins recursion one level deeper.
 //
-// veraPDF 6-2-4-3-t04-pass-f holds its group on a form INSIDE a form's
-// resources. The walk previously repaired the outer form's graphics states and
-// stopped, so the nested group survived.
+// A group may sit on a form INSIDE a form's resources. The walk previously
+// repaired the outer form's graphics states and stopped, so the nested group
+// survived.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-4-3-t04-pass-f: holds its group on a form INSIDE a form's
+//     resources.
 func TestFixXObject_NestedFormGroupIsRemoved(t *testing.T) {
 	doc, alloc := newTestDoc(t, nestedFormGroupPDF())
 	pageRes := ast.PdfDict{"XObject": ast.PdfDict{"Fm0": ast.PdfIndirectRef{ObjectNum: 20}}}
@@ -180,7 +194,11 @@ func sharedAppearancePDF() []byte {
 }
 
 // nestedFormGroupPDF puts the transparency group on a form declared inside another
-// form's resources, mirroring veraPDF 6-2-4-3-t04-pass-f.
+// form's resources.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-4-3-t04-pass-f: the fixture mirrors its shape.
 func nestedFormGroupPDF() []byte {
 	return []byte(
 		"%PDF-1.4\n" +

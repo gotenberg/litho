@@ -375,6 +375,12 @@ func TestRecordInheritedCS_CombinesInvocations(t *testing.T) {
 // a stream actually paints with. A pattern merely declared in the resource
 // dictionary paints nothing and so is not a colour usage under ISO 19005-2
 // §6.2.4.3, which veraPDF was measured to agree with.
+//
+// # Corpus evidence
+//
+//   - pdfjs tiling-pattern-large-steps.pdf, issue13372.pdf: select the Pattern
+//     space by a resource name rather than literally, with "/cs1 cs" and
+//     "/R8 cs" respectively, the spelling the resource-name case covers.
 func TestScanContentColorOps_ReferencedPatterns(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -408,8 +414,7 @@ func TestScanContentColorOps_ReferencedPatterns(t *testing.T) {
 		{
 			// The spelling real producers emit: the Pattern space is named in
 			// /Resources/ColorSpace as [/Pattern base] and selected by that
-			// name, not written literally (pdfjs tiling-pattern-large-steps.pdf
-			// uses "/cs1 cs", issue13372.pdf "/R8 cs").
+			// name, not written literally.
 			name:      "a pattern space reached by resource name is recorded",
 			stream:    "/cs1 cs /P3 scn 0 0 50 50 re f",
 			patternCS: map[string]bool{"cs1": true},

@@ -37,7 +37,7 @@ func TestUndefinedOperatorCountedPerOccurrence(t *testing.T) {
 }
 
 // TestUndefinedOperatorSuppressedForPageStreams covers who states the rule.
-// checkPageContent already walks every page content stream and states 6.2.2 t1
+// [checkPageContent] already walks every page content stream and states 6.2.2 t1
 // there, so the resource walk must stay silent for those or the violation is
 // stated twice. Streams that walk does not reach, Form XObjects and Type3
 // CharProcs, pass true and are the only ones this path reports.

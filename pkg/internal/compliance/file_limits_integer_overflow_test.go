@@ -13,8 +13,11 @@ import (
 // a signed run of digits an integer object whatever its magnitude, so the
 // literal fails the integer test (t1) although litho holds its value as a real,
 // while a literal written with a decimal point stays a real and is judged by
-// its magnitude (t2). pdfjs issue20872.pdf writes four such integers. Every
-// case was measured against veraPDF.
+// its magnitude (t2). Every case was measured against veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20872.pdf: writes four such integers.
 func TestIntegerLiteralPastInt64Range(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

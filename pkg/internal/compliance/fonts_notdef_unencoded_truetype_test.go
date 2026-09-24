@@ -80,14 +80,18 @@ func withPostNames(t *testing.T, data []byte) []byte {
 // /Encoding gives each code. A font that declares no /Encoding names nothing,
 // so every used code came back empty and was reported: ISO 32000-1, 9.6.6.4
 // resolves such a TrueType through the program's own cmap instead, which the
-// no-names branch already consults. pdfjs issue6410.pdf embeds four nonsymbolic
-// TrueTypes of exactly this shape, whose post 2.0 tables send them down this
-// branch, and litho named charCode 32 although all three cmap subtables map it
-// to "space"; veraPDF judged 149 glyphs there and found no .notdef.
+// no-names branch already consults.
 //
 // The MacExpertEncoding case is the guard that matters: a font that DOES
 // declare an encoding leaving the shown code undefined must still fire, so the
 // fix narrows the check rather than silencing it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue6410.pdf: embeds four nonsymbolic TrueTypes that declare no
+//     /Encoding, whose post 2.0 tables send them down the glyph-name branch.
+//     litho named charCode 32 although all three cmap subtables map it to
+//     "space", and veraPDF judged 149 glyphs there and found no .notdef.
 func TestNotdef_UnencodedTrueTypeIsJudgedByItsCmap(t *testing.T) {
 	t.Parallel()
 

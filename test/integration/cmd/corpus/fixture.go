@@ -104,6 +104,13 @@ func loadFixturesNone(m *Manifest, pdfs []string) []Fixture {
 	return fixtures
 }
 
+// loadFixturesAuto emits one fixture per PDF, keyed on the profile the PDF
+// claims via XMP when the manifest allows it and on its basename otherwise.
+//
+// # Corpus evidence
+//
+//   - govdocs: ~1500 PDFs, and the live XMP scan adds ~30s to every run,
+//     which is why a provisioned claims.csv replaces it.
 func loadFixturesAuto(m *Manifest, pdfs []string) ([]Fixture, error) {
 	allow := make(map[string]bool, len(m.Profiles))
 	for _, p := range m.Profiles {
@@ -111,9 +118,9 @@ func loadFixturesAuto(m *Manifest, pdfs []string) ([]Fixture, error) {
 	}
 
 	// When provisioning produced a claims.csv next to the testdata
-	// root, trust it and skip the live XMP scan. Govdocs has ~1500
-	// PDFs and the live scan adds ~30s to every run; the CSV cuts
-	// that to a single fopen.
+	// root, trust it and skip the live XMP scan, which the CSV cuts to
+	// a single fopen. Without one, loadClaimsCSV returns nil claims and
+	// the live scan runs, so its error needs no handling.
 	claims, _ := loadClaimsCSV(filepath.Join(m.TestdataRoot(), "claims.csv"))
 
 	fixtures := make([]Fixture, len(pdfs))
@@ -180,7 +187,7 @@ func detectClaimedProfile(ctx context.Context, pdfPath string) string {
 		return ""
 	}
 	defer rc.Close()
-	const limit = 1 << 20 // 1 MiB cap; XMP packets larger than this are pathological
+	const limit = 1 << 20 // 1 MiB cap, an anti-DoS guard, not spec-mandated: XMP packets larger than this are pathological
 	data, err := io.ReadAll(io.LimitReader(rc, limit))
 	if err != nil {
 		return ""

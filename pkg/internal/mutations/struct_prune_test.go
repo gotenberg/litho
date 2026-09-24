@@ -91,8 +91,12 @@ func deleteFirstOfTagged(t *testing.T) *writer.ObjAllocator {
 // A structure element names its page in /Pg (ISO 32000-1, 14.7.2, Table 323).
 // Left behind it describes a page the document no longer has, and since the
 // rewrite writes whatever the catalog reaches, it keeps that page and its
-// content in the output: govdocs thread_400_400912.pdf held 17204 bytes of the
-// page it had just deleted, by the structure tree alone.
+// content in the output.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400912.pdf: held 17204 bytes of the page it had just
+//     deleted, by the structure tree alone.
 func TestDeletePagesPrunesStructureElements(t *testing.T) {
 	t.Parallel()
 
@@ -147,8 +151,12 @@ func TestDeletePagesPrunesParentTree(t *testing.T) {
 // The item itself stays: /Dest and /A are both optional (ISO 32000-1, Table
 // 153), so a bookmark keeping its title and its place in the tree is valid,
 // while unlinking it would mean repairing /First, /Last, /Next, /Prev and /Count
-// around the hole. govdocs thread_000_000761.pdf kept 2196 bytes of its deleted
-// page through an outline destination alone.
+// around the hole.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000761.pdf: kept 2196 bytes of its deleted page
+//     through an outline destination alone.
 func TestDeletePagesStripsOutlineDestinations(t *testing.T) {
 	t.Parallel()
 

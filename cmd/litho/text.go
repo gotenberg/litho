@@ -20,6 +20,13 @@ type textResult struct {
 	Pages []textPageResult `json:"pages"`
 }
 
+// runText extracts and prints the text of the selected pages of each named
+// file, every page when -pages is absent.
+//
+// # Corpus evidence
+//
+//   - pdfjs JBIG2Globals.pdf: a searchable scan whose OCR layer uses
+//     rendering mode 3 extracts 0 words by default and 1459 with -invisible.
 func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("text", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -28,8 +35,7 @@ func runText(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	pagesFlag := fs.String("pages", "", "Page range (e.g., 1-3,5,last)")
 	// Text a viewer does not paint is still text. Rendering mode 3 (ISO 32000-1,
 	// Table 106) is how a scanned page carries its OCR layer, so a searchable
-	// scan reads as empty without -invisible: pdfjs JBIG2Globals.pdf extracts
-	// 0 words by default and 1459 with it.
+	// scan reads as empty without -invisible.
 	invisible := fs.Bool("invisible", false, "Include invisible text (rendering mode 3), such as an OCR layer")
 	clipPath := fs.Bool("clip-path", false, "Include text the graphics-state clipping path (W/W*) excludes")
 	clipped := fs.Bool("clipped", false, "Include text outside the visible CropBox")

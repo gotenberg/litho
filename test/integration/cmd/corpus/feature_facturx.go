@@ -29,14 +29,14 @@ type mustangJob struct {
 }
 
 // facturxGolden is the per-fixture verdict the matrix uses to score
-// litho's [Reader.ValidateFacturX] output. Report carries Mustang's raw
+// litho's [pdf.Reader.ValidateFacturX] output. Report carries Mustang's raw
 // text so the mismatch payload can quote whichever rules tripped.
 type facturxGolden struct {
 	Valid  bool
 	Report string
 }
 
-// facturxFeature scores [Reader.ValidateFacturX] against Mustang. The
+// facturxFeature scores [pdf.Reader.ValidateFacturX] against Mustang. The
 // PDF/A-3 archival base layer is scored separately by the existing
 // compliance feature against VeraPDF; this feature isolates the
 // hybrid-invoice carrier rules (filename, AFRelationship, fx:* XMP,
@@ -92,10 +92,10 @@ func (f *facturxFeature) HasGolden(fixtureID string) bool {
 	return ok
 }
 
-// facturxOutput is litho's verdict captured by [Run]. Failures is the
-// list of INVOICE.* rule descriptions; the PDF/A-3 base aggregator
-// (INVOICE test 13) is filtered out so this feature only scores the
-// fx-layer rules. The base PDF/A-3 layer is the compliance feature's
+// facturxOutput is litho's verdict captured by [facturxFeature.Run].
+// Failures is the list of INVOICE.* rule descriptions; the PDF/A-3 base
+// aggregator (INVOICE test 13) is filtered out so this feature only scores
+// the fx-layer rules. The base PDF/A-3 layer is the compliance feature's
 // job.
 type facturxOutput struct {
 	Valid    bool     `json:"valid"`
@@ -190,11 +190,11 @@ type facturxMismatch struct {
 // is filtered out so the feature only scores fx-layer violations;
 // PDF/A-3 base mismatches belong to the compliance feature.
 //
-// Dispatch by filename prefix: ZUGFeRD/corpus flattens its tree into
-// names like "v1__correct_*", "v2__fail_*", "xmlrechnung__*". The v1
-// fixtures use ZUGFeRD 1.0 filenames + namespaces that ValidateFacturX
-// rejects on principle, so the feature routes them to the v1 entry
-// point instead.
+// ZUGFeRD/corpus flattens its tree into names like "v1__correct_*",
+// "v2__fail_*", "xmlrechnung__*", but dispatch reads the embedded invoice
+// filename rather than that prefix. The v1 fixtures use ZUGFeRD 1.0
+// filenames + namespaces that ValidateFacturX rejects on principle, so the
+// feature routes them to the v1 entry point instead.
 func validateFacturXWithLitho(ctx context.Context, pdfPath string) ([]string, error) {
 	f, err := os.Open(pdfPath)
 	if err != nil {

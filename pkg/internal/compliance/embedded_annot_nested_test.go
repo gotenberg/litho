@@ -13,8 +13,11 @@ import (
 // media clip's data at /A/R/C/D (ISO 32000-1 §13.2.3), and ISO 19005-1 §6.1.11
 // t1 forbids the /EF key on a file specification wherever it appears.
 //
-// Five veraPDF test-suite files (PDF_UA-1__7.18.6.2-t01/t02-*) embed a video
-// exactly that way; veraPDF reports every one and litho saw only /FS.
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.18.6.2-t01/t02-*: five test-suite files embed a
+//     video exactly that way; veraPDF reports every one and litho saw only
+//     /FS.
 func TestCollectFileSpecs_NestedInAnnotation(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

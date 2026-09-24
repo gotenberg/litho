@@ -10,9 +10,12 @@ import (
 // maxPatterns bounds the patterns one pattern dictionary may define. It is an
 // anti-DoS guard, not spec-mandated: GRAYMAX is a 32-bit field, and a
 // dictionary of zero-height patterns would otherwise demand billions of them
-// at no pixel cost. The largest of the 21 pattern dictionaries in the test
-// corpora holds 625 patterns (10-bit gray-scale values); 2^16 allows a full
-// 16-bit gray scale.
+// at no pixel cost. 2^16 allows a full 16-bit gray scale.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest of the 21 pattern dictionaries holds 625
+//     patterns (10-bit gray-scale values).
 const maxPatterns = 1 << 16
 
 // maxGrayBits bounds GSBPP, the bits per gray-scale value. It follows from

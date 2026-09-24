@@ -30,8 +30,8 @@ func SetBookmarks(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 // WriteOutline writes a bookmark tree to the allocator and patches the
 // catalog's /Outlines entry. pageRefs maps 1-based page numbers in the
 // output to their indirect references in the allocator. This is the
-// low-level entry point used by Split and Merge, which already have the
-// new page refs from their copier.
+// low-level entry point behind [SetBookmarks]. [Split] and [Merge] build
+// fresh catalogs and call [BuildOutline] instead.
 func WriteOutline(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -83,7 +83,7 @@ func WriteOutline(
 // BuildOutline allocates outline objects for the given bookmark tree and
 // returns the ref to the root /Outlines dict (or a zero ref if nothing was
 // written). The caller is responsible for inserting the returned ref into
-// the catalog. Used by Split and Merge which build fresh catalogs.
+// the catalog. Used by [Split] and [Merge], which build fresh catalogs.
 func BuildOutline(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -139,12 +139,12 @@ func visibleOutlineCount(bookmarks []models.Bookmark) int {
 func buildOutlineItems(alloc *writer.ObjAllocator, bookmarks []models.Bookmark, parent ast.PdfIndirectRef, pageRefs map[int]ast.PdfIndirectRef) []ast.PdfIndirectRef {
 	refs := make([]ast.PdfIndirectRef, len(bookmarks))
 
-	// First pass: allocate refs.
+	// Every ref exists before any dict is built, so each item can name its
+	// /Prev and /Next.
 	for i := range bookmarks {
 		refs[i] = alloc.Alloc(ast.PdfNull{}) // placeholder
 	}
 
-	// Second pass: build dicts with links.
 	for i, bm := range bookmarks {
 		d := ast.PdfDict{
 			// An outline item's /Title is a text string (ISO 32000-1, 12.3.3).

@@ -28,9 +28,14 @@ func ExtractFormData(ctx context.Context, doc *document.Document) ([]models.Form
 //
 // [ExtractFormData] reports only fields that carry a /V, which is what a caller
 // asking "what did the user type" wants. Listing a form needs the other answer:
-// pdfjs issue14301.pdf has 660 named fields and `litho forms` printed
-// "(no form fields)" for it, because only its 320 checkboxes carry a value. That
-// also left no way to discover the names to hand to set-form.
+// reporting only valued fields hid the unfilled ones from `litho forms`, and
+// left no way to discover the names to hand to set-form.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14301.pdf: has 660 named fields, and `litho forms` printed
+//     "(no form fields)" for it, because only its 320 checkboxes carry a
+//     value.
 func ExtractFormFields(ctx context.Context, doc *document.Document) ([]models.FormField, error) {
 	return extractForm(ctx, doc, true)
 }
@@ -41,11 +46,15 @@ func ExtractFormFields(ctx context.Context, doc *document.Document) ([]models.Fo
 // The interactive form lists its fields in /AcroForm (ISO 32000-1, 12.7.2) and
 // the pages carry the widgets that present them (12.5.6.19). A producer may
 // write only the widget, so asking the catalog alone answers "no" for a document
-// whose fields `litho forms` lists: pdfjs issue12963.pdf has 27 of them and no
-// /AcroForm at all.
+// whose fields `litho forms` lists.
 //
 // The walk stops at the first field found, so a document with a large form costs
 // no more than one.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12963.pdf: has 27 fields that `litho forms` lists and no
+//     /AcroForm at all.
 func HasPageWidgetField(ctx context.Context, doc *document.Document) bool {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -191,7 +200,12 @@ func widgetFieldRoot(ctx context.Context, doc *document.Document, annotObj ast.P
 }
 
 // extractForm walks the interactive form once. includeEmpty selects between the
-// two answers above.
+// answers of [ExtractFormData] and [ExtractFormFields].
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12963.pdf: has 241 fields the interactive form does not
+//     list, and `litho forms` reported none of them.
 func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool) ([]models.FormField, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -201,9 +215,8 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 	// A document may carry fields the interactive form does not list. ISO
 	// 32000-1, 12.7.2 says /AcroForm holds them, and 12.5.6.19 says the page
 	// holds the widget that presents one; producers write the widget and forget
-	// the registration. pdfjs issue12963.pdf has 241 such fields, and
-	// `litho forms` reported none of them, so the page is walked even when the
-	// catalog states no form at all.
+	// the registration, so the page is walked even when the catalog states no
+	// form at all.
 	acroFormObj, hasAcroForm := catalog.Dict["AcroForm"]
 	var acroFormDict ast.PdfDict
 	if hasAcroForm {
@@ -263,7 +276,7 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 		// Per ISO 32000-1, Table 218, /Fields may legitimately be empty: an
 		// interactive form carrying only /DA, /DR or /NeedAppearances declares
 		// no root fields. An empty array resolves to a nil slice, and
-		// [document.ResolveArray] already reports a genuine type mismatch as an
+		// document.ResolveArray already reports a genuine type mismatch as an
 		// error, so this is "no root fields" rather than a malformed entry.
 		// Rejecting it made `litho forms` fail outright on a conformant file.
 		return xfaOnly()
@@ -336,7 +349,7 @@ func extractForm(ctx context.Context, doc *document.Document, includeEmpty bool)
 		// Execute field calculations
 		for fieldName, script := range calcScripts {
 			// PDF Calculate scripts output to `event.value`
-			// We mock the event object
+			// Mock the event object.
 			_, _ = vm.RunString(`var event = { value: "" };`) //nolint:errcheck // Best-effort JS execution; PDF scripts commonly reference undefined globals.
 
 			// Execute the specific calculation logic
@@ -402,11 +415,15 @@ const choiceValueSeparator = ", "
 //
 // A name is a byte sequence (ISO 32000-1, 7.3.5), so an appearance state like
 // /Off or /Yes passes through unchanged. Producers do write text there, though,
-// and pdfjs issue19753.pdf gives a checkbox a UTF-16BE name: returning the raw
-// bytes put a string that is not valid UTF-8 into [models.FormField], which the
-// JSON encoder then rendered as replacement characters. Decoding is limited to
-// the bytes that are already unusable as they stand, so every ASCII appearance
-// state keeps comparing equal to the /AP key that names it.
+// such as a UTF-16BE checkbox name: returning the raw bytes put a string that is
+// not valid UTF-8 into [models.FormField], which the JSON encoder then rendered
+// as replacement characters. Decoding is limited to the bytes that are already
+// unusable as they stand, so every ASCII appearance state keeps comparing equal
+// to the /AP key that names it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19753.pdf: gives a checkbox a UTF-16BE name.
 func nameValue(v ast.PdfName) string {
 	if utf8.ValidString(string(v)) {
 		return string(v)
@@ -418,9 +435,13 @@ func nameValue(v ast.PdfName) string {
 //
 // Per ISO 32000-1, 12.7.4.4, Table 230, a choice field's value is a text string,
 // or an array of them when the field allows multiple selection. Only the scalar
-// forms were read, so every multi-select list box reported an empty value:
-// pdfjs annotation-choice-widget.pdf holds ["Ipsum" "Amet" "Consectetur" "Elit"]
-// in one and `litho forms` printed nothing for it.
+// forms were read, so every multi-select list box reported an empty value.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation-choice-widget.pdf: holds
+//     ["Ipsum" "Amet" "Consectetur" "Elit"] in one multi-select list box, and
+//     `litho forms` printed nothing for it.
 func joinChoiceValue(ctx context.Context, doc *document.Document, arr ast.PdfArray) string {
 	parts := make([]string, 0, len(arr))
 	for _, item := range arr {

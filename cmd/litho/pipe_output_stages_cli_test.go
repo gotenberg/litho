@@ -16,7 +16,7 @@ import (
 // individual mutation commands", and for attach, detach, insert, set-bookmarks
 // and stamp-pdf that was false: each is an ordinary mutation command with an
 // -o, and each answered `unknown stage`. sign and redact stay out on purpose;
-// [stageCmds] carries the reason.
+// stageCmds carries the reason.
 //
 // Each stage is asserted through a SIBLING SUBCOMMAND rather than by scanning
 // the output bytes, the convention the other pipe stage tests set: litho writes
@@ -275,7 +275,7 @@ func TestPipe_NewStagesRejectTheirMissingRequiredFlags(t *testing.T) {
 // A stage that fails while it is being BUILT returns before createOutput, so no
 // file ever exists and the assertion there passes for free. Only a stage that
 // fails INSIDE Pipeline.WriteTo has a file on disk to leave behind, and that is
-// the defect `aadb8373` fixed: runPipe was the only output-producing command
+// the defect `c433b788` fixed: runPipe was the only output-producing command
 // that never called abandonOutput, so a mid-write failure left a partial
 // document beside a non-zero exit.
 //

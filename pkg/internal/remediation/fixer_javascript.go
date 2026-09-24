@@ -119,7 +119,7 @@ func fixForbiddenActionsOnOutlines(ctx context.Context, alloc *writer.ObjAllocat
 }
 
 // walkOutlineItem recurses into /First and /Next sibling chains, bounded
-// by [visited] to break cycles in malformed outlines.
+// by visited to break cycles in malformed outlines.
 func walkOutlineItem(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, visited map[int]bool, fixes *[]string, depth int) {
 	if ctx.Err() != nil || depth > maxPageTreeDepth {
 		return
@@ -276,7 +276,7 @@ func isForbiddenAction(ctx context.Context, doc *document.Document, obj ast.PdfO
 	}
 	// A Named action is forbidden unless its /N is one of the standard named
 	// actions (§6.6.1). Mirror the validator (which reuses the same
-	// [compliance.AllowedNamedActions] set): only a present, non-standard /N is
+	// compliance.AllowedNamedActions set): only a present, non-standard /N is
 	// a violation, so a malformed action without /N is left alone.
 	if s == "Named" {
 		if n, _ := document.ResolveName(ctx, doc, d["N"]); n != "" {

@@ -19,8 +19,13 @@ import (
 // names its glyphs a1 to a191, which are in no AGL litho consults. litho
 // exempted every standard-14 font alike, so a ZapfDingbats glyph with no
 // /ToUnicode had no Unicode value and nothing said so. veraPDF reports it under
-// ISO 14289-1 §7.21.7 t1 on 27 pdfjs files, among them js-buttons.pdf, which
-// shows code 0x34 through an unembedded ZapfDingbats inside a widget appearance.
+// ISO 14289-1 §7.21.7 t1.
+//
+// # Corpus evidence
+//
+//   - pdfjs: veraPDF reports it on 27 files.
+//   - pdfjs js-buttons.pdf: one of them, showing code 0x34 through an
+//     unembedded ZapfDingbats inside a widget appearance.
 func TestToUnicode_ZapfDingbatsNeedsToUnicode(t *testing.T) {
 	t.Parallel()
 

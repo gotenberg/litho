@@ -10,12 +10,15 @@ import (
 
 // TestUA1Containment_ByStandardType pins that the ISO 14289-1 §7.2 containment
 // rules read the element, its parent and its kids by standard type, as
-// veraPDF's SE objects, parentStandardType and kidsStandardTypes do.
+// veraPDF's SE objects, parentStandardType and kidsStandardTypes do. A Div,
+// Part, or NonStruct is looked through on both sides: its kids count as kids
+// of the element around it.
 //
-// govdocs thread_000_000150.pdf maps LI_Label to Lbl and LI_Title to LBody;
-// comparing the names as written reported §7.2 t20 on every list item. A Div,
-// Part, or NonStruct is looked through on both sides: its kids count as kids of
-// the element around it.
+// # Corpus evidence
+//
+//   - govdocs thread_000_000150.pdf: maps LI_Label to Lbl and LI_Title to
+//     LBody; comparing the names as written reported §7.2 t20 on every list
+//     item.
 func TestUA1Containment_ByStandardType(t *testing.T) {
 	t.Parallel()
 

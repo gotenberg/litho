@@ -58,14 +58,20 @@ type PageOffsetEntry struct {
 // headerOffset. If found, it returns the parsed parameters; otherwise nil.
 //
 // headerOffset is the position of the %PDF- header, which is not always 0:
-// Acrobat and litho both accept a leading prefix, and pdfjs issue11330.pdf
-// carries 27 bytes of Java serialization before its header. Parsing from 0
-// reads that prefix instead of the dictionary, so a linearized file was
-// reported as not linearized.
+// Acrobat and litho both accept a leading prefix. Parsing from 0 reads that
+// prefix instead of the dictionary, so a linearized file was reported as not
+// linearized.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11330.pdf: carries 27 bytes of Java serialization before its
+//     header, so parsing from 0 reported it as not linearized.
+//   - pdfjs issue11330.pdf: declares /L 129725 inside a 129752 byte file, and
+//     comparing /L against the raw size called the linearized file stale.
 func probeLinearization(r io.ReaderAt, fileSize, headerOffset int64) *LinearizationParams {
 	// The linearization dictionary is the very first indirect object in the
 	// file, right after the %PDF-X.Y header (and an optional binary comment).
-	// We parse it using the standard parser which handles "N G obj ... endobj".
+	// The standard parser handles "N G obj ... endobj".
 	lex := lexer.NewLexer(ioat.NewReader(r, fileSize, headerOffset))
 	p := parser.NewParser(lex)
 
@@ -131,10 +137,8 @@ func probeLinearization(r io.ReaderAt, fileSize, headerOffset int64) *Linearizat
 	//
 	// The length is measured from the header, not from byte 0. ISO 32000-1,
 	// F.2.2 defines /L as the length of the whole file, and a producer writes
-	// it before anything is prepended: pdfjs issue11330.pdf declares
-	// /L 129725 inside a 129752 byte file whose first 27 bytes are Java
-	// serialization, and comparing against the raw size called a linearized
-	// file stale.
+	// it before anything is prepended, so comparing against the raw size calls
+	// a prefixed linearized file stale.
 	if params.FileLength > 0 && params.FileLength != fileSize-headerOffset {
 		return nil
 	}
@@ -176,7 +180,7 @@ func parseHintStream(r io.ReaderAt, size int64, params *LinearizationParams) ([]
 
 	// The file itself bounds the page count: a /N larger than the file could
 	// hold is not a page count, whatever the hint stream says. Refusing costs
-	// nothing, because [NewDocument] already drops a hint table whose stream
+	// nothing, because NewDocument already drops a hint table whose stream
 	// fails to parse, so the document opens without one exactly as it does for
 	// any other malformed hint stream.
 	if int64(params.NumPages) > size/minBytesPerPage {
@@ -193,10 +197,13 @@ func parseHintStream(r io.ReaderAt, size int64, params *LinearizationParams) ([]
 // allocation directly. Measured without it, a 40-byte hint stream declaring
 // 20,000,000 pages allocated 458 MB, and a negative count panicked in make.
 //
-// The deepest page count across the corpus is 2322, with a median of 3, so a
-// million leaves real documents three orders of magnitude of headroom while
+// A million leaves real documents three orders of magnitude of headroom while
 // capping the table near 25 MB. It sits below [maxTrailerObjectCount] because a
 // page needs at least one object.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest page count is 2322, with a median of 3.
 const maxHintTablePages = 1 << 20
 
 // parsePageOffsetTable decodes the bit-packed Page Offset Hint Table
@@ -221,7 +228,7 @@ const maxHintTablePages = 1 << 20
 //	Per-page arrays (each N entries, bit-packed):
 //	  - object count deltas       (item3 bits each)
 //	  - page length deltas        (item5 bits each)
-//	  ... (more arrays we skip for now)
+//	  ... (further arrays, not read)
 func parsePageOffsetTable(data []byte, numPages int) ([]PageOffsetEntry, error) {
 	// Checked before the header so a crafted count cannot reach the allocation
 	// below, and so a negative one is refused rather than panicking in make.

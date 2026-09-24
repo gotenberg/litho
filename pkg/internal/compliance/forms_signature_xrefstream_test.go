@@ -73,26 +73,34 @@ func signedXRefStreamPDF(byteRange [4]int64) []byte {
 // ISO 19005-2 §6.4.3 t1 requires the digest to cover the entire file, and litho
 // answers it by recomputing the range and comparing. The recomputation anchored
 // the revision's %%EOF on the first traditional xref table following the
-// /Contents, and a file written with cross-reference streams has none: 47 of
-// the 61 signed files across the corpora. The anchor collapsed onto the
-// /Contents itself and the scan began mid-dictionary.
+// /Contents, and a file written with cross-reference streams has none. The
+// anchor collapsed onto the /Contents itself and the scan began
+// mid-dictionary.
 //
 // That went unnoticed because a single-revision file survives it. The only
 // %%EOF such a file has is the one the proper anchor reaches, so the answer was
-// accidentally right for 33 of the 39 signature objects measured. The other 6
-// sit more than maxSigEOFScan past their /Contents, and there the scan found no
-// marker and the recomputation bailed rather than report a range it could not
-// trust.
-//
-// pdfjs xfa_filled_imm1344e.pdf is one of them: its object 53 holds its
-// /Contents hex at 11437 while the dictionary declares 15651, a signed revision
-// shifted by 4214 bytes, and veraPDF 1.30.2 reports "ByteRange array of the
-// digital signature does not cover the entire file" where litho was silent.
+// accidentally right. Where that %%EOF sits more than maxSigEOFScan past the
+// /Contents, the scan found no marker and the recomputation bailed rather than
+// report a range it could not trust.
 //
 // The correct-range case is the guard that matters. Anchoring on every section
-// puts all 47 under a recomputed verdict rather than a lucky one, so a fixture
-// that only proved the rule can fire would not show that conformant files stay
-// quiet.
+// puts every cross-reference-stream file under a recomputed verdict rather than
+// a lucky one, so a fixture that only proved the rule can fire would not show
+// that conformant files stay quiet.
+//
+// # Corpus evidence
+//
+//   - All corpora: 47 of the 61 signed files are written with cross-reference
+//     streams, and anchoring on every section puts all 47 under a recomputed
+//     verdict.
+//   - All corpora: the answer was accidentally right for 33 of the 39
+//     signature objects measured. The other 6 sit more than maxSigEOFScan past
+//     their /Contents.
+//   - pdfjs xfa_filled_imm1344e.pdf: one of those 6. Its object 53 holds its
+//     /Contents hex at 11437 while the dictionary declares 15651, a signed
+//     revision shifted by 4214 bytes, and veraPDF 1.30.2 reports "ByteRange
+//     array of the digital signature does not cover the entire file" where
+//     litho was silent. The shifted-contents case has its shape.
 func TestSignatureByteRangeXRefStream(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -136,8 +144,8 @@ func TestSignatureByteRangeXRefStream(t *testing.T) {
 
 	t.Run("shifted contents offset fires", func(t *testing.T) {
 		t.Parallel()
-		// The xfa_filled_imm1344e.pdf shape: the signed revision moved, so the
-		// declared /Contents start no longer matches where it sits.
+		// The signed revision moved, so the declared /Contents start no
+		// longer matches where it sits.
 		bad := actual
 		bad[1] -= 3
 		if v := sigFieldViolations(t, signedXRefStreamPDF(bad)); len(v) == 0 {

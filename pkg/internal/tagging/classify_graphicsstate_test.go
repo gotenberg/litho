@@ -34,8 +34,8 @@ func qRestoresFontSizePDF() []byte {
 // TestClassify_QRestoresTheTextFontSize pins that a font size set inside q…Q
 // does not leak past the Q into later text.
 //
-// pageTextBlocks tracks curFont from Tf alone and has no q or Q case, so a size
-// raised inside a saved graphics state stays in effect after the restore. The
+// pageTextBlocks tracked curFont from Tf alone and had no q or Q case, so a size
+// raised inside a saved graphics state stayed in effect after the restore. The
 // consequence is not cosmetic: fontSize drives bodyFontSize, the
 // fontSize >= body*headingSizeRatio heading test, and the line-height merge, so
 // a leaked size can promote body text to a heading and reshape the structure

@@ -8,6 +8,10 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
+// TestPatchPageDeviceN_KeepsAnEarlierFixersPendingColourSpaceWrite pins that
+// the DeviceN /Colorants repair keeps an earlier fixer's pending write to the
+// same colour-space object.
+//
 // [patchPageDeviceN] reads the DeviceN colour-space array with
 // document.ResolveArray (fixer_devicen.go), hands that value to
 // [buildPatchedDeviceN], and writes the result back at the array's own object

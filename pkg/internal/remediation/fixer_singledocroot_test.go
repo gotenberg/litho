@@ -13,7 +13,7 @@ func TestMatchSingleDocRoot(t *testing.T) {
 	if !matchSingleDocRoot(compliance.Violation{Rule: compliance.Rule_14289_2_8_2_5_2_t01}) {
 		t.Error("must match the single-Document-root rule (§8.2.5.2 t1)")
 	}
-	// t2 (namespace) is handled implicitly by the /NS we set, not claimed directly.
+	// t2 (namespace) is handled implicitly by the /NS the fixer sets, not claimed directly.
 	if matchSingleDocRoot(compliance.Violation{Rule: compliance.Rule_14289_2_8_2_5_2_t02}) {
 		t.Error("must not claim the namespace rule (§8.2.5.2 t2)")
 	}

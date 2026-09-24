@@ -10,7 +10,12 @@ import (
 
 // misrootedCatalogPDF assembles a document whose trailer /Root points at the
 // /Info dictionary in object 1 while the real catalog sits in object 2, the
-// shape of pdfjs issue9418.pdf after its damaged incremental update.
+// shape a damaged incremental update leaves.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9418.pdf: the fixture reproduces this file's shape after its
+//     damaged incremental update.
 func misrootedCatalogPDF() []byte {
 	objs := []string{
 		"<< /Producer (Aspose) /CreationDate (D:20180130101459Z) >>",
@@ -41,12 +46,17 @@ func misrootedCatalogPDF() []byte {
 // Per ISO 32000-1 §7.5.5 Table 15 /Root shall be the catalog, so a file naming
 // something else is malformed and [document.Document.CatalogRef] recovers from
 // it. Taking /Root at face value made every catalog fixer patch the wrong
-// object: on pdfjs issue9418.pdf /MarkInfo, /Lang, /Metadata, /StructTreeRoot
-// and /ViewerPreferences were merged into the document information dictionary
-// while the catalog kept none of them. Remediation reported those repairs as
-// applied and then listed the same violations as residual, so it never
-// converged: a second pass over its own output reported the identical fixes
-// again.
+// object: the catalog repairs were merged into the document information
+// dictionary while the catalog kept none of them. Remediation reported those
+// repairs as applied and then listed the same violations as residual, so it
+// never converged: a second pass over its own output reported the identical
+// fixes again.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9418.pdf: /MarkInfo, /Lang, /Metadata, /StructTreeRoot and
+//     /ViewerPreferences were merged into the document information
+//     dictionary while the catalog kept none of them.
 func TestFixMarkInfo_RepairsTheRecoveredCatalog(t *testing.T) {
 	doc, alloc := newTestDoc(t, misrootedCatalogPDF())
 

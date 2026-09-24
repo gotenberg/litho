@@ -20,12 +20,16 @@ const maxBeadsPerThread = 100000
 //
 // A bead names its page in /P and chains to its neighbours through /N and /V
 // (ISO 32000-1, 12.4.3), and the thread names its first bead in /F. A bead left
-// in the ring therefore keeps its page in the output, which is how govdocs
-// thread_100_100184.pdf held on to 3649 bytes of the page it had just deleted.
+// in the ring therefore keeps its page in the output.
 //
 // Splicing rather than dropping: unlike split, delete keeps the catalog, so
 // /Threads still lists the articles and they are meant to keep working. A thread
 // that loses every bead goes, since an article with no beads has nothing to say.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100184.pdf: a bead left in the ring held on to 3649
+//     bytes of the page the deletion had just removed.
 func pruneArticleBeads(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,

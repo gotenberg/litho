@@ -29,7 +29,11 @@ func buildSigPDF(objs []string, trailerExtra string) []byte {
 }
 
 // unregisteredSigPDF builds a signed document whose signature widget is on the
-// page but absent from any interactive form, the shape of pdfjs issue17794.pdf.
+// page but absent from any interactive form.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue17794.pdf: has this shape.
 func unregisteredSigPDF(withAcroForm bool) []byte {
 	catalog := "<< /Type /Catalog /Pages 2 0 R >>"
 	if withAcroForm {
@@ -68,10 +72,16 @@ func sigsOf(t *testing.T, data []byte) []string {
 //
 // ISO 32000-1, 12.7.2 says an interactive form lists its fields in /AcroForm,
 // and 12.5.6.19 says the page carries the widget that presents one. Producers
-// sign documents without registering the field: pdfjs issue17794.pdf has no
-// /AcroForm at all, and issue18466.pdf and a veraPDF 6.1.12 fixture are the
-// same shape. litho answered "(no signatures)" for all three while poppler's
-// pdfsig reported them.
+// sign documents without registering the field, and litho answered
+// "(no signatures)" for such documents while poppler's pdfsig reported them.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue17794.pdf: has no /AcroForm at all. litho answered
+//     "(no signatures)" while poppler's pdfsig reported its signature.
+//   - pdfjs issue18466.pdf: the same shape, with the same two answers.
+//   - verapdf: a 6.1.12 fixture has the same shape, with the same two
+//     answers.
 func TestSignatureFoundWithoutAnAcroForm(t *testing.T) {
 	t.Parallel()
 
@@ -98,8 +108,11 @@ func TestRegisteredSignatureReportedOnce(t *testing.T) {
 
 // TestUnsignedFieldIsNotASignature is the control: an empty signature field is
 // a placeholder, not a signature. poppler's pdfsig lists it and says "The
-// signature form field is not signed"; litho reports only real signatures, as
-// pdfjs issue18801.pdf shows.
+// signature form field is not signed"; litho reports only real signatures.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18801.pdf: shows that litho reports only real signatures.
 func TestUnsignedFieldIsNotASignature(t *testing.T) {
 	t.Parallel()
 

@@ -91,13 +91,15 @@ func parseNumbering(title string) *numberingMatch {
 	return nil
 }
 
-// looksLikeTOCEntry returns true if a line looks like a Table of Contents
-// entry (numbering, ellipsis leaders, trailing page number) and should be
-// filtered out from heading detection.
+// reTOCLine matches the ellipsis leaders and trailing page number that end a
+// Table of Contents entry.
 //
 //nolint:gochecknoglobals // immutable lookup
 var reTOCLine = regexp.MustCompile(`[.·•\s]{4,}\d+\s*$`)
 
+// looksLikeTOCEntry returns true if a line looks like a Table of Contents
+// entry (numbering, ellipsis leaders, trailing page number) and should be
+// filtered out from heading detection.
 func looksLikeTOCEntry(s string) bool {
 	return reTOCLine.MatchString(s)
 }

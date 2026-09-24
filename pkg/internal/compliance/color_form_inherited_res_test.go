@@ -15,11 +15,14 @@ import (
 // ISO 32000-1, 8.10.1 makes /Resources optional: a form that omits it draws on
 // the resource dictionary of the content stream that invoked it. litho returned
 // early when the entry was absent, so every nested XObject, shading and pattern
-// of such a form went unscanned and its device colour went unreported. pdfjs
-// issue1055r.pdf draws a form with no /Resources whose stream invokes a second
-// form by a name only the page declares, and that one fills with an "rg"
-// operator; veraPDF reports ISO 19005-2 §6.2.4.3 t2 at
-// .../xObject[0]/contentStream[0]/operators[3]/fillCS[0].
+// of such a form went unscanned and its device colour went unreported.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue1055r.pdf: draws a form with no /Resources whose stream
+//     invokes a second form by a name only the page declares, and that one
+//     fills with an "rg" operator; veraPDF reports ISO 19005-2 §6.2.4.3 t2 at
+//     .../xObject[0]/contentStream[0]/operators[3]/fillCS[0].
 func TestFormXObjectInheritsResources(t *testing.T) {
 	t.Parallel()
 

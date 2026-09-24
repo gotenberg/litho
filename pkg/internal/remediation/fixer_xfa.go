@@ -14,6 +14,13 @@ func matchXFA(v compliance.Violation) bool {
 	return descriptionContains(v, "XFA")
 }
 
+// fixXFA removes the /XFA entry from the interactive form dictionary, whether
+// that dictionary is indirect or written inline in the catalog.
+//
+// # Corpus evidence
+//
+//   - All corpora: 11 of the 20 files carrying an interactive form dictionary
+//     write it inline.
 func fixXFA(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -56,10 +63,10 @@ func fixXFA(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 		alloc.AllocAt(acroFormRef.ObjectNum, newAcroForm)
 	} else {
 		// ISO 32000-1, 12.7.2 does not require the interactive form dictionary
-		// to be an indirect object, and 11 of the 20 corpus files carrying one
-		// write it inline. Dropping the rewrite here reported a repair that was
-		// never made: /XFA survived, the violation persisted, and the fixpoint
-		// loop re-reported the same repair on every one of its rounds.
+		// to be an indirect object, and producers commonly write it inline.
+		// Dropping the rewrite here reported a repair that was never made: /XFA
+		// survived, the violation persisted, and the fixpoint loop re-reported
+		// the same repair on every one of its rounds.
 		newCatalog := make(ast.PdfDict, len(catalogDict))
 		maps.Copy(newCatalog, catalogDict)
 		newCatalog["AcroForm"] = newAcroForm

@@ -10,9 +10,14 @@ import (
 // TestRoleMappedNoteAndFormula pins that ISO 14289-1, 7.9 t1 and 7.7 t1 judge
 // the structure type an element stands for through the /RoleMap, not the name
 // it is written with. veraPDF builds its SENote and SEFormula objects from the
-// mapped standard type: govdocs thread_400_400934.pdf writes /Footnote, mapped
-// to /Note, without /ID, and veraPDF reports 7.9 t1. An unmapped /Footnote is no
-// Note and passes. Every case was measured against veraPDF.
+// mapped standard type, so a /Footnote mapped to /Note without /ID fails 7.9
+// t1. An unmapped /Footnote is no Note and passes. Every case was measured
+// against veraPDF.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400934.pdf: writes /Footnote, mapped to /Note,
+//     without /ID, and veraPDF reports 7.9 t1.
 func TestRoleMappedNoteAndFormula(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -48,7 +48,7 @@ func checkOCConfigNames(ctx context.Context, doc *document.Document, catalog ast
 			}
 			// §7.10 t2 (PDF/UA-1) / §8.7 t2 (PDF/UA-2): /AS key forbidden in any
 			// OC config dict. An /AS written as null is absent (ISO 32000-1,
-			// 7.3.7), as veraPDF reads it, measured ([nonNullKeyPresent]).
+			// 7.3.7), as veraPDF reads it, measured (nonNullKeyPresent).
 			if knownKey(dConfig, "AS") {
 				results = append(results, Violation{
 					Rule: asForbiddenRule(profile), Context: "default config (D)",
@@ -131,6 +131,15 @@ func hasNonEmptyName(ctx context.Context, doc *document.Document, dict ast.PdfDi
 	return string(nameStr) != ""
 }
 
+// checkPDFUAIdentification validates the PDF/UA identification schema in the
+// catalog XMP metadata (ISO 14289-1 §5, ISO 14289-2 §5) through
+// [checkPDFUAIdentificationIn]. A document with no XMP metadata draws nothing
+// here.
+//
+// # Corpus evidence
+//
+//   - verapdf 7.1-t08-fail-a: has no XMP metadata and fires only 7.1 t8, so
+//     firing the identifier rule as well over-reports.
 func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !IsPDFUA(profile) {
 		return nil
@@ -141,8 +150,7 @@ func checkPDFUAIdentification(ctx context.Context, doc *document.Document, catal
 		// No XMP metadata at all: veraPDF scopes the §5 identifier rule to the
 		// XMP package object, so with no package it does not fire. The missing
 		// metadata itself is reported by the §7.1 metadata-presence check, so
-		// firing the identifier rule here over-reports (verapdf-corpus
-		// 7.1-t08-fail-a fires only 7.1 t8).
+		// firing the identifier rule here over-reports.
 		return nil
 	}
 

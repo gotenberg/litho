@@ -75,9 +75,13 @@ func generatedToUnicode(t *testing.T, data []byte, shown map[byte]bool) (string,
 // The generator used to sit inside the width repair, behind its early returns
 // for a missing /FontDescriptor, an unreadable program and an absent /Widths.
 // A Type 1 program has no cmap table, so the char-code-to-GID route is nil for
-// every one of them, and PDF_A-2u__6-2-11-7-2-t01-fail-a came out of
-// remediation with "Fixed: 0" against a rule that only wants the mapping
-// (ISO 19005-2, 6.2.11.7.2).
+// every one of them, and such a file came out of remediation with "Fixed: 0"
+// against a rule that only wants the mapping (ISO 19005-2, 6.2.11.7.2).
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-2u__6-2-11-7-2-t01-fail-a: came out of remediation with
+//     "Fixed: 0" against ISO 19005-2, 6.2.11.7.2.
 func TestFixSimpleFontToUnicodeNeedsNoFontProgram(t *testing.T) {
 	t.Parallel()
 
@@ -98,8 +102,12 @@ func TestFixSimpleFontToUnicodeNeedsNoFontProgram(t *testing.T) {
 // The rule asks for a mapping of the codes a page USES. A CMap built from the
 // /Encoding need not reach every one of them, and attaching a partial one
 // satisfies litho's own presence check while veraPDF still reports the rule:
-// remediation then claims a repair the output does not contain. Twenty-four
-// corpus cells went that way before the gate existed.
+// remediation then claims a repair the output does not contain.
+//
+// # Corpus evidence
+//
+//   - All corpora: twenty-four corpus cells went that way before the gate
+//     existed.
 func TestFixSimpleFontToUnicodeRefusesPartialCoverage(t *testing.T) {
 	t.Parallel()
 
@@ -163,10 +171,14 @@ func TestFixSimpleFontToUnicodeLeavesAMappedFont(t *testing.T) {
 //
 // ISO 32000-1, 9.6.6.1 says such a font is drawn through its built-in encoding
 // and a reader shall not substitute a standard one, so there is no trustworthy
-// source of Unicode. Deriving it from a standard encoding invented meanings:
-// the TeX math fonts of 6-3-8-t01-fail-a are symbolic with no /Encoding, and
-// the generated mapping turned "−∞ ∞" into "−1 1" in extracted text while
-// satisfying the compliance rule.
+// source of Unicode. Deriving it from a standard encoding invented meanings
+// that satisfied the compliance rule while corrupting extracted text.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-3-8-t01-fail-a: its TeX math fonts are symbolic with no
+//     /Encoding, and the generated mapping turned "−∞ ∞" into "−1 1" in
+//     extracted text while satisfying the compliance rule.
 func TestFixSimpleFontToUnicodeSkipsASymbolicFontWithNoEncoding(t *testing.T) {
 	t.Parallel()
 

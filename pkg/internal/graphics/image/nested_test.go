@@ -53,8 +53,13 @@ const imageObj = "<< /Type /XObject /Subtype /Image /Width 8 /Height 8" +
 //
 // ISO 32000-1, 8.10.1 lets a page draw its content through a form XObject, and
 // producers put images there routinely. Reporting only the page's own resources
-// missed them: across the pdfjs and govdocs corpora it under-reported 583 pages,
-// including one where every one of 580 images sat inside a form.
+// missed them, down to pages whose every image sat inside a form.
+//
+// # Corpus evidence
+//
+//   - All corpora: across the pdfjs and govdocs corpora, reporting only the
+//     page's own resources under-reported 583 pages, including one where every
+//     one of 580 images sat inside a form.
 func TestExtractImagesRecursiveFindsNestedImages(t *testing.T) {
 	t.Parallel()
 
@@ -84,7 +89,9 @@ func TestExtractImagesRecursiveFindsNestedImages(t *testing.T) {
 // one resource dictionary stays two entries, which is what a listing keyed by
 // resource name has always reported.
 //
-// pdfjs 160F-2019.pdf names object 394 as both /Im0 and /Im1.
+// # Corpus evidence
+//
+//   - pdfjs 160F-2019.pdf: names object 394 as both /Im0 and /Im1.
 func TestExtractImagesRecursiveKeepsBothNames(t *testing.T) {
 	t.Parallel()
 
@@ -151,7 +158,9 @@ func TestExtractImagesRecursiveSurvivesASelfReferencingForm(t *testing.T) {
 // TestExtractImagesRecursiveSkipsAnImageWithNoSize is the control: a malformed
 // image states no usable dimensions and is not reportable.
 //
-// pdfjs issue4575.pdf writes /Width /Height with no height at all.
+// # Corpus evidence
+//
+//   - pdfjs issue4575.pdf: writes /Width /Height with no height at all.
 func TestExtractImagesRecursiveSkipsAnImageWithNoSize(t *testing.T) {
 	t.Parallel()
 

@@ -78,9 +78,9 @@ func xmpTitleFound(t *testing.T, rootObjNum int) bool {
 // TestXMPOpenFollowsTheRecoveredCatalog pins that the XMP packet is found on a
 // document whose trailer /Root names a non-catalog.
 //
-// Per ISO 32000-1 §7.5.5 Table 15 /Root shall be the catalog, so such a file is
+// Per ISO 32000-1, 7.5.5, Table 15 /Root shall be the catalog, so such a file is
 // malformed and the reader recovers by scanning. XMPOpen read the raw /Root, so
-// [pdf.Reader.XMPMetadata] reported no XMP at all on a document whose catalog
+// pdf.Reader.XMPMetadata reported no XMP at all on a document whose catalog
 // carries a valid /Metadata stream. The sibling resolveXMPMetadata found that
 // same packet through its object-pool fallback, so the two disagreed about
 // whether the document had XMP.

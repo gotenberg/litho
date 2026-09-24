@@ -26,9 +26,13 @@ func nestedResourcePDF(pageResources string) []string {
 // A tiling pattern is a content stream with its own resources (ISO 32000-1,
 // 8.7.3.1) and a soft mask names a transparency group XObject in /G that is
 // painted to derive the mask (11.6.5.2, Table 144). Neither puts the image in
-// the page's /XObject dictionary, so walking that alone reported nothing:
-// pdfjs issue18956.pdf draws a 728x90 image through an /ExtGState soft mask and
-// nothing else, and issue16395.pdf paints its images through a pattern.
+// the page's /XObject dictionary, so walking that alone reported nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18956.pdf: draws a 728x90 image through an /ExtGState soft
+//     mask and nothing else.
+//   - pdfjs issue16395.pdf: paints its images through a pattern.
 func TestCollectImagesFollowsPatternsAndSoftMasks(t *testing.T) {
 	t.Parallel()
 

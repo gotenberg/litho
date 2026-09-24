@@ -7,6 +7,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
+// TestSetMetadata_DoesNotResurrectClearedFields pins that [SetMetadata] after
+// [ClearMetadata] writes only the fields it was given.
+//
 // Mutations queued on one writer share a single allocator and run in order with
 // no flush between them, so [SetMetadata] must read /Info through the allocator:
 // its contract is that an empty field preserves "the existing value", and after
@@ -19,8 +22,12 @@ import (
 // destroyed, and reports success doing it.
 //
 // Nothing else catches this. Mutations have no fix-to-fixpoint loop to notice a
-// discarded write, the corpus gate scores no metadata-set cell, and every
-// existing ClearMetadata test calls it alone rather than alongside SetMetadata.
+// discarded write, and every existing ClearMetadata test calls it alone rather
+// than alongside SetMetadata.
+//
+// # Corpus evidence
+//
+//   - All corpora: the gate scores no metadata-set cell.
 func TestSetMetadata_DoesNotResurrectClearedFields(t *testing.T) {
 	ctx := context.Background()
 	doc := metadataFixture(t, true, true)

@@ -30,8 +30,8 @@ type ByteRange struct {
 	Start, End int
 }
 
-// parseOperations is the shared tokenization loop used by both ParseStreamData
-// and ParsePageContent. It reads tokens from the parser, collecting operands
+// parseOperations is the shared tokenization loop used by both [ParseStreamData]
+// and [ParsePageContent]. It reads tokens from the parser, collecting operands
 // and emitting operations when an operator keyword is encountered. Inline
 // images (BI/ID/EI) are detected and safely skipped. When ranges is non-nil,
 // the parser must have offset tracking enabled and each operation's byte
@@ -181,11 +181,15 @@ func ParseStreamDataWithOverflows(ctx context.Context, data []byte) ([]Operation
 // accumulated buffer grows with the file's object count rather than with
 // anything the page could legitimately draw.
 //
-// 64 MB is chosen against the corpora rather than by round number. The largest
-// real page found across all of them is page 1 of pdfjs issue21089.pdf at
-// 27.51 MB of decoded content (in a 12.11 MB file), so this leaves better than
-// 2x headroom over the heaviest legitimate page while still bounding the worst
-// case. It was 32 MB, which that page came within 16% of.
+// 64 MB is chosen against the heaviest real page measured rather than by round
+// number: it leaves better than 2x headroom over that page while still bounding
+// the worst case. It was 32 MB, which that page came close to exceeding.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest real page found across all of them is page 1 of
+//     pdfjs issue21089.pdf, at 27.51 MB of decoded content in a 12.11 MB file.
+//   - pdfjs issue21089.pdf: page 1 came within 16% of the former 32 MB cap.
 const MaxPageContentSize = 64 << 20
 
 // ParsePageContent extracts, concatenates, and parses the content streams of a page or form XObject.

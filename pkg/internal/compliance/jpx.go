@@ -39,6 +39,12 @@ func jpxRulesForPart(part int) jpxRules {
 
 // checkJPXImage validates JPEG2000 data stream constraints for an Image XObject
 // with JPXDecode filter.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11004.pdf, issue12579.pdf: write [/ASCII85Decode /JPXDecode]
+//     and [/FlateDecode /JPXDecode] respectively, and behind either one no
+//     §6.2.8.3 violation was reported while the raw bytes were read.
 func checkJPXImage(ctx context.Context, doc *document.Document, stream ast.PdfStream, name ast.PdfName, pageNum, part int) []Violation {
 	rules := jpxRulesForPart(part)
 	if rules.t1.Specification == "" {
@@ -47,9 +53,8 @@ func checkJPXImage(ctx context.Context, doc *document.Document, stream ast.PdfSt
 
 	// The checks below read what JPXDecode consumes, so the chain is applied
 	// up to it. Asking for the raw bytes yielded the codestream only when
-	// JPXDecode was the whole chain: pdfjs issue11004.pdf writes
-	// [/ASCII85Decode /JPXDecode] and issue12579.pdf [/FlateDecode
-	// /JPXDecode], and behind either one no §6.2.8.3 violation was reported.
+	// JPXDecode was the whole chain, so a filter in front of it hid every
+	// §6.2.8.3 violation.
 	data, _, err := doc.DecodeStreamUpTo(ctx, stream, "JPXDecode")
 	if err != nil || len(data) < 12 {
 		return nil

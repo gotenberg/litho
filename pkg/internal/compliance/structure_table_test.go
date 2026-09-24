@@ -235,8 +235,9 @@ func TestValidateTableColumnConsistency_RowSpanCrossesSection(t *testing.T) {
 	}
 }
 
-// A /RowSpan that stays inside its own section is regular, and so is a table
-// whose rows sit directly under it with no section at all.
+// TestValidateTableColumnConsistency_RowSpanInsideSection pins that a /RowSpan
+// that stays inside its own section is regular, and so is a table whose rows
+// sit directly under it with no section at all.
 func TestValidateTableColumnConsistency_RowSpanInsideSection(t *testing.T) {
 	inSection := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",

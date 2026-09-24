@@ -10,11 +10,14 @@ import (
 // rectangle outside the crop box (isOutsideCropBox), or the hidden flag
 // ((F & 2) == 2).
 //
-// A hidden Link and one whose rectangle lies off the page's crop box are exempt;
-// pdfjs issue3694_reduced.pdf has only an off-page Link without /Contents and
-// veraPDF passes it. /Contents is a text string judged by the text it decodes
-// to, so a byte order mark alone does not describe the link (ISO 32000-1,
-// 7.9.2.2).
+// A hidden Link and one whose rectangle lies off the page's crop box are
+// exempt. /Contents is a text string judged by the text it decodes to, so a
+// byte order mark alone does not describe the link (ISO 32000-1, 7.9.2.2).
+//
+// # Corpus evidence
+//
+//   - pdfjs issue3694_reduced.pdf: has only an off-page Link without
+//     /Contents, and veraPDF passes it.
 func TestCheckLinkContents_VeraPDFScope(t *testing.T) {
 	t.Parallel()
 

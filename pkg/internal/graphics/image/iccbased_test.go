@@ -13,9 +13,13 @@ import (
 //
 // Per ISO 32000-1, 8.6.5.5, Table 66 the profile stream's /N shall be 1, 3 or 4,
 // standing for DeviceGray, DeviceRGB and DeviceCMYK. Every ICCBased space
-// answered DeviceRGB, which mislabelled the CMYK images in pdfjs
-// issue11052.pdf. The answer drives [DecodeImage]'s pixel loop, so a
-// four-component image was read three bytes to the pixel.
+// answered DeviceRGB, which mislabelled CMYK images. The answer drives
+// [DecodeImage]'s pixel loop, so a four-component image was read three bytes
+// to the pixel.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11052.pdf: its CMYK images were mislabelled DeviceRGB.
 func TestResolveColorSpaceICCBasedComponents(t *testing.T) {
 	t.Parallel()
 

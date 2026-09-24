@@ -12,11 +12,13 @@ import (
 // PDF", the same reason the predefined-property and property-type audits already
 // run per packet.
 //
-// pdfjs issue19319.pdf carries an xmpMM:DerivedFrom whose stRef fields include
-// originalDocumentID, which the XMP 2005 ResourceRef does not define. litho
-// reported it while the packet sat in the catalog and fell silent once
-// remediation moved the same bytes into an object-level stream; veraPDF reports
-// it either way.
+// # Corpus evidence
+//
+//   - pdfjs issue19319.pdf: carries an xmpMM:DerivedFrom whose stRef fields
+//     include originalDocumentID, which the XMP 2005 ResourceRef does not
+//     define. litho reported it while the packet sat in the catalog and fell
+//     silent once remediation moved the same bytes into an object-level
+//     stream; veraPDF reports it either way.
 func TestXMPStructFieldNames_EveryPacket(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -41,7 +41,6 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 			return results
 		}
 
-		// Check page-level transparency group.
 		results = append(results, checkPageTransparencyGroup1(ctx, doc, page, i+1)...)
 
 		visited := make(map[int]bool)
@@ -301,6 +300,12 @@ func checkPageTransparencyGroup1(ctx context.Context, doc *document.Document, pa
 
 // checkExtGStateTransparency1 checks all ExtGState entries for transparency
 // (SMask, BM, CA, ca) which are forbidden in PDF/A-1.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20914.pdf: declares /GDIModeMask with a /Darken blend mode
+//     and never sets it, and veraPDF reports only the /Transparent state a
+//     form actually applies.
 func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, resources ast.PdfDict, pageNum int, drawn *drawnResources) []Violation {
 	gsDict, err := document.ResolveDict(ctx, doc, resources["ExtGState"])
 	if err != nil || gsDict == nil {
@@ -316,9 +321,7 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 		// A resource dictionary lists what the content MAY set, not what it
 		// sets; see [drawnResources]. veraPDF builds its PDExtGState from the
 		// gs operator that selects it, so a state nothing selects is reported
-		// nowhere: pdfjs issue20914.pdf declares /GDIModeMask with a /Darken
-		// blend mode and never sets it, and veraPDF reports only the
-		// /Transparent state a form actually applies.
+		// nowhere.
 		if !drawn.setsExtGState(string(gsName)) {
 			continue
 		}
@@ -453,6 +456,16 @@ func blendingCSRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_10_t02, Rule_19005_3_6_2_10_t02, Rule_19005_4_6_2_9_t02)
 }
 
+// checkTransparencyParts2Plus applies the PDF/A-2, PDF/A-3, and PDF/A-4 page
+// transparency rules: the blend mode an ExtGState names, and the blending
+// colour space a page that uses transparency must have.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue6741.pdf: declares /G1 (/BM /Darken) and /G2 (/BM /Lighten),
+//     sets only /G0 (/BM /Normal), carries no page /Group and no OutputIntent,
+//     and veraPDF reports nothing for it while litho, surveying every declared
+//     ExtGState, fired §6.2.10 t2.
 func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []pageCtx, _ string, part int) []Violation {
 	hasOutputIntent, _ := documentOutputIntentInfo(ctx, doc, catalog)
 
@@ -486,11 +499,8 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		// selects one, so a state nothing selects contributes no transparency.
 		// [checkExtGStateTransparency1] and [resourcesUseTransparency] already
 		// scope themselves this way; this loop did not, and it runs first.
-		// pdfjs issue6741.pdf declares /G1 (/BM /Darken) and /G2 (/BM
-		// /Lighten), sets only /G0 (/BM /Normal), carries no page /Group and no
-		// OutputIntent, and veraPDF reports nothing for it while litho fired
-		// §6.2.10 t2. A nil drawn admits every name, which keeps a page whose
-		// content litho cannot read unscoped rather than silently clean.
+		// A nil drawn admits every name, which keeps a page whose content
+		// litho cannot read unscoped rather than silently clean.
 		drawn := pageDrawnResources(ctx, &pages[i])
 
 		// Check blend modes in ExtGState.
@@ -510,7 +520,6 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 					continue
 				}
 
-				// Validate blend mode.
 				if bmObj, hasBM := gs["BM"]; hasBM {
 					bm := resolveBlendMode(ctx, doc, bmObj)
 					if bm != "" && !standardBlendModes[bm] {
@@ -601,10 +610,15 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 // transparency", which veraPDF answers from the content stream: its
 // PDPage.containsTransparency is raised while walking operators, so a soft
 // masked image nothing paints leaves it false. Two fixtures identical but for a
-// single Do settle it, and pdfjs issue12963.pdf shows the shape in the wild,
-// declaring eleven soft masked images while drawing only FXX15, which has no
-// /SMask; issue14847.pdf declares two and draws nothing at all. veraPDF reports
-// neither, at 2b or at 4.
+// single Do settle it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12963.pdf: declares eleven soft masked images while drawing
+//     only FXX15, which has no /SMask, and veraPDF reports nothing at 2b or
+//     at 4.
+//   - pdfjs issue14847.pdf: declares two soft masked images and draws nothing
+//     at all, and veraPDF reports nothing at 2b or at 4.
 type drawnResources struct {
 	xobjects   map[string]bool
 	extGStates map[string]bool
@@ -700,34 +714,31 @@ func formDrawnResources(ctx context.Context, doc *document.Document, stream ast.
 // PDPage.containsTransparency is what §6.2.10 t2 acts on: given an ExtGState
 // naming /Compatible, no page /Group and no PDF/A OutputIntent it reports "The
 // page contains transparent objects with no blending colour space defined",
-// while the same file naming /Normal passes. govdocs thread_300_300345.pdf is
-// the corpus case. The rule that judges which values /BM may take is a separate
-// check and still admits Compatible.
+// while the same file naming /Normal passes. The rule that judges which values
+// /BM may take is a separate check and still admits Compatible.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300345.pdf: the corpus case, an ExtGState naming
+//     /Compatible.
 func blendModeIsTransparency(bm string) bool {
 	return bm != "" && bm != "Normal"
 }
 
-// resourcesUseTransparency reports whether a resource dictionary reaches any
-// transparency the content stream actually draws: an ExtGState with a
-// non-isolating blend mode, a soft mask, or a non-opaque constant alpha; an
-// Image XObject with a /SMask; or a Form XObject with a transparency /Group. It
-// recurses into Form XObject resources, bounded by maxFormXObjectDepth and a
-// visited set of form-dict identities, so nested transparency is detected while
-// cyclic references cannot loop.
-//
-// drawn narrows the scan to the names the content stream invokes; see
-// [drawnResources]. A nil drawn admits every name, for callers that hold no
-// content stream to consult.
 // imageSoftMasked reports whether an image XObject carries a soft mask.
 //
 // Per ISO 32000-1, Table 89, the /SMask entry of an image is either a stream or
 // the name None, and None states that the image has no soft mask. Testing only
 // that the key is present and not null therefore read an explicit /SMask /None
-// as transparency and demanded a blending colour space the page does not need:
-// pdfjs issue14814.pdf draws one such image on a page carrying no /Group under
-// no OutputIntent, and veraPDF reports nothing there. Two fixtures differing
-// only in that value settle it. The ExtGState paths already draw the same
-// distinction inline.
+// as transparency and demanded a blending colour space the page does not need.
+// Two fixtures differing only in that value settle it. The ExtGState paths
+// already draw the same distinction inline.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14814.pdf: draws one image with /SMask /None on a page
+//     carrying no /Group under no OutputIntent, and veraPDF reports nothing
+//     there.
 func imageSoftMasked(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
 	if !nonNullKeyPresent(ctx, doc, dict, "SMask") {
 		return false
@@ -736,6 +747,17 @@ func imageSoftMasked(ctx context.Context, doc *document.Document, dict ast.PdfDi
 	return name != "None"
 }
 
+// resourcesUseTransparency reports whether a resource dictionary reaches any
+// transparency the content stream actually draws: an ExtGState with a
+// non-isolating blend mode, a soft mask, or a non-opaque constant alpha; an
+// Image XObject with a /SMask; or a Form XObject with a transparency /Group. It
+// recurses into Form XObject resources, bounded by [maxFormXObjectDepth] and a
+// visited set of form-dict identities, so nested transparency is detected while
+// cyclic references cannot loop.
+//
+// drawn narrows the scan to the names the content stream invokes; see
+// [drawnResources]. A nil drawn admits every name, for callers that hold no
+// content stream to consult.
 func resourcesUseTransparency(ctx context.Context, doc *document.Document, res ast.PdfDict, depth int, visited map[string]bool, drawn *drawnResources) bool {
 	if res == nil || depth > maxFormXObjectDepth || ctx.Err() != nil {
 		return false
@@ -826,6 +848,13 @@ func resourcesUseTransparency(ctx context.Context, doc *document.Document, res a
 // checkAnnotationTransparency checks whether any annotation on the page
 // uses transparency (via appearance streams with transparency groups or
 // ExtGState with transparency settings).
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation-as.pdf: its appearances carry image /SMask entries,
+//     and it fails ISO 19005-2 §6.2.10 t2 in veraPDF.
+//   - pdfjs stamps.pdf: its appearances carry a /Group /S /Transparency, and
+//     it fails ISO 19005-2 §6.2.10 t2 in veraPDF.
 func checkAnnotationTransparency(ctx context.Context, doc *document.Document, page ast.PdfDict) bool {
 	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annotsArr) == 0 {
@@ -866,9 +895,7 @@ func checkAnnotationTransparency(ctx context.Context, doc *document.Document, pa
 				// same tree as the page pass: an appearance routinely paints a
 				// soft-masked image or a transparency-group form rather than
 				// setting an ExtGState, and veraPDF counts those toward the
-				// page's containsTransparency (pdfjs annotation-as.pdf carries
-				// image /SMask entries, stamps.pdf a /Group /S /Transparency,
-				// and both fail ISO 19005-2 §6.2.10 t2 there).
+				// page's containsTransparency.
 				if apRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && apRes != nil {
 					if resourcesUseTransparency(ctx, doc, apRes, 0, map[string]bool{},
 						formDrawnResources(ctx, doc, stream)) {
@@ -944,9 +971,6 @@ func documentOutputIntentInfo(ctx context.Context, doc *document.Document, catal
 	return false, ""
 }
 
-// checkType3FontTransparency checks whether any Type 3 font in the page
-// resources uses transparency (via ExtGState or transparency group XObjects
-// in its own resources).
 // checkPatternTransparency checks whether any tiling pattern in the page
 // resources uses transparency (via ExtGState with alpha or blend mode).
 func checkPatternTransparency(ctx context.Context, doc *document.Document, pageRes ast.PdfDict) bool {
@@ -999,6 +1023,9 @@ func checkPatternTransparency(ctx context.Context, doc *document.Document, pageR
 	return false
 }
 
+// checkType3FontTransparency checks whether any Type 3 font in the page
+// resources uses transparency (via ExtGState or transparency group XObjects
+// in its own resources).
 func checkType3FontTransparency(ctx context.Context, doc *document.Document, p *pageCtx, pageRes ast.PdfDict) bool {
 	fontDict, err := document.ResolveDict(ctx, doc, pageRes["Font"])
 	if err != nil || fontDict == nil {
@@ -1148,6 +1175,11 @@ func type3EncodingCodeToName(ctx context.Context, doc *document.Document, fontDi
 // soft mask, or non-standard blend mode, or a Do operator painting a Form
 // XObject that is a transparency group. The referenced resources resolve through
 // the font's own /Resources.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue10717.pdf: keeps its /SMask images in the Type3 font's own
+//     /Resources, where only this walk reaches them.
 func type3CharProcTransparent(ctx context.Context, doc *document.Document, charProc ast.PdfStream, fontRes ast.PdfDict) bool {
 	data, err := doc.DecodeStream(ctx, charProc)
 	if err != nil {
@@ -1188,9 +1220,8 @@ func type3CharProcTransparent(ctx context.Context, doc *document.Document, charP
 			case "Image":
 				// A glyph procedure that paints a soft-masked image makes the
 				// page transparent exactly as the page content would (ISO
-				// 32000-1 §11.6.5): pdfjs issue10717.pdf keeps its /SMask
-				// images in the Type3 font's own /Resources, where only this
-				// walk reaches them.
+				// 32000-1 §11.6.5). Such images can sit in the Type3 font's
+				// own /Resources, where only this walk reaches them.
 				if imageSoftMasked(ctx, doc, stream.Dict) {
 					return true
 				}
@@ -1253,15 +1284,21 @@ func resolveBlendMode(ctx context.Context, doc *document.Document, obj ast.PdfOb
 	return string(name)
 }
 
-// floatEquals1 tests whether a float64 is approximately 1.0.
+// alphaEpsilon is the tolerance [floatEquals1] allows around 1.0.
 const alphaEpsilon = 1e-6
 
+// floatEquals1 tests whether a float64 is approximately 1.0.
 func floatEquals1(v float64) bool {
 	return math.Abs(v-1.0) < alphaEpsilon
 }
 
 // pageHasBlendingCS checks whether a page dictionary has a Group dict with
 // /S = Transparency and a /CS entry.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11045.pdf: points its group /CS at a free object, so the
+//     page has no blending colour space.
 func pageHasBlendingCS(ctx context.Context, doc *document.Document, page ast.PdfDict) bool {
 	groupObj, hasGroup := page["Group"]
 	if !hasGroup {
@@ -1284,9 +1321,9 @@ func pageHasBlendingCS(ctx context.Context, doc *document.Document, page ast.Pdf
 	}
 	// Per ISO 32000-1 §7.3.9 an indirect reference to a non-existent object is
 	// the null object, and per §7.3.7 a dictionary entry whose value is null is
-	// equivalent to the entry being absent. pdfjs issue11045.pdf points its
-	// group /CS at a free object, so the page has no blending colour space and
-	// still owes ISO 19005-2 §6.2.10 t2 an answer.
+	// equivalent to the entry being absent. A group /CS pointing at a free
+	// object leaves the page with no blending colour space, and it still owes
+	// ISO 19005-2 §6.2.10 t2 an answer.
 	cs, err := document.ResolveObject(ctx, doc, csObj)
 	if err != nil {
 		return false

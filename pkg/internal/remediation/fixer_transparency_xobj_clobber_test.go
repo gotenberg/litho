@@ -8,17 +8,20 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// [fixXObjectTransparency] reads the XObject with document.ResolveObject
-// (fixer_transparency.go), rebuilds its dictionary with
-// maps.Copy(newDict, stream.Dict) and writes that back at xoRef.ObjectNum. It
-// consults no alloc-aware helper, and fixResourceTransparency, the only thing
+// TestFixXObjectTransparency_KeepsAPeerFixersPendingStreamWrite pins that the
+// XObject transparency repair reads the stream through the allocator.
+//
+// [fixXObjectTransparency] used to read the XObject with
+// document.ResolveObject (fixer_transparency.go), rebuild its dictionary with
+// maps.Copy(newDict, stream.Dict) and write that back at xoRef.ObjectNum. It
+// consulted no alloc-aware helper, and fixResourceTransparency, the only thing
 // it delegates to, is a pure dispatcher holding no read or write of its own.
-// So an earlier fixer's edit to that stream is discarded.
+// So an earlier fixer's edit to that stream was discarded.
 //
 // Peer and ordering are measured: graphics (registry 106) writes XObject
 // streams in fixXObjects and reads them ALLOC-AWARE, and transparency is
-// registry 107, the very next entry. Graphics writes correctly, transparency
-// overwrites from the stale copy.
+// registry 107, the very next entry. Graphics wrote correctly, and
+// transparency overwrote it from the stale copy.
 //
 // THE SEEDED OBJECT IS 21, NOT 20, AND THAT IS THE WHOLE POINT. In
 // nestedFormGroupPDF object 20 is the outer form and carries NO /Group; object

@@ -2,12 +2,12 @@
 // profile Schematron files by inlining external code-list lookups.
 //
 // The upstream profile Schematrons reference companion codedb XML
-// files via the XPath 1.0 [document] function, e.g.
+// files via the XPath 1.0 document() function, e.g.
 //
 //	test="document('FACTUR-X_EN16931_codedb.xml')/codedb/cl[@id=3]/enumeration[@value=$codeValue3]"
 //
-// litho's [pkg/internal/schematron] engine is backed by antchfx/xpath,
-// which does not implement [document]. Rather than fork the XPath
+// litho's pkg/internal/schematron engine is backed by antchfx/xpath,
+// which does not implement document(). Rather than fork the XPath
 // engine, this generator resolves the lookup at build time:
 //
 //  1. Parse each FACTUR-X_*_codedb.xml file into a {file, cl-id} →

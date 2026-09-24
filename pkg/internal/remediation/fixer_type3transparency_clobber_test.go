@@ -9,27 +9,35 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// [fixType3FontTransparency] reads the Type 3 font dictionary with
-// document.ResolveDict (fixer_transparency.go), copies it with
-// maps.Copy(work, fd) and writes that copy back at the font's own object
-// number. It consults no alloc-aware helper, so an earlier fixer's edit to the
-// same font object is discarded.
+// TestFixType3FontTransparency_KeepsAPeerFixersPendingFontWrite pins that the
+// Type 3 font repair reads the font dictionary through the allocator.
+//
+// [fixType3FontTransparency] used to read the Type 3 font dictionary with
+// document.ResolveDict (fixer_transparency.go), copy it with
+// maps.Copy(work, fd) and write that copy back at the font's own object
+// number. It consulted no alloc-aware helper, so an earlier fixer's edit to the
+// same font object was discarded.
 //
 // Peer and ordering are measured, not assumed: patchType3FontColorSpace
-// (outputintent.go) writes Type 3 font dictionaries and IS alloc-aware, and it
-// runs at registry entries output-intent 68 and output-intent-cleanup 70, both
-// far ahead of transparency at 107. So transparency reads that object stale and
-// drops the colour-space repair.
+// (fixer_outputintent.go) writes Type 3 font dictionaries and IS alloc-aware,
+// and it runs at registry entries output-intent 68 and output-intent-cleanup
+// 70, both far ahead of transparency at 107. So transparency read that object
+// stale and dropped the colour-space repair.
 //
 // THE FIXTURE MUST BE THE INLINE ONE. type3FontPDF stores /GS0 as an indirect
 // reference, so fixExtGStateDict writes THAT object and the font dict is never
 // rewritten at all: seeding object 10 there would read back the seed itself and
 // pass while proving nothing. inlineType3PDF declares /Resources, /ExtGState
-// and /GS0 all inline on object 10, which is the shape the corpus carriers use
-// and the only shape in which AllocAt fires on the font object.
+// and /GS0 all inline on object 10, the only shape in which AllocAt fires on
+// the font object.
 //
 // The marker is /Name because the fixture does not declare one: a key already
 // present on disk would survive inside the stale copy too.
+//
+// # Corpus evidence
+//
+//   - All corpora: the carriers declare /Resources, /ExtGState and /GS0 all
+//     inline on the font, the shape inlineType3PDF builds.
 func TestFixType3FontTransparency_KeepsAPeerFixersPendingFontWrite(t *testing.T) {
 	t.Parallel()
 

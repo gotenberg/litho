@@ -325,7 +325,13 @@ func danglingRefPDF() []byte {
 // rewrite of a document with an indirect reference to an absent object copies it
 // as null instead of aborting. Before this, the copier failed the entire rewrite
 // with "object not found in xref", so remediation of any file with a damaged xref
-// (pdfcpu T4) rolled back and errored instead of producing a valid output.
+// rolled back and errored instead of producing a valid output.
+//
+// # Corpus evidence
+//
+//   - pdfcpu T4.pdf: has a damaged xref, and its remediation rolled back and
+//     errored instead of producing a valid output until the copier tolerated
+//     the absent object.
 func TestWriter_FullRewrite_ToleratesDanglingRef(t *testing.T) {
 	ctx := context.Background()
 	data := danglingRefPDF()
@@ -407,10 +413,15 @@ func TestWriter_FullRewrite_ToleratesUnparseableObject(t *testing.T) {
 	}
 }
 
-// freeCatalogPDF builds a PDF whose xref marks object 1 — the /Root target — as
+// freeCatalogPDF builds a PDF whose xref marks object 1, the /Root target, as
 // a free entry even though the object is physically present. A reader recovers
 // the catalog by scanning; a full rewrite that trusted the free entry would copy
-// a null catalog and drop every page. Reproduces pdfjs issue18986/issue9418.
+// a null catalog and drop every page.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18986.pdf, issue9418.pdf: have the shape this fixture
+//     reproduces.
 func freeCatalogPDF() []byte {
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
@@ -494,7 +505,13 @@ func rootlessTrailerPDF() []byte {
 // TestWriter_FullRewrite_RecoversRootlessTrailer pins the catalog-recovery
 // fallback: a full rewrite of a document whose trailer lost /Root finds the
 // catalog by scanning the object table (matching the reader) instead of failing
-// with "trailer missing /Root indirect reference" (govdocs thread_100_100982/3).
+// with "trailer missing /Root indirect reference".
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100982.pdf, thread_100_100983.pdf: failed the full
+//     rewrite with "trailer missing /Root indirect reference" before the
+//     fallback.
 func TestWriter_FullRewrite_RecoversRootlessTrailer(t *testing.T) {
 	ctx := context.Background()
 	data := rootlessTrailerPDF()
@@ -999,7 +1016,7 @@ func TestWriter_FlattenForm(t *testing.T) {
 // /Annots update each clobbered the other's mutations.
 func buildFormPDFWithAppearances(t *testing.T) []byte {
 	t.Helper()
-	// Build objects as strings; record each object's byte offset as we
+	// Build objects as strings; record each object's byte offset on
 	// append, so xref entries don't have to be hand-counted.
 	var (
 		body    bytes.Buffer
@@ -1074,8 +1091,8 @@ func TestWriter_FlattenForm_XObjectAndContentsSurvive(t *testing.T) {
 	}
 
 	// The output must reference two FlatAP Form XObjects by name. The
-	//    XObject allocator picks names like "FlatAP7" and "FlatAP8" based
-	//    on object numbers; match the prefix and count occurrences.
+	// XObject allocator picks names like "FlatAP7" and "FlatAP8" based
+	// on object numbers; match the prefix and count occurrences.
 	flatAPCount := strings.Count(outStr, "/FlatAP")
 	// Expected references: 1× in /Resources/XObject, 1× in /Contents (Do
 	// invocation) per widget. With two widgets that's 4 references.
@@ -1137,7 +1154,12 @@ func TestMerge_TwoDocuments(t *testing.T) {
 // inlinePagePDF builds a PDF whose page tree inlines the page dict directly in
 // /Kids instead of referencing it indirectly. Such a page has no object number,
 // so a merge that copied pages only by reference dropped it. Reproduces qpdf
-// direct-pages.pdf / pages-is-page.pdf and pdfjs issue9105_other/issue9540.
+// direct-pages.pdf / pages-is-page.pdf.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9105_other.pdf, issue9540.pdf: inline their page dicts in
+//     /Kids, the shape this fixture reproduces.
 func inlinePagePDF() []byte {
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
@@ -2246,15 +2268,15 @@ func TestVerifySignatures_CallableAfterRoundTrip(t *testing.T) {
 	}
 }
 
-// [Writer.Sign] is documented as needing to be the last mutation before
-// [Writer.WriteTo]. It is not a mutation at all: it sets a flag, and
-// writeToInternal hands every queued mutation to WriteWithSignature, which
-// applies them before computing the digest. So a mutation queued AFTER Sign is
-// still applied and still covered by the signature.
+// TestWriter_SignThenModify pins that a mutation queued AFTER [Writer.Sign] is
+// still applied and still covered by the signature. Sign may be called at any
+// point before [Writer.WriteTo]: it is not a mutation at all, it sets a flag,
+// and writeToInternal hands every queued mutation to WriteWithSignature, which
+// applies them before computing the digest.
 //
-// TestWriter_SignAndModify covers the documented order. This covers the
-// reverse, which nothing asserted: if the ordering ever became load-bearing,
-// the title would be dropped here while that test kept passing.
+// TestWriter_SignAndModify covers the usual order. This covers the reverse,
+// which nothing asserted: if the ordering ever became load-bearing, the title
+// would be dropped here while that test kept passing.
 func TestWriter_SignThenModify(t *testing.T) {
 	data := writerTestPDF()
 	ctx := context.Background()
@@ -2736,7 +2758,7 @@ func TestWriter_StampText(t *testing.T) {
 	}
 
 	// WithArtifacts: the stamp is /Artifact-marked, so a default extraction
-	// omits it. [TestStampText_ExtractionHonoursTheArtifactMarking] pins that
+	// omits it. TestStampText_ExtractionHonoursTheArtifactMarking pins that
 	// omission; this test is about the stamp reaching the page at all.
 	text, err := r2.ExtractText(ctx, 1, WithArtifacts())
 	if err != nil {
@@ -3606,12 +3628,17 @@ func TestRemediate_Pages12_PDFA4_then_PDFUA2(t *testing.T) {
 }
 
 // TestWriter_RemediatePDFA_Pages12_NoSilentBreakage is the motivating
-// regression test. Applying PDF/A-4 with aggressive fixes to
-// pages_12.pdf historically left the output unable to yield any
-// extractable text. The safety net must surface that either as a
-// successful remediation with text preserved (rollback may have kicked
-// in) or as ErrRemediationBrokePDF. A successful call that returned no
-// text is not acceptable.
+// regression test: applying PDF/A-4 with aggressive fixes to the 12-page
+// fixture must not silently leave an output that yields no extractable text.
+// The safety net must surface such a loss either as a successful remediation
+// with text preserved (rollback may have kicked in) or as
+// ErrRemediationBrokePDF. A successful call that returned no text is not
+// acceptable.
+//
+// # Corpus evidence
+//
+//   - litho pages_12.pdf: applying PDF/A-4 with aggressive fixes historically
+//     left the output unable to yield any extractable text.
 func TestWriter_RemediatePDFA_Pages12_NoSilentBreakage(t *testing.T) {
 	ctx := context.Background()
 	data := pages12Fixture(t)

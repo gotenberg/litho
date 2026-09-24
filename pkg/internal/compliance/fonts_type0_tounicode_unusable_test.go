@@ -13,9 +13,13 @@ import (
 // stream is not a CMap fails ISO 14289-1 §7.21.7 t1 once it shows a glyph.
 //
 // The clause asks for a ToUnicode CMap that maps character codes to Unicode
-// values, and a stream that does not parse as one maps none. pdfjs
-// issue8061.pdf ships 345 bytes of binary data there; veraPDF reads every glyph
-// the font shows as having no Unicode value, while litho accepted the entry.
+// values, and a stream that does not parse as one maps none.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue8061.pdf: ships 345 bytes of binary data as its /ToUnicode.
+//     veraPDF reads every glyph the font shows as having no Unicode value,
+//     while litho accepted the entry.
 func TestType0ToUnicode_NotACMap(t *testing.T) {
 	t.Parallel()
 

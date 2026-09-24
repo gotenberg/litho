@@ -76,8 +76,8 @@ func GenerateFromStructTree(
 		return nil, nil
 	}
 
-	// Build a level map from the candidates' "fontSize" field (which we
-	// repurpose as the heading level × -1 so larger = earlier).
+	// Build a level map from the candidates' "fontSize" field (repurposed
+	// as the heading level × -1 so larger = earlier).
 	levels := make(map[float64]int)
 	for _, c := range candidates {
 		lvl := max(int(-c.fontSize), 1)

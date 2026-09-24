@@ -34,8 +34,8 @@ func TestCollectBookmarkLeaves(t *testing.T) {
 	}
 }
 
-// TestExpectedMergeLeaves doubles each input leaf — original page
-// plus page+N — to model what the merge-self output should contain.
+// TestExpectedMergeLeaves doubles each input leaf, original page
+// plus page+N, to model what the merge-self output should contain.
 func TestExpectedMergeLeaves(t *testing.T) {
 	t.Parallel()
 	in := []bookmarkLeaf{{Title: "Intro", Page: 1}, {Title: "End", Page: 3}}

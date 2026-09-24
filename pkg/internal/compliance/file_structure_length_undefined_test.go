@@ -11,10 +11,14 @@ import (
 // ISO 32000-1, Table 5 makes /Length an integer, and 7.3.10 treats a reference
 // to an undefined object as a reference to the null object. veraPDF reads any
 // /Length that is not a number as null, which matches no real extent, while a
-// real that equals the extent passes. pdfjs issue19510.pdf gives its XRef
-// stream /Length 9 0 R, and object 9 is the page's content stream: veraPDF
-// reports the XRef stream, and litho, which skipped any /Length it could not
-// read as an integer, said nothing. Every case was measured against veraPDF.
+// real that equals the extent passes. Every case was measured against veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19510.pdf: gives its XRef stream /Length 9 0 R, and object 9
+//     is the page's content stream. veraPDF reports the XRef stream, and
+//     litho, which skipped any /Length it could not read as an integer, said
+//     nothing.
 func TestCheckStreamLengths_NonNumberLength(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

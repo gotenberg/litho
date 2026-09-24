@@ -13,9 +13,13 @@ import (
 // bfrange crossing a first-byte boundary reaches has no Unicode value (ISO
 // 14289-2, 8.4.5.8 t1). Adobe Technical Note #5411, 1.4.1 rules such a line
 // invalid, and veraPDF keeps the start code's first-byte block, so
-// <01ED> <0206> maps nothing. pdfjs issue5751.pdf carries exactly this line,
-// and veraPDF fails the five glyphs it shows from it while litho passed them.
-// The control writes the same codes as two conforming ranges.
+// <01ED> <0206> maps nothing. The control writes the same codes as two
+// conforming ranges.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5751.pdf: carries exactly the <01ED> <0206> line, and veraPDF
+//     fails the five glyphs it shows from it while litho passed them.
 func TestType0PerGlyphToUnicode_BfRangeCrossingFirstByte(t *testing.T) {
 	t.Parallel()
 

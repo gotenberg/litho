@@ -35,10 +35,14 @@ func inlinePatternTransparencyPDF() []byte {
 	)
 }
 
-// [fixPatternTransparency] resolves each pattern with document.ResolveObject
-// (fixer_transparency.go), copies the resolved dictionary into work and writes
-// that copy back at the pattern's own object number. It consults no alloc-aware
-// helper, so an earlier fixer's edit to the same pattern object is discarded.
+// TestFixPatternTransparency_KeepsAPeerFixersPendingPatternWrite pins that the
+// pattern repair keeps an earlier fixer's pending write to the same pattern.
+//
+// [fixPatternTransparency] used to resolve each pattern with
+// document.ResolveObject (fixer_transparency.go), copy the resolved dictionary
+// into work and write that copy back at the pattern's own object number. It
+// consulted no alloc-aware helper, so an earlier fixer's edit to the same
+// pattern object was discarded.
 //
 // Peer and ordering are measured, not assumed: recurseColorSpacePatch writes
 // pattern objects and runs at output-intent, fixer.go:68, ahead of transparency

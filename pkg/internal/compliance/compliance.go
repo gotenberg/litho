@@ -14,7 +14,7 @@ import (
 // [Violation] value that can be type-asserted to access the structured
 // [Rule] and Context fields. An empty slice means the document passes.
 //
-// Concurrent calls to ValidatePDFA and ValidatePDFUA on the same
+// Concurrent calls to ValidatePDFA and [ValidatePDFUA] on the same
 // [document.Document] are serialized through the document's validation
 // run mutex: only one validator runs at a time so that the parser-level
 // format-checking flag and the accumulated [document.Document.FormatViolations]

@@ -32,14 +32,19 @@ type stampResource struct {
 // A stamp's X and Y are documented as "points from the page's bottom-left
 // corner", but the content stream draws in PDF user space, where (0, 0) is the
 // coordinate origin rather than the corner. Those coincide only when the box
-// starts at (0, 0). They often do not: 4% of the corpus files measured carry a
-// non-zero origin, including govdocs thread_000_000018.pdf at (-306, -396),
-// where an unshifted stamp landed in the middle of the page and ran off the
-// right edge, losing its last character to the crop.
+// starts at (0, 0), and real files often place it elsewhere, where an
+// unshifted stamp lands away from the corner the caller named.
 //
 // The CropBox is the right box because it is the area a viewer shows (ISO
 // 32000-1, 14.11.2), and [document.Page] already resolves it with the
 // MediaBox fallback the spec requires.
+//
+// # Corpus evidence
+//
+//   - All corpora: 4% of the files measured carry a non-zero box origin.
+//   - govdocs thread_000_000018.pdf: its box starts at (-306, -396), where an
+//     unshifted stamp landed in the middle of the page and ran off the right
+//     edge, losing its last character to the crop.
 func stampOriginShift(page *document.Page) (dx, dy float64, ok bool) {
 	box := page.CropBox
 	if len(box) < 2 {
@@ -155,7 +160,7 @@ func applyStampToPages(
 		// A page inlined in a /Kids array has no object number to replace. Skip
 		// it rather than abort the whole stamp over one unaddressable page, but
 		// say so: the alternative was writing it back at object 0, which every
-		// reader ignores (see [writer.ObjAllocator.AllocAt]).
+		// reader ignores (see writer.ObjAllocator.AllocAt).
 		if !alloc.AllocAt(page.Ref.ObjectNum, newDict) {
 			doc.Logger.Debug("skipping stamp on a page with no indirect reference",
 				slog.Int("page", pageNum),
@@ -171,14 +176,18 @@ func applyStampToPages(
 // A page's operators run to the end of the stream, so any graphics state the
 // page leaves unbalanced is still in force when a stamp is appended (ISO
 // 32000-1, 8.4.4). Bracketing the original content restores the default state
-// first, which is what a stamp's absolute coordinates assume: pdfjs bug946506
-// opens with a bare "16 0 0 16 0 0 cm" and no q, so an unbracketed 36pt stamp
-// was drawn at 576pt and ran off the page.
+// first, which is what a stamp's absolute coordinates assume: a page that
+// leaves a cm in force otherwise transforms every stamp appended after it.
 //
 // The pair is allocated at most once per call and shared by every page: the
 // streams are immutable and carry no page-specific state. Allocating lazily
 // keeps them out of a document whose pages all lack /Contents, where nothing
 // would reference them and the writer does not prune unreachable objects.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug946506.pdf: opens with a bare "16 0 0 16 0 0 cm" and no q, so
+//     an unbracketed 36pt stamp was drawn at 576pt and ran off the page.
 func newContentBrackets(alloc *writer.ObjAllocator) func() (ast.PdfIndirectRef, ast.PdfIndirectRef) {
 	var saveRef, restoreRef ast.PdfIndirectRef
 	var allocated bool
@@ -200,6 +209,12 @@ func newContentBrackets(alloc *writer.ObjAllocator) func() (ast.PdfIndirectRef, 
 // original streams or a prior stamp, the new stream is appended to it; wrapping
 // the array as one element would nest it, and a conforming reader treats the
 // nested array as a non-stream entry and drops all the content it holds.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12963.pdf: holds /Contents as a reference to a two-stream
+//     array, and wrapping that reference produced [[streamA streamB] stamp],
+//     so the page lost every one of its 1241 characters.
 func appendPageContents(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, baseDict ast.PdfDict, brackets func() (ast.PdfIndirectRef, ast.PdfIndirectRef), stampRef ast.PdfIndirectRef) ast.PdfObject {
 	existing, ok := baseDict["Contents"]
 	if !ok {
@@ -217,10 +232,9 @@ func appendPageContents(ctx context.Context, doc *document.Document, alloc *writ
 		return bracket(arr...)
 	}
 	// The array may be reached through a reference, which a type assertion on
-	// the raw value misses: pdfjs issue12963.pdf holds /Contents as a reference
-	// to a two-stream array, and wrapping that reference produced
-	// [[streamA streamB] stamp]. A conforming reader drops the nested array, so
-	// the page lost every one of its 1241 characters.
+	// the raw value misses: wrapping that reference produces
+	// [[streamA streamB] stamp], and a conforming reader drops the nested
+	// array along with every character it draws.
 	if ref, isRef := existing.(ast.PdfIndirectRef); isRef {
 		if arr, err := document.ResolveArray(ctx, doc, ref); err == nil && arr != nil {
 			return bracket(arr...)
@@ -272,7 +286,7 @@ func mergeStampResources(
 	page *document.Page,
 	additions []stampResource,
 ) ast.PdfDict {
-	// Group additions by category so we only rebuild each sub-dict once.
+	// Group additions by category so each sub-dict is rebuilt only once.
 	byCategory := make(map[ast.PdfName][]stampResource)
 	for _, r := range additions {
 		byCategory[r.category] = append(byCategory[r.category], r)
@@ -383,12 +397,18 @@ func escapePDFString(s string) string {
 // ISO 32000-1, 7.8.2 makes a page's content the concatenation of the streams the
 // array holds, and 7.3.9 makes a null, or a reference to a missing object,
 // equivalent to the entry being absent. Carrying such an entry into a rewritten
-// array is therefore lossless to drop and harmful to keep: pdfjs issue18973.pdf
-// page 45 begins its /Contents with a null, and appending a flattened appearance
-// after it produced a page poppler rendered as nothing at all. The page had
-// carried 163 characters of signature text through the annotation before the
-// flatten, and 0 after. Dropping the null recovers 542, because the same null was
-// already hiding the page's own body text in the source.
+// array is therefore lossless to drop and harmful to keep: a reader may render
+// nothing of the content appended after it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18973.pdf: page 45 begins its /Contents with a null, and
+//     appending a flattened appearance after it produced a page poppler
+//     rendered as nothing at all.
+//   - pdfjs issue18973.pdf: page 45 carried 163 characters of signature text
+//     through the annotation before the flatten, and 0 after. Dropping the
+//     null recovers 542, because the same null was already hiding the page's
+//     own body text in the source.
 func contentStreamElements(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, elems []ast.PdfObject) []ast.PdfObject {
 	out := make([]ast.PdfObject, 0, len(elems))
 	for _, elem := range elems {

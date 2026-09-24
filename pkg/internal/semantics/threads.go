@@ -23,8 +23,8 @@ type Thread struct {
 
 // ResolveThreads extracts article threads from the document.
 func ResolveThreads(ctx context.Context, doc *document.Document) ([]Thread, error) {
-	// Resolved through [document.ResolveCatalog] so a damaged /Root that names a
-	// non-catalog (ISO 32000-1 §7.5.5 Table 15 requires it to be the catalog)
+	// Resolved through document.ResolveCatalog so a damaged /Root that names a
+	// non-catalog (ISO 32000-1, 7.5.5, Table 15 requires it to be the catalog)
 	// still finds the article threads, matching the reader's recovery.
 	resolved, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {

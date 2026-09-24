@@ -35,7 +35,6 @@ type XRefRecord struct {
 // dictionary, and startxref pointer to w. Returns the byte offset of the
 // "xref" keyword (for use in the startxref line) and the total bytes written.
 func WriteXRefTable(ctx context.Context, w io.Writer, records []XRefRecord, trailer ast.PdfDict) (xrefOffset int64, written int64, err error) {
-	// Sort records by object number.
 	sort.Slice(records, func(i, j int) bool {
 		return records[i].ObjNum < records[j].ObjNum
 	})
@@ -57,7 +56,6 @@ func WriteXRefTable(ctx context.Context, w io.Writer, records []XRefRecord, trai
 
 	var total int64
 
-	// Write "xref\n".
 	n, err := io.WriteString(w, "xref\n")
 	total += int64(n)
 	if err != nil {
@@ -119,7 +117,7 @@ func WriteXRefTable(ctx context.Context, w io.Writer, records []XRefRecord, trai
 
 // WriteXRefStream writes a PDF 1.5+ cross-reference stream to w. The stream
 // dict doubles as the trailer. Returns the total bytes written.
-// The allocator is used to assign an object number to the xref stream itself.
+// The xref stream itself takes the allocator's next object number.
 func WriteXRefStream(ctx context.Context, w io.Writer, records []XRefRecord, trailer ast.PdfDict, allocator *ObjAllocator, selfOffset int64) (int64, error) {
 	// The cross-reference stream is itself an indirect object and must
 	// carry an entry for its own object number (ISO 32000-1 §7.5.8.2);
@@ -132,7 +130,6 @@ func WriteXRefStream(ctx context.Context, w io.Writer, records []XRefRecord, tra
 	xrefObjNum := allocator.NextObjNum()
 	records = append(records, XRefRecord{ObjNum: xrefObjNum, Offset: selfOffset})
 
-	// Sort records by object number.
 	sort.Slice(records, func(i, j int) bool {
 		return records[i].ObjNum < records[j].ObjNum
 	})
@@ -189,7 +186,6 @@ func WriteXRefStream(ctx context.Context, w io.Writer, records []XRefRecord, tra
 		}
 	}
 
-	// Compress with FlateDecode.
 	compressed, err := filter.ApplyEncodeFilter(data, "FlateDecode")
 	if err != nil {
 		return 0, fmt.Errorf("compressing xref stream: %w", err)

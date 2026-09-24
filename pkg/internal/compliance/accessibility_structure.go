@@ -512,7 +512,7 @@ func (r *nsRoleResolver) resolveStandardType(ctx context.Context, doc *document.
 		// that standard type (ISO 32000-2:2020, 14.8.6). Accepting the standard
 		// name first reported ISO 14289-2 8.2.5.2 t2 (a Document in the wrong
 		// namespace) where veraPDF reports t1 (the root holds no Document at all),
-		// and disagreed with [iso32005Resolve], which already resolves in this
+		// and disagreed with iso32005Resolve, which already resolves in this
 		// order for the ISO/TS 32005 matrix.
 		//
 		// A type that maps to itself has no applicable mapping and stands for
@@ -958,7 +958,7 @@ func checkAnnotArtifactFlags(ctx context.Context, doc *document.Document, catalo
 
 			// Both tests apply only to an annotation in the logical structure
 			// that no Artifact encloses: veraPDF gates them on
-			// structParentType == null || isArtifact, see [annotStructScope].
+			// structParentType == null || isArtifact, see annotStructScope.
 			if parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot); parent == nil || underArtifact {
 				continue
 			}

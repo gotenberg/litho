@@ -151,6 +151,12 @@ func parseTokens(s string, depth int) ([]token, string, error) {
 
 // execOp dispatches a single operator.
 //
+// # Corpus evidence
+//
+//   - pdfjs colorspace_atan.pdf: its tint transform compares the atan angle
+//     back to its input, and half the image came out wrong while atan
+//     answered from -180 to 180.
+//
 //nolint:gocyclo // Type 4 PS requires handling many operators in one switch.
 func execOp(op string, stack *[]float64, _ []token) error {
 	switch op {
@@ -276,9 +282,8 @@ func execOp(op string, stack *[]float64, _ []token) error {
 		}
 		// ISO 32000-1, 7.10.5 takes the operator from the PostScript Language
 		// Reference, whose atan answers in degrees from 0 to 360; math.Atan2
-		// answers from -180 to 180. pdfjs colorspace_atan.pdf tests exactly
-		// that: its tint transform compares the angle back to its input, and
-		// half the image came out wrong.
+		// answers from -180 to 180, so a tint transform that compares the
+		// angle back to its input gets half the image wrong.
 		angle := math.Atan2(num, den) * 180 / math.Pi
 		if angle < 0 {
 			angle += 360
@@ -497,7 +502,7 @@ func execOp(op string, stack *[]float64, _ []token) error {
 
 // execTokens evaluates a token sequence, handling blocks and control flow.
 func execTokens(tokens []token, stack *[]float64) error {
-	// We need a block stack to accumulate blocks for if/ifelse.
+	// A block stack accumulates blocks for if/ifelse.
 	var blocks [][]token
 
 	for _, tok := range tokens {

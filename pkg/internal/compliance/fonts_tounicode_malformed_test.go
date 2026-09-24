@@ -16,11 +16,15 @@ import (
 //
 // ISO 32000-1, 7.3.5 ends a name at a delimiter, so "/Adobe-Identity-UC>"
 // leaves a bare ">" that is valid nowhere in a CMap. veraPDF discards such a
-// CMap whole and reports every code the page shows. Measured on pdfjs
-// issue11651.pdf, whose CMap carries both "/CMapName /Adobe-Identity-UC>" and
-// "/Ordering (UC>)" where an S was corrupted to ">", and on fixtures isolating
-// each: corrupting /CMapName alone already makes veraPDF fail the file, while
-// the same CMap with the name intact passes in both tools.
+// CMap whole and reports every code the page shows. Measured on fixtures
+// isolating each corruption: corrupting /CMapName alone already makes veraPDF
+// fail the file, while the same CMap with the name intact passes in both tools.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11651.pdf: its CMap carries both
+//     "/CMapName /Adobe-Identity-UC>" and "/Ordering (UC>)" where an S was
+//     corrupted to ">", and the measurement was made on it too.
 func TestType0ToUnicode_MalformedCMapMapsNothing(t *testing.T) {
 	t.Parallel()
 

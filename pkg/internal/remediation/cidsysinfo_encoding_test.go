@@ -12,9 +12,15 @@ import (
 // relabelled /Identity-H to sidestep the CIDSystemInfo rule.
 //
 // Relabelling only preserves the text when the codes already ARE the CIDs. A
-// CMap defines its own codespace (ISO 32000-1, 9.7.5): issue18117.pdf embeds
-// /Uni-Utf8-H, whose codes run one to four bytes, and relabelling it left an
-// odd-length code tail and glyphs resolving to .notdef.
+// CMap defines its own codespace (ISO 32000-1, 9.7.5): relabelling an embedded
+// CMap whose codes are not two bytes each leaves an odd-length code tail and
+// glyphs resolving to .notdef.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18117.pdf: embeds /Uni-Utf8-H, whose codes run one to four
+//     bytes, and relabelling it left an odd-length code tail and glyphs
+//     resolving to .notdef.
 func TestEncodingIsIdentityCompatible(t *testing.T) {
 	ctx := context.Background()
 	doc := &document.Document{Logger: document.NopLogger()}

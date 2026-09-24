@@ -12,9 +12,15 @@ import (
 // /Artifact marked-content sequence that carries an /MCID: when the ParentTree
 // maps the MCID to a structure element reaching the root, the content is both
 // marked as an Artifact and tagged, so it is an Artifact inside tagged content
-// and tagged content inside an Artifact, as on govdocs thread_000_000632.pdf.
-// With the MCID left out of the ParentTree it is not tagged and neither test
-// fires. Every case was measured against veraPDF.
+// and tagged content inside an Artifact. With the MCID left out of the
+// ParentTree it is not tagged and neither test fires. Every case was measured
+// against veraPDF.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000632.pdf: carries an /Artifact sequence with an
+//     /MCID the ParentTree maps, so its content is both an Artifact inside
+//     tagged content and tagged content inside an Artifact.
 func TestArtifactSequenceWithOwnedMCID(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

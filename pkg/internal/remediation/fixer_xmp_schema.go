@@ -57,7 +57,7 @@ func fixXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	if !ok2 {
 		return nil, nil
 	}
-	// Decode before searching: [ast.PdfStream.Bytes] returns the body before
+	// Decode before searching: ast.PdfStream.Bytes returns the body before
 	// filter decoding, so a /Metadata carrying a filter (ISO 32000-1, 14.3.2
 	// permits one) was searched as compressed bytes, no property was ever
 	// found, and the violation stayed residual. A stream queued by an earlier

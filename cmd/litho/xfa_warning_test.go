@@ -49,10 +49,14 @@ func xfaFormFixturePDF() []byte {
 
 // TestSplit_WarnsWhenXFAIsDropped pins the silent half of the form-data loss.
 //
-// Measured across the corpus: a split or a merge leaves 19 of 23 XFA-bearing
-// files with no form at all, one of them losing 1455 fields, because the page
-// operations carry widgets and not /XFA. Dropping it is defensible; saying
-// nothing is not.
+// A split or a merge can leave an XFA document with no form at all, because
+// the page operations carry widgets and not /XFA. Dropping it is defensible;
+// saying nothing is not.
+//
+// # Corpus evidence
+//
+//   - All corpora: a split or a merge leaves 19 of 23 XFA-bearing files with
+//     no form at all, one of them losing 1455 fields.
 func TestSplit_WarnsWhenXFAIsDropped(t *testing.T) {
 	src := writeTempPDF(t, xfaFormFixturePDF())
 	out := filepath.Join(t.TempDir(), "split.pdf")

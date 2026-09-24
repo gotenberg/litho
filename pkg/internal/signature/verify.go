@@ -133,7 +133,7 @@ func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.C
 
 		// /Contents in a signature dict is stored as a hex string in
 		// the PDF, but the lexer has already decoded it into raw DER
-		// bytes by the time we see sig.Contents.
+		// bytes by the time this code reads sig.Contents.
 		der := []byte(sig.Contents)
 
 		certs, err := parsePKCS7Certificates(der)

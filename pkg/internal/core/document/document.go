@@ -29,7 +29,7 @@ import (
 // protected by internal locks. The format-violation record is keyed by object number
 // and written once per object, so concurrent resolutions of the same
 // object contribute one entry, not one per goroutine.
-// Concurrent read paths ([Resolve], [ResolveDict], [ResolveArray], etc.)
+// Concurrent read paths ([Document.Resolve], [ResolveDict], [ResolveArray], etc.)
 // run in parallel through a read-write mutex. Concurrent validation
 // runs ([pdf.Reader.ValidatePDFA] / [pdf.Reader.ValidatePDFUA] on the
 // same underlying Document) are serialized through a dedicated run
@@ -82,7 +82,7 @@ type Document struct {
 	Rebuilt bool
 
 	// TrailerSynthesized is true when no trailer dictionary could be recovered
-	// from the file and [Index].Trailer holds one litho made up instead. Its
+	// from the file and [Document.Index].Trailer holds one litho made up instead. Its
 	// entries are litho's own, derived from whatever the raw scan found, so a
 	// caller that reports on what the file contains must not read them: a
 	// 219-byte damaged file yields /Size 2147483648 from a bogus object number
@@ -104,7 +104,7 @@ type Document struct {
 	// complianceMode enables parser-level format violation collection.
 	// When true, parsers created during object resolution collect hex
 	// string format issues and other structural violations without
-	// failing the parse. Accessed atomically so [Resolve] can check it
+	// failing the parse. Accessed atomically so [Document.Resolve] can check it
 	// without blocking on a mutex on every call. Toggled by
 	// [Document.SetComplianceMode].
 	complianceMode atomic.Bool
@@ -328,15 +328,18 @@ func (d *Document) NewStreamReader(ctx context.Context, stream ast.PdfStream) (i
 // Per ISO 32000-1, 7.3.10, any value may be written as an indirect reference
 // unless a table says otherwise, and Table 5 places no such restriction on
 // either key. The filter pipeline sees only the dictionary and cannot resolve
-// anything, so a stream whose /Filter is a reference decoded to nothing:
-// pdfjs bug1727053.pdf writes /Filter 3 0 R for its embedded font program,
-// which left the whole 751 KB TrueType program unreadable.
+// anything, so a stream whose /Filter is a reference decoded to nothing.
 //
 // The JBIG2Globals stream of a JBIG2Decode parameter dictionary is resolved
 // the same way: ISO 32000-1, Table 12 makes it a stream, so it is always an
 // indirect reference, and the JBIG2Decode filter reads the global segments
 // from it. So is the /ColorSpace of a JPXDecode image, which decides how that
 // filter reads the JPEG 2000 data (7.4.9).
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1727053.pdf: writes /Filter 3 0 R for its embedded font
+//     program, which left the whole 751 KB TrueType program unreadable.
 func (d *Document) resolveStreamFilterKeys(ctx context.Context, stream ast.PdfStream) ast.PdfStream {
 	stream = d.resolveFilterKeys(ctx, stream)
 	if stream.Dict == nil {
@@ -575,8 +578,22 @@ func headerExistsBeyondScanLimit(r io.ReaderAt, size int64) bool {
 
 // NewDocument creates a new [Document] by parsing the XRef chains.
 // If logger is nil, a no-op logger is used.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1606566.pdf: has a complete xref, trailer and startxref and
+//     simply lacks the "%PDF-" line. pdf.js, poppler ("May not be a PDF file
+//     (continuing anyway)") and pikepdf all open it, which is why a headerless
+//     file that ends like a PDF is read.
+//   - pdfjs issue5909_original.pdf: its final startxref points into a
+//     superseded revision, and the rebuild left all 43 objects cached as
+//     ciphertext, so `litho metadata` reported the encrypted bytes as the
+//     /Author and `litho text` found nothing in a document poppler reads. A
+//     full rewrite then dropped /Encrypt while copying those bytes verbatim,
+//     turning a readable file into an unreadable one and reporting success.
+//     The caches are reset once the crypto handler exists for that reason.
 func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Logger) (*Document, error) {
-	// Validate PDF Header. Scan up to [headerScanLimit] bytes so files
+	// Validate PDF Header. Scan up to headerScanLimit bytes so files
 	// with a leading prefix (UTF-8 BOM, explanatory comment) are still
 	// accepted.
 	headerBuf := make([]byte, headerScanLimit)
@@ -592,12 +609,11 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 
 	// A file with no header at all is still read when it ends like a PDF.
 	// ISO 32000-1, 7.5.2 requires the header, so such a file is invalid, but
-	// every other reader accepts it: pdfjs bug1606566.pdf has a complete xref,
-	// trailer and startxref and simply lacks the "%PDF-" line, and pdf.js,
-	// poppler ("May not be a PDF file (continuing anyway)") and pikepdf all
-	// open it.
+	// every other reader accepts it: pdf.js, poppler and pikepdf all open a
+	// file that has a complete xref, trailer and startxref and lacks only the
+	// "%PDF-" line.
 	//
-	// A header merely sitting beyond [headerScanLimit] is a different case and
+	// A header merely sitting beyond headerScanLimit is a different case and
 	// stays rejected: its body is too far from the start to cache safely, and
 	// treating it as headerless would record a header offset of 0 for a file
 	// that has one.
@@ -695,7 +711,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	// A raw-scan rebuild only recovers uncompressed "N G obj" headers; objects
 	// held inside object streams (ISO 32000-1 §7.5.7), which can include a
 	// catalog or page-tree node a modern producer compressed, are invisible to
-	// it. Register each recovered object stream's members so [ResolveCatalog]
+	// it. Register each recovered object stream's members so ResolveCatalog
 	// can still find a compressed /Type /Catalog (otherwise the whole page tree
 	// is lost). Runs only after a rebuild, when the fully-constructed document
 	// can resolve the object streams it found.
@@ -752,16 +768,13 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		// function, so its strings and streams are still ciphertext. Recovery
 		// does exactly that: a raw-scan rebuild resolves every object it found
 		// looking for object streams, which runs above and caches all of them.
-		// On pdfjs issue5909_original.pdf, whose final startxref points into a
-		// superseded revision, that left all 43 objects cached as ciphertext,
-		// so `litho metadata` reported the encrypted bytes as the /Author and
-		// `litho text` found nothing in a document poppler reads. A full
-		// rewrite then dropped /Encrypt while copying those bytes verbatim,
-		// turning a readable file into an unreadable one and reporting success.
+		// Left in the cache, that ciphertext is reported as the document's
+		// metadata and text, and a full rewrite copies it verbatim after
+		// dropping /Encrypt, turning a readable file into an unreadable one.
 		//
-		// [Document.Authenticate] already clears the caches for this reason,
+		// Document.Authenticate already clears the caches for this reason,
 		// but a document that opens on the empty user password authenticates
-		// inside [crypto.NewHandler] and never calls it.
+		// inside crypto.NewHandler and never calls it.
 		doc.resetParsedObjectCaches()
 
 		doc.Logger.Debug("encryption detected",
@@ -822,12 +835,19 @@ func (d *Document) resetParsedObjectCaches() {
 // Per ISO 32000-1, 7.5.2 the header is "%PDF-1.N", so the version is digits, a
 // period, then digits, and the line may carry anything after that: the header
 // is a comment and the rest of the line is not part of the number. Reading to
-// the end of the line reported pdfjs issue15033.pdf, whose header is
-// "%PDF-1.3%", as version "1.3%", which is not a version and compares against
-// nothing. Poppler reads 1.3 there and litho now agrees.
+// the end of the line turns a header such as "%PDF-1.3%" into version "1.3%",
+// which is not a version and compares against nothing. Poppler reads 1.3 there
+// and litho agrees.
 //
-// A header with no complete number ("%PDF-1." in pdfjs issue9105_other.pdf)
-// yields the empty string, the same answer a headerless file gives.
+// A header with no complete number ("%PDF-1.") yields the empty string, the
+// same answer a headerless file gives.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15033.pdf: the header is "%PDF-1.3%", and reading to the end
+//     of the line reported version "1.3%" where poppler reads 1.3.
+//   - pdfjs issue9105_other.pdf: the header is "%PDF-1." with no complete
+//     number.
 func headerVersion(buf []byte) string {
 	i := 0
 	for i < len(buf) && buf[i] >= '0' && buf[i] <= '9' {
@@ -852,16 +872,19 @@ func headerVersion(buf []byte) string {
 // Per ISO 32000-1, 7.5.2 the catalog /Version, if present, shall be used
 // instead of the version in the file header, whichever is later: Table 28 only
 // describes when a producer writes the entry. pdf.js reads it the same way,
-// with "return this.catalog.version || this.#version" in core/document.js, and
-// so does the metadata golden for pdfjs PDFJS-9279-reduced.pdf, whose header
-// says 1.7 and whose catalog says /1.4: the expected version is 1.4.
+// with "return this.catalog.version || this.#version" in core/document.js.
 //
 // A /Version that is not a version number is ignored rather than reported.
 // pdf.js validates it against the same shape and warns, and a caller comparing
 // the reported version against a profile requirement cannot do anything with a
 // name like /Nonsense.
+//
+// # Corpus evidence
+//
+//   - pdfjs PDFJS-9279-reduced.pdf: the header says 1.7 and the catalog says
+//     /1.4, and its metadata golden expects version 1.4.
 func (d *Document) initCatalogVersion(ctx context.Context) {
-	// Resolved through [Document.CatalogRef]: per ISO 32000-1 §7.5.5 Table 15
+	// Resolved through ResolveCatalog: per ISO 32000-1 §7.5.5 Table 15
 	// /Root shall be the catalog, and reading it raw made a file whose damaged
 	// incremental update points elsewhere keep its header version, so a catalog
 	// declaring /Version /2.0 was reported as 1.4.
@@ -937,10 +960,15 @@ func (d *Document) ClearCaches() {
 // maxFontProgCacheBytes bounds the total decoded font-program bytes retained by
 // [Document.SetCachedFontProgram]. It is an anti-DoS guard, not spec-mandated: a
 // crafted file could declare many large font programs, so the cache evicts
-// rather than grow without bound. Measured against the test corpora, the
-// heaviest real document embeds 18.4 MB of font programs across 2129 documents
-// that embed any, so 64 MB leaves better than 3x headroom while staying well
-// under the 256 MB single-stream decompression cap.
+// rather than grow without bound. 64 MB leaves ample headroom over the
+// heaviest real document while staying well under the 256 MB single-stream
+// decompression cap.
+//
+// # Corpus evidence
+//
+//   - All corpora: of the 2129 documents that embed any font program, the
+//     heaviest embeds 18.4 MB of them, so 64 MB leaves better than 3x
+//     headroom.
 const maxFontProgCacheBytes = 64 << 20
 
 // CachedFontProgram returns the decoded font program for the given FontFile

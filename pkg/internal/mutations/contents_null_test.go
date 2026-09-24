@@ -15,12 +15,15 @@ import (
 //
 // ISO 32000-1, 7.8.2 makes a page's content the concatenation of the streams the
 // array holds, and 7.3.9 makes a null equivalent to an absent entry, so dropping
-// one loses nothing. Keeping it does: pdfjs issue18973.pdf page 45 opens its
-// /Contents with a null, and appending a flattened appearance after it left a
-// page poppler rendered as nothing. The page had shown 163 characters of
-// signature text through the annotation before the flatten and 0 after; without
-// the null it shows 542, because the same null was already hiding the page's own
-// body text in the source.
+// one loses nothing. Keeping it does: appending a flattened appearance after a
+// leading null left a page poppler rendered as nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18973.pdf: page 45 opens its /Contents with a null. The page
+//     had shown 163 characters of signature text through the annotation before
+//     the flatten and 0 after; without the null it shows 542, because the same
+//     null was already hiding the page's own body text in the source.
 func TestAppendPageContentsDropsNonStreamEntries(t *testing.T) {
 	t.Parallel()
 

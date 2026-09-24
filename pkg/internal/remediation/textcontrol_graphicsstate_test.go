@@ -11,22 +11,26 @@ import (
 // inside q…Q does not outlive the Q.
 //
 // Per ISO 32000-1, 8.4.2 and Table 104 the text font is part of the graphics
-// state, so Q restores it. stripControlBytesFromOps tracks currentFont from Tf
-// alone and has no q or Q case, so a font selected inside a saved state stayed
+// state, so Q restores it. stripControlBytesFromOps tracked currentFont from Tf
+// alone and had no q or Q case, so a font selected inside a saved state stayed
 // current afterwards and fonts[currentFont] was consulted for the wrong
 // resource name.
 //
 // That matters more here than in a collector that only labels things: this is a
 // safetyContent fixer that REWRITES the content stream. The composite guard
 // exists because dropping bytes from multi-byte codes deletes half of each code
-// and slides the rest, which turned "A different method" into mojibake and cost
-// issue2856.pdf a third of its text. Consulting it for the wrong font either
+// and slides the rest into mojibake. Consulting it for the wrong font either
 // strips a composite string, corrupting it, or skips a simple one that should
 // have been cleaned.
 //
 // The ordering below is the discriminating one. F1 is composite and selected
 // outside the q; F2 is simple and selected inside it. After the Q the font is
 // F1 again, so the CIDs shown there must survive untouched.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue2856.pdf: byte stripping under a composite font turned "A
+//     different method" into mojibake and cost the file a third of its text.
 func TestStripControlBytesFromOps_RestoresTheFontOnQ(t *testing.T) {
 	// <0041 0020 0042>: three 2-byte CIDs, each carrying a 0x00 high byte,
 	// exactly the bytes the control-byte strip would eat.

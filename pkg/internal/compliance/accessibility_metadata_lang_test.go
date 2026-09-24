@@ -17,10 +17,13 @@ import (
 // models one for every dictionary in the cross-reference table whose /Metadata
 // is a metadata stream (GFCosDict.getMetadata over GFCosDocument's
 // indirectObjects). With no catalog /Lang, a language alternative qualified only
-// by x-default leaves that metadata's language undetermined. pdfjs
-// bug867484.pdf gives a structure element such a packet; veraPDF reports it and
-// litho, which read the catalog's packet only, did not. Measured against
+// by x-default leaves that metadata's language undetermined. Measured against
 // veraPDF on fixtures of each shape.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug867484.pdf: gives a structure element such a packet; veraPDF
+//     reports it and litho, which read the catalog's packet only, did not.
 func TestMetadataLang_AnyMetadataStream(t *testing.T) {
 	t.Parallel()
 

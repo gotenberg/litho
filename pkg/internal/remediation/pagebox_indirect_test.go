@@ -81,9 +81,12 @@ func TestDegenerateMediaBoxTakesAnIndirectSiblingsSize(t *testing.T) {
 }
 
 // indirectBoxPDF builds a two-page document. Page 1 is a valid 250 by 50 page
-// whose /MediaBox coordinates are indirect references, the shape of pdfjs
-// issue7872.pdf. Page 2 carries a genuinely degenerate box, which is what makes
-// the page box fixer run at all.
+// whose /MediaBox coordinates are indirect references. Page 2 carries a
+// genuinely degenerate box, which is what makes the page box fixer run at all.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7872.pdf: page 1 has this file's shape.
 func indirectBoxPDF() []byte {
 	const content = "BT /F1 12 Tf 10 20 Td (hi) Tj ET\n"
 

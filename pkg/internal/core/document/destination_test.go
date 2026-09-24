@@ -50,8 +50,12 @@ func destDoc(t *testing.T, objs ...string) (*Document, map[ast.PdfIndirectRef]in
 // TestResolveDestinationPageForms walks the destination shapes ISO 32000-1,
 // 12.3.2 allows. Link annotations reached only the explicit-array form before
 // this resolver was shared with the outline walk, so a link to a named
-// destination reported no page at all: pdfjs link-annotation-border.pdf has 26
-// such links, and bug1997343, issue14864 and friends have more.
+// destination reported no page at all.
+//
+// # Corpus evidence
+//
+//   - pdfjs link-annotation-border.pdf: has 26 links to a named destination,
+//     and bug1997343, issue14864 and friends have more.
 func TestResolveDestinationPageForms(t *testing.T) {
 	t.Parallel()
 
@@ -153,10 +157,14 @@ func buildGenerationPDF(gen int) []byte {
 //
 // [Document.Resolve] matches an indirect reference on its object number alone,
 // which is deliberate, so a reference litho resolves to a page has to find that
-// page in the page map too. Keying the map on the exact reference broke that:
-// govdocs thread_400_400594.pdf holds page 12 as "40 2 R" and sends eight
-// outline entries to "40 0 R", and every one of them reported no page, while
-// remediating the same file emitted a working outline from the same input.
+// page in the page map too. Keying the map on the exact reference broke that: a
+// destination naming the page under another generation reported no page.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400594.pdf: holds page 12 as "40 2 R" and sends eight
+//     outline entries to "40 0 R". Every one of them reported no page, while
+//     remediating the same file emitted a working outline from the same input.
 func TestResolveDestinationPageIgnoresTheGeneration(t *testing.T) {
 	t.Parallel()
 

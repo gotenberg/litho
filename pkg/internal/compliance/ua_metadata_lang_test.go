@@ -13,7 +13,13 @@ import (
 // TestUAMetadataLang covers ISO 14289-1 §7.2 t33: the document metadata's
 // natural language must be determinable. With no catalog /Lang, it is determined
 // by a specific xml:lang in the XMP; a packet qualified only with "x-default"
-// leaves it undetermined (verapdf-corpus 7.2-t33-fail-a vs pass-b).
+// leaves it undetermined.
+//
+// # Corpus evidence
+//
+//   - verapdf 7.2-t33-fail-a, 7.2-t33-pass-b: the fail and pass files this
+//     contrast between an "x-default" packet and a specific xml:lang is drawn
+//     from.
 func TestUAMetadataLang(t *testing.T) {
 	t.Parallel()
 

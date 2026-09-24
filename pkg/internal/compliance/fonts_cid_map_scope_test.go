@@ -34,13 +34,20 @@ func withNumberOfHMetrics(t *testing.T, data []byte, n uint16) []byte {
 // TestCIDSetCompletenessAbsentMap pins ISO 19005-2, 6.2.11.4.2 t2 on a
 // CIDFontType2 subset with no /CIDToGIDMap: the map is then Identity (ISO
 // 32000-1, 9.7.4.2, Table 117), so the /CIDSet shall list the glyphs of the
-// program, as it shall under /CIDToGIDMap /Identity. veraPDF reads the absent
-// entry that way on pdfjs issue5874.pdf. It requires the glyphs below
-// hhea.numberOfHMetrics only, as on pdfjs issue5202.pdf, and fails a bit for a
-// CID the program does not hold. Under a /CIDToGIDMap stream every CID the map
-// covers whose glyph exists counts, GID 0 included, and a trailing odd byte is
-// one more entry, as on pdfjs issue11768_reduced.pdf. Every case was measured
-// against veraPDF.
+// program, as it shall under /CIDToGIDMap /Identity, and veraPDF reads the
+// absent entry that way. It requires the glyphs below hhea.numberOfHMetrics
+// only, and fails a bit for a CID the program does not hold. Under a
+// /CIDToGIDMap stream every CID the map covers whose glyph exists counts,
+// GID 0 included, and a trailing odd byte is one more entry. Every case was
+// measured against veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5874.pdf: veraPDF reads its absent /CIDToGIDMap as Identity.
+//   - pdfjs issue5202.pdf: veraPDF requires only the glyphs below
+//     hhea.numberOfHMetrics.
+//   - pdfjs issue11768_reduced.pdf: a trailing odd byte of its /CIDToGIDMap
+//     stream counts as one more entry.
 func TestCIDSetCompletenessAbsentMap(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -112,8 +119,13 @@ func TestCIDSetCompletenessAbsentMap(t *testing.T) {
 // TestCIDFontType0IgnoresCIDToGIDMap pins ISO 19005-2, 6.2.11.5 t1 on a
 // CIDFontType0 that carries a /CIDToGIDMap: ISO 32000-1, 9.7.4.2, Table 117
 // gives the entry to Type 2 CIDFonts only, so the glyph whose width /W states is
-// the CID's own. veraPDF ignores the map the same way on pdfjs issue7901.pdf. A
-// CIDFontType2 still follows it.
+// the CID's own, and veraPDF ignores the map the same way. A CIDFontType2 still
+// follows it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7901.pdf: veraPDF ignores the /CIDToGIDMap of its
+//     CIDFontType0.
 func TestCIDFontType0IgnoresCIDToGIDMap(t *testing.T) {
 	t.Parallel()
 	ctx := testCtx()

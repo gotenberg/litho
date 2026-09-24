@@ -75,8 +75,7 @@ func TestBitReader_PastEnd(t *testing.T) {
 
 func TestParsePageOffsetTable(t *testing.T) {
 	// Build a minimal hint table header + 2-page data.
-	// Header: 13 fields.
-	// We'll set:
+	// Header: 13 fields, set as:
 	//   minObjsPerPage = 5
 	//   location = 0
 	//   bitsObjCountDelta = 3
@@ -86,8 +85,7 @@ func TestParsePageOffsetTable(t *testing.T) {
 	//
 	// Then arrays:
 	//   obj count deltas: page0=2 (010), page1=7 (111) → 0101_11xx
-	//   page length deltas: page0=100 (0110_0100), page1=200 (1100_1000), wait, 4 bits each
-	//   page0=5 (0101), page1=10 (1010) = 0101_1010
+	//   page length deltas, 4 bits each: page0=5 (0101), page1=10 (1010) = 0101_1010
 
 	// Build header manually with a bitWriter helper.
 	bw := &bitWriter{}

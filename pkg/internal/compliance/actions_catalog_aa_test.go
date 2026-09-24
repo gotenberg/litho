@@ -12,9 +12,11 @@ import (
 // in the file, so the actions it holds are still judged. litho reported the
 // dictionary and returned, leaving the action unjudged.
 //
-// The real file is the veraPDF test suite's 6-5-2-t01-fail-b.pdf, whose catalog
-// /AA/WS holds a JavaScript action: veraPDF reports §6.6.1 t1 for the action
-// and §6.6.2 t3 for the dictionary.
+// # Corpus evidence
+//
+//   - verapdf 6-5-2-t01-fail-b.pdf: its catalog /AA/WS holds a JavaScript action,
+//     and veraPDF reports §6.6.1 t1 for the action and §6.6.2 t3 for the
+//     dictionary.
 func TestCheckCatalogAA_ForbiddenAAStillChecksActionTypes(t *testing.T) {
 	t.Parallel()
 

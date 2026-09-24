@@ -9,7 +9,7 @@ import (
 // pipe performed the confidentiality downgrade the standalone page operations
 // report, and said nothing.
 //
-// `80cb8803` wired warnEncryptionDropped into split, merge, delete, insert and
+// `f2a37513` wired warnEncryptionDropped into split, merge, delete, insert and
 // rotate, the five operations measured to drop encryption. Every one of them is
 // also a pipe stage, and pipe called the warning zero times: measured before the
 // fix, `litho delete -p pw` warned and `litho pipe -p pw ... delete` produced
@@ -18,7 +18,7 @@ import (
 // The default is NOT changed here, exactly as it was not changed there:
 // encrypted in, plaintext out remains deliberate. Only the silence is closed.
 //
-// These tests match [encryptionWarning], the same constant the standalone
+// These tests match encryptionWarning, the same constant the standalone
 // warning tests use, so a reworded message updates in one place.
 
 // TestPipe_WarnsWhenAPageOperationDropsEncryption covers all five stages whose
@@ -116,8 +116,8 @@ func TestPipe_NoWarningForAPlainInput(t *testing.T) {
 // bug.
 //
 // Its predecessor asserted pipe stays SILENT for autotag, set-metadata and
-// flatten-form, which was correct when written: `10c8949f` matched pipe to the
-// five page operations, the only commands warning at the time. `80742794` then
+// flatten-form, which was correct when written: `b59fc758` matched pipe to the
+// five page operations, the only commands warning at the time. `bbed371f` then
 // gave every other output-producing command the warning without widening
 // pipe's allow list, so those three (and seven more) warned standalone and
 // stayed silent through pipe. The old test did not fail. It defended the
@@ -173,7 +173,7 @@ func TestPipe_WarnsForEveryStageWhoseStandaloneCommandWarns(t *testing.T) {
 // warning can fire only if the stamp reader reached stageReaders. A stage that
 // opened the stamp correctly but never handed the reader back would produce an
 // unprotected document in silence, which is the same shape as the merge
-// closers that leaked before `aadb8373`.
+// closers that leaked before `c433b788`.
 func TestPipe_WarnsWhenOnlyTheStampStageSourceIsEncrypted(t *testing.T) {
 	plain := writeTempPDF(t, untaggedTextPDF())
 	stamp := encryptTempPDF(t, writeTempPDF(t, untaggedTextPDF()), "s3cret")

@@ -12,10 +12,13 @@ import (
 )
 
 // valuedFieldPDF builds a page whose only content is a text field carrying a
-// value and no appearance stream, the shape of pdfjs annotation-tx.pdf and of
-// the field in bug1847733.pdf that reads "In order to submit this form...".
-// When empty is set the field has no value, so nothing is lost by giving it a
-// blank appearance.
+// value and no appearance stream. When empty is set the field has no value, so
+// nothing is lost by giving it a blank appearance.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation-tx.pdf, bug1847733.pdf: both carry this shape, the
+//     latter in the field that reads "In order to submit this form...".
 func valuedFieldPDF(empty bool) []byte {
 	value := "(In order to submit this form)"
 	if empty {
@@ -51,12 +54,17 @@ func valuedFieldPDF(empty bool) []byte {
 //
 // A variable-text field with a value and no /AP is drawn from /V and /DA (ISO
 // 32000-1, 12.7.3.3). Supplying a blank form XObject satisfies ISO 19005-2,
-// 6.3.3 by replacing what the viewer would draw with nothing: pdfjs
-// annotation-tx.pdf lost the 12 characters that were the whole page, and
-// bug1847733.pdf lost the line "In order to submit this form, you should open it
-// with Adobe Acrobat Reader." Drawing the value here needs the /DA font out of
-// /DR and the field's own layout, so the violation is left as a residual the
-// caller can see rather than answered with a document that lost its content.
+// 6.3.3 by replacing what the viewer would draw with nothing. Drawing the value
+// here needs the /DA font out of /DR and the field's own layout, so the
+// violation is left as a residual the caller can see rather than answered with
+// a document that lost its content.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation-tx.pdf: the blank appearance lost the 12 characters
+//     that were the whole page.
+//   - pdfjs bug1847733.pdf: the blank appearance lost the line "In order to
+//     submit this form, you should open it with Adobe Acrobat Reader."
 func TestAnnotAppearanceLeavesAValuedFieldAlone(t *testing.T) {
 	t.Parallel()
 
@@ -105,8 +113,13 @@ func TestAnnotAppearanceStillFixesAnEmptyField(t *testing.T) {
 }
 
 // freeTextPDF builds a page whose only content is a free text annotation with
-// no appearance stream, as pdfjs issue16021.pdf is. When empty is set the
-// annotation carries no text, so a blank appearance costs nothing.
+// no appearance stream. When empty is set the annotation carries no text, so a
+// blank appearance costs nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16021.pdf: has this shape, one free text annotation with no
+//     appearance stream as the whole page.
 func freeTextPDF(empty bool) []byte {
 	contents := "(Hello World)"
 	if empty {
@@ -143,8 +156,12 @@ func freeTextPDF(empty bool) []byte {
 // A free text annotation displays the text in /Contents through /DA when it
 // stores no appearance (ISO 32000-1, 12.5.6.6), the same machinery a
 // variable-text field uses. Giving it a blank form to satisfy ISO 19005-2,
-// 6.3.3 replaced that with nothing: pdfjs issue16021.pdf, whose whole page is
-// one /FreeText reading "Hello World", came out of remediation empty.
+// 6.3.3 replaced that with nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16021.pdf: its whole page is one /FreeText reading "Hello
+//     World", and it came out of remediation empty.
 func TestAnnotAppearanceLeavesAFreeTextAlone(t *testing.T) {
 	t.Parallel()
 
@@ -249,8 +266,11 @@ func lineAnnotGainedAP(t *testing.T, captioned bool) bool {
 //
 // /Cap true replicates /Contents as a caption in the line's appearance (ISO
 // 32000-1, 12.5.6.7). Supplying a blank form to satisfy ISO 19005-2, 6.3.3
-// replaced it with nothing: pdfjs issue14203.pdf page 11 lost the caption
-// "Please note".
+// replaced it with nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14203.pdf: page 11 lost the caption "Please note".
 func TestAnnotAppearanceLeavesACaptionedLineAlone(t *testing.T) {
 	t.Parallel()
 

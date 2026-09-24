@@ -58,7 +58,7 @@ func setMetadataFails(t *testing.T, out string, args []string) {
 // metadata command reports.
 //
 // The fixture carries no /Info at all, which is what makes the assertion
-// sound. [semantics.Metadata] does not read only the live dictionary: it also
+// sound. semantics.Metadata does not read only the live dictionary: it also
 // runs scanRawInfoFields over the raw bytes to recover fields from SUPERSEDED
 // Info objects, because litho writes incremental updates. A value that was
 // never written cannot be recovered from anywhere, so a positive assertion on

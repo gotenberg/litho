@@ -146,10 +146,15 @@ func TestPatchExistingXMP_InjectsUARev(t *testing.T) {
 	}
 }
 
-// TestPatchExistingXMP_SkipsMalformedPacket pins the malformed-XMP guard
-// (verapdf-corpus 6-7-2-1-t01-fail-d remediated against PDF/A-4e/4f): a packet
-// that is not well-formed XML is left untouched, so byte-level pdfaid injection
-// cannot shift how a lenient reader parses part/rev and introduce §6.7.3 t02/t05.
+// TestPatchExistingXMP_SkipsMalformedPacket pins the malformed-XMP guard: a
+// packet that is not well-formed XML is left untouched, so byte-level pdfaid
+// injection cannot shift how a lenient reader parses part/rev and introduce
+// §6.7.3 t02/t05.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-7-2-1-t01-fail-d: the guard covers this file remediated
+//     against PDF/A-4e/4f.
 func TestPatchExistingXMP_SkipsMalformedPacket(t *testing.T) {
 	// Well-formed apart from a mismatched-case end tag: readable enough for a
 	// lenient part/rev scan, but not well-formed XML.

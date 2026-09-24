@@ -166,8 +166,12 @@ func TestAssembleXFAXML_BoundsBothShapes(t *testing.T) {
 // TestAssembleXFAXML_AcceptsARealisticForm is the control for the bound tests:
 // they would all pass on a build that refused every XFA form outright.
 //
-// 3 MB is above the largest form measured anywhere in the corpora (2.34 MB), so
-// a bound that rejected this would be rejecting real documents.
+// 3 MB is above the largest real form, so a bound that rejected this would be
+// rejecting real documents.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest form assembles 2.34 MB.
 func TestAssembleXFAXML_AcceptsARealisticForm(t *testing.T) {
 	const realistic = 3 << 20
 

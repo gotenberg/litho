@@ -34,8 +34,12 @@ func descriptorAfterType0Repair(t *testing.T, createCIDSet bool) (ast.PdfDict, [
 // /CIDSet, so the violation reports the key's absence. The repair was reachable
 // only through "if _, ok := fdDict[\"CIDSet\"]; ok", which skips exactly that
 // population, and clause 6.3.5 raised the /CharSet flag besides, which reaches
-// simple fonts only. 240 corpus cells stayed unfixed across PDF_A-1a and
-// PDF_A-1b with litho and veraPDF agreeing on every one of them.
+// simple fonts only.
+//
+// # Corpus evidence
+//
+//   - All corpora: 240 corpus cells stayed unfixed across PDF_A-1a and
+//     PDF_A-1b with litho and veraPDF agreeing on every one of them.
 func TestFixType0Font_AddsAMissingCIDSet(t *testing.T) {
 	t.Parallel()
 

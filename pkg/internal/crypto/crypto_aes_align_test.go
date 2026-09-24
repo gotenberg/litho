@@ -14,9 +14,12 @@ const xmpFixture = `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta
 // documents: bytes that ISO 32000-1, 7.6.2 could never have produced come back
 // exactly as stored, with no error.
 //
-// pdfjs bug1826783.pdf is the file that needs it. It declares /EncryptMetadata
-// true with AESV2 and then stores its /Metadata packet as plaintext, 1544 bytes,
-// which leaves 8 bytes past the initialisation vector.
+// # Corpus evidence
+//
+//   - pdfjs bug1826783.pdf: the file that needs it. It declares
+//     /EncryptMetadata true with AESV2 and then stores its /Metadata packet as
+//     plaintext, 1544 bytes, which leaves 8 bytes past the initialisation
+//     vector.
 func TestAESDecryptPassesThroughWhatCannotBeCiphertext(t *testing.T) {
 	t.Parallel()
 

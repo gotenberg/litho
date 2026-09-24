@@ -128,10 +128,13 @@ func TestOffsetPages(t *testing.T) {
 //
 // Page number zero is what [models.Bookmark] carries when the destination is
 // null, points outside the file, or does not resolve. Adding the offset to it
-// produced a page in the PRECEDING document: merging govdocs
-// thread_400_400931.pdf with thread_400_400934.pdf sent the latter's
-// "cr2002073.pdf" bookmark, whose /Dest is [null 0 0 1], to page 5, which
-// belongs to the other file entirely.
+// produced a page in the PRECEDING document.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400931.pdf, thread_400_400934.pdf: merging them sent
+//     the latter's "cr2002073.pdf" bookmark, whose /Dest is [null 0 0 1], to
+//     page 5, which belongs to the other file entirely.
 func TestOffsetPagesKeepsDestinationlessBookmarks(t *testing.T) {
 	bookmarks := []models.Bookmark{
 		{Title: "no destination", PageNumber: 0, Children: []models.Bookmark{

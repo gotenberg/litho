@@ -33,7 +33,7 @@ type MutationFunc func(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 // WriteWithSignature performs the two-pass incremental signing flow:
 // write the incremental update with a placeholder /Contents hex string,
 // compute SHA-256 over the ByteRange (everything except the placeholder),
-// call Signer.Sign to get the PKCS#7 blob, then patch the placeholder
+// call [Signer.Sign] to get the PKCS#7 blob, then patch the placeholder
 // with the actual signature bytes.
 func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Document, signer Signer, mutations []MutationFunc, xrefStream bool) error {
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
@@ -51,8 +51,8 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 	placeholderHexLen := estimatedSize * 2
 
 	// Create the signature dictionary with a placeholder /Contents.
-	// We use actual zero bytes (not ASCII '0') so the serializer produces
-	// a hex string <0000...0000> that we can locate and patch.
+	// Actual zero bytes (not ASCII '0') make the serializer produce a hex
+	// string <0000...0000> that the second pass can locate and patch.
 	placeholderBytes := make([]byte, estimatedSize)
 	sigDict := ast.PdfDict{
 		"Type":      ast.PdfName("Sig"),
@@ -130,7 +130,8 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 	newCatalog["AcroForm"] = acroFormRef
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 
-	// Pass 1: write to a buffer so we can patch afterwards.
+	// The update is written to a buffer first, so the placeholder can be
+	// patched before anything reaches dst.
 	startXRef, err := document.FindStartXRef(doc.RawReader(), doc.FileSize())
 	if err != nil {
 		return fmt.Errorf("finding startxref: %w", err)
@@ -180,7 +181,7 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 	totalLen := len(pdfBytes)
 	byteRange := [4]int{0, sigStart, sigEnd, totalLen - sigEnd}
 
-	// Pass 2: compute the SHA-256 hash over the ByteRange regions.
+	// Compute the SHA-256 hash over the ByteRange regions.
 	h := sha256.New()
 	h.Write(pdfBytes[byteRange[0] : byteRange[0]+byteRange[1]])
 	h.Write(pdfBytes[byteRange[2] : byteRange[2]+byteRange[3]])
@@ -204,7 +205,7 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 	copy(pdfBytes[sigStart+1:sigEnd-1], []byte(sigHex))
 
 	// Patch the ByteRange array. The placeholder uses 10-digit values
-	// (9999999999) so we can replace with zero-padded values of the same width.
+	// (9999999999) so zero-padded values of the same width can replace them.
 	brOld := []byte("/ByteRange [0 9999999999 9999999999 9999999999]")
 	brNew := fmt.Appendf(nil, "/ByteRange [0 %010d %010d %010d]", byteRange[1], byteRange[2], byteRange[3])
 	pdfBytes = bytes.Replace(pdfBytes, brOld, brNew, 1)

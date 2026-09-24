@@ -13,7 +13,12 @@ import (
 
 // inheritedBoxPDF builds a two-level page tree whose boundary box is declared
 // on the interior /Pages node, so both pages inherit it and neither carries one
-// of its own. That is the shape of PDF_A-2b__veraPDF_test_suite_6-1-13-t09.
+// of its own.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-2b__veraPDF_test_suite_6-1-13-t09: the fixture reproduces
+//     the shape of these files.
 func inheritedBoxPDF(key, box string) []byte {
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
@@ -60,9 +65,13 @@ func fixedPagesNode(t *testing.T, data []byte, preserveContent bool) ast.PdfDict
 //
 // A box on a /Pages node is inherited by every page beneath it (ISO 32000-1,
 // 7.7.3.4, Table 30), so ISO 19005-2, 6.1.13 test 11 measures it and litho
-// reports it as "Pages tree /MediaBox". The fixer walked only the leaves, so
-// 6-1-13-t09-fail-c and -fail-d stayed unremediable: their pages declare no box
-// at all.
+// reports it as "Pages tree /MediaBox". The fixer walked only the leaves, so a
+// file whose pages declare no box at all stayed unremediable.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-1-13-t09-fail-c and -fail-d: stayed unremediable while the
+//     fixer walked only the leaves, because their pages declare no box at all.
 func TestFixPageBoxesReachesTheInheritedBox(t *testing.T) {
 	t.Parallel()
 

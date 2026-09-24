@@ -40,7 +40,7 @@ type XRefEntry struct {
 }
 
 // Index is an aggregated cross-reference index containing a map of object
-// numbers to their XRefEntry values and the associated trailer dictionary.
+// numbers to their [XRefEntry] values and the associated trailer dictionary.
 type Index struct {
 	Entries map[int]XRefEntry
 	Trailer ast.PdfDict
@@ -257,6 +257,12 @@ const freeListHeadGeneration = 65535
 // trailer dictionary. It populates indexMap with the parsed entries and returns
 // the trailer dictionary, the byte offset of the previous xref section, and
 // any error encountered.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7229.pdf: labels its first subsection's free-list head as
+//     object 1, which cost page 1 its only image until the table parser
+//     restarted the subsection at 0.
 func ParseXRefTable(ctx context.Context, lex *lexer.Lexer, indexMap map[int]XRefEntry) (ast.PdfDict, int64, error) {
 	tok, err := lex.NextToken()
 	if err != nil {
@@ -344,9 +350,8 @@ func ParseXRefTable(ctx context.Context, lex *lexer.Lexer, indexMap map[int]XRef
 			// that declares it as object 1 has labelled every one of its
 			// entries one too high, which silently maps each object onto its
 			// predecessor's bytes and marks the real object 1 free. Producers
-			// do emit this (pdfjs issue7229.pdf, where it cost page 1 its only
-			// image), and each entry then lands exactly on the object header
-			// one lower, so the intended start is 0.
+			// do emit this, and each entry then lands exactly on the object
+			// header one lower, so the intended start is 0.
 			if i == 0 && startObj == 1 && offset == 0 && gen == freeListHeadGeneration && isFree {
 				startObj = 0
 			}

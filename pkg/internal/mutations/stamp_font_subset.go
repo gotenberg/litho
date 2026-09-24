@@ -108,8 +108,8 @@ func subsetTTF(raw []byte, keepGIDs map[uint16]bool) ([]byte, error) {
 	// Zero checkSumAdjustment before recomputing the file checksum.
 	binary.BigEndian.PutUint32(newHead[8:12], 0)
 
-	// Assemble the subset font. We keep every table but substitute
-	// head / loca / glyf with our new versions.
+	// Assemble the subset font: every table is kept, with head, loca and
+	// glyf replaced by the rebuilt versions.
 	tables := make(map[string][]byte, len(records))
 	for _, rec := range records {
 		tag := rec.Tag
@@ -127,8 +127,8 @@ func subsetTTF(raw []byte, keepGIDs map[uint16]bool) ([]byte, error) {
 
 	// Compute head.checkSumAdjustment = 0xB1B0AFBA - checksum(entire file).
 	// The head checksum was computed with a zeroed checkSumAdjustment,
-	// which is what we want. Now patch the final value into the head
-	// table's bytes in-place.
+	// which is what the formula expects. Now patch the final value into
+	// the head table's bytes in-place.
 	adjustment := uint32(0xB1B0AFBA) - tableChecksum(subset)
 	headOffset := findTableOffset(subset, "head")
 	if headOffset < 0 || headOffset+12 > len(subset) {
@@ -222,9 +222,9 @@ func expandCompositeClosure(keep map[uint16]bool, glyfData []byte, offsets []uin
 			//   (argument bytes, 1 or 2 based on flags)
 			//   (optional transform bytes)
 			//
-			// We only need to walk components enough to extract
-			// glyphIndex values. The MORE_COMPONENTS bit (0x0020)
-			// indicates another component follows.
+			// The walk only reads each component far enough to extract
+			// its glyphIndex. The MORE_COMPONENTS bit (0x0020) indicates
+			// another component follows.
 			pos := 10 // skip the 10-byte header
 			for pos+4 <= len(data) {
 				flags := binary.BigEndian.Uint16(data[pos : pos+2])

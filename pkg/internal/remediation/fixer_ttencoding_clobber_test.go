@@ -8,6 +8,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
+// TestFixTrueTypeEncoding_KeepsAnEarlierFixersPendingWrite pins that
+// tt-encoding reads the font dictionary through the allocator.
+//
 // A fixer that rewrites an object another fixer also rewrites must read that
 // object through the allocator. [RemediatePDFA] drives every registry entry
 // against ONE allocator and ONE document and never flushes between them, so a
@@ -16,8 +19,9 @@ import (
 //
 // tt-encoding replaces the whole font dictionary, and it runs after the font
 // fixers that write the same object: cid-gidmap, font-keys, tounicode-ranges,
-// fonts, and font-widths. Those read alloc-aware (fixer_cidgidmap.go:55,
-// fixer_fontwidth.go:53); this pins that tt-encoding does too.
+// fonts, and font-widths. Those read alloc-aware (fixCIDToGIDMap in
+// fixer_cidgidmap.go, fixFontWidth in fixer_fontwidth.go); this pins that
+// tt-encoding does too.
 //
 // Worth pinning because nothing else catches it. The fix-to-fixpoint loop in
 // pkg/pdf reopens the output and re-runs up to maxRemediationRounds, so a
@@ -38,7 +42,7 @@ func TestFixTrueTypeEncoding_KeepsAnEarlierFixersPendingWrite(t *testing.T) {
 	}
 
 	// Stand in for any earlier font fixer leaving a repair pending, the shape
-	// fixSimpleFont writes at fixer_fonts.go:254: copy the dict, correct one
+	// fixSimpleFont writes in fixer_fonts.go: copy the dict, correct one
 	// key, AllocAt the same object number.
 	peer := make(ast.PdfDict, len(fontDict))
 	maps.Copy(peer, fontDict)

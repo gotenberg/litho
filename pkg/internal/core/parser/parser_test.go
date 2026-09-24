@@ -264,9 +264,14 @@ func TestParseDict_NonNameKey_Skipped(t *testing.T) {
 // is expected does not discard the whole dict. A space inside a name is the
 // real-world cause: `/BaseFont /AASGAA+Arial,Unicode MS` lexes as the name
 // `/AASGAA+Arial,Unicode` plus the keyword `MS`. Failing the object drops the
-// font entirely, so a rewrite emits a dangling resource reference (pdfjs
-// issue11549_reduced, veraPDF §6.2.2 t3). The stray token is skipped; every
-// valid pair, including those after it, survives.
+// font entirely, so a rewrite emits a dangling resource reference that
+// veraPDF reports under §6.2.2 t3. The stray token is skipped; every valid
+// pair, including those after it, survives.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11549_reduced.pdf: carries this split name, and a rewrite
+//     emitted a dangling resource reference (veraPDF §6.2.2 t3).
 func TestParseDict_StrayKeywordKey_Recovered(t *testing.T) {
 	p := newParser("<<\n/BaseFont /AASGAA+Arial,Unicode MS\n/DescendantFonts [ 56 0 R ]\n/Subtype /Type0\n/Type /Font\n>>")
 	obj, err := p.ParseObject(context.Background())

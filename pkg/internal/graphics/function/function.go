@@ -10,12 +10,18 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/postscript"
 )
 
+// Bounds on the untrusted sizes a function object declares.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest tint transform sample table is 255 entries,
+//     far below the maxSampleCount bound.
 const (
 	// maxSampleCount bounds the sample table of a type 0 function. /Size and
 	// /BitsPerSample both come from the file, so their product is untrusted.
-	// A tint transform samples one input, and the largest in the corpora is
-	// 255 entries; 1<<20 leaves room for a multi-input function while keeping
-	// the decoded table under a few megabytes. Anti-DoS, not spec-mandated.
+	// A tint transform samples one input, so its table is small; 1<<20 leaves
+	// room for a multi-input function while keeping the decoded table under a
+	// few megabytes. Anti-DoS, not spec-mandated.
 	maxSampleCount = 1 << 20
 
 	// maxOutputs bounds /Range. A colour function feeds a device space, so
@@ -63,7 +69,7 @@ func New(ctx context.Context, doc *document.Document, obj ast.PdfObject) (*Funct
 	}
 
 	// isStream is tracked explicitly rather than inferred from stream.Dict:
-	// the zero [ast.PdfStream] carries a nil dict AND a nil loader, so a field
+	// the zero ast.PdfStream carries a nil dict AND a nil loader, so a field
 	// check would confuse "not a stream" with "a stream whose dict is empty"
 	// and could reach DecodeStream with nothing to read.
 	var dict ast.PdfDict
@@ -133,10 +139,14 @@ func (f *Function) Inputs() int { return len(f.domain) / 2 }
 // (i0, i1, ... ) sits at i0 + i1*Size[0] + i2*Size[0]*Size[1] and so on, which
 // is what [Function.evalSampled] compounds its stride to match. One input makes
 // the two possible orderings identical, so nothing below a two-input function
-// can tell a correct index from a transposed one. Confirmed against a real
-// 7-colorant tint table, where reading it this way makes each single-colorant
-// corner return its own ink (/Cyan gives 0,173,239 and /Magenta 236,0,140)
-// while the transpose returns colours no colorant explains.
+// can tell a correct index from a transposed one.
+//
+// # Corpus evidence
+//
+//   - All corpora: on a real 7-colorant tint table, reading the first input
+//     fastest makes each single-colorant corner return its own ink (/Cyan
+//     gives 0,173,239 and /Magenta 236,0,140) while the transpose returns
+//     colours no colorant explains.
 func (f *Function) initSampled(ctx context.Context, doc *document.Document, dict ast.PdfDict, stream ast.PdfStream, isStream bool) error {
 	if !isStream {
 		return fmt.Errorf("%w: a type 0 function shall be a stream", ErrMalformed)

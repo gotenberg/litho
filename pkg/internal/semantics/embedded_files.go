@@ -52,11 +52,16 @@ func ExtractEmbeddedFiles(ctx context.Context, doc *document.Document) ([]models
 //
 // ISO 32000-2, 14.13 associates a file with the document or one of its parts
 // through an /AF array of file specifications. A producer may use it as the
-// only route to an embedded file: pdfjs bug1937438_mml_from_latex.pdf attaches
-// two stylesheets that way with no name tree at all, and a Factur-X invoice in
-// the corpus reaches its factur-x.xml the same way.
+// only route to an embedded file, with no name tree at all.
 //
-// The catalog and the pages are walked, which is where the corpus puts them.
+// The catalog and the pages are walked, which is where real files put them.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1937438_mml_from_latex.pdf: attaches two stylesheets through
+//     /AF with no name tree at all.
+//   - facturx: an invoice reaches its factur-x.xml through /AF the same way.
+//   - All corpora: /AF arrays sit on the catalog and the pages.
 func collectAssociatedFiles(
 	ctx context.Context,
 	doc *document.Document,

@@ -12,9 +12,13 @@ import (
 //
 // veraPDF decides containsLabels on the L's kids and each LI's kids by
 // standard type: the /RoleMap applies first, and Div, Part, and NonStruct are
-// looked through. govdocs thread_300_300035.pdf labels its items with LI_Label,
-// which its role map maps to Lbl; litho compared the names as written and
-// missed four lists veraPDF reports.
+// looked through.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300035.pdf: labels its items with LI_Label, which its
+//     role map maps to Lbl; litho compared the names as written and missed
+//     four lists veraPDF reports.
 func TestListNumberingByStandardType(t *testing.T) {
 	t.Parallel()
 

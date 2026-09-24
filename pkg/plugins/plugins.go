@@ -1,8 +1,9 @@
 package plugins
 
 // FilterDecoder decodes a PDF stream filter that litho does not support
-// natively. Implementations are registered via [pdf.WithFilterPlugin] and
-// consulted during stream decompression for filter names they handle.
+// natively. Implementations are registered via
+// [github.com/gotenberg/litho/pkg/pdf.WithFilterPlugin] and consulted during
+// stream decompression for filter names they handle.
 type FilterDecoder interface {
 	// FilterName returns the canonical PDF filter name this decoder handles
 	// (e.g., "JBIG2Decode", "JPXDecode"). The name must not include a

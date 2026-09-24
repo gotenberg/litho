@@ -32,8 +32,12 @@ func calArray(family string, white []float64, gamma ast.PdfObject, matrix []floa
 	return ast.PdfArray{ast.PdfName(family), dict}
 }
 
-// srgbD65 is the CalRGB space 17,348 govdocs images use: the sRGB primaries
-// and D65 white with a pure 2.22221 gamma.
+// srgbD65 returns a CalRGB space real images use: the sRGB primaries and D65
+// white with a pure 2.22221 gamma.
+//
+// # Corpus evidence
+//
+//   - govdocs: 17,348 images use this space.
 func srgbD65() ast.PdfArray {
 	g := ast.PdfReal(2.22221)
 	return calArray("CalRGB", []float64{0.9505, 1, 1.089}, ast.PdfArray{g, g, g},

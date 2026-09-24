@@ -23,10 +23,13 @@ func structComplaint(got []Violation) bool {
 // written as namespace-qualified attributes holds a struct, exactly as a nested
 // Description would.
 //
-// govdocs thread_300_300116.pdf writes <exif:Flash exif:Fired="False" .../> in
-// one packet and the same struct with sub-elements in another. litho read the
-// first as plain text and reported a value-type violation for it; veraPDF, whose
-// own SchemasDefinition types exif:Flash as "flash", reports none.
+// # Corpus evidence
+//
+//   - govdocs thread_300_300116.pdf: writes <exif:Flash exif:Fired="False"
+//     .../> in one packet and the same struct with sub-elements in another.
+//     litho read the first as plain text and reported a value-type violation
+//     for it; veraPDF, whose own SchemasDefinition types exif:Flash as
+//     "flash", reports none.
 func TestXMPPropertyAttributes_AreAStruct(t *testing.T) {
 	t.Parallel()
 
@@ -63,12 +66,14 @@ func TestXMPPropertyAttributes_PlainTextStillReports(t *testing.T) {
 
 // TestXMPPropertyAttributes_FieldsAreStillAudited pins the other half of the
 // shorthand: the attributes are the struct's fields, so the value-type field
-// audit reads them there too.
+// audit reads them there too. Reading the shorthand as a struct without
+// auditing its attributes would silence an undefined field.
 //
-// pdfjs issue13971.pdf writes <xmpMM:DerivedFrom stRef:originalDocumentID=".."/>
-// and veraPDF reports the field the 2005 ResourceRef does not define. Reading
-// the shorthand as a struct without auditing its attributes would have silenced
-// that.
+// # Corpus evidence
+//
+//   - pdfjs issue13971.pdf: writes <xmpMM:DerivedFrom
+//     stRef:originalDocumentID=".."/>, and veraPDF reports the field the 2005
+//     ResourceRef does not define.
 func TestXMPPropertyAttributes_FieldsAreStillAudited(t *testing.T) {
 	t.Parallel()
 
@@ -89,11 +94,14 @@ func TestXMPPropertyAttributes_FieldsAreStillAudited(t *testing.T) {
 // TestXMPPropertyAttributes_FieldsInsideAnArrayAreAudited pins that a struct
 // written with property attributes is read wherever its value type puts it. An
 // xmpMM:History is a Seq of ResourceEvent, so each event is an rdf:li three
-// levels down, and Adobe writes its fields as attributes.
+// levels down, and Adobe writes its fields as attributes. Auditing only the
+// property element leaves such a field silent.
 //
-// pdfjs issue13971.pdf carries stEvt:changed there, a field the 2005
-// ResourceEvent does not define, and veraPDF reports it against xmpMM:History.
-// Auditing only the property element left it silent.
+// # Corpus evidence
+//
+//   - pdfjs issue13971.pdf: carries stEvt:changed there, a field the 2005
+//     ResourceEvent does not define, and veraPDF reports it against
+//     xmpMM:History.
 func TestXMPPropertyAttributes_FieldsInsideAnArrayAreAudited(t *testing.T) {
 	t.Parallel()
 

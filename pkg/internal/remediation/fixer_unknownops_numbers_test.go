@@ -17,7 +17,7 @@ import (
 // TestRepairMalformedNumbersKeepsOperatorArity pins that a numeric literal the
 // content parser could not read stays part of its operator's arguments.
 //
-// pdfjs issue15604.pdf writes its text matrix as
+// Take a text matrix written as
 //
 //	-. -.002 .002 -. 59.64 760.026 Tm
 //
@@ -25,8 +25,14 @@ import (
 // parser reports it as an operator. That splits the operand run, and removing it
 // as an operator undefined by ISO 19005-2, 6.2.2 took the operands with it: Tm
 // arrived with two of the six operands Table 108 requires, no text matrix was
-// set, and all 1027 characters of the page stopped extracting while veraPDF
-// still called the output conformant.
+// set, and the page's text stopped extracting while veraPDF still called the
+// output conformant.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15604.pdf: writes its text matrix this way, and all 1027
+//     characters of the page stopped extracting while veraPDF still called the
+//     output conformant.
 func TestRepairMalformedNumbersKeepsOperatorArity(t *testing.T) {
 	t.Parallel()
 
@@ -129,7 +135,11 @@ func TestNumericPrefixSalvagesValue(t *testing.T) {
 }
 
 // malformedNumberPDF builds a one-page document whose text matrix carries tok
-// in two of its six operand positions, as pdfjs issue15604.pdf does with "-.".
+// in two of its six operand positions.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15604.pdf: carries "-." in two of its six Tm operand positions.
 func malformedNumberPDF(tok string) []byte {
 	content := "BT\n/F0 9.96 Tf\n" + tok + " -.002 .002 " + tok + " 59.64 760.026 Tm\n(hello) Tj\nET\n"
 
@@ -169,7 +179,7 @@ func malformedNumberPDF(tok string) []byte {
 // 7.3.3 does not define). The digit-less spellings "-." and "-" no longer reach
 // this fixer: the lexer resolves them to 0 the way Adobe Reader and pdf.js do,
 // so they arrive as operands and never look like an operator. See
-// [lexer.isDigitlessNumber] and TestFixUnknownOps_DigitlessNumberNeedsNoRepair.
+// lexer.isDigitlessNumber and TestFixUnknownOps_DigitlessNumberNeedsNoRepair.
 func TestFixUnknownOpsRepairsRatherThanStrips(t *testing.T) {
 	t.Parallel()
 
@@ -210,11 +220,14 @@ func TestFixUnknownOpsRepairsRatherThanStrips(t *testing.T) {
 // spellings never reach the repair, because the lexer already reads them as the
 // number they stand for.
 //
-// pdfjs issue15604.pdf writes "-." in two of its Tm operand positions. litho
-// used to surface that as an operator, strip it under ISO 19005-2, 6.2.2 and
-// take the neighbouring operands with it, which the repair then had to undo.
-// The lexer resolves it to 0 the way Adobe Reader and pdf.js do, so Tm arrives
-// whole and there is nothing to rewrite.
+// litho used to surface a "-." Tm operand as an operator, strip it under
+// ISO 19005-2, 6.2.2 and take the neighbouring operands with it, which the
+// repair then had to undo. The lexer resolves it to 0 the way Adobe Reader and
+// pdf.js do, so Tm arrives whole and there is nothing to rewrite.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15604.pdf: writes "-." in two of its Tm operand positions.
 func TestFixUnknownOps_DigitlessNumberNeedsNoRepair(t *testing.T) {
 	t.Parallel()
 

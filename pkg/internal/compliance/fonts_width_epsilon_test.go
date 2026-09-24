@@ -11,8 +11,12 @@ import "testing"
 // program advance through a scale read from the font, and a Type 1 /FontMatrix
 // of 0.001 parses to 0.0010000000000000000208: an advance of 334 against a
 // declared 333 then computes as 1.0000000000000191, which a strict comparison
-// against 1.0 reports. pdfjs bug921760.pdf, issue13915.pdf and issue6127.pdf
-// all failed that way and veraPDF passes every one.
+// against 1.0 reports.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug921760.pdf, issue13915.pdf, issue6127.pdf: all failed that
+//     way, and veraPDF passes every one.
 func TestWidthsInconsistent_ToleranceBoundary(t *testing.T) {
 	t.Parallel()
 

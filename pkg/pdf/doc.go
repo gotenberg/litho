@@ -70,7 +70,7 @@
 // # Digital signatures
 //
 // [Reader.ExtractSignatures] and [Reader.VerifySignatures] inspect existing
-// signatures. [Writer.Sign] queues a new signature; [WriteTo] produces a
+// signatures. [Writer.Sign] queues a new signature; [Writer.WriteTo] produces a
 // signed incremental update.
 //
 // # Functional options

@@ -59,7 +59,7 @@ func TestDecodePdfString(t *testing.T) {
 		{"utf8-double-bom", ast.PdfString("\xef\xbb\xbf\xef\xbb\xbfHi"), "Hi"},
 		// UTF-8 BOM declared but the payload contains invalid UTF-8
 		// (lone continuation byte). Replace with U+FFFD instead of
-		// returning a Go string that fails [utf8.ValidString], which
+		// returning a Go string that fails utf8.ValidString, which
 		// would silently corrupt JSON encoders and rune iteration
 		// downstream.
 		{"utf8-bom-invalid-payload", ast.PdfString("\xef\xbb\xbf\xc2hello"), "�hello"},

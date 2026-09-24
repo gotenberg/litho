@@ -81,9 +81,13 @@ func symbolicTTF(code uint16) string {
 //
 // ISO 32000-1, 9.6.6.4 draws such a code through the (3,0) subtable, so a code
 // it lacks selects no glyph. litho treated the code as unresolvable and skipped
-// it. pdfjs issue8234.pdf shows code 32 through an Arial subset whose (3,0)
-// subtable holds only 0xF021 to 0xF027; veraPDF reports it and fontTools
-// confirms no space glyph.
+// it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue8234.pdf: shows code 32 through an Arial subset whose (3,0)
+//     subtable holds only 0xF021 to 0xF027. veraPDF reports it and fontTools
+//     confirms no space glyph.
 func TestSymbolicTrueTypeGlyphPresence(t *testing.T) {
 	t.Parallel()
 

@@ -256,7 +256,7 @@ func trimDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *
 			continue
 		}
 		// Inline colour spaces accumulate: rebuilding the parent once per
-		// entry would keep only the last, the trap [fixExtGStateDict] records.
+		// entry would keep only the last, the trap fixExtGStateDict records.
 		var inlineUpdates ast.PdfDict
 		for csName, entry := range csDict {
 			ref, isRef := entry.(ast.PdfIndirectRef)

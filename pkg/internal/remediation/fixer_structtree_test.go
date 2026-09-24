@@ -237,14 +237,17 @@ func TestFixStructTree_UA2NamespacesPresentRepointsDocNS(t *testing.T) {
 	}
 }
 
-// roleMappedDocumentPDF builds the shape the veraPDF corpus actually carries:
-// a structure tree whose root child spells a PRIVATE type that the /RoleMap
-// sends to Document.
+// roleMappedDocumentPDF builds a structure tree whose root child spells a
+// PRIVATE type that the /RoleMap sends to Document, the shape real carriers of
+// this violation have.
 //
-// Measured on PDF_A-1a__veraPDF_test_suite_6-7-11-t01-fail-a and four siblings:
-// StructTreeRoot /K [10 0 R] /RoleMap 12 0 R, no /Namespaces, obj 10 is
-// /S /PDFDocument, and obj 12 maps /PDFDocument -> /Document (and
-// /Rectangle -> /Figure). Every one of the five is identical in shape.
+// # Corpus evidence
+//
+//   - verapdf PDF_A-1a__veraPDF_test_suite_6-7-11-t01-fail-a and four
+//     siblings: StructTreeRoot /K [10 0 R] /RoleMap 12 0 R, no /Namespaces,
+//     obj 10 is /S /PDFDocument, and obj 12 maps /PDFDocument -> /Document
+//     (and /Rectangle -> /Figure). Every one of the five is identical in
+//     shape.
 func roleMappedDocumentPDF() []byte {
 	return buildStructPDF(
 		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
@@ -267,13 +270,16 @@ func roleMappedDocumentPDF() []byte {
 // root while silently leaving the element untagged: claimed, fired, and not
 // repaired.
 //
-// The asymmetry is measurable in the gate rather than inferred. All five
-// carriers are clean under every PDF/A profile and come back post=1 with
-// residual exactly ['8.2.5.2-t02'] under PDF_UA-2 and both WTPDF levels,
-// which is 15 cells that litho and veraPDF already agree on.
-//
 // [resolvedStructType] is the shared resolver whose own godoc records this
 // same mistake costing a spurious 7.2 t18 in the list fixer.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-7-11-t01-fail-a and its four siblings: the asymmetry is
+//     measured in the gate rather than inferred. All five carriers are clean
+//     under every PDF/A profile and come back post=1 with residual exactly
+//     ['8.2.5.2-t02'] under PDF_UA-2 and both WTPDF levels, which is 15 cells
+//     that litho and veraPDF already agree on.
 func TestFixStructTree_UA2RoleMappedDocumentGetsPDF2NS(t *testing.T) {
 	doc, alloc := newTestDoc(t, roleMappedDocumentPDF())
 
@@ -298,24 +304,30 @@ func TestFixStructTree_UA2RoleMappedDocumentGetsPDF2NS(t *testing.T) {
 // TestFixStructTree_UA2LiteralDocumentMappedAwayStillGetsNS pins the arm that
 // resolving through the /RoleMap does NOT cover.
 //
-// Shape measured on veraPDF's PDF_UA-1__7.1-t07-fail-a.pdf, which
-// fixer_rolemap.go already names: StructTreeRoot /K [18 0 R] with
-// /RoleMap << /Document /Book >> and no /Namespaces, where object 18 is
-// literally /S /Document.
+// The fixture is a root child literally named /S /Document under a
+// /RoleMap << /Document /Book >>, with no /Namespaces.
 //
 // Following the map sends a literally-named Document AWAY from Document (to
 // Book, which is standard nowhere), so a guard that only resolves rejects the
-// very element the rule is about. Writing /NS is what repairs this file:
-// [equivalentType] consults the legacy /RoleMap only for the empty and PDF 1.7
-// namespaces (accessibility_structure.go:547), so declaring the PDF 2.0
-// namespace escapes the harmful Document->Book mapping and the element reads as
-// a standard Document again.
+// very element the rule is about. Writing /NS is what repairs this shape:
+// compliance's equivalentType consults the legacy /RoleMap only for the empty
+// and PDF 1.7 namespaces (compliance/accessibility_structure.go), so declaring
+// the PDF 2.0 namespace escapes the harmful Document->Book mapping and the
+// element reads as a standard Document again.
 //
-// Measured: replacing the raw-name check with resolution alone dropped this
-// file from fully-fixed to three violations (8.2.5.2-t01, 8.2.4-t04 and
-// Table 5. StructTreeRoot-Document-t01) across PDF_UA-2 and both WTPDF levels.
 // The two checks identify overlapping but different sets, so the guard needs
 // BOTH arms.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.1-t07-fail-a.pdf: the fixture's shape is measured on
+//     this file, which fixer_rolemap.go already names: StructTreeRoot
+//     /K [18 0 R] with /RoleMap << /Document /Book >> and no /Namespaces,
+//     where object 18 is literally /S /Document.
+//   - verapdf PDF_UA-1__7.1-t07-fail-a.pdf: replacing the raw-name check with
+//     resolution alone dropped this file from fully-fixed to three violations
+//     (8.2.5.2-t01, 8.2.4-t04 and Table 5. StructTreeRoot-Document-t01) across
+//     PDF_UA-2 and both WTPDF levels.
 func TestFixStructTree_UA2LiteralDocumentMappedAwayStillGetsNS(t *testing.T) {
 	pdf := buildStructPDF(
 		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",

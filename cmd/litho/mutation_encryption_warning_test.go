@@ -12,7 +12,7 @@ import (
 // Twelve output-producing commands turned an encrypted input into an
 // unprotected one and said nothing.
 //
-// `80cb8803` warned on the five page operations, and the record inferred the
+// `f2a37513` warned on the five page operations, and the record inferred the
 // rest of the surface was three more commands. Measured, it is twelve: attach,
 // detach, autotag, flatten-form, set-bookmarks, set-form, set-metadata,
 // stamp-text, stamp-image, stamp-pdf, remediate and redact.
@@ -21,7 +21,7 @@ import (
 // removes confidential content, and gets back a document anyone can open.
 //
 // The plaintext-out DEFAULT is untouched and remains deliberate, exactly as
-// `80cb8803` left it. Only the silence is closed.
+// `f2a37513` left it. Only the silence is closed.
 
 // encFixtures carries the inputs the table needs, built once per subtest so a
 // command that writes cannot disturb another's source.

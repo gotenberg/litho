@@ -124,6 +124,12 @@ func incrementBytes(b []byte) {
 }
 
 // Parse extracts mapping data from a CMap stream payload.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11651.pdf: its "/CMapName /Adobe-Identity-UC>" is a name
+//     whose S became a ">", and veraPDF reports ISO 14289-1, 7.21.7 t1 on
+//     every code the page shows, the codes its bfchar list maps included.
 func Parse(ctx context.Context, data []byte) (*CMap, error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex)
@@ -310,12 +316,10 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 		default:
 			// A bare ">" is a token no CMap syntax produces: the lexer returns
 			// ">>" whole and a hex string consumes its own ">". It appears where
-			// a name or string is corrupted, as in the "/CMapName
-			// /Adobe-Identity-UC>" of pdfjs issue11651.pdf, whose S became a
-			// ">". ISO 32000-1, 7.3.5 ends a name at a delimiter, so what
-			// follows is valid nowhere, and veraPDF discards the CMap whole: it
-			// reports ISO 14289-1, 7.21.7 t1 on every code the page shows, the
-			// codes its bfchar list maps included.
+			// a name or string is corrupted. ISO 32000-1, 7.3.5 ends a name at
+			// a delimiter, so what follows is valid nowhere, and veraPDF
+			// discards the CMap whole, the codes its bfchar list maps
+			// included.
 			if tok.Type == lexer.TokenDelimiter && tok.Value == ">" {
 				c.malformed = true
 			}
@@ -360,7 +364,7 @@ func (c *CMap) mapWithCodeSpaces(data []byte) (int, string, bool) {
 	for _, n := range slices.Backward(lengths) {
 		// A malformed CMap can declare a zero-width codespace, which
 		// would match the empty prefix of any string and report a
-		// mapping that consumes nothing. [CIDMap.next] mirrors this
+		// mapping that consumes nothing. CIDMap.next mirrors this
 		// loop and guards the same case.
 		if n == 0 || n > len(data) {
 			continue

@@ -15,9 +15,14 @@ import (
 // states the rule as "Subtype == Type3 || fontName != null": ISO 19005-1 6.3.2
 // t3, ISO 19005-2 and -3 6.2.11.2 t3, ISO 19005-4 6.2.10.2 t3. A value of any
 // other type resolves to no name at all, so it fails exactly as a missing entry
-// does. pdfjs issue1350.pdf writes both its fonts that way, as a UTF-16BE hex
-// string (/BaseFont<feff004100410043...>), and veraPDF reports it twice with
-// "A BaseFont entry is missing or has invalid type" while naming the font null.
+// does.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue1350.pdf: writes both its fonts' /BaseFont as a UTF-16BE hex
+//     string (/BaseFont<feff004100410043...>), and veraPDF reports it twice
+//     with "A BaseFont entry is missing or has invalid type" while naming the
+//     font null.
 func TestFontBaseFontMustBeAName(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

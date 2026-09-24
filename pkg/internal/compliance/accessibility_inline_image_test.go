@@ -17,9 +17,13 @@ import (
 // a Do operator naming an image XObject does, and veraPDF builds a content item
 // for it that ISO 14289-2, 8.2.2 requires to be tagged or marked as an Artifact.
 // litho counted fills, strokes, text, shadings and Do as painting and left the
-// inline image out, so pdfjs issue11124.pdf, whose only page content is an
-// untagged inline image, passed. Measured against veraPDF on fixtures of each
-// shape.
+// inline image out, so a page whose only content is an untagged inline image
+// passed. Measured against veraPDF on fixtures of each shape.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11124.pdf: its only page content is an untagged inline
+//     image, and it passed while litho left inline images out.
 func TestUntaggedContent_InlineImage(t *testing.T) {
 	t.Parallel()
 

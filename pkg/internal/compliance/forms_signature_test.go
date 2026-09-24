@@ -59,6 +59,9 @@ func sigFieldViolations(t *testing.T, data []byte) []Violation {
 	})
 }
 
+// TestCheckSignatureByteRange pins that [checkSignatureByteRange] passes a
+// /ByteRange recomputed from the file, fires on a wrong span or a shifted
+// /Contents offset, and ignores a non-signature field.
 func TestCheckSignatureByteRange(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -127,6 +130,8 @@ func TestCheckSignatureByteRange(t *testing.T) {
 	})
 }
 
+// TestNextXRefOffset pins that [nextXRefOffset] returns the next section
+// offset after its argument, or the argument when none follows.
 func TestNextXRefOffset(t *testing.T) {
 	t.Parallel()
 	doc := &document.Document{XRefSectionOffsets: []int64{900, 100, 500}}
@@ -147,6 +152,8 @@ func TestNextXRefOffset(t *testing.T) {
 	}
 }
 
+// TestIsPdfWhitespaceByte pins the six PDF whitespace bytes
+// [isPdfWhitespaceByte] accepts.
 func TestIsPdfWhitespaceByte(t *testing.T) {
 	t.Parallel()
 	for _, b := range []byte{0x00, 0x09, 0x0A, 0x0C, 0x0D, 0x20} {

@@ -14,7 +14,8 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 )
 
-// maxCMapChainDepth bounds how far the /UseCMap chain is followed. It mirrors
+// maxCMapChainDepth bounds how far the /UseCMap chain is followed. Anti-DoS
+// guard, not spec-mandated: real usecmap chains are 1-2 deep. It mirrors
 // maxUseCMapChainDepth in the checker, so the fixer cannot be asked to settle
 // a chain deeper than the one the checker reports.
 const maxCMapChainDepth = 5
@@ -223,11 +224,11 @@ func embedNamedUseCMap(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		return false
 	}
 	// A CIDSystemInfo-shaped name denotes nothing, and
-	// [dropUnresolvableUseCMap] settles that one.
+	// dropUnresolvableUseCMap settles that one.
 	//
 	// The Identity check is defence in depth, not a load-bearing guard:
 	// litho ships no bundled data for Identity-H or Identity-V, so
-	// [cmap.EmbedPredefined] already declines them, and removing this line
+	// cmap.EmbedPredefined already declines them, and removing this line
 	// changes no observable behaviour today. It states the exemption ISO
 	// 19005-1, 6.3.3.3 grants those two, so the intent survives a change to
 	// what litho bundles.

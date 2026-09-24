@@ -19,9 +19,14 @@ import (
 // The measured allocations are kept in the comments below as the record of what
 // the bound prevents.
 
-// corpusMaxMCID is the largest marked-content id measured across all 5171
-// corpus fixtures (govdocs thread_000_000314.pdf). The controls below use it so
-// a bound that refused real documents would fail rather than pass quietly.
+// corpusMaxMCID is the largest marked-content id real documents carry. The
+// controls below use it so a bound that refused real documents would fail
+// rather than pass quietly.
+//
+// # Corpus evidence
+//
+//   - All corpora, 5171 files: the largest marked-content id is 12522.
+//   - govdocs thread_000_000314.pdf: carries that largest id.
 const corpusMaxMCID = 12522
 
 // parentTreeMCIDPDF builds a structure tree whose single element registers one

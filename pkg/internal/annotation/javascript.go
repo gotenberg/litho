@@ -59,10 +59,15 @@ const maxJSNameTreeDepth = 64
 // a document could legitimately script. Measured on a leaf of 20 compressed
 // streams, 328 KB of input collected 160 MB.
 //
-// 4 MB is chosen against the corpora rather than by round number. Of 59 files
-// naming /JavaScript, 30 carry document-level scripts, and the largest totals
-// 60,881 bytes across 65 scripts (pdfjs issue20914.pdf), so this leaves better
-// than 60x headroom over the heaviest real document.
+// 4 MB is chosen against real documents rather than by round number, and
+// leaves better than 60x headroom over the heaviest one.
+//
+// # Corpus evidence
+//
+//   - All corpora: of 59 files naming /JavaScript, 30 carry document-level
+//     scripts.
+//   - pdfjs issue20914.pdf: carries the largest total, 60,881 bytes across 65
+//     scripts.
 const maxDocumentScriptsSize = 4 << 20
 
 func extractJSTree(ctx context.Context, doc *document.Document, nodeObj ast.PdfObject, scripts *[]string) error {

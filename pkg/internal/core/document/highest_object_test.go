@@ -9,7 +9,11 @@ import (
 
 // inflatedSizePDF builds a small document whose trailer declares far more
 // objects than its byte count could define, and whose catalog points at a page
-// tree numbered in that upper range, as pdfjs issue16091.pdf does.
+// tree numbered in that upper range.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16091.pdf: the shape this fixture reproduces.
 func inflatedSizePDF(declaredSize int) []byte {
 	objs := []string{
 		"<< /Type /Catalog /Pages 90000 0 R >>",
@@ -41,11 +45,15 @@ func inflatedSizePDF(declaredSize int) []byte {
 // 32000-1, Table 15), which includes objects an incremental update references
 // but this index never resolved. Rejecting it as implausible, the way the index
 // rightly rejects such entries, dropped the estimate back to the index and the
-// next allocation landed on top of a live object: on pdfjs issue16091.pdf the
-// catalog names its page tree 156325 while the trailer declares /Size 156342 in
-// a 107 KB file, and `litho attach` wrote the update's own cross-reference
-// stream at 156325. poppler read the input fine and then refused the output with
-// "Top-level pages object is wrong type (stream)".
+// next allocation landed on top of a live object.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16091.pdf: the catalog names its page tree 156325 while the
+//     trailer declares /Size 156342 in a 107 KB file, and `litho attach` wrote
+//     the update's own cross-reference stream at 156325. poppler read the input
+//     fine and then refused the output with "Top-level pages object is wrong
+//     type (stream)".
 func TestHighestObjectNumberHonoursAnInflatedTrailerSize(t *testing.T) {
 	t.Parallel()
 

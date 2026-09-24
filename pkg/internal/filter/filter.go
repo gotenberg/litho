@@ -20,8 +20,9 @@ import (
 )
 
 // maxDecompressedSize caps the output of any single stream decompression to
-// 256 MB. Prevents decompression bomb attacks where a small compressed stream
-// expands into gigabytes.
+// 256 MB. It is an anti-DoS guard, not spec-mandated: it prevents
+// decompression bomb attacks where a small compressed stream expands into
+// gigabytes.
 const maxDecompressedSize = 256 << 20 // 256 MB
 
 // limitedCopy copies from r to buf in 1 MB chunks up to maxDecompressedSize.
@@ -204,6 +205,12 @@ func DecodeStreamUpTo(ctx context.Context, stream ast.PdfStream, stop ast.PdfNam
 
 // extractDecodeParms returns a slice of DecodeParms dicts, one per filter.
 // Missing entries are nil.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue8895.pdf: its one FlateDecode image states
+//     [<< /Predictor 15 ... >>] over samples with no predictor bytes, and
+//     applying the entry scrambled the rows.
 func extractDecodeParms(dict ast.PdfDict, numFilters int) []ast.PdfDict {
 	result := make([]ast.PdfDict, numFilters)
 
@@ -221,12 +228,11 @@ func extractDecodeParms(dict ast.PdfDict, numFilters int) []ast.PdfDict {
 	case ast.PdfArray:
 		// ISO 32000-1, Table 5 gives a single filter a parameter dictionary and
 		// an array of them only to a filter array. PDF.js and qpdf ignore an
-		// array under a single filter, and pdfjs issue8895.pdf shows why: its
-		// one FlateDecode image states [<< /Predictor 15 ... >>] over samples
-		// with no predictor bytes, and applying the entry scrambled the rows.
-		// Only an image follows them: there a wrong reading costs a picture,
-		// while on an xref or object stream it would cost the document, so
-		// those keep reading the array leniently.
+		// array under a single filter: a producer can state a predictor entry
+		// over samples with no predictor bytes, and applying it scrambles the
+		// rows. Only an image follows them: there a wrong reading costs a
+		// picture, while on an xref or object stream it would cost the
+		// document, so those keep reading the array leniently.
 		if _, single := dict["Filter"].(ast.PdfName); single && dict["Subtype"] == ast.PdfName("Image") {
 			return result
 		}
@@ -307,7 +313,7 @@ func decodeFlateDecode(ctx context.Context, data []byte) ([]byte, error) {
 
 	// A decompression bomb is not a damaged stream. The tolerance below keeps
 	// whatever decoded when a stream is truncated or its checksum is broken,
-	// and it decides that on buf.Len() > 0 -- which a bomb always satisfies,
+	// and it decides that on buf.Len() > 0, which a bomb always satisfies,
 	// since limitedCopy only reports one after 256 MB has been buffered. So
 	// ErrDecompressionBomb was never returned from this path: the caller got
 	// a stream silently truncated at the cap and no signal that it was, while
@@ -332,13 +338,13 @@ func decodeFlateDecode(ctx context.Context, data []byte) ([]byte, error) {
 	// frequently have truncated zlib streams or bad checksums, but the
 	// decompressed bytes up to that point are usable.
 	if copyErr != nil && copyErr != io.EOF && copyErr != io.ErrUnexpectedEOF {
-		// If we got some data, use it despite the error.
+		// If some data decoded, use it despite the error.
 		if buf.Len() == 0 {
 			return nil, copyErr
 		}
 	}
 
-	// Tolerate close errors (checksum mismatches) when we have data.
+	// Tolerate close errors (checksum mismatches) once data has decoded.
 	if closeErr != nil && buf.Len() == 0 {
 		return nil, fmt.Errorf("failed to close zlib reader: %w", closeErr)
 	}
@@ -357,7 +363,7 @@ func openFlate(data []byte) (io.ReadCloser, error) {
 		return r, nil
 	}
 	fr := flate.NewReader(bytes.NewReader(data))
-	// Verify we can read at least some data.
+	// Verify that at least some data reads.
 	probe := make([]byte, 1)
 	if _, probeErr := fr.Read(probe); probeErr != nil {
 		fr.Close()

@@ -2,6 +2,12 @@ package compliance
 
 import "testing"
 
+// TestXmpWellFormed pins which packets [xmpWellFormed] accepts.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-7-2-1: the quirk BOM case is the double-encoded BOM these
+//     files carry.
 func TestXmpWellFormed(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -10,7 +16,7 @@ func TestXmpWellFormed(t *testing.T) {
 		want bool
 	}{
 		{"valid", `<?xpacket begin=''?><x:xmpmeta xmlns:x="adobe:ns:meta/"><a>x</a></x:xmpmeta>`, true},
-		// The double-encoded BOM (the 6-7-2-1 quirk) is harmless attribute content.
+		// The double-encoded BOM is harmless attribute content.
 		{"valid with quirk BOM", "<?xpacket begin='\xc3\xaf\xc2\xbb\xc2\xbf'?><x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><a>x</a></x:xmpmeta>", true},
 		{"mismatched tag", `<x:xmpmeta xmlns:x="adobe:ns:meta/"><dc:creator xmlns:dc="d">x</dc:Creator></x:xmpmeta>`, false},
 		{"unclosed tag", `<x:xmpmeta xmlns:x="adobe:ns:meta/"><a>x</x:xmpmeta>`, false},
@@ -30,11 +36,14 @@ func TestXmpWellFormed(t *testing.T) {
 // reference, does not by itself make a packet malformed. veraPDF parses with
 // FIX_CONTROL_CHARS on by default and substitutes a space for each such
 // character, so reporting §6.6.2.1 t4 / §6.7.2.1 t4 on that construct alone
-// diverges from every XMPCore-based validator. Real files depend on it: the
-// govdocs corpus file thread_300_300842.pdf holds "&#x5;" inside a
-// dc:description, and veraPDF reports schema violations against that packet's
-// properties, proving it parsed. Defects that are not control characters still
-// fail.
+// diverges from every XMPCore-based validator. Real files depend on it.
+// Defects that are not control characters still fail.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300842.pdf: holds "&#x5;" inside a dc:description,
+//     and veraPDF reports schema violations against that packet's properties,
+//     proving it parsed.
 func TestXmpWellFormed_ControlChars(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -60,9 +69,17 @@ func TestXmpWellFormed_ControlChars(t *testing.T) {
 	}
 }
 
+// TestXmpPacketSerializationValidity pins the rules
+// [xmpPacketSerializationValidity] fires for a malformed packet at each PDF/A
+// part.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-7-2-1-t01-fail-d: its defect is a mismatched start/end tag,
+//     the shape of the malformed packet here.
 func TestXmpPacketSerializationValidity(t *testing.T) {
 	t.Parallel()
-	// A mismatched start/end tag, the 6-7-2-1-t01-fail-d defect.
+	// A mismatched start/end tag.
 	malformed := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/"><dc:creator xmlns:dc="d">x</dc:Creator></x:xmpmeta>`)
 	wellFormed := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/"><a>x</a></x:xmpmeta>`)
 

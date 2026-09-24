@@ -16,13 +16,16 @@ import (
 // Per ISO 32000-1, Table 111, /MissingWidth is "the width to use for character
 // codes whose widths are not specified in a font dictionary's Widths array",
 // defaulting to 0, so such a code has a declared width like any other. Walking
-// only the array left every code below /FirstChar or past its end unexamined:
-// govdocs thread_100_100945.pdf shows a space at code 32 against a /FirstChar
-// of 48 and a 222-unit program glyph, which veraPDF reports under ISO 19005-2
-// §6.2.11.5.
+// only the array left every code below /FirstChar or past its end unexamined.
 //
 // The fixture is Lato-Bold with FontMatrix 0.0005 (2000 units/em): its "space"
 // glyph is 486 program units, so 486×1000/2000 = 243 in text space.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100945.pdf: shows a space at code 32 against a
+//     /FirstChar of 48 and a 222-unit program glyph, which veraPDF reports
+//     under ISO 19005-2 §6.2.11.5.
 func TestCheckGlyphWidths_UncoveredCode(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

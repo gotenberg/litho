@@ -46,10 +46,14 @@ func emptyNamePDF(t *testing.T, selector string) []byte {
 // reported as an undefined named resource.
 //
 // ISO 32000-1, 7.3.5 allows a name to be empty, and no resource dictionary can
-// usefully key an entry on it, so veraPDF 1.30.2 models no reference for it:
-// pdfjs bug1669099.pdf writes "/ 12.00000 Tf" in 15 widget appearance streams
-// and veraPDF reports no ISO 19005-4, 6.2.2 t3 anywhere in that file. Reporting
-// it invented one violation per occurrence.
+// usefully key an entry on it, so veraPDF 1.30.2 models no reference for it.
+// Reporting it invented one violation per occurrence.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1669099.pdf: writes "/ 12.00000 Tf" in 15 widget appearance
+//     streams, and veraPDF reports no ISO 19005-4, 6.2.2 t3 anywhere in that
+//     file.
 func TestEmptyResourceNameIsNotAReference(t *testing.T) {
 	t.Parallel()
 

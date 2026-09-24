@@ -121,9 +121,13 @@ func standard14BuiltinEncodingApplies(ctx context.Context, doc *document.Documen
 // ISO 32000-1, Table 114 makes the implicit base of a /Differences array the
 // font program's built-in encoding, so a font embedding no program and earning
 // no standard 14 substitute supplies no name at all, and 9.10.2 then gives the
-// code no Unicode value. govdocs thread_000_000885.pdf shows Palatino-Roman
-// with a /FontDescriptor, no program and a /Differences-only /Encoding, and
-// veraPDF reports ISO 14289-1 §7.21.7 t1 on every glyph it draws.
+// code no Unicode value.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000885.pdf: shows Palatino-Roman with a
+//     /FontDescriptor, no program and a /Differences-only /Encoding, and
+//     veraPDF reports ISO 14289-1 §7.21.7 t1 on every glyph it draws.
 func fontNamesUnencodedCodes(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
 	return embedsFontProgram(ctx, doc, fontDict) ||
 		standard14BuiltinEncodingApplies(ctx, doc, fontDict)
@@ -135,6 +139,15 @@ func fontNamesUnencodedCodes(ctx context.Context, doc *document.Document, fontDi
 // [everyUsedGlyphNameHasUnicode]. Without them it surveys the names the font
 // mentions: a standard 14 font's built-in encoding, the /Encoding /Differences
 // array, and /FontDescriptor /CharSet, which lists a Type 1 subset's glyphs.
+//
+// # Corpus evidence
+//
+//   - pdfjs js-buttons.pdf: shows code 0x34 through an unembedded ZapfDingbats
+//     with no /ToUnicode inside a widget appearance, which veraPDF reports
+//     under ISO 14289-1 §7.21.7 t1. It backs the ZapfDingbats exclusion.
+//   - govdocs thread_300_300031.pdf: shows ZapfDingbats code 110, which its
+//     /Differences does not name, and veraPDF reports it. It backs judging the
+//     shown codes rather than surveying the names the font mentions.
 func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
 	// A standard 14 font carries a well-known built-in encoding whose glyph
 	// names are all AGL-resolvable, so its base encoding needs no embedded
@@ -151,10 +164,7 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 	// Symbol font" and no third set: a ZapfDingbats glyph therefore has no
 	// Unicode value without a /ToUnicode CMap. litho already treats the pair as
 	// special elsewhere (the stamp writer and the TrueType-encoding fixer both
-	// exempt "Symbol and ZapfDingbats" from a standard encoding). pdfjs
-	// js-buttons.pdf shows code 0x34 through an unembedded ZapfDingbats with no
-	// /ToUnicode inside a widget appearance, which veraPDF reports under ISO
-	// 14289-1 §7.21.7 t1.
+	// exempt "Symbol and ZapfDingbats" from a standard encoding).
 	//
 	// Symbol with no /Encoding is excluded too. Its built-in encoding is not a
 	// Latin one, and 9.10.2 admits Symbol names only through a /Differences
@@ -176,8 +186,7 @@ func allGlyphNamesAGLResolvable(ctx context.Context, doc *document.Document, fon
 	// the rest, which fall to an implicit base encoding, and a /CharSet lists an
 	// embedded subset's glyphs rather than the encoding that reaches them. Both
 	// surveys answered "resolvable" for fonts whose shown codes had no name at
-	// all. veraPDF reports exactly those codes: govdocs thread_300_300031.pdf
-	// shows ZapfDingbats code 110, which its /Differences does not name.
+	// all, and veraPDF reports exactly those codes.
 	if usage != nil && len(usage.charCodes) > 0 {
 		return everyUsedGlyphNameHasUnicode(ctx, doc, fontDict, usage)
 	}
@@ -284,14 +293,18 @@ func allDifferencesGlyphNamesAGLResolvable(ctx context.Context, doc *document.Do
 // a Type 3 font takes a Unicode value from the glyph name its /Encoding gives.
 //
 // ISO 14289-1, 7.21.7 and ISO 19005-2, 6.2.11.7.2 judge each glyph shown, so a
-// name /Differences assigns to a code nothing shows is out of scope: pdfjs
-// issue5896.pdf leaves empty names at two unshown codes and veraPDF passes its
-// letters. Per ISO 32000-1, 9.6.5 the /Differences array of a Type 3 font gives
-// its complete encoding, so a shown code the array leaves out, or names with an
-// empty name, has no glyph name and no Unicode value. A /BaseEncoding, which the
-// clause does not provide for, still supplies a missing name, as it does for
-// veraPDF. A shown .notdef is left to the Unicode-value and .notdef checks,
-// since the glyph lists map it to U+0000.
+// name /Differences assigns to a code nothing shows is out of scope. Per ISO
+// 32000-1, 9.6.5 the /Differences array of a Type 3 font gives its complete
+// encoding, so a shown code the array leaves out, or names with an empty name,
+// has no glyph name and no Unicode value. A /BaseEncoding, which the clause does
+// not provide for, still supplies a missing name, as it does for veraPDF. A
+// shown .notdef is left to the Unicode-value and .notdef checks, since the glyph
+// lists map it to U+0000.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5896.pdf: leaves empty names at two unshown codes, and veraPDF
+//     passes its letters.
 func shownType3GlyphNamesResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
 	encObj, ok := fontDict["Encoding"]
 	if !ok {
@@ -330,6 +343,13 @@ func shownType3GlyphNamesResolvable(ctx context.Context, doc *document.Document,
 // The names in [nonAGLGlyphNames] are excluded. [encodings.GlyphToRuneFull]
 // serves text extraction too and maps names no published glyph list defines, so
 // it answers a broader question than ISO 32000-1, 9.10.2 asks here.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300084.pdf: shows codes its embedded Type 1 program
+//     names G4F and G56, which litho read as U+004F and U+0056, and veraPDF
+//     reports those glyphs as having no Unicode value. It backs refusing the
+//     synthetic code-point spellings.
 func glyphNameHasUnicode(name string) bool {
 	if _, ok := encodings.SymbolGlyphsUnicode[name]; ok {
 		return true
@@ -340,10 +360,8 @@ func glyphNameHasUnicode(name string) bool {
 		return false
 	}
 	// A name on the list wins even if it happens to look synthetic. Otherwise
-	// the code-point spellings producers invent are refused: govdocs
-	// thread_300_300084.pdf shows codes its embedded Type 1 program names G4F and
-	// G56, which litho read as U+004F and U+0056, and veraPDF reports those glyphs
-	// as having no Unicode value.
+	// the code-point spellings producers invent are refused, since veraPDF
+	// gives such a glyph no Unicode value.
 	if _, ok := encodings.GlyphToRuneSimple(name); ok {
 		return true
 	}
@@ -354,12 +372,6 @@ func glyphNameHasUnicode(name string) bool {
 	return ok
 }
 
-// usedDifferencesGlyphNamesResolvable reports whether every /Encoding
-// /Differences override behind a rendered character code yields a Unicode
-// value. Codes the array leaves alone keep the font's base encoding and are out
-// of scope here. With no recorded usage the check is vacuous: the rules it
-// backs are scoped to veraPDF's Glyph object, which exists only for a code the
-// content stream actually shows, so an override nothing renders maps nothing.
 // shownCodesNamedByResolvableDifferences reports whether /Differences names
 // every character code the content stream shows through this font, and every
 // such name carries a Unicode value.
@@ -400,6 +412,12 @@ func shownCodesNamedByResolvableDifferences(ctx context.Context, doc *document.D
 	return true
 }
 
+// usedDifferencesGlyphNamesResolvable reports whether every /Encoding
+// /Differences override behind a rendered character code yields a Unicode
+// value. Codes the array leaves alone keep the font's base encoding and are out
+// of scope here. With no recorded usage the check is vacuous: the rules it
+// backs are scoped to veraPDF's Glyph object, which exists only for a code the
+// content stream actually shows, so an override nothing renders maps nothing.
 func usedDifferencesGlyphNamesResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
 	if usage == nil || len(usage.charCodes) == 0 {
 		return true
@@ -487,11 +505,19 @@ func predefinedEncodingTable(ctx context.Context, doc *document.Document, fontDi
 // A code the encoding does not name selects no glyph, so it stands for no
 // character and carries no Unicode value, which ISO 19005-4, 6.2.10.7 (with
 // ISO 19005-2, 6.2.11.7.2 and ISO 14289-1, 7.21.7) forbids for a shown glyph.
-// This is the unnamed twin of an explicit /Differences .notdef. pdfjs
-// issue18059.pdf sets /Helvetica with /WinAnsiEncoding and then shows
-// <0044004500460047...>, whose every other byte is code 0: a simple font takes
-// one byte per code, WinAnsiEncoding names nothing below 32, and veraPDF
-// reports the glyph at code 0.
+// This is the unnamed twin of an explicit /Differences .notdef. A simple font
+// takes one byte per code and WinAnsiEncoding names nothing below 32, so
+// two-byte text shown through a WinAnsiEncoding font reaches code 0.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18059.pdf: sets /Helvetica with /WinAnsiEncoding and then
+//     shows <0044004500460047...>, whose every other byte is code 0, and
+//     veraPDF reports the glyph at code 0.
+//   - verapdf 6-3-8-t01-pass-b.pdf: a file built to conform, which litho
+//     reported while it judged codes from 32 up, because its
+//     MacExpertEncoding table omits the space at code 32 that Annex D
+//     defines.
 func renderedUnencodedCode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) (byte, bool) {
 	if usage == nil || len(usage.charCodes) == 0 {
 		return 0, false
@@ -509,8 +535,7 @@ func renderedUnencodedCode(ctx context.Context, doc *document.Document, fontDict
 		// in any of them and the conclusion holds whatever table litho carries.
 		// Above 32 a gap may be litho's rather than the encoding's: its
 		// MacExpertEncoding table omits the space at code 32 that Annex D
-		// defines, and reading that gap as "no glyph" reported veraPDF's own
-		// 6-3-8-t01-pass-b.pdf, a file built to conform.
+		// defines, and reading that gap as "no glyph" reports conforming files.
 		if code >= firstEncodedCode {
 			continue
 		}
@@ -663,15 +688,19 @@ func allGlyphNamesInSymbolEncoding(ctx context.Context, doc *document.Document, 
 // Glyph object, and a Glyph exists only for a code something renders. A glyph
 // merely present in an embedded subset is out of scope, so a Type 1 subset
 // whose /CharSet lists a name with no Unicode value is still conforming when
-// nothing shows that name's code. pdfjs bug1260585.pdf embeds CMSY10 whose
-// /CharSet names negationslash, in neither the Adobe standard Latin set nor the
-// Symbol font ISO 32000-1, 9.10.2 admits; the program's own encoding puts it at
-// code 0x36, which the page never shows, and veraPDF reports nothing.
+// nothing shows that name's code.
 //
 // Unlike [usedGlyphNamesResolvable] this demands the encoding actually name
 // every used code. A code the encoding leaves out has no glyph name to judge,
 // and skipping it would exempt a font on the strength of the codes litho
 // happened to read rather than on the codes the page shows.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1260585.pdf: embeds CMSY10 whose /CharSet names negationslash,
+//     in neither the Adobe standard Latin set nor the Symbol font ISO 32000-1,
+//     9.10.2 admits. The program's own encoding puts it at code 0x36, which the
+//     page never shows, and veraPDF reports nothing.
 func everyUsedGlyphNameHasUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
 	if usage == nil || len(usage.charCodes) == 0 {
 		return false
@@ -698,6 +727,14 @@ func everyUsedGlyphNameHasUnicode(ctx context.Context, doc *document.Document, f
 // usedGlyphNamesResolvable returns true if all glyph names referenced by the
 // used character codes in a Type 1 font are resolvable to Unicode: either
 // via the AGL or the Symbol encoding set.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14438.pdf: shows code 13 of a symbolic CMSY7 whose
+//     /Differences name it circlecopyrt, a TeX spelling of the copyright sign
+//     that GlyphToRuneFull resolves and the Adobe Glyph List does not carry,
+//     and veraPDF reports the glyph. It backs judging names through
+//     [glyphNameHasUnicode] rather than the typography tables.
 func usedGlyphNamesResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
 	encoding := resolveSimpleFontEncoding(ctx, doc, fontDict)
 	if encoding == nil {
@@ -712,10 +749,7 @@ func usedGlyphNamesResolvable(ctx context.Context, doc *document.Document, fontD
 		// [glyphNameHasUnicode] rather than encodings.GlyphToRuneFull: the
 		// typography tables serve text extraction and map names no published
 		// glyph list defines, which ISO 32000-1, 9.10.2 does not admit here.
-		// pdfjs issue14438.pdf shows code 13 of a symbolic CMSY7 whose
-		// /Differences name it circlecopyrt, a TeX spelling of the copyright
-		// sign that GlyphToRuneFull resolves and the Adobe Glyph List does not
-		// carry; veraPDF reports the glyph. See [nonAGLGlyphNames].
+		// See [nonAGLGlyphNames].
 		if glyphNameHasUnicode(glyphName) || symbolEncodingNames[glyphName] {
 			continue
 		}
@@ -727,16 +761,30 @@ func usedGlyphNamesResolvable(ctx context.Context, doc *document.Document, fontD
 // resolveSimpleFontEncoding builds a charCode → glyphName mapping for a
 // simple font (Type1, TrueType). Checks PDF-level /Encoding first, then
 // falls back to the Type 1 font program's built-in encoding.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug859204.pdf: writes /Encoding /NULL over an embedded Type 1
+//     whose built-in names are all in the Adobe Glyph List, and veraPDF
+//     derives a Unicode value for every one of the eleven codes the page
+//     shows. It backs keeping the built-in encoding under an unknown name.
+//   - govdocs thread_000_000364.pdf: a subset CFF that maps codes 9, 10, 13,
+//     127 and 128 in /Differences and every printing code in the CFF. It
+//     backs the program's built-in encoding as the implicit base.
+//   - govdocs thread_300_300031.pdf: shows ZapfDingbats code 110 that its
+//     /Differences leave alone, and veraPDF reports it under ISO 14289-1
+//     §7.21.7 t1.
+//   - pdfjs bug1727053.pdf: shows code 80 through an embedded Arial,Bold whose
+//     three cmap subtables all map U+0050 to the glyph P, and veraPDF reports
+//     nothing. It backs the StandardEncoding base for a non-symbolic TrueType.
 func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) map[byte]string {
-	// Priority 1: PDF-level /Encoding.
+	// The PDF-level /Encoding takes priority over the program's own.
 	if encObj, ok := fontDict["Encoding"]; ok {
 		// Named encoding. A name no predefined encoding carries states nothing,
 		// so the font's built-in encoding stays in force (ISO 32000-1, Table
-		// 114, BaseEncoding): pdfjs bug859204.pdf writes /Encoding /NULL over an
-		// embedded Type 1 whose built-in names are all in the Adobe Glyph List,
-		// and veraPDF derives a Unicode value for every one of the eleven codes
-		// the page shows. Reading the invalid name as an empty encoding left
-		// those codes unnamed and reported ISO 14289-1, 7.21.7 t1 against them.
+		// 114, BaseEncoding). Reading the invalid name as an empty encoding
+		// leaves the shown codes unnamed and reports ISO 14289-1, 7.21.7 t1
+		// against them.
 		if encName, err := document.ResolveName(ctx, doc, encObj); err == nil && encName != "" {
 			if names := predefinedEncodingNames(string(encName)); len(names) > 0 {
 				return names
@@ -749,10 +797,9 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 			// differences from an implicit base encoding, which for an embedded
 			// program is that program's built-in encoding (ISO 32000-1, Table
 			// 114, BaseEncoding). A subset CFF names only a handful of codes in
-			// /Differences and leaves the rest to its own encoding: govdocs
-			// thread_000_000364.pdf maps codes 9, 10, 13, 127 and 128 there and
-			// every printing code in the CFF, so dropping the base leaves the
-			// shown codes unresolved and the width check silent.
+			// /Differences and leaves the rest to its own encoding, so dropping
+			// the base leaves the shown codes unresolved and the width check
+			// silent.
 			if baseName, err := document.ResolveName(ctx, doc, encDict["BaseEncoding"]); err == nil && baseName != "" {
 				maps.Copy(result, predefinedEncodingNames(string(baseName)))
 			} else {
@@ -761,8 +808,7 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 				// so, so Table 114 gives it its built-in encoding, never
 				// StandardEncoding. Those built-in names (a1 to a191) carry no
 				// Unicode value, so a code its /Differences leave alone stays
-				// unnamed: govdocs thread_300_300031.pdf shows code 110 that way,
-				// and veraPDF reports it under ISO 14289-1 §7.21.7 t1.
+				// unnamed, and veraPDF reports it under ISO 14289-1 §7.21.7 t1.
 				if len(builtin) == 0 && !isSymbolicFont(ctx, doc, document.ResolveFontDescriptor(ctx, doc, fontDict)) &&
 					!isZapfDingbatsByName(ctx, doc, fontDict) && fontNamesUnencodedCodes(ctx, doc, fontDict) {
 					// ISO 32000-1, 9.6.6.4 and Table 114: a non-symbolic font
@@ -771,10 +817,7 @@ func resolveSimpleFontEncoding(ctx context.Context, doc *document.Document, font
 					// built-in encoding out of /FontFile and /FontFile3 only, so
 					// a TrueType /FontFile2 lands here and every code the
 					// /Differences array leaves alone stayed unnamed, which the
-					// .notdef rule then read as a reference to glyph 0. pdfjs
-					// bug1727053.pdf shows code 80 through an embedded
-					// Arial,Bold whose three cmap subtables all map U+0050 to
-					// the glyph P; veraPDF reports nothing.
+					// .notdef rule then read as a reference to glyph 0.
 					builtin = predefinedEncodingNames("StandardEncoding")
 				}
 				maps.Copy(result, builtin)
@@ -809,21 +852,28 @@ func fontDifferencesNames(ctx context.Context, doc *document.Document, fontDict 
 // cffPredefinedEncodingFilled returns names plus the codes a predefined CFF
 // encoding assigns that names leaves unnamed.
 //
-// [cff.PredefinedEncodingNames] reports the whole table while
+// [typography.ExtractCFFPredefinedEncodingNames] reports the whole table while
 // [typography.ExtractCFFEncodingNames] reports only the codes whose glyph the
 // subset embeds. That intersection is right for drawing and wrong for asking
-// what a code means: pdfjs issue8586.pdf embeds BHIACH+TimesNRExpertMT, a
-// subset CFF declaring the Expert encoding whose charset holds Gsmall and
-// Ismall but not Hsmall, so code 0x61 was left unnamed even though the encoding
-// plainly assigns it Hsmall. That is the only code the page shows, and Hsmall
-// carries a PUA value, so ISO 19005-2 §6.2.11.7.3 went unreported while veraPDF
-// 1.30.2 failed it.
+// what a code means: a subset CFF declaring the Expert encoding leaves a code
+// unnamed when its charset lacks the glyph the encoding plainly assigns it.
 //
 // The fill applies only where the built-in encoding governs. Per ISO 32000-1,
 // Table 114 a named /Encoding or a /BaseEncoding replaces the program's own
-// encoding outright, and the nine veraPDF-corpus fixtures that embed an
-// Expert CFF all name /WinAnsiEncoding or /MacExpertEncoding, so their codes
-// must keep resolving through that table rather than the font's.
+// encoding outright, so a font naming one keeps resolving its codes through
+// that table rather than the font's.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue8586.pdf: embeds BHIACH+TimesNRExpertMT, a subset CFF
+//     declaring the Expert encoding whose charset holds Gsmall and Ismall but
+//     not Hsmall, so code 0x61 was left unnamed even though the encoding
+//     assigns it Hsmall. That is the only code the page shows, and Hsmall
+//     carries a PUA value, so ISO 19005-2 §6.2.11.7.3 went unreported while
+//     veraPDF 1.30.2 failed it.
+//   - verapdf: the nine fixtures that embed an Expert CFF all name
+//     /WinAnsiEncoding or /MacExpertEncoding, which backs limiting the fill
+//     to fonts whose built-in encoding governs.
 func cffPredefinedEncodingFilled(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, names map[byte]string) map[byte]string {
 	if !builtinEncodingGoverns(ctx, doc, fontDict) {
 		return names
@@ -912,6 +962,18 @@ func builtinEncodingNames(fontData []byte) map[byte]string {
 // builtinProgramEncoding returns the charCode → glyphName mapping an embedded
 // Type 1 (/FontFile) or CFF (/FontFile3) program carries in its own encoding.
 // Returns nil when the descriptor holds no such program or it cannot be read.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug860632.pdf: embeds Helvetica as a PFB container with no
+//     /Encoding. veraPDF, which cannot read that program, finds no name for
+//     any code it shows and reports ISO 14289-1, 7.21.7 t1 on each, while
+//     litho read StandardEncoding out of the PFB. It backs reading no
+//     encoding from a /FontFile that holds no Type 1 program.
+//   - govdocs thread_000_000341.pdf: embeds AvantGarde-Book with a program
+//     that names a predefined encoding and binds 110 codes through
+//     /Differences, leaving the other 146, the space and the digits among
+//     them, to the reference.
 func builtinProgramEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) map[byte]string {
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fd == nil {
@@ -923,10 +985,7 @@ func builtinProgramEncoding(ctx context.Context, doc *document.Document, fontDic
 		// 9.9.1 defines embeds no encoding either: [streamHoldsFontProgram]
 		// already leaves such a font unembedded, and reading names out of it
 		// anyway credited glyphs with Unicode values from a program the font
-		// was reported as lacking. pdfjs bug860632.pdf embeds Helvetica as a PFB
-		// container with no /Encoding: veraPDF, which cannot read that program,
-		// finds no name for any code it shows and reports ISO 14289-1, 7.21.7
-		// t1 on each, while litho read StandardEncoding out of the PFB.
+		// was reported as lacking.
 		if err == nil && streamHoldsFontProgram(ctx, doc, "FontFile", fontFileObj, stream) {
 			data, err := decodeFontProgram(ctx, doc, fontFileObj, stream)
 			if err == nil {
@@ -937,11 +996,7 @@ func builtinProgramEncoding(ctx context.Context, doc *document.Document, fontDic
 				// building one ("/Encoding StandardEncoding def") carries no
 				// per-code array for [typography.ExtractType1EncodingNames]
 				// to read, so its codes would stay unnamed.
-				// [builtinEncodingNames] expands the reference. govdocs
-				// thread_000_000341.pdf embeds AvantGarde-Book that way and
-				// binds 110 codes through /Differences, leaving the other
-				// 146, the space and the digits among them, to the
-				// reference.
+				// [builtinEncodingNames] expands the reference.
 				if enc := builtinEncodingNames(data); len(enc) > 0 {
 					return enc
 				}
@@ -1080,6 +1135,33 @@ func encodingGlyphNames(name string, table map[byte]rune) map[byte]string {
 }
 
 // checkToUnicode validates the ToUnicode mapping requirement (rule 2).
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100601.pdf: shows code 1 of an embedded
+//     MHHIBN+ZapfDingbats named /a73 with no /ToUnicode. veraPDF reports that
+//     glyph at PDF/A-1a and passes it at PDF/A-2u, where the rule runs and
+//     succeeds rather than going unapplied (142 passed rules against 121 at
+//     1a). It backs the Part 1 only ZapfDingbats carve-out.
+//   - All corpora: extending the ZapfDingbats carve-out to Parts 2 and later
+//     reported four files veraPDF passes.
+//   - pdfjs bug1727053.pdf: shows an unembedded Arial,Bold with no /ToUnicode,
+//     and veraPDF reports neither 7.21.7 nor 8.4.5.8. It backs extending the
+//     glyph-name exemption to TrueType.
+//   - govdocs: veraPDF reports 16 files whose TrueType names /WinAnsiEncoding
+//     or /MacRomanEncoding and shows codes the program leaves unmapped. These
+//     files motivated the /Encoding dictionary restriction. All 16 show codes
+//     /Differences never names, and they take the /BaseEncoding route, so they
+//     never reach the StandardEncoding fallback.
+//   - pdfjs issue8613.pdf: shows two unembedded MSSansSerif fonts whose
+//     /Differences names the whole range, and veraPDF passes them.
+//   - govdocs thread_300_300859.pdf: shows an embedded ZJLCSM+Symbol whose
+//     only code is named /bullet, and veraPDF passes it.
+//   - pdfjs bug1727053.pdf: shows 27 codes of an embedded Arial,Bold, 23 of
+//     them named by the StandardEncoding base rather than by its 88-entry
+//     /Differences. veraPDF passes all 27 (passedChecks=27) while litho
+//     reported the font at PDF/A-2u, 2a, 3a and 3u and stayed silent at
+//     PDF/UA-1 and UA-2. It backs not scoping the TrueType disjunct to PDF/UA.
 func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := toUnicodeRule(profile)
 	if rule.Specification == "" {
@@ -1145,19 +1227,16 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// set of named characters in the Symbol font" and no third set, so those
 	// names carry no Unicode value here. The Adobe Glyph List does map them,
 	// which is why [glyphNameHasUnicode] answers true and every name survey
-	// below would pass the font. govdocs thread_100_100601.pdf shows code 1 of
-	// an embedded MHHIBN+ZapfDingbats named /a73 with no /ToUnicode, and veraPDF
-	// reports that glyph. [allGlyphNamesAGLResolvable] already excluded the
-	// standard 14 spelling; an embedded subset reaches the surveys below instead.
+	// below would pass the font. [allGlyphNamesAGLResolvable] already excluded
+	// the standard 14 spelling; an embedded subset reaches the surveys below
+	// instead.
 	//
 	// Part 1 only, and measured rather than assumed: veraPDF answers the very
-	// same test (`toUnicode != null` on a Glyph) differently by flavour. On
-	// thread_100_100601.pdf it reports the /a73 glyph at PDF/A-1a and passes it
-	// at PDF/A-2u, where the rule runs and succeeds rather than going unapplied
-	// (142 passed rules against 121 at 1a). Parts 2 and later evidently admit
-	// the Adobe Glyph List entry that 9.10.2 does not, so the exemption stands
-	// there and extending this carve-out to them reported four files veraPDF
-	// passes.
+	// same test (`toUnicode != null` on a Glyph) differently by flavour,
+	// reporting such a glyph at PDF/A-1a and passing it at PDF/A-2u, where the
+	// rule runs and succeeds rather than going unapplied. Parts 2 and later
+	// evidently admit the Adobe Glyph List entry that 9.10.2 does not, so the
+	// exemption stands there.
 	dingbats := PDFAPart(profile) == 1 && isZapfDingbatsByName(ctx, doc, fontDict)
 
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
@@ -1183,29 +1262,24 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// 7.21.7 and ISO 14289-2, 8.4.5.8 ask only that each shown glyph carry a
 	// Unicode value, which ISO 32000-1, 9.10.2 derives from the glyph name
 	// whatever the font's subtype. veraPDF computes that value per Glyph and so
-	// passes a TrueType whose names resolve: pdfjs bug1727053.pdf shows an
-	// unembedded Arial,Bold with no /ToUnicode and veraPDF reports neither
-	// 7.21.7 nor 8.4.5.8.
+	// passes a TrueType whose names resolve.
 	//
 	// A TrueType earns it only through an /Encoding dictionary, which states its
 	// glyph names outright. ISO 32000-1, 9.6.6.4 resolves a TrueType code
 	// through the font's own cmap, so a name a predefined table merely implies
 	// yields Unicode only when the program actually carries that glyph, which
 	// this check does not establish. veraPDF, which reads the cmap, still
-	// reports 16 govdocs files whose TrueType names /WinAnsiEncoding or
-	// /MacRomanEncoding and shows codes the program leaves unmapped.
+	// reports a TrueType that names /WinAnsiEncoding or /MacRomanEncoding and
+	// shows codes the program leaves unmapped.
 	subtype := fontSubtype(ctx, doc, fontDict)
 
 	// A /Differences array that names every code the font shows is the one
 	// TrueType case the paragraph above does not argue against: the names are
 	// stated outright rather than implied by a predefined table, so ISO 32000-1,
-	// 9.10.2 derives Unicode from them without reading the program's cmap, and
-	// the 16 govdocs files that motivated the restriction all show codes
-	// /Differences never names. veraPDF asks Glyph.toUnicode != null (the
-	// PDFA-1A profile's own test for 6.3.8 t1) and so passes both shapes:
-	// pdfjs issue8613.pdf shows two unembedded MSSansSerif fonts whose
-	// /Differences names the whole range, and govdocs thread_300_300859.pdf an
-	// embedded ZJLCSM+Symbol whose only code is named /bullet.
+	// 9.10.2 derives Unicode from them without reading the program's cmap. The
+	// restriction is aimed at codes /Differences never names. veraPDF asks
+	// Glyph.toUnicode != null (the PDFA-1A profile's own test for 6.3.8 t1) and
+	// so passes such a font, embedded or not.
 	if subtype == "TrueType" && fontEncodingIsDict(ctx, doc, fontDict) &&
 		shownCodesNamedByResolvableDifferences(ctx, doc, fontDict, usage) {
 		return nil
@@ -1219,18 +1293,13 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// the base encoding, which [resolveSimpleFontEncoding] derives for exactly
 	// this shape (an embedded non-symbolic TrueType whose /Differences state no
 	// /BaseEncoding takes StandardEncoding, ISO 32000-1, 9.6.6.4 and Table 114).
-	// pdfjs bug1727053.pdf shows 27 codes of an embedded Arial,Bold, 23 of them
-	// named by that base rather than by its 88-entry /Differences: veraPDF
-	// passes all 27 (passedChecks=27) while litho reported the font at PDF/A-2u,
-	// 2a, 3a and 3u and stayed silent at PDF/UA-1 and UA-2.
 	//
 	// The restriction the exemption above states still holds, because the base
 	// encoding is only derived where its names are earned: that fallback is
 	// gated on a non-symbolic font that is not ZapfDingbats and either embeds a
-	// program or is one of the standard 14. The 16 govdocs files that motivated
-	// the restriction name /WinAnsiEncoding or /MacRomanEncoding and show codes
-	// their program leaves unmapped, so they take the /BaseEncoding route and
-	// never reach it.
+	// program or is one of the standard 14. A TrueType that names
+	// /WinAnsiEncoding or /MacRomanEncoding takes the /BaseEncoding route and
+	// never reaches it.
 	//
 	// The TrueType disjunct admits only a font whose shown codes were recorded.
 	// [allGlyphNamesAGLResolvable] falls back to surveying the names the font
@@ -1294,14 +1363,22 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 // ISO 14289-1, 7.21.7 and ISO 19005-2, 6.2.11.7.2 ask that every shown code
 // map to Unicode. A /ToUnicode CMap vouches only for the codes it maps: ISO
 // 32000-1, 9.10.2 derives the value of any other code from its glyph name, and
-// veraPDF's PDSimpleFont.toUnicode falls back the same way. govdocs
-// thread_300_300068.pdf shows code 2 of an MTSY font whose /Differences name it
-// circlecopyrt, a TeX spelling no glyph list carries, while its /ToUnicode maps
-// codes 1 and 3 only; veraPDF reports the glyph.
+// veraPDF's PDSimpleFont.toUnicode falls back the same way.
 //
 // A code left unnamed or named .notdef is skipped, because veraPDF then reads
 // the program's own glyph name, which this check does not establish. A CMap
 // that cannot be read is skipped too, leaving the font to the presence rule.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300068.pdf: shows code 2 of an MTSY font whose
+//     /Differences name it circlecopyrt, a TeX spelling no glyph list carries,
+//     while its /ToUnicode maps codes 1 and 3 only, and veraPDF reports the
+//     glyph.
+//   - pdfjs bug864847.pdf: shows an unembedded symbolic Arial-ItalicMT with no
+//     /Encoding whose /ToUnicode maps only <20>, and veraPDF reports every
+//     other code. It backs reporting an unnamed code when the font embeds no
+//     program.
 func shownCodeOutsideToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) (byte, string, bool) {
 	if usage == nil || len(usage.charCodes) == 0 {
 		return 0, "", false
@@ -1353,9 +1430,7 @@ func shownCodeOutsideToUnicode(ctx context.Context, doc *document.Document, font
 		if name == "" || name == ".notdef" {
 			// veraPDF reads the program's own glyph name here, which this check
 			// does not establish, so a named program keeps its exemption. With
-			// no program there is nothing left to read: pdfjs bug864847.pdf shows
-			// an unembedded symbolic Arial-ItalicMT with no /Encoding whose
-			// /ToUnicode maps only <20>, and veraPDF reports every other code.
+			// no program there is nothing left to read.
 			if !embedded {
 				return c, "", true
 			}
@@ -1434,10 +1509,15 @@ func symbolicCmapViolation(profile string, subs []truetype.CmapSubtable) bool {
 //
 // Listed means the published list, which veraPDF's AdobeGlyphList holds with
 // .notdef: a uniXXXX name, which the glyph list conventions derive rather than
-// list, does not qualify, and pdfjs issue13626.pdf names uni0453 where veraPDF
-// reports it. A font with no embedded program is left to the embedding rule, as
-// veraPDF leaves it, and a program whose table directory will not parse is not
-// held to the subtable half, since whether it carries the subtable is unknown.
+// list, does not qualify, and veraPDF reports it. A font with no embedded
+// program is left to the embedding rule, as veraPDF leaves it, and a program
+// whose table directory will not parse is not held to the subtable half, since
+// whether it carries the subtable is unknown.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue13626.pdf: names uni0453 in /Differences, and veraPDF reports
+//     it.
 func nonSymbolicDifferencesProblem(ctx context.Context, doc *document.Document, fd ast.PdfDict, differences ast.PdfArray) string {
 	fontData := extractFontProgramData(ctx, doc, fd)
 	if fontData == nil {
@@ -1500,6 +1580,13 @@ func nonSymbolicCmapViolation(profile string, subs []truetype.CmapSubtable) bool
 }
 
 // checkTrueTypeEncoding validates TrueType-specific encoding rules (rule 7).
+//
+// # Corpus evidence
+//
+//   - pdfjs TrueType_without_cmap.pdf: embeds a non-symbolic TrueType whose
+//     program has no cmap table, and veraPDF reports it.
+//   - pdfjs issue215.pdf: names no /BaseEncoding and lists small-cap names
+//     outside the Adobe Glyph List, and veraPDF counts one violation.
 func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string) []Violation {
 	var results []Violation
 
@@ -1542,9 +1629,7 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 					// a (1,0) subtable, so a program with no cmap table at all
 					// fails it outright. Reading only the parsed-subtable set
 					// let that case pass silently, since the missing table is
-					// an error rather than an empty set: pdfjs
-					// TrueType_without_cmap.pdf embeds exactly such a font and
-					// veraPDF reports it.
+					// an error rather than an empty set, and veraPDF reports it.
 					results = append(results, failf(cmapRule, "font %s on page %d: non-symbolic TrueType program carries no cmap table", fontName, pageNum)...)
 				case err == nil && nonSymbolicCmapViolation(profile, subs):
 					results = append(results, failf(cmapRule, "font %s on page %d: non-symbolic TrueType cmap subtable set is not permitted (%d subtables)", fontName, pageNum, len(subs))...)
@@ -1571,9 +1656,7 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 						results = append(results, failf(rule, "font %s on page %d has invalid Encoding type", fontName, pageNum)...)
 					} else {
 						// veraPDF states the rule as one test per font, so a font whose
-						// base encoding and /Differences both fail it is reported once:
-						// pdfjs issue215.pdf names no /BaseEncoding and lists small-cap
-						// names outside the Adobe Glyph List, and veraPDF counts one.
+						// base encoding and /Differences both fail it is reported once.
 						baseEnc, _ := document.ResolveName(ctx, doc, encDict["BaseEncoding"])
 						if baseEnc != "MacRomanEncoding" && baseEnc != "WinAnsiEncoding" {
 							results = append(results, failf(rule, "font %s on page %d BaseEncoding=%s", fontName, pageNum, baseEnc)...)
@@ -1602,6 +1685,13 @@ func checkTrueTypeEncoding(ctx context.Context, doc *document.Document, fontDict
 
 // checkType0ToUnicode validates the ToUnicode requirement for composite fonts (rule 2).
 // usage carries the codes the page shows through the font, or nil when unknown.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18466.pdf: shows 16 glyphs of a FZSSK--GBK1-0 encoded
+//     UniGB-UTF16-H, the case the part 1 CJK exemption lapses for.
+//   - pdfjs issue8061.pdf: ships 345 bytes of binary data as its /ToUnicode,
+//     and veraPDF reports each glyph.
 func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	rule := toUnicodeRule(profile)
 	if rule.Specification == "" {
@@ -1618,8 +1708,7 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 	//
 	// Measured against veraPDF at PDF/A-1a over an Adobe-GB1 CIDFont with no
 	// /ToUnicode: GBK-EUC-H and UniGB-UCS2-H report nothing, UniGB-UTF16-H
-	// reports the glyph. pdfjs issue18466.pdf is the corpus case, 16 glyphs of a
-	// FZSSK--GBK1-0 encoded UniGB-UTF16-H.
+	// reports the glyph.
 	cidSysInfo, err := document.ResolveDict(ctx, doc, cidFontDict["CIDSystemInfo"])
 	if err == nil && cidSysInfo != nil {
 		ordering, _ := document.ResolveString(ctx, doc, cidSysInfo["Ordering"])
@@ -1641,9 +1730,9 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 	// ISO 14289-1 §7.21.7 and ISO 19005-2 §6.2.11.7.2 ask for a ToUnicode CMap
 	// that maps the codes a glyph shows, and ISO 32000-1 §9.10.3 makes the entry
 	// a CMap stream. A stream that does not parse as one maps no code, so every
-	// glyph the font shows goes without a Unicode value: pdfjs issue8061.pdf ships
-	// 345 bytes of binary data there, and veraPDF reports each glyph. A font no
-	// glyph uses is not judged, since both rules are scoped to shown glyphs.
+	// glyph the font shows goes without a Unicode value, and veraPDF reports each
+	// glyph. A font no glyph uses is not judged, since both rules are scoped to
+	// shown glyphs.
 	if usage != nil && len(usage.charCodes) > 0 && toUnicodeMapsNothing(ctx, doc, type0Dict["ToUnicode"]) {
 		return failf(rule, "font %s on page %d: /ToUnicode is not a CMap mapping any code", fontName, pageNum)
 	}
@@ -1904,13 +1993,6 @@ func isInvalidUnicodeDst(token string) bool {
 	return t == "<0000>" || t == "<FEFF>" || t == "<FFFE>"
 }
 
-// containsPUAMapping scans a ToUnicode CMap for destination values in a Unicode
-// Private Use Area: BMP (U+E000-U+F8FF), Supplementary PUA-A (U+F0000-U+FFFFD),
-// or PUA-B (U+100000-U+10FFFD), including supplementary values written as
-// UTF-16BE surrogate pairs. bfchar entries pair <src> <dst>; bfrange entries are
-// <lo> <hi> <dst>. A single line may pack several entries, so every destination
-// token on the line is tested (the earlier parts[1]-only scan missed packed
-// fixtures where the PUA destination is not the second field).
 // puaSourceCodes parses a ToUnicode CMap and returns the set of source character
 // codes whose Unicode destination holds a Private Use Area code point, which is
 // veraPDF's per-glyph unicodePUA (PUAHelper.containPUA over the glyph's whole
@@ -2072,6 +2154,13 @@ func isPUAScalar(val uint32) bool {
 		(val >= 0x100000 && val <= 0x10FFFD)
 }
 
+// containsPUAMapping scans a ToUnicode CMap for destination values in a Unicode
+// Private Use Area: BMP (U+E000-U+F8FF), Supplementary PUA-A (U+F0000-U+FFFFD),
+// or PUA-B (U+100000-U+10FFFD), including supplementary values written as
+// UTF-16BE surrogate pairs. bfchar entries pair <src> <dst>; bfrange entries are
+// <lo> <hi> <dst>. A single line may pack several entries, so every destination
+// token on the line is tested (the earlier parts[1]-only scan missed packed
+// fixtures where the PUA destination is not the second field).
 func containsPUAMapping(cmapData string) bool {
 	// A begin/end marker may share a line with its entries
 	// ("... <06> <0066> endbfchar"), so scan whole begin..end regions rather

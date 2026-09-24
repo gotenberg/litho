@@ -210,7 +210,7 @@ func fixAnnotNesting(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	// Write the tree back the way the other structural fixers do: a direct
 	// /Nums dict on a StructTreeRoot queued at its own object number, so a
 	// later fixer reading alloc-first sees this one's work (see
-	// [fixParentTree] and [fixContentTag]). Allocating a separate object and
+	// fixParentTree and fixContentTag). Allocating a separate object and
 	// repointing /ParentTree at it would orphan the original and drop whatever
 	// sibling keys it carried. /ParentTreeNextKey is maintained because this
 	// fixer consumes keys (ISO 32000-2, Table 323).

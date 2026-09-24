@@ -25,7 +25,12 @@ import (
 // way Adobe Reader and pdf.js do, so they arrive as operands. See
 // TestFixUnknownOps_DigitlessNumberNeedsNoRepair. Only a malformed token that
 // still looks numeric gets this far, which makes the reachable input narrower
-// than the issue15604 case that motivated the repair, but the same defect.
+// than the digit-less case that motivated the repair, but the same defect.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15604: its digit-less "-." operands are the case that
+//     motivated the repair.
 const malformedTm = "0.0.0 0 0 1 59.64 760.026 Tm"
 
 // repairReachPDF builds a document that puts the malformed text matrix in one

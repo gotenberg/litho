@@ -9,6 +9,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
+// TestFixType0Font_KeepsAPeerFixersPendingCIDFontWrite pins that the Type 0
+// font repair keeps a peer fixer's pending write to the descendant CIDFont.
+//
 // The stale read and the write that consumes it live in DIFFERENT functions
 // here, which is why neither looks guilty on its own:
 //
@@ -22,7 +25,7 @@ import (
 // both, and the pair is still a clobber.
 //
 // The ordering makes it reachable rather than theoretical: cid-gidmap (registry
-// 110) scans for Subtype == CIDFontType2 -- this very object -- reads it
+// 110) scans for Subtype == CIDFontType2, this very object, reads it
 // alloc-aware and writes /CIDToGIDMap; fonts (144) then rebuilds it from the
 // on-disk copy. cid-sysinfo (147) writes it too but reads alloc-aware and runs
 // later, so it is defended.

@@ -31,8 +31,12 @@ func filteredImagePDF(entries string, data []byte, extra ...string) []string {
 // The filter pipeline skips a filter it cannot decode and hands back the
 // still-encoded bytes. An 8x8 image with no /ColorSpace is read as RGB, which
 // wants 192 bytes, so 231 encoded bytes passed the length check and came back
-// as pixels with no error. litho/pdfs/jpx_2b.pdf held seven JPXDecode images of
-// exactly this shape while JPXDecode needed a plugin.
+// as pixels with no error.
+//
+// # Corpus evidence
+//
+//   - litho jpx_2b.pdf: held seven JPXDecode images of exactly this shape
+//     while JPXDecode needed a plugin.
 func TestDecodeImage_UndecodableFilterIsRefusedEvenWhenLongEnough(t *testing.T) {
 	t.Parallel()
 

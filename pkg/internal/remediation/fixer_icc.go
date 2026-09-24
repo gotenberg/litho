@@ -88,7 +88,7 @@ func fixCorruptICC(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		}
 
 		// The header fields below are read at fixed offsets into the profile,
-		// so the profile has to be decoded first: [ast.PdfStream.Bytes] returns
+		// so the profile has to be decoded first: ast.PdfStream.Bytes returns
 		// the body before filter decoding, and a FlateDecode profile put
 		// deflate output at every offset. Each field then failed its test and a
 		// valid profile was replaced with litho's own sRGB copy.

@@ -12,11 +12,15 @@ import (
 // /ToUnicode is judged under PDF/UA by the glyph names of the codes a page
 // shows (ISO 14289-1, 7.21.7 t1), not by every name its /Differences lists.
 //
-// pdfjs issue5896.pdf names its letters A, G, P and so on but leaves two empty
-// names at codes 11 and 12 it never shows; litho reported the whole font while
-// veraPDF passed every shown glyph. On one-glyph fixtures veraPDF fails a shown
-// code whose name is empty or that /Differences leaves out, and takes a missing
-// name from a /BaseEncoding when one is given.
+// On one-glyph fixtures veraPDF fails a shown code whose name is empty or that
+// /Differences leaves out, and takes a missing name from a /BaseEncoding when
+// one is given.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5896.pdf: names its letters A, G, P and so on but leaves two
+//     empty names at codes 11 and 12 it never shows. litho reported the whole
+//     font while veraPDF passed every shown glyph.
 func TestToUnicode_Type3JudgedPerShownCode(t *testing.T) {
 	t.Parallel()
 

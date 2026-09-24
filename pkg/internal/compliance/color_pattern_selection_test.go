@@ -35,8 +35,13 @@ func patSelectionPDF(content string) []byte {
 // already selected, and only the Pattern form takes a name. A name written with
 // no Pattern space selected is malformed and paints nothing. Measured against
 // veraPDF 1.30.2, which reports nothing for such a pattern and reports it once
-// the space is selected. pdfjs issue18466.pdf is the real instance: it writes
-// "/P12 scn /P12 SCN" with no /Pattern cs anywhere on the page.
+// the space is selected.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18466.pdf: writes "/P12 scn /P12 SCN" with no /Pattern cs
+//     anywhere on the page, the real instance of a name with no Pattern space
+//     selected.
 func TestPatternNeedsPatternSpaceToBeSelected(t *testing.T) {
 	t.Parallel()
 

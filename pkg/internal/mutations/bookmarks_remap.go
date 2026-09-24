@@ -105,16 +105,20 @@ func abs(x int) int {
 	return x
 }
 
-// OffsetPages adds offset to every PageNumber in the tree. Used by Merge
+// OffsetPages adds offset to every PageNumber in the tree. Used by [Merge]
 // to shift each source's bookmarks into the concatenated page space.
 //
 // Page number zero means the bookmark names no page of its document, which is
 // what [models.Bookmark] carries for a destination that is null, points outside
 // the file, or does not resolve. Shifting it produced a page number in the
-// preceding source: merging govdocs thread_400_400931.pdf with
-// thread_400_400934.pdf sent the latter's "cr2002073.pdf" bookmark, whose /Dest
-// is [null 0 0 1], to page 5, the last page of the other document. The entry is
-// kept without a destination instead, which is what the writer emits for zero.
+// preceding source. The entry is kept without a destination instead, which is
+// what the writer emits for zero.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400931.pdf, thread_400_400934.pdf: merging them sent
+//     the latter's "cr2002073.pdf" bookmark, whose /Dest is [null 0 0 1], to
+//     page 5, the last page of the other document.
 func OffsetPages(bookmarks []models.Bookmark, offset int) []models.Bookmark {
 	if len(bookmarks) == 0 || offset == 0 {
 		return bookmarks

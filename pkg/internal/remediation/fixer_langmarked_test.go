@@ -13,9 +13,13 @@ import (
 )
 
 // markedLangPDF builds a tagged page whose content stream marks a span with an
-// inline /Lang, the shape of PDF_UA-1__7.2-t29-fail-g. tag is the language
-// value written into the property list. When named is true the property list is
-// reached by name through /Resources /Properties instead of inline.
+// inline /Lang. tag is the language value written into the property list. When
+// named is true the property list is reached by name through /Resources
+// /Properties instead of inline.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.2-t29-fail-g: carries this shape.
 func markedLangPDF(tag string, named bool) []byte {
 	body := "BT /F1 12 Tf 10 700 Td (hello) Tj ET"
 	marked := fmt.Sprintf("/Span <</Lang (%s)>> BDC\n%s\nEMC\n", tag, body)
@@ -87,8 +91,14 @@ func runMarkedLangFix(t *testing.T, tag string, named bool, profile string) (str
 //
 // A /Lang may be given inline on BDC (ISO 32000-1, 14.6.2) and the language
 // identifier rules of 14.9.2 reach it. The repair only walked the structure
-// tree, so PDF_UA-1__7.2-t29-fail-g through -p came out of remediation still
-// carrying tags like "-pt", which litho and veraPDF both keep reporting.
+// tree, so such tags survived remediation and litho and veraPDF both kept
+// reporting them.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.2-t29-fail-g through -p: came out of remediation
+//     still carrying tags like "-pt", which litho and veraPDF both keep
+//     reporting.
 func TestFixLangStripsAnInlineMarkedContentTag(t *testing.T) {
 	t.Parallel()
 

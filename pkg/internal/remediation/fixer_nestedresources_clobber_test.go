@@ -28,9 +28,11 @@ func type3FontSharingPageResourcesPDF() []byte {
 	)
 }
 
-// The registry drives every fixer against ONE allocator with no flush between
-// them, so a fixer that rewrites a whole dictionary must read it through the
-// allocator or it discards what the fixers before it wrote to the same object.
+// TestFixNestedResources_KeepsAPeerFixersPendingFontWrite pins that the Type 3
+// font repair reads the font dictionary through the allocator. The registry
+// drives every fixer against ONE allocator with no flush between them, so a
+// fixer that rewrites a whole dictionary must read it through the allocator or
+// it discards what the fixers before it wrote to the same object.
 //
 // nested-resources (registry 131) rewrites the Type 3 FONT dictionary, and it
 // runs after cid-gidmap (110), font-keys (111) and tounicode-ranges (114),

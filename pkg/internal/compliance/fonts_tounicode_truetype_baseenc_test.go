@@ -15,11 +15,16 @@ import (
 //
 // ISO 19005-2, 6.2.11.7.2, ISO 14289-1, 7.21.7 and ISO 14289-2, 8.4.5.8 ask the
 // same question, and veraPDF answers it the same way in every flavour
-// (Glyph.toUnicode != null). pdfjs bug1727053.pdf is the corpus case: an
-// embedded Arial,Bold showing 27 codes, 23 of them named by the implicit
-// StandardEncoding base rather than by its 88-entry /Differences. veraPDF
-// passes all 27; litho reported the font at PDF/A-2u, 2a, 3a and 3u while
-// staying silent at PDF/UA-1 and UA-2.
+// (Glyph.toUnicode != null).
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1727053.pdf: an embedded Arial,Bold showing 27 codes, 23 of
+//     them named by the implicit StandardEncoding base rather than by its
+//     88-entry /Differences. veraPDF passes all 27; litho reported the font at
+//     PDF/A-2u, 2a, 3a and 3u while staying silent at PDF/UA-1 and UA-2.
+//   - govdocs: the unembedded control has the shape of the 16 files the
+//     /Encoding dictionary restriction protects.
 func TestToUnicodeTrueTypeBaseEncodingNamesTheRest(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -63,7 +68,7 @@ func TestToUnicodeTrueTypeBaseEncodingNamesTheRest(t *testing.T) {
 				t.Errorf("an embedded TrueType whose base encoding names the rest needs no /ToUnicode, got %v", got)
 			}
 			// Without a program there is no base encoding to earn, which is the
-			// shape of the 16 govdocs files the restriction protects.
+			// shape the restriction protects.
 			if got := build(t, profile, "", used(65, 66)); len(got) == 0 {
 				t.Error("an unembedded TrueType must still require /ToUnicode for a code /Differences does not name")
 			}

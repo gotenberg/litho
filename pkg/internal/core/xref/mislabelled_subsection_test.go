@@ -16,7 +16,11 @@ import (
 // ISO 32000-1, 7.5.4 gives offset 0 with generation 65535 to object 0 and only
 // object 0, so such a subsection has labelled every entry one too high: each
 // object maps onto its predecessor's bytes and the real object 1 reads as free.
-// pdfjs issue7229.pdf does this, and it cost page 1 its only image.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7229.pdf: labels its first subsection this way, and it cost
+//     page 1 its only image.
 func TestParseXRefTable_MislabelledFirstSubsection(t *testing.T) {
 	table := "xref\r1 4\r" +
 		"0000000000 65535 f \r" +

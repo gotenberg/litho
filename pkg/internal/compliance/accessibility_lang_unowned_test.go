@@ -13,10 +13,13 @@ import (
 // so text outside every marked-content sequence, or inside one with no /MCID,
 // went unexamined whenever a structure tree existed. veraPDF resolves every
 // SETextItem through the marked content around it and reports it when nothing
-// there names a language: pdfjs issue16176.pdf shows a Tj outside every
-// sequence, bug1755507.pdf three inside a /Part with no /MCID, and on a
-// one-page fixture veraPDF reports artifact text the same way. A /Lang on the
-// enclosing sequence covers the text.
+// there names a language, and on a one-page fixture veraPDF reports artifact
+// text the same way. A /Lang on the enclosing sequence covers the text.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16176.pdf: shows a Tj outside every marked-content sequence.
+//   - pdfjs bug1755507.pdf: shows three Tj inside a /Part with no /MCID.
 func TestCheckLangRequired_TextNoElementOwns(t *testing.T) {
 	t.Parallel()
 

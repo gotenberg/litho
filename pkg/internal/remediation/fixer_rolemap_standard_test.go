@@ -10,14 +10,19 @@ import (
 // TestFixRoleMapDropsAStandardTypeFromACycle pins that a standard structure
 // type caught in a role-map cycle is dropped, never redirected.
 //
-// PDF_UA-2__8.2.4-t02-fail-a maps /LI to itself. Breaking that by pointing it at
-// /P remapped a standard type, which ISO 14289-1, 7.1 test 7 forbids outright
-// and litho itself reports, and it turned every list item into a paragraph: the
-// remediated file then had <L> containing <P> and <P> containing <LBody>, three
-// findings veraPDF confirmed on litho's own output.
+// Breaking a self-mapping such as /LI -> /LI by pointing it at /P remaps a
+// standard type, which ISO 14289-1, 7.1 test 7 forbids outright and litho
+// itself reports, and it turns every list item into a paragraph.
 //
 // Nothing is left dangling by the drop: a chain aimed at /LI now ends on the
 // standard name itself, which is where it should end.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-2__8.2.4-t02-fail-a: maps /LI to itself, and pointing it
+//     at /P left the remediated file with <L> containing <P> and <P>
+//     containing <LBody>, three findings veraPDF confirmed on litho's own
+//     output.
 func TestFixRoleMapDropsAStandardTypeFromACycle(t *testing.T) {
 	t.Parallel()
 

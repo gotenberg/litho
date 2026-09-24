@@ -37,13 +37,17 @@ func fixMarkedContentLang(ctx context.Context, alloc *writer.ObjAllocator, doc *
 // A /Lang may be given inline on a BDC operator (ISO 32000-1, 14.6.2), and the
 // language identifier rules of 14.9.2 apply there just as they do on a
 // structure element. The structure-tree repair could not reach those: the
-// property list lives in the content stream, not in an object, so
-// PDF_UA-1__7.2-t29-fail-g through -p came out of remediation still carrying
-// tags like "-pt" and "1-pt".
+// property list lives in the content stream, not in an object, so such tags
+// survived remediation.
 //
 // Removing the entry is the repair, exactly as for a structure element: the
 // span then inherits the document language rather than declaring an
 // unusable one. Nothing is painted by BDC, so no visible content changes.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.2-t29-fail-g through -p: came out of remediation
+//     still carrying tags like "-pt" and "1-pt" before this repair.
 func repairMarkedContentLangs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, requireDeclared bool) int {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {

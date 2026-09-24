@@ -276,9 +276,13 @@ func isValidFontFileSubtype(part int, subtype string) bool {
 // ISO 32000-1, 9.6.2.2 makes /FirstChar, /LastChar, /Widths and /FontDescriptor
 // all present or all absent for exactly that reason. Embedding a program leaves
 // the shorthand behind: the font now carries its own glyphs, so it owes its own
-// metrics, and veraPDF's isStandard is false for it. pdfjs
-// issue11150_reduced.pdf names /Symbol and embeds a /FontFile while declaring
-// none of the three, and veraPDF reports all of t4, t5 and t6.
+// metrics, and veraPDF's isStandard is false for it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11150_reduced.pdf: names /Symbol and embeds a /FontFile while
+//     declaring none of /FirstChar, /LastChar and /Widths, and veraPDF reports
+//     all of t4, t5 and t6.
 func embedsFontProgram(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
 	if fd == nil {
@@ -348,6 +352,12 @@ func checkSimpleFontRequiredKeys(ctx context.Context, doc *document.Document, fo
 // Type 3 font (t3). Every part carries t3, stated as
 // "Subtype == Type3 || fontName != null": ISO 19005-1 6.3.2 t3, ISO 19005-2 and
 // -3 6.2.11.2 t3, ISO 19005-4 6.2.10.2 t3.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue1350.pdf: writes both its fonts as
+//     /BaseFont<feff004100410043...>, a UTF-16BE hex string, and veraPDF
+//     reports each one with the font itself resolved to null.
 func checkFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, subtype string, part int) []Violation {
 	if part == 0 {
 		return nil
@@ -379,9 +389,8 @@ func checkFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict
 		// ISO 32000-1, 9.6.2, Table 111 types /BaseFont as a name, and the test
 		// every part states is "fontName != null", not "the key is present". A
 		// value of any other type names no font, so it fails exactly as a
-		// missing entry does: pdfjs issue1350.pdf writes both its fonts as
-		// /BaseFont<feff004100410043...>, a UTF-16BE hex string, and veraPDF
-		// reports each one with the font itself resolved to null.
+		// missing entry does, and veraPDF reports such a font as resolved to
+		// null.
 		baseFont, present := fontDict["BaseFont"]
 		_, nameErr := document.ResolveName(ctx, doc, baseFont)
 		if !present || nameErr != nil {
@@ -512,11 +521,20 @@ func isFontEmbedded(ctx context.Context, doc *document.Document, fd ast.PdfDict,
 // embedded (ISO 19005-2, 6.2.11.4.1 t1; ISO 14289-2, 8.4.5.5.1 t1).
 //
 // Measured against veraPDF 1.30.2, moving the same program bytes between
-// declarations: a /Type1 font fails an sfnt under "Type1C" (pdfjs
-// issue7598.pdf embeds an OTTO) and passes a bare CFF; a /CIDFontType0 fails an
-// OTTO under "CIDFontType0C" (issue20426.pdf, issue6782.pdf) and passes the same
-// bytes under "OpenType"; a /TrueType font passes an sfnt under "Type1C"
-// (issue4668.pdf) and fails a bare CFF there.
+// declarations: a /Type1 font fails an sfnt under "Type1C" and passes a bare
+// CFF; a /CIDFontType0 fails an OTTO under "CIDFontType0C" and passes the same
+// bytes under "OpenType"; a /TrueType font passes an sfnt under "Type1C" and
+// fails a bare CFF there.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7598.pdf: embeds an OTTO under "Type1C" in a /Type1 font, the
+//     source of the /Type1 measurement.
+//   - pdfjs issue20426.pdf, issue6782.pdf: embed an OTTO under
+//     "CIDFontType0C" in a /CIDFontType0, the source of the /CIDFontType0
+//     measurement.
+//   - pdfjs issue4668.pdf: embeds an sfnt under "Type1C" in a /TrueType font,
+//     the source of the /TrueType measurement.
 func fontFile3ParsesForFont(ctx context.Context, doc *document.Document, fontSub, declared string, obj ast.PdfObject, stream ast.PdfStream) bool {
 	data, err := decodeFontProgram(ctx, doc, obj, stream)
 	if err != nil || len(data) == 0 {
@@ -540,14 +558,18 @@ func fontFile3ParsesForFont(ctx context.Context, doc *document.Document, fontSub
 // font-program cache when the stream is reached through an indirect reference.
 //
 // The font rules re-read the same embedded program for every page that declares
-// the font, and inflating it is far from free: on one 4 MB government document
-// the program decode ran 11248 times over 66 distinct streams and accounted for
-// roughly three quarters of the whole validation. A direct stream is not
+// the font, and inflating it is far from free. A direct stream is not
 // cacheable, having no object number to key on, and is not shared between pages
 // anyway.
 //
 // The returned slice is shared with every other caller and must not be
 // modified. All callers pass it to a parser that only reads it.
+//
+// # Corpus evidence
+//
+//   - govdocs: on one 4 MB government document the program decode ran 11248
+//     times over 66 distinct streams and accounted for roughly three quarters
+//     of the whole validation.
 func decodeFontProgram(ctx context.Context, doc *document.Document, obj ast.PdfObject, stream ast.PdfStream) ([]byte, error) {
 	ref, indirect := obj.(ast.PdfIndirectRef)
 	if indirect {
@@ -579,10 +601,15 @@ func decodeFontProgram(ctx context.Context, doc *document.Document, obj ast.PdfO
 // data is corrupt, or whose check fails, and reports
 // the font as not embedded (ISO 19005-2, 6.2.11.4.1 t1), then skips the rules
 // that need the program, the /CIDToGIDMap one (6.2.11.3.2 t1) among them. A
-// stream that merely ends early still embeds its glyphs for veraPDF. Measured on
-// pdfjs issue11651.pdf (invalid distance), on a /FontFile2 with one deflate byte
-// flipped (a failed check) and on one cut 40 bytes short. inflated bounds the
-// strict pass: the damage lies within the bytes the filter already produced.
+// stream that merely ends early still embeds its glyphs for veraPDF. Measured
+// on a /FontFile2 with one deflate byte flipped (a failed check) and on one cut
+// 40 bytes short. inflated bounds the strict pass: the damage lies within the
+// bytes the filter already produced.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11651.pdf: deflate data with an invalid distance, measured
+//     alongside the two constructed programs.
 func deflateDataCorrupt(ctx context.Context, doc *document.Document, stream ast.PdfStream, inflated int) bool {
 	filter := stream.Dict["Filter"]
 	if arr, err := document.ResolveArray(ctx, doc, filter); err == nil && len(arr) == 1 {
@@ -617,19 +644,29 @@ func deflateDataCorrupt(ctx context.Context, doc *document.Document, stream ast.
 // Only container-level mistakes are judged, never the program's internal
 // consistency: a truncated but well-formed program still embeds glyphs, and
 // deciding otherwise would turn every parser difference into a false positive.
+//
+// # Corpus evidence
+//
+//   - pdfjs poppler-395-0-fuzzed.pdf: carries a /FontFile2 with corrupt
+//     ASCIIHex data that veraPDF passes as embedded.
+//   - pdfjs bug866395.pdf: carries an empty /FontFile3.
+//   - pdfjs bug860632.pdf, issue14462_reduced.pdf: embed a PFB container as
+//     /FontFile.
+//   - pdfjs issue13193.pdf, issue9262_reduced.pdf: embed a TrueType
+//     Collection as /FontFile2.
+//   - pdfjs issue4668.pdf: declares /Type1C over a TrueType sfnt, and veraPDF
+//     reports it embedded. Enforcing the /Subtype would fail it.
 func streamHoldsFontProgram(ctx context.Context, doc *document.Document, key ast.PdfName, obj ast.PdfObject, stream ast.PdfStream) bool {
 	data, err := decodeFontProgram(ctx, doc, obj, stream)
 	if err != nil {
 		// A program whose bytes will not decode says nothing about which
-		// container it holds, and veraPDF still counts the font as embedded:
-		// pdfjs poppler-395-0-fuzzed.pdf carries a /FontFile2 with corrupt
-		// ASCIIHex data that it passes. Leave it embedded rather than guess.
+		// container it holds, and veraPDF still counts the font as embedded.
+		// Leave it embedded rather than guess.
 		doc.Logger.Debug("compliance: fonts: font program will not decode",
 			"key", key, "error", err)
 		return true
 	}
 	if len(data) == 0 {
-		// pdfjs bug866395.pdf carries an empty /FontFile3.
 		return false
 	}
 
@@ -638,14 +675,12 @@ func streamHoldsFontProgram(ctx context.Context, doc *document.Document, key ast
 		// A Type 1 program is the clear, encrypted and fixed portions measured
 		// by /Length1, /Length2 and /Length3 (ISO 32000-1 §9.9.1). The PFB
 		// container wraps those in 6-byte segment headers starting 0x80 0x01,
-		// which is a different file format: pdfjs bug860632.pdf and
-		// issue14462_reduced.pdf embed one.
+		// which is a different file format.
 		return !bytes.HasPrefix(data, []byte{0x80, 0x01})
 	case "FontFile2":
 		// A TrueType program is an sfnt. "ttcf" is a TrueType Collection, which
 		// holds several fonts and names none of them, so it is not the single
-		// program Table 126 asks for: pdfjs issue13193.pdf and
-		// issue9262_reduced.pdf embed one.
+		// program Table 126 asks for.
 		return isSfntFontProgram(data)
 	case "FontFile3":
 		// Every format /FontFile3 may name is one of two containers: a bare CFF
@@ -654,12 +689,12 @@ func streamHoldsFontProgram(ctx context.Context, doc *document.Document, key ast
 		// container at all, so they embed nothing.
 		//
 		// Which of the two the /Subtype names is deliberately not enforced.
-		// pdfjs issue4668.pdf declares /Type1C over a TrueType sfnt and veraPDF
-		// reports it embedded, because its verdict is whether its own parser
-		// succeeded (GFPDFont.getcontainsFontFile returns getFontProgram() !=
-		// null && fontProgramParsed), not which container the subtype named.
-		// Rejecting the mismatch would fail that file and every other producer
-		// that mislabels a program consumers still read.
+		// veraPDF reports a TrueType sfnt under /Type1C as embedded, because
+		// its verdict is whether its own parser succeeded
+		// (GFPDFont.getcontainsFontFile returns getFontProgram() != null &&
+		// fontProgramParsed), not which container the subtype named.
+		// Rejecting the mismatch would fail every producer that mislabels a
+		// program consumers still read.
 		return isCFFFontProgram(data) || isSfntFontProgram(data)
 	}
 	return true

@@ -97,9 +97,14 @@ func deleteEmbeddedFilesNameEntry(ctx context.Context, alloc *writer.ObjAllocato
 //
 // The scan is object-level rather than a walk down from the catalog because the
 // rule is keyed on the COS object (CosFileSpecification), and because a
-// specification carrying /EF is reachable through several containers. 18 of the
-// corpus cells report t1 with no /Names/EmbeddedFiles tree at all, so deleting
-// that tree cannot be the whole repair.
+// specification carrying /EF is reachable through several containers. A file
+// can report t1 with no /Names/EmbeddedFiles tree at all, so deleting that tree
+// cannot be the whole repair.
+//
+// # Corpus evidence
+//
+//   - All corpora: 18 of the cells report t1 with no /Names/EmbeddedFiles tree
+//     at all.
 func stripEFFromFileSpecs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) int {
 	count := 0
 	for objNum, entry := range doc.Index.Entries {

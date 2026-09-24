@@ -21,10 +21,16 @@ const maxStructTreeDepth = 64
 // A structure element names the page its content sits on in /Pg (ISO 32000-1,
 // 14.7.2, Table 323), so an element left behind both describes a page the
 // document no longer has and, because the rewrite copies whatever the catalog
-// reaches, keeps that page and its content stream in the output. Deleting page 1
-// of govdocs thread_400_400912.pdf carried the page along with 17204 bytes of
-// its content, held there by the structure tree alone once /OpenAction and the
-// form field tree had let go.
+// reaches, keeps that page and its content stream in the output.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400912.pdf: deleting page 1 carried the page along
+//     with 17204 bytes of its content, held there by the structure tree alone
+//     once /OpenAction and the form field tree had let go.
+//   - govdocs thread_000_000761.pdf: storing the returned reference again after
+//     its /K array was rewritten in place wrote the reference as the array
+//     object, which cost the file its whole structure tree.
 func pruneStructTree(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -45,8 +51,8 @@ func pruneStructTree(
 	if kids.Changed {
 		changed = true
 		// A queued /K array was already rewritten in place; storing the returned
-		// reference again would write the reference AS the array object, which
-		// cost thread_000_000761.pdf its whole structure tree.
+		// reference again would write the reference AS the array object and
+		// lose the whole structure tree.
 		if !kids.Queued {
 			newRoot["K"] = kids.Value
 		}
@@ -62,7 +68,7 @@ func pruneStructTree(
 	// Either walk stopping short leaves elements naming a removed page, and the
 	// rewrite copies whatever the catalog reaches, so the page and its content
 	// would ship inside a document reporting one fewer page. Refuse: the error
-	// reaches [writer] before anything is written, so the caller gets no file
+	// reaches the writer before anything is written, so the caller gets no file
 	// rather than a half-pruned one. Pruning /K alone is not enough either, which
 	// is why /ParentTree counts here too.
 	if kids.Truncated || tree.Truncated {
@@ -92,7 +98,12 @@ func onRemovedPage(dict ast.PdfDict, removed map[int]bool) bool {
 // that was rewritten in place, so the owning element keeps its reference
 // untouched, from the case where the owner must store Value. Conflating the two
 // left a dropped single kid still referenced by its parent, and with it the page
-// it named: govdocs thread_000_000761.pdf kept 2196 bytes that way.
+// it named.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_000_000761.pdf: kept 2196 bytes of the deleted page
+//     through a dropped single kid its parent still referenced.
 type structKidsResult struct {
 	Value     ast.PdfObject
 	Changed   bool
@@ -197,8 +208,14 @@ func pruneStructKidsAt(
 	return structKidsResult{Value: kept, Changed: true, Survivors: len(kept)}
 }
 
-// pruneStructKid decides the fate of one kid of a structure element, reporting
-// whether it must be dropped and whether it was rewritten in place.
+// pruneStructKidAt decides the fate of one kid of a structure element,
+// reporting whether it must be dropped and whether it was rewritten in place.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100587.pdf: reading only an /OBJR's own /Pg kept one
+//     naming a link annotation on the deleted page, and through the link's
+//     /GoTo the page itself.
 func pruneStructKidAt(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -222,9 +239,9 @@ func pruneStructKidAt(
 	// A marked-content or object reference has no descendants to save. Its /Pg is
 	// optional (ISO 32000-1, Tables 324 and 325) and defaults to the owning
 	// element's page, so one without it dies with that page exactly as a bare
-	// marked-content identifier does. Reading only its own /Pg kept an /OBJR
-	// naming a link annotation on the deleted page of govdocs
-	// thread_100_100587.pdf, and through the link's /GoTo the page itself.
+	// marked-content identifier does. Reading only its own /Pg would keep an
+	// /OBJR naming a link annotation on the deleted page, and through the
+	// link's /GoTo the page itself.
 	if kind, _ := dict["Type"].(ast.PdfName); kind == "MCR" || kind == "OBJR" {
 		if _, hasOwnPage := dict["Pg"]; !hasOwnPage {
 			return ownerOnRemovedPage, false
@@ -234,7 +251,7 @@ func pruneStructKidAt(
 	return pruneStructElementAt(ctx, alloc, doc, kid, dict, removed, memo, depth, truncated)
 }
 
-// pruneStructElement filters one element's own /K and decides whether the
+// pruneStructElementAt filters one element's own /K and decides whether the
 // element itself survives.
 //
 // An element goes only when nothing of it is left: its page is removed and no
@@ -334,6 +351,12 @@ func pruneParentTree(
 // twice costs 2^64. The output does not change either way, since each kid is
 // written back at its own index, which is why this is a limit rather than a
 // repair.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18503.pdf: its /ParentTree and /Nums are both direct, and
+//     not storing the replacement for a direct node left the tree entirely
+//     unpruned: it was filtered and then thrown away.
 func pruneParentTreeAt(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -423,9 +446,7 @@ func pruneParentTreeAt(
 		return structKidsResult{Value: nodeObj}
 	}
 	// A direct node has no object of its own to rewrite, so the caller has to
-	// store the replacement. Missing that left pdfjs issue18503.pdf, whose
-	// /ParentTree and /Nums are both direct, entirely unpruned: the tree was
-	// filtered and then thrown away.
+	// store the replacement, or the filtered tree is thrown away.
 	if ref, isRef := nodeObj.(ast.PdfIndirectRef); isRef {
 		alloc.AllocAt(ref.ObjectNum, newNode)
 		return structKidsResult{Value: nodeObj, Changed: true, Queued: true}
@@ -476,11 +497,16 @@ func pruneParentTreeValue(
 //
 // The /K walk cannot reach these. A structure tree is meant to be symmetric, but
 // real files list an element in /ParentTree whose parent never lists it back in
-// /K (pdfjs issue18503.pdf), so the ancestor is reachable only upwards. It still
-// holds the page: the element survives, its /P is a live reference, and 22297
-// bytes of the deleted page came with it. The ancestor keeps its place and loses
-// only /Pg, which is optional (ISO 32000-1, Table 323) and named content that is
-// now gone.
+// /K, so the ancestor is reachable only upwards. It still holds the page: the
+// element survives and its /P is a live reference. The ancestor keeps its place
+// and loses only /Pg, which is optional (ISO 32000-1, Table 323) and named
+// content that is now gone.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18503.pdf: lists an element in /ParentTree whose parent never
+//     lists it back in /K, and 22297 bytes of the deleted page came along
+//     through that ancestor.
 func clearRemovedPgOnAncestors(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,

@@ -27,10 +27,14 @@ func formXObject(resources, body string) string {
 // TestCheckPatternFonts_UnembeddedFontInCell pins that a font reached only
 // through a tiling pattern's cell is checked. A coloured tiling pattern
 // (ISO 32000-1, 8.7.3.3) paints its cell with a content stream of its own, and
-// veraPDF descends into it from the scn or SCN that selects it: pdfjs
-// issue15716.pdf fills a rectangle with a pattern whose cell shows a glyph from
-// an unembedded ZapfDingbats, which veraPDF reports under ISO 19005-2,
-// 6.2.11.4.1 t1. Every case was measured against veraPDF.
+// veraPDF descends into it from the scn or SCN that selects it. Every case was
+// measured against veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue15716.pdf: fills a rectangle with a pattern whose cell shows
+//     a glyph from an unembedded ZapfDingbats, which veraPDF reports under ISO
+//     19005-2, 6.2.11.4.1 t1.
 func TestCheckPatternFonts_UnembeddedFontInCell(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

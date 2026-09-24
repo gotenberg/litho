@@ -37,20 +37,21 @@ func resolveName(ctx context.Context, doc *document.Document, dict ast.PdfDict, 
 	return string(val), nil
 }
 
-// resolveColorSpace extracts the /ColorSpace from an image XObject dictionary
-// and maps it to a usable base color space name. PDF color spaces can be a
-// simple /Name or a complex array (e.g. [/ICCBased stream], [/Indexed base ...]).
 // iccBasedSpace returns the device space an [/ICCBased stream] array stands for.
 //
 // Per ISO 32000-1, 8.6.5.5, Table 66, the stream's /N gives the number of
 // components and shall be 1, 3 or 4, matching DeviceGray, DeviceRGB and
 // DeviceCMYK; /Alternate names the space to substitute when the profile cannot
-// be used. Answering DeviceRGB for every ICCBased space mislabelled the CMYK
-// images in pdfjs issue11052.pdf, and the answer is not cosmetic: the decoder
-// switches on it, so a four-component image was read three bytes to the pixel.
+// be used. Answering DeviceRGB for every ICCBased space mislabelled CMYK
+// images, and the answer is not cosmetic: the decoder switches on it, so a
+// four-component image was read three bytes to the pixel.
 //
 // An array that states neither keeps the old DeviceRGB answer, which is the
 // most common profile and what a caller can do least harm with.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11052.pdf: its CMYK images were mislabelled DeviceRGB.
 func iccBasedSpace(ctx context.Context, doc *document.Document, cs ast.PdfArray) string {
 	if len(cs) < 2 {
 		return "DeviceRGB"
@@ -102,6 +103,9 @@ func iccBasedSpace(ctx context.Context, doc *document.Document, cs ast.PdfArray)
 	return "DeviceRGB"
 }
 
+// resolveColorSpace extracts the /ColorSpace from an image XObject dictionary
+// and maps it to a usable base color space name. PDF color spaces can be a
+// simple /Name or a complex array (e.g. [/ICCBased stream], [/Indexed base ...]).
 func resolveColorSpace(ctx context.Context, doc *document.Document, dict ast.PdfDict) string {
 	csObj, ok := dict["ColorSpace"]
 	if !ok {

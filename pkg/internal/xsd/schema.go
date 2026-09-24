@@ -44,7 +44,7 @@ type Schema struct {
 	Elements map[QName]*Element
 	// Types indexes top-level xs:complexType and xs:simpleType
 	// declarations by their fully qualified name. Built-in types from
-	// [BuiltinTypes] are pre-populated so references to xs:string and
+	// [builtinNames] are pre-populated so references to xs:string and
 	// the like resolve without a second lookup table.
 	Types map[QName]Type
 	// Imports indexes loaded imported schemas by their target
@@ -85,9 +85,9 @@ const maxTypeDerivationDepth = 64
 
 // BuiltinType is the marker representation of an XS-namespace
 // primitive (xs:string, xs:int, xs:date, ...). The loader populates a
-// stub instance for each known built-in in [BuiltinTypes]. PR2 will
-// attach facet implementations and lexical-space validators; until
-// then the type exists only so element type references can resolve.
+// stub instance for each known built-in in [builtinNames]. The type
+// carries no behaviour of its own: [validateLexical] dispatches on its
+// name, and [ValidateValue] applies the facets a restriction adds.
 type BuiltinType struct {
 	Name QName
 }
@@ -229,7 +229,7 @@ type Wildcard struct {
 }
 
 // Facet is the closed sum of xs:restriction facet kinds the loader
-// recognises. PR2 attaches value-validation logic to each.
+// recognises. [ValidateValue] applies each kind to a value.
 type Facet interface{ isFacet() }
 
 // Pattern matches xs:pattern.
@@ -240,22 +240,31 @@ type Pattern struct{ Value string }
 // in source order so callers can render allow-lists in error context.
 type Enumeration struct{ Value string }
 
-// Length, MinLength, MaxLength match xs:length / xs:minLength /
-// xs:maxLength.
+// The length facets match xs:length, xs:minLength and xs:maxLength.
 type (
-	Length    struct{ Value int }
+	// Length matches xs:length.
+	Length struct{ Value int }
+	// MinLength matches xs:minLength.
 	MinLength struct{ Value int }
+	// MaxLength matches xs:maxLength.
 	MaxLength struct{ Value int }
 )
 
-// MinInclusive, MaxInclusive, MinExclusive, MaxExclusive match the
-// xs:*Inclusive / xs:*Exclusive numeric and date range facets. The
-// value is kept as the raw lexical form parsed off the XSD; PR2
-// converts to typed comparators per the simpleType's base.
+// The range facets match the xs:*Inclusive / xs:*Exclusive numeric and
+// date range facets. Each value is kept as the raw lexical form parsed
+// off the XSD, and [ValidateValue] compares the value and the bound as
+// decimals whatever the simpleType's base.
+//
+// TODO: convert range facet values to typed comparators per the
+// simpleType's base, so a date range compares as dates.
 type (
+	// MinInclusive matches xs:minInclusive.
 	MinInclusive struct{ Value string }
+	// MaxInclusive matches xs:maxInclusive.
 	MaxInclusive struct{ Value string }
+	// MinExclusive matches xs:minExclusive.
 	MinExclusive struct{ Value string }
+	// MaxExclusive matches xs:maxExclusive.
 	MaxExclusive struct{ Value string }
 )
 

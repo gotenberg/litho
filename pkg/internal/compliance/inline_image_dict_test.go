@@ -11,8 +11,11 @@ import (
 // TestExtractInlineImageFilters pins how an inline image dictionary's filters
 // are read: a ']' glued to the last name ends the array, a comment hides what
 // it holds (ISO 32000-1, 7.2.4), and the abbreviation /F decides over /Filter
-// whichever comes first, as veraPDF reads them. pdfjs issue14256.pdf writes
-// every one of these.
+// whichever comes first, as veraPDF reads them.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14256.pdf: writes every one of these.
 func TestExtractInlineImageFilters(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {

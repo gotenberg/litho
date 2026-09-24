@@ -180,10 +180,14 @@ func reportWriter(outputPath string, stdout, stderr io.Writer) io.Writer {
 // that fails partway leaves a short or empty file exactly where the caller
 // asked for the result, over the top of whatever was there before. A user who
 // checks the exit code is safe, but the file on disk is not a PDF and looks
-// like one: `litho flatten-form -o out.pdf` on pdfjs issue19484_1.pdf, whose
-// object stream will not inflate, left a zero-byte out.pdf behind.
+// like one.
 //
 // Writing to stdout removes nothing, since there is no file to withdraw.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue19484_1.pdf: its object stream will not inflate, and
+//     `litho flatten-form -o out.pdf` on it left a zero-byte out.pdf behind.
 func abandonOutput(path string, closeDst func() error) {
 	if closeDst != nil {
 		closeDst() //nolint:errcheck // already returning an error; a close failure would mask its cause
@@ -259,7 +263,7 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 	defer closer()
 
 	// None of these commands has an encryption flag, so none can ever be
-	// encrypting. decrypt opts out: see [withoutEncryptionWarning].
+	// encrypting. decrypt opts out: see withoutEncryptionWarning.
 	if !cmdCfg.skipEncryptionWarning {
 		warnEncryptionDropped(stderr, false, r)
 	}

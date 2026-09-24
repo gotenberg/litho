@@ -75,9 +75,13 @@ func repairedCIDFont(t *testing.T, data []byte) (ast.PdfDict, []string) {
 //
 // /DW is the width every CID outside /W is drawn with, which is exactly the set
 // a viewer renders as .notdef, so ISO 19005-2, 6.2.11.5 holds it to the
-// program's glyph 0 advance. The repair only ever rewrote /W, so
-// 6-2-11-4-1-t02-fail-e reported ".notdef glyph width mismatch (declared=1000.0,
-// font=545.4)" with "Fixed: 0" on every pass.
+// program's glyph 0 advance. The repair only ever rewrote /W, so a .notdef
+// width mismatch was reported with "Fixed: 0" on every pass.
+//
+// # Corpus evidence
+//
+//   - verapdf 6-2-11-4-1-t02-fail-e: reported ".notdef glyph width mismatch
+//     (declared=1000.0, font=545.4)" with "Fixed: 0" on every pass.
 func TestFixType0FontCorrectsTheDefaultWidth(t *testing.T) {
 	t.Parallel()
 

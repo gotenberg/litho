@@ -12,9 +12,13 @@ import (
 //
 // The rule compares /CharSet against the whole embedded program, which no
 // page's codes enter into, so it belongs with the dictionary rules for the same
-// reason the glyph-width comparison does. govdocs thread_300_300511.pdf selects
-// NSNPEK+CMR12 from 31 pages and litho reported its missing glyph "O" 31 times,
-// where veraPDF states it once against the font.
+// reason the glyph-width comparison does.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_300_300511.pdf: selects NSNPEK+CMR12 from 31 pages, and
+//     litho reported its missing glyph "O" 31 times, where veraPDF states it
+//     once against the font.
 func TestCharSetCompletenessJudgedOncePerFont(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

@@ -2,6 +2,8 @@ package compliance
 
 import "testing"
 
+// TestPDFAPart pins the part number [PDFAPart] returns for each profile
+// identifier.
 func TestPDFAPart(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -36,6 +38,8 @@ func TestPDFAPart(t *testing.T) {
 	}
 }
 
+// TestPDFALevel pins the level byte [PDFALevel] returns for each profile
+// identifier.
 func TestPDFALevel(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -60,6 +64,8 @@ func TestPDFALevel(t *testing.T) {
 	}
 }
 
+// TestPDFAConformance pins the conformance letter [PDFAConformance] returns
+// for each profile identifier.
 func TestPDFAConformance(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -89,6 +95,7 @@ func TestPDFAConformance(t *testing.T) {
 	}
 }
 
+// TestIsPDFA pins which profile identifiers [IsPDFA] recognises.
 func TestIsPDFA(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -114,6 +121,7 @@ func TestIsPDFA(t *testing.T) {
 	}
 }
 
+// TestIsPDFUA pins which profile identifiers [IsPDFUA] recognises.
 func TestIsPDFUA(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -146,6 +154,8 @@ func TestIsPDFUA(t *testing.T) {
 	}
 }
 
+// TestPDFUAPart pins the part number [PDFUAPart] returns for each profile
+// identifier.
 func TestPDFUAPart(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -172,6 +182,8 @@ func TestPDFUAPart(t *testing.T) {
 	}
 }
 
+// TestRequiresUnicodeMapping pins which PDF/A profiles
+// [RequiresUnicodeMapping] holds to Unicode mapping.
 func TestRequiresUnicodeMapping(t *testing.T) {
 	tests := []struct {
 		profile string
@@ -208,6 +220,8 @@ func TestRequiresUnicodeMapping(t *testing.T) {
 	}
 }
 
+// TestConformanceSatisfies pins which XMP conformance claims
+// [ConformanceSatisfies] accepts for each profile level.
 func TestConformanceSatisfies(t *testing.T) {
 	tests := []struct {
 		name    string

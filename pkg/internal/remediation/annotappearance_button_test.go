@@ -12,8 +12,12 @@ import (
 )
 
 // buttonWidgetPDF builds a page with one widget whose field type lives on its
-// parent field, the way every button in govdocs thread_400_400580.pdf does.
-// annotExtra and parentFT let a caller move /FT or add /AS.
+// parent field. annotExtra and parentFT let a caller move /FT or add /AS.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400580.pdf: every button carries its field type on
+//     its parent field, the shape this fixture reproduces.
 func buttonWidgetPDF(annotExtra, parentFT string) []byte {
 	appearance := "q 1 0 0 RG 0 0 20 20 re S Q"
 
@@ -66,8 +70,14 @@ func fixedAnnot(t *testing.T, data []byte) ast.PdfDict {
 //
 // /FT is inheritable (ISO 32000-1, 12.7.3.1). Reading it off the annotation
 // alone left /AP /N as a stream where ISO 19005-2, 6.3.3 test 3 requires a
-// subdictionary, so govdocs thread_400_400580.pdf came out of remediation
-// newly failing that rule, which veraPDF confirmed on the output.
+// subdictionary, so a button inheriting its type came out of remediation
+// newly failing that rule.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400580.pdf: came out of remediation newly failing
+//     ISO 19005-2, 6.3.3 test 3 while /FT was read off the annotation alone,
+//     which veraPDF confirmed on the output.
 func TestAnnotAppearanceWrapsAButtonWhoseTypeIsInherited(t *testing.T) {
 	t.Parallel()
 

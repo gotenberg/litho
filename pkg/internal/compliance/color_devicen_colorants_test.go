@@ -10,8 +10,12 @@ import (
 // DeviceN arrays are structurally valid.
 const tintTransformObj = "<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0] /C1 [1 1 1] /N 1 >>"
 
-// deviceNRGB is the construct in the PDF.js fixture devicen.pdf: a DeviceN
-// naming the additive primaries with no /Attributes at all.
+// deviceNRGB is a DeviceN naming the additive primaries with no /Attributes at
+// all.
+//
+// # Corpus evidence
+//
+//   - pdfjs devicen.pdf: carries this construct.
 const deviceNRGB = "[/DeviceN [/Red /Green /Blue] /DeviceRGB 6 0 R]"
 
 // deviceNResourcePDF builds a one-page PDF whose /Resources/ColorSpace declares
@@ -51,7 +55,12 @@ func deviceNImagePDF(csObj string) []byte {
 // Blue are spot colorants for ISO 19005-2 §6.2.4.4 t1. Only the four DeviceCMYK
 // process colorants of ISO 32000-1 §8.6.6.4 are exempt; veraPDF's PDDeviceN
 // model uses that same four-name set. litho previously exempted the additive
-// primaries too and stayed silent on PDF.js's devicen.pdf, where veraPDF fires.
+// primaries too.
+//
+// # Corpus evidence
+//
+//   - pdfjs devicen.pdf: litho stayed silent while it exempted the additive
+//     primaries, and veraPDF fires.
 func TestDeviceNColorants_AdditiveNamesAreSpotColours(t *testing.T) {
 	t.Parallel()
 	data := deviceNResourcePDF(deviceNRGB)
@@ -61,10 +70,14 @@ func TestDeviceNColorants_AdditiveNamesAreSpotColours(t *testing.T) {
 }
 
 // TestDeviceNColorants_ImageXObjectColorSpace pins that a DeviceN reached only
-// as the /ColorSpace of an image XObject is checked. This is the construct in
-// PDF.js's colorspace_atan/cos/sin.pdf, where veraPDF reports at
-// .../xObject[0](4 0 obj PDXImage)/imageCS[0](6 0 obj PDDeviceN). litho used to
-// scan /Resources/ColorSpace only and missed it.
+// as the /ColorSpace of an image XObject is checked. litho used to scan
+// /Resources/ColorSpace only and missed it.
+//
+// # Corpus evidence
+//
+//   - pdfjs colorspace_atan.pdf, colorspace_cos.pdf, colorspace_sin.pdf: carry
+//     this construct, where veraPDF reports at
+//     .../xObject[0](4 0 obj PDXImage)/imageCS[0](6 0 obj PDDeviceN).
 func TestDeviceNColorants_ImageXObjectColorSpace(t *testing.T) {
 	t.Parallel()
 	data := deviceNImagePDF("[/DeviceN [/X /Y /Z] /DeviceRGB 6 0 R]")

@@ -234,11 +234,11 @@ func resolveXMPStream(ctx context.Context, doc *document.Document, ref ast.PdfOb
 // Returns nil if no XMP metadata stream is present. The stream data is not
 // read until the caller invokes the returned function.
 func XMPOpen(ctx context.Context, doc *document.Document) (func(context.Context) (io.ReadCloser, error), error) {
-	// Resolved through [document.ResolveCatalog], which honours the trailer
+	// Resolved through document.ResolveCatalog, which honours the trailer
 	// /Root when it resolves to a catalog and recovers by scanning when it does
-	// not. Per ISO 32000-1 §7.5.5 Table 15 /Root shall be the catalog, so a file
+	// not. Per ISO 32000-1, 7.5.5, Table 15 /Root shall be the catalog, so a file
 	// pointing it elsewhere is malformed. Reading the raw /Root made
-	// [Reader.XMPMetadata] report no XMP on a document whose catalog carries a
+	// Reader.XMPMetadata report no XMP on a document whose catalog carries a
 	// valid /Metadata stream, while resolveXMPMetadata found that same packet
 	// through its object-pool fallback.
 	resolved, err := document.ResolveCatalog(ctx, doc)
@@ -294,7 +294,10 @@ func resolveInfoMetadata(ctx context.Context, doc *document.Document) map[string
 
 // Metadata extracts document-level metadata. It first reads the legacy /Info
 // dictionary, then overlays any XMP metadata from the catalog's /Metadata stream.
-// XMP values take precedence over /Info values, following the PDF 2.0 standard.
+// XMP fills the fields /Info lacks and overrides the rest, except that a
+// non-empty /Info value of a standard Info field (Title, Author, Subject,
+// Keywords, Creator, Producer, CreationDate, ModDate) wins over its XMP
+// counterpart.
 func Metadata(ctx context.Context, doc *document.Document) (map[string]string, error) {
 	info := resolveInfoMetadata(ctx, doc)
 	xmp := resolveXMPMetadata(ctx, doc)
@@ -353,21 +356,29 @@ func Metadata(ctx context.Context, doc *document.Document) (map[string]string, e
 // maxRawInfoScanBytes bounds the raw Info-field recovery scan. Anti-DoS guard,
 // not spec-mandated: the scan reads the WHOLE file into one buffer, so without
 // a ceiling a large document would cost its own size in memory on what looks
-// like a cheap metadata query. Measured: below this limit [Reader.Metadata]
+// like a cheap metadata query. Measured: below this limit Reader.Metadata
 // allocates about the file size (8 MiB file -> 8.4 MiB), above it the scan is
 // skipped and the cost falls to a constant ~0.3 MiB. 10 MB covers essentially
-// every real PDF (the largest in the govdocs corpus is ~12 MB) while keeping
-// the worst case bounded.
+// every real PDF while keeping the worst case bounded.
+//
+// # Corpus evidence
+//
+//   - govdocs: the largest file is ~12 MB.
 const maxRawInfoScanBytes = 10 * 1024 * 1024
 
 // scanRawInfoFields scans the raw PDF bytes for Info-dict field
-// values and populates [metadata] with recoveries for fields the
+// values and populates metadata with recoveries for fields the
 // in-memory Info resolution could not supply. Every field, /ModDate
 // included, is filled only when missing, so a value the document
-// states stays intact. The scan
-// runs against the entire file so incremental updates whose newest
-// trailer points at a stale or non-dict /Info can still expose
-// earlier revisions' values.
+// states stays intact. The scan runs against the entire file so
+// incremental updates whose newest trailer points at a stale or
+// non-dict /Info can still expose earlier revisions' values.
+//
+// # Corpus evidence
+//
+//   - All corpora: preferring the newest /ModDate found anywhere disagreed
+//     with pdf.js, poppler and Acrobat on 9 fixtures, including two facturx
+//     files whose XMP timestamp is written one second after the /Info one.
 func scanRawInfoFields(ctx context.Context, doc *document.Document, metadata map[string]string) {
 	fileSize := doc.FileSize()
 	if fileSize > maxRawInfoScanBytes {
@@ -387,8 +398,8 @@ func scanRawInfoFields(ctx context.Context, doc *document.Document, metadata map
 	// finds. The scan exists to recover fields when /Info is unusable, not to
 	// second-guess a document that answered the question: pdf.js, poppler and
 	// Acrobat all report the /Info value, and preferring the newest date found
-	// anywhere disagreed with them on 9 corpus fixtures, including two Factur-X
-	// files whose XMP timestamp is written one second after the /Info one.
+	// anywhere disagrees with them, notably where an XMP timestamp is written
+	// just after the /Info one.
 	//
 	// When nothing structured supplied a date, the newest of the scanned values
 	// is still the best answer: an incremental update that dropped the field
@@ -584,7 +595,7 @@ func unescapePdfLiteralString(s []byte) []byte {
 
 // decodeHexString converts a PDF hex string body (the bytes between "<"
 // and ">") to raw bytes. Whitespace is ignored and an unpaired trailing
-// nibble is treated as if followed by '0', per ISO 32000-1 §7.3.4.3.
+// nibble is treated as if followed by '0', per ISO 32000-1, 7.3.4.3.
 // Returns false when a non-hex, non-whitespace byte is encountered.
 func decodeHexString(s []byte) ([]byte, bool) {
 	out := make([]byte, 0, len(s)/2)

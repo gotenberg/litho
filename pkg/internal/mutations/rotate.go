@@ -28,7 +28,7 @@ func RotatePages(ctx context.Context, alloc *writer.ObjAllocator, pages []*docum
 	// Fold the angle into the four values /Rotate is documented to take.
 	// ISO 32000-1, Table 30 only requires a multiple of 90, so 720 and -90 are
 	// legal and veraPDF accepts them, but writing them contradicts what
-	// [pdf.Writer.RotatePages] promises and leaves a reader to normalise a full
+	// pdf.Writer.RotatePages promises and leaves a reader to normalise a full
 	// turn or a negative angle on litho's behalf.
 	rotation = ((rotation % 360) + 360) % 360
 	for _, pageNum := range pageNums {

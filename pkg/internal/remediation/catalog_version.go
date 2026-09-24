@@ -18,19 +18,22 @@ import (
 // §6.1.2 governs the file HEADER, and its §6.1.12 check reads the catalog
 // entry with fallbackToHeader false, so an ABSENT entry conforms (see
 // compliance.checkVersionPart4). Remediation already re-emits the header for
-// that profile. Measured on the veraPDF fixture
-// PDF_A-4__veraPDF_test_suite_6-1-2-t01-fail-a.pdf, whose header is %PDF-1.7:
-// the remediated output is %PDF-2.0 with NO catalog /Version and zero
-// version-clause findings. Writing one there would add a key litho leaves
-// absent by design.
+// that profile, so the output conforms with no catalog /Version. Writing one
+// there would add a key litho leaves absent by design.
 //
 // ISO 14289-2 is the opposite case. Its version rule is checked with
 // fallbackToHeader true, so the catalog entry and the header are equally
 // acceptable carriers, and remediation for these profiles frequently stays
 // incremental, where the header cannot be touched at all. WTPDF adopts the
 // ISO 14289-2 requirements wholesale and is named separately because
-// RemediateWTPDF passes the WTPDF level through verbatim rather than
+// [RemediateWTPDF] passes the WTPDF level through verbatim rather than
 // normalising it to the PDF/UA-2 identifier the way validation does.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-4__veraPDF_test_suite_6-1-2-t01-fail-a.pdf: its header is
+//     %PDF-1.7, and the remediated output is %PDF-2.0 with NO catalog
+//     /Version and zero version-clause findings.
 func catalogCarriesVersion(profile string) bool {
 	return strings.HasPrefix(profile, "PDF/UA-2") || strings.HasPrefix(profile, "WTPDF")
 }

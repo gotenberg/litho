@@ -84,7 +84,7 @@ func TestParsePDFDate(t *testing.T) {
 
 // buildTestPKCS7 creates a minimal DER-encoded PKCS#7 SignedData structure
 // containing the given certificates. This is NOT a valid signature. It only
-// tests that our parser can extract the embedded certificates.
+// tests that the parser can extract the embedded certificates.
 func buildTestPKCS7(certs ...*x509.Certificate) ([]byte, error) {
 	// OID for PKCS#7 SignedData: 1.2.840.113549.1.7.2
 	oidSignedData := asn1.ObjectIdentifier{1, 2, 840, 113549, 1, 7, 2}

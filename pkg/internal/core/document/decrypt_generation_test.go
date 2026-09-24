@@ -59,10 +59,13 @@ func rc4ObjectKey(fileKey []byte, objNum, genNum int) []byte {
 // litho resolves by object number alone (see [Document.ObjectGeneration]). A
 // caller building ast.PdfIndirectRef{ObjectNum: n} with no generation still
 // reaches the object, and before this it decrypted with the wrong key and cached
-// the result for everyone after it. pdfjs issue16464.pdf carries eleven
-// generation-1 objects: the compliance cache-warming pass resolved them at
-// generation 0 and `remediate` wrote four of page 1's five content streams out
-// as noise.
+// the result for everyone after it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16464.pdf: carries eleven generation-1 objects. The compliance
+//     cache-warming pass resolved them at generation 0, and `remediate` wrote
+//     four of page 1's five content streams out as noise.
 func TestDecryptionUsesTheObjectsGeneration(t *testing.T) {
 	t.Parallel()
 

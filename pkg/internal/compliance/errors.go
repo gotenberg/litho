@@ -11,7 +11,7 @@ import (
 // sentinel via [errors.Is] without inspecting the wrapped message.
 var ErrUnknownProfile = errors.New("compliance: unknown profile")
 
-// errUndecodableContent is returned by resolvePageContentBytes for a page none
+// errUndecodableContent is returned by [resolvePageContentBytes] for a page none
 // of whose content streams decode, at least one of them because it carries a
 // /Filter litho cannot decode. Those bytes stay filter-encoded, so
 // content-operator analysis is skipped rather than run on them; the undecodable
@@ -22,7 +22,7 @@ var errUndecodableContent = errors.New("compliance: content stream has an undeco
 // slice returned by [ValidateFacturX] and [ValidateZUGFeRD]. It fires
 // when a Schematron rule's XPath could not be compiled or evaluated;
 // the rule's verdict on the document is unknown. The public
-// [pdf.ErrSchematronRuleSkipped] sentinel re-exports the same value so
+// pdf.ErrSchematronRuleSkipped sentinel re-exports the same value so
 // callers can match with [errors.Is] without depending on the internal
 // package.
 var ErrSchematronRuleSkipped = errors.New("schematron rule skipped (xpath construct unsupported)")

@@ -130,6 +130,13 @@ func PackObjectStreams(ctx context.Context, alloc *ObjAllocator) ([]PackedObject
 // writeOneObjStm builds one object stream from as many of batch as fit within
 // [maxObjStmPayload], removes those objects from pending, and reports their
 // placements along with the number consumed.
+//
+// # Corpus evidence
+//
+//   - All corpora: two ~1 KB files of five objects each came out 42 bytes
+//     LARGER packed, because the stream dictionary and Flate header cost more
+//     than the "N 0 obj"/"endobj" wrappers they replace. The never-worse size
+//     check declines such a batch.
 func writeOneObjStm(
 	ctx context.Context,
 	alloc *ObjAllocator,
@@ -175,9 +182,8 @@ func writeOneObjStm(
 		return nil, 0, fmt.Errorf("compressing object stream: %w", err)
 	}
 
-	// Decline a batch that packing would not shrink. Measured on the corpus,
-	// two ~1 KB files of five objects each came out 42 bytes LARGER packed,
-	// because the stream dictionary and Flate header cost more than the
+	// Decline a batch that packing would not shrink. On a small batch the
+	// stream dictionary and Flate header can cost more than the
 	// "N 0 obj"/"endobj" wrappers they replace. Growth is the regression this
 	// packing exists to remove, so never-worse matters more than packing
 	// everything: those objects stay pending and are written directly.

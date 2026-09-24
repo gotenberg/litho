@@ -21,11 +21,14 @@ func pageExtGStatePDF() []byte {
 	)
 }
 
+// TestFixTransparency_KeepsAPeerFixersPendingExtGStateWrite pins that the
+// transparency repair reads an /ExtGState through the allocator.
+//
 // graphics (registry 106) and transparency (registry 107) are CONSECUTIVE
 // registry entries that write the same /ExtGState objects. fixExtGStates reads
-// each entry through resolveFromAllocOrDoc; fixExtGStateDict reads it with
-// document.ResolveDict and uses no alloc-aware helper at all, so running second
-// it rebuilds the dictionary from the on-disk copy and drops whatever graphics
+// each entry through resolveFromAllocOrDoc; fixExtGStateDict used to read it
+// with document.ResolveDict and no alloc-aware helper at all, so running second
+// it rebuilt the dictionary from the on-disk copy and dropped whatever graphics
 // just wrote there.
 //
 // The pending write stands in for that peer. Provoking graphics for real needs
@@ -34,7 +37,7 @@ func pageExtGStatePDF() []byte {
 // this test to another fixer's matcher.
 //
 // The fixpoint loop in pkg/pdf hides this in the output, exactly as it hid
-// d35a5613: a discarded repair is simply reapplied on the next round, so only a
+// 9bbdcd41: a discarded repair is simply reapplied on the next round, so only a
 // unit test can see it.
 func TestFixTransparency_KeepsAPeerFixersPendingExtGStateWrite(t *testing.T) {
 	t.Parallel()

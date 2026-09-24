@@ -14,13 +14,13 @@ import (
 // with XPath 2.0 `for $V in ... return ...` let-lists,
 // `abs()` (which antchfx does not implement), `xs:decimal()` casts in
 // path-step position, and similar XPath 2.0 idioms. The
-// transformations in [pkg/internal/schematron/xpath_rewrite.go]
+// transformations in pkg/internal/schematron/xpath_rewrite.go
 // cover the common shapes but cannot generally convert
 // `abs(X) +/- C op Y` into an XPath 1.0 form. The Go evaluators here
 // replicate the arithmetic intent directly.
 //
 // Each function below follows the same pattern as the existing
-// overrides in this file: read the context node and a small subtree,
+// overrides in overrides.go: read the context node and a small subtree,
 // extract numeric and string values via the helpers in overrides.go,
 // and return (assertionResult, error) where assertionResult is true
 // when the rule passes for the matched context node and false when
@@ -500,7 +500,9 @@ func brFXENO4GermanDelivery(_ context.Context, node *xmlquery.Node) (bool, error
 
 // hasAnyNonEmptyText reports whether the element or any of its
 // descendants carries non-whitespace text content. The schematron
-// expresses this as normalize-space(string-join(.//text(), ”)).
+// expresses this as:
+//
+//	normalize-space(string-join(.//text(), ''))
 func hasAnyNonEmptyText(n *xmlquery.Node) bool {
 	if n == nil {
 		return false

@@ -56,6 +56,8 @@ func ocDocPDF(t *testing.T, ocProps string, extraObjs ...string) (*document.Docu
 	return doc, cat.Dict
 }
 
+// TestForbiddenOCProperties_A1 pins that any catalog /OCProperties fails
+// ISO 19005-1 §6.1.13 t1.
 func TestForbiddenOCProperties_A1(t *testing.T) {
 	// PDF/A-1 forbids optional content: any catalog /OCProperties is a violation.
 	if v := checkForbiddenOCProperties(ast.PdfDict{"OCProperties": ast.PdfDict{}}); len(v) != 1 || v[0].Rule != Rule_19005_1_6_1_13_t01 {
@@ -66,6 +68,8 @@ func TestForbiddenOCProperties_A1(t *testing.T) {
 	}
 }
 
+// TestOCConfigNames_MissingName pins that an optional content configuration
+// with no /Name fails the parts 2 to 4 name rule.
 func TestOCConfigNames_MissingName(t *testing.T) {
 	ctx := context.Background()
 	doc, cat := ocDocPDF(t, "<< /D << >> >>")
@@ -81,6 +85,8 @@ func TestOCConfigNames_MissingName(t *testing.T) {
 	}
 }
 
+// TestOCConfigNames_EmptyName pins that an empty configuration /Name fails
+// parts 2 and 3 and conforms to part 4.
 func TestOCConfigNames_EmptyName(t *testing.T) {
 	ctx := context.Background()
 	doc, cat := ocDocPDF(t, "<< /D << /Name () >> >>")
@@ -99,6 +105,8 @@ func TestOCConfigNames_EmptyName(t *testing.T) {
 	}
 }
 
+// TestOCConfigNames_DuplicateName pins that two configurations sharing a
+// /Name fail the parts 2 to 4 uniqueness rule.
 func TestOCConfigNames_DuplicateName(t *testing.T) {
 	ctx := context.Background()
 	doc, cat := ocDocPDF(t, "<< /D << /Name (X) >> /Configs [4 0 R] >>", "<< /Name (X) >>")
@@ -114,6 +122,8 @@ func TestOCConfigNames_DuplicateName(t *testing.T) {
 	}
 }
 
+// TestOCConfigNames_Valid pins that uniquely named configurations raise
+// nothing.
 func TestOCConfigNames_Valid(t *testing.T) {
 	ctx := context.Background()
 	doc, cat := ocDocPDF(t, "<< /D << /Name (Default) >> /Configs [4 0 R] >>", "<< /Name (Alt) >>")
@@ -124,6 +134,8 @@ func TestOCConfigNames_Valid(t *testing.T) {
 	}
 }
 
+// TestOCGOrderCompleteness pins that an /Order omitting an OCG fails the
+// parts 2 to 4 completeness rule and a complete one conforms.
 func TestOCGOrderCompleteness(t *testing.T) {
 	ctx := context.Background()
 	ocg1 := "<< /Type /OCG /Name (L1) >>"

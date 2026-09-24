@@ -74,10 +74,15 @@ type models_FormField struct {
 // not list is still reported.
 //
 // ISO 32000-1, 12.7.2 puts fields in /AcroForm and 12.5.6.19 puts the widget on
-// the page. Producers write the widget without registering the field: pdfjs
-// issue12963.pdf carries 257 such widgets and `litho forms` reported none of
-// them, as did issue14203.pdf, issue15597.pdf, issue17069.pdf and
-// bug1723568.pdf.
+// the page. Producers write the widget without registering the field, and
+// `litho forms` reported no such widget.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12963.pdf: carries 257 such widgets, and `litho forms`
+//     reported none of them.
+//   - pdfjs issue14203.pdf, issue15597.pdf, issue17069.pdf, bug1723568.pdf:
+//     `litho forms` reported none of their unregistered widgets either.
 func TestFieldFoundWhenOnlyOnThePage(t *testing.T) {
 	t.Parallel()
 

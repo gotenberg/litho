@@ -17,9 +17,12 @@ import (
 // yields an empty dictionary with no error, while the real catalog body sits in
 // the file for the reader's recovery scan to find.
 //
-// This is pdfjs issue18986.pdf in miniature. There a UTF-8 round-trip replaced
-// every byte above 0x7F in the cross-reference stream with EF BF BD, which
-// desynchronises the fixed-width rows and decodes the catalog's entry as free.
+// # Corpus evidence
+//
+//   - pdfjs issue18986.pdf: the fixture is this file in miniature. A UTF-8
+//     round-trip replaced every byte above 0x7F in its cross-reference stream
+//     with EF BF BD, which desynchronises the fixed-width rows and decodes the
+//     catalog's entry as free. The file uses a cross-reference STREAM.
 func misdirectedCatalogPDF() []byte {
 	var buf bytes.Buffer
 	buf.WriteString("%PDF-1.4\n")
@@ -34,8 +37,8 @@ func misdirectedCatalogPDF() []byte {
 	write(3, "<< /Type /Page /Parent 1 0 R /MediaBox [0 0 612 792] >>")
 	write(4, "<< /Type /Catalog /Pages 1 0 R /PageMode /UseNone >>")
 
-	// A cross-reference STREAM, as issue18986.pdf uses: the offset repair that
-	// rescues a misdirected classic table does not run here.
+	// A cross-reference STREAM: the offset repair that rescues a misdirected
+	// classic table does not run here.
 	xrefOffset := buf.Len()
 	var rows bytes.Buffer
 	row := func(t, offset int) {

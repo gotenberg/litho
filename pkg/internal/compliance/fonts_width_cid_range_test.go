@@ -10,7 +10,7 @@ import (
 
 // cidRangeWidths is the binary width table these tests compare against. Only
 // CID 1 carries a width, so a violation can only arise from a CID that reaches
-// gid 1 -- either legitimately, or by the uint16 narrowing these tests pin.
+// gid 1, either legitimately or by the uint16 narrowing these tests pin.
 var cidRangeWidths = map[uint16]float64{1: 600}
 
 // TestCheckCIDFontWidths_OutOfRangeCIDReportsNothing pins that a /W entry

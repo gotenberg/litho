@@ -37,7 +37,7 @@ type contentStateChecker struct {
 
 	results []Violation
 
-	// Track whether we've already reported a violation per type to avoid
+	// Track whether a violation was already reported per type to avoid
 	// flooding results with one violation per painting operator.
 	reportedOverprintFill   bool
 	reportedOverprintStroke bool
@@ -265,7 +265,7 @@ var operatorResourceCategory = map[string]ast.PdfName{
 // and that no undefined operators are used.
 //
 // reportUndefinedOps selects who states ISO 19005-2/3/4, 6.2.2 t1. A page
-// content stream is already walked by checkPageContent, which states it there;
+// content stream is already walked by [checkPageContent], which states it there;
 // pass false for those and true for the streams that walk does not reach, so
 // the rule is stated exactly once per undefined operator.
 func checkContentStreamResources(
@@ -292,9 +292,18 @@ func checkContentStreamResources(
 	return results
 }
 
-// checkContentStreamResourcesOps is like checkContentStreamResources but
+// checkContentStreamResourcesOps is like [checkContentStreamResources] but
 // accepts pre-parsed operations. It does NOT check inline image intents
 // (which require raw bytes); callers must handle that separately if needed.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1669099.pdf: writes "/ 12.00000 Tf" in 15 widget appearance
+//     streams, and veraPDF reports no §6.2.2 t3 for the file, so the empty name
+//     is no reference.
+//   - pdfjs issue16432.pdf: its form XObjects name /F0 83 0 R, and object 83 is
+//     null. veraPDF reports the name as undefined (t3), never as inherited
+//     (t2).
 func checkContentStreamResourcesOps(
 	ctx context.Context,
 	doc *document.Document,
@@ -359,7 +368,7 @@ func checkContentStreamResourcesOps(
 				if r, ok := operand.(ast.PdfReal); ok {
 					// A real the parser read from an integer literal past the
 					// 64-bit range is an integer, judged by checkNumericLimits
-					// (see [checkNumberLimits]). overflow is shared by the check
+					// (see checkNumberLimits). overflow is shared by the check
 					// groups, so it is read, never consumed.
 					if overflow[float64(r)] > 0 {
 						continue
@@ -424,10 +433,8 @@ func checkContentStreamResourcesOps(
 
 		// ISO 32000-1, 7.3.5 allows a name object to be empty, and a resource
 		// dictionary cannot usefully key an entry on it, so veraPDF models no
-		// reference at all: pdfjs bug1669099.pdf writes "/ 12.00000 Tf" in 15
-		// widget appearance streams and veraPDF reports no §6.2.2 t3 for the
-		// file. Reporting the empty name instead invents a violation per
-		// occurrence.
+		// reference at all. Reporting the empty name instead invents a
+		// violation per occurrence.
 		if name == "" {
 			continue
 		}
@@ -452,8 +459,7 @@ func checkContentStreamResourcesOps(
 		// ISO 32000-1, 7.3.7: an entry whose value is null is the same as an
 		// absent one, so the name is undefined. The stream's own dictionary
 		// holds the key, so veraPDF reports it as undefined (t3) even when the
-		// Pages tree defines the name, never as inherited (t2): pdfjs
-		// issue16432.pdf's form XObjects name /F0 83 0 R, and object 83 is null.
+		// Pages tree defines the name, never as inherited (t2).
 		if exists && resourceEntryNull(ctx, doc, entry) {
 			key := string(category) + ":" + string(name)
 			if !reported[key] {
@@ -558,7 +564,8 @@ func missingResourceRule(part int) Rule {
 
 // inheritedResourceRule selects §6.2.2 t2: a content stream shall not use
 // resources it can only reach through Pages-tree inheritance
-// (`inheritedResourceNames == ”`). PDF/A-1 carries no resource rules.
+// (veraPDF tests that `inheritedResourceNames` is empty). PDF/A-1 carries no
+// resource rules.
 func inheritedResourceRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_2_t02, Rule_19005_3_6_2_2_t02, Rule_19005_4_6_2_2_t02)
 }

@@ -37,9 +37,13 @@ func pageBoxPDF(pageEntries string) []byte {
 //
 // ISO 32000-1, Table 30 requires /MediaBox, so such a file is invalid and the
 // spec does not say what to report. Answering 0 by 0 describes a page no viewer
-// would draw: poppler reports 612 x 792 for govdocs thread_400_400739.pdf,
-// which has no /MediaBox anywhere, and pdf.js substitutes its
-// LETTER_SIZE_MEDIABOX.
+// would draw: poppler reports 612 x 792 for such a page, and pdf.js substitutes
+// its LETTER_SIZE_MEDIABOX.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400739.pdf: has no /MediaBox anywhere, and poppler
+//     reports 612 x 792 for it.
 func TestPageWithoutMediaBoxReportsLetter(t *testing.T) {
 	data := pageBoxPDF("")
 	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
@@ -61,7 +65,12 @@ func TestPageWithoutMediaBoxReportsLetter(t *testing.T) {
 }
 
 // TestPageWithZeroAreaMediaBoxReportsLetter pins the same for a media box that
-// is present but encloses no area, the shape of pdfjs boundingBox_invalid.pdf.
+// is present but encloses no area.
+//
+// # Corpus evidence
+//
+//   - pdfjs boundingBox_invalid.pdf: its first page declares a media box that
+//     is present but encloses no area, the shape this test builds.
 func TestPageWithZeroAreaMediaBoxReportsLetter(t *testing.T) {
 	data := pageBoxPDF("/MediaBox [0 0 0 0]")
 	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))
@@ -86,9 +95,11 @@ func TestPageWithZeroAreaMediaBoxReportsLetter(t *testing.T) {
 // still wins over a degenerate crop box, so the Letter fallback stays reserved
 // for pages with no usable box at all.
 //
-// This is page 2 of pdfjs boundingBox_invalid.pdf, which declares
-// /MediaBox [0 0 800 600] with /CropBox [0 0 0 0]. poppler reports 800 x 600
-// for it.
+// # Corpus evidence
+//
+//   - pdfjs boundingBox_invalid.pdf: page 2 declares /MediaBox [0 0 800 600]
+//     with /CropBox [0 0 0 0], the shape this test builds, and poppler reports
+//     800 x 600 for it.
 func TestPageWithZeroAreaCropBoxFallsBackToMediaBox(t *testing.T) {
 	data := pageBoxPDF("/MediaBox [0 0 800 600] /CropBox [0 0 0 0]")
 	r, err := Open(context.Background(), bytes.NewReader(data), int64(len(data)))

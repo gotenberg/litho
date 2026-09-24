@@ -296,7 +296,7 @@ func DecodePdfString(s ast.PdfString) string {
 	// All bytes > 0x7F must be converted to proper UTF-8 runes since Go
 	// strings are UTF-8 and raw high bytes are invalid sequences. Also
 	// route around the fast path when an undefined PDFDocEncoding control
-	// byte is present so [pdfDocEncodingUndefined] can drop it: a stray
+	// byte is present so pdfDocEncodingUndefined can drop it: a stray
 	// 0x05 inside an otherwise-ASCII bookmark title leaks through as
 	// U+0005 otherwise.
 	needsDecode := false
@@ -388,6 +388,12 @@ func stripLeadingBOM(s string) string {
 // The remaining bytes either pass through unchanged (printable ASCII,
 // the four defined low controls, 0xA0-0xFF) or are dropped by
 // [pdfDocEncodingUndefined].
+//
+// # Corpus evidence
+//
+//   - pdfjs bug858128.pdf: its /Title carries a euro at 0xA0, which passing
+//     through as U+00A0 turned into a space. pdf.js, poppler and pikepdf all
+//     read it as the euro sign.
 var pdfDocEncoding = map[byte]rune{
 	0x18: 0x02D8, // BREVE
 	0x19: 0x02C7, // CARON
@@ -434,9 +440,7 @@ var pdfDocEncoding = map[byte]rune{
 	// ISO 32000-1, Table D.2 places EURO SIGN at 0xA0 in PDFDocEncoding, where
 	// Latin-1 has NO-BREAK SPACE. PDFDocEncoding has no no-break space: the
 	// typographic characters already occupy 0x80-0x9E, so the euro went here.
-	// Passing 0xA0 through as U+00A0 turned the euro into a space in pdfjs
-	// bug858128.pdf, whose /Title carries it; pdf.js, poppler and pikepdf all
-	// read it as the euro sign.
+	// Passing 0xA0 through as U+00A0 turned the euro into a space.
 	0xA0: 0x20AC, // EURO SIGN
 }
 
@@ -647,23 +651,6 @@ func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.Pdf
 	return d.resolveWith(ctx, ref, nil)
 }
 
-// augmentXrefFromRawScan performs a single linear scan of the document
-// bytes looking for every "N G obj" marker. It runs at most once per
-// Document via d.xrefAugment. The scan is invoked from the
-// object-resolution path, so its cost is paid only on files whose xref
-// is truncated, lies about object offsets, or omits objects inserted
-// by an external editor.
-//
-// For each discovered marker the augmentation inserts the entry when
-// missing, and overrides the stored offset when the xref-declared
-// offset does not contain the expected "N G obj" header. Compressed
-// (type 2) and free (type 0) entries are left alone: a raw scan cannot
-// see into object streams, and free entries intentionally reference no
-// body. The sync.Once serializes the scan against itself; the mutation
-// loop holds d.mu so a concurrent resolve, which reads Index.Entries
-// under d.mu.RLock via xrefEntry, never observes the map mid-write. The
-// O(file size) scan runs unlocked so it does not serialize unrelated
-// resolves.
 // xrefEntry returns the cross-reference entry for objNum. It reads
 // Index.Entries under d.mu.RLock so a concurrent lazy augmentation
 // write in [Document.augmentXrefFromRawScan] cannot race the read. The
@@ -677,10 +664,14 @@ func (d *Document) Resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.Pdf
 // would resolve "5 1 R" to null when the table lists object 5 at generation 0.
 // Deliberate leniency: generations above zero appear almost exclusively in
 // files that reuse object numbers across incremental updates, where answering
-// null loses a page the document plainly intends (pdfjs issue7496 reaches its
-// only /Annots this way). Matching on the number recovers the object the table
-// points at; qpdf instead keeps the older generation, so the two disagree on
-// such files.
+// null loses a page the document plainly intends. Matching on the number
+// recovers the object the table points at; qpdf instead keeps the older
+// generation, so the two disagree on such files.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue7496: reaches its only /Annots through a reference whose
+//     generation differs from the one the table lists.
 func (d *Document) xrefEntry(objNum int) (xref.XRefEntry, bool) {
 	d.mu.RLock()
 	entry, ok := d.Index.Entries[objNum]
@@ -703,6 +694,23 @@ func (d *Document) XRefEntriesSnapshot() map[int]xref.XRefEntry {
 	return out
 }
 
+// augmentXrefFromRawScan performs a single linear scan of the document
+// bytes looking for every "N G obj" marker. It runs at most once per
+// Document via d.xrefAugment. The scan is invoked from the
+// object-resolution path, so its cost is paid only on files whose xref
+// is truncated, lies about object offsets, or omits objects inserted
+// by an external editor.
+//
+// For each discovered marker the augmentation inserts the entry when
+// missing, and overrides the stored offset when the xref-declared
+// offset does not contain the expected "N G obj" header. Compressed
+// (type 2) and free (type 0) entries are left alone: a raw scan cannot
+// see into object streams, and free entries intentionally reference no
+// body. The sync.Once serializes the scan against itself; the mutation
+// loop holds d.mu so a concurrent resolve, which reads Index.Entries
+// under d.mu.RLock via xrefEntry, never observes the map mid-write. The
+// O(file size) scan runs unlocked so it does not serialize unrelated
+// resolves.
 func (d *Document) augmentXrefFromRawScan(ctx context.Context) {
 	d.xrefAugment.Do(func() {
 		discovered, err := scanIndirectObjects(ctx, d.r, d.size)
@@ -890,6 +898,14 @@ func readDecimal(s []byte, pos int) (int, int) {
 // resolveWith is the internal implementation of Resolve. The visited map tracks
 // object numbers in the current call chain to detect circular references. Each
 // goroutine gets its own visited set, so there is no cross-goroutine interference.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue16464.pdf: has eleven generation-1 objects. The compliance
+//     cache-warming pass resolved them at generation 0, and `remediate` wrote
+//     four of page 1's five content streams out as noise, losing the glyphs
+//     the forms they invoke would have drawn. The cipher now keys on the
+//     generation the cross-reference gives the object.
 func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visited map[int]bool) (ast.PdfObject, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -947,8 +963,8 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 	case xref.XRefTypeNormal:
 		// Snapshot compliance-mode state once per resolution so all
 		// three decision points agree on the same value. A concurrent
-		// validator toggling the flag mid-resolution cannot change our
-		// branches after we started.
+		// validator toggling the flag mid-resolution cannot change this
+		// resolution's branches once it started.
 		complianceMode := d.ComplianceMode()
 
 		// Verify the object header at the xref-declared offset matches
@@ -981,14 +997,10 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 			// gives the object, not the one the caller put in the reference.
 			// ISO 32000-1, 7.6.2 mixes object number AND generation into the
 			// key, while litho resolves by object number alone (see
-			// [Document.ObjectGeneration]); a caller that builds
+			// Document.ObjectGeneration); a caller that builds
 			// ast.PdfIndirectRef{ObjectNum: n} without a generation therefore
 			// still reaches the object but decrypts it with the wrong key, and
-			// the result is cached for everyone after it. pdfjs issue16464.pdf
-			// has eleven generation-1 objects: the compliance cache-warming
-			// pass resolved them at generation 0, and `remediate` wrote four of
-			// page 1's five content streams out as noise, losing the glyphs the
-			// forms they invoke would have drawn.
+			// the result is cached for everyone after it.
 			// entry is the in-use normal entry checked above, so its
 			// generation is the object's own, not an object-stream index.
 			p.WithDecryption(d.Crypto.DecryptFunc(ref.ObjectNum, entry.Generation))
@@ -1042,8 +1054,8 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		return nil, fmt.Errorf("unknown xref entry type: %d", entry.Type)
 	}
 
-	// Cache the result. If another goroutine cached the same object while we
-	// were parsing, use its result for consistency.
+	// Cache the result. If another goroutine cached the same object while
+	// this one was parsing, use its result for consistency.
 	d.mu.Lock()
 	if existing, ok := d.objectCache[ref.ObjectNum]; ok {
 		d.mu.Unlock()

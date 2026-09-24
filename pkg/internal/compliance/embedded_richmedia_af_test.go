@@ -47,10 +47,12 @@ func richMediaAFPDF(t *testing.T, ef, af bool) (*document.Document, ast.PdfDict)
 // annotation /FS to that standard, associating an external filespec but never
 // an embedded one, and an /Assets entry is the same kind of reference.
 //
-// Measured against veraPDF 1.30.2 at PDF/A-3b on the only four corpus files of
-// 4868 scanned that carry a RichMedia annotation with /Assets
-// (PDF_A-4e__veraPDF_test_suite_6-3-2-t01-fail-b.pdf and three siblings): all
-// four fail 6.8 t4 there, and litho reported none of them.
+// # Corpus evidence
+//
+//   - All corpora, 4868 files scanned: only four carry a RichMedia annotation
+//     with /Assets, PDF_A-4e__veraPDF_test_suite_6-3-2-t01-fail-b.pdf and
+//     three siblings. Measured against veraPDF 1.30.2 at PDF/A-3b, all four
+//     fail 6.8 t4 there, and litho reported none of them.
 func TestCatalogAF_RichMediaAssetIsAnAnnotationReference(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

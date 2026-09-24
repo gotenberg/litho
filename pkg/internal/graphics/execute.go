@@ -255,7 +255,7 @@ func (b ImageBox) ImageSpace(x, y float64) (u, v float64, ok bool) {
 //
 // Anything it cannot resolve counts toward [Machine.UnresolvedXObjects] rather
 // than passing silently, so a caller can tell "this page paints no image here"
-// from "I could not tell what this Do paints" — a distinction that decides
+// from "I could not tell what this Do paints", a distinction that decides
 // whether refusing is honest.
 func handleDoXObject(ctx context.Context, m *Machine, state *State, op content.Operation) {
 	if !m.RecordImageBoxes {
@@ -298,7 +298,7 @@ const InlineImageName = "(inline)"
 //
 // An inline image paints the unit square through the CTM exactly as an image
 // XObject does (ISO 32000-1, 8.9.7), so the same mapping applies. Unlike a Do
-// there is nothing to look up — the image travels in the content stream — so
+// there is nothing to look up: the image travels in the content stream, so
 // this cannot fail to resolve and never counts toward
 // [Machine.UnresolvedXObjects].
 //
@@ -443,8 +443,8 @@ func handleSaveState(_ context.Context, m *Machine, state *State, _ content.Oper
 }
 
 func handleRestoreState(_ context.Context, m *Machine, _ *State, _ content.Operation) {
-	// The initial state frame is never popped. This matches PDF 32000
-	// §8.4.4, where Q outside any save/restore pair is a no-op.
+	// The initial state frame is never popped. This matches ISO 32000-1,
+	// 8.4.4, where Q outside any save/restore pair is a no-op.
 	if len(m.Stack) > 1 {
 		m.Stack = m.Stack[:len(m.Stack)-1]
 	}
@@ -532,8 +532,8 @@ func handleTextMatrix(_ context.Context, m *Machine, state *State, op content.Op
 	m.Chunk++
 }
 
-// applyTextMove advances the text line matrix by (tx, ty) per PDF 32000
-// §9.4.2 equation for Td. Shared by Td, TD, T*, ', and ".
+// applyTextMove advances the text line matrix by (tx, ty) per the ISO
+// 32000-1, 9.4.2 equation for Td. Shared by Td, TD, T*, ', and ".
 func applyTextMove(state *State, tx, ty float64) {
 	tlm := state.Text.Tlm
 	state.Text.Tlm[4] = tx*tlm[0] + ty*tlm[2] + tlm[4]
@@ -569,7 +569,7 @@ func handleTextNextLine(_ context.Context, m *Machine, state *State, _ content.O
 
 func handleTextNextLineShow(_ context.Context, m *Machine, state *State, _ content.Operation) {
 	// Per spec, ' moves to the next line and shows text. Text rendering
-	// is handled by the extractor layer. Here we only advance the matrix.
+	// is handled by the extractor layer. This handler only advances the matrix.
 	applyTextMove(state, 0, -state.Text.Tl)
 	m.Chunk++
 }
@@ -820,7 +820,7 @@ func handleClipPath(_ context.Context, m *Machine, state *State, _ content.Opera
 	m.pathClipped = true
 
 	// Intersect the current clipping path with the current path bounds.
-	// Per PDF 32000 §8.5.4, W/W* marks the path for clipping but does
+	// Per ISO 32000-1, 8.5.4, W/W* marks the path for clipping but does
 	// not end it. A subsequent n / S / s / f / F / B / B* / b / b*
 	// operator ends the path.
 	if m.CurrentPath.MinX > state.ClippingPath.MinX {
@@ -1050,6 +1050,6 @@ func syncSkipExtraction(m *Machine, state *State) {
 }
 
 func handleDesignatedMCPoint(_ context.Context, _ *Machine, _ *State, _ content.Operation) {
-	// Designated marked-content points (DP) carry no state transition.
+	// Designated marked-content points (DP) carry no state transition:
 	// they exist only as hooks for external consumers.
 }

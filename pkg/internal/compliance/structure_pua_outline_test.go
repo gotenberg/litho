@@ -42,9 +42,11 @@ func puaOutlineNoStructPDF(title string) []byte {
 // the structure tree. Judging it inside the structure-tree branch left litho
 // silent on exactly the files that have an outline and no /StructTreeRoot.
 //
-// Measured against veraPDF 1.30.2 on the corpus fixture puatext_ua2.pdf with
-// its /StructTreeRoot entry removed and nothing else changed: veraPDF reports
-// §8.6 t1 once, litho reported it not at all.
+// # Corpus evidence
+//
+//   - litho puatext_ua2.pdf: with its /StructTreeRoot entry removed and
+//     nothing else changed, veraPDF 1.30.2 reports §8.6 t1 once, and litho
+//     reported it not at all.
 func TestOutlineTitlePUAWithoutStructureTree(t *testing.T) {
 	t.Parallel()
 

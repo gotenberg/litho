@@ -131,11 +131,15 @@ func ocgIdentity(t *testing.T, data []byte) (off []ast.PdfName, absent []ast.Pdf
 // /OCGs. ISO 32000-1, 8.11.2.3 decides visibility by matching the group a
 // marked-content sequence names against the configuration, so every switched-off
 // layer became visible; 8.11.4.3 requires /OCGs to hold all the document's
-// groups, which it no longer did. Merging pdfjs issue9462.pdf revealed two
-// hidden layers, 157 lines of text a viewer had been told not to show.
+// groups, which it no longer did.
 //
 // litho's own reader cannot catch this: it extracts hidden optional content on
 // purpose, so `litho text` reads the same before and after.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9462.pdf: merging it revealed two hidden layers, 157 lines of
+//     text a viewer had been told not to show.
 func TestMergeKeepsOptionalContentGroupIdentity(t *testing.T) {
 	t.Parallel()
 

@@ -33,14 +33,18 @@ end`)
 // ISO 32000-1, 7.3.5 ends a name at a delimiter, so "/Adobe-Identity-UC>"
 // leaves a bare ">" that is valid nowhere: the lexer returns ">>" whole and a
 // hex string consumes its own ">", so no well-formed CMap yields that token.
-// veraPDF discards such a CMap entirely and reports ISO 14289-1, 7.21.7 t1 on
-// every code the page shows, including codes the bfchar list maps. Measured on
-// pdfjs issue11651.pdf, whose CMap carries both "/CMapName /Adobe-Identity-UC>"
-// and "/Ordering (UC>)", and on fixtures isolating each: corrupting /CMapName
-// alone is enough for veraPDF to fail the file.
+// veraPDF discards such a CMap entirely, including codes the bfchar list maps.
 //
 // The mapping itself stays readable, because text extraction keeps every entry
 // that parsed while a validator judges the CMap as mapping nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue11651.pdf: its CMap carries both "/CMapName
+//     /Adobe-Identity-UC>" and "/Ordering (UC>)", and veraPDF reports ISO
+//     14289-1, 7.21.7 t1 on every code the page shows, including codes the
+//     bfchar list maps. Fixtures isolating each show that corrupting
+//     /CMapName alone is enough for veraPDF to fail the file.
 func TestParse_MalformedTokenFlagsTheCMapAndKeepsTheMapping(t *testing.T) {
 	t.Parallel()
 

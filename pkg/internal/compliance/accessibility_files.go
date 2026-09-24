@@ -31,7 +31,7 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 	// and /UF, the EmbeddedFiles-tree ones for /Desc. This covers file specs referenced from the
 	// EmbeddedFiles name tree, FileAttachment annotations, and other sources.
 	//
-	// [collectFileSpecs] supplies them, so a file specification written as a
+	// collectFileSpecs supplies them, so a file specification written as a
 	// direct dictionary in an annotation /FS is covered too: a bare sweep of
 	// the cross-reference map sees only indirect objects and silently skipped
 	// it. It also returns the specs in object-number order, where the map
@@ -47,7 +47,7 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 		// so a name holding only a byte order mark is empty. Measured against
 		// veraPDF. Only a specification that embeds a file is judged: veraPDF's
 		// containsEF is a knownKey on /EF, so an /EF written as null embeds
-		// nothing (ISO 32000-1, 7.3.7), measured ([nonNullKeyPresent]).
+		// nothing (ISO 32000-1, 7.3.7), measured (nonNullKeyPresent).
 		if profile == "PDF/UA-1" && knownKey(dict, "EF") {
 			hasF := hasNonEmptyStringKey(ctx, doc, dict, "F")
 			hasUF := hasNonEmptyStringKey(ctx, doc, dict, "UF")
@@ -65,7 +65,7 @@ func checkPDFUAFileSpecFUF(ctx context.Context, doc *document.Document, catalog 
 		// its contents, so an empty /Desc () satisfies the requirement and
 		// only an absent /Desc is a violation. A /Desc written as null is
 		// absent (ISO 32000-1, 7.3.7), as veraPDF's knownKey reads it,
-		// measured ([nonNullKeyPresent]).
+		// measured (nonNullKeyPresent).
 		// The rule is not gated on /EF: veraPDF tests containsDesc ||
 		// presentInEmbeddedFiles == false, measured on a specification in the
 		// name tree that has no /EF at all.
@@ -153,7 +153,7 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 	}
 
 	// The artifact rules below read the enclosing element through the
-	// structure parent tree, see [annotStructScope].
+	// structure parent tree, see annotStructScope.
 	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	if err != nil {
 		doc.Logger.Debug("compliance.accessibility: cannot resolve structure tree root", "error", err)
@@ -208,7 +208,7 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 				// §8.9.2.4.12 t1: Screen annotations shall include a /Contents
 				// entry. Like the other per-subtype description rules below,
 				// veraPDF tests "Contents != null" on getStringKey, so a /Contents
-				// that is null or not a string is absent ([stringKeyPresent]),
+				// that is null or not a string is absent (stringKeyPresent),
 				// measured on Ink and Stamp annotations.
 				if !stringKeyPresent(ctx, doc, annot, "Contents") {
 					results = append(results, failf(Rule_14289_2_8_9_2_4_12_t01,
@@ -218,7 +218,7 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 				// §8.9.2.4.10 t1: a file attachment annotation referencing a file
 				// specification dictionary shall include /AFRelationship on it.
 				// veraPDF reads it with getNameKeyStringValue, so only a name
-				// counts ([nameKeyPresent]): a null or string value is absent.
+				// counts (nameKeyPresent): a null or string value is absent.
 				if fs, _ := document.ResolveDict(ctx, doc, annot["FS"]); fs != nil {
 					if !nameKeyPresent(ctx, doc, fs, "AFRelationship") {
 						results = append(results, failf(Rule_14289_2_8_9_2_4_10_t01,
@@ -229,7 +229,7 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 				// §8.9.2.4.7 t1: a rubber stamp annotation shall have a /Name or a
 				// /Contents entry describing the stamp's intent.
 				// veraPDF reads /Name with getNameKeyStringValue, so only a name
-				// counts ([nameKeyPresent]): a string /Name does not.
+				// counts (nameKeyPresent): a string /Name does not.
 				if !nameKeyPresent(ctx, doc, annot, "Name") && !stringKeyPresent(ctx, doc, annot, "Contents") {
 					results = append(results, failf(Rule_14289_2_8_9_2_4_7_t01,
 						"Stamp annotation lacks both /Name and /Contents")...)
@@ -270,6 +270,11 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 
 // checkLinkContents validates PDF/UA-1 §7.18.5 t2: Link annotations must
 // have a non-empty /Contents key providing an alternate description.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue3694_reduced.pdf: has only an off-page Link without
+//     /Contents, and veraPDF passes it.
 func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-1" {
 		return nil
@@ -293,8 +298,7 @@ func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.
 			}
 			// veraPDF's test exempts a hidden Link and one whose rectangle lies
 			// off the crop box of the page holding it: (F & 2) == 2 ||
-			// isOutsideCropBox == true. pdfjs issue3694_reduced.pdf has only an
-			// off-page Link without /Contents, and veraPDF passes it.
+			// isOutsideCropBox == true.
 			flags, _ := document.ResolveInt(ctx, doc, annot["F"])
 			const hiddenBit = 1 << 1 // ISO 32000-1, Table 165: bit position 2
 			if int(flags)&hiddenBit != 0 || annotRectOutsidePageCropBox(ctx, doc, annot, page) {
@@ -347,7 +351,7 @@ func checkMediaClipData(ctx context.Context, doc *document.Document, catalog ast
 			}
 
 			// t01: /CT shall be present on the clip dict. veraPDF reads it with
-			// getContentType, so only a string counts ([stringKeyPresent]): a
+			// getContentType, so only a string counts (stringKeyPresent): a
 			// null or name value is absent, measured.
 			if !stringKeyPresent(ctx, doc, clipDict, "CT") {
 				results = append(results, failf(Rule_14289_1_7_18_6_2_t01,
@@ -530,6 +534,12 @@ func enclosingStructElemHasAlt(ctx context.Context, doc *document.Document, tree
 // up the field tree belongs to another field and is not read: veraPDF's
 // GFPDWidgetAnnot.getTU reads the same two places and nothing above them,
 // measured on a widget whose only /TU sits on its grandparent.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1847733.pdf: writes a /TU of <FEFF>, a byte order mark alone,
+//     which decodes to nothing and which veraPDF reads as empty, so the /TU
+//     is judged by its decoded text.
 func fieldTU(ctx context.Context, doc *document.Document, annot ast.PdfDict) string {
 	node := annot
 	if !isFieldDict(node) {
@@ -539,10 +549,10 @@ func fieldTU(ctx context.Context, doc *document.Document, annot ast.PdfDict) str
 		}
 		node = parent
 	}
-	// /TU is a text string, judged by the text it decodes to: pdfjs
-	// bug1847733.pdf writes <FEFF>, a byte order mark alone, which decodes to
-	// nothing (ISO 32000-1, 7.9.2.2) and which veraPDF reads as empty. An absent
-	// or non-string /TU states nothing, so its resolution error is not needed.
+	// /TU is a text string, judged by the text it decodes to: a byte order
+	// mark alone decodes to nothing (ISO 32000-1, 7.9.2.2), and veraPDF reads
+	// it as empty. An absent or non-string /TU states nothing, so its
+	// resolution error is not needed.
 	tu, _ := document.ResolveString(ctx, doc, node["TU"])
 	return document.DecodePdfString(tu)
 }

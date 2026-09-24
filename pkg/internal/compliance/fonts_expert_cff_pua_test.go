@@ -36,15 +36,20 @@ func expertCFF(encoding int) string {
 // declaring the Expert encoding (ISO 32000-1, 9.6.6 with the CFF Top DICT
 // Encoding operand) assigns code 0x61 the name Hsmall whatever glyphs it
 // embeds. litho read that encoding by intersecting the Expert table with the
-// font's charset, which is right for drawing and wrong here: pdfjs
-// issue8586.pdf embeds a subset holding Gsmall and Ismall but not Hsmall, and
-// 0x61 is the only code its page shows, so the PUA value went unreported while
-// veraPDF 1.30.2 failed the rule.
+// font's charset, which is right for drawing and wrong here: a subset lacking
+// Hsmall left the code unnamed and its PUA value unreported.
 //
 // The controls carry the weight. A named /Encoding and a /BaseEncoding each
-// replace the program's own encoding outright (ISO 32000-1, Table 114), and
-// every veraPDF-corpus fixture that embeds an Expert CFF names one of them, so
+// replace the program's own encoding outright (ISO 32000-1, Table 114), so
 // those must keep resolving through the named table and stay silent.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue8586.pdf: embeds a subset holding Gsmall and Ismall but not
+//     Hsmall, and 0x61 is the only code its page shows, so the PUA value went
+//     unreported while veraPDF 1.30.2 failed the rule.
+//   - verapdf: every fixture that embeds an Expert CFF names a /Encoding or a
+//     /BaseEncoding, the shape of the named /Encoding control case.
 func TestExpertCFFPUACodes(t *testing.T) {
 	t.Parallel()
 
@@ -108,7 +113,7 @@ func TestExpertCFFPUACodes(t *testing.T) {
 			want:          true,
 		},
 		{
-			// The shape of every veraPDF-corpus Expert fixture.
+			// The named-table shape the controls hold silent.
 			name:          "a named /Encoding replaces the program's encoding",
 			encodingEntry: "/Encoding /WinAnsiEncoding",
 			cffEncoding:   1,
@@ -129,7 +134,7 @@ func TestExpertCFFPUACodes(t *testing.T) {
 		},
 		{
 			// A custom encoding offset is the font's own table, which
-			// [ExtractEncoding] reads; nothing is filled in.
+			// cff.ExtractEncoding reads; nothing is filled in.
 			name:          "a custom CFF encoding is left alone",
 			encodingEntry: "/Encoding << /Type /Encoding /Differences [] >>",
 			cffEncoding:   100,

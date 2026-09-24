@@ -17,9 +17,15 @@ import (
 // character, which ISO 19005-4, 6.2.10.7 forbids for a shown glyph. litho only
 // caught the explicit /Differences .notdef spelling, and a font whose /Encoding
 // is the bare name of a predefined encoding carries no /Differences at all.
-// pdfjs issue18059.pdf sets /Helvetica with /WinAnsiEncoding and shows
-// <0044004500460047...>: a simple font takes one byte per code, so every other
-// code is 0, and veraPDF reports it.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18059.pdf: sets /Helvetica with /WinAnsiEncoding and shows
+//     <0044004500460047...>. A simple font takes one byte per code, so every
+//     other code is 0, and veraPDF reports it.
+//   - verapdf 6-3-8-t01-pass-b.pdf, 6-2-11-7-2-t01-pass-b.pdf: both built to
+//     conform, whose only shown code is 32. Reading the gap in litho's
+//     MacExpertEncoding table as "no glyph" reported them.
 func TestUnencodedRenderedCode(t *testing.T) {
 	t.Parallel()
 
@@ -70,10 +76,9 @@ func TestUnencodedRenderedCode(t *testing.T) {
 	})
 
 	// litho's own MacExpertEncoding table omits the space at code 32 that
-	// ISO 32000-2, Annex D defines. Reading that gap as "no glyph" reported
-	// veraPDF's 6-3-8-t01-pass-b.pdf and 6-2-11-7-2-t01-pass-b.pdf, both built
-	// to conform, whose only shown code is 32. Judging just the control range
-	// keeps the conclusion independent of which table litho carries.
+	// ISO 32000-2, Annex D defines. Reading that gap as "no glyph" reports
+	// files built to conform. Judging just the control range keeps the
+	// conclusion independent of which table litho carries.
 	t.Run("a gap in litho's own table above the control range does not fire", func(t *testing.T) {
 		t.Parallel()
 		if fires(t, pdf("MacExpertEncoding", "20", "")) {

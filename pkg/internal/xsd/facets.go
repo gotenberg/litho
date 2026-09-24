@@ -164,10 +164,10 @@ func whitespaceCollapse(v string) string {
 }
 
 // applyFacet dispatches to the per-kind validator. Unknown facet
-// kinds (or those PR2 chooses not to enforce) return nil so the
-// engine remains forward-compatible with future facet additions.
-// base is retained for the facet kinds that must validate against the base
-// type (minInclusive and friends); the kinds handled below do not need it.
+// kinds return nil so the engine remains forward-compatible with
+// future facet additions. The base type is accepted but unused: the
+// range facets compare as decimals whatever the base (see the TODO on
+// [MinInclusive]).
 func applyFacet(value string, f Facet, _base *BuiltinType) *FacetViolation {
 	switch fc := f.(type) {
 	case Pattern:
@@ -211,9 +211,9 @@ func validatePattern(value string, fc Pattern) *FacetViolation {
 	if re == nil {
 		// Treat an uncompilable pattern as a permissive match. A real
 		// XSD validator would reject the schema; the loader has no
-		// regex compile step in PR1, so the cost surfaces here and
-		// we err on the side of false negatives rather than runtime
-		// panics.
+		// regex compile step, so the cost surfaces here and the
+		// validator errs on the side of false negatives rather than
+		// runtime panics.
 		return nil
 	}
 	if !re.MatchString(value) {
@@ -428,6 +428,6 @@ func significantDigitCount(s string) int {
 		count++
 	}
 	// Trailing zeros after the decimal point still count toward total
-	// digits per XSD, which our straight-scan above already includes.
+	// digits per XSD, which the straight scan above already includes.
 	return count
 }

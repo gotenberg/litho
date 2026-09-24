@@ -15,8 +15,12 @@ import (
 // /OCProperties, which no object number addresses. Writing the fix only through
 // the allocator dropped that case while still reporting success, so the catalog
 // was rewritten with /Name still missing and the next run found the same
-// defect: remediating complex_1b.pdf grew it 1125 bytes per pass, forever,
-// and never added the /Name.
+// defect, so the file grew on every pass and never gained the /Name.
+//
+// # Corpus evidence
+//
+//   - litho complex_1b.pdf: remediating it grew it 1125 bytes per pass,
+//     forever, and never added the /Name.
 func TestEnsureOCGConfigNameReturnsDirectReplacement(t *testing.T) {
 	alloc := writer.NewObjAllocator(10)
 	direct := ast.PdfDict{"Order": ast.PdfArray{}}

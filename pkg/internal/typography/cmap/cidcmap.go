@@ -116,6 +116,8 @@ func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 					if low > high {
 						continue
 					}
+					// Mirrors the package-level maxRangeEntries: an anti-DoS
+					// guard on one cidrange's expansion, not spec-mandated.
 					const maxRangeEntries = 1 << 16
 					for i := 0; i <= high-low && i < maxRangeEntries; i++ {
 						c.Mapping[low+i] = dst + i
@@ -141,11 +143,14 @@ func ParseCID(ctx context.Context, data []byte) (*CIDCMap, error) {
 //
 // A CMap with a codespace but no cidchar or cidrange section still decodes:
 // ISO 32000-1, 9.7.6.3 sends a code no mapping covers to CID 0, and a
-// bfchar or bfrange section maps to Unicode, not to CIDs (9.10.3). pdfjs
-// bug920426.pdf gives a Type 0 font an encoding CMap written with bfchar alone;
-// veraPDF's CMap.toCID reads its codes as CID 0. When the stream names a base
-// CMap (usecmap) or notdef mappings, which litho does not resolve, an
-// unmapped code stays unknown instead.
+// bfchar or bfrange section maps to Unicode, not to CIDs (9.10.3). When the
+// stream names a base CMap (usecmap) or notdef mappings, which litho does not
+// resolve, an unmapped code stays unknown instead.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug920426.pdf: gives a Type 0 font an encoding CMap written with
+//     bfchar alone, and veraPDF's CMap.toCID reads its codes as CID 0.
 func ParseEmbeddedCIDMap(ctx context.Context, data []byte) *CIDMap {
 	cidc, err := ParseCID(ctx, data)
 	if err != nil || cidc == nil {

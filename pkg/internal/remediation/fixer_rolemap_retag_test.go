@@ -14,11 +14,16 @@ import (
 // TestResolvedStructTypeFollowsRoleMap pins that a fixer judging a child by role
 // resolves it the way the validator does.
 //
-// A fixer reading the raw /S disagrees with the rule it repairs. govdocs
-// thread_100_100631.pdf maps /LI_Title to /LBody: the list fixer saw an
-// unrecognised child, treated an existing list body as an orphan, and wrapped it
-// in a second LBody, leaving an LBody parented by an LBody and drawing
-// ISO 14289-1 §7.2 test 18, which the input never had.
+// A fixer reading the raw /S disagrees with the rule it repairs. A custom role
+// mapped to /LBody reads as an unrecognised child, so the list fixer treated an
+// existing list body as an orphan and wrapped it in a second LBody, leaving an
+// LBody parented by an LBody and drawing ISO 14289-1 §7.2 test 18, which the
+// input never had.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100631.pdf: maps /LI_Title to /LBody, and the list
+//     fixer wrapped that existing list body in a second LBody.
 func TestResolvedStructTypeFollowsRoleMap(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -129,11 +134,16 @@ func roleOfElement(t *testing.T, alloc *writer.ObjAllocator) ast.PdfName {
 //
 // Dropping a standard-type mapping un-maps every element that used it, which
 // silently changes what the document says. Retagging to the declared target
-// keeps that meaning, but ONLY when the target is itself standard: veraPDF's
-// PDF_UA-1__7.1-t07-fail-a.pdf maps /Document to the CUSTOM /Book, and
-// rewriting the element to /Book left it an unmapped type, turning a compliant
-// repair into an ISO 14289-1 §7.1 test 5 failure. The corpus gate still passed;
-// only the count against the previous run showed it.
+// keeps that meaning, but ONLY when the target is itself standard: rewriting
+// an element to a CUSTOM target leaves it an unmapped type, turning a compliant
+// repair into an ISO 14289-1 §7.1 test 5 failure.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.1-t07-fail-a.pdf: maps /Document to the CUSTOM /Book,
+//     and rewriting the element to /Book left it an unmapped type.
+//   - All corpora: the gate still passed on that regression; only the count
+//     against the previous run showed it.
 func TestFixRoleMap_RetagsOnlyTowardsStandardTargets(t *testing.T) {
 	t.Parallel()
 

@@ -18,10 +18,14 @@ import (
 // dropped, so /AP << /N null >> has no /N; an entry whose value is a reference
 // is kept and judged by what it resolves to, so /N naming an undefined object is
 // a null that is no appearance stream; and an /AP that resolves to no
-// dictionary is no appearance dictionary. pdfjs pypdf2332.pdf points /N at an
-// object past its /Size on four markup annotations, and veraPDF reports ISO
-// 19005-4, 6.3.3 t4 on each while litho said nothing. Every case was measured
-// against veraPDF.
+// dictionary is no appearance dictionary. Every case was measured against
+// veraPDF.
+//
+// # Corpus evidence
+//
+//   - pdfjs pypdf2332.pdf: points /N at an object past its /Size on four
+//     markup annotations, and veraPDF reports ISO 19005-4, 6.3.3 t4 on each
+//     while litho said nothing.
 func TestAnnotAppearance_NullAndUndefined(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

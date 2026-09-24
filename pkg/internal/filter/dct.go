@@ -11,7 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/filter/dct"
 )
 
-// decodeDCT implements the DCTDecode filter (PDF spec 7.4.8).
+// decodeDCT implements the DCTDecode filter (ISO 32000-1, 7.4.8).
 // It decodes JPEG data and returns raw pixel bytes:
 //   - Gray:        1 byte per pixel
 //   - RGB/YCbCr:   3 bytes per pixel (R, G, B order)
@@ -19,6 +19,15 @@ import (
 //
 // dict is the image dictionary, whose /Height bounds a frame that declares
 // more lines than the image has.
+//
+// # Corpus evidence
+//
+//   - All corpora: the lenient decoder decodes 15 of the 16 JPEGs
+//     image/jpeg refuses, the 16th holding no JPEG data at all, and agrees
+//     with image/jpeg, to within 4 levels, on all 6,181 it reads.
+//   - All corpora: reading CMYK samples inverted rendered 670 images, 639
+//     of them govdocs, as their negatives against PDF.js: white paper came
+//     out black.
 func decodeDCT(ctx context.Context, data []byte, parms, dict ast.PdfDict) ([]byte, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("dct decode: empty input")
@@ -30,9 +39,7 @@ func decodeDCT(ctx context.Context, data []byte, parms, dict ast.PdfDict) ([]byt
 		// through: scan data that ends early, a component identifier the
 		// frame repeats, a height given by a DNL marker. The lenient decoder
 		// renders it instead, and only here, so every image image/jpeg reads
-		// keeps its reading. Measured on the corpora: it decodes 15 of the 16
-		// JPEGs image/jpeg refuses, the 16th holding no JPEG data at all, and
-		// agrees with image/jpeg, to within 4 levels, on all 6,181 it reads.
+		// keeps its reading.
 		colorTransform, height := -1, 0
 		if v, ok := parms["ColorTransform"].(ast.PdfInt); ok {
 			colorTransform = int(v)
@@ -71,9 +78,7 @@ func decodeDCT(ctx context.Context, data []byte, parms, dict ast.PdfDict) ([]byt
 		// defers to the rules of Adobe Technical Note #5116, under which the
 		// YUVK transform yields CMYK from YUV as 255 minus RGB and passes K
 		// through, and applies no inversion otherwise. A PDF producer that
-		// embeds an inverted JPEG says so with a /Decode array. Reading the
-		// samples inverted rendered 670 corpus images, 639 of them govdocs,
-		// as their negatives against PDF.js: white paper came out black.
+		// embeds an inverted JPEG says so with a /Decode array.
 		out := make([]byte, 0, w*h*4)
 		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 			off := m.PixOffset(bounds.Min.X, y)

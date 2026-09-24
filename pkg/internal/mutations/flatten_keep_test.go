@@ -13,7 +13,11 @@ import (
 )
 
 // valuedWidgetNoAPPDF builds a page whose only content is a text field carrying
-// a value and no appearance stream at all, as pdfjs annotation-tx.pdf does.
+// a value and no appearance stream at all.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation-tx.pdf: has this shape.
 func valuedWidgetNoAPPDF() []byte {
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] /NeedAppearances true >> >>",
@@ -43,12 +47,17 @@ func valuedWidgetNoAPPDF() []byte {
 // stored appearance keeps what it showed on the page.
 //
 // A viewer draws a variable-text field from /V and /DA when it stores no
-// appearance (ISO 32000-1, 12.7.3.3). litho used to drop such an annotation, and
-// on pdfjs annotation-tx.pdf that removed the only text the page had. It then
-// kept the widget instead, which preserved the value but left the form behind so
-// the flatten never finished. litho now builds the appearance from the value and
-// bakes that in, which satisfies the same guarantee: the text this widget showed
-// is still on the page afterwards.
+// appearance (ISO 32000-1, 12.7.3.3). litho used to drop such an annotation,
+// which could remove the only text a page had. It then kept the widget instead,
+// which preserved the value but left the form behind so the flatten never
+// finished. litho now builds the appearance from the value and bakes that in,
+// which satisfies the same guarantee: the text this widget showed is still on
+// the page afterwards.
+//
+// # Corpus evidence
+//
+//   - pdfjs annotation-tx.pdf: dropping the annotation removed the only text
+//     the page had.
 func TestFlattenFormDrawsAWidgetItCannotBake(t *testing.T) {
 	t.Parallel()
 
