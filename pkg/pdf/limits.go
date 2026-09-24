@@ -12,7 +12,8 @@ import "github.com/gotenberg/litho/pkg/internal/limits"
 //
 // A zero field keeps its default, so Limits{MaxStreamBytes: 1 << 30} raises
 // one budget and leaves the others alone. A negative field, or one above its
-// ceiling, makes [Open] fail with [ErrInvalidLimits]. Pass it to [Open] or
+// ceiling, makes [Open] fail with [ErrInvalidLimits], and [Limits.Validate]
+// reports the same error without opening a document. Pass it to [Open] or
 // [OpenFile] with [WithLimits].
 //
 // The recursion guards that protect litho's own stack are not configurable:
@@ -91,12 +92,23 @@ func DefaultLimits() Limits {
 }
 
 // WithLimits sets the resource budgets the document is read under. A zero
-// field of l keeps its default; [Open] fails with [ErrInvalidLimits] when a
-// field is negative or above its ceiling. See [Limits].
+// field of l keeps its default; [Open] fails with the error [Limits.Validate]
+// returns, wrapping [ErrInvalidLimits], when a field is negative or above its
+// ceiling. See [Limits].
 func WithLimits(l Limits) OpenOption {
 	return func(o *openOpts) {
 		o.limits = l
 	}
+}
+
+// Validate reports the first budget of l that is negative or above its
+// ceiling, as an error wrapping [ErrInvalidLimits] that names the field, its
+// value and the bound it breaks. A zero budget is valid: it stands for its
+// default. [Open] and [OpenFile] return this same error for the budgets
+// [WithLimits] gives them, so a caller that takes budgets from configuration
+// or flags can refuse a bad one before opening any document.
+func (l Limits) Validate() error {
+	return l.internal().Validate()
 }
 
 // internal translates l to the budgets the internal packages read.

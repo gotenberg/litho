@@ -106,9 +106,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 			logger = slog.New(slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: level}))
 		case limitFlagFor(arg) != nil:
 			// Consumes the next argument in the space form, as --timeout does.
-			// A value past a budget's ceiling parses here and is refused by the
-			// library when the command opens its document, which names the
-			// field and the ceiling.
+			// A value past a budget's ceiling is refused here, with the error
+			// pdf.Limits.Validate returns, which names the field and the
+			// ceiling: before any document opens, and once rather than for
+			// every input of a multi-input command.
 			f := limitFlagFor(arg)
 			value, split := strings.CutPrefix(arg, "--"+f.name+"=")
 			if !split {
@@ -120,6 +121,12 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 				value = args[i]
 			}
 			if err := f.set(&limits, value); err != nil {
+				fmt.Fprintf(stderr, "invalid --%s %q: %v\n", f.name, value, err)
+				return exitError
+			}
+			// Every earlier flag passed this check, so a failure names the
+			// budget this flag just set.
+			if err := limits.Validate(); err != nil {
 				fmt.Fprintf(stderr, "invalid --%s %q: %v\n", f.name, value, err)
 				return exitError
 			}

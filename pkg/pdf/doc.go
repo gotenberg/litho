@@ -119,7 +119,10 @@
 //	}))
 //
 // A stream or an image past its budget fails with [ErrStreamTooLarge] or
-// [ErrImageTooLarge]; see [Limits] for what each budget bounds.
+// [ErrImageTooLarge]; see [Limits] for what each budget bounds. A budget
+// below zero or past its ceiling makes [Open] fail with [ErrInvalidLimits],
+// and [Limits.Validate] reports it before any document opens, for budgets
+// read from configuration.
 //
 // # Embedding files
 //

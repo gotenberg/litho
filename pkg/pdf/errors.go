@@ -229,8 +229,8 @@ var (
 	ErrInvalidCMYKProfile = errors.New("invalid default CMYK profile")
 
 	// ErrInvalidLimits is returned, wrapped in an error naming the field, by
-	// [Open] and [OpenFile] when a budget given to [WithLimits] is negative or
-	// above its ceiling. See [Limits].
+	// [Limits.Validate], and by [Open] and [OpenFile] when a budget given to
+	// [WithLimits] is negative or above its ceiling. See [Limits].
 	ErrInvalidLimits = limits.ErrInvalid
 
 	// ErrStreamTooLarge is returned, wrapped, when decoding a stream would

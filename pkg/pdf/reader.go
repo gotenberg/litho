@@ -547,10 +547,10 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (_
 		opt(&o)
 	}
 	defer recoverToError(o.logger, "pdf.Open", &err)
-	lim := o.limits.internal()
-	if err := lim.Validate(); err != nil {
+	if err := o.limits.Validate(); err != nil {
 		return nil, err
 	}
+	lim := o.limits.internal()
 	if o.ciiFS != nil {
 		schema, err := xsd.Load(ctx, o.ciiFS, o.ciiRoot)
 		if err != nil {

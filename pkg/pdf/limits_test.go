@@ -107,6 +107,53 @@ func TestOpen_RefusesInvalidLimits(t *testing.T) {
 	}
 }
 
+// TestLimitsValidate_IsTheCheckOpenRuns pins [Limits.Validate] to the check
+// [Open] runs: for a budget below zero or past its ceiling it returns an error
+// wrapping [ErrInvalidLimits] with the very message Open returns, naming the
+// field, and for zero budgets, the defaults and the ceilings it returns nil.
+func TestLimitsValidate_IsTheCheckOpenRuns(t *testing.T) {
+	t.Parallel()
+
+	data := minimalPDF()
+	for name, tc := range map[string]struct {
+		l     Limits
+		field string
+	}{
+		"negative stream bytes":        {Limits{MaxStreamBytes: -1}, "MaxStreamBytes"},
+		"image pixels past ceiling":    {Limits{MaxImagePixels: 1<<30 + 1}, "MaxImagePixels"},
+		"embedded bytes past ceiling":  {Limits{MaxEmbeddedFileBytes: 4<<30 + 1}, "MaxEmbeddedFileBytes"},
+		"form depth past ceiling":      {Limits{MaxFormDepth: 257}, "MaxFormDepth"},
+		"negative cached objects":      {Limits{MaxCachedObjects: -1}, "MaxCachedObjects"},
+		"the first bad field is named": {Limits{MaxStreamBytes: 4<<30 + 1, MaxFormDepth: -1}, "MaxStreamBytes"},
+	} {
+		verr := tc.l.Validate()
+		if !errors.Is(verr, ErrInvalidLimits) {
+			t.Errorf("%s: Validate() = %v, want ErrInvalidLimits", name, verr)
+			continue
+		}
+		if !strings.Contains(verr.Error(), tc.field) {
+			t.Errorf("%s: Validate() = %q, want it to name %s", name, verr, tc.field)
+		}
+		_, oerr := Open(context.Background(), bytes.NewReader(data), int64(len(data)), WithLimits(tc.l))
+		if oerr == nil || oerr.Error() != verr.Error() {
+			t.Errorf("%s: Open error = %v, want Validate's %q", name, oerr, verr)
+		}
+	}
+
+	ceilings := Limits{
+		MaxStreamBytes:       4 << 30,
+		MaxImagePixels:       1 << 30,
+		MaxEmbeddedFileBytes: 4 << 30,
+		MaxFormDepth:         256,
+		MaxCachedObjects:     8_388_607,
+	}
+	for _, l := range []Limits{{}, DefaultLimits(), ceilings} {
+		if err := l.Validate(); err != nil {
+			t.Errorf("Validate(%+v) = %v, want nil", l, err)
+		}
+	}
+}
+
 // budgetImagesPDF builds a page showing three 1024x1024 grey images, each
 // decoding to 1 MiB of samples: /Flate through FlateDecode with a PNG
 // predictor, whose FlateDecode stage yields 1,049,600 bytes, /RL through

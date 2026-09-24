@@ -163,7 +163,7 @@ Every document is read under five budgets that keep a crafted file from asking f
 | `--max-form-depth`          | Form XObjects nested below a page                   | `10`        |
 | `--max-cached-objects`      | Parsed objects kept in memory                       | `50000`     |
 
-A byte count takes a plain integer or a `KiB`, `MiB` or `GiB` suffix, the others a plain integer, and `0` keeps the default. A value that does not parse, or one past its ceiling, exits `1`.
+A byte count takes a plain integer or a `KiB`, `MiB` or `GiB` suffix, the others a plain integer, and `0` keeps the default. A value that does not parse, or one past its ceiling, exits `1` before any document opens.
 
 `--max-stream-bytes` also bounds the content of one page, summed across its content streams, at a quarter of its value: raising it is how to read a page heavier than `64MiB`.
 

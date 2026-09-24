@@ -5,8 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 // TestParseByteSize pins the size syntax of the byte-count limit flags: a
@@ -90,7 +93,7 @@ func nestedImagePDF() []byte {
 // TestRun_LimitFlags pins the resource-limit flags end to end: both spellings
 // reach the library, which lists the image two forms down under the default
 // depth and not under --max-form-depth 1, and a bad value exits 1 naming the
-// flag, or, past a ceiling, naming the budget when the document opens.
+// flag and, past a ceiling, the budget too.
 func TestRun_LimitFlags(t *testing.T) {
 	path := writeTempPDF(t, nestedImagePDF())
 
@@ -143,6 +146,67 @@ func TestLimitFlags_AreAdvertised(t *testing.T) {
 	for _, want := range []string{"(default 256MiB)", "(default 100000000)", "(default 50MiB)", "(default 10)", "(default 50000)"} {
 		if !strings.Contains(usage.String(), want) {
 			t.Errorf("printUsage does not show %s", want)
+		}
+	}
+}
+
+// TestRun_LimitFlagsPastTheirCeiling pins that a resource-limit flag past its
+// ceiling is refused while the flags are parsed, before any document opens,
+// with the error [pdf.Limits.Validate] returns for that budget, and that each
+// ceiling itself is accepted. The document path does not exist, so any message
+// naming it would mean the command ran.
+func TestRun_LimitFlagsPastTheirCeiling(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "absent.pdf")
+
+	for _, tt := range []struct {
+		flag, value string
+		limits      pdf.Limits
+	}{
+		{"max-stream-bytes", "4294967297", pdf.Limits{MaxStreamBytes: 4<<30 + 1}},
+		{"max-stream-bytes", "5GiB", pdf.Limits{MaxStreamBytes: 5 << 30}},
+		{"max-image-pixels", "1073741825", pdf.Limits{MaxImagePixels: 1<<30 + 1}},
+		{"max-embedded-file-bytes", "5GiB", pdf.Limits{MaxEmbeddedFileBytes: 5 << 30}},
+		{"max-form-depth", "257", pdf.Limits{MaxFormDepth: 257}},
+		{"max-cached-objects", "8388608", pdf.Limits{MaxCachedObjects: 8_388_608}},
+	} {
+		t.Run(tt.flag+"="+tt.value, func(t *testing.T) {
+			verr := tt.limits.Validate()
+			if !errors.Is(verr, pdf.ErrInvalidLimits) {
+				t.Fatalf("Validate(%+v) = %v, want ErrInvalidLimits", tt.limits, verr)
+			}
+			want := fmt.Sprintf("invalid --%s %q: %v\n", tt.flag, tt.value, verr)
+
+			for _, args := range [][]string{
+				{"--" + tt.flag, tt.value, "info", missing},
+				{"--" + tt.flag + "=" + tt.value, "info", missing},
+				// A valid flag first: the refusal still names this one.
+				{"--max-form-depth", "3", "--" + tt.flag, tt.value, "info", missing},
+			} {
+				var stdout, stderr bytes.Buffer
+				if rc := run(context.Background(), args, &stdout, &stderr); rc != exitError {
+					t.Errorf("run(%q) = %d, want %d", args, rc, exitError)
+				}
+				if stderr.String() != want {
+					t.Errorf("run(%q) stderr = %q, want %q", args, stderr.String(), want)
+				}
+				if stdout.Len() != 0 {
+					t.Errorf("run(%q) wrote %q to stdout, want nothing", args, stdout.String())
+				}
+			}
+		})
+	}
+
+	path := writeTempPDF(t, nestedImagePDF())
+	for _, args := range [][]string{
+		{"--max-stream-bytes", "4GiB", "images", path},
+		{"--max-image-pixels", "1073741824", "images", path},
+		{"--max-embedded-file-bytes", "4GiB", "images", path},
+		{"--max-form-depth", "256", "images", path},
+		{"--max-cached-objects", "8388607", "images", path},
+	} {
+		var stdout, stderr bytes.Buffer
+		if rc := run(context.Background(), args, &stdout, &stderr); rc != exitOK {
+			t.Errorf("run(%q) = %d, want %d at the ceiling. stderr: %q", args, rc, exitOK, stderr.String())
 		}
 	}
 }
