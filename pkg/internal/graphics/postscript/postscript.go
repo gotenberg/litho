@@ -227,7 +227,16 @@ func execOp(op string, stack *[]float64, _ []token) error {
 		if err != nil {
 			return fmt.Errorf("postscript op %q: %w", op, err)
 		}
-		*stack = append(*stack, math.Atan2(num, den)*180/math.Pi)
+		// ISO 32000-1, 7.10.5 takes the operator from the PostScript Language
+		// Reference, whose atan answers in degrees from 0 to 360; math.Atan2
+		// answers from -180 to 180. pdfjs colorspace_atan.pdf tests exactly
+		// that: its tint transform compares the angle back to its input, and
+		// half the image came out wrong.
+		angle := math.Atan2(num, den) * 180 / math.Pi
+		if angle < 0 {
+			angle += 360
+		}
+		*stack = append(*stack, angle)
 
 	case "exp":
 		base, exponent, err := pop2(stack)

@@ -119,6 +119,16 @@ func TestTrigonometry(t *testing.T) {
 	if !almostEqual(result[0], 90.0, 1e-9) {
 		t.Errorf("atan(1,0) = %v, want 90", result[0])
 	}
+
+	// atan answers in degrees from 0 to 360: a point below the axis is past
+	// 180, not negative.
+	result, err = Execute(nil, []byte("{ -1 0 atan }"))
+	if err != nil {
+		t.Fatalf("atan: %v", err)
+	}
+	if result[0] != 270 {
+		t.Errorf("atan(-1,0) = %v, want 270", result[0])
+	}
 }
 
 func TestExpAndLog(t *testing.T) {
