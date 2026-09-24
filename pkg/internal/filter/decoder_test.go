@@ -332,11 +332,6 @@ func TestDecoder_UndecodableFilterMatchesThePackageLevelPath(t *testing.T) {
 				t.Error("a plugin was consulted for a filter it does not claim")
 			}
 
-			if _, isNull := tc.filter.(ast.PdfNull); isNull {
-				// NewStreamReader rejects a null /Filter on both paths alike;
-				// the eager path is the one that diverged.
-				return
-			}
 			rc, err := d.NewStreamReader(context.Background(), stream)
 			if err != nil {
 				t.Fatalf("NewStreamReader with an unrelated plugin: %v", err)

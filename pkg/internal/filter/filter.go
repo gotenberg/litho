@@ -687,27 +687,19 @@ func decodeBrotli(ctx context.Context, data []byte) ([]byte, error) {
 //
 // The caller must close the returned reader when done.
 func NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
-	filterObj, hasFilter := stream.Dict["Filter"]
-	if !hasFilter {
+	// streamFilterNames reads a null /Filter as absent, as [DecodeStream]
+	// does. This path used to reject it as an invalid type, so the same
+	// stream decoded eagerly and failed to open lazily.
+	filters, err := streamFilterNames(stream.Dict)
+	if err != nil {
+		return nil, err
+	}
+	if len(filters) == 0 {
 		data, err := stream.Bytes(ctx)
 		if err != nil {
 			return nil, err
 		}
 		return io.NopCloser(bytes.NewReader(data)), nil
-	}
-
-	var filters []ast.PdfName
-	switch f := filterObj.(type) {
-	case ast.PdfName:
-		filters = append(filters, f)
-	case ast.PdfArray:
-		for _, item := range f {
-			if name, ok := item.(ast.PdfName); ok {
-				filters = append(filters, name)
-			}
-		}
-	default:
-		return nil, fmt.Errorf("invalid type for /Filter: %T", filterObj)
 	}
 
 	parms := extractDecodeParms(stream.Dict, len(filters))

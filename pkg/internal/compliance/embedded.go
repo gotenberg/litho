@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"regexp"
 	"slices"
 	"strings"
@@ -751,11 +753,14 @@ type embeddedDepthKey struct{}
 //     so the deepest nesting is 1.
 const maxEmbeddedDepth = 2
 
-// maxEmbeddedFileSize is the maximum size of a decoded embedded file stream
-// that will be validated. Larger files are skipped, with no violation, so a
-// crafted attachment cannot make validation hold a huge document in memory and
-// parse it. Anti-DoS guard, not spec-mandated: ISO 32000-1, 7.11.4 puts no
-// bound on an embedded file stream.
+// maxEmbeddedFileSize is the maximum size of a decoded embedded PDF that will
+// be validated. A larger embedded PDF is not validated and raises no
+// violation, so a crafted attachment cannot make validation hold a huge
+// document in memory and parse it. Anti-DoS guard, not spec-mandated: ISO
+// 32000-1, 7.11.4 puts no bound on an embedded file stream.
+//
+// The cap does not spare a large file that is not a PDF: its header decides
+// that, and [readEmbeddedFile] reads only the header to find out.
 //
 // 50 MB leaves better than nine times the largest embedded file in real
 // documents, and better than sixty times the largest embedded PDF.
@@ -770,6 +775,80 @@ const maxEmbeddedDepth = 2
 //     v2__correct_intarsys_EN16931_zugferd_2p0_EN16931_Elektron.pdf: the
 //     largest embedded PDF, 843,023 bytes.
 const maxEmbeddedFileSize = 50 * 1024 * 1024
+
+// embeddedHeaderScanLen is how many leading bytes of an embedded file are
+// searched for the "%PDF-" header. ISO 32000-1, 7.5.2 puts the header on the
+// first line; the window is the one document.NewDocument scans
+// (headerScanLimit in package document) to tolerate a leading prefix, so a
+// file judged a PDF here is one the parser recognises by its header.
+const embeddedHeaderScanLen = 1024
+
+// embeddedReadChunk is how much of an embedded file [readEmbeddedFile] reads
+// between two context checks, the chunk the filter pipeline decodes between
+// its own.
+const embeddedReadChunk = 1 << 20 // 1 MB
+
+// pdfHeaderMarker opens the header line of a PDF file (ISO 32000-1, 7.5.2).
+const pdfHeaderMarker = "%PDF-"
+
+// readEmbeddedFile reads a decoded embedded file from r and reports whether it
+// is a PDF, deciding that from its first [embeddedHeaderScanLen] bytes alone.
+//
+// A file that is not a PDF is read no further than its header, and data is
+// nil. A PDF is read in full up to limit bytes; one longer than that sets
+// tooLarge and returns no data, having read limit+1 bytes. The whole file used
+// to be decoded before its size was known, so the cap exempted a large
+// attachment from the PDF/A check altogether, even one whose first bytes
+// showed it was not a PDF.
+//
+// A read error once some bytes have arrived ends the file there and is logged
+// at Debug: the filter pipeline tolerates a damaged stream the same way when
+// it decodes one eagerly, so a truncated attachment is judged on what decodes.
+// An error before any byte arrives, or a cancelled ctx, is returned.
+func readEmbeddedFile(ctx context.Context, r io.Reader, limit int64, logger *slog.Logger) (data []byte, isPDF, tooLarge bool, err error) {
+	var buf bytes.Buffer
+	ended, err := copyEmbedded(ctx, &buf, r, embeddedHeaderScanLen, logger)
+	if err != nil {
+		return nil, false, false, err
+	}
+	if !bytes.Contains(buf.Bytes(), []byte(pdfHeaderMarker)) {
+		return nil, false, false, nil
+	}
+	if !ended {
+		if _, err := copyEmbedded(ctx, &buf, r, limit+1-int64(buf.Len()), logger); err != nil {
+			return nil, true, false, err
+		}
+	}
+	if int64(buf.Len()) > limit {
+		return nil, true, true, nil
+	}
+	return buf.Bytes(), true, false, nil
+}
+
+// copyEmbedded copies up to n bytes of r into buf in [embeddedReadChunk]
+// chunks, checking ctx between them. ended reports that r has no more data:
+// it reached its end, or failed after buf received data, which
+// [readEmbeddedFile] treats as the end of a damaged stream.
+func copyEmbedded(ctx context.Context, buf *bytes.Buffer, r io.Reader, n int64, logger *slog.Logger) (ended bool, err error) {
+	for n > 0 {
+		if err := ctx.Err(); err != nil {
+			return true, err
+		}
+		copied, err := io.CopyN(buf, r, min(n, embeddedReadChunk))
+		n -= copied
+		switch {
+		case err == io.EOF:
+			return true, nil
+		case err != nil && buf.Len() > 0:
+			logger.Debug("compliance.embedded: embedded stream ends in a read error, judging the bytes before it",
+				"bytes", buf.Len(), "error", err)
+			return true, nil
+		case err != nil:
+			return true, err
+		}
+	}
+	return false, nil
+}
 
 // checkEmbeddedFileCompliance validates that all embedded files are
 // themselves PDF/A-compliant. Two rules share the machinery: ISO
@@ -841,24 +920,34 @@ func validateEmbeddedFileSpec(ctx context.Context, doc *document.Document, fs fi
 		return nil
 	}
 
-	// Decode the stream.
-	data, err := doc.DecodeStream(ctx, stream)
+	rc, err := doc.NewStreamReader(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("compliance.embedded: cannot decode embedded stream",
+			"object", fs.objNum, "error", err)
+		return nil
+	}
+	data, isPDF, tooLarge, err := readEmbeddedFile(ctx, rc, maxEmbeddedFileSize, doc.Logger)
+	if closeErr := rc.Close(); closeErr != nil {
+		doc.Logger.Debug("compliance.embedded: closing embedded stream",
+			"object", fs.objNum, "error", closeErr)
+	}
 	if err != nil {
 		doc.Logger.Debug("compliance.embedded: cannot decode embedded stream",
 			"object", fs.objNum, "error", err)
 		return nil
 	}
 
-	if len(data) > maxEmbeddedFileSize {
-		doc.Logger.Debug("compliance.embedded: embedded file too large, skipping",
-			"object", fs.objNum, "size", len(data))
-		return nil
-	}
-
-	// Non-PDF embedded files cannot be PDF/A-compliant.
-	if !bytes.Contains(data[:min(len(data), 1024)], []byte("%PDF-")) {
+	// ISO 19005-2, 6.8 and ISO 19005-4, 6.9 require an embedded file to
+	// conform to an accepted PDF/A part, which a file that is not a PDF
+	// cannot, whatever its size.
+	if !isPDF {
 		return failf(rule,
 			"object %d: embedded file is not a PDF document", fs.objNum)
+	}
+	if tooLarge {
+		doc.Logger.Debug("compliance.embedded: embedded PDF too large, skipping",
+			"object", fs.objNum, "limit", maxEmbeddedFileSize)
+		return nil
 	}
 
 	doc.Logger.Debug("compliance.embedded: validating embedded PDF",
