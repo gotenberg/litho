@@ -18,7 +18,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
-	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // Float safely extracts a float64 from a [ast.PdfObject].
@@ -454,16 +453,6 @@ var pdfDocEncoding = map[byte]rune{
 	0xA0: 0x20AC, // EURO SIGN
 }
 
-// maxObjStmCacheBytes bounds the total decoded object-stream bytes retained by
-// [Document.cacheObjStm]. It is an anti-DoS guard, not spec-mandated: a crafted
-// file could pack many large object streams, so the cache evicts rather than
-// grow without bound. 256 MB matches the default stream budget,
-// [limits.DefaultMaxStreamBytes], so the cache never holds more than one
-// worst-case decode's worth of memory under the defaults. It stays fixed when
-// a caller raises that budget: the cache then evicts sooner, which costs a
-// re-decode, never a wrong answer.
-const maxObjStmCacheBytes = limits.DefaultMaxStreamBytes
-
 // objStmData is a decoded object stream plus its parsed header: the object
 // number and byte offset (relative to /First) of each contained object.
 // Caching it makes extracting object k an O(1) lookup instead of re-lexing k
@@ -749,12 +738,15 @@ func parseObjStmHeader(ctx context.Context, decoded []byte, n int) (objNums, off
 }
 
 // cacheObjStm stores a parsed object stream for reuse, bounding the total cached
-// decoded bytes with an evict-all policy. Object-stream resolution has strong
-// locality (a page's compressed objects share one stream), so evicting the
-// whole map on overflow rarely thrashes. A single stream larger than the budget
-// is not cached, so it cannot force repeated evictions.
+// decoded bytes at [limits.Limits.MaxObjStmCacheBytes] of the document's budgets
+// with an evict-all policy. Object-stream resolution has strong locality (a
+// page's compressed objects share one stream), so evicting the whole map on
+// overflow rarely thrashes. A single stream larger than the bound is not
+// cached, so it cannot force repeated evictions. Eviction costs a re-decode,
+// never a wrong answer.
 func (d *Document) cacheObjStm(objStmNum int, data *objStmData) {
-	if len(data.decoded) > maxObjStmCacheBytes {
+	limit := d.Limits().MaxObjStmCacheBytes()
+	if int64(len(data.decoded)) > limit {
 		return
 	}
 	d.mu.Lock()
@@ -765,7 +757,7 @@ func (d *Document) cacheObjStm(objStmNum int, data *objStmData) {
 	if _, ok := d.objStmCache[objStmNum]; ok {
 		return
 	}
-	if d.objStmCacheBytes+len(data.decoded) > maxObjStmCacheBytes {
+	if int64(d.objStmCacheBytes)+int64(len(data.decoded)) > limit {
 		d.objStmCache = make(map[int]*objStmData)
 		d.objStmCacheBytes = 0
 	}

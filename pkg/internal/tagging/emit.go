@@ -11,7 +11,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
-	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // maxTagDepth bounds structure-tree recursion. It is an anti-DoS guard, not
@@ -19,21 +18,6 @@ import (
 // rarely past a handful of levels), so 64 is far above any genuine document
 // while still capping a pathological or hostile classifier input.
 const maxTagDepth = 64
-
-// maxTaggedContentSize bounds a page's decoded content before marking. It is
-// an anti-DoS guard, not spec-mandated.
-//
-// It tracks [content.MaxPageContentSize] by reference rather than by value.
-// The two were written to match, then drifted when that limit rose from 32 MB
-// to 64 MB, leaving this one to refuse pages the rest of the pipeline reads.
-// The gap was reachable rather than theoretical: real pages come close to the
-// stale bound.
-//
-// # Corpus evidence
-//
-//   - pdfjs issue21089.pdf: page 1 decodes to 27.51 MB, within 16% of the
-//     stale 32 MB bound.
-const maxTaggedContentSize = content.MaxPageContentSize
 
 // Emit synthesizes a PDF structure tree from the logical tree rooted at root,
 // injects per-element marked content into the pages its leaves reference, and
@@ -495,6 +479,19 @@ func (e *emitter) dictAllocFirst(ctx context.Context, ref ast.PdfIndirectRef) (a
 // followed by a newline) so byte offsets the classifier derives from
 // [content.ParseStreamDataWithOffsets] line up with the bytes marked here.
 // Classify and Emit both call it so they agree on the page's content bytes.
+//
+// The content is bounded by [limits.Limits.MaxPageContentBytes] of the
+// document's budgets, an anti-DoS guard, not spec-mandated. It reads the same
+// bound as [content.ParsePageContent] rather than a value of its own. A bound
+// of its own was written to match, then drifted when that limit rose from 32 MB
+// to 64 MB, leaving tagging to refuse pages the rest of the pipeline reads. The
+// gap was reachable rather than theoretical: real pages come close to the stale
+// bound.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue21089.pdf: page 1 decodes to 27.51 MB, within 16% of the
+//     stale 32 MB bound.
 func pageContentBytes(ctx context.Context, doc *document.Document, page *document.Page) ([]byte, error) {
 	contentsObj, ok := page.Dict["Contents"]
 	if !ok {
@@ -521,6 +518,7 @@ func pageContentBytes(ctx context.Context, doc *document.Document, page *documen
 		return nil, fmt.Errorf("unexpected /Contents type %T", resolved)
 	}
 
+	limit := doc.Limits().MaxPageContentBytes()
 	var all []byte
 	for _, s := range streams {
 		data, err := doc.DecodeStream(ctx, s)
@@ -534,8 +532,8 @@ func pageContentBytes(ctx context.Context, doc *document.Document, page *documen
 		}
 		all = append(all, data...)
 		all = append(all, '\n')
-		if len(all) > maxTaggedContentSize {
-			return nil, fmt.Errorf("content exceeds %d MB limit", maxTaggedContentSize>>20)
+		if int64(len(all)) > limit {
+			return nil, fmt.Errorf("content exceeds the %d-byte page content limit", limit)
 		}
 	}
 	return all, nil

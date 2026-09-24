@@ -104,3 +104,55 @@ func TestNewDocument_ReadsItsLimits(t *testing.T) {
 		t.Errorf("1 KiB budget: NewStreamReader of a single FlateDecode filter = %v, want the unbounded streaming read", err)
 	}
 }
+
+// TestCacheObjStm_FollowsTheStreamBudget pins the object-stream cache to
+// [limits.Limits.MaxObjStmCacheBytes] of the document's budgets: an object
+// stream as large as the stream budget is cached, a larger one is not, and a
+// stream that would take the cache past the budget empties it first. The
+// default document caches a stream the lowered budget refuses.
+func TestCacheObjStm_FollowsTheStreamBudget(t *testing.T) {
+	t.Parallel()
+
+	data := limitsDocBytes(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [] /Count 0 >>",
+	)
+	ctx := context.Background()
+	const budget = 100
+
+	doc, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, WithLimits(limits.Limits{MaxStreamBytes: budget}))
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	cached := func(d *Document) []int {
+		d.mu.RLock()
+		defer d.mu.RUnlock()
+		var nums []int
+		for n := range d.objStmCache {
+			nums = append(nums, n)
+		}
+		return nums
+	}
+
+	doc.cacheObjStm(1, &objStmData{decoded: make([]byte, budget+1)})
+	if got := cached(doc); len(got) != 0 {
+		t.Errorf("a stream past the %d-byte budget was cached: %v", budget, got)
+	}
+	doc.cacheObjStm(2, &objStmData{decoded: make([]byte, budget)})
+	if got := cached(doc); len(got) != 1 || got[0] != 2 {
+		t.Errorf("after a stream of exactly the budget the cache holds %v, want [2]", got)
+	}
+	doc.cacheObjStm(3, &objStmData{decoded: make([]byte, 1)})
+	if got := cached(doc); len(got) != 1 || got[0] != 3 {
+		t.Errorf("a stream past the remaining budget left the cache holding %v, want only [3]", got)
+	}
+
+	def, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	def.cacheObjStm(1, &objStmData{decoded: make([]byte, budget+1)})
+	if got := cached(def); len(got) != 1 {
+		t.Errorf("the default budget did not cache a %d-byte stream: %v", budget+1, got)
+	}
+}

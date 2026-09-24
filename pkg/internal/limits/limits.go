@@ -12,7 +12,9 @@ import "fmt"
 // only reads it afterwards, so it needs no lock.
 type Limits struct {
 	// MaxStreamBytes bounds the decoded output of one stream. See
-	// [DefaultMaxStreamBytes].
+	// [DefaultMaxStreamBytes]. The page content bound and the object-stream
+	// cache derive from it: see [Limits.MaxPageContentBytes] and
+	// [Limits.MaxObjStmCacheBytes].
 	MaxStreamBytes int64
 
 	// MaxImagePixels bounds Width x Height of one image, and scales the
@@ -242,4 +244,60 @@ func (l Limits) Validate() error {
 func (l Limits) ScaleImageCap(base int64) int64 {
 	pixels := l.WithDefaults().MaxImagePixels
 	return max(base*pixels/DefaultMaxImagePixels, 1)
+}
+
+// pageContentShare divides the stream budget into the page content bound:
+// [Limits.MaxPageContentBytes] is MaxStreamBytes over it. That method says why
+// a page gets a quarter.
+const pageContentShare = 4
+
+// MaxPageContentBytes returns the bound on the decoded content one page, or one
+// form XObject, accumulates across its /Contents array: a quarter of
+// MaxStreamBytes and never below 1, so 64 MiB under the default budget. It is
+// an anti-DoS guard, not spec-mandated.
+//
+// ISO 32000-1, 7.7.3.3 lets a page split its content across an array of
+// streams, and MaxStreamBytes bounds each part but not their sum: a page can
+// name thousands of stream objects, and without this bound the accumulated
+// buffer grows with the file's object count rather than with anything the page
+// could draw. Every reader of page content applies this one bound (text
+// extraction, compliance, remediation, auto-tagging, stamping and redaction),
+// and the redaction scan applies it to each stream it reads, so no reader
+// refuses a page another reads.
+//
+// It moves with MaxStreamBytes: a caller that raises the stream budget to read
+// a heavy page reads it whole, and one that lowers the budget bounds pages too.
+// It is a quarter of the budget, not the whole of it, because a page is held
+// twice over, as bytes and then as the operators parsed from them, which retain
+// about five times the bytes. A page at a quarter of the budget holds about one
+// and a half stream budgets once parsed, where a page as large as the budget
+// would hold over six.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest real page found across all of them is page 1 of
+//     pdfjs issue21089.pdf, at 27.51 MB of decoded content in a 12.11 MB file,
+//     so the default leaves better than twice its size.
+//   - pdfjs issue21089.pdf: page 1 decodes to 28,846,545 bytes across 55
+//     streams and parses into 608,043 operators that retain 152 MB, 5.3 bytes
+//     per content byte.
+//   - pdfjs issue21089.pdf: page 1 came within 16% of the former 32 MB bound.
+func (l Limits) MaxPageContentBytes() int64 {
+	return max(l.WithDefaults().MaxStreamBytes/pageContentShare, 1)
+}
+
+// MaxObjStmCacheBytes returns the bound on the decoded object-stream bytes a
+// document keeps cached: MaxStreamBytes itself, so 256 MiB under the default
+// budget. It is an anti-DoS guard, not spec-mandated: a crafted file can pack
+// many large object streams (ISO 32000-1, 7.5.7), so the cache empties rather
+// than grows without bound.
+//
+// It equals the stream budget because that budget bounds each object stream the
+// cache holds. Every object stream that decodes then fits, and the cache never
+// holds more than one worst-case decode. A bound below the budget would leave
+// the streams between the two uncached, so each object read from one decodes
+// the whole stream again. A bound above it would let the cache outgrow what the
+// caller allowed one decode.
+func (l Limits) MaxObjStmCacheBytes() int64 {
+	return l.WithDefaults().MaxStreamBytes
 }

@@ -10,7 +10,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // flateStream returns a content stream object holding n bytes of compressible
@@ -37,7 +37,7 @@ func flateStream(t *testing.T, n int) string {
 //
 // Per ISO 32000-1, 7.7.3.3 a page's content may be split across an array of
 // streams. The per-stream decompression cap bounds each part but says nothing
-// about their sum, so before [content.MaxPageContentSize] applied here, a page
+// about their sum, so before [limits.Limits.MaxPageContentBytes] applied here, a page
 // naming enough parts grew this buffer with the file's object count rather than
 // with anything it could legitimately draw. Every page-scoped check reads this
 // buffer, so the growth happened on the ordinary validation path.
@@ -46,7 +46,7 @@ func TestPageContentBytesBoundsTheAccumulatedBuffer(t *testing.T) {
 
 	// Parts of 4 MB each, enough of them to pass the cap.
 	const part = 4 << 20
-	parts := content.MaxPageContentSize/part + 2
+	parts := int(limits.Default().MaxPageContentBytes()/part) + 2
 
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",

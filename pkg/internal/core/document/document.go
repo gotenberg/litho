@@ -51,7 +51,7 @@ type Document struct {
 	fontCache        map[int]any
 	cmapCache        map[int]any         // parsed CMap by ToUnicode stream object number
 	objStmCache      map[int]*objStmData // parsed object streams by ObjStm object number
-	objStmCacheBytes int                 // decoded bytes held in objStmCache, bounded by maxObjStmCacheBytes
+	objStmCacheBytes int                 // decoded bytes held in objStmCache, bounded by limits.Limits.MaxObjStmCacheBytes
 	fontProgCache    map[int][]byte      // decoded font programs by FontFile stream object number
 	fontProgBytes    int                 // decoded bytes held in fontProgCache, bounded by maxFontProgCacheBytes
 	colorCache       map[[2]int]any      // colour transforms by profile object number and rendering intent

@@ -192,6 +192,49 @@ func TestLimits_StreamBudget(t *testing.T) {
 	}
 }
 
+// TestLimits_PageContentFollowsTheStreamBudget pins the page content bound to
+// [Limits.MaxStreamBytes]: a page whose /Contents array holds two 20 KiB parts,
+// each well inside a 64 KiB stream budget, is refused under that budget, since
+// their sum passes a quarter of it, and read under the default and under a
+// 256 KiB budget.
+func TestLimits_PageContentFollowsTheStreamBudget(t *testing.T) {
+	t.Parallel()
+
+	const partSize = 20 << 10
+	part := []byte("BT /F1 12 Tf 72 700 Td (Heavy) Tj ET\n")
+	part = append(part, bytes.Repeat([]byte(" "), partSize-len(part))...)
+	data := limitsPDF(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents [4 0 R 5 0 R] /Resources << /Font << /F1 6 0 R >> >> >>",
+		streamObj("", part),
+		streamObj("", part),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	)
+
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name  string
+		l     Limits
+		reads bool
+	}{
+		{"default", Limits{}, true},
+		{"256 KiB", Limits{MaxStreamBytes: 256 << 10}, true},
+		{"64 KiB", Limits{MaxStreamBytes: 64 << 10}, false},
+	} {
+		text, err := openLimited(t, data, tc.l).ExtractText(ctx, 1)
+		if tc.reads {
+			if err != nil || !strings.Contains(text, "Heavy") {
+				t.Errorf("%s: ExtractText = %q, %v; want the page read", tc.name, text, err)
+			}
+			continue
+		}
+		if err == nil {
+			t.Errorf("%s: ExtractText = %q, want the page refused", tc.name, text)
+		}
+	}
+}
+
 // TestLimits_ImagePixelBudget pins [Limits.MaxImagePixels]: the 1024x1024
 // image decodes under a budget of exactly its pixels and fails with
 // [ErrImageTooLarge] under one pixel less.

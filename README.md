@@ -165,6 +165,8 @@ Every document is read under five budgets that keep a crafted file from asking f
 
 A byte count takes a plain integer or a `KiB`, `MiB` or `GiB` suffix, the others a plain integer, and `0` keeps the default. A value that does not parse, or one past its ceiling, exits `1`.
 
+`--max-stream-bytes` also bounds the content of one page, summed across its content streams, at a quarter of its value: raising it is how to read a page heavier than `64MiB`.
+
 ```bash
 litho --max-stream-bytes 64MiB --max-image-pixels 25000000 images document.pdf
 ```

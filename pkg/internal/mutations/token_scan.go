@@ -12,21 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
-	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
-
-// maxScannedStreamSize bounds the decoded bytes read from any one stream while
-// scanning. Anti-DoS guard, not spec-mandated: a scan decodes every stream in
-// the document, so a decompression bomb would otherwise be read in full. It
-// mirrors [content.MaxPageContentSize], which is sized against the heaviest
-// real page rather than picked round, and a single stream larger than the
-// heaviest legitimate page is past anything a scan needs to read.
-//
-// # Corpus evidence
-//
-//   - All corpora: [content.MaxPageContentSize] is measured against the
-//     largest real page found across them rather than picked round.
-const maxScannedStreamSize = content.MaxPageContentSize
 
 // maxScanDepth bounds nesting while walking one object. Anti-DoS guard, not
 // spec-mandated: arrays and dictionaries nest a handful of levels in real
@@ -59,7 +45,8 @@ type ScanResult struct {
 	// location, so a caller and a test see the same sequence every run.
 	Hits []TokenHit
 	// Unreadable names the objects whose stream could not be decoded or was
-	// larger than [maxScannedStreamSize], in ascending order. A scan that
+	// longer than the scan reads of one stream (see [scanWalk.scanStreamData]),
+	// in ascending order. A scan that
 	// skipped a stream has not proved that stream clean, so a caller that must
 	// fail closed refuses when this is non-empty rather than reading the empty
 	// Hits as success.
@@ -350,7 +337,16 @@ func (w *scanWalk) resolve(ctx context.Context, ref ast.PdfIndirectRef) (ast.Pdf
 // Decoded rather than raw, because the copy that matters is the one a reader
 // sees: a redacted word inside a Flate-compressed structure tree or appearance
 // stream is invisible to a scan of the stored bytes.
+//
+// It reads at most [limits.Limits.MaxPageContentBytes] of the document's
+// budgets from one stream, and reports a longer one unreadable. That bound is an
+// anti-DoS guard, not spec-mandated: a scan decodes every stream in the
+// document, so a decompression bomb would otherwise be read in full. It is the
+// page content bound because a single stream larger than the heaviest page any
+// reader accepts is past anything a scan needs to read, and a caller that
+// raises the stream budget to edit a heavy page can then scan that page too.
 func (w *scanWalk) scanStreamData(ctx context.Context, objNum int, stream ast.PdfStream) {
+	limit := w.doc.Limits().MaxPageContentBytes()
 	rc, err := w.doc.NewStreamReader(ctx, stream)
 	if err != nil {
 		w.unreadable[objNum] = true
@@ -358,7 +354,7 @@ func (w *scanWalk) scanStreamData(ctx context.Context, objNum int, stream ast.Pd
 			slog.Int("object", objNum), slog.Any("err", err))
 		return
 	}
-	data, err := io.ReadAll(io.LimitReader(rc, int64(maxScannedStreamSize)+1))
+	data, err := io.ReadAll(io.LimitReader(rc, limit+1))
 	if closeErr := rc.Close(); closeErr != nil {
 		w.doc.Logger.Debug("token scan: closing stream reader",
 			slog.Int("object", objNum), slog.Any("err", closeErr))
@@ -369,11 +365,11 @@ func (w *scanWalk) scanStreamData(ctx context.Context, objNum int, stream ast.Pd
 			slog.Int("object", objNum), slog.Any("err", err))
 		return
 	}
-	if len(data) > maxScannedStreamSize {
+	if int64(len(data)) > limit {
 		// Read short of the end, so the rest of it is unexamined.
 		w.unreadable[objNum] = true
 		w.doc.Logger.Debug("token scan: stream exceeds the scan cap",
-			slog.Int("object", objNum), slog.Int("cap", maxScannedStreamSize))
+			slog.Int("object", objNum), slog.Int64("cap", limit))
 		return
 	}
 
