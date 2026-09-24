@@ -187,15 +187,10 @@ func decodeTile(ctx context.Context, cs *codestream, t *tile, budget *blockBudge
 // and 2: the RCT on the reversible path (T.800, G.2.2), the ICT on the
 // irreversible one (G.3.2).
 func inverseMCT(cs *codestream, d *tileDecoder) error {
-	// G.2 and G.3: three components of one separation, bit depth and filter.
-	if len(d.comps) < 3 {
-		return fmt.Errorf("%w: multiple component transformation over %d components", ErrMalformed, len(d.comps))
+	if err := checkMCT(cs, d); err != nil {
+		return err
 	}
-	c0, c1, c2 := cs.components[0], cs.components[1], cs.components[2]
 	rev := d.comps[0].style.reversible
-	if c1 != c0 || c2 != c0 || d.comps[1].style.reversible != rev || d.comps[2].style.reversible != rev {
-		return fmt.Errorf("%w: multiple component transformation over unlike components", ErrMalformed)
-	}
 	p0, p1, p2 := &d.comps[0].coeffs, &d.comps[1].coeffs, &d.comps[2].coeffs
 	if rev {
 		for i := range p0.ints {
@@ -210,6 +205,21 @@ func inverseMCT(cs *codestream, d *tileDecoder) error {
 		p0.floats[i] = y0 + 1.402*y2
 		p1.floats[i] = y0 - 0.34413*y1 - 0.71414*y2
 		p2.floats[i] = y0 + 1.772*y1
+	}
+	return nil
+}
+
+// checkMCT refuses the multiple component transformation of a tile whose
+// components it cannot join: G.2 and G.3 take three components of one
+// separation, bit depth and filter. It reads the coding parameters alone.
+func checkMCT(cs *codestream, d *tileDecoder) error {
+	if len(d.comps) < 3 {
+		return fmt.Errorf("%w: multiple component transformation over %d components", ErrMalformed, len(d.comps))
+	}
+	c0, c1, c2 := cs.components[0], cs.components[1], cs.components[2]
+	rev := d.comps[0].style.reversible
+	if c1 != c0 || c2 != c0 || d.comps[1].style.reversible != rev || d.comps[2].style.reversible != rev {
+		return fmt.Errorf("%w: multiple component transformation over unlike components", ErrMalformed)
 	}
 	return nil
 }

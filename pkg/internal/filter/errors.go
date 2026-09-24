@@ -47,4 +47,9 @@ var (
 	// plugin declined for a filter litho has no built-in decoder for. It
 	// fails the stream where a bare ErrUnsupportedFilter skips the filter.
 	errPluginDeclined = errors.New("declined by its plugin, and litho has no built-in decoder for it")
+
+	// errUnsettled is returned by a codec probe (see codecProbes) that cannot
+	// tell from the headers whether the decoder refuses the stream, and by
+	// probeChain for a chain the probes cannot settle: only decoding tells.
+	errUnsettled = errors.New("only decoding tells whether the decoder refuses the stream")
 )

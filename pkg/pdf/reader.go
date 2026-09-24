@@ -1766,9 +1766,15 @@ func (r *Reader) ExtractRedactedText(ctx context.Context, pageNum int) (_ []mode
 // registering a plugin for the filter makes them decodable. Returns an empty
 // slice when every stream is decodable.
 //
-// The filter names settle most streams. A stream behind JPXDecode,
-// JBIG2Decode, CCITTFaxDecode or Crypt is decoded to find out whether its
-// decoder refuses it, so the call costs a decode of each such stream.
+// The filter names settle most streams. For a stream behind JPXDecode,
+// JBIG2Decode, CCITTFaxDecode or Crypt, the call reads what its decoder
+// reads before the image data, the JPEG 2000 headers, the JBIG2 segment
+// headers, the first CCITT row or the Crypt parameters, to find out whether
+// the decoder refuses it, and decodes no image. The rare stream those cannot
+// settle, a JPEG 2000 region of interest past the decoder's bit-planes or one
+// of those four filters chained after an image codec, is decoded. A refused
+// stream whose image data also fails decoding, damaged or past a decoding
+// limit, is listed all the same.
 func (r *Reader) UndecodableStreams(ctx context.Context) (_ []models.StreamDiagnostic, err error) {
 	defer recoverToError(r.logger(), "Reader.UndecodableStreams", &err)
 	diags, err := r.doc.UndecodableStreams(ctx)

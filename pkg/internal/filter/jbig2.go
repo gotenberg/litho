@@ -34,24 +34,53 @@ import (
 //     whose foreground poppler draws dark at 158,888 of its 159,600 pixels,
 //     the rest being resampled edges.
 func decodeJBIG2(ctx context.Context, data []byte, parms ast.PdfDict, lim limits.Limits) ([]byte, error) {
-	var globals []byte
-	if stream, ok := parms["JBIG2Globals"].(ast.PdfStream); ok {
-		decoded, err := NewDecoder(nil, lim).DecodeStream(ctx, stream)
-		if err != nil {
-			return nil, fmt.Errorf("decoding JBIG2Globals: %w", err)
-		}
-		globals = decoded
+	globals, err := jbig2Globals(ctx, parms, lim)
+	if err != nil {
+		return nil, err
 	}
 	bm, err := jbig2.Decode(ctx, data, globals, lim.ScaleImageCap(jbig2.DefaultMaxBitmapPixels))
 	if err != nil {
-		if errors.Is(err, jbig2.ErrUnsupported) {
-			return nil, fmt.Errorf("%w: JBIG2Decode: %w", ErrUnsupportedFilter, err)
-		}
-		return nil, fmt.Errorf("JBIG2Decode: %w", err)
+		return nil, jbig2Error(err)
 	}
 	out := make([]byte, len(bm.Data))
 	for i, b := range bm.Data {
 		out[i] = ^b
 	}
 	return out, nil
+}
+
+// probeJBIG2 is the probe of JBIG2Decode (see codecProbes): decodeJBIG2 with
+// [jbig2.Check] in place of decoding the regions.
+func probeJBIG2(ctx context.Context, data []byte, parms, _ ast.PdfDict, lim limits.Limits) error {
+	globals, err := jbig2Globals(ctx, parms, lim)
+	if err != nil {
+		return err
+	}
+	if err := jbig2.Check(ctx, data, globals); err != nil {
+		return jbig2Error(err)
+	}
+	return nil
+}
+
+// jbig2Globals returns the decoded JBIG2Globals stream of parms, or nil when
+// there is none, decoded under the stream budget of lim.
+func jbig2Globals(ctx context.Context, parms ast.PdfDict, lim limits.Limits) ([]byte, error) {
+	stream, ok := parms["JBIG2Globals"].(ast.PdfStream)
+	if !ok {
+		return nil, nil
+	}
+	decoded, err := NewDecoder(nil, lim).DecodeStream(ctx, stream)
+	if err != nil {
+		return nil, fmt.Errorf("decoding JBIG2Globals: %w", err)
+	}
+	return decoded, nil
+}
+
+// jbig2Error wraps an error of the jbig2 package, marking data that uses a
+// construct the decoder lacks as an unsupported filter.
+func jbig2Error(err error) error {
+	if errors.Is(err, jbig2.ErrUnsupported) {
+		return fmt.Errorf("%w: JBIG2Decode: %w", ErrUnsupportedFilter, err)
+	}
+	return fmt.Errorf("JBIG2Decode: %w", err)
 }

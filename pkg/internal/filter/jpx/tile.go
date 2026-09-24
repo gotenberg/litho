@@ -29,6 +29,13 @@ type tileDecoder struct {
 // newTileDecoder resolves tile t's coding parameters and lays out its
 // components, counting code-blocks against budget.
 func (cs *codestream) newTileDecoder(t *tile, budget *blockBudget) (*tileDecoder, error) {
+	return cs.resolveTile(t, budget, true)
+}
+
+// resolveTile is [codestream.newTileDecoder]. Without alloc it counts the
+// precincts and code-blocks against budget as the layout does, without
+// allocating them, for [Image.Check], which reads the coding parameters only.
+func (cs *codestream) resolveTile(t *tile, budget *blockBudget, alloc bool) (*tileDecoder, error) {
 	// T.800, A.6.1: a tile-part COD overrides the main one for the whole
 	// tile, and its per-component part overrides the main COCs too.
 	cod := cs.main.cod
@@ -80,7 +87,7 @@ func (cs *codestream) newTileDecoder(t *tile, budget *blockBudget) (*tileDecoder
 		if need := 3*tc.style.levels + 1; tc.quant.style != quantDerived && len(tc.quant.steps) < need {
 			return nil, fmt.Errorf("%w: component %d of tile %d has %d quantization step sizes for %d sub-bands", ErrMalformed, c, t.index, len(tc.quant.steps), need)
 		}
-		if err := layoutComponent(tc, budget); err != nil {
+		if err := layoutComponent(tc, budget, alloc); err != nil {
 			return nil, err
 		}
 		levels = max(levels, tc.style.levels+1)
@@ -200,6 +207,31 @@ func (tc *tileComponent) magnitudeBits(b *band) int {
 	return tc.quant.guards + tc.stepSize(b).exponent - 1
 }
 
+// blockPlanes returns the magnitude bit-planes a code-block of sub-band b of
+// tc is coded with: Mb plus the ROI shift (T.800, E-2 and H-3). Tier-1
+// decoding refuses a code-block of more than maxPlanes once its packets have
+// given it a coding pass.
+func (tc *tileComponent) blockPlanes(b *band) int {
+	return tc.magnitudeBits(b) + tc.roi
+}
+
+// checkReversible refuses resolution level res of tc when the reversible path
+// cannot hold its coefficients: a sub-band of more than maxReversibleBits
+// magnitude bit-planes. It reads the coding parameters alone, and
+// [tileDecoder.decodeBlocks] applies it before it decodes the level's
+// code-blocks.
+func (tc *tileComponent) checkReversible(res *resolution) error {
+	if !tc.style.reversible {
+		return nil
+	}
+	for i := range res.bands {
+		if mb := tc.magnitudeBits(&res.bands[i]); mb > maxReversibleBits {
+			return fmt.Errorf("%w: reversible sub-band of %d magnitude bit-planes", ErrUnsupported, mb)
+		}
+	}
+	return nil
+}
+
 // maxReversibleBits is the most magnitude bit-planes a sub-band of the 5-3
 // reversible path may have: its coefficients are held in int32. It is an
 // implementation limit, not spec-mandated; a 16-bit image needs about 19.
@@ -225,12 +257,8 @@ func (d *tileDecoder) decodeBlocks(ctx context.Context, cs *codestream) error {
 		}
 		for r := range tc.resolutions {
 			res := &tc.resolutions[r]
-			if tc.style.reversible {
-				for i := range res.bands {
-					if mb := tc.magnitudeBits(&res.bands[i]); mb > maxReversibleBits {
-						return fmt.Errorf("%w: reversible sub-band of %d magnitude bit-planes", ErrUnsupported, mb)
-					}
-				}
+			if err := tc.checkReversible(res); err != nil {
+				return err
 			}
 			for k := range res.precincts {
 				for i := range res.precincts[k].bands {
@@ -259,7 +287,7 @@ func (d *tileDecoder) decodeBlocks(ctx context.Context, cs *codestream) error {
 // the middle of the interval its bits leave open (T.800, E-6 and E-8).
 func (tc *tileComponent) decodeBlock(t *t1, b *band, cb *codeBlock, precision int) error {
 	mb := tc.magnitudeBits(b)
-	if err := t.decode(cb, b.orient, mb+tc.roi, tc.style.cbStyle); err != nil {
+	if err := t.decode(cb, b.orient, tc.blockPlanes(b), tc.style.cbStyle); err != nil {
 		return err
 	}
 	if cb.passes == 0 {

@@ -133,8 +133,9 @@ func (b *blockBudget) charge(w, h int) error {
 
 // layoutComponent splits one tile-component into resolution levels, sub-bands,
 // precincts and code-blocks, counting code-blocks and precincts against
-// budget.
-func layoutComponent(tc *tileComponent, budget *blockBudget) error {
+// budget. Without alloc it lays out the resolution levels and sub-bands and
+// counts the precincts and code-blocks, but allocates none of them.
+func layoutComponent(tc *tileComponent, budget *blockBudget, alloc bool) error {
 	s := tc.style
 	nl := s.levels
 	tc.resolutions = make([]resolution, nl+1)
@@ -193,9 +194,11 @@ func layoutComponent(tc *tileComponent, budget *blockBudget) error {
 		if err := budget.charge(res.pw, res.ph); err != nil {
 			return err
 		}
-		res.precincts = make([]precinct, res.pw*res.ph)
-		for k := range res.precincts {
-			if err := layoutPrecinct(res, r, k, budget); err != nil {
+		if alloc {
+			res.precincts = make([]precinct, res.pw*res.ph)
+		}
+		for k := range res.pw * res.ph {
+			if err := layoutPrecinct(res, r, k, budget, alloc); err != nil {
 				return err
 			}
 		}
@@ -204,9 +207,9 @@ func layoutComponent(tc *tileComponent, budget *blockBudget) error {
 }
 
 // layoutPrecinct lays out the code-blocks of precinct k of resolution level r
-// in each sub-band (T.800, B.6, B.7 and B.9).
-func layoutPrecinct(res *resolution, r, k int, budget *blockBudget) error {
-	p := &res.precincts[k]
+// in each sub-band (T.800, B.6, B.7 and B.9). Without alloc it only counts
+// them against budget.
+func layoutPrecinct(res *resolution, r, k int, budget *blockBudget, alloc bool) error {
 	px, py := k%res.pw, k/res.pw
 	// The precinct in resolution-level coordinates, anchored at (0, 0).
 	x0 := (res.x0>>res.ppx + px) << res.ppx
@@ -216,21 +219,29 @@ func layoutPrecinct(res *resolution, r, k int, budget *blockBudget) error {
 		// Every sub-band of a level above 0 has half its resolution.
 		x0, y0, x1, y1 = x0>>1, y0>>1, x1>>1, y1>>1
 	}
-	p.bands = make([]precinctBand, len(res.bands))
+	var p *precinct
+	if alloc {
+		p = &res.precincts[k]
+		p.bands = make([]precinctBand, len(res.bands))
+	}
 	for i := range res.bands {
 		b := &res.bands[i]
-		pb := &p.bands[i]
 		bx0, by0 := max(x0, b.x0), max(y0, b.y0)
 		bx1, by1 := min(x1, b.x1), min(y1, b.y1)
 		if bx0 >= bx1 || by0 >= by1 {
 			continue
 		}
 		cx0, cy0 := bx0>>b.cbw, by0>>b.cbh
-		pb.w = ceilShift(bx1, b.cbw) - cx0
-		pb.h = ceilShift(by1, b.cbh) - cy0
-		if err := budget.charge(pb.w, pb.h); err != nil {
+		w := ceilShift(bx1, b.cbw) - cx0
+		h := ceilShift(by1, b.cbh) - cy0
+		if err := budget.charge(w, h); err != nil {
 			return err
 		}
+		if !alloc {
+			continue
+		}
+		pb := &p.bands[i]
+		pb.w, pb.h = w, h
 		pb.blocks = make([]codeBlock, pb.w*pb.h)
 		for j := range pb.blocks {
 			cx, cy := cx0+j%pb.w, cy0+j/pb.w

@@ -83,15 +83,13 @@ func Decodable(name ast.PdfName) bool {
 // refusesUnsupported reports whether the built-in decoder of the named filter
 // refuses a stream that uses a feature it lacks, with [ErrUnsupportedFilter]:
 // a JPEG 2000 or JBIG2 construct, a CCITT coding, a Crypt filter other than
-// Identity. Only decoding tells which streams it refuses, so the name alone
-// cannot say the filter decodes. It mirrors the cases of applyDecodeFilter
+// Identity. The name alone cannot say such a filter decodes: the codecs'
+// probes read the data's headers to find out (see codecProbes), and the Crypt
+// filter reads its parameters alone. It mirrors the cases of applyDecodeFilter
 // that return ErrUnsupportedFilter; keep the two in sync.
 func refusesUnsupported(name ast.PdfName) bool {
-	switch name {
-	case "CCITTFaxDecode", "CCF", "JBIG2Decode", "JPXDecode", "Crypt":
-		return true
-	}
-	return false
+	_, codec := codecProbes[name]
+	return codec || name == "Crypt"
 }
 
 // DecodeStream decodes a PDF stream based on its /Filter dictionary entry.
@@ -184,7 +182,7 @@ func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder, strict b
 			// for is not skipped: the diagnostics count a filter a plugin
 			// claims as decodable, so a caller that consulted them before
 			// decoding would read the still-encoded bytes as decoded.
-			if errors.Is(derr, ErrUnsupportedFilter) && !errors.Is(derr, errPluginDeclined) && !strict {
+			if skipsFilter(derr) && !strict {
 				report.Skipped = append(report.Skipped, f)
 				continue
 			}
@@ -688,7 +686,27 @@ func ascii85Digit(v, d uint32) (uint32, bool) {
 }
 
 func decodeCCITTFax(ctx context.Context, data []byte, parms ast.PdfDict, limit int64) ([]byte, error) {
-	// ISO 32000-1, Table 11, with its defaults.
+	out, err := ccitt.Decode(ctx, data, ccittParams(parms, limit))
+	if err != nil {
+		return nil, ccittError(err)
+	}
+	return out, nil
+}
+
+// probeCCITTFax is the probe of CCITTFaxDecode (see codecProbes):
+// decodeCCITTFax with [ccitt.Check], which decodes the first row alone, the
+// only one whose failure fails the decoding.
+func probeCCITTFax(ctx context.Context, data []byte, parms, _ ast.PdfDict, lim limits.Limits) error {
+	if err := ccitt.Check(ctx, data, ccittParams(parms, lim.MaxStreamBytes)); err != nil {
+		return ccittError(err)
+	}
+	return nil
+}
+
+// ccittParams returns the decoder parameters of a CCITTFaxDecode parameter
+// dictionary, ISO 32000-1, Table 11, with its defaults, and limit as the cap
+// on the decoded bytes.
+func ccittParams(parms ast.PdfDict, limit int64) ccitt.Params {
 	p := ccitt.DefaultParams()
 	p.MaxOutput = limit
 	if parms != nil {
@@ -700,18 +718,21 @@ func decodeCCITTFax(ctx context.Context, data []byte, parms ast.PdfDict, limit i
 		p.EndOfBlock = pdfBoolOr(parms["EndOfBlock"], p.EndOfBlock)
 		p.BlackIs1 = pdfBoolOr(parms["BlackIs1"], p.BlackIs1)
 	}
-	out, err := ccitt.Decode(ctx, data, p)
+	return p
+}
+
+// ccittError wraps an error of the ccitt package, marking data that uses a
+// coding the decoder lacks as an unsupported filter.
+func ccittError(err error) error {
 	switch {
-	case err == nil:
-		return out, nil
 	case errors.Is(err, ccitt.ErrUnsupported):
-		return nil, fmt.Errorf("%w: CCITTFaxDecode: %w", ErrUnsupportedFilter, err)
+		return fmt.Errorf("%w: CCITTFaxDecode: %w", ErrUnsupportedFilter, err)
 	case errors.Is(err, ccitt.ErrLimit):
 		// The decoder's cap on its output is the stream budget, so it
 		// reports the bomb every other decoder reports.
-		return nil, fmt.Errorf("%w: ccitt decode: %w", ErrDecompressionBomb, err)
+		return fmt.Errorf("%w: ccitt decode: %w", ErrDecompressionBomb, err)
 	}
-	return nil, fmt.Errorf("ccitt decode: %w", err)
+	return fmt.Errorf("ccitt decode: %w", err)
 }
 
 // pdfIntOr returns an integer parameter, or def when it is absent or not an

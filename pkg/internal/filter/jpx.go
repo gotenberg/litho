@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter/jpx"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // decodeJPX decodes a JPXDecode stream (ISO 32000-1, 7.4.9) into one byte per
@@ -23,13 +24,9 @@ import (
 // maxSamples caps the samples of the image and of its rendered grid, scaled
 // from the image budget.
 func decodeJPX(ctx context.Context, data []byte, dict ast.PdfDict, maxSamples int64) ([]byte, error) {
-	img, err := jpx.Describe(data, maxSamples)
+	img, channels, err := describeJPX(data, dict, maxSamples)
 	if err != nil {
-		return nil, jpxError(err)
-	}
-	channels, err := jpxColourChannels(img, dict)
-	if err != nil {
-		return nil, fmt.Errorf("JPXDecode: %w", err)
+		return nil, err
 	}
 	indexed := isIndexedSpace(dict["ColorSpace"])
 	out, err := img.Render(ctx, channels, func(v int32, precision int, signed bool) byte {
@@ -39,6 +36,40 @@ func decodeJPX(ctx context.Context, data []byte, dict ast.PdfDict, maxSamples in
 		return nil, jpxError(err)
 	}
 	return out, nil
+}
+
+// describeJPX reads the headers of the JPEG 2000 data of a JPXDecode stream
+// and returns its image and the channels decodeJPX renders of it, as the
+// image dictionary dict says. The image's samples are not decoded.
+func describeJPX(data []byte, dict ast.PdfDict, maxSamples int64) (*jpx.Image, []jpx.Channel, error) {
+	img, err := jpx.Describe(data, maxSamples)
+	if err != nil {
+		return nil, nil, jpxError(err)
+	}
+	channels, err := jpxColourChannels(img, dict)
+	if err != nil {
+		return nil, nil, fmt.Errorf("JPXDecode: %w", err)
+	}
+	return img, channels, nil
+}
+
+// probeJPX is the probe of JPXDecode (see codecProbes): decodeJPX up to the
+// samples, with [jpx.Image.Check] in place of rendering them.
+func probeJPX(ctx context.Context, data []byte, _, dict ast.PdfDict, lim limits.Limits) error {
+	img, channels, err := describeJPX(data, dict, lim.ScaleImageCap(jpx.DefaultMaxSamples))
+	if err != nil {
+		return err
+	}
+	settled, err := img.Check(ctx, channels)
+	switch {
+	case errors.Is(err, jpx.ErrUnsupported):
+		return jpxError(err)
+	case !settled:
+		return errUnsettled
+	case err != nil:
+		return jpxError(err)
+	}
+	return nil
 }
 
 // jpxError wraps an error of the jpx package, marking data that uses a JPEG

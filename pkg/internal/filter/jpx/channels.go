@@ -185,27 +185,11 @@ func gcd(a, b int) int {
 // Render holds one tile's samples at a time, where [Decode] holds every
 // component's.
 func (img *Image) Render(ctx context.Context, chs []Channel, conv func(v int32, precision int, signed bool) byte) ([]byte, error) {
+	if err := img.checkChannels(chs); err != nil {
+		return nil, err
+	}
 	w, h := img.DefaultSize()
 	n := len(chs)
-	if n == 0 {
-		return nil, fmt.Errorf("%w: no channel to render", ErrMalformed)
-	}
-	if limit := img.maxSamples; int64(w) > limit || int64(h) > limit || int64(w)*int64(h) > limit/int64(n) {
-		return nil, fmt.Errorf("%w: %dx%d grid points of %d channels", ErrLimit, w, h, n)
-	}
-	for i, ch := range chs {
-		if ch.Component < 0 || ch.Component >= len(img.Components) {
-			return nil, fmt.Errorf("%w: channel %d maps component %d of %d", ErrMalformed, i, ch.Component, len(img.Components))
-		}
-		if ch.PaletteColumn >= 0 {
-			if img.header == nil || img.header.palette == nil || ch.PaletteColumn >= len(img.header.palette.columns) {
-				return nil, fmt.Errorf("%w: channel %d looks up a palette column the file lacks", ErrMalformed, i)
-			}
-			if col := img.header.palette.columns[ch.PaletteColumn]; col.precision > maxSampleBits {
-				return nil, fmt.Errorf("%w: palette column of %d bits", ErrUnsupported, col.precision)
-			}
-		}
-	}
 	out := make([]byte, w*h*n)
 	grids := make([]*componentGrid, len(img.Components))
 	err := img.decodeTiles(ctx, func(c int, tc *tileComponent) error {
@@ -227,6 +211,35 @@ func (img *Image) Render(ctx context.Context, chs []Channel, conv func(v int32, 
 		return nil, err
 	}
 	return out, nil
+}
+
+// checkChannels refuses what [Image.Render] refuses of chs before it decodes a
+// sample: no channel, a grid past the image's cap, a channel that maps a
+// component or palette column the image lacks, and a palette column deeper
+// than the samples it holds.
+func (img *Image) checkChannels(chs []Channel) error {
+	w, h := img.DefaultSize()
+	n := len(chs)
+	if n == 0 {
+		return fmt.Errorf("%w: no channel to render", ErrMalformed)
+	}
+	if limit := img.maxSamples; int64(w) > limit || int64(h) > limit || int64(w)*int64(h) > limit/int64(n) {
+		return fmt.Errorf("%w: %dx%d grid points of %d channels", ErrLimit, w, h, n)
+	}
+	for i, ch := range chs {
+		if ch.Component < 0 || ch.Component >= len(img.Components) {
+			return fmt.Errorf("%w: channel %d maps component %d of %d", ErrMalformed, i, ch.Component, len(img.Components))
+		}
+		if ch.PaletteColumn >= 0 {
+			if img.header == nil || img.header.palette == nil || ch.PaletteColumn >= len(img.header.palette.columns) {
+				return fmt.Errorf("%w: channel %d looks up a palette column the file lacks", ErrMalformed, i)
+			}
+			if col := img.header.palette.columns[ch.PaletteColumn]; col.precision > maxSampleBits {
+				return fmt.Errorf("%w: palette column of %d bits", ErrUnsupported, col.precision)
+			}
+		}
+	}
+	return nil
 }
 
 // componentGrid maps the default grid onto one component: cols[u] and rows[v]

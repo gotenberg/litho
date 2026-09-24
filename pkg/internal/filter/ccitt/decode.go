@@ -65,8 +65,22 @@ func DefaultParams() Params {
 //
 // Decode is safe for concurrent use: it keeps no state between calls.
 func Decode(ctx context.Context, data []byte, p Params) ([]byte, error) {
-	out, _, err := decode(ctx, data, p, false)
+	out, _, err := decode(ctx, data, p, false, 0)
 	return out, err
+}
+
+// Check reports whether [Decode] refuses data with [ErrUnsupported], and
+// decodes its first row alone to find out. Decode returns the rows before one
+// it cannot decode and fails only when there are none, so a coding it lacks
+// refuses the data in the first row or not at all. Check returns the error
+// Decode fails with there: that refusal, or the error of a malformed first row
+// or of parameters Decode refuses before it, and nil when the first row
+// decodes or the data holds none.
+//
+// Check is safe for concurrent use: it keeps no state between calls.
+func Check(ctx context.Context, data []byte, p Params) error {
+	_, _, err := decode(ctx, data, p, false, 1)
+	return err
 }
 
 // DecodeBlock decodes exactly Rows rows as [Decode] does, then, for
@@ -81,7 +95,7 @@ func DecodeBlock(ctx context.Context, data []byte, p Params) ([]byte, int, error
 	if p.Rows < 1 {
 		return nil, 0, fmt.Errorf("%w: a block of %d rows", ErrMalformed, p.Rows)
 	}
-	out, used, err := decode(ctx, data, p, true)
+	out, used, err := decode(ctx, data, p, true, 0)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -94,8 +108,9 @@ func DecodeBlock(ctx context.Context, data []byte, p Params) ([]byte, int, error
 // decode decodes rows as [Decode] and [DecodeBlock] describe, and reports
 // the whole bytes consumed. When block is set a garbled row is an error
 // whatever precedes it, and the end-of-block pattern after the last row is
-// consumed.
-func decode(ctx context.Context, data []byte, p Params, block bool) ([]byte, int, error) {
+// consumed. maxRows, when above 0, stops the decoding after that many rows,
+// for [Check].
+func decode(ctx context.Context, data []byte, p Params, block bool, maxRows int) ([]byte, int, error) {
 	if p.Columns < 1 || p.Columns > maxColumns {
 		return nil, 0, fmt.Errorf("%w: %d columns", ErrLimit, p.Columns)
 	}
@@ -112,7 +127,7 @@ func decode(ctx context.Context, data []byte, p Params, block bool) ([]byte, int
 	}
 	d := &decoder{r: bitReader{data: data}, p: p}
 	var out []byte
-	for row := 0; p.Rows == 0 || row < p.Rows; row++ {
+	for row := 0; (p.Rows == 0 || row < p.Rows) && (maxRows == 0 || row < maxRows); row++ {
 		if row%ctxRows == 0 {
 			if err := ctx.Err(); err != nil {
 				return nil, 0, err

@@ -105,14 +105,23 @@ func (d *Decoder) DecodeStreamReport(ctx context.Context, stream ast.PdfStream) 
 
 // UndecodableFilters returns, in chain order, the filters of stream's chain
 // that decoding skips because litho cannot decode them: the Skipped of
-// [Decoder.DecodeStreamReport], without decoding when the names settle it.
+// [Decoder.DecodeStreamReport], found without decoding the stream's image
+// data.
 //
 // A filter neither a built-in decoder nor a plugin knows is found from its
-// name. A built-in decoder that refuses a feature it lacks is found only by
-// decoding (see refusesUnsupported), so a chain naming one is decoded, and
-// its plugin, if one claims the filter, is consulted as decoding consults it.
-// When the chain fails on malformed data before its end, the filters after the
-// failure never run, and those among them the names settle are listed.
+// name. A built-in decoder that refuses a feature it lacks cannot be judged by
+// name (see refusesUnsupported): a chain naming one runs through probeChain,
+// which reads the headers of the codec's data where decoding would decode it
+// (see codecProbes), and consults a plugin that claims a filter as decoding
+// consults it. A chain the headers cannot settle is decoded, as is the data of
+// a codec a plugin claims. When the chain fails before its end, the filters
+// after the failure never run, and those among them the names settle are
+// listed.
+//
+// The answer is decoding's for data that decodes past its headers. A stream
+// whose data also fails decoding before the construct its decoder refuses,
+// damaged or past a decoding limit, fails with that error, and is listed all
+// the same.
 //
 // The error is only ever the context's.
 func (d *Decoder) UndecodableFilters(ctx context.Context, stream ast.PdfStream) ([]ast.PdfName, error) {
@@ -128,16 +137,21 @@ func (d *Decoder) UndecodableFilters(ctx context.Context, stream ast.PdfStream) 
 	if !slices.ContainsFunc(names, refusesUnsupported) {
 		return unknown, nil
 	}
-	_, report, err := decodeChain(ctx, stream, d, false)
+	skipped, err := probeChain(ctx, stream, d)
+	if errors.Is(err, errUnsettled) {
+		var report DecodeReport
+		_, report, err = decodeChain(ctx, stream, d, false)
+		skipped = report.Skipped
+	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return nil, ctxErr
 	}
 	if err == nil {
-		return report.Skipped, nil
+		return skipped, nil
 	}
 	var out []ast.PdfName
 	for _, n := range names {
-		if slices.Contains(report.Skipped, n) || slices.Contains(unknown, n) {
+		if slices.Contains(skipped, n) || slices.Contains(unknown, n) {
 			out = append(out, n)
 		}
 	}
@@ -204,8 +218,9 @@ func (d *Decoder) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io
 // filter litho cannot decode and hands its input on, NewStreamReaderChecked
 // fails with [ErrUnsupportedFilter]: at once for a filter no decoder knows,
 // naming every such filter of the chain, and at the decoder's refusal for a
-// built-in one that meets a feature it lacks. It refuses a stream exactly
-// when [Decoder.UndecodableFilters] lists a filter of its chain.
+// built-in one that meets a feature it lacks. [Decoder.UndecodableFilters]
+// lists a filter of every stream it refuses. It refuses every listed stream,
+// unless the data fails decoding first, damaged or past a decoding limit.
 //
 // Damaged data is not refused: the bytes a filter decoded before the damage
 // are read as NewStreamReader reads them.

@@ -24,21 +24,31 @@ type StreamDiagnostic struct {
 // registered plugin knows, such as an unknown filter, or one whose built-in
 // decoder refuses a feature the stream uses. It is the whole-document
 // equivalent of the skip [filter.DecodeStreamChecked] reports as incomplete,
-// and lists exactly the filters decoding skips (see
-// [Document.UndecodableFilters]). Damaged data, which DecodeStreamChecked also
-// reports as incomplete, is not listed: its filter decodes, and hands on what
-// the data holds before the damage. Results are sorted by object number.
+// and lists the filters decoding skips (see [Document.UndecodableFilters]).
+// Damaged data, which DecodeStreamChecked also reports as incomplete, is not
+// listed: its filter decodes, and hands on what the data holds before the
+// damage. Results are sorted by object number.
 //
-// A stream whose chain holds a filter that can refuse a feature is decoded to
-// find out, so the call costs a decode of every such stream.
+// A stream whose chain holds a filter that can refuse a feature has the
+// headers of its data read to find out, and its image data is not decoded
+// (see [filter.Decoder.UndecodableFilters]).
 //
 // # Corpus evidence
 //
-//   - All corpora: no stream uses a feature its built-in decoder refuses, so
-//     decoding changed the answer for no stream.
-//   - All corpora: decoding the JPXDecode, JBIG2Decode, CCITTFaxDecode and
-//     Crypt streams raised the summed time of the call from 5.5 s to 44 s.
-//   - pdfjs issue17289.pdf: the slowest file, from under 10 ms to 3.8 s.
+//   - All corpora: no stream uses a feature its built-in decoder refuses, and
+//     reading the headers gives the answer decoding every such stream gives,
+//     on every file.
+//   - All corpora: 8705 streams name a filter that can refuse a feature
+//     (8061 CCITTFaxDecode, 337 JPXDecode, 301 JBIG2Decode, 6 Crypt), and
+//     the headers settle every one, so the call decodes none of them.
+//   - All corpora: with a refused construct planted in their JPXDecode,
+//     JBIG2Decode and CCITTFaxDecode streams, 10,115 variants, the headers
+//     agree with decoding on all but 25 JBIG2 streams that fail decoding
+//     before the planted segment, 5 past the page-size cap and 20 malformed.
+//   - All corpora: decoding those streams raised the summed time of the call
+//     six- to tenfold. Reading their headers keeps it within the run-to-run
+//     noise of reading the filter names alone.
+//   - pdfjs issue17289.pdf: the slowest file to decode, 6.3 s, takes 3 ms.
 func (d *Document) UndecodableStreams(ctx context.Context) ([]StreamDiagnostic, error) {
 	var diags []StreamDiagnostic
 	for objNum, entry := range d.XRefEntriesSnapshot() {
@@ -86,7 +96,8 @@ func (d *Document) StreamHasUndecodableFilter(ctx context.Context, stream ast.Pd
 // refuses a feature the stream uses (a JPEG 2000 or JBIG2 construct, a CCITT
 // coding, a Crypt filter other than Identity). A caller that interprets the
 // bytes must refuse instead of reading them. See
-// [filter.Decoder.UndecodableFilters] for which streams are decoded to answer.
+// [filter.Decoder.UndecodableFilters] for how the headers of such a stream's
+// data answer, and for the rare stream decoded instead.
 //
 // A filter a registered plugin claims is listed only if the plugin declines
 // the stream and the built-in decoder then refuses it. A declined stream whose

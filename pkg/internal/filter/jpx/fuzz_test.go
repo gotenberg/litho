@@ -16,15 +16,24 @@ const fuzzSmallSamples = 1 << 12
 // of what it decodes, as the JPXDecode filter does. The contract is
 // crash-freedom: every input either decodes to components whose sample planes
 // match their dimensions, and renders to one byte per channel per grid point,
-// or returns an error carrying a sentinel.
+// or returns an error carrying a sentinel. [Image.Check] agrees with Render:
+// whatever Render refuses as unsupported Check refuses too, or calls
+// unsettled, and whatever Render renders Check passes.
 func FuzzDecode(f *testing.F) {
 	// Seeds reach both entry points and the tile-part loop: the J.10
 	// codestream bare, wrapped in a JP2 file, and truncated inside its
 	// tile-part. The OpenJPEG codestreams reach every progression order,
-	// POC, PPM, PPT, SOP, EPH and the code-block styles.
+	// POC, PPM, PPT, SOP, EPH and the code-block styles. Two refusals follow:
+	// a reversible sub-band of 37 magnitude bit-planes, from seven guard bits
+	// and an exponent of 31 in the QCD, and code-blocks past maxPlanes, from
+	// an RGN shift of 255 after the SIZ.
 	f.Add(annexJ10)
 	f.Add(slices.Concat(signatureBox, fileTypeBox, boxOf(boxHeader, imageHeaderBox, greyBox), boxOf(boxCodestream, annexJ10)))
 	f.Add(annexJ10[:90])
+	wide := slices.Clone(annexJ10)
+	wide[49], wide[50] = 0xE0, 0xF8
+	f.Add(wide)
+	f.Add(slices.Concat(annexJ10[:45], seg(markerRGN, 0, 0, 0xFF), annexJ10[45:]))
 	names, err := filepath.Glob("testdata/*.j2k")
 	if err != nil {
 		f.Fatal(err)
@@ -43,6 +52,19 @@ func FuzzDecode(f *testing.F) {
 		}
 	}
 	f.Fuzz(func(t *testing.T, data []byte) {
+		ctx := context.Background()
+		if img, err := Describe(data, DefaultMaxSamples); err == nil {
+			if chs, err := img.Channels(); err == nil {
+				settled, checkErr := img.Check(ctx, chs)
+				_, renderErr := img.Render(ctx, chs, func(v int32, _ int, _ bool) byte { return byte(v) })
+				if errors.Is(renderErr, ErrUnsupported) && settled && !errors.Is(checkErr, ErrUnsupported) {
+					t.Fatalf("Render refuses the image (%v), Check does not: %v", renderErr, checkErr)
+				}
+				if renderErr == nil && checkErr != nil {
+					t.Fatalf("Render renders the image, Check fails it: %v", checkErr)
+				}
+			}
+		}
 		// A small cap takes the refusals a lowered image budget moves: what
 		// decodes under it holds no more samples than it allows.
 		if small, err := Decode(context.Background(), data, fuzzSmallSamples); err != nil {

@@ -346,8 +346,9 @@ func (d *Document) NewStreamReader(ctx context.Context, stream ast.PdfStream) (i
 
 // NewStreamReaderChecked is [Document.NewStreamReader] that fails, with
 // [filter.ErrUnsupportedFilter], on a filter litho cannot decode instead of
-// handing its input on still encoded: it refuses a stream exactly when
-// [Document.UndecodableFilters] lists a filter of its chain. See
+// handing its input on still encoded. [Document.UndecodableFilters] lists a
+// filter of every stream it refuses, and it refuses every listed stream,
+// unless the data fails decoding first, damaged or past a decoding limit. See
 // [filter.Decoder.NewStreamReaderChecked].
 func (d *Document) NewStreamReaderChecked(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
 	stream = d.resolveStreamFilterKeys(ctx, stream)

@@ -2,6 +2,7 @@ package jbig2
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 )
@@ -12,7 +13,9 @@ const fuzzSmallCap = 1 << 12
 
 // FuzzDecode feeds arbitrary page and global segment data to the decoder. The
 // contract is crash-freedom: every input either decodes to a bitmap whose
-// buffer matches its dimensions or returns an error.
+// buffer matches its dimensions or returns an error. [Check] agrees with it:
+// it refuses as unsupported whatever Decode refuses so, and passes whatever
+// Decode decodes.
 func FuzzDecode(f *testing.F) {
 	b, err := os.ReadFile("testdata/t88_annex_h1.jb2")
 	if err != nil {
@@ -58,6 +61,10 @@ func FuzzDecode(f *testing.F) {
 	f.Add(concat(raw[0], raw[1], raw[2], raw[3], raw[4], raw[5], raw[6], raw[7]), []byte(nil))
 	f.Add(concat(raw[0], raw[8], raw[9], raw[10], raw[11], raw[12], raw[13], raw[14]), []byte(nil))
 	f.Add([]byte{}, []byte{})
+	// An 8x8 page, then an extension segment flagged necessary, which Decode
+	// and Check refuse.
+	page := segmentBytes(0, typePageInformation, 1, []byte{0, 0, 0, 8, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+	f.Add(concat(page, segmentBytes(1, typeExtension, 1, []byte{0xA0, 0, 0, 1})), []byte(nil))
 
 	f.Fuzz(func(t *testing.T, data, globals []byte) {
 		// A small cap takes the refusals a lowered image budget moves: whatever
@@ -66,6 +73,10 @@ func FuzzDecode(f *testing.F) {
 			t.Fatalf("%dx%d page decoded under a %d-pixel cap", small.Width, small.Height, int64(fuzzSmallCap))
 		}
 		bm, err := Decode(context.Background(), data, globals, DefaultMaxBitmapPixels)
+		checkErr := Check(context.Background(), data, globals)
+		if (errors.Is(err, ErrUnsupported) && !errors.Is(checkErr, ErrUnsupported)) || (err == nil && checkErr != nil) {
+			t.Fatalf("Check = %v, Decode = %v", checkErr, err)
+		}
 		if err != nil {
 			return
 		}

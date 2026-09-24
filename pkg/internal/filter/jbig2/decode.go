@@ -31,21 +31,63 @@ const maxDecodedAreas = 4
 //
 // Decode is safe for concurrent use: it keeps no state between calls.
 func Decode(ctx context.Context, data, globals []byte, maxPixels int64) (*Bitmap, error) {
-	globalSegs, err := parseSegments(globals)
-	if err != nil {
-		return nil, fmt.Errorf("JBIG2Globals: %w", err)
-	}
-	pageSegs, err := parseSegments(data)
+	d := &decoder{budget: budget{area: maxPixels}}
+	err := walkSegments(data, globals, func(seg segment) (bool, error) {
+		if err := d.process(ctx, seg); err != nil {
+			return false, err
+		}
+		return d.ended, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	d := &decoder{budget: budget{area: maxPixels}}
+	return d.finish()
+}
+
+// Check reports whether [Decode] refuses data and globals with
+// [ErrUnsupported], reading their segment headers and decoding no region.
+// It walks the segments Decode processes, in its order, and returns the first
+// error their headers show: a construct Decode refuses as unsupported, or a
+// malformed one it fails on first. Data that Decode fails on inside a
+// segment it processes before that construct, damaged or past its bitmap
+// cap, fails there instead.
+//
+// Check is safe for concurrent use: it keeps no state between calls.
+func Check(ctx context.Context, data, globals []byte) error {
+	ended := false
+	return walkSegments(data, globals, func(seg segment) (bool, error) {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		if err := checkSegment(seg); err != nil {
+			return false, fmt.Errorf("segment %d: %w", seg.number, err)
+		}
+		if seg.kind == typeEndOfPage || seg.kind == typeEndOfFile {
+			ended = true
+		}
+		return ended, nil
+	})
+}
+
+// walkSegments hands process the segments of one page in the order [Decode]
+// processes them (T.88, 8.2): every global segment, then those of the page
+// the first page information segment of data names, and of no page, until
+// process reports the page ended.
+func walkSegments(data, globals []byte, process func(seg segment) (ended bool, err error)) error {
+	globalSegs, err := parseSegments(globals)
+	if err != nil {
+		return fmt.Errorf("JBIG2Globals: %w", err)
+	}
+	pageSegs, err := parseSegments(data)
+	if err != nil {
+		return err
+	}
 	for _, seg := range globalSegs {
 		if seg.page != 0 {
-			return nil, fmt.Errorf("%w: JBIG2Globals segment %d is associated with page %d", ErrMalformed, seg.number, seg.page)
+			return fmt.Errorf("%w: JBIG2Globals segment %d is associated with page %d", ErrMalformed, seg.number, seg.page)
 		}
-		if err := d.process(ctx, seg); err != nil {
-			return nil, err
+		if _, err := process(seg); err != nil {
+			return err
 		}
 	}
 	pageNumber := uint32(0)
@@ -56,20 +98,21 @@ func Decode(ctx context.Context, data, globals []byte, maxPixels int64) (*Bitmap
 		}
 	}
 	if pageNumber == 0 {
-		return nil, fmt.Errorf("%w: no page information segment", ErrMalformed)
+		return fmt.Errorf("%w: no page information segment", ErrMalformed)
 	}
 	for _, seg := range pageSegs {
 		if seg.page != 0 && seg.page != pageNumber {
 			continue
 		}
-		if err := d.process(ctx, seg); err != nil {
-			return nil, err
+		ended, err := process(seg)
+		if err != nil {
+			return err
 		}
-		if d.ended {
+		if ended {
 			break
 		}
 	}
-	return d.finish()
+	return nil
 }
 
 // decoder holds the state of decoding one page: the page buffer and what
@@ -149,6 +192,11 @@ func (d *decoder) process(ctx context.Context, seg segment) error {
 		d.seen = make(map[uint32]bool)
 	}
 	d.seen[seg.number] = true
+	// The checks the header settles come first, so [Check], which makes them
+	// alone, finds what decoding the earlier segments would reach.
+	if err := checkSegment(seg); err != nil {
+		return fmt.Errorf("segment %d: %w", seg.number, err)
+	}
 	var err error
 	switch seg.kind {
 	case typePageInformation:
@@ -169,19 +217,32 @@ func (d *decoder) process(ctx context.Context, seg segment) error {
 		err = d.refinementRegion(ctx, seg)
 	case typeTables:
 		err = d.codeTable(seg)
-	case typeProfiles:
-		// A profiles segment lists what the stream conforms to (7.4.12); it
-		// changes nothing a decoder produces.
-	case typeExtension:
-		err = checkExtension(seg)
-	default:
-		// 7.3: every other value is reserved and must not be used.
-		err = fmt.Errorf("%w: segment %d has the reserved type %d", ErrMalformed, seg.number, seg.kind)
 	}
 	if err != nil {
 		return fmt.Errorf("segment %d: %w", seg.number, err)
 	}
 	return nil
+}
+
+// checkSegment makes the checks of a segment its header settles, which
+// [decoder.process] makes before it decodes the segment and [Check] makes
+// alone. A profiles segment lists what the stream conforms to (T.88, 7.4.12)
+// and an extension segment not flagged necessary adds nothing a decoder needs
+// (checkExtension), so neither has anything left to decode.
+func checkSegment(seg segment) error {
+	switch seg.kind {
+	case typeSymbolDictionary, typePatternDictionary, typeTables,
+		typeIntermediateText, typeImmediateText, typeImmediateLosslessText,
+		typeIntermediateHalftone, typeImmediateHalftone, typeImmediateLosslessHalf,
+		typeIntermediateGeneric, typeImmediateGeneric, typeImmediateLosslessGeneric,
+		typeIntermediateRefinement, typeImmediateRefinement, typeImmediateLosslessRefine,
+		typePageInformation, typeEndOfPage, typeEndOfStripe, typeEndOfFile, typeProfiles:
+		return nil
+	case typeExtension:
+		return checkExtension(seg)
+	}
+	// 7.3: every other value is reserved and must not be used.
+	return fmt.Errorf("%w: segment %d has the reserved type %d", ErrMalformed, seg.number, seg.kind)
 }
 
 // checkExtension accepts an extension segment unless it is flagged necessary.
