@@ -16,9 +16,9 @@ import (
 //
 // Grouped rather than passed as separate booleans: [Split] and [Merge] take
 // these positionally, and three or more adjacent bools at a call site are
-// transposable without the compiler noticing. Later passes described in
-// OPTIMIZATION.md (image recompression, font subsetting, linearization) extend
-// this struct instead of lengthening those signatures again.
+// transposable without the compiler noticing. Later passes (image
+// recompression, font subsetting, linearization) extend this struct instead of
+// lengthening those signatures again.
 //
 // Every pass here is refused for an encrypted document, because encryption
 // runs over the object set before serialization; see [writer.PackObjectStreams]

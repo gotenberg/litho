@@ -6,10 +6,11 @@
 // restriction are intentionally out of scope because CII does not
 // rely on them.
 //
-// PR1 of the engine ships only the schema loader and the in-memory
-// type model. Validation, facet enforcement, attribute checks, and
-// CII bundling arrive in follow-up PRs; see FACTUR-X.md for the
-// roadmap.
+// [Load] builds the in-memory type model from a schema tree,
+// [Validate] checks an instance document against a [Schema], and
+// [ValidateValue] enforces one simple type's lexical space and facets.
+// The compliance package bundles the CII schemas and runs them on
+// Factur-X payloads.
 //
 // Concurrency: a [Schema] is immutable once [Load] returns. Concurrent
 // readers are safe. Mutating a Schema after Load is undefined.

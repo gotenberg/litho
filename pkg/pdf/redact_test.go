@@ -151,9 +151,8 @@ func TestWriter_Redact_RejectsAPageOutOfRange(t *testing.T) {
 
 // TestWriter_Redact_RemovesTheCoveredTextFromTheOutput is the headline
 // contract: litho could already DETECT text sitting under a redaction mark
-// (Reader.ExtractRedactedText) and could not remove it, which REDACTION.md
-// calls the one roadmap gap whose absence is itself a hazard -- litho
-// diagnoses a leak it cannot fix.
+// (Reader.ExtractRedactedText) and could not remove it, a gap whose absence
+// is itself a hazard -- litho diagnosed a leak it could not fix.
 //
 // The assertion is on the OUTPUT BYTES, not on extracted text. Extraction
 // reads the page's content stream, so it would report a clean page while a
@@ -201,9 +200,8 @@ func TestWriter_Redact_RemovesTheCoveredTextFromTheOutput(t *testing.T) {
 // then verifies with a document-wide scan and fails closed. It deliberately
 // does NOT touch /Info, and its own doc comment names that as the usual cause
 // of a surviving copy: "a home no token-driven pass reaches, such as /Info,
-// which ClearMetadata owns". REDACTION.md agrees -- metadata "needs no new
-// scrubber ... what is missing is composing it into a redaction flow rather
-// than any new code".
+// which ClearMetadata owns". Metadata needs no new scrubber, only composing
+// ClearMetadata into the redaction flow.
 //
 // So this fixture puts the redacted word in /Info /Title. A Redact that
 // composes ClearMetadata succeeds and the word is gone; one that does not
@@ -321,8 +319,8 @@ func TestWriter_Redact_FailsClosedWhenACopySurvives(t *testing.T) {
 // TestWriter_Redact_RefusesPartialCoverage pins fail-closed at the public
 // boundary, and pins that a refusal leaves the Writer usable and UNCHANGED.
 //
-// Refusing beats half-redacting (REDACTION.md: "Fully remove (and prove it) or
-// refuse"). The second half matters as much as the first: an eager operation
+// Refusing beats half-redacting: fully remove (and prove it) or refuse. The
+// second half matters as much as the first: an eager operation
 // that queued edits before erroring would leave a Writer whose next WriteTo
 // emits a partially redacted file, so the error must restore the Writer state.
 func TestWriter_Redact_RefusesPartialCoverage(t *testing.T) {
