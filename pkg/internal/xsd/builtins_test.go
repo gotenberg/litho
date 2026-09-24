@@ -75,6 +75,103 @@ func TestValidateLexical_Numerics(t *testing.T) {
 	}
 }
 
+// TestValidateLexical_DecimalStrict pins XML Schema Part 2, 3.2.3.1: a
+// decimal literal is digits with at most one period and an optional sign.
+// The exponent, fraction, base-prefix and underscore forms big.Rat.SetString
+// reads are not in the lexical space.
+func TestValidateLexical_DecimalStrict(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		value   string
+		wantErr bool
+	}{
+		{"-1.23", false},
+		{"12678967.543233", false},
+		{"+100000.00", false},
+		{"210", false},
+		{"5.", false},
+		{".5", false},
+		{"007", false},
+		{"1e5", true},
+		{"1E5", true},
+		{"1/2", true},
+		{"0x10", true},
+		{"0b1", true},
+		{"0o7", true},
+		{"1_000", true},
+		{"Inf", true},
+		{"NaN", true},
+		{".", true},
+		{"", true},
+		{"+", true},
+		{"--1", true},
+		{"1.2.3", true},
+		{"1,5", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.value, func(t *testing.T) {
+			t.Parallel()
+
+			got := validateLexical(tc.value, builtin("decimal"))
+			if tc.wantErr && got == nil {
+				t.Errorf("validateLexical(%q) = nil, want a lexical error", tc.value)
+			}
+			if !tc.wantErr && got != nil {
+				t.Errorf("validateLexical(%q) = %v, want nil", tc.value, got)
+			}
+		})
+	}
+}
+
+// TestParseDecimal_ExactValue checks the value parseDecimal builds from the
+// digits, and that it refuses what the lexical space refuses, so a range
+// facet never orders a literal the lexical check rejects.
+func TestParseDecimal_ExactValue(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct{ in, want string }{
+		{"1.50", "3/2"},
+		{"-0.25", "-1/4"},
+		{"+7", "7"},
+		{".5", "1/2"},
+		{"5.", "5"},
+		{"-0", "0"},
+	} {
+		got, ok := parseDecimal(tc.in)
+		if !ok {
+			t.Errorf("parseDecimal(%q) failed, want %s", tc.in, tc.want)
+			continue
+		}
+		if got.RatString() != tc.want {
+			t.Errorf("parseDecimal(%q) = %s, want %s", tc.in, got.RatString(), tc.want)
+		}
+	}
+	for _, in := range []string{"1e5", "1/2", "0x10", "1_0", " 1", ""} {
+		if _, ok := parseDecimal(in); ok {
+			t.Errorf("parseDecimal(%q) succeeded, want a failure", in)
+		}
+	}
+}
+
+// TestValidateValue_DecimalRangeRejectsNonDecimal is the range half of
+// 3.2.3.1: before, "1e5" passed the lexical check and ordered as 100000
+// against a maxInclusive.
+func TestValidateValue_DecimalRangeRejectsNonDecimal(t *testing.T) {
+	t.Parallel()
+
+	st := &SimpleType{Base: builtin("decimal"), Facets: []Facet{MaxInclusive{Value: "1000000"}}}
+	for _, v := range []string{"1e5", "1/2", "0x10"} {
+		got := ValidateValue(v, st)
+		if len(got) == 0 {
+			t.Errorf("ValidateValue(%q) = no violation, want the lexical one", v)
+		}
+	}
+	if got := ValidateValue("100000", st); len(got) != 0 {
+		t.Errorf("ValidateValue(100000) = %v, want none", got)
+	}
+}
+
 func TestValidateLexical_DateTimes(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -420,20 +420,30 @@ func validateRangeBound(value, bound string, kind boundKind, base *BuiltinType, 
 	return nil
 }
 
-// parseDecimal accepts the XSD decimal lexical form (optional sign,
-// integer part, optional fractional part). Returns a *big.Rat so
-// bounds comparisons stay exact for invoice totals where IEEE float
-// rounding would distort verdicts.
+// parseDecimal reads s as a literal of the decimal lexical space, XML
+// Schema Part 2, 3.2.3.1: an optional sign, then digits with at most one
+// period (see [isDecimalNumeral]). Returns a *big.Rat so bounds comparisons
+// stay exact for invoice totals where IEEE float rounding would distort
+// verdicts.
+//
+// The value is built from the digits rather than by big.Rat.SetString,
+// which also reads an exponent ("1e5"), a fraction ("1/2"), a base prefix
+// ("0x10") and underscores, none of them a decimal literal. s must already
+// be white-space normalized, which [ValidateValue] and [compareRange] do.
 func parseDecimal(s string) (*big.Rat, bool) {
-	s = strings.TrimSpace(s)
-	if s == "" {
+	if !isDecimalNumeral(s) {
 		return nil, false
 	}
-	r := new(big.Rat)
-	if _, ok := r.SetString(s); ok {
-		return r, true
+	whole, fraction, _ := strings.Cut(trimSign(s), ".")
+	num, ok := new(big.Int).SetString(whole+fraction, 10)
+	if !ok {
+		return nil, false
 	}
-	return nil, false
+	if strings.HasPrefix(s, "-") {
+		num.Neg(num)
+	}
+	den := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(len(fraction))), nil)
+	return new(big.Rat).SetFrac(num, den), true
 }
 
 // validateFractionDigits applies XML Schema Part 2, 4.3.12.3: the value is

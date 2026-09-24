@@ -272,14 +272,10 @@ func checkBoolean(value string, base *BuiltinType) *FacetViolation {
 
 // checkDecimal checks XML Schema Part 2, 3.2.3.1: "a finite-length sequence
 // of decimal digits (#x30-#x39) separated by a period", with an optional
-// leading sign.
-//
-// TODO: parseDecimal delegates to big.Rat.SetString, which also accepts an
-// exponent ("1e5"), a fraction ("1/2") and a base prefix ("0x10"). None of
-// them is in the decimal lexical space, so each passes here where a
-// conforming validator rejects it.
+// leading sign. An exponent, a fraction or a base prefix is not a decimal
+// literal.
 func checkDecimal(value string, base *BuiltinType) *FacetViolation {
-	if _, ok := parseDecimal(value); !ok {
+	if !isDecimalNumeral(value) {
 		return lexErr(base, value, "not a decimal literal")
 	}
 	return nil
