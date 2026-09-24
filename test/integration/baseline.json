@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-09-22T10:48:09Z",
+  "captured_at": "2026-09-24T05:11:37Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -238,12 +238,12 @@
           "skipped": 1
         },
         "text": {
-          "matched": 1026,
-          "mismatched": 164,
+          "matched": 1027,
+          "mismatched": 163,
           "skipped": 1,
           "metrics": {
-            "chars_match": 1110,
-            "words_match": 1026
+            "chars_match": 1111,
+            "words_match": 1027
           }
         }
       }
