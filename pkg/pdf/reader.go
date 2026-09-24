@@ -1,6 +1,7 @@
 package pdf
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"errors"
@@ -26,6 +27,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/geospatial"
 	"github.com/gotenberg/litho/pkg/internal/graphics"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/graphics/icc"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/heuristics"
 	"github.com/gotenberg/litho/pkg/internal/schematron"
@@ -54,7 +56,8 @@ type openOpts struct {
 	schRoot   string
 	schPhase  string
 	schSchema *schematron.Schema
-	lenient   bool // relax Factur-X/ZUGFeRD consumer-path tolerances
+	lenient   bool   // relax Factur-X/ZUGFeRD consumer-path tolerances
+	cmyk      []byte // nil unless WithDefaultCMYKProfile was supplied
 }
 
 // WithLogger injects a structured logger for debug-level diagnostic output.
@@ -153,6 +156,35 @@ func WithLenient() OpenOption {
 	return func(o *openOpts) {
 		o.lenient = true
 	}
+}
+
+// WithDefaultCMYKProfile sets the ICC profile DeviceCMYK colours are read in
+// when the document states no output intent for them, such as the profile of
+// the press a document was prepared for. It governs how [Reader.DecodeImage]
+// and the Decode function of each [Reader.ExtractImages] entry turn CMYK
+// samples into RGB. Without it, litho reads DeviceCMYK through its built-in
+// profile of the CGATS TR 001 (SWOP) printing condition.
+//
+// profile holds the bytes of a CMYK ICC profile, and is copied. [Open] fails
+// with [ErrInvalidCMYKProfile] when litho cannot convert colours through it.
+func WithDefaultCMYKProfile(profile []byte) OpenOption {
+	return func(o *openOpts) {
+		o.cmyk = bytes.Clone(profile)
+	}
+}
+
+// checkCMYKProfile reports why litho cannot read CMYK colours through
+// profile, or nil when it can.
+func checkCMYKProfile(profile []byte) error {
+	p, err := icc.Parse(profile)
+	if err != nil {
+		return err
+	}
+	if p.Components() != 4 {
+		return fmt.Errorf("profile of the %q colour space", p.Space)
+	}
+	_, err = p.NewTransform(icc.RelativeColorimetric)
+	return err
 }
 
 // Reader is the high-level API facade for the PDF parsing engine.
@@ -514,6 +546,11 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (_
 		}
 		o.ciiSchema = schema
 	}
+	if o.cmyk != nil {
+		if err := checkCMYKProfile(o.cmyk); err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrInvalidCMYKProfile, err)
+		}
+	}
 	if o.schFS != nil {
 		schSchema, err := schematron.Load(ctx, o.schFS, o.schRoot)
 		if err != nil {
@@ -553,6 +590,7 @@ func Open(ctx context.Context, r io.ReaderAt, size int64, opts ...OpenOption) (_
 	if len(o.filters) > 0 {
 		doc.Filters = filter.NewDecoder(o.filters)
 	}
+	doc.CMYKProfile = o.cmyk
 
 	return &Reader{
 		doc:       doc,

@@ -80,7 +80,7 @@
 //
 //   - [Open] / [OpenFile] take [OpenOption]: [WithLogger], [WithPassword],
 //     [WithOCREngine], [WithFilterPlugin], [WithCIISchemas],
-//     [WithSchematron], [WithLenient].
+//     [WithSchematron], [WithLenient], [WithDefaultCMYKProfile].
 //   - [Reader.ExtractText] takes [ExtractTextOption]: [WithHiddenText],
 //     [WithInvisibleText], [WithClipPathText], [WithClippedText],
 //     [WithArtifacts].

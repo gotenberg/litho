@@ -211,6 +211,11 @@ var (
 	// [models.ZUGFeRDVersion] constants.
 	ErrInvalidZUGFeRDVersion = errors.New("zugferd version is invalid")
 
+	// ErrInvalidCMYKProfile is returned by [Open] and [OpenFile] when the
+	// profile given to [WithDefaultCMYKProfile] is not a CMYK ICC profile
+	// litho can convert colours through.
+	ErrInvalidCMYKProfile = errors.New("invalid default CMYK profile")
+
 	// ErrSchematronRuleSkipped is returned by [Reader.ValidateFacturX]
 	// and [Reader.ValidateZUGFeRD] as an advisory entry in the
 	// violations slice whenever a Schematron rule's XPath could not
