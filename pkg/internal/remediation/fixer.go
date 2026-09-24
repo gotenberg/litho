@@ -285,6 +285,26 @@ func resolveStreamFromAllocOrDoc(ctx context.Context, alloc *writer.ObjAllocator
 	return s, true
 }
 
+// liveStream returns the stream at ref as the next fixer should see it: the
+// replacement an earlier fixer queued at that object number, or the document's
+// copy when nothing is queued there. It reports false when the object is not a
+// stream, including when the queued replacement is something else, so a caller
+// never writes the document's stream back over it. Unlike
+// [resolveStreamFromAllocOrDoc], it never falls back to the document past a
+// pending write.
+func liveStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef) (ast.PdfStream, bool) {
+	obj, pending := alloc.Pending()[ref.ObjectNum]
+	if !pending {
+		resolved, err := doc.Resolve(ctx, ref)
+		if err != nil {
+			return ast.PdfStream{}, false
+		}
+		obj = resolved
+	}
+	s, ok := obj.(ast.PdfStream)
+	return s, ok && s.Dict != nil
+}
+
 // clausePrefix checks if a violation's rule clause starts with any of the given prefixes.
 func clausePrefix(v compliance.Violation, prefixes ...string) bool {
 	for _, p := range prefixes {

@@ -69,6 +69,22 @@ func matchLZW(v compliance.Violation) bool {
 //
 // Both repairs answer the same clause. The LZW half rewrites the bytes; the
 // case half rewrites only the name, and only when the bytes prove it right.
+//
+// Each stream is read through the allocator. This fixer visits every object in
+// the file and runs late in the content tier, so an earlier fixer has often
+// rewritten the stream already: images keeps an LZW body under a repaired
+// dictionary, and the content fixers write their rewrite back unfiltered.
+// Re-encoding the document's copy discarded either edit.
+//
+// # Corpus evidence
+//
+//   - litho complex_1b.pdf, complex_2a.pdf, complex_2b.pdf, complex_2u.pdf,
+//     complex_3b.pdf, a4syntax_4.pdf: the /DefaultRGB output-intent adds to
+//     the /Resources of an LZW Form XObject was discarded at PDF/A-1b, 2b
+//     and 4.
+//   - govdocs thread_100_100603.pdf, thread_100_100635.pdf,
+//     thread_100_100636.pdf: under aggressive remediation, text-control's
+//     rewrite of four LZW content streams per file was reverted.
 func fixLZW(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	var count int
 	renamed := make(map[int]string)
@@ -81,14 +97,8 @@ func fixLZW(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 			continue
 		}
 
-		ref := ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation}
-		resolved, err := doc.Resolve(ctx, ref)
-		if err != nil {
-			continue
-		}
-
-		stream, ok := resolved.(ast.PdfStream)
-		if !ok || stream.Dict == nil {
+		stream, ok := liveStream(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation})
+		if !ok {
 			continue
 		}
 
