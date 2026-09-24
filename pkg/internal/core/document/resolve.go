@@ -269,6 +269,11 @@ func DecodePdfString(s ast.PdfString) string {
 		return stripLeadingBOM(string(utf16.Decode(u16s)))
 	}
 	// UTF-16LE BOM (0xFF 0xFE): little-endian byte order.
+	//
+	// Deliberate leniency: ISO 32000-1, 7.9.2.2 encodes a text string in
+	// PDFDocEncoding or UTF-16BE only, so these bytes are PDFDocEncoded
+	// "ÿþ". A string starting with them is read as UTF-16LE instead. Which
+	// producers write it is not recorded.
 	if len(b) >= 2 && b[0] == utf16BEBom1 && b[1] == utf16BEBom0 {
 		u16s := make([]uint16, (len(b)-2)/2)
 		for i := range u16s {
@@ -317,6 +322,11 @@ func DecodePdfString(s ast.PdfString) string {
 	// punctuation into mojibake. Pure PdfDocEncoding byte streams with
 	// values in the 0x80-0x9F mapping range are not valid UTF-8 (they
 	// contain bare continuation bytes), so the ambiguity rarely bites.
+	//
+	// Deliberate leniency: ISO 32000-1, 7.9.2.2 reads a text string without
+	// the 254 255 marker as PDFDocEncoding, so a conforming string whose
+	// bytes happen to form UTF-8, such as "Ã©" (C3h A9h), is misread as
+	// "é". Which producers write unmarked UTF-8 is not recorded.
 	if utf8.Valid(b) && utf8.RuneCount(b) < len(b) {
 		return stripLeadingBOM(string(b))
 	}

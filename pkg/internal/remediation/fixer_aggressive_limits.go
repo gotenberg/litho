@@ -14,13 +14,21 @@ import (
 )
 
 const (
-	// pdfAGraphicsDepth is the q/Q nesting cap from ISO 19005-1 §6.1.12
-	// test 8 (28 levels).
+	// pdfAGraphicsDepth is the q/Q nesting cap from ISO 19005-1, 6.1.12
+	// test 8 and ISO 19005-2/3, 6.1.13 test 8 (28 levels).
 	pdfAGraphicsDepth = 28
-	// pdfADictMax is the 4095-entry cap on a single PDF dictionary.
+	// pdfADictMax is the 4095-entry cap on a single PDF dictionary. ISO
+	// 19005-1, 6.1.12 test 6 imposes it from the PDF Reference 1.4
+	// architectural limits (Table C.1), which is the reference veraPDF's
+	// PDF/A-1 profile cites. ISO 32000-1, Table C.1 lists no dictionary
+	// limit, and no ISO 19005-2/3/4 rule in veraPDF's profiles states one,
+	// so the cap binds PDF/A-1 alone. The detector is
+	// compliance.maxDictCap1.
 	pdfADictMax = 4095
 	// pdfADeviceNComponents is the 8-component cap on DeviceN colour
-	// spaces (ISO 19005-1 §6.1.12 test 9, ISO 19005-2 §6.2.4.4).
+	// spaces (ISO 19005-1, 6.1.12 test 9, from PDF Reference 1.4, Table
+	// C.1). ISO 19005-2/3, 6.1.13 test 9 allows 32, the ISO 32000-1, Table
+	// C.1 value.
 	pdfADeviceNComponents = 8
 )
 
@@ -42,6 +50,12 @@ func matchAggressiveLimits(v compliance.Violation) bool {
 // Gated on [Options.PreserveContent]=false because each repair below
 // is a lossy content rewrite: paths flatten, dictionaries lose entries,
 // spot colours drop, out-of-range character codes map to nothing.
+//
+// TODO: the profile is ignored, so every repair runs with the PDF/A-1
+// limits. A PDF/A-2 or PDF/A-3 violation that matches, such as q/Q nesting
+// under 6.1.13 test 8, also truncates any dictionary above [pdfADictMax],
+// which those parts do not cap, and trims any DeviceN above 8 colorants,
+// where 6.1.13 test 9 allows 32.
 func fixAggressiveLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, _ string) ([]string, error) {
 	if opts.PreserveContent {
 		return nil, nil

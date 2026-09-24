@@ -393,6 +393,11 @@ func (p *Parser) parseIndirectObject(ctx context.Context) (ast.PdfObject, error)
 
 	// Consume the endobj keyword if present. Tolerate missing endobj (Acrobat compat).
 	// Peek returns TokenEOF on error, so the type guard safely prevents Consume on failure.
+	//
+	// Deliberate leniency: ISO 32000-1, 7.3.10 brackets an indirect object's
+	// value "between the keywords obj and endobj". The value parsed so far is
+	// returned without its closing keyword. No file or Acrobat measurement
+	// backing the attribution is recorded.
 	t, _ := p.Peek(0) //nolint:errcheck // EOF is expected; type guard below handles it
 	if t.Type == lexer.TokenKeyword && t.Value == "endobj" {
 		_, _ = p.Consume() //nolint:errcheck // Token already validated by Peek
@@ -1144,16 +1149,21 @@ func (p *Parser) SkipInlineImage(ctx context.Context) error {
 		return fmt.Errorf("parser read ahead too far before inline image data")
 	}
 
-	// Skip the single whitespace byte that follows ID (per PDF spec).
+	// Skip the single white-space byte that follows ID. ISO 32000-1, 8.9.7
+	// requires it unless the image uses ASCIIHexDecode or ASCII85Decode. With
+	// those filters the byte may be the first byte of data, which is harmless
+	// here: only the EI terminator is sought, and the data is not returned.
 	reader := p.lex.Reader()
 	if _, err := reader.ReadByte(); err != nil {
 		return fmt.Errorf("failed to read post-ID whitespace: %w", err)
 	}
 
-	// Scan forward for the EI terminator. Per the PDF spec, image data ends
-	// at a whitespace byte followed by "EI" followed by whitespace, a
-	// delimiter, or EOF. Raw bytes 'E' and 'I' can occur inside image data,
-	// so the scan validates the trailing context to avoid false matches.
+	// Scan forward for the EI terminator. ISO 32000-1, 8.9.7 places the data
+	// "between the ID and EI operators" and gives no length for it, so the
+	// end is found by heuristic: "EI" read as its own token (7.2.2), preceded
+	// by white space and followed by white space, a delimiter, or EOF. Raw
+	// bytes 'E' and 'I' can occur inside image data, so the scan validates
+	// the trailing context to avoid false matches.
 	return scanToEI(reader, ctx, ascii85)
 }
 
@@ -1242,13 +1252,15 @@ func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) 
 		return nil, fmt.Errorf("parser read ahead too far before inline image data")
 	}
 
-	// Skip the single whitespace byte that follows ID (per PDF spec).
+	// Skip the single white-space byte that follows ID (ISO 32000-1, 8.9.7).
+	// See SkipInlineImage for the ASCIIHexDecode and ASCII85Decode case.
 	reader := p.lex.Reader()
 	if _, err := reader.ReadByte(); err != nil {
 		return nil, fmt.Errorf("failed to read post-ID whitespace: %w", err)
 	}
 
-	// Scan forward for the EI terminator.
+	// Scan forward for the EI terminator, found by the heuristic
+	// SkipInlineImage describes.
 	ascii85 := false
 	if f, ok := dict["F"]; ok {
 		ascii85 = filterNamesContainASCII85(f)

@@ -98,6 +98,19 @@ func IsBuiltin(qn QName) bool {
 // invoices actually use. Less common types fall through to permissive
 // acceptance; the loader still resolves them so unrelated schema
 // references work.
+//
+// Each lexical space is the one XML Schema Part 2: Datatypes (Second
+// Edition) defines, in 3.2 for the primitive types and 3.3 for the derived
+// ones. The clause sits on each case and check.
+//
+// TODO: 4.3.6 fixes whiteSpace to collapse for every atomic type but string
+// and the types derived from it, and token itself collapses, so white space
+// is normalised before a value is held against its lexical space.
+// [ValidateValue] applies only the whiteSpace facets a schema declares, never
+// a built-in's own. "A\nB" and "A  B" as xs:token, or "A\tB" as
+// xs:normalizedString, are therefore reported, although they normalise to
+// valid values. Element text is trimmed before it reaches here, so only
+// interior white space and attribute values are affected.
 func validateLexical(value string, base *BuiltinType) *FacetViolation {
 	if base == nil {
 		return nil
@@ -106,6 +119,8 @@ func validateLexical(value string, base *BuiltinType) *FacetViolation {
 		return nil
 	}
 	switch base.Name.Local {
+	// 3.2.1: string holds every finite sequence of XML characters, and the
+	// XML parser has already rejected any other.
 	case "string", "anyType", "anySimpleType":
 		return nil
 	case "normalizedString":
@@ -116,6 +131,12 @@ func validateLexical(value string, base *BuiltinType) *FacetViolation {
 		return checkBoolean(value, base)
 	case "decimal":
 		return checkDecimal(value, base)
+	// The integer family, 3.3.13 to 3.3.25: each derived type fixes its
+	// range as a minInclusive and maxInclusive on integer, nonPositiveInteger
+	// 3.3.14, negativeInteger 3.3.15, long 3.3.16, int 3.3.17, short 3.3.18,
+	// byte 3.3.19, nonNegativeInteger 3.3.20, unsignedLong 3.3.21,
+	// unsignedInt 3.3.22, unsignedShort 3.3.23, unsignedByte 3.3.24 and
+	// positiveInteger 3.3.25.
 	case "integer":
 		return checkInteger(value, base, nil, nil)
 	case "nonNegativeInteger":
@@ -152,6 +173,12 @@ func validateLexical(value string, base *BuiltinType) *FacetViolation {
 		// XSD lets anyURI be permissive: any string that survives
 		// percent-encoding is acceptable. Practically all CII
 		// IDSchemeAgencyID values pass; reject only the empty form.
+		//
+		// TODO: 3.2.17.1 admits every sequence that escapes to a legal RFC
+		// 2396 URI reference, and RFC 2396 makes both the URI and the
+		// fragment of a reference optional, so the empty string is a valid
+		// anyURI. Rejecting it flags an empty attribute a conforming
+		// validator accepts.
 		if value == "" {
 			return lexErr(base, value, "empty anyURI")
 		}
@@ -168,6 +195,8 @@ func lexErr(base *BuiltinType, value, reason string) *FacetViolation {
 	}
 }
 
+// checkNormalizedString checks XML Schema Part 2, 3.3.1: the lexical space
+// holds no carriage return, line feed or tab.
 func checkNormalizedString(value string, base *BuiltinType) *FacetViolation {
 	if strings.ContainsAny(value, "\t\n\r") {
 		return lexErr(base, value, "contains tab/newline/carriage-return")
@@ -175,6 +204,8 @@ func checkNormalizedString(value string, base *BuiltinType) *FacetViolation {
 	return nil
 }
 
+// checkToken checks XML Schema Part 2, 3.3.2: normalizedString's lexical
+// space, with no leading or trailing space and no run of two or more spaces.
 func checkToken(value string, base *BuiltinType) *FacetViolation {
 	if v := checkNormalizedString(value, base); v != nil {
 		return v
@@ -190,6 +221,8 @@ func checkToken(value string, base *BuiltinType) *FacetViolation {
 	return nil
 }
 
+// checkBoolean checks XML Schema Part 2, 3.2.2.1: the legal literals are
+// true, false, 1 and 0.
 func checkBoolean(value string, base *BuiltinType) *FacetViolation {
 	switch value {
 	case "true", "false", "1", "0":
@@ -198,6 +231,14 @@ func checkBoolean(value string, base *BuiltinType) *FacetViolation {
 	return lexErr(base, value, "not one of true|false|1|0")
 }
 
+// checkDecimal checks XML Schema Part 2, 3.2.3.1: "a finite-length sequence
+// of decimal digits (#x30-#x39) separated by a period", with an optional
+// leading sign.
+//
+// TODO: parseDecimal delegates to big.Rat.SetString, which also accepts an
+// exponent ("1e5"), a fraction ("1/2") and a base prefix ("0x10"). None of
+// them is in the decimal lexical space, so each passes here where a
+// conforming validator rejects it.
 func checkDecimal(value string, base *BuiltinType) *FacetViolation {
 	if _, ok := parseDecimal(value); !ok {
 		return lexErr(base, value, "not a decimal literal")
@@ -205,6 +246,10 @@ func checkDecimal(value string, base *BuiltinType) *FacetViolation {
 	return nil
 }
 
+// checkInteger checks XML Schema Part 2, 3.3.13.1, "a finite-length sequence
+// of decimal digits (#x30-#x39) with an optional leading sign", then the
+// range a derived type fixes. The trim stands in for the whiteSpace collapse
+// 4.3.6 fixes on every numeric type.
 func checkInteger(value string, base *BuiltinType, minInt, maxInt *big.Int) *FacetViolation {
 	v := strings.TrimSpace(value)
 	n, ok := new(big.Int).SetString(v, 10)
@@ -229,6 +274,16 @@ func checkBoundedInt(value string, base *BuiltinType, minLit, maxLit string) *Fa
 // checkDate checks value against the XSD date lexical form CCYY-MM-DD,
 // after stripping any timezone suffix. The helpers below check the
 // byte-level shape; checkDate then checks the month and day ranges.
+//
+// XML Schema Part 2, 3.2.9.1 gives the form as '-'? yyyy '-' mm '-' dd
+// zzzzzz?, with the year, month, day and timezone written as for dateTime
+// (3.2.7.1).
+//
+// TODO: the check covers only the first ten characters and a flat 1 to 31
+// day range. 3.2.7 caps the day by its month and year ("cannot even be 29
+// for month 02 and year 2002") and 3.2.7.1 prohibits '0000', yet
+// "2024-02-30", "0000-01-01" and "2024-01-15abc" pass. The '-'? sign and a
+// year of more than four digits, which 3.2.7.1 allows, are rejected.
 func checkDate(value string, base *BuiltinType) *FacetViolation {
 	s, _ := splitTimezone(value)
 	if len(s) < 10 || s[4] != '-' || s[7] != '-' {
@@ -245,6 +300,13 @@ func checkDate(value string, base *BuiltinType) *FacetViolation {
 	return nil
 }
 
+// checkDateTime checks the shape of XML Schema Part 2, 3.2.7.1: '-'? yyyy
+// '-' mm '-' dd 'T' hh ':' mm ':' ss ('.' s+)? (zzzzzz)?.
+//
+// TODO: only the separators and digits of the first 19 characters are
+// checked. Month, day, hour, minute and second ranges are not, and whatever
+// follows the seconds is accepted, so "2024-13-45T99:99:99" and
+// "2024-01-15T10:00:00junk" pass.
 func checkDateTime(value string, base *BuiltinType) *FacetViolation {
 	s, _ := splitTimezone(value)
 	// Minimum well-formed dateTime: CCYY-MM-DDTHH:MM:SS, 19 chars.
@@ -259,6 +321,12 @@ func checkDateTime(value string, base *BuiltinType) *FacetViolation {
 	return nil
 }
 
+// checkTime checks the shape of XML Schema Part 2, 3.2.8.1: "the left
+// truncated lexical representation for dateTime", hh:mm:ss.sss with an
+// optional timezone.
+//
+// TODO: as in checkDateTime, the ranges and anything past the seconds go
+// unchecked, so "25:61:61" passes.
 func checkTime(value string, base *BuiltinType) *FacetViolation {
 	s, _ := splitTimezone(value)
 	if len(s) < 8 || s[2] != ':' || s[5] != ':' {
@@ -274,6 +342,9 @@ func checkTime(value string, base *BuiltinType) *FacetViolation {
 // its optional timezone suffix ("Z" or +HH:MM/-HH:MM). The suffix is
 // recognised by shape only; full RFC 3339 timezone arithmetic is out
 // of scope.
+//
+// The shape is XML Schema Part 2, 3.2.7.3: (('+' | '-') hh ':' mm) | 'Z'.
+// The magnitude limit of 14 hours stated there is not checked.
 func splitTimezone(value string) (body string, tz string) {
 	if i := strings.LastIndexAny(value, "+-"); i > 0 && len(value)-i == 6 && value[i+3] == ':' {
 		return value[:i], value[i:]

@@ -21,8 +21,9 @@ var emptyBoundingBox = BoundingBox{
 // opHandler is the canonical signature for a PDF content-stream operator
 // handler. It receives a context, the machine, the current top-of-stack
 // graphics state, and the parsed operation. Handlers do not return errors:
-// PDF content streams are tolerant by spec. Unknown or ill-formed operators
-// leave the graphics state unchanged rather than abort processing.
+// an unknown or ill-formed operator leaves the graphics state unchanged
+// rather than abort processing. That relaxes ISO 32000-1, 7.8.2; see
+// [Machine.executeOp].
 type opHandler func(ctx context.Context, m *Machine, state *State, op content.Operation)
 
 // opHandlers is the dispatch table for [Machine.executeOp]. Populated in
@@ -133,9 +134,18 @@ func (m *Machine) Execute(ctx context.Context, ops []content.Operation) error {
 }
 
 // executeOp dispatches a single operation to its handler. Unknown
-// operators are silently ignored. The PDF spec requires lenient
-// tolerance because implementations encode extensions that older
-// readers must skip without failing.
+// operators are silently ignored.
+//
+// Deliberate leniency: ISO 32000-1, 7.8.2 says that "when a conforming
+// reader encounters an operator in a content stream that it does not
+// recognize, an error shall occur", and suspends that only inside a BX/EX
+// compatibility section (Table 32). The machine tracks state and does not
+// judge operators. Most keywords missing from [opHandlers] are standard
+// operators it does not model (sh, gs, Tj and others), and failing on
+// those would abort every page. A keyword ISO 32000-1 does not define at
+// all is skipped the same way, inside BX/EX or not. The compliance checker
+// reports undefined operators under ISO 19005-1, 6.2.10 and ISO
+// 19005-2/3/4, 6.2.2, which forbid them even inside BX/EX.
 func (m *Machine) executeOp(ctx context.Context, op content.Operation) error {
 	h, ok := opHandlers[op.Operator]
 	if !ok {

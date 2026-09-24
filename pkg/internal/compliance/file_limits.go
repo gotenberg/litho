@@ -12,29 +12,30 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// PDF implementation limits. The PDF/A-1 (suffix 1) values mirror
-// ISO 32000-1:2008 Annex C, Table C.1 (Architectural limits) and are
-// imposed as conformance limits by ISO 19005-1 §6.1.12. The PDF/A-2..4
-// values (suffix 2) reflect PDF 2.0 (ISO 32000-2), which raises the real
-// and string limits and the DeviceN colorant count; ISO 19005-2/3
-// §6.1.13 imposes them. maxQNesting (q/Q graphics-state nesting) and
-// maxCID (16-bit CID space) are spec structural maxima, not Table C.1.
+// PDF implementation limits. The PDF/A-1 (suffix 1) values mirror the
+// architectural limits of PDF Reference 1.4, Table C.1, which ISO 19005-1,
+// 6.1.12 imposes as conformance limits; veraPDF's PDF/A-1 profile cites that
+// table for every 6.1.12 test. The PDF/A-2/3 values (suffix 2) mirror ISO
+// 32000-1, Annex C, Table C.1, which ISO 19005-2/3, 6.1.13 imposes. That table
+// raises the real limit and the DeviceN colorant count, lowers the string
+// limit, and lists no array or dictionary capacity at all. Unsuffixed values
+// are the same in both tables.
 const (
-	maxIntegerValue = 2_147_483_647  // ISO 32000-1 Table C.1: largest integer.
-	minIntegerValue = -2_147_483_648 // ISO 32000-1 Table C.1: smallest integer.
-	maxNameBytes    = MaxNameBytes   // ISO 32000-1 Table C.1: name length in bytes.
-	maxIndirectObjs = 8_388_607      // ISO 32000-1 Table C.1: objects in a single file.
-	maxStringBytes1 = 65535          // ISO 32000-1 Table C.1: string length.
-	maxStringBytes2 = 32767          // ISO 32000-2: PDF 2.0 string length.
-	maxArrayCap1    = 8191           // ISO 32000-1 Table C.1: array elements.
-	maxDictCap1     = 4095           // ISO 32000-1 Table C.1: dictionary entries.
-	maxRealAbs1     = 32767.0        // ISO 32000-1 Table C.1: largest real magnitude.
-	maxRealAbs2     = 3.403e38       // ISO 32000-2: PDF 2.0 real magnitude (IEEE single).
-	minRealAbs2     = 1.175e-38      // ISO 32000-2: smallest normal IEEE single magnitude.
-	maxDeviceN1     = 8              // ISO 32000-1: DeviceN colorant count.
-	maxDeviceN2     = 32             // ISO 32000-2: PDF 2.0 DeviceN colorant count.
-	maxQNesting     = 28             // ISO 32000-1 Table C.1: graphics-state (q/Q) nesting.
-	maxCID          = 65535          // 16-bit CID space.
+	maxIntegerValue = 2_147_483_647  // Table C.1: largest integer.
+	minIntegerValue = -2_147_483_648 // Table C.1: smallest integer.
+	maxNameBytes    = MaxNameBytes   // Table C.1: name length in bytes.
+	maxIndirectObjs = 8_388_607      // Table C.1: objects in a single file.
+	maxStringBytes1 = 65535          // PDF Reference 1.4, Table C.1: string length.
+	maxStringBytes2 = 32767          // ISO 32000-1, Table C.1: string length.
+	maxArrayCap1    = 8191           // PDF Reference 1.4, Table C.1: array elements.
+	maxDictCap1     = 4095           // PDF Reference 1.4, Table C.1: dictionary entries.
+	maxRealAbs1     = 32767.0        // PDF Reference 1.4, Table C.1: largest real magnitude.
+	maxRealAbs2     = 3.403e38       // ISO 32000-1, Table C.1: largest real magnitude.
+	minRealAbs2     = 1.175e-38      // ISO 32000-1, Table C.1: nonzero real closest to 0.
+	maxDeviceN1     = 8              // PDF Reference 1.4, Table C.1: DeviceN colorant count.
+	maxDeviceN2     = 32             // ISO 32000-1, Table C.1: DeviceN colorant count.
+	maxQNesting     = 28             // Table C.1: graphics-state (q/Q) nesting.
+	maxCID          = 65535          // Table C.1: largest CID.
 )
 
 // MaxNameBytes is the 127-byte cap on PDF name length from ISO 32000-1

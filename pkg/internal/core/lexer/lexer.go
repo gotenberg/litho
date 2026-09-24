@@ -320,6 +320,13 @@ func (l *Lexer) NextToken() (Token, error) {
 					return Token{Type: TokenError, Value: err.Error()}, err
 				}
 				// Null bytes inside names are silently stripped (Acrobat compat).
+				//
+				// Deliberate leniency: ISO 32000-1, 7.3.5 builds a name from
+				// "any characters (8-bit values) except null", and 7.2.2, Table 1
+				// makes NUL a white-space character, which ends the token, so
+				// "/Ty\x00pe" is the name Ty followed by the keyword pe. The
+				// byte is dropped and the name continues, giving Type. No file
+				// or Acrobat measurement backing the attribution is recorded.
 				if cc == 0x00 {
 					continue
 				}

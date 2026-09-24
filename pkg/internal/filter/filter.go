@@ -457,6 +457,9 @@ func decodeLZW(ctx context.Context, data []byte, parms ast.PdfDict) ([]byte, err
 	return result, nil
 }
 
+// decodeASCIIHex decodes ISO 32000-1, 7.4.2: one byte per pair of hexadecimal
+// digits, white space ignored, and a GREATER-THAN SIGN as EOD. Any other
+// character is an error, which hex.DecodeString reports.
 func decodeASCIIHex(data []byte) ([]byte, error) {
 	val := string(data)
 	idx := strings.Index(val, ">")
@@ -464,6 +467,10 @@ func decodeASCIIHex(data []byte) ([]byte, error) {
 		val = val[:idx]
 	}
 
+	// TODO: 7.4.2 ignores "all white-space characters (see 7.2)", and Table 1
+	// also lists NUL (00h) and FORM FEED (0Ch). Only SP, HT, LF and CR are
+	// stripped here, so a stream holding either byte fails with "invalid
+	// byte" instead of decoding.
 	val = strings.Map(func(r rune) rune {
 		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
 			return -1
@@ -471,6 +478,10 @@ func decodeASCIIHex(data []byte) ([]byte, error) {
 		return r
 	}, val)
 
+	// 7.4.2: "If the filter encounters the EOD marker after reading an odd
+	// number of hexadecimal digits, it shall behave as if a 0 (zero) followed
+	// the last digit." The digit is supplied without an EOD marker too, so
+	// data truncated before its ">" still decodes.
 	if len(val)%2 != 0 {
 		val += "0"
 	}
@@ -481,15 +492,24 @@ func decodeASCIIHex(data []byte) ([]byte, error) {
 	return decoded, nil
 }
 
+// decodeASCII85 decodes ISO 32000-1, 7.4.3. The encoding ends at its "~>"
+// EOD marker and ignores white space. A z inside a group and a final partial
+// group of one character are errors, which ascii85.Decode reports.
+//
+// TODO: 7.4.3 makes "any character sequences that represent impossible
+// combinations in the ASCII base-85 encoding" an error, a group whose value
+// exceeds 2^32 - 1 among them. ascii85.Decode accumulates in a uint32 and
+// wraps instead, so "uuuuu" decodes to four wrong bytes.
 func decodeASCII85(data []byte) ([]byte, error) {
-	// PDF ASCII85 streams end with the EOD marker "~>". Strip it (and any
-	// trailing garbage) before passing to Go's decoder, which doesn't
-	// understand the PDF-specific marker.
+	// 7.4.3 names the 2-character sequence ~> as the EOD marker, so nothing
+	// after it is data. Go's decoder does not know the marker, so cut there.
 	if idx := bytes.Index(data, []byte("~>")); idx != -1 {
 		data = data[:idx]
 	}
 
-	// Strip whitespace that PDF generators may inject between groups.
+	// 7.4.3: the filter "shall ignore all white-space characters (see 7.2)".
+	// ascii85.Decode also skips every byte up to SPACE, which covers the NUL
+	// and FORM FEED this list omits.
 	data = bytes.Map(func(r rune) rune {
 		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
 			return -1

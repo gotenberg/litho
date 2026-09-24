@@ -105,9 +105,11 @@ func checkEmbeddedGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			return results
 		}
 
-		// Check /F and /UF keys (§7.11). The rule scopes to "the file
-		// specification dictionary for an embedded file", so a plain
-		// filespec without /EF is out of scope and not flagged.
+		// Check /F and /UF keys (ISO 19005-2/3, 6.8 t2 and ISO 19005-4, 6.9
+		// t2; the keys are those of ISO 32000-1, 7.11.3, Table 44). The rule
+		// scopes to "the file specification dictionary for an embedded
+		// file", so a plain filespec without /EF is out of scope and not
+		// flagged.
 		if fs.hasEF {
 			results = append(results, checkFileSpecFUF(ctx, doc, fs, part)...)
 		}

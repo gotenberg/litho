@@ -113,6 +113,10 @@ func collectAllFacets(t Type) ([]Facet, *BuiltinType) {
 // When multiple WhiteSpace facets appear, the last one wins (which
 // matches XSD's "most-derived restriction" rule under the collect
 // order above).
+//
+// The three modes are those of XML Schema Part 2, 4.3.6. That clause also
+// fixes collapse on every atomic type not derived from string, which is not
+// applied here; see the TODO on [validateLexical].
 func applyWhitespace(value string, facets []Facet) string {
 	mode := ""
 	for _, f := range facets {
@@ -206,6 +210,13 @@ func applyFacet(value string, f Facet, _base *BuiltinType) *FacetViolation {
 //nolint:gochecknoglobals // process-wide compile cache.
 var patternCache sync.Map // map[string]*regexp.Regexp
 
+// validatePattern applies XML Schema Part 2, 4.3.4.4: a literal is
+// facet-valid when it is among the strings the regular expression denotes.
+//
+// TODO: 4.3.4.3 ORs the patterns of one derivation step ("combined as if
+// they appeared in a single regular expression as separate branches") and
+// ANDs only those of different steps. Every Pattern is checked on its own
+// here, so a value matching one of two same-step patterns is reported.
 func validatePattern(value string, fc Pattern) *FacetViolation {
 	re := patternFor(fc.Value)
 	if re == nil {
@@ -214,6 +225,13 @@ func validatePattern(value string, fc Pattern) *FacetViolation {
 		// regex compile step, so the cost surfaces here and the
 		// validator errs on the side of false negatives rather than
 		// runtime panics.
+		//
+		// Deliberate leniency: 4.3.4.2 requires {value} to be a valid
+		// regular expression. Go's RE2 syntax is not the Appendix F
+		// dialect either, so the escapes \i and \c and block escapes such
+		// as \p{IsBasicLatin} fail to compile and land here. Character
+		// class subtraction compiles with another meaning: [a-z-[aeiou]]
+		// matches "a]" and rejects "b".
 		return nil
 	}
 	if !re.MatchString(value) {
@@ -230,8 +248,9 @@ func patternFor(raw string) *regexp.Regexp {
 	if cached, ok := patternCache.Load(raw); ok {
 		return cached.(*regexp.Regexp)
 	}
-	// XSD patterns are implicitly anchored at both ends; Go's regexp
-	// package matches anywhere by default, so wrap.
+	// XSD patterns are implicitly anchored at both ends (XML Schema Part
+	// 2, Appendix F); Go's regexp package matches anywhere by default, so
+	// wrap.
 	re, err := regexp.Compile("^(?:" + raw + ")$")
 	if err != nil {
 		return nil
@@ -244,6 +263,16 @@ func patternFor(raw string) *regexp.Regexp {
 // Enumeration facet supplied. Exposed separately from [applyFacet]
 // because the allow-list semantics need to see the full set of
 // enumeration values at once.
+//
+// XML Schema Part 2, 4.3.5.3 makes the enumerations of one step a single
+// set, and 4.3.5.4 accepts a value that is one of them. The comparison is on
+// literals, which matches values for the string-derived types CII
+// enumerates; a numeric enumeration of 1 would reject 1.0.
+//
+// TODO: the values of every step join one set here, so a value a derived
+// step leaves out still passes. 4.3.5 constrains the value space of the type
+// that states the facet to its own set, and 4.3.5.5 keeps that set within
+// the base's, so the most-derived enumeration decides.
 func validateEnumeration(value string, facets []Facet) *FacetViolation {
 	var values []string
 	for _, f := range facets {
@@ -264,6 +293,10 @@ func validateEnumeration(value string, facets []Facet) *FacetViolation {
 	}
 }
 
+// validateExactLength applies XML Schema Part 2, 4.3.1. validateMinLength
+// and validateMaxLength apply 4.3.2 and 4.3.3 the same way. For string and
+// anyURI all three count characters, which the rune count gives. The octet
+// count 4.3.1 prescribes for hexBinary and base64Binary is not implemented.
 func validateExactLength(value string, want int, fc Facet) *FacetViolation {
 	if utf8.RuneCountInString(value) == want {
 		return nil
@@ -370,6 +403,12 @@ func parseDecimal(s string) (*big.Rat, bool) {
 	return nil, false
 }
 
+// validateFractionDigits applies XML Schema Part 2, 4.3.12.3: the value is
+// expressible as i × 10^-n with 0 <= n <= fractionDigits.
+//
+// TODO: 4.3.12 restricts the value space, not the lexical space, and states
+// that "trailing fractional zero digits" are "still permitted". Every digit
+// after the point is counted here, so "1.50" fails fractionDigits 1.
 func validateFractionDigits(value string, maxDigits int, fc Facet) *FacetViolation {
 	digits := fractionalDigitCount(value)
 	if digits <= maxDigits {
@@ -381,6 +420,9 @@ func validateFractionDigits(value string, maxDigits int, fc Facet) *FacetViolati
 	}
 }
 
+// validateTotalDigits applies XML Schema Part 2, 4.3.11.3: the value is
+// expressible as i × 10^-n with |i| < 10^totalDigits and
+// 0 <= n <= totalDigits. See significantDigitCount for how it departs.
 func validateTotalDigits(value string, maxDigits int, fc Facet) *FacetViolation {
 	digits := significantDigitCount(value)
 	if digits <= maxDigits {
@@ -427,7 +469,11 @@ func significantDigitCount(s string) int {
 		leadingZeros = false
 		count++
 	}
-	// Trailing zeros after the decimal point still count toward total
-	// digits per XSD, which the straight scan above already includes.
+	// Trailing zeros after the decimal point count toward the total here.
+	//
+	// TODO: XML Schema Part 2, 4.3.11 bounds the value, not the literal,
+	// and states that "trailing fractional zero digits" are "still
+	// permitted", so they must not count. "1.000" is 1, which totalDigits
+	// 3 admits, yet it counts four digits here and fails.
 	return count
 }

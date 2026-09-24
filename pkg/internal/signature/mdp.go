@@ -69,6 +69,14 @@ func extractMDPPolicy(ctx context.Context, doc *document.Document, sigDict ast.P
 			continue
 		}
 
+		// ISO 32000-1, 12.8.2.2, Table 254 gives P the values 1 to 3 and a
+		// default of 2. Table 256 gives the FieldMDP transform parameters no
+		// P entry, so only DocMDP falls back to the default. A FieldMDP /P is
+		// still read when a producer writes one.
+		//
+		// TODO: Table 254 types P as a number, so /P 1.0 is a valid P=1. Only
+		// an integer is read here, and a real P falls back to the default 2,
+		// which permits changes the author forbade.
 		if pObj, ok := tpDict["P"]; ok {
 			if pInt, ok := pObj.(ast.PdfInt); ok {
 				p := int(pInt)
@@ -78,7 +86,6 @@ func extractMDPPolicy(ctx context.Context, doc *document.Document, sigDict ast.P
 			}
 		}
 
-		// DocMDP defaults to P=2 if not specified.
 		if tmName == "DocMDP" {
 			return 2
 		}
@@ -205,26 +212,37 @@ func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd
 
 // classifyModifications checks whether the appended objects violate the MDP policy.
 // Returns an empty string if compliant, or a violation description.
+//
+// The policies are those of ISO 32000-1, 12.8.2.2, Table 254. P=1 permits no
+// change, P=2 permits filling in forms, instantiating page templates and
+// signing, and P=3 adds annotation creation, deletion and modification.
+// 12.8.2.2.2 lets a reader "compare the signed and current versions of the
+// document". This classifier sees only the /Type and /FT of each appended
+// object, so it approximates that comparison: it cannot tell a filled-in
+// field from another change to an object of the same type.
 func classifyModifications(objects []appendedObject, policy int) string {
 	for _, obj := range objects {
 		if obj.IsXRef {
-			// XRef tables/streams are structural overhead, always allowed.
+			// Every incremental update appends a cross-reference section
+			// (ISO 32000-1, 7.5.6), which changes no object by itself. A free
+			// entry in that section deletes an object, and this classifier
+			// does not read the entries.
 			continue
 		}
 
 		switch policy {
 		case 1:
-			// No changes allowed at all.
+			// Table 254, P=1: any change invalidates the signature.
 			return fmt.Sprintf("object %d (%s) added after signing", obj.ObjNum, objDescription(obj))
 
 		case 2:
-			// Only form filling and additional signatures allowed.
+			// Table 254, P=2: form filling, page templates and signing.
 			if !isAllowedP2(obj) {
 				return fmt.Sprintf("object %d (%s) is not a form field or signature", obj.ObjNum, objDescription(obj))
 			}
 
 		case 3:
-			// Form filling, signing, and annotations allowed.
+			// Table 254, P=3: P=2 plus annotation changes.
 			if !isAllowedP3(obj) {
 				return fmt.Sprintf("object %d (%s) is not a form field, signature, or annotation", obj.ObjNum, objDescription(obj))
 			}
@@ -236,15 +254,29 @@ func classifyModifications(objects []appendedObject, policy int) string {
 
 // isAllowedP2 returns true if the object is allowed under DocMDP P=2
 // (form filling and signing only).
+//
+// ISO 32000-1, 12.8.2.2, Table 254 permits, at P=2, "filling in forms,
+// instantiating page templates, and signing". A signature adds a /Sig value
+// and its /SigRef, a filled field rewrites its widget and field dictionaries
+// (12.7.3.1, Table 220 names the field types Btn, Tx, Ch and Sig), and adding
+// either touches the catalog's form and the page's /Annots, while a template
+// adds a page.
 func isAllowedP2(obj appendedObject) bool {
 	switch obj.Type {
 	case "Sig", "SigRef":
 		return true
 	case "Annot":
-		// Widget annotations (form field appearances) are allowed.
+		// A widget annotation is a form field's appearance (12.5.6.19).
+		//
+		// TODO: Table 254 permits annotation changes only at P=3, and every
+		// /Type /Annot passes here, widget or not, because appendedObject
+		// records no /Subtype. A P=2 certification followed by an appended
+		// comment is reported as within policy, and isAllowedP3's own
+		// annotation branch is unreachable.
 		return true
 	case "Catalog", "Pages", "Page":
-		// Structural updates for adding signatures are allowed.
+		// Adding a field or a signature rewrites the catalog and the page that
+		// lists its widget, and instantiating a template adds a page.
 		return true
 	case "":
 		// Objects without /Type include form field values, appearance streams,
@@ -252,8 +284,11 @@ func isAllowedP2(obj appendedObject) bool {
 		if obj.FT == "Sig" || obj.FT == "Tx" || obj.FT == "Btn" || obj.FT == "Ch" {
 			return true
 		}
-		// Typeless objects are conservatively allowed. They may be
-		// appearance streams or font resources needed for form rendering.
+		// Deliberate leniency: Table 254 invalidates every change outside the
+		// permitted ones, but a typeless object may be an appearance stream or
+		// a font a filled field needs, or a rewritten page content stream,
+		// and the /Type alone cannot tell them apart. The classifier reports
+		// such a file as within policy rather than flag every form fill.
 		return true
 	}
 	return false
@@ -265,7 +300,8 @@ func isAllowedP3(obj appendedObject) bool {
 	if isAllowedP2(obj) {
 		return true
 	}
-	// P=3 additionally allows annotations.
+	// ISO 32000-1, Table 254, P=3 adds "annotation creation, deletion, and
+	// modification" to P=2.
 	return obj.Type == "Annot"
 }
 

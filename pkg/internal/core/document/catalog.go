@@ -27,12 +27,12 @@ type Page struct {
 	Dict      ast.PdfDict
 	Resources ast.PdfDict
 	MediaBox  ast.PdfArray
-	CropBox   ast.PdfArray      // Inherited; defaults to MediaBox per PDF spec
+	CropBox   ast.PdfArray      // Inherited; defaults to MediaBox (ISO 32000-1, Table 30)
 	BleedBox  ast.PdfArray      // Non-inherited; defaults to CropBox
 	TrimBox   ast.PdfArray      // Non-inherited; defaults to CropBox
 	ArtBox    ast.PdfArray      // Non-inherited; defaults to CropBox
 	Rotate    int               // Inherited; clockwise degrees (0, 90, 180, 270)
-	UserUnit  float64           // Non-inherited; default 1.0 (PDF 1.6+, §7.7.3.3)
+	UserUnit  float64           // Non-inherited; default 1.0 (PDF 1.6+, ISO 32000-1, Table 30)
 	DPM       map[string]string // Document Part Metadata
 }
 
@@ -432,7 +432,7 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			return fmt.Errorf("page tree cycle at object %d", nodeRef.ObjectNum)
 		}
 		// done is every node already fully traversed. A page tree is a strict
-		// tree (ISO 32000-1 §7.7.3.2), so a node reached again through a
+		// tree (ISO 32000-1, 7.7.3.2), so a node reached again through a
 		// different /Kids path is malformed; traversing it once is correct and
 		// keeps the walk linear. Without this a crafted tree whose every node
 		// lists the same child twice fans out 2^depth, a denial of service.
@@ -467,7 +467,8 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		}
 	}
 
-	// Inherit or override CropBox (inheritable per PDF spec)
+	// Inherit or override CropBox (inheritable per ISO 32000-1, 7.7.3.3,
+	// Table 30).
 	currentCropBox := inheritedCropBox
 	if cbObj, ok := node["CropBox"]; ok {
 		cbArr, err := ResolveArray(ctx, doc, cbObj)
@@ -478,8 +479,9 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		}
 	}
 
-	// Inherit or override Rotate (inheritable per PDF spec §7.7.3.3). The entry
-	// may itself be indirect, which ISO 32000-1, 7.3.9 allows anywhere.
+	// Inherit or override Rotate (inheritable per ISO 32000-1, 7.7.3.3, Table
+	// 30). The entry may itself be indirect, which ISO 32000-1, 7.3.9 allows
+	// anywhere.
 	currentRotate := inheritedRotate
 	if rotObj, ok := node["Rotate"]; ok {
 		if ref, isRef := rotObj.(ast.PdfIndirectRef); isRef {
@@ -568,16 +570,23 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			}
 		}
 	case "Page":
-		// CropBox defaults to MediaBox per PDF spec §14.11.2
+		// The crop box defaults to the media box (ISO 32000-1, 14.11.2.1).
 		effectiveCropBox := clampToMediaBox(currentCropBox, currentMediaBox)
 
-		// BleedBox, TrimBox, ArtBox are non-inheritable; default to CropBox.
+		// BleedBox, TrimBox, ArtBox are non-inheritable and default to the
+		// crop box (ISO 32000-1, 7.7.3.3, Table 30).
+		//
+		// TODO: 14.11.2.1 reduces the bleed, trim and art boxes, like the crop
+		// box, "to their intersection with the media box" when they extend
+		// beyond it. Only the crop box is clamped, so a stated bleed, trim or
+		// art box larger than the page is reported as written.
 		bleedBox := resolveBoxArray(ctx, doc, node, "BleedBox", effectiveCropBox)
 		trimBox := resolveBoxArray(ctx, doc, node, "TrimBox", effectiveCropBox)
 		artBox := resolveBoxArray(ctx, doc, node, "ArtBox", effectiveCropBox)
 
-		// UserUnit (PDF 1.6+, §7.7.3.3): non-inheritable scaling factor.
-		// Default is 1.0 (1 unit = 1/72 inch).
+		// UserUnit (PDF 1.6+, ISO 32000-1, 7.7.3.3, Table 30): a positive,
+		// non-inheritable scaling factor. Default is 1.0 (1 unit = 1/72
+		// inch).
 		userUnit := 1.0
 		if uuObj, ok := node["UserUnit"]; ok {
 			if v := Float(uuObj); v > 0 {
@@ -706,6 +715,12 @@ func mergeResourceDicts(ctx context.Context, doc *Document, inherited ast.PdfDic
 // dicts alongside a zero-length stream payload), the stream's own dict
 // is returned. The wider type-coercion failure surfaces as an error so
 // the caller can attribute the traversal abort to the offending kid.
+//
+// Deliberate leniency: ISO 32000-1, 7.7.3.2 (Table 29) allows only page
+// objects and page tree nodes as kids, and 7.7.3.3 makes a page object "a
+// dictionary", which a stream (7.3.8.1: "a dictionary followed by zero or
+// more bytes") is not. Reading the stream's dictionary keeps the page.
+// Which writers emit this shape is not recorded.
 func resolveKidDict(ctx context.Context, doc *Document, kidObj ast.PdfObject) (ast.PdfDict, error) {
 	dict, err := ResolveDict(ctx, doc, kidObj)
 	if err == nil && dict != nil {
@@ -731,6 +746,12 @@ func resolveKidDict(ctx context.Context, doc *Document, kidObj ast.PdfObject) (a
 // tolerate this by reading /Kids (Pages node) or /MediaBox/Contents
 // (leaf Page node). Returns an empty string when the node is
 // unrecognisable.
+//
+// Deliberate leniency: ISO 32000-1, 7.7.3.2, Table 29 and 7.7.3.3, Table 30
+// make /Type Required on both kinds of node, as Pages and Page. The shape
+// test reads /Kids as the Table 29 entry only a page tree node has, and
+// /MediaBox or /Contents as Table 30 entries of a page. Which writers omit
+// /Type is not recorded.
 func inferPageTreeNodeType(ctx context.Context, doc *Document, node ast.PdfDict) string {
 	if typeObj, ok := node["Type"]; ok {
 		if typeStr, err := ResolveName(ctx, doc, typeObj); err == nil && typeStr != "" {
