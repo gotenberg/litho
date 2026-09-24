@@ -21,6 +21,7 @@
   "goldens": {
     "text": "goldens/text",
     "metadata": "goldens/metadata",
+    "imagedecode": "goldens/images",
     "compliance": "goldens/compliance",
     "remediation": "goldens/compliance",
     "remediation-aggressive": "goldens/compliance"

@@ -33,6 +33,7 @@ var featureRegistry = []FeatureFactory{
 	func() Feature { return newMergeCatalogFeature() },
 	func() Feature { return newFacturxFeature() },
 	func() Feature { return newSchematronFeature() },
+	func() Feature { return newImageDecodeFeature() },
 }
 
 // runOptions captures the CLI flags for the run subcommand.

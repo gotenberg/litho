@@ -8,7 +8,8 @@
 #   docker run <image> <corpus_name> <profiles_csv> <features_csv> <profile_mode>
 #
 # features_csv lists the feature names whose goldens this corpus needs
-# (text, metadata, compliance, remediation, remediation-aggressive).
+# (text, metadata, imagedecode, compliance, remediation,
+# remediation-aggressive).
 # profile_mode mirrors the manifest's profile_mode field; "auto"
 # triggers the per-claim VeraPDF flow which validates each PDF only
 # against the profile it declares in its XMP packet.
@@ -96,6 +97,22 @@ if wants text || wants metadata; then
   fi
 else
   echo "==> skipping text + metadata goldens (not requested by ${CORPUS})."
+fi
+
+if wants imagedecode; then
+  IMAGES="$OUTPUT/goldens/images"
+  if nonempty "$IMAGES"; then
+    echo "==> image goldens already present, skipping PDF.js image decode."
+  else
+    mkdir -p "$IMAGES"
+    echo "==> generating image goldens (PDF.js)..."
+    node /work/lib/gen-images.mjs \
+      --pdfjs-dir /opt/pdfjs \
+      --pdfs-dir "$PDFS" \
+      --out "$IMAGES"
+  fi
+else
+  echo "==> skipping image goldens (not requested by ${CORPUS})."
 fi
 
 if wants bookmarks; then

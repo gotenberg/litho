@@ -1,0 +1,304 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"image"
+	"math"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+
+	"github.com/gotenberg/litho/pkg/pdf"
+)
+
+// imageDecodeFeature decodes each image [pdf.Reader.ExtractImages] lists on a
+// page through its Decode function and matches them against the images PDF.js
+// paints on that page, compared by size and by a coarse signature of their
+// pixels.
+//
+// It is the gate's reach into image decoding: no other feature decodes image
+// samples, so a decoder could change its output while every other cell stayed
+// identical.
+type imageDecodeFeature struct {
+	mu      sync.RWMutex
+	goldens map[string]*imageGolden
+	cache   sync.Map // pdfPath -> *cachedRun
+}
+
+func newImageDecodeFeature() *imageDecodeFeature {
+	return &imageDecodeFeature{goldens: make(map[string]*imageGolden)}
+}
+
+// imageGolden is the per-fixture golden gen-images.mjs writes, and also the
+// shape of the feature's own output.
+type imageGolden struct {
+	ID    string           `json:"id"`
+	Pages []imagePageGroup `json:"pages"`
+}
+
+// imagePageGroup holds the images of one page.
+type imagePageGroup struct {
+	Page   int              `json:"page"`
+	Images []imageSignature `json:"images"`
+}
+
+// imageSignature describes one decoded image: its size and the mean red,
+// green and blue of each cell of a grid of at most maxSignatureCells by
+// maxSignatureCells, row by row. Failed marks an image litho could not
+// decode, which carries no signature.
+type imageSignature struct {
+	Width  int       `json:"width"`
+	Height int       `json:"height"`
+	Grid   [2]int    `json:"grid"`
+	Sig    []float64 `json:"sig"`
+	Name   string    `json:"name,omitempty"`
+	Failed string    `json:"failed,omitempty"`
+}
+
+// maxSignatureCells is the grid size along each axis, matching gen-images.mjs.
+const maxSignatureCells = 4
+
+// imageTolerance is the largest difference, in 8-bit levels, a cell mean may
+// show between litho and PDF.js for the images to match. Decoders round
+// differently (the reconstruction of lossy JPEG 2000 and the inverse DCT of
+// JPEG are the decoder's choice), which moves a cell mean by a level or two;
+// a wrong filter, colour space, orientation or sample layout moves it by tens.
+const imageTolerance = 3.0
+
+func (f *imageDecodeFeature) Name() string         { return "imagedecode" }
+func (f *imageDecodeFeature) GoldenSource() string { return "pdfjs" }
+
+func (f *imageDecodeFeature) LoadGoldens(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ErrNoGoldens
+	}
+	loaded := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			continue
+		}
+		var g imageGolden
+		if err := json.Unmarshal(data, &g); err != nil {
+			continue
+		}
+		id := strings.TrimSuffix(e.Name(), ".json")
+		f.mu.Lock()
+		f.goldens[id] = &g
+		f.mu.Unlock()
+		loaded++
+	}
+	if loaded == 0 {
+		return ErrNoGoldens
+	}
+	return nil
+}
+
+func (f *imageDecodeFeature) HasGolden(fixtureID string) bool {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	_, ok := f.goldens[baseFixtureID(fixtureID)]
+	return ok
+}
+
+func (f *imageDecodeFeature) golden(fixtureID string) *imageGolden {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	return f.goldens[baseFixtureID(fixtureID)]
+}
+
+// Run decodes the images of the pages the golden lists images on. Pages
+// PDF.js paints no image on are not decoded: they have nothing to compare.
+func (f *imageDecodeFeature) Run(ctx context.Context, pdfPath, fixtureID string) ([]byte, error) {
+	if v, ok := f.cache.Load(pdfPath); ok {
+		cr := v.(*cachedRun)
+		return cr.output, cr.err
+	}
+	out, err := f.decodePages(ctx, pdfPath, f.golden(fixtureID))
+	f.cache.Store(pdfPath, &cachedRun{output: out, err: err})
+	return out, err
+}
+
+func (f *imageDecodeFeature) decodePages(ctx context.Context, pdfPath string, golden *imageGolden) ([]byte, error) {
+	var result imageGolden
+	if golden == nil || len(golden.Pages) == 0 {
+		return json.Marshal(result)
+	}
+	file, err := os.Open(pdfPath)
+	if err != nil {
+		return nil, fmt.Errorf("open: %w", err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat: %w", err)
+	}
+	r, err := pdf.Open(ctx, file, info.Size())
+	if err != nil {
+		return nil, fmt.Errorf("pdf.Open: %w", err)
+	}
+	defer r.Close()
+	for _, gp := range golden.Pages {
+		metas, err := r.ExtractImages(ctx, gp.Page)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			result.Pages = append(result.Pages, imagePageGroup{Page: gp.Page})
+			continue
+		}
+		group := imagePageGroup{Page: gp.Page}
+		for _, m := range metas {
+			img, err := m.Decode(ctx)
+			if err != nil {
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+				group.Images = append(group.Images, imageSignature{Width: m.Width, Height: m.Height, Name: m.Filename, Failed: err.Error()})
+				continue
+			}
+			sig := signatureOf(img)
+			sig.Name = m.Filename
+			group.Images = append(group.Images, sig)
+		}
+		result.Pages = append(result.Pages, group)
+	}
+	return json.Marshal(result)
+}
+
+// signatureOf computes the signature gen-images.mjs computes for PDF.js's
+// decoded image data.
+func signatureOf(img image.Image) imageSignature {
+	b := img.Bounds()
+	w, h := b.Dx(), b.Dy()
+	gw, gh := min(maxSignatureCells, w), min(maxSignatureCells, h)
+	sums := make([]float64, gw*gh*3)
+	counts := make([]float64, gw*gh)
+	for y := range h {
+		cy := y * gh / h
+		for x := range w {
+			cx := x * gw / w
+			r, g, bl, _ := img.At(b.Min.X+x, b.Min.Y+y).RGBA()
+			c := cy*gw + cx
+			sums[3*c] += float64(r >> 8)
+			sums[3*c+1] += float64(g >> 8)
+			sums[3*c+2] += float64(bl >> 8)
+			counts[c]++
+		}
+	}
+	sig := make([]float64, len(sums))
+	for i := range sig {
+		sig[i] = math.Round(sums[i]/counts[i/3]*10) / 10
+	}
+	return imageSignature{Width: w, Height: h, Grid: [2]int{gw, gh}, Sig: sig}
+}
+
+// Compare pairs each golden image with an unused image litho decoded on the
+// same page, of the same size, whose signature lies within imageTolerance.
+func (f *imageDecodeFeature) Compare(fixtureID string, output []byte) Verdict {
+	golden := f.golden(fixtureID)
+	if golden == nil {
+		return Verdict{FixtureID: fixtureID, Skipped: true, Reason: "no golden"}
+	}
+	total := 0
+	for _, gp := range golden.Pages {
+		total += len(gp.Images)
+	}
+	if total == 0 {
+		return Verdict{FixtureID: fixtureID, Skipped: true, Reason: "PDF.js paints no image XObject"}
+	}
+	var got imageGolden
+	if err := json.Unmarshal(output, &got); err != nil {
+		return Verdict{FixtureID: fixtureID, Reason: fmt.Sprintf("decode output: %v", err)}
+	}
+	byPage := make(map[int][]imageSignature, len(got.Pages))
+	for _, gp := range got.Pages {
+		byPage[gp.Page] = gp.Images
+	}
+	matched, failed := 0, 0
+	var mismatches []json.RawMessage
+	for _, gp := range golden.Pages {
+		litho := byPage[gp.Page]
+		used := make([]bool, len(litho))
+		for i, im := range litho {
+			if im.Failed != "" {
+				failed++
+				used[i] = true
+			}
+		}
+		for _, want := range gp.Images {
+			best, bestDiff := -1, math.Inf(1)
+			for i, im := range litho {
+				if used[i] || im.Width != want.Width || im.Height != want.Height || im.Grid != want.Grid {
+					continue
+				}
+				if d := signatureDistance(im.Sig, want.Sig); d < bestDiff {
+					best, bestDiff = i, d
+				}
+			}
+			if best >= 0 && bestDiff <= imageTolerance {
+				used[best] = true
+				matched++
+				continue
+			}
+			mismatches = append(mismatches, imageMismatch(gp.Page, want, litho, best, bestDiff))
+		}
+	}
+	v := Verdict{
+		FixtureID:  fixtureID,
+		Match:      matched == total,
+		Score:      float64(matched) / float64(total),
+		Metrics:    map[string]int{"images_match": matched, "decode_failed": failed},
+		Mismatches: mismatches,
+	}
+	if !v.Match {
+		v.Reason = fmt.Sprintf("%d of %d images match", matched, total)
+	}
+	return v
+}
+
+// signatureDistance returns the largest difference between two signatures'
+// cell means.
+func signatureDistance(a, b []float64) float64 {
+	if len(a) != len(b) {
+		return math.Inf(1)
+	}
+	d := 0.0
+	for i := range a {
+		d = math.Max(d, math.Abs(a[i]-b[i]))
+	}
+	return d
+}
+
+// imageMismatch describes a golden image nothing matched.
+func imageMismatch(page int, want imageSignature, litho []imageSignature, best int, bestDiff float64) json.RawMessage {
+	entry := map[string]any{"page": page, "width": want.Width, "height": want.Height}
+	switch {
+	case best >= 0:
+		entry["closest"] = litho[best].Name
+		entry["distance"] = math.Round(bestDiff*10) / 10
+	default:
+		for _, im := range litho {
+			if im.Failed != "" && im.Width == want.Width && im.Height == want.Height {
+				entry["closest"] = im.Name
+				entry["failed"] = im.Failed
+				break
+			}
+		}
+		if _, ok := entry["closest"]; !ok {
+			entry["closest"] = "no decoded image of that size"
+		}
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return json.RawMessage(`{"error":"marshal"}`)
+	}
+	return data
+}

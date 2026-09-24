@@ -6,6 +6,7 @@
   "goldens": {
     "text": "goldens/text",
     "metadata": "goldens/metadata",
+    "imagedecode": "goldens/images",
     "merge-catalog": "goldens/text"
   },
   "skips": {

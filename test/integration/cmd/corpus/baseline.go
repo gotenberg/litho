@@ -54,6 +54,7 @@ var costMetrics = map[string]bool{
 	"verapdf_regressed": true,
 	"litho_regressed":   true,
 	"disagreement":      true,
+	"decode_failed":     true,
 
 	// The split catalog invariants count VIOLATIONS, so more is worse. Without
 	// an entry here the default good-when-higher rule would report split
