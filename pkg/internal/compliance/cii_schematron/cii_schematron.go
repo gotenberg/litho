@@ -1,13 +1,3 @@
-// Package cii_schematron bundles the EN 16931 CII Schematron rule
-// set litho ships by default. Reader.ValidateFacturX wires the
-// bundled schema into the Schematron pass when no caller-supplied
-// override is in place.
-//
-// See README.md for the bundle layout, the upstream source, and the
-// bump process.
-//
-// Concurrency: [LoadDefault] memoises one [*schematron.Schema] per
-// process behind a [sync.Once] and is safe to call concurrently.
 package cii_schematron
 
 import (
@@ -62,7 +52,7 @@ var bundledFS embed.FS
 
 // FS exposes the bundled rule set as an [io/fs.FS] for callers that
 // want to introspect the bundle or pass it through to
-// [pkg/pdf.WithSchematron] explicitly. The returned filesystem is
+// pdf.WithSchematron explicitly. The returned filesystem is
 // read-only and safe to share.
 func FS() fs.FS { return bundledFS }
 
@@ -150,7 +140,7 @@ func LoadPeppol(ctx context.Context) (*schematron.Schema, error) {
 	return peppolSchema, peppolFault
 }
 
-// LoadXRechnung returns the bundled XRechnung CII Schematron - the
+// LoadXRechnung returns the bundled XRechnung CII Schematron, the
 // German CIUS of EN 16931 published by KoSIT. Same lazy-load
 // semantics as [LoadDefault]; same fallback behaviour on parse
 // failure.
@@ -172,7 +162,7 @@ func LoadXRechnung(ctx context.Context) (*schematron.Schema, error) {
 
 //nolint:gochecknoglobals // memoised load results, not sentinel errors.
 var (
-	facturxProfileOnce sync.Map // string conformance level -> *sync.Once
+	facturxProfileOnce sync.Map // bundle root path -> *sync.Once
 	facturxProfileMu   sync.Mutex
 	facturxProfileMem  = map[string]*schematron.Schema{}
 	facturxProfileErr  = map[string]error{}
@@ -323,9 +313,9 @@ func profileRuleCoverage(profile *schematron.Schema) map[string]struct{} {
 // importableRule returns a Rule containing only the baseline rule's
 // asserts and reports whose canonical ids aren't already covered by
 // the profile. Arithmetic-class rule families stay out regardless
-// of coverage because their xs:decimal-heavy XPath blocks trip our
-// engine; the profile's FX-SCH-A-* renamings of those rules already
-// fire under the engine's matching rewriters.
+// of coverage because their xs:decimal-heavy XPath blocks trip the
+// antchfx XPath engine; the profile's FX-SCH-A-* renamings of those
+// rules already fire under the engine's matching rewriters.
 func importableRule(rule *schematron.Rule, covered map[string]struct{}) *schematron.Rule {
 	if rule == nil {
 		return nil
@@ -402,10 +392,6 @@ func bracketedRuleID(msg string) string {
 	return id
 }
 
-// facturxProfileRoot maps a conformance-level string to the
-// corresponding bundle root path. Returns ("", false) for unknown
-// or unsupported levels (XRECHNUNG routes through LoadXRechnung;
-// every other free-form level falls back to LoadDefault).
 // baselineFlagsOnce + baselineFlags carry the lazy-loaded
 // {EN 16931 rule id -> flag attribute} map used by
 // [BaselineFlagForRule]. The bundled FACTUR-X profile schematrons
@@ -424,7 +410,7 @@ var (
 // flag attribute for the supplied rule id (the bracketed prefix that
 // appears in [CII-SR-465] / [BR-CO-10] / etc. message text). The
 // lookup is case-sensitive and the empty string maps to "no flag /
-// implicit fatal" - distinct from the absent-key signal returned
+// implicit fatal", distinct from the absent-key signal returned
 // via ok=false.
 //
 // The compliance severity mapper consults this so per-profile rules
@@ -476,6 +462,10 @@ func loadBaselineFlags() {
 	baselineFlags = out
 }
 
+// facturxProfileRoot maps a conformance-level string to the
+// corresponding bundle root path. Returns ("", false) for unknown
+// or unsupported levels (XRECHNUNG routes through [LoadXRechnung];
+// every other free-form level falls back to [LoadDefault]).
 func facturxProfileRoot(level string) (string, bool) {
 	switch level {
 	case "MINIMUM":

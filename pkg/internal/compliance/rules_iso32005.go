@@ -4,6 +4,7 @@
 // the veraPDF profile PDF_UA/ISO-32005-Tagged.xml. veraPDF's ua2
 // flavour validates PDFUA-2-ISO32005.xml, which is PDFUA-2.xml plus
 // these rules, so litho mirrors that pairing for PDF/UA-2 runs.
+
 package compliance
 
 // iso32005Entry is one Table 5 rule: a parent-child inclusion

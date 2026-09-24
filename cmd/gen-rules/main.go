@@ -386,10 +386,8 @@ func fatalf(format string, args ...any) {
 	os.Exit(1)
 }
 
-// iso32005Shape classifies a Table 5 test expression into one of the eight
-// mechanical shapes the ISO/TS 32005 profile uses. Anything else is
-// reported and skipped so a profile update cannot silently emit a wrong
-// check.
+// iso32005Entry is one Table 5 parent-child inclusion rule of the ISO/TS
+// 32005 profile, with the shape its test expression was classified into.
 type iso32005Entry struct {
 	Clause      string // verbatim, e.g. "Table 5. Annot-Document"
 	TestNumber  int
@@ -400,6 +398,10 @@ type iso32005Entry struct {
 	Child       string // "" for noContent; "Hn" for numbered headings; "content" for content rules
 }
 
+// iso32005ShapeRes classifies a Table 5 test expression into one of the eight
+// mechanical shapes the ISO/TS 32005 profile uses. Anything else is
+// reported and skipped so a profile update cannot silently emit a wrong
+// check.
 var iso32005ShapeRes = []struct {
 	kind string
 	re   *regexp.Regexp
@@ -478,7 +480,7 @@ func generateISO32005(profilePath, outPath string) (int, error) {
 	buf.WriteString("// ISO/TS 32005 Table 5 structure-type inclusion entries, derived from\n")
 	buf.WriteString("// the veraPDF profile PDF_UA/ISO-32005-Tagged.xml. veraPDF's ua2\n")
 	buf.WriteString("// flavour validates PDFUA-2-ISO32005.xml, which is PDFUA-2.xml plus\n")
-	buf.WriteString("// these rules, so litho mirrors that pairing for PDF/UA-2 runs.\n")
+	buf.WriteString("// these rules, so litho mirrors that pairing for PDF/UA-2 runs.\n\n")
 	buf.WriteString("package compliance\n\n")
 	buf.WriteString("// iso32005Entry is one Table 5 rule: a parent-child inclusion\n")
 	buf.WriteString("// constraint (or content-item prohibition) plus the Rule it emits.\n")

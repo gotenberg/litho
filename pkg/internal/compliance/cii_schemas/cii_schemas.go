@@ -1,12 +1,3 @@
-// Package cii_schemas bundles the UN/CEFACT Cross-Industry Invoice
-// XSD set litho ships by default. The validator wires the bundled
-// schemas into [pkg/pdf.Reader.ValidateFacturX] so end users get full
-// XSD validation without having to source the schemas themselves.
-//
-// See README.md for the bundle layout and the bump process.
-//
-// Concurrency: [LoadDefault] memoises one [*xsd.Schema] per process
-// behind a [sync.Once] and is safe to call concurrently.
 package cii_schemas
 
 import (
@@ -56,7 +47,7 @@ const ZUGFeRD1p0Root = "zugferd1p0/ZUGFeRD1p0.xsd"
 var bundledFS embed.FS
 
 // FS exposes the bundled schemas as an [io/fs.FS] for callers that
-// want to introspect the bundle or pass it to [pkg/pdf.WithCIISchemas]
+// want to introspect the bundle or pass it to pdf.WithCIISchemas
 // explicitly. The returned filesystem is read-only and safe to share.
 func FS() fs.FS { return bundledFS }
 
