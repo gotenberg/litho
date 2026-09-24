@@ -44,10 +44,12 @@ var (
 // the image the caller never selected. Overwriting the covered samples clears
 // exactly what was asked for and leaves the rest of the picture where it was.
 //
-// A picture's samples come back as 8-bit DeviceRGB under /FlateDecode whatever
-// they were before, which is what lets a JPX or DCT image be cleared at all:
-// there is no encoder for those filters, so the blanked image has to be written
-// in a filter litho can produce. Any /SMask is carried over untouched, because a
+// A picture's samples come back at 8 bits under /FlateDecode whatever filter
+// they were in, which is what lets a JPX or DCT image be cleared at all: there
+// is no encoder for those filters, so the blanked image has to be written in a
+// filter litho can produce. A picture in DeviceGray, DeviceRGB, DeviceCMYK, an
+// ICCBased, CalGray or CalRGB space keeps that space (see [blankNative]); an
+// indexed, Separation, DeviceN or Lab picture is written as DeviceRGB. Any /SMask is carried over untouched, because a
 // soft mask is a separate grayscale image that stays valid against the new
 // samples and dropping it would change transparency outside the region.
 //
@@ -110,6 +112,16 @@ func blankImage(
 		!pdfimage.AppliesDecodeArray(ctx, doc, stream.Dict) {
 		return fmt.Errorf("%w: %q carries a /Decode the decode does not apply",
 			ErrImageCarriesSampleEntries, box.Name)
+	}
+
+	if !isStencil {
+		native, ok, err := pdfimage.DecodeImageNative(ctx, doc, page, ast.PdfName(box.Name))
+		if err != nil {
+			return fmt.Errorf("%w: %q: %w", ErrImageNotDecodable, box.Name, err)
+		}
+		if ok {
+			return blankNative(alloc, ref, stream, box, zones, native)
+		}
 	}
 
 	// The samples as stored: the replacement keeps the image's soft mask, so a
@@ -201,6 +213,59 @@ func blankImage(
 	return nil
 }
 
+// blankNative clears the covered samples of a picture in its own colour space
+// and writes it back under the same /ColorSpace, so every sample the region
+// does not cover keeps its exact value. Going through RGB instead converted
+// every CMYK, ICC-based and CIE-based picture, and baked that reading of its
+// colour into the file: a redacted CMYK photograph changed colour outside the
+// region as well as inside it. A cleared sample is black in the space: 0 on
+// every component, or full black ink with no colour ink for four components.
+func blankNative(
+	alloc *writer.ObjAllocator,
+	ref ast.PdfIndirectRef,
+	stream ast.PdfStream,
+	box graphics.ImageBox,
+	zones []heuristics.Zone,
+	native pdfimage.NativeSamples,
+) error {
+	n := native.Components
+	black := make([]byte, n)
+	if n == 4 {
+		black[3] = 255
+	}
+	blanked, err := forCoveredSamples(box, zones, native.Width, native.Height, func(px, py int) {
+		i := (py*native.Width + px) * n
+		copy(native.Data[i:i+n], black)
+	})
+	if err != nil {
+		return fmt.Errorf("%q: %w", box.Name, err)
+	}
+	if blanked == 0 {
+		return fmt.Errorf("%w: %q", ErrImageRegionCoversNoSample, box.Name)
+	}
+	compressed, err := flateCompress(native.Data)
+	if err != nil {
+		return fmt.Errorf("compressing blanked image %q: %w", box.Name, err)
+	}
+	// No /Decode: the samples carry the array's mapping already.
+	dict := ast.PdfDict{
+		"Type":             ast.PdfName("XObject"),
+		"Subtype":          ast.PdfName("Image"),
+		"Width":            ast.PdfInt(native.Width),
+		"Height":           ast.PdfInt(native.Height),
+		"ColorSpace":       stream.Dict["ColorSpace"],
+		"BitsPerComponent": ast.PdfInt(8),
+		"Filter":           ast.PdfName("FlateDecode"),
+	}
+	if smask, present := stream.Dict["SMask"]; present {
+		dict["SMask"] = smask
+	}
+	if !alloc.AllocAt(ref.ObjectNum, ast.NewStream(dict, compressed)) {
+		return fmt.Errorf("%w: %q", ErrImageNotAddressable, box.Name)
+	}
+	return nil
+}
+
 // packStencilBits re-packs the canvas as one-bit stencil samples, inverting the
 // unpacking [pdfimage.DecodeImage] applied.
 //
@@ -245,8 +310,15 @@ func packStencilBits(canvas *image.NRGBA, w, h int) []byte {
 // what the caller asked to clear.
 func blankCoveredSamples(canvas *image.NRGBA, box graphics.ImageBox, zones []heuristics.Zone, fill []byte) (int, error) {
 	bounds := canvas.Bounds()
-	w, h := bounds.Dx(), bounds.Dy()
+	return forCoveredSamples(box, zones, bounds.Dx(), bounds.Dy(), func(px, py int) {
+		i := canvas.PixOffset(bounds.Min.X+px, bounds.Min.Y+py)
+		copy(canvas.Pix[i:i+3], fill)
+	})
+}
 
+// forCoveredSamples calls clear for every sample of a w x h image whose centre
+// falls inside a zone, and reports how many it found.
+func forCoveredSamples(box graphics.ImageBox, zones []heuristics.Zone, w, h int, clear func(px, py int)) (int, error) {
 	minPx, minPy, maxPx, maxPy, ok := candidateSamples(box, zones, w, h)
 	if !ok {
 		return 0, ErrImagePlacementDegenerate
@@ -275,8 +347,7 @@ func blankCoveredSamples(canvas *image.NRGBA, box graphics.ImageBox, zones []heu
 				continue
 			}
 
-			i := canvas.PixOffset(bounds.Min.X+px, bounds.Min.Y+py)
-			copy(canvas.Pix[i:i+3], fill)
+			clear(px, py)
 			blanked++
 		}
 	}

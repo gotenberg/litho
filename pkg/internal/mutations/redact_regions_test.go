@@ -320,8 +320,10 @@ func TestRedactPageRegions_BlanksAnImageInsideTheRegion(t *testing.T) {
 	if !ok {
 		t.Fatalf("object 7 = %T, want the replaced image stream", alloc.Pending()[7])
 	}
-	if cs := replaced.Dict["ColorSpace"]; cs != ast.PdfName("DeviceRGB") {
-		t.Errorf("ColorSpace = %v, want DeviceRGB: the samples are re-encoded", cs)
+	// The picture stays in its own colour space, so the samples the region
+	// does not cover keep their exact value.
+	if cs := replaced.Dict["ColorSpace"]; cs != ast.PdfName("DeviceGray") {
+		t.Errorf("ColorSpace = %v, want DeviceGray: the picture keeps its colour space", cs)
 	}
 	if f := replaced.Dict["Filter"]; f != ast.PdfName("FlateDecode") {
 		t.Errorf("Filter = %v, want FlateDecode: it has to be written in a filter litho can produce", f)
@@ -340,8 +342,8 @@ func TestRedactPageRegions_BlanksAnImageInsideTheRegion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decompressing the replacement: %v", err)
 	}
-	if !bytes.Equal(samples, []byte{0, 0, 0}) {
-		t.Errorf("samples = %v, want one black RGB pixel: the covered sample was not cleared", samples)
+	if !bytes.Equal(samples, []byte{0}) {
+		t.Errorf("samples = %v, want one black grey sample: the covered sample was not cleared", samples)
 	}
 }
 

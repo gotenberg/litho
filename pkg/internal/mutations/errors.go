@@ -172,8 +172,9 @@ var ErrImageRegionCoversNoSample = errors.New("region covers an image but none o
 // ErrImageCarriesSampleEntries reports an image whose dictionary holds entries
 // the blanked replacement cannot carry forward.
 //
-// Blanking re-encodes the samples as 8-bit DeviceRGB under a fresh dictionary,
-// so /Decode, /Mask and /ColorKeyMask are dropped rather than retained. What
+// Blanking re-encodes the samples at 8 bits under a fresh dictionary, in the
+// image's own colour space or in DeviceRGB, so /Decode, /Mask and
+// /ColorKeyMask are dropped rather than retained. What
 // matters is whether the decoded pixels already carry what the dropped entry
 // said.
 //

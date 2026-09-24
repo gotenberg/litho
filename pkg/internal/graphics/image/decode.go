@@ -1011,6 +1011,102 @@ func DecodeImageSamples(ctx context.Context, doc *document.Document, page *docum
 	return decodeImagePixels(ctx, doc, name, stream)
 }
 
+// NativeSamples are the samples of an image in its own colour space: one byte
+// per component per pixel, in rows, with the image's /Decode array applied.
+type NativeSamples struct {
+	Data                      []byte
+	Components, Width, Height int
+}
+
+// errNotNative reports an image whose samples do not come out in the colour
+// space its dictionary names.
+var errNotNative = errors.New("image samples are not in a device colour space")
+
+// DecodeImageNative decodes a named Image XObject into the samples of its own
+// colour space, where that space is DeviceGray, DeviceRGB, DeviceCMYK, an
+// ICCBased space over one, three or four components, CalGray or CalRGB, and
+// reports false for any other image: indexed, Separation, DeviceN and Lab
+// images, stencil masks, and an image whose data does not hold the components
+// its space names. A caller that writes the samples back under the same
+// /ColorSpace changes no colour, where going through [DecodeImage]'s RGB
+// converts them.
+func DecodeImageNative(ctx context.Context, doc *document.Document, page *document.Page, name ast.PdfName) (NativeSamples, bool, error) {
+	stream, err := lookupImage(ctx, doc, page, name)
+	if err != nil {
+		return NativeSamples{}, false, err
+	}
+	want, ok := nativeComponents(ctx, doc, stream.Dict)
+	if !ok {
+		return NativeSamples{}, false, nil
+	}
+	var native NativeSamples
+	if _, err := decodeImageInto(ctx, doc, name, stream, &native); err != nil {
+		if errors.Is(err, errNotNative) {
+			return NativeSamples{}, false, nil
+		}
+		return NativeSamples{}, false, err
+	}
+	if native.Components != want {
+		return NativeSamples{}, false, nil
+	}
+	return native, true, nil
+}
+
+// nativeComponents returns the component count of an image dictionary's
+// /ColorSpace when it is a space whose samples DecodeImageNative returns.
+func nativeComponents(ctx context.Context, doc *document.Document, dict ast.PdfDict) (int, bool) {
+	// An /ImageMask that cannot be resolved counts as absent, as the decode
+	// treats it.
+	if mask, _ := document.ResolveBool(ctx, doc, dict["ImageMask"]); mask {
+		return 0, false
+	}
+	obj, ok := dict["ColorSpace"]
+	if !ok {
+		return 0, false
+	}
+	switch cs := mustResolve(ctx, doc, obj).(type) {
+	case ast.PdfName:
+		n := imageComponents(string(cs))
+		return n, n > 0
+	case ast.PdfArray:
+		if len(cs) < 2 {
+			return 0, false
+		}
+		family, _ := mustResolve(ctx, doc, cs[0]).(ast.PdfName)
+		switch family {
+		case "ICCBased":
+			n := imageComponents(iccBasedSpace(ctx, doc, cs))
+			return n, n > 0
+		case "CalRGB":
+			return 3, true
+		case "CalGray":
+			return 1, true
+		}
+	}
+	return 0, false
+}
+
+// captureNative fills native with the samples of a device reading, /Decode
+// applied, and paints the rows short data lacked black in that space.
+func captureNative(native *NativeSamples, data []byte, dec [][256]byte, components, width, height, validRows int) error {
+	if components == 0 || len(data) < width*height*components {
+		return errNotNative
+	}
+	out := make([]byte, width*height*components)
+	for i := range out {
+		out[i] = dec[i%components][data[i]]
+	}
+	black := make([]byte, components)
+	if components == 4 {
+		black[3] = 255
+	}
+	for i := validRows * width * components; i < len(out); i += components {
+		copy(out[i:i+components], black)
+	}
+	*native = NativeSamples{Data: out, Components: components, Width: width, Height: height}
+	return nil
+}
+
 // lookupImage finds the image stream DecodeImage decodes.
 func lookupImage(ctx context.Context, doc *document.Document, page *document.Page, name ast.PdfName) (ast.PdfStream, error) {
 	if xobjDict, err := document.ResolveDict(ctx, doc, page.Resources["XObject"]); err == nil && xobjDict != nil {
@@ -1046,6 +1142,15 @@ func decodeImageStream(ctx context.Context, doc *document.Document, name ast.Pdf
 // decodeImagePixels decodes the samples of an Image XObject stream into
 // pixels, taking no account of its soft mask.
 func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream) (image.Image, error) {
+	return decodeImageInto(ctx, doc, name, stream, nil)
+}
+
+// decodeImageInto decodes the samples of an Image XObject stream. With native
+// nil it returns them as pixels. Otherwise it stops before any colour
+// conversion and fills native with the samples of a DeviceGray, DeviceRGB or
+// DeviceCMYK reading, /Decode applied, or reports errNotNative when the
+// samples do not come out that way.
+func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, native *NativeSamples) (image.Image, error) {
 	width, err := resolveInt(ctx, doc, stream.Dict, "Width")
 	if err != nil {
 		return nil, err
@@ -1301,6 +1406,10 @@ func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.Pdf
 	cal, isCal := resolveCalSpace(ctx, doc, stream.Dict["ColorSpace"])
 	if isCal && calComponents(cal) != components {
 		isCal = false
+	}
+
+	if native != nil {
+		return nil, captureNative(native, decodedData, dec, components, width, height, validRows)
 	}
 
 	switch colorSpace {
