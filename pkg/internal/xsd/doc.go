@@ -2,9 +2,9 @@
 // scoped to the subset of constructs the UN/CEFACT Cross-Industry
 // Invoice D16B schemas use. It is not a general-purpose XSD 1.0
 // validator: substitution groups, identity constraints (xs:key /
-// xs:keyref / xs:unique), xs:redefine, and complex-type derivation by
-// restriction are intentionally out of scope because CII does not
-// rely on them.
+// xs:keyref / xs:unique), xs:redefine, and derivation by restriction
+// of a complex type with complex content are intentionally out of
+// scope because CII does not rely on them.
 //
 // [Load] builds the in-memory type model from a schema tree,
 // [Validate] checks an instance document against a [Schema], and

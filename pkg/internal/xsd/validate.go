@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 )
 
@@ -94,11 +95,12 @@ type frame struct {
 	// rendering when leaf rules fire.
 	name xml.Name
 	// matcher tracks the position inside the parent type's content
-	// model. Nil when element.Type is a simple type (leaf).
+	// model. Nil when the element is a leaf: its type is a simple type,
+	// or a complex type with simple content.
 	matcher contentMatcher
 	// pendingText accumulates CharData while waiting for the
-	// matching EndElement; only used when the type is a simple
-	// type so the leaf value can be validated on close.
+	// matching EndElement; only used on a leaf so its value can be
+	// validated on close.
 	pendingText strings.Builder
 }
 
@@ -221,16 +223,10 @@ func (v *validator) onCharData(t xml.CharData) {
 		return
 	}
 	top := v.stack[len(v.stack)-1]
-	if top.element == nil {
+	if top.element == nil || top.matcher != nil {
 		return
 	}
-	if _, simple := top.element.Type.(*SimpleType); simple {
-		top.pendingText.Write(t)
-		return
-	}
-	if _, builtin := top.element.Type.(*BuiltinType); builtin {
-		top.pendingText.Write(t)
-	}
+	top.pendingText.Write(t)
 }
 
 // openRoot consumes the document element and pushes the first frame.
@@ -265,14 +261,16 @@ func (v *validator) findRootElement(qn QName) (*Element, bool) {
 
 // pushFrame opens a frame for an accepted element. The matcher is
 // installed when the type carries an element content model; simple
-// types and built-ins leave matcher nil so CharData is collected as
-// leaf text instead. Attribute validation runs at frame open since
-// every attribute is bound to its element by the time the
-// StartElement event arrives.
+// types, built-ins and complex types with simple content leave matcher
+// nil so CharData is collected as leaf text instead. Attribute
+// validation runs at frame open since every attribute is bound to its
+// element by the time the StartElement event arrives.
 func (v *validator) pushFrame(start xml.StartElement, el *Element) {
 	f := &frame{element: el, name: start.Name}
 	if ct, ok := el.Type.(*ComplexType); ok {
-		f.matcher = newMatcher(ct, v.schema)
+		if _, simple := ct.Content.(SimpleContent); !simple {
+			f.matcher = newMatcher(ct, v.schema)
+		}
 		v.violations = append(v.violations,
 			validateAttributes(start, ct, v.pathWith(start.Name))...)
 	}
@@ -377,10 +375,17 @@ func collectExtendedParticles(ct *ComplexType) []Particle {
 	return out
 }
 
-// collectExtendedAttributes flattens the xs:extension chain into a
+// collectExtendedAttributes flattens the derivation chain into a
 // single attribute-use list, base-first then derived. Used by
-// attribute validation so an extending complex type honours every
+// attribute validation so a derived complex type honours every
 // attribute declared on its base alongside the local additions.
+//
+// Per XML Schema Part 1, 3.4.2 a derivation by restriction keeps the
+// base's attribute uses except those it redeclares or prohibits, so a
+// declaration replaces an earlier one of the same name, and a prohibited
+// one removes it. An extension may not redeclare a base attribute (3.4.6,
+// ct-props-correct.4), so the rule changes nothing there on a valid
+// schema.
 func collectExtendedAttributes(ct *ComplexType) []AttributeUse {
 	var chain []*ComplexType
 	cur := ct
@@ -394,7 +399,12 @@ func collectExtendedAttributes(ct *ComplexType) []AttributeUse {
 	}
 	var out []AttributeUse
 	for _, link := range chain {
-		out = append(out, link.Attributes...)
+		for _, use := range link.Attributes {
+			out = slices.DeleteFunc(out, func(u AttributeUse) bool { return u.Name == use.Name })
+			if !use.Prohibited {
+				out = append(out, use)
+			}
+		}
 	}
 	return out
 }
@@ -427,7 +437,7 @@ func validateAttributes(start xml.StartElement, ct *ComplexType, path string) []
 			}
 			continue
 		}
-		if use.Fixed != "" && value != use.Fixed {
+		if use.Fixed != "" && !fixedValueMatches(value, use) {
 			out = append(out, Violation{
 				Rule:   RuleAttribute,
 				Path:   path + "/@" + use.Name.Local,
@@ -444,6 +454,17 @@ func validateAttributes(start xml.StartElement, ct *ComplexType, path string) []
 		}
 	}
 	return out
+}
+
+// fixedValueMatches reports whether value satisfies the fixed value of
+// use. Per XML Schema Part 1, 3.2.4 (cvc-au) the comparison is on the
+// normalized value, so both sides are white-space normalized under the
+// attribute type's mode first: " EUR " matches a fixed "EUR" on an
+// xs:token attribute. The comparison stays literal beyond that, which is
+// value equality for the string-derived types CII fixes.
+func fixedValueMatches(value string, use AttributeUse) bool {
+	steps, base := collectAllFacets(use.Type)
+	return applyWhitespace(value, steps, base) == applyWhitespace(use.Fixed, steps, base)
 }
 
 // findAttr returns the value of an attribute matching want from

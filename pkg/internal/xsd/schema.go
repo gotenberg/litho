@@ -123,24 +123,31 @@ func (t *SimpleType) QName() QName { return t.Name }
 func (t *SimpleType) isType()      {}
 
 // ComplexType models an xs:complexType declaration. Content is the
-// element-content model; attributes are the type's attribute uses.
-// Type derivation is supported only by xs:extension; derivation by
-// restriction on complex types is out of scope per the CII subset.
+// content model; attributes are the type's attribute uses.
+//
+// A type with xs:complexContent derives by xs:extension only; complex
+// content derivation by restriction is out of scope per the CII subset. A
+// type with xs:simpleContent derives by extension or by restriction, and
+// its Content is then a [SimpleContent].
 type ComplexType struct {
 	// Name is the qualified name of the type. Zero-value when the
 	// type is anonymous (inlined on an element).
 	Name QName
-	// Content is the element-content model: a Sequence, Choice, or
-	// Empty. Mixed content is not yet modelled because the CII
+	// Content is the content model: a Sequence, Choice, Empty or
+	// SimpleContent. Mixed content is not yet modelled because the CII
 	// schemas do not use it on validated invoice elements.
 	Content ContentModel
-	// Attributes is the list of attribute uses on the type.
+	// Attributes is the list of attribute uses the type declares
+	// itself. Those it inherits stay on [ComplexType.Base].
 	Attributes []AttributeUse
-	// Base is the type this complexType extends. Nil when the type
-	// has no base. Resolved during the link pass.
+	// Base is the type this complexType derives from, per XML Schema
+	// Part 1, 3.4.2 its {base type definition}: the base of the
+	// xs:complexContent extension, or of the xs:simpleContent extension
+	// or restriction. Nil when the type has no base. Resolved during the
+	// link pass.
 	Base Type
-	// BaseRef holds the unresolved QName parsed off the xs:extension
-	// base attribute. Zero-value when the type does not extend.
+	// BaseRef holds the unresolved QName parsed off the base attribute.
+	// Zero-value when the type does not derive.
 	BaseRef QName
 }
 
@@ -178,12 +185,17 @@ type AttributeUse struct {
 	Type     Type
 	TypeRef  QName
 	Required bool
-	Default  string
-	Fixed    string
+	// Prohibited reports use="prohibited". Per XML Schema Part 1, 3.2.2
+	// such an xs:attribute is no attribute use at all: in a derivation by
+	// restriction it removes the base type's use of the same name
+	// (3.4.2), and elsewhere it has no effect.
+	Prohibited bool
+	Default    string
+	Fixed      string
 }
 
-// ContentModel is the closed sum of element-content models.
-// [Sequence], [Choice], and [Empty] implement it.
+// ContentModel is the closed sum of content models. [Sequence],
+// [Choice], [Empty] and [SimpleContent] implement it.
 type ContentModel interface{ isContent() }
 
 // Sequence models xs:sequence: an ordered list of particles each of
@@ -208,6 +220,33 @@ func (Choice) isContent() {}
 type Empty struct{}
 
 func (Empty) isContent() {}
+
+// SimpleContent is the content model of a complex type declared with
+// xs:simpleContent: the element holds character data and no child
+// element. Per XML Schema Part 1, 3.4.2 the type's {content type} is then
+// a simple type definition, built from [ComplexType.Base]:
+//
+//   - By extension, it is the base's own: the base simple type, or the
+//     content type of a base complex type with simple content. The
+//     extension only adds attribute uses.
+//   - By restriction, it restricts the base's content type, or Inline when
+//     the xs:restriction carries an xs:simpleType, with Facets.
+//
+// [ValidateValue] validates a value against the content type when handed
+// the complex type itself.
+type SimpleContent struct {
+	// Restriction reports derivation by xs:restriction. False means
+	// derivation by xs:extension.
+	Restriction bool
+	// Facets are the facets the xs:restriction declares, in source
+	// order. They form one derivation step. Empty for an extension.
+	Facets []Facet
+	// Inline is the xs:simpleType child of the xs:restriction, nil when
+	// it has none.
+	Inline *SimpleType
+}
+
+func (SimpleContent) isContent() {}
 
 // Particle is one occurrence-slot inside a content model. Exactly
 // one of [Element] or [Wildcard] is populated.

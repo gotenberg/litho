@@ -32,6 +32,11 @@ func (v FacetViolation) Error() string {
 // the facets of every step of the chain, base first. Returns nil
 // when the value passes every check.
 //
+// t may also be a [ComplexType] with [SimpleContent]: the value is then
+// checked against the type's {content type}, the simple type XML Schema
+// Part 1, 3.4.2 derives for it. Any other complex type has no lexical
+// space, and every value passes.
+//
 // White space is normalized first, under the mode [effectiveWhiteSpace]
 // derives, and every check then sees the normalized value: per XML Schema
 // Part 1, 3.1.4 it is the normalized value that is validated. "A\nB" and
@@ -39,15 +44,17 @@ func (v FacetViolation) Error() string {
 //
 // # Corpus evidence
 //
-//   - All corpora: under every bundled schema, the 159 files that embed XML
-//     reach this function only with xs:boolean values and with values of the
+//   - All corpora: through the Factur-X and ZUGFeRD validators, the 159
+//     files that embed XML reach this function in 141 files with the text of
+//     the CII xs:simpleContent types, 3734 xs:decimal, 4338 xs:token, 2709
+//     xs:string and 7 xs:base64Binary values, and with 2355 values of their
+//     attributes. The rest are 144 xs:boolean values and 15 values of the
 //     ZUGFeRD 1.0 xs:union DateMandatoryDateTimeType, which names no
-//     built-in. None of them changes under white-space normalization.
-//   - All corpora: the white-space, decimal, anyURI, digit, enumeration and
-//     pattern rules leave every XSD violation on those files unchanged. The
-//     CII code, identifier, amount and text types derive by xs:simpleContent,
-//     which the loader does not model, so neither their text nor their
-//     attributes is checked.
+//     built-in.
+//   - facturx, v1__fail_Mustangproject_fail1: its ApplicablePercent
+//     "19.00e" is the one violation the simple content types add, through
+//     the validators and under every bundled schema alike. Mustang rejects
+//     the file for the same value.
 func ValidateValue(value string, t Type) []FacetViolation {
 	if t == nil {
 		return nil
@@ -90,7 +97,8 @@ func ValidateValue(value string, t Type) []FacetViolation {
 }
 
 // collectAllFacets walks t's base chain through SimpleType
-// restrictions and returns the facets of each derivation step, in the
+// restrictions, and through the content types of complex types with
+// simple content, and returns the facets of each derivation step, in the
 // conventional "base first, most-derived last" order, plus the
 // underlying built-in type the chain bottoms out on. The steps stay
 // apart because XML Schema Part 2 combines facets differently within a
@@ -105,29 +113,42 @@ func ValidateValue(value string, t Type) []FacetViolation {
 // walks in validate.go the bound TRUNCATES rather than reports, so a
 // pathological chain yields the facets gathered so far.
 func collectAllFacets(t Type) ([][]Facet, *BuiltinType) {
-	var chain []*SimpleType
+	var steps [][]Facet
 	var base *BuiltinType
 
 	cur := t
+walk:
 	for depth := 0; cur != nil && depth < maxTypeDerivationDepth; depth++ {
-		st, ok := cur.(*SimpleType)
-		if !ok {
+		switch tt := cur.(type) {
+		case *BuiltinType:
 			// A built-in ends the chain and names the lexical space.
-			// Any other kind ends it with no lexical space at all.
-			if bt, isBuiltin := cur.(*BuiltinType); isBuiltin {
-				base = bt
+			base = tt
+			break walk
+		case *SimpleType:
+			// Prepend so the chain reads base first, which is the order
+			// the facets must be applied in for "most-derived wins" to
+			// hold.
+			steps = append([][]Facet{tt.Facets}, steps...)
+			cur = tt.Base
+		case *ComplexType:
+			// Per XML Schema Part 1, 3.4.2 the {content type} of a complex
+			// type with simple content is the base's, restricted by the
+			// facets of a restriction: see [SimpleContent].
+			content, ok := tt.Content.(SimpleContent)
+			if !ok {
+				// Element content has no lexical space.
+				break walk
 			}
-			break
+			cur = tt.Base
+			if content.Restriction {
+				steps = append([][]Facet{content.Facets}, steps...)
+				if content.Inline != nil {
+					cur = content.Inline
+				}
+			}
+		default:
+			break walk
 		}
-		// Prepend so the chain reads base first, which is the order the
-		// facets must be applied in for "most-derived wins" to hold.
-		chain = append([]*SimpleType{st}, chain...)
-		cur = st.Base
-	}
-
-	steps := make([][]Facet, 0, len(chain))
-	for _, link := range chain {
-		steps = append(steps, link.Facets)
 	}
 	return steps, base
 }

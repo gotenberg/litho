@@ -200,6 +200,10 @@ func linkContent(s *Schema, c ContentModel) error {
 				return err
 			}
 		}
+	case SimpleContent:
+		if cm.Inline != nil {
+			return linkType(s, cm.Inline)
+		}
 	case Empty, nil:
 	}
 	return nil
@@ -299,6 +303,23 @@ type rawComplexType struct {
 	Choice         *rawChoice         `xml:"choice"`
 	Attributes     []rawAttribute     `xml:"attribute"`
 	ComplexContent *rawComplexContent `xml:"complexContent"`
+	SimpleContent  *rawSimpleContent  `xml:"simpleContent"`
+}
+
+type rawSimpleContent struct {
+	Extension   *rawExtension                `xml:"extension"`
+	Restriction *rawSimpleContentRestriction `xml:"restriction"`
+}
+
+// rawSimpleContentRestriction captures an xs:restriction under
+// xs:simpleContent: an optional xs:simpleType, the facets, then the
+// attribute uses. Every child the named fields do not claim lands in
+// Facets, which [collectFacets] filters.
+type rawSimpleContentRestriction struct {
+	Base       string         `xml:"base,attr"`
+	SimpleType *rawSimpleType `xml:"simpleType"`
+	Attributes []rawAttribute `xml:"attribute"`
+	Facets     []rawFacet     `xml:",any"`
 }
 
 type rawComplexContent struct {
@@ -516,6 +537,10 @@ func buildComplexType(tns string, prefixes map[string]string, raw *rawComplexTyp
 			return nil, err
 		}
 		ct.Attributes = append(ct.Attributes, attrs...)
+	case raw.SimpleContent != nil:
+		if err := buildSimpleContent(tns, prefixes, raw.SimpleContent, ct); err != nil {
+			return nil, err
+		}
 	default:
 		ct.Content = Empty{}
 	}
@@ -525,6 +550,50 @@ func buildComplexType(tns string, prefixes map[string]string, raw *rawComplexTyp
 	}
 	ct.Attributes = append(ct.Attributes, attrs...)
 	return ct, nil
+}
+
+// buildSimpleContent fills ct from an xs:simpleContent child, per XML
+// Schema Part 1, 3.4.2: the base attribute names the {base type
+// definition}, and the derivation's own attributes join the type's
+// attribute uses. Per the same clause simpleContent holds exactly one
+// xs:extension or xs:restriction, and each requires base.
+func buildSimpleContent(tns string, prefixes map[string]string, raw *rawSimpleContent, ct *ComplexType) error {
+	var base string
+	var rawAttrs []rawAttribute
+	switch {
+	case raw.Extension != nil:
+		base, rawAttrs = raw.Extension.Base, raw.Extension.Attributes
+		ct.Content = SimpleContent{}
+	case raw.Restriction != nil:
+		r := raw.Restriction
+		base, rawAttrs = r.Base, r.Attributes
+		content := SimpleContent{Restriction: true, Facets: collectFacets(r.Facets)}
+		if r.SimpleType != nil {
+			inline, err := buildSimpleType(tns, prefixes, r.SimpleType)
+			if err != nil {
+				return err
+			}
+			content.Inline = inline
+		}
+		ct.Content = content
+	default:
+		return fmt.Errorf("%w: xs:simpleContent of %q holds neither xs:extension nor xs:restriction",
+			ErrSchemaParse, ct.Name.Local)
+	}
+	if base == "" {
+		return fmt.Errorf("%w: xs:simpleContent of %q derives without a base", ErrSchemaParse, ct.Name.Local)
+	}
+	baseRef, err := parseQName(base, tns, prefixes)
+	if err != nil {
+		return err
+	}
+	ct.BaseRef = baseRef
+	attrs, err := buildAttributes(tns, prefixes, rawAttrs)
+	if err != nil {
+		return err
+	}
+	ct.Attributes = append(ct.Attributes, attrs...)
+	return nil
 }
 
 func buildSimpleType(tns string, prefixes map[string]string, raw *rawSimpleType) (*SimpleType, error) {
@@ -593,10 +662,11 @@ func buildAttributes(tns string, prefixes map[string]string, raws []rawAttribute
 	for i := range raws {
 		a := raws[i]
 		au := AttributeUse{
-			Name:     QName{Namespace: tns, Local: a.Name},
-			Default:  a.Default,
-			Fixed:    a.Fixed,
-			Required: a.Use == "required",
+			Name:       QName{Namespace: tns, Local: a.Name},
+			Default:    a.Default,
+			Fixed:      a.Fixed,
+			Required:   a.Use == "required",
+			Prohibited: a.Use == "prohibited",
 		}
 		if a.Type != "" {
 			ref, err := parseQName(a.Type, tns, prefixes)
