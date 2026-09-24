@@ -1435,17 +1435,24 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // permissions as MDPPolicy, the /P of ISO 32000-1, 12.8.2.2, Table 254: P=1
 // permits no change, P=2 permits filling in forms, instantiating page
 // templates and signing, and P=3 also permits annotation changes. MDPValid
-// reports whether the objects appended after signing stay within that policy,
+// reports whether what was appended after signing stays within that policy,
 // and MDPInfo names the first object that does not, or why the appended data
-// could not be read. The check classifies each appended object by type rather
-// than comparing revisions, so a forbidden change made through a permitted
-// object type goes unreported. An appended object stream is not itself a
-// change: the objects it holds are classified as if written outside it, and
-// one whose objects cannot be read is reported. At P=2 the check also reads
-// the revision the signature covers and reports an annotation, other than a
-// form field widget, that a page of that revision lists and the current page
-// no longer does; when that revision cannot be read, MDPInfo says removals
-// were not checked.
+// could not be read.
+//
+// The check classifies each appended object by type, so a forbidden change
+// made through a permitted object type goes unreported. An appended object
+// stream is not itself a change: the objects it holds are classified as if
+// written outside it, and one whose objects cannot be read is reported.
+//
+// Where the type cannot decide, the check compares the revision the signature
+// covers with the current one. Following ISO 32000-2, 12.8.2.2, Table 257,
+// objects that only add a document security store or a document timestamp are
+// not changes at any P: the DSS and what it names, a timestamp field with its
+// widget and value and, at P=1, the catalog, form and page updates that list
+// them, provided nothing else in those changed. At P=2 an annotation other
+// than a form field widget that a page of the signed revision lists and the
+// current page no longer does is reported as removed. When the signed
+// revision cannot be read, MDPInfo says what was not checked.
 func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) (_ []models.SignatureValidation, err error) {
 	defer recoverToError(r.logger(), "Reader.VerifySignatures", &err)
 	return signature.VerifySignatures(ctx, r.doc, roots)

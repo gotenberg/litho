@@ -161,35 +161,108 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 		return
 	}
 
+	// The signed revision is read once, and only when a check needs it.
+	var rev *document.Document
+	var revErr error
+	revRead := false
+	signedRevision := func() (*document.Document, error) {
+		if !revRead {
+			rev, revErr = doc.Revision(ctx, signedEnd)
+			revRead = true
+		}
+		return rev, revErr
+	}
+
+	// Validation data is told apart only when the classifier objects to
+	// something, which is when it can change the verdict.
 	violation := classifyModifications(appendedObjects, sig.MDPPolicy)
+	var validationData int
+	var note string
+	if violation != "" {
+		var classified []appendedObject
+		classified, validationData, note = withoutValidationData(ctx, doc, signedRevision, appendedObjects, sig.MDPPolicy)
+		violation = classifyModifications(classified, sig.MDPPolicy)
+	}
 
 	// Table 254 permits annotation deletion only at P=3, and P=1 already
 	// refuses the page rewrite a deletion needs. At P=2 a deletion appends
 	// nothing the classifier forbids, so the signed revision's /Annots are
 	// compared with the current ones. That runs even when nothing was
 	// appended: a cross-reference section alone can free an annotation.
-	var unchecked string
 	if violation == "" && sig.MDPPolicy == 2 {
-		rev, err := doc.Revision(ctx, signedEnd)
+		rev, err := signedRevision()
 		if err == nil {
 			violation, err = removedAnnotation(ctx, doc, rev)
 		}
 		if err != nil {
-			unchecked = fmt.Sprintf("; annotation removals not checked: %v", err)
+			note += fmt.Sprintf("; annotation removals not checked: %v", err)
 		}
 	}
 
 	switch {
 	case violation != "":
 		result.MDPValid = false
-		result.MDPInfo = fmt.Sprintf("P=%d violation: %s", sig.MDPPolicy, violation)
+		result.MDPInfo = fmt.Sprintf("P=%d violation: %s%s", sig.MDPPolicy, violation, note)
 	case len(appendedObjects) == 0:
 		result.MDPValid = true
-		result.MDPInfo = fmt.Sprintf("no new objects after signing (P=%d)%s", sig.MDPPolicy, unchecked)
+		result.MDPInfo = fmt.Sprintf("no new objects after signing (P=%d)%s", sig.MDPPolicy, note)
+	case validationData > 0:
+		result.MDPValid = true
+		result.MDPInfo = fmt.Sprintf("P=%d: %d appended objects are within policy, %d of them adding validation data or document timestamps%s",
+			sig.MDPPolicy, len(appendedObjects), validationData, note)
 	default:
 		result.MDPValid = true
-		result.MDPInfo = fmt.Sprintf("P=%d: %d appended objects are within policy%s", sig.MDPPolicy, len(appendedObjects), unchecked)
+		result.MDPInfo = fmt.Sprintf("P=%d: %d appended objects are within policy%s", sig.MDPPolicy, len(appendedObjects), note)
 	}
+}
+
+// withoutValidationData returns objects without those that add validation
+// data or document timestamps ([ltvExemptions]), how many it left out, and a
+// note for MDPInfo when they could not be told apart.
+//
+// ISO 32000-2, 12.8.2.2, Table 257 does not count such an update as a change
+// whatever /P says, so the classifier never sees them. Telling them apart
+// needs the signed revision, which is read only when the current document
+// holds validation data an appended object could belong to.
+func withoutValidationData(
+	ctx context.Context,
+	doc *document.Document,
+	signedRevision func() (*document.Document, error),
+	objects []appendedObject,
+	policy int,
+) (_ []appendedObject, removed int, note string) {
+	current, err := collectLTV(ctx, doc)
+	if err != nil {
+		return objects, 0, fmt.Sprintf("; validation data not recognized: %v", err)
+	}
+	if len(current.all) == 0 {
+		return objects, 0, ""
+	}
+	relevant := policy == 1
+	for _, obj := range objects {
+		relevant = relevant || current.all[obj.ObjNum]
+	}
+	if !relevant {
+		return objects, 0, ""
+	}
+
+	rev, err := signedRevision()
+	if err != nil {
+		return objects, 0, fmt.Sprintf("; validation data not recognized: %v", err)
+	}
+	exempt, err := ltvExemptions(ctx, doc, rev, current, objects, policy)
+	if err != nil {
+		return objects, 0, fmt.Sprintf("; validation data not recognized: %v", err)
+	}
+	kept := make([]appendedObject, 0, len(objects))
+	for _, obj := range objects {
+		if exempt[obj.ObjNum] {
+			removed++
+			continue
+		}
+		kept = append(kept, obj)
+	}
+	return kept, removed, ""
 }
 
 // appendedObject holds a parsed object from the post-signature region.
