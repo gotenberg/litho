@@ -68,6 +68,12 @@ func matchFontFixes(v compliance.Violation) bool {
 //   - verapdf 6-2-10-9-t01-fail-a: under PDF_A-1a and PDF_A-1b, litho accepted
 //     a written /CharSet while veraPDF went on reporting 6.3.5 t2, taking the
 //     corpus disagreement metric 14 -> 16.
+//   - pdfjs issue5010.pdf: at PDF/A-2b the /CIDSet regeneration wrote the
+//     document's descriptor back over name-utf8's repair of its /FontName.
+//   - pdfjs issue12963.pdf, govdocs thread_300_300033.pdf: several Type 0
+//     fonts share one descriptor, and each wrote its own /CIDSet over the
+//     document's copy of it. Read through the allocator, the descriptor gets
+//     one.
 func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, _ string) ([]string, error) {
 	// Width corrections are gated on a reported width mismatch
 	// (ISO 19005-1 §6.3.6, 19005-2 §6.2.10.5/§6.2.11.5). These clauses
@@ -176,8 +182,11 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 				processed[fontRef.ObjectNum] = true
 			}
 
-			fd, err := document.ResolveDict(ctx, doc, fontEntry)
-			if err != nil || fd == nil {
+			// Alloc-first: every writer below copies this dictionary, or a
+			// container built from it, back into the output, and font-keys and
+			// name-utf8 rewrite font dictionaries earlier in the registry.
+			fd := liveDictValue(ctx, alloc, doc, fontEntry)
+			if fd == nil {
 				continue
 			}
 
@@ -219,8 +228,10 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 	if ref, ok := fdObj.(ast.PdfIndirectRef); ok {
 		fdRef = ref
 	}
-	fdDict, err := document.ResolveDict(ctx, doc, fdObj)
-	if err != nil || fdDict == nil {
+	// Alloc-first: fixCharSet writes this descriptor back whole, and
+	// name-utf8 rewrites a /FontName that is not valid UTF-8 before it.
+	fdDict := liveDictValue(ctx, alloc, doc, fdObj)
+	if fdDict == nil {
 		return nil
 	}
 
@@ -280,13 +291,11 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 
 	if modified {
 		// Build on the latest version of the font dictionary: an earlier repair
-		// in this same pass may already have rewritten it. The caller reads the
-		// dictionary once from the document and hands that value here, so
-		// copying it would discard what a peer wrote. fonts runs at registry
-		// 144, after cid-gidmap (110), font-keys (111), tounicode-ranges (114)
-		// and nested-resources (131), every one of which writes font
-		// dictionaries. fixType0Font and fixSimpleFontToUnicode already
-		// read this way; this one did not.
+		// may already have rewritten it. fonts runs at registry 144, after
+		// cid-gidmap (110), font-keys (111), tounicode-ranges (114) and
+		// nested-resources (131), every one of which writes font dictionaries.
+		// The caller reads the dictionary through the allocator as well; this
+		// re-read keeps the write safe for a caller that does not.
 		targetFont := fontDict
 		if allocated, ok := alloc.Pending()[fontRef.ObjectNum]; ok {
 			if d, isDict := allocated.(ast.PdfDict); isDict {
@@ -326,8 +335,10 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 //     reporting ".notdef glyph width mismatch (declared=1000.0, font=545.4)"
 //     on every pass with nothing fixed.
 func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, fixWidths, regenCIDSet, createCIDSet bool) []string {
-	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
-	if err != nil || len(descArr) == 0 {
+	// Alloc-first: persistCIDFont writes a copy of this array back when it
+	// is indirect and holds the CIDFont inline.
+	descArr := liveArray(ctx, alloc, doc, fontDict["DescendantFonts"])
+	if len(descArr) == 0 {
 		return nil
 	}
 
@@ -358,8 +369,10 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 	if ref, ok := fdObj.(ast.PdfIndirectRef); ok {
 		fdRef = ref
 	}
-	fdDict, err := document.ResolveDict(ctx, doc, fdObj)
-	if err != nil || fdDict == nil {
+	// Alloc-first, for the reason fixSimpleFont gives: fixCIDSet writes this
+	// descriptor back whole.
+	fdDict := liveDictValue(ctx, alloc, doc, fdObj)
+	if fdDict == nil {
 		return nil
 	}
 
