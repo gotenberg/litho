@@ -83,6 +83,15 @@ type checkGroup func(ctx context.Context, vctx *validationCtx) []Violation
 //nolint:gochecknoglobals // package-level rule tables are the core design.
 var pdfaCheckGroups map[models.PDFAProfile][]checkGroup
 
+// pdfuaCheckGroups maps each PDF/UA profile to its check groups.
+//
+// Neither list carries [checkDocumentGroup]. Its checks are PDF/A clauses, and
+// veraPDF's PDF/UA-2 profile (PDF_UA/PDFUA-2.xml) states no PDF version test:
+// the version check that group once ran for PDF/UA-2 reported under ISO
+// 14289-2, 6.2 t1, which is the MarkInfo rule, a rule no oracle states.
+// [checkUAHeaderGroup] is PDF/UA-1 only for the same reason: ISO 14289-1, 6.1
+// constrains the file header, and the PDF/UA-2 profile has no counterpart.
+//
 //nolint:gochecknoglobals // package-level rule tables are the core design.
 var pdfuaCheckGroups map[models.PDFUAProfile][]checkGroup
 

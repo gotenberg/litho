@@ -10,7 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// checkDocumentGroup validates document-level properties for PDF/A and PDF/UA:
+// checkDocumentGroup validates document-level properties for PDF/A:
 //   - PDF/A-1: /OCProperties forbidden. The version NUMBER is deliberately not
 //     checked: §6.1.2 governs the header's FORMAT, not its value, so a part-1
 //     file declaring a later version is not a violation here. See
@@ -23,27 +23,20 @@ import (
 //   - PDF/A parts 2+/4: /OCProperties must have /AS array if /OCGs present;
 //     OC config dicts require unique /Name and complete /Order.
 //   - PDF/A-4: /Info dict restrictions, /Perms dict restrictions.
-//   - PDF/UA-2: PDF version must be 2.0.
 func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	doc, catalog, profile := vctx.doc, vctx.catalog, vctx.profile
 	part := vctx.part
 
 	doc.Logger.Debug("compliance.document: starting document checks",
-		"profile", profile, "part", part, "isPDFUA", vctx.ua)
+		"profile", profile, "part", part)
 
-	var results []Violation
-
-	if vctx.ua {
-		if profile == "PDF/UA-2" {
-			results = append(results, checkVersionIs2(doc, catalog, Rule_14289_2_6_2_t01, true)...)
-		}
-		doc.Logger.Debug("compliance.document: PDF/UA document checks complete", "violations", len(results))
-		return results
-	}
-
+	// A PDF/UA profile has no PDF/A part, and no PDF/UA list registers this
+	// group (see [pdfuaCheckGroups]).
 	if part == 0 {
 		return nil
 	}
+
+	var results []Violation
 
 	if part == 1 {
 		results = append(results, checkVersionPart1(doc, catalog)...)
@@ -51,7 +44,7 @@ func checkDocumentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	}
 
 	if part == 4 {
-		results = append(results, checkVersionPart4(doc, catalog)...)
+		results = append(results, checkVersionPart4(catalog)...)
 	}
 
 	if part >= 2 {
@@ -106,20 +99,8 @@ func checkVersionPart1(_ *document.Document, _ ast.PdfDict) []Violation {
 // the file-header version is governed separately by §6.1.2 t1 (which requires
 // the header to be %PDF-2.n). Falling back to the header here would fire §6.1.12
 // on every non-2.0 header, duplicating §6.1.2 under the wrong clause.
-func checkVersionPart4(doc *document.Document, catalog ast.PdfDict) []Violation {
-	return checkVersionIs2(doc, catalog, Rule_19005_4_6_1_12_t01, false)
-}
-
-// checkVersionIs2 validates that the document uses PDF 2.0 version. When
-// fallbackToHeader is true, an absent catalog /Version defers to the file
-// header version; when false, only the catalog /Version key is checked (an
-// absent key conforms), matching ISO 19005-4 §6.1.12.
-func checkVersionIs2(doc *document.Document, catalog ast.PdfDict, rule Rule, fallbackToHeader bool) []Violation {
+func checkVersionPart4(catalog ast.PdfDict) []Violation {
 	version := catalogVersion(catalog)
-	if version == "" && fallbackToHeader {
-		version = doc.Version
-	}
-
 	if version == "" {
 		return nil
 	}
@@ -129,7 +110,7 @@ func checkVersionIs2(doc *document.Document, catalog ast.PdfDict, rule Rule, fal
 		return nil
 	}
 
-	return failf(rule, "PDF version %s is not 2.0", version)
+	return failf(Rule_19005_4_6_1_12_t01, "PDF version %s is not 2.0", version)
 }
 
 // catalogVersion extracts the /Version name from the catalog dictionary.
