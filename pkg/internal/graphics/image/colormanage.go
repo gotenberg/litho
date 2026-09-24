@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -21,6 +23,124 @@ const maxICCProfileBytes = 16 << 20
 // read in, whichever of the document, the caller or litho supplies it. Object
 // numbers are positive, so it cannot collide with a profile stream's.
 const deviceCMYKKey = -1
+
+// colorContext holds what the colours of an image depend on beyond its own
+// dictionary. The zero value, for a soft mask or a caller with no page,
+// substitutes nothing and leaves output intents to the document.
+type colorContext struct {
+	// resources is the resource dictionary of the content stream that paints
+	// the image. Its DefaultGray, DefaultRGB and DefaultCMYK entries stand in
+	// for the device spaces (ISO 32000-1, 8.6.5.6), and a form, a pattern or
+	// an annotation appearance is covered by its own resources alone
+	// (ISO 32000-2, 8.6.5.7).
+	resources ast.PdfDict
+	// page is the page dictionary, whose /OutputIntents replace the
+	// document's for that page (ISO 32000-2, 14.11.5).
+	page ast.PdfDict
+}
+
+// withDefaults returns dict with its /ColorSpace replaced where a default
+// colour space stands in for a device space: the space itself, the base of an
+// Indexed space, or the alternate of a Separation or DeviceN space. A device
+// space in those two positions is selected like any other, and litho's PDF/A
+// validation, like veraPDF, counts it as device colour the defaults cover.
+// dict is not modified.
+func (cc colorContext) withDefaults(ctx context.Context, doc *document.Document, dict ast.PdfDict) ast.PdfDict {
+	if cc.resources == nil {
+		return dict
+	}
+	csObj, ok := dict["ColorSpace"]
+	if !ok {
+		return dict
+	}
+	resolved, err := document.ResolveObject(ctx, doc, csObj)
+	if err != nil {
+		doc.Logger.Debug("resolving image colour space for default colour spaces", slog.Any("err", err))
+		return dict
+	}
+	var effective ast.PdfObject
+	switch v := resolved.(type) {
+	case ast.PdfName:
+		def, ok := cc.deviceDefault(ctx, doc, v)
+		if !ok {
+			return dict
+		}
+		effective = def
+	case ast.PdfArray:
+		if len(v) < 2 {
+			return dict
+		}
+		family, err := document.ResolveName(ctx, doc, v[0])
+		if err != nil {
+			return dict
+		}
+		pos := map[ast.PdfName]int{"Indexed": 1, "Separation": 2, "DeviceN": 2}[family]
+		if pos == 0 || pos >= len(v) {
+			return dict
+		}
+		base, err := document.ResolveObject(ctx, doc, v[pos])
+		if err != nil {
+			return dict
+		}
+		name, isName := base.(ast.PdfName)
+		if !isName {
+			return dict
+		}
+		def, ok := cc.deviceDefault(ctx, doc, name)
+		if !ok {
+			return dict
+		}
+		arr := slices.Clone(v)
+		arr[pos] = def
+		effective = arr
+	default:
+		return dict
+	}
+	out := maps.Clone(dict)
+	out["ColorSpace"] = effective
+	return out
+}
+
+// deviceDefault returns the default colour space cc's resources name for a
+// device space. ISO 32000-1, 8.6.5.6 requires a CIE-based space with the
+// device space's number of components: an ICCBased space of that /N, or
+// CalGray for DeviceGray and CalRGB for DeviceRGB. Any other value is ignored
+// and the device space kept.
+func (cc colorContext) deviceDefault(ctx context.Context, doc *document.Document, device ast.PdfName) (ast.PdfObject, bool) {
+	key, ok := map[ast.PdfName]ast.PdfName{
+		"DeviceGray": "DefaultGray", "DeviceRGB": "DefaultRGB", "DeviceCMYK": "DefaultCMYK",
+	}[device]
+	if !ok {
+		return nil, false
+	}
+	spaces, err := document.ResolveDict(ctx, doc, cc.resources["ColorSpace"])
+	if err != nil || spaces == nil {
+		return nil, false
+	}
+	defObj, ok := spaces[key]
+	if !ok {
+		return nil, false
+	}
+	arr, err := document.ResolveArray(ctx, doc, defObj)
+	if err != nil || len(arr) < 2 {
+		doc.Logger.Debug("ignoring a default colour space that is no colour space array",
+			slog.String("key", string(key)), slog.Any("err", err))
+		return nil, false
+	}
+	family, err := document.ResolveName(ctx, doc, arr[0])
+	if err != nil {
+		return nil, false
+	}
+	switch {
+	case family == "ICCBased" && iccBasedSpace(ctx, doc, arr) == string(device),
+		family == "CalGray" && device == "DeviceGray",
+		family == "CalRGB" && device == "DeviceRGB":
+		return arr, true
+	}
+	doc.Logger.Debug("ignoring a default colour space of another kind",
+		slog.String("key", string(key)), slog.String("family", string(family)))
+	return nil, false
+}
 
 // renderingIntent returns the rendering intent of an image dictionary's
 // /Intent. Per ISO 32000-1, 8.6.5.8 an unrecognised name selects relative
@@ -58,7 +178,7 @@ func renderingIntent(ctx context.Context, doc *document.Document, dict ast.PdfDi
 // falls back to the device space its /N names. DeviceCMYK is read through
 // [cmykTransform]. DeviceGray, DeviceRGB and the CIE-based spaces keep their
 // own readings.
-func colorTransform(ctx context.Context, doc *document.Document, csObj ast.PdfObject, space string, components int, intent icc.Intent) *icc.Transform {
+func colorTransform(ctx context.Context, doc *document.Document, csObj ast.PdfObject, space string, components int, intent icc.Intent, cc colorContext) *icc.Transform {
 	if csObj != nil {
 		resolved, err := document.ResolveObject(ctx, doc, csObj)
 		if err != nil {
@@ -77,7 +197,7 @@ func colorTransform(ctx context.Context, doc *document.Document, csObj ast.PdfOb
 		}
 	}
 	if space == "DeviceCMYK" && components == 4 {
-		return cmykTransform(ctx, doc, intent)
+		return cmykTransform(ctx, doc, intent, cc)
 	}
 	return nil
 }
@@ -145,9 +265,40 @@ func readProfileTransform(ctx context.Context, doc *document.Document, obj ast.P
 	return p.NewTransform(intent)
 }
 
+// embeddedTransform returns the transform of an ICC profile an image's own
+// data carries, as a JPEG 2000 colour specification does, or nil when there
+// is none or it cannot be used for components components. It is built per
+// image: the profile has no object to key a cache on, and images that carry
+// one are rare.
+func embeddedTransform(doc *document.Document, profile []byte, components int, intent icc.Intent) *icc.Transform {
+	if profile == nil {
+		return nil
+	}
+	if len(profile) > maxICCProfileBytes {
+		doc.Logger.Debug("ignoring an embedded ICC profile past the safety cap", slog.Int("bytes", len(profile)))
+		return nil
+	}
+	p, err := icc.Parse(profile)
+	var t *icc.Transform
+	if err == nil {
+		t, err = p.NewTransform(intent)
+	}
+	if err != nil {
+		doc.Logger.Debug("reading an embedded ICC profile", slog.Any("err", err))
+		return nil
+	}
+	if t.Components() != components {
+		doc.Logger.Debug("ignoring an embedded ICC profile of another component count",
+			slog.Int("profile", t.Components()), slog.Int("samples", components))
+		return nil
+	}
+	return t
+}
+
 // cmykTransform returns the transform DeviceCMYK samples are read through:
-// the CMYK destination profile of the document's output intent, else the
-// profile the caller supplied, else litho's built-in profile. Nil, which
+// the CMYK destination profile of the page's output intents, else of the
+// document's, else the profile the caller supplied, else litho's built-in
+// profile. Nil, which
 // leaves the samples to the device formula, arises only when the built-in
 // profile itself fails.
 //
@@ -155,15 +306,28 @@ func readProfileTransform(ctx context.Context, doc *document.Document, obj ast.P
 // characterise the device a document was prepared for, and ISO 19005-2,
 // 6.2.4.3 admits DeviceCMYK into a PDF/A file on the strength of an output
 // intent with a CMYK destination profile, which is then what those colours
-// mean. A document without one leaves DeviceCMYK uncharacterised, and the
+// mean. ISO 32000-2, 14.11.5 lets a page carry output intents of its own,
+// which replace the document's for that page. A document without one leaves DeviceCMYK uncharacterised, and the
 // naive formula (1-c)(1-k) then paints cyan as (0, 255, 255) where a press
 // prints (0, 174, 239).
-func cmykTransform(ctx context.Context, doc *document.Document, intent icc.Intent) *icc.Transform {
+func cmykTransform(ctx context.Context, doc *document.Document, intent icc.Intent, cc colorContext) *icc.Transform {
+	if obj, ok := cc.page["OutputIntents"]; ok {
+		// Not kept under deviceCMYKKey, which answers for every page: the
+		// profile's own cache entry makes the next image on the page cheap.
+		if t := outputIntentsCMYK(ctx, doc, obj, intent); t != nil {
+			return t
+		}
+	}
 	if v, ok := doc.CachedColorTransform(deviceCMYKKey, int(intent)); ok {
 		t, _ := v.(*icc.Transform) // a nil entry records that even the built-in profile failed
 		return t
 	}
-	t := outputIntentCMYK(ctx, doc, intent)
+	var t *icc.Transform
+	if catalog, err := document.ResolveCatalog(ctx, doc); err != nil {
+		doc.Logger.Debug("resolving catalog for output intents", slog.Any("err", err))
+	} else {
+		t = outputIntentsCMYK(ctx, doc, catalog.Dict["OutputIntents"], intent)
+	}
 	if t == nil && doc.CMYKProfile != nil {
 		p, err := icc.Parse(doc.CMYKProfile)
 		if err == nil {
@@ -188,15 +352,10 @@ func cmykTransform(ctx context.Context, doc *document.Document, intent icc.Inten
 	return t
 }
 
-// outputIntentCMYK returns the transform of the first output intent in the
-// catalog's /OutputIntents whose destination profile is a CMYK profile.
-func outputIntentCMYK(ctx context.Context, doc *document.Document, intent icc.Intent) *icc.Transform {
-	catalog, err := document.ResolveCatalog(ctx, doc)
-	if err != nil {
-		doc.Logger.Debug("resolving catalog for output intents", slog.Any("err", err))
-		return nil
-	}
-	intents, err := document.ResolveArray(ctx, doc, catalog.Dict["OutputIntents"])
+// outputIntentsCMYK returns the transform of the first output intent of the
+// /OutputIntents array obj whose destination profile is a CMYK profile.
+func outputIntentsCMYK(ctx context.Context, doc *document.Document, obj ast.PdfObject, intent icc.Intent) *icc.Transform {
+	intents, err := document.ResolveArray(ctx, doc, obj)
 	if err != nil {
 		doc.Logger.Debug("resolving /OutputIntents", slog.Any("err", err))
 		return nil

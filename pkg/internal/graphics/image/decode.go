@@ -285,7 +285,7 @@ func jpegSampleSpace(decodedLen, width, height int) (string, bool) {
 // therefore arrives already inverted, and the entry is redundant on re-encode.
 func AppliesDecodeArray(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
 	if _, _, indexed := indexedColorSpace(ctx, doc, dict); indexed {
-		_, readable := resolveIndexedPalette(ctx, doc, dict)
+		_, readable := resolveIndexedPalette(ctx, doc, dict, colorContext{})
 		return readable
 	}
 	return true
@@ -485,6 +485,7 @@ func decodeSeparation(
 	cs ast.PdfArray,
 	data []byte,
 	width, height, bitsPerComp int,
+	cc colorContext,
 ) (image.Image, error) {
 	if len(cs) < 4 {
 		return nil, fmt.Errorf("separation colour space has %d entries, want [/Separation name alternate tint]", len(cs))
@@ -518,7 +519,7 @@ func decodeSeparation(
 	// the identity in practice, but a file may.
 	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, dict, 1), 1)
 
-	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, renderingIntent(ctx, doc, dict)))
+	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, renderingIntent(ctx, doc, dict), cc))
 	var lut [256]color.RGBA
 	for s := range 256 {
 		out, err := tint.Eval([]float64{float64(dec[0][s]) / 255})
@@ -560,6 +561,7 @@ func decodeDeviceN(
 	cs ast.PdfArray,
 	data []byte,
 	width, height, bitsPerComp, colorants int,
+	cc colorContext,
 ) (image.Image, error) {
 	if len(cs) < 4 {
 		return nil, fmt.Errorf("devicen colour space has %d entries, want [/DeviceN names alternate tint]", len(cs))
@@ -610,7 +612,7 @@ func decodeDeviceN(
 	// identity in practice, but a file may.
 	dec := buildDecodeLUTs(resolveDecodeArray(ctx, doc, dict, colorants), colorants)
 
-	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, renderingIntent(ctx, doc, dict)))
+	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, renderingIntent(ctx, doc, dict), cc))
 	memo := make(map[string]color.RGBA)
 	inputs := make([]float64, colorants)
 	tuple := make([]byte, colorants)
@@ -650,7 +652,7 @@ func decodeDeviceN(
 // through the space's tint transform (ISO 32000-1, 8.6.6.4 and 8.6.6.5).
 // Reading the tints as RGB, three bytes an entry, misread every entry of the
 // five-colorant tables of govdocs thread_300_300659 and thread_400_400932.
-func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, colorants int, table []byte, intent icc.Intent) ([]byte, error) {
+func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, colorants int, table []byte, intent icc.Intent, cc colorContext) ([]byte, error) {
 	if len(cs) < 4 {
 		return nil, fmt.Errorf("tinted colour space has %d entries, want [family names alternate tint]", len(cs))
 	}
@@ -667,7 +669,7 @@ func tintTable(ctx context.Context, doc *document.Document, cs ast.PdfArray, col
 		return nil, fmt.Errorf("tint transform maps %d inputs to %d values for %d colorants over %q",
 			tint.Inputs(), tint.Outputs(), colorants, alternate)
 	}
-	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, intent))
+	conv := newConverter(colorTransform(ctx, doc, cs[2], alternate, altComps, intent, cc))
 	out := make([]byte, 0, len(table)/colorants*3)
 	in := make([]float64, colorants)
 	for i := 0; i+colorants <= len(table); i += colorants {
@@ -767,7 +769,7 @@ type palette struct {
 // data that holds one: every indexed image failed with "decoded data too short"
 // (pdfjs 160F-2019.pdf and S2.pdf among them), so no palette image could be
 // decoded at all.
-func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast.PdfDict) (palette, bool) {
+func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast.PdfDict, cc colorContext) (palette, bool) {
 	arr, base, ok := indexedColorSpace(ctx, doc, dict)
 	if !ok || len(arr) < 4 {
 		return palette{}, false
@@ -823,7 +825,7 @@ func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast
 	}
 	intent := renderingIntent(ctx, doc, dict)
 	if tinted {
-		rgb, err := tintTable(ctx, doc, tintArr, colorants, lookup, intent)
+		rgb, err := tintTable(ctx, doc, tintArr, colorants, lookup, intent, cc)
 		if err != nil {
 			doc.Logger.Debug("converting an indexed colour table of tints", slog.Any("err", err))
 			return palette{}, false
@@ -834,7 +836,7 @@ func resolveIndexedPalette(ctx context.Context, doc *document.Document, dict ast
 	// are converted once here. A short table is padded in the base space
 	// first, so its missing entries read as the base's zero, as they did
 	// before conversion.
-	if conv := newConverter(colorTransform(ctx, doc, arr[1], base, comps, intent)); conv != nil {
+	if conv := newConverter(colorTransform(ctx, doc, arr[1], base, comps, intent, cc)); conv != nil {
 		if len(lookup) < want {
 			padded := make([]byte, want)
 			copy(padded, lookup)
@@ -1017,11 +1019,11 @@ var ErrImageNotFound = errors.New("image not found")
 // from that listing, and an image drawn through a form is not in the page's
 // own dictionary.
 func DecodeImage(ctx context.Context, doc *document.Document, page *document.Page, name ast.PdfName) (image.Image, error) {
-	stream, err := lookupImage(ctx, doc, page, name)
+	stream, cc, err := lookupImage(ctx, doc, page, name)
 	if err != nil {
 		return nil, err
 	}
-	return decodeImageStream(ctx, doc, name, stream)
+	return decodeImageStream(ctx, doc, name, stream, cc)
 }
 
 // DecodeImageSamples decodes a named Image XObject as [DecodeImage] does, but
@@ -1030,11 +1032,11 @@ func DecodeImage(ctx context.Context, doc *document.Document, page *document.Pag
 // beside the same soft mask needs them that way: undone, a viewer would undo
 // the preblending a second time.
 func DecodeImageSamples(ctx context.Context, doc *document.Document, page *document.Page, name ast.PdfName) (image.Image, error) {
-	stream, err := lookupImage(ctx, doc, page, name)
+	stream, cc, err := lookupImage(ctx, doc, page, name)
 	if err != nil {
 		return nil, err
 	}
-	return decodeImagePixels(ctx, doc, name, stream)
+	return decodeImagePixels(ctx, doc, name, stream, cc)
 }
 
 // NativeSamples are the samples of an image in its own colour space: one byte
@@ -1057,7 +1059,7 @@ var errNotNative = errors.New("image samples are not in a device colour space")
 // /ColorSpace changes no colour, where going through [DecodeImage]'s RGB
 // converts them.
 func DecodeImageNative(ctx context.Context, doc *document.Document, page *document.Page, name ast.PdfName) (NativeSamples, bool, error) {
-	stream, err := lookupImage(ctx, doc, page, name)
+	stream, cc, err := lookupImage(ctx, doc, page, name)
 	if err != nil {
 		return NativeSamples{}, false, err
 	}
@@ -1066,7 +1068,7 @@ func DecodeImageNative(ctx context.Context, doc *document.Document, page *docume
 		return NativeSamples{}, false, nil
 	}
 	var native NativeSamples
-	if _, err := decodeImageInto(ctx, doc, name, stream, &native); err != nil {
+	if _, err := decodeImageInto(ctx, doc, name, stream, cc, &native); err != nil {
 		if errors.Is(err, errNotNative) {
 			return NativeSamples{}, false, nil
 		}
@@ -1134,41 +1136,41 @@ func captureNative(native *NativeSamples, data []byte, dec [][256]byte, componen
 }
 
 // lookupImage finds the image stream DecodeImage decodes.
-func lookupImage(ctx context.Context, doc *document.Document, page *document.Page, name ast.PdfName) (ast.PdfStream, error) {
+func lookupImage(ctx context.Context, doc *document.Document, page *document.Page, name ast.PdfName) (ast.PdfStream, colorContext, error) {
 	if xobjDict, err := document.ResolveDict(ctx, doc, page.Resources["XObject"]); err == nil && xobjDict != nil {
 		if obj, ok := xobjDict[name]; ok {
 			stream, err := document.ResolveStream(ctx, doc, obj)
 			if err != nil {
-				return ast.PdfStream{}, err
+				return ast.PdfStream{}, colorContext{}, err
 			}
 			if stream.Dict == nil {
-				return ast.PdfStream{}, fmt.Errorf("image %q is not a stream", name)
+				return ast.PdfStream{}, colorContext{}, fmt.Errorf("image %q is not a stream", name)
 			}
-			return stream, nil
+			return stream, colorContext{resources: page.Resources, page: page.Dict}, nil
 		}
 	}
-	if stream, ok := findImage(ctx, doc, page, string(name)); ok {
-		return stream, nil
+	if stream, resources, ok := findImage(ctx, doc, page, string(name)); ok {
+		return stream, colorContext{resources: resources, page: page.Dict}, nil
 	}
 	if err := ctx.Err(); err != nil {
-		return ast.PdfStream{}, err
+		return ast.PdfStream{}, colorContext{}, err
 	}
-	return ast.PdfStream{}, fmt.Errorf("image %q: %w", name, ErrImageNotFound)
+	return ast.PdfStream{}, colorContext{}, fmt.Errorf("image %q: %w", name, ErrImageNotFound)
 }
 
 // decodeImageStream decodes the Image XObject stream that name refers to.
-func decodeImageStream(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream) (image.Image, error) {
-	img, err := decodeImagePixels(ctx, doc, name, stream)
+func decodeImageStream(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, cc colorContext) (image.Image, error) {
+	img, err := decodeImagePixels(ctx, doc, name, stream, cc)
 	if err != nil {
 		return nil, err
 	}
-	return unpreblend(ctx, doc, name, stream.Dict, img), nil
+	return unpreblend(ctx, doc, name, stream.Dict, cc, img), nil
 }
 
 // decodeImagePixels decodes the samples of an Image XObject stream into
 // pixels, taking no account of its soft mask.
-func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream) (image.Image, error) {
-	return decodeImageInto(ctx, doc, name, stream, nil)
+func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, cc colorContext) (image.Image, error) {
+	return decodeImageInto(ctx, doc, name, stream, cc, nil)
 }
 
 // decodeImageInto decodes the samples of an Image XObject stream. With native
@@ -1176,7 +1178,11 @@ func decodeImagePixels(ctx context.Context, doc *document.Document, name ast.Pdf
 // conversion and fills native with the samples of a DeviceGray, DeviceRGB or
 // DeviceCMYK reading, /Decode applied, or reports errNotNative when the
 // samples do not come out that way.
-func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, native *NativeSamples) (image.Image, error) {
+func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfName, stream ast.PdfStream, cc colorContext, native *NativeSamples) (image.Image, error) {
+	// A default colour space in the painting resources stands in for a device
+	// space from here on, for every reading of the colour space below.
+	stream.Dict = cc.withDefaults(ctx, doc, stream.Dict)
+
 	width, err := resolveInt(ctx, doc, stream.Dict, "Width")
 	if err != nil {
 		return nil, err
@@ -1197,12 +1203,13 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	// resolveColorSpace answers DeviceRGB for a missing /ColorSpace, but a
 	// JPXDecode image may leave it out and take its colour from the JPEG 2000
 	// data instead (ISO 32000-1, 7.4.9).
+	var jpxProfile []byte
 	if _, stated := stream.Dict["ColorSpace"]; !stated && usesJPXDecode(ctx, doc, stream.Dict) {
-		cs, err := jpxColorSpace(ctx, doc, stream)
+		cs, profile, err := jpxColorSpace(ctx, doc, stream)
 		if err != nil {
 			return nil, fmt.Errorf("image %q: %w", name, err)
 		}
-		colorSpace = cs
+		colorSpace, jpxProfile = cs, profile
 	}
 
 	// A stencil mask is not a picture. ISO 32000-1, 8.9.6.2 gives an image mask
@@ -1278,7 +1285,7 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	//
 	// An indexed image's /Decode array remaps the index range, not colour
 	// components (ISO 32000-1, 8.9.5.2): see indexDecode.
-	pal, isIndexed := resolveIndexedPalette(ctx, doc, stream.Dict)
+	pal, isIndexed := resolveIndexedPalette(ctx, doc, stream.Dict, cc)
 	if !isIndexed {
 		// An unreadable colour table leaves an indexed image with nothing to
 		// decode, and its samples are indices either way (ISO 32000-1, 8.6.6.3).
@@ -1350,9 +1357,9 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 		if arr, family, colorants, ok := tintedColorSpace(ctx, doc, stream.Dict); ok {
 			switch {
 			case family == "Separation":
-				return decodeSeparation(ctx, doc, stream.Dict, arr, decodedData, width, height, bitsPerComp)
+				return decodeSeparation(ctx, doc, stream.Dict, arr, decodedData, width, height, bitsPerComp, cc)
 			case family == "DeviceN" && (filterName != "DCTDecode" || imageComponents(colorSpace) == colorants):
-				return decodeDeviceN(ctx, doc, stream.Dict, arr, decodedData, width, height, bitsPerComp, colorants)
+				return decodeDeviceN(ctx, doc, stream.Dict, arr, decodedData, width, height, bitsPerComp, colorants, cc)
 			}
 		}
 	}
@@ -1439,12 +1446,19 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 		return nil, captureNative(native, decodedData, dec, components, width, height, validRows)
 	}
 
-	// An ICCBased image is read through its profile and a DeviceCMYK one
-	// through the document's CMYK profile (see [colorTransform]). A stencil
-	// mask holds coverage, not colour, whatever /ColorSpace it wrongly states.
+	// An ICCBased image is read through its profile, a JPEG 2000 image with
+	// no /ColorSpace through the profile its own data carries, and a
+	// DeviceCMYK one through the document's CMYK profile (see
+	// [colorTransform]). A stencil mask holds coverage, not colour, whatever
+	// /ColorSpace it wrongly states.
 	var conv *converter
 	if !isMask {
-		conv = newConverter(colorTransform(ctx, doc, stream.Dict["ColorSpace"], colorSpace, components, renderingIntent(ctx, doc, stream.Dict)))
+		intent := renderingIntent(ctx, doc, stream.Dict)
+		t := embeddedTransform(doc, jpxProfile, components, intent)
+		if t == nil {
+			t = colorTransform(ctx, doc, stream.Dict["ColorSpace"], colorSpace, components, intent, cc)
+		}
+		conv = newConverter(t)
 	}
 	var px [4]byte
 

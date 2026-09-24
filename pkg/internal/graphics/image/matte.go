@@ -24,7 +24,7 @@ import (
 //
 // An indexed image is left as it is: its components are indices, which a
 // matte colour cannot be blended with.
-func unpreblend(ctx context.Context, doc *document.Document, name ast.PdfName, dict ast.PdfDict, img image.Image) image.Image {
+func unpreblend(ctx context.Context, doc *document.Document, name ast.PdfName, dict ast.PdfDict, cc colorContext, img image.Image) image.Image {
 	smaskObj, ok := dict["SMask"]
 	if !ok {
 		return img
@@ -40,13 +40,15 @@ func unpreblend(ctx context.Context, doc *document.Document, name ast.PdfName, d
 	if _, _, indexed := indexedColorSpace(ctx, doc, dict); indexed {
 		return img
 	}
-	mr, mg, mb, ok := matteRGB(ctx, doc, dict, matte)
+	mr, mg, mb, ok := matteRGB(ctx, doc, cc.withDefaults(ctx, doc, dict), cc, matte)
 	if !ok {
 		doc.Logger.Debug("ignoring a /Matte that does not fit the image's colour space",
 			slog.String("image", string(name)), slog.Int("components", len(matte)))
 		return img
 	}
-	alphaImg, err := decodeImagePixels(ctx, doc, name+" soft mask", smask)
+	// A soft mask holds opacity, not colour, so no default colour space or
+	// output intent applies to it.
+	alphaImg, err := decodeImagePixels(ctx, doc, name+" soft mask", smask, colorContext{})
 	if err != nil {
 		doc.Logger.Debug("decoding the soft mask to undo a matte", slog.String("image", string(name)), slog.Any("err", err))
 		return img
@@ -89,7 +91,7 @@ func unblend(c, m, a uint8) uint8 {
 
 // matteRGB converts a /Matte array, written in the image's colour space, to
 // the RGB the decoded image is in.
-func matteRGB(ctx context.Context, doc *document.Document, dict ast.PdfDict, matte []float64) (uint8, uint8, uint8, bool) {
+func matteRGB(ctx context.Context, doc *document.Document, dict ast.PdfDict, cc colorContext, matte []float64) (uint8, uint8, uint8, bool) {
 	comp := make([]uint8, len(matte))
 	for i, v := range matte {
 		comp[i] = uint8(min(max(v*255+0.5, 0), 255))
@@ -97,7 +99,7 @@ func matteRGB(ctx context.Context, doc *document.Document, dict ast.PdfDict, mat
 	// The matte is converted as the image's samples are, so a colour-managed
 	// image unblends against the colour its pixels were blended with.
 	space := resolveColorSpace(ctx, doc, dict)
-	if conv := newConverter(colorTransform(ctx, doc, dict["ColorSpace"], space, len(comp), renderingIntent(ctx, doc, dict))); conv != nil {
+	if conv := newConverter(colorTransform(ctx, doc, dict["ColorSpace"], space, len(comp), renderingIntent(ctx, doc, dict), cc)); conv != nil {
 		r, g, b := conv.convert(comp)
 		return r, g, b, true
 	}
