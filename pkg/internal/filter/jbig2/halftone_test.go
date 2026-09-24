@@ -66,7 +66,7 @@ func TestDecodeMMRBlock_ConsumesWholeBlocks(t *testing.T) {
 	data, planes := mmrPlanes(t)
 	off := 0
 	for k, want := range []int{60, 55} {
-		got, used, err := decodeMMRBlock(23, 9, data[off:])
+		got, used, err := decodeMMRBlock(context.Background(), 23, 9, data[off:])
 		if err != nil {
 			t.Fatalf("plane %d: %v", k, err)
 		}

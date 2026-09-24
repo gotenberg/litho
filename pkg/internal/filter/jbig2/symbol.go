@@ -425,7 +425,7 @@ func decodeSymbolsHuffman(ctx context.Context, h symbolHeader, inSyms []*Bitmap,
 			all = append(all, bs)
 		}
 		if !h.refagg {
-			syms, err := collectiveSymbols(widths, total, height, hs)
+			syms, err := collectiveSymbols(ctx, widths, total, height, hs)
 			if err != nil {
 				return nil, err
 			}
@@ -442,7 +442,7 @@ func decodeSymbolsHuffman(ctx context.Context, h symbolHeader, inSyms []*Bitmap,
 
 // collectiveSymbols decodes a height class collective bitmap, ITU-T T.88
 // 6.5.9, and cuts it into the class's symbols, left to right (6.5.5 step 4 d).
-func collectiveSymbols(widths []int64, total, height int64, hs *huffSymbols) ([]*Bitmap, error) {
+func collectiveSymbols(ctx context.Context, widths []int64, total, height int64, hs *huffSymbols) ([]*Bitmap, error) {
 	size, err := hs.bmSize.value(hs.r, "collective bitmap size")
 	if err != nil {
 		return nil, err
@@ -469,7 +469,7 @@ func collectiveSymbols(widths []int64, total, height int64, hs *huffSymbols) ([]
 			return nil, fmt.Errorf("%w: collective bitmap of %d bytes, %d remain", ErrMalformed, size, len(hs.r.data)-hs.r.pos)
 		}
 		// Table 19: MMR with a known byte count, so EOFB may be absent.
-		if collective, err = decodeMMR(int(total), int(height), hs.r.data[hs.r.pos:hs.r.pos+int(size)]); err != nil {
+		if collective, err = decodeMMR(ctx, int(total), int(height), hs.r.data[hs.r.pos:hs.r.pos+int(size)]); err != nil {
 			return nil, err
 		}
 	}

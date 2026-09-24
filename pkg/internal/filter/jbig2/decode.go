@@ -549,7 +549,7 @@ func decodeGenericSegment(ctx context.Context, data []byte, width, height int) (
 	// 7.4.6.2: bit 0 is MMR, bits 1-2 GBTEMPLATE, bit 3 TPGDON. Table 2
 	// leaves GBTEMPLATE and TPGDON unused when MMR is 1.
 	if flags&1 != 0 {
-		return decodeMMR(width, height, data[c.off:])
+		return decodeMMR(ctx, width, height, data[c.off:])
 	}
 	p := genericParams{
 		width:    width,

@@ -1,14 +1,10 @@
 package jbig2
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
-	"io"
 
-	"golang.org/x/image/ccitt"
-
+	"github.com/gotenberg/litho/pkg/internal/filter/ccitt"
 	"github.com/gotenberg/litho/pkg/internal/filter/mq"
 )
 
@@ -228,20 +224,29 @@ const rowsPerCancelCheck = 16
 // T.88, 6.2.6: T.6 two-dimensional coding in which black decodes to 1. The
 // data length is known wherever this is called, so a missing EOFB is not an
 // error (6.2.6).
-func decodeMMR(width, height int, data []byte) (*Bitmap, error) {
+func decodeMMR(ctx context.Context, width, height int, data []byte) (*Bitmap, error) {
+	bm, _, err := decodeMMRBlock(ctx, width, height, data)
+	return bm, err
+}
+
+// decodeMMRBlock decodes an MMR-coded bitmap and the EOFB that may end it,
+// and reports how many whole bytes they occupied, so a following block can
+// start after it (T.88 6.2.6: MMR data consumes an integral number of bytes).
+func decodeMMRBlock(ctx context.Context, width, height int, data []byte) (*Bitmap, int, error) {
 	bm, err := newBitmap(width, height)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if width == 0 || height == 0 {
-		return bm, nil
+		return bm, 0, nil
 	}
-	r := ccitt.NewReader(bytes.NewReader(data), ccitt.MSB, ccitt.Group4, width, height, &ccitt.Options{Invert: true})
-	if _, err := io.ReadFull(r, bm.Data); err != nil {
-		if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
-			return nil, fmt.Errorf("%w: MMR data ends before %d rows of %d pixels", ErrMalformed, height, width)
+	rows, used, err := ccitt.DecodeBlock(ctx, data, ccitt.Params{K: -1, Columns: width, Rows: height, BlackIs1: true})
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, 0, err
 		}
-		return nil, fmt.Errorf("%w: MMR data: %w", ErrMalformed, err)
+		return nil, 0, fmt.Errorf("%w: MMR data of %d rows of %d pixels: %w", ErrMalformed, height, width, err)
 	}
-	return bm, nil
+	copy(bm.Data, rows)
+	return bm, used, nil
 }

@@ -123,3 +123,49 @@ func TestDecode_Canceled(t *testing.T) {
 		t.Errorf("%v, want %v", err, context.Canceled)
 	}
 }
+
+// TestDecodeBlock pins what a block followed by other data reports: its rows,
+// and the whole bytes the rows and an EOFB after them occupy, so the data
+// after it is found (ITU-T T.88, 6.2.6). Rows that stop short are an error,
+// where Decode would return them.
+func TestDecodeBlock(t *testing.T) {
+	t.Parallel()
+
+	p := Params{K: -1, Columns: 8, Rows: 2, BlackIs1: true}
+	next := "11111111"
+	for _, tc := range []struct {
+		name string
+		data string
+		used int
+	}{
+		// 13 bits of rows and 24 of EOFB end in the fifth byte.
+		{"rows and EOFB", rows2 + eol + eol + "000" + next, 5},
+		{"rows alone", rows2 + "000" + next, 2},
+	} {
+		got, used, err := DecodeBlock(context.Background(), bitsOf(tc.data), p)
+		if err != nil {
+			t.Errorf("%s: %v", tc.name, err)
+			continue
+		}
+		if !bytes.Equal(got, []byte{^pattern, ^pattern}) || used != tc.used {
+			t.Errorf("%s: %08b and %d bytes, want %08b and %d", tc.name, got, used, []byte{^pattern, ^pattern}, tc.used)
+		}
+	}
+	// A row that fails names its own failure, here uncompressed mode, rather
+	// than only the rows missing after it.
+	for name, tc := range map[string]struct {
+		data string
+		want error
+	}{
+		"an EOFB after one row":           {rowH + eol + eol, ErrMalformed},
+		"uncompressed mode in second row": {rowH + "0000001 111", ErrUnsupported},
+		"data ending in a row":            {rowH + "1", ErrMalformed},
+	} {
+		if _, _, err := DecodeBlock(context.Background(), bitsOf(tc.data), p); !errors.Is(err, tc.want) {
+			t.Errorf("%s: %v, want %v", name, err, tc.want)
+		}
+	}
+	if _, _, err := DecodeBlock(context.Background(), bitsOf(rows2), Params{K: -1, Columns: 8}); !errors.Is(err, ErrMalformed) {
+		t.Errorf("no rows asked for: %v, want %v", err, ErrMalformed)
+	}
+}

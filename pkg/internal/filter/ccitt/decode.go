@@ -57,40 +57,79 @@ func DefaultParams() Params {
 //
 // Decode is safe for concurrent use: it keeps no state between calls.
 func Decode(ctx context.Context, data []byte, p Params) ([]byte, error) {
+	out, _, err := decode(ctx, data, p, false)
+	return out, err
+}
+
+// DecodeBlock decodes exactly Rows rows as [Decode] does, then, for
+// two-dimensional coding (K negative), the end-of-block pattern if one
+// follows them, and reports how many whole bytes the rows and the pattern
+// occupy. It serves a block embedded in a format whose data goes on after
+// it, as JBIG2 embeds T.6 bitplanes (ITU-T T.88, 6.2.6). Data that holds
+// fewer rows, or garbles one, is an error.
+//
+// DecodeBlock is safe for concurrent use: it keeps no state between calls.
+func DecodeBlock(ctx context.Context, data []byte, p Params) ([]byte, int, error) {
+	if p.Rows < 1 {
+		return nil, 0, fmt.Errorf("%w: a block of %d rows", ErrMalformed, p.Rows)
+	}
+	out, used, err := decode(ctx, data, p, true)
+	if err != nil {
+		return nil, 0, err
+	}
+	if want := p.Rows * ((p.Columns + 7) / 8); len(out) < want {
+		return nil, 0, fmt.Errorf("%w: data ends after %d of %d rows", ErrMalformed, len(out)/((p.Columns+7)/8), p.Rows)
+	}
+	return out, used, nil
+}
+
+// decode decodes rows as [Decode] and [DecodeBlock] describe, and reports
+// the whole bytes consumed. When block is set a garbled row is an error
+// whatever precedes it, and the end-of-block pattern after the last row is
+// consumed.
+func decode(ctx context.Context, data []byte, p Params, block bool) ([]byte, int, error) {
 	if p.Columns < 1 || p.Columns > maxColumns {
-		return nil, fmt.Errorf("%w: %d columns", ErrLimit, p.Columns)
+		return nil, 0, fmt.Errorf("%w: %d columns", ErrLimit, p.Columns)
 	}
 	if p.Rows < 0 {
-		return nil, fmt.Errorf("%w: %d rows", ErrMalformed, p.Rows)
+		return nil, 0, fmt.Errorf("%w: %d rows", ErrMalformed, p.Rows)
 	}
 	rowBytes := (p.Columns + 7) / 8
 	if p.Rows > maxOutput/rowBytes {
-		return nil, fmt.Errorf("%w: %d rows of %d columns", ErrLimit, p.Rows, p.Columns)
+		return nil, 0, fmt.Errorf("%w: %d rows of %d columns", ErrLimit, p.Rows, p.Columns)
 	}
 	d := &decoder{r: bitReader{data: data}, p: p}
 	var out []byte
 	for row := 0; p.Rows == 0 || row < p.Rows; row++ {
 		if row%ctxRows == 0 {
 			if err := ctx.Err(); err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 		}
 		if len(out)+rowBytes > maxOutput {
-			return nil, fmt.Errorf("%w: more than %d bytes of rows", ErrLimit, maxOutput)
+			return nil, 0, fmt.Errorf("%w: more than %d bytes of rows", ErrLimit, maxOutput)
 		}
 		ok, err := d.row()
 		if err != nil {
-			if row > 0 {
+			if row > 0 && !block {
 				break
 			}
-			return nil, err
+			return nil, 0, err
 		}
 		if !ok {
 			break
 		}
 		out = d.render(out)
 	}
-	return out, nil
+	if block && p.K < 0 {
+		// EOFB is two end-of-line codes (T.6, 2.4.3).
+		for range 2 {
+			if eol, err := d.r.endOfLine(); err != nil || !eol {
+				break
+			}
+		}
+	}
+	return out, min((d.r.pos+7)/8, len(data)), nil
 }
 
 // decoder holds the state that runs from one row to the next.

@@ -2,11 +2,7 @@ package jbig2
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"io"
-
-	"golang.org/x/image/ccitt"
 
 	"github.com/gotenberg/litho/pkg/internal/filter/mq"
 )
@@ -56,7 +52,7 @@ func decodePatternDict(ctx context.Context, seg segment, b *budget) (*patternDic
 	var err error
 	if mmr {
 		// The data length is known, so EOFB may be absent (6.2.6).
-		collective, err = decodeMMR(int(total), int(height), data)
+		collective, err = decodeMMR(ctx, int(total), int(height), data)
 	} else {
 		// Table 27: AT pixel A1 sits one pattern to the left, the others at
 		// their nominal places.
@@ -256,7 +252,7 @@ func decodeGrayScale(ctx context.Context, p grayParams, data []byte, b *budget) 
 		var err error
 		if p.mmr {
 			var used int
-			plane, used, err = decodeMMRBlock(p.width, p.height, data[offset:])
+			plane, used, err = decodeMMRBlock(ctx, p.width, p.height, data[offset:])
 			offset += used
 		} else {
 			plane, err = decodeGeneric(ctx, gp, dec, cx)
@@ -283,53 +279,6 @@ func decodeGrayScale(ctx context.Context, p grayParams, data []byte, b *budget) 
 		above = plane
 	}
 	return values, nil
-}
-
-// oneByteReader serves its data one byte per Read and counts the bytes
-// served.
-type oneByteReader struct {
-	data []byte
-	n    int
-}
-
-func (r *oneByteReader) Read(p []byte) (int, error) {
-	if len(p) == 0 {
-		return 0, nil
-	}
-	if r.n >= len(r.data) {
-		return 0, io.EOF
-	}
-	p[0] = r.data[r.n]
-	r.n++
-	return 1, nil
-}
-
-// decodeMMRBlock decodes an MMR-coded bitmap that ends with EOFB and reports
-// how many whole bytes it occupied, so a following block can start after it
-// (T.88 6.2.6: MMR data consumes an integral number of bytes).
-//
-// The count relies on how the CCITT reader consumes its input: it asks for
-// more bytes only when it has run out of bits, so a source that yields one
-// byte per Read has served exactly the bytes the block used, the last one
-// padded. The EOFB is checked by the Read that follows the final row.
-func decodeMMRBlock(width, height int, data []byte) (*Bitmap, int, error) {
-	bm, err := newBitmap(width, height)
-	if err != nil {
-		return nil, 0, err
-	}
-	if width == 0 || height == 0 {
-		return bm, 0, nil
-	}
-	src := &oneByteReader{data: data}
-	r := ccitt.NewReader(src, ccitt.MSB, ccitt.Group4, width, height, &ccitt.Options{Invert: true})
-	if _, err := io.ReadFull(r, bm.Data); err != nil {
-		return nil, 0, fmt.Errorf("%w: MMR bitplane: %w", ErrMalformed, err)
-	}
-	var tail [1]byte
-	if _, err := r.Read(tail[:]); err != nil && !errors.Is(err, io.EOF) {
-		return nil, 0, fmt.Errorf("%w: MMR bitplane end: %w", ErrMalformed, err)
-	}
-	return bm, src.n, nil
 }
 
 // referredPatternDict returns the pattern dictionary a halftone region refers
