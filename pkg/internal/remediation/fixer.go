@@ -123,6 +123,9 @@ var registry = []fixer{
 	{name: "annot-artifact", safety: safetyResource, matches: matchAnnotArtifact, apply: fixAnnotArtifact},
 	{name: "annot-flags", safety: safetyResource, matches: matchAnnotFlags, apply: fixAnnotFlags},
 	{name: "annot-opacity", safety: safetyResource, matches: matchAnnotOpacity, apply: fixAnnotOpacity},
+	// Runs after output-intent and corrupt-icc: its decision reads the
+	// destination profile they may install or replace.
+	{name: "annot-color", safety: safetyResource, matches: matchAnnotColor, apply: fixAnnotColor},
 	{name: "annot-appearance", safety: safetyResource, matches: matchAnnotAppearance, apply: fixAnnotAppearance},
 	{name: "real-limits", safety: safetyResource, matches: matchRealLimits, apply: fixRealLimits},
 	{name: "string-limit", safety: safetyResource, matches: matchStringLimit, apply: fixStringLimit},
