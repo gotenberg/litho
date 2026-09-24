@@ -278,7 +278,7 @@ func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName,
 		return decodeRunLength(data)
 
 	case "DCTDecode", "DCT":
-		return decodeDCT(data, parms)
+		return decodeDCT(ctx, data, parms, dict)
 
 	case "JPXDecode":
 		return decodeJPX(ctx, data, dict)

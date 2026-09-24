@@ -2,6 +2,7 @@ package filter
 
 import (
 	"bytes"
+	"context"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -24,7 +25,7 @@ func TestDecodeDCT(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		got, err := decodeDCT(buf.Bytes(), nil)
+		got, err := decodeDCT(context.Background(), buf.Bytes(), nil, nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -47,7 +48,7 @@ func TestDecodeDCT(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		got, err := decodeDCT(buf.Bytes(), nil)
+		got, err := decodeDCT(context.Background(), buf.Bytes(), nil, nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -59,14 +60,14 @@ func TestDecodeDCT(t *testing.T) {
 	})
 
 	t.Run("empty input", func(t *testing.T) {
-		_, err := decodeDCT(nil, nil)
+		_, err := decodeDCT(context.Background(), nil, nil, nil)
 		if err == nil {
 			t.Fatal("expected error for empty input")
 		}
 	})
 
 	t.Run("corrupt input", func(t *testing.T) {
-		_, err := decodeDCT([]byte{0xFF, 0xD8, 0x00, 0x01}, nil)
+		_, err := decodeDCT(context.Background(), []byte{0xFF, 0xD8, 0x00, 0x01}, nil, nil)
 		if err == nil {
 			t.Fatal("expected error for corrupt JPEG")
 		}
@@ -85,7 +86,7 @@ func TestDecodeDCT(t *testing.T) {
 		parms := ast.PdfDict{
 			"ColorTransform": ast.PdfInt(1),
 		}
-		_, err := decodeDCT(buf.Bytes(), parms)
+		_, err := decodeDCT(context.Background(), buf.Bytes(), parms, nil)
 		if err != nil {
 			t.Fatalf("unexpected error with DecodeParms: %v", err)
 		}
@@ -106,7 +107,7 @@ func TestDecodeDCT_CMYKAsStored(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := decodeDCT(data, nil)
+	got, err := decodeDCT(context.Background(), data, nil, nil)
 	if err != nil {
 		t.Fatalf("decodeDCT: %v", err)
 	}
@@ -128,5 +129,38 @@ func TestDecodeDCT_CMYKAsStored(t *testing.T) {
 				break
 			}
 		}
+	}
+}
+
+// TestDecodeDCT_Lenient renders the JPEGs image/jpeg refuses over damage
+// other readers draw through: data cut off inside the scan, and a frame
+// declaring 65535 lines of an image whose dictionary states 16.
+func TestDecodeDCT_Lenient(t *testing.T) {
+	t.Parallel()
+
+	img := image.NewRGBA(image.Rect(0, 0, 64, 16))
+	for x := range 64 {
+		for y := range 16 {
+			img.Set(x, y, color.RGBA{R: uint8(x * 4), G: uint8(y * 16), B: 90, A: 255})
+		}
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90}); err != nil {
+		t.Fatal(err)
+	}
+	data := buf.Bytes()
+
+	sos := bytes.Index(data, []byte{0xFF, 0xDA})
+	cut := data[:sos+(len(data)-sos)/2]
+	if got, err := decodeDCT(context.Background(), cut, nil, nil); err != nil || len(got) != 64*16*3 {
+		t.Errorf("truncated: %d bytes, %v; want %d", len(got), err, 64*16*3)
+	}
+
+	tall := bytes.Clone(data)
+	sof := bytes.Index(tall, []byte{0xFF, 0xC0})
+	tall[sof+5], tall[sof+6] = 0xFF, 0xFF
+	dict := ast.PdfDict{"Height": ast.PdfInt(16)}
+	if got, err := decodeDCT(context.Background(), tall, nil, dict); err != nil || len(got) != 64*16*3 {
+		t.Errorf("placeholder height: %d bytes, %v; want %d", len(got), err, 64*16*3)
 	}
 }

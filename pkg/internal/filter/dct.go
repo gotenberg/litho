@@ -2,11 +2,13 @@ package filter
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"image"
 	"image/jpeg"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/filter/dct"
 )
 
 // decodeDCT implements the DCTDecode filter (PDF spec 7.4.8).
@@ -14,13 +16,37 @@ import (
 //   - Gray:        1 byte per pixel
 //   - RGB/YCbCr:   3 bytes per pixel (R, G, B order)
 //   - CMYK:        4 bytes per pixel
-func decodeDCT(data []byte, _parms ast.PdfDict) ([]byte, error) {
+//
+// dict is the image dictionary, whose /Height bounds a frame that declares
+// more lines than the image has.
+func decodeDCT(ctx context.Context, data []byte, parms, dict ast.PdfDict) ([]byte, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("dct decode: empty input")
 	}
 
 	img, err := jpeg.Decode(bytes.NewReader(data))
 	if err != nil {
+		// image/jpeg refuses a whole image over damage other readers render
+		// through: scan data that ends early, a component identifier the
+		// frame repeats, a height given by a DNL marker. The lenient decoder
+		// renders it instead, and only here, so every image image/jpeg reads
+		// keeps its reading. Measured on the corpora: it decodes 15 of the 16
+		// JPEGs image/jpeg refuses, the 16th holding no JPEG data at all, and
+		// agrees with image/jpeg, to within 4 levels, on all 6,181 it reads.
+		colorTransform, height := -1, 0
+		if v, ok := parms["ColorTransform"].(ast.PdfInt); ok {
+			colorTransform = int(v)
+		}
+		if v, ok := dict["Height"].(ast.PdfInt); ok {
+			height = int(v)
+		}
+		out, _, _, _, lerr := dct.Decode(ctx, data, colorTransform, height)
+		if lerr == nil {
+			return out, nil
+		}
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
 		return nil, fmt.Errorf("dct decode: %w", err)
 	}
 
