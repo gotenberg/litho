@@ -80,6 +80,20 @@ func Decodable(name ast.PdfName) bool {
 	return false
 }
 
+// refusesUnsupported reports whether the built-in decoder of the named filter
+// refuses a stream that uses a feature it lacks, with [ErrUnsupportedFilter]:
+// a JPEG 2000 or JBIG2 construct, a CCITT coding, a Crypt filter other than
+// Identity. Only decoding tells which streams it refuses, so the name alone
+// cannot say the filter decodes. It mirrors the cases of applyDecodeFilter
+// that return ErrUnsupportedFilter; keep the two in sync.
+func refusesUnsupported(name ast.PdfName) bool {
+	switch name {
+	case "CCITTFaxDecode", "CCF", "JBIG2Decode", "JPXDecode", "Crypt":
+		return true
+	}
+	return false
+}
+
 // DecodeStream decodes a PDF stream based on its /Filter dictionary entry.
 // It supports applying multiple filters sequentially if an array is provided.
 // /DecodeParms are extracted and passed per filter for predictor processing.
@@ -104,7 +118,7 @@ func DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byte, error) {
 // DecodeStream (best-effort), so callers that ignore incomplete behave exactly
 // as before. [Decoder.DecodeStreamReport] tells the two cases apart.
 func DecodeStreamChecked(ctx context.Context, stream ast.PdfStream) (data []byte, incomplete bool, err error) {
-	data, report, err := decodeChain(ctx, stream, nil)
+	data, report, err := decodeChain(ctx, stream, nil, false)
 	return data, report.Incomplete(), err
 }
 
@@ -133,7 +147,11 @@ func (r DecodeReport) Incomplete() bool {
 // decode the same way: before, a Decoder failed the whole stream on a filter
 // no plugin claimed, where the package-level path skipped it, so registering
 // a plugin for one filter changed what every other undecodable filter did.
-func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder) (data []byte, report DecodeReport, err error) {
+//
+// strict fails the stream on a filter decoding would skip, with the error
+// that filter's decoder returned, which wraps [ErrUnsupportedFilter]: see
+// [Decoder.NewStreamReaderChecked].
+func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder, strict bool) (data []byte, report DecodeReport, err error) {
 	filters, err := streamFilterNames(stream.Dict)
 	if err != nil {
 		return nil, report, err
@@ -166,7 +184,7 @@ func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder) (data []
 			// for is not skipped: the diagnostics count a filter a plugin
 			// claims as decodable, so a caller that consulted them before
 			// decoding would read the still-encoded bytes as decoded.
-			if errors.Is(derr, ErrUnsupportedFilter) && !errors.Is(derr, errPluginDeclined) {
+			if errors.Is(derr, ErrUnsupportedFilter) && !errors.Is(derr, errPluginDeclined) && !strict {
 				report.Skipped = append(report.Skipped, f)
 				continue
 			}
@@ -687,7 +705,7 @@ func decodeCCITTFax(ctx context.Context, data []byte, parms ast.PdfDict, limit i
 	case err == nil:
 		return out, nil
 	case errors.Is(err, ccitt.ErrUnsupported):
-		return nil, fmt.Errorf("%w: ccitt decode: %w", ErrUnsupportedFilter, err)
+		return nil, fmt.Errorf("%w: CCITTFaxDecode: %w", ErrUnsupportedFilter, err)
 	case errors.Is(err, ccitt.ErrLimit):
 		// The decoder's cap on its output is the stream budget, so it
 		// reports the bomb every other decoder reports.

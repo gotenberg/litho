@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
+	"strings"
 
 	"github.com/andybalholm/brotli"
 
@@ -89,7 +91,7 @@ func (d *Decoder) DecodeStream(ctx context.Context, stream ast.PdfStream) ([]byt
 // skipped and the returned bytes remain encoded by it, or when a filter met
 // damaged data and handed on only what it decoded before the damage.
 func (d *Decoder) DecodeStreamChecked(ctx context.Context, stream ast.PdfStream) (data []byte, incomplete bool, err error) {
-	data, report, err := decodeChain(ctx, stream, d)
+	data, report, err := decodeChain(ctx, stream, d, false)
 	return data, report.Incomplete(), err
 }
 
@@ -98,7 +100,60 @@ func (d *Decoder) DecodeStreamChecked(ctx context.Context, stream ast.PdfStream)
 // skipped, and those that met damaged data. On an error the report covers the
 // filters that ran before it.
 func (d *Decoder) DecodeStreamReport(ctx context.Context, stream ast.PdfStream) ([]byte, DecodeReport, error) {
-	return decodeChain(ctx, stream, d)
+	return decodeChain(ctx, stream, d, false)
+}
+
+// UndecodableFilters returns, in chain order, the filters of stream's chain
+// that decoding skips because litho cannot decode them: the Skipped of
+// [Decoder.DecodeStreamReport], without decoding when the names settle it.
+//
+// A filter neither a built-in decoder nor a plugin knows is found from its
+// name. A built-in decoder that refuses a feature it lacks is found only by
+// decoding (see refusesUnsupported), so a chain naming one is decoded, and
+// its plugin, if one claims the filter, is consulted as decoding consults it.
+// When the chain fails on malformed data before its end, the filters after the
+// failure never run, and those among them the names settle are listed.
+//
+// The error is only ever the context's.
+func (d *Decoder) UndecodableFilters(ctx context.Context, stream ast.PdfStream) ([]ast.PdfName, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	names, err := streamFilterNames(stream.Dict)
+	if err != nil {
+		// Decoding fails on an invalid /Filter rather than skip a filter.
+		return nil, nil
+	}
+	unknown := d.unknownFilters(names)
+	if !slices.ContainsFunc(names, refusesUnsupported) {
+		return unknown, nil
+	}
+	_, report, err := decodeChain(ctx, stream, d, false)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, ctxErr
+	}
+	if err == nil {
+		return report.Skipped, nil
+	}
+	var out []ast.PdfName
+	for _, n := range names {
+		if slices.Contains(report.Skipped, n) || slices.Contains(unknown, n) {
+			out = append(out, n)
+		}
+	}
+	return out, nil
+}
+
+// unknownFilters returns the names neither a built-in decoder nor a plugin
+// of d decodes.
+func (d *Decoder) unknownFilters(names []ast.PdfName) []ast.PdfName {
+	var out []ast.PdfName
+	for _, n := range names {
+		if !Decodable(n) && !d.Handles(n) {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // DecodeStreamUpTo is the package-level [DecodeStreamUpTo] under d's budgets.
@@ -141,6 +196,26 @@ func (d *Decoder) DecodeStreamUpTo(ctx context.Context, stream ast.PdfStream, st
 //
 // The caller must close the returned reader when done.
 func (d *Decoder) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
+	return d.newStreamReader(ctx, stream, false)
+}
+
+// NewStreamReaderChecked is [Decoder.NewStreamReader] for a caller that must
+// not read still-encoded bytes as decoded ones. Where NewStreamReader skips a
+// filter litho cannot decode and hands its input on, NewStreamReaderChecked
+// fails with [ErrUnsupportedFilter]: at once for a filter no decoder knows,
+// naming every such filter of the chain, and at the decoder's refusal for a
+// built-in one that meets a feature it lacks. It refuses a stream exactly
+// when [Decoder.UndecodableFilters] lists a filter of its chain.
+//
+// Damaged data is not refused: the bytes a filter decoded before the damage
+// are read as NewStreamReader reads them.
+func (d *Decoder) NewStreamReaderChecked(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
+	return d.newStreamReader(ctx, stream, true)
+}
+
+// newStreamReader is [Decoder.NewStreamReader], and with strict
+// [Decoder.NewStreamReaderChecked].
+func (d *Decoder) newStreamReader(ctx context.Context, stream ast.PdfStream, strict bool) (io.ReadCloser, error) {
 	// streamFilterNames reads a null /Filter as absent, as [DecodeStream]
 	// does. This path used to reject it as an invalid type, so the same
 	// stream decoded eagerly and failed to open lazily.
@@ -155,11 +230,14 @@ func (d *Decoder) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io
 		}
 		return io.NopCloser(bytes.NewReader(data)), nil
 	}
+	if unknown := d.unknownFilters(filters); strict && len(unknown) > 0 {
+		return nil, fmt.Errorf("%w: litho cannot decode %s", ErrUnsupportedFilter, joinNames(unknown))
+	}
 
 	for _, f := range filters {
 		if d.Handles(f) {
 			// Plugin path: eager decode, then wrap in a reader.
-			data, err := d.DecodeStream(ctx, stream)
+			data, _, err := decodeChain(ctx, stream, d, strict)
 			if err != nil {
 				return nil, err
 			}
@@ -207,11 +285,20 @@ func (d *Decoder) NewStreamReader(ctx context.Context, stream ast.PdfStream) (io
 	}
 
 	// Slow path: decode fully and wrap in a reader.
-	data, err := d.DecodeStream(ctx, stream)
+	data, _, err := decodeChain(ctx, stream, d, strict)
 	if err != nil {
 		return nil, err
 	}
 	return io.NopCloser(bytes.NewReader(data)), nil
+}
+
+// joinNames lists filter names for an error message.
+func joinNames(names []ast.PdfName) string {
+	s := make([]string, len(names))
+	for i, n := range names {
+		s[i] = string(n)
+	}
+	return strings.Join(s, ", ")
 }
 
 // applyDecodeFilter applies a single filter, checking plugins first. A nil d

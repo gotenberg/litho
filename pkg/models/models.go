@@ -368,7 +368,8 @@ type PageOffsetEntry struct {
 // StreamDiagnostic identifies an in-use stream litho cannot fully decode,
 // reported by [github.com/gotenberg/litho/pkg/pdf.Reader.UndecodableStreams].
 // Filters lists the undecodable filter names in the stream's /Filter chain,
-// such as a filter name no decoder knows.
+// such as a filter name no decoder knows, or a filter whose built-in decoder
+// refuses a feature the stream uses.
 // Values must not be shared across goroutines without synchronization.
 type StreamDiagnostic struct {
 	ObjectNum int      `json:"objectNum"`

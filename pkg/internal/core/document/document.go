@@ -64,6 +64,7 @@ type Document struct {
 	maxCacheSize     int                 // evict all objects when cache exceeds this size
 	limits           limits.Limits       // resource budgets, set by NewDocument, read-only after
 	Crypto           *crypto.Handler
+	streamCrypt      ast.PdfName // the /StmF crypt filter Crypto decrypts streams with, set by NewDocument, read-only after
 	OCConfig         *OCConfig
 	IsEncrypted      bool
 	Authenticated    bool
@@ -343,6 +344,16 @@ func (d *Document) NewStreamReader(ctx context.Context, stream ast.PdfStream) (i
 	return d.Filters.NewStreamReader(ctx, stream)
 }
 
+// NewStreamReaderChecked is [Document.NewStreamReader] that fails, with
+// [filter.ErrUnsupportedFilter], on a filter litho cannot decode instead of
+// handing its input on still encoded: it refuses a stream exactly when
+// [Document.UndecodableFilters] lists a filter of its chain. See
+// [filter.Decoder.NewStreamReaderChecked].
+func (d *Document) NewStreamReaderChecked(ctx context.Context, stream ast.PdfStream) (io.ReadCloser, error) {
+	stream = d.resolveStreamFilterKeys(ctx, stream)
+	return d.Filters.NewStreamReaderChecked(ctx, stream)
+}
+
 // builtinFilters returns a decoder that consults no plugin and decodes under
 // the document's budgets. The cross-reference and object streams decode
 // through it: they are read during construction, before pdf.Open registers
@@ -365,7 +376,9 @@ func (d *Document) builtinFilters() *filter.Decoder {
 // the same way: ISO 32000-1, Table 12 makes it a stream, so it is always an
 // indirect reference, and the JBIG2Decode filter reads the global segments
 // from it. So is the /ColorSpace of a JPXDecode image, which decides how that
-// filter reads the JPEG 2000 data (7.4.9).
+// filter reads the JPEG 2000 data (7.4.9). A Crypt filter naming the crypt
+// filter the security handler already applied reads as Identity (see
+// [Document.appliedCryptParms]).
 //
 // # Corpus evidence
 //
@@ -377,6 +390,9 @@ func (d *Document) resolveStreamFilterKeys(ctx context.Context, stream ast.PdfSt
 		return stream
 	}
 	parms, parmsChanged := d.resolveJBIG2Globals(ctx, stream.Dict["DecodeParms"])
+	if crypt, changed := d.appliedCryptParms(stream.Dict["Filter"], parms); changed {
+		parms, parmsChanged = crypt, true
+	}
 	cs, csChanged := d.resolveJPXColorSpace(ctx, stream.Dict)
 	if !parmsChanged && !csChanged {
 		return stream
@@ -391,6 +407,80 @@ func (d *Document) resolveStreamFilterKeys(ctx context.Context, stream ast.PdfSt
 	}
 	stream.Dict = resolvedDict
 	return stream
+}
+
+// appliedCryptParms returns /DecodeParms with the parameters of a Crypt filter
+// that names the document's default stream crypt filter rewritten to name
+// Identity, and reports whether it rewrote any. filterObj and parms are the
+// stream's resolved /Filter and /DecodeParms.
+//
+// ISO 32000-1, 7.4.10 has the Crypt filter decrypt with the crypt filter its
+// /Name gives, and 7.6.5 makes /StmF the one every other stream is decrypted
+// with. litho's security handler decrypts every stream whose Crypt filter is
+// not Identity with /StmF as it reads the stream, so for one naming /StmF the
+// decryption is done and what remains for the filter is Identity's work. The
+// filter pipeline, which sees only the dictionary, would otherwise refuse the
+// name as a crypt filter it cannot apply. A Crypt filter naming any other crypt
+// filter was decrypted with the wrong one, and is left for the pipeline to
+// refuse.
+//
+// # Corpus evidence
+//
+//   - All corpora: the 6 streams behind a Crypt filter all take Identity,
+//     named or by default, so the rewrite applies to none.
+func (d *Document) appliedCryptParms(filterObj, parms ast.PdfObject) (ast.PdfObject, bool) {
+	if d.streamCrypt == "" || d.streamCrypt == "Identity" {
+		return parms, false
+	}
+	// applied returns the parameters p rewritten to Identity when they name
+	// the default stream crypt filter.
+	applied := func(p ast.PdfObject) (ast.PdfDict, bool) {
+		dict, isDict := p.(ast.PdfDict)
+		if name, _ := dict["Name"].(ast.PdfName); !isDict || name != d.streamCrypt {
+			return nil, false
+		}
+		out := maps.Clone(dict)
+		out["Name"] = ast.PdfName("Identity")
+		return out, true
+	}
+	switch f := filterObj.(type) {
+	case ast.PdfName:
+		if f == "Crypt" {
+			if out, ok := applied(parms); ok {
+				return out, true
+			}
+		}
+	case ast.PdfArray:
+		arr, isArray := parms.(ast.PdfArray)
+		if !isArray {
+			// A single dictionary under a filter array is the first filter's
+			// (see filter.extractDecodeParms), and 7.4.10 puts Crypt first.
+			if len(f) > 0 && f[0] == ast.PdfName("Crypt") {
+				if out, ok := applied(parms); ok {
+					return out, true
+				}
+			}
+			return parms, false
+		}
+		var out ast.PdfArray
+		for i, item := range f {
+			if item != ast.PdfName("Crypt") || i >= len(arr) {
+				continue
+			}
+			rewritten, ok := applied(arr[i])
+			if !ok {
+				continue
+			}
+			if out == nil {
+				out = slices.Clone(arr)
+			}
+			out[i] = rewritten
+		}
+		if out != nil {
+			return out, true
+		}
+	}
+	return parms, false
 }
 
 // resolveJPXColorSpace resolves the /ColorSpace of a stream decoded by
@@ -827,11 +917,16 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		}
 
 		doc.IsEncrypted = true
-		handler, err := crypto.NewHandler(doc.resolveEncryptEntries(ctx, encDict), doc.Index.Trailer)
+		encEntries := doc.resolveEncryptEntries(ctx, encDict)
+		handler, err := crypto.NewHandler(encEntries, doc.Index.Trailer)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize crypto handler: %w", err)
 		}
 		doc.Crypto = handler
+		// ISO 32000-1, Table 20: crypt filters, and so /StmF, exist from V 4.
+		if stmF, isName := encEntries["StmF"].(ast.PdfName); isName && handler.V >= 4 {
+			doc.streamCrypt = stmF
+		}
 		doc.Authenticated = handler.Authenticated
 
 		// Anything parsed before this point was parsed without the decryption

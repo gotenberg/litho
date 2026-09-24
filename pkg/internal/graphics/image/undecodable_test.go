@@ -2,6 +2,7 @@ package image
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"strings"
@@ -175,5 +176,68 @@ func TestDecodeImage_FilterAPluginDeclinesIsRefused(t *testing.T) {
 	}
 	if !errors.Is(err, filter.ErrUnsupportedFilter) {
 		t.Errorf("refusal does not wrap ErrUnsupportedFilter: %v", err)
+	}
+}
+
+// jpxPart2Header opens a JPEG 2000 codestream whose Rsiz of 8000h signals
+// ISO/IEC 15444-2 capabilities, which the JPXDecode decoder refuses.
+var jpxPart2Header = []byte{
+	0xFF, 0x4F, 0xFF, 0x51, 0x00, 0x29, 0x80, 0x00,
+	0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x09,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x09,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x01, 0x07, 0x01, 0x01,
+}
+
+// jbig2NecessaryExtension is a JBIG2 page followed by an extension segment
+// flagged necessary (T.88, 7.4.14), which the JBIG2Decode decoder refuses.
+func jbig2NecessaryExtension() []byte {
+	page := binary.BigEndian.AppendUint32(nil, 0)
+	page = append(page, 48, 0, 1)
+	page = binary.BigEndian.AppendUint32(page, 19)
+	page = append(page, 0, 0, 0, 8, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+	ext := binary.BigEndian.AppendUint32(nil, 1)
+	ext = append(ext, 62, 0, 1)
+	ext = binary.BigEndian.AppendUint32(ext, 4)
+	return append(page, append(ext, 0xA0, 0, 0, 1)...)
+}
+
+// TestDecodeImage_UnsupportedFeatureIsRefused pins that an image whose
+// built-in decoder refuses a feature it lacks is refused like one behind a
+// filter no decoder knows, naming the filter.
+//
+// The pipeline skips such a filter and hands its input on, and the refusal
+// above keyed on filter names alone, so each of these 8x8 one-bit images came
+// back as a picture read from codestream bytes, or from encrypted ones.
+func TestDecodeImage_UnsupportedFeatureIsRefused(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		filter, entries string
+		data            []byte
+	}{
+		{"JPXDecode", "/Filter /JPXDecode", jpxPart2Header},
+		{"JBIG2Decode", "/Filter /JBIG2Decode", jbig2NecessaryExtension()},
+		{"CCITTFaxDecode", "/Filter /CCITTFaxDecode /DecodeParms << /K -1 /Columns 8 /Rows 8 >>",
+			[]byte{0x03, 0xC0, 0, 0, 0, 0, 0, 0}},
+		{"Crypt", "/Filter /Crypt /DecodeParms << /Name /OtherCF >>", []byte("still encrypted")},
+	} {
+		t.Run(tc.filter, func(t *testing.T) {
+			t.Parallel()
+
+			entries := "/ColorSpace /DeviceGray /BitsPerComponent 1 " + tc.entries
+			ctx, doc, page := imagePDF(t, filteredImagePDF(entries, tc.data))
+			img, err := DecodeImage(ctx, doc, page, ast.PdfName("Im0"))
+			if err == nil {
+				t.Fatalf("DecodeImage read a stream %s refuses as a %v picture", tc.filter, img.Bounds())
+			}
+			if !errors.Is(err, filter.ErrUnsupportedFilter) {
+				t.Errorf("refusal does not wrap ErrUnsupportedFilter: %v", err)
+			}
+			if !strings.Contains(err.Error(), tc.filter) {
+				t.Errorf("refusal does not name %s: %v", tc.filter, err)
+			}
+		})
 	}
 }

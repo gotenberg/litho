@@ -233,7 +233,7 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 		// It skips that part only, not the page: ISO 32000-1, 7.7.3.3 makes the
 		// array one content stream split into parts, and veraPDF judges the
 		// parts it can read.
-		if doc.StreamHasUndecodableFilter(s) {
+		if doc.StreamHasUndecodableFilter(ctx, s) {
 			undecodablePart = true
 			continue
 		}

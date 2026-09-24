@@ -9,7 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"math"
-	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -1336,20 +1335,18 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 
 	filterName := imageFilterName(ctx, doc, stream.Dict)
 
-	// The filter pipeline skips a filter it cannot decode and returns that
-	// filter's input still encoded, so every length check below would compare
-	// codestream bytes against a sample count. A short codestream was reported
-	// as "decoded data too short", blaming the file for a decoder litho lacks.
-	// One long enough passed and was read as pixels with no error at all,
-	// giving a picture made of codestream bytes.
-	if bad := doc.UndecodableFilters(ctx, stream); len(bad) > 0 {
-		return nil, fmt.Errorf("image %q is encoded with %s, which litho cannot decode: %w",
-			name, strings.Join(bad, ", "), filter.ErrUnsupportedFilter)
-	}
-
 	// Stream through filters and read all decoded bytes for pixel construction
 	// below. Streaming decompression avoids holding both compressed and
 	// decompressed copies in memory simultaneously.
+	//
+	// The checked reader refuses a filter litho cannot decode, where the
+	// filter pipeline skips it and returns its input still encoded, so every
+	// length check below would compare codestream bytes against a sample
+	// count. A short codestream was reported as "decoded data too short",
+	// blaming the file for a decoder litho lacks. One long enough passed and
+	// was read as pixels with no error at all, giving a picture made of
+	// codestream bytes. A built-in decoder that meets a feature it lacks, a
+	// JPEG 2000 construct among them, is refused the same way.
 	//
 	// A JPEG comes through here too. It used to take a branch of its own that
 	// handed the stream to image/jpeg, on the premise that the filter pipeline
@@ -1357,7 +1354,10 @@ func decodeImageInto(ctx context.Context, doc *document.Document, name ast.PdfNa
 	// DCTDecode, and the pipeline runs decodeDCT, which returns decoded samples.
 	// image/jpeg was therefore being asked to decode already-decoded bytes and
 	// reported a missing SOI marker, so no JPEG decoded at all.
-	rc, err := doc.NewStreamReader(ctx, stream)
+	rc, err := doc.NewStreamReaderChecked(ctx, stream)
+	if errors.Is(err, filter.ErrUnsupportedFilter) {
+		return nil, fmt.Errorf("image %q cannot be decoded: %w", name, err)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("opening image stream: %w", err)
 	}

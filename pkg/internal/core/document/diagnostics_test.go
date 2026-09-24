@@ -35,8 +35,8 @@ func TestUndecodableFilters(t *testing.T) {
 			if tc.filter != nil {
 				dict["Filter"] = tc.filter
 			}
-			got := d.undecodableFilters(ast.NewStream(dict, nil))
-			if !equalStrings(got, tc.want) {
+			got, err := d.undecodableFilters(context.Background(), ast.NewStream(dict, nil))
+			if err != nil || !equalStrings(got, tc.want) {
 				t.Errorf("undecodableFilters = %v, want %v", got, tc.want)
 			}
 		})
@@ -131,7 +131,10 @@ func TestUndecodableFilters_AgreeWithDecoding(t *testing.T) {
 
 				d := &Document{Filters: dec, Logger: slog.New(slog.DiscardHandler)}
 				stream := ast.NewStream(ast.PdfDict{"Filter": chain}, []byte("616263>"))
-				bad := d.undecodableFilters(stream)
+				bad, err := d.undecodableFilters(context.Background(), stream)
+				if err != nil {
+					t.Fatalf("undecodableFilters: %v", err)
+				}
 				data, incomplete, err := d.Filters.DecodeStreamChecked(context.Background(), stream)
 
 				if len(bad) > 0 {

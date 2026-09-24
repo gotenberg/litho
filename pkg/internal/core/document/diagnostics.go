@@ -6,7 +6,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
-	"github.com/gotenberg/litho/pkg/internal/filter"
 )
 
 // StreamDiagnostic identifies an in-use stream object whose /Filter chain
@@ -15,18 +14,31 @@ type StreamDiagnostic struct {
 	// ObjectNum is the stream's object number.
 	ObjectNum int
 	// Filters are the undecodable filter names in the chain, such as a
-	// filter name no decoder knows.
+	// filter name no decoder knows, or a filter whose built-in decoder
+	// refuses a feature the stream uses.
 	Filters []string
 }
 
 // UndecodableStreams reports in-use stream objects whose /Filter chain
-// contains a filter that neither the built-in decoders nor a registered
-// plugin can handle, such as an unknown filter. It is the static,
-// whole-document equivalent of the skip [filter.DecodeStreamChecked] reports
-// as incomplete, computed from the filter names without decoding the streams.
-// Damaged data, which DecodeStreamChecked also reports as incomplete, is not
-// listed: its filter decodes, and hands on what the data holds before the
-// damage. Results are sorted by object number.
+// contains a filter litho cannot decode: one neither a built-in decoder nor a
+// registered plugin knows, such as an unknown filter, or one whose built-in
+// decoder refuses a feature the stream uses. It is the whole-document
+// equivalent of the skip [filter.DecodeStreamChecked] reports as incomplete,
+// and lists exactly the filters decoding skips (see
+// [Document.UndecodableFilters]). Damaged data, which DecodeStreamChecked also
+// reports as incomplete, is not listed: its filter decodes, and hands on what
+// the data holds before the damage. Results are sorted by object number.
+//
+// A stream whose chain holds a filter that can refuse a feature is decoded to
+// find out, so the call costs a decode of every such stream.
+//
+// # Corpus evidence
+//
+//   - All corpora: no stream uses a feature its built-in decoder refuses, so
+//     decoding changed the answer for no stream.
+//   - All corpora: decoding the JPXDecode, JBIG2Decode, CCITTFaxDecode and
+//     Crypt streams raised the summed time of the call from 5.5 s to 44 s.
+//   - pdfjs issue17289.pdf: the slowest file, from under 10 ms to 3.8 s.
 func (d *Document) UndecodableStreams(ctx context.Context) ([]StreamDiagnostic, error) {
 	var diags []StreamDiagnostic
 	for objNum, entry := range d.XRefEntriesSnapshot() {
@@ -44,7 +56,11 @@ func (d *Document) UndecodableStreams(ctx context.Context) ([]StreamDiagnostic, 
 		if !ok {
 			continue
 		}
-		if bad := d.undecodableFilters(stream); len(bad) > 0 {
+		bad, err := d.undecodableFilters(ctx, stream)
+		if err != nil {
+			return diags, err
+		}
+		if len(bad) > 0 {
 			diags = append(diags, StreamDiagnostic{ObjectNum: objNum, Filters: bad})
 		}
 	}
@@ -53,68 +69,51 @@ func (d *Document) UndecodableStreams(ctx context.Context) ([]StreamDiagnostic, 
 }
 
 // StreamHasUndecodableFilter reports whether the stream's /Filter chain contains
-// a filter that neither a built-in decoder nor a registered plugin can decode, so
+// a filter litho cannot decode (see [Document.UndecodableFilters]), so
 // [Document.DecodeStream] would leave the bytes filter-encoded. Content-analysis
 // callers use it to skip operator parsing on such a stream, whose still-encoded
-// bytes would otherwise be misread as a run of undefined operators.
-func (d *Document) StreamHasUndecodableFilter(stream ast.PdfStream) bool {
-	return len(d.undecodableFilters(stream)) > 0
+// bytes would otherwise be misread as a run of undefined operators. A cancelled
+// ctx answers false.
+func (d *Document) StreamHasUndecodableFilter(ctx context.Context, stream ast.PdfStream) bool {
+	bad, err := d.undecodableFilters(ctx, stream)
+	return err == nil && len(bad) > 0
 }
 
-// UndecodableFilters returns the names in the stream's /Filter chain that
-// neither a built-in decoder nor a registered plugin can decode, in chain
-// order. [Document.NewStreamReader] skips such a filter and hands back its
-// input still encoded, so a caller that interprets the bytes must refuse
-// instead of reading them.
+// UndecodableFilters returns, in chain order, the names in the stream's
+// /Filter chain that [Document.DecodeStream] skips because litho cannot decode
+// them, handing back their input still encoded: a filter neither a built-in
+// decoder nor a registered plugin knows, and a built-in one whose decoder
+// refuses a feature the stream uses (a JPEG 2000 or JBIG2 construct, a CCITT
+// coding, a Crypt filter other than Identity). A caller that interprets the
+// bytes must refuse instead of reading them. See
+// [filter.Decoder.UndecodableFilters] for which streams are decoded to answer.
+//
+// A filter a registered plugin claims is listed only if the plugin declines
+// the stream and the built-in decoder then refuses it. A declined stream whose
+// filter litho has no decoder for fails with [filter.ErrUnsupportedFilter]
+// rather than come back still encoded, so it is not listed.
 //
 // An indirect /Filter is resolved first, exactly as the decode path resolves
-// it, so the answer describes the chain that decode would actually run.
+// it, so the answer describes the chain that decode would actually run. A
+// cancelled ctx answers nil.
 func (d *Document) UndecodableFilters(ctx context.Context, stream ast.PdfStream) []string {
-	return d.undecodableFilters(d.resolveStreamFilterKeys(ctx, stream))
-}
-
-// undecodableFilters returns the names in the stream's /Filter chain that
-// no built-in decoder or registered plugin can decode, which decoding skips
-// with or without plugins registered.
-//
-// A filter a registered plugin claims is not listed, although the plugin may
-// decline a stream. A declined stream goes to the built-in decoder, and fails
-// with [filter.ErrUnsupportedFilter] when litho has none rather than come back
-// still encoded by a filter this answer called decodable.
-//
-// TODO: a built-in decoder that meets a feature it lacks (a JPEG 2000 or
-// JBIG2 construct, a CCITT mode, a Crypt sub-filter) reports
-// ErrUnsupportedFilter too, and decoding skips that filter although its name
-// is decodable. The name alone cannot predict it.
-func (d *Document) undecodableFilters(stream ast.PdfStream) []string {
-	var bad []string
-	for _, name := range streamFilterNames(stream) {
-		if filter.Decodable(name) {
-			continue
-		}
-		if d.Filters.Handles(name) {
-			continue
-		}
-		bad = append(bad, string(name))
+	bad, err := d.undecodableFilters(ctx, stream)
+	if err != nil {
+		return nil
 	}
 	return bad
 }
 
-// streamFilterNames returns the /Filter chain as names, handling both the
-// single-name and array forms. Indirect /Filter values are uncommon and
-// are not resolved here.
-func streamFilterNames(stream ast.PdfStream) []ast.PdfName {
-	switch f := stream.Dict["Filter"].(type) {
-	case ast.PdfName:
-		return []ast.PdfName{f}
-	case ast.PdfArray:
-		names := make([]ast.PdfName, 0, len(f))
-		for _, item := range f {
-			if n, ok := item.(ast.PdfName); ok {
-				names = append(names, n)
-			}
-		}
-		return names
+// undecodableFilters is [Document.UndecodableFilters], reporting a cancelled
+// ctx as its error.
+func (d *Document) undecodableFilters(ctx context.Context, stream ast.PdfStream) ([]string, error) {
+	names, err := d.Filters.UndecodableFilters(ctx, d.resolveStreamFilterKeys(ctx, stream))
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	var bad []string
+	for _, name := range names {
+		bad = append(bad, string(name))
+	}
+	return bad, nil
 }
