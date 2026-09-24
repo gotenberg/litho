@@ -46,27 +46,36 @@ func streamFormatRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_7_t01, Rule_19005_2_6_1_7_1_t01, Rule_19005_3_6_1_7_1_t01, Rule_19005_4_6_1_6_1_t01)
 }
 
-// maxHexStringViolationsPerPage bounds how many hex-string findings one page
-// contributes. Not spec-mandated: an anti-DoS guard. veraPDF keys the rule on
-// the CosString and applies no such bound, but a conforming page has no
+// maxContentFormatViolationsPerPage bounds how many content-stream format
+// findings one page contributes. Not spec-mandated: an anti-DoS guard. veraPDF
+// keys the hex string rules on the CosString and the undefined-operator rule on
+// the operator, and applies no such bound, but a conforming page has no
 // findings at all and a real defective producer emits a handful, so a page
 // reaching this many is crafted rather than merely wrong.
-const maxHexStringViolationsPerPage = 64
+const maxContentFormatViolationsPerPage = 64
 
-// checkContentStreamHexStrings parses page content streams with format
-// checking enabled to detect hex string violations: odd digit count
-// (§6.1.6 t1) and non-hex characters (§6.1.6 t2).
+// checkContentStreamFormat parses page content streams with format checking
+// enabled to detect hex string violations, odd digit count (§6.1.6 t1) and
+// non-hex characters (§6.1.6 t2), and numbers written with an exponent where an
+// operand stands, which read as an undefined operator.
 //
 // Every finding on the page is reported. Stopping at the first one lost the
 // other test entirely when both defects were present: a page whose first bad
 // string has an odd digit count and whose second holds a non-hex character
 // answered t1 alone, where veraPDF answers both.
-func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+//
+// # Corpus evidence
+//
+//   - pdfjs sci-notation.pdf: sets a font size with "1e2 Tf" after the stray
+//     keyword ETBT, and veraPDF states the undefined-operator test twice at
+//     PDF/A-1b and PDF/A-2b, where litho stated it for ETBT alone.
+func checkContentStreamFormat(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	oddRule := hexStringRule(profile)
 	if oddRule.Specification == "" {
 		return nil
 	}
 	charRule := hexStringInvalidCharRule(profile)
+	operatorRule := undefinedOperatorRule(PDFAPart(profile))
 
 	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
@@ -81,14 +90,33 @@ func checkContentStreamHexStrings(ctx context.Context, doc *document.Document, c
 		}
 
 		_, violations := content.ParseStreamDataFormatChecked(ctx, streamData)
-		for n, v := range violations {
-			if n == maxHexStringViolationsPerPage {
+		reported := 0
+		for _, v := range violations {
+			if reported == maxContentFormatViolationsPerPage {
 				break
 			}
 			rule := oddRule
-			if errors.Is(v, parser.ErrHexStringInvalidChar) {
+			switch {
+			case errors.Is(v, parser.ErrHexStringInvalidChar):
 				rule = charRule
+			case errors.Is(v, parser.ErrNumberExponentOperand):
+				// ISO 32000-1, 7.3.3 gives a number no exponent, so the token
+				// is no operand: it stands where an operator does, and it is
+				// none ISO 32000-1 defines (ISO 19005-1, 6.2.10 t1; ISO
+				// 19005-2, 6.2.2 t1). veraPDF ends the number at the exponent
+				// letter and reports the rest of the token as that operator,
+				// once per token; measured with veraPDF 1.30 on "1.5e1 w",
+				// "1.5E-1 w" and "1e1 w".
+				rule = operatorRule
+			case errors.Is(v, parser.ErrNumberExponent):
+				// Inside an array or a dictionary the token is neither a
+				// number nor an operator, a syntax error no ISO 19005 rule
+				// states. veraPDF gives up on the content stream and reports
+				// nothing from it; measured with veraPDF 1.30 on a dash array,
+				// a BDC property list and an inline image dictionary.
+				continue
 			}
+			reported++
 			results = append(results, Violation{
 				Rule:    rule,
 				Context: fmt.Sprintf("page %d: %s", i+1, v.Error()),
@@ -122,13 +150,16 @@ func checkFormatViolations(vctx *validationCtx, profile string) []Violation {
 		// by their message, so rewording a message cannot move a violation to
 		// another rule. A violation of no class checked here, a hex string
 		// with an odd digit count among them, keeps the hex string rule.
-		//
-		// TODO: a parser.ErrNumberExponent violation falls through to the hex
-		// string rule too, here and in checkContentStreamHexStrings, as it did
-		// when the message was matched. No ISO 19005 clause states it, so it
-		// likely belongs nowhere; it is kept to leave every verdict unchanged.
 		rule := hexRule
 		switch {
+		case errors.Is(violation, parser.ErrNumberExponent):
+			// ISO 32000-1, 7.3.3 gives a number no exponent, and no ISO 19005
+			// rule states number syntax outside a content stream. veraPDF ends
+			// the number at the exponent letter and cannot read the object
+			// holding it: measured with veraPDF 1.30, a page dictionary or an
+			// array holding 1.5e2 stops the validation with a parse error and
+			// no rule. See [checkContentStreamFormat] for a content stream.
+			continue
 		case errors.Is(violation, document.ErrObjectHeaderFormat):
 			// Object headers are judged by checkObjHeaderByteFormat, which
 			// sweeps every cross-reference entry. What resolution happened to

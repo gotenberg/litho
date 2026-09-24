@@ -39,6 +39,10 @@ func TestFormatViolationScope(t *testing.T) {
 		hexChar    = fmt.Errorf("compliance: %w", fmt.Errorf("%w %q", parser.ErrHexStringInvalidChar, '!'))
 		hexOdd     = fmt.Errorf("compliance: %w", parser.ErrHexStringOddDigits)
 		misleading = fmt.Errorf("compliance: xref stream: %w", fmt.Errorf("%w %q", parser.ErrHexStringInvalidChar, 'g'))
+		exponent   = parser.NewFormatViolation(parser.ErrNumberExponent,
+			"compliance: number uses scientific notation, which ISO 32000-1 §7.3.3 does not permit")
+		exponentAlone = parser.NewFormatViolation(parser.ErrNumberExponentOperand,
+			"compliance: number uses scientific notation, which ISO 32000-1 §7.3.3 does not permit")
 	)
 
 	for _, tc := range []struct {
@@ -64,6 +68,11 @@ func TestFormatViolationScope(t *testing.T) {
 		// The class decides, not the text: this message names an xref and a
 		// stream, which the substring match read as an xref defect.
 		{"the class decides, not the message", misleading, "PDF/A-2b", Rule_19005_2_6_1_6_t02},
+		// No ISO 19005 rule states number syntax in an object, and veraPDF
+		// stops at a parse error there; a content stream is judged elsewhere.
+		{"a number with an exponent at part 1", exponent, "PDF/A-1b", Rule{}},
+		{"a number with an exponent at part 2", exponent, "PDF/A-2b", Rule{}},
+		{"an unnested number with an exponent", exponentAlone, "PDF/A-2b", Rule{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

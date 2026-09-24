@@ -89,3 +89,58 @@ func TestFormatViolationsMatchTheirClass(t *testing.T) {
 		})
 	}
 }
+
+// TestNumberExponentOperandClass pins which numbers written with an exponent
+// the parser records as [ErrNumberExponentOperand]: one read on its own, as a
+// content stream operand is, and none inside an array, a dictionary or an
+// inline image's dictionary. Measured on one-page fixtures, veraPDF reports the
+// first as an operator ISO 32000-1 does not define, and gives up on a content
+// stream holding any of the others without reporting it.
+func TestNumberExponentOperandClass(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name    string
+		src     string
+		unread  bool
+		operand bool
+	}{
+		{"a real operand", "1.5e1", false, true},
+		{"an integer operand", "1e1", true, true},
+		{"a signed exponent", "-1.5E-1", false, true},
+		{"an array element", "[1.5e1 2]", false, false},
+		{"a dictionary value", "<< /MCID 1.5e1 >>", false, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := newParser(tt.src).WithFormatChecking()
+			if _, err := p.ParseObject(context.Background()); (err != nil) != tt.unread {
+				t.Fatalf("ParseObject error = %v, want an error: %v", err, tt.unread)
+			}
+			if len(p.FormatViolations) != 1 {
+				t.Fatalf("got %d violations, want 1: %v", len(p.FormatViolations), p.FormatViolations)
+			}
+			v := p.FormatViolations[0]
+			if !errors.Is(v, ErrNumberExponent) {
+				t.Errorf("%q does not match ErrNumberExponent", v)
+			}
+			if got := errors.Is(v, ErrNumberExponentOperand); got != tt.operand {
+				t.Errorf("errors.Is(%q, ErrNumberExponentOperand) = %v, want %v", v, got, tt.operand)
+			}
+		})
+	}
+
+	t.Run("an inline image dictionary value", func(t *testing.T) {
+		t.Parallel()
+		p := newParser("/W 1 /H 1 /BPC 8 /CS /G /Foo 1.5e1 ID \x80 EI").WithFormatChecking()
+		if _, err := p.ParseInlineImageDict(context.Background()); err != nil {
+			t.Fatalf("ParseInlineImageDict: %v", err)
+		}
+		if len(p.FormatViolations) != 1 {
+			t.Fatalf("got %d violations, want 1: %v", len(p.FormatViolations), p.FormatViolations)
+		}
+		if v := p.FormatViolations[0]; !errors.Is(v, ErrNumberExponent) || errors.Is(v, ErrNumberExponentOperand) {
+			t.Errorf("%q: want ErrNumberExponent, not ErrNumberExponentOperand", v)
+		}
+	})
+}

@@ -48,13 +48,13 @@ var (
 	ErrXRefFormat = errors.New("cross-reference table format violation")
 
 	// ErrXRefEOLMarkers marks a cross-reference table whose xref keyword is
-	// not followed by a single EOL marker, the requirement ISO 19005-1, 6.1.4
-	// t2 and ISO 19005-2, 6.1.4 t2 state.
+	// not followed by a single EOL marker and then the subsection header, the
+	// requirement ISO 19005-1, 6.1.4 t2 and ISO 19005-2, 6.1.4 t2 state. White
+	// space before the header breaks it too.
 	ErrXRefEOLMarkers = fmt.Errorf("%w: EOL markers after the xref keyword", ErrXRefFormat)
 
 	// ErrXRefSubsectionSpacing marks a cross-reference table whose subsection
-	// header is not the two numbers separated by a single space, or is set
-	// apart from the xref keyword by extra white space. ISO 19005-1, 6.1.4 t1
-	// states the requirement, and later parts dropped it.
+	// header is not the two numbers separated by a single space. ISO 19005-1,
+	// 6.1.4 t1 states the requirement, and later parts dropped it.
 	ErrXRefSubsectionSpacing = fmt.Errorf("%w: subsection header spacing", ErrXRefFormat)
 )

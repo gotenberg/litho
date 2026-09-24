@@ -12,6 +12,11 @@ import (
 // cross-reference table violation, and the exact message it keeps. Compliance
 // picks ISO 19005-1, 6.1.4 t1 or t2 by class; it matched "EOL" and "not
 // followed by" in the message before.
+//
+// White space between the keyword and the header is of the EOL class, as
+// veraPDF states it: measured with veraPDF 1.30, LF then a space, LF then a tab
+// and CR+LF then a space each fail 6.1.4 t2 alone at PDF/A-1b and PDF/A-2b.
+// With surplus EOL markers before it, it is the same single defect.
 func TestXRefTableFormatViolationsMatchTheirClass(t *testing.T) {
 	t.Parallel()
 
@@ -23,7 +28,10 @@ func TestXRefTableFormatViolationsMatchTheirClass(t *testing.T) {
 	}{
 		{"no EOL after the keyword", " 0 1\n", ErrXRefEOLMarkers, "compliance: xref keyword not followed by EOL"},
 		{"surplus EOL", "\n\n0 1\n", ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by multiple EOL markers"},
-		{"white space before the header", "\n 0 1\n", ErrXRefSubsectionSpacing, "compliance: xref keyword and subsection header separated by extra whitespace"},
+		{"white space before the header", "\n 0 1\n", ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by extra whitespace"},
+		{"a tab before the header", "\n\t0 1\n", ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by extra whitespace"},
+		{"CR+LF then white space", "\r\n 0 1\n", ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by extra whitespace"},
+		{"surplus EOL then white space", "\n\n 0 1\n", ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by multiple EOL markers"},
 		{"separator not a space", "\n0\t1\n", ErrXRefSubsectionSpacing, "compliance: xref subsection header separator is not a single space (0x09)"},
 		{"wide separator", "\n0  1\n", ErrXRefSubsectionSpacing, "compliance: xref subsection header has 2 spaces between start and count (must be 1)"},
 	} {

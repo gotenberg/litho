@@ -75,7 +75,9 @@ type Parser struct {
 	// inside. Every recursive path reaches it again, so counting there covers
 	// dictionaries, arrays and object header chains with one counter: a
 	// dictionary value and an array element are both parsed by ParseObject,
-	// and `N G obj` reaches it through parseIndirectObject.
+	// and `N G obj` reaches it through parseIndirectObject. An inline image's
+	// dictionary, which ParseObject does not parse, is counted by
+	// [Parser.ParseInlineImageDict] itself.
 	depth int
 }
 
@@ -135,6 +137,18 @@ func (p *Parser) recordViolation(class error, msg string) {
 	if p.checkFormat {
 		p.FormatViolations = append(p.FormatViolations, NewFormatViolation(class, "compliance: "+msg))
 	}
+}
+
+// recordNumberExponent records a number written with an exponent under format
+// checking. One read outside any array or dictionary is recorded as
+// [ErrNumberExponentOperand]: in a content stream it stands where an operand
+// or an operator does, and the operators are what ISO 19005 constrains.
+func (p *Parser) recordNumberExponent() {
+	class := ErrNumberExponent
+	if p.depth == 1 {
+		class = ErrNumberExponentOperand
+	}
+	p.recordViolation(class, "number uses scientific notation, which ISO 32000-1 §7.3.3 does not permit")
 }
 
 // formatViolationError is a format violation whose message is not built from
@@ -341,10 +355,10 @@ func (p *Parser) parseObject(ctx context.Context) (ast.PdfObject, error) {
 			// divergence. The writer re-emits a plain decimal via
 			// formatReal, so the round-trip is already compliant. Bare
 			// exponent integers ("1e2") are left to the lexer's tokenizer
-			// leniency and remain a parse error here, matching prior
+			// leniency and remain a parse error below, matching prior
 			// behaviour, to avoid shifting text extraction.
 			if p.checkFormat && strings.ContainsAny(t0.Value, "eE") {
-				p.recordViolation(ErrNumberExponent, "number uses scientific notation, which ISO 32000-1 §7.3.3 does not permit")
+				p.recordNumberExponent()
 			}
 			return ast.PdfReal(f), nil
 		}
@@ -365,6 +379,11 @@ func (p *Parser) parseObject(ctx context.Context) (ast.PdfObject, error) {
 					p.IntegerOverflows = append(p.IntegerOverflows, f)
 					return ast.PdfReal(f), nil
 				}
+			}
+			// A bare exponent stays unread, but it is the same divergence
+			// from 7.3.3 as "1.5e2", and veraPDF reads both the same way.
+			if p.checkFormat && strings.ContainsAny(t0.Value, "eE") {
+				p.recordNumberExponent()
 			}
 			return nil, err
 		}
@@ -1431,8 +1450,12 @@ func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) 
 			return nil, fmt.Errorf("unexpected EOF after inline image key %q", keyName)
 		}
 
-		// Parse the value.
+		// The entries between BI and ID form a dictionary (ISO 32000-1,
+		// 8.9.7), so a value is counted one level down, as a dictionary's
+		// value is: it is no operand of the content stream.
+		p.depth++
 		val, err := p.ParseObject(ctx)
+		p.depth--
 		if err != nil {
 			// Tolerate malformed values by consuming the bad token.
 			if _, consumeErr := p.Consume(); consumeErr != nil {

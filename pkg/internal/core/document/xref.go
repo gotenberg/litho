@@ -774,7 +774,8 @@ func (d *Document) ValidateXRefTableFormat(offset int64) []error {
 	// Skip whatever is surplus: leaving pos on it makes the subsection header
 	// scan below read no digits and stop, so this defect would mask a defect
 	// in the header that follows.
-	if pos < len(buf) && (buf[pos] == '\n' || buf[pos] == '\r') {
+	surplusEOL := pos < len(buf) && (buf[pos] == '\n' || buf[pos] == '\r')
+	if surplusEOL {
 		violations = append(violations,
 			parser.NewFormatViolation(ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by multiple EOL markers"))
 		for pos < len(buf) && (buf[pos] == '\n' || buf[pos] == '\r') {
@@ -782,17 +783,20 @@ func (d *Document) ValidateXRefTableFormat(offset int64) []error {
 		}
 	}
 
-	// Check for extra whitespace before subsection header (forbidden), and skip
-	// it for the same reason.
-	//
-	// TODO: this is classed as subsection header spacing (ISO 19005-1, 6.1.4
-	// t1), the class the compliance message matching gave it. White space
-	// between the xref keyword and the subsection header breaks the single EOL
-	// marker t2 asks for, so ErrXRefEOLMarkers may be the right class; moving
-	// it changes verdicts and needs a veraPDF measurement.
+	// White space before the subsection header is skipped for the same
+	// reason. It breaks the single EOL marker between the keyword and the
+	// header (ISO 19005-1, 6.1.4 t2; ISO 19005-2, 6.1.4 t2), not the spacing
+	// inside the header (ISO 19005-1, 6.1.4 t1): veraPDF reads one EOL marker
+	// after the keyword and fails xrefEOLMarkersComplyPDFA when no digit
+	// follows it, measured with veraPDF 1.30 on a space after LF, a space after
+	// CR+LF, a tab after LF and a space after two LF. That test is one verdict
+	// on the bytes between the keyword and the header, so surplus EOL markers
+	// already state it.
 	if pos < len(buf) && (buf[pos] == ' ' || buf[pos] == '\t') {
-		violations = append(violations,
-			parser.NewFormatViolation(ErrXRefSubsectionSpacing, "compliance: xref keyword and subsection header separated by extra whitespace"))
+		if !surplusEOL {
+			violations = append(violations,
+				parser.NewFormatViolation(ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by extra whitespace"))
+		}
 		for pos < len(buf) && (buf[pos] == ' ' || buf[pos] == '\t') {
 			pos++
 		}

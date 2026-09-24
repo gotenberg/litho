@@ -89,7 +89,7 @@ func repairPageHexStrings(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	}
 
 	// The detector's own parse, so a page is rewritten exactly when litho
-	// reports one (compliance.checkContentStreamHexStrings).
+	// reports one (compliance.checkContentStreamFormat).
 	ops, violations := content.ParseStreamDataFormatChecked(ctx, data)
 	if !hasMalformedHexViolation(violations) {
 		return false
