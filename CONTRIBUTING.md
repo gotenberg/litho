@@ -63,7 +63,7 @@ Validate token types with `Expect`. Handle `io.EOF` gracefully. Never panic. Tra
 
 ### No duplication of core logic
 
-`ResolveDict`, `DecodePdfString`, `Float`, and friends live in `internal/core/document`. Do not reimplement them in other packages.
+`ResolveDict`, `DecodePdfString`, `Float`, and friends live in `pkg/internal/core/document`. Do not reimplement them in other packages.
 
 ### Spec-grounded behavior
 
@@ -127,6 +127,27 @@ Reference identifiers with `[Name]` brackets for pkg.go.dev linking:
 - Reference spec clauses: `// Per ISO 32000-2, Table 116...`.
 - Mark debt with `// TODO: [context]`.
 
+### Corpus evidence
+
+Corpus measurements back a decision. They are not the decision. Keep them out of the prose and collect them in a `# Corpus evidence` section, the last block of the declaration's doc comment:
+
+```go
+// maxPageTreeDepth caps recursion so a self-referential /Kids chain cannot
+// exhaust the goroutine stack. Anti-DoS guard, not spec-mandated: ISO
+// 32000-1, 7.7.3.2 makes the page tree a strict tree.
+//
+// # Corpus evidence
+//
+//   - All corpora: 5170 of 5171 files parse, and the deepest page tree is 4.
+//   - All corpora: no file nests deeper than 100, so the gap with the
+//     compliance and remediation caps is never reached.
+```
+
+- One bullet per finding. Each bullet starts with the corpus it was measured on (`All corpora`, `govdocs`, `pdfjs`, `verapdf`, `pdf20`, `pdfcpu`, `facturx`, `litho`), then the file names when the finding is file-specific, then a colon.
+- A corpus mention is the word corpus, a corpus name, a corpus file, or a count measured over corpus files. PDF.js, veraPDF, and pdfcpu as tools are not corpus mentions.
+- Evidence behind a comment inside a function body, a struct field, or one entry of a `const` or `var` group moves to the section of the enclosing declaration. The comment keeps the reason.
+- The prose above the section reads complete without it.
+
 ### Formatting non-Go files
 
 Run `make prettify && make lint-prettier` for YAML, Markdown, and JSON.
@@ -143,7 +164,7 @@ Fuzz tests exist for the lexer and parser. Any function whose leading argument i
 
 See:
 
-- [test/integration/README.md](test/integration/README.md): corpus CLI tool usage, VeraPDF and PDF.js corpora.
+- [test/integration/README.md](test/integration/README.md): corpus CLI tool usage, veraPDF and PDF.js corpora.
 - [pkg/internal/compliance/README.md](pkg/internal/compliance/README.md): compliance engine architecture.
 - [pkg/internal/remediation/README.md](pkg/internal/remediation/README.md): remediation fixer contract.
 
