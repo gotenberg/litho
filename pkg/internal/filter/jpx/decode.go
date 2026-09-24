@@ -6,15 +6,15 @@ import (
 	"math"
 )
 
-// maxSamples bounds the samples one Decode call returns, summed over the
-// components. It is an anti-DoS guard, not spec-mandated: a codestream of a
-// few hundred bytes can describe a huge flat image, and each sample costs four
-// bytes in the result plus four in the tile being decoded. The largest image
-// the corpora decode, 6642x5338 in three components, holds 106 million
-// samples and peaks at 740 MB resident; 2^27 admits it and a 400 dpi A3 page
-// in colour while holding memory near 1 GB. It is below maxImageBytes in
-// graphics/image, 400 million one-byte samples, because samples here are
-// four bytes wide.
+// maxSamples bounds the samples an image holds, summed over its components,
+// and the values one Render call returns, one per channel per grid point. It
+// is an anti-DoS guard, not spec-mandated: a codestream of a few hundred bytes
+// can describe a huge flat image, or components so unevenly subsampled that
+// the default grid dwarfs them, and every sample costs decoding time. The
+// largest image the corpora decode, 6642x5338 in three components, holds 106
+// million samples; 2^27 admits it and a 400 dpi A3 page in colour. It is below
+// maxImageBytes in graphics/image, 400 million one-byte samples, because
+// Decode holds each sample in four bytes.
 const maxSamples = 1 << 27
 
 // maxSampleBits is the deepest component this package returns: samples are
@@ -30,6 +30,7 @@ type Image struct {
 	// for a bare codestream or a header whose methods are all unknown.
 	Colour Colour
 	header *fileHeader
+	cs     *codestream
 	// x0, y0, x1 and y1 bound the image area on the reference grid (B.2).
 	x0, y0, x1, y1 int
 }
@@ -47,11 +48,12 @@ type Component struct {
 	x0, y0 int
 }
 
-// Decode decodes a JP2 file, or a bare codestream, and returns its image.
+// Decode decodes a JP2 file, or a bare codestream, and returns its image with
+// every component's samples.
 //
 // Decode is safe for concurrent use: it keeps no state between calls.
 func Decode(ctx context.Context, data []byte) (*Image, error) {
-	img, cs, err := describe(data)
+	img, err := Describe(data)
 	if err != nil {
 		return nil, err
 	}
@@ -59,42 +61,34 @@ func Decode(ctx context.Context, data []byte) (*Image, error) {
 		c := &img.Components[i]
 		c.Samples = make([]int32, c.Width*c.Height)
 	}
-	budget := &blockBudget{}
-	for _, t := range cs.tiles {
-		if t == nil {
-			continue
-		}
-		if err := img.decodeTile(ctx, cs, t, budget); err != nil {
-			return nil, fmt.Errorf("tile %d: %w", t.index, err)
-		}
+	err = img.decodeTiles(ctx, func(c int, tc *tileComponent) error {
+		img.Components[c].place(tc)
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 	return img, nil
 }
 
 // Describe reads a JP2 file, or a bare codestream, without decoding its
 // samples. The image it returns has components whose Samples are nil, and the
-// colour specification and channels [Decode] would give.
+// colour specification and channels [Decode] would give; [Image.Render]
+// decodes it.
 func Describe(data []byte) (*Image, error) {
-	img, _, err := describe(data)
-	return img, err
-}
-
-// describe parses data and returns its image without samples, and the
-// codestream.
-func describe(data []byte) (*Image, *codestream, error) {
 	stream, hdr, err := readFile(data)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	cs, err := parseCodestream(stream)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	img, err := newImage(cs)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	img.header = hdr
+	img.header, img.cs = hdr, cs
 	if hdr != nil {
 		switch hdr.colour.method {
 		case methodEnumerated:
@@ -103,7 +97,7 @@ func describe(data []byte) (*Image, *codestream, error) {
 			img.Colour.ICC = hdr.colour.profile
 		}
 	}
-	return img, cs, nil
+	return img, nil
 }
 
 // newImage lays out the components of the image area (T.800, B-1 and B-2),
@@ -127,8 +121,25 @@ func newImage(cs *codestream) (*Image, error) {
 	return img, nil
 }
 
-// decodeTile decodes one tile and places its samples in the image.
-func (img *Image) decodeTile(ctx context.Context, cs *codestream, t *tile, budget *blockBudget) error {
+// decodeTiles decodes the image's tiles in turn and hands each reconstructed
+// tile-component to emit, with the index of its component. A tile's
+// coefficients are released before the next tile allocates its own, so only
+// one tile is held at a time.
+func (img *Image) decodeTiles(ctx context.Context, emit func(c int, tc *tileComponent) error) error {
+	budget := &blockBudget{}
+	for _, t := range img.cs.tiles {
+		if t == nil {
+			continue
+		}
+		if err := decodeTile(ctx, img.cs, t, budget, emit); err != nil {
+			return fmt.Errorf("tile %d: %w", t.index, err)
+		}
+	}
+	return nil
+}
+
+// decodeTile decodes one tile and hands its components to emit.
+func decodeTile(ctx context.Context, cs *codestream, t *tile, budget *blockBudget, emit func(c int, tc *tileComponent) error) error {
 	d, err := cs.newTileDecoder(t, budget)
 	if err != nil {
 		return err
@@ -148,9 +159,9 @@ func (img *Image) decodeTile(ctx context.Context, cs *codestream, t *tile, budge
 		}
 	}
 	for c := range d.comps {
-		img.Components[c].place(&d.comps[c])
-		// The tile's coefficients are no longer needed; release them before
-		// the next tile allocates its own.
+		if err := emit(c, &d.comps[c]); err != nil {
+			return err
+		}
 		d.comps[c].coeffs = plane{}
 	}
 	return nil
@@ -187,28 +198,40 @@ func inverseMCT(cs *codestream, d *tileDecoder) error {
 	return nil
 }
 
-// place writes one tile-component into the component: rounded, level shifted
-// back if unsigned (T.800, G.1.2) and clipped to the component's range, the
-// typical answer G.1.2 NOTE gives to values quantization pushed outside it.
+// place writes one tile-component into the component's samples.
 func (c *Component) place(tc *tileComponent) {
-	lo, hi := int64(0), int64(1)<<c.Precision-1
-	shift := int64(1) << (c.Precision - 1)
-	if c.Signed {
-		lo, hi, shift = -shift, shift-1, 0
-	}
-	p := &tc.coeffs
+	s := c.sampler()
 	for y := tc.y0; y < tc.y1; y++ {
 		row := (y - c.y0) * c.Width
 		for x := tc.x0; x < tc.x1; x++ {
-			j := (y-tc.y0)*p.stride + x - tc.x0
-			var v int64
-			if p.ints != nil {
-				v = int64(p.ints[j])
-			} else {
-				v = int64(math.Round(float64(p.floats[j])))
-			}
-			v = min(max(v+shift, lo), hi)
-			c.Samples[row+x-c.x0] = int32(v) //nolint:gosec // v lies in [lo, hi], within maxSampleBits.
+			c.Samples[row+x-c.x0] = s.sample(&tc.coeffs, (y-tc.y0)*tc.coeffs.stride+x-tc.x0)
 		}
 	}
+}
+
+// sampler turns reconstructed coefficients into samples of one component.
+type sampler struct {
+	lo, hi, shift int64
+}
+
+// sampler returns the sampler of the component's depth and signedness.
+func (c *Component) sampler() sampler {
+	shift := int64(1) << (c.Precision - 1)
+	if c.Signed {
+		return sampler{lo: -shift, hi: shift - 1}
+	}
+	return sampler{lo: 0, hi: int64(1)<<c.Precision - 1, shift: shift}
+}
+
+// sample returns coefficient j of p as a sample: rounded, level shifted back
+// if unsigned (T.800, G.1.2) and clipped to the component's range, the
+// typical answer G.1.2 NOTE gives to values quantization pushed outside it.
+func (s sampler) sample(p *plane, j int) int32 {
+	var v int64
+	if p.ints != nil {
+		v = int64(p.ints[j])
+	} else {
+		v = int64(math.Round(float64(p.floats[j])))
+	}
+	return int32(min(max(v+s.shift, s.lo), s.hi)) //nolint:gosec // the value lies in [lo, hi], within maxSampleBits.
 }

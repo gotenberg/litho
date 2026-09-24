@@ -20,31 +20,31 @@ import (
 // channels, not the channels, to the components of the colour space, and a
 // soft mask carried in the data (SMaskInData) is a separate image.
 func decodeJPX(ctx context.Context, data []byte, dict ast.PdfDict) ([]byte, error) {
-	img, err := jpx.Decode(ctx, data)
+	img, err := jpx.Describe(data)
 	if err != nil {
-		if errors.Is(err, jpx.ErrUnsupported) {
-			return nil, fmt.Errorf("%w: JPXDecode: %w", ErrUnsupportedFilter, err)
-		}
-		return nil, fmt.Errorf("JPXDecode: %w", err)
+		return nil, jpxError(err)
 	}
 	channels, err := jpxColourChannels(img, dict)
 	if err != nil {
 		return nil, fmt.Errorf("JPXDecode: %w", err)
 	}
-	w, h := img.DefaultSize()
 	indexed := isIndexedSpace(dict["ColorSpace"])
-	out := make([]byte, w*h*len(channels))
-	for i, ch := range channels {
-		samples, precision, signed, err := img.ChannelSamples(ch)
-		if err != nil {
-			return nil, fmt.Errorf("JPXDecode: %w", err)
-		}
-		samples = img.Resample(samples, ch.Component)
-		for p, v := range samples {
-			out[p*len(channels)+i] = jpxByte(v, precision, signed, indexed)
-		}
+	out, err := img.Render(ctx, channels, func(v int32, precision int, signed bool) byte {
+		return jpxByte(v, precision, signed, indexed)
+	})
+	if err != nil {
+		return nil, jpxError(err)
 	}
 	return out, nil
+}
+
+// jpxError wraps an error of the jpx package, marking data that uses a JPEG
+// 2000 feature the decoder lacks as an unsupported filter.
+func jpxError(err error) error {
+	if errors.Is(err, jpx.ErrUnsupported) {
+		return fmt.Errorf("%w: JPXDecode: %w", ErrUnsupportedFilter, err)
+	}
+	return fmt.Errorf("JPXDecode: %w", err)
 }
 
 // jpxColourChannels returns the colour channels of img in the order of the

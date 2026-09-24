@@ -4,12 +4,33 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
 
 // annexJ10Samples are the samples of the J.10 codestream (J.10.5).
 var annexJ10Samples = []int32{101, 103, 104, 105, 96, 97, 96, 102, 109}
+
+// depth is the depth and signedness Render hands conv for a channel.
+type depth struct {
+	precision int
+	signed    bool
+}
+
+// render renders chs with a conv that keeps the low byte of each value, and
+// returns the bytes with the depth conv saw for each channel.
+func render(t *testing.T, img *Image, chs []Channel) ([]byte, []depth, error) {
+	t.Helper()
+	var seen []depth
+	out, err := img.Render(context.Background(), chs, func(v int32, precision int, signed bool) byte {
+		if d := (depth{precision, signed}); !slices.Contains(seen, d) {
+			seen = append(seen, d)
+		}
+		return byte(v)
+	})
+	return out, seen, err
+}
 
 // paletteFile wraps the J.10 codestream in a JP2 file with a palette of
 // entries entries over three 8-bit columns, entry j being (j, 255 - j, j/2),
@@ -50,18 +71,16 @@ func TestChannels_Palette(t *testing.T) {
 	if !slices.Equal(chs, want) {
 		t.Fatalf("channels %+v, want %+v", chs, want)
 	}
-	for i, ch := range chs {
-		got, prec, signed, err := img.ChannelSamples(ch)
-		if err != nil {
-			t.Fatalf("ChannelSamples(%d): %v", i, err)
-		}
-		var exp []int32
-		for _, v := range annexJ10Samples {
-			exp = append(exp, [3]int32{v, 255 - v, v / 2}[i])
-		}
-		if !slices.Equal(got, exp) || prec != 8 || signed {
-			t.Errorf("channel %d: %v, %d bits, signed %v; want %v, 8 bits, unsigned", i, got, prec, signed, exp)
-		}
+	got, depths, err := render(t, img, chs)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	var entries []byte
+	for _, v := range annexJ10Samples {
+		entries = append(entries, byte(v), byte(255-v), byte(v/2))
+	}
+	if !slices.Equal(got, entries) || !slices.Equal(depths, []depth{{8, false}}) {
+		t.Errorf("rendered %v at depths %v; want %v at 8 bits unsigned", got, depths, entries)
 	}
 }
 
@@ -81,8 +100,12 @@ func TestChannels_Direct(t *testing.T) {
 			t.Errorf("%s: channels %+v, %v; want %+v", name, chs, err, want)
 			continue
 		}
-		if got, _, _, err := img.ChannelSamples(chs[0]); err != nil || !slices.Equal(got, annexJ10Samples) {
-			t.Errorf("%s: samples %v, %v; want %v", name, got, err, annexJ10Samples)
+		want := make([]byte, len(annexJ10Samples))
+		for i, v := range annexJ10Samples {
+			want[i] = byte(v)
+		}
+		if got, _, err := render(t, img, chs); err != nil || !slices.Equal(got, want) {
+			t.Errorf("%s: rendered %v, %v; want %v", name, got, err, want)
 		}
 	}
 }
@@ -155,15 +178,15 @@ func TestChannels_Rejects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Channels: %v", err)
 	}
-	if _, _, _, err := img.ChannelSamples(chs[0]); !errors.Is(err, ErrMalformed) {
-		t.Errorf("ChannelSamples past the palette = %v, want %v", err, ErrMalformed)
+	if _, _, err := render(t, img, chs); !errors.Is(err, ErrMalformed) {
+		t.Errorf("Render past the palette = %v, want %v", err, ErrMalformed)
 	}
 }
 
-// TestResample places the 2x2-subsampled components of cprl_sub.j2k on the
-// 24x20 default image grid (T.800, I.5.3.1.1): each 12x10 sample covers a
-// 2x2 cell.
-func TestResample(t *testing.T) {
+// TestRender_Subsampled places the 2x2-subsampled components of
+// cprl_sub.j2k on the 24x20 default image grid (T.800, I.5.3.1.1): each 12x10
+// sample covers a 2x2 cell, while component 0 fills the grid as it is.
+func TestRender_Subsampled(t *testing.T) {
 	t.Parallel()
 
 	data, err := os.ReadFile("testdata/cprl_sub.j2k")
@@ -177,17 +200,97 @@ func TestResample(t *testing.T) {
 	if w, h := img.DefaultSize(); w != 24 || h != 20 {
 		t.Fatalf("default size %dx%d, want 24x20", w, h)
 	}
-	c1 := img.Components[1]
-	got := img.Resample(c1.Samples, 1)
+	chs := []Channel{{Component: 1, PaletteColumn: -1}, {Component: 0, PaletteColumn: -1}}
+	got, _, err := render(t, img, chs)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	c0, c1 := img.Components[0].Samples, img.Components[1].Samples
 	for v := range 20 {
 		for u := range 24 {
-			if got[v*24+u] != c1.Samples[(v/2)*12+u/2] {
-				t.Fatalf("grid point (%d,%d) = %d, want sample (%d,%d) = %d", u, v, got[v*24+u], u/2, v/2, c1.Samples[(v/2)*12+u/2])
+			p := got[(v*24+u)*2:]
+			if want := []byte{byte(c1[(v/2)*12+u/2]), byte(c0[v*24+u])}; !slices.Equal(p[:2], want) {
+				t.Fatalf("grid point (%d,%d) = %v, want %v", u, v, p[:2], want)
 			}
 		}
 	}
-	if full := img.Resample(img.Components[0].Samples, 0); &full[0] != &img.Components[0].Samples[0] {
-		t.Errorf("a component sampled at every grid point was copied")
+}
+
+// TestRender_Tiled renders the tiled codestreams, some offset and
+// subsampled, tile by tile to what the whole component planes Decode returns
+// give: each grid point takes its sample from the one tile that holds it, even
+// where a subsampled component's tiles and the grid's cells do not line up.
+func TestRender_Tiled(t *testing.T) {
+	t.Parallel()
+
+	names, err := filepath.Glob("testdata/*.j2k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	subsampled := 0
+	for _, name := range names {
+		data, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		img, err := Decode(context.Background(), data)
+		if err != nil {
+			t.Fatalf("%s: Decode: %v", name, err)
+		}
+		if len(img.cs.tiles) < 2 {
+			continue
+		}
+		var chs []Channel
+		for c, comp := range img.Components {
+			chs = append(chs, Channel{Component: c, PaletteColumn: -1})
+			if comp.DX > 1 || comp.DY > 1 {
+				subsampled++
+			}
+		}
+		got, _, err := render(t, img, chs)
+		if err != nil {
+			t.Fatalf("%s: Render: %v", name, err)
+		}
+		m := img.gridStep()
+		w, h := img.DefaultSize()
+		gx0, gy0 := ceilDiv(img.x0, m), ceilDiv(img.y0, m)
+		for i, ch := range chs {
+			comp := img.Components[ch.Component]
+			for v := range h {
+				row := min(max((gy0+v)*m/comp.DY-comp.y0, 0), comp.Height-1)
+				for u := range w {
+					col := min(max((gx0+u)*m/comp.DX-comp.x0, 0), comp.Width-1)
+					if want := byte(comp.Samples[row*comp.Width+col]); got[(v*w+u)*len(chs)+i] != want {
+						t.Fatalf("%s: channel %d at (%d,%d) = %d, want %d", name, i, u, v, got[(v*w+u)*len(chs)+i], want)
+					}
+				}
+			}
+		}
+	}
+	if subsampled == 0 {
+		t.Fatal("no tiled codestream has a subsampled component")
+	}
+}
+
+// TestRender_GridLimit refuses a grid past maxSamples before allocating it.
+// Components 254 and 255 apart share no separation, so the default grid is
+// the full image area while each component holds a few hundred samples a
+// side: a few hundred bytes would otherwise ask for gigabytes. The 8200x8200
+// grid fits under the limit alone but not across two channels.
+func TestRender_GridLimit(t *testing.T) {
+	t.Parallel()
+
+	for _, size := range []uint32{60000, 8200} {
+		b := sizBody(size, size, size, size, 2)
+		b[37], b[38], b[40], b[41] = 254, 254, 255, 255
+		img, err := Describe(codestreamOf(slices.Concat(seg(markerSIZ, b...), seg(markerCOD, codBody...), seg(markerQCD, qcdBody...)), tilePart(0, 0, nil, nil)))
+		if err != nil {
+			t.Fatalf("%d: Describe: %v", size, err)
+		}
+		chs := []Channel{{Component: 0, PaletteColumn: -1}, {Component: 1, PaletteColumn: -1}}
+		if _, _, err := render(t, img, chs); !errors.Is(err, ErrLimit) {
+			t.Errorf("%d: Render = %v, want %v", size, err, ErrLimit)
+		}
 	}
 }
 

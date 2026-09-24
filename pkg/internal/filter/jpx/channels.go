@@ -1,6 +1,10 @@
 package jpx
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+	"slices"
+)
 
 // Enumerated colour spaces, T.800 Table I.10. ISO/IEC 15444-2 adds CMYK (12)
 // and CIEJab (19), which ISO 32000-1, 7.4.9 admits in a PDF.
@@ -96,29 +100,6 @@ func (img *Image) Channels() ([]Channel, error) {
 	return chs, nil
 }
 
-// ChannelSamples returns the samples of ch at its component's resolution, with
-// their depth and signedness: the component's own, or the entries its values
-// index in the palette column (T.800, I.5.3.4).
-func (img *Image) ChannelSamples(ch Channel) ([]int32, int, bool, error) {
-	comp := img.Components[ch.Component]
-	if ch.PaletteColumn < 0 {
-		return comp.Samples, comp.Precision, comp.Signed, nil
-	}
-	p := img.header.palette
-	col := p.columns[ch.PaletteColumn]
-	if col.precision > maxSampleBits {
-		return nil, 0, false, fmt.Errorf("%w: palette column of %d bits", ErrUnsupported, col.precision)
-	}
-	out := make([]int32, len(comp.Samples))
-	for i, v := range comp.Samples {
-		if v < 0 || int(v) >= p.entries {
-			return nil, 0, false, fmt.Errorf("%w: palette index %d of %d entries", ErrMalformed, v, p.entries)
-		}
-		out[i] = int32(col.values[v]) //nolint:gosec // col.precision <= maxSampleBits = 31.
-	}
-	return out, col.precision, col.signed, nil
-}
-
 // DefaultSize returns the default image dimensions (T.800, I.5.3.1.1): the
 // image area divided by M, the greatest common divisor of every component's
 // sample separation.
@@ -143,27 +124,120 @@ func gcd(a, b int) int {
 	return a
 }
 
-// Resample places values, samples of component c, on the default image grid:
-// each grid point takes the sample of c whose separation cell covers it, the
-// sample itself when c is sampled at every grid point.
-func (img *Image) Resample(values []int32, c int) []int32 {
+// Render decodes the image's samples and returns the channels chs on the
+// default image grid (T.800, I.5.3.1.1), pixel by pixel in rows, one byte per
+// channel per pixel in the order of chs. Each grid point takes the sample of
+// its channel's component whose separation cell covers it, and conv turns that
+// sample, of the given depth and signedness, into the byte; a channel that
+// looks up a palette column hands conv the entry the sample indexes, at the
+// column's depth (I.5.3.4).
+//
+// Render holds one tile's samples at a time, where [Decode] holds every
+// component's.
+func (img *Image) Render(ctx context.Context, chs []Channel, conv func(v int32, precision int, signed bool) byte) ([]byte, error) {
+	w, h := img.DefaultSize()
+	n := len(chs)
+	if n == 0 {
+		return nil, fmt.Errorf("%w: no channel to render", ErrMalformed)
+	}
+	if w > maxSamples || h > maxSamples || w*h > maxSamples/n {
+		return nil, fmt.Errorf("%w: %dx%d grid points of %d channels", ErrLimit, w, h, n)
+	}
+	for i, ch := range chs {
+		if ch.Component < 0 || ch.Component >= len(img.Components) {
+			return nil, fmt.Errorf("%w: channel %d maps component %d of %d", ErrMalformed, i, ch.Component, len(img.Components))
+		}
+		if ch.PaletteColumn >= 0 {
+			if img.header == nil || img.header.palette == nil || ch.PaletteColumn >= len(img.header.palette.columns) {
+				return nil, fmt.Errorf("%w: channel %d looks up a palette column the file lacks", ErrMalformed, i)
+			}
+			if col := img.header.palette.columns[ch.PaletteColumn]; col.precision > maxSampleBits {
+				return nil, fmt.Errorf("%w: palette column of %d bits", ErrUnsupported, col.precision)
+			}
+		}
+	}
+	out := make([]byte, w*h*n)
+	grids := make([]*componentGrid, len(img.Components))
+	err := img.decodeTiles(ctx, func(c int, tc *tileComponent) error {
+		var mine []int
+		for i, ch := range chs {
+			if ch.Component == c {
+				mine = append(mine, i)
+			}
+		}
+		if len(mine) == 0 {
+			return nil
+		}
+		if grids[c] == nil {
+			grids[c] = img.grid(c)
+		}
+		return img.renderTile(out, chs, mine, grids[c], c, tc, conv)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// componentGrid maps the default grid onto one component: cols[u] and rows[v]
+// are the column and row of the component sample that covers grid point
+// (u, v). Both are non-decreasing.
+type componentGrid struct {
+	cols, rows []int
+}
+
+// grid returns the componentGrid of component c.
+func (img *Image) grid(c int) *componentGrid {
 	comp := img.Components[c]
 	m := img.gridStep()
 	w, h := img.DefaultSize()
-	if comp.DX == m && comp.DY == m && comp.Width == w && comp.Height == h {
-		return values
-	}
 	gx0, gy0 := ceilDiv(img.x0, m), ceilDiv(img.y0, m)
-	cols := make([]int, w)
-	for u := range cols {
-		cols[u] = min(max((gx0+u)*m/comp.DX-comp.x0, 0), comp.Width-1)
+	g := &componentGrid{cols: make([]int, w), rows: make([]int, h)}
+	for u := range g.cols {
+		g.cols[u] = min(max((gx0+u)*m/comp.DX-comp.x0, 0), comp.Width-1)
 	}
-	out := make([]int32, w*h)
-	for v := range h {
-		row := min(max((gy0+v)*m/comp.DY-comp.y0, 0), comp.Height-1) * comp.Width
-		for u, col := range cols {
-			out[v*w+u] = values[row+col]
+	for v := range g.rows {
+		g.rows[v] = min(max((gy0+v)*m/comp.DY-comp.y0, 0), comp.Height-1)
+	}
+	return g
+}
+
+// renderTile writes the channels mine, all of component c, for the grid
+// points whose samples tile-component tc holds.
+func (img *Image) renderTile(out []byte, chs []Channel, mine []int, g *componentGrid, c int, tc *tileComponent, conv func(int32, int, bool) byte) error {
+	comp := &img.Components[c]
+	s := comp.sampler()
+	// The grid points tc covers form a rectangle: the maps are monotonic.
+	ua := firstAtLeast(g.cols, tc.x0-comp.x0)
+	ub := firstAtLeast(g.cols, tc.x1-comp.x0)
+	va := firstAtLeast(g.rows, tc.y0-comp.y0)
+	vb := firstAtLeast(g.rows, tc.y1-comp.y0)
+	w, n := len(g.cols), len(chs)
+	for v := va; v < vb; v++ {
+		row := (g.rows[v] + comp.y0 - tc.y0) * tc.coeffs.stride
+		for u := ua; u < ub; u++ {
+			sample := s.sample(&tc.coeffs, row+g.cols[u]+comp.x0-tc.x0)
+			for _, i := range mine {
+				ch := chs[i]
+				if ch.PaletteColumn < 0 {
+					out[(v*w+u)*n+i] = conv(sample, comp.Precision, comp.Signed)
+					continue
+				}
+				p := img.header.palette
+				if sample < 0 || int(sample) >= p.entries {
+					return fmt.Errorf("%w: palette index %d of %d entries", ErrMalformed, sample, p.entries)
+				}
+				col := p.columns[ch.PaletteColumn]
+				out[(v*w+u)*n+i] = conv(int32(col.values[sample]), col.precision, col.signed) //nolint:gosec // col.precision <= maxSampleBits = 31.
+			}
 		}
 	}
-	return out
+	return nil
+}
+
+// firstAtLeast returns the first index of the non-decreasing xs whose value is
+// at least x, or len(xs).
+func firstAtLeast(xs []int, x int) int {
+	i, _ := slices.BinarySearch(xs, x)
+	return i
 }
