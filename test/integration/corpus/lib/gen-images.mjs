@@ -15,6 +15,10 @@
  * absorb the rounding differences two decoders legitimately disagree on,
  * while a wrong filter, colour space or orientation moves them far.
  *
+ * PDF.js runs colour-managed, as a browser runs it: ICCBased images go
+ * through their profiles and DeviceCMYK through the CMYK profile PDF.js
+ * ships, both by its qcms WebAssembly module.
+ *
  * Usage:
  *   node gen-images.mjs \
  *     --pdfjs-dir /opt/pdfjs \
@@ -63,6 +67,24 @@ const pdfjsLib = await import("file://" + buildPath);
 // from wasmUrl; without one it cannot decode those images at all.
 const wasmDir = path.join(buildDir, "web", "wasm");
 const wasmUrl = fs.existsSync(wasmDir) ? wasmDir + "/" : undefined;
+
+// iccUrl holds the CMYK profile PDF.js reads DeviceCMYK through.
+const iccDir = path.join(buildDir, "web", "iccs");
+const iccUrl = fs.existsSync(iccDir) ? iccDir + "/" : undefined;
+
+// PDF.js loads its colour module and CMYK profile with a synchronous
+// XMLHttpRequest, which Node lacks. This one reads the local files those
+// URLs name. The JPEG 2000 and JBIG2 modules load through fetch instead,
+// which fails on a local path, so PDF.js decodes them with the JavaScript
+// builds of the same decoders, as it did before colour management.
+globalThis.XMLHttpRequest = class {
+  open(_method, url) {
+    this.url = url;
+  }
+  send() {
+    this.response = new Uint8Array(fs.readFileSync(this.url)).buffer;
+  }
+};
 
 fs.mkdirSync(out, { recursive: true });
 
@@ -141,8 +163,10 @@ for (const name of pdfs) {
     task = pdfjsLib.getDocument({
       data,
       useSystemFonts: true,
-      useWasm: false,
+      useWasm: true,
+      useWorkerFetch: true,
       wasmUrl,
+      iccUrl,
       isEvalSupported: false,
     });
     doc = await task.promise;
