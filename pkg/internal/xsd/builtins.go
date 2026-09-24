@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/big"
 	"slices"
-	"strconv"
 	"strings"
 )
 
@@ -285,17 +284,11 @@ func checkBoundedInt(value string, base *BuiltinType, minLit, maxLit string) *Fa
 // "2024-02-30", "0000-01-01" and "2024-01-15abc" pass. The '-'? sign and a
 // year of more than four digits, which 3.2.7.1 allows, are rejected.
 func checkDate(value string, base *BuiltinType) *FacetViolation {
-	s, _ := splitTimezone(value)
-	if len(s) < 10 || s[4] != '-' || s[7] != '-' {
-		return lexErr(base, value, "expected CCYY-MM-DD lexical form")
-	}
-	if !allDigits(s[:4]) || !allDigits(s[5:7]) || !allDigits(s[8:10]) {
-		return lexErr(base, value, "non-digit in date components")
-	}
-	month, _ := strconv.Atoi(s[5:7])
-	day, _ := strconv.Atoi(s[8:10])
-	if month < 1 || month > 12 || day < 1 || day > 31 {
-		return lexErr(base, value, "month or day out of range")
+	// Per XML Schema Part 2, 3.2.9.1 a date is '-'? yyyy '-' mm '-' dd
+	// zzzzzz?, the year written as for dateTime (3.2.7.1): negative, or
+	// longer than four digits, is valid, and 0000 is not.
+	if _, reason := parseTemporal(value, kindDate); reason != "" {
+		return lexErr(base, value, reason)
 	}
 	return nil
 }
@@ -308,15 +301,10 @@ func checkDate(value string, base *BuiltinType) *FacetViolation {
 // follows the seconds is accepted, so "2024-13-45T99:99:99" and
 // "2024-01-15T10:00:00junk" pass.
 func checkDateTime(value string, base *BuiltinType) *FacetViolation {
-	s, _ := splitTimezone(value)
-	// Minimum well-formed dateTime: CCYY-MM-DDTHH:MM:SS, 19 chars.
-	if len(s) < 19 || s[4] != '-' || s[7] != '-' || s[10] != 'T' ||
-		s[13] != ':' || s[16] != ':' {
-		return lexErr(base, value, "expected CCYY-MM-DDTHH:MM:SS lexical form")
-	}
-	if !allDigits(s[:4]) || !allDigits(s[5:7]) || !allDigits(s[8:10]) ||
-		!allDigits(s[11:13]) || !allDigits(s[14:16]) || !allDigits(s[17:19]) {
-		return lexErr(base, value, "non-digit in dateTime components")
+	// Per XML Schema Part 2, 3.2.7.1 a dateTime is '-'? yyyy '-' mm '-'
+	// dd 'T' hh ':' mm ':' ss ('.' s+)? zzzzzz?.
+	if _, reason := parseTemporal(value, kindDateTime); reason != "" {
+		return lexErr(base, value, reason)
 	}
 	return nil
 }
@@ -328,12 +316,10 @@ func checkDateTime(value string, base *BuiltinType) *FacetViolation {
 // TODO: as in checkDateTime, the ranges and anything past the seconds go
 // unchecked, so "25:61:61" passes.
 func checkTime(value string, base *BuiltinType) *FacetViolation {
-	s, _ := splitTimezone(value)
-	if len(s) < 8 || s[2] != ':' || s[5] != ':' {
-		return lexErr(base, value, "expected HH:MM:SS lexical form")
-	}
-	if !allDigits(s[:2]) || !allDigits(s[3:5]) || !allDigits(s[6:8]) {
-		return lexErr(base, value, "non-digit in time components")
+	// Per XML Schema Part 2, 3.2.8.1 a time is hh ':' mm ':' ss ('.'
+	// s+)? zzzzzz?, the left truncation of dateTime.
+	if _, reason := parseTemporal(value, kindTime); reason != "" {
+		return lexErr(base, value, reason)
 	}
 	return nil
 }

@@ -252,11 +252,10 @@ type (
 
 // The range facets match the xs:*Inclusive / xs:*Exclusive numeric and
 // date range facets. Each value is kept as the raw lexical form parsed
-// off the XSD, and [ValidateValue] compares the value and the bound as
-// decimals whatever the simpleType's base.
-//
-// TODO: convert range facet values to typed comparators per the
-// simpleType's base, so a date range compares as dates.
+// off the XSD, and [ValidateValue] compares the value and the bound in
+// the value space of the built-in the simpleType's restriction chain
+// bottoms out on, so a date range compares as dates (XML Schema Part 2,
+// 4.3.7 to 4.3.10).
 type (
 	// MinInclusive matches xs:minInclusive.
 	MinInclusive struct{ Value string }

@@ -169,10 +169,8 @@ func whitespaceCollapse(v string) string {
 
 // applyFacet dispatches to the per-kind validator. Unknown facet
 // kinds return nil so the engine remains forward-compatible with
-// future facet additions. The base type is accepted but unused: the
-// range facets compare as decimals whatever the base (see the TODO on
-// [MinInclusive]).
-func applyFacet(value string, f Facet, _base *BuiltinType) *FacetViolation {
+// future facet additions.
+func applyFacet(value string, f Facet, base *BuiltinType) *FacetViolation {
 	switch fc := f.(type) {
 	case Pattern:
 		return validatePattern(value, fc)
@@ -187,13 +185,13 @@ func applyFacet(value string, f Facet, _base *BuiltinType) *FacetViolation {
 	case MaxLength:
 		return validateMaxLength(value, fc.Value, f)
 	case MinInclusive:
-		return validateNumericBound(value, fc.Value, boundMinInclusive, f)
+		return validateRangeBound(value, fc.Value, boundMinInclusive, base, f)
 	case MaxInclusive:
-		return validateNumericBound(value, fc.Value, boundMaxInclusive, f)
+		return validateRangeBound(value, fc.Value, boundMaxInclusive, base, f)
 	case MinExclusive:
-		return validateNumericBound(value, fc.Value, boundMinExclusive, f)
+		return validateRangeBound(value, fc.Value, boundMinExclusive, base, f)
 	case MaxExclusive:
-		return validateNumericBound(value, fc.Value, boundMaxExclusive, f)
+		return validateRangeBound(value, fc.Value, boundMaxExclusive, base, f)
 	case FractionDigits:
 		return validateFractionDigits(value, fc.Value, f)
 	case TotalDigits:
@@ -339,45 +337,67 @@ const (
 	boundMaxExclusive
 )
 
-func validateNumericBound(value, bound string, kind boundKind, fc Facet) *FacetViolation {
-	got, ok := parseDecimal(value)
-	if !ok {
+// validateRangeBound checks value against one range facet. The value
+// and the bound compare in the value space of base (see
+// [compareRange]), so a date bound compares chronologically and a
+// numeric one numerically, per XML Schema Part 2, 4.3.7.3 to 4.3.10.3.
+func validateRangeBound(value, bound string, kind boundKind, base *BuiltinType, fc Facet) *FacetViolation {
+	cmp, status := compareRange(value, bound, base)
+	switch status {
+	case rangeCompared:
+	case rangeNotApplicable, rangeBadBound:
+		// Schema-side bug: a range facet on an unordered base (Part 2,
+		// 4.1.5) or a bound outside the base's value space (4.3.7.1 to
+		// 4.3.10.1). Surface it as a permissive miss rather than blame
+		// the instance. The XSD loader does not type-check facet values
+		// yet.
+		return nil
+	case rangeBeyondLimit:
+		// A valid literal litho cannot place (see [maxTemporalDigits]):
+		// no order the spec defines backs a violation.
+		return nil
+	case rangeBadValue:
 		return &FacetViolation{
 			Facet: fc, Value: value,
-			Reason: "value is not a numeric literal",
+			Reason: fmt.Sprintf("value is not an xs:%s literal", base.Name.Local),
 		}
 	}
-	limit, ok := parseDecimal(bound)
-	if !ok {
-		// Schema-side bug; surface as a permissive miss rather than
-		// panic. The XSD loader does not type-check facet values yet.
-		return nil
+	if cmp == orderIncomparable {
+		// Per Part 2, 4.2.2 an incomparable value is neither less, equal
+		// nor greater, so it satisfies none of the four bounds: 3.2.4 and
+		// 3.2.5 exclude it from the restricted value space, and 3.2.6.3
+		// counts an indeterminate duration comparison as false. The same
+		// holds for a timezoned and a non-timezoned date/time value at
+		// most 14 hours apart (3.2.7.4).
+		return &FacetViolation{
+			Facet: fc, Value: value,
+			Reason: fmt.Sprintf("value %s is incomparable with bound %s", value, bound),
+		}
 	}
-	cmp := got.Cmp(limit)
 	switch kind {
 	case boundMinInclusive:
-		if cmp < 0 {
+		if cmp == orderLess {
 			return &FacetViolation{
 				Facet: fc, Value: value,
 				Reason: fmt.Sprintf("value %s below minimum %s", value, bound),
 			}
 		}
 	case boundMaxInclusive:
-		if cmp > 0 {
+		if cmp == orderGreater {
 			return &FacetViolation{
 				Facet: fc, Value: value,
 				Reason: fmt.Sprintf("value %s above maximum %s", value, bound),
 			}
 		}
 	case boundMinExclusive:
-		if cmp <= 0 {
+		if cmp != orderGreater {
 			return &FacetViolation{
 				Facet: fc, Value: value,
 				Reason: fmt.Sprintf("value %s at or below exclusive minimum %s", value, bound),
 			}
 		}
 	case boundMaxExclusive:
-		if cmp >= 0 {
+		if cmp != orderLess {
 			return &FacetViolation{
 				Facet: fc, Value: value,
 				Reason: fmt.Sprintf("value %s at or above exclusive maximum %s", value, bound),
