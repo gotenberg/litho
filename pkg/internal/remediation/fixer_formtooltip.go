@@ -129,6 +129,14 @@ func enclosingAlt(ctx context.Context, doc *document.Document, parentTree ast.Pd
 // walkFormTooltipFields recursively walks form field tree and patches each
 // field that lacks a tooltip-equivalent entry. seen processes each field object
 // once, so a shared or cyclic /Kids tree cannot force exponential work.
+//
+// # Corpus evidence
+//
+//   - All corpora: at PDF/UA-1, 1815 widgets in 151 files lost the
+//     /StructParent annot-nesting had just given them.
+//   - pdfjs bug1669099.pdf, govdocs thread_300_300033.pdf: the next round
+//     nested every widget again, leaving 30 Form elements for 15 widgets and
+//     316 for 158.
 func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, parentTree ast.PdfObject, fields ast.PdfArray, count *int, seen map[int]bool) {
 	for _, fieldObj := range fields {
 		if ctx.Err() != nil {
@@ -143,14 +151,17 @@ func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc 
 			}
 			seen[ref.ObjectNum] = true
 		}
-		field, err := document.ResolveDict(ctx, doc, fieldObj)
-		if err != nil || field == nil {
+		// Alloc-first: the field is written back whole, and on a merged field
+		// and widget annot-nesting has already queued the /StructParent that
+		// links it to its new Form element (ISO 14289-1, 7.18.4).
+		field := liveDictValue(ctx, alloc, doc, fieldObj)
+		if field == nil {
 			continue
 		}
 
 		// Recurse into /Kids first.
 		if kidsObj, ok := field["Kids"]; ok {
-			if kids, err := document.ResolveArray(ctx, doc, kidsObj); err == nil {
+			if kids := liveArray(ctx, alloc, doc, kidsObj); len(kids) > 0 {
 				walkFormTooltipFields(ctx, alloc, doc, parentTree, kids, count, seen)
 			}
 		}
