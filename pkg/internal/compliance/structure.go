@@ -587,7 +587,7 @@ func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRo
 		roleMap:        buildRoleMapIndex(ctx, doc, structTreeRoot),
 		classMap:       structClassMap(ctx, doc, structTreeRoot),
 		iso32005Parent: "StructTreeRoot",
-		ua1Parent:      ua1RootParent,
+		ua1Parent:      ua1ParentRef{root: true},
 		seen:           make(map[int]bool),
 	}
 
@@ -680,10 +680,9 @@ type walkState struct {
 	// being walked, which the PDF/UA-1 containment rules test. It reads through
 	// the role map and past Div, Part, and NonStruct as iso32005Parent does, but
 	// differs at the top of the tree: a child of the structure tree root has no
-	// parent element ([ua1RootParent]), and the kids of a pass-through element
-	// directly under the root see that element's own type, which is where
-	// veraPDF's climb stops. It is empty when the parent has no standard type.
-	ua1Parent string
+	// parent element, and the kids of a pass-through element directly under the
+	// root see that element's own type, which is where veraPDF's climb stops.
+	ua1Parent ua1ParentRef
 
 	// seen records every structure element visited so the walk processes each
 	// once. The structure tree is a strict tree (ISO 32000-1 §14.7.2); without
@@ -1043,12 +1042,12 @@ func walkElement(ctx context.Context, state *walkState, elem ast.PdfDict, parent
 		selfKey := iso32005Key(ctx, state, elem, typeName)
 		if !iso32005PassThroughTypes[selfKey] {
 			state.iso32005Parent = selfKey
-			state.ua1Parent = selfKey
+			state.ua1Parent = ua1ParentRef{key: selfKey}
 			state.ua1ParentSeq = selfSeq
-		} else if state.ua1Parent == ua1RootParent {
+		} else if state.ua1Parent.root {
 			// veraPDF's climb through pass-through parents stops at the root
 			// and reports the type of the last one it passed.
-			state.ua1Parent = selfKey
+			state.ua1Parent = ua1ParentRef{key: selfKey}
 			state.ua1ParentSeq = selfSeq
 		}
 		walkChildren(ctx, state, kObj, typeName, depth+1, lastHeadingLevel)
@@ -1154,15 +1153,24 @@ func walkTypelessElement(ctx context.Context, state *walkState, elem ast.PdfDict
 		return
 	}
 	prevISOParent, prevUA1Parent := state.iso32005Parent, state.ua1Parent
-	state.iso32005Parent, state.ua1Parent = "", ""
+	state.iso32005Parent, state.ua1Parent = "", ua1ParentRef{}
 	walkChildren(ctx, state, kObj, "", depth+1, lastHeadingLevel)
 	state.iso32005Parent, state.ua1Parent = prevISOParent, prevUA1Parent
 }
 
-// ua1RootParent marks the children of the structure tree root, which have no
-// parent element. A PDF name cannot hold a NUL byte (ISO 32000-1, 7.3.5), so no
-// structure type can collide with it.
-const ua1RootParent = "\x00root"
+// ua1ParentRef is the parent the PDF/UA-1 containment rules see for the
+// elements being walked ([walkState.ua1Parent]). The structure tree root is a
+// flag beside the type, not a reserved type string: ISO 32000-1, 7.3.5 forbids
+// the #00 escape, but litho's lexer decodes /#00root to a name holding a NUL,
+// as veraPDF and PDF.js do, so no string is out of a structure type's reach.
+type ua1ParentRef struct {
+	// key is the parent's standard type, keyed as [iso32005Key] keys it, or ""
+	// when the parent has no standard type.
+	key string
+	// root reports the children of the structure tree root, which have no
+	// parent element.
+	root bool
+}
 
 // ua1ParentType maps the walk's [walkState.ua1Parent] to the parent type the
 // PDF/UA-1 containment checks compare against. veraPDF's parentStandardType is
@@ -1170,11 +1178,11 @@ const ua1RootParent = "\x00root"
 // parent has no standard type, and null matches none of the parents the rules
 // allow: on one-element fixtures veraPDF fails §7.2 t17 for a list item at the
 // root. Both are named by a placeholder no rule allows.
-func ua1ParentType(parentKey string) ast.PdfName {
-	if parentKey == "" || parentKey == ua1RootParent {
+func ua1ParentType(parent ua1ParentRef) ast.PdfName {
+	if parent.root || parent.key == "" {
 		return "(none)"
 	}
-	return ast.PdfName(parentKey)
+	return ast.PdfName(parent.key)
 }
 
 // ua1KidJudged reports whether a kid of the given standard type is an entry of
