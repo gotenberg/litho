@@ -497,12 +497,13 @@ func collectExtendedParticles(ct *ComplexType) []Particle {
 // declaration replaces an earlier one of the same name, and a prohibited
 // one removes it. An extension may not redeclare a base attribute (3.4.6,
 // ct-props-correct.4), so the rule changes nothing there on a valid
-// schema.
+// schema. Each link contributes the uses it declares and those of the
+// attribute groups it references ([ownAttributeUses]).
 func collectExtendedAttributes(ct *ComplexType) []AttributeUse {
 	chain := derivationChain(ct)
 	var out []AttributeUse
 	for _, link := range chain {
-		for _, use := range link.Attributes {
+		for _, use := range ownAttributeUses(link) {
 			out = slices.DeleteFunc(out, func(u AttributeUse) bool { return u.Name == use.Name })
 			if !use.Prohibited {
 				out = append(out, use)

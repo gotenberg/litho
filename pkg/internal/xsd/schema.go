@@ -53,6 +53,11 @@ type Schema struct {
 	// that references one ([AttributeUse.Ref]) and an attribute wildcard
 	// ([AttributeWildcard]) reach them.
 	Attributes map[QName]*AttributeUse
+	// AttributeGroups indexes top-level xs:attributeGroup definitions by
+	// their qualified name, which per XML Schema Part 1, 3.6.2 is in the
+	// target namespace. Complex types and other attribute groups reach
+	// them by reference ([ComplexType.AttributeGroups]).
+	AttributeGroups map[QName]*AttributeGroup
 	// Imports indexes loaded imported schemas by their target
 	// namespace. The current schema is not present in this map; it
 	// reaches its own elements/types via Elements and Types directly.
@@ -174,8 +179,18 @@ type ComplexType struct {
 	// schemas do not use it on validated invoice elements.
 	Content ContentModel
 	// Attributes is the list of attribute uses the type declares
-	// itself. Those it inherits stay on [ComplexType.Base].
+	// itself. Those it inherits stay on [ComplexType.Base], and those of
+	// the attribute groups it references on [ComplexType.AttributeGroups].
 	Attributes []AttributeUse
+	// AttributeGroupRefs holds the unresolved QNames of the
+	// xs:attributeGroup references the type declares, in source order.
+	AttributeGroupRefs []QName
+	// AttributeGroups are the attribute group definitions
+	// AttributeGroupRefs names, resolved during the link pass. Per XML
+	// Schema Part 1, 3.4.2 their {attribute uses} join the type's own, and
+	// their {attribute wildcard}s narrow its local one, see
+	// [AttributeWildcard].
+	AttributeGroups []*AttributeGroup
 	// Base is the type this complexType derives from, per XML Schema
 	// Part 1, 3.4.2 its {base type definition}: the base of the
 	// xs:complexContent extension, or of the xs:simpleContent extension
@@ -187,14 +202,43 @@ type ComplexType struct {
 	BaseRef QName
 	// AnyAttribute is the xs:anyAttribute the type declares itself, its
 	// local wildcard. Nil when it declares none. The {attribute
-	// wildcard} the type ends up with also depends on its base, see
-	// [AttributeWildcard].
+	// wildcard} the type ends up with also depends on its attribute
+	// groups and its base, see [AttributeWildcard].
 	AnyAttribute *AttributeWildcard
 }
 
 // QName implements [Type].
 func (t *ComplexType) QName() QName { return t.Name }
 func (t *ComplexType) isType()      {}
+
+// AttributeGroup models a top-level xs:attributeGroup definition, XML
+// Schema Part 1, 3.6: a named set of attribute uses and an attribute
+// wildcard that complex types and other attribute groups incorporate by
+// reference.
+//
+// Per 3.6.2 its {attribute uses} are the ones it declares, united with the
+// {attribute uses} of the groups it references, and its {attribute
+// wildcard} is the complete wildcard of 3.4.2 built from its own
+// xs:anyAttribute and theirs. Per 3.6.3 (src-attribute_group clause 3) no
+// group references itself, directly or through other groups, which [Load]
+// enforces.
+type AttributeGroup struct {
+	// Name is the qualified name of the group, in the target namespace.
+	Name QName
+	// Attributes is the list of attribute uses the group declares itself:
+	// local declarations, in no namespace unless their form says otherwise,
+	// and references to top-level declarations.
+	Attributes []AttributeUse
+	// AttributeGroupRefs holds the unresolved QNames of the
+	// xs:attributeGroup references the group declares, in source order.
+	AttributeGroupRefs []QName
+	// AttributeGroups are the attribute group definitions
+	// AttributeGroupRefs names, resolved during the link pass.
+	AttributeGroups []*AttributeGroup
+	// AnyAttribute is the xs:anyAttribute the group declares itself, its
+	// local wildcard. Nil when it declares none.
+	AnyAttribute *AttributeWildcard
+}
 
 // Element models a top-level or inline xs:element declaration. Inline
 // types are carried in [Inline]; top-level type references are carried
@@ -232,8 +276,9 @@ type Element struct {
 	Fixed   string
 }
 
-// AttributeUse models an xs:attribute occurrence on a complex type, and
-// a top-level xs:attribute declaration in [Schema.Attributes]. An
+// AttributeUse models an xs:attribute occurrence on a complex type or an
+// attribute group, and a top-level xs:attribute declaration in
+// [Schema.Attributes]. An
 // occurrence is a local declaration, or a reference to a top-level one
 // ([AttributeUse.Ref]).
 type AttributeUse struct {
@@ -343,10 +388,13 @@ type Wildcard struct {
 // AttributeWildcard models xs:anyAttribute, XML Schema Part 1, 3.10: the
 // attributes a complex type admits beyond the ones it declares.
 //
-// Per 3.4.2 the {attribute wildcard} of a type is its own xs:anyAttribute
-// when it derives by restriction, and when it derives by extension the
-// union (3.10.6) of that and the {attribute wildcard} of its base, or
-// whichever of the two exists. A type that names no base restricts
+// Per 3.4.2 the complete wildcard of a type is its own xs:anyAttribute,
+// intersected (3.10.6) with the {attribute wildcard} of every attribute
+// group it references, or the intersection of those alone when it declares
+// none. Its {attribute wildcard} is the complete wildcard when it derives
+// by restriction, and when it derives by extension the union (3.10.6) of
+// that and the {attribute wildcard} of its base, or whichever of the two
+// exists. A type that names no base restricts
 // xs:anyType and keeps its own alone; only an explicit extension of
 // xs:anyType inherits the ur-type's ##any wildcard, with lax processing.
 // The validator derives it along the base chain.

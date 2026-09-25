@@ -57,16 +57,40 @@ func simpleTypeAttributes(start xml.StartElement, path string) []Violation {
 }
 
 // attributeWildcardSet is the {attribute wildcard} of a complex type,
-// kept as the wildcards whose union (XML Schema Part 1, 3.10.6) it is: an
-// attribute's namespace is allowed when any one of them allows it. Per
-// 3.10.6 the union of two expressible constraints allows exactly what
-// either allows, and a union 3.10.6 calls not expressible (clause 5.3) is
-// a schema error, which the set judges the same way rather than blaming
+// kept as the complete wildcards whose union (XML Schema Part 1, 3.10.6)
+// it is: an attribute's namespace is allowed when any one of them allows
+// it. Per 3.10.6 the union of two expressible constraints allows exactly
+// what either allows, and a union 3.10.6 calls not expressible (clause 5.3)
+// is a schema error, which the set judges the same way rather than blaming
 // the instance. processContents is the one the union takes, that of the
 // most derived wildcard.
 type attributeWildcardSet struct {
-	alternatives    []*AttributeWildcard
+	alternatives    []*completeWildcard
 	processContents string
+}
+
+// completeWildcard is the complete wildcard of a complex type or an
+// attribute group, per XML Schema Part 1, 3.4.2 and 3.6.2: its own
+// xs:anyAttribute intersected (3.10.6) with the {attribute wildcard} of
+// every attribute group it references. It is kept as the wildcards whose
+// intersection it is: an attribute's namespace is allowed when every one
+// of them allows it. Per 3.10.6 the intersection of two expressible
+// constraints allows exactly what both allow, and one 3.10.6 calls not
+// expressible (clause 5) is a schema error (3.4.3 clause 4, 3.6.3 clause
+// 2), which the set judges the same way rather than blaming the instance.
+type completeWildcard struct {
+	members         []*AttributeWildcard
+	processContents string
+}
+
+// allows reports whether every member of c admits namespace ns.
+func (c *completeWildcard) allows(ns string) bool {
+	for _, m := range c.members {
+		if !m.allows(ns) {
+			return false
+		}
+	}
+	return true
 }
 
 // urTypeWildcard is the {attribute wildcard} of xs:anyType, per XML Schema
@@ -78,22 +102,69 @@ var urTypeWildcard = &AttributeWildcard{Namespace: "##any", ProcessContents: "la
 // attributeWildcard derives the {attribute wildcard} of ct along its
 // derivation chain, per XML Schema Part 1, 3.4.2. A type that derives by
 // restriction, explicitly under xs:simpleContent or implicitly from the
-// ur-type when it names no base, keeps its own xs:anyAttribute alone. A
-// type that derives by extension keeps its base's wildcard, united with
-// its own when it declares one. A base that is a simple type has none,
-// and an explicit extension of xs:anyType inherits [urTypeWildcard].
-// Returns nil when the type admits no undeclared attribute.
+// ur-type when it names no base, keeps its own complete wildcard alone
+// ([wildcardOf]). A type that derives by extension keeps its base's
+// wildcard, united with its own complete wildcard when it has one. A base
+// that is a simple type has none, and an explicit extension of xs:anyType
+// inherits [urTypeWildcard]. Returns nil when the type admits no
+// undeclared attribute.
 func attributeWildcard(ct *ComplexType) *attributeWildcardSet {
 	var w *attributeWildcardSet
+	memo := make(map[*AttributeGroup]*completeWildcard)
 	for _, link := range derivationChain(ct) {
+		local := wildcardOf(link.AnyAttribute, link.AttributeGroups, memo)
 		content, simple := link.Content.(SimpleContent)
 		switch {
 		case link.Base == nil, simple && content.Restriction:
-			w = uniteWildcard(nil, link.AnyAttribute)
+			w = uniteWildcard(nil, local)
 		case isAnyType(link.Base) && !simple:
-			w = uniteWildcard(uniteWildcard(nil, urTypeWildcard), link.AnyAttribute)
+			ur := &completeWildcard{members: []*AttributeWildcard{urTypeWildcard}, processContents: urTypeWildcard.ProcessContents}
+			w = uniteWildcard(uniteWildcard(nil, ur), local)
 		default:
-			w = uniteWildcard(w, link.AnyAttribute)
+			w = uniteWildcard(w, local)
+		}
+	}
+	return w
+}
+
+// wildcardOf returns the complete wildcard of a complex type or an
+// attribute group whose xs:anyAttribute is local and whose attribute group
+// references resolve to groups, per XML Schema Part 1, 3.4.2 clause 2, or
+// nil when it is absent. With no group wildcard it is local alone.
+// Otherwise its namespace constraint intersects local's with that of every
+// group wildcard, and its process contents is local's, or with no local
+// wildcard that of the first group wildcard (clause 2.2.2).
+//
+// memo holds the {attribute wildcard} of every group already derived, so a
+// group referenced along several paths is derived once and the members
+// stay distinct, rather than doubling at each level of a lattice of
+// references. A group met again while its own wildcard is being derived, a
+// reference cycle [Load] rejects, contributes none.
+func wildcardOf(local *AttributeWildcard, groups []*AttributeGroup, memo map[*AttributeGroup]*completeWildcard) *completeWildcard {
+	var w *completeWildcard
+	seen := make(map[*AttributeWildcard]bool)
+	if local != nil {
+		w = &completeWildcard{members: []*AttributeWildcard{local}, processContents: local.ProcessContents}
+		seen[local] = true
+	}
+	for _, g := range groups {
+		gw, derived := memo[g]
+		if !derived {
+			memo[g] = nil
+			gw = wildcardOf(g.AnyAttribute, g.AttributeGroups, memo)
+			memo[g] = gw
+		}
+		if gw == nil {
+			continue
+		}
+		if w == nil {
+			w = &completeWildcard{processContents: gw.processContents}
+		}
+		for _, m := range gw.members {
+			if !seen[m] {
+				seen[m] = true
+				w.members = append(w.members, m)
+			}
 		}
 	}
 	return w
@@ -102,16 +173,52 @@ func attributeWildcard(ct *ComplexType) *attributeWildcardSet {
 // uniteWildcard returns the union of base and local, per XML Schema Part
 // 1, 3.4.2: base alone when local is nil, local alone when base is nil,
 // otherwise both, with the processContents of local.
-func uniteWildcard(base *attributeWildcardSet, local *AttributeWildcard) *attributeWildcardSet {
+func uniteWildcard(base *attributeWildcardSet, local *completeWildcard) *attributeWildcardSet {
 	if local == nil {
 		return base
 	}
-	united := &attributeWildcardSet{processContents: local.ProcessContents}
+	united := &attributeWildcardSet{processContents: local.processContents}
 	if base != nil {
 		united.alternatives = slices.Clone(base.alternatives)
 	}
 	united.alternatives = append(united.alternatives, local)
 	return united
+}
+
+// ownAttributeUses returns the attribute uses ct contributes itself, per
+// XML Schema Part 1, 3.4.2 clauses 1 and 2: the ones it declares, then the
+// {attribute uses} of the attribute groups it references
+// ([appendGroupAttributeUses]). Those of its base are not included.
+func ownAttributeUses(ct *ComplexType) []AttributeUse {
+	if len(ct.AttributeGroups) == 0 {
+		return ct.Attributes
+	}
+	out := slices.Clone(ct.Attributes)
+	return appendGroupAttributeUses(out, ct.AttributeGroups, make(map[*AttributeGroup]bool))
+}
+
+// appendGroupAttributeUses appends to out the {attribute uses} of groups,
+// per XML Schema Part 1, 3.6.2: the ones each group declares, united with
+// those of the groups it references. Per 3.2.2 an xs:attribute whose use
+// is prohibited corresponds to nothing at all inside a group, so it is
+// left out: only one among the children of an xs:restriction removes a
+// base use (3.4.2 clause 3.2). visited holds the groups already appended,
+// as {attribute uses} is a set: a group referenced along several paths
+// contributes once, and a reference cycle, which [Load] rejects, ends.
+func appendGroupAttributeUses(out []AttributeUse, groups []*AttributeGroup, visited map[*AttributeGroup]bool) []AttributeUse {
+	for _, g := range groups {
+		if visited[g] {
+			continue
+		}
+		visited[g] = true
+		for _, use := range g.Attributes {
+			if !use.Prohibited {
+				out = append(out, use)
+			}
+		}
+		out = appendGroupAttributeUses(out, g.AttributeGroups, visited)
+	}
+	return out
 }
 
 // allows reports whether the wildcard admits an attribute in namespace ns,
@@ -155,7 +262,7 @@ func (w *AttributeWildcard) allows(ns string) bool {
 // declaration.
 func (v *validator) undeclaredAttribute(a xml.Attr, w *attributeWildcardSet, path string) []Violation {
 	at := path + "/@" + a.Name.Local
-	if w == nil || !slices.ContainsFunc(w.alternatives, func(alt *AttributeWildcard) bool { return alt.allows(a.Name.Space) }) {
+	if w == nil || !slices.ContainsFunc(w.alternatives, func(alt *completeWildcard) bool { return alt.allows(a.Name.Space) }) {
 		return []Violation{{
 			Rule:   RuleAttribute,
 			Path:   at,

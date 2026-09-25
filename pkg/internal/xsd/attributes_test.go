@@ -230,7 +230,7 @@ func TestValidate_AttributeWildcardRejects(t *testing.T) {
 func TestValidate_LaxWildcardValidatesADeclaredAttribute(t *testing.T) {
 	v := &validator{schema: loadTestSchema(t, anyAttributeXSD)}
 	w := &attributeWildcardSet{
-		alternatives:    []*AttributeWildcard{{Namespace: "##any"}},
+		alternatives:    []*completeWildcard{{members: []*AttributeWildcard{{Namespace: "##any"}}, processContents: "lax"}},
 		processContents: "lax",
 	}
 	attr := xml.Attr{Name: xml.Name{Space: "urn:t", Local: "level"}, Value: "x"}

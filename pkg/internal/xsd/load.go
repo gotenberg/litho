@@ -87,6 +87,7 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, str
 		Elements:        make(map[QName]*Element),
 		Types:           newBuiltinTypeRegistry(),
 		Attributes:      make(map[QName]*AttributeUse),
+		AttributeGroups: make(map[QName]*AttributeGroup),
 		Imports:         make(map[string]*Schema),
 	}
 	l.schemas[p] = schema
@@ -124,6 +125,7 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, str
 		}
 		maps.Copy(schema.Elements, sub.Elements)
 		maps.Copy(schema.Attributes, sub.Attributes)
+		maps.Copy(schema.AttributeGroups, sub.AttributeGroups)
 	}
 
 	if err := populateFromRaw(schema, raw, prefixes); err != nil {
@@ -135,11 +137,21 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, str
 // link walks every loaded schema and resolves every TypeRef into a
 // Type pointer. References to built-in XS types resolve against the
 // pre-populated registry; references to user types resolve against
-// the owning schema or one of its imports.
+// the owning schema or one of its imports. Once every reference
+// resolves, it rejects a circular attribute group reference
+// ([checkAttributeGroupCycles]).
 func (l *loader) link() error {
 	for _, schema := range l.schemas {
 		if err := linkSchema(schema); err != nil {
 			return err
+		}
+	}
+	state := make(map[*AttributeGroup]groupVisit)
+	for _, schema := range l.schemas {
+		for _, g := range schema.AttributeGroups {
+			if err := checkAttributeGroupCycles(g, state); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -158,6 +170,11 @@ func linkSchema(s *Schema) error {
 	}
 	for _, a := range s.Attributes {
 		if err := linkAttribute(s, a); err != nil {
+			return err
+		}
+	}
+	for _, g := range s.AttributeGroups {
+		if err := linkAttributeGroup(s, g); err != nil {
 			return err
 		}
 	}
@@ -196,7 +213,104 @@ func linkType(s *Schema, t Type) error {
 				return err
 			}
 		}
+		groups, err := resolveAttributeGroups(s, tt.AttributeGroupRefs)
+		if err != nil {
+			return err
+		}
+		tt.AttributeGroups = groups
 	}
+	return nil
+}
+
+// linkAttributeGroup resolves the attribute uses of the attribute group g
+// and the groups it references. It rebuilds AttributeGroups from scratch,
+// as a group an xs:include copies is linked once per schema that holds it.
+//
+// # Corpus evidence
+//
+//   - All corpora: no bundled schema defines or references an attribute
+//     group, so no verdict of the 159 files that embed XML moves, through
+//     the Factur-X and ZUGFeRD validators or under any bundled schema.
+//   - All corpora: moving each of the 263 local attributes of the bundled
+//     schemas into an attribute group of its own, referenced from a second
+//     group, moves no violation under any bundled schema either, where
+//     leaving xs:attributeGroup unmodelled raises 5989 violations of
+//     undeclared attributes.
+func linkAttributeGroup(s *Schema, g *AttributeGroup) error {
+	for i := range g.Attributes {
+		if err := linkAttribute(s, &g.Attributes[i]); err != nil {
+			return err
+		}
+	}
+	groups, err := resolveAttributeGroups(s, g.AttributeGroupRefs)
+	if err != nil {
+		return err
+	}
+	g.AttributeGroups = groups
+	return nil
+}
+
+// resolveAttributeGroups returns the attribute group definitions refs
+// name, per XML Schema Part 1, 3.6.2 the top-level ones their QNames
+// resolve to, in s or in the schema s imports for their namespace.
+func resolveAttributeGroups(s *Schema, refs []QName) ([]*AttributeGroup, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	out := make([]*AttributeGroup, 0, len(refs))
+	for _, ref := range refs {
+		g := lookupAttributeGroup(s, ref)
+		if g == nil {
+			return nil, fmt.Errorf("%w: attribute group %s", ErrUnresolvedRef, ref)
+		}
+		out = append(out, g)
+	}
+	return out, nil
+}
+
+// lookupAttributeGroup returns the top-level attribute group definition
+// named qn, in s or in the schema s imports for qn's namespace, or nil.
+func lookupAttributeGroup(s *Schema, qn QName) *AttributeGroup {
+	if g, ok := s.AttributeGroups[qn]; ok {
+		return g
+	}
+	if imp, ok := s.Imports[qn.Namespace]; ok {
+		return imp.AttributeGroups[qn]
+	}
+	return nil
+}
+
+// groupVisit is the state of an attribute group in the depth-first walk of
+// [checkAttributeGroupCycles].
+type groupVisit uint8
+
+const (
+	groupUnvisited groupVisit = iota
+	groupOnPath
+	groupDone
+)
+
+// checkAttributeGroupCycles rejects a circular attribute group reference
+// reachable from g. Per XML Schema Part 1, 3.6.3 (src-attribute_group
+// clause 3) no xs:attributeGroup outside xs:redefine references itself,
+// directly or at any depth through the groups it references. state carries
+// the walk across calls, so each group is explored once and the check stays
+// linear in the number of references.
+func checkAttributeGroupCycles(g *AttributeGroup, state map[*AttributeGroup]groupVisit) error {
+	switch state[g] {
+	case groupOnPath:
+		return fmt.Errorf("%w: xs:attributeGroup %s references itself", ErrSchemaParse, g.Name)
+	case groupDone:
+		return nil
+	case groupUnvisited:
+	}
+	state[g] = groupOnPath
+	for _, ref := range g.AttributeGroups {
+		if err := checkAttributeGroupCycles(ref, state); err != nil {
+			return err
+		}
+	}
+	state[g] = groupDone
 	return nil
 }
 
@@ -395,16 +509,17 @@ func lookupType(s *Schema, qn QName) (Type, error) {
 // document. It mirrors the XSD source structure so the loader can
 // build the typed [Schema] in a second pass.
 type rawSchema struct {
-	XMLName              xml.Name           `xml:"http://www.w3.org/2001/XMLSchema schema"`
-	TargetNamespace      string             `xml:"targetNamespace,attr"`
-	AttributeFormDefault string             `xml:"attributeFormDefault,attr"`
-	ElementFormDefault   string             `xml:"elementFormDefault,attr"`
-	Elements             []rawElement       `xml:"element"`
-	Attributes           []rawAttribute     `xml:"attribute"`
-	ComplexTypes         []rawComplexType   `xml:"complexType"`
-	SimpleTypes          []rawSimpleType    `xml:"simpleType"`
-	Imports              []rawImportInclude `xml:"import"`
-	Includes             []rawImportInclude `xml:"include"`
+	XMLName              xml.Name            `xml:"http://www.w3.org/2001/XMLSchema schema"`
+	TargetNamespace      string              `xml:"targetNamespace,attr"`
+	AttributeFormDefault string              `xml:"attributeFormDefault,attr"`
+	ElementFormDefault   string              `xml:"elementFormDefault,attr"`
+	Elements             []rawElement        `xml:"element"`
+	Attributes           []rawAttribute      `xml:"attribute"`
+	AttributeGroups      []rawAttributeGroup `xml:"attributeGroup"`
+	ComplexTypes         []rawComplexType    `xml:"complexType"`
+	SimpleTypes          []rawSimpleType     `xml:"simpleType"`
+	Imports              []rawImportInclude  `xml:"import"`
+	Includes             []rawImportInclude  `xml:"include"`
 }
 
 type rawImportInclude struct {
@@ -427,13 +542,26 @@ type rawElement struct {
 }
 
 type rawComplexType struct {
-	Name           string             `xml:"name,attr"`
-	Sequence       *rawSequence       `xml:"sequence"`
-	Choice         *rawChoice         `xml:"choice"`
-	Attributes     []rawAttribute     `xml:"attribute"`
-	ComplexContent *rawComplexContent `xml:"complexContent"`
-	SimpleContent  *rawSimpleContent  `xml:"simpleContent"`
-	AnyAttribute   *rawAnyAttribute   `xml:"anyAttribute"`
+	Name            string              `xml:"name,attr"`
+	Sequence        *rawSequence        `xml:"sequence"`
+	Choice          *rawChoice          `xml:"choice"`
+	Attributes      []rawAttribute      `xml:"attribute"`
+	AttributeGroups []rawAttributeGroup `xml:"attributeGroup"`
+	ComplexContent  *rawComplexContent  `xml:"complexContent"`
+	SimpleContent   *rawSimpleContent   `xml:"simpleContent"`
+	AnyAttribute    *rawAnyAttribute    `xml:"anyAttribute"`
+}
+
+// rawAttributeGroup captures an xs:attributeGroup, XML Schema Part 1,
+// 3.6.2: the defining form, a child of xs:schema with a name and the
+// attribute declarations, group references and wildcard it groups, or the
+// referring form, with a ref and no content.
+type rawAttributeGroup struct {
+	Name            string              `xml:"name,attr"`
+	Ref             string              `xml:"ref,attr"`
+	Attributes      []rawAttribute      `xml:"attribute"`
+	AttributeGroups []rawAttributeGroup `xml:"attributeGroup"`
+	AnyAttribute    *rawAnyAttribute    `xml:"anyAttribute"`
 }
 
 // rawAnyAttribute captures an xs:anyAttribute, XML Schema Part 1, 3.10.2.
@@ -452,11 +580,12 @@ type rawSimpleContent struct {
 // attribute uses. Every child the named fields do not claim lands in
 // Facets, which [collectFacets] filters.
 type rawSimpleContentRestriction struct {
-	Base         string           `xml:"base,attr"`
-	SimpleType   *rawSimpleType   `xml:"simpleType"`
-	Attributes   []rawAttribute   `xml:"attribute"`
-	AnyAttribute *rawAnyAttribute `xml:"anyAttribute"`
-	Facets       []rawFacet       `xml:",any"`
+	Base            string              `xml:"base,attr"`
+	SimpleType      *rawSimpleType      `xml:"simpleType"`
+	Attributes      []rawAttribute      `xml:"attribute"`
+	AttributeGroups []rawAttributeGroup `xml:"attributeGroup"`
+	AnyAttribute    *rawAnyAttribute    `xml:"anyAttribute"`
+	Facets          []rawFacet          `xml:",any"`
 }
 
 type rawComplexContent struct {
@@ -464,11 +593,12 @@ type rawComplexContent struct {
 }
 
 type rawExtension struct {
-	Base         string           `xml:"base,attr"`
-	Sequence     *rawSequence     `xml:"sequence"`
-	Choice       *rawChoice       `xml:"choice"`
-	Attributes   []rawAttribute   `xml:"attribute"`
-	AnyAttribute *rawAnyAttribute `xml:"anyAttribute"`
+	Base            string              `xml:"base,attr"`
+	Sequence        *rawSequence        `xml:"sequence"`
+	Choice          *rawChoice          `xml:"choice"`
+	Attributes      []rawAttribute      `xml:"attribute"`
+	AttributeGroups []rawAttributeGroup `xml:"attributeGroup"`
+	AnyAttribute    *rawAnyAttribute    `xml:"anyAttribute"`
 }
 
 type rawSequence struct {
@@ -700,6 +830,13 @@ func populateFromRaw(s *Schema, raw *rawSchema, prefixes map[string]string) erro
 		}
 		s.Attributes[a.Name] = &a
 	}
+	for i := range raw.AttributeGroups {
+		g, err := buildAttributeGroup(doc, &raw.AttributeGroups[i])
+		if err != nil {
+			return err
+		}
+		s.AttributeGroups[g.Name] = g
+	}
 	return nil
 }
 
@@ -787,6 +924,11 @@ func buildComplexType(doc *schemaDoc, raw *rawComplexType) (*ComplexType, error)
 			return nil, err
 		}
 		ct.Attributes = append(ct.Attributes, attrs...)
+		groups, err := buildAttributeGroupRefs(doc, ext.AttributeGroups)
+		if err != nil {
+			return nil, err
+		}
+		ct.AttributeGroupRefs = append(ct.AttributeGroupRefs, groups...)
 		ct.AnyAttribute = buildAnyAttribute(doc.tns, ext.AnyAttribute)
 	case raw.SimpleContent != nil:
 		if err := buildSimpleContent(doc, raw.SimpleContent, ct); err != nil {
@@ -800,6 +942,11 @@ func buildComplexType(doc *schemaDoc, raw *rawComplexType) (*ComplexType, error)
 		return nil, err
 	}
 	ct.Attributes = append(ct.Attributes, attrs...)
+	groups, err := buildAttributeGroupRefs(doc, raw.AttributeGroups)
+	if err != nil {
+		return nil, err
+	}
+	ct.AttributeGroupRefs = append(ct.AttributeGroupRefs, groups...)
 	if raw.AnyAttribute != nil {
 		ct.AnyAttribute = buildAnyAttribute(doc.tns, raw.AnyAttribute)
 	}
@@ -827,14 +974,15 @@ func buildAnyAttribute(tns string, raw *rawAnyAttribute) *AttributeWildcard {
 func buildSimpleContent(doc *schemaDoc, raw *rawSimpleContent, ct *ComplexType) error {
 	var base string
 	var rawAttrs []rawAttribute
+	var rawGroups []rawAttributeGroup
 	switch {
 	case raw.Extension != nil:
-		base, rawAttrs = raw.Extension.Base, raw.Extension.Attributes
+		base, rawAttrs, rawGroups = raw.Extension.Base, raw.Extension.Attributes, raw.Extension.AttributeGroups
 		ct.AnyAttribute = buildAnyAttribute(doc.tns, raw.Extension.AnyAttribute)
 		ct.Content = SimpleContent{}
 	case raw.Restriction != nil:
 		r := raw.Restriction
-		base, rawAttrs = r.Base, r.Attributes
+		base, rawAttrs, rawGroups = r.Base, r.Attributes, r.AttributeGroups
 		ct.AnyAttribute = buildAnyAttribute(doc.tns, r.AnyAttribute)
 		content := SimpleContent{Restriction: true, Facets: collectFacets(r.Facets)}
 		if r.SimpleType != nil {
@@ -862,6 +1010,11 @@ func buildSimpleContent(doc *schemaDoc, raw *rawSimpleContent, ct *ComplexType) 
 		return err
 	}
 	ct.Attributes = append(ct.Attributes, attrs...)
+	groups, err := buildAttributeGroupRefs(doc, rawGroups)
+	if err != nil {
+		return err
+	}
+	ct.AttributeGroupRefs = append(ct.AttributeGroupRefs, groups...)
 	return nil
 }
 
@@ -997,6 +1150,52 @@ func buildAttributes(doc *schemaDoc, raws []rawAttribute) ([]AttributeUse, error
 			return nil, err
 		}
 		out = append(out, au)
+	}
+	return out, nil
+}
+
+// buildAttributeGroup builds the top-level xs:attributeGroup raw. Per XML
+// Schema Part 1, 3.6.2 the defining form carries a name and no ref, its
+// name is in the target namespace, and it holds attribute declarations,
+// attribute group references and an xs:anyAttribute.
+func buildAttributeGroup(doc *schemaDoc, raw *rawAttributeGroup) (*AttributeGroup, error) {
+	if raw.Name == "" || raw.Ref != "" {
+		return nil, fmt.Errorf("%w: top-level xs:attributeGroup needs a name and no ref", ErrSchemaParse)
+	}
+	attrs, err := buildAttributes(doc, raw.Attributes)
+	if err != nil {
+		return nil, err
+	}
+	refs, err := buildAttributeGroupRefs(doc, raw.AttributeGroups)
+	if err != nil {
+		return nil, err
+	}
+	return &AttributeGroup{
+		Name:               QName{Namespace: doc.tns, Local: raw.Name},
+		Attributes:         attrs,
+		AttributeGroupRefs: refs,
+		AnyAttribute:       buildAnyAttribute(doc.tns, raw.AnyAttribute),
+	}, nil
+}
+
+// buildAttributeGroupRefs parses the xs:attributeGroup children raws of a
+// complex type or an attribute group. Per XML Schema Part 1, 3.6.2 each is
+// the referring form: a ref, no name, and no content.
+func buildAttributeGroupRefs(doc *schemaDoc, raws []rawAttributeGroup) ([]QName, error) {
+	if len(raws) == 0 {
+		return nil, nil
+	}
+	out := make([]QName, 0, len(raws))
+	for i := range raws {
+		r := &raws[i]
+		if r.Ref == "" || r.Name != "" || len(r.Attributes) > 0 || len(r.AttributeGroups) > 0 || r.AnyAttribute != nil {
+			return nil, fmt.Errorf("%w: a nested xs:attributeGroup needs a ref, and no name or content", ErrSchemaParse)
+		}
+		ref, err := doc.parseQName(r.Ref)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ref)
 	}
 	return out, nil
 }

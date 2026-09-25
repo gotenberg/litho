@@ -114,6 +114,9 @@ func FuzzXSDLoadThenValidate(f *testing.F) {
 	f.Add([]byte(attributeFormXSD), []byte(`<Amount xmlns="urn:t" xmlns:t="urn:t" t:currencyID="EUR" scale="2">1</Amount>`))
 	f.Add([]byte(localAttributeRefXSD), []byte(`<Amount xmlns="urn:t" xmlns:t="urn:t" t:version="2">1</Amount>`))
 	f.Add([]byte(elementFormXSD), []byte(`<t:Invoice xmlns:t="urn:t"><Line>a</Line><Note>b</Note></t:Invoice>`))
+	f.Add([]byte(attributeGroupXSD), []byte(`<Line xmlns="urn:t" id="L1" unit="LB"><Amount>1</Amount></Line>`))
+	f.Add([]byte(attributeGroupWildcardXSD), []byte(`<Root xmlns="urn:t" xmlns:b="urn:b"><Nested b:x="1"/><TwoGroups x="1"/></Root>`))
+	f.Add([]byte(cyclicAttributeGroupXSD), []byte(`<Root xmlns="urn:t" a="x" b="y"/>`)) // Rejected: a two-step cycle.
 	f.Add([]byte(minimalXSD[:len(minimalXSD)/2]), []byte(payload))
 	f.Add([]byte(""), []byte(""))
 
