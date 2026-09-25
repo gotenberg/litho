@@ -36,11 +36,12 @@ func xrefHeaderDoc(t *testing.T, head string) *document.Document {
 // spacing of ISO 19005-1, 6.1.4 t1, which parts 2 and up dropped. veraPDF
 // reads one EOL marker after the keyword and fails xrefEOLMarkersComplyPDFA
 // when no digit follows it: measured with veraPDF 1.30, each of these tables
-// fails 6.1.4 t2 alone at PDF/A-1b and PDF/A-2b.
+// fails 6.1.4 t2 alone at PDF/A-1b and PDF/A-2b. A form feed and a NUL are
+// white space too (ISO 32000-1, Table 1), and a comment is no digit either.
 func TestXRefHeaderWhiteSpaceIsAnEOLDefect(t *testing.T) {
 	t.Parallel()
 
-	for _, head := range []string{"\n ", "\n\t", "\r\n ", "\n\n "} {
+	for _, head := range []string{"\n ", "\n\t", "\r\n ", "\n\n ", "\n\f", "\n\x00", "\r\n\f", "\r\x00", "\n%c\n"} {
 		for _, tc := range []struct {
 			profile string
 			want    Rule

@@ -16,7 +16,11 @@ import (
 // White space between the keyword and the header is of the EOL class, as
 // veraPDF states it: measured with veraPDF 1.30, LF then a space, LF then a tab
 // and CR+LF then a space each fail 6.1.4 t2 alone at PDF/A-1b and PDF/A-2b.
-// With surplus EOL markers before it, it is the same single defect.
+// With surplus EOL markers before it, it is the same single defect. So is any
+// byte but a digit after the marker: measured with veraPDF 1.30, LF then a form
+// feed, LF then a NUL, CR+LF then a form feed, CR then a NUL, and a table
+// holding no subsection, its trailer keyword after LF or CR+LF, each fail
+// 6.1.4 t2 alone at PDF/A-1b and PDF/A-2b.
 func TestXRefTableFormatViolationsMatchTheirClass(t *testing.T) {
 	t.Parallel()
 
@@ -32,6 +36,11 @@ func TestXRefTableFormatViolationsMatchTheirClass(t *testing.T) {
 		{"a tab before the header", "\n\t0 1\n", ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by extra whitespace"},
 		{"CR+LF then white space", "\r\n 0 1\n", ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by extra whitespace"},
 		{"surplus EOL then white space", "\n\n 0 1\n", ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by multiple EOL markers"},
+		{"a form feed before the header", "\n\f0 1\n", ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by extra whitespace"},
+		{"a NUL before the header", "\n\x000 1\n", ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by extra whitespace"},
+		{"CR+LF then a form feed", "\r\n\f0 1\n", ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by extra whitespace"},
+		{"CR then a NUL", "\r\x000 1\n", ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by extra whitespace"},
+		{"a comment before the header", "\n%c\n0 1\n", ErrXRefEOLMarkers, "compliance: xref keyword not followed by a subsection header"},
 		{"separator not a space", "\n0\t1\n", ErrXRefSubsectionSpacing, "compliance: xref subsection header separator is not a single space (0x09)"},
 		{"wide separator", "\n0  1\n", ErrXRefSubsectionSpacing, "compliance: xref subsection header has 2 spaces between start and count (must be 1)"},
 	} {
@@ -56,6 +65,31 @@ func TestXRefTableFormatViolationsMatchTheirClass(t *testing.T) {
 			}
 		})
 	}
+
+	for _, eol := range []string{"\n", "\r\n"} {
+		t.Run(fmt.Sprintf("no subsection after %q", eol), func(t *testing.T) {
+			t.Parallel()
+			body := "xref" + eol + "trailer\n<< /Size 1 >>\n"
+			got := (&Document{r: bytes.NewReader([]byte(body))}).ValidateXRefTableFormat(0)
+			if len(got) != 1 || !errors.Is(got[0], ErrXRefEOLMarkers) {
+				t.Fatalf("got %v, want one ErrXRefEOLMarkers", got)
+			}
+			if want := "compliance: xref keyword not followed by a subsection header"; got[0].Error() != want {
+				t.Errorf("message = %q, want %q", got[0].Error(), want)
+			}
+		})
+	}
+
+	// The white space is skipped, so a defect in the header behind it is
+	// still found.
+	t.Run("a spacing defect behind a form feed", func(t *testing.T) {
+		t.Parallel()
+		body := "xref\n\f0  1\n0000000000 65535 f \r\ntrailer\n<< /Size 1 >>\n"
+		got := (&Document{r: bytes.NewReader([]byte(body))}).ValidateXRefTableFormat(0)
+		if len(got) != 2 || !errors.Is(got[0], ErrXRefEOLMarkers) || !errors.Is(got[1], ErrXRefSubsectionSpacing) {
+			t.Fatalf("got %v, want ErrXRefEOLMarkers then ErrXRefSubsectionSpacing", got)
+		}
+	})
 }
 
 // TestObjectHeaderFormatViolationsMatchTheirClass pins that the object header

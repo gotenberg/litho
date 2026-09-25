@@ -770,34 +770,31 @@ func (d *Document) ValidateXRefTableFormat(offset int64) []error {
 			parser.NewFormatViolation(ErrXRefEOLMarkers, "compliance: xref keyword not followed by EOL"))
 	}
 
-	// Check for multiple EOL markers (double LF, etc.). Must be a single EOL.
-	// Skip whatever is surplus: leaving pos on it makes the subsection header
-	// scan below read no digits and stop, so this defect would mask a defect
-	// in the header that follows.
-	surplusEOL := pos < len(buf) && (buf[pos] == '\n' || buf[pos] == '\r')
-	if surplusEOL {
-		violations = append(violations,
-			parser.NewFormatViolation(ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by multiple EOL markers"))
-		for pos < len(buf) && (buf[pos] == '\n' || buf[pos] == '\r') {
-			pos++
+	// The single EOL marker must be followed by the subsection header, whose
+	// first byte is a digit. Anything else breaks the single EOL marker between
+	// the keyword and the header (ISO 19005-1, 6.1.4 t2; ISO 19005-2, 6.1.4
+	// t2), not the spacing inside the header (ISO 19005-1, 6.1.4 t1): veraPDF
+	// reads one EOL marker after the keyword and fails xrefEOLMarkersComplyPDFA
+	// when no digit follows it (PDFParser.parseXrefTable). Measured with
+	// veraPDF 1.30 at PDF/A-1b and PDF/A-2b: a second EOL marker, a space or a
+	// tab, a form feed or a NUL after the marker each fail that test, and so
+	// does a table that holds no subsection at all, its trailer keyword
+	// following the marker. The test is one verdict on the bytes between the
+	// keyword and the header, so it is stated once.
+	//
+	// Whatever white space stands there is skipped: leaving pos on it makes
+	// the subsection header scan below read no digits and stop, so this defect
+	// would mask a defect in the header that follows.
+	if pos < len(buf) && (buf[pos] < '0' || buf[pos] > '9') {
+		msg := "compliance: xref keyword not followed by a subsection header"
+		switch {
+		case buf[pos] == '\n' || buf[pos] == '\r':
+			msg = "compliance: xref keyword and subsection header separated by multiple EOL markers"
+		case isPDFWhiteSpace(buf[pos]):
+			msg = "compliance: xref keyword and subsection header separated by extra whitespace"
 		}
-	}
-
-	// White space before the subsection header is skipped for the same
-	// reason. It breaks the single EOL marker between the keyword and the
-	// header (ISO 19005-1, 6.1.4 t2; ISO 19005-2, 6.1.4 t2), not the spacing
-	// inside the header (ISO 19005-1, 6.1.4 t1): veraPDF reads one EOL marker
-	// after the keyword and fails xrefEOLMarkersComplyPDFA when no digit
-	// follows it, measured with veraPDF 1.30 on a space after LF, a space after
-	// CR+LF, a tab after LF and a space after two LF. That test is one verdict
-	// on the bytes between the keyword and the header, so surplus EOL markers
-	// already state it.
-	if pos < len(buf) && (buf[pos] == ' ' || buf[pos] == '\t') {
-		if !surplusEOL {
-			violations = append(violations,
-				parser.NewFormatViolation(ErrXRefEOLMarkers, "compliance: xref keyword and subsection header separated by extra whitespace"))
-		}
-		for pos < len(buf) && (buf[pos] == ' ' || buf[pos] == '\t') {
+		violations = append(violations, parser.NewFormatViolation(ErrXRefEOLMarkers, msg))
+		for pos < len(buf) && isPDFWhiteSpace(buf[pos]) {
 			pos++
 		}
 	}

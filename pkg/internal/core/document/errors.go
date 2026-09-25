@@ -49,8 +49,9 @@ var (
 
 	// ErrXRefEOLMarkers marks a cross-reference table whose xref keyword is
 	// not followed by a single EOL marker and then the subsection header, the
-	// requirement ISO 19005-1, 6.1.4 t2 and ISO 19005-2, 6.1.4 t2 state. White
-	// space before the header breaks it too.
+	// requirement ISO 19005-1, 6.1.4 t2 and ISO 19005-2, 6.1.4 t2 state. Any
+	// byte but a digit after the marker breaks it, white space included, and so
+	// does a table with no subsection header at all.
 	ErrXRefEOLMarkers = fmt.Errorf("%w: EOL markers after the xref keyword", ErrXRefFormat)
 
 	// ErrXRefSubsectionSpacing marks a cross-reference table whose subsection
