@@ -256,7 +256,7 @@ func compareRevisions(ctx context.Context, doc, rev *document.Document, held fun
 		checks = append(checks, check{"annotation removals", func() (string, error) { return removedAnnotation(ctx, doc, rev) }})
 	}
 	if policy >= 2 {
-		checks = append(checks, check{"catalog changes", func() (string, error) { return changedCatalog(ctx, doc, rev, policy) }})
+		checks = append(checks, check{"catalog changes", func() (string, error) { return changedCatalog(ctx, doc, rev, held, policy) }})
 	}
 	if policy >= 2 {
 		checks = append(checks, check{"form fields", func() (string, error) { return changedField(ctx, doc, rev, held, objects, policy) }})

@@ -47,7 +47,8 @@ type catalogEntry struct {
 //
 // /Metadata is not among them: it keeps naming the XMP metadata stream (14.3.2)
 // it named when signed, and [withoutMetadata] decides when that stream may be
-// rewritten in place.
+// rewritten in place. A catalog signed without one may gain it
+// ([addedMetadata]).
 var signingCatalogEntries = map[ast.PdfName]catalogEntry{
 	"AcroForm":   {kept: true},
 	"Pages":      {},
@@ -80,7 +81,10 @@ var signingCatalogEntries = map[ast.PdfName]catalogEntry{
 // [changedUntyped]'s when it does not. Both catalogs are read from
 // their trailers, so an update that points /Root at another catalog is
 // compared too.
-func changedCatalog(ctx context.Context, doc, rev *document.Document, policy int) (string, error) {
+//
+// held reports whether the signed revision held a number
+// ([signedRevision.held]), which tells a /Metadata the catalog gains.
+func changedCatalog(ctx context.Context, doc, rev *document.Document, held func(num int) bool, policy int) (string, error) {
 	signed, err := document.ResolveCatalog(ctx, rev)
 	if err != nil {
 		return "", fmt.Errorf("reading the signed revision's catalog: %w", err)
@@ -105,7 +109,8 @@ func changedCatalog(ctx context.Context, doc, rev *document.Document, policy int
 			case ok, sameObject(before, after):
 				continue
 			}
-		} else if sameObject(before, after) || (permitted && (!entry.kept || after != nil)) {
+		} else if sameObject(before, after) || (permitted && (!entry.kept || after != nil)) ||
+			(key == "Metadata" && addedMetadata(before, after, held)) {
 			continue
 		}
 		return fmt.Sprintf("the catalog's /%s %s, which P=%d does not permit", string(key), change(before, after), policy), nil

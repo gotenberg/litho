@@ -1525,10 +1525,13 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // At every P, an incremental update that makes another change may also
 // rewrite the document information dictionary and the XMP metadata stream the
 // catalog names, each in its own object, since the producers that sign, fill
-// in forms or add validation data rewrite both on every save. The other change
+// in forms or add validation data rewrite both on every save. Where the signed
+// revision had none, the update may add them in new objects, as those
+// producers do, and name them in the trailer and the catalog. The other change
 // is judged as any other, so at P=1 it must be validation data. An update that
-// rewrites only the metadata is reported, and so is one that points the
-// trailer's /Info or the catalog's /Metadata at another object.
+// writes only the metadata is reported, and so is one that points the
+// trailer's /Info or the catalog's /Metadata at another object than the signed
+// one.
 //
 // From P=2 the interactive form is compared with its signed version too, since
 // filling in a field and signing change only a field's value and the

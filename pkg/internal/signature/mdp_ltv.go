@@ -337,7 +337,7 @@ func ltvExemptions(ctx context.Context, doc, rev *document.Document, held func(n
 		}
 		if diff == nil {
 			var err error
-			if diff, err = newLTVDiff(ctx, doc, rev, current); err != nil {
+			if diff, err = newLTVDiff(ctx, doc, rev, held, current); err != nil {
 				return nil, err
 			}
 		}
@@ -453,6 +453,7 @@ func exemptDroppedValidationData(ctx context.Context, doc, rev *document.Documen
 // data with their signed versions.
 type ltvDiff struct {
 	doc, rev *document.Document
+	held     func(num int) bool
 	ltv      *ltvObjects
 
 	catalogNum    int // current catalog, 0 when /Root is no reference
@@ -466,8 +467,10 @@ type ltvDiff struct {
 	annotsOf    map[int]int         // current /Annots array object number to its page
 }
 
-// newLTVDiff reads what [ltvDiff.confined] compares from both revisions.
-func newLTVDiff(ctx context.Context, doc, rev *document.Document, ltv *ltvObjects) (*ltvDiff, error) {
+// newLTVDiff reads what [ltvDiff.confined] compares from both revisions. held
+// reports whether the signed revision rev held a number
+// ([signedRevision.held]).
+func newLTVDiff(ctx context.Context, doc, rev *document.Document, held func(num int) bool, ltv *ltvObjects) (*ltvDiff, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, err
@@ -477,7 +480,7 @@ func newLTVDiff(ctx context.Context, doc, rev *document.Document, ltv *ltvObject
 		return nil, err
 	}
 	d := &ltvDiff{
-		doc: doc, rev: rev, ltv: ltv,
+		doc: doc, rev: rev, held: held, ltv: ltv,
 		catalog: catalog.Dict, signedCatalog: signedCatalog.Dict,
 		pages: make(map[int]ast.PdfDict), signedPages: make(map[int]ast.PdfDict), annotsOf: make(map[int]int),
 	}
@@ -530,6 +533,8 @@ func (d *ltvDiff) confined(ctx context.Context, num int) bool {
 				return d.formConfined(ctx, before, after)
 			case "Extensions":
 				return d.extensionsConfined(ctx, before, after)
+			case "Metadata":
+				return addedMetadata(before, after, d.held)
 			}
 			return false
 		})
