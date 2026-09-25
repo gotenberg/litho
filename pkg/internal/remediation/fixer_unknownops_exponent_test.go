@@ -3,14 +3,12 @@ package remediation
 import (
 	"bytes"
 	"context"
-	"errors"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
-	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -60,12 +58,16 @@ func TestRewriteExponentNumbers(t *testing.T) {
 			if n == 0 {
 				return
 			}
-			// The check's own parse finds nothing left to report.
-			if _, violations := content.ParseStreamDataFormatChecked(context.Background(), got); len(violations) > 0 {
-				for _, v := range violations {
-					if errors.Is(v, parser.ErrNumberExponent) {
-						t.Errorf("the rewritten stream still holds an exponent: %v", v)
-					}
+			// The check's own reading finds nothing left to report: it ends a
+			// number at the exponent letter, which it reads as an operator
+			// ISO 32000-1 does not define.
+			ops, err := content.ParseStreamData(context.Background(), got)
+			if err != nil {
+				t.Fatalf("ParseStreamData(%q): %v", got, err)
+			}
+			for _, op := range ops {
+				if !content.IsOperator(op.Operator) {
+					t.Errorf("the rewritten stream %q still reads the undefined operator %q", got, op.Operator)
 				}
 			}
 		})

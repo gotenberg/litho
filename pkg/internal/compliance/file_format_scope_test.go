@@ -41,8 +41,6 @@ func TestFormatViolationScope(t *testing.T) {
 		misleading = fmt.Errorf("compliance: xref stream: %w", fmt.Errorf("%w %q", parser.ErrHexStringInvalidChar, 'g'))
 		exponent   = parser.NewFormatViolation(parser.ErrNumberExponent,
 			"compliance: number uses scientific notation, which ISO 32000-1 §7.3.3 does not permit")
-		exponentAlone = parser.NewFormatViolation(parser.ErrNumberExponentOperand,
-			"compliance: number uses scientific notation, which ISO 32000-1 §7.3.3 does not permit")
 	)
 
 	for _, tc := range []struct {
@@ -72,7 +70,6 @@ func TestFormatViolationScope(t *testing.T) {
 		// stops at a parse error there; a content stream is judged elsewhere.
 		{"a number with an exponent at part 1", exponent, "PDF/A-1b", Rule{}},
 		{"a number with an exponent at part 2", exponent, "PDF/A-2b", Rule{}},
-		{"an unnested number with an exponent", exponentAlone, "PDF/A-2b", Rule{}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

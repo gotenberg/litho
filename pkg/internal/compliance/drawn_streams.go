@@ -62,9 +62,8 @@ type drawnStream struct {
 // every stream those draw in turn. The content-stream rules judge each one
 // from a single parse: the hex string tests, ISO 19005-1/2/3, 6.1.6 t1 and t2
 // (see [drawnStreamHexStrings]), the undefined-operator rule, ISO 19005-1,
-// 6.2.10 t1 and ISO 19005-2/3/4, 6.2.2 t1, the numbers written with an
-// exponent (see [checkExponentOperands]) and the resource-name tests beside
-// them, in [checkDrawnStream], and the operand limits in
+// 6.2.10 t1 and ISO 19005-2/3/4, 6.2.2 t1, and the resource-name tests beside
+// it, in [checkDrawnStream], and the operand limits in
 // [checkContentStreamLimits].
 //
 // It follows veraPDF 1.30, measured at PDF/A-1b and PDF/A-2b on one-page and

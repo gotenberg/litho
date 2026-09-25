@@ -67,14 +67,5 @@ var ErrStreamMissingLength = fmt.Errorf("%w: stream dictionary has no /Length", 
 
 // ErrNumberExponent marks a format violation recorded under
 // [Parser.WithFormatChecking] for a number written with an exponent, which
-// the syntax of ISO 32000-1, 7.3.3 does not provide. [ErrNumberExponentOperand]
-// matches it under [errors.Is].
+// the syntax of ISO 32000-1, 7.3.3 does not provide.
 var ErrNumberExponent = errors.New("number uses scientific notation")
-
-// ErrNumberExponentOperand marks an [ErrNumberExponent] violation for a number
-// read on its own, outside any array or dictionary, which is where a content
-// stream holds the operands of its operators. The token is no number (ISO
-// 32000-1, 7.3.3), so a content stream reader takes it for an operator:
-// veraPDF and PDF.js end the number at the exponent letter and read the rest
-// of the token as an operator ISO 32000-1 does not define.
-var ErrNumberExponentOperand = fmt.Errorf("%w outside any array or dictionary", ErrNumberExponent)

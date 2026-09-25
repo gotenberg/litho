@@ -104,3 +104,41 @@ func TestFormatViolationEntryKey(t *testing.T) {
 		})
 	}
 }
+
+// TestComplianceReadingRecordsNoExponent pins that
+// [ParseStreamDataForCompliance] records no [parser.ErrNumberExponent],
+// wherever the number stands. It reads the stream as veraPDF does
+// ([lexer.Lexer.WithVeraPDFTokens]), which ends a number at the exponent
+// letter, so "1.5e1 w" is 1.5, the operator e ISO 32000-1 does not define, 1
+// and w. The undefined-operator rule of ISO 19005 states the exponent from the
+// operators, and no check of the compliance engine reads it from the format
+// violations.
+func TestComplianceReadingRecordsNoExponent(t *testing.T) {
+	t.Parallel()
+	for _, content := range []string{
+		"1.5e1 w",
+		"1e1 w",
+		"-1.5E-1 w",
+		"+2e+1 0 m",
+		"1e999 w",
+		"[2.5e1 3] 0 d",
+		"/P << /MCID 1.5e1 >> BDC EMC",
+		"BI /W 1 /H 1 /BPC 8 /CS /G /Foo 1.5e1 ID \x80 EI",
+	} {
+		t.Run(content, func(t *testing.T) {
+			t.Parallel()
+			ops, _, violations, err := ParseStreamDataForCompliance(context.Background(), []byte(content))
+			if err != nil {
+				t.Fatalf("ParseStreamDataForCompliance: %v", err)
+			}
+			for _, v := range violations {
+				if errors.Is(v.Err, parser.ErrNumberExponent) {
+					t.Errorf("recorded %q", v.Err)
+				}
+			}
+			if content == "1.5e1 w" && (len(ops) != 2 || ops[0].Operator != "e" || ops[1].Operator != "w") {
+				t.Errorf("operations = %v, want the undefined e, then w", ops)
+			}
+		})
+	}
+}

@@ -90,26 +90,24 @@ func TestFormatViolationsMatchTheirClass(t *testing.T) {
 	}
 }
 
-// TestNumberExponentOperandClass pins which numbers written with an exponent
-// the parser records as [ErrNumberExponentOperand]: one read on its own, as a
-// content stream operand is, and none inside an array, a dictionary or an
-// inline image's dictionary. Measured on one-page fixtures, veraPDF reports the
-// first as an operator ISO 32000-1 does not define, and gives up on a content
-// stream holding any of the others without reporting it.
-func TestNumberExponentOperandClass(t *testing.T) {
+// TestNumberExponentClass pins that a number written with an exponent records
+// one [ErrNumberExponent] wherever the object syntax reads it: on its own, in
+// an array, in a dictionary and in an inline image's dictionary. An integer
+// with an exponent stays unread. The lexer here keeps the token boundaries of
+// ISO 32000-1, 7.2.2, as the reading of the file body does.
+func TestNumberExponentClass(t *testing.T) {
 	t.Parallel()
 
 	for _, tt := range []struct {
-		name    string
-		src     string
-		unread  bool
-		operand bool
+		name   string
+		src    string
+		unread bool
 	}{
-		{"a real operand", "1.5e1", false, true},
-		{"an integer operand", "1e1", true, true},
-		{"a signed exponent", "-1.5E-1", false, true},
-		{"an array element", "[1.5e1 2]", false, false},
-		{"a dictionary value", "<< /MCID 1.5e1 >>", false, false},
+		{"a real on its own", "1.5e1", false},
+		{"an integer on its own", "1e1", true},
+		{"a signed exponent", "-1.5E-1", false},
+		{"an array element", "[1.5e1 2]", false},
+		{"a dictionary value", "<< /MCID 1.5e1 >>", false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -120,12 +118,8 @@ func TestNumberExponentOperandClass(t *testing.T) {
 			if len(p.FormatViolations) != 1 {
 				t.Fatalf("got %d violations, want 1: %v", len(p.FormatViolations), p.FormatViolations)
 			}
-			v := p.FormatViolations[0]
-			if !errors.Is(v, ErrNumberExponent) {
+			if v := p.FormatViolations[0]; !errors.Is(v, ErrNumberExponent) {
 				t.Errorf("%q does not match ErrNumberExponent", v)
-			}
-			if got := errors.Is(v, ErrNumberExponentOperand); got != tt.operand {
-				t.Errorf("errors.Is(%q, ErrNumberExponentOperand) = %v, want %v", v, got, tt.operand)
 			}
 		})
 	}
@@ -139,8 +133,8 @@ func TestNumberExponentOperandClass(t *testing.T) {
 		if len(p.FormatViolations) != 1 {
 			t.Fatalf("got %d violations, want 1: %v", len(p.FormatViolations), p.FormatViolations)
 		}
-		if v := p.FormatViolations[0]; !errors.Is(v, ErrNumberExponent) || errors.Is(v, ErrNumberExponentOperand) {
-			t.Errorf("%q: want ErrNumberExponent, not ErrNumberExponentOperand", v)
+		if v := p.FormatViolations[0]; !errors.Is(v, ErrNumberExponent) {
+			t.Errorf("%q does not match ErrNumberExponent", v)
 		}
 	})
 }

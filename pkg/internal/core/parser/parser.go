@@ -196,15 +196,12 @@ func (p *Parser) recordViolation(class error, msg string) {
 }
 
 // recordNumberExponent records a number written with an exponent under format
-// checking. One read outside any array or dictionary is recorded as
-// [ErrNumberExponentOperand]: in a content stream it stands where an operand
-// or an operator does, and the operators are what ISO 19005 constrains.
+// checking, as [ErrNumberExponent]. Only a lexer that keeps the token
+// boundaries of ISO 32000-1, 7.2.2 hands the parser such a number: one that
+// reads a content stream as veraPDF does ([lexer.Lexer.WithVeraPDFTokens])
+// ends the number at the exponent letter, and the letter is an operator.
 func (p *Parser) recordNumberExponent() {
-	class := ErrNumberExponent
-	if p.depth == 1 {
-		class = ErrNumberExponentOperand
-	}
-	p.recordViolation(class, "number uses scientific notation, which ISO 32000-1 §7.3.3 does not permit")
+	p.recordViolation(ErrNumberExponent, "number uses scientific notation, which ISO 32000-1 §7.3.3 does not permit")
 }
 
 // formatViolationError is a format violation whose message is not built from

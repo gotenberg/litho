@@ -127,9 +127,7 @@ func pageResourceScopes(ctx context.Context, doc *document.Document, page ast.Pd
 // The undefined-operator rule, ISO 19005-1, 6.2.10 t1 and ISO 19005-2/3/4,
 // 6.2.2 t1, is stated here for these streams, and by [checkPageContent] for a
 // page's own content alone, so it is stated exactly once per undefined
-// operator. A number written with an exponent where an operand stands reads as
-// such an operator, see [checkExponentOperands]. The operand limits are stated
-// by [checkContentStreamLimits].
+// operator. The operand limits are stated by [checkContentStreamLimits].
 //
 // # Corpus evidence
 //
@@ -138,7 +136,6 @@ func pageResourceScopes(ctx context.Context, doc *document.Document, page ast.Pd
 //     ISO 19005-4, 6.2.2 t3 for exactly those 2.
 func checkDrawnStream(ctx context.Context, doc *document.Document, s *drawnStream, part int, hexStrings *drawnStreamHexStrings) []Violation {
 	results := checkContentStreamResourcesOps(ctx, doc, s.ops, s.patterns, s.resources, s.pageRes, part, s.pageNum, true)
-	results = append(results, checkExponentOperands(s.format, part, s.pageNum)...)
 	results = append(results, hexStrings.check(s.format, s.pageNum)...)
 	results = append(results, checkInlineImageIntent(s.ops, part, s.pageNum)...)
 	if s.kind == drawnAppearance {
