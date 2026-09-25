@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -91,6 +92,8 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, pages [
 
 		scanSeparationDeviceNInAnnotations(ctx, doc, page, part, i, colorantAlternates, colorantTintFuncs, limitJudged, results, scope)
 	}
+
+	checkDeviceNColorantLinks(ctx, doc, pages, part, results)
 
 	doc.Logger.Debug("compliance.color: Separation/DeviceN check complete",
 		"uniqueColorants", len(colorantAlternates))
@@ -260,14 +263,13 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 // An image XObject names its colour space inline rather than through
 // /Resources/ColorSpace, so the resource scan never reaches it.
 //
-// Two rules apply to that DeviceN. §6.2.4.4 t1 needs a /Colorants entry for
-// every spot colorant (see [checkDeviceNColorants]). ISO 19005-1 §6.1.12 t9
-// and ISO 19005-2/3 §6.1.13 t9 cap its colourants (see [checkDeviceNLimit]),
-// and veraPDF judges that cap on every PDDeviceN it reaches, anchored at
-// .../xObject[0](n 0 obj PDXImage)/imageCS[0](n 0 obj PDDeviceN), or at
-// .../imageCS[0](n 0 obj PDIndexed)/base[0] for an /Indexed image. The
-// colorant-consistency scan (t2) keeps its resource-dictionary scope. site is
-// the image XObject's own (see [deviceNLimitSite]).
+// ISO 19005-1 §6.1.12 t9 and ISO 19005-2/3 §6.1.13 t9 cap its colourants
+// (see [checkDeviceNLimit]), and veraPDF judges that cap on every PDDeviceN it
+// reaches, anchored at .../xObject[0](n 0 obj PDXImage)/imageCS[0](n 0 obj
+// PDDeviceN), or at .../imageCS[0](n 0 obj PDIndexed)/base[0] for an /Indexed
+// image. §6.2.4.4 t1 is judged on every DeviceN a link reaches (see
+// [checkDeviceNColorantLinks]). site is the image XObject's own (see
+// [deviceNLimitSite]).
 func checkImageDeviceN(ctx context.Context, doc *document.Document, csObj ast.PdfObject, part, pageIdx int, where string, limitJudged map[string]bool, site deviceNLimitSite, results *[]Violation) {
 	imgCS, err := document.ResolveArray(ctx, doc, csObj)
 	if err != nil || len(imgCS) < 2 {
@@ -281,7 +283,6 @@ func checkImageDeviceN(ctx context.Context, doc *document.Document, csObj ast.Pd
 		return
 	}
 	checkDeviceNLimit(ctx, doc, csObj, imgCS, part, pageIdx, where, limitJudged, site, results)
-	checkDeviceNColorants(ctx, doc, imgCS, part, pageIdx, where, results)
 }
 
 // deviceNColorantLimit returns the most colourants a DeviceN colour space may
@@ -431,18 +432,14 @@ func checkSeparationDeviceNArray(ctx context.Context, doc *document.Document, cs
 	case "DeviceN":
 		checkDeviceNCS(ctx, doc, csObj, arr, part, pageIdx, where, colorantAlternates, colorantTintFuncs, limitJudged, site, results)
 	case "Indexed":
-		// Only §6.2.4.4 t1 and the colourant limit follow the base. The
-		// colorant-consistency scan (t2) keeps its resource-dictionary scope,
-		// exactly as [checkImageDeviceN] states, so an /Indexed base adds no
-		// new alternate-space comparisons. veraPDF anchors the colourant limit
-		// at colorSpace[0](n 0 obj PDIndexed)/base[0], measured.
+		// The colourant limit follows the base: veraPDF anchors it at
+		// colorSpace[0](n 0 obj PDIndexed)/base[0], measured.
 		base, baseObj := indexedBaseArray(ctx, doc, arr, 0)
 		if base == nil {
 			return
 		}
 		if baseType, berr := document.ResolveName(ctx, doc, base[0]); berr == nil && baseType == "DeviceN" {
 			checkDeviceNLimit(ctx, doc, baseObj, base, part, pageIdx, where+" /Indexed base", limitJudged, site.within(csObj), results)
-			checkDeviceNColorants(ctx, doc, base, part, pageIdx, where+" /Indexed base", results)
 		}
 	}
 }
@@ -730,8 +727,6 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, csObj ast.PdfOb
 		colorantsDict, _ = document.ResolveDict(ctx, doc, attrsDict["Colorants"]) // Best-effort: nil dict skips colorant checks.
 	}
 
-	checkDeviceNColorants(ctx, doc, arr, part, pageIdx, fmt.Sprintf("ColorSpace %s", csName), results)
-
 	// §6.2.4.4 t2: Separation arrays in Colorants dictionaries must also be
 	// consistent with all other Separation arrays with the same colorant name.
 	for _, cName := range sortedNames(colorantsDict) {
@@ -791,38 +786,58 @@ var deviceNProcessColorants = map[string]bool{
 	"Black":   true,
 }
 
-// checkDeviceNColorants validates §6.2.4.4 t1 for one DeviceN colour space
-// array: every spot colorant it names needs an entry in the /Colorants
-// dictionary of its attributes. where identifies the colour space in the
-// violation context.
+// checkDeviceNColorantLinks validates §6.2.4.4 t1: every spot colorant a
+// DeviceN colour space names needs an entry in the /Colorants dictionary of
+// its attributes. veraPDF judges the test on each PDDeviceN it reaches, so it
+// fails once per link [colorLinkWalk] follows to a DeviceN that misses one,
+// however many it misses: a direct DeviceN wherever a link reaches it, an
+// indirect one once for the whole document. Measured with veraPDF 1.30 at
+// PDF/A-2b on a direct DeviceN naming 33 spot colourants that cs selects and f
+// fills: the test fails twice, where litho failed it once per colourant.
 //
 // # Corpus evidence
 //
-//   - verapdf veraPDF_test_suite_6-2-4-4-t02-fail-a: veraPDF's §6.2.4.4 t1
-//     summary carries seven failed checks, one per offending colorant, so
-//     reporting every undeclared colorant matches it.
-func checkDeviceNColorants(ctx context.Context, doc *document.Document, arr ast.PdfArray, part, pageIdx int, where string, results *[]Violation) {
+//   - verapdf PDF_A-2b__veraPDF_test_suite_6-2-4-4-t02-fail-a.pdf: a direct
+//     DeviceN naming three spot colourants and no /Colorants that seven
+//     operators link to fails the test seven times, where litho failed it
+//     once per colourant, three times.
+func checkDeviceNColorantLinks(ctx context.Context, doc *document.Document, pages []pageCtx, part int, results *[]Violation) {
 	// §6.2.4.4 t1 exists for parts 2+ only; a zero Rule must never be
 	// emitted (it serializes as a clause-less "-t00" residual).
 	rule := separationColorantsRule(part)
-	if rule.Specification == "" || len(arr) < 2 {
+	if rule.Specification == "" {
 		return
 	}
+	walkColorLinks(ctx, doc, pages, part, func(n colorNode) {
+		if n.kind != "DeviceN" {
+			return
+		}
+		if missing := deviceNMissingColorants(ctx, doc, n.arr); len(missing) > 0 {
+			*results = append(*results, failf(rule,
+				"page %d: DeviceN spot colorants %s have no Colorants entry",
+				n.page+1, strings.Join(missing, ", "))...)
+		}
+	})
+}
 
+// deviceNMissingColorants returns the spot colorants the DeviceN array arr
+// names that the /Colorants dictionary of its attributes does not list.
+func deviceNMissingColorants(ctx context.Context, doc *document.Document, arr ast.PdfArray) []string {
+	if len(arr) < 2 {
+		return nil
+	}
 	names, err := document.ResolveArray(ctx, doc, arr[1])
 	if err != nil {
-		doc.Logger.Debug("compliance.color: cannot resolve DeviceN names array", "context", where, "error", err)
-		return
+		doc.Logger.Debug("compliance.color: cannot resolve DeviceN names array", "error", err)
+		return nil
 	}
 
 	allowed := deviceNAllowedColorants(ctx, doc, arr)
+	var missing []string
 	for _, nameObj := range names {
-		if ctx.Err() != nil {
-			return
-		}
 		colorantName, err := document.ResolveName(ctx, doc, nameObj)
 		if err != nil {
-			doc.Logger.Debug("compliance.color: cannot resolve colorant name", "context", where, "error", err)
+			doc.Logger.Debug("compliance.color: cannot resolve colorant name", "error", err)
 			continue
 		}
 		cName := string(colorantName)
@@ -831,13 +846,9 @@ func checkDeviceNColorants(ctx context.Context, doc *document.Document, arr ast.
 		if cName == "None" || deviceNProcessColorants[cName] || allowed[cName] {
 			continue
 		}
-		// Report every undeclared colorant, not just the first: veraPDF raises
-		// one failed check per offending colorant, so stopping here would
-		// under-report a file's actual colorant defects.
-		*results = append(*results, failf(rule,
-			"page %d, %s: DeviceN spot colorant %q has no Colorants entry",
-			pageIdx+1, where, cName)...)
+		missing = append(missing, fmt.Sprintf("%q", cName))
 	}
+	return missing
 }
 
 // deviceNAllowedColorants returns the colorant names a DeviceN array declares

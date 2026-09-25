@@ -109,6 +109,37 @@ func TestDeviceColorCountsEachLink(t *testing.T) {
 	}
 }
 
+// TestDeviceNColorantsCountEachLink pins that ISO 19005-2, 6.2.4.4 t1 fails
+// once per link veraPDF makes to a DeviceN naming a spot colourant its
+// attributes do not list, however many it misses (see
+// [checkDeviceNColorantLinks]). Every count was measured with veraPDF 1.30 at
+// PDF/A-2b on the same fixture.
+func TestDeviceNColorantsCountEachLink(t *testing.T) {
+	t.Parallel()
+
+	fill := "0 0 10 10 re f"
+	spots := "[/DeviceN [/SpotA /SpotB /SpotC] /DeviceGray " + tintTransformObj + "]"
+	tests := []struct {
+		name string
+		data []byte
+		want int
+	}{
+		{"a direct DeviceN three operators link to", linkPagePDF("<< /ColorSpace << /CS0 "+spots+" >> >>", "/CS0 cs 0 0 0 scn "+fill), 3},
+		{"an indirect DeviceN", linkPagePDF("<< /ColorSpace << /CS0 5 0 R >> >>", "/CS0 cs 0 0 0 scn "+fill, spots), 1},
+		{"an indexed space's DeviceN base", linkPagePDF("<< /ColorSpace << /CS0 [/Indexed "+spots+" 1 <000000FFFFFF>] >> >>", "/CS0 cs 0 scn "+fill), 3},
+		{"a DeviceN listing its colourants", linkPagePDF("<< /ColorSpace << /CS0 [/DeviceN [/SpotA] /DeviceGray "+tintTransformObj+
+			" << /Colorants << /SpotA [/Separation /SpotA /DeviceGray "+tintTransformObj+"] >> >>] >> >>", "/CS0 cs 0 scn "+fill), 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ruleContexts(t, tt.data, models.PDFA2b, "6.2.4.4", 1); len(got) != tt.want {
+				t.Errorf("6.2.4.4 t1 fired %d times, want %d: %q", len(got), tt.want, got)
+			}
+		})
+	}
+}
+
 // TestICCBasedProfileCountsEachLink pins that the ICCBased profile test fails
 // once per link veraPDF makes to an ICCBased space over an abstract profile,
 // wherever [colorLinkWalk] reaches one, and once for the document for a direct
