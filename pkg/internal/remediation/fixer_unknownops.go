@@ -1,7 +1,6 @@
 package remediation
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,9 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/core/ioat"
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
-	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
@@ -356,13 +353,9 @@ func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocato
 }
 
 // repairStreamObject repairs the content stream at ref, a form XObject or an
-// appearance stream, with [repairContentData] and writes it back. It returns
-// what changed and whether the stream could be decoded at all.
-//
-// The replacement body is the decoded content, so the filter chain that
-// described the original body no longer applies: carrying /Filter or
-// /DecodeParms across leaves a stream a reader decodes into nothing (ISO
-// 32000-1, 7.3.8.2). /Length is rewritten from the data.
+// appearance stream, with [repairContentData] and writes it back through
+// [replaceDecodedStream]. It returns what changed and whether the stream could
+// be decoded at all.
 func repairStreamObject(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef, stream ast.PdfStream, part int) (unknownOpsTally, bool) {
 	// Decode through the filter pipeline: ast.PdfStream.Bytes hands back the
 	// raw body, which for a FlateDecode form is compressed bytes the content
@@ -375,15 +368,7 @@ func repairStreamObject(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	if t == (unknownOpsTally{}) {
 		return t, true
 	}
-	newDict := make(ast.PdfDict, len(stream.Dict)+1)
-	for k, v := range stream.Dict {
-		if k == "Length" || k == "Filter" || k == "DecodeParms" {
-			continue
-		}
-		newDict[k] = v
-	}
-	newDict["Length"] = ast.PdfInt(len(newData))
-	alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, newData))
+	replaceDecodedStream(alloc, ref, stream.Dict, newData)
 	return t, true
 }
 
@@ -443,10 +428,6 @@ func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, do
 	return total
 }
 
-// exponentTokenCheckInterval is how many tokens [rewriteExponentNumbers] reads
-// between two checks of its context, the interval the content parser uses.
-const exponentTokenCheckInterval = 500
-
 // rewriteExponentNumbers returns data with every number written with an
 // exponent, such as "1.5e1" or "1E-3", replaced by the plain number it denotes
 // ([plainNumber]), and how many it replaced. A stream holding no such number
@@ -489,73 +470,21 @@ const exponentTokenCheckInterval = 500
 //     stay: veraPDF's undefined-operator findings on the output go at
 //     PDF/A-1b and PDF/A-2b.
 func rewriteExponentNumbers(ctx context.Context, data []byte, part int) ([]byte, int) {
-	type splice struct {
-		start, end int
-		text       string
-	}
-	var splices []splice
-	operands, depth := 0, 0
-	p := parser.NewParser(lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))).WithOffsetTracking()
-	for n := 1; ; n++ {
-		if n%exponentTokenCheckInterval == 0 && ctx.Err() != nil {
-			return data, 0
+	operands := 0
+	splices, complete := contentTokenSplices(ctx, data, func(tok lexer.Token, depth int) (string, bool) {
+		if tok.Type != lexer.TokenNumber || !strings.ContainsAny(tok.Value, "eE") {
+			return "", false
 		}
-		tok, err := p.Peek(0)
-		if err != nil || tok.Type == lexer.TokenError {
-			return data, 0
+		text, ok := plainNumber(tok.Value, part)
+		if ok && depth == 0 {
+			operands++
 		}
-		if tok.Type == lexer.TokenEOF {
-			break
-		}
-		end := int(p.PeekEnd(0))
-		if _, err := p.Consume(); err != nil {
-			return data, 0
-		}
-		switch tok.Type {
-		case lexer.TokenKeyword:
-			if tok.Value == "BI" && depth == 0 {
-				if _, err := p.ParseInlineImageDict(ctx); err != nil {
-					return data, 0
-				}
-			}
-		case lexer.TokenDelimiter:
-			switch tok.Value {
-			case "[", "<<":
-				depth++
-			case "]", ">>":
-				depth = max(depth-1, 0)
-			}
-		case lexer.TokenNumber:
-			start := end - len(tok.Value)
-			if !strings.ContainsAny(tok.Value, "eE") || start < 0 || string(data[start:end]) != tok.Value {
-				continue
-			}
-			text, ok := plainNumber(tok.Value, part)
-			if !ok {
-				continue
-			}
-			splices = append(splices, splice{start: start, end: end, text: text})
-			if depth == 0 {
-				operands++
-			}
-		case lexer.TokenEOF, lexer.TokenError, lexer.TokenName, lexer.TokenString, lexer.TokenHexString:
-			// No number, and no nesting: a string or a name is one token.
-		}
-	}
-	if operands == 0 {
+		return text, ok
+	})
+	if !complete || operands == 0 {
 		return data, 0
 	}
-
-	var out bytes.Buffer
-	out.Grow(len(data))
-	prev := 0
-	for _, s := range splices {
-		out.Write(data[prev:s.start])
-		out.WriteString(s.text)
-		prev = s.end
-	}
-	out.Write(data[prev:])
-	return out.Bytes(), len(splices)
+	return applyTokenSplices(data, splices), len(splices)
 }
 
 // plainNumber writes the number an exponent token denotes the way ISO

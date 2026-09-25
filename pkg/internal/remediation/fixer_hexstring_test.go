@@ -91,11 +91,18 @@ func TestFixHexStringRewritesAnOddDigitString(t *testing.T) {
 	}
 	// The value the parser understood must still be what is drawn: the final
 	// digit is assumed to be 0, giving "Hell" and a 0x60 byte.
-	if !strings.Contains(got, "Hell") {
-		t.Errorf("the string's value was not preserved:\n%s", got)
+	ops, err := content.ParseStreamData(context.Background(), []byte(got))
+	if err != nil {
+		t.Fatalf("parsing the rewrite: %v", err)
 	}
-	if !strings.Contains(got, "Tj") {
-		t.Errorf("the show-text operator was lost:\n%s", got)
+	var shown []ast.PdfObject
+	for _, op := range ops {
+		if op.Operator == "Tj" {
+			shown = append(shown, op.Operands...)
+		}
+	}
+	if len(shown) != 1 || shown[0] != ast.PdfString("Hell\x60") {
+		t.Errorf("the rewrite shows %v, want the one string %q:\n%s", shown, "Hell\x60", got)
 	}
 }
 
@@ -154,45 +161,101 @@ func TestMatchHexStringClaimsBothMalformedReports(t *testing.T) {
 	}
 }
 
-// TestHasMalformedHexViolationMatchesTheParserSentinels pins the page-level
-// match: a page is rewritten when the detector's own parse records a violation
-// wrapping one of the two hex-string sentinels, and for no other parse
-// violation. The match is structural, so the same wording in an error that
-// wraps neither sentinel is not claimed.
-func TestHasMalformedHexViolationMatchesTheParserSentinels(t *testing.T) {
+// TestRespellHexStringsAgreesWithTheParser pins the repair against the
+// detector's own parse: a stream is respelled exactly when that parse records a
+// violation wrapping one of the two hex-string sentinels, the respelled stream
+// records none, and it parses to the same operations, so every string keeps
+// the value the parser read (ISO 32000-1, 7.3.4.3).
+func TestRespellHexStringsAgreesWithTheParser(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	for _, tt := range []struct {
-		name     string
-		content  string
-		violated bool
-		want     bool
+		name    string
+		content string
+		want    int
 	}{
-		{"odd digit count", "BT <484> Tj ET", true, true},
-		{"invalid character", "BT <41!4> Tj ET", true, true},
-		{"well-formed", "BT <4848> Tj ET", false, false},
+		{"odd digit count", "BT <484> Tj ET", 1},
+		{"invalid character", "BT <41!4> Tj ET", 1},
+		{"an invalid character making the count odd", "BT <41!> Tj ET", 1},
+		{"white space inside an odd string", "BT <4 8\n4> Tj ET", 1},
+		{"well-formed", "BT <4848> Tj ET", 0},
+		{"well-formed with white space", "BT <48 48> Tj ET", 0},
+		{"empty", "BT <> Tj ET", 0},
+		{"inside an array", "BT [<414> 120 <42>] TJ ET", 1},
+		{"inside a property list", "/Span << /ActualText <FEFF004> >> BDC EMC", 1},
+		{"two on one page", "BT <414> Tj <4!2> Tj ET", 2},
 		// The parser records a scientific-notation real as a format
 		// violation too, which the hex fixer does not repair.
-		{"another parse violation", "1.5e2 0 Td", true, false},
+		{"another parse violation", "1.5e2 0 Td", 0},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, violations := content.ParseStreamDataFormatChecked(ctx, []byte(tt.content))
-			if violated := len(violations) > 0; violated != tt.violated {
-				t.Fatalf("the parse recorded %v, want violations = %v", violations, tt.violated)
+			src := []byte(tt.content)
+			_, before := content.ParseStreamDataFormatChecked(ctx, src)
+			if got := hexViolations(before) > 0; got != (tt.want > 0) {
+				t.Fatalf("control: the parse recorded %v, want hex violations = %v", before, tt.want > 0)
 			}
-			if got := hasMalformedHexViolation(violations); got != tt.want {
-				t.Errorf("hasMalformedHexViolation(%v) = %v, want %v", violations, got, tt.want)
+			out, n := respellHexStrings(ctx, src)
+			if n != tt.want {
+				t.Fatalf("respellHexStrings(%q) respelled %d strings, want %d: %q", src, n, tt.want, out)
+			}
+			if n == 0 {
+				if !bytes.Equal(out, src) {
+					t.Errorf("a stream with nothing to respell came back changed: %q", out)
+				}
+				return
+			}
+			after, violations := content.ParseStreamDataFormatChecked(ctx, out)
+			if hexViolations(violations) > 0 {
+				t.Errorf("the respelled stream %q still records %v", out, violations)
+			}
+			original, err := content.ParseStreamData(ctx, src)
+			if err != nil {
+				t.Fatalf("parsing the source: %v", err)
+			}
+			if !sameOperations(after, original) {
+				t.Errorf("the respelled stream %q reads as\n  %v\nwant what the source reads as\n  %v", out, after, original)
 			}
 		})
 	}
+}
 
-	if !hasMalformedHexViolation([]error{fmt.Errorf("page 1: %w", parser.ErrHexStringOddDigits)}) {
-		t.Error("a wrapped sentinel is not matched")
+// hexViolations counts the violations that wrap one of the two hex-string
+// sentinels.
+func hexViolations(violations []error) int {
+	n := 0
+	for _, v := range violations {
+		if errors.Is(v, parser.ErrHexStringOddDigits) || errors.Is(v, parser.ErrHexStringInvalidChar) {
+			n++
+		}
 	}
-	if hasMalformedHexViolation([]error{errors.New("compliance: " + oddHexDigits), nil}) {
-		t.Error("the wording alone was matched, without the sentinel")
+	return n
+}
+
+// TestWellFormedHexString pins the spelling: the hexadecimal digits as
+// written, a final 0 when their count is odd, and nothing for a well-formed
+// string, white space inside it included.
+func TestWellFormedHexString(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		tok, want string
+		malformed bool
+	}{
+		{"<48656C6C6>", "<48656C6C60>", true},
+		{"<41!4>", "<4140>", true},
+		{"<41!>", "<41>", true},
+		{"<4 1 4>", "<4140>", true},
+		{"<41\x80>", "<41>", true},
+		{"<4141>", "", false},
+		{"<41 41>", "", false},
+		{"<>", "", false},
+	} {
+		got, malformed := wellFormedHexString(tt.tok)
+		if got != tt.want || malformed != tt.malformed {
+			t.Errorf("wellFormedHexString(%q) = %q, %v; want %q, %v", tt.tok, got, malformed, tt.want, tt.malformed)
+		}
 	}
 }
 
