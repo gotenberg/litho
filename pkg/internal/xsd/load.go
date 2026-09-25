@@ -177,6 +177,9 @@ func linkType(s *Schema, t Type) error {
 		if tt.Union {
 			return linkUnion(s, tt)
 		}
+		if tt.List {
+			return linkList(s, tt)
+		}
 	case *ComplexType:
 		if !tt.BaseRef.IsZero() {
 			base, err := lookupType(s, tt.BaseRef)
@@ -218,6 +221,25 @@ func linkUnion(s *Schema, st *SimpleType) error {
 		members = append(members, inline)
 	}
 	st.Members = members
+	return nil
+}
+
+// linkList resolves the {item type definition} of the list st, per XML
+// Schema Part 1, 3.14.2: the type its itemType attribute names, or else its
+// xs:simpleType child.
+func linkList(s *Schema, st *SimpleType) error {
+	if st.InlineItem != nil {
+		if err := linkType(s, st.InlineItem); err != nil {
+			return err
+		}
+		st.ItemType = st.InlineItem
+		return nil
+	}
+	item, err := lookupType(s, st.ItemRef)
+	if err != nil {
+		return err
+	}
+	st.ItemType = item
 	return nil
 }
 
@@ -313,7 +335,7 @@ func lookupType(s *Schema, qn QName) (Type, error) {
 		}
 	}
 	if IsBuiltin(qn) {
-		return &BuiltinType{Name: qn}, nil
+		return newBuiltinTypeRegistry()[qn], nil
 	}
 	return nil, fmt.Errorf("%w: %s", ErrUnresolvedRef, qn)
 }
@@ -429,7 +451,15 @@ type rawAttribute struct {
 type rawSimpleType struct {
 	Name        string          `xml:"name,attr"`
 	Restriction *rawRestriction `xml:"restriction"`
+	List        *rawList        `xml:"list"`
 	Union       *rawUnion       `xml:"union"`
+}
+
+// rawList captures an xs:list, XML Schema Part 1, 3.14.2: an itemType QName
+// or an xs:simpleType child.
+type rawList struct {
+	ItemType   string         `xml:"itemType,attr"`
+	SimpleType *rawSimpleType `xml:"simpleType"`
 }
 
 // rawUnion captures an xs:union, XML Schema Part 1, 3.14.2: a memberTypes
@@ -746,6 +776,9 @@ func buildSimpleType(doc *schemaDoc, raw *rawSimpleType) (*SimpleType, error) {
 	if raw.Union != nil {
 		return st, buildUnion(doc, raw.Union, st)
 	}
+	if raw.List != nil {
+		return st, buildList(doc, raw.List, st)
+	}
 	if raw.Restriction == nil {
 		return st, nil
 	}
@@ -779,6 +812,31 @@ func buildUnion(doc *schemaDoc, raw *rawUnion, st *SimpleType) error {
 		}
 		st.InlineMembers = append(st.InlineMembers, member)
 	}
+	return nil
+}
+
+// buildList fills st from an xs:list child. Per XML Schema Part 1, 3.14.3
+// (src-list-itemType-or-simpleType) the xs:list carries an itemType
+// attribute or an xs:simpleType child, never both nor neither.
+func buildList(doc *schemaDoc, raw *rawList, st *SimpleType) error {
+	st.List = true
+	if (raw.ItemType == "") == (raw.SimpleType == nil) {
+		return fmt.Errorf("%w: xs:list of %q needs exactly one of itemType and an xs:simpleType child",
+			ErrSchemaParse, st.Name.Local)
+	}
+	if raw.SimpleType != nil {
+		item, err := buildSimpleType(doc, raw.SimpleType)
+		if err != nil {
+			return err
+		}
+		st.InlineItem = item
+		return nil
+	}
+	ref, err := doc.parseQName(raw.ItemType)
+	if err != nil {
+		return err
+	}
+	st.ItemRef = ref
 	return nil
 }
 

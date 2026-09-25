@@ -102,8 +102,8 @@ type BuiltinType struct {
 func (t *BuiltinType) QName() QName { return t.Name }
 func (t *BuiltinType) isType()      {}
 
-// SimpleType models an xs:simpleType declaration, derived by xs:restriction
-// or by xs:union. Derivation by xs:list is out of scope per the CII subset.
+// SimpleType models an xs:simpleType declaration, derived by
+// xs:restriction, by xs:list or by xs:union.
 type SimpleType struct {
 	// Name is the qualified name of the type. Zero-value when the
 	// type is anonymous (inlined on an element or attribute).
@@ -136,6 +136,21 @@ type SimpleType struct {
 	MemberRefs []QName
 	// InlineMembers holds the xs:simpleType children of xs:union.
 	InlineMembers []*SimpleType
+	// List reports derivation by xs:list (XML Schema Part 2, 2.5.1.2): a
+	// value is a finite sequence of items of ItemType, and its literal the
+	// item literals separated by white space. Base, BaseRef and Facets are
+	// then unset: a list declares no facet itself, a restriction of it
+	// does.
+	List bool
+	// ItemType is the {item type definition} of a list, per XML Schema Part
+	// 1, 3.14.2 the type the itemType attribute names, or else the
+	// xs:simpleType child of xs:list. Resolved during the link pass from
+	// ItemRef or InlineItem.
+	ItemType Type
+	// ItemRef holds the unresolved QName of the itemType attribute.
+	ItemRef QName
+	// InlineItem holds the xs:simpleType child of xs:list.
+	InlineItem *SimpleType
 }
 
 // QName implements [Type].

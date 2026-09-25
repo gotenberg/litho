@@ -43,7 +43,8 @@ func (v FacetViolation) Error() string {
 // "A  B" as xs:token are therefore the valid value "A B".
 //
 // A type whose restriction chain reaches an xs:union is validated as
-// [resolveUnionValue] describes.
+// [resolveUnionValue] describes, and one whose chain reaches an xs:list as
+// [resolveListValue] does.
 //
 // # Corpus evidence
 //
@@ -66,11 +67,13 @@ func ValidateValue(value string, t Type) []FacetViolation {
 // It is an anti-DoS guard, not a limit XSD imposes: per XML Schema Part 2,
 // 2.5.1.3 a union tries its member types in order, and a member may be a
 // union itself, so a schema that nests wide unions multiplies the work at
-// every level, up to [maxTypeDerivationDepth] levels. Once spent, a value
-// is accepted, as a truncated derivation walk accepts it.
+// every level, up to [maxTypeDerivationDepth] levels. The items of a list
+// (2.5.1.2) share the budget of the list value. Once spent, a value is
+// accepted, as a truncated derivation walk accepts it.
 //
 // 1024 sits far above real schemas: the one union of the bundled schemas,
-// ZUGFeRD 1.0's DateMandatoryDateTimeType, has two built-in members.
+// ZUGFeRD 1.0's DateMandatoryDateTimeType, has two built-in members, and
+// no bundled schema derives a list.
 const maxUnionMemberChecks = 1024
 
 // resolvedValue is a value as the type it was validated against sees it.
@@ -93,9 +96,12 @@ func resolveValue(value string, t Type, depth int, budget *int) resolvedValue {
 	if t == nil {
 		return resolvedValue{normalized: value}
 	}
-	steps, base, union := walkDerivation(t)
-	if union != nil {
-		return resolveUnionValue(value, steps, union, depth, budget)
+	steps, base, variety := walkDerivation(t)
+	switch {
+	case variety != nil && variety.Union:
+		return resolveUnionValue(value, steps, variety, depth, budget)
+	case variety != nil && variety.List:
+		return resolveListValue(value, steps, variety, depth, budget)
 	}
 	normalized := applyWhitespace(value, steps, base)
 
@@ -152,6 +158,91 @@ func resolveUnionValue(value string, steps [][]Facet, u *SimpleType, depth int, 
 		Value:  value,
 		Reason: fmt.Sprintf("value is valid for none of the union's member types %v", names),
 	}}}
+}
+
+// resolveListValue validates value against a type whose restriction chain
+// reaches the list l, the restrictions above it contributing steps.
+//
+// Per XML Schema Part 2, 2.5.1.2 the value of a list is a finite sequence of
+// items of its itemType, and its literal the item literals separated by
+// white space. Per 4.3.6 the white space of a list is collapsed, a mode no
+// schema changes, so the normalized value splits at each space into items,
+// and each item is validated against the itemType as a value of its own.
+// The facets of the steps above the list then judge the whole: per 2.5.1.2
+// the length, minLength and maxLength facets count list items, and a
+// pattern matches the literal of the list, not of each item. Per 4.1.5
+// those, enumeration and whiteSpace are the only facets a list admits: any
+// other is a schema error the instance is not blamed for.
+//
+// The items share the budget of the value ([maxUnionMemberChecks]), so the
+// work a list of union-typed items costs stays bounded like that of one
+// union value, and an item left once the budget is spent is accepted.
+//
+// # Corpus evidence
+//
+//   - All corpora: no bundled schema derives a list or names NMTOKENS,
+//     IDREFS or ENTITIES, so no value of the 159 files that embed XML
+//     reaches this function and no verdict moves.
+func resolveListValue(value string, steps [][]Facet, l *SimpleType, depth int, budget *int) resolvedValue {
+	normalized := whitespaceCollapse(value)
+	out := resolvedValue{normalized: normalized}
+	if depth >= maxTypeDerivationDepth {
+		// A deeper nesting is a truncated walk, which is not blamed on the
+		// instance: see [maxTypeDerivationDepth].
+		return out
+	}
+	var items []string
+	if normalized != "" {
+		items = strings.Split(normalized, " ")
+	}
+	for _, item := range items {
+		for _, fv := range resolveValue(item, l.ItemType, depth+1, budget).violations {
+			out.violations = append(out.violations, FacetViolation{
+				Facet:  fv.Facet,
+				Value:  item,
+				Reason: fmt.Sprintf("list item %q: %s", item, fv.Reason),
+			})
+		}
+	}
+	out.violations = append(out.violations, listFacetViolations(normalized, len(items), steps)...)
+	return out
+}
+
+// listFacetViolations applies the facets of steps, the restrictions of a
+// list, to the list's normalized literal and its count of items, as
+// [resolveListValue] describes. Enumeration compares literals, as
+// [validateEnumeration] does for every type.
+func listFacetViolations(normalized string, count int, steps [][]Facet) []FacetViolation {
+	var out []FacetViolation
+	if v := validateEnumeration(normalized, steps); v != nil {
+		out = append(out, *v)
+	}
+	for _, step := range steps {
+		if v := validatePatterns(normalized, step); v != nil {
+			out = append(out, *v)
+		}
+		for _, f := range step {
+			var reason string
+			switch fc := f.(type) {
+			case Length:
+				if count != fc.Value {
+					reason = fmt.Sprintf("%d list items, where exactly %d are required", count, fc.Value)
+				}
+			case MinLength:
+				if count < fc.Value {
+					reason = fmt.Sprintf("%d list items below minimum %d", count, fc.Value)
+				}
+			case MaxLength:
+				if count > fc.Value {
+					reason = fmt.Sprintf("%d list items above maximum %d", count, fc.Value)
+				}
+			}
+			if reason != "" {
+				out = append(out, FacetViolation{Facet: f, Value: normalized, Reason: reason})
+			}
+		}
+	}
+	return out
 }
 
 // unionFacets keeps the pattern and enumeration facets of steps, the only
@@ -217,9 +308,10 @@ func stepViolations(normalized string, steps [][]Facet, base *BuiltinType) []Fac
 // enumerations of one step form one set (4.3.5.3), and its patterns are
 // alternatives (4.3.4.3).
 //
-// A chain that reaches an xs:union ends there, and the union is the third
-// result, nil when the chain ends on a built-in or on nothing. A union
-// has no built-in of its own: its member types each name theirs.
+// A chain that reaches an xs:union or an xs:list ends there, and that type
+// is the third result, nil when the chain ends on a built-in or on nothing.
+// Neither has a built-in of its own: the member types of a union each name
+// theirs, and so does the item type of a list.
 //
 // The walk is iterative and bounded by [maxTypeDerivationDepth]. A
 // schema may declare a simpleType that restricts itself, directly or
@@ -231,7 +323,7 @@ func stepViolations(normalized string, steps [][]Facet, base *BuiltinType) []Fac
 func walkDerivation(t Type) ([][]Facet, *BuiltinType, *SimpleType) {
 	var steps [][]Facet
 	var base *BuiltinType
-	var union *SimpleType
+	var variety *SimpleType
 
 	cur := t
 walk:
@@ -242,8 +334,8 @@ walk:
 			base = tt
 			break walk
 		case *SimpleType:
-			if tt.Union {
-				union = tt
+			if tt.Union || tt.List {
+				variety = tt
 				break walk
 			}
 			// Prepend so the chain reads base first, which is the order
@@ -271,7 +363,7 @@ walk:
 			break walk
 		}
 	}
-	return steps, base, union
+	return steps, base, variety
 }
 
 // applyWhitespace normalizes value under the mode [effectiveWhiteSpace]

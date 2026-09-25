@@ -109,6 +109,8 @@ func FuzzXSDLoadThenValidate(f *testing.F) {
 	f.Add([]byte(leafTextXSD), []byte(`<Invoice xmlns="urn:t" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Party xsi:nil="true"><Name/></Party></Invoice>`))
 	f.Add([]byte(anyAttributeXSD), []byte(`<Root xmlns="urn:t" xmlns:a="urn:a"><Wide a:x="1"/><Code foo="1">A</Code></Root>`))
 	f.Add([]byte(unionXSD), []byte(`<Invoice xmlns="urn:t"><IssueDateTime>2026-01-01</IssueDateTime><Small>2</Small></Invoice>`))
+	f.Add([]byte(listXSD), []byte(`<Root xmlns="urn:t" sizes="1 x"><Flags>true 0 yes</Flags><Tokens/></Root>`))
+	f.Add([]byte(selfListXSD), []byte(`<Root xmlns="urn:t">a b c</Root>`)) // A list of itself.
 	f.Add([]byte(minimalXSD[:len(minimalXSD)/2]), []byte(payload))
 	f.Add([]byte(""), []byte(""))
 

@@ -27,6 +27,7 @@ var builtinNames = []string{
 	"NCName",
 	"ID",
 	"IDREF",
+	"ENTITY",
 	"anyURI",
 	"QName",
 	"boolean",
@@ -61,28 +62,51 @@ var builtinNames = []string{
 	"anySimpleType",
 }
 
+// builtinLists maps each built-in type derived by list to its item type,
+// per XML Schema Part 2, 3.3.5 (NMTOKENS), 3.3.10 (IDREFS) and 3.3.12
+// (ENTITIES). Each also fixes minLength 1: an empty list is not one of its
+// values.
+//
+//nolint:gochecknoglobals // immutable type registry.
+var builtinLists = map[string]string{
+	"NMTOKENS": "NMTOKEN",
+	"IDREFS":   "IDREF",
+	"ENTITIES": "ENTITY",
+}
+
 // newBuiltinTypeRegistry returns a fresh map seeded with one
-// [BuiltinType] per name in [builtinNames]. The map is owned by the
-// caller; the loader copies entries into a Schema's Types index so
-// imported schemas see the same primitives.
+// [BuiltinType] per name in [builtinNames], and one [SimpleType] per
+// built-in list type ([builtinLists]): a restriction to minLength 1 of a
+// list of its item type. The map is owned by the caller; the loader
+// copies entries into a Schema's Types index so imported schemas see the
+// same primitives.
 func newBuiltinTypeRegistry() map[QName]Type {
-	out := make(map[QName]Type, len(builtinNames))
+	out := make(map[QName]Type, len(builtinNames)+len(builtinLists))
 	for _, name := range builtinNames {
 		qn := QName{Namespace: XSNamespace, Local: name}
 		out[qn] = &BuiltinType{Name: qn}
+	}
+	for name, item := range builtinLists {
+		qn := QName{Namespace: XSNamespace, Local: name}
+		out[qn] = &SimpleType{
+			Name:   qn,
+			Base:   &SimpleType{List: true, ItemType: out[QName{Namespace: XSNamespace, Local: item}]},
+			Facets: []Facet{MinLength{Value: 1}},
+		}
 	}
 	return out
 }
 
 // IsBuiltin reports whether qn names a pre-registered XS-namespace
-// primitive. Useful for the link pass to avoid emitting an
-// "unresolved reference" diagnostic on a missing user type when the
-// reference is actually to a built-in.
+// type, a primitive or a built-in list. Useful for the link pass to
+// avoid emitting an "unresolved reference" diagnostic on a missing user
+// type when the reference is actually to a built-in.
 func IsBuiltin(qn QName) bool {
 	if qn.Namespace != XSNamespace {
 		return false
 	}
-	return slices.Contains(builtinNames, qn.Local)
+	_, list := builtinLists[qn.Local]
+	return list || slices.Contains(builtinNames, qn.Local)
 }
 
 // validateLexical checks value against the lexical space of base.
