@@ -92,11 +92,23 @@ func fixHexString(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 // Re-serialising the parsed operations instead, as this repair used to, could
 // not round-trip an inline image: the parser consumes its data off-token, so a
 // page holding one came back as "<< ... >> BI" with no ID, data or EI, a
-// content stream no reader can parse (ISO 32000-1, 8.9.7). A hex string inside
-// an inline image's own dictionary is left as written: the walk skips the
-// dictionary with the data, which it cannot address token by token.
+// content stream no reader can parse (ISO 32000-1, 8.9.7).
+//
+// A hex string inside an inline image's own dictionary, such as the lookup
+// table of an Indexed colour space, is respelled too
+// ([inlineImageDictSplices]), and the image data after the ID is carried
+// across byte for byte. The walk used to skip the dictionary with the data, so
+// a malformed string there stayed a residual after remediation: litho and
+// veraPDF both state ISO 19005-2, 6.1.6 t1 and t2 for it.
+//
+// # Corpus evidence
+//
+//   - All corpora: of the 229,692 inline images 134 files draw, one holds a
+//     hex string in its dictionary, well formed, in pdfjs TAMReview.pdf. The
+//     repair writes every file as it did when it skipped the dictionaries, and
+//     so does the undefined-operator repair, which shares the token walk.
 func respellHexStrings(ctx context.Context, data []byte) ([]byte, int) {
-	splices, _ := contentTokenSplices(ctx, data, func(tok lexer.Token, _ int) (string, bool) {
+	splices, _ := contentTokenSplices(ctx, data, func(tok lexer.Token, _ tokenPlace) (string, bool) {
 		if tok.Type != lexer.TokenHexString {
 			return "", false
 		}

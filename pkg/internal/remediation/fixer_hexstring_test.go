@@ -185,6 +185,9 @@ func TestRespellHexStringsAgreesWithTheParser(t *testing.T) {
 		{"inside an array", "BT [<414> 120 <42>] TJ ET", 1},
 		{"inside a property list", "/Span << /ActualText <FEFF004> >> BDC EMC", 1},
 		{"two on one page", "BT <414> Tj <4!2> Tj ET", 2},
+		{"an inline image's Indexed lookup", "q BI /W 1 /H 1 /BPC 8 /CS [/I /RGB 0 <FF000>] ID \x00 EI Q", 1},
+		{"an invalid character in an inline image dictionary", "BI /W 1 /H 1 /BPC 8 /CS [/I /G 1 <0!F>] ID \x00 EI", 1},
+		{"inline image data that reads like one", "BI /W 5 /H 1 /BPC 8 /CS /G ID <414> EI", 0},
 		// The parser records a scientific-notation real as a format
 		// violation too, which the hex fixer does not repair.
 		{"another parse violation", "1.5e2 0 Td", 0},

@@ -379,8 +379,8 @@ func separateGluedOperators(ops []content.Operation) ([]content.Operation, int) 
 // exponents go too, since veraPDF stops reading a stream at one inside an
 // array or a dictionary; PDF.js reads such a number the same way there, the
 // rest being a command an array or a dictionary drops. An inline image's
-// dictionary is left as written: the walk skips it with its data, which it
-// cannot address token by token.
+// dictionary is left as written, as it was when the token walk skipped the
+// dictionary with the image's data.
 //
 // The rewrite splices the tokens in place, so the stream's other bytes, inline
 // image data included, are carried across unchanged. A stream the lexer cannot
@@ -399,12 +399,12 @@ func separateGluedOperators(ops []content.Operation) ([]content.Operation, int) 
 //     and veraPDF report the same violations on it as before.
 func rewriteExponentNumbers(ctx context.Context, data []byte, part int) ([]byte, int) {
 	operands := 0
-	splices, complete := contentTokenSplices(ctx, data, func(tok lexer.Token, depth int) (string, bool) {
-		if tok.Type != lexer.TokenNumber || !strings.ContainsAny(tok.Value, "eE") {
+	splices, complete := contentTokenSplices(ctx, data, func(tok lexer.Token, at tokenPlace) (string, bool) {
+		if tok.Type != lexer.TokenNumber || at.inlineImage || !strings.ContainsAny(tok.Value, "eE") {
 			return "", false
 		}
 		text, ok := plainNumber(exponentMantissa(tok.Value), part)
-		if ok && depth == 0 {
+		if ok && at.depth == 0 {
 			operands++
 		}
 		return text, ok
@@ -479,8 +479,8 @@ func exponentMantissa(tok string) string {
 //     19005-2, 6.2.11.5 t1; ISO 19005-4, 6.2.10.5 t1), since the d1 keeps the
 //     width /Widths gives, and the text and images do not change.
 func rewriteNonFiniteNumbers(ctx context.Context, data []byte) ([]byte, int) {
-	splices, _ := contentTokenSplices(ctx, data, func(tok lexer.Token, depth int) (string, bool) {
-		if tok.Type != lexer.TokenKeyword || depth != 0 || !nonFiniteNumber(tok.Value) {
+	splices, _ := contentTokenSplices(ctx, data, func(tok lexer.Token, at tokenPlace) (string, bool) {
+		if tok.Type != lexer.TokenKeyword || at.depth != 0 || !nonFiniteNumber(tok.Value) {
 			return "", false
 		}
 		return "0", true
