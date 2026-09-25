@@ -283,10 +283,33 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 	return withoutZeroRule(results)
 }
 
-// checkOperandLimits checks the string, integer and real operands of one
-// parsed content stream, object objNum, against the implementation limits.
+// checkOperandLimits checks the strings, integers and reals of one parsed
+// content stream, object objNum, against the implementation limits: every
+// operand, and every one an array or a dictionary operand holds at any depth.
 // overflow counts the integer literals past the 64-bit range the parse read as
 // reals (see [checkNumberLimits]), and is consumed.
+//
+// ISO 19005-1, 6.1.12 and ISO 19005-2, 6.1.13 bound every integer, real and
+// string the file contains, and an operand array or dictionary holds some: a
+// dash array (ISO 32000-1, 8.4.3.6), a TJ array (9.4.3), a marked-content
+// property list (14.6.2) and an inline image's dictionary (8.9.7). veraPDF
+// judges each of them whole: measured with veraPDF 1.30 at PDF/A-1b and
+// PDF/A-2b, an integer, a real, a denormal real, a long string, a "-" and a
+// "1.5.5" there fail their limit once each, in an array or a dictionary nested
+// in one too, as they fail it written as an operand. The parse reads the
+// numbers of an array or a dictionary as veraPDF reads them, the "-" being the
+// largest integer veraPDF gives a number and the "1.5.5" the largest real (see
+// [content.ParseStreamData]).
+//
+// An array or a dictionary is judged whatever operator takes it, as the
+// clauses state their limits. veraPDF judges the arrays and dictionaries its
+// operators link alone: the ones above, and the numbers of an array given to
+// c, cm, d1, l, m, re, Tm, v or y. Measured the same way, an integer past the
+// limit in an array given to w, or in a dictionary given to w or BMC, fails
+// nothing. A string past the limit as the /ActualText or /Alt of a property
+// list fails the string limit twice, once as a value of the list and once as
+// the text veraPDF reads for the marked content. Such a string is one string
+// of the file, and is judged once.
 //
 // The operands of an operator ISO 32000-1, Annex A does not define are not
 // checked. ISO 19005-1, 6.2.10 t1 and ISO 19005-2, 6.2.2 t1 already fail the
@@ -303,52 +326,76 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 //   - pdfjs issue5039.pdf: a Type3 glyph writes "-inf" four times, which
 //     veraPDF reads as the integer -9223372036854775807 and the undefined
 //     operator inf, and it reports the operators alone.
+//   - All corpora: judging the numbers of arrays and dictionaries changes
+//     what compliance reports on 3 files at PDF/A-1b and PDF/A-2b, veraPDF
+//     files at their own profile, all of them pdfjs, each a "-" in a TJ
+//     array that fails the integer limit once.
+//   - pdfjs bug1354114.pdf and bug1953099.pdf: veraPDF reports that integer,
+//     and no other limit, in both. veraPDF cannot open bug1130815.pdf.
 func checkOperandLimits(ops []content.Operation, overflow map[float64]int, objNum, maxStr int, profile string) []Violation {
-	part := PDFAPart(profile)
-	where := fmt.Sprintf("object %d (stream content)", objNum)
-	var results []Violation
+	l := operandLimits{
+		where:    fmt.Sprintf("object %d (stream content)", objNum),
+		maxStr:   maxStr,
+		part:     PDFAPart(profile),
+		profile:  profile,
+		overflow: overflow,
+	}
 	for _, op := range ops {
 		if !content.IsOperator(op.Operator) {
 			continue
 		}
 		for _, operand := range op.Operands {
-			switch v := operand.(type) {
-			case ast.PdfString:
-				if len(v) > maxStr {
-					results = append(results, Violation{
-						Rule:    stringLengthRule(profile),
-						Context: fmt.Sprintf("%s: string length %d exceeds %d", where, len(v), maxStr),
-					})
-				}
-			case ast.PdfInt:
-				val := int64(v)
-				if val > maxIntegerValue || val < minIntegerValue {
-					results = append(results, noteSaturated([]Violation{{
-						Rule:    integerRangeRule(profile),
-						Context: fmt.Sprintf("%s: integer %d out of range", where, val),
-					}}, v)...)
-				}
-			case ast.PdfReal:
-				results = append(results, noteSaturated(checkNumberLimits(float64(v), part, profile, where, overflow), v)...)
-			case ast.PdfArray:
-				// TJ arrays carry strings and displacement numbers alike.
-				for _, elem := range v {
-					switch e := elem.(type) {
-					case ast.PdfString:
-						if len(e) > maxStr {
-							results = append(results, Violation{
-								Rule:    stringLengthRule(profile),
-								Context: fmt.Sprintf("%s: string length %d exceeds %d", where, len(e), maxStr),
-							})
-						}
-					case ast.PdfReal:
-						results = append(results, noteSaturated(checkNumberLimits(float64(e), part, profile, where, overflow), e)...)
-					}
-				}
-			}
+			l.judge(operand)
 		}
 	}
-	return results
+	return l.results
+}
+
+// operandLimits carries one [checkOperandLimits] run over the operands of a
+// content stream: where names the stream in the context of a violation,
+// maxStr is the string limit of the part, and overflow counts the integer
+// literals the parse read as reals (see [checkNumberLimits]).
+type operandLimits struct {
+	where    string
+	maxStr   int
+	part     int
+	profile  string
+	overflow map[float64]int
+	results  []Violation
+}
+
+// judge checks one operand, and every string, integer and real an array or a
+// dictionary operand holds at any depth, dictionary values in key order. The
+// recursion is bounded by the nesting the parser reads (maxParseNestingDepth
+// in the parser package).
+func (l *operandLimits) judge(obj ast.PdfObject) {
+	switch v := obj.(type) {
+	case ast.PdfString:
+		if len(v) > l.maxStr {
+			l.results = append(l.results, Violation{
+				Rule:    stringLengthRule(l.profile),
+				Context: fmt.Sprintf("%s: string length %d exceeds %d", l.where, len(v), l.maxStr),
+			})
+		}
+	case ast.PdfInt:
+		val := int64(v)
+		if val > maxIntegerValue || val < minIntegerValue {
+			l.results = append(l.results, noteSaturated([]Violation{{
+				Rule:    integerRangeRule(l.profile),
+				Context: fmt.Sprintf("%s: integer %d out of range", l.where, val),
+			}}, v)...)
+		}
+	case ast.PdfReal:
+		l.results = append(l.results, noteSaturated(checkNumberLimits(float64(v), l.part, l.profile, l.where, l.overflow), v)...)
+	case ast.PdfArray:
+		for _, elem := range v {
+			l.judge(elem)
+		}
+	case ast.PdfDict:
+		for _, key := range slices.Sorted(maps.Keys(v)) {
+			l.judge(v[key])
+		}
+	}
 }
 
 // countOverflows counts, by value, the integer literals past the 64-bit range
