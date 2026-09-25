@@ -43,20 +43,11 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// [markJudgedContents].
 		hasContent := len(p.content) > 0 && !p.contentJudged
 
-		// §6.2.2 t2/t3: resource completeness against the page's OWN
-		// Resources, with names resolvable only through Pages-tree
-		// inheritance reported separately. A name resolved solely via the
-		// inherited Pages-tree /Resources is an inherited reference (t2); a
-		// name resolved nowhere is undefined (t3). Conflating own-or-fallback
-		// page resources hides this distinction.
+		// §6.2.2 t2/t3: resource completeness; see [pageResourceScopes].
 		if hasContent {
 			ops := p.parsedOps(ctx)
 			if ops != nil {
-				ownRes := resolveResources(ctx, doc, page)
-				var inheritedRes ast.PdfDict
-				if pagesDict, err := document.ResolveDict(ctx, doc, vctx.catalog["Pages"]); err == nil && pagesDict != nil {
-					inheritedRes = resolveResources(ctx, doc, pagesDict)
-				}
+				ownRes, inheritedRes := pageResourceScopes(ctx, doc, page)
 				_, _, _, selected, _ := scanContentStreamDeviceCS(ctx, ops, collectPatternCSNames(ctx, doc, res))
 				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, selected.patterns, ownRes, inheritedRes, part, i+1, false)...)
 				// Check inline image /Intent values from parsed BI operations.
@@ -91,6 +82,33 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	doc.Logger.Debug("compliance.graphics: checks complete", "violations", len(results))
 	return results
+}
+
+// pageResourceScopes returns the resource dictionaries a page's content
+// resolves its names against for [checkContentStreamResourcesOps]: its own
+// /Resources, and the one an ancestor in the page tree lends it.
+//
+// ISO 32000-1, 7.7.3.4 makes /Resources inheritable: a page with none of its
+// own uses the nearest ancestor's, and a page with its own uses those alone.
+// Every name the first resolves is an inherited reference, ISO 19005-2/3/4,
+// 6.2.2 t2, and a name the second's dictionary lacks is undefined, ISO
+// 19005-4, 6.2.2 t3, whatever an ancestor defines. Measured with veraPDF 1.30
+// at PDF/A-2b and PDF/A-4 on one-page fixtures whose page tree defines /GS0:
+// "/GS0 gs" fails t2 on a page with no /Resources, and fails nothing at
+// PDF/A-2b and t3 at PDF/A-4 on a page whose /Resources hold no /ExtGState or
+// another ExtGState name.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5954.pdf: its page's /Resources lack the /F1 its content
+//     selects, which the page tree defines, and veraPDF fails no t2 at
+//     PDF/A-2b, where litho failed it once. It is the only file whose count
+//     moves.
+func pageResourceScopes(ctx context.Context, doc *document.Document, page ast.PdfDict) (own, inherited ast.PdfDict) {
+	if own = resolveResources(ctx, doc, page); own != nil {
+		return own, nil
+	}
+	return nil, resolveInheritedResources(ctx, doc, page)
 }
 
 // checkDrawnStream states the content-stream rules for one stream

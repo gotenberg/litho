@@ -210,3 +210,47 @@ func TestRenderingIntentInEveryStream(t *testing.T) {
 		}
 	}
 }
+
+// TestPageResourcesInheritOnlyIntoAPageWithNone pins [pageResourceScopes]: a
+// page with no /Resources resolves its names through the page tree, each an
+// inherited reference (6.2.2 t2), and a page with /Resources of its own
+// resolves them there alone, a name they lack being undefined (t3) whatever
+// the page tree defines. Measured with veraPDF 1.30 at PDF/A-2b and PDF/A-4.
+func TestPageResourcesInheritOnlyIntoAPageWithNone(t *testing.T) {
+	t.Parallel()
+
+	objs := func(pageRes string) []string {
+		page := "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R"
+		if pageRes != "" {
+			page += " /Resources " + pageRes
+		}
+		return []string{
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 /Resources << /ExtGState << /GS0 5 0 R >> >> >>",
+			page + " >>", exponentStream("", "/GS0 gs"), "<< /Type /ExtGState /LW 1 >>",
+		}
+	}
+	for _, c := range []struct {
+		name                 string
+		pageRes              string
+		inherited, undefined int
+	}{
+		{"a page with no resources", "", 1, 0},
+		{"a page with resources and no ExtGState", "<< /ProcSet [/PDF] >>", 0, 1},
+		{"a page with another ExtGState", "<< /ExtGState << /GS1 5 0 R >> >>", 0, 1},
+	} {
+		for _, profile := range []models.PDFAProfile{models.PDFA2b, models.PDFA4} {
+			t.Run(c.name+" "+string(profile), func(t *testing.T) {
+				t.Parallel()
+				wantUndefined := c.undefined
+				if profile == models.PDFA2b {
+					wantUndefined = 0
+				}
+				inherited, undefined, _ := resourceRuleCounts(t, profile, objs(c.pageRes))
+				if inherited != c.inherited || undefined != wantUndefined {
+					t.Errorf("6.2.2 t2 fired %d times and t3 %d, want %d and %d", inherited, undefined, c.inherited, wantUndefined)
+				}
+			})
+		}
+	}
+}
