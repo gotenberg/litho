@@ -16,8 +16,8 @@ import (
 )
 
 // TestClampContentNumbers pins that the content-limits repair respells, in
-// place, every number of a content stream past the limits of the part,
-// wherever it stands: an operand, an element of a nested array, a value of a
+// place, every number of a content stream past the limits of the part that
+// compliance judges: an operand, an element of a nested array, a value of a
 // property list or of an inline image's dictionary. A number the part admits,
 // a run that spells no number and a number written with an exponent are left
 // as written.
@@ -50,7 +50,7 @@ func TestClampContentNumbers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			out, tally := clampContentNumbers(context.Background(), []byte(tc.data), tc.part)
+			out, tally := clampContentNumbers(context.Background(), []byte(tc.data), tc.part, false)
 			n := tally.clamped
 			if n != tc.n {
 				t.Errorf("clamped %d numbers, want %d", n, tc.n)
@@ -72,7 +72,7 @@ func TestClampContentNumbersPastADouble(t *testing.T) {
 	t.Parallel()
 
 	for _, part := range []int{1, 2} {
-		out, tally := clampContentNumbers(context.Background(), []byte(strings.Repeat("9", 400)+" 0 m"), part)
+		out, tally := clampContentNumbers(context.Background(), []byte(strings.Repeat("9", 400)+" 0 m"), part, false)
 		n := tally.clamped
 		if n != 1 {
 			t.Fatalf("part %d: clamped %d numbers, want 1", part, n)
@@ -125,7 +125,7 @@ func TestClampContentNumbersSplitsTranslations(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			out, tally := clampContentNumbers(context.Background(), []byte(tc.data), tc.part)
+			out, tally := clampContentNumbers(context.Background(), []byte(tc.data), tc.part, false)
 			if tally.clamped != tc.clamped || tally.split != tc.split {
 				t.Errorf("clamped %d numbers and split %d translations, want %d and %d", tally.clamped, tally.split, tc.clamped, tc.split)
 			}
@@ -316,4 +316,95 @@ func TestFixContentLimitsLeavesNumbersThePartAdmits(t *testing.T) {
 			t.Errorf("%s: the content stream was rewritten", tc.profile)
 		}
 	}
+}
+
+// TestClampContentNumbersRepairsWhatComplianceJudges pins that the
+// content-limits repair respells exactly the numbers compliance reports past
+// the limits: the ones the operator taking them reads
+// ([compliance.ContentOperandLink]) while the stream processes its colour
+// operators ([compliance.ColourState]). Each stream is validated as the
+// content of a page, or as the cell of an uncoloured tiling pattern, and the
+// repair respells as many numbers as compliance reports.
+func TestClampContentNumbersRepairsWhatComplianceJudges(t *testing.T) {
+	t.Parallel()
+
+	const (
+		big  = "99999999999"
+		path = " 0 0 m 10 10 l S"
+	)
+	for _, tc := range []struct {
+		name, data string
+		uncoloured bool
+		want       string
+	}{
+		{name: "the operand of w", data: big + " w" + path, want: "32767 w" + path},
+		{name: "an extra operand before w", data: big + " 1 w" + path},
+		{name: "an array before w", data: "[" + big + "] 1 w" + path},
+		{name: "a dictionary before BMC", data: "<< /X " + big + " >> /Tag BMC EMC"},
+		{name: "a number before q", data: big + " q Q"},
+		{name: "a number before an undefined operator", data: big + " foo"},
+		{name: "a real given to J", data: "99999.5 J" + path},
+		{name: "an integer given to J", data: big + " J" + path, want: "32767 J" + path},
+		{name: "an array element of m", data: "[" + big + "] 1 1 m 10 10 l S", want: "[32767] 1 1 m 10 10 l S"},
+		{name: "a nested array element of d", data: "[[" + big + "] 2] 0 d" + path, want: "[[32767] 2] 0 d" + path},
+		{name: "g after d1", data: "10 0 0 0 10 10 d1 " + big + " g" + path},
+		{name: "g after the Q closing a d1", data: "q 10 0 0 0 10 10 d1 Q " + big + " g" + path, want: "q 10 0 0 0 10 10 d1 Q 32767 g" + path},
+		{name: "w after d1", data: "10 0 0 0 10 10 d1 " + big + " w" + path, want: "10 0 0 0 10 10 d1 32767 w" + path},
+		{name: "g in an uncoloured cell", data: big + " g 0 0 10 10 re f", uncoloured: true},
+		{name: "an inline image in an uncoloured cell", data: "q BI /W 1 /H 1 /BPC 8 /CS /G /X " + big + " ID \x00 EI Q", uncoloured: true},
+		{
+			name: "an image mask in an uncoloured cell", data: "q BI /W 1 /H 1 /IM true /X " + big + " ID \x00 EI Q", uncoloured: true,
+			want: "q BI /W 1 /H 1 /IM true /X 32767 ID \x00 EI Q",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			reported := contentLimitsReported(t, tc.data, tc.uncoloured)
+			out, tally := clampContentNumbers(context.Background(), []byte(tc.data), 1, tc.uncoloured)
+			if tally.clamped != reported {
+				t.Errorf("clamped %d numbers, compliance reports %d", tally.clamped, reported)
+			}
+			want := tc.want
+			if want == "" {
+				want = tc.data
+			}
+			if string(out) != want {
+				t.Errorf("the repair wrote %q, want %q", out, want)
+			}
+		})
+	}
+}
+
+// contentLimitsReported returns how many violations the content-limits repair
+// claims when compliance validates data at PDF/A-1b, as the content of a page
+// or, when uncoloured, as the cell of an uncoloured tiling pattern the page
+// fills with.
+func contentLimitsReported(t *testing.T, data string, uncoloured bool) int {
+	t.Helper()
+
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << >> >>",
+		hexStreamObj("", data),
+	}
+	if uncoloured {
+		objs[2] = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R " +
+			"/Resources << /ColorSpace << /CS0 [/Pattern /DeviceGray] >> /Pattern << /P0 5 0 R >> >> >>"
+		objs[3] = hexStreamObj("", "/CS0 cs 0.5 /P0 scn 0 0 10 10 re f")
+		objs = append(objs, hexStreamObj("/Type /Pattern /PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 /Resources << >>", data))
+	}
+	doc, _ := newTestDoc(t, buildStructPDF(objs...))
+	viols, err := compliance.ValidatePDFA(context.Background(), doc, models.PDFA1b)
+	if err != nil {
+		t.Fatalf("ValidatePDFA: %v", err)
+	}
+	n := 0
+	for _, e := range viols {
+		if v, ok := e.(compliance.Violation); ok && matchContentLimits(v) {
+			n++
+		}
+	}
+	return n
 }

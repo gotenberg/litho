@@ -45,6 +45,16 @@ type tokenPlace struct {
 	// inlineImage reports whether the token is in an inline image's
 	// dictionary, between its BI and ID.
 	inlineImage bool
+	// operand is the index, among the operands read since the operator
+	// before it, of the operand the token is or stands in, an array or a
+	// dictionary counting as one operand. For an operator, it is the count
+	// of the operands the operator takes.
+	operand int
+	// dict reports whether the outermost array or dictionary open around
+	// the token is a dictionary.
+	dict bool
+	// end is the offset in the stream just past the token's last byte.
+	end int
 }
 
 // contentTokenSplices walks the tokens of a content stream's decoded bytes and
@@ -79,11 +89,43 @@ func repairTokenSplices(ctx context.Context, data []byte, respell func(tok lexer
 	return tokenSplices(ctx, data, lex, respell)
 }
 
+// visitVeraPDFTokens walks the tokens of a content stream's decoded bytes as
+// [contentTokenSplices] does, over the reading of veraPDF, the one validation
+// takes ([lexer.Lexer.WithVeraPDFTokens]), and hands every one it would offer
+// to visit, the ones whose bytes are not their value included: "c047" is the
+// operator c and the number 047, where the token boundaries of ISO 32000-1,
+// 7.2.2 read one keyword, and a run of digits past the range of a double is a
+// number of the value veraPDF gives it.
+func visitVeraPDFTokens(ctx context.Context, data []byte, visit func(tok lexer.Token, at tokenPlace)) {
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0)).WithVeraPDFTokens()
+	walkTokens(ctx, lex, func(tok lexer.Token, at tokenPlace) (tokenSplice, bool) {
+		visit(tok, at)
+		return tokenSplice{}, false
+	})
+}
+
+// tokenOffer is what a walk of [walkTokens] does with one token and where it
+// stands: the replacement it asks for, if any.
+type tokenOffer func(tok lexer.Token, at tokenPlace) (tokenSplice, bool)
+
 // tokenSplices is the walk of [contentTokenSplices] over the tokens lex reads
 // in data.
 func tokenSplices(ctx context.Context, data []byte, lex *lexer.Lexer, respell func(tok lexer.Token, at tokenPlace) (string, bool)) ([]tokenSplice, bool) {
+	return walkTokens(ctx, lex, func(tok lexer.Token, at tokenPlace) (tokenSplice, bool) {
+		return offerToken(data, tok, at, respell)
+	})
+}
+
+// walkTokens hands offer every token lex reads but the delimiters and the BI
+// that opens an inline image, with where it stands, and returns the
+// replacements offer asks for, and whether the walk read the stream to its
+// end. See [contentTokenSplices].
+func walkTokens(ctx context.Context, lex *lexer.Lexer, offer tokenOffer) ([]tokenSplice, bool) {
 	var splices []tokenSplice
 	depth := 0
+	// operands counts the operands read since the last operator, and dict
+	// whether the outermost array or dictionary open is a dictionary.
+	operands, dict := 0, false
 	p := parser.NewParser(lex).WithOffsetTracking()
 	for n := 1; ; n++ {
 		if n%contentTokenCheckInterval == 0 && ctx.Err() != nil {
@@ -103,32 +145,59 @@ func tokenSplices(ctx context.Context, data []byte, lex *lexer.Lexer, respell fu
 		switch tok.Type {
 		case lexer.TokenKeyword:
 			if tok.Value == "BI" && depth == 0 {
-				dictSplices, ok := inlineImageDictSplices(ctx, p, data, respell)
+				dictSplices, ok := inlineImageDictSplices(ctx, p, offer)
 				if !ok {
 					return splices, false
 				}
 				splices = append(splices, dictSplices...)
+				// BI drops the operands before it, and the image ends
+				// its operation.
+				operands = 0
 				continue
 			}
 			// Any other keyword opens no nesting: offered to respell below.
 		case lexer.TokenDelimiter:
 			switch tok.Value {
 			case "[", "<<":
+				if depth == 0 {
+					dict = tok.Value == "<<"
+				}
 				depth++
 			case "]", ">>":
-				depth = max(depth-1, 0)
+				// A close with nothing open is no operand: the parse drops
+				// it.
+				if depth > 0 {
+					depth--
+					if depth == 0 {
+						operands++
+					}
+				}
 			}
 			continue
 		case lexer.TokenEOF, lexer.TokenError, lexer.TokenName, lexer.TokenString, lexer.TokenNumber, lexer.TokenHexString:
 			// A token that opens no nesting: offered to respell below.
 		}
-		if s, ok := offerToken(data, tok, end, tokenPlace{depth: depth}, respell); ok {
+		if s, ok := offer(tok, tokenPlace{depth: depth, operand: operands, dict: depth > 0 && dict, end: end}); ok {
 			splices = append(splices, s)
+		}
+		if depth == 0 {
+			if isOperatorToken(tok) {
+				operands = 0
+			} else {
+				operands++
+			}
 		}
 	}
 }
 
-// inlineImageDictSplices offers respell the tokens of the inline image
+// isOperatorToken reports whether tok, read where an operand or an operator
+// stands, is an operator: a keyword other than the objects true, false and
+// null (ISO 32000-1, 7.3.2 and 7.3.9).
+func isOperatorToken(tok lexer.Token) bool {
+	return tok.Type == lexer.TokenKeyword && tok.Value != "true" && tok.Value != "false" && tok.Value != "null"
+}
+
+// inlineImageDictSplices hands offer the tokens of the inline image
 // dictionary p stands at, just past its BI, and moves p past the image's EI.
 // It returns the replacements, and false when the parser cannot read the
 // image, which ends the walk.
@@ -144,7 +213,7 @@ func tokenSplices(ctx context.Context, data []byte, lex *lexer.Lexer, respell fu
 //
 // Every replacement ends before the ID and the byte that follows it, so the
 // data is carried across byte for byte.
-func inlineImageDictSplices(ctx context.Context, p *parser.Parser, data []byte, respell func(tok lexer.Token, at tokenPlace) (string, bool)) ([]tokenSplice, bool) {
+func inlineImageDictSplices(ctx context.Context, p *parser.Parser, offer tokenOffer) ([]tokenSplice, bool) {
 	var splices []tokenSplice
 	// dictTokens counts the tokens read ahead through the ID, or stays 0 when
 	// no ID was found.
@@ -167,7 +236,7 @@ func inlineImageDictSplices(ctx context.Context, p *parser.Parser, data []byte, 
 			}
 			continue
 		}
-		if s, ok := offerToken(data, tok, int(p.PeekEnd(i)), tokenPlace{depth: depth, inlineImage: true}, respell); ok {
+		if s, ok := offer(tok, tokenPlace{depth: depth, inlineImage: true, end: int(p.PeekEnd(i))}); ok {
 			splices = append(splices, s)
 		}
 	}
@@ -182,10 +251,11 @@ func inlineImageDictSplices(ctx context.Context, p *parser.Parser, data []byte, 
 	return splices, true
 }
 
-// offerToken offers respell tok, which ends at end in data and stands at at,
-// and returns the replacement it asks for. A token whose bytes are not its
-// value is not offered.
-func offerToken(data []byte, tok lexer.Token, end int, at tokenPlace, respell func(tok lexer.Token, at tokenPlace) (string, bool)) (tokenSplice, bool) {
+// offerToken offers respell tok and where it stands in data, and returns the
+// replacement it asks for. A token whose bytes are not its value is not
+// offered.
+func offerToken(data []byte, tok lexer.Token, at tokenPlace, respell func(tok lexer.Token, at tokenPlace) (string, bool)) (tokenSplice, bool) {
+	end := at.end
 	start := end - len(tok.Value)
 	if start < 0 || end > len(data) || string(data[start:end]) != tok.Value {
 		return tokenSplice{}, false

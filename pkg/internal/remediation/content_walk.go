@@ -17,10 +17,23 @@ import (
 // changed. A nil function leaves the stream as it is.
 type contentRepair func(ctx context.Context, data []byte) ([]byte, func())
 
+// streamRepair is a [contentRepair] that is also told whether the stream is
+// the cell of an uncoloured tiling pattern (ISO 32000-1, 8.7.3.3), which
+// ignores the colour operators it holds.
+type streamRepair func(ctx context.Context, data []byte, uncoloured bool) ([]byte, func())
+
 // walkContentStreams repairs with repair every content stream the pages of doc
 // draw, as [contentStreamWalk] reaches them, and returns how many it rewrote.
 // fixer names the caller in the log of a write that cannot land.
 func walkContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fixer string, repair contentRepair) (int, error) {
+	return walkStreams(ctx, alloc, doc, fixer, func(ctx context.Context, data []byte, _ bool) ([]byte, func()) {
+		return repair(ctx, data)
+	})
+}
+
+// walkStreams is [walkContentStreams] with a repair told which streams are
+// uncoloured pattern cells.
+func walkStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fixer string, repair streamRepair) (int, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return 0, fmt.Errorf("resolving catalog: %w", err)
@@ -65,7 +78,7 @@ type contentStreamWalk struct {
 	alloc   *writer.ObjAllocator
 	doc     *document.Document
 	fixer   string
-	repair  contentRepair
+	repair  streamRepair
 	visited map[int]bool
 	// streams counts the content streams rewritten.
 	streams int
@@ -122,7 +135,7 @@ func (w *contentStreamWalk) pageContent(ctx context.Context, pageDict ast.PdfDic
 	if err != nil || len(data) == 0 {
 		return
 	}
-	newData, landed := w.repair(ctx, data)
+	newData, landed := w.repair(ctx, data, false)
 	if landed == nil {
 		return
 	}
@@ -258,7 +271,7 @@ func (w *contentStreamWalk) stream(ctx context.Context, entry ast.PdfObject, kee
 			"fixer", w.fixer, "obj", ref.ObjectNum, "error", err)
 		return stream.Dict, true
 	}
-	if newData, landed := w.repair(ctx, data); landed != nil && replaceDecodedStream(w.alloc, ref, stream.Dict, newData) {
+	if newData, landed := w.repair(ctx, data, isUncolouredPattern(ctx, w.doc, stream.Dict)); landed != nil && replaceDecodedStream(w.alloc, ref, stream.Dict, newData) {
 		landed()
 		w.streams++
 	}
@@ -279,4 +292,16 @@ func isFormXObject(ctx context.Context, doc *document.Document, dict ast.PdfDict
 func isTilingPattern(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
 	patternType, _ := document.ResolveInt(ctx, doc, dict["PatternType"])
 	return patternType == tilingPatternType
+}
+
+// isUncolouredPattern reports whether a stream dictionary is an uncoloured
+// tiling pattern (ISO 32000-1, 8.7.3.3), whose /PaintType is 2.
+func isUncolouredPattern(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
+	if !isTilingPattern(ctx, doc, dict) {
+		return false
+	}
+	// A /PaintType that resolves to no integer makes no uncoloured pattern,
+	// so its error only leaves the cell coloured.
+	paintType, _ := document.ResolveInt(ctx, doc, dict["PaintType"])
+	return paintType == uncolouredPaintType
 }

@@ -267,12 +267,12 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 				doc.Logger.Debug("compliance.file_structure: cannot parse content stream", "error", err)
 				continue
 			}
-			results = append(results, checkOperandLimits(ops, countOverflows(overflows), objNum, maxStr, profile)...)
+			results = append(results, checkOperandLimits(ops, countOverflows(overflows), streamContentWhere(objNum), false, maxStr, profile)...)
 		}
 	}
 
 	walk := newDrawnStreamWalk(vctx, func(s *drawnStream) {
-		results = append(results, checkOperandLimits(s.ops, s.overflow, s.objNum, maxStr, profile)...)
+		results = append(results, checkOperandLimits(s.ops, s.overflow, streamContentWhere(s.objNum), s.uncoloured, maxStr, profile)...)
 	})
 	for i := range vctx.pages {
 		if ctx.Err() != nil {
@@ -284,32 +284,31 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 }
 
 // checkOperandLimits checks the strings, integers and reals of one parsed
-// content stream, object objNum, against the implementation limits: every
-// operand, and every one an array or a dictionary operand holds at any depth.
-// overflow counts the integer literals past the 64-bit range the parse read as
-// reals (see [checkNumberLimits]), and is consumed.
+// content stream against the implementation limits: the ones veraPDF reaches
+// through the operators that use them ([ContentOperandLink]). where names the
+// stream in the context of a violation, and uncoloured reports that it starts
+// with its colour operators ignored ([NewColourState]). overflow counts the
+// integer literals past the 64-bit range the parse read as reals (see
+// [checkNumberLimits]), and is consumed.
 //
 // ISO 19005-1, 6.1.12 and ISO 19005-2, 6.1.13 bound every integer, real and
-// string the file contains, and an operand array or dictionary holds some: a
-// dash array (ISO 32000-1, 8.4.3.6), a TJ array (9.4.3), a marked-content
-// property list (14.6.2) and an inline image's dictionary (8.9.7). veraPDF
-// judges each of them whole: measured with veraPDF 1.30 at PDF/A-1b and
-// PDF/A-2b, an integer, a real, a denormal real, a long string, a "-" and a
-// "1.5.5" there fail their limit once each, in an array or a dictionary nested
-// in one too, as they fail it written as an operand. The parse reads the
-// numbers of an array or a dictionary as veraPDF reads them, the "-" being the
-// largest integer veraPDF gives a number and the "1.5.5" the largest real (see
-// [content.ParseStreamData]).
-//
-// An array or a dictionary is judged whatever operator takes it, as the
-// clauses state their limits. veraPDF judges the arrays and dictionaries its
-// operators link alone: the ones above, and the numbers of an array given to
-// c, cm, d1, l, m, re, Tm, v or y. Measured the same way, an integer past the
-// limit in an array given to w, or in a dictionary given to w or BMC, fails
-// nothing. A string past the limit as the /ActualText or /Alt of a property
-// list fails the string limit twice, once as a value of the list and once as
-// the text veraPDF reads for the marked content. Such a string is one string
-// of the file, and is judged once.
+// string the file contains, whatever operand holds it. Deliberate leniency
+// toward veraPDF, which judges an operand only as the object its operator
+// reads it as: an operand the operator does not read, before the ones it
+// needs or of another type, is judged by no rule, see [ContentOperandLink]. An
+// operand array or dictionary veraPDF reads whole is judged whole: a dash
+// array (ISO 32000-1, 8.4.3.6), a TJ array (9.4.3), a marked-content property
+// list (14.6.2) and an inline image's dictionary (8.9.7). Measured with
+// veraPDF 1.30 at PDF/A-1b and PDF/A-2b, an integer, a real, a denormal real,
+// a long string, a "-" and a "1.5.5" there fail their limit once each, in an
+// array or a dictionary nested in one too, as they fail it written as an
+// operand. The parse reads the numbers of an array or a dictionary as veraPDF
+// reads them, the "-" being the largest integer veraPDF gives a number and the
+// "1.5.5" the largest real (see [content.ParseStreamData]). A string past the
+// limit as the /ActualText or /Alt of a property list fails the string limit
+// twice, once as a value of the list and once as the text veraPDF reads for
+// the marked content. Such a string is one string of the file, and is judged
+// once.
 //
 // The operands of an operator ISO 32000-1, Annex A does not define are not
 // checked. ISO 19005-1, 6.2.10 t1 and ISO 19005-2, 6.2.2 t1 already fail the
@@ -332,23 +331,49 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 //     array that fails the integer limit once.
 //   - pdfjs bug1354114.pdf and bug1953099.pdf: veraPDF reports that integer,
 //     and no other limit, in both. veraPDF cannot open bug1130815.pdf.
-func checkOperandLimits(ops []content.Operation, overflow map[float64]int, objNum, maxStr int, profile string) []Violation {
+func checkOperandLimits(ops []content.Operation, overflow map[float64]int, where string, uncoloured bool, maxStr int, profile string) []Violation {
 	l := operandLimits{
-		where:    fmt.Sprintf("object %d (stream content)", objNum),
+		where:    where,
 		maxStr:   maxStr,
 		part:     PDFAPart(profile),
 		profile:  profile,
 		overflow: overflow,
 	}
+	colour := NewColourState(uncoloured)
 	for _, op := range ops {
-		if !content.IsOperator(op.Operator) {
-			continue
+		n := len(op.Operands)
+		reads := content.IsOperator(op.Operator)
+		if op.Operator == "BI" && n > 0 {
+			reads = colour.ReadsInlineImage(inlineImageMask(op.Operands[n-1]))
 		}
-		for _, operand := range op.Operands {
-			l.judge(operand)
+		for i, operand := range op.Operands {
+			link := OperandLink(0)
+			if reads {
+				link = ContentOperandLink(op.Operator, i, n, colour.On())
+			}
+			l.judgeOperand(operand, link)
 		}
+		colour.Operator(op.Operator)
 	}
 	return l.results
+}
+
+// inlineImageMask reports whether dict, the dictionary of an inline image,
+// makes it an image mask by its /IM entry (ISO 32000-1, 8.9.7, Table 93), the
+// only spelling veraPDF reads (OperatorParser.processInlineImage).
+func inlineImageMask(dict ast.PdfObject) bool {
+	d, ok := dict.(ast.PdfDict)
+	if !ok {
+		return false
+	}
+	imageMask, ok := d["IM"].(ast.PdfBool)
+	return ok && bool(imageMask)
+}
+
+// streamContentWhere names content stream objNum in the context of a
+// violation.
+func streamContentWhere(objNum int) string {
+	return fmt.Sprintf("object %d (stream content)", objNum)
 }
 
 // operandLimits carries one [checkOperandLimits] run over the operands of a
@@ -364,8 +389,78 @@ type operandLimits struct {
 	results  []Violation
 }
 
-// judge checks one operand, and every string, integer and real an array or a
-// dictionary operand holds at any depth, dictionary values in key order. The
+// judgeOperand checks what link reaches of one operand ([ContentOperandLink]),
+// and passes over the rest of it ([operandLimits.skip]).
+func (l *operandLimits) judgeOperand(obj ast.PdfObject, link OperandLink) {
+	switch v := obj.(type) {
+	case ast.PdfInt:
+		if link&(LinkNumber|LinkInteger) != 0 {
+			l.judge(v)
+			return
+		}
+	case ast.PdfReal:
+		// An integer literal past the 64-bit range is a real of the parse,
+		// and an integer of ISO 32000-1, 7.3.3 and of veraPDF.
+		if link&LinkNumber != 0 || link&LinkInteger != 0 && l.overflow[float64(v)] > 0 {
+			l.judge(v)
+			return
+		}
+	case ast.PdfString:
+		if link&LinkString != 0 {
+			l.judge(v)
+			return
+		}
+	case ast.PdfArray:
+		switch {
+		case link&LinkArray != 0:
+			l.judge(v)
+			return
+		case link&LinkArrayNumbers != 0:
+			for _, elem := range v {
+				l.judgeOperand(elem, pick(isNumber(elem), LinkNumber))
+			}
+			return
+		}
+	case ast.PdfDict:
+		if link&LinkDict != 0 {
+			l.judge(v)
+			return
+		}
+	}
+	l.skip(obj)
+}
+
+// isNumber reports whether obj is an integer or a real.
+func isNumber(obj ast.PdfObject) bool {
+	switch obj.(type) {
+	case ast.PdfInt, ast.PdfReal:
+		return true
+	}
+	return false
+}
+
+// skip passes over an object no rule judges, consuming the integer literals
+// past the 64-bit range it holds, so that the count of a value left for the
+// objects after it is theirs (see [checkNumberLimits]).
+func (l *operandLimits) skip(obj ast.PdfObject) {
+	switch v := obj.(type) {
+	case ast.PdfReal:
+		if l.overflow[float64(v)] > 0 {
+			l.overflow[float64(v)]--
+		}
+	case ast.PdfArray:
+		for _, elem := range v {
+			l.skip(elem)
+		}
+	case ast.PdfDict:
+		for _, key := range slices.Sorted(maps.Keys(v)) {
+			l.skip(v[key])
+		}
+	}
+}
+
+// judge checks one object, and every string, integer and real an array or a
+// dictionary holds at any depth, dictionary values in key order. The
 // recursion is bounded by the nesting the parser reads (maxParseNestingDepth
 // in the parser package).
 func (l *operandLimits) judge(obj ast.PdfObject) {

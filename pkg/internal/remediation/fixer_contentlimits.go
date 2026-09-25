@@ -86,8 +86,8 @@ type contentLimitsTally struct {
 func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	part := compliance.PDFAPart(profile)
 	var total contentLimitsTally
-	if _, err := walkContentStreams(ctx, alloc, doc, "content-limits", func(ctx context.Context, data []byte) ([]byte, func()) {
-		newData, t := clampContentNumbers(ctx, data, part)
+	if _, err := walkStreams(ctx, alloc, doc, "content-limits", func(ctx context.Context, data []byte, uncoloured bool) ([]byte, func()) {
+		newData, t := clampContentNumbers(ctx, data, part, uncoloured)
 		if t == (contentLimitsTally{}) {
 			return nil, nil
 		}
@@ -124,14 +124,13 @@ func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 // integer range becomes the real of its value when the part admits it, the
 // largest real otherwise.
 //
-// Every number is reached where it stands: an operand, an element of an array
-// or a value of a dictionary at any depth, an inline image's dictionary
-// included, as compliance judges them. The numbers are spliced in place
-// ([contentTokenSplices]), so every other byte of the stream, inline image
-// data included, is carried across unchanged. A number past the limits where
-// an operand of an undefined operator stands is respelled too: ISO 19005-2,
-// 6.1.13 bounds every number of the file, and the undefined-operator repair
-// removes the operator with its operands.
+// A number is respelled where compliance judges it ([judgedLimitBreakers]):
+// an operand, an element of an array or a value of a dictionary, an inline
+// image's dictionary included, that the operator taking it reads, as veraPDF
+// reads it. The numbers are spliced in place ([contentTokenSplices]), so every
+// other byte of the stream, inline image data included, is carried across
+// unchanged. uncoloured reports the cell of an uncoloured tiling pattern,
+// which starts with its colour operators ignored.
 //
 // The repair used to parse the page's own content, clamp its operands to the
 // PDF/A-1 real limit and write the operations back. That left the numbers of
@@ -159,17 +158,19 @@ func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 //     failed. Split, the text is unchanged, and the output no longer fails the
 //     limit for litho or veraPDF, where it failed it 175 times when the repair
 //     did not reach the forms.
-func clampContentNumbers(ctx context.Context, data []byte, part int) ([]byte, contentLimitsTally) {
+func clampContentNumbers(ctx context.Context, data []byte, part int, uncoloured bool) ([]byte, contentLimitsTally) {
 	splits, n := translationSplits(ctx, data, part)
+	judged := judgedLimitBreakers(ctx, data, part, uncoloured)
 	// Both walks offer the same tokens in the same order, so a token's
-	// ordinal names it in both.
+	// ordinal names it in both. The judged numbers are read as validation
+	// reads them, and named by where they end.
 	ordinal := -1
-	splices, _ := contentTokenSplices(ctx, data, func(tok lexer.Token, _ tokenPlace) (string, bool) {
+	splices, _ := contentTokenSplices(ctx, data, func(tok lexer.Token, at tokenPlace) (string, bool) {
 		ordinal++
 		if text, ok := splits[ordinal]; ok {
 			return text, true
 		}
-		if tok.Type != lexer.TokenNumber || !breaksNumberLimits(tok.Value, part) {
+		if tok.Type != lexer.TokenNumber || !breaksNumberLimits(tok.Value, part) || !judged[at.end] {
 			return "", false
 		}
 		return plainNumber(tok.Value, part)
@@ -180,6 +181,109 @@ func clampContentNumbers(ctx context.Context, data []byte, part int) ([]byte, co
 	// The splices of a split stand where an operand stands, which the walk
 	// keeps whatever it reads, and the others are clamps.
 	return applyTokenSplices(data, splices), contentLimitsTally{clamped: len(splices) - len(splits), split: n}
+}
+
+// limitBreaker is a number token [judgedLimitBreakers] holds until the
+// operator that takes it: where it stands, and whether it is an integer.
+type limitBreaker struct {
+	at      tokenPlace
+	integer bool
+}
+
+// judgedLimitBreakers returns, keyed by the offset just past their last byte,
+// the numbers of data past the implementation limits of the part
+// ([breaksNumberLimits]) that compliance judges: the ones the operator taking
+// them reads, as [compliance.ContentOperandLink] states it, while the stream
+// processes its colour operators as [compliance.ColourState] follows it.
+// uncoloured reports that the stream starts with them ignored.
+//
+// The stream is read as validation reads it ([visitVeraPDFTokens]), which
+// finds the operator c in "c047" and the number 047 after it, and gives a run
+// of digits past the range of a double the value veraPDF reads in it. It is
+// read whole, past the stray "]" where validation stops, as validation reads
+// the stream once the repairs drop it.
+//
+// A number no operator reads, one an undefined operator takes among them,
+// answers to no limit veraPDF states, so it is left as written. The undefined
+// operator is the undefined-operator repair's ([matchUnknownOps]).
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1130815.pdf: its damaged page gives three numbers past the
+//     limits to undefined operators, such as ll, which the repair respelled
+//     at PDF/A-1b and PDF/A-2b and now leaves. No other file's repair
+//     changes. veraPDF 1.30 cannot open the file.
+func judgedLimitBreakers(ctx context.Context, data []byte, part int, uncoloured bool) map[int]bool {
+	var (
+		judged map[int]bool
+		// operands holds the numbers past the limits read since the last
+		// operator, and image the ones of the inline image dictionary being
+		// read, with imageMask and maskKey following its /IM entry.
+		operands, image    []limitBreaker
+		imageMask, maskKey bool
+	)
+	colour := compliance.NewColourState(uncoloured)
+	mark := func(b limitBreaker) {
+		if judged == nil {
+			judged = make(map[int]bool)
+		}
+		judged[b.at.end] = true
+	}
+	// endImage settles the inline image whose dictionary was read: veraPDF
+	// reads it only while the stream processes its colour operators, or as
+	// an image mask.
+	endImage := func() {
+		if colour.ReadsInlineImage(imageMask) {
+			for _, b := range image {
+				mark(b)
+			}
+		}
+		image, imageMask, maskKey = image[:0], false, false
+	}
+	visitVeraPDFTokens(ctx, data, func(tok lexer.Token, at tokenPlace) {
+		breaks := tok.Type == lexer.TokenNumber && breaksNumberLimits(tok.Value, part)
+		if at.inlineImage {
+			if breaks {
+				image = append(image, limitBreaker{at: at})
+			}
+			// ISO 32000-1, 8.9.7, Table 93 abbreviates /ImageMask as /IM, the
+			// only spelling veraPDF reads.
+			imageMask = imageMask || maskKey && tok.Type == lexer.TokenKeyword && tok.Value == "true"
+			maskKey = at.depth == 1 && tok.Type == lexer.TokenName && tok.Value == "/IM"
+			return
+		}
+		if len(image) > 0 || imageMask {
+			endImage()
+		}
+		switch {
+		case breaks:
+			operands = append(operands, limitBreaker{at: at, integer: !strings.ContainsRune(tok.Value, '.')})
+		case at.depth == 0 && isOperatorToken(tok):
+			for _, b := range operands {
+				if operandJudged(compliance.ContentOperandLink(tok.Value, b.at.operand, at.operand, colour.On()), b) {
+					mark(b)
+				}
+			}
+			operands = operands[:0]
+			colour.Operator(tok.Value)
+		}
+	})
+	if len(image) > 0 {
+		endImage()
+	}
+	return judged
+}
+
+// operandJudged reports whether link, what the operator reads of an operand
+// ([compliance.ContentOperandLink]), reaches b, a number standing in it.
+func operandJudged(link compliance.OperandLink, b limitBreaker) bool {
+	switch {
+	case b.at.depth == 0:
+		return link&compliance.LinkNumber != 0 || b.integer && link&compliance.LinkInteger != 0
+	case b.at.dict:
+		return link&compliance.LinkDict != 0
+	}
+	return link&compliance.LinkArray != 0 || b.at.depth == 1 && link&compliance.LinkArrayNumbers != 0
 }
 
 // cmOperands is the count of operands of a cm operator (ISO 32000-1, 8.4.4,

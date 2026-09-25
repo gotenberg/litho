@@ -53,6 +53,9 @@ type drawnStream struct {
 	overflow map[float64]int
 	// format holds the format violations the parse recorded.
 	format []content.FormatViolation
+	// uncoloured reports the cell of an uncoloured tiling pattern, which
+	// ignores the colour operators it holds (see [NewColourState]).
+	uncoloured bool
 }
 
 // drawnStreamWalk reaches every content stream a document draws besides the
@@ -324,16 +327,24 @@ func (w *drawnStreamWalk) visit(ctx context.Context, obj ast.PdfObject, owner as
 		return
 	}
 	scan := w.scan(ctx, ops, appearanceResources(ctx, w.doc, res, pageRes), entry)
+	uncoloured := false
+	if kind == drawnPattern {
+		// A /PaintType that resolves to no integer makes no uncoloured
+		// pattern, so its error only leaves the cell coloured.
+		paintType, _ := document.ResolveInt(ctx, w.doc, stream.Dict["PaintType"])
+		uncoloured = paintType == uncolouredPaintType
+	}
 	w.judge(&drawnStream{
-		kind:      kind,
-		objNum:    objNum,
-		resources: res,
-		pageRes:   pageRes,
-		pageNum:   pageNum,
-		ops:       ops,
-		patterns:  scan.patterns(),
-		overflow:  countOverflows(overflows),
-		format:    format,
+		kind:       kind,
+		objNum:     objNum,
+		resources:  res,
+		pageRes:    pageRes,
+		pageNum:    pageNum,
+		ops:        ops,
+		patterns:   scan.patterns(),
+		overflow:   countOverflows(overflows),
+		format:     format,
+		uncoloured: uncoloured,
 	})
 	w.descend(ctx, scan, pageRes, pageNum, depth+1)
 }
