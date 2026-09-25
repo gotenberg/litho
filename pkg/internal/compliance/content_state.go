@@ -270,6 +270,9 @@ var operatorResourceCategory = map[string]ast.PdfName{
 // the rule is stated exactly once per undefined operator. A number written with
 // an exponent where an operand stands reads as such an operator, so the same
 // flag states it, see [checkExponentOperands].
+//
+// hexStrings states the hex string tests from the same parse, or nothing when
+// nil; see [drawnStreamHexStrings].
 func checkContentStreamResources(
 	ctx context.Context,
 	doc *document.Document,
@@ -279,6 +282,7 @@ func checkContentStreamResources(
 	part int,
 	pageNum int,
 	reportUndefinedOps bool,
+	hexStrings *drawnStreamHexStrings,
 ) []Violation {
 	ops, overflows, formatViolations, err := content.ParseStreamDataForCompliance(ctx, streamData)
 	if err != nil {
@@ -290,6 +294,7 @@ func checkContentStreamResources(
 	if reportUndefinedOps {
 		results = append(results, checkExponentOperands(formatViolations, part, pageNum)...)
 	}
+	results = append(results, hexStrings.check(formatViolations, pageNum)...)
 
 	// Check inline image /Intent values from parsed BI operations.
 	results = append(results, checkInlineImageIntent(ops, part, pageNum)...)

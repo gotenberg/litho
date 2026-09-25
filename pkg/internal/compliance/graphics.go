@@ -24,6 +24,8 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// One ExtGState dictionary is judged once for the whole document; see
 	// [objectJudgedOnce].
 	judgedGS := make(map[int]bool)
+	// So is the syntax of the hex strings in one content stream.
+	hexStrings := newDrawnStreamHexStrings(profile)
 
 	var results []Violation
 	for i := range vctx.pages {
@@ -74,25 +76,27 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// Only scan Forms referenced by Do operators in the page content.
 		var referencedXObjects map[string]bool
 		var used *usedResources
+		var shownFonts map[string]*fontUsageInfo
 		if hasContent {
 			_, referencedXObjects, _, used, _ = scanContentStreamDeviceCS(ctx, vctx.pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, res))
+			shownFonts = collectFontUsage(vctx.pages[i].parsedOps(ctx))
 		}
-		results = append(results, checkFormXObjectResources(ctx, doc, res, part, i+1, referencedXObjects)...)
+		results = append(results, checkFormXObjectResources(ctx, doc, res, part, i+1, referencedXObjects, hexStrings)...)
 
 		// Check the content streams of the tiling patterns the page paints.
-		results = append(results, checkPatternResources(ctx, doc, res, part, i+1, used)...)
+		results = append(results, checkPatternResources(ctx, doc, res, part, i+1, used, hexStrings)...)
 
 		// Scan Form XObject ExtGState for halftone/rendering intent violations.
 		results = append(results, checkFormXObjectExtGState(ctx, doc, res, profile, part, i+1, judgedGS)...)
 
 		// Check Type3 font CharProc resource completeness.
-		results = append(results, checkType3CharProcResources(ctx, doc, res, part, i+1)...)
+		results = append(results, checkType3CharProcResources(ctx, doc, res, part, i+1, shownFonts, hexStrings)...)
 
 		// Scan annotation appearance ExtGState for halftone/rendering intent.
 		results = append(results, checkAnnotationAppearanceExtGState(ctx, doc, page, profile, part, i+1, judgedGS)...)
 
 		// Scan annotation appearance streams for undefined operators.
-		results = append(results, checkAnnotationAppearanceOps(ctx, doc, page, part, i+1)...)
+		results = append(results, checkAnnotationAppearanceOps(ctx, doc, page, part, i+1, hexStrings)...)
 	}
 
 	doc.Logger.Debug("compliance.graphics: checks complete", "violations", len(results))
@@ -102,10 +106,16 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 // checkFormXObjectResources checks content stream resource completeness for
 // Form XObjects referenced by Do operators on the page. Each Form XObject
 // has its own Resources dict; operators in its content stream must reference
-// resources defined there.
-func checkFormXObjectResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part int, pageNum int, referencedNames map[string]bool) []Violation {
+// resources defined there. hexStrings judges the syntax of their hex strings.
+//
+// A nil referencedNames, a page with no content, checks every Form XObject
+// its resources name, but none is painted, so none has its hex strings judged.
+func checkFormXObjectResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part int, pageNum int, referencedNames map[string]bool, hexStrings *drawnStreamHexStrings) []Violation {
 	if pageRes == nil {
 		return nil
+	}
+	if referencedNames == nil {
+		hexStrings = nil
 	}
 	xoDict, err := document.ResolveDict(ctx, doc, pageRes["XObject"])
 	if err != nil || xoDict == nil {
@@ -143,7 +153,7 @@ func checkFormXObjectResources(ctx context.Context, doc *document.Document, page
 		// resource names against its own /Resources first. A name found only
 		// in the PAGE's resources is an inherited reference (t2), so the page
 		// resources serve as the fallback scope when scanning the form stream.
-		results = append(results, checkContentStreamResources(ctx, doc, formData, formRes, pageRes, part, pageNum, true)...)
+		results = append(results, checkContentStreamResources(ctx, doc, formData, formRes, pageRes, part, pageNum, true, hexStrings.once(xoObj))...)
 	}
 	return results
 }
@@ -158,14 +168,14 @@ func checkFormXObjectResources(ctx context.Context, doc *document.Document, page
 // Only a pattern a scn or SCN selects is judged, the same scope
 // [scanPatternImages] uses. veraPDF passes a pattern the page declares and
 // never paints, measured on a fixture whose unselected pattern carries the same
-// out-of-range real.
+// out-of-range real. hexStrings judges the syntax of their hex strings.
 //
 // # Corpus evidence
 //
 //   - pdfjs 22060_A1_01_Plans.pdf: keeps its 136 KB page stream inside the
 //     limit and holds -39455.5 in patterns /R21 and /R24, and veraPDF reports
 //     it there six times.
-func checkPatternResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part, pageNum int, used *usedResources) []Violation {
+func checkPatternResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part, pageNum int, used *usedResources, hexStrings *drawnStreamHexStrings) []Violation {
 	if pageRes == nil || used == nil {
 		return nil
 	}
@@ -200,7 +210,7 @@ func checkPatternResources(ctx context.Context, doc *document.Document, pageRes 
 		// A pattern content stream resolves resource names against its own
 		// /Resources first, with the page's serving as the fallback scope, as a
 		// Form XObject's does.
-		results = append(results, checkContentStreamResources(ctx, doc, data, patternRes, pageRes, part, pageNum, true)...)
+		results = append(results, checkContentStreamResources(ctx, doc, data, patternRes, pageRes, part, pageNum, true, hexStrings.once(patterns[name]))...)
 	}
 	return results
 }
@@ -209,7 +219,13 @@ func checkPatternResources(ctx context.Context, doc *document.Document, pageRes 
 // resource references. Type3 CharProcs are content streams that may reference
 // colour spaces, fonts, etc. If they do, the Type3 font dict must have an
 // explicitly associated /Resources entry.
-func checkType3CharProcResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part, pageNum int) []Violation {
+//
+// hexStrings judges the syntax of the hex strings of every glyph of a font the
+// page shows text with, the glyphs it never shows included: veraPDF reaches
+// them all through the font of a text-showing operator, and none of a font
+// only selected. shownFonts holds the fonts the page shows text with, keyed by
+// resource name, and is nil for a page with no content.
+func checkType3CharProcResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part, pageNum int, shownFonts map[string]*fontUsageInfo, hexStrings *drawnStreamHexStrings) []Violation {
 	if pageRes == nil {
 		return nil
 	}
@@ -241,6 +257,10 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 		if err != nil || charProcs == nil {
 			continue
 		}
+		fontHexStrings := hexStrings
+		if _, shown := shownFonts[string(fontName)]; !shown {
+			fontHexStrings = nil
+		}
 		for _, cpName := range sortedNames(charProcs) {
 			cpObj := charProcs[cpName]
 			stream, err := document.ResolveStream(ctx, doc, cpObj)
@@ -252,7 +272,7 @@ func checkType3CharProcResources(ctx context.Context, doc *document.Document, pa
 			if err != nil || len(data) == 0 {
 				continue
 			}
-			results = append(results, checkContentStreamResources(ctx, doc, data, type3Res, pageRes, part, pageNum, true)...)
+			results = append(results, checkContentStreamResources(ctx, doc, data, type3Res, pageRes, part, pageNum, true, fontHexStrings.once(cpObj))...)
 		}
 	}
 	return results
@@ -306,14 +326,14 @@ func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Docum
 // The named-resource test runs here too, for the one part that states it.
 // An earlier note left it out as unmeasured against the reference validator;
 // it has since been measured. veraPDF 1.30.2 fails ISO 19005-4, 6.2.2 t3 on
-// appearance streams.
+// appearance streams. hexStrings judges the syntax of their hex strings.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue14438.pdf: runs /OC /MC0 BDC in 2 of its 19 appearance
 //     streams, whose own /Resources carry no /Properties, and veraPDF reports
 //     exactly those 2.
-func checkAnnotationAppearanceOps(ctx context.Context, doc *document.Document, page ast.PdfDict, part, pageNum int) []Violation {
+func checkAnnotationAppearanceOps(ctx context.Context, doc *document.Document, page ast.PdfDict, part, pageNum int, hexStrings *drawnStreamHexStrings) []Violation {
 	rule := undefinedOperatorRule(part)
 	if rule.Specification == "" && missingResourceRule(part).Specification == "" {
 		return nil
@@ -352,7 +372,7 @@ func checkAnnotationAppearanceOps(ctx context.Context, doc *document.Document, p
 					}
 					seen[ref.ObjectNum] = true
 				}
-				results = append(results, checkAppearanceStreamOps(ctx, doc, streamObj, rule, pageRes, part, pageNum)...)
+				results = append(results, checkAppearanceStreamOps(ctx, doc, streamObj, rule, pageRes, part, pageNum, hexStrings.once(streamObj))...)
 			}
 		}
 	}
@@ -381,8 +401,9 @@ func appearanceStreamObjects(ctx context.Context, doc *document.Document, apObj 
 // checkAppearanceStreamOps parses one appearance stream, reports every operator
 // outside [validPDFOperators] and every number written with an exponent where
 // an operand stands (see [checkExponentOperands]), and reports the names it
-// references that no resource dictionary defines.
-func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, streamObj ast.PdfObject, rule Rule, pageRes ast.PdfDict, part, pageNum int) []Violation {
+// references that no resource dictionary defines. hexStrings, when not nil,
+// judges the syntax of its hex strings from the same parse.
+func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, streamObj ast.PdfObject, rule Rule, pageRes ast.PdfDict, part, pageNum int, hexStrings *drawnStreamHexStrings) []Violation {
 	stream, err := document.ResolveStream(ctx, doc, streamObj)
 	if err != nil {
 		doc.Logger.Debug("compliance.graphics: cannot resolve appearance stream", "error", err)
@@ -410,6 +431,10 @@ func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, strea
 			"page %d: undefined operator %q in annotation appearance", pageNum, op.Operator)...)
 	}
 	for _, v := range checkExponentOperands(formatViolations, part, pageNum) {
+		v.Context += " in annotation appearance"
+		results = append(results, v)
+	}
+	for _, v := range hexStrings.check(formatViolations, pageNum) {
 		v.Context += " in annotation appearance"
 		results = append(results, v)
 	}

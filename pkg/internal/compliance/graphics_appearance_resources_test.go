@@ -71,7 +71,7 @@ func appearanceResourceFires(t *testing.T, apRes, pageRes string, part int) bool
 		t.Fatalf("ResolvePages: %v (%d pages)", err, len(pages))
 	}
 
-	for _, v := range checkAnnotationAppearanceOps(ctx, doc, pages[0].Dict, part, 1) {
+	for _, v := range checkAnnotationAppearanceOps(ctx, doc, pages[0].Dict, part, 1, nil) {
 		if v.Rule.Clause == "6.2.2" && v.Rule.TestNumber == 3 {
 			return true
 		}

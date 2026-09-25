@@ -127,7 +127,9 @@ func FuzzParseStreamDataWithOverflows(f *testing.F) {
 // appearance streams of a page, and asserts what its callers rely on: format
 // checking records violations and changes nothing else, so the operations, the
 // overflows and the outcome match [ParseStreamDataWithOverflows] on the same
-// bytes.
+// bytes; and placing the violations loses or repeats none, so they match
+// [ParseStreamDataFormatChecked] one for one, and only a violation with an
+// operand can hold the last one.
 func FuzzParseStreamDataForCompliance(f *testing.F) {
 	for _, s := range seedStreams {
 		f.Add([]byte(s))
@@ -135,12 +137,13 @@ func FuzzParseStreamDataForCompliance(f *testing.F) {
 	f.Add([]byte("99999999999999999999 0 0 1 0 0 cm\n"))
 	f.Add([]byte("1.5e1 w [2.5e1 3] 0 d 1e1 w <4g8> Tj\n"))
 	f.Add([]byte("1.5E-1 w <48"))
+	f.Add([]byte("<414> BI /W 1 /H 1 /F <4G> ID \x80 EI <434> zz <4"))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > maxFuzzInput {
 			return
 		}
-		ops, overflows, _, err := ParseStreamDataForCompliance(context.Background(), data)
+		ops, overflows, violations, err := ParseStreamDataForCompliance(context.Background(), data)
 		wantOps, wantOverflows, wantErr := ParseStreamDataWithOverflows(context.Background(), data)
 		if (err == nil) != (wantErr == nil) {
 			t.Fatalf("error = %v, want %v", err, wantErr)
@@ -148,6 +151,18 @@ func FuzzParseStreamDataForCompliance(f *testing.F) {
 		if !reflect.DeepEqual(ops, wantOps) || !reflect.DeepEqual(overflows, wantOverflows) {
 			t.Fatalf("format checking changed the parse: %d operations and %v overflows, want %d and %v",
 				len(ops), overflows, len(wantOps), wantOverflows)
+		}
+		_, wantViolations := ParseStreamDataFormatChecked(context.Background(), data)
+		if len(violations) != len(wantViolations) {
+			t.Fatalf("placed %d violations, the parser recorded %d", len(violations), len(wantViolations))
+		}
+		for i, v := range violations {
+			if v.Err.Error() != wantViolations[i].Error() {
+				t.Fatalf("violation %d is %q, want %q", i, v.Err, wantViolations[i])
+			}
+			if v.Last && v.Operand == nil {
+				t.Fatalf("violation %d is placed on the last operand of %q, and on no operand", i, v.Operator)
+			}
 		}
 	})
 }

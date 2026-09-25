@@ -89,3 +89,58 @@ func TestContentStreamExponentOperands(t *testing.T) {
 		}
 	}
 }
+
+// TestContentStreamHexStringsOnlyWhereRead pins which strings of a content
+// stream answer to the hex string tests, ISO 19005-2, 6.1.6 t1: those veraPDF
+// reads through an operator, never the operands of an operator ISO 32000-1
+// does not define, an operand an operator does not read as text or as a
+// dictionary, or operands no operator follows. Measured with veraPDF 1.30 at
+// PDF/A-2b, each content on a one-page fixture.
+func TestContentStreamHexStringsOnlyWhereRead(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		content string
+		want    int
+	}{
+		{"BT <414> Tj ET", 1},
+		{"BT <434> <414> Tj ET", 1},
+		{"BT [<414> 5 [<434>]] TJ ET", 2},
+		{"BT <414> ' ET", 1},
+		{"BT 0 0 <414> \" ET", 1},
+		{"/Span << /E <414> >> BDC EMC", 1},
+		{"/Span << /X [<414>] >> BDC EMC", 1},
+		{"/Foo << /X << /Y <414> >> >> DP", 1},
+		{"q BI /W 1 /H 1 /BPC 8 /CS /G /Foo <414> ID \x80 EI Q", 1},
+		{"<414> <434> zz", 0},
+		{"<414> zz <434> Tj", 1},
+		{"[<414>] zz", 0},
+		{"<414> w", 0},
+		{"<414> Do", 0},
+		{"<414> BMC EMC", 0},
+		{"BT <414> 12 Tf ET", 0},
+		{"BT <414> 5 Tj ET", 0},
+		{"/Span <414> BDC EMC", 0},
+		{"0 0 m 10 10 l S <414>", 0},
+	} {
+		t.Run(tc.content, func(t *testing.T) {
+			t.Parallel()
+			doc, catalog := objsDocPDF(t,
+				"<< /Type /Catalog /Pages 2 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+				"<< /Length "+strconv.Itoa(len(tc.content))+" >>\nstream\n"+tc.content+"\nendstream",
+			)
+			got := 0
+			for _, v := range checkContentStreamFormat(ctx, doc, catalog, "PDF/A-2b") {
+				if v.Rule == Rule_19005_2_6_1_6_t01 {
+					got++
+				}
+			}
+			if got != tc.want {
+				t.Errorf("t1 fired %d times, want %d", got, tc.want)
+			}
+		})
+	}
+}

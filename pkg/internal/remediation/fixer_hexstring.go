@@ -88,8 +88,10 @@ func repairPageHexStrings(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		return false
 	}
 
-	// The detector's own parse, so a page is rewritten exactly when litho
-	// reports one (compliance.checkContentStreamFormat).
+	// The detector's parse, so every page litho reports one on is rewritten
+	// (compliance.checkContentStreamFormat). The detector judges only the
+	// strings an operator reads, so a page is also rewritten for a malformed
+	// string it does not report, which re-serialising repairs all the same.
 	ops, violations := content.ParseStreamDataFormatChecked(ctx, data)
 	if !hasMalformedHexViolation(violations) {
 		return false

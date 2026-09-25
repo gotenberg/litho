@@ -65,7 +65,9 @@ const maxContentFormatViolationsPerStream = 64
 // Every finding on the page is reported. Stopping at the first one lost the
 // other test entirely when both defects were present: a page whose first bad
 // string has an odd digit count and whose second holds a non-hex character
-// answered t1 alone, where veraPDF answers both.
+// answered t1 alone, where veraPDF answers both. A hex string answers only
+// where veraPDF reads it, see [contentStringJudged]; the other streams a page
+// draws are judged by [drawnStreamHexStrings].
 //
 // # Corpus evidence
 //
@@ -92,34 +94,160 @@ func checkContentStreamFormat(ctx context.Context, doc *document.Document, catal
 			continue
 		}
 
-		_, violations := content.ParseStreamDataFormatChecked(ctx, streamData)
+		// A stream the parser gives up on still states what it read before
+		// the failure, so the violations are judged either way.
+		_, _, violations, err := content.ParseStreamDataForCompliance(ctx, streamData)
+		if err != nil {
+			doc.Logger.Debug("compliance.format: cannot parse the whole page content", "page", i+1, "error", err)
+		}
 		reported := 0
 		for _, v := range violations {
 			if reported == maxContentFormatViolationsPerStream {
 				break
 			}
-			rule := oddRule
+			var rule Rule
 			switch {
-			case errors.Is(v, parser.ErrHexStringInvalidChar):
-				rule = charRule
-			case errors.Is(v, parser.ErrNumberExponentOperand):
+			case errors.Is(v.Err, parser.ErrNumberExponentOperand):
 				// An operator ISO 32000-1 does not define, as
 				// checkExponentOperands states for the other streams.
 				rule = operatorRule
-			case errors.Is(v, parser.ErrNumberExponent):
+			case errors.Is(v.Err, parser.ErrNumberExponent):
 				// Inside an array or a dictionary the token is neither a
 				// number nor an operator, a syntax error no ISO 19005 rule
 				// states. veraPDF gives up on the content stream and reports
 				// nothing from it; measured with veraPDF 1.30 on a dash array,
 				// a BDC property list and an inline image dictionary.
 				continue
+			case !contentStringJudged(v):
+				continue
+			case errors.Is(v.Err, parser.ErrHexStringInvalidChar):
+				rule = charRule
+			default:
+				rule = oddRule
 			}
 			reported++
 			results = append(results, Violation{
 				Rule:    rule,
-				Context: fmt.Sprintf("page %d: %s", i+1, v.Error()),
+				Context: fmt.Sprintf("page %d: %s", i+1, v.Err.Error()),
 			})
 		}
+	}
+	return results
+}
+
+// contentStringJudged reports whether veraPDF judges the syntax of the strings
+// in the operand holding v, a violation recorded in a content stream.
+//
+// ISO 19005-1/2/3, 6.1.6 and ISO 19005-4, 6.1.5 state the hex string tests
+// over every string a file writes, and veraPDF reaches a string of a content
+// stream only through the operator that reads it: the string Tj, ' and " show,
+// every string of the array TJ shows, and every string of the dictionary BDC
+// and DP carry as their property list and BI as its inline image dictionary,
+// nested arrays and dictionaries included. A string in any other operand, the
+// operands of an operator ISO 32000-1 does not define and those no operator
+// follows among them, is never judged. Measured with veraPDF 1.30 at PDF/A-2b:
+// "<414> Tj" and "[<414>] TJ" fail t1, and "<414> zz", "<414> w",
+// "<414> 5 Tj", "/Span <414> BDC" and a trailing "<414>" pass it.
+//
+// veraPDF judges the /ActualText, /Alt and /Lang strings of a property list
+// twice, once as values of the dictionary and once as the text the operator
+// carries, so it fails the test twice for one such string. litho states it
+// once.
+func contentStringJudged(v content.FormatViolation) bool {
+	if !v.Last {
+		return false
+	}
+	var ok bool
+	switch v.Operator {
+	case "Tj", "'", `"`:
+		_, ok = v.Operand.(ast.PdfString)
+	case "TJ":
+		_, ok = v.Operand.(ast.PdfArray)
+	case "BDC", "DP", "BI":
+		_, ok = v.Operand.(ast.PdfDict)
+	}
+	return ok
+}
+
+// drawnStreamHexStrings states the hex string tests, ISO 19005-1/2/3, 6.1.6
+// t1 and t2 and ISO 19005-4, 6.1.5 t1 and t2, for the content streams a page
+// draws besides its own: the form XObjects it paints, the tiling patterns it
+// selects, the glyphs of the Type3 fonts it shows text with and its annotation
+// appearances. [checkContentStreamFormat] states them for a page's own
+// content.
+//
+// The walk that states the undefined-operator rule for those streams parses
+// each one, and states these tests from the same parse. Measured with veraPDF
+// 1.30 at PDF/A-1b and PDF/A-2b, a bad hex string in any of them fails the
+// test once per string; a stream a page declares and never draws passes it,
+// be it a form no Do paints, a pattern no scn selects or a Type3 font a Tf
+// selects and no text shows; and a stream drawn twice, by one page or by two,
+// or an appearance two annotations share, fails it once. The streams are
+// therefore judged once for the whole document.
+//
+// A form XObject painted by another form XObject or by an appearance stream
+// fails the test too, and the walk does not reach it.
+//
+// The walk runs on one goroutine, so the judge takes no lock.
+type drawnStreamHexStrings struct {
+	oddRule, charRule Rule
+	judged            map[int]bool
+}
+
+// newDrawnStreamHexStrings returns the judge for profile, or nil when the
+// profile states no hex string test.
+func newDrawnStreamHexStrings(profile string) *drawnStreamHexStrings {
+	oddRule := hexStringRule(profile)
+	if oddRule.Specification == "" {
+		return nil
+	}
+	return &drawnStreamHexStrings{
+		oddRule:  oddRule,
+		charRule: hexStringInvalidCharRule(profile),
+		judged:   make(map[int]bool),
+	}
+}
+
+// once returns j the first time the walk reaches the stream obj, and nil
+// every time after, so the stream is judged once. A stream written directly
+// rather than referenced can be reached only once.
+func (j *drawnStreamHexStrings) once(obj ast.PdfObject) *drawnStreamHexStrings {
+	if j == nil {
+		return nil
+	}
+	if ref, isRef := obj.(ast.PdfIndirectRef); isRef {
+		if j.judged[ref.ObjectNum] {
+			return nil
+		}
+		j.judged[ref.ObjectNum] = true
+	}
+	return j
+}
+
+// check states the tests for the violations recorded while parsing one
+// stream. A nil j states nothing: the stream was judged already.
+func (j *drawnStreamHexStrings) check(violations []content.FormatViolation, pageNum int) []Violation {
+	if j == nil {
+		return nil
+	}
+	var results []Violation
+	for _, v := range violations {
+		if len(results) == maxContentFormatViolationsPerStream {
+			break
+		}
+		rule := j.oddRule
+		switch {
+		case !errors.Is(v.Err, parser.ErrHexStringOddDigits) && !errors.Is(v.Err, parser.ErrHexStringInvalidChar):
+			continue
+		case !contentStringJudged(v):
+			continue
+		case errors.Is(v.Err, parser.ErrHexStringInvalidChar):
+			rule = j.charRule
+		}
+		results = append(results, Violation{
+			Rule:    rule,
+			Context: fmt.Sprintf("page %d: %s", pageNum, v.Err.Error()),
+		})
 	}
 	return results
 }
@@ -144,7 +272,7 @@ func checkContentStreamFormat(ctx context.Context, doc *document.Document, catal
 //
 // A number inside an array or a dictionary answers to no rule; see
 // [checkContentStreamFormat].
-func checkExponentOperands(violations []error, part, pageNum int) []Violation {
+func checkExponentOperands(violations []content.FormatViolation, part, pageNum int) []Violation {
 	rule := undefinedOperatorRule(part)
 	if rule.Specification == "" {
 		return nil
@@ -154,10 +282,10 @@ func checkExponentOperands(violations []error, part, pageNum int) []Violation {
 		if len(results) == maxContentFormatViolationsPerStream {
 			break
 		}
-		if errors.Is(v, parser.ErrNumberExponentOperand) {
+		if errors.Is(v.Err, parser.ErrNumberExponentOperand) {
 			results = append(results, Violation{
 				Rule:    rule,
-				Context: fmt.Sprintf("page %d: %s", pageNum, v.Error()),
+				Context: fmt.Sprintf("page %d: %s", pageNum, v.Err.Error()),
 			})
 		}
 	}

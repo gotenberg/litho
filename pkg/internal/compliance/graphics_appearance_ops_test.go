@@ -73,7 +73,7 @@ func appearanceOpViolations(t *testing.T, inAppearance bool) []Violation {
 		t.Fatalf("ResolvePages: %v (%d pages)", err, len(pages))
 	}
 
-	got := checkAnnotationAppearanceOps(ctx, doc, pages[0].Dict, 2, 1)
+	got := checkAnnotationAppearanceOps(ctx, doc, pages[0].Dict, 2, 1, nil)
 	var found []Violation
 	for _, v := range got {
 		if strings.HasPrefix(v.Rule.Clause, "6.2.2") {

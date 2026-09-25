@@ -36,8 +36,10 @@ type ByteRange struct {
 // and emitting operations when an operator keyword is encountered. Inline
 // images (BI/ID/EI) are detected and safely skipped. When ranges is non-nil,
 // the parser must have offset tracking enabled and each operation's byte
-// range is appended to it.
-func parseOperations(ctx context.Context, p *parser.Parser, ranges *[]ByteRange) ([]Operation, error) {
+// range is appended to it. When placer is non-nil, the parser must have format
+// checking enabled, and each violation it records is placed on the operation
+// whose operands hold it.
+func parseOperations(ctx context.Context, p *parser.Parser, ranges *[]ByteRange, placer *violationPlacer) ([]Operation, error) {
 	ops := make([]Operation, 0, 256)        //nolint:mnd // reasonable initial capacity for typical pages
 	operands := make([]ast.PdfObject, 0, 8) //nolint:mnd // most operators have ≤6 operands
 	tokenCount := 0
@@ -80,14 +82,17 @@ func parseOperations(ctx context.Context, p *parser.Parser, ranges *[]ByteRange)
 				if _, err := p.Consume(); err != nil {
 					return nil, fmt.Errorf("failed to consume BI: %w", err)
 				}
+				placer.dropOperands()
 				dict, err := p.ParseInlineImageDict(ctx)
 				if err != nil {
 					return nil, fmt.Errorf("inline image: %w", err)
 				}
+				placer.take(0)
 				ops = append(ops, Operation{
 					Operator: "BI",
 					Operands: []ast.PdfObject{dict},
 				})
+				placer.place("BI", ops[len(ops)-1].Operands)
 				operands = nil
 				// The image data is consumed off-token by ParseInlineImageDict,
 				// which empties the token buffer before reading raw bytes, so
@@ -101,6 +106,7 @@ func parseOperations(ctx context.Context, p *parser.Parser, ranges *[]ByteRange)
 				Operator: tok.Value,
 				Operands: operands,
 			})
+			placer.place(tok.Value, operands)
 			operands = nil
 			if _, err := p.Consume(); err != nil {
 				return nil, fmt.Errorf("failed to consume operator token: %w", err)
@@ -116,8 +122,10 @@ func parseOperations(ctx context.Context, p *parser.Parser, ranges *[]ByteRange)
 				if _, consumeErr := p.Consume(); consumeErr != nil {
 					return nil, fmt.Errorf("failed to parse operand: %w (token: %v)", err, tok)
 				}
+				placer.take(noOperand)
 				continue
 			}
+			placer.take(len(operands))
 			operands = append(operands, obj)
 		}
 	}
@@ -131,7 +139,7 @@ func parseOperations(ctx context.Context, p *parser.Parser, ranges *[]ByteRange)
 func ParseStreamData(ctx context.Context, data []byte) ([]Operation, error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex)
-	return parseOperations(ctx, p, nil)
+	return parseOperations(ctx, p, nil, nil)
 }
 
 // ParseStreamDataWithOffsets parses content stream bytes and also returns the
@@ -142,7 +150,7 @@ func ParseStreamDataWithOffsets(ctx context.Context, data []byte) ([]Operation, 
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex).WithOffsetTracking()
 	ranges := make([]ByteRange, 0, 256) //nolint:mnd // matches the operations capacity hint
-	ops, err := parseOperations(ctx, p, &ranges)
+	ops, err := parseOperations(ctx, p, &ranges, nil)
 	if err != nil {
 		// On error parseOperations returns ops=nil but ranges may hold the
 		// entries recorded before the failure; drop them so the two slices
@@ -158,7 +166,7 @@ func ParseStreamDataWithOffsets(ctx context.Context, data []byte) ([]Operation, 
 func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation, []error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex).WithFormatChecking()
-	ops, _ := parseOperations(ctx, p, nil)
+	ops, _ := parseOperations(ctx, p, nil, nil)
 	return ops, p.FormatViolations
 }
 
@@ -169,21 +177,119 @@ func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation
 func ParseStreamDataWithOverflows(ctx context.Context, data []byte) ([]Operation, []float64, error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex)
-	ops, err := parseOperations(ctx, p, nil)
+	ops, err := parseOperations(ctx, p, nil, nil)
 	return ops, p.IntegerOverflows, err
 }
 
 // ParseStreamDataForCompliance parses content stream data with PDF/A format
 // checking enabled and returns, from that one parse, what
 // [ParseStreamDataWithOverflows] returns and the format violations
-// [ParseStreamDataFormatChecked] returns. Format checking records violations
-// without changing the operations, so a walk that judges both the operators
-// and the syntax of a stream parses it once.
-func ParseStreamDataForCompliance(ctx context.Context, data []byte) ([]Operation, []float64, []error, error) {
+// [ParseStreamDataFormatChecked] returns, each placed on the operation whose
+// operands hold it. Format checking records violations without changing the
+// operations, so a walk that judges both the operators and the syntax of a
+// stream parses it once.
+//
+// The violations come back even when the parse fails: the ones recorded before
+// the failure keep their placement, and the rest have no operator.
+func ParseStreamDataForCompliance(ctx context.Context, data []byte) ([]Operation, []float64, []FormatViolation, error) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	p := parser.NewParser(lex).WithFormatChecking()
-	ops, err := parseOperations(ctx, p, nil)
-	return ops, p.IntegerOverflows, p.FormatViolations, err
+	placer := &violationPlacer{p: p}
+	ops, err := parseOperations(ctx, p, nil, placer)
+	return ops, p.IntegerOverflows, placer.finish(), err
+}
+
+// FormatViolation is a format violation the parser recorded in a content
+// stream, placed on the operation whose operands hold it. A reader that judges
+// the syntax of some operands only, as veraPDF does with strings, tells the
+// violations apart by this placement.
+type FormatViolation struct {
+	// Err is the violation. Match its class with [errors.Is].
+	Err error
+	// Operator is the keyword of the operation whose operands hold the
+	// violation, or "" when no operator follows them before the stream ends or
+	// the parse fails.
+	Operator string
+	// Operand is the operand of that operation that holds the violation, or
+	// nil when the violation lies in no operand the operation kept, such as a
+	// token the parser could not read.
+	Operand ast.PdfObject
+	// Last reports whether Operand is the operation's last operand.
+	Last bool
+}
+
+// noOperand is the operand index of a violation that lies in no operand an
+// operation keeps.
+const noOperand = -1
+
+// pendingViolation is a violation recorded among the operands of an operation
+// whose operator is not read yet.
+type pendingViolation struct {
+	err     error
+	operand int
+}
+
+// violationPlacer places the violations a format-checking parser records on
+// the operations [parseOperations] emits. A nil placer places nothing, so the
+// parses that do not check the format pay nothing for it.
+type violationPlacer struct {
+	p       *parser.Parser
+	taken   int
+	pending []pendingViolation
+	placed  []FormatViolation
+}
+
+// take attributes the violations recorded since its last call to the operand
+// at index operand of the operation being read, or to none for [noOperand].
+func (vp *violationPlacer) take(operand int) {
+	if vp == nil {
+		return
+	}
+	for _, err := range vp.p.FormatViolations[vp.taken:] {
+		vp.pending = append(vp.pending, pendingViolation{err: err, operand: operand})
+	}
+	vp.taken = len(vp.p.FormatViolations)
+}
+
+// dropOperands detaches the pending violations from their operands. BI drops
+// the operands read before it, so what they hold lies in no operand of the
+// inline image operation.
+func (vp *violationPlacer) dropOperands() {
+	if vp == nil {
+		return
+	}
+	vp.take(noOperand)
+	for i := range vp.pending {
+		vp.pending[i].operand = noOperand
+	}
+}
+
+// place places the pending violations on the operation just read.
+func (vp *violationPlacer) place(operator string, operands []ast.PdfObject) {
+	if vp == nil {
+		return
+	}
+	vp.take(noOperand)
+	for _, pv := range vp.pending {
+		v := FormatViolation{Err: pv.err, Operator: operator}
+		if pv.operand >= 0 && pv.operand < len(operands) {
+			v.Operand = operands[pv.operand]
+			v.Last = pv.operand == len(operands)-1
+		}
+		vp.placed = append(vp.placed, v)
+	}
+	vp.pending = vp.pending[:0]
+}
+
+// finish returns every violation recorded, the ones no operator followed
+// included.
+func (vp *violationPlacer) finish() []FormatViolation {
+	vp.take(noOperand)
+	for _, pv := range vp.pending {
+		vp.placed = append(vp.placed, FormatViolation{Err: pv.err})
+	}
+	vp.pending = nil
+	return vp.placed
 }
 
 // ParsePageContent extracts, concatenates, and parses the content streams of a page or form XObject.
@@ -263,7 +369,7 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(allData), int64(len(allData)), 0))
 	p := parser.NewParser(lex)
-	ops, err := parseOperations(ctx, p, nil)
+	ops, err := parseOperations(ctx, p, nil, nil)
 	if err != nil {
 		return nil, err
 	}
