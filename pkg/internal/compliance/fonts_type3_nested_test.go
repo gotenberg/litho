@@ -63,7 +63,7 @@ func TestCheckType3CharProcFonts_NestedUnembeddedFont(t *testing.T) {
 
 	// The page shows code 97, whose procedure selects the unembedded Helvetica.
 	got := checkType3CharProcFonts(ctx, doc, parseOps(t, "BT /T3 12 Tf (a) Tj ET"), res, nil,
-		1, "PDF/A-2b", map[int]bool{}, map[int]bool{}, 0)
+		1, "PDF/A-2b", newFontJudgements(), map[int]bool{}, 0)
 	if !hasRule(got, Rule_19005_2_6_2_11_4_1_t01) {
 		t.Errorf("unembedded font inside a Type3 procedure must fire §6.2.11.4.1 t1, got %v", got)
 	}
@@ -71,14 +71,14 @@ func TestCheckType3CharProcFonts_NestedUnembeddedFont(t *testing.T) {
 	// A glyph the page never shows brings no font into scope: code 98 selects
 	// no procedure, so the nested Helvetica is never reached.
 	unused := checkType3CharProcFonts(ctx, doc, parseOps(t, "BT /T3 12 Tf (b) Tj ET"), res, nil,
-		1, "PDF/A-2b", map[int]bool{}, map[int]bool{}, 0)
+		1, "PDF/A-2b", newFontJudgements(), map[int]bool{}, 0)
 	if len(unused) != 0 {
 		t.Errorf("an unshown glyph paints nothing, so nothing may fire; got %v", unused)
 	}
 
 	// Rendering mode 3 paints no glyph, so no procedure runs.
 	invisible := checkType3CharProcFonts(ctx, doc, parseOps(t, "BT 3 Tr /T3 12 Tf (a) Tj ET"), res, nil,
-		1, "PDF/A-2b", map[int]bool{}, map[int]bool{}, 0)
+		1, "PDF/A-2b", newFontJudgements(), map[int]bool{}, 0)
 	if len(invisible) != 0 {
 		t.Errorf("a mode-3 Type3 font renders nothing; got %v", invisible)
 	}

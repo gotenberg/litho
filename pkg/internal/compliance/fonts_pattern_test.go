@@ -84,9 +84,9 @@ func TestCheckPatternFonts_UnembeddedFontInCell(t *testing.T) {
 			ops := parseOps(t, tt.src)
 			var got []Violation
 			if tt.form {
-				got = checkFormXObjectFonts(ctx, doc, ops, res, nil, 1, "PDF/A-2b", map[int]bool{}, map[int]bool{}, 0)
+				got = checkFormXObjectFonts(ctx, doc, ops, res, nil, 1, "PDF/A-2b", newFontJudgements(), map[int]bool{}, 0)
 			} else {
-				got = checkPatternFonts(ctx, doc, ops, res, nil, 1, "PDF/A-2b", map[int]bool{}, map[int]bool{}, 0)
+				got = checkPatternFonts(ctx, doc, ops, res, nil, 1, "PDF/A-2b", newFontJudgements(), map[int]bool{}, 0)
 			}
 			if fired := hasRule(got, Rule_19005_2_6_2_11_4_1_t01); fired != tt.want {
 				t.Errorf("6.2.11.4.1 t1 fired = %v, want %v (%v)", fired, tt.want, got)

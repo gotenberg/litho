@@ -160,11 +160,11 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	var results []Violation
 
 	// Track fonts already checked to avoid duplicate violations. checked keys on
-	// the page-resource name; checkedObjs keys on the resolved object number so
-	// the annotation-appearance pass does not re-check a font also declared in a
+	// the page-resource name; judged keys on the resolved object number so the
+	// annotation-appearance pass does not re-check a font also declared in a
 	// page's /Resources/Font.
 	checked := make(map[string]bool)
-	checkedObjs := make(map[int]bool)
+	judged := newFontJudgements()
 
 	// The embedding rule runs once per font object, on the first page that
 	// selects it, but it is gated on visible rendering. A font drawn invisibly
@@ -181,31 +181,41 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		if ctx.Err() != nil {
 			return results
 		}
+		// A content stream an earlier page shares is judged there alone, with
+		// the fonts that page's resources name, so this page selects no font
+		// through it; see [markJudgedContents].
+		judgeContent := !p.contentJudged
 
-		results = append(results, checkPageDeclaredFonts(ctx, doc, catalog, p, pageIdx+1, profile, checked, checkedObjs, visibleAnywhere)...)
+		if judgeContent {
+			results = append(results, checkPageDeclaredFonts(ctx, doc, catalog, p, pageIdx+1, profile, checked, judged, visibleAnywhere)...)
+		}
 
 		// Fonts referenced only from annotation appearance streams are never
 		// reached by the page /Resources/Font walk above. veraPDF validates them
 		// through the appearance content stream (for example
 		// annots[0]/appearance[0]/contentStream[0]/operators[N]/font[0]); litho
 		// matches by checking their subset glyph coverage here.
-		results = append(results, checkAnnotationAppearanceFonts(ctx, doc, p.dict, treeRoot, pageIdx+1, profile, checkedObjs)...)
+		results = append(results, checkAnnotationAppearanceFonts(ctx, doc, p.dict, treeRoot, pageIdx+1, profile, judged)...)
+
+		if !judgeContent {
+			continue
+		}
 
 		// Fonts used only inside a Form XObject invoked from the page content
 		// (a Do operator) are likewise not reached by the page /Resources/Font
 		// walk. veraPDF descends into the form's content stream and applies the
 		// same font rules there; litho matches by walking invoked forms.
 		xobjVisited := make(map[int]bool)
-		results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, checkedObjs, xobjVisited, 0)...)
+		results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
 
 		// A tiling pattern's cell is another content stream the page walk above
 		// never enters. See checkPatternFonts.
-		results = append(results, checkPatternFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, checkedObjs, xobjVisited, 0)...)
+		results = append(results, checkPatternFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
 
 		// A Type3 glyph procedure is another content stream that may select
 		// fonts of its own, and the page walk above stops at the Type3 font
 		// itself. veraPDF applies the font rules inside those procedures too.
-		results = append(results, checkType3CharProcFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, checkedObjs, xobjVisited, 0)...)
+		results = append(results, checkType3CharProcFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
 	}
 
 	doc.Logger.Debug("compliance: fonts: font checks complete",
@@ -213,17 +223,93 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	return results
 }
 
+// fontJudgements records, for one run of the font group, what it has stated
+// about each font object, so every rule is stated as often as veraPDF states
+// it: veraPDF judges an object it reaches again only the first time.
+type fontJudgements struct {
+	// dict holds the font objects whose dictionary rules were judged.
+	dict map[int]bool
+	// subset holds the font objects the subset rule failed for; see
+	// [fontJudgements.subsetCoverage].
+	subset map[int]bool
+}
+
+// newFontJudgements returns an empty record.
+func newFontJudgements() *fontJudgements {
+	return &fontJudgements{dict: make(map[int]bool), subset: make(map[int]bool)}
+}
+
+// subsetCoverage states the rule a font subset's /CharSet or /CIDSet answers
+// (see [checkSubsetCoverage]) against the codes one content stream shows
+// through fontRef, unless it already failed for that font object.
+//
+// veraPDF states the rule on the font object, PDType1Font for /CharSet and
+// PDCIDFont for /CIDSet, and judges that object once for the whole document.
+// ISO 19005-1, 6.3.5 t2 and t3 are deferred rules, which veraPDF evaluates
+// once every glyph of the document has been read, so a subset fails them when
+// any page renders a glyph the set leaves out. Stating the rule for the first
+// failing page alone gives that count. Measured with veraPDF 1.30 at PDF/A-1b
+// and PDF/A-2b: two pages showing the same codes through one Type1 subset
+// with no /CharSet, or one Type0 subset whose /CIDSet leaves them out, fail
+// ISO 19005-1, 6.3.5 t2 or t3 and ISO 19005-2, 6.2.11.4.2 t2 once, whether
+// the pages share one content stream or draw one each.
+//
+// A font written directly in a resource dictionary has no object to key on,
+// and is judged wherever it is used.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14847.pdf: shows two Type0 subsets whose /CIDSet leaves out
+//     rendered CIDs on four pages, and veraPDF fails ISO 19005-1, 6.3.5 t3
+//     and ISO 19005-2, 6.2.11.4.2 t2 twice, once per font, where litho failed
+//     them eight times.
+//   - All corpora: 237 counts of ISO 19005-1, 6.3.5 t2 and t3 and ISO
+//     19005-2, 6.2.11.4.2 t2 at PDF/A-1b and PDF/A-2b moved toward veraPDF's
+//     and none away, 217 of them onto it; their summed distance from veraPDF
+//     fell from 4497 to 84.
+func (j *fontJudgements) subsetCoverage(ctx context.Context, doc *document.Document, fontRef ast.PdfObject, font ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
+	ref, indirect := fontRef.(ast.PdfIndirectRef)
+	if indirect && j.subset[ref.ObjectNum] {
+		return nil
+	}
+	results := checkSubsetCoverage(ctx, doc, font, fontName, pageNum, profile, usage)
+	if indirect && len(results) > 0 {
+		j.subset[ref.ObjectNum] = true
+	}
+	return results
+}
+
+// checkSubsetCoverage judges the /CharSet of a Type1 subset or the /CIDSet of
+// the descendant of a Type0 subset against the codes usage shows. See
+// [checkGlyphCoverage] and [checkCIDFontGlyphCoverage].
+func checkSubsetCoverage(ctx context.Context, doc *document.Document, font ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
+	if fontSubtype(ctx, doc, font) != "Type0" {
+		return checkGlyphCoverage(ctx, doc, font, fontName, pageNum, profile, usage)
+	}
+	descArr, err := document.ResolveArray(ctx, doc, font["DescendantFonts"])
+	if err != nil || len(descArr) == 0 {
+		return nil
+	}
+	cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0])
+	if err != nil || cidFontDict == nil {
+		return nil
+	}
+	// The shown codes decide whether the font renders at all, and the CIDs
+	// they select scope the checks that judge rendered glyphs alone.
+	return checkCIDFontGlyphCoverage(ctx, doc, cidFontDict, fontName, pageNum, profile, usage != nil && len(usage.charCodes) > 0, type0UsedCIDs(ctx, doc, font, usage))
+}
+
 // checkPageDeclaredFonts runs the full font-check suite over the fonts declared
 // in a page's /Resources/Font. It records each resolved font object number in
-// checkedObjs so [checkAnnotationAppearanceFonts] does not re-check a font that
-// is also declared on the page.
+// judged so [checkAnnotationAppearanceFonts] does not re-check a font that is
+// also declared on the page.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue11678.pdf: its page 2 stream declares /Length 4218 over no
 //     data, and judging glyphs on unparsable content reports a .notdef
 //     against recovered bytes veraPDF never reads.
-func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog ast.PdfDict, p *pageCtx, pageNum int, profile string, checked map[string]bool, checkedObjs map[int]bool, visibleAnywhere map[int]bool) []Violation {
+func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog ast.PdfDict, p *pageCtx, pageNum int, profile string, checked map[string]bool, judged *fontJudgements, visibleAnywhere map[int]bool) []Violation {
 	resources := p.resources
 	if resources == nil {
 		return nil
@@ -269,7 +355,7 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 		// differ from those on the page that first selected it.
 		dictRulesDone := false
 		if isIndirect {
-			dictRulesDone = checkedObjs[ref.ObjectNum]
+			dictRulesDone = judged.dict[ref.ObjectNum]
 		} else if checked[fontKey] {
 			continue
 		}
@@ -282,7 +368,7 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 		// those rules constrain glyphs actually shown. A font rendered instead by
 		// an annotation appearance or a Form XObject is reached by the dedicated
 		// passes in checkFontGroup with that context's usage, so it is left
-		// unmarked in checkedObjs here to avoid starving them. Only present but
+		// unmarked in judged here to avoid starving them. Only present but
 		// unparseable content forces the conservative "check every declared font"
 		// fallback (litho cannot prove non-use).
 		var usage *fontUsageInfo
@@ -302,7 +388,7 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 
 		checked[fontKey] = true
 		if isIndirect {
-			checkedObjs[ref.ObjectNum] = true
+			judged.dict[ref.ObjectNum] = true
 		}
 		// Skip width checks for fonts not used for visible rendering here.
 		isVisible := parseFailed || (usage != nil && usage.visible)
@@ -316,7 +402,8 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 		if !dictRulesDone {
 			results = append(results, checkFontDictRules(ctx, doc, font, fontKey, pageNum, profile, embedVisible, usage)...)
 		}
-		if fontSubtype(ctx, doc, font) == "Type0" {
+		isType0 := fontSubtype(ctx, doc, font) == "Type0"
+		if isType0 {
 			if dictRulesDone {
 				// The dictionary was reported on an earlier page, but this page's
 				// glyphs are still unjudged. See checkType0UsageRules. Content
@@ -335,6 +422,11 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 		} else {
 			results = append(results, checkFontUsageRules(ctx, doc, font, fontKey, pageNum, profile, isVisible, usage)...)
 		}
+		// The subset rule judges glyphs too, so the unparsable content above
+		// states nothing more for a composite font judged on an earlier page.
+		if !isType0 || !dictRulesDone || !parseFailed {
+			results = append(results, judged.subsetCoverage(ctx, doc, fontRef, font, fontKey, pageNum, profile, usage)...)
+		}
 
 		// PUA ActualText check (needs page and catalog context).
 		results = append(results, checkPUAWithoutActualText(ctx, doc, font, fontKey, pageNum, profile, p.dict, catalog)...)
@@ -349,9 +441,9 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 // a Do-invoked form, ISO 19005-2 §6.2.11.4.1); litho's page pass walks
 // /Resources/Font on the page only, so such a font is otherwise never reached.
 // Recursion into nested forms is bounded by the form budget ([formTooDeep]);
-// visited guards resource cycles; checkedObjs deduplicates against fonts
+// visited guards resource cycles; judged deduplicates against fonts
 // already checked on the page and across forms.
-func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
+func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
 	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return nil
 	}
@@ -398,10 +490,10 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 			doc.Logger.Debug("compliance: fonts: cannot parse Form XObject", "page", pageNum, "error", err)
 			continue
 		}
-		results = append(results, checkResourceFonts(ctx, doc, xobjRes, subOps, pageNum, profile, checkedObjs)...)
+		results = append(results, checkResourceFonts(ctx, doc, xobjRes, subOps, pageNum, profile, judged)...)
 		results = append(results, checkFormPUA(ctx, doc, xobjRes, subOps, data, stream.Dict, treeRoot, pageNum, profile)...)
-		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, xobjRes, treeRoot, pageNum, profile, checkedObjs, visited, depth+1)...)
-		results = append(results, checkPatternFonts(ctx, doc, subOps, xobjRes, treeRoot, pageNum, profile, checkedObjs, visited, depth+1)...)
+		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, xobjRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
+		results = append(results, checkPatternFonts(ctx, doc, subOps, xobjRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 	}
 	return results
 }
@@ -425,7 +517,7 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 //   - pdfjs issue15716.pdf: fills a rectangle with a pattern whose cell shows a
 //     glyph from an unembedded ZapfDingbats, which veraPDF reports under
 //     ISO 19005-2, 6.2.11.4.1 and litho never reached.
-func checkPatternFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
+func checkPatternFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
 	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return nil
 	}
@@ -476,9 +568,9 @@ func checkPatternFonts(ctx context.Context, doc *document.Document, ops []conten
 			doc.Logger.Debug("compliance: fonts: cannot parse tiling pattern", "page", pageNum, "error", err)
 			continue
 		}
-		results = append(results, checkResourceFonts(ctx, doc, patternRes, subOps, pageNum, profile, checkedObjs)...)
-		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, patternRes, treeRoot, pageNum, profile, checkedObjs, visited, depth+1)...)
-		results = append(results, checkPatternFonts(ctx, doc, subOps, patternRes, treeRoot, pageNum, profile, checkedObjs, visited, depth+1)...)
+		results = append(results, checkResourceFonts(ctx, doc, patternRes, subOps, pageNum, profile, judged)...)
+		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, patternRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
+		results = append(results, checkPatternFonts(ctx, doc, subOps, patternRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 	}
 	return results
 }
@@ -503,7 +595,7 @@ func checkPatternFonts(ctx context.Context, doc *document.Document, ops []conten
 //   - pdfjs ContentStreamCycleType3insideType3.pdf: reaches an unembedded
 //     Helvetica through two nested Type3 fonts, and its name warns of the
 //     resource cycle the visited set breaks.
-func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, depth int) []Violation {
+func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
 	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return nil
 	}
@@ -565,9 +657,9 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 					"page", pageNum, "glyph", glyphName, "error", err)
 				continue
 			}
-			results = append(results, checkResourceFonts(ctx, doc, t3Res, procOps, pageNum, profile, checkedObjs)...)
-			results = append(results, checkType3CharProcFonts(ctx, doc, procOps, t3Res, treeRoot, pageNum, profile, checkedObjs, visited, depth+1)...)
-			results = append(results, checkFormXObjectFonts(ctx, doc, procOps, t3Res, treeRoot, pageNum, profile, checkedObjs, visited, depth+1)...)
+			results = append(results, checkResourceFonts(ctx, doc, t3Res, procOps, pageNum, profile, judged)...)
+			results = append(results, checkType3CharProcFonts(ctx, doc, procOps, t3Res, treeRoot, pageNum, profile, judged, visited, depth+1)...)
+			results = append(results, checkFormXObjectFonts(ctx, doc, procOps, t3Res, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 		}
 	}
 	return results
@@ -591,7 +683,7 @@ func shownGlyphNames(encoding map[byte]string, charCodes map[byte]bool) []string
 // content stream selects for rendering, resolved from res /Resources/Font. Only
 // fonts actually used (selected with Tf and shown) are checked; a font declared
 // in the resources but never selected renders no glyph and is out of scope.
-func checkResourceFonts(ctx context.Context, doc *document.Document, res ast.PdfDict, ops []content.Operation, pageNum int, profile string, checkedObjs map[int]bool) []Violation {
+func checkResourceFonts(ctx context.Context, doc *document.Document, res ast.PdfDict, ops []content.Operation, pageNum int, profile string, judged *fontJudgements) []Violation {
 	fontDict, _ := document.ResolveDict(ctx, doc, res["Font"])
 	if len(fontDict) == 0 {
 		return nil
@@ -609,16 +701,17 @@ func checkResourceFonts(ctx context.Context, doc *document.Document, res ast.Pdf
 		}
 		fontRef := fontDict[fontName]
 		if ref, ok := fontRef.(ast.PdfIndirectRef); ok {
-			if checkedObjs[ref.ObjectNum] {
+			if judged.dict[ref.ObjectNum] {
 				continue
 			}
-			checkedObjs[ref.ObjectNum] = true
+			judged.dict[ref.ObjectNum] = true
 		}
 		font, err := document.ResolveDict(ctx, doc, fontRef)
 		if err != nil || font == nil {
 			continue
 		}
 		results = append(results, checkSingleFont(ctx, doc, font, string(fontName), pageNum, profile, fontUsage.visible, fontUsage)...)
+		results = append(results, judged.subsetCoverage(ctx, doc, fontRef, font, string(fontName), pageNum, profile, fontUsage)...)
 	}
 	return results
 }
@@ -638,9 +731,9 @@ const maxAppearanceStateFonts = 256
 // widget appearance); litho's page pass only walks /Resources/Font on the page,
 // so a font referenced solely from an annotation appearance is otherwise never
 // reached. The full single-font suite runs here, scoped to the glyphs the
-// appearance stream actually renders. checkedObjs deduplicates against fonts
+// appearance stream actually renders. judged deduplicates against fonts
 // already checked on the page and across appearance streams.
-func checkAnnotationAppearanceFonts(ctx context.Context, doc *document.Document, page, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs map[int]bool) []Violation {
+func checkAnnotationAppearanceFonts(ctx context.Context, doc *document.Document, page, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements) []Violation {
 	annots, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annots) == 0 {
 		return nil
@@ -667,7 +760,7 @@ func checkAnnotationAppearanceFonts(ctx context.Context, doc *document.Document,
 			if !ok {
 				continue
 			}
-			results = append(results, checkAppearanceStreamFonts(ctx, doc, apObj, treeRoot, pageNum, profile, checkedObjs, visited, 0)...)
+			results = append(results, checkAppearanceStreamFonts(ctx, doc, apObj, treeRoot, pageNum, profile, judged, visited, 0)...)
 		}
 	}
 	return results
@@ -685,7 +778,7 @@ func checkAnnotationAppearanceFonts(ctx context.Context, doc *document.Document,
 //     reached only through a Form XObject the appearance invokes.
 //   - pdfjs issue17069.pdf: shows both routes at once, one font named by the
 //     appearance itself and one only by the form it invokes.
-func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apObj ast.PdfObject, treeRoot ast.PdfDict, pageNum int, profile string, checkedObjs, visited map[int]bool, stateCount int) []Violation {
+func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apObj ast.PdfObject, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, stateCount int) []Violation {
 	stream, err := document.ResolveStream(ctx, doc, apObj)
 	if err != nil {
 		// A state subdictionary: each value is an appearance stream.
@@ -699,7 +792,7 @@ func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apO
 				break
 			}
 			stateCount++
-			results = append(results, checkAppearanceStreamFonts(ctx, doc, subDict[stateName], treeRoot, pageNum, profile, checkedObjs, visited, stateCount)...)
+			results = append(results, checkAppearanceStreamFonts(ctx, doc, subDict[stateName], treeRoot, pageNum, profile, judged, visited, stateCount)...)
 		}
 		return results
 	}
@@ -741,7 +834,7 @@ func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apO
 	// scanAnnotationAppearanceCS).
 	// checkFormXObjectFonts carries the Do gating, the depth cap and the
 	// visited set, so a shared form is walked once.
-	results := checkFormXObjectFonts(ctx, doc, ops, res, treeRoot, pageNum, profile, checkedObjs, visited, 0)
+	results := checkFormXObjectFonts(ctx, doc, ops, res, treeRoot, pageNum, profile, judged, visited, 0)
 
 	for _, fontName := range sortedNames(fontDict) {
 		fontUsage := usage[string(fontName)]
@@ -750,24 +843,27 @@ func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apO
 		}
 		fontRef := fontDict[fontName]
 		if ref, ok := fontRef.(ast.PdfIndirectRef); ok {
-			if checkedObjs[ref.ObjectNum] {
+			if judged.dict[ref.ObjectNum] {
 				continue
 			}
-			checkedObjs[ref.ObjectNum] = true
+			judged.dict[ref.ObjectNum] = true
 		}
 		font, err := document.ResolveDict(ctx, doc, fontRef)
 		if err != nil || font == nil {
 			continue
 		}
 		results = append(results, checkSingleFont(ctx, doc, font, string(fontName), pageNum, profile, fontUsage.visible, fontUsage)...)
+		results = append(results, judged.subsetCoverage(ctx, doc, fontRef, font, string(fontName), pageNum, profile, fontUsage)...)
 	}
 	return results
 }
 
-// checkSingleFont runs all font checks against a single font dictionary.
-// If isVisible is false, width consistency and embedding checks are skipped
-// (the font is not used for visible rendering). Usage provides per-charCode
-// usage information for ToUnicode exemption checks.
+// checkSingleFont runs all font checks against a single font dictionary but
+// the subset rule, which its callers state once per font object through
+// [fontJudgements.subsetCoverage]. If isVisible is false, width consistency
+// and embedding checks are skipped (the font is not used for visible
+// rendering). Usage provides per-charCode usage information for ToUnicode
+// exemption checks.
 func checkSingleFont(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool, usage *fontUsageInfo) []Violation {
 	results := checkFontDictRules(ctx, doc, fontDict, fontName, pageNum, profile, isVisible, usage)
 	if fontSubtype(ctx, doc, fontDict) == "Type0" {
@@ -870,7 +966,8 @@ func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict as
 // text-showing operator, so these hold per page rather than per font object: a
 // font object shared by several pages must be judged against each page's own
 // usage, or a glyph defect that first appears on a later page is never seen.
-// Simple fonts only; [checkType0Font] covers the composite path.
+// Simple fonts only; [checkType0Font] covers the composite path. The /CharSet
+// rule is stated once per font object, by [fontJudgements.subsetCoverage].
 func checkFontUsageRules(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool, usage *fontUsageInfo) []Violation {
 	var results []Violation
 
@@ -885,9 +982,6 @@ func checkFontUsageRules(ctx context.Context, doc *document.Document, fontDict a
 
 	// .notdef glyph.
 	results = append(results, checkNotdefGlyph(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
-
-	// Glyph coverage (CharSet for Type1 subsets).
-	results = append(results, checkGlyphCoverage(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 
 	// ToUnicode CMap values.
 	results = append(results, checkToUnicodeCMapValues(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
@@ -910,7 +1004,7 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 }
 
 // checkFormPUA runs the PUA check over the fonts a Form XObject's own content
-// selects. It does not consult checkedObjs: a font already judged where the
+// selects. It does not consult judged: a font already judged where the
 // page shows it can still show an uncovered PUA glyph inside the form.
 func checkFormPUA(ctx context.Context, doc *document.Document, res ast.PdfDict, ops []content.Operation, data []byte, form, treeRoot ast.PdfDict, pageNum int, profile string) []Violation {
 	if puaActualTextRule(profile).Specification == "" {
@@ -1417,7 +1511,8 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 // object's dictionary is reported once, but every page that selects the font
 // shows its own codes, so these run again for each. veraPDF builds a glyph per
 // show operator. Simple fonts already work this way through
-// [checkFontUsageRules].
+// [checkFontUsageRules]. The /CIDSet rule is stated once per font object, by
+// [fontJudgements.subsetCoverage].
 //
 // # Corpus evidence
 //
@@ -1456,12 +1551,6 @@ func checkType0UsageRules(ctx context.Context, doc *document.Document, fontDict,
 			}
 		}
 	}
-
-	// CIDFont glyph coverage (CIDSet for CIDFont subsets). Completeness
-	// is scoped to USED CIDs: a CIDSet that omits a CID never rendered does
-	// not break the embedded subset for any glyph the page actually draws, so
-	// only used CIDs are required to be present.
-	results = append(results, checkCIDFontGlyphCoverage(ctx, doc, cidFontDict, fontName, pageNum, profile, usage != nil && len(usage.charCodes) > 0, type0UsedCIDs(ctx, doc, fontDict, usage))...)
 
 	// ToUnicode CMap values.
 	results = append(results, checkToUnicodeCMapValues(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
@@ -2250,7 +2339,9 @@ func checkType0GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 // page renders visibly. The embedding rule is reported once per font object, so
 // it cannot ask a single page whether the font is visible: a font drawn in
 // rendering mode 3 on the page that happens to declare it first, and normally on
-// a later page, is embedded-or-not regardless of which page is asked.
+// a later page, is embedded-or-not regardless of which page is asked. A page
+// whose content stream an earlier page shares renders nothing through it; see
+// [markJudgedContents].
 func collectVisibleFontObjects(ctx context.Context, doc *document.Document, vctx *validationCtx) map[int]bool {
 	visible := make(map[int]bool)
 	for pageIdx := range vctx.pages {
@@ -2258,7 +2349,7 @@ func collectVisibleFontObjects(ctx context.Context, doc *document.Document, vctx
 			return visible
 		}
 		p := &vctx.pages[pageIdx]
-		if p.resources == nil {
+		if p.resources == nil || p.contentJudged {
 			continue
 		}
 		fontDict, err := document.ResolveDict(ctx, doc, p.resources["Font"])
