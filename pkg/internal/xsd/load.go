@@ -29,10 +29,12 @@ import (
 // that load large schema sets can bound provisioning time.
 func Load(ctx context.Context, fsys fs.FS, rootPath string) (*Schema, error) {
 	loader := &loader{
-		fsys:    fsys,
-		schemas: make(map[string]*Schema),
-		raw:     make(map[string]*rawSchema),
-		loading: make(map[string]bool),
+		fsys:     fsys,
+		schemas:  make(map[string]*Schema),
+		raw:      make(map[string]*rawSchema),
+		loading:  make(map[string]bool),
+		own:      make(map[*Schema]*Schema),
+		includer: make(map[*Schema]*Schema),
 	}
 	root, _, err := loader.loadFile(ctx, rootPath, "")
 	if err != nil {
@@ -53,6 +55,14 @@ type loader struct {
 	schemas map[string]*Schema
 	raw     map[string]*rawSchema
 	loading map[string]bool
+	// own maps the Schema of each schema document to the components the
+	// document declares itself, apart from those its xs:include children
+	// copy in, so the link pass links each component once, in the scope
+	// of the document that wrote it ([refScope]).
+	own map[*Schema]*Schema
+	// includer maps the Schema of each included schema document to that
+	// of the first document that includes it.
+	includer map[*Schema]*Schema
 }
 
 // loadFile reads a single XSD by path. Returns the populated Schema
@@ -117,38 +127,88 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, str
 		if err != nil {
 			return nil, "", err
 		}
-		for qn, t := range sub.Types {
-			if _, isBuiltin := t.(*BuiltinType); isBuiltin {
-				continue
-			}
-			schema.Types[qn] = t
+		if _, ok := l.includer[sub]; !ok {
+			l.includer[sub] = schema
 		}
-		maps.Copy(schema.Elements, sub.Elements)
-		maps.Copy(schema.Attributes, sub.Attributes)
-		maps.Copy(schema.AttributeGroups, sub.AttributeGroups)
+		copyComponents(schema, sub)
 	}
 
-	if err := populateFromRaw(schema, raw); err != nil {
+	own := &Schema{
+		TargetNamespace: raw.TargetNamespace,
+		Elements:        make(map[QName]*Element),
+		Types:           make(map[QName]Type),
+		Attributes:      make(map[QName]*AttributeUse),
+		AttributeGroups: make(map[QName]*AttributeGroup),
+	}
+	if err := populateFromRaw(own, raw); err != nil {
 		return nil, "", fmt.Errorf("at %s: %w", p, err)
 	}
+	copyComponents(schema, own)
+	l.own[schema] = own
 	return schema, schema.TargetNamespace, nil
 }
 
-// link walks every loaded schema and resolves every TypeRef into a
-// Type pointer. References to built-in XS types resolve against the
-// pre-populated registry; references to user types resolve against
-// the owning schema or one of its imports. Once every reference
-// resolves, it rejects a circular attribute group reference
-// ([checkAttributeGroupCycles]).
+// copyComponents adds the top-level components of src, built-in types
+// aside, to those of dst.
+func copyComponents(dst, src *Schema) {
+	for qn, t := range src.Types {
+		if _, isBuiltin := t.(*BuiltinType); isBuiltin {
+			continue
+		}
+		dst.Types[qn] = t
+	}
+	maps.Copy(dst.Elements, src.Elements)
+	maps.Copy(dst.Attributes, src.Attributes)
+	maps.Copy(dst.AttributeGroups, src.AttributeGroups)
+}
+
+// includeRoot returns the Schema that the components of the schema
+// document doc join: that of the outermost document that includes doc,
+// directly or through other includes, or doc's own when none does. Its
+// maps hold every component of the schema doc belongs to (XML Schema
+// Part 1, 4.2.1). The loader rejects an include cycle ([ErrImportLoop]),
+// so the chain takes at most one step per loaded document.
+func (l *loader) includeRoot(doc *Schema) *Schema {
+	for range len(l.schemas) {
+		includer, ok := l.includer[doc]
+		if !ok {
+			break
+		}
+		doc = includer
+	}
+	return doc
+}
+
+// link resolves the references of every loaded schema document: each
+// TypeRef into a Type pointer, and each attribute and attribute group
+// reference into the declaration it names. References to built-in XS
+// types resolve against the pre-populated registry. Each component links
+// once, in the scope of the document that wrote it ([refScope]). Once
+// every reference resolves, it rejects a circular attribute group
+// reference ([checkAttributeGroupCycles]).
 func (l *loader) link() error {
-	for _, schema := range l.schemas {
-		if err := linkSchema(schema); err != nil {
+	scopes := make(map[*Schema]refScope, len(l.own))
+	for doc := range l.own {
+		scopes[doc] = refScope{schema: l.includeRoot(doc), doc: doc}
+	}
+	// An attribute use that references a top-level attribute declaration
+	// takes the declaration's type ([linkAttributeRef]), so every
+	// declaration links first.
+	for doc, own := range l.own {
+		for _, a := range own.Attributes {
+			if err := linkAttribute(scopes[doc], a); err != nil {
+				return err
+			}
+		}
+	}
+	for doc, own := range l.own {
+		if err := linkComponents(scopes[doc], own); err != nil {
 			return err
 		}
 	}
 	state := make(map[*AttributeGroup]groupVisit)
-	for _, schema := range l.schemas {
-		for _, g := range schema.AttributeGroups {
+	for _, own := range l.own {
+		for _, g := range own.AttributeGroups {
 			if err := checkAttributeGroupCycles(g, state); err != nil {
 				return err
 			}
@@ -157,63 +217,104 @@ func (l *loader) link() error {
 	return nil
 }
 
-func linkSchema(s *Schema) error {
-	for _, t := range s.Types {
-		if err := linkType(s, t); err != nil {
+// refScope is where a QName a schema document writes resolves. Per XML
+// Schema Part 1, 4.2.1 an xs:include brings the components of the
+// included document into the including schema, so a QName in the target
+// namespace resolves against every component of that schema, whichever
+// document declares it. Per 3.15.3 (src-resolve clause 4) a QName in
+// another namespace resolves only when the schema document that carries
+// it imports that namespace: an included document resolves through its
+// own xs:import children, and its namespace bindings stay its own
+// ([qnameScope]).
+//
+// # Corpus evidence
+//
+//   - All corpora: no bundled schema uses xs:include, so each component
+//     resolves in the document that declares it alone. Each of the 28
+//     loads to the same model as when an included component also linked
+//     in the including document, and no verdict of the 159 files that
+//     embed XML moves, through the Factur-X and ZUGFeRD validators or
+//     under any bundled schema.
+type refScope struct {
+	// schema holds the components of the schema the document belongs to
+	// ([loader.includeRoot]).
+	schema *Schema
+	// doc is the Schema of the document that wrote the QName, whose
+	// Imports resolve the other namespaces.
+	doc *Schema
+}
+
+// lookupComponent returns the component named qn in the map components
+// picks: that of sc.schema, then that of the schema sc.doc imports for
+// qn's namespace.
+func lookupComponent[T any](sc refScope, qn QName, components func(*Schema) map[QName]T) (T, bool) {
+	if c, ok := components(sc.schema)[qn]; ok {
+		return c, true
+	}
+	if imp, ok := sc.doc.Imports[qn.Namespace]; ok {
+		c, ok := components(imp)[qn]
+		return c, ok
+	}
+	var zero T
+	return zero, false
+}
+
+// linkComponents links the types, element declarations and attribute
+// groups own holds, the components one schema document declares, in the
+// scope sc of that document. [loader.link] links its attribute
+// declarations beforehand.
+func linkComponents(sc refScope, own *Schema) error {
+	for _, t := range own.Types {
+		if err := linkType(sc, t); err != nil {
 			return err
 		}
 	}
-	for _, e := range s.Elements {
-		if err := linkElement(s, e); err != nil {
+	for _, e := range own.Elements {
+		if err := linkElement(sc, e); err != nil {
 			return err
 		}
 	}
-	for _, a := range s.Attributes {
-		if err := linkAttribute(s, a); err != nil {
-			return err
-		}
-	}
-	for _, g := range s.AttributeGroups {
-		if err := linkAttributeGroup(s, g); err != nil {
+	for _, g := range own.AttributeGroups {
+		if err := linkAttributeGroup(sc, g); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func linkType(s *Schema, t Type) error {
+func linkType(sc refScope, t Type) error {
 	switch tt := t.(type) {
 	case *SimpleType:
 		if !tt.BaseRef.IsZero() {
-			base, err := lookupType(s, tt.BaseRef)
+			base, err := lookupType(sc, tt.BaseRef)
 			if err != nil {
 				return err
 			}
 			tt.Base = base
 		}
 		if tt.Union {
-			return linkUnion(s, tt)
+			return linkUnion(sc, tt)
 		}
 		if tt.List {
-			return linkList(s, tt)
+			return linkList(sc, tt)
 		}
 	case *ComplexType:
 		if !tt.BaseRef.IsZero() {
-			base, err := lookupType(s, tt.BaseRef)
+			base, err := lookupType(sc, tt.BaseRef)
 			if err != nil {
 				return err
 			}
 			tt.Base = base
 		}
-		if err := linkContent(s, tt.Content); err != nil {
+		if err := linkContent(sc, tt.Content); err != nil {
 			return err
 		}
 		for i := range tt.Attributes {
-			if err := linkAttribute(s, &tt.Attributes[i]); err != nil {
+			if err := linkAttribute(sc, &tt.Attributes[i]); err != nil {
 				return err
 			}
 		}
-		groups, err := resolveAttributeGroups(s, tt.AttributeGroupRefs)
+		groups, err := resolveAttributeGroups(sc, tt.AttributeGroupRefs)
 		if err != nil {
 			return err
 		}
@@ -223,8 +324,7 @@ func linkType(s *Schema, t Type) error {
 }
 
 // linkAttributeGroup resolves the attribute uses of the attribute group g
-// and the groups it references. It rebuilds AttributeGroups from scratch,
-// as a group an xs:include copies is linked once per schema that holds it.
+// and the groups it references.
 //
 // # Corpus evidence
 //
@@ -236,13 +336,13 @@ func linkType(s *Schema, t Type) error {
 //     group, moves no violation under any bundled schema either, where
 //     leaving xs:attributeGroup unmodelled raises 5989 violations of
 //     undeclared attributes.
-func linkAttributeGroup(s *Schema, g *AttributeGroup) error {
+func linkAttributeGroup(sc refScope, g *AttributeGroup) error {
 	for i := range g.Attributes {
-		if err := linkAttribute(s, &g.Attributes[i]); err != nil {
+		if err := linkAttribute(sc, &g.Attributes[i]); err != nil {
 			return err
 		}
 	}
-	groups, err := resolveAttributeGroups(s, g.AttributeGroupRefs)
+	groups, err := resolveAttributeGroups(sc, g.AttributeGroupRefs)
 	if err != nil {
 		return err
 	}
@@ -252,32 +352,20 @@ func linkAttributeGroup(s *Schema, g *AttributeGroup) error {
 
 // resolveAttributeGroups returns the attribute group definitions refs
 // name, per XML Schema Part 1, 3.6.2 the top-level ones their QNames
-// resolve to, in s or in the schema s imports for their namespace.
-func resolveAttributeGroups(s *Schema, refs []QName) ([]*AttributeGroup, error) {
+// resolve to in sc.
+func resolveAttributeGroups(sc refScope, refs []QName) ([]*AttributeGroup, error) {
 	if len(refs) == 0 {
 		return nil, nil
 	}
 	out := make([]*AttributeGroup, 0, len(refs))
 	for _, ref := range refs {
-		g := lookupAttributeGroup(s, ref)
-		if g == nil {
+		g, ok := lookupComponent(sc, ref, func(s *Schema) map[QName]*AttributeGroup { return s.AttributeGroups })
+		if !ok {
 			return nil, fmt.Errorf("%w: attribute group %s", ErrUnresolvedRef, ref)
 		}
 		out = append(out, g)
 	}
 	return out, nil
-}
-
-// lookupAttributeGroup returns the top-level attribute group definition
-// named qn, in s or in the schema s imports for qn's namespace, or nil.
-func lookupAttributeGroup(s *Schema, qn QName) *AttributeGroup {
-	if g, ok := s.AttributeGroups[qn]; ok {
-		return g
-	}
-	if imp, ok := s.Imports[qn.Namespace]; ok {
-		return imp.AttributeGroups[qn]
-	}
-	return nil
 }
 
 // groupVisit is the state of an attribute group in the depth-first walk of
@@ -316,20 +404,18 @@ func checkAttributeGroupCycles(g *AttributeGroup, state map[*AttributeGroup]grou
 
 // linkUnion resolves the {member type definitions} of the union st, per
 // XML Schema Part 1, 3.14.2: the types its memberTypes attribute names, in
-// order, then its xs:simpleType children, in order. It rebuilds Members
-// from scratch, as a type an xs:include copies is linked once per schema
-// that holds it.
-func linkUnion(s *Schema, st *SimpleType) error {
+// order, then its xs:simpleType children, in order.
+func linkUnion(sc refScope, st *SimpleType) error {
 	members := make([]Type, 0, len(st.MemberRefs)+len(st.InlineMembers))
 	for _, ref := range st.MemberRefs {
-		member, err := lookupType(s, ref)
+		member, err := lookupType(sc, ref)
 		if err != nil {
 			return err
 		}
 		members = append(members, member)
 	}
 	for _, inline := range st.InlineMembers {
-		if err := linkType(s, inline); err != nil {
+		if err := linkType(sc, inline); err != nil {
 			return err
 		}
 		members = append(members, inline)
@@ -341,15 +427,15 @@ func linkUnion(s *Schema, st *SimpleType) error {
 // linkList resolves the {item type definition} of the list st, per XML
 // Schema Part 1, 3.14.2: the type its itemType attribute names, or else its
 // xs:simpleType child.
-func linkList(s *Schema, st *SimpleType) error {
+func linkList(sc refScope, st *SimpleType) error {
 	if st.InlineItem != nil {
-		if err := linkType(s, st.InlineItem); err != nil {
+		if err := linkType(sc, st.InlineItem); err != nil {
 			return err
 		}
 		st.ItemType = st.InlineItem
 		return nil
 	}
-	item, err := lookupType(s, st.ItemRef)
+	item, err := lookupType(sc, st.ItemRef)
 	if err != nil {
 		return err
 	}
@@ -357,41 +443,41 @@ func linkList(s *Schema, st *SimpleType) error {
 	return nil
 }
 
-func linkContent(s *Schema, c ContentModel) error {
+func linkContent(sc refScope, c ContentModel) error {
 	switch cm := c.(type) {
 	case Sequence:
 		for i := range cm.Particles {
-			if err := linkParticle(s, &cm.Particles[i]); err != nil {
+			if err := linkParticle(sc, &cm.Particles[i]); err != nil {
 				return err
 			}
 		}
 	case Choice:
 		for i := range cm.Particles {
-			if err := linkParticle(s, &cm.Particles[i]); err != nil {
+			if err := linkParticle(sc, &cm.Particles[i]); err != nil {
 				return err
 			}
 		}
 	case SimpleContent:
 		if cm.Inline != nil {
-			return linkType(s, cm.Inline)
+			return linkType(sc, cm.Inline)
 		}
 	case Empty, nil:
 	}
 	return nil
 }
 
-func linkParticle(s *Schema, p *Particle) error {
+func linkParticle(sc refScope, p *Particle) error {
 	if p.Element != nil {
-		return linkElement(s, p.Element)
+		return linkElement(sc, p.Element)
 	}
 	return nil
 }
 
-func linkElement(s *Schema, e *Element) error {
+func linkElement(sc refScope, e *Element) error {
 	if e.Inline != nil {
 		// Anonymous types live inside the element; link them too so
 		// nested complex/simple types resolve their own refs.
-		if err := linkType(s, e.Inline); err != nil {
+		if err := linkType(sc, e.Inline); err != nil {
 			return err
 		}
 		e.Type = e.Inline
@@ -399,10 +485,10 @@ func linkElement(s *Schema, e *Element) error {
 	}
 	if e.TypeRef.IsZero() {
 		// xs:element without an explicit type defaults to xs:anyType.
-		e.Type = s.Types[QName{Namespace: XSNamespace, Local: "anyType"}]
+		e.Type = sc.schema.Types[QName{Namespace: XSNamespace, Local: "anyType"}]
 		return nil
 	}
-	t, err := lookupType(s, e.TypeRef)
+	t, err := lookupType(sc, e.TypeRef)
 	if err != nil {
 		return err
 	}
@@ -421,18 +507,18 @@ func linkElement(s *Schema, e *Element) error {
 //   - All corpora: no schema the 159 files that embed XML validate against
 //     gives an attribute an xs:simpleType child, so none of their verdicts
 //     moves.
-func linkAttribute(s *Schema, a *AttributeUse) error {
+func linkAttribute(sc refScope, a *AttributeUse) error {
 	if !a.Ref.IsZero() {
-		return linkAttributeRef(s, a)
+		return linkAttributeRef(sc, a)
 	}
 	if a.TypeRef.IsZero() {
 		if a.Type != nil {
-			return linkType(s, a.Type)
+			return linkType(sc, a.Type)
 		}
-		a.Type = s.Types[QName{Namespace: XSNamespace, Local: "anySimpleType"}]
+		a.Type = sc.schema.Types[QName{Namespace: XSNamespace, Local: "anySimpleType"}]
 		return nil
 	}
-	t, err := lookupType(s, a.TypeRef)
+	t, err := lookupType(sc, a.TypeRef)
 	if err != nil {
 		return err
 	}
@@ -450,21 +536,19 @@ func linkAttribute(s *Schema, a *AttributeUse) error {
 // declaration, so a takes the declaration's fixed value when it states
 // none.
 //
-// The declaration is linked first, in the schema that holds it, since the
-// link pass visits schemas in no fixed order. It cannot recurse: a
-// top-level declaration carries no ref ([populateFromRaw]).
+// [loader.link] links every top-level declaration before any reference to
+// one, in the scope of the document that declares it. A top-level
+// declaration carries no ref ([populateFromRaw]), so none of them reaches
+// here.
 //
 // # Corpus evidence
 //
 //   - All corpora: no bundled schema references an attribute declaration,
 //     so no verdict of the 159 files that embed XML moves.
-func linkAttributeRef(s *Schema, a *AttributeUse) error {
-	owner, decl := lookupAttribute(s, a.Ref)
+func linkAttributeRef(sc refScope, a *AttributeUse) error {
+	decl := lookupAttribute(sc, a.Ref)
 	if decl == nil {
 		return fmt.Errorf("%w: attribute %s", ErrUnresolvedRef, a.Ref)
-	}
-	if err := linkAttribute(owner, decl); err != nil {
-		return err
 	}
 	a.Type = decl.Type
 	if a.Fixed == "" {
@@ -473,31 +557,17 @@ func linkAttributeRef(s *Schema, a *AttributeUse) error {
 	return nil
 }
 
-// lookupAttribute returns the top-level attribute declaration named qn, in
-// s or in the schema s imports for qn's namespace, together with the schema
-// that holds it. Both are nil when neither declares it.
-func lookupAttribute(s *Schema, qn QName) (*Schema, *AttributeUse) {
-	if a, ok := s.Attributes[qn]; ok {
-		return s, a
-	}
-	if imp, ok := s.Imports[qn.Namespace]; ok {
-		if a, ok := imp.Attributes[qn]; ok {
-			return imp, a
-		}
-	}
-	return nil, nil
+// lookupAttribute returns the top-level attribute declaration named qn in
+// sc, or nil when none is.
+func lookupAttribute(sc refScope, qn QName) *AttributeUse {
+	a, _ := lookupComponent(sc, qn, func(s *Schema) map[QName]*AttributeUse { return s.Attributes })
+	return a
 }
 
-// lookupType resolves qn against the schema's own Types map, then
-// against the imports indexed by qn.Namespace.
-func lookupType(s *Schema, qn QName) (Type, error) {
-	if t, ok := s.Types[qn]; ok {
+// lookupType resolves qn in sc, then against the built-in types.
+func lookupType(sc refScope, qn QName) (Type, error) {
+	if t, ok := lookupComponent(sc, qn, func(s *Schema) map[QName]Type { return s.Types }); ok {
 		return t, nil
-	}
-	if imp, ok := s.Imports[qn.Namespace]; ok {
-		if t, ok := imp.Types[qn]; ok {
-			return t, nil
-		}
 	}
 	if IsBuiltin(qn) {
 		return newBuiltinTypeRegistry()[qn], nil

@@ -289,6 +289,5 @@ func (v *validator) undeclaredAttribute(a xml.Attr, w *attributeWildcardSet, pat
 // globalAttribute returns the top-level attribute declaration named qn, in
 // the validated schema or the one it imports for qn's namespace, or nil.
 func (v *validator) globalAttribute(qn QName) *AttributeUse {
-	_, a := lookupAttribute(v.schema, qn)
-	return a
+	return lookupAttribute(refScope{schema: v.schema, doc: v.schema}, qn)
 }
