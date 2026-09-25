@@ -199,6 +199,16 @@ func typeInLegacyRoleMap(roleMap map[ast.PdfName]ast.PdfName, typeName ast.PdfNa
 	return ok
 }
 
+// nsTypeKey identifies a structure type within its namespace, for the cycle
+// detection of role-map chains. A struct keeps the pair apart where a joined
+// string would not: a name holds any byte a "#hh" escape decodes to, NUL
+// included (ISO 32000-1, 7.3.5), and a namespace URI is a string that can hold
+// one too, so two different pairs joined on NUL could collide.
+type nsTypeKey struct {
+	ns  string
+	typ ast.PdfName
+}
+
 // nsChainOutcome classifies where a namespace role-map (/RoleMapNS) chain ends.
 type nsChainOutcome int
 
@@ -227,7 +237,7 @@ const (
 // would report t1 on input the depth guard, not the document, cut short.
 func roleMapNSChainOutcome(ctx context.Context, doc *document.Document, typeName ast.PdfName, nsURI string, nsRoleMaps map[string]ast.PdfDict) nsChainOutcome {
 	curType, curNS := typeName, nsURI
-	visited := map[string]bool{curNS + "\x00" + string(curType): true}
+	visited := map[nsTypeKey]bool{{ns: curNS, typ: curType}: true}
 
 	for range maxRoleMapNSDepth {
 		rmns, ok := nsRoleMaps[curNS]
@@ -252,7 +262,7 @@ func roleMapNSChainOutcome(ctx context.Context, doc *document.Document, typeName
 			return nsChainStandard
 		}
 
-		key := string(targetURI) + "\x00" + string(targetType)
+		key := nsTypeKey{ns: string(targetURI), typ: targetType}
 		if visited[key] {
 			return nsChainCircular
 		}
@@ -499,9 +509,9 @@ func (r *nsRoleResolver) elementStandardType(ctx context.Context, doc *document.
 // /RoleMap (when nsURI is empty). ok is false if no standard namespace is
 // reached within [maxRoleMapNSDepth] hops or a cycle is detected.
 func (r *nsRoleResolver) resolveStandardType(ctx context.Context, doc *document.Document, typeName, nsURI string) (stdType, stdNS string, ok bool) {
-	visited := make(map[string]bool)
+	visited := make(map[nsTypeKey]bool)
 	for range maxRoleMapNSDepth {
-		key := nsURI + "\x00" + typeName
+		key := nsTypeKey{ns: nsURI, typ: ast.PdfName(typeName)}
 		if visited[key] {
 			return "", "", false
 		}

@@ -227,7 +227,7 @@ func iso32005ResolveRef(ctx context.Context, state *walkState, ref iso32005Ref) 
 // accepts the MathML namespace, whose every type is standard
 // (ISO 32000-2:2020, 14.8.6).
 func resolveStandardRef(ctx context.Context, state *walkState, ref iso32005Ref, isStandard func(iso32005Ref) bool) (iso32005Ref, bool) {
-	visited := map[string]bool{ref.visitKey(): true}
+	visited := map[nsTypeKey]bool{ref.visitKey(): true}
 
 	next, ok := iso32005Equivalent(ctx, state, ref)
 	if !ok || visited[next.visitKey()] {
@@ -259,7 +259,7 @@ func iso32005StandardName(ctx context.Context, state *walkState, elem ast.PdfDic
 }
 
 // visitKey identifies a type within its namespace for cycle detection.
-func (r iso32005Ref) visitKey() string { return string(r.name) + "\x00" + r.uri }
+func (r iso32005Ref) visitKey() nsTypeKey { return nsTypeKey{ns: r.uri, typ: r.name} }
 
 // iso32005Equivalent returns the role-map target of one structure type.
 // Per ISO 32000-2:2020, 14.8.6, an element that declares a namespace is
