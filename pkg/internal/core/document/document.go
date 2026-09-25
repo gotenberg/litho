@@ -64,6 +64,7 @@ type Document struct {
 	runMu            sync.Mutex          // serializes compliance-engine validation runs
 	xrefAugment      sync.Once           // guards the one-shot raw-bytes augmentation of xrefEntries
 	xrefAugmentRan   bool                // the augmentation has run, whatever it found; protected by mu
+	xrefAugmented    bool                // the augmentation added or overrode an entry; protected by mu
 	maxCacheSize     int                 // evict all objects when cache exceeds this size
 	limits           limits.Limits       // resource budgets, set by NewDocument, read-only after
 	Crypto           *crypto.Handler

@@ -233,6 +233,15 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 // check reaches, and whose bytes hold objects the table lacks, pays for the
 // second run.
 //
+// The deferral covers the groups' own lookups, not a concurrent caller's:
+// [document.Document.Resolve] is safe for concurrent use, so text extraction on
+// the same Document can run the augmentation in the middle of the fan-out, and
+// the groups then disagree about the index exactly as they did when a group
+// ran it. The groups therefore run again whenever
+// [document.Document.XRefAugmented] answers differently after the fan-out than
+// before it, whichever goroutine ran the scan. The augmentation runs once per
+// Document, so there is never a third run.
+//
 // # Corpus evidence
 //
 //   - All corpora: no file changes the index during the fan-out at PDF/A-1b,
@@ -245,12 +254,20 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 func runCheckGroups(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, groups []checkGroup) ([]Violation, error) {
 	vctx := buildValidationCtx(ctx, doc, catalog, profile)
 
+	augmented := doc.XRefAugmented()
 	var missed atomic.Bool
 	violations, err := fanOutCheckGroups(document.DeferXRefAugmentation(ctx, &missed), doc, vctx, profile, groups)
-	if err != nil || !missed.Load() || !doc.AugmentXRef(ctx) {
-		return violations, err
+	if err != nil {
+		return nil, err
 	}
-	doc.Logger.Debug("compliance: a check group missed the xref and the augmentation changed it, running the groups again", "profile", profile)
+	if missed.Load() {
+		doc.AugmentXRef(ctx)
+	}
+	if doc.XRefAugmented() == augmented {
+		return violations, nil
+	}
+	doc.Logger.Debug("compliance: the xref augmentation changed the index during the check groups, running them again",
+		"profile", profile, "missed", missed.Load())
 	return fanOutCheckGroups(ctx, doc, vctx, profile, groups)
 }
 

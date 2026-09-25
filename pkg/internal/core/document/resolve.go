@@ -928,28 +928,41 @@ type xrefDeferKey struct{}
 // [Document.augmentXrefFromRawScan]). It sets missed instead, and the lookup
 // fails as it would had the scan found nothing.
 //
-// The augmentation rewrites the index, so it cannot run while other
-// goroutines read it. A caller that fans out over one Document resolves under
-// this context. Once every goroutine has returned and missed is set, it calls
-// [Document.AugmentXRef], and runs again when that changed the index. Left to
-// the lazy path, the augmentation ran in whichever goroutine missed first,
-// while the others were ranging the map it wrote, and the goroutines that
-// swept the index before that moment saw a different set of objects than the
-// ones after it (CONTRIBUTING "Deterministic output").
+// A caller that fans out over one Document resolves under this context, so no
+// goroutine of its own changes the index while the others sweep it. Left to the
+// lazy path, the augmentation ran in whichever goroutine missed first, and the
+// goroutines that swept the index before that moment saw a different set of
+// objects than the ones after it (CONTRIBUTING "Deterministic output"). Once
+// every goroutine has returned and missed is set, the caller calls
+// [Document.AugmentXRef].
+//
+// The context defers only the lookups made under it. A concurrent caller that
+// does not use it, text extraction on the same Document for one, can still run
+// the augmentation while the fan-out sweeps the index. The caller therefore
+// reads [Document.XRefAugmented] before the fan-out and again after it, and runs
+// again over the final index when the answer changed, whoever ran the scan.
 func DeferXRefAugmentation(ctx context.Context, missed *atomic.Bool) context.Context {
 	return context.WithValue(ctx, xrefDeferKey{}, missed)
 }
 
 // AugmentXRef runs the raw-byte augmentation of the cross-reference index now
-// rather than at the first lookup that misses, and reports whether it changed
-// the index. It runs at most once per Document, so a call after the
-// augmentation ran does nothing and reports false. See
+// rather than at the first lookup that misses. It runs at most once per
+// Document, so a call after the augmentation ran does nothing.
+// [Document.XRefAugmented] reports whether it changed the index. See
 // [DeferXRefAugmentation] for the caller that needs it.
-//
-// AugmentXRef rewrites the index, so it must not run while another goroutine
-// reads it.
-func (d *Document) AugmentXRef(ctx context.Context) bool {
-	return d.augmentXrefFromRawScan(ctx)
+func (d *Document) AugmentXRef(ctx context.Context) {
+	d.augmentXrefFromRawScan(ctx)
+}
+
+// XRefAugmented reports whether the raw-byte augmentation has changed the
+// cross-reference index, whichever goroutine ran it. The augmentation runs at
+// most once per Document, so the answer turns true at most once and never
+// back. See [DeferXRefAugmentation] for the caller that compares it across a
+// fan-out.
+func (d *Document) XRefAugmented() bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.xrefAugmented
 }
 
 // augmentOnMiss runs the augmentation for a lookup that missed, unless ctx
@@ -986,7 +999,7 @@ func (d *Document) augmentOnMiss(ctx context.Context) bool {
 // d.mu.RLock through [Document.XRefEntry] or [Document.XRefEntries], never
 // observes the map mid-write. The O(file size) scan runs unlocked so it does
 // not serialize unrelated resolves.
-func (d *Document) augmentXrefFromRawScan(ctx context.Context) (changed bool) {
+func (d *Document) augmentXrefFromRawScan(ctx context.Context) {
 	d.xrefAugment.Do(func() {
 		defer func() {
 			d.mu.Lock()
@@ -1016,8 +1029,9 @@ func (d *Document) augmentXrefFromRawScan(ctx context.Context) (changed bool) {
 			d.xrefEntries[objNum] = entry
 			overridden++
 		}
+		changed := added > 0 || overridden > 0
+		d.xrefAugmented = changed
 		d.mu.Unlock()
-		changed = added > 0 || overridden > 0
 		if changed {
 			d.Logger.Debug("xref augmented from raw scan",
 				slog.Int("added", added),
@@ -1025,7 +1039,6 @@ func (d *Document) augmentXrefFromRawScan(ctx context.Context) (changed bool) {
 			)
 		}
 	})
-	return changed
 }
 
 // objectHeaderMatches reports whether the bytes at offset start with an
