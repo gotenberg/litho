@@ -15,7 +15,8 @@ import (
 
 // Serialize writes a [ast.PdfObject] to w in spec-compliant PDF syntax.
 // Streams write their raw bytes directly (content-preserving). Returns the
-// number of bytes written.
+// number of bytes written. A name holding a NUL byte has no conforming
+// spelling (ISO 32000-1, 7.3.5), so it fails with [ErrNameHoldsNull].
 func Serialize(ctx context.Context, w io.Writer, obj ast.PdfObject) (int64, error) {
 	if obj == nil {
 		n, err := io.WriteString(w, "null")
@@ -117,7 +118,26 @@ func FormatReal(f float64) string {
 
 // serializeName writes a PDF name with proper #XX hex-escaping for bytes
 // outside printable ASCII or PDF delimiter characters.
+//
+// A name holding a NUL byte is refused with [ErrNameHoldsNull] before a byte
+// is written. ISO 32000-1, 7.3.5 builds a name from "any characters (8-bit
+// values) except null (character code 0)", so no spelling of such a name
+// conforms. It reaches the writer from a "#00" escape in the source, which
+// the lexer decodes as PDF.js and veraPDF do. Writing "#00" back repeats the
+// fault. Dropping the byte renames the name, which can collide with a name
+// the same dictionary already holds, and orphans every reference still
+// spelling it the old way, such as a resource name in a content stream the
+// writer copies byte for byte. Refusing writes no invalid name and changes no
+// other.
+//
+// # Corpus evidence
+//
+//   - All corpora: no file holds a NUL in a name of its trailer or of any
+//     object its cross-reference data lists, so no full rewrite refuses.
 func serializeName(w io.Writer, name ast.PdfName) (int64, error) {
+	if strings.IndexByte(string(name), 0) >= 0 {
+		return 0, fmt.Errorf("%w: %q", ErrNameHoldsNull, string(name))
+	}
 	var buf []byte
 	buf = append(buf, '/')
 	for i := 0; i < len(string(name)); i++ {

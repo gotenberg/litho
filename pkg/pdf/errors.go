@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/filter"
 	pdfimage "github.com/gotenberg/litho/pkg/internal/graphics/image"
 	"github.com/gotenberg/litho/pkg/internal/limits"
@@ -187,6 +188,17 @@ var (
 	// refuses and writes nothing. Real trees nest two or three levels, so no
 	// ordinary document reaches this.
 	ErrAttachmentTreeIncomplete = errors.New("attachment tree incomplete: the embedded-files tree nests deeper than the attachment walk reads, so rebuilding it would drop entries")
+
+	// ErrNameHoldsNull is returned, wrapped with the name, by
+	// [Writer.WriteTo], [Split] and [Merge] when an object they write holds
+	// a name with a NUL byte in it. ISO 32000-1, 7.3.5 excludes NUL from
+	// every name, so no spelling of that name conforms. Only a "#00" escape
+	// in the source produces one: writing it back repeats the fault, and
+	// dropping the byte renames it, which can collide with a name the
+	// document already uses or orphan a content stream that still spells it
+	// the old way. litho refuses rather than write either. The destination
+	// then holds an incomplete file, as it does after any write error.
+	ErrNameHoldsNull = writer.ErrNameHoldsNull
 
 	// ErrRemediationBrokePDF is returned by [Writer.RemediatePDFA] and
 	// [Writer.RemediatePDFUA] when applied fixes cause the output to
