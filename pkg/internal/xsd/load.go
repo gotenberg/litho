@@ -239,8 +239,22 @@ func linkElement(s *Schema, e *Element) error {
 	return nil
 }
 
+// linkAttribute resolves the {type definition} of a, per XML Schema Part
+// 1, 3.2.2: the xs:simpleType child when there is one, else the type the
+// type attribute names, else the simple ur-type definition. The loader
+// holds the xs:simpleType child in [AttributeUse.Type] already, with no
+// TypeRef, so only its own references are left to resolve.
+//
+// # Corpus evidence
+//
+//   - All corpora: no schema the 159 files that embed XML validate against
+//     gives an attribute an xs:simpleType child, so none of their verdicts
+//     moves.
 func linkAttribute(s *Schema, a *AttributeUse) error {
 	if a.TypeRef.IsZero() {
+		if a.Type != nil {
+			return linkType(s, a.Type)
+		}
 		a.Type = s.Types[QName{Namespace: XSNamespace, Local: "anySimpleType"}]
 		return nil
 	}

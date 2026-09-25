@@ -191,8 +191,15 @@ type Element struct {
 // Top-level xs:attribute declarations are not yet modelled because
 // CII uses inline attribute uses exclusively.
 type AttributeUse struct {
-	Name     QName
-	Type     Type
+	Name QName
+	// Type is the attribute's {type definition} (XML Schema Part 1,
+	// 3.2.2): its xs:simpleType child, set at load time, or the type
+	// TypeRef names, or xs:anySimpleType when it has neither, both set
+	// during the link pass.
+	Type Type
+	// TypeRef is the unresolved reference parsed off the type attribute.
+	// Zero-value when the attribute carries an xs:simpleType child or no
+	// type at all.
 	TypeRef  QName
 	Required bool
 	// Prohibited reports use="prohibited". Per XML Schema Part 1, 3.2.2
