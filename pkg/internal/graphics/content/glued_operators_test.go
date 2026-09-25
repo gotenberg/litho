@@ -2,6 +2,7 @@ package content
 
 import (
 	"context"
+	"math"
 	"reflect"
 	"slices"
 	"testing"
@@ -165,6 +166,57 @@ func TestDefaultReadingEndsOperatorsAtDigits(t *testing.T) {
 		t.Fatalf("ParseStreamDataForCompliance: %v", err)
 	}
 	check("ParseStreamDataForCompliance", ops)
+}
+
+// TestDefaultReadingReadsNumbersAsVeraPDF pins that a parse without an option
+// reads a number as veraPDF reads one (BaseParser.readNumber): it ends before
+// the first character other than a digit or a period, and a run that spells no
+// number of ISO 32000-1, 7.3.3 is the largest value veraPDF gives it, which the
+// implementation limits of ISO 19005 judge. Measured with veraPDF 1.30 at
+// PDF/A-1b and PDF/A-2b: "12m" is no undefined operator, ".020.594" fails the
+// real limit, "-" the integer limit, and "1e2" the undefined-operator test for
+// e.
+func TestDefaultReadingReadsNumbersAsVeraPDF(t *testing.T) {
+	t.Parallel()
+
+	src := "0 0 m .020.594 10 l 12m - 5 w 1e2 w"
+	ops, err := ParseStreamData(context.Background(), []byte(src))
+	if err != nil {
+		t.Fatalf("ParseStreamData(%q): %v", src, err)
+	}
+	if got, want := operators(ops), []string{"m", "l", "m", "w", "e", "w"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("ParseStreamData(%q) operators = %v, want %v", src, got, want)
+	}
+	for i, want := range [][]ast.PdfObject{
+		{ast.PdfInt(0), ast.PdfInt(0)},
+		{ast.PdfReal(math.MaxFloat64), ast.PdfInt(10)},
+		{ast.PdfInt(12)},
+		{ast.PdfInt(-math.MaxInt64), ast.PdfInt(5)},
+		{ast.PdfInt(1)},
+		{ast.PdfInt(2)},
+	} {
+		if got := ops[i].Operands; !reflect.DeepEqual(got, want) {
+			t.Errorf("ParseStreamData(%q) %s operands = %#v, want %#v", src, ops[i].Operator, got, want)
+		}
+	}
+}
+
+// TestForRepairKeepsNumberRuns pins the reading of a repair: a run that starts
+// with a digit, a sign or a period keeps the token boundaries of ISO 32000-1,
+// 7.2.2, and one that spells no number is the keyword it is written as, while
+// an operator still ends before a digit, as validation reads it.
+func TestForRepairKeepsNumberRuns(t *testing.T) {
+	t.Parallel()
+
+	src := "0 0 m .020.594 10 l 12m - 5 w q1 0 0 1 0 0 cm Q"
+	ops, err := ParseStreamData(context.Background(), []byte(src), ForRepair())
+	if err != nil {
+		t.Fatalf("ParseStreamData(%q): %v", src, err)
+	}
+	want := []string{"m", ".020.594", "l", "12m", "-", "w", "q", "cm", "Q"}
+	if got := operators(ops); !reflect.DeepEqual(got, want) {
+		t.Errorf("ParseStreamData(%q, ForRepair()) operators = %v, want %v", src, got, want)
+	}
 }
 
 // TestSplitGluedOperatorsShareTheRunBytes pins the byte ranges of operators

@@ -71,9 +71,12 @@ type Lexer struct {
 	// commands ends a run of regular characters at a command, or is nil to
 	// end it only at white space or a delimiter. See [Lexer.WithCommands].
 	commands *CommandSet
-	// digitBoundaries ends a keyword before a digit as veraPDF does. See
-	// [Lexer.WithDigitBoundaries].
-	digitBoundaries bool
+	// veraPDF reads tokens as veraPDF reads a content stream. See
+	// [Lexer.WithVeraPDFTokens].
+	veraPDF bool
+	// repair keeps the token boundaries a repair writes back where veraPDF
+	// departs from them. See [Lexer.WithRepairTokens].
+	repair bool
 }
 
 // Reader returns the underlying [ioat.Reader] used by this lexer.
@@ -255,6 +258,10 @@ func isNumber(s string) bool {
 // Kept to a token of signs and dots alone. pdf.js throws on "-f", where a
 // regular character follows the sign, and that stays a keyword here.
 //
+// A content stream read as veraPDF reads it gives such a token the value
+// veraPDF reads in it instead ([Lexer.WithVeraPDFTokens]), and the reading of
+// a repair keeps it the keyword it is written as ([Lexer.WithRepairTokens]).
+//
 // # Corpus evidence
 //
 //   - pdfjs issue9252.pdf, issue15604.pdf, bug1753983.pdf, bug1953099.pdf:
@@ -283,7 +290,7 @@ func (l *Lexer) readRegular() (Token, error) {
 	// run before a character that would make it none (see [Lexer.WithCommands]).
 	command := false
 	// beforeDigit reports whether the run ends before a digit, which its first
-	// character decides (see [Lexer.WithDigitBoundaries]).
+	// character decides (see [Lexer.WithVeraPDFTokens]).
 	beforeDigit := false
 	for {
 		c, err := l.reader.ReadByte()
@@ -298,7 +305,7 @@ func (l *Lexer) readRegular() (Token, error) {
 			break
 		}
 		if len(buf) == 0 {
-			beforeDigit = l.digitBoundaries && endsBeforeDigit(c)
+			beforeDigit = l.veraPDF && endsBeforeDigit(c)
 		} else if beforeDigit && isDigit(c) && !joinsBeforeDigit(buf[len(buf)-1], c) {
 			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 			break
@@ -316,7 +323,7 @@ func (l *Lexer) readRegular() (Token, error) {
 	if isNumber(val) {
 		return Token{Type: TokenNumber, Value: val}, nil
 	}
-	if isDigitlessNumber(val) {
+	if isDigitlessNumber(val) && !l.repair {
 		return Token{Type: TokenNumber, Value: "0"}, nil
 	}
 	if num, ok := splitNumberEndobj(val); ok {
@@ -536,6 +543,9 @@ func (l *Lexer) NextToken() (Token, error) {
 			return Token{Type: TokenDelimiter, Value: string(c)}, nil
 
 		default:
+			if l.veraPDF && !l.repair && startsVeraPDFNumber(c) {
+				return l.readVeraPDFNumber(c)
+			}
 			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 			return l.readRegular()
 		}

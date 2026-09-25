@@ -55,6 +55,39 @@ const (
 	MaxIntegerValue = maxIntegerValue
 )
 
+// SaturatedNumberNote ends the context of an implementation-limit violation
+// in a content stream whose number is the largest integer or real, signed,
+// veraPDF gives a number it cannot read. The content parse reads that value in
+// a run such as "-" or ".020.594", which spells no number of ISO 32000-1, 7.3.3
+// (see [content.ParseStreamData]), and in a number past the range of a double.
+// Exported so the remediation that respells such a run claims the violations
+// it answers.
+const SaturatedNumberNote = "the largest value veraPDF gives a number it cannot read"
+
+// saturatedNumber reports whether obj is a number [SaturatedNumberNote]
+// describes.
+func saturatedNumber(obj ast.PdfObject) bool {
+	switch v := obj.(type) {
+	case ast.PdfInt:
+		return v == math.MaxInt64 || v == -math.MaxInt64
+	case ast.PdfReal:
+		return math.Abs(float64(v)) == math.MaxFloat64
+	}
+	return false
+}
+
+// noteSaturated ends the context of each of vs with [SaturatedNumberNote] when
+// num is a number it describes, and returns vs.
+func noteSaturated(vs []Violation, num ast.PdfObject) []Violation {
+	if !saturatedNumber(num) {
+		return vs
+	}
+	for i := range vs {
+		vs[i].Context += ", " + SaturatedNumberNote
+	}
+	return vs
+}
+
 func integerRangeRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_12_t01, Rule_19005_2_6_1_13_t01, Rule_19005_3_6_1_13_t01, Rule{})
 }
@@ -254,11 +287,30 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 // parsed content stream, object objNum, against the implementation limits.
 // overflow counts the integer literals past the 64-bit range the parse read as
 // reals (see [checkNumberLimits]), and is consumed.
+//
+// The operands of an operator ISO 32000-1, Annex A does not define are not
+// checked. ISO 19005-1, 6.2.10 t1 and ISO 19005-2, 6.2.2 t1 already fail the
+// operator, and veraPDF judges none of its operands against the limits:
+// measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b, a string, an integer
+// and a real past the limits, a "-" or a "1.5.5", which it reads as the
+// largest integer or real it gives a number, and an array holding them, each
+// written before an undefined operator, inside a BX/EX section or not, fail
+// the undefined-operator test alone, and fail the limit written before a
+// defined one.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5039.pdf: a Type3 glyph writes "-inf" four times, which
+//     veraPDF reads as the integer -9223372036854775807 and the undefined
+//     operator inf, and it reports the operators alone.
 func checkOperandLimits(ops []content.Operation, overflow map[float64]int, objNum, maxStr int, profile string) []Violation {
 	part := PDFAPart(profile)
 	where := fmt.Sprintf("object %d (stream content)", objNum)
 	var results []Violation
 	for _, op := range ops {
+		if !content.IsOperator(op.Operator) {
+			continue
+		}
 		for _, operand := range op.Operands {
 			switch v := operand.(type) {
 			case ast.PdfString:
@@ -271,13 +323,13 @@ func checkOperandLimits(ops []content.Operation, overflow map[float64]int, objNu
 			case ast.PdfInt:
 				val := int64(v)
 				if val > maxIntegerValue || val < minIntegerValue {
-					results = append(results, Violation{
+					results = append(results, noteSaturated([]Violation{{
 						Rule:    integerRangeRule(profile),
 						Context: fmt.Sprintf("%s: integer %d out of range", where, val),
-					})
+					}}, v)...)
 				}
 			case ast.PdfReal:
-				results = append(results, checkNumberLimits(float64(v), part, profile, where, overflow)...)
+				results = append(results, noteSaturated(checkNumberLimits(float64(v), part, profile, where, overflow), v)...)
 			case ast.PdfArray:
 				// TJ arrays carry strings and displacement numbers alike.
 				for _, elem := range v {
@@ -290,7 +342,7 @@ func checkOperandLimits(ops []content.Operation, overflow map[float64]int, objNu
 							})
 						}
 					case ast.PdfReal:
-						results = append(results, checkNumberLimits(float64(e), part, profile, where, overflow)...)
+						results = append(results, noteSaturated(checkNumberLimits(float64(e), part, profile, where, overflow), e)...)
 					}
 				}
 			}

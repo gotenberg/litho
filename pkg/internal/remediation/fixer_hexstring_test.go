@@ -285,7 +285,9 @@ func TestFixHexStringRewritesAnInvalidCharacterString(t *testing.T) {
 //
 // The content parser used to consume one token more than a failed operand
 // parse had, so "/F1 1e2 Tf" lost its Tf and the rewrite wrote the page back
-// without it, the stray /F1 joined to the operator that followed.
+// without it, the stray /F1 joined to the operator that followed. The streams
+// are read as PDF.js reads them, where "1e2" is one number the parser cannot
+// read; the reading of veraPDF ends it at the "e".
 func TestFixHexStringKeepsTheOperatorAfterAMalformedOperand(t *testing.T) {
 	t.Parallel()
 
@@ -300,7 +302,7 @@ func TestFixHexStringKeepsTheOperatorAfterAMalformedOperand(t *testing.T) {
 	want := []string{"BT", "Tf", "Td", "Tj", "Tf", "TJ", "Tj", "ET"}
 	var after []content.Operation
 	for name, src := range map[string]string{"original": original, "rewrite": rewritten} {
-		ops, err := content.ParseStreamData(ctx, []byte(src))
+		ops, err := content.ParseStreamData(ctx, []byte(src), content.SplitGluedOperators())
 		if err != nil {
 			t.Fatalf("parsing the %s: %v", name, err)
 		}

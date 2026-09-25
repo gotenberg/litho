@@ -28,6 +28,11 @@ func operators(ops []Operation) []string {
 // the operators after it, and inside an inline image dictionary it could be
 // the ID that ends it.
 //
+// The streams are read as PDF.js reads them ([SplitGluedOperators]), where
+// "1e2" is one number the parser cannot read. The reading of veraPDF ends the
+// number at the "e", so there it is the number 1, the operator e and the
+// number 2 ([lexer.Lexer.WithVeraPDFTokens]).
+//
 // # Corpus evidence
 //
 //   - pdfjs sci-notation.pdf: writes "/F1 1e2 Tf", and the Tf it lost made the
@@ -99,7 +104,7 @@ func TestParseStreamDataDropsOnlyTheMalformedOperand(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			ops, err := ParseStreamData(context.Background(), []byte(tc.src))
+			ops, err := ParseStreamData(context.Background(), []byte(tc.src), SplitGluedOperators())
 			if err != nil {
 				t.Fatalf("ParseStreamData(%q): %v", tc.src, err)
 			}
@@ -117,12 +122,13 @@ func TestParseStreamDataDropsOnlyTheMalformedOperand(t *testing.T) {
 
 // TestParseStreamDataWithOffsetsKeepsRangesAfterAMalformedOperand pins that the
 // byte ranges stay parallel to the operations when an operand is dropped: the
-// operator after it still closes its own range.
+// operator after it still closes its own range. The stream is read as PDF.js
+// reads it, where "1e2" is one number the parser cannot read.
 func TestParseStreamDataWithOffsetsKeepsRangesAfterAMalformedOperand(t *testing.T) {
 	t.Parallel()
 
 	src := "/F1 1e2 Tf (a) Tj"
-	ops, ranges, err := ParseStreamDataWithOffsets(context.Background(), []byte(src))
+	ops, ranges, err := ParseStreamDataWithOffsets(context.Background(), []byte(src), SplitGluedOperators())
 	if err != nil {
 		t.Fatalf("ParseStreamDataWithOffsets: %v", err)
 	}

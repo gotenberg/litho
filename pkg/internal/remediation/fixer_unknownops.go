@@ -28,6 +28,15 @@ import (
 // content only, runs only when content may change, and never sees a number
 // written with an exponent, which the content parser reads as a number.
 //
+// It also matches an implementation-limit violation (ISO 19005-1, 6.1.12;
+// ISO 19005-2, 6.1.13) whose number is the largest value veraPDF gives a
+// number it cannot read ([compliance.SaturatedNumberNote]). The content parse
+// reads that value in a run that spells no number of ISO 32000-1, 7.3.3, such
+// as "-" or ".020.594", and the repair that answers it is the one here, which
+// respells the run as the number it begins with, 0 when it holds no digit
+// ([repairMalformedNumbers]). Clamping it to the limit, as the real-limits
+// repair clamps a number past it, would write a value no viewer drew.
+//
 // # Corpus evidence
 //
 //   - All corpora: at PDF/A-1b the part-1 claim clears 6.2.10 t1 for litho and
@@ -36,8 +45,15 @@ import (
 //     form XObject the aggressive pass never reads.
 //   - pdfjs poppler-90-0-fuzzed.pdf: at PDF/A-1b default veraPDF stops
 //     reporting 6.2.10 t1, and litho's count drops from 1617 to 1571.
+//   - pdfjs issue15604.pdf, issue9252.pdf and bug1753983.pdf: veraPDF failed
+//     the output of their PDF/A-1b and PDF/A-2b remediations, default and
+//     aggressive, on the limit a run such as "-." or "-" breaks, and passes it
+//     now that the claim reaches the repair.
 func matchUnknownOps(v compliance.Violation) bool {
 	if v.Rule.Object == "Op_Undefined" {
+		return true
+	}
+	if clausePrefix(v, "6.1.12", "6.1.13") && contextContains(v, compliance.SaturatedNumberNote) {
 		return true
 	}
 	if !clausePrefix(v, "6.2.2") {
@@ -138,6 +154,10 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // nothing is to be written. The bytes can be empty: a stream holding nothing
 // but undefined operators is written back with none.
 //
+// The stream is read as a repair reads it ([content.ForRepair]): a run that
+// starts with a digit keeps its boundaries, and one that spells no number,
+// such as ".020.594" or "-", is the keyword [repairMalformedNumbers] respells.
+//
 // A stream whose only defect is an exponent is written back as spliced, not
 // re-serialized, so nothing else in it moves. Removing an operator or folding a
 // number re-serializes the parsed operations, which cannot round-trip an inline
@@ -157,7 +177,7 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 		return data, unknownOpsTally{exponents: t.exponents}
 	}
 
-	ops, err := content.ParseStreamData(ctx, data)
+	ops, err := content.ParseStreamData(ctx, data, content.ForRepair())
 	if err != nil {
 		return spliced()
 	}
@@ -453,9 +473,10 @@ func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, do
 //
 // ISO 32000-1, 7.3.3 gives a number no exponent, so the token is no operand,
 // and neither reference reader takes it as one. veraPDF ends the number at the
-// exponent letter and reads the rest as an operator: "1.5e1 w" is the number
-// 1.5, an operator "e1" that ISO 32000-1 does not define (ISO 19005-1, 6.2.10
-// t1; ISO 19005-2, 6.2.2 t1), and a w with no operand. PDF.js ends the number
+// exponent letter and the operator after it at the next digit: "1.5e1 w" is
+// the number 1.5, an operator e that ISO 32000-1 does not define (ISO 19005-1,
+// 6.2.10 t1; ISO 19005-2, 6.2.2 t1), and the number 1, which the w takes, as
+// validation reads it ([content.ParseStreamData]). PDF.js ends the number
 // at the letter too (Lexer.getNumber has no exponent), reads the rest as a
 // command it does not know, and skips that command keeping the operands before
 // it (EvaluatorPreprocessor.read), so the w it draws has the width 1.5, and
@@ -467,17 +488,18 @@ func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, do
 // removal the way other undefined operators are removed would take the number
 // with it. Rewriting the token as the number it spells, 15 or 100, changed the
 // page: the text after "/F1 1e2 Tf" drew at a hundred times the size PDF.js
-// draws it at. litho's content parser reads "1.5e1" as 15 and cannot read
-// "1e2" at all, a reading of its own this rewrite does not follow.
+// draws it at. The reading of a repair ([content.ForRepair]) keeps the token
+// whole, reads "1.5e1" as 15 and cannot read "1e2" at all, a reading of its own
+// this rewrite does not follow.
 //
 // Only a stream with a finding is rewritten: a number where an operand
-// stands, outside any array or dictionary, which is the one the check reports
-// ([parser.ErrNumberExponentOperand]). The rest of such a stream's exponents go
-// too, since veraPDF stops reading a stream at one inside an array or a
-// dictionary; PDF.js reads such a number the same way there, the rest being a
-// command an array or a dictionary drops. An inline image's dictionary is left
-// as written: the walk skips it with its data, which it cannot address token by
-// token.
+// stands, outside any array or dictionary, which is the one validation reports,
+// as the operator its exponent letter starts. The rest of such a stream's
+// exponents go too, since veraPDF stops reading a stream at one inside an
+// array or a dictionary; PDF.js reads such a number the same way there, the
+// rest being a command an array or a dictionary drops. An inline image's
+// dictionary is left as written: the walk skips it with its data, which it
+// cannot address token by token.
 //
 // The rewrite splices the tokens in place, so the stream's other bytes, inline
 // image data included, are carried across unchanged. A stream the lexer cannot

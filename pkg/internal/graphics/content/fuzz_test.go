@@ -33,6 +33,10 @@ var seedStreams = []string{
 	"BT /F1 24 Tf 50 500 Td (a) Tj ETBT /F1 1e2 Tf 50 600 Td (b) Tj ET\n",
 	"qQ BTET ETXX /F1 12 TfT* T*Tf q1 0 0 1 0 0cm /P <<>> BDC EMC\n",
 	"BT (a) TjET",
+	// Numbers veraPDF ends before a letter or saturates, which ForRepair keeps
+	// whole, and a truncated one.
+	"0 0 m .020.594 10 l 12m - 5 w --5 w 1e2 w 55.8492#7136 0 Td 5-3 m\n",
+	"0 0 m 1.5.",
 }
 
 // FuzzParseStreamData feeds arbitrary bytes to the content stream parser and
@@ -53,6 +57,7 @@ func FuzzParseStreamData(f *testing.F) {
 		}
 		_, _ = ParseStreamData(context.Background(), data)
 		_, _ = ParseStreamData(context.Background(), data, SplitGluedOperators())
+		_, _ = ParseStreamData(context.Background(), data, ForRepair())
 	})
 }
 
@@ -68,7 +73,7 @@ func FuzzParseStreamDataWithOffsets(f *testing.F) {
 		if len(data) > maxFuzzInput {
 			return
 		}
-		for _, opts := range [][]Option{nil, {SplitGluedOperators()}} {
+		for _, opts := range [][]Option{nil, {SplitGluedOperators()}, {ForRepair()}} {
 			ops, ranges, err := ParseStreamDataWithOffsets(context.Background(), data, opts...)
 			if err != nil {
 				continue

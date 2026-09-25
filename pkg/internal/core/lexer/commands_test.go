@@ -87,62 +87,6 @@ func TestNoCommandsKeepsTokenBoundaries(t *testing.T) {
 	}
 }
 
-// TestWithDigitBoundariesEndsOperatorsAtDigits pins the veraPDF reading of a
-// run of regular characters: an operator ends before a digit, save the 0 or 1
-// of d0 and d1, and a run that starts with "n", "t", "f", "B", "I", a digit, a
-// sign or a period keeps the token boundaries of ISO 32000-1, 7.2.2. Measured
-// with veraPDF 1.30 at PDF/A-1b and PDF/A-2b, the undefined operators it reports
-// for q1, re1, T*1, d2, xd0, dd1, n1, f1, true1 and BT1 are the ones read here.
-func TestWithDigitBoundariesEndsOperatorsAtDigits(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name string
-		src  string
-		want []Token
-	}{
-		{"an operator then a number", "q1", []Token{kw("q"), num("1")}},
-		{"a two-letter operator then a real", "re1.5", []Token{kw("re"), num("1.5")}},
-		{"an operator that ends in a star", "T*1", []Token{kw("T*"), num("1")}},
-		{"an undefined operator before a number", "xx1", []Token{kw("xx"), num("1")}},
-		{"the run after the digit keeps its boundaries", "xx1yy", []Token{kw("xx"), kw("1yy")}},
-		{"d0 stays whole", "d0", []Token{kw("d0")}},
-		{"d1 stays whole", "d1", []Token{kw("d1")}},
-		{"one digit joins a d", "d01", []Token{kw("d0"), num("1")}},
-		{"any other digit ends it", "d2", []Token{kw("d"), num("2")}},
-		{"a digit after a d that ends a run", "xd0", []Token{kw("xd0")}},
-		{"a digit after a second d", "dd1", []Token{kw("dd1")}},
-		{"a run from n stays whole", "n1", []Token{kw("n1")}},
-		{"a run from f stays whole", "f1", []Token{kw("f1")}},
-		{"a run from t stays whole", "true1", []Token{kw("true1")}},
-		{"a run from B stays whole", "BT1", []Token{kw("BT1")}},
-		{"a run from I stays whole", "ID1", []Token{kw("ID1")}},
-		{"a run from a digit stays whole", "1q", []Token{kw("1q")}},
-		{"a number is left alone", "1e2", []Token{num("1e2")}},
-		{"a signed number is left alone", "-1.5", []Token{num("-1.5")}},
-		{"a number run into endobj is still split", "7559endobj", []Token{num("7559"), kw("endobj")}},
-		{"white space ends an operator as before", "q 1", []Token{kw("q"), num("1")}},
-		{"a delimiter ends an operator as before", "Tf/F1", []Token{kw("Tf"), {Type: TokenName, Value: "/F1"}}},
-		{"glued operators stay one keyword", "ETBT", []Token{kw("ETBT")}},
-	} {
-		lex := newLexer(tc.src).WithDigitBoundaries()
-		var got []Token
-		for range len(tc.src) + 1 {
-			tok, err := lex.NextToken()
-			if err != nil {
-				t.Fatalf("%s: NextToken(%q): %v", tc.name, tc.src, err)
-			}
-			if tok.Type == TokenEOF {
-				break
-			}
-			got = append(got, tok)
-		}
-		if !reflect.DeepEqual(got, tc.want) {
-			t.Errorf("%s: %q lexes as %v, want %v", tc.name, tc.src, got, tc.want)
-		}
-	}
-}
-
 // TestNewCommandSetAddsPartialCommands pins the prefixes NewCommandSet adds: the
 // ones between a word and a shorter member it is read through, and no others.
 func TestNewCommandSetAddsPartialCommands(t *testing.T) {

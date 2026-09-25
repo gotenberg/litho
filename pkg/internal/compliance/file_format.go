@@ -558,6 +558,12 @@ func (j *drawnStreamHexStrings) check(violations []content.FormatViolation, page
 //
 // A number inside an array or a dictionary answers to no rule; see
 // [checkContentStreamFormat].
+//
+// TODO: [veraPDF number reading] the content parse now ends a number where
+// veraPDF ends it ([content.ParseStreamData]), so "1.5e1" is the number 1.5
+// and the undefined operator e, which the operator walks state, and no parse
+// this package runs records the violation read here any more. Removing this and
+// the exponent cases of [checkContentStreamFormat] is left to a decision.
 func checkExponentOperands(violations []content.FormatViolation, part, pageNum int) []Violation {
 	rule := undefinedOperatorRule(part)
 	if rule.Specification == "" {

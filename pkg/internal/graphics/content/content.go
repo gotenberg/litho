@@ -145,6 +145,9 @@ type readOptions struct {
 	// commands is the command set the lexer ends a run of regular characters
 	// at, or nil for the reading of veraPDF (see [newLexer]).
 	commands *lexer.CommandSet
+	// repair reads the stream as a repair that writes it back reads it. See
+	// [ForRepair].
+	repair bool
 }
 
 // SplitGluedOperators reads operators written with no white space between
@@ -156,12 +159,12 @@ type readOptions struct {
 // It is for the readings that follow a viewer: text extraction, the widths of
 // Type 3 glyphs, and the redaction that has to remove what a viewer shows where
 // the viewer shows it. Without it a parse reads the stream as veraPDF does
-// (PDFStreamParser.nextOperator): it keeps the token boundaries of 7.2.2 but
-// ends an operator before a digit ([lexer.Lexer.WithDigitBoundaries]), so
-// compliance reads "ETBT" as the one operator ISO 19005 forbids, which veraPDF
-// reports under ISO 19005-2, 6.2.2 t1, and the remediation that answers it
-// writes the operators back apart ([GluedOperators]). Both readings take "q1"
-// as q then the number 1.
+// (PDFStreamParser): it keeps the token boundaries of 7.2.2 but ends an
+// operator before a digit and a number before the first character no number
+// holds ([lexer.Lexer.WithVeraPDFTokens]), so compliance reads "ETBT" as the
+// one operator ISO 19005 forbids, which veraPDF reports under ISO 19005-2,
+// 6.2.2 t1, and the remediation that answers it writes the operators back
+// apart ([GluedOperators]). Both readings take "q1" as q then the number 1.
 //
 // # Corpus evidence
 //
@@ -181,6 +184,36 @@ type readOptions struct {
 func SplitGluedOperators() Option {
 	return func(o *readOptions) {
 		o.commands = gluedOperators
+	}
+}
+
+// ForRepair reads a stream as a repair that writes it back reads it: as a
+// parse without an option reads it, save where the reading of veraPDF departs
+// from what a repair has to keep ([lexer.Lexer.WithRepairTokens]). A run that
+// starts with a digit, a sign or a period keeps the token boundaries of ISO
+// 32000-1, 7.2.2, and is a keyword when it spells no number of 7.3.3, "-" and
+// ".020.594" included, where a parse without the option reads the largest
+// value veraPDF gives it.
+//
+// The value veraPDF reads is no value a viewer draws, so writing it back would
+// move what the page shows, and ending the run where veraPDF ends it hands the
+// operator after it an operand a repair that removes the run would otherwise
+// take with it. Kept whole, the run is written back as it was, removed with
+// its number, or respelled as the number a viewer reads in it. Under
+// [SplitGluedOperators] it changes nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs poppler-90-0-fuzzed.pdf: page 14 writes "55.8492", fuzzed bytes
+//     and "7136 0 Td". Read as veraPDF reads it, removing the fuzzed bytes as
+//     an undefined operator took 55.8492 with them and moved the text after
+//     the Td 7136 units right, and the extracted text of the PDF/A-1b
+//     remediation dropped from 1079 to 72 bytes. The real-limits repair,
+//     which clamped a malformed number to the limit and wrote its page back,
+//     kept that drop past the rollback of the content repairs.
+func ForRepair() Option {
+	return func(o *readOptions) {
+		o.repair = true
 	}
 }
 
@@ -207,45 +240,59 @@ func GluedOperators(keyword string) []string {
 }
 
 // newLexer returns a lexer over data that reads it as opts say. With no option
-// it reads the stream as veraPDF does, ending an operator before a digit
-// ([lexer.Lexer.WithDigitBoundaries]): that is the reading ISO 19005 validation
-// and the remediation that answers it share, so "q1" is the q veraPDF counts
-// toward the nesting limit rather than an operator it never reports.
-// [SplitGluedOperators] replaces it with the reading of PDF.js, which splits
-// "q1" too.
+// it reads the stream as veraPDF does ([lexer.Lexer.WithVeraPDFTokens]): that
+// is the reading ISO 19005 validation takes, so "q1" is the q veraPDF counts
+// toward the nesting limit rather than an operator it never reports, "12m" is
+// 12 then m, and ".020.594" is the largest real veraPDF gives a number, which
+// fails the real limit. [ForRepair] keeps what a repair writes back where that
+// reading departs from it, and [SplitGluedOperators] replaces it with the
+// reading of PDF.js, which splits "q1" too.
 //
 // # Corpus evidence
 //
-//   - All corpora: 4 files change what compliance reports at PDF/A-1b and
-//     PDF/A-2b, veraPDF files at their own profile, all of them pdfjs.
-//   - pdfjs issue6342.pdf: its undefined operators go from 27 to 19, against
-//     veraPDF's 1. The 19 left are runs that start with a digit or a period,
-//     such as "12m", which veraPDF ends at the first character no number
-//     holds and this reading does not.
-//   - pdfjs poppler-90-0-fuzzed.pdf: its undefined operators go from 1924 to
-//     2113. veraPDF reports 87, from the 4 of its 16 pages it reads, and the
-//     operators both readings report on those pages go from 3 to 13.
-//   - pdfjs bug1130815.pdf: its undefined operators go from 1674 to 1548, and
-//     the q operators it writes against a digit now exceed the q/Q nesting
-//     limit. veraPDF cannot open the file; its default remediation keeps those
-//     q operators, which the undefined-operator repair removed, and veraPDF
-//     fails the output on the nesting limit.
-//   - pdfjs issue6342.pdf: its PDF/A-1b remediation keeps the curves whose
-//     operator ran into a digit, and two of their operands exceed the real
-//     limit for litho and veraPDF alike.
-//   - pdfjs issue11678.pdf: the count stays, and "J0.15560A38" now reads as
-//     J and an undefined run. veraPDF reports no undefined operator in the
-//     file.
+//   - All corpora: ending an operator before a digit changes what compliance
+//     reports on 4 files at PDF/A-1b and PDF/A-2b, veraPDF files at their own
+//     profile, all of them pdfjs.
+//   - pdfjs issue6342.pdf: its undefined operators go from 27 to 19 when an
+//     operator ends before a digit, and to 1, veraPDF's c., when a number ends
+//     before the first character no number holds. Its malformed numbers, such
+//     as ".020.594", then fail the real limit, which it fails 14 times at
+//     PDF/A-1b and 12 at PDF/A-2b, as veraPDF reports it.
+//   - All corpora: reading numbers as veraPDF does changes what compliance
+//     reports on 10 files at PDF/A-1b and PDF/A-2b, veraPDF files at their own
+//     profile, all of them pdfjs. On the 7 veraPDF opens, no rule count moves
+//     away from veraPDF's.
+//   - pdfjs poppler-90-0-fuzzed.pdf: on the 4 pages veraPDF reports undefined
+//     operators for, litho's go from 2, 18, 3 and 23 to veraPDF's 2, 24, 3 and
+//     58, 74 of them the same operators, the others differing at ")", ">" and
+//     "%", which veraPDF reads inside an operator. Page 4 loses its one and
+//     page 15 gains one, pages veraPDF reports none for.
+//   - pdfjs issue15604.pdf and bug1753983.pdf: "-." and "-" read as the largest
+//     values veraPDF gives a number, and fail the real and integer limits as
+//     veraPDF reports them.
+//   - pdfjs sci-notation.pdf: the exponent of "1e2 Tf" is the undefined
+//     operator e veraPDF names, where the format check stated it.
+//   - pdfjs bug1130815.pdf: its undefined operators go from 1548 to 153, and
+//     its damaged stream's malformed numbers fail the integer and real limits.
+//     veraPDF cannot open the file.
+//   - pdfjs bug1130815.pdf: its default remediation keeps the q operators it
+//     writes against a digit, which the undefined-operator repair removed, and
+//     veraPDF fails the output on the q/Q nesting limit.
+//   - pdfjs issue11678.pdf: "J0.15560A38" reads as J, a number and the
+//     undefined A. veraPDF reports no undefined operator in the file.
 func newLexer(data []byte, opts []Option) *lexer.Lexer {
 	var o readOptions
 	for _, opt := range opts {
 		opt(&o)
 	}
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
-	if o.commands != nil {
+	switch {
+	case o.commands != nil:
 		lex.WithCommands(o.commands)
-	} else {
-		lex.WithDigitBoundaries()
+	case o.repair:
+		lex.WithVeraPDFTokens().WithRepairTokens()
+	default:
+		lex.WithVeraPDFTokens()
 	}
 	return lex
 }

@@ -176,10 +176,8 @@ func malformedNumberPDF(tok string) []byte {
 // of its six arguments and the page's text stops being placed at all.
 //
 // The token here carries digits ("0.0.0", two decimal points, which ISO 32000-2,
-// 7.3.3 does not define). The digit-less spellings "-." and "-" no longer reach
-// this fixer: the lexer resolves them to 0 the way Adobe Reader and pdf.js do,
-// so they arrive as operands and never look like an operator. See
-// lexer.isDigitlessNumber and TestFixUnknownOps_DigitlessNumberNeedsNoRepair.
+// 7.3.3 does not define). The digit-less spellings take the same repair; see
+// TestFixUnknownOpsRespellsDigitlessNumbers.
 func TestFixUnknownOpsRepairsRatherThanStrips(t *testing.T) {
 	t.Parallel()
 
@@ -216,19 +214,22 @@ func TestFixUnknownOpsRepairsRatherThanStrips(t *testing.T) {
 	}
 }
 
-// TestFixUnknownOps_DigitlessNumberNeedsNoRepair pins that the digit-less
-// spellings never reach the repair, because the lexer already reads them as the
-// number they stand for.
+// TestFixUnknownOpsRespellsDigitlessNumbers pins that a digit-less spelling
+// reaches the repair and comes out as 0, the number Adobe Reader and PDF.js
+// read in it.
 //
-// litho used to surface a "-." Tm operand as an operator, strip it under
-// ISO 19005-2, 6.2.2 and take the neighbouring operands with it, which the
-// repair then had to undo. The lexer resolves it to 0 the way Adobe Reader and
-// pdf.js do, so Tm arrives whole and there is nothing to rewrite.
+// veraPDF reads "-" and "+" as the largest 64-bit integer, and "-." and "." as
+// the largest double, signed, which fail the implementation limits of ISO
+// 19005-1, 6.1.12 and ISO 19005-2, 6.1.13, and the content parse reads them the
+// same way. Written back as that value, the text matrix would move the text
+// off the page, so the repair reads the stream with the spelling kept and
+// writes 0, as it writes the numeric prefix of "0.0.0".
 //
 // # Corpus evidence
 //
-//   - pdfjs issue15604.pdf: writes "-." in two of its Tm operand positions.
-func TestFixUnknownOps_DigitlessNumberNeedsNoRepair(t *testing.T) {
+//   - pdfjs issue15604.pdf: writes "-." in two of its Tm operand positions,
+//     and veraPDF 1.30 fails 6.1.12 t2 twice on it at PDF/A-1b.
+func TestFixUnknownOpsRespellsDigitlessNumbers(t *testing.T) {
 	t.Parallel()
 
 	for _, tok := range []string{"-.", "-", "+", "."} {
@@ -247,13 +248,19 @@ func TestFixUnknownOps_DigitlessNumberNeedsNoRepair(t *testing.T) {
 			if err != nil {
 				t.Fatalf("fixUnknownOps: %v", err)
 			}
-			if slices.ContainsFunc(fixes, func(f string) bool {
-				return strings.Contains(f, "malformed number")
-			}) {
-				t.Errorf("the lexer already resolved %q, so nothing needed repair: %v", tok, fixes)
+			if !slices.Contains(fixes, "repaired 2 malformed number(s) in content streams") {
+				t.Errorf("%q was not repaired: %v", tok, fixes)
 			}
-			if _, rewritten := alloc.Pending()[4]; rewritten {
-				t.Errorf("the content stream was rewritten though %q parses cleanly", tok)
+			stream, ok := alloc.Pending()[4].(ast.PdfStream)
+			if !ok {
+				t.Fatalf("content stream not rewritten: %T", alloc.Pending()[4])
+			}
+			body, err := stream.Bytes(ctx)
+			if err != nil {
+				t.Fatalf("reading rewritten content: %v", err)
+			}
+			if !strings.Contains(string(body), "0 -0.002 0.002 0 59.64 760.026 Tm") {
+				t.Errorf("%q did not become 0 in the text matrix:\n%s", tok, body)
 			}
 		})
 	}

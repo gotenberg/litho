@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/models"
@@ -51,14 +52,17 @@ func TestContentStreamHexStringsReportsEveryFinding(t *testing.T) {
 }
 
 // TestContentStreamExponentOperands pins the rule a number written with an
-// exponent answers to in a page content stream. Where an operand stands, the
-// token is no number (ISO 32000-1, 7.3.3), so it reads as an operator ISO
-// 32000-1 does not define: ISO 19005-1, 6.2.10 t1 and ISO 19005-2, 6.2.2 t1,
-// once per token. Inside an array, a dictionary or an inline image dictionary it
-// is a syntax error no rule states. Measured with veraPDF 1.30 on one-page
-// fixtures: "1.5e1 w", "1.5E-1 w" and "1e1 w" each fail the operator test once,
-// and it gives up on a stream holding the nested forms, reporting nothing from
-// it. The hex string rules, where the exponent used to land, stay silent.
+// exponent answers to in a page content stream. ISO 32000-1, 7.3.3 gives a
+// number no exponent, and the content parse reads the stream as veraPDF does
+// (BaseParser.readNumber and PDFStreamParser.nextOperator): the number ends at
+// the exponent letter, and the letter up to the next digit is an operator ISO
+// 32000-1 does not define, ISO 19005-1, 6.2.10 t1 and ISO 19005-2, 6.2.2 t1,
+// once per token where an operand stands. Inside an array, a dictionary or an
+// inline image dictionary it is a syntax error no rule states, and the format
+// check, where the exponent used to land, stays silent. Measured with veraPDF
+// 1.30 on one-page fixtures: "1.5e1 w" and "1E1 w" fail the operator test for
+// e and E, and a stream holding one of the nested forms fails nothing, veraPDF
+// giving up on it.
 func TestContentStreamExponentOperands(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -73,21 +77,27 @@ func TestContentStreamExponentOperands(t *testing.T) {
 	)
 
 	for _, tc := range []struct {
-		profile string
+		profile models.PDFAProfile
 		want    Rule
 	}{
-		{"PDF/A-1b", Rule_19005_1_6_2_10_t01},
-		{"PDF/A-2b", Rule_19005_2_6_2_2_t01},
+		{models.PDFA1b, Rule_19005_1_6_2_10_t01},
+		{models.PDFA2b, Rule_19005_2_6_2_2_t01},
 	} {
-		got := checkContentStreamFormat(ctx, buildValidationCtx(ctx, doc, catalog, tc.profile))
-		if len(got) != 2 {
-			t.Fatalf("%s: got %d findings, want 2 (the two unnested exponents): %v", tc.profile, len(got), got)
+		if got := checkContentStreamFormat(ctx, buildValidationCtx(ctx, doc, catalog, string(tc.profile))); len(got) != 0 {
+			t.Errorf("%s: the format check states %v, want nothing", tc.profile, got)
 		}
-		for _, v := range got {
-			if v.Rule != tc.want {
-				t.Errorf("%s: got rule %s test %d, want %s test %d",
-					tc.profile, v.Rule.Clause, v.Rule.TestNumber, tc.want.Clause, tc.want.TestNumber)
+		viols, err := ValidatePDFA(ctx, doc, tc.profile)
+		if err != nil {
+			t.Fatalf("%s: ValidatePDFA: %v", tc.profile, err)
+		}
+		var operators []string
+		for _, e := range viols {
+			if v, ok := e.(Violation); ok && v.Rule == tc.want {
+				operators = append(operators, v.Context)
 			}
+		}
+		if len(operators) != 2 || !strings.Contains(operators[0], `"e"`) || !strings.Contains(operators[1], `"E"`) {
+			t.Errorf("%s: the undefined-operator test states %q, want e and E, the two unnested exponents", tc.profile, operators)
 		}
 	}
 }

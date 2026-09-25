@@ -518,7 +518,9 @@ func replaceContentArrayStreams(alloc *writer.ObjAllocator, arr ast.PdfArray, ne
 // content to rewrite.
 //
 // When no earlier fixer touched the page (the common case) it resolves entirely
-// from the document, so the operations match [content.ParsePageContent].
+// from the document. Every caller writes the operations back, so they are read
+// as a repair reads them ([content.ForRepair]), which [content.ParsePageContent]
+// matches save where the reading of veraPDF departs from what a repair keeps.
 func livePageContentOps(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) ([]content.Operation, ast.PdfObject, error) {
 	pageDict := resolveFromAllocOrDoc(ctx, alloc, doc, page.Ref)
 	if pageDict == nil {
@@ -532,7 +534,7 @@ func livePageContentOps(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	if err != nil {
 		return nil, contentsObj, err
 	}
-	ops, err := content.ParseStreamData(ctx, data)
+	ops, err := content.ParseStreamData(ctx, data, content.ForRepair())
 	if err != nil {
 		return nil, contentsObj, err
 	}
