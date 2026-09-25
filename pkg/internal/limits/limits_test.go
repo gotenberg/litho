@@ -66,24 +66,25 @@ func TestScaleImageCap_MovesWithTheBudget(t *testing.T) {
 }
 
 // TestDerivedBounds_FollowTheStreamBudget pins the page content bound, the
-// object-stream cache bound and the font-program cache bound to the stream
-// budget: at the default budget each equals the constant it replaced, 64 MiB,
-// 256 MiB and 64 MiB, and a raised or lowered budget moves all three, the page
-// and font-program bounds as a quarter of it and never below 1.
+// object-stream cache bound, the font-program cache bound and the
+// colour-transform cache bound to the stream budget: at the default budget
+// each equals the constant it replaced, 64 MiB, 256 MiB, 64 MiB and 64 MiB,
+// and a raised or lowered budget moves all four, the page, font-program and
+// colour-transform bounds as a quarter of it and never below 1.
 func TestDerivedBounds_FollowTheStreamBudget(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name                         string
-		l                            limits.Limits
-		page, objStmCache, fontCache int64
+		name                                     string
+		l                                        limits.Limits
+		page, objStmCache, fontCache, colorCache int64
 	}{
-		{"default", limits.Default(), 64 << 20, 256 << 20, 64 << 20},
-		{"zero reads as the default", limits.Limits{}, 64 << 20, 256 << 20, 64 << 20},
-		{"raised", limits.Limits{MaxStreamBytes: 1 << 30}, 256 << 20, 1 << 30, 256 << 20},
-		{"ceiling", limits.Limits{MaxStreamBytes: limits.MaxStreamBytesCeiling}, 1 << 30, 4 << 30, 1 << 30},
-		{"lowered", limits.Limits{MaxStreamBytes: 64 << 10}, 16 << 10, 64 << 10, 16 << 10},
-		{"below four bytes", limits.Limits{MaxStreamBytes: 3}, 1, 3, 1},
+		{"default", limits.Default(), 64 << 20, 256 << 20, 64 << 20, 64 << 20},
+		{"zero reads as the default", limits.Limits{}, 64 << 20, 256 << 20, 64 << 20, 64 << 20},
+		{"raised", limits.Limits{MaxStreamBytes: 1 << 30}, 256 << 20, 1 << 30, 256 << 20, 256 << 20},
+		{"ceiling", limits.Limits{MaxStreamBytes: limits.MaxStreamBytesCeiling}, 1 << 30, 4 << 30, 1 << 30, 1 << 30},
+		{"lowered", limits.Limits{MaxStreamBytes: 64 << 10}, 16 << 10, 64 << 10, 16 << 10, 16 << 10},
+		{"below four bytes", limits.Limits{MaxStreamBytes: 3}, 1, 3, 1, 1},
 	} {
 		if got := tc.l.MaxPageContentBytes(); got != tc.page {
 			t.Errorf("%s: MaxPageContentBytes() = %d, want %d", tc.name, got, tc.page)
@@ -93,6 +94,9 @@ func TestDerivedBounds_FollowTheStreamBudget(t *testing.T) {
 		}
 		if got := tc.l.MaxFontProgCacheBytes(); got != tc.fontCache {
 			t.Errorf("%s: MaxFontProgCacheBytes() = %d, want %d", tc.name, got, tc.fontCache)
+		}
+		if got := tc.l.MaxColorCacheBytes(); got != tc.colorCache {
+			t.Errorf("%s: MaxColorCacheBytes() = %d, want %d", tc.name, got, tc.colorCache)
 		}
 	}
 }

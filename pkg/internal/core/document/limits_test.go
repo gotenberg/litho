@@ -212,3 +212,59 @@ func TestSetCachedFontProgram_FollowsTheStreamBudget(t *testing.T) {
 		t.Errorf("the default budget did not cache a %d-byte program", bound+1)
 	}
 }
+
+// TestSetCachedColorTransform_FollowsTheStreamBudget pins the colour-transform
+// cache to [limits.Limits.MaxColorCacheBytes] of the document's budgets, a
+// quarter of the stream budget: a transform as large as the bound is cached, a
+// larger one is not, and a transform that would take the cache past the bound
+// empties it first. The default document caches a transform the lowered
+// budget refuses.
+func TestSetCachedColorTransform_FollowsTheStreamBudget(t *testing.T) {
+	t.Parallel()
+
+	data := limitsDocBytes(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [] /Count 0 >>",
+	)
+	ctx := context.Background()
+	const budget, bound, intent = 400, 100, 1
+
+	doc, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil, WithLimits(limits.Limits{MaxStreamBytes: budget}))
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	if got := doc.Limits().MaxColorCacheBytes(); got != bound {
+		t.Fatalf("MaxColorCacheBytes() = %d under a %d-byte budget, want %d", got, budget, bound)
+	}
+	cached := func(d *Document, nums ...int) []int {
+		var held []int
+		for _, n := range nums {
+			if _, ok := d.CachedColorTransform(n, intent); ok {
+				held = append(held, n)
+			}
+		}
+		return held
+	}
+
+	doc.SetCachedColorTransform(1, intent, "t1", bound+1)
+	if got := cached(doc, 1); len(got) != 0 {
+		t.Errorf("a transform past the %d-byte bound was cached", bound)
+	}
+	doc.SetCachedColorTransform(2, intent, "t2", bound)
+	if got := cached(doc, 2); len(got) != 1 {
+		t.Errorf("a transform of exactly the bound was not cached")
+	}
+	doc.SetCachedColorTransform(3, intent, "t3", 1)
+	if got := cached(doc, 2, 3); len(got) != 1 || got[0] != 3 {
+		t.Errorf("a transform past the remaining bound left the cache holding %v, want only [3]", got)
+	}
+
+	def, err := NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	def.SetCachedColorTransform(1, intent, "t1", bound+1)
+	if got := cached(def, 1); len(got) != 1 {
+		t.Errorf("the default budget did not cache a %d-byte transform", bound+1)
+	}
+}

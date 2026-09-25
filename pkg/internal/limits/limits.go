@@ -13,9 +13,9 @@ import "fmt"
 type Limits struct {
 	// MaxStreamBytes bounds the decoded output of one stream. See
 	// [DefaultMaxStreamBytes]. The page content bound, the object-stream
-	// cache and the font-program cache derive from it: see
-	// [Limits.MaxPageContentBytes], [Limits.MaxObjStmCacheBytes] and
-	// [Limits.MaxFontProgCacheBytes].
+	// cache, the font-program cache and the colour-transform cache derive
+	// from it: see [Limits.MaxPageContentBytes], [Limits.MaxObjStmCacheBytes],
+	// [Limits.MaxFontProgCacheBytes] and [Limits.MaxColorCacheBytes].
 	MaxStreamBytes int64
 
 	// MaxImagePixels bounds Width x Height of one image, and scales the
@@ -331,4 +331,29 @@ const fontProgCacheShare = 4
 //     headroom.
 func (l Limits) MaxFontProgCacheBytes() int64 {
 	return max(l.WithDefaults().MaxStreamBytes/fontProgCacheShare, 1)
+}
+
+// colorCacheShare divides the stream budget into the colour-transform cache
+// bound: [Limits.MaxColorCacheBytes] is MaxStreamBytes over it. That method
+// says why the cache gets a quarter.
+const colorCacheShare = 4
+
+// MaxColorCacheBytes returns the bound on the colour transforms a document
+// keeps cached, built from its ICC profile streams: a quarter of
+// MaxStreamBytes and never below 1, so 64 MiB under the default budget. It is
+// an anti-DoS guard, not spec-mandated: a crafted file can declare many
+// ICCBased colour spaces (ISO 32000-1, 8.6.5.5) whose profiles carry large
+// lookup tables, so the cache empties rather than grows without bound. A
+// transform larger than the bound is not cached and is built again at each
+// use, which costs time, never a wrong answer.
+//
+// It moves with MaxStreamBytes, which bounds each profile stream a transform
+// is built from: a caller that raises the budget to read a document of heavy
+// profiles caches their transforms too, and one that lowers it shrinks the
+// cache. It is a quarter of the budget, as the font-program cache is, because
+// the default then stays the 64 MiB the cache always had. The densest lookup
+// table in common use, 33 points over four inputs, builds a transform of
+// about 29 MB, and a document rarely holds more than one or two profiles.
+func (l Limits) MaxColorCacheBytes() int64 {
+	return max(l.WithDefaults().MaxStreamBytes/colorCacheShare, 1)
 }

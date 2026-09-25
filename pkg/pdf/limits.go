@@ -39,7 +39,7 @@ type Limits struct {
 	// BrotliDecode filter without holding its output, and that read is not
 	// bounded. Default 256 MiB, at most 4 GiB.
 	//
-	// Three further bounds move with it. The content of one page, summed
+	// Four further bounds move with it. The content of one page, summed
 	// across the streams of its /Contents array, may take a quarter of it, 64
 	// MiB by default: text extraction, validation, remediation, auto-tagging,
 	// stamping and redaction refuse a page with more, as they refuse a damaged
@@ -48,9 +48,10 @@ type Limits struct {
 	// and not the whole, because the operators parsed from a page hold about
 	// five times its bytes. The decoded object streams the
 	// [Reader] keeps cached may take the whole of it, and the decoded font
-	// programs it keeps cached a quarter, 64 MiB by default: when either would
-	// take more, its cache is emptied and refilled, which costs re-decoding,
-	// never a wrong answer.
+	// programs and the colour transforms built from ICC profiles it keeps
+	// cached a quarter each, 64 MiB by default: when one would take more, its
+	// cache is emptied and refilled, which costs re-decoding, never a wrong
+	// answer.
 	MaxStreamBytes int64
 
 	// MaxImagePixels bounds Width x Height of one image. [Reader.DecodeImage]

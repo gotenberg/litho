@@ -55,7 +55,7 @@ type Document struct {
 	fontProgCache    map[int][]byte      // decoded font programs by FontFile stream object number
 	fontProgBytes    int                 // decoded bytes held in fontProgCache, bounded by limits.Limits.MaxFontProgCacheBytes
 	colorCache       map[[2]int]any      // colour transforms by profile object number and rendering intent
-	colorCacheBytes  int                 // bytes held in colorCache, bounded by maxColorCacheBytes
+	colorCacheBytes  int                 // bytes held in colorCache, bounded by limits.Limits.MaxColorCacheBytes
 	sortedOffsets    []int64             // ascending normal-object offsets, for O(log N) endobj scan-capping
 	sortedOffsetsLen int                 // len(Index.Entries) when sortedOffsets was built; rebuild on change
 	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache, sortedOffsets, formatViolations, and the lazy Index.Entries augmentation
@@ -1166,14 +1166,6 @@ func (d *Document) SetCachedFontProgram(objNum int, data []byte) {
 	d.fontProgBytes += len(data)
 }
 
-// maxColorCacheBytes bounds the bytes of colour transforms retained by
-// [Document.SetCachedColorTransform]. It is an anti-DoS guard, not
-// spec-mandated: a crafted file could declare many profiles with large lookup
-// tables, so the cache evicts rather than grow without bound. The densest
-// table in common use, 33 points over four inputs, builds a transform of
-// about 29 MB, and a document rarely holds more than one or two profiles.
-const maxColorCacheBytes = 64 << 20
-
 // CachedColorTransform returns the colour transform cached for the profile
 // stream object number and rendering intent. A nil value records a profile
 // that could not be used.
@@ -1186,10 +1178,12 @@ func (d *Document) CachedColorTransform(objNum, intent int) (any, bool) {
 
 // SetCachedColorTransform stores a colour transform of size bytes keyed by
 // its profile stream object number and rendering intent, bounding the total
-// with an evict-all policy. A transform larger than the budget is not
-// cached, so it cannot force repeated evictions.
+// bytes at [limits.Limits.MaxColorCacheBytes] of the document's budgets with
+// an evict-all policy. A transform larger than the bound is not cached, so it
+// cannot force repeated evictions.
 func (d *Document) SetCachedColorTransform(objNum, intent int, t any, size int) {
-	if size > maxColorCacheBytes {
+	limit := d.Limits().MaxColorCacheBytes()
+	if int64(size) > limit {
 		return
 	}
 	d.mu.Lock()
@@ -1198,7 +1192,7 @@ func (d *Document) SetCachedColorTransform(objNum, intent int, t any, size int) 
 	if _, ok := d.colorCache[key]; ok {
 		return
 	}
-	if d.colorCache == nil || d.colorCacheBytes+size > maxColorCacheBytes {
+	if d.colorCache == nil || int64(d.colorCacheBytes)+int64(size) > limit {
 		d.colorCache = make(map[[2]int]any)
 		d.colorCacheBytes = 0
 	}
