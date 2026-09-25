@@ -28,12 +28,15 @@ import (
 //
 // Filling in a field or signing redraws a widget (12.5.6.19, 12.7.3.3), and
 // its appearance stream draws with XObjects, fonts and the other
-// [appearanceTypes]. Such an object is exempt when an annotation the update
-// rewrote within policy, a widget at P=2 and any annotation at P=3, reaches it
-// from its /AP ([drawnObjects]), and it is new. An object the signed revision
-// already held is exempt only when it was that annotation's own appearance
-// stream there ([ownAppearances]): a font or an image an appearance shares with
-// the page would otherwise let an update redraw the page through it.
+// [appearanceTypes]. The widget's default appearance may also name a font the
+// update adds to the form's default resources (12.7.2, Table 218). Such an
+// object is exempt when an annotation the update rewrote within policy, a
+// widget at P=2 and any annotation at P=3, reaches it from its /AP, or a
+// widget among them names it from /DR in its /DA ([drawnObjects]), and it is
+// new. An object the signed revision already held is exempt only when it was
+// that annotation's own appearance stream there ([ownAppearances]): a font or
+// an image an appearance shares with the page would otherwise let an update
+// redraw the page through it.
 //
 // An object is new when the signed revision neither defines it nor refers to
 // it ([signedRevision.held]): filling in a number the signed document already

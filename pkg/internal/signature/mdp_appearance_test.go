@@ -1,6 +1,7 @@
 package signature
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"testing"
@@ -129,6 +130,104 @@ func TestEvaluateMDP_AppearanceStreams(t *testing.T) {
 			}
 			if tc.reported != "" && !strings.Contains(result.MDPInfo, tc.reported) {
 				t.Errorf("MDPInfo %q does not name %s", result.MDPInfo, tc.reported)
+			}
+		})
+	}
+}
+
+// TestEvaluateMDP_DefaultResources covers ISO 32000-1, 12.8.2.2, Table 254
+// with 12.7.3.3, Table 222: a signer that sets a widget's default appearance
+// may add the font it names to the form's default resources (12.7.2, Table
+// 218), which no appearance stream draws with. The font is part of signing
+// when the /DA of a widget the update signed or filled in names it, at P=2 and
+// P=3, even when a later signature replaces it. A /DR font no such widget
+// names, or one the signed document already held, stays a change.
+func TestEvaluateMDP_DefaultResources(t *testing.T) {
+	font := func(num int, base string) updatedObject {
+		return updatedObject{num, "<< /Type /Font /Subtype /Type0 /BaseFont /" + base + " /Encoding /Identity-H /DescendantFonts [" + fmt.Sprint(num+1) + " 0 R] >>"}
+	}
+	cidFont := func(num int, base string) updatedObject {
+		return updatedObject{num, "<< /Type /Font /Subtype /CIDFontType2 /BaseFont /" + base + " /CIDSystemInfo << /Registry (Adobe) /Ordering (Japan1) /Supplement 4 >> /FontDescriptor " + fmt.Sprint(num+1) + " 0 R >>"}
+	}
+	descriptor := func(num int, base string) updatedObject {
+		return updatedObject{num, "<< /Type /FontDescriptor /FontName /" + base + " /Flags 4 /FontBBox [0 -137 1000 859] /ItalicAngle 0 /Ascent 859 /Descent -141 /CapHeight 859 /StemV 0 >>"}
+	}
+	withFont := func(first int, base string) []updatedObject {
+		return []updatedObject{font(first, base), cidFont(first+1, base), descriptor(first+2, base)}
+	}
+	form := func(fields, fonts, extra string) updatedObject {
+		return updatedObject{7, "<< /Fields [4 0 R 6 0 R " + fields + "] /SigFlags 3 /DR << /Font << /F1 10 0 R " + fonts + " >> >>" + extra + " >>"}
+	}
+	page := func(extra string) updatedObject {
+		return updatedObject{3, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R 6 0 R 9 0 R" + extra + "] /Resources << /Font << /F1 10 0 R >> >> /Contents 11 0 R >>"}
+	}
+	signing := func(widget, value int, da string) []updatedObject {
+		return []updatedObject{
+			{widget, fmt.Sprintf("<< /Type /Annot /Subtype /Widget /FT /Sig /T (approval%d) /Rect [300 300 400 350] /P 3 0 R%s /V %d 0 R /AP << /N %d 0 R >> >>", widget, da, value, value+1)},
+			{value, approvalValue},
+			{value + 1, formXObject("", "q 0 0 100 50 re S Q")},
+		}
+	}
+	signed := func(da string, fonts string, fontObjs ...updatedObject) []updatedObject {
+		objs := append([]updatedObject{form("30 0 R", fonts, ""), page(" 30 0 R")}, signing(30, 31, da)...)
+		return append(objs, fontObjs...)
+	}
+
+	tests := []struct {
+		name     string
+		policy   int
+		updates  [][]updatedObject
+		want     bool
+		reported string // what MDPInfo names when the verdict is a violation
+	}{
+		{"P=2 signing adds the /DR font its /DA names", 2, [][]updatedObject{
+			signed(" /DA (/MS-Mincho 0 Tf 0 g)", "/MS-Mincho 40 0 R", withFont(40, "MS-Mincho")...),
+		}, true, ""},
+		{"P=3 signing adds the /DR font its /DA names", 3, [][]updatedObject{
+			signed(" /DA (/MS-Mincho 0 Tf 0 g)", "/MS-Mincho 40 0 R", withFont(40, "MS-Mincho")...),
+		}, true, ""},
+		{"P=2 signing adds the /DR font the form's /DA names", 2, [][]updatedObject{
+			append([]updatedObject{form("30 0 R", "/MS-Mincho 40 0 R", " /DA (/MS-Mincho 0 Tf 0 g)"), page(" 30 0 R")},
+				append(signing(30, 31, ""), withFont(40, "MS-Mincho")...)...),
+		}, true, ""},
+		{"P=2 a later signature replaces the /DR font", 2, [][]updatedObject{
+			signed(" /DA (/MS-Mincho 0 Tf 0 g)", "/MS-Mincho 40 0 R", withFont(40, "MS-Mincho")...),
+			append(append([]updatedObject{form("30 0 R 50 0 R", "/MS-Mincho 43 0 R", ""), page(" 30 0 R 50 0 R")},
+				signing(50, 51, " /DA (/MS-Mincho 0 Tf 0 g)")...), withFont(43, "MS-Mincho")...),
+		}, true, ""},
+
+		{"P=2 /DR font no widget names", 2, [][]updatedObject{
+			signed(" /DA (/F1 0 Tf 0 g)", "/MS-Mincho 40 0 R", withFont(40, "MS-Mincho")...),
+		}, false, "object 40 (Font)"},
+		{"P=2 /DR font only a widget the update left alone names", 2, [][]updatedObject{
+			signed(" /DA (/F1 0 Tf 0 g)", "/F9 40 0 R", withFont(40, "MS-Mincho")...),
+		}, false, "object 40 (Font)"},
+		{"P=2 signed /DR font rewritten", 2, [][]updatedObject{
+			signed(" /DA (/F1 0 Tf 0 g)", "", updatedObject{10, "<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>"}),
+		}, false, "object 10 (Font)"},
+		{"P=1 signing adds the /DR font its /DA names", 1, [][]updatedObject{
+			signed(" /DA (/MS-Mincho 0 Tf 0 g)", "/MS-Mincho 40 0 R", withFont(40, "MS-Mincho")...),
+		}, false, "added after signing"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// The text field widget (6) of the signed revision names /F9 in its
+			// /DA, which the signed /DR does not hold. The rename keeps every
+			// object at its offset.
+			base := bytes.Replace(appearanceCertifiedPDF(tc.policy), []byte("/DA (/F1 12 Tf 0 g)"), []byte("/DA (/F9 12 Tf 0 g)"), 1)
+			data := base
+			for _, update := range tc.updates {
+				data = appendUpdate(t, data, update...)
+			}
+			result := mdpVerdict(t, data, len(base), tc.policy)
+			if result.MDPValid != tc.want {
+				t.Fatalf("MDPValid = %v, want %v (MDPInfo %q)", result.MDPValid, tc.want, result.MDPInfo)
+			}
+			if tc.reported != "" && !strings.Contains(result.MDPInfo, tc.reported) {
+				t.Errorf("MDPInfo %q does not name %s", result.MDPInfo, tc.reported)
+			}
+			if strings.Contains(result.MDPInfo, "not recognized") || strings.Contains(result.MDPInfo, "not checked") {
+				t.Errorf("MDPInfo %q: a check did not run", result.MDPInfo)
 			}
 		})
 	}

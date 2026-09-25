@@ -1468,7 +1468,9 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // redrawing an annotation the update rewrote within the policy (a form field
 // widget or a new signature's widget at P=2, any annotation at P=3) when that
 // annotation's /AP reaches it and it is new, or was that annotation's own
-// appearance stream in the signed revision. A later form fill that redraws the
+// appearance stream in the signed revision. A font or another resource the
+// update adds to the form's default resources (/DR) passes the same way when
+// the default appearance (/DA) of such a widget names it. A later form fill that redraws the
 // same widget leaves the earlier appearance unreferenced, so such an object is
 // also judged in the revision the update that wrote it made, against the
 // revision before that update: it passes when the /AP of an annotation that
@@ -1528,17 +1530,19 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // rewrites only the metadata is reported, and so is one that points the
 // trailer's /Info or the catalog's /Metadata at another object.
 //
-// At P=2 the interactive form is compared with its signed version too, since
+// From P=2 the interactive form is compared with its signed version too, since
 // filling in a field and signing change only a field's value and the
 // appearance of its widgets. The form dictionary may change in every entry but
 // /CO. A field or widget the update rewrote may change only in its value and
-// appearance entries, a signature field may gain a /V but not replace one,
-// /Ff may gain only the ReadOnly flag a signature's /Lock sets, and /Kids may
-// gain only new fields. A field or widget the update added must belong to a
-// signature field and carry no /A or /AA action, and no object the actions of
-// a field or widget reach may be written differently from its signed
-// definition. When the signed revision cannot be read, MDPInfo says what was
-// not checked.
+// appearance entries, and at P=3 a widget also in the other entries of an
+// annotation but its /A and /AA actions and its /Parent, since P=3 adds
+// annotation changes and not changes to the form. A signature field may gain a
+// /V but not replace one, /Ff may gain only the ReadOnly flag a signature's
+// /Lock sets, and /Kids may gain only new fields. A field or widget the update
+// added must belong to a signature field and carry no /A or /AA action, and no
+// object the actions of a field or widget reach may be written differently
+// from its signed definition. When the signed revision cannot be read, MDPInfo
+// says what was not checked.
 func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) (_ []models.SignatureValidation, err error) {
 	defer recoverToError(r.logger(), "Reader.VerifySignatures", &err)
 	return signature.VerifySignatures(ctx, r.doc, roots)

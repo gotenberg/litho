@@ -258,8 +258,8 @@ func compareRevisions(ctx context.Context, doc, rev *document.Document, held fun
 	if policy >= 2 {
 		checks = append(checks, check{"catalog changes", func() (string, error) { return changedCatalog(ctx, doc, rev, policy) }})
 	}
-	if policy == 2 {
-		checks = append(checks, check{"form fields", func() (string, error) { return changedField(ctx, doc, rev, held, objects) }})
+	if policy >= 2 {
+		checks = append(checks, check{"form fields", func() (string, error) { return changedField(ctx, doc, rev, held, objects, policy) }})
 	}
 	if policy >= 2 {
 		checks = append(checks, check{"untyped objects", func() (string, error) { return changedUntyped(ctx, doc, rev, classified, policy) }})
@@ -284,7 +284,7 @@ func revisionChecks(policy int) string {
 	case 2:
 		return "page changes, page order, page removals, catalog changes, form fields, untyped objects and annotation removals"
 	case 3:
-		return "page changes, page order, page removals, catalog changes and untyped objects"
+		return "page changes, page order, page removals, catalog changes, form fields and untyped objects"
 	}
 	return "page changes, page order and page removals"
 }

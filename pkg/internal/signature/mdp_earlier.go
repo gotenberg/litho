@@ -37,7 +37,8 @@ type earlierDefinition struct {
 //     whose change, compared with the revision before, is filling in or
 //     signing ([fieldDiff]), and at P=3 any other annotation;
 //   - an object of one of the [appearanceTypes] it wrote is exempt when the
-//     revision it made reaches it from those annotations' /AP ([drawnObjects])
+//     revision it made reaches it from those annotations' /AP, or from the
+//     default resources a widget among them names in its /DA ([drawnObjects]),
 //     and it is new, neither held by the signed revision nor by the revision
 //     before ([signedRevision.held]), or was the own appearance stream of one
 //     of those annotations in the revision before ([ownAppearances]) and was
@@ -133,7 +134,7 @@ func exemptUpdateAppearances(
 	}
 	priorHeld := func(num int) bool { return before.held(ctx, prior, num) }
 
-	changes := &fieldDiff{doc: made, rev: prior, held: priorHeld}
+	changes := &fieldDiff{doc: made, rev: prior, held: priorHeld, policy: policy}
 	var annots []int
 	for _, obj := range objects {
 		if obj.UpdateEnd != end || !obj.IsAnnot || !permitted(obj, policy) {

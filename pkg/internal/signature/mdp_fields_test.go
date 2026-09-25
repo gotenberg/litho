@@ -149,3 +149,74 @@ func TestEvaluateMDP_FormFields(t *testing.T) {
 		})
 	}
 }
+
+// TestEvaluateMDP_FormFieldsP3 covers ISO 32000-1, 12.8.2.2, Table 254 for the
+// fields of the interactive form at P=3, which adds annotation creation,
+// deletion and modification to what P=2 permits. A widget may then move or
+// change how it looks, and comments may come and go, but the form changes as
+// at P=2 only: no new field other than a signature field, no action added or
+// rewritten, no field renamed.
+func TestEvaluateMDP_FormFieldsP3(t *testing.T) {
+	script := "<< /S /JavaScript /JS (this.getField\\(\"amount\"\\).value = 900;) >>"
+
+	tests := []struct {
+		name     string
+		update   []updatedObject
+		want     bool
+		reported string // what MDPInfo names when the verdict is a violation
+	}{
+		{"text field filled", []updatedObject{
+			textField(" /V (100.00) /AP << /N 41 0 R >>"),
+			{41, formXObject("/Font << /Helv 42 0 R >>", "/Tx BMC BT /Helv 12 Tf (100.00) Tj ET EMC")},
+			{42, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"},
+		}, true, ""},
+		{"widget moved and recoloured", []updatedObject{
+			{6, "<< /Type /Annot /Subtype /Widget /FT /Tx /T (amount) /Rect [40 40 140 60] /P 3 0 R /DA (/Helv 12 Tf 0 g) /AA << /K 9 0 R >> /C [1 0 0] /Contents (Amount due) >>"},
+		}, true, ""},
+		{"comment added", []updatedObject{
+			{40, "<< /Type /Annot /Subtype /Text /Rect [200 200 220 220] /P 3 0 R /Contents (note) >>"},
+			fieldsPage("4 0 R 6 0 R 8 0 R 40 0 R"),
+		}, true, ""},
+
+		{"text field added", []updatedObject{
+			{40, "<< /Type /Annot /Subtype /Widget /FT /Tx /T (added) /Rect [300 400 400 450] /P 3 0 R >>"},
+			fieldsForm("4 0 R 6 0 R 8 0 R 40 0 R", ""),
+			fieldsPage("4 0 R 6 0 R 8 0 R 40 0 R"),
+		}, false, "field 40 (Tx) was added, which P=3 permits only for a signature field"},
+		{"action added to an existing field", []updatedObject{
+			emptySignature(" /AA << /U 41 0 R >>"), {41, script},
+		}, false, "field 8 (Sig) added its /AA, which P=3 does not permit"},
+		{"widget action added", []updatedObject{
+			textField(" /A 41 0 R"), {41, script},
+		}, false, "field 6 (Tx) added its /A, which P=3 does not permit"},
+		{
+			"existing field's action rewritten",
+			[]updatedObject{{9, script}},
+			false, "object 9 (untyped) is reached through field 6 (Tx)'s /AA, which P=3 does not permit changing",
+		},
+		{"existing field renamed", []updatedObject{
+			{6, "<< /Type /Annot /Subtype /Widget /FT /Tx /T (total) /Rect [20 20 120 40] /P 3 0 R /DA (/Helv 12 Tf 0 g) /AA << /K 9 0 R >> >>"},
+		}, false, "field 6 (Tx) changed its /T"},
+		{"field flags beyond read-only", []updatedObject{textField(" /Ff 4096")}, false, "field 6 (Tx) added its /Ff"},
+		{
+			"calculation order added",
+			[]updatedObject{fieldsForm("4 0 R 6 0 R 8 0 R", " /CO [6 0 R]")},
+			false, "the interactive form's /CO was added, which P=3 does not permit",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			base := fieldsCertifiedPDF(3)
+			result := mdpVerdict(t, appendUpdate(t, base, tc.update...), len(base), 3)
+			if result.MDPValid != tc.want {
+				t.Fatalf("MDPValid = %v, want %v (MDPInfo %q)", result.MDPValid, tc.want, result.MDPInfo)
+			}
+			if tc.reported != "" && !strings.Contains(result.MDPInfo, tc.reported) {
+				t.Errorf("MDPInfo %q does not name %s", result.MDPInfo, tc.reported)
+			}
+			if strings.Contains(result.MDPInfo, "not checked") {
+				t.Errorf("MDPInfo %q: a comparison did not run", result.MDPInfo)
+			}
+		})
+	}
+}

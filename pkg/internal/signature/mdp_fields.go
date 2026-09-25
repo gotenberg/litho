@@ -43,6 +43,21 @@ var formEntries = map[ast.PdfName]bool{
 	"NeedAppearances": true, "XFA": true,
 }
 
+// annotationEntries are the entries of a widget annotation that ISO 32000-1,
+// 12.8.2.2, Table 254 lets change at P=3, which adds "annotation creation,
+// deletion, and modification" to P=2: those of an annotation dictionary
+// (12.5.2, Table 164; ISO 32000-2, 12.5.2, Table 166 adds /AF, /ca, /CA, /BM
+// and /Lang) and of a widget (12.5.6.19, Table 188) other than /Type and
+// /Subtype, which make it a widget, /Parent, which places it in the field tree
+// (12.7.3.1), and the /A and /AA actions, which run when the field is used and
+// so belong to the form rather than to how the annotation looks.
+var annotationEntries = map[ast.PdfName]bool{
+	"Rect": true, "Contents": true, "P": true, "NM": true, "M": true, "F": true,
+	"AP": true, "AS": true, "Border": true, "C": true, "StructParent": true, "OC": true,
+	"AF": true, "ca": true, "CA": true, "BM": true, "Lang": true,
+	"H": true, "MK": true, "BS": true,
+}
+
 // readOnlyFlag is the ReadOnly bit of a field's /Ff (ISO 32000-1, 12.7.3.1,
 // Table 221).
 const readOnlyFlag = 1
@@ -50,19 +65,21 @@ const readOnlyFlag = 1
 // changedField describes the first change to the interactive form of doc
 // that is neither filling in a field nor signing, compared with the signed
 // revision rev, or returns "" when there is none. objects are the objects
-// appended after signing, and held reports whether the signed revision held a
-// number ([signedRevision.held]). It runs at P=2.
+// appended after signing, held reports whether the signed revision held a
+// number ([signedRevision.held]), and policy is 2 or 3.
 //
 // ISO 32000-1, 12.8.2.2, Table 254 permits filling in forms, instantiating
-// page templates and signing at P=2, and invalidates the signature on any
-// other change. The classifier passes every field and widget dictionary, so
-// what the form reaches is compared here:
+// page templates and signing at P=2, adds annotation creation, deletion and
+// modification at P=3, and invalidates the signature on any other change. The
+// classifier passes every field and widget dictionary, so what the form
+// reaches is compared here:
 //
 //   - the form dictionary may change only in [formEntries];
 //   - a field or widget the update rewrote may change only in [fillEntries],
-//     a signature field only gains a /V where it had none (12.7.4.5), its
-//     /Ff only gains the ReadOnly flag a signature's /Lock sets (Table 233),
-//     and its /Kids only gain new signature fields;
+//     and at P=3 a widget in [annotationEntries] too, a signature field only
+//     gains a /V where it had none (12.7.4.5), its /Ff only gains the
+//     ReadOnly flag a signature's /Lock sets (Table 233), and its /Kids only
+//     gain new signature fields;
 //   - a field or widget the update added must be a signature field or a
 //     widget of one, and carry no /A or /AA action;
 //   - no object a field's or widget's action reaches (12.6.2, 12.6.3) may be
@@ -70,12 +87,14 @@ const readOnlyFlag = 1
 //
 // A field's actions run when a reader opens, fills in or leaves it, and a
 // field's type and name define the form, so none of these changes fills in a
-// form or signs it.
+// form or signs it. The annotation changes P=3 adds do not reach them: a
+// widget is a field's annotation, and creating one for another field adds to
+// the form.
 //
 // The fields are those the form's /Fields reaches through /Kids, the widgets
 // the pages list, and the widgets the update wrote. A new field that
 // instantiating a page template adds (12.7.6) is reported like any other.
-func changedField(ctx context.Context, doc, rev *document.Document, held func(num int) bool, objects []appendedObject) (string, error) {
+func changedField(ctx context.Context, doc, rev *document.Document, held func(num int) bool, objects []appendedObject, policy int) (string, error) {
 	appended := make(map[int]appendedObject)
 	for _, obj := range objects {
 		if !obj.IsXRef && obj.Unread == "" {
@@ -107,7 +126,7 @@ func changedField(ctx context.Context, doc, rev *document.Document, held func(nu
 	if form != nil {
 		for _, key := range changedKeys(signedForm, form) {
 			if !formEntries[key] {
-				return fmt.Sprintf("the interactive form's /%s %s, which P=2 does not permit", string(key), change(signedForm[key], form[key])), nil
+				return fmt.Sprintf("the interactive form's /%s %s, which P=%d does not permit", string(key), change(signedForm[key], form[key]), policy), nil
 			}
 		}
 	}
@@ -116,7 +135,7 @@ func changedField(ctx context.Context, doc, rev *document.Document, held func(nu
 	if err != nil {
 		return "", err
 	}
-	f := &fieldDiff{doc: doc, rev: rev, held: held}
+	f := &fieldDiff{doc: doc, rev: rev, held: held, policy: policy}
 	var roots []reachRoot
 	for i, num := range nodes {
 		if i%100 == 0 {
@@ -148,7 +167,7 @@ func changedField(ctx context.Context, doc, rev *document.Document, held func(nu
 			if violation != "" || !ok || sameDefinition(ctx, doc, rev, num) {
 				return
 			}
-			violation = fmt.Sprintf("object %d (%s) is reached through %s, which P=2 does not permit changing", num, objDescription(obj), root.via)
+			violation = fmt.Sprintf("object %d (%s) is reached through %s, which P=%d does not permit changing", num, objDescription(obj), root.via, policy)
 		})
 		if err != nil {
 			return "", fmt.Errorf("walking %s: %w", root.via, err)
@@ -248,10 +267,11 @@ func formNodes(ctx context.Context, doc *document.Document, form ast.PdfDict, ob
 }
 
 // fieldDiff compares the fields and widgets of the current document doc with
-// the signed revision rev for [changedField].
+// the signed revision rev for [changedField], at policy 2 or 3.
 type fieldDiff struct {
 	doc, rev *document.Document
 	held     func(num int) bool
+	policy   int
 }
 
 // judge describes how the field or widget num, which the update wrote as dict,
@@ -261,11 +281,11 @@ func (f *fieldDiff) judge(ctx context.Context, num int, dict ast.PdfDict) string
 	if !f.held(num) {
 		for _, key := range []ast.PdfName{"A", "AA"} {
 			if _, ok := dict[key]; ok {
-				return fmt.Sprintf("%s was added with an /%s action, which P=2 does not permit", desc, string(key))
+				return fmt.Sprintf("%s was added with an /%s action, which P=%d does not permit", desc, string(key), f.policy)
 			}
 		}
 		if f.fieldType(ctx, dict) != "Sig" {
-			return fmt.Sprintf("%s was added, which P=2 permits only for a signature field", desc)
+			return fmt.Sprintf("%s was added, which P=%d permits only for a signature field", desc, f.policy)
 		}
 		return ""
 	}
@@ -279,7 +299,7 @@ func (f *fieldDiff) judge(ctx context.Context, num int, dict ast.PdfDict) string
 	isSig := f.fieldType(ctx, dict) == "Sig"
 	for _, key := range changedKeys(before, dict) {
 		if !f.filled(ctx, key, before, dict, isSig) {
-			return fmt.Sprintf("%s %s its /%s, which P=2 does not permit", desc, changeVerb(before[key], dict[key]), string(key))
+			return fmt.Sprintf("%s %s its /%s, which P=%d does not permit", desc, changeVerb(before[key], dict[key]), string(key), f.policy)
 		}
 	}
 	return ""
@@ -300,6 +320,9 @@ func (f *fieldDiff) filled(ctx context.Context, key ast.PdfName, before, after a
 		return bok && aok && a == b|readOnlyFlag
 	case "Kids":
 		return f.kidsAdded(ctx, before["Kids"], after["Kids"])
+	}
+	if f.policy == 3 && annotationEntries[key] && dictName(after, "Subtype") == "Widget" {
+		return true
 	}
 	return fillEntries[key]
 }
