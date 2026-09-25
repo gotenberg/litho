@@ -15,14 +15,15 @@ import (
 )
 
 // TestRewriteExponentNumbers pins how a number written with an exponent is
-// rewritten: as the plain number it denotes, spliced in place, and only in a
-// stream where one stands as an operand, which is the finding ISO 19005-1,
-// 6.2.10 t1 and ISO 19005-2, 6.2.2 t1 report.
+// rewritten: as the number PDF.js reads in it, the part before the exponent
+// letter, spliced in place with the rest gone, and only in a stream where one
+// stands as an operand, which is the finding ISO 19005-1, 6.2.10 t1 and ISO
+// 19005-2, 6.2.2 t1 report.
 //
-// veraPDF reads "1.5e1 w" as the number 1.5, an undefined operator "e1" and a
-// w with no operand. Stripping "e1" the way an undefined operator is stripped
-// would take the 1.5 with it; a reader that accepts the form reads 15, the
-// number the producer wrote.
+// PDF.js reads "1.5e1 w" as the number 1.5, a command "e1" it does not know
+// and skips, and a w drawing with the width 1.5. veraPDF reads the same number
+// and an undefined operator "e1". Writing the 15 the token spells changed what
+// the viewer draws.
 func TestRewriteExponentNumbers(t *testing.T) {
 	t.Parallel()
 
@@ -31,21 +32,23 @@ func TestRewriteExponentNumbers(t *testing.T) {
 		name, in, want string
 		part, count    int
 	}{
-		{"a real operand", "1.5e1 w", "15 w", 2, 1},
-		{"an integer operand", "/F1 1e2 Tf", "/F1 100 Tf", 2, 1},
-		{"a signed exponent", "-1.5E-1 w", "-0.15 w", 2, 1},
-		{"an explicit plus", "+2e+1 0 m", "20 0 m", 2, 1},
+		{"a real operand", "1.5e1 w", "1.5 w", 2, 1},
+		{"an integer operand", "/F1 1e2 Tf", "/F1 1 Tf", 2, 1},
+		{"a signed exponent", "-1.5E-1 w", "-1.5 w", 2, 1},
+		{"an explicit plus", "+2e+1 0 m", "2 0 m", 2, 1},
+		{"a leading point", ".5e1 w", "0.5 w", 2, 1},
+		{"a trailing point", "5.e1 w", "5 w", 2, 1},
 		{"nested alone is no finding", "[2.5e1 3] 0 d", "[2.5e1 3] 0 d", 2, 0},
-		{"nested beside a finding", "1.5e1 w [2.5e1 3] 0 d", "15 w [25 3] 0 d", 2, 2},
+		{"nested beside a finding", "1.5e1 w [2.5e1 3] 0 d", "1.5 w [2.5 3] 0 d", 2, 2},
 		{"inside a string", "(1.5e1) Tj", "(1.5e1) Tj", 2, 0},
 		{"inside a comment", "% 1e5\n0 w", "% 1e5\n0 w", 2, 0},
 		{"a keyword that only looks like one", "1e 1e2e3 w", "1e 1e2e3 w", 2, 0},
-		{"after an inline image", image + " 1e1 w", image + " 10 w", 2, 1},
-		{"past the PDF/A-1 real limit", "1e5 w", "32767 w", 1, 1},
-		{"past the ISO 32000-1 real limit", "-1e40 w", "-340300000000000000000000000000000000000.0 w", 2, 1},
-		{"past the float64 range", "1e999 w", "340300000000000000000000000000000000000.0 w", 4, 1},
-		{"closer to 0 than a normal real", "1e-40 w", "0 w", 2, 1},
-		{"a whole real past the integer range", "3e10 0 m", "30000000000.0 0 m", 2, 1},
+		{"after an inline image", image + " 1e1 w", image + " 1 w", 2, 1},
+		{"an exponent past every limit", "1e999 w", "1 w", 4, 1},
+		{"past the PDF/A-1 real limit", "40000e1 w", "32767 w", 1, 1},
+		{"past the ISO 32000-1 real limit", "-400000000000000000000000000000000000000e1 w", "-340300000000000000000000000000000000000.0 w", 2, 1},
+		{"closer to 0 than a normal real", "0.00000000000000000000000000000000000000001e40 w", "0 w", 2, 1},
+		{"a whole real past the integer range", "30000000000e1 0 m", "30000000000.0 0 m", 2, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -129,9 +132,9 @@ func TestFixUnknownOps_RewritesAnExponentOnlyStream(t *testing.T) {
 		obj  int
 		want string
 	}{
-		{4, "15 w 0 0 m 10 10 l S /X0 Do"},
-		{6, "10 w 0 0 m 5 5 l S"},
-		{8, "0.15 w 0 0 m 5 5 l S"},
+		{4, "1.5 w 0 0 m 10 10 l S /X0 Do"},
+		{6, "1 w 0 0 m 5 5 l S"},
+		{8, "1.5 w 0 0 m 5 5 l S"},
 	} {
 		got := string(bytes.TrimSpace(pendingStreamBytes(t, alloc, tc.obj)))
 		if got != tc.want {
@@ -147,12 +150,14 @@ func TestFixUnknownOps_RewritesAnExponentOnlyStream(t *testing.T) {
 // the corpus file that carries the defect: an undefined operator, then a font
 // size written with an exponent. The removal re-serializes the page, and the
 // content parser cannot read "1e2", so without the rewrite first Tf lost its
-// size, and the operator itself went with the unreadable token.
+// size, and the operator itself went with the unreadable token. The size
+// written is the 1 PDF.js reads in "1e2", not the 100 it spells.
 //
 // # Corpus evidence
 //
 //   - pdfjs sci-notation.pdf: remediating it at PDF/A-2b wrote "/F1 50 600
-//     Td", a Td with three operands, where the page sets "/F1 1e2 Tf".
+//     Td", a Td with three operands, where the page sets "/F1 1e2 Tf". Its
+//     PDF.js text golden draws the line after it at height 1.
 func TestFixUnknownOps_KeepsTheOperandsOfTheNextOperator(t *testing.T) {
 	t.Parallel()
 
@@ -178,8 +183,8 @@ func TestFixUnknownOps_KeepsTheOperandsOfTheNextOperator(t *testing.T) {
 	if len(tf) != 2 {
 		t.Fatalf("got %d Tf operators, want 2: %v", len(tf), ops)
 	}
-	if size := tf[1].Operands; len(size) != 2 || size[1] != ast.PdfInt(100) {
-		t.Errorf("the second Tf has operands %v, want [/F1 100]", size)
+	if size := tf[1].Operands; len(size) != 2 || size[1] != ast.PdfInt(1) {
+		t.Errorf("the second Tf has operands %v, want [/F1 1]", size)
 	}
 }
 
@@ -207,7 +212,7 @@ func TestFixUnknownOps_LeavesAnInlineImageStreamItCannotSerialize(t *testing.T) 
 	if _, err := fixUnknownOps(ctx, alloc, doc, Options{}, nil, "PDF/A-2b"); err != nil {
 		t.Fatalf("fixUnknownOps: %v", err)
 	}
-	if got, want := string(bytes.TrimSpace(pendingStreamBytes(t, alloc, 4))), image+" foo 10 w"; got != want {
+	if got, want := string(bytes.TrimSpace(pendingStreamBytes(t, alloc, 4))), image+" foo 1 w"; got != want {
 		t.Errorf("page = %q, want %q", got, want)
 	}
 }
@@ -262,7 +267,7 @@ func TestFixUnknownOps_KeepsTheNestedResourcesRepair(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading the form: %v", err)
 	}
-	if !bytes.Contains(body, []byte("15 w")) {
+	if !bytes.Contains(body, []byte("1.5 w")) {
 		t.Fatalf("the form holds %q: the exponent was not rewritten, so the check below proves nothing", body)
 	}
 	if got.Dict["Resources"] == nil {

@@ -55,7 +55,8 @@ type unknownOpsTally struct {
 	removed int
 	// repaired counts malformed numbers folded back into their operator.
 	repaired int
-	// exponents counts numbers written with an exponent that became plain.
+	// exponents counts numbers written with an exponent that were rewritten
+	// as the number a viewer reads in them.
 	exponents int
 	// separated counts operators that ran on from the operator before them
 	// with no white space between them, and were written back apart.
@@ -78,7 +79,7 @@ func (t *unknownOpsTally) add(o unknownOpsTally) {
 // That premise holds for a real operator alone, so each of the three streams
 // is repaired first by [repairContentData]: a number written with an exponent,
 // which veraPDF reads as a number and an undefined operator, is rewritten as
-// the plain number it denotes, and a numeric literal the parser could not read
+// the number PDF.js reads in it, and a numeric literal the parser could not read
 // surfaces as an operator whose removal would take the operands of the
 // operator that follows. See [rewriteExponentNumbers] and the worked Tm
 // example on [repairMalformedNumbers].
@@ -128,10 +129,11 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 }
 
 // repairContentData repairs one content stream's decoded bytes: numbers
-// written with an exponent become plain numbers ([rewriteExponentNumbers]),
-// malformed numbers fold back into their operator ([repairMalformedNumbers]),
-// operators run together with no white space between them come apart
-// ([separateGluedOperators]), and operators outside [content.IsOperator] go.
+// written with an exponent become the numbers a viewer reads in them
+// ([rewriteExponentNumbers]), malformed numbers fold back into their operator
+// ([repairMalformedNumbers]), operators run together with no white space
+// between them come apart ([separateGluedOperators]), and operators outside
+// [content.IsOperator] go.
 // It returns the bytes to write and what it changed; a zero tally means
 // nothing is to be written. The bytes can be empty: a stream holding nothing
 // but undefined operators is written back with none.
@@ -444,28 +446,38 @@ func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, do
 }
 
 // rewriteExponentNumbers returns data with every number written with an
-// exponent, such as "1.5e1" or "1E-3", replaced by the plain number it denotes
-// ([plainNumber]), and how many it replaced. A stream holding no such number
+// exponent, such as "1.5e1" or "1E-3", replaced by the number a viewer reads
+// in it, the part before the exponent letter ([exponentMantissa], written by
+// [plainNumber]), and how many it replaced. A stream holding no such number
 // where an operand stands comes back unchanged with a count of 0.
 //
-// ISO 32000-1, 7.3.3 gives a number no exponent, so the token is no operand.
-// veraPDF ends the number at the exponent letter and reads the rest as an
-// operator: "1.5e1 w" is the number 1.5, an operator "e1" that ISO 32000-1
-// does not define (ISO 19005-1, 6.2.10 t1; ISO 19005-2, 6.2.2 t1), and a w
-// with no operand. Stripping "e1" the way an undefined operator is stripped
-// would take the 1.5 with it and leave w without its width, which is not what
-// the producer wrote: a reader that accepts the form, as litho's parser and
-// PDF.js do, reads the one number 15, and exponential format is only a
-// spelling of a number the clause rules out (ISO 32000-1, 7.3.3 names
-// "6.02E23"). Writing that number plainly keeps every operator's operands and
-// leaves nothing undefined.
+// ISO 32000-1, 7.3.3 gives a number no exponent, so the token is no operand,
+// and neither reference reader takes it as one. veraPDF ends the number at the
+// exponent letter and reads the rest as an operator: "1.5e1 w" is the number
+// 1.5, an operator "e1" that ISO 32000-1 does not define (ISO 19005-1, 6.2.10
+// t1; ISO 19005-2, 6.2.2 t1), and a w with no operand. PDF.js ends the number
+// at the letter too (Lexer.getNumber has no exponent), reads the rest as a
+// command it does not know, and skips that command keeping the operands before
+// it (EvaluatorPreprocessor.read), so the w it draws has the width 1.5, and
+// "/F1 1e2 Tf" sets the font size 1.
+//
+// Remediation keeps what the viewer shows, so the token is rewritten as the
+// number PDF.js reads, and the rest of it goes, as both readers treat it:
+// PDF.js skips it, and veraPDF reports it as an undefined operator, whose
+// removal the way other undefined operators are removed would take the number
+// with it. Rewriting the token as the number it spells, 15 or 100, changed the
+// page: the text after "/F1 1e2 Tf" drew at a hundred times the size PDF.js
+// draws it at. litho's content parser reads "1.5e1" as 15 and cannot read
+// "1e2" at all, a reading of its own this rewrite does not follow.
 //
 // Only a stream with a finding is rewritten: a number where an operand
 // stands, outside any array or dictionary, which is the one the check reports
 // ([parser.ErrNumberExponentOperand]). The rest of such a stream's exponents go
 // too, since veraPDF stops reading a stream at one inside an array or a
-// dictionary. An inline image's dictionary is left as written: the walk skips
-// it with its data, which it cannot address token by token.
+// dictionary; PDF.js reads such a number the same way there, the rest being a
+// command an array or a dictionary drops. An inline image's dictionary is left
+// as written: the walk skips it with its data, which it cannot address token by
+// token.
 //
 // The rewrite splices the tokens in place, so the stream's other bytes, inline
 // image data included, are carried across unchanged. A stream the lexer cannot
@@ -474,23 +486,21 @@ func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, do
 // # Corpus evidence
 //
 //   - pdfjs sci-notation.pdf: the one corpus file with an exponent where an
-//     operand stands, "/F1 1e2 Tf" after the stray keyword ETBT. Removing ETBT
-//     re-serialized the page with "1e2" and the Tf after it gone, and wrote
-//     "/F1 50 600 Td". The rewrite keeps "/F1 100 Tf", which puts the next
-//     line above the page, where PDF.js draws it. litho's own reading of the
-//     original lost the same two tokens, which left that Td without effect
-//     and the line on the page, so the integrity probe counted a text drop
-//     and rolled the content repairs back. Read with the operand dropped
-//     alone, the original puts the line above the page too, and the repairs
-//     stay: veraPDF's undefined-operator findings on the output go at
-//     PDF/A-1b and PDF/A-2b.
+//     operand stands, "/F1 1e2 Tf" after the stray keyword ETBT. Its PDF.js
+//     text golden draws the second line at height 1 and width 6.5. The
+//     rewrite to 100 drew it 594.6 wide, past the page edge, and both litho
+//     and PDF.js lost its last character from the extracted text. The rewrite
+//     writes "/F1 1 Tf": PDF.js reads the output of a PDF/A-1b, PDF/A-2b or
+//     PDF/A-4 remediation, default or aggressive, exactly as its golden reads
+//     the source, litho's text of the output matches that golden, and litho
+//     and veraPDF report the same violations on it as before.
 func rewriteExponentNumbers(ctx context.Context, data []byte, part int) ([]byte, int) {
 	operands := 0
 	splices, complete := contentTokenSplices(ctx, data, func(tok lexer.Token, depth int) (string, bool) {
 		if tok.Type != lexer.TokenNumber || !strings.ContainsAny(tok.Value, "eE") {
 			return "", false
 		}
-		text, ok := plainNumber(tok.Value, part)
+		text, ok := plainNumber(exponentMantissa(tok.Value), part)
 		if ok && depth == 0 {
 			operands++
 		}
@@ -502,20 +512,32 @@ func rewriteExponentNumbers(ctx context.Context, data []byte, part int) ([]byte,
 	return applyTokenSplices(data, splices), len(splices)
 }
 
-// plainNumber writes the number an exponent token denotes the way ISO
-// 32000-1, 7.3.3 spells a number, inside the limits of the PDF/A part: an
-// integer when it is whole and within the integer range, and a real with a
-// decimal point otherwise. ok is false when tok is not a number.
+// exponentMantissa returns the part of a number token written with an
+// exponent that stands before the exponent letter: "1.5" of "1.5e1" and "-1"
+// of "-1E-3". It is the number PDF.js and veraPDF read in the token, both
+// ending a number at the letter; see [rewriteExponentNumbers]. A token with no
+// exponent letter comes back whole.
+func exponentMantissa(tok string) string {
+	if i := strings.IndexAny(tok, "eE"); i >= 0 {
+		return tok[:i]
+	}
+	return tok
+}
+
+// plainNumber writes the number tok spells the way ISO 32000-1, 7.3.3 spells
+// a number, inside the limits of the PDF/A part: an integer when it is whole
+// and within the integer range, and a real with a decimal point otherwise. ok
+// is false when tok is not a number.
 //
 // A magnitude past the part's largest real becomes that real (ISO 19005-1,
 // 6.1.12 t2; ISO 19005-2, 6.1.13 t2). Part 4 states no limit and takes the
-// ISO 32000-1, Table C.1 one, which is also where a float64 overflow such as
-// "1e999" lands. A nonzero magnitude closer to 0 than the smallest normal real
-// of that table becomes 0, the only value ISO 19005-2, 6.1.13 t5 accepts
-// there; parts 1 and 4 state no such floor and take the same one, since no
-// operand draws differently at that magnitude. A whole number past the integer
-// range keeps its decimal point, since read back as an integer it would break
-// ISO 19005-2, 6.1.13 t1.
+// ISO 32000-1, Table C.1 one, which is also where a float64 overflow, a run
+// of over 308 digits, lands. A nonzero magnitude closer to 0 than the smallest
+// normal real of that table becomes 0, the only value ISO 19005-2, 6.1.13 t5
+// accepts there; parts 1 and 4 state no such floor and take the same one,
+// since no operand draws differently at that magnitude. A whole number past
+// the integer range keeps its decimal point, since read back as an integer it
+// would break ISO 19005-2, 6.1.13 t1.
 func plainNumber(tok string, part int) (string, bool) {
 	v, err := strconv.ParseFloat(tok, 64)
 	if err != nil && !errors.Is(err, strconv.ErrRange) {
