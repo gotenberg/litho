@@ -63,16 +63,15 @@ func countClauseViolations(t *testing.T, data []byte, clause string, test int) i
 	return n
 }
 
-// TestDeviceRGBSubScopeReportedOnce pins §6.2.4.3 t2 across every combination
-// of page-scope and sub-scope DeviceRGB usage with and without a page
-// DefaultRGB.
+// TestDeviceRGBSubScopeCountsEachLink pins §6.2.4.3 t2 across every
+// combination of page-scope and sub-scope DeviceRGB usage with and without a
+// page DefaultRGB.
 //
-// The plain and sub-scope checks answer different questions: a page DefaultRGB
-// covers page-scope rg but never a form's own. With no page default, though,
-// the plain check already reports the form's usage, so firing both wrote the
-// clause twice for a single use. Each row below is one usage, so each expects
-// exactly one violation, or none when a default covers it.
-func TestDeviceRGBSubScopeReportedOnce(t *testing.T) {
+// A page DefaultRGB covers page-scope rg but never a form's own, and each
+// uncovered use fails once per operator linking to DeviceRGB: the rg and the
+// f after it. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on
+// [subScopePDF]: every row fails the test as often as it expects.
+func TestDeviceRGBSubScopeCountsEachLink(t *testing.T) {
 	t.Parallel()
 
 	const pageRGB = "1 0 0 rg 0 0 20 20 re f"
@@ -86,12 +85,12 @@ func TestDeviceRGBSubScopeReportedOnce(t *testing.T) {
 		def     string
 		want    int
 	}{
-		{"page rgb, no default", pageRGB, "", "", 1},
-		{"form rgb, no default", invokeForm, formRGB, "", 1},
-		{"form rgb, page DefaultRGB", invokeForm, formRGB, "/DefaultRGB", 1},
+		{"page rgb, no default", pageRGB, "", "", 2},
+		{"form rgb, no default", invokeForm, formRGB, "", 2},
+		{"form rgb, page DefaultRGB", invokeForm, formRGB, "/DefaultRGB", 2},
 		{"page rgb, page DefaultRGB", pageRGB, "", "/DefaultRGB", 0},
-		{"page and form rgb, no default", pageRGB + " " + invokeForm, formRGB, "", 1},
-		{"page and form rgb, page DefaultRGB", pageRGB + " " + invokeForm, formRGB, "/DefaultRGB", 1},
+		{"page and form rgb, no default", pageRGB + " " + invokeForm, formRGB, "", 4},
+		{"page and form rgb, page DefaultRGB", pageRGB + " " + invokeForm, formRGB, "/DefaultRGB", 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -104,12 +103,13 @@ func TestDeviceRGBSubScopeReportedOnce(t *testing.T) {
 	}
 }
 
-// TestDeviceGraySubScopeReportedOnce pins the same shape for §6.2.4.3 t4.
+// TestDeviceGraySubScopeCountsEachLink pins the same shape for §6.2.4.3 t4.
 //
 // The initial DeviceGray of ISO 32000-1 §8.6.8, painted with no colour space
-// selected, belongs to the root content stream rather than to the form, so it
-// is page-scope usage and reports once through the plain check.
-func TestDeviceGraySubScopeReportedOnce(t *testing.T) {
+// selected, belongs to the root content stream rather than to the form, and
+// only the f painting with it links to it, so it fails once where g and f fail
+// twice. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b.
+func TestDeviceGraySubScopeCountsEachLink(t *testing.T) {
 	t.Parallel()
 
 	const pageGray = "0.5 g 0 0 20 20 re f"
@@ -123,8 +123,8 @@ func TestDeviceGraySubScopeReportedOnce(t *testing.T) {
 		formOps string
 		want    int
 	}{
-		{"page gray", pageGray, "", 1},
-		{"form gray", invokeForm, formGray, 1},
+		{"page gray", pageGray, "", 2},
+		{"form gray", invokeForm, formGray, 2},
 		{"form initial gray", invokeForm, formInitialGray, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

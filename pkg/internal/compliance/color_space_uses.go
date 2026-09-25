@@ -22,20 +22,38 @@ type colorSpaceUse struct {
 	objNum   int
 }
 
-// csRef is a colour space a content stream selects by name, as the
+// csRef is a colour space a content stream selects, as the
 // /Resources/ColorSpace entry the name resolves to: scope is the identity of
 // the content stream whose resources define name (see [colorSpaceScope]). The
 // zero csRef names no colour space.
+//
+// A walk that follows device colour (see [csLinkHooks]) also gives a csRef to
+// a colour space no entry names: family is the family g, rg, k or a family
+// name selects (DeviceGray, DeviceRGB or DeviceCMYK), or Pattern, and covered
+// records that a Default colour space replaces the device family where it was
+// selected (ISO 32000-1, 8.6.5.6). isPattern records that the space is a
+// Pattern space, so a name operand of scn or SCN selects a pattern, and
+// pattern names the /Resources/Pattern entry of scope one selected.
 type csRef struct {
 	scope, name string
+	family      string
+	covered     bool
+	isPattern   bool
+	pattern     string
 }
 
 // csPaintState is the part of the graphics state that decides which colour
 // space an operator paints with: the current fill and stroke colour spaces and
-// the text rendering mode (ISO 32000-1, 8.4.1, Tables 52 and 104).
+// the text rendering mode (ISO 32000-1, 8.4.1, Tables 52 and 104), with the
+// /Resources/Font entry Tf selected, whose glyphs a Type 3 font paints.
+// stencil records that a d1 made the stream a Type 3 glyph that paints a
+// stencil in the current colour, in which every colour operator shall be
+// ignored (ISO 32000-1, 9.6.5, Table 113).
 type csPaintState struct {
 	fill, stroke csRef
 	textRender   int
+	font         string
+	stencil      bool
 }
 
 // colorSpaceUsesOf returns, per /Resources/ColorSpace name, every operator of
@@ -63,10 +81,67 @@ func colorSpaceUsesOf(ctx context.Context, ops []content.Operation) map[string][
 // operator that links to a named colour space, with the operator's index and
 // the colour space it reaches. resolve maps a name the stream selects to the
 // entry it names, and a zero result links nothing. paint, when not nil, is
-// called at every Do with the XObject name and the state in force there.
+// called at every Do with the XObject name and the state in force there. The
+// links are those of [walkColorSpaceLinksWith], where g, rg and k (and G, RG
+// and K) leave no named space current.
+func walkColorSpaceLinks(ctx context.Context, ops []content.Operation, entry csPaintState, resolve func(string) csRef, link func(csRef, int, string), paint func(string, csPaintState)) {
+	walkColorSpaceLinksWith(ctx, ops, entry, csLinkHooks{resolve: resolve, link: link, paint: paint})
+}
+
+// csLinkHooks are what [walkColorSpaceLinksWith] calls. resolve and link are
+// required, and every other hook may be nil.
+type csLinkHooks struct {
+	// resolve maps a name cs, CS or an inline image selects to the colour
+	// space it names, and a zero result links nothing.
+	resolve func(name string) csRef
+	// link is called for every operator that links to a colour space, with
+	// its index among the operations.
+	link func(ref csRef, idx int, operator string)
+	// paint is called at every Do with the XObject name and the state in force.
+	paint func(name string, st csPaintState)
+	// device gives the colour space g, rg and k select for filling, and G, RG
+	// and K for stroking, by family. Without it those operators leave no
+	// linked space current and link nothing.
+	device func(family string) csRef
+	// pattern gives the pattern scn or SCN selects by its name operand while
+	// a Pattern space is current (ISO 32000-1, 8.7.3.1), which the operator
+	// and later painting link to in place of the space. Without it they link
+	// to the Pattern space.
+	pattern func(name string) csRef
+	// shade is called at every sh with the shading name.
+	shade func(name string)
+	// show is called at every text show with the state in force, whose font a
+	// Type 3 font paints glyphs with.
+	show func(st csPaintState)
+}
+
+// stencilIgnoredOperators are the operators that select, set or paint with a
+// colour space, which a Type 3 glyph past its d1 ignores (ISO 32000-1, 9.6.5,
+// Table 113; see [walkColorSpaceLinksWith]).
 //
-// The links, measured with veraPDF 1.30 on one DeviceN at PDF/A-1b and
-// PDF/A-2b:
+//nolint:gochecknoglobals // immutable lookup set.
+var stencilIgnoredOperators = map[string]bool{
+	"cs": true, "CS": true, "sc": true, "SC": true, "scn": true, "SCN": true,
+	"g": true, "G": true, "rg": true, "RG": true, "k": true, "K": true,
+	"f": true, "F": true, "f*": true, "S": true, "s": true,
+	"B": true, "B*": true, "b": true, "b*": true,
+}
+
+// deviceFamilyOperators maps g, rg and k, and G, RG and K, to the device
+// family each selects (ISO 32000-1, 8.6.8, Table 74).
+//
+//nolint:gochecknoglobals // immutable lookup table.
+var deviceFamilyOperators = map[string]string{
+	"g": "DeviceGray", "rg": "DeviceRGB", "k": "DeviceCMYK",
+	"G": "DeviceGray", "RG": "DeviceRGB", "K": "DeviceCMYK",
+}
+
+// walkColorSpaceLinksWith walks ops from the state entry and calls
+// hooks.link for every operator that links to a colour space, with the
+// operator's index and the colour space it reaches.
+//
+// The links, measured with veraPDF 1.30 on one DeviceN and on the device
+// colour spaces at PDF/A-1b and PDF/A-2b:
 //
 //   - cs and CS select the space (ISO 32000-1, 8.6.8, Table 74), and scn and
 //     SCN set a colour in it. sc and SC set one too, but veraPDF gives them no
@@ -79,20 +154,44 @@ func colorSpaceUsesOf(ctx context.Context, ops []content.Operation) map[string][
 //   - An inline image reaches the space its /CS or /ColorSpace names, and an
 //     inline image mask, which names none, the current fill space (ISO
 //     32000-1, 8.9.6.2 and 8.9.7).
-//   - g, rg and k select a device space for fill, G, RG and K for stroke, so
-//     the named space stops being current. q and Q save and restore both,
-//     with the text rendering mode (ISO 32000-1, 8.4.2).
-func walkColorSpaceLinks(ctx context.Context, ops []content.Operation, entry csPaintState, resolve func(string) csRef, link func(csRef, int, string), paint func(string, csPaintState)) {
+//   - g, rg and k select a device space for fill, G, RG and K for stroke, and
+//     link to it. q and Q save and restore both, with the text rendering mode
+//     and the font (ISO 32000-1, 8.4.2).
+//   - scn and SCN with a name operand while a Pattern space is current select
+//     that pattern, which they and later painting link to.
+//   - After a d1, a Type 3 glyph paints a stencil in the current colour and
+//     its colour operators shall be ignored (ISO 32000-1, 9.6.5, Table 113):
+//     no operator selects, sets or paints with a colour space, and an inline
+//     image other than a mask is ignored, but an inline image mask still
+//     links to the fill space it paints with. Measured on Type 3 glyphs: an
+//     inline image mask past a d1 fails the colour the text shows in, rg and
+//     f past it fail nothing, and a fill before it fails that colour.
+func walkColorSpaceLinksWith(ctx context.Context, ops []content.Operation, entry csPaintState, hooks csLinkHooks) {
 	add := func(ref csRef, idx int, operator string) {
-		if ref.name != "" {
-			link(ref, idx, operator)
+		if ref != (csRef{}) && ref.family != "Pattern" {
+			hooks.link(ref, idx, operator)
 		}
 	}
 	selected := func(op content.Operation) csRef {
 		if name := lastNameOperand(op); name != "" {
-			return resolve(name)
+			return hooks.resolve(name)
 		}
 		return csRef{}
+	}
+	selectPattern := func(cur csRef, op content.Operation) csRef {
+		if hooks.pattern == nil || !cur.isPattern {
+			return cur
+		}
+		if name := lastNameOperand(op); name != "" {
+			return hooks.pattern(name)
+		}
+		return cur
+	}
+	selectDevice := func(operator string) csRef {
+		if hooks.device == nil {
+			return csRef{}
+		}
+		return hooks.device(deviceFamilyOperators[operator])
 	}
 	st := entry
 	var stack []csPaintState
@@ -100,7 +199,12 @@ func walkColorSpaceLinks(ctx context.Context, ops []content.Operation, entry csP
 		if idx%100 == 0 && ctx.Err() != nil {
 			return
 		}
+		if st.stencil && stencilIgnoredOperators[op.Operator] {
+			continue
+		}
 		switch op.Operator {
+		case "d1":
+			st.stencil = true
 		case "q":
 			stack = append(stack, st)
 		case "Q":
@@ -114,6 +218,12 @@ func walkColorSpaceLinks(ctx context.Context, ops []content.Operation, entry csP
 					st.textRender = int(mode)
 				}
 			}
+		case "Tf":
+			if len(op.Operands) >= 1 {
+				if name, ok := op.Operands[0].(ast.PdfName); ok {
+					st.font = string(name)
+				}
+			}
 		case "cs":
 			st.fill = selected(op)
 			add(st.fill, idx, op.Operator)
@@ -121,13 +231,17 @@ func walkColorSpaceLinks(ctx context.Context, ops []content.Operation, entry csP
 			st.stroke = selected(op)
 			add(st.stroke, idx, op.Operator)
 		case "scn":
+			st.fill = selectPattern(st.fill, op)
 			add(st.fill, idx, op.Operator)
 		case "SCN":
+			st.stroke = selectPattern(st.stroke, op)
 			add(st.stroke, idx, op.Operator)
 		case "g", "rg", "k":
-			st.fill = csRef{}
+			st.fill = selectDevice(op.Operator)
+			add(st.fill, idx, op.Operator)
 		case "G", "RG", "K":
-			st.stroke = csRef{}
+			st.stroke = selectDevice(op.Operator)
+			add(st.stroke, idx, op.Operator)
 		case "f", "F", "f*":
 			add(st.fill, idx, op.Operator)
 		case "S", "s":
@@ -137,21 +251,28 @@ func walkColorSpaceLinks(ctx context.Context, ops []content.Operation, entry csP
 			add(st.stroke, idx, op.Operator)
 		case "Tj", "TJ", "'", `"`:
 			fills, strokes := textModePaints(st.textRender)
-			if fills {
+			if fills && !st.stencil {
 				add(st.fill, idx, op.Operator)
 			}
-			if strokes {
+			if strokes && !st.stencil {
 				add(st.stroke, idx, op.Operator)
+			}
+			if hooks.show != nil {
+				hooks.show(st)
 			}
 		case "BI":
 			if inlineImageIsMask(op) {
 				add(st.fill, idx, op.Operator)
-			} else if name := inlineImageCSName(op); name != "" {
-				add(resolve(name), idx, op.Operator)
+			} else if name := inlineImageCSName(op); name != "" && !st.stencil {
+				add(hooks.resolve(name), idx, op.Operator)
 			}
 		case "Do":
-			if name := lastNameOperand(op); name != "" && paint != nil {
-				paint(name, st)
+			if name := lastNameOperand(op); name != "" && hooks.paint != nil {
+				hooks.paint(name, st)
+			}
+		case "sh":
+			if name := lastNameOperand(op); name != "" && hooks.shade != nil {
+				hooks.shade(name)
 			}
 		}
 	}

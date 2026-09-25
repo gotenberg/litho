@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -27,24 +28,14 @@ type defaultCS struct {
 	hasGray bool
 }
 
-// deviceCSUsage tracks which device-dependent colour spaces are used.
+// deviceCSUsage tracks which device-dependent colour spaces one content
+// stream's operators use (see [scanContentStreamDeviceCS]).
 type deviceCSUsage struct {
 	rgb  bool
 	cmyk bool
 	gray bool
-	// subScope* track device CS usage from sub-scopes (Form XObjects,
-	// tiling patterns) that is NOT covered by the sub-scope's own DefaultCS
-	// or Group CS. This usage cannot be covered by a parent scope's DefaultCS
-	// per ISO 32000-2 §8.6.5.7. Only OutputIntent or blending CS apply.
-	subScopeRGB  bool
-	subScopeCMYK bool
-	subScopeGray bool
-	// initialGray tracks painting with no colour space selected, here or in
-	// any scope that invoked this one, which uses the initial DeviceGray of
-	// ISO 32000-1, 8.6.8. That selection belongs to the root content stream
-	// (the page, or an annotation appearance), so the root's DefaultGray
-	// covers it and a form's or a tiling pattern's own never does: veraPDF
-	// was measured on forms, nested forms, image masks and patterns.
+	// initialGray tracks painting with no colour space selected, which uses
+	// the initial DeviceGray of ISO 32000-1, 8.6.8.
 	initialGray bool
 }
 
@@ -57,9 +48,9 @@ type deviceCSUsage struct {
 // could nest them until the goroutine stack is exhausted.
 //
 // It bounds CHAIN LENGTH only. Cycles are broken by the visited sets the callers
-// own, not by this cap: [checkFormXObjectFonts] and [checkType3CharProcFonts]
-// key on object number, [scanFormXObjectCS] on the resolved dict's pointer. A
-// depth bound survives a cycle without detecting it, so both are needed.
+// own, not by this cap: [checkFormXObjectFonts], [checkType3CharProcFonts]
+// and [colorLinkWalk] key on object number. A depth bound survives a cycle
+// without detecting it, so both are needed.
 //
 // Every recursion site of the package reads it (fonts, transparency, colour,
 // file limits, accessibility), and text extraction, image listing and
@@ -68,11 +59,52 @@ func formTooDeep(doc *document.Document, depth int) bool {
 	return depth > doc.Limits().MaxFormDepth
 }
 
+// deviceFamilies are the device families in the order their violations are
+// reported, with the rule each breaks and the colour space an output intent
+// must name to cover it (ISO 19005-1, 6.2.3.3; ISO 19005-2, 6.2.4.3), where
+// "" means any.
+//
+//nolint:gochecknoglobals // immutable lookup table.
+var deviceFamilies = []struct {
+	name, defaultName, intent string
+	rule                      func(part int) Rule
+}{
+	{"DeviceRGB", "DefaultRGB", "RGB ", deviceRGBRule},
+	{"DeviceCMYK", "DefaultCMYK", "CMYK", deviceCMYKRule},
+	{"DeviceGray", "DefaultGray", "", deviceGrayRule},
+}
+
+// deviceLinkCounts holds, per device family in [deviceFamilies] order, the
+// links of one page's walk that reach it with no Default colour space to
+// replace it: plain for every link but the page's transparency group, whose
+// blending space group counts.
+type deviceLinkCounts struct {
+	plain, group [3]int
+}
+
+// deviceFamilyIndex returns the position of family in [deviceFamilies].
+func deviceFamilyIndex(family string) int {
+	for i, f := range deviceFamilies {
+		if f.name == family {
+			return i
+		}
+	}
+	return -1
+}
+
 // checkDeviceColorSpaces validates that device-dependent colour spaces
 // (DeviceRGB, DeviceCMYK, DeviceGray) are only used when allowed.
 // checkDeviceColorSpaces takes the already-resolved pages so it can reuse their
 // parsed operations; the page dictionaries are the same ones [collectPages]
 // yields, in the same order.
+//
+// It fails a rule once per link veraPDF makes to the device family, as
+// [colorLinkWalk] follows them, that no Default colour space replaces and no
+// output intent covers: an OutputIntent whose profile names the family's
+// colour space, any OutputIntent for DeviceGray, and under PDF/A-4 the page's
+// output intent or its transparency group's device-independent blending space.
+// ISO 19005-2/3, 6.2.4.3 conditions DeviceRGB and DeviceCMYK on the
+// OutputIntent alone, so a blending space covers nothing there.
 //
 // A page whose content stream an earlier page shares uses no colour through
 // it, since veraPDF judges that stream on the first page alone, with what it
@@ -84,6 +116,10 @@ func formTooDeep(doc *document.Document, depth int) bool {
 // them alone, and two pages whose /Contents are direct arrays naming it fail
 // them twice as often.
 //
+// A device blending space of the page's transparency group reports its own
+// context, which routes its repair to the group rather than to an output
+// intent.
+//
 // # Corpus evidence
 //
 //   - pdfjs bug1019475_1.pdf: gives its page a DeviceRGB transparency group
@@ -94,72 +130,25 @@ func formTooDeep(doc *document.Document, depth int) bool {
 //   - pdfjs issue18042.pdf: four pages share one content stream that paints a
 //     DeviceRGB image, and veraPDF fails ISO 19005-1, 6.2.3.3 t1 and ISO
 //     19005-2, 6.2.4.3 t2 once, where litho failed them four times.
-//   - pdfjs pypdf2332.pdf: twelve pages draw nine content streams in
-//     DeviceGray, and veraPDF fails ISO 19005-1, 6.2.3.3 t3 and ISO 19005-2,
-//     6.2.4.3 t4 ten times, once per stream and twice for the first page's
-//     two uses, where litho failed them once per page, twelve times.
 func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages []pageCtx, part int, hasICC bool, iccColorSpace string, results *[]Violation) {
-	links := newColorSpaceLinkIndex(pages)
-	for i := range pages {
-		page := pages[i].dict
-		if ctx.Err() != nil {
+	counts := make([]deviceLinkCounts, len(pages))
+	walkColorLinks(ctx, doc, pages, part, func(n colorNode) {
+		i := deviceFamilyIndex(n.family)
+		if i < 0 || n.covered {
 			return
 		}
-
-		// /Resources is an inheritable page attribute (ISO 32000-1 §7.7.3.4): a
-		// page with none of its own uses the nearest ancestor's. veraPDF checks
-		// device colour usage against the effective resources, so litho must
-		// resolve inheritance here or it skips colour checks on pages whose
-		// resources live on a Pages node (qpdf shared-images, form-xobjects-*).
-		// A page with no /Resources anywhere in its ancestry still paints: the
-		// initial graphics-state colour space is DeviceGray (ISO 32000-1
-		// §8.6.8), so a bare "0 0 m 10 10 l S" is a DeviceGray use that
-		// ISO 19005-1 §6.2.3.3 t3 requires an OutputIntent to cover. Keep
-		// scanning with a nil resource dict instead of skipping the page: every
-		// lookup below tolerates a nil dict, and a page with no resources can
-		// declare no DefaultCS to suppress the finding.
-		resources := resolveInheritedResources(ctx, doc, page)
-
-		defaults := collectDefaultColorSpaces(ctx, doc, resources)
-
-		// Scan colour spaces used in the page resources.
-		csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
-		if err != nil {
-			doc.Logger.Debug("compliance.color: cannot resolve ColorSpace dict", "page", i, "error", err)
+		if n.group {
+			counts[n.page].group[i]++
+		} else {
+			counts[n.page].plain[i]++
 		}
+	})
+	if ctx.Err() != nil {
+		return
+	}
 
-		// Scan content stream operators for device CS usage and collect
-		// XObject names referenced by Do operators. A content stream an
-		// earlier page shares is judged there alone, with what it draws (see
-		// [markJudgedContents]), so this page uses no colour through it.
-		var deviceCSUsed deviceCSUsage
-		if !pages[i].contentJudged {
-			contentCSUsed, referencedXObjects, contentCSNames, usedResourceKeys, inheritedCSAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
-
-			deviceCSUsed = scanForDeviceColorSpaces(ctx, doc, csDict, resources, referencedXObjects, usedResourceKeys, inheritedCSAtDo, part, contentCSNames, pageScope(&pages[i], i, links))
-			deviceCSUsed.rgb = deviceCSUsed.rgb || contentCSUsed.rgb
-			deviceCSUsed.cmyk = deviceCSUsed.cmyk || contentCSUsed.cmyk
-			deviceCSUsed.gray = deviceCSUsed.gray || contentCSUsed.gray
-			// The initial DeviceGray painted with no colour space selected, on
-			// the page or in a form or tiling pattern it draws, is the page's
-			// own selection, which the page's DefaultGray covers (ISO 32000-1,
-			// 8.6.5.6).
-			deviceCSUsed.gray = deviceCSUsed.gray || contentCSUsed.initialGray || deviceCSUsed.initialGray
-		}
-
-		// Also scan annotation appearance streams for device CS usage.
-		annotUsage := scanAnnotationAppearanceCS(ctx, doc, page, part)
-		deviceCSUsed.rgb = deviceCSUsed.rgb || annotUsage.rgb
-		deviceCSUsed.cmyk = deviceCSUsed.cmyk || annotUsage.cmyk
-		deviceCSUsed.gray = deviceCSUsed.gray || annotUsage.gray
-		deviceCSUsed.subScopeRGB = deviceCSUsed.subScopeRGB || annotUsage.subScopeRGB
-		deviceCSUsed.subScopeCMYK = deviceCSUsed.subScopeCMYK || annotUsage.subScopeCMYK
-		deviceCSUsed.subScopeGray = deviceCSUsed.subScopeGray || annotUsage.subScopeGray
-
-		// Check page transparency group colour space as additional coverage.
-		// Per the spec, the "current transparency blending space" also provides
-		// device CS coverage.
-		blendingCS := pageBlendingColorSpace(ctx, doc, page)
+	for i := range pages {
+		page := pages[i].dict
 
 		// PDF/A-4 (PDF 2.0): page-level OutputIntents provide coverage for
 		// the page, overriding or supplementing catalog-level OutputIntents.
@@ -172,75 +161,52 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 		if pageHasICC {
 			effectiveICCCS = pageICCCS
 		}
-
-		// Universal coverage: the OutputIntent applies to all scopes. The
-		// transparency-group blending CS counts only under PDF/A-4. ISO
-		// 19005-2/3 §6.2.4.3 conditions DeviceRGB/CMYK coverage on the
-		// OutputIntent ICC profile colour space alone, so a page-level RGB
-		// group blending CS does not cover page-content rg under those parts.
-		// ISO 19005-4 (PDF 2.0) admits the current blending colour space as
-		// coverage, following the PDF 2.0 transparency model.
-		rgbUniversalCover := (effectiveHasICC && effectiveICCCS == "RGB ") || (part == 4 && blendingCS == "RGB ")
-		cmykUniversalCover := (effectiveHasICC && effectiveICCCS == "CMYK") || (part == 4 && blendingCS == "CMYK")
-		grayUniversalCover := effectiveHasICC
-
-		// DeviceRGB: needs DefaultRGB, OutputIntent with RGB, or RGB blending CS.
-		if deviceCSUsed.rgb && !defaults.hasRGB && !rgbUniversalCover {
-			*results = append(*results, failf(deviceRGBRule(part), "page %d: DeviceRGB used without DefaultRGB or RGB OutputIntent", i+1)...)
-		}
-		// Sub-scope DeviceRGB: page DefaultRGB doesn't apply; only universal
-		// coverage. This adds something only when a page DefaultRGB suppressed
-		// the check above: without one, that check already reports the same
-		// usage, and firing both wrote the clause twice for a single use.
-		if deviceCSUsed.subScopeRGB && defaults.hasRGB && !rgbUniversalCover {
-			*results = append(*results, failf(deviceRGBRule(part), "page %d: DeviceRGB used in pattern/form without local DefaultRGB or RGB OutputIntent", i+1)...)
+		var blendingCS string
+		if part == 4 {
+			blendingCS = pageBlendingColorSpace(ctx, doc, page)
 		}
 
-		// DeviceCMYK: needs DefaultCMYK, OutputIntent with CMYK, or CMYK blending CS.
-		if deviceCSUsed.cmyk && !defaults.hasCMYK && !cmykUniversalCover {
-			*results = append(*results, failf(deviceCMYKRule(part), "page %d: DeviceCMYK used without DefaultCMYK or CMYK OutputIntent", i+1)...)
-		}
-		// Sub-scope DeviceCMYK: page DefaultCMYK doesn't apply. Reported only
-		// when a page DefaultCMYK suppressed the check above (see DeviceRGB).
-		if deviceCSUsed.subScopeCMYK && defaults.hasCMYK && !cmykUniversalCover {
-			*results = append(*results, failf(deviceCMYKRule(part), "page %d: DeviceCMYK used in pattern/form without local DefaultCMYK or CMYK OutputIntent", i+1)...)
-		}
-
-		// DeviceGray: needs DefaultGray or any OutputIntent.
-		if deviceCSUsed.gray && !defaults.hasGray && !grayUniversalCover {
-			*results = append(*results, failf(deviceGrayRule(part), "page %d: DeviceGray used without DefaultGray or OutputIntent", i+1)...)
-		}
-		// Sub-scope DeviceGray: page DefaultGray doesn't apply. Reported only
-		// when a page DefaultGray suppressed the check above (see DeviceRGB).
-		if deviceCSUsed.subScopeGray && defaults.hasGray && !grayUniversalCover {
-			*results = append(*results, failf(deviceGrayRule(part), "page %d: DeviceGray used in pattern/form without local DefaultGray or OutputIntent", i+1)...)
-		}
-
-		// A transparency group whose blending colour space is itself a device
-		// colour space is a device-colour usage (ISO 19005-2/3 §6.2.4.3; veraPDF
-		// object PDDeviceRGB at context /Group/colorSpace). The page's effective
-		// resources resolve it like any other device colour space, so a matching
-		// Default colour space there covers it (ISO 32000-1, 8.6.5.6), inherited
-		// from a Pages node or not, and veraPDF then reports no device colour.
-		// Measured for RGB, CMYK and Gray groups. The "transparency group"
-		// context routes the repair to fixGroupCS, which drops the /CS so the
-		// blending space falls back to the intent profile, rather than to the
-		// OutputIntent fixer.
-		switch pageTransparencyGroupCSName(ctx, doc, page) {
-		case "DeviceRGB":
-			if !rgbUniversalCover && !defaults.hasRGB {
-				*results = append(*results, failf(deviceRGBRule(part), "page %d: transparency group blending colour space is DeviceRGB without RGB OutputIntent", i+1)...)
+		for f, family := range deviceFamilies {
+			covered := effectiveHasICC && (family.intent == "" || effectiveICCCS == family.intent)
+			if blendingCS != "" && blendingCS == family.intent {
+				covered = true
 			}
-		case "DeviceCMYK":
-			if !cmykUniversalCover && !defaults.hasCMYK {
-				*results = append(*results, failf(deviceCMYKRule(part), "page %d: transparency group blending colour space is DeviceCMYK without CMYK OutputIntent", i+1)...)
+			if covered {
+				continue
 			}
-		case "DeviceGray":
-			if !grayUniversalCover && !defaults.hasGray {
-				*results = append(*results, failf(deviceGrayRule(part), "page %d: transparency group blending colour space is DeviceGray without OutputIntent", i+1)...)
+			rule := family.rule(part)
+			if n := counts[i].plain[f]; n > 0 {
+				*results = append(*results, repeatViolation(rule, n,
+					fmt.Sprintf("page %d: %s used without %s or %s", i+1, family.name, family.defaultName, intentPhrase(family.intent)))...)
+			}
+			if n := counts[i].group[f]; n > 0 {
+				*results = append(*results, repeatViolation(rule, n,
+					fmt.Sprintf("page %d: transparency group blending colour space is %s without %s", i+1, family.name, intentPhrase(family.intent)))...)
 			}
 		}
 	}
+}
+
+// intentPhrase names the output intent that covers a device family whose
+// profile colour space must be intent, or any when intent is "".
+func intentPhrase(intent string) string {
+	switch intent {
+	case "RGB ":
+		return "RGB OutputIntent"
+	case "CMYK":
+		return "CMYK OutputIntent"
+	}
+	return "OutputIntent"
+}
+
+// repeatViolation returns n violations of rule with one context, the
+// failures of n links to one colour space on one page.
+func repeatViolation(rule Rule, n int, context string) []Violation {
+	out := make([]Violation, n)
+	for i := range out {
+		out[i] = Violation{Rule: rule, Context: context}
+	}
+	return out
 }
 
 // pageBlendingColorSpace returns the ICC colour space signature of the page's
@@ -297,26 +263,6 @@ func pageBlendingColorSpace(ctx context.Context, doc *document.Document, page as
 	default:
 		return ""
 	}
-}
-
-// pageTransparencyGroupCSName returns the raw colour space name of the page's
-// transparency group blending space (/Group /CS), e.g. "DeviceRGB", or "" when
-// absent. Unlike [pageBlendingColorSpace] it does not resolve ICC signatures:
-// it exists to detect a device blending space, which veraPDF treats as a
-// device-colour usage coverable only by an OutputIntent.
-func pageTransparencyGroupCSName(ctx context.Context, doc *document.Document, page ast.PdfDict) string {
-	group, err := document.ResolveDict(ctx, doc, page["Group"])
-	if err != nil || group == nil {
-		return ""
-	}
-	if s, _ := document.ResolveName(ctx, doc, group["S"]); s != "Transparency" {
-		return ""
-	}
-	csObj, ok := group["CS"]
-	if !ok {
-		return ""
-	}
-	return resolveCSName(ctx, doc, csObj)
 }
 
 // collectDefaultColorSpaces extracts Default{RGB,CMYK,Gray} entries from a

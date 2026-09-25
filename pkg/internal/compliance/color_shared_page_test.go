@@ -65,6 +65,10 @@ func sharedColorPDF(t *testing.T, colourants int, contents ...string) []error {
 	return viols
 }
 
+// sharedColorFormRGBLinks is the number of operators of the form /Fm0 of
+// [sharedColorObjs] that link to DeviceRGB: its rg and its f.
+const sharedColorFormRGBLinks = 2
+
 // TestColorRulesJudgeSharedPageContentOnce pins that the colour-space rules
 // judge a page content stream two pages share once, with what it draws, as the
 // content-stream rules do (see [markJudgedContents]).
@@ -73,8 +77,9 @@ func sharedColorPDF(t *testing.T, colourants int, contents ...string) []error {
 // pages whose /Contents is the same stream fail the device colour tests, the
 // DeviceN colourant limit, the ICCBased profile test and ISO 19005-2, 6.2.4.4 t1
 // and t2 as often as one of them alone does, two pages whose /Contents are
-// direct arrays naming it fail them twice as often, and a page between the two
-// that fills with DeviceRGB adds its own DeviceRGB use alone.
+// direct arrays naming it fail them twice as often but for the DeviceRGB of the
+// form the content paints, judged once, and a page between the two that fills
+// with DeviceRGB adds its own DeviceRGB uses alone.
 func TestColorRulesJudgeSharedPageContentOnce(t *testing.T) {
 	t.Parallel()
 
@@ -107,8 +112,15 @@ func TestColorRulesJudgeSharedPageContentOnce(t *testing.T) {
 				if got := countRuleErrs(t, shared, rule); got != n {
 					t.Errorf("%s t%d fired %d times on two pages sharing the stream, want %d", rule.Clause, rule.TestNumber, got, n)
 				}
-				if got := countRuleErrs(t, arrays, rule); got != 2*n {
-					t.Errorf("%s t%d fired %d times on two direct arrays, want %d", rule.Clause, rule.TestNumber, got, 2*n)
+				// The form /Fm0 the content paints is judged once for the
+				// document, so its rg and f fail DeviceRGB once each however
+				// many pages paint it.
+				arraysWant := 2 * n
+				if rule == p.rgb {
+					arraysWant -= sharedColorFormRGBLinks
+				}
+				if got := countRuleErrs(t, arrays, rule); got != arraysWant {
+					t.Errorf("%s t%d fired %d times on two direct arrays, want %d", rule.Clause, rule.TestNumber, got, arraysWant)
 				}
 				want := n
 				if rule == p.rgb {

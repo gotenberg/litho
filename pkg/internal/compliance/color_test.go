@@ -9,15 +9,15 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// TestScanFormXObjectCS_DeviceGroupCSCountsAsUsage covers §6.2.4.3: a Form
+// TestColorLinkWalk_DeviceGroupCSCountsAsUsage covers §6.2.4.3: a Form
 // XObject whose transparency /Group /CS is a device colour space is itself a
 // device-colour usage (veraPDF PDDeviceRGB at /Group/colorSpace), coverable only
 // by a matching OutputIntent. A group with no device /CS is not.
-func TestScanFormXObjectCS_DeviceGroupCSCountsAsUsage(t *testing.T) {
+func TestColorLinkWalk_DeviceGroupCSCountsAsUsage(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	scan := func(t *testing.T, group string) deviceCSUsage {
+	scan := func(t *testing.T, group string) bool {
 		t.Helper()
 		doc, _ := objsDocPDF(t,
 			"<< /Type /Catalog >>",
@@ -27,13 +27,17 @@ func TestScanFormXObjectCS_DeviceGroupCSCountsAsUsage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolve form: %v", err)
 		}
-		return scanFormXObjectCS(ctx, doc, stream, 0, map[string]bool{}, inheritedCSDefault(), 4, nil)
+		rgb := false
+		w := &colorLinkWalk{doc: doc, part: 4, judged: map[int]bool{}, streams: map[string]*linkStream{},
+			visit: func(n colorNode) { rgb = rgb || n.family == "DeviceRGB" && !n.covered }}
+		w.formStream(ctx, stream, w.newStream(ctx, nil, nil))
+		return rgb
 	}
 
-	if !scan(t, "/Group << /S /Transparency /CS /DeviceRGB >>").rgb {
+	if !scan(t, "/Group << /S /Transparency /CS /DeviceRGB >>") {
 		t.Error("DeviceRGB transparency group /CS must count as DeviceRGB usage")
 	}
-	if scan(t, "/Group << /S /Transparency >>").rgb {
+	if scan(t, "/Group << /S /Transparency >>") {
 		t.Error("a transparency group without a device /CS must not count as DeviceRGB usage")
 	}
 }
