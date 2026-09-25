@@ -30,6 +30,9 @@ type codecProbe func(ctx context.Context, data []byte, parms, dict ast.PdfDict, 
 //     stream (see [jbig2.Check]).
 //   - CCITTFaxDecode: the first row, the only one whose failure fails the
 //     decoding (see [ccitt.Check]).
+//   - DCTDecode: the marker segments up to the first scan, the frame header
+//     among them (see [dct.Check]). A frame marker past the first scan, which
+//     starts a second frame, leaves the data unsettled.
 //
 // The Crypt filter reads its parameters alone, so it runs as it is.
 var codecProbes = map[ast.PdfName]codecProbe{
@@ -37,6 +40,8 @@ var codecProbes = map[ast.PdfName]codecProbe{
 	"JBIG2Decode":    probeJBIG2,
 	"CCITTFaxDecode": probeCCITTFax,
 	"CCF":            probeCCITTFax,
+	"DCTDecode":      probeDCT,
+	"DCT":            probeDCT,
 }
 
 // skipsFilter reports whether decoding skips a filter that failed with err,

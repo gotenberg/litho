@@ -79,11 +79,11 @@ func Decodable(name ast.PdfName) bool {
 
 // refusesUnsupported reports whether the built-in decoder of the named filter
 // refuses a stream that uses a feature it lacks, with [ErrUnsupportedFilter]:
-// a JPEG 2000 or JBIG2 construct, a CCITT coding, a Crypt filter other than
-// Identity. The name alone cannot say such a filter decodes: the codecs'
-// probes read the data's headers to find out (see codecProbes), and the Crypt
-// filter reads its parameters alone. It mirrors the cases of applyDecodeFilter
-// that return ErrUnsupportedFilter; keep the two in sync.
+// a JPEG 2000 or JBIG2 construct, a CCITT or JPEG coding, a Crypt filter
+// other than Identity. The name alone cannot say such a filter decodes: the
+// codecs' probes read the data's headers to find out (see codecProbes), and
+// the Crypt filter reads its parameters alone. It mirrors the cases of
+// applyDecodeFilter that return ErrUnsupportedFilter; keep the two in sync.
 func refusesUnsupported(name ast.PdfName) bool {
 	_, codec := codecProbes[name]
 	return codec || name == "Crypt"

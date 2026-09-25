@@ -49,6 +49,16 @@ type StreamDiagnostic struct {
 //     six- to tenfold. Reading their headers keeps it within the run-to-run
 //     noise of reading the filter names alone.
 //   - pdfjs issue17289.pdf: the slowest file to decode, 6.3 s, takes 3 ms.
+//   - All corpora: 7,557 streams name DCTDecode, and the JPEG headers settle
+//     every one. With a refused coding planted in the 6,363 whose only filter
+//     it is, an arithmetic or 12-bit frame or a second frame before or after
+//     the first scan, 25,452 variants, the call agrees with decoding on every
+//     one: the headers settle all but a second frame past the first scan,
+//     which the call decodes.
+//   - All corpora: reading the JPEG headers raised the summed time of the
+//     call from 6.95 s to 8.05 s, the least of two runs each. The largest
+//     rise on one file, 54 ms, decodes the LZWDecode layer its JPEGs sit
+//     behind (govdocs thread_400_400358.pdf).
 func (d *Document) UndecodableStreams(ctx context.Context) ([]StreamDiagnostic, error) {
 	var diags []StreamDiagnostic
 	for objNum, entry := range d.XRefEntriesSnapshot() {
@@ -94,7 +104,7 @@ func (d *Document) StreamHasUndecodableFilter(ctx context.Context, stream ast.Pd
 // them, handing back their input still encoded: a filter neither a built-in
 // decoder nor a registered plugin knows, and a built-in one whose decoder
 // refuses a feature the stream uses (a JPEG 2000 or JBIG2 construct, a CCITT
-// coding, a Crypt filter other than Identity). A caller that interprets the
+// or JPEG coding, a Crypt filter other than Identity). A caller that interprets the
 // bytes must refuse instead of reading them. See
 // [filter.Decoder.UndecodableFilters] for how the headers of such a stream's
 // data answer, and for the rare stream decoded instead.

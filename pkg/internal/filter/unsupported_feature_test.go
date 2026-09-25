@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"image"
+	"image/jpeg"
 	"io"
 	"os"
 	"slices"
@@ -41,6 +43,27 @@ func jbig2NecessaryExtension() []byte {
 	return append(page, append(ext, 0xA0, 0, 0, 1)...)
 }
 
+// baselineJPEG returns a baseline JPEG of a 16x16 grey gradient from the
+// standard library's encoder, which both DCTDecode decoders read, and the
+// offset of its SOF0 marker.
+func baselineJPEG(t *testing.T) ([]byte, int) {
+	t.Helper()
+	img := image.NewGray(image.Rect(0, 0, 16, 16))
+	for i := range img.Pix {
+		img.Pix[i] = byte(i)
+	}
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, nil); err != nil {
+		t.Fatal(err)
+	}
+	data := buf.Bytes()
+	sof := bytes.Index(data, []byte{0xFF, 0xC0})
+	if sof < 0 {
+		t.Fatal("the encoder wrote no SOF0 marker")
+	}
+	return data, sof
+}
+
 // unsupportedFeatureStreams returns, for each built-in filter that refuses a
 // feature it lacks, a minimal stream using one such feature and a stream the
 // same filter decodes.
@@ -56,6 +79,9 @@ func unsupportedFeatureStreams(t *testing.T) []struct {
 		t.Fatalf("reading the JBIG2 example: %v %v", errP, errG)
 	}
 	g4 := ast.PdfDict{"K": ast.PdfInt(-1), "Columns": ast.PdfInt(8), "Rows": ast.PdfInt(1)}
+	baseline, sof := baselineJPEG(t)
+	arithmetic := bytes.Clone(baseline)
+	arithmetic[sof+1] = 0xC9
 	return []struct {
 		filter             ast.PdfName
 		refused, decodable ast.PdfStream
@@ -79,6 +105,13 @@ func unsupportedFeatureStreams(t *testing.T) []struct {
 			filter:    "CCITTFaxDecode",
 			refused:   ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("CCITTFaxDecode"), "DecodeParms": g4}, []byte{0x03, 0xC0}),
 			decodable: ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("CCITTFaxDecode"), "DecodeParms": g4}, []byte{0x80, 0x10, 0x01}),
+		},
+		{
+			// SOF9, a sequential frame coded arithmetically (T.81, Table
+			// B.1), in place of the control's SOF0.
+			filter:    "DCTDecode",
+			refused:   ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("DCTDecode")}, arithmetic),
+			decodable: ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("DCTDecode")}, baseline),
 		},
 		{
 			filter: "Crypt",

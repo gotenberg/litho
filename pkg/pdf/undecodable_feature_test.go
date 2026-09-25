@@ -6,18 +6,39 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	goimage "image"
+	"image/jpeg"
 	"slices"
 	"testing"
 )
 
-// unsupportedFeaturePDF builds a one-page document showing four 8x8 one-bit
-// images, each encoded with a feature its built-in decoder lacks, and a fifth
-// that decodes: /Jpx carries a JPEG 2000 codestream whose Rsiz signals ISO/IEC
+// arithmeticJPEG returns an 8x8 grey JPEG from the standard library's
+// encoder with its frame marker turned into SOF9, a sequential frame coded
+// arithmetically (ITU-T T.81, Table B.1), which neither DCTDecode decoder
+// reads.
+func arithmeticJPEG(t *testing.T) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, goimage.NewGray(goimage.Rect(0, 0, 8, 8)), nil); err != nil {
+		t.Fatal(err)
+	}
+	data := buf.Bytes()
+	sof := bytes.Index(data, []byte{0xFF, 0xC0})
+	if sof < 0 {
+		t.Fatal("the encoder wrote no SOF0 marker")
+	}
+	data[sof+1] = 0xC9
+	return data
+}
+
+// unsupportedFeaturePDF builds a one-page document showing five 8x8 images,
+// each encoded with a feature its built-in decoder lacks, and a sixth that
+// decodes: /Jpx carries a JPEG 2000 codestream whose Rsiz signals ISO/IEC
 // 15444-2, /Jbig2 a JBIG2 extension segment flagged necessary, /Fax a CCITT
 // row in uncompressed mode, /Crypt a Crypt filter naming a crypt filter the
-// document does not apply, and /Plain uncompressed samples. It returns the
-// object number of each image by name.
-func unsupportedFeaturePDF() ([]byte, map[string]int) {
+// document does not apply, /Jpeg an arithmetic-coded JPEG, and /Plain
+// uncompressed samples. It returns the object number of each image by name.
+func unsupportedFeaturePDF(t *testing.T) ([]byte, map[string]int) {
 	jpx := []byte{
 		0xFF, 0x4F, 0xFF, 0x51, 0x00, 0x29, 0x80, 0x00,
 		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x09,
@@ -35,6 +56,8 @@ func unsupportedFeaturePDF() ([]byte, map[string]int) {
 	jbig2 = binary.BigEndian.AppendUint32(jbig2, 4)
 	jbig2 = append(jbig2, 0xA0, 0, 0, 1)
 
+	jpegData := arithmeticJPEG(t)
+
 	image := func(entries string, data []byte) string {
 		return fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width 8 /Height 8 /ColorSpace /DeviceGray"+
 			" /BitsPerComponent 1 %s /Length %d >>\nstream\n%s\nendstream", entries, len(data), data)
@@ -43,12 +66,14 @@ func unsupportedFeaturePDF() ([]byte, map[string]int) {
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject" +
-			" << /Jpx 4 0 R /Jbig2 5 0 R /Fax 6 0 R /Crypt 7 0 R /Plain 8 0 R >> >> >>",
+			" << /Jpx 4 0 R /Jbig2 5 0 R /Fax 6 0 R /Crypt 7 0 R /Plain 8 0 R /Jpeg 9 0 R >> >> >>",
 		image("/Filter /JPXDecode", jpx),
 		image("/Filter /JBIG2Decode", jbig2),
 		image("/Filter /CCITTFaxDecode /DecodeParms << /K -1 /Columns 8 /Rows 8 >>", []byte{0x03, 0xC0, 0, 0, 0, 0, 0, 0}),
 		image("/Filter /Crypt /DecodeParms << /Name /OtherCF >>", []byte("still encrypted")),
 		image("", bytes.Repeat([]byte{0xAA}, 8)),
+		fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width 8 /Height 8 /ColorSpace /DeviceGray"+
+			" /BitsPerComponent 8 /Filter /DCTDecode /Length %d >>\nstream\n%s\nendstream", len(jpegData), jpegData),
 	}
 	var buf bytes.Buffer
 	buf.WriteString("%PDF-1.7\n")
@@ -63,7 +88,7 @@ func unsupportedFeaturePDF() ([]byte, map[string]int) {
 		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offs[i])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
-	return buf.Bytes(), map[string]int{"Jpx": 4, "Jbig2": 5, "Fax": 6, "Crypt": 7, "Plain": 8}
+	return buf.Bytes(), map[string]int{"Jpx": 4, "Jbig2": 5, "Fax": 6, "Crypt": 7, "Plain": 8, "Jpeg": 9}
 }
 
 // TestUnsupportedFeature_DiagnosticsAgreeWithImageDecoding pins, through the
@@ -76,7 +101,7 @@ func TestUnsupportedFeature_DiagnosticsAgreeWithImageDecoding(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	data, objects := unsupportedFeaturePDF()
+	data, objects := unsupportedFeaturePDF(t)
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -95,7 +120,7 @@ func TestUnsupportedFeature_DiagnosticsAgreeWithImageDecoding(t *testing.T) {
 	for _, d := range diags {
 		listed[d.ObjectNum] = d.Filters
 	}
-	wantFilter := map[string]string{"Jpx": "JPXDecode", "Jbig2": "JBIG2Decode", "Fax": "CCITTFaxDecode", "Crypt": "Crypt"}
+	wantFilter := map[string]string{"Jpx": "JPXDecode", "Jbig2": "JBIG2Decode", "Fax": "CCITTFaxDecode", "Crypt": "Crypt", "Jpeg": "DCTDecode"}
 
 	metas, err := r.ExtractImages(ctx, 1)
 	if err != nil {

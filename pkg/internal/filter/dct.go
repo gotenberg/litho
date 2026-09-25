@@ -3,13 +3,46 @@ package filter
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/jpeg"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/filter/dct"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
+
+// probeDCT is the probe of DCTDecode (see codecProbes): the lenient decoder's
+// marker segments up to the first scan, read by [dct.Check]. A JPEG that
+// decodes past its headers is decoded by image/jpeg or the lenient decoder,
+// and both refuse every coding the lenient decoder lacks, so the headers
+// answer for decodeDCT.
+func probeDCT(ctx context.Context, data []byte, _, dict ast.PdfDict, lim limits.Limits) error {
+	if len(data) == 0 {
+		return errors.New("dct decode: empty input")
+	}
+	settled, err := dct.Check(ctx, data, dctStatedHeight(dict), lim.ScaleImageCap(dct.DefaultMaxSamples))
+	switch {
+	case errors.Is(err, dct.ErrUnsupported):
+		return fmt.Errorf("%w: DCTDecode: %w", ErrUnsupportedFilter, err)
+	case err != nil:
+		return fmt.Errorf("dct decode: %w", err)
+	case !settled:
+		return errUnsettled
+	}
+	return nil
+}
+
+// dctStatedHeight returns the /Height of the image dictionary dict, which
+// bounds a frame that declares more lines than the image has, or 0 when it
+// states none.
+func dctStatedHeight(dict ast.PdfDict) int {
+	if v, ok := dict["Height"].(ast.PdfInt); ok {
+		return int(v)
+	}
+	return 0
+}
 
 // decodeDCT implements the DCTDecode filter (ISO 32000-1, 7.4.8).
 // It decodes JPEG data and returns raw pixel bytes:
@@ -21,6 +54,12 @@ import (
 // more lines than the image has. maxSamples caps the frame the lenient decoder
 // reads, scaled from the image budget.
 //
+// A coding the decoders lack, lossless, arithmetic or hierarchical coding
+// (ITU-T T.81, Table B.1), samples other than 8 bits (B.2.2), or a count of
+// components other than 1, 3 or 4, is refused with [ErrUnsupportedFilter], as
+// every other codec refuses a feature it lacks, so the chain skips the filter
+// and the diagnostics list it rather than report the data malformed.
+//
 // # Corpus evidence
 //
 //   - All corpora: the lenient decoder decodes 15 of the 16 JPEGs
@@ -29,6 +68,8 @@ import (
 //   - All corpora: reading CMYK samples inverted rendered 670 images, 639
 //     of them govdocs, as their negatives against PDF.js: white paper came
 //     out black.
+//   - All corpora: none of the 7,557 DCTDecode streams uses a coding the
+//     decoders lack, so none is refused.
 func decodeDCT(ctx context.Context, data []byte, parms, dict ast.PdfDict, maxSamples int64) ([]byte, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("dct decode: empty input")
@@ -41,19 +82,21 @@ func decodeDCT(ctx context.Context, data []byte, parms, dict ast.PdfDict, maxSam
 		// frame repeats, a height given by a DNL marker. The lenient decoder
 		// renders it instead, and only here, so every image image/jpeg reads
 		// keeps its reading.
-		colorTransform, height := -1, 0
+		colorTransform := -1
 		if v, ok := parms["ColorTransform"].(ast.PdfInt); ok {
 			colorTransform = int(v)
 		}
-		if v, ok := dict["Height"].(ast.PdfInt); ok {
-			height = int(v)
-		}
-		out, _, _, _, lerr := dct.Decode(ctx, data, colorTransform, height, maxSamples)
+		out, _, _, _, lerr := dct.Decode(ctx, data, colorTransform, dctStatedHeight(dict), maxSamples)
 		if lerr == nil {
 			return out, nil
 		}
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, ctxErr
+		}
+		// image/jpeg refuses every coding the lenient decoder lacks as well,
+		// so the lenient decoder's refusal is the stream's.
+		if errors.Is(lerr, dct.ErrUnsupported) {
+			return nil, fmt.Errorf("%w: DCTDecode: %w", ErrUnsupportedFilter, lerr)
 		}
 		return nil, fmt.Errorf("dct decode: %w", err)
 	}

@@ -1,6 +1,7 @@
 package dct
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -73,6 +74,11 @@ type decoder struct {
 	maxSamples        int64
 	blocksSinceCtx    int
 	sawFrame, sawScan bool
+	// checkOnly stops the walk of the marker segments at the first scan,
+	// whose coded data starts at firstScanData, and allocates no plane: see
+	// [Check].
+	checkOnly     bool
+	firstScanData int
 }
 
 // Decode decodes a JPEG, baseline or progressive Huffman-coded (ITU-T T.81),
@@ -110,6 +116,61 @@ func Decode(ctx context.Context, data []byte, colorTransform, statedHeight int, 
 	return out, len(d.comps), d.width, d.height, nil
 }
 
+// Check reports, from the marker segments before the first scan alone,
+// whether [Decode] refuses data with [ErrUnsupported], and decodes no scan to
+// find out. err is the first error Decode meets before the first scan's coded
+// data: a coding Decode refuses as unsupported, lossless, arithmetic or
+// hierarchical coding, samples other than 8 bits or a count of components it
+// lacks, or a malformed or over-budget header it fails on first. statedHeight
+// and maxSamples are what Decode is given; the colour transform never refuses
+// data, so Check takes none.
+//
+// settled is false when Decode may refuse the data past the first scan,
+// where Check does not look: a frame marker after it starts a second frame,
+// or one of a coding Decode lacks. Check finds such a marker by its two bytes
+// anywhere past the scan, which the coded data escapes (T.81, B.1.1.5), so
+// settled is true only when Decode cannot meet one.
+//
+// Check does not read the coded data, so data damaged there fails Decode
+// where Check reports nothing.
+func Check(ctx context.Context, data []byte, statedHeight int, maxSamples int64) (settled bool, err error) {
+	d := &decoder{data: data, statedHeight: statedHeight, maxSamples: maxSamples, checkOnly: true}
+	if len(data) < 4 || data[0] != 0xFF || data[1] != 0xD8 {
+		return true, fmt.Errorf("%w: no start-of-image marker", ErrMalformed)
+	}
+	if err := d.decodeSegments(ctx); err != nil {
+		return true, err
+	}
+	if !d.sawScan {
+		return true, fmt.Errorf("%w: no scan", ErrMalformed)
+	}
+	if err := ctx.Err(); err != nil {
+		return true, err
+	}
+	return !hasFrameMarker(data[d.firstScanData:]), nil
+}
+
+// isFrameMarker reports whether m is a start-of-frame marker (T.81, Table
+// B.1): SOF0 to SOF15 but for DHT, JPG and DAC, which share the range.
+func isFrameMarker(m byte) bool {
+	return m >= 0xC0 && m <= 0xCF && m != 0xC4 && m != 0xC8 && m != 0xCC
+}
+
+// hasFrameMarker reports whether data holds a start-of-frame marker's two
+// bytes anywhere.
+func hasFrameMarker(data []byte) bool {
+	for {
+		i := bytes.IndexByte(data, 0xFF)
+		if i < 0 || i+1 >= len(data) {
+			return false
+		}
+		if isFrameMarker(data[i+1]) {
+			return true
+		}
+		data = data[i+1:]
+	}
+}
+
 // decodeSegments walks the marker segments and decodes each scan.
 func (d *decoder) decodeSegments(ctx context.Context) error {
 	p := 2
@@ -142,7 +203,7 @@ func (d *decoder) decodeSegments(ctx context.Context) error {
 		switch {
 		case m == 0xC0 || m == 0xC1 || m == 0xC2:
 			err = d.frame(body, m == 0xC2)
-		case m >= 0xC3 && m <= 0xCF && m != 0xC4 && m != 0xC8 && m != 0xCC:
+		case isFrameMarker(m):
 			err = fmt.Errorf("%w: frame 0x%02X (lossless or arithmetic coding)", ErrUnsupported, m)
 		case m == 0xC4:
 			err = d.huffmanTables(body)
@@ -156,6 +217,12 @@ func (d *decoder) decodeSegments(ctx context.Context) error {
 			if len(body) >= 12 && string(body[:5]) == "Adobe" {
 				d.adobe, d.adobeTransform = true, body[11]
 			}
+		case m == 0xDA && d.checkOnly:
+			if _, err := d.scanHeader(body); err != nil {
+				return err
+			}
+			d.sawScan, d.firstScanData = true, p+2+length
+			return nil
 		case m == 0xDA:
 			var next int
 			next, err = d.scan(ctx, body, p+2+length)
@@ -232,7 +299,9 @@ func (d *decoder) frame(b []byte, progressive bool) error {
 		c.width = ceilDiv(d.width*c.h, d.hmax)
 		c.height = ceilDiv(d.height*c.v, d.vmax)
 		c.bw, c.bh = d.mcusX*c.h, d.mcusY*c.v
-		c.coeffs = make([]int16, c.bw*c.bh*64)
+		if !d.checkOnly {
+			c.coeffs = make([]int16, c.bw*c.bh*64)
+		}
 	}
 	return nil
 }
@@ -301,15 +370,22 @@ type scanComp struct {
 	dc, ac *huffman
 }
 
-// scan reads a start-of-scan segment (T.81, B.2.3), decodes the scan whose
-// data starts at dataStart, and returns the position of the marker after
-// it.
-func (d *decoder) scan(ctx context.Context, b []byte, dataStart int) (int, error) {
+// scanParams is what a start-of-scan header (T.81, B.2.3) says of its scan:
+// its components, the band of coefficients it codes, ss to se, and the
+// successive approximation bits ah and al.
+type scanParams struct {
+	comps          []scanComp
+	ss, se, ah, al int
+}
+
+// scanHeader reads a start-of-scan header (T.81, B.2.3), checking it against
+// the frame and the tables read so far.
+func (d *decoder) scanHeader(b []byte) (scanParams, error) {
 	if !d.sawFrame {
-		return 0, fmt.Errorf("%w: scan before frame", ErrMalformed)
+		return scanParams{}, fmt.Errorf("%w: scan before frame", ErrMalformed)
 	}
 	if len(b) < 1 || len(b) < 1+2*int(b[0])+3 || b[0] < 1 || int(b[0]) > len(d.comps) {
-		return 0, fmt.Errorf("%w: scan header", ErrMalformed)
+		return scanParams{}, fmt.Errorf("%w: scan header", ErrMalformed)
 	}
 	ns := int(b[0])
 	var sc []scanComp
@@ -326,7 +402,7 @@ func (d *decoder) scan(ctx context.Context, b []byte, dataStart int) (int, error
 			}
 		}
 		if k < 0 {
-			return 0, fmt.Errorf("%w: scan names component %d the frame lacks", ErrMalformed, id)
+			return scanParams{}, fmt.Errorf("%w: scan names component %d the frame lacks", ErrMalformed, id)
 		}
 		used[k] = true
 		sc = append(sc, scanComp{c: d.comps[k], dc: d.dc[tables>>4&3], ac: d.ac[tables&3]})
@@ -337,13 +413,26 @@ func (d *decoder) scan(ctx context.Context, b []byte, dataStart int) (int, error
 		ss, se, ah, al = 0, 63, 0, 0
 	}
 	if ss > se || se > 63 || al > 13 || (ss == 0 && se != 0 && d.progressive) {
-		return 0, fmt.Errorf("%w: spectral selection %d..%d", ErrMalformed, ss, se)
+		return scanParams{}, fmt.Errorf("%w: spectral selection %d..%d", ErrMalformed, ss, se)
 	}
 	for _, s := range sc {
 		if (ss == 0 && s.dc == nil && ah == 0) || (se > 0 && s.ac == nil) {
-			return 0, fmt.Errorf("%w: scan uses a Huffman table the data lacks", ErrMalformed)
+			return scanParams{}, fmt.Errorf("%w: scan uses a Huffman table the data lacks", ErrMalformed)
 		}
 	}
+	return scanParams{comps: sc, ss: ss, se: se, ah: ah, al: al}, nil
+}
+
+// scan reads a start-of-scan segment (T.81, B.2.3), decodes the scan whose
+// data starts at dataStart, and returns the position of the marker after
+// it.
+func (d *decoder) scan(ctx context.Context, b []byte, dataStart int) (int, error) {
+	h, err := d.scanHeader(b)
+	if err != nil {
+		return 0, err
+	}
+	sc, ns := h.comps, len(h.comps)
+	ss, se, ah, al := h.ss, h.se, h.ah, h.al
 	d.sawScan = true
 	r := &bitReader{data: d.data, start: dataStart, pos: dataStart}
 	for _, c := range d.comps {

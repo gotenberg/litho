@@ -81,6 +81,11 @@ func refusalRows(t *testing.T) []refusalRow {
 		return pdfast.NewStream(pdfast.PdfDict{"Filter": pdfast.PdfName("JPXDecode")}, data)
 	}
 	g4 := pdfast.PdfDict{"K": pdfast.PdfInt(-1), "Columns": pdfast.PdfInt(8), "Rows": pdfast.PdfInt(1)}
+	dctStream := func(edit func(j []byte, sof, sofLen int) []byte) pdfast.PdfStream {
+		j, sof := baselineJPEG(t)
+		sofLen := 2 + int(binary.BigEndian.Uint16(j[sof+2:]))
+		return pdfast.NewStream(pdfast.PdfDict{"Filter": pdfast.PdfName("DCTDecode")}, edit(j, sof, sofLen))
+	}
 	return []refusalRow{
 		{
 			// T.800, A.5.2: a CAP marker segment in the main header.
@@ -166,6 +171,47 @@ func refusalRows(t *testing.T) []refusalRow {
 			stream:  pdfast.NewStream(pdfast.PdfDict{"Filter": pdfast.PdfName("CCITTFaxDecode"), "DecodeParms": g4}, []byte{0x03, 0xC0}),
 		},
 		{
+			// T.81, Table B.1: SOF9, a sequential frame coded arithmetically.
+			site:    "dct: decoder.decodeSegments",
+			refusal: "frame 0xC9",
+			filter:  "DCTDecode",
+			stream: dctStream(func(j []byte, sof, _ int) []byte {
+				j[sof+1] = 0xC9
+				return j
+			}),
+		},
+		{
+			// T.81, B.2.2: an extended sequential frame of 12-bit samples.
+			site:    "dct: decoder.frame",
+			refusal: "12-bit samples",
+			filter:  "DCTDecode",
+			stream: dctStream(func(j []byte, sof, _ int) []byte {
+				j[sof+1], j[sof+4] = 0xC1, 12
+				return j
+			}),
+		},
+		{
+			// T.81, B.3: a second frame, before any scan.
+			site:    "dct: decoder.frame",
+			refusal: "a second frame",
+			filter:  "DCTDecode",
+			stream: dctStream(func(j []byte, sof, sofLen int) []byte {
+				return slices.Concat(j[:sof+sofLen], j[sof:sof+sofLen], j[sof+sofLen:])
+			}),
+		},
+		{
+			// T.81, B.3: a second frame after the first scan, met only past
+			// the coded data the probe does not read.
+			site:    "dct: decoder.frame",
+			refusal: "a second frame",
+			filter:  "DCTDecode",
+			stream: dctStream(func(j []byte, sof, sofLen int) []byte {
+				eoi := len(j) - 2
+				return slices.Concat(j[:eoi], j[sof:sof+sofLen], j[eoi:])
+			}),
+			midStream: true,
+		},
+		{
 			// ISO 32000-1, 7.4.10: a crypt filter other than Identity.
 			site:    "filter: decodeCrypt",
 			refusal: "sub-filter \"OtherCF\"",
@@ -248,7 +294,7 @@ func TestProbes_EveryRefusalSiteHasARow(t *testing.T) {
 	for _, row := range refusalRows(t) {
 		rows[row.site] = true
 	}
-	for _, pkg := range []string{"jpx", "jbig2", "ccitt"} {
+	for _, pkg := range []string{"jpx", "jbig2", "ccitt", "dct"} {
 		sites := unsupportedSites(t, pkg)
 		if len(sites) == 0 {
 			t.Fatalf("%s: found no site wrapping ErrUnsupported; the scan is broken", pkg)
