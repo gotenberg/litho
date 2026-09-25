@@ -1480,7 +1480,9 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // A page of the signed revision that the current page tree no longer holds is
 // reported as removed at every P, and at P=2 so is an annotation other than a
 // form field widget that a page of the signed revision lists and the current
-// page no longer does.
+// page no longer does. The pages of the signed revision must also keep their
+// order at every P: a template instantiation may add a page anywhere, but no
+// P permits moving a signed page before another.
 //
 // No P permits changing what a signed page draws. Each page of the signed
 // revision must keep every entry but /Annots and /Parent, and the resources,

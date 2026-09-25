@@ -49,7 +49,6 @@ func TestEvaluateMDP_RemovedPage(t *testing.T) {
 		{"P=3 page dropped from /Kids", 3, pages("3 0 R", 1), false},
 
 		{"P=1 unrelated object freed", 1, freed(9), true},
-		{"P=2 pages reordered", 2, pages("8 0 R 3 0 R", 2), true},
 		{"P=2 template page added", 2, func(t *testing.T, base []byte) []byte {
 			return appendUpdate(t, base,
 				updatedObject{2, "<< /Type /Pages /Kids [3 0 R 8 0 R 9 0 R] /Count 3 >>"},
@@ -66,6 +65,66 @@ func TestEvaluateMDP_RemovedPage(t *testing.T) {
 			}
 			if !tc.want && !strings.Contains(result.MDPInfo, "page 2 (object 8) was removed") {
 				t.Errorf("MDPInfo %q does not name the removed page", result.MDPInfo)
+			}
+			if strings.Contains(result.MDPInfo, "not checked") {
+				t.Errorf("MDPInfo %q: the signed revision was not read", result.MDPInfo)
+			}
+		})
+	}
+}
+
+// TestEvaluateMDP_ReorderedPage covers ISO 32000-1, 7.7.3.1, which has the page
+// tree define the order of the pages, and 12.8.2.2, Table 254, which permits
+// no reordering at any P: P=2 and P=3 permit filling in forms, instantiating
+// page templates and signing, P=3 adds annotation changes, and ISO 32000-2,
+// 12.8.2.2, Table 257 keeps that list, exempting only validation data and
+// document timestamps. A template instantiation adds a page (12.7.6), which
+// may land anywhere, so a signed page's number may change while the signed
+// pages keep their order, and a page tree rebuilt around them in the same
+// order is no change either.
+func TestEvaluateMDP_ReorderedPage(t *testing.T) {
+	kids := func(objs ...updatedObject) func(t *testing.T, base []byte) []byte {
+		return func(t *testing.T, base []byte) []byte { return appendUpdate(t, base, objs...) }
+	}
+	reordered := kids(updatedObject{2, "<< /Type /Pages /Kids [8 0 R 3 0 R] /Count 2 >>"})
+
+	tests := []struct {
+		name     string
+		policy   int
+		update   func(t *testing.T, base []byte) []byte
+		want     bool
+		reported string // what MDPInfo names when the verdict is a violation
+	}{
+		{"P=1 pages reordered", 1, reordered, false, ""},
+		{"P=2 pages reordered", 2, reordered, false, "page 1 (object 3) was moved after page 2 (object 8)"},
+		{"P=3 pages reordered", 3, reordered, false, "page 1 (object 3) was moved after page 2 (object 8)"},
+		{"P=2 pages reordered under a new node", 2, kids(
+			updatedObject{2, "<< /Type /Pages /Kids [40 0 R] /Count 2 >>"},
+			updatedObject{40, "<< /Type /Pages /Parent 2 0 R /Kids [8 0 R 3 0 R] /Count 2 >>"},
+		), false, "page 1 (object 3) was moved after page 2 (object 8)"},
+
+		{"P=2 template page added before the signed pages", 2, kids(
+			updatedObject{2, "<< /Type /Pages /Kids [9 0 R 3 0 R 8 0 R] /Count 3 >>"},
+			updatedObject{9, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>"},
+		), true, ""},
+		{"P=2 template page added between the signed pages", 2, kids(
+			updatedObject{2, "<< /Type /Pages /Kids [3 0 R 9 0 R 8 0 R] /Count 3 >>"},
+			updatedObject{9, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>"},
+		), true, ""},
+		{"P=2 page tree rebuilt in the signed order", 2, kids(
+			updatedObject{2, "<< /Type /Pages /Kids [40 0 R 8 0 R] /Count 2 >>"},
+			updatedObject{40, "<< /Type /Pages /Parent 2 0 R /Kids [3 0 R] /Count 1 >>"},
+		), true, ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			base := twoPageCertifiedPDF(tc.policy)
+			result := mdpVerdict(t, tc.update(t, base), len(base), tc.policy)
+			if result.MDPValid != tc.want {
+				t.Fatalf("MDPValid = %v, want %v (MDPInfo %q)", result.MDPValid, tc.want, result.MDPInfo)
+			}
+			if tc.reported != "" && !strings.Contains(result.MDPInfo, tc.reported) {
+				t.Errorf("MDPInfo %q does not name %s", result.MDPInfo, tc.reported)
 			}
 			if strings.Contains(result.MDPInfo, "not checked") {
 				t.Errorf("MDPInfo %q: the signed revision was not read", result.MDPInfo)

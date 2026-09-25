@@ -30,7 +30,8 @@ type catalogEntry struct {
 //   - /AcroForm holds the form (12.7.2) that filling in and signing change, and
 //     what it reaches is classified by the P=2 rules. Neither removes it.
 //   - /Pages is the page tree a template instantiation grows (12.7.6). Its
-//     pages are compared by [changedPage], [removedPage] and [removedAnnotation].
+//     pages are compared by [changedPage], [removedPage], [reorderedPage] and
+//     [removedAnnotation].
 //   - /DSS holds validation data (ISO 32000-2, 12.8.4.3).
 //   - /Extensions may change in the /ESIC and /ADBE entries that ETSI EN 319
 //     142-1, 5.6 has a writer declare for validation data, and in the /ISO_

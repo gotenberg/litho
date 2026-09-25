@@ -184,13 +184,14 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 	}
 
 	// Table 254 permits page deletion at no P and annotation deletion only at
-	// P=3, and no P permits changing what a signed page draws. A deletion may
-	// append nothing the classifier forbids, and the classifier permits a
-	// rewritten page and catalog and an untyped object, so the signed
-	// revision's pages and, from P=2, its catalog are compared with the current
-	// ones. At P=1 the page and catalog rewrites those changes need are already
-	// refused. That runs even when nothing was appended: a cross-reference
-	// section alone can free a page or an annotation, or point /Root elsewhere.
+	// P=3, and no P permits reordering the signed pages or changing what a
+	// signed page draws. A deletion may append nothing the classifier forbids,
+	// and the classifier permits a rewritten page tree and catalog and an
+	// untyped object, so the signed revision's pages and, from P=2, its catalog
+	// are compared with the current ones. At P=1 the page and catalog rewrites
+	// those changes need are already refused. That runs even when nothing was
+	// appended: a cross-reference section alone can free a page or an
+	// annotation, or point /Root elsewhere.
 	if violation == "" {
 		rev, err := signed.revision(ctx)
 		if err != nil {
@@ -231,6 +232,7 @@ func compareRevisions(ctx context.Context, doc, rev *document.Document, objects,
 	}
 	checks := []check{
 		{"page removals", func() (string, error) { return removedPage(ctx, doc, rev) }},
+		{"page order", func() (string, error) { return reorderedPage(ctx, doc, rev) }},
 		{"page changes", func() (string, error) { return changedPage(ctx, doc, rev, objects, policy) }},
 	}
 	if policy == 2 {
@@ -260,11 +262,11 @@ func compareRevisions(ctx context.Context, doc, rev *document.Document, objects,
 func revisionChecks(policy int) string {
 	switch policy {
 	case 2:
-		return "page changes, page removals, catalog changes, untyped objects and annotation removals"
+		return "page changes, page order, page removals, catalog changes, untyped objects and annotation removals"
 	case 3:
-		return "page changes, page removals, catalog changes and untyped objects"
+		return "page changes, page order, page removals, catalog changes and untyped objects"
 	}
-	return "page changes and page removals"
+	return "page changes, page order and page removals"
 }
 
 // withoutValidationData returns objects without those that add validation

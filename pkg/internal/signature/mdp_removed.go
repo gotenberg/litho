@@ -133,6 +133,64 @@ func removedPage(ctx context.Context, doc, rev *document.Document) (string, erro
 	return "", nil
 }
 
+// reorderedPage describes the first page of the signed revision rev that the
+// current document's page tree holds out of the order in which it was signed,
+// and returns "" when the signed pages keep their order.
+//
+// ISO 32000-1, 7.7.3.1 has the page tree define the ordering of a document's
+// pages, so moving a page changes the document. 12.8.2.2, Table 254 permits no
+// such change at any P: P=1 permits none, and P=2 and P=3 permit filling in
+// forms, instantiating page templates and signing, to which P=3 adds
+// annotation changes. ISO 32000-2, 12.8.2.2, Table 257 keeps that list and
+// exempts only validation data and document timestamps. Instantiating a
+// template adds a page (12.7.6), which may land before, between or after the
+// signed pages, so a signed page's number may change, and only the order of
+// the signed pages among themselves is compared. 12.8.2.2.2 lets a reader
+// compare the signed and current versions, which is what this does.
+//
+// Pages are matched by object number, a page the tree lists more than once
+// counts at its first place, and a page the update removed is left to
+// [removedPage].
+func reorderedPage(ctx context.Context, doc, rev *document.Document) (string, error) {
+	signedPages, err := pagesOf(ctx, rev)
+	if err != nil {
+		return "", fmt.Errorf("reading the signed revision's pages: %w", err)
+	}
+	currentPages, err := pagesOf(ctx, doc)
+	if err != nil {
+		return "", fmt.Errorf("reading the current pages: %w", err)
+	}
+	signedAt := make(map[int]int, len(signedPages))
+	for i, p := range signedPages {
+		if num := p.Ref.ObjectNum; num > 0 {
+			if _, dup := signedAt[num]; !dup {
+				signedAt[num] = i + 1
+			}
+		}
+	}
+
+	seen := make(map[int]bool, len(signedAt))
+	var last, lastNum int
+	for i, p := range currentPages {
+		if i%100 == 0 {
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
+		}
+		num := p.Ref.ObjectNum
+		at, signed := signedAt[num]
+		if !signed || seen[num] {
+			continue
+		}
+		seen[num] = true
+		if at < last {
+			return fmt.Sprintf("page %d (object %d) was moved after page %d (object %d), which no P permits", at, num, last, lastNum), nil
+		}
+		last, lastNum = at, num
+	}
+	return "", nil
+}
+
 // pagesOf returns the pages of doc's page tree.
 func pagesOf(ctx context.Context, doc *document.Document) ([]*document.Page, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)

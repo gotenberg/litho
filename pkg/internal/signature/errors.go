@@ -5,8 +5,8 @@ import "errors"
 // ErrMDPViolation names a modification that violates the DocMDP or FieldMDP
 // policy a signature declared. An update that only adds validation data or a
 // document timestamp is not a modification (ISO 32000-2, 12.8.2.2, Table
-// 257), removing a page or changing what a signed page draws is one at every
-// P, changing a catalog entry that form filling and signing do not need is one
+// 257), removing or reordering pages or changing what a signed page draws is
+// one at every P, changing a catalog entry that form filling and signing do not need is one
 // from P=2 up, and adding or removing an annotation other than a widget is one
 // at P=2.
 //
