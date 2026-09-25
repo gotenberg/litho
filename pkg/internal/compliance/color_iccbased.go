@@ -70,20 +70,24 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 		// Get page blending CS ICC ref for identity comparison.
 		blendingCSRef := resolvePageBlendingICCRef(ctx, doc, page)
 
-		// Collect CS names actually used by cs/CS operators in the content
-		// stream. Parse failure yields nil ops; checks run on whatever is
-		// available.
-		usedCSNames := collectUsedCSNames(pages[i].parsedOps(ctx))
-
-		// A pattern or a shading takes part only when the page paints with it,
-		// which the same parsed operations report.
-		_, referencedXObjects, _, used, inheritedAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
-
-		checkICCBasedInResources(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, usedCSNames, results)
-
-		// Recursively scan Form XObject and annotation sub-resources.
+		// Recursively scan Form XObject and annotation sub-resources. A
+		// content stream an earlier page shares is judged there alone, with
+		// what it draws (see [markJudgedContents]), so only this page's
+		// annotations remain.
 		visited := make(map[string]bool)
-		scanICCBasedRecursive(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, results, 0, visited, used, referencedXObjects, inheritedAtDo)
+		if !pages[i].contentJudged {
+			// Collect CS names actually used by cs/CS operators in the content
+			// stream. Parse failure yields nil ops; checks run on whatever is
+			// available.
+			usedCSNames := collectUsedCSNames(pages[i].parsedOps(ctx))
+
+			// A pattern or a shading takes part only when the page paints with
+			// it, which the same parsed operations report.
+			_, referencedXObjects, _, used, inheritedAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
+
+			checkICCBasedInResources(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, usedCSNames, results)
+			scanICCBasedRecursive(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, results, 0, visited, used, referencedXObjects, inheritedAtDo)
+		}
 
 		// Scan annotation appearance streams.
 		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])

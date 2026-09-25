@@ -332,7 +332,9 @@ func (s *colorSpaceScope) ownUses(ctx context.Context, doc *document.Document) m
 // annotation appearance streams of the page, which begin in the default
 // state (see [inheritedCSDefault]), each entering the forms it paints. A
 // stream that also serves as the content of a page is not walked as a form,
-// and the chain is capped at the form budget, [formTooDeep].
+// a page content stream an earlier page shares is walked from that page
+// alone (see [markJudgedContents]), and the chain is capped at the form
+// budget, [formTooDeep].
 //
 // Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on a direct DeviceN over
 // the colourant limit that a page or an appearance stream selects and a form
@@ -391,7 +393,9 @@ func (x *colorSpaceLinkIndex) build(ctx context.Context, doc *document.Document)
 		}
 		p := &x.pages[i]
 		page := newLinkScope(ctx, doc, pageScopeID(i), 0, p.resources)
-		x.walk(ctx, doc, p.parsedOps(ctx), page, page, csPaintState{}, 1)
+		if !p.contentJudged {
+			x.walk(ctx, doc, p.parsedOps(ctx), page, page, csPaintState{}, 1)
+		}
 
 		annots, err := document.ResolveArray(ctx, doc, p.dict["Annots"])
 		if err != nil {

@@ -74,10 +74,30 @@ func formTooDeep(doc *document.Document, depth int) bool {
 // parsed operations; the page dictionaries are the same ones [collectPages]
 // yields, in the same order.
 //
+// A page whose content stream an earlier page shares uses no colour through
+// it, since veraPDF judges that stream on the first page alone, with what it
+// draws (see [markJudgedContents]); the Separation and DeviceN walk, the
+// ICCBased walk and the colour-space link index skip it the same way.
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b: two pages sharing one
+// stream fail the device colour tests, the DeviceN colourant limit, the
+// ICCBased profile test and ISO 19005-2, 6.2.4.4 t1 and t2 as often as one of
+// them alone, and two pages whose /Contents are direct arrays naming it fail
+// them twice as often.
+//
 // # Corpus evidence
 //
 //   - pdfjs bug1019475_1.pdf: gives its page a DeviceRGB transparency group
 //     beside a DefaultRGB, and veraPDF reports no DeviceRGB.
+//   - pdfjs hello_world_rotated.pdf: five pages share one content stream
+//     that paints with DeviceGray, and veraPDF fails ISO 19005-1, 6.2.3.3 t3
+//     and ISO 19005-2, 6.2.4.3 t4 once, where litho failed them five times.
+//   - pdfjs issue18042.pdf: four pages share one content stream that paints a
+//     DeviceRGB image, and veraPDF fails ISO 19005-1, 6.2.3.3 t1 and ISO
+//     19005-2, 6.2.4.3 t2 once, where litho failed them four times.
+//   - pdfjs pypdf2332.pdf: twelve pages draw nine content streams in
+//     DeviceGray, and veraPDF fails ISO 19005-1, 6.2.3.3 t3 and ISO 19005-2,
+//     6.2.4.3 t4 ten times, once per stream and twice for the first page's
+//     two uses, where litho failed them once per page, twelve times.
 func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages []pageCtx, part int, hasICC bool, iccColorSpace string, results *[]Violation) {
 	for i := range pages {
 		page := pages[i].dict
@@ -108,17 +128,23 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 		}
 
 		// Scan content stream operators for device CS usage and collect
-		// XObject names referenced by Do operators.
-		contentCSUsed, referencedXObjects, contentCSNames, usedResourceKeys, inheritedCSAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
+		// XObject names referenced by Do operators. A content stream an
+		// earlier page shares is judged there alone, with what it draws (see
+		// [markJudgedContents]), so this page uses no colour through it.
+		var deviceCSUsed deviceCSUsage
+		if !pages[i].contentJudged {
+			contentCSUsed, referencedXObjects, contentCSNames, usedResourceKeys, inheritedCSAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
 
-		deviceCSUsed := scanForDeviceColorSpaces(ctx, doc, csDict, resources, referencedXObjects, usedResourceKeys, inheritedCSAtDo, part, contentCSNames)
-		deviceCSUsed.rgb = deviceCSUsed.rgb || contentCSUsed.rgb
-		deviceCSUsed.cmyk = deviceCSUsed.cmyk || contentCSUsed.cmyk
-		deviceCSUsed.gray = deviceCSUsed.gray || contentCSUsed.gray
-		// The initial DeviceGray painted with no colour space selected, on the
-		// page or in a form or tiling pattern it draws, is the page's own
-		// selection, which the page's DefaultGray covers (ISO 32000-1, 8.6.5.6).
-		deviceCSUsed.gray = deviceCSUsed.gray || contentCSUsed.initialGray || deviceCSUsed.initialGray
+			deviceCSUsed = scanForDeviceColorSpaces(ctx, doc, csDict, resources, referencedXObjects, usedResourceKeys, inheritedCSAtDo, part, contentCSNames)
+			deviceCSUsed.rgb = deviceCSUsed.rgb || contentCSUsed.rgb
+			deviceCSUsed.cmyk = deviceCSUsed.cmyk || contentCSUsed.cmyk
+			deviceCSUsed.gray = deviceCSUsed.gray || contentCSUsed.gray
+			// The initial DeviceGray painted with no colour space selected, on
+			// the page or in a form or tiling pattern it draws, is the page's
+			// own selection, which the page's DefaultGray covers (ISO 32000-1,
+			// 8.6.5.6).
+			deviceCSUsed.gray = deviceCSUsed.gray || contentCSUsed.initialGray || deviceCSUsed.initialGray
+		}
 
 		// Also scan annotation appearance streams for device CS usage.
 		annotUsage := scanAnnotationAppearanceCS(ctx, doc, page, part)

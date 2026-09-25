@@ -76,8 +76,10 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, pages [
 		// A page with no /Resources, its own or inherited, paints nothing from
 		// a named resource, but its annotations still render through appearance
 		// streams that carry their own /Resources (ISO 32000-1 §12.5.5), so it
-		// skips only its own scan.
-		if resources := resolveInheritedResources(ctx, doc, page); resources != nil {
+		// skips only its own scan. So does a page whose content stream an
+		// earlier page shares, which is judged there alone with what it draws
+		// (see [markJudgedContents]).
+		if resources := resolveInheritedResources(ctx, doc, page); resources != nil && !pages[i].contentJudged {
 			// A pattern or a shading takes part only when the page paints with
 			// it, and a colour space only when something selects it. The parsed
 			// operations report both, and they are already cached on the page
