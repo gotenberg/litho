@@ -1439,6 +1439,12 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // and MDPInfo names the first object that does not, or why the appended data
 // could not be read.
 //
+// The policy is read from the signature dictionary's /Reference and checked
+// against the file itself, not taken from the PKCS#7 data, so it is reported
+// whatever the cryptographic checks conclude. A signature whose PKCS#7 data
+// does not parse still carries MDPPolicy, MDPValid and MDPInfo, beside an
+// ErrorMessage that says why HashValid and CertChainValid are false.
+//
 // The check classifies each appended object by type, so a forbidden change
 // made through a permitted object type goes unreported. An appended object
 // stream is not itself a change: the objects it holds are classified as if

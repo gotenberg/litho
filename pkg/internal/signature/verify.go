@@ -107,6 +107,11 @@ func parsePDFDate(s string) (time.Time, error) {
 // Store (DSS) is present, it uses the embedded OCSP responses, CRLs, and
 // timestamp tokens for Long-Term Validation (LTV), allowing offline
 // verification of signatures whose certificates have since expired.
+//
+// The modification detection and prevention policy of each signature is
+// evaluated independently of its cryptographic checks, so a signature whose
+// PKCS#7 data does not parse still reports its MDP fields beside the
+// ErrorMessage that says why.
 func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.CertPool) ([]models.SignatureValidation, error) {
 	sigs, err := ExtractSignatures(ctx, doc)
 	if err != nil {
@@ -130,6 +135,14 @@ func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.C
 		if dss != nil {
 			result.HasDSS = true
 		}
+
+		// The DocMDP or FieldMDP transform and its /P live in the signature
+		// dictionary's /Reference (ISO 32000-1, 12.8.1, Tables 252 and 253),
+		// not in the PKCS#7 data, and the policy is checked against the file's
+		// revisions (12.8.2.2.2). Neither needs the signature to parse or
+		// verify, so the policy is reported beside whatever the cryptographic
+		// checks below conclude.
+		evaluateMDP(ctx, doc, sig, &result)
 
 		// /Contents in a signature dict is stored as a hex string in
 		// the PDF, but the lexer has already decoded it into raw DER
@@ -273,9 +286,6 @@ func VerifySignatures(ctx context.Context, doc *document.Document, roots *x509.C
 				}
 			}
 		}
-
-		// Evaluate MDP (Modification Detection and Prevention) policy.
-		evaluateMDP(ctx, doc, sig, &result)
 
 		results = append(results, result)
 	}
