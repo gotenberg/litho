@@ -173,3 +173,203 @@ func TestDeviceNColorants_AnnotationOnPageWithoutResources(t *testing.T) {
 		t.Error("a DeviceN an appearance stream selects on a page with no /Resources must fire §6.2.4.4 t1")
 	}
 }
+
+// directDeviceNPDF builds a PDF of one page per content, each with its own
+// content stream, sharing one /Resources dictionary (object 3) that writes
+// csArr directly as /CS0 and names a Helvetica /F1 (object 4), the form /Fm0
+// (object 5) and the image /Im0 (object 7). Object 6 is the tint transform
+// [deviceNOf] references. The form and the image write csArr directly too,
+// and are empty dictionaries unless form and image give their content.
+func directDeviceNPDF(csArr, form, image string, contents ...string) []byte {
+	formObj := "<< >>"
+	if form != "" {
+		formObj = fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] "+
+			"/Resources << /ColorSpace << /CS0 %s >> >> /Length %d >>\nstream\n%s\nendstream", csArr, len(form), form)
+	}
+	imageObj := "<< >>"
+	if image != "" {
+		imageObj = fmt.Sprintf("<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 "+
+			"/ColorSpace %s /Length %d >>\nstream\n%s\nendstream", csArr, len(image), image)
+	}
+	var kids strings.Builder
+	for i := range contents {
+		fmt.Fprintf(&kids, " %d 0 R", 8+2*i)
+	}
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		fmt.Sprintf("<< /Type /Pages /Kids [%s] /Count %d >>", kids.String(), len(contents)),
+		"<< /ColorSpace << /CS0 " + csArr + " >> /XObject << /Fm0 5 0 R /Im0 7 0 R >> /Font << /F1 4 0 R >> >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		formObj,
+		tintTransformObj,
+		imageObj,
+	}
+	for i, c := range contents {
+		objs = append(objs,
+			fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources 3 0 R /Contents %d 0 R >>", 9+2*i),
+			fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(c), c))
+	}
+	return cyclePDF(objs...)
+}
+
+// directDeviceNAppearancesPDF builds a one-page PDF with no page /Resources
+// whose annotations draw appearance streams writing csArr directly as /CS0.
+// shared gives two annotations one normal appearance; otherwise one annotation
+// has distinct normal, rollover and down appearances.
+func directDeviceNAppearancesPDF(csArr string, shared bool) []byte {
+	const page = "0 0 1 1 re S"
+	const content = "/CS0 cs 0 scn 0 0 10 10 re f"
+	ap := fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] "+
+		"/Resources << /ColorSpace << /CS0 %s >> >> /Length %d >>\nstream\n%s\nendstream", csArr, len(content), content)
+	annots, first := "[7 0 R]", "<< /Type /Annot /Subtype /Square /Rect [0 0 10 10] /F 4 /AP << /N 8 0 R /R 9 0 R /D 10 0 R >> >>"
+	extra := []string{ap, ap, ap}
+	if shared {
+		annots = "[7 0 R 9 0 R]"
+		first = "<< /Type /Annot /Subtype /Square /Rect [0 0 10 10] /F 4 /AP << /N 8 0 R >> >>"
+		extra = []string{ap, "<< /Type /Annot /Subtype /Square /Rect [20 0 30 10] /F 4 /AP << /N 8 0 R >> >>"}
+	}
+	return cyclePDF(append([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R /Annots " + annots + " >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(page), page),
+		"<< >>",
+		tintTransformObj,
+		first,
+	}, extra...)...)
+}
+
+// TestDeviceNLimit_CountsWhatVeraPDFCounts pins that ISO 19005-1 §6.1.12 t9
+// and ISO 19005-2 §6.1.13 t9 fail as many times as veraPDF 1.30 fails them on
+// a DeviceN written directly, with no object of its own. Every count below was
+// measured on the same file at PDF/A-1b and PDF/A-2b.
+//
+// veraPDF judges an indirect object once, and a direct one wherever its model
+// reaches it. A /Resources/ColorSpace entry is reached through every operator
+// linking to it: cs, CS, scn and SCN, each painting operator by the space it
+// paints with, text by its rendering mode, and an inline image by its /CS or,
+// for a mask, by the fill space. sc, SC and n reach nothing. A form, an
+// appearance or an image is an indirect object, so what it holds is judged
+// once however many times it is painted, while a page is judged per page even
+// when pages share their /Resources. litho judged every such space once per
+// place it found it.
+func TestDeviceNLimit_CountsWhatVeraPDFCounts(t *testing.T) {
+	t.Parallel()
+
+	profiles := []struct {
+		profile    models.PDFAProfile
+		clause     string
+		colourants int
+	}{
+		{models.PDFA1b, "6.1.12", 9},
+		{models.PDFA2b, "6.1.13", 33},
+	}
+	tests := []struct {
+		name string
+		data func(dn string, n int) []byte
+		want int
+	}{
+		{
+			name: "cs, scn and f each reach it",
+			data: func(dn string, _ int) []byte {
+				return directDeviceNPDF(dn, "", "", "/CS0 cs 0 scn 0 0 10 10 re f")
+			},
+			want: 3,
+		},
+		{
+			name: "sc and SC reach nothing, B reaches it for fill and stroke",
+			data: func(dn string, _ int) []byte {
+				return directDeviceNPDF(dn, "", "", "/CS0 CS 0 SCN 0 0 10 10 re S /CS0 cs 0 sc 0 0 10 10 re B")
+			},
+			want: 6,
+		},
+		{
+			name: "text reaches it by rendering mode",
+			data: func(dn string, _ int) []byte {
+				return directDeviceNPDF(dn, "", "", "/CS0 cs /CS0 CS BT /F1 12 Tf 10 10 Td (a) Tj 1 Tr (b) Tj "+
+					"2 Tr (c) Tj 3 Tr (d) Tj 7 Tr (e) Tj 0 Tr [(f)] TJ (g) ' 1 2 (h) \" ET")
+			},
+			want: 9,
+		},
+		{
+			name: "Q restores the space cs selected",
+			data: func(dn string, _ int) []byte {
+				return directDeviceNPDF(dn, "", "", "q /CS0 cs Q 0 0 10 10 re f")
+			},
+			want: 1,
+		},
+		{
+			name: "g replaces it and n paints nothing",
+			data: func(dn string, _ int) []byte {
+				return directDeviceNPDF(dn, "", "", "/CS0 cs 0.5 g 0 0 10 10 re f /CS0 CS 0 0 10 10 re n")
+			},
+			want: 2,
+		},
+		{
+			name: "an inline image naming it reaches it",
+			data: func(dn string, n int) []byte {
+				return directDeviceNPDF(dn, "", "", "q /CS0 cs BI /W 1 /H 1 /CS /CS0 /BPC 8 ID "+strings.Repeat("\x00", n)+" EI Q")
+			},
+			want: 2,
+		},
+		{
+			name: "an inline image mask reaches the fill space",
+			data: func(dn string, _ int) []byte {
+				return directDeviceNPDF(dn, "", "", "q /CS0 cs 0 scn BI /W 1 /H 1 /IM true ID \x00 EI Q")
+			},
+			want: 3,
+		},
+		{
+			name: "pages sharing /Resources are judged per page",
+			data: func(dn string, _ int) []byte {
+				return directDeviceNPDF(dn, "", "", "/CS0 cs 0 scn 0 0 10 10 re f", "/CS0 cs 0 scn 0 0 10 10 re f")
+			},
+			want: 6,
+		},
+		{
+			name: "a direct /Indexed base is reached with its space",
+			data: func(dn string, n int) []byte {
+				return directDeviceNPDF(indexedOver(dn, n), "", "", "/CS0 cs 0 scn 0 0 10 10 re f")
+			},
+			want: 3,
+		},
+		{
+			name: "a form painted three times on two pages is judged once",
+			data: func(dn string, _ int) []byte {
+				return directDeviceNPDF(dn, "/CS0 cs 0 scn 0 0 10 10 re f", "",
+					"/Fm0 Do q 1 0 0 1 20 0 cm /Fm0 Do Q", "/Fm0 Do")
+			},
+			want: 3,
+		},
+		{
+			name: "an image painted three times on two pages is judged once",
+			data: func(dn string, n int) []byte {
+				return directDeviceNPDF(dn, "", strings.Repeat("\x00", n),
+					"q 10 0 0 10 0 0 cm /Im0 Do Q q 10 0 0 10 20 0 cm /Im0 Do Q", "q 10 0 0 10 0 0 cm /Im0 Do Q")
+			},
+			want: 1,
+		},
+		{
+			name: "three appearance streams are judged each",
+			data: func(dn string, _ int) []byte { return directDeviceNAppearancesPDF(dn, false) },
+			want: 9,
+		},
+		{
+			name: "an appearance two annotations share is judged once",
+			data: func(dn string, _ int) []byte { return directDeviceNAppearancesPDF(dn, true) },
+			want: 3,
+		},
+	}
+
+	for _, p := range profiles {
+		for _, tt := range tests {
+			t.Run(p.clause+" "+tt.name, func(t *testing.T) {
+				t.Parallel()
+				got := ruleContexts(t, tt.data(deviceNOf(p.colourants), p.colourants), p.profile, p.clause, 9)
+				if len(got) != tt.want {
+					t.Errorf("§%s t9 fired %d times, want %d: %q", p.clause, len(got), tt.want, got)
+				}
+			})
+		}
+	}
+}
