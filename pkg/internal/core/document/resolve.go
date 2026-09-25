@@ -1330,90 +1330,13 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 
 	switch entry.Type {
 	case xref.XRefTypeNormal:
-		// Snapshot compliance-mode state once per resolution so all
-		// three decision points agree on the same value. A concurrent
-		// validator toggling the flag mid-resolution cannot change this
-		// resolution's branches once it started.
-		complianceMode := d.ComplianceMode()
-
-		// Verify the object header at the xref-declared offset matches
-		// the expected number. A mismatch typically means the xref table
-		// lies about offsets, which happens on files rewritten by buggy
-		// producers or after truncation. Augment from the raw scan and
-		// retry at the discovered offset before giving up. The override
-		// lives inside augmentXrefFromRawScan so all writes to
-		// xrefEntries stay under the sync.Once.
-		if !objectHeaderMatches(d.r, entry.Offset, ref.ObjectNum) {
-			if d.augmentOnMiss(ctx) {
-				// Parsing at the declared offset would cache whatever sits
-				// there for the run that follows the deferred scan, so the
-				// object stays unresolved until the scan has run. Compliance,
-				// the one caller that defers, cannot reach this: its warming
-				// pass resolves every listed object before it fans out, so a
-				// mismatched header has run the scan by then.
-				return nil, fmt.Errorf("%w: object %d: header mismatch at offset %d, augmentation deferred",
-					ErrObjectNotFound, ref.ObjectNum, entry.Offset)
-			}
-			if rescanned, ok := d.XRefEntry(ref.ObjectNum); ok {
-				entry = rescanned
-			}
-		}
-
-		// Check the header bytes only once the offset is settled, so the
-		// check reads the same bytes the parse does. Reading the declared
-		// offset first made the result depend on whether some earlier
-		// resolution had already triggered the augmentation.
-		var formatViolations []error
-		if complianceMode {
-			formatViolations = d.validateObjectHeaderFormat(entry.Offset, ref.ObjectNum)
-		}
-
-		lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, entry.Offset))
-		p := parser.NewParser(lex).WithObjectEnd(d.objectEnd(entry.Offset))
-		if d.Crypto != nil {
-			// Key the per-object cipher on the generation the cross-reference
-			// gives the object, not the one the caller put in the reference.
-			// ISO 32000-1, 7.6.2 mixes object number AND generation into the
-			// key, while litho resolves by object number alone (see
-			// Document.ObjectGeneration); a caller that builds
-			// ast.PdfIndirectRef{ObjectNum: n} without a generation therefore
-			// still reaches the object but decrypts it with the wrong key, and
-			// the result is cached for everyone after it.
-			// entry is the in-use normal entry checked above, so its
-			// generation is the object's own, not an object-stream index.
-			p.WithDecryption(d.Crypto.DecryptFunc(ref.ObjectNum, entry.Generation))
-		}
-		if complianceMode {
-			p.WithFormatChecking()
-		}
-
-		obj, err = p.ParseObject(ctx)
+		// Read compliance mode once, so a concurrent validator toggling it
+		// mid-resolution cannot change this parse's branches once it
+		// started.
+		obj, err = d.parseNormalObject(ctx, ref, entry, d.ComplianceMode())
 		if err != nil {
-			// Record the header findings even though the body did not
-			// parse. A failed parse is never cached, so every later
-			// resolution of this object repeats the work, and only the
-			// per-object record keeps the retries from counting twice.
-			if complianceMode {
-				d.RecordFormatViolations(ref.ObjectNum, formatViolations...)
-			}
-			return nil, fmt.Errorf("failed to parse object %d at offset %d: %w", ref.ObjectNum, entry.Offset, err)
+			return nil, err
 		}
-
-		// Record the object's format violations, header findings first,
-		// then the parser's. Recording is keyed by object number, so a
-		// re-parse after an eviction and a second goroutine that missed
-		// the cache at the same time both add nothing.
-		if complianceMode {
-			d.RecordFormatViolations(ref.ObjectNum, append(formatViolations, p.FormatViolations...)...)
-		}
-		d.recordIntegerOverflows(ref.ObjectNum, p.IntegerOverflows)
-
-		d.Logger.Debug("resolve object parsed",
-			slog.Int("obj", ref.ObjectNum),
-			slog.Int("gen", ref.GenNum),
-			slog.Int64("offset", entry.Offset),
-			slog.String("type", fmt.Sprintf("%T", obj)),
-		)
 
 	case xref.XRefTypeCompressed:
 		obj, err = d.extractFromObjectStream(ctx, entry.ObjStmNum, entry.ObjStmIndex, ref.ObjectNum, visited)
@@ -1449,4 +1372,137 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 	d.mu.Unlock()
 
 	return obj, nil
+}
+
+// parseNormalObject parses the uncompressed object ref, whose in-use normal
+// cross-reference entry is entry, and caches nothing. With checkFormat set, it
+// records the object's format violations (see [Document.RecordFormatViolations]):
+// the header's findings first, then the parser's, or the header's alone when
+// the body does not parse. [Document.resolveWith] and
+// [Document.CheckObjectFormat] both parse through it, so an object's record is
+// the same whichever of the two made it.
+func (d *Document) parseNormalObject(ctx context.Context, ref ast.PdfIndirectRef, entry xref.XRefEntry, checkFormat bool) (ast.PdfObject, error) {
+	// Verify the object header at the xref-declared offset matches the
+	// expected number. A mismatch typically means the xref table lies about
+	// offsets, which happens on files rewritten by buggy producers or after
+	// truncation. Augment from the raw scan and retry at the discovered offset
+	// before giving up. The override lives inside augmentXrefFromRawScan so all
+	// writes to xrefEntries stay under the sync.Once.
+	if !objectHeaderMatches(d.r, entry.Offset, ref.ObjectNum) {
+		if d.augmentOnMiss(ctx) {
+			// Parsing at the declared offset would cache whatever sits there
+			// for the run that follows the deferred scan, so the object stays
+			// unresolved until the scan has run. Compliance, the one caller
+			// that defers, cannot reach this: its warming pass resolves every
+			// listed object before it fans out, so a mismatched header has run
+			// the scan by then.
+			return nil, fmt.Errorf("%w: object %d: header mismatch at offset %d, augmentation deferred",
+				ErrObjectNotFound, ref.ObjectNum, entry.Offset)
+		}
+		if rescanned, ok := d.XRefEntry(ref.ObjectNum); ok {
+			entry = rescanned
+		}
+	}
+
+	// Check the header bytes only once the offset is settled, so the check
+	// reads the same bytes the parse does. Reading the declared offset first
+	// made the result depend on whether some earlier resolution had already
+	// triggered the augmentation.
+	var formatViolations []error
+	if checkFormat {
+		formatViolations = d.validateObjectHeaderFormat(entry.Offset, ref.ObjectNum)
+	}
+
+	lex := lexer.NewLexer(ioat.NewReader(d.r, d.size, entry.Offset))
+	p := parser.NewParser(lex).WithObjectEnd(d.objectEnd(entry.Offset))
+	if d.Crypto != nil {
+		// Key the per-object cipher on the generation the cross-reference
+		// gives the object, not the one the caller put in the reference.
+		// ISO 32000-1, 7.6.2 mixes object number AND generation into the key,
+		// while litho resolves by object number alone (see
+		// Document.ObjectGeneration); a caller that builds
+		// ast.PdfIndirectRef{ObjectNum: n} without a generation therefore
+		// still reaches the object but decrypts it with the wrong key, and the
+		// result is cached for everyone after it. entry is an in-use normal
+		// entry, so its generation is the object's own, not an object-stream
+		// index.
+		p.WithDecryption(d.Crypto.DecryptFunc(ref.ObjectNum, entry.Generation))
+	}
+	if checkFormat {
+		p.WithFormatChecking()
+	}
+
+	obj, err := p.ParseObject(ctx)
+	if err != nil {
+		// Record the header findings even though the body did not parse. A
+		// failed parse is never cached, so every later resolution of this
+		// object repeats the work, and only the per-object record keeps the
+		// retries from counting twice. A parse the context cut short records
+		// nothing: the first recording wins, and a partial one would stand for
+		// the object in every later run on this Document.
+		if checkFormat && ctx.Err() == nil {
+			d.RecordFormatViolations(ref.ObjectNum, formatViolations...)
+		}
+		return nil, fmt.Errorf("failed to parse object %d at offset %d: %w", ref.ObjectNum, entry.Offset, err)
+	}
+
+	// Record the object's format violations, header findings first, then the
+	// parser's. Recording is keyed by object number, so a re-parse after an
+	// eviction and a second goroutine that missed the cache at the same time
+	// both add nothing.
+	if checkFormat {
+		d.RecordFormatViolations(ref.ObjectNum, append(formatViolations, p.FormatViolations...)...)
+	}
+	d.recordIntegerOverflows(ref.ObjectNum, p.IntegerOverflows)
+
+	d.Logger.Debug("object parsed",
+		slog.Int("obj", ref.ObjectNum),
+		slog.Int("gen", ref.GenNum),
+		slog.Int64("offset", entry.Offset),
+		slog.Bool("format_checked", checkFormat),
+		slog.String("type", fmt.Sprintf("%T", obj)),
+	)
+	return obj, nil
+}
+
+// CheckObjectFormat records the format violations of object objNum when no
+// parse has recorded them yet, and does nothing when one has.
+//
+// Only a parse in compliance mode records them, and an object is parsed only
+// when a resolution misses the cache. Whatever was resolved before compliance
+// mode was turned on therefore stayed cached with nothing recorded: the catalog
+// and the root of the page tree, which [NewDocument] resolves, the objects a
+// raw-scan rebuild or a catalog scan resolves while opening, and anything a
+// caller read before validating. A validation then missed the defects the
+// parse finds in those objects, a bad hex string among them, while a
+// validation of the same bytes that parsed them first reported them.
+//
+// CheckObjectFormat parses the object's bytes again, with format checking and
+// through the parse [Document.Resolve] uses, and records what that finds. The
+// record is the one a first parse in compliance mode would have made, so an
+// object contributes the same findings once whether it was cached before the
+// validation began or not. The cached value is left alone. An object the index
+// lacks, a free entry and an object held in an object stream record nothing,
+// since no parse checks the members of an object stream.
+//
+// CheckObjectFormat is safe for concurrent use.
+func (d *Document) CheckObjectFormat(ctx context.Context, objNum int) {
+	if ctx.Err() != nil {
+		return
+	}
+	d.mu.RLock()
+	_, recorded := d.formatViolations[objNum]
+	d.mu.RUnlock()
+	if recorded {
+		return
+	}
+	entry, ok := d.XRefEntry(objNum)
+	if !ok || entry.Free || entry.Type != xref.XRefTypeNormal {
+		return
+	}
+	// The object may not parse. The header findings are recorded all the same,
+	// and the parse error is what every resolution of the object reports.
+	if _, err := d.parseNormalObject(ctx, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation}, entry, true); err != nil {
+		d.Logger.Debug("format check of an object failed to parse it", slog.Int("obj", objNum), slog.Any("err", err))
+	}
 }

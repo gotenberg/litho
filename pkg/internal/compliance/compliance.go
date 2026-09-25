@@ -72,18 +72,15 @@ func runValidationViolations(ctx context.Context, doc *document.Document, profil
 	// the checks run against a fully-parsed document graph, then disable
 	// compliance mode again so concurrent reads after the run return
 	// to the non-validation hot path. Compliance mode is set BEFORE the
-	// catalog is resolved: an object first parsed while resolving the
-	// catalog or page tree would otherwise be cached without its header
-	// being format-checked, so a later §6.1.8/§6.1.9 defect on that object
-	// would be reported only when a run happened to parse it after the flag
-	// flipped, an order-dependent (nondeterministic) result.
+	// catalog is resolved, so an object this run parses first is checked
+	// as it is parsed. The objects cached before the run began, which
+	// pdf.Open resolves while opening, are checked by resolveAllObjects.
 	//
 	// The format violations recorded by a previous run are kept. They are
 	// keyed by object number, so a second run re-resolving the same
 	// objects adds nothing and reports the same set. Clearing them here
-	// would instead hand the second run only what it re-parsed: the
-	// objects cached by the first run are never parsed again, so their
-	// violations would disappear.
+	// would make every run parse every cached object a second time to
+	// record the same findings again.
 	doc.SetComplianceMode(true)
 	defer doc.SetComplianceMode(false)
 

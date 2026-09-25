@@ -121,8 +121,8 @@ type Document struct {
 	complianceMode atomic.Bool
 
 	// formatViolations records the parser-level format violations found on
-	// each object, keyed by object number, when complianceMode is true.
-	// Recording is idempotent per object (see
+	// each object, keyed by object number, by a parse in compliance mode or
+	// by [Document.CheckObjectFormat]. Recording is idempotent per object (see
 	// [Document.RecordFormatViolations]), so the set is a function of the
 	// input bytes rather than of how often an object happened to be parsed.
 	// Access is serialized by d.mu.
@@ -280,12 +280,13 @@ func (d *Document) IntegerOverflows(objNum int) []float64 {
 // ResetFormatViolations drops every recorded format violation and returns
 // the previous contents in [Document.FormatViolations] order.
 //
-// Recording is repopulated by parsing, so reset the record only together
-// with the object cache: an object still in the cache is never re-parsed
-// and would never record its violations again. [Document.ClearCaches] and
-// [Document.Authenticate] reset both at once for that reason. A validation
-// pass must not reset on its own, or a second pass over the same Document
-// would report only the violations of the objects that failed to parse.
+// Recording is repopulated by parsing, so reset the record together with
+// the object cache: an object still in the cache is parsed again only by
+// [Document.CheckObjectFormat], one extra parse per cached object.
+// [Document.ClearCaches] and [Document.Authenticate] reset both at once for
+// that reason. A validation pass does not reset on its own, since the next
+// pass over the same Document would then parse every cached object a second
+// time to record the same findings.
 func (d *Document) ResetFormatViolations() []error {
 	d.mu.Lock()
 	defer d.mu.Unlock()

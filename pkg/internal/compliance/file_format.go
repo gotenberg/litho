@@ -245,10 +245,10 @@ func propertyListJudgesTwice(operator string, key ast.PdfName) bool {
 // The strings are found from the format violations the parse of the object
 // holding the property list recorded (see [propertyListSite]). A property
 // list written directly in the resources of a Type3 font, whose object the
-// walk does not know, adds nothing, and neither does one in an object the
-// parse never checked, which [checkFormatViolations] misses too. Each content
-// stream contributes at most [maxContentFormatViolationsPerStream] of these
-// findings.
+// walk does not know, adds nothing, and neither does one in a member of an
+// object stream, which no parse checks and [checkFormatViolations] misses
+// too. Each content stream contributes at most
+// [maxContentFormatViolationsPerStream] of these findings.
 //
 // # Corpus evidence
 //

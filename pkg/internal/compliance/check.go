@@ -408,7 +408,30 @@ func resolveCatalog(ctx context.Context, doc *document.Document) (ast.PdfDict, e
 }
 
 // resolveAllObjects forces resolution of every indirect object in the xref
-// table. This ensures parser-level format checks run on ALL objects.
+// table, and format-checks each uncompressed one, so the parser-level format
+// checks cover all of them.
+//
+// Resolving alone checks only the objects that miss the cache. Those opening
+// the file already resolved, the catalog and the root of the page tree among
+// them, are cache hits, and a bad hex string in them (ISO 19005-1/2/3, 6.1.6
+// t1 and t2) was never reported. [document.Document.CheckObjectFormat] parses
+// each object no parse has recorded yet, which is only those.
+//
+// # Corpus evidence
+//
+//   - All corpora: opening leaves cached 9,202 of the 513,524 uncompressed
+//     objects outside the verapdf corpus, 4,090 of them in the 46 files whose
+//     index is rebuilt from a raw scan, and 5,240 of the 57,723 in the verapdf
+//     corpus, about two per file. Those are the only objects the check parses
+//     a second time, and validating every file outside the verapdf corpus at
+//     PDF/A-1b takes the same CPU time as before, 178 to 183 s either way.
+//   - pdfjs issue9105_other.pdf, poppler-742-0-fuzzed.pdf and
+//     poppler-85140-0.pdf: are the only files whose counts move at PDF/A-1b
+//     and PDF/A-2b, and the verapdf files under their own profile, the litho
+//     files under theirs and the facturx files under PDF/A-3b move none. All
+//     three are rebuilt, which parses their objects while opening, and
+//     veraPDF parses none of the three. poppler-742-0-fuzzed.pdf gains 60
+//     odd-digit and 129 non-hex strings.
 func resolveAllObjects(ctx context.Context, doc *document.Document) {
 	doc.Logger.Debug("compliance: resolving all objects for format checks")
 	count := 0
@@ -433,6 +456,7 @@ func resolveAllObjects(ctx context.Context, doc *document.Document) {
 		// they matter. Aggregate failure would stop compliance mode
 		// from seeing a broken doc at all, which is worse.
 		_, _ = document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum}) // Warming the cache; resolve errors are tolerated.
+		doc.CheckObjectFormat(ctx, objNum)
 		count++
 	}
 	doc.Logger.Debug("compliance: resolved all objects", "count", count)

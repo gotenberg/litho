@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -340,6 +342,86 @@ func TestPropertyListHexStringsPerNamingOperator(t *testing.T) {
 				if got := countRuleErrs(t, viols, p.invalid); got != tc.invalid {
 					t.Errorf("%s test %d fired %d times, want %d: %v", p.invalid.Clause, p.invalid.TestNumber, got, tc.invalid, viols)
 				}
+			})
+		}
+	}
+}
+
+// TestHexStringsInObjectsOpeningCached pins that a bad hex string fails the
+// hex string tests, ISO 19005-1/2, 6.1.6 t1 and t2, in the objects opening the
+// file resolves before any validation starts: the catalog, the root of the page
+// tree, and the optional-content configuration. Those objects were cached with
+// no format check, so the tests never fired in them. Measured with veraPDF 1.30
+// at PDF/A-1b and PDF/A-2b on the same files: each count below is veraPDF's,
+// and a property list the root of the page tree defines for its page fails as
+// often as one the page defines itself.
+//
+// Each file is judged three ways, with the same counts: freshly opened, a
+// second time on the same Document, and after every object was resolved before
+// the validation began, as text extraction does.
+func TestHexStringsInObjectsOpeningCached(t *testing.T) {
+	t.Parallel()
+
+	const (
+		catalog = "<< /Type /Catalog /Pages 2 0 R >>"
+		pages   = "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"
+		page    = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << >> /Contents 4 0 R >>"
+		bdc     = "/Span /P0 BDC EMC"
+	)
+	rootProps := "<< /Type /Pages /Kids [3 0 R] /Count 1 /Resources << /Properties << /P0 << /ActualText <414> >> >> >> >>"
+	inherits := "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 4 0 R >>"
+	cases := []struct {
+		name         string
+		objs         []string
+		odd, invalid int
+	}{
+		{"catalog odd", []string{"<< /Type /Catalog /Pages 2 0 R /Foo <414> >>", pages, page, exponentStream("", "")}, 1, 0},
+		{"catalog non-hex", []string{"<< /Type /Catalog /Pages 2 0 R /Foo <41Z4> >>", pages, page, exponentStream("", "")}, 0, 1},
+		{"page tree root odd", []string{catalog, "<< /Type /Pages /Kids [3 0 R] /Count 1 /Foo <414> >>", page, exponentStream("", "")}, 1, 0},
+		{"page tree root non-hex", []string{catalog, "<< /Type /Pages /Kids [3 0 R] /Count 1 /Foo <41Z4> >>", page, exponentStream("", "")}, 0, 1},
+		{"root property list named once", []string{catalog, rootProps, inherits, exponentStream("", bdc)}, 3, 0},
+		{"root property list named twice", []string{catalog, rootProps, inherits, exponentStream("", bdc+" "+bdc)}, 5, 0},
+		{"optional-content configuration", []string{
+			"<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R] /D 6 0 R >> >>", pages, page, exponentStream("", ""),
+			"<< /Type /OCG /Name <414> >>", "<< /ON [5 0 R] /Foo <414> >>",
+		}, 2, 0},
+	}
+	for _, tc := range cases {
+		for _, p := range []struct {
+			profile      models.PDFAProfile
+			odd, invalid Rule
+		}{
+			{models.PDFA1b, Rule_19005_1_6_1_6_t01, Rule_19005_1_6_1_6_t02},
+			{models.PDFA2b, Rule_19005_2_6_1_6_t01, Rule_19005_2_6_1_6_t02},
+		} {
+			t.Run(tc.name+" "+string(p.profile), func(t *testing.T) {
+				t.Parallel()
+				ctx := context.Background()
+				check := func(when string, doc *document.Document) {
+					t.Helper()
+					viols, err := ValidatePDFA(ctx, doc, p.profile)
+					if err != nil {
+						t.Fatalf("%s: ValidatePDFA: %v", when, err)
+					}
+					if got := countRuleErrs(t, viols, p.odd); got != tc.odd {
+						t.Errorf("%s: %s test %d fired %d times, want %d: %v", when, p.odd.Clause, p.odd.TestNumber, got, tc.odd, viols)
+					}
+					if got := countRuleErrs(t, viols, p.invalid); got != tc.invalid {
+						t.Errorf("%s: %s test %d fired %d times, want %d: %v", when, p.invalid.Clause, p.invalid.TestNumber, got, tc.invalid, viols)
+					}
+				}
+
+				doc, _ := objsDocPDF(t, tc.objs...)
+				check("opened", doc)
+				check("validated again", doc)
+
+				warmed, _ := objsDocPDF(t, tc.objs...)
+				for objNum := range warmed.XRefEntries() {
+					if _, err := document.ResolveObject(ctx, warmed, ast.PdfIndirectRef{ObjectNum: objNum}); err != nil {
+						t.Fatalf("resolve object %d: %v", objNum, err)
+					}
+				}
+				check("every object resolved first", warmed)
 			})
 		}
 	}
