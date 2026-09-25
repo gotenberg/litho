@@ -447,7 +447,9 @@ func classifyModifications(objects []appendedObject, policy int) string {
 // and its /SigRef, a filled field rewrites its widget and field dictionaries
 // (12.7.3.1, Table 220 names the field types Btn, Tx, Ch and Sig), and adding
 // either touches the catalog's form and the page's /Annots, while a template
-// adds a page.
+// adds a page. A typed object this refuses may still serve a form fill, which
+// [withoutFormData] tells apart: the XFA datasets packet, and what a rewritten
+// widget's appearance draws with.
 func isAllowedP2(obj appendedObject) bool {
 	if obj.IsAnnot {
 		// Table 254 permits annotation creation, deletion and modification

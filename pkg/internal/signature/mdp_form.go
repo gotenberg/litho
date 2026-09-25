@@ -13,16 +13,27 @@ import (
 // and that the type-based classifier cannot tell from other changes, and a
 // note for MDPInfo when they could not be told apart. policy is 2 or 3.
 //
-// ISO 32000-1, 12.8.2.2, Table 254 permits "filling in forms" from P=2 up. An
-// XFA form keeps the values a user enters in its datasets packet
-// ([xfaDatasets]), a stream the producer may type as it likes, so a stream an
-// update wrote is form data when the /XFA array names it as that packet. The signed revision's
-// array is the one the certifier approved, so a stream it names is form data.
-// The current array may name another stream, which is form data only when it
-// is new: a stream the signed revision already held in another role has not
-// become the form's data by being renamed. Nothing else the /XFA array names
-// is exempt, since the template and configuration packets define the form
-// rather than fill it in.
+// ISO 32000-1, 12.8.2.2, Table 254 permits "filling in forms" and "signing"
+// from P=2 up, and P=3 adds annotation changes. Two kinds of objects serve
+// those changes whatever type their producer gives them.
+//
+// An XFA form keeps the values a user enters in its datasets packet
+// ([xfaDatasets]), so a stream an update wrote is form data when the /XFA
+// array names it as that packet. The signed revision's array is the one the
+// certifier approved, so a stream it names is form data. The current array may
+// name another stream, which is form data only when it is new: a stream the
+// signed revision already held in another role has not become the form's data
+// by being renamed. Nothing else the /XFA array names is exempt, since the
+// template and configuration packets define the form rather than fill it in.
+//
+// Filling in a field or signing redraws a widget (12.5.6.19, 12.7.3.3), and
+// its appearance stream draws with XObjects, fonts and the other
+// [appearanceTypes]. Such an object is exempt when an annotation the update
+// rewrote within policy, a widget at P=2 and any annotation at P=3, reaches it
+// from its /AP ([drawnObjects]), and it is new. An object the signed revision
+// already held is exempt only when it was that annotation's own appearance
+// stream there ([ownAppearances]): a font or an image an appearance shares with
+// the page would otherwise let an update redraw the page through it.
 func withoutFormData(
 	ctx context.Context,
 	doc *document.Document,
@@ -30,31 +41,51 @@ func withoutFormData(
 	objects []appendedObject,
 	policy int,
 ) (_ []appendedObject, note string) {
-	candidate := false
+	var streams, drawn bool
+	var annots []int
 	for _, obj := range objects {
-		candidate = candidate || (obj.IsStream && !permitted(obj, policy))
+		if permitted(obj, policy) {
+			if obj.IsAnnot {
+				annots = append(annots, obj.ObjNum)
+			}
+			continue
+		}
+		streams = streams || obj.IsStream
+		drawn = drawn || (!obj.IsAnnot && appearanceTypes[obj.Type])
 	}
-	if !candidate {
+	drawn = drawn && len(annots) > 0
+	if !streams && !drawn {
 		return objects, ""
 	}
 
 	rev, err := signedRevision()
 	if err != nil {
-		return objects, fmt.Sprintf("; XFA form data not recognized: %v", err)
+		return objects, fmt.Sprintf("; form data not recognized: %v", err)
 	}
-	signed, err := xfaDatasets(ctx, rev)
-	if err != nil {
-		return objects, fmt.Sprintf("; XFA form data not recognized: %v", err)
+	var signedData, currentData, reached, own map[int]bool
+	if streams {
+		if signedData, err = xfaDatasets(ctx, rev); err != nil {
+			return objects, fmt.Sprintf("; form data not recognized: %v", err)
+		}
+		if currentData, err = xfaDatasets(ctx, doc); err != nil {
+			return objects, fmt.Sprintf("; form data not recognized: %v", err)
+		}
 	}
-	current, err := xfaDatasets(ctx, doc)
-	if err != nil {
-		return objects, fmt.Sprintf("; XFA form data not recognized: %v", err)
+	if drawn {
+		if reached, err = drawnObjects(ctx, doc, annots); err != nil {
+			return objects, fmt.Sprintf("; form data not recognized: %v", err)
+		}
+		own = ownAppearances(ctx, rev, annots)
 	}
 
 	kept := make([]appendedObject, 0, len(objects))
 	for _, obj := range objects {
 		num := obj.ObjNum
-		if obj.IsStream && (signed[num] || (current[num] && !rev.DefinesObject(num))) {
+		isNew := !rev.DefinesObject(num)
+		if obj.IsStream && (signedData[num] || (currentData[num] && isNew)) {
+			continue
+		}
+		if !obj.IsAnnot && appearanceTypes[obj.Type] && reached[num] && (isNew || own[num]) {
 			continue
 		}
 		kept = append(kept, obj)

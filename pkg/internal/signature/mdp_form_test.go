@@ -83,7 +83,7 @@ func TestEvaluateMDP_XFADatasetsWithoutASignedRevision(t *testing.T) {
 	base := xfaCertifiedPDF(2, "[(template) 8 0 R (datasets) 6 0 R]")
 	data := appendUpdate(t, base, updatedObject{6, "<< /Type /EmbeddedFile /Length 11 >>\nstream\n<a>Jane</a>\nendstream"})
 	result := mdpVerdict(t, data, bytes.Index(base, []byte("xref")), 2)
-	if result.MDPValid || !strings.Contains(result.MDPInfo, "XFA form data not recognized") {
+	if result.MDPValid || !strings.Contains(result.MDPInfo, "form data not recognized") {
 		t.Errorf("MDPValid = %v, MDPInfo %q: want a violation that says the form data was not recognized", result.MDPValid, result.MDPInfo)
 	}
 }

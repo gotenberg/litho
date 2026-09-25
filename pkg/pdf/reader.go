@@ -1455,13 +1455,22 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // objects that only add a document security store or a document timestamp are
 // not changes at any P: the DSS and what it names, a timestamp field with its
 // widget and value and, at P=1, the catalog, form and page updates that list
-// them, provided nothing else in those changed. From P=2 a stream the /XFA
-// array names as the XFA datasets packet holds filled-in form data whatever its
-// type, when the signed revision's array names it or when it is new and the
-// current array names it; the other XFA packets get no such allowance. At P=2
-// an annotation other than a form field widget that a page of the signed
-// revision lists and the current page no longer does is reported as removed.
-// When the signed revision cannot be read, MDPInfo says what was not checked.
+// them, provided nothing else in those changed.
+//
+// From P=2 two kinds of objects serve a form fill or a signature whatever their
+// type. A stream the /XFA array names as the XFA datasets packet holds form
+// data when the signed revision's array names it, or when it is new and the
+// current array names it; the other XFA packets get no such allowance. An
+// XObject, a font or another object an appearance stream draws with is part of
+// redrawing an annotation the update rewrote within the policy (a form field
+// widget or a new signature's widget at P=2, any annotation at P=3) when that
+// annotation's /AP reaches it and it is new, or was that annotation's own
+// appearance stream in the signed revision.
+//
+// At P=2 an annotation other than a form field widget that a page of the
+// signed revision lists and the current page no longer does is reported as
+// removed. When the signed revision cannot be read, MDPInfo says what was not
+// checked.
 func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) (_ []models.SignatureValidation, err error) {
 	defer recoverToError(r.logger(), "Reader.VerifySignatures", &err)
 	return signature.VerifySignatures(ctx, r.doc, roots)
