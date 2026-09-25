@@ -466,12 +466,70 @@ type objStmData struct {
 	first   int
 	objNums []int
 	offsets []int
+
+	// starts holds the distinct header offsets that lie within the bytes
+	// after /First, in increasing order. [objStmData.objectEnd] reads it to
+	// bound each object's parse.
+	starts []int
+}
+
+// newObjStmData returns the parsed object stream whose decoded bytes are
+// decoded, with /First first and the header pairs objNums and offsets.
+func newObjStmData(decoded []byte, first int, objNums, offsets []int) *objStmData {
+	body := len(decoded) - first
+	starts := make([]int, 0, len(offsets))
+	for _, off := range offsets {
+		if off >= 0 && off <= body {
+			starts = append(starts, off)
+		}
+	}
+	slices.Sort(starts)
+	return &objStmData{decoded: decoded, first: first, objNums: objNums, offsets: offsets, starts: slices.Compact(starts)}
+}
+
+// objectEnd returns where the object at off ends, both offsets counted from
+// /First: the nearest offset above off in the header, or the end of the
+// decoded bytes. ISO 32000-1, 7.5.7 has the header give the offset of each
+// object and requires them in increasing order, so the next offset is where
+// the next object starts. A header that breaks the order is still read with
+// each object bounded by the nearest offset above its own.
+func (o *objStmData) objectEnd(off int) int {
+	i, found := slices.BinarySearch(o.starts, off)
+	if found {
+		i++
+	}
+	if i < len(o.starts) {
+		return o.starts[i]
+	}
+	return len(o.decoded) - o.first
+}
+
+// parser returns a parser over the object stored at [off, end) of the bytes
+// after /First, which reaches the end of its data at end.
+func (o *objStmData) parser(off, end int) *parser.Parser {
+	limit := o.first + end
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(o.decoded[:limit]), int64(limit), int64(o.first+off)))
+	return parser.NewParser(lex)
 }
 
 // extractFromObjectStream extracts an object from an Object Stream. targetObjNum
 // is the object number the xref claims lives at targetIndex; it lets the lookup
 // recover when a damaged xref points at the wrong index. visited is the
 // per-call-chain set for circular-reference detection.
+//
+// The object is parsed only within its own bytes, from its offset up to the
+// next offset in the header (see [objStmData.objectEnd]), as
+// [Document.DecodeObjectStream] parses it. An object that leaves a dictionary,
+// an array or a string open would otherwise read the objects stored after it
+// as its own values, where an uncompressed one stops at the next object the
+// cross-reference table places (see [parser.Parser.WithObjectEnd]).
+//
+// # Corpus evidence
+//
+//   - All corpora: no compressed object reads past the next offset of its
+//     stream's header, so the bound changes no object any file resolves, and
+//     no file's page count, text, undecodable streams or PDF/A-2b
+//     violations.
 func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum, targetIndex, targetObjNum int, visited map[int]bool) (ast.PdfObject, error) {
 	d.mu.RLock()
 	data, cached := d.objStmCache[objStmNum]
@@ -490,13 +548,11 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum, targe
 		return nil, fmt.Errorf("object %d not found in object stream %d (xref index %d of %d)", targetObjNum, objStmNum, targetIndex, len(data.offsets))
 	}
 	targetOffset := data.offsets[slot]
-	if targetOffset < 0 {
+	if targetOffset < 0 || targetOffset > len(data.decoded)-data.first {
 		return nil, fmt.Errorf("invalid offset for object %d in object stream %d", targetObjNum, objStmNum)
 	}
 
-	absoluteOffset := int64(data.first + targetOffset)
-	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data.decoded), int64(len(data.decoded)), absoluteOffset))
-	p := parser.NewParser(lex)
+	p := data.parser(targetOffset, data.objectEnd(targetOffset))
 	obj, err := p.ParseObject(ctx)
 	if err == nil {
 		d.recordIntegerOverflows(targetObjNum, p.IntegerOverflows)
@@ -572,11 +628,18 @@ func (d *Document) decodeObjectStreamHeader(ctx context.Context, objStmNum int, 
 		return nil, fmt.Errorf("object stream /First is not an integer")
 	}
 
+	// 7.5.7, Table 16: /First is "the byte offset in the decoded stream of
+	// the first compressed object", so it lies inside the decoded bytes.
+	first := int(firstInt)
+	if first < 0 || first > len(decoded) {
+		return nil, fmt.Errorf("object stream %d: /First %d lies outside its %d decoded bytes", objStmNum, first, len(decoded))
+	}
+
 	objNums, offsets, err := parseObjStmHeader(ctx, decoded, n)
 	if err != nil {
 		return nil, fmt.Errorf("reading object stream %d header: %w", objStmNum, err)
 	}
-	return &objStmData{decoded: decoded, first: int(firstInt), objNums: objNums, offsets: offsets}, nil
+	return newObjStmData(decoded, first, objNums, offsets), nil
 }
 
 // CompressedObject is one object an object stream holds.
@@ -612,24 +675,10 @@ func (d *Document) DecodeObjectStream(ctx context.Context, objStmNum int, stream
 	if err != nil {
 		return nil, err
 	}
-	// 7.5.7, Table 16: /First is "the byte offset in the decoded stream of
-	// the first compressed object", so it lies inside the decoded bytes.
-	if data.first < 0 || data.first > len(data.decoded) {
-		return nil, fmt.Errorf("object stream %d: /First %d lies outside its %d decoded bytes", objStmNum, data.first, len(data.decoded))
-	}
 	body := len(data.decoded) - data.first
 
-	starts := make([]int, 0, len(data.offsets))
-	for _, off := range data.offsets {
-		if off >= 0 && off <= body {
-			starts = append(starts, off)
-		}
-	}
-	slices.Sort(starts)
-	starts = slices.Compact(starts)
-
-	parsed := make(map[int]ast.PdfObject, len(starts))
-	objects := make([]CompressedObject, 0, len(starts))
+	parsed := make(map[int]ast.PdfObject, len(data.starts))
+	objects := make([]CompressedObject, 0, len(data.starts))
 	for i, num := range data.objNums {
 		if i%100 == 0 {
 			if err := ctx.Err(); err != nil {
@@ -642,11 +691,7 @@ func (d *Document) DecodeObjectStream(ctx context.Context, objStmNum int, stream
 		}
 		obj, seen := parsed[off]
 		if !seen {
-			end := body
-			if j, found := slices.BinarySearch(starts, off); found && j+1 < len(starts) {
-				end = starts[j+1]
-			}
-			obj = d.parseCompressedObject(ctx, data, objStmNum, num, off, end)
+			obj = d.parseCompressedObject(ctx, data, objStmNum, num, off)
 			parsed[off] = obj
 		}
 		if obj != nil {
@@ -656,12 +701,11 @@ func (d *Document) DecodeObjectStream(ctx context.Context, objStmNum int, stream
 	return objects, nil
 }
 
-// parseCompressedObject parses the object stored at [off, end) of data's body,
-// the bytes after /First. It returns nil when those bytes hold no object.
-func (d *Document) parseCompressedObject(ctx context.Context, data *objStmData, objStmNum, objNum, off, end int) ast.PdfObject {
-	limit := data.first + end
-	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data.decoded[:limit]), int64(limit), int64(data.first+off)))
-	obj, err := parser.NewParser(lex).ParseObject(ctx)
+// parseCompressedObject parses the object stored at off of data's body, the
+// bytes after /First, up to where the next object starts (see
+// [objStmData.objectEnd]). It returns nil when those bytes hold no object.
+func (d *Document) parseCompressedObject(ctx context.Context, data *objStmData, objStmNum, objNum, off int) ast.PdfObject {
+	obj, err := data.parser(off, data.objectEnd(off)).ParseObject(ctx)
 	if err != nil {
 		// A damaged object leaves its neighbours readable, and the caller
 		// asked for the objects the stream holds, so it is left out.
