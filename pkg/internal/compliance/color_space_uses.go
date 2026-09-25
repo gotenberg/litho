@@ -262,6 +262,33 @@ func (s *colorSpaceScope) usesOf(ctx context.Context, doc *document.Document, na
 	return slices.Concat(s.uses[name], s.links.linksTo(ctx, doc, csRef{scope: s.id, name: name}))
 }
 
+// linkedByForms reports whether an operator of a form the document paints
+// links to the /Resources/ColorSpace entry name of the scope (see
+// [colorSpaceLinkIndex]). It returns false when s is nil.
+//
+// A form selecting a name its own resources do not define reaches the entry
+// of the page's (ISO 32000-1, 7.8.3), so the page's entry is in use even when
+// the page's own content never names it. Measured with veraPDF 1.30 at
+// PDF/A-1b and PDF/A-2b on a page that only paints a form, whose resources
+// define no colour space, selecting and filling with the page's /CS0: a
+// direct DeviceN over the colourant limit fails the limit once per operator
+// of the form linking to it, an indirect one once, a nested form reaches the
+// page's entry as its parent does, and a DeviceN with spot colourants and a
+// Separation conflicting with the page's own fail ISO 19005-2, 6.2.4.4 t1 and
+// t2 as they do when the page selects them.
+//
+// # Corpus evidence
+//
+//   - All corpora: no count moves under PDF/A-1b and PDF/A-2b, nor for the
+//     verapdf files under their own profile, so no file breaks a rule through
+//     a colour space only a form selects from its page's resources.
+func (s *colorSpaceScope) linkedByForms(ctx context.Context, doc *document.Document, name string) bool {
+	if s == nil {
+		return false
+	}
+	return len(s.links.linksTo(ctx, doc, csRef{scope: s.id, name: name})) > 0
+}
+
 // ownUses counts the links of the scope's own content stream (see
 // [colorSpaceUsesOf]), or returns nil when it will not decode or parse.
 func (s *colorSpaceScope) ownUses(ctx context.Context, doc *document.Document) map[string][]colorSpaceUse {

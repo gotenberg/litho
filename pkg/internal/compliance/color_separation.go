@@ -177,15 +177,9 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 		// the space, whether or not anything is then painted with it.
 		// collectReferencedCSNames is the scoping the device-colour scan
 		// already applies, and it also counts a space named by a painted image
-		// or shading.
-		//
-		// TODO: a name a painted form selects that only the page's resources
-		// define (ISO 32000-1, 7.8.3) is judged here only when the page's own
-		// content selects it too. veraPDF links the form's operators to the
-		// page's entry either way: a direct DeviceN over the colourant limit
-		// that only such a form selects and fills fails two checks there and
-		// none here. Widening the scoping reaches the colorant-consistency
-		// tests too, which were not measured for it.
+		// or shading. A name a painted form selects that only the page's
+		// resources define (ISO 32000-1, 7.8.3) is selected too, though the
+		// page's own content never names it (see [colorSpaceScope.linkedByForms]).
 		var referenced map[string]bool
 		if contentCSNames != nil {
 			referenced = collectReferencedCSNames(ctx, doc, resources, referencedXObjects, contentCSNames)
@@ -194,7 +188,7 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 			if ctx.Err() != nil {
 				return
 			}
-			if referenced != nil && !referenced[string(name)] {
+			if referenced != nil && !referenced[string(name)] && !scope.linkedByForms(ctx, doc, string(name)) {
 				continue
 			}
 			checkSeparationDeviceNArray(ctx, doc, csDict[name], part, pageIdx, string(name), colorantAlternates, colorantTintFuncs, limitJudged, resourceSite(scope, string(name)), results)

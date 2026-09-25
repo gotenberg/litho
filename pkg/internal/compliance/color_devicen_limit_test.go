@@ -575,6 +575,28 @@ func TestDeviceNLimit_CountsInheritedColorSpaces(t *testing.T) {
 			want: 3,
 		},
 		{
+			name: "a form selecting a name only the page defines reaches it though the page never selects it",
+			data: func(dn string) []byte { return inheritingFormsPDF(dn, "/CS0 cs 0 scn "+fill, noRes, "", "/Fm0 Do") },
+			want: 3,
+		},
+		{
+			name: "a nested form selecting a name only the page defines reaches it",
+			data: func(dn string) []byte { return inheritingFormsPDF(dn, "/Fm1 Do", noRes, "/CS0 cs "+fill, "/Fm0 Do") },
+			want: 2,
+		},
+		{
+			name: "a form two pages paint reaches the page name on the first",
+			data: func(dn string) []byte {
+				return inheritingFormsPDF(dn, "/CS0 cs "+fill, noRes, "", "/Fm0 Do", "/Fm0 Do")
+			},
+			want: 2,
+		},
+		{
+			name: "a page name no form selects is not judged",
+			data: func(dn string) []byte { return inheritingFormsPDF(dn, fill, noRes, "", "/Fm0 Do") },
+			want: 0,
+		},
+		{
 			name: "a form an appearance stream paints inherits its space",
 			data: func(dn string) []byte { return inheritingAppearancePDF(dn, false) },
 			want: 2,
