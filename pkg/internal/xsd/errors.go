@@ -23,11 +23,6 @@ var (
 	// rather than as silent validation gaps later.
 	ErrUnsupportedConstruct = errors.New("xsd: unsupported construct")
 
-	// ErrImportLoop signals that schema imports form a cycle. The
-	// loader rejects this rather than trying to break it because
-	// CII has no legitimate need for cyclic imports.
-	ErrImportLoop = errors.New("xsd: import cycle")
-
 	// ErrEncoding signals that an instance document names or uses a
 	// character encoding the decoder [NewDecoder] builds cannot read.
 	// [Validate] returns it wrapped as its parse error.

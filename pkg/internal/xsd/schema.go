@@ -69,6 +69,11 @@ type Schema struct {
 	// fills it, and the validator resolves the document element against
 	// it.
 	globalElements map[QName]*Element
+	// globalAttributes indexes by name the {attribute declarations} of the
+	// schema this document corresponds to, gathered as globalElements is.
+	// [Load] fills it, and the validator resolves an attribute that a lax
+	// or strict attribute wildcard admits against it.
+	globalAttributes map[QName]*AttributeUse
 }
 
 // Type is the closed sum of XSD type kinds the loader recognises.

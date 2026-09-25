@@ -286,8 +286,17 @@ func (v *validator) undeclaredAttribute(a xml.Attr, w *attributeWildcardSet, pat
 	return attributeValueViolations(a.Value, *decl, path)
 }
 
-// globalAttribute returns the top-level attribute declaration named qn, in
-// the validated schema or the one it imports for qn's namespace, or nil.
+// globalAttribute returns the top-level attribute declaration named qn, or
+// nil. Per XML Schema Part 1, 3.4.4 (cvc-complex-type clause 3.2) and
+// 3.10.4 (cvc-wildcard) an attribute a lax or strict wildcard admits is
+// assessed against the declaration its name resolves to by QName resolution
+// (Instance), 3.15.4: an entry of the {attribute declarations} of the
+// schema, which holds those of every schema document the validated one
+// includes or imports, however deep ([reachableDeclarations]). Searching
+// the validated document and its direct imports alone missed a declaration
+// an imported document reaches through an import of its own, so a strict
+// wildcard rejected an attribute the schema declares and a lax one let its
+// value through unchecked.
 func (v *validator) globalAttribute(qn QName) *AttributeUse {
-	return lookupAttribute(refScope{schema: v.schema, doc: v.schema}, qn)
+	return v.schema.globalAttributes[qn]
 }

@@ -34,7 +34,6 @@ func Load(ctx context.Context, fsys fs.FS, rootPath string) (*Schema, error) {
 		fsys:     fsys,
 		schemas:  make(map[docKey]*Schema),
 		raw:      make(map[string]*rawSchema),
-		loading:  make(map[docKey]bool),
 		own:      make(map[*Schema]*Schema),
 		includer: make(map[*Schema]*Schema),
 		includes: make(map[*Schema][]*Schema),
@@ -43,11 +42,13 @@ func Load(ctx context.Context, fsys fs.FS, rootPath string) (*Schema, error) {
 	if err != nil {
 		return nil, err
 	}
+	loader.completeIncludes()
 	if err := loader.link(); err != nil {
 		return nil, err
 	}
 	for doc := range loader.own {
-		doc.globalElements = loader.elementDeclarations(doc)
+		doc.globalElements = reachableDeclarations(loader, doc, func(s *Schema) map[QName]*Element { return s.Elements })
+		doc.globalAttributes = reachableDeclarations(loader, doc, func(s *Schema) map[QName]*AttributeUse { return s.Attributes })
 	}
 	return root, nil
 }
@@ -61,7 +62,6 @@ type loader struct {
 	fsys    fs.FS
 	schemas map[docKey]*Schema
 	raw     map[string]*rawSchema
-	loading map[docKey]bool
 	// own maps the Schema of each schema document to the components the
 	// document declares itself, apart from those its xs:include children
 	// copy in, so the link pass links each component once, in the scope
@@ -116,14 +116,14 @@ func (l *loader) loadFile(ctx context.Context, p, importer, includerNS string) (
 	if raw.TargetNamespace == "" {
 		key.chameleon = includerNS
 	}
+	// A document still loading is returned as it stands. That is a cycle,
+	// which XML Schema Part 1 does not forbid: two documents may import each
+	// other, and references resolve only once every document has loaded
+	// ([loader.link]). An include cycle leaves the documents on it short of
+	// each other's components until [loader.completeIncludes] runs.
 	if existing, ok := l.schemas[key]; ok {
 		return existing, existing.TargetNamespace, nil
 	}
-	if l.loading[key] {
-		return nil, "", fmt.Errorf("%w at %s", ErrImportLoop, p)
-	}
-	l.loading[key] = true
-	defer delete(l.loading, key)
 
 	tns := cmp.Or(raw.TargetNamespace, key.chameleon)
 	schema := &Schema{
@@ -156,9 +156,24 @@ func (l *loader) loadFile(ctx context.Context, p, importer, includerNS string) (
 		if inc.SchemaLocation == "" {
 			continue
 		}
-		sub, _, err := l.loadFile(ctx, inc.SchemaLocation, p, tns)
+		sub, ns, err := l.loadFile(ctx, inc.SchemaLocation, p, tns)
 		if err != nil {
 			return nil, "", err
+		}
+		// Per XML Schema Part 1, 4.2.1 (src-include clause 2.1) an included
+		// document with a targetNamespace must name the one its includer
+		// has, and an includer without one includes only documents without
+		// one. A chameleon document takes its includer's ([docKey]), so ns
+		// differs from tns only when the included document names another.
+		// Deliberate leniency: the clause reads the includer's attribute, so
+		// a chameleon includer, whose document names no namespace, could
+		// include no document that names one, not even the namespace its own
+		// components take. tns is that namespace, as libxml2 reads it:
+		// measured with xmllint (libxml2 2.9.13), which accepts that include
+		// and rejects the other two.
+		if ns != tns {
+			return nil, "", fmt.Errorf("%w: included schema %s declares targetNamespace %q but its includer %s has %q",
+				ErrSchemaParse, inc.SchemaLocation, ns, p, tns)
 		}
 		if _, ok := l.includer[sub]; !ok {
 			l.includer[sub] = schema
@@ -218,8 +233,10 @@ func copyComponents(dst, src *Schema) {
 // document doc join: that of the outermost document that includes doc,
 // directly or through other includes, or doc's own when none does. Its
 // maps hold every component of the schema doc belongs to (XML Schema
-// Part 1, 4.2.1). The loader rejects an include cycle ([ErrImportLoop]),
-// so the chain takes at most one step per loaded document.
+// Part 1, 4.2.1). An include cycle, which the loader accepts, makes the
+// chain circular, so the walk stops after one step per loaded document, at
+// a document of the cycle. Each of those holds the components of all of
+// them ([loader.completeIncludes]), so any is a scope that resolves them.
 func (l *loader) includeRoot(doc *Schema) *Schema {
 	for range len(l.schemas) {
 		includer, ok := l.includer[doc]
@@ -231,7 +248,65 @@ func (l *loader) includeRoot(doc *Schema) *Schema {
 	return doc
 }
 
-// elementDeclarations returns the {element declarations} of the schema
+// completeIncludes gives each schema document the components of every
+// document it includes, directly or through other includes, that it lacks.
+// Per XML Schema Part 1, 4.2.1 (src-include clause 3) the schema
+// corresponding to a document holds the components of each document it
+// includes. [loader.loadFile] copies them in as each include returns, which
+// gathers them all unless an include leads back to a document still
+// loading: the documents of an include cycle, which the clause does not
+// forbid, each hold their own components, and those of the documents after
+// them on the cycle, but not those before. A reference one of them writes to
+// a component of another then failed as unresolved ([ErrUnresolvedRef]),
+// where xmllint (libxml2 2.9.13) loads the same two documents and validates
+// against them. The walk follows the includes in source order, and a
+// component already present keeps its place, so a name two documents
+// declare resolves as the eager copy resolved it.
+//
+// # Corpus evidence
+//
+//   - All corpora: no bundled schema uses xs:include, so the walk adds
+//     nothing to any of the 28, and each loads to the same model.
+func (l *loader) completeIncludes() {
+	for doc := range l.own {
+		seen := map[*Schema]bool{doc: true}
+		stack := slices.Clone(l.includes[doc])
+		slices.Reverse(stack)
+		for len(stack) > 0 {
+			s := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			if seen[s] {
+				continue
+			}
+			seen[s] = true
+			addMissingComponents(doc, l.own[s])
+			for _, inc := range slices.Backward(l.includes[s]) {
+				stack = append(stack, inc)
+			}
+		}
+	}
+}
+
+// addMissingComponents adds the top-level components of src that dst lacks
+// to those of dst.
+func addMissingComponents(dst, src *Schema) {
+	addMissing(dst.Types, src.Types)
+	addMissing(dst.Elements, src.Elements)
+	addMissing(dst.Attributes, src.Attributes)
+	addMissing(dst.AttributeGroups, src.AttributeGroups)
+}
+
+// addMissing adds the entries of src whose key dst lacks to dst.
+func addMissing[T any](dst, src map[QName]T) {
+	for qn, c := range src {
+		if _, ok := dst[qn]; !ok {
+			dst[qn] = c
+		}
+	}
+}
+
+// reachableDeclarations returns the top-level declarations pick selects,
+// the {element declarations} or the {attribute declarations}, of the schema
 // corresponding to the schema document doc, keyed by name. Per XML Schema
 // Part 1, 4.2.1 (src-include clause 3) and 4.2.3 (src-import) that schema
 // holds the components of doc, and all the components of each schema
@@ -250,8 +325,11 @@ func (l *loader) includeRoot(doc *Schema) *Schema {
 //     the same model, and no verdict of the 159 files that embed XML moves,
 //     through the Factur-X and ZUGFeRD validators or under any bundled
 //     schema.
-func (l *loader) elementDeclarations(doc *Schema) map[QName]*Element {
-	out := make(map[QName]*Element)
+//   - All corpora: none of the 28 bundled schemas declares a top-level
+//     attribute, so no attribute wildcard resolves a declaration, through
+//     this walk or through the validated document and its direct imports.
+func reachableDeclarations[T any](l *loader, doc *Schema, pick func(*Schema) map[QName]T) map[QName]T {
+	out := make(map[QName]T)
 	seen := make(map[*Schema]bool)
 	stack := []*Schema{doc}
 	for len(stack) > 0 {
@@ -261,9 +339,9 @@ func (l *loader) elementDeclarations(doc *Schema) map[QName]*Element {
 			continue
 		}
 		seen[s] = true
-		for qn, el := range s.Elements {
+		for qn, decl := range pick(s) {
 			if _, ok := out[qn]; !ok {
-				out[qn] = el
+				out[qn] = decl
 			}
 		}
 		// Pushed in reverse, so the walk visits the includes in source order,

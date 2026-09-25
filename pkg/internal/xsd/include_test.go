@@ -160,3 +160,154 @@ func TestLoad_IncludedDocumentImportsItsOwnNamespaces(t *testing.T) {
 		t.Errorf("Load: got %v, want %v", err, ErrUnresolvedRef)
 	}
 }
+
+// TestValidate_WildcardAttributeResolvesInEveryReachableDocument pins XML
+// Schema Part 1, 3.4.4 (cvc-complex-type clause 3.2) and 3.15.4: an
+// attribute a lax or strict attribute wildcard admits is assessed against
+// the declaration of its name among the {attribute declarations} of the
+// schema, which hold those of every document the validated one reaches.
+// lib.xsd declares the code attribute in urn:lib, which the root document
+// reaches only through an import of an import. A strict wildcard reported it
+// undeclared, and a lax one let a value past its maxLength through.
+func TestValidate_WildcardAttributeResolvesInEveryReachableDocument(t *testing.T) {
+	for _, process := range []string{"strict", "lax"} {
+		t.Run(process, func(t *testing.T) {
+			s, err := Load(context.Background(), fstest.MapFS{
+				"root.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">
+  <xs:import namespace="urn:mid" schemaLocation="mid.xsd"/>
+  <xs:element name="Doc"><xs:complexType><xs:anyAttribute namespace="urn:lib" processContents="` + process + `"/></xs:complexType></xs:element>
+</xs:schema>`)},
+				"mid.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:mid">
+  <xs:import namespace="urn:lib" schemaLocation="lib.xsd"/>
+</xs:schema>`)},
+				"lib.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:lib">
+  <xs:attribute name="code"><xs:simpleType><xs:restriction base="xs:token"><xs:maxLength value="3"/></xs:restriction></xs:simpleType></xs:attribute>
+</xs:schema>`)},
+			}, "root.xsd")
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			const open = `<t:Doc xmlns:t="urn:t" xmlns:l="urn:lib" `
+			for doc, want := range map[string]string{
+				open + `l:code="abc"/>`:  "",
+				open + `l:code="abcd"/>`: "length",
+			} {
+				vs := validateDoc(t, s, doc)
+				if want == "" && len(vs) != 0 {
+					t.Errorf("%s: got %v, want none", doc, vs)
+				}
+				if want != "" && (len(vs) != 1 || !strings.Contains(vs[0].Reason, want)) {
+					t.Errorf("%s: got %v, want one violation naming %q", doc, vs, want)
+				}
+			}
+		})
+	}
+}
+
+// TestLoad_IncludeCycle pins that documents that include each other load.
+// XML Schema Part 1, 4.2.1 does not forbid an include cycle, and per
+// src-include clause 3 the schema of each document on it holds the
+// components of all of them. a.xsd and b.xsd each reference a type the other
+// declares. The loader copied an included document's components as the
+// include returned, so the document the cycle closed on lacked those of the
+// one still loading, and the load failed on an unresolved reference.
+func TestLoad_IncludeCycle(t *testing.T) {
+	files := fstest.MapFS{
+		"a.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">
+  <xs:include schemaLocation="b.xsd"/>
+  <xs:complexType name="AType"><xs:sequence><xs:element name="B" type="BType"/></xs:sequence></xs:complexType>
+  <xs:element name="Doc" type="AType"/>
+</xs:schema>`)},
+		"b.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">
+  <xs:include schemaLocation="a.xsd"/>
+  <xs:complexType name="BType"><xs:sequence><xs:element name="C" type="Code"/></xs:sequence></xs:complexType>
+  <xs:simpleType name="Code"><xs:restriction base="xs:token"><xs:maxLength value="3"/></xs:restriction></xs:simpleType>
+  <xs:element name="Other" type="AType"/>
+</xs:schema>`)},
+	}
+	for _, root := range []string{"a.xsd", "b.xsd"} {
+		t.Run(root, func(t *testing.T) {
+			s, err := Load(context.Background(), files, root)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			for doc, want := range map[string]string{
+				`<Doc xmlns="urn:t"><B><C>abc</C></B></Doc>`:     "",
+				`<Other xmlns="urn:t"><B><C>abc</C></B></Other>`: "",
+				`<Doc xmlns="urn:t"><B><C>abcd</C></B></Doc>`:    RuleFacet,
+			} {
+				vs := validateDoc(t, s, doc)
+				if want == "" && len(vs) != 0 {
+					t.Errorf("%s: got %v, want none", doc, vs)
+				}
+				if want != "" && (len(vs) != 1 || vs[0].Rule != want) {
+					t.Errorf("%s: got %v, want one %s violation", doc, vs, want)
+				}
+			}
+		})
+	}
+}
+
+// TestLoad_IncludedTargetNamespace pins XML Schema Part 1, 4.2.1
+// (src-include clause 2.1): an included document with a targetNamespace
+// must name the one of its includer. The loader accepted any, and the
+// included components joined the includer's schema under a namespace no
+// reference to them names. A document without one is a chameleon include
+// and takes its includer's (clause 2.3), and a document it includes in turn
+// may name that namespace, as libxml2 accepts it.
+func TestLoad_IncludedTargetNamespace(t *testing.T) {
+	const part = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:other">
+  <xs:simpleType name="Code"><xs:restriction base="xs:token"><xs:maxLength value="2"/></xs:restriction></xs:simpleType>
+</xs:schema>`
+	for name, tc := range map[string]struct {
+		files   fstest.MapFS
+		wantErr error
+	}{
+		"another namespace": {
+			files: fstest.MapFS{
+				"root.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">
+  <xs:include schemaLocation="part.xsd"/>
+</xs:schema>`)},
+				"part.xsd": &fstest.MapFile{Data: []byte(part)},
+			},
+			wantErr: ErrSchemaParse,
+		},
+		"an includer without one": {
+			files: fstest.MapFS{
+				"root.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:include schemaLocation="part.xsd"/>
+</xs:schema>`)},
+				"part.xsd": &fstest.MapFile{Data: []byte(part)},
+			},
+			wantErr: ErrSchemaParse,
+		},
+		"the namespace a chameleon includer takes": {
+			files: fstest.MapFS{
+				"root.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:other" xmlns="urn:other">
+  <xs:include schemaLocation="mid.xsd"/>
+  <xs:element name="Doc" type="Code"/>
+</xs:schema>`)},
+				"mid.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:include schemaLocation="part.xsd"/>
+</xs:schema>`)},
+				"part.xsd": &fstest.MapFile{Data: []byte(part)},
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, err := Load(context.Background(), tc.files, "root.xsd")
+			if tc.wantErr != nil {
+				if !errors.Is(err, tc.wantErr) {
+					t.Errorf("Load: got %v, want %v", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if vs := validateDoc(t, s, `<Doc xmlns="urn:other">abc</Doc>`); len(vs) != 1 || vs[0].Rule != RuleFacet {
+				t.Errorf("got %v, want one %s violation", vs, RuleFacet)
+			}
+		})
+	}
+}
