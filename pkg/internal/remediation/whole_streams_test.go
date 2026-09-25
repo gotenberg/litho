@@ -39,7 +39,9 @@ func wholeStreamsPDF(data string) []byte {
 
 // TestRemediationReadsContentStreamsWhole pins that remediation repairs the
 // operators a viewer draws where validation, reading a stream as veraPDF
-// does, reads no further: past a stray "]".
+// does, reads no further: past a stray "]", and in a stream holding an array
+// veraPDF cannot read, which validation judges nothing of. The undefined
+// operators there go with the ones validation reports.
 func TestRemediationReadsContentStreamsWhole(t *testing.T) {
 	t.Parallel()
 
@@ -50,6 +52,7 @@ func TestRemediationReadsContentStreamsWhole(t *testing.T) {
 		fix           string
 	}{
 		{"past a stray ]", "q Q ] zz\n", 0, "removed 1 unknown content-stream operator(s)"},
+		{"beside an array veraPDF cannot read", "q Q [1 xx] TJ zz\n", 0, "removed 1 unknown content-stream operator(s)"},
 	} {
 		data := wholeStreamsPDF(tc.content)
 		doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)

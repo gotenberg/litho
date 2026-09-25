@@ -95,6 +95,12 @@ type Parser struct {
 	// but the scan for the end of a stream whose /Length cannot be used is
 	// not (see [Parser.readStreamBody]).
 	objectEnd int64
+
+	// veraPDFContainers notes the containers veraPDF cannot read, and
+	// abandoned reports that one was read. See
+	// [Parser.WithVeraPDFContainers].
+	veraPDFContainers bool
+	abandoned         bool
 }
 
 // NewParser creates a new Parser that reads PDF objects from the given lexer.
@@ -702,6 +708,15 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 	// resync is set once a malformed entry has put the key/value alternation
 	// in doubt, and cleared at the next name.
 	resync := false
+	// vera follows the dictionary as veraPDF reads it, under
+	// [Parser.WithVeraPDFContainers] alone.
+	var vera *veraPDFDict
+	if p.veraPDFContainers {
+		vera = &veraPDFDict{}
+	}
+	// ended is the token that ends the dictionary, the end of the data unless
+	// a close marker does.
+	ended := lexer.Token{Type: lexer.TokenEOF}
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("parsing dict: %w", err)
@@ -715,6 +730,7 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 			return nil, err
 		}
 		if closed {
+			ended = t
 			break
 		}
 
@@ -726,6 +742,7 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 				if _, err := p.Consume(); err != nil {
 					return nil, err
 				}
+				vera.item(ast.PdfName(strings.TrimPrefix(t.Value, "/")), t)
 				continue
 			}
 		}
@@ -735,6 +752,7 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 			// The stray token is already consumed. Other errors (EOF, lexer
 			// failures) are not recoverable.
 			if isStrayToken(err) {
+				vera.item(nil, t)
 				resync = true
 				continue
 			}
@@ -746,6 +764,7 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 			}
 			return nil, err
 		}
+		vera.item(keyObj, t)
 		key, ok := keyObj.(ast.PdfName)
 		if !ok {
 			resync = true
@@ -762,6 +781,7 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 			return nil, err
 		}
 		if closed {
+			ended = t
 			break
 		}
 		outer := p.noteEntry(key)
@@ -777,6 +797,7 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 				return nil, err
 			}
 			if isStrayToken(err) {
+				vera.item(nil, t)
 				resync = true
 				continue
 			}
@@ -784,7 +805,11 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 			// does not decrypt, closes the dict with the pairs read so far.
 			break
 		}
+		vera.item(valObj, t)
 		dict[key] = valObj
+	}
+	if vera.failed(ended) {
+		p.abandon()
 	}
 	if deferredContents {
 		if err := p.settleSignatureContents(dict); err != nil {
@@ -799,7 +824,11 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 // dictionary whose `>>` is missing and are left for the caller: `endobj` for
 // [Parser.parseIndirectObject], and `stream` for [Parser.parseDict], which
 // reads the stream body that follows. Recovery from a malformed entry must
-// never run past them, since the bytes after `stream` are not tokens.
+// never run past them, since the bytes after `stream` are not tokens. Under
+// [Parser.WithVeraPDFContainers] they end nothing: a content stream holds no
+// indirect object and no stream (ISO 32000-1, 7.8.2), so the bytes after
+// either keyword are tokens, and veraPDF reads it as a value it cannot read
+// (COSParser.nextObject).
 //
 // # Corpus evidence
 //
@@ -812,7 +841,7 @@ func (p *Parser) closeDict(t lexer.Token) (bool, error) {
 	case t.Type == lexer.TokenEOF:
 		return true, nil
 	case t.Type == lexer.TokenKeyword && (t.Value == "endobj" || t.Value == "stream"):
-		return true, nil
+		return !p.veraPDFContainers, nil
 	case t.Type == lexer.TokenDelimiter && t.Value == ">>":
 		if _, err := p.Expect(lexer.TokenDelimiter); err != nil {
 			return false, err
@@ -1426,11 +1455,14 @@ func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Tolerate EOF or endobj inside an array: close gracefully.
+		// Tolerate EOF or endobj inside an array: close gracefully. veraPDF
+		// reads neither as the end of an array.
 		if t.Type == lexer.TokenEOF {
+			p.abandon()
 			break
 		}
 		if t.Type == lexer.TokenKeyword && t.Value == "endobj" {
+			p.abandon()
 			break
 		}
 		if t.Type == lexer.TokenDelimiter && t.Value == "]" {
@@ -1451,6 +1483,8 @@ func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 			}
 			// Tolerate malformed array elements (e.g., operators inside TJ
 			// arrays): drop the bad element and continue with the next one.
+			// veraPDF gives up on the stream there.
+			p.abandon()
 			if p.SkipFailedObject(mark) != nil {
 				break
 			}
@@ -1647,7 +1681,11 @@ func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) 
 
 		// Expect a name token as the key.
 		if tok.Type != lexer.TokenName {
-			// Tolerate unexpected tokens by skipping them.
+			// Tolerate unexpected tokens by skipping them. veraPDF reads the
+			// dictionary up to the first key that is no name, which has to be
+			// the ID it ends at (PDFStreamParser.parseNextToken, veraPDF-parser
+			// 1.30), and gives up on the stream otherwise.
+			p.abandon()
 			if _, err := p.Consume(); err != nil {
 				return nil, fmt.Errorf("inline image dict key: %w", err)
 			}

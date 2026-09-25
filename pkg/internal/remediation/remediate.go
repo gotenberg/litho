@@ -18,11 +18,25 @@ import (
 // ([content.WithWholeStreams]).
 //
 // Validation judges a content stream as far as veraPDF reads it: to a stray
-// "]". A viewer draws the operators past it all the same, and a repair that
-// rewrites such a stream drops the "]", after which veraPDF judges every
-// operator it holds. Read whole, the stream's
+// "]", and not at all when it holds an array or a dictionary veraPDF cannot
+// read. A viewer draws the operators past those points all the same, and a
+// repair that rewrites such a stream drops what ended veraPDF's reading, after
+// which veraPDF judges every operator it holds. Read whole, the stream's
 // defects reach the repairs that answer them. What remains is judged on the
 // output as validation reads it.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1130815.pdf: read as validation reads it, its damaged page
+//     held no finding, and its PDF/A-1b and PDF/A-2b remediations dropped the
+//     removal of 735 undefined operators, the repair of 854 malformed numbers
+//     and the q/Q flattening. Read whole, they write the files they wrote
+//     before, which veraPDF 1.30 opens and judges as litho does.
+//   - pdfjs bug1130815.pdf, issue11678.pdf, operator-in-TJ-array.pdf and
+//     poppler-90-0-fuzzed.pdf: the outputs of their PDF/A-1b and PDF/A-2b
+//     remediations, default and aggressive, fail the same veraPDF 1.30 rules
+//     as before, and operator-in-TJ-array.pdf no longer reports as a residual
+//     the font veraPDF does not judge.
 func wholeStreams(ctx context.Context) context.Context {
 	return content.WithWholeStreams(ctx)
 }

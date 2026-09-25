@@ -40,6 +40,11 @@ var seedStreams = []string{
 	// Operators veraPDF reads on through a delimiter, and a truncated one.
 	"q Q%comment\nBT (a) T)Tj ET q Q>> /P <</A xx>> BDC EMC [xx)] 0 d q Q{}\n",
 	"q Q%c",
+	// Stray delimiters veraPDF reads as operators, a stray "]" it ends its
+	// reading at, and containers it gives up on the stream for, and a
+	// truncated one.
+	"q ) { } > >> Q )Tj) q ] Q [1 yy] TJ /P <</A 1 2 /B>> BDC EMC <</A>> BI /W 1 /F 1.5e1 ID \x80 EI\n",
+	"q Q [1 2",
 }
 
 // FuzzParseStreamData feeds arbitrary bytes to the content stream parser and
@@ -58,9 +63,16 @@ func FuzzParseStreamData(f *testing.F) {
 		if len(data) > maxFuzzInput {
 			return
 		}
-		_, _ = ParseStreamData(context.Background(), data)
+		ops, err := ParseStreamData(context.Background(), data)
 		_, _ = ParseStreamData(context.Background(), data, SplitGluedOperators())
 		_, _ = ParseStreamData(context.Background(), data, ForRepair())
+		whole, wholeErr := ParseStreamData(context.Background(), data, WholeStream())
+		// A parse without an option reads what WholeStream reads, up to where
+		// it ends or gives up: its operations are a prefix of the whole
+		// stream's, or none.
+		if err == nil && wholeErr == nil && (len(ops) > len(whole) || len(ops) > 0 && !reflect.DeepEqual(ops, whole[:len(ops)])) {
+			t.Fatalf("a parse without an option reads %d operations that are no prefix of the %d WholeStream reads", len(ops), len(whole))
+		}
 	})
 }
 
@@ -76,7 +88,7 @@ func FuzzParseStreamDataWithOffsets(f *testing.F) {
 		if len(data) > maxFuzzInput {
 			return
 		}
-		for _, opts := range [][]Option{nil, {SplitGluedOperators()}, {ForRepair()}} {
+		for _, opts := range [][]Option{nil, {SplitGluedOperators()}, {ForRepair()}, {WholeStream()}} {
 			ops, ranges, err := ParseStreamDataWithOffsets(context.Background(), data, opts...)
 			if err != nil {
 				continue

@@ -60,46 +60,61 @@ func TestContentStreamHexStringsReportsEveryFinding(t *testing.T) {
 // the exponent letter, and the letter up to the next digit is an operator ISO
 // 32000-1 does not define, ISO 19005-1, 6.2.10 t1 and ISO 19005-2, 6.2.2 t1,
 // once per token where an operand stands. Inside an array, a dictionary or an
-// inline image dictionary it is a syntax error no rule states, and the format
-// check, where the exponent used to land, stays silent. Measured with veraPDF
-// 1.30 on one-page fixtures: "1.5e1 w" and "1E1 w" fail the operator test for
-// e and E, and a stream holding one of the nested forms fails nothing, veraPDF
-// giving up on it.
+// inline image dictionary it is a syntax error no rule states, which makes
+// veraPDF give up on the whole stream, and the format check, where the
+// exponent used to land, stays silent. Measured with veraPDF 1.30 on one-page
+// fixtures at PDF/A-1b and PDF/A-2b: "1.5e1 w" and "1E1 w" fail the operator
+// test for e and E, and a stream holding one of the nested forms, alone or
+// beside them, fails nothing.
 func TestContentStreamExponentOperands(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	content := "1.5e1 w [2.5e1 3] 0 d /P << /MCID 1.5e1 >> BDC EMC " +
-		"q BI /W 1 /H 1 /BPC 8 /CS /G /Foo 1.5e1 ID \x80 EI Q 1E1 w 0 0 m 10 10 l S"
-	doc, catalog := objsDocPDF(t,
-		"<< /Type /Catalog /Pages 2 0 R >>",
-		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
-		"<< /Length "+strconv.Itoa(len(content))+" >>\nstream\n"+content+"\nendstream",
-	)
-
-	for _, tc := range []struct {
-		profile models.PDFAProfile
-		want    Rule
+	const unnested = "1.5e1 w 1E1 w 0 0 m 10 10 l S"
+	for _, content := range []struct {
+		data string
+		want []string
 	}{
-		{models.PDFA1b, Rule_19005_1_6_2_10_t01},
-		{models.PDFA2b, Rule_19005_2_6_2_2_t01},
+		{unnested, []string{`"e"`, `"E"`}},
+		{"1.5e1 w [2.5e1 3] 0 d " + unnested, nil},
+		{"1.5e1 w /P << /MCID 1.5e1 >> BDC EMC " + unnested, nil},
+		{"1.5e1 w q BI /W 1 /H 1 /BPC 8 /CS /G /Foo 1.5e1 ID \x80 EI Q " + unnested, nil},
 	} {
-		if got := checkContentStreamFormat(ctx, buildValidationCtx(ctx, doc, catalog, string(tc.profile))); len(got) != 0 {
-			t.Errorf("%s: the format check states %v, want nothing", tc.profile, got)
-		}
-		viols, err := ValidatePDFA(ctx, doc, tc.profile)
-		if err != nil {
-			t.Fatalf("%s: ValidatePDFA: %v", tc.profile, err)
-		}
-		var operators []string
-		for _, e := range viols {
-			if v, ok := e.(Violation); ok && v.Rule == tc.want {
-				operators = append(operators, v.Context)
+		doc, catalog := objsDocPDF(t,
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+			"<< /Length "+strconv.Itoa(len(content.data))+" >>\nstream\n"+content.data+"\nendstream",
+		)
+		for _, tc := range []struct {
+			profile models.PDFAProfile
+			want    Rule
+		}{
+			{models.PDFA1b, Rule_19005_1_6_2_10_t01},
+			{models.PDFA2b, Rule_19005_2_6_2_2_t01},
+		} {
+			if got := checkContentStreamFormat(ctx, buildValidationCtx(ctx, doc, catalog, string(tc.profile))); len(got) != 0 {
+				t.Errorf("%s: %q: the format check states %v, want nothing", tc.profile, content.data, got)
 			}
-		}
-		if len(operators) != 2 || !strings.Contains(operators[0], `"e"`) || !strings.Contains(operators[1], `"E"`) {
-			t.Errorf("%s: the undefined-operator test states %q, want e and E, the two unnested exponents", tc.profile, operators)
+			viols, err := ValidatePDFA(ctx, doc, tc.profile)
+			if err != nil {
+				t.Fatalf("%s: ValidatePDFA: %v", tc.profile, err)
+			}
+			var operators []string
+			for _, e := range viols {
+				if v, ok := e.(Violation); ok && v.Rule == tc.want {
+					operators = append(operators, v.Context)
+				}
+			}
+			if len(operators) != len(content.want) {
+				t.Errorf("%s: %q: the undefined-operator test states %q, want %q", tc.profile, content.data, operators, content.want)
+				continue
+			}
+			for i, want := range content.want {
+				if !strings.Contains(operators[i], want) {
+					t.Errorf("%s: %q: the undefined-operator test states %q, want %q", tc.profile, content.data, operators, content.want)
+				}
+			}
 		}
 	}
 }
