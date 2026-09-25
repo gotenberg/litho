@@ -173,6 +173,21 @@ func walkIndirectObjects(
 	dictFn func(ast.PdfDict) (ast.PdfDict, bool),
 	arrayFn func(ast.PdfArray) (ast.PdfArray, bool),
 ) (int, error) {
+	return walkNumberedObjects(ctx, alloc, doc,
+		func(_ int, d ast.PdfDict) (ast.PdfDict, bool) { return dictFn(d) },
+		func(_ int, a ast.PdfArray) (ast.PdfArray, bool) { return arrayFn(a) })
+}
+
+// walkNumberedObjects is [walkIndirectObjects] with the number of the object
+// passed to the transformers, for a repair that reads what the parse of that
+// object recorded, such as [document.Document.IntegerOverflows].
+func walkNumberedObjects(
+	ctx context.Context,
+	alloc *writer.ObjAllocator,
+	doc *document.Document,
+	dictFn func(int, ast.PdfDict) (ast.PdfDict, bool),
+	arrayFn func(int, ast.PdfArray) (ast.PdfArray, bool),
+) (int, error) {
 	count := 0
 	for objNum, entry := range doc.XRefEntries() {
 		if err := ctx.Err(); err != nil {
@@ -194,17 +209,17 @@ func walkIndirectObjects(
 		}
 		switch v := obj.(type) {
 		case ast.PdfDict:
-			if patched, changed := dictFn(v); changed {
+			if patched, changed := dictFn(objNum, v); changed {
 				alloc.AllocAt(objNum, patched)
 				count++
 			}
 		case ast.PdfArray:
-			if patched, changed := arrayFn(v); changed {
+			if patched, changed := arrayFn(objNum, v); changed {
 				alloc.AllocAt(objNum, patched)
 				count++
 			}
 		case ast.PdfStream:
-			if patched, changed := dictFn(v.Dict); changed {
+			if patched, changed := dictFn(objNum, v.Dict); changed {
 				raw, err := v.Bytes(ctx)
 				if err != nil {
 					// Reading the raw stream body failed (cancelled

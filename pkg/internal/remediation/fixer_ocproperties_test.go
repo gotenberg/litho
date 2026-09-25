@@ -186,43 +186,62 @@ func TestMatchRealLimits_DeclinesThePartOneOCPropertiesRule(t *testing.T) {
 		t.Error("real-limits claims the part-1 /OCProperties rule it cannot repair")
 	}
 
-	// Every numeric limits violation it DOES repair must still match. These
-	// Context strings are the real ones from compliance/file_limits.go, which
-	// emits THIRTEEN distinct formats across these two clauses; only three of
-	// them say "out of range".
+	// Every numeric limits violation it DOES repair must still match, whatever
+	// its context says. These Context strings are the real ones from
+	// compliance/file_limits.go.
 	//
 	// REGRESSION GUARD: narrowing this matcher with
 	// contextContains("out of range") silently stopped claiming 6.1.12
-	// test 2, whose violations read "real %g exceeds +/-%g".
-	// A positive context filter has to enumerate every phrasing the checks
-	// emit; excluding the single rule that does not belong here does not.
+	// test 2, whose violations read "real %g exceeds +/-%g". The matcher
+	// names the rules instead.
 	for _, tc := range []struct {
 		name string
 		v    compliance.Violation
+		want bool
 	}{
 		{"part-1 real exceeds", compliance.Violation{
-			Rule:    compliance.Rule{Specification: "ISO_19005_1", Clause: "6.1.12", TestNumber: 2},
-			Context: "page 1, object 4: real 1e+40 exceeds +/-32767",
-		}},
-		{"part-1 real closer to zero", compliance.Violation{
-			Rule:    compliance.Rule{Specification: "ISO_19005_1", Clause: "6.1.12", TestNumber: 5},
-			Context: "page 1, object 4: real 1e-40 is closer to zero than +/-1.175e-38",
-		}},
+			Rule:    compliance.Rule_19005_1_6_1_12_t02,
+			Context: "object 4: real 1e+40 exceeds +/-32767",
+		}, true},
+		{"part-1 integer out of range", compliance.Violation{
+			Rule:    compliance.Rule_19005_1_6_1_12_t01,
+			Context: "object 4: integer 99999999999 out of range",
+		}, true},
 		{"part-2 integer out of range", compliance.Violation{
-			Rule:    compliance.Rule{Specification: "ISO_19005_2", Clause: "6.1.13", TestNumber: 1},
-			Context: "page 1, object 4: integer 99999999999 out of range",
-		}},
+			Rule:    compliance.Rule_19005_2_6_1_13_t01,
+			Context: "object 4: integer 99999999999 out of range",
+		}, true},
+		{"part-2 real closer to zero", compliance.Violation{
+			Rule:    compliance.Rule_19005_2_6_1_13_t05,
+			Context: "object 4: real 1e-40 is closer to zero than +/-1.175e-38",
+		}, true},
+		{"part-3 real exceeds", compliance.Violation{
+			Rule:    compliance.Rule_19005_3_6_1_13_t02,
+			Context: "trailer: real 1e+40 exceeds +/-3.403e+38",
+		}, true},
+		// The numbers of a content stream are the content-limits repair's.
+		{"part-1 real in a content stream", compliance.Violation{
+			Rule:    compliance.Rule_19005_1_6_1_12_t02,
+			Context: "object 4 (stream content): real 40000 exceeds +/-32767",
+		}, false},
+		// The other tests of the clauses are other repairs'.
+		{"part-1 array capacity", compliance.Violation{
+			Rule:    compliance.Rule_19005_1_6_1_12_t05,
+			Context: "object 4: array capacity 9000 exceeds 8191",
+		}, false},
 		{"part-2 string length", compliance.Violation{
-			Rule:    compliance.Rule{Specification: "ISO_19005_2", Clause: "6.1.13", TestNumber: 3},
-			Context: "page 1, object 4: string length 40000 exceeds 32767",
-		}},
+			Rule:    compliance.Rule_19005_2_6_1_13_t03,
+			Context: "object 4: string length 40000 exceeds 32767",
+		}, false},
 		{"part-2 name length", compliance.Violation{
-			Rule:    compliance.Rule{Specification: "ISO_19005_2", Clause: "6.1.13", TestNumber: 4},
-			Context: "page 1, object 4: name length 200 exceeds 127",
-		}},
+			Rule:    compliance.Rule_19005_2_6_1_13_t04,
+			Context: "object 4: name length 200 exceeds 127",
+		}, false},
+		{"part-2 permissions", compliance.Violation{Rule: compliance.Rule_19005_2_6_1_12_t01}, false},
+		{"part-4 catalog version", compliance.Violation{Rule: compliance.Rule_19005_4_6_1_12_t01}, false},
 	} {
-		if !matchRealLimits(tc.v) {
-			t.Errorf("real-limits stopped claiming %s: %q", tc.name, tc.v.Context)
+		if got := matchRealLimits(tc.v); got != tc.want {
+			t.Errorf("matchRealLimits(%s) = %v, want %v", tc.name, got, tc.want)
 		}
 	}
 }
