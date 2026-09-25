@@ -9,12 +9,28 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/models"
 )
+
+// wholeStreams returns ctx for a remediation run, under which its validation
+// and its repairs read every content stream whole
+// ([content.WithWholeStreams]).
+//
+// Validation judges a content stream as far as veraPDF reads it: to a stray
+// "]". A viewer draws the operators past it all the same, and a repair that
+// rewrites such a stream drops the "]", after which veraPDF judges every
+// operator it holds. Read whole, the stream's
+// defects reach the repairs that answer them. What remains is judged on the
+// output as validation reads it.
+func wholeStreams(ctx context.Context) context.Context {
+	return content.WithWholeStreams(ctx)
+}
 
 // RemediatePDFA validates the document against the given PDF/A profile, applies
 // targeted fixes for remediable violations, and returns a report.
 func RemediatePDFA(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, profile models.PDFAProfile, opts Options) (*Report, error) {
+	ctx = wholeStreams(ctx)
 	violations, err := compliance.ValidatePDFA(ctx, doc, profile)
 	if err != nil {
 		return nil, fmt.Errorf("validating for remediation: %w", err)
@@ -25,6 +41,7 @@ func RemediatePDFA(ctx context.Context, doc *document.Document, alloc *writer.Ob
 // RemediatePDFUA validates the document against the given PDF/UA profile, applies
 // targeted fixes for remediable violations, and returns a report.
 func RemediatePDFUA(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, profile models.PDFUAProfile, opts Options) (*Report, error) {
+	ctx = wholeStreams(ctx)
 	violations, err := compliance.ValidatePDFUA(ctx, doc, profile)
 	if err != nil {
 		return nil, fmt.Errorf("validating for remediation: %w", err)
@@ -41,6 +58,7 @@ func RemediatePDFUA(ctx context.Context, doc *document.Document, alloc *writer.O
 // against PDF/UA-2 here would report those as residuals the level never
 // required.
 func RemediateWTPDF(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, profile models.WTPDFProfile, opts Options) (*Report, error) {
+	ctx = wholeStreams(ctx)
 	violations, err := compliance.ValidateWTPDF(ctx, doc, profile)
 	if err != nil {
 		return nil, fmt.Errorf("validating for remediation: %w", err)

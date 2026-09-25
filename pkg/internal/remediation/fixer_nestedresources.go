@@ -267,8 +267,12 @@ func fixType3FontResources(ctx context.Context, alloc *writer.ObjAllocator, doc 
 // indirect /ColorSpace dictionary at its own object number ahead of
 // nested-resources, and copying the document's version would orphan that
 // write.
+//
+// The stream is read whole ([content.WholeStream]): a viewer draws with the
+// names used after a stray "]" that validation reads no further than, so the
+// stream needs them in its resources as much as the others.
 func resourcesForStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, data []byte, own, pageRes ast.PdfDict) (ast.PdfDict, int) {
-	ops, err := content.ParseStreamData(ctx, data)
+	ops, err := content.ParseStreamData(ctx, data, content.WholeStream())
 	if err != nil {
 		doc.Logger.Debug("remediation.nestedresources: cannot parse content stream", "error", err)
 		return own, 0

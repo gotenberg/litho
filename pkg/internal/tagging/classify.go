@@ -432,12 +432,15 @@ const firstTextPrefixLen = 16
 // BT…ET) and returns them with the length of the decoded content they index
 // into. Marking whole text objects keeps marked-content sequences cleanly
 // nested with BT/ET and lets the gaps between them be artifacted as a unit.
+// The content is read whole ([content.WholeStream]): a viewer draws the text
+// after a stray "]" that validation reads no further than, and ISO 32000-1,
+// 14.8.2.2 asks that it be tagged too.
 func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.Page) ([]textBlock, []imageBlock, []byte, error) {
 	data, err := pageContentBytes(ctx, doc, page)
 	if err != nil || len(data) == 0 {
 		return nil, nil, data, err
 	}
-	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data)
+	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data, content.WholeStream())
 	if err != nil {
 		return nil, nil, data, err
 	}

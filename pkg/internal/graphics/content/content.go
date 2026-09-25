@@ -39,8 +39,10 @@ type ByteRange struct {
 // the parser must have offset tracking enabled and each operation's byte
 // range is appended to it. When placer is non-nil, the parser must have format
 // checking enabled, and each violation it records is placed on the operation
-// whose operands hold it.
-func parseOperations(ctx context.Context, p *parser.Parser, ranges *[]ByteRange, placer *violationPlacer) ([]Operation, error) {
+// whose operands hold it. o is how the parse reads the stream: read as veraPDF
+// reads it, the parse ends where [endsReading] says.
+func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, ranges *[]ByteRange, placer *violationPlacer) ([]Operation, error) {
+	stops := o.readsAsVeraPDF()
 	ops := make([]Operation, 0, 256)        //nolint:mnd // reasonable initial capacity for typical pages
 	operands := make([]ast.PdfObject, 0, 8) //nolint:mnd // most operators have ≤6 operands
 	tokenCount := 0
@@ -72,7 +74,7 @@ func parseOperations(ctx context.Context, p *parser.Parser, ranges *[]ByteRange,
 		if err != nil && err != io.EOF && tok.Type == lexer.TokenError {
 			return nil, fmt.Errorf("lexer error: %w", err)
 		}
-		if tok.Type == lexer.TokenEOF {
+		if tok.Type == lexer.TokenEOF || stops && endsReading(tok) {
 			break
 		}
 
@@ -136,6 +138,33 @@ func parseOperations(ctx context.Context, p *parser.Parser, ranges *[]ByteRange,
 	return ops, nil
 }
 
+// endsReading reports whether tok, read where an operand or an operator
+// stands, ends a parse that reads the stream as veraPDF does: a "]" there.
+//
+// ISO 32000-1, 7.3.6 closes an array with "]", so one outside every array
+// begins no object and is no operator, and ISO 19005-1, 6.2.10 and ISO
+// 19005-2, 6.2.2 constrain every operator of the stream, the ones after it
+// included. Deliberate leniency toward veraPDF, the reference validator of ISO
+// 19005, which reads no further: its content stream parser reads an operator
+// of no characters from a "]" (PDFStreamParser.nextOperator, veraPDF-parser
+// 1.30), which parseNextToken returns as the end of the stream, so no rule
+// judges what follows. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b, the
+// undefined operators, the colour spaces, the fonts, the resource names, the
+// ExtGState and the form XObjects used after a stray "]" answer to no test,
+// those used before it do, and a "]" in the first stream of a /Contents array
+// hides the streams after it too. A parse without an option therefore stops
+// there, and the operands read before it, which no operator takes, go with
+// the rest. [WholeStream] reads on.
+//
+// # Corpus evidence
+//
+//   - All corpora: ending the reading at a stray "]" changes what compliance
+//     reports on no file at PDF/A-1b and PDF/A-2b, veraPDF files at their own
+//     profile.
+func endsReading(tok lexer.Token) bool {
+	return tok.Type == lexer.TokenDelimiter && tok.Value == "]"
+}
+
 // Option configures how [ParseStreamData], [ParseStreamDataWithOffsets] and
 // [ParsePageContent] read a content stream.
 type Option func(*readOptions)
@@ -148,6 +177,45 @@ type readOptions struct {
 	// repair reads the stream as a repair that writes it back reads it. See
 	// [ForRepair].
 	repair bool
+	// whole reads every operator of the stream. See [WholeStream].
+	whole bool
+}
+
+// readsAsVeraPDF reports whether a parse under o reads the stream as veraPDF
+// reads it, to its end and no further: a parse without an option. See
+// [newLexer] and [endsReading].
+func (o readOptions) readsAsVeraPDF() bool {
+	return o.commands == nil && !o.repair && !o.whole
+}
+
+// optionsOf returns what opts set, for a parse under ctx: a context from
+// [WithWholeStreams] sets [WholeStream].
+func optionsOf(ctx context.Context, opts []Option) readOptions {
+	var o readOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	if whole, _ := ctx.Value(wholeStreamsKey{}).(bool); whole {
+		o.whole = true
+	}
+	return o
+}
+
+// wholeStreamsKey is the context key [WithWholeStreams] sets.
+type wholeStreamsKey struct{}
+
+// WithWholeStreams returns a copy of ctx under which every parse reads a
+// stream whole, as [WholeStream] reads it: a parse without an option then
+// reads past the stray "]" where it ends.
+//
+// It is for the remediation, whose repairs answer the findings of a
+// validation run: ISO 19005 judges what veraPDF reads, but a remediation that
+// took veraPDF's reading would leave unrepaired the operators a viewer draws
+// past those points, which veraPDF judges once a repair that rewrites the
+// stream has dropped what ended its reading there. A context carries it so
+// that the validation run and every repair under it read the same streams.
+func WithWholeStreams(ctx context.Context) context.Context {
+	return context.WithValue(ctx, wholeStreamsKey{}, true)
 }
 
 // SplitGluedOperators reads operators written with no white space between
@@ -222,6 +290,22 @@ func ForRepair() Option {
 	}
 }
 
+// WholeStream reads a stream as a parse without an option reads it, save that
+// it reads every operator the stream holds: past the stray "]" where that
+// parse ends ([endsReading]).
+//
+// It is for the readings that act on what a viewer draws rather than on what
+// veraPDF judges, such as the tagging that marks every piece of a page's
+// content (ISO 32000-1, 14.8.2.2), and the repair that gives a form XObject
+// every resource it names. A viewer reads on past a stray "]": PDF.js drops
+// the token and keeps reading (EvaluatorPreprocessor.read). [ForRepair] and
+// [SplitGluedOperators] read the whole stream too.
+func WholeStream() Option {
+	return func(o *readOptions) {
+		o.whole = true
+	}
+}
+
 // GluedOperators returns the operators [SplitGluedOperators] reads keyword as
 // when it reads two or more operators of ISO 32000-1, Annex A, Table A.1 and
 // nothing else, and nil otherwise: "ETBT" gives ET and BT, while "ETXX", whose
@@ -244,15 +328,16 @@ func GluedOperators(keyword string) []string {
 	return parts
 }
 
-// newLexer returns a lexer over data that reads it as opts say. With no option
+// newLexer returns a lexer over data that reads it as o says. With no option
 // it reads the stream as veraPDF does ([lexer.Lexer.WithVeraPDFTokens]): that
 // is the reading ISO 19005 validation takes, so "q1" is the q veraPDF counts
 // toward the nesting limit rather than an operator it never reports, "12m" is
 // 12 then m, ".020.594" is the largest real veraPDF gives a number, which fails
-// the real limit, and "re%" before a comment is one undefined operator.
-// [ForRepair] keeps what a repair writes back where that reading departs from
-// it, and [SplitGluedOperators] replaces it with the reading of PDF.js, which
-// splits "q1" too.
+// the real limit, "re%" before a comment is one undefined operator, and so is
+// a stray ")". [ForRepair] keeps what a repair writes back where that reading
+// departs from it, and [SplitGluedOperators] replaces it with the reading of
+// PDF.js, which splits "q1" too. [WholeStream] keeps the tokens and only reads
+// on where the parse would end ([endsReading]).
 //
 // # Corpus evidence
 //
@@ -299,11 +384,7 @@ func GluedOperators(keyword string) []string {
 //     operator. Page 8, which veraPDF reports none for, goes from 5 to 2.
 //   - pdfjs issue15893_reduced.pdf: two undefined operators around a ")"
 //     read as one. veraPDF cannot open the file.
-func newLexer(data []byte, opts []Option) *lexer.Lexer {
-	var o readOptions
-	for _, opt := range opts {
-		opt(&o)
-	}
+func newLexer(data []byte, o readOptions) *lexer.Lexer {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	switch {
 	case o.commands != nil:
@@ -319,10 +400,12 @@ func newLexer(data []byte, opts []Option) *lexer.Lexer {
 // ParseStreamData parses raw content stream bytes into a sequence of [Operation] values.
 // The parser checks ctx at regular intervals, allowing large or pathological
 // content streams to be interrupted by deadline. opts choose how it reads the
-// stream, see [SplitGluedOperators].
+// stream, see [SplitGluedOperators]. With no option it reads the stream as
+// veraPDF does ([newLexer]), and ends where veraPDF ends ([endsReading]).
 func ParseStreamData(ctx context.Context, data []byte, opts ...Option) ([]Operation, error) {
-	p := parser.NewParser(newLexer(data, opts))
-	return parseOperations(ctx, p, nil, nil)
+	o := optionsOf(ctx, opts)
+	p := parser.NewParser(newLexer(data, o))
+	return parseOperations(ctx, p, o, nil, nil)
 }
 
 // ParseStreamDataWithOffsets parses content stream bytes and also returns the
@@ -334,9 +417,10 @@ func ParseStreamData(ctx context.Context, data []byte, opts ...Option) ([]Operat
 // characters share its bytes: in "ETBT", ET ends after its T and BT holds the
 // two bytes after it.
 func ParseStreamDataWithOffsets(ctx context.Context, data []byte, opts ...Option) ([]Operation, []ByteRange, error) {
-	p := parser.NewParser(newLexer(data, opts)).WithOffsetTracking()
+	o := optionsOf(ctx, opts)
+	p := parser.NewParser(newLexer(data, o)).WithOffsetTracking()
 	ranges := make([]ByteRange, 0, 256) //nolint:mnd // matches the operations capacity hint
-	ops, err := parseOperations(ctx, p, &ranges, nil)
+	ops, err := parseOperations(ctx, p, o, &ranges, nil)
 	if err != nil {
 		// On error parseOperations returns ops=nil but ranges may hold the
 		// entries recorded before the failure; drop them so the two slices
@@ -350,8 +434,9 @@ func ParseStreamDataWithOffsets(ctx context.Context, data []byte, opts ...Option
 // checking enabled. Returns [Operation] values and any hex string format
 // violations detected by the parser.
 func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation, []error) {
-	p := parser.NewParser(newLexer(data, nil)).WithFormatChecking()
-	ops, _ := parseOperations(ctx, p, nil, nil)
+	o := optionsOf(ctx, nil)
+	p := parser.NewParser(newLexer(data, o)).WithFormatChecking()
+	ops, _ := parseOperations(ctx, p, o, nil, nil)
 	return ops, p.FormatViolations
 }
 
@@ -360,8 +445,9 @@ func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation
 // parser read as a real because it overflows 64 bits (see
 // [parser.Parser.IntegerOverflows]).
 func ParseStreamDataWithOverflows(ctx context.Context, data []byte) ([]Operation, []float64, error) {
-	p := parser.NewParser(newLexer(data, nil))
-	ops, err := parseOperations(ctx, p, nil, nil)
+	o := optionsOf(ctx, nil)
+	p := parser.NewParser(newLexer(data, o))
+	ops, err := parseOperations(ctx, p, o, nil, nil)
 	return ops, p.IntegerOverflows, err
 }
 
@@ -376,9 +462,10 @@ func ParseStreamDataWithOverflows(ctx context.Context, data []byte) ([]Operation
 // The violations come back even when the parse fails: the ones recorded before
 // the failure keep their placement, and the rest have no operator.
 func ParseStreamDataForCompliance(ctx context.Context, data []byte) ([]Operation, []float64, []FormatViolation, error) {
-	p := parser.NewParser(newLexer(data, nil)).WithFormatChecking()
+	o := optionsOf(ctx, nil)
+	p := parser.NewParser(newLexer(data, o)).WithFormatChecking()
 	placer := &violationPlacer{p: p}
-	ops, err := parseOperations(ctx, p, nil, placer)
+	ops, err := parseOperations(ctx, p, o, nil, placer)
 	return ops, p.IntegerOverflows, placer.finish(), err
 }
 
@@ -573,8 +660,9 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 		slog.Int("total_bytes", len(allData)),
 	)
 
-	p := parser.NewParser(newLexer(allData, opts))
-	ops, err := parseOperations(ctx, p, nil, nil)
+	o := optionsOf(ctx, opts)
+	p := parser.NewParser(newLexer(allData, o))
+	ops, err := parseOperations(ctx, p, o, nil, nil)
 	if err != nil {
 		return nil, err
 	}
