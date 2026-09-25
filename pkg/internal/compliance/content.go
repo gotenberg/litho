@@ -155,6 +155,14 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 // resolvePageContentBytes decodes and concatenates the content streams of a page,
 // returning the raw bytes suitable for both parsing and inline image scanning.
 //
+// A stream the /Contents array lists more than once is read where the array
+// first lists it, and only there. Measured with veraPDF 1.30 at PDF/A-1b and
+// PDF/A-2b on a page whose array lists one stream twice, directly or through
+// an indirect array, or a stream, a second one and the first again: every
+// content-stream rule fails as often as it does when the array lists each
+// stream once, the q/Q nesting limit included, which 15 unclosed q in the
+// stream listed twice would reach if its operators were read twice.
+//
 // # Corpus evidence
 //
 //   - pdfjs bomb_giant.pdf: follows its text part with three /JBIG2Decode
@@ -165,6 +173,9 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 //   - pdfjs issue17190_1.pdf: carries 77 parts, one of them unreadable, and
 //     litho reported none of the colour and font defects veraPDF raises from
 //     the other 76 while a truncated part lost the whole page.
+//   - All corpora: govdocs thread_200_200738.pdf is the only file whose
+//     /Contents array lists a part twice, on 10 of its pages, and no count
+//     moves at PDF/A-1b or PDF/A-2b.
 func resolvePageContentBytes(ctx context.Context, doc *document.Document, page ast.PdfDict) ([]byte, error) {
 	contentsObj, ok := page["Contents"]
 	if !ok {
@@ -182,7 +193,18 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 	case ast.PdfStream:
 		streams = append(streams, v)
 	case ast.PdfArray:
+		listed := make(map[int]bool, len(v))
 		for _, item := range v {
+			// ISO 32000-1, 7.7.3.3 makes the array one content stream cut
+			// into parts, and veraPDF reads a part the array lists again as
+			// no part at all: it judges the page as if the array held each
+			// stream once, where it first lists it.
+			if ref, ok := item.(ast.PdfIndirectRef); ok {
+				if listed[ref.ObjectNum] {
+					continue
+				}
+				listed[ref.ObjectNum] = true
+			}
 			stream, err := document.ResolveStream(ctx, doc, item)
 			if err != nil {
 				return nil, fmt.Errorf("resolving item in /Contents array: %w", err)
