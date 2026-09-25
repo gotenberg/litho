@@ -15,7 +15,8 @@ import (
 )
 
 // contentStreamContext is the phrase compliance's content-stream limit check
-// names the stream holding a number with, "object N (stream content)".
+// names the stream holding a number with: "page N (stream content)" for the
+// content of a page, and "object N (stream content)" for a stream it draws.
 const contentStreamContext = "(stream content)"
 
 // maxTranslationSplits caps the translations [splitTranslation] writes ahead

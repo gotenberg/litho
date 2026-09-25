@@ -57,7 +57,8 @@ const (
 //     only while the stream processes its colour operators.
 //   - BMC, MP and ri read the name they end with, BDC and DP the tag before
 //     their property list and the list itself when it is a dictionary, whole.
-//     BI reads its dictionary whole (GFOp_ID).
+//     BI reads its dictionary whole (GFOp_ID), when the stream reads the
+//     image at all ([ColourState.ReadsInlineImage]).
 //   - Every other operator, q, Q, BT, ET, n, the painting and clipping
 //     operators, T*, Tr, EMC, BX, EX, gs, Do and sh, reads none.
 //
@@ -68,11 +69,11 @@ const (
 // Td, ", Tj, ', TJ, Tf, d, BMC, MP, BDC or DP, in an array before w, g or cs,
 // in a dictionary before w, m or BMC, and as a real given to J, it fails
 // nothing, while every number operand of m, cm, g and cs fails it, the array
-// elements of m too. A string past the limit fails ISO 19005-2,
-// 6.1.13 t3 shown by Tj, TJ and ", and in a dash array, and fails nothing
-// before w, m, BMC or an undefined operator, or as an extra operand before Tj.
-// A 128-byte name fails ISO 19005-1, 6.1.12 t4 and ISO 19005-2, 6.1.13 t4
-// given to Tf, ri, BMC, MP, cs, CS, g and scn, as the tag of BDC and DP, as a
+// elements of m too. A string past the limit fails ISO 19005-2, 6.1.13 t3
+// shown by Tj, TJ and ", and in a dash array, and fails nothing before w, m,
+// BMC or an undefined operator, or as an extra operand before Tj. A 128-byte
+// name fails ISO 19005-1, 6.1.12 t4 and ISO 19005-2, 6.1.13 t4 given to Tf,
+// ri, BMC, MP, cs, CS, g, scn and SCN, as the tag of BDC and DP, as a
 // key or a value of their property list or of an inline image's dictionary,
 // and in a dash array, and fails nothing given to sc, gs, Do or sh, as an
 // extra operand before Tf, BMC or cs, or before q, w or an undefined operator.
@@ -112,8 +113,8 @@ func ContentOperandLink(operator string, index, n int, colour bool) OperandLink 
 	case "Td", "TD", "d0":
 		return pick(index >= n-2, LinkNumber)
 	case `"`:
-		// The two numbers need a string after them: with fewer than three
-		// operands the operator reads none (GFOp_DoubleQuote.getSpecialNumber).
+		// The operator reads its two numbers only when it takes three
+		// operands or more (GFOp_DoubleQuote.getSpecialNumber).
 		return pick(last, LinkString) | pick(!last && n >= 3 && index >= n-3, LinkNumber)
 	case "c", "cm", "d1", "l", "m", "re", "Tm", "v", "y":
 		return LinkNumber | LinkArrayNumbers

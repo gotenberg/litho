@@ -300,8 +300,11 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 // limit as the /ActualText or /Alt of a property list fails the string limit
 // twice, once as a value of the list and once as the text veraPDF reads for
 // the marked content. Such a string is one string of the file, and is judged
-// once. The name by which BDC or DP names a property list of /Properties is
-// no name veraPDF judges: a long one fails nothing.
+// once. So is a property list BDC or DP names from /Properties, which veraPDF
+// reads through the operator as well as in the resources: measured the same
+// way, an integer past the limit in it fails the limit twice. The object walk
+// judges it once ([checkNumericLimits]). The name by which BDC or DP names the
+// list is no name veraPDF judges: a long one fails nothing.
 //
 // The operands of an operator ISO 32000-1, Annex A does not define are not
 // checked. ISO 19005-1, 6.2.10 t1 and ISO 19005-2, 6.2.2 t1 already fail the
