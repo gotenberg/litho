@@ -323,8 +323,9 @@ func TestCheckObjectFormat_RecordedObjectIsNotParsedAgain(t *testing.T) {
 }
 
 // TestCheckObjectFormat_RecordsNothingOutsideTheIndex pins that an object
-// number the index lacks, a free entry and an object-stream member record
-// nothing: no parse checks them, so none has a record to complete.
+// number the index lacks, a free entry and a member of an object stream that
+// cannot be read, here because object 1 is no stream, record nothing: no parse
+// of their bytes runs, so none has a record to complete.
 func TestCheckObjectFormat_RecordsNothingOutsideTheIndex(t *testing.T) {
 	t.Parallel()
 	data, offsets := formatViolationPDF(t, "<< /Type /Catalog /Foo <414> >>\n")

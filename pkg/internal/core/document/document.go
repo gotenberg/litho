@@ -124,12 +124,12 @@ type Document struct {
 	// input bytes rather than of how often an object happened to be parsed.
 	// Access is serialized by d.mu.
 	//
-	// The key space is the set of object numbers that carry a normal xref
-	// entry, so the map holds at most len(xrefEntries) keys: an object
-	// number absent from the index fails resolution before anything is
-	// recorded. That is the same bound the index itself already lives
-	// under (an xref entry costs bytes in the file), so the store needs no
-	// cap of its own.
+	// The key space is the set of object numbers that carry an in-use xref
+	// entry, uncompressed or held in an object stream, so the map holds at
+	// most len(xrefEntries) keys: an object number absent from the index
+	// fails resolution before anything is recorded. That is the same bound
+	// the index itself already lives under (an xref entry costs bytes in the
+	// file), so the store needs no cap of its own.
 	formatViolations map[int][]error
 
 	// integerOverflows records, per object number, the integer literals past

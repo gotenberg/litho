@@ -230,11 +230,10 @@ func propertyListJudgesTwice(operator string, key ast.PdfName) bool {
 // as a page does, and PDF/A-4 counts as PDF/A-2b.
 //
 // The strings are found from the format violations the parse of the object
-// holding the property list recorded (see [propertyListSite]). A property
-// list written directly in the resources of a Type3 font, whose object the
-// walk does not know, adds nothing, and neither does one in a member of an
-// object stream, which no parse checks and [checkFormatViolations] misses
-// too. Each content stream contributes at most
+// holding the property list recorded (see [propertyListSite]), whether that
+// object is written uncompressed or in an object stream. A property list
+// written directly in the resources of a Type3 font, whose object the walk
+// does not know, adds nothing. Each content stream contributes at most
 // [maxContentFormatViolationsPerStream] of these findings.
 //
 // # Corpus evidence
@@ -535,6 +534,12 @@ func (j *drawnStreamHexStrings) check(violations []content.FormatViolation, page
 // document: the check groups run concurrently and keep resolving objects, so
 // a live read reported however many violations had been recorded at that
 // instant.
+//
+// # Corpus evidence
+//
+//   - All corpora: no file writes a stream in an object stream, so the /Length
+//     of such a stream, which no check judges, costs no finding veraPDF
+//     states.
 func checkFormatViolations(vctx *validationCtx, profile string) []Violation {
 	if len(vctx.formatViolations) == 0 {
 		return nil
@@ -584,10 +589,17 @@ func checkFormatViolations(vctx *validationCtx, profile string) []Violation {
 			}
 		case errors.Is(violation, parser.ErrStreamFormat):
 			if errors.Is(violation, parser.ErrStreamLengthMismatch) {
-				// checkStreamLengths sweeps every stream and states this rule
-				// there, so passing resolution's copy on states it twice. A
-				// stream with no /Length key at all is not swept, and its
-				// violation is of another class.
+				// checkStreamLengths sweeps every uncompressed stream and
+				// states this rule there, so passing resolution's copy on
+				// states it twice. A stream with no /Length key at all is not
+				// swept, and its violation is of another class.
+				//
+				// TODO: a stream written in an object stream, which ISO
+				// 32000-1, 7.5.7 forbids, is not swept either, and veraPDF
+				// 1.30 states this rule for a /Length that misses its data
+				// there. This finding cannot stand in for the sweep: the
+				// parse accepts a /Length that counts the EOL before
+				// endstream, which the rule does not.
 				continue
 			}
 			eolRule := streamEOLRule(profile)

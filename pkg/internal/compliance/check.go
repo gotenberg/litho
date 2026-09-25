@@ -408,8 +408,8 @@ func resolveCatalog(ctx context.Context, doc *document.Document) (ast.PdfDict, e
 }
 
 // resolveAllObjects forces resolution of every indirect object in the xref
-// table, and format-checks each uncompressed one, so the parser-level format
-// checks cover all of them.
+// table, and format-checks each one, uncompressed or held in an object
+// stream, so the parser-level format checks cover all of them.
 //
 // Resolving alone checks only the objects that miss the cache. Those opening
 // the file already resolved, the catalog and the root of the page tree among

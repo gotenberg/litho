@@ -526,13 +526,37 @@ func (o *objStmData) parser(off, end int) *parser.Parser {
 // as its own values, where an uncompressed one stops at the next object the
 // cross-reference table places (see [parser.Parser.WithObjectEnd]).
 //
+// With checkFormat set, the parse records the object's format violations, as
+// [Document.parseNormalObject] does for an uncompressed object, and a member
+// that does not parse records an empty list. The findings are the parser's
+// alone: ISO 32000-1, 7.5.7 stores the object with no "obj" header and no
+// endobj keyword, so the layout [Document.validateObjectHeaderFormat] judges
+// is not there. What the parser judges is the object's own syntax, the same
+// inside an object stream as outside one: ISO 19005-1/2/3, 6.1.6 states the
+// hex string tests over every string a file writes, and a stream written in
+// an object stream, which 7.5.7 forbids, still has the keyword and /Length
+// that ISO 19005-1, 6.1.7 and ISO 19005-2/3, 6.1.7.1 judge. veraPDF judges
+// them all there. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b: a bad
+// hex string in a member fails 6.1.6 as it does uncompressed, whether the
+// member is the catalog, an object another references or one no object
+// references, and a stream in a member fails the keyword and /Length tests. A
+// member whose object stream cannot be read records nothing: no parse of it
+// ran, and why the stream failed may depend on the resolution that asked for
+// it.
+//
 // # Corpus evidence
 //
 //   - All corpora: no compressed object reads past the next offset of its
 //     stream's header, so the bound changes no object any file resolves, and
 //     no file's page count, text, undecodable streams or PDF/A-2b
 //     violations.
-func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum, targetIndex, targetObjNum int, visited map[int]bool) (ast.PdfObject, error) {
+//   - All corpora: 666 files store 372,937 objects in object streams, 70 of
+//     which do not resolve. Format-checking their parse finds no violation
+//     and no stream in any of them, so no file's violations move under
+//     PDF/A-2b, the verapdf and litho files under their own profile, and
+//     validating the 666 files takes the same CPU time, 52 to 54 s either
+//     way.
+func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum, targetIndex, targetObjNum int, visited map[int]bool, checkFormat bool) (ast.PdfObject, error) {
 	d.mu.RLock()
 	data, cached := d.objStmCache[objStmNum]
 	d.mu.RUnlock()
@@ -545,21 +569,40 @@ func (d *Document) extractFromObjectStream(ctx context.Context, objStmNum, targe
 		d.cacheObjStm(objStmNum, data)
 	}
 
+	// A member the stream's bytes do not hold records an empty list, as an
+	// uncompressed object that does not parse records its header's findings
+	// alone, so a later format check does not parse it again. A cancelled
+	// context records nothing, since a partial record would stand for the
+	// object in every later run on this Document.
+	failed := func(err error) (ast.PdfObject, error) {
+		if checkFormat && ctx.Err() == nil {
+			d.RecordFormatViolations(targetObjNum)
+		}
+		return nil, err
+	}
+
 	slot := data.slotFor(targetIndex, targetObjNum)
 	if slot < 0 {
-		return nil, fmt.Errorf("object %d not found in object stream %d (xref index %d of %d)", targetObjNum, objStmNum, targetIndex, len(data.offsets))
+		return failed(fmt.Errorf("object %d not found in object stream %d (xref index %d of %d)", targetObjNum, objStmNum, targetIndex, len(data.offsets)))
 	}
 	targetOffset := data.offsets[slot]
 	if targetOffset < 0 || targetOffset > len(data.decoded)-data.first {
-		return nil, fmt.Errorf("invalid offset for object %d in object stream %d", targetObjNum, objStmNum)
+		return failed(fmt.Errorf("invalid offset for object %d in object stream %d", targetObjNum, objStmNum))
 	}
 
 	p := data.parser(targetOffset, data.objectEnd(targetOffset))
-	obj, err := p.ParseObject(ctx)
-	if err == nil {
-		d.recordIntegerOverflows(targetObjNum, p.IntegerOverflows)
+	if checkFormat {
+		p.WithFormatChecking()
 	}
-	return obj, err
+	obj, err := p.ParseObject(ctx)
+	if err != nil {
+		return failed(err)
+	}
+	if checkFormat {
+		d.RecordFormatViolations(targetObjNum, p.FormatViolations...)
+	}
+	d.recordIntegerOverflows(targetObjNum, p.IntegerOverflows)
+	return obj, nil
 }
 
 // slotFor returns the header index of the object to extract. It trusts the
@@ -1337,18 +1380,19 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 	var obj ast.PdfObject
 	var err error
 
+	// Read compliance mode once, so a concurrent validator toggling it
+	// mid-resolution cannot change this parse's branches once it started.
+	checkFormat := d.ComplianceMode()
+
 	switch entry.Type {
 	case xref.XRefTypeNormal:
-		// Read compliance mode once, so a concurrent validator toggling it
-		// mid-resolution cannot change this parse's branches once it
-		// started.
-		obj, err = d.parseNormalObject(ctx, ref, entry, d.ComplianceMode())
+		obj, err = d.parseNormalObject(ctx, ref, entry, checkFormat)
 		if err != nil {
 			return nil, err
 		}
 
 	case xref.XRefTypeCompressed:
-		obj, err = d.extractFromObjectStream(ctx, entry.ObjStmNum, entry.ObjStmIndex, ref.ObjectNum, visited)
+		obj, err = d.extractFromObjectStream(ctx, entry.ObjStmNum, entry.ObjStmIndex, ref.ObjectNum, visited, checkFormat)
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract object %d from stream %d: %w", ref.ObjectNum, entry.ObjStmNum, err)
 		}
@@ -1490,9 +1534,10 @@ func (d *Document) parseNormalObject(ctx context.Context, ref ast.PdfIndirectRef
 // through the parse [Document.Resolve] uses, and records what that finds. The
 // record is the one a first parse in compliance mode would have made, so an
 // object contributes the same findings once whether it was cached before the
-// validation began or not. The cached value is left alone. An object the index
-// lacks, a free entry and an object held in an object stream record nothing,
-// since no parse checks the members of an object stream.
+// validation began or not. The cached value is left alone. An object held in
+// an object stream is parsed from that stream's decoded bytes (see
+// [Document.extractFromObjectStream]). An object the index lacks and a free
+// entry record nothing.
 //
 // CheckObjectFormat is safe for concurrent use.
 func (d *Document) CheckObjectFormat(ctx context.Context, objNum int) {
@@ -1506,12 +1551,22 @@ func (d *Document) CheckObjectFormat(ctx context.Context, objNum int) {
 		return
 	}
 	entry, ok := d.XRefEntry(objNum)
-	if !ok || entry.Free || entry.Type != xref.XRefTypeNormal {
+	if !ok || entry.Free {
 		return
 	}
-	// The object may not parse. The header findings are recorded all the same,
-	// and the parse error is what every resolution of the object reports.
-	if _, err := d.parseNormalObject(ctx, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation}, entry, true); err != nil {
+	// The object may not parse. The findings a failed parse still makes are
+	// recorded all the same, and the parse error is what every resolution of
+	// the object reports.
+	var err error
+	switch entry.Type {
+	case xref.XRefTypeNormal:
+		_, err = d.parseNormalObject(ctx, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation}, entry, true)
+	case xref.XRefTypeCompressed:
+		_, err = d.extractFromObjectStream(ctx, entry.ObjStmNum, entry.ObjStmIndex, objNum, nil, true)
+	default:
+		return
+	}
+	if err != nil {
 		d.Logger.Debug("format check of an object failed to parse it", slog.Int("obj", objNum), slog.Any("err", err))
 	}
 }
