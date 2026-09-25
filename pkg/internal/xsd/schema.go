@@ -62,6 +62,13 @@ type Schema struct {
 	// namespace. The current schema is not present in this map; it
 	// reaches its own elements/types via Elements and Types directly.
 	Imports map[string]*Schema
+	// globalElements indexes by name the {element declarations} of the
+	// schema this document corresponds to (XML Schema Part 1, 3.15.1): the
+	// top-level ones of Elements, and those of every schema document it
+	// includes or imports, directly or through other documents. [Load]
+	// fills it, and the validator resolves the document element against
+	// it.
+	globalElements map[QName]*Element
 }
 
 // Type is the closed sum of XSD type kinds the loader recognises.

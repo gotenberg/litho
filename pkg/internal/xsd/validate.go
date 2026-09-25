@@ -297,8 +297,8 @@ func (v *validator) onCharData(t xml.CharData) {
 }
 
 // openRoot consumes the document element and pushes the first frame.
-// The element must be declared at the schema top level (or one of
-// its imports) for validation to proceed.
+// The element must be declared at the top level of the schema
+// ([validator.findRootElement]) for validation to proceed.
 func (v *validator) openRoot(start xml.StartElement) {
 	qn := QName{Namespace: start.Name.Space, Local: start.Name.Local}
 	el, ok := v.findRootElement(qn)
@@ -314,16 +314,16 @@ func (v *validator) openRoot(start xml.StartElement) {
 	v.pushFrame(start, el)
 }
 
+// findRootElement returns the element declaration the document element
+// named qn validates against. Per XML Schema Part 1, 3.3.4 (cvc-assess-elt
+// clause 1.1.1.3.2) and 5.2 the validation root takes the declaration its
+// name resolves to by QName resolution (Instance), 3.15.4: an entry of the
+// {element declarations} of the schema, which holds those of every schema
+// document the validated one includes or imports, however deep
+// ([loader.elementDeclarations]).
 func (v *validator) findRootElement(qn QName) (*Element, bool) {
-	if el, ok := v.schema.Elements[qn]; ok {
-		return el, true
-	}
-	for _, imp := range v.schema.Imports {
-		if el, ok := imp.Elements[qn]; ok {
-			return el, true
-		}
-	}
-	return nil, false
+	el, ok := v.schema.globalElements[qn]
+	return el, ok
 }
 
 // pushFrame opens a frame for an accepted element. The matcher is

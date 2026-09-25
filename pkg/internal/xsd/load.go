@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"maps"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -35,6 +36,7 @@ func Load(ctx context.Context, fsys fs.FS, rootPath string) (*Schema, error) {
 		loading:  make(map[string]bool),
 		own:      make(map[*Schema]*Schema),
 		includer: make(map[*Schema]*Schema),
+		includes: make(map[*Schema][]*Schema),
 	}
 	root, _, err := loader.loadFile(ctx, rootPath, "")
 	if err != nil {
@@ -42,6 +44,9 @@ func Load(ctx context.Context, fsys fs.FS, rootPath string) (*Schema, error) {
 	}
 	if err := loader.link(); err != nil {
 		return nil, err
+	}
+	for doc := range loader.own {
+		doc.globalElements = loader.elementDeclarations(doc)
 	}
 	return root, nil
 }
@@ -63,6 +68,9 @@ type loader struct {
 	// includer maps the Schema of each included schema document to that
 	// of the first document that includes it.
 	includer map[*Schema]*Schema
+	// includes maps the Schema of each schema document to those of the
+	// documents its xs:include children name, in source order.
+	includes map[*Schema][]*Schema
 }
 
 // loadFile reads a single XSD by path. Returns the populated Schema
@@ -130,6 +138,7 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, str
 		if _, ok := l.includer[sub]; !ok {
 			l.includer[sub] = schema
 		}
+		l.includes[schema] = append(l.includes[schema], sub)
 		copyComponents(schema, sub)
 	}
 
@@ -177,6 +186,54 @@ func (l *loader) includeRoot(doc *Schema) *Schema {
 		doc = includer
 	}
 	return doc
+}
+
+// elementDeclarations returns the {element declarations} of the schema
+// corresponding to the schema document doc, keyed by name. Per XML Schema
+// Part 1, 4.2.1 (src-include clause 3) and 4.2.3 (src-import) that schema
+// holds the components of doc, and all the components of each schema
+// corresponding to a document doc includes or imports, so the walk follows
+// both, through every document it reaches. doc's own declarations, which
+// hold those of the documents it includes ([copyComponents]), come first,
+// and a name keeps the first declaration the walk finds, which the order
+// of the walk fixes.
+//
+// # Corpus evidence
+//
+//   - All corpora: no bundled schema uses xs:include, and none of the 28
+//     reaches through an import of an import a top-level element declaration
+//     that its own document and its direct imports lack, so each resolves
+//     the same document elements as when only those counted. Each loads to
+//     the same model, and no verdict of the 159 files that embed XML moves,
+//     through the Factur-X and ZUGFeRD validators or under any bundled
+//     schema.
+func (l *loader) elementDeclarations(doc *Schema) map[QName]*Element {
+	out := make(map[QName]*Element)
+	seen := make(map[*Schema]bool)
+	stack := []*Schema{doc}
+	for len(stack) > 0 {
+		s := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if seen[s] {
+			continue
+		}
+		seen[s] = true
+		for qn, el := range s.Elements {
+			if _, ok := out[qn]; !ok {
+				out[qn] = el
+			}
+		}
+		// Pushed in reverse, so the walk visits the includes in source order,
+		// then the imports by namespace.
+		imports := slices.Sorted(maps.Keys(s.Imports))
+		for _, ns := range slices.Backward(imports) {
+			stack = append(stack, s.Imports[ns])
+		}
+		for _, inc := range slices.Backward(l.includes[s]) {
+			stack = append(stack, inc)
+		}
+	}
+	return out
 }
 
 // link resolves the references of every loaded schema document: each

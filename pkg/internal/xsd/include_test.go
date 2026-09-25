@@ -87,6 +87,59 @@ func TestLoad_IncludedReferencesResolveInTheirDocument(t *testing.T) {
 	}
 }
 
+// TestValidate_RootResolvesInEveryReachableDocument pins XML Schema Part 1,
+// 5.2 and 3.15.4 (QName resolution (Instance)): the document element takes
+// its declaration from the {element declarations} of the schema, which per
+// 4.2.1 and 4.2.3 holds those of every document the validated one includes
+// or imports, however deep. lib.xsd declares the Code element in urn:lib;
+// the root document reaches it through an included document's import, or
+// through an import of an import, and never imports urn:lib itself.
+func TestValidate_RootResolvesInEveryReachableDocument(t *testing.T) {
+	const lib = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:lib">
+  <xs:element name="Code"><xs:simpleType><xs:restriction base="xs:token"><xs:maxLength value="3"/></xs:restriction></xs:simpleType></xs:element>
+</xs:schema>`
+	for name, files := range map[string]fstest.MapFS{
+		"import of an included document": {
+			"root.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">
+  <xs:include schemaLocation="part.xsd"/>
+</xs:schema>`)},
+			"part.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">
+  <xs:import namespace="urn:lib" schemaLocation="lib.xsd"/>
+</xs:schema>`)},
+			"lib.xsd": &fstest.MapFile{Data: []byte(lib)},
+		},
+		"import of an import": {
+			"root.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t">
+  <xs:import namespace="urn:mid" schemaLocation="mid.xsd"/>
+</xs:schema>`)},
+			"mid.xsd": &fstest.MapFile{Data: []byte(`<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:mid">
+  <xs:import namespace="urn:lib" schemaLocation="lib.xsd"/>
+</xs:schema>`)},
+			"lib.xsd": &fstest.MapFile{Data: []byte(lib)},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, err := Load(context.Background(), files, "root.xsd")
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			for doc, want := range map[string]string{
+				`<l:Code xmlns:l="urn:lib">ab</l:Code>`:   "",
+				`<l:Code xmlns:l="urn:lib">abcd</l:Code>`: RuleFacet,
+				`<l:Name xmlns:l="urn:lib">ab</l:Name>`:   RuleRoot,
+			} {
+				vs := validateDoc(t, s, doc)
+				if want == "" && len(vs) != 0 {
+					t.Errorf("%s: got %v, want none", doc, vs)
+				}
+				if want != "" && (len(vs) != 1 || vs[0].Rule != want) {
+					t.Errorf("%s: got %v, want one %s violation", doc, vs, want)
+				}
+			}
+		})
+	}
+}
+
 // TestLoad_IncludedDocumentImportsItsOwnNamespaces pins XML Schema Part 1,
 // 3.15.3 (src-resolve clause 4.2.2) from the other side: a QName an
 // included document writes does not resolve through an xs:import of the
