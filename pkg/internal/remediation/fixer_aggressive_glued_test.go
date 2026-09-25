@@ -69,7 +69,7 @@ func TestFixAggressive_RemovesARunThatIsNotOperators(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	for _, src := range []string{"(a) Tj ETXX", "(a) Tj junk", "(a) Tj q1"} {
+	for _, src := range []string{"(a) Tj ETXX", "(a) Tj junk"} {
 		doc, alloc := newTestDoc(t, exponentPagePDF(src, "", "", ""))
 		fixes, err := fixAggressive(ctx, alloc, doc, Options{}, aggressiveUndefinedOperator, "PDF/A-2b")
 		if err != nil {
@@ -85,5 +85,26 @@ func TestFixAggressive_RemovesARunThatIsNotOperators(t *testing.T) {
 		if len(got) != 1 || got[0].Operator != "Tj" {
 			t.Errorf("%q: the rewrite reads as %v, want the Tj alone", src, got)
 		}
+	}
+}
+
+// TestFixAggressive_LeavesAnOperatorEndedByADigit pins that "q1" is no
+// undefined operator: the compliance reading ends an operator at a digit, as
+// veraPDF does, so it reads q then the number 1, and the aggressive rewrite has
+// nothing to remove.
+func TestFixAggressive_LeavesAnOperatorEndedByADigit(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	doc, alloc := newTestDoc(t, exponentPagePDF("(a) Tj q1", "", "", ""))
+	fixes, err := fixAggressive(ctx, alloc, doc, Options{}, aggressiveUndefinedOperator, "PDF/A-2b")
+	if err != nil {
+		t.Fatalf("fixAggressive: %v", err)
+	}
+	if len(fixes) != 0 {
+		t.Errorf("fixes = %q, want none", fixes)
+	}
+	if _, pending := alloc.Pending()[4]; pending {
+		t.Error("the page content was rewritten, want it left as written")
 	}
 }
