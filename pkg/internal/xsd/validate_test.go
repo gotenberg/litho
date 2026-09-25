@@ -23,7 +23,7 @@ func loadTestSchema(t *testing.T, body string) *Schema {
 
 const invoiceXSD = `<?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="urn:t" elementFormDefault="qualified">
+           targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">
   <xs:simpleType name="Currency">
     <xs:restriction base="xs:string">
       <xs:enumeration value="EUR"/>

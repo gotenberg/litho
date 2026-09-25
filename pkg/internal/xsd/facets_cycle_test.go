@@ -10,7 +10,7 @@ import (
 // base through Schema.Types and never checks that the chain terminates, so
 // nothing rejects this at load time.
 const selfRestrictingXSD = `<?xml version="1.0" encoding="UTF-8"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" elementFormDefault="qualified">
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">
   <xs:simpleType name="Loop">
     <xs:restriction base="Loop"><xs:maxLength value="5"/></xs:restriction>
   </xs:simpleType>
@@ -21,7 +21,7 @@ const selfRestrictingXSD = `<?xml version="1.0" encoding="UTF-8"?>
 // caught by an identity check; a two-step cycle would not, so both shapes are
 // pinned.
 const mutuallyRestrictingXSD = `<?xml version="1.0" encoding="UTF-8"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" elementFormDefault="qualified">
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">
   <xs:simpleType name="A"><xs:restriction base="B"><xs:maxLength value="5"/></xs:restriction></xs:simpleType>
   <xs:simpleType name="B"><xs:restriction base="A"><xs:maxLength value="7"/></xs:restriction></xs:simpleType>
   <xs:element name="Root" type="A"/>

@@ -78,7 +78,7 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, str
 	if err != nil {
 		return nil, "", fmt.Errorf("%w: reading %s: %w", ErrSchemaParse, p, err)
 	}
-	raw, prefixes, err := parseRawSchema(data)
+	raw, err := parseRawSchema(data)
 	if err != nil {
 		return nil, "", fmt.Errorf("%w at %s: %w", ErrSchemaParse, p, err)
 	}
@@ -128,7 +128,7 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, str
 		maps.Copy(schema.AttributeGroups, sub.AttributeGroups)
 	}
 
-	if err := populateFromRaw(schema, raw, prefixes); err != nil {
+	if err := populateFromRaw(schema, raw); err != nil {
 		return nil, "", fmt.Errorf("at %s: %w", p, err)
 	}
 	return schema, schema.TargetNamespace, nil
@@ -666,67 +666,218 @@ type rawFacet struct {
 	Value   string `xml:"value,attr"`
 }
 
-// parseRawSchema decodes data into a rawSchema and side-loads the
-// prefix → namespace bindings declared on the xs:schema start tag.
-// encoding/xml resolves namespaces on element names but leaves
-// attribute values as raw strings, so the loader needs the prefix
-// map separately to translate type="lib:Foo" references.
-func parseRawSchema(data []byte) (*rawSchema, map[string]string, error) {
-	prefixes, err := extractSchemaPrefixes(data)
-	if err != nil {
-		return nil, nil, err
-	}
+// parseRawSchema decodes data into a rawSchema. It reads the tokens
+// through a [qnameScope], so each QName-valued attribute the rawSchema
+// holds already names the expanded name it denotes ([parseQName]).
+func parseRawSchema(data []byte) (*rawSchema, error) {
 	var raw rawSchema
-	if err := xml.Unmarshal(data, &raw); err != nil {
-		return nil, nil, err
+	if err := xml.NewTokenDecoder(newQNameScope(data)).Decode(&raw); err != nil {
+		if errors.Is(err, io.EOF) {
+			return nil, errors.New("no xs:schema start element found")
+		}
+		return nil, err
 	}
 	if raw.XMLName.Local != "schema" || raw.XMLName.Space != XSNamespace {
-		return nil, nil, errors.New("root element is not xs:schema")
+		return nil, errors.New("root element is not xs:schema")
 	}
-	return &raw, prefixes, nil
+	return &raw, nil
 }
 
-// extractSchemaPrefixes walks the token stream just far enough to
-// reach the xs:schema StartElement, then returns prefix → URI for
-// every xmlns: attribute on that element. The wellKnownPrefixes map
-// is folded in so a schema that omits the conventional ram/qdt/udt
-// declarations still resolves CII references.
-func extractSchemaPrefixes(data []byte) (map[string]string, error) {
-	dec := xml.NewDecoder(bytes.NewReader(data))
-	for {
-		tok, err := dec.Token()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil, errors.New("no xs:schema start element found")
-			}
+// qnameScope is an [xml.TokenReader] over the raw tokens of a schema
+// document. It tracks the namespace declarations in scope at each
+// element and rewrites each QName-valued attribute of an XML Schema
+// element into the expanded name it denotes, written {namespace}local.
+// encoding/xml resolves the names of elements and attributes but leaves
+// attribute values as written, and the declarations an element makes go
+// out of scope at its end tag, so the loader resolves the values here.
+//
+// Per XML Schema Part 1, 3.15.3 (QName Interpretation), a prefixed QName
+// takes the namespace its prefix is bound to in the in-scope namespaces
+// of the element that carries it, and an unprefixed one the default
+// namespace in scope there, or no namespace when none is. The target
+// namespace plays no part: a schema document that names its own types
+// unprefixed binds the default namespace to its target namespace.
+//
+// The content of xs:annotation stays as written: its xs:appinfo and
+// xs:documentation hold markup no component is built from.
+//
+// # Corpus evidence
+//
+//   - All corpora: no bundled schema writes an unprefixed QName or declares
+//     a namespace below xs:schema, so each of the 28 loads to the same model
+//     as when an unprefixed QName took the target namespace, and no verdict
+//     of the 159 files that embed XML moves, through the Factur-X and
+//     ZUGFeRD validators or under any bundled schema.
+type qnameScope struct {
+	dec *xml.Decoder
+	// bindings holds the namespace declarations of each open element,
+	// innermost last, keyed by prefix. The empty prefix is the default
+	// namespace, which xmlns="" binds to no namespace.
+	bindings []map[string]string
+	// annotation is the depth of the open xs:annotation, 0 outside one.
+	annotation int
+}
+
+func newQNameScope(data []byte) *qnameScope {
+	return &qnameScope{dec: xml.NewDecoder(bytes.NewReader(data))}
+}
+
+// Token implements [xml.TokenReader].
+func (q *qnameScope) Token() (xml.Token, error) {
+	tok, err := q.dec.RawToken()
+	if err != nil {
+		return nil, err
+	}
+	switch t := tok.(type) {
+	case xml.StartElement:
+		t = t.Copy()
+		q.bindings = append(q.bindings, namespaceDeclarations(t.Attr))
+		if q.annotation != 0 || !q.isSchemaElement(t.Name) {
+			return t, nil
+		}
+		if t.Name.Local == "annotation" {
+			q.annotation = len(q.bindings)
+			return t, nil
+		}
+		if err := q.expandAttributes(t.Attr); err != nil {
 			return nil, err
 		}
-		se, ok := tok.(xml.StartElement)
+		return t, nil
+	case xml.EndElement:
+		if q.annotation == len(q.bindings) {
+			q.annotation = 0
+		}
+		if len(q.bindings) > 0 {
+			q.bindings = q.bindings[:len(q.bindings)-1]
+		}
+	}
+	return xml.CopyToken(tok), nil
+}
+
+// namespaceDeclarations returns the prefix → namespace bindings the
+// xmlns and xmlns:prefix attributes among attrs, as a raw token carries
+// them, declare. The default namespace is keyed by the empty prefix.
+// Nil when attrs declares none.
+func namespaceDeclarations(attrs []xml.Attr) map[string]string {
+	var out map[string]string
+	for _, a := range attrs {
+		prefix, ok := "", false
+		switch {
+		case a.Name.Space == "xmlns":
+			prefix, ok = a.Name.Local, true
+		case a.Name.Space == "" && a.Name.Local == "xmlns":
+			ok = true
+		}
 		if !ok {
 			continue
 		}
-		if se.Name.Space != XSNamespace || se.Name.Local != "schema" {
-			return nil, fmt.Errorf("first start element is %s, want xs:schema", se.Name.Local)
+		if out == nil {
+			out = make(map[string]string)
 		}
-		out := make(map[string]string, len(se.Attr)+len(wellKnownPrefixes))
-		maps.Copy(out, wellKnownPrefixes)
-		for _, a := range se.Attr {
-			if a.Name.Space == "xmlns" {
-				out[a.Name.Local] = a.Value
-			}
-		}
-		return out, nil
+		out[prefix] = a.Value
 	}
+	return out
 }
+
+// isSchemaElement reports whether the raw element name name, whose Space
+// holds its prefix, is in the XML Schema namespace.
+func (q *qnameScope) isSchemaElement(name xml.Name) bool {
+	var ns string
+	if name.Space == "" {
+		ns = q.defaultNamespace()
+	} else {
+		var ok bool
+		if ns, ok = q.prefixNamespace(name.Space); !ok {
+			return false
+		}
+	}
+	return ns == XSNamespace
+}
+
+// expandAttributes rewrites, in place, the value of each attribute of an
+// XML Schema element that the schema for schemas (XML Schema Part 1,
+// Appendix A) types as a QName, or for memberTypes as a list of QNames,
+// into the expanded names it denotes. No XML Schema element carries an
+// unprefixed attribute of one of these names under another type.
+func (q *qnameScope) expandAttributes(attrs []xml.Attr) error {
+	for i := range attrs {
+		a := &attrs[i]
+		if a.Name.Space != "" || a.Value == "" {
+			continue
+		}
+		switch a.Name.Local {
+		case "type", "ref", "base", "itemType", "substitutionGroup", "refer":
+			expanded, err := q.expand(a.Value)
+			if err != nil {
+				return err
+			}
+			a.Value = expanded
+		case "memberTypes":
+			names := strings.Fields(a.Value)
+			for j, name := range names {
+				expanded, err := q.expand(name)
+				if err != nil {
+					return err
+				}
+				names[j] = expanded
+			}
+			a.Value = strings.Join(names, " ")
+		}
+	}
+	return nil
+}
+
+// expand returns the expanded name {namespace}local the QName raw
+// denotes in the current scope ([qnameScope]).
+func (q *qnameScope) expand(raw string) (string, error) {
+	ns := q.defaultNamespace()
+	local := raw
+	if prefix, rest, prefixed := strings.Cut(raw, ":"); prefixed {
+		var ok bool
+		if ns, ok = q.prefixNamespace(prefix); !ok {
+			return "", fmt.Errorf("%w: unknown prefix %q in %q", ErrSchemaParse, prefix, raw)
+		}
+		local = rest
+	}
+	return "{" + ns + "}" + local, nil
+}
+
+// defaultNamespace returns the default namespace in scope, "" when none
+// is.
+func (q *qnameScope) defaultNamespace() string {
+	for i := len(q.bindings) - 1; i >= 0; i-- {
+		if ns, ok := q.bindings[i][""]; ok {
+			return ns
+		}
+	}
+	return ""
+}
+
+// prefixNamespace returns the namespace prefix is bound to in scope.
+// Per Namespaces in XML 1.0, 3 the xml prefix is bound by definition.
+// A prefix no element declares falls back to [wellKnownPrefixes].
+func (q *qnameScope) prefixNamespace(prefix string) (string, bool) {
+	for i := len(q.bindings) - 1; i >= 0; i-- {
+		if ns, ok := q.bindings[i][prefix]; ok {
+			return ns, true
+		}
+	}
+	if prefix == "xml" {
+		return xmlNamespace, true
+	}
+	ns, ok := wellKnownPrefixes[prefix]
+	return ns, ok
+}
+
+// xmlNamespace is the namespace the xml prefix is bound to by definition
+// (Namespaces in XML 1.0, 3).
+const xmlNamespace = "http://www.w3.org/XML/1998/namespace"
 
 // schemaDoc is what the builders read off the xs:schema element of the
 // schema document a declaration sits in.
 type schemaDoc struct {
 	// tns is the targetNamespace attribute, empty when absent.
 	tns string
-	// prefixes maps each namespace prefix declared on xs:schema, and
-	// [wellKnownPrefixes], to its namespace.
-	prefixes map[string]string
 	// attributeFormDefault and elementFormDefault are the attributes of
 	// those names, whose absence means unqualified (XML Schema Part 1,
 	// 3.15.2).
@@ -789,10 +940,9 @@ func (d *schemaDoc) localElementNamespace(form string) string {
 	return d.localNamespace(form, d.elementFormDefault)
 }
 
-func populateFromRaw(s *Schema, raw *rawSchema, prefixes map[string]string) error {
+func populateFromRaw(s *Schema, raw *rawSchema) error {
 	doc := &schemaDoc{
 		tns:                  raw.TargetNamespace,
-		prefixes:             prefixes,
 		attributeFormDefault: raw.AttributeFormDefault,
 		elementFormDefault:   raw.ElementFormDefault,
 	}
@@ -858,7 +1008,7 @@ func buildElement(doc *schemaDoc, raw *rawElement, ns string) (*Element, error) 
 	}
 	switch {
 	case raw.Type != "":
-		ref, err := doc.parseQName(raw.Type)
+		ref, err := parseQName(raw.Type)
 		if err != nil {
 			return nil, err
 		}
@@ -898,7 +1048,7 @@ func buildComplexType(doc *schemaDoc, raw *rawComplexType) (*ComplexType, error)
 		ct.Content = ch
 	case raw.ComplexContent != nil && raw.ComplexContent.Extension != nil:
 		ext := raw.ComplexContent.Extension
-		baseRef, err := doc.parseQName(ext.Base)
+		baseRef, err := parseQName(ext.Base)
 		if err != nil {
 			return nil, err
 		}
@@ -1000,7 +1150,7 @@ func buildSimpleContent(doc *schemaDoc, raw *rawSimpleContent, ct *ComplexType) 
 	if base == "" {
 		return fmt.Errorf("%w: xs:simpleContent of %q derives without a base", ErrSchemaParse, ct.Name.Local)
 	}
-	baseRef, err := doc.parseQName(base)
+	baseRef, err := parseQName(base)
 	if err != nil {
 		return err
 	}
@@ -1032,7 +1182,7 @@ func buildSimpleType(doc *schemaDoc, raw *rawSimpleType) (*SimpleType, error) {
 		return st, nil
 	}
 	if raw.Restriction.Base != "" {
-		base, err := doc.parseQName(raw.Restriction.Base)
+		base, err := parseQName(raw.Restriction.Base)
 		if err != nil {
 			return nil, err
 		}
@@ -1048,7 +1198,7 @@ func buildSimpleType(doc *schemaDoc, raw *rawSimpleType) (*SimpleType, error) {
 func buildUnion(doc *schemaDoc, raw *rawUnion, st *SimpleType) error {
 	st.Union = true
 	for _, name := range strings.Fields(raw.MemberTypes) {
-		ref, err := doc.parseQName(name)
+		ref, err := parseQName(name)
 		if err != nil {
 			return err
 		}
@@ -1081,7 +1231,7 @@ func buildList(doc *schemaDoc, raw *rawList, st *SimpleType) error {
 		st.InlineItem = item
 		return nil
 	}
-	ref, err := doc.parseQName(raw.ItemType)
+	ref, err := parseQName(raw.ItemType)
 	if err != nil {
 		return err
 	}
@@ -1191,7 +1341,7 @@ func buildAttributeGroupRefs(doc *schemaDoc, raws []rawAttributeGroup) ([]QName,
 		if r.Ref == "" || r.Name != "" || len(r.Attributes) > 0 || len(r.AttributeGroups) > 0 || r.AnyAttribute != nil {
 			return nil, fmt.Errorf("%w: a nested xs:attributeGroup needs a ref, and no name or content", ErrSchemaParse)
 		}
-		ref, err := doc.parseQName(r.Ref)
+		ref, err := parseQName(r.Ref)
 		if err != nil {
 			return nil, err
 		}
@@ -1210,7 +1360,7 @@ func buildAttributeRef(doc *schemaDoc, a *rawAttribute) (AttributeUse, error) {
 		return AttributeUse{}, fmt.Errorf("%w: xs:attribute ref=%q also carries a name, type, form or xs:simpleType",
 			ErrSchemaParse, a.Ref)
 	}
-	ref, err := doc.parseQName(a.Ref)
+	ref, err := parseQName(a.Ref)
 	if err != nil {
 		return AttributeUse{}, err
 	}
@@ -1234,7 +1384,7 @@ func buildAttribute(doc *schemaDoc, a *rawAttribute, ns string) (AttributeUse, e
 		Prohibited: a.Use == "prohibited",
 	}
 	if a.Type != "" {
-		ref, err := doc.parseQName(a.Type)
+		ref, err := parseQName(a.Type)
 		if err != nil {
 			return AttributeUse{}, err
 		}
@@ -1285,28 +1435,27 @@ func collectFacets(raws []rawFacet) []Facet {
 	return out
 }
 
-// parseQName turns a prefixed name from an XSD attribute (e.g.
-// "xs:string", "ram:IDType") into a QName by consulting the per-schema
-// prefix map captured at load time. Unprefixed names assume the
-// schema's target namespace.
-func (d *schemaDoc) parseQName(raw string) (QName, error) {
-	for i := 0; i < len(raw); i++ {
-		if raw[i] == ':' {
-			prefix := raw[:i]
-			local := raw[i+1:]
-			ns, ok := d.prefixes[prefix]
-			if !ok {
-				return QName{}, fmt.Errorf("%w: unknown prefix %q in %q", ErrSchemaParse, prefix, raw)
-			}
-			return QName{Namespace: ns, Local: local}, nil
-		}
+// parseQName reads the expanded name {namespace}local that [qnameScope]
+// wrote in place of a QName-valued attribute. A value in any other form
+// sits on an element outside the XML Schema namespace, which the schema
+// for schemas does not allow where the loader reads one.
+func parseQName(raw string) (QName, error) {
+	end := strings.LastIndexByte(raw, '}')
+	if !strings.HasPrefix(raw, "{") || end < 0 {
+		return QName{}, fmt.Errorf("%w: QName %q is not on an XML Schema element", ErrSchemaParse, raw)
 	}
-	return QName{Namespace: d.tns, Local: raw}, nil
+	return QName{Namespace: raw[1:end], Local: raw[end+1:]}, nil
 }
 
 // wellKnownPrefixes maps XSD prefix aliases to their namespace URIs.
 // The CII building blocks use a stable set of prefixes across all
 // shipped schema generations.
+//
+// Deliberate leniency: per XML Schema Part 1, 3.15.3 (QName
+// Interpretation) a prefix a QName carries must be bound in scope, and
+// [qnameScope] falls back to this table for a prefix no element binds,
+// so a schema document that omits the conventional ram, qdt or udt
+// declarations still resolves its CII references.
 //
 //nolint:gochecknoglobals // immutable lookup table.
 var wellKnownPrefixes = map[string]string{

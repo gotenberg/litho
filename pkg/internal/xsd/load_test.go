@@ -8,7 +8,7 @@ import (
 )
 
 const minimalXSD = `<?xml version="1.0" encoding="UTF-8"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:test" elementFormDefault="qualified">
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:test" xmlns="urn:test" elementFormDefault="qualified">
   <xs:simpleType name="MyID">
     <xs:restriction base="xs:string">
       <xs:maxLength value="50"/>
@@ -181,7 +181,7 @@ func TestLoad_MalformedSchema(t *testing.T) {
 }
 
 const extensionXSD = `<?xml version="1.0" encoding="UTF-8"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" elementFormDefault="qualified">
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">
   <xs:complexType name="BaseType">
     <xs:sequence>
       <xs:element name="A" type="xs:string"/>

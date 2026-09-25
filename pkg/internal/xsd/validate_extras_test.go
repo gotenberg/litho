@@ -8,7 +8,7 @@ import (
 
 const attrXSD = `<?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="urn:t" elementFormDefault="qualified">
+           targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">
   <xs:complexType name="AmountType">
     <xs:simpleContent>
       <xs:extension base="xs:decimal">
@@ -96,7 +96,7 @@ func TestValidate_Attributes_OptionalAbsent(t *testing.T) {
 
 const extensionContentXSD = `<?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="urn:t" elementFormDefault="qualified">
+           targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">
   <xs:complexType name="HeaderType">
     <xs:sequence>
       <xs:element name="Title" type="xs:string"/>
@@ -161,7 +161,7 @@ func TestValidate_Extension_MergesBaseAttributes(t *testing.T) {
 
 const tokenXSD = `<?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="urn:t" elementFormDefault="qualified">
+           targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">
   <xs:complexType name="PartyType">
     <xs:sequence>
       <xs:element name="Name" type="xs:token"/>
@@ -202,7 +202,7 @@ func TestValidate_TokenWhiteSpace(t *testing.T) {
 
 const uriAttrXSD = `<?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="urn:t" elementFormDefault="qualified">
+           targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">
   <xs:complexType name="LinkType">
     <xs:sequence>
       <xs:element name="ID" type="xs:string"/>

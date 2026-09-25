@@ -13,7 +13,7 @@ import (
 // multi-byte sequence would not, and the reverse.
 const encodingXSD = `<?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
-           targetNamespace="urn:t" elementFormDefault="qualified">
+           targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">
   <xs:simpleType name="ShortName">
     <xs:restriction base="xs:string">
       <xs:maxLength value="3"/>

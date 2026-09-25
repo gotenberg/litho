@@ -268,7 +268,7 @@ func TestValidateValue_ComplexTypeWithSimpleContent(t *testing.T) {
 // content extends the other. Like a self-restricting simpleType it loads,
 // since the loader checks only that each base resolves.
 const mutuallyExtendingSimpleContentXSD = `<?xml version="1.0" encoding="UTF-8"?>
-<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" elementFormDefault="qualified">
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">
   <xs:complexType name="A"><xs:simpleContent><xs:extension base="B"/></xs:simpleContent></xs:complexType>
   <xs:complexType name="B">
     <xs:simpleContent>
