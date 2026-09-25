@@ -3,6 +3,8 @@ package compliance
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -259,9 +261,40 @@ var operatorResourceCategory = map[string]ast.PdfName{
 }
 
 // checkContentStreamResourcesOps validates that every named resource the
-// operators of a parsed content stream reference exists in its resources, and
-// that the stream uses no undefined operator. It does NOT check inline image
-// intents, see [checkInlineImageIntent].
+// operators of a parsed content stream reference exists in its resources, that
+// every ri operator names a rendering intent, and that the stream uses no
+// undefined operator. It does NOT check inline image intents, see
+// [checkInlineImageIntent].
+//
+// resources is the stream's own resource dictionary and inherited the one its
+// names fall back to: the page's for a form XObject, a tiling pattern, a Type3
+// glyph description or an annotation appearance stream, and the page tree's for
+// a page with no /Resources of its own. patterns names the patterns the
+// stream's scn and SCN operators select in a Pattern colour space, which are
+// resource names of the Pattern category.
+//
+// ISO 19005-2/3/4, 6.2.2 t2 and ISO 19005-4, 6.2.2 t3 judge the content stream,
+// not the name: veraPDF tests that the stream's inheritedResourceNames and
+// undefinedResourceNames are empty, so each fails once for a stream however
+// many names it resolves through the fallback or nowhere. The rendering-intent
+// test, ISO 19005-1, 6.2.9 t1 and ISO 19005-2/3, 6.2.6 t1, judges the intent
+// each ri operator names (CosRenderingIntent), so it fails once per operator.
+// Measured with veraPDF 1.30 at PDF/A-1b, PDF/A-2b and PDF/A-4 on page
+// contents, form XObjects and annotation appearance streams:
+//
+//   - A name of any category, XObject, Font, ExtGState, ColorSpace, Pattern,
+//     Shading or Properties, that the stream's own resources lack and the page
+//     defines fails t2 once, and all seven in one stream fail it once. An
+//     appearance stream with no /Resources, or one whose /Resources name only
+//     other resources, fails it the same way.
+//   - Two names no resource dictionary defines fail t3 once, and a name the
+//     page defines beside one nothing defines fails t2 and t3 once each.
+//   - A pattern is looked up only when scn or SCN names it in a Pattern
+//     colour space: /Pattern, or a resource space [/Pattern] or [/Pattern
+//     base]. The same scn in the default space, DeviceGray or DeviceRGB looks
+//     up nothing, and nor does a numeric scn in a Pattern space.
+//   - "/Bad ri /Bad ri" fails the rendering-intent test twice, in a page
+//     content, a form XObject and an appearance stream alike.
 //
 // reportUndefinedOps selects who states ISO 19005-2/3/4, 6.2.2 t1. A page
 // content stream is already walked by [checkPageContent], which states it there;
@@ -276,58 +309,72 @@ var operatorResourceCategory = map[string]ast.PdfName{
 //   - pdfjs issue16432.pdf: its form XObjects name /F0 83 0 R, and object 83 is
 //     null. veraPDF reports the name as undefined (t3), never as inherited
 //     (t2).
+//   - pdfjs issue19624.pdf: its two pages name 85 marked-content properties
+//     only the page tree defines, and veraPDF fails t2 once for each page's
+//     content, where litho failed it once per name, 85 times. issue6961.pdf (8
+//     names over two pages), bug1669099.pdf (5 names) and issue9195.pdf (3
+//     names) move the same way, to veraPDF's count.
+//   - pdfjs issue18816.pdf: selects /Pattern5, which only the page tree
+//     defines, and veraPDF fails t2 for the page's content, where litho looked
+//     up no pattern name.
+//   - verapdf: every file agrees with veraPDF at its own profile on t2, t3 and
+//     the rendering-intent test, before and after.
 func checkContentStreamResourcesOps(
 	ctx context.Context,
 	doc *document.Document,
 	ops []content.Operation,
+	patterns map[string]bool,
 	resources ast.PdfDict,
 	inherited ast.PdfDict,
 	part int,
 	pageNum int,
 	reportUndefinedOps bool,
 ) []Violation {
-	// ISO 19005-2/3/4 §6.2.2 splits a name absent from the stream's own
-	// resources by where it does resolve: reachable only through Pages-tree
-	// inheritance is t2 (`inheritedResourceNames == ''`), truly undefined is t3.
-	inheritedHas := func(category, name ast.PdfName) bool {
-		if inherited == nil {
-			return false
-		}
-		sub, err := document.ResolveDict(ctx, doc, inherited[category])
-		if err != nil || sub == nil {
-			return false
-		}
-		_, ok := sub[name]
-		return ok
-	}
 	if ops == nil {
 		return nil
 	}
 
 	undefinedRule := undefinedOperatorRule(part)
+	inheritRule := inheritedResourceRule(part)
 	resourceRule := missingResourceRule(part)
+	riRule := renderingIntentRule(part)
 
 	var results []Violation
-	reported := make(map[string]bool) // avoid duplicate violations
+	var inheritedStated, undefinedStated bool
+	looked := make(map[string]bool)
+	// lookup states t2 or t3 for the first name of the stream that fails it.
+	lookup := func(operator string, category, name ast.PdfName) {
+		if (inheritedStated || inheritRule.Specification == "") && (undefinedStated || resourceRule.Specification == "") {
+			return
+		}
+		key := string(category) + ":" + string(name)
+		if looked[key] {
+			return
+		}
+		looked[key] = true
+		switch standing, why := resourceStanding(ctx, doc, resources, inherited, category, name); standing {
+		case resourceNameDefined:
+		case resourceNameInherited:
+			if !inheritedStated && inheritRule.Specification != "" {
+				inheritedStated = true
+				results = append(results, failf(inheritRule, "page %d: %s operator resolves %q only through inherited Resources/%s", pageNum, operator, name, string(category))...)
+			}
+		case resourceNameUndefined:
+			if !undefinedStated && resourceRule.Specification != "" {
+				undefinedStated = true
+				results = append(results, failf(resourceRule, "page %d: %s operator references %q %s Resources/%s", pageNum, operator, name, why, string(category))...)
+			}
+		}
+	}
 
 	for idx, op := range ops {
 		if idx%200 == 0 && ctx.Err() != nil {
 			return results
 		}
 
-		// Check ri operator for invalid rendering intent.
-		if op.Operator == "ri" && len(op.Operands) >= 1 {
-			if riName, ok := op.Operands[0].(ast.PdfName); ok {
-				if !validRenderingIntents[string(riName)] {
-					riRule := renderingIntentRule(part)
-					if riRule.Specification != "" {
-						key := "ri:" + string(riName)
-						if !reported[key] {
-							reported[key] = true
-							results = append(results, failf(riRule, "page %d: ri operator uses invalid intent %q", pageNum, riName)...)
-						}
-					}
-				}
+		if op.Operator == "ri" && len(op.Operands) >= 1 && riRule.Specification != "" {
+			if riName, ok := op.Operands[0].(ast.PdfName); ok && !validRenderingIntents[string(riName)] {
+				results = append(results, failf(riRule, "page %d: ri operator uses invalid intent %q", pageNum, riName)...)
 			}
 		}
 
@@ -384,54 +431,56 @@ func checkContentStreamResourcesOps(
 		if name == "" {
 			continue
 		}
+		lookup(op.Operator, category, name)
+	}
 
-		// Look up the name in the appropriate Resources sub-dictionary.
-		subDict, err := document.ResolveDict(ctx, doc, resources[category])
-		if err != nil || subDict == nil {
-			key := string(category) + ":" + string(name)
-			if !reported[key] {
-				reported[key] = true
-				if inheritedHas(category, name) {
-					if r := inheritedResourceRule(part); r.Specification != "" {
-						results = append(results, failf(r, "page %d: %s operator resolves %q only through inherited Resources/%s", pageNum, op.Operator, name, string(category))...)
-					}
-				} else if resourceRule.Specification != "" {
-					results = append(results, failf(resourceRule, "page %d: %s operator references %q not in Resources/%s", pageNum, op.Operator, name, string(category))...)
-				}
-			}
-			continue
-		}
-		entry, exists := subDict[name]
-		// ISO 32000-1, 7.3.7: an entry whose value is null is the same as an
-		// absent one, so the name is undefined. The stream's own dictionary
-		// holds the key, so veraPDF reports it as undefined (t3) even when the
-		// Pages tree defines the name, never as inherited (t2).
-		if exists && resourceEntryNull(ctx, doc, entry) {
-			key := string(category) + ":" + string(name)
-			if !reported[key] {
-				reported[key] = true
-				if resourceRule.Specification != "" {
-					results = append(results, failf(resourceRule, "page %d: %s operator references %q, which Resources/%s maps to null", pageNum, op.Operator, name, string(category))...)
-				}
-			}
-			continue
-		}
-		if !exists {
-			key := string(category) + ":" + string(name)
-			if !reported[key] {
-				reported[key] = true
-				if inheritedHas(category, name) {
-					if r := inheritedResourceRule(part); r.Specification != "" {
-						results = append(results, failf(r, "page %d: %s operator resolves %q only through inherited Resources/%s", pageNum, op.Operator, name, string(category))...)
-					}
-				} else if resourceRule.Specification != "" {
-					results = append(results, failf(resourceRule, "page %d: %s operator references %q not in Resources/%s", pageNum, op.Operator, name, string(category))...)
-				}
-			}
+	for _, name := range slices.Sorted(maps.Keys(patterns)) {
+		if name != "" {
+			lookup("scn", "Pattern", ast.PdfName(name))
 		}
 	}
 
 	return results
+}
+
+// resourceNameStanding says where a name a content stream uses resolves.
+type resourceNameStanding int
+
+const (
+	// resourceNameDefined is a name the stream's own resources define.
+	resourceNameDefined resourceNameStanding = iota
+	// resourceNameInherited is a name only the fallback resources define.
+	resourceNameInherited
+	// resourceNameUndefined is a name no resource dictionary defines.
+	resourceNameUndefined
+)
+
+// resourceStanding reports where name, of the given category, resolves:
+// in resources, the stream's own, or only in inherited, the fallback, or
+// nowhere. For an undefined name it also says why, the words between the name
+// and the resource dictionary in the finding's context.
+//
+// ISO 32000-1, 7.3.7 makes an entry whose value is null the same as an absent
+// one, so the name is undefined. The stream's own dictionary holds the key, so
+// veraPDF reports it as undefined (t3) even when the fallback defines the name,
+// never as inherited (t2).
+func resourceStanding(ctx context.Context, doc *document.Document, resources, inherited ast.PdfDict, category, name ast.PdfName) (resourceNameStanding, string) {
+	if sub, err := document.ResolveDict(ctx, doc, resources[category]); err == nil && sub != nil {
+		if entry, exists := sub[name]; exists {
+			if resourceEntryNull(ctx, doc, entry) {
+				return resourceNameUndefined, "which maps to null in"
+			}
+			return resourceNameDefined, ""
+		}
+	}
+	if inherited != nil {
+		if sub, err := document.ResolveDict(ctx, doc, inherited[category]); err == nil && sub != nil {
+			if _, ok := sub[name]; ok {
+				return resourceNameInherited, ""
+			}
+		}
+	}
+	return resourceNameUndefined, "not in"
 }
 
 // resourceEntryNull reports whether a resource dictionary entry's value is

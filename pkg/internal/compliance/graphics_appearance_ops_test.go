@@ -55,14 +55,14 @@ func appearanceOpPDF(t *testing.T, inAppearance bool) []byte {
 }
 
 // appearanceScan runs the drawn-stream walk over the pages of the document
-// whose catalog is cat and returns what [checkAppearanceStreamOps] states for
+// whose catalog is cat and returns what [checkDrawnStream] states for
 // the annotation appearance streams it reaches, at part.
 func appearanceScan(ctx context.Context, doc *document.Document, cat ast.PdfDict, part int) []Violation {
 	vctx := &validationCtx{doc: doc, catalog: cat, part: part, pages: pageCtxsFor(ctx, doc, cat)}
 	var got []Violation
 	walk := newDrawnStreamWalk(vctx, func(s *drawnStream) {
 		if s.kind == drawnAppearance {
-			got = append(got, checkAppearanceStreamOps(ctx, doc, s, part, nil)...)
+			got = append(got, checkDrawnStream(ctx, doc, s, part, nil)...)
 		}
 	})
 	for i := range vctx.pages {

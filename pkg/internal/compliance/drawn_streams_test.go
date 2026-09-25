@@ -91,8 +91,7 @@ func TestContentRulesInEveryDrawnStream(t *testing.T) {
 	cases := []struct {
 		name   string
 		judged int
-		// inherited is how many times PDF/A-2b fails 6.2.2 t2, or -1 where
-		// litho and veraPDF differ for a reason this walk does not own.
+		// inherited is how many times PDF/A-2b fails 6.2.2 t2.
 		inherited int
 		objs      []string
 	}{
@@ -137,9 +136,8 @@ func TestContentRulesInEveryDrawnStream(t *testing.T) {
 			f.form(x("Fm0", "7"), "/Fm0 Do"), f.form(x("Fm1", "8"), "/Fm1 Do"), f.form("<< >>", drawnBad),
 		}},
 		// veraPDF states 6.2.2 t2 for the appearance's own /Fm0, which the page
-		// alone defines. litho states no t2 for an appearance stream's names;
-		// see checkAppearanceStreamOps.
-		{"a form an appearance names through the page", 1, -1, []string{
+		// alone defines.
+		{"a form an appearance names through the page", 1, 1, []string{
 			f.pages(3), f.page(x("Fm0", "7"), 4, " /Annots [5 0 R]"), exponentStream("", drawnPlain), f.annot(6),
 			f.form("<< >>", "/Fm0 Do"), f.form("<< >>", drawnBad),
 		}},
@@ -296,7 +294,7 @@ func TestContentRulesInEveryDrawnStream(t *testing.T) {
 						n    int
 					}{p.limit, tc.judged})
 				}
-				if p.profile == models.PDFA2b && tc.inherited >= 0 {
+				if p.profile == models.PDFA2b {
 					want = append(want, struct {
 						rule Rule
 						n    int

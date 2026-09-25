@@ -44,6 +44,10 @@ type drawnStream struct {
 	pageRes ast.PdfDict
 	pageNum int
 	ops     []content.Operation
+	// patterns names the patterns its scn and SCN operators select, resource
+	// names the stream uses as much as its other operators' operands (see
+	// [checkContentStreamResourcesOps]).
+	patterns map[string]bool
 	// overflow counts the integer literals past the 64-bit range the parse
 	// read as reals (see [checkNumberLimits]).
 	overflow map[float64]int
@@ -92,6 +96,14 @@ type drawnStream struct {
 //     32000-1, 8.10.2), so a bare scn in it selects a pattern when the drawing
 //     stream selected the Pattern space.
 //
+// One divergence remains. litho judges a glyph description on the names it
+// uses itself, while veraPDF gives the glyph descriptions of one Type3 font a
+// single set of inherited names: measured with veraPDF 1.30 at PDF/A-2b, a
+// glyph naming only a font no dictionary defines fails ISO 19005-2, 6.2.2 t2
+// once another glyph of its font, judged before it, names a font the page
+// defines. veraPDF judges the glyphs in the order of a Java hash map, which
+// litho does not model.
+//
 // A cycle of forms painting each other is broken by the judged set, since a
 // stream already judged is not entered again. The chain is capped at the form
 // budget, [formTooDeep], an anti-DoS guard: a stream a page's content draws is
@@ -110,7 +122,9 @@ type drawnStream struct {
 //     outermost alone.
 //   - pdfjs pr4922.pdf: two pages show text with the same Type3 fonts, and
 //     veraPDF states 6.2.2 t2 for their glyph descriptions 20 times, where
-//     litho judged each glyph once per page, 39 times.
+//     litho judged each glyph once per page, 39 times. litho now states it 19
+//     times: glyph /three names only /R98, which the first page does not
+//     define, and fails in veraPDF through the font's shared set alone.
 //   - pdfjs poppler-90-0-fuzzed.pdf: its pages share damaged Type3 fonts, and
 //     litho stated the undefined-operator rule 1874 times in their glyph
 //     descriptions, where veraPDF states it in none of them.
@@ -141,7 +155,7 @@ func newDrawnStreamWalk(vctx *validationCtx, judge func(*drawnStream)) *drawnStr
 // [markJudgedContents].
 func (w *drawnStreamWalk) walkPage(ctx context.Context, p *pageCtx, pageNum int) {
 	if !p.contentJudged {
-		w.descend(ctx, p.parsedOps(ctx), p.resources, p.resources, inheritedCSDefault(), pageNum, 1)
+		w.descend(ctx, w.scan(ctx, p.parsedOps(ctx), p.resources, inheritedCSDefault()), p.resources, pageNum, 1)
 	}
 
 	annots, err := document.ResolveArray(ctx, w.doc, p.dict["Annots"])
@@ -172,18 +186,47 @@ func (w *drawnStreamWalk) walkPage(ctx context.Context, p *pageCtx, pageNum int)
 	}
 }
 
-// descend reaches the streams one content stream draws, whose operations are
-// ops, at depth levels below the page. scope resolves the names its operators
-// use, pageRes is the page's resource dictionary, and entry is the
-// colour-space selection the stream starts from.
-func (w *drawnStreamWalk) descend(ctx context.Context, ops []content.Operation, scope, pageRes ast.PdfDict, entry inheritedCS, pageNum, depth int) {
-	if len(ops) == 0 || ctx.Err() != nil {
-		return
+// drawnScan is what one content stream draws, read from its operations: the
+// forms its Do operators paint, the patterns its scn and SCN operators select
+// and the colour-space selection in force at each Do.
+type drawnScan struct {
+	ops []content.Operation
+	// scope resolves the names its operators use.
+	scope     ast.PdfDict
+	painted   map[string]bool
+	selected  *usedResources
+	doEntries map[string]inheritedCS
+}
+
+// scan reads what the stream whose operations are ops draws. scope resolves
+// the names they use, and entry is the colour-space selection the stream
+// starts from.
+func (w *drawnStreamWalk) scan(ctx context.Context, ops []content.Operation, scope ast.PdfDict, entry inheritedCS) drawnScan {
+	if len(ops) == 0 {
+		return drawnScan{}
 	}
 	_, painted, _, selected, doEntries := scanContentStreamDeviceCSFrom(ctx, ops, collectPatternCSNames(ctx, w.doc, scope), entry)
+	return drawnScan{ops: ops, scope: scope, painted: painted, selected: selected, doEntries: doEntries}
+}
+
+// patterns returns the names of the patterns the stream selects.
+func (s drawnScan) patterns() map[string]bool {
+	if s.selected == nil {
+		return nil
+	}
+	return s.selected.patterns
+}
+
+// descend reaches the streams one content stream draws, which s holds, at
+// depth levels below the page. pageRes is the page's resource dictionary.
+func (w *drawnStreamWalk) descend(ctx context.Context, s drawnScan, pageRes ast.PdfDict, pageNum, depth int) {
+	if len(s.ops) == 0 || ctx.Err() != nil {
+		return
+	}
+	scope := s.scope
 
 	xobjects, _ := document.ResolveDict(ctx, w.doc, scope["XObject"])
-	for _, name := range slices.Sorted(maps.Keys(painted)) {
+	for _, name := range slices.Sorted(maps.Keys(s.painted)) {
 		obj, ok := xobjects[ast.PdfName(name)]
 		if !ok || w.judgedAlready(obj) {
 			continue
@@ -195,11 +238,11 @@ func (w *drawnStreamWalk) descend(ctx context.Context, ops []content.Operation, 
 		if subtype, _ := document.ResolveName(ctx, w.doc, stream.Dict["Subtype"]); subtype != "Form" {
 			continue
 		}
-		w.visit(ctx, obj, nil, drawnForm, pageRes, inheritedCSFor(doEntries, name), pageNum, depth)
+		w.visit(ctx, obj, nil, drawnForm, pageRes, inheritedCSFor(s.doEntries, name), pageNum, depth)
 	}
 
 	patterns, _ := document.ResolveDict(ctx, w.doc, scope["Pattern"])
-	for _, name := range slices.Sorted(maps.Keys(selected.patterns)) {
+	for _, name := range slices.Sorted(maps.Keys(s.patterns())) {
 		obj, ok := patterns[ast.PdfName(name)]
 		if !ok || w.judgedAlready(obj) {
 			continue
@@ -219,7 +262,7 @@ func (w *drawnStreamWalk) descend(ctx context.Context, ops []content.Operation, 
 	// text never shows included: veraPDF reaches them all through the font of
 	// the text-showing operator, and none of a font a Tf only selects.
 	fonts, _ := document.ResolveDict(ctx, w.doc, scope["Font"])
-	for _, name := range slices.Sorted(maps.Keys(collectFontUsage(ops))) {
+	for _, name := range slices.Sorted(maps.Keys(collectFontUsage(s.ops))) {
 		fontDict, err := document.ResolveDict(ctx, w.doc, fonts[ast.PdfName(name)])
 		if err != nil || fontDict == nil {
 			continue
@@ -281,6 +324,7 @@ func (w *drawnStreamWalk) visit(ctx context.Context, obj ast.PdfObject, owner as
 		w.doc.Logger.Debug("compliance.graphics: cannot parse drawn stream", "error", err)
 		return
 	}
+	scan := w.scan(ctx, ops, appearanceResources(ctx, w.doc, res, pageRes), entry)
 	w.judge(&drawnStream{
 		kind:      kind,
 		objNum:    objNum,
@@ -288,8 +332,9 @@ func (w *drawnStreamWalk) visit(ctx context.Context, obj ast.PdfObject, owner as
 		pageRes:   pageRes,
 		pageNum:   pageNum,
 		ops:       ops,
+		patterns:  scan.patterns(),
 		overflow:  countOverflows(overflows),
 		format:    format,
 	})
-	w.descend(ctx, ops, appearanceResources(ctx, w.doc, res, pageRes), pageRes, entry, pageNum, depth+1)
+	w.descend(ctx, scan, pageRes, pageNum, depth+1)
 }

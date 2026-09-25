@@ -83,10 +83,10 @@ func appearanceResourceFires(t *testing.T, apRes, pageRes string, part int) bool
 // reaches it, and veraPDF 1.30.2 reports it there.
 //
 // The page's resources fill in per name, which was measured by adding /MC0 to
-// the page alone (veraPDF fell silent) and then by giving the appearance stream
-// a /Properties holding a different name while the page kept /MC0 (still
-// silent). A page-defined name is therefore not reported at all, not even as
-// the inherited-resource test.
+// the page alone (t3 fell silent) and then by giving the appearance stream a
+// /Properties holding a different name while the page kept /MC0 (still
+// silent). A page-defined name fails the inherited-resource test, t2, instead:
+// measured with veraPDF 1.30 at PDF/A-2b and PDF/A-4 on both shapes.
 //
 // # Corpus evidence
 //

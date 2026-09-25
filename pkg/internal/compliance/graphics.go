@@ -6,7 +6,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // checkGraphicsGroup validates ExtGState, halftones, rendering intent, and
@@ -58,7 +57,8 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 				if pagesDict, err := document.ResolveDict(ctx, doc, vctx.catalog["Pages"]); err == nil && pagesDict != nil {
 					inheritedRes = resolveResources(ctx, doc, pagesDict)
 				}
-				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, ownRes, inheritedRes, part, i+1, false)...)
+				_, _, _, selected, _ := scanContentStreamDeviceCS(ctx, ops, collectPatternCSNames(ctx, doc, res))
+				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, selected.patterns, ownRes, inheritedRes, part, i+1, false)...)
 				// Check inline image /Intent values from parsed BI operations.
 				results = append(results, checkInlineImageIntent(ops, part, i+1)...)
 				// Inline image filters are stated by checkInlineImageFilters,
@@ -94,14 +94,17 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 }
 
 // checkDrawnStream states the content-stream rules for one stream
-// [drawnStreamWalk] reaches. An annotation appearance stream is judged by
-// [checkAppearanceStreamOps].
+// [drawnStreamWalk] reaches: a form XObject, a tiling pattern cell, a Type3
+// glyph description or an annotation appearance stream.
 //
-// A form XObject, a tiling pattern cell and a Type3 glyph description resolve
-// resource names against their own /Resources first, a glyph description
-// against its font's. Per ISO 19005-2, 6.2.2, a name found only in the page's
-// resources is an inherited reference (t2), so the page's serve as the fallback
-// scope.
+// Each resolves resource names against its own /Resources first, a glyph
+// description against its font's. Per ISO 19005-2, 6.2.2, a name found only in
+// the page's resources is an inherited reference (t2), so the page's serve as
+// the fallback scope; see [checkContentStreamResourcesOps]. An appearance
+// stream is a content stream (ISO 32000-1, 12.5.5) and veraPDF resolves its
+// names the same way: measured with veraPDF 1.30 at PDF/A-1b, PDF/A-2b and
+// PDF/A-4, an appearance stream fails t2, t3, the ri test and the inline
+// image intent test exactly as a form XObject the page paints does.
 //
 // The undefined-operator rule, ISO 19005-1, 6.2.10 t1 and ISO 19005-2/3/4,
 // 6.2.2 t1, is stated here for these streams, and by [checkPageContent] for a
@@ -109,14 +112,23 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 // operator. A number written with an exponent where an operand stands reads as
 // such an operator, see [checkExponentOperands]. The operand limits are stated
 // by [checkContentStreamLimits].
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14438.pdf: runs /OC /MC0 BDC in 2 of its 19 appearance
+//     streams, whose own /Resources carry no /Properties, and veraPDF fails
+//     ISO 19005-4, 6.2.2 t3 for exactly those 2.
 func checkDrawnStream(ctx context.Context, doc *document.Document, s *drawnStream, part int, hexStrings *drawnStreamHexStrings) []Violation {
-	if s.kind == drawnAppearance {
-		return checkAppearanceStreamOps(ctx, doc, s, part, hexStrings)
-	}
-	results := checkContentStreamResourcesOps(ctx, doc, s.ops, s.resources, s.pageRes, part, s.pageNum, true)
+	results := checkContentStreamResourcesOps(ctx, doc, s.ops, s.patterns, s.resources, s.pageRes, part, s.pageNum, true)
 	results = append(results, checkExponentOperands(s.format, part, s.pageNum)...)
 	results = append(results, hexStrings.check(s.format, s.pageNum)...)
-	return append(results, checkInlineImageIntent(s.ops, part, s.pageNum)...)
+	results = append(results, checkInlineImageIntent(s.ops, part, s.pageNum)...)
+	if s.kind == drawnAppearance {
+		for i := range results {
+			results[i].Context += " in annotation appearance"
+		}
+	}
+	return results
 }
 
 // checkAnnotationAppearanceExtGState scans annotation appearance stream
@@ -174,61 +186,6 @@ func appearanceStreamObjects(ctx context.Context, doc *document.Document, apObj 
 	return out
 }
 
-// checkAppearanceStreamOps states the content-stream rules for one annotation
-// appearance stream: every operator outside [content.IsOperator], every number
-// written with an exponent where an operand stands (see
-// [checkExponentOperands]), the syntax of its hex strings, and the names it
-// references that no resource dictionary defines.
-//
-// An appearance stream is a content stream (ISO 32000-1, 12.5.5), so the
-// prohibition in ISO 19005-2, 6.2.2 reaches it, and veraPDF flags an operator
-// there that ISO 32000-1 does not define.
-//
-// The named-resource test runs here too, for the one part that states it.
-// veraPDF 1.30.2 fails ISO 19005-4, 6.2.2 t3 on appearance streams.
-//
-// # Corpus evidence
-//
-//   - pdfjs issue14438.pdf: runs /OC /MC0 BDC in 2 of its 19 appearance
-//     streams, whose own /Resources carry no /Properties, and veraPDF reports
-//     exactly those 2.
-func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, s *drawnStream, part int, hexStrings *drawnStreamHexStrings) []Violation {
-	rule := undefinedOperatorRule(part)
-	var results []Violation
-	for idx, op := range s.ops {
-		if idx%100 == 0 && ctx.Err() != nil {
-			return results
-		}
-		if op.Operator == "" || content.IsOperator(op.Operator) {
-			continue
-		}
-		results = append(results, failf(rule,
-			"page %d: undefined operator %q in annotation appearance", s.pageNum, op.Operator)...)
-	}
-	for _, v := range checkExponentOperands(s.format, part, s.pageNum) {
-		v.Context += " in annotation appearance"
-		results = append(results, v)
-	}
-	for _, v := range hexStrings.check(s.format, s.pageNum) {
-		v.Context += " in annotation appearance"
-		results = append(results, v)
-	}
-
-	// Only ISO 19005-4 states the undefined-name test (§6.2.2 t3), so the scan
-	// is confined to the part that can report it. The inherited-resource
-	// dictionary is nil: a name the page defines is not an inherited reference
-	// for an appearance stream, and veraPDF reports nothing at all for it.
-	if missingResourceRule(part).Specification == "" {
-		return results
-	}
-	for _, v := range checkContentStreamResourcesOps(ctx, doc, s.ops,
-		appearanceResources(ctx, doc, s.resources, s.pageRes), nil, part, s.pageNum, false) {
-		v.Context += ", annotation appearance"
-		results = append(results, v)
-	}
-	return results
-}
-
 // appearanceResources returns the resource dictionary an appearance stream's
 // names resolve against: its own /Resources, with the page's standing in for
 // every name the stream does not define itself.
@@ -236,9 +193,10 @@ func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, s *dr
 // The fallback is per name rather than per category, measured against veraPDF
 // 1.30.2. Defining /MC0 on the page alone silences §6.2.2 t3, and so does
 // giving the appearance stream a /Properties holding a different name while the
-// page defines /MC0. ISO 32000-1, 12.5.5 leaves an appearance stream's
-// resources to the stream, so the page fills the gaps rather than replacing
-// them.
+// page defines /MC0: the name resolves, through the page, and fails the
+// inherited-resource test t2 instead (see [checkContentStreamResourcesOps]).
+// ISO 32000-1, 12.5.5 leaves an appearance stream's resources to the stream, so
+// the page fills the gaps rather than replacing them.
 //
 // # Corpus evidence
 //

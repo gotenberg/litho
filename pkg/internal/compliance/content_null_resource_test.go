@@ -51,7 +51,7 @@ func TestNullResourceEntryIsUndefined(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := checkContentStreamResourcesOps(ctx, doc, ops, tt.own, tt.inherited, tt.part, 1, false)
+			got := checkContentStreamResourcesOps(ctx, doc, ops, nil, tt.own, tt.inherited, tt.part, 1, false)
 			if tt.want.Specification == "" {
 				if len(got) != 0 {
 					t.Errorf("got %v, want no violation", got)
