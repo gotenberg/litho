@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -590,9 +591,13 @@ func decodeFontProgram(ctx context.Context, doc *document.Document, obj ast.PdfO
 	// data, which are a fragment of the program rather than the program. A
 	// program whose bytes will not decode says nothing about its container, and
 	// veraPDF counts the font as embedded (see [streamHoldsFontProgram]), so
-	// the fragment reads as a program that will not decode.
-	if len(report.Damaged) > 0 {
-		return nil, fmt.Errorf("%w: %s data is damaged", errDamagedFontProgram, report.Damaged[0])
+	// the fragment reads as a program that will not decode. The chain keeps
+	// what FlateDecode, LZWDecode and BrotliDecode decoded before damage too,
+	// and those bytes stand as the program: veraPDF reads a program whose
+	// deflate data merely ends early, and one whose deflate data is corrupt is
+	// weighed below.
+	if i := slices.IndexFunc(report.Damaged, isASCIIFilter); i >= 0 {
+		return nil, fmt.Errorf("%w: %s data is damaged", errDamagedFontProgram, report.Damaged[i])
 	}
 	// The filter keeps what it inflated before corrupt deflate data, which is
 	// not the program the file embeds; see [deflateDataCorrupt]. Such a program
@@ -605,6 +610,16 @@ func decodeFontProgram(ctx context.Context, doc *document.Document, obj ast.PdfO
 		doc.SetCachedFontProgram(ref.ObjectNum, data)
 	}
 	return data, nil
+}
+
+// isASCIIFilter reports whether name is ASCIIHexDecode or ASCII85Decode, in
+// full or abbreviated (ISO 32000-1, Table 6 and Table 94).
+func isASCIIFilter(name ast.PdfName) bool {
+	switch name {
+	case "ASCIIHexDecode", "AHx", "ASCII85Decode", "A85":
+		return true
+	}
+	return false
 }
 
 // deflateDataCorrupt reports whether a stream filtered by FlateDecode alone

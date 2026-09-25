@@ -43,6 +43,14 @@ var (
 	// bytes before it are kept and the stream is reported incomplete.
 	ErrInvalidASCII85 = errors.New("ascii85: invalid data")
 
+	// errDamagedData marks the error a FlateDecode, LZWDecode or BrotliDecode
+	// filter returns alongside the bytes it decoded before damaged data:
+	// corrupt data, or data that ends before its final block. The filter chain
+	// keeps those bytes and reports the stream incomplete (see
+	// keepsDamagedPrefix), so the error reaches no caller. When nothing decoded
+	// before the damage the filter returns the damage's own error instead.
+	errDamagedData = errors.New("damaged data")
+
 	// errPluginDeclined marks, alongside [ErrUnsupportedFilter], a stream a
 	// plugin declined for a filter litho has no built-in decoder for. It
 	// fails the stream where a bare ErrUnsupportedFilter skips the filter.

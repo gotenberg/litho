@@ -29,6 +29,10 @@ func FuzzApplyDecodeFilter(f *testing.F) {
 	f.Add([]byte{0x00, 0x01, 0x02, 0x80, 0xff}) // RunLength-ish
 	f.Add([]byte{0xff, 0xd8, 0xff, 0xd9})       // JPEG SOI/EOI
 
+	// zlib data cut inside its block, and zlib data stopped at a sync flush.
+	f.Add([]byte{0x78, 0x9c, 0xca, 0x48, 0xcd})
+	f.Add([]byte{0x78, 0x9c, 0xca, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff})
+
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 1<<20 {
 			return

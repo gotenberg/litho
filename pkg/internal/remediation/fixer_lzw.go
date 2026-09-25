@@ -209,7 +209,9 @@ func canonicalFilterSpelling(name ast.PdfName) (ast.PdfName, bool) {
 // The check must be [filter.DecodeStreamChecked], never a nil error from
 // DecodeStream. Decoding is best-effort: an unsupported filter is SKIPPED and
 // its bytes pass through unchanged, so DecodeStream reports success having
-// decoded nothing.
+// decoded nothing. It also reports data damaged under the canonical name, an
+// ASCII character the filter rejects or deflate data cut short, which decodes
+// only up to the damage, so such a stream keeps its name as well.
 //
 // Only a single-name /Filter is repaired. An array would need each element
 // verified in chain order, and no real file exercises that code.
@@ -220,6 +222,9 @@ func canonicalFilterSpelling(name ast.PdfName) (ast.PdfName, bool) {
 //     for /Flatedecode with the raw 37 bytes untouched, byte for byte.
 //   - All corpora: no file carries a case-misspelled name inside a /Filter
 //     array, so the gate could not falsify an array repair.
+//   - All corpora: the one case-misspelled FlateDecode stream, object 11 of
+//     verapdf PDF_A-4__veraPDF_test_suite_6-1-6-2-t01-fail-b.pdf, inflates
+//     whole under the canonical name, so no rename depends on damaged data.
 func fixFilterNameCase(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, objNum int, stream ast.PdfStream, filterObj ast.PdfObject) string {
 	name, ok := filterObj.(ast.PdfName)
 	if !ok {

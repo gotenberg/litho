@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash/adler32"
 	"io"
 	"math"
 	"sync"
@@ -26,6 +27,10 @@ import (
 // stream budget [limits.DefaultMaxStreamBytes] describes, and fails with
 // [ErrDecompressionBomb] once buf holds more. Context is checked between
 // chunks so callers can cancel long decompression.
+//
+// An error r returns, other than io.EOF, is returned with whatever buf holds
+// by then: the caller decides whether the bytes decoded before damaged data
+// stand (see [keepsDamagedPrefix]).
 func limitedCopy(ctx context.Context, buf *bytes.Buffer, r io.Reader, limit int64) error {
 	const chunk = 1 << 20 // 1 MB
 	for {
@@ -40,14 +45,6 @@ func limitedCopy(ctx context.Context, buf *bytes.Buffer, r io.Reader, limit int6
 			return nil
 		}
 		if err != nil {
-			if buf.Len() > 0 {
-				// Best-effort: a truncated or corrupt stream yields
-				// usable partial data, so return what decoded with a nil
-				// error. The caller cannot currently distinguish a fully
-				// decoded stream from a salvaged partial one; surfacing
-				// that is deferred to the strict/lenient read mode.
-				return nil
-			}
 			return err
 		}
 	}
@@ -200,14 +197,26 @@ func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder, strict b
 // ISO 32000-1, 7.4.2 says a character outside the ASCIIHexDecode encoding
 // "shall cause an error", and 7.4.3 says the same of ASCII85Decode, adding a
 // group past 2^32 - 1, a z inside a group and a final partial group of one
-// character. Leniency: litho relaxes both clauses as it relaxes FlateDecode
-// and LZWDecode data that stops short. The bytes of the digit pairs or groups
-// before the damage are handed to the next filter, and the stream is reported
-// incomplete ([DecodeStreamChecked]) rather than failed, so a damaged stream
-// yields what it holds up to the damage, as a viewer renders it. When nothing
-// decoded before the damage the error stands, as it does for FlateDecode. The
-// two ASCII filters share the rule whatever the damage, a bad character as
-// much as a bad group, so neither decides by the kind of error.
+// character. FlateDecode data (7.4.4) is a zlib stream of deflate data, which
+// ends with the block RFC 1951, 3.2.3 marks final and holds only the codes 3.2
+// defines; LZWDecode data (7.4.4.2) holds only the codes its table defines. A
+// BrotliDecode stream ends with the meta-block RFC 7932, 9.2 marks last.
+//
+// Leniency: litho relaxes each of these rules. The bytes decoded before the
+// damage, a character the ASCII filters reject, a code the format does not
+// define, or data that ends before its final block, are handed to the next
+// filter, and the stream is reported incomplete ([DecodeStreamChecked])
+// rather than failed, so a damaged stream yields what it holds up to the
+// damage, as a viewer renders it. When nothing decoded before the damage the
+// error stands. The ASCII filters share the rule whatever the damage, a bad
+// character as much as a bad group, so neither decides by the kind of error.
+//
+// Data whose end-of-data marker is missing is whole, not damaged: an ASCII
+// filter's (see [decodeASCIIHex]), an LZWDecode stream's EOD code (see
+// [decodeLZW]), and deflate data that stops at a sync flush without its final
+// block (see [endsAtSyncFlush]). A zlib stream whose deflate data ends but
+// whose Adler-32 checksum is missing or wrong is whole too: the checksum
+// follows the deflate data rather than delimiting it.
 //
 // Every other filter either keeps a damaged stream's output itself or fails.
 //
@@ -220,8 +229,16 @@ func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder, strict b
 //     26 more meet it before anything decodes, and still fail.
 //   - All corpora: none of the 109 is an image, and no image decodes
 //     differently.
+//   - All corpora: 39 FlateDecode streams keep the bytes decoded before damage
+//     and are now reported incomplete where they were reported whole: 29 hold
+//     corrupt deflate data and 10 end before their final block, 6 of them in
+//     pdfjs poppler-90-0-fuzzed.pdf. Their decoded bytes are unchanged.
+//   - All corpora: 286 zlib streams miss all or part of their checksum and 16
+//     carry a wrong one after deflate data that ends, and are still reported
+//     whole. No LZWDecode stream holds a code its table lacks, and none of the
+//     30 BrotliDecode streams is damaged.
 func keepsDamagedPrefix(decoded []byte, err error) bool {
-	return len(decoded) > 0 && (errors.Is(err, ErrInvalidASCIIHex) || errors.Is(err, ErrInvalidASCII85))
+	return len(decoded) > 0 && (errors.Is(err, ErrInvalidASCIIHex) || errors.Is(err, ErrInvalidASCII85) || errors.Is(err, errDamagedData))
 }
 
 // streamFilterNames returns the stream's /Filter entries in the order they
@@ -333,17 +350,11 @@ func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName,
 	switch filterName {
 	case "FlateDecode", "Fl":
 		decoded, err := decodeFlateDecode(ctx, data, lim.MaxStreamBytes)
-		if err != nil {
-			return nil, err
-		}
-		return applyPredictor(decoded, extractPredictorParams(parms))
+		return predict(decoded, err, parms)
 
 	case "LZWDecode", "LZW":
 		decoded, err := decodeLZW(ctx, data, parms, lim.MaxStreamBytes)
-		if err != nil {
-			return nil, err
-		}
-		return applyPredictor(decoded, extractPredictorParams(parms))
+		return predict(decoded, err, parms)
 
 	case "ASCIIHexDecode", "AHx":
 		return decodeASCIIHex(data)
@@ -377,58 +388,180 @@ func applyDecodeFilter(ctx context.Context, data []byte, filterName ast.PdfName,
 	}
 }
 
+// predict applies the predictor of the parameter dictionary parms to decoded,
+// the output of a FlateDecode or LZWDecode filter that returned err with it.
+// The bytes such a filter keeps before damaged data ([keepsDamagedPrefix]) are
+// predicted as a whole stream's are, and err stays with them.
+func predict(decoded []byte, err error, parms ast.PdfDict) ([]byte, error) {
+	if err != nil && !keepsDamagedPrefix(decoded, err) {
+		return nil, err
+	}
+	out, perr := applyPredictor(decoded, extractPredictorParams(parms))
+	if perr != nil {
+		return nil, perr
+	}
+	return out, err
+}
+
+// decodeFlateDecode implements the FlateDecode filter (ISO 32000-1, 7.4.4):
+// the deflate data (RFC 1951) of a zlib stream (RFC 1950), or of the whole
+// data when the zlib header is damaged (see [deflateData]).
+//
+// Damaged deflate data, corrupt or ending before its final block, yields the
+// bytes decoded before the damage with an error wrapping errDamagedData (see
+// [keepsDamagedPrefix]), unless the data stops at a sync flush
+// ([endsAtSyncFlush]). The zlib checksum is not read once deflate data yields
+// bytes: it follows the deflate data rather than delimiting it, and a missing
+// or wrong one leaves every byte decoded.
+//
+// When nothing decodes, the stream fails on any error, the checksum's
+// included, as compress/zlib, which read the data before, made it fail.
 func decodeFlateDecode(ctx context.Context, data []byte, limit int64) ([]byte, error) {
-	r, err := openFlate(data)
+	body, framed, err := deflateData(data)
 	if err != nil {
 		return nil, err
 	}
+	src := bytes.NewReader(body)
+	r := flate.NewReader(src)
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer bufPool.Put(buf)
 	copyErr := limitedCopy(ctx, buf, r, limit)
-	closeErr := r.Close()
 
-	// A decompression bomb is not a damaged stream. The tolerance below keeps
-	// whatever decoded when a stream is truncated or its checksum is broken,
-	// and it decides that on buf.Len() > 0, which a bomb always satisfies,
-	// since limitedCopy only reports one after the budget has been buffered. So
-	// ErrDecompressionBomb was never returned from this path: the caller got
-	// a stream silently truncated at the cap and no signal that it was, while
-	// decodeLZW, decodeCCITTFax and decodeBrotli all propagate the same error.
+	// A decompression bomb is not a damaged stream: limitedCopy reports one
+	// only after the budget has been buffered, and keeping that buffer would
+	// hand the caller a stream silently truncated at the cap. decodeLZW,
+	// decodeCCITTFax and decodeBrotli all propagate the same error.
 	if errors.Is(copyErr, ErrDecompressionBomb) {
 		return nil, fmt.Errorf("FlateDecode %w", copyErr)
 	}
 
 	// Cancellation is not a damaged stream either. limitedCopy reports
-	// ctx.Err() between chunks, so a chunk has always been buffered by then and
-	// the tolerance below keeps it and reports success: the caller was told a
-	// cancelled decode produced a complete stream, truncated wherever
-	// cancellation landed. decodeLZW, decodeCCITTFax and decodeBrotli all
-	// propagate it. Tested with a context whose Err reports cancellation only
-	// after the first chunk, since one cancelled up front leaves an empty
-	// buffer and is handled correctly either way.
+	// ctx.Err() between chunks, so a chunk has always been buffered by then,
+	// and keeping it would tell the caller a cancelled decode produced the
+	// bytes up to wherever cancellation landed. Tested with a context whose
+	// Err reports cancellation only after the first chunk, since one cancelled
+	// up front leaves an empty buffer and is handled correctly either way.
 	if copyErr != nil && ctx.Err() != nil {
 		return nil, copyErr
 	}
 
-	// Tolerate read errors that leave valid partial data. Damaged PDFs
-	// frequently have truncated zlib streams or bad checksums, but the
-	// decompressed bytes up to that point are usable.
-	if copyErr != nil && copyErr != io.EOF && copyErr != io.ErrUnexpectedEOF {
-		// If some data decoded, use it despite the error.
-		if buf.Len() == 0 {
-			return nil, copyErr
+	if buf.Len() == 0 {
+		if err := emptyFlateError(copyErr, framed, body[len(body)-src.Len():]); err != nil {
+			return nil, err
 		}
+		return []byte{}, nil
 	}
-
-	// Tolerate close errors (checksum mismatches) once data has decoded.
-	if closeErr != nil && buf.Len() == 0 {
-		return nil, fmt.Errorf("failed to close zlib reader: %w", closeErr)
-	}
-
 	result := make([]byte, buf.Len())
 	copy(result, buf.Bytes())
-	return result, nil
+	if copyErr == nil || (errors.Is(copyErr, io.ErrUnexpectedEOF) && endsAtSyncFlush(body)) {
+		return result, nil
+	}
+	return result, fmt.Errorf("%w: FlateDecode: %w", errDamagedData, copyErr)
+}
+
+// emptyFlateError returns the error of FlateDecode data that decodes to
+// nothing, where copyErr is what reading its deflate data returned, framed
+// reports a zlib stream, and trailer holds the bytes after its deflate data.
+// It returns what compress/zlib, which read the data before, made of the
+// stream: nil for an empty zlib stream whose checksum is sound, and otherwise
+// the error of the deflate data or of the checksum.
+func emptyFlateError(copyErr error, framed bool, trailer []byte) error {
+	switch {
+	case copyErr == nil && !framed:
+		return nil
+	case copyErr == nil && len(trailer) < 4:
+		copyErr = io.ErrUnexpectedEOF
+	case copyErr == nil && binary.BigEndian.Uint32(trailer) != adler32.Checksum(nil):
+		return zlib.ErrChecksum
+	case copyErr == nil:
+		return nil
+	}
+	if errors.Is(copyErr, io.ErrUnexpectedEOF) {
+		return fmt.Errorf("failed to close zlib reader: %w", copyErr)
+	}
+	return copyErr
+}
+
+// syncFlushMarker is the empty stored block (RFC 1951, 3.2.4) a zlib encoder
+// writes on a sync or full flush: LEN 0 and NLEN 0xFFFF, byte-aligned, so a
+// decoder holds every byte the encoder was given.
+var syncFlushMarker = []byte{0x00, 0x00, 0xFF, 0xFF}
+
+// endsAtSyncFlush reports whether deflate data that ends before its final
+// block stops at a sync flush: its last bytes, less the end-of-line a
+// producer counted in /Length, are the empty stored block of a flush.
+//
+// Leniency: RFC 1951, 3.2.3 has deflate data end with a block marked final,
+// and such data does not. A producer that flushes its encoder and never
+// finishes it has written every byte it was given, so litho reads the data as
+// whole rather than damaged. ISO 32000-1, 7.3.8.1 keeps the end-of-line
+// before endstream out of /Length; one counted in it would otherwise hide the
+// flush.
+//
+// # Corpus evidence
+//
+//   - All corpora: 16 of the 26 FlateDecode streams that end before their
+//     final block after decoding something stop at a sync flush.
+//   - pdfjs issue17332.pdf: Microsoft Word 2019 writes its images this way,
+//     and each of the four decodes to exactly the samples its Width, Height
+//     and colour space call for.
+//   - pdfjs comments.pdf, highlights.pdf: macOS Quartz writes annotation
+//     appearances and the cross-reference stream this way.
+//   - pdfjs issue18058.pdf: the /Length of its content stream counts the line
+//     feed after the flush.
+func endsAtSyncFlush(body []byte) bool {
+	return bytes.HasSuffix(bytes.TrimRight(body, "\r\n"), syncFlushMarker)
+}
+
+// deflateData returns the deflate data of FlateDecode data, and whether a
+// zlib header and checksum frame it. It reads the data as zlib when
+// compress/zlib accepts its header, and otherwise as raw deflate when deflate
+// data follows the damaged header, as in some corrupt PDFs: [openFlate] makes
+// the same choice for the streaming path. Data that is neither fails with the
+// error compress/zlib returns for its header.
+func deflateData(data []byte) (body []byte, framed bool, err error) {
+	n, err := zlibHeaderLen(data)
+	if err == nil {
+		return data[n:], true, nil
+	}
+	fr := flate.NewReader(bytes.NewReader(data))
+	// Verify that at least some data reads.
+	probe := make([]byte, 1)
+	if _, probeErr := fr.Read(probe); probeErr != nil {
+		return nil, false, err
+	}
+	return data, false, nil
+}
+
+// zlibHeaderLen returns the length of the zlib header data opens with (RFC
+// 1950, 2.2), accepting exactly the headers compress/zlib's reader accepts,
+// and otherwise the error it returns. That reader is given no preset
+// dictionary, so it reads a header naming one only when the dictionary
+// identifier is the Adler-32 checksum of no bytes.
+func zlibHeaderLen(data []byte) (int, error) {
+	const (
+		deflateMethod = 8
+		maxWindowBits = 7
+		presetDict    = 0x20
+	)
+	if len(data) < 2 {
+		return 0, io.ErrUnexpectedEOF
+	}
+	cmf, flg := data[0], data[1]
+	if cmf&0x0F != deflateMethod || cmf>>4 > maxWindowBits || binary.BigEndian.Uint16(data)%31 != 0 {
+		return 0, zlib.ErrHeader
+	}
+	if flg&presetDict == 0 {
+		return 2, nil
+	}
+	if len(data) < 6 {
+		return 0, io.ErrUnexpectedEOF
+	}
+	if binary.BigEndian.Uint32(data[2:]) != adler32.Checksum(nil) {
+		return 0, zlib.ErrDictionary
+	}
+	return 6, nil
 }
 
 // openFlate returns a reader of FlateDecode data: zlib, or raw deflate when
@@ -488,6 +621,22 @@ func (t *tolerantReader) Close() error {
 	return nil
 }
 
+// decodeLZW implements the LZWDecode filter (ISO 32000-1, 7.4.4.2). A code
+// its table does not define, met after some data decoded, yields the bytes
+// decoded before it with an error wrapping errDamagedData (see
+// [keepsDamagedPrefix]).
+//
+// Leniency: data that ends without the EOD code of 7.4.4.2 is read as whole,
+// as an ASCII filter's data without its EOD marker is. Nothing tells a
+// producer that omits the code from data cut short, and the producers seen
+// omitting it write whole images.
+//
+// # Corpus evidence
+//
+//   - All corpora: 2 of the 8,235 LZWDecode streams end without the EOD code,
+//     and each decodes to exactly the samples its image dictionary calls for
+//     (pdfcpu pkg_testdata__Paclitaxel.pdf, pdfjs issue17169.pdf, both with
+//     /EarlyChange 0).
 func decodeLZW(ctx context.Context, data []byte, parms ast.PdfDict, limit int64) ([]byte, error) {
 	// PDF spec: LZW uses MSB-first order, literal width 8 (codes 0–255),
 	// ClearTable=256, EOD=257. /EarlyChange defaults to 1.
@@ -506,11 +655,17 @@ func decodeLZW(ctx context.Context, data []byte, parms ast.PdfDict, limit int64)
 	if errors.Is(err, ErrDecompressionBomb) {
 		return nil, fmt.Errorf("LZWDecode %w", err)
 	}
-	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+	if err == io.ErrUnexpectedEOF {
+		err = nil
+	}
+	if err != nil && (buf.Len() == 0 || ctx.Err() != nil) {
 		return nil, err
 	}
 	result := make([]byte, buf.Len())
 	copy(result, buf.Bytes())
+	if err != nil {
+		return result, fmt.Errorf("%w: LZWDecode: %w", errDamagedData, err)
+	}
 	return result, nil
 }
 
@@ -756,17 +911,24 @@ func pdfBoolOr(v ast.PdfObject, def bool) bool {
 	return def
 }
 
+// decodeBrotli implements the BrotliDecode filter (RFC 7932). Data damaged
+// after some of it decodes, corrupt or ending before its last meta-block,
+// yields the bytes decoded before the damage with an error wrapping
+// errDamagedData (see [keepsDamagedPrefix]).
 func decodeBrotli(ctx context.Context, data []byte, limit int64) ([]byte, error) {
 	r := brotli.NewReader(bytes.NewReader(data))
 	buf := bufPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer bufPool.Put(buf)
 	err := limitedCopy(ctx, buf, r, limit)
-	if err != nil {
+	if err != nil && (buf.Len() == 0 || ctx.Err() != nil || errors.Is(err, ErrDecompressionBomb)) {
 		return nil, fmt.Errorf("brotli decode: %w", err)
 	}
 	result := make([]byte, buf.Len())
 	copy(result, buf.Bytes())
+	if err != nil {
+		return result, fmt.Errorf("%w: BrotliDecode: %w", errDamagedData, err)
+	}
 	return result, nil
 }
 

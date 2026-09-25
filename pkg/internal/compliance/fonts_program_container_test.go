@@ -1,8 +1,12 @@
 package compliance
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -104,5 +108,64 @@ func TestFontEmbedding_UndecodableProgramStaysEmbedded(t *testing.T) {
 	}
 	if got := checkFontEmbedding(ctx, doc, font, "F1", 1, "PDF/A-2b", false); len(got) != 0 {
 		t.Errorf("an undecodable program must stay embedded, got %v", got)
+	}
+}
+
+// TestFontEmbedding_CutShortDeflateProgramIsJudged pins that the bytes
+// FlateDecode keeps before its data ends are judged as the program, though
+// the filter reports the stream damaged: veraPDF reads a program whose
+// deflate data merely ends early (see [deflateDataCorrupt]), so a cut sfnt
+// embeds the font and a cut program of another container does not. Only an
+// ASCII filter's fragment reads as a program that will not decode.
+func TestFontEmbedding_CutShortDeflateProgramIsJudged(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	filler := strings.Repeat("glyph outlines and hinting instructions ", 60)
+	for _, tc := range []struct {
+		name    string
+		program string
+		fires   bool
+	}{
+		{"a cut sfnt embeds the font", "\x00\x01\x00\x00" + filler, false},
+		{"a cut non-sfnt does not", "\x01\x00\x04\x03" + filler, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var z bytes.Buffer
+			w := zlib.NewWriter(&z)
+			if _, err := w.Write([]byte(tc.program)); err != nil {
+				t.Fatal(err)
+			}
+			if err := w.Close(); err != nil {
+				t.Fatal(err)
+			}
+			cut := z.Bytes()[:z.Len()/2]
+			doc, _ := objsDocPDF(t,
+				"<< /Type /Catalog /Pages 2 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+				"<< /Type /Font /Subtype /TrueType /BaseFont /Test /FirstChar 65 /LastChar 65"+
+					" /Widths [722] /FontDescriptor 5 0 R >>",
+				"<< /Type /FontDescriptor /FontName /Test /Flags 32 /FontFile2 6 0 R >>",
+				fmt.Sprintf("<< /Length %d /Filter /FlateDecode >>\nstream\n%s\nendstream", len(cut), cut),
+			)
+			stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: 6})
+			if err != nil {
+				t.Fatalf("resolve program: %v", err)
+			}
+			if data, report, err := doc.DecodeStreamReport(ctx, stream); err != nil || len(data) < 4 ||
+				!slices.Equal(report.Damaged, []ast.PdfName{"FlateDecode"}) {
+				t.Fatalf("DecodeStreamReport = %d bytes, %+v, %v; want a prefix, FlateDecode damaged", len(data), report, err)
+			}
+			font, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 4})
+			if err != nil {
+				t.Fatalf("resolve font: %v", err)
+			}
+			got := checkFontEmbedding(ctx, doc, font, "F1", 1, "PDF/A-2b", false)
+			if fired := hasRule(got, Rule_19005_2_6_2_11_4_1_t01); fired != tc.fires {
+				t.Errorf("embedding violation = %v, want %v", fired, tc.fires)
+			}
+		})
 	}
 }

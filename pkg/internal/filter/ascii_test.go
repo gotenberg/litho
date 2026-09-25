@@ -249,9 +249,10 @@ func TestDecodeASCII85_Invalid(t *testing.T) {
 // TestDecodeStream_ASCIIDamageKeepsPrefix checks what a caller of each decoding
 // entry point sees when ASCII85Decode or ASCIIHexDecode data is damaged ahead
 // of FlateDecode: the bytes decoded before the damage are kept and handed to
-// FlateDecode, which reads them as it reads any truncated input, and the
-// stream is reported incomplete. The damage is not [ErrUnsupportedFilter]: the
-// filter is not skipped, and its encoded bytes never reach FlateDecode.
+// FlateDecode, which reads them as it reads any truncated input, keeping what
+// inflates and reporting its own damage, and the stream is reported
+// incomplete. The damage is not [ErrUnsupportedFilter]: the filter is not
+// skipped, and its encoded bytes never reach FlateDecode.
 //
 // Before, the damage failed the whole stream and no byte came back.
 func TestDecodeStream_ASCIIDamageKeepsPrefix(t *testing.T) {
@@ -303,11 +304,11 @@ func TestDecodeStream_ASCIIDamageKeepsPrefix(t *testing.T) {
 			}
 
 			// FlateDecode after it behaves as it does on the truncated input
-			// directly: the tolerance of decodeFlateDecode keeps what inflates.
+			// directly: it keeps what inflates, and reports the data cut short.
 			truncated := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("FlateDecode")}, compressed[:half])
 			want, truncIncomplete, err := DecodeStreamChecked(ctx, truncated)
-			if err != nil || truncIncomplete || len(want) == 0 || !bytes.HasPrefix(plain, want) {
-				t.Fatalf("control: FlateDecode on the truncated input = %d bytes, incomplete %v, %v; want a prefix of the plain text",
+			if err != nil || !truncIncomplete || len(want) == 0 || !bytes.HasPrefix(plain, want) {
+				t.Fatalf("control: FlateDecode on the truncated input = %d bytes, incomplete %v, %v; want a prefix of the plain text, incomplete",
 					len(want), truncIncomplete, err)
 			}
 			chained := ast.NewStream(ast.PdfDict{
@@ -323,10 +324,11 @@ func TestDecodeStream_ASCIIDamageKeepsPrefix(t *testing.T) {
 			if got, err := d.DecodeStream(ctx, chained); err != nil || !bytes.Equal(got, want) {
 				t.Errorf("(*Decoder)(nil).DecodeStream = %d bytes, %v; want %d bytes", len(got), err, len(want))
 			}
-			// The report names the damaged filter, and skips none.
+			// The report names both damaged filters in chain order, and skips
+			// none.
 			if _, report, err := d.DecodeStreamReport(ctx, chained); err != nil ||
-				!slices.Equal(report.Damaged, []ast.PdfName{tc.filter}) || len(report.Skipped) != 0 {
-				t.Errorf("DecodeStreamReport = %+v, %v; want %s damaged and nothing skipped", report, err, tc.filter)
+				!slices.Equal(report.Damaged, []ast.PdfName{tc.filter, "FlateDecode"}) || len(report.Skipped) != 0 {
+				t.Errorf("DecodeStreamReport = %+v, %v; want %s and FlateDecode damaged and nothing skipped", report, err, tc.filter)
 			}
 
 			rc, err := NewStreamReader(ctx, chained)
