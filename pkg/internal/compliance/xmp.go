@@ -716,6 +716,22 @@ func xmpPacketHeaderEncodingRule(part int) []Violation {
 // not-well-formed packet (for example a start/end tag whose case does
 // not match). PDF/A-1 §6.7.9 t01 carries only the well-formedness half (there
 // is no part-1 UTF-8/encoding equivalent), so part 1 returns a single rule.
+//
+// A well-formed packet holding no rdf:RDF element fails t5 alone. veraPDF's
+// XMPCore looks for an rdf:RDF element in the RDF namespace anywhere in the
+// packet and, finding none, returns an empty metadata object that carries no
+// actual encoding, so actualEncoding == "UTF-8" is false. Measured with
+// veraPDF 1.30 at PDF/A-2b and PDF/A-4: a catalog packet that is an empty
+// x:xmpmeta, with or without an xpacket header, a lone <foo/>, an x:xmpmeta
+// holding another element, or one holding rdf:RDF in another namespace fails
+// ISO 19005-2, 6.6.2.1 t5 and ISO 19005-4, 6.7.2.1 t5, and passes t4. One
+// holding rdf:RDF anywhere, an empty one or one nested in another element
+// included, passes both, whatever its xpacket header.
+//
+// # Corpus evidence
+//
+//   - All corpora: pdfjs issue15833.pdf alone holds well-formed packets with
+//     no rdf:RDF element, and veraPDF cannot parse the file.
 func xmpPacketSerializationValidity(xmpData []byte, part int) []Violation {
 	if part == 1 {
 		if xmpWellFormed(xmpData) {
@@ -735,10 +751,30 @@ func xmpPacketSerializationValidity(xmpData []byte, part int) []Violation {
 		return nil
 	}
 	if xmpWellFormed(xmpData) {
+		if !xmpHoldsRDF(xmpData) {
+			return failf(t5, "XMP packet encoding cannot be determined: packet holds no rdf:RDF element")
+		}
 		return nil
 	}
 	results := failf(t4, "XMP packet is not well-formed XML")
 	return append(results, failf(t5, "XMP packet encoding cannot be determined: packet is not well-formed XML")...)
+}
+
+// xmpHoldsRDF reports whether a well-formed packet holds an rdf:RDF element in
+// the RDF namespace, at any depth, which is where veraPDF's XMPCore reads the
+// metadata from; see [xmpPacketSerializationValidity].
+func xmpHoldsRDF(data []byte) bool {
+	dec := xml.NewDecoder(bytes.NewReader(xmpRepairForParse(data)))
+	dec.CharsetReader = xmpPassThroughCharset
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return false
+		}
+		if start, ok := tok.(xml.StartElement); ok && start.Name.Space == xmpRDFNamespace && start.Name.Local == "RDF" {
+			return true
+		}
+	}
 }
 
 // XMPWellFormed reports whether data is well-formed XML, the same test

@@ -81,7 +81,9 @@ func TestXmpPacketSerializationValidity(t *testing.T) {
 	t.Parallel()
 	// A mismatched start/end tag.
 	malformed := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/"><dc:creator xmlns:dc="d">x</dc:Creator></x:xmpmeta>`)
-	wellFormed := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/"><a>x</a></x:xmpmeta>`)
+	wellFormed := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="` + xmpRDFNamespace + `"/></x:xmpmeta>`)
+	// Well-formed, but with no rdf:RDF element for veraPDF's XMPCore to read.
+	noRDF := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/"><a>x</a></x:xmpmeta>`)
 
 	t.Run("malformed fires t4+t5 part 2", func(t *testing.T) {
 		t.Parallel()
@@ -101,6 +103,19 @@ func TestXmpPacketSerializationValidity(t *testing.T) {
 		t.Parallel()
 		if vs := xmpPacketSerializationValidity(wellFormed, 2); len(vs) != 0 {
 			t.Errorf("well-formed packet must not fire, got %v", vs)
+		}
+	})
+	// Measured with veraPDF 1.30 at PDF/A-2b and PDF/A-4: a packet holding no
+	// rdf:RDF element passes t4 and fails t5, and at PDF/A-1 states nothing.
+	t.Run("no rdf:RDF fires t5 alone", func(t *testing.T) {
+		t.Parallel()
+		for part, t5 := range map[int]Rule{2: Rule_19005_2_6_6_2_1_t05, 3: Rule_19005_3_6_6_2_1_t05, 4: Rule_19005_4_6_7_2_1_t05} {
+			if vs := xmpPacketSerializationValidity(noRDF, part); len(vs) != 1 || !hasRule(vs, t5) {
+				t.Errorf("part %d: expected t5 alone, got %v", part, vs)
+			}
+		}
+		if vs := xmpPacketSerializationValidity(noRDF, 1); len(vs) != 0 {
+			t.Errorf("part 1 has no encoding rule, got %v", vs)
 		}
 	})
 	t.Run("malformed fires t4+t5 part 4", func(t *testing.T) {
