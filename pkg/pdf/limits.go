@@ -43,9 +43,10 @@ type Limits struct {
 	// across the streams of its /Contents array, may take a quarter of it, 64
 	// MiB by default: text extraction, validation, remediation, auto-tagging,
 	// stamping and redaction refuse a page with more, as they refuse a damaged
-	// one, and the redaction scan reads no more than that from any one stream.
-	// A quarter and not the whole, because the operators parsed from a page
-	// hold about five times its bytes. The decoded object streams the
+	// one, and a call that fails on it returns [ErrPageContentTooLarge]. The
+	// redaction scan reads no more than that from any one stream. A quarter
+	// and not the whole, because the operators parsed from a page hold about
+	// five times its bytes. The decoded object streams the
 	// [Reader] keeps cached may take the whole of it, and the decoded font
 	// programs it keeps cached a quarter, 64 MiB by default: when either would
 	// take more, its cache is emptied and refilled, which costs re-decoding,

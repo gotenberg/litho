@@ -9,6 +9,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // validPDFOperators is the set of all operators defined in ISO 32000.
@@ -261,7 +262,7 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 		// conservatively, rather than letting a crafted page grow the buffer
 		// with the file's object count.
 		if limit := doc.Limits().MaxPageContentBytes(); int64(len(allData)) > limit {
-			return nil, fmt.Errorf("page content exceeds the %d-byte page content limit", limit)
+			return nil, fmt.Errorf("%w of %d bytes", limits.ErrPageContentTooLarge, limit)
 		}
 	}
 

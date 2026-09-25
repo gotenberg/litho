@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // matchContentTag claims content that is neither tagged as real content nor
@@ -376,7 +377,7 @@ func resolveContentBytesAt(ctx context.Context, alloc *writer.ObjAllocator, doc 
 			// naming thousands of streams grows this buffer with the file's
 			// object count rather than with anything the page could draw.
 			if limit := doc.Limits().MaxPageContentBytes(); int64(len(all)) > limit {
-				return nil, fmt.Errorf("page content exceeds the %d-byte page content limit", limit)
+				return nil, fmt.Errorf("%w of %d bytes", limits.ErrPageContentTooLarge, limit)
 			}
 		}
 		return all, nil

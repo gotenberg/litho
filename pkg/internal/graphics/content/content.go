@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ioat"
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // Operation represents a drawing or state operation in a PDF content stream.
@@ -238,7 +239,7 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 		allData = append(allData, data...)
 		allData = append(allData, '\n')
 		if int64(len(allData)) > limit {
-			return nil, fmt.Errorf("content stream exceeds the %d-byte page content limit", limit)
+			return nil, fmt.Errorf("%w of %d bytes", limits.ErrPageContentTooLarge, limit)
 		}
 	}
 

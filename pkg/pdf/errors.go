@@ -251,6 +251,15 @@ var (
 	// the Open function of an image or an embedded file.
 	ErrStreamTooLarge = filter.ErrDecompressionBomb
 
+	// ErrPageContentTooLarge is returned, wrapped, when the decoded content of
+	// a page, summed across the streams of its /Contents array, takes more
+	// than a quarter of [Limits.MaxStreamBytes]: by [Reader.ExtractText] and
+	// the other calls that read a page's operators, by [Writer.Redact]
+	// alongside [ErrRedactionRefused], and by [Writer.WriteTo] for a
+	// [Writer.StampPDF] whose source page is that heavy. Validation and
+	// remediation read such a page as they read a damaged one instead.
+	ErrPageContentTooLarge = limits.ErrPageContentTooLarge
+
 	// ErrImageTooLarge is returned, wrapped alongside [ErrImageNotDecodable],
 	// by [Reader.DecodeImage] and an image's Decode function when the image
 	// declares more than [Limits.MaxImagePixels] pixels, or its decoded

@@ -239,18 +239,14 @@ func TestLimits_StreamBudget(t *testing.T) {
 	}
 }
 
-// TestLimits_PageContentFollowsTheStreamBudget pins the page content bound to
-// [Limits.MaxStreamBytes]: a page whose /Contents array holds two 20 KiB parts,
-// each well inside a 64 KiB stream budget, is refused under that budget, since
-// their sum passes a quarter of it, and read under the default and under a
-// 256 KiB budget.
-func TestLimits_PageContentFollowsTheStreamBudget(t *testing.T) {
-	t.Parallel()
-
+// heavyPagePDF returns a one-page document whose /Contents array holds two
+// 20 KiB parts, each well inside a 64 KiB stream budget, whose sum passes a
+// quarter of it.
+func heavyPagePDF() []byte {
 	const partSize = 20 << 10
 	part := []byte("BT /F1 12 Tf 72 700 Td (Heavy) Tj ET\n")
 	part = append(part, bytes.Repeat([]byte(" "), partSize-len(part))...)
-	data := limitsPDF(
+	return limitsPDF(
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents [4 0 R 5 0 R] /Resources << /Font << /F1 6 0 R >> >> >>",
@@ -258,6 +254,17 @@ func TestLimits_PageContentFollowsTheStreamBudget(t *testing.T) {
 		streamObj("", part),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 	)
+}
+
+// TestLimits_PageContentFollowsTheStreamBudget pins the page content bound to
+// [Limits.MaxStreamBytes]: the page of [heavyPagePDF] is refused with
+// [ErrPageContentTooLarge] under a 64 KiB stream budget, since its two parts
+// sum past a quarter of it, and read under the default and under a 256 KiB
+// budget.
+func TestLimits_PageContentFollowsTheStreamBudget(t *testing.T) {
+	t.Parallel()
+
+	data := heavyPagePDF()
 
 	ctx := context.Background()
 	for _, tc := range []struct {
@@ -276,8 +283,43 @@ func TestLimits_PageContentFollowsTheStreamBudget(t *testing.T) {
 			}
 			continue
 		}
-		if err == nil {
-			t.Errorf("%s: ExtractText = %q, want the page refused", tc.name, text)
+		if !errors.Is(err, ErrPageContentTooLarge) {
+			t.Errorf("%s: ExtractText = %q, %v; want %v", tc.name, text, err, ErrPageContentTooLarge)
+		}
+	}
+}
+
+// TestLimits_PageContentTooLargeReachesTheWriter pins that a Writer operation
+// refusing a page past the page content bound says so with
+// [ErrPageContentTooLarge]: [Writer.Redact], alongside
+// [ErrRedactionRefused], and [Writer.WriteTo] for a [Writer.StampPDF] whose
+// source page is the heavy one. The control stamps and redacts under the
+// default budget.
+func TestLimits_PageContentTooLargeReachesTheWriter(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name    string
+		l       Limits
+		refused bool
+	}{
+		{"default", Limits{}, false},
+		{"64 KiB", Limits{MaxStreamBytes: 64 << 10}, true},
+	} {
+		heavy := openLimited(t, heavyPagePDF(), tc.l)
+		_, err := NewWriter(heavy).Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{70, 690, 200, 720}}})
+		if tc.refused != errors.Is(err, ErrPageContentTooLarge) || (tc.refused && !errors.Is(err, ErrRedactionRefused)) || (!tc.refused && err != nil) {
+			t.Errorf("%s: Redact error = %v, want the page refused %v", tc.name, err, tc.refused)
+		}
+
+		w := NewWriter(openLimited(t, minimalPDF(), tc.l))
+		if err := w.StampPDF(PDFStamp{Source: openLimited(t, heavyPagePDF(), tc.l)}); err != nil {
+			t.Fatalf("%s: StampPDF: %v", tc.name, err)
+		}
+		err = w.WriteTo(ctx, io.Discard)
+		if tc.refused != errors.Is(err, ErrPageContentTooLarge) || (!tc.refused && err != nil) {
+			t.Errorf("%s: WriteTo of a heavy stamp = %v, want the page refused %v", tc.name, err, tc.refused)
 		}
 	}
 }

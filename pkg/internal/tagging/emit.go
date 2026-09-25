@@ -11,6 +11,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/limits"
 )
 
 // maxTagDepth bounds structure-tree recursion. It is an anti-DoS guard, not
@@ -533,7 +534,7 @@ func pageContentBytes(ctx context.Context, doc *document.Document, page *documen
 		all = append(all, data...)
 		all = append(all, '\n')
 		if int64(len(all)) > limit {
-			return nil, fmt.Errorf("content exceeds the %d-byte page content limit", limit)
+			return nil, fmt.Errorf("%w of %d bytes", limits.ErrPageContentTooLarge, limit)
 		}
 	}
 	return all, nil

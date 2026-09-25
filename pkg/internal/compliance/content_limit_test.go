@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -81,8 +82,8 @@ func TestPageContentBytesBoundsTheAccumulatedBuffer(t *testing.T) {
 	if len(data) != 0 {
 		t.Errorf("rejected page still returned %d bytes", len(data))
 	}
-	if !strings.Contains(err.Error(), "exceeds") {
-		t.Errorf("error %q does not report the limit", err)
+	if !errors.Is(err, limits.ErrPageContentTooLarge) {
+		t.Errorf("error %q is not %v", err, limits.ErrPageContentTooLarge)
 	}
 }
 
