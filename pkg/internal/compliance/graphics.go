@@ -125,19 +125,25 @@ func pageResourceScopes(ctx context.Context, doc *document.Document, page ast.Pd
 // image intent test exactly as a form XObject the page paints does.
 //
 // The undefined-operator rule, ISO 19005-1, 6.2.10 t1 and ISO 19005-2/3/4,
-// 6.2.2 t1, is stated here for these streams, and by [checkPageContent] for a
-// page's own content alone, so it is stated exactly once per undefined
-// operator. The operand limits are stated by [checkContentStreamLimits].
+// 6.2.2 t1, and the inline image filter rule ([checkInlineImageFilters]) are
+// stated here for these streams, and by [checkPageContent] for a page's own
+// content alone, so each is stated exactly once per undefined operator and
+// per inline image. The operand limits are stated by
+// [checkContentStreamLimits].
 //
 // # Corpus evidence
 //
 //   - pdfjs issue14438.pdf: runs /OC /MC0 BDC in 2 of its 19 appearance
 //     streams, whose own /Resources carry no /Properties, and veraPDF fails
 //     ISO 19005-4, 6.2.2 t3 for exactly those 2.
+//   - All corpora: stating the inline image filter rule in these streams
+//     changes no count at PDF/A-1b or PDF/A-2b, veraPDF files at their own
+//     profile.
 func checkDrawnStream(ctx context.Context, doc *document.Document, s *drawnStream, part int, hexStrings *drawnStreamHexStrings) []Violation {
 	results := checkContentStreamResourcesOps(ctx, doc, s.ops, s.patterns, s.resources, s.pageRes, part, s.pageNum, true)
 	results = append(results, hexStrings.check(s.format, s.pageNum)...)
 	results = append(results, checkInlineImageIntent(s.ops, part, s.pageNum)...)
+	results = append(results, checkInlineImageFilters(s.ops, part, s.pageNum)...)
 	if s.kind == drawnAppearance {
 		for i := range results {
 			results[i].Context += " in annotation appearance"

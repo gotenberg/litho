@@ -277,7 +277,13 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 // checkInlineImageFilters states the inline image filter rule, ISO 19005-1,
 // 6.1.10 t2 and ISO 19005-2/3, 6.1.10 t1 and ISO 19005-4, 6.1.9 t1, for the
 // inline images of a content stream whose operations are ops, once for each
-// image whose filters include one the part forbids.
+// image whose filters include one the part forbids. [checkPageContent] states
+// it for a page's content, and [checkDrawnStream] for every form XObject,
+// tiling pattern, Type3 glyph and annotation appearance the pages draw, once
+// for each stream as [drawnStreamWalk] reaches it. Measured with veraPDF 1.30
+// at PDF/A-1b and PDF/A-2b, an LZW inline image fails the rule once in each
+// of those streams, once for a form XObject two pages paint or one page
+// paints twice, and not at all in a form XObject no Do paints.
 //
 // An inline image veraPDF reads as part of the check of the EI before it has
 // no BI operation of its own (see [content.ParseStreamData]), so no rule
