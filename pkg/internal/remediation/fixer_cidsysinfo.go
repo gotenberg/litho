@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/core/xref"
 	"github.com/gotenberg/litho/pkg/internal/typography/cmap"
 )
 
@@ -46,6 +48,13 @@ func matchCIDSystemInfo(v compliance.Violation) bool {
 // Registry/Ordering/Supplement mismatches without touching the CMap or CIDFont
 // dictionaries.
 //
+// Fonts held in an object stream (ISO 32000-1, 7.5.7) are repaired too, as
+// [fixCIDToGIDMap] repairs them: the update defines the object normally in a
+// later cross-reference section, which supersedes the copy inside the object
+// stream (7.5.8). Every dictionary written back is read through the allocator
+// first, so an earlier fixer's edit, or the alignment of another font sharing
+// the object, is kept.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue18117.pdf: embeds /Uni-Utf8-H, whose codes are one to four
@@ -54,15 +63,29 @@ func matchCIDSystemInfo(v compliance.Violation) bool {
 //   - All corpora: no font or CMap this fixer rewrites is queued by an earlier
 //     fixer first, at PDF/A-1b, 2b, 4 or PDF/UA-1, so reading through the
 //     allocator changes no output.
+//   - All corpora: 133 files hold a Type 0 font in an object stream, and none
+//     carries a CIDSystemInfo mismatch this fixer can settle, so reaching them
+//     changes no residual violation at PDF/A-1b or 2b, with or without the
+//     aggressive fixes.
 func fixCIDSystemInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
+	// Sorted, since Index.Entries is a map: two fonts sharing a CIDFont or a
+	// CMap each read the other's pending edit, so the order decides the
+	// output.
+	nums := make([]int, 0, len(doc.Index.Entries))
+	for objNum := range doc.Index.Entries {
+		nums = append(nums, objNum)
+	}
+	slices.Sort(nums)
+
 	count := 0
 	aligned := 0
 	wmode := 0
-	for objNum, entry := range doc.Index.Entries {
+	for _, objNum := range nums {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if entry.Type != 1 || objNum == 0 {
+		entry := doc.Index.Entries[objNum]
+		if entry.Type == xref.XRefTypeFree || objNum == 0 {
 			continue
 		}
 		// Alloc-first: the relabelled font is written back whole, and earlier
@@ -213,9 +236,12 @@ func alignCIDSystemInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	if descDict == nil {
 		return 0
 	}
+	// Alloc-first, since the patched dict is written back whole: a second
+	// Type 0 font sharing this CIDSystemInfo object may already have queued
+	// it.
 	sysRef, isSysRef := descDict["CIDSystemInfo"].(ast.PdfIndirectRef)
-	sysDict, err := document.ResolveDict(ctx, doc, descDict["CIDSystemInfo"])
-	if err != nil || sysDict == nil {
+	sysDict := liveDictValue(ctx, alloc, doc, descDict["CIDSystemInfo"])
+	if sysDict == nil {
 		return 0
 	}
 
