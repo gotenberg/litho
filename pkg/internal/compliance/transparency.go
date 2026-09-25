@@ -33,6 +33,16 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 	return results
 }
 
+// checkTransparencyPart1 applies the ISO 19005-1, 6.4 transparency rules to
+// each page: its own /Group, what its content stream draws and its annotation
+// appearances.
+//
+// A page whose content stream an earlier page shares draws nothing more, since
+// veraPDF judges that stream on the first page alone, with what it draws (see
+// [markJudgedContents]). Measured with veraPDF 1.30 at PDF/A-1b: two pages
+// sharing one stream that paints a soft masked image and a form with a
+// transparency group and sets two graphics states with constant alpha fail
+// 6.4 t2, t3, t5 and t6 once each, as one of the pages alone does.
 func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages []pageCtx) []Violation {
 	var results []Violation
 	for i := range pages {
@@ -46,7 +56,7 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 		visited := make(map[int]bool)
 
 		res := resolveInheritedResources(ctx, doc, page)
-		if res != nil {
+		if res != nil && !pages[i].contentJudged {
 			results = append(results, checkResourceTransparency1(ctx, doc, res, i+1, visited, 0,
 				pageDrawnResources(ctx, &pages[i]))...)
 		}
@@ -73,10 +83,12 @@ func checkResourceTransparency1(ctx context.Context, doc *document.Document, res
 	}
 
 	results := checkExtGStateTransparency1(ctx, doc, res, pageNum, drawn)
-	results = append(results, checkXObjectTransparency1(ctx, doc, res, pageNum)...)
+	results = append(results, checkXObjectTransparency1(ctx, doc, res, pageNum, drawn)...)
 
-	results = append(results, walkNestedResources1(ctx, doc, res["XObject"], pageNum, visited, depth)...)
-	results = append(results, walkNestedResources1(ctx, doc, res["Pattern"], pageNum, visited, depth)...)
+	results = append(results, walkNestedResources1(ctx, doc, res["XObject"], pageNum, visited, depth, drawn.drawsXObject)...)
+	// A pattern is selected by scn or SCN, which [drawnResources] does not
+	// record, so every pattern the resources declare is walked.
+	results = append(results, walkNestedResources1(ctx, doc, res["Pattern"], pageNum, visited, depth, nil)...)
 
 	// Type 3 font resources: a CharProc is a content stream, and its
 	// operators draw through the font's own /Resources. A transparency Group
@@ -148,9 +160,10 @@ func checkResourceTransparency1(ctx context.Context, doc *document.Document, res
 }
 
 // walkNestedResources1 recurses into the /Resources of each stream in an
-// XObject or Pattern resource sub-dictionary. Names are sorted so the
-// violation order is deterministic.
-func walkNestedResources1(ctx context.Context, doc *document.Document, dictObj ast.PdfObject, pageNum int, visited map[int]bool, depth int) []Violation {
+// XObject or Pattern resource sub-dictionary that drawn admits, or of every
+// stream when drawn is nil. Names are sorted so the violation order is
+// deterministic.
+func walkNestedResources1(ctx context.Context, doc *document.Document, dictObj ast.PdfObject, pageNum int, visited map[int]bool, depth int, drawn func(string) bool) []Violation {
 	dict, err := document.ResolveDict(ctx, doc, dictObj)
 	if err != nil || dict == nil {
 		return nil
@@ -164,6 +177,9 @@ func walkNestedResources1(ctx context.Context, doc *document.Document, dictObj a
 
 	var results []Violation
 	for _, name := range names {
+		if drawn != nil && !drawn(string(name)) {
+			continue
+		}
 		entry := dict[name]
 		if ref, ok := entry.(ast.PdfIndirectRef); ok {
 			if visited[ref.ObjectNum] {
@@ -368,8 +384,29 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 	return results
 }
 
-// checkXObjectTransparency1 checks XObject entries for forbidden SMask (PDF/A-1).
-func checkXObjectTransparency1(ctx context.Context, doc *document.Document, resources ast.PdfDict, pageNum int) []Violation {
+// checkXObjectTransparency1 checks the XObjects a content stream paints for a
+// forbidden SMask or transparency group (PDF/A-1).
+//
+// A resource dictionary lists what the content MAY paint; see
+// [drawnResources]. veraPDF builds its PDXObject from the Do operator that
+// paints one, so an XObject nothing paints is reported nowhere, and neither is
+// anything its own resources hold, which [checkResourceTransparency1] leaves
+// unwalked. Measured with veraPDF 1.30 at PDF/A-1b: a page declaring a soft
+// masked image and a form with a transparency group, and painting neither,
+// passes ISO 19005-1, 6.4 t2 and t3.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14847.pdf: declares two soft masked images on three pages
+//     whose content paints no XObject, and veraPDF fails ISO 19005-1, 6.4 t2
+//     nowhere, where litho failed it six times.
+//   - pdfjs issue6961.pdf: each of its two pages declares 270 forms with a
+//     transparency group and paints one or two, and litho failed ISO
+//     19005-1, 6.4 t3 73172 times, where veraPDF fails it 272 times, as
+//     litho now does.
+//   - All corpora: 26 counts of ISO 19005-1, 6.4 t2, t3, t5 and t6 at
+//     PDF/A-1b moved toward veraPDF's and none away, 19 of them onto it.
+func checkXObjectTransparency1(ctx context.Context, doc *document.Document, resources ast.PdfDict, pageNum int, drawn *drawnResources) []Violation {
 	xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
 	if err != nil || xobjDict == nil {
 		return nil
@@ -380,6 +417,9 @@ func checkXObjectTransparency1(ctx context.Context, doc *document.Document, reso
 		xoObj := xobjDict[xoName]
 		if ctx.Err() != nil {
 			return results
+		}
+		if !drawn.drawsXObject(string(xoName)) {
+			continue
 		}
 
 		// XObjects are streams: ResolveDict rejects ast.PdfStream, which
@@ -460,6 +500,13 @@ func blendingCSRule(part int) Rule {
 // transparency rules: the blend mode an ExtGState names, and the blending
 // colour space a page that uses transparency must have.
 //
+// A page whose content stream an earlier page shares sets no state through it,
+// since veraPDF judges that stream on the first page alone (see
+// [markJudgedContents]), but it still uses the transparency the stream paints.
+// Measured with veraPDF 1.30 at PDF/A-2b: two pages sharing one stream that
+// sets two states with a blend mode no table lists fail ISO 19005-2, 6.2.10
+// t1 twice, as one of the pages alone does, and t2 once per page.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue6741.pdf: declares /G1 (/BM /Darken) and /G2 (/BM /Lighten),
@@ -522,7 +569,9 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 
 				if bmObj, hasBM := gs["BM"]; hasBM {
 					bm := resolveBlendMode(ctx, doc, bmObj)
-					if bm != "" && !standardBlendModes[bm] {
+					// A content stream an earlier page shares sets its states
+					// there alone; see [markJudgedContents].
+					if bm != "" && !standardBlendModes[bm] && !pages[i].contentJudged {
 						results = append(results, failf(blendModeRule(part), "page %d, ExtGState %s, BM=%s", i+1, string(gsName), bm)...)
 					}
 					if blendModeIsTransparency(bm) {
