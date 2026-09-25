@@ -96,10 +96,14 @@ func TestEvaluateMDP_FormFields(t *testing.T) {
 		{"need appearances set", []updatedObject{fieldsForm("4 0 R 6 0 R 8 0 R", " /NeedAppearances true")}, true, ""},
 
 		{"text field added", newWidget("Tx", ""), false, "field 40 (Tx) was added, which P=2 permits only for a signature field"},
-		{"text field added with a JavaScript /AA", append(newWidget("Tx", " /AA << /K 41 0 R >>"), updatedObject{41, script}),
-			false, "field 40 (Tx) was added with an /AA action"},
-		{"signature field added with a JavaScript /A", append(newWidget("Sig", " /A 41 0 R"), updatedObject{41, script}),
-			false, "field 40 (Sig) was added with an /A action"},
+		{
+			"text field added with a JavaScript /AA", append(newWidget("Tx", " /AA << /K 41 0 R >>"), updatedObject{41, script}),
+			false, "field 40 (Tx) was added with an /AA action",
+		},
+		{
+			"signature field added with a JavaScript /A", append(newWidget("Sig", " /A 41 0 R"), updatedObject{41, script}),
+			false, "field 40 (Sig) was added with an /A action",
+		},
 		{"widget of its own added with a JavaScript /AA", []updatedObject{
 			{40, "<< /FT /Sig /T (added) /Kids [41 0 R] >>"},
 			{41, "<< /Type /Annot /Subtype /Widget /Parent 40 0 R /Rect [300 400 400 450] /P 3 0 R /AA << /E 43 0 R >> >>"},
@@ -110,8 +114,11 @@ func TestEvaluateMDP_FormFields(t *testing.T) {
 		{"action added to an existing field", []updatedObject{
 			emptySignature(" /AA << /U 41 0 R >>"), {41, script},
 		}, false, "field 8 (Sig) added its /AA"},
-		{"existing field's action rewritten", []updatedObject{{9, script}},
-			false, "object 9 (untyped) is reached through field 6 (Tx)'s /AA"},
+		{
+			"existing field's action rewritten",
+			[]updatedObject{{9, script}},
+			false, "object 9 (untyped) is reached through field 6 (Tx)'s /AA",
+		},
 		{"existing field renamed", []updatedObject{
 			{6, "<< /Type /Annot /Subtype /Widget /FT /Tx /T (total) /Rect [20 20 120 40] /P 3 0 R /DA (/Helv 12 Tf 0 g) /AA << /K 9 0 R >> >>"},
 		}, false, "field 6 (Tx) changed its /T"},
@@ -120,8 +127,11 @@ func TestEvaluateMDP_FormFields(t *testing.T) {
 			{4, "<< /Type /Annot /Subtype /Widget /FT /Sig /T (cert) /Rect [0 0 0 0] /P 3 0 R /V 41 0 R >>"},
 			{41, approvalValue},
 		}, false, "field 4 (Sig) changed its /V"},
-		{"calculation order added", []updatedObject{fieldsForm("4 0 R 6 0 R 8 0 R", " /CO [6 0 R]")},
-			false, "the interactive form's /CO was added"},
+		{
+			"calculation order added",
+			[]updatedObject{fieldsForm("4 0 R 6 0 R 8 0 R", " /CO [6 0 R]")},
+			false, "the interactive form's /CO was added",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
