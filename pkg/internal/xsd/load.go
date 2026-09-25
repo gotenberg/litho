@@ -1077,6 +1077,10 @@ func (d *schemaDoc) localElementNamespace(form string) string {
 //     xs:attribute, so each of the 28 still loads to the same model, and no
 //     verdict of the 159 files that embed XML moves, through the Factur-X
 //     and ZUGFeRD validators or under any bundled schema.
+//   - All corpora: no bundled schema sets minOccurs or maxOccurs on a
+//     top-level xs:element, or use on a top-level xs:attribute, and none
+//     declares a top-level attribute at all. Each of the 28 still loads to
+//     the same model, and no verdict of those files moves.
 func populateFromRaw(s *Schema, raw *rawSchema) error {
 	doc := &schemaDoc{
 		tns:                  raw.TargetNamespace,
@@ -1105,6 +1109,14 @@ func populateFromRaw(s *Schema, raw *rawSchema) error {
 			// target namespace.
 			return fmt.Errorf("%w: top-level xs:element %q carries form", ErrSchemaParse, raw.Elements[i].Name)
 		}
+		if raw.Elements[i].MinOccurs != "" || raw.Elements[i].MaxOccurs != "" {
+			// Per XML Schema Part 1, 3.3.3 the topLevelElement type of the
+			// schema for schemas (Appendix A) prohibits minOccurs and
+			// maxOccurs too: per 3.3.2 they bound the particle an xs:element
+			// inside a complex type or a model group forms, and a top-level
+			// one forms none.
+			return fmt.Errorf("%w: top-level xs:element %q carries minOccurs or maxOccurs", ErrSchemaParse, raw.Elements[i].Name)
+		}
 		el, err := buildElement(doc, &raw.Elements[i], doc.tns)
 		if err != nil {
 			return err
@@ -1124,6 +1136,14 @@ func populateFromRaw(s *Schema, raw *rawSchema) error {
 			// prohibits form: a top-level declaration always takes the
 			// target namespace.
 			return fmt.Errorf("%w: top-level xs:attribute %q carries form", ErrSchemaParse, raw.Attributes[i].Name)
+		}
+		if raw.Attributes[i].Use != "" {
+			// Per XML Schema Part 1, 3.2.3 the topLevelAttribute type of the
+			// schema for schemas (Appendix A) prohibits use too: per 3.2.2 it
+			// sets the {required} of the attribute use an xs:attribute inside
+			// a complex type or an attribute group forms, and a top-level one
+			// forms none.
+			return fmt.Errorf("%w: top-level xs:attribute %q carries use", ErrSchemaParse, raw.Attributes[i].Name)
 		}
 		a, err := buildAttribute(doc, &raw.Attributes[i], doc.tns)
 		if err != nil {

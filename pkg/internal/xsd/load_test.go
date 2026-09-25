@@ -224,3 +224,34 @@ func TestLoad_ComplexExtension(t *testing.T) {
 		t.Errorf("Derived particles: got %+v, want [B]", seq.Particles)
 	}
 }
+
+// TestLoad_TopLevelOccursAndUseRejected pins that the loader rejects
+// minOccurs and maxOccurs on a top-level xs:element, and use on a top-level
+// xs:attribute. Per XML Schema Part 1, 3.3.3 and 3.2.3 both meet the schema
+// for schemas, whose topLevelElement and topLevelAttribute types (Appendix
+// A) prohibit them. The same attributes on a local declaration still load.
+func TestLoad_TopLevelOccursAndUseRejected(t *testing.T) {
+	const head = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns="urn:t">`
+	for body, rejected := range map[string]bool{
+		`<xs:element name="Invoice" type="xs:string" minOccurs="0"/>`:               true,
+		`<xs:element name="Invoice" type="xs:string" maxOccurs="unbounded"/>`:       true,
+		`<xs:element name="Invoice" type="xs:string" minOccurs="1" maxOccurs="1"/>`: true,
+		`<xs:attribute name="currency" type="xs:string" use="required"/>`:           true,
+		`<xs:attribute name="currency" type="xs:string" use="optional"/>`:           true,
+		`<xs:attribute name="currency" type="xs:string" use="prohibited"/>`:         true,
+		`<xs:element name="Invoice"><xs:complexType>
+  <xs:sequence><xs:element name="ID" type="xs:string" minOccurs="0" maxOccurs="unbounded"/></xs:sequence>
+  <xs:attribute name="currency" type="xs:string" use="required"/>
+</xs:complexType></xs:element>`: false,
+	} {
+		_, err := Load(context.Background(), fstest.MapFS{
+			"schema.xsd": &fstest.MapFile{Data: []byte(head + body + `</xs:schema>`)},
+		}, "schema.xsd")
+		if rejected && !errors.Is(err, ErrSchemaParse) {
+			t.Errorf("%s: Load error %v, want %v", body, err, ErrSchemaParse)
+		}
+		if !rejected && err != nil {
+			t.Errorf("%s: Load error %v, want none", body, err)
+		}
+	}
+}
