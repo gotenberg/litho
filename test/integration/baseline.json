@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-09-25T05:45:42Z",
+  "captured_at": "2026-09-25T08:46:20Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -256,12 +256,12 @@
           "skipped": 1
         },
         "text": {
-          "matched": 1028,
-          "mismatched": 162,
+          "matched": 1029,
+          "mismatched": 161,
           "skipped": 1,
           "metrics": {
             "chars_match": 1112,
-            "words_match": 1028
+            "words_match": 1029
           }
         }
       }
@@ -274,37 +274,37 @@
           "skipped": 0
         },
         "remediation": {
-          "matched": 33197,
-          "mismatched": 5818,
+          "matched": 33205,
+          "mismatched": 5810,
           "skipped": 0,
           "metrics": {
             "disagreement": 14,
-            "fully_fixed": 33197,
-            "litho_fixed": 163626,
-            "litho_post": 6523,
+            "fully_fixed": 33205,
+            "litho_fixed": 163634,
+            "litho_post": 6515,
             "litho_pre": 170149,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 163728,
-            "verapdf_post": 6537,
+            "verapdf_fixed": 163736,
+            "verapdf_post": 6529,
             "verapdf_pre": 170261,
             "verapdf_regressed": 4
           }
         },
         "remediation-aggressive": {
-          "matched": 34033,
-          "mismatched": 4982,
+          "matched": 34041,
+          "mismatched": 4974,
           "skipped": 0,
           "metrics": {
             "disagreement": 14,
-            "fully_fixed": 34033,
-            "litho_fixed": 164679,
-            "litho_post": 5470,
+            "fully_fixed": 34041,
+            "litho_fixed": 164687,
+            "litho_post": 5462,
             "litho_pre": 170149,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 164781,
-            "verapdf_post": 5484,
+            "verapdf_fixed": 164789,
+            "verapdf_post": 5476,
             "verapdf_pre": 170261,
             "verapdf_regressed": 4
           }
