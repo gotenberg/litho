@@ -3,8 +3,6 @@ package compliance
 import (
 	"context"
 	"errors"
-	"fmt"
-	"math"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -260,51 +258,15 @@ var operatorResourceCategory = map[string]ast.PdfName{
 	"BDC": "Properties",
 }
 
-// checkContentStreamResources validates that all named resources referenced by
-// operators in the content stream exist in the associated Resources dictionary,
-// and that no undefined operators are used.
+// checkContentStreamResourcesOps validates that every named resource the
+// operators of a parsed content stream reference exists in its resources, and
+// that the stream uses no undefined operator. It does NOT check inline image
+// intents, see [checkInlineImageIntent].
 //
 // reportUndefinedOps selects who states ISO 19005-2/3/4, 6.2.2 t1. A page
 // content stream is already walked by [checkPageContent], which states it there;
 // pass false for those and true for the streams that walk does not reach, so
-// the rule is stated exactly once per undefined operator. A number written with
-// an exponent where an operand stands reads as such an operator, so the same
-// flag states it, see [checkExponentOperands].
-//
-// hexStrings states the hex string tests from the same parse, or nothing when
-// nil; see [drawnStreamHexStrings].
-func checkContentStreamResources(
-	ctx context.Context,
-	doc *document.Document,
-	streamData []byte,
-	resources ast.PdfDict,
-	inherited ast.PdfDict,
-	part int,
-	pageNum int,
-	reportUndefinedOps bool,
-	hexStrings *drawnStreamHexStrings,
-) []Violation {
-	ops, overflows, formatViolations, err := content.ParseStreamDataForCompliance(ctx, streamData)
-	if err != nil {
-		doc.Logger.Debug("compliance.content: cannot parse content stream", "error", err)
-		return nil
-	}
-
-	results := checkContentStreamResourcesOps(ctx, doc, ops, countOverflows(overflows), resources, inherited, part, pageNum, reportUndefinedOps)
-	if reportUndefinedOps {
-		results = append(results, checkExponentOperands(formatViolations, part, pageNum)...)
-	}
-	results = append(results, hexStrings.check(formatViolations, pageNum)...)
-
-	// Check inline image /Intent values from parsed BI operations.
-	results = append(results, checkInlineImageIntent(ops, part, pageNum)...)
-
-	return results
-}
-
-// checkContentStreamResourcesOps is like [checkContentStreamResources] but
-// accepts pre-parsed operations. It does NOT check inline image intents
-// (which require raw bytes); callers must handle that separately if needed.
+// the rule is stated exactly once per undefined operator.
 //
 // # Corpus evidence
 //
@@ -318,7 +280,6 @@ func checkContentStreamResourcesOps(
 	ctx context.Context,
 	doc *document.Document,
 	ops []content.Operation,
-	overflow map[float64]int,
 	resources ast.PdfDict,
 	inherited ast.PdfDict,
 	part int,
@@ -345,11 +306,9 @@ func checkContentStreamResourcesOps(
 
 	undefinedRule := undefinedOperatorRule(part)
 	resourceRule := missingResourceRule(part)
-	realRule := realRangeRuleByPart(part)
 
 	var results []Violation
 	reported := make(map[string]bool) // avoid duplicate violations
-	reportedRealLimit := false
 
 	for idx, op := range ops {
 		if idx%200 == 0 && ctx.Err() != nil {
@@ -367,29 +326,6 @@ func checkContentStreamResourcesOps(
 							reported[key] = true
 							results = append(results, failf(riRule, "page %d: ri operator uses invalid intent %q", pageNum, riName)...)
 						}
-					}
-				}
-			}
-		}
-
-		// Check content stream operands for real values exceeding PDF/A-1 limit.
-		if part == 1 && !reportedRealLimit && realRule.Specification != "" {
-			for _, operand := range op.Operands {
-				if r, ok := operand.(ast.PdfReal); ok {
-					// A real the parser read from an integer literal past the
-					// 64-bit range is an integer, judged by checkNumericLimits
-					// (see checkNumberLimits). overflow is shared by the check
-					// groups, so it is read, never consumed.
-					if overflow[float64(r)] > 0 {
-						continue
-					}
-					if math.Abs(float64(r)) > maxRealAbs1 {
-						results = append(results, Violation{
-							Rule:    realRule,
-							Context: fmt.Sprintf("page %d: content stream real %g exceeds +/-%g", pageNum, float64(r), maxRealAbs1),
-						})
-						reportedRealLimit = true
-						break
 					}
 				}
 			}
@@ -546,13 +482,6 @@ func checkInlineImageIntent(ops []content.Operation, part int, pageNum int) []Vi
 		}
 	}
 	return results
-}
-
-func realRangeRuleByPart(part int) Rule {
-	if part == 1 {
-		return Rule_19005_1_6_1_12_t02
-	}
-	return Rule{}
 }
 
 func undefinedOperatorRule(part int) Rule {

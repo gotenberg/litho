@@ -139,42 +139,63 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 		results = append(results, checkObjectNumericLimits(doc.Index.Trailer, "trailer", part, profile, nil)...)
 	}
 
-	// Additionally, scan actual content streams for string/integer limits.
-	// Content streams are those referenced by page /Contents entries.
-	results = append(results, checkContentStreamLimits(ctx, doc, part, profile)...)
+	// The content streams are scanned by checkContentStreamLimits.
+	return withoutZeroRule(results)
+}
 
-	// PDF/A-4 drops most ISO 32000-1 implementation limits, so several
-	// rule selectors in this file legitimately return the zero Rule for
-	// part 4. A violation carrying it must never escape: it serializes
-	// as a clause-less "-t00" residual.
+// withoutZeroRule drops the violations carrying the zero Rule. PDF/A-4 drops
+// most ISO 32000-1 implementation limits, so several rule selectors in this
+// file legitimately return the zero Rule for part 4. A violation carrying it
+// must never escape: it serializes as a clause-less "-t00" residual.
+func withoutZeroRule(results []Violation) []Violation {
 	return slices.DeleteFunc(results, func(v Violation) bool { return v.Rule.Specification == "" })
 }
 
-// checkContentStreamLimits finds all page content streams and Form XObject
-// streams and checks string/integer operands for implementation limit
-// violations. Only actual content streams are scanned, not ICC profiles,
-// font programs, or other binary streams.
-func checkContentStreamLimits(ctx context.Context, doc *document.Document, part int, profile string) []Violation {
-	catalog, err := resolveCatalog(ctx, doc)
-	if err != nil || catalog == nil {
-		return nil
-	}
-	pages := collectPages(ctx, doc, catalog)
+// checkContentStreamLimits checks the string, integer and real operands of
+// every content stream the document draws against the implementation limits:
+// the content of each page, and every stream [drawnStreamWalk] reaches from it,
+// its form XObjects, tiling patterns, Type3 glyphs and annotation appearances
+// included. Only content streams are scanned, not ICC profiles, font programs
+// or other binary streams.
+//
+// ISO 19005-2 §6.1.13 constrains every number a conforming file contains, and
+// ISO 19005-1, 6.1.12 t2 states the real-magnitude limit over CosReal, which is
+// every real the file writes. A stream a page draws is as much part of the file
+// as the page's content: a tiling pattern paints its cell with a content stream
+// of its own (ISO 32000-1, 8.7.3.1), and a form XObject, a Type3 glyph and an
+// appearance are content streams too. veraPDF reaches them (its context path
+// runs page/contentStream/operators[N]/xObject), and judges each once for the
+// whole document: measured with veraPDF 1.30 at PDF/A-1b, a real past the
+// limit fails 6.1.12 t2 once per real in a form nested in a form, a tiling
+// pattern, an annotation appearance and a form one of them paints, and once
+// for a form two pages paint.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue6342.pdf: writes two out-of-range reals in the form its page
+//     invokes at operator 11, and veraPDF reports both. It reports twelve more
+//     there, for malformed numbers such as ".020.594" that it reads as
+//     2147483647.
+//   - pdfjs 22060_A1_01_Plans.pdf: keeps its 136 KB page stream inside the
+//     limit and holds six out-of-range reals in patterns /R21 and /R24, and
+//     veraPDF reports each of them, where litho reported one per pattern.
+//   - pdfjs tracemonkey.pdf: veraPDF reports 328 out-of-range reals, and
+//     litho reported 331, pages 10, 11 and 13 each stating one of theirs
+//     twice.
+func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violation {
+	doc, profile := vctx.doc, vctx.profile
 	maxStr := maxStringBytes1
-	if part >= 2 {
+	if vctx.part >= 2 {
 		maxStr = maxStringBytes2
 	}
 	var results []Violation
 	visited := make(map[int]bool)
 
-	for _, page := range pages {
+	for i := range vctx.pages {
 		if ctx.Err() != nil {
 			return results
 		}
-		// Page content streams. The page's resources are what a Do inside them
-		// names its Form XObjects through.
-		pageRes, _ := document.ResolveDict(ctx, doc, page["Resources"])
-		contentsObj := page["Contents"]
+		contentsObj := vctx.pages[i].dict["Contents"]
 		if contentsObj == nil {
 			continue
 		}
@@ -194,43 +215,40 @@ func checkContentStreamLimits(ctx context.Context, doc *document.Document, part 
 				}
 				visited[objNum] = true
 			}
-			stream, sErr := document.ResolveStream(ctx, doc, ref)
-			if sErr != nil {
+			stream, err := document.ResolveStream(ctx, doc, ref)
+			if err != nil {
 				continue
 			}
-			results = append(results, scanStreamOperandLimits(ctx, doc, stream, objNum, maxStr, profile, pageRes, visited, 0)...)
+			data, err := doc.DecodeStream(ctx, stream)
+			if err != nil || len(data) == 0 {
+				continue
+			}
+			ops, overflows, err := content.ParseStreamDataWithOverflows(ctx, data)
+			if err != nil {
+				doc.Logger.Debug("compliance.file_structure: cannot parse content stream", "error", err)
+				continue
+			}
+			results = append(results, checkOperandLimits(ops, countOverflows(overflows), objNum, maxStr, profile)...)
 		}
 	}
-	return results
+
+	walk := newDrawnStreamWalk(vctx, func(s *drawnStream) {
+		results = append(results, checkOperandLimits(s.ops, s.overflow, s.objNum, maxStr, profile)...)
+	})
+	for i := range vctx.pages {
+		if ctx.Err() != nil {
+			return results
+		}
+		walk.walkPage(ctx, &vctx.pages[i], i+1)
+	}
+	return withoutZeroRule(results)
 }
 
-// scanStreamOperandLimits decodes a content stream and checks string/integer
-// operands for limit violations, then descends into the Form XObjects the
-// stream invokes.
-//
-// ISO 19005-2 §6.1.13 constrains every number a conforming file contains, and a
-// form's content stream is as much part of the file as the page's. veraPDF
-// reaches them (its context path runs page/contentStream/operators[N]/xObject),
-// while litho stopped at the page.
-//
-// # Corpus evidence
-//
-//   - pdfjs issue6342.pdf: hides twelve out-of-range reals in the form its page
-//     invokes at operator 11.
-func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream ast.PdfStream, objNum int, maxStr int, profile string, res ast.PdfDict, visited map[int]bool, depth int) []Violation {
-	if formTooDeep(doc, depth) || ctx.Err() != nil {
-		return nil
-	}
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil || len(data) == 0 {
-		return nil
-	}
-	ops, overflows, err := content.ParseStreamDataWithOverflows(ctx, data)
-	if err != nil {
-		doc.Logger.Debug("compliance.file_structure: cannot parse content stream", "error", err)
-		return nil
-	}
-	overflow := countOverflows(overflows)
+// checkOperandLimits checks the string, integer and real operands of one
+// parsed content stream, object objNum, against the implementation limits.
+// overflow counts the integer literals past the 64-bit range the parse read as
+// reals (see [checkNumberLimits]), and is consumed.
+func checkOperandLimits(ops []content.Operation, overflow map[float64]int, objNum, maxStr int, profile string) []Violation {
 	part := PDFAPart(profile)
 	where := fmt.Sprintf("object %d (stream content)", objNum)
 	var results []Violation
@@ -271,46 +289,6 @@ func scanStreamOperandLimits(ctx context.Context, doc *document.Document, stream
 				}
 			}
 		}
-	}
-	return append(results, scanInvokedFormLimits(ctx, doc, ops, res, maxStr, profile, visited, depth)...)
-}
-
-// scanInvokedFormLimits scans the content streams of the Form XObjects a Do
-// operator names in res. visited guards a resource cycle and against scanning
-// one form twice, and depth caps the chain at the form budget ([formTooDeep]).
-func scanInvokedFormLimits(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, maxStr int, profile string, visited map[int]bool, depth int) []Violation {
-	xobjDict, err := document.ResolveDict(ctx, doc, res["XObject"])
-	if err != nil || len(xobjDict) == 0 {
-		return nil
-	}
-	var results []Violation
-	for _, op := range ops {
-		if op.Operator != "Do" || len(op.Operands) < 1 {
-			continue
-		}
-		name, ok := op.Operands[0].(ast.PdfName)
-		if !ok {
-			continue
-		}
-		ref, isRef := xobjDict[name].(ast.PdfIndirectRef)
-		if !isRef || visited[ref.ObjectNum] {
-			continue
-		}
-		form, err := document.ResolveStream(ctx, doc, xobjDict[name])
-		if err != nil || form.Dict == nil {
-			continue
-		}
-		if subtype, _ := document.ResolveName(ctx, doc, form.Dict["Subtype"]); subtype != "Form" {
-			continue
-		}
-		visited[ref.ObjectNum] = true
-		// A form without its own /Resources inherits the ones in force where it
-		// is invoked (ISO 32000-1, 8.10.1).
-		formRes := res
-		if own, err := document.ResolveDict(ctx, doc, form.Dict["Resources"]); err == nil && len(own) > 0 {
-			formRes = own
-		}
-		results = append(results, scanStreamOperandLimits(ctx, doc, form, ref.ObjectNum, maxStr, profile, formRes, visited, depth+1)...)
 	}
 	return results
 }

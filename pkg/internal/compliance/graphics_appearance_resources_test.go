@@ -66,12 +66,8 @@ func appearanceResourceFires(t *testing.T, apRes, pageRes string, part int) bool
 	if err != nil {
 		t.Fatalf("ResolveCatalog: %v", err)
 	}
-	pages, err := document.ResolvePages(ctx, doc, catalog)
-	if err != nil || len(pages) == 0 {
-		t.Fatalf("ResolvePages: %v (%d pages)", err, len(pages))
-	}
 
-	for _, v := range checkAnnotationAppearanceOps(ctx, doc, pages[0].Dict, part, 1, nil) {
+	for _, v := range appearanceScan(ctx, doc, catalog.Dict, part) {
 		if v.Rule.Clause == "6.2.2" && v.Rule.TestNumber == 3 {
 			return true
 		}

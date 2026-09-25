@@ -21,13 +21,17 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	doc.Logger.Debug("compliance.graphics: starting checks", "profile", profile, "part", part)
 
+	var results []Violation
+
 	// One ExtGState dictionary is judged once for the whole document; see
 	// [objectJudgedOnce].
 	judgedGS := make(map[int]bool)
-	// So is the syntax of the hex strings in one content stream.
+	// So is every content stream the pages draw besides their own content.
 	hexStrings := newDrawnStreamHexStrings(profile)
+	drawn := newDrawnStreamWalk(vctx, func(s *drawnStream) {
+		results = append(results, checkDrawnStream(ctx, doc, s, part, hexStrings)...)
+	})
 
-	var results []Violation
 	for i := range vctx.pages {
 		p := &vctx.pages[i]
 		page := p.dict
@@ -52,13 +56,17 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 				if pagesDict, err := document.ResolveDict(ctx, doc, vctx.catalog["Pages"]); err == nil && pagesDict != nil {
 					inheritedRes = resolveResources(ctx, doc, pagesDict)
 				}
-				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, p.overflow, ownRes, inheritedRes, part, i+1, false)...)
+				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, ownRes, inheritedRes, part, i+1, false)...)
 				// Check inline image /Intent values from parsed BI operations.
 				results = append(results, checkInlineImageIntent(ops, part, i+1)...)
 				// Inline image filters are stated by checkInlineImageFilters,
 				// which scans the same page's raw bytes.
 			}
 		}
+
+		// The form XObjects, tiling patterns, Type3 glyphs and annotation
+		// appearances the page draws, and whatever those draw in turn.
+		drawn.walkPage(ctx, p, i+1)
 
 		if res == nil {
 			continue
@@ -72,210 +80,41 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			}
 		}
 
-		// Also check Form XObject content streams for resource completeness.
-		// Only scan Forms referenced by Do operators in the page content.
-		var referencedXObjects map[string]bool
-		var used *usedResources
-		var shownFonts map[string]*fontUsageInfo
-		if hasContent {
-			_, referencedXObjects, _, used, _ = scanContentStreamDeviceCS(ctx, vctx.pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, res))
-			shownFonts = collectFontUsage(vctx.pages[i].parsedOps(ctx))
-		}
-		results = append(results, checkFormXObjectResources(ctx, doc, res, part, i+1, referencedXObjects, hexStrings)...)
-
-		// Check the content streams of the tiling patterns the page paints.
-		results = append(results, checkPatternResources(ctx, doc, res, part, i+1, used, hexStrings)...)
-
 		// Scan Form XObject ExtGState for halftone/rendering intent violations.
 		results = append(results, checkFormXObjectExtGState(ctx, doc, res, profile, part, i+1, judgedGS)...)
 
-		// Check Type3 font CharProc resource completeness.
-		results = append(results, checkType3CharProcResources(ctx, doc, res, part, i+1, shownFonts, hexStrings)...)
-
 		// Scan annotation appearance ExtGState for halftone/rendering intent.
 		results = append(results, checkAnnotationAppearanceExtGState(ctx, doc, page, profile, part, i+1, judgedGS)...)
-
-		// Scan annotation appearance streams for undefined operators.
-		results = append(results, checkAnnotationAppearanceOps(ctx, doc, page, part, i+1, hexStrings)...)
 	}
 
 	doc.Logger.Debug("compliance.graphics: checks complete", "violations", len(results))
 	return results
 }
 
-// checkFormXObjectResources checks content stream resource completeness for
-// Form XObjects referenced by Do operators on the page. Each Form XObject
-// has its own Resources dict; operators in its content stream must reference
-// resources defined there. hexStrings judges the syntax of their hex strings.
+// checkDrawnStream states the content-stream rules for one stream
+// [drawnStreamWalk] reaches. An annotation appearance stream is judged by
+// [checkAppearanceStreamOps].
 //
-// A nil referencedNames, a page with no content, checks every Form XObject
-// its resources name, but none is painted, so none has its hex strings judged.
-func checkFormXObjectResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part int, pageNum int, referencedNames map[string]bool, hexStrings *drawnStreamHexStrings) []Violation {
-	if pageRes == nil {
-		return nil
-	}
-	if referencedNames == nil {
-		hexStrings = nil
-	}
-	xoDict, err := document.ResolveDict(ctx, doc, pageRes["XObject"])
-	if err != nil || xoDict == nil {
-		return nil
-	}
-
-	var results []Violation
-	for _, xoName := range sortedNames(xoDict) {
-		xoObj := xoDict[xoName]
-		// Only check Form XObjects that are actually referenced by Do operators.
-		if referencedNames != nil && !referencedNames[string(xoName)] {
-			continue
-		}
-		if ctx.Err() != nil {
-			return results
-		}
-		stream, err := document.ResolveStream(ctx, doc, xoObj)
-		if err != nil {
-			doc.Logger.Debug("compliance.graphics: cannot resolve XObject stream", "error", err)
-			continue
-		}
-		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-		if subtype != "Form" {
-			continue
-		}
-		formData, err := doc.DecodeStream(ctx, stream)
-		if err != nil || len(formData) == 0 {
-			continue
-		}
-		formRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-		if formRes == nil {
-			formRes = make(ast.PdfDict)
-		}
-		// Per ISO 19005-2 §6.2.2, a Form XObject content stream resolves
-		// resource names against its own /Resources first. A name found only
-		// in the PAGE's resources is an inherited reference (t2), so the page
-		// resources serve as the fallback scope when scanning the form stream.
-		results = append(results, checkContentStreamResources(ctx, doc, formData, formRes, pageRes, part, pageNum, true, hexStrings.once(xoObj))...)
-	}
-	return results
-}
-
-// checkPatternResources checks the content stream of every tiling pattern the
-// page paints. A tiling pattern draws its cell with a content stream of its own
-// (ISO 32000-1, 8.7.3.1), so the operand limits and resource rules apply there
-// as they do on the page. ISO 19005-1, 6.1.12 t2 states the real-magnitude
-// limit over CosReal, which is every real the file writes, pattern cells
-// included.
+// A form XObject, a tiling pattern cell and a Type3 glyph description resolve
+// resource names against their own /Resources first, a glyph description
+// against its font's. Per ISO 19005-2, 6.2.2, a name found only in the page's
+// resources is an inherited reference (t2), so the page's serve as the fallback
+// scope.
 //
-// Only a pattern a scn or SCN selects is judged, the same scope
-// [scanPatternImages] uses. veraPDF passes a pattern the page declares and
-// never paints, measured on a fixture whose unselected pattern carries the same
-// out-of-range real. hexStrings judges the syntax of their hex strings.
-//
-// # Corpus evidence
-//
-//   - pdfjs 22060_A1_01_Plans.pdf: keeps its 136 KB page stream inside the
-//     limit and holds -39455.5 in patterns /R21 and /R24, and veraPDF reports
-//     it there six times.
-func checkPatternResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part, pageNum int, used *usedResources, hexStrings *drawnStreamHexStrings) []Violation {
-	if pageRes == nil || used == nil {
-		return nil
+// The undefined-operator rule, ISO 19005-1, 6.2.10 t1 and ISO 19005-2/3/4,
+// 6.2.2 t1, is stated here for these streams, and by [checkPageContent] for a
+// page's own content alone, so it is stated exactly once per undefined
+// operator. A number written with an exponent where an operand stands reads as
+// such an operator, see [checkExponentOperands]. The operand limits are stated
+// by [checkContentStreamLimits].
+func checkDrawnStream(ctx context.Context, doc *document.Document, s *drawnStream, part int, hexStrings *drawnStreamHexStrings) []Violation {
+	if s.kind == drawnAppearance {
+		return checkAppearanceStreamOps(ctx, doc, s, part, hexStrings)
 	}
-	patterns, err := document.ResolveDict(ctx, doc, pageRes["Pattern"])
-	if err != nil || patterns == nil {
-		return nil
-	}
-
-	var results []Violation
-	for _, name := range sortedNames(patterns) {
-		if ctx.Err() != nil {
-			return results
-		}
-		if !used.patterns[string(name)] {
-			continue
-		}
-		stream, err := document.ResolveStream(ctx, doc, patterns[name])
-		if err != nil {
-			continue // a shading pattern: a dictionary with no content of its own
-		}
-		if patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"]); patternType != 1 {
-			continue
-		}
-		data, err := doc.DecodeStream(ctx, stream)
-		if err != nil || len(data) == 0 {
-			continue
-		}
-		patternRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-		if patternRes == nil {
-			patternRes = make(ast.PdfDict)
-		}
-		// A pattern content stream resolves resource names against its own
-		// /Resources first, with the page's serving as the fallback scope, as a
-		// Form XObject's does.
-		results = append(results, checkContentStreamResources(ctx, doc, data, patternRes, pageRes, part, pageNum, true, hexStrings.once(patterns[name]))...)
-	}
-	return results
-}
-
-// checkType3CharProcResources checks Type3 font CharProc content streams for
-// resource references. Type3 CharProcs are content streams that may reference
-// colour spaces, fonts, etc. If they do, the Type3 font dict must have an
-// explicitly associated /Resources entry.
-//
-// hexStrings judges the syntax of the hex strings of every glyph of a font the
-// page shows text with, the glyphs it never shows included: veraPDF reaches
-// them all through the font of a text-showing operator, and none of a font
-// only selected. shownFonts holds the fonts the page shows text with, keyed by
-// resource name, and is nil for a page with no content.
-func checkType3CharProcResources(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, part, pageNum int, shownFonts map[string]*fontUsageInfo, hexStrings *drawnStreamHexStrings) []Violation {
-	if pageRes == nil {
-		return nil
-	}
-	fontDict, err := document.ResolveDict(ctx, doc, pageRes["Font"])
-	if err != nil || fontDict == nil {
-		return nil
-	}
-	var results []Violation
-	for _, fontName := range sortedNames(fontDict) {
-		fontRef := fontDict[fontName]
-		fd, err := document.ResolveDict(ctx, doc, fontRef)
-		if err != nil || fd == nil {
-			continue
-		}
-		subtype, _ := document.ResolveName(ctx, doc, fd["Subtype"])
-		if subtype != "Type3" {
-			continue
-		}
-		// §6.2.2 scopes resource completeness to the CharProc stream: a name
-		// resolved only through the page's resources is inherited (t2), one
-		// resolved nowhere is undefined (t3). A Type3 font without its own
-		// /Resources therefore fires t2 per inherited name, never a
-		// blanket missing-dictionary violation.
-		type3Res, err := document.ResolveDict(ctx, doc, fd["Resources"])
-		if err != nil || type3Res == nil {
-			type3Res = make(ast.PdfDict)
-		}
-		charProcs, err := document.ResolveDict(ctx, doc, fd["CharProcs"])
-		if err != nil || charProcs == nil {
-			continue
-		}
-		fontHexStrings := hexStrings
-		if _, shown := shownFonts[string(fontName)]; !shown {
-			fontHexStrings = nil
-		}
-		for _, cpName := range sortedNames(charProcs) {
-			cpObj := charProcs[cpName]
-			stream, err := document.ResolveStream(ctx, doc, cpObj)
-			if err != nil {
-				doc.Logger.Debug("compliance.graphics: cannot resolve CharProc stream", "error", err)
-				continue
-			}
-			data, err := doc.DecodeStream(ctx, stream)
-			if err != nil || len(data) == 0 {
-				continue
-			}
-			results = append(results, checkContentStreamResources(ctx, doc, data, type3Res, pageRes, part, pageNum, true, fontHexStrings.once(cpObj))...)
-		}
-	}
-	return results
+	results := checkContentStreamResourcesOps(ctx, doc, s.ops, s.resources, s.pageRes, part, s.pageNum, true)
+	results = append(results, checkExponentOperands(s.format, part, s.pageNum)...)
+	results = append(results, hexStrings.check(s.format, s.pageNum)...)
+	return append(results, checkInlineImageIntent(s.ops, part, s.pageNum)...)
 }
 
 // checkAnnotationAppearanceExtGState scans annotation appearance stream
@@ -314,71 +153,6 @@ func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Docum
 	return results
 }
 
-// checkAnnotationAppearanceOps reports content-stream operators that ISO
-// 32000-1 does not define when they appear inside an annotation appearance
-// stream.
-//
-// An appearance stream is a content stream (ISO 32000-1, 12.5.5), so the
-// prohibition in ISO 19005-2, 6.2.2 reaches it. The page-level scan only sees
-// a page's own /Contents and the Form XObjects its resources name, so an
-// operator inside /Annots[]/AP went unreported while veraPDF flagged it.
-//
-// The named-resource test runs here too, for the one part that states it.
-// An earlier note left it out as unmeasured against the reference validator;
-// it has since been measured. veraPDF 1.30.2 fails ISO 19005-4, 6.2.2 t3 on
-// appearance streams. hexStrings judges the syntax of their hex strings.
-//
-// # Corpus evidence
-//
-//   - pdfjs issue14438.pdf: runs /OC /MC0 BDC in 2 of its 19 appearance
-//     streams, whose own /Resources carry no /Properties, and veraPDF reports
-//     exactly those 2.
-func checkAnnotationAppearanceOps(ctx context.Context, doc *document.Document, page ast.PdfDict, part, pageNum int, hexStrings *drawnStreamHexStrings) []Violation {
-	rule := undefinedOperatorRule(part)
-	if rule.Specification == "" && missingResourceRule(part).Specification == "" {
-		return nil
-	}
-	pageRes := resolveResources(ctx, doc, page)
-	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
-	if err != nil || len(annotsArr) == 0 {
-		return nil
-	}
-
-	var results []Violation
-	// An appearance stream shared by several annotations is one stream, so it
-	// answers once per page rather than once per reference.
-	seen := make(map[int]bool)
-	for _, annotObj := range annotsArr {
-		if err := ctx.Err(); err != nil {
-			return results
-		}
-		annot, _ := document.ResolveDict(ctx, doc, annotObj)
-		if annot == nil {
-			continue
-		}
-		apDict, _ := document.ResolveDict(ctx, doc, annot["AP"])
-		if apDict == nil {
-			continue
-		}
-		for _, key := range []ast.PdfName{"N", "R", "D"} {
-			apObj, ok := apDict[key]
-			if !ok {
-				continue
-			}
-			for _, streamObj := range appearanceStreamObjects(ctx, doc, apObj) {
-				if ref, isRef := streamObj.(ast.PdfIndirectRef); isRef {
-					if seen[ref.ObjectNum] {
-						continue
-					}
-					seen[ref.ObjectNum] = true
-				}
-				results = append(results, checkAppearanceStreamOps(ctx, doc, streamObj, rule, pageRes, part, pageNum, hexStrings.once(streamObj))...)
-			}
-		}
-	}
-	return results
-}
-
 // appearanceStreamObjects returns the appearance streams an /AP entry holds.
 // The entry is a stream, or a subdictionary keyed by appearance state when the
 // annotation has several (ISO 32000-1, 12.5.5), as a checkbox does with /Off
@@ -398,29 +172,28 @@ func appearanceStreamObjects(ctx context.Context, doc *document.Document, apObj 
 	return out
 }
 
-// checkAppearanceStreamOps parses one appearance stream, reports every operator
-// outside [content.IsOperator] and every number written with an exponent where
-// an operand stands (see [checkExponentOperands]), and reports the names it
-// references that no resource dictionary defines. hexStrings, when not nil,
-// judges the syntax of its hex strings from the same parse.
-func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, streamObj ast.PdfObject, rule Rule, pageRes ast.PdfDict, part, pageNum int, hexStrings *drawnStreamHexStrings) []Violation {
-	stream, err := document.ResolveStream(ctx, doc, streamObj)
-	if err != nil {
-		doc.Logger.Debug("compliance.graphics: cannot resolve appearance stream", "error", err)
-		return nil
-	}
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil || len(data) == 0 {
-		return nil
-	}
-	ops, _, formatViolations, err := content.ParseStreamDataForCompliance(ctx, data)
-	if err != nil {
-		doc.Logger.Debug("compliance.graphics: cannot parse appearance stream", "error", err)
-		return nil
-	}
-
+// checkAppearanceStreamOps states the content-stream rules for one annotation
+// appearance stream: every operator outside [content.IsOperator], every number
+// written with an exponent where an operand stands (see
+// [checkExponentOperands]), the syntax of its hex strings, and the names it
+// references that no resource dictionary defines.
+//
+// An appearance stream is a content stream (ISO 32000-1, 12.5.5), so the
+// prohibition in ISO 19005-2, 6.2.2 reaches it, and veraPDF flags an operator
+// there that ISO 32000-1 does not define.
+//
+// The named-resource test runs here too, for the one part that states it.
+// veraPDF 1.30.2 fails ISO 19005-4, 6.2.2 t3 on appearance streams.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14438.pdf: runs /OC /MC0 BDC in 2 of its 19 appearance
+//     streams, whose own /Resources carry no /Properties, and veraPDF reports
+//     exactly those 2.
+func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, s *drawnStream, part int, hexStrings *drawnStreamHexStrings) []Violation {
+	rule := undefinedOperatorRule(part)
 	var results []Violation
-	for idx, op := range ops {
+	for idx, op := range s.ops {
 		if idx%100 == 0 && ctx.Err() != nil {
 			return results
 		}
@@ -428,13 +201,13 @@ func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, strea
 			continue
 		}
 		results = append(results, failf(rule,
-			"page %d: undefined operator %q in annotation appearance", pageNum, op.Operator)...)
+			"page %d: undefined operator %q in annotation appearance", s.pageNum, op.Operator)...)
 	}
-	for _, v := range checkExponentOperands(formatViolations, part, pageNum) {
+	for _, v := range checkExponentOperands(s.format, part, s.pageNum) {
 		v.Context += " in annotation appearance"
 		results = append(results, v)
 	}
-	for _, v := range hexStrings.check(formatViolations, pageNum) {
+	for _, v := range hexStrings.check(s.format, s.pageNum) {
 		v.Context += " in annotation appearance"
 		results = append(results, v)
 	}
@@ -446,13 +219,8 @@ func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, strea
 	if missingResourceRule(part).Specification == "" {
 		return results
 	}
-	streamRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-	if err != nil {
-		doc.Logger.Debug("compliance.graphics: cannot resolve appearance resources", "error", err)
-		return results
-	}
-	for _, v := range checkContentStreamResourcesOps(ctx, doc, ops, nil,
-		appearanceResources(ctx, doc, streamRes, pageRes), nil, part, pageNum, false) {
+	for _, v := range checkContentStreamResourcesOps(ctx, doc, s.ops,
+		appearanceResources(ctx, doc, s.resources, s.pageRes), nil, part, s.pageNum, false) {
 		v.Context += ", annotation appearance"
 		results = append(results, v)
 	}

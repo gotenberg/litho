@@ -37,15 +37,11 @@ type validationCtx struct {
 
 // pageCtx holds pre-resolved data for a single page.
 type pageCtx struct {
-	dict      ast.PdfDict
-	resources ast.PdfDict // resolved, with inherited fallback from Pages tree
-	content   []byte      // decoded content stream bytes (nil if decode fails)
-	ops       []content.Operation
-	opsOnce   sync.Once
-	// overflow counts, by value, the integer literals past the 64-bit range
-	// that the parse of ops read as reals (see checkNumberLimits). Set with
-	// ops and read-only after.
-	overflow    map[float64]int
+	dict        ast.PdfDict
+	resources   ast.PdfDict // resolved, with inherited fallback from Pages tree
+	content     []byte      // decoded content stream bytes (nil if decode fails)
+	ops         []content.Operation
+	opsOnce     sync.Once
 	parseFailed bool // true only when ParseStreamData errored (not for empty content)
 
 	// contentUnreadable is true when the content stream could not be resolved
@@ -64,9 +60,8 @@ type pageCtx struct {
 func (p *pageCtx) parsedOps(ctx context.Context) []content.Operation {
 	p.opsOnce.Do(func() {
 		if len(p.content) > 0 {
-			ops, overflows, err := content.ParseStreamDataWithOverflows(ctx, p.content)
+			ops, _, err := content.ParseStreamDataWithOverflows(ctx, p.content)
 			p.ops = ops // Parse failure yields nil ops; checks run on whatever is available.
-			p.overflow = countOverflows(overflows)
 			if err != nil {
 				// Assigning the comparison would clear the flag a failed decode
 				// already set on a page whose bytes never reached the parser.

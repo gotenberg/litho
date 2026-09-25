@@ -11,7 +11,7 @@ import (
 // ISO 19005-2, 6.2.2 t1 findings.
 func undefinedOpViolations(t *testing.T, ops []content.Operation, report bool) []Violation {
 	t.Helper()
-	got := checkContentStreamResourcesOps(testCtx(), nopDoc(), ops, nil, nil, nil, 2, 1, report)
+	got := checkContentStreamResourcesOps(testCtx(), nopDoc(), ops, nil, nil, 2, 1, report)
 	return slices.DeleteFunc(got, func(v Violation) bool {
 		return v.Rule != Rule_19005_2_6_2_2_t01
 	})

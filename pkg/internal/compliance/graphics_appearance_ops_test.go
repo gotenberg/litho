@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -53,6 +54,23 @@ func appearanceOpPDF(t *testing.T, inAppearance bool) []byte {
 	return buf.Bytes()
 }
 
+// appearanceScan runs the drawn-stream walk over the pages of the document
+// whose catalog is cat and returns what [checkAppearanceStreamOps] states for
+// the annotation appearance streams it reaches, at part.
+func appearanceScan(ctx context.Context, doc *document.Document, cat ast.PdfDict, part int) []Violation {
+	vctx := &validationCtx{doc: doc, catalog: cat, part: part, pages: pageCtxsFor(ctx, doc, cat)}
+	var got []Violation
+	walk := newDrawnStreamWalk(vctx, func(s *drawnStream) {
+		if s.kind == drawnAppearance {
+			got = append(got, checkAppearanceStreamOps(ctx, doc, s, part, nil)...)
+		}
+	})
+	for i := range vctx.pages {
+		walk.walkPage(ctx, &vctx.pages[i], i+1)
+	}
+	return got
+}
+
 // appearanceOpViolations runs the appearance-stream operator scan over the
 // fixture's single page and keeps the 6.2.2 findings.
 func appearanceOpViolations(t *testing.T, inAppearance bool) []Violation {
@@ -68,12 +86,8 @@ func appearanceOpViolations(t *testing.T, inAppearance bool) []Violation {
 	if err != nil {
 		t.Fatalf("ResolveCatalog: %v", err)
 	}
-	pages, err := document.ResolvePages(ctx, doc, catalog)
-	if err != nil || len(pages) == 0 {
-		t.Fatalf("ResolvePages: %v (%d pages)", err, len(pages))
-	}
 
-	got := checkAnnotationAppearanceOps(ctx, doc, pages[0].Dict, 2, 1, nil)
+	got := appearanceScan(ctx, doc, catalog.Dict, 2)
 	var found []Violation
 	for _, v := range got {
 		if strings.HasPrefix(v.Rule.Clause, "6.2.2") {

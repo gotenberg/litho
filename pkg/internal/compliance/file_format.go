@@ -170,28 +170,21 @@ func contentStringJudged(v content.FormatViolation) bool {
 }
 
 // drawnStreamHexStrings states the hex string tests, ISO 19005-1/2/3, 6.1.6
-// t1 and t2 and ISO 19005-4, 6.1.5 t1 and t2, for the content streams a page
-// draws besides its own: the form XObjects it paints, the tiling patterns it
-// selects, the glyphs of the Type3 fonts it shows text with and its annotation
-// appearances. [checkContentStreamFormat] states them for a page's own
-// content.
+// t1 and t2 and ISO 19005-4, 6.1.5 t1 and t2, for the content streams a
+// document draws besides the content of its pages: the form XObjects, tiling
+// patterns, Type3 glyphs and annotation appearances [drawnStreamWalk] reaches.
+// [checkContentStreamFormat] states them for a page's own content.
 //
-// The walk that states the undefined-operator rule for those streams parses
-// each one, and states these tests from the same parse. Measured with veraPDF
-// 1.30 at PDF/A-1b and PDF/A-2b, a bad hex string in any of them fails the
-// test once per string; a stream a page declares and never draws passes it,
-// be it a form no Do paints, a pattern no scn selects or a Type3 font a Tf
-// selects and no text shows; and a stream drawn twice, by one page or by two,
-// or an appearance two annotations share, fails it once. The streams are
-// therefore judged once for the whole document.
-//
-// A form XObject painted by another form XObject or by an appearance stream
-// fails the test too, and the walk does not reach it.
-//
-// The walk runs on one goroutine, so the judge takes no lock.
+// The walk parses each stream once, and the tests are stated from that parse.
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b, a bad hex string in any
+// of them fails the test once per string, nested in another form, an
+// appearance or a pattern included; a stream a page declares and never draws
+// passes it, be it a form no Do paints, a pattern no scn selects or a Type3
+// font a Tf selects and no text shows; and a stream drawn twice, by one page
+// or by two, or an appearance two annotations share, fails it once, since the
+// walk judges each stream once for the whole document.
 type drawnStreamHexStrings struct {
 	oddRule, charRule Rule
-	judged            map[int]bool
 }
 
 // newDrawnStreamHexStrings returns the judge for profile, or nil when the
@@ -204,28 +197,11 @@ func newDrawnStreamHexStrings(profile string) *drawnStreamHexStrings {
 	return &drawnStreamHexStrings{
 		oddRule:  oddRule,
 		charRule: hexStringInvalidCharRule(profile),
-		judged:   make(map[int]bool),
 	}
-}
-
-// once returns j the first time the walk reaches the stream obj, and nil
-// every time after, so the stream is judged once. A stream written directly
-// rather than referenced can be reached only once.
-func (j *drawnStreamHexStrings) once(obj ast.PdfObject) *drawnStreamHexStrings {
-	if j == nil {
-		return nil
-	}
-	if ref, isRef := obj.(ast.PdfIndirectRef); isRef {
-		if j.judged[ref.ObjectNum] {
-			return nil
-		}
-		j.judged[ref.ObjectNum] = true
-	}
-	return j
 }
 
 // check states the tests for the violations recorded while parsing one
-// stream. A nil j states nothing: the stream was judged already.
+// stream. A nil j states nothing.
 func (j *drawnStreamHexStrings) check(violations []content.FormatViolation, pageNum int) []Violation {
 	if j == nil {
 		return nil
@@ -261,13 +237,12 @@ func (j *drawnStreamHexStrings) check(violations []content.FormatViolation, page
 // the rest of the token as that operator, once per token; measured with
 // veraPDF 1.30 on "1.5e1 w", "1.5E-1 w" and "1e1 w".
 //
-// [checkContentStreamFormat] states it for a page's own content. The walks that
-// state the undefined-operator rule for the other streams a page draws, the
-// form XObjects it paints, the tiling patterns it selects, the glyphs of its
-// Type3 fonts and its annotation appearances, call this on the violations of
-// the same parse, so the two findings reach the same streams. veraPDF parses
-// each of those streams the same way: measured with veraPDF 1.30 at PDF/A-1b
-// and PDF/A-2b, "1.5e1 w" in any one of them fails the undefined-operator test
+// [checkContentStreamFormat] states it for a page's own content. The rules that
+// judge the other streams a document draws, the ones [drawnStreamWalk]
+// reaches, call this on the violations of the parse the undefined-operator rule
+// reads, so the two findings reach the same streams. veraPDF parses each of
+// those streams the same way: measured with veraPDF 1.30 at PDF/A-1b and
+// PDF/A-2b, "1.5e1 w" in any one of them fails the undefined-operator test
 // once, and "15 w" passes it.
 //
 // A number inside an array or a dictionary answers to no rule; see
