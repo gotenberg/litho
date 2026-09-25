@@ -26,6 +26,9 @@ func FuzzInlineImageScan(f *testing.F) {
 	f.Add([]byte("BI ID"))
 	// A dictionary key that looks like the terminator.
 	f.Add([]byte("BI /ID /ID ID x EI"))
+	// Two inline images in a row, the first with an EI inside its data and
+	// the second truncated before its EI.
+	f.Add([]byte("BI /F /LZW ID xEI zz EI\n% c\nBI /F /LZW ID yy E"))
 	f.Add([]byte("q 1 0 0 1 0 0 cm BT /F1 12 Tf (hi) Tj ET Q"))
 
 	f.Fuzz(func(_ *testing.T, data []byte) {
