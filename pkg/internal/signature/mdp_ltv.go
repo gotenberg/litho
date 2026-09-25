@@ -349,11 +349,18 @@ func ltvExemptions(ctx context.Context, doc, rev *document.Document, held func(n
 }
 
 // maxEarlierRevisions bounds how many revisions between the signed one and the
-// current one [exemptDroppedValidationData] reads. It is an anti-DoS guard, not
+// current one [exemptDroppedValidationData] reads, and how many updates
+// [withoutEarlierAppearances] judges. It is an anti-DoS guard, not
 // spec-mandated: each revision is read through its own /Prev chain, so a
 // crafted file of many small updates would otherwise cost the square of their
 // number. A document gains a revision each time validation data or a document
-// timestamp is added to it, and 64 covers decades of yearly renewals.
+// timestamp is added to it, or a form is filled in and saved, and 64 covers
+// decades of yearly renewals and far more fills than a signed form receives.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18801.pdf: the most updates after a signature in all
+//     corpora, 14 form fills.
 const maxEarlierRevisions = 64
 
 // exemptDroppedValidationData adds to exempt each object number that an

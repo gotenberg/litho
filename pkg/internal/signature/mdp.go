@@ -157,7 +157,7 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 
 	// There are bytes after the signed range. Parse the appended objects
 	// to determine if they violate the MDP policy.
-	appendedObjects, err := parseAppendedObjects(ctx, doc, signedEnd, fileSize)
+	appendedObjects, updates, err := parseAppendedObjects(ctx, doc, signedEnd, fileSize)
 	if err != nil {
 		result.MDPInfo = fmt.Sprintf("unable to parse appended data: %v", err)
 		return
@@ -180,7 +180,7 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 		violation = classifyModifications(classified, sig.MDPPolicy)
 		if violation != "" && sig.MDPPolicy >= 2 {
 			var formNote string
-			classified, formNote = withoutFormData(ctx, doc, signed, classified, sig.MDPPolicy)
+			classified, formNote = withoutFormData(ctx, doc, signed, classified, updates, sig.MDPPolicy)
 			note += formNote
 			violation = classifyModifications(classified, sig.MDPPolicy)
 		}
@@ -368,7 +368,9 @@ var objectHeaderRe = regexp.MustCompile(`(\d+)\s+\d+\s+obj\b`)
 
 // parseAppendedObjects scans the bytes between signedEnd and fileEnd for
 // indirect object definitions and records the entries classifyModifications
-// reads.
+// reads. It also returns the file offset just past each end-of-file marker
+// in those bytes, in ascending order: where each incremental update ends
+// ([updateEndOffsets]).
 //
 // An object stream is not recorded itself: the objects it holds are, each
 // described exactly as an object written outside a stream would be. ISO
@@ -376,10 +378,10 @@ var objectHeaderRe = regexp.MustCompile(`(\d+)\s+\d+\s+obj\b`)
 // an incremental update that compresses its objects (7.5.8 introduced both
 // together) changes the document through the objects inside and never through
 // the container.
-func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd, fileEnd int64) ([]appendedObject, error) {
+func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd, fileEnd int64) ([]appendedObject, []int64, error) {
 	data, err := doc.ReadFileBytes(ctx, signedEnd, fileEnd-signedEnd)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	var objects []appendedObject
@@ -390,7 +392,7 @@ func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd
 	for i, loc := range matches {
 		if i%100 == 0 {
 			if err := ctx.Err(); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		// Parse the object starting at the header position.
@@ -419,7 +421,7 @@ func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd
 		}
 	}
 
-	return objects, nil
+	return objects, updateEnds, nil
 }
 
 // eofMarker ends each incremental update (ISO 32000-1, 7.5.5, 7.5.6).

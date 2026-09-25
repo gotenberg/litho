@@ -1468,7 +1468,11 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // redrawing an annotation the update rewrote within the policy (a form field
 // widget or a new signature's widget at P=2, any annotation at P=3) when that
 // annotation's /AP reaches it and it is new, or was that annotation's own
-// appearance stream in the signed revision.
+// appearance stream in the signed revision. A later form fill that redraws the
+// same widget leaves the earlier appearance unreferenced, so such an object is
+// also judged in the revision the update that wrote it made, against the
+// revision before that update: it passes when the /AP of an annotation that
+// update changed within the policy reaches it there.
 //
 // In a tagged document, the structure tree additions that tag such an
 // annotation are part of the change too, as ISO 14289-1, 7.18 requires of a

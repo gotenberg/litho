@@ -38,11 +38,18 @@ import (
 // An object is new when the signed revision neither defines it nor refers to
 // it ([signedRevision.held]): filling in a number the signed document already
 // refers to changes what that reference means.
+//
+// The current document reaches only the appearances the last update to each
+// annotation gave it, so the appearance objects left over are judged in the
+// revision the update that wrote them made ([withoutEarlierAppearances]).
+// updates are the file offsets where each incremental update after the signed
+// revision ends.
 func withoutFormData(
 	ctx context.Context,
 	doc *document.Document,
 	signed *signedRevision,
 	objects []appendedObject,
+	updates []int64,
 	policy int,
 ) (_ []appendedObject, note string) {
 	var streams, drawn bool
@@ -93,6 +100,9 @@ func withoutFormData(
 			continue
 		}
 		kept = append(kept, obj)
+	}
+	if drawn {
+		return withoutEarlierAppearances(ctx, doc, signed, rev, objects, kept, updates, policy)
 	}
 	return kept, ""
 }
