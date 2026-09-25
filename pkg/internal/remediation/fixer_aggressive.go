@@ -197,7 +197,21 @@ func fixAnnotationAppearances(ctx context.Context, alloc *writer.ObjAllocator, d
 }
 
 // fixContentStreams parses page content streams and fixes rendering intent
-// operators and removes unknown operators between BX/EX markers.
+// operators and removes unknown operators, BX/EX sections included.
+//
+// The removal is [dropUndefinedOperators], the one the unknown-ops fixer makes,
+// so a run of operators written with no white space between them, such as
+// "ETBT", is written back as the operators a viewer reads (ISO 32000-1,
+// Annex A, Table A.1) rather than deleted whole. Deleting it removed the ET
+// and BT a viewer draws with, and the text after them moved.
+//
+// # Corpus evidence
+//
+//   - pdfjs sci-notation.pdf, bug1130815.pdf: the two files with such a run in
+//     page content. The unknown-ops fixer answers the same findings ahead of
+//     this rewrite and separates the runs first, so the violations litho and
+//     veraPDF report after an aggressive PDF/A-1b, PDF/A-2b or PDF/A-4
+//     remediation, and the extracted text, are unchanged.
 func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fixRI, fixUnknown bool) ([]string, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -208,7 +222,7 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		return nil, err
 	}
 
-	var totalRI, totalUnknown int
+	var totalRI, totalUnknown, totalSeparated int
 
 	for pageNum, page := range pages {
 		if err := ctx.Err(); err != nil {
@@ -220,45 +234,31 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 			continue
 		}
 
-		modified := false
 		hasInlineImage := false
-		inCompat := 0
-		pageRI, pageUnknown := 0, 0
+		pageRI, pageUnknown, pageSeparated := 0, 0, 0
+
+		// The removal the unknown-ops fixer makes, shared so that a run of
+		// operators written with no white space between them comes apart here
+		// too; see [dropUndefinedOperators].
+		if fixUnknown {
+			ops, pageSeparated, pageUnknown = dropUndefinedOperators(ops)
+		}
 
 		for i, op := range ops {
 			if op.Operator == "BI" {
 				hasInlineImage = true
 			}
-			if op.Operator == "BX" {
-				inCompat++
-			}
-			if op.Operator == "EX" && inCompat > 0 {
-				inCompat--
-			}
-
 			if fixRI && op.Operator == "ri" && len(op.Operands) == 1 {
 				if name, ok := op.Operands[0].(ast.PdfName); ok {
 					if !isValidRenderingIntent(string(name)) {
 						ops[i].Operands[0] = ast.PdfName("RelativeColorimetric")
 						pageRI++
-						modified = true
 					}
-				}
-			}
-
-			if fixUnknown && op.Operator != "BX" && op.Operator != "EX" && op.Operator != "" {
-				// Per ISO 19005-2 §6.2.2, undefined operators are
-				// forbidden even inside BX/EX compatibility brackets,
-				// so strip them wherever they appear.
-				if !content.IsOperator(op.Operator) {
-					ops[i].Operator = ""
-					pageUnknown++
-					modified = true
 				}
 			}
 		}
 
-		if !modified {
+		if pageRI == 0 && pageUnknown == 0 && pageSeparated == 0 {
 			continue
 		}
 
@@ -283,6 +283,7 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		}
 		totalRI += pageRI
 		totalUnknown += pageUnknown
+		totalSeparated += pageSeparated
 	}
 
 	var fixes []string
@@ -291,6 +292,9 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	}
 	if totalUnknown > 0 {
 		fixes = append(fixes, fmt.Sprintf("removed %d unknown operators from BX/EX sections", totalUnknown))
+	}
+	if totalSeparated > 0 {
+		fixes = append(fixes, fmt.Sprintf("separated %d content-stream operator(s) written with no white space before them", totalSeparated))
 	}
 	return fixes, nil
 }

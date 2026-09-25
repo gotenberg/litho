@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -159,20 +160,8 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 		return spliced()
 	}
 	ops, t.repaired = repairMalformedNumbers(ops)
-	ops, t.separated = separateGluedOperators(ops)
-	hasInlineImage := false
-	for i, op := range ops {
-		if op.Operator == "BI" {
-			hasInlineImage = true
-		}
-		if op.Operator == "" || op.Operator == "BX" || op.Operator == "EX" {
-			continue
-		}
-		if !content.IsOperator(op.Operator) {
-			ops[i].Operator = ""
-			t.removed++
-		}
-	}
+	ops, t.separated, t.removed = dropUndefinedOperators(ops)
+	hasInlineImage := slices.ContainsFunc(ops, func(op content.Operation) bool { return op.Operator == "BI" })
 	if (t.removed == 0 && t.repaired == 0 && t.separated == 0) || hasInlineImage {
 		return spliced()
 	}
@@ -181,6 +170,32 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 		return spliced()
 	}
 	return out, t
+}
+
+// dropUndefinedOperators separates every run of operators written with no
+// white space between them ([separateGluedOperators]), then blanks every
+// operator outside [content.IsOperator] for [filterOps] to drop, BX and EX
+// aside. It returns the operations, how many operators it separated, and how
+// many it removed.
+//
+// ISO 19005-2, 6.2.2 forbids an undefined operator even inside a BX/EX
+// compatibility section, so one is removed wherever it stands. The unknown-ops
+// fixer and the aggressive content rewrite both remove them through this, so a
+// run a viewer reads as operators comes apart on either path rather than going
+// whole on one of them.
+func dropUndefinedOperators(ops []content.Operation) ([]content.Operation, int, int) {
+	ops, separated := separateGluedOperators(ops)
+	removed := 0
+	for i, op := range ops {
+		if op.Operator == "" || op.Operator == "BX" || op.Operator == "EX" {
+			continue
+		}
+		if !content.IsOperator(op.Operator) {
+			ops[i].Operator = ""
+			removed++
+		}
+	}
+	return ops, separated, removed
 }
 
 // separateGluedOperators replaces every operation whose operator is a run of
