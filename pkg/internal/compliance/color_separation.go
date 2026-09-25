@@ -63,6 +63,7 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, pages [
 	// limitJudged holds the identities already judged against the colourant
 	// limit (see [checkDeviceNLimit] and [deviceNLimitSite]).
 	limitJudged := make(map[string]bool)
+	links := newColorSpaceLinkIndex(pages)
 
 	for i := range pages {
 		if ctx.Err() != nil {
@@ -70,6 +71,7 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, pages [
 		}
 
 		page := pages[i].dict
+		scope := pageScope(&pages[i], i, links)
 
 		// A page with no /Resources, its own or inherited, paints nothing from
 		// a named resource, but its annotations still render through appearance
@@ -82,10 +84,10 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, pages [
 			// (see pageCtx.parsedOps), so this costs no second parse.
 			_, referencedXObjects, contentCSNames, used, inheritedAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
 
-			scanSeparationDeviceNInResources(ctx, doc, resources, part, i, colorantAlternates, colorantTintFuncs, limitJudged, results, pageScope(&pages[i], i), used, referencedXObjects, contentCSNames, inheritedAtDo)
+			scanSeparationDeviceNInResources(ctx, doc, resources, part, i, colorantAlternates, colorantTintFuncs, limitJudged, results, scope, used, referencedXObjects, contentCSNames, inheritedAtDo)
 		}
 
-		scanSeparationDeviceNInAnnotations(ctx, doc, page, part, i, colorantAlternates, colorantTintFuncs, limitJudged, results)
+		scanSeparationDeviceNInAnnotations(ctx, doc, page, part, i, colorantAlternates, colorantTintFuncs, limitJudged, results, scope)
 	}
 
 	doc.Logger.Debug("compliance.color: Separation/DeviceN check complete",
@@ -93,7 +95,8 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, pages [
 }
 
 // scanSeparationDeviceNInAnnotations scans the normal, rollover and down
-// appearance streams of every annotation on page.
+// appearance streams of every annotation on page, whose own content is
+// pageContent.
 //
 // # Corpus evidence
 //
@@ -101,7 +104,7 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, pages [
 //     inherited, and 4 of them carry annotations whose appearance streams went
 //     unscanned while the page was skipped whole. None of those streams
 //     selects a Separation or DeviceN, so no verdict moves.
-func scanSeparationDeviceNInAnnotations(ctx context.Context, doc *document.Document, page ast.PdfDict, part, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, limitJudged map[string]bool, results *[]Violation) {
+func scanSeparationDeviceNInAnnotations(ctx context.Context, doc *document.Document, page ast.PdfDict, part, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, limitJudged map[string]bool, results *[]Violation, pageContent *colorSpaceScope) {
 	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil {
 		doc.Logger.Debug("compliance.color: cannot resolve page annotations", "page", pageIdx+1, "error", err)
@@ -134,7 +137,7 @@ func scanSeparationDeviceNInAnnotations(ctx context.Context, doc *document.Docum
 				// colour-space state, and its own operations report both
 				// what it paints and which colour spaces it selects.
 				apUsed, apXObjects, apCSNames, apInherited := nestedScopeUsage(ctx, doc, apStream, apRes, inheritedCSDefault())
-				apScope := nestedScope(apDict[apKey], apStream, fmt.Sprintf("page %d annotation %d /%s", pageIdx, annotIdx, apKey))
+				apScope := nestedScope(pageContent, apDict[apKey], apStream, fmt.Sprintf("page %d annotation %d /%s", pageIdx, annotIdx, apKey))
 				scanSeparationDeviceNInResources(ctx, doc, apRes, part, pageIdx, colorantAlternates, colorantTintFuncs, limitJudged, results, apScope, apUsed, apXObjects, apCSNames, apInherited)
 			}
 		}
@@ -175,6 +178,14 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 		// collectReferencedCSNames is the scoping the device-colour scan
 		// already applies, and it also counts a space named by a painted image
 		// or shading.
+		//
+		// TODO: a name a painted form selects that only the page's resources
+		// define (ISO 32000-1, 7.8.3) is judged here only when the page's own
+		// content selects it too. veraPDF links the form's operators to the
+		// page's entry either way: a direct DeviceN over the colourant limit
+		// that only such a form selects and fills fails two checks there and
+		// none here. Widening the scoping reaches the colorant-consistency
+		// tests too, which were not measured for it.
 		var referenced map[string]bool
 		if contentCSNames != nil {
 			referenced = collectReferencedCSNames(ctx, doc, resources, referencedXObjects, contentCSNames)
@@ -242,7 +253,7 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 			// Separation arrays a file employs: one the form only declares
 			// employs none, and veraPDF reports nothing for it.
 			formUsed, formXObjects, formCSNames, formInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSFor(inherited, string(k)))
-			formScope := nestedScope(xobjObj, stream, scopeID(scope)+" XObject /"+string(k))
+			formScope := nestedScope(scope, xobjObj, stream, scopeID(scope)+" XObject /"+string(k))
 			scanSeparationDeviceNRecursive(ctx, doc, subRes, part, pageIdx, colorantAlternates, colorantTintFuncs, limitJudged, results, depth+1, visited, formScope, formUsed, formXObjects, formCSNames, formInherited)
 		}
 	}
@@ -300,8 +311,10 @@ func deviceNColorantLimit(part int) int {
 // no identity of its own, and veraPDF judges it wherever its model reaches it:
 // once through the indirect object holding it, an /Indexed space, an image
 // XObject, a shading or a pattern, and once per linking operator when it is an
-// entry of /Resources/ColorSpace (see [colorSpaceUsesOf]). limitJudged holds
-// the identities already judged, keyed as [deviceNLimitSite] states.
+// entry of /Resources/ColorSpace: the operators of the stream the resources
+// belong to (see [colorSpaceUsesOf]), then those of the forms painting with
+// the space they inherit from it (see [colorSpaceLinkIndex]). limitJudged
+// holds the identities already judged, keyed as [deviceNLimitSite] states.
 //
 // # Corpus evidence
 //
@@ -340,9 +353,13 @@ func checkDeviceNLimit(ctx context.Context, doc *document.Document, csObj ast.Pd
 		return
 	}
 	for _, use := range uses {
+		at := fmt.Sprintf("operator %d (%s)", use.index, use.operator)
+		if use.objNum != 0 {
+			at += fmt.Sprintf(" of the form in object %d", use.objNum)
+		}
 		*results = append(*results, failf(rule,
-			"page %d, %s, operator %d (%s): DeviceN has %d components (max %d)",
-			pageIdx+1, where, use.index, use.operator, len(names), limit)...)
+			"page %d, %s, %s: DeviceN has %d components (max %d)",
+			pageIdx+1, where, at, len(names), limit)...)
 	}
 }
 
@@ -534,7 +551,7 @@ func scanSeparationInPatterns(ctx context.Context, doc *document.Document, resou
 		// colour-space state, and its own operations report both what it paints
 		// and which colour spaces it selects.
 		cellUsed, cellXObjects, cellCSNames, cellInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
-		cellScope := nestedScope(patternObj, stream, scopeID(scope)+" Pattern /"+string(name))
+		cellScope := nestedScope(scope, patternObj, stream, scopeID(scope)+" Pattern /"+string(name))
 		scanSeparationDeviceNRecursive(ctx, doc, subRes, part, pageIdx, colorantAlternates, colorantTintFuncs, limitJudged, results, depth+1, visited, cellScope, cellUsed, cellXObjects, cellCSNames, cellInherited)
 	}
 }
