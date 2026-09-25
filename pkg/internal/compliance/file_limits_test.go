@@ -41,24 +41,42 @@ func TestNameEscapesExpandedOnce(t *testing.T) {
 		rule    Rule
 		want    int
 	}{
-		{"a 129-byte name spelling escapes at part 1", doc("", " /Foo /"+strings.Repeat("#2341", 43), "Helvetica"),
-			models.PDFA1b, Rule_19005_1_6_1_12_t04, 1},
-		{"a 129-byte name spelling escapes at part 2", doc("", " /Foo /"+strings.Repeat("#2341", 43), "Helvetica"),
-			models.PDFA2b, Rule_19005_2_6_1_13_t04, 1},
-		{"a 130-byte name written escaped", doc("", " /Foo /"+strings.Repeat("#41", 130), "Helvetica"),
-			models.PDFA2b, Rule_19005_2_6_1_13_t04, 1},
-		{"a 43-byte name", doc("", " /Foo /"+strings.Repeat("A", 43), "Helvetica"),
-			models.PDFA2b, Rule_19005_2_6_1_13_t04, 0},
-		{"a valid UTF-8 name spelling an escape at part 2", doc("", "", "Foo#23C3"),
-			models.PDFA2b, Rule_19005_2_6_1_8_t01, 0},
-		{"a valid UTF-8 name spelling an escape at part 4", doc("", "", "Foo#23C3"),
-			models.PDFA4, Rule_19005_4_6_1_7_t01, 0},
-		{"an invalid UTF-8 name", doc("", "", "Foo#C3"),
-			models.PDFA2b, Rule_19005_2_6_1_8_t01, 1},
-		{"a version spelling an escape", doc(" /Version /#2332#2E0", "", "Helvetica"),
-			models.PDFA4, Rule_19005_4_6_1_12_t01, 1},
-		{"a version written escaped", doc(" /Version /2#2E0", "", "Helvetica"),
-			models.PDFA4, Rule_19005_4_6_1_12_t01, 0},
+		{
+			"a 129-byte name spelling escapes at part 1", doc("", " /Foo /"+strings.Repeat("#2341", 43), "Helvetica"),
+			models.PDFA1b, Rule_19005_1_6_1_12_t04, 1,
+		},
+		{
+			"a 129-byte name spelling escapes at part 2", doc("", " /Foo /"+strings.Repeat("#2341", 43), "Helvetica"),
+			models.PDFA2b, Rule_19005_2_6_1_13_t04, 1,
+		},
+		{
+			"a 130-byte name written escaped", doc("", " /Foo /"+strings.Repeat("#41", 130), "Helvetica"),
+			models.PDFA2b, Rule_19005_2_6_1_13_t04, 1,
+		},
+		{
+			"a 43-byte name", doc("", " /Foo /"+strings.Repeat("A", 43), "Helvetica"),
+			models.PDFA2b, Rule_19005_2_6_1_13_t04, 0,
+		},
+		{
+			"a valid UTF-8 name spelling an escape at part 2", doc("", "", "Foo#23C3"),
+			models.PDFA2b, Rule_19005_2_6_1_8_t01, 0,
+		},
+		{
+			"a valid UTF-8 name spelling an escape at part 4", doc("", "", "Foo#23C3"),
+			models.PDFA4, Rule_19005_4_6_1_7_t01, 0,
+		},
+		{
+			"an invalid UTF-8 name", doc("", "", "Foo#C3"),
+			models.PDFA2b, Rule_19005_2_6_1_8_t01, 1,
+		},
+		{
+			"a version spelling an escape", doc(" /Version /#2332#2E0", "", "Helvetica"),
+			models.PDFA4, Rule_19005_4_6_1_12_t01, 1,
+		},
+		{
+			"a version written escaped", doc(" /Version /2#2E0", "", "Helvetica"),
+			models.PDFA4, Rule_19005_4_6_1_12_t01, 0,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

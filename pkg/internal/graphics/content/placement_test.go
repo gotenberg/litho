@@ -29,8 +29,10 @@ func TestFormatViolationPlacement(t *testing.T) {
 		{"an operand before the last", "<414> 5 Tj", []want{{"Tj", "ast.PdfString", false}}},
 		{"inside a TJ array", "[(a) <4G>] TJ", []want{{"TJ", "ast.PdfArray", true}}},
 		{"inside a property list", "/Span << /ActualText <414> >> BDC EMC", []want{{"BDC", "ast.PdfDict", true}}},
-		{"inside an inline image dictionary", "BI /W 1 /H 1 /BPC 8 /CS /G /F <414> ID \x80 EI",
-			[]want{{"BI", "ast.PdfDict", true}}},
+		{
+			"inside an inline image dictionary", "BI /W 1 /H 1 /BPC 8 /CS /G /F <414> ID \x80 EI",
+			[]want{{"BI", "ast.PdfDict", true}},
+		},
 		{"an operand an inline image drops", "<414> BI /W 1 /H 1 /BPC 8 /CS /G ID \x80 EI", []want{{"BI", "", false}}},
 		{"operands no operator follows", "0 0 m <414>", []want{{"", "", false}}},
 		{"one per operation", "<414> zz <434> Tj", []want{{"zz", "ast.PdfString", true}, {"Tj", "ast.PdfString", true}}},

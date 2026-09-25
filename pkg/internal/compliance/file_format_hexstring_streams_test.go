@@ -41,57 +41,81 @@ func TestHexStringsInEveryDrawnStream(t *testing.T) {
 		objs  func(text string) []string
 	}{
 		{"a form XObject", true, func(text string) []string {
-			return []string{catalog, pages, page("<< /XObject << /Fm0 5 0 R >> >>", ""),
-				exponentStream("", "/Fm0 Do"), exponentStream(formDic, text)}
+			return []string{
+				catalog, pages, page("<< /XObject << /Fm0 5 0 R >> >>", ""),
+				exponentStream("", "/Fm0 Do"), exponentStream(formDic, text),
+			}
 		}},
 		{"a form XObject painted twice", true, func(text string) []string {
-			return []string{catalog, pages, page("<< /XObject << /Fm0 5 0 R >> >>", ""),
-				exponentStream("", "/Fm0 Do /Fm0 Do"), exponentStream(formDic, text)}
+			return []string{
+				catalog, pages, page("<< /XObject << /Fm0 5 0 R >> >>", ""),
+				exponentStream("", "/Fm0 Do /Fm0 Do"), exponentStream(formDic, text),
+			}
 		}},
 		{"a form XObject two pages paint", true, func(text string) []string {
-			return []string{catalog, "<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>",
+			return []string{
+				catalog, "<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>",
 				page("<< /XObject << /Fm0 5 0 R >> >>", ""), exponentStream("", "/Fm0 Do"),
-				exponentStream(formDic, text), page("<< /XObject << /Fm0 5 0 R >> >>", "")}
+				exponentStream(formDic, text), page("<< /XObject << /Fm0 5 0 R >> >>", ""),
+			}
 		}},
 		{"a form XObject no Do paints", false, func(text string) []string {
-			return []string{catalog, pages, page("<< /XObject << /Fm0 5 0 R >> >>", ""),
-				exponentStream("", plain), exponentStream(formDic, text)}
+			return []string{
+				catalog, pages, page("<< /XObject << /Fm0 5 0 R >> >>", ""),
+				exponentStream("", plain), exponentStream(formDic, text),
+			}
 		}},
 		{"a tiling pattern", true, func(text string) []string {
-			return []string{catalog, pages, page("<< /Pattern << /P0 5 0 R >> >>", ""),
-				exponentStream("", "/Pattern cs /P0 scn 0 0 100 100 re f"), exponentStream(pattern, text)}
+			return []string{
+				catalog, pages, page("<< /Pattern << /P0 5 0 R >> >>", ""),
+				exponentStream("", "/Pattern cs /P0 scn 0 0 100 100 re f"), exponentStream(pattern, text),
+			}
 		}},
 		{"a tiling pattern no scn selects", false, func(text string) []string {
-			return []string{catalog, pages, page("<< /Pattern << /P0 5 0 R >> >>", ""),
-				exponentStream("", "0 0 100 100 re f"), exponentStream(pattern, text)}
+			return []string{
+				catalog, pages, page("<< /Pattern << /P0 5 0 R >> >>", ""),
+				exponentStream("", "0 0 100 100 re f"), exponentStream(pattern, text),
+			}
 		}},
 		{"a shown Type3 glyph", true, func(text string) []string {
-			return []string{catalog, pages, page("<< /Font << /T0 5 0 R >> >>", ""),
+			return []string{
+				catalog, pages, page("<< /Font << /T0 5 0 R >> >>", ""),
 				exponentStream("", "BT /T0 12 Tf 10 10 Td (a) Tj ET"), type3,
-				exponentStream("", "1000 0 d0 "+text), exponentStream("", "1000 0 d0 "+plain)}
+				exponentStream("", "1000 0 d0 "+text), exponentStream("", "1000 0 d0 "+plain),
+			}
 		}},
 		{"an unshown glyph of a shown Type3 font", true, func(text string) []string {
-			return []string{catalog, pages, page("<< /Font << /T0 5 0 R >> >>", ""),
+			return []string{
+				catalog, pages, page("<< /Font << /T0 5 0 R >> >>", ""),
 				exponentStream("", "BT /T0 12 Tf 10 10 Td (a) Tj ET"), type3,
-				exponentStream("", "1000 0 d0 "+plain), exponentStream("", "1000 0 d0 "+text)}
+				exponentStream("", "1000 0 d0 "+plain), exponentStream("", "1000 0 d0 "+text),
+			}
 		}},
 		{"a Type3 font no text shows", false, func(text string) []string {
-			return []string{catalog, pages, page("<< /Font << /T0 5 0 R >> >>", ""),
+			return []string{
+				catalog, pages, page("<< /Font << /T0 5 0 R >> >>", ""),
 				exponentStream("", "BT /T0 12 Tf ET"), type3,
-				exponentStream("", "1000 0 d0 "+text), exponentStream("", "1000 0 d0 "+plain)}
+				exponentStream("", "1000 0 d0 "+text), exponentStream("", "1000 0 d0 "+plain),
+			}
 		}},
 		{"an annotation appearance", true, func(text string) []string {
-			return []string{catalog, pages, page("<< >>", " /Annots [5 0 R]"), exponentStream("", plain), annot,
-				exponentStream(formDic, text)}
+			return []string{
+				catalog, pages, page("<< >>", " /Annots [5 0 R]"), exponentStream("", plain), annot,
+				exponentStream(formDic, text),
+			}
 		}},
 		{"a down appearance", true, func(text string) []string {
-			return []string{catalog, pages, page("<< >>", " /Annots [5 0 R]"), exponentStream("", plain),
+			return []string{
+				catalog, pages, page("<< >>", " /Annots [5 0 R]"), exponentStream("", plain),
 				"<< /Type /Annot /Subtype /Square /Rect [0 0 100 100] /F 4 /AP << /N 7 0 R /D 6 0 R >> >>",
-				exponentStream(formDic, text), exponentStream(formDic, plain)}
+				exponentStream(formDic, text), exponentStream(formDic, plain),
+			}
 		}},
 		{"an appearance two annotations share", true, func(text string) []string {
-			return []string{catalog, pages, page("<< >>", " /Annots [5 0 R 7 0 R]"), exponentStream("", plain), annot,
-				exponentStream(formDic, text), annot}
+			return []string{
+				catalog, pages, page("<< >>", " /Annots [5 0 R 7 0 R]"), exponentStream("", plain), annot,
+				exponentStream(formDic, text), annot,
+			}
 		}},
 	}
 
