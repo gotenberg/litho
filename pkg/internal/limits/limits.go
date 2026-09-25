@@ -12,9 +12,10 @@ import "fmt"
 // only reads it afterwards, so it needs no lock.
 type Limits struct {
 	// MaxStreamBytes bounds the decoded output of one stream. See
-	// [DefaultMaxStreamBytes]. The page content bound and the object-stream
-	// cache derive from it: see [Limits.MaxPageContentBytes] and
-	// [Limits.MaxObjStmCacheBytes].
+	// [DefaultMaxStreamBytes]. The page content bound, the object-stream
+	// cache and the font-program cache derive from it: see
+	// [Limits.MaxPageContentBytes], [Limits.MaxObjStmCacheBytes] and
+	// [Limits.MaxFontProgCacheBytes].
 	MaxStreamBytes int64
 
 	// MaxImagePixels bounds Width x Height of one image, and scales the
@@ -300,4 +301,34 @@ func (l Limits) MaxPageContentBytes() int64 {
 // caller allowed one decode.
 func (l Limits) MaxObjStmCacheBytes() int64 {
 	return l.WithDefaults().MaxStreamBytes
+}
+
+// fontProgCacheShare divides the stream budget into the font-program cache
+// bound: [Limits.MaxFontProgCacheBytes] is MaxStreamBytes over it. That method
+// says why the cache gets a quarter.
+const fontProgCacheShare = 4
+
+// MaxFontProgCacheBytes returns the bound on the decoded font programs a
+// document keeps cached: a quarter of MaxStreamBytes and never below 1, so 64
+// MiB under the default budget. It is an anti-DoS guard, not spec-mandated: a
+// crafted file can embed many large font programs (ISO 32000-1, 9.9), so the
+// cache empties rather than grows without bound. A program larger than the
+// bound is not cached and is decoded again at each use, which costs time,
+// never a wrong answer.
+//
+// It moves with MaxStreamBytes, which bounds each program the cache holds: a
+// caller that raises the budget to read a document of heavy fonts caches them
+// too, and one that lowers it shrinks the cache. It is a quarter of the
+// budget, not the whole of it as the object-stream cache is, because the
+// default then stays the 64 MiB the cache always had, well over the fonts of
+// the heaviest real document, and the document's caches together stay within
+// a small multiple of one budget.
+//
+// # Corpus evidence
+//
+//   - All corpora: of the 2129 documents that embed any font program, the
+//     heaviest embeds 18.4 MB of them, so 64 MiB leaves better than 3x
+//     headroom.
+func (l Limits) MaxFontProgCacheBytes() int64 {
+	return max(l.WithDefaults().MaxStreamBytes/fontProgCacheShare, 1)
 }

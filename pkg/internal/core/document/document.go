@@ -53,7 +53,7 @@ type Document struct {
 	objStmCache      map[int]*objStmData // parsed object streams by ObjStm object number
 	objStmCacheBytes int                 // decoded bytes held in objStmCache, bounded by limits.Limits.MaxObjStmCacheBytes
 	fontProgCache    map[int][]byte      // decoded font programs by FontFile stream object number
-	fontProgBytes    int                 // decoded bytes held in fontProgCache, bounded by maxFontProgCacheBytes
+	fontProgBytes    int                 // decoded bytes held in fontProgCache, bounded by limits.Limits.MaxFontProgCacheBytes
 	colorCache       map[[2]int]any      // colour transforms by profile object number and rendering intent
 	colorCacheBytes  int                 // bytes held in colorCache, bounded by maxColorCacheBytes
 	sortedOffsets    []int64             // ascending normal-object offsets, for O(log N) endobj scan-capping
@@ -1123,20 +1123,6 @@ func (d *Document) ClearCaches() {
 	d.mu.Unlock()
 }
 
-// maxFontProgCacheBytes bounds the total decoded font-program bytes retained by
-// [Document.SetCachedFontProgram]. It is an anti-DoS guard, not spec-mandated: a
-// crafted file could declare many large font programs, so the cache evicts
-// rather than grow without bound. 64 MB leaves ample headroom over the
-// heaviest real document while staying well under the default stream budget,
-// [limits.DefaultMaxStreamBytes].
-//
-// # Corpus evidence
-//
-//   - All corpora: of the 2129 documents that embed any font program, the
-//     heaviest embeds 18.4 MB of them, so 64 MB leaves better than 3x
-//     headroom.
-const maxFontProgCacheBytes = 64 << 20
-
 // CachedFontProgram returns the decoded font program for the given FontFile
 // stream object number. Returns nil, false if not cached.
 //
@@ -1151,14 +1137,17 @@ func (d *Document) CachedFontProgram(objNum int) ([]byte, bool) {
 }
 
 // SetCachedFontProgram stores a decoded font program keyed by its FontFile
-// stream object number, bounding total cached bytes with an evict-all policy.
+// stream object number, bounding the total cached bytes at
+// [limits.Limits.MaxFontProgCacheBytes] of the document's budgets with an
+// evict-all policy.
 //
 // Font programs have strong locality: one embedded font is re-read by every
 // per-page font check, which is exactly what makes the cache pay. A single
-// program larger than the budget is not cached, so it cannot force repeated
+// program larger than the bound is not cached, so it cannot force repeated
 // evictions.
 func (d *Document) SetCachedFontProgram(objNum int, data []byte) {
-	if len(data) > maxFontProgCacheBytes {
+	limit := d.Limits().MaxFontProgCacheBytes()
+	if int64(len(data)) > limit {
 		return
 	}
 	d.mu.Lock()
@@ -1169,7 +1158,7 @@ func (d *Document) SetCachedFontProgram(objNum int, data []byte) {
 	if _, ok := d.fontProgCache[objNum]; ok {
 		return
 	}
-	if d.fontProgBytes+len(data) > maxFontProgCacheBytes {
+	if int64(d.fontProgBytes)+int64(len(data)) > limit {
 		d.fontProgCache = make(map[int][]byte)
 		d.fontProgBytes = 0
 	}

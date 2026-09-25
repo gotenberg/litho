@@ -84,7 +84,7 @@ func TestFontProgramCacheRejectsOversized(t *testing.T) {
 	t.Parallel()
 
 	doc := cacheTestDoc(t)
-	doc.SetCachedFontProgram(1, make([]byte, maxFontProgCacheBytes+1))
+	doc.SetCachedFontProgram(1, make([]byte, doc.Limits().MaxFontProgCacheBytes()+1))
 
 	if _, ok := doc.CachedFontProgram(1); ok {
 		t.Error("a program larger than the budget was cached")
@@ -100,7 +100,7 @@ func TestFontProgramCacheEvictsOnOverflow(t *testing.T) {
 	doc := cacheTestDoc(t)
 
 	// Two halves fit; the third forces an evict-all and is then stored alone.
-	half := make([]byte, maxFontProgCacheBytes/2)
+	half := make([]byte, doc.Limits().MaxFontProgCacheBytes()/2)
 	doc.SetCachedFontProgram(1, half)
 	doc.SetCachedFontProgram(2, half)
 	if _, ok := doc.CachedFontProgram(1); !ok {
