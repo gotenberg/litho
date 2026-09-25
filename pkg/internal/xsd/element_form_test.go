@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -141,6 +142,29 @@ func TestLoad_ElementFormPerDocument(t *testing.T) {
 		}
 		if (len(vs) == 0) != valid {
 			t.Errorf("%s: got %v, want valid=%v", doc, vs, valid)
+		}
+	}
+}
+
+// TestLoad_TopLevelFormRejected pins that the loader rejects form on a
+// top-level declaration. Per XML Schema Part 1, 3.2.3 and 3.3.3 an
+// xs:attribute and an xs:element meet the schema for schemas, whose
+// topLevelAttribute and topLevelElement types (Appendix A) prohibit form:
+// a top-level declaration always takes the target namespace. A local one
+// keeps its form ([TestLoad_LocalElementNamespace]).
+func TestLoad_TopLevelFormRejected(t *testing.T) {
+	const head = `<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" targetNamespace="urn:t" xmlns="urn:t">`
+	for name, body := range map[string]string{
+		"element qualified":     `<xs:element name="Invoice" type="xs:string" form="qualified"/>`,
+		"element unqualified":   `<xs:element name="Invoice" type="xs:string" form="unqualified"/>`,
+		"attribute qualified":   `<xs:attribute name="currency" type="xs:string" form="qualified"/>`,
+		"attribute unqualified": `<xs:attribute name="currency" type="xs:string" form="unqualified"/>`,
+	} {
+		_, err := Load(context.Background(), fstest.MapFS{
+			"schema.xsd": &fstest.MapFile{Data: []byte(head + body + `</xs:schema>`)},
+		}, "schema.xsd")
+		if !errors.Is(err, ErrSchemaParse) {
+			t.Errorf("%s: Load error %v, want %v", name, err, ErrSchemaParse)
 		}
 	}
 }

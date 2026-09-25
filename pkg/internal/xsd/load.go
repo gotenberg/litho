@@ -976,7 +976,7 @@ func (d *schemaDoc) localNamespace(form, formDefault string) string {
 // 1, 3.2.2: the target namespace of the schema when form is qualified, or
 // when form is absent and attributeFormDefault is qualified, and no
 // namespace otherwise. A top-level declaration always takes the target
-// namespace.
+// namespace, and [populateFromRaw] rejects one that carries form.
 //
 // # Corpus evidence
 //
@@ -995,7 +995,8 @@ func (d *schemaDoc) localAttributeNamespace(form string) string {
 // the schema when form is qualified, or when form is absent and
 // elementFormDefault is qualified, and no namespace otherwise. A top-level
 // declaration always takes the target namespace: the topLevelElement type
-// of the schema for schemas gives it no form.
+// of the schema for schemas prohibits form, and [populateFromRaw] rejects
+// one that carries it.
 //
 // # Corpus evidence
 //
@@ -1010,6 +1011,15 @@ func (d *schemaDoc) localElementNamespace(form string) string {
 	return d.localNamespace(form, d.elementFormDefault)
 }
 
+// populateFromRaw builds the top-level components the schema document raw
+// declares into s.
+//
+// # Corpus evidence
+//
+//   - All corpora: no bundled schema sets form on a top-level xs:element or
+//     xs:attribute, so each of the 28 still loads to the same model, and no
+//     verdict of the 159 files that embed XML moves, through the Factur-X
+//     and ZUGFeRD validators or under any bundled schema.
 func populateFromRaw(s *Schema, raw *rawSchema) error {
 	doc := &schemaDoc{
 		tns:                  raw.TargetNamespace,
@@ -1031,6 +1041,13 @@ func populateFromRaw(s *Schema, raw *rawSchema) error {
 		s.Types[st.QName()] = st
 	}
 	for i := range raw.Elements {
+		if raw.Elements[i].Form != "" {
+			// Per XML Schema Part 1, 3.3.3 an xs:element meets the schema
+			// for schemas, whose topLevelElement type (Appendix A)
+			// prohibits form: a top-level declaration always takes the
+			// target namespace.
+			return fmt.Errorf("%w: top-level xs:element %q carries form", ErrSchemaParse, raw.Elements[i].Name)
+		}
 		el, err := buildElement(doc, &raw.Elements[i], doc.tns)
 		if err != nil {
 			return err
@@ -1043,6 +1060,13 @@ func populateFromRaw(s *Schema, raw *rawSchema) error {
 			// the attribute its name names; the schema for schemas gives it
 			// no ref attribute.
 			return fmt.Errorf("%w: top-level xs:attribute needs a name and no ref", ErrSchemaParse)
+		}
+		if raw.Attributes[i].Form != "" {
+			// Per XML Schema Part 1, 3.2.3 an xs:attribute meets the schema
+			// for schemas, whose topLevelAttribute type (Appendix A)
+			// prohibits form: a top-level declaration always takes the
+			// target namespace.
+			return fmt.Errorf("%w: top-level xs:attribute %q carries form", ErrSchemaParse, raw.Attributes[i].Name)
 		}
 		a, err := buildAttribute(doc, &raw.Attributes[i], doc.tns)
 		if err != nil {
