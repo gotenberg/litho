@@ -136,7 +136,7 @@ func logDeclinedNames(doc *document.Document, pinned map[string]bool) {
 // [fixNameUTF8] must not rewrite them.
 func collectResourceKeys(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (map[string]bool, error) {
 	out := make(map[string]bool)
-	for objNum, entry := range doc.Index.Entries {
+	for objNum, entry := range doc.XRefEntries() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}

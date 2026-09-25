@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"slices"
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -22,19 +21,6 @@ const (
 	minPageBound   = 3.0
 	maxPageBound   = 14400.0
 )
-
-// sortedEntryNums returns the document's cross-reference object numbers in
-// ascending order. Per-object structure checks iterate it instead of ranging
-// the entries map directly, so violations emit in a deterministic order
-// (CONTRIBUTING "Deterministic output").
-func sortedEntryNums(doc *document.Document) []int {
-	nums := make([]int, 0, len(doc.Index.Entries))
-	for objNum := range doc.Index.Entries {
-		nums = append(nums, objNum)
-	}
-	slices.Sort(nums)
-	return nums
-}
 
 // checkFileStructureGroup validates PDF file structure rules (§6.1).
 func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
@@ -505,8 +491,7 @@ func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profil
 	forbiddenKeys := []ast.PdfName{"F", "FFilter", "FDecodeParms"}
 	var results []Violation
 
-	for _, objNum := range sortedEntryNums(doc) {
-		entry := doc.Index.Entries[objNum]
+	for objNum, entry := range doc.XRefEntries() {
 		if ctx.Err() != nil {
 			return results
 		}
@@ -540,8 +525,7 @@ func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profil
 func checkStreamLZW(ctx context.Context, doc *document.Document, profile string) []Violation {
 	var results []Violation
 
-	for _, objNum := range sortedEntryNums(doc) {
-		entry := doc.Index.Entries[objNum]
+	for objNum, entry := range doc.XRefEntries() {
 		if ctx.Err() != nil {
 			return results
 		}
@@ -627,8 +611,7 @@ func checkNonStandardFilters(ctx context.Context, doc *document.Document, profil
 	}
 
 	var results []Violation
-	for _, objNum := range sortedEntryNums(doc) {
-		entry := doc.Index.Entries[objNum]
+	for objNum, entry := range doc.XRefEntries() {
 		if ctx.Err() != nil {
 			return results
 		}
@@ -739,7 +722,7 @@ func checkXRefFormat(doc *document.Document, profile string) []Violation {
 
 	// Detect xref stream usage by checking if any entries use compressed type
 	// (type 2), which is only possible with xref streams.
-	for _, entry := range doc.Index.Entries {
+	for _, entry := range doc.XRefEntries() {
 		if entry.Type == xref.XRefTypeCompressed {
 			return fail(xrefStreamForbiddenRule(profile), "document uses xref streams")
 		}
@@ -782,8 +765,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 	var results []Violation
 	rule := streamLengthRule(profile)
 
-	for _, objNum := range sortedEntryNums(doc) {
-		entry := doc.Index.Entries[objNum]
+	for objNum, entry := range doc.XRefEntries() {
 		if ctx.Err() != nil {
 			return results
 		}

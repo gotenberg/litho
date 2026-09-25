@@ -133,7 +133,7 @@ func TestWriteIncremental_HybridSourceUpdateWins(t *testing.T) {
 		t.Fatal("expected Rebuilt=false; the appended file must parse through its xref chain")
 	}
 
-	entry, ok := doc.Index.Entries[1]
+	entry, ok := doc.XRefEntry(1)
 	if !ok {
 		t.Fatal("catalog object 1 missing from the xref index")
 	}

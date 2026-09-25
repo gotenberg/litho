@@ -79,7 +79,7 @@ func fixAFRelationship(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 // number of repaired dicts and the sorted object numbers of all filespecs.
 func fixAFOnAllFilespecs(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator) (int, []int) {
 	var objNums []int
-	for objNum, entry := range doc.Index.Entries {
+	for objNum, entry := range doc.XRefEntries() {
 		if ctx.Err() != nil {
 			break
 		}

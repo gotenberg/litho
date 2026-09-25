@@ -59,7 +59,7 @@ func TestRebuild_RecoversCompressedCatalog(t *testing.T) {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	e1, ok := doc.Index.Entries[1]
+	e1, ok := doc.xrefEntries[1]
 	if !ok || e1.Type != xref.XRefTypeCompressed {
 		t.Fatalf("obj 1 entry = %+v (present=%v), want a compressed entry registered by object-stream expansion", e1, ok)
 	}

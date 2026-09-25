@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"maps"
 	"math"
-	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
@@ -55,7 +54,7 @@ type Page struct {
 //
 // A page whose reference carries a generation above zero is also recorded under
 // generation zero. [Document.Resolve] matches on the object number alone (see
-// [Document.xrefEntry] for why), so a reference litho happily resolves to a page
+// [Document.XRefEntry] for why), so a reference litho happily resolves to a page
 // has to find that page here too. Without the alias, a destination naming the
 // page under the wrong generation resolves but misses the lookup, and the
 // bookmark reports no page.
@@ -229,15 +228,12 @@ func scanForCatalog(ctx context.Context, doc *Document) ast.PdfDict {
 //     none holds more than one candidate catalog or page-tree root, so the
 //     fixed order changes no corpus output.
 func scanObjects(ctx context.Context, doc *Document, match func(ast.PdfDict) bool) (ast.PdfIndirectRef, ast.PdfDict) {
-	// Iterate a snapshot: the loop calls Resolve, which can trigger the
-	// lazy xref augmentation write, so ranging Index.Entries directly
-	// would race a concurrent augmentation.
-	snapshot := doc.XRefEntriesSnapshot()
-	for _, objNum := range slices.Sorted(maps.Keys(snapshot)) {
+	// The loop calls Resolve, which can trigger the lazy xref augmentation
+	// write, and XRefEntries yields from a copy taken under the lock.
+	for objNum, entry := range doc.XRefEntries() {
 		if err := ctx.Err(); err != nil {
 			return ast.PdfIndirectRef{}, nil
 		}
-		entry := snapshot[objNum]
 		if objNum == 0 || entry.Type != 1 {
 			continue
 		}

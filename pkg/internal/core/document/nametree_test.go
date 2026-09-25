@@ -231,7 +231,7 @@ func TestSearchNameTree_DirectUnit(t *testing.T) {
 	// Unit test searchNameTree with in-memory AST objects (no PDF file).
 	// Simulate a flat leaf node.
 	doc := &Document{
-		Index:       xref.Index{Entries: make(map[int]xref.XRefEntry)},
+		xrefEntries: make(map[int]xref.XRefEntry),
 		objectCache: make(map[int]ast.PdfObject),
 		fontCache:   make(map[int]any),
 	}
@@ -289,7 +289,7 @@ func TestSearchNameTree_DirectUnit(t *testing.T) {
 //     destination identifier.
 func TestSearchNameTree_ByteExactKey(t *testing.T) {
 	doc := &Document{
-		Index:       xref.Index{Entries: make(map[int]xref.XRefEntry)},
+		xrefEntries: make(map[int]xref.XRefEntry),
 		objectCache: make(map[int]ast.PdfObject),
 		fontCache:   make(map[int]any),
 	}
@@ -334,7 +334,7 @@ func TestSearchNameTree_ByteExactKey(t *testing.T) {
 
 func TestSearchNameTree_DepthCapBreaksCycle(t *testing.T) {
 	doc := &Document{
-		Index:       xref.Index{Entries: make(map[int]xref.XRefEntry)},
+		xrefEntries: make(map[int]xref.XRefEntry),
 		objectCache: make(map[int]ast.PdfObject),
 		fontCache:   make(map[int]any),
 	}
@@ -357,7 +357,7 @@ func TestSearchNameTree_DepthCapBreaksCycle(t *testing.T) {
 
 func TestSearchNameTree_RespectsContextCancel(t *testing.T) {
 	doc := &Document{
-		Index:       xref.Index{Entries: make(map[int]xref.XRefEntry)},
+		xrefEntries: make(map[int]xref.XRefEntry),
 		objectCache: make(map[int]ast.PdfObject),
 		fontCache:   make(map[int]any),
 	}

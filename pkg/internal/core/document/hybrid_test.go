@@ -113,7 +113,7 @@ func TestHybridXRef_CompressedOverridesLegacy(t *testing.T) {
 		t.Fatal("expected Rebuilt=false for hybrid PDF")
 	}
 
-	entry, ok := doc.Index.Entries[3]
+	entry, ok := doc.xrefEntries[3]
 	if !ok {
 		t.Fatal("object 3 not found in xref")
 	}
@@ -138,7 +138,7 @@ func TestHybridXRef_NonOverriddenEntriesPreserved(t *testing.T) {
 
 	// Objects 1 and 2 should be present and valid.
 	for _, objNum := range []int{1, 2} {
-		entry, ok := doc.Index.Entries[objNum]
+		entry, ok := doc.xrefEntries[objNum]
 		if !ok {
 			t.Errorf("object %d not found", objNum)
 			continue
@@ -159,7 +159,7 @@ func TestHybridXRef_NoXRefStm_LegacyOnly(t *testing.T) {
 	if doc.Rebuilt {
 		t.Error("expected Rebuilt=false")
 	}
-	if len(doc.Index.Entries) == 0 {
+	if len(doc.xrefEntries) == 0 {
 		t.Error("expected non-empty xref entries")
 	}
 }
@@ -252,7 +252,7 @@ func TestHybridXRef_Type2_CompressedObjectFromStream(t *testing.T) {
 	}
 
 	// Object 3 should be Type 2 (from the XRefStm), not absent.
-	entry, ok := doc.Index.Entries[3]
+	entry, ok := doc.xrefEntries[3]
 	if !ok {
 		t.Fatal("object 3 not found; hybrid /XRefStm should have added it")
 	}

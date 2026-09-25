@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
-	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -50,20 +49,14 @@ func matchCMapFlatten(v compliance.Violation) bool {
 //     because the mappings it contributes are real and ISO 19005-1, 6.3.3.3
 //     wants them in the file.
 func fixCMapFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
-	// Sorted so the fix list is identical across runs: Index.Entries is a map.
-	nums := make([]int, 0, len(doc.Index.Entries))
-	for objNum := range doc.Index.Entries {
-		nums = append(nums, objNum)
-	}
-	slices.Sort(nums)
-
+	// XRefEntries yields in object-number order, so the fix list is identical
+	// across runs.
 	var fixes []string
 	done := make(map[int]bool)
-	for _, objNum := range nums {
+	for objNum, entry := range doc.XRefEntries() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		entry := doc.Index.Entries[objNum]
 		if entry.Type != 1 || objNum == 0 {
 			continue
 		}

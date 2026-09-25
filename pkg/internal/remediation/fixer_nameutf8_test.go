@@ -268,7 +268,7 @@ func TestResourceRefPDF_Parses(t *testing.T) {
 		t.Fatal("fixture lost its over-long name")
 	}
 	doc, _ := newTestDoc(t, data)
-	if len(doc.Index.Entries) < 8 {
-		t.Fatalf("fixture parsed %d objects, want at least 8", len(doc.Index.Entries))
+	if n := doc.XRefEntryCount(); n < 8 {
+		t.Fatalf("fixture parsed %d objects, want at least 8", n)
 	}
 }

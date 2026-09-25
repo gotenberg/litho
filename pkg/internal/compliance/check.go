@@ -349,7 +349,7 @@ func resolveAllObjects(ctx context.Context, doc *document.Document) {
 	// Iterate a snapshot: this warming pass resolves each object, which
 	// can trigger the lazy xref augmentation write on a damaged file. A
 	// concurrent reader (e.g. ExtractText on the same Document) could win
-	// the augmentation race, so ranging Index.Entries directly here would
+	// the augmentation race, so ranging the index without its lock would
 	// race that write. A lookup the check groups miss later is deferred,
 	// see runCheckGroups.
 	for objNum, entry := range doc.XRefEntriesSnapshot() {

@@ -20,9 +20,9 @@ func TestFixCIDSystemInfo_FontInsideObjectStream(t *testing.T) {
 		"<< /Type /Font /Subtype /Type0 /BaseFont /Probe /DescendantFonts [<< /Type /Font "+
 			"/Subtype /CIDFontType0 /BaseFont /Probe "+
 			"/CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> >>] >>"))
-	if got := doc.Index.Entries[5].Type; got != xref.XRefTypeCompressed {
+	if got, _ := doc.XRefEntry(5); got.Type != xref.XRefTypeCompressed {
 		t.Fatalf("fixture: object 5 has xref type %d, want %d (in an object stream)",
-			got, xref.XRefTypeCompressed)
+			got.Type, xref.XRefTypeCompressed)
 	}
 
 	fixes, err := fixCIDSystemInfo(context.Background(), alloc, doc, Options{}, nil, "PDF/A-2b")

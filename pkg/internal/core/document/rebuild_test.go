@@ -58,7 +58,7 @@ func TestNewDocument_ValidXRef(t *testing.T) {
 	if doc.Rebuilt {
 		t.Error("expected Rebuilt=false for valid PDF")
 	}
-	if len(doc.Index.Entries) == 0 {
+	if len(doc.xrefEntries) == 0 {
 		t.Error("expected non-empty xref entries")
 	}
 }
@@ -74,10 +74,10 @@ func TestNewDocument_CorruptedXRef_Rebuilds(t *testing.T) {
 	}
 
 	// Should have found both objects.
-	if _, ok := doc.Index.Entries[1]; !ok {
+	if _, ok := doc.xrefEntries[1]; !ok {
 		t.Error("rebuilt xref missing object 1")
 	}
-	if _, ok := doc.Index.Entries[2]; !ok {
+	if _, ok := doc.xrefEntries[2]; !ok {
 		t.Error("rebuilt xref missing object 2")
 	}
 	if doc.Index.Trailer == nil {
@@ -108,7 +108,7 @@ func TestNewDocument_NoXRef_Rebuilds(t *testing.T) {
 	if !doc.Rebuilt {
 		t.Error("expected Rebuilt=true for PDF without xref table")
 	}
-	if _, ok := doc.Index.Entries[1]; !ok {
+	if _, ok := doc.xrefEntries[1]; !ok {
 		t.Error("rebuilt xref missing object 1")
 	}
 }
@@ -116,9 +116,9 @@ func TestNewDocument_NoXRef_Rebuilds(t *testing.T) {
 func TestRebuildXRef_ObjectOffsets(t *testing.T) {
 	data := corruptedPDF()
 	doc := &Document{
-		r:     bytes.NewReader(data),
-		size:  int64(len(data)),
-		Index: xref.Index{Entries: make(map[int]xref.XRefEntry)},
+		r:           bytes.NewReader(data),
+		size:        int64(len(data)),
+		xrefEntries: make(map[int]xref.XRefEntry),
 	}
 
 	if err := doc.rebuildXRef(context.Background()); err != nil {
@@ -126,7 +126,7 @@ func TestRebuildXRef_ObjectOffsets(t *testing.T) {
 	}
 
 	// Verify offsets point to valid "N G obj" locations.
-	for objNum, entry := range doc.Index.Entries {
+	for objNum, entry := range doc.xrefEntries {
 		if entry.Type != 1 {
 			continue
 		}
@@ -146,9 +146,9 @@ func TestRebuildXRef_ObjectOffsets(t *testing.T) {
 func TestRebuildXRef_TrailerHasRoot(t *testing.T) {
 	data := corruptedPDF()
 	doc := &Document{
-		r:     bytes.NewReader(data),
-		size:  int64(len(data)),
-		Index: xref.Index{Entries: make(map[int]xref.XRefEntry)},
+		r:           bytes.NewReader(data),
+		size:        int64(len(data)),
+		xrefEntries: make(map[int]xref.XRefEntry),
 	}
 
 	if err := doc.rebuildXRef(context.Background()); err != nil {
@@ -170,9 +170,9 @@ func TestRebuildXRef_NoObjects(t *testing.T) {
 	// A file with just a header and no objects should fail rebuild.
 	data := []byte("%PDF-1.4\n%%EOF\n")
 	doc := &Document{
-		r:     bytes.NewReader(data),
-		size:  int64(len(data)),
-		Index: xref.Index{Entries: make(map[int]xref.XRefEntry)},
+		r:           bytes.NewReader(data),
+		size:        int64(len(data)),
+		xrefEntries: make(map[int]xref.XRefEntry),
 	}
 
 	err := doc.rebuildXRef(context.Background())
@@ -189,15 +189,15 @@ func TestRebuildXRef_NoTrailer(t *testing.T) {
 	// minimal trailer so the catalog-recovery path can still run.
 	data := []byte("%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n")
 	doc := &Document{
-		r:     bytes.NewReader(data),
-		size:  int64(len(data)),
-		Index: xref.Index{Entries: make(map[int]xref.XRefEntry)},
+		r:           bytes.NewReader(data),
+		size:        int64(len(data)),
+		xrefEntries: make(map[int]xref.XRefEntry),
 	}
 
 	if err := doc.rebuildXRef(context.Background()); err != nil {
 		t.Fatalf("rebuild failed: %v", err)
 	}
-	if _, ok := doc.Index.Entries[1]; !ok {
+	if _, ok := doc.xrefEntries[1]; !ok {
 		t.Fatal("expected object 1 in rebuilt entries")
 	}
 	if doc.Index.Trailer == nil {

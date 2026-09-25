@@ -173,7 +173,7 @@ func walkIndirectObjects(
 	arrayFn func(ast.PdfArray) (ast.PdfArray, bool),
 ) (int, error) {
 	count := 0
-	for objNum, entry := range doc.Index.Entries {
+	for objNum, entry := range doc.XRefEntries() {
 		if err := ctx.Err(); err != nil {
 			return count, err
 		}

@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
-	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -443,13 +441,11 @@ func checkObjHeaderByteFormat(doc *document.Document, profile string) []Violatio
 	rule := objHeaderRule(profile)
 	var results []Violation
 
-	// Iterate the entries in object-number order, from a snapshot: ranging
-	// the map emitted the violations in a different order on every run
-	// (CONTRIBUTING "Deterministic output") and raced the lazy xref
-	// augmentation another check group can trigger.
-	entries := doc.XRefEntriesSnapshot()
-	for _, objNum := range slices.Sorted(maps.Keys(entries)) {
-		entry := entries[objNum]
+	// Iterate the entries in object-number order, from a copy taken under the
+	// document lock: ranging the map emitted the violations in a different
+	// order on every run (CONTRIBUTING "Deterministic output") and raced the
+	// lazy xref augmentation a concurrent reader can trigger.
+	for objNum, entry := range doc.XRefEntries() {
 		if entry.Free || entry.Type != xref.XRefTypeNormal {
 			continue
 		}

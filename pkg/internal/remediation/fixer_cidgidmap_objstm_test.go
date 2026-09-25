@@ -75,9 +75,9 @@ func TestFixCIDToGIDMap_FontInsideObjectStream(t *testing.T) {
 	// The fixture only means anything if the reader really reports a
 	// compressed entry. A rebuilt cross-reference would report type 1 and the
 	// assertions below would pass without exercising the compressed path.
-	if got := doc.Index.Entries[5].Type; got != xref.XRefTypeCompressed {
+	if got, _ := doc.XRefEntry(5); got.Type != xref.XRefTypeCompressed {
 		t.Fatalf("fixture: object 5 has xref type %d, want %d (in an object stream)",
-			got, xref.XRefTypeCompressed)
+			got.Type, xref.XRefTypeCompressed)
 	}
 
 	descs, err := fixCIDToGIDMap(context.Background(), alloc, doc, Options{}, nil, "PDF/A-2")

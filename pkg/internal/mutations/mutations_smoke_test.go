@@ -40,7 +40,7 @@ func newMutationDoc(t *testing.T, data []byte) (*document.Document, *writer.ObjA
 		t.Fatalf("NewDocument: %v", err)
 	}
 	maxObj := 0
-	for objNum := range doc.Index.Entries {
+	for objNum := range doc.XRefEntries() {
 		if objNum > maxObj {
 			maxObj = objNum
 		}

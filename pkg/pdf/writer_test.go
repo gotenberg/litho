@@ -1555,7 +1555,7 @@ func formXObjectFontNames(t *testing.T, ctx context.Context, data []byte) []stri
 		t.Fatalf("NewDocument: %v", err)
 	}
 	var names []string
-	for objNum := range doc.Index.Entries {
+	for objNum := range doc.XRefEntries() {
 		if objNum == 0 {
 			continue
 		}

@@ -43,7 +43,7 @@ func matchCIDToGIDMap(v compliance.Violation) bool {
 // stream always have generation 0 (7.5.7), which is what the entry reports.
 func fixCIDToGIDMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	var count int
-	for objNum, entry := range doc.Index.Entries {
+	for objNum, entry := range doc.XRefEntries() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}

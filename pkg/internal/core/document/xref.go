@@ -107,11 +107,11 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 			// xref sections so this section's /XRefStm cannot override
 			// them. Entries added by this section's plain xref table or
 			// /XRefStm remain free to be updated by the stream.
-			preExisting := make(map[int]struct{}, len(d.Index.Entries))
-			for objNum := range d.Index.Entries {
+			preExisting := make(map[int]struct{}, len(d.xrefEntries))
+			for objNum := range d.xrefEntries {
 				preExisting[objNum] = struct{}{}
 			}
-			trailerDict, p, err := xref.ParseXRefTable(ctx, lex, d.Index.Entries)
+			trailerDict, p, err := xref.ParseXRefTable(ctx, lex, d.xrefEntries)
 			if err != nil {
 				return fmt.Errorf("parsing xref table at offset %d: %w", currentOffset, err)
 			}
@@ -151,7 +151,7 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 			if !ok {
 				return fmt.Errorf("expected xref stream, got %T", obj)
 			}
-			pVal, err := xref.ParseXRefStream(ctx, stream, d.Index.Entries, d.builtinFilters())
+			pVal, err := xref.ParseXRefStream(ctx, stream, d.xrefEntries, d.builtinFilters())
 			if err != nil {
 				return fmt.Errorf("parsing xref stream at offset %d: %w", currentOffset, err)
 			}
@@ -203,11 +203,11 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 //     qpdf refuses outright, turning a file both poppler and pikepdf accept
 //     into one pikepdf rejects.
 func (d *Document) pruneUnrepresentableEntries() {
-	for objNum := range d.Index.Entries {
+	for objNum := range d.xrefEntries {
 		if d.objectNumberFits(objNum) {
 			continue
 		}
-		delete(d.Index.Entries, objNum)
+		delete(d.xrefEntries, objNum)
 		d.Logger.Debug("dropping xref entry whose object number the file cannot define",
 			slog.Int("object_number", objNum),
 			slog.Int64("file_size", d.size),
@@ -289,13 +289,16 @@ func (d *Document) objectNumberFits(objNum int) bool {
 //     find /Root dictionary", on a file both of them read before the edit.
 func (d *Document) HighestObjectNumber() int {
 	highest := 0
-	for objNum := range d.Index.Entries {
-		// Bounded here as well as in the prune, because resolution registers
-		// objects it recovers by scanning long after the index was built.
+	// Under the read lock, because resolution registers objects it recovers by
+	// scanning long after the index was built, on whichever goroutine missed.
+	// For the same reason the number is bounded here as well as in the prune.
+	d.mu.RLock()
+	for objNum := range d.xrefEntries {
 		if objNum > highest && d.objectNumberFits(objNum) {
 			highest = objNum
 		}
 	}
+	d.mu.RUnlock()
 	if size, ok := d.trailerObjectCount(); ok && size-1 > highest {
 		highest = size - 1
 	}
@@ -321,7 +324,7 @@ func (d *Document) HighestObjectNumber() int {
 //   - pdfjs bug1393476.pdf: came out of "litho rotate" reporting the new angle
 //     to litho and none at all to poppler or pikepdf.
 func (d *Document) ObjectGeneration(objNum int) int {
-	entry, ok := d.Index.Entries[objNum]
+	entry, ok := d.XRefEntry(objNum)
 	if !ok || entry.Free {
 		return 0
 	}
@@ -337,7 +340,7 @@ func (d *Document) ObjectGeneration(objNum int) int {
 // loses whatever the object held. Free entries report false, since nothing
 // references a free object.
 func (d *Document) DefinesObject(objNum int) bool {
-	entry, ok := d.xrefEntry(objNum)
+	entry, ok := d.XRefEntry(objNum)
 	return ok && !entry.Free
 }
 
@@ -417,7 +420,7 @@ func (d *Document) parseHybridXRefStream(ctx context.Context, offset int64, skip
 		if _, locked := skipLocked[objNum]; locked {
 			continue
 		}
-		d.Index.Entries[objNum] = entry
+		d.xrefEntries[objNum] = entry
 	}
 
 	return nil
@@ -551,21 +554,21 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) []error 
 func (d *Document) nextNormalObjectOffset(off int64) int64 {
 	d.mu.RLock()
 	offs := d.sortedOffsets
-	fresh := offs != nil && d.sortedOffsetsLen == len(d.Index.Entries)
+	fresh := offs != nil && d.sortedOffsetsLen == len(d.xrefEntries)
 	d.mu.RUnlock()
 
 	if !fresh {
 		d.mu.Lock()
-		if d.sortedOffsets == nil || d.sortedOffsetsLen != len(d.Index.Entries) {
-			rebuilt := make([]int64, 0, len(d.Index.Entries))
-			for _, entry := range d.Index.Entries {
+		if d.sortedOffsets == nil || d.sortedOffsetsLen != len(d.xrefEntries) {
+			rebuilt := make([]int64, 0, len(d.xrefEntries))
+			for _, entry := range d.xrefEntries {
 				if entry.Type == xref.XRefTypeNormal {
 					rebuilt = append(rebuilt, entry.Offset)
 				}
 			}
 			slices.Sort(rebuilt)
 			d.sortedOffsets = rebuilt
-			d.sortedOffsetsLen = len(d.Index.Entries)
+			d.sortedOffsetsLen = len(d.xrefEntries)
 		}
 		offs = d.sortedOffsets
 		d.mu.Unlock()

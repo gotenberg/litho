@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -68,23 +67,16 @@ func matchCIDSystemInfo(v compliance.Violation) bool {
 //     changes no residual violation at PDF/A-1b or 2b, with or without the
 //     aggressive fixes.
 func fixCIDSystemInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
-	// Sorted, since Index.Entries is a map: two fonts sharing a CIDFont or a
-	// CMap each read the other's pending edit, so the order decides the
-	// output.
-	nums := make([]int, 0, len(doc.Index.Entries))
-	for objNum := range doc.Index.Entries {
-		nums = append(nums, objNum)
-	}
-	slices.Sort(nums)
-
+	// In object-number order, which XRefEntries yields: two fonts sharing a
+	// CIDFont or a CMap each read the other's pending edit, so the order
+	// decides the output.
 	count := 0
 	aligned := 0
 	wmode := 0
-	for _, objNum := range nums {
+	for objNum, entry := range doc.XRefEntries() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		entry := doc.Index.Entries[objNum]
 		if entry.Type == xref.XRefTypeFree || objNum == 0 {
 			continue
 		}

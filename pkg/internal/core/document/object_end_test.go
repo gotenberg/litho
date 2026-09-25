@@ -117,8 +117,8 @@ func TestObjectEndSkipsOffsetMissingItsHeader(t *testing.T) {
 	t.Parallel()
 	doc := objectEndDoc(t)
 
-	third, fourth := doc.Index.Entries[3].Offset, doc.Index.Entries[4].Offset
-	fifth := doc.Index.Entries[5].Offset
+	third, fourth := doc.xrefEntries[3].Offset, doc.xrefEntries[4].Offset
+	fifth := doc.xrefEntries[5].Offset
 	if got := doc.objectEnd(third); got != fourth {
 		t.Fatalf("objectEnd(object 3) = %d, want object 4's offset %d", got, fourth)
 	}

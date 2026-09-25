@@ -89,7 +89,7 @@ func fixLZW(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 	var count int
 	renamed := make(map[int]string)
 
-	for objNum, entry := range doc.Index.Entries {
+	for objNum, entry := range doc.XRefEntries() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
@@ -154,8 +154,8 @@ func fixLZW(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 	if count > 0 {
 		fixes = append(fixes, fmt.Sprintf("re-encoded %d LZW streams as FlateDecode", count))
 	}
-	// Sorted: doc.Index.Entries is a map, and identical input must produce
-	// identical output.
+	// Sorted: renamed is a map, and identical input must produce identical
+	// output.
 	for _, objNum := range slices.Sorted(maps.Keys(renamed)) {
 		fixes = append(fixes, renamed[objNum])
 	}

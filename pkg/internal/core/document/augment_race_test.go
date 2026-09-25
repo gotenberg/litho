@@ -15,10 +15,10 @@ import (
 // xref-augmentation write against concurrent map reads. Object 2's
 // stored offset points at object 1's header, so the first resolve of
 // object 2 fails objectHeaderMatches and triggers
-// augmentXrefFromRawScan, which writes Index.Entries. Other goroutines
+// augmentXrefFromRawScan, which writes the xref entries. Other goroutines
 // resolving objects 1/3/4 read the same map at the same time. Run under
 // -race, this would fail with a concurrent map read/write before the
-// d.mu guard was added in xrefEntry / augmentXrefFromRawScan.
+// d.mu guard was added in XRefEntry / augmentXrefFromRawScan.
 func TestResolve_ConcurrentAugmentation_NoRace(t *testing.T) {
 	objs := []string{
 		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
@@ -46,10 +46,10 @@ func TestResolve_ConcurrentAugmentation_NoRace(t *testing.T) {
 		4: {Type: xref.XRefTypeNormal, Offset: offsets[4]},
 	}
 	doc := &Document{
-		r:    bytes.NewReader(data),
-		size: int64(len(data)),
+		r:           bytes.NewReader(data),
+		size:        int64(len(data)),
+		xrefEntries: entries,
 		Index: xref.Index{
-			Entries: entries,
 			Trailer: ast.PdfDict{"Size": ast.PdfInt(5), "Root": ast.PdfIndirectRef{ObjectNum: 1}},
 		},
 		objectCache: make(map[int]ast.PdfObject),

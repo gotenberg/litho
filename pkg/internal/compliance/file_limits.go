@@ -98,7 +98,7 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 	var results []Violation
 
 	// Check indirect object count.
-	objCount := len(doc.Index.Entries)
+	objCount := doc.XRefEntryCount()
 	if objCount > maxIndirectObjs {
 		results = append(results, Violation{
 			Rule:    indirectObjCountRule(profile),
@@ -110,12 +110,11 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 	// In object-number order: the walk appends violations, and Go randomises map
 	// iteration, so an unsorted walk reported the same findings in a different
 	// order on consecutive runs of the same binary.
-	objNums := slices.Sorted(maps.Keys(doc.Index.Entries))
-	for _, objNum := range objNums {
+	for objNum, entry := range doc.XRefEntries() {
 		if ctx.Err() != nil {
 			return results
 		}
-		if doc.Index.Entries[objNum].Free {
+		if entry.Free {
 			continue
 		}
 

@@ -39,10 +39,13 @@ type XRefEntry struct {
 	ObjStmIndex int // Only for XRefTypeCompressed
 }
 
-// Index is an aggregated cross-reference index containing a map of object
-// numbers to their [XRefEntry] values and the associated trailer dictionary.
+// Index holds the trailer dictionaries of a parsed cross-reference chain.
+//
+// The [XRefEntry] values the chain lists are not part of it. The document that
+// parses the chain keeps them in a field of its own behind its lock, because
+// resolving an object can rewrite them long after parsing, and a map read by
+// concurrent goroutines while one of them writes it is a data race.
 type Index struct {
-	Entries map[int]XRefEntry
 	Trailer ast.PdfDict
 
 	// LastTrailer is the trailer of the oldest section on the /Prev chain. In

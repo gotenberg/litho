@@ -14,12 +14,12 @@ import (
 // including its rebuild when the entry set grows (lazy xref augmentation).
 // Compressed entries (no byte offset) are ignored.
 func TestNextNormalObjectOffset(t *testing.T) {
-	d := &Document{Index: xref.Index{Entries: map[int]xref.XRefEntry{
+	d := &Document{xrefEntries: map[int]xref.XRefEntry{
 		1: {Type: xref.XRefTypeNormal, Offset: 100},
 		2: {Type: xref.XRefTypeNormal, Offset: 250},
 		3: {Type: xref.XRefTypeNormal, Offset: 400},
 		4: {Type: xref.XRefTypeCompressed, Offset: 0},
-	}}}
+	}}
 
 	cases := []struct{ off, want int64 }{
 		{50, 100}, {100, 250}, {150, 250}, {249, 250}, {250, 400}, {400, math.MaxInt64}, {999, math.MaxInt64},
@@ -31,7 +31,7 @@ func TestNextNormalObjectOffset(t *testing.T) {
 	}
 
 	// Growing the entry set must invalidate the cached slice and rebuild.
-	d.Index.Entries[5] = xref.XRefEntry{Type: xref.XRefTypeNormal, Offset: 175}
+	d.xrefEntries[5] = xref.XRefEntry{Type: xref.XRefTypeNormal, Offset: 175}
 	if got := d.nextNormalObjectOffset(100); got != 175 {
 		t.Errorf("after adding offset 175: nextNormalObjectOffset(100) = %d, want 175", got)
 	}

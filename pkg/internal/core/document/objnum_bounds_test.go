@@ -43,7 +43,7 @@ func TestPruneUnrepresentableEntries(t *testing.T) {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	for objNum := range doc.Index.Entries {
+	for objNum := range doc.xrefEntries {
 		if int64(objNum) > int64(len(data)) {
 			t.Errorf("index kept object %d in a %d-byte file", objNum, len(data))
 		}

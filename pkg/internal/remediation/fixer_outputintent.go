@@ -231,7 +231,7 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 
 	// Skip documents with implementation-limit or structural issues that
 	// can corrupt newly added objects during serialization.
-	for objNum, entry := range doc.Index.Entries {
+	for objNum, entry := range doc.XRefEntries() {
 		if entry.Offset > doc.FileSize() || int64(objNum) > maxPlausibleObjNum {
 			return nil, nil
 		}

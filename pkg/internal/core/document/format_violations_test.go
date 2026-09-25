@@ -38,10 +38,10 @@ func formatViolationDoc(data []byte, offsets []int64) *Document {
 		entries[objNum] = xref.XRefEntry{Type: xref.XRefTypeNormal, Offset: offsets[objNum]}
 	}
 	return &Document{
-		r:    bytes.NewReader(data),
-		size: int64(len(data)),
+		r:           bytes.NewReader(data),
+		size:        int64(len(data)),
+		xrefEntries: entries,
 		Index: xref.Index{
-			Entries: entries,
 			Trailer: ast.PdfDict{"Size": ast.PdfInt(len(offsets)), "Root": ast.PdfIndirectRef{ObjectNum: 1}},
 		},
 		objectCache:  make(map[int]ast.PdfObject),

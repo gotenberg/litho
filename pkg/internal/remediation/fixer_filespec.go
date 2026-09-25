@@ -29,7 +29,7 @@ func matchFileSpecFUF(v compliance.Violation) bool {
 // spec objects are rewritten.
 func fixFileSpecFUF(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	var count int
-	for objNum, entry := range doc.Index.Entries {
+	for objNum, entry := range doc.XRefEntries() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}

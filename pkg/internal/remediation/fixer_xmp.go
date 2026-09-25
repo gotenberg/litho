@@ -131,16 +131,10 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 // rewritten uncompressed (the fresh dict drops /Filter) to keep the edited XMP
 // readable, matching the catalog XMP stream fixXMP writes.
 func fixComponentMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogMetaNum, part int) []string {
-	// Iterate object numbers in sorted order so the emitted fix notes and the
-	// destination object numbering stay deterministic across runs.
-	objNums := make([]int, 0, len(doc.Index.Entries))
-	for objNum := range doc.Index.Entries {
-		objNums = append(objNums, objNum)
-	}
-	sort.Ints(objNums)
-
+	// XRefEntries yields in object-number order, so the emitted fix notes and
+	// the destination object numbering stay deterministic across runs.
 	var fixes []string
-	for _, objNum := range objNums {
+	for objNum := range doc.XRefEntries() {
 		if objNum == 0 || objNum == catalogMetaNum {
 			continue
 		}

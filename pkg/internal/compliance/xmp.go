@@ -523,11 +523,11 @@ func xmpCollectMetadataStreams(ctx context.Context, doc *document.Document, cata
 	seen := make(map[int]bool)
 	var metaNums []int
 
-	for _, objNum := range sortedEntryNums(doc) {
+	for objNum, entry := range doc.XRefEntries() {
 		if ctx.Err() != nil || len(metaNums) >= maxXMPMetadataStreams {
 			break
 		}
-		if doc.Index.Entries[objNum].Free {
+		if entry.Free {
 			continue
 		}
 		obj, err := document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})

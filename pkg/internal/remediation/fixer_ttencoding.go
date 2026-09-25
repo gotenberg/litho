@@ -44,7 +44,7 @@ func fixTrueTypeEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	}
 
 	count := 0
-	for objNum, entry := range doc.Index.Entries {
+	for objNum, entry := range doc.XRefEntries() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}

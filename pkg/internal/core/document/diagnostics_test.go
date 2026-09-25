@@ -61,9 +61,9 @@ func TestUndecodableStreams_EndToEnd(t *testing.T) {
 	doc := &Document{
 		r:    bytes.NewReader(data),
 		size: int64(len(data)),
-		Index: xref.Index{Entries: map[int]xref.XRefEntry{
+		xrefEntries: map[int]xref.XRefEntry{
 			1: {Type: xref.XRefTypeNormal, Offset: 9}, // "1 0 obj" begins after "%PDF-1.7\n"
-		}},
+		},
 		objectCache: make(map[int]ast.PdfObject),
 		fontCache:   make(map[int]any),
 		cmapCache:   make(map[int]any),

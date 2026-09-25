@@ -128,7 +128,7 @@ func (d *Document) rebuildXRef(ctx context.Context) error {
 		}
 	}
 
-	d.Index.Entries = entries
+	d.xrefEntries = entries
 	d.Index.Trailer = trailer
 
 	return nil

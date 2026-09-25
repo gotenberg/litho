@@ -107,7 +107,7 @@ func FuzzNewDocument(f *testing.F) {
 
 		// An xref entry's offset is a position in the same input. A negative
 		// one indexes backwards from every read site that uses it.
-		for num, entry := range doc.Index.Entries {
+		for num, entry := range doc.xrefEntries {
 			if entry.Offset < 0 {
 				t.Fatalf("object %d has negative xref offset %d", num, entry.Offset)
 			}

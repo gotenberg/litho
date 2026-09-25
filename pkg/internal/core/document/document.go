@@ -25,9 +25,10 @@ import (
 //
 // Concurrent use. Document is safe for concurrent use by multiple
 // goroutines after construction completes. All mutable caches
-// (objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache)
-// and the compliance scratch state (ComplianceMode, formatViolations) are
-// protected by internal locks. The format-violation record is keyed by object number
+// (objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache),
+// the cross-reference entries, which a resolution that misses them rewrites
+// (see [Document.XRefEntries]), and the compliance scratch state
+// (ComplianceMode, formatViolations) are protected by internal locks. The format-violation record is keyed by object number
 // and written once per object, so concurrent resolutions of the same
 // object contribute one entry, not one per goroutine.
 // Concurrent read paths ([Document.Resolve], [ResolveDict], [ResolveArray], etc.)
@@ -47,6 +48,7 @@ type Document struct {
 	r                io.ReaderAt
 	size             int64
 	Index            xref.Index
+	xrefEntries      map[int]xref.XRefEntry // cross-reference entries by object number, see [Document.XRefEntries]
 	objectCache      map[int]ast.PdfObject
 	fontCache        map[int]any
 	cmapCache        map[int]any         // parsed CMap by ToUnicode stream object number
@@ -57,10 +59,10 @@ type Document struct {
 	colorCache       map[[2]int]any      // colour transforms by profile object number and rendering intent
 	colorCacheBytes  int                 // bytes held in colorCache, bounded by limits.Limits.MaxColorCacheBytes
 	sortedOffsets    []int64             // ascending normal-object offsets, for O(log N) endobj scan-capping
-	sortedOffsetsLen int                 // len(Index.Entries) when sortedOffsets was built; rebuild on change
-	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache, sortedOffsets, formatViolations, and the lazy Index.Entries augmentation
+	sortedOffsetsLen int                 // len(xrefEntries) when sortedOffsets was built; rebuild on change
+	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache, sortedOffsets, formatViolations, and xrefEntries once construction completes
 	runMu            sync.Mutex          // serializes compliance-engine validation runs
-	xrefAugment      sync.Once           // guards the one-shot raw-bytes augmentation of Index
+	xrefAugment      sync.Once           // guards the one-shot raw-bytes augmentation of xrefEntries
 	xrefAugmentRan   bool                // the augmentation has run, whatever it found; protected by mu
 	maxCacheSize     int                 // evict all objects when cache exceeds this size
 	limits           limits.Limits       // resource budgets, set by NewDocument, read-only after
@@ -124,7 +126,7 @@ type Document struct {
 	// Access is serialized by d.mu.
 	//
 	// The key space is the set of object numbers that carry a normal xref
-	// entry, so the map holds at most len(Index.Entries) keys: an object
+	// entry, so the map holds at most len(xrefEntries) keys: an object
 	// number absent from the index fails resolution before anything is
 	// recorded. That is the same bound the index itself already lives
 	// under (an xref entry costs bytes in the file), so the store needs no
@@ -800,7 +802,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	doc := &Document{
 		r:            r,
 		size:         size,
-		Index:        xref.Index{Entries: make(map[int]xref.XRefEntry)},
+		xrefEntries:  make(map[int]xref.XRefEntry),
 		objectCache:  make(map[int]ast.PdfObject),
 		fontCache:    make(map[int]any),
 		cmapCache:    make(map[int]any),
@@ -830,7 +832,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 			slog.String("error", err.Error()),
 		)
 		// Fallback: brute-force rebuild by scanning for object headers.
-		doc.Index.Entries = make(map[int]xref.XRefEntry)
+		doc.xrefEntries = make(map[int]xref.XRefEntry)
 		doc.Index.Trailer = nil
 		if rebuildErr := doc.rebuildXRef(ctx); rebuildErr != nil {
 			return nil, fmt.Errorf("%w: %v (rebuild also failed: %v)", ErrDamagedXRef, err, rebuildErr)
@@ -846,11 +848,11 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	// pointing at offset 0, which yields no objects. The rebuild path
 	// discovers them by scanning raw bytes.
 	if !doc.Rebuilt {
-		shouldRebuild := len(doc.Index.Entries) == 0
+		shouldRebuild := len(doc.xrefEntries) == 0
 		if !shouldRebuild {
 			if rootRef, ok := doc.Index.Trailer["Root"]; ok {
 				if ref, ok := rootRef.(ast.PdfIndirectRef); ok {
-					if _, exists := doc.Index.Entries[ref.ObjectNum]; !exists {
+					if _, exists := doc.xrefEntries[ref.ObjectNum]; !exists {
 						shouldRebuild = true
 					}
 				}
@@ -858,7 +860,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		}
 		if shouldRebuild {
 			doc.Logger.Debug("xref entries incomplete, rebuilding")
-			doc.Index.Entries = make(map[int]xref.XRefEntry)
+			doc.xrefEntries = make(map[int]xref.XRefEntry)
 			doc.Index.Trailer = nil
 			if rebuildErr := doc.rebuildXRef(ctx); rebuildErr == nil {
 				doc.Rebuilt = true
@@ -874,7 +876,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	// is lost). Runs only after a rebuild, when the fully-constructed document
 	// can resolve the object streams it found.
 	if doc.Rebuilt {
-		doc.expandObjectStreamsForRebuild(ctx, doc.Index.Entries)
+		doc.expandObjectStreamsForRebuild(ctx, doc.xrefEntries)
 	}
 
 	// Runs once the index is final, whichever path filled it, because all of
@@ -882,11 +884,11 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 	doc.pruneUnrepresentableEntries()
 
 	if !doc.Rebuilt {
-		doc.declaredStarts = declaredObjectStarts(doc.Index.Entries)
+		doc.declaredStarts = declaredObjectStarts(doc.xrefEntries)
 	}
 
 	doc.Logger.Debug("xref parsed",
-		slog.Int("entries", len(doc.Index.Entries)),
+		slog.Int("entries", len(doc.xrefEntries)),
 		slog.Bool("rebuilt", doc.Rebuilt),
 		slog.Bool("linearized", doc.Linearization != nil),
 	)

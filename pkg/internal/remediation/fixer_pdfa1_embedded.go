@@ -107,7 +107,7 @@ func deleteEmbeddedFilesNameEntry(ctx context.Context, alloc *writer.ObjAllocato
 //     at all.
 func stripEFFromFileSpecs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) int {
 	count := 0
-	for objNum, entry := range doc.Index.Entries {
+	for objNum, entry := range doc.XRefEntries() {
 		if ctx.Err() != nil {
 			return count
 		}

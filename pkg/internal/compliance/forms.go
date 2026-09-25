@@ -303,7 +303,7 @@ func computeSignatureByteRange(ctx context.Context, doc *document.Document, sigO
 	if doc.HeaderOffset != 0 {
 		return actual, 0, false, false
 	}
-	entry, exists := doc.Index.Entries[sigObjNum]
+	entry, exists := doc.XRefEntry(sigObjNum)
 	if !exists || entry.Free || entry.Type == xref.XRefTypeCompressed {
 		return actual, 0, false, false
 	}

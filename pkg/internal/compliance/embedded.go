@@ -253,7 +253,7 @@ func (fs fileSpecEntry) label() string {
 func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []fileSpecEntry {
 	var specs []fileSpecEntry
 
-	for objNum, entry := range doc.Index.Entries {
+	for objNum, entry := range doc.XRefEntries() {
 		if ctx.Err() != nil {
 			return specs
 		}

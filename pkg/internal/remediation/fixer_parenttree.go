@@ -69,12 +69,7 @@ func fixParentTree(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	// structure elements are always indirect and may live outside the
 	// reachable /K chains while remediation rounds are in flight.
 	perPage := make(map[int]map[int]ast.PdfIndirectRef)
-	objNums := make([]int, 0, len(doc.Index.Entries))
-	for objNum := range doc.Index.Entries {
-		objNums = append(objNums, objNum)
-	}
-	slices.Sort(objNums)
-	for _, objNum := range objNums {
+	for objNum := range doc.XRefEntries() {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
