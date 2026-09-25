@@ -9,10 +9,12 @@ import (
 
 // twoPageCertifiedPDF is a document certified at the given DocMDP policy with
 // two pages: the first (3) carries the certification signature widget (4,
-// value 5) and a text field widget (6), the second (8) nothing.
+// value 5) and a text field widget (6), the second (8) nothing. Its name
+// dictionary names, in its /Templates tree (11), a template page (9) that
+// draws a content stream (10), which [templateInstance] instantiates.
 func twoPageCertifiedPDF(policy int) []byte {
 	return buildSigPDF([]string{
-		"<< /Type /Catalog /Pages 2 0 R /AcroForm 7 0 R >>",
+		"<< /Type /Catalog /Pages 2 0 R /AcroForm 7 0 R /Names << /Templates 11 0 R >> >>",
 		"<< /Type /Pages /Kids [3 0 R 8 0 R] /Count 2 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R 6 0 R] >>",
 		"<< /Type /Annot /Subtype /Widget /FT /Sig /T (cert) /Rect [0 0 0 0] /P 3 0 R /V 5 0 R >>",
@@ -20,8 +22,15 @@ func twoPageCertifiedPDF(policy int) []byte {
 		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /Rect [20 20 120 40] /P 3 0 R >>",
 		"<< /Fields [4 0 R 6 0 R] /SigFlags 3 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /Page /MediaBox [0 0 612 792] /Contents 10 0 R >>",
+		streamObject("BT /Helv 12 Tf 72 700 Td (Appendix) Tj ET"),
+		"<< /Names [(appendix) 9 0 R] >>",
 	}, "")
 }
+
+// templateInstance is the page (12) that instantiating the template of
+// [twoPageCertifiedPDF] adds: a copy of the template page (9).
+var templateInstance = updatedObject{12, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 10 0 R >>"}
 
 // TestEvaluateMDP_RemovedPage covers ISO 32000-1, 12.8.2.2, Table 254: no P
 // permits deleting a page, whether the update rewrites the page tree or only
@@ -48,11 +57,11 @@ func TestEvaluateMDP_RemovedPage(t *testing.T) {
 		{"P=2 page dropped from /Kids", 2, pages("3 0 R", 1), false},
 		{"P=3 page dropped from /Kids", 3, pages("3 0 R", 1), false},
 
-		{"P=1 unrelated object freed", 1, freed(9), true},
+		{"P=1 unrelated object freed", 1, freed(13), true},
 		{"P=2 template page added", 2, func(t *testing.T, base []byte) []byte {
 			return appendUpdate(t, base,
-				updatedObject{2, "<< /Type /Pages /Kids [3 0 R 8 0 R 9 0 R] /Count 3 >>"},
-				updatedObject{9, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>"},
+				updatedObject{2, "<< /Type /Pages /Kids [3 0 R 8 0 R 12 0 R] /Count 3 >>"},
+				templateInstance,
 			)
 		}, true},
 	}
@@ -104,12 +113,12 @@ func TestEvaluateMDP_ReorderedPage(t *testing.T) {
 		), false, "page 1 (object 3) was moved after page 2 (object 8)"},
 
 		{"P=2 template page added before the signed pages", 2, kids(
-			updatedObject{2, "<< /Type /Pages /Kids [9 0 R 3 0 R 8 0 R] /Count 3 >>"},
-			updatedObject{9, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>"},
+			updatedObject{2, "<< /Type /Pages /Kids [12 0 R 3 0 R 8 0 R] /Count 3 >>"},
+			templateInstance,
 		), true, ""},
 		{"P=2 template page added between the signed pages", 2, kids(
-			updatedObject{2, "<< /Type /Pages /Kids [3 0 R 9 0 R 8 0 R] /Count 3 >>"},
-			updatedObject{9, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>"},
+			updatedObject{2, "<< /Type /Pages /Kids [3 0 R 12 0 R 8 0 R] /Count 3 >>"},
+			templateInstance,
 		), true, ""},
 		{"P=2 page tree rebuilt in the signed order", 2, kids(
 			updatedObject{2, "<< /Type /Pages /Kids [40 0 R 8 0 R] /Count 2 >>"},

@@ -199,14 +199,15 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 	}
 
 	// Table 254 permits page deletion at no P and annotation deletion only at
-	// P=3, and no P permits reordering the signed pages or changing what a
-	// signed page draws. A deletion may append nothing the classifier forbids,
-	// and the classifier permits a rewritten page tree and catalog and an
-	// untyped object, so the signed revision's pages and, from P=2, its catalog
-	// are compared with the current ones. At P=1 the page and catalog rewrites
+	// P=3, no P permits reordering the signed pages or changing what a signed
+	// page draws, and only a template instantiation adds a page, from P=2. A
+	// deletion may append nothing the classifier forbids, and the classifier
+	// permits a rewritten page tree and catalog, a new page and an untyped
+	// object, so the signed revision's pages and, from P=2, its catalog are
+	// compared with the current ones. At P=1 the page and catalog rewrites
 	// those changes need are already refused. That runs even when nothing was
 	// appended: a cross-reference section alone can free a page or an
-	// annotation, or point /Root elsewhere.
+	// annotation, or point /Root or the page tree elsewhere.
 	if violation == "" {
 		rev, err := signed.revision(ctx)
 		if err != nil {
@@ -264,6 +265,7 @@ func compareRevisions(ctx context.Context, doc, rev *document.Document, held fun
 	if policy >= 2 {
 		checks = append(checks, check{"untyped objects", func() (string, error) { return changedUntyped(ctx, doc, rev, classified, policy) }})
 	}
+	checks = append(checks, check{"added pages", func() (string, error) { return addedPage(ctx, doc, rev, policy) }})
 	for _, c := range checks {
 		violation, err := c.run()
 		if err != nil {
@@ -282,11 +284,11 @@ func compareRevisions(ctx context.Context, doc, rev *document.Document, held fun
 func revisionChecks(policy int) string {
 	switch policy {
 	case 2:
-		return "page changes, page order, page removals, catalog changes, form fields, untyped objects and annotation removals"
+		return "added pages, page changes, page order, page removals, catalog changes, form fields, untyped objects and annotation removals"
 	case 3:
-		return "page changes, page order, page removals, catalog changes, form fields and untyped objects"
+		return "added pages, page changes, page order, page removals, catalog changes, form fields and untyped objects"
 	}
-	return "page changes, page order and page removals"
+	return "added pages, page changes, page order and page removals"
 }
 
 // withoutValidationData returns objects without those that add validation
@@ -581,8 +583,10 @@ func isAllowedP2(obj appendedObject) bool {
 		// forbids at P=2: removedAnnotation finds it by comparing the page's
 		// /Annots with the signed revision's. changedPage compares the rest
 		// of a rewritten page, so a page rewrite that changes its /Contents
-		// or /Resources is reported there, and changedCatalog compares a
-		// rewritten catalog, so one that adds an /OpenAction is.
+		// or /Resources is reported there, addedPage compares a new page with
+		// the signed revision's templates, so one that draws anything else is
+		// reported there, and changedCatalog compares a rewritten catalog, so
+		// one that adds an /OpenAction is.
 		return true
 	case "":
 		// Objects without /Type include form field values, appearance streams,

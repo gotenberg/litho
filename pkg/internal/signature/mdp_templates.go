@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -19,7 +21,7 @@ import (
 const maxActionCompare = 1 << 12
 
 // templateWidget is a widget of a page the signed revision names as a
-// template, with what [templateInstances.match] compares.
+// template, with what [copiedWidget] compares.
 type templateWidget struct {
 	rect    []float64
 	ft      string
@@ -37,17 +39,16 @@ type widgetActions struct {
 	terminal       int
 }
 
-// templateInstances is what [fieldDiff] reads to tell the fields that a
-// template instantiation adds: the widgets of the signed revision's template
-// pages, and the widgets the pages the update added list.
-type templateInstances struct {
+// templatePage is a page the signed revision names as a template, with the
+// widgets it lists.
+type templatePage struct {
+	num     int // the page's object number, 0 when the name tree holds it directly
+	dict    ast.PdfDict
 	widgets []templateWidget
-	added   map[int]bool
 }
 
-// newTemplateInstances reads the template pages of the signed revision rev and
-// the pages doc holds that rev does not, as held tells ([signedRevision.held]).
-// It returns nil when rev names no template page.
+// signedTemplates reads the pages the name dictionary of the signed revision
+// rev names as templates, each once, and returns nil when it names none.
 //
 // ISO 32000-1, 12.7.6 lets the name dictionary name pages in its /Templates
 // tree, which a reader does not show, and in its /Pages tree, which it does,
@@ -59,7 +60,7 @@ type templateInstances struct {
 //   - All corpora: no name dictionary holds a /Templates tree, and the one
 //     /Pages tree, in pdfjs issue19389.pdf, is in a document with no
 //     signature, so the rule rests on the clauses alone.
-func newTemplateInstances(ctx context.Context, doc, rev *document.Document, held func(num int) bool) (*templateInstances, error) {
+func signedTemplates(ctx context.Context, rev *document.Document) ([]*templatePage, error) {
 	catalog, err := document.ResolveCatalog(ctx, rev)
 	if err != nil {
 		return nil, fmt.Errorf("reading the signed revision's catalog: %w", err)
@@ -82,21 +83,25 @@ func newTemplateInstances(ctx context.Context, doc, rev *document.Document, held
 			return nil, fmt.Errorf("reading the signed /Names /%s: %w", string(tree), err)
 		}
 	}
-	if len(pages) == 0 {
-		return nil, nil
-	}
 
-	t := &templateInstances{added: make(map[int]bool)}
+	var templates []*templatePage
+	seen := make(map[int]bool)
 	for i, page := range pages {
 		if i%100 == 0 {
 			if err := ctx.Err(); err != nil {
 				return nil, err
 			}
 		}
+		num := refNum(page)
+		if num > 0 && seen[num] {
+			continue
+		}
+		seen[num] = true
 		pageDict, err := document.ResolveDict(ctx, rev, page)
 		if err != nil || pageDict == nil {
 			continue
 		}
+		t := &templatePage{num: num, dict: pageDict}
 		for _, w := range pageWidgets(ctx, rev, pageDict) {
 			t.widgets = append(t.widgets, templateWidget{
 				rect:    rectOf(ctx, rev, w.dict),
@@ -105,8 +110,35 @@ func newTemplateInstances(ctx context.Context, doc, rev *document.Document, held
 				actions: actionsOf(ctx, rev, w.num, w.dict),
 			})
 		}
+		templates = append(templates, t)
 	}
-	if len(t.widgets) == 0 {
+	return templates, nil
+}
+
+// templateInstances is what [fieldDiff] reads to tell the fields that a
+// template instantiation adds: the widgets of the signed revision's template
+// pages, and the widgets the pages the update added list.
+type templateInstances struct {
+	templates []*templatePage
+	added     map[int]bool
+}
+
+// newTemplateInstances reads the template pages of the signed revision rev
+// ([signedTemplates]) and the pages doc holds that rev does not, as held tells
+// ([signedRevision.held]). It returns nil when no template page of rev lists a
+// widget.
+func newTemplateInstances(ctx context.Context, doc, rev *document.Document, held func(num int) bool) (*templateInstances, error) {
+	templates, err := signedTemplates(ctx, rev)
+	if err != nil {
+		return nil, err
+	}
+	t := &templateInstances{added: make(map[int]bool)}
+	for _, tp := range templates {
+		if len(tp.widgets) > 0 {
+			t.templates = append(t.templates, tp)
+		}
+	}
+	if len(t.templates) == 0 {
 		return nil, nil
 	}
 
@@ -158,13 +190,25 @@ func pageWidgets(ctx context.Context, doc *document.Document, page ast.PdfDict) 
 	return widgets
 }
 
-// match returns the template widget that the widget of doc copies: the same
-// rectangle, the same field type and the same partial name for its field.
+// match returns the widget of a template page that the widget of doc copies
+// ([copiedWidget]).
 func (t *templateInstances) match(ctx context.Context, doc *document.Document, widget ast.PdfDict) (templateWidget, bool) {
+	for _, tp := range t.templates {
+		if tw, ok := copiedWidget(ctx, doc, widget, tp.widgets); ok {
+			return tw, true
+		}
+	}
+	return templateWidget{}, false
+}
+
+// copiedWidget returns the widget of widgets that the widget of doc copies:
+// the same rectangle, the same field type and the same partial name for its
+// field.
+func copiedWidget(ctx context.Context, doc *document.Document, widget ast.PdfDict, widgets []templateWidget) (templateWidget, bool) {
 	rect := rectOf(ctx, doc, widget)
 	ft := fieldTypeIn(ctx, doc, widget)
 	name := partialName(ctx, doc, widget)
-	for _, tw := range t.widgets {
+	for _, tw := range widgets {
 		if tw.ft == ft && tw.name == name && sameNumbers(tw.rect, rect) {
 			return tw, true
 		}
@@ -379,17 +423,40 @@ func sameNumbers(a, b []float64) bool {
 // compares at most [maxActionCompare] pairs, and a pair of references it
 // already compares counts as the same, so a cycle ends the walk.
 func sameAcross(ctx context.Context, a *document.Document, x ast.PdfObject, b *document.Document, y ast.PdfObject) bool {
+	budget := pairBudget{left: maxActionCompare}
+	return budget.same(ctx, a, x, b, y)
+}
+
+// pairBudget is how many more pairs of objects the comparisons that share it
+// may compare ([pairBudget.same]). exhausted records that one of them ran out.
+type pairBudget struct {
+	left      int
+	exhausted bool
+}
+
+// same reports whether x of a is the same object as y of b, as [sameAcross]
+// compares them, spending one unit of the budget on each pair. A comparison
+// that runs out of budget reports the objects different. Dictionary entries
+// are compared in key order, so what a comparison spends does not depend on
+// the order of a Go map, and whether a later comparison sharing the budget
+// runs out is the same from run to run.
+func (p *pairBudget) same(ctx context.Context, a *document.Document, x ast.PdfObject, b *document.Document, y ast.PdfObject) bool {
 	type pair struct{ x, y ast.PdfObject }
 	stack := []pair{{x, y}}
 	compared := make(map[[2]int]bool)
-	for n := 0; len(stack) > 0; n++ {
-		if n >= maxActionCompare || ctx.Err() != nil {
+	for len(stack) > 0 {
+		if p.left <= 0 {
+			p.exhausted = true
 			return false
 		}
-		p := stack[len(stack)-1]
+		if ctx.Err() != nil {
+			return false
+		}
+		p.left--
+		top := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
-		xr, xRef := p.x.(ast.PdfIndirectRef)
-		yr, yRef := p.y.(ast.PdfIndirectRef)
+		xr, xRef := top.x.(ast.PdfIndirectRef)
+		yr, yRef := top.y.(ast.PdfIndirectRef)
 		if xRef && yRef {
 			key := [2]int{xr.ObjectNum, yr.ObjectNum}
 			if compared[key] {
@@ -397,11 +464,11 @@ func sameAcross(ctx context.Context, a *document.Document, x ast.PdfObject, b *d
 			}
 			compared[key] = true
 		}
-		px, err := resolvedIn(ctx, a, p.x)
+		px, err := resolvedIn(ctx, a, top.x)
 		if err != nil {
 			return false
 		}
-		py, err := resolvedIn(ctx, b, p.y)
+		py, err := resolvedIn(ctx, b, top.y)
 		if err != nil {
 			return false
 		}
@@ -411,19 +478,20 @@ func sameAcross(ctx context.Context, a *document.Document, x ast.PdfObject, b *d
 			if !ok || len(xv) != len(yv) {
 				return false
 			}
-			for key, value := range xv {
+			keys := slices.Sorted(maps.Keys(xv))
+			for _, key := range slices.Backward(keys) {
 				other, ok := yv[key]
 				if !ok {
 					return false
 				}
-				stack = append(stack, pair{value, other})
+				stack = append(stack, pair{xv[key], other})
 			}
 		case ast.PdfArray:
 			yv, ok := py.(ast.PdfArray)
 			if !ok || len(xv) != len(yv) {
 				return false
 			}
-			for i := range xv {
+			for i := len(xv) - 1; i >= 0; i-- {
 				stack = append(stack, pair{xv[i], yv[i]})
 			}
 		case ast.PdfStream:
