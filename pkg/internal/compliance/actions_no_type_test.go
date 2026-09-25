@@ -24,8 +24,10 @@ func TestActionWithNoTypeIsForbidden(t *testing.T) {
 	}
 	content := exponentStream("", "0 0 m 10 10 l S")
 	linkWith := func(action string) []string {
-		return []string{catalog(""), pages, page("/Annots [5 0 R]"), content,
-			"<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /F 4 /Border [0 0 0] /A " + action + " >>"}
+		return []string{
+			catalog(""), pages, page("/Annots [5 0 R]"), content,
+			"<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /F 4 /Border [0 0 0] /A " + action + " >>",
+		}
 	}
 	for _, tc := range []struct {
 		name string
@@ -41,9 +43,11 @@ func TestActionWithNoTypeIsForbidden(t *testing.T) {
 		{"an indirect link action with no /S", append(linkWith("6 0 R"), "<< /URI (http://example.com) >>"), 1},
 		{"an /OpenAction with no /S", []string{catalog("/OpenAction << /Type /Action /D [3 0 R /Fit] >>"), pages, page(""), content}, 1},
 		{"a page /AA action with no /S", []string{catalog(""), pages, page("/AA << /O << /Type /Action >> >>"), content}, 1},
-		{"an outline action with no /S", []string{catalog("/Outlines 5 0 R"), pages, page(""), content,
+		{"an outline action with no /S", []string{
+			catalog("/Outlines 5 0 R"), pages, page(""), content,
 			"<< /Type /Outlines /First 6 0 R /Last 6 0 R /Count 1 >>",
-			"<< /Title (x) /Parent 5 0 R /A << /D [3 0 R /Fit] >> >>"}, 1},
+			"<< /Title (x) /Parent 5 0 R /A << /D [3 0 R /Fit] >> >>",
+		}, 1},
 		{"a URI action", linkWith("<< /S /URI /URI (http://example.com) >>"), 0},
 		{"a destination under /OpenAction", []string{catalog("/OpenAction [3 0 R /Fit]"), pages, page(""), content}, 0},
 	} {
