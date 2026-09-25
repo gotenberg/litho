@@ -200,6 +200,10 @@ func (t *ComplexType) isType()      {}
 // types are carried in [Inline]; top-level type references are carried
 // in [TypeRef] and resolved into [Type] during the link pass.
 type Element struct {
+	// Name is the name of the element declaration. Per XML Schema Part 1,
+	// 3.3.2 a top-level declaration is in the target namespace, and a local
+	// one in no namespace unless its form, or the elementFormDefault of its
+	// schema document, is qualified.
 	Name QName
 	// Type is the resolved element type. Set during the link pass for
 	// elements that point at a top-level type via [TypeRef], or copied

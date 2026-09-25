@@ -398,6 +398,7 @@ type rawSchema struct {
 	XMLName              xml.Name           `xml:"http://www.w3.org/2001/XMLSchema schema"`
 	TargetNamespace      string             `xml:"targetNamespace,attr"`
 	AttributeFormDefault string             `xml:"attributeFormDefault,attr"`
+	ElementFormDefault   string             `xml:"elementFormDefault,attr"`
 	Elements             []rawElement       `xml:"element"`
 	Attributes           []rawAttribute     `xml:"attribute"`
 	ComplexTypes         []rawComplexType   `xml:"complexType"`
@@ -419,6 +420,7 @@ type rawElement struct {
 	Nillable    string          `xml:"nillable,attr"`
 	Default     string          `xml:"default,attr"`
 	Fixed       string          `xml:"fixed,attr"`
+	Form        string          `xml:"form,attr"`
 	ComplexType *rawComplexType `xml:"complexType"`
 	SimpleType  *rawSimpleType  `xml:"simpleType"`
 	Ref         string          `xml:"ref,attr"`
@@ -595,9 +597,27 @@ type schemaDoc struct {
 	// prefixes maps each namespace prefix declared on xs:schema, and
 	// [wellKnownPrefixes], to its namespace.
 	prefixes map[string]string
-	// attributeFormDefault is the attributeFormDefault attribute, whose
-	// absence means unqualified (XML Schema Part 1, 3.15.2).
+	// attributeFormDefault and elementFormDefault are the attributes of
+	// those names, whose absence means unqualified (XML Schema Part 1,
+	// 3.15.2).
 	attributeFormDefault string
+	elementFormDefault   string
+}
+
+// localNamespace returns the {target namespace} of a local declaration
+// whose form attribute is form, per XML Schema Part 1, 3.2.2 and 3.3.2:
+// the target namespace when form is qualified, or when form is absent and
+// formDefault, the attributeFormDefault or elementFormDefault of its schema
+// document, is qualified, and no namespace otherwise.
+func (d *schemaDoc) localNamespace(form, formDefault string) string {
+	form = strings.TrimSpace(form)
+	if form == "" {
+		form = strings.TrimSpace(formDefault)
+	}
+	if form == "qualified" {
+		return d.tns
+	}
+	return ""
 }
 
 // localAttributeNamespace returns the {target namespace} of a local
@@ -615,14 +635,28 @@ type schemaDoc struct {
 //     and ZUGFeRD validators, as their unprefixed attributes no longer
 //     match.
 func (d *schemaDoc) localAttributeNamespace(form string) string {
-	form = strings.TrimSpace(form)
-	if form == "" {
-		form = strings.TrimSpace(d.attributeFormDefault)
-	}
-	if form == "qualified" {
-		return d.tns
-	}
-	return ""
+	return d.localNamespace(form, d.attributeFormDefault)
+}
+
+// localElementNamespace returns the {target namespace} of a local element
+// declaration, an xs:element with a name inside a complex type, whose form
+// attribute is form, per XML Schema Part 1, 3.3.2: the target namespace of
+// the schema when form is qualified, or when form is absent and
+// elementFormDefault is qualified, and no namespace otherwise. A top-level
+// declaration always takes the target namespace: the topLevelElement type
+// of the schema for schemas gives it no form.
+//
+// # Corpus evidence
+//
+//   - All corpora: every bundled schema document sets elementFormDefault
+//     to qualified and none sets form, so their local elements all stay in
+//     the target namespace, and no verdict of the 159 files that embed XML
+//     moves, through the Factur-X and ZUGFeRD validators or under any
+//     bundled schema. Leaving them unqualified instead turns 91 of those
+//     files invalid through the validators, as their child elements, all in
+//     the target namespace, no longer match.
+func (d *schemaDoc) localElementNamespace(form string) string {
+	return d.localNamespace(form, d.elementFormDefault)
 }
 
 func populateFromRaw(s *Schema, raw *rawSchema, prefixes map[string]string) error {
@@ -630,6 +664,7 @@ func populateFromRaw(s *Schema, raw *rawSchema, prefixes map[string]string) erro
 		tns:                  raw.TargetNamespace,
 		prefixes:             prefixes,
 		attributeFormDefault: raw.AttributeFormDefault,
+		elementFormDefault:   raw.ElementFormDefault,
 	}
 	for i := range raw.ComplexTypes {
 		ct, err := buildComplexType(doc, &raw.ComplexTypes[i])
@@ -646,7 +681,7 @@ func populateFromRaw(s *Schema, raw *rawSchema, prefixes map[string]string) erro
 		s.Types[st.QName()] = st
 	}
 	for i := range raw.Elements {
-		el, err := buildElement(doc, &raw.Elements[i])
+		el, err := buildElement(doc, &raw.Elements[i], doc.tns)
 		if err != nil {
 			return err
 		}
@@ -668,13 +703,16 @@ func populateFromRaw(s *Schema, raw *rawSchema, prefixes map[string]string) erro
 	return nil
 }
 
-func buildElement(doc *schemaDoc, raw *rawElement) (*Element, error) {
+// buildElement builds the element declaration raw, named in namespace ns:
+// the target namespace for a top-level declaration, and the one its form
+// gives a local one ([schemaDoc.localElementNamespace]).
+func buildElement(doc *schemaDoc, raw *rawElement, ns string) (*Element, error) {
 	if raw.Ref != "" {
 		return nil, fmt.Errorf("%w: top-level xs:element with ref attribute (CII does not use this)",
 			ErrUnsupportedConstruct)
 	}
 	el := &Element{
-		Name:      QName{Namespace: doc.tns, Local: raw.Name},
+		Name:      QName{Namespace: ns, Local: raw.Name},
 		MinOccurs: occursOrDefault(raw.MinOccurs, 1),
 		MaxOccurs: occursOrDefault(raw.MaxOccurs, 1),
 		Nillable:  isTrueBoolean(raw.Nillable),
@@ -917,7 +955,7 @@ func buildChoice(doc *schemaDoc, raw *rawChoice) (Choice, error) {
 func buildParticles(doc *schemaDoc, els []rawElement, wcs []rawWildcard, nested []rawChoice) ([]Particle, error) {
 	out := make([]Particle, 0, len(els)+len(wcs))
 	for i := range els {
-		el, err := buildElement(doc, &els[i])
+		el, err := buildElement(doc, &els[i], doc.localElementNamespace(els[i].Form))
 		if err != nil {
 			return nil, err
 		}

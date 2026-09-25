@@ -113,6 +113,7 @@ func FuzzXSDLoadThenValidate(f *testing.F) {
 	f.Add([]byte(selfListXSD), []byte(`<Root xmlns="urn:t">a b c</Root>`)) // A list of itself.
 	f.Add([]byte(attributeFormXSD), []byte(`<Amount xmlns="urn:t" xmlns:t="urn:t" t:currencyID="EUR" scale="2">1</Amount>`))
 	f.Add([]byte(localAttributeRefXSD), []byte(`<Amount xmlns="urn:t" xmlns:t="urn:t" t:version="2">1</Amount>`))
+	f.Add([]byte(elementFormXSD), []byte(`<t:Invoice xmlns:t="urn:t"><Line>a</Line><Note>b</Note></t:Invoice>`))
 	f.Add([]byte(minimalXSD[:len(minimalXSD)/2]), []byte(payload))
 	f.Add([]byte(""), []byte(""))
 
