@@ -49,6 +49,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 		outputIntentRef, outputIntentHdr, outputIntentData = resolveOutputIntentICCInfo(ctx, doc, catalog)
 	}
 
+	links := newColorSpaceLinkIndex(pages)
 	for i := range pages {
 		page := pages[i].dict
 		if ctx.Err() != nil {
@@ -85,7 +86,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 			// it, which the same parsed operations report.
 			_, referencedXObjects, _, used, inheritedAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
 
-			checkICCBasedInResources(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, usedCSNames, results)
+			checkICCBasedInResources(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, usedCSNames, pageScope(&pages[i], i, links), results)
 			scanICCBasedRecursive(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, results, 0, visited, used, referencedXObjects, inheritedAtDo)
 		}
 
@@ -118,7 +119,7 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 					// patterns and shadings it paints and which colour spaces
 					// it selects.
 					apUsed, apXObjects, apCSNames, apInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
-					checkICCBasedInResources(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, apCSNames, results)
+					checkICCBasedInResources(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, apCSNames, nil, results)
 					scanICCBasedRecursive(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, results, 1, visited, apUsed, apXObjects, apInherited)
 				}
 			}
@@ -225,7 +226,7 @@ func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resource
 		// it selects: one it merely declares is employed by nothing, and
 		// veraPDF reports nothing for it.
 		formUsed, formXObjects, formCSNames, formInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSFor(inherited, string(k)))
-		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, formCSNames, results)
+		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, formCSNames, nil, results)
 		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, results, depth+1, visited, formUsed, formXObjects, formInherited)
 	}
 }
@@ -468,7 +469,7 @@ func scanICCBasedInPatterns(ctx context.Context, doc *document.Document, resourc
 		// colour-space state, so its own operations report which patterns and
 		// shadings it paints and which colour spaces it selects.
 		cellUsed, cellXObjects, cellCSNames, cellInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
-		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, cellCSNames, results)
+		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, cellCSNames, nil, results)
 		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results, depth+1, visited, cellUsed, cellXObjects, cellInherited)
 	}
 }
@@ -517,8 +518,24 @@ func resolveFormBlendingRef(ctx context.Context, doc *document.Document, stream 
 }
 
 // checkICCBasedInResources scans a page's resources for ICCBased colour spaces
-// and validates them.
-func checkICCBasedInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, usedCSNames map[string]bool, results *[]Violation) {
+// and validates them. scope is the page's content, whose entries the forms it
+// paints may select (see [colorSpaceScope.linkedByForms]), or nil for a nested
+// content stream.
+//
+// A name a painted form selects that only the page's resources define (ISO
+// 32000-1, 7.8.3) is selected too, though the page's own content never names
+// it. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on a page that only
+// paints a form, whose resources define no colour space, selecting and filling
+// with the page's /CS0 [/ICCBased] over an abstract profile: ISO 19005-1,
+// 6.2.3.2 t1 and ISO 19005-2, 6.2.4.2 t1 fail, directly through the form or
+// through a form it paints, and nothing fails when no form selects the name.
+//
+// # Corpus evidence
+//
+//   - All corpora: no count moves under PDF/A-1b and PDF/A-2b, nor for the
+//     verapdf files under their own profile, so no file reaches an ICCBased
+//     space only through a page name a form selects.
+func checkICCBasedInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, usedCSNames map[string]bool, scope *colorSpaceScope, results *[]Violation) {
 	csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
 	if err != nil || csDict == nil {
 		return
@@ -532,7 +549,7 @@ func checkICCBasedInResources(ctx context.Context, doc *document.Document, resou
 
 		// Skip CS names not referenced by cs/CS operators in the content stream.
 		// A CS declared in Resources but never used is not a violation.
-		if usedCSNames != nil && !usedCSNames[string(name)] {
+		if usedCSNames != nil && !usedCSNames[string(name)] && !scope.linkedByForms(ctx, doc, string(name)) {
 			continue
 		}
 

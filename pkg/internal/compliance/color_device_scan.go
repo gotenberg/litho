@@ -9,8 +9,23 @@ import (
 )
 
 // scanForDeviceColorSpaces looks through page resources for uses of DeviceRGB,
-// DeviceCMYK, and DeviceGray colour spaces.
-func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDict ast.PdfDict, resources ast.PdfDict, referencedXObjects map[string]bool, used *usedResources, inherited map[string]inheritedCS, part int, contentCSNames map[string]bool) deviceCSUsage {
+// DeviceCMYK, and DeviceGray colour spaces. scope is the page's content, whose
+// /Resources/ColorSpace entries the forms it paints may select (see
+// [colorSpaceScope.linkedByForms]).
+//
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on a page that only
+// paints a form, whose resources define no colour space, selecting and filling
+// with the page's /CS0: an /Indexed space over DeviceGray, held directly or
+// indirectly, or the name /DeviceGray, fails ISO 19005-1, 6.2.3.3 t3 and ISO
+// 19005-2, 6.2.4.3 t4, directly through the form or through a form it paints,
+// and nothing fails when no form selects the name.
+//
+// # Corpus evidence
+//
+//   - All corpora: no count moves under PDF/A-1b and PDF/A-2b, nor for the
+//     verapdf files under their own profile, so no file uses a device colour
+//     space only through a page name a form selects.
+func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDict ast.PdfDict, resources ast.PdfDict, referencedXObjects map[string]bool, used *usedResources, inherited map[string]inheritedCS, part int, contentCSNames map[string]bool, scope *colorSpaceScope) deviceCSUsage {
 	var usage deviceCSUsage
 
 	// A named colour space in /Resources/ColorSpace counts only when it is
@@ -19,13 +34,16 @@ func scanForDeviceColorSpaces(ctx context.Context, doc *document.Document, csDic
 	// DECLARED but never referenced is not "used" and does not trip §6.2.4.3.
 	// veraPDF, the PDF/A reference validator, is usage-driven here, so keying
 	// off declarations produced false positives on real documents that carry
-	// unused DeviceGray entries in their resource dictionaries.
+	// unused DeviceGray entries in their resource dictionaries. A name a
+	// painted form selects that only the page's resources define (ISO
+	// 32000-1, 7.8.3) is referenced too, though the page's own content never
+	// names it.
 	usedNames := collectReferencedCSNames(ctx, doc, resources, referencedXObjects, contentCSNames)
 	for key, csObj := range csDict {
 		if ctx.Err() != nil {
 			return usage
 		}
-		if !usedNames[string(key)] {
+		if !usedNames[string(key)] && !scope.linkedByForms(ctx, doc, string(key)) {
 			continue
 		}
 		csName := resolveCSName(ctx, doc, csObj)

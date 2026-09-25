@@ -99,6 +99,7 @@ func formTooDeep(doc *document.Document, depth int) bool {
 //     6.2.4.3 t4 ten times, once per stream and twice for the first page's
 //     two uses, where litho failed them once per page, twelve times.
 func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages []pageCtx, part int, hasICC bool, iccColorSpace string, results *[]Violation) {
+	links := newColorSpaceLinkIndex(pages)
 	for i := range pages {
 		page := pages[i].dict
 		if ctx.Err() != nil {
@@ -135,7 +136,7 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 		if !pages[i].contentJudged {
 			contentCSUsed, referencedXObjects, contentCSNames, usedResourceKeys, inheritedCSAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
 
-			deviceCSUsed = scanForDeviceColorSpaces(ctx, doc, csDict, resources, referencedXObjects, usedResourceKeys, inheritedCSAtDo, part, contentCSNames)
+			deviceCSUsed = scanForDeviceColorSpaces(ctx, doc, csDict, resources, referencedXObjects, usedResourceKeys, inheritedCSAtDo, part, contentCSNames, pageScope(&pages[i], i, links))
 			deviceCSUsed.rgb = deviceCSUsed.rgb || contentCSUsed.rgb
 			deviceCSUsed.cmyk = deviceCSUsed.cmyk || contentCSUsed.cmyk
 			deviceCSUsed.gray = deviceCSUsed.gray || contentCSUsed.gray
