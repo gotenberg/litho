@@ -3,6 +3,7 @@ package remediation
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"sort"
@@ -35,6 +36,12 @@ const (
 	// DeviceN limit. Both caps mirror compliance.checkDeviceNCS, which raises
 	// the violation.
 	pdfA23DeviceNComponents = 32
+	// tilingPatternType is the /PatternType of a tiling pattern (ISO 32000-1,
+	// 8.7.3.1, Table 75), and uncolouredPaintType the /PaintType of one whose
+	// cell specifies no colour of its own (8.7.3.3). Both mirror the
+	// constants compliance's pattern walk reads.
+	tilingPatternType   = 1
+	uncolouredPaintType = 2
 )
 
 // matchAggressiveLimits matches implementation-limit violations that
@@ -283,19 +290,30 @@ func truncateDict(d ast.PdfDict) ast.PdfDict {
 }
 
 // trimDeviceNColorants caps the colourant names of every DeviceN colour space
-// a page's /Resources /ColorSpace dictionary declares at limit, keeping the
-// first limit. The tint-transform function won't be accurate for
-// the reduced component set; aggressive mode accepts that loss.
+// the validator's component-count check reaches at limit, keeping the first
+// limit. The tint-transform function won't be accurate for the reduced
+// component set; aggressive mode accepts that loss.
+//
+// The walk mirrors compliance.checkSeparationDeviceN, the only emitter of ISO
+// 19005-1 6.1.12 test 9 and ISO 19005-2/3 6.1.13 test 9: each page's
+// effective /Resources, inherited from an ancestor when the page states none
+// (ISO 32000-1, 7.7.3.4), and the appearance streams of its annotations. Below
+// a /Resources it reaches the /ColorSpace entries, the /ColorSpace of each
+// shading, the shading of each shading pattern and the /Resources of each
+// coloured tiling pattern and form XObject, recursively; see [deviceNTrim].
+// It trims every DeviceN space it reaches, where the validator judges the
+// page's own spaces only when content selects them: trimming a space nothing
+// paints with changes nothing rendered.
 //
 // Every level is read through the allocator and written back where it lives:
-// an indirect array at its own object number, an inline one into its
-// /ColorSpace dictionary, an inline /ColorSpace into its /Resources, and
-// inline /Resources into the page. aggressive-limits is the last registry
-// entry, so every colour-space writer precedes it: devicen rewrites DeviceN
-// arrays at their object numbers, and output-intent rewrites /Resources with
-// the /ColorSpace dictionary inlined, leaving the indirect one unused. A read
-// from the document there trims a dictionary the output no longer references.
-// A space counts as trimmed only when its write lands.
+// an indirect object at its own object number, an inline one into its parent,
+// up to the page or ancestor holding the /Resources. aggressive-limits is the
+// last registry entry, so every colour-space writer precedes it: devicen
+// rewrites DeviceN arrays at their object numbers, and output-intent rewrites
+// /Resources, form XObjects and patterns with the /ColorSpace dictionary
+// inlined, leaving the indirect one unused. A read from the document there
+// trims a dictionary the output no longer references. A space counts as
+// trimmed only when its write lands.
 //
 // # Corpus evidence
 //
@@ -305,6 +323,9 @@ func truncateDict(d ast.PdfDict) ast.PdfDict {
 //     colourants and their test 9 violation in aggressive mode. Trimmed,
 //     neither output draws test 9 from litho or veraPDF, and
 //     6-1-12-t09-fail-a.pdf passes veraPDF at PDF/A-1b.
+//   - All corpora: these two are the only files declaring a DeviceN space
+//     past 8 colourants anywhere, both at page level, so the walk below the
+//     page has no corpus reach.
 func trimDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, limit int) (int, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -321,55 +342,357 @@ func trimDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	var pageEntries []annotPageEntry
 	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool), 0)
 
-	count := 0
+	w := &deviceNTrim{alloc: alloc, doc: doc, limit: limit, visited: make(map[int]bool)}
 	for _, pe := range pageEntries {
+		if err := ctx.Err(); err != nil {
+			return w.count, err
+		}
+		w.pageResources(ctx, pe)
+		w.annotationAppearances(ctx, pe)
+	}
+	return w.count, ctx.Err()
+}
+
+// deviceNTrim carries the state of one [trimDeviceNColorants] walk. visited
+// holds the object number of every resource dictionary, form, pattern and
+// shading already walked, so a shared object is trimmed once and a cyclic
+// /Resources chain cannot loop. The recursion depth through forms and tiling
+// patterns is bounded by the document's form-nesting budget, the bound
+// compliance's formTooDeep applies to the walk this one mirrors.
+type deviceNTrim struct {
+	alloc   *writer.ObjAllocator
+	doc     *document.Document
+	limit   int
+	visited map[int]bool
+	count   int
+}
+
+// trimmed is what one level of a [deviceNTrim] walk hands its parent: the
+// value the parent holds, whether that value changed (an inline level the
+// parent must write into itself), and how many trimmed spaces the change
+// carries that no write has landed yet.
+type trimmed struct {
+	value   ast.PdfObject
+	changed bool
+	pending int
+}
+
+// unchanged is the [trimmed] of a level that needs no write.
+func unchanged(obj ast.PdfObject) trimmed {
+	return trimmed{value: obj}
+}
+
+// land writes value at obj's object number when obj is an indirect reference,
+// counting the pending spaces it carries, and otherwise hands value back for
+// the parent to hold inline.
+func (w *deviceNTrim) land(obj, value ast.PdfObject, pending int) trimmed {
+	if ref, ok := obj.(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 {
+		w.alloc.AllocAt(ref.ObjectNum, value)
+		w.count += pending
+		return unchanged(obj)
+	}
+	return trimmed{value: value, changed: true, pending: pending}
+}
+
+// firstVisit reports whether obj is an inline value or an indirect object the
+// walk has not reached yet, marking it.
+func (w *deviceNTrim) firstVisit(obj ast.PdfObject) bool {
+	ref, ok := obj.(ast.PdfIndirectRef)
+	if !ok {
+		return true
+	}
+	if w.visited[ref.ObjectNum] {
+		return false
+	}
+	w.visited[ref.ObjectNum] = true
+	return true
+}
+
+// pageResources trims the page's effective /Resources and writes an inline
+// one back into the page or ancestor that holds it. The inheritance walk
+// mirrors compliance.resolveInheritedResources: the nearest node, the page
+// first, whose /Resources is a dictionary.
+func (w *deviceNTrim) pageResources(ctx context.Context, pe annotPageEntry) {
+	owner, ownerRef := pe.dict, pe.ref
+	seen := make(map[int]bool)
+	for depth := 0; liveDictValue(ctx, w.alloc, w.doc, owner["Resources"]) == nil; depth++ {
+		parentRef, ok := owner["Parent"].(ast.PdfIndirectRef)
+		if !ok || parentRef.ObjectNum <= 0 || seen[parentRef.ObjectNum] || depth >= maxPageTreeDepth {
+			return
+		}
+		seen[parentRef.ObjectNum] = true
+		owner = resolveFromAllocOrDoc(ctx, w.alloc, w.doc, parentRef)
+		if owner == nil {
+			return
+		}
+		ownerRef = parentRef
+	}
+
+	t := w.resources(ctx, owner["Resources"], 0)
+	if !t.changed || ownerRef.ObjectNum <= 0 {
+		return
+	}
+	newOwner := maps.Clone(owner)
+	newOwner["Resources"] = t.value
+	w.land(ownerRef, newOwner, t.pending)
+}
+
+// annotationAppearances trims the /Resources of every appearance stream the
+// page's annotations carry under /N, /R and /D, as compliance's
+// checkSeparationDeviceN scans them. An appearance subdictionary is walked
+// state by state: its streams are indirect, so the annotation itself is never
+// rewritten.
+func (w *deviceNTrim) annotationAppearances(ctx context.Context, pe annotPageEntry) {
+	for _, annotObj := range liveArray(ctx, w.alloc, w.doc, pe.dict["Annots"]) {
 		if ctx.Err() != nil {
-			return count, ctx.Err()
+			return
 		}
-		resObj, ok := pe.dict["Resources"]
-		if !ok {
-			continue
-		}
-		resDict := liveDictValue(ctx, alloc, doc, resObj)
-		csObj, ok := resDict["ColorSpace"]
-		if !ok {
-			continue
-		}
-		csDict := liveDictValue(ctx, alloc, doc, csObj)
-		if csDict == nil {
-			continue
-		}
-		// Inline colour spaces accumulate: rebuilding the parent once per
-		// entry would keep only the last, the trap fixExtGStateDict records.
-		// Keyed by NAME, since an inline entry has no object number.
-		var inlineUpdates ast.PdfDict
-		for _, csName := range slices.Sorted(maps.Keys(csDict)) {
-			entry := csDict[csName]
-			newArr, trimmed := trimDeviceNArray(ctx, alloc, doc, entry, limit)
-			if !trimmed {
+		annot := liveDictValue(ctx, w.alloc, w.doc, annotObj)
+		ap := liveDictValue(ctx, w.alloc, w.doc, annot["AP"])
+		for _, key := range []ast.PdfName{"N", "R", "D"} {
+			entry, ok := ap[key]
+			if !ok {
 				continue
 			}
-			if ref, isRef := entry.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
-				alloc.AllocAt(ref.ObjectNum, newArr)
-				count++
+			if _, isStream := w.dictOrStream(ctx, entry); isStream {
+				w.formStream(ctx, entry, 0, false)
 				continue
 			}
-			if inlineUpdates == nil {
-				inlineUpdates = ast.PdfDict{}
+			states := liveDictValue(ctx, w.alloc, w.doc, entry)
+			for _, state := range slices.Sorted(maps.Keys(states)) {
+				w.formStream(ctx, states[state], 0, false)
 			}
-			inlineUpdates[csName] = newArr
-		}
-		if len(inlineUpdates) == 0 {
-			continue
-		}
-		newCS := make(ast.PdfDict, len(csDict))
-		maps.Copy(newCS, csDict)
-		maps.Copy(newCS, inlineUpdates)
-		if writePageColorSpace(alloc, pe, resObj, resDict, csObj, newCS) {
-			count += len(inlineUpdates)
 		}
 	}
-	return count, nil
+}
+
+// resources trims one /Resources dictionary: its /ColorSpace entries, and the
+// shadings, patterns and form XObjects it names.
+func (w *deviceNTrim) resources(ctx context.Context, obj ast.PdfObject, depth int) trimmed {
+	if ctx.Err() != nil || depth > w.doc.Limits().MaxFormDepth || !w.firstVisit(obj) {
+		return unchanged(obj)
+	}
+	res := liveDictValue(ctx, w.alloc, w.doc, obj)
+	if res == nil {
+		return unchanged(obj)
+	}
+
+	walks := []struct {
+		key  ast.PdfName
+		trim func(ast.PdfObject) trimmed
+	}{
+		{"ColorSpace", func(e ast.PdfObject) trimmed { return w.colorSpace(ctx, e) }},
+		{"Shading", func(e ast.PdfObject) trimmed { return w.shading(ctx, e) }},
+		{"Pattern", func(e ast.PdfObject) trimmed { return w.pattern(ctx, e, depth) }},
+		{"XObject", func(e ast.PdfObject) trimmed { return w.formStream(ctx, e, depth+1, true) }},
+	}
+	var updates ast.PdfDict
+	pending := 0
+	for _, walk := range walks {
+		sub, ok := res[walk.key]
+		if !ok {
+			continue
+		}
+		t := w.entries(ctx, sub, walk.trim)
+		if !t.changed {
+			continue
+		}
+		if updates == nil {
+			updates = ast.PdfDict{}
+		}
+		updates[walk.key] = t.value
+		pending += t.pending
+	}
+	if updates == nil {
+		return unchanged(obj)
+	}
+	newRes := maps.Clone(res)
+	maps.Copy(newRes, updates)
+	return w.land(obj, newRes, pending)
+}
+
+// entries applies trim to every value of one resource category dictionary, in
+// sorted name order. Inline results accumulate before the dictionary is
+// rebuilt once: rebuilding it per entry would keep only the last, the trap
+// fixExtGStateDict records.
+func (w *deviceNTrim) entries(ctx context.Context, obj ast.PdfObject, trim func(ast.PdfObject) trimmed) trimmed {
+	d := liveDictValue(ctx, w.alloc, w.doc, obj)
+	var updates ast.PdfDict
+	pending := 0
+	for _, name := range slices.Sorted(maps.Keys(d)) {
+		if ctx.Err() != nil {
+			break
+		}
+		t := trim(d[name])
+		if !t.changed {
+			continue
+		}
+		if updates == nil {
+			updates = ast.PdfDict{}
+		}
+		updates[name] = t.value
+		pending += t.pending
+	}
+	if updates == nil {
+		return unchanged(obj)
+	}
+	nd := maps.Clone(d)
+	maps.Copy(nd, updates)
+	return w.land(obj, nd, pending)
+}
+
+// colorSpace trims one colour space value when it is a DeviceN space past the
+// limit. An /Indexed space over a DeviceN base is left alone, as
+// compliance.checkSeparationDeviceNArray judges only its colorant
+// declarations there, never its component count, and its lookup table holds
+// one byte per base component (ISO 32000-1, 8.6.6.3), which a trim would
+// misread.
+func (w *deviceNTrim) colorSpace(ctx context.Context, entry ast.PdfObject) trimmed {
+	newArr, ok := trimDeviceNArray(ctx, w.alloc, w.doc, entry, w.limit)
+	if !ok {
+		return unchanged(entry)
+	}
+	return w.land(entry, newArr, 1)
+}
+
+// shading trims the /ColorSpace of one shading, a dictionary or, for types 4
+// to 7, a stream (ISO 32000-1, 8.7.4.5).
+func (w *deviceNTrim) shading(ctx context.Context, entry ast.PdfObject) trimmed {
+	if !w.firstVisit(entry) {
+		return unchanged(entry)
+	}
+	obj, isStream := w.dictOrStream(ctx, entry)
+	dict := dictOf(obj)
+	cs, ok := dict["ColorSpace"]
+	if !ok {
+		return unchanged(entry)
+	}
+	t := w.colorSpace(ctx, cs)
+	if !t.changed {
+		return unchanged(entry)
+	}
+	return w.rewrite(ctx, entry, obj, isStream, "ColorSpace", t)
+}
+
+// pattern trims one pattern. A shading pattern names its colour space on its
+// /Shading; a tiling pattern (ISO 32000-1, 8.7.3.3) paints its cell from its
+// own /Resources, walked one form level deeper. An uncoloured tiling pattern
+// (PaintType 2) is skipped, as compliance.scanSeparationInPatterns skips it:
+// its cell specifies no colour of its own.
+func (w *deviceNTrim) pattern(ctx context.Context, entry ast.PdfObject, depth int) trimmed {
+	if !w.firstVisit(entry) {
+		return unchanged(entry)
+	}
+	obj, isStream := w.dictOrStream(ctx, entry)
+	dict := dictOf(obj)
+	if dict == nil {
+		return unchanged(entry)
+	}
+	if !isStream {
+		sh, ok := dict["Shading"]
+		if !ok {
+			return unchanged(entry)
+		}
+		t := w.shading(ctx, sh)
+		if !t.changed {
+			return unchanged(entry)
+		}
+		return w.rewrite(ctx, entry, obj, false, "Shading", t)
+	}
+	patternType, _ := document.ResolveInt(ctx, w.doc, dict["PatternType"])
+	paintType, _ := document.ResolveInt(ctx, w.doc, dict["PaintType"])
+	if patternType != tilingPatternType || paintType == uncolouredPaintType {
+		return unchanged(entry)
+	}
+	t := w.resources(ctx, dict["Resources"], depth+1)
+	if !t.changed {
+		return unchanged(entry)
+	}
+	return w.rewrite(ctx, entry, obj, true, "Resources", t)
+}
+
+// formStream trims the /Resources of one form: a form XObject when
+// requireForm is set, where an image XObject is left alone, or an annotation
+// appearance stream. An image's DeviceN space is not judged for its component
+// count by compliance, and each sample carries one component per colourant
+// (ISO 32000-1, 8.9.5.2), so a trim would scramble the image.
+func (w *deviceNTrim) formStream(ctx context.Context, entry ast.PdfObject, depth int, requireForm bool) trimmed {
+	if !w.firstVisit(entry) {
+		return unchanged(entry)
+	}
+	obj, isStream := w.dictOrStream(ctx, entry)
+	if !isStream {
+		return unchanged(entry)
+	}
+	dict := dictOf(obj)
+	if requireForm {
+		if subtype, _ := document.ResolveName(ctx, w.doc, dict["Subtype"]); subtype != "Form" {
+			return unchanged(entry)
+		}
+	}
+	t := w.resources(ctx, dict["Resources"], depth)
+	if !t.changed {
+		return unchanged(entry)
+	}
+	return w.rewrite(ctx, entry, obj, true, "Resources", t)
+}
+
+// rewrite replaces key in the dictionary or stream obj that entry holds with
+// the changed child t and lands the copy. A stream keeps its raw body; one
+// whose body cannot be read is left as it is rather than written empty.
+func (w *deviceNTrim) rewrite(ctx context.Context, entry, obj ast.PdfObject, isStream bool, key ast.PdfName, t trimmed) trimmed {
+	nd := maps.Clone(dictOf(obj))
+	nd[key] = t.value
+	if !isStream {
+		return w.land(entry, nd, t.pending)
+	}
+	ref, isRef := entry.(ast.PdfIndirectRef)
+	if !isRef || ref.ObjectNum <= 0 {
+		return unchanged(entry)
+	}
+	stream, _ := obj.(ast.PdfStream)
+	raw, err := stream.Bytes(ctx)
+	if err != nil {
+		w.doc.Logger.Debug("remediation: skipping DeviceN trim, stream body read failed",
+			slog.Int("obj", ref.ObjectNum), slog.Any("err", err))
+		return unchanged(entry)
+	}
+	return w.land(entry, ast.NewStream(nd, raw), t.pending)
+}
+
+// dictOrStream returns the dictionary or stream entry names, read through the
+// allocator, and whether it is a stream. It returns nil for anything else.
+func (w *deviceNTrim) dictOrStream(ctx context.Context, entry ast.PdfObject) (ast.PdfObject, bool) {
+	obj := entry
+	if ref, ok := entry.(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 {
+		pending, isPending := w.alloc.Pending()[ref.ObjectNum]
+		if !isPending {
+			resolved, err := w.doc.Resolve(ctx, ref)
+			if err != nil {
+				return nil, false
+			}
+			pending = resolved
+		}
+		obj = pending
+	}
+	switch v := obj.(type) {
+	case ast.PdfStream:
+		return v, v.Dict != nil
+	case ast.PdfDict:
+		return v, false
+	}
+	return nil, false
+}
+
+// dictOf returns the dictionary of a dictionary or stream, or nil.
+func dictOf(obj ast.PdfObject) ast.PdfDict {
+	switch v := obj.(type) {
+	case ast.PdfStream:
+		return v.Dict
+	case ast.PdfDict:
+		return v
+	}
+	return nil
 }
 
 // trimDeviceNArray returns the DeviceN colour space entry, read through the
@@ -396,32 +719,4 @@ func trimDeviceNArray(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 	copy(newArr, arr)
 	newArr[1] = newNames
 	return newArr, true
-}
-
-// writePageColorSpace writes newCS where the page's /ColorSpace dictionary
-// lives: at its own object number, else into the /Resources it sits in, at the
-// /Resources object number or, when those are inline too, into the page.
-// resDict and pe.dict are the live dictionaries the caller read, so the copies
-// keep every earlier fixer's edit. Returns false when nothing addressable holds
-// the dictionary, a page without an object number.
-func writePageColorSpace(alloc *writer.ObjAllocator, pe annotPageEntry, resObj ast.PdfObject, resDict ast.PdfDict, csObj ast.PdfObject, newCS ast.PdfDict) bool {
-	if ref, ok := csObj.(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 {
-		alloc.AllocAt(ref.ObjectNum, newCS)
-		return true
-	}
-	newRes := make(ast.PdfDict, len(resDict))
-	maps.Copy(newRes, resDict)
-	newRes["ColorSpace"] = newCS
-	if ref, ok := resObj.(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 {
-		alloc.AllocAt(ref.ObjectNum, newRes)
-		return true
-	}
-	if pe.ref.ObjectNum == 0 {
-		return false
-	}
-	newPage := make(ast.PdfDict, len(pe.dict))
-	maps.Copy(newPage, pe.dict)
-	newPage["Resources"] = newRes
-	alloc.AllocAt(pe.ref.ObjectNum, newPage)
-	return true
 }
