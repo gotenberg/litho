@@ -9,44 +9,9 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/limits"
 )
-
-// validPDFOperators is the set of all operators defined in ISO 32000.
-//
-//nolint:gochecknoglobals // package-level lookup table for content stream validation.
-var validPDFOperators = map[string]bool{
-	// General graphics state.
-	"q": true, "Q": true, "cm": true, "w": true, "J": true, "j": true,
-	"M": true, "d": true, "ri": true, "i": true, "gs": true,
-	// Path construction.
-	"m": true, "l": true, "c": true, "v": true, "y": true, "h": true,
-	"re": true,
-	// Path painting.
-	"S": true, "s": true, "f": true, "F": true, "f*": true,
-	"B": true, "B*": true, "b": true, "b*": true, "n": true,
-	// Clipping.
-	"W": true, "W*": true,
-	// Color.
-	"CS": true, "cs": true, "SC": true, "SCN": true, "sc": true, "scn": true,
-	"G": true, "g": true, "RG": true, "rg": true, "K": true, "k": true,
-	// Text.
-	"BT": true, "ET": true, "Tc": true, "Tw": true, "Tz": true, "TL": true,
-	"Tf": true, "Tr": true, "Ts": true, "Td": true, "TD": true, "Tm": true,
-	"T*": true, "Tj": true, "TJ": true, "'": true, "\"": true,
-	// XObject.
-	"Do": true,
-	// Inline image.
-	"BI": true, "ID": true, "EI": true,
-	// Marked content.
-	"MP": true, "DP": true, "BMC": true, "BDC": true, "EMC": true,
-	// Compatibility.
-	"BX": true, "EX": true,
-	// Shading.
-	"sh": true,
-	// Type 3 font operators.
-	"d0": true, "d1": true,
-}
 
 // forbiddenInlineImageFilters lists filter names that are not permitted in
 // inline images for PDF/A conformance. ISO 19005-1 §6.1.10 forbids
@@ -142,7 +107,7 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 		}
 
 		// Check for unknown operators.
-		if !validPDFOperators[op.Operator] {
+		if !content.IsOperator(op.Operator) {
 			results = append(results, failf(unknownOperatorRule(part),
 				"page %d: operator %q", pageNum, op.Operator)...)
 		}

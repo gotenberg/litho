@@ -53,7 +53,7 @@ func matchUnknownOps(v compliance.Violation) bool {
 
 // unknownOpsTally counts what [fixUnknownOps] changed.
 type unknownOpsTally struct {
-	// removed counts operators outside [validOperators] that were stripped.
+	// removed counts operators outside [content.IsOperator] that were stripped.
 	removed int
 	// repaired counts malformed numbers folded back into their operator.
 	repaired int
@@ -67,7 +67,7 @@ func (t *unknownOpsTally) add(o unknownOpsTally) {
 	t.exponents += o.exponents
 }
 
-// fixUnknownOps strips operators absent from [validOperators] from every page
+// fixUnknownOps strips operators absent from [content.IsOperator] from every page
 // content stream, every Form XObject referenced through page Resources, and
 // every annotation appearance stream. Viewers ignore these tokens per
 // ISO 32000 §A.2, so removing a genuine one has no visible effect and only
@@ -125,7 +125,7 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // repairContentData repairs one content stream's decoded bytes: numbers
 // written with an exponent become plain numbers ([rewriteExponentNumbers]),
 // malformed numbers fold back into their operator ([repairMalformedNumbers]),
-// and operators outside [validOperators] go. It returns the bytes to write and
+// and operators outside [content.IsOperator] go. It returns the bytes to write and
 // what it changed; a zero tally means nothing is to be written. The bytes can
 // be empty: a stream holding nothing but undefined operators is written back
 // with none.
@@ -162,7 +162,7 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 		if op.Operator == "" || op.Operator == "BX" || op.Operator == "EX" {
 			continue
 		}
-		if !validOperators[op.Operator] {
+		if !content.IsOperator(op.Operator) {
 			ops[i].Operator = ""
 			t.removed++
 		}

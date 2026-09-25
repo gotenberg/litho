@@ -14,28 +14,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// validOperators is the set of PDF content stream operators defined in
-// ISO 32000-2, Tables 50-77.
-//
-//nolint:gochecknoglobals // constant lookup table
-var validOperators = map[string]bool{
-	"w": true, "J": true, "j": true, "M": true, "d": true, "ri": true, "i": true, "gs": true,
-	"q": true, "Q": true, "cm": true,
-	"m": true, "l": true, "c": true, "v": true, "y": true, "h": true, "re": true,
-	"S": true, "s": true, "f": true, "F": true, "f*": true, "B": true, "B*": true,
-	"b": true, "b*": true, "n": true, "W": true, "W*": true,
-	"BT": true, "ET": true,
-	"Tc": true, "Tw": true, "Tz": true, "TL": true, "Tf": true, "Tr": true, "Ts": true,
-	"Td": true, "TD": true, "Tm": true, "T*": true, "Tj": true, "TJ": true, "'": true, "\"": true,
-	"d0": true, "d1": true,
-	"CS": true, "cs": true, "SC": true, "SCN": true, "sc": true, "scn": true,
-	"G": true, "g": true, "RG": true, "rg": true, "K": true, "k": true,
-	"sh": true,
-	"BI": true, "ID": true, "EI": true,
-	"Do": true,
-	"MP": true, "DP": true, "BMC": true, "BDC": true, "EMC": true, "BX": true, "EX": true,
-}
-
 // matchAggressive matches violations that require content modification to fix.
 // These are only applied when PreserveContent is false.
 //
@@ -272,7 +250,7 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 				// Per ISO 19005-2 §6.2.2, undefined operators are
 				// forbidden even inside BX/EX compatibility brackets,
 				// so strip them wherever they appear.
-				if !validOperators[op.Operator] {
+				if !content.IsOperator(op.Operator) {
 					ops[i].Operator = ""
 					pageUnknown++
 					modified = true

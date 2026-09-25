@@ -399,7 +399,7 @@ func appearanceStreamObjects(ctx context.Context, doc *document.Document, apObj 
 }
 
 // checkAppearanceStreamOps parses one appearance stream, reports every operator
-// outside [validPDFOperators] and every number written with an exponent where
+// outside [content.IsOperator] and every number written with an exponent where
 // an operand stands (see [checkExponentOperands]), and reports the names it
 // references that no resource dictionary defines. hexStrings, when not nil,
 // judges the syntax of its hex strings from the same parse.
@@ -424,7 +424,7 @@ func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, strea
 		if idx%100 == 0 && ctx.Err() != nil {
 			return results
 		}
-		if op.Operator == "" || validPDFOperators[op.Operator] {
+		if op.Operator == "" || content.IsOperator(op.Operator) {
 			continue
 		}
 		results = append(results, failf(rule,
