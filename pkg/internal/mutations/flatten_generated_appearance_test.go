@@ -10,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // flattenDoc builds a one-page document carrying the given widget and returns
@@ -192,6 +193,9 @@ func TestParseDefaultAppearance(t *testing.T) {
 		{"/Helv 0 Tf 0 g", "Helv", 0, "0 g"},
 		{"0 0 1 rg /F1 11 Tf", "F1", 11, "0 0 1 rg"},
 		{"/F2 8 Tf 0 0 0 1 k", "F2", 8, "0 0 0 1 k"},
+		{"/Helv#20Bold 9 Tf 0 g", "Helv Bold", 9, "0 g"},
+		{"/F#231 9 Tf 0 g", "F#1", 9, "0 g"},
+		{"//Helvetica 12 Tf 0 g", "Helvetica", 12, "0 g"},
 		{"", "", 0, ""},
 	} {
 		font, size, colour := parseDefaultAppearance(tc.da)
@@ -199,6 +203,68 @@ func TestParseDefaultAppearance(t *testing.T) {
 			t.Errorf("parseDefaultAppearance(%q) = (%q, %v, %q), want (%q, %v, %q)",
 				tc.da, font, size, colour, tc.font, tc.size, tc.colour)
 		}
+	}
+}
+
+// TestTextFieldAppearanceSpellsTheFontName pins that the generated appearance
+// selects the /DR font its /DA names when that name needs escaping.
+//
+// A /DA is content-stream syntax (ISO 32000-1, 12.7.3.3), so "/Helv#20Bold"
+// names the /DR key "Helv Bold" (ISO 32000-1, 7.3.5). The name used to be kept
+// as spelled, which matched no /DR key and fell back to Helvetica, and once
+// decoded it has to be escaped again on the way out: written raw, "/Helv Bold
+// 9 Tf" gives Tf the operands Bold and 9 and selects no font.
+func TestTextFieldAppearanceSpellsTheFontName(t *testing.T) {
+	t.Parallel()
+
+	ctx, doc, alloc := flattenDoc(t,
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (Ada) /Rect [10 10 130 30] >>")
+	font := ast.PdfDict{"Type": ast.PdfName("Font"), "Subtype": ast.PdfName("Type1"), "BaseFont": ast.PdfName("Helvetica-Bold")}
+	catalog := ast.PdfDict{"AcroForm": ast.PdfDict{"DR": ast.PdfDict{"Font": ast.PdfDict{"Helv Bold": font}}}}
+	annot := ast.PdfDict{"DA": ast.PdfString("/Helv#20Bold 9 Tf 0 g")}
+
+	stream, ok := textFieldAppearance(ctx, doc, alloc, catalog, annot, nil, "Ada", 120, 20)
+	if !ok {
+		t.Fatal("no appearance was generated")
+	}
+	raw, err := stream.Bytes(ctx)
+	if err != nil {
+		t.Fatalf("reading the appearance: %v", err)
+	}
+	ops, err := content.ParseStreamData(ctx, raw)
+	if err != nil {
+		t.Fatalf("parsing the appearance %q: %v", raw, err)
+	}
+	var tf []ast.PdfObject
+	for _, op := range ops {
+		if op.Operator == "Tf" {
+			tf = op.Operands
+		}
+	}
+	if len(tf) != 2 || tf[0] != ast.PdfName("Helv Bold") {
+		t.Fatalf("the appearance %q selects the font with %v, want [/Helv#20Bold 9]", raw, tf)
+	}
+	res, _ := stream.Dict["Resources"].(ast.PdfDict)
+	fonts, _ := res["Font"].(ast.PdfDict)
+	if got, _ := fonts["Helv Bold"].(ast.PdfDict); got["BaseFont"] != ast.PdfName("Helvetica-Bold") {
+		t.Errorf("the appearance resources map Helv Bold to %v, want the /DR font", fonts["Helv Bold"])
+	}
+}
+
+// TestTextFieldAppearanceRefusesANullFontName pins the one font name no
+// spelling carries: ISO 32000-1, 7.3.5 excludes NUL from every name, so the
+// widget is kept rather than drawn through a name the writer refuses.
+func TestTextFieldAppearanceRefusesANullFontName(t *testing.T) {
+	t.Parallel()
+
+	ctx, doc, alloc := flattenDoc(t,
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /V (Ada) /Rect [10 10 130 30] >>")
+	font := ast.PdfDict{"Type": ast.PdfName("Font"), "Subtype": ast.PdfName("Type1"), "BaseFont": ast.PdfName("Helvetica")}
+	catalog := ast.PdfDict{"AcroForm": ast.PdfDict{"DR": ast.PdfDict{"Font": ast.PdfDict{"F\x001": font}}}}
+	annot := ast.PdfDict{"DA": ast.PdfString("/F#001 9 Tf 0 g")}
+
+	if _, ok := textFieldAppearance(ctx, doc, alloc, catalog, annot, nil, "Ada", 120, 20); ok {
+		t.Error("an appearance was generated through a font name holding NUL")
 	}
 }
 

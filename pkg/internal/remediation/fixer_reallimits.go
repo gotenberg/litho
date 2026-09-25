@@ -75,23 +75,28 @@ func fixRealLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			continue
 		}
 
-		modified := false
+		clampedOnPage := 0
 		for i := range ops {
 			for j, operand := range ops[i].Operands {
 				if clamped, changed := clampReal(operand); changed {
 					ops[i].Operands[j] = clamped
-					total++
-					modified = true
+					clampedOnPage++
 				}
 			}
 		}
-		if !modified {
+		if clampedOnPage == 0 {
 			continue
 		}
-		newData := serializeOps(ops)
+		newData, err := serializeOps(ops)
+		if err != nil {
+			doc.Logger.Debug("remediation: cannot rewrite a content stream for its out-of-range reals",
+				"page", pageNum+1, "error", err)
+			continue
+		}
 		if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
 			return nil, fmt.Errorf("replacing content stream on page %d: %w", pageNum+1, err)
 		}
+		total += clampedOnPage
 	}
 
 	// Sweep every indirect object's dict for scalar/array operands over

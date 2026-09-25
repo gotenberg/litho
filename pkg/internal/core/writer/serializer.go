@@ -116,6 +116,16 @@ func FormatReal(f float64) string {
 	return formatReal(f)
 }
 
+// SerializeName writes name to w in the spelling [Serialize] gives it and
+// returns the number of bytes written. Content-stream writers outside this
+// package serialise their operands one by one and need the same spelling: a
+// name written raw ends at its first white space or delimiter, and a "#" in it
+// reads back as the start of an escape (ISO 32000-1, 7.3.5). A name holding a
+// NUL byte fails with [ErrNameHoldsNull].
+func SerializeName(w io.Writer, name ast.PdfName) (int64, error) {
+	return serializeName(w, name)
+}
+
 // serializeName writes a PDF name with proper #XX hex-escaping for bytes
 // outside printable ASCII or PDF delimiter characters.
 //

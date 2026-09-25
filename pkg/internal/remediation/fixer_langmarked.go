@@ -110,7 +110,13 @@ func repairPageMarkedContentLangs(ctx context.Context, alloc *writer.ObjAllocato
 		return 0
 	}
 
-	if err := replaceContentStream(ctx, alloc, doc, contentsObj, serializeOps(ops), pageNum); err != nil {
+	newData, err := serializeOps(ops)
+	if err != nil {
+		doc.Logger.Debug("remediation: cannot rewrite content stream for marked-content /Lang",
+			"page", pageNum, "error", err)
+		return 0
+	}
+	if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum); err != nil {
 		doc.Logger.Debug("remediation: cannot rewrite content stream for marked-content /Lang",
 			"page", pageNum, "error", err)
 		return 0

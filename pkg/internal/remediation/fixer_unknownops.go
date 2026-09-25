@@ -137,7 +137,8 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // dictionary alone, and writing it back leaves "<< ... >> BI" with no ID, data
 // or EI, a content stream no reader can parse (ISO 32000-1, 8.9.7). Such a
 // stream keeps its operators and malformed numbers as a reported residual, as
-// [fixContentStreams] keeps them.
+// [fixContentStreams] keeps them. So does a stream holding a name with a NUL
+// byte, which [serializeOps] has no conforming spelling for.
 func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unknownOpsTally) {
 	var t unknownOpsTally
 	data, t.exponents = rewriteExponentNumbers(ctx, data, part)
@@ -169,7 +170,11 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 	if (t.removed == 0 && t.repaired == 0) || hasInlineImage {
 		return spliced()
 	}
-	return serializeOps(filterOps(ops)), t
+	out, err := serializeOps(filterOps(ops))
+	if err != nil {
+		return spliced()
+	}
+	return out, t
 }
 
 // stripUnknownFromStream repairs a page's live content (alloc-first, so an

@@ -30,7 +30,9 @@ func TestWriteOperand_DictIsOrdered(t *testing.T) {
 	var first string
 	for i := range 50 {
 		var buf bytes.Buffer
-		writeOperand(&buf, dict)
+		if err := writeOperand(&buf, dict); err != nil {
+			t.Fatalf("writeOperand: %v", err)
+		}
 		got := buf.String()
 		if i == 0 {
 			first = got
@@ -62,9 +64,12 @@ func TestSerializeOps_Stable(t *testing.T) {
 		{Operator: "EMC"},
 	}
 
-	first := serializeOps(ops)
+	first, err := serializeOps(ops)
+	if err != nil {
+		t.Fatalf("serializeOps: %v", err)
+	}
 	for range 50 {
-		if got := serializeOps(ops); !bytes.Equal(got, first) {
+		if got, _ := serializeOps(ops); !bytes.Equal(got, first) {
 			t.Fatalf("serializeOps is not stable:\n  %s\n  %s", first, got)
 		}
 	}

@@ -294,15 +294,17 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 			continue
 		}
 
-		totalRI += pageRI
-		totalUnknown += pageUnknown
-
-		filtered := filterOps(ops)
-		newData := serializeOps(filtered)
-
+		newData, err := serializeOps(filterOps(ops))
+		if err != nil {
+			doc.Logger.Debug("remediation: cannot rewrite a content stream for its operators",
+				"page", pageNum+1, "error", err)
+			continue
+		}
 		if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
 			return nil, err
 		}
+		totalRI += pageRI
+		totalUnknown += pageUnknown
 	}
 
 	var fixes []string
@@ -333,14 +335,21 @@ func filterOps(ops []content.Operation) []content.Operation {
 	return result
 }
 
-func serializeOps(ops []content.Operation) []byte {
+// serializeOps writes ops back as content-stream syntax, one operation per
+// line. It fails, writing nothing, when an operand has no conforming
+// spelling: a name holding a NUL byte, which ISO 32000-1, 7.3.5 excludes from
+// every name ([writer.ErrNameHoldsNull]). A caller leaves that stream as it
+// was.
+func serializeOps(ops []content.Operation) ([]byte, error) {
 	var buf bytes.Buffer
 	for _, op := range ops {
 		for i, operand := range op.Operands {
 			if i > 0 {
 				buf.WriteByte(' ')
 			}
-			writeOperand(&buf, operand)
+			if err := writeOperand(&buf, operand); err != nil {
+				return nil, fmt.Errorf("writing an operand of %q: %w", op.Operator, err)
+			}
 		}
 		if len(op.Operands) > 0 {
 			buf.WriteByte(' ')
@@ -348,16 +357,31 @@ func serializeOps(ops []content.Operation) []byte {
 		buf.WriteString(op.Operator)
 		buf.WriteByte('\n')
 	}
-	return buf.Bytes()
+	return buf.Bytes(), nil
 }
 
 // writeOperand serialises one content-stream operand into buf in PDF syntax.
+//
+// A name, a dictionary key included, is spelled by [writer.SerializeName],
+// which escapes every byte ISO 32000-1, 7.3.5 does not let a name carry as
+// itself: white space, a delimiter, the "#" that starts an escape, and every
+// byte outside 0x21 to 0x7E. The lexer decodes those escapes on the way in, so
+// writing the decoded bytes back raw changed the operand. "/Font#20A Tf" came
+// back as the name Font, a keyword A and a Tf short an operand.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue11678.pdf: formatting reals with %g, an aggressive content
 //     rewrite turned 5 violations into 64.
-func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) {
+//   - All corpora: 53 files hold a name that needs escaping in page or form
+//     content, most of them marked-content tags holding a space, such as
+//     "Table Contents" and "Text body". No NUL is among them.
+//   - pdfjs poppler-90-0-fuzzed.pdf: the one of them whose content a PDF/A-1b
+//     or PDF/A-2b rewrite reaches, default or aggressive. Its name holds the
+//     bytes 0x03, 0x92 and 0xE3, which read back the same when written raw,
+//     and is now spelled with escapes: the operators parse the same, and
+//     litho and veraPDF report the same on the output.
+func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) error {
 	switch v := obj.(type) {
 	case ast.PdfInt:
 		fmt.Fprintf(buf, "%d", int64(v))
@@ -366,8 +390,9 @@ func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) {
 		// ISO 32000-1, 7.3.3 forbids in a PDF real.
 		buf.WriteString(writer.FormatReal(float64(v)))
 	case ast.PdfName:
-		buf.WriteByte('/')
-		buf.WriteString(string(v))
+		if _, err := writer.SerializeName(buf, v); err != nil {
+			return err
+		}
 	case ast.PdfString:
 		buf.WriteByte('(')
 		for _, b := range []byte(v) {
@@ -402,7 +427,9 @@ func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) {
 			if i > 0 {
 				buf.WriteByte(' ')
 			}
-			writeOperand(buf, elem)
+			if err := writeOperand(buf, elem); err != nil {
+				return err
+			}
 		}
 		buf.WriteByte(']')
 	case ast.PdfDict:
@@ -412,15 +439,20 @@ func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) {
 		// /Subtype" one run and "/Type /Subtype /Attached" the next.
 		buf.WriteString("<<")
 		for _, k := range slices.Sorted(maps.Keys(v)) {
-			buf.WriteString(" /")
-			buf.WriteString(string(k))
 			buf.WriteByte(' ')
-			writeOperand(buf, v[k])
+			if _, err := writer.SerializeName(buf, k); err != nil {
+				return err
+			}
+			buf.WriteByte(' ')
+			if err := writeOperand(buf, v[k]); err != nil {
+				return err
+			}
 		}
 		buf.WriteString(">>")
 	default:
 		fmt.Fprintf(buf, "%v", obj)
 	}
+	return nil
 }
 
 func replaceContentStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, contentsObj ast.PdfObject, newData []byte, pageNum int) error {

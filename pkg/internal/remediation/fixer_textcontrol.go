@@ -62,12 +62,16 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		if !modified {
 			continue
 		}
-		total += removed
-		filtered := filterOps(ops)
-		newData := serializeOps(filtered)
+		newData, err := serializeOps(filterOps(ops))
+		if err != nil {
+			doc.Logger.Debug("remediation: cannot rewrite a content stream for its control bytes",
+				"page", pageNum+1, "error", err)
+			continue
+		}
 		if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
 			return nil, fmt.Errorf("replacing content stream on page %d: %w", pageNum+1, err)
 		}
+		total += removed
 	}
 	if total == 0 {
 		return nil, nil

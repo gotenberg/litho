@@ -96,7 +96,13 @@ func repairPageHexStrings(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	if !hasMalformedHexViolation(violations) {
 		return false
 	}
-	if err := replaceContentStream(ctx, alloc, doc, contentsObj, serializeOps(ops), pageNum); err != nil {
+	newData, err := serializeOps(ops)
+	if err != nil {
+		doc.Logger.Debug("remediation: cannot rewrite a content stream for an odd-digit hex string",
+			"page", pageNum, "error", err)
+		return false
+	}
+	if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum); err != nil {
 		doc.Logger.Debug("remediation: cannot rewrite a content stream for an odd-digit hex string",
 			"page", pageNum, "error", err)
 		return false

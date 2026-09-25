@@ -18,7 +18,10 @@ func roundTripOperand(t *testing.T, in []byte) []byte {
 		Operator: "Tj",
 		Operands: []ast.PdfObject{ast.PdfString(in)},
 	}}
-	data := serializeOps(ops)
+	data, err := serializeOps(ops)
+	if err != nil {
+		t.Fatalf("serializeOps: %v", err)
+	}
 
 	parsed, err := content.ParseStreamData(context.Background(), data)
 	if err != nil {

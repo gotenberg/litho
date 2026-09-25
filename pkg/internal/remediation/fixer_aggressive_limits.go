@@ -193,7 +193,12 @@ func flattenGraphicsStack(ctx context.Context, alloc *writer.ObjAllocator, doc *
 			continue
 		}
 		clipped := clipQNesting(ops, pdfAGraphicsDepth)
-		newData := serializeOps(clipped)
+		newData, err := serializeOps(clipped)
+		if err != nil {
+			doc.Logger.Debug("remediation: cannot rewrite a content stream for its q nesting",
+				"page", pageNum+1, "error", err)
+			continue
+		}
 		if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
 			return count, fmt.Errorf("replacing content stream on page %d: %w", pageNum+1, err)
 		}

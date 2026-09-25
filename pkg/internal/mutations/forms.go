@@ -14,6 +14,8 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/ioat"
+	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
@@ -1090,9 +1092,20 @@ func textFieldAppearance(
 	}
 	baseline += size * baselineDescenderRatio
 
-	body := fmt.Sprintf("/Tx BMC\nq\nBT\n%s\n/%s %s Tf\n%s %s Td\n%s Tj\nET\nQ\nEMC\n",
+	// The font name comes from the document's /DA, so it is spelled by the
+	// writer: written raw, a name holding white space, a delimiter or a "#"
+	// reads back as another name (ISO 32000-1, 7.3.5), and the Tf selects no
+	// font. One holding a NUL has no spelling at all, and the widget stays.
+	var fontOperand bytes.Buffer
+	if _, err := writer.SerializeName(&fontOperand, ast.PdfName(resourceName)); err != nil {
+		doc.Logger.Debug("widget /DA names a font with no PDF spelling, keeping the annotation",
+			slog.Any("err", err))
+		return ast.PdfStream{}, false
+	}
+
+	body := fmt.Sprintf("/Tx BMC\nq\nBT\n%s\n%s %s Tf\n%s %s Td\n%s Tj\nET\nQ\nEMC\n",
 		colourOps,
-		resourceName,
+		fontOperand.String(),
 		formatFloat(size),
 		formatFloat(textInsetX),
 		formatFloat(baseline),
@@ -1177,13 +1190,15 @@ func appearanceFont(
 //
 // The colour is whatever precedes the g, rg or k operator, so a /DA stating a
 // grey, RGB or CMYK fill is carried across unchanged.
+//
+// The font name is returned decoded ([daFontName]), as the /DR key it names is.
 func parseDefaultAppearance(da string) (fontName string, size float64, colourOps string) {
 	tokens := strings.Fields(da)
 	for i, tok := range tokens {
 		switch tok {
 		case "Tf":
 			if i >= 2 {
-				fontName = strings.TrimPrefix(tokens[i-2], "/")
+				fontName = daFontName(tokens[i-2])
 				if v, err := strconv.ParseFloat(tokens[i-1], 64); err == nil {
 					size = v
 				}
@@ -1196,6 +1211,40 @@ func parseDefaultAppearance(da string) (fontName string, size float64, colourOps
 		}
 	}
 	return fontName, size, colourOps
+}
+
+// daFontName decodes the name a /DA writes before its Tf. A /DA holds
+// content-stream operators (ISO 32000-1, 12.7.3.3), so its font name is a name
+// object whose "#" escapes the lexer decodes (ISO 32000-1, 7.3.5), and the /DR
+// font dictionary it selects from is keyed by the decoded name: "/Helv#20Bold"
+// names the key "Helv Bold".
+//
+// The token is split at white space only, so it can hold more than one name:
+// "//Helvetica" is the empty name and the name Helvetica, and Tf takes the one
+// next to its size. The last name in the token is therefore the font. A token
+// holding no name keeps its spelling, less a leading solidus.
+//
+// # Corpus evidence
+//
+//   - All corpora: 13 files write a /DA font token this changes, each a
+//     "//Helvetica" style run on an annotation flattening does not draw, so
+//     flattening them writes the same content.
+func daFontName(tok string) string {
+	lex := lexer.NewLexer(ioat.NewReader(strings.NewReader(tok), int64(len(tok)), 0))
+	name, found := "", false
+	for range len(tok) {
+		t, err := lex.NextToken()
+		if err != nil || t.Type == lexer.TokenEOF {
+			break
+		}
+		if t.Type == lexer.TokenName {
+			name, found = strings.TrimPrefix(t.Value, "/"), true
+		}
+	}
+	if !found {
+		return strings.TrimPrefix(tok, "/")
+	}
+	return name
 }
 
 // colourOperandCount returns how many numbers a fill-colour operator takes.

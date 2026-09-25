@@ -81,7 +81,12 @@ func fixStringLimit(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 			if !modified {
 				continue
 			}
-			newData := serializeOps(ops)
+			newData, err := serializeOps(ops)
+			if err != nil {
+				doc.Logger.Debug("remediation: cannot rewrite a content stream for its long strings",
+					"page", pageNum+1, "error", err)
+				continue
+			}
 			if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
 				return nil, fmt.Errorf("replacing content stream on page %d: %w", pageNum+1, err)
 			}
