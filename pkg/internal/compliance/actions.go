@@ -138,10 +138,24 @@ var allowedAAKeys = map[ast.PdfName]bool{
 	"Bl": true,
 }
 
-// maxActionChainDepth limits traversal of /Next action chains to prevent
-// infinite loops from circular references. Anti-DoS guard, not spec-mandated:
-// action chains can be long in complex interactive documents, so 200 provides
-// headroom.
+// maxActionChainDepth bounds how deep [walkActionChain] follows the /Next tree
+// of one action (ISO 32000-1, 12.6.2, Table 193), which it walks recursively.
+// Anti-DoS guard, not spec-mandated: the spec puts no length on a chain, and a
+// crafted one of direct dictionaries nested thousands deep would otherwise grow
+// the goroutine stack with it. Fan-out needs no cap of its own: the run judges
+// each action object once ([objectJudgedOnce]), so a /Next array that repeats
+// an action, or a chain that loops back on itself, adds no work, and the direct
+// dictionaries a chain can hold are bounded by the file's size. Action chains
+// in real documents are a few actions long, so 200 leaves ample headroom.
+//
+// The outline and form-field walks reuse the value as their own depth bound,
+// and remediation's action-chain splice descends as deep (its
+// maxActionChainDepth), so it cuts every action this walk judges.
+//
+// # Corpus evidence
+//
+//   - All corpora: 5 files hold an action with /Next.
+//   - pdfjs bug1737260.pdf: holds the longest chain, 6 actions.
 const maxActionChainDepth = 200
 
 // checkActionGroup validates action restrictions for PDF/A (§6.6.1, §6.6.2,
@@ -162,18 +176,18 @@ func checkActionGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	results := make([]Violation, 0, 8)
 
+	// One action object is judged once, however many parents or /Next arrays
+	// reach it; see objectJudgedOnce.
+	judged := make(map[int]bool)
+
 	// Check catalog /OpenAction.
-	results = append(results, checkCatalogOpenAction(ctx, doc, catalog, profile, part)...)
+	results = append(results, checkCatalogOpenAction(ctx, doc, catalog, profile, part, judged)...)
 
 	// Check catalog /AA.
-	results = append(results, checkCatalogAA(ctx, doc, catalog, profile, part)...)
+	results = append(results, checkCatalogAA(ctx, doc, catalog, profile, part, judged)...)
 
 	// Check page /AA dicts.
-	results = append(results, checkPageActions(ctx, doc, catalog, profile, part)...)
-
-	// One action object is judged once, however many parents reach it; see
-	// objectJudgedOnce.
-	judged := make(map[int]bool)
+	results = append(results, checkPageActions(ctx, doc, catalog, profile, part, judged)...)
 
 	// Check annotation /A and /AA.
 	results = append(results, checkAnnotationActions(ctx, doc, catalog, profile, part, judged)...)
@@ -182,7 +196,7 @@ func checkActionGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	results = append(results, checkJavaScriptNameTree(ctx, doc, catalog, profile, part)...)
 
 	// Check outline (bookmark) actions.
-	results = append(results, checkOutlineActions(ctx, doc, catalog, profile, part)...)
+	results = append(results, checkOutlineActions(ctx, doc, catalog, profile, part, judged)...)
 
 	// Check AcroForm field actions.
 	results = append(results, checkFormFieldActions(ctx, doc, catalog, profile, part, judged)...)
@@ -192,19 +206,15 @@ func checkActionGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 // checkCatalogOpenAction checks the catalog /OpenAction entry for forbidden
 // action types and invalid named actions.
-func checkCatalogOpenAction(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
+func checkCatalogOpenAction(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, judged map[int]bool) []Violation {
 	openAction, ok := catalog["OpenAction"]
 	if !ok {
 		return nil
 	}
 
-	// /OpenAction may be an array (destination) or a dict (action).
-	actionDict, err := document.ResolveDict(ctx, doc, openAction)
-	if err != nil || actionDict == nil {
-		return nil
-	}
-
-	return walkActionChain(ctx, doc, actionDict, profile, part, "catalog /OpenAction", 0, make(map[int]bool))
+	// /OpenAction may be an array (destination) or a dict (action); judgeAction
+	// judges only a dictionary.
+	return judgeAction(ctx, doc, openAction, profile, part, "catalog /OpenAction", judged)
 }
 
 // checkCatalogAA checks the catalog /AA dictionary.
@@ -214,7 +224,7 @@ func checkCatalogOpenAction(ctx context.Context, doc *document.Document, catalog
 //   - verapdf 6-5-2-t01-fail-b.pdf: its catalog /AA/WS holds a JavaScript action,
 //     and veraPDF reports both §6.6.1 t1 for the action and §6.6.2 t3 for the
 //     dictionary.
-func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
+func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, judged map[int]bool) []Violation {
 	// veraPDF's PDDocument containsAA is a knownKey test: an /AA written as null
 	// is absent (ISO 32000-1, 7.3.7), one naming any object is present. Measured.
 	if !knownKey(catalog, "AA") {
@@ -251,13 +261,13 @@ func checkCatalogAA(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	}
 
 	// Walk the actions under the catalog's trigger events for forbidden types.
-	results = append(results, walkAATriggers(ctx, doc, aaDict, catalogAATriggers, profile, part, "catalog", nil)...)
+	results = append(results, walkAATriggers(ctx, doc, aaDict, catalogAATriggers, profile, part, "catalog", judged)...)
 
 	return results
 }
 
 // checkPageActions checks /AA dicts on all pages.
-func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
+func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, judged map[int]bool) []Violation {
 	pages := collectPages(ctx, doc, catalog)
 
 	var results []Violation
@@ -297,7 +307,7 @@ func checkPageActions(ctx context.Context, doc *document.Document, catalog ast.P
 		}
 
 		// Walk the actions under the page's trigger events for forbidden types.
-		results = append(results, walkAATriggers(ctx, doc, aaDict, pageAATriggers, profile, part, fmt.Sprintf("page %d", i+1), nil)...)
+		results = append(results, walkAATriggers(ctx, doc, aaDict, pageAATriggers, profile, part, fmt.Sprintf("page %d", i+1), judged)...)
 	}
 
 	return results
@@ -328,16 +338,30 @@ func walkAATriggers(ctx context.Context, doc *document.Document, aaDict ast.PdfD
 		if ctx.Err() != nil {
 			return results
 		}
-		if !slices.Contains(triggers, key) || objectJudgedOnce(aaDict[key], judged) {
+		if !slices.Contains(triggers, key) {
 			continue
 		}
-		actionDict, err := document.ResolveDict(ctx, doc, aaDict[key])
-		if err != nil || actionDict == nil {
-			continue
-		}
-		results = append(results, walkActionChain(ctx, doc, actionDict, profile, part, fmt.Sprintf("%s /AA/%s", location, key), 0, make(map[int]bool))...)
+		results = append(results, judgeAction(ctx, doc, aaDict[key], profile, part, fmt.Sprintf("%s /AA/%s", location, key), judged)...)
 	}
 	return results
+}
+
+// judgeAction judges the action obj holds, and every action its /Next tree
+// reaches, for a forbidden type, unless an action object was judged already
+// under another parent. A value that is not a dictionary, such as a
+// destination array under /OpenAction, holds no action.
+func judgeAction(ctx context.Context, doc *document.Document, obj ast.PdfObject, profile string, part int, location string, judged map[int]bool) []Violation {
+	if judged == nil {
+		judged = make(map[int]bool)
+	}
+	if objectJudgedOnce(obj, judged) {
+		return nil
+	}
+	action, err := document.ResolveDict(ctx, doc, obj)
+	if err != nil || action == nil {
+		return nil
+	}
+	return walkActionChain(ctx, doc, action, profile, part, location, 0, judged)
 }
 
 // checkAnnotationActions checks /A and /AA entries on all annotations across
@@ -381,10 +405,7 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 
 			if !isWidget {
 				if aObj, hasA := annotDict["A"]; hasA {
-					aDict, err := document.ResolveDict(ctx, doc, aObj)
-					if err == nil && aDict != nil {
-						results = append(results, walkActionChain(ctx, doc, aDict, profile, part, location+" /A", 0, make(map[int]bool))...)
-					}
+					results = append(results, judgeAction(ctx, doc, aObj, profile, part, location+" /A", judged)...)
 				}
 			}
 
@@ -400,7 +421,7 @@ func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog
 						results = append(results, checkAAKeyRestrictions(ctx, doc, aaDict, location)...)
 					}
 
-					results = append(results, walkAATriggers(ctx, doc, aaDict, annotAATriggers, profile, part, location, nil)...)
+					results = append(results, walkAATriggers(ctx, doc, aaDict, annotAATriggers, profile, part, location, judged)...)
 				}
 			}
 		}
@@ -451,11 +472,8 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 	// Walk widget /A action chain for forbidden types (when /A is present and
 	// not already flagged as structurally forbidden). Type violations still
 	// fire for completeness.
-	if hasA && !objectJudgedOnce(annotDict["A"], judged) {
-		aDict, err := document.ResolveDict(ctx, doc, annotDict["A"])
-		if err == nil && aDict != nil {
-			results = append(results, walkActionChain(ctx, doc, aDict, profile, part, location+" /A", 0, make(map[int]bool))...)
-		}
+	if hasA {
+		results = append(results, judgeAction(ctx, doc, annotDict["A"], profile, part, location+" /A", judged)...)
 	}
 
 	// Walk widget /AA action chains for forbidden types. In part 4, widget
@@ -490,11 +508,19 @@ func checkWidgetActions(ctx context.Context, doc *document.Document, annotDict a
 // Only an indirect action can be shared, so a direct dictionary is always
 // judged: it belongs to the one parent that spells it out.
 //
+// veraPDF keeps one set of the indirect objects it has visited for the whole
+// validation run, so the rule holds across every action site: an action that
+// an annotation's /A and another action's /Next both reach is judged once,
+// and a /Next cycle ends when it comes back to an action already judged.
+//
 // # Corpus evidence
 //
 //   - pdfjs 160F-2019.pdf: drew 117 findings from litho against 54 from
 //     veraPDF, split exactly 57 and 57 between the two paths over the same 42
 //     merged dictionaries.
+//   - pdfjs issue18030.pdf: four link annotations share one GoToE action, and
+//     at PDF/A-1b litho reported it four times against veraPDF's once while
+//     only widgets and form fields shared the set.
 func objectJudgedOnce(obj ast.PdfObject, judged map[int]bool) bool {
 	ref, ok := obj.(ast.PdfIndirectRef)
 	if !ok || judged == nil {
@@ -508,11 +534,23 @@ func objectJudgedOnce(obj ast.PdfObject, judged map[int]bool) bool {
 }
 
 // walkActionChain recursively checks an action dict and its /Next chain for
-// forbidden action types and invalid named actions. visited records the object
-// numbers of actions already walked: a crafted /Next cycle would otherwise
-// recurse to the depth cap on every entry point, and a /Next array that lists
+// forbidden action types and invalid named actions. ISO 32000-1, 12.6.2, Table
+// 193 lets /Next hold one action dictionary or an array of them, performed
+// after this one, so the actions form a tree and every action in it is an
+// action the document performs: ISO 19005-1 6.6.1 and ISO 19005-2/3 6.5.1
+// restrict each of them, and veraPDF links every /Next entry that is a
+// dictionary as a PDAction of its own. judged records the object numbers of
+// actions already walked in this run (see [objectJudgedOnce]): a crafted /Next
+// cycle would otherwise recurse to the depth cap, and a /Next array that lists
 // the same action repeatedly would fan out 2^depth (a denial of service).
-func walkActionChain(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int, location string, depth int, visited map[int]bool) []Violation {
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20914.pdf: 503 outline items hold a GoTo action whose /Next
+//     is a JavaScript action. veraPDF reports all 503 under ISO 19005-1 6.6.1
+//     test 1 and ISO 19005-2 6.5.1 test 1, and litho reported none while the
+//     outline walk judged the first action alone.
+func walkActionChain(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int, location string, depth int, judged map[int]bool) []Violation {
 	if ctx.Err() != nil || depth > maxActionChainDepth {
 		return nil
 	}
@@ -546,17 +584,14 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 	// Recurse into one /Next action, skipping any action object already walked
 	// so a cyclic or repeated /Next cannot loop forever or fan out.
 	walkNext := func(obj ast.PdfObject, loc string) {
-		if ref, ok := obj.(ast.PdfIndirectRef); ok {
-			if visited[ref.ObjectNum] {
-				return
-			}
-			visited[ref.ObjectNum] = true
+		if objectJudgedOnce(obj, judged) {
+			return
 		}
 		d, err := document.ResolveDict(ctx, doc, obj)
 		if err != nil || d == nil {
 			return
 		}
-		results = append(results, walkActionChain(ctx, doc, d, profile, part, loc, depth+1, visited)...)
+		results = append(results, walkActionChain(ctx, doc, d, profile, part, loc, depth+1, judged)...)
 	}
 
 	// /Next can be a single action dict or an array of action dicts.
@@ -635,7 +670,7 @@ func checkJavaScriptNameTree(ctx context.Context, doc *document.Document, catalo
 
 // checkOutlineActions walks the document outline (bookmarks) and checks
 // /A entries on outline items for forbidden action types.
-func checkOutlineActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
+func checkOutlineActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, judged map[int]bool) []Violation {
 	outlinesObj, ok := catalog["Outlines"]
 	if !ok {
 		return nil
@@ -647,7 +682,7 @@ func checkOutlineActions(ctx context.Context, doc *document.Document, catalog as
 	}
 
 	var results []Violation
-	walkOutlineItems(ctx, doc, outlines["First"], profile, part, &results, 0, make(map[int]bool))
+	walkOutlineItems(ctx, doc, outlines["First"], profile, part, &results, 0, make(map[int]bool), judged)
 	return results
 }
 
@@ -656,8 +691,9 @@ func checkOutlineActions(ctx context.Context, doc *document.Document, catalog as
 // visited tracks resolved item object numbers across the whole walk: outline
 // items form a linked list, and a crafted /Next or /First cycle would
 // otherwise recurse forever. Stack exhaustion is not recoverable in Go, so
-// the cycle must be broken here, not at the pkg/pdf recover boundary.
-func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, profile string, part int, results *[]Violation, depth int, visited map[int]bool) {
+// the cycle must be broken here, not at the pkg/pdf recover boundary. judged
+// is the run's set of action objects already judged ([objectJudgedOnce]).
+func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, profile string, part int, results *[]Violation, depth int, visited, judged map[int]bool) {
 	if depth > maxActionChainDepth {
 		return
 	}
@@ -684,63 +720,21 @@ func walkOutlineItems(ctx context.Context, doc *document.Document, itemObj ast.P
 			return
 		}
 
-		// Check /A action on this outline item.
-		// For PDF/A, outline items are user-initiated (not automatic triggers).
-		// The spec restricts certain action types in /AA (additional actions)
-		// but outline /A is explicit user interaction, so it carries the
-		// per-profile action-type whitelist via the outline-specific handling
-		// below rather than the /AA key restrictions.
+		// The action-type whitelist of ISO 19005-1 6.6.1 and ISO 19005-2/3
+		// 6.5.1 applies to every action, outline /A included: the spec grants
+		// outlines no exemption, and the /Next tree is walked as for any other
+		// action site. veraPDF links any dictionary under an outline item's /A
+		// as a PDAction (PDOutlineItem.getAction), so the walk does not ask
+		// for an /S first; walkActionChain judges only a present /S.
 		if aObj, hasA := item["A"]; hasA {
-			aDict, err := document.ResolveDict(ctx, doc, aObj)
-			if err == nil && aDict != nil {
-				// Verify it's actually an action (has /S key), not a destination.
-				if _, hasS := aDict["S"]; hasS {
-					if IsPDFUA(profile) {
-						violations := walkActionChain(ctx, doc, aDict, profile, part, "outline item", 0, make(map[int]bool))
-						*results = append(*results, violations...)
-					} else {
-						// PDF/A: check with outline-specific exemptions.
-						violations := checkOutlineActionPDFA(ctx, doc, aDict, profile, part)
-						*results = append(*results, violations...)
-					}
-				}
-			}
+			*results = append(*results, judgeAction(ctx, doc, aObj, profile, part, "outline item", judged)...)
 		}
 
 		// Recurse into children; siblings continue the loop.
-		walkOutlineItems(ctx, doc, item["First"], profile, part, results, depth+1, visited)
+		walkOutlineItems(ctx, doc, item["First"], profile, part, results, depth+1, visited, judged)
 
 		itemObj = item["Next"]
 	}
-}
-
-// checkOutlineActionPDFA checks an outline item action for PDF/A against the
-// per-profile action-type whitelist.
-func checkOutlineActionPDFA(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int) []Violation {
-	actionType, _ := document.ResolveName(ctx, doc, action["S"])
-	if actionType == "" {
-		return nil
-	}
-
-	var results []Violation
-
-	// The §6.6.1/§6.5.1 t1 action-type whitelist applies to every PDAction
-	// site, including outline /A actions: the spec grants no outline exemption.
-	if isForbiddenAction(actionType, profile) {
-		rule := forbiddenActionTypeRule(part)
-		results = append(results, failf(rule, "%s at outline item", actionType)...)
-	}
-
-	// Also check named actions (§6.6.1 test 2 / §6.5.1 test 2).
-	if actionType == "Named" {
-		actionName, _ := document.ResolveName(ctx, doc, action["N"])
-		if actionName != "" && !AllowedNamedActions[actionName] {
-			rule := namedActionRule(part)
-			results = append(results, failf(rule, "%s at outline item", actionName)...)
-		}
-	}
-
-	return results
 }
 
 // checkFormFieldActions walks the AcroForm /Fields array and checks form field

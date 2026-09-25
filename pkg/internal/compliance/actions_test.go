@@ -59,7 +59,7 @@ func TestCheckPageActions_ForbiddenAAStillChecksActionTypes(t *testing.T) {
 		"<< /Type /Action /S /Named /N /ShowBookmarks >>",
 	)
 
-	got := checkPageActions(context.Background(), doc, cat, "PDF/A-2b", 2)
+	got := checkPageActions(context.Background(), doc, cat, "PDF/A-2b", 2, make(map[int]bool))
 	for _, want := range []Rule{
 		Rule_19005_2_6_5_2_t02, // page /AA forbidden
 		Rule_19005_2_6_5_1_t01, // Launch action type

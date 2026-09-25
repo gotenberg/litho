@@ -62,7 +62,7 @@ func TestCheckOutlineActions_NextCycleTerminates(t *testing.T) {
 	}
 
 	// Must terminate and still see item A's JavaScript action exactly once.
-	violations := checkOutlineActions(context.Background(), doc, cat.Dict, "PDF/UA-1", 1)
+	violations := checkOutlineActions(context.Background(), doc, cat.Dict, "PDF/UA-1", 1, make(map[int]bool))
 	if len(violations) == 0 {
 		t.Error("expected the JavaScript action on the cyclic outline to be flagged")
 	}

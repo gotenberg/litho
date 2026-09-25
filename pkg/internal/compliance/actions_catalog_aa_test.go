@@ -39,7 +39,7 @@ func TestCheckCatalogAA_ForbiddenAAStillChecksActionTypes(t *testing.T) {
 	} {
 		t.Run(tc.profile, func(t *testing.T) {
 			t.Parallel()
-			got := checkCatalogAA(context.Background(), doc, cat, tc.profile, tc.part)
+			got := checkCatalogAA(context.Background(), doc, cat, tc.profile, tc.part, make(map[int]bool))
 			if !hasRule(got, tc.dict) {
 				t.Errorf("%s: catalog /AA must report the forbidden dictionary %v (got %v)",
 					tc.profile, tc.dict, got)
