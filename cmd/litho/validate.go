@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/models"
@@ -239,19 +241,11 @@ func advisoryMessages(errs []error) []string {
 // a profile a command then refuses sends the caller in circles.
 func validateProfileNames() []string {
 	names := make([]string, 0, len(pdfaProfiles)+len(pdfuaProfiles)+len(wtpdfProfiles)+1+len(zugferdProfiles))
-	for k := range pdfaProfiles {
-		names = append(names, k)
-	}
-	for k := range pdfuaProfiles {
-		names = append(names, k)
-	}
-	for k := range wtpdfProfiles {
-		names = append(names, k)
-	}
+	names = append(names, sortedKeys(pdfaProfiles)...)
+	names = append(names, sortedKeys(pdfuaProfiles)...)
+	names = append(names, sortedKeys(wtpdfProfiles)...)
 	names = append(names, facturXProfileName)
-	for k := range zugferdProfiles {
-		names = append(names, k)
-	}
+	names = append(names, sortedKeys(zugferdProfiles)...)
 	return names
 }
 
@@ -260,17 +254,16 @@ func validateProfileNames() []string {
 // profile a command then refuses sends the caller in circles.
 func remediateProfileNames() []string {
 	names := make([]string, 0, len(pdfaProfiles)+len(pdfuaProfiles)+len(wtpdfProfiles)+len(facturxVariants))
-	for k := range pdfaProfiles {
-		names = append(names, k)
-	}
-	for k := range pdfuaProfiles {
-		names = append(names, k)
-	}
-	for k := range wtpdfProfiles {
-		names = append(names, k)
-	}
-	for k := range facturxVariants {
-		names = append(names, k)
-	}
+	names = append(names, sortedKeys(pdfaProfiles)...)
+	names = append(names, sortedKeys(pdfuaProfiles)...)
+	names = append(names, sortedKeys(wtpdfProfiles)...)
+	names = append(names, sortedKeys(facturxVariants)...)
 	return names
+}
+
+// sortedKeys returns a profile table's names in ascending order. The usage
+// and error messages print them, and ranging the map printed a different
+// order on every run (CONTRIBUTING "Deterministic output").
+func sortedKeys[V any](table map[string]V) []string {
+	return slices.Sorted(maps.Keys(table))
 }

@@ -7,8 +7,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -213,10 +215,12 @@ func printRedactReport(stdout, stderr io.Writer, format, file string, report *pd
 			fmt.Fprintf(stdout, "Scrubbed %d document-wide copy holder(s)\n", n)
 		}
 		// Naming these is the point: litho cannot re-subset the embedded
-		// program, so its outlines still describe the removed glyphs.
-		for page, fonts := range result.FontsFullyRemovedOnPage {
+		// program, so its outlines still describe the removed glyphs. Pages
+		// print in ascending order: ranging the map printed them in a
+		// different order on every run (CONTRIBUTING "Deterministic output").
+		for _, page := range slices.Sorted(maps.Keys(result.FontsFullyRemovedOnPage)) {
 			fmt.Fprintf(stdout, "Page %d no longer draws with font object(s) %v; their embedded outlines remain\n",
-				page, fonts)
+				page, result.FontsFullyRemovedOnPage[page])
 		}
 	default:
 		fmt.Fprintf(stderr, "unknown format %q. Valid: text, json\n", format)
