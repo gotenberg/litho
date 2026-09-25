@@ -427,3 +427,65 @@ func TestResolveNamedDest_FanoutBomb(t *testing.T) {
 		t.Fatal("ResolveNamedDest did not complete: name-tree fan-out not bounded")
 	}
 }
+
+func TestWalkNameTree_ReportsEveryEntry(t *testing.T) {
+	pdfData, page1Ref, page2Ref := buildNameTreePDF()
+	doc, err := NewDocument(context.Background(), bytes.NewReader(pdfData), int64(len(pdfData)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	var keys []string
+	pages := make(map[string]ast.PdfObject)
+	err = WalkNameTree(context.Background(), doc, ast.PdfIndirectRef{ObjectNum: 6}, func(key string, value ast.PdfObject) {
+		keys = append(keys, key)
+		if arr, ok := value.(ast.PdfArray); ok && len(arr) > 0 {
+			pages[key] = arr[0]
+		}
+	})
+	if err != nil {
+		t.Fatalf("WalkNameTree: %v", err)
+	}
+	if fmt.Sprint(keys) != "[Chapter1 Chapter2]" {
+		t.Errorf("keys = %v, want [Chapter1 Chapter2]", keys)
+	}
+	if pages["Chapter1"] != page1Ref || pages["Chapter2"] != page2Ref {
+		t.Errorf("values = %v, want pages %v and %v", pages, page1Ref, page2Ref)
+	}
+}
+
+func TestWalkNameTree_CycleTerminates(t *testing.T) {
+	// The root's /Kids names the root before its leaf: the walk visits it
+	// once and still reaches the leaf.
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.7\n")
+	var offs []int
+	for _, body := range []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R >>",
+		"<< /Kids [4 0 R 5 0 R] >>",
+		"<< /Names [(only) 3 0 R] >>",
+	} {
+		offs = append(offs, buf.Len())
+		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", len(offs), body)
+	}
+	xrefOff := buf.Len()
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f \n", len(offs)+1)
+	for _, off := range offs {
+		fmt.Fprintf(&buf, "%010d 00000 n \n", off)
+	}
+	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(offs)+1, xrefOff)
+	doc, err := NewDocument(context.Background(), bytes.NewReader(buf.Bytes()), int64(buf.Len()), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	var keys []string
+	if err := WalkNameTree(context.Background(), doc, ast.PdfIndirectRef{ObjectNum: 4}, func(key string, _ ast.PdfObject) {
+		keys = append(keys, key)
+	}); err != nil {
+		t.Fatalf("WalkNameTree: %v", err)
+	}
+	if fmt.Sprint(keys) != "[only]" {
+		t.Errorf("keys = %v, want [only]", keys)
+	}
+}

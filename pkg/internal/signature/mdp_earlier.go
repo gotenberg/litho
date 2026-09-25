@@ -134,7 +134,7 @@ func exemptUpdateAppearances(
 	}
 	priorHeld := func(num int) bool { return before.held(ctx, prior, num) }
 
-	changes := &fieldDiff{doc: made, rev: prior, held: priorHeld, policy: policy}
+	changes := &fieldDiff{doc: made, rev: prior, signed: rev, held: priorHeld, policy: policy}
 	var annots []int
 	for _, obj := range objects {
 		if obj.UpdateEnd != end || !obj.IsAnnot || !permitted(obj, policy) {

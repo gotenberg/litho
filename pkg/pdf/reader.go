@@ -1539,9 +1539,12 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // annotation changes and not changes to the form. A signature field may gain a
 // /V but not replace one, /Ff may gain only the ReadOnly flag a signature's
 // /Lock sets, and /Kids may gain only new fields. A field or widget the update
-// added must belong to a signature field and carry no /A or /AA action, and no
-// object the actions of a field or widget reach may be written differently
-// from its signed definition. When the signed revision cannot be read, MDPInfo
+// added must belong to a signature field and carry no /A or /AA action, unless
+// it arrives with a template instantiation: its widgets sit on a page the
+// update added and copy, in place, field type, partial name and actions, the
+// widgets of a page the signed revision names in /Names /Templates or /Pages.
+// No object the actions of another field or widget reach may be written
+// differently from its signed definition. When the signed revision cannot be read, MDPInfo
 // says what was not checked.
 func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) (_ []models.SignatureValidation, err error) {
 	defer recoverToError(r.logger(), "Reader.VerifySignatures", &err)

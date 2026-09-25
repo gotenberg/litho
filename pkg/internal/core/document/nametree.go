@@ -2,6 +2,7 @@ package document
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -380,4 +381,65 @@ func nameTreeKey(ctx context.Context, doc *Document, obj ast.PdfObject) string {
 		return string(v)
 	}
 	return ""
+}
+
+// WalkNameTree calls leaf with each key and value the name tree rooted at
+// nodeObj holds, the value unresolved, in the order the tree lists them (ISO
+// 32000-1, 7.9.6, Table 36). A key is read as [nameTreeKey] reads it, and a key
+// the tree lists twice is passed to leaf twice.
+//
+// Each node is walked once and the descent stops at [maxNameTreeDepth], as in
+// [LookupNameTree], so a cycle or a /Kids entry listed twice ends the walk
+// there. /Limits is not read: the walk visits every node anyway. A node that
+// does not resolve reports its error.
+func WalkNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, leaf func(key string, value ast.PdfObject)) error {
+	return walkNameTreeAt(ctx, doc, nodeObj, leaf, make(map[int]bool), 0)
+}
+
+// walkNameTreeAt walks one name-tree node for [WalkNameTree].
+func walkNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject, leaf func(key string, value ast.PdfObject), seen map[int]bool, depth int) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if depth > maxNameTreeDepth {
+		return nil
+	}
+	if ref, ok := nodeObj.(ast.PdfIndirectRef); ok {
+		if seen[ref.ObjectNum] {
+			return nil
+		}
+		seen[ref.ObjectNum] = true
+	}
+	nodeDict, err := ResolveDict(ctx, doc, nodeObj)
+	if err != nil {
+		return fmt.Errorf("resolving a name tree node: %w", err)
+	}
+	if nodeDict == nil {
+		return nil
+	}
+
+	if namesObj, ok := nodeDict["Names"]; ok {
+		names, err := ResolveArray(ctx, doc, namesObj)
+		if err != nil {
+			return fmt.Errorf("resolving a name tree node's /Names: %w", err)
+		}
+		for i := 0; i+1 < len(names); i += 2 {
+			leaf(nameTreeKey(ctx, doc, names[i]), names[i+1])
+		}
+	}
+
+	kidsObj, ok := nodeDict["Kids"]
+	if !ok {
+		return nil
+	}
+	kids, err := ResolveArray(ctx, doc, kidsObj)
+	if err != nil {
+		return fmt.Errorf("resolving a name tree node's /Kids: %w", err)
+	}
+	for _, kid := range kids {
+		if err := walkNameTreeAt(ctx, doc, kid, leaf, seen, depth+1); err != nil {
+			return err
+		}
+	}
+	return nil
 }

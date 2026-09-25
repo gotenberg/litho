@@ -81,7 +81,8 @@ const readOnlyFlag = 1
 //     ReadOnly flag a signature's /Lock sets (Table 233), and its /Kids only
 //     gain new signature fields;
 //   - a field or widget the update added must be a signature field or a
-//     widget of one, and carry no /A or /AA action;
+//     widget of one, and carry no /A or /AA action, unless it arrives with a
+//     template instantiation ([fieldDiff.instantiated]);
 //   - no object a field's or widget's action reaches (12.6.2, 12.6.3) may be
 //     written differently from its signed definition.
 //
@@ -92,8 +93,7 @@ const readOnlyFlag = 1
 // the form.
 //
 // The fields are those the form's /Fields reaches through /Kids, the widgets
-// the pages list, and the widgets the update wrote. A new field that
-// instantiating a page template adds (12.7.6) is reported like any other.
+// the pages list, and the widgets the update wrote.
 func changedField(ctx context.Context, doc, rev *document.Document, held func(num int) bool, objects []appendedObject, policy int) (string, error) {
 	appended := make(map[int]appendedObject)
 	for _, obj := range objects {
@@ -135,7 +135,7 @@ func changedField(ctx context.Context, doc, rev *document.Document, held func(nu
 	if err != nil {
 		return "", err
 	}
-	f := &fieldDiff{doc: doc, rev: rev, held: held, policy: policy}
+	f := &fieldDiff{doc: doc, rev: rev, signed: rev, held: held, policy: policy}
 	var roots []reachRoot
 	for i, num := range nodes {
 		if i%100 == 0 {
@@ -151,6 +151,11 @@ func changedField(ctx context.Context, doc, rev *document.Document, held func(nu
 			if violation := f.judge(ctx, num, dict); violation != "" {
 				return violation, nil
 			}
+		}
+		if f.copies[num] {
+			// The actions of a template's copy are the template's, compared
+			// with the signed revision object by object.
+			continue
 		}
 		for _, key := range []ast.PdfName{"A", "AA"} {
 			if action, ok := dict[key]; ok {
@@ -267,11 +272,17 @@ func formNodes(ctx context.Context, doc *document.Document, form ast.PdfDict, ob
 }
 
 // fieldDiff compares the fields and widgets of the current document doc with
-// the signed revision rev for [changedField], at policy 2 or 3.
+// the revision rev before the update, the signed one for [changedField], at
+// policy 2 or 3. held reports whether rev held a number, and signed is the
+// signed revision, whose template pages [fieldDiff.instantiated] reads.
 type fieldDiff struct {
-	doc, rev *document.Document
-	held     func(num int) bool
-	policy   int
+	doc, rev, signed *document.Document
+	held             func(num int) bool
+	policy           int
+
+	templates     *templateInstances
+	templatesRead bool
+	copies        map[int]bool // the fields and widgets [fieldDiff.instantiated] accepted
 }
 
 // judge describes how the field or widget num, which the update wrote as dict,
@@ -279,6 +290,13 @@ type fieldDiff struct {
 func (f *fieldDiff) judge(ctx context.Context, num int, dict ast.PdfDict) string {
 	desc := f.describe(ctx, num, dict)
 	if !f.held(num) {
+		if f.instantiated(ctx, num, dict) {
+			if f.copies == nil {
+				f.copies = make(map[int]bool)
+			}
+			f.copies[num] = true
+			return ""
+		}
 		for _, key := range []ast.PdfName{"A", "AA"} {
 			if _, ok := dict[key]; ok {
 				return fmt.Sprintf("%s was added with an /%s action, which P=%d does not permit", desc, string(key), f.policy)
@@ -350,16 +368,22 @@ func (f *fieldDiff) kidsAdded(ctx context.Context, before, after ast.PdfObject) 
 }
 
 // fieldType returns the field type of a field or widget of the current
-// document, stated or inherited through /Parent (ISO 32000-1, 12.7.3.1, Table
-// 220), or "" when it has none. The walk is bounded by [maxFieldTreeDepth].
+// document ([fieldTypeIn]).
 func (f *fieldDiff) fieldType(ctx context.Context, dict ast.PdfDict) string {
+	return fieldTypeIn(ctx, f.doc, dict)
+}
+
+// fieldTypeIn returns the field type of a field or widget of doc, stated or
+// inherited through /Parent (ISO 32000-1, 12.7.3.1, Table 220), or "" when it
+// has none. The walk is bounded by [maxFieldTreeDepth].
+func fieldTypeIn(ctx context.Context, doc *document.Document, dict ast.PdfDict) string {
 	seen := make(map[int]bool)
 	for depth := 0; dict != nil && depth <= maxFieldTreeDepth; depth++ {
-		if ft, err := document.ResolveName(ctx, f.doc, dict["FT"]); err == nil && ft != "" {
+		if ft, err := document.ResolveName(ctx, doc, dict["FT"]); err == nil && ft != "" {
 			return string(ft)
 		}
 		var ok bool
-		if _, dict, ok = document.ResolveFieldParent(ctx, f.doc, dict, seen); !ok {
+		if _, dict, ok = document.ResolveFieldParent(ctx, doc, dict, seen); !ok {
 			break
 		}
 	}
