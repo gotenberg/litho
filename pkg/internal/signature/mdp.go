@@ -183,6 +183,18 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 		}
 	}
 
+	// The structure tree additions that tag a permitted annotation are
+	// judged whatever the classifier concluded: an element without /Type
+	// passes it, and [changedUntyped] would then report it.
+	if sig.MDPPolicy >= 2 {
+		untagged, tagNote := withoutAnnotationTags(ctx, doc, signed, classified, sig.MDPPolicy)
+		note += tagNote
+		if len(untagged) < len(classified) {
+			classified = untagged
+			violation = classifyModifications(classified, sig.MDPPolicy)
+		}
+	}
+
 	// Table 254 permits page deletion at no P and annotation deletion only at
 	// P=3, and no P permits reordering the signed pages or changing what a
 	// signed page draws. A deletion may append nothing the classifier forbids,

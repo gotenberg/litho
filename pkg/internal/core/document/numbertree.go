@@ -2,6 +2,7 @@ package document
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
@@ -102,4 +103,92 @@ func searchNumberTreeAt(
 		}
 	}
 	return nil, nil
+}
+
+// WalkNumberTree calls leaf with each key and value the number tree rooted at
+// nodeObj holds, the value unresolved, in the order the tree lists them, and
+// node with the object number of each indirect object the tree is built from:
+// its node dictionaries and each /Kids or /Nums array written as an object of
+// its own (ISO 32000-1, 7.9.7, Table 37). A /Nums entry whose key is not an
+// integer is skipped, and a key the tree lists twice is passed to leaf twice.
+//
+// Each node is walked once and the descent stops at [maxNumberTreeDepth], as
+// in [LookupNumberTree], so a cycle or a /Kids entry listed twice ends the
+// walk there. A node that does not resolve reports its error.
+func WalkNumberTree(
+	ctx context.Context,
+	doc *Document,
+	nodeObj ast.PdfObject,
+	node func(num int),
+	leaf func(key int, value ast.PdfObject),
+) error {
+	return walkNumberTreeAt(ctx, doc, nodeObj, node, leaf, make(map[int]bool), 0)
+}
+
+// walkNumberTreeAt walks one number-tree node for [WalkNumberTree].
+func walkNumberTreeAt(
+	ctx context.Context,
+	doc *Document,
+	nodeObj ast.PdfObject,
+	node func(num int),
+	leaf func(key int, value ast.PdfObject),
+	seen map[int]bool,
+	depth int,
+) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if depth > maxNumberTreeDepth {
+		return nil
+	}
+	if ref, ok := nodeObj.(ast.PdfIndirectRef); ok {
+		if seen[ref.ObjectNum] {
+			return nil
+		}
+		seen[ref.ObjectNum] = true
+		node(ref.ObjectNum)
+	}
+	nodeDict, err := ResolveDict(ctx, doc, nodeObj)
+	if err != nil {
+		return fmt.Errorf("resolving a number tree node: %w", err)
+	}
+	if nodeDict == nil {
+		return nil
+	}
+
+	if numsObj, ok := nodeDict["Nums"]; ok {
+		if ref, isRef := numsObj.(ast.PdfIndirectRef); isRef {
+			node(ref.ObjectNum)
+		}
+		nums, err := ResolveArray(ctx, doc, numsObj)
+		if err != nil {
+			return fmt.Errorf("resolving a number tree node's /Nums: %w", err)
+		}
+		for i := 0; i+1 < len(nums); i += 2 {
+			// Table 37 keys a number tree by integer, so a null, which
+			// ResolveInt reads as 0, names no key either.
+			k, err := ResolveObject(ctx, doc, nums[i])
+			if key, ok := k.(ast.PdfInt); err == nil && ok {
+				leaf(int(key), nums[i+1])
+			}
+		}
+	}
+
+	kidsObj, ok := nodeDict["Kids"]
+	if !ok {
+		return nil
+	}
+	if ref, isRef := kidsObj.(ast.PdfIndirectRef); isRef {
+		node(ref.ObjectNum)
+	}
+	kids, err := ResolveArray(ctx, doc, kidsObj)
+	if err != nil {
+		return fmt.Errorf("resolving a number tree node's /Kids: %w", err)
+	}
+	for _, kid := range kids {
+		if err := walkNumberTreeAt(ctx, doc, kid, node, leaf, seen, depth+1); err != nil {
+			return err
+		}
+	}
+	return nil
 }

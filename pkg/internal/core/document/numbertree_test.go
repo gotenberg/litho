@@ -201,3 +201,51 @@ func TestLookupNumberTree_CycleDoesNotBreakTheRealLeaf(t *testing.T) {
 		t.Errorf("key 7 = %v (%T), want SEVEN", got, got)
 	}
 }
+
+// walkedNumberTree returns what [WalkNumberTree] reports from root: its node
+// object numbers and its entries.
+func walkedNumberTree(t *testing.T, doc *Document, root ast.PdfObject) ([]int, map[int]ast.PdfObject) {
+	t.Helper()
+	var nodes []int
+	entries := make(map[int]ast.PdfObject)
+	err := WalkNumberTree(context.Background(), doc, root,
+		func(num int) { nodes = append(nodes, num) },
+		func(key int, value ast.PdfObject) { entries[key] = value },
+	)
+	if err != nil {
+		t.Fatalf("WalkNumberTree: %v", err)
+	}
+	return nodes, entries
+}
+
+func TestWalkNumberTree_ReportsEveryEntryAndNode(t *testing.T) {
+	doc := numberTreeDoc(t, buildNumberTreePDF())
+	nodes, entries := walkedNumberTree(t, doc, ast.PdfIndirectRef{ObjectNum: 4})
+
+	want := map[int]ast.PdfObject{0: ast.PdfString("ZERO"), 1: ast.PdfString("ONE"), 2: ast.PdfString("TWO")}
+	if len(entries) != len(want) {
+		t.Fatalf("entries = %v, want %v", entries, want)
+	}
+	for key, value := range want {
+		if entries[key] != value {
+			t.Errorf("key %d = %v, want %v", key, entries[key], value)
+		}
+	}
+	if fmt.Sprint(nodes) != "[4 5 6]" {
+		t.Errorf("nodes = %v, want [4 5 6]", nodes)
+	}
+}
+
+func TestWalkNumberTree_CycleTerminates(t *testing.T) {
+	// The root's /Kids names the root: the walk visits it once and still
+	// reaches the leaf listed after it.
+	doc := numberTreeDoc(t, buildCyclicNumberTreePDF())
+	nodes, entries := walkedNumberTree(t, doc, ast.PdfIndirectRef{ObjectNum: 4})
+
+	if entries[7] != ast.PdfString("SEVEN") || len(entries) != 1 {
+		t.Errorf("entries = %v, want only key 7", entries)
+	}
+	if fmt.Sprint(nodes) != "[4 5]" {
+		t.Errorf("nodes = %v, want [4 5]", nodes)
+	}
+}

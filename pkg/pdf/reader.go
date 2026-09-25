@@ -1470,6 +1470,17 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // annotation's /AP reaches it and it is new, or was that annotation's own
 // appearance stream in the signed revision.
 //
+// In a tagged document, the structure tree additions that tag such an
+// annotation are part of the change too, as ISO 14289-1, 7.18 requires of a
+// PDF/UA writer: a new structure element whose only kids are object
+// references to annotations the update wrote within the policy, a Form element
+// for a widget, an Annot or Link element for another annotation at P=3; the
+// parent tree entries that key those annotations' /StructParent to it; and the
+// element or structure tree root that gains it as a kid. Any other change to
+// the structure tree is reported: an existing element's other kids or entries,
+// its /Alt or /ActualText among them, the role map, a signed parent tree
+// entry, or a new element that claims page content.
+//
 // An object is new, for these allowances and for validation data, only when
 // the signed revision neither defines it nor refers to it from an object its
 // trailer reaches. A reference to an undefined object reads as null (ISO
