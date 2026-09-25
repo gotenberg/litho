@@ -37,6 +37,9 @@ var seedStreams = []string{
 	// whole, and a truncated one.
 	"0 0 m .020.594 10 l 12m - 5 w --5 w 1e2 w 55.8492#7136 0 Td 5-3 m\n",
 	"0 0 m 1.5.",
+	// Operators veraPDF reads on through a delimiter, and a truncated one.
+	"q Q%comment\nBT (a) T)Tj ET q Q>> /P <</A xx>> BDC EMC [xx)] 0 d q Q{}\n",
+	"q Q%c",
 }
 
 // FuzzParseStreamData feeds arbitrary bytes to the content stream parser and

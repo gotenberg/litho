@@ -219,6 +219,32 @@ func TestForRepairKeepsNumberRuns(t *testing.T) {
 	}
 }
 
+// TestDelimitersEndOperatorsForRepairOnly pins that a parse without an option
+// runs an operator on through ")" and "%", as veraPDF reads it, while the
+// reading of a repair ends it there, as ISO 32000-1, 7.2.2 does, and a viewer
+// reads T, a stray ")", Tj, Q and a comment.
+func TestDelimitersEndOperatorsForRepairOnly(t *testing.T) {
+	t.Parallel()
+
+	src := "BT (a) T)Tj ET q Q%comment\n"
+	for _, tc := range []struct {
+		name string
+		opts []Option
+		want []string
+	}{
+		{"validation", nil, []string{"BT", "T)Tj", "ET", "q", "Q%comment"}},
+		{"repair", []Option{ForRepair()}, []string{"BT", "T", "Tj", "ET", "q", "Q"}},
+	} {
+		ops, err := ParseStreamData(context.Background(), []byte(src), tc.opts...)
+		if err != nil {
+			t.Fatalf("%s: ParseStreamData(%q): %v", tc.name, src, err)
+		}
+		if got := operators(ops); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: ParseStreamData(%q) operators = %v, want %v", tc.name, src, got, tc.want)
+		}
+	}
+}
+
 // TestSplitGluedOperatorsShareTheRunBytes pins the byte ranges of operators
 // split from one run: they stay contiguous, so a caller splicing by range
 // reaches each operator's own bytes.

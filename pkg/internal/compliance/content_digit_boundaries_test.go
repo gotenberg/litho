@@ -127,3 +127,55 @@ func TestNumbersEndAsVeraPDFEndsThem(t *testing.T) {
 		}
 	}
 }
+
+// TestUndefinedOperatorsRunOnThroughDelimiters pins that compliance reads an
+// operator as veraPDF reads it (PDFStreamParser.nextOperator): ")", ">", "{",
+// "}" and "%" do not end it where an operator stands, while a string, an array
+// or a dictionary does, and a keyword inside a dictionary ends at them. Every
+// case was measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on the same
+// one-page fixtures.
+func TestUndefinedOperatorsRunOnThroughDelimiters(t *testing.T) {
+	t.Parallel()
+
+	const (
+		catalog = "<< /Type /Catalog /Pages 2 0 R >>"
+		pages   = "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"
+		page    = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << >> /Contents 4 0 R >>"
+	)
+	for _, tc := range []struct {
+		name      string
+		content   string
+		undefined int
+	}{
+		{"a comment", "q Q%comment\n", 1},
+		{"a comment and the words after it", "q Q%xx yy zz\n", 3},
+		{"a comment at the end of the stream", "q Q%xx", 1},
+		{"a closing parenthesis", "q Q) \n", 1},
+		{"a dictionary close", "q Q>> \n", 1},
+		{"braces", "q Q{ \n", 1},
+		{"an operator after the parenthesis", "BT (a) T)Tj ET\n", 1},
+		{"a string ends the operator", "q Q(x) Tj\n", 0},
+		{"a keyword inside a dictionary", "/P <</MCID 0 /A xx>> BDC EMC\n", 0},
+		{"white space before the comment", "q Q %comment\n", 0},
+	} {
+		for _, p := range []struct {
+			profile   models.PDFAProfile
+			undefined Rule
+		}{
+			{models.PDFA1b, Rule_19005_1_6_2_10_t01},
+			{models.PDFA2b, Rule_19005_2_6_2_2_t01},
+		} {
+			t.Run(tc.name+" "+string(p.profile), func(t *testing.T) {
+				t.Parallel()
+				doc, _ := objsDocPDF(t, catalog, pages, page, exponentStream("", tc.content))
+				viols, err := ValidatePDFA(context.Background(), doc, p.profile)
+				if err != nil {
+					t.Fatalf("ValidatePDFA: %v", err)
+				}
+				if got := countRuleErrs(t, viols, p.undefined); got != tc.undefined {
+					t.Errorf("undefined-operator test fired %d times, want %d: %v", got, tc.undefined, viols)
+				}
+			})
+		}
+	}
+}

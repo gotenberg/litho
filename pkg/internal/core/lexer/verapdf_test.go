@@ -69,6 +69,46 @@ func TestWithVeraPDFTokensEndsOperatorsAtDigits(t *testing.T) {
 	}
 }
 
+// TestWithVeraPDFTokensRunsOperatorsOnThroughDelimiters pins that an operator
+// veraPDF reads (PDFStreamParser.nextOperator) runs on through ")", ">", "{",
+// "}" and "%", and ends at white space, "[", "]", "<", "(", "/" or a digit, as
+// before. A keyword inside an array or a dictionary, and one that starts with
+// "n", "t", "f" or "B", ends at every delimiter (BaseParser.nextToken). Measured
+// with veraPDF 1.30 at PDF/A-1b and PDF/A-2b, the undefined operators it
+// reports for "Q%comment", "Q%c1", "Q)", "Q>", "Q{" and "Q}" are the ones read
+// here, and "Q(x) Tj" holds none.
+func TestWithVeraPDFTokensRunsOperatorsOnThroughDelimiters(t *testing.T) {
+	t.Parallel()
+
+	delim := func(v string) Token { return Token{Type: TokenDelimiter, Value: v} }
+	for _, tc := range []struct {
+		name string
+		src  string
+		want []Token
+	}{
+		{"a comment", "Q%comment", []Token{kw("Q%comment")}},
+		{"a comment then a digit", "Q%c1", []Token{kw("Q%c"), num("1")}},
+		{"a closing parenthesis", "Q)", []Token{kw("Q)")}},
+		{"a greater-than sign", "Q>", []Token{kw("Q>")}},
+		{"a dictionary close", "Q>>", []Token{kw("Q>>")}},
+		{"braces", "Q{}", []Token{kw("Q{}")}},
+		{"an operator after the parenthesis", "T)Tj", []Token{kw("T)Tj")}},
+		{"a string ends it as before", "Q(x)", []Token{kw("Q"), {Type: TokenString, Value: "(x)"}}},
+		{"a hex string ends it as before", "Q<41>", []Token{kw("Q"), {Type: TokenHexString, Value: "<41>"}}},
+		{"an array ends it as before", "Q]", []Token{kw("Q"), delim("]")}},
+		{"a run from n ends at the delimiter", "n)", []Token{kw("n"), delim(")")}},
+		{"a run from B ends at the comment", "BT%c", []Token{kw("BT")}},
+		{"inside an array", "[xx)]", []Token{delim("["), kw("xx"), delim(")"), delim("]")}},
+		{"inside a dictionary", "<</A xx>> Q)", []Token{delim("<<"), {Type: TokenName, Value: "/A"}, kw("xx"), delim(">>"), kw("Q)")}},
+		{"after an array", "[1] xx)", []Token{delim("["), num("1"), delim("]"), kw("xx)")}},
+		{"after a stray close", "] xx)", []Token{delim("]"), kw("xx)")}},
+	} {
+		if got := lexVeraPDF(t, tc.src); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: %q lexes as %v, want %v", tc.name, tc.src, got, tc.want)
+		}
+	}
+}
+
 // TestWithVeraPDFTokensReadsNumbersAsVeraPDF pins the veraPDF reading of a run
 // that starts with a digit, a sign or a period (BaseParser.readNumber): the
 // number ends before the first character other than a digit or a period, and
@@ -155,8 +195,8 @@ func TestObjectBodyKeepsNumberBoundaries(t *testing.T) {
 
 // TestWithRepairTokensKeepsNumberRuns pins the reading of a repair: a run that
 // starts with a digit, a sign or a period keeps the token boundaries of ISO
-// 32000-1, 7.2.2, and is a keyword when it spells no number, "-" included,
-// while an operator still ends before a digit.
+// 32000-1, 7.2.2, and is a keyword when it spells no number, "-" included, an
+// operator ends at every delimiter, and an operator still ends before a digit.
 func TestWithRepairTokensKeepsNumberRuns(t *testing.T) {
 	t.Parallel()
 
@@ -173,6 +213,8 @@ func TestWithRepairTokensKeepsNumberRuns(t *testing.T) {
 		{"-1.5", []Token{num("-1.5")}},
 		{"q1", []Token{kw("q"), num("1")}},
 		{"n1", []Token{kw("n1")}},
+		{"T)Tj", []Token{kw("T"), {Type: TokenDelimiter, Value: ")"}, kw("Tj")}},
+		{"Q%comment", []Token{kw("Q")}},
 	} {
 		lex := newLexer(tc.src).WithVeraPDFTokens().WithRepairTokens()
 		var got []Token

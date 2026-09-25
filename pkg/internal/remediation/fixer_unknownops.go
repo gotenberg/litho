@@ -77,6 +77,9 @@ type unknownOpsTally struct {
 	// separated counts operators that ran on from the operator before them
 	// with no white space between them, and were written back apart.
 	separated int
+	// delimited counts operators written against a delimiter veraPDF reads
+	// into them, which were written back apart from it.
+	delimited int
 }
 
 func (t *unknownOpsTally) add(o unknownOpsTally) {
@@ -84,6 +87,7 @@ func (t *unknownOpsTally) add(o unknownOpsTally) {
 	t.repaired += o.repaired
 	t.exponents += o.exponents
 	t.separated += o.separated
+	t.delimited += o.delimited
 }
 
 // fixUnknownOps strips operators absent from [content.IsOperator] from every page
@@ -141,6 +145,9 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	if total.separated > 0 {
 		fixes = append(fixes, fmt.Sprintf("separated %d content-stream operator(s) written with no white space before them", total.separated))
 	}
+	if total.delimited > 0 {
+		fixes = append(fixes, fmt.Sprintf("separated %d content-stream operator(s) from the delimiter written against them", total.delimited))
+	}
 	return fixes, nil
 }
 
@@ -183,8 +190,9 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 	}
 	ops, t.repaired = repairMalformedNumbers(ops)
 	ops, t.separated, t.removed = dropUndefinedOperators(ops)
+	t.delimited = delimitedOperators(ctx, data)
 	hasInlineImage := slices.ContainsFunc(ops, func(op content.Operation) bool { return op.Operator == "BI" })
-	if (t.removed == 0 && t.repaired == 0 && t.separated == 0) || hasInlineImage {
+	if (t.removed == 0 && t.repaired == 0 && t.separated == 0 && t.delimited == 0) || hasInlineImage {
 		return spliced()
 	}
 	out, err := serializeOps(filterOps(ops))
@@ -192,6 +200,43 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 		return spliced()
 	}
 	return out, t
+}
+
+// delimitedOperators counts the operators of data written against one of the
+// delimiters ")", ">", "{", "}" and "%", which validation reads, as veraPDF
+// does, as one operator ISO 32000-1 does not define ([content.ParseStreamData]),
+// and whose part before the delimiter is an operator of Annex A: "re%" before
+// a comment, or "Q)".
+//
+// ISO 32000-1, 7.2.2, Table 2 makes those characters delimiters, so a viewer
+// reads re and a comment, and the reading of a repair ([content.ForRepair])
+// finds nothing to remove. Written back from that reading, the operator stands
+// apart from the delimiter, the comment and a stray delimiter go, and veraPDF
+// reads re. An operator whose part before the delimiter is no operator is not
+// counted: the repair removes that part as it removes any undefined operator.
+//
+// # Corpus evidence
+//
+//   - pdfjs calgray.pdf and calrgb.pdf: write "re" against a comment 60 and
+//     1360 times, which veraPDF 1.30 reports under ISO 19005-1, 6.2.10 t1 and
+//     ISO 19005-2, 6.2.2 t1, and which their PDF/A-1b and PDF/A-2b
+//     remediations, default and aggressive, left in place. The outputs now
+//     pass that test for veraPDF, and their extracted text is unchanged.
+func delimitedOperators(ctx context.Context, data []byte) int {
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, op := range ops {
+		if content.IsOperator(op.Operator) {
+			continue
+		}
+		if i := strings.IndexAny(op.Operator, ")>{}%"); i > 0 && content.IsOperator(op.Operator[:i]) {
+			n++
+		}
+	}
+	return n
 }
 
 // dropUndefinedOperators separates every run of operators written with no

@@ -29,11 +29,15 @@ import (
 //   - Any other run is an operator, which ends before white space, one of the
 //     delimiters "[", "]", "<", "(" and "/", or a digit
 //     (PDFStreamParser.nextOperator), so "q1" is q then the number 1. A 0 or a
-//     1 after a "d" stays in the operator, which keeps d0 and d1 whole.
+//     1 after a "d" stays in the operator, which keeps d0 and d1 whole. The
+//     other delimiters of ISO 32000-1, 7.2.2, Table 2, ")", ">", "{", "}" and
+//     "%", do not end it, so "Q%comment" and "T)Tj" are one operator each.
+//   - Inside an array or a dictionary, veraPDF reads a keyword to white space
+//     or any delimiter (BaseParser.nextToken), and so does this reading, save
+//     that it still ends one before a digit. A keyword there other than true,
+//     false and null stops veraPDF reading the stream either way.
 //
-// Two rules of veraPDF are not mirrored. veraPDF does not end an operator at
-// ")", ">", "{", "}" or "%", which ISO 32000-1, 7.2.2, Table 2 makes
-// delimiters and which end it here. And a run that starts with "I" keeps its
+// One rule of veraPDF is not mirrored: a run that starts with "I" keeps its
 // boundaries, where veraPDF reads it as the start of inline image data.
 //
 // The objects of the file body keep the token boundaries of 7.2.2: only a
@@ -58,6 +62,11 @@ func (l *Lexer) WithVeraPDFTokens() *Lexer {
 // which is no value a viewer draws: PDF.js reads "-" as 0, and ".020.594" as
 // 0.02 then 0.594 (Lexer.getNumber). Kept as the keyword it is written as, the
 // run is written back as it was, or respelled as a number.
+//
+// It also ends an operator at every delimiter of ISO 32000-1, 7.2.2, Table 2.
+// veraPDF reads "T)Tj" as one undefined operator, where a viewer reads T, a
+// stray ")" and the Tj it draws with. Removing the run would remove the Tj,
+// where removing T leaves it in place.
 func (l *Lexer) WithRepairTokens() *Lexer {
 	l.repair = true
 	return l
@@ -84,6 +93,21 @@ func joinsBeforeDigit(prev, digit byte) bool {
 // isDigit reports whether c is a decimal digit.
 func isDigit(c byte) bool {
 	return c >= '0' && c <= '9'
+}
+
+// runsOnThrough reports whether c, a delimiter of ISO 32000-1, 7.2.2, Table 2,
+// stays in an operator veraPDF reads (PDFStreamParser.nextOperator).
+func runsOnThrough(c byte) bool {
+	return c == ')' || c == '>' || c == '{' || c == '}' || c == '%'
+}
+
+// nest counts the array or dictionary a token opens, delta 1, or closes,
+// delta -1, under [Lexer.WithVeraPDFTokens]. A close with none open counts
+// nothing.
+func (l *Lexer) nest(delta int) {
+	if l.veraPDF {
+		l.nesting = max(l.nesting+delta, 0)
+	}
 }
 
 // startsVeraPDFNumber reports whether a run that starts with c is a number
