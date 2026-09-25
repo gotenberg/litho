@@ -61,6 +61,7 @@ type Document struct {
 	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache, sortedOffsets, formatViolations, and the lazy Index.Entries augmentation
 	runMu            sync.Mutex          // serializes compliance-engine validation runs
 	xrefAugment      sync.Once           // guards the one-shot raw-bytes augmentation of Index
+	xrefAugmentRan   bool                // the augmentation has run, whatever it found; protected by mu
 	maxCacheSize     int                 // evict all objects when cache exceeds this size
 	limits           limits.Limits       // resource budgets, set by NewDocument, read-only after
 	Crypto           *crypto.Handler

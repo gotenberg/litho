@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -862,6 +863,56 @@ func (d *Document) XRefEntriesSnapshot() map[int]xref.XRefEntry {
 	return out
 }
 
+// xrefDeferKey is the context key [DeferXRefAugmentation] stores its flag
+// under.
+type xrefDeferKey struct{}
+
+// DeferXRefAugmentation returns a context under which a lookup that misses the
+// cross-reference index does not run the raw-byte augmentation (see
+// [Document.augmentXrefFromRawScan]). It sets missed instead, and the lookup
+// fails as it would had the scan found nothing.
+//
+// The augmentation rewrites the index, so it cannot run while other
+// goroutines read it. A caller that fans out over one Document resolves under
+// this context. Once every goroutine has returned and missed is set, it calls
+// [Document.AugmentXRef], and runs again when that changed the index. Left to
+// the lazy path, the augmentation ran in whichever goroutine missed first,
+// while the others were ranging the map it wrote, and the goroutines that
+// swept the index before that moment saw a different set of objects than the
+// ones after it (CONTRIBUTING "Deterministic output").
+func DeferXRefAugmentation(ctx context.Context, missed *atomic.Bool) context.Context {
+	return context.WithValue(ctx, xrefDeferKey{}, missed)
+}
+
+// AugmentXRef runs the raw-byte augmentation of the cross-reference index now
+// rather than at the first lookup that misses, and reports whether it changed
+// the index. It runs at most once per Document, so a call after the
+// augmentation ran does nothing and reports false. See
+// [DeferXRefAugmentation] for the caller that needs it.
+//
+// AugmentXRef rewrites the index, so it must not run while another goroutine
+// reads it.
+func (d *Document) AugmentXRef(ctx context.Context) bool {
+	return d.augmentXrefFromRawScan(ctx)
+}
+
+// augmentOnMiss runs the augmentation for a lookup that missed, unless ctx
+// defers it (see [DeferXRefAugmentation]) and it has not run yet. It reports
+// whether it deferred, in which case the index is unchanged.
+func (d *Document) augmentOnMiss(ctx context.Context) bool {
+	if missed, ok := ctx.Value(xrefDeferKey{}).(*atomic.Bool); ok {
+		d.mu.RLock()
+		ran := d.xrefAugmentRan
+		d.mu.RUnlock()
+		if !ran {
+			missed.Store(true)
+			return true
+		}
+	}
+	d.augmentXrefFromRawScan(ctx)
+	return false
+}
+
 // augmentXrefFromRawScan performs a single linear scan of the document
 // bytes looking for every "N G obj" marker. It runs at most once per
 // Document via d.xrefAugment. The scan is invoked from the
@@ -879,8 +930,13 @@ func (d *Document) XRefEntriesSnapshot() map[int]xref.XRefEntry {
 // under d.mu.RLock via xrefEntry, never observes the map mid-write. The
 // O(file size) scan runs unlocked so it does not serialize unrelated
 // resolves.
-func (d *Document) augmentXrefFromRawScan(ctx context.Context) {
+func (d *Document) augmentXrefFromRawScan(ctx context.Context) (changed bool) {
 	d.xrefAugment.Do(func() {
+		defer func() {
+			d.mu.Lock()
+			d.xrefAugmentRan = true
+			d.mu.Unlock()
+		}()
 		discovered, err := scanIndirectObjects(ctx, d.r, d.size)
 		if err != nil {
 			d.Logger.Debug("xref augmentation scan failed", slog.Any("err", err))
@@ -905,13 +961,15 @@ func (d *Document) augmentXrefFromRawScan(ctx context.Context) {
 			overridden++
 		}
 		d.mu.Unlock()
-		if added > 0 || overridden > 0 {
+		changed = added > 0 || overridden > 0
+		if changed {
 			d.Logger.Debug("xref augmented from raw scan",
 				slog.Int("added", added),
 				slog.Int("overridden", overridden),
 			)
 		}
 	})
+	return changed
 }
 
 // objectHeaderMatches reports whether the bytes at offset start with an
@@ -1181,8 +1239,9 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		// table is truncated or references objects inserted by
 		// external editors that never rewrote the table. The scan is
 		// O(file size) and memoised via sync.Once so subsequent
-		// lookups hit the cached index.
-		d.augmentXrefFromRawScan(ctx)
+		// lookups hit the cached index. A deferred augmentation leaves
+		// the index as it is, so the lookup below still misses.
+		d.augmentOnMiss(ctx)
 		entry, ok = d.xrefEntry(ref.ObjectNum)
 	}
 	if !ok {
@@ -1213,7 +1272,16 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		// lives inside augmentXrefFromRawScan so all writes to
 		// Index.Entries stay under the sync.Once.
 		if !objectHeaderMatches(d.r, entry.Offset, ref.ObjectNum) {
-			d.augmentXrefFromRawScan(ctx)
+			if d.augmentOnMiss(ctx) {
+				// Parsing at the declared offset would cache whatever sits
+				// there for the run that follows the deferred scan, so the
+				// object stays unresolved until the scan has run. Compliance,
+				// the one caller that defers, cannot reach this: its warming
+				// pass resolves every listed object before it fans out, so a
+				// mismatched header has run the scan by then.
+				return nil, fmt.Errorf("%w: object %d: header mismatch at offset %d, augmentation deferred",
+					ErrObjectNotFound, ref.ObjectNum, entry.Offset)
+			}
 			if rescanned, ok := d.xrefEntry(ref.ObjectNum); ok {
 				entry = rescanned
 			}

@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -223,9 +224,45 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 // goroutine outlives the call, and it returns the context error instead of the
 // partial violations the groups stopped at, which would read as a complete
 // verdict.
+//
+// A group can miss a cross-reference lookup, and the first miss runs the
+// one-shot raw-byte augmentation that rewrites the index. Run from a group, it
+// wrote the index while the other groups were ranging it, and the groups that
+// swept it before that moment missed the objects it added while the ones after
+// saw them, so the same bytes reported a different violation count from run to
+// run (CONTRIBUTING "Deterministic output"). The groups therefore resolve
+// under [document.DeferXRefAugmentation]: a miss only sets a flag. When one
+// did, the augmentation runs once every group has returned, and when it
+// changed the index the groups run again over the same validation context,
+// this time over the final index. Only a file whose table misses an object a
+// check reaches, and whose bytes hold objects the table lacks, pays for the
+// second run.
+//
+// # Corpus evidence
+//
+//   - All corpora: no file changes the index during the fan-out at PDF/A-1b,
+//     PDF/A-2b, PDF/A-4 or PDF/UA-1, so none pays the second run. pdfjs
+//     poppler-742-0-fuzzed.pdf, pdfjs pypdf2332.pdf and verapdf
+//     PDF_A-2b__veraPDF_test_suite_6-2-11-4-1-t01-fail-a.pdf miss a lookup
+//     during it, and the scan finds nothing to add. pdfjs
+//     poppler-85140-0.pdf changes the index while the validation context is
+//     built, which is still before the fan-out.
 func runCheckGroups(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, groups []checkGroup) ([]Violation, error) {
 	vctx := buildValidationCtx(ctx, doc, catalog, profile)
 
+	var missed atomic.Bool
+	violations, err := fanOutCheckGroups(document.DeferXRefAugmentation(ctx, &missed), doc, vctx, profile, groups)
+	if err != nil || !missed.Load() || !doc.AugmentXRef(ctx) {
+		return violations, err
+	}
+	doc.Logger.Debug("compliance: a check group missed the xref and the augmentation changed it, running the groups again", "profile", profile)
+	return fanOutCheckGroups(ctx, doc, vctx, profile, groups)
+}
+
+// fanOutCheckGroups runs each check group on its own goroutine over vctx and
+// collects the violations in group order. See [runCheckGroups] for the
+// panic, cancellation and lifetime contract.
+func fanOutCheckGroups(ctx context.Context, doc *document.Document, vctx *validationCtx, profile string, groups []checkGroup) ([]Violation, error) {
 	type result struct {
 		index      int
 		violations []Violation
@@ -318,8 +355,8 @@ func resolveAllObjects(ctx context.Context, doc *document.Document) {
 	// can trigger the lazy xref augmentation write on a damaged file. A
 	// concurrent reader (e.g. ExtractText on the same Document) could win
 	// the augmentation race, so ranging Index.Entries directly here would
-	// race that write. The per-group checks below run after this pass, by
-	// which point the augmentation sync.Once is spent.
+	// race that write. A lookup the check groups miss later is deferred,
+	// see runCheckGroups.
 	for objNum, entry := range doc.XRefEntriesSnapshot() {
 		if count%100 == 0 {
 			if ctx.Err() != nil {
