@@ -83,6 +83,9 @@ type unknownOpsTally struct {
 	// delimited counts operators written against a delimiter veraPDF reads
 	// into them, which were written back apart from it.
 	delimited int
+	// strays counts the operators veraPDF reads from a stray delimiter where
+	// an operator stands, whose delimiters were removed.
+	strays int
 }
 
 func (t *unknownOpsTally) add(o unknownOpsTally) {
@@ -92,6 +95,7 @@ func (t *unknownOpsTally) add(o unknownOpsTally) {
 	t.nonFinite += o.nonFinite
 	t.separated += o.separated
 	t.delimited += o.delimited
+	t.strays += o.strays
 }
 
 // fixUnknownOps strips operators absent from [content.IsOperator] from every
@@ -168,6 +172,9 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	if total.delimited > 0 {
 		fixes = append(fixes, fmt.Sprintf("separated %d content-stream operator(s) from the delimiter written against them", total.delimited))
 	}
+	if total.strays > 0 {
+		fixes = append(fixes, fmt.Sprintf("removed the stray delimiters of %d undefined content-stream operator(s)", total.strays))
+	}
 	return fixes, nil
 }
 
@@ -213,9 +220,9 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 	}
 	ops, t.repaired = repairMalformedNumbers(ops)
 	ops, t.separated, t.removed = dropUndefinedOperators(ops)
-	t.delimited = delimitedOperators(ctx, data)
+	t.delimited, t.strays = delimitedOperators(ctx, data)
 	hasInlineImage := slices.ContainsFunc(ops, func(op content.Operation) bool { return op.Operator == "BI" })
-	if (t.removed == 0 && t.repaired == 0 && t.separated == 0 && t.delimited == 0) || hasInlineImage {
+	if (t.removed == 0 && t.repaired == 0 && t.separated == 0 && t.delimited == 0 && t.strays == 0) || hasInlineImage {
 		return spliced()
 	}
 	out, err := serializeOps(filterOps(ops))
@@ -229,7 +236,8 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 // delimiters ")", ">", "{", "}" and "%", which validation reads, as veraPDF
 // does, as one operator ISO 32000-1 does not define ([content.ParseStreamData]),
 // and whose part before the delimiter is an operator of Annex A: "re%" before
-// a comment, or "Q)".
+// a comment, or "Q)". It also counts, as strays, the operators validation reads
+// from a stray ")", ">", "{" or "}" where an operator stands: ")", or ")Tj)".
 //
 // ISO 32000-1, 7.2.2, Table 2 makes those characters delimiters, so a viewer
 // reads re and a comment, and the reading of a repair ([content.ForRepair])
@@ -237,6 +245,9 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 // apart from the delimiter, the comment and a stray delimiter go, and veraPDF
 // reads re. An operator whose part before the delimiter is no operator is not
 // counted: the repair removes that part as it removes any undefined operator.
+// A stray delimiter begins no object, so the reading of a repair drops it, a
+// viewer draws nothing for it, and the stream written back from that reading
+// holds none of it: ")Tj)" leaves the Tj a viewer reads.
 //
 // # Corpus evidence
 //
@@ -245,21 +256,23 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 //     ISO 19005-2, 6.2.2 t1, and which their PDF/A-1b and PDF/A-2b
 //     remediations, default and aggressive, left in place. The outputs now
 //     pass that test for veraPDF, and their extracted text is unchanged.
-func delimitedOperators(ctx context.Context, data []byte) int {
+func delimitedOperators(ctx context.Context, data []byte) (delimited, strays int) {
 	ops, err := content.ParseStreamData(ctx, data)
 	if err != nil {
-		return 0
+		return 0, 0
 	}
-	n := 0
 	for _, op := range ops {
 		if content.IsOperator(op.Operator) {
 			continue
 		}
-		if i := strings.IndexAny(op.Operator, ")>{}%"); i > 0 && content.IsOperator(op.Operator[:i]) {
-			n++
+		switch i := strings.IndexAny(op.Operator, ")>{}%"); {
+		case i == 0:
+			strays++
+		case i > 0 && content.IsOperator(op.Operator[:i]):
+			delimited++
 		}
 	}
-	return n
+	return delimited, strays
 }
 
 // dropUndefinedOperators separates every run of operators written with no

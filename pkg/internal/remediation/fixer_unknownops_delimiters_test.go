@@ -15,7 +15,10 @@ import (
 // the comment and the stray delimiter go, and validation reads the operator.
 // An operator whose part before the delimiter is no operator goes as any
 // undefined operator does, and the operator a viewer reads after the delimiter
-// stays.
+// stays. A stray ")", ">", "{" or "}" where an operator stands, which
+// validation reads as veraPDF does, as the start of an undefined operator,
+// goes, and so does the operator a viewer reads from nothing, while the one
+// it reads after the delimiter stays.
 //
 // # Corpus evidence
 //
@@ -27,20 +30,24 @@ func TestRepairContentDataSeparatesOperatorsFromDelimiters(t *testing.T) {
 
 	ctx := context.Background()
 	for _, tc := range []struct {
-		name               string
-		src                string
-		delimited, removed int
-		want               []string
+		name                       string
+		src                        string
+		delimited, strays, removed int
+		want                       []string
 	}{
-		{"an operator against a comment", "0 0 10 10 re%\nf\n", 1, 0, []string{"re", "f"}},
-		{"an operator against a parenthesis", "q 1 0 0 1 0 0 cm Q)\n", 1, 0, []string{"q", "cm", "Q"}},
-		{"an operator against a dictionary close", "q Q>> q Q{}\n", 2, 0, []string{"q", "Q", "q", "Q"}},
-		{"an undefined operator against a parenthesis", "BT /F1 12 Tf (a) T)Tj ET\n", 0, 1, []string{"BT", "Tf", "Tj", "ET"}},
+		{"an operator against a comment", "0 0 10 10 re%\nf\n", 1, 0, 0, []string{"re", "f"}},
+		{"an operator against a parenthesis", "q 1 0 0 1 0 0 cm Q)\n", 1, 0, 0, []string{"q", "cm", "Q"}},
+		{"an operator against a dictionary close", "q Q>> q Q{}\n", 2, 0, 0, []string{"q", "Q", "q", "Q"}},
+		{"an undefined operator against a parenthesis", "BT /F1 12 Tf (a) T)Tj ET\n", 0, 0, 1, []string{"BT", "Tf", "Tj", "ET"}},
+		{"a stray parenthesis", "q ) Q\n", 0, 1, 0, []string{"q", "Q"}},
+		{"stray braces and a dictionary close", "q { } >> > Q\n", 0, 4, 0, []string{"q", "Q"}},
+		{"an operator after a stray parenthesis", "BT /F1 12 Tf (a) )Tj) ET\n", 0, 1, 0, []string{"BT", "Tf", "Tj", "ET"}},
+		{"an undefined operator after a stray brace", "q }xx Q\n", 0, 1, 1, []string{"q", "Q"}},
 	} {
 		out, tally := repairContentData(ctx, []byte(tc.src), 2)
-		if tally.delimited != tc.delimited || tally.removed != tc.removed {
-			t.Errorf("%s: separated %d operators from a delimiter and removed %d, want %d and %d",
-				tc.name, tally.delimited, tally.removed, tc.delimited, tc.removed)
+		if tally.delimited != tc.delimited || tally.strays != tc.strays || tally.removed != tc.removed {
+			t.Errorf("%s: separated %d operators from a delimiter, removed the strays of %d and removed %d, want %d, %d and %d",
+				tc.name, tally.delimited, tally.strays, tally.removed, tc.delimited, tc.strays, tc.removed)
 			continue
 		}
 		if strings.ContainsAny(string(out), "%{}") {

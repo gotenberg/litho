@@ -32,6 +32,14 @@ import (
 //     1 after a "d" stays in the operator, which keeps d0 and d1 whole. The
 //     other delimiters of ISO 32000-1, 7.2.2, Table 2, ")", ">", "{", "}" and
 //     "%", do not end it, so "Q%comment" and "T)Tj" are one operator each.
+//   - A ")", ">", "{" or "}" where an operator stands starts one, read by the
+//     same rule: a stray ")" is the operator ")", and ")Tj)", ">>" and "}"
+//     before a digit are the operators ")Tj)", ">>" and "}". By ISO 32000-1,
+//     7.2.2 such a delimiter begins no object, and a reading without this
+//     option drops it. veraPDF reads it as the start of an operator
+//     (PDFStreamParser.parseNextToken hands every character it has no case
+//     for to nextOperator), one ISO 19005-1, 6.2.10 t1 and ISO 19005-2, 6.2.2
+//     t1 forbid.
 //   - Inside an array or a dictionary, veraPDF reads a keyword to white space
 //     or any delimiter (BaseParser.nextToken), and so does this reading, save
 //     that it still ends one before a digit. A keyword there other than true,
@@ -42,6 +50,16 @@ import (
 //
 // The objects of the file body keep the token boundaries of 7.2.2: only a
 // content stream reading sets it.
+//
+// # Corpus evidence
+//
+//   - All corpora: reading a stray ")", ">", "{" or "}" as the start of an
+//     operator changes what compliance reports on 1 file at PDF/A-1b and
+//     PDF/A-2b, veraPDF files at their own profile.
+//   - pdfjs issue11678.pdf: a ">>" written after a hex string on the damaged
+//     page 2 runs on into the undefined operator ">>J", the page's fourth.
+//     veraPDF 1.30 reports none on that page, whose stream holds a container
+//     it gives up on.
 func (l *Lexer) WithVeraPDFTokens() *Lexer {
 	l.veraPDF = true
 	return l
@@ -66,7 +84,9 @@ func (l *Lexer) WithVeraPDFTokens() *Lexer {
 // It also ends an operator at every delimiter of ISO 32000-1, 7.2.2, Table 2.
 // veraPDF reads "T)Tj" as one undefined operator, where a viewer reads T, a
 // stray ")" and the Tj it draws with. Removing the run would remove the Tj,
-// where removing T leaves it in place.
+// where removing T leaves it in place. For the same reason a stray ")", ">",
+// "{" or "}" stays the delimiter it is, which the parser drops, where veraPDF
+// reads an operator from it.
 func (l *Lexer) WithRepairTokens() *Lexer {
 	l.repair = true
 	return l
@@ -101,13 +121,49 @@ func runsOnThrough(c byte) bool {
 	return c == ')' || c == '>' || c == '{' || c == '}' || c == '%'
 }
 
-// nest counts the array or dictionary a token opens, delta 1, or closes,
-// delta -1, under [Lexer.WithVeraPDFTokens]. A close with none open counts
-// nothing.
-func (l *Lexer) nest(delta int) {
-	if l.veraPDF {
-		l.nesting = max(l.nesting+delta, 0)
+// maxTrackedNesting bounds how many open arrays and dictionaries a lexer under
+// [Lexer.WithVeraPDFTokens] remembers the kind of. Anti-DoS guard, not
+// spec-mandated: ISO 32000-1 sets no nesting limit, and the memory is otherwise
+// bounded by the length of the stream alone. It mirrors the object nesting the
+// parser accepts (maxParseNestingDepth in the parser package, 10000), past
+// which the parser refuses the object, so a stream nested deeper is damage
+// whose token boundaries no reading keeps. Past the bound a close closes
+// whatever is open.
+const maxTrackedNesting = 10000
+
+// opens notes the array ('[') or dictionary ('<') a token opens under
+// [Lexer.WithVeraPDFTokens].
+func (l *Lexer) opens(kind byte) {
+	switch {
+	case !l.veraPDF:
+	case len(l.open) < maxTrackedNesting:
+		l.open = append(l.open, kind)
+	default:
+		l.deep++
 	}
+}
+
+// closes notes the array ('[') or dictionary ('<') a token closes under
+// [Lexer.WithVeraPDFTokens]. A close that does not match the innermost one
+// open closes nothing: veraPDF reads a "]" inside a dictionary as the value of
+// an entry (COSParser.getDictionary, veraPDF-parser 1.30), so the ">>" after it
+// still closes the dictionary, and gives up on the stream at a ">>" inside an
+// array (COSParser.getArray). A close with none open closes nothing either.
+func (l *Lexer) closes(kind byte) {
+	switch n := len(l.open); {
+	case l.deep > 0:
+		l.deep--
+	case n > 0 && l.open[n-1] == kind:
+		l.open = l.open[:n-1]
+	}
+}
+
+// atOperator reports whether the token being read stands where veraPDF reads
+// an operator: outside every array and dictionary of a content stream read
+// under [Lexer.WithVeraPDFTokens], and not for a repair
+// ([Lexer.WithRepairTokens]).
+func (l *Lexer) atOperator() bool {
+	return l.veraPDF && !l.repair && len(l.open) == 0 && l.deep == 0
 }
 
 // startsVeraPDFNumber reports whether a run that starts with c is a number

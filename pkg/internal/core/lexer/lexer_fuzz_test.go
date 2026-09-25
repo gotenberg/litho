@@ -34,6 +34,8 @@ func FuzzLexer(f *testing.F) {
 	f.Add([]byte("0 0 m 1.5."))
 	f.Add([]byte("q Q%comment\nT)Tj Q>> <</A xx>> BDC [xx)] Q{} ] xx)"))
 	f.Add([]byte("q Q%c"))
+	f.Add([]byte("q ) { } > >> Q )Tj) }1 w >/F1 <</A ]>> ) [>> ) ] }] ) <41> )"))
+	f.Add([]byte("q )"))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 64*1024 {

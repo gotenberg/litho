@@ -179,3 +179,56 @@ func TestUndefinedOperatorsRunOnThroughDelimiters(t *testing.T) {
 		}
 	}
 }
+
+// TestStrayDelimitersAreUndefinedOperators pins that compliance reads a ")",
+// ">", "{" or "}" where an operator stands as veraPDF reads it
+// (PDFStreamParser.nextOperator): the start of an undefined operator, which
+// runs on as any operator does, while inside a dictionary it is no operator.
+// Every case was measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on the
+// same one-page fixtures.
+func TestStrayDelimitersAreUndefinedOperators(t *testing.T) {
+	t.Parallel()
+
+	const (
+		catalog = "<< /Type /Catalog /Pages 2 0 R >>"
+		pages   = "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"
+		page    = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << >> /Contents 4 0 R >>"
+	)
+	for _, tc := range []struct {
+		name      string
+		content   string
+		undefined int
+	}{
+		{"a closing parenthesis", "q ) Q\n", 1},
+		{"an opening brace", "q { Q\n", 1},
+		{"a closing brace", "q } Q\n", 1},
+		{"a greater-than sign", "q > Q\n", 1},
+		{"a dictionary close", "q >> Q\n", 1},
+		{"an operator run on", "q )Tj) Q\n", 1},
+		{"a digit after a brace", "q }1 w Q\n", 1},
+		{"a name after a greater-than sign", "q >/F1 12 Tf Q\n", 1},
+		{"between the operands of an operator", "0 0 m 5 ) 10 10 l S\n", 1},
+		{"inside a dictionary", "/P <</A )>> BDC EMC\n", 0},
+		{"a bracket inside a dictionary", "/P <</A ]>> BDC EMC\n", 0},
+	} {
+		for _, p := range []struct {
+			profile   models.PDFAProfile
+			undefined Rule
+		}{
+			{models.PDFA1b, Rule_19005_1_6_2_10_t01},
+			{models.PDFA2b, Rule_19005_2_6_2_2_t01},
+		} {
+			t.Run(tc.name+" "+string(p.profile), func(t *testing.T) {
+				t.Parallel()
+				doc, _ := objsDocPDF(t, catalog, pages, page, exponentStream("", tc.content))
+				viols, err := ValidatePDFA(context.Background(), doc, p.profile)
+				if err != nil {
+					t.Fatalf("ValidatePDFA: %v", err)
+				}
+				if got := countRuleErrs(t, viols, p.undefined); got != tc.undefined {
+					t.Errorf("undefined-operator test fired %d times, want %d: %v", got, tc.undefined, viols)
+				}
+			})
+		}
+	}
+}

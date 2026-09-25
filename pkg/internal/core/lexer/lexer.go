@@ -77,10 +77,14 @@ type Lexer struct {
 	// repair keeps the token boundaries a repair writes back where veraPDF
 	// departs from them. See [Lexer.WithRepairTokens].
 	repair bool
-	// nesting counts the arrays and dictionaries open at the token being read
-	// under [Lexer.WithVeraPDFTokens], where veraPDF reads a keyword as it
-	// reads an operand rather than as an operator.
-	nesting int
+	// open holds, innermost last, the kind of each array ('[') and dictionary
+	// ('<') open at the token being read under [Lexer.WithVeraPDFTokens],
+	// where veraPDF reads a keyword or a delimiter as it reads an operand
+	// rather than as an operator. See [Lexer.opens] and [Lexer.closes].
+	open []byte
+	// deep counts the arrays and dictionaries open past the
+	// [maxTrackedNesting] that open remembers.
+	deep int
 }
 
 // Reader returns the underlying [ioat.Reader] used by this lexer.
@@ -308,11 +312,12 @@ func (l *Lexer) readRegular() (Token, error) {
 			}
 			return Token{Type: TokenError, Value: err.Error()}, err
 		}
-		// The first character is never white space or a delimiter, which
-		// NextToken reads as tokens of their own.
+		// The first character is never white space, and a delimiter only
+		// where [Lexer.atOperator] reads one as the start of an operator:
+		// NextToken reads the others as tokens of their own.
 		if len(buf) == 0 {
 			beforeDigit = l.veraPDF && endsBeforeDigit(c)
-			runsOn = beforeDigit && !l.repair && l.nesting == 0
+			runsOn = beforeDigit && l.atOperator()
 		} else if beforeDigit && isDigit(c) && !joinsBeforeDigit(buf[len(buf)-1], c) {
 			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 			break
@@ -502,8 +507,12 @@ func (l *Lexer) NextToken() (Token, error) {
 			}
 			return Token{Type: TokenString, Value: buf.String()}, nil
 
-		case ')':
-			return Token{Type: TokenDelimiter, Value: ")"}, nil
+		case ')', '{', '}':
+			if l.atOperator() {
+				_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
+				return l.readRegular()
+			}
+			return Token{Type: TokenDelimiter, Value: string(c)}, nil
 
 		case '<':
 			nextC, err := l.reader.ReadByte()
@@ -514,7 +523,7 @@ func (l *Lexer) NextToken() (Token, error) {
 				return Token{Type: TokenError, Value: err.Error()}, err
 			}
 			if nextC == '<' {
-				l.nest(1)
+				l.opens('<')
 				return Token{Type: TokenDelimiter, Value: "<<"}, nil
 			}
 			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
@@ -538,6 +547,10 @@ func (l *Lexer) NextToken() (Token, error) {
 			return Token{Type: TokenHexString, Value: buf.String()}, nil
 
 		case '>':
+			if l.atOperator() {
+				_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
+				return l.readRegular()
+			}
 			nextC, err := l.reader.ReadByte()
 			if err != nil {
 				if err == io.EOF {
@@ -546,20 +559,19 @@ func (l *Lexer) NextToken() (Token, error) {
 				return Token{Type: TokenError, Value: err.Error()}, err
 			}
 			if nextC == '>' {
-				l.nest(-1)
+				l.closes('<')
 				return Token{Type: TokenDelimiter, Value: ">>"}, nil
 			}
 			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 			return Token{Type: TokenDelimiter, Value: ">"}, nil
 
-		case '[', ']', '{', '}':
-			switch c {
-			case '[':
-				l.nest(1)
-			case ']':
-				l.nest(-1)
-			}
-			return Token{Type: TokenDelimiter, Value: string(c)}, nil
+		case '[':
+			l.opens('[')
+			return Token{Type: TokenDelimiter, Value: "["}, nil
+
+		case ']':
+			l.closes('[')
+			return Token{Type: TokenDelimiter, Value: "]"}, nil
 
 		default:
 			if l.veraPDF && !l.repair && startsVeraPDFNumber(c) {

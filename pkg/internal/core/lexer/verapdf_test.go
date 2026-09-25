@@ -96,12 +96,51 @@ func TestWithVeraPDFTokensRunsOperatorsOnThroughDelimiters(t *testing.T) {
 		{"a string ends it as before", "Q(x)", []Token{kw("Q"), {Type: TokenString, Value: "(x)"}}},
 		{"a hex string ends it as before", "Q<41>", []Token{kw("Q"), {Type: TokenHexString, Value: "<41>"}}},
 		{"an array ends it as before", "Q]", []Token{kw("Q"), delim("]")}},
-		{"a run from n ends at the delimiter", "n)", []Token{kw("n"), delim(")")}},
+		{"a run from n ends at the delimiter", "n)", []Token{kw("n"), kw(")")}},
 		{"a run from B ends at the comment", "BT%c", []Token{kw("BT")}},
 		{"inside an array", "[xx)]", []Token{delim("["), kw("xx"), delim(")"), delim("]")}},
 		{"inside a dictionary", "<</A xx>> Q)", []Token{delim("<<"), {Type: TokenName, Value: "/A"}, kw("xx"), delim(">>"), kw("Q)")}},
 		{"after an array", "[1] xx)", []Token{delim("["), num("1"), delim("]"), kw("xx)")}},
 		{"after a stray close", "] xx)", []Token{delim("]"), kw("xx)")}},
+	} {
+		if got := lexVeraPDF(t, tc.src); !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: %q lexes as %v, want %v", tc.name, tc.src, got, tc.want)
+		}
+	}
+}
+
+// TestWithVeraPDFTokensReadsStrayDelimitersAsOperators pins that a ")", ">",
+// "{" or "}" where veraPDF reads an operator starts one
+// (PDFStreamParser.nextOperator), which runs on as any operator does, while
+// inside an array or a dictionary it stays a delimiter, and a close of the
+// other kind leaves the array or dictionary open. Measured with veraPDF 1.30
+// at PDF/A-1b and PDF/A-2b, the undefined operators it reports for "q ) Q",
+// "q { Q", "q } Q", "q > Q", "q >> Q", "q )Tj) Q", "q }1 w Q" and
+// "q >/F1 12 Tf Q" are the ones read here.
+func TestWithVeraPDFTokensReadsStrayDelimitersAsOperators(t *testing.T) {
+	t.Parallel()
+
+	delim := func(v string) Token { return Token{Type: TokenDelimiter, Value: v} }
+	name := func(v string) Token { return Token{Type: TokenName, Value: v} }
+	for _, tc := range []struct {
+		name string
+		src  string
+		want []Token
+	}{
+		{"a closing parenthesis", "q ) Q", []Token{kw("q"), kw(")"), kw("Q")}},
+		{"an opening brace", "{ Q", []Token{kw("{"), kw("Q")}},
+		{"a closing brace", "} Q", []Token{kw("}"), kw("Q")}},
+		{"a greater-than sign", "> Q", []Token{kw(">"), kw("Q")}},
+		{"a dictionary close", ">> Q", []Token{kw(">>"), kw("Q")}},
+		{"an operator run on", ")Tj) Q", []Token{kw(")Tj)"), kw("Q")}},
+		{"a digit ends it", "}1 w", []Token{kw("}"), num("1"), kw("w")}},
+		{"a name ends it", ">/F1", []Token{kw(">"), name("/F1")}},
+		{"at the end of the data", ")", []Token{kw(")")}},
+		{"inside an array", "[) { } >]", []Token{delim("["), delim(")"), delim("{"), delim("}"), delim(">"), delim("]")}},
+		{"inside a dictionary", "<</A )>> )", []Token{delim("<<"), name("/A"), delim(")"), delim(">>"), kw(")")}},
+		{"a bracket inside a dictionary", "<</A ]>> )", []Token{delim("<<"), name("/A"), delim("]"), delim(">>"), kw(")")}},
+		{"a dictionary close inside an array", "[>>] )", []Token{delim("["), delim(">>"), delim("]"), kw(")")}},
+		{"a hex string is no stray", "<41> )", []Token{{Type: TokenHexString, Value: "<41>"}, kw(")")}},
 	} {
 		if got := lexVeraPDF(t, tc.src); !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("%s: %q lexes as %v, want %v", tc.name, tc.src, got, tc.want)
@@ -214,6 +253,8 @@ func TestWithRepairTokensKeepsNumberRuns(t *testing.T) {
 		{"q1", []Token{kw("q"), num("1")}},
 		{"n1", []Token{kw("n1")}},
 		{"T)Tj", []Token{kw("T"), {Type: TokenDelimiter, Value: ")"}, kw("Tj")}},
+		{") Q", []Token{{Type: TokenDelimiter, Value: ")"}, kw("Q")}},
+		{">> Q", []Token{{Type: TokenDelimiter, Value: ">>"}, kw("Q")}},
 		{"Q%comment", []Token{kw("Q")}},
 	} {
 		lex := newLexer(tc.src).WithVeraPDFTokens().WithRepairTokens()
