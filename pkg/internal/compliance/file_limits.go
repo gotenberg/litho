@@ -183,11 +183,11 @@ func withoutZeroRule(results []Violation) []Violation {
 	return slices.DeleteFunc(results, func(v Violation) bool { return v.Rule.Specification == "" })
 }
 
-// checkContentStreamLimits checks the string, integer and real operands of
-// every content stream the document draws against the implementation limits:
-// the content of each page, and every stream [drawnStreamWalk] reaches from it,
-// its form XObjects, tiling patterns, Type3 glyphs and annotation appearances
-// included. Only content streams are scanned, not ICC profiles, font programs
+// checkContentStreamLimits checks the string, name, integer and real operands
+// of every content stream the document draws against the implementation
+// limits: the content of each page, and every stream [drawnStreamWalk] reaches
+// from it, its form XObjects, tiling patterns, Type3 glyphs and annotation
+// appearances included. Only content streams are scanned, not ICC profiles, font programs
 // or other binary streams.
 //
 // ISO 19005-2 §6.1.13 constrains every number a conforming file contains, and
@@ -283,20 +283,22 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 	return withoutZeroRule(results)
 }
 
-// checkOperandLimits checks the strings, integers and reals of one parsed
-// content stream against the implementation limits: the ones veraPDF reaches
-// through the operators that use them ([ContentOperandLink]). where names the
-// stream in the context of a violation, and uncoloured reports that it starts
-// with its colour operators ignored ([NewColourState]). overflow counts the
-// integer literals past the 64-bit range the parse read as reals (see
-// [checkNumberLimits]), and is consumed.
+// checkOperandLimits checks the strings, names, integers and reals of one
+// parsed content stream against the implementation limits: the ones veraPDF
+// reaches through the operators that use them ([ContentOperandLink]). where
+// names the stream in the context of a violation, and uncoloured reports that
+// it starts with its colour operators ignored ([NewColourState]). overflow
+// counts the integer literals past the 64-bit range the parse read as reals
+// (see [checkNumberLimits]), and is consumed.
 //
-// ISO 19005-1, 6.1.12 and ISO 19005-2, 6.1.13 bound every integer, real and
-// string the file contains, whatever operand holds it. Deliberate leniency
-// toward veraPDF, which judges an operand only as the object its operator
-// reads it as: an operand the operator does not read, before the ones it
-// needs or of another type, is judged by no rule, see [ContentOperandLink]. An
-// operand array or dictionary veraPDF reads whole is judged whole: a dash
+// ISO 19005-1, 6.1.12 and ISO 19005-2, 6.1.13 bound every integer, real,
+// string and name the file contains, whatever operand holds it, a name to 127
+// bytes (t4) as the object walk judges it ([checkObjectNumericLimits]): its
+// #XX escapes expanded. Deliberate leniency toward veraPDF, which judges an
+// operand only as the object its operator reads it as: an operand the
+// operator does not read, before the ones it needs or of another type, is
+// judged by no rule, see [ContentOperandLink]. An operand array or dictionary
+// veraPDF reads whole is judged whole, its keys and values: a dash
 // array (ISO 32000-1, 8.4.3.6), a TJ array (9.4.3), a marked-content property
 // list (14.6.2) and an inline image's dictionary (8.9.7). Measured with
 // veraPDF 1.30 at PDF/A-1b and PDF/A-2b, an integer, a real, a denormal real,
@@ -308,7 +310,8 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 // limit as the /ActualText or /Alt of a property list fails the string limit
 // twice, once as a value of the list and once as the text veraPDF reads for
 // the marked content. Such a string is one string of the file, and is judged
-// once.
+// once. The name by which BDC or DP names a property list of /Properties is
+// no name veraPDF judges: a long one fails nothing.
 //
 // The operands of an operator ISO 32000-1, Annex A does not define are not
 // checked. ISO 19005-1, 6.2.10 t1 and ISO 19005-2, 6.2.2 t1 already fail the
@@ -331,6 +334,15 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 //     array that fails the integer limit once.
 //   - pdfjs bug1354114.pdf and bug1953099.pdf: veraPDF reports that integer,
 //     and no other limit, in both. veraPDF cannot open bug1130815.pdf.
+//   - All corpora: judging the names of a content stream changes what
+//     compliance reports on 2 files at PDF/A-1b and PDF/A-2b, veraPDF files
+//     at their own profile, each now failing the name limit as often as
+//     veraPDF 1.30 does.
+//   - pdfjs issue6151.pdf: selects its font by a name of 139 bytes, written
+//     with #20 escapes, which veraPDF reports as a Tf operand beside the /Font
+//     key the object walk reports.
+//   - litho limits_2b.pdf: gives cs a name of 203 bytes, which veraPDF reports
+//     beside the /ColorSpace key.
 func checkOperandLimits(ops []content.Operation, overflow map[float64]int, where string, uncoloured bool, maxStr int, profile string) []Violation {
 	l := operandLimits{
 		where:    where,
@@ -410,6 +422,11 @@ func (l *operandLimits) judgeOperand(obj ast.PdfObject, link OperandLink) {
 			l.judge(v)
 			return
 		}
+	case ast.PdfName:
+		if link&LinkName != 0 {
+			l.judge(v)
+			return
+		}
 	case ast.PdfArray:
 		switch {
 		case link&LinkArray != 0:
@@ -459,12 +476,22 @@ func (l *operandLimits) skip(obj ast.PdfObject) {
 	}
 }
 
-// judge checks one object, and every string, integer and real an array or a
-// dictionary holds at any depth, dictionary values in key order. The
-// recursion is bounded by the nesting the parser reads (maxParseNestingDepth
-// in the parser package).
+// judge checks one object, and every string, name, integer and real an array
+// or a dictionary holds at any depth, each key of a dictionary with its value,
+// in key order. The recursion is bounded by the nesting the parser reads
+// (maxParseNestingDepth in the parser package).
 func (l *operandLimits) judge(obj ast.PdfObject) {
 	switch v := obj.(type) {
+	case ast.PdfName:
+		// The limit applies to the bytes the name stands for, which the
+		// lexer already expanded from its #XX escapes, as for a name of an
+		// object (see [checkObjectNumericLimits]).
+		if len(v) > maxNameBytes {
+			l.results = append(l.results, Violation{
+				Rule:    nameLengthRule(l.profile),
+				Context: fmt.Sprintf("%s: name length %d exceeds %d", l.where, len(v), maxNameBytes),
+			})
+		}
 	case ast.PdfString:
 		if len(v) > l.maxStr {
 			l.results = append(l.results, Violation{
@@ -488,6 +515,7 @@ func (l *operandLimits) judge(obj ast.PdfObject) {
 		}
 	case ast.PdfDict:
 		for _, key := range slices.Sorted(maps.Keys(v)) {
+			l.judge(key)
 			l.judge(v[key])
 		}
 	}

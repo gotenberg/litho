@@ -170,3 +170,76 @@ func TestColourStateFollowsQAndD1(t *testing.T) {
 		})
 	}
 }
+
+// TestNameLimitInContentStreams pins that the name limit, ISO 19005-1, 6.1.12
+// t4 and ISO 19005-2, 6.1.13 t4, judges the names of a content stream veraPDF
+// reads: the name an operator reads ([ContentOperandLink]), and every key and
+// name value of a dictionary or an array it reads whole. The limit applies to
+// the bytes the name stands for, its #XX escapes expanded. Every case was
+// measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on the same one-page
+// fixtures, which fail the limit as many times as the case states.
+func TestNameLimitInContentStreams(t *testing.T) {
+	t.Parallel()
+
+	const path = " 0 0 m 10 10 l S"
+	long := "/" + strings.Repeat("a", 128)
+	for _, tc := range []struct {
+		name, content string
+		want          int
+	}{
+		{"the font name of Tf", "BT " + long + " 12 Tf ET", 1},
+		{"a 127-byte font name", "BT /" + strings.Repeat("a", 127) + " 12 Tf ET", 0},
+		{"43 escapes, 129 bytes written", "BT /" + strings.Repeat("#41", 43) + " 12 Tf ET", 0},
+		{"128 escapes", "BT /" + strings.Repeat("#41", 128) + " 12 Tf ET", 1},
+		{"an extra name before Tf", "BT " + long + " /F1 12 Tf ET", 0},
+		{"the intent of ri", long + " ri", 1},
+		{"the tag of BMC", long + " BMC EMC", 1},
+		{"an extra name before BMC", long + " /Tag BMC EMC", 0},
+		{"the tag of MP", long + " MP", 1},
+		{"the tag of BDC", long + " << >> BDC EMC", 1},
+		{"a key of a property list", "/Tag << " + long + " 1 >> BDC EMC", 1},
+		{"a value of a property list", "/Tag << /X " + long + " >> BDC EMC", 1},
+		{"a property list named from the resources", "/Tag " + long + " BDC EMC", 0},
+		{"the tag of DP", long + " << >> DP", 1},
+		{"the name of cs", long + " cs" + path, 1},
+		{"an extra name before cs", long + " /DeviceGray cs" + path, 0},
+		{"the name of CS", long + " CS" + path, 1},
+		{"the name of g", long + " g" + path, 1},
+		{"the pattern of scn", "/Pattern cs " + long + " scn" + path, 1},
+		{"a name given to sc", "/DeviceGray cs " + long + " sc" + path, 0},
+		{"the name of gs", long + " gs", 0},
+		{"the name of Do", long + " Do", 0},
+		{"the name of sh", long + " sh", 0},
+		{"a name in a dash array", "[" + long + " 2] 0 d" + path, 1},
+		{"a key of an inline image", "q 10 0 0 10 0 0 cm BI /W 1 /H 1 /BPC 8 /CS /G " + long + " 1 ID \x00 EI Q", 1},
+		{"a value of an inline image", "q 10 0 0 10 0 0 cm BI /W 1 /H 1 /BPC 8 /CS /G /X " + long + " ID \x00 EI Q", 1},
+		{"a name before q", long + " q Q", 0},
+		{"a name before w", long + " 1 w" + path, 0},
+		{"a name before an undefined operator", long + " foo", 0},
+	} {
+		for _, p := range []struct {
+			profile models.PDFAProfile
+			rule    Rule
+		}{
+			{models.PDFA1b, Rule_19005_1_6_1_12_t04},
+			{models.PDFA2b, Rule_19005_2_6_1_13_t04},
+		} {
+			t.Run(tc.name+" "+string(p.profile), func(t *testing.T) {
+				t.Parallel()
+				doc, _ := objsDocPDF(t,
+					"<< /Type /Catalog /Pages 2 0 R >>",
+					"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+					"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << >> /Contents 4 0 R >>",
+					exponentStream("", tc.content),
+				)
+				viols, err := ValidatePDFA(context.Background(), doc, p.profile)
+				if err != nil {
+					t.Fatalf("ValidatePDFA: %v", err)
+				}
+				if got := countRuleErrs(t, viols, p.rule); got != tc.want {
+					t.Errorf("the name limit fired %d times, want %d: %v", got, tc.want, viols)
+				}
+			})
+		}
+	}
+}

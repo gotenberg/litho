@@ -71,6 +71,11 @@ const (
 // elements of m too. A string past the limit fails ISO 19005-2,
 // 6.1.13 t3 shown by Tj, TJ and ", and in a dash array, and fails nothing
 // before w, m, BMC or an undefined operator, or as an extra operand before Tj.
+// A 128-byte name fails ISO 19005-1, 6.1.12 t4 and ISO 19005-2, 6.1.13 t4
+// given to Tf, ri, BMC, MP, cs, CS, g and scn, as the tag of BDC and DP, as a
+// key or a value of their property list or of an inline image's dictionary,
+// and in a dash array, and fails nothing given to sc, gs, Do or sh, as an
+// extra operand before Tf, BMC or cs, or before q, w or an undefined operator.
 // veraPDF cannot validate a stream whose m takes an array holding an array: it
 // stops on the element that is no number (GFOperator.getListOfNumbers).
 //
