@@ -2,10 +2,12 @@ package remediation
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -311,14 +313,14 @@ func needAppearancesShowsAValue(ctx context.Context, doc *document.Document) boo
 	return false
 }
 
-// invokesXObject reports whether a content stream names an XObject and invokes
-// it with Do (ISO 32000-1, 8.8).
-func invokesXObject(data []byte, name ast.PdfName) bool {
+// firstInvocation returns the offset at which a content stream first names an
+// XObject and invokes it with Do (ISO 32000-1, 8.8), or -1 when it never does.
+func firstInvocation(data []byte, name ast.PdfName) int {
 	needle := append([]byte{'/'}, []byte(name)...)
 	for i := 0; ; {
 		j := bytes.Index(data[i:], needle)
 		if j < 0 {
-			return false
+			return -1
 		}
 		rest := data[i+j+len(needle):]
 		// The name ends here only if a delimiter follows, so /Im4 does not
@@ -328,7 +330,7 @@ func invokesXObject(data []byte, name ast.PdfName) bool {
 			continue
 		}
 		if bytes.HasPrefix(bytes.TrimLeft(rest, " \t\r\n"), []byte("Do")) {
-			return true
+			return i + j
 		}
 		i += j + len(needle)
 	}
@@ -414,6 +416,12 @@ func fieldValueText(ctx context.Context, doc *document.Document, annot ast.PdfDi
 }
 
 // appearanceText concatenates the strings an appearance shows with Tj or TJ.
+//
+// The pieces join in a fixed order: invoked XObjects in the order the stream
+// paints them, appearance states by name. Ranging the resource and state maps
+// joined them in a different order on every run, so a value split across two
+// XObjects matched on some runs only, and the same bytes kept or dropped
+// /NeedAppearances at random (CONTRIBUTING "Deterministic output").
 func appearanceText(ctx context.Context, doc *document.Document, obj ast.PdfObject, depth int) string {
 	if depth > maxAppearanceNestDepth || obj == nil {
 		return ""
@@ -440,17 +448,27 @@ func appearanceText(ctx context.Context, doc *document.Document, obj ast.PdfObje
 		if err != nil || inner == nil {
 			return out
 		}
+		type invocation struct {
+			at    int
+			child ast.PdfObject
+		}
+		var invoked []invocation
 		for name, child := range inner {
-			if !invokesXObject(data, name) {
-				continue
+			if at := firstInvocation(data, name); at >= 0 {
+				invoked = append(invoked, invocation{at: at, child: child})
 			}
-			out += appearanceText(ctx, doc, child, depth+1)
+		}
+		// Two names never share an offset: a name only matches where a
+		// delimiter ends it, so the order is total.
+		slices.SortFunc(invoked, func(a, b invocation) int { return cmp.Compare(a.at, b.at) })
+		for _, inv := range invoked {
+			out += appearanceText(ctx, doc, inv.child, depth+1)
 		}
 		return out
 	case ast.PdfDict:
 		var out strings.Builder
-		for _, entry := range v {
-			out.WriteString(appearanceText(ctx, doc, entry, depth+1))
+		for _, key := range slices.Sorted(maps.Keys(v)) {
+			out.WriteString(appearanceText(ctx, doc, v[key], depth+1))
 		}
 		return out.String()
 	}
