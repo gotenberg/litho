@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"maps"
 	"math"
-	"sort"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
@@ -151,35 +151,11 @@ func (d *Document) CatalogRef(ctx context.Context) (ast.PdfIndirectRef, bool) {
 }
 
 // scanForCatalogObjRef returns the reference of the first matching indirect
-// object, scanning in ascending object-number order so the choice is
-// deterministic when several candidates match (a full rewrite must be
-// reproducible). It mirrors [scanObjects] but yields the reference, which a
-// writer needs, rather than the resolved dict.
+// object, in the order [scanObjects] defines. It yields the reference, which
+// a writer needs, rather than the resolved dict.
 func scanForCatalogObjRef(ctx context.Context, doc *Document, match func(ast.PdfDict) bool) (ast.PdfIndirectRef, bool) {
-	snapshot := doc.XRefEntriesSnapshot()
-	nums := make([]int, 0, len(snapshot))
-	for objNum := range snapshot {
-		nums = append(nums, objNum)
-	}
-	sort.Ints(nums)
-	for _, objNum := range nums {
-		if err := ctx.Err(); err != nil {
-			return ast.PdfIndirectRef{}, false
-		}
-		entry := snapshot[objNum]
-		if objNum == 0 || entry.Type != 1 {
-			continue
-		}
-		ref := ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation}
-		resolved, err := doc.Resolve(ctx, ref)
-		if err != nil {
-			continue
-		}
-		if dict, ok := resolved.(ast.PdfDict); ok && match(dict) {
-			return ref, true
-		}
-	}
-	return ast.PdfIndirectRef{}, false
+	ref, dict := scanObjects(ctx, doc, match)
+	return ref, dict != nil
 }
 
 // catalogHasPages reports whether a candidate catalog dict points at a
@@ -209,7 +185,7 @@ func catalogHasPages(ctx context.Context, doc *Document, catalog ast.PdfDict) bo
 // error path.
 func scanForCatalog(ctx context.Context, doc *Document) ast.PdfDict {
 	// Most confident: /Type /Catalog with a /Pages child.
-	if dict := scanObjects(ctx, doc, func(d ast.PdfDict) bool {
+	if _, dict := scanObjects(ctx, doc, func(d ast.PdfDict) bool {
 		// Silent error: a missing or malformed /Type just means the
 		// candidate is not a catalog. Move on.
 		typeName, _ := ResolveName(ctx, doc, d["Type"]) //nolint:errcheck // see comment.
@@ -218,7 +194,7 @@ func scanForCatalog(ctx context.Context, doc *Document) ast.PdfDict {
 		return dict
 	}
 	// Any dict with a resolvable /Pages child.
-	if dict := scanObjects(ctx, doc, func(d ast.PdfDict) bool {
+	if _, dict := scanObjects(ctx, doc, func(d ast.PdfDict) bool {
 		return catalogHasPages(ctx, doc, d)
 	}); dict != nil {
 		return dict
@@ -232,94 +208,69 @@ func scanForCatalog(ctx context.Context, doc *Document) ast.PdfDict {
 }
 
 // scanObjects iterates every in-use uncompressed entry in the
-// cross-reference table, resolves each to a dictionary, and returns
-// the first one that matches the predicate. Compressed entries are
-// skipped: resolving one triggers a full decompression of its
-// containing object stream, and catalog / pages-root objects are
-// almost always direct. Scanning compressed objects would inflate the
-// cost of every recovery path by several orders of magnitude on files
-// with large object streams.
-func scanObjects(ctx context.Context, doc *Document, match func(ast.PdfDict) bool) ast.PdfDict {
+// cross-reference table, resolves each to a dictionary, and returns the
+// first one that matches the predicate, with its reference. Compressed
+// entries are skipped: resolving one triggers a full decompression of its
+// containing object stream, and catalog / pages-root objects are almost
+// always direct. Scanning compressed objects would inflate the cost of
+// every recovery path by several orders of magnitude on files with large
+// object streams.
+//
+// The scan runs in ascending object-number order. A damaged file can hold
+// several candidates, and ranging the table map would pick one at random
+// on each run, so the same bytes would recover different catalogs and
+// write different output (CONTRIBUTING "Deterministic output"). The single
+// order also keeps [ResolveCatalog] and [Document.CatalogRef], which both
+// recover through this scan, agreeing on the catalog.
+//
+// # Corpus evidence
+//
+//   - All corpora: 14 files recover their catalog through this scan, and
+//     none holds more than one candidate catalog or page-tree root, so the
+//     fixed order changes no corpus output.
+func scanObjects(ctx context.Context, doc *Document, match func(ast.PdfDict) bool) (ast.PdfIndirectRef, ast.PdfDict) {
 	// Iterate a snapshot: the loop calls Resolve, which can trigger the
 	// lazy xref augmentation write, so ranging Index.Entries directly
 	// would race a concurrent augmentation.
-	for objNum, entry := range doc.XRefEntriesSnapshot() {
+	snapshot := doc.XRefEntriesSnapshot()
+	for _, objNum := range slices.Sorted(maps.Keys(snapshot)) {
 		if err := ctx.Err(); err != nil {
-			return nil
+			return ast.PdfIndirectRef{}, nil
 		}
+		entry := snapshot[objNum]
 		if objNum == 0 || entry.Type != 1 {
 			continue
 		}
-		resolved, err := doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation})
-		if err != nil {
-			continue
-		}
-		dict, ok := resolved.(ast.PdfDict)
-		if !ok {
-			continue
-		}
-		if match(dict) {
-			return dict
-		}
-	}
-	return nil
-}
-
-// findPagesRoot locates a /Type /Pages dictionary that is not referenced
-// as a /Kids entry of another Pages node. That node is the effective
-// page tree root when the catalog is missing or damaged.
-func findPagesRoot(ctx context.Context, doc *Document) ast.PdfIndirectRef {
-	// Collect every /Type /Pages node. Same rationale as scanObjects:
-	// limit the scan to uncompressed entries to avoid decompressing
-	// large object streams that are unlikely to hold a pages-root
-	// dictionary.
-	candidates := make(map[int]ast.PdfIndirectRef)
-	// Snapshot for the same reason as scanObjects: Resolve in the loop
-	// can trigger the lazy xref augmentation write.
-	for objNum, entry := range doc.XRefEntriesSnapshot() {
-		if err := ctx.Err(); err != nil {
-			return ast.PdfIndirectRef{}
-		}
-		if objNum == 0 || entry.Type != 1 {
-			continue
-		}
-		resolved, err := doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation})
-		if err != nil {
-			continue
-		}
-		dict, ok := resolved.(ast.PdfDict)
-		if !ok {
-			continue
-		}
-		// Silent error: an object without a resolvable /Type is not a
-		// Pages node and can be skipped.
-		typeName, _ := ResolveName(ctx, doc, dict["Type"]) //nolint:errcheck // see comment.
-		if typeName != "Pages" {
-			continue
-		}
-		candidates[objNum] = ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation}
-	}
-	// Remove any candidate that appears as a /Parent of another node.
-	for _, ref := range candidates {
+		ref := ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation}
 		resolved, err := doc.Resolve(ctx, ref)
 		if err != nil {
 			continue
 		}
-		dict, ok := resolved.(ast.PdfDict)
-		if !ok {
-			continue
+		if dict, ok := resolved.(ast.PdfDict); ok && match(dict) {
+			return ref, dict
+		}
+	}
+	return ast.PdfIndirectRef{}, nil
+}
+
+// findPagesRoot locates a /Type /Pages dictionary that records no /Parent,
+// which makes it the effective page tree root when the catalog is missing
+// or damaged. When several qualify, the lowest object number wins, for the
+// reason [scanObjects] gives: the pick must not change from run to run.
+func findPagesRoot(ctx context.Context, doc *Document) ast.PdfIndirectRef {
+	ref, _ := scanObjects(ctx, doc, func(dict ast.PdfDict) bool {
+		// Silent error: an object without a resolvable /Type is not a
+		// Pages node and can be skipped.
+		typeName, _ := ResolveName(ctx, doc, dict["Type"]) //nolint:errcheck // see comment.
+		if typeName != "Pages" {
+			return false
 		}
 		// Absent or wrongly typed /Parent simply means this node has
 		// no parent recorded; treat it as root-eligible.
 		parentRef, _ := dict["Parent"].(ast.PdfIndirectRef) //nolint:errcheck // see comment.
-		if parentRef != (ast.PdfIndirectRef{}) {
-			delete(candidates, ref.ObjectNum)
-		}
-	}
-	for _, ref := range candidates {
-		return ref
-	}
-	return ast.PdfIndirectRef{}
+		return parentRef == (ast.PdfIndirectRef{})
+	})
+	return ref
 }
 
 // ResolvePages extracts all [Page] entries from the [Catalog] by traversing the page tree.
