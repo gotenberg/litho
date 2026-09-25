@@ -50,12 +50,7 @@ func TestUnreadableContainerLeavesTheStreamUnjudged(t *testing.T) {
 	for _, profile := range []models.PDFAProfile{models.PDFA1b, models.PDFA2b} {
 		t.Run("a /Contents array "+string(profile), func(t *testing.T) {
 			t.Parallel()
-			// TODO: [per-part limits] the implementation-limit check parses
-			// each part of a /Contents array alone (checkContentStreamLimits),
-			// where veraPDF gives up on the parts as one stream, so the
-			// integer of the first part still fails ISO 19005-1, 6.1.12 t1 and
-			// ISO 19005-2, 6.1.13 t1 here, and veraPDF 1.30 reports neither.
-			got := withoutRules(streamEndsRules(t, profile, "[4 0 R 8 0 R]", exponentStream("", streamEndsProbe), exponentStream("", "[xx] TJ\n")), "6.1.12 t1", "6.1.13 t1")
+			got := streamEndsRules(t, profile, "[4 0 R 8 0 R]", exponentStream("", streamEndsProbe), exponentStream("", "[xx] TJ\n"))
 			if want := pageContent(t, profile, ""); !reflect.DeepEqual(got, want) {
 				t.Errorf("an unreadable array in the second part reports %v, want %v", got, want)
 			}

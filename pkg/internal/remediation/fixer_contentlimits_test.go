@@ -2,6 +2,7 @@ package remediation
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"slices"
 	"strconv"
@@ -407,4 +408,64 @@ func contentLimitsReported(t *testing.T, data string, uncoloured bool) int {
 		}
 	}
 	return n
+}
+
+// TestFixContentLimitsReadsPartsAsOneStream pins that the content-limits
+// repair reads the parts of a page's /Contents array as the one stream
+// compliance judges, and respells as many numbers as compliance reports: one
+// in an array or an operand list a part opens and the next closes, none given
+// as an extra operand to an operator of the next part.
+func TestFixContentLimitsReadsPartsAsOneStream(t *testing.T) {
+	t.Parallel()
+
+	const (
+		big  = "99999999999"
+		path = " 0 0 m 10 10 l S"
+	)
+	for _, tc := range []struct {
+		name, first, other string
+		want               int
+	}{
+		{"a dash array across two parts", "[" + big, "2] 0 d" + path, 1},
+		{"an operand before the operator of the next part", big, " w" + path, 1},
+		{"an extra operand before the operator of the next part", big + " 1", " w" + path, 0},
+		{"a number in each part", big + " w" + path, big + " w" + path, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			data := buildStructPDF(
+				"<< /Type /Catalog /Pages 2 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents [4 0 R 5 0 R] /Resources << >> >>",
+				hexStreamObj("", tc.first),
+				hexStreamObj("", tc.other),
+			)
+			doc, _ := newTestDoc(t, data)
+			viols, err := compliance.ValidatePDFA(context.Background(), doc, models.PDFA1b)
+			if err != nil {
+				t.Fatalf("ValidatePDFA: %v", err)
+			}
+			reported := 0
+			for _, e := range viols {
+				if v, ok := e.(compliance.Violation); ok && matchContentLimits(v) {
+					reported++
+				}
+			}
+			doc, alloc := newTestDoc(t, data)
+			fixes, err := fixContentLimits(context.Background(), alloc, doc, Options{}, nil, "PDF/A-1b")
+			if err != nil {
+				t.Fatalf("fixContentLimits: %v", err)
+			}
+			clamped := 0
+			if len(fixes) > 0 {
+				if _, err := fmt.Sscanf(fixes[0], "clamped %d", &clamped); err != nil {
+					t.Fatalf("reading %q: %v", fixes[0], err)
+				}
+			}
+			if reported != tc.want || clamped != tc.want {
+				t.Errorf("compliance reports %d numbers and the repair clamped %d, want %d", reported, clamped, tc.want)
+			}
+		})
+	}
 }

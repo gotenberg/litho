@@ -187,8 +187,8 @@ func withoutZeroRule(results []Violation) []Violation {
 // of every content stream the document draws against the implementation
 // limits: the content of each page, and every stream [drawnStreamWalk] reaches
 // from it, its form XObjects, tiling patterns, Type3 glyphs and annotation
-// appearances included. Only content streams are scanned, not ICC profiles, font programs
-// or other binary streams.
+// appearances included. Only content streams are scanned, not ICC profiles,
+// font programs or other binary streams.
 //
 // ISO 19005-2 §6.1.13 constrains every number a conforming file contains, and
 // ISO 19005-1, 6.1.12 t2 states the real-magnitude limit over CosReal, which is
@@ -207,6 +207,18 @@ func withoutZeroRule(results []Violation) []Violation {
 // direct arrays naming the same stream fail the limit once each, and a stream
 // one page's array names twice fails it once.
 //
+// The parts of a /Contents array are judged as the one content stream ISO
+// 32000-1, 7.7.3.3 makes them, which is how veraPDF reads them and how the
+// other content-stream rules judge them ([resolvePageContentBytes]). Judged
+// part by part, the limits still fired in a part veraPDF never reads. Measured
+// with veraPDF 1.30 at PDF/A-1b and PDF/A-2b, an integer past the limit given
+// to w fails nothing in the part after one whose stray "]" ends veraPDF's
+// reading, nor in a page whose other part, before or after it, holds an array
+// veraPDF gives up on (see [content.ParseStreamData]). An integer in a dash
+// array, a TJ array or an operand list a part opens and the next one closes
+// fails it once. "99999" ending one part and "999999 w" starting the next fail
+// nothing: the parts join no token.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue6342.pdf: writes two out-of-range reals in the form its page
@@ -219,6 +231,9 @@ func withoutZeroRule(results []Violation) []Violation {
 //   - pdfjs tracemonkey.pdf: veraPDF reports 328 out-of-range reals, and
 //     litho reported 331, pages 10, 11 and 13 each stating one of theirs
 //     twice.
+//   - All corpora: judging the parts of a /Contents array as one stream
+//     changes what compliance reports on no file at PDF/A-1b and PDF/A-2b,
+//     veraPDF files at their own profile.
 func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violation {
 	doc, profile := vctx.doc, vctx.profile
 	maxStr := maxStringBytes1
@@ -231,44 +246,19 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 		if ctx.Err() != nil {
 			return results
 		}
-		contentsObj := vctx.pages[i].dict["Contents"]
-		if contentsObj == nil || vctx.pages[i].contentJudged {
-			continue
-		}
 		// A page's content is judged whole even when another page's shares a
 		// part of it, and a part the page lists twice is judged once.
-		visited := make(map[int]bool)
-		// Contents can be a single stream ref or an array of stream refs.
-		var refs []ast.PdfObject
-		if arr, err := document.ResolveArray(ctx, doc, contentsObj); err == nil && arr != nil {
-			refs = arr
-		} else {
-			refs = []ast.PdfObject{contentsObj}
+		page := &vctx.pages[i]
+		if page.contentJudged || len(page.content) == 0 {
+			continue
 		}
-		for _, ref := range refs {
-			objNum := 0
-			if r, ok := ref.(ast.PdfIndirectRef); ok {
-				objNum = r.ObjectNum
-				if visited[objNum] {
-					continue
-				}
-				visited[objNum] = true
-			}
-			stream, err := document.ResolveStream(ctx, doc, ref)
-			if err != nil {
-				continue
-			}
-			data, err := doc.DecodeStream(ctx, stream)
-			if err != nil || len(data) == 0 {
-				continue
-			}
-			ops, overflows, err := content.ParseStreamDataWithOverflows(ctx, data)
-			if err != nil {
-				doc.Logger.Debug("compliance.file_structure: cannot parse content stream", "error", err)
-				continue
-			}
-			results = append(results, checkOperandLimits(ops, countOverflows(overflows), streamContentWhere(objNum), false, maxStr, profile)...)
+		ops, overflows, err := content.ParseStreamDataWithOverflows(ctx, page.content)
+		if err != nil {
+			doc.Logger.Debug("compliance.file_structure: cannot parse page content", "page", i+1, "error", err)
+			continue
 		}
+		where := fmt.Sprintf("page %d (stream content)", i+1)
+		results = append(results, checkOperandLimits(ops, countOverflows(overflows), where, false, maxStr, profile)...)
 	}
 
 	walk := newDrawnStreamWalk(vctx, func(s *drawnStream) {

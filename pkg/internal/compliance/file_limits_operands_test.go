@@ -243,3 +243,61 @@ func TestNameLimitInContentStreams(t *testing.T) {
 		}
 	}
 }
+
+// TestLimitsJudgePageContentPartsAsOneStream pins that the implementation
+// limits read the parts of a page's /Contents array as the one content stream
+// ISO 32000-1, 7.7.3.3 makes them, as veraPDF reads them: a stray "]" in a part
+// ends the reading of the parts after it, an array veraPDF gives up on in any
+// part leaves the whole page unjudged, and an array or an operand list may
+// open in one part and close in the next, while no token joins across parts.
+// Every case was measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on the
+// same fixtures, which fail the integer limit as many times as the case states.
+func TestLimitsJudgePageContentPartsAsOneStream(t *testing.T) {
+	t.Parallel()
+
+	const (
+		big  = "99999999999"
+		path = " 0 0 m 10 10 l S"
+	)
+	for _, tc := range []struct {
+		name         string
+		first, other string
+		want         int
+	}{
+		{"a part after a stray ]", "q ]", big + " w" + path + " Q", 0},
+		{"a part before an array veraPDF gives up on", big + " w" + path, "BT [1 w] TJ ET", 0},
+		{"a part after an array veraPDF gives up on", "BT [1 w] TJ ET", big + " w" + path, 0},
+		{"a dash array across two parts", "[" + big, "2] 0 d" + path, 1},
+		{"a TJ array across two parts", "BT /F1 12 Tf [(a) ", big + "] TJ ET", 1},
+		{"an operand before the operator of the next part", big, " w" + path, 1},
+		{"an extra operand before the operator of the next part", big + " 1", " w" + path, 0},
+		{"a number cut by the end of a part", "99999", "999999 w" + path, 0},
+		{"a number in each part", big + " w" + path, big + " w" + path, 2},
+	} {
+		for _, p := range []struct {
+			profile models.PDFAProfile
+			rule    Rule
+		}{
+			{models.PDFA1b, Rule_19005_1_6_1_12_t01},
+			{models.PDFA2b, Rule_19005_2_6_1_13_t01},
+		} {
+			t.Run(tc.name+" "+string(p.profile), func(t *testing.T) {
+				t.Parallel()
+				doc, _ := objsDocPDF(t,
+					"<< /Type /Catalog /Pages 2 0 R >>",
+					"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+					"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << >> /Contents [4 0 R 5 0 R] >>",
+					exponentStream("", tc.first),
+					exponentStream("", tc.other),
+				)
+				viols, err := ValidatePDFA(context.Background(), doc, p.profile)
+				if err != nil {
+					t.Fatalf("ValidatePDFA: %v", err)
+				}
+				if got := countRuleErrs(t, viols, p.rule); got != tc.want {
+					t.Errorf("the integer limit fired %d times, want %d: %v", got, tc.want, viols)
+				}
+			})
+		}
+	}
+}

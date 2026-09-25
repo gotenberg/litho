@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"slices"
 	"sort"
 	"testing"
 
@@ -99,12 +98,7 @@ func TestStrayArrayCloseEndsTheJudgedContent(t *testing.T) {
 	for _, profile := range []models.PDFAProfile{models.PDFA1b, models.PDFA2b} {
 		t.Run("a /Contents array "+string(profile), func(t *testing.T) {
 			t.Parallel()
-			// TODO: [per-part limits] the implementation-limit check parses
-			// each part of a /Contents array alone (checkContentStreamLimits),
-			// where veraPDF reads the parts as one stream, so the integer of
-			// the second part still fails ISO 19005-1, 6.1.12 t1 and ISO
-			// 19005-2, 6.1.13 t1 here, and veraPDF 1.30 reports neither.
-			got := withoutRules(streamEndsRules(t, profile, "[4 0 R 8 0 R]", exponentStream("", "xx ]"), exponentStream("", streamEndsProbe)), "6.1.12 t1", "6.1.13 t1")
+			got := streamEndsRules(t, profile, "[4 0 R 8 0 R]", exponentStream("", "xx ]"), exponentStream("", streamEndsProbe))
 			want := pageContent(t, profile, "xx\n")
 			if !reflect.DeepEqual(got, want) {
 				t.Errorf("a stray ] in the first part reports %v, want %v", got, want)
@@ -114,15 +108,4 @@ func TestStrayArrayCloseEndsTheJudgedContent(t *testing.T) {
 			}
 		})
 	}
-}
-
-// withoutRules returns rules without the ones drop names.
-func withoutRules(rules []string, drop ...string) []string {
-	var out []string
-	for _, r := range rules {
-		if !slices.Contains(drop, r) {
-			out = append(out, r)
-		}
-	}
-	return out
 }
