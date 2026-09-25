@@ -222,13 +222,18 @@ func TestValidate_SimpleContentChecksAttributes(t *testing.T) {
 // TestValidate_SimpleContentRestrictionAttributes pins XML Schema Part 1,
 // 3.4.2: a restriction replaces the base's attribute use of the same name
 // and drops a prohibited one, so SmallAmountType's optional currencyID
-// wins over AmountType's required one and its scale is no longer checked.
+// wins over AmountType's required one and its scale is no longer an
+// attribute use: its value goes unchecked as an xs:integer, and the
+// attribute is undeclared (3.4.4, cvc-complex-type clause 3.2.1).
 func TestValidate_SimpleContentRestrictionAttributes(t *testing.T) {
 	t.Parallel()
 
+	if got := validateSimpleContent(t, `<Small>1</Small>`); len(got) != 0 {
+		t.Errorf("without scale: got %v, want no violation", got)
+	}
 	got := validateSimpleContent(t, `<Small scale="two">1</Small>`)
-	if len(got) != 0 {
-		t.Errorf("got %v, want no violation", got)
+	if len(got) != 1 || got[0].Rule != RuleAttribute || !strings.Contains(got[0].Reason, "not declared") {
+		t.Errorf("with scale: got %v, want one undeclared-attribute violation", got)
 	}
 }
 

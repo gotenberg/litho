@@ -55,7 +55,8 @@ const (
 //
 // The walk checks element ordering, cardinality, leaf values,
 // attributes, xsi:nil, xs:choice content, and unknown elements. An xs:any
-// wildcard accepts its child and skips the subtree.
+// wildcard accepts its child and skips the subtree. An attribute no use
+// declares must be admitted by the type's xs:anyAttribute.
 //
 // The walker honours ctx cancellation at element boundaries: a
 // canceled context terminates the walk and surfaces ctx.Err() as
@@ -327,7 +328,9 @@ func (v *validator) pushFrame(start xml.StartElement, el *Element) {
 		if _, simple := ct.Content.(SimpleContent); !simple && !nilled {
 			f.matcher = newMatcher(ct, v.schema)
 		}
-		v.violations = append(v.violations, validateAttributes(start, ct, path)...)
+		v.violations = append(v.violations, v.validateAttributes(start, ct, path)...)
+	} else if !isAnyType(el.Type) {
+		v.violations = append(v.violations, simpleTypeAttributes(start, path)...)
 	}
 	v.stack = append(v.stack, f)
 }
@@ -427,15 +430,14 @@ func newMatcher(ct *ComplexType, _ *Schema) contentMatcher {
 	return &sequenceMatcher{seq: Sequence{Particles: particles}, particles: particles}
 }
 
-// collectExtendedParticles flattens the xs:extension chain rooted at
-// ct into a single particle list. Base particles appear before
-// derived particles, matching the way an extending complex type
-// appends to the base's content model.
+// derivationChain returns ct and the complex types it derives from, the
+// most basic first: the base chain up to the first base that is not a
+// complex type.
 //
 // The loader rejects xs:include cycles, but it does NOT reject a type
 // whose base chain returns to itself, so the bound is load bearing
 // rather than merely defensive: see [maxTypeDerivationDepth].
-func collectExtendedParticles(ct *ComplexType) []Particle {
+func derivationChain(ct *ComplexType) []*ComplexType {
 	var chain []*ComplexType
 	cur := ct
 	for depth := 0; cur != nil && depth < maxTypeDerivationDepth; depth++ {
@@ -446,6 +448,15 @@ func collectExtendedParticles(ct *ComplexType) []Particle {
 		}
 		break
 	}
+	return chain
+}
+
+// collectExtendedParticles flattens the xs:extension chain rooted at
+// ct into a single particle list. Base particles appear before
+// derived particles, matching the way an extending complex type
+// appends to the base's content model.
+func collectExtendedParticles(ct *ComplexType) []Particle {
+	chain := derivationChain(ct)
 	var out []Particle
 	for _, link := range chain {
 		switch m := link.Content.(type) {
@@ -470,16 +481,7 @@ func collectExtendedParticles(ct *ComplexType) []Particle {
 // ct-props-correct.4), so the rule changes nothing there on a valid
 // schema.
 func collectExtendedAttributes(ct *ComplexType) []AttributeUse {
-	var chain []*ComplexType
-	cur := ct
-	for depth := 0; cur != nil && depth < maxTypeDerivationDepth; depth++ {
-		chain = append([]*ComplexType{cur}, chain...)
-		if base, ok := cur.Base.(*ComplexType); ok {
-			cur = base
-			continue
-		}
-		break
-	}
+	chain := derivationChain(ct)
 	var out []AttributeUse
 	for _, link := range chain {
 		for _, use := range link.Attributes {
@@ -493,20 +495,28 @@ func collectExtendedAttributes(ct *ComplexType) []AttributeUse {
 }
 
 // validateAttributes walks the declared attribute uses on ct and
-// matches each one against the StartElement's attribute list. The
-// path argument names the owning element so violations point at the
-// right place when several elements have attribute issues.
+// matches each one against the StartElement's attribute list, then
+// judges every attribute no use declares against the type's attribute
+// wildcard ([undeclaredAttribute]). The path argument names the owning
+// element so violations point at the right place when several elements
+// have attribute issues.
 //
-// Three failure modes surface as RuleAttribute:
+// Four failure modes surface as RuleAttribute:
 //   - required attribute absent
 //   - attribute value does not satisfy its declared type
 //   - attribute has a fixed value and the document supplied a
 //     different one
-func validateAttributes(start xml.StartElement, ct *ComplexType, path string) []Violation {
+//   - attribute no use declares and no wildcard admits
+//
+// # Corpus evidence
+//
+//   - All corpora: none of the 159 files that embed XML carries an
+//     attribute no use declares, through the Factur-X and ZUGFeRD
+//     validators or under any bundled schema, and no bundled schema
+//     declares an xs:anyAttribute. Counting every attribute as undeclared
+//     instead raises 5888 violations, so the check reaches them.
+func (v *validator) validateAttributes(start xml.StartElement, ct *ComplexType, path string) []Violation {
 	declared := collectExtendedAttributes(ct)
-	if len(declared) == 0 {
-		return nil
-	}
 	var out []Violation
 	for _, use := range declared {
 		value, present := findAttr(start.Attr, use.Name)
@@ -520,21 +530,41 @@ func validateAttributes(start xml.StartElement, ct *ComplexType, path string) []
 			}
 			continue
 		}
-		if use.Fixed != "" && !fixedValueMatches(value, use) {
-			out = append(out, Violation{
-				Rule:   RuleAttribute,
-				Path:   path + "/@" + use.Name.Local,
-				Reason: fmt.Sprintf("fixed attribute value %q does not match required %q", value, use.Fixed),
-			})
+		out = append(out, attributeValueViolations(value, use, path)...)
+	}
+	var wildcard *attributeWildcardSet
+	for _, a := range start.Attr {
+		if !isSchemaAttribute(a.Name) {
 			continue
 		}
-		for _, fv := range ValidateValue(value, use.Type) {
-			out = append(out, Violation{
-				Rule:   RuleAttribute,
-				Path:   path + "/@" + use.Name.Local,
-				Reason: fv.Reason,
-			})
+		if slices.ContainsFunc(declared, func(u AttributeUse) bool { return attrMatches(a.Name, u.Name) }) {
+			continue
 		}
+		if wildcard == nil {
+			wildcard = attributeWildcard(ct)
+		}
+		out = append(out, v.undeclaredAttribute(a, wildcard, path)...)
+	}
+	return out
+}
+
+// attributeValueViolations validates value, the value of the attribute
+// use declares, against the use's fixed value and type.
+func attributeValueViolations(value string, use AttributeUse, path string) []Violation {
+	if use.Fixed != "" && !fixedValueMatches(value, use) {
+		return []Violation{{
+			Rule:   RuleAttribute,
+			Path:   path + "/@" + use.Name.Local,
+			Reason: fmt.Sprintf("fixed attribute value %q does not match required %q", value, use.Fixed),
+		}}
+	}
+	var out []Violation
+	for _, fv := range ValidateValue(value, use.Type) {
+		out = append(out, Violation{
+			Rule:   RuleAttribute,
+			Path:   path + "/@" + use.Name.Local,
+			Reason: fv.Reason,
+		})
 	}
 	return out
 }
@@ -557,14 +587,20 @@ func fixedValueMatches(value string, use AttributeUse) bool {
 // the convention CII relies on.
 func findAttr(attrs []xml.Attr, want QName) (string, bool) {
 	for _, a := range attrs {
-		if a.Name.Local != want.Local {
-			continue
-		}
-		if want.Namespace == "" || a.Name.Space == want.Namespace || a.Name.Space == "" {
+		if attrMatches(a.Name, want) {
 			return a.Value, true
 		}
 	}
 	return "", false
+}
+
+// attrMatches reports whether the attribute name matches the declared
+// name want, as [findAttr] matches them.
+func attrMatches(name xml.Name, want QName) bool {
+	if name.Local != want.Local {
+		return false
+	}
+	return want.Namespace == "" || name.Space == want.Namespace || name.Space == ""
 }
 
 // sequenceMatcher walks an xs:sequence content model. It accepts

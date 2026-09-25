@@ -47,6 +47,11 @@ type Schema struct {
 	// [builtinNames] are pre-populated so references to xs:string and
 	// the like resolve without a second lookup table.
 	Types map[QName]Type
+	// Attributes indexes top-level xs:attribute declarations by their
+	// qualified name. Per XML Schema Part 1, 3.2.2 a top-level
+	// declaration always takes the target namespace. Only an attribute
+	// wildcard reaches them: see [AttributeWildcard].
+	Attributes map[QName]*AttributeUse
 	// Imports indexes loaded imported schemas by their target
 	// namespace. The current schema is not present in this map; it
 	// reaches its own elements/types via Elements and Types directly.
@@ -149,6 +154,11 @@ type ComplexType struct {
 	// BaseRef holds the unresolved QName parsed off the base attribute.
 	// Zero-value when the type does not derive.
 	BaseRef QName
+	// AnyAttribute is the xs:anyAttribute the type declares itself, its
+	// local wildcard. Nil when it declares none. The {attribute
+	// wildcard} the type ends up with also depends on its base, see
+	// [AttributeWildcard].
+	AnyAttribute *AttributeWildcard
 }
 
 // QName implements [Type].
@@ -187,9 +197,10 @@ type Element struct {
 	Fixed   string
 }
 
-// AttributeUse models an xs:attribute occurrence on a complex type.
-// Top-level xs:attribute declarations are not yet modelled because
-// CII uses inline attribute uses exclusively.
+// AttributeUse models an xs:attribute occurrence on a complex type, and
+// a top-level xs:attribute declaration in [Schema.Attributes]. A
+// reference to a top-level declaration (xs:attribute ref) is not
+// modelled because CII uses inline attribute uses exclusively.
 type AttributeUse struct {
 	Name QName
 	// Type is the attribute's {type definition} (XML Schema Part 1,
@@ -282,6 +293,29 @@ type Wildcard struct {
 	ProcessContents string
 	MinOccurs       int
 	MaxOccurs       int
+}
+
+// AttributeWildcard models xs:anyAttribute, XML Schema Part 1, 3.10: the
+// attributes a complex type admits beyond the ones it declares.
+//
+// Per 3.4.2 the {attribute wildcard} of a type is its own xs:anyAttribute
+// when it derives by restriction, and when it derives by extension the
+// union (3.10.6) of that and the {attribute wildcard} of its base, or
+// whichever of the two exists. A type that names no base restricts
+// xs:anyType and keeps its own alone; only an explicit extension of
+// xs:anyType inherits the ur-type's ##any wildcard, with lax processing.
+// The validator derives it along the base chain.
+type AttributeWildcard struct {
+	// Namespace is the namespace attribute as written: "##any" (the
+	// default when empty), "##other", or a list of namespace names,
+	// "##targetNamespace" and "##local" (3.10.2).
+	Namespace string
+	// TargetNamespace is the targetNamespace of the declaring schema,
+	// which "##other" and "##targetNamespace" denote.
+	TargetNamespace string
+	// ProcessContents is "strict" (the default when empty), "lax" or
+	// "skip".
+	ProcessContents string
 }
 
 // Facet is the closed sum of xs:restriction facet kinds the loader

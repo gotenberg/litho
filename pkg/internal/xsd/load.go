@@ -85,6 +85,7 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, str
 		TargetNamespace: raw.TargetNamespace,
 		Elements:        make(map[QName]*Element),
 		Types:           newBuiltinTypeRegistry(),
+		Attributes:      make(map[QName]*AttributeUse),
 		Imports:         make(map[string]*Schema),
 	}
 	l.schemas[p] = schema
@@ -121,6 +122,7 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, str
 			schema.Types[qn] = t
 		}
 		maps.Copy(schema.Elements, sub.Elements)
+		maps.Copy(schema.Attributes, sub.Attributes)
 	}
 
 	if err := populateFromRaw(schema, raw, prefixes); err != nil {
@@ -150,6 +152,11 @@ func linkSchema(s *Schema) error {
 	}
 	for _, e := range s.Elements {
 		if err := linkElement(s, e); err != nil {
+			return err
+		}
+	}
+	for _, a := range s.Attributes {
+		if err := linkAttribute(s, a); err != nil {
 			return err
 		}
 	}
@@ -290,6 +297,7 @@ type rawSchema struct {
 	XMLName         xml.Name           `xml:"http://www.w3.org/2001/XMLSchema schema"`
 	TargetNamespace string             `xml:"targetNamespace,attr"`
 	Elements        []rawElement       `xml:"element"`
+	Attributes      []rawAttribute     `xml:"attribute"`
 	ComplexTypes    []rawComplexType   `xml:"complexType"`
 	SimpleTypes     []rawSimpleType    `xml:"simpleType"`
 	Imports         []rawImportInclude `xml:"import"`
@@ -321,6 +329,13 @@ type rawComplexType struct {
 	Attributes     []rawAttribute     `xml:"attribute"`
 	ComplexContent *rawComplexContent `xml:"complexContent"`
 	SimpleContent  *rawSimpleContent  `xml:"simpleContent"`
+	AnyAttribute   *rawAnyAttribute   `xml:"anyAttribute"`
+}
+
+// rawAnyAttribute captures an xs:anyAttribute, XML Schema Part 1, 3.10.2.
+type rawAnyAttribute struct {
+	Namespace       string `xml:"namespace,attr"`
+	ProcessContents string `xml:"processContents,attr"`
 }
 
 type rawSimpleContent struct {
@@ -333,10 +348,11 @@ type rawSimpleContent struct {
 // attribute uses. Every child the named fields do not claim lands in
 // Facets, which [collectFacets] filters.
 type rawSimpleContentRestriction struct {
-	Base       string         `xml:"base,attr"`
-	SimpleType *rawSimpleType `xml:"simpleType"`
-	Attributes []rawAttribute `xml:"attribute"`
-	Facets     []rawFacet     `xml:",any"`
+	Base         string           `xml:"base,attr"`
+	SimpleType   *rawSimpleType   `xml:"simpleType"`
+	Attributes   []rawAttribute   `xml:"attribute"`
+	AnyAttribute *rawAnyAttribute `xml:"anyAttribute"`
+	Facets       []rawFacet       `xml:",any"`
 }
 
 type rawComplexContent struct {
@@ -344,10 +360,11 @@ type rawComplexContent struct {
 }
 
 type rawExtension struct {
-	Base       string         `xml:"base,attr"`
-	Sequence   *rawSequence   `xml:"sequence"`
-	Choice     *rawChoice     `xml:"choice"`
-	Attributes []rawAttribute `xml:"attribute"`
+	Base         string           `xml:"base,attr"`
+	Sequence     *rawSequence     `xml:"sequence"`
+	Choice       *rawChoice       `xml:"choice"`
+	Attributes   []rawAttribute   `xml:"attribute"`
+	AnyAttribute *rawAnyAttribute `xml:"anyAttribute"`
 }
 
 type rawSequence struct {
@@ -473,6 +490,13 @@ func populateFromRaw(s *Schema, raw *rawSchema, prefixes map[string]string) erro
 		}
 		s.Elements[el.Name] = el
 	}
+	attrs, err := buildAttributes(tns, prefixes, raw.Attributes)
+	if err != nil {
+		return err
+	}
+	for i := range attrs {
+		s.Attributes[attrs[i].Name] = &attrs[i]
+	}
 	return nil
 }
 
@@ -557,6 +581,7 @@ func buildComplexType(tns string, prefixes map[string]string, raw *rawComplexTyp
 			return nil, err
 		}
 		ct.Attributes = append(ct.Attributes, attrs...)
+		ct.AnyAttribute = buildAnyAttribute(tns, ext.AnyAttribute)
 	case raw.SimpleContent != nil:
 		if err := buildSimpleContent(tns, prefixes, raw.SimpleContent, ct); err != nil {
 			return nil, err
@@ -569,7 +594,23 @@ func buildComplexType(tns string, prefixes map[string]string, raw *rawComplexTyp
 		return nil, err
 	}
 	ct.Attributes = append(ct.Attributes, attrs...)
+	if raw.AnyAttribute != nil {
+		ct.AnyAttribute = buildAnyAttribute(tns, raw.AnyAttribute)
+	}
 	return ct, nil
+}
+
+// buildAnyAttribute models an xs:anyAttribute declared in a schema whose
+// target namespace is tns. Nil in, nil out.
+func buildAnyAttribute(tns string, raw *rawAnyAttribute) *AttributeWildcard {
+	if raw == nil {
+		return nil
+	}
+	return &AttributeWildcard{
+		Namespace:       raw.Namespace,
+		TargetNamespace: tns,
+		ProcessContents: raw.ProcessContents,
+	}
 }
 
 // buildSimpleContent fills ct from an xs:simpleContent child, per XML
@@ -583,10 +624,12 @@ func buildSimpleContent(tns string, prefixes map[string]string, raw *rawSimpleCo
 	switch {
 	case raw.Extension != nil:
 		base, rawAttrs = raw.Extension.Base, raw.Extension.Attributes
+		ct.AnyAttribute = buildAnyAttribute(tns, raw.Extension.AnyAttribute)
 		ct.Content = SimpleContent{}
 	case raw.Restriction != nil:
 		r := raw.Restriction
 		base, rawAttrs = r.Base, r.Attributes
+		ct.AnyAttribute = buildAnyAttribute(tns, r.AnyAttribute)
 		content := SimpleContent{Restriction: true, Facets: collectFacets(r.Facets)}
 		if r.SimpleType != nil {
 			inline, err := buildSimpleType(tns, prefixes, r.SimpleType)
