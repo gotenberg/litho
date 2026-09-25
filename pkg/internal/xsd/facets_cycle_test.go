@@ -77,7 +77,7 @@ func TestCollectAllFacets_CyclicChainStillCollects(t *testing.T) {
 	a.Base = b
 	b.Base = a
 
-	steps, base := collectAllFacets(a)
+	steps, base, _ := walkDerivation(a)
 	if base != nil {
 		t.Errorf("base = %v, want nil: a cyclic chain reaches no built-in", base)
 	}
@@ -99,7 +99,7 @@ func TestCollectAllFacets_AcyclicOrderUnchanged(t *testing.T) {
 	upstream := &SimpleType{Name: QName{Local: "Upstream"}, Base: builtin, Facets: []Facet{MaxLength{Value: 9}}}
 	derived := &SimpleType{Name: QName{Local: "Derived"}, Base: upstream, Facets: []Facet{MaxLength{Value: 3}}}
 
-	steps, base := collectAllFacets(derived)
+	steps, base, _ := walkDerivation(derived)
 	if base != builtin {
 		t.Fatalf("base = %v, want the built-in the chain bottoms out on", base)
 	}

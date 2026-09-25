@@ -85,9 +85,8 @@ func FuzzNewDecoder(f *testing.F) {
 
 // FuzzXSDLoadThenValidate drives a FUZZED schema through validation, which
 // neither target above can do: FuzzXSDLoad stops at Load, and Load cannot reach
-// the facet walk (collectAllFacets has exactly two callers, ValidateValue and
-// itself, and ValidateValue runs only from Validate). FuzzXSDValidate holds the
-// schema fixed and acyclic.
+// the facet walk (walkDerivation runs only under resolveValue, which only
+// Validate reaches). FuzzXSDValidate holds the schema fixed and acyclic.
 //
 // The comment on FuzzXSDValidate reasons that fuzzing both halves "would mostly
 // produce schemas that fail to load and leave the validator unreached". That is
@@ -108,6 +107,7 @@ func FuzzXSDLoadThenValidate(f *testing.F) {
 	f.Add([]byte(simpleContentXSD), []byte(`<Invoice xmlns="urn:t"><Small scale="x">1,5</Small></Invoice>`))
 	f.Add([]byte(leafTextXSD), []byte(`<Invoice xmlns="urn:t" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><Party xsi:nil="true"><Name/></Party></Invoice>`))
 	f.Add([]byte(anyAttributeXSD), []byte(`<Root xmlns="urn:t" xmlns:a="urn:a"><Wide a:x="1"/><Code foo="1">A</Code></Root>`))
+	f.Add([]byte(unionXSD), []byte(`<Invoice xmlns="urn:t"><IssueDateTime>2026-01-01</IssueDateTime><Small>2</Small></Invoice>`))
 	f.Add([]byte(minimalXSD[:len(minimalXSD)/2]), []byte(payload))
 	f.Add([]byte(""), []byte(""))
 

@@ -597,10 +597,13 @@ func attributeValueViolations(value string, use AttributeUse, path string) []Vio
 // value space ([compareRange]), so "1.0" matches a fixed decimal "1", and
 // the boolean literals "1" and "true" match (XML Schema Part 2, 3.2.2.1).
 // The other types compare literally, which is value equality for the
-// string-derived types CII fixes.
+// string-derived types CII fixes. On a type derived from a union, each side
+// is normalized and compared as the member type that validates it
+// ([resolveUnionValue]).
 func fixedValueMatches(value, fixed string, t Type) bool {
-	steps, base := collectAllFacets(t)
-	value, fixed = applyWhitespace(value, steps, base), applyWhitespace(fixed, steps, base)
+	budget := maxUnionMemberChecks
+	got, want := resolveValue(value, t, 0, &budget), resolveValue(fixed, t, 0, &budget)
+	value, fixed, base := got.normalized, want.normalized, got.base
 	if value == fixed {
 		return true
 	}

@@ -11,6 +11,7 @@ import (
 	"maps"
 	"path"
 	"strconv"
+	"strings"
 )
 
 // Load reads the XSD at rootPath from fsys, follows every xs:import
@@ -173,6 +174,9 @@ func linkType(s *Schema, t Type) error {
 			}
 			tt.Base = base
 		}
+		if tt.Union {
+			return linkUnion(s, tt)
+		}
 	case *ComplexType:
 		if !tt.BaseRef.IsZero() {
 			base, err := lookupType(s, tt.BaseRef)
@@ -190,6 +194,30 @@ func linkType(s *Schema, t Type) error {
 			}
 		}
 	}
+	return nil
+}
+
+// linkUnion resolves the {member type definitions} of the union st, per
+// XML Schema Part 1, 3.14.2: the types its memberTypes attribute names, in
+// order, then its xs:simpleType children, in order. It rebuilds Members
+// from scratch, as a type an xs:include copies is linked once per schema
+// that holds it.
+func linkUnion(s *Schema, st *SimpleType) error {
+	members := make([]Type, 0, len(st.MemberRefs)+len(st.InlineMembers))
+	for _, ref := range st.MemberRefs {
+		member, err := lookupType(s, ref)
+		if err != nil {
+			return err
+		}
+		members = append(members, member)
+	}
+	for _, inline := range st.InlineMembers {
+		if err := linkType(s, inline); err != nil {
+			return err
+		}
+		members = append(members, inline)
+	}
+	st.Members = members
 	return nil
 }
 
@@ -399,6 +427,14 @@ type rawAttribute struct {
 type rawSimpleType struct {
 	Name        string          `xml:"name,attr"`
 	Restriction *rawRestriction `xml:"restriction"`
+	Union       *rawUnion       `xml:"union"`
+}
+
+// rawUnion captures an xs:union, XML Schema Part 1, 3.14.2: a memberTypes
+// list of QNames and xs:simpleType children.
+type rawUnion struct {
+	MemberTypes string          `xml:"memberTypes,attr"`
+	SimpleTypes []rawSimpleType `xml:"simpleType"`
 }
 
 type rawRestriction struct {
@@ -663,6 +699,9 @@ func buildSimpleType(tns string, prefixes map[string]string, raw *rawSimpleType)
 	st := &SimpleType{
 		Name: QName{Namespace: tns, Local: raw.Name},
 	}
+	if raw.Union != nil {
+		return st, buildUnion(tns, prefixes, raw.Union, st)
+	}
 	if raw.Restriction == nil {
 		return st, nil
 	}
@@ -675,6 +714,28 @@ func buildSimpleType(tns string, prefixes map[string]string, raw *rawSimpleType)
 	}
 	st.Facets = collectFacets(raw.Restriction.Facets)
 	return st, nil
+}
+
+// buildUnion fills st from an xs:union child. Per XML Schema Part 1,
+// 3.14.2 the union's members are the memberTypes QNames, a
+// white-space-separated list, then the xs:simpleType children.
+func buildUnion(tns string, prefixes map[string]string, raw *rawUnion, st *SimpleType) error {
+	st.Union = true
+	for _, name := range strings.Fields(raw.MemberTypes) {
+		ref, err := parseQName(name, tns, prefixes)
+		if err != nil {
+			return err
+		}
+		st.MemberRefs = append(st.MemberRefs, ref)
+	}
+	for i := range raw.SimpleTypes {
+		member, err := buildSimpleType(tns, prefixes, &raw.SimpleTypes[i])
+		if err != nil {
+			return err
+		}
+		st.InlineMembers = append(st.InlineMembers, member)
+	}
+	return nil
 }
 
 func buildSequence(tns string, prefixes map[string]string, raw *rawSequence) (Sequence, error) {

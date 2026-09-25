@@ -42,6 +42,9 @@ func (v FacetViolation) Error() string {
 // Part 1, 3.1.4 it is the normalized value that is validated. "A\nB" and
 // "A  B" as xs:token are therefore the valid value "A B".
 //
+// A type whose restriction chain reaches an xs:union is validated as
+// [resolveUnionValue] describes.
+//
 // # Corpus evidence
 //
 //   - All corpora: through the Factur-X and ZUGFeRD validators, the 159
@@ -49,17 +52,51 @@ func (v FacetViolation) Error() string {
 //     the CII xs:simpleContent types, 3734 xs:decimal, 4391 xs:token, 2773
 //     xs:string and 10 xs:base64Binary values, and with 2355 values of their
 //     attributes. The rest are 144 xs:boolean values and 15 values of the
-//     ZUGFeRD 1.0 xs:union DateMandatoryDateTimeType, which names no
-//     built-in.
+//     ZUGFeRD 1.0 xs:union DateMandatoryDateTimeType.
 //   - facturx, v1__fail_Mustangproject_fail1: its ApplicablePercent
 //     "19.00e" is the one violation the simple content types add, through
 //     the validators and under every bundled schema alike. Mustang rejects
 //     the file for the same value.
 func ValidateValue(value string, t Type) []FacetViolation {
+	budget := maxUnionMemberChecks
+	return resolveValue(value, t, 0, &budget).violations
+}
+
+// maxUnionMemberChecks bounds the member validations one value may cost.
+// It is an anti-DoS guard, not a limit XSD imposes: per XML Schema Part 2,
+// 2.5.1.3 a union tries its member types in order, and a member may be a
+// union itself, so a schema that nests wide unions multiplies the work at
+// every level, up to [maxTypeDerivationDepth] levels. Once spent, a value
+// is accepted, as a truncated derivation walk accepts it.
+//
+// 1024 sits far above real schemas: the one union of the bundled schemas,
+// ZUGFeRD 1.0's DateMandatoryDateTimeType, has two built-in members.
+const maxUnionMemberChecks = 1024
+
+// resolvedValue is a value as the type it was validated against sees it.
+type resolvedValue struct {
+	// normalized is the value once white-space normalized, under the mode
+	// of the member type that validated it when the type derives from a
+	// union.
+	normalized string
+	// base is the built-in the matching derivation bottoms out on, nil
+	// when it names none.
+	base *BuiltinType
+	// violations are the checks the value fails, nil when it is valid.
+	violations []FacetViolation
+}
+
+// resolveValue validates value against t, as [ValidateValue] documents.
+// depth counts the unions entered so far, and budget the member
+// validations left ([maxUnionMemberChecks]).
+func resolveValue(value string, t Type, depth int, budget *int) resolvedValue {
 	if t == nil {
-		return nil
+		return resolvedValue{normalized: value}
 	}
-	steps, base := collectAllFacets(t)
+	steps, base, union := walkDerivation(t)
+	if union != nil {
+		return resolveUnionValue(value, steps, union, depth, budget)
+	}
 	normalized := applyWhitespace(value, steps, base)
 
 	var out []FacetViolation
@@ -68,9 +105,84 @@ func ValidateValue(value string, t Type) []FacetViolation {
 			out = append(out, *v)
 		}
 	}
-	// Enumeration is an allow-list: the Enumeration facets of a step
-	// form one set, so they are evaluated together outside the per-facet
-	// loop below.
+	out = append(out, stepViolations(normalized, steps, base)...)
+	return resolvedValue{normalized: normalized, base: base, violations: out}
+}
+
+// resolveUnionValue validates value against a type whose restriction chain
+// reaches the union u, the restrictions above it contributing steps.
+//
+// Per XML Schema Part 2, 2.5.1.3 the lexical and value spaces of a union
+// are the union of those of its member types, and a value is validated
+// against the members in order until one matches. The first member that
+// validates value therefore decides its normalized value and value space,
+// and a value no member validates is outside the union's lexical space.
+// Per 4.1.5 pattern and enumeration are the only facets a union admits, so
+// the steps above it apply those two to that normalized value; any other
+// facet there is a schema error the instance is not blamed for.
+//
+// # Corpus evidence
+//
+//   - facturx: 15 values in 6 ZUGFeRD 1.0 files reach the one union of the
+//     bundled schemas, DateMandatoryDateTimeType, and each is a valid
+//     xs:dateTime or xs:date, so no verdict moves. Rejecting all 15 instead
+//     turns those 6 files, which Mustang holds valid, invalid.
+func resolveUnionValue(value string, steps [][]Facet, u *SimpleType, depth int, budget *int) resolvedValue {
+	accepted := resolvedValue{normalized: value}
+	if len(u.Members) == 0 || depth >= maxTypeDerivationDepth {
+		// A union with no member is a schema error (Part 1, 3.14.6,
+		// src-union-memberTypes-or-simpleTypes), and a deeper nesting a
+		// truncated walk: neither is blamed on the instance.
+		return accepted
+	}
+	names := make([]string, 0, len(u.Members))
+	for _, member := range u.Members {
+		if *budget <= 0 {
+			return accepted
+		}
+		*budget--
+		r := resolveValue(value, member, depth+1, budget)
+		if len(r.violations) == 0 {
+			r.violations = stepViolations(r.normalized, unionFacets(steps), r.base)
+			return r
+		}
+		names = append(names, typeName(member))
+	}
+	return resolvedValue{normalized: value, violations: []FacetViolation{{
+		Value:  value,
+		Reason: fmt.Sprintf("value is valid for none of the union's member types %v", names),
+	}}}
+}
+
+// unionFacets keeps the pattern and enumeration facets of steps, the only
+// ones XML Schema Part 2, 4.1.5 applies to a union.
+func unionFacets(steps [][]Facet) [][]Facet {
+	out := make([][]Facet, len(steps))
+	for i, step := range steps {
+		for _, f := range step {
+			switch f.(type) {
+			case Pattern, Enumeration:
+				out[i] = append(out[i], f)
+			}
+		}
+	}
+	return out
+}
+
+// typeName names t for a diagnostic, its local name or "anonymous".
+func typeName(t Type) string {
+	if name := t.QName().Local; name != "" {
+		return name
+	}
+	return "anonymous"
+}
+
+// stepViolations applies the facets of every derivation step to
+// normalized, base first. Enumeration is an allow-list: the Enumeration
+// facets of a step form one set, so they are evaluated together outside
+// the per-facet loop.
+func stepViolations(normalized string, steps [][]Facet, base *BuiltinType) []FacetViolation {
+	var out []FacetViolation
 	if v := validateEnumeration(normalized, steps); v != nil {
 		out = append(out, *v)
 	}
@@ -96,14 +208,18 @@ func ValidateValue(value string, t Type) []FacetViolation {
 	return out
 }
 
-// collectAllFacets walks t's base chain through SimpleType
-// restrictions, and through the content types of complex types with
-// simple content, and returns the facets of each derivation step, in the
-// conventional "base first, most-derived last" order, plus the
-// underlying built-in type the chain bottoms out on. The steps stay
-// apart because XML Schema Part 2 combines facets differently within a
-// step and across steps: the enumerations of one step form one set
-// (4.3.5.3), and its patterns are alternatives (4.3.4.3).
+// walkDerivation walks t's base chain through SimpleType restrictions,
+// and through the content types of complex types with simple content,
+// and returns the facets of each derivation step, in the conventional
+// "base first, most-derived last" order, plus the underlying built-in
+// type the chain bottoms out on. The steps stay apart because XML Schema
+// Part 2 combines facets differently within a step and across steps: the
+// enumerations of one step form one set (4.3.5.3), and its patterns are
+// alternatives (4.3.4.3).
+//
+// A chain that reaches an xs:union ends there, and the union is the third
+// result, nil when the chain ends on a built-in or on nothing. A union
+// has no built-in of its own: its member types each name theirs.
 //
 // The walk is iterative and bounded by [maxTypeDerivationDepth]. A
 // schema may declare a simpleType that restricts itself, directly or
@@ -112,9 +228,10 @@ func ValidateValue(value string, t Type) []FacetViolation {
 // goroutine stack, which Go cannot recover from. Like the extension
 // walks in validate.go the bound TRUNCATES rather than reports, so a
 // pathological chain yields the facets gathered so far.
-func collectAllFacets(t Type) ([][]Facet, *BuiltinType) {
+func walkDerivation(t Type) ([][]Facet, *BuiltinType, *SimpleType) {
 	var steps [][]Facet
 	var base *BuiltinType
+	var union *SimpleType
 
 	cur := t
 walk:
@@ -125,6 +242,10 @@ walk:
 			base = tt
 			break walk
 		case *SimpleType:
+			if tt.Union {
+				union = tt
+				break walk
+			}
 			// Prepend so the chain reads base first, which is the order
 			// the facets must be applied in for "most-derived wins" to
 			// hold.
@@ -150,7 +271,7 @@ walk:
 			break walk
 		}
 	}
-	return steps, base
+	return steps, base, union
 }
 
 // applyWhitespace normalizes value under the mode [effectiveWhiteSpace]

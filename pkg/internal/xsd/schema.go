@@ -73,8 +73,9 @@ type Type interface {
 
 // maxTypeDerivationDepth bounds every walk up a type's base chain: the
 // simpleType restriction chain in facets.go and the complexType
-// extension chains in validate.go. It is an anti-DoS guard, not a limit
-// XSD imposes.
+// extension chains in validate.go. It also bounds how deep validation
+// descends through unions nested as member types. It is an anti-DoS
+// guard, not a limit XSD imposes.
 //
 // Nothing rejects a schema whose base chain returns to itself. The
 // loader resolves each base through [Schema.Types] and checks only that
@@ -101,9 +102,8 @@ type BuiltinType struct {
 func (t *BuiltinType) QName() QName { return t.Name }
 func (t *BuiltinType) isType()      {}
 
-// SimpleType models an xs:simpleType declaration. Only restriction-
-// based derivations are supported; xs:union and xs:list are out of
-// scope per the CII subset.
+// SimpleType models an xs:simpleType declaration, derived by xs:restriction
+// or by xs:union. Derivation by xs:list is out of scope per the CII subset.
 type SimpleType struct {
 	// Name is the qualified name of the type. Zero-value when the
 	// type is anonymous (inlined on an element or attribute).
@@ -121,6 +121,21 @@ type SimpleType struct {
 	// whiteSpace). The order matches the XSD source so multi-value
 	// constraints like enumeration sets remain ordered.
 	Facets []Facet
+	// Union reports derivation by xs:union (XML Schema Part 2, 2.5.1.3):
+	// the value space and lexical space are the union of those of
+	// Members. Base, BaseRef and Facets are then unset: a union
+	// declares no facet itself.
+	Union bool
+	// Members are the {member type definitions} of a union, per XML
+	// Schema Part 1, 3.14.2 the types the memberTypes attribute names,
+	// in order, then the xs:simpleType children of xs:union, in order.
+	// Resolved during the link pass from MemberRefs and InlineMembers.
+	Members []Type
+	// MemberRefs holds the unresolved QNames of the memberTypes
+	// attribute.
+	MemberRefs []QName
+	// InlineMembers holds the xs:simpleType children of xs:union.
+	InlineMembers []*SimpleType
 }
 
 // QName implements [Type].

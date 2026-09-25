@@ -298,7 +298,7 @@ func TestCollectAllFacets_CyclicSimpleContentTerminates(t *testing.T) {
 	a.Base = b
 	b.Base = a
 
-	steps, base := collectAllFacets(a)
+	steps, base, _ := walkDerivation(a)
 	if base != nil {
 		t.Errorf("base = %v, want nil: a cyclic chain reaches no built-in", base)
 	}
