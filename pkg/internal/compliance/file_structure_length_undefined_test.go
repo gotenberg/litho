@@ -49,7 +49,7 @@ func TestCheckStreamLengths_NonNumberLength(t *testing.T) {
 				"<< /Length "+tt.length+" >>\nstream\nq Q\nendstream",
 				"<< /Length 2 >>\nstream\nab\nendstream",
 			)
-			if got := len(checkStreamLengths(ctx, doc, "PDF/A-2b")) > 0; got != tt.want {
+			if got := len(checkStreamLengths(ctx, doc, "PDF/A-2b", nil)) > 0; got != tt.want {
 				t.Errorf("6.1.7.1 t1 fired = %v, want %v", got, tt.want)
 			}
 		})

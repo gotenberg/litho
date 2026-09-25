@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -535,99 +536,108 @@ func (j *drawnStreamHexStrings) check(violations []content.FormatViolation, page
 // a live read reported however many violations had been recorded at that
 // instant.
 //
+// The violations of an object in twice are stated again; see
+// [cosReachedTwice]. They are read from the document by object, which reads
+// the snapshot's list: [resolveAllObjects] records every object's violations
+// before the context is built, and the first recording for an object wins.
+//
 // # Corpus evidence
 //
 //   - All corpora: no file writes a stream in an object stream, so the /Length
 //     of such a stream, which no check judges, costs no finding veraPDF
 //     states.
-func checkFormatViolations(vctx *validationCtx, profile string) []Violation {
-	if len(vctx.formatViolations) == 0 {
-		return nil
-	}
-
+func checkFormatViolations(vctx *validationCtx, profile string, twice map[int]bool) []Violation {
 	var results []Violation
-	hexRule := hexStringRule(profile)
-	streamRule := streamFormatRule(profile)
-	xrefRule := xrefFormatRule(profile)
-
 	for _, violation := range vctx.formatViolations {
-		// The violations are told apart by the sentinel of their class, never
-		// by their message, so rewording a message cannot move a violation to
-		// another rule. A violation of no class checked here, a hex string
-		// with an odd digit count among them, keeps the hex string rule.
-		rule := hexRule
-		switch {
-		case errors.Is(violation, parser.ErrNumberExponent):
-			// ISO 32000-1, 7.3.3 gives a number no exponent, and no ISO 19005
-			// rule states number syntax outside a content stream. veraPDF ends
-			// the number at the exponent letter and cannot read the object
-			// holding it: measured with veraPDF 1.30, a page dictionary or an
-			// array holding 1.5e2 stops the validation with a parse error and
-			// no rule. See [checkContentStreamFormat] for a content stream.
-			continue
-		case errors.Is(violation, document.ErrObjectHeaderFormat):
-			// Object headers are judged by checkObjHeaderByteFormat, which
-			// sweeps every cross-reference entry. What resolution happened to
-			// record here is a subset of that, so passing it on would report
-			// the same defect twice for any object that missed the cache.
-			continue
-		case errors.Is(violation, document.ErrXRefFormat):
-			rule = xrefRule
-			if PDFAPart(profile) == 1 {
-				// ISO 19005-1, 6.1.4 splits the table in two:
-				// t1 subsectionHeaderSpaceSeparated, t2 xrefEOLMarkersComplyPDFA.
-				if errors.Is(violation, document.ErrXRefEOLMarkers) {
-					rule = Rule_19005_1_6_1_4_t02
-				}
-			} else if !errors.Is(violation, document.ErrXRefEOLMarkers) {
-				// Parts 2 and up kept only xrefEOLMarkersComplyPDFA and dropped
-				// the subsection-header spacing requirement, so a spacing defect
-				// has no rule to answer to. Measured: veraPDF 1.30.2 reports
-				// nothing at all for an xref whose only defect is two spaces in
-				// the subsection header.
-				continue
-			}
-		case errors.Is(violation, parser.ErrStreamFormat):
-			if errors.Is(violation, parser.ErrStreamLengthMismatch) {
-				// checkStreamLengths sweeps every uncompressed stream and
-				// states this rule there, so passing resolution's copy on
-				// states it twice. A stream with no /Length key at all is not
-				// swept, and its violation is of another class.
-				//
-				// TODO: a stream written in an object stream, which ISO
-				// 32000-1, 7.5.7 forbids, is not swept either, and veraPDF
-				// 1.30 states this rule for a /Length that misses its data
-				// there. This finding cannot stand in for the sweep: the
-				// parse accepts a /Length that counts the EOL before
-				// endstream, which the rule does not.
-				continue
-			}
-			eolRule := streamEOLRule(profile)
-			keywordEOL := errors.Is(violation, parser.ErrStreamKeywordEOL)
-			if keywordEOL && eolRule.Specification == "" {
-				// ISO 19005-4, 6.1.6.1 states only Length == realLength and the
-				// F/FFilter/FDecodeParms prohibition. Part 4 dropped the
-				// stream-keyword EOL requirement, so there is no rule to answer
-				// to and folding it into t1 states a defect the clause does not.
-				continue
-			}
-			rule = streamRule
-			// PDF/A-1/2/3 attribute a stream-keyword EOL defect to a dedicated
-			// rule (t02), distinct from the /Length-mismatch rule (t01).
-			if keywordEOL {
-				rule = eolRule
-			}
-		case errors.Is(violation, parser.ErrHexStringInvalidChar):
-			rule = hexStringInvalidCharRule(profile)
+		if rule, ok := formatViolationRule(violation, profile); ok {
+			results = append(results, Violation{Rule: rule, Context: violation.Error()})
 		}
+	}
+	for _, objNum := range slices.Sorted(maps.Keys(twice)) {
+		for _, violation := range vctx.doc.ObjectFormatViolations(objNum) {
+			if rule, ok := formatViolationRule(violation, profile); ok {
+				results = append(results, Violation{Rule: rule, Context: violation.Error()})
+			}
+		}
+	}
+	return results
+}
 
-		results = append(results, Violation{
-			Rule:    rule,
-			Context: violation.Error(),
-		})
+// formatViolationRule returns the rule a parser-level format violation
+// answers to, and false for one [checkFormatViolations] leaves to another
+// check or no rule states.
+func formatViolationRule(violation error, profile string) (Rule, bool) {
+	// The violations are told apart by the sentinel of their class, never by
+	// their message, so rewording a message cannot move a violation to another
+	// rule. A violation of no class checked here, a hex string with an odd
+	// digit count among them, keeps the hex string rule.
+	rule := hexStringRule(profile)
+	switch {
+	case errors.Is(violation, parser.ErrNumberExponent):
+		// ISO 32000-1, 7.3.3 gives a number no exponent, and no ISO 19005
+		// rule states number syntax outside a content stream. veraPDF ends
+		// the number at the exponent letter and cannot read the object
+		// holding it: measured with veraPDF 1.30, a page dictionary or an
+		// array holding 1.5e2 stops the validation with a parse error and
+		// no rule. See [checkContentStreamFormat] for a content stream.
+		return Rule{}, false
+	case errors.Is(violation, document.ErrObjectHeaderFormat):
+		// Object headers are judged by checkObjHeaderByteFormat, which
+		// sweeps every cross-reference entry. What resolution happened to
+		// record here is a subset of that, so passing it on would report
+		// the same defect twice for any object that missed the cache.
+		return Rule{}, false
+	case errors.Is(violation, document.ErrXRefFormat):
+		rule = xrefFormatRule(profile)
+		if PDFAPart(profile) == 1 {
+			// ISO 19005-1, 6.1.4 splits the table in two:
+			// t1 subsectionHeaderSpaceSeparated, t2 xrefEOLMarkersComplyPDFA.
+			if errors.Is(violation, document.ErrXRefEOLMarkers) {
+				rule = Rule_19005_1_6_1_4_t02
+			}
+		} else if !errors.Is(violation, document.ErrXRefEOLMarkers) {
+			// Parts 2 and up kept only xrefEOLMarkersComplyPDFA and dropped
+			// the subsection-header spacing requirement, so a spacing defect
+			// has no rule to answer to. Measured: veraPDF 1.30.2 reports
+			// nothing at all for an xref whose only defect is two spaces in
+			// the subsection header.
+			return Rule{}, false
+		}
+	case errors.Is(violation, parser.ErrStreamFormat):
+		if errors.Is(violation, parser.ErrStreamLengthMismatch) {
+			// checkStreamLengths sweeps every stream and states this rule
+			// there, so passing resolution's copy on states it twice. A
+			// stream with no /Length key at all is not swept, and its
+			// violation is of another class.
+			//
+			// TODO: a stream written in an object stream, which ISO
+			// 32000-1, 7.5.7 forbids, is not swept either, and veraPDF
+			// 1.30 states this rule for a /Length that misses its data
+			// there. This finding cannot stand in for the sweep: the
+			// parse accepts a /Length that counts the EOL before
+			// endstream, which the rule does not.
+			return Rule{}, false
+		}
+		eolRule := streamEOLRule(profile)
+		keywordEOL := errors.Is(violation, parser.ErrStreamKeywordEOL)
+		if keywordEOL && eolRule.Specification == "" {
+			// ISO 19005-4, 6.1.6.1 states only Length == realLength and the
+			// F/FFilter/FDecodeParms prohibition. Part 4 dropped the
+			// stream-keyword EOL requirement, so there is no rule to answer
+			// to and folding it into t1 states a defect the clause does not.
+			return Rule{}, false
+		}
+		rule = streamFormatRule(profile)
+		// PDF/A-1/2/3 attribute a stream-keyword EOL defect to a dedicated
+		// rule (t02), distinct from the /Length-mismatch rule (t01).
+		if keywordEOL {
+			rule = eolRule
+		}
+	case errors.Is(violation, parser.ErrHexStringInvalidChar):
+		rule = hexStringInvalidCharRule(profile)
 	}
 
-	return results
+	return rule, true
 }
 
 // streamEOLRule returns the "stream keyword not followed by a valid EOL" rule

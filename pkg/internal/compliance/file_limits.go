@@ -116,7 +116,8 @@ func indirectObjCountRule(profile string) Rule {
 }
 
 // checkNumericLimits validates §6.1.12/6.1.13: numeric value limits for
-// names, strings, integers, reals, arrays, dicts, and indirect objects.
+// names, strings, integers, reals, arrays, dicts, and indirect objects. An
+// object in twice fails each limit twice; see [cosReachedTwice].
 //
 // # Corpus evidence
 //
@@ -126,7 +127,7 @@ func indirectObjCountRule(profile string) Rule {
 //     /Size is 2147483648, a value that appears nowhere in it.
 //   - All corpora: a violation carrying the zero Rule serialized as a
 //     clause-less "-t00" residual.
-func checkNumericLimits(ctx context.Context, doc *document.Document, profile string) []Violation {
+func checkNumericLimits(ctx context.Context, doc *document.Document, profile string, twice map[int]bool) []Violation {
 	part := PDFAPart(profile)
 	var results []Violation
 
@@ -158,7 +159,7 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 		}
 
 		overflow := countOverflows(doc.IntegerOverflows(objNum))
-		results = append(results, checkObjectNumericLimits(obj, fmt.Sprintf("object %d", objNum), part, profile, overflow)...)
+		results = append(results, asReached(twice, objNum, checkObjectNumericLimits(obj, fmt.Sprintf("object %d", objNum), part, profile, overflow))...)
 	}
 
 	// The trailer dictionary is not an indirect object, so the walk above never

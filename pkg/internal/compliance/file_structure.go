@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -30,22 +31,23 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 	doc.Logger.Debug("compliance.file_structure: starting checks", "profile", profile)
 
 	var results []Violation
+	twice := cosReachedTwice(ctx, doc, catalog)
 
 	results = append(results, checkFileHeader(ctx, doc, profile)...)
 	results = append(results, checkTrailerID(ctx, doc, profile)...)
 	results = append(results, checkEncryptionForbidden(doc, profile)...)
 	results = append(results, checkPostEOFData(ctx, doc, profile)...)
-	results = append(results, checkStreamExternalKeys(ctx, doc, profile)...)
-	results = append(results, checkStreamLZW(ctx, doc, profile)...)
+	results = append(results, checkStreamExternalKeys(ctx, doc, profile, twice)...)
+	results = append(results, checkStreamLZW(ctx, doc, profile, twice)...)
 	results = append(results, checkEmbeddedFiles(ctx, doc, catalog, profile)...)
-	results = append(results, checkFormatViolations(vctx, profile)...)
+	results = append(results, checkFormatViolations(vctx, profile, twice)...)
 	results = append(results, checkObjHeaderByteFormat(doc, profile)...)
-	results = append(results, checkStreamLengths(ctx, doc, profile)...)
+	results = append(results, checkStreamLengths(ctx, doc, profile, twice)...)
 	results = append(results, checkContentStreamFormat(ctx, vctx)...)
 	results = append(results, checkPropertyListHexStrings(ctx, vctx)...)
-	results = append(results, checkNonStandardFilters(ctx, doc, profile)...)
+	results = append(results, checkNonStandardFilters(ctx, doc, profile, twice)...)
 	results = append(results, checkPageBoundaries(ctx, doc, catalog, profile)...)
-	results = append(results, checkNumericLimits(ctx, doc, profile)...)
+	results = append(results, checkNumericLimits(ctx, doc, profile, twice)...)
 	results = append(results, checkContentStreamLimits(ctx, vctx)...)
 	results = append(results, checkXRefFormat(doc, profile)...)
 	results = append(results, checkXRefTableByteFormat(doc, profile)...)
@@ -64,6 +66,80 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 		"violations", len(results),
 	)
 	return results
+}
+
+// cosReachedTwice returns the indirect objects whose bytes veraPDF's COS rules
+// judge twice: the document information dictionary the trailer's /Info
+// references, and every XMP metadata stream a dictionary's /Metadata
+// references.
+//
+// veraPDF judges every indirect object once through the cross-reference table
+// (root/indirectObjects), and again where its model reaches the same object
+// under a type of its own: the trailer's /Info as CosInfo
+// (root/trailer[0]/Info[0]), and a metadata stream as the stream of its
+// PDMetadata (root/document[0]/metadata[0]/stream[0] for the catalog's, and
+// the metadata of any other dictionary for the rest). The two reaches are
+// different objects to its identity check, so every ISO 19005 file-structure
+// rule the object's bytes fail is failed twice. PDMetadata accepts a stream
+// only with /Type /Metadata and /Subtype /XML (see [xmpMetadataStream]), and
+// judges a stream several dictionaries name once.
+//
+// Measured with veraPDF 1.30 at PDF/A-1b, PDF/A-2b and PDF/A-4:
+//
+//   - An /Info dictionary holding a hex string with an odd digit count or a
+//     non-hex character, one nested in an array, a string past the length
+//     limit, an integer or a real past its range, or a name past its length
+//     limit, as a key or a value, fails the rule twice.
+//   - A metadata stream whose /Length misses its data, whose stream keyword
+//     ends in a CR alone, that carries /F or an LZWDecode filter, or whose
+//     dictionary holds an odd hex string, a long name or an out-of-range
+//     integer fails the rule twice, whether the catalog, a page or an image
+//     names it, and so does one two pages name.
+//   - A catalog /Metadata stream with no /Type fails once.
+//
+// A trailer litho made up because the file has none names no /Info of the
+// file's own.
+//
+// # Corpus evidence
+//
+//   - All corpora: 257 counts of ISO 19005-1, 6.1.6, 6.1.7 and 6.1.12 and
+//     ISO 19005-2, 6.1.6 and 6.1.7.1 at PDF/A-1b, at PDF/A-2b and at the
+//     veraPDF corpus's own profiles moved onto veraPDF's, from a summed
+//     distance of 317, most of them a metadata stream's /Length or stream
+//     keyword EOL.
+//   - pdfjs issue13783.pdf, issue15833.pdf and PDFBOX-3148-2-fuzzed.pdf: the
+//     only other counts that moved, on files veraPDF cannot parse.
+//   - litho filestruct_1b.pdf: holds an odd hex string and a non-hex
+//     character in its /Info, and veraPDF fails ISO 19005-1 and ISO
+//     19005-2, 6.1.6 t1 and t2 twice each, where litho failed them once.
+func cosReachedTwice(ctx context.Context, doc *document.Document, catalog ast.PdfDict) map[int]bool {
+	twice := make(map[int]bool)
+	if !doc.TrailerSynthesized {
+		if ref, ok := doc.Index.Trailer["Info"].(ast.PdfIndirectRef); ok {
+			if info, err := document.ResolveDict(ctx, doc, ref); err == nil && info != nil {
+				twice[ref.ObjectNum] = true
+			}
+		}
+	}
+	metaNums := xmpCollectMetadataStreams(ctx, doc, catalog)
+	if ref, ok := catalog["Metadata"].(ast.PdfIndirectRef); ok {
+		metaNums = append(metaNums, ref.ObjectNum)
+	}
+	for _, objNum := range metaNums {
+		if _, ok := xmpMetadataStream(ctx, doc, objNum); ok {
+			twice[objNum] = true
+		}
+	}
+	return twice
+}
+
+// asReached returns the violations object objNum's bytes fail, stated twice
+// when veraPDF reaches the object twice; see [cosReachedTwice].
+func asReached(twice map[int]bool, objNum int, violations []Violation) []Violation {
+	if !twice[objNum] || len(violations) == 0 {
+		return violations
+	}
+	return slices.Concat(violations, violations)
 }
 
 func fileHeaderRule(profile string) Rule {
@@ -487,8 +563,9 @@ func checkPostEOFData(ctx context.Context, doc *document.Document, profile strin
 }
 
 // checkStreamExternalKeys validates §6.1.7: stream dicts must not contain
-// /F, /FFilter, or /FDecodeParms.
-func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profile string) []Violation {
+// /F, /FFilter, or /FDecodeParms. A stream in twice fails it twice; see
+// [cosReachedTwice].
+func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profile string, twice map[int]bool) []Violation {
 	forbiddenKeys := []ast.PdfName{"F", "FFilter", "FDecodeParms"}
 	var results []Violation
 
@@ -512,18 +589,17 @@ func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profil
 			}
 		}
 		if len(found) > 0 {
-			results = append(results, Violation{
-				Rule:    streamExternalKeysRule(profile),
-				Context: fmt.Sprintf("object %d: stream dict contains %v", objNum, found),
-			})
+			results = append(results, asReached(twice, objNum, failf(streamExternalKeysRule(profile),
+				"object %d: stream dict contains %v", objNum, found))...)
 		}
 	}
 
 	return results
 }
 
-// checkStreamLZW validates §6.1.10: LZWDecode filter is not permitted.
-func checkStreamLZW(ctx context.Context, doc *document.Document, profile string) []Violation {
+// checkStreamLZW validates §6.1.10: LZWDecode filter is not permitted. A
+// stream in twice fails it twice; see [cosReachedTwice].
+func checkStreamLZW(ctx context.Context, doc *document.Document, profile string, twice map[int]bool) []Violation {
 	var results []Violation
 
 	for objNum, entry := range sweptXRefEntries(doc) {
@@ -540,10 +616,8 @@ func checkStreamLZW(ctx context.Context, doc *document.Document, profile string)
 		}
 
 		if hasLZWFilter(ctx, doc, stream.Dict) {
-			results = append(results, Violation{
-				Rule:    lzwFilterRule(profile),
-				Context: fmt.Sprintf("object %d uses LZWDecode filter", objNum),
-			})
+			results = append(results, asReached(twice, objNum, failf(lzwFilterRule(profile),
+				"object %d uses LZWDecode filter", objNum))...)
 		}
 	}
 
@@ -602,7 +676,8 @@ var standardFilters = map[string]bool{
 // requirement, so a non-LZW non-standard name (for example /Flatedecode with the
 // wrong case) is not a filter violation under PDF/A-1. Parts 2-4 (§6.1.7.2 /
 // §6.1.6.2) do require the standard filter set, so the same name fails there.
-func checkNonStandardFilters(ctx context.Context, doc *document.Document, profile string) []Violation {
+// A stream in twice fails it twice; see [cosReachedTwice].
+func checkNonStandardFilters(ctx context.Context, doc *document.Document, profile string, twice map[int]bool) []Violation {
 	if PDFAPart(profile) == 1 {
 		return nil
 	}
@@ -630,10 +705,8 @@ func checkNonStandardFilters(ctx context.Context, doc *document.Document, profil
 		// Single filter name.
 		if name, err := document.ResolveName(ctx, doc, filterObj); err == nil && name != "" {
 			if !standardFilters[string(name)] {
-				results = append(results, Violation{
-					Rule:    rule,
-					Context: fmt.Sprintf("object %d uses non-standard filter /%s", objNum, name),
-				})
+				results = append(results, asReached(twice, objNum, failf(rule,
+					"object %d uses non-standard filter /%s", objNum, name))...)
 			}
 			continue
 		}
@@ -642,10 +715,8 @@ func checkNonStandardFilters(ctx context.Context, doc *document.Document, profil
 			for _, elem := range arr {
 				if n, err := document.ResolveName(ctx, doc, elem); err == nil && n != "" {
 					if !standardFilters[string(n)] {
-						results = append(results, Violation{
-							Rule:    rule,
-							Context: fmt.Sprintf("object %d uses non-standard filter /%s", objNum, n),
-						})
+						results = append(results, asReached(twice, objNum, failf(rule,
+							"object %d uses non-standard filter /%s", objNum, n))...)
 					}
 				}
 			}
@@ -762,7 +833,9 @@ func checkXRefFormat(doc *document.Document, profile string) []Violation {
 // This avoids scanning the entire stream data for "endstream", which was
 // fragile due to binary data containing the keyword or EOL normalization
 // differences between producers.
-func checkStreamLengths(ctx context.Context, doc *document.Document, profile string) []Violation {
+//
+// A stream in twice fails each rule twice; see [cosReachedTwice].
+func checkStreamLengths(ctx context.Context, doc *document.Document, profile string, twice map[int]bool) []Violation {
 	var results []Violation
 	rule := streamLengthRule(profile)
 
@@ -791,10 +864,8 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 		}
 
 		if declaredLen < 0 {
-			results = append(results, Violation{
-				Rule:    rule,
-				Context: fmt.Sprintf("object %d: negative /Length=%d", objNum, declaredLen),
-			})
+			results = append(results, asReached(twice, objNum, failf(rule,
+				"object %d: negative /Length=%d", objNum, declaredLen))...)
 			continue
 		}
 
@@ -831,14 +902,13 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 		}
 		expOff := int(absExpectedEnd - winStart)
 
+		var found []Violation
 		esRel := bytes.Index(win, []byte("endstream"))
 		if esRel < 0 || !streamLengthMatches(win, expOff, esRel) {
 			// endstream is not one valid EOL past the declared end (or not within
 			// the window at all): the /Length does not match the real length.
-			results = append(results, Violation{
-				Rule:    rule,
-				Context: fmt.Sprintf("object %d: declared /Length=%d does not match the stream data extent", objNum, declaredLen),
-			})
+			found = append(found, failf(rule,
+				"object %d: declared /Length=%d does not match the stream data extent", objNum, declaredLen)...)
 		}
 
 		// §6.1.7 t2 / §6.1.7.1 t2: the endstream keyword shall be immediately
@@ -846,11 +916,10 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 		// is non-compliant when the byte before endstream is not CR or LF, be it
 		// stream data abutting endstream, or a space or tab left after the EOL.
 		if eolRule := streamEOLRule(profile); eolRule.Specification != "" && esRel >= 1 && win[esRel-1] != '\n' && win[esRel-1] != '\r' {
-			results = append(results, Violation{
-				Rule:    eolRule,
-				Context: fmt.Sprintf("object %d: endstream keyword not immediately preceded by an EOL marker", objNum),
-			})
+			found = append(found, failf(eolRule,
+				"object %d: endstream keyword not immediately preceded by an EOL marker", objNum)...)
 		}
+		results = append(results, asReached(twice, objNum, found)...)
 	}
 
 	return results

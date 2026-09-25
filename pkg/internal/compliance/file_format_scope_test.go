@@ -74,7 +74,7 @@ func TestFormatViolationScope(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			vctx := &validationCtx{formatViolations: []error{tc.msg}}
-			got := checkFormatViolations(vctx, tc.profile)
+			got := checkFormatViolations(vctx, tc.profile, nil)
 			if tc.want == (Rule{}) {
 				if len(got) != 0 {
 					t.Fatalf("want silence, got %v", got)

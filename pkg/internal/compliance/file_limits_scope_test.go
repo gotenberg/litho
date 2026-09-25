@@ -34,7 +34,7 @@ func TestCheckNumericLimits_TrailerDictionary(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewDocument: %v", err)
 		}
-		return hasRule(checkNumericLimits(ctx, doc, "PDF/A-2b"), Rule_19005_2_6_1_13_t01)
+		return hasRule(checkNumericLimits(ctx, doc, "PDF/A-2b", nil), Rule_19005_2_6_1_13_t01)
 	}
 
 	cases := []struct {
@@ -81,7 +81,7 @@ func TestCheckNumericLimits_SynthesizedTrailerIgnored(t *testing.T) {
 	if !doc.TrailerSynthesized {
 		t.Skip("this fixture no longer exercises the synthesized-trailer path")
 	}
-	if hasRule(checkNumericLimits(ctx, doc, "PDF/A-2b"), Rule_19005_2_6_1_13_t01) {
+	if hasRule(checkNumericLimits(ctx, doc, "PDF/A-2b", nil), Rule_19005_2_6_1_13_t01) {
 		t.Error("a synthesized trailer must not be reported against the integer-range rule")
 	}
 }

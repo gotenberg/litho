@@ -591,15 +591,8 @@ func xmpCollectMetadataRefs(obj ast.PdfObject, catalogMetaNum int, seen map[int]
 // its raw bytes: reporting a malformed packet litho merely failed to decode
 // would be a false positive.
 func xmpPacketBytes(ctx context.Context, doc *document.Document, objNum int) []byte {
-	stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
-	if err != nil || stream.Dict == nil {
-		doc.Logger.Debug("compliance.xmp: cannot resolve metadata stream", "object", objNum, "error", err)
-		return nil
-	}
-
-	typeName, _ := document.ResolveName(ctx, doc, stream.Dict["Type"])
-	subtypeName, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-	if typeName != "Metadata" || subtypeName != "XML" {
+	stream, ok := xmpMetadataStream(ctx, doc, objNum)
+	if !ok {
 		return nil
 	}
 
@@ -609,6 +602,20 @@ func xmpPacketBytes(ctx context.Context, doc *document.Document, objNum int) []b
 		return nil
 	}
 	return data
+}
+
+// xmpMetadataStream resolves object objNum and reports whether it is an XMP
+// metadata stream, which veraPDF's PDMetadata.isMetadataObject accepts only
+// when /Type is /Metadata and /Subtype is /XML.
+func xmpMetadataStream(ctx context.Context, doc *document.Document, objNum int) (ast.PdfStream, bool) {
+	stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+	if err != nil || stream.Dict == nil {
+		doc.Logger.Debug("compliance.xmp: cannot resolve metadata stream", "object", objNum, "error", err)
+		return ast.PdfStream{}, false
+	}
+	typeName, _ := document.ResolveName(ctx, doc, stream.Dict["Type"])
+	subtypeName, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
+	return stream, typeName == "Metadata" && subtypeName == "XML"
 }
 
 // xmpPacketViolation names the metadata stream a packet violation came from,
