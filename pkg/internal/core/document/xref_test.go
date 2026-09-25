@@ -3,41 +3,9 @@ package document
 import (
 	"bytes"
 	"context"
-	"math"
 	"testing"
 	"time"
-
-	"github.com/gotenberg/litho/pkg/internal/core/xref"
 )
-
-// TestNextNormalObjectOffset pins the binary search that caps endobj scanning,
-// including its rebuild when the entry set grows (lazy xref augmentation).
-// Compressed entries (no byte offset) are ignored. The write below stands in
-// for an index writer, so it records the change as every writer does.
-func TestNextNormalObjectOffset(t *testing.T) {
-	d := &Document{xrefEntries: map[int]xref.XRefEntry{
-		1: {Type: xref.XRefTypeNormal, Offset: 100},
-		2: {Type: xref.XRefTypeNormal, Offset: 250},
-		3: {Type: xref.XRefTypeNormal, Offset: 400},
-		4: {Type: xref.XRefTypeCompressed, Offset: 0},
-	}}
-
-	cases := []struct{ off, want int64 }{
-		{50, 100}, {100, 250}, {150, 250}, {249, 250}, {250, 400}, {400, math.MaxInt64}, {999, math.MaxInt64},
-	}
-	for _, c := range cases {
-		if got := d.nextNormalObjectOffset(c.off); got != c.want {
-			t.Errorf("nextNormalObjectOffset(%d) = %d, want %d", c.off, got, c.want)
-		}
-	}
-
-	// Growing the entry set must invalidate the cached slice and rebuild.
-	d.xrefEntries[5] = xref.XRefEntry{Type: xref.XRefTypeNormal, Offset: 175}
-	d.noteXRefChange()
-	if got := d.nextNormalObjectOffset(100); got != 175 {
-		t.Errorf("after adding offset 175: nextNormalObjectOffset(100) = %d, want 175", got)
-	}
-}
 
 // cyclicPrevPDF returns a PDF whose xref trailer /Prev points back at the xref
 // table's own offset (109), forming a self-referential chain. The trailer sits

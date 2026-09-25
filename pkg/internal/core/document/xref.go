@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"math"
-	"slices"
-	"sort"
 	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -112,7 +109,6 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 				preExisting[objNum] = struct{}{}
 			}
 			trailerDict, p, err := xref.ParseXRefTable(ctx, lex, d.xrefEntries)
-			d.noteXRefChange()
 			if err != nil {
 				return fmt.Errorf("parsing xref table at offset %d: %w", currentOffset, err)
 			}
@@ -153,7 +149,6 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 				return fmt.Errorf("expected xref stream, got %T", obj)
 			}
 			pVal, err := xref.ParseXRefStream(ctx, stream, d.xrefEntries, d.builtinFilters())
-			d.noteXRefChange()
 			if err != nil {
 				return fmt.Errorf("parsing xref stream at offset %d: %w", currentOffset, err)
 			}
@@ -210,7 +205,6 @@ func (d *Document) pruneUnrepresentableEntries() {
 			continue
 		}
 		delete(d.xrefEntries, objNum)
-		d.noteXRefChange()
 		d.Logger.Debug("dropping xref entry whose object number the file cannot define",
 			slog.Int("object_number", objNum),
 			slog.Int64("file_size", d.size),
@@ -424,7 +418,6 @@ func (d *Document) parseHybridXRefStream(ctx context.Context, offset int64, skip
 			continue
 		}
 		d.xrefEntries[objNum] = entry
-		d.noteXRefChange()
 	}
 
 	return nil
@@ -549,84 +542,39 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) []error 
 	return append(violations, d.validateEndobjFormat(offset, objNum)...)
 }
 
-// noteXRefChange records a write to xrefEntries, so a cache derived from the
-// index rebuilds before its next read (see [Document.nextNormalObjectOffset]).
-// Every write to xrefEntries calls it. Once construction completes the caller
-// holds d.mu for writing; before that no other goroutine can reach the
-// document.
-func (d *Document) noteXRefChange() {
-	d.xrefGen++
-}
-
-// nextNormalObjectOffset returns the smallest normal indirect-object offset
-// strictly greater than off, or [math.MaxInt64] if none. It binary-searches an
-// ascending offset slice cached on the document. This replaces a full scan of
-// every xref entry, which turned per-object endobj validation into an O(N^2)
-// cost on files packed with objects.
-//
-// The slice is rebuilt whenever the index changed since it was built, as
-// [Document.noteXRefChange] records. Keying it on the entry count missed the
-// raw-byte augmentation when that only moves offsets: an override replaces an
-// entry the table misplaced without adding one, so the slice kept the offset
-// the table declared and lacked the one the object really has. An endobj scan
-// then ended at the stale offset, which can fall inside the scanned object's
-// own body, or ran on past the moved object's real header.
-//
-// # Corpus evidence
-//
-//   - All corpora: six files have the augmentation move offsets without adding
-//     an entry. Three of them, pdfjs issue10326.pdf, issue18986.pdf and
-//     issue9418.pdf, run it while they open, before anything builds the cache.
-//   - pdfjs bug1898802.pdf, issue11678.pdf, prefilled_f1040.pdf: build the
-//     cache first, so it went stale on each, though no object's endobj check
-//     reads differently through the stale offsets.
-func (d *Document) nextNormalObjectOffset(off int64) int64 {
-	d.mu.RLock()
-	offs := d.sortedOffsets
-	fresh := offs != nil && d.sortedOffsetsGen == d.xrefGen
-	d.mu.RUnlock()
-
-	if !fresh {
-		d.mu.Lock()
-		if d.sortedOffsets == nil || d.sortedOffsetsGen != d.xrefGen {
-			rebuilt := make([]int64, 0, len(d.xrefEntries))
-			for _, entry := range d.xrefEntries {
-				if entry.Type == xref.XRefTypeNormal {
-					rebuilt = append(rebuilt, entry.Offset)
-				}
-			}
-			slices.Sort(rebuilt)
-			d.sortedOffsets = rebuilt
-			d.sortedOffsetsGen = d.xrefGen
-		}
-		offs = d.sortedOffsets
-		d.mu.Unlock()
-	}
-
-	i := sort.Search(len(offs), func(i int) bool { return offs[i] > off })
-	if i < len(offs) {
-		return offs[i]
-	}
-	return math.MaxInt64
-}
-
 // validateEndobjFormat scans the object body starting at offset to find
 // "endobj" and validates it is preceded by an EOL marker. It returns the
 // violations found.
+//
+// The scan stops at the next object the index placed when the document was
+// opened ([Document.objectStarts]), so "endobj" literals embedded in a later
+// object's strings cannot be found. The raw-byte augmentation can move and add
+// entries after that, at whichever lookup first misses the index, and a window
+// taken from the live index made the verdict on an object depend on whether
+// some earlier resolution had run it: a table the augmentation repairs can
+// place an object inside the body of the one before it, and the scan of that
+// one then ended short of its own endobj until the augmentation moved the
+// entry. An offset that misses the header of the object listed there is
+// stepped over instead, as [Document.objectEnd] steps over it, and
+// [nextObjectHeader] still ends the window at the header the object really
+// has.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue15096.pdf: supersedes object 264, whose abandoned copy ends
 //     "endobj " and was reported as object 263's until the window stopped at
 //     the next object header.
+//   - All corpora: forcing the augmentation once a file is open moves 5
+//     objects and adds 465 across 470 files, and every object judged at the
+//     same offset before and after it reports the same findings, whether the
+//     window comes from the live index or the opening one. No PDF/A-1b or
+//     PDF/A-2b violation moves.
 func (d *Document) validateEndobjFormat(offset int64, objNum int) []error {
-	// Cap the scan at the next indirect object's offset so "endobj"
-	// literals embedded in a later object's strings cannot be found. Using a
-	// binary search over cached ascending offsets keeps this O(log N) per
+	// A binary search over the ascending offsets keeps this O(log N) per
 	// object; scanning every entry here would be O(N^2) across a full pass on
 	// a file with many objects.
 	scanLimit := int64(maxEndobjScanBytes)
-	if next := d.nextNormalObjectOffset(offset); next < math.MaxInt64 && next-offset < scanLimit {
+	if next, ok := d.nextObjectStart(d.objectStarts, offset); ok && next-offset < scanLimit {
 		scanLimit = next - offset
 	}
 	buf := make([]byte, scanLimit)

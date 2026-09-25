@@ -1030,9 +1030,6 @@ func (d *Document) augmentXrefFromRawScan(ctx context.Context) {
 			overridden++
 		}
 		changed := added > 0 || overridden > 0
-		if changed {
-			d.noteXRefChange()
-		}
 		d.xrefAugmented = changed
 		d.mu.Unlock()
 		if changed {
@@ -1108,14 +1105,15 @@ func declaredObjectStarts(entries map[int]xref.XRefEntry) []objectStart {
 	return starts
 }
 
-// maxObjectEndProbes bounds how many later objects [Document.objectEnd] checks
-// for a header before it gives up on bounding a parse. Anti-DoS guard, not
-// spec-mandated: each check is one small read, and a table whose offsets all
-// miss their headers would otherwise have every resolution check every object
-// after it, a cost quadratic in the object count. A table that places the next
-// object correctly needs one check, and one that points a few objects astray
-// still finds a header within the bound. Past it the parse runs to the end of
-// the file, as it did before any bound.
+// maxObjectEndProbes bounds how many later objects [Document.nextObjectStart]
+// checks for a header before it gives up on bounding a parse or an endobj
+// scan. Anti-DoS guard, not spec-mandated: each check is one small read, and a
+// table whose offsets all miss their headers would otherwise have every
+// resolution check every object after it, a cost quadratic in the object
+// count. A table that places the next object correctly needs one check, and
+// one that points a few objects astray still finds a header within the bound.
+// Past it the parse runs to the end of the file, as it did before any bound,
+// and the endobj scan to its own cap, [maxEndobjScanBytes].
 //
 // # Corpus evidence
 //
@@ -1138,7 +1136,18 @@ const maxObjectEndProbes = 8
 // offset that misses its header says nothing about where this object ends, and
 // ending the parse there would cut a sound object short.
 func (d *Document) objectEnd(offset int64) int64 {
-	starts := d.declaredStarts
+	if next, ok := d.nextObjectStart(d.declaredStarts, offset); ok {
+		return next
+	}
+	return d.size
+}
+
+// nextObjectStart returns the offset of the first object of starts, listed by
+// ascending offset, that lies after offset and whose bytes open the header of
+// the object starts names there, "N G obj" (ISO 32000-1, 7.3.10). It checks
+// at most [maxObjectEndProbes] objects, and reports false when none of them
+// qualifies.
+func (d *Document) nextObjectStart(starts []objectStart, offset int64) (int64, bool) {
 	i, _ := slices.BinarySearchFunc(starts, offset, func(s objectStart, off int64) int {
 		if s.offset <= off {
 			return -1
@@ -1147,10 +1156,10 @@ func (d *Document) objectEnd(offset int64) int64 {
 	})
 	for probes := 0; i < len(starts) && probes < maxObjectEndProbes; i, probes = i+1, probes+1 {
 		if objectHeaderMatches(d.r, starts[i].offset, starts[i].num) {
-			return starts[i].offset
+			return starts[i].offset, true
 		}
 	}
-	return d.size
+	return 0, false
 }
 
 // scanIndirectObjects returns an xref entry for every "N G obj" header
