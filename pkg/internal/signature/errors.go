@@ -5,8 +5,8 @@ import "errors"
 // ErrMDPViolation names a modification that violates the DocMDP or FieldMDP
 // policy a signature declared. An update that only adds validation data or a
 // document timestamp is not a modification (ISO 32000-2, 12.8.2.2, Table
-// 257), removing a page is one at every P, and removing an annotation other
-// than a widget is one at P=2.
+// 257), removing a page or changing what a signed page draws is one at every
+// P, and adding or removing an annotation other than a widget is one at P=2.
 //
 // NOTHING RETURNS IT, and a caller must not reach for [errors.Is] against it.
 // MDP is evaluated rather than refused: evaluateMDP reports every outcome

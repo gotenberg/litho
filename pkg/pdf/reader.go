@@ -1446,7 +1446,8 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // ErrorMessage that says why HashValid and CertChainValid are false.
 //
 // The check classifies each appended object by type, so a forbidden change
-// made through a permitted object type goes unreported. An appended object
+// made through a permitted object type goes unreported unless one of the
+// comparisons with the signed revision below finds it. An appended object
 // stream is not itself a change: the objects it holds are classified as if
 // written outside it, and one whose objects cannot be read is reported.
 //
@@ -1472,8 +1473,16 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // A page of the signed revision that the current page tree no longer holds is
 // reported as removed at every P, and at P=2 so is an annotation other than a
 // form field widget that a page of the signed revision lists and the current
-// page no longer does. When the signed revision cannot be read, MDPInfo says
-// what was not checked.
+// page no longer does.
+//
+// No P permits changing what a signed page draws. Each page of the signed
+// revision must keep every entry but /Annots and /Parent, and the resources,
+// boxes and rotation it inherits. No appended object may redefine an object
+// the page reaches through anything else, its content streams, resources and
+// actions among them, unless it writes the same definition again. At P=2 an
+// annotation a page lists and did not list when signed must be a form field
+// widget. When the signed revision cannot be read, MDPInfo says what was not
+// checked.
 func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) (_ []models.SignatureValidation, err error) {
 	defer recoverToError(r.logger(), "Reader.VerifySignatures", &err)
 	return signature.VerifySignatures(ctx, r.doc, roots)
