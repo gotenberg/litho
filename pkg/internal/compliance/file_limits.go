@@ -420,13 +420,17 @@ func checkObjectNumericLimits(obj ast.PdfObject, where string, part int, profile
 		}
 
 	case ast.PdfName:
-		// PDF names may contain #XX hex escape sequences. The limit applies
-		// to the decoded byte length, not the encoded representation.
-		decodedLen := decodedNameLength(string(v))
-		if decodedLen > maxNameBytes {
+		// The limit applies to the bytes the name stands for, not to its
+		// written form, and the name holds those bytes: the lexer already
+		// expanded its #XX escapes (ISO 32000-1, 7.3.5). Expanding them a
+		// second time shortened a name whose bytes spell an escape: 43 times
+		// /#2341 stands for 129 bytes, "#41" 43 times, and read as 43.
+		// veraPDF 1.30 fails ISO 19005-1, 6.1.12 t4 and ISO 19005-2, 6.1.13
+		// t4 on it.
+		if len(v) > maxNameBytes {
 			results = append(results, Violation{
 				Rule:    nameLengthRule(profile),
-				Context: fmt.Sprintf("%s: name length %d exceeds %d", where, decodedLen, maxNameBytes),
+				Context: fmt.Sprintf("%s: name length %d exceeds %d", where, len(v), maxNameBytes),
 			})
 		}
 
@@ -466,27 +470,4 @@ func checkObjectNumericLimits(obj ast.PdfObject, where string, part int, profile
 	}
 
 	return results
-}
-
-// decodedNameLength returns the byte length of a PDF name after decoding #XX
-// hex escape sequences. Each #XX sequence represents a single byte in the
-// decoded name.
-func decodedNameLength(name string) int {
-	decoded := 0
-	i := 0
-	for i < len(name) {
-		if name[i] == '#' && i+2 < len(name) && isHexDigit(name[i+1]) && isHexDigit(name[i+2]) {
-			decoded++
-			i += 3
-		} else {
-			decoded++
-			i++
-		}
-	}
-	return decoded
-}
-
-// isHexDigit returns true if c is a valid hexadecimal digit.
-func isHexDigit(c byte) bool {
-	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }

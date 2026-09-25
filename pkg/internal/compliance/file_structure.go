@@ -3,7 +3,6 @@ package compliance
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
@@ -1254,7 +1253,8 @@ func utf8NameRule(profile string) Rule {
 
 // checkUTF8Names validates §6.1.7 (PDF/A-4) / §6.1.8 (PDF/A-2/3): font names,
 // colorant names in Separation/DeviceN colour spaces, and structure type names
-// must be valid UTF-8 after #XX hex escape expansion.
+// must be valid UTF-8 once their #XX escapes are expanded, which the lexer
+// does (see [checkNameUTF8]).
 func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	var results []Violation
 	seen := make(map[string]bool) // Avoid duplicate reports for the same name.
@@ -1355,39 +1355,23 @@ func checkStructureTypeUTF8(ctx context.Context, doc *document.Document, root as
 	})
 }
 
-// checkNameUTF8 validates that a PDF name, after #XX hex escape expansion,
-// is a valid UTF-8 string. Reports a violation if not.
+// checkNameUTF8 validates that a PDF name is a valid UTF-8 string, and reports
+// a violation if not.
+//
+// name holds the bytes the name stands for: the lexer already expanded its #XX
+// escapes (ISO 32000-1, 7.3.5), and the rule judges those bytes. Expanding them
+// a second time misread a name whose bytes spell an escape: /Foo#23C3 stands
+// for the valid "Foo#C3", and read as the invalid "Foo\xC3". veraPDF 1.30
+// passes ISO 19005-2, 6.1.8 t1 and ISO 19005-4, 6.1.7 t1 on it and fails
+// /Foo#C3.
 func checkNameUTF8(name, context string, rule Rule, seen map[string]bool, results *[]Violation) {
 	if seen[name] {
 		return
 	}
 	seen[name] = true
 
-	decoded := expandNameHexEscapes(name)
-	if !utf8.ValidString(decoded) {
+	if !utf8.ValidString(name) {
 		*results = append(*results, failf(rule,
 			"%s %q is not valid UTF-8", context, name)...)
 	}
-}
-
-// expandNameHexEscapes expands #XX hex escape sequences in a PDF name.
-// For example, "A#20B" becomes "A B".
-func expandNameHexEscapes(name string) string {
-	if len(name) < 3 {
-		return name
-	}
-
-	var buf []byte
-	for i := 0; i < len(name); i++ {
-		if name[i] == '#' && i+2 < len(name) {
-			b, err := hex.DecodeString(name[i+1 : i+3])
-			if err == nil && len(b) == 1 {
-				buf = append(buf, b[0])
-				i += 2
-				continue
-			}
-		}
-		buf = append(buf, name[i])
-	}
-	return string(buf)
 }

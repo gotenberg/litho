@@ -114,53 +114,21 @@ func checkVersionPart4(catalog ast.PdfDict) []Violation {
 }
 
 // catalogVersion extracts the /Version name from the catalog dictionary.
-// PDF names may contain #XX hex escape sequences (e.g., /#32#2E#30 = "2.0"),
-// so the name is decoded before returning.
+//
+// The name holds the bytes it stands for: the lexer already expanded its #XX
+// escapes (ISO 32000-1, 7.3.5), so /#32#2E#30 reads "2.0" here. Expanding them
+// a second time misread a name whose bytes spell an escape: /#2332#2E0 stands
+// for "#32.0", which is no 2.n version, and read "2.0". veraPDF 1.30 fails
+// ISO 19005-4, 6.1.12 t1 on it and passes /2#2E0.
 func catalogVersion(catalog ast.PdfDict) string {
 	vObj, ok := catalog["Version"]
 	if !ok {
 		return ""
 	}
 	if name, ok := vObj.(ast.PdfName); ok {
-		return decodePdfName(string(name))
+		return string(name)
 	}
 	return ""
-}
-
-// decodePdfName decodes #XX hex escape sequences in a PDF name.
-func decodePdfName(name string) string {
-	if !strings.Contains(name, "#") {
-		return name
-	}
-	var buf strings.Builder
-	buf.Grow(len(name))
-	for i := 0; i < len(name); i++ {
-		if name[i] == '#' && i+2 < len(name) {
-			hi := unhex(name[i+1])
-			lo := unhex(name[i+2])
-			if hi >= 0 && lo >= 0 {
-				buf.WriteByte(byte(hi<<4 | lo)) //nolint:gosec // hex decode; values bounded 0-15
-				i += 2
-				continue
-			}
-		}
-		buf.WriteByte(name[i])
-	}
-	return buf.String()
-}
-
-// unhex returns the numeric value of a hex digit, or -1 if not a hex digit.
-func unhex(c byte) int {
-	switch {
-	case c >= '0' && c <= '9':
-		return int(c - '0')
-	case c >= 'a' && c <= 'f':
-		return int(c-'a') + 10
-	case c >= 'A' && c <= 'F':
-		return int(c-'A') + 10
-	default:
-		return -1
-	}
 }
 
 // checkAlternatePresentations validates that /AlternatePresentations is not
