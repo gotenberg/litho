@@ -4,6 +4,8 @@ import (
 	"context"
 	"strconv"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // TestContentStreamHexStringsReportsEveryFinding pins that a page contributes
@@ -142,5 +144,74 @@ func TestContentStreamHexStringsOnlyWhereRead(t *testing.T) {
 				t.Errorf("t1 fired %d times, want %d", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestContentStreamHexStringsPropertyListTwice pins that a bad hex string
+// written as the /ActualText or /Alt of a BDC or DP property list, or as the
+// /Lang of a BDC one, fails the hex string tests twice, as veraPDF fails them:
+// once as a value of the property list and once as the string veraPDF models
+// that entry as. Measured with veraPDF 1.30 at PDF/A-1b, PDF/A-2b and PDF/A-4,
+// each content on a one-page fixture and again in a painted form XObject. /E,
+// /Lang under DP and an /ActualText nested in another entry are the controls:
+// each fails once.
+func TestContentStreamHexStringsPropertyListTwice(t *testing.T) {
+	t.Parallel()
+
+	const (
+		catalog = "<< /Type /Catalog /Pages 2 0 R >>"
+		pages   = "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"
+		page    = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R " +
+			"/Resources << /XObject << /Fm0 5 0 R >> >> >>"
+		formDict = "/Type /XObject /Subtype /Form /BBox [0 0 100 100] /Resources << >>"
+	)
+	cases := []struct {
+		content      string
+		odd, invalid int
+	}{
+		{"/Span <</ActualText <414>>> BDC EMC", 2, 0},
+		{"/Span <</Alt <414>>> BDC EMC", 2, 0},
+		{"/Span <</Lang <414>>> BDC EMC", 2, 0},
+		{"/Span <</ActualText <414>>> DP", 2, 0},
+		{"/Span <</Alt <414>>> DP", 2, 0},
+		{"/Span <</ActualText <41Z4>>> BDC EMC", 0, 2},
+		{"/Span <</ActualText <41Z>>> BDC EMC", 2, 2},
+		{"/Span <</ActualText <414> /Alt <414> /Lang <414> /E <414>>> BDC EMC", 7, 0},
+		{"/Span <</E <414>>> BDC EMC", 1, 0},
+		{"/Span <</Lang <414>>> DP", 1, 0},
+		{"/Span <</X <</ActualText <414>>> /Y [<414>]>> BDC EMC", 2, 0},
+		{"/Span <</ActualText <4142>>> BDC EMC", 0, 0},
+	}
+	for _, tc := range cases {
+		for _, where := range []string{"page", "form"} {
+			pageContent, formContent := tc.content, "0 0 m 10 10 l S"
+			if where == "form" {
+				pageContent, formContent = "/Fm0 Do", tc.content
+			}
+			objs := []string{catalog, pages, page, exponentStream("", pageContent), exponentStream(formDict, formContent)}
+			for _, p := range []struct {
+				profile      models.PDFAProfile
+				odd, invalid Rule
+			}{
+				{models.PDFA1b, Rule_19005_1_6_1_6_t01, Rule_19005_1_6_1_6_t02},
+				{models.PDFA2b, Rule_19005_2_6_1_6_t01, Rule_19005_2_6_1_6_t02},
+				{models.PDFA4, Rule_19005_4_6_1_5_t01, Rule_19005_4_6_1_5_t02},
+			} {
+				t.Run(where+" "+tc.content+" "+string(p.profile), func(t *testing.T) {
+					t.Parallel()
+					doc, _ := objsDocPDF(t, objs...)
+					viols, err := ValidatePDFA(context.Background(), doc, p.profile)
+					if err != nil {
+						t.Fatalf("ValidatePDFA: %v", err)
+					}
+					if got := countRuleErrs(t, viols, p.odd); got != tc.odd {
+						t.Errorf("%s test %d fired %d times, want %d: %v", p.odd.Clause, p.odd.TestNumber, got, tc.odd, viols)
+					}
+					if got := countRuleErrs(t, viols, p.invalid); got != tc.invalid {
+						t.Errorf("%s test %d fired %d times, want %d: %v", p.invalid.Clause, p.invalid.TestNumber, got, tc.invalid, viols)
+					}
+				})
+			}
+		}
 	}
 }

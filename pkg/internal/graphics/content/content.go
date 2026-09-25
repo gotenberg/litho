@@ -3,6 +3,7 @@ package content
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -332,11 +333,31 @@ type FormatViolation struct {
 	Operand ast.PdfObject
 	// Last reports whether Operand is the operation's last operand.
 	Last bool
+	// Key is the key of the entry of Operand, a dictionary, whose value is the
+	// string holding the violation, or "" when the violation lies deeper in
+	// Operand or Operand is no dictionary.
+	Key ast.PdfName
 }
 
 // noOperand is the operand index of a violation that lies in no operand an
 // operation keeps.
 const noOperand = -1
+
+// operandEntryDepth is the depth the parser reads a value of an operand
+// dictionary at (see [parser.EntryViolationError]): parseOperations reads
+// every operand as an object on its own, at depth 1, and
+// [parser.Parser.ParseInlineImageDict] reads the values of an inline image
+// dictionary one level down, as a dictionary's values are.
+const operandEntryDepth = 2
+
+// operandEntryKey returns the key of the operand dictionary entry whose value
+// is the string holding err, or "" when err names none.
+func operandEntryKey(err error) ast.PdfName {
+	if ev, ok := errors.AsType[*parser.EntryViolationError](err); ok && ev.Depth == operandEntryDepth {
+		return ev.Key
+	}
+	return ""
+}
 
 // pendingViolation is a violation recorded among the operands of an operation
 // whose operator is not read yet.
@@ -391,6 +412,9 @@ func (vp *violationPlacer) place(operator string, operands []ast.PdfObject) {
 		if pv.operand >= 0 && pv.operand < len(operands) {
 			v.Operand = operands[pv.operand]
 			v.Last = pv.operand == len(operands)-1
+			if _, isDict := v.Operand.(ast.PdfDict); isDict {
+				v.Key = operandEntryKey(pv.err)
+			}
 		}
 		vp.placed = append(vp.placed, v)
 	}

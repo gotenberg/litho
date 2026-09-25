@@ -70,3 +70,37 @@ func TestFormatViolationPlacement(t *testing.T) {
 		})
 	}
 }
+
+// TestFormatViolationEntryKey pins that a violation placed on an operand
+// dictionary names the entry whose value is the string holding it, and names
+// none when the string lies deeper in the dictionary or the operand is no
+// dictionary.
+func TestFormatViolationEntryKey(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		content string
+		want    ast.PdfName
+	}{
+		{"/Span << /ActualText <414> >> BDC EMC", "ActualText"},
+		{"/Span << /Lang <4G> >> DP", "Lang"},
+		{"/Span << /X << /ActualText <414> >> >> BDC EMC", ""},
+		{"/Span << /X [<414>] >> BDC EMC", ""},
+		{"BI /W 1 /H 1 /BPC 8 /CS /G /F <414> ID \x80 EI", "F"},
+		{"<414> Tj", ""},
+		{"[<414>] TJ", ""},
+	} {
+		t.Run(tc.content, func(t *testing.T) {
+			t.Parallel()
+			_, _, violations, err := ParseStreamDataForCompliance(context.Background(), []byte(tc.content))
+			if err != nil {
+				t.Fatalf("ParseStreamDataForCompliance: %v", err)
+			}
+			if len(violations) != 1 {
+				t.Fatalf("got %d violations, want 1: %v", len(violations), violations)
+			}
+			if got := violations[0].Key; got != tc.want {
+				t.Errorf("Key = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

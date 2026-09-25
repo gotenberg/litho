@@ -53,6 +53,13 @@ type Parser struct {
 	FormatViolations []error
 	checkFormat      bool
 
+	// entryKey is the key of the dictionary entry whose value format checking
+	// is reading, and entryDepth the depth that value is read at, so that a
+	// violation in a string written as the value names the entry (see
+	// [EntryViolationError]).
+	entryKey   ast.PdfName
+	entryDepth int
+
 	// IntegerOverflows holds, in parse order, the value of every integer
 	// literal too large for a 64-bit integer, which the parser reads as a
 	// real. ISO 32000-1, 7.3.3 writes an integer as decimal digits with an
@@ -229,6 +236,41 @@ func (p *Parser) recordViolationErr(err error) {
 	if p.checkFormat {
 		p.FormatViolations = append(p.FormatViolations, fmt.Errorf("compliance: %w", err))
 	}
+}
+
+// EntryViolationError is a format violation in a string written as the value
+// of a dictionary entry, rather than nested deeper in that value. It reads as
+// the violation it wraps and matches it under [errors.Is].
+//
+// veraPDF reaches some entries of a dictionary through a second model object
+// as well as through the dictionary, the /ActualText, /Alt and /Lang of a
+// marked-content property list among them, so a consumer counting its
+// findings needs to know which entry holds the string.
+type EntryViolationError struct {
+	// Key is the key of the entry.
+	Key ast.PdfName
+	// Depth is the nesting depth the string was read at: 1 for an object
+	// read on its own, such as a content-stream operand, and one more per
+	// array or dictionary enclosing it.
+	Depth int
+
+	err error
+}
+
+// Error returns the message of the wrapped violation.
+func (e *EntryViolationError) Error() string { return e.err.Error() }
+
+// Unwrap returns the wrapped violation.
+func (e *EntryViolationError) Unwrap() error { return e.err }
+
+// recordStringViolation is [Parser.recordViolationErr] for a violation in the
+// string being read, which it records as an [EntryViolationError] when the
+// string is the value of the dictionary entry being read.
+func (p *Parser) recordStringViolation(err error) {
+	if p.entryKey != "" && p.depth == p.entryDepth {
+		err = &EntryViolationError{Key: p.entryKey, Depth: p.depth, err: err}
+	}
+	p.recordViolationErr(err)
 }
 
 // Peek returns the token n positions ahead without consuming it.
@@ -709,7 +751,9 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 		if closed {
 			break
 		}
+		outerKey, outerDepth := p.noteEntry(key)
 		valObj, err := p.parseDictValue(ctx, key, &deferredContents)
+		p.restoreEntry(outerKey, outerDepth)
 		if err != nil {
 			// Nesting past [maxParseNestingDepth] is a refusal, not a damaged
 			// value to recover from. Closing the dict here would hand back a
@@ -843,6 +887,25 @@ func startsValue(t lexer.Token) bool {
 		return false
 	}
 	return false
+}
+
+// noteEntry notes, under format checking, that the value of the dictionary
+// entry key is read next, one level below the current depth, so that a
+// violation in a string written as that value names key (see
+// [EntryViolationError]). It returns the enclosing entry, which
+// [Parser.restoreEntry] puts back once the value is read, since the value may
+// be a dictionary of its own.
+func (p *Parser) noteEntry(key ast.PdfName) (ast.PdfName, int) {
+	outerKey, outerDepth := p.entryKey, p.entryDepth
+	if p.checkFormat {
+		p.entryKey, p.entryDepth = key, p.depth+1
+	}
+	return outerKey, outerDepth
+}
+
+// restoreEntry puts back the entry [Parser.noteEntry] returned.
+func (p *Parser) restoreEntry(key ast.PdfName, depth int) {
+	p.entryKey, p.entryDepth = key, depth
 }
 
 // parseDictValue reads the value of key. A /Contents whose value is a string
@@ -1599,7 +1662,9 @@ func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) 
 		// value is: it is no operand of the content stream.
 		p.depth++
 		mark := p.consumed
+		outerKey, outerDepth := p.noteEntry(keyName)
 		val, err := p.ParseObject(ctx)
+		p.restoreEntry(outerKey, outerDepth)
 		p.depth--
 		if err != nil {
 			// Tolerate a malformed value by dropping it. Consuming a token
@@ -1810,7 +1875,7 @@ func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
 			nonWhiteSpace++
 			isHex := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
 			if !isHex && !reported {
-				p.recordViolationErr(fmt.Errorf("%w %q", ErrHexStringInvalidChar, r))
+				p.recordStringViolation(fmt.Errorf("%w %q", ErrHexStringInvalidChar, r))
 				reported = true
 			}
 		}
@@ -1832,7 +1897,7 @@ func (p *Parser) parseHexString(val string) (ast.PdfString, error) {
 	}, val)
 
 	if p.checkFormat && nonWhiteSpace%2 != 0 {
-		p.recordViolationErr(ErrHexStringOddDigits)
+		p.recordStringViolation(ErrHexStringOddDigits)
 	}
 	if len(val)%2 != 0 {
 		val += "0"

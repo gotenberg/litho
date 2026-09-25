@@ -130,6 +130,13 @@ func checkContentStreamFormat(ctx context.Context, doc *document.Document, catal
 				Rule:    rule,
 				Context: fmt.Sprintf("page %d: %s", i+1, v.Err.Error()),
 			})
+			if key := propertyListStringKey(v); key != "" && reported < maxContentFormatViolationsPerStream {
+				reported++
+				results = append(results, Violation{
+					Rule:    rule,
+					Context: fmt.Sprintf("page %d: %s, read again as the property list's /%s", i+1, v.Err.Error(), key),
+				})
+			}
 		}
 	}
 	return results
@@ -149,10 +156,8 @@ func checkContentStreamFormat(ctx context.Context, doc *document.Document, catal
 // "<414> Tj" and "[<414>] TJ" fail t1, and "<414> zz", "<414> w",
 // "<414> 5 Tj", "/Span <414> BDC" and a trailing "<414>" pass it.
 //
-// veraPDF judges the /ActualText, /Alt and /Lang strings of a property list
-// twice, once as values of the dictionary and once as the text the operator
-// carries, so it fails the test twice for one such string. litho states it
-// once.
+// veraPDF judges some strings of a property list twice, see
+// [propertyListStringKey].
 func contentStringJudged(v content.FormatViolation) bool {
 	if !v.Last {
 		return false
@@ -167,6 +172,45 @@ func contentStringJudged(v content.FormatViolation) bool {
 		_, ok = v.Operand.(ast.PdfDict)
 	}
 	return ok
+}
+
+// propertyListStringKey returns the key of the property list entry holding v,
+// a violation [contentStringJudged] accepts, when veraPDF judges that string a
+// second time, and "" when it judges it once.
+//
+// veraPDF models the property list of BDC and DP (ISO 32000-1, 14.6.2) as a
+// dictionary whose values it judges, and models three of its entries again as
+// objects of their own: /ActualText (14.9.4) and /Alt (14.9.3) for both
+// operators, and /Lang (14.9.2.2) for BDC alone. A bad hex string written as
+// one of those values therefore fails the test twice, at
+// .../operators[n]/properties[0]/values[m] and at .../operators[n]/actualText[0],
+// alt[0] or Lang[0]. Measured with veraPDF 1.30 at PDF/A-1b, PDF/A-2b and
+// PDF/A-4, for odd digits and for a non-hex character alike: /ActualText, /Alt
+// and /Lang under BDC and /ActualText and /Alt under DP fail twice, while /E,
+// /Lang under DP and an /ActualText nested in another entry fail once.
+//
+// A property list BDC names from /Resources/Properties is judged there as well,
+// once as an object of the file and twice more for every BDC naming it. The
+// file-level format check states such a string once, so that count stays below
+// veraPDF's.
+//
+// # Corpus evidence
+//
+//   - All corpora: no content stream writes a bad hex string as one of those
+//     values, under PDF/A-1b and PDF/A-2b and the verapdf files under their own
+//     profile, so no count moves.
+func propertyListStringKey(v content.FormatViolation) ast.PdfName {
+	switch v.Key {
+	case "ActualText", "Alt":
+		if v.Operator == "BDC" || v.Operator == "DP" {
+			return v.Key
+		}
+	case "Lang":
+		if v.Operator == "BDC" {
+			return v.Key
+		}
+	}
+	return ""
 }
 
 // drawnStreamHexStrings states the hex string tests, ISO 19005-1/2/3, 6.1.6
@@ -224,6 +268,12 @@ func (j *drawnStreamHexStrings) check(violations []content.FormatViolation, page
 			Rule:    rule,
 			Context: fmt.Sprintf("page %d: %s", pageNum, v.Err.Error()),
 		})
+		if key := propertyListStringKey(v); key != "" && len(results) < maxContentFormatViolationsPerStream {
+			results = append(results, Violation{
+				Rule:    rule,
+				Context: fmt.Sprintf("page %d: %s, read again as the property list's /%s", pageNum, v.Err.Error(), key),
+			})
+		}
 	}
 	return results
 }
