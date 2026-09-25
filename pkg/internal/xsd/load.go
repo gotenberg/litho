@@ -2,6 +2,7 @@ package xsd
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/xml"
 	"errors"
@@ -31,14 +32,14 @@ import (
 func Load(ctx context.Context, fsys fs.FS, rootPath string) (*Schema, error) {
 	loader := &loader{
 		fsys:     fsys,
-		schemas:  make(map[string]*Schema),
+		schemas:  make(map[docKey]*Schema),
 		raw:      make(map[string]*rawSchema),
-		loading:  make(map[string]bool),
+		loading:  make(map[docKey]bool),
 		own:      make(map[*Schema]*Schema),
 		includer: make(map[*Schema]*Schema),
 		includes: make(map[*Schema][]*Schema),
 	}
-	root, _, err := loader.loadFile(ctx, rootPath, "")
+	root, _, err := loader.loadFile(ctx, rootPath, "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -54,12 +55,13 @@ func Load(ctx context.Context, fsys fs.FS, rootPath string) (*Schema, error) {
 // loader tracks the work-in-progress state during a multi-file XSD
 // load. The schemas map is keyed by absolute file path (forward-slash)
 // so re-imports of the same file from different importers reuse one
-// Schema instance.
+// Schema instance, and by the namespace a chameleon include gives the
+// document ([docKey]). The raw map caches the parsed documents by path.
 type loader struct {
 	fsys    fs.FS
-	schemas map[string]*Schema
+	schemas map[docKey]*Schema
 	raw     map[string]*rawSchema
-	loading map[string]bool
+	loading map[docKey]bool
 	// own maps the Schema of each schema document to the components the
 	// document declares itself, apart from those its xs:include children
 	// copy in, so the link pass links each component once, in the scope
@@ -73,43 +75,66 @@ type loader struct {
 	includes map[*Schema][]*Schema
 }
 
+// docKey identifies a loaded schema document: its path, and the target
+// namespace it takes as a chameleon include, "" when it takes none
+// ([loader.loadFile]). Each namespace that includes a chameleon document
+// gets components of its own from it.
+type docKey struct {
+	path      string
+	chameleon string
+}
+
 // loadFile reads a single XSD by path. Returns the populated Schema
 // plus the namespace URI so callers can register the import. importer
 // is the path of the schema that triggered the load; "" for the root.
-func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, string, error) {
+// includerNS is the target namespace of the document that includes p, ""
+// when p is the root or imported.
+//
+// Per XML Schema Part 1, 4.2.1 (src-include clauses 2.3 and 3.2) a document
+// with no targetNamespace that a document with one includes is a chameleon
+// include: its components join the including schema with that target
+// namespace in place of the absent one ([populateFromRaw]).
+//
+// # Corpus evidence
+//
+//   - All corpora: no bundled schema uses xs:include, so none is a
+//     chameleon include. Each of the 28 loads to the same model, and no
+//     verdict of the 159 files that embed XML moves, through the Factur-X
+//     and ZUGFeRD validators or under any bundled schema.
+func (l *loader) loadFile(ctx context.Context, p, importer, includerNS string) (*Schema, string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, "", err
 	}
 	if importer != "" {
 		p = path.Join(path.Dir(importer), p)
 	}
-	if existing, ok := l.schemas[p]; ok {
+	raw, err := l.parse(p)
+	if err != nil {
+		return nil, "", err
+	}
+	key := docKey{path: p}
+	if raw.TargetNamespace == "" {
+		key.chameleon = includerNS
+	}
+	if existing, ok := l.schemas[key]; ok {
 		return existing, existing.TargetNamespace, nil
 	}
-	if l.loading[p] {
+	if l.loading[key] {
 		return nil, "", fmt.Errorf("%w at %s", ErrImportLoop, p)
 	}
-	l.loading[p] = true
-	defer delete(l.loading, p)
+	l.loading[key] = true
+	defer delete(l.loading, key)
 
-	data, err := fs.ReadFile(l.fsys, p)
-	if err != nil {
-		return nil, "", fmt.Errorf("%w: reading %s: %w", ErrSchemaParse, p, err)
-	}
-	raw, err := parseRawSchema(data)
-	if err != nil {
-		return nil, "", fmt.Errorf("%w at %s: %w", ErrSchemaParse, p, err)
-	}
+	tns := cmp.Or(raw.TargetNamespace, key.chameleon)
 	schema := &Schema{
-		TargetNamespace: raw.TargetNamespace,
+		TargetNamespace: tns,
 		Elements:        make(map[QName]*Element),
 		Types:           newBuiltinTypeRegistry(),
 		Attributes:      make(map[QName]*AttributeUse),
 		AttributeGroups: make(map[QName]*AttributeGroup),
 		Imports:         make(map[string]*Schema),
 	}
-	l.schemas[p] = schema
-	l.raw[p] = raw
+	l.schemas[key] = schema
 
 	// Process imports and includes first so cross-schema references
 	// can resolve during the same call's element/type walk.
@@ -117,7 +142,7 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, str
 		if imp.SchemaLocation == "" {
 			continue
 		}
-		sub, ns, err := l.loadFile(ctx, imp.SchemaLocation, p)
+		sub, ns, err := l.loadFile(ctx, imp.SchemaLocation, p, "")
 		if err != nil {
 			return nil, "", err
 		}
@@ -131,7 +156,7 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, str
 		if inc.SchemaLocation == "" {
 			continue
 		}
-		sub, _, err := l.loadFile(ctx, inc.SchemaLocation, p)
+		sub, _, err := l.loadFile(ctx, inc.SchemaLocation, p, tns)
 		if err != nil {
 			return nil, "", err
 		}
@@ -143,18 +168,36 @@ func (l *loader) loadFile(ctx context.Context, p, importer string) (*Schema, str
 	}
 
 	own := &Schema{
-		TargetNamespace: raw.TargetNamespace,
+		TargetNamespace: tns,
 		Elements:        make(map[QName]*Element),
 		Types:           make(map[QName]Type),
 		Attributes:      make(map[QName]*AttributeUse),
 		AttributeGroups: make(map[QName]*AttributeGroup),
 	}
-	if err := populateFromRaw(own, raw); err != nil {
+	if err := populateFromRaw(own, raw, key.chameleon); err != nil {
 		return nil, "", fmt.Errorf("at %s: %w", p, err)
 	}
 	copyComponents(schema, own)
 	l.own[schema] = own
 	return schema, schema.TargetNamespace, nil
+}
+
+// parse returns the schema document at path p, read and parsed on first
+// use.
+func (l *loader) parse(p string) (*rawSchema, error) {
+	if raw, ok := l.raw[p]; ok {
+		return raw, nil
+	}
+	data, err := fs.ReadFile(l.fsys, p)
+	if err != nil {
+		return nil, fmt.Errorf("%w: reading %s: %w", ErrSchemaParse, p, err)
+	}
+	raw, err := parseRawSchema(data)
+	if err != nil {
+		return nil, fmt.Errorf("%w at %s: %w", ErrSchemaParse, p, err)
+	}
+	l.raw[p] = raw
+	return raw, nil
 }
 
 // copyComponents adds the top-level components of src, built-in types
@@ -1003,8 +1046,13 @@ const xmlNamespace = "http://www.w3.org/XML/1998/namespace"
 // schemaDoc is what the builders read off the xs:schema element of the
 // schema document a declaration sits in.
 type schemaDoc struct {
-	// tns is the targetNamespace attribute, empty when absent.
+	// tns is the targetNamespace attribute, empty when absent, or for a
+	// chameleon include the target namespace of the including document.
 	tns string
+	// chameleon reports a chameleon include ([loader.loadFile]), whose
+	// references in no namespace name components in tns
+	// ([schemaDoc.qname]).
+	chameleon bool
 	// attributeFormDefault and elementFormDefault are the attributes of
 	// those names, whose absence means unqualified (XML Schema Part 1,
 	// 3.15.2).
@@ -1069,7 +1117,17 @@ func (d *schemaDoc) localElementNamespace(form string) string {
 }
 
 // populateFromRaw builds the top-level components the schema document raw
-// declares into s.
+// declares into s. chameleon is the target namespace raw takes as a
+// chameleon include ([loader.loadFile]), "" when it takes none.
+//
+// Per XML Schema Part 1, 4.2.1 (src-include clause 3.2) the components of a
+// chameleon include are those it declares, except that its includer's
+// target namespace replaces the absent one wherever that would appear: in
+// the {target namespace} of each named component, top-level or local and
+// qualified (clause 3.2.1), in the {namespace constraint} of each wildcard,
+// which ##targetNamespace and ##other build on (clause 3.2.2), and in each
+// reference in no namespace (the paragraph after clause 3). ##local names
+// no namespace rather than the target namespace, so it still denotes none.
 //
 // # Corpus evidence
 //
@@ -1081,9 +1139,10 @@ func (d *schemaDoc) localElementNamespace(form string) string {
 //     top-level xs:element, or use on a top-level xs:attribute, and none
 //     declares a top-level attribute at all. Each of the 28 still loads to
 //     the same model, and no verdict of those files moves.
-func populateFromRaw(s *Schema, raw *rawSchema) error {
+func populateFromRaw(s *Schema, raw *rawSchema, chameleon string) error {
 	doc := &schemaDoc{
-		tns:                  raw.TargetNamespace,
+		tns:                  cmp.Or(raw.TargetNamespace, chameleon),
+		chameleon:            raw.TargetNamespace == "" && chameleon != "",
 		attributeFormDefault: raw.AttributeFormDefault,
 		elementFormDefault:   raw.ElementFormDefault,
 	}
@@ -1179,7 +1238,7 @@ func buildElement(doc *schemaDoc, raw *rawElement, ns string) (*Element, error) 
 	}
 	switch {
 	case raw.Type != "":
-		ref, err := parseQName(raw.Type)
+		ref, err := doc.qname(raw.Type)
 		if err != nil {
 			return nil, err
 		}
@@ -1219,7 +1278,7 @@ func buildComplexType(doc *schemaDoc, raw *rawComplexType) (*ComplexType, error)
 		ct.Content = ch
 	case raw.ComplexContent != nil && raw.ComplexContent.Extension != nil:
 		ext := raw.ComplexContent.Extension
-		baseRef, err := parseQName(ext.Base)
+		baseRef, err := doc.qname(ext.Base)
 		if err != nil {
 			return nil, err
 		}
@@ -1321,7 +1380,7 @@ func buildSimpleContent(doc *schemaDoc, raw *rawSimpleContent, ct *ComplexType) 
 	if base == "" {
 		return fmt.Errorf("%w: xs:simpleContent of %q derives without a base", ErrSchemaParse, ct.Name.Local)
 	}
-	baseRef, err := parseQName(base)
+	baseRef, err := doc.qname(base)
 	if err != nil {
 		return err
 	}
@@ -1353,7 +1412,7 @@ func buildSimpleType(doc *schemaDoc, raw *rawSimpleType) (*SimpleType, error) {
 		return st, nil
 	}
 	if raw.Restriction.Base != "" {
-		base, err := parseQName(raw.Restriction.Base)
+		base, err := doc.qname(raw.Restriction.Base)
 		if err != nil {
 			return nil, err
 		}
@@ -1369,7 +1428,7 @@ func buildSimpleType(doc *schemaDoc, raw *rawSimpleType) (*SimpleType, error) {
 func buildUnion(doc *schemaDoc, raw *rawUnion, st *SimpleType) error {
 	st.Union = true
 	for _, name := range strings.Fields(raw.MemberTypes) {
-		ref, err := parseQName(name)
+		ref, err := doc.qname(name)
 		if err != nil {
 			return err
 		}
@@ -1402,7 +1461,7 @@ func buildList(doc *schemaDoc, raw *rawList, st *SimpleType) error {
 		st.InlineItem = item
 		return nil
 	}
-	ref, err := parseQName(raw.ItemType)
+	ref, err := doc.qname(raw.ItemType)
 	if err != nil {
 		return err
 	}
@@ -1512,7 +1571,7 @@ func buildAttributeGroupRefs(doc *schemaDoc, raws []rawAttributeGroup) ([]QName,
 		if r.Ref == "" || r.Name != "" || len(r.Attributes) > 0 || len(r.AttributeGroups) > 0 || r.AnyAttribute != nil {
 			return nil, fmt.Errorf("%w: a nested xs:attributeGroup needs a ref, and no name or content", ErrSchemaParse)
 		}
-		ref, err := parseQName(r.Ref)
+		ref, err := doc.qname(r.Ref)
 		if err != nil {
 			return nil, err
 		}
@@ -1531,7 +1590,7 @@ func buildAttributeRef(doc *schemaDoc, a *rawAttribute) (AttributeUse, error) {
 		return AttributeUse{}, fmt.Errorf("%w: xs:attribute ref=%q also carries a name, type, form or xs:simpleType",
 			ErrSchemaParse, a.Ref)
 	}
-	ref, err := parseQName(a.Ref)
+	ref, err := doc.qname(a.Ref)
 	if err != nil {
 		return AttributeUse{}, err
 	}
@@ -1555,7 +1614,7 @@ func buildAttribute(doc *schemaDoc, a *rawAttribute, ns string) (AttributeUse, e
 		Prohibited: a.Use == "prohibited",
 	}
 	if a.Type != "" {
-		ref, err := parseQName(a.Type)
+		ref, err := doc.qname(a.Type)
 		if err != nil {
 			return AttributeUse{}, err
 		}
@@ -1616,6 +1675,24 @@ func parseQName(raw string) (QName, error) {
 		return QName{}, fmt.Errorf("%w: QName %q is not on an XML Schema element", ErrSchemaParse, raw)
 	}
 	return QName{Namespace: raw[1:end], Local: raw[end+1:]}, nil
+}
+
+// qname reads the QName-valued attribute raw of an element of the schema
+// document d ([parseQName]). Per XML Schema Part 1, 4.2.1 (src-include,
+// the paragraph after clause 3) a reference in no namespace inside a
+// chameleon include takes the target namespace of the including document:
+// a document with no targetNamespace imports no namespace-less schema
+// (4.2.3, src-import clause 1.2), so the reference names a component of its
+// own, which sits in that namespace ([populateFromRaw]).
+func (d *schemaDoc) qname(raw string) (QName, error) {
+	qn, err := parseQName(raw)
+	if err != nil {
+		return QName{}, err
+	}
+	if d.chameleon && qn.Namespace == "" {
+		qn.Namespace = d.tns
+	}
+	return qn, nil
 }
 
 // wellKnownPrefixes maps XSD prefix aliases to their namespace URIs.
