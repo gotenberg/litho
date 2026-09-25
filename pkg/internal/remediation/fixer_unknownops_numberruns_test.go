@@ -59,8 +59,9 @@ func TestMatchUnknownOpsClaimsSaturatedNumbers(t *testing.T) {
 	}
 }
 
-// TestFixRealLimitsLeavesMalformedNumbers pins that the real-limits repair
-// leaves a run that spells no number to the repair that respells it. Validation
+// TestFixRealLimitsLeavesMalformedNumbers pins that the real-limits and
+// content-limits repairs leave a run that spells no number to the repair that
+// respells it. Validation
 // reads "-" as the largest 64-bit integer veraPDF gives it, which fails the
 // integer limit, and clamping that value to the limit wrote a coordinate no
 // viewer draws, PDF.js reading 0 there.
@@ -79,15 +80,17 @@ func TestFixRealLimitsLeavesMalformedNumbers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
-	fixes, err := fixRealLimits(ctx, alloc, doc, Options{}, nil, "PDF/A-1b")
-	if err != nil {
-		t.Fatalf("fixRealLimits: %v", err)
-	}
-	if len(fixes) != 0 {
-		t.Errorf("fixRealLimits clamped %v", fixes)
-	}
-	if _, rewritten := alloc.Pending()[4]; rewritten {
-		t.Error("the content stream was rewritten")
+	for _, f := range []fixer{{name: "real-limits", apply: fixRealLimits}, {name: "content-limits", apply: fixContentLimits}} {
+		alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+		fixes, err := f.apply(ctx, alloc, doc, Options{}, nil, "PDF/A-1b")
+		if err != nil {
+			t.Fatalf("%s: %v", f.name, err)
+		}
+		if len(fixes) != 0 {
+			t.Errorf("%s clamped %v", f.name, fixes)
+		}
+		if _, rewritten := alloc.Pending()[4]; rewritten {
+			t.Errorf("%s rewrote the content stream", f.name)
+		}
 	}
 }

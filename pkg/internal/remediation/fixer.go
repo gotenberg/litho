@@ -143,6 +143,7 @@ var registry = []fixer{
 	{name: "af-relationship", safety: safetyResource, matches: matchAFRelationship, apply: fixAFRelationship},
 	// Content-modifying: glyph, content-stream, or image edits.
 	{name: "unknown-ops", safety: safetyContent, matches: matchUnknownOps, apply: fixUnknownOps},
+	{name: "content-limits", safety: safetyContent, matches: matchContentLimits, apply: fixContentLimits},
 	{name: "text-control", safety: safetyContent, matches: matchTextControl, apply: fixTextControl},
 	{name: "fonts", safety: safetyContent, matches: matchFontFixes, apply: fixFontIssues},
 	{name: "font-widths", safety: safetyContent, matches: matchFontWidth, apply: fixFontWidth},

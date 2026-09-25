@@ -16,6 +16,7 @@ func FuzzContentTokenSplices(f *testing.F) {
 	f.Add([]byte("BT <414> Tj ET q BI /W 1 /H 1 /BPC 8 /CS [/I /G 0 <0F0>] ID \x00 EI Q 602 0 inf inf -inf -inf d1"))
 	f.Add([]byte("BI /W 1 /H 1 /CS [/I /G 0 <0F")) // Truncated inside the dictionary.
 	f.Add([]byte("[- 2] 0 d BT [(a) 1.5.5 (b)] TJ ET /Span << /MCID -. >> BDC EMC BI /W 1 /D [. 1] ID \x00 EI"))
+	f.Add([]byte("q 3.1 0 0 3.1 150 -34310.223 cm [99999.5 2] 0 d 1 0 0 1 70000.5 -100000.25 cm Q"))
 	f.Fuzz(func(t *testing.T, data []byte) {
 		ctx := context.Background()
 		respell := func(tok lexer.Token, _ tokenPlace) (string, bool) {
@@ -35,5 +36,7 @@ func FuzzContentTokenSplices(f *testing.F) {
 		respellHexStrings(ctx, data)
 		rewriteNonFiniteNumbers(ctx, data)
 		rewriteNestedMalformedNumbers(ctx, data, 1)
+		clampContentNumbers(ctx, data, 1)
+		clampContentNumbers(ctx, data, 2)
 	})
 }

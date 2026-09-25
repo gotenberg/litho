@@ -36,8 +36,8 @@ import (
 // respells the run as the number it begins with, 0 when it holds no digit
 // ([repairMalformedNumbers], and [rewriteNestedMalformedNumbers] where an
 // array or a dictionary holds the run). Clamping it to the limit, as the
-// real-limits repair clamps a number past it, would write a value no viewer
-// drew.
+// content-limits repair clamps a number past it ([fixContentLimits]), would
+// write a value no viewer drew.
 //
 // # Corpus evidence
 //

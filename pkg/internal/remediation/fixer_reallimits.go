@@ -18,10 +18,10 @@ const pdfARealLimit = 32767.0
 // and ISO 19005-4 §6.1.9 test 1 (2^31 - 1).
 const pdfAIntLimit = 2147483647
 
-// matchRealLimits matches PDF/A numeric-limit violations that originate
-// from content streams. ISO 19005-1 §6.1.12 and ISO 19005-2/4 §6.1.13
-// impose different caps on integers and reals; both overflows are
-// repaired by the same pass, which clamps operands in place.
+// matchRealLimits matches PDF/A numeric-limit violations. ISO 19005-1 §6.1.12
+// and ISO 19005-2/4 §6.1.13 impose different caps on integers and reals; both
+// overflows are repaired by the same pass, which clamps the numbers of every
+// indirect object. The numbers of content streams are [matchContentLimits]'s.
 //
 // # Corpus evidence
 //
@@ -46,68 +46,17 @@ func matchRealLimits(v compliance.Violation) bool {
 	return clausePrefix(v, "6.1.12", "6.1.13")
 }
 
-// fixRealLimits clamps out-of-range numeric values in two places:
-//
-//  1. Every page-level content stream, whose operands live in a parse
-//     tree the fixer rewrites in place.
-//  2. Every indirect object's body. PDF/A §6.1.12 / §6.1.13 apply to
-//     bare numeric literals anywhere in the file, not just page content.
-//
-// Clamping can shift a drawing coordinate, but the alternative is
-// failing compliance; the spec caps the value regardless of intent.
+// fixRealLimits clamps out-of-range numeric values in every indirect object's
+// body. PDF/A §6.1.12 / §6.1.13 apply to bare numeric literals anywhere in the
+// file, not just page content. The numbers of content streams are clamped by
+// [fixContentLimits], a content-tier repair.
 func fixRealLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	catalog, err := document.ResolveCatalog(ctx, doc)
-	if err != nil {
-		return nil, fmt.Errorf("resolving catalog: %w", err)
-	}
-	pages, err := document.ResolvePages(ctx, doc, catalog)
-	if err != nil {
-		return nil, fmt.Errorf("resolving pages: %w", err)
-	}
-
-	var total int
-	for pageNum, page := range pages {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		ops, contentsObj, err := livePageContentOps(ctx, alloc, doc, page)
-		if err != nil || contentsObj == nil {
-			continue
-		}
-
-		clampedOnPage := 0
-		for i := range ops {
-			for j, operand := range ops[i].Operands {
-				if clamped, changed := clampReal(operand); changed {
-					ops[i].Operands[j] = clamped
-					clampedOnPage++
-				}
-			}
-		}
-		if clampedOnPage == 0 {
-			continue
-		}
-		newData, err := serializeOps(ops)
-		if err != nil {
-			doc.Logger.Debug("remediation: cannot rewrite a content stream for its out-of-range reals",
-				"page", pageNum+1, "error", err)
-			continue
-		}
-		if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
-			return nil, fmt.Errorf("replacing content stream on page %d: %w", pageNum+1, err)
-		}
-		total += clampedOnPage
-	}
-
-	// Sweep every indirect object's dict for scalar/array operands over
-	// the limit. Stream bodies are not walked here: numeric literals
-	// inside content streams of Form XObjects etc. are caught via the
-	// page-content pass above plus the aggressive content-stream fixer.
-	n, err := walkIndirectObjects(ctx, alloc, doc, clampDictReals, clampArrayReals)
+	// Stream bodies are not walked here: the content streams are
+	// fixContentLimits's.
+	total, err := walkIndirectObjects(ctx, alloc, doc, clampDictReals, clampArrayReals)
 	if err != nil {
 		return nil, err
 	}
-	total += n
 
 	if total == 0 {
 		return nil, nil
@@ -118,9 +67,8 @@ func fixRealLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // clampDictReals clamps PdfReal values to ±[pdfARealLimit] and PdfInt
 // values to ±[pdfAIntLimit]. Small integers are untouched so /Length,
 // /Size, offsets etc. stay intact; only values that exceed the 32-bit
-// signed range (which PDF/A forbids outright) get capped. Content
-// stream operands are handled by the top-level pass which uses the
-// stricter real limit.
+// signed range (which PDF/A forbids outright) get capped. The numbers
+// of content streams are clamped by [clampContentNumbers].
 //
 //nolint:dupl // Dict and array walkers handle distinct types.
 func clampDictReals(dict ast.PdfDict) (ast.PdfDict, bool) {
@@ -224,29 +172,4 @@ func clampArrayReals(arr ast.PdfArray) (ast.PdfArray, bool) {
 		return nil, false
 	}
 	return newArr, true
-}
-
-// clampReal returns a clamped operand plus a flag reporting whether the
-// value had to be modified. Integer operands that fit within the real
-// limit are passed through unchanged.
-func clampReal(obj ast.PdfObject) (ast.PdfObject, bool) {
-	switch v := obj.(type) {
-	case ast.PdfReal:
-		f := float64(v)
-		if f > pdfARealLimit {
-			return ast.PdfReal(pdfARealLimit), true
-		}
-		if f < -pdfARealLimit {
-			return ast.PdfReal(-pdfARealLimit), true
-		}
-	case ast.PdfInt:
-		f := float64(v)
-		if f > pdfARealLimit {
-			return ast.PdfReal(pdfARealLimit), true
-		}
-		if f < -pdfARealLimit {
-			return ast.PdfReal(-pdfARealLimit), true
-		}
-	}
-	return obj, false
 }
