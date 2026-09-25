@@ -65,14 +65,16 @@ const maxContentFormatViolationsPerStream = 64
 // string has an odd digit count and whose second holds a non-hex character
 // answered t1 alone, where veraPDF answers both. A hex string answers only
 // where veraPDF reads it, see [contentStringJudged]; the other streams a page
-// draws are judged by [drawnStreamHexStrings].
+// draws are judged by [drawnStreamHexStrings]. A content stream an earlier page
+// shares is judged there alone; see [markJudgedContents].
 //
 // # Corpus evidence
 //
 //   - pdfjs sci-notation.pdf: sets a font size with "1e2 Tf" after the stray
 //     keyword ETBT, and veraPDF states the undefined-operator test twice at
 //     PDF/A-1b and PDF/A-2b, where litho stated it for ETBT alone.
-func checkContentStreamFormat(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
+func checkContentStreamFormat(ctx context.Context, vctx *validationCtx) []Violation {
+	doc, profile := vctx.doc, vctx.profile
 	oddRule := hexStringRule(profile)
 	if oddRule.Specification == "" {
 		return nil
@@ -80,21 +82,20 @@ func checkContentStreamFormat(ctx context.Context, doc *document.Document, catal
 	charRule := hexStringInvalidCharRule(profile)
 	operatorRule := undefinedOperatorRule(PDFAPart(profile))
 
-	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
 
-	for i, page := range pages {
+	for i := range vctx.pages {
 		if ctx.Err() != nil {
 			return results
 		}
-		streamData, err := resolvePageContentBytes(ctx, doc, page)
-		if err != nil || len(streamData) == 0 {
+		page := &vctx.pages[i]
+		if page.contentJudged || len(page.content) == 0 {
 			continue
 		}
 
 		// A stream the parser gives up on still states what it read before
 		// the failure, so the violations are judged either way.
-		_, _, violations, err := content.ParseStreamDataForCompliance(ctx, streamData)
+		_, _, violations, err := content.ParseStreamDataForCompliance(ctx, page.content)
 		if err != nil {
 			doc.Logger.Debug("compliance.format: cannot parse the whole page content", "page", i+1, "error", err)
 		}

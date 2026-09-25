@@ -29,7 +29,7 @@ func TestContentStreamHexStringsReportsEveryFinding(t *testing.T) {
 		"<< /Length "+strconv.Itoa(len(content))+" >>\nstream\n"+content+"\nendstream",
 	)
 
-	got := checkContentStreamFormat(ctx, doc, catalog, "PDF/A-1b")
+	got := checkContentStreamFormat(ctx, buildValidationCtx(ctx, doc, catalog, "PDF/A-1b"))
 
 	var odd, invalid int
 	for _, v := range got {
@@ -79,7 +79,7 @@ func TestContentStreamExponentOperands(t *testing.T) {
 		{"PDF/A-1b", Rule_19005_1_6_2_10_t01},
 		{"PDF/A-2b", Rule_19005_2_6_2_2_t01},
 	} {
-		got := checkContentStreamFormat(ctx, doc, catalog, tc.profile)
+		got := checkContentStreamFormat(ctx, buildValidationCtx(ctx, doc, catalog, tc.profile))
 		if len(got) != 2 {
 			t.Fatalf("%s: got %d findings, want 2 (the two unnested exponents): %v", tc.profile, len(got), got)
 		}
@@ -135,7 +135,7 @@ func TestContentStreamHexStringsOnlyWhereRead(t *testing.T) {
 				"<< /Length "+strconv.Itoa(len(tc.content))+" >>\nstream\n"+tc.content+"\nendstream",
 			)
 			got := 0
-			for _, v := range checkContentStreamFormat(ctx, doc, catalog, "PDF/A-2b") {
+			for _, v := range checkContentStreamFormat(ctx, buildValidationCtx(ctx, doc, catalog, "PDF/A-2b")) {
 				if v.Rule == Rule_19005_2_6_1_6_t01 {
 					got++
 				}

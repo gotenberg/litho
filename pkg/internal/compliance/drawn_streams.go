@@ -74,7 +74,9 @@ type drawnStream struct {
 //     from there only: a form two pages paint, whose Do names a form each page
 //     maps differently, reaches the form of the first page alone.
 //   - A stream that also serves as the content of a page is that page's, and
-//     is not judged again as a form.
+//     is not judged again as a form. A page whose content an earlier page
+//     shares draws nothing the walk reaches through that content, since
+//     veraPDF walks it from the earlier page alone; see [markJudgedContents].
 //   - A stream is reached only through the operator that draws it. A form no
 //     Do paints, a pattern no scn or SCN selects, a Type3 font no text is
 //     shown with, and the forms such a stream would paint, are never judged,
@@ -134,9 +136,13 @@ func newDrawnStreamWalk(vctx *validationCtx, judge func(*drawnStream)) *drawnStr
 }
 
 // walkPage reaches the streams page p, the pageNum-th, draws: those its
-// content draws, then its annotation appearance streams.
+// content draws, then its annotation appearance streams. A content stream an
+// earlier page shares was walked from that page alone; see
+// [markJudgedContents].
 func (w *drawnStreamWalk) walkPage(ctx context.Context, p *pageCtx, pageNum int) {
-	w.descend(ctx, p.parsedOps(ctx), p.resources, p.resources, inheritedCSDefault(), pageNum, 1)
+	if !p.contentJudged {
+		w.descend(ctx, p.parsedOps(ctx), p.resources, p.resources, inheritedCSDefault(), pageNum, 1)
+	}
 
 	annots, err := document.ResolveArray(ctx, w.doc, p.dict["Annots"])
 	if err != nil {

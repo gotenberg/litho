@@ -46,8 +46,11 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		scanXObjectResources(ctx, doc, res, i+1, part, profile, &results, visited, 0, referencedXObjects)
 		scanPatternImages(ctx, doc, res, used, i+1, part, profile, &results, visited)
 
-		// Check inline images for Interpolate = true.
-		results = append(results, checkInlineImageInterpolate(vctx.pages[i].parsedOps(ctx), i+1, part)...)
+		// Check inline images for Interpolate = true. A content stream an
+		// earlier page shares is judged there alone; see [markJudgedContents].
+		if !vctx.pages[i].contentJudged {
+			results = append(results, checkInlineImageInterpolate(vctx.pages[i].parsedOps(ctx), i+1, part)...)
+		}
 	}
 
 	doc.Logger.Debug("compliance.xobjects: checks complete", "violations", len(results))

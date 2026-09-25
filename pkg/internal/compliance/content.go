@@ -71,6 +71,11 @@ func checkContentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		if ctx.Err() != nil {
 			return results
 		}
+		// A content stream an earlier page shares is judged there alone; see
+		// [markJudgedContents].
+		if vctx.pages[i].contentJudged {
+			continue
+		}
 
 		pageResults := checkPageContent(ctx, doc, &vctx.pages[i], part, i+1)
 		results = append(results, pageResults...)
@@ -81,6 +86,20 @@ func checkContentGroup(ctx context.Context, vctx *validationCtx) []Violation {
 }
 
 // checkPageContent validates the content streams of a single page.
+//
+// The q/Q nesting limit, ISO 19005-1, 6.1.12 t8 and ISO 19005-2/3, 6.1.13 t8,
+// fails once for every q that opens a level past [maxQNesting]: veraPDF states
+// it over each q operator (Op_q_gsave, "nestingLevel <= 28"). Measured with
+// veraPDF 1.30 at PDF/A-1b and PDF/A-2b, 29 nested levels fail it once, 31
+// levels three times, and two runs of 29 levels twice.
+//
+// # Corpus evidence
+//
+//   - litho limits_2b.pdf: nests 30 levels, and veraPDF fails the test twice at
+//     PDF/A-1b and PDF/A-2b, where litho failed it once.
+//   - pdfjs bug1130815.pdf: runs 124 q past the limit on its first page, 145
+//     levels deep at most, which litho stated once. veraPDF cannot parse the
+//     file (it finds no cross-reference table), so it has no count to compare.
 func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx, part, pageNum int) []Violation {
 	if len(page.content) == 0 {
 		return nil
@@ -98,7 +117,7 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 
 	// Check operators and q/Q nesting.
 	qDepth := 0
-	maxDepthSeen := 0
+	nestingRule := qNestingRule(part)
 
 	for idx, op := range ops {
 		// Check context every ~100 operators.
@@ -116,22 +135,14 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 		switch op.Operator {
 		case "q":
 			qDepth++
-			if qDepth > maxDepthSeen {
-				maxDepthSeen = qDepth
+			if qDepth > maxQNesting && nestingRule.Clause != "" {
+				results = append(results, failf(nestingRule,
+					"page %d: q/Q nesting depth %d exceeds %d", pageNum, qDepth, maxQNesting)...)
 			}
 		case "Q":
 			if qDepth > 0 {
 				qDepth--
 			}
-		}
-	}
-
-	// Report q/Q nesting violation if exceeded.
-	if maxDepthSeen > maxQNesting {
-		rule := qNestingRule(part)
-		if rule.Clause != "" {
-			results = append(results, failf(rule,
-				"page %d: q/Q nesting depth %d exceeds %d", pageNum, maxDepthSeen, maxQNesting)...)
 		}
 	}
 

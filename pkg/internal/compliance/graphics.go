@@ -40,7 +40,9 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		}
 
 		res := p.resources
-		hasContent := len(p.content) > 0
+		// A content stream an earlier page shares is judged there alone; see
+		// [markJudgedContents].
+		hasContent := len(p.content) > 0 && !p.contentJudged
 
 		// §6.2.2 t2/t3: resource completeness against the page's OWN
 		// Resources, with names resolvable only through Pages-tree

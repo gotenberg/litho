@@ -50,6 +50,11 @@ type pageCtx struct {
 	// when it cannot see what a page paints (see pageDrawnResources) keys on
 	// this rather than on empty operations, which a blank page also produces.
 	contentUnreadable bool
+
+	// contentJudged is true when an earlier page's /Contents is the same
+	// indirect object, which the content-stream rules judge on that page
+	// alone; see [markJudgedContents].
+	contentJudged bool
 }
 
 // parsedOps returns the lazily-parsed content stream operations. The result is
@@ -196,6 +201,7 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 			contentUnreadable: contentErr != nil,
 		}
 	}
+	markJudgedContents(vctx.pages)
 
 	// Freeze the format violations here, on the single goroutine that
 	// builds the context: every object has been resolved by now, and the
@@ -203,6 +209,44 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 	vctx.formatViolations = doc.FormatViolations()
 
 	return vctx
+}
+
+// markJudgedContents sets [pageCtx.contentJudged] on every page whose
+// /Contents is an indirect object an earlier page's /Contents already is.
+//
+// ISO 32000-1, 7.7.3.3 lets pages share a content stream, and veraPDF judges it
+// once for the whole document, on the first page that draws it: the
+// content-stream rules state nothing for the later pages, and the streams the
+// content draws are reached from the first page alone, through its resources.
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on two-page fixtures, for
+// the hex string tests, the undefined-operator rule, the real limit, the q/Q
+// nesting limit, the inline image filter, interpolation and intent tests, the
+// ri test and the inherited-resource test:
+//
+//   - Two pages whose /Contents is the same stream, or the same indirect array
+//     of streams, fail each test as often as one of them alone does.
+//   - Two pages whose /Contents are direct arrays fail each test twice as
+//     often, the arrays naming the same streams or not, and so do a page whose
+//     /Contents is a stream and one whose array holds it.
+//   - When the shared content paints /Fm0 and each page maps /Fm0 to its own
+//     form, only the first page's form is judged.
+//
+// # Corpus evidence
+//
+//   - pdfjs hello_world_rotated.pdf, issue14847.pdf, issue18042.pdf and
+//     pypdf2332.pdf: are the only files whose pages share a /Contents, and none
+//     of the content-stream rules fires in the shared streams, so no count
+//     moves at PDF/A-1b or PDF/A-2b.
+func markJudgedContents(pages []pageCtx) {
+	seen := make(map[int]bool)
+	for i := range pages {
+		ref, ok := pages[i].dict["Contents"].(ast.PdfIndirectRef)
+		if !ok {
+			continue
+		}
+		pages[i].contentJudged = seen[ref.ObjectNum]
+		seen[ref.ObjectNum] = true
+	}
 }
 
 // runCheckGroups executes the check groups concurrently and returns their

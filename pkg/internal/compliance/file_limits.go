@@ -169,6 +169,11 @@ func withoutZeroRule(results []Violation) []Violation {
 // pattern, an annotation appearance and a form one of them paints, and once
 // for a form two pages paint.
 //
+// A page's content is judged once for each /Contents object, see
+// [markJudgedContents]: measured the same way, two pages whose /Contents are
+// direct arrays naming the same stream fail the limit once each, and a stream
+// one page's array names twice fails it once.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue6342.pdf: writes two out-of-range reals in the form its page
@@ -188,16 +193,18 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 		maxStr = maxStringBytes2
 	}
 	var results []Violation
-	visited := make(map[int]bool)
 
 	for i := range vctx.pages {
 		if ctx.Err() != nil {
 			return results
 		}
 		contentsObj := vctx.pages[i].dict["Contents"]
-		if contentsObj == nil {
+		if contentsObj == nil || vctx.pages[i].contentJudged {
 			continue
 		}
+		// A page's content is judged whole even when another page's shares a
+		// part of it, and a part the page lists twice is judged once.
+		visited := make(map[int]bool)
 		// Contents can be a single stream ref or an array of stream refs.
 		var refs []ast.PdfObject
 		if arr, err := document.ResolveArray(ctx, doc, contentsObj); err == nil && arr != nil {
