@@ -920,12 +920,50 @@ func (d *Document) XRefEntryCount() int {
 // sort of the index per range, which the index size bounds.
 func (d *Document) XRefEntries() iter.Seq2[int, xref.XRefEntry] {
 	return func(yield func(int, xref.XRefEntry) bool) {
-		for _, e := range d.sortedXRefEntries() {
+		for _, e := range d.sortedXRefEntries(false) {
 			if !yield(e.objNum, e.entry) {
 				return
 			}
 		}
 	}
+}
+
+// OpenedXRefEntries returns an iterator over the cross-reference entries the
+// document was opened with, the ones its cross-reference sections list or,
+// for a rebuilt index, the ones the rebuild found, in ascending object-number
+// order, free entries included. It yields what [Document.XRefEntries] yields,
+// less the entries the raw-byte augmentation added, whenever it ran, a lookup
+// made while opening included.
+//
+// The augmentation runs at the first lookup that misses the index, whichever
+// caller makes it, so the objects it adds are in the index or not depending on
+// what the Document was asked before: text extraction that follows a
+// reference the table leaves out adds them, and a validation run that never
+// follows one does not. A sweep that judges every object ranges this instead,
+// so its verdict is a function of the bytes (CONTRIBUTING "Deterministic
+// output"). An entry the augmentation moved, because the offset the table gives
+// misses the object's header, keeps its new offset: resolving that object is
+// what runs the augmentation, so a caller that resolves every object before it
+// sweeps reads the same offsets whatever ran before it.
+//
+// The iterator copies the entries under d.mu.RLock, as [Document.XRefEntries]
+// does, so the loop body may resolve objects.
+func (d *Document) OpenedXRefEntries() iter.Seq2[int, xref.XRefEntry] {
+	return func(yield func(int, xref.XRefEntry) bool) {
+		for _, e := range d.sortedXRefEntries(true) {
+			if !yield(e.objNum, e.entry) {
+				return
+			}
+		}
+	}
+}
+
+// OpenedXRefEntryCount returns the number of entries
+// [Document.OpenedXRefEntries] yields, free entries included.
+func (d *Document) OpenedXRefEntryCount() int {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return len(d.xrefEntries) - len(d.xrefAdded)
 }
 
 // numberedXRefEntry pairs a cross-reference entry with its object number.
@@ -935,12 +973,16 @@ type numberedXRefEntry struct {
 }
 
 // sortedXRefEntries copies the cross-reference entries under d.mu.RLock and
-// returns them in ascending object-number order. The sort runs after the lock
-// is released, so it does not hold up a concurrent augmentation.
-func (d *Document) sortedXRefEntries() []numberedXRefEntry {
+// returns them in ascending object-number order, less the ones the raw-byte
+// augmentation added when opened is set. The sort runs after the lock is
+// released, so it does not hold up a concurrent augmentation.
+func (d *Document) sortedXRefEntries(opened bool) []numberedXRefEntry {
 	d.mu.RLock()
 	out := make([]numberedXRefEntry, 0, len(d.xrefEntries))
 	for objNum, entry := range d.xrefEntries {
+		if opened && d.xrefAdded[objNum] {
+			continue
+		}
 		out = append(out, numberedXRefEntry{objNum: objNum, entry: entry})
 	}
 	d.mu.RUnlock()
@@ -1033,8 +1075,9 @@ func (d *Document) augmentOnMiss(ctx context.Context) bool {
 // by an external editor.
 //
 // For each discovered marker the augmentation inserts the entry when
-// missing, and overrides the stored offset when the xref-declared
-// offset does not contain the expected "N G obj" header. Compressed
+// missing, recording its number in d.xrefAdded for
+// [Document.OpenedXRefEntries], and overrides the stored offset when the
+// xref-declared offset does not contain the expected "N G obj" header. Compressed
 // (type 2) and free (type 0) entries are left alone: a raw scan cannot
 // see into object streams, and free entries intentionally reference no
 // body. The sync.Once serializes the scan against itself; the mutation
@@ -1060,6 +1103,10 @@ func (d *Document) augmentXrefFromRawScan(ctx context.Context) {
 			existing, exists := d.xrefEntries[objNum]
 			if !exists {
 				d.xrefEntries[objNum] = entry
+				if d.xrefAdded == nil {
+					d.xrefAdded = make(map[int]bool)
+				}
+				d.xrefAdded[objNum] = true
 				added++
 				continue
 			}

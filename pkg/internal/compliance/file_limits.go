@@ -130,8 +130,8 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 	part := PDFAPart(profile)
 	var results []Violation
 
-	// Check indirect object count.
-	objCount := doc.XRefEntryCount()
+	// Count the objects the walk below judges ([sweptXRefEntries]).
+	objCount := doc.OpenedXRefEntryCount()
 	if objCount > maxIndirectObjs {
 		results = append(results, Violation{
 			Rule:    indirectObjCountRule(profile),
@@ -143,7 +143,7 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 	// In object-number order: the walk appends violations, and Go randomises map
 	// iteration, so an unsorted walk reported the same findings in a different
 	// order on consecutive runs of the same binary.
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptXRefEntries(doc) {
 		if ctx.Err() != nil {
 			return results
 		}

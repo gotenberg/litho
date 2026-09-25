@@ -546,7 +546,7 @@ func checkInvoiceStreamSubtype(ctx context.Context, doc *document.Document, invo
 
 func checkInvoiceConflictingVariant(ctx context.Context, doc *document.Document, v hybridInvoiceVariant) []Violation {
 	var results []Violation
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptXRefEntries(doc) {
 		if ctx.Err() != nil {
 			return results
 		}

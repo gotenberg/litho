@@ -667,8 +667,10 @@ func checkObjHeaderByteFormat(doc *document.Document, profile string) []Violatio
 	// Iterate the entries in object-number order, from a copy taken under the
 	// document lock: ranging the map emitted the violations in a different
 	// order on every run (CONTRIBUTING "Deterministic output") and raced the
-	// lazy xref augmentation a concurrent reader can trigger.
-	for objNum, entry := range doc.XRefEntries() {
+	// lazy xref augmentation a concurrent reader can trigger. An object that
+	// augmentation added is never judged, whatever ran before
+	// ([sweptXRefEntries]).
+	for objNum, entry := range sweptXRefEntries(doc) {
 		if entry.Free || entry.Type != xref.XRefTypeNormal {
 			continue
 		}

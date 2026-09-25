@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"iter"
 	"reflect"
 	"runtime"
 	"runtime/debug"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/xref"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/models"
 )
@@ -211,7 +213,7 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 	// Freeze the format violations here, on the single goroutine that
 	// builds the context: every object has been resolved by now, and the
 	// check groups that run next resolve objects of their own.
-	vctx.formatViolations = doc.FormatViolations()
+	vctx.formatViolations = sweptFormatViolations(doc)
 
 	return vctx
 }
@@ -271,10 +273,12 @@ func markJudgedContents(pages []pageCtx) {
 //
 // A group can miss a cross-reference lookup, and the first miss runs the
 // one-shot raw-byte augmentation that rewrites the index. Run from a group, it
-// wrote the index while the other groups were ranging it, and the groups that
-// swept it before that moment missed the objects it added while the ones after
-// saw them, so the same bytes reported a different violation count from run to
-// run (CONTRIBUTING "Deterministic output"). The groups therefore resolve
+// wrote the index while the other groups were reading it, and the lookups made
+// before that moment missed the objects it added while the ones after found
+// them, so the same bytes reported a different violation count from run to run
+// (CONTRIBUTING "Deterministic output"). The sweeps over every object no
+// longer see those objects at all (see [sweptXRefEntries]), but a reference
+// followed to one still does. The groups therefore resolve
 // under [document.DeferXRefAugmentation]: a miss only sets a flag. When one
 // did, the augmentation runs once every group has returned, and when it
 // changed the index the groups run again over the same validation context,
@@ -435,13 +439,12 @@ func resolveCatalog(ctx context.Context, doc *document.Document) (ast.PdfDict, e
 func resolveAllObjects(ctx context.Context, doc *document.Document) {
 	doc.Logger.Debug("compliance: resolving all objects for format checks")
 	count := 0
-	// Iterate a snapshot: this warming pass resolves each object, which
-	// can trigger the lazy xref augmentation write on a damaged file. A
-	// concurrent reader (e.g. ExtractText on the same Document) could win
-	// the augmentation race, so ranging the index without its lock would
-	// race that write. A lookup the check groups miss later is deferred,
-	// see runCheckGroups.
-	for objNum, entry := range doc.XRefEntriesSnapshot() {
+	// The iterator yields from a copy: this warming pass resolves each
+	// object, which can trigger the lazy xref augmentation write on a
+	// damaged file, and a concurrent reader (e.g. ExtractText on the same
+	// Document) could win the augmentation race. A lookup the check groups
+	// miss later is deferred, see runCheckGroups.
+	for objNum, entry := range sweptXRefEntries(doc) {
 		if count%100 == 0 {
 			if ctx.Err() != nil {
 				return
@@ -460,6 +463,59 @@ func resolveAllObjects(ctx context.Context, doc *document.Document) {
 		count++
 	}
 	doc.Logger.Debug("compliance: resolved all objects", "count", count)
+}
+
+// sweptXRefEntries returns the cross-reference entries a check that sweeps
+// every object judges, in ascending object-number order: the ones the
+// document was opened with, which its cross-reference sections list or its
+// rebuild found (see [document.Document.OpenedXRefEntries]).
+//
+// An object the file's table leaves out is not one of them, even once the
+// raw-byte augmentation that repairs a damaged index has added it. ISO
+// 32000-1, 7.3.10 reads a reference to an undefined object as the null
+// object, and veraPDF, which reads the file's own table, judges no such
+// object. Measured with veraPDF 1.30.2 at PDF/A-2b: a stream with an
+// LZWDecode filter and an /F key fails 6.1.7.1 t3 and 6.1.7.2 t1 when the
+// table lists it, and fails nothing when the table leaves it out, whether the
+// catalog references it or not and whether its number is below the trailer's
+// /Size or not.
+//
+// The augmentation runs at the first lookup that misses the index, for
+// whichever caller makes it, so sweeping the live index judged the objects it
+// adds only when something run before the validation had missed: text
+// extraction that follows a font's /Widths to an object the table leaves out
+// runs it, and a validation run that never follows that reference does not.
+// The same bytes then drew a different verdict depending on what the caller
+// did first (CONTRIBUTING "Deterministic output").
+//
+// # Corpus evidence
+//
+//   - All corpora: each of the 5171 files draws the same PDF/A-2b violations
+//     on a fresh reader and on one that extracted the text of every page
+//     first, sweeping the live index or this one, so no file shows the
+//     dependence.
+//   - pdfjs GHOSTSCRIPT-698804-1-fuzzed.pdf: is the only file whose PDF/A-2b
+//     verdict moves. Its table lists objects 0 and 1 alone, and it loses a
+//     6.1.7.1 t1 violation on object 5, which the augmentation adds when the
+//     validation resolves the page's /Contents. veraPDF does not open the
+//     file ("Pages not found").
+func sweptXRefEntries(doc *document.Document) iter.Seq2[int, xref.XRefEntry] {
+	return doc.OpenedXRefEntries()
+}
+
+// sweptFormatViolations returns the parser-level format violations recorded
+// on the objects [sweptXRefEntries] yields, ordered by object number as
+// [document.Document.FormatViolations] orders them. An object the
+// augmentation added is parsed in compliance mode when a check reaches it
+// through a reference, and a caller that resolved it before the validation
+// cached it with nothing recorded, so its findings came and went with what
+// ran first.
+func sweptFormatViolations(doc *document.Document) []error {
+	var out []error
+	for objNum := range sweptXRefEntries(doc) {
+		out = append(out, doc.ObjectFormatViolations(objNum)...)
+	}
+	return out
 }
 
 // collectPages traverses the page tree and returns all leaf page dicts.

@@ -492,7 +492,7 @@ func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profil
 	forbiddenKeys := []ast.PdfName{"F", "FFilter", "FDecodeParms"}
 	var results []Violation
 
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptXRefEntries(doc) {
 		if ctx.Err() != nil {
 			return results
 		}
@@ -526,7 +526,7 @@ func checkStreamExternalKeys(ctx context.Context, doc *document.Document, profil
 func checkStreamLZW(ctx context.Context, doc *document.Document, profile string) []Violation {
 	var results []Violation
 
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptXRefEntries(doc) {
 		if ctx.Err() != nil {
 			return results
 		}
@@ -612,7 +612,7 @@ func checkNonStandardFilters(ctx context.Context, doc *document.Document, profil
 	}
 
 	var results []Violation
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptXRefEntries(doc) {
 		if ctx.Err() != nil {
 			return results
 		}
@@ -723,7 +723,7 @@ func checkXRefFormat(doc *document.Document, profile string) []Violation {
 
 	// Detect xref stream usage by checking if any entries use compressed type
 	// (type 2), which is only possible with xref streams.
-	for _, entry := range doc.XRefEntries() {
+	for _, entry := range sweptXRefEntries(doc) {
 		if entry.Type == xref.XRefTypeCompressed {
 			return fail(xrefStreamForbiddenRule(profile), "document uses xref streams")
 		}
@@ -766,7 +766,7 @@ func checkStreamLengths(ctx context.Context, doc *document.Document, profile str
 	var results []Violation
 	rule := streamLengthRule(profile)
 
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptXRefEntries(doc) {
 		if ctx.Err() != nil {
 			return results
 		}

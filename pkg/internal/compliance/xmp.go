@@ -523,7 +523,7 @@ func xmpCollectMetadataStreams(ctx context.Context, doc *document.Document, cata
 	seen := make(map[int]bool)
 	var metaNums []int
 
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptXRefEntries(doc) {
 		if ctx.Err() != nil || len(metaNums) >= maxXMPMetadataStreams {
 			break
 		}
