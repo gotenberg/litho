@@ -800,7 +800,7 @@ func (r *Reader) ExtractText(ctx context.Context, pageNum int, opts ...ExtractTe
 		return "", err
 	}
 
-	ops, err := content.ParsePageContent(ctx, r.doc, targetPage.Dict)
+	ops, err := content.ParsePageContent(ctx, r.doc, targetPage.Dict, content.SplitGluedOperators())
 	if err != nil {
 		return "", err
 	}
@@ -1226,7 +1226,7 @@ func (r *Reader) ExtractTables(ctx context.Context, pageNum int) (_ []models.Tab
 		return nil, err
 	}
 
-	ops, err := content.ParsePageContent(ctx, r.doc, targetPage.Dict)
+	ops, err := content.ParsePageContent(ctx, r.doc, targetPage.Dict, content.SplitGluedOperators())
 	if err != nil {
 		return nil, err
 	}
@@ -1595,7 +1595,7 @@ func (r *Reader) ExtractTextElements(ctx context.Context, pageNum int) (_ []mode
 		return nil, err
 	}
 
-	ops, err := content.ParsePageContent(ctx, r.doc, targetPage.Dict)
+	ops, err := content.ParsePageContent(ctx, r.doc, targetPage.Dict, content.SplitGluedOperators())
 	if err != nil {
 		return nil, err
 	}
@@ -1705,7 +1705,7 @@ func (r *Reader) ExtractLines(ctx context.Context, pageNum int) (_ []models.Line
 		return nil, err
 	}
 
-	ops, err := content.ParsePageContent(ctx, r.doc, targetPage.Dict)
+	ops, err := content.ParsePageContent(ctx, r.doc, targetPage.Dict, content.SplitGluedOperators())
 	if err != nil {
 		return nil, err
 	}

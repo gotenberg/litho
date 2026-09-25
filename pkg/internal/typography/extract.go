@@ -567,7 +567,7 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 		return nil
 	}
 
-	formOps, err := content.ParsePageContent(ctx, doc, stream)
+	formOps, err := content.ParsePageContent(ctx, doc, stream, content.SplitGluedOperators())
 	if err != nil {
 		return nil
 	}

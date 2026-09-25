@@ -135,12 +135,93 @@ func parseOperations(ctx context.Context, p *parser.Parser, ranges *[]ByteRange,
 	return ops, nil
 }
 
+// Option configures how [ParseStreamData], [ParseStreamDataWithOffsets] and
+// [ParsePageContent] read a content stream.
+type Option func(*readOptions)
+
+// readOptions is what the [Option] values of a parse set.
+type readOptions struct {
+	// commands is the command set the lexer ends a run of regular characters
+	// at, or nil for the token boundaries of ISO 32000-1, 7.2.2.
+	commands *lexer.CommandSet
+}
+
+// SplitGluedOperators reads operators written with no white space between
+// them as PDF.js reads them: "ETBT" is ET then BT, and "q1" is q then the
+// number 1. See [lexer.Lexer.WithCommands] for the rule and the leniency it
+// takes with ISO 32000-1, 7.2.2 and 7.8.2, and [IsOperator] for the operators
+// of Annex A, Table A.1 it splits at.
+//
+// It is for the readings that follow a viewer: text extraction, the widths of
+// Type 3 glyphs, and the redaction that has to remove what a viewer shows where
+// the viewer shows it. Without it a parse keeps the token boundaries of 7.2.2,
+// as veraPDF does (PDFStreamParser.nextOperator), so compliance reads "ETBT" as
+// the one operator ISO 19005 forbids, which veraPDF reports under ISO 19005-2,
+// 6.2.2 t1, and the remediation that answers it writes the operators back
+// apart ([GluedOperators]).
+//
+// # Corpus evidence
+//
+//   - pdfjs sci-notation.pdf: writes "ETBT" between its two text objects,
+//     and its second line left the extracted text. It matches its PDF.js text
+//     golden again, and its PDF/A-2b remediation, default and aggressive,
+//     still clears 6.2.2 t1 for litho and veraPDF.
+//   - All corpora: 8 pages of 5 files hold a run this reading splits, the
+//     others being pdfjs bug1130815.pdf, issue11678.pdf,
+//     poppler-90-0-fuzzed.pdf and litho contentstream_4.pdf. Beyond
+//     sci-notation.pdf, the text of one page changes, page 14 of
+//     poppler-90-0-fuzzed.pdf, by a comma, and no text verdict moves.
+//   - All corpora: what compliance reads is unchanged on every page, and so
+//     are the PDF/A-2b violations of every file, veraPDF files at their own
+//     profile, and the violations left after a default or aggressive
+//     remediation.
+func SplitGluedOperators() Option {
+	return func(o *readOptions) {
+		o.commands = gluedOperators
+	}
+}
+
+// GluedOperators returns the operators [SplitGluedOperators] reads keyword as
+// when it reads two or more operators of ISO 32000-1, Annex A, Table A.1 and
+// nothing else, and nil otherwise: "ETBT" gives ET and BT, while "ETXX", whose
+// XX is no operator, "q1", whose 1 is an operand, and "ET" itself give nil.
+// keyword is a run of regular characters as a parse without the option reads
+// it, one undefined operator to validation, and a keyword holding white space
+// or a delimiter is no such run and gives nil.
+func GluedOperators(keyword string) []string {
+	parts := gluedOperators.Split(keyword)
+	if len(parts) < 2 {
+		return nil
+	}
+	// No operator holds white space or a delimiter, so a keyword holding one
+	// leaves a piece that is no operator.
+	for _, part := range parts {
+		if !IsOperator(part) {
+			return nil
+		}
+	}
+	return parts
+}
+
+// newLexer returns a lexer over data that reads it as opts say.
+func newLexer(data []byte, opts []Option) *lexer.Lexer {
+	var o readOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
+	if o.commands != nil {
+		lex.WithCommands(o.commands)
+	}
+	return lex
+}
+
 // ParseStreamData parses raw content stream bytes into a sequence of [Operation] values.
 // The parser checks ctx at regular intervals, allowing large or pathological
-// content streams to be interrupted by deadline.
-func ParseStreamData(ctx context.Context, data []byte) ([]Operation, error) {
-	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
-	p := parser.NewParser(lex)
+// content streams to be interrupted by deadline. opts choose how it reads the
+// stream, see [SplitGluedOperators].
+func ParseStreamData(ctx context.Context, data []byte, opts ...Option) ([]Operation, error) {
+	p := parser.NewParser(newLexer(data, opts))
 	return parseOperations(ctx, p, nil, nil)
 }
 
@@ -148,9 +229,12 @@ func ParseStreamData(ctx context.Context, data []byte) ([]Operation, error) {
 // byte range of each operation, parallel to the operations slice. Use it to
 // map operations back to the source bytes (e.g. to inject or excise
 // marked-content around a run of operations). The ranges are into data.
-func ParseStreamDataWithOffsets(ctx context.Context, data []byte) ([]Operation, []ByteRange, error) {
-	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
-	p := parser.NewParser(lex).WithOffsetTracking()
+//
+// Under [SplitGluedOperators] the operations split from one run of regular
+// characters share its bytes: in "ETBT", ET ends after its T and BT holds the
+// two bytes after it.
+func ParseStreamDataWithOffsets(ctx context.Context, data []byte, opts ...Option) ([]Operation, []ByteRange, error) {
+	p := parser.NewParser(newLexer(data, opts)).WithOffsetTracking()
 	ranges := make([]ByteRange, 0, 256) //nolint:mnd // matches the operations capacity hint
 	ops, err := parseOperations(ctx, p, &ranges, nil)
 	if err != nil {
@@ -299,8 +383,8 @@ func (vp *violationPlacer) finish() []FormatViolation {
 // The concatenated content is bounded by [limits.Limits.MaxPageContentBytes] of
 // the document's budgets: ISO 32000-1, 7.7.3.3 lets a page split its content
 // across an array of streams, and the per-stream budget says nothing about
-// their sum.
-func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfObject) ([]Operation, error) {
+// their sum. opts choose how it reads the streams, as for [ParseStreamData].
+func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfObject, opts ...Option) ([]Operation, error) {
 	var streams []ast.PdfStream
 
 	switch v := node.(type) {
@@ -369,8 +453,7 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 		slog.Int("total_bytes", len(allData)),
 	)
 
-	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(allData), int64(len(allData)), 0))
-	p := parser.NewParser(lex)
+	p := parser.NewParser(newLexer(allData, opts))
 	ops, err := parseOperations(ctx, p, nil, nil)
 	if err != nil {
 		return nil, err

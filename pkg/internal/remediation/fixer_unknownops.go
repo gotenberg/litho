@@ -59,12 +59,16 @@ type unknownOpsTally struct {
 	repaired int
 	// exponents counts numbers written with an exponent that became plain.
 	exponents int
+	// separated counts operators that ran on from the operator before them
+	// with no white space between them, and were written back apart.
+	separated int
 }
 
 func (t *unknownOpsTally) add(o unknownOpsTally) {
 	t.removed += o.removed
 	t.repaired += o.repaired
 	t.exponents += o.exponents
+	t.separated += o.separated
 }
 
 // fixUnknownOps strips operators absent from [content.IsOperator] from every page
@@ -119,16 +123,20 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	if total.exponents > 0 {
 		fixes = append(fixes, fmt.Sprintf("rewrote %d number(s) written with an exponent in content streams", total.exponents))
 	}
+	if total.separated > 0 {
+		fixes = append(fixes, fmt.Sprintf("separated %d content-stream operator(s) written with no white space before them", total.separated))
+	}
 	return fixes, nil
 }
 
 // repairContentData repairs one content stream's decoded bytes: numbers
 // written with an exponent become plain numbers ([rewriteExponentNumbers]),
 // malformed numbers fold back into their operator ([repairMalformedNumbers]),
-// and operators outside [content.IsOperator] go. It returns the bytes to write and
-// what it changed; a zero tally means nothing is to be written. The bytes can
-// be empty: a stream holding nothing but undefined operators is written back
-// with none.
+// operators run together with no white space between them come apart
+// ([separateGluedOperators]), and operators outside [content.IsOperator] go.
+// It returns the bytes to write and what it changed; a zero tally means
+// nothing is to be written. The bytes can be empty: a stream holding nothing
+// but undefined operators is written back with none.
 //
 // A stream whose only defect is an exponent is written back as spliced, not
 // re-serialized, so nothing else in it moves. Removing an operator or folding a
@@ -154,6 +162,7 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 		return spliced()
 	}
 	ops, t.repaired = repairMalformedNumbers(ops)
+	ops, t.separated = separateGluedOperators(ops)
 	hasInlineImage := false
 	for i, op := range ops {
 		if op.Operator == "BI" {
@@ -167,7 +176,7 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 			t.removed++
 		}
 	}
-	if (t.removed == 0 && t.repaired == 0) || hasInlineImage {
+	if (t.removed == 0 && t.repaired == 0 && t.separated == 0) || hasInlineImage {
 		return spliced()
 	}
 	out, err := serializeOps(filterOps(ops))
@@ -175,6 +184,64 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 		return spliced()
 	}
 	return out, t
+}
+
+// separateGluedOperators replaces every operation whose operator is a run of
+// operators written with no white space between them with one operation per
+// operator, and returns the operations and how many operators it separated.
+// The first operator takes the run's operands and the others take none, which
+// is how a viewer that splits the run hands them out: no operand stands
+// between them.
+//
+// ISO 32000-1, 7.2.2 reads "ETBT" as one keyword, and ISO 19005-2, 6.2.2
+// forbids it as an operator Annex A does not define, but PDF.js reads ET then
+// BT (see [content.SplitGluedOperators]), and so does litho's text
+// extraction. Removing the run as an undefined operator removed the ET and BT
+// a viewer draws with, and the text after them moved. Written back apart, the
+// operators read the same under both readings. Only a run that splits into
+// operators alone comes apart ([content.GluedOperators]): one that leaves
+// anything else, such as "junk", which splits into j and the undefined unk,
+// is removed whole as before.
+//
+// # Corpus evidence
+//
+//   - pdfjs sci-notation.pdf: writes "ETBT" between its two text objects.
+//     Once text extraction read ET then BT, removing the run moved the second
+//     line off the page, the PDF/A-2b content repairs were rolled back,
+//     default and aggressive, and 6.2.2 t1 stayed in the output. The two
+//     operators now come apart, the output passes that test for litho and
+//     veraPDF, and both lines extract.
+//   - pdfjs bug1130815.pdf: holds such runs, "ll" and "lm", in a damaged page
+//     stream, and the violations its remediation leaves are unchanged.
+//   - All corpora: no file's PDF/A-2b remediation leaves other violations
+//     than before, default or aggressive, veraPDF files at their own profile.
+func separateGluedOperators(ops []content.Operation) ([]content.Operation, int) {
+	var out []content.Operation
+	n := 0
+	for i, op := range ops {
+		var parts []string
+		if op.Operator != "" && !content.IsOperator(op.Operator) {
+			parts = content.GluedOperators(op.Operator)
+		}
+		if parts == nil {
+			if out != nil {
+				out = append(out, op)
+			}
+			continue
+		}
+		if out == nil {
+			out = append(make([]content.Operation, 0, len(ops)+len(parts)), ops[:i]...)
+		}
+		out = append(out, content.Operation{Operator: parts[0], Operands: op.Operands})
+		for _, part := range parts[1:] {
+			out = append(out, content.Operation{Operator: part})
+		}
+		n += len(parts) - 1
+	}
+	if out == nil {
+		return ops, 0
+	}
+	return out, n
 }
 
 // stripUnknownFromStream repairs a page's live content (alloc-first, so an

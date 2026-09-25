@@ -204,7 +204,7 @@ func redactPageRegions(
 		return RedactReport{}, nil
 	}
 
-	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data)
+	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data, content.SplitGluedOperators())
 	if err != nil {
 		return RedactReport{}, fmt.Errorf("parsing page content: %w", err)
 	}

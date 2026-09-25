@@ -281,7 +281,7 @@ func placementCovers(
 	if err != nil {
 		return nil, fmt.Errorf("%w: assembling page content: %w", ErrImageShared, err)
 	}
-	ops, err := content.ParseStreamData(ctx, data)
+	ops, err := content.ParseStreamData(ctx, data, content.SplitGluedOperators())
 	if err != nil {
 		return nil, fmt.Errorf("%w: parsing page content: %w", ErrImageShared, err)
 	}

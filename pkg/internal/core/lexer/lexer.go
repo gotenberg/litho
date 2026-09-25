@@ -68,6 +68,9 @@ type Token struct {
 // ioat.Reader, which guarantees bufPos > 0 and UnreadByte cannot fail.
 type Lexer struct {
 	reader *ioat.Reader
+	// commands ends a run of regular characters at a command, or is nil to
+	// end it only at white space or a delimiter. See [Lexer.WithCommands].
+	commands *CommandSet
 }
 
 // Reader returns the underlying [ioat.Reader] used by this lexer.
@@ -270,7 +273,12 @@ func isDigitlessNumber(s string) bool {
 }
 
 func (l *Lexer) readRegular() (Token, error) {
-	var buf strings.Builder
+	// Keywords and numbers rarely run past 16 bytes, so the run is usually
+	// read without growing the buffer.
+	buf := make([]byte, 0, 16)
+	// command reports whether buf is a command of l.commands, which ends the
+	// run before a character that would make it none (see [Lexer.WithCommands]).
+	command := false
 	for {
 		c, err := l.reader.ReadByte()
 		if err != nil {
@@ -283,10 +291,16 @@ func (l *Lexer) readRegular() (Token, error) {
 			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 			break
 		}
-		buf.WriteByte(c)
+		buf = append(buf, c)
+		if command && !l.commands.has(buf) {
+			buf = buf[:len(buf)-1]
+			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
+			break
+		}
+		command = l.commands.has(buf)
 	}
 
-	val := buf.String()
+	val := string(buf)
 	if isNumber(val) {
 		return Token{Type: TokenNumber, Value: val}, nil
 	}

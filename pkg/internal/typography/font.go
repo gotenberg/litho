@@ -2304,7 +2304,7 @@ func extractType3GlyphWidth(ctx context.Context, doc *document.Document, stream 
 		return 0, err
 	}
 
-	ops, err := content.ParseStreamData(ctx, data)
+	ops, err := content.ParseStreamData(ctx, data, content.SplitGluedOperators())
 	if err != nil {
 		return 0, err
 	}

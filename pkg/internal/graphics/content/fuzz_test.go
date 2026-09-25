@@ -3,6 +3,7 @@ package content
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -27,6 +28,11 @@ var seedStreams = []string{
 	"<</Type/Foo>> BDC EMC\n",
 	"1 0 0 1 0 0 cm",
 	"",
+	// Operators written with no white space between them, which
+	// SplitGluedOperators splits, and a truncated one.
+	"BT /F1 24 Tf 50 500 Td (a) Tj ETBT /F1 1e2 Tf 50 600 Td (b) Tj ET\n",
+	"qQ BTET ETXX /F1 12 TfT* T*Tf q1 0 0 1 0 0cm /P <<>> BDC EMC\n",
+	"BT (a) TjET",
 }
 
 // FuzzParseStreamData feeds arbitrary bytes to the content stream parser and
@@ -46,6 +52,7 @@ func FuzzParseStreamData(f *testing.F) {
 			return
 		}
 		_, _ = ParseStreamData(context.Background(), data)
+		_, _ = ParseStreamData(context.Background(), data, SplitGluedOperators())
 	})
 }
 
@@ -61,19 +68,21 @@ func FuzzParseStreamDataWithOffsets(f *testing.F) {
 		if len(data) > maxFuzzInput {
 			return
 		}
-		ops, ranges, err := ParseStreamDataWithOffsets(context.Background(), data)
-		if err != nil {
-			return
-		}
-		// Every operation must carry a range, or a caller splicing by index
-		// reads past the slice.
-		if len(ranges) != len(ops) {
-			t.Fatalf("got %d operations but %d byte ranges", len(ops), len(ranges))
-		}
-		for i, r := range ranges {
-			if r.Start < 0 || r.End > len(data) || r.Start > r.End {
-				t.Fatalf("operation %d has range [%d,%d) outside a %d-byte stream",
-					i, r.Start, r.End, len(data))
+		for _, opts := range [][]Option{nil, {SplitGluedOperators()}} {
+			ops, ranges, err := ParseStreamDataWithOffsets(context.Background(), data, opts...)
+			if err != nil {
+				continue
+			}
+			// Every operation must carry a range, or a caller splicing by
+			// index reads past the slice.
+			if len(ranges) != len(ops) {
+				t.Fatalf("got %d operations but %d byte ranges", len(ops), len(ranges))
+			}
+			for i, r := range ranges {
+				if r.Start < 0 || r.End > len(data) || r.Start > r.End {
+					t.Fatalf("operation %d has range [%d,%d) outside a %d-byte stream",
+						i, r.Start, r.End, len(data))
+				}
 			}
 		}
 	})
@@ -162,6 +171,34 @@ func FuzzParseStreamDataForCompliance(f *testing.F) {
 			}
 			if v.Last && v.Operand == nil {
 				t.Fatalf("violation %d is placed on the last operand of %q, and on no operand", i, v.Operator)
+			}
+		}
+	})
+}
+
+// FuzzGluedOperators covers the split of one keyword into operators, which the
+// unknown-operator repair runs on keywords read from attacker-controlled
+// content, and asserts the split loses and adds nothing: the operators it
+// returns spell the keyword.
+func FuzzGluedOperators(f *testing.F) {
+	for _, s := range []string{"ETBT", "qQ", "BTET", "ETXX", "TfT*", "q1", "falsef", "BDX", "ETB", ""} {
+		f.Add(s)
+	}
+
+	f.Fuzz(func(t *testing.T, keyword string) {
+		if len(keyword) > maxFuzzInput {
+			return
+		}
+		parts := GluedOperators(keyword)
+		if parts == nil {
+			return
+		}
+		if joined := strings.Join(parts, ""); joined != keyword {
+			t.Fatalf("GluedOperators(%q) = %q, which spells %q", keyword, parts, joined)
+		}
+		for _, p := range parts {
+			if !IsOperator(p) {
+				t.Fatalf("GluedOperators(%q) returned %q, no operator", keyword, p)
 			}
 		}
 	})
