@@ -28,9 +28,10 @@ type tokenSplice struct {
 // walk read the stream to its end.
 //
 // Only a token whose bytes are its value is offered, so a replacement covers
-// exactly the bytes it stands for. The lexer hands a number and a hex string
-// back as written. An inline image's dictionary and data are skipped whole:
-// the walk cannot address its data token by token.
+// exactly the bytes it stands for. The lexer hands a number, a hex string and
+// a keyword back as written. A delimiter is never offered, and neither is the
+// BI that opens an inline image. The image's dictionary and data are skipped
+// whole: the walk cannot address its data token by token.
 //
 // A walk the lexer cannot finish returns the replacements it found before the
 // failure, which a caller may still apply: splicing them leaves every byte
@@ -60,8 +61,9 @@ func contentTokenSplices(ctx context.Context, data []byte, respell func(tok lexe
 				if _, err := p.ParseInlineImageDict(ctx); err != nil {
 					return splices, false
 				}
+				continue
 			}
-			continue
+			// Any other keyword opens no nesting: offered to respell below.
 		case lexer.TokenDelimiter:
 			switch tok.Value {
 			case "[", "<<":

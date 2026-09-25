@@ -74,6 +74,9 @@ type unknownOpsTally struct {
 	// exponents counts numbers written with an exponent that were rewritten
 	// as the number a viewer reads in them.
 	exponents int
+	// nonFinite counts numbers written with no finite value, such as "inf",
+	// that were rewritten as 0.
+	nonFinite int
 	// separated counts operators that ran on from the operator before them
 	// with no white space between them, and were written back apart.
 	separated int
@@ -86,47 +89,61 @@ func (t *unknownOpsTally) add(o unknownOpsTally) {
 	t.removed += o.removed
 	t.repaired += o.repaired
 	t.exponents += o.exponents
+	t.nonFinite += o.nonFinite
 	t.separated += o.separated
 	t.delimited += o.delimited
 }
 
-// fixUnknownOps strips operators absent from [content.IsOperator] from every page
-// content stream, every Form XObject referenced through page Resources, and
-// every annotation appearance stream. Viewers ignore these tokens per
-// ISO 32000 §A.2, so removing a genuine one has no visible effect and only
-// eliminates the PDF/A violation.
+// fixUnknownOps strips operators absent from [content.IsOperator] from every
+// content stream a page draws, which [walkContentStreams] reaches: the page's
+// own content, and the form XObjects, tiling patterns, Type 3 glyphs and
+// annotation appearances it draws. Viewers ignore these tokens per ISO 32000
+// §A.2, so removing a genuine one has no visible effect and only eliminates
+// the PDF/A violation.
 //
-// That premise holds for a real operator alone, so each of the three streams
-// is repaired first by [repairContentData]: a number written with an exponent,
-// which veraPDF reads as a number and an undefined operator, is rewritten as
-// the number PDF.js reads in it, and a numeric literal the parser could not read
-// surfaces as an operator whose removal would take the operands of the
-// operator that follows. See [rewriteExponentNumbers] and the worked Tm
-// example on [repairMalformedNumbers].
+// That premise holds for a real operator alone, so each stream is repaired
+// first by [repairContentData]: a number written with an exponent, which
+// veraPDF reads as a number and an undefined operator, is rewritten as the
+// number PDF.js reads in it, a number written with no finite value becomes 0,
+// and a numeric literal the parser could not read surfaces as an operator whose
+// removal would take the operands of the operator that follows. See
+// [rewriteExponentNumbers], [rewriteNonFiniteNumbers] and the worked Tm example
+// on [repairMalformedNumbers].
+//
+// The walk is the one the hex-string repair takes, so the streams repaired are
+// the ones compliance judges the undefined-operator tests over (ISO 19005-1,
+// 6.2.10 t1; ISO 19005-2/3/4, 6.2.2 t1). This fixer used to read page content,
+// the forms page resources name and appearance streams alone, so an undefined
+// operator in a Type 3 glyph or a tiling pattern stayed a residual after every
+// remediation.
+//
+// # Corpus evidence
+//
+//   - All corpora: run on every file, whatever it reports, the wider walk
+//     changes what the repair writes in 3 files.
+//   - pdfjs issue18122.pdf: a tiling pattern whose data runs past a
+//     misspelled "endsteam" holds 2 undefined operators, which litho and
+//     veraPDF no longer report after a PDF/A-1b, PDF/A-2b or PDF/A-4
+//     remediation, default or aggressive.
+//   - pdfjs issue5039.pdf: the 4 undefined operators of a Type 3 glyph go for
+//     both validators, see [rewriteNonFiniteNumbers].
+//   - pdfjs poppler-90-0-fuzzed.pdf: 87 fuzzed Type 3 glyphs are rewritten,
+//     which neither validator judges for their operators. The findings of the
+//     outputs do not change but for the abbreviated filter names those glyphs
+//     carried (ISO 19005-2, 6.1.7.2 t1; ISO 19005-4, 6.1.6.2 t1), 104 to 69
+//     for litho and veraPDF at PDF/A-2b and PDF/A-4, and the text and images
+//     do not change.
 func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
-	catalog, err := document.ResolveCatalog(ctx, doc)
-	if err != nil {
-		return nil, fmt.Errorf("resolving catalog: %w", err)
-	}
-	pages, err := document.ResolvePages(ctx, doc, catalog)
-	if err != nil {
-		return nil, fmt.Errorf("resolving pages: %w", err)
-	}
-
 	part := compliance.PDFAPart(profile)
 	var total unknownOpsTally
-	visited := make(map[int]bool)
-	for pageNum, page := range pages {
-		if err := ctx.Err(); err != nil {
-			return nil, err
+	if _, err := walkContentStreams(ctx, alloc, doc, "unknown-ops", func(ctx context.Context, data []byte) ([]byte, func()) {
+		newData, t := repairContentData(ctx, data, part)
+		if t == (unknownOpsTally{}) {
+			return nil, nil
 		}
-		n, err := stripUnknownFromStream(ctx, alloc, doc, page, pageNum+1, part)
-		if err != nil {
-			return nil, err
-		}
-		total.add(n)
-		total.add(stripUnknownInResources(ctx, alloc, doc, page.Resources, visited, part))
-		total.add(stripUnknownInAnnotations(ctx, alloc, doc, page.Dict, visited, part))
+		return newData, func() { total.add(t) }
+	}); err != nil {
+		return nil, err
 	}
 
 	var fixes []string
@@ -142,6 +159,9 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	if total.exponents > 0 {
 		fixes = append(fixes, fmt.Sprintf("rewrote %d number(s) written with an exponent in content streams", total.exponents))
 	}
+	if total.nonFinite > 0 {
+		fixes = append(fixes, fmt.Sprintf("rewrote %d number(s) written with no finite value in content streams as 0", total.nonFinite))
+	}
 	if total.separated > 0 {
 		fixes = append(fixes, fmt.Sprintf("separated %d content-stream operator(s) written with no white space before them", total.separated))
 	}
@@ -153,7 +173,8 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 // repairContentData repairs one content stream's decoded bytes: numbers
 // written with an exponent become the numbers a viewer reads in them
-// ([rewriteExponentNumbers]), malformed numbers fold back into their operator
+// ([rewriteExponentNumbers]), numbers written with no finite value become 0
+// ([rewriteNonFiniteNumbers]), malformed numbers fold back into their operator
 // ([repairMalformedNumbers]), operators run together with no white space
 // between them come apart ([separateGluedOperators]), and operators outside
 // [content.IsOperator] go.
@@ -165,23 +186,25 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // starts with a digit keeps its boundaries, and one that spells no number,
 // such as ".020.594" or "-", is the keyword [repairMalformedNumbers] respells.
 //
-// A stream whose only defect is an exponent is written back as spliced, not
-// re-serialized, so nothing else in it moves. Removing an operator or folding a
-// number re-serializes the parsed operations, which cannot round-trip an inline
-// image: the parser consumes its data off-token, so the BI operation keeps its
-// dictionary alone, and writing it back leaves "<< ... >> BI" with no ID, data
-// or EI, a content stream no reader can parse (ISO 32000-1, 8.9.7). Such a
+// A stream whose only defects are exponents and numbers with no finite value is
+// written back as spliced, not re-serialized, so nothing else in it moves.
+// Removing an operator or folding a number re-serializes the parsed
+// operations, which cannot round-trip an inline image: the parser consumes its
+// data off-token, so the BI operation keeps its dictionary alone, and writing
+// it back leaves "<< ... >> BI" with no ID, data or EI, a content stream no
+// reader can parse (ISO 32000-1, 8.9.7). Such a
 // stream keeps its operators and malformed numbers as a reported residual, as
 // [fixContentStreams] keeps them. So does a stream holding a name with a NUL
 // byte, which [serializeOps] has no conforming spelling for.
 func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unknownOpsTally) {
 	var t unknownOpsTally
 	data, t.exponents = rewriteExponentNumbers(ctx, data, part)
+	data, t.nonFinite = rewriteNonFiniteNumbers(ctx, data)
 	spliced := func() ([]byte, unknownOpsTally) {
-		if t.exponents == 0 {
+		if t.exponents == 0 && t.nonFinite == 0 {
 			return nil, unknownOpsTally{}
 		}
-		return data, unknownOpsTally{exponents: t.exponents}
+		return data, unknownOpsTally{exponents: t.exponents, nonFinite: t.nonFinite}
 	}
 
 	ops, err := content.ParseStreamData(ctx, data, content.ForRepair())
@@ -323,193 +346,6 @@ func separateGluedOperators(ops []content.Operation) ([]content.Operation, int) 
 	return out, n
 }
 
-// stripUnknownFromStream repairs a page's live content (alloc-first, so an
-// earlier fixer's rewrite is seen) with [repairContentData] and writes the
-// result back through [replaceContentStream].
-func stripUnknownFromStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, pageNum, part int) (unknownOpsTally, error) {
-	contentsObj, ok := livePageDict(ctx, alloc, doc, page)["Contents"]
-	if !ok {
-		return unknownOpsTally{}, nil
-	}
-	data, err := liveContentBytes(ctx, alloc, doc, contentsObj)
-	if err != nil {
-		return unknownOpsTally{}, nil
-	}
-	newData, t := repairContentData(ctx, data, part)
-	if t == (unknownOpsTally{}) {
-		return t, nil
-	}
-	if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum); err != nil {
-		return t, fmt.Errorf("replacing content stream on page %d: %w", pageNum, err)
-	}
-	return t, nil
-}
-
-// stripUnknownInAnnotations repairs the appearance streams of a page's
-// annotations with [repairContentData].
-//
-// An appearance stream is a content stream (ISO 32000-1, 12.5.5), so the ISO
-// 19005-2, 6.2.2 prohibition reaches it, but it hangs off /Annots[]/AP rather
-// than the page resources this fixer walked, and veraPDF reports an operator
-// there that litho left in place.
-func stripUnknownInAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict, visited map[int]bool, part int) unknownOpsTally {
-	var total unknownOpsTally
-	if pageDict == nil {
-		return total
-	}
-	annots, err := document.ResolveArray(ctx, doc, pageDict["Annots"])
-	if err != nil || len(annots) == 0 {
-		return total
-	}
-
-	for _, annotObj := range annots {
-		if err := ctx.Err(); err != nil {
-			return total
-		}
-		annot, err := document.ResolveDict(ctx, doc, annotObj)
-		if err != nil || annot == nil {
-			continue
-		}
-		apDict, err := document.ResolveDict(ctx, doc, annot["AP"])
-		if err != nil || apDict == nil {
-			continue
-		}
-		for _, key := range []ast.PdfName{"N", "R", "D"} {
-			apObj, ok := apDict[key]
-			if !ok {
-				continue
-			}
-			for _, entry := range appearanceEntries(ctx, doc, apObj) {
-				total.add(stripUnknownFromStreamObject(ctx, alloc, doc, entry, visited, part))
-			}
-		}
-	}
-	return total
-}
-
-// appearanceEntries returns the objects an /AP entry names: the entry itself
-// when it is a stream, or every value of the appearance-state subdictionary a
-// multi-state annotation uses (ISO 32000-1, 12.5.5), as a checkbox does.
-func appearanceEntries(ctx context.Context, doc *document.Document, apObj ast.PdfObject) []ast.PdfObject {
-	if _, err := document.ResolveStream(ctx, doc, apObj); err == nil {
-		return []ast.PdfObject{apObj}
-	}
-	stateDict, err := document.ResolveDict(ctx, doc, apObj)
-	if err != nil || stateDict == nil {
-		return nil
-	}
-	out := make([]ast.PdfObject, 0, len(stateDict))
-	for _, v := range stateDict {
-		out = append(out, v)
-	}
-	return out
-}
-
-// stripUnknownFromStreamObject repairs one appearance stream with
-// [repairContentData]. An appearance stream is a content stream (ISO 32000-1,
-// 12.5.5), so a mangled operand splits its operand run exactly as it does on a
-// page, and stripping the token takes the next operator's arguments with it.
-//
-// # Corpus evidence
-//
-//   - pdfjs issue15604.pdf: the page path gained the malformed-number repair
-//     when the Tm on this file lost four of its six operands.
-func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, visited map[int]bool, part int) unknownOpsTally {
-	ref, isRef := obj.(ast.PdfIndirectRef)
-	if !isRef || ref.ObjectNum == 0 || visited[ref.ObjectNum] {
-		return unknownOpsTally{}
-	}
-	visited[ref.ObjectNum] = true
-
-	// Read alloc-first, for the same reason as the resources walk below: an
-	// appearance stream is a Form XObject (ISO 32000-1, 12.5.5), so graphics,
-	// transparency and nested-resources reach it from registry entries ahead of
-	// unknown-ops, and rebuilding the body from the on-disk copy would discard
-	// what they queued. ref is known non-zero from the guard above.
-	stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, obj)
-	if !ok {
-		return unknownOpsTally{}
-	}
-	t, _ := repairStreamObject(ctx, alloc, doc, ref, stream, part)
-	return t
-}
-
-// repairStreamObject repairs the content stream at ref, a form XObject or an
-// appearance stream, with [repairContentData] and writes it back through
-// [replaceDecodedStream]. It returns what changed and whether the stream could
-// be decoded at all.
-func repairStreamObject(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef, stream ast.PdfStream, part int) (unknownOpsTally, bool) {
-	// Decode through the filter pipeline: ast.PdfStream.Bytes hands back the
-	// raw body, which for a FlateDecode form is compressed bytes the content
-	// lexer reads as a run of undefined operators.
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil {
-		return unknownOpsTally{}, false
-	}
-	newData, t := repairContentData(ctx, data, part)
-	if t == (unknownOpsTally{}) {
-		return t, true
-	}
-	replaceDecodedStream(alloc, ref, stream.Dict, newData)
-	return t, true
-}
-
-// stripUnknownInResources recurses into a page's /Resources/XObject
-// entries to process Form XObjects that may hold their own content
-// streams with bad operators, repairing each with [repairContentData].
-//
-// A form XObject holds a content stream (ISO 32000-1, 8.10.2), so a mangled
-// operand costs it the next operator's arguments here just as it does on a
-// page. The forms a form draws are reached whether or not the form itself
-// needed a repair: the walk descended only from a form it had rewritten, so a
-// defect one level below a clean form was never seen.
-func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, visited map[int]bool, part int) unknownOpsTally {
-	var total unknownOpsTally
-	if resources == nil {
-		return total
-	}
-	xoObj, ok := resources["XObject"]
-	if !ok {
-		return total
-	}
-	xoDict, err := document.ResolveDict(ctx, doc, xoObj)
-	if err != nil || xoDict == nil {
-		return total
-	}
-	for _, entry := range xoDict {
-		if err := ctx.Err(); err != nil {
-			return total
-		}
-		ref, ok := entry.(ast.PdfIndirectRef)
-		if !ok || ref.ObjectNum == 0 || visited[ref.ObjectNum] {
-			continue
-		}
-		visited[ref.ObjectNum] = true
-
-		// Read alloc-first. graphics, transparency and nested-resources all
-		// write XObject streams from registry entries ahead of unknown-ops, so
-		// rebuilding the body from the on-disk copy below would discard their
-		// edits when this one lands.
-		stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, ref)
-		if !ok {
-			continue
-		}
-		if subtype, _ := stream.Dict["Subtype"].(ast.PdfName); subtype != "Form" {
-			continue
-		}
-		t, readable := repairStreamObject(ctx, alloc, doc, ref, stream, part)
-		if !readable {
-			continue
-		}
-		total.add(t)
-
-		if nestedRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && nestedRes != nil {
-			total.add(stripUnknownInResources(ctx, alloc, doc, nestedRes, visited, part))
-		}
-	}
-	return total
-}
-
 // rewriteExponentNumbers returns data with every number written with an
 // exponent, such as "1.5e1" or "1E-3", replaced by the number a viewer reads
 // in it, the part before the exponent letter ([exponentMantissa], written by
@@ -589,6 +425,81 @@ func exponentMantissa(tok string) string {
 		return tok[:i]
 	}
 	return tok
+}
+
+// rewriteNonFiniteNumbers returns data with every token that spells a number
+// with no finite value where an operand stands ([nonFiniteNumber]), such as
+// "inf" or "-inf", replaced by 0, and how many it replaced.
+//
+// ISO 32000-1, 7.3.3 writes a number as digits with an optional sign and
+// decimal point, so these tokens are keywords, and ISO 19005-1, 6.2.10 t1 and
+// ISO 19005-2/3/4, 6.2.2 t1 forbid them as operators Annex A does not define.
+// veraPDF reports each one so and reads the operands before it as its own. A
+// producer writes one where its formatter printed a floating-point value it
+// could not bound: a Type 3 glyph with no marks, whose bounding box was
+// accumulated from no point, reads "602 0" then the box (inf, inf, -inf, -inf)
+// ahead of its d1.
+//
+// Each token is taken for the number it stands for, as
+// [repairMalformedNumbers] takes a numeral that lost its digits, and written
+// 0, a value inside every part's limits, so the operator after it keeps the
+// operands the producer wrote for it. The other repairs at hand change what a
+// viewer shows:
+//
+//   - Removing the token as an undefined operator takes the operands before it
+//     too, so the d1 above keeps none of the six Table 113 requires, the glyph
+//     width among them.
+//   - [separateGluedOperators] reads "inf" as PDF.js does, i then n then f, and
+//     writes three operators no producer meant ahead of the d1 a glyph starts
+//     with (ISO 32000-1, 9.6.5).
+//   - The part's largest real M, which [plainNumber] writes for a magnitude
+//     past it, turns the empty box into (M, M, -M, -M), which a reader
+//     normalises into a box covering the plane (ISO 32000-1, 7.9.5), and PDF.js
+//     widens the font's bounding box to it.
+//
+// PDF.js reads the zero box as bogus bounds and skips the d1
+// (TranslatedFont's Type 3 colour-operator pass), and draws the glyph as it
+// drew the source's: with nothing, since it cannot read "-inf" as a number
+// (Lexer.getNumber) and drops a Type 3 glyph at its first error
+// (TranslatedFont.loadType3Data).
+//
+// Only a token outside any array or dictionary is rewritten, the one the
+// undefined-operator tests report. The tokens are spliced in place, so every
+// other byte of the stream, inline image data included, is carried across
+// unchanged. A stream the lexer cannot read to its end has the tokens before
+// the failure rewritten and the rest left as written.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5039.pdf: the space glyph of its Type 3 font is the glyph
+//     above, and no other file holds such a token where the repair reads. Its
+//     PDF/A-1b, PDF/A-2b and PDF/A-4 remediations, default or aggressive, no
+//     longer leave the 4 undefined operators for litho or veraPDF. veraPDF's
+//     glyph width finding on the glyph goes too (ISO 19005-1, 6.3.6 t1; ISO
+//     19005-2, 6.2.11.5 t1; ISO 19005-4, 6.2.10.5 t1), since the d1 keeps the
+//     width /Widths gives, and the text and images do not change.
+func rewriteNonFiniteNumbers(ctx context.Context, data []byte) ([]byte, int) {
+	splices, _ := contentTokenSplices(ctx, data, func(tok lexer.Token, depth int) (string, bool) {
+		if tok.Type != lexer.TokenKeyword || depth != 0 || !nonFiniteNumber(tok.Value) {
+			return "", false
+		}
+		return "0", true
+	})
+	if len(splices) == 0 {
+		return data, 0
+	}
+	return applyTokenSplices(data, splices), len(splices)
+}
+
+// nonFiniteNumber reports whether tok spells a floating-point value with no
+// finite magnitude the way a formatter prints one: "inf", "infinity" or "nan"
+// in any case, after at most one sign, as C's printf ("inf", "-nan"), Java and
+// JavaScript ("Infinity", "NaN") write them.
+func nonFiniteNumber(tok string) bool {
+	if len(tok) > 0 && (tok[0] == '+' || tok[0] == '-') {
+		tok = tok[1:]
+	}
+	return strings.EqualFold(tok, "inf") || strings.EqualFold(tok, "infinity") || strings.EqualFold(tok, "nan")
 }
 
 // plainNumber writes the number tok spells the way ISO 32000-1, 7.3.3 spells

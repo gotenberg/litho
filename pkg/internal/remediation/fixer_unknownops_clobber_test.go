@@ -13,13 +13,14 @@ import (
 // TestStripUnknownInResources_KeepsAnEarlierFixersPendingStreamWrite pins that
 // the resources path reads each XObject stream through the allocator.
 //
-// [stripUnknownInResources] walks resources["XObject"] and writes each
-// stripped result back at that stream's own object number. It used to read
-// each stream with doc.Resolve plus a type assertion to ast.PdfStream, while
-// its sibling [stripUnknownFromStreamObject] read appearance streams with
-// document.ResolveStream. Neither consulted an alloc-aware helper, so an
-// earlier fixer's edit to the same XObject stream was discarded. Both now read
-// through resolveStreamFromAllocOrDoc.
+// The repair walks resources["XObject"] and writes each stripped result back at
+// that stream's own object number. Its resources path used to read each stream
+// with doc.Resolve plus a type assertion to ast.PdfStream, while its
+// appearance path read appearance streams with document.ResolveStream. Neither
+// consulted an alloc-aware helper, so an earlier fixer's edit to the same
+// XObject stream was discarded. Both then read through
+// resolveStreamFromAllocOrDoc, and both now go through the one read of
+// [contentStreamWalk], which the hex-string repair shares.
 //
 // Peer and ordering are measured STRUCTURALLY, not by token: graphics writes
 // XObject streams in fixXObjects (two sites), transparency writes them in

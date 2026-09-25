@@ -13,14 +13,15 @@ import (
 // TestStripUnknownFromStreamObject_KeepsAnEarlierFixersPendingStreamWrite pins
 // that the appearance-stream path reads the stream through the allocator.
 //
-// [stripUnknownFromStreamObject] writes the stripped appearance stream back at
-// that stream's own object number. It used to read the stream with
+// The repair writes the stripped appearance stream back at that stream's own
+// object number. Its appearance path used to read the stream with
 // document.ResolveStream, consulting no alloc-aware helper, so an earlier
-// fixer's edit to the same stream was discarded. It now reads through
-// resolveStreamFromAllocOrDoc.
+// fixer's edit to the same stream was discarded. It then read through
+// resolveStreamFromAllocOrDoc, and now goes through the one read of
+// [contentStreamWalk], which the resources path shares.
 //
 // THIS IS THE SIBLING PATH, and it needs its own test rather than inheriting
-// the one written for stripUnknownInResources. That function reaches XObject
+// the one written for the resources path. That path reaches XObject
 // streams through the page's /Resources and took a DIFFERENT read, via
 // doc.Resolve plus a type assertion, which is why a census grepping for
 // document.ResolveStream found one read site but not the other at all. One
@@ -93,7 +94,7 @@ func TestStripUnknownFromStreamObject_KeepsAnEarlierFixersPendingStreamWrite(t *
 	}
 
 	if _, kept := got.Dict["Metadata"]; !kept {
-		t.Errorf("/Metadata is gone: stripUnknownFromStreamObject rebuilt the stream "+
+		t.Errorf("/Metadata is gone: the appearance repair rebuilt the stream "+
 			"dictionary from the on-disk copy and discarded the earlier fixer's "+
 			"write; dict = %v", got.Dict)
 	}
