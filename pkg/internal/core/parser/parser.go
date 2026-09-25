@@ -83,6 +83,12 @@ type Parser struct {
 	// consumed counts the tokens [Parser.Consume] has advanced past. See
 	// [Parser.Consumed] and [Parser.SkipFailedObject].
 	consumed int
+
+	// objectEnd is the end [Parser.WithObjectEnd] set, or 0 when the data
+	// runs to the end of the file. The data of a stream is exempt from it,
+	// but the scan for the end of a stream whose /Length cannot be used is
+	// not (see [Parser.readStreamBody]).
+	objectEnd int64
 }
 
 // NewParser creates a new Parser that reads PDF objects from the given lexer.
@@ -148,6 +154,7 @@ func (p *Parser) WithOffsetTracking() *Parser {
 //     no other file's parse, page count, text or violations under PDF/A-2b,
 //     veraPDF files under their own profile.
 func (p *Parser) WithObjectEnd(end int64) *Parser {
+	p.objectEnd = end
 	p.lex.Reader().SetLimit(end)
 	return p
 }
@@ -918,7 +925,8 @@ func isSignatureDict(dict ast.PdfDict) bool {
 // delimits it (ISO 32000-1, 7.3.8.2), and the lazy stream reads it straight
 // from the file. A table offset that lands inside the data is the weaker claim
 // of the two, since the header found there can belong to a file the stream
-// embeds uncompressed.
+// embeds uncompressed. A stream whose /Length cannot be used has no such claim,
+// and the scan for its end stops at the bound (see [Parser.readStreamBody]).
 func (p *Parser) parseStreamAfterDict(ctx context.Context, dict ast.PdfDict) (ast.PdfObject, error) {
 	if _, err := p.Expect(lexer.TokenKeyword); err != nil {
 		return nil, err
@@ -1039,7 +1047,26 @@ func (p *Parser) consumeStreamEOL(reader *ioat.Reader) error {
 // it. It first tries a fast path using /Length; if /Length is missing or
 // doesn't point at `endstream`, it falls back to a byte scan.
 //
+// The scan stops at the end [Parser.WithObjectEnd] set, where the next object
+// starts, and the stream's data then runs up to it. ISO 32000-1, 7.3.8.1 ends
+// the data at the endstream keyword and 7.3.10 ends the object at endobj, so
+// an endstream found past the next object belongs to another stream: reading
+// on to it took every object in between as this stream's data. Only /Length
+// may carry the data past the next object's start (see
+// [Parser.parseStreamAfterDict]), and the scan runs because /Length is not
+// usable.
+//
 // The returned usedLength is true if the fast path was taken.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18122.pdf: object 11, a tiling pattern, states /Length 0 and
+//     closes its data with a misspelt "endsteam". The scan read on through
+//     object 13's image to its endstream, and the pattern's content held that
+//     image's 366,997 bytes of JPEG data. It now holds the 20 bytes before
+//     object 12, the misspelt keyword and endobj among them.
+//   - All corpora: no other object changes, nor any file's page count, text,
+//     undecodable streams or PDF/A-2b violations.
 func (p *Parser) readStreamBody(ctx context.Context, reader *ioat.Reader, dict ast.PdfDict, streamStart int64) (int64, bool, error) {
 	if dataLen, ok := tryFastStreamLength(reader, dict, streamStart); ok {
 		return dataLen, true, nil
@@ -1049,6 +1076,10 @@ func (p *Parser) readStreamBody(ctx context.Context, reader *ioat.Reader, dict a
 	// byte-by-byte for the endstream marker.
 	if _, err := reader.Seek(streamStart, io.SeekStart); err != nil {
 		return 0, false, fmt.Errorf("seeking back to stream start: %w", err)
+	}
+	if p.objectEnd > 0 {
+		reader.SetLimit(p.objectEnd)
+		defer reader.ClearLimit()
 	}
 	dataLen, err := p.scanEndstream(ctx, reader)
 	return dataLen, false, err

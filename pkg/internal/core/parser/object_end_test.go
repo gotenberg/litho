@@ -174,3 +174,42 @@ func TestWithObjectEndLeavesStreamDataWhole(t *testing.T) {
 		t.Errorf("stream data = %q, want %q", got, data)
 	}
 }
+
+// TestWithObjectEndBoundsTheEndstreamScan pins that the scan for the end of a
+// stream with no usable /Length stops where the next object starts. Object 1
+// has no /Length and no endstream, and scanning on found object 2's endstream,
+// so object 1's data held object 2 whole. A stream whose endstream comes
+// before the bound keeps the data up to it.
+func TestWithObjectEndBoundsTheEndstreamScan(t *testing.T) {
+	next := "2 0 obj\n<< /Length 3 >>\nstream\nXYZ\nendstream\nendobj\n"
+	for _, tc := range []struct {
+		name, src, want string
+		control         bool
+	}{
+		{"no endstream", "1 0 obj\n<< >>\nstream\nABC\nendobj\n" + next, "ABC\nendobj", true},
+		{"endstream before the bound", "1 0 obj\n<< /Length 1 0 R >>\nstream\nABC\nendstream\nendobj\n" + next, "ABC", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := func(bounded bool) string {
+				obj, _ := parseObjectEndingAt(t, tc.src, "2 0 obj", bounded)
+				stream, ok := obj.(ast.PdfStream)
+				if !ok {
+					t.Fatalf("ParseObject = %T, want ast.PdfStream", obj)
+				}
+				got, err := stream.Bytes(context.Background())
+				if err != nil {
+					t.Fatalf("reading stream data: %v", err)
+				}
+				return string(got)
+			}
+			// The unbounded scan is the control: it must reach object 2, or
+			// the bounded one below proves nothing.
+			if got := data(false); tc.control && !strings.Contains(got, "2 0 obj") {
+				t.Fatalf("unbounded stream data = %q, want it to run into object 2", got)
+			}
+			if got := data(true); got != tc.want {
+				t.Errorf("stream data = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
