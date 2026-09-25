@@ -62,6 +62,27 @@ func FuzzXSDValidate(f *testing.F) {
 	})
 }
 
+// FuzzNewDecoder asserts the decoder [NewDecoder] builds never panics while
+// it sniffs a byte order mark, transcodes UTF-16 and switches to a declared
+// encoding. The seeds reach each of the three.
+func FuzzNewDecoder(f *testing.F) {
+	latin1 := `<?xml version="1.0" encoding="ISO-8859-1"?><a b="` + "\xE9" + `">` + "\xFF" + `</a>`
+	f.Add([]byte(latin1))
+	f.Add([]byte(latin1[:len(latin1)/2])) // Truncated inside the element.
+	f.Add([]byte("\xFF\xFE<\x00?\x00x\x00m\x00l\x00 \x00"))
+	f.Add([]byte("\xFE\xFF\x00<\x00a"))
+	f.Add([]byte(`<?xml version="1.0" encoding="UTF-8-W/O-BOM"?><a/>`))
+
+	f.Fuzz(func(_ *testing.T, payload []byte) {
+		dec := NewDecoder(payload)
+		for {
+			if _, err := dec.Token(); err != nil {
+				return
+			}
+		}
+	})
+}
+
 // FuzzXSDLoadThenValidate drives a FUZZED schema through validation, which
 // neither target above can do: FuzzXSDLoad stops at Load, and Load cannot reach
 // the facet walk (collectAllFacets has exactly two callers, ValidateValue and

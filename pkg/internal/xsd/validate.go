@@ -1,7 +1,6 @@
 package xsd
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"encoding/xml"
@@ -48,9 +47,11 @@ const (
 // Validate streams payload through the XSD engine and returns every
 // failure as a [Violation]. An empty slice means the document
 // satisfies schema's content model, cardinality, and leaf-type
-// constraints. An underlying parse error (malformed XML, unexpected
-// EOF) is returned as the second value distinct from violations so
-// callers can tell "ran-but-failed-rules" apart from "could-not-run".
+// constraints. An underlying parse error (malformed XML, an encoding
+// [NewDecoder] cannot read, which wraps [ErrEncoding]) is returned as the
+// second value distinct from violations so callers can tell
+// "ran-but-failed-rules" apart from "could-not-run". The violations found
+// before it are returned alongside.
 //
 // The walk checks element ordering, cardinality, leaf values,
 // attributes, xsi:nil, xs:choice content, and unknown elements. An xs:any
@@ -65,9 +66,8 @@ func Validate(ctx context.Context, schema *Schema, payload []byte) ([]Violation,
 	}
 	v := &validator{
 		schema:  schema,
-		decoder: xml.NewDecoder(bytes.NewReader(payload)),
+		decoder: NewDecoder(payload),
 	}
-	v.decoder.Strict = true
 	if err := v.run(ctx); err != nil {
 		return v.violations, err
 	}

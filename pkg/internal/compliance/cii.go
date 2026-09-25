@@ -1,7 +1,6 @@
 package compliance
 
 import (
-	"bytes"
 	"context"
 	"encoding/xml"
 	"errors"
@@ -191,8 +190,12 @@ func (p ciiPath) matches(steps ...xml.Name) bool {
 // lenient is true the decoder tolerates both, matching producers that
 // emit not-quite-conformant XML. No spec sanctions the lenient mode; it
 // is opt-in via WithFacturXLenient.
+//
+// The decoder is the XSD engine's ([xsd.NewDecoder]), so the spine and
+// the XSD pass read the same character encodings: those XML 1.0, 4.3.3
+// has a processor read, UTF-16 and ISO-8859-1 among them.
 func newComplianceXMLDecoder(payload []byte, lenient bool) *xml.Decoder {
-	dec := xml.NewDecoder(bytes.NewReader(payload))
+	dec := xsd.NewDecoder(payload)
 	if lenient {
 		dec.Strict = false
 		dec.Entity = xml.HTMLEntity
@@ -326,8 +329,9 @@ func readLeafText(dec *xml.Decoder, name xml.Name) string {
 // found. The gate admits ZUGFeRD 1.0 alongside the v100-family CII
 // variants because the caller pairs the variant with the matching
 // XSD set; the schema's own root element binding catches
-// namespace mismatches.
-func checkInvoiceCIIXSD(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, schema *xsd.Schema) []Violation {
+// namespace mismatches. lenient is WithFacturXLenient, see
+// [validateCIIXSDBytes].
+func checkInvoiceCIIXSD(ctx context.Context, doc *document.Document, invoice invoiceFileSpec, v hybridInvoiceVariant, schema *xsd.Schema, lenient bool) []Violation {
 	if schema == nil {
 		return nil
 	}
@@ -346,18 +350,48 @@ func checkInvoiceCIIXSD(ctx context.Context, doc *document.Document, invoice inv
 		return nil
 	}
 
-	xsdViolations, err := xsd.Validate(ctx, schema, data)
-	if err != nil {
-		// Parse failure already surfaced via the structural spine
-		// rules in checkInvoiceCII; do not double-report it.
+	return validateCIIXSDBytes(ctx, data, v, schema, lenient)
+}
+
+// validateCIIXSDBytes runs the XSD pass of [checkInvoiceCIIXSD] against an
+// in-memory XML payload, so unit tests can exercise it without a PDF.
+//
+// A payload the engine cannot parse fails the pass under
+// [Rule_cii_xsd_WellFormed]: XML Schema Part 1, 5.2 assesses the
+// schema-validity of an element information item, which exists only once
+// the document has been parsed as XML 1.0, so an unparsable payload is not
+// schema-valid. That covers an encoding declaration XML 1.0, 4.3.3 makes a
+// fatal error, which the CII spine rules report too, and a ZUGFeRD 1.0
+// payload, which they do not check. The violations found before the parse
+// failure are kept.
+//
+// Deliberate leniency: under WithFacturXLenient the pass reports nothing
+// for a payload it cannot parse, which relaxes the 5.2 verdict. The spine
+// check alone then judges well-formedness, with the tolerances that option
+// grants to producers of not-quite-conformant XML: an HTML named entity,
+// and what the non-strict decoder reads.
+//
+// # Corpus evidence
+//
+//   - facturx, v2__fail_Mustangproject_factur-x-invalid-xml-encoding-attribute:
+//     declares encoding="UTF-8-W/O-BOM", which production [81] rejects. It
+//     is the one payload of the 159 files that embed XML the engine cannot
+//     parse, and Mustang fails its schema validation for that declaration.
+func validateCIIXSDBytes(ctx context.Context, payload []byte, v hybridInvoiceVariant, schema *xsd.Schema, lenient bool) []Violation {
+	xsdViolations, err := xsd.Validate(ctx, schema, payload)
+	if err != nil && (lenient || ctx.Err() != nil) {
 		return nil
 	}
-	out := make([]Violation, 0, len(xsdViolations))
+	out := make([]Violation, 0, len(xsdViolations)+1)
 	for _, xv := range xsdViolations {
 		out = append(out, Violation{
 			Rule:    ruleForXSDClass(xv.Rule),
 			Context: formatXSDContext(v, xv),
 		})
+	}
+	if err != nil {
+		out = append(out, failf(Rule_cii_xsd_WellFormed,
+			"%s: invoice XML cannot be parsed for schema validation: %v", v.label, err)...)
 	}
 	return out
 }

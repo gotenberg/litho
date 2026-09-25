@@ -286,6 +286,14 @@ var (
 		Description:   "Element attributes shall meet the XSD declaration's required/fixed/type constraints",
 	}
 
+	Rule_cii_xsd_WellFormed = Rule{
+		Specification: "HYBRID_INVOICE",
+		Clause:        "CII_XSD",
+		TestNumber:    7,
+		Object:        "CII",
+		Description:   "The embedded invoice payload shall parse as XML so the XSD schema can assess it",
+	}
+
 	// CII Schematron rules. The Schematron engine fires when a
 	// business-rule assertion sourced from EN 16931 / XRechnung
 	// (or any user-supplied Schematron set) trips on the embedded
