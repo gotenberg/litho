@@ -46,6 +46,11 @@ func matchAnnotColor(v compliance.Violation) bool {
 // the border and icon colour of an annotation without one changes, and only
 // in a viewer that draws it from these keys.
 //
+// Outside that conflict the arrays stay. In a file carrying no intent,
+// output-intent installs an sRGB one for them (see [addAnnotColorIntent]), so
+// this fixer acts under an intent the content needs or the source declares,
+// and on a file output-intent does not extend.
+//
 // The decision reads the output intents through the allocator, not the
 // document: output-intent and corrupt-icc run first and may install or
 // replace the destination profile, so a source with no intent can leave with
@@ -79,8 +84,10 @@ func matchAnnotColor(v compliance.Violation) bool {
 // # Corpus evidence
 //
 //   - All corpora: 42 files at PDF/A-1a and 1b, 39 in aggressive mode, kept
-//     6.5.3 test 3 after remediation on litho and veraPDF. The fixer clears it
-//     from each and moves no other rule on either validator.
+//     6.5.3 test 3 after remediation on litho and veraPDF. The sRGB intent
+//     output-intent adds clears it from 22 of them, 19 in aggressive mode, and
+//     the fixer from the other 20, whose content needs a CMYK intent. Neither
+//     moves another rule on either validator.
 //   - govdocs thread_400_400575, pdfjs bug1899804, bug921760, issue13915,
 //     issue14105 and stamps: output-intent installs a CMYK intent in the first
 //     round and an sRGB one in the second, at PDF/A-1a and 1b in both modes.
@@ -197,6 +204,55 @@ func fixAnnotColor(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 func colorArrayPresent(ctx context.Context, doc *document.Document, annot ast.PdfDict, key ast.PdfName) bool {
 	v, ok := annot[key]
 	return ok && !entryResolvesToNull(ctx, doc, v)
+}
+
+// annotColorPresent reports whether an annotation on some page of catalog
+// carries a /C or /IC array [fixAnnotColor] would remove, reading every object
+// through alloc as that fixer does.
+//
+// An annotation whose subtype the run removes does not count. ISO 19005-1,
+// 6.5.2 forbids its subtype, and the annotations fixer, which every 6.5.3
+// violation brings in, removes it later in the same round (see
+// [annotSubtypeRemoved]), so its arrays never reach the output.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-4 6-3-3-t01-pass-d and 6-3-2-t01-fail-u, pdfjs issue20062:
+//     the only coloured annotation is one PDF/A-1 forbids, which aggressive
+//     mode removes, so counting it added an sRGB intent the output did not
+//     need.
+func annotColorPresent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, opts Options, profile string) bool {
+	pagesObj, ok := catalog["Pages"]
+	if !ok {
+		return false
+	}
+	var pages []annotPageEntry
+	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
+	for _, pe := range pages {
+		if ctx.Err() != nil {
+			return false
+		}
+		annotsObj, ok := pe.dict["Annots"]
+		if !ok {
+			continue
+		}
+		for _, annotObj := range liveArray(ctx, alloc, doc, annotsObj) {
+			annot := liveDictValue(ctx, alloc, doc, annotObj)
+			if annot == nil {
+				continue
+			}
+			if !colorArrayPresent(ctx, doc, annot, "C") && !colorArrayPresent(ctx, doc, annot, "IC") {
+				continue
+			}
+			// Best-effort: an unreadable /Subtype yields an empty name, which
+			// the annotations fixer removes, exactly as it reads it.
+			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+			if !annotSubtypeRemoved(subtype, opts, profile) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // intentProfile is one output intent that carries a destination profile: its

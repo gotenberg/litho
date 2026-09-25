@@ -151,3 +151,29 @@ func TestWriter_RemediatePDFA1_KeepsAnnotColorWhenTheIntentTurnsRGB(t *testing.T
 		t.Errorf("the output still reports %d 6.5.3 test 3 violation(s)", n)
 	}
 }
+
+// TestWriter_RemediatePDFA1_AddsAnSRGBIntentForAnnotColor pins the repair ISO
+// 19005-1, 6.5.3 prefers when nothing forces the conflict: the page paints no
+// device colour and the file carries no output intent, so remediation adds the
+// sRGB intent that admits the colour arrays and the annotation keeps both.
+func TestWriter_RemediatePDFA1_AddsAnSRGBIntentForAnnotColor(t *testing.T) {
+	t.Parallel()
+
+	r, annot, colorSpace := remediateAnnotColor(t, limitsPDF(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
+		"<< /Type /Annot /Subtype /Square /Rect [10 10 60 60] /F 4 /C [1 0 0] /IC [0 0 1] >>",
+	))
+	if colorSpace != "RGB " {
+		t.Fatalf("the output intent is %q, want the sRGB one added for the annotation", colorSpace)
+	}
+	for _, key := range []ast.PdfName{"C", "IC"} {
+		if _, has := annot[key]; !has {
+			t.Errorf("%s was removed although the output intent is RGB; annotation = %v", key, annot)
+		}
+	}
+	if n := annotColorResidual(t, r); n != 0 {
+		t.Errorf("the output still reports %d 6.5.3 test 3 violation(s)", n)
+	}
+}

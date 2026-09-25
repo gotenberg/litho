@@ -332,17 +332,33 @@ func permittedAnnotSubtypesFor(profile string) map[ast.PdfName]bool {
 	return nil
 }
 
+// annotSubtypeRemoved reports whether [fixAnnotArray] removes an annotation of
+// subtype from a run at profile with opts.
+//
+// Each PDF/A part permits a different set of annotation types: part 2/3 allows
+// FileAttachment and forbids Projection, part 4 does the reverse, and part 1 is
+// narrower than both. Removing an annotation destroys content the author
+// placed, so the profile-exact check is gated like every other repair that
+// cannot preserve what it touches. A nil set means the profile is not PDF/A,
+// leaving only the generic check.
+//
+// A subtype the profile's own table permits is kept in both modes. The two
+// generic terms serve every part and level at once, so they forbid 3D and
+// RichMedia, which ISO 19005-4 6.3.1 permits at conformance level E (Annex B):
+// without this exemption a PDF/A-4e run deleted them whenever any other
+// annotation violation brought the fixer in.
+func annotSubtypeRemoved(subtype ast.PdfName, opts Options, profile string) bool {
+	strictSubtypes := permittedAnnotSubtypesFor(profile)
+	if strictSubtypes[subtype] {
+		return false
+	}
+	strict := !opts.PreserveContent && strictSubtypes != nil
+	return forbiddenAnnotSubtypes[subtype] || !permittedAnnotSubtypes[subtype] || strict
+}
+
 // fixAnnotArray processes each annotation in the array, returning fixes and
 // whether any annotations were removed (requiring the array to be rebuilt).
 func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, annots ast.PdfArray, pageNum int, opts Options, profile string) ([]string, bool) {
-	// Each PDF/A part permits a different set of annotation types: part 2/3
-	// allows FileAttachment and forbids Projection, part 4 does the reverse, and
-	// part 1 is narrower than both. Removing an annotation destroys content the
-	// author placed, so the profile-exact check is gated like every other repair
-	// that cannot preserve what it touches. A nil set means the profile is not
-	// PDF/A, leaving only the generic check below.
-	strictSubtypes := permittedAnnotSubtypesFor(profile)
-	strict := !opts.PreserveContent && strictSubtypes != nil
 	var fixes []string
 	removed := false
 
@@ -376,15 +392,7 @@ func fixAnnotArray(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		// (PDF/A-2/3/4 §6.3.1, PDF/A-1 §6.5.2). Mark the slot nil here;
 		// the caller's rebuildAnnotsArray skips nil entries when
 		// rewriting the array.
-		//
-		// A subtype the profile's own table permits is kept in both modes.
-		// The two generic terms serve every part and level at once, so they
-		// forbid 3D and RichMedia, which ISO 19005-4 6.3.1 permits at
-		// conformance level E (Annex B): without this exemption a PDF/A-4e
-		// run deleted them whenever any other annotation violation brought
-		// the fixer in.
-		permittedByProfile := strictSubtypes[subtype]
-		if !permittedByProfile && (forbiddenAnnotSubtypes[subtype] || !permittedAnnotSubtypes[subtype] || strict) {
+		if annotSubtypeRemoved(subtype, opts, profile) {
 			annots[i] = nil
 			removed = true
 			// Null the annotation object as well. Dropping it from /Annots

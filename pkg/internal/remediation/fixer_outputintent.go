@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -70,6 +71,12 @@ func hasMatchingOutputIntent(ctx context.Context, doc *document.Document, arr as
 }
 
 func matchOutputIntent(v compliance.Violation) bool {
+	// ISO 19005-1, 6.5.3 test 3 admits an annotation colour array under an RGB
+	// PDF/A-1 output intent, which this fixer installs in a file that carries
+	// none. See [addAnnotColorIntent].
+	if matchAnnotColor(v) {
+		return true
+	}
 	// A device-colour transparency group blending space is repaired structurally
 	// by fixGroupCS (drop /CS), not by installing an OutputIntent: installing one
 	// for the group can perturb a multi-scope file's existing intent coverage.
@@ -206,14 +213,16 @@ const maxPlausibleObjNum = 100000
 
 // fixOutputIntent adds a GTS_PDFA1 output intent covering the device colour
 // space the violations flag, and injects a Default colour space into resource
-// dictionaries for the one that intent leaves uncovered.
+// dictionaries for the one that intent leaves uncovered. Under PDF/A-1 it then
+// adds an sRGB intent to a file still carrying none when an annotation colour
+// array needs one (see [addAnnotColorIntent]).
 //
 // # Corpus evidence
 //
 //   - verapdf 6-2-3-3-t01-fail-b: its sole intent is a GTS_PDFA1 CMYK profile
 //     over DeviceRGB content, and treating any intent as coverage left it
 //     still failing after remediation.
-func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, profile string) ([]string, error) {
+func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, violations []compliance.Violation, profile string) ([]string, error) {
 	// Skip structurally damaged documents where embedding a large ICC
 	// profile risks corruption during serialization.
 	if doc.Rebuilt {
@@ -228,6 +237,83 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		}
 	}
 
+	// The device colour decision reads the device colour violations alone. A
+	// run the annotation colour rule alone brings here has no device colour to
+	// cover, and the RGB default of that decision would replace a CMYK intent
+	// the source carries.
+	device := slices.DeleteFunc(slices.Clone(violations), matchAnnotColor)
+	annotColor := len(device) < len(violations)
+
+	var fixes []string
+	if len(device) > 0 || !annotColor {
+		deviceFixes, err := fixDeviceColorIntent(ctx, alloc, doc, device)
+		if err != nil {
+			return nil, err
+		}
+		fixes = deviceFixes
+	}
+	if annotColor {
+		if fix := addAnnotColorIntent(ctx, alloc, doc, opts, profile); fix != "" {
+			fixes = append(fixes, fix)
+		}
+	}
+	return fixes, nil
+}
+
+// addAnnotColorIntent installs the sRGB GTS_PDFA1 output intent under PDF/A-1
+// when the catalog, as output-intent's device colour decision left it, carries
+// no output intent and some annotation the run keeps carries a colour array.
+// It returns the fix description, or "" when it installs nothing.
+//
+// ISO 19005-1, 6.5.3 forbids an annotation's /C and /IC arrays unless the
+// destination profile of the PDF/A-1 output intent (6.2.2) is an RGB one, so
+// without an intent annot-color drops them. The sRGB intent keeps them at no
+// cost to the content. That decision ran first and installs an intent for
+// every device colour space a violation flags (6.2.3.3), so a file still
+// carrying none paints no device colour this round, and the sRGB intent is the
+// one it would receive for DeviceRGB.
+//
+// A file that carries an intent keeps it, and annot-color resolves 6.5.3
+// against it. A CMYK intent the content needs is the true conflict, where
+// dropping the arrays changes the least, and an intent the source declares
+// names its intended output condition, which a border colour does not justify
+// replacing. A file whose kept annotations carry no colour array gets nothing:
+// the intent would serve no rule.
+//
+// # Corpus evidence
+//
+//   - All corpora: 22 files at PDF/A-1a and 1b carry no output intent and
+//     paint no device colour (govdocs 14, pdfjs 5, verapdf 2, pdfcpu 1).
+//     annot-color dropped all 339 of their annotation colour arrays. With the
+//     sRGB intent they keep every one, 19 of the files in aggressive mode, and
+//     each reports the same rules as before on litho and veraPDF.
+func addAnnotColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, profile string) string {
+	if compliance.PDFAPart(profile) != 1 {
+		return ""
+	}
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
+	if !ok {
+		return ""
+	}
+	catalogDict := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	if catalogDict == nil {
+		return ""
+	}
+	if len(liveArray(ctx, alloc, doc, catalogDict["OutputIntents"])) > 0 {
+		return ""
+	}
+	if !annotColorPresent(ctx, alloc, doc, catalogDict, opts, profile) {
+		return ""
+	}
+	addOutputIntent(ctx, alloc, doc, catalogRef, catalogDict, false)
+	return "added sRGB OutputIntent to catalog for annotation colour arrays"
+}
+
+// fixDeviceColorIntent is the device colour decision of [fixOutputIntent]:
+// it adds the output intent covering the device colour space the violations
+// flag, and injects a Default colour space for the one that intent leaves
+// uncovered.
+func fixDeviceColorIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, violations []compliance.Violation) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, fmt.Errorf("trailer missing /Root")
@@ -287,59 +373,13 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	}
 
 	if addOI {
-		iccData, nComponents, conditionID := cmykICCProfile, 4, "US Web Coated (SWOP) v2"
-		if !addCMYK {
-			iccData, nComponents, conditionID = sRGBICCProfile, 3, "sRGB IEC61966-2.1"
-		}
-		iccStream := ast.NewStream(ast.PdfDict{"N": ast.PdfInt(nComponents)}, iccData)
-		iccRef := alloc.Alloc(iccStream)
-
-		// ISO 32000-2 Table 401 and ISO 19005-4 §6.2.3 keep GTS_PDFA1 as
-		// the PDF/A output-intent subtype for every part; a "GTS_PDFA"
-		// subtype does not exist, so an intent carrying it does not satisfy
-		// the device-colour requirement of §6.2.4.3.
-		outputIntent := ast.PdfDict{
-			"Type":                      ast.PdfName("OutputIntent"),
-			"S":                         ast.PdfName("GTS_PDFA1"),
-			"OutputConditionIdentifier": ast.PdfString(conditionID),
-			"DestOutputProfile":         iccRef,
-		}
-		oiRef := alloc.Alloc(outputIntent)
-
-		newCatalog := make(ast.PdfDict, len(catalogDict)+1)
-		maps.Copy(newCatalog, catalogDict)
-		newCatalog["OutputIntents"] = ast.PdfArray{oiRef}
-		alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
-		catalogDict = newCatalog
+		catalogDict = addOutputIntent(ctx, alloc, doc, catalogRef, catalogDict, addCMYK)
 		if addCMYK {
 			fixes = append(fixes, "added CMYK OutputIntent to catalog")
 			oiIsCMYK = true
 		} else {
 			fixes = append(fixes, "added sRGB OutputIntent to catalog")
 			oiIsRGB = true
-		}
-	}
-
-	// When an OutputIntent was just added, any existing ICCBased page
-	// colorspace that happens to share the profile now violates
-	// §6.2.4.2. Dedup them immediately.
-	if addOI {
-		if newCat := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef); newCat != nil {
-			if profile := firstOutputIntentProfile(ctx, alloc, doc, newCat); profile != nil {
-				visited := make(map[int]bool)
-				var entries []annotPageEntry
-				if pagesObj, ok := newCat["Pages"]; ok {
-					collectPageRefs(ctx, alloc, doc, pagesObj, &entries, make(map[int]bool), 0)
-				}
-				for _, pe := range entries {
-					profiles := profileSet{
-						outputIntent: profile,
-						blending:     blendingProfile(ctx, alloc, doc, pe.dict),
-					}
-					dedupICCInResources(ctx, alloc, doc, pe, profiles.all(), visited)
-					dedupICCInXObjects(ctx, alloc, doc, pe, profiles, visited)
-				}
-			}
 		}
 	}
 
@@ -375,6 +415,60 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	}
 
 	return fixes, nil
+}
+
+// addOutputIntent makes a GTS_PDFA1 output intent carrying the embedded CMYK
+// profile, or the sRGB one when cmyk is false, the catalog's only output
+// intent, and returns the rewritten catalog.
+//
+// An ICCBased colour space whose profile the new intent now repeats violates
+// ISO 19005-4, 6.2.4.2, so the same pass replaces every page's copy with the
+// device space the intent covers.
+func addOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalogRef ast.PdfIndirectRef, catalogDict ast.PdfDict, cmyk bool) ast.PdfDict {
+	iccData, nComponents, conditionID := cmykICCProfile, 4, "US Web Coated (SWOP) v2"
+	if !cmyk {
+		iccData, nComponents, conditionID = sRGBICCProfile, 3, "sRGB IEC61966-2.1"
+	}
+	iccStream := ast.NewStream(ast.PdfDict{"N": ast.PdfInt(nComponents)}, iccData)
+	iccRef := alloc.Alloc(iccStream)
+
+	// ISO 32000-2 Table 401 and ISO 19005-4 §6.2.3 keep GTS_PDFA1 as
+	// the PDF/A output-intent subtype for every part; a "GTS_PDFA"
+	// subtype does not exist, so an intent carrying it does not satisfy
+	// the device-colour requirement of §6.2.4.3.
+	outputIntent := ast.PdfDict{
+		"Type":                      ast.PdfName("OutputIntent"),
+		"S":                         ast.PdfName("GTS_PDFA1"),
+		"OutputConditionIdentifier": ast.PdfString(conditionID),
+		"DestOutputProfile":         iccRef,
+	}
+	oiRef := alloc.Alloc(outputIntent)
+
+	newCatalog := make(ast.PdfDict, len(catalogDict)+1)
+	maps.Copy(newCatalog, catalogDict)
+	newCatalog["OutputIntents"] = ast.PdfArray{oiRef}
+	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
+
+	newCat := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	if newCat == nil {
+		return newCatalog
+	}
+	if profile := firstOutputIntentProfile(ctx, alloc, doc, newCat); profile != nil {
+		visited := make(map[int]bool)
+		var entries []annotPageEntry
+		if pagesObj, ok := newCat["Pages"]; ok {
+			collectPageRefs(ctx, alloc, doc, pagesObj, &entries, make(map[int]bool), 0)
+		}
+		for _, pe := range entries {
+			profiles := profileSet{
+				outputIntent: profile,
+				blending:     blendingProfile(ctx, alloc, doc, pe.dict),
+			}
+			dedupICCInResources(ctx, alloc, doc, pe, profiles.all(), visited)
+			dedupICCInXObjects(ctx, alloc, doc, pe, profiles, visited)
+		}
+	}
+	return newCatalog
 }
 
 // injectDefaultColorSpace walks the page tree plus every reachable Form
