@@ -256,8 +256,8 @@ func TestEvaluateMDP_UnreadableObjectStream(t *testing.T) {
 // stream encrypted under its own key (7.5.7).
 //
 // The object stream is read, so the form dictionary inside it passes. The
-// datasets stream still fails the type-based classifier: its producer types it
-// /EmbeddedFile, which is not a type P=2 permits.
+// datasets stream passes too, although its producer types it /EmbeddedFile:
+// the /XFA array names it as the datasets packet, which holds form data.
 //
 // # Corpus evidence
 //
@@ -273,7 +273,9 @@ func TestEvaluateMDP_EncryptedXFAFormFill(t *testing.T) {
 		"<< /Type /Annot /Subtype /Widget /FT /Sig /T (cert) /Rect [0 0 0 0] /P 3 0 R /V 5 0 R >>",
 		"<< /Type /Sig /ByteRange [0 1 1 1] /Contents <30> /Reference [<< /Type /SigRef /TransformMethod /DocMDP /TransformParams << /Type /TransformParams /P 2 /V /1.2 >> >>] >>",
 		"<< /Type /EmbeddedFile /Length 4 >>\nstream\n<a/>\nendstream",
-		"<< /Fields [4 0 R] /SigFlags 3 /XFA [(datasets) 6 0 R] >>",
+		// An encrypted file encrypts its strings under their object's key
+		// (ISO 32000-1, 7.6.2), so the packet name is written sealed.
+		fmt.Sprintf("<< /Fields [4 0 R] /SigFlags 3 /XFA [<%x> 6 0 R] >>", seal(7, []byte("datasets"))),
 		"null", "null", "null",
 		encDict,
 	}, trailer)
@@ -291,11 +293,11 @@ func TestEvaluateMDP_EncryptedXFAFormFill(t *testing.T) {
 		}
 	})
 
-	t.Run("datasets typed EmbeddedFile is what fails", func(t *testing.T) {
+	t.Run("datasets typed EmbeddedFile passes as form data", func(t *testing.T) {
 		data := packedUpdate(t, base, 13, []updatedObject{form}, []updatedObject{catalog, datasets, rights}, true, seal, trailer)
 		result := mdpVerdict(t, data, len(base), 2)
-		if result.MDPValid || !strings.Contains(result.MDPInfo, "object 6 (EmbeddedFile)") {
-			t.Errorf("MDPValid = %v, MDPInfo %q: want the datasets stream, object 6, reported", result.MDPValid, result.MDPInfo)
+		if !result.MDPValid {
+			t.Errorf("MDPValid = false (MDPInfo %q), want the datasets stream, object 6, passed as form data", result.MDPInfo)
 		}
 	})
 }

@@ -173,8 +173,8 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 		return rev, revErr
 	}
 
-	// Validation data is told apart only when the classifier objects to
-	// something, which is when it can change the verdict.
+	// Validation data and form data are told apart only when the classifier
+	// objects to something, which is when they can change the verdict.
 	violation := classifyModifications(appendedObjects, sig.MDPPolicy)
 	var validationData int
 	var note string
@@ -182,6 +182,12 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 		var classified []appendedObject
 		classified, validationData, note = withoutValidationData(ctx, doc, signedRevision, appendedObjects, sig.MDPPolicy)
 		violation = classifyModifications(classified, sig.MDPPolicy)
+		if violation != "" && sig.MDPPolicy >= 2 {
+			var formNote string
+			classified, formNote = withoutFormData(ctx, doc, signedRevision, classified, sig.MDPPolicy)
+			note += formNote
+			violation = classifyModifications(classified, sig.MDPPolicy)
+		}
 	}
 
 	// Table 254 permits annotation deletion only at P=3, and P=1 already
@@ -267,12 +273,13 @@ func withoutValidationData(
 
 // appendedObject holds a parsed object from the post-signature region.
 type appendedObject struct {
-	ObjNum  int
-	Type    string // /Type value if present, empty otherwise
-	Subtype string // /Subtype value of an annotation, empty otherwise
-	FT      string // /FT value for form fields, empty otherwise
-	IsXRef  bool   // true if this is an xref table/stream (not a content object)
-	IsAnnot bool   // true if this is an annotation dictionary
+	ObjNum   int
+	Type     string // /Type value if present, empty otherwise
+	Subtype  string // /Subtype value of an annotation, empty otherwise
+	FT       string // /FT value for form fields, empty otherwise
+	IsXRef   bool   // true if this is an xref table/stream (not a content object)
+	IsAnnot  bool   // true if this is an annotation dictionary
+	IsStream bool   // true if this is a stream
 
 	// Unread is set on an object stream whose objects could not be read, and
 	// says why. The objects it holds are then unknown.
@@ -374,6 +381,7 @@ func describeAppended(objNum int, obj ast.PdfObject) appendedObject {
 			ao.Subtype = dictName(v, "Subtype")
 		}
 	case ast.PdfStream:
+		ao.IsStream = true
 		ao.Type = dictName(v.Dict, "Type")
 		if ao.Type == "XRef" {
 			ao.IsXRef = true
