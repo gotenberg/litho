@@ -64,9 +64,27 @@ type tokenPlace struct {
 // failure, which a caller may still apply: splicing them leaves every byte
 // from the failure on as it was. A done context returns none.
 func contentTokenSplices(ctx context.Context, data []byte, respell func(tok lexer.Token, at tokenPlace) (string, bool)) ([]tokenSplice, bool) {
+	return tokenSplices(ctx, data, lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0)), respell)
+}
+
+// repairTokenSplices is [contentTokenSplices] over the tokens of the reading of
+// a repair ([content.ForRepair]), where a run that starts with a digit, a sign
+// or a period and spells no number of ISO 32000-1, 7.3.3 is a keyword holding
+// its text: "-", "." and "1.5.5" are offered as written. The token boundaries
+// of ISO 32000-1, 7.2.2 read "-" as a number of value 0 (see the lexer's
+// digitless numbers), whose bytes are not its value, which
+// [contentTokenSplices] never offers.
+func repairTokenSplices(ctx context.Context, data []byte, respell func(tok lexer.Token, at tokenPlace) (string, bool)) ([]tokenSplice, bool) {
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0)).WithVeraPDFTokens().WithRepairTokens()
+	return tokenSplices(ctx, data, lex, respell)
+}
+
+// tokenSplices is the walk of [contentTokenSplices] over the tokens lex reads
+// in data.
+func tokenSplices(ctx context.Context, data []byte, lex *lexer.Lexer, respell func(tok lexer.Token, at tokenPlace) (string, bool)) ([]tokenSplice, bool) {
 	var splices []tokenSplice
 	depth := 0
-	p := parser.NewParser(lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))).WithOffsetTracking()
+	p := parser.NewParser(lex).WithOffsetTracking()
 	for n := 1; ; n++ {
 		if n%contentTokenCheckInterval == 0 && ctx.Err() != nil {
 			return nil, false

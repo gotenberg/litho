@@ -34,8 +34,10 @@ import (
 // reads that value in a run that spells no number of ISO 32000-1, 7.3.3, such
 // as "-" or ".020.594", and the repair that answers it is the one here, which
 // respells the run as the number it begins with, 0 when it holds no digit
-// ([repairMalformedNumbers]). Clamping it to the limit, as the real-limits
-// repair clamps a number past it, would write a value no viewer drew.
+// ([repairMalformedNumbers], and [rewriteNestedMalformedNumbers] where an
+// array or a dictionary holds the run). Clamping it to the limit, as the
+// real-limits repair clamps a number past it, would write a value no viewer
+// drew.
 //
 // # Corpus evidence
 //
@@ -69,7 +71,8 @@ func matchUnknownOps(v compliance.Violation) bool {
 type unknownOpsTally struct {
 	// removed counts operators outside [content.IsOperator] that were stripped.
 	removed int
-	// repaired counts malformed numbers folded back into their operator.
+	// repaired counts malformed numbers folded back into their operator or
+	// respelled where an array or a dictionary holds them.
 	repaired int
 	// exponents counts numbers written with an exponent that were rewritten
 	// as the number a viewer reads in them.
@@ -181,10 +184,11 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // repairContentData repairs one content stream's decoded bytes: numbers
 // written with an exponent become the numbers a viewer reads in them
 // ([rewriteExponentNumbers]), numbers written with no finite value become 0
-// ([rewriteNonFiniteNumbers]), malformed numbers fold back into their operator
-// ([repairMalformedNumbers]), operators run together with no white space
-// between them come apart ([separateGluedOperators]), and operators outside
-// [content.IsOperator] go.
+// ([rewriteNonFiniteNumbers]), malformed numbers in an array or a dictionary
+// become the numbers they begin with ([rewriteNestedMalformedNumbers]) and the
+// others fold back into their operator ([repairMalformedNumbers]), operators
+// run together with no white space between them come apart
+// ([separateGluedOperators]), and operators outside [content.IsOperator] go.
 // It returns the bytes to write and what it changed; a zero tally means
 // nothing is to be written. The bytes can be empty: a stream holding nothing
 // but undefined operators is written back with none.
@@ -193,8 +197,9 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // starts with a digit keeps its boundaries, and one that spells no number,
 // such as ".020.594" or "-", is the keyword [repairMalformedNumbers] respells.
 //
-// A stream whose only defects are exponents and numbers with no finite value is
-// written back as spliced, not re-serialized, so nothing else in it moves.
+// A stream whose only defects are exponents, numbers with no finite value and
+// malformed numbers in an array or a dictionary is written back as spliced, not
+// re-serialized, so nothing else in it moves.
 // Removing an operator or folding a number re-serializes the parsed
 // operations, which cannot round-trip an inline image: the parser consumes its
 // data off-token, so the BI operation keeps its dictionary alone, and writing
@@ -207,22 +212,24 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 	var t unknownOpsTally
 	data, t.exponents = rewriteExponentNumbers(ctx, data, part)
 	data, t.nonFinite = rewriteNonFiniteNumbers(ctx, data)
+	data, nested := rewriteNestedMalformedNumbers(ctx, data, part)
 	spliced := func() ([]byte, unknownOpsTally) {
-		if t.exponents == 0 && t.nonFinite == 0 {
+		if t.exponents == 0 && t.nonFinite == 0 && nested == 0 {
 			return nil, unknownOpsTally{}
 		}
-		return data, unknownOpsTally{exponents: t.exponents, nonFinite: t.nonFinite}
+		return data, unknownOpsTally{exponents: t.exponents, nonFinite: t.nonFinite, repaired: nested}
 	}
 
 	ops, err := content.ParseStreamData(ctx, data, content.ForRepair())
 	if err != nil {
 		return spliced()
 	}
-	ops, t.repaired = repairMalformedNumbers(ops)
+	ops, folded := repairMalformedNumbers(ops)
+	t.repaired = folded + nested
 	ops, t.separated, t.removed = dropUndefinedOperators(ops)
 	t.delimited, t.strays = delimitedOperators(ctx, data)
 	hasInlineImage := slices.ContainsFunc(ops, func(op content.Operation) bool { return op.Operator == "BI" })
-	if (t.removed == 0 && t.repaired == 0 && t.separated == 0 && t.delimited == 0 && t.strays == 0) || hasInlineImage {
+	if (t.removed == 0 && folded == 0 && t.separated == 0 && t.delimited == 0 && t.strays == 0) || hasInlineImage {
 		return spliced()
 	}
 	out, err := serializeOps(filterOps(ops))
@@ -230,6 +237,83 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 		return spliced()
 	}
 	return out, t
+}
+
+// rewriteNestedMalformedNumbers returns data with every run where an array or
+// a dictionary holds a number, an inline image's dictionary among them, that
+// validation reads as the largest value veraPDF gives a number it cannot read
+// ([saturatedRun]), replaced by the number [repairMalformedNumbers] salvages
+// from such a run where an operand stands: its longest numeric prefix, 0 when
+// it holds no digit, written inside the part's limits by [plainNumber]. It
+// returns how many it replaced.
+//
+// ISO 32000-1, 7.3.3 gives "-" and "1.5.5" no number. Validation reads them as
+// veraPDF does, as the largest 64-bit integer and the largest double, which
+// fail the implementation limits of ISO 19005-1, 6.1.12 t1 and t2 and ISO
+// 19005-2, 6.1.13 t1 and t2 in a dash array, a TJ array, a property list or an
+// inline image's dictionary as they fail them where an operand stands (see
+// [compliance.SaturatedNumberNote]). PDF.js reads "-" there as 0
+// (Lexer.getNumber), the number the respelling writes. A run veraPDF reads as
+// numbers inside the limits, such as "3-5", which it reads as 3 then -5, fails
+// nothing and is left as written.
+//
+// The reading of a repair ([content.ForRepair]) keeps such a run whole as a
+// keyword, which an array or a dictionary cannot hold, and the parse drops it:
+// "[- 2] 0 d" read as the dash array [2], and a stream written back from that
+// reading for another repair changed its dash pattern. Respelled first, the run
+// stays the element it was. The runs are spliced in place, so every other byte
+// of the stream, inline image data included, is carried across unchanged. A
+// stream the lexer cannot read to its end has the runs before the failure
+// respelled and the rest left as written.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1354114.pdf and bug1953099.pdf: write a lone "-" in a TJ array,
+//     which veraPDF 1.30 fails the integer limit on at PDF/A-1b and PDF/A-2b.
+//     Their PDF/A-1b and PDF/A-2b remediations, default and aggressive, no
+//     longer fail it for litho or veraPDF, and their extracted text does not
+//     change. bug1953099.pdf passes both validators at both profiles.
+//   - pdfjs bug1130815.pdf: its damaged page stream holds 14 such runs in its
+//     arrays. 13 of them, such as "3-5", are numbers inside the limits to
+//     veraPDF and stay as written, and "1-", 1 then the integer "-", becomes 1.
+//   - All corpora: no other file holds such a run in an array or a dictionary
+//     of a content stream.
+func rewriteNestedMalformedNumbers(ctx context.Context, data []byte, part int) ([]byte, int) {
+	splices, _ := repairTokenSplices(ctx, data, func(tok lexer.Token, at tokenPlace) (string, bool) {
+		if tok.Type != lexer.TokenKeyword || at.depth == 0 || !malformedNumber(tok.Value) || !saturatedRun(ctx, tok.Value) {
+			return "", false
+		}
+		return plainNumber(strconv.FormatFloat(numericPrefix(tok.Value), 'f', -1, 64), part)
+	})
+	if len(splices) == 0 {
+		return data, 0
+	}
+	return applyTokenSplices(data, splices), len(splices)
+}
+
+// saturatedRun reports whether validation reads a number of the run tok as the
+// largest integer or real, signed, veraPDF gives a number it cannot read
+// ([compliance.SaturatedNumberNote]). The run is read as validation reads a
+// content stream ([content.ParseStreamData]), where it may hold several
+// numbers: "--5" is -9223372036854775807 then -5.
+func saturatedRun(ctx context.Context, tok string) bool {
+	ops, err := content.ParseStreamData(ctx, []byte(tok+" n"))
+	if err != nil || len(ops) != 1 {
+		return false
+	}
+	for _, operand := range ops[0].Operands {
+		switch v := operand.(type) {
+		case ast.PdfInt:
+			if v == math.MaxInt64 || v == -math.MaxInt64 {
+				return true
+			}
+		case ast.PdfReal:
+			if math.Abs(float64(v)) == math.MaxFloat64 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // delimitedOperators counts the operators of data written against one of the
