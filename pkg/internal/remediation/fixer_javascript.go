@@ -786,10 +786,11 @@ func hasNonNullEntry(dict ast.PdfDict, key ast.PdfName) bool {
 // the allocator, so the verdict judges the action an earlier fixer left. Only
 // the action itself is judged: [actionSplice] walks its /Next.
 func isForbiddenActionDict(ctx context.Context, doc *document.Document, d ast.PdfDict, profile string) bool {
+	// A /S that is absent or no name gives "", the type of no whitelist, which
+	// the validator reports as veraPDF does (ISO 32000-1, Table 193 requires
+	// /S), so the error is the verdict and the action goes: it performs
+	// nothing a viewer can name.
 	s, _ := document.ResolveName(ctx, doc, d["S"])
-	if s == "" {
-		return false
-	}
 	if stripsActionType(s, profile) {
 		return true
 	}

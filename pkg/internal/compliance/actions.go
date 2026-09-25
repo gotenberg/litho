@@ -550,6 +550,9 @@ func objectJudgedOnce(obj ast.PdfObject, judged map[int]bool) bool {
 //     is a JavaScript action. veraPDF reports all 503 under ISO 19005-1 6.6.1
 //     test 1 and ISO 19005-2 6.5.1 test 1, and litho reported none while the
 //     outline walk judged the first action alone.
+//   - All corpora: no action this walk reaches has a /S that is absent or no
+//     name, so judging one as a type outside the whitelist moves no finding
+//     at PDF/A-1b or PDF/A-2b, veraPDF files at their own profile.
 func walkActionChain(ctx context.Context, doc *document.Document, action ast.PdfDict, profile string, part int, location string, depth int, judged map[int]bool) []Violation {
 	if ctx.Err() != nil || depth > maxActionChainDepth {
 		return nil
@@ -557,21 +560,23 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 
 	var results []Violation
 
-	// Check the action type (/S).
-	actionType, _ := document.ResolveName(ctx, doc, action["S"])
-	if actionType != "" {
-		if isForbiddenAction(actionType, profile) {
-			rule := forbiddenActionTypeRule(part)
-			results = append(results, failf(rule, "%s at %s", actionType, location)...)
-		}
+	// Check the action type (/S). ISO 32000-1, Table 193 requires /S, a name,
+	// and the test of ISO 19005-1 6.6.1 t1, ISO 19005-2/3 6.5.1 t1 and ISO
+	// 19005-4 6.6.1 t1 permits the types its whitelist names, so an action whose
+	// /S is absent, null, a string or the empty name is of no permitted type.
+	// resolveActionType answers "" for all of them, which no whitelist holds.
+	actionType := resolveActionType(ctx, doc, action)
+	if isForbiddenAction(actionType, profile) {
+		rule := forbiddenActionTypeRule(part)
+		results = append(results, failf(rule, "%s at %s", actionTypeLabel(actionType), location)...)
+	}
 
-		// Check named actions (§6.6.1 test 2).
-		if actionType == "Named" {
-			actionName, _ := document.ResolveName(ctx, doc, action["N"])
-			if actionName != "" && !AllowedNamedActions[actionName] {
-				rule := namedActionRule(part)
-				results = append(results, failf(rule, "%s at %s", actionName, location)...)
-			}
+	// Check named actions (§6.6.1 test 2).
+	if actionType == "Named" {
+		actionName, _ := document.ResolveName(ctx, doc, action["N"])
+		if actionName != "" && !AllowedNamedActions[actionName] {
+			rule := namedActionRule(part)
+			results = append(results, failf(rule, "%s at %s", actionName, location)...)
 		}
 	}
 
@@ -607,6 +612,33 @@ func walkActionChain(ctx context.Context, doc *document.Document, action ast.Pdf
 	}
 
 	return results
+}
+
+// resolveActionType returns the action type the /S of action names, or "" when
+// /S is absent or names no type: null, a string, any other object that is not
+// a name, or the empty name. [walkActionChain] judges "" as a type outside every
+// whitelist, as veraPDF does, so a /S that does not resolve is a verdict rather
+// than a check left undone.
+func resolveActionType(ctx context.Context, doc *document.Document, action ast.PdfDict) ast.PdfName {
+	s, ok := action["S"]
+	if !ok {
+		return ""
+	}
+	actionType, err := document.ResolveName(ctx, doc, s)
+	if err != nil {
+		doc.Logger.Debug("compliance.actions: action /S is not a name", "error", err)
+		return ""
+	}
+	return actionType
+}
+
+// actionTypeLabel names actionType in a finding. veraPDF names an action with
+// no type "Unknown or not permitted Action type null".
+func actionTypeLabel(actionType ast.PdfName) string {
+	if actionType == "" {
+		return "action with no /S type"
+	}
+	return actionType.String()
 }
 
 // checkAAKeyRestrictions checks that an /AA dictionary only contains permitted

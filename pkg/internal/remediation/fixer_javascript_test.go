@@ -35,6 +35,61 @@ func TestIsForbiddenActionDict_NamedActions(t *testing.T) {
 	}
 }
 
+// TestIsForbiddenActionDict_NoType pins that the fixer strips an action whose
+// /S is absent or no name, which the validator reports under ISO 19005-2 6.5.1
+// t1 as veraPDF does, and leaves it under a profile that states no action-type
+// whitelist.
+func TestIsForbiddenActionDict_NoType(t *testing.T) {
+	doc, _ := newTestDoc(t, minimalCatalogPDF(""))
+	ctx := context.Background()
+	cases := []struct {
+		name    string
+		act     ast.PdfDict
+		profile string
+		want    bool
+	}{
+		{"no /S", ast.PdfDict{"URI": ast.PdfString("http://example.com")}, "PDF/A-2b", true},
+		{"an empty action", ast.PdfDict{}, "PDF/A-2b", true},
+		{"a string /S", ast.PdfDict{"S": ast.PdfString("URI")}, "PDF/A-2b", true},
+		{"a null /S", ast.PdfDict{"S": ast.PdfNull{}}, "PDF/A-1b", true},
+		{"a URI action", ast.PdfDict{"S": ast.PdfName("URI")}, "PDF/A-2b", false},
+		{"no /S under PDF/UA-1", ast.PdfDict{}, "PDF/UA-1", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isForbiddenActionDict(ctx, doc, tc.act, tc.profile); got != tc.want {
+				t.Errorf("isForbiddenActionDict(%v, %s) = %v, want %v", tc.act, tc.profile, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestFixJavaScript_CutsActionWithNoType pins the splice of an action with no
+// /S: it goes, and the action its /Next names takes its place.
+func TestFixJavaScript_CutsActionWithNoType(t *testing.T) {
+	pdf := buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /OpenAction << /D [3 0 R /Fit] /Next << /S /URI /URI (http://example.com) >> >> >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+	)
+	doc, alloc := newTestDoc(t, pdf)
+
+	descs, err := fixJavaScript(context.Background(), alloc, doc, Options{}, nil, "PDF/A-2b")
+	if err != nil {
+		t.Fatalf("fixJavaScript: %v", err)
+	}
+	if len(descs) == 0 {
+		t.Fatal("expected the /OpenAction with no /S to be cut")
+	}
+	open, ok := pendingDict(t, alloc, 1)["OpenAction"].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("/OpenAction = %v, want the URI action its /Next named", pendingDict(t, alloc, 1)["OpenAction"])
+	}
+	if s, _ := open["S"].(ast.PdfName); s != "URI" {
+		t.Errorf("/OpenAction /S = %v, want /URI", open["S"])
+	}
+}
+
 func TestFixJavaScript_RemovesForbiddenNamedAction(t *testing.T) {
 	pdf := buildStructPDF(
 		"<< /Type /Catalog /Pages 2 0 R /OpenAction << /S /Named /N /ExportData >> >>",
