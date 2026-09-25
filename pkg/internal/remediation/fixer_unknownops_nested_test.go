@@ -127,3 +127,94 @@ func assertNoSaturatedNumber(t *testing.T, data []byte) {
 		}
 	}
 }
+
+// TestRepairContentDataKeepsNumberRunsOnRewrite pins that a run an array holds
+// which validation reads as several numbers, as veraPDF 1.30 does, survives a
+// stream written back from its parsed operations as those numbers. The reading
+// of a repair keeps "3-5" whole as a keyword, which the parse drops from an
+// array, so removing an undefined operator from the stream wrote the TJ array
+// back without the 3 and the -5 validation read in the source.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1130815.pdf: writes 13 such runs in the TJ arrays of its
+//     damaged page stream.
+func TestRepairContentDataKeepsNumberRunsOnRewrite(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, data string
+		want       []ast.PdfObject
+	}{
+		{"a TJ array", "BT [(a) 3-5 (b) 11-8] TJ ET xx", []ast.PdfObject{
+			ast.PdfString("a"), ast.PdfInt(3), ast.PdfInt(-5), ast.PdfString("b"), ast.PdfInt(11), ast.PdfInt(-8),
+		}},
+		{"reals and a plus sign", "BT [(a) .5-.25 (b) 2+3] TJ ET xx", []ast.PdfObject{
+			ast.PdfString("a"), ast.PdfReal(.5), ast.PdfReal(-.25), ast.PdfString("b"), ast.PdfInt(2), ast.PdfInt(3),
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			out, tally := repairContentData(context.Background(), []byte(tc.data), 2)
+			if tally.removed != 1 || tally.repaired != 2 {
+				t.Errorf("removed %d operators and repaired %d numbers, want 1 and 2", tally.removed, tally.repaired)
+			}
+			ops, err := content.ParseStreamData(context.Background(), out)
+			if err != nil {
+				t.Fatalf("ParseStreamData: %v", err)
+			}
+			var got ast.PdfArray
+			for _, op := range ops {
+				if op.Operator == "TJ" && len(op.Operands) == 1 {
+					got, _ = op.Operands[0].(ast.PdfArray)
+				}
+				if op.Operator == "xx" {
+					t.Errorf("the rewrite %q keeps the undefined operator", out)
+				}
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("the rewrite %q holds the TJ array %v, want %v", out, got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("element %d of the TJ array of %q is %v (%T), want %v (%T)", i, out, got[i], got[i], tc.want[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+// TestSplitNestedNumberRuns pins which runs the split writes as the numbers
+// validation reads in them: a run of several numbers where an array or a
+// dictionary holds it. A run where an operand stands, one in an inline
+// image's dictionary, and one veraPDF reads as the largest value it gives a
+// number are left to the repairs that answer them.
+func TestSplitNestedNumberRuns(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, data, want string
+	}{
+		{"an array", "[3-5 2] 0 d", "[3 -5 2] 0 d"},
+		{"a nested array", "[[1-8] 2] 0 d", "[[1 -8] 2] 0 d"},
+		{"a dictionary", "/P << /X 1.5-2 >> BDC EMC", "/P << /X 1.5 -2 >> BDC EMC"},
+		{"an operand", "3-5 Td", ""},
+		{"an inline image", "BI /W 1 /H 1 /BPC 8 /CS /G /D [0-1] ID \x00 EI", ""},
+		{"a trailing minus", "[1- 2] 0 d", ""},
+		{"a number", "[3 -5] 0 d", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			out, n := splitNestedNumberRuns(context.Background(), []byte(tc.data))
+			want, wantN := tc.want, 1
+			if want == "" {
+				want, wantN = tc.data, 0
+			}
+			if string(out) != want || n != wantN {
+				t.Errorf("split %q into %q (%d), want %q (%d)", tc.data, out, n, want, wantN)
+			}
+		})
+	}
+}

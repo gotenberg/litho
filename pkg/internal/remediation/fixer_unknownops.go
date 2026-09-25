@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/ioat"
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
@@ -220,12 +221,17 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 		return data, unknownOpsTally{exponents: t.exponents, nonFinite: t.nonFinite, repaired: nested}
 	}
 
-	ops, err := content.ParseStreamData(ctx, data, content.ForRepair())
+	// The operations are read from the bytes with every run veraPDF reads as
+	// numbers inside an array or a dictionary written as those numbers, which
+	// the reading of a repair would otherwise drop when they are written back.
+	// The runs stay as written in a stream that is only spliced.
+	parsed, split := splitNestedNumberRuns(ctx, data)
+	ops, err := content.ParseStreamData(ctx, parsed, content.ForRepair())
 	if err != nil {
 		return spliced()
 	}
 	ops, folded := repairMalformedNumbers(ops)
-	t.repaired = folded + nested
+	t.repaired = folded + nested + split
 	ops, t.separated, t.removed = dropUndefinedOperators(ops)
 	t.delimited, t.strays = delimitedOperators(ctx, data)
 	hasInlineImage := slices.ContainsFunc(ops, func(op content.Operation) bool { return op.Operator == "BI" })
@@ -237,6 +243,74 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 		return spliced()
 	}
 	return out, t
+}
+
+// splitNestedNumberRuns returns data with every run where an array or a
+// dictionary holds a number, outside an inline image's dictionary, that
+// validation reads as several numbers ([veraPDFNumbers]), such as "3-5",
+// written as those numbers apart, "3 -5", and how many it wrote. A run
+// validation reads as the largest value veraPDF gives a number it cannot read
+// is [rewriteNestedMalformedNumbers]'s.
+//
+// ISO 32000-1, 7.3.3 gives a number one sign at most, before its digits, so
+// "3-5" spells none, and the reading of a repair ([content.ForRepair]) keeps
+// it whole as a keyword, which an array cannot hold: the parse drops it, and a
+// stream written back from that reading lost the element. veraPDF, whose
+// reading ISO 19005 validation takes, ends a number before a sign
+// (BaseParser.readNumber, veraPDF-parser 1.30), so it reads 3 then -5, which
+// fail nothing. Written as those numbers, the run stays what validation read
+// in the source. The runs are spliced in place, so every other byte of the
+// stream is carried across unchanged.
+//
+// A stream that is only spliced keeps such a run as written: PDF.js reads
+// "3-5" as 35 (Lexer.getNumber skips a sign inside a number), so no spelling
+// keeps what both readers read, and the run fails no test to answer.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1130815.pdf: writes 13 such runs, "3-5", "3-8", "1-8" and
+//     "11-8", in the TJ arrays of its damaged page stream. Its PDF/A-1b,
+//     PDF/A-2b and PDF/A-4 remediations, default and aggressive, remove the
+//     stream's undefined operators and write it back, which dropped each of
+//     them. They keep them now, and the violations litho and veraPDF 1.30
+//     report on the outputs, and their extracted text, do not change.
+func splitNestedNumberRuns(ctx context.Context, data []byte) ([]byte, int) {
+	splices, _ := repairTokenSplices(ctx, data, func(tok lexer.Token, at tokenPlace) (string, bool) {
+		if tok.Type != lexer.TokenKeyword || at.depth == 0 || at.inlineImage || !malformedNumber(tok.Value) || saturatedRun(ctx, tok.Value) {
+			return "", false
+		}
+		return veraPDFNumbers(tok.Value)
+	})
+	if len(splices) == 0 {
+		return data, 0
+	}
+	return applyTokenSplices(data, splices), len(splices)
+}
+
+// veraPDFNumbers returns the numbers veraPDF reads in the run tok, written
+// apart as it spells them, "3 -5" for "3-5", and false unless it reads two
+// numbers or more there and nothing else. The run is read as validation reads
+// a content stream ([lexer.Lexer.WithVeraPDFTokens]).
+func veraPDFNumbers(tok string) (string, bool) {
+	lex := lexer.NewLexer(ioat.NewReader(strings.NewReader(tok), int64(len(tok)), 0)).WithVeraPDFTokens()
+	var nums []string
+	for {
+		t, err := lex.NextToken()
+		if err != nil || t.Type == lexer.TokenError {
+			return "", false
+		}
+		if t.Type == lexer.TokenEOF {
+			break
+		}
+		if t.Type != lexer.TokenNumber {
+			return "", false
+		}
+		nums = append(nums, t.Value)
+	}
+	if len(nums) < 2 {
+		return "", false
+	}
+	return strings.Join(nums, " "), true
 }
 
 // rewriteNestedMalformedNumbers returns data with every run where an array or
@@ -255,7 +329,8 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 // [compliance.SaturatedNumberNote]). PDF.js reads "-" there as 0
 // (Lexer.getNumber), the number the respelling writes. A run veraPDF reads as
 // numbers inside the limits, such as "3-5", which it reads as 3 then -5, fails
-// nothing and is left as written.
+// nothing and is left as written, save in a stream written back from its
+// parsed operations ([splitNestedNumberRuns]).
 //
 // The reading of a repair ([content.ForRepair]) keeps such a run whole as a
 // keyword, which an array or a dictionary cannot hold, and the parse drops it:
@@ -275,7 +350,8 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 //     change. bug1953099.pdf passes both validators at both profiles.
 //   - pdfjs bug1130815.pdf: its damaged page stream holds 14 such runs in its
 //     arrays. 13 of them, such as "3-5", are numbers inside the limits to
-//     veraPDF and stay as written, and "1-", 1 then the integer "-", becomes 1.
+//     veraPDF, which [splitNestedNumberRuns] keeps, and "1-", 1 then the
+//     integer "-", becomes 1.
 //   - All corpora: no other file holds such a run in an array or a dictionary
 //     of a content stream.
 func rewriteNestedMalformedNumbers(ctx context.Context, data []byte, part int) ([]byte, int) {
