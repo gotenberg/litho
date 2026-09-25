@@ -218,6 +218,13 @@ func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder, strict b
 // whose Adler-32 checksum is missing or wrong is whole too: the checksum
 // follows the deflate data rather than delimiting it.
 //
+// A CCITTFaxDecode stream whose row after the first enters uncompressed mode
+// (ITU-T T.4, 4.2), a coding the decoder lacks, hands on the rows before it
+// the same way. Its data is not damaged, but the rows after that one are
+// unread, so the stream is reported incomplete rather than cut short with
+// nothing to tell it from a whole image. In the first row nothing decoded
+// before it, and the decoder refuses the data as a feature it lacks.
+//
 // Every other filter either keeps a damaged stream's output itself or fails.
 //
 // # Corpus evidence
@@ -237,6 +244,8 @@ func decodeChain(ctx context.Context, stream ast.PdfStream, d *Decoder, strict b
 //     carry a wrong one after deflate data that ends, and are still reported
 //     whole. No LZWDecode stream holds a code its table lacks, and none of the
 //     30 BrotliDecode streams is damaged.
+//   - All corpora: none of the 8061 CCITTFaxDecode streams enters
+//     uncompressed mode in any row, so none is reported incomplete for it.
 func keepsDamagedPrefix(decoded []byte, err error) bool {
 	return len(decoded) > 0 && (errors.Is(err, ErrInvalidASCIIHex) || errors.Is(err, ErrInvalidASCII85) || errors.Is(err, errDamagedData))
 }
@@ -842,10 +851,15 @@ func ascii85Digit(v, d uint32) (uint32, bool) {
 
 func decodeCCITTFax(ctx context.Context, data []byte, parms ast.PdfDict, limit int64) ([]byte, error) {
 	out, err := ccitt.Decode(ctx, data, ccittParams(parms, limit))
-	if err != nil {
-		return nil, ccittError(err)
+	switch {
+	case err == nil:
+		return out, nil
+	case errors.Is(err, ccitt.ErrPartial):
+		// The rows before one the decoder cannot read are kept, as the bytes
+		// before damaged data are (see keepsDamagedPrefix).
+		return out, fmt.Errorf("%w: CCITTFaxDecode: %w", errDamagedData, err)
 	}
-	return out, nil
+	return nil, ccittError(err)
 }
 
 // probeCCITTFax is the probe of CCITTFaxDecode (see codecProbes):

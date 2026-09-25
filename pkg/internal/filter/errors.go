@@ -45,7 +45,9 @@ var (
 
 	// errDamagedData marks the error a FlateDecode, LZWDecode or BrotliDecode
 	// filter returns alongside the bytes it decoded before damaged data:
-	// corrupt data, or data that ends before its final block. The filter chain
+	// corrupt data, or data that ends before its final block. A
+	// CCITTFaxDecode filter returns it alongside the rows before a row in a
+	// coding its decoder lacks, whose rest it cannot read. The filter chain
 	// keeps those bytes and reports the stream incomplete (see
 	// keepsDamagedPrefix), so the error reaches no caller. When nothing decoded
 	// before the damage the filter returns the damage's own error instead.

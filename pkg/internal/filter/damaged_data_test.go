@@ -339,3 +339,48 @@ func zlibReference(data []byte) ([]byte, error) {
 	}
 	return []byte{}, nil
 }
+
+// TestDecodeStreamReport_CCITTUncompressedModeAfterTheFirstRow pins that a
+// CCITTFaxDecode stream whose second row enters uncompressed mode hands on
+// its first row and is reported incomplete, as damaged data is, where it came
+// back as if the one row were the whole image. It is not a refusal: the
+// probe, which reads the first row, and the diagnostics find nothing litho
+// cannot decode, and the checked reader reads the row.
+func TestDecodeStreamReport_CCITTUncompressedModeAfterTheFirstRow(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Horizontal white 3 black 2, then V0 to the edge (ITU-T T.4, 4.2),
+	// followed by the extension code that opens uncompressed mode.
+	parms := ast.PdfDict{"K": ast.PdfInt(-1), "Columns": ast.PdfInt(8), "Rows": ast.PdfInt(2)}
+	stream := ast.NewStream(ast.PdfDict{"Filter": ast.PdfName("CCITTFaxDecode"), "DecodeParms": parms}, []byte{0x31, 0xC0, 0xF0})
+	firstRow := []byte{0b11100111}
+
+	var d *Decoder
+	data, report, err := d.DecodeStreamReport(ctx, stream)
+	if err != nil || !bytes.Equal(data, firstRow) {
+		t.Fatalf("DecodeStreamReport = %08b, %v; want the first row", data, err)
+	}
+	if want := []ast.PdfName{"CCITTFaxDecode"}; !slices.Equal(report.Damaged, want) || len(report.Skipped) != 0 {
+		t.Errorf("report = %+v, want %v damaged and nothing skipped", report, want)
+	}
+
+	raw, err := stream.Bytes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := codecProbes["CCITTFaxDecode"](ctx, raw, parms, stream.Dict, limits.Default()); err != nil {
+		t.Errorf("probe = %v, want nil", err)
+	}
+	if bad, err := d.UndecodableFilters(ctx, stream); err != nil || len(bad) != 0 {
+		t.Errorf("UndecodableFilters = %v, %v; want none", bad, err)
+	}
+	rc, err := d.NewStreamReaderChecked(ctx, stream)
+	if err != nil {
+		t.Fatalf("NewStreamReaderChecked: %v", err)
+	}
+	defer rc.Close()
+	if got, err := io.ReadAll(rc); err != nil || !bytes.Equal(got, firstRow) {
+		t.Errorf("checked reader = %08b, %v; want the first row", got, err)
+	}
+}

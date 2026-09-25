@@ -101,6 +101,33 @@ func TestDecode_BrokenRow(t *testing.T) {
 	}
 }
 
+// TestDecode_UncompressedModeAfterTheFirstRow pins that a second row entering
+// uncompressed mode ends the decoding with the first row, as a garbled row
+// does, but says so with [ErrPartial]: returning the first row alone cut the
+// image short with nothing to tell it from a whole one. It is not a refusal,
+// so [Check], which reads the first row, agrees with Decode.
+func TestDecode_UncompressedModeAfterTheFirstRow(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	for _, rows := range []int{0, 2} {
+		p := Params{K: -1, Columns: 8, Rows: rows}
+		data := bitsOf(rowH + " 0000001 111")
+		out, err := Decode(ctx, data, p)
+		if !errors.Is(err, ErrPartial) || errors.Is(err, ErrUnsupported) || !bytes.Equal(out, []byte{pattern}) {
+			t.Errorf("/Rows %d: Decode = %08b, %v; want the first row and %v", rows, out, err, ErrPartial)
+		}
+		if err := Check(ctx, data, p); err != nil {
+			t.Errorf("/Rows %d: Check = %v, want nil", rows, err)
+		}
+	}
+
+	out, err := Decode(ctx, bitsOf(rowH+" 00000001 1"), Params{K: -1, Columns: 8})
+	if err != nil || !bytes.Equal(out, []byte{pattern}) {
+		t.Errorf("control, a garbled second row: Decode = %08b, %v; want the first row alone", out, err)
+	}
+}
+
 // TestDecode_Limits refuses a width outside what a row may hold before
 // decoding anything.
 func TestDecode_Limits(t *testing.T) {

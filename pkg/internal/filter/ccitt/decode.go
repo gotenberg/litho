@@ -2,6 +2,7 @@ package ccitt
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/limits"
@@ -63,6 +64,12 @@ func DefaultParams() Params {
 // decoding: the rows before it are returned, and an error only when there are
 // none.
 //
+// A row in a coding the decoder lacks, uncompressed mode (ITU-T T.4, 4.2 and
+// T.6, 2.2.2), ends the decoding too, but the data goes on past it, so the
+// rows before it are returned with an error wrapping [ErrPartial]: a caller
+// can then tell them from a whole image. In the first row, with no row before
+// it, the decoder refuses the data with [ErrUnsupported].
+//
 // Decode is safe for concurrent use: it keeps no state between calls.
 func Decode(ctx context.Context, data []byte, p Params) ([]byte, error) {
 	out, _, err := decode(ctx, data, p, false, 0)
@@ -72,7 +79,8 @@ func Decode(ctx context.Context, data []byte, p Params) ([]byte, error) {
 // Check reports whether [Decode] refuses data with [ErrUnsupported], and
 // decodes its first row alone to find out. Decode returns the rows before one
 // it cannot decode and fails only when there are none, so a coding it lacks
-// refuses the data in the first row or not at all. Check returns the error
+// refuses the data in the first row or not at all: past it, the coding ends
+// the rows Decode returns with [ErrPartial]. Check returns the error
 // Decode fails with there: that refusal, or the error of a malformed first row
 // or of parameters Decode refuses before it, and nil when the first row
 // decodes or the data holds none.
@@ -139,6 +147,11 @@ func decode(ctx context.Context, data []byte, p Params, block bool, maxRows int)
 		ok, err := d.row()
 		if err != nil {
 			if row > 0 && !block {
+				// Not wrapped: the rows are returned, so the error must not
+				// read as a refusal of the data.
+				if errors.Is(err, ErrUnsupported) {
+					return out, min((d.r.pos+7)/8, len(data)), fmt.Errorf("%w: row %d: %s", ErrPartial, row+1, err.Error())
+				}
 				break
 			}
 			return nil, 0, err
