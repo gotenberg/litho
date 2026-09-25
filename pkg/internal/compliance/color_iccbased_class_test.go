@@ -12,8 +12,10 @@ import (
 // 19005-2, 6.2.4.2 t1 on the header of an ICCBased colour space's profile, as
 // veraPDF's ICCInputProfile test reads it: the device class shall be prtr,
 // mntr, scnr or spac, the colour space RGB, CMYK, GRAY or Lab, and the version
-// below the part's ceiling (3 for PDF/A-1, 5 after). Every case was measured
-// against veraPDF.
+// below the part's ceiling (3 for PDF/A-1, 5 after). The page's cs and f link
+// to the direct ICCBased space and sc does not, so a failing profile fails
+// twice (see [checkICCBasedProfiles]). Every case was measured against
+// veraPDF.
 func TestICCBasedProfileClassAndSpace(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -26,13 +28,13 @@ func TestICCBasedProfileClassAndSpace(t *testing.T) {
 		want2   int // PDF/A-2b, 6.2.4.2 t1
 	}{
 		{"a monitor RGB profile", "mntr", "RGB ", 2, 0, 0},
-		{"an abstract Lab profile", "abst", "Lab ", 2, 1, 1},
-		{"a device link RGB profile", "link", "RGB ", 2, 1, 1},
-		{"a monitor XYZ profile", "mntr", "XYZ ", 2, 1, 1},
-		{"a version 4 monitor RGB profile", "mntr", "RGB ", 4, 1, 0},
+		{"an abstract Lab profile", "abst", "Lab ", 2, 2, 2},
+		{"a device link RGB profile", "link", "RGB ", 2, 2, 2},
+		{"a monitor XYZ profile", "mntr", "XYZ ", 2, 2, 2},
+		{"a version 4 monitor RGB profile", "mntr", "RGB ", 4, 2, 0},
 		{"a colour space Lab profile", "spac", "Lab ", 2, 0, 0},
 		{"a scanner RGB profile", "scnr", "RGB ", 2, 0, 0},
-		{"a named colour RGB profile", "nmcl", "RGB ", 2, 1, 1},
+		{"a named colour RGB profile", "nmcl", "RGB ", 2, 2, 2},
 	}
 	for _, tt := range tests {
 		for _, p := range []struct {

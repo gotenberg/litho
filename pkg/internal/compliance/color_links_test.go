@@ -108,3 +108,52 @@ func TestDeviceColorCountsEachLink(t *testing.T) {
 		})
 	}
 }
+
+// TestICCBasedProfileCountsEachLink pins that the ICCBased profile test fails
+// once per link veraPDF makes to an ICCBased space over an abstract profile,
+// wherever [colorLinkWalk] reaches one, and once for the document for a direct
+// four-component space (see [checkICCBasedProfiles]). Every count was measured
+// with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on the same fixture.
+func TestICCBasedProfileCountsEachLink(t *testing.T) {
+	t.Parallel()
+
+	profile := func(space string, n, pad int) string {
+		data := []byte(iccHeaderOnly("abst", space))
+		data = append(data, make([]byte, pad)...)
+		return fmt.Sprintf("<< /N %d /Length %d >>\nstream\n%s\nendstream", n, len(data), data)
+	}
+	rgb, cmyk, cmyk2 := profile("RGB ", 3, 0), profile("CMYK", 4, 0), profile("CMYK", 4, 4)
+	fill := "0 0 10 10 re f"
+	fn := "<< /FunctionType 2 /Domain [0 1] /C0 [0 0 0] /C1 [1 0 0] /N 1 >>"
+	tests := []struct {
+		name string
+		data []byte
+		want int
+	}{
+		{"a direct space three operators link to", linkPagePDF("<< /ColorSpace << /CS0 [/ICCBased 5 0 R] >> >>", "/CS0 cs 0 0 0 scn "+fill, rgb), 3},
+		{"an indirect space", linkPagePDF("<< /ColorSpace << /CS0 6 0 R >> >>", "/CS0 cs 0 0 0 scn "+fill, rgb, "[/ICCBased 5 0 R]"), 1},
+		{"a Separation's alternate", linkPagePDF("<< /ColorSpace << /CS0 [/Separation /Spot [/ICCBased 5 0 R] "+fn+"] >> >>", "/CS0 cs 1 scn "+fill, rgb), 3},
+		{"an indexed space's base", linkPagePDF("<< /ColorSpace << /CS0 [/Indexed [/ICCBased 5 0 R] 1 <000000FFFFFF>] >> >>", "/CS0 cs 0 scn "+fill, rgb), 3},
+		{"the page group's blending space", cyclePDF(
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << >> /Contents 4 0 R /Group << /S /Transparency /CS [/ICCBased 5 0 R] >> >>",
+			"<< /Length 0 >>\nstream\n\nendstream", rgb), 1},
+		{"a direct CMYK space three operators link to", linkPagePDF("<< /ColorSpace << /CS0 [/ICCBased 5 0 R] >> >>", "/CS0 cs 0 0 0 1 scn "+fill, cmyk), 1},
+		{"two direct CMYK spaces over different profiles", linkPagePDF("<< /ColorSpace << /CS0 [/ICCBased 5 0 R] /CS1 [/ICCBased 6 0 R] >> >>",
+			"/CS0 cs 0 0 0 1 scn "+fill+" /CS1 cs 0 0 0 1 scn "+fill, cmyk, cmyk2), 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			for _, p := range []struct {
+				profile models.PDFAProfile
+				clause  string
+			}{{models.PDFA1b, "6.2.3.2"}, {models.PDFA2b, "6.2.4.2"}} {
+				if got := ruleContexts(t, tt.data, p.profile, p.clause, 1); len(got) != tt.want {
+					t.Errorf("%s: %s t1 fired %d times, want %d", p.profile, p.clause, len(got), tt.want)
+				}
+			}
+		})
+	}
+}

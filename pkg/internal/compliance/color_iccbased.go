@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -40,6 +39,39 @@ func iccBasedIdentityRule(part int) Rule {
 // checkICCBasedProfiles takes the already-resolved pages so it can reuse their
 // parsed operations; the page dictionaries are the same ones [collectPages]
 // yields, in the same order.
+//
+// It judges every ICCBased space [colorLinkWalk] reaches, once per link veraPDF
+// makes to it: an ICCBased space written directly is judged wherever a link
+// reaches it, and an indirect one once for the whole document. veraPDF judges
+// the embedded profile of each PDICCBased it reaches, which has no identity of
+// its own, so a direct space three operators link to fails the profile test
+// three times. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on an
+// abstract profile that cs selects, scn sets and f fills: ISO 19005-1, 6.2.3.2
+// t1 and ISO 19005-2, 6.2.4.2 t1 fail three times for a direct /ICCBased array
+// and once for an indirect one.
+//
+// A four-component ICCBased space is the exception: veraPDF judges it as a
+// PDICCBasedCMYK, whose identity joins the array's own to the overprint mode
+// and flag in force, and a direct array's own identity is none, so every
+// direct four-component space of the document shares one. Measured the same
+// way: a direct CMYK space fails once however many operators link to it, and
+// two direct ones over different profiles fail once between them. The
+// overprint state is not followed, so a direct CMYK space judged again under
+// another overprint mode, which veraPDF fails again, fails once here.
+//
+// # Corpus evidence
+//
+//   - All corpora: under PDF/A-1b and PDF/A-2b, and the verapdf files under
+//     their own profile, eight profile test counts move toward veraPDF's and
+//     none away, and no verdict moves.
+//   - pdfjs issue17689.pdf: fails ISO 19005-1, 6.2.3.2 t1 600 times with
+//     veraPDF, once per link, where litho failed it once per page, seven
+//     times.
+//   - govdocs thread_400_400765.pdf: sixteen pages use one direct CMYK space,
+//     and veraPDF fails the profile test once.
+//   - govdocs thread_200_200973.pdf: veraPDF fails the profile test three
+//     times where litho fails it once, since its direct CMYK spaces are
+//     judged again under other overprint modes.
 func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []pageCtx, part int, results *[]Violation) {
 	// Collect the OutputIntent ICC profile info for identity comparison (parts 2+).
 	var outputIntentRef ast.PdfIndirectRef
@@ -49,82 +81,83 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 		outputIntentRef, outputIntentHdr, outputIntentData = resolveOutputIntentICCInfo(ctx, doc, catalog)
 	}
 
-	links := newColorSpaceLinkIndex(pages)
-	for i := range pages {
-		page := pages[i].dict
-		if ctx.Err() != nil {
+	// For page-level OutputIntents (PDF/A-4 allows them), use the page's
+	// OutputIntent ICC info if the catalog-level one is absent.
+	type intent struct {
+		ref      ast.PdfIndirectRef
+		hdr      iccProfileHeader
+		data     []byte
+		resolved bool
+	}
+	pageIntents := make([]intent, len(pages))
+	intentOf := func(pageIdx int) intent {
+		if part < 2 || len(outputIntentData) > 0 {
+			return intent{ref: outputIntentRef, hdr: outputIntentHdr, data: outputIntentData}
+		}
+		pi := &pageIntents[pageIdx]
+		if !pi.resolved {
+			pi.ref, pi.hdr, pi.data = resolveOutputIntentICCInfo(ctx, doc, pages[pageIdx].dict)
+			pi.resolved = true
+		}
+		return *pi
+	}
+
+	// One profile judged on one page against one blending space yields the
+	// same violations every time a link reaches it, so they are worked out
+	// once and repeated.
+	type judgement struct {
+		page, profile, blend int
+	}
+	judged := make(map[judgement][]Violation)
+	directCMYK := false
+	walkColorLinks(ctx, doc, pages, part, func(n colorNode) {
+		if n.kind != "ICCBased" {
 			return
 		}
-
-		resources := resolveInheritedResources(ctx, doc, page)
-		if resources == nil {
-			continue
-		}
-
-		// For page-level OutputIntents (PDF/A-4 allows them), use the page's
-		// OutputIntent ICC info if the catalog-level one is absent.
-		pageOIRef, pageOIHdr, pageOIData := outputIntentRef, outputIntentHdr, outputIntentData
-		if part >= 2 && len(outputIntentData) == 0 {
-			pageOIRef, pageOIHdr, pageOIData = resolveOutputIntentICCInfo(ctx, doc, page)
-		}
-
-		// Get page blending CS ICC ref for identity comparison.
-		blendingCSRef := resolvePageBlendingICCRef(ctx, doc, page)
-
-		// Recursively scan Form XObject and annotation sub-resources. A
-		// content stream an earlier page shares is judged there alone, with
-		// what it draws (see [markJudgedContents]), so only this page's
-		// annotations remain.
-		visited := make(map[string]bool)
-		if !pages[i].contentJudged {
-			// Collect CS names actually used by cs/CS operators in the content
-			// stream. Parse failure yields nil ops; checks run on whatever is
-			// available.
-			usedCSNames := collectUsedCSNames(pages[i].parsedOps(ctx))
-
-			// A pattern or a shading takes part only when the page paints with
-			// it, which the same parsed operations report.
-			_, referencedXObjects, _, used, inheritedAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
-
-			checkICCBasedInResources(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, usedCSNames, pageScope(&pages[i], i, links), results)
-			scanICCBasedRecursive(ctx, doc, resources, part, i, pageOIRef, pageOIHdr, pageOIData, blendingCSRef, results, 0, visited, used, referencedXObjects, inheritedAtDo)
-		}
-
-		// Scan annotation appearance streams.
-		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
-		for _, annotObj := range annotsArr {
-			annot, _ := document.ResolveDict(ctx, doc, annotObj)
-			if annot == nil {
-				continue
+		if n.direct && iccBasedComponents(ctx, doc, n.arr) == cmykComponents {
+			if directCMYK {
+				return
 			}
-			apDict, _ := document.ResolveDict(ctx, doc, annot["AP"])
-			if apDict == nil {
-				continue
-			}
-			for _, key := range []ast.PdfName{"N", "R", "D"} {
-				apObj, ok := apDict[key]
-				if !ok {
-					continue
-				}
-				stream, err := document.ResolveStream(ctx, doc, apObj)
-				if err != nil {
-					doc.Logger.Debug("compliance.color: cannot resolve appearance stream", "error", err)
-					continue
-				}
-				subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-				if subRes != nil {
-					formBlendRef := resolveFormBlendingRef(ctx, doc, stream, blendingCSRef)
-					// An appearance stream no Do invokes begins in the default
-					// colour-space state, so its own operations report which
-					// patterns and shadings it paints and which colour spaces
-					// it selects.
-					apUsed, apXObjects, apCSNames, apInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
-					checkICCBasedInResources(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, apCSNames, nil, results)
-					scanICCBasedRecursive(ctx, doc, subRes, part, i, pageOIRef, pageOIHdr, pageOIData, formBlendRef, results, 1, visited, apUsed, apXObjects, apInherited)
-				}
+			directCMYK = true
+		}
+		key := judgement{page: n.page, blend: n.in.blendRef.ObjectNum}
+		if len(n.arr) >= 2 {
+			if ref, ok := n.arr[1].(ast.PdfIndirectRef); ok {
+				key.profile = ref.ObjectNum
 			}
 		}
+		if vs, ok := judged[key]; ok && key.profile != 0 {
+			*results = append(*results, vs...)
+			return
+		}
+		var vs []Violation
+		oi := intentOf(n.page)
+		checkICCBasedArray(ctx, doc, n.arr, part, n.page, "ICCBased colour space", oi.ref, oi.hdr, oi.data, n.in.blendRef, &vs)
+		judged[key] = vs
+		*results = append(*results, vs...)
+	})
+}
+
+// cmykComponents is the number of components of a CMYK colour space (ISO
+// 32000-1, 8.6.4.4), the count veraPDF reads an ICCBased space's /N against to
+// judge it as a PDICCBasedCMYK.
+const cmykComponents = 4
+
+// iccBasedComponents returns the /N the profile stream of the ICCBased array
+// arr declares, or 0 when it declares none that can be read.
+func iccBasedComponents(ctx context.Context, doc *document.Document, arr ast.PdfArray) int {
+	if len(arr) < 2 {
+		return 0
 	}
+	stream, err := document.ResolveStream(ctx, doc, arr[1])
+	if err != nil {
+		return 0
+	}
+	n, err := document.ResolveInt(ctx, doc, stream.Dict["N"])
+	if err != nil {
+		return 0
+	}
+	return int(n)
 }
 
 // nestedScopeUsage surveys one nested content stream's own operators, so the
@@ -156,81 +189,6 @@ func nestedScopeUsage(ctx context.Context, doc *document.Document, stream ast.Pd
 	return used, referencedXObjects, contentCSNames, inherited
 }
 
-// scanICCBasedRecursive scans Form XObject sub-resources recursively for
-// ICCBased colour spaces.
-func scanICCBasedRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Violation, depth int, visited map[string]bool, used *usedResources, referencedXObjects map[string]bool, inherited map[string]inheritedCS) {
-	if formTooDeep(doc, depth) || ctx.Err() != nil {
-		return
-	}
-
-	// An ICCBased colour space reached through a painted pattern's own
-	// resources, or named as a painted shading's /ColorSpace, is used by the
-	// file and so falls under the same clause. These run before the /XObject
-	// lookup below, which returns early on a page that has no XObject at all.
-	scanICCBasedInShadings(ctx, doc, resources, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results, used)
-	scanICCBasedInPatterns(ctx, doc, resources, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results, depth, visited, used)
-
-	xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
-	if err != nil || xobjDict == nil {
-		return
-	}
-
-	for _, k := range sortedNames(xobjDict) {
-		xobjObj := xobjDict[k]
-		if ctx.Err() != nil {
-			return
-		}
-		// Only an XObject a Do operator invokes is used. One merely declared in
-		// /Resources/XObject paints nothing, so its colour space is not a use,
-		// which is the scoping scanXObjectColorSpaces already applies.
-		// Measured: veraPDF reports nothing for a truncated ICC profile on an
-		// image no operator invokes, and reports it as soon as a Do does.
-		// referencedXObjects is nil for a scope whose operations were not
-		// surveyed, which judges that scope in full rather than filtering it
-		// against a survey that does not exist.
-		if referencedXObjects != nil && !referencedXObjects[string(k)] {
-			continue
-		}
-		// Cycle detection.
-		if ref, ok := xobjObj.(ast.PdfIndirectRef); ok {
-			key := fmt.Sprintf("icc-%d", ref.ObjectNum)
-			if visited[key] {
-				continue
-			}
-			visited[key] = true
-		}
-		stream, err := document.ResolveStream(ctx, doc, xobjObj)
-		if err != nil {
-			doc.Logger.Debug("compliance.color: cannot resolve XObject stream", "error", err)
-			continue
-		}
-		st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-		// Image XObjects carry an inline /ColorSpace [/ICCBased ref] that the
-		// named-resource scan in checkICCBasedInResources never reaches, so
-		// validate their ICC profile version here.
-		if st == "Image" {
-			checkImageICCBasedVersion(ctx, doc, stream, part, pageIdx, k, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results)
-			continue
-		}
-		if st != "Form" {
-			continue
-		}
-		subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-		if subRes == nil {
-			continue
-		}
-		formBlendRef := resolveFormBlendingRef(ctx, doc, stream, blendingCSRef)
-		// A form begins from the colour-space state in effect at its Do, so a
-		// bare scn inside it can select a pattern the invoking stream chose the
-		// space for. Its own operations also report which of its colour spaces
-		// it selects: one it merely declares is employed by nothing, and
-		// veraPDF reports nothing for it.
-		formUsed, formXObjects, formCSNames, formInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSFor(inherited, string(k)))
-		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, formCSNames, nil, results)
-		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, formBlendRef, results, depth+1, visited, formUsed, formXObjects, formInherited)
-	}
-}
-
 // reportUnreadableICCN reports /N against a profile whose own component count
 // cannot be read.
 //
@@ -249,8 +207,7 @@ func reportUnreadableICCN(nRule Rule, nVal int, pageIdx int, where string, resul
 }
 
 // checkICCBasedArray validates one [/ICCBased stream] colour space array.
-// where names the site the violation message reports, so a caller can say
-// "ColorSpace CS0", "image Im0" or "Shading Sh0" while sharing one validation.
+// where names the site the violation message reports.
 //
 // The rules are part-dependent: /N against the profile's own colour space is
 // stated only by ISO 19005-1 (see [iccBasedNRule]), and the OutputIntent
@@ -355,143 +312,6 @@ func checkICCBasedIdentity(ctx context.Context, doc *document.Document, profileO
 	}
 }
 
-// scanICCBasedInShadings validates the ICCBased colour space a painted shading
-// names. A shading dictionary carries /ColorSpace directly (ISO 32000-1
-// §8.7.4.3) rather than through /Resources/ColorSpace, so the resource scan
-// never reaches it.
-//
-// Only a shading an sh operator paints counts. Measured against veraPDF: it
-// reports the clause for a broken profile on a painted shading and nothing at
-// all when no operator paints that shading.
-func scanICCBasedInShadings(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Violation, used *usedResources) {
-	if used == nil {
-		return
-	}
-
-	shDict, err := document.ResolveDict(ctx, doc, resources["Shading"])
-	if err != nil || shDict == nil {
-		return
-	}
-
-	for _, name := range sortedNames(shDict) {
-		if ctx.Err() != nil {
-			return
-		}
-		if !used.shadings[string(name)] {
-			continue
-		}
-		sd := resolveShadingDict(ctx, doc, shDict[name])
-		if sd == nil {
-			continue
-		}
-		arr, err := document.ResolveArray(ctx, doc, sd["ColorSpace"])
-		if err != nil || len(arr) < 2 {
-			continue
-		}
-		if t, _ := document.ResolveName(ctx, doc, arr[0]); t != "ICCBased" {
-			continue
-		}
-		checkICCBasedArray(ctx, doc, arr, part, pageIdx, fmt.Sprintf("Shading %s", name), outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results)
-	}
-}
-
-// scanICCBasedInPatterns validates the ICCBased colour spaces a painted pattern
-// reaches: a tiling pattern through its own /Resources, a shading pattern
-// through its /Shading dictionary (ISO 32000-1 §8.7.3).
-//
-// Only a pattern a scn/SCN operator selects counts, and an uncoloured tiling
-// pattern is skipped: its cell specifies no colour of its own (ISO 32000-1
-// §8.7.3.3). Both conditions were measured against veraPDF, which reports
-// nothing for an unselected pattern and nothing for an uncoloured one.
-func scanICCBasedInPatterns(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Violation, depth int, visited map[string]bool, used *usedResources) {
-	if used == nil {
-		return
-	}
-
-	patDict, err := document.ResolveDict(ctx, doc, resources["Pattern"])
-	if err != nil || patDict == nil {
-		return
-	}
-
-	for _, name := range sortedNames(patDict) {
-		if ctx.Err() != nil {
-			return
-		}
-		if !used.patterns[string(name)] {
-			continue
-		}
-
-		patternObj := patDict[name]
-		if ref, ok := patternObj.(ast.PdfIndirectRef); ok {
-			key := fmt.Sprintf("icc-pattern-%d", ref.ObjectNum)
-			if visited[key] {
-				continue
-			}
-			visited[key] = true
-		}
-
-		stream, err := document.ResolveStream(ctx, doc, patternObj)
-		if err != nil {
-			// A shading pattern is a dictionary, and names its colour space on
-			// the /Shading it paints.
-			patternDict, err := document.ResolveDict(ctx, doc, patternObj)
-			if err != nil || patternDict == nil {
-				continue
-			}
-			sd := resolveShadingDict(ctx, doc, patternDict["Shading"])
-			if sd == nil {
-				continue
-			}
-			arr, arrErr := document.ResolveArray(ctx, doc, sd["ColorSpace"])
-			if arrErr != nil || len(arr) < 2 {
-				continue
-			}
-			if t, _ := document.ResolveName(ctx, doc, arr[0]); t == "ICCBased" {
-				checkICCBasedArray(ctx, doc, arr, part, pageIdx, fmt.Sprintf("Pattern %s shading", name), outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results)
-			}
-			continue
-		}
-
-		patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"])
-		if patternType != tilingPatternType {
-			continue
-		}
-		paintType, _ := document.ResolveInt(ctx, doc, stream.Dict["PaintType"])
-		if paintType == uncolouredPaintType {
-			continue
-		}
-
-		subRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-		if subRes == nil {
-			continue
-		}
-		// A tiling pattern cell no Do invokes begins in the default
-		// colour-space state, so its own operations report which patterns and
-		// shadings it paints and which colour spaces it selects.
-		cellUsed, cellXObjects, cellCSNames, cellInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
-		checkICCBasedInResources(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, cellCSNames, nil, results)
-		scanICCBasedRecursive(ctx, doc, subRes, part, pageIdx, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results, depth+1, visited, cellUsed, cellXObjects, cellInherited)
-	}
-}
-
-// checkImageICCBasedVersion validates an image XObject's ICCBased /ColorSpace.
-// Image colour spaces are inline ([/ICCBased ref]) rather than named resources,
-// so the resource scan in [checkICCBasedInResources] never reaches them.
-//
-// It reports the same defects as any other ICCBased colour space. Reporting
-// only a header problem left an image carrying an unresolvable, undecodable or
-// truncated profile unjudged, while veraPDF reports it.
-func checkImageICCBasedVersion(ctx context.Context, doc *document.Document, stream ast.PdfStream, part, pageIdx int, name ast.PdfName, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Violation) {
-	arr, err := document.ResolveArray(ctx, doc, stream.Dict["ColorSpace"])
-	if err != nil || len(arr) < 2 {
-		return
-	}
-	if t, _ := document.ResolveName(ctx, doc, arr[0]); t != "ICCBased" {
-		return
-	}
-	checkICCBasedArray(ctx, doc, arr, part, pageIdx, fmt.Sprintf("image %s", name), outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results)
-}
-
 // resolveFormBlendingRef extracts the ICCBased blending CS ref from a Form
 // XObject's Group CS, falling back to the parent's blending ref.
 func resolveFormBlendingRef(ctx context.Context, doc *document.Document, stream ast.PdfStream, parentRef ast.PdfIndirectRef) ast.PdfIndirectRef {
@@ -515,152 +335,6 @@ func resolveFormBlendingRef(ctx context.Context, doc *document.Document, stream 
 		return ref
 	}
 	return parentRef
-}
-
-// checkICCBasedInResources scans a page's resources for ICCBased colour spaces
-// and validates them. scope is the page's content, whose entries the forms it
-// paints may select (see [colorSpaceScope.linkedByForms]), or nil for a nested
-// content stream.
-//
-// A name a painted form selects that only the page's resources define (ISO
-// 32000-1, 7.8.3) is selected too, though the page's own content never names
-// it. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on a page that only
-// paints a form, whose resources define no colour space, selecting and filling
-// with the page's /CS0 [/ICCBased] over an abstract profile: ISO 19005-1,
-// 6.2.3.2 t1 and ISO 19005-2, 6.2.4.2 t1 fail, directly through the form or
-// through a form it paints, and nothing fails when no form selects the name.
-//
-// # Corpus evidence
-//
-//   - All corpora: no count moves under PDF/A-1b and PDF/A-2b, nor for the
-//     verapdf files under their own profile, so no file reaches an ICCBased
-//     space only through a page name a form selects.
-func checkICCBasedInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, usedCSNames map[string]bool, scope *colorSpaceScope, results *[]Violation) {
-	csDict, err := document.ResolveDict(ctx, doc, resources["ColorSpace"])
-	if err != nil || csDict == nil {
-		return
-	}
-
-	for _, name := range sortedNames(csDict) {
-		csObj := csDict[name]
-		if ctx.Err() != nil {
-			return
-		}
-
-		// Skip CS names not referenced by cs/CS operators in the content stream.
-		// A CS declared in Resources but never used is not a violation.
-		if usedCSNames != nil && !usedCSNames[string(name)] && !scope.linkedByForms(ctx, doc, string(name)) {
-			continue
-		}
-
-		arr, err := document.ResolveArray(ctx, doc, csObj)
-		if err != nil || len(arr) < 2 {
-			continue
-		}
-
-		csType, err := document.ResolveName(ctx, doc, arr[0])
-		if err != nil {
-			doc.Logger.Debug("compliance.color: cannot resolve color space type name", "error", err)
-			continue
-		}
-
-		// For Separation/DeviceN, check the alternate colour space for ICCBased.
-		if csType == "Separation" && len(arr) >= 3 {
-			altArr, altErr := document.ResolveArray(ctx, doc, arr[2])
-			if altErr == nil && len(altArr) >= 2 {
-				altType, _ := document.ResolveName(ctx, doc, altArr[0])
-				if altType == "ICCBased" {
-					checkSingleICCBased(ctx, doc, altArr[1], part, pageIdx, name, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results)
-				}
-			}
-			continue
-		}
-		if csType == "DeviceN" && len(arr) >= 4 {
-			altArr, altErr := document.ResolveArray(ctx, doc, arr[2])
-			if altErr == nil && len(altArr) >= 2 {
-				altType, _ := document.ResolveName(ctx, doc, altArr[0])
-				if altType == "ICCBased" {
-					checkSingleICCBased(ctx, doc, altArr[1], part, pageIdx, name, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results)
-				}
-			}
-			// A DeviceN /Attributes/Process/ColorSpace (arr[4]) may itself be an
-			// ICCBased CMYK space identical to the OutputIntent (ISO 19005-4
-			// §6.2.4.2 t3); the alternate scan above never reaches it.
-			if len(arr) >= 5 {
-				if attrs, _ := document.ResolveDict(ctx, doc, arr[4]); attrs != nil {
-					if proc, _ := document.ResolveDict(ctx, doc, attrs["Process"]); proc != nil {
-						if procArr, _ := document.ResolveArray(ctx, doc, proc["ColorSpace"]); len(procArr) >= 2 {
-							if pt, _ := document.ResolveName(ctx, doc, procArr[0]); pt == "ICCBased" {
-								checkSingleICCBased(ctx, doc, procArr[1], part, pageIdx, name, outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results)
-							}
-						}
-					}
-				}
-			}
-			continue
-		}
-
-		if csType != "ICCBased" {
-			continue
-		}
-
-		checkICCBasedArray(ctx, doc, arr, part, pageIdx, fmt.Sprintf("ColorSpace %s", name), outputIntentRef, outputIntentHdr, outputIntentData, blendingCSRef, results)
-	}
-}
-
-// checkSingleICCBased validates a single ICCBased profile stream for the CMYK
-// identity restriction (§6.2.4.2 t3). Used for ICCBased profiles found inside
-// Separation/DeviceN alternate colour spaces.
-func checkSingleICCBased(ctx context.Context, doc *document.Document, profileObj ast.PdfObject, part int, pageIdx int, csName ast.PdfName, outputIntentRef ast.PdfIndirectRef, outputIntentHdr iccProfileHeader, outputIntentData []byte, blendingCSRef ast.PdfIndirectRef, results *[]Violation) {
-	if part < 2 {
-		return
-	}
-
-	stream, err := document.ResolveStream(ctx, doc, profileObj)
-	if err != nil {
-		return
-	}
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil {
-		return
-	}
-	hdr, ok := parseICCHeader(data)
-	if !ok || hdr.colorSpace != "CMYK" {
-		return
-	}
-
-	iccRef, _ := profileObj.(ast.PdfIndirectRef)
-	identical := false
-
-	if len(outputIntentData) > 0 && outputIntentHdr.colorSpace == "CMYK" {
-		if iccRef.ObjectNum > 0 && outputIntentRef.ObjectNum > 0 &&
-			iccRef.ObjectNum == outputIntentRef.ObjectNum && iccRef.GenNum == outputIntentRef.GenNum {
-			identical = true
-		}
-		if !identical && ICCProfilesEqual(data, outputIntentData) {
-			identical = true
-		}
-	}
-
-	if !identical && blendingCSRef.ObjectNum > 0 {
-		if iccRef.ObjectNum > 0 && iccRef.ObjectNum == blendingCSRef.ObjectNum && iccRef.GenNum == blendingCSRef.GenNum {
-			identical = true
-		}
-		if !identical {
-			blendStream, blendErr := document.ResolveStream(ctx, doc, blendingCSRef)
-			if blendErr == nil {
-				blendData, blendErr := doc.DecodeStream(ctx, blendStream)
-				if blendErr == nil && ICCProfilesEqual(data, blendData) {
-					identical = true
-				}
-			}
-		}
-	}
-
-	if identical {
-		*results = append(*results, failf(iccBasedIdentityRule(part),
-			"page %d, ColorSpace %s alternate: ICCBased CMYK profile identical to OutputIntent", pageIdx+1, csName)...)
-	}
 }
 
 // resolvePageBlendingICCRef returns the indirect reference to the ICCBased profile

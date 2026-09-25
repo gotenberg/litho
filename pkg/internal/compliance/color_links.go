@@ -25,7 +25,8 @@ const maxColorSpaceNesting = 8
 //
 // covered records that a Default colour space replaces the device family
 // (ISO 32000-1, 8.6.5.6), and group that the family is the blending space of
-// the page's transparency group.
+// the page's transparency group. direct records that an ICCBased array is
+// written directly rather than as an indirect object.
 type colorNode struct {
 	page    int
 	in      *linkStream
@@ -34,6 +35,7 @@ type colorNode struct {
 	group   bool
 	kind    string
 	arr     ast.PdfArray
+	direct  bool
 }
 
 // linkStream is one content stream [colorLinkWalk] walks: a page's content,
@@ -283,29 +285,45 @@ func (w *colorLinkWalk) newStream(ctx context.Context, res ast.PdfDict, parent *
 	return s
 }
 
-// walkPage walks one page: its transparency group, its content unless an
-// earlier page shares it (see [markJudgedContents]), then the appearance
-// streams of its annotations.
+// walkPage walks one page: its content unless an earlier page shares it (see
+// [markJudgedContents]), the appearance streams of its annotations, then its
+// transparency group.
 //
 // /Resources is an inheritable page attribute (ISO 32000-1, 7.7.3.4), so the
 // page's names and Default colour spaces are those of the nearest ancestor
 // that has one. A page with none anywhere still paints in the initial
 // DeviceGray (ISO 32000-1, 8.6.8), which nothing then covers.
+//
+// veraPDF reaches a page's content before its annotations and both before its
+// transparency group, and a form's content before its group: measured with
+// veraPDF 1.30 at PDF/A-2b on direct four-component ICCBased spaces, which
+// veraPDF judges once for the document (see [checkICCBasedProfiles]), one
+// over a valid profile and one over an abstract one, the space met first
+// decides whether the profile test fails.
 func (w *colorLinkWalk) walkPage(ctx context.Context, p *pageCtx) {
 	doc := w.doc
 	page := w.newStream(ctx, resolveInheritedResources(ctx, doc, p.dict), nil)
 	page.blendRef = resolvePageBlendingICCRef(ctx, doc, p.dict)
 
-	// A page's transparency group blending space is a colour space veraPDF
-	// reaches from the page (/Group/colorSpace), which the page's Default
-	// colour spaces cover (ISO 32000-1, 8.6.5.6).
-	w.judgeGroup(ctx, p.dict, page, true)
-
 	if !p.contentJudged {
 		w.walkStream(ctx, p.parsedOps(ctx), page, initialState(page), 0)
 	}
+	w.walkAnnotations(ctx, p.dict, page)
 
-	annots, err := document.ResolveArray(ctx, doc, p.dict["Annots"])
+	// A page's transparency group blending space is a colour space veraPDF
+	// reaches from the page (/Group/colorSpace), which the page's Default
+	// colour spaces cover (ISO 32000-1, 8.6.5.6). It is not judged against
+	// itself as the space the page blends in.
+	site := *page
+	site.blendRef = ast.PdfIndirectRef{}
+	w.judgeGroup(ctx, p.dict, &site, true)
+}
+
+// walkAnnotations walks the appearance streams of the annotations of the page
+// dict, whose content is page, and the streams of its 3D annotations.
+func (w *colorLinkWalk) walkAnnotations(ctx context.Context, dict ast.PdfDict, page *linkStream) {
+	doc := w.doc
+	annots, err := document.ResolveArray(ctx, doc, dict["Annots"])
 	if err != nil {
 		doc.Logger.Debug("compliance.color: cannot resolve page annotations", "page", w.page+1, "error", err)
 		return
@@ -355,17 +373,16 @@ func (w *colorLinkWalk) walkAppearance(ctx context.Context, obj ast.PdfObject, p
 		w.doc.Logger.Debug("compliance.color: cannot resolve appearance stream", "object", ref.ObjectNum, "error", err)
 		return
 	}
-	s := w.formStream(ctx, stream, page)
-	if ops, ok := w.parse(ctx, stream); ok {
-		w.walkStream(ctx, ops, s, initialState(s), 1)
-	}
+	w.walkForm(ctx, stream, page, initialState, 0)
 }
 
-// formStream returns the stream of a form XObject or an appearance stream
-// parent reaches, with its transparency group judged. Under PDF/A-4 an
-// isolated group's blending space covers the stream's own device families
-// (see [formGroupICCColorSpace]).
-func (w *colorLinkWalk) formStream(ctx context.Context, stream ast.PdfStream, parent *linkStream) *linkStream {
+// walkForm walks the content of a form XObject or an appearance stream parent
+// reaches, from the state entry gives it, then judges its transparency group
+// in the space parent blends in. Under PDF/A-4 an isolated group's blending
+// space covers the stream's own device families (see
+// [formGroupICCColorSpace]). depth is the level of parent below its root
+// content stream.
+func (w *colorLinkWalk) walkForm(ctx context.Context, stream ast.PdfStream, parent *linkStream, entry func(*linkStream) csPaintState, depth int) {
 	res, err := document.ResolveDict(ctx, w.doc, stream.Dict["Resources"])
 	if err != nil {
 		w.doc.Logger.Debug("compliance.color: cannot resolve form resources", "error", err)
@@ -375,8 +392,12 @@ func (w *colorLinkWalk) formStream(ctx context.Context, stream ast.PdfStream, pa
 	if w.part == 4 {
 		s.blendCover = formGroupICCColorSpace(ctx, w.doc, stream)
 	}
-	w.judgeGroup(ctx, stream.Dict, s, false)
-	return s
+	if ops, ok := w.parse(ctx, stream); ok {
+		w.walkStream(ctx, ops, s, entry(s), depth+1)
+	}
+	site := *s
+	site.blendRef = parent.blendRef
+	w.judgeGroup(ctx, stream.Dict, &site, false)
 }
 
 // judgeGroup judges the blending space of the transparency group dict holds
@@ -560,7 +581,8 @@ func (w *colorLinkWalk) judgeSpace(ctx context.Context, obj ast.PdfObject, s *li
 			w.judgeDeviceNAttributes(ctx, arr[4], s, defaults, nesting+1)
 		}
 	case "ICCBased":
-		w.visit(colorNode{page: w.page, in: s, kind: string(kind), arr: arr})
+		_, indirect := obj.(ast.PdfIndirectRef)
+		w.visit(colorNode{page: w.page, in: s, kind: string(kind), arr: arr, direct: !indirect})
 	case "CalGray", "CalRGB", "Lab", "Pattern":
 	default:
 		// A one-element array holds a family name (ISO 32000-1, 8.6.3).
@@ -633,10 +655,7 @@ func (w *colorLinkWalk) paintXObject(ctx context.Context, obj ast.PdfObject, st 
 		if formTooDeep(w.doc, depth+1) {
 			return
 		}
-		fs := w.formStream(ctx, stream, s)
-		if ops, ok := w.parse(ctx, stream); ok {
-			w.walkStream(ctx, ops, fs, st, depth+1)
-		}
+		w.walkForm(ctx, stream, s, func(*linkStream) csPaintState { return st }, depth)
 	}
 }
 

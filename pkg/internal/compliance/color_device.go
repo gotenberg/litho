@@ -6,7 +6,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 func deviceRGBRule(part int) Rule {
@@ -323,25 +322,6 @@ func collectPatternCSNames(ctx context.Context, doc *document.Document, resource
 		names[string(name)] = true
 	}
 	return names
-}
-
-// collectUsedCSNames returns the set of colour space names referenced by
-// cs/CS operators in the pre-parsed operations. Returns nil if ops is empty.
-func collectUsedCSNames(ops []content.Operation) map[string]bool {
-	if len(ops) == 0 {
-		return nil
-	}
-	used := make(map[string]bool)
-	for _, op := range ops {
-		if op.Operator == "cs" || op.Operator == "CS" {
-			if len(op.Operands) >= 1 {
-				if name, ok := op.Operands[0].(ast.PdfName); ok {
-					used[string(name)] = true
-				}
-			}
-		}
-	}
-	return used
 }
 
 // checkPageOutputIntent checks for a page-level /OutputIntents array (PDF 2.0).
