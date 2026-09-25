@@ -12,41 +12,17 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// forbiddenActionTypes lists the action types the fixer strips from
-// annotation, catalog, page and outline actions. Membership only nominates a
-// type: [stripsActionType] removes it where the target profile forbids it,
-// because the parts disagree on three of them. ISO 19005-1 6.6.1 test 1,
-// ISO 19005-2/3 6.5.1 test 1 and ISO 19005-4 6.6.1 test 1 each state a
-// whitelist (veraPDF's PDFA-1B.xml, PDFA-2B.xml, PDFA-4.xml, PDFA-4E.xml and
-// PDFA-4F.xml):
-//
-//   - JavaScript is outside the part 1 to 3 whitelists and inside every
-//     PDF/A-4 one.
-//   - SetOCGState and GoTo3DView are outside every whitelist but PDF/A-4e's,
-//     which admits them for the 3D content its Annex B describes.
-//
-// Every other entry is outside every part's whitelist.
-var forbiddenActionTypes = map[string]bool{
-	"Launch":      true,
-	"Sound":       true,
-	"Movie":       true,
-	"ResetForm":   true,
-	"ImportData":  true,
-	"JavaScript":  true,
-	"Hide":        true,
-	"Rendition":   true,
-	"Trans":       true,
-	"GoTo3DView":  true,
-	"SetState":    true,
-	"NOP":         true,
-	"SetOCGState": true,
-}
-
 // stripsActionType reports whether the fixer removes an action of type s under
-// profile: s is one of [forbiddenActionTypes] and the profile's whitelist
-// excludes it. The verdict is the validator's own
-// ([compliance.IsForbiddenActionType]), so an action the profile permits, such
-// as JavaScript under PDF/A-4, is never stripped.
+// profile. The verdict is the validator's own ([compliance.IsForbiddenActionType]):
+// a type outside the whitelist ISO 19005-1 6.6.1 test 1, ISO 19005-2/3 6.5.1
+// test 1 or ISO 19005-4 6.6.1 test 1 states for the profile's part and
+// conformance. An action the profile permits, such as JavaScript under
+// PDF/A-4, is never stripped.
+//
+// The fixer keeps no list of its own. A hand list of forbidden types used to
+// nominate what was stripped, and it had drifted from the whitelists: GoToE is
+// outside the part 1 whitelist, RichMediaExecute and GoToDp outside the part 1
+// to 3 ones, and the validator flagged all three while the fixer kept them.
 //
 // # Corpus evidence
 //
@@ -54,8 +30,13 @@ var forbiddenActionTypes = map[string]bool{
 //     lost the /Names/JavaScript tree those profiles permit, because its other
 //     forbidden actions ran this fixer. The residual rules were the same
 //     either way.
+//   - pdfjs issue17056.pdf, issue8844.pdf, issue18030.pdf: remediated as
+//     PDF/A-1b, they kept 30, 1 and 1 GoToE link actions that litho and
+//     veraPDF both report under 6.6.1 test 1. Stripped, neither reports any.
+//   - verapdf PDF_UA-1__7.11-t01-fail-a.pdf, -fail-b.pdf, -pass-a.pdf and
+//     PDF_UA-2__8.14.1-t01-fail-a.pdf: the same, one GoToE action each.
 func stripsActionType(s ast.PdfName, profile string) bool {
-	return forbiddenActionTypes[string(s)] && compliance.IsForbiddenActionType(s, profile)
+	return compliance.IsForbiddenActionType(s, profile)
 }
 
 func matchJavaScript(v compliance.Violation) bool {
@@ -111,6 +92,17 @@ func fixJavaScript(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			fixes = append(fixes, "removed /Names/JavaScript from catalog")
 		}
 	}
+
+	// Form fields carry their own /AA, which the validator judges through the
+	// AcroForm field tree rather than through any page. The walk runs before
+	// the catalog write because an inline field tree can only be written back
+	// through the catalog.
+	fieldFixes, newCatalog := fixForbiddenActionsOnFields(ctx, alloc, doc, catalogDict, profile)
+	if newCatalog != nil {
+		catalogDict = newCatalog
+		catalogChanged = true
+	}
+	fixes = append(fixes, fieldFixes...)
 
 	if catalogChanged {
 		alloc.AllocAt(catalogRef.ObjectNum, catalogDict)
@@ -265,7 +257,9 @@ func fixForbiddenActionsOnPages(ctx context.Context, alloc *writer.ObjAllocator,
 			continue
 		}
 
-		for _, annotObj := range annots {
+		var inlineFixed map[int]ast.PdfDict
+		var inlineFixes []string
+		for i, annotObj := range annots {
 			var annotRef ast.PdfIndirectRef
 			if r, ok := annotObj.(ast.PdfIndirectRef); ok {
 				annotRef = r
@@ -283,40 +277,238 @@ func fixForbiddenActionsOnPages(ctx context.Context, alloc *writer.ObjAllocator,
 				annotDict = resolved
 			}
 
-			changed := false
-			newAnnot := make(ast.PdfDict, len(annotDict))
-			maps.Copy(newAnnot, annotDict)
-
-			// Remove /A if it references a forbidden action type.
-			if aObj, hasA := newAnnot["A"]; hasA {
-				if isForbiddenAction(ctx, alloc, doc, aObj, profile) {
-					delete(newAnnot, "A")
-					changed = true
-					fixes = append(fixes, fmt.Sprintf("removed forbidden /A action from annotation on page %d", pageNum))
-				}
+			newAnnot, annotFixes := stripAnnotationActions(ctx, alloc, doc, annotDict, pageNum, profile)
+			if newAnnot == nil {
+				continue
 			}
-
-			// Remove forbidden entries from annotation /AA.
-			if aaObj, hasAA := newAnnot["AA"]; hasAA {
-				aaFixes, cleaned := removeForbiddenFromAADict(ctx, alloc, doc, aaObj, fmt.Sprintf("annotation on page %d", pageNum), profile)
-				if cleaned != nil {
-					if len(cleaned) == 0 {
-						delete(newAnnot, "AA")
-					} else {
-						newAnnot["AA"] = cleaned
-					}
-					changed = true
-					fixes = append(fixes, aaFixes...)
-				}
-			}
-
-			if changed && annotRef.ObjectNum > 0 {
+			if annotRef.ObjectNum > 0 {
 				alloc.AllocAt(annotRef.ObjectNum, newAnnot)
+				fixes = append(fixes, annotFixes...)
+				continue
 			}
+			// ISO 32000-1, 12.5.2 does not require an annotation to be an
+			// indirect object. One written inline in /Annots has no object
+			// number to address, so the repair was reported and never
+			// written. It goes back through the array, and is reported only
+			// once that write lands.
+			if inlineFixed == nil {
+				inlineFixed = make(map[int]ast.PdfDict, 1)
+			}
+			inlineFixed[i] = newAnnot
+			inlineFixes = append(inlineFixes, annotFixes...)
+		}
+		if installInlineAnnots(ctx, alloc, doc, pe, annotsObj, annots, inlineFixed) > 0 {
+			fixes = append(fixes, inlineFixes...)
 		}
 	}
 
 	return fixes, nil
+}
+
+// stripAnnotationActions returns a copy of annotDict without the forbidden
+// actions its /A and /AA hold, with the fix descriptions, or nil when it holds
+// none.
+func stripAnnotationActions(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, annotDict ast.PdfDict, pageNum int, profile string) (ast.PdfDict, []string) {
+	var newAnnot ast.PdfDict
+	var fixes []string
+	clone := func() {
+		if newAnnot == nil {
+			newAnnot = maps.Clone(annotDict)
+		}
+	}
+
+	if aObj, hasA := annotDict["A"]; hasA && isForbiddenAction(ctx, alloc, doc, aObj, profile) {
+		clone()
+		delete(newAnnot, "A")
+		fixes = append(fixes, fmt.Sprintf("removed forbidden /A action from annotation on page %d", pageNum))
+	}
+
+	if aaObj, hasAA := annotDict["AA"]; hasAA {
+		aaFixes, cleaned := removeForbiddenFromAADict(ctx, alloc, doc, aaObj, fmt.Sprintf("annotation on page %d", pageNum), profile)
+		if cleaned != nil {
+			clone()
+			if len(cleaned) == 0 {
+				delete(newAnnot, "AA")
+			} else {
+				newAnnot["AA"] = cleaned
+			}
+			fixes = append(fixes, aaFixes...)
+		}
+	}
+	return newAnnot, fixes
+}
+
+// maxFieldTreeDepth bounds the descent of the AcroForm field tree through /Kids
+// in [fieldActionWalk]. Anti-DoS guard, not spec-mandated: ISO 32000-1,
+// 12.7.3.1 puts no depth on the field tree, and the visited set is what ends a
+// cyclic /Kids. The value is the bound compliance's walkFormFields descends to
+// (its maxActionChainDepth), so the fixer reaches every field whose actions
+// the validator judges. [maxFieldParentDepth] bounds the upward /Parent walk,
+// a different shape.
+const maxFieldTreeDepth = 200
+
+// fixForbiddenActionsOnFields strips the forbidden actions from the /AA of
+// every form field the AcroForm /Fields tree lists (ISO 19005-1 6.6.1, ISO
+// 19005-2/3 6.5.1, ISO 19005-4 6.6.1: the action-type restrictions reach every
+// action in the file). The page walk cannot reach them: a non-terminal field
+// is no annotation, and a terminal one merged with its widget is judged there
+// under the annotation triggers alone.
+//
+// Every level is read through the allocator and written back where it lives:
+// an indirect field or /Kids array at its own object number, an inline one
+// into its parent. It returns the catalog to write when the AcroForm
+// dictionary is inline in it and changed, or nil.
+//
+// # Corpus evidence
+//
+//   - litho annots_1b.pdf: the non-terminal field "parent" holds a JavaScript
+//     action under /AA/K, and at PDF/A-2b the output kept 6.5.1 test 1 and
+//     6.4.1 test 2 for it.
+//   - pdfjs issue15092.pdf, issue16863.pdf, issue19753.pdf: remediated as
+//     PDF/A-2b they kept 3, 8 and 18 field actions under 6.5.1 test 1, and 1,
+//     4 and 10 fields under 6.4.1 test 2, as PDF/A-1b the same counts under
+//     6.6.1 test 1 and 6.6.2 test 2. The walk clears every one, in litho and
+//     in veraPDF, since each /AA held nothing else.
+func fixForbiddenActionsOnFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, profile string) ([]string, ast.PdfDict) {
+	acroFormObj, ok := catalog["AcroForm"]
+	if !ok {
+		return nil, nil
+	}
+	acroForm := liveDictValue(ctx, alloc, doc, acroFormObj)
+	if acroForm == nil {
+		return nil, nil
+	}
+	fieldsObj, ok := acroForm["Fields"]
+	if !ok {
+		return nil, nil
+	}
+
+	w := fieldActionWalk{alloc: alloc, doc: doc, profile: profile, seen: make(map[int]bool)}
+	newFields, changed := w.array(ctx, fieldsObj, true, 0)
+	if !changed {
+		return w.fixes, nil
+	}
+	newAcroForm := maps.Clone(acroForm)
+	newAcroForm["Fields"] = newFields
+	if ref, isRef := acroFormObj.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
+		alloc.AllocAt(ref.ObjectNum, newAcroForm)
+		return w.fixes, nil
+	}
+	newCatalog := maps.Clone(catalog)
+	newCatalog["AcroForm"] = newAcroForm
+	return w.fixes, newCatalog
+}
+
+// fieldActionWalk carries the state of one [fixForbiddenActionsOnFields] walk.
+// seen processes each field object once, so a shared or cyclic /Kids tree
+// cannot force exponential work or loop.
+type fieldActionWalk struct {
+	alloc   *writer.ObjAllocator
+	doc     *document.Document
+	profile string
+	seen    map[int]bool
+	fixes   []string
+}
+
+// array walks one /Fields or /Kids array. It returns the value the parent
+// holds and true when that value changed: an indirect array is written at its
+// own object number and the parent keeps its reference.
+//
+// listedByField says whether arrObj is the /Fields array or a form field's
+// /Kids, the only lists compliance's walkFormFields draws form fields from.
+func (w *fieldActionWalk) array(ctx context.Context, arrObj ast.PdfObject, listedByField bool, depth int) (ast.PdfObject, bool) {
+	if ctx.Err() != nil || depth > maxFieldTreeDepth {
+		return arrObj, false
+	}
+	arr := liveArray(ctx, w.alloc, w.doc, arrObj)
+	var newArr ast.PdfArray
+	for i, item := range arr {
+		if ctx.Err() != nil {
+			break
+		}
+		ref, isRef := item.(ast.PdfIndirectRef)
+		if isRef {
+			if w.seen[ref.ObjectNum] {
+				continue
+			}
+			w.seen[ref.ObjectNum] = true
+		}
+		field := liveDictValue(ctx, w.alloc, w.doc, item)
+		if field == nil {
+			continue
+		}
+		location := "inline form field"
+		if isRef {
+			location = fmt.Sprintf("form field %d", ref.ObjectNum)
+		}
+		newField := w.field(ctx, field, location, listedByField, depth)
+		if newField == nil {
+			continue
+		}
+		if isRef && ref.ObjectNum > 0 {
+			w.alloc.AllocAt(ref.ObjectNum, newField)
+			continue
+		}
+		if newArr == nil {
+			newArr = slices.Clone(arr)
+		}
+		newArr[i] = newField
+	}
+	if newArr == nil {
+		return arrObj, false
+	}
+	if ref, isRef := arrObj.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
+		w.alloc.AllocAt(ref.ObjectNum, newArr)
+		return arrObj, false
+	}
+	return newArr, true
+}
+
+// field returns a copy of one field dictionary without the forbidden actions
+// its /AA holds and with its rewritten /Kids, or nil when neither changed.
+//
+// Only a form field's /AA is judged, mirroring compliance's walkFormFields:
+// every dictionary /Fields lists, and below a field only the kids carrying a
+// non-null partial name /T (ISO 32000-1, 12.7.3.1; a null entry is absent per
+// 7.3.7). Any other kid is a widget, whose /AA the page walk judges as an
+// annotation's.
+func (w *fieldActionWalk) field(ctx context.Context, field ast.PdfDict, location string, listedByField bool, depth int) ast.PdfDict {
+	isField := listedByField && (depth == 0 || hasNonNullEntry(field, "T"))
+
+	var newField ast.PdfDict
+	if aaObj, hasAA := field["AA"]; hasAA && isField {
+		aaFixes, cleaned := removeForbiddenFromAADict(ctx, w.alloc, w.doc, aaObj, location, w.profile)
+		if cleaned != nil {
+			newField = maps.Clone(field)
+			if len(cleaned) == 0 {
+				delete(newField, "AA")
+			} else {
+				newField["AA"] = cleaned
+			}
+			w.fixes = append(w.fixes, aaFixes...)
+		}
+	}
+
+	if kidsObj, hasKids := field["Kids"]; hasKids {
+		if newKids, changed := w.array(ctx, kidsObj, isField, depth+1); changed {
+			if newField == nil {
+				newField = maps.Clone(field)
+			}
+			newField["Kids"] = newKids
+		}
+	}
+	return newField
+}
+
+// hasNonNullEntry reports whether dict holds key with a value other than the
+// null object, which ISO 32000-1, 7.3.7 makes equivalent to an absent entry.
+func hasNonNullEntry(dict ast.PdfDict, key ast.PdfName) bool {
+	v, ok := dict[key]
+	if !ok {
+		return false
+	}
+	_, isNull := v.(ast.PdfNull)
+	return !isNull
 }
 
 // isForbiddenAction checks if the given object is an action dict whose type

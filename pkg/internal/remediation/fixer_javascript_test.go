@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
@@ -210,5 +211,64 @@ func TestFixJavaScript_StripsOnlyWhatTheProfileForbids(t *testing.T) {
 				t.Errorf("surviving actions under %s:\n got %+v\nwant %+v", tc.profile, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestFixJavaScript_StripsWhatTheValidatorFlags pins that the fixer strips an
+// action type exactly where [compliance.IsForbiddenActionType] flags it, for
+// every action type ISO 32000-2, Table 201 defines plus a non-standard one.
+//
+// A hand list used to nominate the stripped types, and it had drifted from the
+// whitelists of ISO 19005-1 6.6.1 test 1, ISO 19005-2/3 6.5.1 test 1 and ISO
+// 19005-4 6.6.1 test 1: GoToE at PDF/A-1, RichMediaExecute and GoToDp at parts
+// 1 to 3 were flagged and kept. The explicit rows pin those three.
+func TestFixJavaScript_StripsWhatTheValidatorFlags(t *testing.T) {
+	t.Parallel()
+
+	types := []ast.PdfName{
+		"GoTo", "GoToR", "GoToE", "GoToDp", "Launch", "Thread", "URI", "Sound",
+		"Movie", "Hide", "Named", "SubmitForm", "ResetForm", "ImportData",
+		"SetOCGState", "Rendition", "Trans", "GoTo3DView", "JavaScript",
+		"RichMediaExecute", "SetState", "NOP", "NotAnActionType",
+	}
+	profiles := []string{"PDF/A-1b", "PDF/A-2b", "PDF/A-3b", "PDF/A-4", "PDF/A-4e", "PDF/A-4f", "PDF/UA-1"}
+
+	explicit := map[[2]string]bool{
+		{"GoToE", "PDF/A-1b"}:            true,
+		{"GoToE", "PDF/A-2b"}:            false,
+		{"RichMediaExecute", "PDF/A-1b"}: true,
+		{"RichMediaExecute", "PDF/A-3b"}: true,
+		{"RichMediaExecute", "PDF/A-4"}:  false,
+		{"GoToDp", "PDF/A-2b"}:           true,
+		{"GoToDp", "PDF/A-4f"}:           false,
+	}
+
+	for _, profile := range profiles {
+		for _, typ := range types {
+			t.Run(profile+"/"+string(typ), func(t *testing.T) {
+				t.Parallel()
+
+				ctx := context.Background()
+				doc, alloc := newTestDoc(t, assemblePDF([]string{
+					"<< /Type /Catalog /Pages 2 0 R >>",
+					"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+					"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
+					"<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A << /S /" + string(typ) + " >> >>",
+				}))
+				if _, err := fixJavaScript(ctx, alloc, doc, Options{}, nil, profile); err != nil {
+					t.Fatalf("fixJavaScript: %v", err)
+				}
+				annot := resolveFromAllocOrDoc(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: 4})
+				_, kept := annot["A"]
+
+				want := compliance.IsForbiddenActionType(typ, profile)
+				if w, ok := explicit[[2]string{string(typ), profile}]; ok && w != want {
+					t.Fatalf("the validator's verdict moved: IsForbiddenActionType(%s, %s) = %v, this test pins %v", typ, profile, want, w)
+				}
+				if kept == want {
+					t.Errorf("%s under %s: kept = %v, but the validator flags it = %v", typ, profile, kept, want)
+				}
+			})
+		}
 	}
 }
