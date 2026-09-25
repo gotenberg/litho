@@ -45,6 +45,16 @@ const (
 // of redefining it and letting the two drift apart.
 const MaxNameBytes = 127
 
+// MaxRealAbs1, MaxRealAbs2 and MinRealAbs2 export the real bounds above, and
+// MaxIntegerValue the integer bound, so the remediation package writes a
+// number inside the bounds this package detects with, as [MaxNameBytes] does.
+const (
+	MaxRealAbs1     = maxRealAbs1
+	MaxRealAbs2     = maxRealAbs2
+	MinRealAbs2     = minRealAbs2
+	MaxIntegerValue = maxIntegerValue
+)
+
 func integerRangeRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_12_t01, Rule_19005_2_6_1_13_t01, Rule_19005_3_6_1_13_t01, Rule{})
 }

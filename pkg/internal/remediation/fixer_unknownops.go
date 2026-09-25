@@ -1,21 +1,47 @@
 package remediation
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"math"
 	"strconv"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/ioat"
+	"github.com/gotenberg/litho/pkg/internal/core/lexer"
+	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// matchUnknownOps matches ISO 19005-2/4 §6.2.2 content-stream violations
-// that report operators not defined in ISO 32000. These are dead bytes at
-// the viewer level, so stripping them is content-preserving.
+// matchUnknownOps matches the content-stream violations that report an
+// operator not defined in ISO 32000: ISO 19005-2/3/4, 6.2.2 t1 and ISO
+// 19005-1, 6.2.10 t1. These are dead bytes at the viewer level, so stripping
+// them is content-preserving.
+//
+// The part-1 spelling is matched by the rule's Object, as [matchAggressive]
+// matches it, because clause strings are reused across parts. Claiming 6.2.2
+// alone left every part-1 finding to the aggressive pass, which reads page
+// content only, runs only when content may change, and never sees a number
+// written with an exponent, which the content parser reads as a number.
+//
+// # Corpus evidence
+//
+//   - All corpora: at PDF/A-1b the part-1 claim clears 6.2.10 t1 for litho and
+//     veraPDF on 13 default cells, among them pdfjs bug1130815.pdf with 1674
+//     undefined operators, and on 3 aggressive cells whose operator sits in a
+//     form XObject the aggressive pass never reads.
+//   - pdfjs poppler-90-0-fuzzed.pdf: at PDF/A-1b default veraPDF stops
+//     reporting 6.2.10 t1, and litho's count drops from 1617 to 1571.
 func matchUnknownOps(v compliance.Violation) bool {
+	if v.Rule.Object == "Op_Undefined" {
+		return true
+	}
 	if !clausePrefix(v, "6.2.2") {
 		return false
 	}
@@ -25,6 +51,22 @@ func matchUnknownOps(v compliance.Violation) bool {
 		descriptionContains(v, "operator \"")
 }
 
+// unknownOpsTally counts what [fixUnknownOps] changed.
+type unknownOpsTally struct {
+	// removed counts operators outside [validOperators] that were stripped.
+	removed int
+	// repaired counts malformed numbers folded back into their operator.
+	repaired int
+	// exponents counts numbers written with an exponent that became plain.
+	exponents int
+}
+
+func (t *unknownOpsTally) add(o unknownOpsTally) {
+	t.removed += o.removed
+	t.repaired += o.repaired
+	t.exponents += o.exponents
+}
+
 // fixUnknownOps strips operators absent from [validOperators] from every page
 // content stream, every Form XObject referenced through page Resources, and
 // every annotation appearance stream. Viewers ignore these tokens per
@@ -32,10 +74,13 @@ func matchUnknownOps(v compliance.Violation) bool {
 // eliminates the PDF/A violation.
 //
 // That premise holds for a real operator alone, so each of the three streams
-// runs [repairMalformedNumbers] first: a numeric literal the parser could not
-// read surfaces as an operator, and stripping it takes the operands of the
-// operator that follows. See the worked Tm example on that function.
-func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
+// is repaired first by [repairContentData]: a number written with an exponent,
+// which veraPDF reads as a number and an undefined operator, is rewritten as
+// the plain number it denotes, and a numeric literal the parser could not read
+// surfaces as an operator whose removal would take the operands of the
+// operator that follows. See [rewriteExponentNumbers] and the worked Tm
+// example on [repairMalformedNumbers].
+func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, fmt.Errorf("resolving catalog: %w", err)
@@ -45,93 +90,130 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		return nil, fmt.Errorf("resolving pages: %w", err)
 	}
 
-	var total, repaired int
+	part := compliance.PDFAPart(profile)
+	var total unknownOpsTally
 	visited := make(map[int]bool)
 	for pageNum, page := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		n, r, err := stripUnknownFromStream(ctx, alloc, doc, page, pageNum+1)
+		n, err := stripUnknownFromStream(ctx, alloc, doc, page, pageNum+1, part)
 		if err != nil {
 			return nil, err
 		}
-		total += n
-		repaired += r
-		n, r = stripUnknownInResources(ctx, alloc, doc, page.Resources, visited)
-		total += n
-		repaired += r
-		n, r = stripUnknownInAnnotations(ctx, alloc, doc, page.Dict, visited)
-		total += n
-		repaired += r
+		total.add(n)
+		total.add(stripUnknownInResources(ctx, alloc, doc, page.Resources, visited, part))
+		total.add(stripUnknownInAnnotations(ctx, alloc, doc, page.Dict, visited, part))
 	}
 
 	var fixes []string
-	if total > 0 {
-		fixes = append(fixes, fmt.Sprintf("removed %d unknown content-stream operator(s)", total))
+	if total.removed > 0 {
+		fixes = append(fixes, fmt.Sprintf("removed %d unknown content-stream operator(s)", total.removed))
 	}
 	// Reported separately: a repair rewrites the stream without removing an
 	// operator, so folding it into the removal count would say an operator went
 	// that did not, and saying nothing would rewrite page content silently.
-	if repaired > 0 {
-		fixes = append(fixes, fmt.Sprintf("repaired %d malformed number(s) in content streams", repaired))
+	if total.repaired > 0 {
+		fixes = append(fixes, fmt.Sprintf("repaired %d malformed number(s) in content streams", total.repaired))
+	}
+	if total.exponents > 0 {
+		fixes = append(fixes, fmt.Sprintf("rewrote %d number(s) written with an exponent in content streams", total.exponents))
 	}
 	return fixes, nil
 }
 
-// stripUnknownFromStream parses a page's live content (alloc-first, so an
-// earlier fixer's rewrite is seen), repairs malformed numbers, strips operators
-// outside [validOperators], and writes the result back through
-// [replaceContentStream]. Returns the number of operators removed and the number
-// of malformed numbers folded back into their operator.
-func stripUnknownFromStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, pageNum int) (int, int, error) {
-	ops, contentsObj, err := livePageContentOps(ctx, alloc, doc, page)
-	if err != nil || contentsObj == nil {
-		return 0, 0, nil
+// repairContentData repairs one content stream's decoded bytes: numbers
+// written with an exponent become plain numbers ([rewriteExponentNumbers]),
+// malformed numbers fold back into their operator ([repairMalformedNumbers]),
+// and operators outside [validOperators] go. It returns the bytes to write and
+// what it changed; a zero tally means nothing is to be written. The bytes can
+// be empty: a stream holding nothing but undefined operators is written back
+// with none.
+//
+// A stream whose only defect is an exponent is written back as spliced, not
+// re-serialized, so nothing else in it moves. Removing an operator or folding a
+// number re-serializes the parsed operations, which cannot round-trip an inline
+// image: the parser consumes its data off-token, so the BI operation keeps its
+// dictionary alone, and writing it back leaves "<< ... >> BI" with no ID, data
+// or EI, a content stream no reader can parse (ISO 32000-1, 8.9.7). Such a
+// stream keeps its operators and malformed numbers as a reported residual, as
+// [fixContentStreams] keeps them.
+func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unknownOpsTally) {
+	var t unknownOpsTally
+	data, t.exponents = rewriteExponentNumbers(ctx, data, part)
+	spliced := func() ([]byte, unknownOpsTally) {
+		if t.exponents == 0 {
+			return nil, unknownOpsTally{}
+		}
+		return data, unknownOpsTally{exponents: t.exponents}
 	}
-	ops, repairs := repairMalformedNumbers(ops)
-	removed := 0
-	modified := repairs > 0
+
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		return spliced()
+	}
+	ops, t.repaired = repairMalformedNumbers(ops)
+	hasInlineImage := false
 	for i, op := range ops {
+		if op.Operator == "BI" {
+			hasInlineImage = true
+		}
 		if op.Operator == "" || op.Operator == "BX" || op.Operator == "EX" {
 			continue
 		}
 		if !validOperators[op.Operator] {
 			ops[i].Operator = ""
-			removed++
-			modified = true
+			t.removed++
 		}
 	}
-	if !modified {
-		return 0, 0, nil
+	if (t.removed == 0 && t.repaired == 0) || hasInlineImage {
+		return spliced()
 	}
-	filtered := filterOps(ops)
-	newData := serializeOps(filtered)
-	if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum); err != nil {
-		return removed, repairs, fmt.Errorf("replacing content stream on page %d: %w", pageNum, err)
-	}
-	return removed, repairs, nil
+	return serializeOps(filterOps(ops)), t
 }
 
-// stripUnknownInAnnotations strips undefined operators from the appearance
-// streams of a page's annotations.
+// stripUnknownFromStream repairs a page's live content (alloc-first, so an
+// earlier fixer's rewrite is seen) with [repairContentData] and writes the
+// result back through [replaceContentStream].
+func stripUnknownFromStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, pageNum, part int) (unknownOpsTally, error) {
+	contentsObj, ok := livePageDict(ctx, alloc, doc, page)["Contents"]
+	if !ok {
+		return unknownOpsTally{}, nil
+	}
+	data, err := liveContentBytes(ctx, alloc, doc, contentsObj)
+	if err != nil {
+		return unknownOpsTally{}, nil
+	}
+	newData, t := repairContentData(ctx, data, part)
+	if t == (unknownOpsTally{}) {
+		return t, nil
+	}
+	if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum); err != nil {
+		return t, fmt.Errorf("replacing content stream on page %d: %w", pageNum, err)
+	}
+	return t, nil
+}
+
+// stripUnknownInAnnotations repairs the appearance streams of a page's
+// annotations with [repairContentData].
 //
 // An appearance stream is a content stream (ISO 32000-1, 12.5.5), so the ISO
 // 19005-2, 6.2.2 prohibition reaches it, but it hangs off /Annots[]/AP rather
 // than the page resources this fixer walked, and veraPDF reports an operator
 // there that litho left in place.
-func stripUnknownInAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict, visited map[int]bool) (int, int) {
+func stripUnknownInAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict, visited map[int]bool, part int) unknownOpsTally {
+	var total unknownOpsTally
 	if pageDict == nil {
-		return 0, 0
+		return total
 	}
 	annots, err := document.ResolveArray(ctx, doc, pageDict["Annots"])
 	if err != nil || len(annots) == 0 {
-		return 0, 0
+		return total
 	}
 
-	total, repaired := 0, 0
 	for _, annotObj := range annots {
 		if err := ctx.Err(); err != nil {
-			return total, repaired
+			return total
 		}
 		annot, err := document.ResolveDict(ctx, doc, annotObj)
 		if err != nil || annot == nil {
@@ -147,13 +229,11 @@ func stripUnknownInAnnotations(ctx context.Context, alloc *writer.ObjAllocator, 
 				continue
 			}
 			for _, entry := range appearanceEntries(ctx, doc, apObj) {
-				n, r := stripUnknownFromStreamObject(ctx, alloc, doc, entry, visited)
-				total += n
-				repaired += r
+				total.add(stripUnknownFromStreamObject(ctx, alloc, doc, entry, visited, part))
 			}
 		}
 	}
-	return total, repaired
+	return total
 }
 
 // appearanceEntries returns the objects an /AP entry names: the entry itself
@@ -174,19 +254,19 @@ func appearanceEntries(ctx context.Context, doc *document.Document, apObj ast.Pd
 	return out
 }
 
-// stripUnknownFromStreamObject rewrites one appearance stream without the
-// operators outside [validOperators], returning how many it removed and how
-// many malformed numbers it folded back. The replacement body is decoded
-// content, so /Filter and /DecodeParms go with it.
+// stripUnknownFromStreamObject repairs one appearance stream with
+// [repairContentData]. An appearance stream is a content stream (ISO 32000-1,
+// 12.5.5), so a mangled operand splits its operand run exactly as it does on a
+// page, and stripping the token takes the next operator's arguments with it.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue15604.pdf: the page path gained the malformed-number repair
 //     when the Tm on this file lost four of its six operands.
-func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, visited map[int]bool) (int, int) {
+func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, visited map[int]bool, part int) unknownOpsTally {
 	ref, isRef := obj.(ast.PdfIndirectRef)
 	if !isRef || ref.ObjectNum == 0 || visited[ref.ObjectNum] {
-		return 0, 0
+		return unknownOpsTally{}
 	}
 	visited[ref.ObjectNum] = true
 
@@ -197,42 +277,32 @@ func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocato
 	// what they queued. ref is known non-zero from the guard above.
 	stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, obj)
 	if !ok {
-		return 0, 0
+		return unknownOpsTally{}
 	}
+	t, _ := repairStreamObject(ctx, alloc, doc, ref, stream, part)
+	return t
+}
+
+// repairStreamObject repairs the content stream at ref, a form XObject or an
+// appearance stream, with [repairContentData] and writes it back. It returns
+// what changed and whether the stream could be decoded at all.
+//
+// The replacement body is the decoded content, so the filter chain that
+// described the original body no longer applies: carrying /Filter or
+// /DecodeParms across leaves a stream a reader decodes into nothing (ISO
+// 32000-1, 7.3.8.2). /Length is rewritten from the data.
+func repairStreamObject(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef, stream ast.PdfStream, part int) (unknownOpsTally, bool) {
+	// Decode through the filter pipeline: ast.PdfStream.Bytes hands back the
+	// raw body, which for a FlateDecode form is compressed bytes the content
+	// lexer reads as a run of undefined operators.
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
-		return 0, 0
+		return unknownOpsTally{}, false
 	}
-	ops, err := content.ParseStreamData(ctx, data)
-	if err != nil {
-		return 0, 0
+	newData, t := repairContentData(ctx, data, part)
+	if t == (unknownOpsTally{}) {
+		return t, true
 	}
-
-	// An appearance stream is a content stream (ISO 32000-1, 12.5.5), so a
-	// mangled operand splits its operand run exactly as it does on a page and
-	// stripping the token takes the next operator's arguments with it. The page
-	// path has repaired that since a Tm lost four of its six operands; this
-	// path read the same bodies without it.
-	ops, repaired := repairMalformedNumbers(ops)
-
-	removed := 0
-	for i, op := range ops {
-		if op.Operator == "" || op.Operator == "BX" || op.Operator == "EX" {
-			continue
-		}
-		if !validOperators[op.Operator] {
-			ops[i].Operator = ""
-			removed++
-		}
-	}
-	// Seeded from the repair, not from removed alone: a stream whose only defect
-	// is a malformed number still has to be written back, or the repair happens
-	// in memory and is discarded.
-	if removed == 0 && repaired == 0 {
-		return 0, 0
-	}
-
-	newData := serializeOps(filterOps(ops))
 	newDict := make(ast.PdfDict, len(stream.Dict)+1)
 	for k, v := range stream.Dict {
 		if k == "Length" || k == "Filter" || k == "DecodeParms" {
@@ -242,27 +312,35 @@ func stripUnknownFromStreamObject(ctx context.Context, alloc *writer.ObjAllocato
 	}
 	newDict["Length"] = ast.PdfInt(len(newData))
 	alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, newData))
-	return removed, repaired
+	return t, true
 }
 
 // stripUnknownInResources recurses into a page's /Resources/XObject
 // entries to process Form XObjects that may hold their own content
-// streams with bad operators. Returns how many operators it removed and how
-// many malformed numbers it folded back.
-func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, visited map[int]bool) (int, int) {
+// streams with bad operators, repairing each with [repairContentData].
+//
+// A form XObject holds a content stream (ISO 32000-1, 8.10.2), so a mangled
+// operand costs it the next operator's arguments here just as it does on a
+// page. The forms a form draws are reached whether or not the form itself
+// needed a repair: the walk descended only from a form it had rewritten, so a
+// defect one level below a clean form was never seen.
+func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, visited map[int]bool, part int) unknownOpsTally {
+	var total unknownOpsTally
 	if resources == nil {
-		return 0, 0
+		return total
 	}
 	xoObj, ok := resources["XObject"]
 	if !ok {
-		return 0, 0
+		return total
 	}
 	xoDict, err := document.ResolveDict(ctx, doc, xoObj)
 	if err != nil || xoDict == nil {
-		return 0, 0
+		return total
 	}
-	total, totalRepaired := 0, 0
 	for _, entry := range xoDict {
+		if err := ctx.Err(); err != nil {
+			return total
+		}
 		ref, ok := entry.(ast.PdfIndirectRef)
 		if !ok || ref.ObjectNum == 0 || visited[ref.ObjectNum] {
 			continue
@@ -277,70 +355,173 @@ func stripUnknownInResources(ctx context.Context, alloc *writer.ObjAllocator, do
 		if !ok {
 			continue
 		}
-		subtype, _ := stream.Dict["Subtype"].(ast.PdfName)
-		if subtype != "Form" {
+		if subtype, _ := stream.Dict["Subtype"].(ast.PdfName); subtype != "Form" {
 			continue
 		}
+		t, readable := repairStreamObject(ctx, alloc, doc, ref, stream, part)
+		if !readable {
+			continue
+		}
+		total.add(t)
 
-		// Decode through the filter pipeline: ast.PdfStream.Bytes hands back
-		// the raw body, which for a FlateDecode form is compressed bytes the
-		// content lexer reads as a run of undefined operators.
-		data, err := doc.DecodeStream(ctx, stream)
-		if err != nil {
-			continue
-		}
-		ops, err := content.ParseStreamData(ctx, data)
-		if err != nil {
-			continue
-		}
-		// A form XObject holds a content stream (ISO 32000-1, 8.10.2), so a
-		// mangled operand costs it the next operator's arguments here just as it
-		// does on a page. Repaired before the strip, for the same reason and in
-		// the same order as the page path.
-		ops, repaired := repairMalformedNumbers(ops)
-		removed := 0
-		// Seeded from the repair: a form whose only defect is a malformed number
-		// still has to be written back, or the repair is discarded.
-		modified := repaired > 0
-		for i, op := range ops {
-			if op.Operator == "" || op.Operator == "BX" || op.Operator == "EX" {
-				continue
-			}
-			if !validOperators[op.Operator] {
-				ops[i].Operator = ""
-				removed++
-				modified = true
-			}
-		}
-		if !modified {
-			continue
-		}
-		filtered := filterOps(ops)
-		newData := serializeOps(filtered)
-		// The replacement body is the decoded content, so the filter chain that
-		// described the original body no longer applies: carrying /Filter or
-		// /DecodeParms across leaves a stream a reader decodes into nothing
-		// (ISO 32000-1, 7.3.8.2). /Length is rewritten from the data.
-		newDict := make(ast.PdfDict, len(stream.Dict)+1)
-		for k, v := range stream.Dict {
-			if k == "Length" || k == "Filter" || k == "DecodeParms" {
-				continue
-			}
-			newDict[k] = v
-		}
-		newDict["Length"] = ast.PdfInt(len(newData))
-		alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, newData))
-		total += removed
-		totalRepaired += repaired
-
-		// Recurse into nested Form XObjects.
 		if nestedRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && nestedRes != nil {
-			n, r := stripUnknownInResources(ctx, alloc, doc, nestedRes, visited)
-			total += n
-			totalRepaired += r
+			total.add(stripUnknownInResources(ctx, alloc, doc, nestedRes, visited, part))
 		}
 	}
-	return total, totalRepaired
+	return total
+}
+
+// exponentTokenCheckInterval is how many tokens [rewriteExponentNumbers] reads
+// between two checks of its context, the interval the content parser uses.
+const exponentTokenCheckInterval = 500
+
+// rewriteExponentNumbers returns data with every number written with an
+// exponent, such as "1.5e1" or "1E-3", replaced by the plain number it denotes
+// ([plainNumber]), and how many it replaced. A stream holding no such number
+// where an operand stands comes back unchanged with a count of 0.
+//
+// ISO 32000-1, 7.3.3 gives a number no exponent, so the token is no operand.
+// veraPDF ends the number at the exponent letter and reads the rest as an
+// operator: "1.5e1 w" is the number 1.5, an operator "e1" that ISO 32000-1
+// does not define (ISO 19005-1, 6.2.10 t1; ISO 19005-2, 6.2.2 t1), and a w
+// with no operand. Stripping "e1" the way an undefined operator is stripped
+// would take the 1.5 with it and leave w without its width, which is not what
+// the producer wrote: a reader that accepts the form, as litho's parser and
+// PDF.js do, reads the one number 15, and exponential format is only a
+// spelling of a number the clause rules out (ISO 32000-1, 7.3.3 names
+// "6.02E23"). Writing that number plainly keeps every operator's operands and
+// leaves nothing undefined.
+//
+// Only a stream with a finding is rewritten: a number where an operand
+// stands, outside any array or dictionary, which is the one the check reports
+// ([parser.ErrNumberExponentOperand]). The rest of such a stream's exponents go
+// too, since veraPDF stops reading a stream at one inside an array or a
+// dictionary. An inline image's dictionary is left as written: the walk skips
+// it with its data, which it cannot address token by token.
+//
+// The rewrite splices the tokens in place, so the stream's other bytes, inline
+// image data included, are carried across unchanged. A stream the lexer cannot
+// read to its end is left alone.
+//
+// # Corpus evidence
+//
+//   - pdfjs sci-notation.pdf: the one corpus file with an exponent where an
+//     operand stands, "/F1 1e2 Tf" after the stray keyword ETBT. Removing ETBT
+//     re-serialized the page with "1e2" and the Tf after it gone, and wrote
+//     "/F1 50 600 Td". The rewrite keeps "/F1 100 Tf", which puts the next
+//     line above the page, where PDF.js draws it. litho's own reading of the
+//     original loses the same two tokens and keeps that line on the page, so
+//     the integrity probe counts a text drop and rolls the content repairs
+//     back, leaving the file as it was.
+func rewriteExponentNumbers(ctx context.Context, data []byte, part int) ([]byte, int) {
+	type splice struct {
+		start, end int
+		text       string
+	}
+	var splices []splice
+	operands, depth := 0, 0
+	p := parser.NewParser(lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))).WithOffsetTracking()
+	for n := 1; ; n++ {
+		if n%exponentTokenCheckInterval == 0 && ctx.Err() != nil {
+			return data, 0
+		}
+		tok, err := p.Peek(0)
+		if err != nil || tok.Type == lexer.TokenError {
+			return data, 0
+		}
+		if tok.Type == lexer.TokenEOF {
+			break
+		}
+		end := int(p.PeekEnd(0))
+		if _, err := p.Consume(); err != nil {
+			return data, 0
+		}
+		switch tok.Type {
+		case lexer.TokenKeyword:
+			if tok.Value == "BI" && depth == 0 {
+				if _, err := p.ParseInlineImageDict(ctx); err != nil {
+					return data, 0
+				}
+			}
+		case lexer.TokenDelimiter:
+			switch tok.Value {
+			case "[", "<<":
+				depth++
+			case "]", ">>":
+				depth = max(depth-1, 0)
+			}
+		case lexer.TokenNumber:
+			start := end - len(tok.Value)
+			if !strings.ContainsAny(tok.Value, "eE") || start < 0 || string(data[start:end]) != tok.Value {
+				continue
+			}
+			text, ok := plainNumber(tok.Value, part)
+			if !ok {
+				continue
+			}
+			splices = append(splices, splice{start: start, end: end, text: text})
+			if depth == 0 {
+				operands++
+			}
+		case lexer.TokenEOF, lexer.TokenError, lexer.TokenName, lexer.TokenString, lexer.TokenHexString:
+			// No number, and no nesting: a string or a name is one token.
+		}
+	}
+	if operands == 0 {
+		return data, 0
+	}
+
+	var out bytes.Buffer
+	out.Grow(len(data))
+	prev := 0
+	for _, s := range splices {
+		out.Write(data[prev:s.start])
+		out.WriteString(s.text)
+		prev = s.end
+	}
+	out.Write(data[prev:])
+	return out.Bytes(), len(splices)
+}
+
+// plainNumber writes the number an exponent token denotes the way ISO
+// 32000-1, 7.3.3 spells a number, inside the limits of the PDF/A part: an
+// integer when it is whole and within the integer range, and a real with a
+// decimal point otherwise. ok is false when tok is not a number.
+//
+// A magnitude past the part's largest real becomes that real (ISO 19005-1,
+// 6.1.12 t2; ISO 19005-2, 6.1.13 t2). Part 4 states no limit and takes the
+// ISO 32000-1, Table C.1 one, which is also where a float64 overflow such as
+// "1e999" lands. A nonzero magnitude closer to 0 than the smallest normal real
+// of that table becomes 0, the only value ISO 19005-2, 6.1.13 t5 accepts
+// there; parts 1 and 4 state no such floor and take the same one, since no
+// operand draws differently at that magnitude. A whole number past the integer
+// range keeps its decimal point, since read back as an integer it would break
+// ISO 19005-2, 6.1.13 t1.
+func plainNumber(tok string, part int) (string, bool) {
+	v, err := strconv.ParseFloat(tok, 64)
+	if err != nil && !errors.Is(err, strconv.ErrRange) {
+		return "", false
+	}
+	maxAbs := compliance.MaxRealAbs2
+	if part == 1 {
+		maxAbs = compliance.MaxRealAbs1
+	}
+	switch {
+	case v > maxAbs:
+		v = maxAbs
+	case v < -maxAbs:
+		v = -maxAbs
+	case math.Abs(v) < compliance.MinRealAbs2:
+		v = 0
+	}
+	if v == math.Trunc(v) && math.Abs(v) <= compliance.MaxIntegerValue {
+		return strconv.FormatInt(int64(v), 10), true
+	}
+	s := writer.FormatReal(v)
+	if !strings.ContainsRune(s, '.') {
+		s += ".0"
+	}
+	return s, true
 }
 
 // repairMalformedNumbers folds tokens the content parser surfaced as operators,
