@@ -625,7 +625,16 @@ const maxFieldTreeDepth = 200
 //     6.6.1 test 1 and 6.6.2 test 2. The walk clears every one, in litho and
 //     in veraPDF, since each /AA held nothing else.
 func fixForbiddenActionsOnFields(ctx context.Context, s *actionSplice, catalog ast.PdfDict) ([]string, ast.PdfDict) {
-	alloc, doc := s.alloc, s.doc
+	return rewriteFieldAA(ctx, s.alloc, s.doc, catalog, func(ctx context.Context, aaObj ast.PdfObject, location string) ([]string, ast.PdfDict) {
+		return removeForbiddenFromAADict(ctx, s, aaObj, location)
+	})
+}
+
+// rewriteFieldAA walks every form field the AcroForm /Fields tree lists and
+// replaces each one's /AA with what cleanAA returns for it (see
+// [fieldActionWalk]). It returns the fix descriptions and the catalog to write
+// when the AcroForm dictionary is inline in it and changed, or nil.
+func rewriteFieldAA(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, cleanAA fieldAACleaner) ([]string, ast.PdfDict) {
 	acroFormObj, ok := catalog["AcroForm"]
 	if !ok {
 		return nil, nil
@@ -639,7 +648,7 @@ func fixForbiddenActionsOnFields(ctx context.Context, s *actionSplice, catalog a
 		return nil, nil
 	}
 
-	w := fieldActionWalk{alloc: alloc, doc: doc, splice: s, seen: make(map[int]bool)}
+	w := fieldActionWalk{alloc: alloc, doc: doc, cleanAA: cleanAA, seen: make(map[int]bool)}
 	newFields, changed := w.array(ctx, fieldsObj, true, 0)
 	if !changed {
 		return w.fixes, nil
@@ -655,15 +664,20 @@ func fixForbiddenActionsOnFields(ctx context.Context, s *actionSplice, catalog a
 	return w.fixes, newCatalog
 }
 
-// fieldActionWalk carries the state of one [fixForbiddenActionsOnFields] walk.
-// seen processes each field object once, so a shared or cyclic /Kids tree
-// cannot force exponential work or loop.
+// fieldAACleaner returns the fix descriptions for one form field's /AA entry
+// aaObj and the /AA the field keeps: an empty dictionary removes the entry,
+// and nil leaves the field as it is. location names the field in the fixes.
+type fieldAACleaner func(ctx context.Context, aaObj ast.PdfObject, location string) ([]string, ast.PdfDict)
+
+// fieldActionWalk carries the state of one [rewriteFieldAA] walk. seen
+// processes each field object once, so a shared or cyclic /Kids tree cannot
+// force exponential work or loop.
 type fieldActionWalk struct {
-	alloc  *writer.ObjAllocator
-	doc    *document.Document
-	splice *actionSplice
-	seen   map[int]bool
-	fixes  []string
+	alloc   *writer.ObjAllocator
+	doc     *document.Document
+	cleanAA fieldAACleaner
+	seen    map[int]bool
+	fixes   []string
 }
 
 // array walks one /Fields or /Kids array. It returns the value the parent
@@ -720,8 +734,8 @@ func (w *fieldActionWalk) array(ctx context.Context, arrObj ast.PdfObject, liste
 	return newArr, true
 }
 
-// field returns a copy of one field dictionary with the forbidden actions cut
-// out of its /AA and with its rewritten /Kids, or nil when neither changed.
+// field returns a copy of one field dictionary with the /AA the walk's cleaner
+// leaves and with its rewritten /Kids, or nil when neither changed.
 //
 // Only a form field's /AA is judged, mirroring compliance's walkFormFields:
 // every dictionary /Fields lists, and below a field only the kids carrying a
@@ -733,7 +747,7 @@ func (w *fieldActionWalk) field(ctx context.Context, field ast.PdfDict, location
 
 	var newField ast.PdfDict
 	if aaObj, hasAA := field["AA"]; hasAA && isField {
-		aaFixes, cleaned := removeForbiddenFromAADict(ctx, w.splice, aaObj, location)
+		aaFixes, cleaned := w.cleanAA(ctx, aaObj, location)
 		if cleaned != nil {
 			newField = maps.Clone(field)
 			if len(cleaned) == 0 {

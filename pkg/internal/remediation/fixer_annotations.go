@@ -47,10 +47,10 @@ var permittedAAKeys = map[ast.PdfName]bool{
 func matchAnnotations(v compliance.Violation) bool {
 	return clausePrefix(v,
 		"6.3.1", // forbidden annotation types
-		"6.4.1", // widget /A or /AA
+		"6.4.1", // widget /A or /AA, form field /AA
 		"6.5.2", // catalog/page /AA (part 1)
 		"6.5.3", // annotation flags (part 1)
-		"6.6.2", // widget /AA
+		"6.6.2", // widget and form field /AA (part 1)
 		"6.6.3", // non-permitted AA keys
 	)
 }
@@ -77,6 +77,17 @@ func fixAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		fixes = append(fixes, "removed /AA from catalog")
 	}
 
+	// The field walk runs before the page walk, so a merged field and widget
+	// the page walk rewrites is read with its /AA already gone.
+	if compliance.FieldAAForbidden(profile) {
+		fieldFixes, newCatalog := rewriteFieldAA(ctx, alloc, doc, catalogDict, dropFieldAA)
+		if newCatalog != nil {
+			catalogDict = newCatalog
+			alloc.AllocAt(catalogRef.ObjectNum, catalogDict)
+		}
+		fixes = append(fixes, fieldFixes...)
+	}
+
 	// Walk pages to fix annotations.
 	pageFixes, err := fixPageAnnotations(ctx, alloc, doc, catalogDict, opts, profile)
 	if err != nil {
@@ -85,6 +96,27 @@ func fixAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	fixes = append(fixes, pageFixes...)
 
 	return fixes, nil
+}
+
+// dropFieldAA is the [fieldAACleaner] that removes a form field's /AA whatever
+// it holds. ISO 19005-1 §6.6.2 t2 and ISO 19005-2/3 §6.4.1 t2 forbid the key
+// itself on a field, so reducing it to the permitted actions, which the
+// javascript fixer does, still leaves the violation: veraPDF reports a field
+// /AA holding one GoTo action, measured. A direct null is an absent entry (ISO
+// 32000-1, 7.3.7) and is left alone, as compliance's walkFormFields leaves it.
+//
+// # Corpus evidence
+//
+//   - All corpora: 50 files carry a form field /AA, and remediated at PDF/A-1b
+//     and PDF/A-2b, or at their own profile for the verapdf ones, none keeps
+//     it: each is merged with its widget or holds forbidden actions alone, so
+//     the page walk or the javascript fixer already cleared it. The verdict
+//     moves only for a field that is no widget and holds a permitted action.
+func dropFieldAA(_ context.Context, aaObj ast.PdfObject, location string) ([]string, ast.PdfDict) {
+	if _, isNull := aaObj.(ast.PdfNull); isNull {
+		return nil, nil
+	}
+	return []string{fmt.Sprintf("removed /AA from %s", location)}, ast.PdfDict{}
 }
 
 // annotPageEntry pairs a page dict with its indirect reference.

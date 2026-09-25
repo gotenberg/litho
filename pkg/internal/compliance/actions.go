@@ -839,6 +839,14 @@ func fieldAARule(part int) Rule {
 	return ruleByPart(part, Rule_19005_1_6_6_2_t02, Rule_19005_2_6_4_1_t02, Rule_19005_3_6_4_1_t02, Rule{})
 }
 
+// FieldAAForbidden reports whether profile forbids the /AA key on a form field
+// whatever actions it holds, which is the verdict [fieldAARule] carries: ISO
+// 19005-1 §6.6.2 t2 and ISO 19005-2/3 §6.4.1 t2. Remediation asks it so its
+// removal follows the validator rather than a copy of the part list.
+func FieldAAForbidden(profile string) bool {
+	return fieldAARule(PDFAPart(profile)) != (Rule{})
+}
+
 // actionKeysPresent returns a human-readable string listing which of /A and
 // /AA keys are present.
 func actionKeysPresent(hasA, hasAA bool) string {
