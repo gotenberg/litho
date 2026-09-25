@@ -79,6 +79,10 @@ type Parser struct {
 	// dictionary, which ParseObject does not parse, is counted by
 	// [Parser.ParseInlineImageDict] itself.
 	depth int
+
+	// consumed counts the tokens [Parser.Consume] has advanced past. See
+	// [Parser.Consumed] and [Parser.SkipFailedObject].
+	consumed int
 }
 
 // NewParser creates a new Parser that reads PDF objects from the given lexer.
@@ -242,6 +246,7 @@ func (p *Parser) Peek(n int) (lexer.Token, error) {
 func (p *Parser) Consume() (lexer.Token, error) {
 	tok, err := p.Peek(0)
 	if p.buffered() > 0 {
+		p.consumed++
 		p.head++
 		if p.head == len(p.tokens) {
 			// Drained: rewind to the front of the backing arrays so the next
@@ -264,6 +269,60 @@ func (p *Parser) Expect(expectedType lexer.TokenType) (lexer.Token, error) {
 		return lexer.Token{}, fmt.Errorf("syntax error: expected token %v, got %v (%q)", expectedType, tok.Type, tok.Value)
 	}
 	return tok, nil
+}
+
+// Consumed returns how many tokens the parser has consumed. Taken before a
+// [Parser.ParseObject] call, it is the mark [Parser.SkipFailedObject] needs to
+// recover from that call's failure.
+func (p *Parser) Consumed() int {
+	return p.consumed
+}
+
+// SkipFailedObject moves the parser past an object [Parser.ParseObject] failed
+// to read, given the [Parser.Consumed] mark taken before the call, so that the
+// malformed object costs itself and nothing after it. It returns the error the
+// token stream is in when no token follows, which is where the caller's
+// recovery ends.
+//
+// ParseObject consumes the token it fails on for nearly every malformed object:
+// a number it cannot read, such as "1e2", which has no ISO 32000-1, 7.3.3
+// syntax; a stray delimiter; a bare keyword; a string it cannot decode.
+// Consuming one more token after the failure took the next object with it, and
+// in a content stream that object is often the operator: "/F1 1e2 Tf" lost its
+// Tf, and "[(a) 1e2] TJ" lost the "]" that closes the array, which then ran on
+// through the rest of the stream. A token is consumed here only when the failed
+// call consumed none, which is what keeps a recovery loop moving forward.
+//
+// Neither reference reader loses the operator. PDF.js ends the number at the
+// "e" (Lexer.getNumber), drops the unknown command "e2" and keeps its operands
+// for the operator that follows (EvaluatorPreprocessor.read), so its Tf reads a
+// size of 1. veraPDF ends it at the "e" too (BaseParser.readNumber) and reads
+// "e" as an operator and 2 as the size (PDFStreamParser.parseNextToken).
+//
+// # Corpus evidence
+//
+//   - pdfjs sci-notation.pdf: writes "/F1 1e2 Tf" after the stray keyword
+//     ETBT. The Tf it lost made PDF/A-1b and PDF/A-2b remediation roll back
+//     its content repairs; they now stay, and veraPDF reports no undefined
+//     operator on the output. The line after it leaves litho's text: the Td
+//     that places it had been ignored for the stray /F1 it carried, and
+//     litho reads ETBT as one undefined operator, not the ET BT PDF.js reads.
+//   - pdfjs poppler-90-0-fuzzed.pdf, issue11678.pdf: keep tokens of damaged
+//     streams that were swallowed, which raises litho's ISO 19005-2, 6.2.2
+//     t1 count from 1617 to 1924 and from 2 to 3. Page 14 of the first
+//     recovers the text "function[10]M. Naor".
+//   - pdfjs issue11088.pdf, issue15893_reduced.pdf, issue19484_2.pdf,
+//     poppler-742-0-fuzzed.pdf: gain an operator in a stream of binary
+//     noise, with no change to text or violations.
+//   - All corpora: no other file changes the operators of a page or form
+//     XObject, its page count, its text or its PDF/A-2b violations.
+func (p *Parser) SkipFailedObject(mark int) error {
+	if p.consumed != mark {
+		_, err := p.Peek(0)
+		return err
+	}
+	_, err := p.Consume()
+	return err
 }
 
 // maxParseNestingDepth bounds how deeply [Parser.ParseObject] recurses into
@@ -1275,6 +1334,7 @@ func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 			break
 		}
 
+		mark := p.consumed
 		obj, err := p.ParseObject(ctx)
 		if err != nil {
 			// Nesting past [maxParseNestingDepth] is a refusal rather than a
@@ -1283,16 +1343,9 @@ func (p *Parser) parseArray(ctx context.Context) (ast.PdfObject, error) {
 			if errors.Is(err, errNestingTooDeep) {
 				return nil, err
 			}
-			// Tolerate malformed array elements (e.g., operators inside
-			// TJ arrays): skip the bad token and continue parsing.
-			//
-			// ParseObject consumes a token before dispatching on it, so a bare
-			// keyword is already past by the time it reports one. Consuming
-			// again would swallow the element AFTER the bad token.
-			if errors.Is(err, errUnexpectedKeyword) {
-				continue
-			}
-			if _, consumeErr := p.Consume(); consumeErr != nil {
+			// Tolerate malformed array elements (e.g., operators inside TJ
+			// arrays): drop the bad element and continue with the next one.
+			if p.SkipFailedObject(mark) != nil {
 				break
 			}
 			continue
@@ -1514,11 +1567,14 @@ func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) 
 		// 8.9.7), so a value is counted one level down, as a dictionary's
 		// value is: it is no operand of the content stream.
 		p.depth++
+		mark := p.consumed
 		val, err := p.ParseObject(ctx)
 		p.depth--
 		if err != nil {
-			// Tolerate malformed values by consuming the bad token.
-			if _, consumeErr := p.Consume(); consumeErr != nil {
+			// Tolerate a malformed value by dropping it. Consuming a token
+			// past it would take the next key, or the ID that ends the
+			// dictionary, with it.
+			if skipErr := p.SkipFailedObject(mark); skipErr != nil {
 				return nil, fmt.Errorf("inline image dict value for %q: %w", keyName, err)
 			}
 			continue

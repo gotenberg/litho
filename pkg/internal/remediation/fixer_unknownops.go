@@ -410,9 +410,12 @@ const exponentTokenCheckInterval = 500
 //     re-serialized the page with "1e2" and the Tf after it gone, and wrote
 //     "/F1 50 600 Td". The rewrite keeps "/F1 100 Tf", which puts the next
 //     line above the page, where PDF.js draws it. litho's own reading of the
-//     original loses the same two tokens and keeps that line on the page, so
-//     the integrity probe counts a text drop and rolls the content repairs
-//     back, leaving the file as it was.
+//     original lost the same two tokens, which left that Td without effect
+//     and the line on the page, so the integrity probe counted a text drop
+//     and rolled the content repairs back. Read with the operand dropped
+//     alone, the original puts the line above the page too, and the repairs
+//     stay: veraPDF's undefined-operator findings on the output go at
+//     PDF/A-1b and PDF/A-2b.
 func rewriteExponentNumbers(ctx context.Context, data []byte, part int) ([]byte, int) {
 	type splice struct {
 		start, end int

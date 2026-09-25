@@ -215,3 +215,47 @@ func TestFixHexStringRewritesAnInvalidCharacterString(t *testing.T) {
 		t.Errorf("the show-text operator was lost:\n%s", got)
 	}
 }
+
+// TestFixHexStringKeepsTheOperatorAfterAMalformedOperand pins the round trip
+// the rewrite depends on: parsing the rewritten stream gives back the operators
+// the original parsed to, with a malformed operand elsewhere on the page.
+//
+// The content parser used to consume one token more than a failed operand
+// parse had, so "/F1 1e2 Tf" lost its Tf and the rewrite wrote the page back
+// without it, the stray /F1 joined to the operator that followed.
+func TestFixHexStringKeepsTheOperatorAfterAMalformedOperand(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	operand := "<48656C6C6> Tj /F1 1e2 Tf [(a) 1e2 (b)] TJ (c)"
+	original := "BT /F1 12 Tf 10 700 Td " + operand + " Tj ET\n"
+	rewritten := rewrittenContent(t, hexStringPDF(operand))
+	if rewritten == "" {
+		t.Fatal("the content stream was not rewritten")
+	}
+
+	want := []string{"BT", "Tf", "Td", "Tj", "Tf", "TJ", "Tj", "ET"}
+	var after []content.Operation
+	for name, src := range map[string]string{"original": original, "rewrite": rewritten} {
+		ops, err := content.ParseStreamData(ctx, []byte(src))
+		if err != nil {
+			t.Fatalf("parsing the %s: %v", name, err)
+		}
+		var got []string
+		for _, op := range ops {
+			got = append(got, op.Operator)
+		}
+		if strings.Join(got, " ") != strings.Join(want, " ") {
+			t.Fatalf("the %s parses to %v, want %v", name, got, want)
+		}
+		if name == "rewrite" {
+			after = ops
+		}
+	}
+	if tf := after[4].Operands; len(tf) != 1 || tf[0] != ast.PdfName("F1") {
+		t.Errorf("the rewritten Tf carries %v, want [/F1]", tf)
+	}
+	if tj, ok := after[5].Operands[0].(ast.PdfArray); !ok || len(tj) != 2 {
+		t.Errorf("the rewritten TJ carries %v, want [(a) (b)]", after[5].Operands)
+	}
+}

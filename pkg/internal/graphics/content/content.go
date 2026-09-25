@@ -113,13 +113,15 @@ func parseOperations(ctx context.Context, p *parser.Parser, ranges *[]ByteRange,
 			}
 			recordRange(opEnd)
 		} else {
+			mark := p.Consumed()
 			obj, err := p.ParseObject(ctx)
 			if err != nil {
-				// Tolerate malformed operands (stray delimiters like ']',
-				// broken references, etc.) by consuming the bad token and
-				// continuing. Lenient parsers skip unrecognised tokens in content
-				// streams rather than aborting.
-				if _, consumeErr := p.Consume(); consumeErr != nil {
+				// Tolerate a malformed operand (a stray delimiter like ']', a
+				// broken reference, a number such as "1e2") by dropping it and
+				// continuing: lenient parsers skip unrecognised tokens in content
+				// streams rather than aborting. Only the operand goes. The
+				// operator after it keeps its place and the operands before it.
+				if skipErr := p.SkipFailedObject(mark); skipErr != nil {
 					return nil, fmt.Errorf("failed to parse operand: %w (token: %v)", err, tok)
 				}
 				placer.take(noOperand)
