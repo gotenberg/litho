@@ -20,25 +20,44 @@ import (
 // UTF-8 and UTF-16, and a processor may read the other encodings IANA
 // registers:
 //
-//   - A UTF-16 entity begins with a byte order mark (4.3.3), from which it is
-//     recognized and transcoded to UTF-8 before parsing.
+//   - A UTF-16 entity is recognized from its bytes ([utf16Order]) and
+//     transcoded to UTF-8 before parsing.
 //   - An encoding declaration naming an IANA-registered encoding that is
 //     ASCII-compatible, ISO-8859-1 or windows-1252 for instance, decodes the
 //     rest of the entity. Per 4.3.3 names match case-insensitively, and an
 //     IANA-registered name denotes the encoding registered for it.
 //
+// Whether an entity is UTF-16 is read off its bytes, never off its
+// declaration. Deliberate leniency: 4.3.3 requires a UTF-16 entity to begin
+// with a byte order mark, and makes it a fatal error for an entity to be in
+// an encoding other than the one its declaration names. An entity declaring
+// UTF-16 whose bytes are ASCII-compatible is read as those bytes, as if it
+// declared no encoding. An entity whose bytes are UTF-16, with a byte order
+// mark or without, is read as UTF-16 whatever encoding litho reads its
+// declaration names. The XMP reader of the compliance package,
+// xmpDetectEncoding, applies the same rule for the reason it gives:
+// veraPDF's XMPCore reads a metadata packet's bytes whatever encoding it
+// declares, and holds valid a UTF-8 packet declaring UTF-16. litho reads
+// the XMP packet and the embedded invoice of one PDF alike.
+//
 // Everything else is an error: an encoding name outside production [81]
 // EncName, which makes the declaration not well-formed; a name IANA does not
 // register or x/text cannot decode, which 4.3.3 makes a fatal error ("an
 // entity with an encoding that it is unable to process"); and a declaration
-// that contradicts the bytes, which is also a fatal error there, such as
-// UTF-16 declared on an entity with no byte order mark, which Appendix F.1
-// has already read as ASCII-compatible to reach the declaration.
+// of an ASCII-incompatible encoding, EBCDIC for instance, on an entity
+// Appendix F.1 has already read as ASCII-compatible to reach the
+// declaration, which contradicts its bytes.
+//
+// # Corpus evidence
+//
+//   - All corpora: none of the 159 files that embed XML declares UTF-16 or
+//     begins with a byte order mark or a NUL byte, so the rule moves no
+//     verdict.
 func NewDecoder(payload []byte) *xml.Decoder {
 	wide := false
-	if bytes.HasPrefix(payload, []byte{0xFE, 0xFF}) || bytes.HasPrefix(payload, []byte{0xFF, 0xFE}) {
-		// ExpectBOM reads the byte order from the mark and drops it.
-		if transcoded, err := unicode.UTF16(unicode.BigEndian, unicode.ExpectBOM).NewDecoder().Bytes(payload); err == nil {
+	if order, ok := utf16Order(payload); ok {
+		// UseBOM drops a byte order mark, which also overrides order.
+		if transcoded, err := unicode.UTF16(order, unicode.UseBOM).NewDecoder().Bytes(payload); err == nil {
 			payload, wide = transcoded, true
 		}
 	}
@@ -48,6 +67,31 @@ func NewDecoder(payload []byte) *xml.Decoder {
 		return charsetReader(label, input, wide)
 	}
 	return dec
+}
+
+// utf16Order reports whether payload is UTF-16, and in which byte order: it
+// begins with a byte order mark (XML 1.0, 4.3.3), or its first two code
+// units are each a NUL byte and a non-NUL one, which XML 1.0, Appendix F.1
+// reads as UTF-16 with no byte order mark from the "<?" an XML declaration
+// opens with. No UTF-8 entity begins that way, as XML admits no NUL
+// character (2.2).
+//
+// The byte test is the one xmpDetectEncoding in the compliance package
+// applies to an XMP packet, so the two readers agree on what is UTF-16.
+func utf16Order(payload []byte) (unicode.Endianness, bool) {
+	switch {
+	case bytes.HasPrefix(payload, []byte{0xFE, 0xFF}):
+		return unicode.BigEndian, true
+	case bytes.HasPrefix(payload, []byte{0xFF, 0xFE}):
+		return unicode.LittleEndian, true
+	case len(payload) < 4:
+		return unicode.BigEndian, false
+	case payload[0] == 0 && payload[1] != 0 && payload[2] == 0 && payload[3] != 0:
+		return unicode.BigEndian, true
+	case payload[0] != 0 && payload[1] == 0 && payload[2] != 0 && payload[3] == 0:
+		return unicode.LittleEndian, true
+	}
+	return unicode.BigEndian, false
 }
 
 // charsetReader decodes input under the encoding label names. encoding/xml
@@ -71,13 +115,13 @@ func charsetReader(label string, input io.Reader, wide bool) (io.Reader, error) 
 		// An alias such as csUTF8: the bytes are what encoding/xml reads.
 		return input, nil
 	case "UTF-16", "UTF-16BE", "UTF-16LE":
-		if wide {
-			return input, nil
-		}
-		return nil, fmt.Errorf("%w: %q declared on an entity with no UTF-16 byte order mark", ErrEncoding, label)
+		// Transcoded already when the bytes are UTF-16, and read as they
+		// are when they are not: the bytes decide, see [NewDecoder].
+		return input, nil
 	}
 	if wide {
-		return nil, fmt.Errorf("%w: %q declared on an entity that begins with a UTF-16 byte order mark", ErrEncoding, label)
+		// A UTF-16 entity declaring another encoding: the bytes decide.
+		return input, nil
 	}
 	if !asciiCompatible(enc) {
 		return nil, fmt.Errorf("%w: %q declared on an entity read as ASCII-compatible", ErrEncoding, label)

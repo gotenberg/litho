@@ -71,6 +71,7 @@ func FuzzNewDecoder(f *testing.F) {
 	f.Add([]byte(latin1[:len(latin1)/2])) // Truncated inside the element.
 	f.Add([]byte("\xFF\xFE<\x00?\x00x\x00m\x00l\x00 \x00"))
 	f.Add([]byte("\xFE\xFF\x00<\x00a"))
+	f.Add([]byte("<\x00?\x00x\x00m\x00l\x00")) // UTF-16 with no byte order mark.
 	f.Add([]byte(`<?xml version="1.0" encoding="UTF-8-W/O-BOM"?><a/>`))
 
 	f.Fuzz(func(_ *testing.T, payload []byte) {

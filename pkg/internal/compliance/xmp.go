@@ -753,6 +753,12 @@ func XMPWellFormed(data []byte) bool {
 // packet declaring encoding="UTF-16" both its serialization verdict and its
 // whole PDF/A identification. veraPDF's XMPCore reads the bytes and reports
 // neither, because a declaration is not evidence about the bytes.
+//
+// Deliberate leniency: XML 1.0 (Fifth Edition), 4.3.3 makes it a fatal error
+// for an entity to be in an encoding other than the one its declaration
+// names. The bytes decide instead, as [xmpDetectEncoding] reads them. The
+// XSD engine's decoder, [xsd.NewDecoder], applies the same rule to an
+// embedded invoice, so litho reads the two XML payloads of one PDF alike.
 func xmpPassThroughCharset(_ string, input io.Reader) (io.Reader, error) {
 	return input, nil
 }
@@ -974,6 +980,15 @@ func xmpCharRef(data []byte) (value int, width int, ok bool) {
 // Returns one of "UTF-8", "UTF-16BE", "UTF-16LE", "UTF-32BE",
 // "UTF-32LE". An empty input is treated as UTF-8 so the caller does
 // not double-report a missing metadata stream.
+//
+// Deliberate leniency: XML 1.0 (Fifth Edition), 4.3.3 requires a UTF-16
+// entity to begin with a byte order mark, and makes it a fatal error for an
+// entity to be in an encoding other than the one its declaration names. The
+// bytes decide instead: a BOM-less wide packet is read by the zero stride,
+// the detection XML 1.0, Appendix F.1 describes, and a packet whose leading
+// bytes carry no NUL is UTF-8 whatever it declares, as veraPDF's XMPCore
+// reads it. The XSD engine's decoder, [xsd.NewDecoder], applies the same
+// UTF-16 byte test to an embedded invoice.
 func xmpDetectEncoding(data []byte) string {
 	// 4-byte BOMs first; FF FE 00 00 also matches the 2-byte UTF-16 LE
 	// BOM, so the longer prefix has to win.
