@@ -173,6 +173,19 @@ func ParseStreamDataWithOverflows(ctx context.Context, data []byte) ([]Operation
 	return ops, p.IntegerOverflows, err
 }
 
+// ParseStreamDataForCompliance parses content stream data with PDF/A format
+// checking enabled and returns, from that one parse, what
+// [ParseStreamDataWithOverflows] returns and the format violations
+// [ParseStreamDataFormatChecked] returns. Format checking records violations
+// without changing the operations, so a walk that judges both the operators
+// and the syntax of a stream parses it once.
+func ParseStreamDataForCompliance(ctx context.Context, data []byte) ([]Operation, []float64, []error, error) {
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
+	p := parser.NewParser(lex).WithFormatChecking()
+	ops, err := parseOperations(ctx, p, nil)
+	return ops, p.IntegerOverflows, p.FormatViolations, err
+}
+
 // ParsePageContent extracts, concatenates, and parses the content streams of a page or form XObject.
 //
 // The concatenated content is bounded by [limits.Limits.MaxPageContentBytes] of

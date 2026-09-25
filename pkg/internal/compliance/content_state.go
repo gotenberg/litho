@@ -267,7 +267,9 @@ var operatorResourceCategory = map[string]ast.PdfName{
 // reportUndefinedOps selects who states ISO 19005-2/3/4, 6.2.2 t1. A page
 // content stream is already walked by [checkPageContent], which states it there;
 // pass false for those and true for the streams that walk does not reach, so
-// the rule is stated exactly once per undefined operator.
+// the rule is stated exactly once per undefined operator. A number written with
+// an exponent where an operand stands reads as such an operator, so the same
+// flag states it, see [checkExponentOperands].
 func checkContentStreamResources(
 	ctx context.Context,
 	doc *document.Document,
@@ -278,13 +280,16 @@ func checkContentStreamResources(
 	pageNum int,
 	reportUndefinedOps bool,
 ) []Violation {
-	ops, overflows, err := content.ParseStreamDataWithOverflows(ctx, streamData)
+	ops, overflows, formatViolations, err := content.ParseStreamDataForCompliance(ctx, streamData)
 	if err != nil {
 		doc.Logger.Debug("compliance.content: cannot parse content stream", "error", err)
 		return nil
 	}
 
 	results := checkContentStreamResourcesOps(ctx, doc, ops, countOverflows(overflows), resources, inherited, part, pageNum, reportUndefinedOps)
+	if reportUndefinedOps {
+		results = append(results, checkExponentOperands(formatViolations, part, pageNum)...)
+	}
 
 	// Check inline image /Intent values from parsed BI operations.
 	results = append(results, checkInlineImageIntent(ops, part, pageNum)...)

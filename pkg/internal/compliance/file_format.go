@@ -46,13 +46,16 @@ func streamFormatRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_7_t01, Rule_19005_2_6_1_7_1_t01, Rule_19005_3_6_1_7_1_t01, Rule_19005_4_6_1_6_1_t01)
 }
 
-// maxContentFormatViolationsPerPage bounds how many content-stream format
-// findings one page contributes. Not spec-mandated: an anti-DoS guard. veraPDF
-// keys the hex string rules on the CosString and the undefined-operator rule on
-// the operator, and applies no such bound, but a conforming page has no
-// findings at all and a real defective producer emits a handful, so a page
-// reaching this many is crafted rather than merely wrong.
-const maxContentFormatViolationsPerPage = 64
+// maxContentFormatViolationsPerStream bounds how many content-stream format
+// findings one content stream contributes: a page's content, which ISO 32000-1,
+// 7.7.3.3 makes one stream however many parts its /Contents array holds, or one
+// form XObject, tiling pattern, Type3 glyph or appearance stream. Not
+// spec-mandated: an anti-DoS guard. veraPDF keys the hex string rules on the
+// CosString and the undefined-operator rule on the operator, and applies no
+// such bound, but a conforming stream has no findings at all and a real
+// defective producer emits a handful, so a stream reaching this many is
+// crafted rather than merely wrong.
+const maxContentFormatViolationsPerStream = 64
 
 // checkContentStreamFormat parses page content streams with format checking
 // enabled to detect hex string violations, odd digit count (§6.1.6 t1) and
@@ -92,7 +95,7 @@ func checkContentStreamFormat(ctx context.Context, doc *document.Document, catal
 		_, violations := content.ParseStreamDataFormatChecked(ctx, streamData)
 		reported := 0
 		for _, v := range violations {
-			if reported == maxContentFormatViolationsPerPage {
+			if reported == maxContentFormatViolationsPerStream {
 				break
 			}
 			rule := oddRule
@@ -100,13 +103,8 @@ func checkContentStreamFormat(ctx context.Context, doc *document.Document, catal
 			case errors.Is(v, parser.ErrHexStringInvalidChar):
 				rule = charRule
 			case errors.Is(v, parser.ErrNumberExponentOperand):
-				// ISO 32000-1, 7.3.3 gives a number no exponent, so the token
-				// is no operand: it stands where an operator does, and it is
-				// none ISO 32000-1 defines (ISO 19005-1, 6.2.10 t1; ISO
-				// 19005-2, 6.2.2 t1). veraPDF ends the number at the exponent
-				// letter and reports the rest of the token as that operator,
-				// once per token; measured with veraPDF 1.30 on "1.5e1 w",
-				// "1.5E-1 w" and "1e1 w".
+				// An operator ISO 32000-1 does not define, as
+				// checkExponentOperands states for the other streams.
 				rule = operatorRule
 			case errors.Is(v, parser.ErrNumberExponent):
 				// Inside an array or a dictionary the token is neither a
@@ -120,6 +118,46 @@ func checkContentStreamFormat(ctx context.Context, doc *document.Document, catal
 			results = append(results, Violation{
 				Rule:    rule,
 				Context: fmt.Sprintf("page %d: %s", i+1, v.Error()),
+			})
+		}
+	}
+	return results
+}
+
+// checkExponentOperands states the undefined-operator rule, ISO 19005-1,
+// 6.2.10 t1 and ISO 19005-2, 6.2.2 t1, once for every number written with an
+// exponent where an operand stands, from the format violations recorded while
+// parsing one content stream. ISO 32000-1, 7.3.3 gives a number no exponent, so
+// the token is no operand: it stands where an operator does, and it is none ISO
+// 32000-1 defines. veraPDF ends the number at the exponent letter and reports
+// the rest of the token as that operator, once per token; measured with
+// veraPDF 1.30 on "1.5e1 w", "1.5E-1 w" and "1e1 w".
+//
+// [checkContentStreamFormat] states it for a page's own content. The walks that
+// state the undefined-operator rule for the other streams a page draws, the
+// form XObjects it paints, the tiling patterns it selects, the glyphs of its
+// Type3 fonts and its annotation appearances, call this on the violations of
+// the same parse, so the two findings reach the same streams. veraPDF parses
+// each of those streams the same way: measured with veraPDF 1.30 at PDF/A-1b
+// and PDF/A-2b, "1.5e1 w" in any one of them fails the undefined-operator test
+// once, and "15 w" passes it.
+//
+// A number inside an array or a dictionary answers to no rule; see
+// [checkContentStreamFormat].
+func checkExponentOperands(violations []error, part, pageNum int) []Violation {
+	rule := undefinedOperatorRule(part)
+	if rule.Specification == "" {
+		return nil
+	}
+	var results []Violation
+	for _, v := range violations {
+		if len(results) == maxContentFormatViolationsPerStream {
+			break
+		}
+		if errors.Is(v, parser.ErrNumberExponentOperand) {
+			results = append(results, Violation{
+				Rule:    rule,
+				Context: fmt.Sprintf("page %d: %s", pageNum, v.Error()),
 			})
 		}
 	}

@@ -2,6 +2,7 @@ package content
 
 import (
 	"context"
+	"reflect"
 	"testing"
 )
 
@@ -99,10 +100,10 @@ func FuzzParseStreamDataFormatChecked(f *testing.F) {
 //
 // It is not a wrapper: alongside the operations it returns the value of every
 // integer literal the parser had to read as a real because it overflows 64 bits
-// ([parser.Parser.IntegerOverflows]), so it carries a code path the other three
-// never enter. Compliance reaches it on attacker-controlled content from three
-// places (check.go, file_limits.go, content_state.go), and an overflowing
-// literal is exactly what a crafted stream supplies.
+// ([parser.Parser.IntegerOverflows]), so it carries a code path the first three
+// never enter. Compliance reaches it on attacker-controlled content from two
+// places (check.go, file_limits.go), and an overflowing literal is exactly what
+// a crafted stream supplies.
 func FuzzParseStreamDataWithOverflows(f *testing.F) {
 	for _, s := range seedStreams {
 		f.Add([]byte(s))
@@ -118,6 +119,36 @@ func FuzzParseStreamDataWithOverflows(f *testing.F) {
 			return
 		}
 		_, _, _ = ParseStreamDataWithOverflows(context.Background(), data)
+	})
+}
+
+// FuzzParseStreamDataForCompliance covers the variant compliance reaches from
+// content_state.go and graphics.go on the form XObject, pattern, Type3 glyph and
+// appearance streams of a page, and asserts what its callers rely on: format
+// checking records violations and changes nothing else, so the operations, the
+// overflows and the outcome match [ParseStreamDataWithOverflows] on the same
+// bytes.
+func FuzzParseStreamDataForCompliance(f *testing.F) {
+	for _, s := range seedStreams {
+		f.Add([]byte(s))
+	}
+	f.Add([]byte("99999999999999999999 0 0 1 0 0 cm\n"))
+	f.Add([]byte("1.5e1 w [2.5e1 3] 0 d 1e1 w <4g8> Tj\n"))
+	f.Add([]byte("1.5E-1 w <48"))
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > maxFuzzInput {
+			return
+		}
+		ops, overflows, _, err := ParseStreamDataForCompliance(context.Background(), data)
+		wantOps, wantOverflows, wantErr := ParseStreamDataWithOverflows(context.Background(), data)
+		if (err == nil) != (wantErr == nil) {
+			t.Fatalf("error = %v, want %v", err, wantErr)
+		}
+		if !reflect.DeepEqual(ops, wantOps) || !reflect.DeepEqual(overflows, wantOverflows) {
+			t.Fatalf("format checking changed the parse: %d operations and %v overflows, want %d and %v",
+				len(ops), overflows, len(wantOps), wantOverflows)
+		}
 	})
 }
 

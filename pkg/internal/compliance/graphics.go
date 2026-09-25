@@ -379,8 +379,9 @@ func appearanceStreamObjects(ctx context.Context, doc *document.Document, apObj 
 }
 
 // checkAppearanceStreamOps parses one appearance stream, reports every operator
-// outside [validPDFOperators], and reports the names it references that no
-// resource dictionary defines.
+// outside [validPDFOperators] and every number written with an exponent where
+// an operand stands (see [checkExponentOperands]), and reports the names it
+// references that no resource dictionary defines.
 func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, streamObj ast.PdfObject, rule Rule, pageRes ast.PdfDict, part, pageNum int) []Violation {
 	stream, err := document.ResolveStream(ctx, doc, streamObj)
 	if err != nil {
@@ -391,7 +392,7 @@ func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, strea
 	if err != nil || len(data) == 0 {
 		return nil
 	}
-	ops, err := content.ParseStreamData(ctx, data)
+	ops, _, formatViolations, err := content.ParseStreamDataForCompliance(ctx, data)
 	if err != nil {
 		doc.Logger.Debug("compliance.graphics: cannot parse appearance stream", "error", err)
 		return nil
@@ -407,6 +408,10 @@ func checkAppearanceStreamOps(ctx context.Context, doc *document.Document, strea
 		}
 		results = append(results, failf(rule,
 			"page %d: undefined operator %q in annotation appearance", pageNum, op.Operator)...)
+	}
+	for _, v := range checkExponentOperands(formatViolations, part, pageNum) {
+		v.Context += " in annotation appearance"
+		results = append(results, v)
 	}
 
 	// Only ISO 19005-4 states the undefined-name test (§6.2.2 t3), so the scan
