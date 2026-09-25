@@ -516,6 +516,13 @@ func checkCIDSetStreamMap(ctx context.Context, doc *document.Document, cidFontDi
 	return nil
 }
 
+// CIDToGIDStreamEntries reads a /CIDToGIDMap stream as the /CIDSet check does
+// (see [cidToGIDStreamEntries]). Exported so the remediation package builds a
+// /CIDSet from the same reading of the map this package holds it to.
+func CIDToGIDStreamEntries(ctx context.Context, doc *document.Document, obj ast.PdfObject) (gids []int, ok bool) {
+	return cidToGIDStreamEntries(ctx, doc, obj)
+}
+
 // cidToGIDStreamEntries reads a /CIDToGIDMap stream as veraPDF's
 // CIDToGIDMapping.readMapping does: one big-endian GID per two bytes, and a
 // trailing odd byte as one more entry holding that byte shifted left by 8. ok is

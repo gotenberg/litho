@@ -14,6 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/core/xref"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 )
@@ -142,6 +143,7 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 	var fixes []string
 	processed := make(map[int]bool)
+	cidSets := newCIDSetRepair(hasCIDSetViolation, needCIDSet)
 
 	for _, page := range pages {
 		if err := ctx.Err(); err != nil {
@@ -193,7 +195,7 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 			subtype, _ := fd["Subtype"].(ast.PdfName)
 			switch string(subtype) {
 			case "Type0":
-				if f := fixType0Font(ctx, doc, alloc, fd, fontRef, hasWidthViolation, hasCIDSetViolation, needCIDSet); len(f) > 0 {
+				if f := fixType0Font(ctx, doc, alloc, fd, fontRef, hasWidthViolation, cidSets); len(f) > 0 {
 					fixes = append(fixes, f...)
 				}
 			case "Type1", "TrueType", "MMType1":
@@ -326,15 +328,15 @@ func fixSimpleFont(ctx context.Context, doc *document.Document, alloc *writer.Ob
 }
 
 // fixType0Font repairs one Type 0 font: the descendant CIDFont's /W and /DW,
-// its /CIDSet, and a generated /ToUnicode when the code-to-GID route is the
-// identity.
+// its /CIDSet through cidSets (nil repairs none), and a generated /ToUnicode
+// when the code-to-GID route is the identity.
 //
 // # Corpus evidence
 //
 //   - verapdf 6-2-11-4-1-t02-fail-e: while only /W was repaired it stayed
 //     reporting ".notdef glyph width mismatch (declared=1000.0, font=545.4)"
 //     on every pass with nothing fixed.
-func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, fixWidths, regenCIDSet, createCIDSet bool) []string {
+func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fontDict ast.PdfDict, fontRef ast.PdfIndirectRef, fixWidths bool, cidSets *cidSetRepair) []string {
 	// Alloc-first: persistCIDFont writes a copy of this array back when it
 	// is indirect and holds the CIDFont inline.
 	descArr := liveArray(ctx, alloc, doc, fontDict["DescendantFonts"])
@@ -434,8 +436,8 @@ func fixType0Font(ctx context.Context, doc *document.Document, alloc *writer.Obj
 	// only that a PRESENT /CIDSet must identify every CID in the program, so
 	// writing one uninvited would answer a rule nobody reported.
 	_, hasCIDSet := fdDict["CIDSet"]
-	if (hasCIDSet && regenCIDSet) || (!hasCIDSet && createCIDSet) {
-		if fixed := fixCIDSet(ctx, doc, alloc, fdDict, fdRef, fontData); fixed {
+	if cidSets.wanted(hasCIDSet) {
+		if fixed := cidSets.settle(ctx, doc, alloc, fdDict, fdRef, fontData, cidFont); fixed {
 			verb := "regenerated"
 			if !hasCIDSet {
 				verb = "added"
@@ -636,15 +638,178 @@ func fixCharSet(ctx context.Context, alloc *writer.ObjAllocator, fdDict ast.PdfD
 	return alloc.AllocAt(fdRef.ObjectNum, newFD)
 }
 
+// cidSetRepair settles the /CIDSet of each font descriptor once per
+// [fixFontIssues] run.
+//
+// A descriptor holds one /CIDSet, and several CIDFonts can name the same
+// descriptor. The repair used to run per Type 0 font and compare the set it
+// built with the /CIDSet the document held, so the second font sharing a
+// descriptor took the first one's queued set for a stale one and wrote a
+// duplicate over it, leaving the first stream orphaned in the output. The set
+// is now built once per descriptor, for every CIDFont that names it (see
+// [fixCIDSet]), and compared with the /CIDSet the allocator holds.
+//
+// A nil *cidSetRepair repairs nothing.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18801.pdf: at PDF/A-2b the per-font repair left 76
+//     unreferenced /CIDSet streams in the output.
+//   - pdfjs bug1142033.pdf, bug921760.pdf, issue13851.pdf, issue16119.pdf,
+//     issue19319.pdf: at PDF/A-2b it left one to three each, with the same
+//     verdicts from litho and veraPDF as the single set now written.
+type cidSetRepair struct {
+	// regen rewrites a present /CIDSet reported incomplete (ISO 19005-2,
+	// 6.2.11.4.2 t2; ISO 14289-1, 7.21.4.2).
+	regen bool
+	// create supplies a /CIDSet reported missing (ISO 19005-1, 6.3.5 t3).
+	create bool
+	// settled holds the descriptors whose /CIDSet this run already decided.
+	settled map[int]bool
+	// sharers maps a descriptor's object number to the CIDFonts naming it,
+	// gathered on the first repair that needs it.
+	sharers map[int][]ast.PdfDict
+}
+
+// newCIDSetRepair returns the /CIDSet repair of one run, which rewrites an
+// incomplete set when regen is set and supplies a missing one when create is.
+func newCIDSetRepair(regen, create bool) *cidSetRepair {
+	return &cidSetRepair{regen: regen, create: create, settled: make(map[int]bool)}
+}
+
+// wanted reports whether a descriptor holding a /CIDSet (or not, per
+// hasCIDSet) is one the reported violations ask to repair. Regeneration stays
+// gated on the key being present: the conditional rules (6.2.11.4.2, 7.21.4.2)
+// say only that a PRESENT /CIDSet must identify every CID in the program, so
+// writing one uninvited would answer a rule nobody reported.
+func (r *cidSetRepair) wanted(hasCIDSet bool) bool {
+	if r == nil {
+		return false
+	}
+	return (hasCIDSet && r.regen) || (!hasCIDSet && r.create)
+}
+
+// settle writes the /CIDSet of the descriptor fdRef names, once per run, and
+// reports whether it wrote one. cidFont is the CIDFont the caller reached the
+// descriptor through, which stands in for the sharers when the document walk
+// finds none.
+func (r *cidSetRepair) settle(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fdDict ast.PdfDict, fdRef ast.PdfIndirectRef, fontData []byte, cidFont ast.PdfDict) bool {
+	// A direct descriptor has no object number to write the updated
+	// descriptor at, as fixCIDSet also finds.
+	if fdRef.ObjectNum <= 0 {
+		return false
+	}
+	if r.settled[fdRef.ObjectNum] {
+		return false
+	}
+	r.settled[fdRef.ObjectNum] = true
+	if r.sharers == nil {
+		r.sharers = cidFontsByDescriptor(ctx, alloc, doc)
+	}
+	fonts := r.sharers[fdRef.ObjectNum]
+	if len(fonts) == 0 {
+		fonts = []ast.PdfDict{cidFont}
+	}
+	return fixCIDSet(ctx, doc, alloc, fdDict, fdRef, fontData, fonts)
+}
+
+// cidFontsByDescriptor maps the object number of each indirect font
+// descriptor to the CIDFont dictionaries that name it, read through the
+// allocator. A CIDFont held inline in a Type 0 font's /DescendantFonts is
+// reached through that font; one in an object stream through its type 2
+// cross-reference entry.
+func cidFontsByDescriptor(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) map[int][]ast.PdfDict {
+	out := make(map[int][]ast.PdfDict)
+	add := func(d ast.PdfDict) {
+		if sub, _ := d["Subtype"].(ast.PdfName); sub != "CIDFontType0" && sub != "CIDFontType2" {
+			return
+		}
+		if ref, ok := d["FontDescriptor"].(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 {
+			out[ref.ObjectNum] = append(out[ref.ObjectNum], d)
+		}
+	}
+	for objNum, entry := range doc.Index.Entries {
+		if ctx.Err() != nil {
+			return out
+		}
+		if entry.Type == xref.XRefTypeFree || objNum == 0 {
+			continue
+		}
+		d := resolveFromAllocOrDoc(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation})
+		if d == nil {
+			continue
+		}
+		add(d)
+		if sub, _ := d["Subtype"].(ast.PdfName); sub == "Type0" {
+			for _, desc := range liveArray(ctx, alloc, doc, d["DescendantFonts"]) {
+				if inline, ok := desc.(ast.PdfDict); ok {
+					add(inline)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// programCIDs returns the CIDs a CIDFont's program holds, as the /CIDSet check
+// lists them: for a TrueType program, every GID from 1 below maxp.numGlyphs
+// under an Identity /CIDToGIDMap, the default (ISO 32000-1, 9.7.4.2, Table
+// 117), and under a map stream every CID from 1 whose GID the program holds;
+// for a CFF program, the CIDs of its charset. A map stream is read the way the
+// check reads it ([compliance.CIDToGIDStreamEntries]), and one that cannot be
+// read falls back to the Identity reading.
+//
+// Only the program is needed for the Identity and CFF readings. The map is the
+// CIDFont's own, so two CIDFonts sharing one program through one descriptor can
+// hold different CIDs.
+func programCIDs(ctx context.Context, doc *document.Document, cidFont ast.PdfDict, fontData []byte) map[uint16]bool {
+	numGlyphs := typography.ExtractNumGlyphs(fontData)
+	if numGlyphs <= 0 {
+		return typography.ExtractValidCIDs(fontData)
+	}
+	if mapObj, ok := cidFont["CIDToGIDMap"]; ok {
+		if name, _ := document.ResolveName(ctx, doc, mapObj); name == "" {
+			if gids, ok := compliance.CIDToGIDStreamEntries(ctx, doc, mapObj); ok {
+				cids := make(map[uint16]bool)
+				for cid := 1; cid < len(gids) && cid <= math.MaxUint16; cid++ {
+					if gids[cid] < numGlyphs {
+						cids[uint16(cid)] = true //nolint:gosec // cid <= math.MaxUint16.
+					}
+				}
+				return cids
+			}
+		}
+	}
+	cids := make(map[uint16]bool, numGlyphs)
+	for gid := 1; gid < numGlyphs; gid++ {
+		cids[uint16(gid)] = true //nolint:gosec // gid < numGlyphs, a uint16 from maxp.
+	}
+	return cids
+}
+
 // fixCIDSet writes into the font descriptor a /CIDSet covering the CIDs the
-// check requires of the font program, and reports whether it wrote one.
+// check requires of the program, for every CIDFont in cidFonts, and reports
+// whether it wrote one.
+//
+// The set is the union of [programCIDs] over the CIDFonts sharing the
+// descriptor. ISO 19005-1, 6.3.5 t3, as veraPDF tests it, is per glyph: each
+// CID a font renders must be in the set, so a union satisfies every sharer.
+// ISO 19005-2, 6.2.11.4.2 t2 is exact per CIDFont, every CID the program holds
+// and no other; sharers that read one program the same way, which is every
+// Identity and CFF sharer, hold the same CIDs, so their union is that set.
+// Sharers with different /CIDToGIDMap streams cannot all be satisfied by one
+// descriptor, and the union at least lists every CID each one holds.
 //
 // # Corpus evidence
 //
 //   - pdfjs bug911034.pdf: writing only the outlined CIDs left "CID 1 in font
 //     program not in /CIDSet" as soon as the /CIDToGIDMap fixer supplied the
 //     Identity key that activates the rule.
-func fixCIDSet(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fdDict ast.PdfDict, fdRef ast.PdfIndirectRef, fontData []byte) bool {
+//   - pdfjs issue20232.pdf: two TrueType CIDFonts with their own /CIDToGIDMap
+//     streams name one descriptor, and the set built from glyph IDs left the
+//     rendered CIDs 1042 and 8470 out. litho and veraPDF both kept reporting
+//     ISO 19005-1, 6.3.5 t3 at PDF/A-1b, and neither does on the union.
+func fixCIDSet(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fdDict ast.PdfDict, fdRef ast.PdfIndirectRef, fontData []byte, cidFonts []ast.PdfDict) bool {
 	if err := ctx.Err(); err != nil {
 		return false
 	}
@@ -655,12 +820,9 @@ func fixCIDSet(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 	// compliance.checkCIDSetCompletenessTrueType walks that whole range.
 	// Writing only the outlined CIDs leaves a violation as soon as the
 	// /CIDToGIDMap fixer supplies the Identity key that activates the rule.
-	validCIDs := typography.ExtractValidCIDs(fontData)
-	if numGlyphs := typography.ExtractNumGlyphs(fontData); numGlyphs > 0 {
-		validCIDs = make(map[uint16]bool, numGlyphs)
-		for gid := 1; gid < numGlyphs; gid++ {
-			validCIDs[uint16(gid)] = true //nolint:gosec // gid < numGlyphs, a uint16 from maxp.
-		}
+	validCIDs := make(map[uint16]bool)
+	for _, cidFont := range cidFonts {
+		maps.Copy(validCIDs, programCIDs(ctx, doc, cidFont, fontData))
 	}
 	if len(validCIDs) == 0 {
 		return false
@@ -685,9 +847,12 @@ func fixCIDSet(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 
 	// Rewriting a /CIDSet already equal to the computed one is not a repair:
 	// it reports a fix and appends a revision, so remediating the result grew
-	// the file again on every pass.
+	// the file again on every pass. Read through the allocator: fdDict is, so
+	// its /CIDSet may name a set this run queued, which the document does not
+	// hold, and comparing against the document alone wrote a duplicate.
 	if existing, ok := fdDict["CIDSet"]; ok {
-		if stream, err := document.ResolveStream(ctx, doc, existing); err == nil && stream.Dict != nil {
+		ref, _ := existing.(ast.PdfIndirectRef)
+		if stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, ref, existing); ok && stream.Dict != nil {
 			if data, derr := doc.DecodeStream(ctx, stream); derr == nil && bytes.Equal(data, cidSet) {
 				return false
 			}

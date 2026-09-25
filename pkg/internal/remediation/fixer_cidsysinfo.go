@@ -39,11 +39,12 @@ func matchCIDSystemInfo(v compliance.Violation) bool {
 	return contextContains(v, "CIDFont") || contextContains(v, "CMap")
 }
 
-// fixCIDSystemInfo forces every Type-0 font to use /Identity-H (or
-// /Identity-V for vertical-writing CIDFonts). ISO 32000-1 §9.7.2.1
-// exempts those two encodings from the CIDSystemInfo equivalence rule,
-// so relabelling sidesteps Registry/Ordering/Supplement mismatches
-// without touching the CMap or CIDFont dictionaries.
+// fixCIDSystemInfo labels every Type 0 font whose codes are already its CIDs
+// with /Identity-H or /Identity-V, the writing mode [chooseIdentityEncoding]
+// keeps. ISO 32000-1 §9.7.2.1 exempts those two encodings from the
+// CIDSystemInfo equivalence rule, so relabelling sidesteps
+// Registry/Ordering/Supplement mismatches without touching the CMap or CIDFont
+// dictionaries.
 //
 // # Corpus evidence
 //
@@ -103,8 +104,10 @@ func fixCIDSystemInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 		}
 
 		enc := chooseIdentityEncoding(ctx, doc, fontDict)
-		current, _ := fontDict["Encoding"].(ast.PdfName)
-		if current == enc {
+		// Resolved rather than asserted direct: an /Encoding held as an
+		// indirect name already names this CMap, and the exemption holds
+		// however the name is written.
+		if current, err := document.ResolveName(ctx, doc, fontDict["Encoding"]); err == nil && current == enc {
 			continue
 		}
 		newFont := make(ast.PdfDict, len(fontDict))
@@ -304,9 +307,36 @@ func encodingIsIdentityCompatible(ctx context.Context, doc *document.Document, f
 	return name == "Identity-H" || name == "Identity-V"
 }
 
-// chooseIdentityEncoding picks Identity-V when the descendant CIDFont
-// is configured for vertical writing, Identity-H otherwise.
+// chooseIdentityEncoding returns the Identity CMap a Type 0 font is labelled
+// with.
+//
+// A font already on /Identity-H or /Identity-V keeps it. The CMap sets the
+// writing mode: /WMode is an entry of the CMap (ISO 32000-1, 9.7.5.3, Table
+// 120), and the CIDFont's /W2 and /DW2 only give the vertical metrics a
+// vertical CMap uses (9.7.4.3). Both Identity CMaps are exempt from the
+// CIDSystemInfo rule, so swapping one for the other repairs nothing and turns
+// vertical text horizontal, or the reverse. A vertical CIDFont with no /W2 or
+// /DW2 is a legal one that takes the default vertical metrics.
+//
+// Only a font with no /Encoding, which ISO 32000-1, Table 121 requires, has
+// no writing mode to keep. There the descendant's vertical metrics are the one
+// sign of the producer's intent: /Identity-V when it declares /W2 or /DW2,
+// /Identity-H otherwise.
+//
+// # Corpus evidence
+//
+//   - pdfjs vertical.pdf, verapdf 6-2-11-3-1-t01-pass-c, 6-2-10-3-1-t01-pass-c:
+//     hold an /Identity-V font with no /W2 or /DW2, the shape the metrics
+//     alone relabelled /Identity-H. None reports a CIDSystemInfo mismatch that
+//     runs the repair, so no corpus output changes.
+//   - pdfjs issue11922_reduced.pdf, issue13823.pdf, issue19319.pdf,
+//     issue19360.pdf: hold an /Identity-H font whose CIDFont declares /W2 or
+//     /DW2, the reverse case, and none runs the repair either.
 func chooseIdentityEncoding(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) ast.PdfName {
+	if current, err := document.ResolveName(ctx, doc, fontDict["Encoding"]); err == nil &&
+		(current == "Identity-H" || current == "Identity-V") {
+		return current
+	}
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
 		return "Identity-H"

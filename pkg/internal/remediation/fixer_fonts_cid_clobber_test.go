@@ -69,7 +69,7 @@ func TestFixType0Font_KeepsAPeerFixersPendingCIDFontWrite(t *testing.T) {
 	}
 
 	fixes := fixType0Font(ctx, doc, alloc, fontDict,
-		ast.PdfIndirectRef{ObjectNum: type0Obj}, true, false, false)
+		ast.PdfIndirectRef{ObjectNum: type0Obj}, true, nil)
 
 	got, ok := alloc.Pending()[cidObj].(ast.PdfDict)
 	if !ok {
