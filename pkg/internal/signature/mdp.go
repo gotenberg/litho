@@ -1,10 +1,12 @@
 package signature
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
 	"regexp"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -190,18 +192,26 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 		}
 	}
 
-	// Table 254 permits annotation deletion only at P=3, and P=1 already
-	// refuses the page rewrite a deletion needs. At P=2 a deletion appends
-	// nothing the classifier forbids, so the signed revision's /Annots are
-	// compared with the current ones. That runs even when nothing was
-	// appended: a cross-reference section alone can free an annotation.
-	if violation == "" && sig.MDPPolicy == 2 {
+	// Table 254 permits page deletion at no P and annotation deletion only at
+	// P=3. A deletion may append nothing the classifier forbids, so the
+	// signed revision's pages, and at P=2 their /Annots, are compared with the
+	// current ones. At P=1 the page rewrite an annotation deletion needs is
+	// already refused. That runs even when nothing was appended: a
+	// cross-reference section alone can free a page or an annotation.
+	if violation == "" {
+		checked := "page"
+		if sig.MDPPolicy == 2 {
+			checked = "page and annotation"
+		}
 		rev, err := signedRevision()
 		if err == nil {
+			violation, err = removedPage(ctx, doc, rev)
+		}
+		if err == nil && violation == "" && sig.MDPPolicy == 2 {
 			violation, err = removedAnnotation(ctx, doc, rev)
 		}
 		if err != nil {
-			note += fmt.Sprintf("; annotation removals not checked: %v", err)
+			note += fmt.Sprintf("; %s removals not checked: %v", checked, err)
 		}
 	}
 
@@ -223,8 +233,9 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 }
 
 // withoutValidationData returns objects without those that add validation
-// data or document timestamps ([ltvExemptions]), how many it left out, and a
-// note for MDPInfo when they could not be told apart.
+// data or document timestamps ([ltvExemptions]) or that an earlier update
+// added as such and a later one dropped ([exemptDroppedValidationData]), how
+// many it left out, and a note for MDPInfo when they could not be told apart.
 //
 // ISO 32000-2, 12.8.2.2, Table 257 does not count such an update as a change
 // whatever /P says, so the classifier never sees them. Telling them apart
@@ -260,6 +271,9 @@ func withoutValidationData(
 	if err != nil {
 		return objects, 0, fmt.Sprintf("; validation data not recognized: %v", err)
 	}
+	if err := exemptDroppedValidationData(ctx, doc, rev, objects, exempt); err != nil {
+		note = fmt.Sprintf("; validation data a later update dropped not recognized: %v", err)
+	}
 	kept := make([]appendedObject, 0, len(objects))
 	for _, obj := range objects {
 		if exempt[obj.ObjNum] {
@@ -268,7 +282,7 @@ func withoutValidationData(
 		}
 		kept = append(kept, obj)
 	}
-	return kept, removed, ""
+	return kept, removed, note
 }
 
 // appendedObject holds a parsed object from the post-signature region.
@@ -284,6 +298,11 @@ type appendedObject struct {
 	// Unread is set on an object stream whose objects could not be read, and
 	// says why. The objects it holds are then unknown.
 	Unread string
+
+	// UpdateEnd is the file offset just past the end-of-file marker of the
+	// incremental update that holds the object, where the revision that
+	// update made ends. It is 0 when no marker follows the object.
+	UpdateEnd int64
 }
 
 // objectHeaderRe matches "N G obj" headers in the appended data.
@@ -306,6 +325,7 @@ func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd
 	}
 
 	var objects []appendedObject
+	updateEnds := updateEndOffsets(data, signedEnd)
 
 	// Find all object headers.
 	matches := objectHeaderRe.FindAllIndex(data, -1)
@@ -330,14 +350,46 @@ func parseAppendedObjects(ctx context.Context, doc *document.Document, signedEnd
 			doc.Logger.Debug("reading appended object header", slog.Any("err", err))
 		}
 
+		described := []appendedObject{describeAppended(objNum, obj)}
 		if stream, ok := obj.(ast.PdfStream); ok && dictName(stream.Dict, "Type") == "ObjStm" {
-			objects = append(objects, appendedObjectStream(ctx, doc, stream, offset, fileEnd, objNum, genNum)...)
-			continue
+			described = appendedObjectStream(ctx, doc, stream, offset, fileEnd, objNum, genNum)
 		}
-		objects = append(objects, describeAppended(objNum, obj))
+		end := updateEnd(updateEnds, offset)
+		for _, ao := range described {
+			ao.UpdateEnd = end
+			objects = append(objects, ao)
+		}
 	}
 
 	return objects, nil
+}
+
+// eofMarker ends each incremental update (ISO 32000-1, 7.5.5, 7.5.6).
+var eofMarker = []byte("%%EOF")
+
+// updateEndOffsets returns the file offset just past each end-of-file marker
+// in data, the bytes that start at file offset start, in ascending order.
+func updateEndOffsets(data []byte, start int64) []int64 {
+	var ends []int64
+	for at := 0; ; {
+		i := bytes.Index(data[at:], eofMarker)
+		if i < 0 {
+			return ends
+		}
+		at += i + len(eofMarker)
+		ends = append(ends, start+int64(at))
+	}
+}
+
+// updateEnd returns the first of ends past offset: where the incremental
+// update that holds an object at offset ends. It returns 0 when no marker
+// follows the object.
+func updateEnd(ends []int64, offset int64) int64 {
+	i, _ := slices.BinarySearch(ends, offset+1)
+	if i == len(ends) {
+		return 0
+	}
+	return ends[i]
 }
 
 // appendedObjectStream describes the objects an appended object stream holds.

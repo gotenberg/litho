@@ -2,7 +2,10 @@ package signature
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -340,6 +343,99 @@ func ltvExemptions(ctx context.Context, doc, rev *document.Document, current *lt
 		}
 	}
 	return exempt, nil
+}
+
+// maxEarlierRevisions bounds how many revisions between the signed one and the
+// current one [exemptDroppedValidationData] reads. It is an anti-DoS guard, not
+// spec-mandated: each revision is read through its own /Prev chain, so a
+// crafted file of many small updates would otherwise cost the square of their
+// number. A document gains a revision each time validation data or a document
+// timestamp is added to it, and 64 covers decades of yearly renewals.
+const maxEarlierRevisions = 64
+
+// exemptDroppedValidationData adds to exempt each object number that an
+// earlier update wrote as validation data and a later update dropped.
+//
+// ISO 32000-2, 12.8.2.2, Table 257 exempts each incremental update that only
+// adds a DSS or a document timestamp, and a later update of the same kind may
+// rewrite the DSS without a stream an earlier one added. That stream is then
+// validation data in the revision its update made, and in none after, so
+// [ltvExemptions], which reads the current revision, classifies it as any
+// other object. A number is exempt when every appended definition of it lies
+// in an update whose revision holds it as validation data, and when it is new
+// since the signed revision rev or already served as validation data there,
+// the rule [ltvExemptions] applies. A definition in the last update is judged
+// by the current revision, so a stream an update rewrites while dropping it
+// stays a change.
+//
+// Exempting a dropped object passes nothing that reaches the document: an
+// object new since signing is named only by objects written after signing,
+// and each of those is classified itself.
+func exemptDroppedValidationData(ctx context.Context, doc, rev *document.Document, objects []appendedObject, exempt map[int]bool) error {
+	pending := make(map[int][]int64)
+	for _, obj := range objects {
+		num := obj.ObjNum
+		if num <= 0 || obj.IsXRef || obj.Unread != "" || exempt[num] {
+			continue
+		}
+		pending[num] = append(pending[num], obj.UpdateEnd)
+	}
+	distinct := make(map[int64]bool)
+	for _, defs := range pending {
+		for _, end := range defs {
+			if end > 0 {
+				distinct[end] = true
+			}
+		}
+	}
+	if len(distinct) > maxEarlierRevisions {
+		return fmt.Errorf("%d updates hold objects to check, more than the %d compared", len(distinct), maxEarlierRevisions)
+	}
+	ends := slices.Sorted(maps.Keys(distinct))
+
+	held := make(map[int64]map[int]bool, len(ends))
+	for _, end := range ends {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		revision, err := doc.Revision(ctx, end)
+		if err != nil {
+			// A revision that cannot be read holds nothing, so what its
+			// update wrote stays a change.
+			doc.Logger.Debug("reading an earlier revision for validation data", slog.Int64("end", end), slog.Any("err", err))
+			continue
+		}
+		ltv, err := collectLTV(ctx, revision)
+		if err != nil {
+			doc.Logger.Debug("collecting an earlier revision's validation data", slog.Int64("end", end), slog.Any("err", err))
+			continue
+		}
+		held[end] = ltv.all
+	}
+
+	var signed *ltvObjects
+	for num, defs := range pending {
+		dropped := true
+		for _, end := range defs {
+			dropped = dropped && held[end][num]
+		}
+		if !dropped {
+			continue
+		}
+		if rev.DefinesObject(num) {
+			if signed == nil {
+				var err error
+				if signed, err = collectLTV(ctx, rev); err != nil {
+					return err
+				}
+			}
+			if !signed.all[num] {
+				continue
+			}
+		}
+		exempt[num] = true
+	}
+	return nil
 }
 
 // ltvDiff compares the objects a P=1 update may rewrite to hold validation

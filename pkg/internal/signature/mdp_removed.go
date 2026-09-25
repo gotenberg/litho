@@ -28,9 +28,9 @@ type signedAnnotation struct {
 // instantiating page templates, which rearrange them.
 //
 // Pages are matched by object number, so a page the update removed from the
-// tree is outside this check, as is a page written directly in /Kids (7.7.3.2
+// tree is left to [removedPage], and a page written directly in /Kids (7.7.3.2
 // requires references) and an annotation written directly in /Annots (Table
-// 30 requires references).
+// 30 requires references) are outside this check.
 //
 // The work is linear in the /Annots bytes of both revisions, whatever the
 // file shares: a page is compared once however often the tree lists it, a
@@ -90,6 +90,44 @@ func removedAnnotation(ctx context.Context, doc, rev *document.Document) (string
 			if !listed[a.num] || !annotationExists(ctx, doc, a.num) {
 				return fmt.Sprintf("annotation %d (%s) was removed from page %d, which P=2 does not permit", a.num, a.desc, i+1), nil
 			}
+		}
+	}
+	return "", nil
+}
+
+// removedPage describes the first page of the signed revision rev that the
+// current document's page tree no longer holds, and returns "" when none was
+// removed.
+//
+// ISO 32000-1, 12.8.2.2, Table 254 permits no page deletion at any P: P=2 and
+// P=3 permit instantiating page templates, which adds pages, and nothing that
+// takes one away. A deletion need append no object the classifier forbids: at
+// P=2 the /Pages node it rewrites is permitted, and at every P a
+// cross-reference section can free the page (7.5.4) without appending
+// anything. 12.8.2.2.2 lets a reader compare the signed and current versions,
+// which is what this does. Pages are matched by object number, and a page
+// written directly in /Kids, which 7.7.3.2 forbids, is outside the check.
+func removedPage(ctx context.Context, doc, rev *document.Document) (string, error) {
+	signedPages, err := pagesOf(ctx, rev)
+	if err != nil {
+		return "", fmt.Errorf("reading the signed revision's pages: %w", err)
+	}
+	currentPages, err := pagesOf(ctx, doc)
+	if err != nil {
+		return "", fmt.Errorf("reading the current pages: %w", err)
+	}
+	current := make(map[int]bool, len(currentPages))
+	for _, p := range currentPages {
+		current[p.Ref.ObjectNum] = true
+	}
+	for i, p := range signedPages {
+		if i%100 == 0 {
+			if err := ctx.Err(); err != nil {
+				return "", err
+			}
+		}
+		if num := p.Ref.ObjectNum; num > 0 && !current[num] {
+			return fmt.Sprintf("page %d (object %d) was removed from the page tree, which no P permits", i+1, num), nil
 		}
 	}
 	return "", nil

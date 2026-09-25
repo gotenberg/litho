@@ -144,3 +144,69 @@ func TestEvaluateMDP_ValidationDataWithoutASignedRevision(t *testing.T) {
 		t.Errorf("MDPValid = %v, MDPInfo %q: want a violation that says the validation data was not recognized", result.MDPValid, result.MDPInfo)
 	}
 }
+
+// dropUpdate is a later long-term validation update that rewrites the DSS of
+// [dssUpdate] without its OCSP response (22), which it leaves defined.
+func dropUpdate() []updatedObject {
+	return []updatedObject{
+		{20, "<< /Type /DSS /Certs [21 0 R] /VRI 23 0 R >>"},
+		{24, "<< /Type /VRI /Cert [21 0 R] /TS 25 0 R >>"},
+	}
+}
+
+// TestEvaluateMDP_DroppedValidationData covers ISO 32000-2, 12.8.2.2, Table
+// 257 across several updates: a stream an earlier update added as validation
+// data and a later one dropped from the DSS is no change, while a stream the
+// later update rewrites or puts to another use still is.
+func TestEvaluateMDP_DroppedValidationData(t *testing.T) {
+	withDSS := func(t *testing.T, base []byte) []byte {
+		return appendUpdate(t, base, dssUpdate("")...)
+	}
+	tests := []struct {
+		name     string
+		policy   int
+		steps    func(t *testing.T, base []byte) []byte
+		want     bool
+		reported string // what MDPInfo names when the verdict is a violation
+	}{
+		{"P=1 OCSP response dropped", 1, func(t *testing.T, base []byte) []byte {
+			return appendUpdate(t, withDSS(t, base), dropUpdate()...)
+		}, true, ""},
+		{"P=1 OCSP response dropped and freed", 1, func(t *testing.T, base []byte) []byte {
+			return freeObject(t, appendUpdate(t, withDSS(t, base), dropUpdate()...), 22)
+		}, true, ""},
+		{"P=2 VRI dictionary dropped", 2, func(t *testing.T, base []byte) []byte {
+			return appendUpdate(t, withDSS(t, base),
+				updatedObject{23, "<< /0123456789ABCDEF0123456789ABCDEF01234567 26 0 R >>"},
+				updatedObject{26, "<< /Type /VRI /Cert [21 0 R] >>"},
+			)
+		}, true, ""},
+
+		{"P=1 OCSP response dropped and rewritten", 1, func(t *testing.T, base []byte) []byte {
+			return appendUpdate(t, withDSS(t, base),
+				replaced(dropUpdate(), updatedObject{22, "<< /Length 5 >>\nstream\nother\nendstream"})...)
+		}, false, "object 22 (untyped)"},
+		{"P=1 OCSP response dropped into the page content", 1, func(t *testing.T, base []byte) []byte {
+			return appendUpdate(t, withDSS(t, base),
+				replaced(dropUpdate(), updatedObject{3, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents [9 0 R 22 0 R] /Annots [4 0 R 6 0 R] >>"})...)
+		}, false, "object 3 (Page)"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			base := ltvBasePDF(tc.policy)
+			result := mdpVerdict(t, tc.steps(t, base), len(base), tc.policy)
+			if result.MDPValid != tc.want {
+				t.Fatalf("MDPValid = %v, want %v (MDPInfo %q)", result.MDPValid, tc.want, result.MDPInfo)
+			}
+			if tc.want && !strings.Contains(result.MDPInfo, "adding validation data or document timestamps") {
+				t.Errorf("MDPInfo %q does not count the validation data", result.MDPInfo)
+			}
+			if tc.reported != "" && !strings.Contains(result.MDPInfo, tc.reported) {
+				t.Errorf("MDPInfo %q does not name %s", result.MDPInfo, tc.reported)
+			}
+			if strings.Contains(result.MDPInfo, "not recognized") || strings.Contains(result.MDPInfo, "not checked") {
+				t.Errorf("MDPInfo %q: a revision was not read", result.MDPInfo)
+			}
+		})
+	}
+}
