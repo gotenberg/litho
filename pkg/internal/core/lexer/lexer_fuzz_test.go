@@ -10,6 +10,9 @@ import (
 // FuzzLexer feeds arbitrary bytes directly into the lexer.
 func FuzzLexer(f *testing.F) {
 	f.Add([]byte("/Name"))
+	f.Add([]byte("/A#42"))
+	f.Add([]byte("<</F#>>"))
+	f.Add([]byte("/A#4"))
 	f.Add([]byte("(string)"))
 	f.Add([]byte("<AABB>"))
 	f.Add([]byte("<< >>"))

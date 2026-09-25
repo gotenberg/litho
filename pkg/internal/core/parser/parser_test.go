@@ -148,6 +148,31 @@ func TestParseDict_NullByteInName(t *testing.T) {
 	}
 }
 
+// TestParseDict_MalformedNameEscape locks that a NUMBER SIGN without two
+// hexadecimal digits leaves the rest of the dictionary intact: ISO 32000-1,
+// 7.3.5 ends a name at white space or a delimiter, so "/F# /B 1" is the name
+// F# followed by the entry B, and "/C#>>" does not swallow the close.
+func TestParseDict_MalformedNameEscape(t *testing.T) {
+	p := newParser("<< /A /F# /B 1 /C /D#0 /E /G#>> ")
+	obj, err := p.ParseObject(context.Background())
+	if err != nil {
+		t.Fatalf("ParseObject failed: %v", err)
+	}
+	dict, ok := obj.(ast.PdfDict)
+	if !ok {
+		t.Fatalf("expected PdfDict, got %T", obj)
+	}
+	want := ast.PdfDict{"A": ast.PdfName("F#"), "B": ast.PdfInt(1), "C": ast.PdfName("D#0"), "E": ast.PdfName("G#")}
+	if len(dict) != len(want) {
+		t.Fatalf("got %d entries %v, want %v", len(dict), dict, want)
+	}
+	for k, v := range want {
+		if dict[k] != v {
+			t.Errorf("/%s = %v, want %v", k, dict[k], v)
+		}
+	}
+}
+
 func TestParseArray_DictWithoutSpace(t *testing.T) {
 	// Array element followed immediately by dict start.
 	p := newParser("[1 2<< /K /V >>]")

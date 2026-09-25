@@ -163,3 +163,68 @@ func TestLexer_ScientificNotationNumber(t *testing.T) {
 		})
 	}
 }
+
+// TestNameMalformedEscape locks the reading of a NUMBER SIGN that ISO
+// 32000-1, 7.3.5 does not follow with two hexadecimal digits. The name still
+// ends at white space or a delimiter, so the bytes after the NUMBER SIGN are
+// never swallowed when they end it: "/F#>>" keeps its dictionary close and
+// "/A#0 1" keeps its integer. Everything else mirrors PDF.js (Lexer.getName).
+func TestNameMalformedEscape(t *testing.T) {
+	cases := []struct {
+		input string
+		want  []Token
+	}{
+		{"<</K /F#>>", []Token{{TokenDelimiter, "<<"}, {TokenName, "/K"}, {TokenName, "/F#"}, {TokenDelimiter, ">>"}}},
+		{"/A#0 1", []Token{{TokenName, "/A#0"}, {TokenNumber, "1"}}},
+		{"/A#0\x001", []Token{{TokenName, "/A#0"}, {TokenNumber, "1"}}},
+		{"/A#\x00B", []Token{{TokenName, "/A#"}, {TokenKeyword, "B"}}},
+		{"/A# 1", []Token{{TokenName, "/A#"}, {TokenNumber, "1"}}},
+		{"/A#0/B", []Token{{TokenName, "/A#0"}, {TokenName, "/B"}}},
+		{"[/A#]", []Token{{TokenDelimiter, "["}, {TokenName, "/A#"}, {TokenDelimiter, "]"}}},
+		{"/A#(x)", []Token{{TokenName, "/A#"}, {TokenString, "(x)"}}},
+		{"/A#G1", []Token{{TokenName, "/A#G1"}}},
+		{"/A#4G", []Token{{TokenName, "/A#4G"}}},
+		{"/A##41", []Token{{TokenName, "/A##41"}}},
+		{"/A#4#41", []Token{{TokenName, "/A#4#41"}}},
+		{"/A#", []Token{{TokenName, "/A#"}}},
+		{"/A#4", []Token{{TokenName, "/A#4"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			got := lexAll(t, tc.input)
+			if len(got) != len(tc.want) {
+				t.Fatalf("got %d tokens %q, want %d %q", len(got), got, len(tc.want), tc.want)
+			}
+			for i, want := range tc.want {
+				if got[i] != want {
+					t.Errorf("token %d: got %v %q, want %v %q", i, got[i].Type, got[i].Value, want.Type, want.Value)
+				}
+			}
+		})
+	}
+}
+
+// TestNameHexEscape locks the well-formed escapes of ISO 32000-1, 7.3.5,
+// Table 4, in either case of hexadecimal digit. "#00" decodes to NUL, as
+// PDF.js and veraPDF decode it.
+func TestNameHexEscape(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"/Lime#20Green", "/Lime Green"},
+		{"/paired#28#29parentheses", "/paired()parentheses"},
+		{"/The_Key_of_F#23_Minor", "/The_Key_of_F#_Minor"},
+		{"/A#42", "/AB"},
+		{"/A#4a", "/AJ"},
+		{"/A#00B", "/A\x00B"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			got := lexAll(t, tc.input)
+			if len(got) != 1 || got[0] != (Token{TokenName, tc.want}) {
+				t.Errorf("got %q, want one name %q", got, tc.want)
+			}
+		})
+	}
+}

@@ -1,6 +1,7 @@
 package lexer
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -87,15 +88,80 @@ func isDelimiter(c byte) bool {
 	return c == '(' || c == ')' || c == '<' || c == '>' || c == '[' || c == ']' || c == '{' || c == '}' || c == '/' || c == '%'
 }
 
-// decodeHexPair converts two ASCII hex digit bytes into the byte they
-// represent. Returns false if either byte is not a valid hex digit.
-func decodeHexPair(hi, lo byte) (byte, bool) {
-	h, ok1 := hexVal(hi)
-	l, ok2 := hexVal(lo)
-	if !ok1 || !ok2 {
-		return 0, false
+// readNameEscape reads what follows a NUMBER SIGN inside a name, appends the
+// characters it stands for to buf, and reports whether the name ends there.
+//
+// ISO 32000-1, 7.3.5 writes a name character as a NUMBER SIGN followed by its
+// 2-digit hexadecimal code, and ends a name at white space or a delimiter
+// (7.2.2, Tables 1 and 2). A NUMBER SIGN without two hexadecimal digits
+// breaks the first rule, and the bytes after it still obey the second: in
+// "/F#>>" the ">>" closes the dictionary, and in "/A#0 1" the space ends the
+// name before the integer 1. The reading mirrors PDF.js (Lexer.getName): the
+// NUMBER SIGN and a hexadecimal digit read after it stay in the name as
+// themselves, a white-space or delimiter byte ends the name and is left for
+// the next token, and any other byte joins the name as itself. veraPDF
+// (BaseParser.readName) also ends the name there; it differs only on a
+// NUMBER SIGN right after a bad escape, which it reads as a new escape where
+// PDF.js keeps it as itself. The end of the data ends the name, keeping the
+// NUMBER SIGN and any digit read.
+//
+// A "#00" escape decodes to NUL like any other code, as PDF.js and veraPDF
+// decode it, although 7.3.5 builds a name from "any characters (8-bit values)
+// except null (character code 0)".
+//
+// # Corpus evidence
+//
+//   - All corpora: two files carry a NUMBER SIGN without two hexadecimal
+//     digits, and no file changes its page count, its extracted text, its
+//     PDF/A-2b or PDF/UA-1 findings, or what a full rewrite reads back.
+//   - pdfjs poppler-90-0-fuzzed.pdf: the one file this reading changes. Each
+//     of its 10 malformed escapes runs into white space, a delimiter, the end
+//     of the data or another NUMBER SIGN, and none sits in a name of an
+//     object body.
+//   - pdfjs issue11678.pdf: its 4 malformed escapes are each followed by a
+//     regular character, which joins the name as before.
+func (l *Lexer) readNameEscape(buf *strings.Builder) (bool, error) {
+	hi, err := l.reader.ReadByte()
+	if err != nil {
+		buf.WriteByte('#')
+		if errors.Is(err, io.EOF) {
+			return true, nil
+		}
+		return true, fmt.Errorf("reading name escape: %w", err)
 	}
-	return h<<4 | l, true
+	if isWhitespace(hi) || isDelimiter(hi) {
+		_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
+		buf.WriteByte('#')
+		return true, nil
+	}
+	h, ok := hexVal(hi)
+	if !ok {
+		buf.WriteByte('#')
+		buf.WriteByte(hi)
+		return false, nil
+	}
+	lo, err := l.reader.ReadByte()
+	if err != nil {
+		buf.WriteByte('#')
+		buf.WriteByte(hi)
+		if errors.Is(err, io.EOF) {
+			return true, nil
+		}
+		return true, fmt.Errorf("reading name escape: %w", err)
+	}
+	lv, ok := hexVal(lo)
+	if ok {
+		buf.WriteByte(h<<4 | lv)
+		return false, nil
+	}
+	buf.WriteByte('#')
+	buf.WriteByte(hi)
+	if isWhitespace(lo) || isDelimiter(lo) {
+		_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
+		return true, nil
+	}
+	buf.WriteByte(lo)
+	return false, nil
 }
 
 func hexVal(c byte) (byte, bool) {
@@ -346,24 +412,13 @@ func (l *Lexer) NextToken() (Token, error) {
 					_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 					break
 				}
-				// Per ISO 32000-2 §7.3.5, # introduces a two-digit hex code.
 				if cc == '#' {
-					hi, errHi := l.reader.ReadByte()
-					if errHi != nil {
-						break
+					end, err := l.readNameEscape(&buf)
+					if err != nil {
+						return Token{Type: TokenError, Value: err.Error()}, err
 					}
-					lo, errLo := l.reader.ReadByte()
-					if errLo != nil {
-						buf.WriteByte(hi)
+					if end {
 						break
-					}
-					decoded, ok := decodeHexPair(hi, lo)
-					if ok {
-						buf.WriteByte(decoded)
-					} else {
-						buf.WriteByte('#')
-						buf.WriteByte(hi)
-						buf.WriteByte(lo)
 					}
 					continue
 				}
