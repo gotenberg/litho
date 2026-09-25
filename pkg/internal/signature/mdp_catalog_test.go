@@ -136,6 +136,21 @@ func TestEvaluateMDP_CatalogChanges(t *testing.T) {
 		{"P=2 XFA template packet redefined", 2, markedCertifiedPDF, appended(
 			updatedObject{10, streamObject("<template>other</template>")},
 		), false, `object 10 (untyped) is reached through the XFA "template" packet`},
+		{"P=2 information dictionary rewritten alone", 2, func(policy int) []byte {
+			return buildSigPDF([]string{
+				"<< /Type /Catalog /Pages 2 0 R /AcroForm 7 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
+				"<< /Type /Annot /Subtype /Widget /FT /Sig /T (cert) /Rect [0 0 0 0] /P 3 0 R /V 5 0 R >>",
+				certification(policy),
+				"<< /ModDate (D:20260101000000Z) >>",
+				"<< /Fields [4 0 R] /SigFlags 3 >>",
+			}, "/Info 6 0 R ")
+		}, func(t *testing.T, base []byte) []byte {
+			return retrailered(t, appendUpdate(t, base,
+				updatedObject{6, "<< /ModDate (D:20260201000000Z) /Producer (iText) >>"},
+			), "/Root 1 0 R /Info 6 0 R")
+		}, false, "object 6 (untyped) is reached through the trailer's /Info"},
 
 		{"P=2 form fill", 2, plain, appended(
 			updatedObject{6, "<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /Rect [20 20 120 40] /P 3 0 R /DA (/F1 12 Tf 0 g) /V (Jane) /AP << /N 40 0 R >> >>"},
@@ -167,21 +182,6 @@ func TestEvaluateMDP_CatalogChanges(t *testing.T) {
 			updatedObject{12, "<< /JavaScript 13 0 R >>"},
 			updatedObject{13, "<< /Names [] >>"},
 		), true, ""},
-		{"P=2 information dictionary rewritten", 2, func(policy int) []byte {
-			return buildSigPDF([]string{
-				"<< /Type /Catalog /Pages 2 0 R /AcroForm 7 0 R >>",
-				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
-				"<< /Type /Annot /Subtype /Widget /FT /Sig /T (cert) /Rect [0 0 0 0] /P 3 0 R /V 5 0 R >>",
-				certification(policy),
-				"<< /ModDate (D:20260101000000Z) >>",
-				"<< /Fields [4 0 R] /SigFlags 3 >>",
-			}, "/Info 6 0 R ")
-		}, func(t *testing.T, base []byte) []byte {
-			return retrailered(t, appendUpdate(t, base,
-				updatedObject{6, "<< /ModDate (D:20260201000000Z) /Producer (iText) >>"},
-			), "/Root 1 0 R /Info 6 0 R")
-		}, true, ""},
 		{"P=2 XFA datasets packet redefined", 2, markedCertifiedPDF, appended(
 			updatedObject{11, streamObject("<data>Jane</data>")},
 		), true, ""},

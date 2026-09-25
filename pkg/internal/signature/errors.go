@@ -7,8 +7,10 @@ import "errors"
 // document timestamp is not a modification (ISO 32000-2, 12.8.2.2, Table
 // 257), removing or reordering pages or changing what a signed page draws is
 // one at every P, changing a catalog entry that form filling and signing do not need is one
-// from P=2 up, and adding or removing an annotation other than a widget is one
-// at P=2.
+// from P=2 up, and adding or removing an annotation other than a widget, adding
+// a field other than a signature field or changing what a field's actions run
+// is one at P=2. Rewriting the document metadata is one at every P unless the
+// update also makes a change the policy permits.
 //
 // NOTHING RETURNS IT, and a caller must not reach for [errors.Is] against it.
 // MDP is evaluated rather than refused: evaluateMDP reports every outcome

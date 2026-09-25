@@ -166,14 +166,17 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 	// The signed revision is read once, and only when a check needs it.
 	signed := newSignedRevision(doc, signedEnd)
 
-	// Validation data and form data are told apart only when the classifier
-	// objects to something, which is when they can change the verdict.
-	violation := classifyModifications(appendedObjects, sig.MDPPolicy)
-	classified := appendedObjects
+	// The metadata a permitted update rewrites is set aside at every P, before
+	// the classifier sees it. Validation data and form data are told apart
+	// only when the classifier objects to something, which is when they can
+	// change the verdict.
+	classified, note := withoutMetadata(ctx, doc, signed, appendedObjects)
+	violation := classifyModifications(classified, sig.MDPPolicy)
 	var validationData int
-	var note string
 	if violation != "" {
-		classified, validationData, note = withoutValidationData(ctx, doc, signed, appendedObjects, sig.MDPPolicy)
+		var ltvNote string
+		classified, validationData, ltvNote = withoutValidationData(ctx, doc, signed, classified, sig.MDPPolicy)
+		note += ltvNote
 		violation = classifyModifications(classified, sig.MDPPolicy)
 		if violation != "" && sig.MDPPolicy >= 2 {
 			var formNote string

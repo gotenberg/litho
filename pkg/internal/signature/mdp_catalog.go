@@ -45,9 +45,9 @@ type catalogEntry struct {
 //     incremental update can declare only there (7.7.2, Table 28; 7.5.6), and a
 //     signature using a later feature needs.
 //
-// /Metadata is not among them. No clause of 12.8 permits updating the XMP
-// metadata on signing, and the classifier already reports the /Type /Metadata
-// stream (14.3.2, Table 315) an update rewrites.
+// /Metadata is not among them: it keeps naming the XMP metadata stream (14.3.2)
+// it named when signed, and [withoutMetadata] decides when that stream may be
+// rewritten in place.
 var signingCatalogEntries = map[ast.PdfName]catalogEntry{
 	"AcroForm":   {kept: true},
 	"Pages":      {},
@@ -186,8 +186,8 @@ var fieldTypes = map[string]bool{"Btn": true, "Tx": true, "Ch": true, "Sig": tru
 // written differently from its definition in the signed revision rev, and that
 // doc reaches through what filling in forms, instantiating page templates and
 // signing do not change. It returns "" when there is none. objects are the
-// appended objects the exemptions for validation data and form data left, and
-// policy is 2 or 3.
+// appended objects the exemptions for metadata, validation data, form data and
+// annotation tags left, and policy is 2 or 3.
 //
 // The classifier permits an object without /Type, since an appearance stream,
 // a font file or a field's value need not carry one ([isAllowedP2]).
@@ -201,19 +201,15 @@ var fieldTypes = map[string]bool{"Btn": true, "Tx": true, "Ch": true, "Sig": tru
 //   - each XFA packet other than the datasets packet ([xfaPackets]), which
 //     defines the form rather than fills it in (12.7.8);
 //   - at P=2, each annotation a page lists other than a widget, which ISO
-//     32000-1, 12.8.2.2, Table 254 lets change only at P=3.
+//     32000-1, 12.8.2.2, Table 254 lets change only at P=3;
+//   - the trailer's /Info dictionary (14.3.3), which [withoutMetadata] exempts
+//     only when an update rewrites it in place beside another change.
 //
 // Reach is judged in the current revision, so an update that defines a number
 // the signed document refers to but does not define (7.3.10), such as a
 // dangling /OpenAction target, is judged by what refers to it. Each walk ends
 // where [outsideForm] ends it. An object nothing of the above reaches is left
 // alone: the form, a page, or nothing reaches it.
-//
-// Deliberate leniency: the trailer's /Info dictionary (14.3.3) is not a root,
-// although Table 254 permits no metadata change. It draws and runs nothing,
-// and iText rewrites its /ModDate and /Producer on every incremental save, so
-// an approval signature it adds to a certified document would otherwise be
-// reported.
 func changedUntyped(ctx context.Context, doc, rev *document.Document, objects []appendedObject, policy int) (string, error) {
 	var candidates []appendedObject
 	for _, obj := range objects {
@@ -283,6 +279,10 @@ func untypedRoots(ctx context.Context, doc *document.Document, policy int) ([]re
 				roots = append(roots, reachRoot{dict[sub], fmt.Sprintf("the catalog's /%s /%s", string(key), string(sub))})
 			}
 		}
+	}
+
+	if info, ok := doc.Index.Trailer["Info"]; ok {
+		roots = append(roots, reachRoot{info, "the trailer's /Info"})
 	}
 
 	packets, err := xfaPackets(ctx, doc, catalog)

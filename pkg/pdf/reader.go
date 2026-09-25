@@ -1513,8 +1513,16 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // appended object without /Type, written differently from its signed
 // definition, that the current document reaches through one of those other
 // entries, through an XFA packet other than the datasets packet, or at P=2
-// through an annotation other than a form field widget. The trailer's /Info
-// dictionary may change.
+// through an annotation other than a form field widget, or through the
+// trailer's /Info.
+//
+// At every P, an incremental update that makes another change may also
+// rewrite the document information dictionary and the XMP metadata stream the
+// catalog names, each in its own object, since the producers that sign, fill
+// in forms or add validation data rewrite both on every save. The other change
+// is judged as any other, so at P=1 it must be validation data. An update that
+// rewrites only the metadata is reported, and so is one that points the
+// trailer's /Info or the catalog's /Metadata at another object.
 //
 // At P=2 the interactive form is compared with its signed version too, since
 // filling in a field and signing change only a field's value and the
