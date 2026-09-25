@@ -308,6 +308,9 @@ func linkElement(s *Schema, e *Element) error {
 //     gives an attribute an xs:simpleType child, so none of their verdicts
 //     moves.
 func linkAttribute(s *Schema, a *AttributeUse) error {
+	if !a.Ref.IsZero() {
+		return linkAttributeRef(s, a)
+	}
 	if a.TypeRef.IsZero() {
 		if a.Type != nil {
 			return linkType(s, a.Type)
@@ -321,6 +324,54 @@ func linkAttribute(s *Schema, a *AttributeUse) error {
 	}
 	a.Type = t
 	return nil
+}
+
+// linkAttributeRef resolves the attribute use a, a reference to a top-level
+// attribute declaration, per XML Schema Part 1, 3.2.2: its {attribute
+// declaration} is the one a.Ref names, whose {type definition} a takes.
+//
+// A fixed value binds from either side: per 3.5.4 (cvc-au) the use's own,
+// and per 3.2.4 (cvc-attribute clause 4) the declaration's. Per 3.5.6
+// (au-props-correct clause 2) a use may only repeat the fixed value of its
+// declaration, so a takes the declaration's fixed value when it states
+// none.
+//
+// The declaration is linked first, in the schema that holds it, since the
+// link pass visits schemas in no fixed order. It cannot recurse: a
+// top-level declaration carries no ref ([populateFromRaw]).
+//
+// # Corpus evidence
+//
+//   - All corpora: no bundled schema references an attribute declaration,
+//     so no verdict of the 159 files that embed XML moves.
+func linkAttributeRef(s *Schema, a *AttributeUse) error {
+	owner, decl := lookupAttribute(s, a.Ref)
+	if decl == nil {
+		return fmt.Errorf("%w: attribute %s", ErrUnresolvedRef, a.Ref)
+	}
+	if err := linkAttribute(owner, decl); err != nil {
+		return err
+	}
+	a.Type = decl.Type
+	if a.Fixed == "" {
+		a.Fixed = decl.Fixed
+	}
+	return nil
+}
+
+// lookupAttribute returns the top-level attribute declaration named qn, in
+// s or in the schema s imports for qn's namespace, together with the schema
+// that holds it. Both are nil when neither declares it.
+func lookupAttribute(s *Schema, qn QName) (*Schema, *AttributeUse) {
+	if a, ok := s.Attributes[qn]; ok {
+		return s, a
+	}
+	if imp, ok := s.Imports[qn.Namespace]; ok {
+		if a, ok := imp.Attributes[qn]; ok {
+			return imp, a
+		}
+	}
+	return nil, nil
 }
 
 // lookupType resolves qn against the schema's own Types map, then
@@ -445,6 +496,7 @@ type rawAttribute struct {
 	Default    string         `xml:"default,attr"`
 	Fixed      string         `xml:"fixed,attr"`
 	Form       string         `xml:"form,attr"`
+	Ref        string         `xml:"ref,attr"`
 	SimpleType *rawSimpleType `xml:"simpleType"`
 }
 
@@ -601,6 +653,12 @@ func populateFromRaw(s *Schema, raw *rawSchema, prefixes map[string]string) erro
 		s.Elements[el.Name] = el
 	}
 	for i := range raw.Attributes {
+		if raw.Attributes[i].Ref != "" || raw.Attributes[i].Name == "" {
+			// Per XML Schema Part 1, 3.2.2 a top-level xs:attribute declares
+			// the attribute its name names; the schema for schemas gives it
+			// no ref attribute.
+			return fmt.Errorf("%w: top-level xs:attribute needs a name and no ref", ErrSchemaParse)
+		}
 		a, err := buildAttribute(doc, &raw.Attributes[i], doc.tns)
 		if err != nil {
 			return err
@@ -883,19 +941,50 @@ func buildParticles(doc *schemaDoc, els []rawElement, wcs []rawWildcard, nested 
 	return out, nil
 }
 
-// buildAttributes builds the local attribute declarations raws of a
-// complex type, each in the namespace its form gives it
-// ([schemaDoc.localAttributeNamespace]).
+// buildAttributes builds the attribute uses raws of a complex type: each
+// local declaration in the namespace its form gives it
+// ([schemaDoc.localAttributeNamespace]), and each reference to a top-level
+// declaration ([buildAttributeRef]).
 func buildAttributes(doc *schemaDoc, raws []rawAttribute) ([]AttributeUse, error) {
 	out := make([]AttributeUse, 0, len(raws))
 	for i := range raws {
-		au, err := buildAttribute(doc, &raws[i], doc.localAttributeNamespace(raws[i].Form))
+		var au AttributeUse
+		var err error
+		if raws[i].Ref != "" {
+			au, err = buildAttributeRef(doc, &raws[i])
+		} else {
+			au, err = buildAttribute(doc, &raws[i], doc.localAttributeNamespace(raws[i].Form))
+		}
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, au)
 	}
 	return out, nil
+}
+
+// buildAttributeRef builds the attribute use a, an xs:attribute ref. Per
+// XML Schema Part 1, 3.2.2 its {attribute declaration} is the top-level one
+// ref names, which the link pass resolves ([linkAttributeRef]), and its
+// required and value constraint are its own. Per 3.2.3 (src-attribute
+// clauses 3.1 and 3.2) it carries no name, type, form or xs:simpleType.
+func buildAttributeRef(doc *schemaDoc, a *rawAttribute) (AttributeUse, error) {
+	if a.Name != "" || a.Type != "" || a.Form != "" || a.SimpleType != nil {
+		return AttributeUse{}, fmt.Errorf("%w: xs:attribute ref=%q also carries a name, type, form or xs:simpleType",
+			ErrSchemaParse, a.Ref)
+	}
+	ref, err := doc.parseQName(a.Ref)
+	if err != nil {
+		return AttributeUse{}, err
+	}
+	return AttributeUse{
+		Name:       ref,
+		Ref:        ref,
+		Default:    a.Default,
+		Fixed:      a.Fixed,
+		Required:   a.Use == "required",
+		Prohibited: a.Use == "prohibited",
+	}, nil
 }
 
 // buildAttribute builds the attribute declaration a, named in namespace ns.

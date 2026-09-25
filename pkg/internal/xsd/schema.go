@@ -49,8 +49,9 @@ type Schema struct {
 	Types map[QName]Type
 	// Attributes indexes top-level xs:attribute declarations by their
 	// qualified name. Per XML Schema Part 1, 3.2.2 a top-level
-	// declaration always takes the target namespace. Only an attribute
-	// wildcard reaches them: see [AttributeWildcard].
+	// declaration always takes the target namespace. An attribute use
+	// that references one ([AttributeUse.Ref]) and an attribute wildcard
+	// ([AttributeWildcard]) reach them.
 	Attributes map[QName]*AttributeUse
 	// Imports indexes loaded imported schemas by their target
 	// namespace. The current schema is not present in this map; it
@@ -228,15 +229,21 @@ type Element struct {
 }
 
 // AttributeUse models an xs:attribute occurrence on a complex type, and
-// a top-level xs:attribute declaration in [Schema.Attributes]. A
-// reference to a top-level declaration (xs:attribute ref) is not
-// modelled because CII uses inline attribute uses exclusively.
+// a top-level xs:attribute declaration in [Schema.Attributes]. An
+// occurrence is a local declaration, or a reference to a top-level one
+// ([AttributeUse.Ref]).
 type AttributeUse struct {
 	// Name is the name of the attribute declaration. Per XML Schema Part 1,
 	// 3.2.2 a top-level declaration is in the target namespace, and a local
 	// one in no namespace unless its form, or the attributeFormDefault of
 	// its schema document, is qualified.
 	Name QName
+	// Ref is the name an xs:attribute ref gives, the top-level
+	// declaration that is the use's {attribute declaration} (XML Schema
+	// Part 1, 3.2.2). Name is then the same, and the link pass copies
+	// Type, and Fixed when the use states none, from the declaration.
+	// Zero-value for a declaration.
+	Ref QName
 	// Type is the attribute's {type definition} (XML Schema Part 1,
 	// 3.2.2): its xs:simpleType child, set at load time, or the type
 	// TypeRef names, or xs:anySimpleType when it has neither, both set
