@@ -187,3 +187,44 @@ func TestExtractGeoData_NoSources(t *testing.T) {
 		t.Errorf("got %v, want nil", got)
 	}
 }
+
+// TestExtractGeoData_XObjectsInNameOrder pins that the XObject measurements
+// come back ordered by resource name on every call. They were collected by
+// ranging the /XObject map, so a page with several geospatial images returned
+// them in a different order from call to call (CONTRIBUTING "Deterministic
+// output").
+func TestExtractGeoData_XObjectsInNameOrder(t *testing.T) {
+	image := func(system string) ast.PdfStream {
+		return ast.PdfStream{Dict: ast.PdfDict{
+			"Type":    ast.PdfName("XObject"),
+			"Subtype": ast.PdfName("Image"),
+			"Measure": geoMeasure(ast.PdfDict{"Type": ast.PdfName(system)}),
+		}}
+	}
+	page := &document.Page{
+		Dict: ast.PdfDict{"Type": ast.PdfName("Page")},
+		Resources: ast.PdfDict{"XObject": ast.PdfDict{
+			"Im2": image("PROJCS"),
+			"Im0": image("GEOGCS"),
+			"Im1": image("GEOCCS"),
+		}},
+	}
+
+	want := []string{"GEOGCS", "GEOCCS", "PROJCS"}
+	// Go randomizes map iteration per range statement, so an unsorted walk
+	// leaves name order within a few of the 16 runs.
+	for run := range 16 {
+		got, err := ExtractGeoData(context.Background(), nil, page)
+		if err != nil {
+			t.Fatalf("run %d: ExtractGeoData: %v", run, err)
+		}
+		if len(got) != len(want) {
+			t.Fatalf("run %d: got %d GeoData, want %d", run, len(got), len(want))
+		}
+		for i, geo := range got {
+			if geo.CoordinateSystem != want[i] {
+				t.Fatalf("run %d: entry %d is %q, want %q: the order is Im0, Im1, Im2", run, i, geo.CoordinateSystem, want[i])
+			}
+		}
+	}
+}

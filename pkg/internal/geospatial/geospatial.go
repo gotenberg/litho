@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -14,6 +16,10 @@ import (
 
 // ExtractGeoData scans a page dictionary and its Image XObjects for /Measure
 // dictionaries with /Subtype /GEO. Returns nil if no geospatial data is found.
+//
+// The viewports come first, in /VP order, then the XObjects by resource name.
+// Ranging the /XObject map returned them in a different order on every call
+// (CONTRIBUTING "Deterministic output").
 func ExtractGeoData(ctx context.Context, doc *document.Document, page *document.Page) ([]models.GeoData, error) {
 	var results []models.GeoData
 
@@ -44,8 +50,8 @@ func ExtractGeoData(ctx context.Context, doc *document.Document, page *document.
 		if xobjObj, ok := page.Resources["XObject"]; ok {
 			xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
 			if err == nil {
-				for _, obj := range xobjDict {
-					stream, err := document.ResolveStream(ctx, doc, obj)
+				for _, name := range slices.Sorted(maps.Keys(xobjDict)) {
+					stream, err := document.ResolveStream(ctx, doc, xobjDict[name])
 					if err != nil {
 						continue
 					}
