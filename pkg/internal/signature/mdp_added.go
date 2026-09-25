@@ -177,7 +177,7 @@ func (m *templateMatch) instantiates(ctx context.Context, page *document.Page) b
 //   - the attributes the page inherits or states are the template's, the
 //     resources included;
 //   - each annotation the page lists is one the template lists, a widget that
-//     copies a widget of the template ([copiedWidget]), or a widget of a
+//     copies a widget of the template ([widgetMatch.copied]), or a widget of a
 //     signature field, which signing may place on any page. At P=3, which
 //     permits annotation creation, it may also be any other annotation.
 //
@@ -225,7 +225,8 @@ func (m *templateMatch) copies(ctx context.Context, page *document.Page, t *temp
 		if fieldTypeIn(ctx, m.doc, dict) == "Sig" {
 			continue
 		}
-		if _, ok := copiedWidget(ctx, m.doc, dict, t.widgets); !ok {
+		match := widgetMatch{doc: m.doc, rev: m.rev, policy: m.policy, budget: &m.budget}
+		if _, ok := match.copied(ctx, dict, t.widgets); !ok {
 			return false
 		}
 	}

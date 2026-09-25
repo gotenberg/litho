@@ -91,7 +91,7 @@ func TestEvaluateMDP_AddedPage(t *testing.T) {
 			page(" /Contents 11 0 R", "23 0 R 40 0 R"),
 			updatedObject{40, "<< /Type /Annot /Subtype /Widget /FT /Sig /T (approval) /Rect [300 300 400 350] /P 20 0 R /V 41 0 R >>"},
 			updatedObject{41, "<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached /ByteRange [0 1 1 1] /Contents <30> >>"},
-			updatedObject{7, "<< /Fields [4 0 R 6 0 R 9 0 R 21 0 R 40 0 R] /SigFlags 3 /DA (/Helv 0 Tf 0 g) >>"},
+			updatedObject{7, "<< /Fields [4 0 R 6 0 R 9 0 R 14 0 R 21 0 R 40 0 R] /SigFlags 3 /DA (/Helv 0 Tf 0 g) >>"},
 		), true, ""},
 		{"P=3 spawn with a comment on the new page", 3, true, replaced(spawn,
 			page(" /Contents 11 0 R", "23 0 R 40 0 R"),

@@ -12,20 +12,38 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
-// maxActionCompare bounds how many pairs of objects [sameAcross] compares. It
-// is an anti-DoS guard, not spec-mandated: an action and those its /Next entry
-// chains to (ISO 32000-1, 12.6.2, Table 193) are a handful of dictionaries, and
-// the bound stops a crafted chain from costing more than a few thousand
+// maxActionCompare bounds how many pairs of objects [sameAcross] compares, and
+// how many [widgetMatch.copied] compares to tell which template widget a new
+// widget of the form copies. It is an anti-DoS guard, not spec-mandated: an
+// action and those its /Next entry chains to (ISO 32000-1, 12.6.2, Table 193)
+// are a handful of dictionaries, and the traits of a field a few values and at
+// most a choice list of a few hundred options (12.7.4.4, Table 231), so the
+// bound stops a crafted chain or list from costing more than a few thousand
 // comparisons. A comparison that reaches it reports the objects different, so
 // the field it judges stays a change.
 const maxActionCompare = 1 << 12
 
+// fieldTraits are the entries of a field that define what it accepts and how
+// it shows its value, beyond the type, name and actions a copy is also judged
+// by: its flags and default value (ISO 32000-1, 12.7.3.1, Table 220), the
+// options of a check box or radio button (12.7.4.2.3, Table 227) or of a
+// choice field (12.7.4.4, Table 231), the maximum length of a text field
+// (12.7.4.3, Table 229), and the quadding and default appearance of its
+// variable text (12.7.3.3, Table 222).
+var fieldTraits = []ast.PdfName{"Ff", "MaxLen", "Opt", "DV", "Q", "DA"}
+
+// widgetTraits are the entries of a widget annotation that define how it is
+// shown: its annotation flags (ISO 32000-1, 12.5.2, Table 164; 12.5.3) and its
+// appearance characteristics (12.5.6.19, Table 188).
+var widgetTraits = []ast.PdfName{"F", "MK"}
+
 // templateWidget is a widget of a page the signed revision names as a
-// template, with what [copiedWidget] compares.
+// template, with what [widgetMatch.copied] compares.
 type templateWidget struct {
 	rect    []float64
 	ft      string
 	name    string
+	traits  []ast.PdfObject // as [traitsOf] returns them
 	actions widgetActions
 }
 
@@ -107,6 +125,7 @@ func signedTemplates(ctx context.Context, rev *document.Document) ([]*templatePa
 				rect:    rectOf(ctx, rev, w.dict),
 				ft:      fieldTypeIn(ctx, rev, w.dict),
 				name:    partialName(ctx, rev, w.dict),
+				traits:  traitsOf(ctx, rev, w.dict),
 				actions: actionsOf(ctx, rev, w.num, w.dict),
 			})
 		}
@@ -190,30 +209,109 @@ func pageWidgets(ctx context.Context, doc *document.Document, page ast.PdfDict) 
 	return widgets
 }
 
-// match returns the widget of a template page that the widget of doc copies
-// ([copiedWidget]).
-func (t *templateInstances) match(ctx context.Context, doc *document.Document, widget ast.PdfDict) (templateWidget, bool) {
+// match returns the widget of a template page that widget copies
+// ([widgetMatch.copied]).
+func (t *templateInstances) match(ctx context.Context, w widgetMatch, widget ast.PdfDict) (templateWidget, bool) {
 	for _, tp := range t.templates {
-		if tw, ok := copiedWidget(ctx, doc, widget, tp.widgets); ok {
+		if tw, ok := w.copied(ctx, widget, tp.widgets); ok {
 			return tw, true
 		}
 	}
 	return templateWidget{}, false
 }
 
-// copiedWidget returns the widget of widgets that the widget of doc copies:
-// the same rectangle, the same field type and the same partial name for its
-// field.
-func copiedWidget(ctx context.Context, doc *document.Document, widget ast.PdfDict, widgets []templateWidget) (templateWidget, bool) {
-	rect := rectOf(ctx, doc, widget)
-	ft := fieldTypeIn(ctx, doc, widget)
-	name := partialName(ctx, doc, widget)
+// widgetMatch finds the template widget a widget of the current document doc
+// copies. rev is the signed revision that holds the templates, policy the
+// DocMDP permissions, and budget bounds what comparing traits costs.
+type widgetMatch struct {
+	doc, rev *document.Document
+	policy   int
+	budget   *pairBudget
+}
+
+// copied returns the widget of widgets that widget copies: the same
+// rectangle, the same field type, the same partial name for its field and the
+// same [fieldTraits], compared object by object across the two revisions
+// ([pairBudget.same]). At P=2 it also has the same [widgetTraits]. P=3, which
+// adds annotation modification (ISO 32000-1, 12.8.2.2, Table 254), lets those
+// differ, as [annotationEntries] lets them change on a signed widget.
+//
+// A copy whose flags, options, default value or appearance differ from the
+// template's adds, under a template field's name, a field that accepts or
+// shows something the certifier did not approve.
+func (w widgetMatch) copied(ctx context.Context, widget ast.PdfDict, widgets []templateWidget) (templateWidget, bool) {
+	rect := rectOf(ctx, w.doc, widget)
+	ft := fieldTypeIn(ctx, w.doc, widget)
+	name := partialName(ctx, w.doc, widget)
+	var traits []ast.PdfObject
 	for _, tw := range widgets {
-		if tw.ft == ft && tw.name == name && sameNumbers(tw.rect, rect) {
+		if tw.ft != ft || tw.name != name || !sameNumbers(tw.rect, rect) {
+			continue
+		}
+		if traits == nil {
+			traits = traitsOf(ctx, w.doc, widget)
+		}
+		if w.sameTraits(ctx, traits, tw.traits) {
 			return tw, true
 		}
 	}
 	return templateWidget{}, false
+}
+
+// sameTraits reports whether a widget of doc with traits has those of a
+// template widget of rev, both as [traitsOf] returns them.
+func (w widgetMatch) sameTraits(ctx context.Context, traits, template []ast.PdfObject) bool {
+	compared := len(traits)
+	if w.policy == 3 {
+		compared -= len(widgetTraits)
+	}
+	for i := range compared {
+		if !w.budget.same(ctx, w.doc, traits[i], w.rev, template[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// traitsOf returns the [fieldTraits] of the field of a widget of doc as a
+// reader resolves them, then those its field states itself, then the
+// widget's own [widgetTraits]. An absent entry is nil.
+//
+// A reader resolves an inheritable entry from the widget or the nearest
+// ancestor that states it (ISO 32000-1, 12.7.3.1), and Tables 220, 222, 227
+// and 229 make every field trait inheritable but a choice field's /Opt (Table
+// 231), which a reader may read from the field alone. Comparing both readings
+// holds a copy to the template under either. The field is the nearest of the
+// widget and its ancestors that carries a partial name, as for [partialName],
+// and the walk is bounded by [maxFieldTreeDepth].
+func traitsOf(ctx context.Context, doc *document.Document, widget ast.PdfDict) []ast.PdfObject {
+	n := len(fieldTraits)
+	traits := make([]ast.PdfObject, 2*n+len(widgetTraits))
+	stated := make([]bool, n)
+	field := false
+	seen := make(map[int]bool)
+	for depth, dict := 0, widget; dict != nil && depth <= maxFieldTreeDepth; depth++ {
+		for i, key := range fieldTraits {
+			if value, ok := dict[key]; ok && !stated[i] {
+				stated[i] = true
+				traits[i] = value
+			}
+		}
+		if _, ok := dict["T"]; ok && !field {
+			field = true
+			for i, key := range fieldTraits {
+				traits[n+i] = dict[key]
+			}
+		}
+		var ok bool
+		if _, dict, ok = document.ResolveFieldParent(ctx, doc, dict, seen); !ok {
+			break
+		}
+	}
+	for i, key := range widgetTraits {
+		traits[2*n+i] = widget[key]
+	}
+	return traits
 }
 
 // instantiated reports whether the field or widget num, which the update
@@ -229,9 +327,10 @@ func copiedWidget(ctx context.Context, doc *document.Document, widget ast.PdfDic
 // run when it is used must be the template's ([sameAcross]). A node that is
 // neither such a widget nor its field carries no action at all.
 //
-// The copy is judged by where it sits, what it is called and what it runs,
-// which is what a new field changes: it adds a field the certifier did not
-// approve, and its actions run when a reader uses it.
+// The copy is judged by where it sits, what it is called, what it accepts and
+// shows ([fieldTraits], [widgetTraits]) and what it runs, which is what a new
+// field changes: it adds a field the certifier did not approve, and its
+// actions run when a reader uses it.
 func (f *fieldDiff) instantiated(ctx context.Context, num int, dict ast.PdfDict) bool {
 	t := f.templateInstances(ctx)
 	if t == nil {
@@ -247,7 +346,8 @@ func (f *fieldDiff) instantiated(ctx context.Context, num int, dict ast.PdfDict)
 		if !t.added[w.num] || f.held(w.num) {
 			return false
 		}
-		tw, ok := t.match(ctx, f.doc, w.dict)
+		match := widgetMatch{doc: f.doc, rev: f.signed, policy: f.policy, budget: &pairBudget{left: maxActionCompare}}
+		tw, ok := t.match(ctx, match, w.dict)
 		if !ok {
 			return false
 		}
