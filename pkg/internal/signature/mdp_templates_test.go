@@ -83,13 +83,19 @@ func TestEvaluateMDP_TemplateInstantiation(t *testing.T) {
 
 		{"P=2 copy runs another action", 2, true, spawned(copied, updatedObject{24, script}), false, "field 23 (Tx) was added with an /AA action"},
 		{"P=2 copy drops its action", 2, true, spawned(spawnedAmount("")), false, "field 23 (Tx) was added, which P=2 permits only for a signature field"},
-		{"P=2 copy renamed to no template field", 2, true, spawned(strings.Replace(copied, "(amount)", "(total)", 1), updatedObject{24, keystroke}),
-			false, "field 21 was added, which P=2 permits only for a signature field"},
-		{"P=2 copy moved", 2, true, spawned(strings.Replace(copied, "[50 50 150 70]", "[50 50 150 90]", 1), updatedObject{24, keystroke}),
-			false, "field 21 was added, which P=2 permits only for a signature field"},
-		{"P=2 grouping node carries an action", 2, true,
+		{
+			"P=2 copy renamed to no template field", 2, true, spawned(strings.Replace(copied, "(amount)", "(total)", 1), updatedObject{24, keystroke}),
+			false, "field 21 was added, which P=2 permits only for a signature field",
+		},
+		{
+			"P=2 copy moved", 2, true, spawned(strings.Replace(copied, "[50 50 150 70]", "[50 50 150 90]", 1), updatedObject{24, keystroke}),
+			false, "field 21 was added, which P=2 permits only for a signature field",
+		},
+		{
+			"P=2 grouping node carries an action", 2, true,
 			replaced(spawned(copied, updatedObject{24, keystroke}), updatedObject{21, "<< /T (P1) /Kids [22 0 R] /AA << /F 25 0 R >> >>"}, updatedObject{25, script}),
-			false, "field 21 was added with an /AA action"},
+			false, "field 21 was added with an /AA action",
+		},
 		{"P=2 copy placed on a signed page", 2, true, []updatedObject{
 			{3, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R 6 0 R 23 0 R] >>"},
 			{23, "<< /Type /Annot /Subtype /Widget /FT /Tx /T (amount) /Rect [50 50 150 70] /P 3 0 R /DA (/Helv 12 Tf 0 g) /AA << /K 10 0 R >> >>"},

@@ -105,12 +105,18 @@ func TestClampContentNumbersSplitsTranslations(t *testing.T) {
 		part             int
 		clamped, split   int
 	}{
-		{"a translation below the page", "q 3.1264944 0 0 3.1264944 150 -34310.223 cm 0 0 m Q",
-			"q 1 0 0 1 0 -32767 cm 3.1264944 0 0 3.1264944 150 -1543.223 cm 0 0 m Q", 1, 0, 1},
-		{"two translations of several splits", "1 0 0 1 70000.5 -100000.25 cm",
-			"1 0 0 1 32767 -32767 cm 1 0 0 1 32767 -32767 cm 1 0 0 1 0 -32767 cm 1 0 0 1 4466.5 -1699.25 cm", 1, 0, 1},
-		{"an integer translation PDF/A-1 admits", "1 0 0 1 70000 -34310.5 cm",
-			"1 0 0 1 0 -32767 cm 1 0 0 1 70000 -1543.5 cm", 1, 0, 1},
+		{
+			"a translation below the page", "q 3.1264944 0 0 3.1264944 150 -34310.223 cm 0 0 m Q",
+			"q 1 0 0 1 0 -32767 cm 3.1264944 0 0 3.1264944 150 -1543.223 cm 0 0 m Q", 1, 0, 1,
+		},
+		{
+			"two translations of several splits", "1 0 0 1 70000.5 -100000.25 cm",
+			"1 0 0 1 32767 -32767 cm 1 0 0 1 32767 -32767 cm 1 0 0 1 0 -32767 cm 1 0 0 1 4466.5 -1699.25 cm", 1, 0, 1,
+		},
+		{
+			"an integer translation PDF/A-1 admits", "1 0 0 1 70000 -34310.5 cm",
+			"1 0 0 1 0 -32767 cm 1 0 0 1 70000 -1543.5 cm", 1, 0, 1,
+		},
 		{"a scale past the limit", "99999.5 0 0 1 40000.5 0 cm", "32767 0 0 1 32767 0 cm", 1, 2, 0},
 		{"a translation past the split cap", "1 0 0 1 " + far + " 0 cm", "1 0 0 1 32767 0 cm", 1, 1, 0},
 		{"a translation PDF/A-2 admits", "1 0 0 1 70000.5 0 cm", "1 0 0 1 70000.5 0 cm", 2, 0, 0},
