@@ -39,34 +39,46 @@ func TestExponentOperandsInEveryWalkedStream(t *testing.T) {
 		objs func(width string) []string
 	}{
 		{"a form XObject", func(width string) []string {
-			return []string{page("<< /XObject << /Fm0 5 0 R >> >>", ""), exponentStream("", "/Fm0 Do"),
-				exponentStream(formDic, width+" 0 0 m 10 10 l S")}
+			return []string{
+				page("<< /XObject << /Fm0 5 0 R >> >>", ""), exponentStream("", "/Fm0 Do"),
+				exponentStream(formDic, width+" 0 0 m 10 10 l S"),
+			}
 		}},
 		{"a form XObject painted twice", func(width string) []string {
-			return []string{page("<< /XObject << /Fm0 5 0 R >> >>", ""), exponentStream("", "/Fm0 Do /Fm0 Do"),
-				exponentStream(formDic, width+" 0 0 m 10 10 l S")}
+			return []string{
+				page("<< /XObject << /Fm0 5 0 R >> >>", ""), exponentStream("", "/Fm0 Do /Fm0 Do"),
+				exponentStream(formDic, width+" 0 0 m 10 10 l S"),
+			}
 		}},
 		{"a tiling pattern", func(width string) []string {
-			return []string{page("<< /Pattern << /P0 5 0 R >> >>", ""),
+			return []string{
+				page("<< /Pattern << /P0 5 0 R >> >>", ""),
 				exponentStream("", "/Pattern cs /P0 scn 0 0 100 100 re f"),
 				exponentStream("/Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10] "+
-					"/XStep 10 /YStep 10 /Resources << >>", width+" 0 0 m 10 10 l S")}
+					"/XStep 10 /YStep 10 /Resources << >>", width+" 0 0 m 10 10 l S"),
+			}
 		}},
 		{"a Type3 glyph", func(width string) []string {
-			return []string{page("<< /Font << /T0 5 0 R >> >>", ""),
+			return []string{
+				page("<< /Font << /T0 5 0 R >> >>", ""),
 				exponentStream("", "BT /T0 12 Tf 10 10 Td (a) Tj ET"),
 				"<< /Type /Font /Subtype /Type3 /FontBBox [0 0 750 750] /FontMatrix [0.001 0 0 0.001 0 0] " +
 					"/CharProcs << /a 6 0 R >> /Encoding << /Type /Encoding /Differences [97 /a] >> " +
 					"/FirstChar 97 /LastChar 97 /Widths [1000] /Resources << >> >>",
-				exponentStream("", "1000 0 d0 "+width+" 0 0 m 10 10 l S")}
+				exponentStream("", "1000 0 d0 "+width+" 0 0 m 10 10 l S"),
+			}
 		}},
 		{"an annotation appearance", func(width string) []string {
-			return []string{page("<< >>", " /Annots [5 0 R]"), exponentStream("", "0 0 m 10 10 l S"), annot,
-				exponentStream(formDic, width+" 0 0 m 10 10 l S")}
+			return []string{
+				page("<< >>", " /Annots [5 0 R]"), exponentStream("", "0 0 m 10 10 l S"), annot,
+				exponentStream(formDic, width+" 0 0 m 10 10 l S"),
+			}
 		}},
 		{"an appearance two annotations share", func(width string) []string {
-			return []string{page("<< >>", " /Annots [5 0 R 7 0 R]"), exponentStream("", "0 0 m 10 10 l S"), annot,
-				exponentStream(formDic, width+" 0 0 m 10 10 l S"), annot}
+			return []string{
+				page("<< >>", " /Annots [5 0 R 7 0 R]"), exponentStream("", "0 0 m 10 10 l S"), annot,
+				exponentStream(formDic, width+" 0 0 m 10 10 l S"), annot,
+			}
 		}},
 	}
 

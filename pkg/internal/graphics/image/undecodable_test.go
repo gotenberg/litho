@@ -219,8 +219,10 @@ func TestDecodeImage_UnsupportedFeatureIsRefused(t *testing.T) {
 	}{
 		{"JPXDecode", "/Filter /JPXDecode", jpxPart2Header},
 		{"JBIG2Decode", "/Filter /JBIG2Decode", jbig2NecessaryExtension()},
-		{"CCITTFaxDecode", "/Filter /CCITTFaxDecode /DecodeParms << /K -1 /Columns 8 /Rows 8 >>",
-			[]byte{0x03, 0xC0, 0, 0, 0, 0, 0, 0}},
+		{
+			"CCITTFaxDecode", "/Filter /CCITTFaxDecode /DecodeParms << /K -1 /Columns 8 /Rows 8 >>",
+			[]byte{0x03, 0xC0, 0, 0, 0, 0, 0, 0},
+		},
 		{"Crypt", "/Filter /Crypt /DecodeParms << /Name /OtherCF >>", []byte("still encrypted")},
 	} {
 		t.Run(tc.filter, func(t *testing.T) {
