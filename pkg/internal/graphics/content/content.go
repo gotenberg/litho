@@ -142,7 +142,7 @@ type Option func(*readOptions)
 // readOptions is what the [Option] values of a parse set.
 type readOptions struct {
 	// commands is the command set the lexer ends a run of regular characters
-	// at, or nil for the token boundaries of ISO 32000-1, 7.2.2.
+	// at, or nil for the reading of veraPDF (see [newLexer]).
 	commands *lexer.CommandSet
 }
 
@@ -154,11 +154,13 @@ type readOptions struct {
 //
 // It is for the readings that follow a viewer: text extraction, the widths of
 // Type 3 glyphs, and the redaction that has to remove what a viewer shows where
-// the viewer shows it. Without it a parse keeps the token boundaries of 7.2.2,
-// as veraPDF does (PDFStreamParser.nextOperator), so compliance reads "ETBT" as
-// the one operator ISO 19005 forbids, which veraPDF reports under ISO 19005-2,
-// 6.2.2 t1, and the remediation that answers it writes the operators back
-// apart ([GluedOperators]).
+// the viewer shows it. Without it a parse reads the stream as veraPDF does
+// (PDFStreamParser.nextOperator): it keeps the token boundaries of 7.2.2 but
+// ends an operator before a digit ([lexer.Lexer.WithDigitBoundaries]), so
+// compliance reads "ETBT" as the one operator ISO 19005 forbids, which veraPDF
+// reports under ISO 19005-2, 6.2.2 t1, and the remediation that answers it
+// writes the operators back apart ([GluedOperators]). Both readings take "q1"
+// as q then the number 1.
 //
 // # Corpus evidence
 //
@@ -184,7 +186,7 @@ func SplitGluedOperators() Option {
 // GluedOperators returns the operators [SplitGluedOperators] reads keyword as
 // when it reads two or more operators of ISO 32000-1, Annex A, Table A.1 and
 // nothing else, and nil otherwise: "ETBT" gives ET and BT, while "ETXX", whose
-// XX is no operator, "q1", whose 1 is an operand, and "ET" itself give nil.
+// XX is no operator, and "ET" itself give nil.
 // keyword is a run of regular characters as a parse without the option reads
 // it, one undefined operator to validation, and a keyword holding white space
 // or a delimiter is no such run and gives nil.
@@ -203,7 +205,36 @@ func GluedOperators(keyword string) []string {
 	return parts
 }
 
-// newLexer returns a lexer over data that reads it as opts say.
+// newLexer returns a lexer over data that reads it as opts say. With no option
+// it reads the stream as veraPDF does, ending an operator before a digit
+// ([lexer.Lexer.WithDigitBoundaries]): that is the reading ISO 19005 validation
+// and the remediation that answers it share, so "q1" is the q veraPDF counts
+// toward the nesting limit rather than an operator it never reports.
+// [SplitGluedOperators] replaces it with the reading of PDF.js, which splits
+// "q1" too.
+//
+// # Corpus evidence
+//
+//   - All corpora: 4 files change what compliance reports at PDF/A-1b and
+//     PDF/A-2b, veraPDF files at their own profile, all of them pdfjs.
+//   - pdfjs issue6342.pdf: its undefined operators go from 27 to 19, against
+//     veraPDF's 1. The 19 left are runs that start with a digit or a period,
+//     such as "12m", which veraPDF ends at the first character no number
+//     holds and this reading does not.
+//   - pdfjs poppler-90-0-fuzzed.pdf: its undefined operators go from 1924 to
+//     2113. veraPDF reports 87, from the 4 of its 16 pages it reads, and the
+//     operators both readings report on those pages go from 3 to 13.
+//   - pdfjs bug1130815.pdf: its undefined operators go from 1674 to 1548, and
+//     the q operators it writes against a digit now exceed the q/Q nesting
+//     limit. veraPDF cannot open the file; its default remediation keeps those
+//     q operators, which the undefined-operator repair removed, and veraPDF
+//     fails the output on the nesting limit.
+//   - pdfjs issue6342.pdf: its PDF/A-1b remediation keeps the curves whose
+//     operator ran into a digit, and two of their operands exceed the real
+//     limit for litho and veraPDF alike.
+//   - pdfjs issue11678.pdf: the count stays, and "J0.15560A38" now reads as
+//     J and an undefined run. veraPDF reports no undefined operator in the
+//     file.
 func newLexer(data []byte, opts []Option) *lexer.Lexer {
 	var o readOptions
 	for _, opt := range opts {
@@ -212,6 +243,8 @@ func newLexer(data []byte, opts []Option) *lexer.Lexer {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
 	if o.commands != nil {
 		lex.WithCommands(o.commands)
+	} else {
+		lex.WithDigitBoundaries()
 	}
 	return lex
 }
@@ -250,8 +283,7 @@ func ParseStreamDataWithOffsets(ctx context.Context, data []byte, opts ...Option
 // checking enabled. Returns [Operation] values and any hex string format
 // violations detected by the parser.
 func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation, []error) {
-	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
-	p := parser.NewParser(lex).WithFormatChecking()
+	p := parser.NewParser(newLexer(data, nil)).WithFormatChecking()
 	ops, _ := parseOperations(ctx, p, nil, nil)
 	return ops, p.FormatViolations
 }
@@ -261,8 +293,7 @@ func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation
 // parser read as a real because it overflows 64 bits (see
 // [parser.Parser.IntegerOverflows]).
 func ParseStreamDataWithOverflows(ctx context.Context, data []byte) ([]Operation, []float64, error) {
-	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
-	p := parser.NewParser(lex)
+	p := parser.NewParser(newLexer(data, nil))
 	ops, err := parseOperations(ctx, p, nil, nil)
 	return ops, p.IntegerOverflows, err
 }
@@ -278,8 +309,7 @@ func ParseStreamDataWithOverflows(ctx context.Context, data []byte) ([]Operation
 // The violations come back even when the parse fails: the ones recorded before
 // the failure keep their placement, and the rest have no operator.
 func ParseStreamDataForCompliance(ctx context.Context, data []byte) ([]Operation, []float64, []FormatViolation, error) {
-	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
-	p := parser.NewParser(lex).WithFormatChecking()
+	p := parser.NewParser(newLexer(data, nil)).WithFormatChecking()
 	placer := &violationPlacer{p: p}
 	ops, err := parseOperations(ctx, p, nil, placer)
 	return ops, p.IntegerOverflows, placer.finish(), err

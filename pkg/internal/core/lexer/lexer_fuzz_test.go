@@ -9,7 +9,7 @@ import (
 )
 
 // FuzzLexer feeds arbitrary bytes directly into the lexer, with and without a
-// command set.
+// command set, and with digit boundaries.
 func FuzzLexer(f *testing.F) {
 	f.Add([]byte("/Name"))
 	f.Add([]byte("/A#42"))
@@ -25,16 +25,20 @@ func FuzzLexer(f *testing.F) {
 	f.Add([]byte("ETBT qQ BTET ETXX TfT* q1 falsef BDX"))
 	f.Add([]byte("BT (a) TjET"))
 	f.Add([]byte("ETB"))
+	f.Add([]byte("q1 0 0 1 0 0 cm xx1yy d01 xd0 n1 BT1 1q"))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
 		if len(data) > 64*1024 {
 			return
 		}
 
-		for _, cs := range []*CommandSet{nil, testCommands} {
+		for i, cs := range []*CommandSet{nil, testCommands, nil} {
 			r := bytes.NewReader(data)
 			reader := ioat.NewReader(r, int64(len(data)), 0)
 			lex := NewLexer(reader).WithCommands(cs)
+			if i == 2 {
+				lex.WithDigitBoundaries()
+			}
 
 			for range 10000 {
 				tok, err := lex.NextToken()

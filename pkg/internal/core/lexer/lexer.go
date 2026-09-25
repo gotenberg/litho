@@ -71,6 +71,9 @@ type Lexer struct {
 	// commands ends a run of regular characters at a command, or is nil to
 	// end it only at white space or a delimiter. See [Lexer.WithCommands].
 	commands *CommandSet
+	// digitBoundaries ends a keyword before a digit as veraPDF does. See
+	// [Lexer.WithDigitBoundaries].
+	digitBoundaries bool
 }
 
 // Reader returns the underlying [ioat.Reader] used by this lexer.
@@ -279,6 +282,9 @@ func (l *Lexer) readRegular() (Token, error) {
 	// command reports whether buf is a command of l.commands, which ends the
 	// run before a character that would make it none (see [Lexer.WithCommands]).
 	command := false
+	// beforeDigit reports whether the run ends before a digit, which its first
+	// character decides (see [Lexer.WithDigitBoundaries]).
+	beforeDigit := false
 	for {
 		c, err := l.reader.ReadByte()
 		if err != nil {
@@ -288,6 +294,12 @@ func (l *Lexer) readRegular() (Token, error) {
 			return Token{Type: TokenError, Value: err.Error()}, err
 		}
 		if isWhitespace(c) || isDelimiter(c) {
+			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
+			break
+		}
+		if len(buf) == 0 {
+			beforeDigit = l.digitBoundaries && endsBeforeDigit(c)
+		} else if beforeDigit && isDigit(c) && !joinsBeforeDigit(buf[len(buf)-1], c) {
 			_ = l.reader.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
 			break
 		}

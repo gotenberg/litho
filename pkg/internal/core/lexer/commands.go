@@ -110,3 +110,58 @@ func (l *Lexer) WithCommands(cs *CommandSet) *Lexer {
 	l.commands = cs
 	return l
 }
+
+// WithDigitBoundaries makes l end a keyword before a digit the way veraPDF
+// reads a content stream, and returns l. Without it a run of regular characters
+// ends only at white space or a delimiter.
+//
+// ISO 32000-1, 7.2.2 ends a token only at white space or a delimiter, so "q1"
+// is one keyword by the letter of the spec, an operator ISO 32000-1, Annex A
+// does not define, which ISO 19005-1, 6.2.10 t1 and ISO 19005-2, 6.2.2 t1
+// forbid. Deliberate leniency toward veraPDF, the reference validator of ISO
+// 19005: its content stream parser reads an operator up to white space, one of
+// the delimiters "[", "]", "<", "(" and "/", or a digit
+// (PDFStreamParser.nextOperator, veraPDF-parser 1.30), so "q1" is q then the
+// number 1 there, and so it is here. A 0 or a 1 after a "d" stays in the
+// operator, which keeps d0 and d1 whole. A keyword the object syntax can
+// spell, one that starts with "n", "t" or "f", and one that starts with "B" are
+// read to white space or a delimiter (PDFStreamParser.parseNextToken), so
+// "n1", "true1" and "BT1" stay whole.
+//
+// Three rules of veraPDF are not mirrored. A run that starts with a digit, a
+// sign or a period keeps the token boundaries of 7.2.2, where veraPDF ends a
+// number at the first character other than a digit or a period
+// (BaseParser.readNumber): "12m" is one undefined operator here and 12 then m
+// there, and "xx1yy" is xx then the keyword 1yy here and xx, 1 and yy there,
+// two undefined operators either way. veraPDF also does not end an operator at
+// ")", ">", "{", "}" or "%", which ISO 32000-1, 7.2.2, Table 2 makes
+// delimiters and which end it here. And a run that starts with "I" keeps its
+// boundaries, where veraPDF reads it as the start of inline image data.
+//
+// The objects of the file body keep the token boundaries of 7.2.2: only a
+// content stream reading sets it.
+func (l *Lexer) WithDigitBoundaries() *Lexer {
+	l.digitBoundaries = true
+	return l
+}
+
+// endsBeforeDigit reports whether a keyword that starts with first ends
+// before a digit under [Lexer.WithDigitBoundaries].
+func endsBeforeDigit(first byte) bool {
+	switch first {
+	case 'n', 't', 'f', 'B', 'I', '+', '-', '.':
+		return false
+	}
+	return !isDigit(first)
+}
+
+// joinsBeforeDigit reports whether digit, read after prev, stays in a keyword
+// that ends before a digit: the 0 or 1 of d0 and d1.
+func joinsBeforeDigit(prev, digit byte) bool {
+	return prev == 'd' && (digit == '0' || digit == '1')
+}
+
+// isDigit reports whether c is a decimal digit.
+func isDigit(c byte) bool {
+	return c >= '0' && c <= '9'
+}

@@ -32,6 +32,7 @@ func TestRepairContentDataSeparatesGluedOperators(t *testing.T) {
 		{"ET run into BT", "BT /F1 24 Tf 50 500 Td (a) Tj ETBT /F1 12 Tf 50 600 Td (b) Tj ET", 1, 0},
 		{"three operators and the operands of the first", "/F1 12 TfT*T* (a) Tj", 2, 0},
 		{"a glued run beside an undefined operator", "qQ zz", 1, 1},
+		{"an operator run into its operand beside an undefined operator", "q1 0 0 1 0 0 cm Q zz", 0, 1},
 	} {
 		out, tally := repairContentData(ctx, []byte(tc.src), 2)
 		if tally.separated != tc.separated || tally.removed != tc.removed {
@@ -67,7 +68,7 @@ func TestRepairContentDataRemovesARunThatIsNotOperators(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	for _, src := range []string{"(a) Tj ETXX", "(a) Tj junk", "(a) Tj q1"} {
+	for _, src := range []string{"(a) Tj ETXX", "(a) Tj junk", "(a) Tj BT1"} {
 		out, tally := repairContentData(ctx, []byte(src), 2)
 		if tally.separated != 0 || tally.removed != 1 {
 			t.Errorf("%q: separated %d and removed %d operators, want 0 and 1", src, tally.separated, tally.removed)

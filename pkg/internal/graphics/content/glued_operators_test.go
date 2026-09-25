@@ -81,9 +81,9 @@ func TestSplitGluedOperators(t *testing.T) {
 }
 
 // TestGluedOperatorsStayWholeByDefault pins the reading compliance takes: with
-// no option, a run of regular characters ends only at white space or a
-// delimiter (ISO 32000-1, 7.2.2), so "ETBT" is the one operator veraPDF reports
-// as undefined under ISO 19005-2, 6.2.2 t1.
+// no option, a run of letters ends only at white space, a delimiter (ISO
+// 32000-1, 7.2.2) or a digit, so "ETBT" is the one operator veraPDF reports as
+// undefined under ISO 19005-2, 6.2.2 t1.
 func TestGluedOperatorsStayWholeByDefault(t *testing.T) {
 	t.Parallel()
 
@@ -112,6 +112,59 @@ func TestGluedOperatorsStayWholeByDefault(t *testing.T) {
 			t.Errorf("ParseStreamDataForCompliance(%q) operators = %v, want %v", tc.src, got, tc.want)
 		}
 	}
+}
+
+// TestDefaultReadingEndsOperatorsAtDigits pins that every parse without an
+// option ends an operator before a digit, as veraPDF does
+// (PDFStreamParser.nextOperator): "q1" is the q veraPDF counts toward the
+// nesting limit, the digits are the operands of the operator after them, and a
+// run from "n" stays whole, one operator veraPDF reports as undefined. Measured
+// with veraPDF 1.30 at PDF/A-1b and PDF/A-2b.
+func TestDefaultReadingEndsOperatorsAtDigits(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	src := "q1 0 0 1 0 0 cm Q n1"
+	want := []string{"q", "cm", "Q", "n1"}
+	cm := []ast.PdfObject{ast.PdfInt(1), ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(1), ast.PdfInt(0), ast.PdfInt(0)}
+	check := func(name string, ops []Operation) {
+		t.Helper()
+		if got := operators(ops); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s(%q) operators = %v, want %v", name, src, got, want)
+			return
+		}
+		if len(ops[0].Operands) != 0 || !reflect.DeepEqual(ops[1].Operands, cm) {
+			t.Errorf("%s(%q) operands q=%v cm=%v, want none and %v", name, src, ops[0].Operands, ops[1].Operands, cm)
+		}
+	}
+
+	ops, err := ParseStreamData(ctx, []byte(src))
+	if err != nil {
+		t.Fatalf("ParseStreamData: %v", err)
+	}
+	check("ParseStreamData", ops)
+	ops, ranges, err := ParseStreamDataWithOffsets(ctx, []byte(src))
+	if err != nil {
+		t.Fatalf("ParseStreamDataWithOffsets: %v", err)
+	}
+	check("ParseStreamDataWithOffsets", ops)
+	for i, wantRange := range []string{"q", "1 0 0 1 0 0 cm", " Q", " n1"} {
+		if got := src[ranges[i].Start:ranges[i].End]; got != wantRange {
+			t.Errorf("%s range covers %q, want %q", ops[i].Operator, got, wantRange)
+		}
+	}
+	ops, _ = ParseStreamDataFormatChecked(ctx, []byte(src))
+	check("ParseStreamDataFormatChecked", ops)
+	ops, _, err = ParseStreamDataWithOverflows(ctx, []byte(src))
+	if err != nil {
+		t.Fatalf("ParseStreamDataWithOverflows: %v", err)
+	}
+	check("ParseStreamDataWithOverflows", ops)
+	ops, _, _, err = ParseStreamDataForCompliance(ctx, []byte(src))
+	if err != nil {
+		t.Fatalf("ParseStreamDataForCompliance: %v", err)
+	}
+	check("ParseStreamDataForCompliance", ops)
 }
 
 // TestSplitGluedOperatorsShareTheRunBytes pins the byte ranges of operators
