@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -188,10 +189,8 @@ func contentStringJudged(v content.FormatViolation) bool {
 // and /Lang under BDC and /ActualText and /Alt under DP fail twice, while /E,
 // /Lang under DP and an /ActualText nested in another entry fail once.
 //
-// A property list BDC names from /Resources/Properties is judged there as well,
-// once as an object of the file and twice more for every BDC naming it. The
-// file-level format check states such a string once, so that count stays below
-// veraPDF's.
+// A property list BDC or DP names from /Resources/Properties is judged the
+// same way for every operator naming it, see [checkPropertyListHexStrings].
 //
 // # Corpus evidence
 //
@@ -199,17 +198,280 @@ func contentStringJudged(v content.FormatViolation) bool {
 //     values, under PDF/A-1b and PDF/A-2b and the verapdf files under their own
 //     profile, so no count moves.
 func propertyListStringKey(v content.FormatViolation) ast.PdfName {
-	switch v.Key {
-	case "ActualText", "Alt":
-		if v.Operator == "BDC" || v.Operator == "DP" {
-			return v.Key
-		}
-	case "Lang":
-		if v.Operator == "BDC" {
-			return v.Key
-		}
+	if propertyListJudgesTwice(v.Operator, v.Key) {
+		return v.Key
 	}
 	return ""
+}
+
+// propertyListJudgesTwice reports whether veraPDF judges a string written as
+// the value of key, an entry of the property list of operator, a second time
+// (see [propertyListStringKey]).
+func propertyListJudgesTwice(operator string, key ast.PdfName) bool {
+	switch key {
+	case "ActualText", "Alt":
+		return operator == "BDC" || operator == "DP"
+	case "Lang":
+		return operator == "BDC"
+	}
+	return false
+}
+
+// checkPropertyListHexStrings states the hex string tests, ISO 19005-1/2/3,
+// 6.1.6 t1 and t2 and ISO 19005-4, 6.1.5 t1 and t2, for the property lists the
+// BDC and DP operators of a document name from the /Properties of their
+// resources (ISO 32000-1, 14.6.2).
+//
+// veraPDF judges every string of such a property list once as part of the
+// file, which [checkFormatViolations] states, and again for every operator
+// naming it: once as a value of the property list, nested dictionaries and
+// arrays included, and once more for an /ActualText or /Alt, or a /Lang under
+// BDC, written as its value (see [propertyListStringKey]). A property list is
+// judged per operator whether it is an object of its own or written in the
+// /Properties dictionary. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b:
+// a property list whose /ActualText is a bad hex string fails the test three
+// times when one BDC names it and five times when two do, on one page or on
+// two; one whose /E is fails it once per BDC more; a form painted twice
+// judges its BDC once; and a name /Properties does not define, or a property
+// list no operator names, adds nothing.
+//
+// The operators are those of the content streams veraPDF reads: every page's
+// content, and the streams [drawnStreamWalk] reaches, each judged once. A name
+// resolves against the stream's own resources, then against the page's.
+// Measured the same way: a form with no /Properties naming the page's
+// property list, and an appearance stream naming its own twice, fail the test
+// as a page does, and PDF/A-4 counts as PDF/A-2b.
+//
+// The strings are found from the format violations the parse of the object
+// holding the property list recorded (see [propertyListSite]). A property
+// list written directly in the resources of a Type3 font, whose object the
+// walk does not know, adds nothing, and neither does one in an object the
+// parse never checked, which [checkFormatViolations] misses too. Each content
+// stream contributes at most [maxContentFormatViolationsPerStream] of these
+// findings.
+//
+// # Corpus evidence
+//
+//   - All corpora: 9 files fail a hex string test, under PDF/A-1b and
+//     PDF/A-2b and the verapdf files under their own profile, and none holds
+//     the bad string in a property list an operator names, so no count moves.
+func checkPropertyListHexStrings(ctx context.Context, vctx *validationCtx) []Violation {
+	oddRule := hexStringRule(vctx.profile)
+	if oddRule.Specification == "" || !hasEntryHexString(vctx.formatViolations) {
+		return nil
+	}
+	j := &propertyListJudge{
+		doc:      vctx.doc,
+		oddRule:  oddRule,
+		charRule: hexStringInvalidCharRule(vctx.profile),
+		objects:  make(map[int][]error),
+	}
+	homes := make([]resourcesHome, len(vctx.pages))
+	var results []Violation
+	for i := range vctx.pages {
+		if ctx.Err() != nil {
+			return results
+		}
+		homes[i] = pageResourcesHome(ctx, vctx, &vctx.pages[i])
+		results = append(results, j.judge(ctx, vctx.pages[i].parsedOps(ctx), resourcesHome{}, homes[i], i+1)...)
+	}
+	walk := newDrawnStreamWalk(vctx, func(s *drawnStream) {
+		results = append(results, j.judge(ctx, s.ops, drawnResourcesHome(ctx, vctx.doc, s), homes[s.pageNum-1], s.pageNum)...)
+	})
+	for i := range vctx.pages {
+		if ctx.Err() != nil {
+			return results
+		}
+		walk.walkPage(ctx, &vctx.pages[i], i+1)
+	}
+	return results
+}
+
+// hasEntryHexString reports whether violations holds a hex string finding in
+// a string read inside a dictionary, the only kind a property list holds.
+func hasEntryHexString(violations []error) bool {
+	for _, v := range violations {
+		if _, ok := errors.AsType[*parser.EntryViolationError](v); ok && isHexStringViolation(v) {
+			return true
+		}
+	}
+	return false
+}
+
+// isHexStringViolation reports whether v is a hex string finding.
+func isHexStringViolation(v error) bool {
+	return errors.Is(v, parser.ErrHexStringOddDigits) || errors.Is(v, parser.ErrHexStringInvalidChar)
+}
+
+// propertyListSite is where a direct object lies in the file: the indirect
+// object holding it and the keys leading to it from that object's
+// dictionary, none when it is the object itself. objNum 0 locates nothing.
+type propertyListSite struct {
+	objNum int
+	keys   []ast.PdfName
+}
+
+// child returns the site of the value of key in the dictionary at site, whose
+// value as written is raw: raw's own object when it is an indirect reference.
+func (site propertyListSite) child(key ast.PdfName, raw ast.PdfObject) propertyListSite {
+	if ref, ok := raw.(ast.PdfIndirectRef); ok {
+		return propertyListSite{objNum: ref.ObjectNum}
+	}
+	if site.objNum == 0 {
+		return propertyListSite{}
+	}
+	return propertyListSite{objNum: site.objNum, keys: append(slices.Clone(site.keys), key)}
+}
+
+// holds reports whether the string ev names lies in the dictionary at site,
+// ev a finding of the object site.objNum, and returns the key of the entry of
+// that dictionary whose value the string is, or "" when it lies deeper.
+func (site propertyListSite) holds(ev *parser.EntryViolationError) (ast.PdfName, bool) {
+	n := len(site.keys)
+	if len(ev.Path) <= n {
+		return "", false
+	}
+	// The keys of site are dictionaries written as values of each other, and
+	// the dictionary at site holds the string, so each step is one level
+	// below the one before it.
+	base := ev.Path[0].Depth
+	for i := 0; i <= n; i++ {
+		if ev.Path[i].Depth != base+i || (i < n && ev.Path[i].Key != site.keys[i]) {
+			return "", false
+		}
+	}
+	if len(ev.Path) == n+1 && ev.Depth == ev.Path[n].Depth {
+		return ev.Path[n].Key, true
+	}
+	return "", true
+}
+
+// resourcesHome is a resource dictionary a content stream reads names from,
+// with its site in the file, the zero site when it is not known.
+type resourcesHome struct {
+	dict ast.PdfDict
+	site propertyListSite
+}
+
+// pageResourcesHome returns the resources of page p, which [buildValidationCtx]
+// took from the page or else from the root of the page tree.
+func pageResourcesHome(ctx context.Context, vctx *validationCtx, p *pageCtx) resourcesHome {
+	if res := resolveResources(ctx, vctx.doc, p.dict); res != nil {
+		return resourcesHome{dict: res, site: propertyListSite{objNum: p.objNum}.child("Resources", p.dict["Resources"])}
+	}
+	home := resourcesHome{dict: p.resources}
+	if ref, ok := vctx.catalog["Pages"].(ast.PdfIndirectRef); ok {
+		if root, err := document.ResolveDict(ctx, vctx.doc, ref); err == nil && root != nil {
+			home.site = propertyListSite{objNum: ref.ObjectNum}.child("Resources", root["Resources"])
+		}
+	}
+	return home
+}
+
+// drawnResourcesHome returns the own resources of s. A Type3 glyph reads the
+// resources of its font, whose site the walk does not know.
+func drawnResourcesHome(ctx context.Context, doc *document.Document, s *drawnStream) resourcesHome {
+	home := resourcesHome{dict: s.resources}
+	if s.kind == drawnGlyph || s.objNum == 0 || s.resources == nil {
+		return home
+	}
+	stream, err := document.ResolveStream(ctx, doc, ast.PdfIndirectRef{ObjectNum: s.objNum})
+	if err != nil {
+		doc.Logger.Debug("compliance.format: cannot resolve drawn stream", "object", s.objNum, "error", err)
+		return home
+	}
+	home.site = propertyListSite{objNum: s.objNum}.child("Resources", stream.Dict["Resources"])
+	return home
+}
+
+// propertyListJudge states [checkPropertyListHexStrings] for one document. It
+// runs on one goroutine, so it takes no lock.
+type propertyListJudge struct {
+	doc               *document.Document
+	oddRule, charRule Rule
+	// objects caches the format violations recorded per object.
+	objects map[int][]error
+}
+
+// judge states the tests for the property lists the operations ops name,
+// resolving a name against own, then page, on page pageNum.
+func (j *propertyListJudge) judge(ctx context.Context, ops []content.Operation, own, page resourcesHome, pageNum int) []Violation {
+	var results []Violation
+	for idx, op := range ops {
+		if idx%100 == 0 && ctx.Err() != nil {
+			return results
+		}
+		if (op.Operator != "BDC" && op.Operator != "DP") || len(op.Operands) < 2 {
+			continue
+		}
+		name, ok := op.Operands[len(op.Operands)-1].(ast.PdfName)
+		if !ok {
+			continue
+		}
+		site, found := j.propertyList(ctx, own, name)
+		if !found {
+			site, found = j.propertyList(ctx, page, name)
+		}
+		if !found || site.objNum == 0 {
+			continue
+		}
+		for _, v := range j.objectViolations(site.objNum) {
+			ev, ok := errors.AsType[*parser.EntryViolationError](v)
+			if !ok || !isHexStringViolation(v) {
+				continue
+			}
+			key, inList := site.holds(ev)
+			if !inList {
+				continue
+			}
+			rule := j.oddRule
+			if errors.Is(v, parser.ErrHexStringInvalidChar) {
+				rule = j.charRule
+			}
+			at := fmt.Sprintf("page %d: %s, in the property list /%s that %s operator %d names", pageNum, v.Error(), name, op.Operator, idx)
+			results = append(results, Violation{Rule: rule, Context: at})
+			if propertyListJudgesTwice(op.Operator, key) {
+				results = append(results, Violation{Rule: rule, Context: at + ", read again as its /" + string(key)})
+			}
+			if len(results) >= maxContentFormatViolationsPerStream {
+				return results[:maxContentFormatViolationsPerStream]
+			}
+		}
+	}
+	return results
+}
+
+// propertyList returns the site of the property list the /Properties of home
+// defines as name, and whether it defines one. The site is the zero one when
+// home's is not known.
+func (j *propertyListJudge) propertyList(ctx context.Context, home resourcesHome, name ast.PdfName) (propertyListSite, bool) {
+	if home.dict == nil {
+		return propertyListSite{}, false
+	}
+	props, err := document.ResolveDict(ctx, j.doc, home.dict["Properties"])
+	if err != nil || props == nil {
+		return propertyListSite{}, false
+	}
+	raw, ok := props[name]
+	if !ok {
+		return propertyListSite{}, false
+	}
+	// A property list is a dictionary (ISO 32000-1, 14.6.2), and veraPDF
+	// reaches no string through a name defining anything else.
+	if list, err := document.ResolveDict(ctx, j.doc, raw); err != nil || list == nil {
+		return propertyListSite{}, false
+	}
+	return home.site.child("Properties", home.dict["Properties"]).child(name, raw), true
+}
+
+// objectViolations returns the format violations recorded for object objNum.
+func (j *propertyListJudge) objectViolations(objNum int) []error {
+	vs, ok := j.objects[objNum]
+	if !ok {
+		vs = j.doc.ObjectFormatViolations(objNum)
+		j.objects[objNum] = vs
+	}
+	return vs
 }
 
 // drawnStreamHexStrings states the hex string tests, ISO 19005-1/2/3, 6.1.6

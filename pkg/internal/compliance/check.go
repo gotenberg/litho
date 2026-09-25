@@ -37,7 +37,10 @@ type validationCtx struct {
 
 // pageCtx holds pre-resolved data for a single page.
 type pageCtx struct {
-	dict        ast.PdfDict
+	dict ast.PdfDict
+	// objNum is the object number of the page dictionary, or 0 for a page
+	// written directly in its parent's /Kids.
+	objNum      int
 	resources   ast.PdfDict // resolved, with inherited fallback from Pages tree
 	content     []byte      // decoded content stream bytes (nil if decode fails)
 	ops         []content.Operation
@@ -173,9 +176,10 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 	}
 
 	// Collect pages once and resolve resources per page.
-	rawPages := collectPages(ctx, doc, catalog)
+	rawPages := collectPageObjects(ctx, doc, catalog)
 	vctx.pages = make([]pageCtx, len(rawPages))
-	for i, page := range rawPages {
+	for i, pageObj := range rawPages {
+		page := pageObj.dict
 		res := resolveResources(ctx, doc, page)
 		if res == nil {
 			res = inheritedRes
@@ -183,6 +187,7 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 		contentBytes, contentErr := resolvePageContentBytes(ctx, doc, page)
 		vctx.pages[i] = pageCtx{
 			dict:      page,
+			objNum:    pageObj.objNum,
 			resources: res,
 			content:   contentBytes,
 			// A page whose /Contents is present but will not decode has content
@@ -435,12 +440,30 @@ func resolveAllObjects(ctx context.Context, doc *document.Document) {
 
 // collectPages traverses the page tree and returns all leaf page dicts.
 func collectPages(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []ast.PdfDict {
+	objs := collectPageObjects(ctx, doc, catalog)
+	pages := make([]ast.PdfDict, len(objs))
+	for i, p := range objs {
+		pages[i] = p.dict
+	}
+	return pages
+}
+
+// pageObject is one leaf of the page tree: its dictionary and its object
+// number, 0 for a page written directly in its parent's /Kids.
+type pageObject struct {
+	dict   ast.PdfDict
+	objNum int
+}
+
+// collectPageObjects traverses the page tree and returns all leaf pages, in
+// the order [collectPages] returns their dictionaries.
+func collectPageObjects(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []pageObject {
 	pagesObj, ok := catalog["Pages"]
 	if !ok {
 		doc.Logger.Debug("compliance: catalog missing /Pages")
 		return nil
 	}
-	var pages []ast.PdfDict
+	var pages []pageObject
 	collectPagesRecursive(ctx, doc, pagesObj, &pages, make(map[int]bool), 0)
 	doc.Logger.Debug("compliance: collected pages", "count", len(pages))
 	return pages
@@ -455,20 +478,22 @@ func collectPages(ctx context.Context, doc *document.Document, catalog ast.PdfDi
 // realigned. remediation/fixer_annotations.go uses 100 as well.
 const maxPageTreeDepth = 100
 
-// collectPagesRecursive walks the page tree, appending leaf page dicts. seen
+// collectPagesRecursive walks the page tree, appending leaf pages. seen
 // records each node visited so a shared or cyclic /Kids tree is traversed once:
 // a page tree is a strict tree (ISO 32000-1 §7.7.3.2), so a node reached again
 // is malformed, and without the guard a crafted tree whose every node lists the
 // same child twice fans out 2^depth (a denial of service).
-func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, pages *[]ast.PdfDict, seen map[int]bool, depth int) {
+func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, pages *[]pageObject, seen map[int]bool, depth int) {
 	if ctx.Err() != nil || depth > maxPageTreeDepth {
 		return
 	}
+	objNum := 0
 	if ref, ok := obj.(ast.PdfIndirectRef); ok {
 		if seen[ref.ObjectNum] {
 			return
 		}
 		seen[ref.ObjectNum] = true
+		objNum = ref.ObjectNum
 	}
 	dict, err := document.ResolveDict(ctx, doc, obj)
 	if err != nil || dict == nil {
@@ -485,7 +510,7 @@ func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.
 			collectPagesRecursive(ctx, doc, kid, pages, seen, depth+1)
 		}
 	case "Page":
-		*pages = append(*pages, dict)
+		*pages = append(*pages, pageObject{dict: dict, objNum: objNum})
 	default:
 		// Some producers omit /Type; try /Kids to distinguish.
 		if _, hasKids := dict["Kids"]; hasKids {
@@ -497,7 +522,7 @@ func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.
 				collectPagesRecursive(ctx, doc, kid, pages, seen, depth+1)
 			}
 		} else {
-			*pages = append(*pages, dict)
+			*pages = append(*pages, pageObject{dict: dict, objNum: objNum})
 		}
 	}
 }

@@ -236,6 +236,18 @@ func (d *Document) FormatViolations() []error {
 	return d.formatViolationsLocked()
 }
 
+// ObjectFormatViolations returns the format violations recorded for object
+// objNum, in the order they were found, or nil when none were. The first
+// recording for an object wins (see [Document.RecordFormatViolations]), so
+// once the object has been parsed in compliance mode the list no longer
+// changes. The result is a fresh slice. ObjectFormatViolations is safe for
+// concurrent use.
+func (d *Document) ObjectFormatViolations(objNum int) []error {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return slices.Clone(d.formatViolations[objNum])
+}
+
 // recordIntegerOverflows records the integer literals past the 64-bit range
 // that the parse of object objNum read as reals. The first recording for an
 // object wins, as in [Document.RecordFormatViolations], so the record is a

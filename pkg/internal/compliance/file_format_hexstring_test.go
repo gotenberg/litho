@@ -215,3 +215,122 @@ func TestContentStreamHexStringsPropertyListTwice(t *testing.T) {
 		}
 	}
 }
+
+// namedPropertyListObjs builds the objects of a PDF of one page per content,
+// each with its own content stream, sharing the resources object 3, whose
+// /Properties is props and which names the form /Fm0 (object 5). The form
+// draws fm0 with the resources fm0Res, or is an empty dictionary when fm0 is
+// "". Object 6 is p6, object 4 an empty dictionary. pageRes writes the
+// resources directly in every page dictionary instead of referencing object 3.
+func namedPropertyListObjs(props, p6, fm0, fm0Res string, pageRes bool, contents ...string) []string {
+	res := "<< /Properties " + props + " /XObject << /Fm0 5 0 R >> >>"
+	form := "<< >>"
+	if fm0 != "" {
+		form = exponentStream("/Type /XObject /Subtype /Form /BBox [0 0 10 10] /Resources "+fm0Res, fm0)
+	}
+	kids := ""
+	for i := range contents {
+		kids += " " + strconv.Itoa(7+2*i) + " 0 R"
+	}
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [" + kids + "] /Count " + strconv.Itoa(len(contents)) + " >>",
+		res,
+		"<< >>",
+		form,
+		p6,
+	}
+	pageResources := "3 0 R"
+	if pageRes {
+		pageResources = res
+	}
+	for i, c := range contents {
+		objs = append(objs,
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources "+pageResources+" /Contents "+strconv.Itoa(8+2*i)+" 0 R >>",
+			exponentStream("", c))
+	}
+	return objs
+}
+
+// TestPropertyListHexStringsPerNamingOperator pins that a bad hex string in a
+// property list BDC or DP names from /Resources/Properties fails the hex
+// string tests as many times as veraPDF 1.30 fails them: once as part of the
+// file, once more per operator naming the property list, and once more again
+// when it is the /ActualText or /Alt, or under BDC the /Lang, of the property
+// list. Every count below was measured on the same file at PDF/A-1b and
+// PDF/A-2b, and the first three at PDF/A-4 too.
+func TestPropertyListHexStringsPerNamingOperator(t *testing.T) {
+	t.Parallel()
+
+	const (
+		at  = "<< /P0 << /ActualText <414> >> >>"
+		bdc = "/Span /P0 BDC EMC"
+	)
+	appearance := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << >> /Contents 4 0 R /Annots [5 0 R] >>",
+		exponentStream("", "0 0 1 1 re S"),
+		"<< /Type /Annot /Subtype /Square /Rect [0 0 10 10] /F 4 /AP << /N 6 0 R >> >>",
+		exponentStream("/Type /XObject /Subtype /Form /BBox [0 0 10 10] /Resources << /Properties "+at+" >>", bdc+" "+bdc),
+	}
+	cases := []struct {
+		name         string
+		objs         []string
+		odd, invalid int
+		pdfa4        bool
+	}{
+		{"two BDC name a direct property list", namedPropertyListObjs(at, "<< >>", "", "", false, bdc+" "+bdc), 5, 0, true},
+		{"two BDC name a non-hex /ActualText", namedPropertyListObjs("<< /P0 << /ActualText <41Z4> >> >>", "<< >>", "", "", false, bdc+" "+bdc), 0, 5, true},
+		{"two BDC name a direct /E", namedPropertyListObjs("<< /P0 << /E <414> >> >>", "<< >>", "", "", false, bdc+" "+bdc), 3, 0, true},
+		{"one BDC names a direct property list", namedPropertyListObjs(at, "<< >>", "", "", false, bdc), 3, 0, false},
+		{"one BDC names an indirect property list", namedPropertyListObjs("<< /P0 6 0 R >>", "<< /ActualText <414> >>", "", "", false, bdc), 3, 0, false},
+		{"two BDC name an indirect property list", namedPropertyListObjs("<< /P0 6 0 R >>", "<< /ActualText <414> >>", "", "", false, bdc+" "+bdc), 5, 0, false},
+		{"two BDC name an indirect /E", namedPropertyListObjs("<< /P0 6 0 R >>", "<< /E <414> >>", "", "", false, bdc+" "+bdc), 3, 0, false},
+		{"two pages name an indirect property list", namedPropertyListObjs("<< /P0 6 0 R >>", "<< /ActualText <414> >>", "", "", false, bdc, bdc), 5, 0, false},
+		{"an indirect /Properties holds it", namedPropertyListObjs("6 0 R", at, "", "", false, bdc+" "+bdc), 5, 0, false},
+		{"DP names an /ActualText", namedPropertyListObjs(at, "<< >>", "", "", false, "/Span /P0 DP"), 3, 0, false},
+		{"DP names a /Lang", namedPropertyListObjs("<< /P0 << /Lang <414> >> >>", "<< >>", "", "", false, "/Span /P0 DP"), 2, 0, false},
+		{"BDC names a /Lang", namedPropertyListObjs("<< /P0 << /Lang <414> >> >>", "<< >>", "", "", false, bdc), 3, 0, false},
+		{"BDC names a nested /ActualText", namedPropertyListObjs("<< /P0 << /X << /ActualText <414> >> >> >>", "<< >>", "", "", false, bdc), 2, 0, false},
+		{"BDC names an /ActualText and an /Alt", namedPropertyListObjs("<< /P0 << /ActualText <414> /Alt <414> >> >>", "<< >>", "", "", false, bdc), 6, 0, false},
+		{"no operator names it", namedPropertyListObjs(at, "<< >>", "", "", false, "0 0 m 1 1 l S"), 1, 0, false},
+		{"BDC names another property list", namedPropertyListObjs(at, "<< >>", "", "", false, "/Span /P1 BDC EMC"), 1, 0, false},
+		{"two pages name it", namedPropertyListObjs(at, "<< >>", "", "", false, bdc, bdc), 5, 0, false},
+		{"the page dictionary writes the resources", namedPropertyListObjs(at, "<< >>", "", "", true, bdc), 4, 0, false},
+		{"a form painted twice names its own", namedPropertyListObjs("<< >>", "<< >>", bdc, "<< /Properties "+at+" >>", false, "/Fm0 Do /Fm0 Do"), 3, 0, false},
+		{"a form names the page's", namedPropertyListObjs(at, "<< >>", bdc, "<< >>", false, "/Fm0 Do"), 3, 0, false},
+		{"an appearance stream names its own twice", appearance, 5, 0, false},
+	}
+	for _, tc := range cases {
+		profiles := []struct {
+			profile      models.PDFAProfile
+			odd, invalid Rule
+		}{
+			{models.PDFA1b, Rule_19005_1_6_1_6_t01, Rule_19005_1_6_1_6_t02},
+			{models.PDFA2b, Rule_19005_2_6_1_6_t01, Rule_19005_2_6_1_6_t02},
+		}
+		if tc.pdfa4 {
+			profiles = append(profiles, struct {
+				profile      models.PDFAProfile
+				odd, invalid Rule
+			}{models.PDFA4, Rule_19005_4_6_1_5_t01, Rule_19005_4_6_1_5_t02})
+		}
+		for _, p := range profiles {
+			t.Run(tc.name+" "+string(p.profile), func(t *testing.T) {
+				t.Parallel()
+				doc, _ := objsDocPDF(t, tc.objs...)
+				viols, err := ValidatePDFA(context.Background(), doc, p.profile)
+				if err != nil {
+					t.Fatalf("ValidatePDFA: %v", err)
+				}
+				if got := countRuleErrs(t, viols, p.odd); got != tc.odd {
+					t.Errorf("%s test %d fired %d times, want %d: %v", p.odd.Clause, p.odd.TestNumber, got, tc.odd, viols)
+				}
+				if got := countRuleErrs(t, viols, p.invalid); got != tc.invalid {
+					t.Errorf("%s test %d fired %d times, want %d: %v", p.invalid.Clause, p.invalid.TestNumber, got, tc.invalid, viols)
+				}
+			})
+		}
+	}
+}

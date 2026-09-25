@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -88,27 +89,30 @@ func TestHexStringViolationsWrapTheirSentinels(t *testing.T) {
 }
 
 // TestHexStringViolationNamesItsEntry pins that a hex-string finding in a
-// string written as a dictionary value names the entry and the depth the
-// string was read at, and keeps the message and sentinel it has anywhere else.
-// A string nested in an array, or read on its own, names no entry, and the
-// entry a nested dictionary notes is put back once it closes.
+// string read inside a dictionary names the entries enclosing it, outermost
+// first with the depth each value is read at, the innermost key and the depth
+// the string was read at, and keeps the message and sentinel it has anywhere
+// else. A string read outside every dictionary names no entry, and the entries
+// a nested dictionary notes are put back once it closes.
 func TestHexStringViolationNamesItsEntry(t *testing.T) {
 	t.Parallel()
 	type entry struct {
 		key   string
 		depth int
+		path  string // the steps as Key@Depth, joined with "/"
 	}
 	for _, tt := range []struct {
 		src  string
 		want []entry // one per violation, key "" for none
 	}{
-		{"<< /ActualText <414> >>", []entry{{"ActualText", 2}}},
-		{"<< /X << /ActualText <414> >> >>", []entry{{"ActualText", 3}}},
-		{"<< /X [<414>] >>", []entry{{"", 0}}},
-		{"<414>", []entry{{"", 0}}},
-		{"<< /A <41Z> >>", []entry{{"A", 2}, {"A", 2}}},
-		{"<< /A << /B (x) >> /C <414> >>", []entry{{"C", 2}}},
-		{"[<< /A 1 >> <414>]", []entry{{"", 0}}},
+		{"<< /ActualText <414> >>", []entry{{"ActualText", 2, "ActualText@2"}}},
+		{"<< /X << /ActualText <414> >> >>", []entry{{"ActualText", 3, "X@2/ActualText@3"}}},
+		{"<< /X [<414>] >>", []entry{{"X", 3, "X@2"}}},
+		{"<< /X [<< /Y <414> >>] >>", []entry{{"Y", 4, "X@2/Y@4"}}},
+		{"<414>", []entry{{"", 0, ""}}},
+		{"<< /A <41Z> >>", []entry{{"A", 2, "A@2"}, {"A", 2, "A@2"}}},
+		{"<< /A << /B (x) >> /C <414> >>", []entry{{"C", 2, "C@2"}}},
+		{"[<< /A 1 >> <414>]", []entry{{"", 0, ""}}},
 	} {
 		t.Run(tt.src, func(t *testing.T) {
 			t.Parallel()
@@ -129,7 +133,11 @@ func TestHexStringViolationNamesItsEntry(t *testing.T) {
 				}
 				var got entry
 				if ev, ok := errors.AsType[*EntryViolationError](v); ok {
-					got = entry{string(ev.Key), ev.Depth}
+					steps := make([]string, len(ev.Path))
+					for j, step := range ev.Path {
+						steps[j] = fmt.Sprintf("%s@%d", string(step.Key), step.Depth)
+					}
+					got = entry{string(ev.Key), ev.Depth, strings.Join(steps, "/")}
 				}
 				if got != tt.want[i] {
 					t.Errorf("violation %d names %+v, want %+v", i, got, tt.want[i])

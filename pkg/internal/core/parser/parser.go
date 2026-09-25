@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,12 +54,10 @@ type Parser struct {
 	FormatViolations []error
 	checkFormat      bool
 
-	// entryKey is the key of the dictionary entry whose value format checking
-	// is reading, and entryDepth the depth that value is read at, so that a
-	// violation in a string written as the value names the entry (see
-	// [EntryViolationError]).
-	entryKey   ast.PdfName
-	entryDepth int
+	// entryPath holds, under format checking, the dictionary entries whose
+	// values are being read, outermost first, so that a violation in a string
+	// read inside one names them (see [EntryViolationError]).
+	entryPath []EntryStep
 
 	// IntegerOverflows holds, in parse order, the value of every integer
 	// literal too large for a 64-bit integer, which the parser reads as a
@@ -238,23 +237,40 @@ func (p *Parser) recordViolationErr(err error) {
 	}
 }
 
-// EntryViolationError is a format violation in a string written as the value
-// of a dictionary entry, rather than nested deeper in that value. It reads as
-// the violation it wraps and matches it under [errors.Is].
+// EntryViolationError is a format violation in a string read inside the value
+// of a dictionary entry. It reads as the violation it wraps and matches it
+// under [errors.Is].
 //
 // veraPDF reaches some entries of a dictionary through a second model object
 // as well as through the dictionary, the /ActualText, /Alt and /Lang of a
-// marked-content property list among them, so a consumer counting its
-// findings needs to know which entry holds the string.
+// marked-content property list among them, and reaches a property list a
+// content stream names from its resources once more for every operator naming
+// it, so a consumer counting its findings needs to know which entries hold
+// the string.
 type EntryViolationError struct {
-	// Key is the key of the entry.
+	// Key is the key of the innermost entry holding the string.
 	Key ast.PdfName
 	// Depth is the nesting depth the string was read at: 1 for an object
 	// read on its own, such as a content-stream operand, and one more per
-	// array or dictionary enclosing it.
+	// array or dictionary enclosing it. The string is the value of Key itself
+	// when Depth is the depth of the last step of Path, and lies in an array
+	// within that value otherwise.
 	Depth int
+	// Path holds the entries enclosing the string, outermost first, each
+	// with the depth its value is read at. Two consecutive steps whose depths
+	// differ by one are a dictionary written as the value of the first.
+	Path []EntryStep
 
 	err error
+}
+
+// EntryStep is one dictionary entry enclosing a string (see
+// [EntryViolationError]).
+type EntryStep struct {
+	// Key is the key of the entry.
+	Key ast.PdfName
+	// Depth is the nesting depth the entry's value is read at.
+	Depth int
 }
 
 // Error returns the message of the wrapped violation.
@@ -265,10 +281,10 @@ func (e *EntryViolationError) Unwrap() error { return e.err }
 
 // recordStringViolation is [Parser.recordViolationErr] for a violation in the
 // string being read, which it records as an [EntryViolationError] when the
-// string is the value of the dictionary entry being read.
+// string is read inside the value of a dictionary entry.
 func (p *Parser) recordStringViolation(err error) {
-	if p.entryKey != "" && p.depth == p.entryDepth {
-		err = &EntryViolationError{Key: p.entryKey, Depth: p.depth, err: err}
+	if n := len(p.entryPath); n > 0 {
+		err = &EntryViolationError{Key: p.entryPath[n-1].Key, Depth: p.depth, Path: slices.Clone(p.entryPath), err: err}
 	}
 	p.recordViolationErr(err)
 }
@@ -751,9 +767,9 @@ func (p *Parser) parseDictBody(ctx context.Context) (ast.PdfDict, error) {
 		if closed {
 			break
 		}
-		outerKey, outerDepth := p.noteEntry(key)
+		outer := p.noteEntry(key)
 		valObj, err := p.parseDictValue(ctx, key, &deferredContents)
-		p.restoreEntry(outerKey, outerDepth)
+		p.restoreEntry(outer)
 		if err != nil {
 			// Nesting past [maxParseNestingDepth] is a refusal, not a damaged
 			// value to recover from. Closing the dict here would hand back a
@@ -891,21 +907,20 @@ func startsValue(t lexer.Token) bool {
 
 // noteEntry notes, under format checking, that the value of the dictionary
 // entry key is read next, one level below the current depth, so that a
-// violation in a string written as that value names key (see
-// [EntryViolationError]). It returns the enclosing entry, which
-// [Parser.restoreEntry] puts back once the value is read, since the value may
-// be a dictionary of its own.
-func (p *Parser) noteEntry(key ast.PdfName) (ast.PdfName, int) {
-	outerKey, outerDepth := p.entryKey, p.entryDepth
+// violation in a string read inside that value names key (see
+// [EntryViolationError]). It returns the count of entries enclosing it, which
+// [Parser.restoreEntry] puts back once the value is read.
+func (p *Parser) noteEntry(key ast.PdfName) int {
+	outer := len(p.entryPath)
 	if p.checkFormat {
-		p.entryKey, p.entryDepth = key, p.depth+1
+		p.entryPath = append(p.entryPath, EntryStep{Key: key, Depth: p.depth + 1})
 	}
-	return outerKey, outerDepth
+	return outer
 }
 
-// restoreEntry puts back the entry [Parser.noteEntry] returned.
-func (p *Parser) restoreEntry(key ast.PdfName, depth int) {
-	p.entryKey, p.entryDepth = key, depth
+// restoreEntry puts back the entries [Parser.noteEntry] returned.
+func (p *Parser) restoreEntry(outer int) {
+	p.entryPath = p.entryPath[:outer]
 }
 
 // parseDictValue reads the value of key. A /Contents whose value is a string
@@ -1662,9 +1677,9 @@ func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) 
 		// value is: it is no operand of the content stream.
 		p.depth++
 		mark := p.consumed
-		outerKey, outerDepth := p.noteEntry(keyName)
+		outer := p.noteEntry(keyName)
 		val, err := p.ParseObject(ctx)
-		p.restoreEntry(outerKey, outerDepth)
+		p.restoreEntry(outer)
 		p.depth--
 		if err != nil {
 			// Tolerate a malformed value by dropping it. Consuming a token

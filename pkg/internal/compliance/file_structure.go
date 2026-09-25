@@ -42,6 +42,7 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 	results = append(results, checkObjHeaderByteFormat(doc, profile)...)
 	results = append(results, checkStreamLengths(ctx, doc, profile)...)
 	results = append(results, checkContentStreamFormat(ctx, vctx)...)
+	results = append(results, checkPropertyListHexStrings(ctx, vctx)...)
 	results = append(results, checkNonStandardFilters(ctx, doc, profile)...)
 	results = append(results, checkPageBoundaries(ctx, doc, catalog, profile)...)
 	results = append(results, checkNumericLimits(ctx, doc, profile)...)
