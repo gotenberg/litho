@@ -191,8 +191,8 @@ type Element struct {
 	Nillable bool
 	// Default and Fixed carry the element's value constraint, empty when
 	// it has none. Per XML Schema Part 1, 3.3.4 (cvc-elt clause 5.1) an
-	// element with no content takes it as its value. A fixed element's
-	// content is not compared with Fixed.
+	// element with no content takes it as its value, and per clause
+	// 5.2.2.2.2 the content of a fixed element must equal Fixed.
 	Default string
 	Fixed   string
 }

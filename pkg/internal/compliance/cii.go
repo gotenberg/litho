@@ -414,6 +414,8 @@ func ruleForXSDClass(class string) Rule {
 		return Rule_cii_xsd_Facet
 	case xsd.RuleAttribute:
 		return Rule_cii_xsd_Attribute
+	case xsd.RuleFixed:
+		return Rule_cii_xsd_Fixed
 	}
 	return Rule_cii_xsd_Structure
 }

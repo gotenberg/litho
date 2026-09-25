@@ -35,6 +35,10 @@ const leafTextXSD = `<?xml version="1.0" encoding="UTF-8"?>
       <xs:element name="Rate" type="xs:decimal" default="0" minOccurs="0"/>
       <xs:element name="Nillable" type="xs:decimal" nillable="true" minOccurs="0"/>
       <xs:element name="Party" type="PartyType" nillable="true" minOccurs="0"/>
+      <xs:element name="Version" type="xs:decimal" fixed="1.0" minOccurs="0"/>
+      <xs:element name="Unit" type="xs:token" fixed="EA" minOccurs="0"/>
+      <xs:element name="Flag" type="xs:boolean" fixed="true" minOccurs="0"/>
+      <xs:element name="FixedAmount" type="AmountType" fixed="5" minOccurs="0"/>
     </xs:sequence>
   </xs:complexType>
   <xs:element name="Invoice" type="InvoiceType"/>
@@ -63,6 +67,12 @@ func TestValidate_LeafTextValid(t *testing.T) {
 		"nilled simple element":                   `<Nillable xsi:nil="true"/>`,
 		"nilled complex element skips content":    `<Party xsi:nil="true"/>`,
 		"xsi:nil false validates the content":     `<Nillable xsi:nil="false">1</Nillable>`,
+		"empty element takes its fixed value":     `<Version/>`,
+		"fixed decimal, equal value":              `<Version>1</Version>`,
+		"fixed decimal, trailing zeros":           `<Version>01.00</Version>`,
+		"fixed token, collapsed":                  `<Unit> EA </Unit>`,
+		"fixed boolean, other literal":            `<Flag>1</Flag>`,
+		"fixed simple content":                    `<FixedAmount>5.0</FixedAmount>`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -93,6 +103,11 @@ func TestValidate_LeafTextViolations(t *testing.T) {
 		{"nilled element with a child", `<Party xsi:nil="true"><Name>x</Name></Party>`, RuleStructure, "/Party/"},
 		{"xsi:nil on an element that is not nillable", `<Decimal xsi:nil="true"/>`, RuleAttribute, "/Decimal/@xsi:nil"},
 		{"xsi:nil that is not a boolean", `<Nillable xsi:nil="yes"/>`, RuleAttribute, "/Nillable/@xsi:nil"},
+		{"fixed decimal, other value", `<Version>1.5</Version>`, RuleFixed, "/Version"},
+		{"fixed token, other value", `<Unit>KG</Unit>`, RuleFixed, "/Unit"},
+		{"fixed token, blank content", `<Unit> </Unit>`, RuleFixed, "/Unit"},
+		{"fixed boolean, other value", `<Flag>false</Flag>`, RuleFixed, "/Flag"},
+		{"fixed simple content, other value", `<FixedAmount>6</FixedAmount>`, RuleFixed, "/FixedAmount"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

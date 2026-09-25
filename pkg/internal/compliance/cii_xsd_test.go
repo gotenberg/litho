@@ -9,8 +9,9 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/xsd"
 )
 
-// ciiXSDTestSchema declares an Invoice holding one optional token ID, enough
-// for the XSD pass to judge a payload it parsed.
+// ciiXSDTestSchema declares an Invoice holding an optional token ID and an
+// optional Version fixed to 1.0, enough for the XSD pass to judge a
+// payload it parsed.
 const ciiXSDTestSchema = `<?xml version="1.0" encoding="UTF-8"?>
 <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
            targetNamespace="urn:t" elementFormDefault="qualified">
@@ -18,6 +19,7 @@ const ciiXSDTestSchema = `<?xml version="1.0" encoding="UTF-8"?>
     <xs:complexType>
       <xs:sequence>
         <xs:element name="ID" type="xs:token" minOccurs="0"/>
+        <xs:element name="Version" type="xs:decimal" fixed="1.0" minOccurs="0"/>
       </xs:sequence>
     </xs:complexType>
   </xs:element>
@@ -91,5 +93,20 @@ func TestValidateCIIXSDBytes_ReadsISO88591(t *testing.T) {
 	spine = strings.Replace(spine, `Acme Co`, "Acm\xE9 Co", 1)
 	if got := validateCIIBytes([]byte(spine), variantFacturX, false); len(got) != 0 {
 		t.Errorf("spine: got %+v, want none", got)
+	}
+}
+
+// TestValidateCIIXSDBytes_FixedElement pins that an element whose content
+// differs from its fixed value reports [Rule_cii_xsd_Fixed].
+func TestValidateCIIXSDBytes_FixedElement(t *testing.T) {
+	s := loadCIIXSDTestSchema(t)
+	equal := []byte(`<Invoice xmlns="urn:t"><Version>1</Version></Invoice>`)
+	if got := validateCIIXSDBytes(context.Background(), equal, variantFacturX, s, false); len(got) != 0 {
+		t.Errorf("equal value: got %+v, want none", got)
+	}
+	other := []byte(`<Invoice xmlns="urn:t"><Version>2</Version></Invoice>`)
+	got := validateCIIXSDBytes(context.Background(), other, variantFacturX, s, false)
+	if len(got) != 1 || got[0].Rule != Rule_cii_xsd_Fixed {
+		t.Errorf("other value: got %+v, want one Rule_cii_xsd_Fixed", got)
 	}
 }

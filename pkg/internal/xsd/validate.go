@@ -42,6 +42,10 @@ const (
 	RuleLexical     = "lexical"
 	RuleFacet       = "facet"
 	RuleAttribute   = "attribute"
+	// RuleFixed reports an element whose content differs from the
+	// fixed value its declaration imposes (XML Schema Part 1, 3.3.4,
+	// cvc-elt clause 5.2.2).
+	RuleFixed = "fixed"
 )
 
 // Validate streams payload through the XSD engine and returns every
@@ -225,6 +229,12 @@ func (v *validator) onEnd(_ xml.EndElement) {
 // have no character content (clause 3.2.1) and is not validated against its
 // type (cvc-type clause 3.1.3).
 //
+// An element with content and a fixed value constraint must hold that value
+// (clause 5.2.2.2.2): its actual value must equal the fixed one, compared as
+// [fixedValueMatches] compares them. A mismatch is reported under
+// [RuleFixed] alone, as the fixed value is itself valid for the type (3.3.6,
+// e-props-correct clause 2).
+//
 // # Corpus evidence
 //
 //   - All corpora: validating empty text changes no XSD violation on the 159
@@ -237,6 +247,8 @@ func (v *validator) onEnd(_ xml.EndElement) {
 //     line break or a run of spaces, but no string type of the bundled
 //     schemas declares a facet.
 //   - All corpora: none of those files carries xsi:nil.
+//   - All corpora: no schema those files validate against gives an element
+//     a fixed value, so the clause 5.2.2 check moves no verdict.
 func leafViolations(top *frame, path string) []Violation {
 	text := top.pendingText.String()
 	if top.nilled {
@@ -251,6 +263,12 @@ func leafViolations(top *frame, path string) []Violation {
 	}
 	if text == "" {
 		text = cmp.Or(top.element.Fixed, top.element.Default)
+	} else if top.element.Fixed != "" && !fixedValueMatches(text, top.element.Fixed, top.element.Type) {
+		return []Violation{{
+			Rule:   RuleFixed,
+			Path:   path,
+			Reason: fmt.Sprintf("value %q does not match the fixed value %q", text, top.element.Fixed),
+		}}
 	}
 	var out []Violation
 	for _, fv := range ValidateValue(text, top.element.Type) {
@@ -551,7 +569,7 @@ func (v *validator) validateAttributes(start xml.StartElement, ct *ComplexType, 
 // attributeValueViolations validates value, the value of the attribute
 // use declares, against the use's fixed value and type.
 func attributeValueViolations(value string, use AttributeUse, path string) []Violation {
-	if use.Fixed != "" && !fixedValueMatches(value, use) {
+	if use.Fixed != "" && !fixedValueMatches(value, use.Fixed, use.Type) {
 		return []Violation{{
 			Rule:   RuleAttribute,
 			Path:   path + "/@" + use.Name.Local,
@@ -569,15 +587,31 @@ func attributeValueViolations(value string, use AttributeUse, path string) []Vio
 	return out
 }
 
-// fixedValueMatches reports whether value satisfies the fixed value of
-// use. Per XML Schema Part 1, 3.2.4 (cvc-au) the comparison is on the
-// normalized value, so both sides are white-space normalized under the
-// attribute type's mode first: " EUR " matches a fixed "EUR" on an
-// xs:token attribute. The comparison stays literal beyond that, which is
-// value equality for the string-derived types CII fixes.
-func fixedValueMatches(value string, use AttributeUse) bool {
-	steps, base := collectAllFacets(use.Type)
-	return applyWhitespace(value, steps, base) == applyWhitespace(use.Fixed, steps, base)
+// fixedValueMatches reports whether value, of type t, satisfies the fixed
+// value constraint fixed. Per XML Schema Part 1, 3.2.4 (cvc-au) for an
+// attribute and 3.3.4 (cvc-elt clause 5.2.2.2.2) for an element, the
+// actual value must equal the constraint's value, so both sides are
+// white-space normalized under the type's mode first: " EUR " matches a
+// fixed "EUR" on an xs:token attribute. Normalized literals that differ
+// can still denote one value: the ordered primitives compare in their
+// value space ([compareRange]), so "1.0" matches a fixed decimal "1", and
+// the boolean literals "1" and "true" match (XML Schema Part 2, 3.2.2.1).
+// The other types compare literally, which is value equality for the
+// string-derived types CII fixes.
+func fixedValueMatches(value, fixed string, t Type) bool {
+	steps, base := collectAllFacets(t)
+	value, fixed = applyWhitespace(value, steps, base), applyWhitespace(fixed, steps, base)
+	if value == fixed {
+		return true
+	}
+	if o, status := compareRange(value, fixed, base); status == rangeCompared {
+		return o == orderEqual
+	}
+	if base != nil && base.Name == (QName{Namespace: XSNamespace, Local: "boolean"}) {
+		return checkBoolean(value, base) == nil && checkBoolean(fixed, base) == nil &&
+			isTrueBoolean(value) == isTrueBoolean(fixed)
+	}
+	return false
 }
 
 // findAttr returns the value of an attribute matching want from
