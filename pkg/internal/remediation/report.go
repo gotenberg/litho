@@ -28,7 +28,13 @@ type Report struct {
 	// ContentFixed lists descriptions produced by content-tier fixers. These
 	// entries are the subset of Fixed that rollback would discard.
 	ContentFixed []string
+	// ContentFixers names, in the order they ran, the content-tier fixers a
+	// rollback to ContentSnapshot discards the repairs of. A writer that rolls
+	// them back keeps them off the later rounds of the same remediation
+	// ([Options.Disabled]).
+	ContentFixers []string
 	// ContentResidual lists violations that content-tier fixers claimed to
-	// handle. On rollback, the writer moves them back into Residual.
+	// handle. A rollback leaves them in the output, where the validation of
+	// the rolled-back output reports them.
 	ContentResidual []error
 }

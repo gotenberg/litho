@@ -1220,8 +1220,8 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidatePDFA(ctx, profile)
 	}
-	return w.remediate(ctx, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
-		return remediation.RemediatePDFA(ctx, doc, alloc, profile, remOpts)
+	return w.remediate(ctx, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+		return remediation.RemediatePDFA(ctx, doc, alloc, profile, remOpts.WithDisabled(disabled))
 	})
 }
 
@@ -1236,8 +1236,8 @@ func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidatePDFUA(ctx, profile)
 	}
-	return w.remediate(ctx, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
-		return remediation.RemediatePDFUA(ctx, doc, alloc, profile, remOpts)
+	return w.remediate(ctx, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+		return remediation.RemediatePDFUA(ctx, doc, alloc, profile, remOpts.WithDisabled(disabled))
 	})
 }
 
@@ -1254,8 +1254,8 @@ func (w *Writer) RemediateWTPDF(ctx context.Context, profile models.WTPDFProfile
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidateWTPDF(ctx, profile)
 	}
-	return w.remediate(ctx, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
-		return remediation.RemediateWTPDF(ctx, doc, alloc, profile, remOpts)
+	return w.remediate(ctx, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+		return remediation.RemediateWTPDF(ctx, doc, alloc, profile, remOpts.WithDisabled(disabled))
 	})
 }
 
@@ -1371,8 +1371,8 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 		DocumentType: docType,
 		Relationship: relationship,
 	}
-	return w.remediate(ctx, rcfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
-		return remediation.RemediateFacturX(ctx, doc, alloc, fxOpts, remOpts)
+	return w.remediate(ctx, rcfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+		return remediation.RemediateFacturX(ctx, doc, alloc, fxOpts, remOpts.WithDisabled(disabled))
 	})
 }
 
@@ -1394,7 +1394,8 @@ func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ 
 		return r.ValidateFacturX(ctx)
 	}
 	located := false
-	report, err := w.remediate(ctx, rcfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*remediation.Report, error) {
+	// The repair runs no content-tier fixer, so there is none to disable.
+	report, err := w.remediate(ctx, rcfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ []string) (*remediation.Report, error) {
 		fixes, repairErr := remediation.RepairHybridInvoice(ctx, doc, alloc)
 		if repairErr != nil {
 			return nil, repairErr
@@ -1521,14 +1522,28 @@ func evaluateRegression(baseline, post integritySnap, tol RegressionTolerance) s
 	return ""
 }
 
+// remediationRun runs one remediation engine against doc, queuing its repairs
+// in alloc, with the fixers disabled names switched off (see
+// [remediation.Options.Disabled]).
+type remediationRun func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error)
+
 // remediate runs one remediation engine against the document as the caller
 // has staged it, then gates the result: it serializes and reopens the output,
 // revalidates it, and compares its integrity with the staged baseline. A
 // regression rolls back the content-tier fixers when they left a snapshot, and
 // fails with [ErrRemediationBrokePDF], restoring the Writer, when there is none
-// or the rollback does not recover the output. A clean result runs further
-// rounds, up to maxRemediationRounds, while residuals remain and each round
-// still fixes something.
+// or the rollback does not recover the output. The result, rolled back or
+// not, runs further rounds, up to maxRemediationRounds, while residuals remain
+// and each round still fixes something (see [Writer.remediationRound]).
+//
+// The content-tier fixers a rollback discarded stay off in the later rounds,
+// and the others run in them. A rollback restores the allocator to the state
+// before the first content-tier fixer ran, which discards the repairs of every
+// fixer that ran after it, and a round that ended at the rollback left every
+// violation those repairs answer in the output. The later rounds make them.
+// The residual is the validation of the output kept last: a violation a
+// rolled-back fixer claimed is in it when the output holds it. It used to be
+// listed a second time from the claims of the rolled-back fixers.
 //
 // # Corpus evidence
 //
@@ -1536,11 +1551,22 @@ func evaluateRegression(baseline, post integritySnap, tol RegressionTolerance) s
 //     parser-level format violation. With the object cache still warm from
 //     the baseline probe, remediation skipped it and over-reported the file as
 //     fixed.
+//   - pdfjs issue215.pdf and bug1749563.pdf: the font repairs of their
+//     PDF/A-1b, PDF/A-2b and PDF/A-4 remediations, default and aggressive, are
+//     rolled back, and so are those of the PDF/A-1b remediations of litho
+//     glyphs_2b.pdf. The later rounds find nothing more to repair, and the
+//     residual of bug1749563.pdf at PDF/A-1b goes from 60 violations to the 30
+//     litho reports on the output. What litho and veraPDF 1.30 report on the
+//     outputs, and their extracted text, do not change.
+//   - All corpora: over the PDF/A-1b aggressive and PDF/A-2b default
+//     remediations of the 2317 files under 3 MB of every corpus but verapdf
+//     and facturx, only those three roll back, and no other PDF/A-1b report
+//     changes.
 func (w *Writer) remediate(
 	ctx context.Context,
 	tol RegressionTolerance,
 	revalidate func(context.Context, *Reader) ([]error, error),
-	run func(context.Context, *writer.ObjAllocator, *document.Document) (*remediation.Report, error),
+	run remediationRun,
 ) (*RemediationReport, error) {
 	doc := w.reader.doc
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
@@ -1605,7 +1631,7 @@ func (w *Writer) remediate(
 		}
 	}
 
-	report, err := run(ctx, alloc, doc)
+	report, err := run(ctx, alloc, doc, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -1717,6 +1743,10 @@ func (w *Writer) remediate(
 		trigger = evaluateRegression(baseline, post, tol)
 	}
 
+	fixed := report.Fixed
+	// rolledBack lists the fixes discarded by a rollback, and disabled the
+	// content-tier fixers whose repairs were, which the later rounds skip.
+	var rolledBack, disabled []string
 	if trigger != "" {
 		doc.Logger.Debug("remediate: regression detected",
 			slog.String("reason", trigger),
@@ -1749,48 +1779,46 @@ func (w *Writer) remediate(
 			return nil, fmt.Errorf("%w: %s (persisted after rollback)", ErrRemediationBrokePDF, reason2)
 		}
 
-		// Rollback succeeded. Content-tier fixes are discarded; the
-		// violations they claimed to handle move back to residual.
-		w.markPreSerialized(tmpPath2)
-		kept := keepFixedWithout(report.Fixed, report.ContentFixed)
-		finalResidual := make([]error, 0, len(residual2)+len(report.ContentResidual))
-		finalResidual = append(finalResidual, residual2...)
-		finalResidual = append(finalResidual, report.ContentResidual...)
+		// Rollback succeeded. Content-tier fixes are discarded, and the
+		// validation of the rolled-back output reports the violations they
+		// claimed to handle.
+		tmpPath, residual = tmpPath2, residual2
+		fixed = keepFixedWithout(report.Fixed, report.ContentFixed)
+		rolledBack = report.ContentFixed
+		disabled = report.ContentFixers
 		doc.Logger.Debug("remediate: rollback succeeded",
-			slog.Int("kept_fixes", len(kept)),
+			slog.Int("kept_fixes", len(fixed)),
 			slog.Int("rolled_back", len(report.ContentFixed)),
+			slog.Any("disabled", disabled),
 			slog.String("trigger", trigger),
 		)
-		return &RemediationReport{
-			Fixed:      kept,
-			Residual:   finalResidual,
-			RolledBack: report.ContentFixed,
-		}, nil
 	}
 
-	// Happy path: no regression. Fix to fixpoint: a fixer can repair
-	// state that only becomes fixable once an earlier round's output is
-	// serialized (a namespace rebind exposing a now-reachable property,
-	// a structural fix unblocking a metadata one). Each extra round runs
-	// on the previous round's file and is kept only when it fixed
-	// something and survives the same probe-and-revalidate gates;
-	// otherwise the previous round's output stands.
-	fixed := report.Fixed
+	// Fix to fixpoint: a fixer can repair state that only becomes fixable
+	// once an earlier round's output is serialized (a namespace rebind
+	// exposing a now-reachable property, a structural fix unblocking a
+	// metadata one), and a rollback leaves unmade every repair it discarded.
+	// Each extra round runs on the previous round's file and is kept only
+	// when it fixed something and survives the same probe-and-revalidate
+	// gates; otherwise the previous round's output stands.
 	for round := 2; round <= maxRemediationRounds && len(residual) > 0; round++ {
-		nextPath, nextResidual, nextFixed, ok := w.remediationRound(ctx, tmpPath, run, revalidate, baseline, tol)
+		next, ok := w.remediationRound(ctx, tmpPath, run, disabled, revalidate, baseline, tol)
 		if !ok {
 			break
 		}
 		doc.Logger.Debug("remediate: extra round kept",
 			slog.Int("round", round),
-			slog.Int("fixes", len(nextFixed)),
-			slog.Int("residual", len(nextResidual)))
+			slog.Int("fixes", len(next.fixed)),
+			slog.Int("rolled_back", len(next.rolledBack)),
+			slog.Int("residual", len(next.residual)))
 		removeTempFile(doc.Logger, tmpPath)
-		tmpPath, residual = nextPath, nextResidual
-		fixed = append(fixed, nextFixed...)
+		tmpPath, residual = next.path, next.residual
+		fixed = append(fixed, next.fixed...)
+		rolledBack = append(rolledBack, next.rolledBack...)
+		disabled = append(disabled, next.disabled...)
 	}
 	w.markPreSerialized(tmpPath)
-	return &RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual}, nil
+	return &RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual, RolledBack: dedupeFixes(rolledBack)}, nil
 }
 
 // countRepairs counts the fixes that actually repaired something, ignoring the
@@ -1836,32 +1864,49 @@ func dedupeFixes(fixes []string) []string {
 //     the corpora exhibit.
 const maxRemediationRounds = 3
 
+// roundResult is the output of a kept [Writer.remediationRound]: the temp
+// file holding it, its residual validation findings, the fixes it applied,
+// the fixes it rolled back, and the content-tier fixers whose repairs it
+// rolled back.
+type roundResult struct {
+	path       string
+	residual   []error
+	fixed      []string
+	rolledBack []string
+	disabled   []string
+}
+
 // remediationRound reopens the serialized output at path and runs the
-// remediation engine once more against it. It returns ok=false (changing
-// nothing) when the round fixes nothing, fails to serialize, or fails the
-// integrity and regression gates; on success it returns the new temp file,
-// its residual validation findings, and the fixes applied.
+// remediation engine once more against it, with the fixers disabled names
+// switched off. It returns ok=false (changing nothing) when the round fixes
+// nothing, fails to serialize, or fails the integrity and regression gates.
+//
+// A round whose output regresses is rolled back as the first round is: the
+// repairs of its content-tier fixers are discarded, and the round is kept
+// when what remains still fixes something and passes the gates, with those
+// fixers named for the later rounds to disable.
 func (w *Writer) remediationRound(
 	ctx context.Context,
 	path string,
-	run func(context.Context, *writer.ObjAllocator, *document.Document) (*remediation.Report, error),
+	run remediationRun,
+	disabled []string,
 	revalidate func(context.Context, *Reader) ([]error, error),
 	baseline integritySnap,
 	tol RegressionTolerance,
-) (string, []error, []string, bool) {
+) (roundResult, bool) {
 	logger := w.reader.doc.Logger
 
 	r2, err := w.reader.reopenFile(ctx, path)
 	if err != nil {
 		logger.Debug("remediate: round reopen failed", slog.Any("err", err))
-		return "", nil, nil, false
+		return roundResult{}, false
 	}
 	defer r2.Close()
 
 	alloc := writer.NewObjAllocator(r2.doc.HighestObjectNumber())
-	rep, err := run(ctx, alloc, r2.doc)
+	rep, err := run(ctx, alloc, r2.doc, disabled)
 	if err != nil || rep == nil || countRepairs(rep.Fixed) == 0 {
-		return "", nil, nil, false
+		return roundResult{}, false
 	}
 
 	w2 := NewWriter(r2)
@@ -1870,17 +1915,55 @@ func (w *Writer) remediationRound(
 	w2.forceRewrite = rep.NeedsFullRewrite
 	w2.requiredVersion = rep.RequiredVersion
 
+	tmpPath, res, reason := w.writeRound(ctx, w2, revalidate, baseline, tol)
+	if reason == "" {
+		return roundResult{path: tmpPath, residual: res, fixed: rep.Fixed}, true
+	}
+	if rep.ContentSnapshot == nil {
+		logger.Debug("remediate: round regressed, keeping previous output",
+			slog.String("reason", reason))
+		return roundResult{}, false
+	}
+
+	// The allocator restores its pending map in place, which w2 writes from.
+	alloc.Restore(*rep.ContentSnapshot)
+	kept := keepFixedWithout(rep.Fixed, rep.ContentFixed)
+	if countRepairs(kept) == 0 {
+		return roundResult{}, false
+	}
+	tmpPath, res, reason = w.writeRound(ctx, w2, revalidate, baseline, tol)
+	if reason != "" {
+		logger.Debug("remediate: round regressed after rollback, keeping previous output",
+			slog.String("reason", reason))
+		return roundResult{}, false
+	}
+	return roundResult{path: tmpPath, residual: res, fixed: kept, rolledBack: rep.ContentFixed, disabled: rep.ContentFixers}, true
+}
+
+// writeRound serializes the output of a remediation round w2 queues to a temp
+// file, reopens it, and gates it as [Writer.remediate] gates the first round.
+// It returns the temp file and its residual validation findings, or a reason
+// the output was refused, after removing the file.
+func (w *Writer) writeRound(
+	ctx context.Context,
+	w2 *Writer,
+	revalidate func(context.Context, *Reader) ([]error, error),
+	baseline integritySnap,
+	tol RegressionTolerance,
+) (string, []error, string) {
+	logger := w.reader.doc.Logger
+
 	tmpFile, err := os.CreateTemp("", "litho-remediate-round-*.pdf")
 	if err != nil {
 		logger.Debug("remediate: round temp file failed", slog.Any("err", err))
-		return "", nil, nil, false
+		return "", nil, "temp file failed"
 	}
 	tmpPath := tmpFile.Name()
 	if writeErr := w2.writeToInternal(ctx, tmpFile); writeErr != nil {
 		tmpFile.Close()
 		removeTempFile(logger, tmpPath)
 		logger.Debug("remediate: round serialize failed", slog.Any("err", writeErr))
-		return "", nil, nil, false
+		return "", nil, "serialize failed"
 	}
 	tmpFile.Close()
 
@@ -1888,28 +1971,25 @@ func (w *Writer) remediationRound(
 	if err != nil {
 		removeTempFile(logger, tmpPath)
 		logger.Debug("remediate: round reopen of output failed", slog.Any("err", err))
-		return "", nil, nil, false
+		return "", nil, "output failed to reopen"
 	}
 	defer r3.Close()
 
 	post, err := probeIntegrity(ctx, r3)
 	if err != nil {
 		removeTempFile(logger, tmpPath)
-		return "", nil, nil, false
+		return "", nil, "output failed the integrity probe"
 	}
 	if reason := evaluateRegression(baseline, post, tol); reason != "" {
 		removeTempFile(logger, tmpPath)
-		logger.Debug("remediate: round regressed, keeping previous output",
-			slog.String("reason", reason))
-		return "", nil, nil, false
+		return "", nil, reason
 	}
 	res, err := revalidate(ctx, r3)
 	if err != nil {
 		removeTempFile(logger, tmpPath)
-		return "", nil, nil, false
+		return "", nil, "output failed to revalidate"
 	}
-
-	return tmpPath, res, rep.Fixed, true
+	return tmpPath, res, ""
 }
 
 // keepFixedWithout returns the subset of fixed that is not also present in

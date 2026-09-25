@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -88,9 +89,12 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		return &Report{}, nil
 	}
 
-	// Classify violations by fixer.
+	// Classify violations by fixer. A disabled fixer claims nothing, so the
+	// violations it would have answered stay in the residual.
 	typed := toViolations(violations)
-	plan := classify(typed)
+	plan := slices.DeleteFunc(classify(typed), func(e planEntry) bool {
+		return slices.Contains(opts.Disabled, e.f.name)
+	})
 
 	doc.Logger.Debug("remediate started",
 		slog.String("profile", profile),
@@ -113,7 +117,7 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 	// fixer runs. It lets the writer roll back only the content tier when
 	// the post-remediation integrity probe detects a regression.
 	var contentSnapshot *writer.Snapshot
-	var contentFixed []string
+	var contentFixed, contentFixers []string
 	contentHandled := make(map[int]bool)
 
 	for _, entry := range plan {
@@ -146,6 +150,7 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		fixed = append(fixed, descriptions...)
 		if entry.f.safety == safetyContent {
 			contentFixed = append(contentFixed, descriptions...)
+			contentFixers = append(contentFixers, entry.f.name)
 		}
 		for _, idx := range entry.indices {
 			handled[idx] = true
@@ -266,6 +271,7 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		RequiredVersion:  requiredVersion,
 		ContentSnapshot:  contentSnapshot,
 		ContentFixed:     contentFixed,
+		ContentFixers:    contentFixers,
 		ContentResidual:  contentResidual,
 	}, nil
 }

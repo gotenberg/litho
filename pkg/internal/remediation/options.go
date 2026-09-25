@@ -26,4 +26,16 @@ type Options struct {
 	// pin it so identical inputs yield identical output bytes; the random
 	// /ID is litho's documented nondeterminism seam.
 	PinnedID []byte
+	// Disabled names the fixers the run skips: the content-tier fixers whose
+	// repairs a writer rolled back in an earlier round of the same
+	// remediation ([Report.ContentFixers]). The violations they match stay
+	// in the residual.
+	Disabled []string
+}
+
+// WithDisabled returns a copy of o whose run skips the fixers named in names
+// ([Options.Disabled]).
+func (o Options) WithDisabled(names []string) Options {
+	o.Disabled = names
+	return o
 }

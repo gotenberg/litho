@@ -35,7 +35,7 @@ Rules:
 
 ## Registry ordering
 
-Order is priority. Safety tiers run structural → resource → content. Content-tier fixes are tracked separately so the writer can roll back only that tier when the output regresses.
+Order is priority. Safety tiers run structural → resource → content. Content-tier fixes are tracked separately so the writer can roll back only that tier when the output regresses. The fixpoint goes on after a rollback: the later rounds run with the rolled-back content-tier fixers disabled (`Options.Disabled`, from `Report.ContentFixers`), so the other repairs still land.
 
 The `file-structure` fixer never mutates; it signals `Report.NeedsFullRewrite`, and the full rewrite re-serializes every object with clean formatting at the profile's pinned PDF version (`RequiredVersion`: 1.4 for A-1, 1.7 for A-2/3 and UA-1, 2.0 for A-4, UA-2 and WTPDF).
 
