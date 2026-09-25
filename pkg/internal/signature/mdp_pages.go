@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"maps"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -189,18 +188,8 @@ func changedPage(ctx context.Context, doc, rev *document.Document, objects []app
 // change when the page tree is rebuilt, and what a page inherits through it is
 // compared by [changedInheritance].
 func changedEntry(before, after ast.PdfDict) string {
-	keys := slices.Collect(maps.Keys(before))
-	for key := range after {
-		if _, ok := before[key]; !ok {
-			keys = append(keys, key)
-		}
-	}
-	slices.Sort(keys)
-	for _, key := range keys {
-		if key == "Annots" || key == "Parent" {
-			continue
-		}
-		if !sameObject(before[key], after[key]) {
+	for _, key := range changedKeys(before, after) {
+		if key != "Annots" && key != "Parent" {
 			return string(key)
 		}
 	}

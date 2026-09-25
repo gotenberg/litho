@@ -1488,8 +1488,21 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // the page reaches through anything else, its content streams, resources and
 // actions among them, unless it writes the same definition again. At P=2 an
 // annotation a page lists and did not list when signed must be a form field
-// widget. When the signed revision cannot be read, MDPInfo says what was not
-// checked.
+// widget.
+//
+// From P=2 the catalog is compared with its signed version entry by entry, and
+// only the entries that filling in forms, instantiating page templates, signing
+// and validation data need may change: /AcroForm, /Pages, /DSS, /Version, the
+// /ESIC, /ADBE and /ISO_ entries of /Extensions, the /UR3 entry of /Perms, and
+// the /Pages and /Templates entries of /Names. Any other change is reported,
+// an added /OpenAction or /AA, document JavaScript or an embedded file in
+// /Names, a changed /OCProperties or a replaced /Metadata among them. So is an
+// appended object without /Type, written differently from its signed
+// definition, that the current document reaches through one of those other
+// entries, through an XFA packet other than the datasets packet, or at P=2
+// through an annotation other than a form field widget. The trailer's /Info
+// dictionary may change. When the signed revision cannot be read, MDPInfo says
+// what was not checked.
 func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) (_ []models.SignatureValidation, err error) {
 	defer recoverToError(r.logger(), "Reader.VerifySignatures", &err)
 	return signature.VerifySignatures(ctx, r.doc, roots)

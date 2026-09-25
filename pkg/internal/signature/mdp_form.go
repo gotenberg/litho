@@ -109,24 +109,45 @@ func permitted(obj appendedObject, policy int) bool {
 }
 
 // xfaDatasets returns the object numbers of the streams doc's interactive form
-// names as its XFA datasets packet.
-//
-// ISO 32000-1, 12.7.2, Table 218 lets /XFA be a stream holding the whole XML
-// Data Package or an array of text string and stream pairs, one per packet,
-// each named by its string (12.7.8). The datasets packet carries the data a
-// user fills in, while the others hold the template, the configuration and the
-// rest of the form's definition. Only the array form separates the data from
-// the definition, so a single /XFA stream names no datasets packet.
+// names as its XFA datasets packet ([xfaPackets]). The datasets packet carries
+// the data a user fills in, while the others hold the template, the
+// configuration and the rest of the form's definition.
 func xfaDatasets(ctx context.Context, doc *document.Document) (map[int]bool, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, fmt.Errorf("reading the catalog: %w", err)
 	}
-	// A form or an /XFA entry that cannot be read names no packet, so every
-	// stream an update wrote is then classified by its type.
+	packets, err := xfaPackets(ctx, doc, catalog)
+	if err != nil {
+		return nil, err
+	}
+	datasets := make(map[int]bool)
+	for _, p := range packets {
+		if ref, ok := p.value.(ast.PdfIndirectRef); ok && p.name == "datasets" {
+			datasets[ref.ObjectNum] = true
+		}
+	}
+	return datasets, nil
+}
+
+// xfaPacket is one packet of an XFA array: its name and the stream holding it.
+type xfaPacket struct {
+	name  string
+	value ast.PdfObject
+}
+
+// xfaPackets returns the packets of the /XFA array of the interactive form
+// catalog names, in order.
+//
+// ISO 32000-1, 12.7.2, Table 218 lets /XFA be a stream holding the whole XML
+// Data Package or an array of text string and stream pairs, one per packet,
+// each named by its string (12.7.8). Only the array form separates the packets,
+// so a single /XFA stream, like a form or an /XFA entry that cannot be read,
+// holds none.
+func xfaPackets(ctx context.Context, doc *document.Document, catalog *document.Catalog) ([]xfaPacket, error) {
 	form, err := document.ResolveDict(ctx, doc, catalog.Dict["AcroForm"])
 	if err != nil {
-		doc.Logger.Debug("resolving /AcroForm for the XFA datasets packet", slog.Any("err", err))
+		doc.Logger.Debug("resolving /AcroForm for the XFA packets", slog.Any("err", err))
 		return nil, nil
 	}
 	if form == nil {
@@ -134,22 +155,20 @@ func xfaDatasets(ctx context.Context, doc *document.Document) (map[int]bool, err
 	}
 	xfaObj, err := document.ResolveObject(ctx, doc, form["XFA"])
 	if err != nil {
-		doc.Logger.Debug("resolving /XFA for the datasets packet", slog.Any("err", err))
-		return nil, nil
+		doc.Logger.Debug("resolving /XFA for its packets", slog.Any("err", err))
+		return nil, ctx.Err()
 	}
 	xfa, ok := xfaObj.(ast.PdfArray)
 	if !ok {
 		return nil, nil
 	}
-	datasets := make(map[int]bool)
+	packets := make([]xfaPacket, 0, len(xfa)/2)
 	for i := 0; i+1 < len(xfa); i += 2 {
 		name, err := document.ResolveString(ctx, doc, xfa[i])
-		if err != nil || document.DecodePdfString(name) != "datasets" {
+		if err != nil {
 			continue
 		}
-		if ref, ok := xfa[i+1].(ast.PdfIndirectRef); ok {
-			datasets[ref.ObjectNum] = true
-		}
+		packets = append(packets, xfaPacket{name: document.DecodePdfString(name), value: xfa[i+1]})
 	}
-	return datasets, nil
+	return packets, nil
 }

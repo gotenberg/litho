@@ -169,10 +169,10 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 	// Validation data and form data are told apart only when the classifier
 	// objects to something, which is when they can change the verdict.
 	violation := classifyModifications(appendedObjects, sig.MDPPolicy)
+	classified := appendedObjects
 	var validationData int
 	var note string
 	if violation != "" {
-		var classified []appendedObject
 		classified, validationData, note = withoutValidationData(ctx, doc, signed, appendedObjects, sig.MDPPolicy)
 		violation = classifyModifications(classified, sig.MDPPolicy)
 		if violation != "" && sig.MDPPolicy >= 2 {
@@ -186,17 +186,17 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 	// Table 254 permits page deletion at no P and annotation deletion only at
 	// P=3, and no P permits changing what a signed page draws. A deletion may
 	// append nothing the classifier forbids, and the classifier permits a
-	// rewritten page and an untyped content stream, so the signed revision's
-	// pages, and at P=2 their /Annots, are compared with the current ones. At
-	// P=1 the page rewrite an annotation deletion needs is already refused.
-	// That runs even when nothing was appended: a cross-reference section
-	// alone can free a page or an annotation.
+	// rewritten page and catalog and an untyped object, so the signed
+	// revision's pages and, from P=2, its catalog are compared with the current
+	// ones. At P=1 the page and catalog rewrites those changes need are already
+	// refused. That runs even when nothing was appended: a cross-reference
+	// section alone can free a page or an annotation, or point /Root elsewhere.
 	if violation == "" {
 		rev, err := signed.revision(ctx)
 		if err != nil {
 			note += fmt.Sprintf("; %s not checked: %v", revisionChecks(sig.MDPPolicy), err)
 		} else {
-			violation, note = compareRevisions(ctx, doc, rev, appendedObjects, sig.MDPPolicy, note)
+			violation, note = compareRevisions(ctx, doc, rev, appendedObjects, classified, sig.MDPPolicy, note)
 		}
 	}
 	note += signed.note()
@@ -220,10 +220,11 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 
 // compareRevisions compares the signed revision rev with the current document
 // doc and describes the first change policy does not permit, or returns ""
-// when there is none. objects are the objects appended after signing. A
+// when there is none. objects are the objects appended after signing, and
+// classified those the exemptions for validation data and form data left. A
 // comparison that cannot be made adds to note what was not checked, and the
 // others still run.
-func compareRevisions(ctx context.Context, doc, rev *document.Document, objects []appendedObject, policy int, note string) (string, string) {
+func compareRevisions(ctx context.Context, doc, rev *document.Document, objects, classified []appendedObject, policy int, note string) (string, string) {
 	type check struct {
 		what string
 		run  func() (string, error)
@@ -234,6 +235,12 @@ func compareRevisions(ctx context.Context, doc, rev *document.Document, objects 
 	}
 	if policy == 2 {
 		checks = append(checks, check{"annotation removals", func() (string, error) { return removedAnnotation(ctx, doc, rev) }})
+	}
+	if policy >= 2 {
+		checks = append(checks,
+			check{"catalog changes", func() (string, error) { return changedCatalog(ctx, doc, rev, policy) }},
+			check{"untyped objects", func() (string, error) { return changedUntyped(ctx, doc, rev, classified, policy) }},
+		)
 	}
 	for _, c := range checks {
 		violation, err := c.run()
@@ -251,8 +258,11 @@ func compareRevisions(ctx context.Context, doc, rev *document.Document, objects 
 // revisionChecks names what [compareRevisions] checks at policy, for a note
 // that says the signed revision could not be read to check it.
 func revisionChecks(policy int) string {
-	if policy == 2 {
-		return "page changes, page removals and annotation removals"
+	switch policy {
+	case 2:
+		return "page changes, page removals, catalog changes, untyped objects and annotation removals"
+	case 3:
+		return "page changes, page removals, catalog changes and untyped objects"
 	}
 	return "page changes and page removals"
 }
@@ -547,20 +557,23 @@ func isAllowedP2(obj appendedObject) bool {
 		// forbids at P=2: removedAnnotation finds it by comparing the page's
 		// /Annots with the signed revision's. changedPage compares the rest
 		// of a rewritten page, so a page rewrite that changes its /Contents
-		// or /Resources is reported there.
+		// or /Resources is reported there, and changedCatalog compares a
+		// rewritten catalog, so one that adds an /OpenAction is.
 		return true
 	case "":
 		// Objects without /Type include form field values, appearance streams,
 		// and other signature-related metadata.
-		if obj.FT == "Sig" || obj.FT == "Tx" || obj.FT == "Btn" || obj.FT == "Ch" {
+		if fieldTypes[obj.FT] {
 			return true
 		}
 		// Deliberate leniency: Table 254 invalidates every change outside the
 		// permitted ones, but a typeless object may be an appearance stream or
 		// a font a filled field needs, or a rewritten page content stream,
 		// and the /Type alone cannot tell them apart. The classifier reports
-		// such a file as within policy rather than flag every form fill, and
-		// changedPage reports a typeless object a signed page reaches.
+		// such a file as within policy rather than flag every form fill.
+		// changedPage reports a typeless object a signed page reaches, and
+		// changedUntyped one the catalog reaches through an entry that form
+		// filling and signing do not change.
 		return true
 	}
 	return false
