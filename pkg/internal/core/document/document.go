@@ -58,9 +58,10 @@ type Document struct {
 	fontProgBytes    int                 // decoded bytes held in fontProgCache, bounded by limits.Limits.MaxFontProgCacheBytes
 	colorCache       map[[2]int]any      // colour transforms by profile object number and rendering intent
 	colorCacheBytes  int                 // bytes held in colorCache, bounded by limits.Limits.MaxColorCacheBytes
+	xrefGen          uint64              // bumped by every write to xrefEntries, see [Document.noteXRefChange]
 	sortedOffsets    []int64             // ascending normal-object offsets, for O(log N) endobj scan-capping
-	sortedOffsetsLen int                 // len(xrefEntries) when sortedOffsets was built; rebuild on change
-	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache, sortedOffsets, formatViolations, and xrefEntries once construction completes
+	sortedOffsetsGen uint64              // xrefGen when sortedOffsets was built; rebuild when they differ
+	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache, sortedOffsets, formatViolations, xrefEntries and xrefGen once construction completes
 	runMu            sync.Mutex          // serializes compliance-engine validation runs
 	xrefAugment      sync.Once           // guards the one-shot raw-bytes augmentation of xrefEntries
 	xrefAugmentRan   bool                // the augmentation has run, whatever it found; protected by mu
@@ -834,6 +835,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		)
 		// Fallback: brute-force rebuild by scanning for object headers.
 		doc.xrefEntries = make(map[int]xref.XRefEntry)
+		doc.noteXRefChange()
 		doc.Index.Trailer = nil
 		if rebuildErr := doc.rebuildXRef(ctx); rebuildErr != nil {
 			return nil, fmt.Errorf("%w: %v (rebuild also failed: %v)", ErrDamagedXRef, err, rebuildErr)
@@ -862,6 +864,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		if shouldRebuild {
 			doc.Logger.Debug("xref entries incomplete, rebuilding")
 			doc.xrefEntries = make(map[int]xref.XRefEntry)
+			doc.noteXRefChange()
 			doc.Index.Trailer = nil
 			if rebuildErr := doc.rebuildXRef(ctx); rebuildErr == nil {
 				doc.Rebuilt = true

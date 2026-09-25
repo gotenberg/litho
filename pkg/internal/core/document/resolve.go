@@ -1030,6 +1030,9 @@ func (d *Document) augmentXrefFromRawScan(ctx context.Context) {
 			overridden++
 		}
 		changed := added > 0 || overridden > 0
+		if changed {
+			d.noteXRefChange()
+		}
 		d.xrefAugmented = changed
 		d.mu.Unlock()
 		if changed {

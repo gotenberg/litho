@@ -129,6 +129,7 @@ func (d *Document) rebuildXRef(ctx context.Context) error {
 	}
 
 	d.xrefEntries = entries
+	d.noteXRefChange()
 	d.Index.Trailer = trailer
 
 	return nil
@@ -195,6 +196,7 @@ func (d *Document) expandObjectStreamsForRebuild(ctx context.Context, entries ma
 				ObjStmNum:   objStmNum,
 				ObjStmIndex: idx,
 			}
+			d.noteXRefChange()
 			srcOffset[contained] = stmOffset
 		}
 	}

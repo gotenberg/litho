@@ -12,7 +12,8 @@ import (
 
 // TestNextNormalObjectOffset pins the binary search that caps endobj scanning,
 // including its rebuild when the entry set grows (lazy xref augmentation).
-// Compressed entries (no byte offset) are ignored.
+// Compressed entries (no byte offset) are ignored. The write below stands in
+// for an index writer, so it records the change as every writer does.
 func TestNextNormalObjectOffset(t *testing.T) {
 	d := &Document{xrefEntries: map[int]xref.XRefEntry{
 		1: {Type: xref.XRefTypeNormal, Offset: 100},
@@ -32,6 +33,7 @@ func TestNextNormalObjectOffset(t *testing.T) {
 
 	// Growing the entry set must invalidate the cached slice and rebuild.
 	d.xrefEntries[5] = xref.XRefEntry{Type: xref.XRefTypeNormal, Offset: 175}
+	d.noteXRefChange()
 	if got := d.nextNormalObjectOffset(100); got != 175 {
 		t.Errorf("after adding offset 175: nextNormalObjectOffset(100) = %d, want 175", got)
 	}

@@ -112,6 +112,7 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 				preExisting[objNum] = struct{}{}
 			}
 			trailerDict, p, err := xref.ParseXRefTable(ctx, lex, d.xrefEntries)
+			d.noteXRefChange()
 			if err != nil {
 				return fmt.Errorf("parsing xref table at offset %d: %w", currentOffset, err)
 			}
@@ -152,6 +153,7 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 				return fmt.Errorf("expected xref stream, got %T", obj)
 			}
 			pVal, err := xref.ParseXRefStream(ctx, stream, d.xrefEntries, d.builtinFilters())
+			d.noteXRefChange()
 			if err != nil {
 				return fmt.Errorf("parsing xref stream at offset %d: %w", currentOffset, err)
 			}
@@ -208,6 +210,7 @@ func (d *Document) pruneUnrepresentableEntries() {
 			continue
 		}
 		delete(d.xrefEntries, objNum)
+		d.noteXRefChange()
 		d.Logger.Debug("dropping xref entry whose object number the file cannot define",
 			slog.Int("object_number", objNum),
 			slog.Int64("file_size", d.size),
@@ -421,6 +424,7 @@ func (d *Document) parseHybridXRefStream(ctx context.Context, offset int64, skip
 			continue
 		}
 		d.xrefEntries[objNum] = entry
+		d.noteXRefChange()
 	}
 
 	return nil
@@ -545,21 +549,46 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) []error 
 	return append(violations, d.validateEndobjFormat(offset, objNum)...)
 }
 
+// noteXRefChange records a write to xrefEntries, so a cache derived from the
+// index rebuilds before its next read (see [Document.nextNormalObjectOffset]).
+// Every write to xrefEntries calls it. Once construction completes the caller
+// holds d.mu for writing; before that no other goroutine can reach the
+// document.
+func (d *Document) noteXRefChange() {
+	d.xrefGen++
+}
+
 // nextNormalObjectOffset returns the smallest normal indirect-object offset
 // strictly greater than off, or [math.MaxInt64] if none. It binary-searches an
-// ascending offset slice cached on the document, rebuilt only when the entry
-// set size changes (lazy xref augmentation grows it). This replaces a full scan
-// of every xref entry, which turned per-object endobj validation into an
-// O(N^2) cost on files packed with objects.
+// ascending offset slice cached on the document. This replaces a full scan of
+// every xref entry, which turned per-object endobj validation into an O(N^2)
+// cost on files packed with objects.
+//
+// The slice is rebuilt whenever the index changed since it was built, as
+// [Document.noteXRefChange] records. Keying it on the entry count missed the
+// raw-byte augmentation when that only moves offsets: an override replaces an
+// entry the table misplaced without adding one, so the slice kept the offset
+// the table declared and lacked the one the object really has. An endobj scan
+// then ended at the stale offset, which can fall inside the scanned object's
+// own body, or ran on past the moved object's real header.
+//
+// # Corpus evidence
+//
+//   - All corpora: six files have the augmentation move offsets without adding
+//     an entry. Three of them, pdfjs issue10326.pdf, issue18986.pdf and
+//     issue9418.pdf, run it while they open, before anything builds the cache.
+//   - pdfjs bug1898802.pdf, issue11678.pdf, prefilled_f1040.pdf: build the
+//     cache first, so it went stale on each, though no object's endobj check
+//     reads differently through the stale offsets.
 func (d *Document) nextNormalObjectOffset(off int64) int64 {
 	d.mu.RLock()
 	offs := d.sortedOffsets
-	fresh := offs != nil && d.sortedOffsetsLen == len(d.xrefEntries)
+	fresh := offs != nil && d.sortedOffsetsGen == d.xrefGen
 	d.mu.RUnlock()
 
 	if !fresh {
 		d.mu.Lock()
-		if d.sortedOffsets == nil || d.sortedOffsetsLen != len(d.xrefEntries) {
+		if d.sortedOffsets == nil || d.sortedOffsetsGen != d.xrefGen {
 			rebuilt := make([]int64, 0, len(d.xrefEntries))
 			for _, entry := range d.xrefEntries {
 				if entry.Type == xref.XRefTypeNormal {
@@ -568,7 +597,7 @@ func (d *Document) nextNormalObjectOffset(off int64) int64 {
 			}
 			slices.Sort(rebuilt)
 			d.sortedOffsets = rebuilt
-			d.sortedOffsetsLen = len(d.xrefEntries)
+			d.sortedOffsetsGen = d.xrefGen
 		}
 		offs = d.sortedOffsets
 		d.mu.Unlock()
