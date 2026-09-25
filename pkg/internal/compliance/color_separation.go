@@ -60,6 +60,9 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, pages [
 	colorantAlternates := make(map[string]string)
 	// colorantTintFuncs tracks colorant name -> first tint transform (resolved).
 	colorantTintFuncs := make(map[string]ast.PdfObject)
+	// limitJudged holds the indirect DeviceN spaces already judged against the
+	// colourant limit (see [checkDeviceNLimit]).
+	limitJudged := make(map[int]bool)
 
 	for i := range pages {
 		if ctx.Err() != nil {
@@ -67,60 +70,81 @@ func checkSeparationDeviceN(ctx context.Context, doc *document.Document, pages [
 		}
 
 		page := pages[i].dict
-		resources := resolveInheritedResources(ctx, doc, page)
-		if resources == nil {
-			continue
+
+		// A page with no /Resources, its own or inherited, paints nothing from
+		// a named resource, but its annotations still render through appearance
+		// streams that carry their own /Resources (ISO 32000-1 §12.5.5), so it
+		// skips only its own scan.
+		if resources := resolveInheritedResources(ctx, doc, page); resources != nil {
+			// A pattern or a shading takes part only when the page paints with
+			// it, and a colour space only when something selects it. The parsed
+			// operations report both, and they are already cached on the page
+			// (see pageCtx.parsedOps), so this costs no second parse.
+			_, referencedXObjects, contentCSNames, used, inheritedAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
+
+			scanSeparationDeviceNInResources(ctx, doc, resources, part, i, colorantAlternates, colorantTintFuncs, limitJudged, results, used, referencedXObjects, contentCSNames, inheritedAtDo)
 		}
 
-		// A pattern or a shading takes part only when the page paints with it,
-		// and a colour space only when something selects it. The parsed
-		// operations report both, and they are already cached on the page (see
-		// pageCtx.parsedOps), so this costs no second parse.
-		_, referencedXObjects, contentCSNames, used, inheritedAtDo := scanContentStreamDeviceCS(ctx, pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, resources))
-
-		scanSeparationDeviceNInResources(ctx, doc, resources, part, i, colorantAlternates, colorantTintFuncs, results, used, referencedXObjects, contentCSNames, inheritedAtDo)
-
-		// Also scan annotation appearance streams on this page.
-		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
-		for _, annotObj := range annotsArr {
-			annot, _ := document.ResolveDict(ctx, doc, annotObj)
-			if annot == nil {
-				continue
-			}
-			apDict, _ := document.ResolveDict(ctx, doc, annot["AP"])
-			if apDict == nil {
-				continue
-			}
-			for _, apKey := range []ast.PdfName{"N", "R", "D"} {
-				apStream, err := document.ResolveStream(ctx, doc, apDict[apKey])
-				if err != nil {
-					doc.Logger.Debug("compliance.color: cannot resolve appearance stream", "error", err)
-					continue
-				}
-				if apStream.Dict == nil {
-					continue
-				}
-				apRes, _ := document.ResolveDict(ctx, doc, apStream.Dict["Resources"])
-				if apRes != nil {
-					// An appearance stream no Do invokes begins in the default
-					// colour-space state, and its own operations report both
-					// what it paints and which colour spaces it selects.
-					apUsed, apXObjects, apCSNames, apInherited := nestedScopeUsage(ctx, doc, apStream, apRes, inheritedCSDefault())
-					scanSeparationDeviceNInResources(ctx, doc, apRes, part, i, colorantAlternates, colorantTintFuncs, results, apUsed, apXObjects, apCSNames, apInherited)
-				}
-			}
-		}
+		scanSeparationDeviceNInAnnotations(ctx, doc, page, part, i, colorantAlternates, colorantTintFuncs, limitJudged, results)
 	}
 
 	doc.Logger.Debug("compliance.color: Separation/DeviceN check complete",
 		"uniqueColorants", len(colorantAlternates))
 }
 
+// scanSeparationDeviceNInAnnotations scans the normal, rollover and down
+// appearance streams of every annotation on page.
+//
+// # Corpus evidence
+//
+//   - All corpora: 21 of 39188 pages declare no /Resources, their own or
+//     inherited, and 4 of them carry annotations whose appearance streams went
+//     unscanned while the page was skipped whole. None of those streams
+//     selects a Separation or DeviceN, so no verdict moves.
+func scanSeparationDeviceNInAnnotations(ctx context.Context, doc *document.Document, page ast.PdfDict, part, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, limitJudged map[int]bool, results *[]Violation) {
+	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
+	if err != nil {
+		doc.Logger.Debug("compliance.color: cannot resolve page annotations", "page", pageIdx+1, "error", err)
+		return
+	}
+	for _, annotObj := range annotsArr {
+		if ctx.Err() != nil {
+			return
+		}
+		annot, _ := document.ResolveDict(ctx, doc, annotObj) // Best-effort: a nil dict skips the annotation.
+		if annot == nil {
+			continue
+		}
+		apDict, _ := document.ResolveDict(ctx, doc, annot["AP"]) // Best-effort: a nil dict skips the annotation.
+		if apDict == nil {
+			continue
+		}
+		for _, apKey := range []ast.PdfName{"N", "R", "D"} {
+			apStream, err := document.ResolveStream(ctx, doc, apDict[apKey])
+			if err != nil {
+				doc.Logger.Debug("compliance.color: cannot resolve appearance stream", "error", err)
+				continue
+			}
+			if apStream.Dict == nil {
+				continue
+			}
+			apRes, _ := document.ResolveDict(ctx, doc, apStream.Dict["Resources"]) // Best-effort: no /Resources names nothing to scan.
+			if apRes != nil {
+				// An appearance stream no Do invokes begins in the default
+				// colour-space state, and its own operations report both
+				// what it paints and which colour spaces it selects.
+				apUsed, apXObjects, apCSNames, apInherited := nestedScopeUsage(ctx, doc, apStream, apRes, inheritedCSDefault())
+				scanSeparationDeviceNInResources(ctx, doc, apRes, part, pageIdx, colorantAlternates, colorantTintFuncs, limitJudged, results, apUsed, apXObjects, apCSNames, apInherited)
+			}
+		}
+	}
+}
+
 // scanSeparationDeviceNInResources scans a resources dictionary for Separation
 // and DeviceN colour space arrays and validates colorant-to-alternate consistency.
-func scanSeparationDeviceNInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation, used *usedResources, referencedXObjects, contentCSNames map[string]bool, inherited map[string]inheritedCS) {
+func scanSeparationDeviceNInResources(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, limitJudged map[int]bool, results *[]Violation, used *usedResources, referencedXObjects, contentCSNames map[string]bool, inherited map[string]inheritedCS) {
 	visited := make(map[string]bool)
-	scanSeparationDeviceNRecursive(ctx, doc, resources, part, pageIdx, colorantAlternates, colorantTintFuncs, results, 0, visited, used, referencedXObjects, contentCSNames, inherited)
+	scanSeparationDeviceNRecursive(ctx, doc, resources, part, pageIdx, colorantAlternates, colorantTintFuncs, limitJudged, results, 0, visited, used, referencedXObjects, contentCSNames, inherited)
 }
 
 // scanSeparationDeviceNRecursive scans resources (and Form XObject sub-resources)
@@ -133,7 +157,7 @@ func scanSeparationDeviceNInResources(ctx context.Context, doc *document.Documen
 // nil, which judges its colour spaces in full: this scan reaches more than it
 // did, never less. A scope whose stream will not decode or parse yields no
 // survey at all and is judged in full, as an unsurveyed one was.
-func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation, depth int, visited map[string]bool, used *usedResources, referencedXObjects, contentCSNames map[string]bool, inherited map[string]inheritedCS) {
+func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, limitJudged map[int]bool, results *[]Violation, depth int, visited map[string]bool, used *usedResources, referencedXObjects, contentCSNames map[string]bool, inherited map[string]inheritedCS) {
 	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return
 	}
@@ -159,7 +183,7 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 			if referenced != nil && !referenced[string(name)] {
 				continue
 			}
-			checkSeparationDeviceNArray(ctx, doc, csDict[name], part, pageIdx, string(name), colorantAlternates, colorantTintFuncs, results)
+			checkSeparationDeviceNArray(ctx, doc, csDict[name], part, pageIdx, string(name), colorantAlternates, colorantTintFuncs, limitJudged, results)
 		}
 	}
 
@@ -168,8 +192,8 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 	// PDF/A-2 file" (ISO 19005-2 §6.2.4.4), so it takes part in colorant
 	// consistency. Scoping the walk to /Resources/ColorSpace and Form XObjects
 	// left both unreachable while veraPDF reported them.
-	scanSeparationInShadings(ctx, doc, resources, part, pageIdx, colorantAlternates, colorantTintFuncs, results, used)
-	scanSeparationInPatterns(ctx, doc, resources, part, pageIdx, colorantAlternates, colorantTintFuncs, results, depth, visited, used)
+	scanSeparationInShadings(ctx, doc, resources, part, pageIdx, colorantAlternates, colorantTintFuncs, limitJudged, results, used)
+	scanSeparationInPatterns(ctx, doc, resources, part, pageIdx, colorantAlternates, colorantTintFuncs, limitJudged, results, depth, visited, used)
 
 	// Recurse into Form XObject resources.
 	xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
@@ -178,40 +202,29 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 	}
 	for _, k := range sortedNames(xobjDict) {
 		xobjObj := xobjDict[k]
-		ref, ok := xobjObj.(ast.PdfIndirectRef)
-		if ok {
+		stream, err := document.ResolveStream(ctx, doc, xobjObj)
+		if err != nil {
+			doc.Logger.Debug("compliance.color: cannot resolve XObject stream", "error", err)
+			continue
+		}
+		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]) // Best-effort: an unreadable /Subtype matches neither branch.
+		// An image paints only where a Do invokes it, and veraPDF reaches its
+		// colour space through that Do alone: measured silent on a DeviceN
+		// image that /Resources declares and no operator paints. The check
+		// comes before the visited mark, so an image one scope declares
+		// unpainted is still judged in the scope that paints it.
+		if subtype == "Image" && referencedXObjects != nil && !referencedXObjects[string(k)] {
+			continue
+		}
+		if ref, ok := xobjObj.(ast.PdfIndirectRef); ok {
 			key := fmt.Sprintf("%d", ref.ObjectNum)
 			if visited[key] {
 				continue
 			}
 			visited[key] = true
 		}
-		stream, err := document.ResolveStream(ctx, doc, xobjObj)
-		if err != nil {
-			doc.Logger.Debug("compliance.color: cannot resolve XObject stream", "error", err)
-			continue
-		}
-		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
 		if subtype == "Image" {
-			// An image XObject names its colour space inline rather than
-			// through /Resources/ColorSpace, so §6.2.4.4 t1 has to reach it
-			// here. veraPDF reports such a failure at
-			// .../xObject[0](n 0 obj PDXImage)/imageCS[0](n 0 obj PDDeviceN).
-			// Only t1 applies: the colorant-consistency scan (t2) keeps its
-			// existing resource-dictionary scope.
-			imgCS, err := document.ResolveArray(ctx, doc, stream.Dict["ColorSpace"])
-			if err != nil || len(imgCS) < 2 {
-				continue
-			}
-			where := fmt.Sprintf("Image XObject %s", k)
-			// An /Indexed image names its DeviceN one level down; see
-			// indexedBaseArray.
-			if base := indexedBaseArray(ctx, doc, imgCS, 0); base != nil {
-				imgCS, where = base, where+" /Indexed base"
-			}
-			if csType, err := document.ResolveName(ctx, doc, imgCS[0]); err == nil && csType == "DeviceN" {
-				checkDeviceNColorants(ctx, doc, imgCS, part, pageIdx, where, results)
-			}
+			checkImageDeviceN(ctx, doc, stream.Dict["ColorSpace"], part, pageIdx, fmt.Sprintf("Image XObject %s", k), limitJudged, results)
 			continue
 		}
 		if subtype != "Form" {
@@ -226,8 +239,79 @@ func scanSeparationDeviceNRecursive(ctx context.Context, doc *document.Document,
 			// Separation arrays a file employs: one the form only declares
 			// employs none, and veraPDF reports nothing for it.
 			formUsed, formXObjects, formCSNames, formInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSFor(inherited, string(k)))
-			scanSeparationDeviceNRecursive(ctx, doc, subRes, part, pageIdx, colorantAlternates, colorantTintFuncs, results, depth+1, visited, formUsed, formXObjects, formCSNames, formInherited)
+			scanSeparationDeviceNRecursive(ctx, doc, subRes, part, pageIdx, colorantAlternates, colorantTintFuncs, limitJudged, results, depth+1, visited, formUsed, formXObjects, formCSNames, formInherited)
 		}
+	}
+}
+
+// checkImageDeviceN judges the DeviceN colour space an image XObject names in
+// csObj, directly or as the base of an /Indexed space (see [indexedBaseArray]).
+// An image XObject names its colour space inline rather than through
+// /Resources/ColorSpace, so the resource scan never reaches it.
+//
+// Two rules apply to that DeviceN. §6.2.4.4 t1 needs a /Colorants entry for
+// every spot colorant (see [checkDeviceNColorants]). ISO 19005-1 §6.1.12 t9
+// and ISO 19005-2/3 §6.1.13 t9 cap its colourants (see [checkDeviceNLimit]),
+// and veraPDF judges that cap on every PDDeviceN it reaches, anchored at
+// .../xObject[0](n 0 obj PDXImage)/imageCS[0](n 0 obj PDDeviceN), or at
+// .../imageCS[0](n 0 obj PDIndexed)/base[0] for an /Indexed image. The
+// colorant-consistency scan (t2) keeps its resource-dictionary scope.
+func checkImageDeviceN(ctx context.Context, doc *document.Document, csObj ast.PdfObject, part, pageIdx int, where string, limitJudged map[int]bool, results *[]Violation) {
+	imgCS, err := document.ResolveArray(ctx, doc, csObj)
+	if err != nil || len(imgCS) < 2 {
+		return
+	}
+	if base, baseObj := indexedBaseArray(ctx, doc, imgCS, 0); base != nil {
+		imgCS, csObj, where = base, baseObj, where+" /Indexed base"
+	}
+	if csType, err := document.ResolveName(ctx, doc, imgCS[0]); err != nil || csType != "DeviceN" {
+		return
+	}
+	checkDeviceNLimit(ctx, doc, csObj, imgCS, part, pageIdx, where, limitJudged, results)
+	checkDeviceNColorants(ctx, doc, imgCS, part, pageIdx, where, results)
+}
+
+// deviceNColorantLimit returns the most colourants a DeviceN colour space may
+// name under a PDF/A part: 8 for part 1 (ISO 19005-1 §6.1.12, from PDF
+// Reference 1.4 Table C.1) and 32 for parts 2 and 3 (ISO 19005-2/3 §6.1.13,
+// from ISO 32000-1 Annex C, Table C.1).
+func deviceNColorantLimit(part int) int {
+	if part == 1 {
+		return 8
+	}
+	return 32
+}
+
+// checkDeviceNLimit reports ISO 19005-1 §6.1.12 t9 or ISO 19005-2/3 §6.1.13 t9
+// when the DeviceN array arr names more colourants than
+// [deviceNColorantLimit] allows. csObj is the object arr was resolved from, and
+// where names the site the violation message reports.
+//
+// veraPDF judges each indirect colour space once, however many scopes reach it
+// (measured: two images sharing one DeviceN object, or three appearance
+// streams selecting it, fail one check), so an indirect csObj is judged once
+// per document through limitJudged. A direct one has no identity to share and
+// is judged at every site.
+func checkDeviceNLimit(ctx context.Context, doc *document.Document, csObj ast.PdfObject, arr ast.PdfArray, part, pageIdx int, where string, limitJudged map[int]bool, results *[]Violation) {
+	rule := deviceNComponentRule(part)
+	if rule.Specification == "" || len(arr) < 2 {
+		return
+	}
+	if ref, ok := csObj.(ast.PdfIndirectRef); ok {
+		if limitJudged[ref.ObjectNum] {
+			return
+		}
+		limitJudged[ref.ObjectNum] = true
+	}
+	names, err := document.ResolveArray(ctx, doc, arr[1])
+	if err != nil {
+		doc.Logger.Debug("compliance.color: cannot resolve DeviceN names array", "page", pageIdx+1, "context", where, "error", err)
+		return
+	}
+	if limit := deviceNColorantLimit(part); len(names) > limit {
+		*results = append(*results, failf(rule,
+			"page %d, %s: DeviceN has %d components (max %d)",
+			pageIdx+1, where, len(names), limit)...)
 	}
 }
 
@@ -246,8 +330,9 @@ const (
 const maxIndexedBaseDepth = 4
 
 // indexedBaseArray returns the base colour space array of an /Indexed space,
-// following a nested /Indexed base up to [maxIndexedBaseDepth]. Returns nil
-// when arr does not name /Indexed, or its base is not an array.
+// following a nested /Indexed base up to [maxIndexedBaseDepth], and the object
+// it was resolved from, which is an indirect reference when the base is one.
+// Returns nil when arr does not name /Indexed, or its base is not an array.
 //
 // ISO 32000-1, 8.6.6.3 makes that base a colour space in its own right, so the
 // constraints on the space apply to it. veraPDF models it the same way and
@@ -262,28 +347,28 @@ const maxIndexedBaseDepth = 4
 //     entry for IBM. veraPDF anchors §6.2.4.4 t1 at
 //     imageCS[0](52 0 obj PDIndexed)/base[0](51 0 obj PDDeviceN), and litho
 //     reported nothing.
-func indexedBaseArray(ctx context.Context, doc *document.Document, arr ast.PdfArray, depth int) ast.PdfArray {
+func indexedBaseArray(ctx context.Context, doc *document.Document, arr ast.PdfArray, depth int) (ast.PdfArray, ast.PdfObject) {
 	if depth > maxIndexedBaseDepth || ctx.Err() != nil || len(arr) < 2 {
-		return nil
+		return nil, nil
 	}
 	csType, err := document.ResolveName(ctx, doc, arr[0])
 	if err != nil || csType != "Indexed" {
-		return nil
+		return nil, nil
 	}
 	base, err := document.ResolveArray(ctx, doc, arr[1])
 	if err != nil || len(base) < 2 {
-		return nil
+		return nil, nil
 	}
 	if baseType, berr := document.ResolveName(ctx, doc, base[0]); berr == nil && baseType == "Indexed" {
 		return indexedBaseArray(ctx, doc, base, depth+1)
 	}
-	return base
+	return base, arr[1]
 }
 
 // checkSeparationDeviceNArray dispatches one colour-space object to the
 // Separation or DeviceN consistency check. where names the site the violation
 // message reports.
-func checkSeparationDeviceNArray(ctx context.Context, doc *document.Document, csObj ast.PdfObject, part int, pageIdx int, where string, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation) {
+func checkSeparationDeviceNArray(ctx context.Context, doc *document.Document, csObj ast.PdfObject, part int, pageIdx int, where string, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, limitJudged map[int]bool, results *[]Violation) {
 	arr, err := document.ResolveArray(ctx, doc, csObj)
 	if err != nil || len(arr) < 2 {
 		return
@@ -299,17 +384,19 @@ func checkSeparationDeviceNArray(ctx context.Context, doc *document.Document, cs
 	case "Separation":
 		checkSeparationCS(ctx, doc, arr, part, pageIdx, where, colorantAlternates, colorantTintFuncs, results)
 	case "DeviceN":
-		checkDeviceNCS(ctx, doc, arr, part, pageIdx, where, colorantAlternates, colorantTintFuncs, results)
+		checkDeviceNCS(ctx, doc, csObj, arr, part, pageIdx, where, colorantAlternates, colorantTintFuncs, limitJudged, results)
 	case "Indexed":
-		// Only §6.2.4.4 t1 follows the base. The colorant-consistency scan
-		// (t2) keeps its resource-dictionary scope, exactly as the image
-		// XObject site in scanSeparationDeviceNRecursive already states,
-		// so an /Indexed base adds no new alternate-space comparisons.
-		base := indexedBaseArray(ctx, doc, arr, 0)
+		// Only §6.2.4.4 t1 and the colourant limit follow the base. The
+		// colorant-consistency scan (t2) keeps its resource-dictionary scope,
+		// exactly as [checkImageDeviceN] states, so an /Indexed base adds no
+		// new alternate-space comparisons. veraPDF anchors the colourant limit
+		// at colorSpace[0](n 0 obj PDIndexed)/base[0], measured.
+		base, baseObj := indexedBaseArray(ctx, doc, arr, 0)
 		if base == nil {
 			return
 		}
 		if baseType, berr := document.ResolveName(ctx, doc, base[0]); berr == nil && baseType == "DeviceN" {
+			checkDeviceNLimit(ctx, doc, baseObj, base, part, pageIdx, where+" /Indexed base", limitJudged, results)
 			checkDeviceNColorants(ctx, doc, base, part, pageIdx, where+" /Indexed base", results)
 		}
 	}
@@ -322,7 +409,7 @@ func checkSeparationDeviceNArray(ctx context.Context, doc *document.Document, cs
 // Only a shading an sh operator paints counts. veraPDF reports nothing for one
 // that no operator paints, which is the usage-driven scope litho's
 // device-colour scan already applies (see [usedResources]).
-func scanSeparationInShadings(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation, used *usedResources) {
+func scanSeparationInShadings(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, limitJudged map[int]bool, results *[]Violation, used *usedResources) {
 	if used == nil {
 		return
 	}
@@ -344,7 +431,7 @@ func scanSeparationInShadings(ctx context.Context, doc *document.Document, resou
 			doc.Logger.Debug("compliance.color: cannot resolve Shading dict", "name", name)
 			continue
 		}
-		checkSeparationDeviceNArray(ctx, doc, sd["ColorSpace"], part, pageIdx, fmt.Sprintf("Shading %s", name), colorantAlternates, colorantTintFuncs, results)
+		checkSeparationDeviceNArray(ctx, doc, sd["ColorSpace"], part, pageIdx, fmt.Sprintf("Shading %s", name), colorantAlternates, colorantTintFuncs, limitJudged, results)
 	}
 }
 
@@ -357,7 +444,7 @@ func scanSeparationInShadings(ctx context.Context, doc *document.Document, resou
 // §8.7.3.3). Measured against veraPDF on one file at both paint types: it
 // reports §6.2.4.4 t2 for the colorant inside a /PaintType 1 cell and nothing
 // at all for the same cell at /PaintType 2.
-func scanSeparationInPatterns(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation, depth int, visited map[string]bool, used *usedResources) {
+func scanSeparationInPatterns(ctx context.Context, doc *document.Document, resources ast.PdfDict, part int, pageIdx int, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, limitJudged map[int]bool, results *[]Violation, depth int, visited map[string]bool, used *usedResources) {
 	if used == nil {
 		return
 	}
@@ -393,7 +480,7 @@ func scanSeparationInPatterns(ctx context.Context, doc *document.Document, resou
 				continue
 			}
 			if sd := resolveShadingDict(ctx, doc, patternDict["Shading"]); sd != nil {
-				checkSeparationDeviceNArray(ctx, doc, sd["ColorSpace"], part, pageIdx, fmt.Sprintf("Pattern %s shading", name), colorantAlternates, colorantTintFuncs, results)
+				checkSeparationDeviceNArray(ctx, doc, sd["ColorSpace"], part, pageIdx, fmt.Sprintf("Pattern %s shading", name), colorantAlternates, colorantTintFuncs, limitJudged, results)
 			}
 			continue
 		}
@@ -415,7 +502,7 @@ func scanSeparationInPatterns(ctx context.Context, doc *document.Document, resou
 		// colour-space state, and its own operations report both what it paints
 		// and which colour spaces it selects.
 		cellUsed, cellXObjects, cellCSNames, cellInherited := nestedScopeUsage(ctx, doc, stream, subRes, inheritedCSDefault())
-		scanSeparationDeviceNRecursive(ctx, doc, subRes, part, pageIdx, colorantAlternates, colorantTintFuncs, results, depth+1, visited, cellUsed, cellXObjects, cellCSNames, cellInherited)
+		scanSeparationDeviceNRecursive(ctx, doc, subRes, part, pageIdx, colorantAlternates, colorantTintFuncs, limitJudged, results, depth+1, visited, cellUsed, cellXObjects, cellCSNames, cellInherited)
 	}
 }
 
@@ -531,7 +618,7 @@ func functionDictEqual(ctx context.Context, doc *document.Document, a, b ast.Pdf
 
 // checkDeviceNCS validates a DeviceN colour space array:
 // [/DeviceN [/names...] /AlternateSpace /TintTransform ...]
-func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, results *[]Violation) {
+func checkDeviceNCS(ctx context.Context, doc *document.Document, csObj ast.PdfObject, arr ast.PdfArray, part int, pageIdx int, csName string, colorantAlternates map[string]string, colorantTintFuncs map[string]ast.PdfObject, limitJudged map[int]bool, results *[]Violation) {
 	if len(arr) < 4 {
 		return
 	}
@@ -542,16 +629,7 @@ func checkDeviceNCS(ctx context.Context, doc *document.Document, arr ast.PdfArra
 		return
 	}
 
-	// §6.1.12 t09: DeviceN component limit (PDF/A-1: 8, PDF/A-2+: 32).
-	maxComponents := 32
-	if part == 1 {
-		maxComponents = 8
-	}
-	if len(names) > maxComponents {
-		*results = append(*results, failf(deviceNComponentRule(part),
-			"page %d, ColorSpace %s: DeviceN has %d components (max %d)",
-			pageIdx+1, csName, len(names), maxComponents)...)
-	}
+	checkDeviceNLimit(ctx, doc, csObj, arr, part, pageIdx, fmt.Sprintf("ColorSpace %s", csName), limitJudged, results)
 
 	// Everything below mirrors §6.2.4.4, which exists for parts 2+ only;
 	// ISO 19005-1 has no DeviceN consistency rules, and emitting with
