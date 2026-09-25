@@ -1514,8 +1514,19 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // definition, that the current document reaches through one of those other
 // entries, through an XFA packet other than the datasets packet, or at P=2
 // through an annotation other than a form field widget. The trailer's /Info
-// dictionary may change. When the signed revision cannot be read, MDPInfo says
-// what was not checked.
+// dictionary may change.
+//
+// At P=2 the interactive form is compared with its signed version too, since
+// filling in a field and signing change only a field's value and the
+// appearance of its widgets. The form dictionary may change in every entry but
+// /CO. A field or widget the update rewrote may change only in its value and
+// appearance entries, a signature field may gain a /V but not replace one,
+// /Ff may gain only the ReadOnly flag a signature's /Lock sets, and /Kids may
+// gain only new fields. A field or widget the update added must belong to a
+// signature field and carry no /A or /AA action, and no object the actions of
+// a field or widget reach may be written differently from its signed
+// definition. When the signed revision cannot be read, MDPInfo says what was
+// not checked.
 func (r *Reader) VerifySignatures(ctx context.Context, roots *x509.CertPool) (_ []models.SignatureValidation, err error) {
 	defer recoverToError(r.logger(), "Reader.VerifySignatures", &err)
 	return signature.VerifySignatures(ctx, r.doc, roots)

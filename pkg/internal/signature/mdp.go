@@ -209,7 +209,8 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 		if err != nil {
 			note += fmt.Sprintf("; %s not checked: %v", revisionChecks(sig.MDPPolicy), err)
 		} else {
-			violation, note = compareRevisions(ctx, doc, rev, appendedObjects, classified, sig.MDPPolicy, note)
+			held := func(num int) bool { return signed.held(ctx, rev, num) }
+			violation, note = compareRevisions(ctx, doc, rev, held, appendedObjects, classified, sig.MDPPolicy, note)
 		}
 	}
 	note += signed.note()
@@ -234,10 +235,11 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 // compareRevisions compares the signed revision rev with the current document
 // doc and describes the first change policy does not permit, or returns ""
 // when there is none. objects are the objects appended after signing, and
-// classified those the exemptions for validation data and form data left. A
-// comparison that cannot be made adds to note what was not checked, and the
-// others still run.
-func compareRevisions(ctx context.Context, doc, rev *document.Document, objects, classified []appendedObject, policy int, note string) (string, string) {
+// classified those the exemptions for validation data, form data and
+// annotation tags left, and held reports whether the signed revision held a
+// number ([signedRevision.held]). A comparison that cannot be made adds to
+// note what was not checked, and the others still run.
+func compareRevisions(ctx context.Context, doc, rev *document.Document, held func(num int) bool, objects, classified []appendedObject, policy int, note string) (string, string) {
 	type check struct {
 		what string
 		run  func() (string, error)
@@ -251,10 +253,13 @@ func compareRevisions(ctx context.Context, doc, rev *document.Document, objects,
 		checks = append(checks, check{"annotation removals", func() (string, error) { return removedAnnotation(ctx, doc, rev) }})
 	}
 	if policy >= 2 {
-		checks = append(checks,
-			check{"catalog changes", func() (string, error) { return changedCatalog(ctx, doc, rev, policy) }},
-			check{"untyped objects", func() (string, error) { return changedUntyped(ctx, doc, rev, classified, policy) }},
-		)
+		checks = append(checks, check{"catalog changes", func() (string, error) { return changedCatalog(ctx, doc, rev, policy) }})
+	}
+	if policy == 2 {
+		checks = append(checks, check{"form fields", func() (string, error) { return changedField(ctx, doc, rev, held, objects) }})
+	}
+	if policy >= 2 {
+		checks = append(checks, check{"untyped objects", func() (string, error) { return changedUntyped(ctx, doc, rev, classified, policy) }})
 	}
 	for _, c := range checks {
 		violation, err := c.run()
@@ -274,7 +279,7 @@ func compareRevisions(ctx context.Context, doc, rev *document.Document, objects,
 func revisionChecks(policy int) string {
 	switch policy {
 	case 2:
-		return "page changes, page order, page removals, catalog changes, untyped objects and annotation removals"
+		return "page changes, page order, page removals, catalog changes, form fields, untyped objects and annotation removals"
 	case 3:
 		return "page changes, page order, page removals, catalog changes and untyped objects"
 	}
