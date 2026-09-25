@@ -322,14 +322,15 @@ func lookupType(s *Schema, qn QName) (Type, error) {
 // document. It mirrors the XSD source structure so the loader can
 // build the typed [Schema] in a second pass.
 type rawSchema struct {
-	XMLName         xml.Name           `xml:"http://www.w3.org/2001/XMLSchema schema"`
-	TargetNamespace string             `xml:"targetNamespace,attr"`
-	Elements        []rawElement       `xml:"element"`
-	Attributes      []rawAttribute     `xml:"attribute"`
-	ComplexTypes    []rawComplexType   `xml:"complexType"`
-	SimpleTypes     []rawSimpleType    `xml:"simpleType"`
-	Imports         []rawImportInclude `xml:"import"`
-	Includes        []rawImportInclude `xml:"include"`
+	XMLName              xml.Name           `xml:"http://www.w3.org/2001/XMLSchema schema"`
+	TargetNamespace      string             `xml:"targetNamespace,attr"`
+	AttributeFormDefault string             `xml:"attributeFormDefault,attr"`
+	Elements             []rawElement       `xml:"element"`
+	Attributes           []rawAttribute     `xml:"attribute"`
+	ComplexTypes         []rawComplexType   `xml:"complexType"`
+	SimpleTypes          []rawSimpleType    `xml:"simpleType"`
+	Imports              []rawImportInclude `xml:"import"`
+	Includes             []rawImportInclude `xml:"include"`
 }
 
 type rawImportInclude struct {
@@ -421,6 +422,7 @@ type rawAttribute struct {
 	Use        string         `xml:"use,attr"`
 	Default    string         `xml:"default,attr"`
 	Fixed      string         `xml:"fixed,attr"`
+	Form       string         `xml:"form,attr"`
 	SimpleType *rawSimpleType `xml:"simpleType"`
 }
 
@@ -503,46 +505,88 @@ func extractSchemaPrefixes(data []byte) (map[string]string, error) {
 	}
 }
 
+// schemaDoc is what the builders read off the xs:schema element of the
+// schema document a declaration sits in.
+type schemaDoc struct {
+	// tns is the targetNamespace attribute, empty when absent.
+	tns string
+	// prefixes maps each namespace prefix declared on xs:schema, and
+	// [wellKnownPrefixes], to its namespace.
+	prefixes map[string]string
+	// attributeFormDefault is the attributeFormDefault attribute, whose
+	// absence means unqualified (XML Schema Part 1, 3.15.2).
+	attributeFormDefault string
+}
+
+// localAttributeNamespace returns the {target namespace} of a local
+// attribute declaration whose form attribute is form, per XML Schema Part
+// 1, 3.2.2: the target namespace of the schema when form is qualified, or
+// when form is absent and attributeFormDefault is qualified, and no
+// namespace otherwise. A top-level declaration always takes the target
+// namespace.
+//
+// # Corpus evidence
+//
+//   - All corpora: no bundled schema sets attributeFormDefault or form, so
+//     their local attributes are all unqualified. Qualifying them instead
+//     turns 91 of the 159 files that embed XML invalid through the Factur-X
+//     and ZUGFeRD validators, as their unprefixed attributes no longer
+//     match.
+func (d *schemaDoc) localAttributeNamespace(form string) string {
+	form = strings.TrimSpace(form)
+	if form == "" {
+		form = strings.TrimSpace(d.attributeFormDefault)
+	}
+	if form == "qualified" {
+		return d.tns
+	}
+	return ""
+}
+
 func populateFromRaw(s *Schema, raw *rawSchema, prefixes map[string]string) error {
-	tns := raw.TargetNamespace
+	doc := &schemaDoc{
+		tns:                  raw.TargetNamespace,
+		prefixes:             prefixes,
+		attributeFormDefault: raw.AttributeFormDefault,
+	}
 	for i := range raw.ComplexTypes {
-		ct, err := buildComplexType(tns, prefixes, &raw.ComplexTypes[i])
+		ct, err := buildComplexType(doc, &raw.ComplexTypes[i])
 		if err != nil {
 			return err
 		}
 		s.Types[ct.QName()] = ct
 	}
 	for i := range raw.SimpleTypes {
-		st, err := buildSimpleType(tns, prefixes, &raw.SimpleTypes[i])
+		st, err := buildSimpleType(doc, &raw.SimpleTypes[i])
 		if err != nil {
 			return err
 		}
 		s.Types[st.QName()] = st
 	}
 	for i := range raw.Elements {
-		el, err := buildElement(tns, prefixes, &raw.Elements[i])
+		el, err := buildElement(doc, &raw.Elements[i])
 		if err != nil {
 			return err
 		}
 		s.Elements[el.Name] = el
 	}
-	attrs, err := buildAttributes(tns, prefixes, raw.Attributes)
-	if err != nil {
-		return err
-	}
-	for i := range attrs {
-		s.Attributes[attrs[i].Name] = &attrs[i]
+	for i := range raw.Attributes {
+		a, err := buildAttribute(doc, &raw.Attributes[i], doc.tns)
+		if err != nil {
+			return err
+		}
+		s.Attributes[a.Name] = &a
 	}
 	return nil
 }
 
-func buildElement(tns string, prefixes map[string]string, raw *rawElement) (*Element, error) {
+func buildElement(doc *schemaDoc, raw *rawElement) (*Element, error) {
 	if raw.Ref != "" {
 		return nil, fmt.Errorf("%w: top-level xs:element with ref attribute (CII does not use this)",
 			ErrUnsupportedConstruct)
 	}
 	el := &Element{
-		Name:      QName{Namespace: tns, Local: raw.Name},
+		Name:      QName{Namespace: doc.tns, Local: raw.Name},
 		MinOccurs: occursOrDefault(raw.MinOccurs, 1),
 		MaxOccurs: occursOrDefault(raw.MaxOccurs, 1),
 		Nillable:  isTrueBoolean(raw.Nillable),
@@ -551,19 +595,19 @@ func buildElement(tns string, prefixes map[string]string, raw *rawElement) (*Ele
 	}
 	switch {
 	case raw.Type != "":
-		ref, err := parseQName(raw.Type, tns, prefixes)
+		ref, err := doc.parseQName(raw.Type)
 		if err != nil {
 			return nil, err
 		}
 		el.TypeRef = ref
 	case raw.ComplexType != nil:
-		ct, err := buildComplexType(tns, prefixes, raw.ComplexType)
+		ct, err := buildComplexType(doc, raw.ComplexType)
 		if err != nil {
 			return nil, err
 		}
 		el.Inline = ct
 	case raw.SimpleType != nil:
-		st, err := buildSimpleType(tns, prefixes, raw.SimpleType)
+		st, err := buildSimpleType(doc, raw.SimpleType)
 		if err != nil {
 			return nil, err
 		}
@@ -572,39 +616,39 @@ func buildElement(tns string, prefixes map[string]string, raw *rawElement) (*Ele
 	return el, nil
 }
 
-func buildComplexType(tns string, prefixes map[string]string, raw *rawComplexType) (*ComplexType, error) {
+func buildComplexType(doc *schemaDoc, raw *rawComplexType) (*ComplexType, error) {
 	ct := &ComplexType{
-		Name: QName{Namespace: tns, Local: raw.Name},
+		Name: QName{Namespace: doc.tns, Local: raw.Name},
 	}
 	switch {
 	case raw.Sequence != nil:
-		seq, err := buildSequence(tns, prefixes, raw.Sequence)
+		seq, err := buildSequence(doc, raw.Sequence)
 		if err != nil {
 			return nil, err
 		}
 		ct.Content = seq
 	case raw.Choice != nil:
-		ch, err := buildChoice(tns, prefixes, raw.Choice)
+		ch, err := buildChoice(doc, raw.Choice)
 		if err != nil {
 			return nil, err
 		}
 		ct.Content = ch
 	case raw.ComplexContent != nil && raw.ComplexContent.Extension != nil:
 		ext := raw.ComplexContent.Extension
-		baseRef, err := parseQName(ext.Base, tns, prefixes)
+		baseRef, err := doc.parseQName(ext.Base)
 		if err != nil {
 			return nil, err
 		}
 		ct.BaseRef = baseRef
 		switch {
 		case ext.Sequence != nil:
-			seq, err := buildSequence(tns, prefixes, ext.Sequence)
+			seq, err := buildSequence(doc, ext.Sequence)
 			if err != nil {
 				return nil, err
 			}
 			ct.Content = seq
 		case ext.Choice != nil:
-			ch, err := buildChoice(tns, prefixes, ext.Choice)
+			ch, err := buildChoice(doc, ext.Choice)
 			if err != nil {
 				return nil, err
 			}
@@ -612,26 +656,26 @@ func buildComplexType(tns string, prefixes map[string]string, raw *rawComplexTyp
 		default:
 			ct.Content = Empty{}
 		}
-		attrs, err := buildAttributes(tns, prefixes, ext.Attributes)
+		attrs, err := buildAttributes(doc, ext.Attributes)
 		if err != nil {
 			return nil, err
 		}
 		ct.Attributes = append(ct.Attributes, attrs...)
-		ct.AnyAttribute = buildAnyAttribute(tns, ext.AnyAttribute)
+		ct.AnyAttribute = buildAnyAttribute(doc.tns, ext.AnyAttribute)
 	case raw.SimpleContent != nil:
-		if err := buildSimpleContent(tns, prefixes, raw.SimpleContent, ct); err != nil {
+		if err := buildSimpleContent(doc, raw.SimpleContent, ct); err != nil {
 			return nil, err
 		}
 	default:
 		ct.Content = Empty{}
 	}
-	attrs, err := buildAttributes(tns, prefixes, raw.Attributes)
+	attrs, err := buildAttributes(doc, raw.Attributes)
 	if err != nil {
 		return nil, err
 	}
 	ct.Attributes = append(ct.Attributes, attrs...)
 	if raw.AnyAttribute != nil {
-		ct.AnyAttribute = buildAnyAttribute(tns, raw.AnyAttribute)
+		ct.AnyAttribute = buildAnyAttribute(doc.tns, raw.AnyAttribute)
 	}
 	return ct, nil
 }
@@ -654,21 +698,21 @@ func buildAnyAttribute(tns string, raw *rawAnyAttribute) *AttributeWildcard {
 // definition}, and the derivation's own attributes join the type's
 // attribute uses. Per the same clause simpleContent holds exactly one
 // xs:extension or xs:restriction, and each requires base.
-func buildSimpleContent(tns string, prefixes map[string]string, raw *rawSimpleContent, ct *ComplexType) error {
+func buildSimpleContent(doc *schemaDoc, raw *rawSimpleContent, ct *ComplexType) error {
 	var base string
 	var rawAttrs []rawAttribute
 	switch {
 	case raw.Extension != nil:
 		base, rawAttrs = raw.Extension.Base, raw.Extension.Attributes
-		ct.AnyAttribute = buildAnyAttribute(tns, raw.Extension.AnyAttribute)
+		ct.AnyAttribute = buildAnyAttribute(doc.tns, raw.Extension.AnyAttribute)
 		ct.Content = SimpleContent{}
 	case raw.Restriction != nil:
 		r := raw.Restriction
 		base, rawAttrs = r.Base, r.Attributes
-		ct.AnyAttribute = buildAnyAttribute(tns, r.AnyAttribute)
+		ct.AnyAttribute = buildAnyAttribute(doc.tns, r.AnyAttribute)
 		content := SimpleContent{Restriction: true, Facets: collectFacets(r.Facets)}
 		if r.SimpleType != nil {
-			inline, err := buildSimpleType(tns, prefixes, r.SimpleType)
+			inline, err := buildSimpleType(doc, r.SimpleType)
 			if err != nil {
 				return err
 			}
@@ -682,12 +726,12 @@ func buildSimpleContent(tns string, prefixes map[string]string, raw *rawSimpleCo
 	if base == "" {
 		return fmt.Errorf("%w: xs:simpleContent of %q derives without a base", ErrSchemaParse, ct.Name.Local)
 	}
-	baseRef, err := parseQName(base, tns, prefixes)
+	baseRef, err := doc.parseQName(base)
 	if err != nil {
 		return err
 	}
 	ct.BaseRef = baseRef
-	attrs, err := buildAttributes(tns, prefixes, rawAttrs)
+	attrs, err := buildAttributes(doc, rawAttrs)
 	if err != nil {
 		return err
 	}
@@ -695,18 +739,18 @@ func buildSimpleContent(tns string, prefixes map[string]string, raw *rawSimpleCo
 	return nil
 }
 
-func buildSimpleType(tns string, prefixes map[string]string, raw *rawSimpleType) (*SimpleType, error) {
+func buildSimpleType(doc *schemaDoc, raw *rawSimpleType) (*SimpleType, error) {
 	st := &SimpleType{
-		Name: QName{Namespace: tns, Local: raw.Name},
+		Name: QName{Namespace: doc.tns, Local: raw.Name},
 	}
 	if raw.Union != nil {
-		return st, buildUnion(tns, prefixes, raw.Union, st)
+		return st, buildUnion(doc, raw.Union, st)
 	}
 	if raw.Restriction == nil {
 		return st, nil
 	}
 	if raw.Restriction.Base != "" {
-		base, err := parseQName(raw.Restriction.Base, tns, prefixes)
+		base, err := doc.parseQName(raw.Restriction.Base)
 		if err != nil {
 			return nil, err
 		}
@@ -719,17 +763,17 @@ func buildSimpleType(tns string, prefixes map[string]string, raw *rawSimpleType)
 // buildUnion fills st from an xs:union child. Per XML Schema Part 1,
 // 3.14.2 the union's members are the memberTypes QNames, a
 // white-space-separated list, then the xs:simpleType children.
-func buildUnion(tns string, prefixes map[string]string, raw *rawUnion, st *SimpleType) error {
+func buildUnion(doc *schemaDoc, raw *rawUnion, st *SimpleType) error {
 	st.Union = true
 	for _, name := range strings.Fields(raw.MemberTypes) {
-		ref, err := parseQName(name, tns, prefixes)
+		ref, err := doc.parseQName(name)
 		if err != nil {
 			return err
 		}
 		st.MemberRefs = append(st.MemberRefs, ref)
 	}
 	for i := range raw.SimpleTypes {
-		member, err := buildSimpleType(tns, prefixes, &raw.SimpleTypes[i])
+		member, err := buildSimpleType(doc, &raw.SimpleTypes[i])
 		if err != nil {
 			return err
 		}
@@ -738,26 +782,26 @@ func buildUnion(tns string, prefixes map[string]string, raw *rawUnion, st *Simpl
 	return nil
 }
 
-func buildSequence(tns string, prefixes map[string]string, raw *rawSequence) (Sequence, error) {
-	particles, err := buildParticles(tns, prefixes, raw.Elements, raw.Wildcards, raw.Choices)
+func buildSequence(doc *schemaDoc, raw *rawSequence) (Sequence, error) {
+	particles, err := buildParticles(doc, raw.Elements, raw.Wildcards, raw.Choices)
 	if err != nil {
 		return Sequence{}, err
 	}
 	return Sequence{Particles: particles}, nil
 }
 
-func buildChoice(tns string, prefixes map[string]string, raw *rawChoice) (Choice, error) {
-	particles, err := buildParticles(tns, prefixes, raw.Elements, raw.Wildcards, nil)
+func buildChoice(doc *schemaDoc, raw *rawChoice) (Choice, error) {
+	particles, err := buildParticles(doc, raw.Elements, raw.Wildcards, nil)
 	if err != nil {
 		return Choice{}, err
 	}
 	return Choice{Particles: particles}, nil
 }
 
-func buildParticles(tns string, prefixes map[string]string, els []rawElement, wcs []rawWildcard, nested []rawChoice) ([]Particle, error) {
+func buildParticles(doc *schemaDoc, els []rawElement, wcs []rawWildcard, nested []rawChoice) ([]Particle, error) {
 	out := make([]Particle, 0, len(els)+len(wcs))
 	for i := range els {
-		el, err := buildElement(tns, prefixes, &els[i])
+		el, err := buildElement(doc, &els[i])
 		if err != nil {
 			return nil, err
 		}
@@ -781,33 +825,44 @@ func buildParticles(tns string, prefixes map[string]string, els []rawElement, wc
 	return out, nil
 }
 
-func buildAttributes(tns string, prefixes map[string]string, raws []rawAttribute) ([]AttributeUse, error) {
+// buildAttributes builds the local attribute declarations raws of a
+// complex type, each in the namespace its form gives it
+// ([schemaDoc.localAttributeNamespace]).
+func buildAttributes(doc *schemaDoc, raws []rawAttribute) ([]AttributeUse, error) {
 	out := make([]AttributeUse, 0, len(raws))
 	for i := range raws {
-		a := raws[i]
-		au := AttributeUse{
-			Name:       QName{Namespace: tns, Local: a.Name},
-			Default:    a.Default,
-			Fixed:      a.Fixed,
-			Required:   a.Use == "required",
-			Prohibited: a.Use == "prohibited",
-		}
-		if a.Type != "" {
-			ref, err := parseQName(a.Type, tns, prefixes)
-			if err != nil {
-				return nil, err
-			}
-			au.TypeRef = ref
-		} else if a.SimpleType != nil {
-			st, err := buildSimpleType(tns, prefixes, a.SimpleType)
-			if err != nil {
-				return nil, err
-			}
-			au.Type = st
+		au, err := buildAttribute(doc, &raws[i], doc.localAttributeNamespace(raws[i].Form))
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, au)
 	}
 	return out, nil
+}
+
+// buildAttribute builds the attribute declaration a, named in namespace ns.
+func buildAttribute(doc *schemaDoc, a *rawAttribute, ns string) (AttributeUse, error) {
+	au := AttributeUse{
+		Name:       QName{Namespace: ns, Local: a.Name},
+		Default:    a.Default,
+		Fixed:      a.Fixed,
+		Required:   a.Use == "required",
+		Prohibited: a.Use == "prohibited",
+	}
+	if a.Type != "" {
+		ref, err := doc.parseQName(a.Type)
+		if err != nil {
+			return AttributeUse{}, err
+		}
+		au.TypeRef = ref
+	} else if a.SimpleType != nil {
+		st, err := buildSimpleType(doc, a.SimpleType)
+		if err != nil {
+			return AttributeUse{}, err
+		}
+		au.Type = st
+	}
+	return au, nil
 }
 
 func collectFacets(raws []rawFacet) []Facet {
@@ -850,19 +905,19 @@ func collectFacets(raws []rawFacet) []Facet {
 // "xs:string", "ram:IDType") into a QName by consulting the per-schema
 // prefix map captured at load time. Unprefixed names assume the
 // schema's target namespace.
-func parseQName(raw string, tns string, prefixes map[string]string) (QName, error) {
+func (d *schemaDoc) parseQName(raw string) (QName, error) {
 	for i := 0; i < len(raw); i++ {
 		if raw[i] == ':' {
 			prefix := raw[:i]
 			local := raw[i+1:]
-			ns, ok := prefixes[prefix]
+			ns, ok := d.prefixes[prefix]
 			if !ok {
 				return QName{}, fmt.Errorf("%w: unknown prefix %q in %q", ErrSchemaParse, prefix, raw)
 			}
 			return QName{Namespace: ns, Local: local}, nil
 		}
 	}
-	return QName{Namespace: tns, Local: raw}, nil
+	return QName{Namespace: d.tns, Local: raw}, nil
 }
 
 // wellKnownPrefixes maps XSD prefix aliases to their namespace URIs.

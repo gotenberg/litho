@@ -217,6 +217,10 @@ type Element struct {
 // reference to a top-level declaration (xs:attribute ref) is not
 // modelled because CII uses inline attribute uses exclusively.
 type AttributeUse struct {
+	// Name is the name of the attribute declaration. Per XML Schema Part 1,
+	// 3.2.2 a top-level declaration is in the target namespace, and a local
+	// one in no namespace unless its form, or the attributeFormDefault of
+	// its schema document, is qualified.
 	Name QName
 	// Type is the attribute's {type definition} (XML Schema Part 1,
 	// 3.2.2): its xs:simpleType child, set at load time, or the type

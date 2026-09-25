@@ -242,3 +242,104 @@ func TestValidate_LaxWildcardValidatesADeclaredAttribute(t *testing.T) {
 		t.Errorf("undeclared attribute: got %v, want none", vs)
 	}
 }
+
+// attributeFormXSD declares local attributes under each form rule of XML
+// Schema Part 1, 3.2.2: currencyID leaves its form to attributeFormDefault,
+// which the schema omits, so it is unqualified, and scale qualifies itself
+// with form.
+const attributeFormXSD = `<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified">
+  <xs:attribute name="level" type="xs:integer"/>
+  <xs:complexType name="AmountType">
+    <xs:simpleContent>
+      <xs:extension base="xs:decimal">
+        <xs:attribute name="currencyID" type="xs:token" use="required"/>
+        <xs:attribute name="scale" type="xs:integer" form="qualified"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="Amount" type="AmountType"/>
+</xs:schema>`
+
+// qualifiedFormXSD sets attributeFormDefault="qualified", which form
+// unqualified overrides on scale.
+const qualifiedFormXSD = `<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           targetNamespace="urn:t" xmlns="urn:t" elementFormDefault="qualified"
+           attributeFormDefault="qualified">
+  <xs:complexType name="AmountType">
+    <xs:simpleContent>
+      <xs:extension base="xs:decimal">
+        <xs:attribute name="currencyID" type="xs:token" use="required"/>
+        <xs:attribute name="scale" type="xs:integer" form="unqualified"/>
+      </xs:extension>
+    </xs:simpleContent>
+  </xs:complexType>
+  <xs:element name="Amount" type="AmountType"/>
+</xs:schema>`
+
+// TestLoad_LocalAttributeNamespace pins the {target namespace} XML Schema
+// Part 1, 3.2.2 gives an attribute declaration: the target namespace for a
+// top-level one, and for a local one only when its form, or failing that
+// attributeFormDefault, is qualified.
+func TestLoad_LocalAttributeNamespace(t *testing.T) {
+	for name, tc := range map[string]struct {
+		xsd  string
+		want map[string]string
+	}{
+		"unqualified default": {attributeFormXSD, map[string]string{"currencyID": "", "scale": "urn:t"}},
+		"qualified default":   {qualifiedFormXSD, map[string]string{"currencyID": "urn:t", "scale": ""}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := loadTestSchema(t, tc.xsd)
+			ct, ok := s.Types[QName{Namespace: "urn:t", Local: "AmountType"}].(*ComplexType)
+			if !ok {
+				t.Fatal("AmountType is not a complex type")
+			}
+			for _, use := range ct.Attributes {
+				if want := tc.want[use.Name.Local]; use.Name.Namespace != want {
+					t.Errorf("attribute %s: namespace %q, want %q", use.Name.Local, use.Name.Namespace, want)
+				}
+			}
+		})
+	}
+	s := loadTestSchema(t, attributeFormXSD)
+	if _, ok := s.Attributes[QName{Namespace: "urn:t", Local: "level"}]; !ok {
+		t.Error("the top-level attribute level is not indexed in the target namespace")
+	}
+}
+
+// TestValidate_AttributeQualification pins XML Schema Part 1, 3.4.4
+// (cvc-complex-type clauses 3.1 and 4): an attribute matches a declaration
+// when their namespaces are identical, so a prefixed attribute is not the
+// unqualified one a schema declares, and the reverse.
+func TestValidate_AttributeQualification(t *testing.T) {
+	const open = `<Amount xmlns="urn:t" xmlns:t="urn:t" `
+	for name, tc := range map[string]struct {
+		xsd, doc string
+		want     []string
+	}{
+		"unqualified matches":              {attributeFormXSD, open + `currencyID="EUR" t:scale="2">1</Amount>`, nil},
+		"prefixed is not unqualified":      {attributeFormXSD, open + `t:currencyID="EUR">1</Amount>`, []string{"required attribute missing", "not declared"}},
+		"form qualified wants a prefix":    {attributeFormXSD, open + `currencyID="EUR" scale="2">1</Amount>`, []string{"not declared"}},
+		"qualified default matches":        {qualifiedFormXSD, open + `t:currencyID="EUR" scale="2">1</Amount>`, nil},
+		"qualified default wants a prefix": {qualifiedFormXSD, open + `currencyID="EUR">1</Amount>`, []string{"required attribute missing", "not declared"}},
+		"form unqualified wants none":      {qualifiedFormXSD, open + `t:currencyID="EUR" t:scale="2">1</Amount>`, []string{"not declared"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			vs, err := Validate(context.Background(), loadTestSchema(t, tc.xsd), []byte(tc.doc))
+			if err != nil {
+				t.Fatalf("Validate: %v", err)
+			}
+			if len(vs) != len(tc.want) {
+				t.Fatalf("got %v, want %d violations naming %q", vs, len(tc.want), tc.want)
+			}
+			for i, want := range tc.want {
+				if vs[i].Rule != RuleAttribute || !strings.Contains(vs[i].Reason, want) {
+					t.Errorf("violation %d: got %v, want an attribute violation naming %q", i, vs[i], want)
+				}
+			}
+		})
+	}
+}

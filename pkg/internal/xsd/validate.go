@@ -617,11 +617,9 @@ func fixedValueMatches(value, fixed string, t Type) bool {
 	return false
 }
 
-// findAttr returns the value of an attribute matching want from
-// attrs, plus whether one was found. Match is by full QName so
-// namespaced attribute names like xml:lang resolve correctly; an
-// empty want namespace matches an unprefixed attribute, which is
-// the convention CII relies on.
+// findAttr returns the value of the attribute of attrs that the
+// declaration named want matches ([attrMatches]), plus whether one was
+// found.
 func findAttr(attrs []xml.Attr, want QName) (string, bool) {
 	for _, a := range attrs {
 		if attrMatches(a.Name, want) {
@@ -632,12 +630,22 @@ func findAttr(attrs []xml.Attr, want QName) (string, bool) {
 }
 
 // attrMatches reports whether the attribute name matches the declared
-// name want, as [findAttr] matches them.
+// name want. Per XML Schema Part 1, 3.4.4 (cvc-complex-type clause 3.1)
+// the local names must match and the namespaces be identical, a
+// declaration in no namespace matching an unprefixed attribute alone. A
+// local declaration is in no namespace unless its form makes it qualified
+// ([schemaDoc.localAttributeNamespace]), so a prefixed ram:currencyID is
+// not the currencyID the CII schemas declare.
+//
+// # Corpus evidence
+//
+//   - All corpora: the 159 files that embed XML carry 2526 unprefixed
+//     attributes and no prefixed one but xmlns and xsi, and no bundled
+//     schema sets attributeFormDefault or form, so the exact match moves no
+//     violation, through the Factur-X and ZUGFeRD validators or under any
+//     bundled schema.
 func attrMatches(name xml.Name, want QName) bool {
-	if name.Local != want.Local {
-		return false
-	}
-	return want.Namespace == "" || name.Space == want.Namespace || name.Space == ""
+	return name.Local == want.Local && name.Space == want.Namespace
 }
 
 // sequenceMatcher walks an xs:sequence content model. It accepts
