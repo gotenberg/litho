@@ -8,11 +8,11 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// TestIsForbiddenAction_NamedActions covers the extension that flags a /Named
+// TestIsForbiddenActionDict_NamedActions covers the extension that flags a /Named
 // action whose /N is not one of the four standard named actions (§6.6.1). The
 // forbidden-type behavior must stay intact.
-func TestIsForbiddenAction_NamedActions(t *testing.T) {
-	doc, alloc := newTestDoc(t, minimalCatalogPDF(""))
+func TestIsForbiddenActionDict_NamedActions(t *testing.T) {
+	doc, _ := newTestDoc(t, minimalCatalogPDF(""))
 	ctx := context.Background()
 	cases := []struct {
 		name string
@@ -28,8 +28,8 @@ func TestIsForbiddenAction_NamedActions(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := isForbiddenAction(ctx, alloc, doc, tc.act, "PDF/A-2b"); got != tc.want {
-				t.Errorf("isForbiddenAction(%v) = %v, want %v", tc.act, got, tc.want)
+			if got := isForbiddenActionDict(ctx, doc, tc.act, "PDF/A-2b"); got != tc.want {
+				t.Errorf("isForbiddenActionDict(%v) = %v, want %v", tc.act, got, tc.want)
 			}
 		})
 	}

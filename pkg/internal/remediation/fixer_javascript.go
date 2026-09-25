@@ -56,26 +56,34 @@ func fixJavaScript(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 	var fixes []string
 	catalogChanged := false
+	s := newActionSplice(alloc, doc, profile)
 
 	// Remove forbidden entries from catalog /AA.
 	if aaObj, ok := catalogDict["AA"]; ok {
-		catalogFixes, newCatalog := removeForbiddenFromAA(ctx, alloc, doc, catalogDict, aaObj, "catalog", profile)
+		catalogFixes, newCatalog := removeForbiddenFromAA(ctx, s, catalogDict, aaObj, "catalog")
 		if newCatalog != nil {
 			catalogDict = newCatalog
 			catalogChanged = true
-			fixes = append(fixes, catalogFixes...)
 		}
+		fixes = append(fixes, catalogFixes...)
 	}
 
-	// Remove /OpenAction if it references a forbidden action type.
+	// Cut the forbidden actions out of /OpenAction, removing it when none is
+	// left.
 	if oaObj, ok := catalogDict["OpenAction"]; ok {
-		if isForbiddenAction(ctx, alloc, doc, oaObj, profile) {
-			newCatalog := make(ast.PdfDict, len(catalogDict))
-			maps.Copy(newCatalog, catalogDict)
-			delete(newCatalog, "OpenAction")
-			catalogDict = newCatalog
+		cut := s.cut
+		value, keep, changed := s.entry(ctx, oaObj)
+		if changed {
+			catalogDict = maps.Clone(catalogDict)
+			if keep {
+				catalogDict["OpenAction"] = value
+			} else {
+				delete(catalogDict, "OpenAction")
+			}
 			catalogChanged = true
-			fixes = append(fixes, "removed forbidden /OpenAction from catalog")
+		}
+		if fix := s.report(cut, keep, "removed forbidden /OpenAction from catalog", "/OpenAction of catalog"); fix != "" {
+			fixes = append(fixes, fix)
 		}
 	}
 
@@ -97,7 +105,7 @@ func fixJavaScript(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	// AcroForm field tree rather than through any page. The walk runs before
 	// the catalog write because an inline field tree can only be written back
 	// through the catalog.
-	fieldFixes, newCatalog := fixForbiddenActionsOnFields(ctx, alloc, doc, catalogDict, profile)
+	fieldFixes, newCatalog := fixForbiddenActionsOnFields(ctx, s, catalogDict)
 	if newCatalog != nil {
 		catalogDict = newCatalog
 		catalogChanged = true
@@ -109,7 +117,7 @@ func fixJavaScript(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	}
 
 	// Walk pages to remove forbidden actions from page /AA and annotations.
-	pageFixes, err := fixForbiddenActionsOnPages(ctx, alloc, doc, catalogDict, profile)
+	pageFixes, err := fixForbiddenActionsOnPages(ctx, s, catalogDict)
 	if err != nil {
 		return fixes, fmt.Errorf("fixing forbidden actions on pages: %w", err)
 	}
@@ -117,10 +125,234 @@ func fixJavaScript(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 
 	// Outlines live outside the page tree but can still carry forbidden
 	// /A actions (PDF/A-2 §6.5.1 covers outline items too).
-	outlineFixes := fixForbiddenActionsOnOutlines(ctx, alloc, doc, catalogDict, profile)
+	outlineFixes := fixForbiddenActionsOnOutlines(ctx, s, catalogDict)
 	fixes = append(fixes, outlineFixes...)
 
 	return fixes, nil
+}
+
+// maxActionChainDepth bounds how deep [actionSplice] follows the /Next tree of
+// one action (ISO 32000-1, 12.6.2, Table 193), which it walks recursively.
+// Anti-DoS guard, not spec-mandated: the spec puts no length on a chain, and a
+// crafted one of direct dictionaries nested thousands deep would otherwise grow
+// the goroutine stack with it. Fan-out needs no cap of its own: the splice
+// handles each indirect action once and reuses its result, so a /Next array
+// that repeats an action, or a chain that loops back on itself, adds no work.
+// The value is the depth compliance's walkActionChain judges to (its
+// maxActionChainDepth), so the splice reaches every action the validator
+// flags, and an action beyond it is neither flagged nor cut.
+const maxActionChainDepth = 200
+
+// actionSplice cuts the actions a profile forbids out of action trees. An
+// action's /Next holds one action dictionary or an array of them, performed
+// after it (ISO 32000-1, 12.6.2, Table 193), so the actions form a tree, and
+// ISO 19005-1 6.6.1, ISO 19005-2/3 6.5.1 and ISO 19005-4 6.6.1 restrict every
+// action in it: compliance's walkActionChain judges each one.
+//
+// A forbidden action is replaced, in its parent's sequence, by its own /Next
+// actions, spliced in turn. The tree runs in pre-order (the action, then its
+// /Next in order), so the permitted actions keep their order: a GoTo whose
+// /Next is a JavaScript action keeps the GoTo, and a JavaScript action whose
+// /Next is a GoTo leaves the GoTo in its place. Dropping the whole entry
+// instead would be valid too, but it discards every permitted action behind
+// the first forbidden one, such as the navigation of every outline item whose
+// GoTo is followed by a script.
+//
+// Every action is read through the allocator. An indirect action is rewritten
+// at its own object number, since its spliced form is the same whichever
+// parent reaches it; a direct one is rebuilt in its parent. One splice serves a
+// whole fixer run, so an action several parents share is spliced once. Not
+// safe for concurrent use.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20914.pdf: 503 outline GoTo actions hold a JavaScript /Next.
+//     Remediated as PDF/A-1b or PDF/A-2b, the output kept all 503, which
+//     litho and veraPDF both report, while the fixer judged the first action
+//     of a chain alone. Spliced, neither reports any, and all 683 outline
+//     items keep their GoTo.
+//   - All corpora: the 343 profile runs of files that hold a forbidden action
+//     but no /Next chain remediate to the same residual rules and fix
+//     descriptions as before the splice.
+type actionSplice struct {
+	alloc   *writer.ObjAllocator
+	doc     *document.Document
+	profile string
+
+	// done holds, per indirect action spliced, the actions that replace it
+	// in a parent's sequence: itself, or its successors when it is cut.
+	done map[int]splicedAction
+	// active holds the verdict of each indirect action whose splice is under
+	// way, so a /Next cycle back to it ends there.
+	active map[int]bool
+	// cut counts the forbidden actions cut out of the entries spliced so far.
+	// An action two entries share counts in each.
+	cut int
+}
+
+// splicedAction is the outcome of splicing one action: the actions that take
+// its place, whether they differ from the action itself, and whether the
+// action itself is cut.
+type splicedAction struct {
+	actions []ast.PdfObject
+	changed bool
+	cut     bool
+}
+
+// newActionSplice returns an [actionSplice] for one run of the fixer.
+func newActionSplice(alloc *writer.ObjAllocator, doc *document.Document, profile string) *actionSplice {
+	return &actionSplice{
+		alloc:   alloc,
+		doc:     doc,
+		profile: profile,
+		done:    make(map[int]splicedAction),
+		active:  make(map[int]bool),
+	}
+}
+
+// entry splices the action tree an entry that holds one action holds (an /A,
+// an /AA trigger, an /OpenAction), and returns the value the entry takes.
+// keep is false when no action is left, and changed reports whether the value
+// differs from obj. A value that is not an action dictionary, such as a
+// destination array under /OpenAction, is left as it is.
+//
+// When several actions are left, the first becomes the entry's action with the
+// others appended to its /Next, which performs them in the same order. It is a
+// direct copy: another parent may share the original.
+func (s *actionSplice) entry(ctx context.Context, obj ast.PdfObject) (value ast.PdfObject, keep, changed bool) {
+	out := s.splice(ctx, obj, 0)
+	if !out.changed {
+		return obj, true, false
+	}
+	switch len(out.actions) {
+	case 0:
+		return nil, false, true
+	case 1:
+		return out.actions[0], true, true
+	}
+	// A leading entry that is no dictionary, such as a reference to a missing
+	// object, performs nothing, and only a dictionary can head the entry.
+	for i, obj := range out.actions {
+		first := liveDictValue(ctx, s.alloc, s.doc, obj)
+		if first == nil {
+			continue
+		}
+		head := maps.Clone(first)
+		head["Next"] = ast.PdfArray(slices.Concat(s.nextActions(ctx, first["Next"]), out.actions[i+1:]))
+		return head, true, true
+	}
+	return out.actions[0], true, true
+}
+
+// report returns the fix description for one entry spliced when the count of
+// cut actions stood at cut: removed when no action is left, a count of the
+// actions cut out of at's chain when some are, and "" when it lost none.
+func (s *actionSplice) report(cut int, keep bool, removed, at string) string {
+	switch {
+	case !keep:
+		return removed
+	case s.cut > cut:
+		return fmt.Sprintf("cut %d forbidden action(s) out of the action chain at %s", s.cut-cut, at)
+	}
+	return ""
+}
+
+// splice returns the actions that replace obj in its parent's sequence. See
+// [actionSplice].
+func (s *actionSplice) splice(ctx context.Context, obj ast.PdfObject, depth int) splicedAction {
+	unchanged := splicedAction{actions: []ast.PdfObject{obj}}
+	ref, isRef := obj.(ast.PdfIndirectRef)
+	isRef = isRef && ref.ObjectNum > 0
+	if isRef {
+		if out, ok := s.done[ref.ObjectNum]; ok {
+			if out.cut {
+				s.cut++
+			}
+			return out
+		}
+		// A /Next cycle came back to an action under way. A permitted one keeps
+		// the reference, since it stays in the tree; a forbidden one is cut, so
+		// the edge back to it goes.
+		if forbidden, ok := s.active[ref.ObjectNum]; ok {
+			if forbidden {
+				return splicedAction{changed: true}
+			}
+			return unchanged
+		}
+	}
+	if ctx.Err() != nil || depth > maxActionChainDepth {
+		return unchanged
+	}
+	action := liveDictValue(ctx, s.alloc, s.doc, obj)
+	if action == nil {
+		return unchanged
+	}
+
+	forbidden := isForbiddenActionDict(ctx, s.doc, action, s.profile)
+	if isRef {
+		s.active[ref.ObjectNum] = forbidden
+	}
+
+	var next []ast.PdfObject
+	nextChanged := false
+	nextObj, hasNext := action["Next"]
+	if hasNext {
+		for _, item := range s.nextActions(ctx, nextObj) {
+			out := s.splice(ctx, item, depth+1)
+			next = append(next, out.actions...)
+			nextChanged = nextChanged || out.changed
+		}
+	}
+
+	out := unchanged
+	switch {
+	case forbidden:
+		s.cut++
+		out = splicedAction{actions: next, changed: true, cut: true}
+	case nextChanged:
+		rewritten := maps.Clone(action)
+		switch len(next) {
+		case 0:
+			delete(rewritten, "Next")
+		case 1:
+			rewritten["Next"] = next[0]
+		default:
+			rewritten["Next"] = ast.PdfArray(next)
+		}
+		if isRef {
+			s.alloc.AllocAt(ref.ObjectNum, rewritten)
+		} else {
+			out = splicedAction{actions: []ast.PdfObject{rewritten}, changed: true}
+		}
+	}
+
+	if isRef {
+		delete(s.active, ref.ObjectNum)
+		s.done[ref.ObjectNum] = out
+	}
+	return out
+}
+
+// nextActions returns the actions a /Next value lists: the items of an array,
+// read through the allocator, or the value itself.
+func (s *actionSplice) nextActions(ctx context.Context, nextObj ast.PdfObject) []ast.PdfObject {
+	switch v := nextObj.(type) {
+	case nil:
+		return nil
+	case ast.PdfArray:
+		return v
+	case ast.PdfIndirectRef:
+		if pending, ok := s.alloc.Pending()[v.ObjectNum]; ok {
+			if arr, isArr := pending.(ast.PdfArray); isArr {
+				return arr
+			}
+			return []ast.PdfObject{nextObj}
+		}
+		if arr, err := document.ResolveArray(ctx, s.doc, v); err == nil {
+			return arr
+		}
+	}
+	return []ast.PdfObject{nextObj}
 }
 
 // removeNamesJavaScript drops the /JavaScript name tree from the catalog's
@@ -154,22 +386,22 @@ func removeNamesJavaScript(ctx context.Context, alloc *writer.ObjAllocator, doc 
 	return newCatalog, true
 }
 
-// fixForbiddenActionsOnOutlines walks the outline tree and strips /A entries
-// whose action subtype profile forbids (ISO 19005-2 §6.5.1).
-func fixForbiddenActionsOnOutlines(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, profile string) []string {
+// fixForbiddenActionsOnOutlines walks the outline tree and cuts the actions
+// profile forbids out of each item's /A (ISO 19005-2 §6.5.1).
+func fixForbiddenActionsOnOutlines(ctx context.Context, s *actionSplice, catalog ast.PdfDict) []string {
 	outlinesObj, ok := catalog["Outlines"]
 	if !ok {
 		return nil
 	}
 	visited := make(map[int]bool)
 	var fixes []string
-	walkOutlineItem(ctx, alloc, doc, outlinesObj, profile, visited, &fixes, 0)
+	walkOutlineItem(ctx, s, outlinesObj, visited, &fixes, 0)
 	return fixes
 }
 
 // walkOutlineItem recurses into /First and /Next sibling chains, bounded
 // by visited to break cycles in malformed outlines.
-func walkOutlineItem(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, profile string, visited map[int]bool, fixes *[]string, depth int) {
+func walkOutlineItem(ctx context.Context, s *actionSplice, obj ast.PdfObject, visited map[int]bool, fixes *[]string, depth int) {
 	if ctx.Err() != nil || depth > maxPageTreeDepth {
 		return
 	}
@@ -183,38 +415,47 @@ func walkOutlineItem(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 
 	var dict ast.PdfDict
 	if isRef && ref.ObjectNum > 0 {
-		dict = resolveFromAllocOrDoc(ctx, alloc, doc, ref)
+		dict = resolveFromAllocOrDoc(ctx, s.alloc, s.doc, ref)
 	}
 	if dict == nil {
-		resolved, err := document.ResolveDict(ctx, doc, obj)
+		resolved, err := document.ResolveDict(ctx, s.doc, obj)
 		if err != nil || resolved == nil {
 			return
 		}
 		dict = resolved
 	}
 
-	if aObj, hasA := dict["A"]; hasA && isForbiddenAction(ctx, alloc, doc, aObj, profile) {
-		newDict := make(ast.PdfDict, len(dict))
-		maps.Copy(newDict, dict)
-		delete(newDict, "A")
-		dict = newDict
-		if isRef && ref.ObjectNum > 0 {
-			alloc.AllocAt(ref.ObjectNum, dict)
+	if aObj, hasA := dict["A"]; hasA {
+		cut := s.cut
+		value, keep, changed := s.entry(ctx, aObj)
+		if changed {
+			dict = maps.Clone(dict)
+			if keep {
+				dict["A"] = value
+			} else {
+				delete(dict, "A")
+			}
+			if isRef && ref.ObjectNum > 0 {
+				s.alloc.AllocAt(ref.ObjectNum, dict)
+			}
 		}
-		*fixes = append(*fixes, "removed forbidden /A action from outline item")
+		if fix := s.report(cut, keep, "removed forbidden /A action from outline item", "/A of outline item"); fix != "" {
+			*fixes = append(*fixes, fix)
+		}
 	}
 
 	if first, ok := dict["First"]; ok {
-		walkOutlineItem(ctx, alloc, doc, first, profile, visited, fixes, depth+1)
+		walkOutlineItem(ctx, s, first, visited, fixes, depth+1)
 	}
 	if next, ok := dict["Next"]; ok {
-		walkOutlineItem(ctx, alloc, doc, next, profile, visited, fixes, depth+1)
+		walkOutlineItem(ctx, s, next, visited, fixes, depth+1)
 	}
 }
 
 // fixForbiddenActionsOnPages walks the page tree and removes forbidden /A and
 // /AA entries from page dicts and their annotations.
-func fixForbiddenActionsOnPages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, profile string) ([]string, error) {
+func fixForbiddenActionsOnPages(ctx context.Context, s *actionSplice, catalog ast.PdfDict) ([]string, error) {
+	alloc, doc := s.alloc, s.doc
 	pagesObj, ok := catalog["Pages"]
 	if !ok {
 		return nil, nil
@@ -234,14 +475,14 @@ func fixForbiddenActionsOnPages(ctx context.Context, alloc *writer.ObjAllocator,
 
 		// Remove forbidden entries from page /AA.
 		if aaObj, ok := pageDict["AA"]; ok {
-			pageFixes, newPage := removeForbiddenFromAA(ctx, alloc, doc, pageDict, aaObj, fmt.Sprintf("page %d", pageNum), profile)
+			pageFixes, newPage := removeForbiddenFromAA(ctx, s, pageDict, aaObj, fmt.Sprintf("page %d", pageNum))
 			if newPage != nil {
 				pageDict = newPage
 				if pe.ref.ObjectNum > 0 {
 					alloc.AllocAt(pe.ref.ObjectNum, pageDict)
 				}
-				fixes = append(fixes, pageFixes...)
 			}
+			fixes = append(fixes, pageFixes...)
 		}
 
 		// Walk annotations and remove forbidden /A and /AA. The array is read
@@ -277,8 +518,11 @@ func fixForbiddenActionsOnPages(ctx context.Context, alloc *writer.ObjAllocator,
 				annotDict = resolved
 			}
 
-			newAnnot, annotFixes := stripAnnotationActions(ctx, alloc, doc, annotDict, pageNum, profile)
+			newAnnot, annotFixes := stripAnnotationActions(ctx, s, annotDict, pageNum)
 			if newAnnot == nil {
+				// Only actions rewritten at their own object numbers, if any,
+				// which have been written already.
+				fixes = append(fixes, annotFixes...)
 				continue
 			}
 			if annotRef.ObjectNum > 0 {
@@ -305,10 +549,11 @@ func fixForbiddenActionsOnPages(ctx context.Context, alloc *writer.ObjAllocator,
 	return fixes, nil
 }
 
-// stripAnnotationActions returns a copy of annotDict without the forbidden
-// actions its /A and /AA hold, with the fix descriptions, or nil when it holds
-// none.
-func stripAnnotationActions(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, annotDict ast.PdfDict, pageNum int, profile string) (ast.PdfDict, []string) {
+// stripAnnotationActions returns a copy of annotDict with the forbidden actions
+// cut out of its /A and /AA, with the fix descriptions, or nil when annotDict
+// itself needs no change. The descriptions also cover the actions cut from
+// indirect actions it reaches, which [actionSplice] rewrites in place.
+func stripAnnotationActions(ctx context.Context, s *actionSplice, annotDict ast.PdfDict, pageNum int) (ast.PdfDict, []string) {
 	var newAnnot ast.PdfDict
 	var fixes []string
 	clone := func() {
@@ -317,14 +562,24 @@ func stripAnnotationActions(ctx context.Context, alloc *writer.ObjAllocator, doc
 		}
 	}
 
-	if aObj, hasA := annotDict["A"]; hasA && isForbiddenAction(ctx, alloc, doc, aObj, profile) {
-		clone()
-		delete(newAnnot, "A")
-		fixes = append(fixes, fmt.Sprintf("removed forbidden /A action from annotation on page %d", pageNum))
+	if aObj, hasA := annotDict["A"]; hasA {
+		cut := s.cut
+		value, keep, changed := s.entry(ctx, aObj)
+		if changed {
+			clone()
+			if keep {
+				newAnnot["A"] = value
+			} else {
+				delete(newAnnot, "A")
+			}
+		}
+		if fix := s.report(cut, keep, fmt.Sprintf("removed forbidden /A action from annotation on page %d", pageNum), fmt.Sprintf("/A of annotation on page %d", pageNum)); fix != "" {
+			fixes = append(fixes, fix)
+		}
 	}
 
 	if aaObj, hasAA := annotDict["AA"]; hasAA {
-		aaFixes, cleaned := removeForbiddenFromAADict(ctx, alloc, doc, aaObj, fmt.Sprintf("annotation on page %d", pageNum), profile)
+		aaFixes, cleaned := removeForbiddenFromAADict(ctx, s, aaObj, fmt.Sprintf("annotation on page %d", pageNum))
 		if cleaned != nil {
 			clone()
 			if len(cleaned) == 0 {
@@ -332,8 +587,8 @@ func stripAnnotationActions(ctx context.Context, alloc *writer.ObjAllocator, doc
 			} else {
 				newAnnot["AA"] = cleaned
 			}
-			fixes = append(fixes, aaFixes...)
 		}
+		fixes = append(fixes, aaFixes...)
 	}
 	return newAnnot, fixes
 }
@@ -369,7 +624,8 @@ const maxFieldTreeDepth = 200
 //     4 and 10 fields under 6.4.1 test 2, as PDF/A-1b the same counts under
 //     6.6.1 test 1 and 6.6.2 test 2. The walk clears every one, in litho and
 //     in veraPDF, since each /AA held nothing else.
-func fixForbiddenActionsOnFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, profile string) ([]string, ast.PdfDict) {
+func fixForbiddenActionsOnFields(ctx context.Context, s *actionSplice, catalog ast.PdfDict) ([]string, ast.PdfDict) {
+	alloc, doc := s.alloc, s.doc
 	acroFormObj, ok := catalog["AcroForm"]
 	if !ok {
 		return nil, nil
@@ -383,7 +639,7 @@ func fixForbiddenActionsOnFields(ctx context.Context, alloc *writer.ObjAllocator
 		return nil, nil
 	}
 
-	w := fieldActionWalk{alloc: alloc, doc: doc, profile: profile, seen: make(map[int]bool)}
+	w := fieldActionWalk{alloc: alloc, doc: doc, splice: s, seen: make(map[int]bool)}
 	newFields, changed := w.array(ctx, fieldsObj, true, 0)
 	if !changed {
 		return w.fixes, nil
@@ -403,11 +659,11 @@ func fixForbiddenActionsOnFields(ctx context.Context, alloc *writer.ObjAllocator
 // seen processes each field object once, so a shared or cyclic /Kids tree
 // cannot force exponential work or loop.
 type fieldActionWalk struct {
-	alloc   *writer.ObjAllocator
-	doc     *document.Document
-	profile string
-	seen    map[int]bool
-	fixes   []string
+	alloc  *writer.ObjAllocator
+	doc    *document.Document
+	splice *actionSplice
+	seen   map[int]bool
+	fixes  []string
 }
 
 // array walks one /Fields or /Kids array. It returns the value the parent
@@ -464,8 +720,8 @@ func (w *fieldActionWalk) array(ctx context.Context, arrObj ast.PdfObject, liste
 	return newArr, true
 }
 
-// field returns a copy of one field dictionary without the forbidden actions
-// its /AA holds and with its rewritten /Kids, or nil when neither changed.
+// field returns a copy of one field dictionary with the forbidden actions cut
+// out of its /AA and with its rewritten /Kids, or nil when neither changed.
 //
 // Only a form field's /AA is judged, mirroring compliance's walkFormFields:
 // every dictionary /Fields lists, and below a field only the kids carrying a
@@ -477,7 +733,7 @@ func (w *fieldActionWalk) field(ctx context.Context, field ast.PdfDict, location
 
 	var newField ast.PdfDict
 	if aaObj, hasAA := field["AA"]; hasAA && isField {
-		aaFixes, cleaned := removeForbiddenFromAADict(ctx, w.alloc, w.doc, aaObj, location, w.profile)
+		aaFixes, cleaned := removeForbiddenFromAADict(ctx, w.splice, aaObj, location)
 		if cleaned != nil {
 			newField = maps.Clone(field)
 			if len(cleaned) == 0 {
@@ -485,8 +741,8 @@ func (w *fieldActionWalk) field(ctx context.Context, field ast.PdfDict, location
 			} else {
 				newField["AA"] = cleaned
 			}
-			w.fixes = append(w.fixes, aaFixes...)
 		}
+		w.fixes = append(w.fixes, aaFixes...)
 	}
 
 	if kidsObj, hasKids := field["Kids"]; hasKids {
@@ -511,14 +767,11 @@ func hasNonNullEntry(dict ast.PdfDict, key ast.PdfName) bool {
 	return !isNull
 }
 
-// isForbiddenAction checks if the given object is an action dict whose type
-// profile forbids (see [stripsActionType]). The action is read alloc-first,
-// so the verdict judges the action an earlier fixer left.
-func isForbiddenAction(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, profile string) bool {
-	d := liveDictValue(ctx, alloc, doc, obj)
-	if d == nil {
-		return false
-	}
+// isForbiddenActionDict reports whether profile forbids the action d is, by
+// its type (see [stripsActionType]) or its name. The caller reads d through
+// the allocator, so the verdict judges the action an earlier fixer left. Only
+// the action itself is judged: [actionSplice] walks its /Next.
+func isForbiddenActionDict(ctx context.Context, doc *document.Document, d ast.PdfDict, profile string) bool {
 	s, _ := document.ResolveName(ctx, doc, d["S"])
 	if s == "" {
 		return false
@@ -540,13 +793,15 @@ func isForbiddenAction(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	return false
 }
 
-// removeForbiddenFromAA removes entries with forbidden action types from an /AA
-// dict on the given parent dict. Returns the fix descriptions and a new parent
-// dict if changes were made, or nil if no changes were needed.
-func removeForbiddenFromAA(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, parentDict ast.PdfDict, aaObj ast.PdfObject, location, profile string) ([]string, ast.PdfDict) {
-	aaFixes, cleaned := removeForbiddenFromAADict(ctx, alloc, doc, aaObj, location, profile)
+// removeForbiddenFromAA cuts the forbidden actions out of the /AA dict on the
+// given parent dict. Returns the fix descriptions and a new parent dict when
+// the /AA dict changed, or nil when it did not; the descriptions also cover
+// the actions cut from indirect actions, which [actionSplice] rewrites in
+// place.
+func removeForbiddenFromAA(ctx context.Context, s *actionSplice, parentDict ast.PdfDict, aaObj ast.PdfObject, location string) ([]string, ast.PdfDict) {
+	aaFixes, cleaned := removeForbiddenFromAADict(ctx, s, aaObj, location)
 	if cleaned == nil {
-		return nil, nil
+		return aaFixes, nil
 	}
 
 	newParent := make(ast.PdfDict, len(parentDict))
@@ -559,35 +814,41 @@ func removeForbiddenFromAA(ctx context.Context, alloc *writer.ObjAllocator, doc 
 	return aaFixes, newParent
 }
 
-// removeForbiddenFromAADict resolves an /AA dict and removes entries whose
-// action values have forbidden types. Returns fix descriptions and the cleaned
-// dict, or nil if no changes were needed. The dict is read alloc-first: the
-// cleaned copy replaces it in the parent, so a copy of the document's version
-// would discard an earlier fixer's edit to an indirect /AA.
-func removeForbiddenFromAADict(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, aaObj ast.PdfObject, location, profile string) ([]string, ast.PdfDict) {
-	aaDict := liveDictValue(ctx, alloc, doc, aaObj)
+// removeForbiddenFromAADict resolves an /AA dict and cuts the forbidden actions
+// out of the action tree under each entry, removing an entry left with none.
+// Returns fix descriptions and the cleaned dict, or nil when the dict itself
+// needs no change. The dict is read alloc-first: the cleaned copy replaces it
+// in the parent, so a copy of the document's version would discard an earlier
+// fixer's edit to an indirect /AA.
+func removeForbiddenFromAADict(ctx context.Context, s *actionSplice, aaObj ast.PdfObject, location string) ([]string, ast.PdfDict) {
+	aaDict := liveDictValue(ctx, s.alloc, s.doc, aaObj)
 	if aaDict == nil {
 		return nil, nil
 	}
 
 	// Sorted: the caller turns these into report lines, and ranging the
 	// dictionary ordered them randomly between runs of the same file.
-	var forbidden []ast.PdfName
-	for _, k := range slices.Sorted(maps.Keys(aaDict)) {
-		if isForbiddenAction(ctx, alloc, doc, aaDict[k], profile) {
-			forbidden = append(forbidden, k)
-		}
-	}
-	if len(forbidden) == 0 {
-		return nil, nil
-	}
-
-	cleaned := make(ast.PdfDict, len(aaDict))
-	maps.Copy(cleaned, aaDict)
+	var cleaned ast.PdfDict
 	var fixes []string
-	for _, k := range forbidden {
-		delete(cleaned, k)
-		fixes = append(fixes, fmt.Sprintf("removed forbidden /AA/%s action from %s", string(k), location))
+	for _, k := range slices.Sorted(maps.Keys(aaDict)) {
+		if ctx.Err() != nil {
+			break
+		}
+		cut := s.cut
+		value, keep, changed := s.entry(ctx, aaDict[k])
+		if changed {
+			if cleaned == nil {
+				cleaned = maps.Clone(aaDict)
+			}
+			if keep {
+				cleaned[k] = value
+			} else {
+				delete(cleaned, k)
+			}
+		}
+		if fix := s.report(cut, keep, fmt.Sprintf("removed forbidden /AA/%s action from %s", string(k), location), fmt.Sprintf("/AA/%s of %s", string(k), location)); fix != "" {
+			fixes = append(fixes, fix)
+		}
 	}
 	return fixes, cleaned
 }
