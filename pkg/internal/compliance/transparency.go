@@ -43,21 +43,53 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 // sharing one stream that paints a soft masked image and a form with a
 // transparency group and sets two graphics states with constant alpha fail
 // 6.4 t2, t3, t5 and t6 once each, as one of the pages alone does.
+//
+// veraPDF judges an object it reaches again only the first time, and the
+// survey states each rule as often. Measured the same way:
+//
+//   - A soft masked image and a graphics state written as an indirect object
+//     fail 6.4 t2 and the graphics state rules once for the whole document,
+//     however many pages, forms or Do and gs operators draw them.
+//   - A graphics state written directly in a resource dictionary has no
+//     object of its own, and fails once for every gs that sets it in a
+//     content stream, which is itself judged once (see visited below).
+//   - A form's own /SMask, and a transparency /Group written directly in it,
+//     fail once for every Do that paints it, and an annotation appearance's
+//     once for every annotation. A group written as an indirect object fails
+//     once for the whole document; see [transparencyGroup1].
+//   - The streams a form, a pattern or a glyph description draws, and an
+//     appearance stream's, are judged once for the whole document: a form two
+//     pages paint, or an appearance two annotations share, fails the rules of
+//     what it draws once.
+//
+// judged holds the image XObjects, graphics states and transparency groups
+// judged so far, and visited the streams and fonts whose resources the survey
+// has walked, which also breaks resource cycles.
+//
+// # Corpus evidence
+//
+//   - All corpora: 104 counts of ISO 19005-1, 6.4 t1 to t6 at PDF/A-1b moved
+//     toward veraPDF's and none away, 103 of them onto it, when litho stopped
+//     judging each object once per page, per resource dictionary and per
+//     annotation; their summed distance from veraPDF fell from 18171 to 6.
+//   - govdocs thread_000_000146.pdf: names the same indirect graphics states
+//     from the resources of many of its 163 forms, and veraPDF fails 6.4 t4,
+//     t5 and t6 two or three times, where litho failed them 19 or 20 times.
 func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages []pageCtx) []Violation {
 	var results []Violation
+	judged := make(map[int]bool)
+	visited := make(map[int]bool)
 	for i := range pages {
 		page := pages[i].dict
 		if ctx.Err() != nil {
 			return results
 		}
 
-		results = append(results, checkPageTransparencyGroup1(ctx, doc, page, i+1)...)
-
-		visited := make(map[int]bool)
+		results = append(results, checkPageTransparencyGroup1(ctx, doc, page, i+1, judged)...)
 
 		res := resolveInheritedResources(ctx, doc, page)
 		if res != nil && !pages[i].contentJudged {
-			results = append(results, checkResourceTransparency1(ctx, doc, res, i+1, visited, 0,
+			results = append(results, checkResourceTransparency1(ctx, doc, res, i+1, visited, judged, 0,
 				pageDrawnResources(ctx, &pages[i]))...)
 		}
 
@@ -65,7 +97,7 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 		// ExtGState reached only inside an appearance form is still part of
 		// the rendered content and falls under the PDF/A-1 §6.4 transparency
 		// restrictions.
-		results = append(results, checkAnnotAPTransparency1(ctx, doc, page, i+1, visited)...)
+		results = append(results, checkAnnotAPTransparency1(ctx, doc, page, i+1, visited, judged)...)
 	}
 	return results
 }
@@ -77,18 +109,18 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 // nested XObjects and patterns rather than stopping at the page dict. visited
 // breaks resource cycles; depth is capped by the form budget ([formTooDeep]),
 // the anti-DoS guard every form walk shares.
-func checkResourceTransparency1(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, visited map[int]bool, depth int, drawn *drawnResources) []Violation {
+func checkResourceTransparency1(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, visited, judged map[int]bool, depth int, drawn *drawnResources) []Violation {
 	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return nil
 	}
 
-	results := checkExtGStateTransparency1(ctx, doc, res, pageNum, drawn)
-	results = append(results, checkXObjectTransparency1(ctx, doc, res, pageNum, drawn)...)
+	results := checkExtGStateTransparency1(ctx, doc, res, pageNum, drawn, judged)
+	results = append(results, checkXObjectTransparency1(ctx, doc, res, pageNum, drawn, judged)...)
 
-	results = append(results, walkNestedResources1(ctx, doc, res["XObject"], pageNum, visited, depth, drawn.drawsXObject)...)
+	results = append(results, walkNestedResources1(ctx, doc, res["XObject"], pageNum, visited, judged, depth, drawn.drawsXObject)...)
 	// A pattern is selected by scn or SCN, which [drawnResources] does not
 	// record, so every pattern the resources declare is walked.
-	results = append(results, walkNestedResources1(ctx, doc, res["Pattern"], pageNum, visited, depth, nil)...)
+	results = append(results, walkNestedResources1(ctx, doc, res["Pattern"], pageNum, visited, judged, depth, nil)...)
 
 	// Type 3 font resources: a CharProc is a content stream, and its
 	// operators draw through the font's own /Resources. A transparency Group
@@ -119,7 +151,7 @@ func checkResourceTransparency1(ctx context.Context, doc *document.Document, res
 			if fontRes, resErr := document.ResolveDict(ctx, doc, fd["Resources"]); resErr == nil && fontRes != nil {
 				// A Type 3 glyph draws through its own CharProc, whose operators
 				// are not in hand here, so its resources stay unscoped.
-				results = append(results, checkResourceTransparency1(ctx, doc, fontRes, pageNum, visited, depth+1, nil)...)
+				results = append(results, checkResourceTransparency1(ctx, doc, fontRes, pageNum, visited, judged, depth+1, nil)...)
 			}
 
 			// A glyph procedure is itself a content stream (ISO 32000-1, 9.6.5),
@@ -151,7 +183,7 @@ func checkResourceTransparency1(ctx context.Context, doc *document.Document, res
 				if nestedErr != nil || procRes == nil {
 					continue
 				}
-				results = append(results, checkResourceTransparency1(ctx, doc, procRes, pageNum, visited, depth+1,
+				results = append(results, checkResourceTransparency1(ctx, doc, procRes, pageNum, visited, judged, depth+1,
 					formDrawnResources(ctx, doc, stream))...)
 			}
 		}
@@ -163,7 +195,7 @@ func checkResourceTransparency1(ctx context.Context, doc *document.Document, res
 // XObject or Pattern resource sub-dictionary that drawn admits, or of every
 // stream when drawn is nil. Names are sorted so the violation order is
 // deterministic.
-func walkNestedResources1(ctx context.Context, doc *document.Document, dictObj ast.PdfObject, pageNum int, visited map[int]bool, depth int, drawn func(string) bool) []Violation {
+func walkNestedResources1(ctx context.Context, doc *document.Document, dictObj ast.PdfObject, pageNum int, visited, judged map[int]bool, depth int, drawn func(string) bool) []Violation {
 	dict, err := document.ResolveDict(ctx, doc, dictObj)
 	if err != nil || dict == nil {
 		return nil
@@ -195,7 +227,7 @@ func walkNestedResources1(ctx context.Context, doc *document.Document, dictObj a
 		if err != nil || nested == nil {
 			continue
 		}
-		results = append(results, checkResourceTransparency1(ctx, doc, nested, pageNum, visited, depth+1,
+		results = append(results, checkResourceTransparency1(ctx, doc, nested, pageNum, visited, judged, depth+1,
 			formDrawnResources(ctx, doc, stream))...)
 	}
 	return results
@@ -206,10 +238,10 @@ func walkNestedResources1(ctx context.Context, doc *document.Document, dictObj a
 // /Group and /SMask, plus the ExtGStates and nested XObjects in its
 // /Resources. An appearance form is a form XObject that paints the
 // annotation, so a transparency Group or /SMask on it is rendered content and
-// falls under §6.4. visited dedups appearance forms shared across annotations
-// so a forbidden Group fires once per form, not once per referencing
-// annotation.
-func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int, visited map[int]bool) []Violation {
+// falls under §6.4. The form's own keys are judged once for every annotation
+// that shows it, and what it draws once for the whole document; see
+// [checkTransparencyPart1].
+func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int, visited, judged map[int]bool) []Violation {
 	annots, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annots) == 0 {
 		return nil
@@ -229,7 +261,7 @@ func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page
 			continue
 		}
 		for _, apName := range sortedNames(apDict) {
-			results = append(results, appearanceTransparency1(ctx, doc, apDict[apName], pageNum, visited)...)
+			results = append(results, appearanceTransparency1(ctx, doc, apDict[apName], pageNum, visited, judged)...)
 		}
 	}
 	return results
@@ -238,9 +270,9 @@ func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page
 // appearanceTransparency1 checks one /AP entry, either an appearance form
 // XObject stream or a sub-dictionary of appearance states (e.g. a button's
 // /On and /Off), for forbidden PDF/A-1 transparency.
-func appearanceTransparency1(ctx context.Context, doc *document.Document, entry ast.PdfObject, pageNum int, visited map[int]bool) []Violation {
+func appearanceTransparency1(ctx context.Context, doc *document.Document, entry ast.PdfObject, pageNum int, visited, judged map[int]bool) []Violation {
 	if stream, err := document.ResolveStream(ctx, doc, entry); err == nil {
-		return appearanceStreamTransparency1(ctx, doc, entry, stream, pageNum, visited)
+		return appearanceStreamTransparency1(ctx, doc, entry, stream, pageNum, visited, judged)
 	}
 	subDict, err := document.ResolveDict(ctx, doc, entry)
 	if err != nil || subDict == nil {
@@ -250,25 +282,25 @@ func appearanceTransparency1(ctx context.Context, doc *document.Document, entry 
 	for _, name := range sortedNames(subDict) {
 		sub := subDict[name]
 		if stream, err := document.ResolveStream(ctx, doc, sub); err == nil {
-			results = append(results, appearanceStreamTransparency1(ctx, doc, sub, stream, pageNum, visited)...)
+			results = append(results, appearanceStreamTransparency1(ctx, doc, sub, stream, pageNum, visited, judged)...)
 		}
 	}
 	return results
 }
 
 // appearanceStreamTransparency1 checks an appearance form XObject's own
-// transparency keys and recurses into its /Resources, deduping shared
-// appearance forms through visited.
-func appearanceStreamTransparency1(ctx context.Context, doc *document.Document, entry ast.PdfObject, stream ast.PdfStream, pageNum int, visited map[int]bool) []Violation {
+// transparency keys and recurses into its /Resources, which visited walks once
+// however many annotations share the form.
+func appearanceStreamTransparency1(ctx context.Context, doc *document.Document, entry ast.PdfObject, stream ast.PdfStream, pageNum int, visited, judged map[int]bool) []Violation {
+	results := formXObjectTransparency1(ctx, doc, stream.Dict, pageNum, "annotation appearance", 1, judged)
 	if ref, ok := entry.(ast.PdfIndirectRef); ok {
 		if visited[ref.ObjectNum] {
-			return nil
+			return results
 		}
 		visited[ref.ObjectNum] = true
 	}
-	results := formXObjectTransparency1(ctx, doc, stream.Dict, pageNum, "annotation appearance")
 	if nested, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && nested != nil {
-		results = append(results, checkResourceTransparency1(ctx, doc, nested, pageNum, visited, 0,
+		results = append(results, checkResourceTransparency1(ctx, doc, nested, pageNum, visited, judged, 0,
 			formDrawnResources(ctx, doc, stream))...)
 	}
 	return results
@@ -295,23 +327,10 @@ func sortedByteKeys(m map[byte]bool) []byte {
 	return keys
 }
 
-// checkPageTransparencyGroup1 checks for forbidden transparency Group on a page (PDF/A-1).
-func checkPageTransparencyGroup1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int) []Violation {
-	groupObj, hasGroup := page["Group"]
-	if !hasGroup {
-		return nil
-	}
-
-	group, err := document.ResolveDict(ctx, doc, groupObj)
-	if err != nil || group == nil {
-		return nil
-	}
-
-	sName, _ := document.ResolveName(ctx, doc, group["S"])
-	if sName == "Transparency" {
-		return failf(Rule_19005_1_6_4_t03, "page %d", pageNum)
-	}
-	return nil
+// checkPageTransparencyGroup1 checks for forbidden transparency Group on a
+// page (PDF/A-1); see [transparencyGroup1].
+func checkPageTransparencyGroup1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int, judged map[int]bool) []Violation {
+	return transparencyGroup1(ctx, doc, page["Group"], 1, judged, "page %d", pageNum)
 }
 
 // checkExtGStateTransparency1 checks all ExtGState entries for transparency
@@ -322,7 +341,7 @@ func checkPageTransparencyGroup1(ctx context.Context, doc *document.Document, pa
 //   - pdfjs issue20914.pdf: declares /GDIModeMask with a /Darken blend mode
 //     and never sets it, and veraPDF reports only the /Transparent state a
 //     form actually applies.
-func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, resources ast.PdfDict, pageNum int, drawn *drawnResources) []Violation {
+func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, resources ast.PdfDict, pageNum int, drawn *drawnResources, judged map[int]bool) []Violation {
 	gsDict, err := document.ResolveDict(ctx, doc, resources["ExtGState"])
 	if err != nil || gsDict == nil {
 		return nil
@@ -341,19 +360,31 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 		if !drawn.setsExtGState(string(gsName)) {
 			continue
 		}
+		// A state written as an indirect object is judged once for the whole
+		// document, and one written here once for every gs that sets it; see
+		// [checkTransparencyPart1].
+		times := drawn.gsCount(string(gsName))
+		if ref, ok := gsObj.(ast.PdfIndirectRef); ok {
+			if judged[ref.ObjectNum] {
+				continue
+			}
+			judged[ref.ObjectNum] = true
+			times = 1
+		}
 
 		gs, err := document.ResolveDict(ctx, doc, gsObj)
 		if err != nil || gs == nil {
 			continue
 		}
 
+		var found []Violation
 		// SMask must be None or absent. veraPDF reads the key with knownKey
 		// ([knownKey]): a direct null is absent (ISO 32000-1, 7.3.7), a reference
 		// to a null object is an SMask that is not None. Measured.
 		if smaskObj := gs["SMask"]; knownKey(gs, "SMask") {
 			smaskName, _ := document.ResolveName(ctx, doc, smaskObj)
 			if smaskName != "None" {
-				results = append(results, failf(Rule_19005_1_6_4_t01, "page %d, ExtGState %s", pageNum, string(gsName))...)
+				found = append(found, failf(Rule_19005_1_6_4_t01, "page %d, ExtGState %s", pageNum, string(gsName))...)
 			}
 		}
 
@@ -361,7 +392,7 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 		if bmObj, hasBM := gs["BM"]; hasBM {
 			bm := resolveBlendMode(ctx, doc, bmObj)
 			if bm != "" && bm != "Normal" && bm != "Compatible" {
-				results = append(results, failf(Rule_19005_1_6_4_t04, "page %d, ExtGState %s, BM=%s", pageNum, string(gsName), bm)...)
+				found = append(found, failf(Rule_19005_1_6_4_t04, "page %d, ExtGState %s, BM=%s", pageNum, string(gsName), bm)...)
 			}
 		}
 
@@ -369,7 +400,7 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 		if caObj, hasCA := gs["CA"]; hasCA {
 			ca := document.Float(caObj)
 			if !floatEquals1(ca) {
-				results = append(results, failf(Rule_19005_1_6_4_t05, "page %d, ExtGState %s, CA=%g", pageNum, string(gsName), ca)...)
+				found = append(found, failf(Rule_19005_1_6_4_t05, "page %d, ExtGState %s, CA=%g", pageNum, string(gsName), ca)...)
 			}
 		}
 
@@ -377,8 +408,11 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 		if caObj, hasCa := gs["ca"]; hasCa {
 			ca := document.Float(caObj)
 			if !floatEquals1(ca) {
-				results = append(results, failf(Rule_19005_1_6_4_t06, "page %d, ExtGState %s, ca=%g", pageNum, string(gsName), ca)...)
+				found = append(found, failf(Rule_19005_1_6_4_t06, "page %d, ExtGState %s, ca=%g", pageNum, string(gsName), ca)...)
 			}
+		}
+		for range times {
+			results = append(results, found...)
 		}
 	}
 	return results
@@ -406,7 +440,7 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 //     litho now does.
 //   - All corpora: 26 counts of ISO 19005-1, 6.4 t2, t3, t5 and t6 at
 //     PDF/A-1b moved toward veraPDF's and none away, 19 of them onto it.
-func checkXObjectTransparency1(ctx context.Context, doc *document.Document, resources ast.PdfDict, pageNum int, drawn *drawnResources) []Violation {
+func checkXObjectTransparency1(ctx context.Context, doc *document.Document, resources ast.PdfDict, pageNum int, drawn *drawnResources, judged map[int]bool) []Violation {
 	xobjDict, err := document.ResolveDict(ctx, doc, resources["XObject"])
 	if err != nil || xobjDict == nil {
 		return nil
@@ -435,31 +469,77 @@ func checkXObjectTransparency1(ctx context.Context, doc *document.Document, reso
 		if xo == nil {
 			continue
 		}
-		results = append(results, formXObjectTransparency1(ctx, doc, xo, pageNum, "XObject "+string(xoName))...)
+		// An image is judged once for the whole document, and anything else
+		// once for every Do that paints it; see [checkTransparencyPart1].
+		times := drawn.doCount(string(xoName))
+		if subtype, _ := document.ResolveName(ctx, doc, xo["Subtype"]); subtype == "Image" {
+			if ref, ok := xoObj.(ast.PdfIndirectRef); ok {
+				if judged[ref.ObjectNum] {
+					continue
+				}
+				judged[ref.ObjectNum] = true
+			}
+			times = 1
+		}
+		results = append(results, formXObjectTransparency1(ctx, doc, xo, pageNum, "XObject "+string(xoName), times, judged)...)
 	}
 	return results
 }
 
 // formXObjectTransparency1 fires the PDF/A-1 §6.4 SMask (t2) and
-// transparency-Group (t3) checks for a single form XObject dictionary.
-// label identifies the XObject in the violation context.
-func formXObjectTransparency1(ctx context.Context, doc *document.Document, xo ast.PdfDict, pageNum int, label string) []Violation {
+// transparency-Group (t3) checks for a single XObject dictionary that times
+// Do operators, or annotations, draw. label identifies the XObject in the
+// violation context. The SMask check fails once for every draw, and the group
+// check as [transparencyGroup1] says.
+func formXObjectTransparency1(ctx context.Context, doc *document.Document, xo ast.PdfDict, pageNum int, label string, times int, judged map[int]bool) []Violation {
 	var results []Violation
 
 	// SMask key must not be present on XObjects: a direct null is absent, a
 	// reference counts ([knownKey]). Measured.
 	if knownKey(xo, "SMask") {
-		results = append(results, failf(Rule_19005_1_6_4_t02, "page %d, %s", pageNum, label)...)
+		for range times {
+			results = append(results, failf(Rule_19005_1_6_4_t02, "page %d, %s", pageNum, label)...)
+		}
 	}
 
 	// Transparency Group is forbidden on form XObjects.
-	if groupObj, hasGroup := xo["Group"]; hasGroup {
-		group, err := document.ResolveDict(ctx, doc, groupObj)
-		if err == nil && group != nil {
-			if sName, _ := document.ResolveName(ctx, doc, group["S"]); sName == "Transparency" {
-				results = append(results, failf(Rule_19005_1_6_4_t03, "page %d, %s", pageNum, label)...)
-			}
+	return append(results, transparencyGroup1(ctx, doc, xo["Group"], times, judged, "page %d, %s", pageNum, label)...)
+}
+
+// transparencyGroup1 fires ISO 19005-1, 6.4 t3 when groupObj is a
+// transparency group, which times pages, Do operators or annotations reach.
+//
+// veraPDF judges a group written as an indirect object once for the whole
+// document, which judged records, and a direct one at every reach. Measured
+// with veraPDF 1.30 at PDF/A-1b: one indirect group that a form painted twice,
+// two forms, or a page and the form it paints twice name fails t3 once, and a
+// direct group on a form painted twice fails it twice.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue6342.pdf: its page and the form it paints twice name one
+//     indirect transparency group, and veraPDF fails t3 once.
+func transparencyGroup1(ctx context.Context, doc *document.Document, groupObj ast.PdfObject, times int, judged map[int]bool, format string, args ...any) []Violation {
+	if groupObj == nil {
+		return nil
+	}
+	group, err := document.ResolveDict(ctx, doc, groupObj)
+	if err != nil || group == nil {
+		return nil
+	}
+	if sName, _ := document.ResolveName(ctx, doc, group["S"]); sName != "Transparency" {
+		return nil
+	}
+	if ref, ok := groupObj.(ast.PdfIndirectRef); ok {
+		if judged[ref.ObjectNum] {
+			return nil
 		}
+		judged[ref.ObjectNum] = true
+		times = 1
+	}
+	var results []Violation
+	for range times {
+		results = append(results, failf(Rule_19005_1_6_4_t03, format, args...)...)
 	}
 	return results
 }
@@ -505,7 +585,8 @@ func blendingCSRule(part int) Rule {
 // [markJudgedContents]), but it still uses the transparency the stream paints.
 // Measured with veraPDF 1.30 at PDF/A-2b: two pages sharing one stream that
 // sets two states with a blend mode no table lists fail ISO 19005-2, 6.2.10
-// t1 twice, as one of the pages alone does, and t2 once per page.
+// t1 twice, as one of the pages alone does, and t2 once per page. The blend
+// mode rule counts as ISO 19005-1, 6.4 does; see [blendModeTimes].
 //
 // # Corpus evidence
 //
@@ -517,6 +598,7 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 	hasOutputIntent, _ := documentOutputIntentInfo(ctx, doc, catalog)
 
 	var results []Violation
+	judged := make(map[int]bool)
 	for i := range pages {
 		page := pages[i].dict
 		if ctx.Err() != nil {
@@ -572,7 +654,9 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 					// A content stream an earlier page shares sets its states
 					// there alone; see [markJudgedContents].
 					if bm != "" && !standardBlendModes[bm] && !pages[i].contentJudged {
-						results = append(results, failf(blendModeRule(part), "page %d, ExtGState %s, BM=%s", i+1, string(gsName), bm)...)
+						for range blendModeTimes(gsObj, drawn.gsCount(string(gsName)), judged) {
+							results = append(results, failf(blendModeRule(part), "page %d, ExtGState %s, BM=%s", i+1, string(gsName), bm)...)
+						}
 					}
 					if blendModeIsTransparency(bm) {
 						pageUsesTransparency = true
@@ -651,6 +735,25 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 	return results
 }
 
+// blendModeTimes returns how many times the graphics state gsObj fails the
+// blend mode rule when a page's content sets it with times gs operators: once
+// for the whole document when it is an indirect object, which judged records,
+// and once for every gs otherwise. Measured with veraPDF 1.30 at PDF/A-2b: an indirect state and a
+// direct one, each naming a blend mode no table lists, fail ISO 19005-2,
+// 6.2.10 t1 three times when one page sets both twice or two pages set both
+// from a stream each.
+func blendModeTimes(gsObj ast.PdfObject, times int, judged map[int]bool) int {
+	ref, ok := gsObj.(ast.PdfIndirectRef)
+	if !ok {
+		return times
+	}
+	if judged[ref.ObjectNum] {
+		return 0
+	}
+	judged[ref.ObjectNum] = true
+	return 1
+}
+
 // drawnResources records the resource names a content stream invokes: the
 // XObjects it paints with Do and the graphics states it sets with gs.
 //
@@ -669,18 +772,20 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 //   - pdfjs issue14847.pdf: declares two soft masked images and draws nothing
 //     at all, and veraPDF reports nothing at 2b or at 4.
 type drawnResources struct {
-	xobjects   map[string]bool
-	extGStates map[string]bool
+	// xobjects and extGStates count the Do and gs operators naming each
+	// resource.
+	xobjects   map[string]int
+	extGStates map[string]int
 }
 
 // collectDrawnResources reads the XObject and ExtGState names ops invokes.
 func collectDrawnResources(ops []content.Operation) *drawnResources {
 	drawn := &drawnResources{
-		xobjects:   make(map[string]bool),
-		extGStates: make(map[string]bool),
+		xobjects:   make(map[string]int),
+		extGStates: make(map[string]int),
 	}
 	for _, op := range ops {
-		var target map[string]bool
+		var target map[string]int
 		switch op.Operator {
 		case "Do":
 			target = drawn.xobjects
@@ -693,7 +798,7 @@ func collectDrawnResources(ops []content.Operation) *drawnResources {
 			continue
 		}
 		if name, ok := op.Operands[len(op.Operands)-1].(ast.PdfName); ok {
-			target[string(name)] = true
+			target[string(name)]++
 		}
 	}
 	return drawn
@@ -703,17 +808,29 @@ func collectDrawnResources(ops []content.Operation) *drawnResources {
 // with Do. A nil receiver admits every name, which is what callers holding no
 // parsed content stream need.
 func (d *drawnResources) drawsXObject(name string) bool {
-	if d == nil {
-		return true
-	}
-	return d.xobjects[name]
+	return d.doCount(name) > 0
 }
 
 // setsExtGState reports whether the content stream selected the named graphics
 // state with gs. A nil receiver admits every name.
 func (d *drawnResources) setsExtGState(name string) bool {
+	return d.gsCount(name) > 0
+}
+
+// doCount returns how many Do operators paint the named XObject. A nil
+// receiver, which holds no parsed content stream, counts one for every name.
+func (d *drawnResources) doCount(name string) int {
 	if d == nil {
-		return true
+		return 1
+	}
+	return d.xobjects[name]
+}
+
+// gsCount returns how many gs operators set the named graphics state. A nil
+// receiver counts one for every name.
+func (d *drawnResources) gsCount(name string) int {
+	if d == nil {
+		return 1
 	}
 	return d.extGStates[name]
 }
