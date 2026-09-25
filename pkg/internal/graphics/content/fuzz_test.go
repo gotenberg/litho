@@ -1,6 +1,7 @@
 package content
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"strings"
@@ -45,6 +46,10 @@ var seedStreams = []string{
 	// truncated one.
 	"q ) { } > >> Q )Tj) q ] Q [1 yy] TJ /P <</A 1 2 /B>> BDC EMC <</A>> BI /W 1 /F 1.5e1 ID \x80 EI\n",
 	"q Q [1 2",
+	// Inline images veraPDF reads with the check of the EI before them, an
+	// ID no BI begins, and a truncated one.
+	"BI /F /LZW ID x EI\nBI /L 4 ID yyyy EI\n% c\nBI ID zz EI q ID xx EI\nQ\n",
+	"BI /W 1 ID xx EI BI /W",
 }
 
 // FuzzParseStreamData feeds arbitrary bytes to the content stream parser and
@@ -69,8 +74,9 @@ func FuzzParseStreamData(f *testing.F) {
 		whole, wholeErr := ParseStreamData(context.Background(), data, WholeStream())
 		// A parse without an option reads what WholeStream reads, up to where
 		// it ends or gives up: its operations are a prefix of the whole
-		// stream's, or none.
-		if err == nil && wholeErr == nil && (len(ops) > len(whole) || len(ops) > 0 && !reflect.DeepEqual(ops, whole[:len(ops)])) {
+		// stream's, or none. The data of inline images is the exception,
+		// which it reads as veraPDF does, and only an ID begins such data.
+		if !bytes.Contains(data, []byte("ID")) && err == nil && wholeErr == nil && (len(ops) > len(whole) || len(ops) > 0 && !reflect.DeepEqual(ops, whole[:len(ops)])) {
 			t.Fatalf("a parse without an option reads %d operations that are no prefix of the %d WholeStream reads", len(ops), len(whole))
 		}
 	})

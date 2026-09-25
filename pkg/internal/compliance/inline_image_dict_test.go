@@ -1,22 +1,26 @@
 package compliance
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// TestExtractInlineImageFilters pins how an inline image dictionary's filters
-// are read: a ']' glued to the last name ends the array, a comment hides what
-// it holds (ISO 32000-1, 7.2.4), and the abbreviation /F decides over /Filter
-// whichever comes first, as veraPDF reads them.
+// TestInlineImageFilters pins how an inline image dictionary's filters are
+// read: a ']' glued to the last name ends the array, a comment hides what it
+// holds (ISO 32000-1, 7.2.4), and the abbreviation /F decides over /Filter
+// whichever comes first, as veraPDF reads them. A value that is no name, or
+// an array holding one, applies no filter (PDInlineImage.getCOSFilters).
 //
 // # Corpus evidence
 //
-//   - pdfjs issue14256.pdf: writes every one of these.
-func TestExtractInlineImageFilters(t *testing.T) {
+//   - pdfjs issue14256.pdf: writes every one of the first five.
+func TestInlineImageFilters(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
 		dict string
@@ -29,11 +33,19 @@ func TestExtractInlineImageFilters(t *testing.T) {
 		{"/Filter /LZWDecode /F /AHx", []string{"AHx"}},
 		{"/F /LZW /Filter /AHx", []string{"LZW"}},
 		{"/W 1 /H 1", nil},
+		{"/F 5", nil},
+		{"/F [/LZW 5]", nil},
 	} {
 		t.Run(tt.dict, func(t *testing.T) {
 			t.Parallel()
-			if got := extractInlineImageFilters([]byte(tt.dict)); !slices.Equal(got, tt.want) {
-				t.Errorf("extractInlineImageFilters(%q) = %q, want %q", tt.dict, got, tt.want)
+			stream := "BI " + tt.dict + " ID x EI"
+			ops, err := content.ParseStreamData(context.Background(), []byte(stream))
+			if err != nil || len(ops) != 1 || ops[0].Operator != "BI" {
+				t.Fatalf("parsing %q: %v, %v", stream, ops, err)
+			}
+			dict, _ := ops[0].Operands[0].(ast.PdfDict)
+			if got := inlineImageFilters(dict); !slices.Equal(got, tt.want) {
+				t.Errorf("inlineImageFilters(%q) = %q, want %q", tt.dict, got, tt.want)
 			}
 		})
 	}

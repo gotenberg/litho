@@ -51,6 +51,18 @@ func IsOperator(op string) bool {
 	return ok
 }
 
+// IsUndefined reports whether op, the operator of an [Operation] a parse
+// returns, is one ISO 19005 forbids as an operator ISO 32000-1 does not
+// define (ISO 19005-1, 6.2.10; ISO 19005-2 to 4, 6.2.2): a keyword outside
+// Annex A, Table A.1 ([IsOperator]), or EI or ID. ISO 32000-1, 8.9.7 defines
+// those two only as the parts of the inline image object BI begins, which a
+// parse returns whole as one BI operation, so an EI or an ID it returns
+// stands outside one. veraPDF 1.30 reports "q EI Q" as one undefined
+// operator at PDF/A-1b and PDF/A-2b.
+func IsUndefined(op string) bool {
+	return !IsOperator(op) || op == "EI" || op == "ID"
+}
+
 // gluedOperators is the command set [SplitGluedOperators] reads a content
 // stream with: the operators of Annex A, Table A.1 and the keywords true, false
 // and null an operand can be (ISO 32000-1, 7.3.2 and 7.3.9). It is the command

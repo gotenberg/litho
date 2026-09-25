@@ -1660,6 +1660,43 @@ func filterNamesContainASCII85(obj ast.PdfObject) bool {
 // Dictionary keys are PDF names (e.g., /W, /H, /BPC, /CS) and values are
 // parsed as normal PDF objects.
 func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) {
+	dict, err := p.ParseInlineImageHeader(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Skip the single white-space byte that follows ID (ISO 32000-1, 8.9.7).
+	// See SkipInlineImage for the ASCIIHexDecode and ASCII85Decode case.
+	reader := p.lex.Reader()
+	if _, err := reader.ReadByte(); err != nil {
+		return nil, fmt.Errorf("failed to read post-ID whitespace: %w", err)
+	}
+
+	// Scan forward for the EI terminator, found by the heuristic
+	// SkipInlineImage describes.
+	ascii85 := false
+	if f, ok := dict["F"]; ok {
+		ascii85 = filterNamesContainASCII85(f)
+	}
+	if !ascii85 {
+		if f, ok := dict["Filter"]; ok {
+			ascii85 = filterNamesContainASCII85(f)
+		}
+	}
+	if err := scanToEI(reader, ctx, ascii85); err != nil {
+		return nil, err
+	}
+
+	return dict, nil
+}
+
+// ParseInlineImageHeader reads an inline image's dictionary key/value pairs
+// (between BI and ID) and returns them as an [ast.PdfDict], as
+// [Parser.ParseInlineImageDict] does, but reads no image data: the parser
+// stands just past the ID keyword, with no token read ahead, so a caller that
+// finds the end of the data itself reads on with [Parser.ResumeAt]. Called
+// after the BI operator has been consumed.
+func (p *Parser) ParseInlineImageHeader(ctx context.Context) (ast.PdfDict, error) {
 	dict := ast.PdfDict{}
 
 	// Parse key/value pairs until the ID keyword.
@@ -1733,29 +1770,22 @@ func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) 
 		return nil, fmt.Errorf("parser read ahead too far before inline image data")
 	}
 
-	// Skip the single white-space byte that follows ID (ISO 32000-1, 8.9.7).
-	// See SkipInlineImage for the ASCIIHexDecode and ASCII85Decode case.
-	reader := p.lex.Reader()
-	if _, err := reader.ReadByte(); err != nil {
-		return nil, fmt.Errorf("failed to read post-ID whitespace: %w", err)
-	}
-
-	// Scan forward for the EI terminator, found by the heuristic
-	// SkipInlineImage describes.
-	ascii85 := false
-	if f, ok := dict["F"]; ok {
-		ascii85 = filterNamesContainASCII85(f)
-	}
-	if !ascii85 {
-		if f, ok := dict["Filter"]; ok {
-			ascii85 = filterNamesContainASCII85(f)
-		}
-	}
-	if err := scanToEI(reader, ctx, ascii85); err != nil {
-		return nil, err
-	}
-
 	return dict, nil
+}
+
+// ResumeAt moves the parser to offset in the data it reads, from where it
+// reads its next token. It is for a caller that has read raw bytes past what
+// the parser returned, such as the data of an inline image after
+// [Parser.ParseInlineImageHeader], and must hold no token read ahead. An
+// offset past the end of the data leaves nothing more to read.
+func (p *Parser) ResumeAt(offset int64) error {
+	if p.buffered() > 0 {
+		return errors.New("resuming with tokens read ahead")
+	}
+	if _, err := p.lex.Reader().Seek(offset, io.SeekStart); err != nil {
+		return fmt.Errorf("resuming at %d: %w", offset, err)
+	}
+	return nil
 }
 
 // scanToEI scans forward through raw binary image data looking for the

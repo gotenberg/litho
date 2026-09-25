@@ -381,12 +381,12 @@ func checkContentStreamResourcesOps(
 		// Test 1: check for undefined operators. veraPDF keys the rule on the
 		// operator occurrence rather than the operator name, so a repeated
 		// undefined operator answers once per use.
-		if !content.IsOperator(op.Operator) {
+		if content.IsUndefined(op.Operator) {
 			if reportUndefinedOps && undefinedRule.Specification != "" {
 				results = append(results, failf(undefinedRule, "page %d: undefined operator %q", pageNum, op.Operator)...)
 			}
-			// No operator outside [content.IsOperator] carries a resource
-			// category, so nothing below applies to it.
+			// No undefined operator carries a resource category, so nothing
+			// below applies to it.
 			continue
 		}
 

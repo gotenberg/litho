@@ -52,8 +52,8 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, selected.patterns, ownRes, inheritedRes, part, i+1, false)...)
 				// Check inline image /Intent values from parsed BI operations.
 				results = append(results, checkInlineImageIntent(ops, part, i+1)...)
-				// Inline image filters are stated by checkInlineImageFilters,
-				// which scans the same page's raw bytes.
+				// The inline image filters of a page's content are stated by
+				// checkPageContent, over the same operations.
 			}
 		}
 

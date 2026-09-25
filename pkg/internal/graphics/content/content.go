@@ -40,13 +40,17 @@ type ByteRange struct {
 // range is appended to it. When placer is non-nil, the parser must have format
 // checking enabled, and each violation it records is placed on the operation
 // whose operands hold it. o is how the parse reads the stream: read as veraPDF
-// reads it, the parse ends where [endsReading] says.
-func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, ranges *[]ByteRange, placer *violationPlacer) ([]Operation, error) {
+// reads it, the parse ends where [endsReading] says, and reads the data of
+// inline images as [inlineImages] says. data is what the parser reads.
+func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data []byte, ranges *[]ByteRange, placer *violationPlacer) ([]Operation, error) {
 	stops := o.readsAsVeraPDF()
 	ops := make([]Operation, 0, 256)        //nolint:mnd // reasonable initial capacity for typical pages
 	operands := make([]ast.PdfObject, 0, 8) //nolint:mnd // most operators have ≤6 operands
 	tokenCount := 0
 	var prevEnd int64
+	// images reads the data of inline images as veraPDF does, made on the
+	// first one a parse that reads the stream as veraPDF does meets.
+	var images *inlineImages
 
 	recordRange := func(end int64) {
 		if ranges == nil {
@@ -89,9 +93,22 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, range
 					return nil, fmt.Errorf("failed to consume BI: %w", err)
 				}
 				placer.dropOperands()
-				dict, err := p.ParseInlineImageDict(ctx)
+				var dict ast.PdfDict
+				if stops {
+					dict, err = p.ParseInlineImageHeader(ctx)
+				} else {
+					dict, err = p.ParseInlineImageDict(ctx)
+				}
 				if err != nil {
 					return nil, fmt.Errorf("inline image: %w", err)
+				}
+				if stops {
+					if images == nil {
+						images = newInlineImages(data)
+					}
+					if err := p.ResumeAt(int64(images.resume(ctx, int(p.Position()), dict))); err != nil {
+						return nil, fmt.Errorf("inline image: %w", err)
+					}
 				}
 				placer.take(0)
 				ops = append(ops, Operation{
@@ -100,9 +117,29 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, range
 				})
 				placer.place("BI", ops[len(ops)-1].Operands)
 				operands = nil
-				// The image data is consumed off-token by ParseInlineImageDict,
-				// which empties the token buffer before reading raw bytes, so
-				// the reader position is just past EI and bounds the operation.
+				// The image data is consumed off-token, and the token buffer is
+				// empty before raw bytes are read, so the reader position is
+				// where reading resumes, just past EI but for an image veraPDF
+				// reads with the one after it, and bounds the operation.
+				recordRange(p.Position())
+				continue
+			}
+
+			// veraPDF reads an ID no BI begins as it reads the ID of an inline
+			// image: the data after it is no operator (see [inlineImages]).
+			if tok.Value == "ID" && stops {
+				ops = append(ops, Operation{Operator: tok.Value, Operands: operands})
+				placer.place(tok.Value, operands)
+				operands = nil
+				if _, err := p.Consume(); err != nil {
+					return nil, fmt.Errorf("failed to consume operator token: %w", err)
+				}
+				if images == nil {
+					images = newInlineImages(data)
+				}
+				if err := p.ResumeAt(int64(images.resume(ctx, int(p.Position()), nil))); err != nil {
+					return nil, fmt.Errorf("inline image data: %w", err)
+				}
 				recordRange(p.Position())
 				continue
 			}
@@ -189,7 +226,7 @@ type readOptions struct {
 
 // readsAsVeraPDF reports whether a parse under o reads the stream as veraPDF
 // reads it, to its end and no further: a parse without an option. See
-// [newLexer] and [endsReading].
+// [newLexer], [endsReading] and [inlineImages].
 func (o readOptions) readsAsVeraPDF() bool {
 	return o.commands == nil && !o.repair && !o.whole
 }
@@ -299,8 +336,11 @@ func ForRepair() Option {
 
 // WholeStream reads a stream as a parse without an option reads it, save that
 // it reads every operator the stream holds: past the stray "]" where that
-// parse ends ([endsReading]), and through the arrays and dictionaries it gives
-// up on the stream for ([parser.Parser.WithVeraPDFContainers]).
+// parse ends ([endsReading]), through the arrays and dictionaries it gives up
+// on the stream for ([parser.Parser.WithVeraPDFContainers]), and every inline
+// image, whose data it ends as [ForRepair] and [SplitGluedOperators] do
+// ([parser.Parser.ParseInlineImageDict]) rather than as veraPDF does, which
+// reads an image that follows another as part of it ([inlineImages]).
 //
 // It is for the readings that act on what a viewer draws rather than on what
 // veraPDF judges, such as the tagging that marks every piece of a page's
@@ -449,12 +489,13 @@ func newLexer(data []byte, o readOptions) *lexer.Lexer {
 // The parser checks ctx at regular intervals, allowing large or pathological
 // content streams to be interrupted by deadline. opts choose how it reads the
 // stream, see [SplitGluedOperators]. With no option it reads the stream as
-// veraPDF does ([newLexer]), ends where veraPDF ends ([endsReading]), and
-// gives no operation for a stream veraPDF gives up on ([newParser]).
+// veraPDF does ([newLexer]), ends where veraPDF ends ([endsReading]), gives no
+// operation for a stream veraPDF gives up on ([newParser]), and reads the data
+// of inline images as veraPDF does ([inlineImages]).
 func ParseStreamData(ctx context.Context, data []byte, opts ...Option) ([]Operation, error) {
 	o := optionsOf(ctx, opts)
 	p := newParser(data, o)
-	return parseOperations(ctx, p, o, nil, nil)
+	return parseOperations(ctx, p, o, data, nil, nil)
 }
 
 // ParseStreamDataWithOffsets parses content stream bytes and also returns the
@@ -469,7 +510,7 @@ func ParseStreamDataWithOffsets(ctx context.Context, data []byte, opts ...Option
 	o := optionsOf(ctx, opts)
 	p := newParser(data, o).WithOffsetTracking()
 	ranges := make([]ByteRange, 0, 256) //nolint:mnd // matches the operations capacity hint
-	ops, err := parseOperations(ctx, p, o, &ranges, nil)
+	ops, err := parseOperations(ctx, p, o, data, &ranges, nil)
 	if err != nil || gaveUp(p, o) {
 		// On error parseOperations returns ops=nil but ranges may hold the
 		// entries recorded before the failure; drop them so the two slices
@@ -485,7 +526,7 @@ func ParseStreamDataWithOffsets(ctx context.Context, data []byte, opts ...Option
 func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation, []error) {
 	o := optionsOf(ctx, nil)
 	p := newParser(data, o).WithFormatChecking()
-	ops, _ := parseOperations(ctx, p, o, nil, nil)
+	ops, _ := parseOperations(ctx, p, o, data, nil, nil)
 	if gaveUp(p, o) {
 		return nil, nil
 	}
@@ -499,7 +540,7 @@ func ParseStreamDataFormatChecked(ctx context.Context, data []byte) ([]Operation
 func ParseStreamDataWithOverflows(ctx context.Context, data []byte) ([]Operation, []float64, error) {
 	o := optionsOf(ctx, nil)
 	p := newParser(data, o)
-	ops, err := parseOperations(ctx, p, o, nil, nil)
+	ops, err := parseOperations(ctx, p, o, data, nil, nil)
 	if gaveUp(p, o) {
 		return nil, nil, nil
 	}
@@ -521,7 +562,7 @@ func ParseStreamDataForCompliance(ctx context.Context, data []byte) ([]Operation
 	o := optionsOf(ctx, nil)
 	p := newParser(data, o).WithFormatChecking()
 	placer := &violationPlacer{p: p}
-	ops, err := parseOperations(ctx, p, o, nil, placer)
+	ops, err := parseOperations(ctx, p, o, data, nil, placer)
 	if gaveUp(p, o) {
 		return nil, nil, nil, nil
 	}
@@ -721,7 +762,7 @@ func ParsePageContent(ctx context.Context, doc *document.Document, node ast.PdfO
 
 	o := optionsOf(ctx, opts)
 	p := newParser(allData, o)
-	ops, err := parseOperations(ctx, p, o, nil, nil)
+	ops, err := parseOperations(ctx, p, o, allData, nil, nil)
 	if err != nil {
 		return nil, err
 	}

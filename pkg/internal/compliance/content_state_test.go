@@ -1,9 +1,23 @@
 package compliance
 
 import (
+	"context"
 	"fmt"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
+
+// inlineFilterViolations parses stream as compliance reads a content stream
+// and states the inline image filter rule of the part over its operations.
+func inlineFilterViolations(t *testing.T, stream string, part int) []Violation {
+	t.Helper()
+	ops, err := content.ParseStreamData(context.Background(), []byte(stream))
+	if err != nil {
+		t.Fatalf("parsing %q: %v", stream, err)
+	}
+	return checkInlineImageFilters(ops, part, 1)
+}
 
 // TestInlineImageLZWStatedOnce covers the inline-image LZW prohibition,
 // ISO 19005-1, 6.1.10 t2. It replaces a test of a second, redundant LZW reader
@@ -30,7 +44,7 @@ func TestInlineImageLZWStatedOnce(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := checkInlineImageFilters([]byte(tc.content), 1, 1)
+			got := inlineFilterViolations(t, tc.content, 1)
 			if len(got) != tc.want {
 				t.Fatalf("got %d violations, want %d: %v", len(got), tc.want, got)
 			}
@@ -44,9 +58,10 @@ func TestInlineImageLZWStatedOnce(t *testing.T) {
 }
 
 // TestInlineImagesInARowJudgedOnce pins that an inline image whose BI follows
-// the EI before it, with only white space and comments between, is not judged
-// (see [checkInlineImageFilters]). Every case was measured with veraPDF 1.30 on
-// a one-page file of this content at PDF/A-1b and PDF/A-2b: an EI followed by a
+// the EI before it, with only white space and comments between, is not judged:
+// the parse reads it as part of the check of that EI (see
+// [checkInlineImageFilters]). Every case was measured with veraPDF 1.30 on a
+// one-page file of this content at PDF/A-1b and PDF/A-2b: an EI followed by a
 // keyword that names no operator is part of the data, and one followed by an
 // operator or a number ends it.
 func TestInlineImagesInARowJudgedOnce(t *testing.T) {
@@ -72,7 +87,7 @@ func TestInlineImagesInARowJudgedOnce(t *testing.T) {
 		}{{1, Rule_19005_1_6_1_10_t02}, {2, Rule_19005_2_6_1_10_t01}} {
 			t.Run(fmt.Sprintf("%s, part %d", tc.name, p.part), func(t *testing.T) {
 				t.Parallel()
-				got := checkInlineImageFilters([]byte(tc.content), p.part, 1)
+				got := inlineFilterViolations(t, tc.content, p.part)
 				if len(got) != tc.want {
 					t.Fatalf("got %d violations, want %d: %v", len(got), tc.want, got)
 				}
@@ -82,44 +97,6 @@ func TestInlineImagesInARowJudgedOnce(t *testing.T) {
 					}
 				}
 			})
-		}
-	}
-}
-
-// TestInlineImageFilterEnds pins where [inlineImageEnd] ends the data of an
-// inline image and what [nextKeyword] reads after an EI.
-func TestInlineImageFilterEnds(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		data string
-		want int
-	}{
-		{" xx EI", 6},
-		{" xx EI\n", 6},
-		{" xxEI q", 5},
-		{" xEI zz EI ", 10},
-		{" xEI d0 EI", 4},
-		{" xx", -1},
-		{" xx EIQ", -1},
-		{"", -1},
-	} {
-		if got := inlineImageEnd([]byte(tc.data), 0); got != tc.want {
-			t.Errorf("inlineImageEnd(%q) = %d, want %d", tc.data, got, tc.want)
-		}
-	}
-	for _, tc := range []struct{ data, want string }{
-		{"  q Q", "q"},
-		{"% c\nBI /W", ""},
-		{" \nBI /W", "BI"},
-		{"q1", "q"},
-		{"d0 1 2", "d0"},
-		{"12 w", ""},
-		{"/Name", ""},
-		{"", ""},
-	} {
-		if got := nextKeyword([]byte(tc.data)); got != tc.want {
-			t.Errorf("nextKeyword(%q) = %q, want %q", tc.data, got, tc.want)
 		}
 	}
 }

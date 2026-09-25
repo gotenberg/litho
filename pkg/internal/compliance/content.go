@@ -1,11 +1,9 @@
 package compliance
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -126,7 +124,7 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 		}
 
 		// Check for unknown operators.
-		if !content.IsOperator(op.Operator) {
+		if content.IsUndefined(op.Operator) {
 			results = append(results, failf(unknownOperatorRule(part),
 				"page %d: operator %q", pageNum, op.Operator)...)
 		}
@@ -146,8 +144,7 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 		}
 	}
 
-	// Check inline image filters in raw bytes.
-	results = append(results, checkInlineImageFilters(page.content, part, pageNum)...)
+	results = append(results, checkInlineImageFilters(ops, part, pageNum)...)
 
 	return results
 }
@@ -277,26 +274,14 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 	return allData, nil
 }
 
-// checkInlineImageFilters scans raw content stream bytes for BI (Begin Inline
-// Image) operators and checks whether any forbidden filters (LZW, Crypt) are
-// used. The scan looks for the BI keyword followed by inline image dictionary
-// key/value pairs, checking /F and /Filter entries.
+// checkInlineImageFilters states the inline image filter rule, ISO 19005-1,
+// 6.1.10 t2 and ISO 19005-2/3, 6.1.10 t1 and ISO 19005-4, 6.1.9 t1, for the
+// inline images of a content stream whose operations are ops, once for each
+// image whose filters include one the part forbids.
 //
-// An inline image whose BI follows the EI of the one before it, with nothing
-// but white space and comments between, is not judged. veraPDF reads the
-// token after an EI to confirm the image ends there (PDFStreamParser), and
-// when that token is a BI it reads the whole next image as part of that
-// check and never gives it an operator of its own, so none of its rules
-// reaches it. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b: two, or
-// three, LZW inline images in a row fail ISO 19005-1, 6.1.10 t2 and ISO
-// 19005-2, 6.1.10 t1 once, whether their dictionaries and data match or
-// not, and whether a comment, or the end of one /Contents part, stands
-// between them. A plain inline image followed by an LZW one fails neither,
-// and an LZW one followed by a plain DeviceRGB one reports no DeviceRGB. An
-// operator between two LZW inline images, even q, Q or n, makes them fail
-// twice. veraPDF resumes after the swallowed image at an offset that depends
-// on the two images' data lengths, which can leave an EI it reports as an
-// undefined operator; that reading is not reproduced here.
+// An inline image veraPDF reads as part of the check of the EI before it has
+// no BI operation of its own (see [content.ParseStreamData]), so no rule
+// judges it.
 //
 // # Corpus evidence
 //
@@ -304,60 +289,20 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 //     file is remediated to PDF/A-2a veraPDF fails it as "a value not listed in
 //     Table 6" (verified live), so a name outside Table 6 is forbidden in parts
 //     2 to 4.
-//   - All corpora: no page content holds an inline image in a row after
-//     another, so no count moves at PDF/A-1b or PDF/A-2b.
-func checkInlineImageFilters(data []byte, part, pageNum int) []Violation {
+//   - All corpora: judging the dictionaries of the BI operations, rather
+//     than the raw bytes of the stream, changes no count of the rule at
+//     PDF/A-1b or PDF/A-2b, veraPDF files at their own profile.
+func checkInlineImageFilters(ops []content.Operation, part, pageNum int) []Violation {
 	var results []Violation
-
-	// prevEnd is the offset just past the EI of the previous inline image, or
-	// -1 when that image found no EI. noEnd records that one found none, so
-	// none after it can (see [inlineImageEnd]).
-	prevEnd := -1
-	noEnd := false
-
-	// Scan for BI tokens in the raw byte stream. BI must appear as a
-	// standalone keyword (preceded by whitespace or start of stream).
-	offset := 0
-	for offset < len(data) {
-		idx := bytes.Index(data[offset:], []byte("BI"))
-		if idx < 0 {
-			break
-		}
-
-		absIdx := offset + idx
-		offset = absIdx + 2
-
-		// Verify BI is a standalone keyword: preceded by whitespace (or start)
-		// and followed by whitespace.
-		if absIdx > 0 && !isPDFWhitespace(data[absIdx-1]) {
+	for _, op := range ops {
+		if op.Operator != "BI" || len(op.Operands) == 0 {
 			continue
 		}
-		if offset < len(data) && !isPDFWhitespace(data[offset]) {
+		dict, ok := op.Operands[0].(ast.PdfDict)
+		if !ok {
 			continue
 		}
-
-		// Extract the inline image dictionary (between BI and ID).
-		idIdx := findInlineImageID(data, offset)
-		if idIdx < 0 {
-			break
-		}
-
-		dictBytes := data[offset:idIdx]
-		swallowed := prevEnd >= 0 && onlySpaceAndComments(data[prevEnd:absIdx])
-		// The image data runs to its EI, so the next BI is searched past it.
-		offset, prevEnd = idIdx+2, -1
-		if !noEnd {
-			prevEnd = inlineImageEnd(data, offset)
-			noEnd = prevEnd < 0
-		}
-		if prevEnd >= 0 {
-			offset = prevEnd
-		}
-		if swallowed {
-			continue
-		}
-
-		for _, filterVal := range extractInlineImageFilters(dictBytes) {
+		for _, filterVal := range inlineImageFilters(dict) {
 			if filterVal == "" {
 				continue
 			}
@@ -380,199 +325,40 @@ func checkInlineImageFilters(data []byte, part, pageNum int) []Violation {
 			}
 		}
 	}
-
 	return results
 }
 
-// inlineImageEnd returns the offset just past the EI that ends the data of an
-// inline image whose ID keyword ends at start, or -1 when no EI does. As
-// veraPDF reads it (PDFStreamParser), the data begins after the one white-space
-// byte following ID (ISO 32000-1, 8.9.7) and ends at the first EI followed by
-// white space or the end of the stream, unless the keyword after that EI names
-// no operator, which makes the EI part of the data (see [nextKeyword]).
-//
-// When no EI after start ends the data, none after a later start does
-// either, so a caller that gets -1 need not ask again further on.
-func inlineImageEnd(data []byte, start int) int {
-	if start < len(data) && isPDFWhitespace(data[start]) {
-		start++
-	}
-	for i := start; i+1 < len(data); i++ {
-		if data[i] != 'E' || data[i+1] != 'I' {
-			continue
-		}
-		end := i + 2
-		if end < len(data) && !isPDFWhitespace(data[end]) {
-			continue
-		}
-		if kw := nextKeyword(data[end:]); kw != "" && !content.IsOperator(kw) {
-			continue
-		}
-		return end
-	}
-	return -1
-}
-
-// nextKeyword returns the run of regular characters the next token of b
-// starts with, past white space, as veraPDF reads an operator: it ends at
-// white space, a delimiter or a digit (ISO 32000-1, 7.2.2). It returns "" when
-// the next token is a number, a name, a string, an array or a dictionary, when
-// a comment comes first, or when b holds no token.
-//
-// veraPDF reads past a comment to the token after it. Stopping at the comment
-// keeps [inlineImageEnd] linear: past it, every EI a long comment holds would
-// read the rest of that comment again.
-func nextKeyword(b []byte) string {
-	i := 0
-	for i < len(b) && isPDFWhitespace(b[i]) {
-		i++
-	}
-	if i == len(b) || isInlineDictDelimiter(b[i]) || strings.IndexByte("+-.0123456789", b[i]) >= 0 {
-		return ""
-	}
-	start := i
-	for i < len(b) && !isPDFWhitespace(b[i]) && !isInlineDictDelimiter(b[i]) && (b[i] < '0' || b[i] > '9') {
-		i++
-	}
-	// d0 and d1 keep their digit (ISO 32000-1, 9.6.5, Table 113).
-	if i < len(b) && b[i-1] == 'd' && (b[i] == '0' || b[i] == '1') {
-		i++
-	}
-	return string(b[start:i])
-}
-
-// onlySpaceAndComments reports whether b holds nothing but white space and
-// comments (ISO 32000-1, 7.2.2 and 7.2.4).
-func onlySpaceAndComments(b []byte) bool {
-	for i := 0; i < len(b); i++ {
-		switch {
-		case isPDFWhitespace(b[i]):
-		case b[i] == '%':
-			for i < len(b) && b[i] != '\n' && b[i] != '\r' {
-				i++
-			}
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-// findInlineImageID locates the ID keyword that terminates the inline image
-// dictionary. ID must be preceded and followed by whitespace.
-func findInlineImageID(data []byte, start int) int {
-	for i := start; i < len(data)-1; i++ {
-		if data[i] == 'I' && data[i+1] == 'D' {
-			// Verify standalone keyword.
-			if i > 0 && !isPDFWhitespace(data[i-1]) {
-				continue
-			}
-			if i+2 < len(data) && !isPDFWhitespace(data[i+2]) {
-				continue
-			}
-			return i
-		}
-	}
-	return -1
-}
-
-// extractInlineImageFilters extracts the filter values from inline image
-// dictionary bytes. It looks for /F or /Filter keys and returns the
-// corresponding name values.
-func extractInlineImageFilters(dictBytes []byte) []string {
-	// Tokenize the dictionary bytes looking for /F or /Filter keys.
-	// Inline image dictionaries use abbreviated key names. The value may be a
-	// single name (/AHx) or a filter-chain array ([/AHx /Fl]); both are legal.
-	tokens := tokenizeInlineDict(dictBytes)
-	// A dictionary that writes both the abbreviation and the full name is
-	// judged by the abbreviation, whichever comes first: veraPDF reports
-	// /F /AHx /Filter /LZWDecode and /Filter /LZWDecode /F /AHx alike as
-	// conforming, and /F /LZW /Filter /AHx as not.
-	for _, want := range []string{"/F", "/Filter"} {
-		for i := 0; i < len(tokens)-1; i++ {
-			if tokens[i] != want {
-				continue
-			}
-			val := tokens[i+1]
-			if val != "[" {
-				return []string{inlineFilterName(val)}
-			}
-			// Filter-chain array: collect the names up to the closing ']'.
-			var names []string
-			for j := i + 2; j < len(tokens) && tokens[j] != "]"; j++ {
-				if n := inlineFilterName(tokens[j]); n != "" {
-					names = append(names, n)
-				}
-			}
-			return names
-		}
-	}
-	return nil
-}
-
-// inlineFilterName normalises an inline-image filter token to a bare filter
-// name by dropping its leading '/'.
-func inlineFilterName(tok string) string {
-	return strings.TrimPrefix(tok, "/")
-}
-
-// tokenizeInlineDict performs a simple tokenization of inline image dictionary
-// bytes, splitting on whitespace and recognizing /Name tokens.
+// inlineImageFilters returns the names of the filters an inline image
+// dictionary applies, as veraPDF reads them (PDInlineImage.getCOSFilters): its
+// /F entry, or its /Filter entry when it has none, since an abbreviation the
+// dictionary holds comes before the full key (ISO 32000-1, 8.9.7, Table 93),
+// holding a name or an array of names (ISO 32000-1, 7.4.1). A value of any
+// other type, or an array holding anything but names, applies none.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue14256.pdf: comments out lines of its inline image
-//     dictionaries, so a key written inside a comment must not be read.
-func tokenizeInlineDict(data []byte) []string {
-	var tokens []string
-	i := 0
-	for i < len(data) {
-		c := data[i]
-		switch {
-		case isPDFWhitespace(c):
-			i++
-		case c == '%':
-			// A comment runs to the end of the line (ISO 32000-1, 7.2.4); a
-			// key written inside one is no key.
-			for i < len(data) && data[i] != '\n' && data[i] != '\r' {
-				i++
+//     dictionaries, so a key written inside a comment is no key.
+func inlineImageFilters(dict ast.PdfDict) []string {
+	v, ok := dict["F"]
+	if !ok {
+		v = dict["Filter"]
+	}
+	switch f := v.(type) {
+	case ast.PdfName:
+		return []string{string(f)}
+	case ast.PdfArray:
+		names := make([]string, 0, len(f))
+		for _, elem := range f {
+			name, ok := elem.(ast.PdfName)
+			if !ok {
+				return nil
 			}
-		case c == '[' || c == ']':
-			// Array delimiters stand alone, so /F [/AHx] /L 3 ends the array at
-			// the ']' glued to /AHx rather than reading /L as a filter.
-			tokens = append(tokens, string(c))
-			i++
-		default:
-			// A name or any other token runs to the next white space or
-			// delimiter (ISO 32000-1, 7.2.2).
-			start := i
-			i++
-			for i < len(data) && !isPDFWhitespace(data[i]) && !isInlineDictDelimiter(data[i]) {
-				i++
-			}
-			tokens = append(tokens, string(data[start:i]))
+			names = append(names, string(name))
 		}
+		return names
 	}
-	return tokens
-}
-
-// isInlineDictDelimiter reports whether b is a PDF delimiter character that
-// ends a token in an inline image dictionary (ISO 32000-1, 7.2.2, Table 2).
-func isInlineDictDelimiter(b byte) bool {
-	switch b {
-	case '/', '[', ']', '(', ')', '<', '>', '{', '}', '%':
-		return true
-	}
-	return false
-}
-
-// isPDFWhitespace returns true if b is a PDF whitespace character (SP, TAB, CR, LF, FF, NUL).
-func isPDFWhitespace(b byte) bool {
-	switch b {
-	case ' ', '\t', '\r', '\n', '\f', 0:
-		return true
-	}
-	return false
+	return nil
 }
 
 // unknownOperatorRule returns the correct rule for unknown content stream

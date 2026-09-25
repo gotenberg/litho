@@ -70,7 +70,8 @@ func matchUnknownOps(v compliance.Violation) bool {
 
 // unknownOpsTally counts what [fixUnknownOps] changed.
 type unknownOpsTally struct {
-	// removed counts operators outside [content.IsOperator] that were stripped.
+	// removed counts the undefined operators ([content.IsUndefined]) that were
+	// stripped.
 	removed int
 	// repaired counts malformed numbers folded back into their operator or
 	// respelled where an array or a dictionary holds them.
@@ -102,7 +103,7 @@ func (t *unknownOpsTally) add(o unknownOpsTally) {
 	t.strays += o.strays
 }
 
-// fixUnknownOps strips operators absent from [content.IsOperator] from every
+// fixUnknownOps strips undefined operators ([content.IsUndefined]) from every
 // content stream a page draws, which [walkContentStreams] reaches: the page's
 // own content, and the form XObjects, tiling patterns, Type 3 glyphs and
 // annotation appearances it draws. Viewers ignore these tokens per ISO 32000
@@ -189,7 +190,8 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // become the numbers they begin with ([rewriteNestedMalformedNumbers]) and the
 // others fold back into their operator ([repairMalformedNumbers]), operators
 // run together with no white space between them come apart
-// ([separateGluedOperators]), and operators outside [content.IsOperator] go.
+// ([separateGluedOperators]), and undefined operators ([content.IsUndefined])
+// go.
 // It returns the bytes to write and what it changed; a zero tally means
 // nothing is to be written. The bytes can be empty: a stream holding nothing
 // but undefined operators is written back with none.
@@ -437,9 +439,13 @@ func delimitedOperators(ctx context.Context, data []byte) (delimited, strays int
 
 // dropUndefinedOperators separates every run of operators written with no
 // white space between them ([separateGluedOperators]), then blanks every
-// operator outside [content.IsOperator] for [filterOps] to drop, BX and EX
-// aside. It returns the operations, how many operators it separated, and how
-// many it removed.
+// undefined operator ([content.IsUndefined]) for [filterOps] to drop, BX and
+// EX aside. It returns the operations, how many operators it separated, and
+// how many it removed.
+//
+// An EI or an ID the reading of a repair returns stands outside every inline
+// image, whose whole object it reads as one BI operation, so a viewer draws
+// nothing for it and removing it changes no image.
 //
 // ISO 19005-2, 6.2.2 forbids an undefined operator even inside a BX/EX
 // compatibility section, so one is removed wherever it stands. The unknown-ops
@@ -453,7 +459,7 @@ func dropUndefinedOperators(ops []content.Operation) ([]content.Operation, int, 
 		if op.Operator == "" || op.Operator == "BX" || op.Operator == "EX" {
 			continue
 		}
-		if !content.IsOperator(op.Operator) {
+		if content.IsUndefined(op.Operator) {
 			ops[i].Operator = ""
 			removed++
 		}
