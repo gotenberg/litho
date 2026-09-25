@@ -1470,6 +1470,13 @@ func (r *Reader) ExtractSignatures(ctx context.Context) (_ []models.Signature, e
 // annotation's /AP reaches it and it is new, or was that annotation's own
 // appearance stream in the signed revision.
 //
+// An object is new, for these allowances and for validation data, only when
+// the signed revision neither defines it nor refers to it from an object its
+// trailer reaches. A reference to an undefined object reads as null (ISO
+// 32000-1, 7.3.10), so an update that defines one the signed revision already
+// refers to changes the signed document rather than adding to it. When those
+// references cannot be collected, no object counts as new and MDPInfo says so.
+//
 // A page of the signed revision that the current page tree no longer holds is
 // reported as removed at every P, and at P=2 so is an annotation other than a
 // form field widget that a page of the signed revision lists and the current

@@ -164,16 +164,7 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 	}
 
 	// The signed revision is read once, and only when a check needs it.
-	var rev *document.Document
-	var revErr error
-	revRead := false
-	signedRevision := func() (*document.Document, error) {
-		if !revRead {
-			rev, revErr = doc.Revision(ctx, signedEnd)
-			revRead = true
-		}
-		return rev, revErr
-	}
+	signed := newSignedRevision(doc, signedEnd)
 
 	// Validation data and form data are told apart only when the classifier
 	// objects to something, which is when they can change the verdict.
@@ -182,11 +173,11 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 	var note string
 	if violation != "" {
 		var classified []appendedObject
-		classified, validationData, note = withoutValidationData(ctx, doc, signedRevision, appendedObjects, sig.MDPPolicy)
+		classified, validationData, note = withoutValidationData(ctx, doc, signed, appendedObjects, sig.MDPPolicy)
 		violation = classifyModifications(classified, sig.MDPPolicy)
 		if violation != "" && sig.MDPPolicy >= 2 {
 			var formNote string
-			classified, formNote = withoutFormData(ctx, doc, signedRevision, classified, sig.MDPPolicy)
+			classified, formNote = withoutFormData(ctx, doc, signed, classified, sig.MDPPolicy)
 			note += formNote
 			violation = classifyModifications(classified, sig.MDPPolicy)
 		}
@@ -201,13 +192,14 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 	// That runs even when nothing was appended: a cross-reference section
 	// alone can free a page or an annotation.
 	if violation == "" {
-		rev, err := signedRevision()
+		rev, err := signed.revision(ctx)
 		if err != nil {
 			note += fmt.Sprintf("; %s not checked: %v", revisionChecks(sig.MDPPolicy), err)
 		} else {
 			violation, note = compareRevisions(ctx, doc, rev, appendedObjects, sig.MDPPolicy, note)
 		}
 	}
+	note += signed.note()
 
 	switch {
 	case violation != "":
@@ -277,7 +269,7 @@ func revisionChecks(policy int) string {
 func withoutValidationData(
 	ctx context.Context,
 	doc *document.Document,
-	signedRevision func() (*document.Document, error),
+	signed *signedRevision,
 	objects []appendedObject,
 	policy int,
 ) (_ []appendedObject, removed int, note string) {
@@ -296,15 +288,16 @@ func withoutValidationData(
 		return objects, 0, ""
 	}
 
-	rev, err := signedRevision()
+	rev, err := signed.revision(ctx)
 	if err != nil {
 		return objects, 0, fmt.Sprintf("; validation data not recognized: %v", err)
 	}
-	exempt, err := ltvExemptions(ctx, doc, rev, current, objects, policy)
+	held := func(num int) bool { return signed.held(ctx, rev, num) }
+	exempt, err := ltvExemptions(ctx, doc, rev, held, current, objects, policy)
 	if err != nil {
 		return objects, 0, fmt.Sprintf("; validation data not recognized: %v", err)
 	}
-	if err := exemptDroppedValidationData(ctx, doc, rev, objects, exempt); err != nil {
+	if err := exemptDroppedValidationData(ctx, doc, rev, held, objects, exempt); err != nil {
 		note = fmt.Sprintf("; validation data a later update dropped not recognized: %v", err)
 	}
 	kept := make([]appendedObject, 0, len(objects))

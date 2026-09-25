@@ -34,10 +34,14 @@ import (
 // already held is exempt only when it was that annotation's own appearance
 // stream there ([ownAppearances]): a font or an image an appearance shares with
 // the page would otherwise let an update redraw the page through it.
+//
+// An object is new when the signed revision neither defines it nor refers to
+// it ([signedRevision.held]): filling in a number the signed document already
+// refers to changes what that reference means.
 func withoutFormData(
 	ctx context.Context,
 	doc *document.Document,
-	signedRevision func() (*document.Document, error),
+	signed *signedRevision,
 	objects []appendedObject,
 	policy int,
 ) (_ []appendedObject, note string) {
@@ -58,7 +62,7 @@ func withoutFormData(
 		return objects, ""
 	}
 
-	rev, err := signedRevision()
+	rev, err := signed.revision(ctx)
 	if err != nil {
 		return objects, fmt.Sprintf("; form data not recognized: %v", err)
 	}
@@ -81,7 +85,7 @@ func withoutFormData(
 	kept := make([]appendedObject, 0, len(objects))
 	for _, obj := range objects {
 		num := obj.ObjNum
-		isNew := !rev.DefinesObject(num)
+		isNew := !signed.held(ctx, rev, num)
 		if obj.IsStream && (signedData[num] || (currentData[num] && isNew)) {
 			continue
 		}

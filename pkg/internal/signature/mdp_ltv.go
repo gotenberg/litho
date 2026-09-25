@@ -299,6 +299,9 @@ func hasNoArea(ctx context.Context, doc *document.Document, rectObj ast.PdfObjec
 // it is new, or when it already served the same purpose in the signed
 // revision rev. Anything else the signed revision held is not: listing the
 // page's content stream in /Certs does not make rewriting it validation data.
+// held reports whether the signed revision held a number, defining it or
+// referring to it ([signedRevision.held]), so an update that defines a number
+// the signed document refers to cannot pass it as new validation data.
 //
 // At P=1 the objects that must change to hold the new data are exempt too, and
 // only when that is all that changed. Each is compared with its signed version:
@@ -306,7 +309,7 @@ func hasNoArea(ctx context.Context, doc *document.Document, rectObj ast.PdfObjec
 // extension that ETSI EN 319 142-1, 5.6 asks a writer to declare; the form may
 // gain timestamp fields in /Fields and change /SigFlags; a page may gain
 // timestamp widgets in /Annots. P=2 and P=3 already permit those rewrites.
-func ltvExemptions(ctx context.Context, doc, rev *document.Document, current *ltvObjects, objects []appendedObject, policy int) (map[int]bool, error) {
+func ltvExemptions(ctx context.Context, doc, rev *document.Document, held func(num int) bool, current *ltvObjects, objects []appendedObject, policy int) (map[int]bool, error) {
 	exempt := make(map[int]bool)
 	var signed *ltvObjects
 	var diff *ltvDiff
@@ -316,7 +319,7 @@ func ltvExemptions(ctx context.Context, doc, rev *document.Document, current *lt
 			continue
 		}
 		if current.all[num] {
-			if !rev.DefinesObject(num) {
+			if !held(num) {
 				exempt[num] = true
 				continue
 			}
@@ -364,14 +367,15 @@ const maxEarlierRevisions = 64
 // other object. A number is exempt when every appended definition of it lies
 // in an update whose revision holds it as validation data, and when it is new
 // since the signed revision rev or already served as validation data there,
-// the rule [ltvExemptions] applies. A definition in the last update is judged
+// the rule [ltvExemptions] applies, with signedHeld telling what the signed
+// revision held. A definition in the last update is judged
 // by the current revision, so a stream an update rewrites while dropping it
 // stays a change.
 //
 // Exempting a dropped object passes nothing that reaches the document: an
 // object new since signing is named only by objects written after signing,
 // and each of those is classified itself.
-func exemptDroppedValidationData(ctx context.Context, doc, rev *document.Document, objects []appendedObject, exempt map[int]bool) error {
+func exemptDroppedValidationData(ctx context.Context, doc, rev *document.Document, signedHeld func(num int) bool, objects []appendedObject, exempt map[int]bool) error {
 	pending := make(map[int][]int64)
 	for _, obj := range objects {
 		num := obj.ObjNum
@@ -422,7 +426,7 @@ func exemptDroppedValidationData(ctx context.Context, doc, rev *document.Documen
 		if !dropped {
 			continue
 		}
-		if rev.DefinesObject(num) {
+		if signedHeld(num) {
 			if signed == nil {
 				var err error
 				if signed, err = collectLTV(ctx, rev); err != nil {
