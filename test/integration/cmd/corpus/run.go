@@ -20,7 +20,7 @@ type FeatureFactory func() Feature
 
 // featureRegistry lists every feature the runner knows about. CLI
 // --feature values are matched against the returned Feature.Name().
-var featureRegistry = []FeatureFactory{
+var featureRegistry = append([]FeatureFactory{
 	func() Feature { return newTextFeature() },
 	func() Feature { return newMetadataFeature() },
 	func() Feature { return newComplianceFeature() },
@@ -34,7 +34,7 @@ var featureRegistry = []FeatureFactory{
 	func() Feature { return newFacturxFeature() },
 	func() Feature { return newSchematronFeature() },
 	func() Feature { return newImageDecodeFeature() },
-}
+}, mutationFeatureFactories()...)
 
 // runOptions captures the CLI flags for the run subcommand.
 type runOptions struct {

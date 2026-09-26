@@ -377,14 +377,8 @@ func validateWithLitho(ctx context.Context, pdfPath, profileDir string) complian
 	}
 	defer r.Close()
 
-	var violations []pdf.Violation
-	if pdfa, ok := dirToPDFAProfile[profileDir]; ok {
-		violations, err = r.ValidatePDFAReport(ctx, pdfa)
-	} else if pdfua, ok := dirToPDFUAProfile[profileDir]; ok {
-		violations, err = r.ValidatePDFUAReport(ctx, pdfua)
-	} else if wtpdf, ok := dirToWTPDFProfile[profileDir]; ok {
-		violations, err = r.ValidateWTPDFReport(ctx, wtpdf)
-	} else {
+	violations, known, err := validateReader(ctx, r, profileDir)
+	if !known {
 		// A profile directory no map covers scores every fixture in it as
 		// compliant, which reads as a feature that passed rather than one
 		// that validated nothing. Add the profile to a map above when a new
@@ -405,4 +399,23 @@ func validateWithLitho(ctx context.Context, pdfPath, profileDir string) complian
 		out.Violations[i] = v.Error()
 	}
 	return out
+}
+
+// validateReader runs litho's validator for the PDF/A, PDF/UA or WTPDF profile
+// profileDir names on r. known is false for a directory no map covers, which
+// validates nothing.
+func validateReader(ctx context.Context, r *pdf.Reader, profileDir string) (violations []pdf.Violation, known bool, err error) {
+	if pdfa, ok := dirToPDFAProfile[profileDir]; ok {
+		violations, err = r.ValidatePDFAReport(ctx, pdfa)
+		return violations, true, err
+	}
+	if pdfua, ok := dirToPDFUAProfile[profileDir]; ok {
+		violations, err = r.ValidatePDFUAReport(ctx, pdfua)
+		return violations, true, err
+	}
+	if wtpdf, ok := dirToWTPDFProfile[profileDir]; ok {
+		violations, err = r.ValidateWTPDFReport(ctx, wtpdf)
+		return violations, true, err
+	}
+	return nil, false, nil
 }

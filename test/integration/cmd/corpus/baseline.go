@@ -72,6 +72,17 @@ var costMetrics = map[string]bool{
 	// see, because a fixture that breaks many rules stays non-compliant on
 	// both sides whatever rule class litho drops or invents.
 	"ruleset_mismatch": true,
+
+	// The mutate-* features count the outputs that failed a check, so more is
+	// worse. See mutationFeature for what each check asks of an output.
+	metricWriteFailed:      true,
+	metricReopenFailed:     true,
+	metricQPDFFailed:       true,
+	metricPagesWrong:       true,
+	metricTextWrong:        true,
+	metricRulesetChanged:   true,
+	metricPromiseBroken:    true,
+	metricSignatureInvalid: true,
 }
 
 // uncomparedMetrics lists raw inventory totals that shift with any

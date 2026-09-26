@@ -16,6 +16,13 @@
   "goldens": {
     "compliance": "goldens/compliance",
     "remediation": "goldens/compliance",
-    "remediation-aggressive": "goldens/compliance"
+    "remediation-aggressive": "goldens/compliance",
+    "mutate-stamp": "goldens/compliance",
+    "mutate-pages": "goldens/compliance",
+    "mutate-autotag": "goldens/compliance",
+    "mutate-flatten": "goldens/compliance",
+    "mutate-sign": "goldens/compliance",
+    "mutate-encrypt": "goldens/compliance",
+    "mutate-redact": "goldens/compliance"
   }
 }

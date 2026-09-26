@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 )
 
 // Scoreboard aggregates results across every (corpus, feature) cell
@@ -96,7 +97,7 @@ func printFeatureRow(w io.Writer, fr *FeatureReport) {
 		fmt.Fprintf(w, "%s %s  fully_fixed=%d  litho_regressed=%d  verapdf_regressed=%d\n",
 			prefix, primary, fullyFixed, lithoRegressed, veraRegressed)
 	default:
-		fmt.Fprintf(w, "%s %s\n", prefix, primary)
+		fmt.Fprintf(w, "%s %s%s\n", prefix, primary, firedMutationMetrics(fr))
 	}
 
 	if fr.NoGoldenFixtures > 0 {
@@ -105,6 +106,26 @@ func printFeatureRow(w io.Writer, fr *FeatureReport) {
 	if fr.Skipped > 0 {
 		fmt.Fprintf(w, "    %d fixtures skipped (corpus skip list)\n", fr.Skipped)
 	}
+}
+
+// firedMutationMetrics names the failure counts of a mutate-* cell that fired,
+// so its row reads as which check failed rather than as a bare count. It
+// returns "" for any other feature.
+func firedMutationMetrics(fr *FeatureReport) string {
+	if !strings.HasPrefix(fr.Name, "mutate-") {
+		return ""
+	}
+	var fired []string
+	for name, n := range fr.Metrics {
+		if n > 0 {
+			fired = append(fired, fmt.Sprintf("%s=%d", name, n))
+		}
+	}
+	if len(fired) == 0 {
+		return ""
+	}
+	sort.Strings(fired)
+	return "  " + strings.Join(fired, " ")
 }
 
 // maxTextMismatches caps the fixtures listed per cell in the text
