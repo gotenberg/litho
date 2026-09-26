@@ -92,7 +92,8 @@ func spawnedAmount(extra string) string {
 
 // TestEvaluateMDP_TemplateInstantiation covers ISO 32000-1, 12.8.2.2, Table
 // 254, which permits instantiating page templates from P=2 up, and 12.7.6,
-// where an instantiation copies a template page with its fields to a new page.
+// where an instantiation adds a template page with its fields as a new page,
+// renaming them or not (12.7.7.3.3, Table 249; Annex J).
 // The fields it adds copy the template's, actions included. A field placed on
 // a signed page, one that copies no template widget, one whose actions differ
 // from the template's, or one arriving with a template the signed document

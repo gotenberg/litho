@@ -69,9 +69,11 @@ type templatePage struct {
 // rev names as templates, each once, and returns nil when it names none.
 //
 // ISO 32000-1, 12.7.6 lets the name dictionary name pages in its /Templates
-// tree, which a reader does not show, and in its /Pages tree, which it does,
-// and a script instantiates either by copying it, its fields among what it
-// holds, to a new page (7.7.4, Table 31).
+// tree, which a reader does not show, and in its /Pages tree, which it does
+// (7.7.4, Table 31), and lets a script or an import-data action add either to
+// the document as a regular page. The page brings the fields it holds, which
+// an instantiation may rename so that they do not clash with the fields
+// already there (12.7.7.3.3, Table 249; Annex J).
 //
 // # Corpus evidence
 //
@@ -319,9 +321,11 @@ func traitsOf(ctx context.Context, doc *document.Document, widget ast.PdfDict) [
 // signed revision names no template.
 //
 // ISO 32000-1, 12.8.2.2, Table 254 permits instantiating page templates at
-// P=2, and 12.7.6 has an instantiation copy a template page, with its fields,
-// to a new page. A script that renames the copied fields gives each a new
-// field of its own, under new nodes that group them. Every widget at or under
+// P=2, and 12.7.6 has an instantiation add a template page, with its fields,
+// to the document as a new page. An instantiation that renames the copied
+// fields, prefixing each name with the page and the template (12.7.7.3.3,
+// Table 249; Annex J), gives each a new field of its own, under new nodes that
+// group them. Every widget at or under
 // num must be listed on a page the signed revision did not hold and copy a
 // widget of a template page ([templateInstances.match]), and the actions that
 // run when it is used must be the template's ([sameAcross]). A node that is

@@ -47,11 +47,13 @@ var inheritedEntries = map[ast.PdfName]bool{"Resources": true, "MediaBox": true,
 // filling in forms, instantiating page templates and signing, and P=3 adds
 // annotation changes, so the one way either adds a page is a template
 // instantiation (12.7.6), which copies a page the signed revision's name
-// dictionary names to a new page. The classifier permits a page and an untyped
-// object from P=2, and [changedPage] compares only the pages the signed
-// revision holds, so a page added with content of its own is found here.
-// 12.8.2.2.2 lets a reader compare the signed and current versions, which is
-// what this does.
+// dictionary names to a new page. Acrobat's Template.spawn, which can
+// otherwise overlay a template on an existing page, always adds one to a
+// certified document: its JavaScript API reference disables the bOverlay
+// parameter there. The classifier permits a page and an untyped object from
+// P=2, and [changedPage] compares only the pages the signed revision holds, so
+// a page added with content of its own is found here. 12.8.2.2.2 lets a reader
+// compare the signed and current versions, which is what this does.
 //
 // At P=1 every added page is reported. Most updates that add one append a
 // page the classifier already refuses, but a cross-reference section alone
