@@ -144,6 +144,7 @@ one deliberately rather than diffing it against a fresh build.
 | `mcform_2a.pdf`        | PDF/A-2a     | Marked-content `/Lang` in forms and annotation appearances       |
 | `xmpempty_1b.pdf`      | PDF/A-1b     | Empty XMP containers and control bytes against `/Info`           |
 | `extvalue_2b.pdf`      | PDF/A-2b     | Extension property values against their declared types           |
+| `afref_3b.pdf`         | PDF/A-3b     | File specifications something refers to but no `/AF` lists       |
 
 ### Must-not-fire controls
 
@@ -334,6 +335,8 @@ violation but is exempt, so a firing is a false positive.
 | `fontcopies_2b`                           | Two pages sharing an indirect resource or `/Font` dictionary           | one font per dictionary      |
 | `fontcopies_2b`                           | `M1`: a missing CID whose `/W` entry is glyph 0's advance              | ISO 19005-2, 6.2.11.5 t1     |
 | `usecmap_2u`                              | `T2`: a `/UseCMap /Adobe-Korea1-UCS2` base mapping all four codes      | ISO 19005-2, 6.2.11.7.2 t1   |
+| `afref_3b`                                | `FA3`: a FileAttachment `/FS` the catalog `/AF` also lists             | ISO 19005-3, 6.8 t4          |
+| `afref_3b`                                | A `/Names /JavaScript` tree written as an empty dictionary             | ISO 32000-1, 7.7.4           |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -349,6 +352,7 @@ which are covered under [Known divergences](#known-divergences).
 | Fixture                | A-1a | A-1b | A-2a | A-2b | A-2u | A-3a | A-3b | A-3u | A-4 | A-4e | A-4f | UA-1 | UA-2 |
 | ---------------------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- | ---- | ---- |
 | `a4syntax_4.pdf`       | 17   | 15   | 21   | 19   | 19   | 21   | 19   | 19   | 16  | 17   | 18   | 13   | 8    |
+| `afref_3b.pdf`         | 5    | 2    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 10   | 7    |
 | `annotkinds_ua2.pdf`   | 7    | 7    | 8    | 8    | 8    | 8    | 8    | 8    | 5   | 5    | 6    | 8    | 10   |
 | `annots_1b.pdf`        | 16   | 14   | 14   | 12   | 12   | 14   | 12   | 12   | 10  | 10   | 11   | 12   | 8    |
 | `annotstruct_ua2.pdf`  | 13   | 12   | 12   | 12   | 12   | 14   | 14   | 14   | 10  | 9    | 9    | 8    | 13   |
@@ -3641,16 +3645,56 @@ Three cells disagree, PDF/A-2a, PDF/A-3a and PDF/UA-2, all on one glyph: see
 [Known divergences](#known-divergences). The other ten return the same rule
 set, and at the PDF/A levels among them the same count for every rule.
 
+### `afref_3b.pdf`
+
+ISO 19005-3, 6.8 test 4 asks every file specification dictionary of a PDF/A-3
+file to be an associated file, and only an `/AF` array associates one (ISO
+32000-2, 14.13): on the catalog, a page, an annotation, an XObject or a
+structure element. A reference from anywhere else names the file without
+stating how it relates to the document, which is what `/AFRelationship` on an
+associated file records. veraPDF's `isAssociatedFile` holds only the objects
+`/AF` arrays list, whether the file is embedded or external and whether the
+dictionary is indirect or written inline. litho used to accept an annotation's
+reference as an association for an external file, and a dictionary written
+inline outright; the verapdf corpus reaches the first route on two files, and
+no corpus file the others.
+
+Five annotations each refer to an external file specification carrying `/F`,
+`/UF` and `/AFRelationship`, so no other 6.8 test applies:
+
+| Annotation | Route to the file specification                     | `6.8/4` |
+| ---------- | --------------------------------------------------- | ------- |
+| `FA1`      | a FileAttachment `/FS` naming an indirect filespec  | fires   |
+| `FA2`      | a FileAttachment `/FS` written inline               | fires   |
+| `LK`       | a Link's `/GoToR` action whose `/F` is inline       | fires   |
+| `RM`       | a RichMedia `/Assets` tree naming an indirect one   | fires   |
+| `FA3`      | a FileAttachment `/FS` the catalog `/AF` also lists | silent  |
+
+The catalog's `/Names /JavaScript` tree is an empty dictionary. ISO 32000-1,
+7.7.4 makes the tree a map of document-level JavaScript actions, and litho
+judges each action it holds; an empty tree holds none, so neither ISO 19005-1,
+6.6.1 t1 nor ISO 19005-2/3, 6.5.1 t1 fires. litho used to fire them on the
+presence of the key. Three pdfjs files write the tree empty, but each carries
+other JavaScript actions, so no corpus file showed it.
+
+| Rule at PDF/A-3b               | veraPDF | litho |
+| ------------------------------ | ------- | ----- |
+| `6.3.1/1` RichMedia annotation | 1       | 1     |
+| `6.8/4` no associated file     | 4       | 4     |
+
+The two tools return the same rule set and the same count for every rule in
+all thirteen cells.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
-the runner scores 92 x 8 = 736 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 92 x 13 = 1196 cells. litho
+the runner scores 93 x 8 = 744 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 93 x 13 = 1209 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1191 of the 1196 cells. The five
+fixtures exist to protect, and it holds in 1204 of the 1209 cells. The five
 exceptions, two on `complex_ua2` and three on `usecmap_2u`, are marked `*` in
 the counts table and covered under [Known divergences](#known-divergences);
 veraPDF reports a non-empty set in each, which is why the verdict still
@@ -3660,7 +3704,7 @@ The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates,
 counts the cells whose sets of failed rules (clause and test) differ. Every
 fixture here is non-compliant on both sides, so a change that drops or invents
-a rule class leaves `matched` at 736 and moves only `ruleset_mismatch`. Four of
+a rule class leaves `matched` at 744 and moves only `ruleset_mismatch`. Four of
 the five exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1
 and PDF/UA-2 and `usecmap_2u` at PDF/A-2a and PDF/UA-2, so the metric reads 4 on
 this corpus, and the text scoreboard names the rules only one side reports. The
