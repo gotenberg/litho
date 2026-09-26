@@ -86,7 +86,8 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 // one content stream, handed to it in stream order ([opRepair]): it removes
 // the bytes in the ASCII control range 0x00-0x1F, but TAB, LF and CR, from the
 // strings every text-showing operator (Tj, TJ, ' and ") shows, and drops an
-// operator whose string it empties. Every byte it removes counts as an edit.
+// operator whose string it empties, keeping the line move and spacing a ' or "
+// sets (see [emptiedShowEffect]). Every byte it removes counts as an edit.
 // It tracks the text font the strings are shown with, which the guard for a
 // composite font reads.
 //
@@ -117,9 +118,10 @@ type controlByteStripper struct {
 	fontStack []string
 }
 
-// repair returns op with the control bytes of its strings removed, none when
-// it empties one of them, and how many bytes it removed. The operands of op
-// are left as they are: a repaired operation holds a copy.
+// repair returns op with the control bytes of its strings removed, only what
+// op does besides showing text when it empties one of them, and how many bytes
+// it removed. The operands of op are left as they are: a repaired operation
+// holds a copy.
 func (s *controlByteStripper) repair(op content.Operation) ([]content.Operation, int) {
 	switch op.Operator {
 	case "Tf":
@@ -190,9 +192,48 @@ func (s *controlByteStripper) repair(op content.Operation) ([]content.Operation,
 	case removed == 0:
 		return keep, 0
 	case emptied:
-		return nil, removed
+		return emptiedShowEffect(op), removed
 	}
 	return []content.Operation{{Operator: op.Operator, Operands: operands}}, removed
+}
+
+// emptiedShowEffect returns the operations that do what the text-showing
+// operation op does besides showing the string the repair emptied. ISO
+// 32000-1, 9.4.3, Table 109 defines string ' as T* string Tj, and aw ac string "
+// as aw Tw ac Tc string ': dropping either whole would move every later line
+// up by one and lose the spacing it set. A Tj or TJ does nothing else, and
+// neither does a " short of its three operands, which Table 109 gives no
+// meaning.
+//
+// # Corpus evidence
+//
+//   - All corpora: no page shows a " string holding a byte the strip removes,
+//     and two files show a ' string the strip empties, govdocs
+//     thread_100_100586.pdf and pdfjs bug854315.pdf, where no .notdef finding
+//     runs the repair.
+//   - litho repairleft_4.pdf: dropping its emptied ' and " lost two line
+//     breaks from its text, which rolled the whole content tier back and left
+//     its .notdef findings, in the aggressive remediation at PDF/A-2a, 2b,
+//     2u, 3b and 4, PDF/UA-1 and PDF/UA-2.
+func emptiedShowEffect(op content.Operation) []content.Operation {
+	nextLine := content.Operation{Operator: "T*"}
+	switch op.Operator {
+	case "'":
+		return []content.Operation{nextLine}
+	case "\"":
+		// An interpreter takes an operator's operands from the top of its
+		// stack, so aw and ac are the two below the string.
+		n := len(op.Operands)
+		if n < 3 {
+			return nil
+		}
+		return []content.Operation{
+			{Operator: "Tw", Operands: []ast.PdfObject{op.Operands[n-3]}},
+			{Operator: "Tc", Operands: []ast.PdfObject{op.Operands[n-2]}},
+			nextLine,
+		}
+	}
+	return nil
 }
 
 // stripControlString returns a copy of s with ASCII control bytes
