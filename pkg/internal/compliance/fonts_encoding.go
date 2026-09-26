@@ -306,20 +306,28 @@ func allDifferencesGlyphNamesAGLResolvable(ctx context.Context, doc *document.Do
 //   - pdfjs issue5896.pdf: leaves empty names at two unshown codes, and veraPDF
 //     passes its letters.
 func shownType3GlyphNamesResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
+	return len(shownType3CodesWithoutUnicode(ctx, doc, fontDict, usage)) == 0
+}
+
+// shownType3CodesWithoutUnicode returns, sorted, the codes a page shows through
+// a Type 3 font whose glyph name gives no Unicode value, read as
+// [shownType3GlyphNamesResolvable] reads them.
+func shownType3CodesWithoutUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) []byte {
 	encObj, ok := fontDict["Encoding"]
 	if !ok {
-		return true
+		return nil
 	}
 	encDict, err := document.ResolveDict(ctx, doc, encObj)
 	if err != nil || encDict == nil {
-		return true
+		return nil
 	}
 	names := differencesGlyphNames(ctx, doc, encDict)
 	var base map[byte]string
 	if baseName, err := document.ResolveName(ctx, doc, encDict["BaseEncoding"]); err == nil && baseName != "" {
 		base = predefinedEncodingNames(string(baseName))
 	}
-	for code := range usage.charCodes {
+	var out []byte
+	for _, code := range sortedByteKeys(usage.charCodes) {
 		name, ok := names[code]
 		if !ok {
 			name = base[code]
@@ -328,10 +336,10 @@ func shownType3GlyphNamesResolvable(ctx context.Context, doc *document.Document,
 			continue
 		}
 		if name == "" || !glyphNameHasUnicode(name) {
-			return false
+			out = append(out, code)
 		}
 	}
-	return true
+	return out
 }
 
 // glyphNameHasUnicode reports whether a glyph name yields a Unicode value on
@@ -562,13 +570,13 @@ const firstEncodedCode = 32
 func notdefUnicodeViolation(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo, mapping map[string]string) []Violation {
 	if code, ok := renderedNotdefDifferencesCode(ctx, doc, fontDict, usage); ok {
 		if _, mapped := mapping[string([]byte{code})]; !mapped {
-			return failf(rule, "font %s on page %d: rendered code %d maps to .notdef via /Differences (renders U+0000)",
+			return glyphFailf(rule, uint32(code), "font %s on page %d: rendered code %d maps to .notdef via /Differences (renders U+0000)",
 				fontName, pageNum, code)
 		}
 	}
 	if code, ok := renderedUnencodedCode(ctx, doc, fontDict, usage); ok {
 		if _, mapped := mapping[string([]byte{code})]; !mapped {
-			return failf(rule, "font %s on page %d: rendered code %d names no glyph in the font's encoding (renders U+0000)",
+			return glyphFailf(rule, uint32(code), "font %s on page %d: rendered code %d names no glyph in the font's encoding (renders U+0000)",
 				fontName, pageNum, code)
 		}
 	}
@@ -1192,9 +1200,18 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 				return nil
 			}
 		}
-		// Fall through to the ToUnicode presence check below.
+		// Fall through to the ToUnicode presence check below. Under part 1 no
+		// glyph name stands in for the map, so every shown code goes without.
 		if !hasToUnicode(ctx, doc, fontDict) {
-			return failf(rule, "font %s on page %d", fontName, pageNum)
+			var codes []byte
+			if usage != nil {
+				if PDFAPart(profile) == 1 {
+					codes = sortedByteKeys(usage.charCodes)
+				} else {
+					codes = shownType3CodesWithoutUnicode(ctx, doc, fontDict, usage)
+				}
+			}
+			return missingUnicodeFaults(rule, fontName, pageNum, codes)
 		}
 		return nil
 	}
@@ -1246,7 +1263,7 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 				return nil
 			}
 			if hasToUnicode(ctx, doc, fontDict) {
-				if _, _, leftOut := shownCodeOutsideToUnicode(ctx, doc, fontDict, usage); !leftOut {
+				if len(shownCodesOutsideToUnicode(ctx, doc, fontDict, usage)) == 0 {
 					return nil
 				}
 			}
@@ -1342,23 +1359,71 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	}
 
 	if !hasToUnicode(ctx, doc, fontDict) {
-		return failf(rule, "font %s on page %d", fontName, pageNum)
+		return missingUnicodeFaults(rule, fontName, pageNum, shownCodesWithoutUnicodeName(ctx, doc, fontDict, usage))
 	}
-	if code, name, leftOut := shownCodeOutsideToUnicode(ctx, doc, fontDict, usage); leftOut {
-		if name == "" {
-			return failf(rule, "font %s on page %d: code %d is outside /ToUnicode and the font embeds no program to name it",
-				fontName, pageNum, code)
+	faults := newGlyphFaults(rule)
+	for _, out := range shownCodesOutsideToUnicode(ctx, doc, fontDict, usage) {
+		if out.name == "" {
+			faults.add(uint32(out.code), "font %s on page %d: code %d is outside /ToUnicode and the font embeds no program to name it",
+				fontName, pageNum, out.code)
+			continue
 		}
-		return failf(rule, "font %s on page %d: code %d is outside /ToUnicode and its glyph name %s has no Unicode value",
-			fontName, pageNum, code, name)
+		faults.add(uint32(out.code), "font %s on page %d: code %d is outside /ToUnicode and its glyph name %s has no Unicode value",
+			fontName, pageNum, out.code, out.name)
 	}
-
-	return nil
+	return faults.violations()
 }
 
-// shownCodeOutsideToUnicode reports a code a Type 1 font shows that its
-// /ToUnicode CMap leaves out and its encoding names with a glyph name carrying
-// no Unicode value.
+// missingUnicodeFaults states the ToUnicode presence rule for a font that gives
+// the codes it shows no /ToUnicode mapping: once for each code in codes, the
+// shown codes left without a Unicode value, and once for the font, naming no
+// glyph, when codes is empty. The rule judges each glyph (veraPDF's Glyph test
+// toUnicode != null), but an empty list means the verdict rests on the font
+// as a whole, through an exemption it failed, rather than on codes litho can
+// name.
+func missingUnicodeFaults(rule Rule, fontName string, pageNum int, codes []byte) []Violation {
+	if len(codes) == 0 {
+		return failf(rule, "font %s on page %d", fontName, pageNum)
+	}
+	faults := newGlyphFaults(rule)
+	for _, c := range codes {
+		faults.add(uint32(c), "font %s on page %d: code %d has no Unicode value", fontName, pageNum, c)
+	}
+	return faults.violations()
+}
+
+// shownCodesWithoutUnicodeName returns, sorted, the codes a simple font shows
+// whose encoding gives them no glyph name a Unicode value derives from (ISO
+// 32000-1, 9.10.2). A code named .notdef is left out: the glyph lists map it
+// to U+0000, which the value rule judges, so it has a Unicode value.
+func shownCodesWithoutUnicodeName(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) []byte {
+	if usage == nil || len(usage.charCodes) == 0 {
+		return nil
+	}
+	enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
+	var out []byte
+	for _, c := range sortedByteKeys(usage.charCodes) {
+		name := enc[c]
+		if name == ".notdef" {
+			continue
+		}
+		if name == "" || (!glyphNameHasUnicode(name) && !symbolEncodingNames[name]) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// outsideCode is a shown code a /ToUnicode CMap leaves out, with the glyph name
+// the encoding gives it, empty when it gives none.
+type outsideCode struct {
+	code byte
+	name string
+}
+
+// shownCodesOutsideToUnicode returns, sorted, the codes a Type 1 font shows
+// that its /ToUnicode CMap leaves out and its encoding names with a glyph name
+// carrying no Unicode value.
 //
 // ISO 14289-1, 7.21.7 and ISO 19005-2, 6.2.11.7.2 ask that every shown code
 // map to Unicode. A /ToUnicode CMap vouches only for the codes it maps: ISO
@@ -1379,9 +1444,9 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 //     /Encoding whose /ToUnicode maps only <20>, and veraPDF reports every
 //     other code. It backs reporting an unnamed code when the font embeds no
 //     program.
-func shownCodeOutsideToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) (byte, string, bool) {
+func shownCodesOutsideToUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) []outsideCode {
 	if usage == nil || len(usage.charCodes) == 0 {
-		return 0, "", false
+		return nil
 	}
 	// A font that embeds no program carries no built-in glyph names to fall back
 	// on, so a code its encoding leaves unnamed has no Unicode source at all once
@@ -1392,37 +1457,33 @@ func shownCodeOutsideToUnicode(ctx context.Context, doc *document.Document, font
 	st := fontSubtype(ctx, doc, fontDict)
 	unembeddedTrueType := st == "TrueType" && !embedded
 	if st != "Type1" && st != "MMType1" && !unembeddedTrueType {
-		return 0, "", false
+		return nil
 	}
 	tuObj, ok := fontDict["ToUnicode"]
 	if !ok {
-		return 0, "", false
+		return nil
 	}
 	stream, err := document.ResolveStream(ctx, doc, tuObj)
 	if err != nil || stream.Dict == nil {
 		doc.Logger.Debug("compliance: fonts: ToUnicode is not a stream", "error", err)
-		return 0, "", false
+		return nil
 	}
 	data, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		doc.Logger.Debug("compliance: fonts: failed to decode ToUnicode CMap", "error", err)
-		return 0, "", false
+		return nil
 	}
 	parsed, err := cmap.Parse(ctx, data)
 	if err != nil || parsed == nil || len(parsed.Mapping) == 0 {
 		doc.Logger.Debug("compliance: fonts: failed to parse ToUnicode CMap", "error", err)
-		return 0, "", false
+		return nil
 	}
 
 	mapped := cmapSourceCodeValues(parsed)
 
 	enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
-	codes := make([]byte, 0, len(usage.charCodes))
-	for c := range usage.charCodes {
-		codes = append(codes, c)
-	}
-	slices.Sort(codes)
-	for _, c := range codes {
+	var out []outsideCode
+	for _, c := range sortedByteKeys(usage.charCodes) {
 		if mapped[int(c)] {
 			continue
 		}
@@ -1432,16 +1493,16 @@ func shownCodeOutsideToUnicode(ctx context.Context, doc *document.Document, font
 			// does not establish, so a named program keeps its exemption. With
 			// no program there is nothing left to read.
 			if !embedded {
-				return c, "", true
+				out = append(out, outsideCode{code: c})
 			}
 			continue
 		}
 		if glyphNameHasUnicode(name) || symbolEncodingNames[name] {
 			continue
 		}
-		return c, name, true
+		out = append(out, outsideCode{code: c, name: name})
 	}
-	return 0, "", false
+	return out
 }
 
 // cmapSourceCodeValues returns the integer value of every source code a parsed
@@ -1723,8 +1784,12 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 		}
 	}
 
+	// With no map at all, or one that maps nothing, every glyph the font shows
+	// goes without a Unicode value, and each is stated once; see
+	// [fontJudgements.glyphs]. Codes litho cannot decode leave one statement
+	// for the font.
 	if !hasToUnicode(ctx, doc, type0Dict) {
-		return failf(rule, "font %s on page %d", fontName, pageNum)
+		return type0MissingUnicode(ctx, doc, type0Dict, rule, usage, "font %s on page %d", fontName, pageNum)
 	}
 
 	// ISO 14289-1 §7.21.7 and ISO 19005-2 §6.2.11.7.2 ask for a ToUnicode CMap
@@ -1734,10 +1799,25 @@ func checkType0ToUnicode(ctx context.Context, doc *document.Document, type0Dict,
 	// glyph. A font no glyph uses is not judged, since both rules are scoped to
 	// shown glyphs.
 	if usage != nil && len(usage.charCodes) > 0 && toUnicodeMapsNothing(ctx, doc, type0Dict["ToUnicode"]) {
-		return failf(rule, "font %s on page %d: /ToUnicode is not a CMap mapping any code", fontName, pageNum)
+		return type0MissingUnicode(ctx, doc, type0Dict, rule, usage, "font %s on page %d: /ToUnicode is not a CMap mapping any code", fontName, pageNum)
 	}
 
 	return nil
+}
+
+// type0MissingUnicode states rule once for every CID a composite font's shown
+// codes select, with the context format renders, or once for the font when
+// those CIDs cannot be decoded.
+func type0MissingUnicode(ctx context.Context, doc *document.Document, type0Dict ast.PdfDict, rule Rule, usage *fontUsageInfo, format, fontName string, pageNum int) []Violation {
+	cids := type0UsedCIDs(ctx, doc, type0Dict, usage)
+	if len(cids) == 0 {
+		return failf(rule, format, fontName, pageNum)
+	}
+	faults := newGlyphFaults(rule)
+	for _, cid := range sortedCIDs(cids) {
+		faults.add(uint32(cid), format, fontName, pageNum)
+	}
+	return faults.violations()
 }
 
 // toUnicodeMapsNothing reports whether a /ToUnicode entry is a stream that does
@@ -1824,12 +1904,20 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		return nil
 	}
 
-	for code, uni := range parsed.Mapping {
+	// Every rendered code is its own glyph, stated once; see
+	// [fontJudgements.glyphs]. A composite font's code is its CID under an
+	// Identity CMap, which is the only case its glyph is named by.
+	faults := newGlyphFaults(rule)
+	for _, code := range slices.Sorted(maps.Keys(parsed.Mapping)) {
 		if !codeUsed(usage, code) {
 			continue
 		}
-		if strings.ContainsAny(uni, "\u0000\uFEFF\uFFFE") {
-			return failf(rule, "font %s on page %d: /ToUnicode maps a rendered code to U+0000, U+FEFF, or U+FFFE",
+		if strings.ContainsAny(parsed.Mapping[code], "\u0000\uFEFF\uFFFE") {
+			var value uint32
+			for i := range len(code) {
+				value = value<<8 | uint32(code[i])
+			}
+			faults.add(value, "font %s on page %d: /ToUnicode maps a rendered code to U+0000, U+FEFF, or U+FFFE",
 				fontName, pageNum)
 		}
 	}
@@ -1837,8 +1925,8 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 	// A rendered code the CMap leaves alone falls back to its glyph name, so an
 	// explicit .notdef override still resolves to U+0000. This is font-type
 	// agnostic, unlike the name-absence reasoning below.
-	if v := notdefUnicodeViolation(ctx, doc, fontDict, fontName, pageNum, rule, usage, parsed.Mapping); v != nil {
-		return v
+	for _, v := range notdefUnicodeViolation(ctx, doc, fontDict, fontName, pageNum, rule, usage, parsed.Mapping) {
+		faults.add(v.glyph.code, "%s", v.Context)
 	}
 
 	// A used code that is absent from the ToUnicode CMap and carries no
@@ -1850,12 +1938,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 	// (t1 family) instead.
 	if st := fontSubtype(ctx, doc, fontDict); st == "Type1" || st == "MMType1" {
 		enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
-		codes := make([]byte, 0, len(usage.charCodes))
-		for b := range usage.charCodes {
-			codes = append(codes, b)
-		}
-		slices.Sort(codes)
-		for _, c := range codes {
+		for _, c := range sortedByteKeys(usage.charCodes) {
 			if _, mapped := parsed.Mapping[string([]byte{c})]; mapped {
 				continue
 			}
@@ -1877,7 +1960,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 			// implied Unicode value at all (not even U+0000), and a missing
 			// /ToUnicode is therefore conformant. Only the Type1 family's
 			// name chain bottoms out at .notdef, whose value is U+0000.
-			return failf(rule, "font %s on page %d: rendered code %d has no ToUnicode mapping and no glyph name (renders U+0000)",
+			faults.add(uint32(c), "font %s on page %d: rendered code %d has no ToUnicode mapping and no glyph name (renders U+0000)",
 				fontName, pageNum, c)
 		}
 	} else if st == "TrueType" {
@@ -1888,23 +1971,18 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		// /Encoding: a symbolic TrueType font has no /Encoding and thus no
 		// implied Unicode, so a missing /ToUnicode is conformant.
 		if enc := resolveSimpleFontEncoding(ctx, doc, fontDict); len(enc) > 0 {
-			codes := make([]byte, 0, len(usage.charCodes))
-			for b := range usage.charCodes {
-				codes = append(codes, b)
-			}
-			slices.Sort(codes)
-			for _, c := range codes {
+			for _, c := range sortedByteKeys(usage.charCodes) {
 				if _, mapped := parsed.Mapping[string([]byte{c})]; mapped {
 					continue
 				}
 				if enc[c] == "" {
-					return failf(rule, "font %s on page %d: rendered code %d has no ToUnicode mapping and is absent from the explicit /Encoding (renders U+0000)",
+					faults.add(uint32(c), "font %s on page %d: rendered code %d has no ToUnicode mapping and is absent from the explicit /Encoding (renders U+0000)",
 						fontName, pageNum, c)
 				}
 			}
 		}
 	}
-	return nil
+	return faults.violations()
 }
 
 // codeUsed reports whether the raw character-code bytes appear in the

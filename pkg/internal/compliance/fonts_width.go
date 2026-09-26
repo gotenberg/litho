@@ -1424,6 +1424,7 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 		}
 	}
 
+	faults := newGlyphFaults(rule)
 	for _, s := range usage.rawStrings {
 		b := []byte(s)
 		for off := 0; off < len(b); {
@@ -1459,14 +1460,23 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 					cid := uint16(b[off])<<8 | uint16(b[off+1])
 					skip = cid == 0 || cffAbsent[cid]
 				}
-				if !skip {
-					return failf(rule, "font %s on page %d: rendered code has no ToUnicode mapping", fontName, pageNum)
+				switch {
+				case skip:
+				case identity && consumed == 2:
+					// Under an Identity CMap the code is the CID, so every such
+					// glyph is stated once; see [fontJudgements.glyphs].
+					cid := uint32(b[off])<<8 | uint32(b[off+1])
+					faults.add(cid, "font %s on page %d: rendered code <%04X> has no ToUnicode mapping", fontName, pageNum, cid)
+				default:
+					// Any other encoding needs its CMap to name the CID, so the
+					// first such code stands for the font.
+					return append(faults.violations(), failf(rule, "font %s on page %d: rendered code has no ToUnicode mapping", fontName, pageNum)...)
 				}
 			}
 			off += consumed
 		}
 	}
-	return nil
+	return faults.violations()
 }
 
 // toUnicodeCoversCode reports whether a /ToUnicode mapping holds an entry for

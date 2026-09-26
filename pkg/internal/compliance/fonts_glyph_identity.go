@@ -267,6 +267,24 @@ var noContext = glyphContext{mode: -1}
 //   - All corpora: the counts of ISO 19005-2, 6.2.11.8 t1 moved toward
 //     veraPDF's in 34 files and away in none; their summed distance fell from
 //     2371 to 28.
+//   - All corpora but verapdf, at PDF/A-2u: the counts of ISO 19005-2,
+//     6.2.11.7.2 t1 moved toward veraPDF's in 273 files and away in 3; their
+//     summed distance fell from 23493 to 2634. Those of 6.2.11.7.2 t2 moved
+//     toward in 8 files and away in 1; their distance fell from 1493 to 1094.
+//   - pdfcpu pkg_testdata__read.go.pdf: the t2 count that moved away, from 164
+//     to 26 against veraPDF's 324. veraPDF tells the glyphs of its Type 3
+//     fonts apart by the /StructParents of each page that shows them, which
+//     litho does not model, having measured no such split for a simple font.
+//   - verapdf: the ToUnicode presence counts at PDF/A-1a, PDF/A-2u, PDF/UA-1
+//     and PDF/UA-2, a distance of 27 from veraPDF's, now match them.
+//   - govdocs thread_200_200408.pdf: a ToUnicode count that moved away, from
+//     26 to 15 against veraPDF's 181, because litho states nothing for the
+//     Type 3 fonts whose /ToUnicode leaves shown codes out. For the fonts it
+//     does judge the counts moved toward veraPDF's: T13 from 22 to 10 against
+//     8, T18 from 3 to 4 against 4.
+//   - pdfjs issue5010.pdf: its /ToUnicode takes most mappings from the
+//     Adobe-Korea1-UCS2 base CMap it names with usecmap, which litho does not
+//     load, so litho states 10 unmapped codes where veraPDF states 5.
 func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fontID string, font ast.PdfDict, usage *fontUsageInfo, profile string, vs []Violation) []Violation {
 	var out []Violation
 	var where map[uint32][]shownGlyph
