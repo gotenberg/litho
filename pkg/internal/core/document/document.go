@@ -3,6 +3,7 @@ package document
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +14,7 @@ import (
 	"sync/atomic"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
 	"github.com/gotenberg/litho/pkg/internal/filter"
@@ -141,18 +143,24 @@ type Document struct {
 	integerOverflows map[int][]float64
 
 	// trailerFormatViolations holds the format violations the bytes of the
-	// trailer dictionary of the section startxref designates hold, which
-	// [xref.ParseXRefTable] reads under format checking. It is nil for a
-	// cross-reference stream, whose dictionary is an indirect object, and for
-	// a trailer a rebuild found or synthesized. Each violation stands for at
-	// least one byte of the trailer, so the file size bounds the slice.
-	// Written once during construction and read-only thereafter.
+	// trailer of the section startxref designates hold: those of a trailer
+	// dictionary, which [xref.ParseXRefTable] reads under format checking, or
+	// those in the trailer entries of a cross-reference stream dictionary,
+	// which [Document.parseXRefChain] reads so (see [xrefStreamTrailerKeys]).
+	// It is nil for a trailer a rebuild found or synthesized. Each violation
+	// stands for at least one byte of the trailer, so the file size bounds the
+	// slice. Written once during construction and read-only thereafter.
 	trailerFormatViolations []error
 
 	// trailerMergedKeys lists the keys [mergeTrailerKeys] carried into
 	// [Document.Index].Trailer from an older section's trailer, at most /Root
 	// and /Info. Written once during construction and read-only thereafter.
 	trailerMergedKeys []ast.PdfName
+
+	// trailerStream reports that the section startxref designates is a
+	// cross-reference stream, whose dictionary [Document.Index].Trailer is.
+	// Written once during construction and read-only thereafter.
+	trailerStream bool
 
 	// objectStarts lists, by ascending offset, where the index places each
 	// in-use uncompressed object once construction has read it from the table
@@ -264,37 +272,75 @@ func (d *Document) ObjectFormatViolations(objNum int) []error {
 	return slices.Clone(d.formatViolations[objNum])
 }
 
-// TrailerFormatViolations returns the format violations the trailer dictionary
-// of the cross-reference table startxref designates holds, in the order they
-// were found, or nil when it holds none, when the section is a
-// cross-reference stream, whose dictionary is an indirect object and recorded
-// as one, or when the trailer came from a rebuild. The trailer is parsed
-// before any validation starts and never again, so the list is recorded
+// TrailerFormatViolations returns the format violations the trailer of the
+// cross-reference section startxref designates holds, in the order they were
+// found, or nil when it holds none or when the trailer came from a rebuild.
+// The trailer of a cross-reference stream is the trailer entries of its
+// dictionary ([Document.TrailerAsWritten]), so the list holds the violations
+// in their values alone; the dictionary is an indirect object, and a parse of
+// it in compliance mode records every violation it holds as the object's. The
+// section is parsed before any validation starts, so the list is recorded
 // whatever the compliance mode. The result is a fresh slice.
-// TrailerFormatViolations is safe for concurrent use: the list is written
-// once during construction.
+// TrailerFormatViolations is safe for concurrent use: the list is written once
+// during construction.
 func (d *Document) TrailerFormatViolations() []error {
 	return slices.Clone(d.trailerFormatViolations)
 }
 
-// TrailerAsWritten returns the trailer dictionary of the cross-reference
-// section startxref designates as the file writes it: [Document.Index].Trailer
-// without the /Root and /Info the reader carries forward from an older
-// section when the newest omits them (see [mergeTrailerKeys]). A PDF/A
-// validator judges the values of that trailer alone, since veraPDF reads the
-// newest section's trailer as root/trailer[0] and merges nothing into it.
+// TrailerAsWritten returns the trailer of the cross-reference section
+// startxref designates as the file writes it: [Document.Index].Trailer without
+// the /Root and /Info the reader carries forward from an older section when
+// the newest omits them (see [mergeTrailerKeys]). A PDF/A validator judges the
+// values of that trailer alone, since veraPDF reads the newest section's
+// trailer as root/trailer[0] and merges nothing into it.
+//
+// A cross-reference stream carries its trailer in its dictionary, beside the
+// entries that describe the stream (ISO 32000-1, 7.5.8.2), so its trailer is
+// the entries of the trailer dictionary, ISO 32000-1, Table 15, that the
+// dictionary holds ([xrefStreamTrailerKeys]). veraPDF builds root/trailer[0]
+// from those entries alone (XrefStreamParser.setTrailer, veraPDF-parser 1.30).
+//
 // TrailerAsWritten is safe for concurrent use: the result is a fresh
 // dictionary whenever it differs from [Document.Index].Trailer, which is
 // read-only after construction.
 func (d *Document) TrailerAsWritten() ast.PdfDict {
-	if len(d.trailerMergedKeys) == 0 {
+	if len(d.trailerMergedKeys) == 0 && !d.trailerStream {
 		return d.Index.Trailer
 	}
-	written := maps.Clone(d.Index.Trailer)
+	var written ast.PdfDict
+	if d.trailerStream {
+		written = make(ast.PdfDict, len(xrefStreamTrailerKeys))
+		for _, key := range xrefStreamTrailerKeys {
+			if value, ok := d.Index.Trailer[key]; ok {
+				written[key] = value
+			}
+		}
+	} else {
+		written = maps.Clone(d.Index.Trailer)
+	}
 	for _, key := range d.trailerMergedKeys {
 		delete(written, key)
 	}
 	return written
+}
+
+// xrefStreamTrailerKeys lists the entries of the trailer dictionary, ISO
+// 32000-1, Table 15, which a cross-reference stream dictionary holds as the
+// trailer's (ISO 32000-1, 7.5.8.2).
+var xrefStreamTrailerKeys = []ast.PdfName{"Size", "Prev", "Root", "Encrypt", "Info", "ID"}
+
+// xrefStreamTrailerViolations returns the format violations among violations,
+// those a parse of a cross-reference stream recorded, that lie in the value of
+// one of its trailer entries ([xrefStreamTrailerKeys]).
+func xrefStreamTrailerViolations(violations []error) []error {
+	var inTrailer []error
+	for _, violation := range violations {
+		entry, ok := errors.AsType[*parser.EntryViolationError](violation)
+		if ok && len(entry.Path) > 0 && slices.Contains(xrefStreamTrailerKeys, entry.Path[0].Key) {
+			inTrailer = append(inTrailer, violation)
+		}
+	}
+	return inTrailer
 }
 
 // recordIntegerOverflows records the integer literals past the 64-bit range
@@ -900,6 +946,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		doc.Index.Trailer = nil
 		doc.trailerFormatViolations = nil
 		doc.trailerMergedKeys = nil
+		doc.trailerStream = false
 		if rebuildErr := doc.rebuildXRef(ctx); rebuildErr != nil {
 			return nil, fmt.Errorf("%w: %v (rebuild also failed: %v)", ErrDamagedXRef, err, rebuildErr)
 		}
@@ -930,6 +977,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 			doc.Index.Trailer = nil
 			doc.trailerFormatViolations = nil
 			doc.trailerMergedKeys = nil
+			doc.trailerStream = false
 			if rebuildErr := doc.rebuildXRef(ctx); rebuildErr == nil {
 				doc.Rebuilt = true
 			}

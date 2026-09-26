@@ -581,6 +581,16 @@ func checkFormatViolations(vctx *validationCtx, profile string, twice map[int]bo
 // it twice, and one in the trailer, or the direct /Info, of an older section
 // an incremental update left behind fails nothing.
 //
+// A cross-reference stream holds the trailer in the entries of its dictionary
+// that ISO 32000-1, Table 15 defines ([document.Document.TrailerAsWritten]).
+// Its dictionary is an indirect object, which the object sweep judges whole,
+// and veraPDF judges those entries once more as the CosTrailer it builds from
+// them, and a direct /Info in them a third time. Measured with veraPDF 1.30 at
+// PDF/A-1b, PDF/A-2b and PDF/A-4: a hex string with an odd digit count or a
+// non-hex character in the /ID of a cross-reference stream fails the rule
+// twice, one in its direct /Info three times, and one in an entry Table 15
+// does not define, or in an older section's stream, once.
+//
 // # Corpus evidence
 //
 //   - All corpora: judging the trailer's strings, and a direct /Info twice,
@@ -588,6 +598,9 @@ func checkFormatViolations(vctx *validationCtx, profile string, twice map[int]bo
 //     profile.
 //   - pdfjs issue9540.pdf: the one file whose trailer writes its /Info
 //     directly, and nothing in it fails a rule.
+//   - All corpora: judging the trailer entries of a cross-reference stream
+//     once more, and its direct /Info twice more, changes no count at
+//     PDF/A-1b or PDF/A-2b, veraPDF files at their own profile.
 func trailerFormatViolations(doc *document.Document, profile string) []Violation {
 	_, directInfo := doc.TrailerAsWritten()["Info"].(ast.PdfDict)
 	var results []Violation

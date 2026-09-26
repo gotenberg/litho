@@ -128,6 +128,13 @@ func indirectObjCountRule(profile string) Rule {
 // newest section's trailer counts: an integer past its range in a direct
 // /Info, or in another entry, of an older section's trailer fails nothing.
 //
+// The trailer of a cross-reference stream is the entries of its dictionary
+// that ISO 32000-1, Table 15 defines, which the object sweep also judges as
+// part of the stream ([document.Document.TrailerAsWritten]). Measured the same
+// way: an integer past its range in the /Size of a cross-reference stream
+// fails the limit twice, one in its direct /Info three times, and one in an
+// entry Table 15 does not define, or a name key past its limit there, once.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue5599.pdf: writes /ID 77777777777777777 in its trailer, which
@@ -136,6 +143,9 @@ func indirectObjCountRule(profile string) Rule {
 //     /Size is 2147483648, a value that appears nowhere in it.
 //   - All corpora: a violation carrying the zero Rule serialized as a
 //     clause-less "-t00" residual.
+//   - All corpora: judging the trailer of a cross-reference stream as its
+//     trailer entries alone changes no count at PDF/A-1b or PDF/A-2b,
+//     veraPDF files at their own profile.
 func checkNumericLimits(ctx context.Context, doc *document.Document, profile string, twice map[int]bool) []Violation {
 	part := PDFAPart(profile)
 	var results []Violation

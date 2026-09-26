@@ -3,6 +3,7 @@ package compliance
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"strings"
 	"testing"
@@ -66,13 +67,7 @@ func TestTrailerValuesJudgedAsVeraPDFReachesThem(t *testing.T) {
 		return trailerDictPDF("<< /Size %d /Root 1 0 R " + id + entries + " >>")
 	}
 
-	cases := []struct {
-		name    string
-		data    []byte
-		profile models.PDFAProfile
-		rule    Rule
-		want    int
-	}{
+	cases := []trailerCase{
 		{
 			"odd hex string in a direct /Info", withEntries(" /Info << /Producer <414> >>"),
 			models.PDFA1b, Rule_19005_1_6_1_6_t01, 2,
@@ -156,6 +151,22 @@ func TestTrailerValuesJudgedAsVeraPDFReachesThem(t *testing.T) {
 			models.PDFA2b, Rule_19005_2_6_1_13_t01, 0,
 		},
 	}
+	runTrailerCases(t, cases)
+}
+
+// trailerCase is one fixture a trailer test validates, with the count of the
+// rule veraPDF 1.30 states for it.
+type trailerCase struct {
+	name    string
+	data    []byte
+	profile models.PDFAProfile
+	rule    Rule
+	want    int
+}
+
+// runTrailerCases validates each case and compares the count of its rule.
+func runTrailerCases(t *testing.T, cases []trailerCase) {
+	t.Helper()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -172,4 +183,148 @@ func TestTrailerValuesJudgedAsVeraPDFReachesThem(t *testing.T) {
 			}
 		})
 	}
+}
+
+// xrefStreamTestID is the /ID the cross-reference stream fixtures carry.
+const xrefStreamTestID = "/ID [<00112233445566778899AABBCCDDEEFF> <00112233445566778899AABBCCDDEEFF>]"
+
+// xrefStreamRow encodes one cross-reference stream entry under /W [1 4 2].
+func xrefStreamRow(kind byte, field2 int, field3 uint16) []byte {
+	row := make([]byte, 7)
+	row[0] = kind
+	binary.BigEndian.PutUint32(row[1:5], uint32(field2))
+	binary.BigEndian.PutUint16(row[5:], field3)
+	return row
+}
+
+// xrefStreamPDF builds a one-page PDF indexed by a cross-reference stream,
+// object 5, whose dictionary carries entries after /Type, /W and /Root.
+func xrefStreamPDF(entries string) []byte {
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << >> /Contents 4 0 R >>",
+		exponentStream("", "0 0 m 10 10 l S"),
+	}
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.7\n%\xe2\xe3\xcf\xd3\n")
+	rows := xrefStreamRow(0, 0, 65535)
+	for i, o := range objs {
+		rows = append(rows, xrefStreamRow(1, buf.Len(), 0)...)
+		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	xref := buf.Len()
+	rows = append(rows, xrefStreamRow(1, xref, 0)...)
+	fmt.Fprintf(&buf, "5 0 obj\n%s\nendobj\nstartxref\n%d\n%%%%EOF\n",
+		exponentStream("/Type /XRef /W [1 4 2] /Root 1 0 R"+entries, string(rows)), xref)
+	return buf.Bytes()
+}
+
+// updatedXRefStreamPDF appends to an [xrefStreamPDF] whose stream carries
+// oldEntries an incremental update rewriting its content stream, indexed by a
+// cross-reference stream, object 6, whose dictionary carries newEntries.
+func updatedXRefStreamPDF(oldEntries, newEntries string) []byte {
+	base := xrefStreamPDF(" /Size 6 " + xrefStreamTestID + oldEntries)
+	_, tail, _ := bytes.Cut(base[bytes.LastIndex(base, []byte("startxref")):], []byte("\n"))
+	prev, _, _ := bytes.Cut(tail, []byte("\n"))
+	buf := bytes.NewBuffer(base)
+	rows := xrefStreamRow(1, buf.Len(), 0)
+	fmt.Fprintf(buf, "4 0 obj\n%s\nendobj\n", exponentStream("", "0 0 m 20 20 l S"))
+	xref := buf.Len()
+	rows = append(rows, xrefStreamRow(1, xref, 0)...)
+	dict := fmt.Sprintf("/Type /XRef /Size 7 /Index [4 1 6 1] /W [1 4 2] /Root 1 0 R /Prev %s %s%s", prev, xrefStreamTestID, newEntries)
+	fmt.Fprintf(buf, "6 0 obj\n%s\nendobj\nstartxref\n%d\n%%%%EOF\n", exponentStream(dict, string(rows)), xref)
+	return buf.Bytes()
+}
+
+// TestXRefStreamTrailerValuesJudgedAsVeraPDFReachesThem pins that the format
+// and limit rules judge the trailer entries of a cross-reference stream
+// dictionary, those ISO 32000-1, Table 15 defines, once more than the object
+// sweep does, and a document information dictionary written directly there
+// twice more; see [trailerFormatViolations], [checkNumericLimits] and
+// [document.Document.TrailerAsWritten]. Every count was measured with veraPDF
+// 1.30.
+func TestXRefStreamTrailerValuesJudgedAsVeraPDFReachesThem(t *testing.T) {
+	t.Parallel()
+
+	withEntries := func(entries string) []byte {
+		return xrefStreamPDF(" /Size 6 " + xrefStreamTestID + entries)
+	}
+
+	runTrailerCases(t, []trailerCase{
+		{
+			"odd hex string in a direct /Info", withEntries(" /Info << /Producer <414> >>"),
+			models.PDFA1b, Rule_19005_1_6_1_6_t01, 3,
+		},
+		{
+			"odd hex string in a direct /Info at 2b", withEntries(" /Info << /Producer <414> >>"),
+			models.PDFA2b, Rule_19005_2_6_1_6_t01, 3,
+		},
+		{
+			"odd hex string in a direct /Info at 4", withEntries(" /Info << /Producer <414> >>"),
+			models.PDFA4, Rule_19005_4_6_1_5_t01, 3,
+		},
+		{
+			"non-hex character in a direct /Info", withEntries(" /Info << /Producer <41G1> >>"),
+			models.PDFA2b, Rule_19005_2_6_1_6_t02, 3,
+		},
+		{
+			"odd hex string in /ID", xrefStreamPDF(" /Size 6 /ID [<00112233445566778899AABBCCDDEEF> <00112233445566778899AABBCCDDEEFF>]"),
+			models.PDFA2b, Rule_19005_2_6_1_6_t01, 2,
+		},
+		{
+			"odd hex string in /ID at 4", xrefStreamPDF(" /Size 6 /ID [<00112233445566778899AABBCCDDEEF> <00112233445566778899AABBCCDDEEFF>]"),
+			models.PDFA4, Rule_19005_4_6_1_5_t01, 2,
+		},
+		{
+			"odd hex string in another entry", withEntries(" /Foo <414>"),
+			models.PDFA2b, Rule_19005_2_6_1_6_t01, 1,
+		},
+		{
+			"integer out of range in another entry", withEntries(" /Foo 2147483648"),
+			models.PDFA1b, Rule_19005_1_6_1_12_t01, 1,
+		},
+		{
+			"integer out of range in another entry at 2b", withEntries(" /Foo 2147483648"),
+			models.PDFA2b, Rule_19005_2_6_1_13_t01, 1,
+		},
+		{
+			"integer out of range in /Size", xrefStreamPDF(" /Size 2147483648 /Index [0 6] " + xrefStreamTestID),
+			models.PDFA2b, Rule_19005_2_6_1_13_t01, 2,
+		},
+		{
+			"integer out of range in a direct /Info", withEntries(" /Info << /Foo 2147483648 >>"),
+			models.PDFA1b, Rule_19005_1_6_1_12_t01, 3,
+		},
+		{
+			"real out of range in a direct /Info", withEntries(" /Info << /Foo 40000.5 >>"),
+			models.PDFA1b, Rule_19005_1_6_1_12_t02, 3,
+		},
+		{
+			"long string in a direct /Info", withEntries(" /Info << /Producer (" + strings.Repeat("x", 70000) + ") >>"),
+			models.PDFA2b, Rule_19005_2_6_1_13_t03, 3,
+		},
+		{
+			"long name key in a direct /Info", withEntries(" /Info << /" + strings.Repeat("K", 200) + " (x) >>"),
+			models.PDFA1b, Rule_19005_1_6_1_12_t04, 3,
+		},
+		{
+			"long name key in the dictionary", withEntries(" /" + strings.Repeat("K", 200) + " 1"),
+			models.PDFA2b, Rule_19005_2_6_1_13_t04, 1,
+		},
+		// An older section's stream is an indirect object the sweep judges,
+		// and nothing judges its trailer entries again.
+		{
+			"odd hex string in the newest stream's direct /Info", updatedXRefStreamPDF("", " /Info << /Producer <414> >>"),
+			models.PDFA2b, Rule_19005_2_6_1_6_t01, 3,
+		},
+		{
+			"odd hex string in an older stream's direct /Info", updatedXRefStreamPDF(" /Info << /Producer <414> >>", ""),
+			models.PDFA2b, Rule_19005_2_6_1_6_t01, 1,
+		},
+		{
+			"integer out of range in an older stream's direct /Info", updatedXRefStreamPDF(" /Info << /Foo 2147483648 >>", ""),
+			models.PDFA2b, Rule_19005_2_6_1_13_t01, 1,
+		},
+	})
 }

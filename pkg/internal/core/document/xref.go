@@ -140,7 +140,14 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 			}
 		case tok.Type == lexer.TokenNumber:
 			lex = lexer.NewLexer(ioat.NewReader(d.r, d.size, currentOffset))
+			// The newest section's dictionary holds the file's trailer
+			// (ISO 32000-1, 7.5.8.2), so it is read under format checking
+			// for the reason [xref.ParseXRefTable] reads a trailer so.
+			newest := d.Index.Trailer == nil
 			p := parser.NewParser(lex)
+			if newest {
+				p = p.WithFormatChecking()
+			}
 			obj, err := p.ParseObject(ctx)
 			if err != nil {
 				return fmt.Errorf("parsing xref stream object at offset %d: %w", currentOffset, err)
@@ -159,8 +166,10 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 				highestOffset = currentOffset
 				d.Index.HighestOffsetTrailer = stream.Dict
 			}
-			if d.Index.Trailer == nil {
+			if newest {
 				d.Index.Trailer = stream.Dict
+				d.trailerStream = true
+				d.trailerFormatViolations = xrefStreamTrailerViolations(p.FormatViolations)
 			} else {
 				d.trailerMergedKeys = append(d.trailerMergedKeys, mergeTrailerKeys(d.Index.Trailer, stream.Dict)...)
 			}
