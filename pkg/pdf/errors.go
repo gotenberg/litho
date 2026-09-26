@@ -216,6 +216,15 @@ var (
 	// unfixable.
 	ErrRemediationBrokePDF = errors.New("remediation broke the PDF beyond the configured regression tolerance")
 
+	// ErrRemediationUnverified is returned, wrapping the file-system error,
+	// by [Writer.RemediatePDFA] and the other remediation methods when the
+	// remediation cannot create, write or close the temp file it reopens to
+	// revalidate its output. Without that file litho can neither check the
+	// output for regressions nor list what it leaves unrepaired, so the
+	// remediation is undone rather than reported. Point the temp files at a
+	// writable directory with [WithTempDir].
+	ErrRemediationUnverified = errors.New("remediation output could not be written to a temp file to verify it")
+
 	// ErrEmptyInvoiceXML is returned by [Writer.RemediateFacturX] when
 	// [FacturXConfig.InvoiceXML] is nil or zero-length. Factur-X
 	// requires an embedded Cross-Industry Invoice payload.

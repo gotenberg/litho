@@ -34,7 +34,7 @@ type writeOpts struct {
 	dedupStreams      bool
 	logger            *slog.Logger
 	bookmarks         *BookmarkOptions
-	pipelineTempDir   string
+	tempDir           string
 	encrypt           *EncryptConfig
 }
 
@@ -169,11 +169,25 @@ func WithWriteLogger(logger *slog.Logger) WriteOption {
 // WithPipelineTempDir directs a [Pipeline] to place intermediate temp files
 // in dir instead of [os.TempDir], the ones a remediation in an
 // [Pipeline.Apply] stage writes included. Useful in sandboxed environments
-// where the default temp directory is not writable. Has no effect outside of
-// a pipeline.
+// where the default temp directory is not writable. It sets what
+// [WithTempDir] sets.
 func WithPipelineTempDir(dir string) WriteOption {
 	return func(o *writeOpts) {
-		o.pipelineTempDir = dir
+		o.tempDir = dir
+	}
+}
+
+// WithTempDir directs the temp files litho writes to dir instead of
+// [os.TempDir]. Passed to [NewWriter], it places the file a remediation writes
+// to revalidate its output; passed to [Pipeline.WriteTo], it also places the
+// pipeline's intermediate files, as [WithPipelineTempDir] does. Useful in
+// sandboxed environments where the default temp directory is not writable: a
+// remediation that cannot write there fails with [ErrRemediationUnverified].
+//
+// [Writer.WriteTo], [Split] and [Merge] write no temp file and ignore it.
+func WithTempDir(dir string) WriteOption {
+	return func(o *writeOpts) {
+		o.tempDir = dir
 	}
 }
 
@@ -567,10 +581,11 @@ func (a signerAdapter) EstimatedSize() int                 { return a.inner.Esti
 //     output, and may mutate the underlying Reader's in-memory state.
 //
 // A remediation ([Writer.RemediatePDFA] and its siblings) writes its output
-// to a temp file in [os.TempDir] so it can revalidate it. WriteTo streams
-// that file to the destination and removes it, and a remediation that fails
-// or is cancelled removes it itself. A Writer that is remediated and never
-// written keeps the file until [Writer.Close].
+// to a temp file so it can revalidate it, in [os.TempDir] unless [NewWriter]
+// was given [WithTempDir], and fails with [ErrRemediationUnverified] when it
+// cannot. WriteTo streams that file to the destination and removes it, and a
+// remediation that fails or is cancelled removes it itself. A Writer that is
+// remediated and never written keeps the file until [Writer.Close].
 //
 // A remediation that repairs its own output again in a later round leaves the
 // Writer editing that output instead of the Reader's document, because those
@@ -603,7 +618,8 @@ type Writer struct {
 	// closed Writer with ErrWriterClosed.
 	closed bool
 	// tempDir is the directory the Writer's temp files go in, "" for
-	// os.TempDir. A Pipeline sets it from WithPipelineTempDir.
+	// os.TempDir: WithTempDir passed to NewWriter, or the directory of the
+	// Pipeline the Writer serves.
 	tempDir string
 	// rewriteOverrides holds per-object replacements produced during
 	// remediation and redaction, keyed by source object number. They are
@@ -650,8 +666,15 @@ type mutation struct {
 // against r. Release the Writer with [Writer.Close] and close r with
 // [Reader.Close] after the Writer has finished; do not issue further
 // reads through r while the Writer is active.
-func NewWriter(r *Reader) *Writer {
-	return &Writer{reader: r, source: r}
+//
+// NewWriter reads [WithTempDir] from opts. The other options shape a write,
+// and belong to [Writer.WriteTo].
+func NewWriter(r *Reader, opts ...WriteOption) *Writer {
+	cfg := writeOpts{}
+	for _, o := range opts {
+		o(&cfg)
+	}
+	return &Writer{reader: r, source: r, tempDir: cfg.tempDir}
 }
 
 // Close removes the temp file a remediation left for [Writer.WriteTo] to
@@ -747,9 +770,61 @@ func releaseOwnedReader(r *Reader, path string) error {
 }
 
 // createTemp creates a temp file named after pattern in the Writer's temp
-// directory ([os.TempDir] unless a [Pipeline] set one).
+// directory ([os.TempDir] unless [WithTempDir] or a [Pipeline] set one).
 func (w *Writer) createTemp(pattern string) (*os.File, error) {
 	return os.CreateTemp(w.tempDir, pattern)
+}
+
+// writeTempFile serializes what src queues into a new temp file named after
+// pattern in w's temp directory and returns its path.
+//
+// A file that cannot be created, written or closed is an error of the
+// environment, not of the document, and comes back wrapping
+// [ErrRemediationUnverified]; a failure of the serialization itself comes back
+// as it is. Either way the file is removed. Remediation used to treat a temp
+// file it could not create as a reason to skip its checks, and returned the
+// report the engine drew up before any output existed as a success.
+func (w *Writer) writeTempFile(ctx context.Context, src *Writer, pattern string) (string, error) {
+	f, err := w.createTemp(pattern)
+	if err != nil {
+		return "", fmt.Errorf("%w: creating a temp file: %w", ErrRemediationUnverified, err)
+	}
+	path := f.Name()
+	tf := &tempFileWriter{f: f}
+	writeErr := src.writeToInternal(ctx, tf)
+	closeErr := f.Close()
+
+	var failure error
+	switch {
+	case tf.err != nil:
+		failure = fmt.Errorf("%w: writing %s: %w", ErrRemediationUnverified, path, tf.err)
+	case writeErr != nil:
+		failure = writeErr
+	case closeErr != nil:
+		failure = fmt.Errorf("%w: closing %s: %w", ErrRemediationUnverified, path, closeErr)
+	}
+	if failure != nil {
+		removeTempFile(w.reader.doc.Logger, path)
+		return "", failure
+	}
+	return path, nil
+}
+
+// tempFileWriter passes writes on to a temp file and keeps the first error the
+// file returns, so a failure of the file is told apart from one of the
+// serialization writing into it.
+type tempFileWriter struct {
+	f   *os.File
+	err error
+}
+
+// Write implements [io.Writer].
+func (t *tempFileWriter) Write(p []byte) (int, error) {
+	n, err := t.f.Write(p)
+	if err != nil && t.err == nil {
+		t.err = err
+	}
+	return n, err
 }
 
 // SetMetadata sets or replaces document Info dictionary fields. Empty fields
@@ -1594,22 +1669,11 @@ func (w *Writer) stagedBaseline(ctx context.Context) (integritySnap, error) {
 	}
 
 	logger := w.reader.doc.Logger
-	f, err := w.createTemp("litho-staged-*.pdf")
+	path, err := w.writeTempFile(ctx, w, "litho-staged-*.pdf")
 	if err != nil {
-		return integritySnap{}, fmt.Errorf("creating staged baseline file: %w", err)
+		return integritySnap{}, fmt.Errorf("serializing staged document: %w", err)
 	}
-	path := f.Name()
 	defer removeTempFile(logger, path)
-
-	if writeErr := w.writeToInternal(ctx, f); writeErr != nil {
-		if closeErr := f.Close(); closeErr != nil {
-			logger.Debug("closing staged baseline file failed", slog.Any("err", closeErr))
-		}
-		return integritySnap{}, fmt.Errorf("serializing staged document: %w", writeErr)
-	}
-	if closeErr := f.Close(); closeErr != nil {
-		return integritySnap{}, fmt.Errorf("closing staged baseline file: %w", closeErr)
-	}
 
 	r, err := w.reader.reopenFile(ctx, path)
 	if err != nil {
@@ -1666,7 +1730,8 @@ type remediationRun func(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 // not, runs further rounds, up to maxRemediationRounds, while residuals remain
 // and each round still fixes something (see [Writer.remediationRound]). When
 // one is kept, the Writer edits its output from then on (see
-// [Writer.rebase]).
+// [Writer.rebase]). A temp file that any of these steps cannot write fails
+// the run with [ErrRemediationUnverified], restoring the Writer.
 //
 // The content-tier fixers a rollback discarded stay off in the later rounds,
 // and the others run in them. The engine runs the content tier after every
@@ -1720,6 +1785,12 @@ func (w *Writer) remediate(
 	}
 
 	baseline, baseErr := w.stagedBaseline(ctx)
+	if errors.Is(baseErr, ErrRemediationUnverified) {
+		// A temp file the staged document cannot be written to says nothing
+		// about the document, and a zero baseline would switch the
+		// regression gates off for a reason the caller never learns.
+		return nil, baseErr
+	}
 	if baseErr != nil {
 		// Treat an unreadable source as a zero baseline: the user asked
 		// litho to fix a broken PDF, so refusing at the door defeats the
@@ -1834,14 +1905,12 @@ func (w *Writer) remediate(
 		w.requiredVersion = report.RequiredVersion
 	}
 
-	// attemptResult distinguishes a failed serialize/reopen (treated as
-	// advisory, falling back to preliminary residuals) from a serialized
-	// output that reopens but then fails probing or validation (treated as
-	// a regression candidate, eligible for rollback).
+	// attemptResult tells an output that reopens, probes and revalidates
+	// from one that fails any of those, a regression candidate eligible for
+	// rollback.
 	type attemptResult int
 	const (
 		attemptOK attemptResult = iota
-		attemptSetupFailed
 		attemptBroken
 	)
 
@@ -1849,59 +1918,57 @@ func (w *Writer) remediate(
 	// temp file, reopens it, and samples both the profile residuals and an
 	// integrity snapshot. The caller must os.Remove the returned tmpPath on
 	// every branch except the happy path, where tmpPath is kept as
-	// w.preSerializedPath.
-	serializeAndProbe := func() (tmpPath string, residuals []error, post integritySnap, outcome attemptResult) {
-		tmpFile, tmpErr := w.createTemp("litho-remediate-*.pdf")
-		if tmpErr != nil {
-			doc.Logger.Debug("remediate: creating temp file failed", slog.Any("err", tmpErr))
-			return "", nil, integritySnap{}, attemptSetupFailed
+	// w.preSerializedPath. A temp file that cannot be written leaves no file
+	// and comes back as unverified, wrapping ErrRemediationUnverified.
+	serializeAndProbe := func() (tmpPath string, residuals []error, post integritySnap, outcome attemptResult, unverified error) {
+		// writeTempFile serializes through writeToInternal: this is a probe
+		// write to a temp file, not the caller's final output, so it must not
+		// trip the single-use guard nor the sign/full-rewrite check
+		// (remediation may set forceRewrite legitimately).
+		tmpPath, writeErr := w.writeTempFile(ctx, w, "litho-remediate-*.pdf")
+		if errors.Is(writeErr, ErrRemediationUnverified) {
+			return "", nil, integritySnap{}, attemptBroken, writeErr
 		}
-		tmpPath = tmpFile.Name()
-		// Use writeToInternal: this is a probe write to a temp file, not
-		// the caller's final output, so it must not trip the single-use
-		// guard nor the sign/full-rewrite check (remediation may set
-		// forceRewrite legitimately).
-		if writeErr := w.writeToInternal(ctx, tmpFile); writeErr != nil {
-			tmpFile.Close()
+		if writeErr != nil {
 			doc.Logger.Debug("remediate: pre-serialization failed, treating output as broken",
 				slog.Any("err", writeErr))
-			return tmpPath, nil, integritySnap{}, attemptBroken
+			return "", nil, integritySnap{}, attemptBroken, nil
 		}
-		tmpFile.Close()
 
 		r2, openErr := w.reader.reopenFile(ctx, tmpPath)
 		if openErr != nil {
 			doc.Logger.Debug("remediate: re-open failed", slog.Any("err", openErr))
-			return tmpPath, nil, integritySnap{}, attemptBroken
+			return tmpPath, nil, integritySnap{}, attemptBroken, nil
 		}
 		defer r2.Close()
 
 		probe, probeErr := probeIntegrity(ctx, r2)
 		if probeErr != nil {
 			doc.Logger.Debug("remediate: post probe failed", slog.Any("err", probeErr))
-			return tmpPath, nil, integritySnap{}, attemptBroken
+			return tmpPath, nil, integritySnap{}, attemptBroken, nil
 		}
 		res, valErr := revalidate(ctx, r2)
 		if valErr != nil {
 			doc.Logger.Debug("remediate: re-validation failed", slog.Any("err", valErr))
-			return tmpPath, nil, integritySnap{}, attemptBroken
+			return tmpPath, nil, integritySnap{}, attemptBroken, nil
 		}
-		return tmpPath, res, probe, attemptOK
+		return tmpPath, res, probe, attemptOK, nil
 	}
 
-	tmpPath, residual, post, outcome := serializeAndProbe()
+	tmpPath, residual, post, outcome, unverified := serializeAndProbe()
 	if err := ctx.Err(); err != nil {
 		return cancelled(tmpPath, err)
+	}
+	if unverified != nil {
+		restorePreState()
+		return nil, unverified
 	}
 
 	// Treat a broken output and a regression identically: both trigger
 	// rollback when a content-tier snapshot exists, and hard-fail
-	// otherwise. A pure setup failure (no bytes written, no reopen
-	// attempted) preserves the older best-effort behavior.
+	// otherwise.
 	var trigger string
 	switch outcome {
-	case attemptSetupFailed:
-		return &RemediationReport{Fixed: report.Fixed, Residual: report.Residual}, nil
 	case attemptBroken:
 		trigger = "output failed to reopen or revalidate"
 	case attemptOK:
@@ -1928,13 +1995,13 @@ func (w *Writer) remediate(
 		// a coherent view after Restore.
 		alloc.Restore(*report.ContentSnapshot)
 
-		tmpPath2, residual2, post2, outcome2 := serializeAndProbe()
+		tmpPath2, residual2, post2, outcome2, unverified2 := serializeAndProbe()
 		if err := ctx.Err(); err != nil {
 			return cancelled(tmpPath2, err)
 		}
-		if outcome2 == attemptSetupFailed {
+		if unverified2 != nil {
 			restorePreState()
-			return nil, fmt.Errorf("%w: rollback serialize failed", ErrRemediationBrokePDF)
+			return nil, unverified2
 		}
 		if outcome2 == attemptBroken {
 			removeTempFile(doc.Logger, tmpPath2)
@@ -1970,7 +2037,12 @@ func (w *Writer) remediate(
 	// gates; otherwise the previous round's output stands.
 	keptLater := false
 	for round := 2; round <= maxRemediationRounds && len(residual) > 0; round++ {
-		next, ok := w.remediationRound(ctx, tmpPath, run, disabled, revalidate, baseline, tol)
+		next, ok, err := w.remediationRound(ctx, tmpPath, run, disabled, revalidate, baseline, tol)
+		if err != nil {
+			removeTempFile(doc.Logger, tmpPath)
+			restorePreState()
+			return nil, err
+		}
 		if !ok {
 			break
 		}
@@ -2075,6 +2147,9 @@ type roundResult struct {
 // repairs of its content-tier fixers are discarded and those of the others
 // kept, and the round is kept when what remains still fixes something and
 // passes the gates, with those fixers named for the later rounds to disable.
+//
+// A temp file the round cannot write is returned as an error wrapping
+// [ErrRemediationUnverified], since it says nothing about the round.
 func (w *Writer) remediationRound(
 	ctx context.Context,
 	path string,
@@ -2083,20 +2158,20 @@ func (w *Writer) remediationRound(
 	revalidate func(context.Context, *Reader) ([]error, error),
 	baseline integritySnap,
 	tol RegressionTolerance,
-) (roundResult, bool) {
+) (roundResult, bool, error) {
 	logger := w.reader.doc.Logger
 
 	r2, err := w.reader.reopenFile(ctx, path)
 	if err != nil {
 		logger.Debug("remediate: round reopen failed", slog.Any("err", err))
-		return roundResult{}, false
+		return roundResult{}, false, nil
 	}
 	defer r2.Close()
 
 	alloc := writer.NewObjAllocator(r2.doc.HighestObjectNumber(ctx))
 	rep, err := run(ctx, alloc, r2.doc, disabled)
 	if err != nil || rep == nil || countRepairs(rep.Fixed) == 0 {
-		return roundResult{}, false
+		return roundResult{}, false, nil
 	}
 
 	w2 := NewWriter(r2)
@@ -2105,81 +2180,84 @@ func (w *Writer) remediationRound(
 	w2.forceRewrite = rep.NeedsFullRewrite
 	w2.requiredVersion = rep.RequiredVersion
 
-	tmpPath, res, reason := w.writeRound(ctx, w2, revalidate, baseline, tol)
+	tmpPath, res, reason, err := w.writeRound(ctx, w2, revalidate, baseline, tol)
+	if err != nil {
+		return roundResult{}, false, err
+	}
 	if reason == "" {
-		return roundResult{path: tmpPath, residual: res, fixed: rep.Fixed}, true
+		return roundResult{path: tmpPath, residual: res, fixed: rep.Fixed}, true, nil
 	}
 	if rep.ContentSnapshot == nil {
 		logger.Debug("remediate: round regressed, keeping previous output",
 			slog.String("reason", reason))
-		return roundResult{}, false
+		return roundResult{}, false, nil
 	}
 
 	// The allocator restores its pending map in place, which w2 writes from.
 	alloc.Restore(*rep.ContentSnapshot)
 	kept := keepFixedWithout(rep.Fixed, rep.ContentFixed)
 	if countRepairs(kept) == 0 {
-		return roundResult{}, false
+		return roundResult{}, false, nil
 	}
-	tmpPath, res, reason = w.writeRound(ctx, w2, revalidate, baseline, tol)
+	tmpPath, res, reason, err = w.writeRound(ctx, w2, revalidate, baseline, tol)
+	if err != nil {
+		return roundResult{}, false, err
+	}
 	if reason != "" {
 		logger.Debug("remediate: round regressed after rollback, keeping previous output",
 			slog.String("reason", reason))
-		return roundResult{}, false
+		return roundResult{}, false, nil
 	}
-	return roundResult{path: tmpPath, residual: res, fixed: kept, rolledBack: rep.ContentFixed, disabled: rep.ContentFixers}, true
+	return roundResult{path: tmpPath, residual: res, fixed: kept, rolledBack: rep.ContentFixed, disabled: rep.ContentFixers}, true, nil
 }
 
 // writeRound serializes the output of a remediation round w2 queues to a temp
 // file, reopens it, and gates it as [Writer.remediate] gates the first round.
 // It returns the temp file and its residual validation findings, or a reason
-// the output was refused, after removing the file.
+// the output was refused, after removing the file. A temp file that cannot be
+// written is no verdict on the round: it is returned as an error wrapping
+// [ErrRemediationUnverified].
 func (w *Writer) writeRound(
 	ctx context.Context,
 	w2 *Writer,
 	revalidate func(context.Context, *Reader) ([]error, error),
 	baseline integritySnap,
 	tol RegressionTolerance,
-) (string, []error, string) {
+) (string, []error, string, error) {
 	logger := w.reader.doc.Logger
 
-	tmpFile, err := w.createTemp("litho-remediate-round-*.pdf")
+	tmpPath, err := w.writeTempFile(ctx, w2, "litho-remediate-round-*.pdf")
+	if errors.Is(err, ErrRemediationUnverified) {
+		return "", nil, "", err
+	}
 	if err != nil {
-		logger.Debug("remediate: round temp file failed", slog.Any("err", err))
-		return "", nil, "temp file failed"
+		logger.Debug("remediate: round serialize failed", slog.Any("err", err))
+		return "", nil, "serialize failed", nil
 	}
-	tmpPath := tmpFile.Name()
-	if writeErr := w2.writeToInternal(ctx, tmpFile); writeErr != nil {
-		tmpFile.Close()
-		removeTempFile(logger, tmpPath)
-		logger.Debug("remediate: round serialize failed", slog.Any("err", writeErr))
-		return "", nil, "serialize failed"
-	}
-	tmpFile.Close()
 
 	r3, err := w.reader.reopenFile(ctx, tmpPath)
 	if err != nil {
 		removeTempFile(logger, tmpPath)
 		logger.Debug("remediate: round reopen of output failed", slog.Any("err", err))
-		return "", nil, "output failed to reopen"
+		return "", nil, "output failed to reopen", nil
 	}
 	defer r3.Close()
 
 	post, err := probeIntegrity(ctx, r3)
 	if err != nil {
 		removeTempFile(logger, tmpPath)
-		return "", nil, "output failed the integrity probe"
+		return "", nil, "output failed the integrity probe", nil
 	}
 	if reason := evaluateRegression(baseline, post, tol); reason != "" {
 		removeTempFile(logger, tmpPath)
-		return "", nil, reason
+		return "", nil, reason, nil
 	}
 	res, err := revalidate(ctx, r3)
 	if err != nil {
 		removeTempFile(logger, tmpPath)
-		return "", nil, "output failed to revalidate"
+		return "", nil, "output failed to revalidate", nil
 	}
-	return tmpPath, res, ""
+	return tmpPath, res, "", nil
 }
 
 // keepFixedWithout returns the subset of fixed that is not also present in
