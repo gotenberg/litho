@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
@@ -11,7 +12,8 @@ import (
 // space of a synthesized transparency group to a device-independent
 // ICCBased sRGB stream. The fixer used to write /CS /DeviceRGB, which under
 // ISO 19005-4 §6.2.4.3 is itself a device colour usage requiring an RGB
-// OutputIntent, so the repair traded one violation for another.
+// OutputIntent, so the repair traded one violation for another. The group is
+// synthesized for the page ISO 19005-4, 6.2.9 t2 flags.
 func TestFixGroupCS_SynthesizedGroupUsesICCBasedCS(t *testing.T) {
 	pdf := buildStructPDF(
 		"<< /Type /Catalog /Pages 2 0 R >>",
@@ -20,7 +22,8 @@ func TestFixGroupCS_SynthesizedGroupUsesICCBasedCS(t *testing.T) {
 	)
 	doc, alloc := newTestDoc(t, pdf)
 
-	descs, err := fixGroupCS(context.Background(), alloc, doc, Options{}, nil, "PDF/A-4")
+	flagged := []compliance.Violation{{Rule: compliance.Rule_19005_4_6_2_9_t02, Context: "page 1"}}
+	descs, err := fixGroupCS(context.Background(), alloc, doc, Options{}, flagged, "PDF/A-4")
 	if err != nil {
 		t.Fatalf("fixGroupCS: %v", err)
 	}
