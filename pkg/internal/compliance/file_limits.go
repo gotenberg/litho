@@ -119,6 +119,15 @@ func indirectObjCountRule(profile string) Rule {
 // names, strings, integers, reals, arrays, dicts, and indirect objects. An
 // object in twice fails each limit twice; see [cosReachedTwice].
 //
+// The trailer is judged once, and a document information dictionary written
+// directly in it twice, as veraPDF reaches it (see [trailerFormatViolations]).
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b: a direct /Info holding
+// an integer past its range, a string past the length limit or a name key past
+// its length limit, or a real past the PDF/A-1 range at PDF/A-1b, fails the
+// limit twice, and a name key past it in the trailer itself once. Only the
+// newest section's trailer counts: an integer past its range in a direct
+// /Info, or in another entry, of an older section's trailer fails nothing.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue5599.pdf: writes /ID 77777777777777777 in its trailer, which
@@ -167,9 +176,18 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 	// file shall not contain" wherever it is written, and veraPDF reports one
 	// in the trailer against its root/trailer[0]. A trailer litho made up
 	// because the file has none holds litho's numbers, not the file's, so it is
-	// left alone.
+	// left alone, and so is what the reader carried into it from an older
+	// section ([document.Document.TrailerAsWritten]).
+	//
+	// A document information dictionary written directly in the trailer is
+	// judged once more, as the CosInfo veraPDF builds from it
+	// (root/trailer[0]/Info[0]); see [trailerFormatViolations].
 	if !doc.TrailerSynthesized {
-		results = append(results, checkObjectNumericLimits(doc.Index.Trailer, "trailer", part, profile, nil)...)
+		trailer := doc.TrailerAsWritten()
+		results = append(results, checkObjectNumericLimits(trailer, "trailer", part, profile, nil)...)
+		if info, ok := trailer["Info"].(ast.PdfDict); ok {
+			results = append(results, checkObjectNumericLimits(info, "trailer /Info", part, profile, nil)...)
+		}
 	}
 
 	// The content streams are scanned by checkContentStreamLimits.

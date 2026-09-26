@@ -32,7 +32,7 @@ func TestParseXRefTable_MislabelledFirstSubsection(t *testing.T) {
 	entries := make(map[int]XRefEntry)
 	data := []byte(table)
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
-	if _, _, err := ParseXRefTable(context.Background(), lex, entries); err != nil {
+	if _, _, _, err := ParseXRefTable(context.Background(), lex, entries); err != nil {
 		t.Fatalf("ParseXRefTable: %v", err)
 	}
 
@@ -66,7 +66,7 @@ func TestParseXRefTable_HonestSubsectionStart(t *testing.T) {
 	entries := make(map[int]XRefEntry)
 	data := []byte(table)
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
-	if _, _, err := ParseXRefTable(context.Background(), lex, entries); err != nil {
+	if _, _, _, err := ParseXRefTable(context.Background(), lex, entries); err != nil {
 		t.Fatalf("ParseXRefTable: %v", err)
 	}
 	if _, ok := entries[0]; ok {

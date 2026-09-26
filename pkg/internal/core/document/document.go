@@ -140,6 +140,20 @@ type Document struct {
 	// serialized by d.mu.
 	integerOverflows map[int][]float64
 
+	// trailerFormatViolations holds the format violations the bytes of the
+	// trailer dictionary of the section startxref designates hold, which
+	// [xref.ParseXRefTable] reads under format checking. It is nil for a
+	// cross-reference stream, whose dictionary is an indirect object, and for
+	// a trailer a rebuild found or synthesized. Each violation stands for at
+	// least one byte of the trailer, so the file size bounds the slice.
+	// Written once during construction and read-only thereafter.
+	trailerFormatViolations []error
+
+	// trailerMergedKeys lists the keys [mergeTrailerKeys] carried into
+	// [Document.Index].Trailer from an older section's trailer, at most /Root
+	// and /Info. Written once during construction and read-only thereafter.
+	trailerMergedKeys []ast.PdfName
+
 	// objectStarts lists, by ascending offset, where the index places each
 	// in-use uncompressed object once construction has read it from the table
 	// or rebuilt it, before any resolution can augment it from a raw-byte scan.
@@ -248,6 +262,39 @@ func (d *Document) ObjectFormatViolations(objNum int) []error {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return slices.Clone(d.formatViolations[objNum])
+}
+
+// TrailerFormatViolations returns the format violations the trailer dictionary
+// of the cross-reference table startxref designates holds, in the order they
+// were found, or nil when it holds none, when the section is a
+// cross-reference stream, whose dictionary is an indirect object and recorded
+// as one, or when the trailer came from a rebuild. The trailer is parsed
+// before any validation starts and never again, so the list is recorded
+// whatever the compliance mode. The result is a fresh slice.
+// TrailerFormatViolations is safe for concurrent use: the list is written
+// once during construction.
+func (d *Document) TrailerFormatViolations() []error {
+	return slices.Clone(d.trailerFormatViolations)
+}
+
+// TrailerAsWritten returns the trailer dictionary of the cross-reference
+// section startxref designates as the file writes it: [Document.Index].Trailer
+// without the /Root and /Info the reader carries forward from an older
+// section when the newest omits them (see [mergeTrailerKeys]). A PDF/A
+// validator judges the values of that trailer alone, since veraPDF reads the
+// newest section's trailer as root/trailer[0] and merges nothing into it.
+// TrailerAsWritten is safe for concurrent use: the result is a fresh
+// dictionary whenever it differs from [Document.Index].Trailer, which is
+// read-only after construction.
+func (d *Document) TrailerAsWritten() ast.PdfDict {
+	if len(d.trailerMergedKeys) == 0 {
+		return d.Index.Trailer
+	}
+	written := maps.Clone(d.Index.Trailer)
+	for _, key := range d.trailerMergedKeys {
+		delete(written, key)
+	}
+	return written
 }
 
 // recordIntegerOverflows records the integer literals past the 64-bit range
@@ -851,6 +898,8 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		// Fallback: brute-force rebuild by scanning for object headers.
 		doc.xrefEntries = make(map[int]xref.XRefEntry)
 		doc.Index.Trailer = nil
+		doc.trailerFormatViolations = nil
+		doc.trailerMergedKeys = nil
 		if rebuildErr := doc.rebuildXRef(ctx); rebuildErr != nil {
 			return nil, fmt.Errorf("%w: %v (rebuild also failed: %v)", ErrDamagedXRef, err, rebuildErr)
 		}
@@ -879,6 +928,8 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 			doc.Logger.Debug("xref entries incomplete, rebuilding")
 			doc.xrefEntries = make(map[int]xref.XRefEntry)
 			doc.Index.Trailer = nil
+			doc.trailerFormatViolations = nil
+			doc.trailerMergedKeys = nil
 			if rebuildErr := doc.rebuildXRef(ctx); rebuildErr == nil {
 				doc.Rebuilt = true
 			}

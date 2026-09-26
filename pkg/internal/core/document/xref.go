@@ -108,7 +108,7 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 			for objNum := range d.xrefEntries {
 				preExisting[objNum] = struct{}{}
 			}
-			trailerDict, p, err := xref.ParseXRefTable(ctx, lex, d.xrefEntries)
+			trailerDict, p, trailerViolations, err := xref.ParseXRefTable(ctx, lex, d.xrefEntries)
 			if err != nil {
 				return fmt.Errorf("parsing xref table at offset %d: %w", currentOffset, err)
 			}
@@ -120,8 +120,9 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 			}
 			if d.Index.Trailer == nil {
 				d.Index.Trailer = trailerDict
+				d.trailerFormatViolations = trailerViolations
 			} else {
-				mergeTrailerKeys(d.Index.Trailer, trailerDict)
+				d.trailerMergedKeys = append(d.trailerMergedKeys, mergeTrailerKeys(d.Index.Trailer, trailerDict)...)
 			}
 
 			// Hybrid-Reference (PDF 1.5): the trailer may contain /XRefStm
@@ -161,7 +162,7 @@ func (d *Document) parseXRefChain(ctx context.Context) error {
 			if d.Index.Trailer == nil {
 				d.Index.Trailer = stream.Dict
 			} else {
-				mergeTrailerKeys(d.Index.Trailer, stream.Dict)
+				d.trailerMergedKeys = append(d.trailerMergedKeys, mergeTrailerKeys(d.Index.Trailer, stream.Dict)...)
 			}
 		default:
 			return fmt.Errorf("unexpected token at xref offset: %v", tok.Value)
@@ -377,15 +378,19 @@ func (d *Document) trailerObjectCount() (int, bool) {
 // primary trailer when they are missing. This handles linearized PDFs where
 // these keys may only appear in the linearization hint trailer.
 // /ID and /Encrypt are NOT merged because their presence/absence in the
-// primary trailer is compliance-significant (PDF/A 6.1.3).
-func mergeTrailerKeys(dst, src ast.PdfDict) {
+// primary trailer is compliance-significant (PDF/A 6.1.3). It returns the keys
+// it copied, which [Document.TrailerAsWritten] leaves out.
+func mergeTrailerKeys(dst, src ast.PdfDict) []ast.PdfName {
+	var copied []ast.PdfName
 	for _, k := range []ast.PdfName{"Root", "Info"} {
 		if _, exists := dst[k]; !exists {
 			if v, ok := src[k]; ok {
 				dst[k] = v
+				copied = append(copied, k)
 			}
 		}
 	}
+	return copied
 }
 
 // parseHybridXRefStream parses a compressed XRef stream embedded in a

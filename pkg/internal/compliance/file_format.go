@@ -563,6 +563,55 @@ func checkFormatViolations(vctx *validationCtx, profile string, twice map[int]bo
 	return results
 }
 
+// trailerFormatViolations returns the violations the format violations in the
+// bytes of the trailer dictionary answer to, which the object sweep never
+// reaches since the trailer is no indirect object.
+//
+// veraPDF judges the trailer as its CosTrailer (root/trailer[0]) and every
+// value in it once, the strings of /ID among them. A document information
+// dictionary written directly in the trailer it judges twice, as a value of
+// the trailer and as the CosInfo it builds from it (root/trailer[0]/Info[0]),
+// as it does one written as an indirect object ([cosReachedTwice]). It reads
+// the trailer of the section startxref designates alone, which
+// [document.Document.TrailerFormatViolations] holds. Measured with veraPDF
+// 1.30 at PDF/A-1b, PDF/A-2b and PDF/A-4: a hex string with an odd digit count
+// or a non-hex character in /ID or in another trailer entry fails ISO
+// 19005-1/2, 6.1.6 t1 or t2, and ISO 19005-4, 6.1.5 t1 or t2, once, one in a
+// direct /Info, as a value or nested in an array or a dictionary there, fails
+// it twice, and one in the trailer, or the direct /Info, of an older section
+// an incremental update left behind fails nothing.
+//
+// # Corpus evidence
+//
+//   - All corpora: judging the trailer's strings, and a direct /Info twice,
+//     changes no count at PDF/A-1b or PDF/A-2b, veraPDF files at their own
+//     profile.
+//   - pdfjs issue9540.pdf: the one file whose trailer writes its /Info
+//     directly, and nothing in it fails a rule.
+func trailerFormatViolations(doc *document.Document, profile string) []Violation {
+	_, directInfo := doc.TrailerAsWritten()["Info"].(ast.PdfDict)
+	var results []Violation
+	for _, violation := range doc.TrailerFormatViolations() {
+		rule, ok := formatViolationRule(violation, profile)
+		if !ok {
+			continue
+		}
+		found := Violation{Rule: rule, Context: "trailer: " + violation.Error()}
+		results = append(results, found)
+		if directInfo && inTrailerInfo(violation) {
+			results = append(results, found)
+		}
+	}
+	return results
+}
+
+// inTrailerInfo reports whether a format violation in the trailer lies in the
+// value of its /Info entry: the outermost entry enclosing it is /Info.
+func inTrailerInfo(violation error) bool {
+	entry, ok := errors.AsType[*parser.EntryViolationError](violation)
+	return ok && len(entry.Path) > 0 && entry.Path[0].Key == "Info"
+}
+
 // formatViolationRule returns the rule a parser-level format violation
 // answers to, and false for one [checkFormatViolations] leaves to another
 // check or no rule states.

@@ -260,29 +260,36 @@ const freeListHeadGeneration = 65535
 
 // ParseXRefTable parses a traditional plain-text cross-reference table and its
 // trailer dictionary. It populates indexMap with the parsed entries and returns
-// the trailer dictionary, the byte offset of the previous xref section, and
-// any error encountered.
+// the trailer dictionary, the byte offset of the previous xref section, the
+// format violations the trailer dictionary's bytes hold, and any error
+// encountered.
+//
+// The trailer is read under format checking ([parser.Parser.WithFormatChecking])
+// whoever asks: a document parses it once, when it opens and before any
+// validation can ask, and since it is no indirect object nothing parses it
+// again, so the violations a PDF/A validator states for it are known only
+// here.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue7229.pdf: labels its first subsection's free-list head as
 //     object 1, which cost page 1 its only image until the table parser
 //     restarted the subsection at 0.
-func ParseXRefTable(ctx context.Context, lex *lexer.Lexer, indexMap map[int]XRefEntry) (ast.PdfDict, int64, error) {
+func ParseXRefTable(ctx context.Context, lex *lexer.Lexer, indexMap map[int]XRefEntry) (ast.PdfDict, int64, []error, error) {
 	tok, err := lex.NextToken()
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 
 	if tok.Type != lexer.TokenKeyword || tok.Value != "xref" {
-		return nil, 0, fmt.Errorf("%w: expected 'xref', got %v", ErrMalformedXRef, tok.Value)
+		return nil, 0, nil, fmt.Errorf("%w: expected 'xref', got %v", ErrMalformedXRef, tok.Value)
 	}
 
 	entryCount := 0
 	for {
 		tok1, err := lex.NextToken()
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, nil, err
 		}
 
 		if tok1.Type == lexer.TokenKeyword && tok1.Value == "trailer" {
@@ -290,64 +297,64 @@ func ParseXRefTable(ctx context.Context, lex *lexer.Lexer, indexMap map[int]XRef
 		}
 
 		if tok1.Type != lexer.TokenNumber {
-			return nil, 0, fmt.Errorf("%w: expected object number or trailer, got %v %s", ErrMalformedXRef, tok1.Type, tok1.Value)
+			return nil, 0, nil, fmt.Errorf("%w: expected object number or trailer, got %v %s", ErrMalformedXRef, tok1.Type, tok1.Value)
 		}
 
 		tok2, err := lex.NextToken()
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, nil, err
 		}
 		if tok2.Type != lexer.TokenNumber {
-			return nil, 0, fmt.Errorf("%w: expected count, got %v", ErrMalformedXRef, tok2.Type)
+			return nil, 0, nil, fmt.Errorf("%w: expected count, got %v", ErrMalformedXRef, tok2.Type)
 		}
 
 		startObj, err := strconv.Atoi(tok1.Value)
 		if err != nil {
-			return nil, 0, fmt.Errorf("%w: invalid start object number %q: %v", ErrMalformedXRef, tok1.Value, err)
+			return nil, 0, nil, fmt.Errorf("%w: invalid start object number %q: %v", ErrMalformedXRef, tok1.Value, err)
 		}
 		count, err := strconv.Atoi(tok2.Value)
 		if err != nil {
-			return nil, 0, fmt.Errorf("%w: invalid entry count %q: %v", ErrMalformedXRef, tok2.Value, err)
+			return nil, 0, nil, fmt.Errorf("%w: invalid entry count %q: %v", ErrMalformedXRef, tok2.Value, err)
 		}
 
 		for i := range count {
 			if entryCount%100 == 0 {
 				if err := ctx.Err(); err != nil {
-					return nil, 0, fmt.Errorf("parsing xref table: %w", err)
+					return nil, 0, nil, fmt.Errorf("parsing xref table: %w", err)
 				}
 			}
 			entryCount++
 
 			tokOff, err := lex.NextToken()
 			if err != nil {
-				return nil, 0, err
+				return nil, 0, nil, err
 			}
 			tokGen, err := lex.NextToken()
 			if err != nil {
-				return nil, 0, err
+				return nil, 0, nil, err
 			}
 			tokType, err := lex.NextToken()
 			if err != nil {
-				return nil, 0, err
+				return nil, 0, nil, err
 			}
 
 			if tokOff.Type != lexer.TokenNumber || tokGen.Type != lexer.TokenNumber || tokType.Type != lexer.TokenKeyword {
-				return nil, 0, fmt.Errorf("%w: invalid entry", ErrMalformedXRef)
+				return nil, 0, nil, fmt.Errorf("%w: invalid entry", ErrMalformedXRef)
 			}
 
 			offset, err := strconv.ParseInt(tokOff.Value, 10, 64)
 			if err != nil {
-				return nil, 0, fmt.Errorf("%w: invalid offset %q: %v", ErrMalformedXRef, tokOff.Value, err)
+				return nil, 0, nil, fmt.Errorf("%w: invalid offset %q: %v", ErrMalformedXRef, tokOff.Value, err)
 			}
 			gen, err := strconv.Atoi(tokGen.Value)
 			if err != nil {
-				return nil, 0, fmt.Errorf("%w: invalid generation %q: %v", ErrMalformedXRef, tokGen.Value, err)
+				return nil, 0, nil, fmt.Errorf("%w: invalid generation %q: %v", ErrMalformedXRef, tokGen.Value, err)
 			}
 			isFree := tokType.Value == "f"
 			isNormal := tokType.Value == "n"
 
 			if !isFree && !isNormal {
-				return nil, 0, fmt.Errorf("%w: invalid entry type: %s", ErrMalformedXRef, tokType.Value)
+				return nil, 0, nil, fmt.Errorf("%w: invalid entry type: %s", ErrMalformedXRef, tokType.Value)
 			}
 
 			// ISO 32000-1, 7.5.4: the free-list head, offset 0 with
@@ -376,15 +383,15 @@ func ParseXRefTable(ctx context.Context, lex *lexer.Lexer, indexMap map[int]XRef
 		}
 	}
 
-	p := parser.NewParser(lex)
+	p := parser.NewParser(lex).WithFormatChecking()
 	trailerObj, err := p.ParseObject(ctx)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, nil, err
 	}
 
 	trailerDict, ok := trailerObj.(ast.PdfDict)
 	if !ok {
-		return nil, 0, fmt.Errorf("%w: expected trailer dictionary, got %T", ErrMalformedXRef, trailerObj)
+		return nil, 0, nil, fmt.Errorf("%w: expected trailer dictionary, got %T", ErrMalformedXRef, trailerObj)
 	}
 
 	var prev int64
@@ -397,5 +404,5 @@ func ParseXRefTable(ctx context.Context, lex *lexer.Lexer, indexMap map[int]XRef
 		}
 	}
 
-	return trailerDict, prev, nil
+	return trailerDict, prev, p.FormatViolations, nil
 }
