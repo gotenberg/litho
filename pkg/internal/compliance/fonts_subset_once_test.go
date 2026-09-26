@@ -124,6 +124,65 @@ func TestFontSubsetRuleStatedOncePerFont(t *testing.T) {
 	}
 }
 
+// TestCIDSetRuleStatedOncePerDescendant pins that the /CIDSet rule is stated
+// once per descendant CIDFont object, however many Type0 fonts name it; see
+// [fontJudgements.subsetCoverage]. Measured with veraPDF 1.30: two Type0
+// fonts over one CIDFont object whose /CIDSet leaves out the shown CIDs fail
+// ISO 19005-1, 6.3.5 t3 and ISO 19005-2, 6.2.11.4.2 t2 once, and two over a
+// CIDFont object each, sharing one descriptor, twice.
+func TestCIDSetRuleStatedOncePerDescendant(t *testing.T) {
+	t.Parallel()
+
+	// Objects 5 to 9 are [subsetType0Font]; object 10 is a second Type0 font,
+	// object 11 a second CIDFont over the same descriptor.
+	objs := func(t *testing.T, cidSet, secondDescendant string) []string {
+		t.Helper()
+		font := subsetType0Font(t, cidSet)
+		const text = "BT /F1 12 Tf 10 50 Td <00010002> Tj /F2 12 Tf 10 30 Td <00010002> Tj ET"
+		return append([]string{
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [12 0 R] /Count 1 >>",
+			exponentStream("", text),
+			"null",
+		}, append(font,
+			"<< /Type /Font /Subtype /Type0 /BaseFont /ABCDEF+Arial /Encoding /Identity-H /DescendantFonts ["+secondDescendant+"] >>",
+			"<< /Type /Font /Subtype /CIDFontType2 /BaseFont /ABCDEF+Arial /DW 1000 /CIDToGIDMap /Identity "+
+				"/FontDescriptor 7 0 R /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] "+
+				"/Resources << /Font << /F1 5 0 R /F2 10 0 R >> >> /Contents 3 0 R >>",
+		)...)
+	}
+	for _, tc := range []struct {
+		name       string
+		descendant string
+		want       int
+	}{
+		{"one CIDFont object", "6 0 R", 1},
+		{"a CIDFont object each", "11 0 R", 2},
+	} {
+		for _, p := range []struct {
+			profile models.PDFAProfile
+			cidSet  string
+			rule    Rule
+		}{
+			{models.PDFA1b, "", Rule_19005_1_6_3_5_t03},
+			{models.PDFA2b, " /CIDSet 9 0 R", Rule_19005_2_6_2_11_4_2_t02},
+		} {
+			t.Run(tc.name+" "+string(p.profile), func(t *testing.T) {
+				t.Parallel()
+				doc, _ := objsDocPDF(t, objs(t, p.cidSet, tc.descendant)...)
+				viols, err := ValidatePDFA(context.Background(), doc, p.profile)
+				if err != nil {
+					t.Fatalf("ValidatePDFA: %v", err)
+				}
+				if got := countRuleErrs(t, viols, p.rule); got != tc.want {
+					t.Errorf("%s test %d fired %d times, want %d", p.rule.Clause, p.rule.TestNumber, got, tc.want)
+				}
+			})
+		}
+	}
+}
+
 // TestSharedPageContentSelectsTheFirstPageFonts pins that a content stream
 // two pages share selects its fonts through the first page's resources alone;
 // see [markJudgedContents]. Each page maps /F1 to its own unembedded font, and

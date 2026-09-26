@@ -254,7 +254,8 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 type fontJudgements struct {
 	// dict holds the font objects whose dictionary rules were judged.
 	dict map[int]bool
-	// subset holds the font objects the subset rule failed for; see
+	// subset holds the objects the subset rule failed for, a simple font or
+	// a composite font's descendant CIDFont; see
 	// [fontJudgements.subsetCoverage].
 	subset map[int]bool
 	// glyph holds the glyph-level statements already made; see
@@ -269,7 +270,7 @@ func newFontJudgements() *fontJudgements {
 
 // subsetCoverage states the rule a font subset's /CharSet or /CIDSet answers
 // (see [checkSubsetCoverage]) against the codes one content stream shows
-// through fontRef, unless it already failed for that font object.
+// through fontRef, unless it already failed for the object it belongs to.
 //
 // veraPDF states the rule on the font object, PDType1Font for /CharSet and
 // PDCIDFont for /CIDSet, and judges that object once for the whole document.
@@ -281,6 +282,13 @@ func newFontJudgements() *fontJudgements {
 // with no /CharSet, or one Type0 subset whose /CIDSet leaves them out, fail
 // ISO 19005-1, 6.3.5 t2 or t3 and ISO 19005-2, 6.2.11.4.2 t2 once, whether
 // the pages share one content stream or draw one each.
+//
+// The /CIDSet rule belongs to the descendant CIDFont, so composite fonts that
+// share one descendant object fail it once between them. Measured with
+// veraPDF 1.30 at PDF/A-1b and PDF/A-2b: two Type0 fonts naming one CIDFont
+// object whose /CIDSet leaves out the shown CIDs fail ISO 19005-1, 6.3.5 t3
+// and ISO 19005-2, 6.2.11.4.2 t2 once, and two naming a CIDFont object each,
+// over one shared descriptor, twice.
 //
 // A font written directly in a resource dictionary has no object to key on,
 // and is judged wherever it is used.
@@ -295,16 +303,41 @@ func newFontJudgements() *fontJudgements {
 //     19005-2, 6.2.11.4.2 t2 at PDF/A-1b and PDF/A-2b moved toward veraPDF's
 //     and none away, 217 of them onto it; their summed distance from veraPDF
 //     fell from 4497 to 84.
+//   - pdfjs issue6127.pdf: names 24 Type0 fonts over 8 descendant CIDFonts,
+//     11 of them over one, and veraPDF fails ISO 19005-1, 6.3.5 t3 6 times
+//     and ISO 19005-2, 6.2.11.4.2 t2 5 times, where litho failed them 17 and
+//     18 times.
+//   - All corpora: keying the /CIDSet rule on the descendant moved the counts
+//     of ISO 19005-1, 6.3.5 t3 toward veraPDF's in 14 files and those of ISO
+//     19005-2, 6.2.11.4.2 t2 in 8, and none away; their summed distance fell
+//     from 59 to 3 and from 106 to 0.
 func (j *fontJudgements) subsetCoverage(ctx context.Context, doc *document.Document, fontRef ast.PdfObject, font ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
-	ref, indirect := fontRef.(ast.PdfIndirectRef)
-	if indirect && j.subset[ref.ObjectNum] {
+	objNum, keyed := subsetRuleObject(ctx, doc, fontRef, font)
+	if keyed && j.subset[objNum] {
 		return nil
 	}
 	results := checkSubsetCoverage(ctx, doc, font, fontName, pageNum, profile, usage)
-	if indirect && len(results) > 0 {
-		j.subset[ref.ObjectNum] = true
+	if keyed && len(results) > 0 {
+		j.subset[objNum] = true
 	}
 	return results
+}
+
+// subsetRuleObject returns the number of the object veraPDF states the subset
+// rule on: the descendant CIDFont of a composite font, and the font itself
+// otherwise. keyed is false for a font or descendant written directly in its
+// container, which has no object number.
+func subsetRuleObject(ctx context.Context, doc *document.Document, fontRef ast.PdfObject, font ast.PdfDict) (objNum int, keyed bool) {
+	if fontSubtype(ctx, doc, font) == "Type0" {
+		descArr, err := document.ResolveArray(ctx, doc, font["DescendantFonts"])
+		if err == nil && len(descArr) > 0 {
+			if ref, ok := descArr[0].(ast.PdfIndirectRef); ok {
+				return ref.ObjectNum, true
+			}
+		}
+	}
+	ref, ok := fontRef.(ast.PdfIndirectRef)
+	return ref.ObjectNum, ok
 }
 
 // checkSubsetCoverage judges the /CharSet of a Type1 subset or the /CIDSet of
@@ -1585,8 +1618,8 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 // shows its own codes, so these run again for each. veraPDF builds a glyph per
 // show operator, and a glyph two pages show is stated once, by
 // [fontJudgements.glyphs]. Simple fonts already work this way through
-// [checkFontUsageRules]. The /CIDSet rule is stated once per font object, by
-// [fontJudgements.subsetCoverage].
+// [checkFontUsageRules]. The /CIDSet rule is stated once per descendant
+// CIDFont, by [fontJudgements.subsetCoverage].
 //
 // # Corpus evidence
 //
