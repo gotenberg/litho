@@ -323,6 +323,15 @@ func buildNameToGID(glyphNames map[uint16]string) map[string]uint16 {
 // too, and so is a code outside /FirstChar to /LastChar on the dictionary side
 // (ISO 32000-1, 9.6.2.1, Table 111).
 //
+// The scaled advance is weighed as the fraction it is. ISO 19005-2, 6.2.11.5
+// and ISO 19005-1, 6.3.6 ask the widths of the font dictionary and of the
+// embedded program to be consistent, and litho keeps that comparison exact
+// ([widthsInconsistent]). veraPDF stores a Type 1 program's advances as
+// integers (Type1FontProgram.glyphWidths), so a /FontMatrix that makes an
+// advance fractional loses the fraction there, and such a glyph can pass one
+// tool and fail the other. The divergence is deliberate: litho does not copy
+// the truncation.
+//
 // # Corpus evidence
 //
 //   - pdfjs bug1354114.pdf: shows WinAnsi code 10, below its /FirstChar, and
@@ -333,6 +342,13 @@ func buildNameToGID(glyphNames map[uint16]string) map[string]uint16 {
 //     whose /Widths starts at 32, and veraPDF reports the 278-unit charstring
 //     against the 0 the dictionary implies. Skipping codes the array does not
 //     cover left this whole class of Type 1 fonts unjudged.
+//   - govdocs thread_300_300035.pdf, thread_300_300083.pdf and
+//     thread_300_300084.pdf: embed Type 1 programs whose /FontMatrix makes the
+//     advances fractional. At PDF/A-1b and PDF/A-2b litho states 24, 30 and
+//     37 width glyphs against veraPDF's 1, 12 and 12, and truncating litho's
+//     program widths leaves exactly veraPDF's counts.
+//   - govdocs thread_200_200155.pdf: the same truncation accounts for 148 of
+//     the 217 width glyphs litho states, leaving veraPDF's 69.
 func checkType1FontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
 	if usage == nil || len(usage.charCodes) == 0 || !usage.visible {
 		return nil

@@ -375,8 +375,9 @@ var noContext = glyphContext{mode: -1}
 //     veraPDF truncates them: litho states 24, 30 and 37 glyphs against
 //     veraPDF's 1, 12 and 12, and truncating litho's own program widths
 //     leaves exactly veraPDF's 1, 12 and 12.
-//   - govdocs thread_200_200155.pdf: the same truncation accounts for 146 of
-//     the 217 width glyphs litho states, against veraPDF's 69.
+//   - govdocs thread_200_200155.pdf: the same truncation accounts for 148 of
+//     the 217 width glyphs litho states, leaving veraPDF's 69. litho keeps
+//     its exact comparison; see [checkType1FontWidths].
 //   - pdfjs issue19835.pdf: 28 of the 278 width glyphs litho states, against
 //     veraPDF's 204, come from a CIDFontType2 program with no cmap table, on
 //     page 8, where veraPDF reports none, and 44 more pass once truncated.
