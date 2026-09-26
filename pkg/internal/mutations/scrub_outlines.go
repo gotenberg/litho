@@ -60,11 +60,18 @@ func scrubOutlineTitles(
 		return nil, nil
 	}
 
-	catalog, err := document.ResolveCatalog(ctx, doc)
+	// The outline as earlier stages staged it: an outline edit queues a new
+	// tree at new object numbers, and walking the source's instead left every
+	// title of the staged one in the output.
+	catalogRef, ok := CatalogRef(ctx, doc)
+	if !ok {
+		return nil, nil
+	}
+	catalog, err := LiveCatalogDict(ctx, alloc, doc, catalogRef)
 	if err != nil || catalog == nil {
 		return nil, nil
 	}
-	root, err := document.ResolveDict(ctx, doc, catalog.Dict["Outlines"])
+	root, err := resolveDictAllocFirst(ctx, alloc, doc, catalog["Outlines"])
 	if err != nil || root == nil {
 		// No outline tree, so no bookmark can be quoting anything.
 		return nil, nil
@@ -122,11 +129,11 @@ func scrubOutlineItems(
 		}
 		visited[ref.ObjectNum] = true
 
-		item, err := document.ResolveDict(ctx, doc, current)
+		item, err := resolveDictAllocFirst(ctx, alloc, doc, current)
 		if err != nil || item == nil {
 			return nil
 		}
-		if outlineTitleQuotes(ctx, doc, item, tokens) {
+		if outlineTitleQuotes(ctx, alloc, doc, item, tokens) {
 			newItem := make(ast.PdfDict, len(item))
 			maps.Copy(newItem, item)
 			// Emptied rather than deleted: /Title is required (ISO 32000-1,
@@ -146,13 +153,14 @@ func scrubOutlineItems(
 	return nil
 }
 
-// outlineTitleQuotes reports whether the item's /Title contains one of tokens.
-func outlineTitleQuotes(ctx context.Context, doc *document.Document, item ast.PdfDict, tokens []string) bool {
+// outlineTitleQuotes reports whether the item's /Title, read from alloc first,
+// contains one of tokens.
+func outlineTitleQuotes(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, item ast.PdfDict, tokens []string) bool {
 	raw, present := item["Title"]
 	if !present {
 		return false
 	}
-	resolved, err := document.ResolveObject(ctx, doc, raw)
+	resolved, err := resolveAllocFirst(ctx, alloc, doc, raw)
 	if err != nil {
 		return false
 	}

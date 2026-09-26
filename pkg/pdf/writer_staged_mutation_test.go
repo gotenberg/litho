@@ -420,3 +420,45 @@ func TestWriterRedactOverAPDFStampRefusesAsOnTheStampedFile(t *testing.T) {
 		t.Errorf("redacting after the stamp in one Writer returned %v, want ErrRedactionRefused as on the stamped file", err)
 	}
 }
+
+// TestWriterRedactAfterBookmarksScrubsTheirTitles pins that a redaction queued
+// after an outline edit empties the titles of the staged outline that quote
+// what it removed, as it does on the file carrying that outline.
+//
+// The outline pass walked the source document's outline, which the edit had
+// replaced with one queued at new object numbers. It found no title to empty,
+// the verification scan then found the staged title quoting the removed text,
+// and the redaction refused a document it could have cleaned.
+func TestWriterRedactAfterBookmarksScrubsTheirTitles(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	data := signablePDF()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	w := NewWriter(r)
+	defer w.Close()
+	w.SetBookmarks([]models.Bookmark{{Title: "The page", PageNumber: 1}})
+	report, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 100, 720}}})
+	if err != nil {
+		t.Fatalf("Redact: %v", err)
+	}
+	if !slices.Contains(report.RemovedText, "page") {
+		t.Fatalf("the redaction removed %q, want the page's text, so the test proves nothing", report.RemovedText)
+	}
+
+	out := writeAndReopen(t, w)
+	bookmarks, err := out.Bookmarks(ctx)
+	if err != nil {
+		t.Fatalf("Bookmarks: %v", err)
+	}
+	if len(bookmarks) != 1 {
+		t.Fatalf("the output carries %d bookmarks, want the one set", len(bookmarks))
+	}
+	if strings.Contains(bookmarks[0].Title, "page") {
+		t.Errorf("the bookmark title %q still quotes the redacted text", bookmarks[0].Title)
+	}
+}
