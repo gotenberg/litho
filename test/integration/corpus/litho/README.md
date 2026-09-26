@@ -136,6 +136,7 @@ one deliberately rather than diffing it against a fresh build.
 | `defaultcs_4.pdf`      | PDF/A-4      | Default colour spaces judged in place of the family they replace |
 | `csnames_2b.pdf`       | PDF/A-2b     | Colour-space names inside colour space arrays, read as the entry |
 | `offlimits_1b.pdf`     | PDF/A-1b     | Implementation limits in streams drawn with colour operators off |
+| `xrefstm_2b.pdf`       | PDF/A-2b     | The trailer entries of a cross-reference stream, and an update's |
 
 ### Must-not-fire controls
 
@@ -419,6 +420,7 @@ which are covered under [Known divergences](#known-divergences).
 | `xobjstate_2b.pdf`     | 8    | 6    | 11   | 9    | 9    | 11   | 9    | 9    | 10  | 10   | 11   | 7    | 7    |
 | `xpacket_1b.pdf`       | 8    | 5    | 9    | 6    | 7    | 9    | 6    | 7    | 9   | 9    | 10   | 8    | 7    |
 | `xref_1b.pdf`          | 7    | 5    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 7    | 7    |
+| `xrefstm_2b.pdf`       | 12   | 10   | 8    | 6    | 6    | 8    | 6    | 6    | 6   | 6    | 7    | 4    | 5    |
 
 ### complex_1b.pdf at PDF/A-1b
 
@@ -3398,6 +3400,53 @@ rendered glyph and litho once per font, and at the PDF/UA levels, where
 veraPDF counts `7.1/3`, `7.2/34` and `8.2.2/1` once per untagged item (see
 [Instance counts](#instance-counts-which-the-corpus-does-not-pin)).
 
+### `xrefstm_2b.pdf`
+
+A cross-reference stream's dictionary holds the file's trailer beside the
+entries that describe the stream (ISO 32000-1, 7.5.8.2), and veraPDF builds the
+trailer from the entries Table 15 defines, `/Size`, `/Prev`, `/Root`,
+`/Encrypt`, `/Info` and `/ID`. The dictionary is an indirect object the object
+sweep judges whole, so a value in a trailer entry is judged twice, a document
+information dictionary written directly there three times, and an entry Table
+15 does not define once. An older section's stream is judged once, as the
+indirect object it is. 922 corpus files end in a cross-reference stream and
+none holds a defect in its trailer entries, so no count reached the reading.
+
+qpdf writes the first section as a cross-reference stream whose trailer holds a
+direct `/Info`, and the builder appends an incremental update rewriting the
+page's content stream, indexed by a stream of its own:
+
+| Where                                  | Value       | Rule at PDF/A-2b   | Count |
+| -------------------------------------- | ----------- | ------------------ | ----- |
+| newest `/ID`, first element            | 31 digits   | `6.1.6/1`          | 2     |
+| newest direct `/Info`, `/Title`        | `<414>`     | `6.1.6/1`          | 3     |
+| newest direct `/Info`, `/Producer`     | `<41G1>`    | `6.1.6/2`          | 3     |
+| newest `/Foo`, no Table 15 entry       | `<414>`     | `6.1.6/1`          | 1     |
+| older direct `/Info`, `/Producer`      | `<414>`     | `6.1.6/1`          | 1     |
+| newest direct `/Info`, `/Count`        | 2147483648  | `6.1.13/1`         | 3     |
+| newest `/Big`, no Table 15 entry       | 2147483648  | `6.1.13/1`         | 1     |
+| older direct `/Info`, `/Count`         | 2147483648  | `6.1.13/1`         | 1     |
+| newest direct `/Info`, `/Subject`      | 32768 bytes | `6.1.13/3`         | 3     |
+| newest direct `/Info`, a key           | 200 bytes   | `6.1.13/4`         | 3     |
+| newest, a key of the stream dictionary | 200 bytes   | `6.1.13/4`         | 1     |
+| newest direct `/Info`, `/Width`        | 40000.5     | PDF/A-1 `6.1.12/2` | 3     |
+
+The newest `/Size` stays in range. veraPDF judges an out-of-range `/Size` twice
+like any trailer entry, but qpdf then refuses the file outright.
+
+| Rule at PDF/A-2b         | veraPDF | litho |
+| ------------------------ | ------- | ----- |
+| `6.1.6/1` odd hex digits | 7       | 7     |
+| `6.1.6/2` non-hex digit  | 3       | 3     |
+| `6.1.13/1` integer       | 5       | 5     |
+| `6.1.13/3` string        | 3       | 3     |
+| `6.1.13/4` name          | 4       | 4     |
+| `6.6.2.1/1` no metadata  | 1       | 1     |
+
+The two tools return the same rule set, and the same count for every rule, in
+all thirteen cells. At PDF/A-1b the real answers `6.1.12/2` three times on
+both, and the cross-reference stream `6.1.4/3`.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
@@ -3407,7 +3456,7 @@ and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1035 of the 1040 cells. The five
+fixtures exist to protect, and it holds in 1048 of the 1053 cells. The five
 exceptions, two on `complex_ua2` and three on `inlineimage_2b`, are marked `*`
 in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
