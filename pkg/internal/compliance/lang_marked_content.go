@@ -195,9 +195,10 @@ func (w *contentLangWalk) form(ctx context.Context, obj ast.PdfObject, parentRes
 	if isRef {
 		w.visited[ref.ObjectNum] = true
 	}
-	data, err := w.doc.DecodeStream(ctx, stream)
-	if err != nil {
-		w.doc.Logger.Debug("compliance: marked-content /Lang: cannot decode form content", "page", pageNum, "error", err)
+	// veraPDF reads no operator from a form it cannot decode
+	// ([decodeContentStream]).
+	data, reads := decodeContentStream(ctx, w.doc, stream)
+	if !reads {
 		return
 	}
 	ops, err := content.ParseStreamData(ctx, data)

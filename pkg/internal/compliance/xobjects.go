@@ -272,12 +272,12 @@ func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.P
 }
 
 // formDrawnXObjects returns the names the Do operators of the Form XObject
-// stream draw, none when its content does not decode or parse.
+// stream draw, none when veraPDF reads no operator from it
+// ([decodeContentStream]) or its content does not parse.
 func formDrawnXObjects(ctx context.Context, doc *document.Document, stream ast.PdfStream, pageNum int) map[string]bool {
 	drawn := make(map[string]bool)
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil {
-		doc.Logger.Debug("compliance.xobjects: cannot decode Form XObject", "page", pageNum, "error", err)
+	data, reads := decodeContentStream(ctx, doc, stream)
+	if !reads {
 		return drawn
 	}
 	ops, err := content.ParseStreamData(ctx, data)
