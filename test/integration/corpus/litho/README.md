@@ -122,6 +122,7 @@ one deliberately rather than diffing it against a fresh build.
 | `threed_4e.pdf`        | PDF/A-4e     | The 3D stream subtypes the engineering conformance permits       |
 | `grouping_ua2.pdf`     | PDF/UA-2     | Both halves of a Table 5 row, chosen by how the parent is used   |
 | `resinherit_2b.pdf`    | PDF/A-2b     | Resources and a media box a page inherits from an inner node     |
+| `inlineimage_2b.pdf`   | PDF/A-2b     | Content repairs on a page that holds inline images               |
 
 ### Must-not-fire controls
 
@@ -294,7 +295,7 @@ zero-area annotation.
 ## Expected firing sets
 
 Counts are distinct rule classes (`clause/test`) reported by litho. litho and
-veraPDF agree exactly on the set in every cell except the two marked `*`,
+veraPDF agree exactly on the set in every cell except the five marked `*`,
 which are covered under [Known divergences](#known-divergences).
 
 | Fixture                | A-1a | A-1b | A-2a | A-2b | A-2u | A-3a | A-3b | A-3u | A-4 | A-4e | A-4f | UA-1 | UA-2 |
@@ -338,6 +339,7 @@ which are covered under [Known divergences](#known-divergences).
 | `idfields_ua2.pdf`     | 6    | 6    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 4    | 6    |
 | `idprefix_2b.pdf`      | 13   | 10   | 12   | 9    | 10   | 13   | 10   | 11   | 10  | 10   | 11   | 8    | 7    |
 | `imgxmp_4.pdf`         | 10   | 8    | 15   | 13   | 13   | 15   | 13   | 13   | 8   | 9    | 10   | 7    | 6    |
+| `inlineimage_2b.pdf`   | 6\*  | 4    | 9\*  | 6    | 7    | 9\*  | 6    | 7    | 6   | 6    | 7    | 10   | 10   |
 | `jpx_2b.pdf`           | 4    | 2    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 5    | 6    |
 | `limits_1b.pdf`        | 12   | 9    | 9    | 6    | 7    | 9    | 6    | 7    | 4   | 4    | 5    | 11   | 9    |
 | `limits_2b.pdf`        | 10   | 8    | 12   | 10   | 10   | 12   | 10   | 10   | 6   | 6    | 7    | 10   | 8    |
@@ -1557,6 +1559,23 @@ litho gap, not a veraPDF one. The masking bug behind it is fixed; what
 remains is a separate facet of the same rule, described under
 [Second bug found](#second-bug-found-pdfua-1-language-coverage-fixed-one-facet-remains).
 
+Three more cells disagree, all on `inlineimage_2b.pdf` and all on the same
+construct: an unusable `/Lang` on a marked-content property list in a document
+with no structure tree.
+
+**`6.8.4/1` at PDF/A-1a, `6.7.4/1` at PDF/A-2a and PDF/A-3a.** veraPDF reports
+the inline `/Span <</Lang (-pt)>> BDC`, litho does not. ISO 19005-2, 6.7.4
+holds a `/Lang` "in the document's Catalog dictionary or in a structure element
+dictionary or property list" to a language identifier, and veraPDF judges every
+such entry as a `CosLang`, the one in a content stream's property list included.
+litho's check scans page property lists too, inline and named, but
+`checkPDFALangValid` in `pkg/internal/compliance/structure.go` returns as soon
+as the catalog has no `/StructTreeRoot`, before it reaches them. The clause
+does not depend on the structure tree, so litho has the gap. A remediation hides it: the
+first round adds a structure tree, the revalidation then reports the entry, and
+the marked-content repair removes it, so both tools agree on every remediated
+output.
+
 One litho gap and one veraPDF gap sit outside the corpus, because planting
 either would add a disagreeing cell rather than coverage.
 
@@ -2734,6 +2753,62 @@ every PDF/A level. The PDF/UA levels differ on instance counts only, the
 per-content-item untagged-content rules the corpus does not pin (see
 [Instance counts](#instance-counts-which-the-corpus-does-not-pin)).
 
+### `inlineimage_2b.pdf`
+
+Four remediation fixers rewrite a page's content stream from its parsed
+operations, and the content parser reads an inline image's data off-token (ISO
+32000-1, 8.9.7). Writing the operations back dropped every image on the page
+and left `<< ... >> BI` with no `ID` or `EI`, a stream no reader can parse.
+Remediating the 105 corpus files that draw inline images in page content, at
+PDF/A-1b, PDF/A-2b, PDF/A-4 and PDF/UA-1, default and aggressive, none of the
+four repaired a page holding one, so the gate never saw it.
+
+One page carries all four defects beside two inline images, whose data holds a
+NUL, a high byte, a delimiter and an end-of-line marker:
+
+| Construct                                               | A-2b         | UA-1       |
+| ------------------------------------------------------- | ------------ | ---------- |
+| image 1 drawn at the deepest of 29 nested `q`           | `6.1.13/8`   | silent     |
+| `(A\x01B)`, whose 0x01 names no glyph under WinAnsi     | `6.2.11.8/1` | `7.21.8/1` |
+| a 40000-byte string, shown in rendering mode 3          | `6.1.13/3`   | silent     |
+| that string's `/Span <</Lang (-pt)>> BDC` property list | silent       | `7.2/29`   |
+| image 2 at the top level, after the text                | none         | none       |
+
+Packing them is the point: string-limit runs in the resource tier and the
+other three in the content tier, so one aggressive remediation rewrites the
+same stream up to four times, and each rewrite has to build on the one before
+it and carry both images across. The control byte also draws `6.2.11.4.1/2`
+(`7.21.4.1/2` at UA-1), and at UA-1 `7.21.7/2`, since code 1 names no glyph and
+so maps to no Unicode value. The font is the conforming non-symbolic TrueType of
+`ttcmap_2b.pdf`, embedded, with `/Widths` from code 1 so the `.notdef` width
+agrees with the dictionary.
+
+Measured on veraPDF 1.30.2 and litho, instance counts per rule:
+
+| PDF/A-2b       | before | default | aggressive |
+| -------------- | ------ | ------- | ---------- |
+| `6.1.13/3`     | 1 / 1  | 1 / 1   | none       |
+| `6.1.13/8`     | 1 / 1  | 1 / 1   | none       |
+| `6.2.11.4.1/2` | 1 / 1  | 1 / 1   | none       |
+| `6.2.11.8/1`   | 1 / 1  | 1 / 1   | none       |
+| `6.2.4.3/4`    | 3 / 3  | none    | none       |
+| `6.6.2.1/1`    | 1 / 1  | none    | none       |
+
+Each cell reads litho / veraPDF. The three content repairs are aggressive, so
+the default remediation leaves their findings as residuals, and the aggressive
+one clears everything on both tools. At PDF/UA-1 the default remediation removes
+the `/Lang`, which clears `7.2/29` on both, and the aggressive one strips the
+control byte as well, leaving `7.1/3` alone, reported once by litho and four
+times by veraPDF. Every output of the eight profiles `manifest.json` lists,
+default and aggressive, carries both images byte for byte, and litho and
+veraPDF agree on each one's rule set.
+
+Before the fix both cells failed. At PDF/A-2b aggressive the string-limit
+rewrite, in the resource tier, dropped the images and the text with them: the
+extracted text fell from 2 bytes to 0, the rollback of the content tier could
+not restore it, and the writer refused the whole remediation. At PDF/UA-1 the
+`/Lang` repair never reached the output, and `7.2/29` stayed a residual.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets, and
@@ -2743,10 +2818,11 @@ validates, so 70 x 13 = 910 cells. litho and veraPDF return the same verdict in
 all of them: in each cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 908 of the 910 cells. The two
-exceptions are both `complex_ua2`, both marked `*` in the counts table and both
-covered under [Known divergences](#known-divergences); veraPDF reports a
-non-empty set in each, which is why the verdict still matches.
+fixtures exist to protect, and it holds in 905 of the 910 cells. The five
+exceptions, two on `complex_ua2` and three on `inlineimage_2b`, are marked `*`
+in the counts table and covered under
+[Known divergences](#known-divergences); veraPDF reports a non-empty set in
+each, which is why the verdict still matches.
 
 Both figures are measured by hand against a live veraPDF rather than taken from
 the runner. The thirteen flavours are `1a 1b 2a 2b 2u 3a 3b 3u 4 4e 4f ua1 ua2`
