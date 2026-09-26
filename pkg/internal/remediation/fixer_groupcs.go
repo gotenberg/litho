@@ -45,25 +45,22 @@ func groupHasBlendingSpace(ctx context.Context, doc *document.Document, group as
 	return compliance.GroupHasBlendingSpace(ctx, doc, group)
 }
 
-// matchGroupCS matches transparency /Group CS violations: mismatched
-// blending CS vs OutputIntent, or a page with transparency that lacks
-// any /Group entry at all. Covers ISO 19005-2/3 §6.2.10 and
-// ISO 19005-4 §6.2.9 test 2.
+// matchGroupCS matches transparency /Group CS violations: a page group
+// blending in a device colour space no OutputIntent covers (see
+// [flagsDeviceGroup]), or a page with transparency that lacks a blending
+// colour space (see [requiresPageGroup]).
 func matchGroupCS(v compliance.Violation) bool {
-	// A device-colour transparency group blending space (ISO 19005 §6.2.3.3 /
-	// §6.2.4.3, flagged with a "transparency group" context) is repaired by
-	// replacing it with a device-independent one, not by installing an
-	// OutputIntent for it.
-	if clausePrefix(v, "6.2.3.3", "6.2.4.3") && contextContains(v, "transparency group") {
-		return true
-	}
-	if !clausePrefix(v, "6.2.9", "6.2.10") {
-		return false
-	}
-	if contextContains(v, "blending CS") && contextContains(v, "incompatible") {
-		return true
-	}
-	return requiresPageGroup(v)
+	return flagsDeviceGroup(v) || requiresPageGroup(v)
+}
+
+// flagsDeviceGroup reports whether v flags the device colour space the page's
+// transparency group blends in, which no OutputIntent covers: ISO 19005-1,
+// 6.2.3.3 and ISO 19005-2/3/4, 6.2.4.3, with the "page N: transparency group"
+// context the detector gives the page's own group alone. It is repaired by
+// replacing the blending space with a device-independent one, not by
+// installing an OutputIntent for it.
+func flagsDeviceGroup(v compliance.Violation) bool {
+	return clausePrefix(v, "6.2.3.3", "6.2.4.3") && contextContains(v, "transparency group")
 }
 
 // requiresPageGroup reports whether v is the rule that asks a page for a
@@ -77,18 +74,19 @@ func requiresPageGroup(v compliance.Violation) bool {
 		v.Rule == compliance.Rule_19005_4_6_2_9_t02
 }
 
-// pagesRequiringGroup returns the 1-based numbers of the pages violations
-// flag under [requiresPageGroup].
-func pagesRequiringGroup(violations []compliance.Violation) map[int]bool {
+// flaggedPages returns the 1-based numbers of the pages the violations flag
+// matches name, in a context that is "page N" or begins "page N:".
+func flaggedPages(violations []compliance.Violation, flags func(compliance.Violation) bool) map[int]bool {
 	pages := make(map[int]bool)
 	for _, v := range violations {
-		if !requiresPageGroup(v) {
+		if !flags(v) {
 			continue
 		}
 		num, ok := strings.CutPrefix(v.Context, "page ")
 		if !ok {
 			continue
 		}
+		num, _, _ = strings.Cut(num, ":")
 		if n, err := strconv.Atoi(num); err == nil && n > 0 {
 			pages[n] = true
 		}
@@ -98,20 +96,21 @@ func pagesRequiringGroup(violations []compliance.Violation) map[int]bool {
 
 // fixGroupCS handles two repair paths on page transparency /Group dicts:
 //
-//  1. When a /Group blends in a device colour space, which conforms only
-//     with a matching OutputIntent, replace it with ICCBased sRGB.
+//  1. When a violation flags the device colour space a page /Group blends
+//     in, which conforms only with a matching OutputIntent, replace it with
+//     ICCBased sRGB (see [flagsDeviceGroup]).
 //  2. When a page that requires a blending colour space has no /Group, or a
 //     /Group without one, synthesize a minimal transparency group or give
 //     it the sRGB /CS.
 //
 // A page gets a blending space only when a violation asks for it (see
-// [requiresPageGroup]). ISO 19005-2/3, 6.2.10 t2 and ISO 19005-4, 6.2.9 t2
-// require a group only on a page that contains transparency, and ISO
-// 19005-1, 6.4 t3 forbids a page transparency group outright. The
-// transparency fixer runs first and removes the page groups 6.4 t3 flags, and
-// synthesizing a group on every page lacking one put them back: at PDF/A-1
-// the output failed 6.4 t3 again, and only a second remediation round
-// removed them.
+// [requiresPageGroup]), and keeps a device one no violation flags. ISO
+// 19005-2/3, 6.2.10 t2 and ISO 19005-4, 6.2.9 t2 require a group only on a
+// page that contains transparency, and ISO 19005-1, 6.4 t3 forbids a page
+// transparency group outright. The transparency fixer runs first and removes
+// the page groups 6.4 t3 flags, and synthesizing a group on every page lacking
+// one put them back: at PDF/A-1 the output failed 6.4 t3 again, and only a
+// second remediation round removed them.
 //
 // A device-independent blending space is kept. The fixer used to drop every
 // /CS that was not a device space, for a finding that named one incompatible
@@ -133,6 +132,10 @@ func pagesRequiringGroup(violations []compliance.Violation) map[int]bool {
 //     default and aggressive, of those 516 files, no residual violation
 //     rises, and veraPDF 1.30 reports the same failed rules on every PDF/A-1b
 //     output that changes.
+//   - All corpora: 562 files give a page a transparency group blending in a
+//     device space. On the 514 where group-cs runs at PDF/A-1b, PDF/A-2b or
+//     PDF/A-4, a finding names every such group, so keeping the others moves
+//     no corpus output; litho repairleft_4.pdf carries one no finding names.
 func fixGroupCS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, _ string) ([]string, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -143,7 +146,8 @@ func fixGroupCS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		return nil, fmt.Errorf("resolving pages: %w", err)
 	}
 
-	needsGroup := pagesRequiringGroup(violations)
+	needsGroup := flaggedPages(violations, requiresPageGroup)
+	deviceGroup := flaggedPages(violations, flagsDeviceGroup)
 	var count int
 	// blendingCSRef is allocated lazily and shared by every page that
 	// needs a synthesized transparency group.
@@ -194,12 +198,14 @@ func fixGroupCS(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		newGroup := make(ast.PdfDict, len(groupDict)+1)
 		maps.Copy(newGroup, groupDict)
 		switch {
-		case hasCS && groupCSIsDevice(ctx, doc, csObj):
+		case deviceGroup[i+1] && hasCS && groupCSIsDevice(ctx, doc, csObj):
 			// A device blending space conforms only with a matching OutputIntent,
-			// which the document may lack. Replace it with device-independent
-			// ICCBased sRGB so the group is valid unconditionally, rather than
-			// dropping /CS (which would leave a transparency page without a
-			// blending space, itself an ISO 19005-2 §6.2.10 test 2 violation).
+			// and this one has none. Replace it with device-independent ICCBased
+			// sRGB so the group is valid unconditionally, rather than dropping
+			// /CS (which would leave a transparency page without a blending
+			// space, itself an ISO 19005-2 §6.2.10 test 2 violation). A device
+			// blending space no violation flags is covered (ISO 19005-2/3/4,
+			// 6.2.4.3), and replacing it would change how the group composites.
 		case needsGroup[i+1] && !groupHasBlendingSpace(ctx, doc, groupDict):
 			// The page ISO 19005-2/3 §6.2.10 t2 or ISO 19005-4 §6.2.9 t2
 			// flags has a group, but no transparency group blending space: it
