@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "captured_at": "2026-09-25T13:11:38Z",
+  "captured_at": "2026-09-26T07:44:59Z",
   "corpora": {
     "facturx": {
       "features": {
@@ -123,13 +123,13 @@
           "metrics": {
             "disagreement": 0,
             "fully_fixed": 22,
-            "litho_fixed": 3312,
-            "litho_post": 1235,
+            "litho_fixed": 3314,
+            "litho_post": 1233,
             "litho_pre": 4547,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 3310,
-            "verapdf_post": 1235,
+            "verapdf_fixed": 3312,
+            "verapdf_post": 1233,
             "verapdf_pre": 4545,
             "verapdf_regressed": 0
           }
@@ -141,13 +141,13 @@
           "metrics": {
             "disagreement": 0,
             "fully_fixed": 22,
-            "litho_fixed": 3454,
-            "litho_post": 1093,
+            "litho_fixed": 3456,
+            "litho_post": 1091,
             "litho_pre": 4547,
             "litho_regressed": 0,
             "parse_failed": 0,
-            "verapdf_fixed": 3452,
-            "verapdf_post": 1093,
+            "verapdf_fixed": 3454,
+            "verapdf_post": 1091,
             "verapdf_pre": 4545,
             "verapdf_regressed": 0
           }
@@ -280,9 +280,9 @@
           "metrics": {
             "disagreement": 14,
             "fully_fixed": 33205,
-            "litho_fixed": 163634,
+            "litho_fixed": 163676,
             "litho_post": 6515,
-            "litho_pre": 170149,
+            "litho_pre": 170191,
             "litho_regressed": 0,
             "parse_failed": 0,
             "verapdf_fixed": 163736,
@@ -298,9 +298,9 @@
           "metrics": {
             "disagreement": 14,
             "fully_fixed": 34041,
-            "litho_fixed": 164687,
+            "litho_fixed": 164729,
             "litho_post": 5462,
-            "litho_pre": 170149,
+            "litho_pre": 170191,
             "litho_regressed": 0,
             "parse_failed": 0,
             "verapdf_fixed": 164789,
