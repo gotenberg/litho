@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -22,18 +23,19 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	var results []Violation
 
-	// One ExtGState dictionary is judged once for the whole document; see
-	// [objectJudgedOnce].
+	// A graphics state written as an indirect object, and a halftone, is
+	// judged once for the whole document; see [checkExtGStateGraphics].
 	judgedGS := make(map[int]bool)
 	// So is every content stream the pages draw besides their own content.
 	hexStrings := newDrawnStreamHexStrings(profile)
 	drawn := newDrawnStreamWalk(vctx, func(s *drawnStream) {
 		results = append(results, checkDrawnStream(ctx, doc, s, part, hexStrings)...)
+		scope := appearanceResources(ctx, doc, s.resources, s.pageRes)
+		results = append(results, checkExtGStateGraphics(ctx, doc, scope, collectDrawnResources(s.ops), profile, part, s.pageNum, judgedGS)...)
 	})
 
 	for i := range vctx.pages {
 		p := &vctx.pages[i]
-		page := p.dict
 		if ctx.Err() != nil {
 			return results
 		}
@@ -67,21 +69,17 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			}
 		}
 
-		// The form XObjects, tiling patterns, Type3 glyphs and annotation
-		// appearances the page draws, and whatever those draw in turn.
-		drawn.walkPage(ctx, p, i+1)
-
-		if res == nil {
-			continue
+		// The graphics states the page's own content sets. A page whose
+		// content litho cannot read has every state its resources list judged
+		// once, rather than none (see [pageDrawnResources]).
+		if !p.contentJudged {
+			results = append(results, checkExtGStateGraphics(ctx, doc, res, pageDrawnResources(ctx, p), profile, part, i+1, judgedGS)...)
 		}
 
-		results = append(results, checkExtGStateGraphics(ctx, doc, res, profile, part, i+1, judgedGS)...)
-
-		// Scan Form XObject ExtGState for halftone/rendering intent violations.
-		results = append(results, checkFormXObjectExtGState(ctx, doc, res, profile, part, i+1, judgedGS)...)
-
-		// Scan annotation appearance ExtGState for halftone/rendering intent.
-		results = append(results, checkAnnotationAppearanceExtGState(ctx, doc, page, profile, part, i+1, judgedGS)...)
+		// The form XObjects, tiling patterns, Type3 glyphs and annotation
+		// appearances the page draws, and whatever those draw in turn, with
+		// the graphics states each of them sets.
+		drawn.walkPage(ctx, p, i+1)
 	}
 
 	doc.Logger.Debug("compliance.graphics: checks complete", "violations", len(results))
@@ -163,42 +161,6 @@ func checkDrawnStream(ctx context.Context, doc *document.Document, s *drawnStrea
 	return results
 }
 
-// checkAnnotationAppearanceExtGState scans annotation appearance stream
-// resources for ExtGState entries (rendering intent, halftone, etc.).
-func checkAnnotationAppearanceExtGState(ctx context.Context, doc *document.Document, page ast.PdfDict, profile string, part, pageNum int, judged map[int]bool) []Violation {
-	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
-	if err != nil || len(annotsArr) == 0 {
-		return nil
-	}
-	var results []Violation
-	for _, annotObj := range annotsArr {
-		annot, _ := document.ResolveDict(ctx, doc, annotObj)
-		if annot == nil {
-			continue
-		}
-		apDict, _ := document.ResolveDict(ctx, doc, annot["AP"])
-		if apDict == nil {
-			continue
-		}
-		for _, key := range []ast.PdfName{"N", "R", "D"} {
-			apObj, ok := apDict[key]
-			if !ok {
-				continue
-			}
-			stream, err := document.ResolveStream(ctx, doc, apObj)
-			if err != nil {
-				doc.Logger.Debug("compliance.graphics: cannot resolve appearance stream", "error", err)
-				continue
-			}
-			apRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-			if apRes != nil {
-				results = append(results, checkExtGStateGraphics(ctx, doc, apRes, profile, part, pageNum, judged)...)
-			}
-		}
-	}
-	return results
-}
-
 // appearanceStreamObjects returns the appearance streams an /AP entry holds.
 // The entry is a stream, or a subdictionary keyed by appearance state when the
 // annotation has several (ISO 32000-1, 12.5.5), as a checkbox does with /Off
@@ -265,75 +227,111 @@ func appearanceResources(ctx context.Context, doc *document.Document, streamRes,
 	return merged
 }
 
-// checkFormXObjectExtGState scans Form XObject resources for ExtGState
-// entries (halftone, rendering intent, etc.) that the page-level scan misses.
-func checkFormXObjectExtGState(ctx context.Context, doc *document.Document, pageRes ast.PdfDict, profile string, part, pageNum int, judged map[int]bool) []Violation {
-	if pageRes == nil {
-		return nil
-	}
-	xoDict, err := document.ResolveDict(ctx, doc, pageRes["XObject"])
-	if err != nil || xoDict == nil {
-		return nil
-	}
-	var results []Violation
-	for _, xoName := range sortedNames(xoDict) {
-		xoObj := xoDict[xoName]
-		stream, err := document.ResolveStream(ctx, doc, xoObj)
-		if err != nil {
-			doc.Logger.Debug("compliance.graphics: cannot resolve XObject stream", "error", err)
-			continue
-		}
-		st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-		if st != "Form" {
-			continue
-		}
-		formRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-		if formRes == nil {
-			continue
-		}
-		results = append(results, checkExtGStateGraphics(ctx, doc, formRes, profile, part, pageNum, judged)...)
-	}
-	return results
-}
-
-// checkExtGStateGraphics validates all ExtGState entries in a page's resources.
+// checkExtGStateGraphics judges the graphics states the gs operators of one
+// content stream set, whose names resolve against resources and which drawn
+// counts, against the transfer function, halftone and rendering intent rules:
+// ISO 19005-1, 6.2.8 t1 and t2 and 6.2.9 t1, ISO 19005-2/3, 6.2.5 t1 to t6
+// and 6.2.6 t1, and ISO 19005-4, 6.2.5 t1 to t6.
+//
+// veraPDF builds a PDExtGState only from a gs operator (GFOp_gs,
+// veraPDF-validation 1.30), so a state no gs sets is judged nowhere, and it
+// judges one model object per indirect object for the whole run: a state
+// written as an indirect object fails once for the whole document, and one
+// written directly once for every gs that sets it ([blendModeTimes]). The
+// halftone a state names is a model object of its own (GFPDHalftone), which
+// an indirect /HT makes one for the whole document ([objectJudgedOnce]),
+// whatever states and gs operators reach it. Measured with veraPDF 1.30 at
+// PDF/A-1b, PDF/A-2b and PDF/A-4:
+//
+//   - A direct state holding /TR or /RI /Foo that two gs set fails 6.2.8 t1
+//     or 6.2.9 t1 at PDF/A-1b, and 6.2.5 t1 or 6.2.6 t1 at PDF/A-2b, twice,
+//     and a direct and an indirect state no gs sets fail nothing.
+//   - An indirect state holding /TR2 /Foo set twice on one page and once on
+//     another fails t2 once.
+//   - A direct state holding a direct type 6 halftone that two gs set fails
+//     6.2.5 t4 twice, an indirect one set on two pages holding one fails it
+//     once, and two direct states naming one indirect type 6 halftone, each
+//     set once, fail it once.
+//
+// The streams a page draws are reached by [drawnStreamWalk], each judged once
+// for the whole document with the states it sets itself: a form painted twice
+// setting a direct state once fails once, and so does an appearance two
+// annotations share, a form painted by a form, a selected tiling pattern cell
+// and a shown Type3 glyph, while a form no Do paints and a soft mask group
+// fail nothing.
+//
+// The work is one read of every name drawn gives and one judgement of the
+// state it names, whatever the count of gs operators setting it; only the
+// findings repeat, so a stream of millions of gs operators costs time linear
+// in its operators. A nil drawn, from a page whose content litho cannot read,
+// judges every state resources list once (see [pageDrawnResources]).
 //
 // # Corpus evidence
 //
 //   - govdocs thread_100_100666.pdf: references ExtGState object 190 from 30
 //     pages, and veraPDF reports its /TR once. It backs judging a shared
 //     dictionary once.
-func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resources ast.PdfDict, profile string, part, pageNum int, judged map[int]bool) []Violation {
+//   - pdfjs issue21089.pdf: six graphics states name one indirect type 5
+//     halftone whose process colorants carry transfer functions, and veraPDF
+//     fails ISO 19005-2, 6.2.5 t6 four times, where litho failed it 24 times.
+//   - govdocs thread_300_300255.pdf: its two pages list /GS13, holding /TR,
+//     and never set it, and veraPDF fails 6.2.5 t1 twice, where litho failed
+//     it four times.
+//   - All corpora: judging a state where a gs sets it moved 19 counts at
+//     PDF/A-1b, PDF/A-2b and PDF/A-4, in 7 files, all toward veraPDF's and
+//     13 onto it. The 6 still apart are 6.2.5 t6, which veraPDF states on
+//     each halftone of a type 5 halftone by its colorant name.
+func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resources ast.PdfDict, drawn *drawnResources, profile string, part, pageNum int, judged map[int]bool) []Violation {
 	gsDict, err := document.ResolveDict(ctx, doc, resources["ExtGState"])
 	if err != nil || gsDict == nil {
 		return nil
 	}
 
+	names := sortedNames(gsDict)
+	if drawn != nil {
+		names = names[:0]
+		for _, name := range slices.Sorted(maps.Keys(drawn.extGStates)) {
+			if _, ok := gsDict[ast.PdfName(name)]; ok {
+				names = append(names, ast.PdfName(name))
+			}
+		}
+	}
+
 	var results []Violation
-	for _, gsName := range sortedNames(gsDict) {
-		gsObj := gsDict[gsName]
+	for _, gsName := range names {
 		if ctx.Err() != nil {
 			return results
 		}
-
-		// One ExtGState dictionary, one finding: these rules forbid keys OF THE
-		// DICTIONARY (ISO 19005-2 §6.2.5 among them), so a state 30 pages share
-		// is one violation, not 30. veraPDF states each against its single
-		// PDExtGState. See [objectJudgedOnce].
-		if objectJudgedOnce(gsObj, judged) {
+		gsObj := gsDict[gsName]
+		times := blendModeTimes(gsObj, drawn.gsCount(string(gsName)), judged)
+		if times == 0 {
 			continue
 		}
-
 		gs, err := document.ResolveDict(ctx, doc, gsObj)
 		if err != nil || gs == nil {
 			continue
 		}
 
-		results = append(results, checkTransferFunction(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
-		results = append(results, checkHTPKey(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
-		results = append(results, checkHalftone(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
-		results = append(results, checkRenderingIntent(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
-		results = append(results, checkOverprint(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
+		found := checkTransferFunction(ctx, doc, gs, profile, part, pageNum, string(gsName))
+		found = append(found, checkHTPKey(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
+		found = append(found, checkRenderingIntent(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
+		found = append(found, checkOverprint(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
+		halftone := checkHalftone(ctx, doc, gs, profile, part, pageNum, string(gsName))
+		for range times {
+			results = append(results, found...)
+		}
+		if len(halftone) == 0 {
+			continue
+		}
+		if _, indirect := gs["HT"].(ast.PdfIndirectRef); indirect {
+			if !objectJudgedOnce(gs["HT"], judged) {
+				results = append(results, halftone...)
+			}
+			continue
+		}
+		for range times {
+			results = append(results, halftone...)
+		}
 	}
 	return results
 }

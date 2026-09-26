@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -51,15 +52,21 @@ func TestSharedExtGStateJudgedOnce(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	// Three pages, all naming the same indirect ExtGState (object 6).
-	page := "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]" +
-		" /Resources << /ExtGState << /GS0 6 0 R >> >> >>"
+	// Three pages, all setting the same indirect ExtGState (object 6), each
+	// from a content stream of its own.
+	page := func(content int) string {
+		return fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents %d 0 R"+
+			" /Resources << /ExtGState << /GS0 6 0 R >> >> >>", content)
+	}
 	doc, cat := objsDocPDF(t,
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>",
-		page, page, page,
+		page(8), page(9), page(10),
 		"<< /Type /ExtGState /TR 7 0 R >>",
 		"<< /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >>",
+		streamObj("/GS0 gs 0 0 10 10 re f"),
+		streamObj("/GS0 gs /GS0 gs 0 0 10 10 re f"),
+		streamObj("/GS0 gs 0 0 10 10 re f"),
 	)
 
 	got := checkGraphicsGroup(ctx, &validationCtx{
@@ -87,13 +94,15 @@ func TestDistinctExtGStatesEachReport(t *testing.T) {
 	doc, cat := objsDocPDF(t,
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]"+
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 8 0 R"+
 			" /Resources << /ExtGState << /GS0 5 0 R >> >> >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]"+
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 9 0 R"+
 			" /Resources << /ExtGState << /GS1 6 0 R >> >> >>",
 		"<< /Type /ExtGState /TR 7 0 R >>",
 		"<< /Type /ExtGState /TR 7 0 R >>",
 		"<< /FunctionType 2 /Domain [0 1] /C0 [0] /C1 [1] /N 1 >>",
+		streamObj("/GS0 gs 0 0 10 10 re f"),
+		streamObj("/GS1 gs 0 0 10 10 re f"),
 	)
 
 	got := checkGraphicsGroup(ctx, &validationCtx{
