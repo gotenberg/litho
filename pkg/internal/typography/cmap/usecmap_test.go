@@ -8,16 +8,18 @@ import (
 // TestPredefinedUnicode pins that a bundled CID-to-Unicode CMap yields its
 // bfchar mappings apart from its bfrange ones. Adobe-Korea1-UCS2 maps CID 60
 // hexadecimal to U+20A9 through bfchar and CID 41 to U+0060 through the bfrange
-// <0001> <005F> <0020>. The single mappings decoded from the bundled binary
-// CMap match, code for code, the bfchar entries of the text CMap veraPDF 1.30
-// bundles (6968 of them, one value apart: <205A>, which the binary CMap
-// stores as <CDCDCDCD> and veraPDF as <FFFD>), and all the codes both cover.
+// <0001> <005F> <0020>. The CMap is Adobe's resource, the file veraPDF 1.30
+// bundles, so its 6968 single mappings match veraPDF's code for code: <205A>
+// maps to U+FFFD, which the PDF.js binary copy stores as <CDCDCDCD>.
 func TestPredefinedUnicode(t *testing.T) {
 	t.Parallel()
 
 	chars, all := PredefinedUnicode("Adobe-Korea1-UCS2")
 	if got := chars["\x00\x60"]; got != "₩" {
 		t.Errorf("bfchar CID 60 maps to %q, want U+20A9", got)
+	}
+	if got := chars["\x20\x5A"]; got != "�" {
+		t.Errorf("bfchar CID 205A maps to %q, want U+FFFD", got)
 	}
 	if got, ok := chars["\x00\x41"]; ok {
 		t.Errorf("bfchar holds CID 41 (%q), which only a bfrange maps", got)

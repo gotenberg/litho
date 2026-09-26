@@ -143,11 +143,28 @@ var predefinedUnicodeCache sync.Map
 // Unicode strings. Both are nil when litho bundles no such CMap. A CMap that
 // maps codes to CIDs rather than to Unicode yields empty maps.
 //
+// It serves the conformance checks, which judge a /ToUnicode CMap built on a
+// predefined one as veraPDF does, so the Adobe-*-UCS2 CMaps come from Adobe's
+// current resources ([adobeUCS2FS]) rather than from the PDF.js copies text
+// extraction reads. Adobe-KR-UCS2, which PDF.js does not ship, is among them.
+//
 // A base the bundled CMap names in turn is not followed: none of the bundled
 // CMaps that map to Unicode names one.
 func PredefinedUnicode(name string) (chars, all map[string]string) {
 	if cached, ok := predefinedUnicodeCache.Load(name); ok {
 		p, _ := cached.(*predefinedUnicode)
+		return p.chars, p.all
+	}
+	if src, ok, err := adobeUCS2Source(name); ok {
+		if err != nil {
+			return nil, nil
+		}
+		chars, all, err := parseAdobeUCS2(src)
+		if err != nil {
+			return nil, nil
+		}
+		p := &predefinedUnicode{chars: chars, all: all}
+		predefinedUnicodeCache.Store(name, p)
 		return p.chars, p.all
 	}
 	path := "bcmaps/" + name + ".bcmap"
