@@ -253,7 +253,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			judged.claimAnnotationReads(ctx, doc, p.dict, pageIdx+1)
 		}
 		if judgeContent {
-			walk := claimWalk{pageNum: pageIdx + 1, visited: make(map[int]bool), forms: pageFormReads(profile)}
+			walk := claimWalk{pageNum: pageIdx + 1, visited: make(map[int]bool), forms: pageFormReads(profile), type3: make(map[int]*type3Procs)}
 			judged.claimStreamReads(ctx, doc, walk, p.parsedOps(ctx), p.resources, site, paintState{}, 0, false)
 		}
 		if !annotsFirst {

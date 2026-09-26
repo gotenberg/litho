@@ -571,6 +571,44 @@ type claimWalk struct {
 	pageNum int
 	visited map[int]bool
 	forms   formReads
+	// type3 caches, by object number, what [fontJudgements.claimType3Reads]
+	// reads from a font a stream shows, nil for a font that is no Type 3 font
+	// with glyph procedures, so a font shown by many operators is read once.
+	type3 map[int]*type3Procs
+}
+
+// type3Procs is what the claim walk reads from a Type 3 font: its dictionary,
+// its /Resources, its /CharProcs and the glyph names its encoding gives codes.
+type type3Procs struct {
+	font      ast.PdfDict
+	res       ast.PdfDict
+	charProcs ast.PdfDict
+	encoding  map[byte]string
+}
+
+// resolveType3Procs returns what the claim walk reads from the font fontRef
+// names, nil when it is no Type 3 font with /Resources and glyph procedures;
+// see [claimWalk].
+func (walk claimWalk) resolveType3Procs(ctx context.Context, doc *document.Document, fontRef ast.PdfObject) *type3Procs {
+	ref, isRef := fontRef.(ast.PdfIndirectRef)
+	if isRef && walk.type3 != nil {
+		if procs, ok := walk.type3[ref.ObjectNum]; ok {
+			return procs
+		}
+	}
+	var procs *type3Procs
+	font, err := document.ResolveDict(ctx, doc, fontRef)
+	if err == nil && font != nil && fontSubtype(ctx, doc, font) == "Type3" {
+		t3Res, _ := document.ResolveDict(ctx, doc, font["Resources"])
+		charProcs, _ := document.ResolveDict(ctx, doc, font["CharProcs"])
+		if t3Res != nil && len(charProcs) > 0 {
+			procs = &type3Procs{font: font, res: t3Res, charProcs: charProcs, encoding: resolveSimpleFontEncoding(ctx, doc, font)}
+		}
+	}
+	if isRef && walk.type3 != nil {
+		walk.type3[ref.ObjectNum] = procs
+	}
+	return procs
 }
 
 // claimStreamReads makes the claims of [fontJudgements.claimProgram] for the
@@ -704,16 +742,10 @@ func (j *fontJudgements) claimType3Reads(ctx context.Context, doc *document.Docu
 	if mode == invisibleRenderingMode || formTooDeep(doc, depth+1) {
 		return
 	}
-	font, err := document.ResolveDict(ctx, doc, fontRef)
-	if err != nil || font == nil || fontSubtype(ctx, doc, font) != "Type3" {
+	procs := walk.resolveType3Procs(ctx, doc, fontRef)
+	if procs == nil {
 		return
 	}
-	t3Res, _ := document.ResolveDict(ctx, doc, font["Resources"])
-	charProcs, _ := document.ResolveDict(ctx, doc, font["CharProcs"])
-	if t3Res == nil || len(charProcs) == 0 {
-		return
-	}
-	encoding := resolveSimpleFontEncoding(ctx, doc, font)
 	var codes []byte
 	switch s := shown.(type) {
 	case ast.PdfString:
@@ -726,11 +758,11 @@ func (j *fontJudgements) claimType3Reads(ctx context.Context, doc *document.Docu
 		}
 	}
 	for _, code := range codes {
-		glyphName := encoding[code]
+		glyphName := procs.encoding[code]
 		if glyphName == "" {
 			continue
 		}
-		procRef := charProcs[ast.PdfName(glyphName)]
+		procRef := procs.charProcs[ast.PdfName(glyphName)]
 		ref, isRef := procRef.(ast.PdfIndirectRef)
 		if isRef {
 			if walk.visited[ref.ObjectNum] {
@@ -742,9 +774,9 @@ func (j *fontJudgements) claimType3Reads(ctx context.Context, doc *document.Docu
 		if !ok {
 			continue
 		}
-		procSite := type3ProcSite(ctx, doc, fontRef, fontName, font, t3Res, site, procRef)
+		procSite := type3ProcSite(ctx, doc, fontRef, fontName, procs.font, procs.res, site, procRef)
 		procSite.mode = mode
-		j.claimStreamReads(ctx, doc, walk, proc, t3Res, procSite, paint, depth+1, unread)
+		j.claimStreamReads(ctx, doc, walk, proc, procs.res, procSite, paint, depth+1, unread)
 	}
 }
 
@@ -958,7 +990,7 @@ func (j *fontJudgements) claimAppearanceReads(ctx context.Context, doc *document
 		doc.Logger.Debug("compliance: fonts: cannot parse appearance stream", "page", pageNum, "error", err)
 		return
 	}
-	walk := claimWalk{pageNum: pageNum, visited: visited, forms: formsReadWhereDrawn}
+	walk := claimWalk{pageNum: pageNum, visited: visited, forms: formsReadWhereDrawn, type3: make(map[int]*type3Procs)}
 	j.claimStreamReads(ctx, doc, walk, ops, res, streamSite(ctx, doc, apObj, stream.Dict["Resources"], res), paintState{}, 0, false)
 }
 
