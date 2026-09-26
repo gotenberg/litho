@@ -18,7 +18,7 @@ import (
 const photoshopNS = "http://ns.adobe.com/photoshop/1.0/"
 
 // componentCatalogPacket is a PDF/A-2b catalog packet xmp-metadata has
-// nothing to patch in, so it leaves the component packets alone too.
+// nothing to patch in. It repairs the component packets all the same.
 const componentCatalogPacket = `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/">
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">

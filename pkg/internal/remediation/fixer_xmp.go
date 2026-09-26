@@ -32,7 +32,7 @@ func matchXMP(v compliance.Violation) bool {
 	)
 }
 
-func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
+func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, profile string) ([]string, error) {
 	// A trailer with no /Root indirect reference cannot be patched in place
 	// (there is no catalog object number to write back to). Skip rather than
 	// error, matching every other catalog-dependent fixer (fixCatalogCleanup,
@@ -99,7 +99,13 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 		// Patch existing XMP.
 		patched, patchFixes := patchExistingXMP(existingXMP, part, conformance, uaPart, info)
 		if len(patchFixes) == 0 && !reencoded {
-			return infoFixes, nil // nothing to patch
+			// Nothing to patch in the catalog packet, but a component packet a
+			// violation names still needs its repair.
+			if !slices.ContainsFunc(violations, namesComponentPacket) {
+				return infoFixes, nil
+			}
+			metaRef, _ := catalogDict["Metadata"].(ast.PdfIndirectRef)
+			return append(infoFixes, fixComponentMetadata(ctx, alloc, doc, metaRef.ObjectNum, part)...), nil
 		}
 		xmpBytes = []byte(patched)
 		fixes = append(slices.Clone(infoFixes), patchFixes...)

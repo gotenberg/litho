@@ -382,6 +382,38 @@ func parseXMPSchemaTarget(s string) (objNum int, prop xmpSchemaProperty, ok bool
 	return objNum, xmpSchemaProperty{nsURI: nsURI, localName: localName}, true
 }
 
+// namesComponentPacket reports whether v was found in a component metadata
+// stream, one other than the catalog's packet: the compliance engine prefixes
+// the context of such a finding with "object N: ".
+//
+// xmp-metadata runs its component repair on such a finding even when the
+// catalog packet needs no patch, and only then. A round of remediation leaves
+// the catalog's former packet behind, unreferenced, and a repair of every
+// metadata stream counted rewriting it as a fix: at PDF/UA-1, where a residual
+// 7.1 finding runs xmp-metadata again, that kept an extra round which changed
+// nothing any validator reads.
+//
+// # Corpus evidence
+//
+//   - litho imgxmp_4.pdf: at PDF/A-4 the catalog packet needs no patch, so
+//     the bytes and encoding attributes of two page packets stayed, and the
+//     output failed ISO 19005-4, 6.7.2.1 t2 and t3 on litho and veraPDF 1.30.
+//   - govdocs thread_300_300779.pdf, pdfcpu pkg_testdata__VectorApple.pdf,
+//     pdfjs S2.pdf, bug1720411.pdf, bug1722036.pdf, bug1766987.pdf,
+//     freeculture.pdf, issue13520.pdf and issue18801.pdf: with the component
+//     repair run whatever the findings, a PDF/UA-1 remediation, default and
+//     aggressive, took a second round to rewrite the unreferenced packet, and
+//     left the same residual.
+func namesComponentPacket(v compliance.Violation) bool {
+	rest, found := strings.CutPrefix(v.Context, "object ")
+	if !found {
+		return false
+	}
+	num, _, cut := strings.Cut(rest, ": ")
+	n, err := strconv.Atoi(num)
+	return cut && err == nil && n > 0
+}
+
 // parseXMPSchemaContext extracts the namespace URI and local name from a
 // clause 6.6.2.3.1 violation context string. The compliance engine
 // encodes the offending XMP property as "<URI>:<localName> <detail>",
