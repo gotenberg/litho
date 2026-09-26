@@ -135,6 +135,10 @@ type csLinkHooks struct {
 	// show is called at every text show with the state in force, whose font a
 	// Type 3 font paints glyphs with.
 	show func(st csPaintState)
+	// inlineSpace is called at every inline image other than a mask that
+	// names no colour space, with the space its dictionary writes out, or
+	// nil when it gives none (see [inlineImageCS]).
+	inlineSpace func(cs ast.PdfObject)
 }
 
 // colourOperators are the operators that select, set or paint with a colour
@@ -188,9 +192,12 @@ var deviceFamilyOperators = map[string]string{
 //     Table 60). n paints nothing.
 //   - Tj, TJ, ' and " fill, stroke or do both as the text rendering mode says
 //     (ISO 32000-1, 9.3.6, Table 106; see [textModePaints]).
-//   - An inline image reaches the space its /CS or /ColorSpace names, and an
-//     inline image mask, which names none, the current fill space (ISO
-//     32000-1, 8.9.6.2 and 8.9.7).
+//   - An inline image reaches the space its /CS or /ColorSpace names or
+//     writes out, and an inline image mask, which names none, the current
+//     fill space (ISO 32000-1, 8.9.6.2 and 8.9.7). veraPDF gives an inline
+//     image with no colour space DeviceGray, which no Default colour space
+//     replaces (see [unknownSpace]): measured, one painted twice fails
+//     DeviceGray twice, and one in a form painted twice once.
 //   - g, rg and k select a device space for fill, G, RG and K for stroke, and
 //     link to it. q and Q save and restore both, with the text rendering mode
 //     and the font (ISO 32000-1, 8.4.2).
@@ -208,6 +215,16 @@ var deviceFamilyOperators = map[string]string{
 //     on Type 3 glyphs: an inline image mask past a d1 fails the colour the
 //     text shows in, rg, f and sh past it fail nothing, and a fill before it
 //     fails that colour.
+//
+// # Corpus evidence
+//
+//   - All corpora: under PDF/A-1b and PDF/A-2b, and the verapdf files under
+//     their own profile, judging the colour space an inline image writes out,
+//     and DeviceGray for one it gives none, moves two device colour counts on
+//     one file, each to veraPDF's, and no verdict.
+//   - pdfjs TAMReview.pdf: paints an inline image whose /CS writes out
+//     [/I /RGB 3 <...>], and veraPDF fails DeviceGray 128 times, where litho
+//     failed it 127 times.
 func walkColorSpaceLinksWith(ctx context.Context, ops []content.Operation, entry csPaintState, hooks csLinkHooks) {
 	add := func(ref csRef, idx int, operator string) {
 		if ref != (csRef{}) && ref.family != "Pattern" {
@@ -333,10 +350,14 @@ func walkColorSpaceLinksWith(ctx context.Context, ops []content.Operation, entry
 				hooks.show(st)
 			}
 		case "BI":
-			if inlineImageIsMask(op) {
+			switch name := inlineImageCSName(op); {
+			case inlineImageIsMask(op):
 				add(st.fill, idx, op.Operator)
-			} else if name := inlineImageCSName(op); name != "" && !st.colourOff {
+			case st.colourOff:
+			case name != "":
 				add(hooks.resolve(name), idx, op.Operator)
+			case hooks.inlineSpace != nil:
+				hooks.inlineSpace(inlineImageCS(op))
 			}
 		case "Do":
 			if name := lastNameOperand(op); name != "" && hooks.paint != nil {
@@ -361,22 +382,29 @@ func lastNameOperand(op content.Operation) string {
 }
 
 // inlineImageCSName returns the colour space name an inline image's
-// dictionary gives under /CS or /ColorSpace, or "" when it gives none or
-// writes the space as an array.
+// dictionary gives (see [inlineImageCS]), or "" when it gives none or writes
+// the space out.
 func inlineImageCSName(op content.Operation) string {
+	name, _ := inlineImageCS(op).(ast.PdfName)
+	return string(name)
+}
+
+// inlineImageCS returns the colour space an inline image's dictionary gives,
+// under its abbreviated key /CS or, failing that, /ColorSpace (ISO 32000-1,
+// 8.9.7, Table 93), the order veraPDF reads them in
+// (PDInlineImage.getInlineImageKey), or nil when it gives none.
+func inlineImageCS(op content.Operation) ast.PdfObject {
 	if len(op.Operands) == 0 {
-		return ""
+		return nil
 	}
 	dict, ok := op.Operands[0].(ast.PdfDict)
 	if !ok {
-		return ""
+		return nil
 	}
-	for _, key := range []ast.PdfName{"CS", "ColorSpace"} {
-		if name, ok := dict[key].(ast.PdfName); ok {
-			return string(name)
-		}
+	if cs, ok := dict["CS"]; ok {
+		return cs
 	}
-	return ""
+	return dict["ColorSpace"]
 }
 
 // colorSpaceScope is one content stream whose /Resources the Separation and

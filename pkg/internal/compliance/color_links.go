@@ -536,6 +536,16 @@ func (w *colorLinkWalk) walkStream(ctx context.Context, ops []content.Operation,
 			w.walkType3(ctx, obj, st, s, depth)
 		}
 	}
+	hooks.inlineSpace = func(cs ast.PdfObject) {
+		if cs == nil {
+			w.judgeRef(ctx, unknownSpace, s, depth)
+			return
+		}
+		// A colour space the image writes out is judged where the image
+		// is, and the stream's own Default colour spaces replace a device
+		// family it holds (ISO 32000-1, 8.6.5.6).
+		w.judgeSpace(ctx, cs, s, s.defaults, true, 0)
+	}
 	walkColorSpaceLinksWith(ctx, ops, entry, hooks)
 }
 
@@ -762,8 +772,13 @@ func (w *colorLinkWalk) judgeSpace(ctx context.Context, obj ast.PdfObject, s *li
 		return
 	}
 	kind, _ := document.ResolveName(ctx, w.doc, arr[0]) // Best-effort: an unreadable family is an unknown space.
+	// ISO 32000-1, 8.9.7, Table 94 lets an inline image abbreviate Indexed
+	// to I, which veraPDF, the reference validator of ISO 19005, reads in no
+	// colour space array: measured with veraPDF 1.30 at PDF/A-1b and
+	// PDF/A-2b, [/I /DeviceRGB 1 <...>] fails DeviceGray inline and in
+	// /Resources/ColorSpace alike, so it is an unknown space here too.
 	switch kind {
-	case "Indexed", "I":
+	case "Indexed":
 		if len(arr) >= 2 {
 			w.judgeSpace(ctx, arr[1], s, defaults, true, nesting+1)
 		}
