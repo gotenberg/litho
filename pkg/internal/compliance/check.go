@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"runtime/debug"
 	"sync"
-	"sync/atomic"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -271,56 +270,24 @@ func markJudgedContents(pages []pageCtx) {
 // partial violations the groups stopped at, which would read as a complete
 // verdict.
 //
-// A group can miss a cross-reference lookup, and the first miss runs the
-// one-shot raw-byte augmentation that rewrites the index. Run from a group, it
-// wrote the index while the other groups were reading it, and the lookups made
-// before that moment missed the objects it added while the ones after found
-// them, so the same bytes reported a different violation count from run to run
-// (CONTRIBUTING "Deterministic output"). The sweeps over every object no
-// longer see those objects at all (see [sweptXRefEntries]), but a reference
-// followed to one still does. The groups therefore resolve
-// under [document.DeferXRefAugmentation]: a miss only sets a flag. When one
-// did, the augmentation runs once every group has returned, and when it
-// changed the index the groups run again over the same validation context,
-// this time over the final index. Only a file whose table misses an object a
-// check reaches, and whose bytes hold objects the table lacks, pays for the
-// second run.
-//
-// The deferral covers the groups' own lookups, not a concurrent caller's:
-// [document.Document.Resolve] is safe for concurrent use, so text extraction on
-// the same Document can run the augmentation in the middle of the fan-out, and
-// the groups then disagree about the index exactly as they did when a group
-// ran it. The groups therefore run again whenever
-// [document.Document.XRefAugmented] answers differently after the fan-out than
-// before it, whichever goroutine ran the scan. The augmentation runs once per
-// Document, so there is never a third run.
-//
-// # Corpus evidence
-//
-//   - All corpora: no file changes the index during the fan-out at PDF/A-1b,
-//     PDF/A-2b, PDF/A-4 or PDF/UA-1, so none pays the second run. pdfjs
-//     poppler-742-0-fuzzed.pdf, pdfjs pypdf2332.pdf and verapdf
-//     PDF_A-2b__veraPDF_test_suite_6-2-11-4-1-t01-fail-a.pdf miss a lookup
-//     during it, and the scan finds nothing to add. pdfjs
-//     poppler-85140-0.pdf changes the index while the validation context is
-//     built, which is still before the fan-out.
+// The groups resolve under [document.OpenedObjectsOnly], which
+// [runValidationViolations] sets for the whole run, so a lookup that misses
+// the cross-reference index reads the object as undefined instead of running
+// the one-shot raw-byte augmentation that rewrites the index. Run from a
+// group, the augmentation wrote the index while the other groups were reading
+// it, and the lookups made before that moment missed the objects it added
+// while the ones after found them, so the same bytes reported a different
+// violation count from run to run (CONTRIBUTING "Deterministic output"). A
+// concurrent caller that does not validate, text extraction on the same
+// Document for one, can still run it during the fan-out, but the objects it
+// adds are out of the groups' reach, and it moves no entry a group reads: a
+// listed entry whose offset misses its object's header runs the augmentation
+// the first time the object is resolved, and [resolveAllObjects] has resolved
+// every listed object before the groups start. A rebuilt index, whose objects
+// the view leaves in reach, the augmentation's included, has run the
+// augmentation before the run began.
 func runCheckGroups(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, groups []checkGroup) ([]Violation, error) {
 	vctx := buildValidationCtx(ctx, doc, catalog, profile)
-
-	augmented := doc.XRefAugmented()
-	var missed atomic.Bool
-	violations, err := fanOutCheckGroups(document.DeferXRefAugmentation(ctx, &missed), doc, vctx, profile, groups)
-	if err != nil {
-		return nil, err
-	}
-	if missed.Load() {
-		doc.AugmentXRef(ctx)
-	}
-	if doc.XRefAugmented() == augmented {
-		return violations, nil
-	}
-	doc.Logger.Debug("compliance: the xref augmentation changed the index during the check groups, running them again",
-		"profile", profile, "missed", missed.Load())
 	return fanOutCheckGroups(ctx, doc, vctx, profile, groups)
 }
 
@@ -440,10 +407,11 @@ func resolveAllObjects(ctx context.Context, doc *document.Document) {
 	doc.Logger.Debug("compliance: resolving all objects for format checks")
 	count := 0
 	// The iterator yields from a copy: this warming pass resolves each
-	// object, which can trigger the lazy xref augmentation write on a
-	// damaged file, and a concurrent reader (e.g. ExtractText on the same
-	// Document) could win the augmentation race. A lookup the check groups
-	// miss later is deferred, see runCheckGroups.
+	// object, and one whose offset misses its header runs the lazy xref
+	// augmentation write on a damaged file, as a concurrent reader (e.g.
+	// ExtractText on the same Document) can. Resolving every listed object
+	// here settles those offsets before the check groups fan out, see
+	// runCheckGroups.
 	for objNum, entry := range sweptXRefEntries(doc) {
 		if count%100 == 0 {
 			if ctx.Err() != nil {

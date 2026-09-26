@@ -303,6 +303,9 @@ func computeSignatureByteRange(ctx context.Context, doc *document.Document, sigO
 	if doc.HeaderOffset != 0 {
 		return actual, 0, false, false
 	}
+	// The caller resolved the signature under the validation's view (see
+	// document.OpenedObjectsOnly), which reads a signature the table leaves
+	// out as undefined, so the entry read here is one the table lists.
 	entry, exists := doc.XRefEntry(sigObjNum)
 	if !exists || entry.Free || entry.Type == xref.XRefTypeCompressed {
 		return actual, 0, false, false

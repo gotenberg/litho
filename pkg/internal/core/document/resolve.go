@@ -12,7 +12,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -966,6 +965,109 @@ func (d *Document) OpenedXRefEntryCount() int {
 	return len(d.xrefEntries) - len(d.xrefAdded)
 }
 
+// listsObjectLocked reports whether a lookup under [OpenedObjectsOnly] reads
+// objNum as the object the index holds: the entries the document was opened
+// with list it and, for an object held in an object stream, list the stream
+// too. Every object of a rebuilt index qualifies, since no table leaves one
+// out. The caller holds d.mu.
+//
+// The object stream counts because the object is read from it: an object
+// cached, or a stream decoded, by a caller that reached a stream the table
+// leaves out would otherwise stand for the object whatever ran first.
+func (d *Document) listsObjectLocked(objNum int) bool {
+	if d.Rebuilt {
+		return true
+	}
+	entry, ok := d.xrefEntries[objNum]
+	if !ok || d.xrefAdded[objNum] {
+		return false
+	}
+	if entry.Free || entry.Type != xref.XRefTypeCompressed {
+		return true
+	}
+	_, ok = d.xrefEntries[entry.ObjStmNum]
+	return ok && !d.xrefAdded[entry.ObjStmNum]
+}
+
+// listsObject is [Document.listsObjectLocked] for a caller that does not hold
+// d.mu.
+func (d *Document) listsObject(objNum int) bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.listsObjectLocked(objNum)
+}
+
+// openedOnlyKey is the context key [OpenedObjectsOnly] marks a context with.
+type openedOnlyKey struct{}
+
+// OpenedObjectsOnly returns a context under which [Document.Resolve] reads a
+// reference to an object the file's cross-reference table leaves out as a
+// reference to an undefined object: it fails with [ErrObjectNotFound], as it
+// does for an object the file does not hold at all, whether or not the
+// raw-byte augmentation added the object to the index, and the miss does not
+// run the augmentation. A listed entry whose offset misses its object's header
+// still runs it: the scan then moves that entry, and the objects it adds stay
+// out of reach.
+//
+// ISO 32000-1, 7.3.10 makes a reference to an undefined object a reference to
+// the null object, and an object the cross-reference table does not list is
+// undefined however many bodies in the file carry its number. veraPDF, which
+// reads the file's own table (veraPDF-parser Reader.getObject answers null for
+// a key the table does not contain), judges such a reference as it judges one
+// to an object the file lacks. Measured with veraPDF 1.30.2 at PDF/A-1b and
+// PDF/A-2b on fixtures whose target object sits in the body, left out of a
+// classic table whose /Size covers its number or does not: a page's
+// /Contents, a font, a text annotation, a form field, an image XObject, a
+// page's /Resources, a content stream's indirect /Length and a /FontFile2
+// each draw the violations they draw when the file does not hold the object,
+// and none of the ones they draw when the table lists it. A second page whose
+// /Kids entry is left out makes veraPDF fail to parse the file, as an absent
+// one does.
+//
+// Only the lookups made under the context read the file this way. Text
+// extraction and rendering on the same Document keep the augmentation, and
+// the objects it adds stay reachable to them; see
+// [Document.augmentXrefFromRawScan]. The objects either caller caches are
+// parsed from the same bytes, so sharing the cache is safe: the context is
+// checked before the cache, which may hold an object the table leaves out.
+//
+// On a rebuilt index the context changes nothing. litho could not read the
+// table, so none leaves an object out: the rebuild and the augmentation both
+// recover objects from a raw scan, and every object either finds resolves.
+// veraPDF attempts no such recovery, since its parser reads the sections
+// startxref points at or reports the file unreadable (veraPDF-parser
+// PDFParser.getXRefInfo). A caller that fans out over a rebuilt Document runs
+// [Document.AugmentXRef] first, so that no lookup of its own changes the index
+// while the others read it.
+//
+// # Corpus evidence
+//
+//   - All corpora: 464 files carry objects their table leaves out, and in 458
+//     of them the only one is a cross-reference stream or a trailer
+//     dictionary that nothing references. No file's PDF/A-1b or PDF/A-2b
+//     violations move, nor those of the verapdf files under their own
+//     profile.
+//   - pdfjs GHOSTSCRIPT-698804-1-fuzzed.pdf: lists objects 0 and 1 alone, so
+//     its page tree reads as undefined, and its violations do not move.
+//     veraPDF does not open it ("Pages not found").
+//   - pdfjs poppler-85140-0.pdf: is rebuilt, and only the augmentation
+//     recovers its page, whose generation 18446744073709551616 the rebuild's
+//     scan does not read. Reading it as undefined dropped a 6.1.13 t11
+//     violation at PDF/A-2b, which the rebuilt case keeps. veraPDF does not
+//     open it ("Document doesn't contain startxref keyword").
+func OpenedObjectsOnly(ctx context.Context) context.Context {
+	if resolvesOpenedOnly(ctx) {
+		return ctx
+	}
+	return context.WithValue(ctx, openedOnlyKey{}, true)
+}
+
+// resolvesOpenedOnly reports whether ctx carries [OpenedObjectsOnly].
+func resolvesOpenedOnly(ctx context.Context) bool {
+	on, _ := ctx.Value(openedOnlyKey{}).(bool)
+	return on
+}
+
 // numberedXRefEntry pairs a cross-reference entry with its object number.
 type numberedXRefEntry struct {
 	objNum int
@@ -1004,37 +1106,10 @@ func (d *Document) XRefEntriesSnapshot() map[int]xref.XRefEntry {
 	return out
 }
 
-// xrefDeferKey is the context key [DeferXRefAugmentation] stores its flag
-// under.
-type xrefDeferKey struct{}
-
-// DeferXRefAugmentation returns a context under which a lookup that misses the
-// cross-reference index does not run the raw-byte augmentation (see
-// [Document.augmentXrefFromRawScan]). It sets missed instead, and the lookup
-// fails as it would had the scan found nothing.
-//
-// A caller that fans out over one Document resolves under this context, so no
-// goroutine of its own changes the index while the others sweep it. Left to the
-// lazy path, the augmentation ran in whichever goroutine missed first, and the
-// goroutines that swept the index before that moment saw a different set of
-// objects than the ones after it (CONTRIBUTING "Deterministic output"). Once
-// every goroutine has returned and missed is set, the caller calls
-// [Document.AugmentXRef].
-//
-// The context defers only the lookups made under it. A concurrent caller that
-// does not use it, text extraction on the same Document for one, can still run
-// the augmentation while the fan-out sweeps the index. The caller therefore
-// reads [Document.XRefAugmented] before the fan-out and again after it, and runs
-// again over the final index when the answer changed, whoever ran the scan.
-func DeferXRefAugmentation(ctx context.Context, missed *atomic.Bool) context.Context {
-	return context.WithValue(ctx, xrefDeferKey{}, missed)
-}
-
 // AugmentXRef runs the raw-byte augmentation of the cross-reference index now
 // rather than at the first lookup that misses. It runs at most once per
 // Document, so a call after the augmentation ran does nothing.
-// [Document.XRefAugmented] reports whether it changed the index. See
-// [DeferXRefAugmentation] for the caller that needs it.
+// [Document.XRefAugmented] reports whether it changed the index.
 func (d *Document) AugmentXRef(ctx context.Context) {
 	d.augmentXrefFromRawScan(ctx)
 }
@@ -1042,29 +1117,11 @@ func (d *Document) AugmentXRef(ctx context.Context) {
 // XRefAugmented reports whether the raw-byte augmentation has changed the
 // cross-reference index, whichever goroutine ran it. The augmentation runs at
 // most once per Document, so the answer turns true at most once and never
-// back. See [DeferXRefAugmentation] for the caller that compares it across a
-// fan-out.
+// back.
 func (d *Document) XRefAugmented() bool {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.xrefAugmented
-}
-
-// augmentOnMiss runs the augmentation for a lookup that missed, unless ctx
-// defers it (see [DeferXRefAugmentation]) and it has not run yet. It reports
-// whether it deferred, in which case the index is unchanged.
-func (d *Document) augmentOnMiss(ctx context.Context) bool {
-	if missed, ok := ctx.Value(xrefDeferKey{}).(*atomic.Bool); ok {
-		d.mu.RLock()
-		ran := d.xrefAugmentRan
-		d.mu.RUnlock()
-		if !ran {
-			missed.Store(true)
-			return true
-		}
-	}
-	d.augmentXrefFromRawScan(ctx)
-	return false
 }
 
 // augmentXrefFromRawScan performs a single linear scan of the document
@@ -1085,13 +1142,24 @@ func (d *Document) augmentOnMiss(ctx context.Context) bool {
 // d.mu.RLock through [Document.XRefEntry] or [Document.XRefEntries], never
 // observes the map mid-write. The O(file size) scan runs unlocked so it does
 // not serialize unrelated resolves.
+//
+// Deliberate leniency: ISO 32000-1, 7.3.10 makes a reference to an object the
+// table does not list a reference to null, and inserting what the scan finds
+// resolves such a reference to the body that carries the number instead. Text
+// extraction and rendering keep that reading, since a damaged table that
+// dropped an object loses the text or the image it holds otherwise. PDF.js
+// recovers the same objects with a narrower trigger. Its XRef.fetch answers
+// null for a number the table lacks, and XRef.indexObjects rebuilds the whole
+// table from every "N G obj" in the bytes only when the document is reloaded
+// in recovery mode: when the table cannot be read, when the trailer's /Root
+// holds no /Pages dictionary, or when the first or last page cannot be
+// fetched because an entry's object header does not match (XRef.parse,
+// PDFDocument.checkFirstPage and checkLastPage). A validation run reads the
+// file as veraPDF does instead, and resolves under [OpenedObjectsOnly],
+// where a lookup that misses the table does not run the scan and no object
+// it inserted resolves.
 func (d *Document) augmentXrefFromRawScan(ctx context.Context) {
 	d.xrefAugment.Do(func() {
-		defer func() {
-			d.mu.Lock()
-			d.xrefAugmentRan = true
-			d.mu.Unlock()
-		}()
 		discovered, err := scanIndirectObjects(ctx, d.r, d.size)
 		if err != nil {
 			d.Logger.Debug("xref augmentation scan failed", slog.Any("err", err))
@@ -1378,8 +1446,15 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		return nil, err
 	}
 
-	// Fast path: check cache under read lock.
+	// Fast path: check cache under read lock. A lookup under
+	// OpenedObjectsOnly first answers for an object the table leaves out,
+	// which a caller that ran the augmentation may have cached.
+	openedOnly := resolvesOpenedOnly(ctx)
 	d.mu.RLock()
+	if openedOnly && !d.listsObjectLocked(ref.ObjectNum) {
+		d.mu.RUnlock()
+		return nil, fmt.Errorf("%w: object %d", ErrObjectNotFound, ref.ObjectNum)
+	}
 	if obj, ok := d.objectCache[ref.ObjectNum]; ok {
 		d.mu.RUnlock()
 		d.Logger.Debug("resolve object cache hit",
@@ -1410,9 +1485,8 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		// table is truncated or references objects inserted by
 		// external editors that never rewrote the table. The scan is
 		// O(file size) and memoised via sync.Once so subsequent
-		// lookups hit the cached index. A deferred augmentation leaves
-		// the index as it is, so the lookup below still misses.
-		d.augmentOnMiss(ctx)
+		// lookups hit the cached index.
+		d.augmentXrefFromRawScan(ctx)
 		entry, ok = d.XRefEntry(ref.ObjectNum)
 	}
 	if !ok {
@@ -1489,16 +1563,7 @@ func (d *Document) parseNormalObject(ctx context.Context, ref ast.PdfIndirectRef
 	// before giving up. The override lives inside augmentXrefFromRawScan so all
 	// writes to xrefEntries stay under the sync.Once.
 	if !objectHeaderMatches(d.r, entry.Offset, ref.ObjectNum) {
-		if d.augmentOnMiss(ctx) {
-			// Parsing at the declared offset would cache whatever sits there
-			// for the run that follows the deferred scan, so the object stays
-			// unresolved until the scan has run. Compliance, the one caller
-			// that defers, cannot reach this: its warming pass resolves every
-			// listed object before it fans out, so a mismatched header has run
-			// the scan by then.
-			return nil, fmt.Errorf("%w: object %d: header mismatch at offset %d, augmentation deferred",
-				ErrObjectNotFound, ref.ObjectNum, entry.Offset)
-		}
+		d.augmentXrefFromRawScan(ctx)
 		if rescanned, ok := d.XRefEntry(ref.ObjectNum); ok {
 			entry = rescanned
 		}
@@ -1583,8 +1648,9 @@ func (d *Document) parseNormalObject(ctx context.Context, ref ast.PdfIndirectRef
 // object contributes the same findings once whether it was cached before the
 // validation began or not. The cached value is left alone. An object held in
 // an object stream is parsed from that stream's decoded bytes (see
-// [Document.extractFromObjectStream]). An object the index lacks and a free
-// entry record nothing.
+// [Document.extractFromObjectStream]). An object the index lacks, a free
+// entry and, under [OpenedObjectsOnly], an object resolving would read as
+// undefined record nothing.
 //
 // CheckObjectFormat is safe for concurrent use.
 func (d *Document) CheckObjectFormat(ctx context.Context, objNum int) {
@@ -1595,6 +1661,11 @@ func (d *Document) CheckObjectFormat(ctx context.Context, objNum int) {
 	_, recorded := d.formatViolations[objNum]
 	d.mu.RUnlock()
 	if recorded {
+		return
+	}
+	// Under OpenedObjectsOnly an object read from a stream the table leaves
+	// out records nothing, as resolving it fails.
+	if resolvesOpenedOnly(ctx) && !d.listsObject(objNum) {
 		return
 	}
 	entry, ok := d.XRefEntry(objNum)

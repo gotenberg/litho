@@ -216,6 +216,10 @@ func ValidateWTPDF(ctx context.Context, doc *document.Document, profile models.W
 	release := doc.LockValidationRun()
 	defer release()
 
+	// The declaration check below reads the file as the check groups do; see
+	// runValidationViolations.
+	ctx = document.OpenedObjectsOnly(ctx)
+
 	// The checks run under the PDF/UA-2 identifier so every profile test
 	// inside them selects the ISO 14289-2 rules. Keying them on the WTPDF
 	// identifier instead would silence the whole rule set, since those

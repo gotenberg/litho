@@ -24,13 +24,12 @@ const unlistedFontFillers = 1500
 const unlistedFontTrials = 24
 
 // unlistedFontPDF assembles a one-page document whose only font, object 5, sits
-// in the body but not in the cross-reference table. The table lists objects 1
-// to 4 and the given number of filler objects, numbered from 6. Opening the
-// file, warming its objects and building the validation context never resolve
-// the font, so the raw-byte augmentation that adds it to the index runs on the
-// first goroutine that does: text extraction, or the validation run once its
-// check groups have returned.
-func unlistedFontPDF(fillers int) []byte {
+// in the body but, unless listFont is set, not in the cross-reference table.
+// The table lists objects 1 to 4 and the given number of filler objects,
+// numbered from 6. Text extraction resolves the font, misses the index, and
+// runs the raw-byte augmentation that adds it; a validation run reads the font
+// reference as a reference to an undefined object and runs no augmentation.
+func unlistedFontPDF(fillers int, listFont bool) []byte {
 	content := "BT /F1 12 Tf 72 720 Td (Hello) Tj ET"
 	bodies := []string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
@@ -52,8 +51,12 @@ func unlistedFontPDF(fillers int) []byte {
 	}
 
 	start := buf.Len()
-	buf.WriteString("xref\n0 5\n0000000000 65535 f \r\n")
-	for objNum := 1; objNum <= 4; objNum++ {
+	head := 4
+	if listFont {
+		head = 5
+	}
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f \r\n", head+1)
+	for objNum := 1; objNum <= head; objNum++ {
 		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[objNum])
 	}
 	fmt.Fprintf(&buf, "6 %d\n", fillers)
@@ -69,19 +72,19 @@ func unlistedFontPDF(fillers int) []byte {
 // the font the page uses.
 //
 // Extraction resolves the font, misses the index, and runs the one-shot
-// raw-byte augmentation, which writes the index. The validation run defers
-// the augmentation for its own check groups, but not for another caller, and
-// its groups ranged the index map without the document lock, so extraction
-// wrote the map while a group iterated it: a data race, which the runtime can
-// also end with a fatal "concurrent map iteration and map write". The groups
-// now read the index through a copy taken under the lock, and the run goes
-// again over the final index when the augmentation changed it during the
-// fan-out, so the verdict matches a run nobody raced.
+// raw-byte augmentation, which writes the index. The validation run's check
+// groups ranged the index map without the document lock, so extraction wrote
+// the map while a group iterated it: a data race, which the runtime can also
+// end with a fatal "concurrent map iteration and map write". The groups now
+// read the index through a copy taken under the lock, and read a reference to
+// an object the table leaves out as a reference to an undefined object, as
+// veraPDF does, whether or not extraction added it, so the verdict matches a
+// run nobody raced.
 //
-// Measured on the code before the fix, one run of 24 trials: 7 landed the
-// augmentation inside the fan-out and dropped the violation for the unlisted
-// font, and -race reported 7 races between the augmentation's writes and the
-// check groups' sweeps.
+// Measured on the code before the index copy, one run of 24 trials: 7 landed
+// the augmentation inside the fan-out and dropped the violation the unlisted
+// font then drew, and -race reported 7 races between the augmentation's
+// writes and the check groups' sweeps.
 //
 // The augmentation runs once per Document, so each trial opens a fresh reader,
 // and extraction starts after a delay swept across the length of a serial run,
@@ -89,9 +92,8 @@ func unlistedFontPDF(fillers int) []byte {
 func TestConcurrentValidationAndXRefAugmentation(t *testing.T) {
 	t.Parallel()
 
-	data := unlistedFontPDF(unlistedFontFillers)
 	ctx := context.Background()
-	open := func(t *testing.T) *Reader {
+	open := func(t *testing.T, data []byte) *Reader {
 		t.Helper()
 		r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 		if err != nil {
@@ -99,22 +101,35 @@ func TestConcurrentValidationAndXRefAugmentation(t *testing.T) {
 		}
 		return r
 	}
+	reportsFont := func(errs []string) bool {
+		return slices.ContainsFunc(errs, func(s string) bool { return strings.Contains(s, "font F1") })
+	}
 
+	// Control: the font draws a violation when the table lists it, so a run
+	// that reached it through the augmentation would differ from the serial
+	// run below, and the trials compare something.
+	listed, err := open(t, unlistedFontPDF(unlistedFontFillers, true)).ValidatePDFA(ctx, models.PDFA2b)
+	if err != nil {
+		t.Fatalf("ValidatePDFA with the font listed: %v", err)
+	}
+	if !reportsFont(errorStrings(listed)) {
+		t.Fatalf("the listed font draws no violation among %d: %q", len(listed), errorStrings(listed))
+	}
+
+	data := unlistedFontPDF(unlistedFontFillers, false)
 	started := time.Now()
-	want, err := open(t).ValidatePDFA(ctx, models.PDFA2b)
+	want, err := open(t, data).ValidatePDFA(ctx, models.PDFA2b)
 	if err != nil {
 		t.Fatalf("serial ValidatePDFA: %v", err)
 	}
 	serial := time.Since(started)
 	wantStrings := errorStrings(want)
-	// Control: the serial run must report the font, which only the index the
-	// augmentation completes holds, or the trials below compare nothing.
-	if !slices.ContainsFunc(wantStrings, func(s string) bool { return strings.Contains(s, "font F1") }) {
-		t.Fatalf("serial run reports nothing about the unlisted font among %d violations: %q", len(want), wantStrings)
+	if reportsFont(wantStrings) {
+		t.Fatalf("serial run judges the font the table leaves out: %q", wantStrings)
 	}
 
 	for trial := range unlistedFontTrials {
-		r := open(t)
+		r := open(t, data)
 		delay := serial * time.Duration(trial) / unlistedFontTrials
 
 		var (

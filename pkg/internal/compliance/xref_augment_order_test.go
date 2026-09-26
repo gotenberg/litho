@@ -18,8 +18,8 @@ import (
 // and the objects unlisted, which the table leaves out too. catalogExtra and
 // pageExtra are appended to the catalog and page dictionaries. With /Metadata
 // 9 0 R, an object the file does not hold, resolving the dangling reference
-// runs the raw-byte xref augmentation, and the augmentation adds object 4 to
-// the index.
+// outside a validation run runs the raw-byte xref augmentation, and the
+// augmentation adds object 4 to the index.
 func unlistedObjectPDF(catalogExtra, pageExtra, unlisted string) []byte {
 	listed := []string{
 		"<< /Type /Catalog /Pages 2 0 R" + catalogExtra + " >>",
@@ -61,13 +61,15 @@ func unlistedObjectPDF(catalogExtra, pageExtra, unlisted string) []byte {
 // dangling reference the validation misses no lookup, and object 4 was
 // reported only when an earlier caller had run the augmentation. The sweeps now
 // judge the objects the index held when the document was opened, as veraPDF,
-// which reads the file's own table, does.
+// which reads the file's own table, does, and a miss during a validation run
+// no longer runs the augmentation (see document.OpenedObjectsOnly).
 //
 // The page's /Resources in the last case is object 5, which the table leaves
 // out and which holds a hex string with an odd digit count (ISO 19005-2, 6.1.6
-// t1). A validation run resolves it while it builds its context, in
-// compliance mode, and records the finding. A caller that resolved it first
-// cached it with nothing recorded, and the run then reported nothing.
+// t1). A validation run resolved it while it built its context, in
+// compliance mode, and recorded the finding. A caller that resolved it first
+// cached it with nothing recorded, and the run then reported nothing. The
+// validation now reads the reference as undefined either way.
 func TestXRefAugmentationLeavesTheSweepsAlone(t *testing.T) {
 	t.Parallel()
 

@@ -81,6 +81,19 @@ func runValidationViolations(ctx context.Context, doc *document.Document, profil
 	// objects adds nothing and reports the same set. Clearing them here
 	// would make every run parse every cached object a second time to
 	// record the same findings again.
+	//
+	// Every lookup of the run reads a reference to an object the file's
+	// cross-reference table leaves out as a reference to an undefined object,
+	// which ISO 32000-1, 7.3.10 makes null, as veraPDF does; see
+	// document.OpenedObjectsOnly. The raw-byte augmentation that finds such an
+	// object for text extraction is a leniency no conformance checker grants.
+	// A rebuilt index has no table to leave an object out, and its lookups
+	// still run the augmentation, so it runs here, before any check group
+	// reads the index, rather than at whichever lookup misses first.
+	ctx = document.OpenedObjectsOnly(ctx)
+	if doc.Rebuilt {
+		doc.AugmentXRef(ctx)
+	}
 	doc.SetComplianceMode(true)
 	defer doc.SetComplianceMode(false)
 
