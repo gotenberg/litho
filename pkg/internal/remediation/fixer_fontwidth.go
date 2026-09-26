@@ -26,7 +26,7 @@ const widthFixTolerance = 1.0
 //
 // This is the only matcher in the registry that carries NO rule identity: a
 // violation is claimed on the Context substring alone. That is precise in
-// practice because nine emit sites, all in the width checker, are the only
+// practice because the emit sites, all in the width checker, are the only
 // producers of the phrase, but it is a free-text contract between two packages.
 // It reads [compliance.WidthMismatchContext] rather than a local copy so the
 // two cannot drift, and TestWidthMismatchContext_IsTheWordingTheFixerMatches

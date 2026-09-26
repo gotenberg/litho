@@ -607,6 +607,20 @@ func checkCIDSetCompletenessTrueTypeRendered(ctx context.Context, doc *document.
 // ok is false only when the entry is a stream that cannot be read, in which case
 // the caller skips the check rather than guess the mapping.
 func cidToGIDMapping(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict) (lookup func(uint16) uint16, ok bool) {
+	mapped, ok := cidToGIDMapped(ctx, doc, cidFontDict)
+	if mapped == nil {
+		return nil, ok
+	}
+	return func(cid uint16) uint16 {
+		gid, _ := mapped(cid) // beyond the map → GID 0, .notdef
+		return gid
+	}, true
+}
+
+// cidToGIDMapped is [cidToGIDMapping] with a lookup that also reports whether
+// the map covers the CID: a map stream maps only the CIDs its bytes reach (ISO
+// 32000-1, 9.7.4.2, Table 117), two bytes each.
+func cidToGIDMapped(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict) (lookup func(uint16) (uint16, bool), ok bool) {
 	obj, has := cidFontDict["CIDToGIDMap"]
 	if !has {
 		return nil, true
@@ -622,12 +636,12 @@ func cidToGIDMapping(ctx context.Context, doc *document.Document, cidFontDict as
 	if err != nil {
 		return nil, false
 	}
-	return func(cid uint16) uint16 {
+	return func(cid uint16) (uint16, bool) {
 		i := int(cid) * 2
 		if i+1 >= len(data) {
-			return 0 // beyond the map → .notdef
+			return 0, false
 		}
-		return uint16(data[i])<<8 | uint16(data[i+1])
+		return uint16(data[i])<<8 | uint16(data[i+1]), true
 	}, true
 }
 

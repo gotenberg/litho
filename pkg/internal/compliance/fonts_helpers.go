@@ -907,10 +907,13 @@ func lookupCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast
 		return document.Float(r)
 	}
 
-	// Default width.
-	dw := num(cidFontDict["DW"])
-	if dw == 0 {
-		dw = 1000 // PDF spec default.
+	// ISO 32000-1, Table 117 makes 1000 the width of a font with no /DW, and
+	// an explicit 0 declares a width like any other, which veraPDF reads
+	// (PDCIDFont.getDefaultWidth).
+	dw := 1000.0
+	switch r, _ := document.ResolveObject(ctx, doc, cidFontDict["DW"]); r.(type) {
+	case ast.PdfInt, ast.PdfReal:
+		dw = document.Float(r)
 	}
 
 	wObj, ok := cidFontDict["W"]

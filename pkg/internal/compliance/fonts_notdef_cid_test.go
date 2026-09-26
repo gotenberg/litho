@@ -17,7 +17,9 @@ import (
 // GID 1 = "uni0000" (an empty, zero-advance control-character glyph), and 38
 // glyphs total. A used CID that resolves to an in-range non-zero GID must not
 // fire even when that glyph is empty and zero-width; only a CID resolving to
-// GID 0 or to a GID outside the program fires.
+// GID 0 or to a GID outside the program fires. Measured with veraPDF 1.30 at
+// PDF/A-2b: CID 256 of this program fails ISO 19005-2, 6.2.11.8 t1 and
+// 6.2.11.4.1 t2.
 func TestCheckType0NotdefGlyph_CIDFontType2(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -62,14 +64,12 @@ func TestCheckType0NotdefGlyph_CIDFontType2(t *testing.T) {
 	if v := check(0); len(v) == 0 {
 		t.Error("CID 0 (.notdef glyph) must fire")
 	}
-	// CID 100 is beyond the 38-glyph program. Under Identity /CIDToGIDMap it is
-	// a missing glyph handled by the glyph-presence rule, not the .notdef rule:
-	// veraPDF does not consistently treat an out-of-range CID as a .notdef Glyph,
-	// so firing 6.2.11.8 here would be a false positive. It does report the
-	// glyph as absent, so the presence rule is what must come back.
+	// CID 100 is beyond the 38-glyph program. Under Identity /CIDToGIDMap it
+	// names no glyph, which veraPDF names .notdef (GFGlyph: glyphIsPresent ?
+	// null : ".notdef") and reports as absent, so both rules must come back.
 	v := check(100)
-	if hasRule(v, notdefRule("PDF/A-2b")) {
-		t.Errorf("CID 100 (beyond the glyph table) must not fire the .notdef rule, got %v", v)
+	if !hasRule(v, notdefRule("PDF/A-2b")) {
+		t.Errorf("CID 100 (beyond the glyph table) must fire the .notdef rule, got %v", v)
 	}
 	if !hasRule(v, glyphPresenceRule("PDF/A-2b")) {
 		t.Errorf("CID 100 (beyond the glyph table) must fire the glyph-presence rule, got %v", v)

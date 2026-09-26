@@ -13,8 +13,8 @@ import (
 //
 // remediation's matchFontWidth is the only matcher in that registry carrying no
 // rule identity: it claims a violation because the Context contains
-// [WidthMismatchContext], and nothing else. Nine emit sites, eight here and one
-// in fonts.go, are the only producers of that wording, so rewording any of them
+// [WidthMismatchContext], and nothing else. The emit sites, in fonts_width.go
+// and fonts.go, are the only producers of that wording, so rewording any of them
 // retires the fixer silently.
 //
 // A matcher-level assertion cannot catch that. remediation's own

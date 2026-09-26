@@ -66,7 +66,7 @@ func TestType0ToUnicode_MalformedCMapMapsNothing(t *testing.T) {
 				charCodes:  map[byte]bool{0: true, 3: true},
 				rawStrings: []ast.PdfString{"\x00\x03"},
 			}
-			got := checkType0Font(ctx, doc, fontDict, "F1", 1, "PDF/UA-1", true, usage)
+			got := checkType0Font(ctx, doc, fontDict, "F1", 1, "PDF/UA-1", usage)
 			if fired := hasRule(got, toUnicodeRule("PDF/UA-1")); fired != tt.fires {
 				t.Errorf("7.21.7 t1 fired = %v, want %v (%v)", fired, tt.fires, got)
 			}

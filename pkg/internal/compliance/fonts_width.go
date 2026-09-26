@@ -19,7 +19,7 @@ import (
 //
 // It is exported because remediation's matchFontWidth claims a width
 // violation on this substring alone, carrying no rule identity at all, and
-// nine emit sites across this file and fonts.go must not drift from it.
+// every emit site across this file and fonts.go must not drift from it.
 // Same reasoning as [PDFUA2ExpectedRev]: one symbol, so the checker and the
 // fixer cannot disagree about the wording.
 const WidthMismatchContext = "width mismatch"
@@ -1306,6 +1306,56 @@ func checkCIDDefaultWidths(ctx context.Context, doc *document.Document, cidFontD
 		if widthsInconsistent(dw, expectedWidth) {
 			faults.add(uint32(cid), "font %s on page %d: CID %d "+WidthMismatchContext+" (PDF=%.1f, font=%.1f)",
 				fontName, pageNum, cid, dw, expectedWidth)
+		}
+	}
+	return faults.violations()
+}
+
+// checkType2MissingGlyphWidths applies the glyph-width rule to the used CIDs a
+// TrueType CIDFont's program holds no glyph for ([missingType2CIDs]), which
+// [checkCIDFontWidths] and [checkCIDDefaultWidths] leave out for want of an
+// advance of their own.
+//
+// ISO 19005-2, 6.2.11.5 still asks such a glyph's widths to agree, and veraPDF
+// weighs one: its TrueType program weighs a glyph index past its glyph count
+// that its metrics do not reach at the advance of glyph 0, and gives a CID a
+// map stream does not reach the glyph index 0
+// (BaseTrueTypeProgram.getWidthWithCheck, CIDToGIDMapping.getGID), against the
+// /W or /DW width the dictionary declares (ISO 32000-1, 9.7.4.3). Measured
+// with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on CID 256 of a 38-glyph program
+// whose glyph 0 advances 443.36: /DW 1000 or no /DW fails ISO 19005-1, 6.3.6
+// t1 and ISO 19005-2, 6.2.11.5 t1, /DW 443 or /W [256 [443]] passes, and
+// /DW 443 with /W [256 [500]] fails; with glyph 0 advancing 0, /DW 1000 fails
+// and /DW 0 passes, so no zero advance is excused here. A CID a map stream
+// sends past the program, or does not reach, fails alike.
+func checkType2MissingGlyphWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, fontData []byte, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, usedCIDs map[uint16]bool) []Violation {
+	if fontSubtype(ctx, doc, cidFontDict) != "CIDFontType2" {
+		return nil
+	}
+	notdefAdvance, ok := binaryWidths[0]
+	if !ok {
+		return nil
+	}
+	mapped, ok := cidToGIDMapped(ctx, doc, cidFontDict)
+	if !ok {
+		return nil
+	}
+	expected := notdefAdvance * 1000.0 / float64(unitsPerEm)
+	faults := newGlyphFaults(rule)
+	for _, cid := range missingType2CIDs(ctx, doc, cidFontDict, fontData, usedCIDs) {
+		gid, covered := cid, true
+		if mapped != nil {
+			gid, covered = mapped(cid)
+		}
+		// A glyph index the program's metrics still reach carries an advance of
+		// its own, which the checks above weigh.
+		if _, has := binaryWidths[gid]; covered && has {
+			continue
+		}
+		declared := lookupCIDWidth(ctx, doc, cidFontDict, cid)
+		if widthsInconsistent(declared, expected) {
+			faults.add(uint32(cid), "font %s on page %d: CID %d names no glyph, "+WidthMismatchContext+" against glyph 0 (PDF=%.1f, font=%.1f)",
+				fontName, pageNum, cid, declared, expected)
 		}
 	}
 	return faults.violations()

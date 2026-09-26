@@ -58,7 +58,7 @@ func TestType0ToUnicode_NotACMap(t *testing.T) {
 				usage.charCodes[3] = true
 				usage.rawStrings = []ast.PdfString{"\x00\x03"}
 			}
-			got := checkType0Font(ctx, doc, fontDict, "F1", 1, "PDF/UA-1", tt.shown, usage)
+			got := checkType0Font(ctx, doc, fontDict, "F1", 1, "PDF/UA-1", usage)
 			if fired := hasRule(got, toUnicodeRule("PDF/UA-1")); fired != tt.fires {
 				t.Errorf("7.21.7 t1 fired = %v, want %v (%v)", fired, tt.fires, got)
 			}

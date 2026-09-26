@@ -133,11 +133,13 @@ const mcUnnamed = "none"
 // marked-content sequences it opens can be told apart from another stream's.
 // key is unique to the stream within the document; props is the /Properties
 // dictionary of the stream's resources, which a BDC may name its property list
-// from; owner is the stream's [structureKey].
+// from; owner is the stream's [structureKey]; fonts names the /Font dictionary
+// of those resources ([fontDictKey]).
 type showSite struct {
 	key   string
 	props ast.PdfDict
 	owner int32
+	fonts string
 }
 
 // structureKey returns the value veraPDF tells the glyphs of one content stream
@@ -224,12 +226,63 @@ func markedContentKey(op content.Operation, index int, site showSite) string {
 
 // fontIdentity names the font object veraPDF holds a font resource to be: the
 // object a reference points at, or, for a font dictionary written directly in
-// the resources, the resource name within the stream that names it.
+// a /Font dictionary, that entry of that dictionary.
+//
+// veraPDF tells fonts apart by their dictionary as a Java object
+// (GFIDGenerator hashes the COSDictionary, which keeps Object.hashCode), and
+// judges a font object it has met before only once. A direct font is one
+// object for every page or stream whose resources reach the same /Font
+// dictionary, and a new one wherever a dictionary writes its own copy.
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on an unembedded
+// Helvetica written directly in the resources: two pages each writing the
+// resources inline fail ISO 19005-1, 6.3.4 t1 and ISO 19005-2, 6.2.11.4.1 t1
+// twice, and one page naming two copies twice; two pages sharing one indirect
+// /Resources, one indirect /Font dictionary or the resources of the /Pages
+// node fail them once, as do two forms sharing one /Resources and one form
+// drawn on two pages; a page naming an indirect font /F1 and another writing
+// a copy under the same name fail them twice.
+//
+// # Corpus evidence
+//
+//   - All corpora: at PDF/A-1b and PDF/A-2b, judging each copy of a font
+//     written directly in a /Font dictionary, rather than the first page that
+//     names it, moves no count.
 func fontIdentity(fontRef ast.PdfObject, name ast.PdfName, site showSite) string {
 	if ref, ok := fontRef.(ast.PdfIndirectRef); ok {
 		return "obj " + strconv.Itoa(ref.ObjectNum)
 	}
-	return site.key + "/" + string(name)
+	fonts := site.fonts
+	if fonts == "" {
+		fonts = site.key + "/Resources/Font"
+	}
+	return fonts + "/" + string(name)
+}
+
+// fontDictKey names the /Font dictionary of the resources res, which the
+// object holder names writes as rawRes: the object a reference points at, or
+// the path to the dictionary from the nearest object that writes it directly.
+// Two streams whose resources reach one dictionary get one key, which is what
+// makes a font written directly in it one font; see [fontIdentity].
+func fontDictKey(holder string, rawRes ast.PdfObject, res ast.PdfDict) string {
+	if ref, ok := res["Font"].(ast.PdfIndirectRef); ok {
+		return "obj " + strconv.Itoa(ref.ObjectNum)
+	}
+	if ref, ok := rawRes.(ast.PdfIndirectRef); ok {
+		return "obj " + strconv.Itoa(ref.ObjectNum) + "/Font"
+	}
+	return holder + "/Resources/Font"
+}
+
+// descendantIdentity names the descendant CIDFont descendant, the first entry
+// of the /DescendantFonts array of the composite font id names: the object a
+// reference points at, or that entry of the composite font. veraPDF states the
+// rules of a CIDFont on that object, once however many composite fonts share
+// it.
+func descendantIdentity(id string, descendant ast.PdfObject) string {
+	if ref, ok := descendant.(ast.PdfIndirectRef); ok {
+		return "obj " + strconv.Itoa(ref.ObjectNum)
+	}
+	return id + "/DescendantFonts"
 }
 
 // glyphKey identifies one glyph-level statement: a rule, a font, a character
@@ -295,11 +348,12 @@ var noContext = glyphContext{mode: -1}
 // codes an embedded CMap leaves unmapped all select CID 0 and are as many
 // glyphs.
 //
-// A font written directly in a resource dictionary is identified by its
-// resource name within the stream that names it ([fontIdentity]), where
-// veraPDF tells each dictionary apart; the page pass judges such a font on
-// the first page that names it, so two pages each writing its own copy count
-// once here and twice in veraPDF.
+// A font written directly in a /Font dictionary is identified by that entry of
+// that dictionary ([fontIdentity]), as veraPDF identifies it by the dictionary
+// object. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on a Type1
+// subset whose /Widths disagree with its program for two codes: two pages
+// each writing the font inline fail the width rule four times, and two pages
+// or two forms sharing one /Resources twice.
 //
 // # Corpus evidence
 //
