@@ -508,3 +508,101 @@ func TestWriterGeneratedBookmarksKeepTheStagedOutline(t *testing.T) {
 		})
 	}
 }
+
+// namedDestinationsPDF builds a three-page document whose catalog names a
+// destination on each page in a /Names /Dests tree. Each page draws its own
+// text: Page1, Page2 and Page3.
+func namedDestinationsPDF() []byte {
+	page := func(n int) string {
+		return fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents %d 0 R /Resources << /Font << /F1 9 0 R >> >> >>", 5+n)
+	}
+	stream := func(n int) string {
+		content := fmt.Sprintf("BT /F1 12 Tf 100 700 Td (Page%d) Tj ET\n", n)
+		return fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content)
+	}
+	return buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R /Names << /Dests 10 0 R >> >>",
+		"<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>",
+		page(1), page(2), page(3),
+		stream(1), stream(2), stream(3),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		"<< /Names [(p1) [3 0 R /Fit] (p2) [4 0 R /Fit] (p3) [5 0 R /Fit]] >>",
+	})
+}
+
+// TestWriterDeletedPageStaysOutOfTheStagedReferences pins that a page deleted on
+// a Writer stays out of the output when another edit on the same Writer
+// references it, as it does when the edits run on the written files in turn.
+//
+// A deletion drops what still names the deleted page, which is otherwise enough
+// to write the page into the output. It dropped only what the source document
+// held: an outline an earlier edit set, and a /Names tree an attachment had
+// queued afresh, kept their destinations, and so did an outline set after the
+// deletion, and each carried the deleted page and its content into the file.
+func TestWriterDeletedPageStaysOutOfTheStagedReferences(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		edits func(t *testing.T, w *Writer)
+	}{
+		{
+			name: "an outline set before the deletion",
+			edits: func(t *testing.T, w *Writer) {
+				w.SetBookmarks([]models.Bookmark{{Title: "Third", PageNumber: 3}})
+				if err := w.DeletePages(3); err != nil {
+					t.Fatalf("DeletePages: %v", err)
+				}
+			},
+		},
+		{
+			name: "an outline set after the deletion",
+			edits: func(t *testing.T, w *Writer) {
+				if err := w.DeletePages(3); err != nil {
+					t.Fatalf("DeletePages: %v", err)
+				}
+				w.SetBookmarks([]models.Bookmark{{Title: "Third", PageNumber: 3}})
+			},
+		},
+		{
+			name: "named destinations an attachment requeued",
+			edits: func(t *testing.T, w *Writer) {
+				w.AddAttachment("note.txt", []byte("note"), "text/plain")
+				if err := w.DeletePages(3); err != nil {
+					t.Fatalf("DeletePages: %v", err)
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			data := namedDestinationsPDF()
+			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer r.Close()
+			w := NewWriter(r)
+			defer w.Close()
+			tc.edits(t, w)
+
+			var out bytes.Buffer
+			if err := w.WriteTo(ctx, &out); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			if bytes.Contains(out.Bytes(), []byte("(Page3)")) {
+				t.Error("the output carries the deleted page's content")
+			}
+			r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+			if err != nil {
+				t.Fatalf("reopening the output: %v", err)
+			}
+			defer r2.Close()
+			if got := pageTexts(t, r2); !slices.Equal(got, []string{"Page1", "Page2"}) {
+				t.Errorf("the output pages show %q, want Page1 and Page2", got)
+			}
+		})
+	}
+}

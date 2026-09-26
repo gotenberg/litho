@@ -452,6 +452,10 @@ func splitDestOverrides(ctx context.Context, doc *document.Document, keptPages [
 // page, which is enough to write that page into the output.
 // It reports whether the walk stopped at its depth bound with items unread.
 //
+// The outline is read as earlier stages staged it, from alloc first: an
+// outline edit queues a new tree at new object numbers, and walking the
+// source's instead left that tree naming the deleted page.
+//
 // # Corpus evidence
 //
 //   - govdocs thread_000_000761.pdf: an outline destination wrote 2196 bytes
@@ -463,7 +467,7 @@ func pruneOutlineDestinations(
 	catalogDict ast.PdfDict,
 	removed map[int]bool,
 ) bool {
-	root, err := document.ResolveDict(ctx, doc, catalogDict["Outlines"])
+	root, err := resolveDictAllocFirst(ctx, alloc, doc, catalogDict["Outlines"])
 	if err != nil || root == nil {
 		return false
 	}
@@ -498,11 +502,11 @@ func pruneOutlineItems(
 		}
 		visited[ref.ObjectNum] = true
 
-		item, err := document.ResolveDict(ctx, doc, current)
+		item, err := resolveDictAllocFirst(ctx, alloc, doc, current)
 		if err != nil || item == nil {
 			return
 		}
-		if outlineTargetsRemoved(ctx, doc, item, removed) {
+		if outlineTargetsRemoved(ctx, alloc, doc, item, removed) {
 			newItem := make(ast.PdfDict, len(item))
 			maps.Copy(newItem, item)
 			delete(newItem, "Dest")
@@ -515,12 +519,13 @@ func pruneOutlineItems(
 }
 
 // outlineTargetsRemoved reports whether an outline item's destination, given
-// either as /Dest or through a /GoTo action, names a removed page.
-func outlineTargetsRemoved(ctx context.Context, doc *document.Document, item ast.PdfDict, removed map[int]bool) bool {
+// either as /Dest or through a /GoTo action read from alloc first, names a
+// removed page.
+func outlineTargetsRemoved(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, item ast.PdfDict, removed map[int]bool) bool {
 	if destTargetsRemoved(ctx, doc, item["Dest"], removed, 0) {
 		return true
 	}
-	action, err := document.ResolveDict(ctx, doc, item["A"])
+	action, err := resolveDictAllocFirst(ctx, alloc, doc, item["A"])
 	if err != nil || action == nil {
 		return false
 	}
@@ -601,7 +606,7 @@ func pruneDestNameTreeAt(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	changed := false
 
 	if kidsObj, hasKids := node["Kids"]; hasKids {
-		if kids, err := document.ResolveArray(ctx, doc, kidsObj); err == nil {
+		if kids, err := resolveArrayAllocFirst(ctx, alloc, doc, kidsObj); err == nil {
 			newKids := make(ast.PdfArray, len(kids))
 			for i, kid := range kids {
 				newKid, kidChanged := pruneDestNameTreeAt(ctx, alloc, doc, kid, drop, visited, depth+1, truncated)
@@ -615,7 +620,7 @@ func pruneDestNameTreeAt(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	}
 
 	if namesObj, hasNames := node["Names"]; hasNames {
-		if names, err := document.ResolveArray(ctx, doc, namesObj); err == nil {
+		if names, err := resolveArrayAllocFirst(ctx, alloc, doc, namesObj); err == nil {
 			keptPairs := make(ast.PdfArray, 0, len(names))
 			for i := 0; i+1 < len(names); i += 2 {
 				if drop(names[i+1]) {
@@ -647,6 +652,10 @@ func pruneDestNameTreeAt(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 // pruneCatalogDestinations drops the named destinations that point at pages a
 // rebuild removed, rewriting the catalog when either table changes.
 //
+// The tables are read as earlier stages staged them, from alloc first. An
+// attachment queues the catalog's /Names afresh at a new object number, and
+// reading the source's instead left its /Dests naming the deleted page.
+//
 // # Corpus evidence
 //
 //   - govdocs thread_400_400912.pdf: an /OpenAction left pointing at a deleted
@@ -671,7 +680,7 @@ func pruneCatalogDestinations(
 	if openAction, hasOpen := catalogDict["OpenAction"]; hasOpen {
 		targets := destTargetsRemoved(ctx, doc, openAction, removed, 0)
 		if !targets {
-			if action, err := document.ResolveDict(ctx, doc, openAction); err == nil && action != nil {
+			if action, err := resolveDictAllocFirst(ctx, alloc, doc, openAction); err == nil && action != nil {
 				if subtype, _ := action["S"].(ast.PdfName); subtype == "GoTo" {
 					targets = destTargetsRemoved(ctx, doc, action["D"], removed, 0)
 				}
@@ -684,7 +693,7 @@ func pruneCatalogDestinations(
 	}
 
 	if destsObj, hasDests := catalogDict["Dests"]; hasDests {
-		if dests, err := document.ResolveDict(ctx, doc, destsObj); err == nil && dests != nil {
+		if dests, err := resolveDictAllocFirst(ctx, alloc, doc, destsObj); err == nil && dests != nil {
 			if kept, dropped := pruneDestsDict(ctx, doc, dests, removed); dropped {
 				changed = true
 				if ref, isRef := destsObj.(ast.PdfIndirectRef); isRef {
@@ -697,7 +706,7 @@ func pruneCatalogDestinations(
 	}
 
 	if namesObj, hasNames := catalogDict["Names"]; hasNames {
-		if names, err := document.ResolveDict(ctx, doc, namesObj); err == nil && names != nil {
+		if names, err := resolveDictAllocFirst(ctx, alloc, doc, namesObj); err == nil && names != nil {
 			if destsRoot, hasDestsRoot := names["Dests"]; hasDestsRoot {
 				newRoot, dropped, destsTruncated := pruneDestNameTree(ctx, alloc, doc, destsRoot,
 					func(value ast.PdfObject) bool {

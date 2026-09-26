@@ -13,14 +13,29 @@ import (
 
 // SetBookmarks replaces the document outline tree. Pages is the full set of
 // resolved pages used to map bookmark page numbers to indirect references.
+//
+// A page an earlier deletion removed from the staged page tree gets no
+// destination, as [pruneOutlineDestinations] leaves an item naming a deleted
+// page: a destination naming it is enough to write the page into the output.
 func SetBookmarks(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pages []*document.Page, bookmarks []models.Bookmark) error {
 	if len(bookmarks) == 0 {
 		return nil
 	}
 
+	var held map[int]bool
+	if staged, ok := stagedPageKids(ctx, alloc, doc); ok {
+		held = make(map[int]bool, len(staged))
+		for _, ref := range staged {
+			held[ref.ObjectNum] = true
+		}
+	}
+
 	// Build page number to indirect ref mapping.
 	pageRefs := make(map[int]ast.PdfIndirectRef, len(pages))
 	for i, p := range pages {
+		if held != nil && !held[p.Ref.ObjectNum] {
+			continue
+		}
 		pageRefs[i+1] = p.Ref // 1-based
 	}
 
