@@ -132,6 +132,7 @@ one deliberately rather than diffing it against a fresh build.
 | `undecodable_2b.pdf`   | PDF/A-2b     | Content streams veraPDF reads no operator from                   |
 | `fontclaims_2b.pdf`    | PDF/A-2b     | Name-keyed CFF gaps, pattern and Type 3 program reads, `.notdef` |
 | `imagereach_2b.pdf`    | PDF/A-2b     | Images a form lists or a shared content stream never draws       |
+| `repairleft_4.pdf`     | PDF/A-4      | Inherited colour spaces, emptied `'` and `"`, a covered group    |
 
 ### Must-not-fire controls
 
@@ -381,6 +382,7 @@ which are covered under [Known divergences](#known-divergences).
 | `pagegroup_2b.pdf`     | 7    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 6    | 6    |
 | `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
+| `repairleft_4.pdf`     | 10   | 8    | 16   | 13   | 14   | 16   | 13   | 14   | 9   | 10   | 11   | 11   | 9    |
 | `resinherit_2b.pdf`    | 9    | 6    | 11   | 8    | 9    | 11   | 8    | 9    | 9   | 9    | 10   | 9    | 9    |
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
