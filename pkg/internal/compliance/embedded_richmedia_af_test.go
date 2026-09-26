@@ -43,9 +43,10 @@ func richMediaAFPDF(t *testing.T, ef, af bool) (*document.Document, ast.PdfDict)
 // associated with the document or one of its parts (veraPDF's
 // `isAssociatedFile == true`), which ISO 32000-2, 14.13 expresses with an /AF
 // array on the catalog, a page, an XObject or a structure element. An
-// annotation reference is not such an array: litho already holds a direct
-// annotation /FS to that standard, associating an external filespec but never
-// an embedded one, and an /Assets entry is the same kind of reference.
+// annotation reference is not such an array, for an embedded filespec or an
+// external one: an /Assets entry is a reference of the same kind as an
+// annotation /FS, and veraPDF fails both (see
+// [TestCatalogAF_AReferenceIsNoAssociation]).
 //
 // # Corpus evidence
 //
@@ -64,7 +65,7 @@ func TestCatalogAF_RichMediaAssetIsAnAnnotationReference(t *testing.T) {
 		fires bool
 	}{
 		{"an embedded filespec needs a real /AF array", true, false, true},
-		{"an external filespec may rely on the annotation reference", false, false, false},
+		{"an external filespec needs a real /AF array too", false, false, true},
 		{"an embedded filespec the page /AF names is associated", true, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

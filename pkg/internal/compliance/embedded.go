@@ -512,9 +512,18 @@ func afRelationshipRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule{}, Rule_19005_3_6_8_t03, Rule_19005_4_6_9_t04)
 }
 
-// checkCatalogAF validates §6.8 t4: for PDF/A-3+, each file specification dict
-// with an /EF key must be referenced from the catalog's /AF array. This ensures
-// the associated files are properly declared at the document level.
+// checkCatalogAF validates ISO 19005-3, 6.8 t4: every file specification
+// dictionary of a PDF/A-3 file is an associated file, one an /AF array lists
+// on the catalog, a page, an annotation, an XObject or a structure element (ISO
+// 32000-2, 14.13).
+//
+// A reference that is not an /AF entry does not associate, whether the file is
+// embedded or external: an annotation's /FS, a remote go-to action's /F and a
+// RichMedia /Assets tree name the file without stating its relationship to
+// the document, which is what /AFRelationship on an associated file records.
+// veraPDF's isAssociatedFile reads the same way: it holds only the object keys
+// that /AF arrays list (FileSpecificationKeysHelper), and fails the rule on
+// each of those routes, measured on a crafted file per route.
 //
 // # Corpus evidence
 //
@@ -522,6 +531,11 @@ func afRelationshipRule(part int) Rule {
 //     filespecs are reached only through a /RichMedia annotation's /Assets
 //     tree and carry no /AF anywhere in the file, and veraPDF fails
 //     ISO 19005-3, 6.8 t4 (isAssociatedFile == true) on both.
+//   - verapdf PDF_A-2b__veraPDF_test_suite_6-3-2-t01-fail-p.pdf and
+//     6-3-3-t01-fail-p.pdf: a FileAttachment /FS names an external filespec
+//     no /AF lists, and veraPDF fails the rule at PDF/A-3a, 3b and 3u, where
+//     litho called the annotation reference an association and passed them.
+//   - All corpora: dropping that leniency moves no other file at PDF/A-3b.
 func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.PdfDict, fileSpecs []fileSpecEntry, part int) []Violation {
 	if len(fileSpecs) == 0 {
 		return nil
@@ -551,13 +565,6 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	// Collect all /AF references from catalog, pages, and annotations.
 	// The /AF array can appear on any of these per the spec.
 	afRefs := make(map[int]bool)
-	// fsAnnotRefs holds filespecs reached only through an annotation /FS (e.g. a
-	// Link's remote go-to). For §6.8 t4 association, an annotation /FS reference
-	// counts for a filespec WITHOUT /EF (an external file) but NOT for an
-	// embedded one: a filespec carrying /EF is data the document owns, so it
-	// must appear in a real /AF array, not merely be reachable via an
-	// annotation.
-	fsAnnotRefs := make(map[int]bool)
 	collectAFRefs(ctx, doc, catalog["AF"], afRefs)
 
 	// Also collect from pages, their annotations, and XObject resources.
@@ -580,26 +587,6 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 						continue
 					}
 					collectAFRefs(ctx, doc, annotDict["AF"], afRefs)
-
-					// Annotations with /FS directly reference a file spec
-					// (e.g., a Link's remote go-to or a FileAttachment). This
-					// satisfies association only for an external (non-/EF)
-					// filespec; an embedded one still needs a real /AF entry.
-					if fsObj, hasFS := annotDict["FS"]; hasFS {
-						if ref, isRef := fsObj.(ast.PdfIndirectRef); isRef {
-							fsAnnotRefs[ref.ObjectNum] = true
-						}
-					}
-
-					// RichMedia annotations reference file specs through
-					// /RichMediaContent/Assets (a name tree). That is an
-					// annotation reference, not an /AF entry, so it associates
-					// an external filespec only: an embedded one (/EF) still
-					// needs a real /AF array, exactly as for a direct /FS
-					// above. veraPDF fails ISO 19005-3, 6.8 t4
-					// (isAssociatedFile == true) on an /EF filespec whose only
-					// route is a /RichMedia annotation's /Assets tree.
-					collectRichMediaFileSpecRefs(ctx, doc, annotDict, fsAnnotRefs)
 				}
 			}
 		}
@@ -637,14 +624,9 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 
 	var results []Violation
 	for _, fs := range associatedSpecs {
-		associated := fs.objNum != 0 && afRefs[fs.objNum]
-		// An external (non-embedded) filespec may be associated through an
-		// annotation /FS reference; an embedded one (/EF) must be in /AF. A
-		// direct /FS is that same annotation reference, written inline.
-		if !fs.hasEF && (fs.objNum == 0 || fsAnnotRefs[fs.objNum]) {
-			associated = true
-		}
-		if !associated {
+		// Only an /AF array associates, and it lists indirect objects: a
+		// filespec written inline has no object number an /AF entry could name.
+		if fs.objNum == 0 || !afRefs[fs.objNum] {
 			results = append(results, Violation{
 				Rule:    rule,
 				Context: fmt.Sprintf("%s: file specification not referenced in any /AF array", fs.label()),
@@ -667,60 +649,6 @@ func collectAFRefs(ctx context.Context, doc *document.Document, afObj ast.PdfObj
 	for _, elem := range arr {
 		if ref, ok := elem.(ast.PdfIndirectRef); ok {
 			refs[ref.ObjectNum] = true
-		}
-	}
-}
-
-// collectRichMediaFileSpecRefs extracts file spec references from a RichMedia
-// annotation. File specs can appear in two places:
-//   - /RichMediaContent/Assets name tree (key/value pairs)
-//   - /RichMediaContent/Configurations/*/Instances/*/Asset
-func collectRichMediaFileSpecRefs(ctx context.Context, doc *document.Document, annotDict ast.PdfDict, refs map[int]bool) {
-	rmContent, ok := annotDict["RichMediaContent"]
-	if !ok {
-		return
-	}
-	rmDict, err := document.ResolveDict(ctx, doc, rmContent)
-	if err != nil || rmDict == nil {
-		return
-	}
-
-	// /Assets name tree.
-	assetsDict, err := document.ResolveDict(ctx, doc, rmDict["Assets"])
-	if err == nil && assetsDict != nil {
-		namesArr, err := document.ResolveArray(ctx, doc, assetsDict["Names"])
-		if err == nil {
-			for i := 1; i < len(namesArr); i += 2 {
-				if ref, ok := namesArr[i].(ast.PdfIndirectRef); ok {
-					refs[ref.ObjectNum] = true
-				}
-			}
-		}
-	}
-
-	// /Configurations → instances → /Asset.
-	configs, err := document.ResolveArray(ctx, doc, rmDict["Configurations"])
-	if err != nil {
-		return
-	}
-	for _, cfgObj := range configs {
-		cfgDict, err := document.ResolveDict(ctx, doc, cfgObj)
-		if err != nil || cfgDict == nil {
-			continue
-		}
-		instances, err := document.ResolveArray(ctx, doc, cfgDict["Instances"])
-		if err != nil {
-			doc.Logger.Debug("compliance.embedded: cannot resolve config instances array", "error", err)
-			continue
-		}
-		for _, instObj := range instances {
-			instDict, err := document.ResolveDict(ctx, doc, instObj)
-			if err != nil || instDict == nil {
-				continue
-			}
-			if assetRef, ok := instDict["Asset"].(ast.PdfIndirectRef); ok {
-				refs[assetRef.ObjectNum] = true
-			}
 		}
 	}
 }
