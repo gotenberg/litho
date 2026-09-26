@@ -147,6 +147,7 @@ one deliberately rather than diffing it against a fresh build.
 | `afref_3b.pdf`         | PDF/A-3b     | File specifications something refers to but no `/AF` lists       |
 | `langpua_ua2.pdf`      | PDF/UA-2     | Private Use Area characters in structure and content `/Lang`     |
 | `repairroom_2b.pdf`    | PDF/A-2b     | Moves a stripped `.notdef` made, and DeviceN spaces in shadings  |
+| `paintop_2b.pdf`       | PDF/A-2b     | Transparency no operator paints under, halftones judged once     |
 
 ### Must-not-fire controls
 
@@ -201,6 +202,8 @@ violation but is exempt, so a firing is a false positive.
 | `docinfo_1b`                              | `/Trapped` matching `pdf:Trapped`, an entry 6.7.3 does not name        | ISO 19005-1, 6.7.3           |
 | `docinfo_1b`                              | `/Company`, a docinfo entry with no XMP analogue at all                | ISO 19005-1, 6.7.3           |
 | `docinfo_1b`                              | Extension schema declaring `pdf:Trapped`, conforming in every field    | ISO 19005-1, 6.7.9           |
+| `paintop_2b`                              | Pages 1 to 7: a transparent state no painting operator paints under    | ISO 19005-2, 6.2.10 t2       |
+| `paintop_2b`                              | `H1`, `H2`: a component a process colorant reaches before a spot one   | ISO 19005-2, 6.2.5 t6        |
 | `imgxmp_4`                                | `ImOK`, an image conforming in all four respects its siblings break    | ISO 19005-4, 6.2.7.1         |
 | `imgxmp_4`                                | `ImMaskOK`, an image mask with `/BitsPerComponent 1`                   | ISO 19005-4, 6.2.7.1 t5      |
 | `imgxmp_4`                                | `/Interpolate false` on every image and every image mask               | ISO 19005-4, 6.2.7.1 t3      |
@@ -419,6 +422,7 @@ which are covered under [Known divergences](#known-divergences).
 | `offlimits_1b.pdf`     | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 6    | 7    | 7    | 7    |
 | `outputintent_2b.pdf`  | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
 | `pagegroup_2b.pdf`     | 7    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 6    | 6    |
+| `paintop_2b.pdf`       | 7    | 4    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 9    | 7    |
 | `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
 | `repairleft_4.pdf`     | 10   | 8    | 16   | 13   | 14   | 16   | 13   | 14   | 9   | 10   | 11   | 11   | 9    |
@@ -1635,22 +1639,6 @@ litho is right on the spec: ISO 19005-2, 6.2.4.3 constrains DeviceRGB wherever
 content paints with it, and a coloured pattern's cell supplies its own colour
 (ISO 32000-1, 8.7.3.3). No code changed and no fixture plants it. Same treatment
 as the `7.1/12` entry below.
-
-**`6.2.10/2` at PDF/A-2b and `6.2.9/2` at PDF/A-4, transparency nothing
-paints.** Both tools now read a page's transparency from what its content and
-annotations draw and ignore the page's own `/Group`, but veraPDF also asks
-which operator paints under which state. It raises `containsTransparency` at a
-painting operator whose graphics state is transparent for it
-(`TransparencyBehaviour`, veraPDF-validation 1.30): a fill tests `/ca`, a
-stroke `/CA`, both a soft mask and a blend mode, and an alpha counts only
-below 1. litho counts every graphics state a `gs` sets. Measured with veraPDF
-1.30 at both profiles on one-page files with no group and no output intent,
-each of which litho fails and veraPDF passes: a `gs` setting `/ca 0.5` that
-`Q` undoes before any fill, `/ca 0.5` before a stroke alone, `/CA 0.5` before
-a fill alone, and `/ca 1.5` before a fill. Of the 227 corpus files litho fails
-under 6.2.10 t2 at PDF/A-2b, the 225 veraPDF processes fail it as often there,
-83 against the verapdf and litho goldens and 142 live, so no corpus file shows
-the difference. Not planted.
 
 **`7.1/12` at PDF/UA-1.** litho reports a structure element missing its `/P`
 entry; veraPDF cannot. `GFPDStructElem.getcontainsParent` returns
@@ -3760,6 +3748,73 @@ use a DeviceN short of colorants, pdfjs issue17065.pdf is the one a
 remediation left short, and the remediation corpus runs none of them. No
 corpus page the `.notdef` repair runs on shows text after an emptied TJ whose
 numbers move.
+
+### `paintop_2b.pdf`
+
+ISO 19005-2, 6.2.10 t2 and ISO 19005-4, 6.2.9 t2 ask every page that contains
+transparency, in a document without a PDF/A OutputIntent, for a blending
+colour space. veraPDF decides that a page contains transparency at the
+operators that paint, under the graphics state in force there
+(`TransparencyBehaviour`, veraPDF-validation 1.30): a fill tests `/ca`, a
+stroke `/CA`, both a soft mask and a blend mode, an alpha counts only below 1,
+and a gs replaces the soft mask and the blend mode, absent ones included. The
+file declares no OutputIntent and no page group, and paints in an ICCBased
+space throughout. Each of pages 1 to 7 sets a transparent graphics state that
+no operator paints under:
+
+| Page | Construct                                                    |
+| ---- | ------------------------------------------------------------ |
+| 1    | `/ca 0.5` set inside `q ... Q`, the fill after `Q`           |
+| 2    | `/ca 0.5` before a stroke alone                              |
+| 3    | `/CA 0.5` before a fill alone                                |
+| 4    | `/ca 1.5` before a fill                                      |
+| 5    | a soft mask, cleared by a graphics state that names none     |
+| 6    | a tiling pattern filling at `/ca 0.5`, selected, never used  |
+| 7    | an annotation appearance setting `/ca 0.5` and painting none |
+
+No page contains transparency, so neither rule fires. litho counted every
+graphics state a gs set, every tiling pattern the resources listed and every
+state an appearance set, and failed all eight pages, the halftone page among
+them through the pattern its resources list.
+
+Page 8 sets four graphics states whose halftones ISO 19005-2, 6.2.5 judges.
+veraPDF builds a halftone from an `/HT` that is a name, a dictionary or a
+stream, and one more for every component of a type 5 halftone, judged under
+its colorant name. It lists the components in the iteration order of the Java
+HashMap its dictionary is, walks them from the last, and judges a component
+written as an indirect object where it first reaches it:
+
+| State | `/HT`                                              | Answers at PDF/A-2b  |
+| ----- | -------------------------------------------------- | -------------------- |
+| `H1`  | type 5, `/Red` and `/Cyan` naming one component    | nothing              |
+| `H2`  | type 5, `/Blue` and `/Yellow` naming one component | nothing              |
+| `H3`  | the name `/Foo`                                    | `6.2.5/4`, `6.2.5/5` |
+| `H4`  | a type 6 halftone, a stream                        | `6.2.5/4`            |
+
+`/Cyan` and `/Yellow`, process colorants that need no transfer function,
+reach the shared components before `/Red` and `/Blue`, which would, so `H1`
+and `H2` pass. `H3` has no type and names itself as its `/HalftoneName`. litho
+failed `6.2.5/6` for `/Red` and `/Blue` and read neither `H3` nor `H4`.
+
+| Rule       | Profile  | veraPDF | litho | litho before |
+| ---------- | -------- | ------- | ----- | ------------ |
+| `6.2.10/2` | PDF/A-2b | 0       | 0     | 8            |
+| `6.2.9/2`  | PDF/A-4  | 0       | 0     | 8            |
+| `6.2.5/4`  | PDF/A-2b | 2       | 2     | 0            |
+| `6.2.5/5`  | PDF/A-2b | 1       | 1     | 0            |
+| `6.2.5/6`  | PDF/A-2b | 0       | 0     | 2            |
+| `6.2.5/4`  | PDF/A-4  | 2       | 2     | 0            |
+| `6.2.5/5`  | PDF/A-4  | 1       | 1     | 0            |
+| `6.2.5/6`  | PDF/A-4  | 0       | 0     | 2            |
+| `6.4/1`    | PDF/A-1b | 1       | 1     | 1            |
+| `6.4/5`    | PDF/A-1b | 1       | 1     | 1            |
+| `6.4/6`    | PDF/A-1b | 2       | 2     | 2            |
+
+At PDF/A-1b, ISO 19005-1, 6.4 judges every graphics state a gs builds, painted
+under or not, and the halftones are silent. The two tools return the same rule
+set in all thirteen cells, and the same count for every rule at every PDF/A
+level. The repair replaces `H3` and `H4` with `/Default`, and every remediated
+output passes on both tools at PDF/A-1b, PDF/A-2b and PDF/A-4.
 
 ## Scope
 
