@@ -208,7 +208,7 @@ A documented refusal (`ErrSignFullRewriteIncompatible` on an encrypted source, `
 
 The rule-set comparison is litho against litho: the `compliance` cell already compares litho with veraPDF. What each mutation may change is pinned per rule in `feature_mutation_rules.go`, each entry with its clause. Every output may pass a file-structure rule the input failed (ISO 19005 clause 6.1, ISO 14289-1, 7.16), because the Writer writes a new revision or file and decrypts. A stamp may fail the unembedded-font, DeviceRGB and text-language rules its standard font and fill colour trigger. An encrypted PDF/A output must fail the Encrypt rule. Auto-tagging, flattening and redaction may pass any rule, and a redaction may fail the metadata rules, since it clears the metadata by design. Everything but the rule set is checked once per PDF, on its first fixture, so those metrics count PDFs and `ruleset_changed` counts (PDF, profile) cells.
 
-`qpdf` is optional: without it on PATH the qpdf check is skipped, and the run says so once on stderr. The seven features take about 30 s together on an idle machine.
+`qpdf` is optional: without it on PATH the qpdf check is skipped, and the run says so once on stderr. The seven features take 18 s together with 4 workers on an idle machine.
 
 ### Comparison notes
 

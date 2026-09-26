@@ -86,10 +86,14 @@ type mutationFailure struct {
 // metric of its feature, zero included, so the baseline keeps a bar on each.
 //
 // The mutation runs once per PDF and its output is cached, so the per-profile
-// fixtures only validate. On the litho corpus the seven features take about
-// 30 s together on an idle machine, most of it the 16 validations per PDF.
+// fixtures only validate, two validations each, which is most of the cost.
 //
 // Run and Compare are safe for concurrent calls once Prepare returns.
+//
+// # Corpus evidence
+//
+//   - litho: the seven features take 18 s together with 4 workers on an idle
+//     machine.
 type mutationFeature struct {
 	spec   mutationSpec
 	signer *corpusSigner
