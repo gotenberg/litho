@@ -29,9 +29,10 @@ rather than the page's `/ColorSpace` resources:
 
 `CSX`, a Separation of SpotX the page also paints with, is the definition a
 completed `/Colorants` must reuse (6.2.4.4 t2). The `/Colorants` repair walked
-the page's `/ColorSpace` resources alone, so both kept t1. The corpus files
-with a shading whose DeviceN lacks a colorant, pdfjs issue17065.pdf and four
-govdocs files, are outside the remediation corpus.
+the page's `/ColorSpace` resources alone, so both kept t1. Of the five corpus
+files whose shadings use a DeviceN short of colorants, pdfjs issue17065.pdf is
+the one a remediation left short, and the remediation corpus runs none of
+them.
 
 The font is the conforming non-symbolic TrueType of `repairleft_4.pdf`,
 embedded, with `/Widths` from code 1 so the `.notdef` width agrees with the

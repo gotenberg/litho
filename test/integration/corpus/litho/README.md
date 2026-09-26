@@ -3755,10 +3755,11 @@ The aggressive remediation at PDF/A-2a, 2b, 2u, 3b and 4 now leaves nothing,
 where it left both 6.2.4.4 t1 findings, and the default one leaves the glyph
 findings only the aggressive mode repairs; veraPDF agrees on every output. The
 runner scores rule sets, so it guards the `/Colorants` reach, and the text
-positions above are measured by hand. The corpus files with a shading whose
-DeviceN lacks a colorant, pdfjs issue17065.pdf and four govdocs files, are
-outside the remediation corpus, and no corpus page the `.notdef` repair runs
-on shows text after an emptied TJ whose numbers move.
+positions above are measured by hand. Of the five corpus files whose shadings
+use a DeviceN short of colorants, pdfjs issue17065.pdf is the one a
+remediation left short, and the remediation corpus runs none of them. No
+corpus page the `.notdef` repair runs on shows text after an emptied TJ whose
+numbers move.
 
 ## Scope
 
