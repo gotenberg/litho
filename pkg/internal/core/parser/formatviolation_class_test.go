@@ -127,8 +127,8 @@ func TestNumberExponentClass(t *testing.T) {
 	t.Run("an inline image dictionary value", func(t *testing.T) {
 		t.Parallel()
 		p := newParser("/W 1 /H 1 /BPC 8 /CS /G /Foo 1.5e1 ID \x80 EI").WithFormatChecking()
-		if _, err := p.ParseInlineImageDict(context.Background()); err != nil {
-			t.Fatalf("ParseInlineImageDict: %v", err)
+		if _, err := p.ParseInlineImageHeader(context.Background()); err != nil {
+			t.Fatalf("ParseInlineImageHeader: %v", err)
 		}
 		if len(p.FormatViolations) != 1 {
 			t.Fatalf("got %d violations, want 1: %v", len(p.FormatViolations), p.FormatViolations)

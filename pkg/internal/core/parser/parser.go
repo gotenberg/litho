@@ -83,7 +83,7 @@ type Parser struct {
 	// dictionary value and an array element are both parsed by ParseObject,
 	// and `N G obj` reaches it through parseIndirectObject. An inline image's
 	// dictionary, which ParseObject does not parse, is counted by
-	// [Parser.ParseInlineImageDict] itself.
+	// [Parser.ParseInlineImageHeader] itself.
 	depth int
 
 	// consumed counts the tokens [Parser.Consume] has advanced past. See
@@ -192,7 +192,8 @@ func (p *Parser) buffered() int {
 
 // Position returns the underlying reader's current byte offset. Callers with
 // offset tracking use it to bound constructs the token stream does not cover,
-// notably inline image data consumed by [Parser.ParseInlineImageDict].
+// notably the data of an inline image, which starts past the ID keyword
+// [Parser.ParseInlineImageHeader] stops after.
 func (p *Parser) Position() int64 {
 	return p.lex.Reader().Position()
 }
@@ -1572,134 +1573,12 @@ func (p *Parser) parseString(val string) (ast.PdfString, error) {
 	return ast.PdfString(string(b)), nil
 }
 
-// SkipInlineImage reads past an inline image in a content stream.
-// Called after the BI operator has been consumed. It reads the dictionary
-// key/value pairs until the ID keyword, then scans forward through raw
-// binary image data until the EI terminator is found.
-func (p *Parser) SkipInlineImage(ctx context.Context) error {
-	ascii85 := false
-	// Consume inline image dictionary entries until the ID keyword.
-	// Entries are key/value pairs (e.g., /W 100 /H 50 /BPC 8 /CS /RGB).
-	// Track the /F filter to know whether the image data is ASCII85-encoded,
-	// which changes how the EI terminator scan must handle PDF delimiters.
-	for {
-		tok, err := p.Peek(0)
-		if err != nil {
-			return fmt.Errorf("inline image dict: %w", err)
-		}
-		if tok.Type == lexer.TokenEOF {
-			return fmt.Errorf("unexpected EOF in inline image dictionary")
-		}
-		// ID marks the end of the dictionary and start of raw image data.
-		if tok.Type == lexer.TokenKeyword && tok.Value == "ID" {
-			if _, err := p.Consume(); err != nil {
-				return fmt.Errorf("failed to consume ID: %w", err)
-			}
-			break
-		}
-		if tok.Type == lexer.TokenName && (tok.Value == "/F" || tok.Value == "/Filter") {
-			if _, err := p.Consume(); err != nil {
-				return fmt.Errorf("inline image filter key: %w", err)
-			}
-			val, err := p.ParseObject(ctx)
-			if err != nil {
-				continue
-			}
-			if filterNamesContainASCII85(val) {
-				ascii85 = true
-			}
-			continue
-		}
-		// Consume the token (key or value); its data is not needed.
-		if _, err := p.Consume(); err != nil {
-			return fmt.Errorf("inline image dict entry: %w", err)
-		}
-	}
-
-	// Ensure no lookahead tokens remain before switching to raw byte reading.
-	if p.buffered() > 0 {
-		return fmt.Errorf("parser read ahead too far before inline image data")
-	}
-
-	// Skip the single white-space byte that follows ID. ISO 32000-1, 8.9.7
-	// requires it unless the image uses ASCIIHexDecode or ASCII85Decode. With
-	// those filters the byte may be the first byte of data, which is harmless
-	// here: only the EI terminator is sought, and the data is not returned.
-	reader := p.lex.Reader()
-	if _, err := reader.ReadByte(); err != nil {
-		return fmt.Errorf("failed to read post-ID whitespace: %w", err)
-	}
-
-	// Scan forward for the EI terminator. ISO 32000-1, 8.9.7 places the data
-	// "between the ID and EI operators" and gives no length for it, so the
-	// end is found by heuristic: "EI" read as its own token (7.2.2), preceded
-	// by white space and followed by white space, a delimiter, or EOF. Raw
-	// bytes 'E' and 'I' can occur inside image data, so the scan validates
-	// the trailing context to avoid false matches.
-	return scanToEI(reader, ctx, ascii85)
-}
-
-// filterNamesContainASCII85 reports whether a /F (or /Filter) value
-// includes the ASCII85Decode filter, testing both the short abbreviation
-// ("A85") used by inline images and the long name.
-func filterNamesContainASCII85(obj ast.PdfObject) bool {
-	switch v := obj.(type) {
-	case ast.PdfName:
-		return v == "A85" || v == "ASCII85Decode"
-	case ast.PdfArray:
-		for _, elem := range v {
-			if name, ok := elem.(ast.PdfName); ok {
-				if name == "A85" || name == "ASCII85Decode" {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-// ParseInlineImageDict reads an inline image's dictionary key/value pairs
-// (between BI and ID), skips the binary image data (ID to EI), and returns
-// the properties as an [ast.PdfDict]. Called after the BI operator has been consumed.
-// Dictionary keys are PDF names (e.g., /W, /H, /BPC, /CS) and values are
-// parsed as normal PDF objects.
-func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) {
-	dict, err := p.ParseInlineImageHeader(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Skip the single white-space byte that follows ID (ISO 32000-1, 8.9.7).
-	// See SkipInlineImage for the ASCIIHexDecode and ASCII85Decode case.
-	reader := p.lex.Reader()
-	if _, err := reader.ReadByte(); err != nil {
-		return nil, fmt.Errorf("failed to read post-ID whitespace: %w", err)
-	}
-
-	// Scan forward for the EI terminator, found by the heuristic
-	// SkipInlineImage describes.
-	ascii85 := false
-	if f, ok := dict["F"]; ok {
-		ascii85 = filterNamesContainASCII85(f)
-	}
-	if !ascii85 {
-		if f, ok := dict["Filter"]; ok {
-			ascii85 = filterNamesContainASCII85(f)
-		}
-	}
-	if err := scanToEI(reader, ctx, ascii85); err != nil {
-		return nil, err
-	}
-
-	return dict, nil
-}
-
 // ParseInlineImageHeader reads an inline image's dictionary key/value pairs
-// (between BI and ID) and returns them as an [ast.PdfDict], as
-// [Parser.ParseInlineImageDict] does, but reads no image data: the parser
-// stands just past the ID keyword, with no token read ahead, so a caller that
-// finds the end of the data itself reads on with [Parser.ResumeAt]. Called
-// after the BI operator has been consumed.
+// (between BI and ID) and returns them as an [ast.PdfDict], and reads no image
+// data: the parser stands just past the ID keyword, with no token read ahead.
+// ISO 32000-1, 8.9.7 gives the data no length, so the caller finds where it
+// ends, as the reader it follows ends it, and reads on with [Parser.ResumeAt].
+// Called after the BI operator has been consumed.
 func (p *Parser) ParseInlineImageHeader(ctx context.Context) (ast.PdfDict, error) {
 	dict := ast.PdfDict{}
 	p.skippedKey = false
@@ -1799,150 +1678,6 @@ func (p *Parser) ResumeAt(offset int64) error {
 		return fmt.Errorf("resuming at %d: %w", offset, err)
 	}
 	return nil
-}
-
-// scanToEI scans forward through raw binary image data looking for the
-// EI end-of-inline-image marker. Uses a state machine: the marker must be
-// preceded by whitespace and followed by whitespace, a delimiter, or EOF.
-// When ascii85 is true, EI is accepted only if followed by whitespace
-// (or EOF). That stricter post-check prevents false matches on the bytes
-// 'E' and 'I' inside ASCII85-encoded image data, whose 33-117 alphabet
-// includes every PDF delimiter character. Non-ASCII85 image data can
-// contain arbitrary binary bytes, so the looser ws-or-delim post-check
-// remains necessary to match producers that pack the next operator
-// immediately after EI. The optional ctx enables cancellation during
-// long scans of malformed data.
-func scanToEI(reader io.Reader, ctx context.Context, ascii85 bool) error {
-	type readByteFunc interface {
-		ReadByte() (byte, error)
-		UnreadByte() error
-		Position() int64
-		ReaderAt() io.ReaderAt
-	}
-	r := reader.(readByteFunc)
-
-	// Check context every 64KB to avoid hanging on malformed inline images.
-	const ctxCheckInterval = 64 * 1024
-	sinceLastCheck := 0
-
-	// State machine: 0=scanning, 1=saw whitespace, 2=saw ws+E.
-	state := 0
-	for {
-		c, err := r.ReadByte()
-		if err != nil {
-			if err == io.EOF {
-				return fmt.Errorf("unexpected EOF scanning for EI in inline image")
-			}
-			return err
-		}
-
-		sinceLastCheck++
-		if sinceLastCheck >= ctxCheckInterval {
-			sinceLastCheck = 0
-			if ctx != nil {
-				if err := ctx.Err(); err != nil {
-					return fmt.Errorf("scanning for EI: %w", err)
-				}
-			}
-		}
-
-		switch state {
-		case 0:
-			if isInlineWS(c) {
-				state = 1
-			}
-		case 1:
-			switch {
-			case c == 'E':
-				state = 2
-			case isInlineWS(c):
-				// Stay in state 1.
-			default:
-				state = 0
-			}
-		case 2:
-			switch {
-			case c == 'I':
-				eiEnd := r.Position() // offset just past "EI", before reading the separator
-				next, err := r.ReadByte()
-				if err != nil {
-					if err == io.EOF {
-						return nil // EI at end of stream is valid.
-					}
-					return err
-				}
-				accepted := isInlineWS(next) || (!ascii85 && isInlineDelim(next))
-				// A NUL byte after "EI" is ambiguous: some producers terminate
-				// a real inline image with EI followed by NUL padding, but NUL
-				// also occurs inside binary image data (notably FlateDecoded
-				// streams), where the "EI" is coincidental. Disambiguate by the
-				// bytes that follow: content-stream text after a real EI,
-				// versus more binary after a false one. Matches the lookahead
-				// in PDF.js findDefaultInlineStreamEnd. Accepting a false EI
-				// stopped the scan early and lexed trailing image bytes as
-				// content operators (spurious ISO 19005 §6.2.2 undefined
-				// operators).
-				if accepted && next == 0x00 && !eiFollowedByContent(r.ReaderAt(), eiEnd) {
-					accepted = false
-				}
-				if accepted {
-					_ = r.UnreadByte() // Guaranteed to succeed: previous ReadByte succeeded on a buffered reader.
-					return nil
-				}
-				// False match, continue scanning.
-				if isInlineWS(c) {
-					state = 1
-				} else {
-					state = 0
-				}
-			case isInlineWS(c):
-				state = 1
-			default:
-				state = 0
-			}
-		}
-	}
-}
-
-// eiFollowedByContent reports whether the bytes at offset at (immediately
-// after a candidate EI marker) look like content-stream text rather than
-// binary image data. A real EI is followed by the next operator or its
-// operands, which are whitespace and printable ASCII; a coincidental "EI"
-// inside binary image data is followed by more binary. Only whitespace and
-// printable ASCII count as content, with a lone NUL tolerated (some producers
-// pad with a single NUL); a NUL run or any byte outside 0x20-0x7E signals
-// binary. Called only for the ambiguous EI+NUL case, so it never alters the
-// common EI+space/newline path. An empty read (EI at EOF) is a valid
-// terminator.
-func eiFollowedByContent(ra io.ReaderAt, at int64) bool {
-	const window = 8 // small: enough to spot binary, short of any following string operand
-	var buf [window]byte
-	n, _ := ra.ReadAt(buf[:], at)
-	b := buf[:n]
-	for i := range b {
-		c := b[i]
-		switch {
-		case c == 0x00:
-			if i+1 < len(b) && b[i+1] == 0x00 {
-				return false // consecutive NULs: binary image data
-			}
-		case c == 0x09 || c == 0x0A || c == 0x0C || c == 0x0D || c == 0x20:
-		case c >= 0x21 && c <= 0x7E:
-		default:
-			return false // a byte outside printable ASCII: binary image data
-		}
-	}
-	return true
-}
-
-func isInlineDelim(c byte) bool {
-	return c == '(' || c == ')' || c == '<' || c == '>' ||
-		c == '[' || c == ']' || c == '{' || c == '}' ||
-		c == '/' || c == '%'
-}
-
-func isInlineWS(c byte) bool {
-	return c == 0x00 || c == 0x09 || c == 0x0A || c == 0x0C || c == 0x0D || c == 0x20
 }
 
 func (p *Parser) parseHexString(val string) (ast.PdfString, error) {

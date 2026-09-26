@@ -103,8 +103,8 @@ func TestWithVeraPDFContainersInlineImageKeys(t *testing.T) {
 		{"/W 1 /H 1 /BPC 8 /CS /G ID \x80 EI ", false},
 	} {
 		p := veraPDFParser(tc.src, true)
-		if _, err := p.ParseInlineImageDict(context.Background()); err != nil {
-			t.Errorf("ParseInlineImageDict(%q): %v", tc.src, err)
+		if _, err := p.ParseInlineImageHeader(context.Background()); err != nil {
+			t.Errorf("ParseInlineImageHeader(%q): %v", tc.src, err)
 			continue
 		}
 		if got := p.Abandoned(); got != tc.abandoned {
