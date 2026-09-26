@@ -194,30 +194,29 @@ func TestFixXMPSchema_StripsTheFlaggedPropertyFromTheComponentPacket(t *testing.
 	}
 }
 
-// TestFixXMPSchema_KeepsAComponentPropertyXMPMetadataDeclared pins that
-// xmp-schema keeps a component property xmp-metadata has declared since the
-// validator judged it.
+// TestFixXMPSchema_StripsAComponentPropertyXMPMetadataDeclared pins that
+// xmp-schema strips a flagged component property xmp-metadata has declared
+// since the validator judged it.
 //
 // xmp-metadata runs first and declares photoshop:History in an extension
-// schema of the page packet, which answers 6.6.2.3.1 for it. Stripping it
-// after that repaired nothing and lost the property. dc:format is a
-// predefined property written in the wrong value type, which no declaration
-// answers, so it is still stripped.
-func TestFixXMPSchema_KeepsAComponentPropertyXMPMetadataDeclared(t *testing.T) {
+// schema of the page packet. A declaration answers ISO 19005-2, 6.6.2.3.1
+// only when the value matches the value type it declares, which xmp-schema
+// cannot vouch for (see TestFixXMPSchema_StripsTheFontsXMPMetadataDeclared),
+// so the flagged value is stripped all the same.
+func TestFixXMPSchema_StripsAComponentPropertyXMPMetadataDeclared(t *testing.T) {
 	t.Parallel()
 
 	packet, schemaFixes := runComponentXMPFixers(t, componentPatchedCatalogPacket)
-	if !xmpDeclaredProperties(packet)[xmpSchemaProperty{photoshopNS, "History"}] {
+	if !strings.Contains(string(packet), "<pdfaProperty:name>History</pdfaProperty:name>") {
 		t.Fatalf("precondition: xmp-metadata declared no photoshop:History in the page packet:\n%s", packet)
 	}
-	if loc := findXMPProperty(packet, photoshopNS, "History"); loc.Form == xmpPropertyNotFound {
-		t.Errorf("photoshop:History is gone although xmp-metadata declared it; xmp-schema fixes = %q", schemaFixes)
+	for _, prop := range []xmpSchemaProperty{{photoshopNS, "History"}, {dcNS, "format"}} {
+		if loc := findXMPProperty(packet, prop.nsURI, prop.localName); loc.Form != xmpPropertyNotFound {
+			t.Errorf("%s%s survived in the page packet: %q", prop.nsURI, prop.localName, xmpPropertyRawValue(packet, loc))
+		}
 	}
-	if loc := findXMPProperty(packet, dcNS, "format"); loc.Form != xmpPropertyNotFound {
-		t.Errorf("dc:format survived in the page packet: %q", xmpPropertyRawValue(packet, loc))
-	}
-	if !containsFix(schemaFixes, "stripped 1 XMP schema-noncompliant propert(ies) from 1 component metadata stream(s)") {
-		t.Errorf("xmp-schema fixes = %q, want dc:format alone counted", schemaFixes)
+	if !containsFix(schemaFixes, "stripped 2 XMP schema-noncompliant propert(ies) from 1 component metadata stream(s)") {
+		t.Errorf("xmp-schema fixes = %q, want both properties counted", schemaFixes)
 	}
 }
 
@@ -261,43 +260,126 @@ func TestRemediatePDFA_ComponentPacketPassesAfterOneRound(t *testing.T) {
 	}
 }
 
-func TestXMPDeclaredProperties(t *testing.T) {
-	t.Parallel()
+// xmpTPgNS is the namespace of the XMP Paged-Text schema.
+const xmpTPgNS = "http://ns.adobe.com/xap/1.0/t/pg/"
 
-	const packet = `<x:xmpmeta xmlns:x="adobe:ns:meta/">
+// fontsCatalogPacket is a PDF/A-1b catalog packet carrying xmpTPg:Fonts, which
+// the 2004 XMP Specification ISO 19005-1 references does not define, as a bag
+// of stFnt structures written as nested rdf:Description elements. ISO
+// 19005-1, 6.7.9 flags it under tests 2 and 3.
+const fontsCatalogPacket = `<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-<rdf:Description rdf:about="" xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"
-  xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#" xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#">
-<pdfaExtension:schemas><rdf:Bag>
- <rdf:li rdf:parseType="Resource">
-  <pdfaSchema:property><rdf:Seq>
-   <rdf:li rdf:parseType="Resource"><pdfaProperty:name>History</pdfaProperty:name></rdf:li>
-   <rdf:li rdf:parseType="Resource"><pdfaProperty:name> ColorMode </pdfaProperty:name></rdf:li>
-  </rdf:Seq></pdfaSchema:property>
-  <pdfaSchema:namespaceURI>http://ns.adobe.com/photoshop/1.0/</pdfaSchema:namespaceURI>
- </rdf:li>
- <rdf:li pdfaSchema:namespaceURI="http://example.com/ns/">
-  <pdfaSchema:property><rdf:Seq><rdf:li pdfaProperty:name="Custom"/></rdf:Seq></pdfaSchema:property>
- </rdf:li>
-</rdf:Bag></pdfaExtension:schemas>
+<rdf:Description rdf:about="" xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/">
+<pdfaid:part>1</pdfaid:part>
+<pdfaid:conformance>B</pdfaid:conformance>
+</rdf:Description>
+<rdf:Description rdf:about="" xmlns:xmpTPg="http://ns.adobe.com/xap/1.0/t/pg/" xmlns:stFnt="http://ns.adobe.com/xap/1.0/sType/Font#">
+<xmpTPg:Fonts><rdf:Bag><rdf:li><rdf:Description>
+<stFnt:fontName>Helvetica-Bold</stFnt:fontName>
+<stFnt:fontFamily>Helvetica</stFnt:fontFamily>
+<stFnt:fontType>TrueType</stFnt:fontType>
+</rdf:Description></rdf:li></rdf:Bag></xmpTPg:Fonts>
 </rdf:Description>
 </rdf:RDF>
-</x:xmpmeta>`
+</x:xmpmeta>
+<?xpacket end="w"?>`
 
-	got := xmpDeclaredProperties([]byte(packet))
-	for _, want := range []xmpSchemaProperty{
-		{photoshopNS, "History"},
-		{photoshopNS, "ColorMode"},
-		{"http://example.com/ns/", "Custom"},
-	} {
-		if !got[want] {
-			t.Errorf("%s%s is not declared; got %v", want.nsURI, want.localName, got)
+// fontsPDF builds a one-page PDF/A-1b candidate whose catalog carries
+// [fontsCatalogPacket] as its /Metadata, object 4.
+func fontsPDF() []byte {
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R /Metadata 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream", len(fontsCatalogPacket), fontsCatalogPacket),
+	}
+	offs := make([]int, len(objs)+1)
+	for i, o := range objs {
+		offs[i+1] = buf.Len()
+		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	xref := buf.Len()
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	for i := 1; i <= len(objs); i++ {
+		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offs[i])
+	}
+	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R /ID [<00112233445566778899aabbccddeeff> <00112233445566778899aabbccddeeff>] >>\nstartxref\n%d\n%%%%EOF\n",
+		len(objs)+1, xref)
+	return buf.Bytes()
+}
+
+// TestFixXMPSchema_StripsTheFontsXMPMetadataDeclared pins that xmp-schema
+// strips a flagged catalog property xmp-metadata has declared, in the value
+// type it inferred, since the validator judged it.
+//
+// xmp-metadata declares xmpTPg:Fonts as "bag Text", although its items are
+// structures. litho's validator accepts that declaration, and veraPDF does
+// not: ISO 19005-1, 6.7.9 t3 asks the value to match the value type its
+// extension schema declares. xmp-schema kept the property because it was
+// declared, and the output, which litho reported compliant, failed 6.7.9 t3
+// on veraPDF.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-1b__veraPDF_test_suite_6-7-2-t03-fail-i.pdf: remediated
+//     at PDF/A-1b and PDF/A-1a, its output kept xmpTPg:Fonts and failed 6.7.9
+//     t3 on veraPDF 1.30.2, where the strip passes it. The packet of
+//     PDF_A-2b__veraPDF_test_suite_6-6-2-3-1-t03-pass-b.pdf did the same
+//     with an xmpDM property at PDF/A-1b.
+func TestFixXMPSchema_StripsTheFontsXMPMetadataDeclared(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	doc, alloc := newTestDoc(t, fontsPDF())
+	errs, err := compliance.ValidatePDFA(ctx, doc, models.PDFA1b)
+	if err != nil {
+		t.Fatalf("ValidatePDFA: %v", err)
+	}
+	violations := toViolations(errs)
+	flagged := false
+	for _, v := range violations {
+		if objNum, prop, ok := parseXMPSchemaTarget(v.Context); ok && matchXMPSchema(v) && objNum == 0 && prop == (xmpSchemaProperty{xmpTPgNS, "Fonts"}) {
+			flagged = true
 		}
 	}
-	if len(got) != 3 {
-		t.Errorf("got %d declarations, want 3: %v", len(got), got)
+	if !flagged {
+		t.Fatalf("precondition: no 6.7.9 violation xmp-schema reads names xmpTPg:Fonts in the catalog packet; violations = %v", errs)
 	}
-	if got := xmpDeclaredProperties([]byte(componentPagePacket)); len(got) != 0 {
-		t.Errorf("a packet with no extension schema declares %v", got)
+
+	var schemaFixes []string
+	for _, name := range []string{"xmp-metadata", "xmp-schema"} {
+		f, matched := matchedBy(t, name, violations)
+		fixes, err := f.apply(ctx, alloc, doc, Options{}, matched, string(models.PDFA1b))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if name == "xmp-schema" {
+			schemaFixes = fixes
+		}
+	}
+
+	ref, ok := resolveFromAllocOrDoc(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: 1})["Metadata"].(ast.PdfIndirectRef)
+	if !ok {
+		t.Fatal("the live catalog has no indirect /Metadata")
+	}
+	stream, ok := liveStream(ctx, alloc, doc, ref)
+	if !ok {
+		t.Fatalf("object %d is no stream once the repairs apply", ref.ObjectNum)
+	}
+	packet, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		t.Fatalf("decoding the catalog packet: %v", err)
+	}
+	if !strings.Contains(string(packet), "<pdfaProperty:name>Fonts</pdfaProperty:name>") {
+		t.Fatalf("precondition: xmp-metadata declared no xmpTPg:Fonts, so nothing tempts xmp-schema to keep it:\n%s", packet)
+	}
+	if loc := findXMPProperty(packet, xmpTPgNS, "Fonts"); loc.Form != xmpPropertyNotFound {
+		t.Errorf("xmpTPg:Fonts survived in the catalog packet; xmp-schema fixes = %q; packet:\n%s", schemaFixes, packet)
+	}
+	if !containsFix(schemaFixes, "stripped 1 XMP schema-noncompliant propert(ies)") {
+		t.Errorf("xmp-schema fixes = %q, want the catalog strip reported", schemaFixes)
 	}
 }

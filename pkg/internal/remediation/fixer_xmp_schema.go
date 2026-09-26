@@ -1,9 +1,7 @@
 package remediation
 
 import (
-	"bytes"
 	"context"
-	"encoding/xml"
 	"fmt"
 	"maps"
 	"slices"
@@ -48,9 +46,14 @@ func matchXMPSchema(v compliance.Violation) bool {
 // the rewritten value undid that sync, so the output failed 6.7.3 again and
 // only a second remediation round restored it.
 //
-// A property an earlier fixer has declared since in an extension schema is
-// kept for the same reason (see [stripJudgedXMPProperties]): the declaration
-// already answers the finding, and the strip only lost the property.
+// A property an earlier fixer has only declared since, in an extension schema,
+// still holds the value the validator judged, and is stripped. A declaration
+// answers ISO 19005-1, 6.7.9 and ISO 19005-2/3, 6.6.2.3.1 only when the value
+// matches the value type it declares, and [fixXMP] can declare one the value
+// does not match: it declares an xmpTPg:Fonts whose items are structures as
+// "bag Text", which litho's validator accepts and veraPDF fails under 6.7.9
+// t3. Stripping the property repairs the finding whatever the declaration
+// says.
 //
 // A property a component metadata stream holds is stripped from that stream
 // (see [stripComponentXMPSchema]). Its violation names the stream as
@@ -75,19 +78,24 @@ func matchXMPSchema(v compliance.Violation) bool {
 //     synced properties no later round restored. veraPDF 1.30 reports the
 //     same failed rules on every PDF/A output that changes.
 //   - All corpora: 65 files carry a component packet with a 6.6.2.3.1
-//     violation at PDF/A-2b, 36 govdocs, 24 pdfjs and 5 pdfcpu. Of 516
-//     sampled files, those 65 among them, the PDF/A-2b remediation of 25 left
-//     145 such violations, default and aggressive alike, and now leaves none:
-//     15 of those outputs are now fully fixed.
-//   - All corpora: over the same remediations, the strip of 353 catalog
-//     properties at PDF/A-1b and 343 at PDF/A-2b, in 112 files, 60 of them
-//     govdocs, and of 1848 component properties, is skipped for the extension
-//     schema xmp-metadata declared, and no residual violation moves.
+//     violation at PDF/A-2b, 36 govdocs, 24 pdfjs and 5 pdfcpu, and so does
+//     litho pagegroup_2b.pdf. Of 517 sampled files, those 66 among them, the
+//     PDF/A-2b remediation of 26 left 148 such violations, default and
+//     aggressive alike, and now leaves none: 15 of those outputs are now fully
+//     fixed.
+//   - verapdf PDF_A-1b__veraPDF_test_suite_6-7-2-t03-fail-i.pdf: xmp-metadata
+//     declares its xmpTPg:Fonts, a bag of stFnt structures, as "bag Text".
+//     Keeping the declared property failed 6.7.9 t3 on veraPDF 1.30.2 at
+//     PDF/A-1b and PDF/A-1a, where the strip passes the output.
+//     PDF_A-2b__veraPDF_test_suite_6-6-2-3-1-t03-pass-b.pdf did the same at
+//     PDF/A-1b with an xmpDM property.
 //   - All corpora: over the PDF/A-1b, PDF/A-2b and PDF/UA-1 remediations,
-//     default and aggressive, of those 516 files, no residual violation rises.
-//     veraPDF 1.30 reports the same failed rules on every PDF/A-1b output
-//     that changes, and the same or fewer on every PDF/A-2b one: 23 files
-//     fail 6.6.2.3.1 fewer times in both modes, and 12 of them now pass.
+//     default and aggressive, of those 517 files, and the PDF/A-1a and
+//     PDF/A-1b remediations of the 2601 verapdf files, no residual violation
+//     rises and no fully fixed output is lost. veraPDF 1.30.2 reports the same
+//     failed rules on every PDF/A-1a and PDF/A-1b output that changes, and the
+//     same or fewer on every PDF/A-2b one: 24 files fail 6.6.2.3.1 fewer
+//     times in each mode, and 13 of them now pass.
 func fixXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, _ string) ([]string, error) {
 	targets := xmpSchemaTargets(violations)
 
@@ -245,21 +253,10 @@ func stripComponentXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, do
 // stripJudgedXMPProperties removes every occurrence of each of props from xmp
 // that still holds a value the validator judged in judged, and returns the new
 // packet with the number of properties it removed.
-//
-// A property an extension schema in xmp declares, when none in judged did, is
-// kept: an earlier fixer declared it since. [fixXMP] declares, with the value
-// type it is written in, every property no predefined schema of the part
-// defines, which answers ISO 19005-2/3, 6.6.2.3.1 and ISO 19005-1, 6.7.9 for
-// it as the strip would, and keeps the property.
 func stripJudgedXMPProperties(xmp, judged []byte, props []xmpSchemaProperty) ([]byte, int) {
-	declared := xmpDeclaredProperties(xmp)
-	judgedDeclared := xmpDeclaredProperties(judged)
 	stripped := 0
 	out := xmp
 	for _, prop := range props {
-		if declared[prop] && !judgedDeclared[prop] {
-			continue
-		}
 		read := xmpPropertyValues(judged, prop.nsURI, prop.localName)
 		// Loop to drop every occurrence; a single property may appear in
 		// more than one rdf:Description in pathological XMP. The first one
@@ -283,90 +280,6 @@ func stripJudgedXMPProperties(xmp, judged []byte, props []xmpSchemaProperty) ([]
 		}
 	}
 	return out, stripped
-}
-
-// xmpDeclaredProperties returns the properties the extension schemas of
-// packet declare: for each entry of pdfaExtension:schemas, its
-// pdfaSchema:namespaceURI paired with every pdfaProperty:name it lists (ISO
-// 19005-2, 6.6.2.3.2 and ISO 19005-1, 6.7.8). A field may be written as an
-// element or as an attribute. A packet that does not parse yields the entries
-// read before the error.
-func xmpDeclaredProperties(packet []byte) map[xmpSchemaProperty]bool {
-	declared := make(map[xmpSchemaProperty]bool)
-	if !bytes.Contains(packet, []byte(pdfaExtensionNS)) {
-		return declared
-	}
-	dec := xml.NewDecoder(bytes.NewReader(packet))
-	dec.Strict = false
-
-	var (
-		depth, schemasDepth = 0, -1
-		uri                 string
-		names               []string
-		field               string
-		text                strings.Builder
-	)
-	// The entries of pdfaExtension:schemas are the rdf:li two levels below it,
-	// inside its rdf:Bag.
-	flush := func() {
-		for _, name := range names {
-			if uri != "" && name != "" {
-				declared[xmpSchemaProperty{nsURI: uri, localName: name}] = true
-			}
-		}
-		uri, names = "", nil
-	}
-	for {
-		tok, err := dec.Token()
-		if err != nil {
-			flush()
-			return declared
-		}
-		switch t := tok.(type) {
-		case xml.StartElement:
-			depth++
-			if t.Name.Space == pdfaExtensionNS && t.Name.Local == "schemas" {
-				schemasDepth = depth
-			}
-			if schemasDepth < 0 {
-				continue
-			}
-			for _, a := range t.Attr {
-				switch {
-				case a.Name.Space == pdfaSchemaNS && a.Name.Local == "namespaceURI":
-					uri = strings.TrimSpace(a.Value)
-				case a.Name.Space == pdfaPropertyNS && a.Name.Local == "name":
-					names = append(names, strings.TrimSpace(a.Value))
-				}
-			}
-			field = ""
-			switch {
-			case t.Name.Space == pdfaSchemaNS && t.Name.Local == "namespaceURI",
-				t.Name.Space == pdfaPropertyNS && t.Name.Local == "name":
-				field = t.Name.Space + t.Name.Local
-				text.Reset()
-			}
-		case xml.CharData:
-			if field != "" {
-				text.Write(t)
-			}
-		case xml.EndElement:
-			switch field {
-			case pdfaSchemaNS + "namespaceURI":
-				uri = strings.TrimSpace(text.String())
-			case pdfaPropertyNS + "name":
-				names = append(names, strings.TrimSpace(text.String()))
-			}
-			field = ""
-			if schemasDepth > 0 && (depth == schemasDepth+2 || depth == schemasDepth) {
-				flush()
-			}
-			if depth == schemasDepth {
-				schemasDepth = -1
-			}
-			depth--
-		}
-	}
 }
 
 // judgedCatalogXMP returns the catalog XMP packet the validator read: the
