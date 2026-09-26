@@ -153,6 +153,7 @@ one deliberately rather than diffing it against a fresh build.
 | `exttypes_2b.pdf`      | PDF/A-2b     | Extension value types resolved per schema entry, not per packet  |
 | `extpredef_2b.pdf`     | PDF/A-2b     | Predefined properties, structures and XPath through declarations |
 | `extguards_2b.pdf`     | PDF/A-2b     | Extension-declared values veraPDF accepts, false-positive guards |
+| `formcycle_ua1.pdf`    | PDF/UA-1     | Forms whose resources list each other, under auto-tagging        |
 
 ### Must-not-fire controls
 
@@ -411,6 +412,7 @@ which are covered under [Known divergences](#known-divergences).
 | `fontleft_2b.pdf`      | 7    | 4    | 9    | 5    | 7    | 9    | 5    | 7    | 7   | 7    | 8    | 14   | 13   |
 | `forbidden_mix.pdf`    | 14   | 12   | 14   | 12   | 12   | 16   | 14   | 14   | 14  | 13   | 13   | 11   | 9    |
 | `formcs_2b.pdf`        | 6    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 7    | 7    |
+| `formcycle_ua1.pdf`    | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
 | `formmedia_ua1.pdf`    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 7   | 7    | 8    | 7    | 5    |
 | `formstruct_ua2.pdf`   | 4    | 4    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 7    | 7    |
 | `glyphs_2b.pdf`        | 7    | 4    | 8    | 5    | 6    | 8    | 5    | 6    | 6   | 6    | 7    | 10   | 10   |
@@ -4020,6 +4022,60 @@ GPSCoordinate, so the fixture fires `6.7.8/9` three times, `6.7.9/2` twice and
 `6.7.9/3` three times there, on both. All thirteen cells return the same rule
 set on both.
 
+### `formcycle_ua1.pdf`
+
+Remediation at PDF/UA-1, PDF/UA-2 and the level-A PDF/A profiles tags an
+untagged file, and the tagging marks every region of page content that is not a
+structure leaf as an `/Artifact`, except a region drawing a Form XObject that
+paints text (ISO 14289-1, 7.1). It judges a form by the XObjects its resources
+list, and resources can list each other back: ISO 32000-1, 8.10.1 forbids a form
+that invokes itself, not one that lists a form listing it. The scan walked the
+forms depth first and cached a "no text" for a form whose search had stopped at
+a form still on its path, so which forms it judged decorative followed Go's map
+order. One page in the seven corpora lists forms that list each other back, page
+1 of pdfjs issue19800.pdf, and it names the same text-painting forms either way,
+so no count reached this.
+
+One untagged page draws three forms between three lines of its own text, in the
+conforming embedded TrueType of `ttcmap_2b.pdf`:
+
+| Page name | Form                                              | Region after tagging |
+| --------- | ------------------------------------------------- | -------------------- |
+| `/X1`     | A: lists B and C and draws C; listed, never drawn | none                 |
+| `/X2`     | B: lists and draws A, so it draws C's text        | left unmarked        |
+| `/X3`     | D: draws E, which shows text                      | left unmarked        |
+| `/X4`     | F: a rectangle                                    | `/Artifact`          |
+
+When the page's map order put `/X1` before `/X2`, and A's put B before C, the
+scan met B from A, cached "no text" for it and swept `/X2` into an `/Artifact`.
+The name C shows then stopped extracting, and the integrity probe refused the
+remediation. Measured on veraPDF 1.30.2 and litho, eight runs of each of the
+eight profiles `manifest.json` lists, default and aggressive:
+
+| Profile  | Runs refused before the fix       | Rules left after it, litho / veraPDF |
+| -------- | --------------------------------- | ------------------------------------ |
+| PDF/A-2a | 6 of 8, both modes                | none / none                          |
+| PDF/UA-1 | 6 of 8, both modes                | `7.1/3`: 1 / 2                       |
+| PDF/UA-2 | 6 of 8 default, 8 of 8 aggressive | `8.2.2/1`: 1 / 2                     |
+
+After the fix every run of every profile writes the same bytes. PDF/A-1b, 2b,
+2u, 3b and 4 do not tag, write the same bytes before and after, and leave no
+rule on either tool. The rule left at PDF/UA is honest: `/X2` and `/X3` draw
+real text the classifier does not tag, and leaving their regions unmarked keeps
+it readable rather than hiding it inside an `/Artifact`. litho reports the page
+once, and veraPDF each of the two regions.
+
+Before remediation the file agrees with veraPDF in all thirteen cells:
+
+| Rule at PDF/UA-1               | veraPDF | litho |
+| ------------------------------ | ------- | ----- |
+| `6.2/1` no `/MarkInfo`         | 1       | 1     |
+| `7.1/3` unmarked content       | 6       | 1     |
+| `7.1/8` no metadata stream     | 1       | 1     |
+| `7.1/10` no `/DisplayDocTitle` | 1       | 1     |
+| `7.1/11` no structure tree     | 1       | 1     |
+| `7.2/34` no natural language   | 5       | 1     |
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
@@ -4049,6 +4105,13 @@ remediated output with both tools, and their `disagreement` metric sums, over
 the cells, the difference between the numbers of rules each reports. It reads 0
 on this corpus in both modes, so any cell that moves it is a regression or a
 divergence to cover under Known divergences.
+a rule class leaves `matched` at 744 and moves only `ruleset_mismatch`. Four of
+the five exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1
+and PDF/UA-2 and `usecmap_2u` at PDF/A-2a and PDF/UA-2, so the metric reads 4 on
+this corpus, and the text scoreboard names the rules only one side reports. The
+PDF/A-3a cell of `usecmap_2u` is outside the manifest. A fifth cell in the
+runner is a regression, or a divergence to cover under Known divergences and
+mark `*`.
 
 The thirteen-level figures are measured by hand against a live veraPDF. The
 thirteen flavours are `1a 1b 2a 2b 2u 3a 3b 3u 4 4e 4f ua1 ua2` on the veraPDF
