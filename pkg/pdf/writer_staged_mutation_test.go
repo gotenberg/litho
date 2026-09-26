@@ -3,6 +3,7 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -283,5 +284,139 @@ func TestWriterPageTreeEditsCompose(t *testing.T) {
 				t.Errorf("the output pages show %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestWriterRedactAfterAnXObjectStampRedacts pins that a redaction queued after
+// an image or PDF stamp redacts the page, as it does on the stamped file.
+//
+// The stamp draws an XObject it queued at a new object number, and the
+// redaction looked every XObject the page invokes up in the source document
+// alone. The stamp's was not there, so the redaction refused the page as
+// invoking content it could not follow, whatever the region covered.
+func TestWriterRedactAfterAnXObjectStampRedacts(t *testing.T) {
+	t.Parallel()
+
+	pngData := buildPNG(t, false)
+	for _, tc := range []struct {
+		name  string
+		stamp func(ctx context.Context, w *Writer) error
+	}{
+		{
+			name: "an image stamp",
+			stamp: func(_ context.Context, w *Writer) error {
+				return w.StampImage(ImageStamp{Data: pngData, MimeType: "image/png", X: 300, Y: 300, Width: 20})
+			},
+		},
+		{
+			name: "a PDF stamp",
+			stamp: func(ctx context.Context, w *Writer) error {
+				src := textPagePDF("Stamp")
+				r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
+				if err != nil {
+					return err
+				}
+				t.Cleanup(func() {
+					if err := r.Close(); err != nil {
+						t.Errorf("Reader.Close: %v", err)
+					}
+				})
+				return w.StampPDF(PDFStamp{Source: r, Page: 1, X: 300, Y: 300, Scale: 0.1})
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			data := signablePDF()
+			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer r.Close()
+			w := NewWriter(r)
+			defer w.Close()
+			if err := tc.stamp(ctx, w); err != nil {
+				t.Fatalf("stamping: %v", err)
+			}
+			report, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 100, 720}}})
+			if err != nil {
+				t.Fatalf("Redact: %v", err)
+			}
+			if !slices.Contains(report.RemovedText, "page") {
+				t.Errorf("the redaction removed %q, want the page's text", report.RemovedText)
+			}
+			if text := strings.Join(pageTexts(t, writeAndReopen(t, w)), " "); strings.Contains(text, "page") {
+				t.Errorf("the output page still shows the redacted text: %q", text)
+			}
+		})
+	}
+}
+
+// TestWriterRedactOverAPDFStampRefusesAsOnTheStampedFile pins that a region
+// covering the text a PDF stamp queued earlier draws is refused, as it is on
+// the stamped file: the text lives in the stamp's form XObject, whose stream a
+// redaction cannot edit (see [ErrRedactionRefused]).
+//
+// The text extraction the redaction runs looked the form up in the source
+// document alone and did not find it, so it saw no text in the region and
+// reported success over a page still showing it.
+func TestWriterRedactOverAPDFStampRefusesAsOnTheStampedFile(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	stampAndRedact := func(data []byte, stamp bool) error {
+		r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		defer r.Close()
+		w := NewWriter(r)
+		defer w.Close()
+		if stamp {
+			src := textPagePDF("Stamp")
+			sr, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer sr.Close()
+			// The stamp page draws its text at (100, 700), which the
+			// translation moves to (100, 400).
+			if err := w.StampPDF(PDFStamp{Source: sr, Page: 1, Y: -300}); err != nil {
+				t.Fatalf("StampPDF: %v", err)
+			}
+		}
+		_, err = w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{90, 390, 200, 420}}})
+		return err
+	}
+
+	// The stamped file, written, then redacted on its own.
+	r, err := Open(ctx, bytes.NewReader(signablePDF()), int64(len(signablePDF())))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	w := NewWriter(r)
+	defer w.Close()
+	src := textPagePDF("Stamp")
+	sr, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer sr.Close()
+	if err := w.StampPDF(PDFStamp{Source: sr, Page: 1, Y: -300}); err != nil {
+		t.Fatalf("StampPDF: %v", err)
+	}
+	var stamped bytes.Buffer
+	if err := w.WriteTo(ctx, &stamped); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	if err := stampAndRedact(stamped.Bytes(), false); !errors.Is(err, ErrRedactionRefused) {
+		t.Fatalf("redacting the stamped file returned %v, want ErrRedactionRefused, so the test proves nothing", err)
+	}
+
+	if err := stampAndRedact(signablePDF(), true); !errors.Is(err, ErrRedactionRefused) {
+		t.Errorf("redacting after the stamp in one Writer returned %v, want ErrRedactionRefused as on the stamped file", err)
 	}
 }

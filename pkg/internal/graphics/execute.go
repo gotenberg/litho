@@ -332,7 +332,7 @@ func (m *Machine) resolveXObject(ctx context.Context, name ast.PdfName) (ast.Pdf
 	if !ok {
 		return ast.PdfStream{}, 0, false
 	}
-	xobjDict, err := document.ResolveDict(ctx, m.Doc, xobjObj)
+	xobjDict, err := document.ResolveDict(ctx, m.Doc, m.StagedObject(xobjObj))
 	if err != nil || xobjDict == nil {
 		return ast.PdfStream{}, 0, false
 	}
@@ -340,7 +340,7 @@ func (m *Machine) resolveXObject(ctx context.Context, name ast.PdfName) (ast.Pdf
 	if !ok {
 		return ast.PdfStream{}, 0, false
 	}
-	stream, err := document.ResolveStream(ctx, m.Doc, target)
+	stream, err := document.ResolveStream(ctx, m.Doc, m.StagedObject(target))
 	if err != nil || stream.Dict == nil {
 		return ast.PdfStream{}, 0, false
 	}
@@ -349,6 +349,18 @@ func (m *Machine) resolveXObject(ctx context.Context, name ast.PdfName) (ast.Pdf
 		objNum = ref.ObjectNum
 	}
 	return stream, objNum, true
+}
+
+// StagedObject returns the object [Machine.Staged] holds at obj's number when
+// obj is a reference to one, and obj otherwise. A walk that follows XObjects
+// alongside the machine resolves through it, so both read the same content.
+func (m *Machine) StagedObject(obj ast.PdfObject) ast.PdfObject {
+	if ref, isRef := obj.(ast.PdfIndirectRef); isRef {
+		if pending, ok := m.Staged[ref.ObjectNum]; ok {
+			return pending
+		}
+	}
+	return obj
 }
 
 // imageBoxFromCTM maps the unit square onto the page through ctm and returns its

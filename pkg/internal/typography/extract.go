@@ -527,7 +527,10 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	if !ok {
 		return nil
 	}
-	xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
+	// The machine's staged objects come first: a caller reading content as an
+	// edit staged it, a redaction after a PDF stamp, sets them, and the stamp's
+	// form exists nowhere else.
+	xobjDict, err := document.ResolveDict(ctx, doc, machine.StagedObject(xobjObj))
 	if err != nil {
 		doc.Logger.Debug("resolving XObject dict for Do", slog.Any("err", err))
 	}
@@ -548,7 +551,7 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 		}
 	}
 
-	stream, err := document.ResolveStream(ctx, doc, targetObj)
+	stream, err := document.ResolveStream(ctx, doc, machine.StagedObject(targetObj))
 	if err != nil {
 		doc.Logger.Debug("resolving Form XObject stream", slog.Any("err", err))
 	}
@@ -575,7 +578,7 @@ func handleDoOp(ctx context.Context, doc *document.Document, machine *graphics.M
 	// Determine the Form's own /Resources; inherit the parent's on absence.
 	formRes := resources
 	if resObj, ok := stream.Dict["Resources"]; ok {
-		resDict, err := document.ResolveDict(ctx, doc, resObj)
+		resDict, err := document.ResolveDict(ctx, doc, machine.StagedObject(resObj))
 		if err != nil {
 			doc.Logger.Debug("resolving Form XObject resources", slog.Any("err", err))
 		}

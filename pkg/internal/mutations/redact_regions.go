@@ -222,6 +222,10 @@ func redactPageRegions(
 	// A removed show operator takes its advance with it, and later text on the
 	// same line is positioned by that advance. See removedShowReplacement.
 	machine.RecordShowAdvances = true
+	// An XObject an earlier stage drew, a stamp's, is queued at a number only
+	// alloc holds: resolved against the document alone it was unresolved, and
+	// the page was refused below.
+	machine.Staged = alloc.Pending()
 
 	elements, origins, fontRefs, err := typography.ExtractElementsWithAttribution(ctx, doc, machine, page, ops)
 	if err != nil {

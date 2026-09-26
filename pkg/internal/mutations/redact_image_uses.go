@@ -290,6 +290,8 @@ func placementCovers(
 	machine.Resources = page.Resources
 	machine.IgnoreOCVisibility = true
 	machine.RecordImageBoxes = true
+	// The page as staged, as [RedactPageRegions] reads it.
+	machine.Staged = alloc.Pending()
 	if err := machine.Execute(ctx, ops); err != nil {
 		return nil, fmt.Errorf("%w: running page content: %w", ErrImageShared, err)
 	}

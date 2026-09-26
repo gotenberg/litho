@@ -78,6 +78,13 @@ type Machine struct {
 	CurrentPath        BoundingBox // Tracks the current active path bounds
 	Doc                *document.Document
 	Resources          ast.PdfDict // Current page resources (for resolving Pattern names)
+	// Staged holds objects an edit has queued for writing, keyed by object
+	// number, and the machine prefers them to the document's when it resolves
+	// an XObject. A caller reading content as earlier edits staged it sets it:
+	// a stamp queues the XObject it draws at a number the document does not
+	// define, and resolving that against the document alone counted the Do as
+	// unresolved. Nil reads the document alone.
+	Staged map[int]ast.PdfObject
 	// Chunk is a monotonically increasing counter bumped by text
 	// operators that start or reposition a new show-text chain
 	// (BT, ET, Td, TD, Tm, Tf, T*). Glyphs produced while it is
