@@ -138,6 +138,7 @@ one deliberately rather than diffing it against a fresh build.
 | `offlimits_1b.pdf`     | PDF/A-1b     | Implementation limits in streams drawn with colour operators off |
 | `xrefstm_2b.pdf`       | PDF/A-2b     | The trailer entries of a cross-reference stream, and an update's |
 | `typedreads_1b.pdf`    | PDF/A-1b     | Values veraPDF reads again through typed objects of its model    |
+| `fontcopies_2b.pdf`    | PDF/A-2b     | Fonts written directly, judged per copy, and CIDs past a program |
 
 ### Must-not-fire controls
 
@@ -325,6 +326,8 @@ violation but is exempt, so a firing is a false positive.
 | `offlimits_1b`                            | Pages 11 to 13: `99999999999 g` drawn with colour operators off        | ISO 19005-1, 6.1.12 t1       |
 | `typedreads_1b`                           | Every `/Lang` an odd hex string decoding to a well-formed tag          | ISO 19005-1, 6.8.4           |
 | `typedreads_1b`                           | The outline dictionary's `/Title`, never read again as an item's       | ISO 32000-1, 12.3.3          |
+| `fontcopies_2b`                           | Two pages sharing an indirect resource or `/Font` dictionary           | one font per dictionary      |
+| `fontcopies_2b`                           | `M1`: a missing CID whose `/W` entry is glyph 0's advance              | ISO 19005-2, 6.2.11.5 t1     |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -368,6 +371,7 @@ which are covered under [Known divergences](#known-divergences).
 | `fenote_ua2.pdf`       | 4    | 3    | 5    | 4    | 4    | 5    | 4    | 4    | 3   | 3    | 4    | 5    | 6    |
 | `filestruct_1b.pdf`    | 15   | 13   | 12   | 10   | 10   | 12   | 10   | 10   | 13  | 13   | 14   | 10   | 8    |
 | `fontclaims_2b.pdf`    | 9    | 6    | 9    | 6    | 7    | 9    | 6    | 7    | 7   | 7    | 8    | 11   | 11   |
+| `fontcopies_2b.pdf`    | 14   | 11   | 13   | 10   | 11   | 13   | 10   | 11   | 11  | 11   | 12   | 13   | 13   |
 | `fontdict_2b.pdf`      | 9    | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 8   | 8    | 9    | 7    | 7    |
 | `fontkeys_1b.pdf`      | 13   | 10   | 13   | 10   | 11   | 13   | 10   | 11   | 11  | 11   | 12   | 8    | 8    |
 | `fontleft_2b.pdf`      | 7    | 4    | 9    | 5    | 7    | 9    | 5    | 7    | 7   | 7    | 8    | 14   | 13   |
@@ -1690,6 +1694,20 @@ reports. veraPDF builds no `CosIndirect` for the scalar, so its
 right and veraPDF under-reports, the same way it drops a `/P`-less structure
 element under `8.2.1/2`. `pdfjs/issue1045.pdf`, `bug1011159.pdf` and
 `issue3566.pdf` all carry the construct.
+
+**`6.3.5/3` at PDF/A-1b, a rendered CID past the program under a `/CIDSet`.**
+litho reports it on `fontcopies_2b.pdf` remediated at PDF/A-1b, in both modes,
+and veraPDF does not; the fixture itself agrees, since its subset CIDFont has no
+`/CIDSet` at all, which both report. The remediation writes a `/CIDSet` naming
+the CIDs the three-glyph program holds, and `C` renders CID 5, which the
+program does not hold. veraPDF asks the `/CIDSet` for the CIDs present in the
+program, and ISO 19005-1, 6.3.5 reads the same way. litho's rendered-CID check,
+`checkCIDSetCompletenessTrueTypeRendered` in
+`pkg/internal/compliance/fonts_coverage.go`, exempts a rendered CID whose glyph
+has no outline but not one whose GID lies past the program, so it asks the
+`/CIDSet` for CID 5. The same `/CIDSet` planted by hand on the source draws
+`6.3.5/3` from litho alone. litho has the gap. Not planted, since it would add
+a disagreeing cell rather than coverage.
 
 ### Instance counts, which the corpus does not pin
 
@@ -3497,6 +3515,57 @@ object and once through the name tree, `6.1.11/1` here and `6.8`, `6.9` at the
 later parts, where litho judges it once (see
 [Instance counts](#instance-counts-which-the-corpus-does-not-pin)).
 
+### `fontcopies_2b.pdf`
+
+A font dictionary written directly in a `/Font` resource dictionary has no
+object number, and veraPDF tells its copies apart by the dictionary that writes
+each: every such dictionary is one font, judged once however many pages or
+forms reach it. Twelve corpus files write a font directly, and judging each
+copy moves no count on any of them. Three fonts are written directly, an
+unembedded Helvetica (`U`), a Type 1 subset whose `/Widths` say 100 where its
+CFF says 600 (`W`), and a Type0 over a shared three-glyph CIDFontType2 showing
+CID 5 (`C`), in nine layouts over 13 copies: a copy on each of two pages, two
+pages sharing an indirect resource dictionary, two sharing an indirect `/Font`
+dictionary, two inheriting from their node, an indirect font and then a copy
+under the same name, two names on one page, one form two pages paint, two
+forms with a copy each, and two forms sharing resources.
+
+A CID a TrueType CIDFont's program holds no glyph for is weighed at glyph 0's
+advance, so it fails the width rule wherever the declared width differs, beside
+the presence and `.notdef` rules. `fontleft_2b.pdf` shows such CIDs with `/DW`
+at that advance, where the width rule stays silent, and pdfjs
+Brotli-Prototype-FileA.pdf shows one veraPDF cannot open. Seven indirect Type0
+fonts, `M1` to `M7`, move the declared width and the map: a `/W` at glyph 0's
+advance (the control), a `/W` off it, no `/DW`, no `/CIDToGIDMap`, the first CID
+past the program, a map stream sending CID 1 past it, and a map stream ending
+before the CID. Last, two unembedded Type0 fonts share one descendant object
+declaring Adobe-Korea1 under UniJIS-UCS2-H, and two pages write one Type0 font
+with its descendant written in it: the embedding rule counts descendant
+objects, the `/CIDSystemInfo` rule composite fonts.
+
+| Rule at PDF/A-2b                | veraPDF | litho |
+| ------------------------------- | ------- | ----- |
+| `6.2.2/2` inherited name        | 2       | 2     |
+| `6.2.4.3/4` DeviceGray          | 62      | 62    |
+| `6.2.11.2/1` font `/Type`       | 7       | 7     |
+| `6.2.11.3.1/1` `/CIDSystemInfo` | 4       | 4     |
+| `6.2.11.3.2/1` `/CIDToGIDMap`   | 1       | 1     |
+| `6.2.11.4.1/1` not embedded     | 16      | 16    |
+| `6.2.11.4.1/2` glyph missing    | 20      | 20    |
+| `6.2.11.5/1` glyph width        | 45      | 45    |
+| `6.2.11.8/1` `.notdef`          | 20      | 20    |
+| `6.6.2.1/1` no metadata         | 1       | 1     |
+
+`U` answers 13 times and the Korean descendants 3, `C` answers presence,
+`.notdef` and width 13 times each, `W` width 26 times, and `M1` to `M7` add 7,
+7 and 6. The Korean descendants carry no `/Type`, as in the measurement that
+fixed their counts, which `6.2.11.2/1` answers once per descendant and once
+more per composite font read through it.
+
+The two tools return the same rule set in all thirteen cells, and the same count
+for every rule at every PDF/A level; at the PDF/UA levels veraPDF counts the
+untagged-content rules once per text show.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
@@ -3506,7 +3575,7 @@ and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1061 of the 1066 cells. The five
+fixtures exist to protect, and it holds in 1074 of the 1079 cells. The five
 exceptions, two on `complex_ua2` and three on `inlineimage_2b`, are marked `*`
 in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
