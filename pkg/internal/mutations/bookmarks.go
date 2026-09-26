@@ -179,3 +179,106 @@ func buildOutlineItems(alloc *writer.ObjAllocator, bookmarks []models.Bookmark, 
 
 	return refs
 }
+
+// StagedBookmarks returns the outline an earlier stage queued as bookmarks,
+// numbering pages as pages does, and reports false when no stage queued one:
+// the caller then reads the document's own outline.
+//
+// A stage that sets the outline ([SetBookmarks], a generated outline) queues a
+// new tree at new object numbers, and one that drops it queues a catalog
+// without /Outlines. Reading the document's outline instead, to add generated
+// bookmarks to it, wrote over the staged one. An item whose destination names
+// no page of pages keeps its title and children and gets page 0.
+func StagedBookmarks(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pages []*document.Page) ([]models.Bookmark, bool) {
+	catalogRef, ok := CatalogRef(ctx, doc)
+	if !ok {
+		return nil, false
+	}
+	catalog, ok := alloc.Pending()[catalogRef.ObjectNum].(ast.PdfDict)
+	if !ok {
+		return nil, false
+	}
+	outlinesObj, ok := catalog["Outlines"]
+	if !ok {
+		return nil, true
+	}
+	outlinesRef, ok := outlinesObj.(ast.PdfIndirectRef)
+	if !ok {
+		return nil, false
+	}
+	root, ok := alloc.Pending()[outlinesRef.ObjectNum].(ast.PdfDict)
+	if !ok {
+		return nil, false
+	}
+	pageNums := make(map[int]int, len(pages))
+	for i, page := range pages {
+		pageNums[page.Ref.ObjectNum] = i + 1
+	}
+	return stagedOutlineItems(ctx, alloc, doc, root["First"], pageNums, make(map[int]bool), 0), true
+}
+
+// stagedOutlineItems reads one sibling chain of outline items, and their
+// children, from alloc first. It walks as [scrubOutlineItems] does: an item
+// reached twice ends its chain, and the descent stops at [maxOutlineDepth].
+func stagedOutlineItems(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, first ast.PdfObject, pageNums map[int]int, visited map[int]bool, depth int) []models.Bookmark {
+	if depth > maxOutlineDepth {
+		return nil
+	}
+	var out []models.Bookmark
+	for current := first; current != nil; {
+		if ctx.Err() != nil {
+			return out
+		}
+		ref, isRef := current.(ast.PdfIndirectRef)
+		if !isRef || visited[ref.ObjectNum] {
+			return out
+		}
+		visited[ref.ObjectNum] = true
+		item, err := resolveDictAllocFirst(ctx, alloc, doc, ref)
+		if err != nil || item == nil {
+			return out
+		}
+		var title string
+		if resolved, err := resolveAllocFirst(ctx, alloc, doc, item["Title"]); err == nil {
+			if s, isStr := resolved.(ast.PdfString); isStr {
+				title = document.DecodePdfString(s)
+			}
+		}
+		out = append(out, models.Bookmark{
+			Title:      title,
+			PageNumber: stagedOutlinePage(ctx, alloc, doc, item, pageNums),
+			Children:   stagedOutlineItems(ctx, alloc, doc, item["First"], pageNums, visited, depth+1),
+		})
+		current = item["Next"]
+	}
+	return out
+}
+
+// stagedOutlinePage returns the page number an outline item's explicit
+// destination names, through /Dest or a GoTo action's /D (ISO 32000-1, 12.3.3
+// and 12.6.4.2), or 0 when it names none of pageNums.
+func stagedOutlinePage(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, item ast.PdfDict, pageNums map[int]int) int {
+	dest, ok := item["Dest"]
+	if !ok {
+		actionObj, hasAction := item["A"]
+		if !hasAction {
+			return 0
+		}
+		action, err := resolveDictAllocFirst(ctx, alloc, doc, actionObj)
+		if err != nil || action == nil {
+			return 0
+		}
+		if s, _ := action["S"].(ast.PdfName); s != "GoTo" {
+			return 0
+		}
+		dest = action["D"]
+	}
+	arr, err := resolveArrayAllocFirst(ctx, alloc, doc, dest)
+	if err != nil || len(arr) == 0 {
+		return 0
+	}
+	if ref, isRef := arr[0].(ast.PdfIndirectRef); isRef {
+		return pageNums[ref.ObjectNum]
+	}
+	return 0
+}

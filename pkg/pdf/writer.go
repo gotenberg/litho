@@ -1033,6 +1033,11 @@ const (
 // mutation that replaces the outline with the generated bookmark tree.
 // The merge mode controls whether existing bookmarks are preserved. The
 // mutation is queued and applied when [Writer.WriteTo] is called.
+//
+// The existing bookmarks are the outline an earlier edit on the Writer set,
+// when one did, and the Reader's otherwise. The headings are detected in the
+// Reader's pages, as [Reader.GenerateBookmarks] detects them: a page inserted,
+// or content stamped or redacted on the same Writer, is not read.
 func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode BookmarkMergeMode) {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
@@ -1044,12 +1049,22 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 				return nil
 			}
 
+			resolvedPages, err := w.reader.resolvePages(ctx)
+			if err != nil {
+				return fmt.Errorf("resolving pages for bookmarks: %w", err)
+			}
+
 			final := generated
 			switch mode {
 			case BookmarkReplace:
 				// nothing to merge
 			case BookmarkPrepend, BookmarkAppend:
-				existing, err := w.reader.Bookmarks(ctx)
+				// The outline an earlier edit queued is the existing one, and
+				// reading the Reader's instead wrote over it.
+				existing, staged := mutations.StagedBookmarks(ctx, alloc, doc, resolvedPages)
+				if !staged {
+					existing, err = w.reader.Bookmarks(ctx)
+				}
 				if err == nil && len(existing) > 0 {
 					if mode == BookmarkPrepend {
 						merged := make([]models.Bookmark, 0, len(generated)+len(existing))
@@ -1065,10 +1080,6 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 				}
 			}
 
-			resolvedPages, err := w.reader.resolvePages(ctx)
-			if err != nil {
-				return fmt.Errorf("resolving pages for bookmarks: %w", err)
-			}
 			return mutations.SetBookmarks(ctx, alloc, doc, resolvedPages, final)
 		},
 	})

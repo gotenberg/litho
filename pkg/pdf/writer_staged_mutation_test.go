@@ -462,3 +462,49 @@ func TestWriterRedactAfterBookmarksScrubsTheirTitles(t *testing.T) {
 		t.Errorf("the bookmark title %q still quotes the redacted text", bookmarks[0].Title)
 	}
 }
+
+// TestWriterGeneratedBookmarksKeepTheStagedOutline pins that bookmarks generated
+// in the append and prepend modes join the outline an earlier edit on the
+// Writer set, as they join the outline of the file carrying it.
+//
+// The modes read the existing outline from the Reader's document, which the
+// earlier edit had not touched: it queued its own outline, so the generated
+// bookmarks replaced it.
+func TestWriterGeneratedBookmarksKeepTheStagedOutline(t *testing.T) {
+	t.Parallel()
+
+	for name, mode := range map[string]BookmarkMergeMode{"append": BookmarkAppend, "prepend": BookmarkPrepend} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			data := headingPDF()
+			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer r.Close()
+			w := NewWriter(r)
+			defer w.Close()
+			w.SetBookmarks([]models.Bookmark{{Title: "Set earlier", PageNumber: 2, Children: []models.Bookmark{{Title: "Child", PageNumber: 1}}}})
+			w.GenerateBookmarks(BookmarkGenerationOptions{}, mode)
+
+			bookmarks, err := writeAndReopen(t, w).Bookmarks(ctx)
+			if err != nil {
+				t.Fatalf("Bookmarks: %v", err)
+			}
+			if len(bookmarks) < 2 {
+				t.Fatalf("the output carries %d bookmarks, want the one set and the generated ones", len(bookmarks))
+			}
+			set := bookmarks[0]
+			if mode == BookmarkPrepend {
+				set = bookmarks[len(bookmarks)-1]
+			}
+			want := models.Bookmark{Title: "Set earlier", PageNumber: 2, Children: []models.Bookmark{{Title: "Child", PageNumber: 1}}}
+			if set.Title != want.Title || set.PageNumber != want.PageNumber || len(set.Children) != 1 ||
+				set.Children[0].Title != "Child" || set.Children[0].PageNumber != 1 {
+				t.Errorf("the outline holds %+v where the bookmark set earlier belongs, want %+v", set, want)
+			}
+		})
+	}
+}
