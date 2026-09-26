@@ -653,6 +653,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 				UserPassword:  *userPw,
 				OwnerPassword: *ownerPw,
 				Algorithm:     a,
+				Permissions:   allPermissions,
 			})
 			return nil
 		})

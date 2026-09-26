@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 // TestPipe_SplitStageSelectsThePageRange pins semantics that read backwards
@@ -60,6 +64,56 @@ func TestPipe_EncryptStageProducesAnEncryptedDocument(t *testing.T) {
 	}
 	if opensWithoutAPassword(t, out) {
 		t.Error("the encrypt stage produced a document that opens with no password")
+	}
+}
+
+// TestPipe_EncryptStageGrantsWhatTheEncryptCommandGrants pins the permissions
+// the encrypt stage writes against those of the encrypt command, which grants
+// every one (-1).
+//
+// The stage left [pdf.EncryptConfig.Permissions] at its zero value, so the P
+// key of its output was 0: every permission denied, printing and copying
+// included, and with them the extraction for accessibility that ISO 14289-1,
+// 7.16 requires of an encrypted PDF/UA-1 file, so `pipe f encrypt ...
+// remediate -profile PDF/UA-1` wrote an output that fails the profile it was
+// remediated to.
+func TestPipe_EncryptStageGrantsWhatTheEncryptCommandGrants(t *testing.T) {
+	ctx := context.Background()
+	src := onePageTempPDF(t)
+	const password = "s3cret"
+	command := encryptTempPDF(t, src, password)
+	piped := filepath.Join(t.TempDir(), "piped.pdf")
+	if rc, errOut := runPipeArgs(t, []string{
+		"pipe", src, "encrypt", "-user-password", password, "-o", piped,
+	}); rc != exitOK {
+		t.Fatalf("pipe encrypt: exit %d, stderr: %s", rc, errOut)
+	}
+
+	open := func(path string) *pdf.Reader {
+		t.Helper()
+		r, err := pdf.OpenFile(ctx, path, pdf.WithPassword(password))
+		if err != nil {
+			t.Fatalf("opening %s: %v", path, err)
+		}
+		t.Cleanup(func() { _ = r.Close() })
+		if !r.IsEncrypted() {
+			t.Fatalf("%s is not encrypted", path)
+		}
+		return r
+	}
+	want, got := open(command).Permissions(), open(piped).Permissions()
+	if got != want {
+		t.Errorf("the encrypt stage grants %+v, the encrypt command %+v", got, want)
+	}
+
+	violations, err := open(piped).ValidatePDFUAReport(ctx, models.PDFUA1)
+	if err != nil {
+		t.Fatalf("ValidatePDFUAReport: %v", err)
+	}
+	for _, v := range violations {
+		if v.Clause == "7.16" {
+			t.Errorf("the encrypt stage bars extraction for accessibility: %s", v.Context)
+		}
 	}
 }
 

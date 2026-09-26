@@ -15,6 +15,13 @@ var encryptAlgorithms = map[string]pdf.EncryptAlgorithm{
 	"aes256":  pdf.EncryptAES256,
 }
 
+// allPermissions is the P key every encryption the CLI writes carries: every
+// permission granted (ISO 32000-1, 7.6.3.2, Table 22). The CLI takes no
+// permission flags, so a password protects the document from being opened,
+// not from being printed, copied or read by assistive technology, which
+// ISO 14289-1, 7.16 requires an encrypted PDF/UA-1 file to allow.
+const allPermissions int32 = -1
+
 // encryptWriteOptions builds the write options that encrypt a command's
 // output, or none when no password was supplied. The bool reports whether the
 // flags were usable: an unknown algorithm is a usage error, not a silent
@@ -38,7 +45,7 @@ func encryptWriteOptions(userPwd, ownerPwd, algorithm string, stderr io.Writer) 
 		UserPassword:  userPwd,
 		OwnerPassword: ownerPwd,
 		Algorithm:     algo,
-		Permissions:   -1,
+		Permissions:   allPermissions,
 	})}, true
 }
 
@@ -163,7 +170,7 @@ func runEncrypt(ctx context.Context, args []string, _stdout, stderr io.Writer) i
 		UserPassword:  *userPwd,
 		OwnerPassword: *ownerPwd,
 		Algorithm:     algo,
-		Permissions:   -1,
+		Permissions:   allPermissions,
 	})
 
 	dst, closeDst, err := createOutput(*output)
