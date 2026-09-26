@@ -261,14 +261,12 @@ func xmpInfoEntryValue(ctx context.Context, doc *document.Document, infoDict ast
 	case nil, ast.PdfNull:
 		return xmpInfoEntry{}
 	case ast.PdfString:
-		text := document.DecodePdfString(v)
-		// A text entry holding a control character equals no XMP value: veraPDF
-		// reads a byte PDFDocEncoding leaves undefined as the control character
-		// it is (where DecodePdfString drops it), and XMPCore reads a control
-		// character in a packet, raw or referenced, as a space (see
-		// [xmpFixControlChars]). Dates are left to their own comparison.
-		if key != "CreationDate" && key != "ModDate" &&
-			(document.ContainsUndefinedPDFDocBytes(v) || strings.ContainsFunc(text, func(r rune) bool { return xmpIsControlChar(int(r)) })) {
+		// Dates are left to their own comparison.
+		if key == "CreationDate" || key == "ModDate" {
+			return xmpInfoEntry{present: true, text: document.DecodePdfString(v), comparable: true, isString: true}
+		}
+		text, control := XMPInfoText(v)
+		if control {
 			return xmpInfoEntry{present: true, text: text + " (holds a control character)", isString: true}
 		}
 		return xmpInfoEntry{present: true, text: text, comparable: true, isString: true}
@@ -289,6 +287,36 @@ func xmpInfoEntryValue(ctx context.Context, doc *document.Document, infoDict ast
 	default:
 		return xmpInfoEntry{present: true, text: fmt.Sprintf("(%T)", resolved)}
 	}
+}
+
+// XMPInfoText returns the text a document information text string s holds as
+// veraPDF compares it with its XMP analogue under ISO 19005-1, 6.7.3, and
+// whether that text holds a control character, which no XMP value equals.
+//
+// veraPDF drops one trailing NUL, the terminator a C string carries, and reads
+// every other byte PDFDocEncoding leaves undefined (ISO 32000-1, Table D.2) as
+// the control character it is, where [document.DecodePdfString] drops it. A
+// packet cannot hold a control character: XMPCore reads one, raw or
+// referenced, as a space (see [xmpFixControlChars]). Measured on veraPDF
+// 1.30.2 with crafted PDF/A-1b files: "ab" followed by one NUL equals an
+// analogue of "ab", in PDFDocEncoding and in UTF-16BE alike, and two trailing
+// NULs, a leading or a middle one, or a trailing 0x03 equal none.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_400_400906.pdf: its /Title, /Author and /Creator each end
+//     in one NUL, and veraPDF passes them against analogues without it.
+func XMPInfoText(s ast.PdfString) (string, bool) {
+	bom := len(s) >= 2 && (s[0] == 0xFE && s[1] == 0xFF || s[0] == 0xFF && s[1] == 0xFE) ||
+		strings.HasPrefix(string(s), "\xEF\xBB\xBF")
+	if !bom && len(s) > 0 && s[len(s)-1] == 0 {
+		s = s[:len(s)-1]
+	}
+	text := document.DecodePdfString(s)
+	if bom {
+		text = strings.TrimSuffix(text, "\x00")
+	}
+	return text, document.ContainsUndefinedPDFDocBytes(s) || strings.ContainsFunc(text, XMPControlChar)
 }
 
 // javaDoubleString spells f as Java's Double.toString does, which is how

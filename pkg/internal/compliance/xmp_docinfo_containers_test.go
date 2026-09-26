@@ -88,6 +88,12 @@ func TestXMPCheckDocInfoSync_ControlCharacters(t *testing.T) {
 		{"only a control character, against an empty analogue", `<< /Producer (\003) >>`, "", true},
 		{"0x18 against the breve it encodes", `<< /Producer (\030 version) >>`, "˘ version", false},
 		{"spaces against spaces", `<< /Producer (  version) >>`, "  version", false},
+		{"one trailing NUL against the text without it", `<< /Producer (ab\000) >>`, "ab", false},
+		{"UTF-16 trailing NUL against the text without it", `<< /Producer <FEFF006100620000> >>`, "ab", false},
+		{"only a NUL, against an empty analogue", `<< /Producer (\000) >>`, "", false},
+		{"two trailing NULs against the text without them", `<< /Producer (ab\000\000) >>`, "ab", true},
+		{"a middle NUL against the text without it", `<< /Producer (a\000b) >>`, "ab", true},
+		{"a leading NUL against the text without it", `<< /Producer (\000ab) >>`, "ab", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

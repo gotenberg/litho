@@ -418,8 +418,8 @@ func stripInfoControlChars(ctx context.Context, alloc *writer.ObjAllocator, doc 
 			// An entry that holds no string is [dropNonTextInfoEntries]'s.
 			continue
 		}
-		text := document.DecodePdfString(s)
-		if !document.ContainsUndefinedPDFDocBytes(s) && !strings.ContainsFunc(text, compliance.XMPControlChar) {
+		text, control := compliance.XMPInfoText(s)
+		if !control {
 			continue
 		}
 		cleaned[key] = strings.Map(func(r rune) rune {
