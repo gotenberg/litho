@@ -146,6 +146,7 @@ one deliberately rather than diffing it against a fresh build.
 | `extvalue_2b.pdf`      | PDF/A-2b     | Extension property values against their declared types           |
 | `afref_3b.pdf`         | PDF/A-3b     | File specifications something refers to but no `/AF` lists       |
 | `langpua_ua2.pdf`      | PDF/UA-2     | Private Use Area characters in structure and content `/Lang`     |
+| `repairroom_2b.pdf`    | PDF/A-2b     | Moves a stripped `.notdef` made, and DeviceN spaces in shadings  |
 
 ### Must-not-fire controls
 
@@ -421,6 +422,7 @@ which are covered under [Known divergences](#known-divergences).
 | `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
 | `repairleft_4.pdf`     | 10   | 8    | 16   | 13   | 14   | 16   | 13   | 14   | 9   | 10   | 11   | 11   | 9    |
+| `repairroom_2b.pdf`    | 5    | 2    | 7    | 3    | 5    | 8    | 4    | 6    | 8   | 8    | 9    | 10   | 9    |
 | `resinherit_2b.pdf`    | 9    | 6    | 11   | 8    | 9    | 11   | 8    | 9    | 9   | 9    | 10   | 9    | 9    |
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
@@ -3708,6 +3710,55 @@ other JavaScript actions, so no corpus file showed it.
 
 The two tools return the same rule set and the same count for every rule in
 all thirteen cells.
+
+### `repairroom_2b.pdf`
+
+Two repairs reached less than the rule they answer or removed more than the
+finding. The `.notdef` repair strips a code the font gives no glyph from the
+strings a page shows (ISO 19005-2, 6.2.11.8), and the `/Colorants` repair
+completes a DeviceN whose spot colorants have no entry (6.2.4.4 t1). The page
+carries three constructs, each with something after it that shows what the
+repair did:
+
+| Construct                                        | What the repair must keep or reach   |
+| ------------------------------------------------ | ------------------------------------ |
+| `(AB) Tj [(\x01) -3000] TJ (BA) Tj`              | the 3000-unit move of the emptied TJ |
+| `(A\x01B) Tj (AB) Tj`                            | the 600-unit width of the `.notdef`  |
+| a DeviceN in a shading pattern and in `/Shading` | both, reusing the page's SpotX       |
+
+A number in a TJ array moves the text position (ISO 32000-1, 9.4.3), and a
+glyph moves it by its width (9.4.4). The repair dropped a TJ it emptied whole
+and removed a glyph with its width, so the text after either started further
+left. It now keeps each as a TJ number. The font is `repairleft_4.pdf`'s,
+whose `/Widths` give code 1 the 600 units of the `.notdef` glyph it shows.
+poppler's `pdftotext -bbox` places the words after an aggressive PDF/A-2b
+remediation at:
+
+| Word after the stripped code | Source x | Before the fix | Now   |
+| ---------------------------- | -------- | -------------- | ----- |
+| `BA`, line 1                 | 129.6    | 86.4           | 129.6 |
+| `BAB`, line 2                | 86.4     | 79.2           | 86.4  |
+
+The `/Colorants` repair walked the page's `/ColorSpace` resources alone, and
+compliance judges the DeviceN a shading paints with as any other, so both
+spaces kept 6.2.4.4 t1 through remediation on litho and veraPDF alike.
+`CSX`, a Separation of SpotX the page paints with, is the definition both
+completed `/Colorants` reuse (6.2.4.4 t2).
+
+| Rule at PDF/A-2b                 | veraPDF | litho |
+| -------------------------------- | ------- | ----- |
+| `6.2.4.4/1` DeviceN colorants    | 2       | 2     |
+| `6.2.11.4.1/2` glyph not in font | 1       | 1     |
+| `6.2.11.8/1` `.notdef`           | 1       | 1     |
+
+The aggressive remediation at PDF/A-2a, 2b, 2u, 3b and 4 now leaves nothing,
+where it left both 6.2.4.4 t1 findings, and the default one leaves the glyph
+findings only the aggressive mode repairs; veraPDF agrees on every output. The
+runner scores rule sets, so it guards the `/Colorants` reach, and the text
+positions above are measured by hand. The corpus files with a shading whose
+DeviceN lacks a colorant, pdfjs issue17065.pdf and four govdocs files, are
+outside the remediation corpus, and no corpus page the `.notdef` repair runs
+on shows text after an emptied TJ whose numbers move.
 
 ## Scope
 
