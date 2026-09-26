@@ -23,11 +23,14 @@ const maxColorSpaceNesting = 8
 // array, which kind names. page is the index of the page whose walk reached
 // it, and in the content stream whose operator or resource made the link.
 //
-// covered records that a Default colour space replaces the device family
-// (ISO 32000-1, 8.6.5.6), and group that the family is the blending space of
-// the page's transparency group. direct records that an ICCBased array is
-// written directly rather than as an indirect object, and mode is the
-// overprint mode the link reached it under (see [overprintMode]).
+// A device family a Default colour space replaces is never a node: the link
+// reaches the Default space instead (ISO 32000-1, 8.6.5.6). covered records
+// that under PDF/A-4 the blending space of the isolated group the family is
+// painted in covers it (see [formGroupICCColorSpace]), and group that the
+// family is the blending space of the page's transparency group. direct
+// records that an ICCBased array is written directly rather than as an
+// indirect object, and mode is the overprint mode the link reached it under
+// (see [overprintMode]).
 type colorNode struct {
 	page    int
 	in      *linkStream
@@ -49,9 +52,9 @@ type colorNode struct {
 // appearance stream), and page is the page's content, nil for the page
 // itself. defaults are the Default colour spaces of the stream's own
 // resources, which alone replace a device family the stream selects: measured
-// with veraPDF 1.30 at PDF/A-2b, a page's DefaultRGB covers no rg of a form, a
-// tiling pattern cell or an appearance stream, whether or not that stream has
-// /Resources. entry is the state the stream begins in and ops its operations,
+// with veraPDF 1.30 at PDF/A-2b, a page's DefaultRGB replaces no rg of a form,
+// a tiling pattern cell or an appearance stream, whether or not that stream
+// has /Resources. entry is the state the stream begins in and ops its operations,
 // from which the state the tiling cells it paints begin in is worked out once,
 // into cells (see [colorLinkWalk.cellEntry]).
 type linkStream struct {
@@ -100,25 +103,37 @@ func (s *linkStream) lookup(pick func(*linkStream) ast.PdfDict, name string) (as
 	return nil, nil
 }
 
-// covers reports whether the stream covers the device family: a Default colour
-// space of its own resources (ISO 32000-1, 8.6.5.6), or under PDF/A-4 the
-// blending space of the isolated group it is the content of.
-func (s *linkStream) covers(family string) bool {
-	return s.defaults.covers(family) || blendCovers(s.blendCover, family)
+// blends reports whether, under PDF/A-4, the blending space of the isolated
+// group the stream is the content of covers the device family.
+func (s *linkStream) blends(family string) bool {
+	return blendCovers(s.blendCover, family)
 }
 
-// covers reports whether a Default colour space of d replaces the device
-// family (ISO 32000-1, 8.6.5.6).
-func (d defaultCS) covers(family string) bool {
-	switch family {
-	case "DeviceRGB":
-		return d.hasRGB
-	case "DeviceCMYK":
-		return d.hasCMYK
-	case "DeviceGray":
-		return d.hasGray
+// deviceRef returns the colour space an operator of s selects as the device
+// family: the Default colour space of the stream's own resources, which
+// replaces it (ISO 32000-1, 8.6.5.6), or the family itself. named marks cs,
+// CS or an inline image selecting the family by name, where g, rg and k (and
+// G, RG and K) select it by operator.
+//
+// A Default veraPDF cannot read (see [defaultSpaceReadable]) leaves an
+// operator the family and a name no colour space, which it judges as
+// DeviceGray (see [unknownSpace]): veraPDF-validation 1.30,
+// OperatorParser.processColorSpace falls back to the family, and
+// PDResourcesHandler.getColorSpace does not. Measured with veraPDF 1.30 at
+// PDF/A-1b and PDF/A-2b on a DefaultRGB that is a number or a name no entry
+// defines: "1 0 0 rg" and f fail DeviceRGB twice, "/DeviceRGB cs", scn and f
+// fail DeviceGray three times. One case stays unmodelled: an inline image in
+// a form whose own Default veraPDF cannot read falls back to the page's
+// resources (veraPDF-validation 1.30, PDInlineImage.getImageCS), where litho
+// judges it as DeviceGray.
+func (s *linkStream) deviceRef(family string, named bool) csRef {
+	switch e := s.defaults.entry(family); {
+	case e.readable:
+		return csRef{family: family, scope: s.id, deflt: true}
+	case e.obj != nil && named:
+		return unknownSpace
 	}
-	return false
+	return csRef{family: family, covered: s.blends(family)}
 }
 
 // blendCovers reports whether a blending space whose ICC colour space is icc
@@ -183,14 +198,39 @@ func deviceFamily(name string) string {
 //     it, in the state of that text show: a glyph that fills with no colour
 //     of its own fails the colour the page selected.
 //
-// Which Default colour space covers a device family, measured the same way:
-// the Default of the stream's own resources for a family its operator
-// selects, an image or a shading sh paints or an inline image names; the
-// Default of the resources defining a /Resources/ColorSpace entry for a
-// family the entry holds, however deep; the root content stream's DefaultGray
-// for the initial DeviceGray, the page's for a form or a tiling pattern cell
-// and an appearance stream's own for itself; the font's own for a Type 3
-// glyph; and none for the shading of a shading pattern.
+// Which Default colour space replaces a device family (ISO 32000-1, 8.6.5.6),
+// measured the same way: the Default of the stream's own resources for a
+// family its operator selects, an image or a shading sh paints or an inline
+// image names; the Default of the resources defining a /Resources/ColorSpace
+// entry for a family the entry holds, however deep; the root content stream's
+// DefaultGray for the initial DeviceGray, the page's for a form or a tiling
+// pattern cell and an appearance stream's own for itself; the font's own for
+// a Type 3 glyph; and none for the shading of a shading pattern.
+//
+// veraPDF judges the family as the Default space that replaces it, whatever
+// that space is (veraPDF-validation 1.30, PDResourcesHandler.getColorSpace
+// and the parser's ColorSpaceFactory): a link to the family reaches the Default
+// in its place, an indirect Default once for the whole document and a direct
+// one at every link, a four-component ICCBased one under the overprint mode of
+// the link, and a family the Default itself gives is not replaced again (see
+// [defaultCS]). It checks no component count, so a DefaultRGB over a gray
+// profile or a CalGray passes. Measured with veraPDF 1.30 at PDF/A-1b and
+// PDF/A-2b:
+//
+//   - A direct DefaultRGB over an abstract profile that "1 0 0 rg" selects and
+//     f fills fails the profile test twice, an indirect one once, and one two
+//     pages' resources hold directly four times.
+//   - A DefaultRGB naming DeviceCMYK fails DeviceCMYK twice, a DeviceN or
+//     Separation DefaultCMYK over DeviceCMYK fails its alternate twice, and a
+//     DefaultCMYK over a CMYK profile that k and f reach before and after a gs
+//     selecting /OPM 1 with /op true fails the profile test twice and ISO
+//     19005-2, 6.2.4.2 t2 once.
+//   - A DefaultGray over an abstract profile fails the profile test once for a
+//     fill in a form the page paints, and once for a fill in the cell of a
+//     tiling pattern the page paints.
+//
+// A Default veraPDF cannot read leaves what reaches it its own fallback (see
+// [linkStream.deviceRef] and [colorLinkWalk.replaceDevice]).
 //
 // Every tiling cell one content stream paints begins in one graphics state,
 // which each uncoloured pattern the stream paints turns the colour operators
@@ -245,6 +285,13 @@ func deviceFamily(name string) string {
 //     ISO 19005-2, 6.2.4.3 t3 68 times and t4 50 times, as veraPDF does. The
 //     reading of a remediation, which rejected that data, failed them 38 and
 //     33 times.
+//   - All corpora: 156 files set a Default colour space, every one ICCBased,
+//     CalRGB or CalGray, and judging it in place of the family it replaces
+//     moves no count at PDF/A-1b or PDF/A-2b, nor on those files at PDF/A-4:
+//     their profiles pass, and no DefaultCMYK is painted under overprint mode
+//     1. They agree with veraPDF on every colour test at PDF/A-1b and
+//     PDF/A-2b, but pdfjs issue5909_original.pdf, which veraPDF cannot
+//     validate.
 type colorLinkWalk struct {
 	doc   *document.Document
 	part  int
@@ -425,9 +472,15 @@ func (w *colorLinkWalk) walkAnnotations(ctx context.Context, dict ast.PdfDict, p
 
 // initialState returns the state a root content stream begins in: fill and
 // stroke in the initial DeviceGray (ISO 32000-1, 8.6.8), which the root's own
-// DefaultGray covers.
+// DefaultGray replaces (8.6.5.6). veraPDF builds the initial state as it
+// selects a device family by name (see [linkStream.deviceRef]), so a
+// DefaultGray it cannot read leaves no colour space, which it judges as
+// DeviceGray, as it judges the family itself.
 func initialState(root *linkStream) csPaintState {
-	gray := csRef{family: "DeviceGray", covered: root.defaults.hasGray}
+	gray := csRef{family: "DeviceGray"}
+	if root.defaults.gray.readable {
+		gray = csRef{family: "DeviceGray", scope: root.id, deflt: true}
+	}
 	return csPaintState{fill: gray, stroke: gray}
 }
 
@@ -491,8 +544,8 @@ func (w *colorLinkWalk) judgeGroup(ctx context.Context, dict ast.PdfDict, s *lin
 		return
 	}
 	if name, err := document.ResolveName(ctx, w.doc, csObj); err == nil {
-		if family := deviceFamily(string(name)); family == string(name) {
-			w.visit(colorNode{page: w.page, in: s, family: family, covered: s.covers(family), group: onPage})
+		if family := deviceFamily(string(name)); family == string(name) && !w.replaceDevice(ctx, family, s.defaults, s, false, 0, overprintMode{}, nil) {
+			w.visit(colorNode{page: w.page, in: s, family: family, covered: s.blends(family), group: onPage})
 		}
 		return
 	}
@@ -567,7 +620,7 @@ func (w *colorLinkWalk) spaceHooks(ctx context.Context, s *linkStream) csLinkHoo
 				return csRef{scope: def.id, name: name, isPattern: resolveCSName(ctx, w.doc, obj) == "Pattern"}
 			}
 			if family := deviceFamily(name); family != "" {
-				return csRef{family: family, covered: s.covers(family)}
+				return s.deviceRef(family, true)
 			}
 			if name == "Pattern" {
 				return csRef{family: "Pattern", isPattern: true}
@@ -575,7 +628,7 @@ func (w *colorLinkWalk) spaceHooks(ctx context.Context, s *linkStream) csLinkHoo
 			return unknownSpace
 		},
 		device: func(family string) csRef {
-			return csRef{family: family, covered: s.covers(family)}
+			return s.deviceRef(family, false)
 		},
 		pattern: func(name string) csRef {
 			if _, def := s.lookup(func(c *linkStream) ast.PdfDict { return c.patterns }, name); def != nil {
@@ -728,6 +781,13 @@ func (w *colorLinkWalk) judgeRef(ctx context.Context, ref csRef, s *linkStream, 
 		if def := w.streams[ref.scope]; def != nil {
 			w.judgeSpaceUnder(ctx, def.colorSpaces[ast.PdfName(ref.name)], s, def.defaults, mode)
 		}
+	case ref.deflt:
+		// ISO 32000-1, 8.6.5.6: the Default colour space of the resources of
+		// the stream that selected the family replaces it, and the link
+		// reaches it in its place.
+		if def := w.streams[ref.scope]; def != nil {
+			w.judgeSpaceAs(ctx, def.defaults.entry(ref.family).obj, s, def.defaults.inside(), true, 0, mode)
+		}
 	case deviceFamily(ref.family) != "":
 		w.visit(colorNode{page: w.page, in: s, family: ref.family, covered: ref.covered})
 	}
@@ -856,7 +916,7 @@ func (w *colorLinkWalk) judgeSpaceAs(ctx context.Context, obj ast.PdfObject, s *
 		}
 	}
 	if name, ok := resolved.(ast.PdfName); ok {
-		w.judgeFamilyName(string(name), s, defaults, unreadable)
+		w.judgeFamilyName(ctx, string(name), s, defaults, unknown, nesting, mode, unreadable)
 		return
 	}
 	arr, ok := resolved.(ast.PdfArray)
@@ -872,8 +932,12 @@ func (w *colorLinkWalk) judgeSpaceAs(ctx context.Context, obj ast.PdfObject, s *
 	// /Resources/ColorSpace alike, so it is an unknown space here too.
 	switch kind {
 	case "Indexed":
+		// The base is replaced by a Default colour space even inside one:
+		// measured with veraPDF 1.30 at PDF/A-2b, a DefaultRGB [/Indexed
+		// /DeviceGray ...] beside a DefaultGray over an abstract profile fails
+		// the profile test for "1 0 0 rg" and f.
 		if len(arr) >= 2 {
-			w.judgeSpace(ctx, arr[1], s, defaults, true, nesting+1)
+			w.judgeSpace(ctx, arr[1], s, defaults.outside(), true, nesting+1)
 		}
 	case "Separation":
 		w.visit(colorNode{page: w.page, in: s, kind: string(kind), arr: arr})
@@ -896,29 +960,67 @@ func (w *colorLinkWalk) judgeSpaceAs(ctx context.Context, obj ast.PdfObject, s *
 		}
 		w.visit(node)
 	case "CalGray", "CalRGB", "Lab", "Pattern":
+	case "CalCMYK":
+		// ISO 32000-1, 8.6.5 defines no CalCMYK family, and veraPDF reads the
+		// PDF 1.1 spelling as DeviceCMYK (veraPDF-validation 1.30,
+		// ColorSpaceFactory.getColorSpaceFromArray): measured with veraPDF
+		// 1.30 at PDF/A-2b, a DefaultCMYK [/CalCMYK ...] leaves "0 0 0 1 k"
+		// and f failing DeviceCMYK twice.
+		w.judgeFamilyName(ctx, "DeviceCMYK", s, defaults, unknown, nesting, mode, unreadable)
 	default:
 		// A one-element array holds a family name (ISO 32000-1, 8.6.3).
 		if len(arr) == 1 {
-			w.judgeFamilyName(string(kind), s, defaults, unreadable)
+			w.judgeFamilyName(ctx, string(kind), s, defaults, unknown, nesting, mode, unreadable)
 			return
 		}
 		unreadable()
 	}
 }
 
-// judgeFamilyName judges a colour space written as the family name name: a
-// device family the Default colour spaces defaults, or the blending space of
-// s, may cover, Pattern, which holds no colour space of its own, or any other
-// name, a space veraPDF cannot read, for which unreadable is called.
-func (w *colorLinkWalk) judgeFamilyName(name string, s *linkStream, defaults defaultCS, unreadable func()) {
+// judgeFamilyName judges a colour space written as the family name name,
+// reached from a link of s under the overprint mode mode: a device family, in
+// whose place a link reaches the Default colour space of defaults that
+// replaces it (see [colorLinkWalk.replaceDevice]) and which otherwise the
+// blending space of s may cover; Pattern, which holds no colour space of its
+// own; the name of another entry of the /ColorSpace dictionary a Default
+// colour space gives, which veraPDF reads in its place; or any other name, a
+// space veraPDF cannot read, for which unreadable is called.
+func (w *colorLinkWalk) judgeFamilyName(ctx context.Context, name string, s *linkStream, defaults defaultCS, unknown bool, nesting int, mode overprintMode, unreadable func()) {
 	switch family := deviceFamily(name); {
 	case family != "" && family == name:
-		covered := defaults.covers(family) || blendCovers(s.blendCover, family)
-		w.visit(colorNode{page: w.page, in: s, family: family, covered: covered})
+		if !w.replaceDevice(ctx, family, defaults, s, unknown, nesting, mode, unreadable) {
+			w.visit(colorNode{page: w.page, in: s, family: family, covered: s.blends(family)})
+		}
 	case name == "Pattern":
+	case defaults.inDefault && defaults.colorSpaces[ast.PdfName(name)] != nil:
+		// Measured with veraPDF 1.30 at PDF/A-2b: a DefaultRGB /CS0 whose
+		// entry is a direct ICCBased space over an abstract profile fails the
+		// profile test for "1 0 0 rg" and f, and one whose entry is
+		// /DeviceGray is replaced by the DefaultGray.
+		w.judgeSpaceAs(ctx, defaults.colorSpaces[ast.PdfName(name)], s, defaults.outside(), unknown, nesting+1, mode)
 	default:
 		unreadable()
 	}
+}
+
+// replaceDevice judges, in place of the device family, the Default colour
+// space of defaults that replaces it (ISO 32000-1, 8.6.5.6), reached from a
+// link of s under the overprint mode mode, and reports whether defaults set
+// one. A Default veraPDF cannot read (see [defaultSpaceReadable]) is judged as
+// unreadable says, which nil makes nothing: veraPDF then reads no colour
+// space, which an /Indexed base or an alternate judges as DeviceGray and an
+// image, a shading or a transparency group as nothing.
+func (w *colorLinkWalk) replaceDevice(ctx context.Context, family string, defaults defaultCS, s *linkStream, unknown bool, nesting int, mode overprintMode, unreadable func()) bool {
+	e := defaults.entry(family)
+	switch {
+	case e.obj == nil:
+		return false
+	case e.readable:
+		w.judgeSpaceAs(ctx, e.obj, s, defaults.inside(), unknown, nesting+1, mode)
+	case unreadable != nil:
+		unreadable()
+	}
+	return true
 }
 
 // judgeDeviceNAttributes judges the Separations a DeviceN attributes
@@ -936,7 +1038,7 @@ func (w *colorLinkWalk) judgeDeviceNAttributes(ctx context.Context, attrsObj ast
 		}
 	}
 	for _, name := range sortedNames(colorants) {
-		w.judgeSpace(ctx, colorants[name], s, defaults, false, nesting)
+		w.judgeSpace(ctx, colorants[name], s, defaults.outside(), false, nesting)
 	}
 	if process, _ := document.ResolveDict(ctx, w.doc, attrs["Process"]); process != nil { // Best-effort: an unreadable /Process holds nothing.
 		w.judgeSpace(ctx, process["ColorSpace"], s, defaults, false, nesting)
@@ -985,7 +1087,9 @@ func (w *colorLinkWalk) judgeNamedOrSpace(ctx context.Context, csObj ast.PdfObje
 	}
 	if name, err := document.ResolveName(ctx, w.doc, csObj); err == nil {
 		if family := deviceFamily(string(name)); family == string(name) {
-			w.visit(colorNode{page: w.page, in: s, family: family, covered: s.covers(family)})
+			if !w.replaceDevice(ctx, family, s.defaults, s, false, 0, overprintMode{}, nil) {
+				w.visit(colorNode{page: w.page, in: s, family: family, covered: s.blends(family)})
+			}
 			return
 		}
 		if entry, def := s.lookup(func(c *linkStream) ast.PdfDict { return c.colorSpaces }, string(name)); def != nil {
@@ -1115,7 +1219,8 @@ func (w *colorLinkWalk) walkType3(ctx context.Context, obj ast.PdfObject, st csP
 // judge3D judges the device colour spaces a 3D annotation's stream names in
 // its own /ColorSpace and in its resources' /ColorSpace, once per stream: the
 // 3D artwork renders into the page area, so the page's Default colour spaces
-// cover them.
+// replace them (ISO 32000-1, 8.6.5.6), as veraPDF resolves them through the
+// page's resources (veraPDF-validation 1.30, GFPD3DStream.getColorSpace).
 func (w *colorLinkWalk) judge3D(ctx context.Context, annot ast.PdfDict, page *linkStream) {
 	streams := []ast.PdfObject{annot["3DD"]}
 	if view, _ := document.ResolveDict(ctx, w.doc, annot["3DV"]); view != nil { // Best-effort: an unreadable view names nothing.
@@ -1140,8 +1245,8 @@ func (w *colorLinkWalk) judge3D(ctx context.Context, annot ast.PdfDict, page *li
 			}
 		}
 		for _, csObj := range spaces {
-			if family := deviceFamily(resolveCSName(ctx, w.doc, csObj)); family != "" {
-				w.visit(colorNode{page: w.page, in: page, family: family, covered: page.covers(family)})
+			if family := deviceFamily(resolveCSName(ctx, w.doc, csObj)); family != "" && !w.replaceDevice(ctx, family, page.defaults, page, false, 0, overprintMode{}, nil) {
+				w.visit(colorNode{page: w.page, in: page, family: family, covered: page.blends(family)})
 			}
 		}
 	}

@@ -68,6 +68,10 @@ var operatorResourceCategory = map[string]ast.PdfName{
 // pass false for those and true for the streams that walk does not reach, so
 // the rule is stated exactly once per undefined operator.
 //
+// defaultUndefined is the device family the stream selects under a Default
+// colour space veraPDF cannot read, which it records as one more undefined
+// name (see [unreadableDefaultSelected]), or "".
+//
 // # Corpus evidence
 //
 //   - pdfjs bug1669099.pdf: writes "/ 12.00000 Tf" in 15 widget appearance
@@ -96,6 +100,7 @@ func checkContentStreamResourcesOps(
 	part int,
 	pageNum int,
 	reportUndefinedOps bool,
+	defaultUndefined string,
 ) []Violation {
 	if ops == nil {
 		return nil
@@ -205,6 +210,10 @@ func checkContentStreamResourcesOps(
 		if name != "" {
 			lookup("scn", "Pattern", ast.PdfName(name))
 		}
+	}
+
+	if defaultUndefined != "" && !undefinedStated && resourceRule.Specification != "" {
+		results = append(results, failf(resourceRule, "page %d: %s resolves to a Default colour space that is no colour space", pageNum, defaultUndefined)...)
 	}
 
 	return results

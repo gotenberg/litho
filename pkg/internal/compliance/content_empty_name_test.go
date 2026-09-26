@@ -105,7 +105,7 @@ func TestEmptyResourceNameIsNotAReference(t *testing.T) {
 			res := resolveResources(ctx, doc, pages[0].Dict)
 
 			got := false
-			for _, v := range checkContentStreamResourcesOps(ctx, doc, ops, nil, res, nil, 4, 1, false) {
+			for _, v := range checkContentStreamResourcesOps(ctx, doc, ops, nil, res, nil, 4, 1, false, "") {
 				if v.Rule.Clause == "6.2.2" && v.Rule.TestNumber == 3 {
 					got = true
 				}

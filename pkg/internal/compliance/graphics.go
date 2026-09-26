@@ -49,7 +49,17 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			if ops != nil {
 				ownRes, inheritedRes := pageResourceScopes(ctx, doc, page)
 				_, _, _, selected, _ := scanContentStreamDeviceCS(ctx, ops, collectPatternCSNames(ctx, doc, res))
-				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, selected.patterns, ownRes, inheritedRes, part, i+1, false)...)
+				// A page's Default colour spaces are those of the resources it
+				// uses, its own or inherited ones (ISO 32000-1, 7.7.3.4).
+				defaultUndefined := ""
+				if missingResourceRule(part).Specification != "" {
+					defaultRes := ownRes
+					if defaultRes == nil {
+						defaultRes = inheritedRes
+					}
+					defaultUndefined = unreadableDefaultSelected(ctx, doc, ops, defaultRes, ownRes, inheritedRes, true, false)
+				}
+				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, selected.patterns, ownRes, inheritedRes, part, i+1, false, defaultUndefined)...)
 				// Check inline image /Intent values from parsed BI operations.
 				results = append(results, checkInlineImageIntent(ops, part, i+1)...)
 				// The inline image filters of a page's content are stated by
@@ -134,7 +144,14 @@ func pageResourceScopes(ctx context.Context, doc *document.Document, page ast.Pd
 //     changes no count at PDF/A-1b or PDF/A-2b, veraPDF files at their own
 //     profile.
 func checkDrawnStream(ctx context.Context, doc *document.Document, s *drawnStream, part int, hexStrings *drawnStreamHexStrings) []Violation {
-	results := checkContentStreamResourcesOps(ctx, doc, s.ops, s.patterns, s.resources, s.pageRes, part, s.pageNum, true)
+	// A drawn stream's Default colour spaces are those of its own resources
+	// alone (see [linkStream]), and only an appearance stream begins in the
+	// initial state rather than inheriting its drawer's.
+	defaultUndefined := ""
+	if missingResourceRule(part).Specification != "" {
+		defaultUndefined = unreadableDefaultSelected(ctx, doc, s.ops, s.resources, s.resources, s.pageRes, s.kind == drawnAppearance, s.colourOff)
+	}
+	results := checkContentStreamResourcesOps(ctx, doc, s.ops, s.patterns, s.resources, s.pageRes, part, s.pageNum, true, defaultUndefined)
 	results = append(results, hexStrings.check(s.format, s.pageNum)...)
 	results = append(results, checkInlineImageIntent(s.ops, part, s.pageNum)...)
 	results = append(results, checkInlineImageFilters(s.ops, part, s.pageNum)...)

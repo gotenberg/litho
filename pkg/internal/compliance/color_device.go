@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 func deviceRGBRule(part int) Rule {
@@ -20,11 +21,62 @@ func deviceGrayRule(part int) Rule {
 	return ruleByPart(part, Rule_19005_1_6_2_3_3_t03, Rule_19005_2_6_2_4_3_t04, Rule_19005_3_6_2_4_3_t04, Rule_19005_4_6_2_4_3_t04)
 }
 
-// defaultCS tracks which Default{RGB,CMYK,Gray} colour spaces are set.
+// defaultCS holds the Default colour spaces one resource dictionary sets
+// under /ColorSpace, which replace the device families DefaultRGB, DefaultCMYK
+// and DefaultGray name (ISO 32000-1, 8.6.5.6), and colorSpaces, the
+// dictionary holding them, against which a name a Default space gives
+// resolves.
+//
+// inDefault marks the spaces a Default colour space holds, where veraPDF
+// replaces no device family again: a family name the Default gives, one an
+// alternate of its Separation or DeviceN gives, and its DeviceN process space.
+// The base of an /Indexed space and the Separations of a DeviceN /Colorants
+// dictionary are replaced again, as anywhere else (veraPDF-validation 1.30,
+// ColorSpaceFactory.getColorSpaceFromName and PDSpecialColorSpace, whose
+// wasDefault flag PDIndexed and PDDeviceN.getColorants drop).
 type defaultCS struct {
-	hasRGB  bool
-	hasCMYK bool
-	hasGray bool
+	gray, rgb, cmyk defaultEntry
+	colorSpaces     ast.PdfDict
+	inDefault       bool
+}
+
+// defaultEntry is one Default colour space entry: obj is the value, nil when
+// the dictionary has none, and readable reports that veraPDF reads a colour
+// space from it (see [defaultSpaceReadable]).
+type defaultEntry struct {
+	obj      ast.PdfObject
+	readable bool
+}
+
+// entry returns the Default colour space entry that replaces the device
+// family, or the zero entry when d replaces none.
+func (d defaultCS) entry(family string) defaultEntry {
+	if d.inDefault {
+		return defaultEntry{}
+	}
+	switch family {
+	case "DeviceRGB":
+		return d.rgb
+	case "DeviceCMYK":
+		return d.cmyk
+	case "DeviceGray":
+		return d.gray
+	}
+	return defaultEntry{}
+}
+
+// inside returns d as the spaces a Default colour space holds see it (see
+// [defaultCS]).
+func (d defaultCS) inside() defaultCS {
+	d.inDefault = true
+	return d
+}
+
+// outside returns d as the base of an /Indexed space or a DeviceN colourant
+// sees it, where a device family is replaced again.
+func (d defaultCS) outside() defaultCS {
+	d.inDefault = false
+	return d
 }
 
 // deviceCSUsage tracks which device-dependent colour spaces one content
@@ -264,8 +316,14 @@ func pageBlendingColorSpace(ctx context.Context, doc *document.Document, page as
 	}
 }
 
-// collectDefaultColorSpaces extracts Default{RGB,CMYK,Gray} entries from a
-// resources dictionary's /ColorSpace sub-dictionary.
+// collectDefaultColorSpaces returns the Default colour spaces a resources
+// dictionary's /ColorSpace sub-dictionary sets (ISO 32000-1, 8.6.5.6). An
+// entry whose value is null sets none, as an absent one (ISO 32000-1, 7.3.7),
+// while a reference, even to no object, sets one veraPDF cannot read:
+// measured with veraPDF 1.30 at PDF/A-2b and PDF/A-4, a DefaultRGB written as
+// null leaves "/DeviceRGB cs", scn and f failing DeviceRGB three times, and
+// one referencing no object fails DeviceGray three times and ISO 19005-4,
+// 6.2.2 t3.
 func collectDefaultColorSpaces(ctx context.Context, doc *document.Document, resources ast.PdfDict) defaultCS {
 	csObj, ok := resources["ColorSpace"]
 	if !ok {
@@ -278,17 +336,174 @@ func collectDefaultColorSpaces(ctx context.Context, doc *document.Document, reso
 		return defaultCS{}
 	}
 
-	var ds defaultCS
-	if _, ok := csDict["DefaultRGB"]; ok {
-		ds.hasRGB = true
+	entry := func(key ast.PdfName) defaultEntry {
+		obj, ok := csDict[key]
+		if _, null := obj.(ast.PdfNull); !ok || null {
+			return defaultEntry{}
+		}
+		return defaultEntry{obj: obj, readable: defaultSpaceReadable(ctx, doc, obj, csDict, 0)}
 	}
-	if _, ok := csDict["DefaultCMYK"]; ok {
-		ds.hasCMYK = true
+	return defaultCS{rgb: entry("DefaultRGB"), cmyk: entry("DefaultCMYK"), gray: entry("DefaultGray"), colorSpaces: csDict}
+}
+
+// unreadableDefaultSelected returns the device family a content stream
+// selects while defaultRes, the resources whose Default colour spaces replace
+// its families, give one for it that veraPDF cannot read (see
+// [defaultSpaceReadable]), or "" when it selects none.
+//
+// veraPDF records such a family as a resource name no dictionary defines,
+// which fails ISO 19005-4, 6.2.2 t3, once for the stream (veraPDF-validation
+// 1.30, PDResourcesHandler.getColorSpace): wherever it resolves a family
+// through the stream's resources, at g, rg, k, G, RG and K and at cs and CS
+// naming the family while the stream processes its colour operators (see
+// [walkColorSpaceLinksWith]), at an image XObject a Do paints whose
+// /ColorSpace names it, looked up in xobjects and then fallback, and, in a
+// root content stream, a page's or an appearance stream's, at the initial
+// DeviceGray (ISO 32000-1, 8.6.8), which a form, a tiling cell or a Type 3
+// glyph inherits instead. colourOff reports that the stream begins with its
+// colour operators off.
+//
+// Measured with veraPDF 1.30 at PDF/A-4 on a DefaultRGB or DefaultGray that is
+// a number: a page painting nothing fails t3 through its DefaultGray, and so
+// does an appearance stream, but not a form a page paints; a page, a form, a
+// Type 3 glyph set with d0 and a page's inherited resources fail it through
+// rg, "/DeviceRGB cs" or an image the page paints, a glyph past its d1 does
+// not; and the page's DefaultRGB fails nothing through a form's rg.
+//
+// One case stays unmodelled: veraPDF records an image's family only in the
+// stream that first paints it, where litho states it in every stream that
+// paints it.
+//
+// # Corpus evidence
+//
+//   - All corpora: no file sets a Default colour space veraPDF cannot read.
+func unreadableDefaultSelected(ctx context.Context, doc *document.Document, ops []content.Operation, defaultRes, xobjects, fallback ast.PdfDict, root, colourOff bool) string {
+	defaults := collectDefaultColorSpaces(ctx, doc, defaultRes)
+	unreadable := func(family string) bool {
+		e := defaults.entry(family)
+		return e.obj != nil && !e.readable
 	}
-	if _, ok := csDict["DefaultGray"]; ok {
-		ds.hasGray = true
+	if !unreadable("DeviceGray") && !unreadable("DeviceRGB") && !unreadable("DeviceCMYK") {
+		return ""
 	}
-	return ds
+	if root && unreadable("DeviceGray") {
+		return "DeviceGray"
+	}
+	off := colourOff
+	var stack []bool
+	for idx, op := range ops {
+		if idx%100 == 0 && ctx.Err() != nil {
+			return ""
+		}
+		switch op.Operator {
+		case "q":
+			stack = append(stack, off)
+		case "Q":
+			if len(stack) > 0 {
+				off = stack[len(stack)-1]
+				stack = stack[:len(stack)-1]
+			}
+		case "d1":
+			off = true
+		case "g", "rg", "k", "G", "RG", "K":
+			if family := deviceFamilyOperators[op.Operator]; !off && unreadable(family) {
+				return family
+			}
+		case "cs", "CS":
+			if name := lastNameOperand(op); !off && deviceFamily(name) == name && unreadable(name) {
+				return name
+			}
+		case "Do":
+			if family := imageDeviceFamily(ctx, doc, op, xobjects, fallback); family != "" && unreadable(family) {
+				return family
+			}
+		}
+	}
+	return ""
+}
+
+// imageDeviceFamily returns the device family the image XObject a Do paints
+// names as its /ColorSpace, alone or in a one-element array, as veraPDF reads
+// a colour space name there (veraPDF-validation 1.30, PDXImage), or "" for
+// any other XObject, an image mask or a colour space written out. The name the
+// Do gives is looked up in xobjects and then fallback.
+func imageDeviceFamily(ctx context.Context, doc *document.Document, op content.Operation, xobjects, fallback ast.PdfDict) string {
+	name := ast.PdfName(lastNameOperand(op))
+	if name == "" {
+		return ""
+	}
+	var obj ast.PdfObject
+	for _, res := range []ast.PdfDict{xobjects, fallback} {
+		dict, _ := document.ResolveDict(ctx, doc, res["XObject"]) // Best-effort: unreadable XObjects define no name.
+		if o, ok := dict[name]; ok {
+			obj = o
+			break
+		}
+	}
+	stream, err := document.ResolveStream(ctx, doc, obj)
+	if err != nil {
+		return ""
+	}
+	if subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype != "Image" { // Best-effort: an unreadable /Subtype is no image.
+		return ""
+	}
+	// ISO 32000-1, 8.9.6.2: an image mask carries no colour space.
+	if mask, _ := document.ResolveBool(ctx, doc, stream.Dict["ImageMask"]); mask { // Best-effort: an unreadable /ImageMask is no mask.
+		return ""
+	}
+	csObj := stream.Dict["ColorSpace"]
+	if arr, err := document.ResolveArray(ctx, doc, csObj); err == nil && len(arr) == 1 {
+		csObj = arr[0]
+	}
+	cs, _ := document.ResolveName(ctx, doc, csObj) // Best-effort: a colour space written out names no family.
+	if family := deviceFamily(string(cs)); family == string(cs) {
+		return family
+	}
+	return ""
+}
+
+// defaultSpaceReadable reports whether veraPDF reads a colour space from the
+// Default colour space entry obj of the /ColorSpace dictionary colorSpaces,
+// which a device family it replaces then links to in its place.
+//
+// veraPDF reads a name as a device family, as Pattern, or as another entry of
+// colorSpaces; an array as the family its first element names, a one-element
+// array as that element, and [/CalCMYK ...] as DeviceCMYK; and anything else
+// as no colour space (veraPDF-validation 1.30, ColorSpaceFactory.getColorSpace
+// of the parser). What it does with a Default it cannot read depends on what
+// reaches it (see [colorLinkWalk.deviceRef]). A dictionary, which veraPDF
+// reads as a pattern when it carries a /PatternType, is read as nothing here.
+func defaultSpaceReadable(ctx context.Context, doc *document.Document, obj ast.PdfObject, colorSpaces ast.PdfDict, nesting int) bool {
+	if nesting > maxColorSpaceNesting {
+		return false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return false
+	}
+	switch v := resolved.(type) {
+	case ast.PdfName:
+		switch name := string(v); {
+		case deviceFamily(name) == name, name == "Pattern":
+			return true
+		default:
+			entry, ok := colorSpaces[v]
+			return ok && defaultSpaceReadable(ctx, doc, entry, colorSpaces, nesting+1)
+		}
+	case ast.PdfArray:
+		if len(v) == 1 {
+			return defaultSpaceReadable(ctx, doc, v[0], colorSpaces, nesting+1)
+		}
+		if len(v) == 0 {
+			return false
+		}
+		kind, _ := document.ResolveName(ctx, doc, v[0]) // Best-effort: an unreadable family reads as no colour space.
+		switch kind {
+		case "CalGray", "CalRGB", "Lab", "ICCBased", "Separation", "DeviceN", "Indexed", "Pattern", "CalCMYK":
+			return true
+		}
+	}
+	return false
 }
 
 // collectPatternCSNames returns the /Resources/ColorSpace keys that name a

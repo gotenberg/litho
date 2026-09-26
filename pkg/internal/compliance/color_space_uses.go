@@ -29,17 +29,20 @@ type colorSpaceUse struct {
 //
 // A walk that follows device colour (see [csLinkHooks]) also gives a csRef to
 // a colour space no entry names: family is the family g, rg, k or a family
-// name selects (DeviceGray, DeviceRGB or DeviceCMYK), or Pattern, and covered
-// records that a Default colour space replaces the device family where it was
-// selected (ISO 32000-1, 8.6.5.6). isPattern records that the space is a
-// Pattern space, so a name operand of scn or SCN selects a pattern, and
-// pattern names the /Resources/Pattern entry of scope one selected. under
-// records that the space is the underlying colour space of the Pattern space
-// entry name of scope, the base its [/Pattern base] array names (ISO 32000-1,
-// 8.7.3.3).
+// name selects (DeviceGray, DeviceRGB or DeviceCMYK), or Pattern. deflt
+// records that the Default colour space of the resources of scope replaces
+// the device family where it was selected (ISO 32000-1, 8.6.5.6), which the
+// links reach in its place, and covered that under PDF/A-4 the blending space
+// of the isolated group it was selected in covers the family. isPattern
+// records that the space is a Pattern space, so a name operand of scn or SCN
+// selects a pattern, and pattern names the /Resources/Pattern entry of scope
+// one selected. under records that the space is the underlying colour space
+// of the Pattern space entry name of scope, the base its [/Pattern base]
+// array names (ISO 32000-1, 8.7.3.3).
 type csRef struct {
 	scope, name string
 	family      string
+	deflt       bool
 	covered     bool
 	isPattern   bool
 	pattern     string

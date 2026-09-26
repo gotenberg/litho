@@ -76,11 +76,11 @@ func iccBasedIdentityRule(part int) Rule {
 // Two pages painting under /OPM 1 with the same direct space, or with one
 // indirect space, fail t2 once between them.
 //
-// One divergence remains: veraPDF judges a device family a Default colour
-// space replaces as that space (ISO 32000-1, 8.6.5.6), so a DefaultCMYK over
-// an abstract profile that k selects and f fills before and after a gs
-// selecting /OPM 1 with /op true fails the profile test twice and t2 once,
-// where litho judges the family as covered and fails neither.
+// A device family a Default colour space replaces reaches the Default space
+// in its place (ISO 32000-1, 8.6.5.6; see [colorLinkWalk]), which is judged
+// here when it is ICCBased: a DefaultCMYK over an abstract profile that k
+// selects and f fills before and after a gs selecting /OPM 1 with /op true
+// fails the profile test twice and t2 once, as with veraPDF.
 //
 // # Corpus evidence
 //
