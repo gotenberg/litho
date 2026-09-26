@@ -147,7 +147,10 @@ func TestRewriteNonFiniteNumbers(t *testing.T) {
 		{"inside an array", "[inf 2] 0 d", "[inf 2] 0 d", 0},
 		{"a name, a string and longer keywords", "/inf gs (inf) Tj infinite nanx", "/inf gs (inf) Tj infinite nanx", 0},
 		{"two signs", "--inf w", "--inf w", 0},
-		{"inline image data", "BI /W 1 /H 1 /BPC 8 /CS /G ID inf EI inf w", "BI /W 1 /H 1 /BPC 8 /CS /G ID inf EI 0 w", 1},
+		{"inline image data", "BI /W 1 /H 1 /BPC 8 /CS /G ID inf EI Q inf w", "BI /W 1 /H 1 /BPC 8 /CS /G ID inf EI Q 0 w", 1},
+		// veraPDF reads the data on past an EI that no operator follows, to
+		// the end of the stream, where PDF.js ends it.
+		{"data one reader reads on", "BI /W 1 /H 1 /BPC 8 /CS /G ID inf EI inf w", "BI /W 1 /H 1 /BPC 8 /CS /G ID inf EI inf w", 0},
 	} {
 		got, n := rewriteNonFiniteNumbers(ctx, []byte(tc.src))
 		if string(got) != tc.want || n != tc.n {

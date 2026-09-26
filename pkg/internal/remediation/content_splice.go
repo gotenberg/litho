@@ -9,6 +9,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // contentTokenCheckInterval is how many tokens [contentTokenSplices] reads
@@ -67,7 +68,8 @@ type tokenPlace struct {
 // exactly the bytes it stands for. The lexer hands a number, a hex string and
 // a keyword back as written. A delimiter is never offered, and neither is the
 // BI that opens an inline image. The tokens of the image's dictionary are
-// offered ([inlineImageDictSplices]), and its data is skipped whole: the walk
+// offered ([inlineImageDictSplices]), and its data is skipped whole, past what
+// veraPDF and PDF.js both read as data ([content.InlineImageEnds]): the walk
 // cannot address it token by token.
 //
 // A walk the lexer cannot finish returns the replacements it found before the
@@ -98,7 +100,7 @@ func repairTokenSplices(ctx context.Context, data []byte, respell func(tok lexer
 // number of the value veraPDF gives it.
 func visitVeraPDFTokens(ctx context.Context, data []byte, visit func(tok lexer.Token, at tokenPlace)) {
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0)).WithVeraPDFTokens()
-	walkTokens(ctx, lex, func(tok lexer.Token, at tokenPlace) (tokenSplice, bool) {
+	walkTokens(ctx, data, lex, func(tok lexer.Token, at tokenPlace) (tokenSplice, bool) {
 		visit(tok, at)
 		return tokenSplice{}, false
 	})
@@ -111,17 +113,20 @@ type tokenOffer func(tok lexer.Token, at tokenPlace) (tokenSplice, bool)
 // tokenSplices is the walk of [contentTokenSplices] over the tokens lex reads
 // in data.
 func tokenSplices(ctx context.Context, data []byte, lex *lexer.Lexer, respell func(tok lexer.Token, at tokenPlace) (string, bool)) ([]tokenSplice, bool) {
-	return walkTokens(ctx, lex, func(tok lexer.Token, at tokenPlace) (tokenSplice, bool) {
+	return walkTokens(ctx, data, lex, func(tok lexer.Token, at tokenPlace) (tokenSplice, bool) {
 		return offerToken(data, tok, at, respell)
 	})
 }
 
-// walkTokens hands offer every token lex reads but the delimiters and the BI
-// that opens an inline image, with where it stands, and returns the
+// walkTokens hands offer every token lex reads in data but the delimiters and
+// the BI that opens an inline image, with where it stands, and returns the
 // replacements offer asks for, and whether the walk read the stream to its
 // end. See [contentTokenSplices].
-func walkTokens(ctx context.Context, lex *lexer.Lexer, offer tokenOffer) ([]tokenSplice, bool) {
+func walkTokens(ctx context.Context, data []byte, lex *lexer.Lexer, offer tokenOffer) ([]tokenSplice, bool) {
 	var splices []tokenSplice
+	// images finds where the data of the inline images ends, made on the
+	// first one the walk meets.
+	var images *content.InlineImageEnds
 	depth := 0
 	// operands counts the operands read since the last operator, and dict
 	// whether the outermost array or dictionary open is a dictionary.
@@ -145,7 +150,10 @@ func walkTokens(ctx context.Context, lex *lexer.Lexer, offer tokenOffer) ([]toke
 		switch tok.Type {
 		case lexer.TokenKeyword:
 			if tok.Value == "BI" && depth == 0 {
-				dictSplices, ok := inlineImageDictSplices(ctx, p, offer)
+				if images == nil {
+					images = content.NewInlineImageEnds(data)
+				}
+				dictSplices, ok := inlineImageDictSplices(ctx, p, images, offer)
 				if !ok {
 					return splices, false
 				}
@@ -198,22 +206,22 @@ func isOperatorToken(tok lexer.Token) bool {
 }
 
 // inlineImageDictSplices hands offer the tokens of the inline image
-// dictionary p stands at, just past its BI, and moves p past the image's EI.
-// It returns the replacements, and false when the parser cannot read the
-// image, which ends the walk.
+// dictionary p stands at, just past its BI, and moves p past the image's data
+// where images ends it. It returns the replacements, and false when the parser
+// cannot read the image, which ends the walk.
 //
 // The tokens are read ahead of the parser, from its BI to the first ID
-// keyword, without consuming them, and [parser.Parser.ParseInlineImageDict]
-// then reads the dictionary and skips the data as it always has: it finds the
-// EI by the dictionary's filter, which a walk consuming the tokens itself would
-// hide from it. The replacements stand only when the parser consumed exactly
-// the tokens read ahead, so the ID they end at is the one its data starts
-// after (ISO 32000-1, 8.9.7). A dictionary the parser reads another way, or one
-// longer than [maxInlineImageDictTokens], is left as written.
+// keyword, without consuming them, and [parser.Parser.ParseInlineImageHeader]
+// then reads the dictionary, whose filters end the data, which a walk
+// consuming the tokens itself would hide from it. The replacements stand only
+// when the parser consumed exactly the tokens read ahead, so the ID they end
+// at is the one its data starts after (ISO 32000-1, 8.9.7). A dictionary the
+// parser reads another way, or one longer than [maxInlineImageDictTokens], is
+// left as written.
 //
 // Every replacement ends before the ID and the byte that follows it, so the
 // data is carried across byte for byte.
-func inlineImageDictSplices(ctx context.Context, p *parser.Parser, offer tokenOffer) ([]tokenSplice, bool) {
+func inlineImageDictSplices(ctx context.Context, p *parser.Parser, images *content.InlineImageEnds, offer tokenOffer) ([]tokenSplice, bool) {
 	var splices []tokenSplice
 	// dictTokens counts the tokens read ahead through the ID, or stays 0 when
 	// no ID was found.
@@ -242,7 +250,11 @@ func inlineImageDictSplices(ctx context.Context, p *parser.Parser, offer tokenOf
 	}
 
 	before := p.Consumed()
-	if _, err := p.ParseInlineImageDict(ctx); err != nil {
+	dict, err := p.ParseInlineImageHeader(ctx)
+	if err != nil {
+		return nil, false
+	}
+	if err := p.ResumeAt(int64(images.End(ctx, int(p.Position()), dict))); err != nil {
 		return nil, false
 	}
 	if dictTokens == 0 || p.Consumed()-before != dictTokens {

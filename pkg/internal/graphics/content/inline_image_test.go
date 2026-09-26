@@ -80,6 +80,47 @@ func TestInlineImagesReadWholeByOtherReadings(t *testing.T) {
 	}
 }
 
+// TestInlineImagesReadByRepairs pins that the readings of a repair end the
+// data of an inline image at the later of the ends veraPDF and PDF.js give it
+// ([inlineImages.repairEnd]), so no byte either reads as data reads as an
+// operator.
+func TestInlineImagesReadByRepairs(t *testing.T) {
+	t.Parallel()
+
+	const g = "BI /W 1 /H 1 /BPC 8 /CS /G "
+	for _, tc := range []struct {
+		name, data          string
+		vera, pdfjs, repair []string
+	}{
+		// veraPDF reads an EI before the /L bytes as data.
+		{"veraPDF ends later", g + "/L 9 ID x EI Q zz EI Q\n", []string{"BI", "Q"}, []string{"BI", "Q", "zz", "EI", "Q"}, []string{"BI", "Q"}},
+		// PDF.js takes no EI that a tab follows.
+		{"PDF.js ends later", g + "ID x EI\tQ zz EI Q\n", []string{"BI", "Q", "zz", "EI", "Q"}, []string{"BI", "Q"}, []string{"BI", "Q"}},
+		{"both end at an EI against the data", g + "ID xEI Q\n", []string{"BI", "Q"}, []string{"BI", "Q"}, []string{"BI", "Q"}},
+		{"no EI", g + "ID x\nQ\n", []string{"BI"}, []string{"BI"}, []string{"BI"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := operatorsOf(t, tc.data); !reflect.DeepEqual(got, tc.vera) {
+				t.Errorf("read as veraPDF reads it: %q, want %q", got, tc.vera)
+			}
+			if got := operatorsOf(t, tc.data, SplitGluedOperators()); !reflect.DeepEqual(got, tc.pdfjs) {
+				t.Errorf("read as PDF.js reads it: %q, want %q", got, tc.pdfjs)
+			}
+			for name, opt := range map[string]Option{"ForRepair": ForRepair(), "WholeStream": WholeStream()} {
+				if got := operatorsOf(t, tc.data, opt); !reflect.DeepEqual(got, tc.repair) {
+					t.Errorf("%s: %q, want %q", name, got, tc.repair)
+				}
+			}
+			ends := NewInlineImageEnds([]byte(tc.data))
+			idEnd := strings.Index(tc.data, "ID") + len("ID")
+			if got, want := ends.End(context.Background(), idEnd, nil), newInlineImages([]byte(tc.data)).repairEnd(context.Background(), idEnd, nil); got != want {
+				t.Errorf("InlineImageEnds.End = %d, want %d", got, want)
+			}
+		})
+	}
+}
+
 // TestInlineImagesResumeOffsets pins where the reading resumes after an image
 // whose EI a BI follows: at the data of the last image read with it, offset
 // by the length of the data of the first, "EI" included.

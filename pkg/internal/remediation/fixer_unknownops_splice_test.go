@@ -36,9 +36,11 @@ func TestRepairContentData_SplicesAroundInlineImages(t *testing.T) {
 			tally: unknownOpsTally{removed: 1},
 		},
 		{
+			// The image runs through the white-space byte past its EI, where
+			// PDF.js reads on, so the stray EI's span begins at the EI.
 			name:  "stray EI and ID",
 			data:  "q " + img + " EI Q ID",
-			want:  "q " + img + "  Q ",
+			want:  "q " + img + "   Q ",
 			tally: unknownOpsTally{removed: 2},
 		},
 		{
@@ -79,8 +81,8 @@ func TestRepairContentData_SplicesAroundInlineImages(t *testing.T) {
 		},
 		{
 			name:  "between two images",
-			data:  img + " foo " + img,
-			want:  img + "  " + img,
+			data:  "q " + img + " Q foo q " + img + " Q",
+			want:  "q " + img + " Q  q " + img + " Q",
 			tally: unknownOpsTally{removed: 1},
 		},
 		{
@@ -121,6 +123,21 @@ func TestRepairContentData_SplicesAroundInlineImages(t *testing.T) {
 func TestRepairContentData_LeavesAnImageStreamItCannotSplice(t *testing.T) {
 	t.Parallel()
 	data := "q " + spliceImage + " QBI zz"
+	got, tally := repairContentData(context.Background(), []byte(data), 2)
+	if tally != (unknownOpsTally{}) {
+		t.Errorf("repaired %q to %q, %+v, want it left as written", data, got, tally)
+	}
+}
+
+// TestRepairContentData_LeavesAnOperatorPDFJSReadsAsData pins that an
+// undefined operator written just past an image's EI stays: PDF.js ends the
+// data at no EI whose next bytes lex to an operator Annex A, Table A.1 does
+// not define (Parser.findDefaultInlineStreamEnd, src/core/parser.js), so it
+// reads "foo" and the second image as the first image's data, and removing
+// "foo" would end the first image at its EI and draw the second.
+func TestRepairContentData_LeavesAnOperatorPDFJSReadsAsData(t *testing.T) {
+	t.Parallel()
+	data := spliceImage + " foo " + spliceImage
 	got, tally := repairContentData(context.Background(), []byte(data), 2)
 	if tally != (unknownOpsTally{}) {
 		t.Errorf("repaired %q to %q, %+v, want it left as written", data, got, tally)

@@ -241,8 +241,10 @@ func deviceFamily(name string) string {
 //   - pdfjs pr6531_2.pdf: is encrypted, and veraPDF judges none of its
 //     appearance stream's colour.
 //   - pdfjs bug1513120_reduced.pdf: half its Type 3 glyphs end their inline
-//     image mask data with EI and no white space, which litho's content
-//     parser rejects, so it counts half the links veraPDF does.
+//     image mask data with EI and no white space before it, and litho fails
+//     ISO 19005-2, 6.2.4.3 t3 68 times and t4 50 times, as veraPDF does. The
+//     reading of a remediation, which rejected that data, failed them 38 and
+//     33 times.
 type colorLinkWalk struct {
 	doc   *document.Document
 	part  int

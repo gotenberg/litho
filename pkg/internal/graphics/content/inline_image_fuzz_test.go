@@ -9,8 +9,9 @@ import (
 
 // FuzzInlineImages feeds arbitrary bytes to the reader of inline image data
 // that a parse reading a stream as veraPDF does uses ([inlineImages]), and
-// asserts crash-freedom and that reading never resumes before the data it
-// was asked to read.
+// asserts crash-freedom, that reading never resumes before the data it was
+// asked to read, and that the reading of a repair resumes past what PDF.js
+// reads as data ([inlineImages.repairEnd]).
 //
 // The bytes are a content stream's, entirely file-controlled, and the reader
 // indexes them itself: it scans image data for EI, reads the token after
@@ -33,6 +34,11 @@ func FuzzInlineImages(f *testing.F) {
 			for _, dict := range []ast.PdfDict{nil, {"L": ast.PdfInt(3)}, {"Length": ast.PdfReal(1e18)}} {
 				if got := r.resume(ctx, idEnd, dict); got < idEnd {
 					t.Fatalf("resume(%d) = %d, before the data", idEnd, got)
+				}
+				// A repair reads on past what either reader reads as data.
+				pdfjs, _ := pdfjsInlineImageEnd(ctx, data, idEnd, dict)
+				if got := newInlineImages(data).repairEnd(ctx, idEnd, dict); got < pdfjs || got > len(data) {
+					t.Fatalf("repairEnd(%d) = %d, before the %d PDF.js reads to or past the stream", idEnd, got, pdfjs)
 				}
 			}
 		}

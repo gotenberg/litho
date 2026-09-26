@@ -184,8 +184,9 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 // stream at a key that is no name (ISO 32000-1, 8.9.7) and at a token it
 // cannot read (Parser.makeInlineImage and Lexer.getObj, src/core/parser.js),
 // so a dictionary that parse cannot read ends it too, as does one that holds
-// such a key. The other readings end the data at an EI that white space
-// precedes and follows ([parser.Parser.ParseInlineImageDict]).
+// such a key. The readings of a repair, [ForRepair] and [WholeStream], end the
+// data at the later of the ends the two readers give it
+// ([inlineImages.repairEnd]).
 func readInlineImage(ctx context.Context, p *parser.Parser, o readOptions, images *inlineImages) (ast.PdfDict, bool, error) {
 	switch {
 	case o.commands != nil:
@@ -205,8 +206,11 @@ func readInlineImage(ctx context.Context, p *parser.Parser, o readOptions, image
 		}
 		return dict, true, p.ResumeAt(int64(images.resume(ctx, int(p.Position()), dict)))
 	default:
-		dict, err := p.ParseInlineImageDict(ctx)
-		return dict, err == nil, err
+		dict, err := p.ParseInlineImageHeader(ctx)
+		if err != nil {
+			return nil, false, err
+		}
+		return dict, true, p.ResumeAt(int64(images.repairEnd(ctx, int(p.Position()), dict)))
 	}
 }
 
@@ -351,6 +355,9 @@ func SplitGluedOperators() Option {
 // the Tj here, which a repair that removed the run would take with it. Under
 // [SplitGluedOperators] it changes nothing.
 //
+// It ends the data of an inline image past what both veraPDF and PDF.js read
+// as its data ([inlineImages.repairEnd]), so no repair rewrites a byte of it.
+//
 // # Corpus evidence
 //
 //   - pdfjs poppler-90-0-fuzzed.pdf: page 14 writes "55.8492", fuzzed bytes
@@ -370,9 +377,10 @@ func ForRepair() Option {
 // it reads every operator the stream holds: past the stray "]" where that
 // parse ends ([endsReading]), through the arrays and dictionaries it gives up
 // on the stream for ([parser.Parser.WithVeraPDFContainers]), and every inline
-// image, whose data it ends as [ForRepair] does
-// ([parser.Parser.ParseInlineImageDict]) rather than as veraPDF does, which
-// reads an image that follows another as part of it ([inlineImages]).
+// image, whose data it ends as [ForRepair] does, past what both veraPDF and
+// PDF.js read as its data ([inlineImages.repairEnd]), rather than as veraPDF
+// does, which reads an image that follows another as part of it
+// ([inlineImages]).
 //
 // It is for the readings that act on what a viewer draws rather than on what
 // veraPDF judges, such as the tagging that marks every piece of a page's
@@ -631,7 +639,7 @@ const noOperand = -1
 // operandEntryDepth is the depth the parser reads a value of an operand
 // dictionary at (see [parser.EntryViolationError]): parseOperations reads
 // every operand as an object on its own, at depth 1, and
-// [parser.Parser.ParseInlineImageDict] reads the values of an inline image
+// [parser.Parser.ParseInlineImageHeader] reads the values of an inline image
 // dictionary one level down, as a dictionary's values are.
 const operandEntryDepth = 2
 

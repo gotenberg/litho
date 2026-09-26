@@ -543,7 +543,7 @@ func nameSplices(ctx context.Context, data []byte, rename func(name string) (ast
 	}
 	asked := make(map[int]string)
 	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
-	splices, complete := walkTokens(ctx, lex, func(tok lexer.Token, at tokenPlace) (tokenSplice, bool) {
+	splices, complete := walkTokens(ctx, data, lex, func(tok lexer.Token, at tokenPlace) (tokenSplice, bool) {
 		// The lexer hands a name back with the solidus that begins it.
 		name, isName := strings.CutPrefix(tok.Value, "/")
 		if tok.Type != lexer.TokenName || !isName {

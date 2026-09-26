@@ -162,6 +162,69 @@ func (r *inlineImages) resume(ctx context.Context, idEnd int, dict ast.PdfDict) 
 	return min(last+end-first, len(r.data))
 }
 
+// repairEnd returns the offset a repair's reading of the stream resumes at
+// after the inline image whose ID keyword ends at idEnd, with dict its
+// dictionary: past the data as PDF.js ends it ([pdfjsInlineImageEnd]) or as
+// veraPDF ends the data of that image ([inlineImages.scan]), whichever runs
+// longer.
+//
+// A repair writes a stream back, and no byte either reader takes for image
+// data may move, or it moves the pixels a viewer paints, or the image data
+// ISO 19005 judges, ISO 32000-1, 8.9.7 giving the data no length that a
+// reader could resynchronise on. Reading on from the later end keeps both.
+// The operators between the two ends, which one reader reads, are written
+// back as they are: veraPDF reads the images a check reads whole as data,
+// which the repair reads as images of their own, and the bytes it reads as
+// operators once it moves back into their data are data to PDF.js.
+// Deliberate leniency toward both readers: a stream either reads as ISO
+// 32000-1, 8.9.7 has it keeps the operators they both read.
+//
+// Both scans stop at the end they find, and the reading resumes at the later
+// one, so no scan reads a byte another scan of the stream has read, but the
+// one PDF.js makes to the end of a stream holding no EI it takes, past
+// which it met none.
+//
+// # Corpus evidence
+//
+//   - All corpora: the reading of a repair moves on 64 content streams of 5
+//     files, 63 of which it failed to read. Read as a remediation reads
+//     them, the PDF/A-2b violations of 3 of those files move, each to what
+//     veraPDF 1.30 reports: pdfjs
+//     bug1513120_reduced.pdf, issue10388_reduced.pdf and issue17794.pdf.
+//   - All corpora: the default and aggressive PDF/A-2b remediations of the 5
+//     files write the same bytes as before.
+//   - pdfjs issue17794.pdf: its PDF/UA-1 remediation tags the inline image
+//     it reads, 1309 structure elements where it wrote 1308, and veraPDF
+//     reports the same findings on the output.
+func (r *inlineImages) repairEnd(ctx context.Context, idEnd int, dict ast.PdfDict) int {
+	vera, _ := r.scan(ctx, r.dataStart(idEnd), inlineDataLength(dict))
+	pdfjs, _ := pdfjsInlineImageEnd(ctx, r.data, idEnd, dict)
+	return max(vera, pdfjs)
+}
+
+// InlineImageEnds finds where the data of the inline images of one content
+// stream ends as a repair reads the stream ([ForRepair], and see
+// [inlineImages.repairEnd]), for a walk of the stream that reads its tokens
+// itself. It holds the state that keeps reading the images of the stream
+// linear in its length, so one value serves the one stream it was made for.
+// It is not safe for concurrent use.
+type InlineImageEnds struct {
+	images *inlineImages
+}
+
+// NewInlineImageEnds returns the finder of the ends of the inline images of
+// data, a content stream's decoded bytes.
+func NewInlineImageEnds(data []byte) *InlineImageEnds {
+	return &InlineImageEnds{images: newInlineImages(data)}
+}
+
+// End returns the offset in the stream past the data of the inline image whose
+// ID keyword ends at idEnd, with dict its dictionary, where a repair reads
+// on.
+func (e *InlineImageEnds) End(ctx context.Context, idEnd int, dict ast.PdfDict) int {
+	return e.images.repairEnd(ctx, idEnd, dict)
+}
+
 // dataStart returns the offset of the data of an inline image whose ID
 // keyword ends at idEnd: past the white-space byte that follows ID (ISO
 // 32000-1, 8.9.7), when one does.
