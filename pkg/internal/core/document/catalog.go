@@ -222,14 +222,34 @@ func scanForCatalog(ctx context.Context, doc *Document) ast.PdfDict {
 // order also keeps [ResolveCatalog] and [Document.CatalogRef], which both
 // recover through this scan, agreeing on the catalog.
 //
+// The candidates are every object the file's bytes define, the ones its table
+// leaves out included, so the scan runs the raw-byte augmentation first (see
+// [Document.augmentXrefFromRawScan]). Recovery is leniency on read that ISO
+// 32000-1 does not describe, and the reader it follows is PDF.js: when the
+// catalog the trailer names is unusable, PDF.js re-reads the file in recovery
+// mode (XRef.indexObjects), which rebuilds its index from every "N G obj"
+// header in the bytes and resolves the catalog through that index. veraPDF
+// recovers no catalog at all and reports the file. Ranging the index without the augmentation saw the objects
+// the table leaves out only when some earlier lookup had missed and run it, so
+// the same bytes recovered a catalog or failed to depending on what the caller
+// did first (CONTRIBUTING "Deterministic output"). Under
+// [DeferXRefAugmentation] the scan defers it as a missed lookup does, and the
+// caller's run over the final index sees those objects.
+//
 // # Corpus evidence
 //
 //   - All corpora: 14 files recover their catalog through this scan, and
 //     none holds more than one candidate catalog or page-tree root, so the
 //     fixed order changes no corpus output.
+//   - All corpora: no file recovers a different catalog or page count with
+//     the augmentation run first or not, before running it here or after.
+//   - pdfjs bug1980958.pdf: is the one file whose recovery now runs the
+//     augmentation while it opens, and its catalog, its page count and its
+//     PDF/A-1b and PDF/A-2b remediations do not change.
 func scanObjects(ctx context.Context, doc *Document, match func(ast.PdfDict) bool) (ast.PdfIndirectRef, ast.PdfDict) {
-	// The loop calls Resolve, which can trigger the lazy xref augmentation
-	// write, and XRefEntries yields from a copy taken under the lock.
+	doc.AugmentXRef(ctx)
+	// The loop calls Resolve, and XRefEntries yields from a copy taken under
+	// the lock.
 	for objNum, entry := range doc.XRefEntries() {
 		if err := ctx.Err(); err != nil {
 			return ast.PdfIndirectRef{}, nil
