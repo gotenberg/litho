@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -160,6 +161,19 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 // stream once, the q/Q nesting limit included, which 15 unclosed q in the
 // stream listed twice would reach if its operators were read twice.
 //
+// A part veraPDF reads no operator from ([decodeContentStream]) adds nothing,
+// and the page reads the parts it can: ISO 32000-1, 7.7.3.3 makes the array
+// one content stream cut into parts, and one part that does not decode says
+// nothing about the others. So does an entry of the array that is no stream,
+// which veraPDF 1.30 skips as it concatenates the parts (COSArray.getData),
+// and a /Contents that is neither a stream nor an array, from which it reads
+// no content at all (PDPage.initializeContents): ISO 32000-1, 7.7.3.3, Table
+// 30 allows only those two, and 7.3.9 makes a null value an absent entry. A
+// page none of whose parts decodes has no content, and no rule judges an
+// operator of it, as in veraPDF. The error is kept for a /Contents that does
+// not resolve and for content past the page budget, which the callers answer
+// conservatively.
+//
 // # Corpus evidence
 //
 //   - pdfjs bomb_giant.pdf: follows its text part with three /JBIG2Decode
@@ -167,12 +181,22 @@ func checkPageContent(ctx context.Context, doc *document.Document, page *pageCtx
 //     content while litho dropped the page. Measured against veraPDF with the
 //     undecodable part before and after the readable one, and with an unknown
 //     filter name in its place.
-//   - pdfjs issue17190_1.pdf: carries 77 parts, one of them unreadable, and
-//     litho reported none of the colour and font defects veraPDF raises from
-//     the other 76 while a truncated part lost the whole page.
+//   - pdfjs issue17190_1.pdf: carries 77 parts, 37 of them /FlateDecode
+//     streams with no data, which decode to nothing, and litho reported none
+//     of the colour and font defects veraPDF raises from the other 40 while a
+//     part that did not decode lost the whole page.
 //   - All corpora: govdocs thread_200_200738.pdf is the only file whose
 //     /Contents array lists a part twice, on 10 of its pages, and no count
 //     moves at PDF/A-1b or PDF/A-2b.
+//   - pdfjs issue18973.pdf: page 45 lists an entry that is no stream beside
+//     two content streams, and litho judged every font of the page as if it
+//     drew them and read none of its operators. Reading the two streams, the
+//     file fails the embedding rule 31 times, where litho counted 29, and its
+//     DeviceGray rule 2744 times, where litho counted 2725, at PDF/A-1b and
+//     PDF/A-2b, as veraPDF does.
+//   - pdfjs issue15803.pdf: page 1 has a null /Contents, which litho judged
+//     as unreadable content showing text with no /Lang at PDF/UA-1. veraPDF
+//     cannot parse the file.
 func resolvePageContentBytes(ctx context.Context, doc *document.Document, page ast.PdfDict) ([]byte, error) {
 	contentsObj, ok := page["Contents"]
 	if !ok {
@@ -204,49 +228,25 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 			}
 			stream, err := document.ResolveStream(ctx, doc, item)
 			if err != nil {
-				return nil, fmt.Errorf("resolving item in /Contents array: %w", err)
+				if ctx.Err() != nil {
+					return nil, ctx.Err()
+				}
+				doc.Logger.Debug("compliance: /Contents array entry is no stream; skipping",
+					slog.Any("err", err))
+				continue
 			}
 			streams = append(streams, stream)
 		}
 	default:
-		return nil, fmt.Errorf("unexpected /Contents type: %T", resolved)
+		return nil, nil
 	}
 
-	var (
-		allData         []byte
-		decoded         int
-		lastErr         error
-		undecodablePart bool
-	)
+	var allData []byte
 	for _, s := range streams {
-		// A stream whose /Filter chain contains an undecodable filter (e.g. a
-		// misspelled "Flatedecode") stays filter-encoded after DecodeStream.
-		// Parsing those bytes as content operators yields a run of spurious
-		// "undefined operator" violations; the bad filter itself is reported
-		// separately (ISO 19005 §6.1.6.2). veraPDF likewise does not parse an
-		// undecodable content stream.
-		//
-		// It skips that part only, not the page: ISO 32000-1, 7.7.3.3 makes the
-		// array one content stream split into parts, and veraPDF judges the
-		// parts it can read.
-		if doc.StreamHasUndecodableFilter(ctx, s) {
-			undecodablePart = true
+		data, reads := decodeContentStream(ctx, doc, s)
+		if !reads {
 			continue
 		}
-		data, err := doc.DecodeStream(ctx, s)
-		if err != nil {
-			// ISO 32000-1, 7.7.3.3 lets a page split its content across an
-			// array of streams, and one truncated part says nothing about the
-			// rest. Losing the whole page for it threw away every operator the
-			// other parts hold. Viewers render what they can, and
-			// content.ParsePageContent already skips the part and keeps
-			// going.
-			doc.Logger.Debug("compliance: content stream part failed to decode; skipping",
-				slog.Any("err", err))
-			lastErr = err
-			continue
-		}
-		decoded++
 		allData = append(allData, data...)
 		allData = append(allData, '\n')
 
@@ -261,17 +261,188 @@ func resolvePageContentBytes(ctx context.Context, doc *document.Document, page a
 		}
 	}
 
-	// Nothing decoded at all is a page whose content litho cannot read, which
-	// the caller answers conservatively. A page held back by an undecodable
-	// filter keeps its own sentinel, whatever else failed beside it.
-	if decoded == 0 && undecodablePart {
-		return nil, errUndecodableContent
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	if decoded == 0 && lastErr != nil {
-		return nil, fmt.Errorf("decoding content stream: %w", lastErr)
-	}
-
 	return allData, nil
+}
+
+// contentFilters lists the filters veraPDF 1.30 decodes a stream through
+// (COSFilterRegistry): the standard filters of ISO 32000-1, 7.4.1, Table 6
+// that are no image codec, and Crypt, which it reads as the identity. The
+// abbreviations ISO 32000-1, 8.9.7, Table 94 gives those filters for inline
+// images, the image codecs (CCITTFaxDecode, JBIG2Decode, DCTDecode,
+// JPXDecode), BrotliDecode and every other name are none of them.
+//
+//nolint:gochecknoglobals // package-level lookup table.
+var contentFilters = map[ast.PdfName]bool{
+	"ASCIIHexDecode":  true,
+	"ASCII85Decode":   true,
+	"LZWDecode":       true,
+	"FlateDecode":     true,
+	"RunLengthDecode": true,
+	"Crypt":           true,
+}
+
+// decodeContentStream returns the bytes of the content stream s that veraPDF
+// reads operators from, and false when it reads none: a page's content or a
+// part of it, a form XObject, a tiling pattern, a Type 3 glyph description or
+// an annotation appearance. Every compliance walk that judges the operators of
+// a content stream reads it here, so that no rule judges an operator veraPDF
+// does not read.
+//
+// ISO 19005 judges the operators a content stream holds and says nothing of a
+// stream a reader cannot decode. litho follows veraPDF 1.30, which parses what
+// the filters of the stream decode (GFPDContentStream.parseOperators) and
+// reads:
+//
+//   - nothing when the last filter of the chain is one it does not decode
+//     ([contentFilters]): its stand-in for that filter reads as an empty
+//     stream. A filter it does not decode earlier in the chain hands its
+//     input on unchanged to the next one, so the chain is read without it.
+//   - nothing when decoding fails before the first byte, and the bytes
+//     decoded before the damage when it fails later, as the filter chain
+//     keeps them ([document.Document.DecodeStreamReport]).
+//
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on a page per case,
+// each selecting an unembedded font, filling in DeviceRGB and running an
+// undefined operator: /FlateDecode data that is no zlib stream or whose first
+// block is invalid, /AHx, /A85 and /Fl, /DCTDecode, an unknown filter, and
+// [/FlateDecode /Foo] fail none of the three rules, where [/Foo /FlateDecode]
+// over Flate data, Flate data cut short or damaged after the operators, and
+// ASCIIHexDecode data damaged after them fail all three.
+//
+// # Corpus evidence
+//
+//   - pdfjs poppler-90-0-fuzzed.pdf: pages 7, 12 and 16 hold a stream that
+//     fails to decode before its first byte, /A85 on page 7, and litho judged
+//     every font the pages declare as if they drew it: 18 glyph widths and 7
+//     unembedded fonts veraPDF does not report there, one of them R20, which
+//     it reports on page 14, where a stream it reads draws it. Pages 9 and 10
+//     are /AHx, from which litho read two undefined operators and two
+//     DeviceGray uses that veraPDF does not report either. Every count now
+//     matches veraPDF's on every page at PDF/A-1b, but for one 6.2.8 test on
+//     page 1 this reading does not move, and so does every moved count at
+//     PDF/A-2b and PDF/UA-1.
+//   - pdfjs poppler-395-0-fuzzed.pdf: its one content stream fails to decode
+//     before its first byte, and litho judged the unembedded font the page
+//     declares, which veraPDF does not report.
+//   - pdfjs Brotli-Prototype-FileA.pdf: 25 pages of /BrotliDecode content, from
+//     which litho read 69185 device colour uses at PDF/A-1b and PDF/A-2b, and
+//     four font findings at PDF/A-1b, five at PDF/A-2b. veraPDF cannot parse
+//     the file, whose cross reference stream is itself Brotli data.
+//   - pdfjs PDFBOX-3148-2-fuzzed.pdf: a page and a form in /A85, from which
+//     litho read two DeviceGray uses. veraPDF cannot parse the file.
+//   - All corpora: no other count moves at PDF/A-1b or PDF/A-2b, and no file
+//     writes a filter veraPDF does not decode before the last of a chain,
+//     which litho undecodable_2b.pdf plants.
+func decodeContentStream(ctx context.Context, doc *document.Document, s ast.PdfStream) ([]byte, bool) {
+	s, reads := veraPDFFilterChain(ctx, doc, s)
+	if !reads {
+		doc.Logger.Debug("compliance: content stream ends with a filter veraPDF does not decode; reading none")
+		return nil, false
+	}
+	data, err := doc.DecodeStream(ctx, s)
+	if err != nil {
+		doc.Logger.Debug("compliance: content stream does not decode; reading none", slog.Any("err", err))
+		return nil, false
+	}
+	return data, true
+}
+
+// veraPDFFilterChain returns s with the filters of its chain that veraPDF
+// passes its input through unchanged left out (see [decodeContentStream]),
+// and false when veraPDF reads nothing from it: the chain ends with a filter
+// veraPDF does not decode, or its parameters do not fit it
+// ([veraPDFDecodeParms]). A chain of [contentFilters] alone comes back as it
+// is.
+func veraPDFFilterChain(ctx context.Context, doc *document.Document, s ast.PdfStream) (ast.PdfStream, bool) {
+	filterObj, err := document.ResolveObject(ctx, doc, s.Dict["Filter"])
+	if err != nil {
+		// The decode resolves /Filter again, and fails the stream for it.
+		doc.Logger.Debug("compliance: cannot resolve content stream /Filter", slog.Any("err", err))
+		return s, true
+	}
+	var chain ast.PdfArray
+	switch f := filterObj.(type) {
+	case ast.PdfName:
+		chain = ast.PdfArray{f}
+	case ast.PdfArray:
+		chain = f
+	default:
+		return s, true
+	}
+	if len(chain) == 0 {
+		return s, true
+	}
+	parms, fits := veraPDFDecodeParms(ctx, doc, s.Dict["DecodeParms"], len(chain))
+	if !fits {
+		return s, false
+	}
+	kept := make(ast.PdfArray, 0, len(chain))
+	keptParms := make(ast.PdfArray, 0, len(chain))
+	for i, item := range chain {
+		name, err := document.ResolveName(ctx, doc, item)
+		if err != nil || !contentFilters[name] {
+			if i == len(chain)-1 {
+				return s, false
+			}
+			continue
+		}
+		kept = append(kept, name)
+		if parms != nil {
+			keptParms = append(keptParms, parms[i])
+		}
+	}
+	if len(kept) == len(chain) {
+		return s, true
+	}
+	dict := make(ast.PdfDict, len(s.Dict))
+	maps.Copy(dict, s.Dict)
+	dict["Filter"] = kept
+	if parms != nil {
+		dict["DecodeParms"] = keptParms
+	}
+	s.Dict = dict
+	return s, true
+}
+
+// veraPDFDecodeParms returns the /DecodeParms obj of a chain of n filters as
+// one entry per filter, nil when obj gives none, and false when veraPDF reads
+// nothing from the stream for them: veraPDF 1.30 (COSFilters.getInputStream)
+// fails to decode a stream whose parameters, a dictionary or an array of
+// them, count other than its filters, or whose array holds an entry that is
+// neither a dictionary nor null. ISO 32000-1, 7.3.8.2, Table 5 gives the
+// array one entry per filter, and a single dictionary to a single filter.
+// Measured with veraPDF 1.30 at PDF/A-2b over Flate data: under [/Foo
+// /FlateDecode], a dictionary holding a PNG predictor reads nothing, and an
+// array giving it to /Foo and null to /FlateDecode reads the stream; under
+// /FlateDecode, [<< >> << >>] and [5] read nothing, and [null] and 5 read it.
+func veraPDFDecodeParms(ctx context.Context, doc *document.Document, obj ast.PdfObject, n int) (ast.PdfArray, bool) {
+	parms, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		// Parameters that do not resolve give no filter any, as in the decode.
+		doc.Logger.Debug("compliance: cannot resolve content stream /DecodeParms", slog.Any("err", err))
+		return nil, true
+	}
+	switch p := parms.(type) {
+	case ast.PdfDict:
+		return ast.PdfArray{p}, n == 1
+	case ast.PdfArray:
+		for _, entry := range p {
+			resolved, err := document.ResolveObject(ctx, doc, entry)
+			if err != nil {
+				continue
+			}
+			switch resolved.(type) {
+			case ast.PdfDict, ast.PdfNull, nil:
+			default:
+				return nil, false
+			}
+		}
+		return p, len(p) == n
+	}
+	return nil, true
 }
 
 // checkInlineImageFilters states the inline image filter rule, ISO 19005-1,

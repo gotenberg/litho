@@ -599,11 +599,11 @@ func (w *colorLinkWalk) judgeGroup(ctx context.Context, dict ast.PdfDict, s *lin
 	w.judgeSpace(ctx, csObj, s, s.defaults, false, 0)
 }
 
-// parse decodes and parses stream, logging why it cannot.
+// parse decodes and parses stream, logging why it cannot. A stream veraPDF
+// reads no operator from reads as none ([decodeContentStream]).
 func (w *colorLinkWalk) parse(ctx context.Context, stream ast.PdfStream) ([]content.Operation, bool) {
-	data, err := w.doc.DecodeStream(ctx, stream)
-	if err != nil {
-		w.doc.Logger.Debug("compliance.color: cannot decode content stream", "error", err)
+	data, reads := decodeContentStream(ctx, w.doc, stream)
+	if !reads {
 		return nil, false
 	}
 	ops, err := content.ParseStreamData(ctx, data)

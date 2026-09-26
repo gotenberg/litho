@@ -51,10 +51,12 @@ func TestResolvePageContentBytesKeepsTheReadableParts(t *testing.T) {
 	}
 }
 
-// TestResolvePageContentBytesReportsATotalLoss pins the other side: when no
-// part decodes there is nothing to check, and the caller has to hear about it
-// so the conservative fallbacks engage rather than reading the page as empty.
-func TestResolvePageContentBytesReportsATotalLoss(t *testing.T) {
+// TestResolvePageContentBytesReadsATotalLossAsNoContent pins the other side:
+// when no part decodes, the page has no content, and no error sends the
+// callers to their conservative fallbacks, which judged every font the page
+// declares as if it drew them. veraPDF reads no operator from a content stream
+// that does not decode ([decodeContentStream]).
+func TestResolvePageContentBytesReadsATotalLossAsNoContent(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
@@ -70,7 +72,7 @@ func TestResolvePageContentBytesReportsATotalLoss(t *testing.T) {
 	}
 
 	data, err := resolvePageContentBytes(ctx, doc, page)
-	if err == nil {
-		t.Errorf("a page whose every part failed returned %d bytes and no error", len(data))
+	if err != nil || len(data) != 0 {
+		t.Errorf("a page whose every part failed returned %q and %v, want no content and no error", data, err)
 	}
 }

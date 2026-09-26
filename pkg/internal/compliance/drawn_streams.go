@@ -484,8 +484,8 @@ func (w *drawnStreamWalk) visit(ctx context.Context, obj ast.PdfObject, owner as
 	if err != nil {
 		w.doc.Logger.Debug("compliance.graphics: cannot resolve drawn stream resources", "error", err)
 	}
-	data, err := w.doc.DecodeStream(ctx, stream)
-	if err != nil || len(data) == 0 {
+	data, reads := decodeContentStream(ctx, w.doc, stream)
+	if !reads || len(data) == 0 {
 		return
 	}
 	ops, overflows, format, err := content.ParseStreamDataForCompliance(ctx, data)

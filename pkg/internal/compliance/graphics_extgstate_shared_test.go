@@ -2,7 +2,6 @@ package compliance
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -30,7 +29,7 @@ func pageCtxsForPages(ctx context.Context, doc *document.Document, pages ...ast.
 			pageObject:        pageObject{dict: page},
 			resources:         resolveResources(ctx, doc, page),
 			content:           contentBytes,
-			parseFailed:       contentErr != nil && !errors.Is(contentErr, errUndecodableContent),
+			parseFailed:       contentErr != nil,
 			contentUnreadable: contentErr != nil,
 		}
 	}

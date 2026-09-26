@@ -652,9 +652,8 @@ func resolveFontForm(ctx context.Context, doc *document.Document, xobjDict ast.P
 	if xobjRes == nil {
 		return fontForm{}, false
 	}
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil {
-		doc.Logger.Debug("compliance: fonts: cannot decode Form XObject", "page", pageNum, "error", err)
+	data, reads := decodeContentStream(ctx, doc, stream)
+	if !reads {
 		return fontForm{}, false
 	}
 	ops, err := content.ParseStreamData(ctx, data)
@@ -725,9 +724,8 @@ func checkPatternFonts(ctx context.Context, doc *document.Document, ops []conten
 		if patternRes == nil {
 			continue
 		}
-		data, err := doc.DecodeStream(ctx, stream)
-		if err != nil {
-			doc.Logger.Debug("compliance: fonts: cannot decode tiling pattern", "page", pageNum, "error", err)
+		data, reads := decodeContentStream(ctx, doc, stream)
+		if !reads {
 			continue
 		}
 		subOps, err := content.ParseStreamData(ctx, data)
@@ -814,10 +812,8 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 			if err != nil {
 				continue
 			}
-			data, err := doc.DecodeStream(ctx, stream)
-			if err != nil {
-				doc.Logger.Debug("compliance: fonts: cannot decode Type3 CharProc",
-					"page", pageNum, "glyph", glyphName, "error", err)
+			data, reads := decodeContentStream(ctx, doc, stream)
+			if !reads {
 				continue
 			}
 			procOps, err := content.ParseStreamData(ctx, data)
@@ -1039,9 +1035,8 @@ func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apO
 	// before that test is what reaches those, and the walk below judges them.
 	fontDict, _ := document.ResolveDict(ctx, doc, res["Font"])
 
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil {
-		doc.Logger.Debug("compliance: fonts: cannot decode appearance stream", "page", pageNum, "error", err)
+	data, reads := decodeContentStream(ctx, doc, stream)
+	if !reads {
 		return nil
 	}
 	ops, err := content.ParseStreamData(ctx, data)

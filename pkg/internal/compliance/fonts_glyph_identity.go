@@ -724,9 +724,8 @@ func (j *fontJudgements) claimAppearanceReads(ctx context.Context, doc *document
 	if res == nil {
 		return
 	}
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil {
-		doc.Logger.Debug("compliance: fonts: cannot decode appearance stream", "page", pageNum, "error", err)
+	data, reads := decodeContentStream(ctx, doc, stream)
+	if !reads {
 		return
 	}
 	ops, err := content.ParseStreamData(ctx, data)

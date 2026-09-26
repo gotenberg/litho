@@ -64,7 +64,8 @@ func TestExtGStateTransparency1ScopedToDrawnStates(t *testing.T) {
 }
 
 // TestExtGStateTransparency1UnreadableContentStaysUnscoped pins the safe
-// direction: when the content stream cannot be parsed there is no drawn set, and
+// direction: when the content cannot be read, a /Contents that does not
+// resolve or content past the page budget, there is no drawn set, and
 // [drawnResources.setsExtGState] admits every name rather than silently
 // emptying the survey. A page litho cannot read must not be called
 // transparency-free.
@@ -72,19 +73,46 @@ func TestExtGStateTransparency1UnreadableContentStaysUnscoped(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	// /Contents points at a non-stream object, so the content bytes never
-	// resolve and pageDrawnResources returns nil.
 	doc, cat := objsDocPDF(t,
 		"<< /Type /Catalog /Pages 2 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R"+
-			" /Resources << /ExtGState << /GSblend 5 0 R >> >> >>",
-		"<< /NotAStream true >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]"+
+			" /Resources << /ExtGState << /GSblend 4 0 R >> >> >>",
 		"<< /Type /ExtGState /BM /Darken >>",
 	)
+	pages := pageCtxsFor(ctx, doc, cat)
+	// What collectPageContexts records for a /Contents it cannot read.
+	pages[0].parseFailed = true
+	pages[0].contentUnreadable = true
 
-	vs := checkTransparencyPart1(ctx, doc, pageCtxsFor(ctx, doc, cat))
+	vs := checkTransparencyPart1(ctx, doc, pages)
 	if !hasRule(vs, Rule_19005_1_6_4_t04) {
 		t.Errorf("unreadable content must leave the survey unscoped, got %v", vs)
+	}
+}
+
+// TestExtGStateTransparency1NonStreamContentsDrawsNothing pins that a /Contents
+// that is no stream nor array is no content rather than unreadable content:
+// ISO 32000-1, 7.7.3.3, Table 30 allows only those two, and veraPDF 1.30 reads
+// no operator from any other (PDPage.initializeContents). Measured at
+// PDF/A-1b with a dictionary, null and an integer as the /Contents of a page
+// whose resources name an ExtGState with /BM /Darken: none fails ISO 19005-1,
+// 6.4 t4, which the same page drawing the state with gs fails once.
+func TestExtGStateTransparency1NonStreamContentsDrawsNothing(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	for _, contents := range []string{"5 0 R", "null", "7"} {
+		doc, cat := objsDocPDF(t,
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents "+contents+
+				" /Resources << /ExtGState << /GSblend 4 0 R >> >> >>",
+			"<< /Type /ExtGState /BM /Darken >>",
+			"<< /NotAStream true >>",
+		)
+		if vs := checkTransparencyPart1(ctx, doc, pageCtxsFor(ctx, doc, cat)); hasRule(vs, Rule_19005_1_6_4_t04) {
+			t.Errorf("/Contents %s draws nothing, got %v", contents, vs)
+		}
 	}
 }

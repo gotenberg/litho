@@ -948,12 +948,13 @@ func pageDrawnResources(ctx context.Context, p *pageCtx) *drawnResources {
 
 // formDrawnResources parses a Form XObject's own content stream so recursion
 // into it judges what the form paints rather than what it declares. Returns nil
-// when the stream cannot be read, which keeps the survey of that form's
-// resources unscoped rather than silently emptying it.
+// when the stream does not parse, which keeps the survey of that form's
+// resources unscoped rather than silently emptying it. A stream veraPDF reads
+// no operator from ([decodeContentStream]) paints nothing.
 func formDrawnResources(ctx context.Context, doc *document.Document, stream ast.PdfStream) *drawnResources {
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil {
-		return nil
+	data, reads := decodeContentStream(ctx, doc, stream)
+	if !reads {
+		return collectDrawnResources(nil)
 	}
 	ops, err := content.ParseStreamData(ctx, data)
 	if err != nil {
@@ -1439,8 +1440,8 @@ func type3EncodingCodeToName(ctx context.Context, doc *document.Document, fontDi
 //   - pdfjs issue10717.pdf: keeps its /SMask images in the Type3 font's own
 //     /Resources, where only this walk reaches them.
 func type3CharProcTransparent(ctx context.Context, doc *document.Document, charProc ast.PdfStream, fontRes ast.PdfDict) bool {
-	data, err := doc.DecodeStream(ctx, charProc)
-	if err != nil {
+	data, reads := decodeContentStream(ctx, doc, charProc)
+	if !reads {
 		return false
 	}
 	ops, err := content.ParseStreamData(ctx, data)

@@ -1116,9 +1116,8 @@ func type3ProcWidth(ctx context.Context, doc *document.Document, charProcs ast.P
 	if err != nil {
 		return 0, false
 	}
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil {
-		doc.Logger.Debug("compliance: cannot decode CharProc stream", "error", err)
+	data, reads := decodeContentStream(ctx, doc, stream)
+	if !reads {
 		return 0, false
 	}
 	ops, err := content.ParseStreamData(ctx, data)

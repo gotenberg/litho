@@ -89,9 +89,8 @@ func scanPatternImages(ctx context.Context, doc *document.Document, res ast.PdfD
 		if patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"]); patternType != 1 {
 			continue
 		}
-		data, err := doc.DecodeStream(ctx, stream)
-		if err != nil {
-			doc.Logger.Debug("compliance.xobjects: cannot decode tiling pattern", "pattern", name, "error", err)
+		data, reads := decodeContentStream(ctx, doc, stream)
+		if !reads {
 			continue
 		}
 		ops, err := content.ParseStreamData(ctx, data)

@@ -11,13 +11,6 @@ import (
 // sentinel via [errors.Is] without inspecting the wrapped message.
 var ErrUnknownProfile = errors.New("compliance: unknown profile")
 
-// errUndecodableContent is returned by [resolvePageContentBytes] for a page none
-// of whose content streams decode, at least one of them because it carries a
-// /Filter litho cannot decode. Those bytes stay filter-encoded, so
-// content-operator analysis is skipped rather than run on them; the undecodable
-// filter itself is reported by the §6.1.6.2 filter check.
-var errUndecodableContent = errors.New("compliance: content stream has an undecodable filter")
-
 // errDamagedFontProgram is returned by [decodeFontProgram] for a program whose
 // filter chain met damaged data and kept only the bytes before the damage.
 // The font checks treat it as a program that will not decode.

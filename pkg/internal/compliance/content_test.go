@@ -3,7 +3,6 @@ package compliance
 import (
 	"bytes"
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -11,11 +10,11 @@ import (
 )
 
 // TestResolvePageContentBytes_UndecodableFilterSkipped covers the §6.2.2
-// false-positive guard: a content stream whose /Filter chain contains an
-// undecodable filter (here a misspelled "Flatedecode") stays filter-encoded, so
-// [resolvePageContentBytes] reports [errUndecodableContent] instead of
-// returning the still-encoded bytes for operator parsing. A stream with no
-// filter decodes normally.
+// false-positive guard: a content stream whose /Filter chain ends with a filter
+// litho cannot decode (here a misspelled "Flatedecode") stays filter-encoded,
+// so [resolvePageContentBytes] reads it as no content instead of returning the
+// still-encoded bytes for operator parsing, as veraPDF reads no operator from
+// it. A stream with no filter decodes normally.
 func TestResolvePageContentBytes_UndecodableFilterSkipped(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -29,8 +28,8 @@ func TestResolvePageContentBytes_UndecodableFilterSkipped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve page: %v", err)
 	}
-	if _, err := resolvePageContentBytes(ctx, badDoc, badPage); !errors.Is(err, errUndecodableContent) {
-		t.Errorf("undecodable /Filter: want errUndecodableContent, got %v", err)
+	if data, err := resolvePageContentBytes(ctx, badDoc, badPage); err != nil || len(data) != 0 {
+		t.Errorf("undecodable /Filter: want no content and no error, got %q, %v", data, err)
 	}
 
 	okDoc, _ := objsDocPDF(t,

@@ -41,16 +41,16 @@ type validationCtx struct {
 type pageCtx struct {
 	pageObject
 	resources   ast.PdfDict // the page's own or inherited ones; see [pageObject.effectiveResources]
-	content     []byte      // decoded content stream bytes (nil if decode fails)
+	content     []byte      // decoded content stream bytes (nil when none decodes)
 	ops         []content.Operation
 	opsOnce     sync.Once
-	parseFailed bool // true only when ParseStreamData errored (not for empty content)
+	parseFailed bool // true when the content could not be read or ParseStreamData errored (not for empty content)
 
-	// contentUnreadable is true when the content stream could not be resolved
-	// or decoded at all, including the undecodable-filter case that
-	// parseFailed deliberately excludes. A survey that must stay conservative
-	// when it cannot see what a page paints (see pageDrawnResources) keys on
-	// this rather than on empty operations, which a blank page also produces.
+	// contentUnreadable is true when the /Contents could not be resolved or
+	// its content is past the page budget. A survey that must stay
+	// conservative when it cannot see what a page paints (see
+	// pageDrawnResources) keys on this rather than on empty operations, which
+	// a blank page, and one whose content does not decode, also produce.
 	contentUnreadable bool
 
 	// contentJudged is true when an earlier page's /Contents is the same
@@ -191,19 +191,13 @@ func collectPageContexts(ctx context.Context, doc *document.Document, catalog as
 			pageObject: pageObj,
 			resources:  pageObj.effectiveResources(ctx, doc),
 			content:    contentBytes,
-			// A page whose /Contents is present but will not decode has content
-			// litho cannot read, which is the case the per-font and per-colour
-			// skips call "present but unparseable" and answer conservatively.
-			// Discarding the error left it looking like a page with no content
-			// at all, so every font declared on it was skipped as unused and
-			// an unembedded font behind a truncated stream drew none of the
-			// embedding violation veraPDF raises.
-			//
-			// An undecodable FILTER is excluded. veraPDF does not parse that
-			// stream either, so checking every declared font against it would
-			// report defects veraPDF never raises; the filter itself is already
-			// reported by its own rule.
-			parseFailed:       contentErr != nil && !errors.Is(contentErr, errUndecodableContent),
+			// A /Contents that does not resolve, or content past the page
+			// budget, is content litho cannot read, which the per-font and
+			// per-colour skips call "present but unparseable" and answer
+			// conservatively. A content stream that does not decode is not:
+			// veraPDF reads no operator from it, so it reads as no content
+			// (see [resolvePageContentBytes]).
+			parseFailed:       contentErr != nil,
 			contentUnreadable: contentErr != nil,
 		}
 	}

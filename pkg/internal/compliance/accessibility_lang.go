@@ -360,9 +360,8 @@ func (s *spanLangScan) form(ctx context.Context, op content.Operation, res ast.P
 	if subtype, _ := document.ResolveName(ctx, s.doc, stream.Dict["Subtype"]); subtype != "Form" {
 		return nil
 	}
-	data, err := s.doc.DecodeStream(ctx, stream)
-	if err != nil {
-		s.doc.Logger.Debug("compliance.accessibility: cannot decode Form XObject stream", "error", err)
+	data, reads := decodeContentStream(ctx, s.doc, stream)
+	if !reads {
 		return nil
 	}
 	formOps, err := content.ParseStreamData(ctx, data)
@@ -991,9 +990,11 @@ func mcidsShowingText(ctx context.Context, ops []content.Operation) map[int]bool
 // from the text-showing operator through the marked content enclosing it
 // (GFOpMarkedContent.getInheritedLang), which is the walk this scan mirrors.
 //
-// A page whose content litho cannot decode or parse counts as painting such
+// A page whose /Contents litho cannot resolve or parse counts as painting such
 // text. litho cannot prove that page shows none, and exempting it would drop a
-// violation veraPDF reports on the very files whose streams are damaged.
+// violation veraPDF reports on the very files whose streams are damaged. A
+// content stream that does not decode shows none: veraPDF reads no operator
+// from it ([decodeContentStream]).
 //
 // mcidCovers treats a marked-content sequence carrying an /MCID as covered, for
 // callers that judge MCID-owned text through the structure tree instead.
@@ -1159,10 +1160,11 @@ func formShowsUndeterminedText(ctx context.Context, doc *document.Document, op c
 	if subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype != "Form" {
 		return false
 	}
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil {
-		doc.Logger.Debug("compliance.accessibility: cannot decode Form XObject stream", "error", err)
-		return true
+	// A stream veraPDF reads no operator from shows no text
+	// ([decodeContentStream]).
+	data, reads := decodeContentStream(ctx, doc, stream)
+	if !reads {
+		return false
 	}
 	ops, err := content.ParseStreamData(ctx, data)
 	if err != nil {
