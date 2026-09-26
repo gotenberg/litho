@@ -123,6 +123,7 @@ one deliberately rather than diffing it against a fresh build.
 | `grouping_ua2.pdf`     | PDF/UA-2     | Both halves of a Table 5 row, chosen by how the parent is used   |
 | `resinherit_2b.pdf`    | PDF/A-2b     | Resources and a media box a page inherits from an inner node     |
 | `inlineimage_2b.pdf`   | PDF/A-2b     | Content repairs on a page that holds inline images               |
+| `pagegroup_2b.pdf`     | PDF/A-2b     | Page transparency groups, and an XMP packet a page carries       |
 
 ### Must-not-fire controls
 
@@ -286,6 +287,8 @@ violation but is exempt, so a firing is a false positive.
 | `resinherit_2b`                           | `FR`, the root's font, behind a nearer ancestor's `/Resources`         | ISO 32000-1, 7.7.3.4         |
 | `resinherit_2b`                           | `F6` and `CS4`, an ancestor's, behind the page's own `/Resources`      | ISO 32000-1, 7.7.3.4         |
 | `resinherit_2b`                           | `F4` and `CS3`, an ancestor's, behind a `/Resources` naming no object  | veraPDF `knownKey` reading   |
+| `pagegroup_2b`                            | A page transparency group with an ICCBased blending space              | ISO 19005-2, 6.2.10 t2       |
+| `pagegroup_2b`                            | `xmp:CreatorTool` in the XMP packet a page carries                     | ISO 19005-2, 6.6.2.3.1       |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -349,6 +352,7 @@ which are covered under [Known divergences](#known-divergences).
 | `metafilter_1b.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 8    | 7    |
 | `multipage_2b.pdf`     | 12   | 10   | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 10   | 9    |
 | `outputintent_2b.pdf`  | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
+| `pagegroup_2b.pdf`     | 7    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 6    | 6    |
 | `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
 | `resinherit_2b.pdf`    | 9    | 6    | 11   | 8    | 9    | 11   | 8    | 9    | 9   | 9    | 10   | 9    | 9    |
@@ -2808,6 +2812,58 @@ rewrite, in the resource tier, dropped the images and the text with them: the
 extracted text fell from 2 bytes to 0, the rollback of the content tier could
 not restore it, and the writer refused the whole remediation. At PDF/UA-1 the
 `/Lang` repair never reached the output, and `7.2/29` stayed a residual.
+
+### `pagegroup_2b.pdf`
+
+ISO 19005-2, 6.2.10 test 2 asks every page that contains transparency, in a
+document without a PDF/A OutputIntent, for a `/Group` whose `/CS` names the
+default blending colour space. The file declares no OutputIntent, and four
+pages paint through constant alpha in an ICCBased space, so no page uses a
+device colour space of its own:
+
+| Page | `/Group`                              | Answers at PDF/A-2b |
+| ---- | ------------------------------------- | ------------------- |
+| 1    | none                                  | `6.2.10/2`          |
+| 2    | `/S /Transparency`, an ICCBased `/CS` | nothing             |
+| 3    | `/S /Transparency`, no `/CS`          | `6.2.10/2`          |
+| 4    | `/S /Transparency`, `/CS /DeviceRGB`  | `6.2.4.3/2`         |
+
+Page 2 is the control. Its ICCBased blending space answers the rule, and a
+repair of pages 1 and 3 has to leave it in place: litho's group repair dropped
+every `/CS` that was not a device space, which left page 2, and on a later
+round the space it had just given page 1, failing a rule the source passed.
+Page 3 is the group a check reading "has a `/Group`" as enough lets through.
+Page 4 blends in DeviceRGB, which test 2 of 6.2.4.3 allows only under an RGB
+OutputIntent.
+
+Page 1 also carries its own XMP packet. ISO 19005-2, 6.6.2.3.1 constrains the
+properties of every metadata stream in the file, not only the catalog's:
+`photoshop:History` is no property of the XMP 2005 Photoshop schema and fails
+tests 1 and 2, `dc:format` is a language alternative where the schema defines
+MIMEType text and fails test 2, and `xmp:CreatorTool` is a predefined text
+property that stays silent. litho prefixes a finding in that packet with the
+object that holds it, `object N: `, which its schema repair read as part of the
+namespace URI, so it claimed the finding and stripped nothing. Part 1 judges
+the catalog packet alone, so the page packet is silent at PDF/A-1b.
+
+At PDF/A-1b the same three groups are what ISO 19005-1, 6.4 test 3 forbids,
+and page 4's blending space fails 6.2.3.3 test 1. That is the profile where a
+repair removing the groups and another synthesizing them again showed: the
+remediation took a second round to converge.
+
+| Profile  | Rule          | litho | veraPDF 1.30.2 |
+| -------- | ------------- | ----- | -------------- |
+| PDF/A-2b | `6.2.10/2`    | 2     | 2              |
+| PDF/A-2b | `6.2.4.3/2`   | 1     | 1              |
+| PDF/A-2b | `6.6.2.3.1/1` | 1     | 1              |
+| PDF/A-2b | `6.6.2.3.1/2` | 2     | 2              |
+| PDF/A-1b | `6.4/3`       | 3     | 3              |
+| PDF/A-1b | `6.4/6`       | 4     | 4              |
+| PDF/A-1b | `6.2.3.3/1`   | 1     | 1              |
+| PDF/A-1b | `6.7.11/2`    | 1     | 1              |
+
+The two tools return the same rule set in all thirteen cells, and the same
+instance count for every rule at every PDF/A level.
 
 ## Scope
 
