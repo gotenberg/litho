@@ -343,10 +343,10 @@ var noContext = glyphContext{mode: -1}
 //   - verapdf: the ToUnicode presence counts at PDF/A-1a, PDF/A-2u, PDF/UA-1
 //     and PDF/UA-2, a distance of 27 from veraPDF's, now match them.
 //   - govdocs thread_200_200408.pdf: a ToUnicode count that moved away, from
-//     26 to 15 against veraPDF's 181, because litho states nothing for the
-//     Type 3 fonts whose /ToUnicode leaves shown codes out. For the fonts it
-//     does judge the counts moved toward veraPDF's: T13 from 22 to 10 against
-//     8, T18 from 3 to 4 against 4.
+//     26 to 15 against veraPDF's 181, because litho stated nothing for the
+//     Type 3 fonts whose /ToUnicode leaves shown codes out; see
+//     [checkType3ToUnicode]. For the fonts it did judge the counts moved
+//     toward veraPDF's: T13 from 22 to 10 against 8, T18 from 3 to 4 against 4.
 //   - pdfjs issue5010.pdf: its /ToUnicode takes most mappings from the
 //     Adobe-Korea1-UCS2 base CMap it names with usecmap, which litho does not
 //     load, so litho states 10 unmapped codes where veraPDF states 5.

@@ -289,8 +289,9 @@ func allDifferencesGlyphNamesAGLResolvable(ctx context.Context, doc *document.Do
 	return true
 }
 
-// shownType3GlyphNamesResolvable reports whether every code a page shows through
-// a Type 3 font takes a Unicode value from the glyph name its /Encoding gives.
+// shownType3CodesWithoutUnicode returns, sorted, the codes a page shows through
+// a Type 3 font whose glyph name, the one its /Encoding gives, carries no
+// Unicode value.
 //
 // ISO 14289-1, 7.21.7 and ISO 19005-2, 6.2.11.7.2 judge each glyph shown, so a
 // name /Differences assigns to a code nothing shows is out of scope. Per ISO
@@ -305,13 +306,6 @@ func allDifferencesGlyphNamesAGLResolvable(ctx context.Context, doc *document.Do
 //
 //   - pdfjs issue5896.pdf: leaves empty names at two unshown codes, and veraPDF
 //     passes its letters.
-func shownType3GlyphNamesResolvable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) bool {
-	return len(shownType3CodesWithoutUnicode(ctx, doc, fontDict, usage)) == 0
-}
-
-// shownType3CodesWithoutUnicode returns, sorted, the codes a page shows through
-// a Type 3 font whose glyph name gives no Unicode value, read as
-// [shownType3GlyphNamesResolvable] reads them.
 func shownType3CodesWithoutUnicode(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) []byte {
 	encObj, ok := fontDict["Encoding"]
 	if !ok {
@@ -376,6 +370,11 @@ func glyphNameHasUnicode(name string) bool {
 	if encodings.IsSyntheticGlyphName(name) {
 		return false
 	}
+	// TODO: veraPDF looks a name up in the Adobe Glyph List table alone
+	// (AdobeGlyphList.get), which holds no uniXXXX or uXXXX spelling, so a
+	// code named uni0044 has no Unicode value there: veraPDF 1.30 fails it at
+	// PDF/A-2u through a Type 1 and through a Type 3 font. Measure the corpora
+	// before refusing those spellings here.
 	_, ok := encodings.GlyphToRuneFull(name)
 	return ok
 }
@@ -1181,39 +1180,15 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// glyph to map to a Unicode value, so a Type 3 glyph with no resolvable
 	// Unicode fails under PDF/UA. PDF/A parts 1-3 (levels a/u) and PDF/UA
 	// require either AGL-resolvable Differences names or a /ToUnicode CMap.
+	//
+	// Parts 2/3 §6.2.11.7.2 and PDF/UA accept any glyph-level Unicode
+	// mechanism, including AGL-resolvable /Differences names, in place of a
+	// /ToUnicode entry. PDF/A-1 §6.3.8 t1 is stricter: it requires a /ToUnicode
+	// CMap entry specifically (its only exemptions are predefined encodings,
+	// standard-Latin Type 1, and Adobe-CID Type 0, none of which a Type 3 font
+	// meets), so an AGL-resolvable /Differences set does not substitute there.
 	if isType3Font(ctx, doc, fontDict) {
-		if PDFAPart(profile) == 4 {
-			return nil
-		}
-		// Parts 2/3 §6.2.11.7.2 and PDF/UA accept any glyph-level Unicode
-		// mechanism, including AGL-resolvable /Differences names, in place of a
-		// /ToUnicode entry. PDF/A-1 §6.3.8 t1 is stricter: it requires a /ToUnicode
-		// CMap entry specifically (its only exemptions are predefined encodings,
-		// standard-Latin Type 1, and Adobe-CID Type 0, none of which a Type 3 font
-		// meets), so an AGL-resolvable /Differences set does not substitute there.
-		if PDFAPart(profile) != 1 {
-			if usage != nil && len(usage.charCodes) > 0 {
-				if shownType3GlyphNamesResolvable(ctx, doc, fontDict, usage) {
-					return nil
-				}
-			} else if allDifferencesGlyphNamesAGLResolvable(ctx, doc, fontDict) {
-				return nil
-			}
-		}
-		// Fall through to the ToUnicode presence check below. Under part 1 no
-		// glyph name stands in for the map, so every shown code goes without.
-		if !hasToUnicode(ctx, doc, fontDict) {
-			var codes []byte
-			if usage != nil {
-				if PDFAPart(profile) == 1 {
-					codes = sortedByteKeys(usage.charCodes)
-				} else {
-					codes = shownType3CodesWithoutUnicode(ctx, doc, fontDict, usage)
-				}
-			}
-			return missingUnicodeFaults(rule, fontName, pageNum, codes)
-		}
-		return nil
+		return checkType3ToUnicode(ctx, doc, fontDict, fontName, pageNum, profile, rule, usage)
 	}
 
 	// Exemption (a): standard encoding with Adobe Glyph List coverage.
@@ -1506,22 +1481,9 @@ func shownCodesOutsideToUnicode(ctx context.Context, doc *document.Document, fon
 }
 
 // cmapSourceCodeValues returns the integer value of every source code a parsed
-// /ToUnicode CMap maps. veraPDF looks a simple font's code up in the CMap by its
-// integer value, so a producer that declares a two-byte codespace still maps
-// code 2 with <0002>; a source longer than two bytes names no simple-font code.
+// /ToUnicode CMap maps; see [sourceCodeValues].
 func cmapSourceCodeValues(parsed *cmap.CMap) map[int]bool {
-	mapped := make(map[int]bool, len(parsed.Mapping))
-	for src := range parsed.Mapping {
-		if len(src) > 2 {
-			continue
-		}
-		v := 0
-		for i := range len(src) {
-			v = v<<8 | int(src[i])
-		}
-		mapped[v] = true
-	}
-	return mapped
+	return sourceCodeValues(parsed.Mapping)
 }
 
 // symbolicCmapViolation reports whether a symbolic TrueType font's cmap

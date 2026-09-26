@@ -87,6 +87,51 @@ func validateCount(t *testing.T, objs []string, profile string, rule Rule) int {
 	return countRuleErrs(t, viols, rule)
 }
 
+// type3ToUnicodeCases are the fixtures of [TestToUnicode_Type3CodesOutsideCMap]:
+// a Type 3 font showing codes 41 to 44 hexadecimal, named zzq, zzr, A and zzs,
+// with the failures veraPDF 1.30 states at PDF/A-2u, PDF/UA-1 and PDF/A-1a.
+var type3ToUnicodeCases = []struct {
+	name          string
+	tu            string
+	pdfa2u, pdfa1 int
+}{
+	{"no /ToUnicode", "", 3, 4},
+	{"a /ToUnicode mapping zzr", toUnicodeProgram(bfchars("42", "0042")), 2, 3},
+	{"a /ToUnicode mapping all but A", toUnicodeProgram(bfchars("41", "0041", "42", "0042", "44", "0044")), 0, 1},
+	{"a /ToUnicode mapping nothing", toUnicodeProgram(""), 3, 4},
+}
+
+// TestToUnicode_Type3CodesOutsideCMap pins that a Type 3 font's /ToUnicode
+// vouches only for the codes it maps: a code it leaves out takes its Unicode
+// value from its glyph name, and fails ISO 19005-2, 6.2.11.7.2 t1 and ISO
+// 14289-1, 7.21.7 t1 when the name has none, while ISO 19005-1, 6.3.8 t1
+// admits no name at all. See [checkType3ToUnicode]. Every count was measured
+// with veraPDF 1.30 on these PDFs.
+func TestToUnicode_Type3CodesOutsideCMap(t *testing.T) {
+	t.Parallel()
+
+	names := []string{"zzq", "zzr", "A", "zzs"}
+	for _, tc := range type3ToUnicodeCases {
+		for _, p := range []struct {
+			profile string
+			rule    Rule
+			want    int
+		}{
+			{"PDF/A-2u", Rule_19005_2_6_2_11_7_2_t01, tc.pdfa2u},
+			{"PDF/UA-1", Rule_14289_1_7_21_7_t01, tc.pdfa2u},
+			{"PDF/A-1a", Rule_19005_1_6_3_8_t01, tc.pdfa1},
+		} {
+			t.Run(tc.name+" at "+p.profile, func(t *testing.T) {
+				t.Parallel()
+				objs := glyphPagesObjs(type3Font(0x41, names, tc.tu, ""), glyphText("<41424344> Tj"))
+				if got := validateCount(t, objs, p.profile, p.rule); got != p.want {
+					t.Errorf("%s test %d fired %d times, want %d", p.rule.Clause, p.rule.TestNumber, got, p.want)
+				}
+			})
+		}
+	}
+}
+
 // structParentsCases are the fixtures of
 // [TestGlyphRulesSplitByStructParents]: the /StructParents of two pages that
 // show one glyph, -1 standing for none, and the times veraPDF 1.30 states a
