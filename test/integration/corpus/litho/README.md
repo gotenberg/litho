@@ -134,6 +134,7 @@ one deliberately rather than diffing it against a fresh build.
 | `imagereach_2b.pdf`    | PDF/A-2b     | Images a form lists or a shared content stream never draws       |
 | `repairleft_4.pdf`     | PDF/A-4      | Inherited colour spaces, emptied `'` and `"`, a covered group    |
 | `defaultcs_4.pdf`      | PDF/A-4      | Default colour spaces judged in place of the family they replace |
+| `csnames_2b.pdf`       | PDF/A-2b     | Colour-space names inside colour space arrays, read as the entry |
 
 ### Must-not-fire controls
 
@@ -314,6 +315,8 @@ violation but is exempt, so a firing is a false positive.
 | `defaultcs_4`                             | Page 16: a DefaultRGB over a monitor GRAY profile, no component count  | ISO 32000-1, 8.6.5.6         |
 | `defaultcs_4`                             | Page 23: a glyph past `d1` selecting `rg` under a DefaultRGB of `5`    | ISO 32000-1, 9.6.5           |
 | `defaultcs_4`                             | Page 24: a form's DefaultGray of `5` under the page's inherited fill   | ISO 19005-4, 6.2.2 t3        |
+| `csnames_2b`                              | Page 17: a form's shading naming `/CS0`, which only the page defines   | ISO 32000-1, 7.8.3           |
+| `csnames_2b`                              | Page 20: two Separations of one colorant over `/CS0` and `/DeviceCMYK` | ISO 19005-2, 6.2.4.4 t2      |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -346,6 +349,7 @@ which are covered under [Known divergences](#known-divergences).
 | `complex_ua1.pdf`      | 7    | 6    | 7    | 6    | 6    | 7    | 6    | 6    | 5   | 5    | 6    | 11   | 10   |
 | `complex_ua2.pdf`      | 11   | 8    | 16   | 12   | 12   | 16   | 12   | 12   | 8   | 8    | 9    | 18\* | 18\* |
 | `contentstream_4.pdf`  | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 6   | 6    | 7    | 8    | 7    |
+| `csnames_2b.pdf`       | 8    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 5    | 6    |
 | `defaultcs_4.pdf`      | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 10   | 7    |
 | `docinfo_1b.pdf`       | 11   | 8    | 4    | 1    | 2    | 4    | 1    | 2    | 6   | 6    | 7    | 5    | 5    |
 | `docmdp_2b.pdf`        | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 10   | 8    |
@@ -3285,6 +3289,60 @@ three times.
 The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
 counts but for `7.1/3` and `8.2.2/1` at PDF/UA, the same family.
 
+### `csnames_2b.pdf`
+
+A colour space array holds its `/Indexed` base, its Separation or DeviceN
+alternate and its `/Colorants` spaces as colour spaces (ISO 32000-1, 8.6.6.3 to
+8.6.6.5), and veraPDF reads a name there that is the key of another entry of the
+same `/ColorSpace` resource dictionary as that entry, resolved in the one
+dictionary the space was read from and never in the page's. No corpus file names an entry inside a colour space array, in a `/Colorants`
+dictionary, as a shading's colour space or as an image's or inline image's
+`/Indexed` base, and none holds an `/Indexed` base as an indirect family name,
+so no count reached the reading; litho read the name as a space it cannot read,
+DeviceGray. Two neighbours are reached already and stay out: a page group
+naming an entry, in `blendcs_4.pdf`, and an entry holding an indirect family
+name, in 73 files, govdocs thread_300_300760.pdf among them.
+
+Twenty pages each carry resources of their own, and each Separation a colorant
+of its own:
+
+| Pages   | Name                                                                   | Answers at PDF/A-2b           |
+| ------- | ---------------------------------------------------------------------- | ----------------------------- |
+| 1, 2, 3 | an `/Indexed` base, the same over `[/DeviceRGB]`, an entry naming one  | DeviceRGB x2 each             |
+| 4, 5    | a Separation's and a DeviceN's alternate, `/CS0` being DeviceCMYK      | DeviceCMYK x3 each            |
+| 6       | a `/Colorants` entry naming a Separation over DeviceRGB                | DeviceRGB x3, DeviceGray x3   |
+| 7, 8    | a DefaultRGB's `/Indexed` base, an inline image's                      | DeviceCMYK x2, DeviceRGB x1   |
+| 9, 10   | an `/Indexed` over an abstract ICCBased entry, direct, then indirect   | ICC x2, then x1               |
+| 11, 12  | `/CSp` naming a Pattern space, coloured cell, then uncoloured over RGB | DeviceRGB x2 + `6.1.13/1`, x1 |
+| 13      | an `/Indexed` base that is an indirect `/DeviceRGB`                    | DeviceRGB x2                  |
+| 14      | a form's `/Indexed` over `/CS0`, which only the page defines           | DeviceGray x2                 |
+| 15, 16  | the page's `/Indexed` space and image, in a form redefining `/CS0`     | DeviceRGB x2, x1              |
+| 17      | a form's shading naming `/CS0`, which only the page defines            | nothing                       |
+| 18, 19  | the page's shading and `/Indexed` image a form paints, page DefaultRGB | ICC x1 each                   |
+| 20      | two Separations of one colorant over `/CS0` and `/DeviceCMYK`          | DeviceCMYK x6                 |
+
+Page 11's cell gives `w` the integer 2147483648, which veraPDF reads only
+because the name reaches the Pattern space and builds the pattern. Pages 15,
+16, 18 and 19 also fail `6.2.2/2`, the form selecting a space, an image or a
+shading only the page defines. Page 20 is the 6.2.4.4 t2 control: the two
+alternates compare as the spaces they name, the same DeviceCMYK. A name that
+reaches itself again and a fan-out of names stay out, because veraPDF runs out
+of time or stack on both.
+
+| Rule at PDF/A-2b         | veraPDF | litho |
+| ------------------------ | ------- | ----- |
+| `6.1.13/1` integer       | 1       | 1     |
+| `6.2.2/2` inherited name | 4       | 4     |
+| `6.2.4.2/1` ICC profile  | 5       | 5     |
+| `6.2.4.3/2` DeviceRGB    | 18      | 18    |
+| `6.2.4.3/3` DeviceCMYK   | 14      | 14    |
+| `6.2.4.3/4` DeviceGray   | 5       | 5     |
+| `6.6.2.1/1` no metadata  | 1       | 1     |
+
+The two tools return the same rule set in all thirteen cells, and the same count
+for every rule at every PDF/A level; at the PDF/UA levels veraPDF counts `7.1/3`
+and `8.2.2/1` once per untagged content item.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
@@ -3294,7 +3352,7 @@ and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1009 of the 1014 cells. The five
+fixtures exist to protect, and it holds in 1022 of the 1027 cells. The five
 exceptions, two on `complex_ua2` and three on `inlineimage_2b`, are marked `*`
 in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
