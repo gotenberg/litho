@@ -108,65 +108,76 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 	// without this check trailer-only fixes would silently be lost.
 	origTrailerSize := len(doc.Index.Trailer)
 
-	// Execute fixers in registry order.
+	// Execute fixers in registry order, the content tier after the others.
+	// The writer rolls a regression back to the snapshot taken between the
+	// two, so a rollback discards the content tier's repairs and keeps every
+	// other one. Run interleaved, a structural or resource fixer registered
+	// after a content fixer lost its repair to the rollback while the report
+	// still listed it as fixed.
 	var fixed []string
 	var needsRewrite bool
 	handled := make(map[int]bool) // indices of handled violations
 
-	// Snapshot of the allocator taken right before the first content-tier
-	// fixer runs. It lets the writer roll back only the content tier when
-	// the post-remediation integrity probe detects a regression.
-	var contentSnapshot *writer.Snapshot
-	var contentFixed, contentFixers []string
-	contentHandled := make(map[int]bool)
-
-	for _, entry := range plan {
-		if err := ctx.Err(); err != nil {
-			return nil, fmt.Errorf("remediation canceled: %w", err)
-		}
-
-		if entry.f.safety == safetyContent && contentSnapshot == nil {
-			snap := alloc.Snapshot()
-			contentSnapshot = &snap
-		}
-
-		doc.Logger.Debug("fixer starting",
-			slog.String("fixer", entry.f.name),
-			slog.String("safety", entry.f.safety.String()),
-			slog.Int("violations", len(entry.violations)),
-		)
-		descriptions, err := entry.f.apply(ctx, alloc, doc, opts, entry.violations, profile)
+	others, content := splitContentTier(plan)
+	for _, entry := range others {
+		descriptions, err := applyPlanEntry(ctx, alloc, doc, opts, profile, entry)
 		if err != nil {
-			doc.Logger.Debug("fixer failed",
-				slog.String("fixer", entry.f.name),
-				slog.Any("err", err),
-			)
-			return nil, fmt.Errorf("fixer %s: %w", entry.f.name, err)
+			return nil, err
 		}
-		doc.Logger.Debug("fixer completed",
-			slog.String("fixer", entry.f.name),
-			slog.Int("descriptions", len(descriptions)),
-		)
 		fixed = append(fixed, descriptions...)
-		if entry.f.safety == safetyContent {
-			contentFixed = append(contentFixed, descriptions...)
-			contentFixers = append(contentFixers, entry.f.name)
-		}
 		for _, idx := range entry.indices {
 			handled[idx] = true
-			if entry.f.safety == safetyContent {
-				contentHandled[idx] = true
-			}
 		}
 		if entry.f.name == "file-structure" && len(descriptions) > 0 {
 			needsRewrite = true
 		}
 	}
 
-	var contentResidual []error
-	for i, v := range violations {
-		if contentHandled[i] {
-			contentResidual = append(contentResidual, v)
+	// A trailer SHRINK (e.g. removing /Info for PDF/A-4 §6.1.3) can only
+	// stick through a full rewrite, because earlier trailers inherit absent
+	// keys via /Prev. Only fixers outside the content tier edit the trailer,
+	// so its state is final here, where the version declaration below needs
+	// to know whether the output is rewritten.
+	if len(doc.Index.Trailer) < origTrailerSize {
+		needsRewrite = true
+	}
+
+	requiredVersion := requiredVersionFor(profile)
+
+	// requiredVersion only reaches the output through the writer's
+	// full-rewrite config. An incremental update preserves the original bytes
+	// and cannot re-emit the header, so a profile needing a later version
+	// than the source declares has one place left to say so: the catalog
+	// /Version (ISO 32000-1, 7.5.2), which litho's own reader honors (see
+	// document.initCatalogVersion). Declared before the content tier, so a
+	// rollback keeps it with the other repairs.
+	if !needsRewrite && catalogCarriesVersion(profile) && requiredVersion != "" {
+		if raised := writer.AtLeastVersion(doc.Version, requiredVersion); raised != doc.Version {
+			if declareCatalogVersion(ctx, alloc, doc, raised) {
+				fixed = append(fixed, fmt.Sprintf("declared PDF version %s in the document catalog", raised))
+			}
+		}
+	}
+
+	// Snapshot of the allocator taken right before the content tier runs. It
+	// lets the writer roll back exactly the content tier when the
+	// post-remediation integrity probe detects a regression.
+	var contentSnapshot *writer.Snapshot
+	var contentFixed, contentFixers []string
+	if len(content) > 0 {
+		snap := alloc.Snapshot()
+		contentSnapshot = &snap
+	}
+	for _, entry := range content {
+		descriptions, err := applyPlanEntry(ctx, alloc, doc, opts, profile, entry)
+		if err != nil {
+			return nil, err
+		}
+		fixed = append(fixed, descriptions...)
+		contentFixed = append(contentFixed, descriptions...)
+		contentFixers = append(contentFixers, entry.f.name)
+		for _, idx := range entry.indices {
+			handled[idx] = true
 		}
 	}
 
@@ -180,78 +191,10 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		}
 	}
 
-	// Pin the output PDF version to the value required by each PDF/A
-	// family: part 1 → 1.4, parts 2 and 3 → 1.7, part 4 → 2.0. The
-	// writer honours this in both full-rewrite and incremental output.
-	// The version each profile requires of its output. Note the reach: this
-	// value travels through Report.RequiredVersion into the writer's
-	// full-rewrite config, and the INCREMENTAL path ignores it, because an
-	// incremental update preserves the original bytes and cannot re-emit the
-	// header. A profile whose remediation does not force a rewrite therefore
-	// keeps the source's declared version whatever this says. Measured on a
-	// %PDF-1.4 source: WTPDF-1.0-Reuse rewrites and comes out 2.0, while
-	// PDF/UA-1, PDF/UA-2 and WTPDF-1.0-Accessibility stay incremental and
-	// come out 1.4. Raising those would mean writing a catalog /Version
-	// (ISO 32000-1, 7.5.2), which the values below cannot express: some are
-	// CAPS (PDF/A-1, PDF/UA-1 pin a later source DOWN) and some are FLOORS.
-	var requiredVersion string
-	switch {
-	case strings.HasPrefix(profile, "PDF/A-4"):
-		requiredVersion = "2.0"
-	case strings.HasPrefix(profile, "PDF/A-1"):
-		requiredVersion = "1.4"
-	case strings.HasPrefix(profile, "PDF/A-2"), strings.HasPrefix(profile, "PDF/A-3"):
-		requiredVersion = "1.7"
-	case strings.HasPrefix(profile, "PDF/UA-1"):
-		// ISO 14289-1 §6.1 (PDFUA-1.xml 6.1 t1): the header shall be
-		// %PDF-1.n with n in 0..7, so a PDF 2.0 source is pinned down
-		// to 1.7, the highest conforming version.
-		requiredVersion = "1.7"
-	case strings.HasPrefix(profile, "PDF/UA-2"):
-		// ISO 14289-2 builds on PDF 2.0, and litho says so itself:
-		// compliance.Rule_14289_2_6_2_t01 is checked with checkVersionIs2,
-		// which accepts only "2.n". Remediation writes PDF 2.0 structure
-		// namespaces (/Namespaces, /NS) for this profile, so leaving the
-		// source's version would declare a file that its own contents
-		// contradict.
-		requiredVersion = "2.0"
-	case strings.HasPrefix(profile, "WTPDF"):
-		// WTPDF 1.0 adopts the ISO 14289-2 requirements wholesale, differing
-		// only by the rules it does not state and the Declaration it adds
-		// (see compliance.ValidateWTPDF), so it carries PDF/UA-2's version
-		// requirement too.
-		//
-		// A separate case rather than a PDF/UA-2 prefix: validation
-		// normalises a WTPDF run to the PDF/UA-2 identifier, but
-		// RemediateWTPDF passes the WTPDF level through verbatim, so a
-		// PDF/UA-2 test would never match here.
-		requiredVersion = "2.0"
-	}
-
 	// Trailer mutations (e.g. /ID insertion) don't allocate objects but
 	// still have to be serialized. Incremental writes that ADD keys are
-	// covered by an extra xref section. A SHRINK (e.g. removing /Info
-	// for PDF/A-4 §6.1.3) can only stick through a full rewrite because
-	// earlier trailers inherit absent keys via /Prev, so escalate in
-	// that case.
+	// covered by an extra xref section.
 	trailerDirty := len(doc.Index.Trailer) != origTrailerSize
-	if len(doc.Index.Trailer) < origTrailerSize {
-		needsRewrite = true
-	}
-
-	// requiredVersion above only reaches the output through the writer's
-	// full-rewrite config. An incremental update preserves the original bytes
-	// and cannot re-emit the header, so a profile needing a later version
-	// than the source declares has one place left to say so: the catalog
-	// /Version (ISO 32000-1, 7.5.2), which litho's own reader honors (see
-	// document.initCatalogVersion).
-	if !needsRewrite && catalogCarriesVersion(profile) && requiredVersion != "" {
-		if raised := writer.AtLeastVersion(doc.Version, requiredVersion); raised != doc.Version {
-			if declareCatalogVersion(ctx, alloc, doc, raised) {
-				fixed = append(fixed, fmt.Sprintf("declared PDF version %s in the document catalog", raised))
-			}
-		}
-	}
 
 	doc.Logger.Debug("remediate completed",
 		slog.String("profile", profile),
@@ -272,8 +215,96 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		ContentSnapshot:  contentSnapshot,
 		ContentFixed:     contentFixed,
 		ContentFixers:    contentFixers,
-		ContentResidual:  contentResidual,
 	}, nil
+}
+
+// splitContentTier returns the entries of plan outside the content tier and
+// the content-tier ones, each in plan order.
+func splitContentTier(plan []planEntry) (others, content []planEntry) {
+	for _, entry := range plan {
+		if entry.f.safety == safetyContent {
+			content = append(content, entry)
+		} else {
+			others = append(others, entry)
+		}
+	}
+	return others, content
+}
+
+// applyPlanEntry runs the fixer of one plan entry against the violations it
+// matched and returns the descriptions of what it repaired.
+func applyPlanEntry(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, profile string, entry planEntry) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("remediation canceled: %w", err)
+	}
+	doc.Logger.Debug("fixer starting",
+		slog.String("fixer", entry.f.name),
+		slog.String("safety", entry.f.safety.String()),
+		slog.Int("violations", len(entry.violations)),
+	)
+	descriptions, err := entry.f.apply(ctx, alloc, doc, opts, entry.violations, profile)
+	if err != nil {
+		doc.Logger.Debug("fixer failed",
+			slog.String("fixer", entry.f.name),
+			slog.Any("err", err),
+		)
+		return nil, fmt.Errorf("fixer %s: %w", entry.f.name, err)
+	}
+	doc.Logger.Debug("fixer completed",
+		slog.String("fixer", entry.f.name),
+		slog.Int("descriptions", len(descriptions)),
+	)
+	return descriptions, nil
+}
+
+// requiredVersionFor returns the PDF version the output of a remediation for
+// profile must declare, or "" when the profile requires none. Each PDF/A
+// family pins its own: part 1 → 1.4, parts 2 and 3 → 1.7, part 4 → 2.0.
+//
+// Note the reach: this value travels through Report.RequiredVersion into the
+// writer's full-rewrite config, and the INCREMENTAL path ignores it, because
+// an incremental update preserves the original bytes and cannot re-emit the
+// header. A profile whose remediation does not force a rewrite therefore
+// keeps the source's declared version whatever this says. Measured on a
+// %PDF-1.4 source: WTPDF-1.0-Reuse rewrites and comes out 2.0, while
+// PDF/UA-1, PDF/UA-2 and WTPDF-1.0-Accessibility stay incremental and come
+// out 1.4. Raising those would mean writing a catalog /Version (ISO 32000-1,
+// 7.5.2), which the values below cannot express: some are CAPS (PDF/A-1,
+// PDF/UA-1 pin a later source DOWN) and some are FLOORS.
+func requiredVersionFor(profile string) string {
+	switch {
+	case strings.HasPrefix(profile, "PDF/A-4"):
+		return "2.0"
+	case strings.HasPrefix(profile, "PDF/A-1"):
+		return "1.4"
+	case strings.HasPrefix(profile, "PDF/A-2"), strings.HasPrefix(profile, "PDF/A-3"):
+		return "1.7"
+	case strings.HasPrefix(profile, "PDF/UA-1"):
+		// ISO 14289-1 §6.1 (PDFUA-1.xml 6.1 t1): the header shall be
+		// %PDF-1.n with n in 0..7, so a PDF 2.0 source is pinned down
+		// to 1.7, the highest conforming version.
+		return "1.7"
+	case strings.HasPrefix(profile, "PDF/UA-2"):
+		// ISO 14289-2 builds on PDF 2.0, and litho says so itself:
+		// compliance.Rule_14289_2_6_2_t01 is checked with checkVersionIs2,
+		// which accepts only "2.n". Remediation writes PDF 2.0 structure
+		// namespaces (/Namespaces, /NS) for this profile, so leaving the
+		// source's version would declare a file that its own contents
+		// contradict.
+		return "2.0"
+	case strings.HasPrefix(profile, "WTPDF"):
+		// WTPDF 1.0 adopts the ISO 14289-2 requirements wholesale, differing
+		// only by the rules it does not state and the Declaration it adds
+		// (see compliance.ValidateWTPDF), so it carries PDF/UA-2's version
+		// requirement too.
+		//
+		// A separate case rather than a PDF/UA-2 prefix: validation
+		// normalises a WTPDF run to the PDF/UA-2 identifier, but
+		// RemediateWTPDF passes the WTPDF level through verbatim, so a
+		// PDF/UA-2 test would never match here.
+		return "2.0"
+	}
+	return ""
 }
 
 type planEntry struct {

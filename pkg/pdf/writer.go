@@ -1595,13 +1595,16 @@ type remediationRun func(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 // and each round still fixes something (see [Writer.remediationRound]).
 //
 // The content-tier fixers a rollback discarded stay off in the later rounds,
-// and the others run in them. A rollback restores the allocator to the state
-// before the first content-tier fixer ran, which discards the repairs of every
-// fixer that ran after it, and a round that ended at the rollback left every
-// violation those repairs answer in the output. The later rounds make them.
-// The residual is the validation of the output kept last: a violation a
-// rolled-back fixer claimed is in it when the output holds it. It used to be
-// listed a second time from the claims of the rolled-back fixers.
+// and the others run in them. The engine runs the content tier after every
+// other fixer and snapshots the allocator between the two, so a rollback
+// discards exactly the content tier's repairs: every other repair stays in the
+// output, and Fixed lists it. The snapshot used to be taken at the first
+// content-tier fixer in registry order, and a rollback also discarded the
+// repairs of the structural and resource fixers registered after it, which
+// Fixed still listed. The residual is the validation of the output kept last:
+// a violation a rolled-back fixer claimed is in it when the output holds it.
+// It used to be listed a second time from the claims of the rolled-back
+// fixers.
 //
 // # Corpus evidence
 //
@@ -1885,8 +1888,7 @@ func (w *Writer) remediate(
 	// Fix to fixpoint: a fixer can repair state that only becomes fixable
 	// once an earlier round's output is serialized (a namespace rebind
 	// exposing a now-reachable property, a structural fix unblocking a
-	// metadata one), and a rollback leaves unmade every repair it discarded.
-	// Each extra round runs on the previous round's file and is kept only
+	// metadata one). Each extra round runs on the previous round's file and is kept only
 	// when it fixed something and survives the same probe-and-revalidate
 	// gates; otherwise the previous round's output stands.
 	for round := 2; round <= maxRemediationRounds && len(residual) > 0; round++ {
@@ -1975,9 +1977,9 @@ type roundResult struct {
 // nothing, fails to serialize, or fails the integrity and regression gates.
 //
 // A round whose output regresses is rolled back as the first round is: the
-// repairs of its content-tier fixers are discarded, and the round is kept
-// when what remains still fixes something and passes the gates, with those
-// fixers named for the later rounds to disable.
+// repairs of its content-tier fixers are discarded and those of the others
+// kept, and the round is kept when what remains still fixes something and
+// passes the gates, with those fixers named for the later rounds to disable.
 func (w *Writer) remediationRound(
 	ctx context.Context,
 	path string,

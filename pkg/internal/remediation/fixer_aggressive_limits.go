@@ -50,9 +50,7 @@ const (
 //
 // An out-of-range CID value (ISO 19005-1, 6.1.12 test 10; ISO 19005-2/3,
 // 6.1.13 test 10) is not matched: no repair here answers it (see
-// [limitRepairsFor]), and file-structure and real-limits claim it already. A
-// content-tier claim only put it on [Report.ContentResidual], which a rollback
-// appends to the residual it revalidates, listing it twice.
+// [limitRepairsFor]), and file-structure and real-limits claim it already.
 func matchAggressiveLimits(v compliance.Violation) bool {
 	if !clausePrefix(v, "6.1.12", "6.1.13") {
 		return false

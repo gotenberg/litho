@@ -20,21 +20,19 @@ type Report struct {
 	// RequiredVersion overrides the PDF version in the output header when
 	// the target profile requires a specific version (e.g., "2.0" for PDF/A-4).
 	RequiredVersion string
-	// ContentSnapshot captures allocator state immediately before the first
-	// content-modifying fixer ran. When nil, no content-tier fixer was
-	// applied and rollback is a no-op. The writer uses this to revert just
-	// the content tier when a post-remediation integrity probe regresses.
+	// ContentSnapshot captures allocator state after every fixer outside the
+	// content tier ran and before the first content-modifying fixer did.
+	// When nil, no content-tier fixer was applied and rollback is a no-op.
+	// The writer restores it to revert exactly the content tier when a
+	// post-remediation integrity probe regresses: every other repair stays
+	// in the output, and in Fixed.
 	ContentSnapshot *writer.Snapshot
 	// ContentFixed lists descriptions produced by content-tier fixers. These
-	// entries are the subset of Fixed that rollback would discard.
+	// entries are the subset of Fixed that rollback discards.
 	ContentFixed []string
 	// ContentFixers names, in the order they ran, the content-tier fixers a
 	// rollback to ContentSnapshot discards the repairs of. A writer that rolls
 	// them back keeps them off the later rounds of the same remediation
 	// ([Options.Disabled]).
 	ContentFixers []string
-	// ContentResidual lists violations that content-tier fixers claimed to
-	// handle. A rollback leaves them in the output, where the validation of
-	// the rolled-back output reports them.
-	ContentResidual []error
 }
