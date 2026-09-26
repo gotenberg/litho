@@ -4,7 +4,7 @@ litho is a pure-Go PDF Conforming Processor. Two rules override everything else:
 
 - Module: `github.com/gotenberg/litho`
 - Go: 1.27.0+
-- Optional: Docker (corpus provisioning)
+- Optional: Docker (corpus provisioning, at the tool versions `test/integration/corpus/versions.env` pins)
 
 ## Quick start
 

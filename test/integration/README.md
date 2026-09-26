@@ -7,9 +7,11 @@ Matrix runner that scores litho across (corpus, feature) cells. Every corpus sup
 ```
 test/integration/
 ├── corpus/                     Shared provisioning image + per-corpus scripts
-│   ├── Dockerfile              One image: Node + PDF.js + veraPDF + pdfcpu + Mustang + KoSIT
+│   ├── versions.env            Pinned version of every tool and corpus source
+│   ├── Dockerfile              One image: Node + PDF.js + JRE + veraPDF + pdfcpu + Mustang + KoSIT
 │   ├── entrypoint.sh           Dispatches to <corpus>/download.sh then shared goldens
 │   ├── lib/
+│   │   ├── fetch-revision.sh   Checks out one pinned commit or tag of a git repository
 │   │   ├── gen-references.mjs  PDF.js text + metadata generator (shared)
 │   │   ├── gen-images.mjs      PDF.js image signature generator (shared)
 │   │   ├── gen-bookmarks.sh    pdfcpu bookmark exporter (shared)
@@ -44,13 +46,14 @@ test/integration/
 │       └── README.md           Per-fixture expected firing set
 ├── testdata/<corpus>/          Provisioned output (gitignored)
 │   ├── pdfs/*.pdf
+│   ├── versions.json           Versions each provisioning stage ran with
 │   ├── claims.csv              Auto-mode only: <basename>,<profile> per claimed PDF
 │   └── goldens/
 │       ├── text/<fixture>.json
 │       ├── metadata/<fixture>.json
 │       ├── images/<fixture>.json
 │       └── compliance/<profile>.json
-└── cmd/corpus/                 CLI (init, run, baseline, check, scan-claims)
+└── cmd/corpus/                 CLI (init, run, baseline, check, scan-claims, versions, tools)
 ```
 
 ## Running
@@ -66,6 +69,13 @@ make corpus CORPUS_NAME=verapdf CORPUS_FEATURE=compliance CORPUS_PROFILE=PDF_A-2
 make corpus CORPUS_JSON_OUTPUT=1
 make corpus CORPUS_WORKERS=16
 
+# Provision without scoring, at the pinned versions (see "Tool versions").
+make corpus-init
+make corpus-init CORPUS_NAME=verapdf
+
+# Compare the local verapdf, node, java, qpdf, pdfsig and pikepdf with the pins.
+make corpus-tools
+
 # Wipe provisioned data to force re-init on the next run.
 make clean-corpus
 
@@ -79,13 +89,45 @@ make corpus-baseline
 make corpus-check
 ```
 
-| Variable             | Effect                                           | Example                          |
-| -------------------- | ------------------------------------------------ | -------------------------------- |
-| `CORPUS_NAME`        | run one corpus only (also narrows the auto-init) | `CORPUS_NAME=pdfjs`              |
-| `CORPUS_FEATURE`     | comma-separated feature filter                   | `CORPUS_FEATURE=text,compliance` |
-| `CORPUS_PROFILE`     | restrict to one profile directory                | `CORPUS_PROFILE=PDF_A-2b`        |
-| `CORPUS_JSON_OUTPUT` | emit the scoreboard as JSON                      | `CORPUS_JSON_OUTPUT=1`           |
-| `CORPUS_WORKERS`     | override the parallel worker pool size           | `CORPUS_WORKERS=16`              |
+| Variable                     | Effect                                               | Example                          |
+| ---------------------------- | ---------------------------------------------------- | -------------------------------- |
+| `CORPUS_NAME`                | run one corpus only (also narrows the auto-init)     | `CORPUS_NAME=pdfjs`              |
+| `CORPUS_FEATURE`             | comma-separated feature filter                       | `CORPUS_FEATURE=text,compliance` |
+| `CORPUS_PROFILE`             | restrict to one profile directory                    | `CORPUS_PROFILE=PDF_A-2b`        |
+| `CORPUS_JSON_OUTPUT`         | emit the scoreboard as JSON                          | `CORPUS_JSON_OUTPUT=1`           |
+| `CORPUS_WORKERS`             | override the parallel worker pool size               | `CORPUS_WORKERS=16`              |
+| `CORPUS_ALLOW_VERSION_DRIFT` | score goldens made with other versions than the pins | `CORPUS_ALLOW_VERSION_DRIFT=1`   |
+
+## Tool versions
+
+`corpus/versions.env` pins every tool and corpus source provisioning uses, one commented `KEY=VALUE` per line: veraPDF (the `verapdf/cli` image tag and the digest of the one build the goldens came from), Node (the `node` base image, by digest), the Temurin JRE veraPDF, Mustang and KoSIT run on, the PDF.js commit the image builds, pdfcpu, Mustang, KoSIT with its XRechnung bundle and EN 16931 XSLT, and the revision of each downloaded corpus (a commit SHA or a tag, never a branch; govdocs by its fixed thread list). A last group pins the tools the host runs for live checks and fixture builds (qpdf, poppler's `pdfsig`, pikepdf), which the image does not install.
+
+`corpus init` passes every entry to `docker build` as a `--build-arg`. The Dockerfile carries no default of its own, so a bare `docker build` fails rather than drifting; build by hand with the arguments `corpus versions` prints:
+
+```bash
+docker build $(go run ./test/integration/cmd/corpus versions --build-args) \
+  -t litho-corpus-builder test/integration/corpus
+```
+
+An environment variable of the same name overrides a pin for one invocation, and every command that reads the pins announces the override before anything else:
+
+```bash
+VERAPDF_VERSION=1.30.3 make corpus-init CORPUS_NAME=litho
+```
+
+Overriding `VERAPDF_VERSION` (or `NODE_VERSION`, `NODE_DEBIAN_RELEASE`) without its `*_IMAGE_DIGEST` drops the digest, and the image is pulled by tag: a reference carrying both resolves by the digest alone, which would install the pinned build under the new name. The build also fails when the veraPDF it installed reports another version than `VERAPDF_VERSION`.
+
+Provisioning records what each stage ran with in `testdata/<corpus>/versions.json`, keyed by the directory the stage filled (`pdfs`, `goldens/text`, `goldens/compliance`, ...): the resolved pins, what the tools report about themselves, and for compliance the build header of the veraPDF reports. `corpus run`, `baseline` and `check` compare the record of every golden they read with the pins it depends on (a text golden with the PDF.js commit and Node, a compliance golden with veraPDF and the JRE, the PDFs with the corpus revision) and refuse to score a golden recorded with another value. The refusal names the command that re-provisions exactly the stale directories. `--allow-version-drift` (`CORPUS_ALLOW_VERSION_DRIFT=1`) scores them anyway, for a local experiment; never capture a baseline with it.
+
+Testdata provisioned before `versions.json` existed has no record: the tools its goldens came from are unknown, and each run warns once per corpus without refusing, since only a re-provision can learn them. The one exception is compliance: a veraPDF report names its own build in its header, so a compliance golden whose veraPDF core differs from `VERAPDF_VERSION` is refused with or without a record.
+
+To bump a pin:
+
+1. Edit `corpus/versions.env`. For an image, look up the new digest (`docker buildx imagetools inspect verapdf/cli:v<version>`); for a corpus, pin the new commit SHA.
+2. Re-provision what depends on it. `make corpus-init` names the stale directories and prints the command that removes and regenerates them; run that command.
+3. Recapture the baseline (`make corpus-baseline`) and commit it with the pin, so the gate measures litho against the new goldens rather than the tool change.
+
+The live `remediation` cells shell out to the `verapdf` on your PATH, and live checks use the local qpdf and pdfsig: `make corpus-tools` prints each one against its pin. It reads veraPDF's core version from a report, since `verapdf --version` prints the apps version, which a Homebrew build sets to 1.30.0 over a 1.30.2 core.
 
 ## Regression baseline
 
@@ -192,7 +234,7 @@ When a change touches a construct no corpus file reaches, add a fixture to the l
 - Build the fixture with a pikepdf builder in `corpus/litho/build/` that uses `_common.py` (deterministic `/ID`, `stream_decode_level=none`), so a rebuild reproduces the PDF byte for byte. Commit the builder, the PDF in `corpus/litho/pdfs/`, and its rows in `corpus/litho/README.md`: the Fixtures table, the expected firing set, a section, and a Known divergences entry when litho and veraPDF disagree.
 - Pack several independent constructs into one fixture. The corpus exists to catch a rule that masks another, which a one-construct file cannot show.
 - Confirm the counts with veraPDF at the fixture's home profile before committing, and compare litho's rule set with veraPDF's at every profile.
-- Provisioning captures the goldens with `corpus/lib/run-verapdf.sh`. On an already provisioned checkout, copy the PDF into `testdata/litho/pdfs/` and add its veraPDF jobs to each `testdata/litho/goldens/compliance/<profile>.json`, with the same veraPDF version as the existing goldens, then recapture `baseline.json`.
+- Provisioning captures the goldens with `corpus/lib/run-verapdf.sh`. On an already provisioned checkout, copy the PDF into `testdata/litho/pdfs/` and add its veraPDF jobs to each `testdata/litho/goldens/compliance/<profile>.json`, made with the pinned veraPDF (`make corpus-tools` shows whether the local one matches), then recapture `baseline.json`.
 - A fixture only protects what a feature runs on it. The litho corpus runs `compliance`, `remediation` and `remediation-aggressive`, so a construct only a Writer mutation reaches (a stamp, a page deletion, a signature) needs a feature that runs that mutation, not a fixture.
 
 ## Manifest schema
