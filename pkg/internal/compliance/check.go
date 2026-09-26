@@ -169,6 +169,21 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 		ua:      IsPDFUA(profile),
 	}
 
+	vctx.pages = collectPageContexts(ctx, doc, catalog)
+
+	// Freeze the format violations here, on the single goroutine that
+	// builds the context: every object has been resolved by now, and the
+	// check groups that run next resolve objects of their own.
+	vctx.formatViolations = sweptFormatViolations(doc)
+
+	return vctx
+}
+
+// collectPageContexts collects the pages of the document catalog once, each
+// with its resources, its own or those the root of the page tree gives, and
+// its decoded content, and marks the pages whose content an earlier page
+// shares (see [markJudgedContents]).
+func collectPageContexts(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []pageCtx {
 	// Resolve inherited resources from Pages tree root.
 	pagesDict, _ := document.ResolveDict(ctx, doc, catalog["Pages"])
 	var inheritedRes ast.PdfDict
@@ -178,7 +193,7 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 
 	// Collect pages once and resolve resources per page.
 	rawPages := collectPageObjects(ctx, doc, catalog)
-	vctx.pages = make([]pageCtx, len(rawPages))
+	pages := make([]pageCtx, len(rawPages))
 	for i, pageObj := range rawPages {
 		page := pageObj.dict
 		res := resolveResources(ctx, doc, page)
@@ -186,7 +201,7 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 			res = inheritedRes
 		}
 		contentBytes, contentErr := resolvePageContentBytes(ctx, doc, page)
-		vctx.pages[i] = pageCtx{
+		pages[i] = pageCtx{
 			dict:      page,
 			objNum:    pageObj.objNum,
 			resources: res,
@@ -207,14 +222,8 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 			contentUnreadable: contentErr != nil,
 		}
 	}
-	markJudgedContents(vctx.pages)
-
-	// Freeze the format violations here, on the single goroutine that
-	// builds the context: every object has been resolved by now, and the
-	// check groups that run next resolve objects of their own.
-	vctx.formatViolations = sweptFormatViolations(doc)
-
-	return vctx
+	markJudgedContents(pages)
+	return pages
 }
 
 // markJudgedContents sets [pageCtx.contentJudged] on every page whose

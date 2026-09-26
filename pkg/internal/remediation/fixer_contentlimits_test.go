@@ -469,3 +469,100 @@ func TestFixContentLimitsReadsPartsAsOneStream(t *testing.T) {
 		})
 	}
 }
+
+// TestFixContentLimitsReadsColourOffStreams pins that the content-limits
+// repair reads a stream compliance judges with its colour operators off from
+// its start as compliance does ([compliance.ColourOffStreams]): a form an
+// uncoloured cell paints, a Type 3 glyph such a cell shows, and a coloured
+// cell of a page that also selects an uncoloured pattern. An integer past the
+// PDF/A-1 limit given to g there is judged by neither, and one in a form the
+// page paints is judged and clamped.
+func TestFixContentLimitsReadsColourOffStreams(t *testing.T) {
+	t.Parallel()
+
+	const (
+		big      = "99999999999"
+		catalog  = "<< /Type /Catalog /Pages 2 0 R >>"
+		pages    = "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"
+		page     = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources %s >>"
+		offPage  = "<< /ColorSpace << /CS0 [/Pattern /DeviceGray] >> /Pattern << /P0 5 0 R >> >>"
+		offFill  = "/CS0 cs 0.5 /P0 scn 0 0 10 10 re f"
+		uncolour = "/Type /Pattern /PatternType 1 /PaintType 2 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 /Resources "
+		colour   = "/Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 10 10] /XStep 10 /YStep 10 /Resources << >>"
+		form     = "/Type /XObject /Subtype /Form /BBox [0 0 10 10]"
+		type3    = "<< /Type /Font /Subtype /Type3 /FontBBox [0 0 1 1] /FontMatrix [0.001 0 0 0.001 0 0] /CharProcs << /a 7 0 R >> " +
+			"/Encoding << /Type /Encoding /Differences [97 /a] >> /FirstChar 97 /LastChar 97 /Widths [1000] /Resources << >> >>"
+	)
+	for _, tc := range []struct {
+		name   string
+		objs   []string
+		stream int
+		want   int
+	}{
+		{
+			name: "a form an uncoloured cell paints",
+			objs: []string{
+				fmt.Sprintf(page, offPage), hexStreamObj("", offFill),
+				hexStreamObj(uncolour+"<< /XObject << /Fm0 6 0 R >> >>", "/Fm0 Do"),
+				hexStreamObj(form, big+" g 0 0 10 10 re f"),
+			},
+			stream: 6,
+		},
+		{
+			name: "a glyph an uncoloured cell shows",
+			objs: []string{
+				fmt.Sprintf(page, offPage), hexStreamObj("", offFill),
+				hexStreamObj(uncolour+"<< /Font << /T3 6 0 R >> >>", "BT /T3 12 Tf (a) Tj ET"),
+				type3, hexStreamObj("", "1000 0 d0 "+big+" g 0 0 1 1 re f"),
+			},
+			stream: 7,
+		},
+		{
+			name: "a coloured cell beside an uncoloured one",
+			objs: []string{
+				fmt.Sprintf(page, "<< /ColorSpace << /CS0 [/Pattern /DeviceGray] >> /Pattern << /P0 5 0 R /P1 6 0 R >> >>"),
+				hexStreamObj("", "/Pattern cs /P1 scn 0 0 10 10 re f "+offFill),
+				hexStreamObj(uncolour+"<< >>", "0 0 5 5 re f"),
+				hexStreamObj(colour, big+" g 0 0 5 5 re f"),
+			},
+			stream: 6,
+		},
+		{
+			name: "a form the page paints",
+			objs: []string{
+				fmt.Sprintf(page, "<< /XObject << /Fm0 5 0 R >> >>"), hexStreamObj("", "/Fm0 Do"),
+				hexStreamObj(form, big+" g 0 0 10 10 re f"),
+			},
+			stream: 5,
+			want:   1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			data := buildStructPDF(append([]string{catalog, pages}, tc.objs...)...)
+			doc, _ := newTestDoc(t, data)
+			viols, err := compliance.ValidatePDFA(ctx, doc, models.PDFA1b)
+			if err != nil {
+				t.Fatalf("ValidatePDFA: %v", err)
+			}
+			reported := 0
+			for _, e := range viols {
+				if v, ok := e.(compliance.Violation); ok && matchContentLimits(v) {
+					reported++
+				}
+			}
+			if reported != tc.want {
+				t.Fatalf("compliance reports %d limit violations, want %d", reported, tc.want)
+			}
+			doc, alloc := newTestDoc(t, data)
+			if _, err := fixContentLimits(ctx, alloc, doc, Options{}, nil, "PDF/A-1b"); err != nil {
+				t.Fatalf("fixContentLimits: %v", err)
+			}
+			if _, rewritten := alloc.Pending()[tc.stream]; rewritten != (tc.want > 0) {
+				t.Errorf("object %d rewritten = %v, want %v", tc.stream, rewritten, tc.want > 0)
+			}
+		})
+	}
+}

@@ -62,6 +62,13 @@ type contentLimitsTally struct {
 // own content, and the form XObjects, tiling patterns, Type 3 glyphs and
 // annotation appearances it draws. See [clampContentNumbers].
 //
+// A stream compliance judges from a start with its colour operators off, as
+// [compliance.ColourOffStreams] lists them, is read that way: a form or a
+// Type 3 glyph first drawn from such a stream, and every tiling cell of a
+// stream that selects an uncoloured pattern, as well as an uncoloured cell.
+// Compliance judges none of the operands of their colour operators, so the
+// repair leaves those as written.
+//
 // Clamping can shift a drawing coordinate, but the alternative is failing
 // compliance; the spec caps the value regardless of intent. It is a
 // content-tier repair, so the writer rolls it back when the output loses the
@@ -84,11 +91,18 @@ type contentLimitsTally struct {
 //     past the PDF/A-1 limit in the streams their pages draw besides their
 //     own content, and issue14724.pdf holds 45533, which their PDF/A-1b
 //     remediations left for litho and veraPDF alike.
+//   - All corpora: no file whose validation at PDF/A-1b or PDF/A-2b reports a
+//     limit violation draws a stream with its colour operators off, so reading
+//     those streams that way changes no remediation.
 func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	part := compliance.PDFAPart(profile)
+	colourOff, err := compliance.ColourOffStreams(ctx, doc, profile)
+	if err != nil {
+		return nil, fmt.Errorf("finding the streams drawn with their colour operators off: %w", err)
+	}
 	var total contentLimitsTally
-	if _, err := walkStreams(ctx, alloc, doc, "content-limits", func(ctx context.Context, data []byte, uncoloured bool) ([]byte, func()) {
-		newData, t := clampContentNumbers(ctx, data, part, uncoloured)
+	if _, err := walkStreams(ctx, alloc, doc, "content-limits", colourOff, func(ctx context.Context, data []byte, off bool) ([]byte, func()) {
+		newData, t := clampContentNumbers(ctx, data, part, off)
 		if t == (contentLimitsTally{}) {
 			return nil, nil
 		}
@@ -130,8 +144,8 @@ func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 // image's dictionary included, that the operator taking it reads, as veraPDF
 // reads it. The numbers are spliced in place ([contentTokenSplices]), so every
 // other byte of the stream, inline image data included, is carried across
-// unchanged. uncoloured reports the cell of an uncoloured tiling pattern,
-// which starts with its colour operators ignored.
+// unchanged. colourOff reports that the stream starts with its colour
+// operators ignored, as the cell of an uncoloured tiling pattern does.
 //
 // The repair used to parse the page's own content, clamp its operands to the
 // PDF/A-1 real limit and write the operations back. That left the numbers of
@@ -159,9 +173,9 @@ func fixContentLimits(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 //     failed. Split, the text is unchanged, and the output no longer fails the
 //     limit for litho or veraPDF, where it failed it 175 times when the repair
 //     did not reach the forms.
-func clampContentNumbers(ctx context.Context, data []byte, part int, uncoloured bool) ([]byte, contentLimitsTally) {
+func clampContentNumbers(ctx context.Context, data []byte, part int, colourOff bool) ([]byte, contentLimitsTally) {
 	splits, n := translationSplits(ctx, data, part)
-	judged := judgedLimitBreakers(ctx, data, part, uncoloured)
+	judged := judgedLimitBreakers(ctx, data, part, colourOff)
 	// Both walks offer the same tokens in the same order, so a token's
 	// ordinal names it in both. The judged numbers are read as validation
 	// reads them, and named by where they end.
@@ -196,7 +210,7 @@ type limitBreaker struct {
 // ([breaksNumberLimits]) that compliance judges: the ones the operator taking
 // them reads, as [compliance.ContentOperandLink] states it, while the stream
 // processes its colour operators as [compliance.ColourState] follows it.
-// uncoloured reports that the stream starts with them ignored.
+// colourOff reports that the stream starts with them ignored.
 //
 // The stream is read as validation reads it ([visitVeraPDFTokens]), which
 // finds the operator c in "c047" and the number 047 after it, and gives a run
@@ -214,7 +228,7 @@ type limitBreaker struct {
 //     limits to undefined operators, such as ll, which the repair respelled
 //     at PDF/A-1b and PDF/A-2b and now leaves. No other file's repair
 //     changes. veraPDF 1.30 cannot open the file.
-func judgedLimitBreakers(ctx context.Context, data []byte, part int, uncoloured bool) map[int]bool {
+func judgedLimitBreakers(ctx context.Context, data []byte, part int, colourOff bool) map[int]bool {
 	var (
 		judged map[int]bool
 		// operands holds the numbers past the limits read since the last
@@ -223,7 +237,7 @@ func judgedLimitBreakers(ctx context.Context, data []byte, part int, uncoloured 
 		operands, image    []limitBreaker
 		imageMask, maskKey bool
 	)
-	colour := compliance.NewColourState(uncoloured)
+	colour := compliance.NewColourState(colourOff)
 	mark := func(b limitBreaker) {
 		if judged == nil {
 			judged = make(map[int]bool)

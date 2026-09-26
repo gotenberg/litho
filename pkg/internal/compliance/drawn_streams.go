@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 
@@ -181,6 +182,43 @@ func newDrawnStreamWalk(vctx *validationCtx, judge func(*drawnStream)) *drawnStr
 		}
 	}
 	return w
+}
+
+// ColourOffStreams returns, by object number, the content streams the pages
+// of doc draw that the content-stream checks judge from a start with their
+// colour operators off (see [drawnScan] and [ColourState]): the cell of an
+// uncoloured tiling pattern, every tiling cell a stream paints once it selects
+// one or when it began that way itself, and a form or a Type 3 glyph
+// description first drawn while the drawing stream's colour operators are
+// off. A page's content, an appearance stream and a stream no page draws are
+// not listed. profile names the part whose rules say which resources a glyph
+// description reads (see [drawnStreamWalk]).
+//
+// It reads the objects the file lists alone, as a validation run does (see
+// [document.OpenedObjectsOnly]).
+func ColourOffStreams(ctx context.Context, doc *document.Document, profile string) (map[int]bool, error) {
+	ctx = document.OpenedObjectsOnly(ctx)
+	catalog, err := resolveCatalog(ctx, doc)
+	if err != nil {
+		return nil, fmt.Errorf("resolving catalog: %w", err)
+	}
+	vctx := &validationCtx{doc: doc, profile: profile, part: PDFAPart(profile), pages: collectPageContexts(ctx, doc, catalog)}
+	off := make(map[int]bool)
+	walk := newDrawnStreamWalk(vctx, func(s *drawnStream) {
+		if s.colourOff && s.objNum != 0 {
+			off[s.objNum] = true
+		}
+	})
+	for i := range vctx.pages {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("walking the streams page %d draws: %w", i+1, err)
+		}
+		walk.walkPage(ctx, &vctx.pages[i], i+1)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("walking the streams the pages draw: %w", err)
+	}
+	return off, nil
 }
 
 // walkPage reaches the streams page p, the pageNum-th, draws: those its

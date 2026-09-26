@@ -17,23 +17,25 @@ import (
 // changed. A nil function leaves the stream as it is.
 type contentRepair func(ctx context.Context, data []byte) ([]byte, func())
 
-// streamRepair is a [contentRepair] that is also told whether the stream is
-// the cell of an uncoloured tiling pattern (ISO 32000-1, 8.7.3.3), which
-// ignores the colour operators it holds.
-type streamRepair func(ctx context.Context, data []byte, uncoloured bool) ([]byte, func())
+// streamRepair is a [contentRepair] that is also told whether the stream
+// starts with the colour operators it holds ignored (see
+// [compliance.ColourState]).
+type streamRepair func(ctx context.Context, data []byte, colourOff bool) ([]byte, func())
 
 // walkContentStreams repairs with repair every content stream the pages of doc
 // draw, as [contentStreamWalk] reaches them, and returns how many it rewrote.
 // fixer names the caller in the log of a write that cannot land.
 func walkContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fixer string, repair contentRepair) (int, error) {
-	return walkStreams(ctx, alloc, doc, fixer, func(ctx context.Context, data []byte, _ bool) ([]byte, func()) {
+	return walkStreams(ctx, alloc, doc, fixer, nil, func(ctx context.Context, data []byte, _ bool) ([]byte, func()) {
 		return repair(ctx, data)
 	})
 }
 
-// walkStreams is [walkContentStreams] with a repair told which streams are
-// uncoloured pattern cells.
-func walkStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fixer string, repair streamRepair) (int, error) {
+// walkStreams is [walkContentStreams] with a repair told which streams start
+// with their colour operators off: the ones colourOff holds by object number,
+// and the cell of every uncoloured tiling pattern (ISO 32000-1, 8.7.3.3),
+// drawn or not.
+func walkStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fixer string, colourOff map[int]bool, repair streamRepair) (int, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return 0, fmt.Errorf("resolving catalog: %w", err)
@@ -43,7 +45,7 @@ func walkStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		return 0, fmt.Errorf("resolving pages: %w", err)
 	}
 
-	w := &contentStreamWalk{alloc: alloc, doc: doc, fixer: fixer, repair: repair, visited: make(map[int]bool)}
+	w := &contentStreamWalk{alloc: alloc, doc: doc, fixer: fixer, repair: repair, colourOff: colourOff, visited: make(map[int]bool)}
 	for i, page := range pages {
 		if err := ctx.Err(); err != nil {
 			return 0, err
@@ -75,11 +77,14 @@ func walkStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 // document's form-nesting budget, the bound compliance applies to the forms a
 // page draws.
 type contentStreamWalk struct {
-	alloc   *writer.ObjAllocator
-	doc     *document.Document
-	fixer   string
-	repair  streamRepair
-	visited map[int]bool
+	alloc  *writer.ObjAllocator
+	doc    *document.Document
+	fixer  string
+	repair streamRepair
+	// colourOff holds the object numbers of the streams that start with their
+	// colour operators off (see [walkStreams]).
+	colourOff map[int]bool
+	visited   map[int]bool
 	// streams counts the content streams rewritten.
 	streams int
 }
@@ -271,7 +276,8 @@ func (w *contentStreamWalk) stream(ctx context.Context, entry ast.PdfObject, kee
 			"fixer", w.fixer, "obj", ref.ObjectNum, "error", err)
 		return stream.Dict, true
 	}
-	if newData, landed := w.repair(ctx, data, isUncolouredPattern(ctx, w.doc, stream.Dict)); landed != nil && replaceDecodedStream(w.alloc, ref, stream.Dict, newData) {
+	off := w.colourOff[ref.ObjectNum] || isUncolouredPattern(ctx, w.doc, stream.Dict)
+	if newData, landed := w.repair(ctx, data, off); landed != nil && replaceDecodedStream(w.alloc, ref, stream.Dict, newData) {
 		landed()
 		w.streams++
 	}
