@@ -114,7 +114,7 @@ func hintStreamPDF(numPages int) []byte {
 	obj5 := buf.Len()
 	buf.WriteString("5 0 obj\n<< /Type /Page /Parent 4 0 R /MediaBox [0 0 10 10] >>\nendobj\n")
 	xref := buf.Len()
-	fmt.Fprintf(&buf, "xref\n0 6\n0000000000 65535 f \r\n%010d 00000 n \r\n%010d 00000 n \r\n%010d 00000 n \r\n%010d 00000 n \r\n%010d 00000 n \r\n",
+	fmt.Fprintf(&buf, "xref\n0 6\n0000000000 65535 f\r\n%010d 00000 n\r\n%010d 00000 n\r\n%010d 00000 n\r\n%010d 00000 n\r\n%010d 00000 n\r\n",
 		linOff, hintOff, obj3, obj4, obj5)
 	fmt.Fprintf(&buf, "trailer\n<< /Size 6 /Root 3 0 R >>\nstartxref\n%d\n%%%%EOF\n", xref)
 

@@ -37,10 +37,10 @@ func versionTablePDF(version string) []byte {
 			"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
 			"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n" +
 			"xref\n0 4\n" +
-			"0000000000 65535 f \r\n" +
-			"0000000009 00000 n \r\n" +
-			"0000000058 00000 n \r\n" +
-			"0000000115 00000 n \r\n" +
+			"0000000000 65535 f\r\n" +
+			"0000000009 00000 n\r\n" +
+			"0000000058 00000 n\r\n" +
+			"0000000115 00000 n\r\n" +
 			"trailer\n<< /Size 4 /Root 1 0 R >>\n" +
 			"startxref\n198\n%%EOF\n")
 }

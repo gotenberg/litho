@@ -31,7 +31,7 @@ func freeObject(t *testing.T, base []byte, num int) []byte {
 	var buf bytes.Buffer
 	buf.Write(base)
 	xref := buf.Len()
-	fmt.Fprintf(&buf, "xref\n0 1\n0000000000 65535 f \r\n%d 1\n0000000000 00001 f \r\ntrailer\n<< /Size 10 /Root 1 0 R /Prev %d >>\nstartxref\n%d\n%%%%EOF\n",
+	fmt.Fprintf(&buf, "xref\n0 1\n0000000000 65535 f\r\n%d 1\n0000000000 00001 f\r\ntrailer\n<< /Size 10 /Root 1 0 R /Prev %d >>\nstartxref\n%d\n%%%%EOF\n",
 		num, startXRef(t, base), xref)
 	return buf.Bytes()
 }

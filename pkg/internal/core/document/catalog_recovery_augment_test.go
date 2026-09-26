@@ -24,7 +24,7 @@ func unlistedCatalogPDF() []byte {
 	offsets[3] = buf.Len()
 	buf.WriteString("3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n")
 	start := buf.Len()
-	fmt.Fprintf(&buf, "xref\n0 1\n0000000000 65535 f \r\n2 2\n%010d 00000 n \r\n%010d 00000 n \r\n", offsets[2], offsets[3])
+	fmt.Fprintf(&buf, "xref\n0 1\n0000000000 65535 f\r\n2 2\n%010d 00000 n\r\n%010d 00000 n\r\n", offsets[2], offsets[3])
 	fmt.Fprintf(&buf, "trailer\n<< /Size 4 >>\nstartxref\n%d\n%%%%EOF\n", start)
 	return buf.Bytes()
 }

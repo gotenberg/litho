@@ -54,9 +54,9 @@ func pdfWithImageOPI() []byte {
 	offsets[4] = buf.Len()
 	buf.WriteString("4 0 obj\n<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /BitsPerComponent 8 /ColorSpace /DeviceRGB /OPI << /F (a.tif) >> /Length 1 >>\nstream\n\x7f\nendstream\nendobj\n")
 	xrefStart := buf.Len()
-	buf.WriteString("xref\n0 5\n0000000000 65535 f \r\n")
+	buf.WriteString("xref\n0 5\n0000000000 65535 f\r\n")
 	for i := 1; i <= 4; i++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[i])
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offsets[i])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefStart)
 	return buf.Bytes()
@@ -113,9 +113,9 @@ func pdfWithImageIntent(intent, filter string, data []byte) []byte {
 	buf.Write(data)
 	buf.WriteString("\nendstream\nendobj\n")
 	xrefStart := buf.Len()
-	buf.WriteString("xref\n0 5\n0000000000 65535 f \r\n")
+	buf.WriteString("xref\n0 5\n0000000000 65535 f\r\n")
 	for i := 1; i <= 4; i++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[i])
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offsets[i])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefStart)
 	return buf.Bytes()
@@ -173,9 +173,9 @@ func pdfWithSMaskInterpolate() []byte {
 	buf.WriteByte(0x2a)
 	buf.WriteString("\nendstream\nendobj\n")
 	xrefStart := buf.Len()
-	buf.WriteString("xref\n0 6\n0000000000 65535 f \r\n")
+	buf.WriteString("xref\n0 6\n0000000000 65535 f\r\n")
 	for i := 1; i <= 5; i++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[i])
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offsets[i])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefStart)
 	return buf.Bytes()

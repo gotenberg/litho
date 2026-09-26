@@ -46,9 +46,9 @@ func laterRoundCLIPDF(binaryComment bool) []byte {
 		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, o)
 	}
 	xref := buf.Len()
-	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
 	for i := 1; i <= len(objs); i++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offs[i])
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offs[i])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R /Info 7 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
 	return buf.Bytes()

@@ -31,7 +31,7 @@ func unlistedObjectDoc(t *testing.T) *Document {
 		buf.WriteString(obj)
 	}
 	xrefAt := buf.Len()
-	fmt.Fprintf(&buf, "xref\n0 4\n0000000000 65535 f \r\n%010d 00000 n \r\n%010d 00000 n \r\n%010d 00000 n \r\n", offsets[1], offsets[2], offsets[3])
+	fmt.Fprintf(&buf, "xref\n0 4\n0000000000 65535 f\r\n%010d 00000 n\r\n%010d 00000 n\r\n%010d 00000 n\r\n", offsets[1], offsets[2], offsets[3])
 	fmt.Fprintf(&buf, "trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefAt)
 	data := buf.Bytes()
 	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)

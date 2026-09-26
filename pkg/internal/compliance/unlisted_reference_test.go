@@ -51,9 +51,9 @@ func referencedContentPDF(table string, broken bool) []byte {
 		listed = 4
 	}
 	start := buf.Len()
-	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f \r\n", listed+1)
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f\r\n", listed+1)
 	for i := 1; i <= listed; i++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[i])
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offsets[i])
 	}
 	if broken {
 		start = buf.Len() + 1000

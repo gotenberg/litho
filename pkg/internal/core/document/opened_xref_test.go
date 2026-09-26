@@ -35,7 +35,7 @@ func TestOpenedXRefEntries(t *testing.T) {
 	}
 	stale := offsets[1] + 2 // inside object 1, where no header starts
 	xrefAt := buf.Len()
-	fmt.Fprintf(&buf, "xref\n0 4\n0000000000 65535 f \r\n%010d 00000 n \r\n%010d 00000 n \r\n%010d 00000 n \r\n", offsets[1], stale, offsets[3])
+	fmt.Fprintf(&buf, "xref\n0 4\n0000000000 65535 f\r\n%010d 00000 n\r\n%010d 00000 n\r\n%010d 00000 n\r\n", offsets[1], stale, offsets[3])
 	fmt.Fprintf(&buf, "trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefAt)
 
 	data := buf.Bytes()

@@ -55,13 +55,13 @@ func unlistedFontPDF(fillers int, listFont bool) []byte {
 	if listFont {
 		head = 5
 	}
-	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f \r\n", head+1)
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f\r\n", head+1)
 	for objNum := 1; objNum <= head; objNum++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[objNum])
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offsets[objNum])
 	}
 	fmt.Fprintf(&buf, "6 %d\n", fillers)
 	for objNum := 6; objNum <= len(bodies); objNum++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[objNum])
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offsets[objNum])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(bodies)+1, start)
 	return buf.Bytes()

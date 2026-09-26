@@ -20,7 +20,7 @@ func xrefHeaderDoc(t *testing.T, head string) *document.Document {
 	two := buf.Len()
 	buf.WriteString("2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n")
 	xref := buf.Len()
-	fmt.Fprintf(&buf, "xref%s0 3\n0000000000 65535 f \r\n%010d 00000 n \r\n%010d 00000 n \r\n", head, one, two)
+	fmt.Fprintf(&buf, "xref%s0 3\n0000000000 65535 f\r\n%010d 00000 n\r\n%010d 00000 n\r\n", head, one, two)
 	fmt.Fprintf(&buf, "trailer\n<< /Size 3 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xref)
 	data := buf.Bytes()
 	doc, err := document.NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)

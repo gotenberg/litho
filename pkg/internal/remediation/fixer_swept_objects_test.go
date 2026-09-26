@@ -31,9 +31,9 @@ func unlistedNamePDF() []byte {
 	}
 	buf.WriteString("5 0 obj\n<< /Type /Probe /Tag /C#FFad >>\nendobj\n")
 	start := buf.Len()
-	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f \r\n", len(listed)+1)
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f\r\n", len(listed)+1)
 	for i := 1; i <= len(listed); i++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[i])
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offsets[i])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(listed)+1, start)
 	return buf.Bytes()

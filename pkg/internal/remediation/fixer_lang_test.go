@@ -198,9 +198,9 @@ func buildStructPDF(bodies ...string) []byte {
 		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, body)
 	}
 	xrefStart := buf.Len()
-	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f \r\n", len(bodies)+1)
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f\r\n", len(bodies)+1)
 	for i := 1; i <= len(bodies); i++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[i])
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offsets[i])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(bodies)+1, xrefStart)
 	return buf.Bytes()

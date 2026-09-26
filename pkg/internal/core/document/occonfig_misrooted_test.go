@@ -31,9 +31,9 @@ func misrootedOCPDF(rootObjNum int) []byte {
 		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, body)
 	}
 	start := buf.Len()
-	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
 	for i := 1; i <= len(objs); i++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[i])
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offsets[i])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root %d 0 R /Info 1 0 R >>\nstartxref\n%d\n%%%%EOF\n",
 		len(objs)+1, rootObjNum, start)

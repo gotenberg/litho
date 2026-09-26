@@ -31,9 +31,9 @@ func untaggedTextPDF() []byte {
 	}
 	xrefStart := buf.Len()
 	fmt.Fprintf(&buf, "xref\n0 %d\n", len(objs)+1)
-	buf.WriteString("0000000000 65535 f \r\n")
+	buf.WriteString("0000000000 65535 f\r\n")
 	for i := 1; i <= len(objs); i++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[i])
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offsets[i])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xrefStart)
 	return buf.Bytes()

@@ -56,7 +56,7 @@ func TestNewDocument_CyclicPrevTerminates(t *testing.T) {
 // defect went unreported and only the pair revealed it.
 func TestValidateXRefTableFormat_SurplusEOLDoesNotMaskSpacing(t *testing.T) {
 	table := func(header string) *Document {
-		body := "xref" + header + "0000000000 65535 f \r\ntrailer\n<< /Size 1 >>\n"
+		body := "xref" + header + "0000000000 65535 f\r\ntrailer\n<< /Size 1 >>\n"
 		return &Document{r: bytes.NewReader([]byte(body))}
 	}
 

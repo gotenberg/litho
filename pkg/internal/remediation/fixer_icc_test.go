@@ -38,9 +38,9 @@ func pdfWithICCVersion(version byte) []byte {
 	buf.Write(icc)
 	buf.WriteString("\nendstream\nendobj\n")
 	xrefStart := buf.Len()
-	buf.WriteString("xref\n0 6\n0000000000 65535 f \r\n")
+	buf.WriteString("xref\n0 6\n0000000000 65535 f\r\n")
 	for i := 1; i <= 5; i++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[i])
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offsets[i])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefStart)
 	return buf.Bytes()
@@ -86,12 +86,12 @@ func pdfWithCorruptICC() []byte {
 			"4 0 obj\n<< /Type /OutputIntent /S /GTS_PDFA1 /OutputConditionIdentifier (sRGB) /DestOutputProfile 5 0 R >>\nendobj\n" +
 			"5 0 obj\n<< /N 3 /Length 4 >>\nstream\nXXXX\nendstream\nendobj\n" +
 			"xref\n0 6\n" +
-			"0000000000 65535 f \r\n" +
-			"0000000009 00000 n \r\n" +
-			"0000000089 00000 n \r\n" +
-			"0000000149 00000 n \r\n" +
-			"0000000221 00000 n \r\n" +
-			"0000000325 00000 n \r\n" +
+			"0000000000 65535 f\r\n" +
+			"0000000009 00000 n\r\n" +
+			"0000000089 00000 n\r\n" +
+			"0000000149 00000 n\r\n" +
+			"0000000221 00000 n\r\n" +
+			"0000000325 00000 n\r\n" +
 			"trailer\n<< /Size 6 /Root 1 0 R >>\n" +
 			"startxref\n378\n%%EOF\n")
 }

@@ -100,9 +100,9 @@ func trailerPDF(extra string) []byte {
 		out += fmt.Sprintf("%d 0 obj\n%s\nendobj\n", i+1, o)
 	}
 	xref := len(out)
-	out += fmt.Sprintf("xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	out += fmt.Sprintf("xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
 	for _, o := range offs {
-		out += fmt.Sprintf("%010d 00000 n \r\n", o)
+		out += fmt.Sprintf("%010d 00000 n\r\n", o)
 	}
 	out += fmt.Sprintf("trailer\n<< /Size %d /Root 1 0 R %s>>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, extra, xref)
 	return []byte(out)

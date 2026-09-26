@@ -106,9 +106,9 @@ func retagPDF(roleMap, elemRole string) []byte {
 		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
 	}
 	xref := b.Len()
-	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
 	for i := 1; i <= len(objs); i++ {
-		fmt.Fprintf(&b, "%010d 00000 n \r\n", offsets[i])
+		fmt.Fprintf(&b, "%010d 00000 n\r\n", offsets[i])
 	}
 	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
 	return b.Bytes()
@@ -201,9 +201,9 @@ func tableSectionPDF(headRole, roleMap string) []byte {
 		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
 	}
 	xref := b.Len()
-	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
 	for i := 1; i <= len(objs); i++ {
-		fmt.Fprintf(&b, "%010d 00000 n \r\n", offsets[i])
+		fmt.Fprintf(&b, "%010d 00000 n\r\n", offsets[i])
 	}
 	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, xref)
 	return b.Bytes()

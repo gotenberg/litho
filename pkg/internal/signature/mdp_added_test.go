@@ -18,7 +18,7 @@ func restoreObject(t *testing.T, base []byte, num int) []byte {
 	var buf bytes.Buffer
 	buf.Write(base)
 	xref := buf.Len()
-	fmt.Fprintf(&buf, "xref\n%d 1\n%010d 00000 n \r\ntrailer\n<< /Size 12 /Root 1 0 R /Prev %d >>\nstartxref\n%d\n%%%%EOF\n",
+	fmt.Fprintf(&buf, "xref\n%d 1\n%010d 00000 n\r\ntrailer\n<< /Size 12 /Root 1 0 R /Prev %d >>\nstartxref\n%d\n%%%%EOF\n",
 		num, at+1, startXRef(t, base), xref)
 	return buf.Bytes()
 }

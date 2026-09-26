@@ -44,7 +44,7 @@ func newMisplacedObject(t *testing.T) misplacedObject {
 	off3 := buf.Len()
 	buf.WriteString(obj3)
 	xrefAt := buf.Len()
-	fmt.Fprintf(&buf, "xref\n0 4\n0000000000 65535 f \r\n%010d 00000 n \r\n%010d 00000 n \r\n%010d 00000 n \r\n", m.off1, m.stale, off3)
+	fmt.Fprintf(&buf, "xref\n0 4\n0000000000 65535 f\r\n%010d 00000 n\r\n%010d 00000 n\r\n%010d 00000 n\r\n", m.off1, m.stale, off3)
 	fmt.Fprintf(&buf, "trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefAt)
 
 	data := buf.Bytes()

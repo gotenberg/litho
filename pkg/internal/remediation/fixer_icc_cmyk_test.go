@@ -47,9 +47,9 @@ func pdfWithCMYKICCVersion(version byte) []byte {
 	buf.Write(icc)
 	buf.WriteString("\nendstream\nendobj\n")
 	xrefStart := buf.Len()
-	buf.WriteString("xref\n0 6\n0000000000 65535 f \r\n")
+	buf.WriteString("xref\n0 6\n0000000000 65535 f\r\n")
 	for i := 1; i <= 5; i++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[i])
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offsets[i])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xrefStart)
 	return buf.Bytes()

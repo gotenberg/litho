@@ -344,7 +344,7 @@ func appendUpdate(t *testing.T, base []byte, objs ...updatedObject) []byte {
 	xref := buf.Len()
 	buf.WriteString("xref\n")
 	for i, o := range objs {
-		fmt.Fprintf(&buf, "%d 1\n%010d 00000 n \r\n", o.num, offs[i])
+		fmt.Fprintf(&buf, "%d 1\n%010d 00000 n\r\n", o.num, offs[i])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R /Prev %d >>\nstartxref\n%d\n%%%%EOF\n", size, prev, xref)
 	return buf.Bytes()

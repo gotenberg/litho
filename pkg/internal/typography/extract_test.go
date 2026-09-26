@@ -27,13 +27,13 @@ func minimalFontPDF() []byte {
 			"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources 5 0 R /Contents 6 0 R >>\nendobj\n" +
 			"6 0 obj\n<< /Length 44 >>\nstream\nBT /F1 12 Tf 100 700 Td (Hello) Tj ET\nendstream\nendobj\n" +
 			"xref\n0 7\n" +
-			"0000000000 65535 f \r\n" +
-			"0000000009 00000 n \r\n" +
-			"0000000058 00000 n \r\n" +
-			"0000000177 00000 n \r\n" +
-			"0000000115 00000 n \r\n" +
-			"0000000165 00000 n \r\n" +
-			"0000000256 00000 n \r\n" +
+			"0000000000 65535 f\r\n" +
+			"0000000009 00000 n\r\n" +
+			"0000000058 00000 n\r\n" +
+			"0000000177 00000 n\r\n" +
+			"0000000115 00000 n\r\n" +
+			"0000000165 00000 n\r\n" +
+			"0000000256 00000 n\r\n" +
 			"trailer\n<< /Size 7 /Root 1 0 R >>\n" +
 			"startxref\n326\n%%EOF\n")
 }

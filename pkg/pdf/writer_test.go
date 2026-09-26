@@ -32,11 +32,11 @@ func writerTestPDF() []byte {
 			"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n" +
 			"4 0 obj\n<< /Title (Original Title) /Author (Jane) >>\nendobj\n" +
 			"xref\n0 5\n" +
-			"0000000000 65535 f \r\n" +
-			"0000000009 00000 n \r\n" +
-			"0000000058 00000 n \r\n" +
-			"0000000115 00000 n \r\n" +
-			"0000000198 00000 n \r\n" +
+			"0000000000 65535 f\r\n" +
+			"0000000009 00000 n\r\n" +
+			"0000000058 00000 n\r\n" +
+			"0000000115 00000 n\r\n" +
+			"0000000198 00000 n\r\n" +
 			"trailer\n<< /Size 5 /Root 1 0 R /Info 4 0 R >>\n" +
 			"startxref\n256\n%%EOF\n")
 }
@@ -69,19 +69,19 @@ func threePagePDF() []byte {
 			"9 0 obj\n<< /Title (Three Pages) >>\nendobj\n" +
 			// xref
 			"xref\n0 13\n" +
-			"0000000000 65535 f \r\n" +
-			"0000000009 00000 n \r\n" +
-			"0000000058 00000 n \r\n" +
-			"0000000248 00000 n \r\n" +
-			"0000000131 00000 n \r\n" +
-			"0000000204 00000 n \r\n" +
-			"0000000413 00000 n \r\n" +
-			"0000000000 00000 f \r\n" +
-			"0000000578 00000 n \r\n" +
-			"0000000744 00000 n \r\n" +
-			"0000000380 00000 n \r\n" +
-			"0000000545 00000 n \r\n" +
-			"0000000710 00000 n \r\n" +
+			"0000000000 65535 f\r\n" +
+			"0000000009 00000 n\r\n" +
+			"0000000058 00000 n\r\n" +
+			"0000000248 00000 n\r\n" +
+			"0000000131 00000 n\r\n" +
+			"0000000204 00000 n\r\n" +
+			"0000000413 00000 n\r\n" +
+			"0000000000 00000 f\r\n" +
+			"0000000578 00000 n\r\n" +
+			"0000000744 00000 n\r\n" +
+			"0000000380 00000 n\r\n" +
+			"0000000545 00000 n\r\n" +
+			"0000000710 00000 n\r\n" +
 			"trailer\n<< /Size 13 /Root 1 0 R /Info 9 0 R >>\n" +
 			"startxref\n790\n%%EOF\n")
 }
@@ -106,14 +106,14 @@ func formPDF() []byte {
 			"7 0 obj\n<< /Fields [5 0 R 6 0 R] >>\nendobj\n" +
 			// xref
 			"xref\n0 8\n" +
-			"0000000000 65535 f \r\n" +
-			"0000000009 00000 n \r\n" +
-			"0000000076 00000 n \r\n" +
-			"0000000133 00000 n \r\n" +
-			"0000000252 00000 n \r\n" +
-			"0000000325 00000 n \r\n" +
-			"0000000440 00000 n \r\n" +
-			"0000000564 00000 n \r\n" +
+			"0000000000 65535 f\r\n" +
+			"0000000009 00000 n\r\n" +
+			"0000000076 00000 n\r\n" +
+			"0000000133 00000 n\r\n" +
+			"0000000252 00000 n\r\n" +
+			"0000000325 00000 n\r\n" +
+			"0000000440 00000 n\r\n" +
+			"0000000564 00000 n\r\n" +
 			"trailer\n<< /Size 8 /Root 1 0 R >>\n" +
 			"startxref\n608\n%%EOF\n")
 }
@@ -313,9 +313,9 @@ func danglingRefPDF() []byte {
 		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
 	}
 	x := b.Len()
-	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
 	for i := 1; i <= len(objs); i++ {
-		fmt.Fprintf(&b, "%010d 00000 n \r\n", off[i])
+		fmt.Fprintf(&b, "%010d 00000 n\r\n", off[i])
 	}
 	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
 	return b.Bytes()
@@ -375,9 +375,9 @@ func garbageObjectPDF() []byte {
 		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
 	}
 	x := b.Len()
-	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
 	for i := 1; i <= len(objs); i++ {
-		fmt.Fprintf(&b, "%010d 00000 n \r\n", off[i])
+		fmt.Fprintf(&b, "%010d 00000 n\r\n", off[i])
 	}
 	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
 	return b.Bytes()
@@ -436,10 +436,10 @@ func freeCatalogPDF() []byte {
 		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
 	}
 	x := b.Len()
-	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
-	fmt.Fprintf(&b, "0000000000 00000 f \r\n") // obj 1 (catalog) wrongly marked free
-	fmt.Fprintf(&b, "%010d 00000 n \r\n", off[2])
-	fmt.Fprintf(&b, "%010d 00000 n \r\n", off[3])
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
+	fmt.Fprintf(&b, "0000000000 00000 f\r\n") // obj 1 (catalog) wrongly marked free
+	fmt.Fprintf(&b, "%010d 00000 n\r\n", off[2])
+	fmt.Fprintf(&b, "%010d 00000 n\r\n", off[3])
 	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
 	return b.Bytes()
 }
@@ -493,9 +493,9 @@ func rootlessTrailerPDF() []byte {
 		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
 	}
 	x := b.Len()
-	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
 	for i := 1; i <= len(objs); i++ {
-		fmt.Fprintf(&b, "%010d 00000 n \r\n", off[i])
+		fmt.Fprintf(&b, "%010d 00000 n\r\n", off[i])
 	}
 	// Trailer deliberately omits /Root.
 	fmt.Fprintf(&b, "trailer\n<< /Size %d >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
@@ -605,15 +605,15 @@ func headingPDF() []byte {
 			"BT /F1 10 Tf 100 700 Td (Even more detailed body content text) Tj ET\n" +
 			"endstream\nendobj\n" +
 			"xref\n0 9\n" +
-			"0000000000 65535 f \r\n" +
-			"0000000009 00000 n \r\n" +
-			"0000000058 00000 n \r\n" +
-			"0000000179 00000 n \r\n" +
-			"0000000435 00000 n \r\n" +
-			"0000000111 00000 n \r\n" +
-			"0000000172 00000 n \r\n" +
-			"0000000262 00000 n \r\n" +
-			"0000000520 00000 n \r\n" +
+			"0000000000 65535 f\r\n" +
+			"0000000009 00000 n\r\n" +
+			"0000000058 00000 n\r\n" +
+			"0000000179 00000 n\r\n" +
+			"0000000435 00000 n\r\n" +
+			"0000000111 00000 n\r\n" +
+			"0000000172 00000 n\r\n" +
+			"0000000262 00000 n\r\n" +
+			"0000000520 00000 n\r\n" +
 			"trailer\n<< /Size 9 /Root 1 0 R >>\n" +
 			"startxref\n690\n%%EOF\n")
 }
@@ -1048,9 +1048,9 @@ func buildFormPDFWithAppearances(t *testing.T) []byte {
 
 	xrefStart := body.Len()
 	body.WriteString("xref\n0 9\n")
-	body.WriteString("0000000000 65535 f \r\n")
+	body.WriteString("0000000000 65535 f\r\n")
 	for i := 1; i <= 8; i++ {
-		body.WriteString(fmt.Sprintf("%010d 00000 n \r\n", offsets[i]))
+		body.WriteString(fmt.Sprintf("%010d 00000 n\r\n", offsets[i]))
 	}
 	body.WriteString("trailer\n<< /Size 9 /Root 1 0 R >>\n")
 	body.WriteString(fmt.Sprintf("startxref\n%d\n%%%%EOF\n", xrefStart))
@@ -1173,9 +1173,9 @@ func inlinePagePDF() []byte {
 		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
 	}
 	x := b.Len()
-	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
 	for i := 1; i <= len(objs); i++ {
-		fmt.Fprintf(&b, "%010d 00000 n \r\n", off[i])
+		fmt.Fprintf(&b, "%010d 00000 n\r\n", off[i])
 	}
 	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
 	return b.Bytes()
@@ -1269,9 +1269,9 @@ func inheritedResourcesPDF() []byte {
 		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, body)
 	}
 	x := b.Len()
-	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \r\n", len(objs)+1)
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
 	for i := 1; i <= len(objs); i++ {
-		fmt.Fprintf(&b, "%010d 00000 n \r\n", off[i])
+		fmt.Fprintf(&b, "%010d 00000 n\r\n", off[i])
 	}
 	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, x)
 	return b.Bytes()

@@ -39,9 +39,9 @@ func unlistedWidthsPDF() []byte {
 	buf.WriteString("7 0 obj\n<< /Length 0 /F (external.dat) >>\nstream\n\nendstream\nendobj\n")
 
 	start := buf.Len()
-	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f \r\n", len(listed)+1)
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f\r\n", len(listed)+1)
 	for i := 1; i <= len(listed); i++ {
-		fmt.Fprintf(&buf, "%010d 00000 n \r\n", offsets[i])
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", offsets[i])
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R /ID [<00112233445566778899AABBCCDDEEFF> <00112233445566778899AABBCCDDEEFF>] >>\nstartxref\n%d\n%%%%EOF\n",
 		len(listed)+1, start)

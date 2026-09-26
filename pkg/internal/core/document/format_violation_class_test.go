@@ -46,7 +46,7 @@ func TestXRefTableFormatViolationsMatchTheirClass(t *testing.T) {
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			body := "xref" + tt.header + "0000000000 65535 f \r\ntrailer\n<< /Size 1 >>\n"
+			body := "xref" + tt.header + "0000000000 65535 f\r\ntrailer\n<< /Size 1 >>\n"
 			got := (&Document{r: bytes.NewReader([]byte(body))}).ValidateXRefTableFormat(0)
 			if len(got) != 1 {
 				t.Fatalf("got %d violations, want 1: %v", len(got), got)
@@ -84,7 +84,7 @@ func TestXRefTableFormatViolationsMatchTheirClass(t *testing.T) {
 	// still found.
 	t.Run("a spacing defect behind a form feed", func(t *testing.T) {
 		t.Parallel()
-		body := "xref\n\f0  1\n0000000000 65535 f \r\ntrailer\n<< /Size 1 >>\n"
+		body := "xref\n\f0  1\n0000000000 65535 f\r\ntrailer\n<< /Size 1 >>\n"
 		got := (&Document{r: bytes.NewReader([]byte(body))}).ValidateXRefTableFormat(0)
 		if len(got) != 2 || !errors.Is(got[0], ErrXRefEOLMarkers) || !errors.Is(got[1], ErrXRefSubsectionSpacing) {
 			t.Fatalf("got %v, want ErrXRefEOLMarkers then ErrXRefSubsectionSpacing", got)
@@ -107,7 +107,7 @@ func TestObjectHeaderFormatViolationsMatchTheirClass(t *testing.T) {
 	two := buf.Len()
 	buf.WriteString("2 0 obj\n<< /Type /Pages /Kids [] /Count 0 >>\nendobj\n")
 	xref := buf.Len()
-	fmt.Fprintf(&buf, "xref\n0 3\n0000000000 65535 f \r\n%010d 00000 n \r\n%010d 00000 n \r\n", one, two)
+	fmt.Fprintf(&buf, "xref\n0 3\n0000000000 65535 f\r\n%010d 00000 n\r\n%010d 00000 n\r\n", one, two)
 	fmt.Fprintf(&buf, "trailer\n<< /Size 3 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", xref)
 	data := buf.Bytes()
 	doc, err := NewDocument(context.Background(), bytes.NewReader(data), int64(len(data)), nil)

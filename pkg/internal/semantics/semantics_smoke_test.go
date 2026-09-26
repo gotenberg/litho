@@ -18,11 +18,11 @@ func pdfWithInfo() []byte {
 			"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n" +
 			"4 0 obj\n<< /Title (Test Title) /Author (Alice) /Subject (Test Subject) /Keywords (k1, k2) /Creator (litho) /Producer (litho) >>\nendobj\n" +
 			"xref\n0 5\n" +
-			"0000000000 65535 f \r\n" +
-			"0000000009 00000 n \r\n" +
-			"0000000058 00000 n \r\n" +
-			"0000000115 00000 n \r\n" +
-			"0000000198 00000 n \r\n" +
+			"0000000000 65535 f\r\n" +
+			"0000000009 00000 n\r\n" +
+			"0000000058 00000 n\r\n" +
+			"0000000115 00000 n\r\n" +
+			"0000000198 00000 n\r\n" +
 			"trailer\n<< /Size 5 /Root 1 0 R /Info 4 0 R >>\n" +
 			"startxref\n330\n%%EOF\n")
 }
