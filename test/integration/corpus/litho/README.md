@@ -139,6 +139,7 @@ one deliberately rather than diffing it against a fresh build.
 | `xrefstm_2b.pdf`       | PDF/A-2b     | The trailer entries of a cross-reference stream, and an update's |
 | `typedreads_1b.pdf`    | PDF/A-1b     | Values veraPDF reads again through typed objects of its model    |
 | `fontcopies_2b.pdf`    | PDF/A-2b     | Fonts written directly, judged per copy, and CIDs past a program |
+| `usecmap_2u.pdf`       | PDF/A-2u     | `/ToUnicode` CMaps built on usecmap and `/UseCMap` bases         |
 
 ### Must-not-fire controls
 
@@ -328,6 +329,7 @@ violation but is exempt, so a firing is a false positive.
 | `typedreads_1b`                           | The outline dictionary's `/Title`, never read again as an item's       | ISO 32000-1, 12.3.3          |
 | `fontcopies_2b`                           | Two pages sharing an indirect resource or `/Font` dictionary           | one font per dictionary      |
 | `fontcopies_2b`                           | `M1`: a missing CID whose `/W` entry is glyph 0's advance              | ISO 19005-2, 6.2.11.5 t1     |
+| `usecmap_2u`                              | `T2`: a `/UseCMap /Adobe-Korea1-UCS2` base mapping all four codes      | ISO 19005-2, 6.2.11.7.2 t1   |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -337,7 +339,7 @@ zero-area annotation.
 ## Expected firing sets
 
 Counts are distinct rule classes (`clause/test`) reported by litho. litho and
-veraPDF agree exactly on the set in every cell except the five marked `*`,
+veraPDF agree exactly on the set in every cell except the eight marked `*`,
 which are covered under [Known divergences](#known-divergences).
 
 | Fixture                | A-1a | A-1b | A-2a | A-2b | A-2u | A-3a | A-3b | A-3u | A-4 | A-4e | A-4f | UA-1 | UA-2 |
@@ -422,6 +424,7 @@ which are covered under [Known divergences](#known-divergences).
 | `typedreads_1b.pdf`    | 10   | 8    | 9    | 8    | 8    | 11   | 10   | 10   | 9   | 8    | 8    | 7    | 11   |
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 5    | 4    |
 | `undecodable_2b.pdf`   | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 11   | 9    |
+| `usecmap_2u.pdf`       | 5    | 2    | 7\*  | 3    | 5    | 7\*  | 3    | 5    | 5   | 5    | 6    | 9    | 9\*  |
 | `usedcs_2b.pdf`        | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `xfatable_ua1.pdf`     | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 4    | 7    |
 | `xmpsyntax_1b.pdf`     | 9    | 7    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 9    | 8    |
@@ -1678,6 +1681,23 @@ does not depend on the structure tree, so litho has the gap. A remediation hides
 first round adds a structure tree, the revalidation then reports the entry, and
 the marked-content repair removes it, so both tools agree on every remediated
 output.
+
+Three more cells disagree, all on `usecmap_2u.pdf` and all on one glyph: CID
+44DF of `C2`, which Adobe's current Adobe-CNS1-UCS2 maps to U+F538, a Private
+Use value, reached through a usecmap base.
+
+**`6.2.11.7.3/1` at PDF/A-2a and PDF/A-3a, `8.4.3/1` at PDF/UA-2.** veraPDF
+reports the glyph, litho does not. ISO 19005-2, 6.2.11.7.3 and ISO 14289-2,
+8.4.3 ask for an `/ActualText` around a glyph whose Unicode value lies in the
+Private Use Area, and the glyph's value is the base's: the program maps no code
+itself. litho reads Private Use values from the bytes of the `/ToUnicode`
+program alone, `containsPUAMapping` and `puaSourceCodes` in
+`pkg/internal/compliance/fonts_encoding.go`, called from
+`checkStreamPUAWithoutActualText` in `pkg/internal/compliance/fonts.go`, and
+never from the base the program names, which the other `/ToUnicode` rules read
+through `resolveUsedCMaps`. litho has the gap. The construct stays because it
+is the case the Adobe CNS1 measurement was taken on, and the gate should show
+the day the gap closes.
 
 One litho gap and one veraPDF gap sit outside the corpus, because planting
 either would add a disagreeing cell rather than coverage.
@@ -3566,6 +3586,61 @@ The two tools return the same rule set in all thirteen cells, and the same count
 for every rule at every PDF/A level; at the PDF/UA levels veraPDF counts the
 untagged-content rules once per text show.
 
+### `usecmap_2u.pdf`
+
+A `/ToUnicode` CMap builds on another two ways (ISO 32000-1, 9.7.5): the
+usecmap operator in its program names a predefined CMap, and a `/UseCMap` entry
+in its stream dictionary (Table 120) names a predefined CMap or an embedded CMap
+stream, which may name another in turn. veraPDF merges only the single-code
+mappings of a usecmap base, a base replacing the mappings defined before the
+operator and yielding to those after it, and supplies every mapping of a
+`/UseCMap` base to the codes the program leaves out. The Adobe UCS2 CMaps it
+reads are Adobe's current resources, which map codes the 2009 copies PDF.js
+ships leave out and drop others; PDF.js ships no Adobe-KR-UCS2 at all. pdfjs
+issue5010.pdf is the one corpus file whose `/ToUnicode` builds on another CMap,
+through usecmap and Adobe-Korea1-UCS2, where the two sources agree, and no file
+names a base with `/UseCMap`, so no count reached any of this.
+
+Five Type 3 fonts show codes 41, 60, 61 and 65 hexadecimal through glyph names
+of no Unicode value, and six Type0 fonts, each over a CIDFontType2 whose
+`/CIDToGIDMap` sends every CID it shows but 0 to a glyph, show CIDs where the
+two Adobe sources disagree:
+
+| Font | `/ToUnicode`                                             | `6.2.11.7.2` t1, t2 |
+| ---- | -------------------------------------------------------- | ------------------- |
+| `T1` | runs `/No-Such-CMap usecmap`                             | 4, 0                |
+| `T2` | `/UseCMap /Adobe-Korea1-UCS2`                            | 0, 0                |
+| `T3` | `/UseCMap` a stream mapping 41 and 65                    | 2, 0                |
+| `T4` | `/UseCMap` a stream mapping 65, whose `/UseCMap` maps 41 | 2, 0                |
+| `T5` | 60 to U+0000, `/Adobe-Korea1-UCS2 usecmap`, 61 to U+0000 | 2, 1                |
+| `C1` | `/Adobe-GB1-UCS2 usecmap`                                | 1, 0                |
+| `C2` | `/Adobe-CNS1-UCS2 usecmap`                               | 1, 0                |
+| `C3` | `/Adobe-Japan1-UCS2 usecmap`                             | 4, 0                |
+| `C4` | `/Adobe-KR-UCS2 usecmap`                                 | 1, 0                |
+| `C5` | `/UseCMap /Adobe-CNS1-UCS2`                              | 1, 0                |
+| `C6` | `/UseCMap /Adobe-Japan1-UCS2`                            | 1, 0                |
+
+Adobe-Korea1-UCS2 maps 60 and 61 through bfchar and 41 and 65 through bfrange,
+which usecmap does not merge, so `T5`'s base replaces its U+0000 for 60 and
+yields to it for 61. Each Type0 font also shows CID 0, the `.notdef` glyph,
+which `6.2.11.8/1` answers once per font. Two readings stay out: a `/UseCMap`
+chain that loops, on which veraPDF raises "Loop inside CMap" and abandons the
+validation, and Japan1 CIDs 5A0D and 5A0E, which Adobe's resource maps through
+the last bfrange of a block it counts as 42 entries and veraPDF's bundled copy
+as 41, so its reader drops them.
+
+| Rule at PDF/A-2u          | veraPDF | litho |
+| ------------------------- | ------- | ----- |
+| `6.2.11.7.2/1` no Unicode | 19      | 19    |
+| `6.2.11.7.2/2` U+0000     | 1       | 1     |
+| `6.2.11.8/1` `.notdef`    | 6       | 6     |
+| `6.2.4.3/4` DeviceGray    | 11      | 11    |
+| `6.6.2.1/1` no metadata   | 1       | 1     |
+
+Three cells disagree, PDF/A-2a, PDF/A-3a and PDF/UA-2, all on one glyph: see
+[Known divergences](#known-divergences). The other ten return the same rule
+set, and at the PDF/A levels among them the same count for every rule.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
@@ -3575,9 +3650,9 @@ and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1074 of the 1079 cells. The five
-exceptions, two on `complex_ua2` and three on `inlineimage_2b`, are marked `*`
-in the counts table and covered under
+fixtures exist to protect, and it holds in 1084 of the 1092 cells. The eight
+exceptions, two on `complex_ua2`, three on `inlineimage_2b` and three on
+`usecmap_2u`, are marked `*` in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
 each, which is why the verdict still matches.
 
