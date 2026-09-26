@@ -60,30 +60,66 @@ func TestImageRulesJudgeDrawnXObjects(t *testing.T) {
 		extra map[int]string
 		want  int
 	}{
-		{"drawn twice on a page", []string{pageImage},
-			map[int]string{20: exponentStream("", draw+" "+draw), 30: image("\x80")}, 1},
-		{"drawn on two pages", []string{pageImage, page("<< /XObject << /I1 30 0 R >> >>", "21 0 R")},
-			map[int]string{20: exponentStream("", draw), 21: exponentStream("", draw), 30: image("\x80")}, 1},
-		{"drawn under two names", []string{page("<< /XObject << /I1 30 0 R /I2 30 0 R >> >>", "20 0 R")},
-			map[int]string{20: exponentStream("", draw+" q /I2 Do Q"), 30: image("\x80")}, 1},
-		{"listed by the page and not drawn", []string{pageImage},
-			map[int]string{20: exponentStream("", "0 0 1 1 re f"), 30: image("\x80")}, 0},
-		{"listed by a form the page draws and not drawn", []string{pageForm},
-			map[int]string{20: exponentStream("", "/X1 Do"), 30: image("\x80"), 31: form("<< /XObject << /I1 30 0 R >> >>", "0 0 1 1 re f")}, 0},
-		{"listed by a nested form and not drawn", []string{pageForm},
+		{
+			"drawn twice on a page",
+			[]string{pageImage},
+			map[int]string{20: exponentStream("", draw+" "+draw), 30: image("\x80")},
+			1,
+		},
+		{
+			"drawn on two pages",
+			[]string{pageImage, page("<< /XObject << /I1 30 0 R >> >>", "21 0 R")},
+			map[int]string{20: exponentStream("", draw), 21: exponentStream("", draw), 30: image("\x80")},
+			1,
+		},
+		{
+			"drawn under two names",
+			[]string{page("<< /XObject << /I1 30 0 R /I2 30 0 R >> >>", "20 0 R")},
+			map[int]string{20: exponentStream("", draw+" q /I2 Do Q"), 30: image("\x80")},
+			1,
+		},
+		{
+			"listed by the page and not drawn",
+			[]string{pageImage},
+			map[int]string{20: exponentStream("", "0 0 1 1 re f"), 30: image("\x80")},
+			0,
+		},
+		{
+			"listed by a form the page draws and not drawn",
+			[]string{pageForm},
+			map[int]string{20: exponentStream("", "/X1 Do"), 30: image("\x80"), 31: form("<< /XObject << /I1 30 0 R >> >>", "0 0 1 1 re f")},
+			0,
+		},
+		{
+			"listed by a nested form and not drawn",
+			[]string{pageForm},
 			map[int]string{
 				20: exponentStream("", "/X1 Do"), 30: image("\x80"),
 				31: form("<< /XObject << /X2 33 0 R >> >>", "/X2 Do"),
 				33: form("<< /XObject << /I1 30 0 R >> >>", "0 0 1 1 re f"),
-			}, 0},
-		{"drawn by a form two pages draw", []string{pageForm, page("<< /XObject << /X1 31 0 R >> >>", "20 0 R")},
-			map[int]string{20: exponentStream("", "/X1 Do"), 30: image("\x80"), 31: form("<< /XObject << /I1 30 0 R >> >>", draw)}, 1},
-		{"listed by a form the page does not draw", []string{pageForm},
-			map[int]string{20: exponentStream("", "0 0 1 1 re f"), 30: image("\x80"), 31: form("<< /XObject << /I1 30 0 R >> >>", draw)}, 0},
+			},
+			0,
+		},
+		{
+			"drawn by a form two pages draw",
+			[]string{pageForm, page("<< /XObject << /X1 31 0 R >> >>", "20 0 R")},
+			map[int]string{20: exponentStream("", "/X1 Do"), 30: image("\x80"), 31: form("<< /XObject << /I1 30 0 R >> >>", draw)},
+			1,
+		},
+		{
+			"listed by a form the page does not draw",
+			[]string{pageForm},
+			map[int]string{20: exponentStream("", "0 0 1 1 re f"), 30: image("\x80"), 31: form("<< /XObject << /I1 30 0 R >> >>", draw)},
+			0,
+		},
 		// The second page shares the first page's content stream, which
 		// veraPDF judges once, through the first page's resources.
-		{"a second image drawn by a shared content stream", []string{pageImage, page("<< /XObject << /I1 32 0 R >> >>", "20 0 R")},
-			map[int]string{20: exponentStream("", draw), 30: image("\x80"), 32: image("\x40")}, 1},
+		{
+			"a second image drawn by a shared content stream",
+			[]string{pageImage, page("<< /XObject << /I1 32 0 R >> >>", "20 0 R")},
+			map[int]string{20: exponentStream("", draw), 30: image("\x80"), 32: image("\x40")},
+			1,
+		},
 	} {
 		for _, p := range []struct {
 			profile models.PDFAProfile
