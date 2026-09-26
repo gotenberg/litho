@@ -253,7 +253,8 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			judged.claimAnnotationReads(ctx, doc, p.dict, pageIdx+1)
 		}
 		if judgeContent {
-			judged.claimStreamReads(ctx, doc, p.parsedOps(ctx), p.resources, site, pageIdx+1, make(map[int]bool), 0, pageFormReads(profile))
+			walk := claimWalk{pageNum: pageIdx + 1, visited: make(map[int]bool), forms: pageFormReads(profile)}
+			judged.claimStreamReads(ctx, doc, walk, p.parsedOps(ctx), p.resources, site, paintState{}, 0, false)
 		}
 		if !annotsFirst {
 			judged.claimAnnotationReads(ctx, doc, p.dict, pageIdx+1)
@@ -694,50 +695,64 @@ func checkPatternFonts(ctx context.Context, doc *document.Document, ops []conten
 
 	var results []Violation
 	for _, op := range ops {
-		if (op.Operator != "scn" && op.Operator != "SCN") || len(op.Operands) == 0 {
+		if op.Operator != "scn" && op.Operator != "SCN" {
 			continue
 		}
-		name, ok := op.Operands[len(op.Operands)-1].(ast.PdfName)
+		patternRef := selectedPattern(op, patternDict)
+		if patternRef == nil {
+			continue
+		}
+		pattern, ok := resolveFontPattern(ctx, doc, patternRef, visited, pageNum)
 		if !ok {
 			continue
 		}
-		patternRef := patternDict[name]
-		ref, isRef := patternRef.(ast.PdfIndirectRef)
-		if isRef && visited[ref.ObjectNum] {
-			continue
-		}
-		// A shading pattern is a dictionary, not a stream, and shows no glyph.
-		stream, err := document.ResolveStream(ctx, doc, patternRef)
-		if err != nil || stream.Dict == nil {
-			continue
-		}
-		if patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"]); patternType != 1 {
-			continue
-		}
-		if paintType, _ := document.ResolveInt(ctx, doc, stream.Dict["PaintType"]); paintType == 2 {
-			continue
-		}
-		if isRef {
-			visited[ref.ObjectNum] = true
-		}
-		patternRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-		if patternRes == nil {
-			continue
-		}
-		data, reads := decodeContentStream(ctx, doc, stream)
-		if !reads {
-			continue
-		}
-		subOps, err := content.ParseStreamData(ctx, data)
-		if err != nil {
-			doc.Logger.Debug("compliance: fonts: cannot parse tiling pattern", "page", pageNum, "error", err)
-			continue
-		}
-		results = append(results, checkResourceFonts(ctx, doc, patternRes, subOps, streamSite(ctx, doc, patternRef, stream.Dict["Resources"], patternRes), pageNum, profile, judged)...)
-		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, 0, patternRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
-		results = append(results, checkPatternFonts(ctx, doc, subOps, patternRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
+		results = append(results, checkResourceFonts(ctx, doc, pattern.res, pattern.ops, streamSite(ctx, doc, pattern.ref, pattern.dict["Resources"], pattern.res), pageNum, profile, judged)...)
+		results = append(results, checkFormXObjectFonts(ctx, doc, pattern.ops, 0, pattern.res, treeRoot, pageNum, profile, judged, visited, depth+1)...)
+		results = append(results, checkPatternFonts(ctx, doc, pattern.ops, pattern.res, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 	}
 	return results
+}
+
+// resolveFontPattern returns the tiling pattern patternRef names, a /Pattern
+// resource, and marks it in visited, as [resolveFontForm] returns a form. ok
+// is false for a shading pattern, which is a dictionary and shows no glyph, an
+// uncoloured tiling pattern, which the font walks leave out as veraPDF leaves
+// it ([checkPatternFonts]), a pattern visited already, or one that carries no
+// /Resources or whose cell does not decode or parse.
+func resolveFontPattern(ctx context.Context, doc *document.Document, patternRef ast.PdfObject, visited map[int]bool, pageNum int) (fontForm, bool) {
+	ref, isRef := patternRef.(ast.PdfIndirectRef)
+	if isRef && visited[ref.ObjectNum] {
+		return fontForm{}, false
+	}
+	stream, err := document.ResolveStream(ctx, doc, patternRef)
+	if err != nil || stream.Dict == nil {
+		return fontForm{}, false
+	}
+	// ISO 32000-1, 8.7.3.1, Table 75: PatternType 1 is a tiling pattern, and
+	// PaintType 2 an uncoloured one.
+	if patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"]); patternType != 1 {
+		return fontForm{}, false
+	}
+	if paintType, _ := document.ResolveInt(ctx, doc, stream.Dict["PaintType"]); paintType == 2 {
+		return fontForm{}, false
+	}
+	if isRef {
+		visited[ref.ObjectNum] = true
+	}
+	res, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+	if res == nil {
+		return fontForm{}, false
+	}
+	data, reads := decodeContentStream(ctx, doc, stream)
+	if !reads {
+		return fontForm{}, false
+	}
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		doc.Logger.Debug("compliance: fonts: cannot parse tiling pattern", "page", pageNum, "error", err)
+		return fontForm{}, false
+	}
+	return fontForm{ref: patternRef, dict: stream.Dict, res: res, data: data, ops: ops}, true
 }
 
 // checkType3CharProcFonts checks fonts used for rendering inside the glyph
@@ -770,7 +785,7 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 	if len(fontDict) == 0 {
 		return nil
 	}
-	usage := collectFontUsage(ops)
+	usage := collectFontUsageAt(ops, showSite{mode: site.mode})
 
 	var results []Violation
 	for _, fontName := range sortedNames(fontDict) {
@@ -807,30 +822,76 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 			continue
 		}
 		encoding := resolveSimpleFontEncoding(ctx, doc, font)
+		modes := type3GlyphModes(encoding, fontUsage.shows)
 		for _, glyphName := range shownGlyphNames(encoding, fontUsage.charCodes) {
-			stream, err := document.ResolveStream(ctx, doc, charProcs[ast.PdfName(glyphName)])
-			if err != nil {
+			procRef := charProcs[ast.PdfName(glyphName)]
+			procOps, ok := parseType3Proc(ctx, doc, procRef, glyphName, pageNum)
+			if !ok {
 				continue
 			}
-			data, reads := decodeContentStream(ctx, doc, stream)
-			if !reads {
-				continue
-			}
-			procOps, err := content.ParseStreamData(ctx, data)
-			if err != nil {
-				doc.Logger.Debug("compliance: fonts: cannot parse Type3 CharProc",
-					"page", pageNum, "glyph", glyphName, "error", err)
-				continue
-			}
-			procSite := streamSite(ctx, doc, charProcs[ast.PdfName(glyphName)], font["Resources"], t3Res)
-			procSite.owner = structureKey(ctx, doc, font)
-			procSite.fonts = fontDictKey(fontIdentity(fontRef, fontName, site), font["Resources"], t3Res)
+			procSite := type3ProcSite(ctx, doc, fontRef, fontName, font, t3Res, site, procRef)
+			procSite.mode = modes[glyphName]
 			results = append(results, checkResourceFonts(ctx, doc, t3Res, procOps, procSite, pageNum, profile, judged)...)
 			results = append(results, checkType3CharProcFonts(ctx, doc, procOps, t3Res, procSite, treeRoot, pageNum, profile, judged, visited, depth+1)...)
-			results = append(results, checkFormXObjectFonts(ctx, doc, procOps, 0, t3Res, treeRoot, pageNum, profile, judged, visited, depth+1)...)
+			results = append(results, checkFormXObjectFonts(ctx, doc, procOps, procSite.mode, t3Res, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 		}
 	}
 	return results
+}
+
+// type3GlyphModes returns, for each glyph name a Type 3 font's encoding gives
+// a shown code, the text rendering mode shows first paints it in, a mode other
+// than 3 when one does. A glyph procedure starts in that mode: veraPDF parses
+// it with the text rendering mode of the operator showing its glyph (see
+// [fontJudgements.claimType3Reads]).
+func type3GlyphModes(encoding map[byte]string, shows []glyphShow) map[string]int {
+	modes := make(map[string]int)
+	for _, show := range shows {
+		for _, code := range []byte(show.str) {
+			name := encoding[code]
+			if name == "" {
+				continue
+			}
+			if mode, ok := modes[name]; !ok || (mode == invisibleRenderingMode && show.at.mode != invisibleRenderingMode) {
+				modes[name] = show.at.mode
+			}
+		}
+	}
+	return modes
+}
+
+// parseType3Proc returns the operators of the Type 3 glyph procedure procRef,
+// the procedure of glyphName, shown on page pageNum. ok is false when it does
+// not resolve to a stream, veraPDF reads no operator from it
+// ([decodeContentStream]), or it does not parse.
+func parseType3Proc(ctx context.Context, doc *document.Document, procRef ast.PdfObject, glyphName string, pageNum int) ([]content.Operation, bool) {
+	stream, err := document.ResolveStream(ctx, doc, procRef)
+	if err != nil {
+		return nil, false
+	}
+	data, reads := decodeContentStream(ctx, doc, stream)
+	if !reads {
+		return nil, false
+	}
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		doc.Logger.Debug("compliance: fonts: cannot parse Type3 CharProc",
+			"page", pageNum, "glyph", glyphName, "error", err)
+		return nil, false
+	}
+	return ops, true
+}
+
+// type3ProcSite returns the [showSite] of the glyph procedure procRef of the
+// Type 3 font font, whose resources are t3Res, shown through the resource name
+// fontName, which names fontRef, in the stream site names. The procedure's
+// glyphs belong to the structure key of the font, and its fonts are entries of
+// the font's /Resources, which [fontIdentity] keys on that font.
+func type3ProcSite(ctx context.Context, doc *document.Document, fontRef ast.PdfObject, fontName ast.PdfName, font, t3Res ast.PdfDict, site showSite, procRef ast.PdfObject) showSite {
+	procSite := streamSite(ctx, doc, procRef, font["Resources"], t3Res)
+	procSite.owner = structureKey(ctx, doc, font)
+	procSite.fonts = fontDictKey(fontIdentity(fontRef, fontName, site), font["Resources"], t3Res)
+	return procSite
 }
 
 // shownGlyphNames returns, sorted, the glyph names a Type3 font's encoding

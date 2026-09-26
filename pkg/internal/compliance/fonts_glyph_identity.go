@@ -491,13 +491,15 @@ func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fon
 //
 // veraPDF parses a page's text and the forms it draws in the order the page
 // draws them, each form where its Do stands and in the rendering mode that Do
-// leaves ([textStateWalk]), and a page's annotation appearances before or after
-// them by part ([annotationsParsedFirst]). litho judges a page's streams in
-// another order, the page's own text first, so it makes the claims in
-// veraPDF's order before it judges any ([fontJudgements.claimStreamReads],
-// [fontJudgements.claimAnnotationReads]). The patterns and Type 3 procedures a
-// page draws claim theirs as litho judges them, after the page's text, forms
-// and, at PDF/A-2 and later, annotations.
+// leaves ([textStateWalk]), a Type 3 glyph procedure where the page shows its
+// glyph, a tiling pattern where the page paints with it ([paintWalk]), and a
+// page's annotation appearances before or after them by part
+// ([annotationsParsedFirst]). litho judges a page's streams in another order,
+// the page's own text first, so it makes the claims in veraPDF's order before
+// it judges any ([fontJudgements.claimStreamReads],
+// [fontJudgements.claimAnnotationReads]). A pattern a stream selects and never
+// paints with claims its fonts as litho judges it, after the page's text,
+// forms and, at PDF/A-2 and later, annotations.
 //
 // Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on a CID a composite
 // program lacks: shown on a second page after the first showed another CID,
@@ -561,50 +563,273 @@ func (j *fontJudgements) claimProgram(scope, fontID string, mode int) {
 	}
 }
 
+// claimWalk is what the claim walk of one page's content, or of one page's
+// annotation appearances, shares across the streams it descends into: the
+// page's number, the streams already walked, and whether a form drawn there is
+// judged by the claims it makes ([formReads]).
+type claimWalk struct {
+	pageNum int
+	visited map[int]bool
+	forms   formReads
+}
+
 // claimStreamReads makes the claims of [fontJudgements.claimProgram] for the
 // text-showing operators of one content stream, whose operators are ops and
-// resources res, and of the Form XObjects it draws, in the order veraPDF
-// parses them: a form's operators where the Do that draws it stands, before the
-// operators that follow. site is the stream's [showSite], visited holds the
-// forms already walked, and depth bounds the recursion as [formTooDeep] bounds
-// the form walk. The forms walked are those [checkFormXObjectFonts] judges.
-// forms says whether a form drawn here is judged by the claims it makes
-// ([formReads]).
-func (j *fontJudgements) claimStreamReads(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, site showSite, pageNum int, visited map[int]bool, depth int, forms formReads) {
+// resources res, and of the streams it draws, in the order veraPDF parses
+// them: a Form XObject's operators where the Do that draws it stands, a Type 3
+// glyph procedure's where an operator shows its glyph
+// ([fontJudgements.claimType3Reads]), and a tiling pattern's where an operator
+// paints with it ([fontJudgements.claimPatternReads]), each before the
+// operators that follow. site is the stream's [showSite] and paint the colours
+// it starts with. depth bounds the recursion as [formTooDeep] bounds the form
+// walk. unread makes the claims without judging the stream's glyphs by them.
+// The forms walked are those [checkFormXObjectFonts] judges.
+func (j *fontJudgements) claimStreamReads(ctx context.Context, doc *document.Document, walk claimWalk, ops []content.Operation, res ast.PdfDict, site showSite, paint paintState, depth int, unread bool) {
 	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return
 	}
 	// A scope no usage carries is one no stream is judged through.
 	scope := site.key + "/"
-	if depth > 0 && forms == formsClaimUnread {
+	if unread {
 		scope = "unread " + scope
 	}
 	fonts, _ := document.ResolveDict(ctx, doc, res["Font"])
 	xobjs, _ := document.ResolveDict(ctx, doc, res["XObject"])
+	patterns, _ := document.ResolveDict(ctx, doc, res["Pattern"])
 	text := textStateWalk{mode: site.mode}
+	colour := paintWalk{paintState: paint}
 	for i, op := range ops {
 		if i%contentOpCancelCheckInterval == 0 && ctx.Err() != nil {
 			return
 		}
 		text.step(op)
+		colour.step(op, patterns)
 		if shown, isShow := shownOperand(op); isShow {
 			ref, ok := fonts[ast.PdfName(text.font)]
 			if text.font != "" && ok && showsString(shown) {
 				j.claimProgram(scope+text.font, fontIdentity(ref, ast.PdfName(text.font), site), text.mode)
+				j.claimType3Reads(ctx, doc, walk, ref, ast.PdfName(text.font), site, shown, text.mode, colour.paintState, depth, unread)
 			}
+			fill, stroke := textPaints(text.mode)
+			j.claimPaintReads(ctx, doc, walk, colour.paintState, fill, stroke, depth)
+			continue
+		}
+		if fill, stroke := pathPaints(op.Operator); fill || stroke {
+			j.claimPaintReads(ctx, doc, walk, colour.paintState, fill, stroke, depth)
 			continue
 		}
 		if len(xobjs) == 0 {
 			continue
 		}
-		form, ok := resolveFontForm(ctx, doc, xobjs, op, visited, pageNum)
+		form, ok := resolveFontForm(ctx, doc, xobjs, op, walk.visited, walk.pageNum)
 		if !ok {
 			continue
 		}
 		sub := streamSite(ctx, doc, form.ref, form.dict["Resources"], form.res)
 		sub.mode = text.mode
-		j.claimStreamReads(ctx, doc, form.ops, form.res, sub, pageNum, visited, depth+1, forms)
+		j.claimStreamReads(ctx, doc, walk, form.ops, form.res, sub, colour.paintState, depth+1, unread || walk.forms == formsClaimUnread)
 	}
+}
+
+// claimPaintReads makes the claims of the tiling patterns an operator paints
+// with, the fill colour's where it fills and the stroke colour's where it
+// strokes; see [fontJudgements.claimPatternReads].
+func (j *fontJudgements) claimPaintReads(ctx context.Context, doc *document.Document, walk claimWalk, paint paintState, fill, stroke bool, depth int) {
+	if fill {
+		j.claimPatternReads(ctx, doc, walk, paint.fill, depth)
+	}
+	if stroke {
+		j.claimPatternReads(ctx, doc, walk, paint.stroke, depth)
+	}
+}
+
+// claimPatternReads makes the claims of the tiling pattern patternRef names,
+// where an operator paints with it, without judging its glyphs by them.
+//
+// veraPDF parses a coloured tiling pattern's cell where an operator paints
+// with the pattern, and never judges the glyphs the cell shows by the program
+// reads that parse makes, so the glyph-presence and glyph-width rules pass
+// them wherever the cell is reached, while the .notdef and ToUnicode rules
+// judge them as any other. A path-painting operator paints with the fill
+// colour where it fills and the stroke colour where it strokes (ISO 32000-1,
+// 8.5.3.1, Table 60), and a text-showing operator with either as its text
+// rendering mode fills or strokes (ISO 32000-1, 9.3.6, Table 106). A pattern
+// selected and never painted with is reached from the operator selecting it,
+// after the page, and judged there ([checkPatternFonts]).
+//
+// Measured with veraPDF 1.30 at PDF/A-1b, PDF/A-2b, PDF/A-2u, PDF/UA-1,
+// PDF/UA-2 and WTPDF 1.0 on a cell showing a CID a TrueType CIDFont lacks: a
+// page filling a rectangle with the pattern fails neither ISO 19005-2,
+// 6.2.11.4.1 t2 nor 6.2.11.5 t1, and fails 6.2.11.8 t1 and 6.2.11.7.2 t1;
+// page text showing another missing CID after the fill fails neither, before
+// it both, and after a fill whose cell shows the CID in rendering mode 2 both.
+// A pattern set with scn and never painted fails both; one filled with f*, B
+// or inside q and Q, stroked with S after SCN, filled inside a form drawn
+// before the page text, or whose cell draws a form showing the CID, claims
+// its fonts where it is painted, as does page text painted with it, after its
+// own glyphs; n, W n, S after scn and f after SCN paint nothing with it.
+func (j *fontJudgements) claimPatternReads(ctx context.Context, doc *document.Document, walk claimWalk, patternRef ast.PdfObject, depth int) {
+	if patternRef == nil {
+		return
+	}
+	pattern, ok := resolveFontPattern(ctx, doc, patternRef, walk.visited, walk.pageNum)
+	if !ok {
+		return
+	}
+	site := streamSite(ctx, doc, pattern.ref, pattern.dict["Resources"], pattern.res)
+	j.claimStreamReads(ctx, doc, walk, pattern.ops, pattern.res, site, paintState{}, depth+1, true)
+}
+
+// claimType3Reads makes the claims of the glyph procedures a text-showing
+// operator shows through fontRef, when it is a Type 3 font, in the order the
+// operator shows their glyphs, each procedure once. site is the stream showing
+// the font through the resource name fontName, shown the operand of the
+// operator, and mode the text rendering mode it shows in, which each procedure
+// starts in; paint and unread are as the stream's own
+// ([fontJudgements.claimStreamReads]).
+//
+// veraPDF parses a glyph procedure where an operator shows its glyph, and
+// judges the procedure's glyphs by the reads that parse makes. Measured with
+// veraPDF 1.30 at PDF/A-1b, PDF/A-2b, PDF/UA-1 and WTPDF 1.0 on a procedure
+// showing a CID a TrueType CIDFont lacks: a Type 3 glyph shown before page text
+// showing two other missing CIDs fails ISO 19005-2, 6.2.11.4.1 t2 once, shown
+// after it twice, and three times when either shows in a rendering mode the
+// other does not use, the procedure taking the mode the Type 3 glyph is shown
+// in; shown in a form at PDF/UA-1, where the form's claims are unread, it
+// fails ISO 14289-1, 7.21.4.1 t2 no time.
+func (j *fontJudgements) claimType3Reads(ctx context.Context, doc *document.Document, walk claimWalk, fontRef ast.PdfObject, fontName ast.PdfName, site showSite, shown ast.PdfObject, mode int, paint paintState, depth int, unread bool) {
+	// A Type 3 font shown only in rendering mode 3 paints nothing, so its
+	// glyph procedures select nothing for rendering; see
+	// [checkType3CharProcFonts].
+	if mode == invisibleRenderingMode || formTooDeep(doc, depth+1) {
+		return
+	}
+	font, err := document.ResolveDict(ctx, doc, fontRef)
+	if err != nil || font == nil || fontSubtype(ctx, doc, font) != "Type3" {
+		return
+	}
+	t3Res, _ := document.ResolveDict(ctx, doc, font["Resources"])
+	charProcs, _ := document.ResolveDict(ctx, doc, font["CharProcs"])
+	if t3Res == nil || len(charProcs) == 0 {
+		return
+	}
+	encoding := resolveSimpleFontEncoding(ctx, doc, font)
+	var codes []byte
+	switch s := shown.(type) {
+	case ast.PdfString:
+		codes = []byte(s)
+	case ast.PdfArray:
+		for _, item := range s {
+			if str, ok := item.(ast.PdfString); ok {
+				codes = append(codes, str...)
+			}
+		}
+	}
+	for _, code := range codes {
+		glyphName := encoding[code]
+		if glyphName == "" {
+			continue
+		}
+		procRef := charProcs[ast.PdfName(glyphName)]
+		ref, isRef := procRef.(ast.PdfIndirectRef)
+		if isRef {
+			if walk.visited[ref.ObjectNum] {
+				continue
+			}
+			walk.visited[ref.ObjectNum] = true
+		}
+		proc, ok := parseType3Proc(ctx, doc, procRef, glyphName, walk.pageNum)
+		if !ok {
+			continue
+		}
+		procSite := type3ProcSite(ctx, doc, fontRef, fontName, font, t3Res, site, procRef)
+		procSite.mode = mode
+		j.claimStreamReads(ctx, doc, walk, proc, t3Res, procSite, paint, depth+1, unread)
+	}
+}
+
+// paintState is what a content stream paints with where it selects a tiling
+// pattern as a colour: the entry of its /Pattern resources the fill colour
+// and the stroke colour name, nil where the colour is no pattern.
+type paintState struct {
+	fill, stroke ast.PdfObject
+}
+
+// paintWalk follows the [paintState] of one content stream through its
+// operators. The colours are part of the graphics state (ISO 32000-1, 8.4.2,
+// Table 52), so Q restores them; the stack holds one entry per q operator
+// already present in the materialized operator slice, as [textStateWalk]'s
+// does.
+type paintWalk struct {
+	paintState
+	saved []paintState
+}
+
+// step applies op to the paint state, resolving a pattern name against the
+// stream's /Pattern resources patterns. Per ISO 32000-1, 8.6.8, Table 74, scn
+// and SCN select a pattern by the name they end with, and every other colour
+// operator, cs and CS included, sets a colour that is no pattern.
+func (w *paintWalk) step(op content.Operation, patterns ast.PdfDict) {
+	switch op.Operator {
+	case "q":
+		w.saved = append(w.saved, w.paintState)
+	case "Q":
+		if n := len(w.saved); n > 0 {
+			w.paintState = w.saved[n-1]
+			w.saved = w.saved[:n-1]
+		}
+	case "cs", "sc", "g", "rg", "k":
+		w.fill = nil
+	case "CS", "SC", "G", "RG", "K":
+		w.stroke = nil
+	case "scn":
+		w.fill = selectedPattern(op, patterns)
+	case "SCN":
+		w.stroke = selectedPattern(op, patterns)
+	}
+}
+
+// selectedPattern returns the /Pattern resource an scn or SCN operator names
+// by its last operand, nil when it names none.
+func selectedPattern(op content.Operation, patterns ast.PdfDict) ast.PdfObject {
+	if len(op.Operands) == 0 {
+		return nil
+	}
+	name, ok := op.Operands[len(op.Operands)-1].(ast.PdfName)
+	if !ok {
+		return nil
+	}
+	return patterns[name]
+}
+
+// pathPaints reports whether the operator named op paints the current path
+// with the fill colour and with the stroke colour (ISO 32000-1, 8.5.3.1, Table
+// 60). n ends the path without painting it.
+func pathPaints(op string) (fill, stroke bool) {
+	switch op {
+	case "f", "F", "f*":
+		return true, false
+	case "S", "s":
+		return false, true
+	case "B", "B*", "b", "b*":
+		return true, true
+	}
+	return false, false
+}
+
+// textPaints reports whether text shown in rendering mode mode is painted with
+// the fill colour and with the stroke colour (ISO 32000-1, 9.3.6, Table 106):
+// modes 0, 2, 4 and 6 fill, and 1, 2, 5 and 6 stroke.
+func textPaints(mode int) (fill, stroke bool) {
+	switch mode {
+	case 0, 4:
+		return true, false
+	case 1, 5:
+		return false, true
+	case 2, 6:
+		return true, true
+	}
+	return false, false
 }
 
 // formReads says whether the Form XObjects a page draws are judged by the
@@ -733,7 +958,8 @@ func (j *fontJudgements) claimAppearanceReads(ctx context.Context, doc *document
 		doc.Logger.Debug("compliance: fonts: cannot parse appearance stream", "page", pageNum, "error", err)
 		return
 	}
-	j.claimStreamReads(ctx, doc, ops, res, streamSite(ctx, doc, apObj, stream.Dict["Resources"], res), pageNum, visited, 0, formsReadWhereDrawn)
+	walk := claimWalk{pageNum: pageNum, visited: visited, forms: formsReadWhereDrawn}
+	j.claimStreamReads(ctx, doc, walk, ops, res, streamSite(ctx, doc, apObj, stream.Dict["Resources"], res), paintState{}, 0, false)
 }
 
 // showsString reports whether the operand of a text-showing operator holds a
