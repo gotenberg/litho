@@ -64,8 +64,8 @@ func fixMarkedContentLang(ctx context.Context, alloc *writer.ObjAllocator, doc *
 //     still carrying tags like "-pt" and "1-pt" before this repair.
 //   - litho mcform_2a.pdf: kept 6.7.4 t1 for the inline BDC of a form the
 //     page draws and of an annotation appearance after a PDF/A-2a
-//     remediation, on litho and veraPDF alike, while the repair read the
-//     page's content alone.
+//     remediation, on litho and veraPDF alike, and 7.2 t29 at PDF/UA-1 and
+//     8.4.4 t2 at PDF/UA-2, while the repair read the page's content alone.
 func repairMarkedContentLangs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, requireDeclared bool) (int, error) {
 	total := 0
 	_, err := walkContentStreams(ctx, alloc, doc, "marked-content-lang", func(ctx context.Context, data []byte) ([]byte, func()) {

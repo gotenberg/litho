@@ -149,7 +149,11 @@ func fixResourcesGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *
 //   - litho gstate_2b.pdf: the direct states GS7, GS9, H1, H2 and the form's
 //     GSn kept 6.2.5 t1, t3, t4 and 6.2.6 t1 after a PDF/A-2b remediation,
 //     and 6.2.8 t1 and 6.2.9 t1 after a PDF/A-1b one, on litho and veraPDF
-//     alike.
+//     alike, and took three rounds where one now does.
+//   - litho namereads_1b.pdf and defaultcs_4.pdf: a direct state's /RI, /BM
+//     and /OPM 1 kept their findings, 6.2.9 t1 at PDF/A-1b and PDF/A-4,
+//     6.2.6 t1 and 6.2.10 t1 at PDF/A-2 and PDF/A-3, and 6.2.4.2 t2 at every
+//     part 2 to 4 profile, on litho and veraPDF alike.
 func fixExtGStates(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, owner ast.PdfDict) (landed, pending []string, dirty bool, err error) {
 	gsObj, ok := resources["ExtGState"]
 	if !ok {
@@ -312,6 +316,15 @@ func writeResourceCategory(alloc *writer.ObjAllocator, owner, resources ast.PdfD
 // forbidden, the halftone a graphics state names carries no
 // TransferFunction, and any non-primary component of a Type-5 halftone
 // needs one (defaulted to /Identity when absent).
+//
+// # Corpus evidence
+//
+//   - litho gstate_2b.pdf: GS4's type 6 halftone kept 6.2.5 t6 after a
+//     PDF/A-2b remediation turned it into a type 1, on litho and veraPDF
+//     alike.
+//   - verapdf PDF_A-4__veraPDF_test_suite_6-2-5-t05-fail-c.pdf: its type 1
+//     halftone's /TransferFunction kept its finding through a PDF/A-4
+//     remediation, on litho and veraPDF alike.
 func normalizeHalftone(ctx context.Context, doc *document.Document, htObj ast.PdfObject) (ast.PdfDict, bool) {
 	htDict, err := document.ResolveDict(ctx, doc, htObj)
 	if err != nil || htDict == nil {

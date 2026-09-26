@@ -372,8 +372,13 @@ const shadingPatternType = 2
 // # Corpus evidence
 //
 //   - pdfjs issue17065.pdf: the DeviceN of the shading pattern its page
-//     inherits kept 6.2.4.4 t1 after a PDF/A-2b remediation, on litho and
-//     veraPDF alike.
+//     inherits kept 6.2.4.4 t1 after a PDF/A-2b or PDF/A-4 remediation, on
+//     litho and veraPDF alike.
+//   - govdocs thread_300_300242.pdf, thread_400_400015.pdf,
+//     thread_400_400575.pdf and thread_400_400932.pdf: shadings use a DeviceN
+//     short of colorants, which a PDF/A-2b remediation already completed, and
+//     their outputs do not change. thread_400_400932.pdf's shadings name the
+//     indirect DeviceN its page's /ColorSpace resources hold.
 func patchPageShadingDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, canon map[ast.PdfName]ast.PdfArray, visited map[int]bool) int {
 	if live := resolveFromAllocOrDoc(ctx, alloc, doc, pe.ref); live != nil {
 		pe.dict = live
