@@ -151,14 +151,12 @@ func pick(ok bool, link OperandLink) OperandLink {
 // a coloured pattern cell, in a d0 glyph and before a d1, and fails nothing in
 // an uncoloured cell or after a d1, even in page content, while one given to w
 // or in the dictionary of an image mask there fails it. A d1 inside q and Q
-// leaves the operators after the Q processed.
-//
-// One divergence remains: veraPDF passes the state on to the forms and glyphs
-// a stream draws, and litho starts each of them with its colour operators
-// processed, whatever the state at the operator that draws it.
+// leaves the operators after the Q processed. veraPDF passes the state on to
+// the forms and glyphs a stream draws, and to every tiling cell of a stream
+// that selects an uncoloured pattern, which start in it (see [drawnScan]).
 type ColourState struct {
 	// off reports that the stream started with its colour operators
-	// ignored: the cell of an uncoloured tiling pattern.
+	// ignored: a tiling cell, a form or a glyph drawn in that state.
 	off bool
 	// depth counts the graphics states q saved and Q has not restored.
 	depth int
@@ -168,10 +166,10 @@ type ColourState struct {
 }
 
 // NewColourState returns the state a stream starts in: with its colour
-// operators processed unless uncoloured, the cell of a tiling pattern whose
+// operators processed unless off, as in the cell of a tiling pattern whose
 // /PaintType is 2.
-func NewColourState(uncoloured bool) ColourState {
-	return ColourState{off: uncoloured}
+func NewColourState(off bool) ColourState {
+	return ColourState{off: off}
 }
 
 // On reports whether the stream processes its colour operators at the next

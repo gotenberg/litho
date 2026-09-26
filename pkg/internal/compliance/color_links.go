@@ -49,12 +49,15 @@ type colorNode struct {
 // resources, which alone replace a device family the stream selects: measured
 // with veraPDF 1.30 at PDF/A-2b, a page's DefaultRGB covers no rg of a form, a
 // tiling pattern cell or an appearance stream, whether or not that stream has
-// /Resources. entry is the state the stream begins in, which a tiling pattern
-// cell it paints begins in too.
+// /Resources. entry is the state the stream begins in and ops its operations,
+// from which the state the tiling cells it paints begin in is worked out once,
+// into cells (see [colorLinkWalk.cellEntry]).
 type linkStream struct {
 	id          string
 	page        *linkStream
 	entry       csPaintState
+	ops         []content.Operation
+	cells       *csPaintState
 	colorSpaces ast.PdfDict
 	xobjects    ast.PdfDict
 	patterns    ast.PdfDict
@@ -186,14 +189,18 @@ func deviceFamily(name string) string {
 // and an appearance stream's own for itself; the font's own for a Type 3
 // glyph; and none for the shading of a shading pattern.
 //
-// An uncoloured tiling pattern's cell is not walked (see
-// [colorLinkWalk.judgePattern]). veraPDF walks it with its colour operators
-// off, and gives an image mask in it a DeviceGray the cell never selects,
-// where ISO 32000-1, 8.7.3.3 paints the mask in the underlying space of the
-// Pattern space. veraPDF also walks every tiling cell one content stream
-// paints in one shared graphics state, which an uncoloured pattern turns the
-// colour operators off in, so the coloured cells that stream paints fail
-// nothing there; litho judges them.
+// Every tiling cell one content stream paints begins in one graphics state,
+// which each uncoloured pattern the stream paints turns the colour operators
+// off in (see [colorLinkWalk.cellEntry]), so the coloured cells a stream
+// paints beside an uncoloured one link to none of the colour they select. A
+// form and a Type 3 glyph begin in the state of the Do or the text show that
+// draws them, and inherit it with the colour operators off. An image mask in
+// an uncoloured cell paints in the fill the cell begins in, which is the fill
+// the stream began with, a page's initial DeviceGray, unless an scn of the
+// stream selected a pattern in a Pattern space with an underlying space,
+// where ISO 32000-1, 8.7.3.3
+// paints it in the underlying space of the Pattern space its own pattern was
+// selected in.
 //
 // # Corpus evidence
 //
@@ -209,12 +216,22 @@ func deviceFamily(name string) string {
 //   - pdfjs issue1055r.pdf: draws a form with no /Resources whose stream
 //     invokes a second form by a name only the page declares, which fills
 //     after rg; veraPDF fails DeviceRGB four times.
+//   - All corpora: under PDF/A-1b and PDF/A-2b, and the verapdf files under
+//     their own profile, walking every tiling cell a stream paints in the one
+//     state veraPDF gives them moves eight device colour counts on four
+//     files, each to veraPDF's count, and no verdict.
 //   - govdocs thread_200_200567.pdf: draws 71 image masks inside 71 cells of
-//     uncoloured tiling patterns over [/Pattern /ICCBased], and veraPDF fails
-//     DeviceGray 71 times where litho fails nothing.
+//     uncoloured tiling patterns SCN selects in [/Pattern /ICCBased], and
+//     veraPDF fails DeviceGray 71 times, the page's initial fill the cells
+//     begin in, where litho failed none.
+//   - govdocs thread_400_400245.pdf: draws twelve image masks inside the cells
+//     of uncoloured patterns scn selects in [/Pattern /DeviceRGB], and veraPDF
+//     fails DeviceRGB 733 times, where litho failed it 721 times.
+//   - govdocs thread_000_000336.pdf: draws one image mask in an uncoloured
+//     cell, and veraPDF fails DeviceGray once, where litho failed nothing.
 //   - pdfjs tiling_patterns_variations.pdf: paints four coloured patterns
 //     whose cells fill after rg and one uncoloured pattern from one page, and
-//     veraPDF fails no DeviceRGB where litho fails eight.
+//     veraPDF fails no DeviceRGB, where litho failed eight.
 //   - pdfjs bug1077808.pdf and issue16454.pdf: veraPDF misreads inline image
 //     data holding "EI" and fails an undefined operator, then counts far
 //     fewer links than the content holds.
@@ -493,11 +510,40 @@ func (w *colorLinkWalk) parse(ctx context.Context, stream ast.PdfStream) ([]cont
 // level of s below its root content stream.
 func (w *colorLinkWalk) walkStream(ctx context.Context, ops []content.Operation, s *linkStream, entry csPaintState, depth int) {
 	s.entry = entry
-	colorSpaces := func(c *linkStream) ast.PdfDict { return c.colorSpaces }
+	s.ops = ops
 	if w.declareOps {
 		w.declareSeparations(ctx, ops, s, entry)
 	}
-	walkColorSpaceLinksWith(ctx, ops, entry, csLinkHooks{
+	hooks := w.spaceHooks(ctx, s)
+	hooks.link = func(ref csRef, _ int, _ string) {
+		w.judgeRef(ctx, ref, s, depth)
+	}
+	hooks.paint = func(name string, st csPaintState) {
+		if obj, _ := s.lookup(func(c *linkStream) ast.PdfDict { return c.xobjects }, name); obj != nil {
+			w.paintXObject(ctx, obj, st, s, depth)
+		}
+	}
+	hooks.shade = func(name string) {
+		if obj, _ := s.lookup(func(c *linkStream) ast.PdfDict { return c.shadings }, name); obj != nil {
+			w.judgeShading(ctx, obj, s, true)
+		}
+	}
+	hooks.show = func(st csPaintState) {
+		if st.font == "" {
+			return
+		}
+		if obj, _ := s.lookup(func(c *linkStream) ast.PdfDict { return c.fonts }, st.font); obj != nil {
+			w.walkType3(ctx, obj, st, s, depth)
+		}
+	}
+	walkColorSpaceLinksWith(ctx, ops, entry, hooks)
+}
+
+// spaceHooks returns the hooks that resolve the colour spaces and patterns
+// the operators of s select, against its resources and then the page's.
+func (w *colorLinkWalk) spaceHooks(ctx context.Context, s *linkStream) csLinkHooks {
+	colorSpaces := func(c *linkStream) ast.PdfDict { return c.colorSpaces }
+	return csLinkHooks{
 		resolve: func(name string) csRef {
 			if obj, def := s.lookup(colorSpaces, name); def != nil {
 				return csRef{scope: def.id, name: name, isPattern: resolveCSName(ctx, w.doc, obj) == "Pattern"}
@@ -517,30 +563,94 @@ func (w *colorLinkWalk) walkStream(ctx context.Context, ops []content.Operation,
 			if _, def := s.lookup(func(c *linkStream) ast.PdfDict { return c.patterns }, name); def != nil {
 				return csRef{scope: def.id, pattern: name, isPattern: true}
 			}
-			return csRef{family: "Pattern", isPattern: true}
+			return unknownSpace
 		},
-		link: func(ref csRef, _ int, _ string) {
-			w.judgeRef(ctx, ref, s, depth)
-		},
-		paint: func(name string, st csPaintState) {
-			if obj, _ := s.lookup(func(c *linkStream) ast.PdfDict { return c.xobjects }, name); obj != nil {
-				w.paintXObject(ctx, obj, st, s, depth)
+		underlying: func(space csRef) csRef {
+			def := w.streams[space.scope]
+			if def == nil || space.name == "" {
+				return csRef{}
 			}
-		},
-		shade: func(name string) {
-			if obj, _ := s.lookup(func(c *linkStream) ast.PdfDict { return c.shadings }, name); obj != nil {
-				w.judgeShading(ctx, obj, s, true)
+			if arr, err := document.ResolveArray(ctx, w.doc, def.colorSpaces[ast.PdfName(space.name)]); err == nil && len(arr) >= 2 {
+				return csRef{scope: space.scope, name: space.name, under: true}
 			}
+			return csRef{}
 		},
-		show: func(st csPaintState) {
-			if st.font == "" {
-				return
-			}
-			if obj, _ := s.lookup(func(c *linkStream) ast.PdfDict { return c.fonts }, st.font); obj != nil {
-				w.walkType3(ctx, obj, st, s, depth)
-			}
-		},
-	})
+	}
+}
+
+// cellEntry returns the state every tiling cell s paints begins in, working
+// it out on first use.
+//
+// veraPDF builds the cell of a tiling pattern from one graphics state per
+// content stream, the state the stream began in, and changes it every time it
+// builds a tiling pattern from the stream's graphics state: at scn and SCN,
+// and at the painting operators and text shows filling or stroking with one.
+// The fill and stroke become the underlying spaces of the Pattern spaces the
+// last scn and SCN selected a pattern in, when there are any, and an
+// uncoloured pattern turns the colour operators off (ISO 32000-1, 8.7.3.3,
+// Table 75). veraPDF reads the cells only once it has read the whole stream,
+// so every cell begins in the state the stream's last change left, however
+// early its pattern is painted (veraPDF-validation 1.30, GFPDTilingPattern
+// and GraphicState.getInitialGraphicState).
+//
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b: a coloured pattern
+// whose cell fills after rg fails DeviceRGB twice alone, and none when the
+// page also paints an uncoloured pattern, before or after it, where the page
+// paints the uncoloured one through a form it fails twice again; a form and
+// a Type 3 glyph such a cell draws fail none of the colour they select; and
+// an image mask in a cell, coloured or not, fails DeviceRGB after cs selects
+// [/Pattern /DeviceRGB] and scn a pattern in it, and the page's initial
+// DeviceGray after CS and SCN do.
+func (w *colorLinkWalk) cellEntry(ctx context.Context, s *linkStream) csPaintState {
+	if s.cells != nil {
+		return *s.cells
+	}
+	cells := s.entry
+	hooks := w.spaceHooks(ctx, s)
+	hooks.link = func(csRef, int, string) {}
+	hooks.construct = func(ref csRef, st csPaintState) {
+		if ref.pattern == "" {
+			return
+		}
+		def := w.streams[ref.scope]
+		if def == nil {
+			return
+		}
+		tiling, uncoloured := tilingPatternKind(ctx, w.doc, def.patterns[ast.PdfName(ref.pattern)])
+		if !tiling {
+			return
+		}
+		if st.fillUnder != (csRef{}) {
+			cells.fill = st.fillUnder
+		}
+		if st.strokeUnder != (csRef{}) {
+			cells.stroke = st.strokeUnder
+		}
+		if uncoloured {
+			cells.colourOff = true
+		}
+	}
+	walkColorSpaceLinksWith(ctx, s.ops, s.entry, hooks)
+	s.cells = &cells
+	return cells
+}
+
+// tilingPatternKind reports whether obj is a tiling pattern (ISO 32000-1,
+// 8.7.3.1, Table 75), and whether it is an uncoloured one (/PaintType 2).
+func tilingPatternKind(ctx context.Context, doc *document.Document, obj ast.PdfObject) (tiling, uncoloured bool) {
+	if obj == nil {
+		return false, false
+	}
+	stream, err := document.ResolveStream(ctx, doc, obj)
+	if err != nil {
+		return false, false
+	}
+	patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"]) // Best-effort: an unreadable type is no tiling pattern.
+	if patternType != tilingPatternType {
+		return false, false
+	}
+	paintType, _ := document.ResolveInt(ctx, doc, stream.Dict["PaintType"]) // Best-effort: an unreadable paint type is coloured.
+	return true, paintType == uncolouredPaintType
 }
 
 // declareSeparations declares every Separation an operator of s selects by
@@ -581,6 +691,15 @@ func (w *colorLinkWalk) judgeRef(ctx context.Context, ref csRef, s *linkStream, 
 	case ref.pattern != "":
 		if def := w.streams[ref.scope]; def != nil {
 			w.judgePattern(ctx, def.patterns[ast.PdfName(ref.pattern)], s, depth)
+		}
+	case ref.under:
+		// The underlying space is reached as the base of the Pattern space,
+		// and the Default colour spaces of the resources defining it replace
+		// a device family it names (ISO 32000-1, 8.6.5.6).
+		if def := w.streams[ref.scope]; def != nil {
+			if arr, err := document.ResolveArray(ctx, w.doc, def.colorSpaces[ast.PdfName(ref.name)]); err == nil && len(arr) >= 2 {
+				w.judgeSpace(ctx, arr[1], s, def.defaults, true, 0)
+			}
 		}
 	case ref.name != "":
 		if def := w.streams[ref.scope]; def != nil {
@@ -788,16 +907,18 @@ func (w *colorLinkWalk) judgeShading(ctx context.Context, obj ast.PdfObject, s *
 }
 
 // judgePattern judges the pattern obj a link of s reaches, once for the whole
-// document. A tiling pattern cell begins in the state s began in: measured
-// with veraPDF 1.30 at PDF/A-2b, a bare fill in the cell of a pattern the
-// page paints fails the page's initial DeviceGray, which the page's
+// document. A tiling pattern cell begins in the state veraPDF gives every cell
+// s paints (see [colorLinkWalk.cellEntry]), from the state s began in:
+// measured with veraPDF 1.30 at PDF/A-2b, a bare fill in the cell of a pattern
+// the page paints fails the page's initial DeviceGray, which the page's
 // DefaultGray covers and the pattern's own does not, and in the cell of a
-// pattern a form paints after the page selected rg, DeviceRGB. An uncoloured
-// one (/PaintType 2) is not judged: its cell specifies no colour of its own
-// (ISO 32000-1, 8.7.3.3, Table 75), and the colour its scn/SCN sets belongs to
-// the underlying space of the Pattern space. A shading pattern's shading is
-// judged with no Default colour space: measured, a page's DefaultRGB leaves a
-// DeviceRGB shading pattern failing.
+// pattern a form paints after the page selected rg, DeviceRGB. The cell of an
+// uncoloured one (/PaintType 2) specifies no colour of its own (ISO 32000-1,
+// 8.7.3.3, Table 75), and begins with its colour operators off: measured, an
+// image XObject in it fails its own DeviceRGB, and an image mask the colour
+// the cell begins in. A shading pattern's shading is judged with no Default
+// colour space: measured, a page's DefaultRGB leaves a DeviceRGB shading
+// pattern failing.
 func (w *colorLinkWalk) judgePattern(ctx context.Context, obj ast.PdfObject, s *linkStream, depth int) {
 	if obj == nil || ctx.Err() != nil {
 		return
@@ -816,15 +937,13 @@ func (w *colorLinkWalk) judgePattern(ctx context.Context, obj ast.PdfObject, s *
 		}
 		return
 	}
-	patternType, _ := document.ResolveInt(ctx, w.doc, stream.Dict["PatternType"]) // Best-effort: an unreadable type is no tiling pattern.
-	paintType, _ := document.ResolveInt(ctx, w.doc, stream.Dict["PaintType"])     // Best-effort: an unreadable paint type is coloured.
-	if patternType != tilingPatternType || paintType == uncolouredPaintType || formTooDeep(w.doc, depth+1) {
+	if tiling, _ := tilingPatternKind(ctx, w.doc, obj); !tiling || formTooDeep(w.doc, depth+1) {
 		return
 	}
 	res, _ := document.ResolveDict(ctx, w.doc, stream.Dict["Resources"]) // Best-effort: no /Resources defines nothing.
 	cell := w.newStream(ctx, res, s)
 	if ops, ok := w.parse(ctx, stream); ok {
-		w.walkStream(ctx, ops, cell, s.entry, depth+1)
+		w.walkStream(ctx, ops, cell, w.cellEntry(ctx, s), depth+1)
 	}
 }
 

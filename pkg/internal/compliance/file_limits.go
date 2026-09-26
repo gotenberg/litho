@@ -281,7 +281,7 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 	}
 
 	walk := newDrawnStreamWalk(vctx, func(s *drawnStream) {
-		results = append(results, checkOperandLimits(s.ops, s.overflow, streamContentWhere(s.objNum), s.uncoloured, maxStr, profile)...)
+		results = append(results, checkOperandLimits(s.ops, s.overflow, streamContentWhere(s.objNum), s.colourOff, maxStr, profile)...)
 	})
 	for i := range vctx.pages {
 		if ctx.Err() != nil {
@@ -295,7 +295,7 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 // checkOperandLimits checks the strings, names, integers and reals of one
 // parsed content stream against the implementation limits: the ones veraPDF
 // reaches through the operators that use them ([ContentOperandLink]). where
-// names the stream in the context of a violation, and uncoloured reports that
+// names the stream in the context of a violation, and colourOff reports that
 // it starts with its colour operators ignored ([NewColourState]). overflow
 // counts the integer literals past the 64-bit range the parse read as reals
 // (see [checkNumberLimits]), and is consumed.
@@ -355,7 +355,7 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 //     key the object walk reports.
 //   - litho limits_2b.pdf: gives cs a name of 203 bytes, which veraPDF reports
 //     beside the /ColorSpace key.
-func checkOperandLimits(ops []content.Operation, overflow map[float64]int, where string, uncoloured bool, maxStr int, profile string) []Violation {
+func checkOperandLimits(ops []content.Operation, overflow map[float64]int, where string, colourOff bool, maxStr int, profile string) []Violation {
 	l := operandLimits{
 		where:    where,
 		maxStr:   maxStr,
@@ -363,7 +363,7 @@ func checkOperandLimits(ops []content.Operation, overflow map[float64]int, where
 		profile:  profile,
 		overflow: overflow,
 	}
-	colour := NewColourState(uncoloured)
+	colour := NewColourState(colourOff)
 	for _, op := range ops {
 		n := len(op.Operands)
 		reads := content.IsOperator(op.Operator)
