@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -61,5 +62,32 @@ func TestSimpleFontGlyphMetrics_CFFBuiltinEncodingFallback(t *testing.T) {
 	}
 	if v := checkSimpleGlyphPresence(ctx, doc, fontDict, "T1_0", 8, "PDF/A-2b", usage); len(v) != 0 {
 		t.Errorf("glyph-presence check fired on correctly-resolved nbsp: %v", v)
+	}
+}
+
+// TestCFFNotdefNamedCodeWidth pins that a code a simple CFF font's encoding
+// names .notdef is weighed at the advance of the program's .notdef glyph, 547
+// in the Lato-Bold fixture, while the glyph counts as present: the charset
+// holds .notdef. See [resolveSimpleFontGlyphs].
+//
+// Every count was measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b.
+func TestCFFNotdefNamedCodeWidth(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		widths string
+		want   glyphRuleCounts
+	}{
+		{"[547 600]", glyphRuleCounts{0, 0, 1}},
+		{"[500 600]", glyphRuleCounts{0, 1, 1}},
+		{"[0 600]", glyphRuleCounts{0, 1, 1}},
+	} {
+		t.Run(tc.widths, func(t *testing.T) {
+			t.Parallel()
+			font := subsetType1Font(t)
+			font[0] = strings.Replace(font[0], "/Widths [600 600] /Encoding /WinAnsiEncoding",
+				"/Widths "+tc.widths+" /Encoding << /Type /Encoding /BaseEncoding /WinAnsiEncoding /Differences [65 /.notdef] >>", 1)
+			checkGlyphRuleCounts(t, glyphPagesObjs(font, glyphText("(A) Tj")), tc.want)
+		})
 	}
 }

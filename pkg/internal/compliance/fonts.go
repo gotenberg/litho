@@ -53,6 +53,80 @@ func collectFontUsage(ops []content.Operation) map[string]*fontUsageInfo {
 	return collectFontUsageAt(ops, showSite{})
 }
 
+// textStateWalk follows the text font and the text rendering mode through the
+// operators of one content stream.
+//
+// Per ISO 32000-1, 8.4.2 the graphics state includes the text state, and Table
+// 104 counts the text font and the text rendering mode among its parameters,
+// so Q restores both. Reading Tf as if it persisted past the enclosing Q
+// attributes character codes to whichever font happens to have been selected
+// last, which is how an unrelated font came to be reported for glyphs it never
+// showed. The stack holds one entry per q operator already present in the
+// materialized operator slice, so it needs no bound of its own.
+//
+// A Form XObject is painted with the graphics state in force at the Do that
+// draws it (ISO 32000-1, 8.10.1), so its stream starts in the rendering mode
+// that Do leaves, and veraPDF judges its glyphs in that mode. Measured with
+// veraPDF 1.30 at PDF/A-1b and PDF/A-2b on a CID a TrueType CIDFont lacks,
+// shown in a form: drawn after "BT 3 Tr ET", it fails neither ISO 19005-1,
+// 6.3.5 t1 nor ISO 19005-2, 6.2.11.4.1 t2, which exempt rendering mode 3, and
+// still fails ISO 19005-2, 6.2.11.8 t1.
+type textStateWalk struct {
+	font  string
+	mode  int
+	saved []textState
+}
+
+// textState is the part of the graphics state a [textStateWalk] follows.
+type textState struct {
+	font string
+	mode int
+}
+
+// step applies op to the text state.
+func (w *textStateWalk) step(op content.Operation) {
+	switch op.Operator {
+	case "q":
+		w.saved = append(w.saved, textState{font: w.font, mode: w.mode})
+	case "Q":
+		if n := len(w.saved); n > 0 {
+			w.font, w.mode = w.saved[n-1].font, w.saved[n-1].mode
+			w.saved = w.saved[:n-1]
+		}
+	case "Tf":
+		if len(op.Operands) >= 1 {
+			if name, ok := op.Operands[0].(ast.PdfName); ok {
+				w.font = string(name)
+			}
+		}
+	case "Tr":
+		if len(op.Operands) >= 1 {
+			if mode, ok := op.Operands[0].(ast.PdfInt); ok {
+				w.mode = int(mode)
+			}
+		}
+	}
+}
+
+// shownOperand returns the operand a text-showing operator paints, a string
+// or an array of strings and adjustments, and whether op shows text at all
+// (ISO 32000-1, 9.4.3, Table 109).
+func shownOperand(op content.Operation) (ast.PdfObject, bool) {
+	switch op.Operator {
+	case "Tj", "TJ":
+		if len(op.Operands) >= 1 {
+			return op.Operands[0], true
+		}
+		return nil, true
+	case "'", "\"":
+		if len(op.Operands) >= 1 {
+			return op.Operands[len(op.Operands)-1], true
+		}
+		return nil, true
+	}
+	return nil, false
+}
+
 // collectFontUsageAt is [collectFontUsage] for the content stream site names,
 // which keys the marked-content sequences its shows are recorded in; see
 // [markedContentKey].
@@ -62,25 +136,10 @@ func collectFontUsageAt(ops []content.Operation, site showSite) map[string]*font
 	}
 
 	usage := make(map[string]*fontUsageInfo)
-	currentFont := ""
-	renderMode := 0 // default rendering mode is 0 (fill)
-
-	// Per ISO 32000-1, 8.4.2 the graphics state includes the text state, and
-	// Table 104 counts the text font and the text rendering mode among its
-	// parameters, so Q restores both. Reading Tf as if it persisted past the
-	// enclosing Q attributes character codes to whichever font happens to have
-	// been selected last, which is how an unrelated font came to be reported
-	// for glyphs it never showed. The stack holds one entry per q operator
-	// already present in the materialized operator slice, so it needs no bound
-	// of its own.
-	type savedTextState struct {
-		font       string
-		renderMode int
-	}
-	var gsStack []savedTextState
+	text := textStateWalk{mode: site.mode}
 	// Marked content is not part of the graphics state (ISO 32000-1, 14.6), so
-	// q and Q leave this stack alone. Like gsStack it holds at most one entry
-	// per operator already materialized.
+	// q and Q leave this stack alone. It holds at most one entry per operator
+	// already materialized.
 	var mcStack []string
 
 	getOrCreate := func(name string) *fontUsageInfo {
@@ -97,7 +156,7 @@ func collectFontUsageAt(ops []content.Operation, site showSite) map[string]*font
 			u.charCodes[b] = true
 		}
 		u.rawStrings = append(u.rawStrings, s)
-		at := glyphContext{mode: renderMode, owner: site.owner}
+		at := glyphContext{mode: text.mode, owner: site.owner}
 		if n := len(mcStack); n > 0 {
 			at.mc = mcStack[n-1]
 		}
@@ -105,10 +164,10 @@ func collectFontUsageAt(ops []content.Operation, site showSite) map[string]*font
 	}
 
 	collectStringBytes := func(obj ast.PdfObject) {
-		if currentFont == "" {
+		if text.font == "" {
 			return
 		}
-		u := getOrCreate(currentFont)
+		u := getOrCreate(text.font)
 		switch s := obj.(type) {
 		case ast.PdfString:
 			record(u, s)
@@ -122,53 +181,24 @@ func collectFontUsageAt(ops []content.Operation, site showSite) map[string]*font
 	}
 
 	for i, op := range ops {
+		text.step(op)
 		switch op.Operator {
-		case "q":
-			gsStack = append(gsStack, savedTextState{font: currentFont, renderMode: renderMode})
-		case "Q":
-			if n := len(gsStack); n > 0 {
-				currentFont, renderMode = gsStack[n-1].font, gsStack[n-1].renderMode
-				gsStack = gsStack[:n-1]
-			}
 		case "BDC", "BMC":
 			mcStack = append(mcStack, markedContentKey(op, i, site))
 		case "EMC":
 			if n := len(mcStack); n > 0 {
 				mcStack = mcStack[:n-1]
 			}
-		case "Tf":
-			if len(op.Operands) >= 1 {
-				if name, ok := op.Operands[0].(ast.PdfName); ok {
-					currentFont = string(name)
-				}
-			}
-		case "Tr":
-			if len(op.Operands) >= 1 {
-				if modeInt, ok := op.Operands[0].(ast.PdfInt); ok {
-					renderMode = int(modeInt)
-				}
-			}
-		case "Tj":
-			if currentFont != "" && renderMode != 3 {
-				getOrCreate(currentFont).visible = true
-			}
-			if len(op.Operands) >= 1 {
-				collectStringBytes(op.Operands[0])
-			}
-		case "TJ":
-			if currentFont != "" && renderMode != 3 {
-				getOrCreate(currentFont).visible = true
-			}
-			if len(op.Operands) >= 1 {
-				collectStringBytes(op.Operands[0])
-			}
-		case "'", "\"":
-			if currentFont != "" && renderMode != 3 {
-				getOrCreate(currentFont).visible = true
-			}
-			if len(op.Operands) >= 1 {
-				collectStringBytes(op.Operands[len(op.Operands)-1])
-			}
+		}
+		shown, isShow := shownOperand(op)
+		if !isShow {
+			continue
+		}
+		if text.font != "" && text.mode != invisibleRenderingMode {
+			getOrCreate(text.font).visible = true
+		}
+		if shown != nil {
+			collectStringBytes(shown)
 		}
 	}
 
@@ -212,6 +242,23 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		judgeContent := !p.contentJudged
 		site := pageSite(ctx, doc, p, pageIdx+1)
 
+		// veraPDF reads a font's program where it first parses the font in a
+		// rendering mode, and it parses a form where the page draws it, so the
+		// page's text and its forms claim their modes in the order the page
+		// draws them, before any is judged. Where the page's annotation
+		// appearances stand in that order depends on the part; see
+		// [annotationsParsedFirst].
+		annotsFirst := annotationsParsedFirst(profile)
+		if annotsFirst {
+			judged.claimAnnotationReads(ctx, doc, p.dict, pageIdx+1)
+		}
+		if judgeContent {
+			judged.claimStreamReads(ctx, doc, p.parsedOps(ctx), p.resources, site, pageIdx+1, make(map[int]bool), 0)
+		}
+		if !annotsFirst {
+			judged.claimAnnotationReads(ctx, doc, p.dict, pageIdx+1)
+		}
+
 		if judgeContent {
 			results = append(results, checkPageDeclaredFonts(ctx, doc, catalog, p, site, pageIdx+1, profile, judged, visibleAnywhere)...)
 
@@ -221,7 +268,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			// stream and applies the same font rules there; litho matches by
 			// walking invoked forms.
 			xobjVisited := make(map[int]bool)
-			results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
+			results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), 0, p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
 
 			// A tiling pattern's cell is another content stream the page walk
 			// above never enters. See checkPatternFonts.
@@ -532,8 +579,10 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 // /Resources/Font on the page only, so such a font is otherwise never reached.
 // Recursion into nested forms is bounded by the form budget ([formTooDeep]);
 // visited guards resource cycles; judged deduplicates against fonts
-// already checked on the page and across forms.
-func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
+// already checked on the page and across forms. mode is the text rendering
+// mode ops starts in, which each form it draws inherits as the Do leaves it
+// ([textStateWalk]).
+func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []content.Operation, mode int, res, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
 	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return nil
 	}
@@ -543,49 +592,77 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 	}
 
 	var results []Violation
+	text := textStateWalk{mode: mode}
 	for _, op := range ops {
-		if op.Operator != "Do" || len(op.Operands) < 1 {
-			continue
-		}
-		name, ok := op.Operands[0].(ast.PdfName)
+		text.step(op)
+		form, ok := resolveFontForm(ctx, doc, xobjDict, op, visited, pageNum)
 		if !ok {
 			continue
 		}
-		xobjRef := xobjDict[name]
-		ref, isRef := xobjRef.(ast.PdfIndirectRef)
-		if isRef && visited[ref.ObjectNum] {
-			continue
-		}
-		stream, err := document.ResolveStream(ctx, doc, xobjRef)
-		if err != nil || stream.Dict == nil {
-			continue
-		}
-		if subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype != "Form" {
-			continue
-		}
-		if isRef {
-			visited[ref.ObjectNum] = true
-		}
-		xobjRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-		if xobjRes == nil {
-			continue
-		}
-		data, err := doc.DecodeStream(ctx, stream)
-		if err != nil {
-			doc.Logger.Debug("compliance: fonts: cannot decode Form XObject", "page", pageNum, "error", err)
-			continue
-		}
-		subOps, err := content.ParseStreamData(ctx, data)
-		if err != nil {
-			doc.Logger.Debug("compliance: fonts: cannot parse Form XObject", "page", pageNum, "error", err)
-			continue
-		}
-		results = append(results, checkResourceFonts(ctx, doc, xobjRes, subOps, streamSite(ctx, doc, xobjRef, stream.Dict["Resources"], xobjRes), pageNum, profile, judged)...)
-		results = append(results, checkFormPUA(ctx, doc, xobjRes, subOps, data, stream.Dict, treeRoot, pageNum, profile)...)
-		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, xobjRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
-		results = append(results, checkPatternFonts(ctx, doc, subOps, xobjRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
+		site := streamSite(ctx, doc, form.ref, form.dict["Resources"], form.res)
+		site.mode = text.mode
+		results = append(results, checkResourceFonts(ctx, doc, form.res, form.ops, site, pageNum, profile, judged)...)
+		results = append(results, checkFormPUA(ctx, doc, form.res, form.ops, form.data, form.dict, treeRoot, pageNum, profile)...)
+		results = append(results, checkFormXObjectFonts(ctx, doc, form.ops, text.mode, form.res, treeRoot, pageNum, profile, judged, visited, depth+1)...)
+		results = append(results, checkPatternFonts(ctx, doc, form.ops, form.res, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 	}
 	return results
+}
+
+// fontForm is a Form XObject a Do operator draws, with what the font walks
+// read from it: the object that holds it, its dictionary and resources, and its
+// decoded content with the operators parsed from it.
+type fontForm struct {
+	ref  ast.PdfObject
+	dict ast.PdfDict
+	res  ast.PdfDict
+	data []byte
+	ops  []content.Operation
+}
+
+// resolveFontForm returns the Form XObject the operator op draws from the
+// /XObject dictionary xobjDict, and marks it in visited. ok is false for an
+// operator other than Do, an XObject that is no form, a form visited already,
+// or one that carries no /Resources or whose stream does not decode or parse:
+// the font walks judge such a form nowhere, so none of them reads it.
+func resolveFontForm(ctx context.Context, doc *document.Document, xobjDict ast.PdfDict, op content.Operation, visited map[int]bool, pageNum int) (fontForm, bool) {
+	if op.Operator != "Do" || len(op.Operands) < 1 {
+		return fontForm{}, false
+	}
+	name, ok := op.Operands[0].(ast.PdfName)
+	if !ok {
+		return fontForm{}, false
+	}
+	xobjRef := xobjDict[name]
+	ref, isRef := xobjRef.(ast.PdfIndirectRef)
+	if isRef && visited[ref.ObjectNum] {
+		return fontForm{}, false
+	}
+	stream, err := document.ResolveStream(ctx, doc, xobjRef)
+	if err != nil || stream.Dict == nil {
+		return fontForm{}, false
+	}
+	if subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype != "Form" {
+		return fontForm{}, false
+	}
+	if isRef {
+		visited[ref.ObjectNum] = true
+	}
+	xobjRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+	if xobjRes == nil {
+		return fontForm{}, false
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("compliance: fonts: cannot decode Form XObject", "page", pageNum, "error", err)
+		return fontForm{}, false
+	}
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		doc.Logger.Debug("compliance: fonts: cannot parse Form XObject", "page", pageNum, "error", err)
+		return fontForm{}, false
+	}
+	return fontForm{ref: xobjRef, dict: stream.Dict, res: xobjRes, data: data, ops: ops}, true
 }
 
 // checkPatternFonts checks fonts used for rendering inside the tiling patterns a
@@ -659,7 +736,7 @@ func checkPatternFonts(ctx context.Context, doc *document.Document, ops []conten
 			continue
 		}
 		results = append(results, checkResourceFonts(ctx, doc, patternRes, subOps, streamSite(ctx, doc, patternRef, stream.Dict["Resources"], patternRes), pageNum, profile, judged)...)
-		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, patternRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
+		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, 0, patternRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 		results = append(results, checkPatternFonts(ctx, doc, subOps, patternRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 	}
 	return results
@@ -754,7 +831,7 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 			procSite.fonts = fontDictKey(fontIdentity(fontRef, fontName, site), font["Resources"], t3Res)
 			results = append(results, checkResourceFonts(ctx, doc, t3Res, procOps, procSite, pageNum, profile, judged)...)
 			results = append(results, checkType3CharProcFonts(ctx, doc, procOps, t3Res, procSite, treeRoot, pageNum, profile, judged, visited, depth+1)...)
-			results = append(results, checkFormXObjectFonts(ctx, doc, procOps, t3Res, treeRoot, pageNum, profile, judged, visited, depth+1)...)
+			results = append(results, checkFormXObjectFonts(ctx, doc, procOps, 0, t3Res, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 		}
 	}
 	return results
@@ -984,7 +1061,7 @@ func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apO
 	// scanAnnotationAppearanceCS).
 	// checkFormXObjectFonts carries the Do gating, the depth cap and the
 	// visited set, so a shared form is walked once.
-	results := checkFormXObjectFonts(ctx, doc, ops, res, treeRoot, pageNum, profile, judged, visited, 0)
+	results := checkFormXObjectFonts(ctx, doc, ops, 0, res, treeRoot, pageNum, profile, judged, visited, 0)
 
 	for _, fontName := range sortedNames(fontDict) {
 		fontUsage := usage[string(fontName)]
@@ -1792,6 +1869,7 @@ func checkType0UsageRules(ctx context.Context, doc *document.Document, fontDict,
 					results = append(results, checkCIDFontWidths(ctx, doc, cidFontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, usedCIDs)...)
 					results = append(results, checkType0NotdefWidth(ctx, doc, fontDict, cidFontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, usage)...)
 					results = append(results, checkType2MissingGlyphWidths(ctx, doc, cidFontDict, fontData, binaryWidths, unitsPerEm, fontName, pageNum, rule, usedCIDs)...)
+					results = append(results, checkCFFMissingGlyphWidths(ctx, doc, cidFontDict, fontData, fontName, pageNum, rule, usedCIDs)...)
 				}
 			}
 		}

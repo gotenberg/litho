@@ -134,12 +134,15 @@ const mcUnnamed = "none"
 // key is unique to the stream within the document; props is the /Properties
 // dictionary of the stream's resources, which a BDC may name its property list
 // from; owner is the stream's [structureKey]; fonts names the /Font dictionary
-// of those resources ([fontDictKey]).
+// of those resources ([fontDictKey]); mode is the text rendering mode the
+// stream starts in, which a Form XObject inherits from the Do that draws it
+// ([textStateWalk]).
 type showSite struct {
 	key   string
 	props ast.PdfDict
 	owner int32
 	fonts string
+	mode  int
 }
 
 // structureKey returns the value veraPDF tells the glyphs of one content stream
@@ -486,27 +489,28 @@ func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fon
 // in it. A Type 3 font has no program, and veraPDF judges its glyphs
 // everywhere. The .notdef rule reads the glyph's name, which needs no program.
 //
-// litho meets the streams of a page in the order it judges them: the page's
-// own text, the forms, patterns and Type 3 procedures it draws, then its
-// annotations' appearances. veraPDF parses a form where the page draws it and
-// an annotation's appearance after the page's content and forms, so every
-// order agrees but one: a form drawn before the page text first shows a font
-// claims its rendering modes after the page text in litho, and before it in
-// veraPDF.
+// veraPDF parses a page's text and the forms it draws in the order the page
+// draws them, each form where its Do stands and in the rendering mode that Do
+// leaves ([textStateWalk]), and a page's annotation appearances before or after
+// them by part ([annotationsParsedFirst]). litho judges a page's streams in
+// another order, the page's own text first, so it makes the claims in
+// veraPDF's order before it judges any ([fontJudgements.claimStreamReads],
+// [fontJudgements.claimAnnotationReads]). The patterns and Type 3 procedures a
+// page draws claim theirs as litho judges them, after the page's text, forms
+// and, at PDF/A-2 and later, annotations.
 //
 // Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on a CID a composite
 // program lacks: shown on a second page after the first showed another CID,
 // it fails neither rule, whether the pages share one /Resources or not, and
 // fails both when the second page shows it in a rendering mode the first did
 // not use, or shows any glyph in such a mode, mode 3 included; shown in a form
-// drawn, or an annotation appearance painted, after the page text shows
-// another CID, it fails neither, and the page text fails both when the
-// annotation shows the other CID; shown in an annotation on a page that draws
-// a form showing another CID, it fails neither, and in the form both. A Type1
-// width that disagrees with its program fails nothing on a second page, unless
-// that page shows the font in a new rendering mode, and a Type 3 code with no
-// glyph procedure fails presence there. The .notdef rule fails for each of
-// them.
+// drawn after the page text shows another CID, it fails neither, and drawn
+// before, both, as it does in a form nested in a form drawn before the text of
+// the form drawing it; shown by the page text after such a form shows another
+// CID, it fails neither. A Type1 width that disagrees with its program fails
+// nothing on a second page, unless that page shows the font in a new rendering
+// mode, and a Type 3 code with no glyph procedure fails presence there. The
+// .notdef rule fails for each of them.
 //
 // A glyph first met where the program is not read keeps the values it was
 // built with (StaticContainers.cachedGlyphs), so a later stream that reads the
@@ -525,23 +529,182 @@ func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fon
 //     three profiles, from 278 to 204.
 //   - govdocs thread_100_100870.pdf: the width counts that moved away, from 3
 //     to 0 against veraPDF's 2. litho's 3 glyphs are shown on pages after
-//     the first, which veraPDF does not judge. veraPDF's 2 are glyphs litho
-//     finds no mismatch in: a CID the CFF charset lacks, which veraPDF weighs
-//     at 1000 and litho does not weigh, and a CID whose charstring advances
-//     333, as /W declares, which veraPDF reads as 400.
+//     the first, which veraPDF does not judge. veraPDF's 2 are a CID the CFF
+//     charset lacks, which litho now weighs too ([checkCFFMissingGlyphWidths]),
+//     and a CID whose charstring advances 333, as /W declares, which veraPDF
+//     reads as 400.
+//   - All corpora, at PDF/A-1b, PDF/A-2b and PDF/A-2u, and at their own
+//     profile for the verapdf files: claiming in veraPDF's order, forms where
+//     the page draws them and annotations before the page at PDF/A-1b, moves
+//     no count.
 func (j *fontJudgements) readsProgram(ctx context.Context, doc *document.Document, fontID string, font ast.PdfDict, usage *fontUsageInfo) bool {
 	if usage == nil || isType3Font(ctx, doc, font) {
 		return true
 	}
-	scope := usage.scope + "\x00" + fontID
 	for _, show := range usage.shows {
-		mode := fontID + "\x00" + strconv.Itoa(show.at.mode)
-		if !j.programMode[mode] {
-			j.programMode[mode] = true
-			j.programScope[scope] = true
+		j.claimProgram(usage.scope, fontID, show.at.mode)
+	}
+	return j.programScope[usage.scope+"\x00"+fontID]
+}
+
+// claimProgram records that the stream and resource name scope names show the
+// font object fontID names in rendering mode mode. The first scope to show a
+// pair of font object and mode is one veraPDF reads the program for; see
+// [fontJudgements.readsProgram].
+func (j *fontJudgements) claimProgram(scope, fontID string, mode int) {
+	key := fontID + "\x00" + strconv.Itoa(mode)
+	if !j.programMode[key] {
+		j.programMode[key] = true
+		j.programScope[scope+"\x00"+fontID] = true
+	}
+}
+
+// claimStreamReads makes the claims of [fontJudgements.claimProgram] for the
+// text-showing operators of one content stream, whose operators are ops and
+// resources res, and of the Form XObjects it draws, in the order veraPDF
+// parses them: a form's operators where the Do that draws it stands, before the
+// operators that follow. site is the stream's [showSite], visited holds the
+// forms already walked, and depth bounds the recursion as [formTooDeep] bounds
+// the form walk. The forms walked are those [checkFormXObjectFonts] judges.
+func (j *fontJudgements) claimStreamReads(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, site showSite, pageNum int, visited map[int]bool, depth int) {
+	if formTooDeep(doc, depth) || ctx.Err() != nil {
+		return
+	}
+	fonts, _ := document.ResolveDict(ctx, doc, res["Font"])
+	xobjs, _ := document.ResolveDict(ctx, doc, res["XObject"])
+	text := textStateWalk{mode: site.mode}
+	for i, op := range ops {
+		if i%contentOpCancelCheckInterval == 0 && ctx.Err() != nil {
+			return
+		}
+		text.step(op)
+		if shown, isShow := shownOperand(op); isShow {
+			ref, ok := fonts[ast.PdfName(text.font)]
+			if text.font != "" && ok && showsString(shown) {
+				j.claimProgram(site.key+"/"+text.font, fontIdentity(ref, ast.PdfName(text.font), site), text.mode)
+			}
+			continue
+		}
+		if len(xobjs) == 0 {
+			continue
+		}
+		form, ok := resolveFontForm(ctx, doc, xobjs, op, visited, pageNum)
+		if !ok {
+			continue
+		}
+		sub := streamSite(ctx, doc, form.ref, form.dict["Resources"], form.res)
+		sub.mode = text.mode
+		j.claimStreamReads(ctx, doc, form.ops, form.res, sub, pageNum, visited, depth+1)
+	}
+}
+
+// annotationsParsedFirst reports whether veraPDF, validating against profile,
+// parses a page's annotation appearances before the page's content, and so
+// reads a font's program for an annotation that shows it in a rendering mode
+// before the page text that shows it in the same mode.
+//
+// veraPDF parses both where it first needs them. The PDF/A-2 and later profiles
+// judge a page's transparency (ISO 19005-2, 6.2.10), which veraPDF computes
+// from the page's content and then its annotations (GFPDPage.getcontainsTransparency),
+// as soon as it meets the page. PDF/A-1 judges none, so the two are parsed as
+// veraPDF gathers the page's links, which it does last to first
+// (BaseValidator.addAllLinkedObjects), annotations before content. Measured
+// with veraPDF 1.30 on a CID a TrueType CIDFont lacks: shown in an annotation
+// appearance after page text that shows another CID, it fails ISO 19005-1,
+// 6.3.5 t1 and 6.3.6 t1 at PDF/A-1b and neither ISO 19005-2, 6.2.11.4.1 t2 nor
+// 6.2.11.5 t1 at PDF/A-2b and PDF/A-2u; shown by the page text instead, it
+// fails neither at PDF/A-1b and both at PDF/A-2b and PDF/A-2u; a form the page
+// draws orders as the page text does. Other profiles keep the PDF/A-2 order,
+// which was not measured for them.
+func annotationsParsedFirst(profile string) bool {
+	return !IsPDFUA(profile) && PDFAPart(profile) == 1
+}
+
+// claimAnnotationReads makes the claims of [fontJudgements.claimStreamReads]
+// for the appearance streams of the annotations of page, in the order
+// [checkAnnotationAppearanceFonts] walks them, pageNum being the page's number.
+func (j *fontJudgements) claimAnnotationReads(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int) {
+	annots, err := document.ResolveArray(ctx, doc, page["Annots"])
+	if err != nil || len(annots) == 0 {
+		return
+	}
+	visited := make(map[int]bool)
+	for _, annotObj := range annots {
+		if ctx.Err() != nil {
+			return
+		}
+		annot, err := document.ResolveDict(ctx, doc, annotObj)
+		if err != nil || annot == nil {
+			continue
+		}
+		apDict, err := document.ResolveDict(ctx, doc, annot["AP"])
+		if err != nil || apDict == nil {
+			continue
+		}
+		for _, key := range []ast.PdfName{"N", "R", "D"} {
+			if apObj, ok := apDict[key]; ok {
+				j.claimAppearanceReads(ctx, doc, apObj, pageNum, visited, 0)
+			}
 		}
 	}
-	return j.programScope[scope]
+}
+
+// claimAppearanceReads is [fontJudgements.claimAnnotationReads] for one
+// appearance entry, a stream or a state subdictionary of streams, walked as
+// [checkAppearanceStreamFonts] walks it.
+func (j *fontJudgements) claimAppearanceReads(ctx context.Context, doc *document.Document, apObj ast.PdfObject, pageNum int, visited map[int]bool, stateCount int) {
+	stream, err := document.ResolveStream(ctx, doc, apObj)
+	if err != nil {
+		subDict, err := document.ResolveDict(ctx, doc, apObj)
+		if err != nil || subDict == nil {
+			return
+		}
+		for _, stateName := range sortedNames(subDict) {
+			if stateCount >= maxAppearanceStateFonts {
+				break
+			}
+			stateCount++
+			j.claimAppearanceReads(ctx, doc, subDict[stateName], pageNum, visited, stateCount)
+		}
+		return
+	}
+	if ref, ok := apObj.(ast.PdfIndirectRef); ok {
+		if visited[ref.ObjectNum] {
+			return
+		}
+		visited[ref.ObjectNum] = true
+	}
+	res, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+	if res == nil {
+		return
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("compliance: fonts: cannot decode appearance stream", "page", pageNum, "error", err)
+		return
+	}
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		doc.Logger.Debug("compliance: fonts: cannot parse appearance stream", "page", pageNum, "error", err)
+		return
+	}
+	j.claimStreamReads(ctx, doc, ops, res, streamSite(ctx, doc, apObj, stream.Dict["Resources"], res), pageNum, visited, 0)
+}
+
+// showsString reports whether the operand of a text-showing operator holds a
+// string, which is what [collectFontUsageAt] records a show for.
+func showsString(obj ast.PdfObject) bool {
+	switch v := obj.(type) {
+	case ast.PdfString:
+		return true
+	case ast.PdfArray:
+		for _, item := range v {
+			if _, ok := item.(ast.PdfString); ok {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // describe renders where a glyph stated for more than one code or context of

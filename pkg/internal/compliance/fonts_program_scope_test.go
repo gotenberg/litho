@@ -51,6 +51,14 @@ func withForm(objs []string, body string) []string {
 	return withObject(objs, 30, exponentStream("/Type /XObject /Subtype /Form /BBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >>", body))
 }
 
+// withNestedForm names, as /X2 in the resources of the form [withForm] adds, a
+// Form XObject whose own /Resources name the font as /F1 and whose content is
+// body.
+func withNestedForm(objs []string, body string) []string {
+	objs[29] = strings.Replace(objs[29], "/Resources << /Font << /F1 5 0 R >> >>", "/Resources << /Font << /F1 5 0 R >> /XObject << /X2 31 0 R >> >>", 1)
+	return withObject(objs, 31, exponentStream("/Type /XObject /Subtype /Form /BBox [0 0 200 100] /Resources << /Font << /F1 5 0 R >> >>", body))
+}
+
 // withAnnotation gives the first page an annotation whose normal appearance
 // names the font as /F1 in its own /Resources and shows body.
 func withAnnotation(objs []string, body string) []string {
@@ -78,12 +86,20 @@ type glyphRuleCounts struct{ presence, width, notdef int }
 // the counts of the glyph rules with want. PDF/A-1 has no .notdef rule.
 func checkGlyphRuleCounts(t *testing.T, objs []string, want glyphRuleCounts) {
 	t.Helper()
+	checkGlyphRuleCountsByPart(t, objs, want, want)
+}
+
+// checkGlyphRuleCountsByPart is [checkGlyphRuleCounts] with the counts
+// PDF/A-1b and PDF/A-2b are to give apart, want1 and want2.
+func checkGlyphRuleCountsByPart(t *testing.T, objs []string, want1, want2 glyphRuleCounts) {
+	t.Helper()
 	for _, p := range []struct {
 		profile                 models.PDFAProfile
 		presence, width, notdef Rule
+		want                    glyphRuleCounts
 	}{
-		{models.PDFA1b, Rule_19005_1_6_3_5_t01, Rule_19005_1_6_3_6_t01, Rule{}},
-		{models.PDFA2b, Rule_19005_2_6_2_11_4_1_t02, Rule_19005_2_6_2_11_5_t01, Rule_19005_2_6_2_11_8_t01},
+		{models.PDFA1b, Rule_19005_1_6_3_5_t01, Rule_19005_1_6_3_6_t01, Rule{}, want1},
+		{models.PDFA2b, Rule_19005_2_6_2_11_4_1_t02, Rule_19005_2_6_2_11_5_t01, Rule_19005_2_6_2_11_8_t01, want2},
 	} {
 		doc, _ := objsDocPDF(t, objs...)
 		viols, err := ValidatePDFA(context.Background(), doc, p.profile)
@@ -93,7 +109,7 @@ func checkGlyphRuleCounts(t *testing.T, objs []string, want glyphRuleCounts) {
 		for _, c := range []struct {
 			rule Rule
 			want int
-		}{{p.presence, want.presence}, {p.width, want.width}, {p.notdef, want.notdef}} {
+		}{{p.presence, p.want.presence}, {p.width, p.want.width}, {p.notdef, p.want.notdef}} {
 			if c.want < 0 || c.rule.Specification == "" {
 				continue
 			}
@@ -107,8 +123,9 @@ func checkGlyphRuleCounts(t *testing.T, objs []string, want glyphRuleCounts) {
 // TestGlyphProgramRulesJudgedInFirstScope pins that the glyph-presence and
 // width rules judge a glyph only where veraPDF reads the font's program for
 // it: through the resource dictionary that first shows the font object in a
-// rendering mode, in page order with a form drawn after the page text, and
-// through any other only when it is the first to show the font in some mode.
+// rendering mode, in the order a page draws its text and its forms, each form
+// in the rendering mode its Do leaves, and through any other only when it is
+// the first to show the font in some mode.
 // The .notdef rule and Type 3 fonts are judged everywhere. See
 // [fontJudgements.readsProgram].
 //
@@ -153,18 +170,21 @@ func TestGlyphProgramRulesJudgedInFirstScope(t *testing.T) {
 		{"a form drawn after the page text", func() []string {
 			return withForm(glyphPagesObjs(type0, glyphText("<0025> Tj")+" /X1 Do"), glyphText("<0100> Tj"))
 		}, glyphRuleCounts{0, 0, 1}},
-		{"an annotation after the page text", func() []string {
-			return withAnnotation(glyphPagesObjs(type0, glyphText("<0025> Tj")), glyphText("<0100> Tj"))
-		}, glyphRuleCounts{0, 0, 1}},
-		{"the page text before an annotation", func() []string {
-			return withAnnotation(glyphPagesObjs(type0, glyphText("<0100> Tj")), glyphText("<0025> Tj"))
+		{"a form drawn before the page text", func() []string {
+			return withForm(glyphPagesObjs(type0, "/X1 Do "+glyphText("<0025> Tj")), glyphText("<0100> Tj"))
 		}, glyphRuleCounts{1, 1, 1}},
-		{"an annotation after a form", func() []string {
-			return withAnnotation(withForm(glyphPagesObjs(type0, "/X1 Do"), glyphText("<0025> Tj")), glyphText("<0100> Tj"))
+		{"the page text after a form", func() []string {
+			return withForm(glyphPagesObjs(type0, "/X1 Do "+glyphText("<0100> Tj")), glyphText("<0025> Tj"))
 		}, glyphRuleCounts{0, 0, 1}},
-		{"a form before an annotation", func() []string {
-			return withAnnotation(withForm(glyphPagesObjs(type0, "/X1 Do"), glyphText("<0100> Tj")), glyphText("<0025> Tj"))
+		{"a nested form before the text of the form drawing it", func() []string {
+			return withNestedForm(withForm(glyphPagesObjs(type0, "/X1 Do"), "/X2 Do "+glyphText("<0100> Tj")), glyphText("<0025> Tj"))
+		}, glyphRuleCounts{0, 0, 1}},
+		{"a form drawn between page text in modes 3 and 0", func() []string {
+			return withForm(glyphPagesObjs(type0, "BT /F1 12 Tf 3 Tr <0025> Tj 0 Tr ET /X1 Do "+glyphText("<0025> Tj")), glyphText("<0100> Tj"))
 		}, glyphRuleCounts{1, 1, 1}},
+		{"a form drawn in rendering mode 3", func() []string {
+			return withForm(glyphPagesObjs(type0, "BT 3 Tr ET /X1 Do BT 0 Tr ET "+glyphText("<0025> Tj")), glyphText("<0100> Tj"))
+		}, glyphRuleCounts{0, 0, 1}},
 		{"a Type1 width on a later page", func() []string {
 			return glyphPagesObjs(type1, glyphText("(A) Tj"), glyphText("(B) Tj"))
 		}, glyphRuleCounts{0, 0, 0}},
@@ -178,6 +198,42 @@ func TestGlyphProgramRulesJudgedInFirstScope(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			checkGlyphRuleCounts(t, tc.objs(), tc.want)
+		})
+	}
+}
+
+// TestGlyphProgramRulesJudgedAnnotationsByPart pins where a page's annotation
+// appearances stand in the order veraPDF reads a font's program: before the
+// page's content at PDF/A-1b, after it at PDF/A-2b; see
+// [annotationsParsedFirst]. The .notdef rule, which needs no program, is
+// judged either way.
+//
+// Every count was measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b.
+func TestGlyphProgramRulesJudgedAnnotationsByPart(t *testing.T) {
+	t.Parallel()
+
+	type0 := programScopeType0Font(t)
+	for _, tc := range []struct {
+		name         string
+		objs         func() []string
+		want1, want2 glyphRuleCounts
+	}{
+		{"a missing CID in an annotation, another on the page", func() []string {
+			return withAnnotation(glyphPagesObjs(type0, glyphText("<0025> Tj")), glyphText("<0100> Tj"))
+		}, glyphRuleCounts{1, 1, -1}, glyphRuleCounts{0, 0, 1}},
+		{"a missing CID on the page, another in an annotation", func() []string {
+			return withAnnotation(glyphPagesObjs(type0, glyphText("<0100> Tj")), glyphText("<0025> Tj"))
+		}, glyphRuleCounts{0, 0, -1}, glyphRuleCounts{1, 1, 1}},
+		{"a missing CID in an annotation, another in a form", func() []string {
+			return withAnnotation(withForm(glyphPagesObjs(type0, "/X1 Do"), glyphText("<0025> Tj")), glyphText("<0100> Tj"))
+		}, glyphRuleCounts{1, 1, -1}, glyphRuleCounts{0, 0, 1}},
+		{"a missing CID in a form, another in an annotation", func() []string {
+			return withAnnotation(withForm(glyphPagesObjs(type0, "/X1 Do"), glyphText("<0100> Tj")), glyphText("<0025> Tj"))
+		}, glyphRuleCounts{0, 0, -1}, glyphRuleCounts{1, 1, 1}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			checkGlyphRuleCountsByPart(t, tc.objs(), tc.want1, tc.want2)
 		})
 	}
 }

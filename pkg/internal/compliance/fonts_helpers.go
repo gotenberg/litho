@@ -348,12 +348,47 @@ func checkSimpleFontRequiredKeys(ctx context.Context, doc *document.Document, fo
 	return results
 }
 
+// type0NameDict returns the dictionary veraPDF reads a Type0 font's name from
+// for the /BaseFont rule, ISO 19005-1, 6.3.2 t3 and ISO 19005-2, 6.2.11.2 t3:
+// its descendant CIDFont, the first entry of /DescendantFonts, or nil, which
+// names no font, when the font has none.
+//
+// veraPDF models a Type0 font as a CIDFont over its descendant's dictionary
+// (PDType0Font is a PDCIDFont, and PDFont reads fontName from that dictionary's
+// /BaseFont), so the rule's "fontName != null" asks about the descendant's
+// /BaseFont. That relaxes ISO 32000-1, 9.7.5, Table 121, which requires the
+// Type0 dictionary's own /BaseFont, to match the validator. Measured with
+// veraPDF 1.30 at PDF/A-1b and PDF/A-2b on an Identity-H font over a TrueType
+// CIDFont: a Type0 font whose own /BaseFont is absent, or is a string, passes
+// the rule when its descendant's is a name. A descendant whose /BaseFont is
+// absent or a string stops veraPDF's validation with an exception, so no count
+// is known for it; litho states the rule for the Type0 font then.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue12823.pdf: its NotoColorEmoji Type0 font names a /BaseFont
+//     but no descendant, and veraPDF fails ISO 19005-1, 6.3.2 t3 and ISO
+//     19005-2, 6.2.11.2 t3 for it at PDF/A-1b, PDF/A-2b and PDF/A-2u, where
+//     litho failed neither.
+func type0NameDict(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) ast.PdfDict {
+	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
+	if err != nil || len(descArr) == 0 {
+		return nil
+	}
+	cid, err := document.ResolveDict(ctx, doc, descArr[0])
+	if err != nil {
+		return nil
+	}
+	return cid
+}
+
 // checkFontRequiredKeys validates the PDF/A font-dictionary required-key rules
 // that apply to every font (PDFont): /Type must be Font (t1), /Subtype must be a
 // recognised font subtype (t2), and /BaseFont must name the font unless it is a
 // Type 3 font (t3). Every part carries t3, stated as
 // "Subtype == Type3 || fontName != null": ISO 19005-1 6.3.2 t3, ISO 19005-2 and
-// -3 6.2.11.2 t3, ISO 19005-4 6.2.10.2 t3.
+// -3 6.2.11.2 t3, ISO 19005-4 6.2.10.2 t3. A Type0 font's name is read from
+// its descendant CIDFont ([type0NameDict]).
 //
 // # Corpus evidence
 //
@@ -393,14 +428,18 @@ func checkFontRequiredKeys(ctx context.Context, doc *document.Document, fontDict
 		// value of any other type names no font, so it fails exactly as a
 		// missing entry does, and veraPDF reports such a font as resolved to
 		// null.
-		baseFont, present := fontDict["BaseFont"]
+		named, subject := fontDict, "font "
+		if subtype == "Type0" {
+			named, subject = type0NameDict(ctx, doc, fontDict), "Type0 font read through its descendant CIDFont: "
+		}
+		baseFont, present := named["BaseFont"]
 		_, nameErr := document.ResolveName(ctx, doc, baseFont)
 		if !present || nameErr != nil {
 			if rule := fontReqKeyRule(part, 3); rule.Specification != "" {
 				if !present {
-					results = append(results, failf(rule, "font missing /BaseFont")...)
+					results = append(results, failf(rule, "%smissing /BaseFont", subject)...)
 				} else {
-					results = append(results, failf(rule, "font /BaseFont is not a name")...)
+					results = append(results, failf(rule, "%s/BaseFont is not a name", subject)...)
 				}
 			}
 		}

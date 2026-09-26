@@ -110,6 +110,10 @@ type simpleFontGlyphs struct {
 	// predefined encoding gives its codes, so a code it leaves unnamed is known
 	// to select no glyph. It is nil whenever the names are not fully known.
 	encodingNames map[byte]string
+	// notdefNamed holds the codes a CFF program's encoding names .notdef. They
+	// map to GID 0 in codeToGID for their width, but the charset holds that
+	// glyph, so it is present.
+	notdefNamed map[byte]bool
 }
 
 // The OpenType head table bounds unitsPerEm to 16..16384 ("Valid range is from
@@ -166,6 +170,7 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 	// Extract charCode → GID mapping from font's cmap table (TrueType/OTTO).
 	charCodeToGID := typography.ExtractCharCodeToGID(ctx, fontData)
 	var encNames map[byte]string
+	var notdefNamed map[byte]bool
 
 	// A symbolic TrueType font resolves its single-byte codes through the
 	// embedded (3,0)/(1,0) cmap, not through glyph names: ISO 32000-1, 9.6.6.4
@@ -214,7 +219,20 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 				builtin := typography.ExtractCFFEncodingNames(fontData)
 				charCodeToGID = make(map[uint16]uint16)
 				for code, name := range enc {
-					if name == ".notdef" || name == "" {
+					if name == "" {
+						continue
+					}
+					// A code the encoding names .notdef selects the program's
+					// .notdef glyph, GID 0 in every CFF charset (Adobe Technical
+					// Note #5176, 13), and veraPDF weighs its width
+					// (CFFType1FontProgram.getWidth) while holding the glyph
+					// present.
+					if name == ".notdef" {
+						charCodeToGID[uint16(code)] = 0
+						if notdefNamed == nil {
+							notdefNamed = make(map[byte]bool)
+						}
+						notdefNamed[code] = true
 						continue
 					}
 					gid, ok := nameToGID[name]
@@ -277,7 +295,7 @@ func resolveSimpleFontGlyphs(ctx context.Context, doc *document.Document, fontDi
 		}
 	}
 
-	return simpleFontGlyphs{widths: binaryWidths, unitsPerEm: unitsPerEm, codeToGID: charCodeToGID, encodingNames: encNames}, true
+	return simpleFontGlyphs{widths: binaryWidths, unitsPerEm: unitsPerEm, codeToGID: charCodeToGID, encodingNames: encNames, notdefNamed: notdefNamed}, true
 }
 
 // encodingFullyPredefined reports whether a simple font's /Encoding names its
@@ -783,7 +801,10 @@ func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontD
 				gid, mapped = 0, true
 			}
 		}
-		if mapped && gid == 0 {
+		// A CFF charset holds .notdef, so a code its encoding names .notdef
+		// selects a glyph the program defines: veraPDF answers the presence
+		// test by that name (CFFType1FontProgram.containsGlyph).
+		if mapped && gid == 0 && !glyphs.notdefNamed[code] {
 			faults.add(uint32(code), "font %s on page %d: glyph for charCode %d not present in embedded font program", fontName, pageNum, code)
 		}
 	}
@@ -955,106 +976,102 @@ func ExpectedCIDFontWidths(ctx context.Context, doc *document.Document, cidFontD
 	return out, true
 }
 
-// checkType3FontWidths compares /Widths against glyph widths declared by
-// d0/d1 operators in Type3 font CharProcs.
+// checkType3FontWidths compares the width a Type 3 font's dictionary declares
+// for each shown code against the one its glyph procedure declares with d0 or
+// d1 (ISO 32000-1, 9.6.5).
+//
+// veraPDF takes both widths as it takes them for a simple font (PDFont.getWidth,
+// PDType3Font.getWidthFromProgram): the dictionary's is the /Widths entry for a
+// code within /FirstChar to /LastChar, and otherwise the descriptor's
+// /MissingWidth, or 0; the program's is the wx a procedure opens with, and
+// otherwise, for a code whose encoding names no procedure, whose procedure the
+// font does not hold, or whose procedure does not begin with d0 or d1, the
+// /MissingWidth again, or 0. It compares the two as the file writes them, in
+// glyph space, with the one-unit tolerance of ISO 19005-2, 6.2.11.5, and so
+// does litho: the /FontMatrix plays no part. Measured with veraPDF 1.30 at
+// PDF/A-1b and PDF/A-2b: a code named /b with no procedure fails ISO 19005-1,
+// 6.3.6 t1 and ISO 19005-2, 6.2.11.5 t1 against a /Widths entry of 500 or 2
+// and passes against 1 or 0, as does a code the encoding does not name, and
+// passes against 500 when the descriptor's /MissingWidth is 500; under a
+// /FontMatrix of [0.01 0 0 0.01 0 0], a procedure declaring 50 passes against
+// 50.5 and fails against 52, and a code with no procedure passes against 0.5
+// and fails against 2.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue5039.pdf: shows code 32 through a Type 3 font that names it
+//     uni0020 and holds no procedure for it, against a /Widths entry of 602;
+//     veraPDF fails the width rule for it at PDF/A-1b, PDF/A-2b and PDF/A-2u,
+//     and litho now does too.
+//   - pdfjs issue14724.pdf: its Type 3 fonts carry a /FontMatrix of [1 0 0 1
+//     0 0], and scaling both widths by it turned a sub-unit difference into a
+//     failure veraPDF does not state; litho now states none either.
+//   - pdfjs poppler-90-0-fuzzed.pdf: the width count that moved away, from 1
+//     to 18 against veraPDF's 0. The 18 codes are shown on pages 7, 12 and
+//     16, whose content streams do not decode: veraPDF reads no operator from
+//     them, while litho recovers operators from the damaged data. Their glyph
+//     procedures are damaged too, so each code is weighed at the missing width
+//     of 0.
 func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
-	widthsObj, hasWidths := fontDict["Widths"]
-	if !hasWidths {
-		return nil
-	}
-	widths, err := document.ResolveArray(ctx, doc, widthsObj)
-	if err != nil || len(widths) == 0 {
-		return nil
-	}
-	firstChar, err := document.ResolveInt(ctx, doc, fontDict["FirstChar"])
-	if err != nil {
-		doc.Logger.Debug("compliance: cannot resolve FirstChar", "error", err)
-		return nil
-	}
-
-	// Build charCode→glyphName from /Encoding /Differences.
-	enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
-
-	// Resolve CharProcs dict.
 	charProcs, err := document.ResolveDict(ctx, doc, fontDict["CharProcs"])
 	if err != nil || charProcs == nil {
 		return nil
 	}
+	enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
+	widths, firstChar, lastChar := type1WidthsArray(ctx, doc, fontDict)
+	missingWidth := type3MissingWidth(ctx, doc, fontDict)
 
-	// Both the /Widths entries and the d0/d1 wx operands of a Type 3 font are
-	// expressed in glyph space (ISO 32000-1 §9.6.5.4). The FontMatrix maps
-	// glyph space to text space; normalise BOTH widths to text space (1/1000
-	// units) before comparing, so the 1-unit tolerance is applied in the same
-	// space veraPDF uses. Scaling only one operand (the original bug) turned a
-	// consistent font into a spurious ~x1000 mismatch. Standard FontMatrix
-	// [0.001 0 0 0.001 0 0] yields scale 1; a [1 0 0 -1 0 0] matrix yields 1000.
-	fmScale := 1.0
-	if fmArr, err := document.ResolveArray(ctx, doc, fontDict["FontMatrix"]); err == nil && len(fmArr) >= 1 {
-		if sx := document.Float(fmArr[0]); sx != 0 {
-			fmScale = math.Abs(sx) * 1000.0
-		}
-	}
-
-	// Extract widths from each CharProc by finding d0/d1 operator.
-	charProcWidths := make(map[string]float64)
-	for glyphName, cpObj := range charProcs {
-		stream, err := document.ResolveStream(ctx, doc, cpObj)
-		if err != nil {
-			doc.Logger.Debug("compliance: cannot resolve CharProc stream", "error", err)
-			continue
-		}
-		streamData, err := doc.DecodeStream(ctx, stream)
-		if err != nil {
-			doc.Logger.Debug("compliance: cannot decode CharProc stream", "error", err)
-			continue
-		}
-		ops, err := content.ParseStreamData(ctx, streamData)
-		if err != nil {
-			doc.Logger.Debug("compliance: cannot parse CharProc stream", "error", err)
-			continue
-		}
-		for _, op := range ops {
-			// d1: wx wy llx lly urx ury d1
-			// d0: wx wy d0
-			if (op.Operator == "d1" && len(op.Operands) >= 6) ||
-				(op.Operator == "d0" && len(op.Operands) >= 2) {
-				wx := document.Float(op.Operands[0])
-				charProcWidths[string(glyphName)] = wx
-				break
+	// Width consistency applies only to glyphs referenced for rendering, the
+	// codes a stream shows: an unrendered /Widths entry (a code mapped to a
+	// .notdef placeholder such as /g0 with declared width 0, whose procedure
+	// still carries a non-zero advance) is not compared. With no usage, every
+	// code the array declares is.
+	var codes []byte
+	if usage != nil {
+		codes = sortedByteKeys(usage.charCodes)
+	} else {
+		for i := range widths {
+			if code := firstChar + i; code >= 0 && code <= 255 {
+				codes = append(codes, byte(code))
 			}
 		}
 	}
 
-	// Compare /Widths against CharProc widths. Every shown code is its own
-	// glyph; see [fontJudgements.glyphs].
+	procWidths := make(map[string]float64)
+	glyphWidthOf := func(name string) float64 {
+		if w, ok := procWidths[name]; ok {
+			return w
+		}
+		w, declared := type3ProcWidth(ctx, doc, charProcs, name)
+		if !declared {
+			w = missingWidth
+		}
+		procWidths[name] = w
+		return w
+	}
+
+	// Every shown code is its own glyph; see [fontJudgements.glyphs].
 	faults := newGlyphFaults(rule)
-	for i, wObj := range widths {
-		charCode := byte(int(firstChar) + i) //nolint:gosec // G115: simple-font char codes occupy the 8-bit space; a /Widths index past 255 is not a valid code and truncation is harmless.
-		// Width consistency applies only to glyphs referenced for rendering:
-		// veraPDF checks only shown codes. An unrendered /Widths entry (e.g. a
-		// code mapped to a .notdef placeholder such as /g0 with declared width 0,
-		// whose CharProc still carries a non-zero d0/d1 advance) is not compared.
-		// A nil usage map falls back to checking every code.
-		if usage != nil && !usage.charCodes[charCode] {
-			continue
+	for _, code := range codes {
+		declared := missingWidth
+		if idx := int(code) - firstChar; widths != nil && idx >= 0 && int(code) <= lastChar {
+			declared = 0
+			if idx < len(widths) {
+				w, ok := widthValue(ctx, doc, widths[idx])
+				if !ok {
+					continue
+				}
+				declared = w
+			}
 		}
-		glyphName := enc[charCode]
-		if glyphName == "" {
-			continue
+		glyphName := enc[code]
+		glyphWidth := missingWidth
+		if glyphName != "" {
+			glyphWidth = glyphWidthOf(glyphName)
 		}
-		cpWidth, ok := charProcWidths[glyphName]
-		if !ok {
-			continue
-		}
-		pdfWidth, wOK := widthValue(ctx, doc, wObj)
-		if !wOK {
-			continue
-		}
-		pdfWidth *= fmScale
-		glyphWidth := cpWidth * fmScale
-		if widthsInconsistent(pdfWidth, glyphWidth) {
-			faults.add(uint32(charCode), "font %s on page %d: char %d (%s) "+WidthMismatchContext+" (PDF=%.1f, glyph=%.1f)",
-				fontName, pageNum, int(firstChar)+i, glyphName, pdfWidth, glyphWidth)
+		if widthsInconsistent(declared, glyphWidth) {
+			faults.add(uint32(code), "font %s on page %d: char %d (%s) "+WidthMismatchContext+" (PDF=%.1f, glyph=%.1f)",
+				fontName, pageNum, code, glyphName, declared, glyphWidth)
 		}
 	}
 	// With no usage every declared code was judged, and naming each would
@@ -1063,6 +1080,61 @@ func checkType3FontWidths(ctx context.Context, doc *document.Document, fontDict 
 		return faults.first()
 	}
 	return faults.violations()
+}
+
+// type3MissingWidth returns the /MissingWidth of a Type 3 font's descriptor,
+// the width veraPDF takes for a code the /Widths array does not cover and for
+// a glyph whose procedure declares none, or 0 when the font has no descriptor
+// or the descriptor no numeric /MissingWidth (ISO 32000-1, 9.8.1, Table 122).
+func type3MissingWidth(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) float64 {
+	fd, err := document.ResolveDict(ctx, doc, fontDict["FontDescriptor"])
+	if err != nil || fd == nil {
+		return 0
+	}
+	mw, err := document.ResolveObject(ctx, doc, fd["MissingWidth"])
+	if err != nil {
+		return 0
+	}
+	if w, ok := document.Number(mw); ok {
+		return w
+	}
+	return 0
+}
+
+// type3ProcWidth returns the glyph width the procedure charProcs holds under
+// name declares, the wx operand of the d0 or d1 operator that must open it
+// (ISO 32000-1, 9.6.5, Table 113). declared is false when the font holds no
+// such procedure, when its stream does not decode or parse, or when it does not
+// open with d0 or d1 and a numeric wx: veraPDF reads a width only from those
+// leading tokens of the decoded stream (Type3CharProcParser) and takes the
+// /MissingWidth otherwise. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b
+// on a procedure whose /FlateDecode data is not a zlib stream: a /Widths entry
+// of 500 fails ISO 19005-1, 6.3.6 t1 and ISO 19005-2, 6.2.11.5 t1, and 0
+// passes.
+func type3ProcWidth(ctx context.Context, doc *document.Document, charProcs ast.PdfDict, name string) (width float64, declared bool) {
+	stream, err := document.ResolveStream(ctx, doc, charProcs[ast.PdfName(name)])
+	if err != nil {
+		return 0, false
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("compliance: cannot decode CharProc stream", "error", err)
+		return 0, false
+	}
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		doc.Logger.Debug("compliance: cannot parse CharProc stream", "error", err)
+		return 0, false
+	}
+	if len(ops) == 0 {
+		return 0, false
+	}
+	// d0: wx wy d0. d1: wx wy llx lly urx ury d1.
+	op := ops[0]
+	if (op.Operator != "d0" || len(op.Operands) != 2) && (op.Operator != "d1" || len(op.Operands) != 6) {
+		return 0, false
+	}
+	return document.Number(op.Operands[0])
 }
 
 // checkCIDFontWidths compares /W array against binary widths for CIDFonts.
@@ -1379,6 +1451,61 @@ func checkType2MissingGlyphWidths(ctx context.Context, doc *document.Document, c
 		declared := lookupCIDWidth(ctx, doc, cidFontDict, cid)
 		if widthsInconsistent(declared, expected) {
 			faults.add(uint32(cid), "font %s on page %d: CID %d names no glyph, "+WidthMismatchContext+" against glyph 0 (PDF=%.1f, font=%.1f)",
+				fontName, pageNum, cid, declared, expected)
+		}
+	}
+	return faults.violations()
+}
+
+// checkCFFMissingGlyphWidths applies the glyph-width rule to the used CIDs a
+// CID-keyed CFF program's charset does not hold, which [checkCIDFontWidths]
+// and [checkCIDDefaultWidths] leave out for want of an advance of their own.
+//
+// ISO 19005-2, 6.2.11.5 asks such a glyph's widths to agree as well, and
+// veraPDF weighs one: its CID-keyed CFF program finds no glyph index for a CID
+// its charset does not list and answers -1 (CFFCIDFontProgram.getWidth), which
+// the glyph takes as the CIDFont's default width, /DW or 1000 (GFGlyph,
+// PDCIDFont.getDefaultWidth), against the /W or /DW width the dictionary
+// declares (ISO 32000-1, 9.7.4.3). So such a CID fails only where /W states it
+// a width other than the default. Measured with veraPDF 1.30 at PDF/A-1b and
+// PDF/A-2b on CID 3 of a program whose charset holds CIDs 1 and 2: /DW 1000
+// with /W [3 [500]] or /W [3 5 500], /W [3 [0]] with no /DW, and /DW 500 with
+// /W [3 [1000]] fail ISO 19005-1, 6.3.6 t1 and ISO 19005-2, 6.2.11.5 t1; /W [3
+// [1000]] with no /DW, and /DW 1000 or /DW 500 with no /W, pass; shown only in
+// rendering mode 3 it passes.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100870.pdf: page 20 shows, in a rendering mode no
+//     earlier page used, a CID its Times-Roman CFF charset does not hold,
+//     which veraPDF fails the width rule for at PDF/A-1b, PDF/A-2b and
+//     PDF/A-2u and litho now does too, 1 of veraPDF's 2. The other is a CID
+//     whose charstring advances 333, as /W declares, which veraPDF reads as
+//     400.
+func checkCFFMissingGlyphWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, fontData []byte, fontName string, pageNum int, rule Rule, usedCIDs map[uint16]bool) []Violation {
+	if fontSubtype(ctx, doc, cidFontDict) != "CIDFontType0" {
+		return nil
+	}
+	charset := typography.ExtractValidCIDs(fontData)
+	if charset == nil {
+		return nil
+	}
+	expected := defaultCIDWidth(ctx, doc, cidFontDict)
+	faults := newGlyphFaults(rule)
+	for _, cid := range sortedCIDs(usedCIDs) {
+		// CID 0 is the .notdef glyph every charset holds, whose width
+		// [checkType0NotdefWidth] owns.
+		if cid == 0 || charset[cid] {
+			continue
+		}
+		declared := lookupCIDWidth(ctx, doc, cidFontDict, cid)
+		// Out-of-int32-range widths are crafted overflow input, not metrics;
+		// see checkSimpleFontWidths.
+		if declared < math.MinInt32 || declared > math.MaxInt32 {
+			continue
+		}
+		if widthsInconsistent(declared, expected) {
+			faults.add(uint32(cid), "font %s on page %d: CID %d is not in the font charset, "+WidthMismatchContext+" against the default width (PDF=%.1f, font=%.1f)",
 				fontName, pageNum, cid, declared, expected)
 		}
 	}

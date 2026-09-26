@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/models"
@@ -57,6 +58,52 @@ func TestFontBaseFontMustBeAName(t *testing.T) {
 				{models.PDFA2b, Rule_19005_2_6_2_11_2_t03},
 			} {
 				viols, err := ValidatePDFA(ctx, doc, p.profile)
+				if err != nil {
+					t.Fatalf("ValidatePDFA: %v", err)
+				}
+				if got := countRuleErrs(t, viols, p.rule); got != tc.want {
+					t.Errorf("%s %s t%d fired %d times, want %d",
+						p.profile, p.rule.Clause, p.rule.TestNumber, got, tc.want)
+				}
+			}
+		})
+	}
+}
+
+// TestType0BaseFontReadFromDescendant pins that a Type0 font answers the
+// /BaseFont rule with its descendant CIDFont's /BaseFont, as veraPDF reads it;
+// see [type0NameDict].
+//
+// The Type0 cases were measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b. A
+// descendant with no name stops veraPDF's validation with an exception, so the
+// last case pins litho's own answer.
+func TestType0BaseFontReadFromDescendant(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name              string
+		type0, descendant string
+		want              int
+	}{
+		{"both named", "/BaseFont /ABCDEF+Arial", "/BaseFont /ABCDEF+Arial", 0},
+		{"the Type0 font unnamed", "", "/BaseFont /ABCDEF+Arial", 0},
+		{"the Type0 font named by a string", "/BaseFont (ABCDEF+Arial)", "/BaseFont /ABCDEF+Arial", 0},
+		{"the descendant unnamed", "/BaseFont /ABCDEF+Arial", "", 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			font := subsetType0Font(t, "")
+			font[0] = strings.Replace(font[0], "/BaseFont /ABCDEF+Arial", tc.type0, 1)
+			font[1] = strings.Replace(font[1], "/BaseFont /ABCDEF+Arial", tc.descendant, 1)
+			doc, _ := objsDocPDF(t, glyphPagesObjs(font, glyphText("<0001> Tj"))...)
+			for _, p := range []struct {
+				profile models.PDFAProfile
+				rule    Rule
+			}{
+				{models.PDFA1b, Rule_19005_1_6_3_2_t03},
+				{models.PDFA2b, Rule_19005_2_6_2_11_2_t03},
+			} {
+				viols, err := ValidatePDFA(context.Background(), doc, p.profile)
 				if err != nil {
 					t.Fatalf("ValidatePDFA: %v", err)
 				}
