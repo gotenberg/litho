@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 	"slices"
 
@@ -275,6 +276,9 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 //
 // Each indirect field and /Kids array is visited once, which ends a cycle and
 // bounds the walk by the objects the file holds.
+//
+// The widgets on each page's /Annots count too (see [pageWidgetFieldNames]):
+// the /Fields tree does not reach every field a reader sees.
 func signatureFieldName(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fields ast.PdfArray) (string, error) {
 	taken := make(map[string]bool)
 	seen := make(map[int]bool)
@@ -319,10 +323,122 @@ func signatureFieldName(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		}
 	}
 
+	if err := pageWidgetFieldNames(ctx, alloc, doc, taken); err != nil {
+		return "", err
+	}
+
 	// At most len(taken) candidates are held, so the loop ends by then.
 	for i := 1; ; i++ {
 		if name := fmt.Sprintf("Signature%d", i); !taken[name] {
 			return name, nil
 		}
 	}
+}
+
+// pageWidgetFieldNames adds to taken the fully qualified name of the field of
+// every widget annotation on a page, pages and annotations read as alloc
+// stages them.
+//
+// ISO 32000-1, 12.7.2 has the form's /Fields reach every field, but a widget a
+// producer left out of it is still a field to the readers that build the form
+// from each page's annotations: pdf.js names a widget's field from the widget
+// and its /Parent chain, whatever /Fields holds, and qpdf reports such a widget
+// and keeps it. A signature named after it would share its name there, and two
+// fields sharing a fully qualified name are one field (12.7.3.2).
+//
+// A widget's name joins the partial names of it and its ancestors, reached
+// through /Parent. Each field's name is worked out once and kept, and a chain
+// that comes back to a field it passed ends there, so the walk is bounded by
+// the objects the file holds.
+//
+// # Corpus evidence
+//
+//   - All corpora: 6 files carry a widget the /Fields tree does not reach, and
+//     one of them names its field Signature2 (verapdf
+//     PDF_A-2b__veraPDF_test_suite_6-1-12-t01-pass-a.pdf), with Signature1
+//     free, so no file reaches the collision: over 114 files sampled, the
+//     six included, signing picks the same name as before.
+func pageWidgetFieldNames(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, taken map[string]bool) error {
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		// A document whose pages cannot be read has no page widgets to name;
+		// the /Fields walk already named what the form holds.
+		doc.Logger.Debug("naming the signature field: resolving the catalog failed", slog.Any("err", err))
+		return nil
+	}
+	readerPages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil {
+		doc.Logger.Debug("naming the signature field: resolving the pages failed", slog.Any("err", err))
+		return nil
+	}
+
+	// names holds the fully qualified name of every field worked out so far,
+	// by object number.
+	names := make(map[int]string)
+	fieldName := func(widget ast.PdfObject) string {
+		// Climb from the widget to its root field, or to the first ancestor
+		// already named, then name each field on the way back down.
+		var chain []ast.PdfDict
+		var nums []int
+		seen := make(map[int]bool)
+		name := ""
+		for cur := widget; cur != nil; {
+			ref, isRef := cur.(ast.PdfIndirectRef)
+			if isRef {
+				if known, done := names[ref.ObjectNum]; done {
+					name = known
+					break
+				}
+				if seen[ref.ObjectNum] {
+					break
+				}
+				seen[ref.ObjectNum] = true
+			}
+			field, err := resolveDictAllocFirst(ctx, alloc, doc, cur)
+			if err != nil || field == nil {
+				break
+			}
+			chain = append(chain, field)
+			nums = append(nums, ref.ObjectNum)
+			cur = field["Parent"]
+		}
+		for i := len(chain) - 1; i >= 0; i-- {
+			if t, hasT := chain[i]["T"]; hasT {
+				if s, err := document.ResolveString(ctx, doc, t); err == nil && s != "" {
+					if partial := document.DecodePdfString(s); name == "" {
+						name = partial
+					} else {
+						name += "." + partial
+					}
+				}
+			}
+			if nums[i] > 0 {
+				names[nums[i]] = name
+			}
+		}
+		return name
+	}
+
+	for _, page := range StagedPages(ctx, alloc, doc, readerPages) {
+		if err := ctx.Err(); err != nil {
+			return fmt.Errorf("naming the signature field: %w", err)
+		}
+		annots, err := resolveArrayAllocFirst(ctx, alloc, doc, latestPageDict(alloc, page)["Annots"])
+		if err != nil {
+			continue
+		}
+		for _, annotObj := range annots {
+			annot, err := resolveDictAllocFirst(ctx, alloc, doc, annotObj)
+			if err != nil || annot == nil {
+				continue
+			}
+			if subtype, _ := annot["Subtype"].(ast.PdfName); subtype != "Widget" {
+				continue
+			}
+			if name := fieldName(annotObj); name != "" {
+				taken[name] = true
+			}
+		}
+	}
+	return nil
 }

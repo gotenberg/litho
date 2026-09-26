@@ -291,6 +291,31 @@ func TestWriterSignNamesItsFieldApart(t *testing.T) {
 			fields: 2,
 		},
 		{
+			// A widget the form's /Fields does not reach is still a field
+			// to the readers that build the form from each page's /Annots.
+			name: "a widget only on a page's annotations",
+			objs: []string{
+				"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Annots [5 0 R 6 0 R] >>",
+				"<< /Fields [] >>",
+				"<< /Type /Annot /Subtype /Widget /FT /Sig /T (Signature1) /Rect [0 0 0 0] /P 3 0 R >>",
+				"<< /Type /Annot /Subtype /Widget /Parent 7 0 R /Rect [0 0 10 10] /P 3 0 R >>",
+				"<< /FT /Tx /T (Signature2) /Kids [6 0 R] >>",
+			},
+			want: "Signature3",
+		},
+		{
+			name: "a widget on a page of a document with no form",
+			objs: []string{
+				"<< /Type /Catalog /Pages 2 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Annots [4 0 R] >>",
+				"<< /Type /Annot /Subtype /Widget /FT /Tx /T (Signature1) /Rect [0 0 10 10] /P 3 0 R >>",
+			},
+			want: "Signature2",
+		},
+		{
 			// The walk must end on a cycle rather than follow it.
 			name: "a parent with no name among its own kids",
 			objs: []string{
