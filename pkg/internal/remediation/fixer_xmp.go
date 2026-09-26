@@ -246,6 +246,21 @@ func gatherInfoMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	return info
 }
 
+// liveMetadataStream resolves a catalog /Metadata value to its stream as earlier
+// stages staged it: the one alloc queues at its object number, else the
+// document's. A stream is always an indirect object (ISO 32000-1, 7.3.8), so a
+// direct value is read from the document only.
+func liveMetadataStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, metaObj ast.PdfObject) (ast.PdfStream, bool) {
+	if ref, isRef := metaObj.(ast.PdfIndirectRef); isRef {
+		return liveStream(ctx, alloc, doc, ref)
+	}
+	stream, err := document.ResolveStream(ctx, doc, metaObj)
+	if err != nil {
+		return ast.PdfStream{}, false
+	}
+	return stream, true
+}
+
 // liveInfoDict resolves the trailer /Info dict, preferring an in-flight
 // patched version from alloc so earlier fixers (e.g. info-date) see their
 // changes flow into the XMP sync. Returns nil when absent or unreadable.
@@ -1742,7 +1757,17 @@ func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []strin
 // would add a claim the file never made, and /Info alone is complete without it.
 //
 // The /Info values are read live, so this must run after the mutation that
-// updates them; [writer.ObjAllocator] pending objects are consulted first.
+// updates them; [writer.ObjAllocator] pending objects are consulted first. So
+// is the packet: a remediation queues the one it writes at a new object number,
+// which the document does not define, and resolving the packet against the
+// document alone found nothing there and left the queued packet asserting the
+// old values.
+//
+// # Corpus evidence
+//
+//   - All corpora: of 115 files remediated at PDF/A-2b and then given a new
+//     title and author in the same Writer, 106 kept the old values in the
+//     remediation's XMP packet, where editing the remediated file moved them.
 func SyncXMPWithDocInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -1760,8 +1785,8 @@ func SyncXMPWithDocInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	if !hasMeta {
 		return nil, nil
 	}
-	stream, err := document.ResolveStream(ctx, doc, metaObj)
-	if err != nil {
+	stream, ok := liveMetadataStream(ctx, alloc, doc, metaObj)
+	if !ok {
 		return nil, nil
 	}
 	data, err := doc.DecodeStream(ctx, stream)
