@@ -145,6 +145,7 @@ one deliberately rather than diffing it against a fresh build.
 | `xmpempty_1b.pdf`      | PDF/A-1b     | Empty XMP containers and control bytes against `/Info`           |
 | `extvalue_2b.pdf`      | PDF/A-2b     | Extension property values against their declared types           |
 | `afref_3b.pdf`         | PDF/A-3b     | File specifications something refers to but no `/AF` lists       |
+| `langpua_ua2.pdf`      | PDF/UA-2     | Private Use Area characters in structure and content `/Lang`     |
 
 ### Must-not-fire controls
 
@@ -337,6 +338,7 @@ violation but is exempt, so a firing is a false positive.
 | `usecmap_2u`                              | `T2`: a `/UseCMap /Adobe-Korea1-UCS2` base mapping all four codes      | ISO 19005-2, 6.2.11.7.2 t1   |
 | `afref_3b`                                | `FA3`: a FileAttachment `/FS` the catalog `/AF` also lists             | ISO 19005-3, 6.8 t4          |
 | `afref_3b`                                | A `/Names /JavaScript` tree written as an empty dictionary             | ISO 32000-1, 7.7.4           |
+| `langpua_ua2`                             | An annotation's own `/Lang` carrying a Private Use Area character      | no CosLang reads it          |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -402,6 +404,7 @@ which are covered under [Known divergences](#known-divergences).
 | `imgxmp_4.pdf`         | 10   | 8    | 15   | 13   | 13   | 15   | 13   | 13   | 8   | 9    | 10   | 7    | 6    |
 | `inlineimage_2b.pdf`   | 7    | 4    | 10   | 6    | 7    | 10   | 6    | 7    | 6   | 6    | 7    | 10   | 10   |
 | `jpx_2b.pdf`           | 4    | 2    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 5    | 6    |
+| `langpua_ua2.pdf`      | 7    | 5    | 8    | 7    | 7    | 8    | 7    | 7    | 4   | 4    | 5    | 4    | 3    |
 | `limits_1b.pdf`        | 12   | 9    | 9    | 6    | 7    | 9    | 6    | 7    | 4   | 4    | 5    | 11   | 9    |
 | `limits_2b.pdf`        | 10   | 8    | 12   | 10   | 10   | 12   | 10   | 10   | 6   | 6    | 7    | 10   | 8    |
 | `linearized_1b.pdf`    | 6    | 4    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
@@ -2292,9 +2295,50 @@ rule. Only the instance counts separated them.
 Where the third character goes was measured rather than read off the clause.
 `CosTextString` sounds like any string, but a document information `/Title` and
 an annotation `/Contents` were both silent; an outline item's `/Title` reaches
-it. Each defect sits beside a twin carrying the same words without the PUA
-character, so a check condemning every `/ActualText`, `/Alt` or title fires on
-the control.
+it, and so does every `/Lang` veraPDF reads as a CosLang, which
+`langpua_ua2.pdf` covers. Each defect sits beside a twin carrying the same words
+without the PUA character, so a check condemning every `/ActualText`, `/Alt` or
+title fires on the control.
+
+## Private Use Area characters in language entries
+
+`langpua_ua2.pdf` covers the rest of ISO 14289-2, 8.6 t1. veraPDF's
+`CosTextString` has one subtype, `CosLang`, built for the catalog `/Lang`, a
+structure element's `/Lang`, the `/Lang` of the element an annotation or a form
+field names by `/StructParent`, and the `/Lang` of a marked-content property
+list. The verapdf corpus reaches the catalog position (`PDF_UA-2__8.6-t01-fail-a`)
+and `puatext_ua2.pdf` the outline title; this file carries the two a document
+states most often.
+
+| Construct                      | Rule    |
+| ------------------------------ | ------- |
+| `/Lang` on a structure element | `8.6/1` |
+| `/Lang` on a BDC property list | `8.6/1` |
+
+A Private Use Area character is no letter, so each defect also breaks the
+Language-Tag grammar: ISO 14289-2 `8.4.4/2`, ISO 14289-1 `7.2/29`, `6.8.4/1`
+at PDF/A-1a and `6.7.4/1` at PDF/A-2a and 3a. Each sits beside a twin whose `/Lang` is a plain
+tag, and the control is an annotation whose own `/Lang` carries the same
+character: veraPDF reads an annotation's language from the element its
+`/StructParent` names (GFPDAnnot.getLang), never from the annotation, so
+neither rule may fire on it.
+
+The rule sets equal veraPDF 1.30.2's in all thirteen cells and at both WTPDF
+levels, and so do the counts of the rules the defects reach:
+
+| Profile  | Rule      | litho | veraPDF 1.30.2 | litho before |
+| -------- | --------- | ----- | -------------- | ------------ |
+| PDF/UA-2 | `8.6/1`   | 2     | 2              | 0            |
+| PDF/UA-2 | `8.4.4/2` | 2     | 2              | 2            |
+| PDF/UA-1 | `7.2/29`  | 2     | 2              | 2            |
+| PDF/A-1a | `6.8.4/1` | 2     | 2              | 2            |
+| PDF/A-2a | `6.7.4/1` | 2     | 2              | 2            |
+| PDF/A-3a | `6.7.4/1` | 2     | 2              | 2            |
+
+The gate compares rule sets, so it sees the two positions as one `8.6/1`: a
+change that loses one of them and keeps the other passes it. The unit test
+`TestTextStringPUA` pins each position on its own, the enclosing element of an
+annotation outside the tree among them.
 
 ## Formulas, notes, shared XObjects and media clips
 
