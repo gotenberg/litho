@@ -235,11 +235,23 @@ func (w *drawnStreamWalk) walkPage(ctx context.Context, p *pageCtx, pageNum int)
 // uncoloured pattern the stream builds turns off for all of them (see
 // [colorLinkWalk.cellEntry]).
 //
+// built names the patterns an scn or SCN selects while the stream processes
+// its colour operators, the only ones veraPDF builds and so the only cells it
+// reaches: an scn past a d1, or in a stream that began with its colour
+// operators off, selects nothing (ISO 32000-1, 9.6.5, Table 113, and 8.7.3.3).
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b: an integer past the
+// limit given to w in the cell of a pattern an scn selects past a d1, in an
+// uncoloured cell or in a form such a cell paints, fails nothing, and one in
+// the cell of a pattern an scn selects past the Q closing a d1 fails ISO
+// 19005-1, 6.1.12 t1 and ISO 19005-2, 6.1.13 t1.
+//
 // # Corpus evidence
 //
 //   - All corpora: carrying the colour state into the streams a stream draws
 //     moves no implementation limit count at PDF/A-1b and PDF/A-2b, veraPDF
 //     files at their own profile.
+//   - All corpora: reaching only the cells of the patterns in built moves no
+//     count at PDF/A-1b or PDF/A-2b.
 type drawnScan struct {
 	ops []content.Operation
 	// scope resolves the names its operators use.
@@ -248,6 +260,7 @@ type drawnScan struct {
 	selected            *usedResources
 	doEntries           map[string]inheritedCS
 	formsOff, fontsOff  map[string]bool
+	built               map[string]bool
 	cellsOff, colourOff bool
 }
 
@@ -261,23 +274,34 @@ func (w *drawnStreamWalk) scan(ctx context.Context, ops []content.Operation, sco
 	}
 	_, painted, _, selected, doEntries := scanContentStreamDeviceCSFrom(ctx, ops, collectPatternCSNames(ctx, w.doc, scope), entry)
 	s := drawnScan{ops: ops, scope: scope, painted: painted, selected: selected, doEntries: doEntries, colourOff: colourOff}
-	w.scanColourStates(ctx, &s)
+	w.scanColourStates(ctx, &s, entry)
 	return s
 }
 
-// scanColourStates fills the colour states of s (see [drawnScan]).
-func (w *drawnStreamWalk) scanColourStates(ctx context.Context, s *drawnScan) {
+// scanColourStates fills the colour states of s (see [drawnScan]), which
+// starts from the colour-space selection entry.
+func (w *drawnStreamWalk) scanColourStates(ctx context.Context, s *drawnScan, entry inheritedCS) {
 	s.formsOff = make(map[string]bool)
 	s.fontsOff = make(map[string]bool)
+	s.built = make(map[string]bool)
 	s.cellsOff = s.colourOff
 	colorSpaces, _ := document.ResolveDict(ctx, w.doc, s.scope["ColorSpace"]) // Best-effort: unreadable colour spaces select no Pattern space.
 	patterns, _ := document.ResolveDict(ctx, w.doc, s.scope["Pattern"])       // Best-effort: unreadable patterns are none.
 	// Only whether a space is a Pattern space and which pattern scn selects
-	// matter here, so every other space is DeviceGray.
+	// matter here, so every other space is DeviceGray. A form starts in the
+	// Pattern space its Do left selected (ISO 32000-1, 8.10.2), so a bare scn
+	// in it selects a pattern.
 	other := csRef{family: "DeviceGray"}
-	walkColorSpaceLinksWith(ctx, s.ops, csPaintState{colourOff: s.colourOff}, csLinkHooks{
+	start := csPaintState{colourOff: s.colourOff}
+	if entry.fillPattern {
+		start.fill = csRef{family: "Pattern", isPattern: true}
+	}
+	if entry.strokePattern {
+		start.stroke = csRef{family: "Pattern", isPattern: true}
+	}
+	walkColorSpaceLinksWith(ctx, s.ops, start, csLinkHooks{
 		resolve: func(name string) csRef {
-			if obj, ok := colorSpaces[ast.PdfName(name)]; ok && resolveCSName(ctx, w.doc, obj) == "Pattern" || name == "Pattern" {
+			if obj, ok := colorSpaces[ast.PdfName(name)]; ok && resolveCSName(ctx, w.doc, resolveColorSpaceName(ctx, w.doc, obj, colorSpaces)) == "Pattern" || name == "Pattern" {
 				return csRef{name: name, isPattern: true}
 			}
 			return other
@@ -286,6 +310,7 @@ func (w *drawnStreamWalk) scanColourStates(ctx context.Context, s *drawnScan) {
 			if name == "" {
 				return other
 			}
+			s.built[name] = true
 			return csRef{pattern: name, isPattern: true}
 		},
 		construct: func(ref csRef, _ csPaintState) {
@@ -345,7 +370,7 @@ func (w *drawnStreamWalk) descend(ctx context.Context, s drawnScan, pageRes ast.
 	patterns, _ := document.ResolveDict(ctx, w.doc, scope["Pattern"])
 	for _, name := range slices.Sorted(maps.Keys(s.patterns())) {
 		obj, ok := patterns[ast.PdfName(name)]
-		if !ok || w.judgedAlready(obj) {
+		if !ok || !s.built[name] || w.judgedAlready(obj) {
 			continue
 		}
 		// A shading pattern is a dictionary with no content of its own.

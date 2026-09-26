@@ -117,10 +117,9 @@ func TestICCBasedNestedColorSpaceNeedsSelecting(t *testing.T) {
 // TestICCBasedNestedEmptyContentEmploysNothing pins that a scope whose content
 // stream parses to no operators employs none of its colour spaces.
 //
-// This is the boundary of [nestedScopeUsage]: a stream that will not decode or
-// parse yields no survey at all and leaves the scope judged in full, while one
-// that parses to zero operators yields an empty survey and paints nothing.
-// veraPDF 1.30.2 reports nothing for the latter.
+// A form whose stream parses to zero operators makes no link to the colour
+// spaces its resources declare, so none of them is judged (see
+// [colorLinkWalk]). veraPDF 1.30.2 reports nothing for it.
 func TestICCBasedNestedEmptyContentEmploysNothing(t *testing.T) {
 	t.Parallel()
 

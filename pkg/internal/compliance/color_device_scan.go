@@ -8,50 +8,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// collectReferencedCSNames returns the set of /Resources/ColorSpace keys that
-// are actually referenced from a content scope: names selected by cs/CS
-// (contentCSNames), plus names used directly as the /ColorSpace of a painted
-// (Do-referenced) image or a shading. A colour space named this way resolves
-// against the resource ColorSpace dictionary, so its key must be treated as
-// used even when no cs/CS operator selects it.
-func collectReferencedCSNames(ctx context.Context, doc *document.Document, resources ast.PdfDict, referencedXObjects, contentCSNames map[string]bool) map[string]bool {
-	used := make(map[string]bool, len(contentCSNames))
-	for n := range contentCSNames {
-		used[n] = true
-	}
-
-	// Images invoked by Do whose /ColorSpace is a bare name reference.
-	if xobjDict, _ := document.ResolveDict(ctx, doc, resources["XObject"]); xobjDict != nil {
-		for name, obj := range xobjDict {
-			if referencedXObjects != nil && !referencedXObjects[string(name)] {
-				continue
-			}
-			stream, err := document.ResolveStream(ctx, doc, obj)
-			if err != nil {
-				continue
-			}
-			if n, err := document.ResolveName(ctx, doc, stream.Dict["ColorSpace"]); err == nil && n != "" {
-				used[string(n)] = true
-			}
-		}
-	}
-
-	// Shadings whose /ColorSpace is a bare name reference.
-	if shDict, _ := document.ResolveDict(ctx, doc, resources["Shading"]); shDict != nil {
-		for _, sh := range shDict {
-			sd := resolveShadingDict(ctx, doc, sh)
-			if sd == nil {
-				continue
-			}
-			if n, err := document.ResolveName(ctx, doc, sd["ColorSpace"]); err == nil && n != "" {
-				used[string(n)] = true
-			}
-		}
-	}
-
-	return used
-}
-
 // formGroupICCColorSpace returns the ICC colour space signature of a Form
 // XObject's /Group/CS, or "" if absent or not device-independent.
 func formGroupICCColorSpace(ctx context.Context, doc *document.Document, stream ast.PdfStream) string {

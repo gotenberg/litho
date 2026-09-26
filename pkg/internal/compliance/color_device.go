@@ -24,8 +24,8 @@ func deviceGrayRule(part int) Rule {
 // defaultCS holds the Default colour spaces one resource dictionary sets
 // under /ColorSpace, which replace the device families DefaultRGB, DefaultCMYK
 // and DefaultGray name (ISO 32000-1, 8.6.5.6), and colorSpaces, the
-// dictionary holding them, against which a name a Default space gives
-// resolves.
+// dictionary holding them, against which a name any colour space read from
+// the same resources holds resolves (see [colorLinkWalk.judgeFamilyName]).
 //
 // inDefault marks the spaces a Default colour space holds, where veraPDF
 // replaces no device family again: a family name the Default gives, one an
@@ -159,8 +159,8 @@ func deviceFamilyIndex(family string) int {
 //
 // A page whose content stream an earlier page shares uses no colour through
 // it, since veraPDF judges that stream on the first page alone, with what it
-// draws (see [markJudgedContents]); the Separation and DeviceN walk, the
-// ICCBased walk and the colour-space link index skip it the same way.
+// draws (see [markJudgedContents]); the Separation and DeviceN walks and the
+// ICCBased walk skip it the same way.
 // Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b: two pages sharing one
 // stream fail the device colour tests, the DeviceN colourant limit, the
 // ICCBased profile test and ISO 19005-2, 6.2.4.4 t1 and t2 as often as one of
@@ -513,7 +513,8 @@ func defaultSpaceReadable(ctx context.Context, doc *document.Document, obj ast.P
 // A pattern space is written [/Pattern] or [/Pattern base] (ISO 32000-1
 // §8.7.3.3) and is normally reached through a resource name rather than the
 // literal /Pattern. Recognising only the literal spelling left every such
-// pattern looking unpainted.
+// pattern looking unpainted. An entry naming another entry reads as that
+// entry (see [resolveColorSpaceName]).
 //
 // # Corpus evidence
 //
@@ -528,7 +529,7 @@ func collectPatternCSNames(ctx context.Context, doc *document.Document, resource
 
 	var names map[string]bool
 	for name, csObj := range csDict {
-		if resolveCSName(ctx, doc, csObj) != "Pattern" {
+		if resolveCSName(ctx, doc, resolveColorSpaceName(ctx, doc, csObj, csDict)) != "Pattern" {
 			continue
 		}
 		if names == nil {

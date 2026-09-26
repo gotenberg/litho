@@ -112,7 +112,7 @@ func TestDeviceColorCountsEachLink(t *testing.T) {
 // TestDeviceNColorantsCountEachLink pins that ISO 19005-2, 6.2.4.4 t1 fails
 // once per link veraPDF makes to a DeviceN naming a spot colourant its
 // attributes do not list, however many it misses (see
-// [checkDeviceNColorantLinks]). Every count was measured with veraPDF 1.30 at
+// [checkDeviceNLinks]). Every count was measured with veraPDF 1.30 at
 // PDF/A-2b on the same fixture.
 func TestDeviceNColorantsCountEachLink(t *testing.T) {
 	t.Parallel()

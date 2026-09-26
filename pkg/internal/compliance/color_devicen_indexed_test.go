@@ -96,8 +96,9 @@ func TestDeviceNColorants_IndexedBase(t *testing.T) {
 		t.Parallel()
 		// ISO 32000-1, 8.6.6.3 forbids an /Indexed base from being another
 		// /Indexed space, so this is malformed input rather than a real shape.
-		// It is here because indexedBaseArray follows the chain and must stay
-		// bounded: the assertion is that litho neither hangs nor misses it.
+		// It is here because the colour link walk follows the chain and must
+		// stay bounded (see [maxColorSpaceNesting]): the assertion is that
+		// litho neither hangs nor misses it.
 		nested := "[/Indexed " + indexedOver(undeclared, 3) + " 0 <00>]"
 		if !firesRule2b(t, deviceNResourcePDF(nested), "6.2.4.4", 1) {
 			t.Error("a DeviceN under nested /Indexed spaces must still be judged")

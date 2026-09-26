@@ -18,6 +18,21 @@ import (
 // of direct arrays stops.
 const maxColorSpaceNesting = 8
 
+// maxColorSpaceNameLinks bounds how many /ColorSpace entry names one link's
+// walk of a colour space follows (see [colorLinkWalk.judgeFamilyName]). Two
+// names can reach one entry, so a DeviceN whose /Colorants name one entry
+// many times, over entries that do the same, fans out as the power of its
+// nesting. Anti-DoS guard, not spec-mandated: a conformant space names at most
+// one base, alternate or process space per level and one Separation per
+// colourant, which ISO 19005-2, 6.1.13 caps at 32, so 256 leaves every such
+// space whole.
+//
+// # Corpus evidence
+//
+//   - All corpora: no colour space holds the name of a /ColorSpace entry, so
+//     the bound is never reached.
+const maxColorSpaceNameLinks = 256
+
 // colorNode is one colour space veraPDF's model reaches through a link (see
 // [colorLinkWalk]): a device family, or an ICCBased, Separation or DeviceN
 // array, which kind names. page is the index of the page whose walk reached
@@ -30,17 +45,20 @@ const maxColorSpaceNesting = 8
 // family is the blending space of the page's transparency group. direct
 // records that an ICCBased array is written directly rather than as an
 // indirect object, and mode is the overprint mode the link reached it under
-// (see [overprintMode]).
+// (see [overprintMode]). colorSpaces is the /ColorSpace dictionary a name a
+// Separation or DeviceN array holds resolves against (see
+// [colorLinkWalk.judgeFamilyName]).
 type colorNode struct {
-	page    int
-	in      *linkStream
-	family  string
-	covered bool
-	group   bool
-	kind    string
-	arr     ast.PdfArray
-	direct  bool
-	mode    overprintMode
+	page        int
+	in          *linkStream
+	family      string
+	covered     bool
+	group       bool
+	kind        string
+	arr         ast.PdfArray
+	direct      bool
+	mode        overprintMode
+	colorSpaces ast.PdfDict
 }
 
 // linkStream is one content stream [colorLinkWalk] walks: a page's content,
@@ -200,9 +218,13 @@ func deviceFamily(name string) string {
 //
 // Which Default colour space replaces a device family (ISO 32000-1, 8.6.5.6),
 // measured the same way: the Default of the stream's own resources for a
-// family its operator selects, an image or a shading sh paints or an inline
-// image names; the Default of the resources defining a /Resources/ColorSpace
-// entry for a family the entry holds, however deep; the root content stream's
+// family its operator selects, or an image or an inline image names; the
+// Default of the resources defining a /Resources/ColorSpace entry for a
+// family the entry holds, however deep, and so of the resources defining an
+// image for a family inside the colour space it writes out; the Default of
+// the resources defining a shading sh paints, the stream's own when they
+// define it, which veraPDF reads the shading's colour space from
+// (veraPDF-validation 1.30, PDShading); the root content stream's
 // DefaultGray for the initial DeviceGray, the page's for a form or a tiling
 // pattern cell and an appearance stream's own for itself; the font's own for
 // a Type 3 glyph; and none for the shading of a shading pattern.
@@ -231,6 +253,14 @@ func deviceFamily(name string) string {
 //
 // A Default veraPDF cannot read leaves what reaches it its own fallback (see
 // [linkStream.deviceRef] and [colorLinkWalk.replaceDevice]).
+//
+// A name a colour space holds as an /Indexed base, an alternate, a colourant
+// or a process space, when it names no family, reads as the /ColorSpace entry
+// of the one resource dictionary the space was read from (see
+// [colorLinkWalk.judgeFamilyName]): the one defining the entry an operator
+// selects, the one whose /XObject or /Shading defines the image or the shading
+// it names, the stream's own for an inline image and a transparency group,
+// and none for the shading of a shading pattern.
 //
 // Every tiling cell one content stream paints begins in one graphics state,
 // which each uncoloured pattern the stream paints turns the colour operators
@@ -311,8 +341,16 @@ type colorLinkWalk struct {
 	// a DeviceN's /Colorants, before any of them is judged, and, through pre,
 	// those the operators of a page's content and annotations select, with
 	// the forms and tiling patterns they paint, before any link of the page
-	// is judged.
-	declare func(ast.PdfArray)
+	// is judged. It also gets the /ColorSpace dictionary a name the array
+	// holds resolves against.
+	declare func(ast.PdfArray, ast.PdfDict)
+	// naming holds the /ColorSpace entry names the current link's walk of a
+	// colour space is resolving, so a name that reaches itself again is a
+	// cycle, and nameLinks counts the names that walk resolved, which
+	// [maxColorSpaceNameLinks] bounds. A link's walk begins at nesting 0,
+	// before it resolves any name, and nameLinks restarts there.
+	naming    map[string]bool
+	nameLinks int
 	// pre is the walk that declares, for each page, the Separations every
 	// operator of the page's content, of its annotations' appearance streams
 	// and of the streams they paint selects by name. declareOps marks that
@@ -341,11 +379,11 @@ func walkColorLinks(ctx context.Context, doc *document.Document, pages []pageCtx
 // or by an annotation's appearance stream, every link fails; with the second
 // the base of an /Indexed space the page selects after the first, or on a
 // later page, only the three links to it do.
-func walkColorLinksDeclaring(ctx context.Context, doc *document.Document, pages []pageCtx, part int, visit func(colorNode), declare func(ast.PdfArray)) {
+func walkColorLinksDeclaring(ctx context.Context, doc *document.Document, pages []pageCtx, part int, visit func(colorNode), declare func(ast.PdfArray, ast.PdfDict)) {
 	newWalk := func(visit func(colorNode)) *colorLinkWalk {
-		w := &colorLinkWalk{doc: doc, part: part, visit: visit, declare: declare, judged: make(map[int]bool), judgedCMYK: make(map[cmykLink]bool), streams: make(map[string]*linkStream)}
+		w := &colorLinkWalk{doc: doc, part: part, visit: visit, declare: declare, judged: make(map[int]bool), judgedCMYK: make(map[cmykLink]bool), streams: make(map[string]*linkStream), naming: make(map[string]bool)}
 		// A stream that is some page's content is judged as that page's
-		// content, never as a form a Do paints (see [colorSpaceLinkIndex]).
+		// content, never as a form a Do paints (see [drawnStreamWalk]).
 		for i := range pages {
 			if ref, ok := pages[i].dict["Contents"].(ast.PdfIndirectRef); ok {
 				w.judged[ref.ObjectNum] = true
@@ -544,10 +582,12 @@ func (w *colorLinkWalk) judgeGroup(ctx context.Context, dict ast.PdfDict, s *lin
 		return
 	}
 	if name, err := document.ResolveName(ctx, w.doc, csObj); err == nil {
-		if family := deviceFamily(string(name)); family == string(name) && !w.replaceDevice(ctx, family, s.defaults, s, false, 0, overprintMode{}, nil) {
-			w.visit(colorNode{page: w.page, in: s, family: family, covered: s.blends(family), group: onPage})
+		if family := deviceFamily(string(name)); family == string(name) {
+			if !w.replaceDevice(ctx, family, s.defaults, s, false, 0, overprintMode{}, nil) {
+				w.visit(colorNode{page: w.page, in: s, family: family, covered: s.blends(family), group: onPage})
+			}
+			return
 		}
-		return
 	}
 	w.judgeSpace(ctx, csObj, s, s.defaults, false, 0)
 }
@@ -580,13 +620,16 @@ func (w *colorLinkWalk) walkStream(ctx context.Context, ops []content.Operation,
 		w.judgeRef(ctx, ref, s, depth, mode)
 	}
 	hooks.paint = func(name string, st csPaintState) {
-		if obj, _ := s.lookup(func(c *linkStream) ast.PdfDict { return c.xobjects }, name); obj != nil {
-			w.paintXObject(ctx, obj, st, s, depth)
+		if obj, def := s.lookup(func(c *linkStream) ast.PdfDict { return c.xobjects }, name); obj != nil {
+			w.paintXObject(ctx, obj, st, s, def, depth)
 		}
 	}
 	hooks.shade = func(name string) {
-		if obj, _ := s.lookup(func(c *linkStream) ast.PdfDict { return c.shadings }, name); obj != nil {
-			w.judgeShading(ctx, obj, s, true)
+		// The resources defining the shading are the ones its colour space
+		// reads a name against, and whose Default colour spaces replace a
+		// family it names (see [colorLinkWalk.judgeFamilyName]).
+		if obj, def := s.lookup(func(c *linkStream) ast.PdfDict { return c.shadings }, name); obj != nil {
+			w.judgeShading(ctx, obj, s, def.defaults)
 		}
 	}
 	hooks.show = func(st csPaintState) {
@@ -617,7 +660,7 @@ func (w *colorLinkWalk) spaceHooks(ctx context.Context, s *linkStream) csLinkHoo
 	return csLinkHooks{
 		resolve: func(name string) csRef {
 			if obj, def := s.lookup(colorSpaces, name); def != nil {
-				return csRef{scope: def.id, name: name, isPattern: resolveCSName(ctx, w.doc, obj) == "Pattern"}
+				return csRef{scope: def.id, name: name, isPattern: resolveCSName(ctx, w.doc, resolveColorSpaceName(ctx, w.doc, obj, def.colorSpaces)) == "Pattern"}
 			}
 			if family := deviceFamily(name); family != "" {
 				return s.deviceRef(family, true)
@@ -645,7 +688,7 @@ func (w *colorLinkWalk) spaceHooks(ctx context.Context, s *linkStream) csLinkHoo
 			if def == nil || space.name == "" {
 				return csRef{}
 			}
-			if arr, err := document.ResolveArray(ctx, w.doc, def.colorSpaces[ast.PdfName(space.name)]); err == nil && len(arr) >= 2 {
+			if arr, err := document.ResolveArray(ctx, w.doc, resolveColorSpaceName(ctx, w.doc, def.colorSpaces[ast.PdfName(space.name)], def.colorSpaces)); err == nil && len(arr) >= 2 {
 				return csRef{scope: space.scope, name: space.name, under: true}
 			}
 			return csRef{}
@@ -741,20 +784,22 @@ func (w *colorLinkWalk) declareSeparations(ctx context.Context, ops []content.Op
 		},
 		link: func(ref csRef, _ int, _ string, _ overprintMode) {
 			if def := w.streams[ref.scope]; def != nil && ref.name != "" {
-				w.declareSeparation(ctx, def.colorSpaces[ast.PdfName(ref.name)])
+				w.declareSeparation(ctx, def.colorSpaces[ast.PdfName(ref.name)], def.colorSpaces)
 			}
 		},
 	})
 }
 
-// declareSeparation declares obj when it is a Separation array.
-func (w *colorLinkWalk) declareSeparation(ctx context.Context, obj ast.PdfObject) {
-	arr, err := document.ResolveArray(ctx, w.doc, obj)
+// declareSeparation declares obj when it is a Separation array, or a name of
+// the /ColorSpace dictionary colorSpaces that reads as one (see
+// [resolveColorSpaceName]).
+func (w *colorLinkWalk) declareSeparation(ctx context.Context, obj ast.PdfObject, colorSpaces ast.PdfDict) {
+	arr, err := document.ResolveArray(ctx, w.doc, resolveColorSpaceName(ctx, w.doc, obj, colorSpaces))
 	if err != nil || len(arr) == 0 {
 		return
 	}
 	if kind, _ := document.ResolveName(ctx, w.doc, arr[0]); kind == "Separation" { // Best-effort: an unreadable family is no Separation.
-		w.declare(arr)
+		w.declare(arr, colorSpaces)
 	}
 }
 
@@ -773,7 +818,7 @@ func (w *colorLinkWalk) judgeRef(ctx context.Context, ref csRef, s *linkStream, 
 		// and the Default colour spaces of the resources defining it replace
 		// a device family it names (ISO 32000-1, 8.6.5.6).
 		if def := w.streams[ref.scope]; def != nil {
-			if arr, err := document.ResolveArray(ctx, w.doc, def.colorSpaces[ast.PdfName(ref.name)]); err == nil && len(arr) >= 2 {
+			if arr, err := document.ResolveArray(ctx, w.doc, resolveColorSpaceName(ctx, w.doc, def.colorSpaces[ast.PdfName(ref.name)], def.colorSpaces)); err == nil && len(arr) >= 2 {
 				w.judgeSpaceUnder(ctx, arr[1], s, def.defaults, mode)
 			}
 		}
@@ -878,15 +923,38 @@ func (w *colorLinkWalk) judgeSpaceUnder(ctx context.Context, obj ast.PdfObject, 
 
 // judgeSpaceAs judges the colour space obj, reached from a link of s under
 // the overprint mode mode, and the spaces it holds. defaults are the Default
-// colour spaces that replace a device family obj holds: those of the resources
-// defining the entry obj is, or of the stream whose image or shading names it.
-// unknown judges a space that cannot be read as [unknownSpace], as veraPDF
-// does for a space an operator selects and for an /Indexed base or an
-// alternate; an image's or a shading's is judged as nothing. The spaces obj
-// holds are reached under the zero mode.
+// colour spaces that replace a device family obj holds, and hold the
+// /ColorSpace dictionary a name it holds reads against: those of the
+// resources defining the entry obj is, or the image or the shading naming it
+// (see [colorLinkWalk.judgeFamilyName]). unknown judges a space that cannot
+// be read as [unknownSpace], as veraPDF does for a space an operator selects
+// and for an /Indexed base or an alternate; an image's or a shading's is
+// judged as nothing. The spaces obj holds are reached under the zero mode.
+//
+// An indirect object is judged once for the whole document, save one holding
+// a name, which is the family or the entry it names wherever a link reaches
+// it: measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b, a /CS0 that is an
+// indirect object holding /DeviceRGB, which cs, f, cs and f reach, fails
+// DeviceRGB four times, and an /Indexed base holding one twice.
+//
+// # Corpus evidence
+//
+//   - pdfcpu pkg_testdata__VectorApple.pdf, and govdocs thread_000_000162.pdf,
+//     thread_400_400372.pdf and thread_400_400374.pdf: their shadings share
+//     one indirect object holding /DeviceCMYK as /ColorSpace, and veraPDF
+//     fails ISO 19005-1, 6.2.3.3 t2 and ISO 19005-2, 6.2.4.3 t3 once per
+//     shading, 851 times in pkg_testdata__VectorApple.pdf, which judging the
+//     object once dropped to 843.
+//   - govdocs thread_300_300760.pdf: its pages name /CS0, an indirect object
+//     holding /DeviceGray, and veraPDF fails ISO 19005-1, 6.2.3.3 t3 and ISO
+//     19005-2, 6.2.4.3 t4 8311 times, where litho judged the object once and
+//     failed them 8310 times.
 func (w *colorLinkWalk) judgeSpaceAs(ctx context.Context, obj ast.PdfObject, s *linkStream, defaults defaultCS, unknown bool, nesting int, mode overprintMode) {
 	if obj == nil || nesting > maxColorSpaceNesting || ctx.Err() != nil {
 		return
+	}
+	if nesting == 0 {
+		w.nameLinks = 0
 	}
 	unreadable := func() {
 		if unknown {
@@ -900,8 +968,12 @@ func (w *colorLinkWalk) judgeSpaceAs(ctx context.Context, obj ast.PdfObject, s *
 		unreadable()
 		return
 	}
+	// A name, direct or not, is the family or the entry it names, which
+	// carries the identity veraPDF judges: an indirect object holding a
+	// device family name is judged at every link, as the name is.
+	_, isName := resolved.(ast.PdfName)
 	cmyk := w.isCMYKICCBased(ctx, resolved)
-	if ref, ok := obj.(ast.PdfIndirectRef); ok {
+	if ref, ok := obj.(ast.PdfIndirectRef); ok && !isName {
 		switch {
 		case cmyk:
 			key := cmykLink{obj: ref.ObjectNum, mode: mode}
@@ -940,12 +1012,12 @@ func (w *colorLinkWalk) judgeSpaceAs(ctx context.Context, obj ast.PdfObject, s *
 			w.judgeSpace(ctx, arr[1], s, defaults.outside(), true, nesting+1)
 		}
 	case "Separation":
-		w.visit(colorNode{page: w.page, in: s, kind: string(kind), arr: arr})
+		w.visit(colorNode{page: w.page, in: s, kind: string(kind), arr: arr, colorSpaces: defaults.colorSpaces})
 		if len(arr) >= 3 {
 			w.judgeSpace(ctx, arr[2], s, defaults, true, nesting+1)
 		}
 	case "DeviceN":
-		w.visit(colorNode{page: w.page, in: s, kind: string(kind), arr: arr})
+		w.visit(colorNode{page: w.page, in: s, kind: string(kind), arr: arr, colorSpaces: defaults.colorSpaces})
 		if len(arr) >= 3 {
 			w.judgeSpace(ctx, arr[2], s, defaults, true, nesting+1)
 		}
@@ -982,9 +1054,48 @@ func (w *colorLinkWalk) judgeSpaceAs(ctx context.Context, obj ast.PdfObject, s *
 // whose place a link reaches the Default colour space of defaults that
 // replaces it (see [colorLinkWalk.replaceDevice]) and which otherwise the
 // blending space of s may cover; Pattern, which holds no colour space of its
-// own; the name of another entry of the /ColorSpace dictionary a Default
-// colour space gives, which veraPDF reads in its place; or any other name, a
-// space veraPDF cannot read, for which unreadable is called.
+// own; the name of an entry of the /ColorSpace dictionary of defaults, which
+// veraPDF reads in its place; or any other name, a space veraPDF cannot read,
+// for which unreadable is called.
+//
+// defaults.colorSpaces is the /ColorSpace dictionary of the one resource
+// dictionary the space holding the name was read from, and veraPDF reads the
+// name against it alone, with no fallback to the page's: an /Indexed base, a
+// Separation or DeviceN alternate, a /Colorants entry, a process space, the
+// underlying space of a Pattern space, a transparency group's /CS, the
+// /ColorSpace of a shading or an image, and an entry whose value is itself a
+// name (veraPDF-validation 1.30, ColorSpaceFactory.getColorSpaceFromName of
+// the parser, which PDSpecialColorSpace, PDDeviceN, PDShading and PDXImage
+// call with the resources they were read from). The entry is read as the
+// entry an operator selects is, so a device family it names is replaced
+// again. Measured with veraPDF 1.30 at PDF/A-1b, PDF/A-2b and PDF/A-4:
+//
+//   - [/Indexed /CS0 ...] over /CS0 /DeviceRGB that cs selects and f fills
+//     fails DeviceRGB twice, and so does /CS2 /CS0; a Separation or DeviceN
+//     over /CS0 /DeviceCMYK fails DeviceCMYK three times through cs, scn and
+//     f; a /Colorants entry and a page group's /CS naming an entry fail the
+//     entry's family, and an /Indexed base naming an ICCBased entry over an
+//     abstract profile fails the profile test.
+//   - A DefaultRGB /CS0 whose entry is a direct ICCBased space over an
+//     abstract profile fails the profile test for "1 0 0 rg" and f, and one
+//     whose entry is /DeviceGray is replaced by the DefaultGray.
+//   - An /Indexed a form's resources define over a /CS0 only the page's
+//     define fails DeviceGray twice, one the page's define over a /CS0 the
+//     form's redefine fails the page's, an image the page's resources define
+//     over /CS0, painted from such a form, fails the page's, and a shading a
+//     form's resources define naming a /CS0 only the page's define fails
+//     nothing.
+//   - A name that reaches itself again, [/Indexed /CS1 ...] as /CS1 or /CS1
+//     naming itself, is a cycle veraPDF never finishes reading: it runs out
+//     of time, heap or stack. litho reads it as a space it cannot read, as it
+//     reads a name past [maxColorSpaceNameLinks].
+//
+// # Corpus evidence
+//
+//   - All corpora: no object names a /ColorSpace entry inside a colour space
+//     array, in a /Colorants or /Process dictionary, as a shading's or a
+//     transparency group's colour space, or as the value of an entry, so
+//     reading the names moves no count at PDF/A-1b or PDF/A-2b.
 func (w *colorLinkWalk) judgeFamilyName(ctx context.Context, name string, s *linkStream, defaults defaultCS, unknown bool, nesting int, mode overprintMode, unreadable func()) {
 	switch family := deviceFamily(name); {
 	case family != "" && family == name:
@@ -992,15 +1103,38 @@ func (w *colorLinkWalk) judgeFamilyName(ctx context.Context, name string, s *lin
 			w.visit(colorNode{page: w.page, in: s, family: family, covered: s.blends(family)})
 		}
 	case name == "Pattern":
-	case defaults.inDefault && defaults.colorSpaces[ast.PdfName(name)] != nil:
-		// Measured with veraPDF 1.30 at PDF/A-2b: a DefaultRGB /CS0 whose
-		// entry is a direct ICCBased space over an abstract profile fails the
-		// profile test for "1 0 0 rg" and f, and one whose entry is
-		// /DeviceGray is replaced by the DefaultGray.
+	case defaults.colorSpaces[ast.PdfName(name)] != nil:
+		if w.naming[name] || w.nameLinks >= maxColorSpaceNameLinks {
+			unreadable()
+			return
+		}
+		w.naming[name] = true
+		w.nameLinks++
 		w.judgeSpaceAs(ctx, defaults.colorSpaces[ast.PdfName(name)], s, defaults.outside(), unknown, nesting+1, mode)
+		delete(w.naming, name)
 	default:
 		unreadable()
 	}
+}
+
+// resolveColorSpaceName returns the object obj reads as when it is the name of
+// an entry of the /ColorSpace dictionary colorSpaces, following a chain of
+// such names as veraPDF does (see [colorLinkWalk.judgeFamilyName]), and obj
+// itself when it is no such name. A chain longer than [maxColorSpaceNesting],
+// which a cycle of names is, returns nil.
+func resolveColorSpaceName(ctx context.Context, doc *document.Document, obj ast.PdfObject, colorSpaces ast.PdfDict) ast.PdfObject {
+	for range maxColorSpaceNesting {
+		name, err := document.ResolveName(ctx, doc, obj)
+		if err != nil || name == "Pattern" || deviceFamily(string(name)) == string(name) {
+			return obj
+		}
+		entry, ok := colorSpaces[name]
+		if !ok {
+			return obj
+		}
+		obj = entry
+	}
+	return nil
 }
 
 // replaceDevice judges, in place of the device family, the Default colour
@@ -1011,6 +1145,9 @@ func (w *colorLinkWalk) judgeFamilyName(ctx context.Context, name string, s *lin
 // space, which an /Indexed base or an alternate judges as DeviceGray and an
 // image, a shading or a transparency group as nothing.
 func (w *colorLinkWalk) replaceDevice(ctx context.Context, family string, defaults defaultCS, s *linkStream, unknown bool, nesting int, mode overprintMode, unreadable func()) bool {
+	if nesting == 0 {
+		w.nameLinks = 0
+	}
 	e := defaults.entry(family)
 	switch {
 	case e.obj == nil:
@@ -1034,7 +1171,7 @@ func (w *colorLinkWalk) judgeDeviceNAttributes(ctx context.Context, attrsObj ast
 	colorants, _ := document.ResolveDict(ctx, w.doc, attrs["Colorants"]) // Best-effort: unreadable colorants hold nothing.
 	if w.declare != nil && !w.declareOps {
 		for _, name := range sortedNames(colorants) {
-			w.declareSeparation(ctx, colorants[name])
+			w.declareSeparation(ctx, colorants[name], defaults.colorSpaces)
 		}
 	}
 	for _, name := range sortedNames(colorants) {
@@ -1046,8 +1183,8 @@ func (w *colorLinkWalk) judgeDeviceNAttributes(ctx context.Context, attrsObj ast
 }
 
 // paintXObject judges the XObject obj a Do of s paints in the state st, once
-// for the whole document.
-func (w *colorLinkWalk) paintXObject(ctx context.Context, obj ast.PdfObject, st csPaintState, s *linkStream, depth int) {
+// for the whole document. def is the stream whose resources define obj.
+func (w *colorLinkWalk) paintXObject(ctx context.Context, obj ast.PdfObject, st csPaintState, s, def *linkStream, depth int) {
 	ref, ok := obj.(ast.PdfIndirectRef)
 	if !ok || w.judged[ref.ObjectNum] || ctx.Err() != nil {
 		return
@@ -1069,7 +1206,7 @@ func (w *colorLinkWalk) paintXObject(ctx context.Context, obj ast.PdfObject, st 
 			w.judgeRef(ctx, st.fill, s, depth, overprintMode{})
 			return
 		}
-		w.judgeNamedOrSpace(ctx, stream.Dict["ColorSpace"], s)
+		w.judgeImageSpace(ctx, stream.Dict["ColorSpace"], s, def)
 	case "Form":
 		if formTooDeep(w.doc, depth+1) {
 			return
@@ -1078,10 +1215,15 @@ func (w *colorLinkWalk) paintXObject(ctx context.Context, obj ast.PdfObject, st 
 	}
 }
 
-// judgeNamedOrSpace judges the colour space an image or a shading of s names
-// in csObj: a family name the Default colour spaces of s cover, a name of a
-// /Resources/ColorSpace entry, or a colour space written out.
-func (w *colorLinkWalk) judgeNamedOrSpace(ctx context.Context, csObj ast.PdfObject, s *linkStream) {
+// judgeImageSpace judges the colour space csObj an image of s names, which
+// the resources of def define: a family name the Default colour spaces of s
+// cover, a name of a /Resources/ColorSpace entry of s or of the page's, or a
+// colour space written out, which reads a name it holds against the resources
+// of def, whose Default colour spaces replace a device family it holds.
+// veraPDF-validation 1.30, GFPDXImage.getImageCS resolves a name through the
+// resources of the stream painting the image, and PDXImage builds any other
+// space from the resources it was read from.
+func (w *colorLinkWalk) judgeImageSpace(ctx context.Context, csObj ast.PdfObject, s, def *linkStream) {
 	if csObj == nil {
 		return
 	}
@@ -1092,19 +1234,28 @@ func (w *colorLinkWalk) judgeNamedOrSpace(ctx context.Context, csObj ast.PdfObje
 			}
 			return
 		}
-		if entry, def := s.lookup(func(c *linkStream) ast.PdfDict { return c.colorSpaces }, string(name)); def != nil {
-			w.judgeSpace(ctx, entry, s, def.defaults, false, 0)
+		if entry, named := s.lookup(func(c *linkStream) ast.PdfDict { return c.colorSpaces }, string(name)); named != nil {
+			w.judgeSpace(ctx, entry, s, named.defaults, false, 0)
 		}
 		return
 	}
-	w.judgeSpace(ctx, csObj, s, s.defaults, false, 0)
+	w.judgeSpace(ctx, csObj, s, def.defaults, false, 0)
 }
 
-// judgeShading judges the colour space of the shading obj: once for the whole
-// document when it is an indirect object, and wherever it is reached when it
-// is written directly. painted marks a shading sh paints, whose device family
-// the Default colour spaces of s cover; no Default covers a shading pattern's.
-func (w *colorLinkWalk) judgeShading(ctx context.Context, obj ast.PdfObject, s *linkStream, painted bool) {
+// judgeShading judges the colour space of the shading obj a link of s
+// reaches: once for the whole document when it is an indirect object, and
+// wherever it is reached when it is written directly. defaults are the Default
+// colour spaces of the resources the shading was read from, which alone read
+// a name its colour space gives and replace a device family it names (see
+// [colorLinkWalk.judgeFamilyName]): those defining the shading sh paints, and
+// none for a shading pattern's, which veraPDF reads from no resources
+// (veraPDF-validation 1.30, PDResources.getPattern). Measured with veraPDF
+// 1.30 at PDF/A-1b and PDF/A-2b: a DeviceRGB shading the page's resources
+// define, which a form with no Default colour space paints, fails the profile
+// test of the page's DefaultRGB over an abstract profile and no DeviceRGB
+// test, and so does an image over [/Indexed /DeviceRGB ...] the page's
+// resources define.
+func (w *colorLinkWalk) judgeShading(ctx context.Context, obj ast.PdfObject, s *linkStream, defaults defaultCS) {
 	if ref, ok := obj.(ast.PdfIndirectRef); ok {
 		if w.judged[ref.ObjectNum] {
 			return
@@ -1115,11 +1266,7 @@ func (w *colorLinkWalk) judgeShading(ctx context.Context, obj ast.PdfObject, s *
 	if sd == nil {
 		return
 	}
-	if painted {
-		w.judgeNamedOrSpace(ctx, sd["ColorSpace"], s)
-		return
-	}
-	w.judgeSpace(ctx, sd["ColorSpace"], s, defaultCS{}, false, 0)
+	w.judgeSpace(ctx, sd["ColorSpace"], s, defaults, false, 0)
 }
 
 // judgePattern judges the pattern obj a link of s reaches, once for the whole
@@ -1149,7 +1296,7 @@ func (w *colorLinkWalk) judgePattern(ctx context.Context, obj ast.PdfObject, s *
 	if err != nil {
 		patternDict, _ := document.ResolveDict(ctx, w.doc, obj) // Best-effort: an unreadable pattern paints nothing.
 		if patternDict != nil {
-			w.judgeShading(ctx, patternDict["Shading"], s, false)
+			w.judgeShading(ctx, patternDict["Shading"], s, defaultCS{})
 		}
 		return
 	}

@@ -6,7 +6,6 @@ import (
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 func iccBasedProfileRule(part int) Rule {
@@ -200,35 +199,6 @@ func iccBasedComponents(ctx context.Context, doc *document.Document, arr ast.Pdf
 		return 0
 	}
 	return int(n)
-}
-
-// nestedScopeUsage surveys one nested content stream's own operators, so the
-// patterns and shadings that scope paints are judged rather than skipped.
-//
-// entry is the colour-space state the scope inherits (ISO 32000-1 §8.10.2): a
-// Form XObject begins from the state in effect at the Do that invoked it, while
-// a tiling pattern cell and an annotation appearance stream begin from the
-// default state (see [inheritedCSDefault]).
-//
-// A stream that will not decode or parse yields no survey. Returning nil leaves
-// such a scope judged exactly as an unsurveyed one was, rather than widening a
-// check on bytes nothing could read.
-func nestedScopeUsage(ctx context.Context, doc *document.Document, stream ast.PdfStream, resources ast.PdfDict, entry inheritedCS) (*usedResources, map[string]bool, map[string]bool, map[string]inheritedCS) {
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil {
-		doc.Logger.Debug("compliance.color: cannot decode nested content stream", "error", err)
-		return nil, nil, nil, nil
-	}
-
-	ops, err := content.ParseStreamData(ctx, data)
-	if err != nil {
-		doc.Logger.Debug("compliance.color: cannot parse nested content stream", "error", err)
-		return nil, nil, nil, nil
-	}
-
-	_, referencedXObjects, contentCSNames, used, inherited := scanContentStreamDeviceCSFrom(ctx, ops, collectPatternCSNames(ctx, doc, resources), entry)
-
-	return used, referencedXObjects, contentCSNames, inherited
 }
 
 // reportUnreadableICCN reports /N against a profile whose own component count

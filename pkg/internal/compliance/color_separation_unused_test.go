@@ -81,7 +81,7 @@ func TestSeparationSelectedButUnpaintedStillJudged(t *testing.T) {
 // TestSeparationInFormResourcesStillJudged pins that a Separation a Form
 // XObject selects is judged.
 //
-// The form's own operations are surveyed (see [nestedScopeUsage]), so the
+// The form's own operations are walked (see [colorLinkWalk]), so the
 // colour spaces it selects are known: this form runs "/CS1 cs", which employs
 // the array and brings it under ISO 19005-2 §6.2.4.4. The form's survey is its
 // own, never the page's: filtering a form's resources against the invoking

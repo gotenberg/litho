@@ -33,8 +33,8 @@ const (
 	pdfA1DeviceNComponents = 8
 	// pdfA23DeviceNComponents is the 32-colourant cap of ISO 19005-2/3,
 	// 6.1.13 test 9, the ISO 32000-1, Table C.1 value. ISO 19005-4 states no
-	// DeviceN limit. Both caps mirror compliance.checkDeviceNCS, which raises
-	// the violation.
+	// DeviceN limit. Both caps mirror compliance.deviceNColorantLimit, which
+	// compliance.checkDeviceNLinks judges.
 	pdfA23DeviceNComponents = 32
 	// tilingPatternType is the /PatternType of a tiling pattern (ISO 32000-1,
 	// 8.7.3.1, Table 75), and uncolouredPaintType the /PaintType of one whose
@@ -297,16 +297,17 @@ func truncateDict(d ast.PdfDict) ast.PdfDict {
 // limit. The tint-transform function won't be accurate for the reduced
 // component set; aggressive mode accepts that loss.
 //
-// The walk mirrors compliance.checkSeparationDeviceN, the only emitter of ISO
-// 19005-1 6.1.12 test 9 and ISO 19005-2/3 6.1.13 test 9: each page's
-// effective /Resources, inherited from an ancestor when the page states none
-// (ISO 32000-1, 7.7.3.4), and the appearance streams of its annotations. Below
-// a /Resources it reaches the /ColorSpace entries, the /ColorSpace of each
+// compliance.checkDeviceNLinks, the only emitter of ISO 19005-1 6.1.12 test 9
+// and ISO 19005-2/3 6.1.13 test 9, judges every DeviceN a colour-space link
+// reaches. The walk reaches the ones it can trim from each page's effective
+// /Resources, inherited from an ancestor when the page states none (ISO
+// 32000-1, 7.7.3.4), and the appearance streams of its annotations. Below a
+// /Resources it reaches the /ColorSpace entries, the /ColorSpace of each
 // shading, the shading of each shading pattern and the /Resources of each
 // coloured tiling pattern and form XObject, recursively; see [deviceNTrim].
-// It trims every DeviceN space it reaches, where the validator judges the
-// page's own spaces only when content selects them: trimming a space nothing
-// paints with changes nothing rendered.
+// It trims every DeviceN space it reaches, where the validator judges a space
+// only when a link reaches it: trimming a space nothing paints with changes
+// nothing rendered.
 //
 // Every level is read through the allocator and written back where it lives:
 // an indirect object at its own object number, an inline one into its parent,
@@ -441,8 +442,8 @@ func (w *deviceNTrim) pageResources(ctx context.Context, pe annotPageEntry) {
 }
 
 // annotationAppearances trims the /Resources of every appearance stream the
-// page's annotations carry under /N, /R and /D, as compliance's
-// checkSeparationDeviceN scans them. An appearance subdictionary is walked
+// page's annotations carry under /N, /R and /D, as compliance's colour-space
+// link walk reaches them. An appearance subdictionary is walked
 // state by state: its streams are indirect, so the annotation itself is never
 // rewritten.
 func (w *deviceNTrim) annotationAppearances(ctx context.Context, pe annotPageEntry) {
@@ -545,11 +546,10 @@ func (w *deviceNTrim) entries(ctx context.Context, obj ast.PdfObject, trim func(
 }
 
 // colorSpace trims one colour space value when it is a DeviceN space past the
-// limit. An /Indexed space over a DeviceN base is left alone, as
-// compliance.checkSeparationDeviceNArray judges only its colorant
-// declarations there, never its component count, and its lookup table holds
-// one byte per base component (ISO 32000-1, 8.6.6.3), which a trim would
-// misread.
+// limit. An /Indexed space over a DeviceN base is left alone, though
+// compliance judges the base against the limit: its lookup table holds one
+// byte per base component (ISO 32000-1, 8.6.6.3), which a trim would misread,
+// so the violation stays.
 func (w *deviceNTrim) colorSpace(ctx context.Context, entry ast.PdfObject) trimmed {
 	newArr, ok := trimDeviceNArray(ctx, w.alloc, w.doc, entry, w.limit)
 	if !ok {
@@ -580,8 +580,10 @@ func (w *deviceNTrim) shading(ctx context.Context, entry ast.PdfObject) trimmed 
 // pattern trims one pattern. A shading pattern names its colour space on its
 // /Shading; a tiling pattern (ISO 32000-1, 8.7.3.3) paints its cell from its
 // own /Resources, walked one form level deeper. An uncoloured tiling pattern
-// (PaintType 2) is skipped, as compliance.scanSeparationInPatterns skips it:
-// its cell specifies no colour of its own.
+// (PaintType 2) is skipped: its cell specifies no colour of its own and
+// processes none of its colour operators (ISO 32000-1, 8.7.3.3), so compliance
+// judges no space they select there, only the images the cell paints, which
+// [deviceNTrim.formStream] leaves alone.
 func (w *deviceNTrim) pattern(ctx context.Context, entry ast.PdfObject, depth int) trimmed {
 	if !w.firstVisit(entry) {
 		return unchanged(entry)
@@ -616,9 +618,10 @@ func (w *deviceNTrim) pattern(ctx context.Context, entry ast.PdfObject, depth in
 
 // formStream trims the /Resources of one form: a form XObject when
 // requireForm is set, where an image XObject is left alone, or an annotation
-// appearance stream. An image's DeviceN space is not judged for its component
-// count by compliance, and each sample carries one component per colourant
-// (ISO 32000-1, 8.9.5.2), so a trim would scramble the image.
+// appearance stream. An image's DeviceN space is left alone, though
+// compliance judges it against the limit: each sample carries one component
+// per colourant (ISO 32000-1, 8.9.5.2), so a trim would scramble the image,
+// and the violation stays.
 func (w *deviceNTrim) formStream(ctx context.Context, entry ast.PdfObject, depth int, requireForm bool) trimmed {
 	if !w.firstVisit(entry) {
 		return unchanged(entry)
