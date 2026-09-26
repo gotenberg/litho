@@ -650,11 +650,14 @@ type Writer struct {
 	// until one succeeds. From then on the Writer accepts Sign, WriteTo and
 	// Close alone (see [Writer.refuseAfterRemediation]). pdfaClause is the ISO
 	// 19005 clause that forbids encrypting what that remediation produced, ""
-	// when its profile is not a PDF/A one. refused is the first call refused
-	// after it, which WriteTo returns.
-	remediation string
-	pdfaClause  string
-	refused     error
+	// when its profile is not a PDF/A one, and accessibilityClause the ISO
+	// 14289 clause that requires an encryption of it to permit extraction for
+	// accessibility, "" when its profile states none. refused is the first call
+	// refused after it, which WriteTo returns.
+	remediation         string
+	pdfaClause          string
+	accessibilityClause string
+	refused             error
 
 	// redactions records the regions of every successful [Writer.Redact]
 	// call, in call order, and redactedTokens the text they removed. WriteTo
@@ -1626,6 +1629,15 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 // [RemediationReport.Residual], which the output's own pdfuaid claim does not
 // account for.
 //
+// Its output may be encrypted, but a PDF/UA-1 output only with permissions
+// that set bit 10 of the P key, the permission to extract content for
+// accessibility: ISO 14289-1, 7.16 requires it of an encrypted conforming
+// file, and [EncryptConfig.Permissions] of -1 or from [Permissions.Mask] set
+// it. The remediation judges its output before it is encrypted, so rather
+// than report a document the write would then break, it returns
+// [ErrPDFUAForbidsBarringAccessibility] when [Writer.Encrypt] cleared the bit
+// before it, and [Writer.WriteTo] returns it for [WithEncryption].
+//
 // It is the last edit on the Writer (see [Writer]): it judges the document the
 // edits queued before it produce, and afterwards the Writer accepts
 // [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
@@ -1635,7 +1647,8 @@ func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidatePDFUA(ctx, profile)
 	}
-	return w.remediate(ctx, remediationTarget{method: "RemediatePDFUA"}, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+	target := remediationTarget{method: "RemediatePDFUA", accessibilityClause: pdfuaAccessibilityClause(profile)}
+	return w.remediate(ctx, target, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
 		return remediation.RemediatePDFUA(ctx, doc, alloc, profile, remOpts.WithDisabled(disabled))
 	})
 }
@@ -1871,12 +1884,38 @@ func probeIntegrity(ctx context.Context, r *Reader) (integritySnap, error) {
 }
 
 // remediationTarget names what a remediation run is for: method, the Writer
-// method, which the refusal of a later call names, and pdfaClause, the ISO
-// 19005 clause that forbids encrypting the output, "" when the profile is not
-// a PDF/A one.
+// method, which the refusal of a later call names, pdfaClause, the ISO 19005
+// clause that forbids encrypting the output, "" when the profile is not a
+// PDF/A one, and accessibilityClause, the ISO 14289 clause that requires an
+// encrypted output to permit extraction for accessibility, "" when the profile
+// states none.
 type remediationTarget struct {
-	method     string
-	pdfaClause string
+	method              string
+	pdfaClause          string
+	accessibilityClause string
+}
+
+// pdfuaAccessibilityClause returns the clause of profile that requires an
+// encrypted conforming file to set bit 10 of its P key, "" when it states
+// none. ISO 14289-1, 7.16 does. The PDF/UA-2 profile holds no such rule, as
+// ISO 32000-2, Table 22 deprecates the bit: readers ignore it and writers set
+// it.
+func pdfuaAccessibilityClause(profile models.PDFUAProfile) string {
+	if profile == models.PDFUA1 {
+		return "ISO 14289-1, 7.16"
+	}
+	return ""
+}
+
+// accessibilityPermission is bit 10 of the P key of a standard security
+// handler, the permission to extract text and graphics in support of
+// accessibility (ISO 32000-1, 7.6.3.2, Table 22).
+const accessibilityPermission = 1 << 9
+
+// permitsAccessibility reports whether the permissions p of an encryption set
+// [accessibilityPermission].
+func permitsAccessibility(p int32) bool {
+	return p&accessibilityPermission != 0
 }
 
 // pdfaEncryptionClause returns the clause of the ISO 19005 part of profile
@@ -2013,7 +2052,9 @@ type remediationRun func(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 // A run that succeeds ends the Writer's edits (see
 // [Writer.refuseAfterRemediation]), and one on a Writer another run ended is
 // refused. So is a run for a PDF/A profile after [Writer.Encrypt], since ISO
-// 19005 forbids encrypting its output.
+// 19005 forbids encrypting its output, and one for PDF/UA-1 after an
+// [Writer.Encrypt] that bars extraction for accessibility, which ISO 14289-1,
+// 7.16 forbids.
 //
 // The content-tier fixers a rollback discarded stay off in the later rounds,
 // and the others run in them. The engine runs the content tier after every
@@ -2059,6 +2100,12 @@ func (w *Writer) remediate(
 	}
 	if target.pdfaClause != "" && w.encryptCfg != nil {
 		return nil, fmt.Errorf("%w (%s): Writer.Encrypt before Writer.%s", ErrPDFAForbidsEncryption, target.pdfaClause, target.method)
+	}
+	// The probes the remediation revalidates are never encrypted (see
+	// writeTempFile), so its report could not list the violation an encryption
+	// that bars accessibility adds to the output.
+	if target.accessibilityClause != "" && w.encryptCfg != nil && !permitsAccessibility(w.encryptCfg.Permissions) {
+		return nil, fmt.Errorf("%w (%s): Writer.Encrypt before Writer.%s", ErrPDFUAForbidsBarringAccessibility, target.accessibilityClause, target.method)
 	}
 	unmaterialize, err := w.materialize(ctx)
 	if err != nil {
@@ -2340,7 +2387,7 @@ func (w *Writer) remediate(
 		}
 	}
 	w.markPreSerialized(tmpPath)
-	w.remediation, w.pdfaClause = target.method, target.pdfaClause
+	w.remediation, w.pdfaClause, w.accessibilityClause = target.method, target.pdfaClause, target.accessibilityClause
 	return &RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual, RolledBack: dedupeFixes(rolledBack)}, nil
 }
 
@@ -2617,9 +2664,11 @@ func (w *Writer) copyFromPreSerialized(ctx context.Context, dst io.Writer) error
 // write succeeds, or at [Writer.Close].
 //
 // WriteTo writes nothing, and returns the refusal, when a call was refused
-// after a remediation ([ErrEditAfterRemediation]), and when [WithEncryption]
-// asks to encrypt the output of a PDF/A remediation
-// ([ErrPDFAForbidsEncryption]).
+// after a remediation ([ErrEditAfterRemediation]), when [WithEncryption] asks
+// to encrypt the output of a PDF/A remediation ([ErrPDFAForbidsEncryption]),
+// and when it asks to encrypt the output of a PDF/UA-1 remediation with
+// permissions that bar extraction for accessibility
+// ([ErrPDFUAForbidsBarringAccessibility]).
 //
 // Signing ([Writer.Sign]) is incompatible with encryption and decryption
 // ([Writer.Encrypt], [Writer.RemoveEncryption], [WithEncryption]); combining
@@ -2664,6 +2713,9 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	if encrypt != nil {
 		if w.pdfaClause != "" {
 			return fmt.Errorf("%w (%s): WithEncryption after Writer.%s", ErrPDFAForbidsEncryption, w.pdfaClause, w.remediation)
+		}
+		if w.accessibilityClause != "" && !permitsAccessibility(encrypt.Permissions) {
+			return fmt.Errorf("%w (%s): WithEncryption after Writer.%s", ErrPDFUAForbidsBarringAccessibility, w.accessibilityClause, w.remediation)
 		}
 	}
 	// Signing an encrypted source is also rejected (see signsEncrypted). A

@@ -244,3 +244,153 @@ func TestPipelineRefusesToEncryptAPDFARemediation(t *testing.T) {
 		t.Errorf("the pipeline wrote %d bytes of an encrypted PDF/A output", out.Len())
 	}
 }
+
+// TestWriterRefusesAPDFUA1EncryptionBarringAccessibility pins that the output
+// of a PDF/UA-1 remediation is never encrypted with permissions that clear bit
+// 10 of the P key. ISO 14289-1, 7.16 requires an encrypted conforming file to
+// set it, and the remediation judges its output unencrypted, since it writes
+// its probes in the clear: its report listed no 7.16 violation while the
+// output WriteTo encrypted failed the rule. The refusal names the clause, and
+// nothing is written.
+func TestWriterRefusesAPDFUA1EncryptionBarringAccessibility(t *testing.T) {
+	t.Parallel()
+
+	barred := EncryptConfig{OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: -1 &^ accessibilityPermission}
+	remediate := func(ctx context.Context, w *Writer) error {
+		_, err := w.RemediatePDFUA(ctx, models.PDFUA1)
+		return err
+	}
+	const clause = "ISO 14289-1, 7.16"
+
+	for _, tc := range []struct {
+		name string
+		// write produces the output, returning the refusal of whichever call
+		// refuses.
+		write func(ctx context.Context, r *Reader, out *bytes.Buffer) error
+	}{
+		{
+			name: "Encrypt before the remediation",
+			write: func(ctx context.Context, r *Reader, out *bytes.Buffer) error {
+				w := NewWriter(r)
+				defer w.Close()
+				w.Encrypt(barred)
+				if err := remediate(ctx, w); err != nil {
+					// A remediation that fails leaves the Writer open to edits.
+					if rotErr := w.RotatePages(90); rotErr != nil {
+						t.Errorf("RotatePages after the refused remediation: %v", rotErr)
+					}
+					return err
+				}
+				return w.WriteTo(ctx, out)
+			},
+		},
+		{
+			name: "WithEncryption after the remediation",
+			write: func(ctx context.Context, r *Reader, out *bytes.Buffer) error {
+				w := NewWriter(r)
+				defer w.Close()
+				if err := remediate(ctx, w); err != nil {
+					t.Fatalf("RemediatePDFUA: %v", err)
+				}
+				return w.WriteTo(ctx, out, WithEncryption(barred))
+			},
+		},
+		{
+			name: "a pipeline encrypting what it remediated",
+			write: func(ctx context.Context, r *Reader, out *bytes.Buffer) error {
+				_, err := NewPipeline().Open(r).Apply(func(ctx context.Context, w *Writer) error {
+					return remediate(ctx, w)
+				}).WriteTo(ctx, out, WithEncryption(barred))
+				return err
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			data := signablePDF()
+			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer r.Close()
+			var out bytes.Buffer
+			err = tc.write(ctx, r, &out)
+			if !errors.Is(err, ErrPDFUAForbidsBarringAccessibility) {
+				t.Fatalf("the write returned %v, want ErrPDFUAForbidsBarringAccessibility", err)
+			}
+			if !strings.Contains(err.Error(), clause) {
+				t.Errorf("the refusal %q does not cite %s", err, clause)
+			}
+			if out.Len() != 0 {
+				t.Errorf("%d bytes were written of a PDF/UA-1 output that bars assistive technology", out.Len())
+			}
+		})
+	}
+}
+
+// TestWriterEncryptsAPDFUA1RemediationThatPermitsAccessibility is the control:
+// permissions that set bit 10 and clear every other permission are what ISO
+// 14289-1, 7.16 asks for, so the output is encrypted on request, and it
+// validates against 7.16 as the report says.
+func TestWriterEncryptsAPDFUA1RemediationThatPermitsAccessibility(t *testing.T) {
+	t.Parallel()
+
+	permitted := EncryptConfig{OwnerPassword: "owner", Algorithm: EncryptAES256, Permissions: accessibilityPermission}
+	for _, tc := range []struct {
+		name    string
+		encrypt bool
+		opts    []WriteOption
+	}{
+		{name: "Encrypt before the remediation", encrypt: true},
+		{name: "WithEncryption after the remediation", opts: []WriteOption{WithEncryption(permitted)}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			data := signablePDF()
+			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer r.Close()
+			w := NewWriter(r)
+			defer w.Close()
+			if tc.encrypt {
+				w.Encrypt(permitted)
+			}
+			report, err := w.RemediatePDFUA(ctx, models.PDFUA1)
+			if err != nil {
+				t.Fatalf("RemediatePDFUA: %v", err)
+			}
+			var out bytes.Buffer
+			if err := w.WriteTo(ctx, &out, tc.opts...); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			got, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+			if err != nil {
+				t.Fatalf("reopening the output: %v", err)
+			}
+			defer got.Close()
+			if !got.IsEncrypted() {
+				t.Fatal("the output is not encrypted, so the test proves nothing")
+			}
+			violations, err := got.ValidatePDFUAReport(ctx, models.PDFUA1)
+			if err != nil {
+				t.Fatalf("ValidatePDFUAReport: %v", err)
+			}
+			for _, v := range violations {
+				if v.Clause == "7.16" {
+					t.Errorf("the output fails ISO 14289-1, 7.16: %s", v.Context)
+				}
+			}
+			for _, e := range report.Residual {
+				if strings.Contains(e.Error(), "7.16") {
+					t.Errorf("the report lists %v, which the output does not fail", e)
+				}
+			}
+		})
+	}
+}

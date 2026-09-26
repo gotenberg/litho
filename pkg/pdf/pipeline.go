@@ -174,8 +174,10 @@ func (p *Pipeline) buildValidationErrors() []error {
 //
 // The options reach the final write as they reach [Writer.WriteTo], which
 // refuses [WithEncryption] after a PDF/A remediation with
-// [ErrPDFAForbidsEncryption]. A stage after a remediation fails with
-// [ErrEditAfterRemediation] (see [Pipeline]).
+// [ErrPDFAForbidsEncryption], and after a PDF/UA-1 remediation, when its
+// permissions bar extraction for accessibility, with
+// [ErrPDFUAForbidsBarringAccessibility]. A stage after a remediation fails
+// with [ErrEditAfterRemediation] (see [Pipeline]).
 func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (_ *PipelineResult, err error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
