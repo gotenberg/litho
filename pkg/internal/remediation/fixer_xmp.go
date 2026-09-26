@@ -58,7 +58,17 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 	var existingXMP string
 	var reencoded bool
 	if metaObj, ok := catalogDict["Metadata"]; ok {
-		if stream, err := document.ResolveStream(ctx, doc, metaObj); err == nil {
+		// Read the packet through the allocator, like the catalog above. A
+		// packet an earlier stage queued, the one Writer.SetMetadata syncs
+		// with the new /Info, lives at an object number only the allocator
+		// holds: resolved against the source document it did not exist, and
+		// a fresh packet replaced it, dropping every property the document's
+		// own packet carried.
+		var metaRef ast.PdfIndirectRef
+		if ref, isRef := metaObj.(ast.PdfIndirectRef); isRef {
+			metaRef = ref
+		}
+		if stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, metaRef, metaObj); ok {
 			// Decode the packet: a non-PDF/A input may store the catalog XMP
 			// FlateDecode-compressed, and the raw bytes would parse as garbage,
 			// so patchExistingXMP would inject no pdfaid and leave the file
