@@ -21,6 +21,11 @@ var webCaptureTrees = []ast.PdfName{"IDS", "URLS"}
 // output. A set left with nothing leaves the tree, since it describes a capture
 // none of whose output survives.
 //
+// The trees are read as earlier stages staged them, from alloc first. An
+// attachment queues the catalog's /Names afresh at a new object number, and a
+// destination prune may have rewritten it already; reading the source's instead
+// left the content sets naming the deleted page.
+//
 // # Corpus evidence
 //
 //   - govdocs thread_400_400742.pdf: held 730 bytes of a deleted page through
@@ -37,7 +42,7 @@ func pruneWebCaptureSets(
 	if !hasNames {
 		return false
 	}
-	names, err := document.ResolveDict(ctx, doc, namesObj)
+	names, err := resolveDictAllocFirst(ctx, alloc, doc, namesObj)
 	if err != nil || names == nil {
 		return false
 	}
@@ -85,7 +90,7 @@ func contentSetIsEmptied(
 	value ast.PdfObject,
 	removed map[int]bool,
 ) bool {
-	set, err := document.ResolveDict(ctx, doc, value)
+	set, err := resolveDictAllocFirst(ctx, alloc, doc, value)
 	if err != nil || set == nil {
 		return false
 	}
@@ -93,7 +98,7 @@ func contentSetIsEmptied(
 	if !hasObjs {
 		return false
 	}
-	objs, err := document.ResolveArray(ctx, doc, objsObj)
+	objs, err := resolveArrayAllocFirst(ctx, alloc, doc, objsObj)
 	if err != nil {
 		return false
 	}

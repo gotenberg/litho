@@ -733,3 +733,56 @@ func TestWriterDeletionKeepsAFieldEditOnTheSameWriter(t *testing.T) {
 		t.Errorf("the output has %d pages (%v), want 2", n, err)
 	}
 }
+
+// TestWriterDeletionPrunesWebCaptureSetsAnAttachmentRequeued pins that deleting a
+// page after an attachment on the same Writer drops the page from the Web
+// Capture content sets naming it (ISO 32000-1, 14.10.4), as it does on the file
+// the attachment wrote.
+//
+// The attachment queues the catalog's /Names afresh at a new object number, and
+// the deletion read the source's: it found no /IDS tree there, so the content
+// set kept naming the deleted page and carried it into the output.
+func TestWriterDeletionPrunesWebCaptureSetsAnAttachmentRequeued(t *testing.T) {
+	t.Parallel()
+
+	page := func(n int) string {
+		return fmt.Sprintf("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents %d 0 R /Resources << /Font << /F1 9 0 R >> >> >>", 5+n)
+	}
+	stream := func(n int) string {
+		content := fmt.Sprintf("BT /F1 12 Tf 100 700 Td (Page%d) Tj ET\n", n)
+		return fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content)
+	}
+	data := buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R /Names << /IDS 10 0 R >> >>",
+		"<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>",
+		page(1), page(2), page(3),
+		stream(1), stream(2), stream(3),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		"<< /Names [(capture) 11 0 R] >>",
+		"<< /Type /SpiderContentSet /S /SPS /ID (capture) /O [4 0 R 5 0 R] >>",
+	})
+
+	ctx := context.Background()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	w := NewWriter(r)
+	defer w.Close()
+	w.AddAttachment("note.txt", []byte("note"), "text/plain")
+	if err := w.DeletePages(3); err != nil {
+		t.Fatalf("DeletePages: %v", err)
+	}
+
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	if bytes.Contains(out.Bytes(), []byte("(Page3)")) {
+		t.Error("the output carries the deleted page's content")
+	}
+	if !bytes.Contains(out.Bytes(), []byte("(Page2)")) {
+		t.Error("the output lost a kept page's content")
+	}
+}
