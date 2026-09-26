@@ -184,6 +184,12 @@ func evaluateMDP(ctx context.Context, doc *document.Document, sig models.Signatu
 			note += formNote
 			violation = classifyModifications(classified, sig.MDPPolicy)
 		}
+		if violation != "" && sig.MDPPolicy >= 2 {
+			var pageNote string
+			classified, pageNote = withoutInstantiatedPages(ctx, doc, signed, classified, sig.MDPPolicy)
+			note += pageNote
+			violation = classifyModifications(classified, sig.MDPPolicy)
+		}
 	}
 
 	// The structure tree additions that tag a permitted annotation are
@@ -563,7 +569,9 @@ func classifyModifications(objects []appendedObject, policy int) string {
 // either touches the catalog's form and the page's /Annots, while a template
 // adds a page. A typed object this refuses may still serve a form fill, which
 // [withoutFormData] tells apart: the XFA datasets packet, and what a rewritten
-// widget's appearance draws with.
+// widget's appearance draws with. It may also serve a template instantiation,
+// which [withoutInstantiatedPages] tells apart: what an added copy of a
+// template page draws with.
 func isAllowedP2(obj appendedObject) bool {
 	if obj.IsAnnot {
 		// Table 254 permits annotation creation, deletion and modification

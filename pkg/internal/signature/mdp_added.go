@@ -74,20 +74,8 @@ func addedPage(ctx context.Context, doc, rev *document.Document, policy int) (st
 	if err != nil {
 		return "", fmt.Errorf("reading the current pages: %w", err)
 	}
-	signed := make(map[int]*document.Page, len(signedPages))
-	var signedDirect []ast.PdfDict
-	for _, p := range signedPages {
-		num := p.Ref.ObjectNum
-		if num <= 0 {
-			signedDirect = append(signedDirect, p.Dict)
-			continue
-		}
-		if _, dup := signed[num]; !dup {
-			signed[num] = p
-		}
-	}
-
-	m := &templateMatch{doc: doc, rev: rev, signed: signed, policy: policy, budget: pairBudget{left: maxTemplatePageCompare}}
+	signed, signedDirect := byObjectNumber(signedPages)
+	m := newTemplateMatch(doc, rev, signed, policy)
 	seen := make(map[int]bool)
 	direct := 0
 	for i, p := range currentPages {
@@ -124,6 +112,35 @@ func addedPage(ctx context.Context, doc, rev *document.Document, policy int) (st
 		return fmt.Sprintf("%s was added and instantiates no page template of the signed revision, which P=%d does not permit", desc, policy), nil
 	}
 	return "", nil
+}
+
+// byObjectNumber returns the pages of a page tree by object number, each at
+// its first place, and, in order, the dictionaries of those written directly
+// in /Kids, which have no number.
+func byObjectNumber(pages []*document.Page) (map[int]*document.Page, []ast.PdfDict) {
+	numbered := make(map[int]*document.Page, len(pages))
+	var direct []ast.PdfDict
+	for _, p := range pages {
+		num := p.Ref.ObjectNum
+		if num <= 0 {
+			direct = append(direct, p.Dict)
+			continue
+		}
+		if _, dup := numbered[num]; !dup {
+			numbered[num] = p
+		}
+	}
+	return numbered, direct
+}
+
+// newTemplateMatch returns a [templateMatch] of the pages doc added with the
+// templates of rev, whose page tree holds the pages signed maps, with a budget
+// of [maxTemplatePageCompare] pairs.
+func newTemplateMatch(doc, rev *document.Document, signed map[int]*document.Page, policy int) *templateMatch {
+	return &templateMatch{
+		doc: doc, rev: rev, signed: signed, policy: policy,
+		budget: pairBudget{left: maxTemplatePageCompare, decoded: &decodedStreams{}},
+	}
 }
 
 // templateMatch compares the pages the current document doc added with the
@@ -171,13 +188,16 @@ func (m *templateMatch) instantiates(ctx context.Context, page *document.Page) b
 // copies reports whether page, of the current document, is a faithful copy of
 // the template page t, as ISO 32000-1, 12.7.6 has an instantiation make one:
 //
-//   - each entry of the page dictionary other than [instanceEntries] and
-//     [inheritedEntries] is the same object as the template's, following
-//     references on both sides ([pairBudget.same]), so the page draws the
-//     template's content streams, the same stream objects or copies with the
-//     same dictionary and bytes, and runs the template's page actions;
-//   - the attributes the page inherits or states are the template's, the
-//     resources included;
+//   - each entry of the page dictionary other than [instanceEntries],
+//     [inheritedEntries] and /Contents is the same object as the template's,
+//     following references on both sides ([pairBudget.same]), so the page
+//     runs the template's page actions. The page is typed /Page where the
+//     template is typed /Template: 12.7.6 has a template the /Templates tree
+//     names "have an object type of Template rather than Page", and adds it to
+//     the document "as a regular page";
+//   - the boxes and the rotation the page inherits or states are the
+//     template's;
+//   - the page paints what the template paints ([templateMatch.paints]);
 //   - each annotation the page lists is one the template lists, a widget that
 //     copies a widget of the template ([widgetMatch.copied]), or a widget of a
 //     signature field, which signing may place on any page. At P=3, which
@@ -188,7 +208,10 @@ func (m *templateMatch) instantiates(ctx context.Context, page *document.Page) b
 // the actions they run.
 func (m *templateMatch) copies(ctx context.Context, page *document.Page, t *templatePage) bool {
 	for _, key := range allKeys(t.dict, page.Dict) {
-		if instanceEntries[key] || inheritedEntries[key] {
+		if instanceEntries[key] || inheritedEntries[key] || key == "Contents" {
+			continue
+		}
+		if key == "Type" && dictName(t.dict, "Type") == "Template" && dictName(page.Dict, "Type") == "Page" {
 			continue
 		}
 		if !m.budget.same(ctx, m.doc, page.Dict[key], m.rev, t.dict[key]) {
@@ -198,9 +221,9 @@ func (m *templateMatch) copies(ctx context.Context, page *document.Page, t *temp
 
 	attrs := m.attributes(ctx, t)
 	if page.Rotate != attrs.rotate ||
-		!m.budget.same(ctx, m.doc, dictObject(page.Resources), m.rev, dictObject(attrs.resources)) ||
 		!m.budget.same(ctx, m.doc, arrayObject(page.MediaBox), m.rev, arrayObject(attrs.mediaBox)) ||
-		!m.budget.same(ctx, m.doc, arrayObject(page.DeclaredCropBox), m.rev, arrayObject(attrs.cropBox)) {
+		!m.budget.same(ctx, m.doc, arrayObject(page.DeclaredCropBox), m.rev, arrayObject(attrs.cropBox)) ||
+		!m.paints(ctx, page, t, attrs) {
 		return false
 	}
 
@@ -233,6 +256,20 @@ func (m *templateMatch) copies(ctx context.Context, page *document.Page, t *temp
 		}
 	}
 	return true
+}
+
+// paints reports whether page paints what the template page t, drawing with
+// attrs, paints: the template's content streams with the template's resources,
+// the same objects or copies holding the same data, stored the same way or
+// not ([pairBudget.same]), or a form XObject that holds the template's content
+// ([templateMatch.wraps]). What a page paints is its content streams read with
+// its resources (ISO 32000-1, 7.8.2, 7.8.3).
+func (m *templateMatch) paints(ctx context.Context, page *document.Page, t *templatePage, attrs pageAttributes) bool {
+	if m.budget.same(ctx, m.doc, page.Dict["Contents"], m.rev, t.dict["Contents"]) &&
+		m.budget.same(ctx, m.doc, dictObject(page.Resources), m.rev, dictObject(attrs.resources)) {
+		return true
+	}
+	return !m.budget.exhausted && m.wraps(ctx, page, t, attrs)
 }
 
 // listedBy returns the object numbers the /Annots of the template page t lists

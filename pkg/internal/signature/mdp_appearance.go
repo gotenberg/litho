@@ -52,15 +52,8 @@ func appearanceOf(obj ast.PdfObject) bool {
 // drawnObjects returns the objects doc reaches from the appearance
 // dictionaries (/AP, ISO 32000-1, 12.5.5, Table 168) of the annotations annots,
 // and from the default resources the default appearance of each widget among
-// them names ([defaultResourcesNamed]), following every reference through
-// objects [appearanceOf] accepts. An object it refuses is neither returned nor
-// walked.
-//
-// Each object is resolved and walked once, so the walk ends on a cycle and its
-// work is linear in the objects doc defines. Direct objects are walked with an
-// explicit stack, so their nesting costs no recursion.
+// them names ([defaultResourcesNamed]), as [drawnFrom] walks them.
 func drawnObjects(ctx context.Context, doc *document.Document, annots []int) (map[int]bool, error) {
-	reached := make(map[int]bool)
 	var stack []ast.PdfObject
 	var widgets []ast.PdfDict
 	for _, num := range annots {
@@ -79,8 +72,19 @@ func drawnObjects(ctx context.Context, doc *document.Document, annots []int) (ma
 	if err != nil {
 		return nil, err
 	}
-	stack = append(stack, named...)
+	return drawnFrom(ctx, doc, append(stack, named...))
+}
 
+// drawnFrom returns the objects doc reaches from roots, following every
+// reference through objects [appearanceOf] accepts. An object it refuses is
+// neither returned nor walked.
+//
+// Each object is resolved and walked once, so the walk ends on a cycle and its
+// work is linear in the objects doc defines. Direct objects are walked with an
+// explicit stack, so their nesting costs no recursion.
+func drawnFrom(ctx context.Context, doc *document.Document, roots []ast.PdfObject) (map[int]bool, error) {
+	reached := make(map[int]bool)
+	stack := append([]ast.PdfObject(nil), roots...)
 	visited := make(map[int]bool)
 	for len(stack) > 0 {
 		obj := stack[len(stack)-1]

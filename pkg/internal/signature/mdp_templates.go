@@ -547,17 +547,22 @@ func sameAcross(ctx context.Context, a *document.Document, x ast.PdfObject, b *d
 
 // pairBudget is how many more pairs of objects the comparisons that share it
 // may compare ([pairBudget.same]). exhausted records that one of them ran out.
+// decoded, when set, lets two streams that store the same data differently
+// compare the same.
 type pairBudget struct {
 	left      int
 	exhausted bool
+	decoded   *decodedStreams
 }
 
 // same reports whether x of a is the same object as y of b, as [sameAcross]
-// compares them, spending one unit of the budget on each pair. A comparison
-// that runs out of budget reports the objects different. Dictionary entries
-// are compared in key order, so what a comparison spends does not depend on
-// the order of a Go map, and whether a later comparison sharing the budget
-// runs out is the same from run to run.
+// compares them, spending one unit of the budget on each pair. With decoded
+// set, two streams whose stored data differ are the same when their data
+// decodes the same ([decodedStreams.same]) and their dictionaries match but
+// for [streamEncodingEntries]. A comparison that runs out of budget reports
+// the objects different. Dictionary entries are compared in key order, so what
+// a comparison spends does not depend on the order of a Go map, and whether a
+// later comparison sharing the budget runs out is the same from run to run.
 func (p *pairBudget) same(ctx context.Context, a *document.Document, x ast.PdfObject, b *document.Document, y ast.PdfObject) bool {
 	type pair struct{ x, y ast.PdfObject }
 	stack := []pair{{x, y}}
@@ -614,10 +619,20 @@ func (p *pairBudget) same(ctx context.Context, a *document.Document, x ast.PdfOb
 			}
 		case ast.PdfStream:
 			yv, ok := py.(ast.PdfStream)
-			if !ok || !sameStreamData(ctx, xv, yv) {
+			if !ok {
 				return false
 			}
-			stack = append(stack, pair{xv.Dict, yv.Dict})
+			xDict, yDict := xv.Dict, yv.Dict
+			if !sameStreamData(ctx, xv, yv) {
+				// ISO 32000-1, 7.3.8.2, Table 5: a stream's length and
+				// filters say how its data is stored, so two streams whose
+				// data decodes the same hold the same data.
+				if p.decoded == nil || !p.decoded.same(ctx, a, refNum(top.x), xv, b, refNum(top.y), yv) {
+					return false
+				}
+				xDict, yDict = withoutEncoding(xDict), withoutEncoding(yDict)
+			}
+			stack = append(stack, pair{xDict, yDict})
 		default:
 			if !sameObject(px, py) {
 				return false
