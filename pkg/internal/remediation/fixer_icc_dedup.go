@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -358,8 +359,12 @@ func dedupICCInXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		return 0
 	}
 	count := 0
-	for _, entry := range xoDict {
-		ref, ok := entry.(ast.PdfIndirectRef)
+	// Sorted: visited marks the colour spaces a form's /Resources lists, so
+	// the form walked first decides a colour space two forms share, against
+	// its own blending space. Walked in Go's map order, that form changed from
+	// run to run (CONTRIBUTING "Deterministic output").
+	for _, name := range slices.Sorted(maps.Keys(xoDict)) {
+		ref, ok := xoDict[name].(ast.PdfIndirectRef)
 		if !ok || ref.ObjectNum == 0 {
 			continue
 		}

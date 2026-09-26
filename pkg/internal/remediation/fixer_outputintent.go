@@ -616,8 +616,11 @@ func patchType3FontColorSpace(ctx context.Context, alloc *writer.ObjAllocator, d
 		return false
 	}
 	changed := false
-	for _, entryObj := range fontDict {
-		ref, isRef := entryObj.(ast.PdfIndirectRef)
+	// Sorted: the walk marks what it visits, so the order decides which font
+	// reaches a shared /Resources first and is rewritten (see
+	// [recurseColorSpacePatch]).
+	for _, name := range slices.Sorted(maps.Keys(fontDict)) {
+		ref, isRef := fontDict[name].(ast.PdfIndirectRef)
 		if !isRef || ref.ObjectNum == 0 {
 			continue
 		}
@@ -658,6 +661,18 @@ func patchType3FontColorSpace(ctx context.Context, alloc *writer.ObjAllocator, d
 
 // recurseColorSpacePatch walks a named resource sub-dict (XObject or
 // Pattern) and updates each entry that carries its own /Resources.
+//
+// The entries are walked in sorted name order. visited marks each object the
+// walk reaches, so of two entries sharing one indirect /Resources only the
+// first patches it and is rewritten, and the second is left as it was. Walked
+// in Go's map order, which of the two that was changed from run to run
+// (CONTRIBUTING "Deterministic output").
+//
+// # Corpus evidence
+//
+//   - litho fontcopies_2b.pdf: page 15 draws /X1 and /X2, two identical forms
+//     sharing /Resources 67 0 R, and a PDF/A-1b remediation rewrote form 48
+//     instead of form 47 in 7 of 40 runs.
 func recurseColorSpacePatch(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, newRes ast.PdfDict, name ast.PdfName, key ast.PdfName, csArr func() ast.PdfArray, visited map[int]bool) bool {
 	subObj, ok := newRes[name]
 	if !ok {
@@ -668,8 +683,8 @@ func recurseColorSpacePatch(ctx context.Context, alloc *writer.ObjAllocator, doc
 		return false
 	}
 	changed := false
-	for _, entryObj := range subDict {
-		ref, isRef := entryObj.(ast.PdfIndirectRef)
+	for _, entryName := range slices.Sorted(maps.Keys(subDict)) {
+		ref, isRef := subDict[entryName].(ast.PdfIndirectRef)
 		if !isRef || ref.ObjectNum == 0 {
 			continue
 		}

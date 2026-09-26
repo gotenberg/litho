@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"math"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -124,7 +125,9 @@ func fixPatternTransparency(ctx context.Context, doc *document.Document, alloc *
 	}
 
 	fixed := 0
-	for _, entry := range patDict {
+	// Sorted, as every walk sharing visited is: see [fixXObjectTransparency].
+	for _, name := range slices.Sorted(maps.Keys(patDict)) {
+		entry := patDict[name]
 		if ref, isRef := entry.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
 			if visited[ref.ObjectNum] {
 				continue
@@ -240,7 +243,9 @@ func fixType3FontTransparency(ctx context.Context, doc *document.Document, alloc
 	}
 
 	fixed := 0
-	for _, entry := range fontDict {
+	// Sorted, as every walk sharing visited is: see [fixXObjectTransparency].
+	for _, name := range slices.Sorted(maps.Keys(fontDict)) {
+		entry := fontDict[name]
 		var fontRef ast.PdfIndirectRef
 		if ref, isRef := entry.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
 			if visited[ref.ObjectNum] {
@@ -371,7 +376,9 @@ func fixType3CharProcTransparency(ctx context.Context, doc *document.Document, a
 	}
 
 	fixed := 0
-	for _, entry := range charProcs {
+	// Sorted, as every walk sharing visited is: see [fixXObjectTransparency].
+	for _, name := range slices.Sorted(maps.Keys(charProcs)) {
+		entry := charProcs[name]
 		ref, isRef := entry.(ast.PdfIndirectRef)
 		if isRef && ref.ObjectNum > 0 {
 			if visited[ref.ObjectNum] {
@@ -615,6 +622,13 @@ func fixExtGStateDict(ctx context.Context, doc *document.Document, alloc *writer
 }
 
 // fixXObjectTransparency removes SMask from images and Group/Transparency from forms.
+//
+// The XObjects are walked in sorted name order, as every walk sharing visited
+// is. visited marks what the walk reaches, so an object reached by two paths
+// is repaired from the first, and [maxTransparencyResourceDepth] can stop
+// that path where the other would not have stopped. Walked in Go's map order,
+// which path came first changed from run to run (CONTRIBUTING "Deterministic
+// output").
 func fixXObjectTransparency(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, resources ast.PdfDict, visited map[int]bool, depth int) int {
 	if resources == nil || depth > maxTransparencyResourceDepth {
 		return 0
@@ -631,7 +645,8 @@ func fixXObjectTransparency(ctx context.Context, doc *document.Document, alloc *
 	}
 
 	fixed := 0
-	for _, xoEntry := range xoDict {
+	for _, name := range slices.Sorted(maps.Keys(xoDict)) {
+		xoEntry := xoDict[name]
 		var xoRef ast.PdfIndirectRef
 		if ref, ok := xoEntry.(ast.PdfIndirectRef); ok {
 			xoRef = ref
