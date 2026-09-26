@@ -238,6 +238,56 @@ func TestGlyphProgramRulesJudgedAnnotationsByPart(t *testing.T) {
 	}
 }
 
+// TestGlyphProgramRulesJudgedAtUA pins how PDF/UA reads a font's program: a
+// form the page draws claims its rendering modes where drawn but has none of
+// its glyphs judged ([pageFormReads]), and the page's annotation appearances
+// are parsed before its content ([annotationsParsedFirst]).
+//
+// Every count was measured with veraPDF 1.30 at PDF/UA-1 and PDF/UA-2.
+func TestGlyphProgramRulesJudgedAtUA(t *testing.T) {
+	t.Parallel()
+
+	type0 := programScopeType0Font(t)
+	for _, tc := range []struct {
+		name string
+		objs func() []string
+		want int
+	}{
+		{"a missing CID in a form alone", func() []string {
+			return withForm(glyphPagesObjs(type0, "/X1 Do"), glyphText("<0100> Tj"))
+		}, 0},
+		{"a form before page text, each showing a missing CID", func() []string {
+			return withForm(glyphPagesObjs(type0, "/X1 Do "+glyphText("<0101> Tj")), glyphText("<0100> Tj"))
+		}, 0},
+		{"page text before a form, each showing a missing CID", func() []string {
+			return withForm(glyphPagesObjs(type0, glyphText("<0101> Tj")+" /X1 Do"), glyphText("<0100> Tj"))
+		}, 1},
+		{"a missing CID in an annotation, another on the page", func() []string {
+			return withAnnotation(glyphPagesObjs(type0, glyphText("<0101> Tj")), glyphText("<0100> Tj <0102> Tj"))
+		}, 2},
+	} {
+		for _, p := range []struct {
+			profile models.PDFUAProfile
+			rule    Rule
+		}{
+			{models.PDFUA1, Rule_14289_1_7_21_4_1_t02},
+			{models.PDFUA2, Rule_14289_2_8_4_5_5_1_t02},
+		} {
+			t.Run(string(p.profile)+" "+tc.name, func(t *testing.T) {
+				t.Parallel()
+				doc, _ := objsDocPDF(t, tc.objs()...)
+				viols, err := ValidatePDFUA(context.Background(), doc, p.profile)
+				if err != nil {
+					t.Fatalf("ValidatePDFUA: %v", err)
+				}
+				if got := countRuleErrs(t, viols, p.rule); got != tc.want {
+					t.Errorf("%s test %d fired %d times, want %d", p.rule.Clause, p.rule.TestNumber, got, tc.want)
+				}
+			})
+		}
+	}
+}
+
 // TestGlyphRulesKeyedByStructureKey pins that every glyph rule states a glyph
 // once per structure key ([structureKey]) of the stream it is shown in, the
 // .notdef rule included; the presence and width rules only look unkeyed

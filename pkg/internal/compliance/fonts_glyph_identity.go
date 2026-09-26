@@ -537,6 +537,8 @@ func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fon
 //     profile for the verapdf files: claiming in veraPDF's order, forms where
 //     the page draws them and annotations before the page at PDF/A-1b, moves
 //     no count.
+//   - verapdf and litho, at PDF/UA-1, PDF/UA-2 and both WTPDF levels: making
+//     a form's claims unread and the annotations' first moves no count.
 func (j *fontJudgements) readsProgram(ctx context.Context, doc *document.Document, fontID string, font ast.PdfDict, usage *fontUsageInfo) bool {
 	if usage == nil || isType3Font(ctx, doc, font) {
 		return true
@@ -566,9 +568,16 @@ func (j *fontJudgements) claimProgram(scope, fontID string, mode int) {
 // operators that follow. site is the stream's [showSite], visited holds the
 // forms already walked, and depth bounds the recursion as [formTooDeep] bounds
 // the form walk. The forms walked are those [checkFormXObjectFonts] judges.
-func (j *fontJudgements) claimStreamReads(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, site showSite, pageNum int, visited map[int]bool, depth int) {
+// forms says whether a form drawn here is judged by the claims it makes
+// ([formReads]).
+func (j *fontJudgements) claimStreamReads(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, site showSite, pageNum int, visited map[int]bool, depth int, forms formReads) {
 	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return
+	}
+	// A scope no usage carries is one no stream is judged through.
+	scope := site.key + "/"
+	if depth > 0 && forms == formsClaimUnread {
+		scope = "unread " + scope
 	}
 	fonts, _ := document.ResolveDict(ctx, doc, res["Font"])
 	xobjs, _ := document.ResolveDict(ctx, doc, res["XObject"])
@@ -581,7 +590,7 @@ func (j *fontJudgements) claimStreamReads(ctx context.Context, doc *document.Doc
 		if shown, isShow := shownOperand(op); isShow {
 			ref, ok := fonts[ast.PdfName(text.font)]
 			if text.font != "" && ok && showsString(shown) {
-				j.claimProgram(site.key+"/"+text.font, fontIdentity(ref, ast.PdfName(text.font), site), text.mode)
+				j.claimProgram(scope+text.font, fontIdentity(ref, ast.PdfName(text.font), site), text.mode)
 			}
 			continue
 		}
@@ -594,8 +603,42 @@ func (j *fontJudgements) claimStreamReads(ctx context.Context, doc *document.Doc
 		}
 		sub := streamSite(ctx, doc, form.ref, form.dict["Resources"], form.res)
 		sub.mode = text.mode
-		j.claimStreamReads(ctx, doc, form.ops, form.res, sub, pageNum, visited, depth+1)
+		j.claimStreamReads(ctx, doc, form.ops, form.res, sub, pageNum, visited, depth+1, forms)
 	}
+}
+
+// formReads says whether the Form XObjects a page draws are judged by the
+// claims they make ([fontJudgements.claimStreamReads]).
+type formReads bool
+
+const (
+	// formsReadWhereDrawn judges a form's glyphs where it is the first to show
+	// a font in a rendering mode.
+	formsReadWhereDrawn formReads = false
+	// formsClaimUnread makes a form's claims where the page draws it without
+	// ever judging its glyphs by them.
+	formsClaimUnread formReads = true
+)
+
+// pageFormReads returns how veraPDF, validating against profile, reads the
+// program of a font the forms a page draws show.
+//
+// For PDF/A, veraPDF parses a form where the page draws it and judges its
+// glyphs by that parse. For PDF/UA it builds a page's content as a semantic
+// content stream (GFPDPage.parseContentStream builds a GFPDSemanticContentStream
+// for a PDF/UA flavour), and a form the page draws then claims its rendering
+// modes where drawn while none of its glyphs is judged. Measured with veraPDF
+// 1.30 at PDF/UA-1 and PDF/UA-2 on a CID a TrueType CIDFont lacks, shown in a
+// form: drawn alone, or before page text showing another missing CID, it fails
+// neither ISO 14289-1, 7.21.4.1 t2 nor ISO 14289-2, 8.4.5.5.1 t2, and neither
+// does the page text; drawn after that page text, the page text fails them
+// once. WTPDF, which veraPDF builds on the PDF/UA-2 rules, is read as PDF/UA
+// without a measurement of its own.
+func pageFormReads(profile string) formReads {
+	if IsPDFUA(profile) {
+		return formsClaimUnread
+	}
+	return formsReadWhereDrawn
 }
 
 // annotationsParsedFirst reports whether veraPDF, validating against profile,
@@ -614,10 +657,13 @@ func (j *fontJudgements) claimStreamReads(ctx context.Context, doc *document.Doc
 // 6.3.5 t1 and 6.3.6 t1 at PDF/A-1b and neither ISO 19005-2, 6.2.11.4.1 t2 nor
 // 6.2.11.5 t1 at PDF/A-2b and PDF/A-2u; shown by the page text instead, it
 // fails neither at PDF/A-1b and both at PDF/A-2b and PDF/A-2u; a form the page
-// draws orders as the page text does. Other profiles keep the PDF/A-2 order,
-// which was not measured for them.
+// draws orders as the page text does. PDF/UA judges no page transparency
+// either, and an annotation's missing CIDs fail ISO 14289-1, 7.21.4.1 t2 and
+// ISO 14289-2, 8.4.5.5.1 t2 at PDF/UA-1 and PDF/UA-2 where the page text's
+// fail neither. PDF/A-3 and PDF/A-4 keep the PDF/A-2 order, which was not
+// measured for them.
 func annotationsParsedFirst(profile string) bool {
-	return !IsPDFUA(profile) && PDFAPart(profile) == 1
+	return IsPDFUA(profile) || PDFAPart(profile) == 1
 }
 
 // claimAnnotationReads makes the claims of [fontJudgements.claimStreamReads]
@@ -688,7 +734,7 @@ func (j *fontJudgements) claimAppearanceReads(ctx context.Context, doc *document
 		doc.Logger.Debug("compliance: fonts: cannot parse appearance stream", "page", pageNum, "error", err)
 		return
 	}
-	j.claimStreamReads(ctx, doc, ops, res, streamSite(ctx, doc, apObj, stream.Dict["Resources"], res), pageNum, visited, 0)
+	j.claimStreamReads(ctx, doc, ops, res, streamSite(ctx, doc, apObj, stream.Dict["Resources"], res), pageNum, visited, 0, formsReadWhereDrawn)
 }
 
 // showsString reports whether the operand of a text-showing operator holds a
