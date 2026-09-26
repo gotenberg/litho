@@ -343,8 +343,7 @@ zero-area annotation.
 ## Expected firing sets
 
 Counts are distinct rule classes (`clause/test`) reported by litho. litho and
-veraPDF agree exactly on the set in every cell except the eight marked `*`,
-veraPDF agree exactly on the set in every cell except the two marked `*`,
+veraPDF agree exactly on the set in every cell except the five marked `*`,
 which are covered under [Known divergences](#known-divergences).
 
 | Fixture                | A-1a | A-1b | A-2a | A-2b | A-2u | A-3a | A-3b | A-3u | A-4 | A-4e | A-4f | UA-1 | UA-2 |
@@ -1673,23 +1672,6 @@ either rule.
 outside the structure tree. `c1c11d3` judges the language of text no structure
 element owns, and both tools now report the rule on this file, so `7.1/12` is
 the cell's only difference.
-
-Three more cells disagree, all on `inlineimage_2b.pdf` and all on the same
-construct: an unusable `/Lang` on a marked-content property list in a document
-with no structure tree.
-
-**`6.8.4/1` at PDF/A-1a, `6.7.4/1` at PDF/A-2a and PDF/A-3a.** veraPDF reports
-the inline `/Span <</Lang (-pt)>> BDC`, litho does not. ISO 19005-2, 6.7.4
-holds a `/Lang` "in the document's Catalog dictionary or in a structure element
-dictionary or property list" to a language identifier, and veraPDF judges every
-such entry as a `CosLang`, the one in a content stream's property list included.
-litho's check scans page property lists too, inline and named, but
-`checkPDFALangValid` in `pkg/internal/compliance/structure.go` returns as soon
-as the catalog has no `/StructTreeRoot`, before it reaches them. The clause
-does not depend on the structure tree, so litho has the gap. A remediation hides it: the
-first round adds a structure tree, the revalidation then reports the entry, and
-the marked-content repair removes it, so both tools agree on every remediated
-output.
 
 Three more cells disagree, all on `usecmap_2u.pdf` and all on one glyph: CID
 44DF of `C2`, which Adobe's current Adobe-CNS1-UCS2 maps to U+F538, a Private
@@ -3662,29 +3644,29 @@ set, and at the PDF/A levels among them the same count for every rule.
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
-the runner scores 77 x 8 = 616 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 77 x 13 = 1001 cells. litho
+the runner scores 92 x 8 = 736 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 92 x 13 = 1196 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1084 of the 1092 cells. The eight
-exceptions, two on `complex_ua2`, three on `inlineimage_2b` and three on
-`usecmap_2u`, are marked `*` in the counts table and covered under
-[Known divergences](#known-divergences); veraPDF reports a non-empty set in
-each, which is why the verdict still matches.
+fixtures exist to protect, and it holds in 1191 of the 1196 cells. The five
+exceptions, two on `complex_ua2` and three on `usecmap_2u`, are marked `*` in
+the counts table and covered under [Known divergences](#known-divergences);
+veraPDF reports a non-empty set in each, which is why the verdict still
+matches.
 
 The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates,
 counts the cells whose sets of failed rules (clause and test) differ. Every
 fixture here is non-compliant on both sides, so a change that drops or invents
-a rule class leaves `matched` at 616 and moves only `ruleset_mismatch`. Three of
+a rule class leaves `matched` at 736 and moves only `ruleset_mismatch`. Four of
 the five exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1
-and PDF/UA-2 and `inlineimage_2b` at PDF/A-2a, so the metric reads 3 on this
-corpus, and the text scoreboard names the rules only one side reports. The
-PDF/A-1a and PDF/A-3a cells of `inlineimage_2b` are outside the manifest. A
-fourth cell in the runner is a regression, or a divergence to cover under
-Known divergences and mark `*`.
+and PDF/UA-2 and `usecmap_2u` at PDF/A-2a and PDF/UA-2, so the metric reads 4 on
+this corpus, and the text scoreboard names the rules only one side reports. The
+PDF/A-3a cell of `usecmap_2u` is outside the manifest. A fifth cell in the
+runner is a regression, or a divergence to cover under Known divergences and
+mark `*`.
 
 The thirteen-level figures are measured by hand against a live veraPDF. The
 thirteen flavours are `1a 1b 2a 2b 2u 3a 3b 3u 4 4e 4f ua1 ua2` on the veraPDF
