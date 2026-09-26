@@ -523,34 +523,6 @@ func hasHexLetter(s string) bool {
 	return false
 }
 
-// IsSyntheticGlyphName reports whether name is one of the code-point spellings
-// some producers invent and [GlyphToRuneFull] decodes for text extraction:
-// "Gxx" (two hex digits), "gXXXX" (four hex digits), "Cdd"/"Cddd" (decimal) or
-// "Cxx" (hex) after C or c, and "iSQPXXXX". No glyph list defines them, so they
-// carry no Unicode value of their own under ISO 32000-1, 9.10.2.
-func IsSyntheticGlyphName(name string) bool {
-	switch {
-	case len(name) == 3 && name[0] == 'G':
-		_, err := strconv.ParseUint(name[1:], 16, 32)
-		return err == nil
-	case len(name) == 5 && name[0] == 'g':
-		_, err := strconv.ParseUint(name[1:], 16, 32)
-		return err == nil
-	case len(name) >= 3 && len(name) <= 5 && (name[0] == 'C' || name[0] == 'c'):
-		if _, err := strconv.Atoi(name[1:]); err == nil {
-			return true
-		}
-		if hasHexLetter(name[1:]) {
-			_, err := strconv.ParseUint(name[1:], 16, 32)
-			return err == nil
-		}
-	case len(name) == 8 && name[:4] == "iSQP":
-		_, err := strconv.ParseUint(name[4:], 16, 32)
-		return err == nil
-	}
-	return false
-}
-
 // GlyphToRuneSimple resolves a glyph name without [RecoverGlyphName] fallback.
 func GlyphToRuneSimple(name string) (rune, bool) {
 	if r, ok := GlyphToRune[name]; ok {
