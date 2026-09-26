@@ -137,6 +137,7 @@ one deliberately rather than diffing it against a fresh build.
 | `csnames_2b.pdf`       | PDF/A-2b     | Colour-space names inside colour space arrays, read as the entry |
 | `offlimits_1b.pdf`     | PDF/A-1b     | Implementation limits in streams drawn with colour operators off |
 | `xrefstm_2b.pdf`       | PDF/A-2b     | The trailer entries of a cross-reference stream, and an update's |
+| `typedreads_1b.pdf`    | PDF/A-1b     | Values veraPDF reads again through typed objects of its model    |
 
 ### Must-not-fire controls
 
@@ -322,6 +323,8 @@ violation but is exempt, so a firing is a false positive.
 | `offlimits_1b`                            | Page 2: a coloured cell selecting `DN` beside an uncoloured one        | ISO 32000-1, 8.7.3.3         |
 | `offlimits_1b`                            | Pages 6, 8, 9: a pattern selected with colour operators off            | ISO 32000-1, 9.6.5           |
 | `offlimits_1b`                            | Pages 11 to 13: `99999999999 g` drawn with colour operators off        | ISO 19005-1, 6.1.12 t1       |
+| `typedreads_1b`                           | Every `/Lang` an odd hex string decoding to a well-formed tag          | ISO 19005-1, 6.8.4           |
+| `typedreads_1b`                           | The outline dictionary's `/Title`, never read again as an item's       | ISO 32000-1, 12.3.3          |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -412,6 +415,7 @@ which are covered under [Known divergences](#known-divergences).
 | `trailer_2b.pdf`       | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
 | `ttcmap_2b.pdf`        | 8    | 5    | 9    | 6    | 7    | 9    | 6    | 7    | 6   | 6    | 7    | 9    | 8    |
 | `ttencoding_2b.pdf`    | 10   | 7    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 10   | 10   |
+| `typedreads_1b.pdf`    | 10   | 8    | 9    | 8    | 8    | 11   | 10   | 10   | 9   | 8    | 8    | 7    | 11   |
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 5    | 4    |
 | `undecodable_2b.pdf`   | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 11   | 9    |
 | `usedcs_2b.pdf`        | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
@@ -3447,6 +3451,52 @@ The two tools return the same rule set, and the same count for every rule, in
 all thirteen cells. At PDF/A-1b the real answers `6.1.12/2` three times on
 both, and the cross-reference stream `6.1.4/3`.
 
+### `typedreads_1b.pdf`
+
+veraPDF judges a value once as a COS object and again wherever a typed object
+of its model wraps it in a new one with no identity of its own: an outline
+item's `/Title`, a structure element's `/S`, `/Lang`, `/Alt` and
+`/ActualText`, the catalog's `/Lang`, the `/Lang` of the element an
+annotation's or a form field's `/StructParent` names, each page box, a stream's
+`/Filter` names, the file specifications of the `/EmbeddedFiles` name tree.
+Every rule of the wrapper's type judges it again: the hex string tests of ISO
+19005-1, 6.1.6, and the limits of 6.1.12. No corpus file holds a hex string
+defect in one of these places, or a page box, a filter name, a structure type
+or a role map key past a limit; two verapdf files hold an outline `/Title` past
+the string limit, which is where the reading showed.
+
+The builder's table lists every defective string, each distinct. The reach is
+veraPDF's, measured one construct per file: the outline walk runs from
+`/First` along `/First` and `/Next`, each item once, and never reads the outline
+dictionary's own `/Title` or an item only `/Last` names; the structure walk
+reads an indirect element once however often `/K` lists it, and never its
+`/E`; an annotation reads its element's `/Lang`, a form field too, down every
+`/Kids` entry holding a `/T`, so the widget that is also the field reads it
+twice more; a media box is judged for every page it applies to, and an indirect
+element of a box once. Every `/Lang` ends on the digit 7, which an odd hex
+string reads as `70`, so it decodes to a well-formed tag (`nlp`, `enp`, `dp`)
+and the language rules of PDF/A-1a, PDF/A-2a and PDF/UA stay silent: veraPDF
+counts those per read. A structure element whose `/K` loops back to itself
+stays out, because veraPDF's PDF/A-3 file specification walk follows it until
+its stack overflows.
+
+| Rule at PDF/A-1b             | veraPDF | litho |
+| ---------------------------- | ------- | ----- |
+| `6.1.6/1` odd hex digits     | 34      | 34    |
+| `6.1.6/2` non-hex digit      | 2       | 2     |
+| `6.1.11/1` EF key            | 2       | 1     |
+| `6.1.11/2` EmbeddedFiles key | 1       | 1     |
+| `6.1.12/2` real              | 14      | 14    |
+| `6.1.12/4` name              | 6       | 6     |
+| `6.7.2/1` no metadata        | 1       | 1     |
+| `6.9/2` field appearance     | 2       | 2     |
+
+The two tools return the same rule set in all thirteen cells. The one count
+that differs is a file specification's: veraPDF judges it once as an indirect
+object and once through the name tree, `6.1.11/1` here and `6.8`, `6.9` at the
+later parts, where litho judges it once (see
+[Instance counts](#instance-counts-which-the-corpus-does-not-pin)).
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
@@ -3456,7 +3506,7 @@ and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1048 of the 1053 cells. The five
+fixtures exist to protect, and it holds in 1061 of the 1066 cells. The five
 exceptions, two on `complex_ua2` and three on `inlineimage_2b`, are marked `*`
 in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
