@@ -77,6 +77,53 @@ func fixPageResources(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 	return []string{fmt.Sprintf("materialised /Resources on %d page(s)", count)}, nil
 }
 
+// resourcesHolder returns the node of the page tree whose /Resources the page's
+// content resolves its names against: the page itself when its /Resources is
+// a dictionary, else the nearest ancestor along /Parent whose /Resources is one
+// (ISO 32000-1, 7.7.3.4 and Table 30). ok is false when no node holds one.
+//
+// A fixer that repairs the resources hands the holder where it would hand the
+// page, and writes an inline /Resources it rebuilt back into the holder: the
+// repair then reaches every page inheriting the dictionary, and never shadows
+// it with a copy on one page. Every node is read through the allocator, so the
+// holder carries what an earlier fixer wrote to it, and a page an earlier
+// fixer gave /Resources of its own holds them.
+//
+// Compliance (pageObject.inheritedHolder) stops at the nearest node that
+// states /Resources at all and follows the node the page tree walk came
+// through, so the two differ only on a /Resources that is not a dictionary or
+// a /Parent that names another node. The walk stops at a /Parent cycle and at
+// maxPageTreeDepth.
+//
+// # Corpus evidence
+//
+//   - All corpora: 19 pages, on 12 files, hold no /Resources dictionary of
+//     their own and inherit one. On two files they inherit a colour space a
+//     colour repair reads, a DeviceN in pdfjs issue17065.pdf and Separations
+//     that agree with each other in litho resinherit_2b.pdf, and on none an
+//     ICCBased space.
+//   - pdfjs issue17065.pdf: devicen completed the DeviceN its page inherits
+//     only in a second round, once page-resources had pinned the dictionary
+//     on the page, at PDF/A-2b and PDF/A-4, default and aggressive. One round
+//     now does.
+func resourcesHolder(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry) (annotPageEntry, bool) {
+	holder := pe
+	seen := make(map[int]bool)
+	for depth := 0; liveDictValue(ctx, alloc, doc, holder.dict["Resources"]) == nil; depth++ {
+		parentRef, ok := holder.dict["Parent"].(ast.PdfIndirectRef)
+		if !ok || parentRef.ObjectNum <= 0 || seen[parentRef.ObjectNum] || depth >= maxPageTreeDepth {
+			return annotPageEntry{}, false
+		}
+		seen[parentRef.ObjectNum] = true
+		parent := resolveFromAllocOrDoc(ctx, alloc, doc, parentRef)
+		if parent == nil {
+			return annotPageEntry{}, false
+		}
+		holder = annotPageEntry{ref: parentRef, dict: parent}
+	}
+	return holder, true
+}
+
 // findInheritedResources walks /Parent upward and returns the first
 // /Resources dict it finds. Returns nil when the chain ends without one.
 //

@@ -192,14 +192,15 @@ func objectsEqual(a, b ast.PdfObject) bool {
 }
 
 // eachColorSpaceArray walks every colour-space array reachable from the
-// page's resources: direct /ColorSpace entries and the /Colorants
-// values of DeviceN/NChannel arrays. The visitor is read-only.
-func eachColorSpaceArray(ctx context.Context, _ *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, visit func(ast.PdfArray)) {
-	resObj, ok := pe.dict["Resources"]
+// resources the page resolves its names against, its own or the ones it
+// inherits (see [resourcesHolder]): direct /ColorSpace entries and the
+// /Colorants values of DeviceN/NChannel arrays. The visitor is read-only.
+func eachColorSpaceArray(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, visit func(ast.PdfArray)) {
+	holder, ok := resourcesHolder(ctx, alloc, doc, pe)
 	if !ok {
 		return
 	}
-	resDict, err := document.ResolveDict(ctx, doc, resObj)
+	resDict, err := document.ResolveDict(ctx, doc, holder.dict["Resources"])
 	if err != nil || resDict == nil {
 		return
 	}
@@ -231,12 +232,14 @@ func eachColorSpaceArray(ctx context.Context, _ *writer.ObjAllocator, doc *docum
 
 // eachColorSpaceArrayMutable is the write-capable companion to
 // eachColorSpaceArray. When patch returns true the provided array
-// replaces the existing entry through the allocator.
+// replaces the existing entry through the allocator, and an inline
+// /Resources goes back into the page or ancestor that holds it.
 func eachColorSpaceArrayMutable(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, visited map[int]bool, patch func(ast.PdfArray) (ast.PdfArray, bool)) {
-	resObj, ok := pe.dict["Resources"]
+	holder, ok := resourcesHolder(ctx, alloc, doc, pe)
 	if !ok {
 		return
 	}
+	resObj := holder.dict["Resources"]
 	// Both containers are read alloc-first because an inline rewrite copies
 	// them and writes the copy back: output-intent rewrites an indirect
 	// /Resources with the /ColorSpace dictionary inlined into it, and devicen,
@@ -314,11 +317,11 @@ func eachColorSpaceArrayMutable(ctx context.Context, alloc *writer.ObjAllocator,
 		alloc.AllocAt(resRef.ObjectNum, newRes)
 		return
 	}
-	newPage := make(ast.PdfDict, len(pe.dict))
-	maps.Copy(newPage, pe.dict)
-	newPage["Resources"] = newRes
-	if pe.ref.ObjectNum > 0 {
-		alloc.AllocAt(pe.ref.ObjectNum, newPage)
+	newHolder := make(ast.PdfDict, len(holder.dict))
+	maps.Copy(newHolder, holder.dict)
+	newHolder["Resources"] = newRes
+	if holder.ref.ObjectNum > 0 {
+		alloc.AllocAt(holder.ref.ObjectNum, newHolder)
 	}
 }
 

@@ -401,35 +401,19 @@ func (w *deviceNTrim) firstVisit(obj ast.PdfObject) bool {
 }
 
 // pageResources trims the page's effective /Resources and writes an inline
-// one back into the page or ancestor that holds it. The inheritance walk
-// follows /Parent to the nearest node, the page first, whose /Resources is a
-// dictionary. Compliance (pageObject.inheritedHolder) stops at the nearest node
-// that states /Resources at all and follows the node the page tree walk came
-// through, so the two differ only on a /Resources that is not a dictionary or
-// a /Parent that names another node.
+// one back into the page or ancestor that holds it (see [resourcesHolder]).
 func (w *deviceNTrim) pageResources(ctx context.Context, pe annotPageEntry) {
-	owner, ownerRef := pe.dict, pe.ref
-	seen := make(map[int]bool)
-	for depth := 0; liveDictValue(ctx, w.alloc, w.doc, owner["Resources"]) == nil; depth++ {
-		parentRef, ok := owner["Parent"].(ast.PdfIndirectRef)
-		if !ok || parentRef.ObjectNum <= 0 || seen[parentRef.ObjectNum] || depth >= maxPageTreeDepth {
-			return
-		}
-		seen[parentRef.ObjectNum] = true
-		owner = resolveFromAllocOrDoc(ctx, w.alloc, w.doc, parentRef)
-		if owner == nil {
-			return
-		}
-		ownerRef = parentRef
-	}
-
-	t := w.resources(ctx, owner["Resources"], 0)
-	if !t.changed || ownerRef.ObjectNum <= 0 {
+	holder, ok := resourcesHolder(ctx, w.alloc, w.doc, pe)
+	if !ok {
 		return
 	}
-	newOwner := maps.Clone(owner)
-	newOwner["Resources"] = t.value
-	w.land(ownerRef, newOwner, t.pending)
+	t := w.resources(ctx, holder.dict["Resources"], 0)
+	if !t.changed || holder.ref.ObjectNum <= 0 {
+		return
+	}
+	newHolder := maps.Clone(holder.dict)
+	newHolder["Resources"] = t.value
+	w.land(holder.ref, newHolder, t.pending)
 }
 
 // annotationAppearances trims the /Resources of every appearance stream the

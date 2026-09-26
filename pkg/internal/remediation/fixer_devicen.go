@@ -21,12 +21,12 @@ func matchDeviceNColorants(v compliance.Violation) bool {
 	return contextContains(v, "Colorants dictionary") || descriptionContains(v, "Colorants dictionary")
 }
 
-// fixDeviceNColorants walks every page's /Resources/ColorSpace entries,
-// looking for DeviceN/NChannel colour spaces whose /Attributes/Colorants
-// dict is missing entries for one or more spot colorants. Each missing
-// colorant gets a minimal /Separation colour space backed by a
-// degenerate Type 2 function. That keeps the document compliant without
-// altering visible output beyond what the existing tint transform
+// fixDeviceNColorants walks the /Resources/ColorSpace entries of every page,
+// inherited ones included, looking for DeviceN/NChannel colour spaces whose
+// /Attributes/Colorants dict is missing entries for one or more spot
+// colorants. Each missing colorant gets a minimal /Separation colour space
+// backed by a degenerate Type 2 function. That keeps the document compliant
+// without altering visible output beyond what the existing tint transform
 // already produced.
 //
 // # Corpus evidence
@@ -75,15 +75,17 @@ func fixDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	return []string{fmt.Sprintf("populated /Colorants for %d DeviceN colour space(s)", total)}, nil
 }
 
-// patchPageDeviceN walks a single page's /Resources/ColorSpace entries
-// and rewrites any DeviceN/NChannel array that is missing /Colorants.
-// The page dict is re-allocated with updated Resources when the fix has
-// to ripple through inline containers.
+// patchPageDeviceN walks the /ColorSpace entries of the /Resources a page
+// resolves its names against, its own or the ones it inherits (see
+// [resourcesHolder]), and rewrites any DeviceN/NChannel array that is missing
+// /Colorants. The page or ancestor holding the /Resources is re-allocated with
+// updated Resources when the fix has to ripple through inline containers.
 func patchPageDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, canon map[ast.PdfName]ast.PdfArray, visited map[int]bool) int {
-	resObj, ok := pe.dict["Resources"]
+	holder, ok := resourcesHolder(ctx, alloc, doc, pe)
 	if !ok {
 		return 0
 	}
+	resObj := holder.dict["Resources"]
 	// Both containers are read alloc-first because an inline repair copies them
 	// and writes the copy back: output-intent rewrites an indirect /Resources
 	// with the /ColorSpace dictionary inlined into it, and name-utf8 rewrites
@@ -164,11 +166,11 @@ func patchPageDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 		return count
 	}
 
-	newPage := make(ast.PdfDict, len(pe.dict))
-	maps.Copy(newPage, pe.dict)
-	newPage["Resources"] = newRes
-	if pe.ref.ObjectNum > 0 {
-		alloc.AllocAt(pe.ref.ObjectNum, newPage)
+	newHolder := make(ast.PdfDict, len(holder.dict))
+	maps.Copy(newHolder, holder.dict)
+	newHolder["Resources"] = newRes
+	if holder.ref.ObjectNum > 0 {
+		alloc.AllocAt(holder.ref.ObjectNum, newHolder)
 	}
 	return count
 }

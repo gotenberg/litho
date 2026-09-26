@@ -205,24 +205,30 @@ func iccProfileData(ctx context.Context, doc *document.Document, stream ast.PdfS
 	return data
 }
 
-// dedupICCInResources applies [dedupICCInOwner] to a page and queues the
-// rebuilt page dictionary when the substitution has to reach it.
+// dedupICCInResources applies [dedupICCInOwner] to the page or ancestor holding
+// the /Resources the page resolves its names against (see [resourcesHolder]),
+// and queues the rebuilt holder dictionary when the substitution has to reach
+// it.
 func dedupICCInResources(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, profiles [][]byte, visited map[int]bool) int {
-	count, newPage := dedupICCInOwner(ctx, alloc, doc, pe.dict, profiles, visited)
-	if newPage != nil && pe.ref.ObjectNum > 0 {
-		alloc.AllocAt(pe.ref.ObjectNum, newPage)
+	holder, ok := resourcesHolder(ctx, alloc, doc, pe)
+	if !ok {
+		return 0
+	}
+	count, newHolder := dedupICCInOwner(ctx, alloc, doc, holder.dict, profiles, visited)
+	if newHolder != nil && holder.ref.ObjectNum > 0 {
+		alloc.AllocAt(holder.ref.ObjectNum, newHolder)
 	}
 	return count
 }
 
-// dedupICCInOwner walks the resources of owner, the page or Form XObject
-// dictionary carrying /Resources, and rewrites /CSx = [/ICCBased ref] entries
-// whose stream matches one of profiles. The paired device colour space is
-// chosen by the profile's component count. It returns the number of colour
-// spaces replaced and, when /Resources and /ColorSpace are both inline, a copy
-// of owner carrying the rewritten /Resources. The caller queues that copy,
-// because only it knows the owner's object kind: a form's dictionary must be
-// written back with its stream body.
+// dedupICCInOwner walks the resources of owner, the page, page tree node or
+// Form XObject dictionary carrying /Resources, and rewrites /CSx = [/ICCBased
+// ref] entries whose stream matches one of profiles. The paired device colour
+// space is chosen by the profile's component count. It returns the number of
+// colour spaces replaced and, when /Resources and /ColorSpace are both inline,
+// a copy of owner carrying the rewritten /Resources. The caller queues that
+// copy, because only it knows the owner's object kind: a form's dictionary must
+// be written back with its stream body.
 //
 // # Corpus evidence
 //
@@ -327,10 +333,11 @@ func dedupICCInOwner(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	return len(inlineUpdates), newOwner
 }
 
-// dedupICCInXObjects walks every Form XObject reachable from a page's
-// /Resources/XObject sub-dict and applies dedupICCInOwner to its
-// own /Resources. PDF/A §6.2.4.2 test 3 also covers Form XObject
-// ColorSpace entries, not just page-level ones.
+// dedupICCInXObjects walks every Form XObject reachable from the
+// /Resources/XObject sub-dict of a page, inherited or its own (see
+// [resourcesHolder]), and applies dedupICCInOwner to its own /Resources.
+// PDF/A §6.2.4.2 test 3 also covers Form XObject ColorSpace entries, not just
+// page-level ones.
 //
 // # Corpus evidence
 //
@@ -338,11 +345,11 @@ func dedupICCInOwner(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 //     PDF/A-4 each form was written back as a bare dictionary without its
 //     content stream, and revalidating the output reported no residual.
 func dedupICCInXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, profiles profileSet, visited map[int]bool) int {
-	resObj, ok := pe.dict["Resources"]
+	holder, ok := resourcesHolder(ctx, alloc, doc, pe)
 	if !ok {
 		return 0
 	}
-	resDict := liveDictValue(ctx, alloc, doc, resObj)
+	resDict := liveDictValue(ctx, alloc, doc, holder.dict["Resources"])
 	if resDict == nil {
 		return 0
 	}
