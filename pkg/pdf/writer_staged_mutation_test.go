@@ -606,3 +606,56 @@ func TestWriterDeletedPageStaysOutOfTheStagedReferences(t *testing.T) {
 		})
 	}
 }
+
+// TestWriterGeneratedBookmarksSkipADeletedPage pins that bookmarks generated
+// after a deletion on the same Writer name no heading of the deleted page, as
+// generating them on the file the deletion wrote names none.
+//
+// Headings are detected in the Reader's pages, the deleted one among them, and
+// each became a bookmark: its destination named the deleted page, which is
+// enough to write the page into the output, and its title quoted the page.
+func TestWriterGeneratedBookmarksSkipADeletedPage(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	data := headingPDF()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	generated, err := r.GenerateBookmarks(ctx, BookmarkGenerationOptions{})
+	if err != nil {
+		t.Fatalf("GenerateBookmarks: %v", err)
+	}
+	if !slices.ContainsFunc(generated, func(b models.Bookmark) bool { return b.Title == "Details" && b.PageNumber == 2 }) {
+		t.Fatalf("the generator found %+v, not the heading of page 2, so the test proves nothing", generated)
+	}
+
+	w := NewWriter(r)
+	defer w.Close()
+	if err := w.DeletePages(2); err != nil {
+		t.Fatalf("DeletePages: %v", err)
+	}
+	w.GenerateBookmarks(BookmarkGenerationOptions{}, BookmarkReplace)
+
+	bookmarks, err := writeAndReopen(t, w).Bookmarks(ctx)
+	if err != nil {
+		t.Fatalf("Bookmarks: %v", err)
+	}
+	var titles []string
+	var walk func([]models.Bookmark)
+	walk = func(bms []models.Bookmark) {
+		for _, b := range bms {
+			titles = append(titles, b.Title)
+			walk(b.Children)
+		}
+	}
+	walk(bookmarks)
+	if slices.Contains(titles, "Details") {
+		t.Errorf("the outline %q names the heading of the deleted page", titles)
+	}
+	if !slices.Contains(titles, "Introduction") {
+		t.Errorf("the outline %q lost the heading of the kept page", titles)
+	}
+}

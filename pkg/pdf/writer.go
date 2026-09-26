@@ -1037,7 +1037,8 @@ const (
 // The existing bookmarks are the outline an earlier edit on the Writer set,
 // when one did, and the Reader's otherwise. The headings are detected in the
 // Reader's pages, as [Reader.GenerateBookmarks] detects them: a page inserted,
-// or content stamped or redacted on the same Writer, is not read.
+// or content stamped or redacted on the same Writer, is not read, and a page
+// deleted on it yields no bookmark.
 func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode BookmarkMergeMode) {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
@@ -1045,13 +1046,15 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 			if err != nil {
 				return fmt.Errorf("generating bookmarks: %w", err)
 			}
-			if len(generated) == 0 {
-				return nil
-			}
-
 			resolvedPages, err := w.reader.resolvePages(ctx)
 			if err != nil {
 				return fmt.Errorf("resolving pages for bookmarks: %w", err)
+			}
+			// The headings come from the Reader's pages, so those of a page
+			// an earlier deletion removed go.
+			generated = mutations.BookmarksOnHeldPages(ctx, alloc, doc, resolvedPages, generated)
+			if len(generated) == 0 {
+				return nil
 			}
 
 			final := generated
