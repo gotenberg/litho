@@ -57,15 +57,16 @@ func assertRedacted(t *testing.T, out []byte, gone, kept []string) {
 }
 
 // TestWriter_Redact_SurvivesEveryWriterStage pins that a redaction holds
-// whatever else the same Writer does, before or after it.
+// whatever else the same Writer does, before or after it. A remediation comes
+// after it: a Redact after a remediation is refused (see
+// [ErrEditAfterRemediation]).
 //
 // Each of these sequences wrote the redacted text back while every call
 // reported success. Redact and remediation each started from an empty
-// allocator and replaced the other's overrides, a remediation file written
-// before Redact was streamed as is, and auto-tagging, queued or run as a
-// remediation fixer, rebuilt the page from the source content stream. The
-// assertions are on the output: what the file holds is the only thing a
-// redaction promises.
+// allocator and replaced the other's overrides, and auto-tagging, queued or
+// run as a remediation fixer, rebuilt the page from the source content
+// stream. The assertions are on the output: what the file holds is the only
+// thing a redaction promises.
 func TestWriter_Redact_SurvivesEveryWriterStage(t *testing.T) {
 	t.Parallel()
 
@@ -100,8 +101,7 @@ func TestWriter_Redact_SurvivesEveryWriterStage(t *testing.T) {
 		{"Redact then RemediatePDFUA", []func(*testing.T, *Writer){redactSecret, remediateUA}},
 		{"Redact then RemediatePDFA 2b", []func(*testing.T, *Writer){redactSecret, remediateA(models.PDFA2b)}},
 		{"Redact then RemediatePDFA 2a", []func(*testing.T, *Writer){redactSecret, remediateA(models.PDFA2a)}},
-		{"RemediatePDFA 2b then Redact", []func(*testing.T, *Writer){remediateA(models.PDFA2b), redactSecret}},
-		{"RemediatePDFUA then Redact", []func(*testing.T, *Writer){remediateUA, redactSecret}},
+		{"AutoTag, Redact, then RemediatePDFUA", []func(*testing.T, *Writer){autoTag, redactSecret, remediateUA}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

@@ -10,7 +10,10 @@
 //   - Mutation writes a new document: page edits, merge and split,
 //     redaction, encryption, metadata, form fields, bookmarks, stamps,
 //     attachments, auto-tagging, and PDF/A or PDF/UA remediation.
-//   - pipe chains several operations on one document.
+//   - pipe chains several operations on one document. A remediate stage runs
+//     at most once, as the last stage, since a remediation's report
+//     describes the output only when nothing edits it afterwards; pipe
+//     refuses any other order before it runs a stage.
 //
 // Global flags precede the command: --timeout bounds the run,
 // --log-level sends library diagnostics to stderr, and --max-stream-bytes,

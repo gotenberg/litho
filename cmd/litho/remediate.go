@@ -71,8 +71,13 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 	defer closer()
 
-	// This command has no encryption flag, so it can never be encrypting.
-	warnEncryptionDropped(stderr, false, r)
+	// This command has no encryption flag, so it can never be encrypting. A
+	// PDF/A output, Factur-X's PDF/A-3 included, cannot take encryption back.
+	if _, facturX := facturxVariants[*profile]; pdfaProfiles[*profile] != "" || facturX {
+		warnEncryptionDroppedByPDFA(stderr, false, r)
+	} else {
+		warnEncryptionDropped(stderr, false, r)
+	}
 
 	w := pdf.NewWriter(r)
 	defer releaseWriter(w, stderr)

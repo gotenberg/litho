@@ -231,6 +231,34 @@ var (
 	// writable directory with [WithTempDir].
 	ErrRemediationUnverified = errors.New("remediation output could not be written to a temp file to verify it")
 
+	// ErrEditAfterRemediation is returned, wrapped with the names of the
+	// refused call and of the remediation, when a [Writer] is asked for an edit
+	// after a remediation ([Writer.RemediatePDFA], [Writer.RemediatePDFUA],
+	// [Writer.RemediateWTPDF], [Writer.RemediateFacturX] or
+	// [Writer.RepairFacturX]), a second remediation included.
+	//
+	// A remediation validates and repairs the document as edited when it runs,
+	// and its [RemediationReport] describes the output only if nothing edits
+	// that document afterwards. After one, a Writer accepts [Writer.Sign],
+	// [Writer.WriteTo] and [Writer.Close], and refuses everything else: queue
+	// the edit before the remediation. A refused call queues nothing. A
+	// method that has an error return hands the refusal back at once, and
+	// every refusal, whatever the method, is also recorded: [Writer.WriteTo]
+	// returns the first one and writes nothing. [Pipeline.WriteTo] returns it too for a
+	// [Pipeline.Split] or [Pipeline.Merge] stage that follows a remediation.
+	ErrEditAfterRemediation = errors.New("edit after a remediation; queue it before the remediation")
+
+	// ErrPDFAForbidsEncryption is returned, naming the clause, when the output
+	// of a PDF/A remediation would be encrypted. Every part of ISO 19005 forbids
+	// the Encrypt key in the trailer: ISO 19005-1, 6.1.3, ISO 19005-2, 6.1.3,
+	// ISO 19005-3, 6.1.3 and ISO 19005-4, 6.1.3. [Writer.RemediatePDFA],
+	// [Writer.RemediateFacturX] and [Writer.RepairFacturX], whose Factur-X
+	// output is a PDF/A-3 file, return it when [Writer.Encrypt] was called
+	// before them, and [Writer.WriteTo] and [Pipeline.WriteTo] return it when
+	// [WithEncryption] asks to encrypt what such a remediation produced.
+	// Nothing is written.
+	ErrPDFAForbidsEncryption = errors.New("PDF/A forbids encryption: the trailer shall not contain the Encrypt key")
+
 	// ErrEmptyInvoiceXML is returned by [Writer.RemediateFacturX] when
 	// [FacturXConfig.InvoiceXML] is nil or zero-length. Factur-X
 	// requires an embedded Cross-Industry Invoice payload.

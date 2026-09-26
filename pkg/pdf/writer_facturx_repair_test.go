@@ -85,7 +85,11 @@ func TestWriter_RepairFacturX_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestWriter_RepairFacturX_NoInvoice also pins that a remediation that fails
+// ends nothing: the Writer drops the file it wrote the queued edits to, keeps
+// them queued, and accepts further edits, which name the same pages.
 func TestWriter_RepairFacturX_NoInvoice(t *testing.T) {
+	dir := isolateTempDir(t)
 	ctx := context.Background()
 	data := minimalPDF()
 	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
@@ -95,7 +99,34 @@ func TestWriter_RepairFacturX_NoInvoice(t *testing.T) {
 	defer r.Close()
 
 	w := NewWriter(r)
+	defer w.Close()
+	w.SetMetadata(Metadata{Title: "Queued before"})
 	if _, err := w.RepairFacturX(ctx); !errors.Is(err, ErrNoInvoiceAttachment) {
 		t.Errorf("err = %v, want ErrNoInvoiceAttachment", err)
+	}
+	if got := lithoTempFiles(t, dir); len(got) != 0 {
+		t.Errorf("the failed repair left %q behind", got)
+	}
+	if err := w.RotatePages(90, 1); err != nil {
+		t.Fatalf("RotatePages after the failed repair: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	if got := rotationsOf(t, out.Bytes()); len(got) != 1 || got[0] != 90 {
+		t.Errorf("the output pages have rotations %v, want [90]", got)
+	}
+	got, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("reopening the output: %v", err)
+	}
+	defer got.Close()
+	meta, err := got.Metadata(ctx)
+	if err != nil {
+		t.Fatalf("Metadata: %v", err)
+	}
+	if meta["Title"] != "Queued before" {
+		t.Errorf("the output /Title is %q, want the edit queued before the repair", meta["Title"])
 	}
 }

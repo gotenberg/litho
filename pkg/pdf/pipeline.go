@@ -29,6 +29,11 @@ import (
 // closure contents; incompatible-operation checks (e.g., Sign + an
 // edit forcing a full rewrite) are enforced by [Writer.WriteTo] at
 // execution time.
+//
+// A remediation is the last edit, as on any [Writer]: an Apply stage after
+// the one that remediates may only call [Writer.Sign], and a Split or Merge
+// stage after it is refused with [ErrEditAfterRemediation] before it runs.
+// Nothing is written then.
 // Pipeline values must not be modified after being passed to [Pipeline.WriteTo].
 //
 // A Pipeline is not safe for concurrent use. Every stage method appends to the
@@ -107,9 +112,10 @@ func (p *Pipeline) Apply(fn func(ctx context.Context, w *Writer) error) *Pipelin
 
 // Validate runs build-time structural checks without executing the
 // pipeline. It catches empty pipelines, missing [Pipeline.Open], empty
-// page lists, and empty merge sources. Cross-stage compatibility
-// (Sign combined with an edit forcing a full rewrite) is enforced by
-// [Writer.WriteTo] at execution time and does not appear here.
+// page lists, and empty merge sources. Cross-stage compatibility (Sign
+// combined with an edit forcing a full rewrite, a stage after a
+// remediation) depends on what the Apply closures call, and is enforced at
+// execution time: it does not appear here.
 func (p *Pipeline) Validate() error {
 	var errs []error
 	if p.firstErr != nil {
@@ -166,6 +172,11 @@ func (p *Pipeline) buildValidationErrors() []error {
 // WriteTo executes the pipeline and writes the final document to dst.
 // Pass [WithWriteLogger] for structured debug logs; pass [WithTempDir] or
 // [WithPipelineTempDir] to redirect intermediate temp files.
+//
+// The options reach the final write as they reach [Writer.WriteTo], which
+// refuses [WithEncryption] after a PDF/A remediation with
+// [ErrPDFAForbidsEncryption]. A stage after a remediation fails with
+// [ErrEditAfterRemediation] (see [Pipeline]).
 func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (_ *PipelineResult, err error) {
 	if err := p.Validate(); err != nil {
 		return nil, err
@@ -292,9 +303,16 @@ func (ex *executor) releaseWriter() {
 	ex.writer = nil
 }
 
-func (ex *executor) flushToTempFile(ctx context.Context) error {
+// flushToTempFile writes the current Writer to an intermediate file and makes
+// that file the current document, before stage, a split or a merge, restructures
+// it. A remediated Writer is refused: restructuring its output would leave the
+// remediation's report describing a document that is not the one written.
+func (ex *executor) flushToTempFile(ctx context.Context, stage string) error {
 	if ex.writer == nil {
 		return nil
+	}
+	if ex.writer.remediation != "" {
+		return fmt.Errorf("%w: a %s stage after Writer.%s", ErrEditAfterRemediation, stage, ex.writer.remediation)
 	}
 	f, err := os.CreateTemp(ex.tempDir, "litho-pipeline-*.pdf")
 	if err != nil {
@@ -399,7 +417,7 @@ type splitStage struct {
 func (s *splitStage) kind() stageKind { return kindSplit }
 func (s *splitStage) name() string    { return stageNameSplit }
 func (s *splitStage) apply(ctx context.Context, ex *executor) error {
-	if err := ex.flushToTempFile(ctx); err != nil {
+	if err := ex.flushToTempFile(ctx, s.name()); err != nil {
 		return err
 	}
 	var opts []WriteOption
@@ -442,7 +460,7 @@ type mergeStage struct {
 func (s *mergeStage) kind() stageKind { return kindMerge }
 func (s *mergeStage) name() string    { return stageNameMerge }
 func (s *mergeStage) apply(ctx context.Context, ex *executor) error {
-	if err := ex.flushToTempFile(ctx); err != nil {
+	if err := ex.flushToTempFile(ctx, s.name()); err != nil {
 		return err
 	}
 	sources := make([]*Reader, 0, len(s.others)+1)

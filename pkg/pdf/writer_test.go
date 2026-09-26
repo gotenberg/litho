@@ -2165,13 +2165,11 @@ func TestWriter_SignWithFullRewriteOps_ReturnsIncompatible(t *testing.T) {
 			}
 		}, src: redactableTextPDF("")},
 		// A remediation whose repairs need a full rewrite is signed on top of
-		// its output, so an edit that forces one must still refuse after it.
-		{name: "delete-pages after a remediation", setup: func(t *testing.T, w *Writer, _ *[]WriteOption) {
+		// its output, so an edit that forces one must still refuse with it.
+		{name: "clear-metadata before a remediation", setup: func(t *testing.T, w *Writer, _ *[]WriteOption) {
+			w.ClearMetadata()
 			if _, err := w.RemediatePDFA(ctx, models.PDFA2b); err != nil {
 				t.Fatalf("RemediatePDFA: %v", err)
-			}
-			if err := w.DeletePages(1); err != nil {
-				t.Fatalf("DeletePages: %v", err)
 			}
 		}},
 		{name: "with-full-rewrite", setup: func(_ *testing.T, _ *Writer, opts *[]WriteOption) { *opts = append(*opts, WithFullRewrite()) }},
@@ -4614,34 +4612,31 @@ func TestWriter_EncryptedSourceRewrittenDecrypted(t *testing.T) {
 // fast path: remediation serializes its output to a temp file, and WriteTo
 // used to stream that file unconditionally, silently discarding any
 // mutation queued after remediation (a stamp, metadata edit, or Sign).
+//
+// A mutation after a remediation is now refused, and one whose method returns
+// no error is refused through WriteTo, which writes nothing rather than the
+// remediated file without the edit.
 func TestWriter_MutationAfterRemediationNotDropped(t *testing.T) {
 	ctx := context.Background()
 	r, err := Open(ctx, bytes.NewReader(writerTestPDF()), int64(len(writerTestPDF())))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
+	defer r.Close()
 
 	w := NewWriter(r)
+	defer w.Close()
 	if _, err := w.RemediatePDFA(ctx, models.PDFA2b); err != nil {
 		t.Fatalf("RemediatePDFA: %v", err)
 	}
 	w.SetMetadata(Metadata{Title: "Post-Remediation Title"})
 
 	var out bytes.Buffer
-	if err := w.WriteTo(ctx, &out); err != nil {
-		t.Fatalf("WriteTo: %v", err)
+	if err := w.WriteTo(ctx, &out); !errors.Is(err, ErrEditAfterRemediation) {
+		t.Fatalf("WriteTo returned %v, want ErrEditAfterRemediation", err)
 	}
-
-	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
-	if err != nil {
-		t.Fatalf("Open output: %v", err)
-	}
-	meta, err := r2.Metadata(ctx)
-	if err != nil {
-		t.Fatalf("Metadata: %v", err)
-	}
-	if meta["Title"] != "Post-Remediation Title" {
-		t.Errorf("post-remediation mutation dropped: Title = %q", meta["Title"])
+	if out.Len() != 0 {
+		t.Errorf("WriteTo wrote %d bytes without the refused mutation", out.Len())
 	}
 }
 

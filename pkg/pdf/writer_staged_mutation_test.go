@@ -13,43 +13,6 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// oneRoundRemediatedWriter opens data, remediates it at PDF/A-2b in a Writer and
-// requires the remediation to keep its first round alone, so its repairs stay
-// queued in the Writer rather than written into a file it edits.
-func oneRoundRemediatedWriter(t *testing.T, data []byte) (*Writer, func()) {
-	t.Helper()
-
-	ctx := context.Background()
-	rounds := &keptRounds{}
-	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)), WithLogger(slog.New(rounds)))
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	w := NewWriter(r)
-	cleanup := func() {
-		if err := w.Close(); err != nil {
-			t.Errorf("Writer.Close: %v", err)
-		}
-		if err := r.Close(); err != nil {
-			t.Errorf("Reader.Close: %v", err)
-		}
-	}
-	report, err := w.RemediatePDFA(ctx, models.PDFA2b)
-	if err != nil {
-		cleanup()
-		t.Fatalf("RemediatePDFA: %v", err)
-	}
-	if rounds.n.Load() != 0 {
-		cleanup()
-		t.Fatalf("the remediation kept %d later rounds, so the Writer edits its output and the test proves nothing", rounds.n.Load())
-	}
-	if len(report.Fixed) == 0 {
-		cleanup()
-		t.Fatal("the remediation fixed nothing, so the test proves nothing")
-	}
-	return w, cleanup
-}
-
 // writeAndReopen writes w and opens the output.
 func writeAndReopen(t *testing.T, w *Writer) *Reader {
 	t.Helper()
@@ -71,20 +34,31 @@ func writeAndReopen(t *testing.T, w *Writer) *Reader {
 	return r
 }
 
-// TestWriterMetadataEditAfterOneRemediationRoundReachesTheXMP pins that a
-// metadata edit queued after a remediation that keeps one round moves the XMP
-// packet the remediation wrote, as it does when it edits the remediated file.
+// TestWriterMetadataEditBeforeARemediationReachesTheXMP pins that a metadata
+// edit queued before a PDF/A remediation reaches the XMP packet the
+// remediation writes, which ISO 19005-2, 6.6.3 requires to agree with /Info.
 //
-// A PDF/A remediation of a document with no XMP writes a packet at a new object
-// number, queued in the Writer, and the edit synchronised XMP from the packet
-// the source document holds at that number: none, so the output carried the
-// new title in /Info only and the remediation's packet kept the old one.
-func TestWriterMetadataEditAfterOneRemediationRoundReachesTheXMP(t *testing.T) {
+// It used to be queued after the remediation, which a Writer now refuses. A
+// PDF/A remediation of a document with no XMP writes a packet at a new object
+// number, and the edit synchronised XMP from the packet the source document
+// held at that number: none, so the output carried the new title in /Info
+// only and the remediation's packet kept the old one.
+func TestWriterMetadataEditBeforeARemediationReachesTheXMP(t *testing.T) {
 	t.Parallel()
 
-	w, cleanup := oneRoundRemediatedWriter(t, signablePDF())
-	defer cleanup()
+	ctx := context.Background()
+	data := signablePDF()
+	src, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer src.Close()
+	w := NewWriter(src)
+	defer w.Close()
 	w.SetMetadata(Metadata{Title: "Edited title", Author: "Edited author"})
+	if _, err := w.RemediatePDFA(ctx, models.PDFA2b); err != nil {
+		t.Fatalf("RemediatePDFA: %v", err)
+	}
 
 	r := writeAndReopen(t, w)
 	packet := readXMPPacket(t, r)

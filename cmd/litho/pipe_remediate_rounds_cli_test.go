@@ -91,16 +91,17 @@ func pdfa1bFindings(t *testing.T, path string) ([]string, []int) {
 	return texts, rotations
 }
 
-// TestPipeRotateAfterRemediateKeepsEveryRound pins that a stage queued after a
-// remediate stage keeps the repairs of every round the remediation kept.
+// TestPipeRotateBeforeRemediateKeepsEveryRound pins that a stage queued before
+// a remediate stage that keeps later rounds reaches the output with the
+// repairs of every round.
 //
-// `litho pipe f remediate -profile PDF/A-1b rotate -angle 90` wrote a file
-// that failed ISO 19005-1, 6.7.3 where `litho pipe f remediate -profile
-// PDF/A-1b` did not: the rotation made the remediation output stale, and the
-// Writer serialized afresh from state that held the first round's repairs
-// alone, while the second round had injected the dc:title and dc:creator the
-// clause requires.
-func TestPipeRotateAfterRemediateKeepsEveryRound(t *testing.T) {
+// The order used to be the reverse: `litho pipe f remediate -profile PDF/A-1b
+// rotate -angle 90` wrote a file that failed ISO 19005-1, 6.7.3 where `litho
+// pipe f remediate -profile PDF/A-1b` did not, because the rotation made the
+// remediation output stale and the second round's dc:title and dc:creator
+// were lost. remediate must now be the last stage, so the rotation comes
+// first and the remediation judges the rotated document.
+func TestPipeRotateBeforeRemediateKeepsEveryRound(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		binaryComment bool
@@ -118,8 +119,8 @@ func TestPipeRotateAfterRemediateKeepsEveryRound(t *testing.T) {
 			}
 			rotated := filepath.Join(dir, "rotated.pdf")
 			if rc, _, stderr := runPipeCLI(t, "pipe", "-o", rotated, src,
-				"remediate", "-profile", "PDF/A-1b", "rotate", "-angle", "90"); rc != exitOK {
-				t.Fatalf("pipe remediate rotate: exit %d; stderr: %s", rc, stderr)
+				"rotate", "-angle", "90", "remediate", "-profile", "PDF/A-1b"); rc != exitOK {
+				t.Fatalf("pipe rotate remediate: exit %d; stderr: %s", rc, stderr)
 			}
 
 			want, _ := pdfa1bFindings(t, plain)

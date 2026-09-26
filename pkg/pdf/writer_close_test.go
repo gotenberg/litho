@@ -134,17 +134,14 @@ func TestWriterWriteToRemovesRemediationOutput(t *testing.T) {
 	}
 }
 
-// TestWriterStaleRemediationOutputIsRemoved pins the stale path: an edit
-// queued after the remediation makes WriteTo serialize afresh, and the file
-// it no longer streams goes all the same.
+// TestWriterStaleRemediationOutputIsRemoved pins the stale path: a write
+// option that shapes the serialization makes WriteTo serialize afresh, and
+// the file it no longer streams goes all the same.
 func TestWriterStaleRemediationOutputIsRemoved(t *testing.T) {
 	dir := isolateTempDir(t)
 	w := remediatedWriter(t)
 
-	if err := w.RotatePages(90); err != nil {
-		t.Fatalf("RotatePages: %v", err)
-	}
-	if err := w.WriteTo(context.Background(), &bytes.Buffer{}); err != nil {
+	if err := w.WriteTo(context.Background(), &bytes.Buffer{}, WithXRefStream()); err != nil {
 		t.Fatalf("WriteTo: %v", err)
 	}
 	if got := lithoTempFiles(t, dir); len(got) != 0 {
@@ -256,7 +253,7 @@ func TestWriterFailedRemediationLeavesNoTempFile(t *testing.T) {
 			if tc.cancelRun {
 				e.cancel = cancel
 			}
-			_, err = w.remediate(ctx, DefaultRegressionTolerance, cancelOnCall(tc.cancelCall, cancel), e.run)
+			_, err = w.remediate(ctx, engineTarget, DefaultRegressionTolerance, cancelOnCall(tc.cancelCall, cancel), e.run)
 			if !errors.Is(err, tc.wantErr) {
 				t.Fatalf("remediate returned %v, want %v", err, tc.wantErr)
 			}
@@ -294,7 +291,7 @@ func TestWriterRemediationRoundCancellationLeavesNoTempFile(t *testing.T) {
 		return e.run(ctx, alloc, doc, disabled)
 	}
 	w := NewWriter(r)
-	if _, err := w.remediate(ctx, DefaultRegressionTolerance, e.revalidate, run); !errors.Is(err, context.Canceled) {
+	if _, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, e.revalidate, run); !errors.Is(err, context.Canceled) {
 		t.Fatalf("remediate returned %v, want context.Canceled", err)
 	}
 	if len(e.disabled) != 2 {
@@ -305,13 +302,15 @@ func TestWriterRemediationRoundCancellationLeavesNoTempFile(t *testing.T) {
 	}
 }
 
-// TestWriterSecondRemediationSupersedesTheFirst pins a Writer remediated
-// twice. The first run's output stayed on the Writer for WriteTo to stream,
-// and WriteTo judged it fresh by the queue length alone, which a remediation
-// does not change: when the first run repaired nothing, the second run's
-// probe and the final WriteTo both streamed the first run's file, and the
-// second run's repairs never reached the output. The first file also leaked.
-func TestWriterSecondRemediationSupersedesTheFirst(t *testing.T) {
+// TestWriterRefusesASecondRemediation pins a Writer asked to remediate twice.
+// The first remediation ends the Writer's edits, even one that repaired
+// nothing, so the second is refused with [ErrEditAfterRemediation] and runs
+// nothing, WriteTo returns the refusal, and the first run's output stays on
+// the Writer until Close removes it.
+//
+// Two runs on one Writer used to compose: the second judged the first's
+// output, and a report for each described a document only the pair produced.
+func TestWriterRefusesASecondRemediation(t *testing.T) {
 	dir := isolateTempDir(t)
 	ctx := context.Background()
 
@@ -325,31 +324,31 @@ func TestWriterSecondRemediationSupersedesTheFirst(t *testing.T) {
 	w := NewWriter(r)
 	defer w.Close()
 	first := &roundsEngine{}
-	if _, err := w.remediate(ctx, DefaultRegressionTolerance, first.revalidate, first.run); err != nil {
+	if _, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, first.revalidate, first.run); err != nil {
 		t.Fatalf("first remediate: %v", err)
 	}
 	second := &roundsEngine{steps: []roundsStep{{keys: []string{"PageLayout"}}}}
-	report, err := w.remediate(ctx, DefaultRegressionTolerance, second.revalidate, second.run)
-	if err != nil {
-		t.Fatalf("second remediate: %v", err)
+	if _, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, second.revalidate, second.run); !errors.Is(err, ErrEditAfterRemediation) {
+		t.Fatalf("second remediate returned %v, want ErrEditAfterRemediation", err)
 	}
-	if len(report.Residual) != 0 {
-		t.Errorf("the second remediation judged an output without its repair: %v", report.Residual)
+	if len(second.disabled) != 0 {
+		t.Errorf("the refused remediation ran its engine %d times", len(second.disabled))
 	}
 	if got := lithoTempFiles(t, dir); len(got) != 1 {
-		t.Errorf("after two remediations the temp dir holds %q, want the second output only", got)
+		t.Errorf("after the refusal the temp dir holds %q, want the first output only", got)
 	}
 
 	var out bytes.Buffer
-	if err := w.WriteTo(ctx, &out); err != nil {
-		t.Fatalf("WriteTo: %v", err)
+	if err := w.WriteTo(ctx, &out); !errors.Is(err, ErrEditAfterRemediation) {
+		t.Fatalf("WriteTo returned %v, want the recorded ErrEditAfterRemediation", err)
 	}
-	r2, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
-	if err != nil {
-		t.Fatalf("reopening the output: %v", err)
+	if out.Len() != 0 {
+		t.Errorf("WriteTo wrote %d bytes after the refusal", out.Len())
 	}
-	defer r2.Close()
-	if res, err := second.revalidate(ctx, r2); err != nil || len(res) != 0 {
-		t.Errorf("the output misses the second remediation's repair: %v %v", res, err)
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if got := lithoTempFiles(t, dir); len(got) != 0 {
+		t.Errorf("Close left %q behind", got)
 	}
 }

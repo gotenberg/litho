@@ -107,9 +107,12 @@ func TestPipe_EqualsFormAlreadyWorks(t *testing.T) {
 // for the fix, and the reason the fix cannot be a blanket "the token after a
 // flag is its value" rule.
 //
-// -aggressive is the only boolean among the stage flags, so it consumes
-// nothing: the token after it is a genuine stage and must still start a new
-// group. Measured working before the fix, and it has to stay that way.
+// -aggressive is a boolean stage flag, so it consumes nothing: the token after
+// it is a genuine stage and must still start a new group. Measured working
+// before the fix, and it has to stay that way. remediate must now be the last
+// stage, so the pipeline is refused, and the refusal naming "rotate" is what
+// proves rotate was read as a stage: swallowed as -aggressive's value, it
+// would leave remediate last and the pipeline would run.
 func TestPipe_BooleanStageFlagDoesNotSwallowTheNextStage(t *testing.T) {
 	src := writeTempPDF(t, untaggedTextPDF())
 	out := filepath.Join(t.TempDir(), "piped.pdf")
@@ -118,11 +121,14 @@ func TestPipe_BooleanStageFlagDoesNotSwallowTheNextStage(t *testing.T) {
 		"pipe", src, "remediate", "-profile", "PDF/A-2b", "-aggressive",
 		"rotate", "-angle", "90", "-o", out,
 	})
-	if rc != exitOK {
-		t.Fatalf("pipe: exit %d, stderr: %s", rc, errOut)
+	if rc != exitError {
+		t.Fatalf("pipe: exit %d, want %d; stderr: %s", rc, exitError, errOut)
 	}
-	if _, err := os.Stat(out); err != nil {
-		t.Fatalf("no output file: %v", err)
+	if !strings.Contains(errOut, `move "rotate" before remediate`) {
+		t.Errorf("the refusal does not name the rotate stage, so -aggressive swallowed it: %q", errOut)
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Errorf("pipe wrote %s for a refused pipeline", out)
 	}
 }
 

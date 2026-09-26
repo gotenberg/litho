@@ -27,6 +27,11 @@ type roundsStep struct {
 	empty bool
 }
 
+// engineTarget is what the tests that call [Writer.remediate] with a
+// [roundsEngine] run it for: no PDF/A profile, and a method name the
+// refusals of a later call quote.
+var engineTarget = remediationTarget{method: "remediate"}
+
 // roundsEngine is a remediation engine that makes the repairs of steps, one
 // step per round, and records the fixers each round was told to disable.
 type roundsEngine struct {
@@ -153,7 +158,7 @@ func TestWriterRemediateContinuesAfterRollback(t *testing.T) {
 
 			e := &roundsEngine{steps: tc.steps}
 			w := NewWriter(r)
-			report, err := w.remediate(ctx, DefaultRegressionTolerance, e.revalidate, e.run)
+			report, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, e.revalidate, e.run)
 			if err != nil {
 				t.Fatalf("remediate: %v", err)
 			}

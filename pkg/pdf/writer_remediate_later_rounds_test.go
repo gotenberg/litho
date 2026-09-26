@@ -76,11 +76,12 @@ func (k *keptRounds) Handle(_ context.Context, r slog.Record) error {
 	return nil
 }
 
-// TestWriterEditAfterLaterRoundsOfTheTestEngine pins the same with the engine
-// of [roundsEngine], whose rounds do not depend on what the real fixers happen
-// to leave for a second one: each of three rounds sets a catalog key, and a
-// rotation queued afterwards must keep all three.
-func TestWriterEditAfterLaterRoundsOfTheTestEngine(t *testing.T) {
+// TestWriterEditBeforeLaterRoundsOfTheTestEngine pins, with the engine of
+// [roundsEngine], whose rounds do not depend on what the real fixers happen to
+// leave for a second one, that a remediation keeping later rounds keeps an
+// edit queued before it: each of three rounds sets a catalog key, and the
+// output holds all three and the rotation.
+func TestWriterEditBeforeLaterRoundsOfTheTestEngine(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -108,14 +109,14 @@ func TestWriterEditAfterLaterRoundsOfTheTestEngine(t *testing.T) {
 			}}
 			w := NewWriter(r)
 			defer w.Close()
-			if _, err := w.remediate(ctx, DefaultRegressionTolerance, e.revalidate, e.run); err != nil {
+			if err := w.RotatePages(90); err != nil {
+				t.Fatalf("RotatePages: %v", err)
+			}
+			if _, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, e.revalidate, e.run); err != nil {
 				t.Fatalf("remediate: %v", err)
 			}
 			if len(e.disabled) != 3 {
 				t.Fatalf("the engine ran %d rounds, want 3", len(e.disabled))
-			}
-			if err := w.RotatePages(90); err != nil {
-				t.Fatalf("RotatePages: %v", err)
 			}
 
 			var out bytes.Buffer
@@ -176,18 +177,15 @@ func laterRoundWriter(t *testing.T) (*Writer, *RemediationReport) {
 }
 
 // TestWriterLaterRoundOutputIsReleased pins the life of the output a Writer
-// edits after a remediation that kept a later round. The Writer reads that
+// writes after a remediation that kept a later round. The Writer reads that
 // file, so a failed write keeps it for the retry; a successful write, or
-// Close, removes it; and a second remediation's output joins it until then.
+// Close, removes it; and a second remediation, which is refused, adds none.
 func TestWriterLaterRoundOutputIsReleased(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("a failed write, then a retry", func(t *testing.T) {
 		dir := isolateTempDir(t)
 		w, report := laterRoundWriter(t)
-		if err := w.RotatePages(90); err != nil {
-			t.Fatalf("RotatePages: %v", err)
-		}
 		if err := w.WriteTo(ctx, refusingWriter{}); !errors.Is(err, errRefusedWrite) {
 			t.Fatalf("WriteTo into a refusing destination returned %v, want its error", err)
 		}
@@ -217,21 +215,16 @@ func TestWriterLaterRoundOutputIsReleased(t *testing.T) {
 		if gotV, wantV := violationTexts(residual), violationTexts(report.Residual); !slices.Equal(gotV, wantV) {
 			t.Errorf("the retried output validates to %q, want %q", gotV, wantV)
 		}
-		for i, rot := range rotationsOf(t, out.Bytes()) {
-			if rot != 90 {
-				t.Errorf("page %d has rotation %d, want 90", i+1, rot)
-			}
-		}
 	})
 
-	t.Run("a second remediation, then Close", func(t *testing.T) {
+	t.Run("a refused second remediation, then Close", func(t *testing.T) {
 		dir := isolateTempDir(t)
 		w, _ := laterRoundWriter(t)
-		if _, err := w.RemediatePDFA(ctx, models.PDFA1b); err != nil {
-			t.Fatalf("second RemediatePDFA: %v", err)
+		if _, err := w.RemediatePDFA(ctx, models.PDFA1b); !errors.Is(err, ErrEditAfterRemediation) {
+			t.Fatalf("second RemediatePDFA returned %v, want ErrEditAfterRemediation", err)
 		}
-		if got := lithoTempFiles(t, dir); len(got) == 0 || len(got) > 2 {
-			t.Errorf("after two remediations the temp dir holds %q, want the output the Writer edits and at most the second output", got)
+		if got := lithoTempFiles(t, dir); len(got) != 1 {
+			t.Errorf("after the refusal the temp dir holds %q, want the output the Writer writes", got)
 		}
 		if err := w.Close(); err != nil {
 			t.Fatalf("Close: %v", err)
@@ -256,45 +249,45 @@ func violationTexts(errs []error) []string {
 	return out
 }
 
-// TestWriterEditAfterLaterRoundKeepsItsFixes pins that an edit queued after a
-// remediation keeps the repairs of every round the remediation kept.
+// TestWriterEditBeforeALaterRoundKeepsItsFixes pins that the output of edits
+// queued before a remediation that keeps a later round holds the edits and the
+// repairs of every round, and validates to the reported residual.
 //
-// The rounds after the first ran on a reopened copy of the previous round's
-// output and handed back only its file, which WriteTo streams when nothing
-// else was queued. An edit queued afterwards makes that file stale, and
-// WriteTo serialized the Writer afresh from state that held the first round's
-// repairs alone: the rotated output lost what the second round repaired, and
-// failed again the rules that round had cleared.
-func TestWriterEditAfterLaterRoundKeepsItsFixes(t *testing.T) {
+// The rounds after the first run on a reopened copy of the previous round's
+// output and hand back only its file, so the Writer writes that file from
+// then on (see [Writer.rebase]). An edit queued after such a remediation made
+// the file stale, and the output lost what the later rounds repaired; no edit
+// follows a remediation now, so the edits here come first.
+func TestWriterEditBeforeALaterRoundKeepsItsFixes(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
 		name          string
 		binaryComment bool
 		before        func(*Writer) error
-		after         func(*Writer) error
 		wantRotate    int
+		wantSubject   string
 	}{
 		{
-			name:          "an incremental first round, rotated after",
+			name:          "an incremental first round, rotated before",
 			binaryComment: true,
-			after:         func(w *Writer) error { return w.RotatePages(90) },
+			before:        func(w *Writer) error { return w.RotatePages(90) },
 			wantRotate:    90,
 		},
 		{
-			name:       "a rewritten first round, rotated after",
-			after:      func(w *Writer) error { return w.RotatePages(90) },
+			name:       "a rewritten first round, rotated before",
+			before:     func(w *Writer) error { return w.RotatePages(90) },
 			wantRotate: 90,
 		},
 		{
-			name:          "rotated before, metadata set after",
+			name:          "rotated and metadata set before",
 			binaryComment: true,
-			before:        func(w *Writer) error { return w.RotatePages(270) },
-			after: func(w *Writer) error {
-				w.SetMetadata(Metadata{Subject: "later edit"})
-				return nil
+			before: func(w *Writer) error {
+				w.SetMetadata(Metadata{Subject: "earlier edit"})
+				return w.RotatePages(270)
 			},
-			wantRotate: 270,
+			wantRotate:  270,
+			wantSubject: "earlier edit",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -311,10 +304,8 @@ func TestWriterEditAfterLaterRoundKeepsItsFixes(t *testing.T) {
 
 			w := NewWriter(r)
 			defer w.Close()
-			if tc.before != nil {
-				if err := tc.before(w); err != nil {
-					t.Fatalf("edit before remediation: %v", err)
-				}
+			if err := tc.before(w); err != nil {
+				t.Fatalf("edit before remediation: %v", err)
 			}
 			report, err := w.RemediatePDFA(ctx, models.PDFA1b)
 			if err != nil {
@@ -322,9 +313,6 @@ func TestWriterEditAfterLaterRoundKeepsItsFixes(t *testing.T) {
 			}
 			if rounds.n.Load() == 0 {
 				t.Fatal("the remediation kept no second round, so the test proves nothing")
-			}
-			if err := tc.after(w); err != nil {
-				t.Fatalf("edit after remediation: %v", err)
 			}
 
 			var out bytes.Buffer
@@ -347,6 +335,15 @@ func TestWriterEditAfterLaterRoundKeepsItsFixes(t *testing.T) {
 			for i, rot := range rotationsOf(t, out.Bytes()) {
 				if rot != tc.wantRotate {
 					t.Errorf("page %d has rotation %d, want %d", i+1, rot, tc.wantRotate)
+				}
+			}
+			if tc.wantSubject != "" {
+				meta, err := got.Metadata(ctx)
+				if err != nil {
+					t.Fatalf("Metadata: %v", err)
+				}
+				if meta["Subject"] != tc.wantSubject {
+					t.Errorf("the output /Subject is %q, want %q", meta["Subject"], tc.wantSubject)
 				}
 			}
 		})

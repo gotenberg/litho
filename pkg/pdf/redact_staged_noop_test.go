@@ -3,6 +3,7 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"errors"
 	"slices"
 	"testing"
 
@@ -21,9 +22,9 @@ var emptyCorner = []RedactRegion{{Page: 1, Rect: [4]float64{540, 0, 590, 50}}}
 // metadata or force a rewrite. It told that apart by an empty pending map, and
 // the edits staged before it are pending too: after a remediation that kept
 // one round, it went on to clear the metadata, and the output lost the XMP
-// packet ISO 19005-2, 6.6.2.1 requires. After a remediation that kept more
-// rounds, the Writer edits the remediated output with nothing staged, so the
-// same redaction changed nothing.
+// packet ISO 19005-2, 6.6.2.1 requires. A remediation is now the last edit,
+// so a redaction after one is refused, even one that would select nothing,
+// and the remediated output is never written without it.
 func TestRedactSelectingNothingAfterStagedEdits(t *testing.T) {
 	t.Parallel()
 
@@ -44,21 +45,19 @@ func TestRedactSelectingNothingAfterStagedEdits(t *testing.T) {
 		if err != nil {
 			t.Fatalf("RemediatePDFA: %v", err)
 		}
-		red, err := w.Redact(ctx, emptyCorner)
-		if err != nil {
-			t.Fatalf("Redact: %v", err)
+		if len(report.Fixed) == 0 {
+			t.Fatal("the remediation fixed nothing, so the test proves nothing")
 		}
-		if len(red.RemovedText) != 0 {
-			t.Fatalf("the redaction removed %q, so the test proves nothing", red.RemovedText)
+		if _, err := w.Redact(ctx, emptyCorner); !errors.Is(err, ErrEditAfterRemediation) {
+			t.Fatalf("Redact after a remediation returned %v, want ErrEditAfterRemediation", err)
 		}
 
 		var out bytes.Buffer
-		if err := w.WriteTo(ctx, &out); err != nil {
-			t.Fatalf("WriteTo: %v", err)
+		if err := w.WriteTo(ctx, &out); !errors.Is(err, ErrEditAfterRemediation) {
+			t.Fatalf("WriteTo returned %v, want the recorded ErrEditAfterRemediation", err)
 		}
-		got, want := violationTexts(validatePDFA2b(t, out.Bytes())), violationTexts(report.Residual)
-		if !slices.Equal(got, want) {
-			t.Errorf("the output validates to %q, want the remediation's residual %q", got, want)
+		if out.Len() != 0 {
+			t.Errorf("WriteTo wrote %d bytes after the refusal", out.Len())
 		}
 	})
 

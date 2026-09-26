@@ -3,6 +3,7 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"testing"
@@ -41,23 +42,17 @@ func rotationsOf(t *testing.T, data []byte) []int {
 	return out
 }
 
-// pipeRotateAndRemediate runs the two stages in the given order through a
+// pipeRotateThenRemediate runs a rotation, then a remediation, through a
 // pipeline and returns the bytes written.
-func pipeRotateAndRemediate(t *testing.T, rotateFirst bool) []byte {
+func pipeRotateThenRemediate(t *testing.T) []byte {
 	t.Helper()
 
-	rotate := func(_ context.Context, w *Writer) error { return w.RotatePages(90) }
-	remediate := func(ctx context.Context, w *Writer) error {
-		_, err := w.RemediatePDFA(ctx, models.PDFA2b)
-		return err
-	}
-
-	p := NewPipeline().Open(openPageRewriteFixture(t))
-	if rotateFirst {
-		p = p.Apply(rotate).Apply(remediate)
-	} else {
-		p = p.Apply(remediate).Apply(rotate)
-	}
+	p := NewPipeline().Open(openPageRewriteFixture(t)).
+		Apply(func(_ context.Context, w *Writer) error { return w.RotatePages(90) }).
+		Apply(func(ctx context.Context, w *Writer) error {
+			_, err := w.RemediatePDFA(ctx, models.PDFA2b)
+			return err
+		})
 
 	var out bytes.Buffer
 	if _, err := p.WriteTo(context.Background(), &out); err != nil {
@@ -76,22 +71,79 @@ func pipeRotateAndRemediate(t *testing.T, rotateFirst bool) []byte {
 func TestPipelineRemediateKeepsAnEarlierRotation(t *testing.T) {
 	t.Parallel()
 
-	for i, got := range rotationsOf(t, pipeRotateAndRemediate(t, true)) {
+	for i, got := range rotationsOf(t, pipeRotateThenRemediate(t)) {
 		if got != 90 {
 			t.Errorf("page %d has rotation %d, want 90: remediation discarded the staged rotation", i+1, got)
 		}
 	}
 }
 
-// TestPipelineRotationAfterRemediateSurvives pins the other order: a mutation
-// queued after remediation builds on its fixes instead of losing to them.
-func TestPipelineRotationAfterRemediateSurvives(t *testing.T) {
+// TestPipelineRefusesAStageAfterARemediation pins the other order: a
+// remediation is the last edit, so a stage after the one that remediates is
+// refused with [ErrEditAfterRemediation] and nothing is written. An Apply
+// stage is refused by the Writer it edits, and a Split or Merge stage, which
+// would restructure the remediated output, by the pipeline before it runs.
+// Signing stays open.
+func TestPipelineRefusesAStageAfterARemediation(t *testing.T) {
 	t.Parallel()
 
-	for i, got := range rotationsOf(t, pipeRotateAndRemediate(t, false)) {
-		if got != 90 {
-			t.Errorf("page %d has rotation %d, want 90: the remediation overrides won over the later rotation", i+1, got)
-		}
+	for _, tc := range []struct {
+		name      string
+		after     func(p *Pipeline, other *Reader) *Pipeline
+		wantStage string
+	}{
+		{
+			name: "a rotation",
+			after: func(p *Pipeline, _ *Reader) *Pipeline {
+				return p.Apply(func(_ context.Context, w *Writer) error { return w.RotatePages(90) })
+			},
+			wantStage: stageNameApply,
+		},
+		{
+			name:      "a split",
+			after:     func(p *Pipeline, _ *Reader) *Pipeline { return p.Split([]int{1}) },
+			wantStage: stageNameSplit,
+		},
+		{
+			name:      "a merge",
+			after:     func(p *Pipeline, other *Reader) *Pipeline { return p.Merge([]*Reader{other}) },
+			wantStage: stageNameMerge,
+		},
+		{
+			name: "a signature",
+			after: func(p *Pipeline, _ *Reader) *Pipeline {
+				return p.Apply(func(_ context.Context, w *Writer) error { w.Sign(&mockSigner{}); return nil })
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			p := NewPipeline().Open(openPageRewriteFixture(t)).Apply(func(ctx context.Context, w *Writer) error {
+				_, err := w.RemediatePDFA(ctx, models.PDFA2b)
+				return err
+			})
+			p = tc.after(p, openPageRewriteFixture(t))
+
+			var out bytes.Buffer
+			_, err := p.WriteTo(context.Background(), &out)
+			if tc.wantStage == "" {
+				if err != nil {
+					t.Fatalf("pipeline: %v", err)
+				}
+				return
+			}
+			if !errors.Is(err, ErrEditAfterRemediation) {
+				t.Fatalf("pipeline returned %v, want ErrEditAfterRemediation", err)
+			}
+			var stageErr *PipelineStageError
+			if !errors.As(err, &stageErr) || stageErr.Name != tc.wantStage || stageErr.Index != 2 {
+				t.Errorf("the refusal %v is not located to the %s stage at index 2", err, tc.wantStage)
+			}
+			if out.Len() != 0 {
+				t.Errorf("the pipeline wrote %d bytes after refusing the stage", out.Len())
+			}
+		})
 	}
 }
 

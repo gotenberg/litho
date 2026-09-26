@@ -119,7 +119,7 @@ func TestWriterRemediationLaterRoundFailsWithoutATempFile(t *testing.T) {
 
 	w := NewWriter(r, WithTempDir(dir))
 	defer w.Close()
-	if _, err := w.remediate(ctx, DefaultRegressionTolerance, e.revalidate, run); !errors.Is(err, ErrRemediationUnverified) {
+	if _, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, e.revalidate, run); !errors.Is(err, ErrRemediationUnverified) {
 		t.Fatalf("remediate returned %v, want ErrRemediationUnverified", err)
 	}
 	if len(e.disabled) != 2 {

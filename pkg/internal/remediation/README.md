@@ -12,6 +12,8 @@ A linear registry of **fixers** in `fixer.go`. Each fixer:
 
 The orchestrator (`remediate.go`) classifies every violation against every fixer, runs them in registry order, and collects residuals.
 
+The engine validates `doc` and repairs through the allocator, so the two agree only while the allocator starts empty. `pdf.Writer` guarantees it: it writes the edits queued before a remediation to a temp file and hands the engine that document, and a remediation is the last edit on a `Writer`.
+
 The writer drives remediation to a bounded fixpoint: up to `maxRemediationRounds` passes, each extra round gated by an output-integrity probe, a regression check, and a revalidation that must strictly shrink the violation set. Trailer `/ID` regeneration is the only nondeterminism seam; `Options.PinnedID` (public `pdf.WithDocumentID`) pins it for byte-identical builds.
 
 ## Fixer contract

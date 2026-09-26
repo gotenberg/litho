@@ -70,6 +70,14 @@
 // remediated Writer holds its output in a temp file until [Writer.WriteTo]
 // streams it or [Writer.Close] removes it.
 //
+// A remediation is the last edit on a Writer. Queue every other edit first:
+// the remediation judges and repairs the document they produce, so its
+// [RemediationReport] describes the output. After it, only [Writer.Sign],
+// [Writer.WriteTo] and [Writer.Close] are accepted, and every other call, a
+// second remediation included, is refused with [ErrEditAfterRemediation]. The
+// output of a PDF/A remediation is never encrypted, since ISO 19005 forbids
+// it: [ErrPDFAForbidsEncryption].
+//
 // # Digital signatures
 //
 // [Reader.ExtractSignatures] and [Reader.VerifySignatures] inspect existing

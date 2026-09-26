@@ -30,6 +30,9 @@ func pipeUsage(w io.Writer) {
 	fmt.Fprintln(w, "        autotag, set-metadata, set-form, flatten-form,")
 	fmt.Fprintln(w, "        set-bookmarks, attach, detach, stamp-text, stamp-image,")
 	fmt.Fprintln(w, "        stamp-pdf, remediate")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "remediate runs at most once, as the last stage, and a PDF/A profile")
+	fmt.Fprintln(w, "takes no encrypt stage.")
 }
 
 // runPipe implements `litho pipe <file> <stage> [flags] <stage> [flags] ... -o out.pdf`.
@@ -57,6 +60,16 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		return exitError
 	}
 
+	// Split stageArgs into groups: each group starts with a stage name.
+	groups := splitStageGroups(stageArgs)
+
+	// Checked before the input is opened or any stage runs, so a pipeline the
+	// library would refuse partway through fails as a usage error instead.
+	if err := validateStageOrder(groups); err != nil {
+		fmt.Fprintf(stderr, "pipe: %v\n", err)
+		return exitError
+	}
+
 	r, closer, err := openPDF(ctx, inputFile, password)
 	if err != nil {
 		fmt.Fprintf(stderr, "pipe: %v\n", err)
@@ -66,8 +79,6 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 
 	pipeline := pdf.NewPipeline().Open(r)
 
-	// Split stageArgs into groups: each group starts with a stage name.
-	groups := splitStageGroups(stageArgs)
 	if len(groups) == 0 {
 		fmt.Fprintln(stderr, "pipe: no stages specified")
 		return exitError
@@ -157,7 +168,14 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// output and said nothing. Emitted before the write, so it is seen even if
 	// the write later fails, exactly as the standalone commands do.
 	if dropsEncryption {
-		warnEncryptionDroppedAddingEncryptStage(stderr, encryptsOutput, append([]*pdf.Reader{r}, stageReaders...)...)
+		readers := append([]*pdf.Reader{r}, stageReaders...)
+		// An encrypt stage is refused beside a PDF/A remediation, so the
+		// warning must not offer one.
+		if p := remediateProfile(groups); pdfaProfiles[p] != "" {
+			warnEncryptionDroppedByPDFA(stderr, encryptsOutput, readers...)
+		} else {
+			warnEncryptionDroppedAddingEncryptStage(stderr, encryptsOutput, readers...)
+		}
 	}
 
 	// The same form-data loss the standalone split and merge report, which pipe
@@ -355,6 +373,76 @@ func expectsValue(arg string) bool {
 		return false
 	}
 	return !boolStageFlags[strings.TrimLeft(arg, "-")]
+}
+
+// validateStageOrder refuses a stage order the library would refuse partway
+// through, before pipe opens anything.
+//
+// A remediation is the last edit a document takes: its report describes the
+// output only when nothing edits it afterwards, and a [pdf.Writer] refuses
+// every edit after one, a second remediation included. So remediate must be
+// the last stage, and there is one at most. Every stage after it is named,
+// so the caller can move them in one go.
+//
+// PDF/A forbids encryption: ISO 19005-1, 6.1.3, ISO 19005-2, 6.1.3, ISO
+// 19005-3, 6.1.3 and ISO 19005-4, 6.1.3 each keep the Encrypt key out of the
+// trailer, so an encrypt stage cannot precede a PDF/A remediate stage. A
+// PDF/UA or WTPDF remediation keeps it.
+func validateStageOrder(groups [][]string) error {
+	remediateAt := -1
+	for i, g := range groups {
+		if len(g) == 0 || g[0] != "remediate" {
+			continue
+		}
+		if remediateAt >= 0 {
+			return fmt.Errorf("only one remediate stage is allowed: a remediation is the last edit, and a second one would edit the output the first one reported on")
+		}
+		remediateAt = i
+	}
+	if remediateAt < 0 {
+		return nil
+	}
+	var after []string
+	for _, g := range groups[remediateAt+1:] {
+		if len(g) > 0 {
+			after = append(after, fmt.Sprintf("%q", g[0]))
+		}
+	}
+	if len(after) > 0 {
+		return fmt.Errorf("remediate must be the last stage, since its report describes the output only when nothing edits it afterwards: move %s before remediate", strings.Join(after, ", "))
+	}
+	profile := stageProfileValue(groups[remediateAt])
+	if pdfaProfiles[profile] == "" {
+		return nil
+	}
+	for _, g := range groups[:remediateAt] {
+		if len(g) > 0 && g[0] == "encrypt" {
+			return fmt.Errorf("an \"encrypt\" stage cannot precede remediate -profile %s: %s forbids encryption in a PDF/A file", profile, pdfaEncryptionClause(profile))
+		}
+	}
+	return nil
+}
+
+// remediateProfile returns the --profile of the pipeline's remediate stage,
+// or "" when it has none.
+func remediateProfile(groups [][]string) string {
+	for _, g := range groups {
+		if len(g) > 0 && g[0] == "remediate" {
+			return stageProfileValue(g)
+		}
+	}
+	return ""
+}
+
+// pdfaEncryptionClause names the clause of the ISO 19005 part of profile, a
+// PDF/A profile name, that forbids the Encrypt key in the trailer: 6.1.3 in
+// every part.
+func pdfaEncryptionClause(profile string) string {
+	part, _ := strings.CutPrefix(profile, "PDF/A-")
+	if part == "" {
+		return "ISO 19005, 6.1.3"
+	}
+	return "ISO 19005-" + part[:1] + ", 6.1.3"
 }
 
 // stageProfileValue returns the --profile a stage group carries, or "".

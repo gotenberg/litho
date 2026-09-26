@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/bookmarks"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -575,30 +576,27 @@ func (a signerAdapter) EstimatedSize() int                 { return a.inner.Esti
 //  1. Obtain a Reader with [Open] or [OpenFile].
 //  2. Create a Writer with [NewWriter], and defer [Writer.Close].
 //  3. Call any number of mutation methods (SetMetadata, RotatePages,
-//     Encrypt, Sign, RemediatePDFA, ...). Mutations are queued; nothing
-//     is written yet.
-//  4. Call WriteTo exactly once. It drains the queue, produces the
+//     Encrypt, Sign, ...). Mutations are queued; nothing is written yet.
+//  4. Optionally, remediate once, after every other edit (RemediatePDFA,
+//     RemediatePDFUA, RemediateWTPDF, RemediateFacturX or RepairFacturX).
+//  5. Call WriteTo exactly once. It drains the queue, produces the
 //     output, and may mutate the underlying Reader's in-memory state.
 //
-// A remediation ([Writer.RemediatePDFA] and its siblings) writes its output
-// to a temp file so it can revalidate it, in [os.TempDir] unless [NewWriter]
-// was given [WithTempDir], and fails with [ErrRemediationUnverified] when it
-// cannot. WriteTo streams that file to the destination and removes it, and a
-// remediation that fails or is cancelled removes it itself. A Writer that is
-// remediated and never written keeps the file until [Writer.Close].
+// A remediation is the last edit on a Writer. It writes the edits queued
+// before it to a temp file and validates, repairs and measures that document,
+// so its [RemediationReport] describes the output. After it, the Writer
+// accepts [Writer.Sign], [Writer.WriteTo] and [Writer.Close], and refuses every
+// other call, a second remediation included, with [ErrEditAfterRemediation]:
+// the refused call queues nothing, a method with an error return returns the
+// refusal, and WriteTo returns the first refusal, whatever the method, and
+// writes nothing. A remediation that fails leaves the Writer open to edits.
 //
-// A remediation that repairs its own output again in a later round leaves the
-// Writer editing that output instead of the Reader's document, because those
-// repairs exist only in the output. An edit queued afterwards applies to the
-// remediated document, and the page numbers it names are that document's. A
-// remediation that keeps its first round alone leaves the Writer editing the
-// Reader's document, its repairs queued with the other edits, and an edit
-// queued afterwards names the Reader's pages. Either way a later edit builds
-// on the repairs. The page numbers differ only when [Writer.DeletePages] or
-// [Writer.InsertPages] ran before the remediation: after a single round, page
-// 1 still names the Reader's first page, deleted or not. Queue those two after
-// the remediation, and every later edit names the same pages whatever the
-// round count.
+// A remediation writes its output to a temp file so it can revalidate it, in
+// [os.TempDir] unless [NewWriter] was given [WithTempDir], and fails with
+// [ErrRemediationUnverified] when it cannot. WriteTo streams that file to the
+// destination and removes it, and a remediation that fails or is cancelled
+// removes it itself. A Writer that is remediated and never written keeps the
+// file until [Writer.Close].
 //
 // A Writer is single-use: create a new Writer (and, if you need a
 // pristine baseline, a new Reader) for each distinct output. Method
@@ -607,9 +605,9 @@ func (a signerAdapter) EstimatedSize() int                 { return a.inner.Esti
 // consumed by any other goroutine between NewWriter and WriteTo.
 type Writer struct {
 	// reader is the document the Writer edits: source, until a remediation
-	// keeps a later round (see [Writer.rebase]). It then reads that round's
-	// output, the temp file at basePath, which the Writer owns and releases
-	// with [Writer.releaseBase].
+	// writes the queued edits to a temp file or keeps a later round (see
+	// [Writer.rebase]). It then reads that file, at basePath, which the
+	// Writer owns and releases with [Writer.releaseBase].
 	reader       *Reader
 	source       *Reader
 	basePath     string
@@ -638,21 +636,30 @@ type Writer struct {
 	// rewriteOverrides holds per-object replacements produced during
 	// remediation and redaction, keyed by source object number. They are
 	// forwarded to the full-rewrite copier so the renumbered output reflects
-	// the patched data instead of the original. Each stage that produces
-	// them starts from the ones already here, so a later stage builds on an
-	// earlier one instead of discarding it.
+	// the patched data instead of the original. A redaction starts from the
+	// ones already here, so a later redaction builds on an earlier one
+	// instead of discarding it.
 	rewriteOverrides map[int]ast.PdfObject
 	// folded counts the queued mutations, from the first, whose edits
-	// rewriteOverrides already holds. A remediation or a redaction replays the
-	// mutations queued before it, so that it reads the document as staged, and
-	// keeps what they staged in its overrides. Only the mutations after these
-	// are applied on top of the overrides: applying one again repeats an edit
-	// that need not be idempotent, and a stamp was drawn twice. They stay
-	// queued all the same, since a stage that fails puts the Writer back as it
-	// was and the pre-serialized output is judged by how many are queued.
+	// rewriteOverrides already holds. A redaction replays the mutations queued
+	// before it, so that it reads the document as staged, and keeps what they
+	// staged in its overrides. Only the mutations after these are applied on
+	// top of the overrides: applying one again repeats an edit that need not
+	// be idempotent, and a stamp was drawn twice. They stay queued all the
+	// same, since a redaction that refuses puts the Writer back as it was.
 	folded          int
 	signer          Signer
 	requiredVersion string
+
+	// remediation names the remediation method that ran on the Writer, ""
+	// until one succeeds. From then on the Writer accepts Sign, WriteTo and
+	// Close alone (see [Writer.refuseAfterRemediation]). pdfaClause is the ISO
+	// 19005 clause that forbids encrypting what that remediation produced, ""
+	// when its profile is not a PDF/A one. refused is the first call refused
+	// after it, which WriteTo returns.
+	remediation string
+	pdfaClause  string
+	refused     error
 
 	// redactions records the regions of every successful [Writer.Redact]
 	// call, in call order, and redactedTokens the text they removed. WriteTo
@@ -666,18 +673,11 @@ type Writer struct {
 	// serialized PDF when remediation pre-serializes for accurate
 	// residual validation. When set, WriteTo streams from this file
 	// instead of re-serializing, then removes it. Close removes it too,
-	// and so does a later remediation, whose output supersedes it, unless
-	// it is the file at basePath, which only releaseBase removes. The
-	// snapshot fields below record the Writer state at pre-serialization
-	// time: any edit
-	// queued afterwards (a new mutation, Sign, Encrypt, decrypt) or a
-	// serialization-shaping write option invalidates the fast path, and
-	// WriteTo re-serializes so the late edit is not silently dropped.
-	preSerializedPath       string
-	preSerializedMutations  int
-	preSerializedRedactions int
-	preSerializedEncrypt    bool
-	preSerializedDecrypt    bool
+	// unless it is the file at basePath, which only releaseBase removes. A
+	// signature, an encryption, or a serialization-shaping write option is not
+	// in the file (see [Writer.writeTempFile]), and WriteTo re-serializes so
+	// it is not silently dropped.
+	preSerializedPath string
 }
 
 // mutation is a deferred modification applied during WriteTo.
@@ -744,21 +744,23 @@ func (w *Writer) releasePreSerialized() error {
 	return nil
 }
 
-// rebase makes next, a reader over the remediation output at path, the
-// document the Writer edits, and releases the output it edited before, if it
-// owned one.
+// rebase makes next, a reader over a temp file at path that litho wrote from
+// the Writer, the document the Writer edits, and releases the file it edited
+// before, if it owned one.
 //
-// A remediation round after the first repairs a reopened copy of the previous
+// Two files take that place. A remediation writes the edits queued before it
+// to one and judges and repairs that document (see [Writer.materialize]). A
+// remediation round after the first repairs a reopened copy of the previous
 // round's output, in that file's object numbers, which a full rewrite has
 // renumbered, so its repairs cannot join the overrides the Writer keeps in its
-// document's numbers. They exist only in the round's output, and the Writer
-// kept the first round's repairs alone: an edit queued after the remediation
-// made WriteTo serialize afresh, and the output lost every later repair.
+// document's numbers: they exist only in the round's output, which WriteTo
+// serializes afresh when a signature, an encryption or a write option makes
+// the streamed file stale, and after a failed write.
 //
-// The output already holds every edit the Writer queued before the
-// remediation, its overrides and its trailer, so none of them stays queued,
-// where they would be applied a second time. The flags that decide how the
-// output is written stay.
+// The file already holds every edit the Writer queued, its overrides and its
+// trailer, so none of them stays queued, where they would be applied a second
+// time. The flags that decide how the output is written stay, and so do the
+// redactions, which WriteTo checks the output against.
 func (w *Writer) rebase(next *Reader, path string) error {
 	prev, prevPath := w.reader, w.basePath
 	w.reader, w.basePath = next, path
@@ -800,6 +802,26 @@ func releaseOwnedReader(r *Reader, path string) error {
 	return errors.Join(errs...)
 }
 
+// refuseAfterRemediation refuses call, a Writer method, once a remediation has
+// run on the Writer, and returns nil before. A remediation's report describes
+// the output only when nothing edits the document after it, so a remediated
+// Writer accepts Sign, WriteTo and Close alone.
+//
+// The refusal is recorded as well as returned. A method with no error return
+// cannot hand it back, and a caller can drop one that is returned, so WriteTo
+// returns the first refusal recorded and writes nothing: the output never goes
+// out without an edit the caller asked for.
+func (w *Writer) refuseAfterRemediation(call string) error {
+	if w.remediation == "" {
+		return nil
+	}
+	err := fmt.Errorf("%w: Writer.%s after Writer.%s", ErrEditAfterRemediation, call, w.remediation)
+	if w.refused == nil {
+		w.refused = err
+	}
+	return err
+}
+
 // createTemp creates a temp file named after pattern in the Writer's temp
 // directory ([os.TempDir] unless [WithTempDir] or a [Pipeline] set one).
 func (w *Writer) createTemp(pattern string) (*os.File, error) {
@@ -816,6 +838,13 @@ func (w *Writer) createTemp(pattern string) (*os.File, error) {
 // the signing path, which then left out every repair, so the remediation
 // judged the unrepaired document.
 //
+// Nor is it encrypted, even when [Writer.Encrypt] was called before the
+// remediation: [Writer.WriteTo] encrypts afresh, as it does for
+// [WithEncryption]. Encrypted, the file could not be reopened under a user
+// password, and a remediation queued after Encrypt failed as broken; and the
+// output of a later round, which is never encrypted, was streamed as if it
+// were, silently unprotected.
+//
 // A file that cannot be created, written or closed is an error of the
 // environment, not of the document, and comes back wrapping
 // [ErrRemediationUnverified]; a failure of the serialization itself comes back
@@ -829,7 +858,10 @@ func (w *Writer) writeTempFile(ctx context.Context, src *Writer, pattern string)
 	}
 	path := f.Name()
 	tf := &tempFileWriter{f: f}
+	encrypt := src.encryptCfg
+	src.encryptCfg = nil
 	writeErr := src.writeToInternal(ctx, tf, nil)
+	src.encryptCfg = encrypt
 	closeErr := f.Close()
 
 	var failure error
@@ -869,6 +901,9 @@ func (t *tempFileWriter) Write(p []byte) (int, error) {
 // in meta are skipped (the existing value is preserved). The mutation is
 // queued and applied when [Writer.WriteTo] is called.
 func (w *Writer) SetMetadata(meta Metadata) {
+	if w.refuseAfterRemediation("SetMetadata") != nil {
+		return
+	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			return mutations.SetMetadata(ctx, alloc, doc, mutations.Metadata(meta))
@@ -895,6 +930,9 @@ func (w *Writer) SetMetadata(meta Metadata) {
 // and the catalog /Metadata stream (XMP) is removed. Forces a full rewrite.
 // The mutation is queued and applied when [Writer.WriteTo] is called.
 func (w *Writer) ClearMetadata() {
+	if w.refuseAfterRemediation("ClearMetadata") != nil {
+		return
+	}
 	w.forceRewrite = true
 	w.editRewrites = true
 	w.mutations = append(w.mutations, mutation{
@@ -907,6 +945,9 @@ func (w *Writer) ClearMetadata() {
 // multiple of 90 (0, 90, 180, 270). The mutation is queued and applied when
 // [Writer.WriteTo] is called.
 func (w *Writer) RotatePages(rotation int, pages ...int) error {
+	if err := w.refuseAfterRemediation("RotatePages"); err != nil {
+		return err
+	}
 	if rotation%90 != 0 {
 		return fmt.Errorf("%w: got %d", ErrInvalidRotation, rotation)
 	}
@@ -931,7 +972,7 @@ func (w *Writer) RotatePages(rotation int, pages ...int) error {
 // [Writer.InsertPages] and the three stamps all document an empty list as
 // every page, which deletion cannot mean because it would leave no document.
 //
-// The pages named are the Reader's (see [Writer]). A deletion queued after an
+// The pages named are the Reader's. A deletion queued after an
 // insertion keeps the inserted pages, and one queued after another deletion
 // keeps what that one removed out.
 //
@@ -941,6 +982,9 @@ func (w *Writer) RotatePages(rotation int, pages ...int) error {
 // carry the page's content while reporting one fewer page. Nothing is written
 // in that case.
 func (w *Writer) DeletePages(pages ...int) error {
+	if err := w.refuseAfterRemediation("DeletePages"); err != nil {
+		return err
+	}
 	if len(pages) == 0 {
 		return ErrEmptyPageList
 	}
@@ -973,11 +1017,14 @@ func (w *Writer) DeletePages(pages ...int) error {
 // and applied when [Writer.WriteTo] is called.
 //
 // Insertions and deletions queued on one Writer build on each other, and pos
-// names a place among the Reader's pages, as page numbers do (see [Writer]).
+// names a place among the Reader's pages, as page numbers do.
 // The pages go before the first of the Reader's pages from pos on that an
 // earlier deletion kept, after the pages an earlier insertion put there, and
 // at the end when no such page is left.
 func (w *Writer) InsertPages(pos int, source *Reader, sourcePages ...int) error {
+	if err := w.refuseAfterRemediation("InsertPages"); err != nil {
+		return err
+	}
 	if source == nil {
 		return ErrNilSource
 	}
@@ -1002,6 +1049,9 @@ func (w *Writer) InsertPages(pos int, source *Reader, sourcePages ...int) error 
 // SetBookmarks replaces the document outline with the given bookmarks.
 // The mutation is queued and applied when [Writer.WriteTo] is called.
 func (w *Writer) SetBookmarks(bookmarks []models.Bookmark) {
+	if w.refuseAfterRemediation("SetBookmarks") != nil {
+		return
+	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			resolvedPages, err := w.reader.resolvePages(ctx)
@@ -1039,6 +1089,9 @@ const (
 // or content stamped or redacted on the same Writer, is not read, and a page
 // deleted on it yields no bookmark.
 func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode BookmarkMergeMode) {
+	if w.refuseAfterRemediation("GenerateBookmarks") != nil {
+		return
+	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			generated, err := w.reader.GenerateBookmarks(ctx, opts)
@@ -1099,12 +1152,15 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 // PDF/UA conformance.
 //
 // It tags the document as the edits queued before it leave it, as every edit
-// does (see [Writer]): it marks up the content a remediation repaired, and it
-// leaves alone a document a remediation tagged. It is also a no-op when any
-// page's content is already marked, since marking it again would nest or cross
-// the existing sequences, and that includes the /Artifact sequence a stamp
-// wraps its content in: queue it before a stamp to tag the document.
+// does. Queue it before a remediation, which then judges the tagged document:
+// after one it is refused with [ErrEditAfterRemediation]. It is also a no-op
+// when any page's content is already marked, since marking it again would nest
+// or cross the existing sequences, and that includes the /Artifact sequence a
+// stamp wraps its content in: queue it before a stamp to tag the document.
 func (w *Writer) AutoTag() {
+	if w.refuseAfterRemediation("AutoTag") != nil {
+		return
+	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			descs, err := tagging.AutoTag(ctx, alloc, doc)
@@ -1193,6 +1249,9 @@ func (c EncryptConfig) toInternal() crypto.EncryptConfig {
 // Forces a full rewrite since every string and stream must be
 // encrypted.
 func (w *Writer) Encrypt(cfg EncryptConfig) {
+	if w.refuseAfterRemediation("Encrypt") != nil {
+		return
+	}
 	internal := cfg.toInternal()
 	w.encryptCfg = &internal
 	w.forceRewrite = true
@@ -1201,6 +1260,9 @@ func (w *Writer) Encrypt(cfg EncryptConfig) {
 // RemoveEncryption removes encryption from the output document. The Reader
 // must have been opened with the correct password. Forces a full rewrite.
 func (w *Writer) RemoveEncryption() {
+	if w.refuseAfterRemediation("RemoveEncryption") != nil {
+		return
+	}
 	w.decrypt = true
 	w.forceRewrite = true
 }
@@ -1210,6 +1272,9 @@ func (w *Writer) RemoveEncryption() {
 // regenerate the visual appearance. The mutation is queued and applied when
 // [Writer.WriteTo] is called.
 func (w *Writer) SetFormField(name, value string) {
+	if w.refuseAfterRemediation("SetFormField") != nil {
+		return
+	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			return mutations.SetFormField(ctx, alloc, doc, name, value)
@@ -1221,6 +1286,9 @@ func (w *Writer) SetFormField(name, value string) {
 // removes the AcroForm dictionary. Forces a full rewrite. The mutation is
 // queued and applied when [Writer.WriteTo] is called.
 func (w *Writer) FlattenForm() {
+	if w.refuseAfterRemediation("FlattenForm") != nil {
+		return
+	}
 	w.forceRewrite = true
 	w.editRewrites = true
 	w.mutations = append(w.mutations, mutation{
@@ -1248,6 +1316,9 @@ func (w *Writer) FlattenForm() {
 // font adds a 7.21.4.1 violation naming the stamp font, and supplying a TTF
 // removes it.
 func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
+	if err := w.refuseAfterRemediation("StampText"); err != nil {
+		return err
+	}
 	if stamp.Text == "" {
 		return ErrEmptyText
 	}
@@ -1271,6 +1342,9 @@ func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 // The stamp is marked as an /Artifact, so it does not cost a tagged document
 // its ISO 14289-1, 7.1 conformance.
 func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
+	if err := w.refuseAfterRemediation("StampImage"); err != nil {
+		return err
+	}
 	if len(stamp.Data) == 0 {
 		return ErrEmptyData
 	}
@@ -1307,6 +1381,9 @@ func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
 // its ISO 14289-1, 7.1 conformance, and any text it carries is omitted from
 // [Reader.ExtractText] unless [WithArtifacts] is passed.
 func (w *Writer) StampPDF(stamp PDFStamp, pages ...int) error {
+	if err := w.refuseAfterRemediation("StampPDF"); err != nil {
+		return err
+	}
 	if stamp.Source == nil {
 		return ErrNilSource
 	}
@@ -1377,6 +1454,9 @@ func textStampToOptions(s TextStamp) mutations.TextStampOptions {
 // rebuilt from that walk, so adding one attachment would drop the others.
 // Nothing is written in that case.
 func (w *Writer) AddAttachment(name string, data []byte, mimeType string) {
+	if w.refuseAfterRemediation("AddAttachment") != nil {
+		return
+	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			if err := mutations.AddAttachment(ctx, alloc, doc, name, data, mimeType); err != nil {
@@ -1420,6 +1500,9 @@ type AssociatedFile struct {
 // [Writer.WriteTo] reports [ErrAttachmentTreeIncomplete] on a tree too deep to
 // read, for the reason given on [Writer.AddAttachment].
 func (w *Writer) AddAssociatedFile(af AssociatedFile) {
+	if w.refuseAfterRemediation("AddAssociatedFile") != nil {
+		return
+	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			err := mutations.AddAttachmentWithOptions(ctx, alloc, doc, af.Name, af.Data, mutations.AttachmentOptions{
@@ -1447,6 +1530,9 @@ func (w *Writer) AddAssociatedFile(af AssociatedFile) {
 // loses every entry past the bound, and a target sitting past it matches
 // nothing, so the removal would report success having removed nothing.
 func (w *Writer) RemoveAttachment(name string) {
+	if w.refuseAfterRemediation("RemoveAttachment") != nil {
+		return
+	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			if err := mutations.RemoveAttachment(ctx, alloc, doc, name); err != nil {
@@ -1474,12 +1560,14 @@ func (w *Writer) RemoveAttachment(name string) {
 // signed file.
 //
 // Sign registers the signer rather than queueing a mutation, so it may be
-// called at any point: [Writer.WriteTo] applies every queued mutation and every
-// repair a remediation kept before computing the digest, and the signature
-// covers the result either way. The signer runs once, in WriteTo: the files a
-// remediation writes to revalidate its output are never signed. What it is not
-// compatible with is an edit forcing a full rewrite, which [Writer.WriteTo]
-// rejects with [ErrSignFullRewriteIncompatible].
+// called at any point, after a remediation included: it is the one call
+// besides [Writer.WriteTo] and [Writer.Close] that a remediated Writer
+// accepts (see [Writer]). [Writer.WriteTo] applies every queued mutation and
+// every repair a remediation kept before computing the digest, and the
+// signature covers the result either way. The signer runs once, in WriteTo:
+// the files a remediation writes to revalidate its output are never signed.
+// What it is not compatible with is an edit forcing a full rewrite, which
+// [Writer.WriteTo] rejects with [ErrSignFullRewriteIncompatible].
 func (w *Writer) Sign(signer Signer) {
 	w.signer = signer
 }
@@ -1500,17 +1588,22 @@ func remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options
 // describes what was fixed and what could not be fixed automatically.
 // Uses incremental update to preserve existing document structure.
 //
-// An edit queued afterwards names pages as [Writer] describes: the source's
-// after a remediation that keeps one round, the remediated document's after one
-// that keeps more. They differ only when pages were deleted or inserted before
-// the remediation.
+// Its output is never encrypted: every part of ISO 19005 forbids the Encrypt
+// key in the trailer (6.1.3 in each). It returns [ErrPDFAForbidsEncryption]
+// when [Writer.Encrypt] was called before it, and [Writer.WriteTo] returns it
+// for [WithEncryption].
+//
+// It is the last edit on the Writer (see [Writer]): it judges the document the
+// edits queued before it produce, and afterwards the Writer accepts
+// [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
 func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediatePDFA", &err)
 	cfg, remOpts := remediateConfig(opts)
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidatePDFA(ctx, profile)
 	}
-	return w.remediate(ctx, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+	target := remediationTarget{method: "RemediatePDFA", pdfaClause: pdfaEncryptionClause(profile)}
+	return w.remediate(ctx, target, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
 		return remediation.RemediatePDFA(ctx, doc, alloc, profile, remOpts.WithDisabled(disabled))
 	})
 }
@@ -1521,17 +1614,16 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 // [RemediationReport.Residual], which the output's own pdfuaid claim does not
 // account for.
 //
-// An edit queued afterwards names pages as [Writer] describes: the source's
-// after a remediation that keeps one round, the remediated document's after one
-// that keeps more. They differ only when pages were deleted or inserted before
-// the remediation.
+// It is the last edit on the Writer (see [Writer]): it judges the document the
+// edits queued before it produce, and afterwards the Writer accepts
+// [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
 func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediatePDFUA", &err)
 	cfg, remOpts := remediateConfig(opts)
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidatePDFUA(ctx, profile)
 	}
-	return w.remediate(ctx, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+	return w.remediate(ctx, remediationTarget{method: "RemediatePDFUA"}, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
 		return remediation.RemediatePDFUA(ctx, doc, alloc, profile, remOpts.WithDisabled(disabled))
 	})
 }
@@ -1544,17 +1636,16 @@ func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile
 // Violations the level does not state are never reported: the run is judged
 // by [Reader.ValidateWTPDF], which applies the level's rule subtractions.
 //
-// An edit queued afterwards names pages as [Writer] describes: the source's
-// after a remediation that keeps one round, the remediated document's after one
-// that keeps more. They differ only when pages were deleted or inserted before
-// the remediation.
+// It is the last edit on the Writer (see [Writer]): it judges the document the
+// edits queued before it produce, and afterwards the Writer accepts
+// [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
 func (w *Writer) RemediateWTPDF(ctx context.Context, profile models.WTPDFProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediateWTPDF", &err)
 	cfg, remOpts := remediateConfig(opts)
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidateWTPDF(ctx, profile)
 	}
-	return w.remediate(ctx, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+	return w.remediate(ctx, remediationTarget{method: "RemediateWTPDF"}, cfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
 		return remediation.RemediateWTPDF(ctx, doc, alloc, profile, remOpts.WithDisabled(disabled))
 	})
 }
@@ -1628,10 +1719,13 @@ type FacturXConfig struct {
 // spec-valid legacy ZUGFeRD file. Producing genuine 1.0/2.0 output is
 // out of scope.
 //
-// An edit queued afterwards names pages as [Writer] describes: the source's
-// after a remediation that keeps one round, the remediated document's after one
-// that keeps more. They differ only when pages were deleted or inserted before
-// the remediation.
+// It is the last edit on the Writer (see [Writer]): it judges the document the
+// edits queued before it produce, and afterwards the Writer accepts
+// [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
+//
+// Its output is a PDF/A-3 file, never encrypted (ISO 19005-3, 6.1.3): it
+// returns [ErrPDFAForbidsEncryption] when [Writer.Encrypt] was called before
+// it, and [Writer.WriteTo] returns it for [WithEncryption].
 func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediateFacturX", &err)
 	if len(cfg.InvoiceXML) == 0 {
@@ -1676,7 +1770,8 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 		DocumentType: docType,
 		Relationship: relationship,
 	}
-	return w.remediate(ctx, rcfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
+	target := remediationTarget{method: "RemediateFacturX", pdfaClause: pdfaEncryptionClause(profile)}
+	return w.remediate(ctx, target, rcfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error) {
 		return remediation.RemediateFacturX(ctx, doc, alloc, fxOpts, remOpts.WithDisabled(disabled))
 	})
 }
@@ -1690,10 +1785,13 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 // known invoice attachment. Use [Writer.RemediateFacturX] to embed a new
 // invoice instead.
 //
-// An edit queued afterwards names pages as [Writer] describes: the source's
-// after a remediation that keeps one round, the remediated document's after one
-// that keeps more. They differ only when pages were deleted or inserted before
-// the remediation.
+// It is the last edit on the Writer (see [Writer]): it judges the document the
+// edits queued before it produce, and afterwards the Writer accepts
+// [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
+//
+// A repaired invoice is a PDF/A-3 file, never encrypted (ISO 19005-3, 6.1.3):
+// it returns [ErrPDFAForbidsEncryption] when [Writer.Encrypt] was called before
+// it, and [Writer.WriteTo] returns it for [WithEncryption].
 func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RepairFacturX", &err)
 	rcfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
@@ -1703,25 +1801,24 @@ func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ 
 	revalidate := func(ctx context.Context, r *Reader) ([]error, error) {
 		return r.ValidateFacturX(ctx)
 	}
-	located := false
+	// A Factur-X invoice is a PDF/A-3 file, so the repaired one is never
+	// encrypted either.
+	target := remediationTarget{method: "RepairFacturX", pdfaClause: pdfaEncryptionClause(models.PDFA3b)}
 	// The repair runs no content-tier fixer, so there is none to disable.
-	report, err := w.remediate(ctx, rcfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ []string) (*remediation.Report, error) {
+	return w.remediate(ctx, target, rcfg.tolerance, revalidate, func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ []string) (*remediation.Report, error) {
 		fixes, repairErr := remediation.RepairHybridInvoice(ctx, doc, alloc)
 		if repairErr != nil {
 			return nil, repairErr
 		}
-		located = located || fixes != nil
+		if fixes == nil {
+			// No known invoice attachment, so nothing to repair: the run
+			// fails, which writes nothing and leaves the Writer as it was,
+			// open to edits. A later round runs on an output the first round
+			// found the attachment in.
+			return nil, ErrNoInvoiceAttachment
+		}
 		return &remediation.Report{Fixed: fixes}, nil
 	})
-	if err == nil && !located {
-		// A refused repair hands back no report, so the output it wrote for
-		// WriteTo goes with it: nothing was repaired in it.
-		if releaseErr := w.releasePreSerialized(); releaseErr != nil {
-			w.reader.doc.Logger.Debug("repair: removing the remediation output failed", slog.Any("err", releaseErr))
-		}
-		return nil, ErrNoInvoiceAttachment
-	}
-	return report, err
 }
 
 // integritySnap captures the signals the post-remediation probe compares
@@ -1761,40 +1858,96 @@ func probeIntegrity(ctx context.Context, r *Reader) (integritySnap, error) {
 	return snap, nil
 }
 
-// stagedBaseline samples the document the caller has staged rather than the
-// source it started from.
-//
-// [probeIntegrity] reads the source Reader, so a pipeline that queued a delete
-// or a split before remediation measured a page count remediation never had:
-// `litho pipe f delete -pages 1 remediate -profile PDF/A-2b` reported
-// "remediation broke the PDF beyond the configured regression tolerance: page
-// count changed from 41 to 40" and rolled back a remediation that had done
-// nothing wrong. An earlier stage's overrides are staged too: remediating a
-// redacted document measured the text Redact had removed, and refused the
-// remediation for "dropping" it. The extra serialization only happens when
-// something is staged.
-func (w *Writer) stagedBaseline(ctx context.Context) (integritySnap, error) {
-	if len(w.mutations) == 0 && len(w.rewriteOverrides) == 0 {
-		return probeIntegrity(ctx, w.reader)
-	}
+// remediationTarget names what a remediation run is for: method, the Writer
+// method, which the refusal of a later call names, and pdfaClause, the ISO
+// 19005 clause that forbids encrypting the output, "" when the profile is not
+// a PDF/A one.
+type remediationTarget struct {
+	method     string
+	pdfaClause string
+}
 
-	logger := w.reader.doc.Logger
+// pdfaEncryptionClause returns the clause of the ISO 19005 part of profile
+// that forbids the Encrypt key in the trailer. Every part states it in 6.1.3:
+// ISO 19005-1, 6.1.3, ISO 19005-2, 6.1.3, ISO 19005-3, 6.1.3 and ISO 19005-4,
+// 6.1.3.
+func pdfaEncryptionClause(profile models.PDFAProfile) string {
+	part, _ := strings.CutPrefix(string(profile), "PDF/A-")
+	if part == "" {
+		return "ISO 19005, 6.1.3"
+	}
+	return "ISO 19005-" + part[:1] + ", 6.1.3"
+}
+
+// materialize writes the edits queued on the Writer to a temp file and makes
+// that file the document the Writer edits (see [Writer.rebase]), so a
+// remediation validates, repairs and measures the document the caller staged
+// rather than the source. It does nothing when nothing is queued.
+//
+// The remediation validated the source while its fixers repaired the objects
+// the queued edits had staged, so it neither saw what an edit introduced nor
+// knew what an edit had removed, and its report said so: the transparency a
+// stamp drawn at half opacity puts on a page, which ISO 19005-2, 6.2.10
+// judges, went unseen, and a page deletion left the report claiming repairs
+// to objects only the deleted page used. Its integrity baseline had needed
+// the same document: `litho pipe f delete -pages 1 remediate -profile
+// PDF/A-2b` once measured the source, reported "page count changed from 41 to
+// 40", and rolled back a remediation that had done nothing wrong, and
+// remediating a redacted document was refused for "dropping" the text Redact
+// had removed.
+//
+// Encryption stays out of the file, as out of every file [Writer.writeTempFile]
+// writes: it describes the output. A file that cannot be written fails with
+// [ErrRemediationUnverified], as the remediation's own temp files do, and an
+// edit that cannot be applied fails as [Writer.WriteTo] would fail on it.
+//
+// It returns undo, which a remediation that fails calls to put the Writer back
+// as it was: the edits queued again, over the document they were queued
+// against, so an edit queued after the failure names the pages it would have
+// named before. A Writer materializes before its one remediation, when it
+// still edits its source.
+//
+// # Corpus evidence
+//
+//   - All corpora: over 36 files sampled across govdocs, pdfjs, verapdf,
+//     pdf20, pdfcpu and litho, a stamp, an attachment, a rotation, a page
+//     deletion or a metadata edit then a PDF/A-2b or PDF/UA-1 remediation
+//     (316 runs, 388 with the unedited control): every output validates to
+//     the reported residual before and after, and no residual changes rule.
+//   - All corpora: the fixes reported change in 55 of those runs, each toward
+//     the edited document: the stamp's transparency gets its blending space
+//     and its font a ToUnicode map, a PDF/UA-1 structure tree counts the pages
+//     a deletion left, and the repairs of objects only the deleted page used
+//     are no longer claimed.
+//   - All corpora: with no edit queued, all 72 reports are unchanged.
+func (w *Writer) materialize(ctx context.Context) (undo func(), err error) {
+	if len(w.mutations) == 0 && len(w.rewriteOverrides) == 0 && !w.trailerDirty && !w.decrypt {
+		return func() {}, nil
+	}
 	path, err := w.writeTempFile(ctx, w, "litho-staged-*.pdf")
 	if err != nil {
-		return integritySnap{}, fmt.Errorf("serializing staged document: %w", err)
+		return nil, fmt.Errorf("writing the edited document to remediate: %w", err)
 	}
-	defer removeTempFile(logger, path)
-
-	r, err := w.reader.reopenFile(ctx, path)
+	logger := w.reader.doc.Logger
+	next, err := w.reader.reopenFile(ctx, path)
 	if err != nil {
-		return integritySnap{}, fmt.Errorf("reopening staged document: %w", err)
+		removeTempFile(logger, path)
+		return nil, fmt.Errorf("reopening the edited document to remediate: %w", err)
 	}
-	defer func() {
-		if closeErr := r.Close(); closeErr != nil {
-			logger.Debug("closing staged baseline reader failed", slog.Any("err", closeErr))
+	prevReader, prevMutations, prevOverrides := w.reader, w.mutations, w.rewriteOverrides
+	prevFolded, prevTrailerDirty := w.folded, w.trailerDirty
+	if err := w.rebase(next, path); err != nil {
+		logger.Debug("remediate: releasing the previous document failed", slog.Any("err", err))
+	}
+	return func() {
+		base, basePath := w.reader, w.basePath
+		w.reader, w.basePath = prevReader, ""
+		w.mutations, w.rewriteOverrides = prevMutations, prevOverrides
+		w.folded, w.trailerDirty = prevFolded, prevTrailerDirty
+		if err := releaseOwnedReader(base, basePath); err != nil {
+			logger.Debug("remediate: releasing the edited document failed", slog.Any("err", err))
 		}
-	}()
-	return probeIntegrity(ctx, r)
+	}, nil
 }
 
 // evaluateRegression returns a non-empty reason describing the first
@@ -1831,17 +1984,24 @@ func evaluateRegression(baseline, post integritySnap, tol RegressionTolerance) s
 // [remediation.Options.Disabled]).
 type remediationRun func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, disabled []string) (*remediation.Report, error)
 
-// remediate runs one remediation engine against the document as the caller
-// has staged it, then gates the result: it serializes and reopens the output,
-// revalidates it, and compares its integrity with the staged baseline. A
-// regression rolls back the content-tier fixers when they left a snapshot, and
-// fails with [ErrRemediationBrokePDF], restoring the Writer, when there is none
-// or the rollback does not recover the output. The result, rolled back or
-// not, runs further rounds, up to maxRemediationRounds, while residuals remain
-// and each round still fixes something (see [Writer.remediationRound]). When
-// one is kept, the Writer edits its output from then on (see
-// [Writer.rebase]). A temp file that any of these steps cannot write fails
-// the run with [ErrRemediationUnverified], restoring the Writer.
+// remediate runs one remediation engine for target against the document as
+// the caller has staged it, written to a temp file first when anything is
+// queued (see [Writer.materialize]), then gates the result: it serializes and
+// reopens the output, revalidates it, and compares its integrity with the
+// edited document's. A regression rolls back the content-tier fixers when they
+// left a snapshot, and fails with [ErrRemediationBrokePDF], restoring the
+// Writer, when there is none or the rollback does not recover the output. The
+// result, rolled back or not, runs further rounds, up to maxRemediationRounds,
+// while residuals remain and each round still fixes something (see
+// [Writer.remediationRound]). When one is kept, the Writer writes its output
+// from then on (see [Writer.rebase]). A temp file that any of these steps
+// cannot write fails the run with [ErrRemediationUnverified], restoring the
+// Writer.
+//
+// A run that succeeds ends the Writer's edits (see
+// [Writer.refuseAfterRemediation]), and one on a Writer another run ended is
+// refused. So is a run for a PDF/A profile after [Writer.Encrypt], since ISO
+// 19005 forbids encrypting its output.
 //
 // The content-tier fixers a rollback discarded stay off in the later rounds,
 // and the others run in them. The engine runs the content tier after every
@@ -1874,6 +2034,7 @@ type remediationRun func(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 //     changes.
 func (w *Writer) remediate(
 	ctx context.Context,
+	target remediationTarget,
 	tol RegressionTolerance,
 	revalidate func(context.Context, *Reader) ([]error, error),
 	run remediationRun,
@@ -1881,31 +2042,26 @@ func (w *Writer) remediate(
 	if w.closed {
 		return nil, ErrWriterClosed
 	}
+	if err := w.refuseAfterRemediation(target.method); err != nil {
+		return nil, err
+	}
+	if target.pdfaClause != "" && w.encryptCfg != nil {
+		return nil, fmt.Errorf("%w (%s): Writer.Encrypt before Writer.%s", ErrPDFAForbidsEncryption, target.pdfaClause, target.method)
+	}
+	unmaterialize, err := w.materialize(ctx)
+	if err != nil {
+		return nil, err
+	}
 	doc := w.reader.doc
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	// A done ctx can stop the raw-byte augmentation short, and the allocator
 	// then starts below objects the file defines.
 	if err := ctx.Err(); err != nil {
+		unmaterialize()
 		return nil, fmt.Errorf("remediation canceled: %w", err)
 	}
 
-	// An earlier remediation's output is superseded by this run's. Kept, it
-	// was also streamed in its place: WriteTo judges the file fresh by the
-	// queued edits, which a remediation does not change, so when nothing was
-	// staged for the baseline below to serialize, this run's probe and the
-	// final write both streamed the earlier file and dropped this run's
-	// repairs.
-	if err := w.releasePreSerialized(); err != nil {
-		doc.Logger.Debug("remediate: removing the previous remediation output failed", slog.Any("err", err))
-	}
-
-	baseline, baseErr := w.stagedBaseline(ctx)
-	if errors.Is(baseErr, ErrRemediationUnverified) {
-		// A temp file the staged document cannot be written to says nothing
-		// about the document, and a zero baseline would switch the
-		// regression gates off for a reason the caller never learns.
-		return nil, baseErr
-	}
+	baseline, baseErr := probeIntegrity(ctx, w.reader)
 	if baseErr != nil {
 		// Treat an unreadable source as a zero baseline: the user asked
 		// litho to fix a broken PDF, so refusing at the door defeats the
@@ -1923,9 +2079,8 @@ func (w *Writer) remediate(
 	// undoes in-place mutations made by fixers such as trailer-id
 	// (assigning a fresh /ID) or enforceInfoDictLimits (deleting /Info),
 	// which otherwise persist on the shared document even when
-	// remediation returns ErrRemediationBrokePDF.
-	preMutations := len(w.mutations)
-	preFolded := w.folded
+	// remediation returns ErrRemediationBrokePDF. Nothing is queued any more:
+	// materialize wrote the queued edits into the document.
 	preForceRewrite := w.forceRewrite
 	preTrailerDirty := w.trailerDirty
 	preRequiredVersion := w.requiredVersion
@@ -1939,13 +2094,12 @@ func (w *Writer) remediate(
 		maps.Copy(doc.Index.Trailer, preTrailerSnap)
 	}
 	restorePreState := func() {
-		w.mutations = w.mutations[:preMutations]
-		w.folded = preFolded
 		w.forceRewrite = preForceRewrite
 		w.trailerDirty = preTrailerDirty
 		w.requiredVersion = preRequiredVersion
 		w.rewriteOverrides = preRewriteOverrides
 		restoreTrailer()
+		unmaterialize()
 	}
 	// cancelled ends a run whose caller gave up: nothing it serialized will
 	// be written, so its temp file goes now rather than at Close, and the
@@ -1967,30 +2121,6 @@ func (w *Writer) remediate(
 	// file as fixed.
 	doc.ClearCaches()
 
-	// Apply whatever an earlier pipeline stage queued before the fixers run,
-	// so they see the document as the caller has staged it. The fixers resolve
-	// through resolveFromAllocOrDoc, so a page already in the allocator is the
-	// one they read and rewrite.
-	//
-	// Without this, remediation built its overrides from the untouched source
-	// and those overrides win at the same object number in writeToInternal, so
-	// `litho pipe f rotate -angle 90 remediate -profile PDF/A-2b` wrote the file
-	// with no rotation at all. The mutations stay queued, marked folded once the
-	// overrides below hold them (see [Writer.folded]): a remediation rollback
-	// must be able to put the Writer back as it was.
-	//
-	// The overrides an earlier stage produced go in first, for the same
-	// reason: remediation replaced them wholesale, so remediating a redacted
-	// document wrote the unredacted source back. The mutations those overrides
-	// already hold are not applied again.
-	seedAllocator(alloc, w.rewriteOverrides)
-	for i, m := range w.unfoldedMutations() {
-		if err := m.apply(ctx, alloc, doc); err != nil {
-			restorePreState()
-			return nil, fmt.Errorf("applying staged mutation %d before remediation: %w", w.folded+i, err)
-		}
-	}
-
 	report, err := run(ctx, alloc, doc, nil)
 	if err != nil {
 		// A fixer that ran before the failing one may have edited the
@@ -2011,8 +2141,6 @@ func (w *Writer) remediate(
 		// whose trailer pointed at the wrong object. Seed via
 		// rewriteOverrides only.
 		w.rewriteOverrides = alloc.Pending()
-		// The map holds what every queued mutation staged, replayed above.
-		w.folded = len(w.mutations)
 	}
 	if report.TrailerDirty {
 		w.trailerDirty = true
@@ -2185,7 +2313,7 @@ func (w *Writer) remediate(
 	}
 	if keptLater {
 		// A later round's repairs exist only in its output, so the Writer
-		// edits that output from here on (see [Writer.rebase]).
+		// writes that output from here on (see [Writer.rebase]).
 		next, err := w.reader.reopenFile(ctx, tmpPath)
 		if err != nil {
 			removeTempFile(doc.Logger, tmpPath)
@@ -2200,6 +2328,7 @@ func (w *Writer) remediate(
 		}
 	}
 	w.markPreSerialized(tmpPath)
+	w.remediation, w.pdfaClause = target.method, target.pdfaClause
 	return &RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual, RolledBack: dedupeFixes(rolledBack)}, nil
 }
 
@@ -2422,15 +2551,11 @@ func removeTempFile(logger *slog.Logger, path string) {
 	}
 }
 
-// markPreSerialized records the remediation temp file plus the Writer
-// state it captures, so a later WriteTo can detect post-remediation edits
-// and re-serialize instead of streaming a stale file.
+// markPreSerialized records the remediation temp file WriteTo streams. No
+// edit can follow the remediation, so only what WriteTo itself adds can make
+// the file stale (see [Writer.writeToInternal]).
 func (w *Writer) markPreSerialized(path string) {
 	w.preSerializedPath = path
-	w.preSerializedMutations = len(w.mutations)
-	w.preSerializedRedactions = len(w.redactions)
-	w.preSerializedEncrypt = w.encryptCfg != nil
-	w.preSerializedDecrypt = w.decrypt
 }
 
 // copyFromPreSerialized streams the pre-serialized temp file to dst and
@@ -2472,12 +2597,17 @@ func (w *Writer) copyFromPreSerialized(ctx context.Context, dst io.Writer) error
 // from a fresh Reader. After [Writer.Close] it returns [ErrWriterClosed].
 //
 // After a remediation, WriteTo streams the temp file the remediation wrote
-// and removes it, whether the write succeeds or not. An edit queued after
-// the remediation, or a write option that shapes the serialization, makes
-// that file stale: WriteTo then removes it and serializes afresh. The one
-// exception is the output of a remediation that kept a later round, which
-// the Writer goes on to edit: a failed write keeps it for the retry, and it
-// goes once a write succeeds, or at [Writer.Close].
+// and removes it, whether the write succeeds or not. A signature, an
+// encryption, or a write option that shapes the serialization is not in that
+// file: WriteTo then removes it and serializes afresh. The one exception is
+// the output of a remediation that kept a later round, which the Writer
+// serializes from: a failed write keeps it for the retry, and it goes once a
+// write succeeds, or at [Writer.Close].
+//
+// WriteTo writes nothing, and returns the refusal, when a call was refused
+// after a remediation ([ErrEditAfterRemediation]), and when [WithEncryption]
+// asks to encrypt the output of a PDF/A remediation
+// ([ErrPDFAForbidsEncryption]).
 //
 // Signing ([Writer.Sign]) is incompatible with the edits that force a
 // full rewrite (encrypt, decrypt, delete/insert pages, flatten, clear
@@ -2505,6 +2635,9 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	if w.consumed {
 		return ErrWriterConsumed
 	}
+	if w.refused != nil {
+		return w.refused
+	}
 	cfg := writeOpts{}
 	for _, o := range opts {
 		o(&cfg)
@@ -2513,6 +2646,9 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	// applying WithEncryption later would let Sign + WithEncryption past it
 	// and silently drop one of the two.
 	if internal := cfg.internalEncrypt(); internal != nil {
+		if w.pdfaClause != "" {
+			return fmt.Errorf("%w (%s): WithEncryption after Writer.%s", ErrPDFAForbidsEncryption, w.pdfaClause, w.remediation)
+		}
 		w.encryptCfg = internal
 		w.forceRewrite = true
 	}
@@ -2678,10 +2814,6 @@ const writeBufferSize = 64 << 10
 //   - govdocs: write syscalls were 30% of a remediate run against an
 //     unbuffered destination, since each round serializes the document to a
 //     temp file to revalidate it.
-//   - pdfjs bug1708041.pdf: came out of
-//     `litho pipe f remediate -profile PDF/A-2b rotate -angle 90` with no
-//     rotation on any page while the remediation overrides were seeded after
-//     the queued mutations, which let them win at the same object number.
 func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Signer, opts ...WriteOption) (err error) {
 	// The serializer emits a write per token: a dictionary key, a delimiter, a
 	// number. Against an unbuffered destination every one of those is a
@@ -2704,28 +2836,20 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 
 	// Fast path: remediation already serialized the output to a temp file
 	// for accurate residual validation. Stream from that file, but only
-	// when nothing changed since: a mutation, Sign, Encrypt, or decrypt
-	// queued after remediation, or a serialization-shaping write option,
-	// is not in the temp file and streaming it would silently drop the
-	// edit. The remediation overrides persist in w.rewriteOverrides, so a
-	// fresh serialization keeps the applied fixes.
+	// when it holds everything asked for: a signature, an encryption, or a
+	// serialization-shaping write option is not in the temp file, and
+	// streaming it would silently drop it. No edit can follow a remediation.
+	// The remediation overrides persist in w.rewriteOverrides, so a fresh
+	// serialization keeps the applied fixes.
 	if w.preSerializedPath != "" {
-		// A Redact after remediation makes it stale too: the temp file holds
-		// the unredacted document. One before remediation does not, since the
-		// temp file went through the same write-time redaction check.
-		stale := len(w.mutations) != w.preSerializedMutations ||
-			len(w.redactions) != w.preSerializedRedactions ||
-			(w.encryptCfg != nil) != w.preSerializedEncrypt ||
-			w.decrypt != w.preSerializedDecrypt ||
+		stale := w.encryptCfg != nil ||
 			signer != nil ||
 			cfg.fullRewrite || cfg.version != "" || cfg.xrefStream ||
 			cfg.packObjectStreams || cfg.dedupStreams
 		if !stale {
 			return w.copyFromPreSerialized(ctx, dst)
 		}
-		w.reader.doc.Logger.Debug("writer: pre-serialized remediation output is stale, re-serializing",
-			slog.Int("mutations", len(w.mutations)),
-			slog.Int("pre_serialized_mutations", w.preSerializedMutations))
+		w.reader.doc.Logger.Debug("writer: pre-serialized remediation output is stale, re-serializing")
 		if err := w.releasePreSerialized(); err != nil {
 			w.reader.doc.Logger.Debug("writer: removing the stale remediation output failed", slog.Any("err", err))
 		}
@@ -2808,8 +2932,9 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 	// Signing requires its own two-pass incremental flow. It carries the
 	// overrides as the incremental path below does: after a remediation that
 	// kept one round they hold every repair, and signing without them wrote
-	// the source back with only the signature added. The mutations those
-	// overrides already hold are not applied again (see [Writer.folded]).
+	// the source back with only the signature added. The mutations a
+	// redaction's overrides already hold are not applied again (see
+	// [Writer.folded]).
 	if signer != nil {
 		pending := w.unfoldedMutations()
 		mutFuncs := make([]mutations.MutationFunc, len(pending))
@@ -2835,17 +2960,16 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			// Seed with the remediation overrides so a mutation queued after
-			// remediation builds ON its fixes rather than against the untouched
+			// Seed with the redaction overrides so a mutation queued after a
+			// redaction builds ON its edits rather than against the untouched
 			// source. The page mutations read through latestPageDict, so the
 			// seeded object is the one they extend.
 			//
-			// This replaces a blanket "remediation wins at the same object
-			// number", which silently dropped whatever the caller asked for:
-			// `litho pipe f remediate -profile PDF/A-2b rotate -angle 90` wrote
-			// the file with no rotation. Mutations queued BEFORE remediation are
-			// already folded into those overrides by Writer.remediate, and are
-			// not applied again (see [Writer.folded]).
+			// This replaces a blanket "the overrides win at the same object
+			// number", which silently dropped whatever the caller asked for.
+			// Mutations queued BEFORE the redaction are already folded into
+			// those overrides by Writer.Redact, and are not applied again (see
+			// [Writer.folded]). No mutation follows a remediation's overrides.
 			for objNum, obj := range w.rewriteOverrides {
 				mutAlloc.AllocAt(objNum, obj)
 			}
@@ -2884,16 +3008,16 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 		return err
 	}
 
-	// Seed the remediation overrides FIRST so a queued mutation builds on the
-	// fixes instead of losing to them: the page mutations read through
-	// latestPageDict, so the seeded object is the one they extend. Remediation
-	// uses source-namespace object numbers, which match this allocator, so
-	// AllocAt with the same keys lands correctly.
+	// Seed the overrides FIRST so a mutation queued after a redaction builds on
+	// its edits instead of losing to them: the page mutations read through
+	// latestPageDict, so the seeded object is the one they extend. Redaction
+	// and remediation use source-namespace object numbers, which match this
+	// allocator, so AllocAt with the same keys lands correctly.
 	//
 	// Seeding them last let them win at the same object number, which silently
-	// dropped whatever the caller asked for, such as a rotation queued after
-	// remediation. The full-rewrite branch above orders it the same way for the
-	// same reason, and skips the same folded mutations.
+	// dropped whatever the caller asked for. The full-rewrite branch above
+	// orders it the same way for the same reason, and skips the same folded
+	// mutations.
 	for objNum, obj := range w.rewriteOverrides {
 		alloc.AllocAt(objNum, obj)
 	}

@@ -96,6 +96,16 @@ func warnEncryptionDroppedAddingEncryptStage(stderr io.Writer, encrypting bool, 
 		"Add an encrypt stage, or run litho encrypt on the result.", readers...)
 }
 
+// warnEncryptionDroppedByPDFA is the form for a PDF/A remediation, standalone
+// or as a pipe stage, whose output cannot be protected again: ISO 19005 forbids
+// the Encrypt key in the trailer (6.1.3 in every part), so pipe refuses an
+// encrypt stage beside it, and running litho encrypt on the result costs the
+// conformance the remediation was asked for.
+func warnEncryptionDroppedByPDFA(stderr io.Writer, encrypting bool, readers ...*pdf.Reader) {
+	warnEncryptionDroppedWithRemedy(stderr, encrypting,
+		"PDF/A forbids encryption (ISO 19005, 6.1.3), so the output cannot be protected and stay conformant.", readers...)
+}
+
 // warnEncryptionDroppedWithRemedy carries the shared body. remedy completes the
 // sentence and must name only what the calling command actually accepts.
 func warnEncryptionDroppedWithRemedy(stderr io.Writer, encrypting bool, remedy string, readers ...*pdf.Reader) {

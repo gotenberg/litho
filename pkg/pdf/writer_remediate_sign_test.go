@@ -206,7 +206,7 @@ func TestWriterSignKeepsTheRepairsOfEveryRemediationRound(t *testing.T) {
 			if tc.signFirst {
 				w.Sign(signer)
 			}
-			if _, err := w.remediate(ctx, DefaultRegressionTolerance, e.revalidate, e.run); err != nil {
+			if _, err := w.remediate(ctx, engineTarget, DefaultRegressionTolerance, e.revalidate, e.run); err != nil {
 				t.Fatalf("remediate: %v", err)
 			}
 			if len(e.disabled) != len(tc.steps) {

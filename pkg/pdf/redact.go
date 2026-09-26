@@ -125,7 +125,9 @@ type RedactReport struct {
 // there too.
 //
 // The redaction holds whatever else the Writer does before or after it:
-// another Redact, remediation, auto-tagging. Each builds on the others' edits,
+// another Redact, auto-tagging, and a remediation, which comes after it since a
+// remediation is the last edit on a Writer (a Redact after one returns
+// [ErrEditAfterRemediation]). Each builds on the others' edits,
 // and [Writer.WriteTo] scans the output it is about to write for every removed
 // string. A stage can still rebuild a page from the source document
 // (auto-tagging marks up the original content stream), so when a removed
@@ -145,6 +147,9 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 	}
 	if w.consumed {
 		return nil, ErrWriterConsumed
+	}
+	if err := w.refuseAfterRemediation("Redact"); err != nil {
+		return nil, err
 	}
 	if len(regions) == 0 {
 		return &RedactReport{}, nil

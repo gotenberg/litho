@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log/slog"
 	"slices"
 	"strings"
 	"testing"
@@ -211,120 +210,59 @@ func tinyRealPDF() []byte {
 	})
 }
 
-// TestWriterAutoTagAfterOneRemediationRoundKeepsTheRepairs pins that AutoTag
-// queued after a remediation that keeps one round tags the remediated document:
-// the output validates as AutoTag applied to the written remediated output
-// does.
+// TestWriterAutoTagBeforeARemediationIsJudgedByIt pins that a remediation
+// queued after AutoTag repairs the tagged document: the output keeps the
+// structure tree and validates to exactly the residual the remediation
+// reports.
 //
-// A remediation that keeps one round leaves its repairs in the Writer's
-// overrides, and auto-tagging read the page content, the catalog and the
-// resources from the Reader's document. After a PDF/A-2b remediation it marked
-// up the source content stream and wrote it over the repaired one, so the real
-// the remediation had clamped came back (ISO 19005-2, 6.1.13). After a PDF/UA-1
-// remediation it found the source catalog untagged and tagged the document a
-// second time, replacing the structure tree the remediation had built.
-func TestWriterAutoTagAfterOneRemediationRoundKeepsTheRepairs(t *testing.T) {
+// AutoTag used to be queued after the remediation, which a Writer now
+// refuses. It then read the page content, the catalog and the resources from
+// the Reader's document: after a PDF/A-2b remediation it marked up the source
+// content stream and wrote it over the repaired one, so the real the
+// remediation had clamped came back (ISO 19005-2, 6.1.13), and after a PDF/UA-1
+// remediation it found the source catalog untagged and replaced the structure
+// tree the remediation had built.
+func TestWriterAutoTagBeforeARemediationIsJudgedByIt(t *testing.T) {
 	t.Parallel()
 
-	validateUA1 := func(t *testing.T, data []byte) []error {
-		t.Helper()
-		ctx := context.Background()
-		r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
-		if err != nil {
-			t.Fatalf("reopening the output: %v", err)
-		}
-		defer r.Close()
-		res, err := r.ValidatePDFUA(ctx, models.PDFUA1)
-		if err != nil {
-			t.Fatalf("ValidatePDFUA: %v", err)
-		}
-		return res
-	}
 	for _, tc := range []struct {
-		name      string
-		data      []byte
-		remediate func(ctx context.Context, w *Writer) (*RemediationReport, error)
-		validate  func(t *testing.T, data []byte) []error
+		name    string
+		data    []byte
+		profile string
 	}{
-		{
-			name: "a PDF/A-2b remediation clamping a real in the content",
-			data: tinyRealPDF(),
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
-				return w.RemediatePDFA(ctx, models.PDFA2b)
-			},
-			validate: validatePDFA2b,
-		},
-		{
-			name: "a PDF/UA-1 remediation tagging a form widget",
-			data: placeholderFormPDF(),
-			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
-				return w.RemediatePDFUA(ctx, models.PDFUA1)
-			},
-			validate: validateUA1,
-		},
+		{name: "a PDF/A-2b remediation clamping a real in the content", data: tinyRealPDF(), profile: string(models.PDFA2b)},
+		{name: "a PDF/UA-1 remediation of a form widget", data: placeholderFormPDF(), profile: string(models.PDFUA1)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			ctx := context.Background()
-			rounds := &keptRounds{}
-			r, err := Open(ctx, bytes.NewReader(tc.data), int64(len(tc.data)), WithLogger(slog.New(rounds)))
+			r, err := Open(ctx, bytes.NewReader(tc.data), int64(len(tc.data)))
 			if err != nil {
 				t.Fatalf("Open: %v", err)
 			}
 			defer r.Close()
 			w := NewWriter(r)
 			defer w.Close()
-			report, err := tc.remediate(ctx, w)
+			w.AutoTag()
+			report, err := remediateFor(ctx, w, tc.profile)
 			if err != nil {
 				t.Fatalf("remediation: %v", err)
-			}
-			if rounds.n.Load() != 0 {
-				t.Fatalf("the remediation kept %d later rounds, so the Writer edits its output and the test proves nothing", rounds.n.Load())
 			}
 			if len(report.Fixed) == 0 {
 				t.Fatal("the remediation fixed nothing, so the test proves nothing")
 			}
-			w.AutoTag()
 			var got bytes.Buffer
 			if err := w.WriteTo(ctx, &got); err != nil {
-				t.Fatalf("WriteTo of AutoTag queued after the remediation: %v", err)
-			}
-
-			// The remediated document, tagged on its own.
-			r2, err := Open(ctx, bytes.NewReader(tc.data), int64(len(tc.data)))
-			if err != nil {
-				t.Fatalf("Open: %v", err)
-			}
-			defer r2.Close()
-			remW := NewWriter(r2)
-			defer remW.Close()
-			if _, err := tc.remediate(ctx, remW); err != nil {
-				t.Fatalf("remediation: %v", err)
-			}
-			var remediated bytes.Buffer
-			if err := remW.WriteTo(ctx, &remediated); err != nil {
 				t.Fatalf("WriteTo: %v", err)
-			}
-			base, err := Open(ctx, bytes.NewReader(remediated.Bytes()), int64(remediated.Len()))
-			if err != nil {
-				t.Fatalf("reopening the remediated output: %v", err)
-			}
-			defer base.Close()
-			wantW := NewWriter(base)
-			defer wantW.Close()
-			wantW.AutoTag()
-			var want bytes.Buffer
-			if err := wantW.WriteTo(ctx, &want); err != nil {
-				t.Fatalf("WriteTo of the tagged remediated output: %v", err)
 			}
 
 			if !bytes.Contains(got.Bytes(), []byte("/StructTreeRoot")) {
 				t.Error("the output carries no structure tree")
 			}
-			gotHits, wantHits := ruleHits(tc.validate(t, got.Bytes())), ruleHits(tc.validate(t, want.Bytes()))
-			if !slices.Equal(gotHits, wantHits) {
-				t.Errorf("AutoTag queued after the remediation validates to %q, want the tagged remediated output's %q", gotHits, wantHits)
+			gotV, wantV := violationTexts(validateFor(t, got.Bytes(), tc.profile)), violationTexts(report.Residual)
+			if !slices.Equal(gotV, wantV) {
+				t.Errorf("the output validates to %q, want the reported residual %q", gotV, wantV)
 			}
 		})
 	}
