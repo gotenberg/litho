@@ -2129,20 +2129,58 @@ func TestWriter_SignWithFullRewriteOps_ReturnsIncompatible(t *testing.T) {
 
 	cases := []struct {
 		name  string
-		setup func(w *Writer, opts *[]WriteOption)
+		setup func(t *testing.T, w *Writer, opts *[]WriteOption)
+		// src is the document signed, writerTestPDF when nil.
+		src []byte
 	}{
-		{"encrypt", func(w *Writer, _ *[]WriteOption) {
+		{name: "encrypt", setup: func(_ *testing.T, w *Writer, _ *[]WriteOption) {
 			w.Encrypt(EncryptConfig{UserPassword: "u", OwnerPassword: "o", Algorithm: EncryptAES256, Permissions: -1})
 		}},
-		{"remove-encryption", func(w *Writer, _ *[]WriteOption) { w.RemoveEncryption() }},
-		{"clear-metadata", func(w *Writer, _ *[]WriteOption) { w.ClearMetadata() }},
-		{"with-full-rewrite", func(_ *Writer, opts *[]WriteOption) { *opts = append(*opts, WithFullRewrite()) }},
+		{name: "remove-encryption", setup: func(_ *testing.T, w *Writer, _ *[]WriteOption) { w.RemoveEncryption() }},
+		{name: "clear-metadata", setup: func(_ *testing.T, w *Writer, _ *[]WriteOption) { w.ClearMetadata() }},
+		{name: "delete-pages", setup: func(t *testing.T, w *Writer, _ *[]WriteOption) {
+			if err := w.DeletePages(1); err != nil {
+				t.Fatalf("DeletePages: %v", err)
+			}
+		}},
+		{name: "insert-pages", setup: func(t *testing.T, w *Writer, _ *[]WriteOption) {
+			src, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			if err := w.InsertPages(0, src); err != nil {
+				t.Fatalf("InsertPages: %v", err)
+			}
+		}},
+		{name: "flatten-form", setup: func(_ *testing.T, w *Writer, _ *[]WriteOption) { w.FlattenForm() }},
+		// A redaction that removes nothing leaves the Writer untouched, so the
+		// region takes a word.
+		{name: "redact", setup: func(t *testing.T, w *Writer, _ *[]WriteOption) {
+			report, err := w.Redact(ctx, []RedactRegion{coversSecret})
+			if err != nil {
+				t.Fatalf("Redact: %v", err)
+			}
+			if len(report.RemovedText) == 0 {
+				t.Fatal("the redaction removed nothing, so the test proves nothing")
+			}
+		}, src: redactableTextPDF("")},
+		// A remediation whose repairs need a full rewrite is signed on top of
+		// its output, so an edit that forces one must still refuse after it.
+		{name: "delete-pages after a remediation", setup: func(t *testing.T, w *Writer, _ *[]WriteOption) {
+			if _, err := w.RemediatePDFA(ctx, models.PDFA2b); err != nil {
+				t.Fatalf("RemediatePDFA: %v", err)
+			}
+			if err := w.DeletePages(1); err != nil {
+				t.Fatalf("DeletePages: %v", err)
+			}
+		}},
+		{name: "with-full-rewrite", setup: func(_ *testing.T, _ *Writer, opts *[]WriteOption) { *opts = append(*opts, WithFullRewrite()) }},
 		// WithEncryption reaches w.encryptCfg from inside WriteTo rather than
 		// from a setter called beforehand, so it is the one arm here that can
 		// regress by ORDERING alone: applied after the guard instead of before
 		// it, the write proceeds and silently drops either the signature or
 		// the encryption.
-		{"with-encryption", func(_ *Writer, opts *[]WriteOption) {
+		{name: "with-encryption", setup: func(_ *testing.T, _ *Writer, opts *[]WriteOption) {
 			*opts = append(*opts, WithEncryption(EncryptConfig{
 				UserPassword: "u", OwnerPassword: "o", Algorithm: EncryptAES256, Permissions: -1,
 			}))
@@ -2151,14 +2189,19 @@ func TestWriter_SignWithFullRewriteOps_ReturnsIncompatible(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+			src := data
+			if tc.src != nil {
+				src = tc.src
+			}
+			r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
 			if err != nil {
 				t.Fatalf("Open: %v", err)
 			}
 			w := NewWriter(r)
+			defer w.Close()
 			w.Sign(&mockSigner{})
 			var opts []WriteOption
-			tc.setup(w, &opts)
+			tc.setup(t, w, &opts)
 
 			var out bytes.Buffer
 			err = w.WriteTo(ctx, &out, opts...)

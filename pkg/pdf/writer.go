@@ -618,6 +618,12 @@ type Writer struct {
 	encryptCfg   *crypto.EncryptConfig
 	decrypt      bool
 	forceRewrite bool
+	// editRewrites records that an edit the caller queued forces the full
+	// rewrite, as ClearMetadata, DeletePages, InsertPages, FlattenForm and
+	// Redact do, where forceRewrite alone may come from a remediation whose
+	// repairs need one. [Writer.WriteTo] refuses to sign the first and signs
+	// the second on top of the rewritten output.
+	editRewrites bool
 	trailerDirty bool
 	// consumed is set once WriteTo produces output successfully. A second
 	// WriteTo on the same Writer returns ErrWriterConsumed rather than
@@ -874,6 +880,7 @@ func (w *Writer) SetMetadata(meta Metadata) {
 // The mutation is queued and applied when [Writer.WriteTo] is called.
 func (w *Writer) ClearMetadata() {
 	w.forceRewrite = true
+	w.editRewrites = true
 	w.mutations = append(w.mutations, mutation{
 		apply: mutations.ClearMetadata,
 	})
@@ -918,6 +925,7 @@ func (w *Writer) DeletePages(pages ...int) error {
 		return ErrEmptyPageList
 	}
 	w.forceRewrite = true
+	w.editRewrites = true
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			resolvedPages, err := w.reader.resolvePages(ctx)
@@ -948,6 +956,7 @@ func (w *Writer) InsertPages(pos int, source *Reader, sourcePages ...int) error 
 		return ErrNilSource
 	}
 	w.forceRewrite = true
+	w.editRewrites = true
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			targetPages, err := w.reader.resolvePages(ctx)
@@ -1172,6 +1181,7 @@ func (w *Writer) SetFormField(name, value string) {
 // queued and applied when [Writer.WriteTo] is called.
 func (w *Writer) FlattenForm() {
 	w.forceRewrite = true
+	w.editRewrites = true
 	w.mutations = append(w.mutations, mutation{
 		apply: mutations.FlattenForm,
 	})
@@ -1412,20 +1422,23 @@ func (w *Writer) RemoveAttachment(name string) {
 // Sign applies a digital signature using the given signer. Signing always uses
 // incremental update (required for ByteRange integrity).
 //
-// A source litho repaired on reading, its cross-reference table rebuilt or
-// bytes found before its header, is rewritten in full first, as an unsigned
-// write with an edit rewrites it, and the signature goes in an incremental
-// update on top of that rewrite: one appended to the damaged bytes would carry
-// their wrong offsets into the signed file.
+// When the output is a full rewrite, [Writer.WriteTo] writes that rewrite
+// first and signs it in an incremental update on top, as a caller would by
+// writing, reopening and signing. Two cases take that path. A remediation whose
+// repairs need a full rewrite is signed on top of its output, so the signed
+// file validates like the unsigned one. A source litho repaired on
+// reading, its cross-reference table rebuilt or bytes found before its header,
+// is rewritten as an unsigned write with an edit rewrites it: an update
+// appended to the damaged bytes would carry their wrong offsets into the
+// signed file.
 //
 // Sign registers the signer rather than queueing a mutation, so it may be
 // called at any point: [Writer.WriteTo] applies every queued mutation and every
 // repair a remediation kept before computing the digest, and the signature
 // covers the result either way. The signer runs once, in WriteTo: the files a
 // remediation writes to revalidate its output are never signed. What it is not
-// compatible with is an operation forcing a full rewrite, a remediation whose
-// repairs need one included, which [Writer.WriteTo] rejects with
-// [ErrSignFullRewriteIncompatible].
+// compatible with is an edit forcing a full rewrite, which [Writer.WriteTo]
+// rejects with [ErrSignFullRewriteIncompatible].
 func (w *Writer) Sign(signer Signer) {
 	w.signer = signer
 }
@@ -2420,12 +2433,14 @@ func (w *Writer) copyFromPreSerialized(ctx context.Context, dst io.Writer) error
 // the Writer goes on to edit: a failed write keeps it for the retry, and it
 // goes once a write succeeds, or at [Writer.Close].
 //
-// Signing ([Writer.Sign]) is incompatible with operations that force
-// a full rewrite (encrypt, decrypt, delete/insert pages, flatten,
-// clear metadata, redaction, a remediation that rewrites the file, or
-// [WithFullRewrite]); combining them returns
+// Signing ([Writer.Sign]) is incompatible with the edits that force a
+// full rewrite (encrypt, decrypt, delete/insert pages, flatten, clear
+// metadata, redaction, or [WithFullRewrite]); combining them returns
 // [ErrSignFullRewriteIncompatible] instead of silently dropping the
-// requested operation.
+// requested operation. A remediation whose repairs need a full rewrite
+// is signed: WriteTo writes the remediation's output and signs it in an
+// incremental update on top, as a source litho repaired on reading is
+// signed (see [Writer.Sign]).
 //
 // Signing an already-encrypted source returns the same error even when
 // the caller asks for nothing else: the incremental signing flow would
@@ -2458,7 +2473,9 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	// Signing an encrypted source is also rejected: the incremental signing
 	// flow would append the signature dictionary's strings in plaintext
 	// where the source's crypto handler requires ciphertext.
-	if w.signer != nil && (w.encryptCfg != nil || w.decrypt || w.forceRewrite || cfg.fullRewrite ||
+	// A full rewrite a remediation asks for is not refused: its output is
+	// signed on top, see writeSignedRewrite.
+	if w.signer != nil && (w.encryptCfg != nil || w.decrypt || w.editRewrites || cfg.fullRewrite ||
 		w.reader.doc.IsEncrypted) {
 		return ErrSignFullRewriteIncompatible
 	}
@@ -2479,15 +2496,21 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 }
 
 // signsARewrite reports whether the output a signature goes on is a full
-// rewrite: the source is one the unsigned write rewrites in full, a signature
-// being an edit of it.
+// rewrite: a remediation's repairs need one, the only full rewrite
+// [Writer.WriteTo] lets a signature through with, or the source is damaged.
+func (w *Writer) signsARewrite() bool {
+	return w.forceRewrite || w.sourceDamaged()
+}
+
+// sourceDamaged reports whether the document the Writer edits is one the
+// unsigned write rewrites in full as soon as it carries an edit.
 //
 // A cross-reference table litho rebuilt records offsets that are wrong, and a
 // file with bytes before its header leaves readers disagreeing on what an
 // offset counts from: ISO 32000-1, 7.5.2 puts the header first, and Acrobat
 // counts from it where litho counts from the file start. An update appended to
-// either carries the damage on, and the signature covers it.
-func (w *Writer) signsARewrite() bool {
+// either carries the damage on, and a signature covers it.
+func (w *Writer) sourceDamaged() bool {
 	return w.reader.doc.Rebuilt || w.reader.doc.HeaderOffset > 0
 }
 
@@ -2497,15 +2520,28 @@ func (w *Writer) signsARewrite() bool {
 // the file but its own value (ISO 32000-1, 12.8.1), so it is written last, and
 // a full rewrite renumbers every object, so the two cannot share one pass.
 //
+// After a remediation the unsigned write streams the output the remediation
+// validated when nothing was queued since and the source needs no repair, so
+// the signature goes on that very file.
+//
 // It has the signature of [Writer.writeToInternal] so [Writer.WriteTo] can pick
 // either; signer is never nil here.
+//
+// # Corpus evidence
+//
+//   - All corpora: of 110 files sampled across the seven and remediated at
+//     PDF/A-2b, 58 could be signed while a remediation that rewrites the file
+//     refused, and 109 are now. The one left, pdfjs empty_protected.pdf, is
+//     an encrypted source. Every signed output validates like the unsigned
+//     remediated output and holds one signature, whose ByteRange covers the
+//     file but its /Contents and which poppler's pdfsig reports valid.
 func (w *Writer) writeSignedRewrite(ctx context.Context, dst io.Writer, signer Signer, opts ...WriteOption) error {
 	cfg := writeOpts{}
 	for _, o := range opts {
 		o(&cfg)
 	}
 	rewrite := opts
-	if w.signsARewrite() {
+	if w.sourceDamaged() {
 		// The unsigned write rewrites a damaged source only when it carries an
 		// edit, and the signature is the edit here.
 		rewrite = append(append([]WriteOption(nil), opts...), WithFullRewrite())

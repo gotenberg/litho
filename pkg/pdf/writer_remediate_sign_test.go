@@ -410,3 +410,127 @@ func TestWriterSignedRemediationValidatesLikeTheUnsigned(t *testing.T) {
 		})
 	}
 }
+
+// TestWriterSignsARemediationThatRewrites pins that a remediation whose repairs
+// need a full rewrite is signed, in an incremental update on top of the
+// remediation's finished output, as a caller would by writing, reopening and
+// signing, and that the signed output validates like the unsigned one. With the
+// /ID pinned, the signed output starts with the unsigned output's bytes.
+//
+// The header of [validXrefPDF] carries no binary comment, which ISO 19005-2,
+// 6.1.2 requires and only a rewrite can add. Signing refused such a
+// remediation with [ErrSignFullRewriteIncompatible], since the signature must
+// be the last thing written and the rewrite renumbers every object.
+func TestWriterSignsARemediationThatRewrites(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	data := validXrefPDF(t)
+	// The /ID a remediation mints is random unless pinned, and the test
+	// compares the signed output with the unsigned one byte for byte.
+	pinnedID := WithDocumentID([]byte("0123456789abcdef"))
+
+	unsigned := func() ([]byte, *RemediationReport) {
+		r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+		if err != nil {
+			t.Fatalf("Open: %v", err)
+		}
+		defer r.Close()
+		w := NewWriter(r)
+		defer w.Close()
+		report, err := w.RemediatePDFA(ctx, models.PDFA2b, pinnedID)
+		if err != nil {
+			t.Fatalf("RemediatePDFA: %v", err)
+		}
+		if !w.forceRewrite {
+			t.Fatal("the remediation writes an incremental update, so the test proves nothing")
+		}
+		var out bytes.Buffer
+		if err := w.WriteTo(ctx, &out); err != nil {
+			t.Fatalf("WriteTo: %v", err)
+		}
+		return out.Bytes(), report
+	}
+	plain, plainReport := unsigned()
+	want := violationTexts(validatePDFA2b(t, plain))
+	if got := violationTexts(plainReport.Residual); !slices.Equal(got, want) {
+		t.Fatalf("the unsigned output validates to %q, want the remediation's residual %q", want, got)
+	}
+
+	for _, tc := range []struct {
+		name string
+		sign func(ctx context.Context, r *Reader, signer Signer) ([]byte, error)
+	}{
+		{
+			name: "signed after the remediation",
+			sign: func(ctx context.Context, r *Reader, signer Signer) ([]byte, error) {
+				w := NewWriter(r)
+				defer w.Close()
+				if _, err := w.RemediatePDFA(ctx, models.PDFA2b, pinnedID); err != nil {
+					return nil, err
+				}
+				w.Sign(signer)
+				var out bytes.Buffer
+				err := w.WriteTo(ctx, &out)
+				return out.Bytes(), err
+			},
+		},
+		{
+			name: "signed before the remediation",
+			sign: func(ctx context.Context, r *Reader, signer Signer) ([]byte, error) {
+				w := NewWriter(r)
+				defer w.Close()
+				w.Sign(signer)
+				if _, err := w.RemediatePDFA(ctx, models.PDFA2b, pinnedID); err != nil {
+					return nil, err
+				}
+				var out bytes.Buffer
+				err := w.WriteTo(ctx, &out)
+				return out.Bytes(), err
+			},
+		},
+		{
+			name: "a pipeline signing in a later stage",
+			sign: func(ctx context.Context, r *Reader, signer Signer) ([]byte, error) {
+				var out bytes.Buffer
+				_, err := NewPipeline().Open(r).
+					Apply(func(ctx context.Context, w *Writer) error {
+						_, err := w.RemediatePDFA(ctx, models.PDFA2b, pinnedID)
+						return err
+					}).
+					Apply(func(_ context.Context, w *Writer) error {
+						w.Sign(signer)
+						return nil
+					}).
+					WriteTo(ctx, &out)
+				return out.Bytes(), err
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer r.Close()
+			signer := newCMSTestSigner(t)
+			signed, err := tc.sign(ctx, r, signer)
+			if err != nil {
+				t.Fatalf("remediating and signing: %v", err)
+			}
+
+			if got := violationTexts(validatePDFA2b(t, signed)); !slices.Equal(got, want) {
+				t.Errorf("the signed output validates to %q, want the unsigned output's %q", got, want)
+			}
+			checkSignedOutput(t, signed, signer)
+			if n := signer.calls.Load(); n != 1 {
+				t.Errorf("the signer ran %d times, want once", n)
+			}
+			if !bytes.HasPrefix(signed, plain) {
+				t.Error("the signature is not an incremental update on top of the unsigned remediated output")
+			}
+		})
+	}
+}

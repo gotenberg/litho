@@ -49,6 +49,9 @@ type MutationFunc func(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 //   - All corpora: of 110 files sampled across them, 42 could be signed after
 //     a PDF/A-2b remediation, and 39 of those validated worse signed than
 //     unsigned. pdfjs 160F-2019.pdf went from 7 violations to 671.
+//   - All corpora: of another 110 files sampled across them, remediated at
+//     PDF/A-2b and signed, poppler's pdfsig reported a digest mismatch on all
+//     58 signed while the ByteRange was filled in after the digest.
 func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Document, signer Signer, overrides map[int]ast.PdfObject, mutations []MutationFunc, xrefStream bool) error {
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	// A done ctx can stop the raw-byte augmentation short, and the allocator

@@ -262,6 +262,7 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 	// rewrite and produced files whose trailer pointed at the wrong object.
 	w.rewriteOverrides = alloc.Pending()
 	w.forceRewrite = true
+	w.editRewrites = true
 	w.recordRedaction(regions, report.RemovedText)
 	return report, nil
 }

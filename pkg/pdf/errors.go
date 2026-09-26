@@ -123,17 +123,21 @@ var (
 	ErrWriterClosed = errors.New("writer closed; create a new Writer")
 
 	// ErrSignFullRewriteIncompatible is returned by [Writer.WriteTo] when
-	// [Writer.Sign] is combined with an operation that requires a full
-	// rewrite: [Writer.Encrypt], [Writer.RemoveEncryption],
-	// [Writer.DeletePages], [Writer.InsertPages], [Writer.FlattenForm],
-	// [Writer.ClearMetadata], [Writer.Redact], [WithFullRewrite], or a
-	// remediation that rewrites the file to repair its structure, such as the
-	// formatting a PDF/A profile requires of the header and of every object.
-	// Signing covers a ByteRange of the existing bytes via an incremental
-	// update; a full rewrite renumbers objects and invalidates that
-	// ByteRange, so the two cannot be combined. Encrypted-then-signed output
-	// is permitted by the spec but not yet implemented.
-	ErrSignFullRewriteIncompatible = errors.New("sign is incompatible with full-rewrite operations (encrypt, decrypt, delete/insert pages, flatten, clear metadata, full rewrite)")
+	// [Writer.Sign] is combined with an edit that requires a full rewrite:
+	// [Writer.Encrypt], [Writer.RemoveEncryption], [Writer.DeletePages],
+	// [Writer.InsertPages], [Writer.FlattenForm], [Writer.ClearMetadata],
+	// [Writer.Redact], [WithFullRewrite] or [WithEncryption], or with an
+	// encrypted source. Signing covers a ByteRange of the existing bytes via
+	// an incremental update; a full rewrite renumbers objects and invalidates
+	// that ByteRange, so the two cannot be combined in one pass.
+	// Encrypted-then-signed output is permitted by the spec but not yet
+	// implemented.
+	//
+	// A remediation whose repairs need a full rewrite, such as the formatting
+	// a PDF/A profile requires of the header and of every object, does not
+	// return it: WriteTo signs the remediation's output in an incremental
+	// update on top.
+	ErrSignFullRewriteIncompatible = errors.New("sign is incompatible with full-rewrite operations (encrypt, decrypt, delete/insert pages, flatten, clear metadata, redact, full rewrite)")
 
 	// ErrEncryptedNotAuthenticated is returned by [Writer.WriteTo] when the
 	// source document is encrypted but was never authenticated, so its
@@ -315,7 +319,7 @@ var (
 // match on the sentinel via [errors.Is] while still inspecting the
 // offending stage via [errors.As].
 //
-// Sign combined with encryption or any other full-rewrite operation
+// Sign combined with encryption or any other edit that forces a full rewrite
 // is enforced by [Writer.WriteTo] at execution time and surfaces as
 // [ErrSignFullRewriteIncompatible], a regular error from
 // [Pipeline.WriteTo], not a pipeline sentinel.

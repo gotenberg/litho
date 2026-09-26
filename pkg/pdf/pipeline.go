@@ -26,8 +26,9 @@ import (
 // The closure can call any [Writer] method, including
 // [Writer.RemediatePDFA]. Results are captured by the caller through
 // variables in the enclosing scope. The pipeline does not inspect
-// closure contents; incompatible-operation checks (e.g., Sign +
-// full-rewrite) are enforced by [Writer.WriteTo] at execution time.
+// closure contents; incompatible-operation checks (e.g., Sign + an
+// edit forcing a full rewrite) are enforced by [Writer.WriteTo] at
+// execution time.
 // Pipeline values must not be modified after being passed to [Pipeline.WriteTo].
 //
 // A Pipeline is not safe for concurrent use. Every stage method appends to the
@@ -107,7 +108,7 @@ func (p *Pipeline) Apply(fn func(ctx context.Context, w *Writer) error) *Pipelin
 // Validate runs build-time structural checks without executing the
 // pipeline. It catches empty pipelines, missing [Pipeline.Open], empty
 // page lists, and empty merge sources. Cross-stage compatibility
-// (Sign combined with a full-rewrite operation) is enforced by
+// (Sign combined with an edit forcing a full rewrite) is enforced by
 // [Writer.WriteTo] at execution time and does not appear here.
 func (p *Pipeline) Validate() error {
 	var errs []error
