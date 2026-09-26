@@ -121,6 +121,7 @@ one deliberately rather than diffing it against a fresh build.
 | `jpx_2b.pdf`           | PDF/A-2b     | The JPEG 2000 container boxes a conforming image may carry       |
 | `threed_4e.pdf`        | PDF/A-4e     | The 3D stream subtypes the engineering conformance permits       |
 | `grouping_ua2.pdf`     | PDF/UA-2     | Both halves of a Table 5 row, chosen by how the parent is used   |
+| `resinherit_2b.pdf`    | PDF/A-2b     | Resources and a media box a page inherits from an inner node     |
 
 ### Must-not-fire controls
 
@@ -281,6 +282,9 @@ violation but is exempt, so a firing is a false positive.
 | `jpx_2b`                                  | `ImOK`, a JPEG 2000 image conforming on all five tests                 | ISO 19005-2, 6.2.8.3         |
 | `jpx_2b`                                  | `ImWaived`, a forbidden METH under an explicit `/ColorSpace`           | ISO 19005-2, 6.2.8.3         |
 | `threed_4e`                               | A `/U3D` and a `/PRC` 3D stream, both permitted values                 | ISO 19005-4, 6.1.6.1 t3      |
+| `resinherit_2b`                           | `FR`, the root's font, behind a nearer ancestor's `/Resources`         | ISO 32000-1, 7.7.3.4         |
+| `resinherit_2b`                           | `F6` and `CS4`, an ancestor's, behind the page's own `/Resources`      | ISO 32000-1, 7.7.3.4         |
+| `resinherit_2b`                           | `F4` and `CS3`, an ancestor's, behind a `/Resources` naming no object  | veraPDF `knownKey` reading   |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -345,6 +349,7 @@ which are covered under [Known divergences](#known-divergences).
 | `outputintent_2b.pdf`  | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
 | `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
+| `resinherit_2b.pdf`    | 9    | 6    | 11   | 8    | 9    | 11   | 8    | 9    | 9   | 9    | 10   | 9    | 9    |
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
 | `structkinds_ua2.pdf`  | 6    | 5    | 7    | 6    | 6    | 7    | 6    | 6    | 3   | 3    | 4    | 5    | 7    |
@@ -2668,16 +2673,77 @@ Every firing was measured on veraPDF 1.30.2 and litho one construct per file
 before the five were planted together, and the two tools return the same rule
 set in all thirteen cells.
 
+### `resinherit_2b.pdf`
+
+ISO 32000-1, 7.7.3.4 and Table 30 make `/Resources` and `/MediaBox`
+inheritable: a page that does not state one takes it from its nearest ancestor
+in the page tree that does, whole. A census of every corpus found 35 pages with
+no `/Resources` of their own, 14 inheriting from the root and none from an
+intermediate `/Pages` node. litho fell back to the root's dictionary, which no
+corpus file could contradict, while missing every font and colour space an
+intermediate node lends, and it judged a media box the root writes once for the
+document where veraPDF judges it once for every page that takes it.
+
+Seven pages sit under six intermediate nodes, one per construct, and every
+font and colour space is a distinct object, so each verdict names its page:
+
+| Page           | Its `/Resources`      | Ancestor lends               | Answers                              |
+| -------------- | --------------------- | ---------------------------- | ------------------------------------ |
+| `Inter`        | none                  | `F1`, `CS0`, two levels up   | `6.2.11.6/2`, `6.2.4.3/2`, `6.2.2/2` |
+| `Own`          | `F2` alone            | `F6`, `CS4`                  | `6.2.11.4.1/1` for `F2` alone        |
+| `Null`         | `null`                | `F3`, `CS2`                  | `6.2.4.3/3`, `6.2.2/2`               |
+| `Dangle`       | `9999 0 R`, no object | `F4`, `CS3`                  | nothing the ancestor lends           |
+| `Parent`       | none, `/Parent` wrong | `F5`, on the node listing it | `6.2.11.4.1/1`, `6.2.2/2`            |
+| `Box1`, `Box2` | none                  | `/MediaBox [0 0 2 2]`        | `6.1.13/11`, once per page           |
+
+`F1`, `F2`, `F3` and `F5` are unembedded, so each also answers
+`6.2.11.4.1/1`: four instances, one per font. `F1` is the only TrueType font
+reached with no `/Encoding`, which makes the intermediate node a rule class of
+its own rather than one instance among four.
+
+Every object a page must not reach carries a defect no reached object does, so
+reaching one adds a rule class rather than an instance. `FR`, the root's font,
+`F6` and `F4` are TrueType fonts outside the standard 14 with no `/FirstChar`
+(`6.2.11.2/4`). `CS4` and `CS3` are Separations naming `SpotRGB`, the colorant
+`CS0` names, over DeviceCMYK instead of DeviceRGB (`6.2.4.4/2`). And every page
+draws with the names its ancestors define: `Inter` with `FR`, which the nearer
+ancestor's dictionary replaces rather than merges with, `Own` with `F6` and
+`CS4` past the dictionary it states, `Dangle` with `F4` and `CS3`.
+
+Three readings are veraPDF's, measured one construct per file before they were
+packed. A `null` entry is absent (ISO 32000-1, 7.3.7), so `Null` inherits. A
+reference to a missing object is kept as the page's own value, as veraPDF's
+`knownKey` keeps any indirect reference, although 7.3.10 reads it as the null
+object; litho follows the entry veraPDF reads, as it does for `/AA` and the
+other keys `knownKey` covers. And `Parent` inherits through the node whose
+`/Kids` lists it, which veraPDF's tree walk records as the parent, not through
+the `/Parent` entry naming the root.
+
+qpdf drops a null dictionary value and cannot write a reference to a missing
+object, so the builder plants both as placeholder names of the same length and
+patches the bytes after the save, which moves no offset. It also builds the page
+tree by hand: pikepdf's page list flattens the tree and pushes inherited
+attributes onto each page, which would delete every construct here.
+
+litho before the fix disagrees with veraPDF on the rule set in all thirteen
+cells. At PDF/A-2b it misses `6.1.13/11` and `6.2.11.6/2`, and reports
+`6.2.11.2/4`, `6.2.11.2/6` and `6.2.4.4/2` from the objects it should not
+reach. After it, the two tools return
+the same rule set in all thirteen cells, and the same count for every rule at
+every PDF/A level. The PDF/UA levels differ on instance counts only, the
+per-content-item untagged-content rules the corpus does not pin (see
+[Instance counts](#instance-counts-which-the-corpus-does-not-pin)).
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets, and
 `manifest.json` expands every fixture across the eight profiles it lists. The
 hand-measured matrix is wider: all thirteen conformance levels veraPDF
-validates, so 69 x 13 = 897 cells. litho and veraPDF return the same verdict in
+validates, so 70 x 13 = 910 cells. litho and veraPDF return the same verdict in
 all of them: in each cell either both report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 895 of the 897 cells. The two
+fixtures exist to protect, and it holds in 908 of the 910 cells. The two
 exceptions are both `complex_ua2`, both marked `*` in the counts table and both
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
