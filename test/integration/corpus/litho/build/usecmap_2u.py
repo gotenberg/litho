@@ -49,9 +49,7 @@ or width rule answers:
 
 Adobe's CNS1 resource maps C2's CID 44DF to U+F538, a Private Use value, which
 ISO 19005-2, 6.2.11.7.3 t1 and ISO 14289-2, 8.4.3 t1 fail with no /ActualText
-around it. veraPDF reports both; litho reads a Private Use value from the
-/ToUnicode program alone and not from the base it names, and reports neither
-(see ../README.md, Known divergences).
+around it. Both tools report each once, the value coming from the base alone.
 
 Each shows CID 0 as well, the .notdef glyph, which 6.2.11.8 t1 fails once per
 font. Two readings stay out. A /UseCMap chain that loops makes veraPDF raise

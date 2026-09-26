@@ -348,7 +348,7 @@ zero-area annotation.
 ## Expected firing sets
 
 Counts are distinct rule classes (`clause/test`) reported by litho. litho and
-veraPDF agree exactly on the set in every cell except the five marked `*`,
+veraPDF agree exactly on the set in every cell except the two marked `*`,
 which are covered under [Known divergences](#known-divergences).
 
 | Fixture                | A-1a | A-1b | A-2a | A-2b | A-2u | A-3a | A-3b | A-3u | A-4 | A-4e | A-4f | UA-1 | UA-2 |
@@ -438,7 +438,7 @@ which are covered under [Known divergences](#known-divergences).
 | `typedreads_1b.pdf`    | 10   | 8    | 9    | 8    | 8    | 11   | 10   | 10   | 9   | 8    | 8    | 7    | 11   |
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 5    | 4    |
 | `undecodable_2b.pdf`   | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 11   | 9    |
-| `usecmap_2u.pdf`       | 5    | 2    | 7\*  | 3    | 5    | 7\*  | 3    | 5    | 5   | 5    | 6    | 9    | 9\*  |
+| `usecmap_2u.pdf`       | 5    | 2    | 8    | 3    | 5    | 8    | 3    | 5    | 5   | 5    | 6    | 9    | 10   |
 | `usedcs_2b.pdf`        | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `xfatable_ua1.pdf`     | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 4    | 7    |
 | `xmpempty_1b.pdf`      | 8    | 5    | 6    | 3    | 4    | 6    | 3    | 4    | 7   | 7    | 8    | 5    | 6    |
@@ -1680,25 +1680,8 @@ outside the structure tree. `c1c11d3` judges the language of text no structure
 element owns, and both tools now report the rule on this file, so `7.1/12` is
 the cell's only difference.
 
-Three more cells disagree, all on `usecmap_2u.pdf` and all on one glyph: CID
-44DF of `C2`, which Adobe's current Adobe-CNS1-UCS2 maps to U+F538, a Private
-Use value, reached through a usecmap base.
-
-**`6.2.11.7.3/1` at PDF/A-2a and PDF/A-3a, `8.4.3/1` at PDF/UA-2.** veraPDF
-reports the glyph, litho does not. ISO 19005-2, 6.2.11.7.3 and ISO 14289-2,
-8.4.3 ask for an `/ActualText` around a glyph whose Unicode value lies in the
-Private Use Area, and the glyph's value is the base's: the program maps no code
-itself. litho reads Private Use values from the bytes of the `/ToUnicode`
-program alone, `containsPUAMapping` and `puaSourceCodes` in
-`pkg/internal/compliance/fonts_encoding.go`, called from
-`checkStreamPUAWithoutActualText` in `pkg/internal/compliance/fonts.go`, and
-never from the base the program names, which the other `/ToUnicode` rules read
-through `resolveUsedCMaps`. litho has the gap. The construct stays because it
-is the case the Adobe CNS1 measurement was taken on, and the gate should show
-the day the gap closes.
-
-One litho gap and one veraPDF gap sit outside the corpus, because planting
-either would add a disagreeing cell rather than coverage.
+One veraPDF gap sits outside the corpus, because planting it would add a
+disagreeing cell rather than coverage.
 
 **`6.1.9/1`, an `endobj` with no preceding EOL, where litho is right.** The
 clause reads "The object number and endobj keyword shall each be preceded by an
@@ -1712,20 +1695,6 @@ reports. veraPDF builds no `CosIndirect` for the scalar, so its
 right and veraPDF under-reports, the same way it drops a `/P`-less structure
 element under `8.2.1/2`. `pdfjs/issue1045.pdf`, `bug1011159.pdf` and
 `issue3566.pdf` all carry the construct.
-
-**`6.3.5/3` at PDF/A-1b, a rendered CID past the program under a `/CIDSet`.**
-litho reports it on `fontcopies_2b.pdf` remediated at PDF/A-1b, in both modes,
-and veraPDF does not; the fixture itself agrees, since its subset CIDFont has no
-`/CIDSet` at all, which both report. The remediation writes a `/CIDSet` naming
-the CIDs the three-glyph program holds, and `C` renders CID 5, which the
-program does not hold. veraPDF asks the `/CIDSet` for the CIDs present in the
-program, and ISO 19005-1, 6.3.5 reads the same way. litho's rendered-CID check,
-`checkCIDSetCompletenessTrueTypeRendered` in
-`pkg/internal/compliance/fonts_coverage.go`, exempts a rendered CID whose glyph
-has no outline but not one whose GID lies past the program, so it asks the
-`/CIDSet` for CID 5. The same `/CIDSet` planted by hand on the source draws
-`6.3.5/3` from litho alone. litho has the gap. Not planted, since it would add
-a disagreeing cell rather than coverage.
 
 ### Instance counts, which the corpus does not pin
 
@@ -3634,6 +3603,14 @@ The two tools return the same rule set in all thirteen cells, and the same count
 for every rule at every PDF/A level; at the PDF/UA levels veraPDF counts the
 untagged-content rules once per text show.
 
+Remediated at PDF/A-1b, in both modes, the output gives `C`'s descendant a
+`/CIDSet` naming the CIDs the three-glyph program holds, while `C` renders CID 5,
+which the program does not hold. ISO 19005-1, 6.3.5 has the set identify the
+CIDs present in the program, and veraPDF asks it at PDF/A-1 only for a rendered
+CID the program holds: one the `/CIDToGIDMap` covers whose glyph lies below
+`maxp.numGlyphs`, with or without an outline. Neither tool reports `6.3.5/3` on
+the output, and the two agree on its rule set.
+
 ### `usecmap_2u.pdf`
 
 A `/ToUnicode` CMap builds on another two ways (ISO 32000-1, 9.7.5): the
@@ -3685,9 +3662,12 @@ as 41, so its reader drops them.
 | `6.2.4.3/4` DeviceGray    | 11      | 11    |
 | `6.6.2.1/1` no metadata   | 1       | 1     |
 
-Three cells disagree, PDF/A-2a, PDF/A-3a and PDF/UA-2, all on one glyph: see
-[Known divergences](#known-divergences). The other ten return the same rule
-set, and at the PDF/A levels among them the same count for every rule.
+`C2` shows CID 44DF, which Adobe's current CNS1 resource maps to U+F538, a
+Private Use value only the base supplies, since the program maps no code
+itself. ISO 19005-2, 6.2.11.7.3 and ISO 14289-2, 8.4.3 ask for an `/ActualText`
+around such a glyph, so both tools report `6.2.11.7.3/1` at PDF/A-2a and
+PDF/A-3a and `8.4.3/1` at PDF/UA-2, once each. The thirteen cells return the
+same rule set, and at the PDF/A levels the same count for every rule.
 
 ### `afref_3b.pdf`
 
@@ -3755,6 +3735,17 @@ this corpus, and the text scoreboard names the rules only one side reports. The
 PDF/A-3a cell of `usecmap_2u` is outside the manifest. A fifth cell in the
 runner is a regression, or a divergence to cover under Known divergences and
 mark `*`.
+a rule class leaves `matched` at 736 and moves only `ruleset_mismatch`. Both
+exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1 and
+PDF/UA-2, so the metric reads 2 on this corpus, and the text scoreboard names
+the rules only one side reports. A third cell in the runner is a regression, or
+a divergence to cover under Known divergences and mark `*`.
+
+The `remediation` and `remediation-aggressive` features validate each
+remediated output with both tools, and their `disagreement` metric sums, over
+the cells, the difference between the numbers of rules each reports. It reads 0
+on this corpus in both modes, so any cell that moves it is a regression or a
+divergence to cover under Known divergences.
 
 The thirteen-level figures are measured by hand against a live veraPDF. The
 thirteen flavours are `1a 1b 2a 2b 2u 3a 3b 3u 4 4e 4f ua1 ua2` on the veraPDF
