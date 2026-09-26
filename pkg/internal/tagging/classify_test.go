@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -326,6 +327,44 @@ func TestClassify_Figures(t *testing.T) {
 		if roles[i] != want[i] {
 			t.Fatalf("roles = %v, want %v", roles, want)
 		}
+	}
+}
+
+// TestClassify_FiguresInheritedResources pins that an image XObject a page
+// inherits becomes a Figure too. The page states no /Resources and an
+// intermediate /Pages node states the image, which the page's content paints
+// by name: ISO 32000-1, 7.7.3.4 and Table 30 make /Resources inheritable, so
+// the name resolves there. Reading only the page's own entry found no image,
+// and the paint stayed untagged.
+func TestClassify_FiguresInheritedResources(t *testing.T) {
+	ctx := context.Background()
+	cs := "BT /F1 12 Tf 72 700 Td (Text before the image goes here.) Tj ET\n" +
+		"q 100 0 0 80 72 600 cm /Im1 Do Q\n"
+	data := assemblePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Pages /Parent 2 0 R /Kids [4 0 R] /Count 1 " +
+			"/Resources << /Font << /F1 5 0 R >> /XObject << /Im1 7 0 R >> >> >>",
+		"<< /Type /Page /Parent 3 0 R /MediaBox [0 0 612 792] /Contents 6 0 R >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(cs), cs),
+		"<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8 /Length 1 >>\nstream\n\x00\nendstream",
+	})
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	root, err := Classify(ctx, doc)
+	if err != nil {
+		t.Fatalf("Classify: %v", err)
+	}
+	var roles []Role
+	for _, k := range root.Kids {
+		roles = append(roles, k.Role)
+	}
+	want := []Role{RoleP, RoleFigure}
+	if !slices.Equal(roles, want) {
+		t.Fatalf("roles = %v, want %v", roles, want)
 	}
 }
 

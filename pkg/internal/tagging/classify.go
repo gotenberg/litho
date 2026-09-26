@@ -641,13 +641,14 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 // and returns the names whose streams carry /Subtype /Image. Form
 // XObjects are excluded: their content is not descended into (see the
 // Classify scope note), so wrapping their Do in a Figure would mark
-// arbitrary nested content as an image.
+// arbitrary nested content as an image. The resources are the page's own
+// or those it inherits from the page tree (ISO 32000-1, 7.7.3.4), which
+// [document.Page.Resources] carries.
 func pageImageXObjectNames(ctx context.Context, doc *document.Document, page *document.Page) map[string]bool {
-	res, err := document.ResolveDict(ctx, doc, page.Dict["Resources"])
-	if err != nil || res == nil {
+	if page.Resources == nil {
 		return nil
 	}
-	xobjs, err := document.ResolveDict(ctx, doc, res["XObject"])
+	xobjs, err := document.ResolveDict(ctx, doc, page.Resources["XObject"])
 	if err != nil || xobjs == nil {
 		return nil
 	}
