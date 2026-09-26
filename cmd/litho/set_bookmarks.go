@@ -40,6 +40,7 @@ func runSetBookmarks(ctx context.Context, args []string, _stdout, stderr io.Writ
 	warnEncryptionDropped(stderr, false, r)
 
 	w := pdf.NewWriter(r)
+	defer releaseWriter(w, stderr)
 	if *generate {
 		w.GenerateBookmarks(defaultBookmarkGenOptions(), pdf.BookmarkReplace)
 	} else {

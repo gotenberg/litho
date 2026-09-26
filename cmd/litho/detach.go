@@ -36,6 +36,7 @@ func runDetach(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 	warnEncryptionDropped(stderr, false, r)
 
 	w := pdf.NewWriter(r)
+	defer releaseWriter(w, stderr)
 	w.RemoveAttachment(*name)
 
 	dst, closeDst, err := createOutput(*output)

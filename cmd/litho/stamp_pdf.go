@@ -64,6 +64,7 @@ func runStampPDF(ctx context.Context, args []string, _stdout, stderr io.Writer) 
 	warnEncryptionDropped(stderr, false, r, stampReader)
 
 	w := pdf.NewWriter(r)
+	defer releaseWriter(w, stderr)
 
 	var pageList []int
 	if *pages != "" {

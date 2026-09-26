@@ -48,6 +48,7 @@ func runSetForm(ctx context.Context, args []string, _stdout, stderr io.Writer) i
 	warnEncryptionDropped(stderr, false, r)
 
 	w := pdf.NewWriter(r)
+	defer releaseWriter(w, stderr)
 
 	for _, f := range fields {
 		name, value, ok := strings.Cut(f, "=")

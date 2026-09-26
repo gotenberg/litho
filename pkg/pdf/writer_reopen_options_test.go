@@ -33,7 +33,9 @@ func TestRepairFacturX_JudgesWithTheReadersSchematron(t *testing.T) {
 	}
 	defer r.Close()
 
-	report, err := NewWriter(r).RepairFacturX(ctx)
+	w := NewWriter(r)
+	defer w.Close()
+	report, err := w.RepairFacturX(ctx)
 	if err != nil {
 		t.Fatalf("RepairFacturX: %v", err)
 	}

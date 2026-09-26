@@ -75,6 +75,7 @@ func runRemediate(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	warnEncryptionDropped(stderr, false, r)
 
 	w := pdf.NewWriter(r)
+	defer releaseWriter(w, stderr)
 
 	var remOpts []pdf.RemediateOption
 	if *aggressive {

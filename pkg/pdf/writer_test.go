@@ -1828,6 +1828,7 @@ func TestWriter_RemediatePDFA_ReportContents(t *testing.T) {
 	}
 
 	w := NewWriter(r)
+	defer w.Close()
 	report, err := w.RemediatePDFA(ctx, models.PDFA2b)
 	if err != nil {
 		t.Fatalf("RemediatePDFA: %v", err)
@@ -1869,6 +1870,7 @@ func TestWriter_RemediatePDFA_Idempotent(t *testing.T) {
 		t.Fatalf("Open remediated: %v", err)
 	}
 	w2 := NewWriter(r2)
+	defer w2.Close()
 	report2, err := w2.RemediatePDFA(ctx, models.PDFA2b)
 	if err != nil {
 		t.Fatalf("second RemediatePDFA: %v", err)
@@ -4652,6 +4654,7 @@ func TestRemediationReport_ResidualViolations(t *testing.T) {
 	}
 	defer r.Close()
 	w := NewWriter(r)
+	defer w.Close()
 	rep, err := w.RemediatePDFA(ctx, models.PDFA1a)
 	if err != nil {
 		t.Fatalf("RemediatePDFA: %v", err)

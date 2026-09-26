@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"slices"
 )
 
 // Pipeline chains write operations against a single PDF state that
@@ -16,8 +17,10 @@ import (
 // [Pipeline.WriteTo] executes the pipeline.
 //
 // Restructuring stages materialize the current state to an intermediate
-// temp file and reopen it as a new [Reader]. Temp files are cleaned up
-// on both success and failure paths.
+// temp file and reopen it as a new [Reader]. A temp file is removed as soon
+// as the next one replaces it as the current state, and every one left, the
+// output of a remediation no stage wrote included, is removed before
+// [Pipeline.WriteTo] returns, on success and failure alike.
 //
 // [Pipeline.Apply] receives a [Writer] bound to the current document.
 // The closure can call any [Writer] method, including
@@ -208,9 +211,7 @@ func (p *Pipeline) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOpti
 
 	// Terminal flush.
 	if !ex.dstWritten {
-		if ex.writer == nil {
-			ex.writer = NewWriter(ex.cur)
-		}
+		ex.ensureWriter()
 		if err := ex.writer.WriteTo(ctx, dst, opts...); err != nil {
 			return nil, &PipelineStageError{
 				Index: len(p.stages) - 1, Name: stageNameWrite, Err: err,
@@ -250,8 +251,11 @@ type stage interface {
 
 // executor drives the sequential execution of pipeline stages.
 type executor struct {
-	cur         *Reader
-	curOwned    bool
+	cur      *Reader
+	curOwned bool
+	// curFile is the intermediate temp file cur reads, nil while cur is the
+	// caller's source.
+	curFile     *os.File
 	writer      *Writer
 	tmpFiles    []*os.File
 	tempDir     string
@@ -266,10 +270,25 @@ type executor struct {
 
 func (ex *executor) isLastStage() bool { return ex.stageIdx == ex.totalStages-1 }
 
+// ensureWriter binds a Writer to the current document, placing its temp
+// files where the pipeline places its own.
 func (ex *executor) ensureWriter() {
 	if ex.writer == nil {
 		ex.writer = NewWriter(ex.cur)
+		ex.writer.tempDir = ex.tempDir
 	}
+}
+
+// releaseWriter closes the current Writer, removing the remediation output
+// it holds when no stage wrote it, and forgets it.
+func (ex *executor) releaseWriter() {
+	if ex.writer == nil {
+		return
+	}
+	if err := ex.writer.Close(); err != nil {
+		ex.logger.Debug("closing writer failed", slog.Any("err", err))
+	}
+	ex.writer = nil
 }
 
 func (ex *executor) flushToTempFile(ctx context.Context) error {
@@ -305,9 +324,15 @@ func (ex *executor) reopenAsCurrent(ctx context.Context, f *os.File) error {
 			ex.logger.Debug("closing previous reader failed", slog.Any("err", closeErr))
 		}
 	}
+	// Nothing reads the previous intermediate file any more: its Reader is
+	// closed and its Writer was written into f.
+	if ex.curFile != nil {
+		ex.removeTempFile(ex.curFile)
+	}
 	ex.cur = next
 	ex.curOwned = true
-	ex.writer = nil
+	ex.curFile = f
+	ex.releaseWriter()
 	return nil
 }
 
@@ -320,20 +345,30 @@ func (ex *executor) newTempFile() (*os.File, error) {
 	return f, nil
 }
 
+// removeTempFile closes and removes f, one of the intermediate files, and
+// drops it from the ones cleanup removes.
+func (ex *executor) removeTempFile(f *os.File) {
+	name := f.Name()
+	if err := f.Close(); err != nil {
+		ex.logger.Debug("closing temp file failed", slog.String("path", name), slog.Any("err", err))
+	}
+	if err := os.Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
+		ex.logger.Debug("removing temp file failed", slog.String("path", name), slog.Any("err", err))
+	}
+	ex.tmpFiles = slices.DeleteFunc(ex.tmpFiles, func(g *os.File) bool { return g == f })
+}
+
 func (ex *executor) cleanup() {
+	// A Writer a failed or cancelled pipeline never wrote may hold the output
+	// of a remediation.
+	ex.releaseWriter()
 	if ex.curOwned && ex.cur != nil {
 		if err := ex.cur.Close(); err != nil {
 			ex.logger.Debug("closing current reader failed", slog.Any("err", err))
 		}
 	}
-	for _, f := range ex.tmpFiles {
-		name := f.Name()
-		if err := f.Close(); err != nil {
-			ex.logger.Debug("closing temp file failed", slog.String("path", name), slog.Any("err", err))
-		}
-		if err := os.Remove(name); err != nil && !errors.Is(err, os.ErrNotExist) {
-			ex.logger.Debug("removing temp file failed", slog.String("path", name), slog.Any("err", err))
-		}
+	for len(ex.tmpFiles) > 0 {
+		ex.removeTempFile(ex.tmpFiles[0])
 	}
 }
 
@@ -350,7 +385,7 @@ func (s *openStage) name() string    { return stageNameOpen }
 func (s *openStage) apply(_ context.Context, ex *executor) error {
 	ex.cur = s.src
 	ex.curOwned = false
-	ex.writer = nil
+	ex.releaseWriter()
 	ex.recordStage(s.name(), false, 0)
 	return nil
 }

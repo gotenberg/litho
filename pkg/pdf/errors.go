@@ -115,6 +115,13 @@ var (
 	// Writer (and Reader) for each distinct output.
 	ErrWriterConsumed = errors.New("writer already consumed; create a new Writer")
 
+	// ErrWriterClosed is returned by [Writer.WriteTo], [Writer.Redact] and
+	// the remediation methods after [Writer.Close]. Close releases the
+	// remediated output a Writer holds, and a later write cannot rebuild it
+	// in full: the later remediation rounds ran against that output, not
+	// against the Writer's queue.
+	ErrWriterClosed = errors.New("writer closed; create a new Writer")
+
 	// ErrSignFullRewriteIncompatible is returned by [Writer.WriteTo] when
 	// [Writer.Sign] is combined with an operation that requires a full
 	// rewrite: [Writer.Encrypt], [Writer.RemoveEncryption],

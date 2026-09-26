@@ -45,6 +45,7 @@
 //
 //		// Mutate and write
 //		writer := pdf.NewWriter(reader)
+//		defer writer.Close()
 //		writer.SetMetadata(pdf.Metadata{Title: "Redacted copy"})
 //		if err := writer.RotatePages(90, 1); err != nil {
 //			log.Fatal(err)
@@ -65,7 +66,9 @@
 //
 // Use [Reader.ValidatePDFA] or [Reader.ValidatePDFUA] to report compliance
 // against a profile, and [Writer.RemediatePDFA] or [Writer.RemediatePDFUA]
-// to queue automatic repairs for the violations the engine can fix.
+// to queue automatic repairs for the violations the engine can fix. A
+// remediated Writer holds its output in a temp file until [Writer.WriteTo]
+// streams it or [Writer.Close] removes it.
 //
 // # Digital signatures
 //

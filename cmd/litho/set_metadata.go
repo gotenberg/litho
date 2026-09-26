@@ -41,6 +41,7 @@ func runSetMetadata(ctx context.Context, args []string, _stdout, stderr io.Write
 	warnEncryptionDropped(stderr, false, r)
 
 	w := pdf.NewWriter(r)
+	defer releaseWriter(w, stderr)
 	w.SetMetadata(pdf.Metadata{
 		Title:    *title,
 		Author:   *author,

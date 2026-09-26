@@ -396,6 +396,8 @@ func remediateOnce(ctx context.Context, pdfPath string, validate func(context.Co
 	out.LithoPre = len(distinctRuleIDs(pre))
 
 	w := pdf.NewWriter(r)
+	// Removes the remediation output when the write below never runs.
+	defer w.Close()
 	if err := remediate(ctx, w); err != nil {
 		out.LithoPost = out.LithoPre
 		out.VeraPost = out.VeraPre

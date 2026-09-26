@@ -61,6 +61,7 @@ func runInsert(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 	}
 
 	w := pdf.NewWriter(r)
+	defer releaseWriter(w, stderr)
 
 	if err := w.InsertPages(*pos, srcReader, srcPageList...); err != nil {
 		fmt.Fprintf(stderr, "inserting pages: %v\n", err)

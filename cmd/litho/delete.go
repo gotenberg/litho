@@ -49,6 +49,7 @@ func runDelete(ctx context.Context, args []string, _stdout, stderr io.Writer) in
 	}
 
 	w := pdf.NewWriter(r)
+	defer releaseWriter(w, stderr)
 
 	if err := w.DeletePages(pageList...); err != nil {
 		fmt.Fprintf(stderr, "deleting pages: %v\n", err)

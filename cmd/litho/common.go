@@ -204,6 +204,15 @@ func abandonOutput(path string, closeDst func() error) {
 	os.Remove(path) //nolint:errcheck,gosec // best-effort withdrawal of a file that is already unusable; path is the caller's own -o flag, the same value createOutput opens above, not untrusted input
 }
 
+// releaseWriter closes w, which removes the temp file a remediation left when
+// the command stopped before writing it, and warns when that file could not
+// be removed. Deferred right after [pdf.NewWriter] in every command.
+func releaseWriter(w *pdf.Writer, stderr io.Writer) {
+	if err := w.Close(); err != nil {
+		fmt.Fprintf(stderr, "warning: %v\n", err)
+	}
+}
+
 // simpleMutationOption adjusts what [runSimpleMutation] offers a command.
 type simpleMutationOption func(*simpleMutationConfig)
 
@@ -275,6 +284,7 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 	}
 
 	w := pdf.NewWriter(r)
+	defer releaseWriter(w, stderr)
 	mutate(w)
 
 	dst, closeDst, err := createOutput(*output)

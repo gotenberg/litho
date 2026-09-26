@@ -140,6 +140,9 @@ type RedactReport struct {
 func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactReport, err error) {
 	defer recoverToError(w.logger(), "Writer.Redact", &err)
 
+	if w.closed {
+		return nil, ErrWriterClosed
+	}
 	if w.consumed {
 		return nil, ErrWriterConsumed
 	}

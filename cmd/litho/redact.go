@@ -141,6 +141,7 @@ func runRedact(ctx context.Context, args []string, stdout, stderr io.Writer) int
 	warnEncryptionDropped(stderr, false, r)
 
 	w := pdf.NewWriter(r)
+	defer releaseWriter(w, stderr)
 
 	// Before the output file exists: a refused redaction must leave nothing
 	// behind, and a half-redacted file on disk is the failure this command

@@ -148,6 +148,7 @@ func runEncrypt(ctx context.Context, args []string, _stdout, stderr io.Writer) i
 	warnCompactSkipped(stderr, *compact, true)
 
 	w := pdf.NewWriter(r)
+	defer releaseWriter(w, stderr)
 	w.Encrypt(pdf.EncryptConfig{
 		UserPassword:  *userPwd,
 		OwnerPassword: *ownerPwd,

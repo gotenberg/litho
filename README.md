@@ -94,6 +94,7 @@ func main() {
 
 	// Remediate, then write the result.
 	w := pdf.NewWriter(r)
+	defer w.Close()
 	report, err := w.RemediatePDFA(ctx, models.PDFA2b)
 	if err != nil {
 		log.Fatal(err)
@@ -113,7 +114,7 @@ func main() {
 
 The public surface lives in three types: `Reader` opens and extracts, `Writer` queues mutations and emits, and `Pipeline` chains operations. See the [godoc](https://pkg.go.dev/github.com/gotenberg/litho/pkg/pdf) for the full API.
 
-`Reader` is safe for concurrent use after construction. `Writer` is single-use and not safe for concurrent use.
+`Reader` is safe for concurrent use after construction. `Writer` is single-use and not safe for concurrent use. Close a `Writer` when done: a remediated one holds its output in a temp file until `WriteTo` streams it or `Close` removes it.
 
 ## CLI
 
