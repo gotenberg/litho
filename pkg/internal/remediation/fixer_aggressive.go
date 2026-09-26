@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
+	"github.com/gotenberg/litho/pkg/internal/core/ioat"
+	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
@@ -205,6 +208,18 @@ func fixAnnotationAppearances(ctx context.Context, alloc *writer.ObjAllocator, d
 // Annex A, Table A.1) rather than deleted whole. Deleting it removed the ET
 // and BT a viewer draws with, and the text after them moved.
 //
+// A page whose content holds an inline image is not serialized again: the
+// content parser reads an image's data off-token, so its BI operation keeps
+// its dictionary alone, and writing the operations back would drop the data
+// and leave "<< ... >> BI" with no ID or EI (ISO 32000-1, 8.9.7). Its repairs
+// are spliced in place instead ([spliceAggressiveRepairs]), the invalid
+// intent an image's own dictionary names among them, its images' data
+// carried across byte for byte, and the spliced stream read back: one that
+// does not read as the repair intends leaves the page as written, its
+// findings reported residuals rather than silently corrupted. Such a page used
+// to be left as written whatever it held, so an invalid rendering intent in
+// it stayed a residual (ISO 19005-1, 6.2.9 t1; ISO 19005-2/3, 6.2.6 t1).
+//
 // # Corpus evidence
 //
 //   - pdfjs sci-notation.pdf, bug1130815.pdf: the two files with such a run in
@@ -212,6 +227,11 @@ func fixAnnotationAppearances(ctx context.Context, alloc *writer.ObjAllocator, d
 //     this rewrite and separates the runs first, so the violations litho and
 //     veraPDF report after an aggressive PDF/A-1b, PDF/A-2b or PDF/A-4
 //     remediation, and the extracted text, are unchanged.
+//   - All corpora: 134 files draw inline images. Of their aggressive PDF/A-1b,
+//     PDF/A-2b and PDF/A-4 remediations, 4 outputs change, all from the image
+//     intents of [respellInlineImageIntents]. No page holding an inline image
+//     gives ri an invalid operand, and every other output is byte for byte
+//     the same.
 func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fixRI, fixUnknown bool) ([]string, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -222,53 +242,62 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		return nil, err
 	}
 
-	var totalRI, totalUnknown, totalSeparated int
+	var total opSpliceTally
 
 	for pageNum, page := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 
-		ops, contentsObj, err := livePageContentOps(ctx, alloc, doc, page)
+		data, contentsObj, err := livePageContentData(ctx, alloc, doc, page)
 		if err != nil || contentsObj == nil {
 			continue
 		}
+		ops, err := content.ParseStreamData(ctx, data, content.ForRepair())
+		if err != nil {
+			continue
+		}
 
-		hasInlineImage := false
-		pageRI, pageUnknown, pageSeparated := 0, 0, 0
+		// serializeOps cannot write an inline image back, so a page holding
+		// one has its repairs spliced in place.
+		if slices.ContainsFunc(ops, beginsInlineImage) {
+			newData, t := spliceAggressiveRepairs(ctx, data, fixRI, fixUnknown)
+			if t == (opSpliceTally{}) {
+				continue
+			}
+			if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
+				return nil, err
+			}
+			total.add(t)
+			continue
+		}
+
+		var tally opSpliceTally
 
 		// The removal the unknown-ops fixer makes, shared so that a run of
 		// operators written with no white space between them comes apart here
 		// too; see [dropUndefinedOperators].
 		if fixUnknown {
-			ops, pageSeparated, pageUnknown = dropUndefinedOperators(ops)
+			ops, tally.separated, tally.removed = dropUndefinedOperators(ops)
+		}
+		// A run such as "QBI" comes apart into a BI no dictionary follows,
+		// which would begin an inline image with no data or EI (ISO 32000-1,
+		// 8.9.7), so the page is left as written, as the splice leaves it
+		// ([repairOperation]).
+		if slices.ContainsFunc(ops, beginsInlineImage) {
+			continue
 		}
 
-		for i, op := range ops {
-			if op.Operator == "BI" {
-				hasInlineImage = true
-			}
-			if fixRI && op.Operator == "ri" && len(op.Operands) == 1 {
-				if name, ok := op.Operands[0].(ast.PdfName); ok {
-					if !isValidRenderingIntent(string(name)) {
-						ops[i].Operands[0] = ast.PdfName("RelativeColorimetric")
-						pageRI++
-					}
+		if fixRI {
+			for i, op := range ops {
+				if invalidIntent(op) {
+					ops[i].Operands[0] = ast.PdfName("RelativeColorimetric")
+					tally.intents++
 				}
 			}
 		}
 
-		if pageRI == 0 && pageUnknown == 0 && pageSeparated == 0 {
-			continue
-		}
-
-		// serializeOps cannot round-trip an inline image: the content parser
-		// consumes the image's binary data off-token, so a BI operation retains
-		// only its dict. Re-serialising a content stream that contains one would
-		// drop the image data and emit invalid "<dict> BI" syntax. Leave such
-		// streams untouched; any rendering-intent or unknown-operator defect in
-		// them remains a reported residual rather than being silently corrupted.
-		if hasInlineImage {
+		if tally == (opSpliceTally{}) {
 			continue
 		}
 
@@ -281,22 +310,177 @@ func fixContentStreams(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 		if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
 			return nil, err
 		}
-		totalRI += pageRI
-		totalUnknown += pageUnknown
-		totalSeparated += pageSeparated
+		total.add(tally)
 	}
 
 	var fixes []string
-	if totalRI > 0 {
-		fixes = append(fixes, fmt.Sprintf("replaced %d invalid rendering intents in content streams", totalRI))
+	if total.intents > 0 {
+		fixes = append(fixes, fmt.Sprintf("replaced %d invalid rendering intents in content streams", total.intents))
 	}
-	if totalUnknown > 0 {
-		fixes = append(fixes, fmt.Sprintf("removed %d unknown operators from BX/EX sections", totalUnknown))
+	if total.removed > 0 {
+		fixes = append(fixes, fmt.Sprintf("removed %d unknown operators from BX/EX sections", total.removed))
 	}
-	if totalSeparated > 0 {
-		fixes = append(fixes, fmt.Sprintf("separated %d content-stream operator(s) written with no white space before them", totalSeparated))
+	if total.folded > 0 {
+		fixes = append(fixes, fmt.Sprintf("repaired %d malformed number(s) in content streams", total.folded))
+	}
+	if total.separated > 0 {
+		fixes = append(fixes, fmt.Sprintf("separated %d content-stream operator(s) written with no white space before them", total.separated))
 	}
 	return fixes, nil
+}
+
+// spliceAggressiveRepairs returns the bytes [fixContentStreams] writes for a
+// page whose content, data, holds an inline image, and what it changed: the
+// invalid rendering intents of the images' dictionaries respelled in place
+// ([respellInlineImageIntents]), then the repairs of [aggressiveOperation]
+// spliced in place of the operations they change ([spliceOperations]). Each
+// step reads its result back and is dropped when it does not read as
+// intended, so a zero tally leaves the page as written.
+func spliceAggressiveRepairs(ctx context.Context, data []byte, fixRI, fixUnknown bool) ([]byte, opSpliceTally) {
+	var t opSpliceTally
+	if fixRI {
+		data, t.intents = respellInlineImageIntents(ctx, data)
+	}
+	if spliced, s, ok := spliceOperations(ctx, data, aggressiveOperation(fixRI, fixUnknown)); ok && s != (opSpliceTally{}) {
+		data = spliced
+		t.add(s)
+	}
+	return data, t
+}
+
+// respellInlineImageIntents returns data with every invalid rendering intent
+// an inline image's dictionary names ([isValidRenderingIntent]) respelled as
+// RelativeColorimetric, and how many it respelled.
+//
+// ISO 32000-1, 8.9.7 lets an inline image carry the /Intent entry of an image
+// XObject (Table 89), which it writes in full, and ISO 19005-1, 6.2.9 and ISO
+// 19005-2/3, 6.2.6 hold it to the four intents of Table 70 as they hold the
+// operand of ri. The names are spliced in place ([walkTokens]), so the image
+// data is carried across byte for byte. The result is read back, and must
+// hold the operations data holds, each image's dictionary with the intents
+// respelled and nothing else changed; otherwise data comes back unchanged
+// with a count of 0.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-1b__veraPDF_test_suite_6-2-9-t01-fail-a.pdf and
+//     PDF_A-2b__veraPDF_test_suite_6-2-6-t01-fail-a.pdf: an inline image of
+//     page content names the intent Custom, which litho and veraPDF 1.30
+//     reported after their aggressive PDF/A-1b and PDF/A-2b remediations.
+//     Respelled, the 4 outputs pass both validators, and their image data
+//     and extracted text do not change.
+func respellInlineImageIntents(ctx context.Context, data []byte) ([]byte, int) {
+	// key is the name offered just before, where a key of an inline image's
+	// dictionary stands, or empty.
+	key := ""
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
+	splices, _ := walkTokens(ctx, data, lex, func(tok lexer.Token, at tokenPlace) (tokenSplice, bool) {
+		prev := key
+		key = ""
+		if !at.inlineImage || at.depth != 1 || tok.Type != lexer.TokenName {
+			return tokenSplice{}, false
+		}
+		name, _ := strings.CutPrefix(tok.Value, "/")
+		if prev != "/Intent" || isValidRenderingIntent(name) {
+			key = tok.Value
+			return tokenSplice{}, false
+		}
+		start, ok := nameSpan(data, at.end, tok.Value)
+		if !ok {
+			return tokenSplice{}, false
+		}
+		return tokenSplice{start: start, end: at.end, text: "/RelativeColorimetric"}, true
+	})
+	if len(splices) == 0 {
+		return data, 0
+	}
+	out := applyTokenSplices(data, splices)
+	before, err := content.ParseStreamData(ctx, data, content.ForRepair())
+	if err != nil {
+		return data, 0
+	}
+	after, err := content.ParseStreamData(ctx, out, content.ForRepair())
+	if err != nil || len(after) != len(before) {
+		return data, 0
+	}
+	respelled := 0
+	for i, op := range before {
+		if want, ok := respelledIntent(op); ok {
+			op = want
+			respelled++
+		}
+		if !sameOperation(after[i], op) {
+			return data, 0
+		}
+	}
+	if respelled != len(splices) {
+		return data, 0
+	}
+	return out, respelled
+}
+
+// respelledIntent returns op, an inline image's BI operation, with the
+// invalid rendering intent its dictionary names replaced by
+// RelativeColorimetric, and false when op names none.
+func respelledIntent(op content.Operation) (content.Operation, bool) {
+	if !beginsInlineImage(op) || len(op.Operands) != 1 {
+		return op, false
+	}
+	dict, ok := op.Operands[0].(ast.PdfDict)
+	if !ok {
+		return op, false
+	}
+	if name, ok := dict["Intent"].(ast.PdfName); !ok || isValidRenderingIntent(string(name)) {
+		return op, false
+	}
+	fixed := maps.Clone(dict)
+	fixed["Intent"] = ast.PdfName("RelativeColorimetric")
+	return content.Operation{Operator: op.Operator, Operands: []ast.PdfObject{fixed}}, true
+}
+
+// aggressiveOperation returns the repair [fixContentStreams] splices into a
+// content stream that holds an inline image ([spliceOperations]): with
+// fixUnknown, the repair of the undefined-operator fixer ([repairOperation]),
+// which folds a malformed number into the operator after it rather than
+// removing it with that operator's operands, and with fixRI, an invalid
+// rendering intent replaced ([invalidIntent]).
+func aggressiveOperation(fixRI, fixUnknown bool) operationRepair {
+	return operationRepair{fold: fixUnknown, op: func(op content.Operation) ([]content.Operation, opSpliceTally, bool) {
+		ops := []content.Operation{op}
+		var t opSpliceTally
+		if fixUnknown {
+			var ok bool
+			if ops, t, ok = repairOperation(op); !ok {
+				return nil, opSpliceTally{}, false
+			}
+		}
+		if !fixRI {
+			return ops, t, true
+		}
+		for i, o := range ops {
+			if invalidIntent(o) {
+				ops[i] = content.Operation{Operator: "ri", Operands: []ast.PdfObject{ast.PdfName("RelativeColorimetric")}}
+				t.intents++
+			}
+		}
+		return ops, t, true
+	}}
+}
+
+// beginsInlineImage reports whether op is the BI operation of an inline image.
+func beginsInlineImage(op content.Operation) bool {
+	return op.Operator == "BI"
+}
+
+// invalidIntent reports whether op is an ri operator naming a rendering intent
+// ISO 32000-1, 8.6.5.8, Table 70 does not define, which ISO 19005-1, 6.2.9 and
+// ISO 19005-2/3, 6.2.6 forbid.
+func invalidIntent(op content.Operation) bool {
+	if op.Operator != "ri" || len(op.Operands) != 1 {
+		return false
+	}
+	name, ok := op.Operands[0].(ast.PdfName)
+	return ok && !isValidRenderingIntent(string(name))
 }
 
 func isValidRenderingIntent(intent string) bool {
@@ -524,6 +708,21 @@ func replaceContentArrayStreams(alloc *writer.ObjAllocator, arr ast.PdfArray, ne
 // from the bytes with every run such as "3-5" in an array or a dictionary
 // written as the numbers veraPDF reads in it ([splitNestedNumberRuns]).
 func livePageContentOps(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) ([]content.Operation, ast.PdfObject, error) {
+	data, contentsObj, err := livePageContentData(ctx, alloc, doc, page)
+	if err != nil || contentsObj == nil {
+		return nil, contentsObj, err
+	}
+	ops, err := content.ParseStreamData(ctx, data, content.ForRepair())
+	if err != nil {
+		return nil, contentsObj, err
+	}
+	return ops, contentsObj, nil
+}
+
+// livePageContentData returns the bytes [livePageContentOps] reads a page's
+// operations from, for a caller that splices its repairs into them
+// ([spliceOperations]), and the /Contents object that addresses them.
+func livePageContentData(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) ([]byte, ast.PdfObject, error) {
 	pageDict := resolveFromAllocOrDoc(ctx, alloc, doc, page.Ref)
 	if pageDict == nil {
 		pageDict = page.Dict
@@ -537,11 +736,7 @@ func livePageContentOps(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		return nil, contentsObj, err
 	}
 	data, _ = splitNestedNumberRuns(ctx, data)
-	ops, err := content.ParseStreamData(ctx, data, content.ForRepair())
-	if err != nil {
-		return nil, contentsObj, err
-	}
-	return ops, contentsObj, nil
+	return data, contentsObj, nil
 }
 
 // liveContentBytes returns a page's decoded content bytes, preferring a

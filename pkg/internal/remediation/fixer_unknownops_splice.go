@@ -14,7 +14,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// spliceCheckInterval is how many operations [spliceRepairedOperations] reads
+// spliceCheckInterval is how many operations [spliceOperations] reads
 // between two checks of its context: each one it keeps is read a second time
 // on its own ([readsAsRepaired]).
 const spliceCheckInterval = 100
@@ -26,17 +26,46 @@ const spliceCheckInterval = 100
 // (see [delimitedOperators]).
 const operatorRunDelimiters = ")>{}%"
 
-// opSpliceTally counts what [spliceRepairedOperations] changed, as
-// [repairContentData] counts it.
+// opSpliceTally counts what [spliceOperations] changed: the malformed
+// numbers it folded, the operators it separated and removed, as
+// [repairContentData] counts them, and the rendering intents it replaced, as
+// [fixContentStreams] counts them.
 type opSpliceTally struct {
-	folded, separated, removed int
+	folded, separated, removed, intents int
+}
+
+func (t *opSpliceTally) add(o opSpliceTally) {
+	t.folded += o.folded
+	t.separated += o.separated
+	t.removed += o.removed
+	t.intents += o.intents
+}
+
+// operationRepair is the repair [spliceOperations] writes. fold reports
+// whether a malformed number folds into the operator after it
+// ([repairMalformedNumbers]), and op returns the operations one operation of
+// the reading of a repair is written as, those numbers folded into its
+// operands, what it changed, and false when no splice of it can stand.
+type operationRepair struct {
+	fold bool
+	op   func(content.Operation) ([]content.Operation, opSpliceTally, bool)
 }
 
 // spliceRepairedOperations repairs a content stream that holds an inline image
 // as [repairContentData] repairs any other, and writes the repairs in place of
-// the operations they change rather than serializing the whole stream again.
-// It returns the bytes to write, what it changed, and false when the splice
-// cannot stand, which leaves the stream to the repairs that splice tokens.
+// the operations they change rather than serializing the whole stream again
+// ([spliceOperations]). It returns the bytes to write, what it changed, and
+// false when the splice cannot stand, which leaves the stream to the repairs
+// that splice tokens.
+func spliceRepairedOperations(ctx context.Context, data []byte) ([]byte, opSpliceTally, bool) {
+	return spliceOperations(ctx, data, operationRepair{fold: true, op: repairOperation})
+}
+
+// spliceOperations writes the operations repair changes in a content stream
+// that holds an inline image in place of the operations they change, rather
+// than serializing the whole stream again. It returns the bytes to write, what
+// it changed, and false when the splice cannot stand, which leaves the stream
+// as it was.
 //
 // Serializing the parsed operations cannot write an inline image back: the
 // parser reads its data off-token, so the BI operation keeps its dictionary
@@ -49,13 +78,15 @@ type opSpliceTally struct {
 //     What stands before its BI is written as a space when it holds anything
 //     validation reads as an operator, or the malformed numbers of a run that
 //     BI, which takes no operand, drops.
-//   - An operation a repair changes is written again from its repaired
-//     operations ([serializeOps]), after a space: a malformed number folded
-//     into the operator after it ([repairMalformedNumbers]), a run of operators
-//     written with no white space between them ([separateGluedOperators]), or
-//     an operator ISO 32000-1 does not define, EI and ID outside an inline
-//     image among them, which goes with its operands
-//     ([dropUndefinedOperators]).
+//   - An operation the repair changes is written again from its repaired
+//     operations ([serializeOps]), after a space. The repair of the
+//     undefined-operator fixer ([repairOperation]) changes a malformed number
+//     folded into the operator after it ([repairMalformedNumbers]), a run of
+//     operators written with no white space between them
+//     ([separateGluedOperators]), and an operator ISO 32000-1 does not
+//     define, EI and ID outside an inline image among them, which goes with
+//     its operands ([dropUndefinedOperators]). The aggressive content rewrite
+//     also changes an invalid rendering intent ([aggressiveOperation]).
 //   - So is one whose bytes validation reads another way than the reading of a
 //     repair ([readsAsRepaired]), such as a stray delimiter where an operator
 //     stands, which the reading of a repair drops, or one that begins with a
@@ -71,7 +102,7 @@ type opSpliceTally struct {
 // stream would, in which every operation kept is the operation it was, and
 // every one written again reads as written: a splice that moved a token
 // boundary between two operations fails, and the stream is left as it was.
-func spliceRepairedOperations(ctx context.Context, data []byte) ([]byte, opSpliceTally, bool) {
+func spliceOperations(ctx context.Context, data []byte, repair operationRepair) ([]byte, opSpliceTally, bool) {
 	var t opSpliceTally
 	ops, ranges, err := content.ParseStreamDataWithOffsets(ctx, data, content.ForRepair())
 	if err != nil || len(ops) != len(ranges) {
@@ -89,7 +120,7 @@ func spliceRepairedOperations(ctx context.Context, data []byte) ([]byte, opSplic
 		if i%spliceCheckInterval == 0 && ctx.Err() != nil {
 			return nil, t, false
 		}
-		if malformedNumber(op.Operator) {
+		if repair.fold && malformedNumber(op.Operator) {
 			if group < 0 {
 				group = i
 			}
@@ -121,15 +152,16 @@ func spliceRepairedOperations(ctx context.Context, data []byte) ([]byte, opSplic
 			continue
 		}
 
-		repaired, separated, removed, ok := repairOperation(merged)
+		repaired, changed, ok := repair.op(merged)
 		if !ok {
 			return nil, t, false
 		}
-		t.separated += separated
-		t.removed += removed
+		t.separated += changed.separated
+		t.removed += changed.removed
+		t.intents += changed.intents
 		want = append(want, repaired...)
 		span := data[start:ranges[i].End]
-		if !folds && separated == 0 && removed == 0 && !startsOperatorRun(data, start) && readsAsRepaired(ctx, span, op) {
+		if !folds && changed == (opSpliceTally{}) && !startsOperatorRun(data, start) && readsAsRepaired(ctx, span, op) {
 			out.Write(span)
 			exp = append(exp, op)
 			continue
@@ -177,16 +209,16 @@ func spliceRepairedOperations(ctx context.Context, data []byte) ([]byte, opSplic
 // 32000-1 does not define removed ([dropUndefinedOperators]). It returns how
 // many operators it separated and removed, and false for a run that holds a
 // BI, which would begin an inline image no dictionary follows.
-func repairOperation(op content.Operation) ([]content.Operation, int, int, bool) {
+func repairOperation(op content.Operation) ([]content.Operation, opSpliceTally, bool) {
 	split, separated := separateGluedOperators([]content.Operation{op})
 	if slices.ContainsFunc(split, func(o content.Operation) bool { return o.Operator == "BI" }) {
-		return nil, 0, 0, false
+		return nil, opSpliceTally{}, false
 	}
 	split, _, removed := dropUndefinedOperators(split)
-	return filterOps(split), separated, removed, true
+	return filterOps(split), opSpliceTally{separated: separated, removed: removed}, true
 }
 
-// inlineImageSplice returns what [spliceRepairedOperations] writes for the
+// inlineImageSplice returns what [spliceOperations] writes for the
 // inline image whose operation spans data[opStart:end]. folds reports that
 // the bytes from start to opStart hold a run of malformed numbers, which BI
 // drops. The image is carried across from its BI to its EI byte for byte, and
