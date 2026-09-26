@@ -1968,17 +1968,13 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 	})
 
 	// Also scan page /Properties resource dicts for /Lang values (used by BDC operators).
-	pagesDict, _ := document.ResolveDict(ctx, doc, catalog["Pages"])
-	inheritedRes := resolveResources(ctx, doc, pagesDict)
-	pages := collectPages(ctx, doc, catalog)
-	for pageIdx, page := range pages {
+	pages := collectPageObjects(ctx, doc, catalog)
+	for pageIdx := range pages {
 		if ctx.Err() != nil {
 			return results
 		}
-		res := resolveResources(ctx, doc, page)
-		if res == nil {
-			res = inheritedRes
-		}
+		page := pages[pageIdx].dict
+		res := pages[pageIdx].effectiveResources(ctx, doc)
 		if res == nil {
 			continue
 		}

@@ -47,7 +47,7 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		if hasContent {
 			ops := p.parsedOps(ctx)
 			if ops != nil {
-				ownRes, inheritedRes := pageResourceScopes(ctx, doc, page)
+				ownRes, inheritedRes := pageResourceScopes(p)
 				_, _, _, selected, _ := scanContentStreamDeviceCS(ctx, ops, collectPatternCSNames(ctx, doc, res))
 				// A page's Default colour spaces are those of the resources it
 				// uses, its own or inherited ones (ISO 32000-1, 7.7.3.4).
@@ -108,11 +108,11 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 //     selects, which the page tree defines, and veraPDF fails no t2 at
 //     PDF/A-2b, where litho failed it once. It is the only file whose count
 //     moves.
-func pageResourceScopes(ctx context.Context, doc *document.Document, page ast.PdfDict) (own, inherited ast.PdfDict) {
-	if own = resolveResources(ctx, doc, page); own != nil {
-		return own, nil
+func pageResourceScopes(p *pageCtx) (own, inherited ast.PdfDict) {
+	if _, _, ancestor := p.inheritedHolder("Resources"); ancestor != nil {
+		return nil, p.resources
 	}
-	return nil, resolveInheritedResources(ctx, doc, page)
+	return p.resources, nil
 }
 
 // checkDrawnStream states the content-stream rules for one stream

@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"runtime"
 	"runtime/debug"
+	"strconv"
 	"sync"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -38,11 +39,8 @@ type validationCtx struct {
 
 // pageCtx holds pre-resolved data for a single page.
 type pageCtx struct {
-	dict ast.PdfDict
-	// objNum is the object number of the page dictionary, or 0 for a page
-	// written directly in its parent's /Kids.
-	objNum      int
-	resources   ast.PdfDict // resolved, with inherited fallback from Pages tree
+	pageObject
+	resources   ast.PdfDict // the page's own or inherited ones; see [pageObject.effectiveResources]
 	content     []byte      // decoded content stream bytes (nil if decode fails)
 	ops         []content.Operation
 	opsOnce     sync.Once
@@ -150,8 +148,9 @@ func init() { //nolint:gochecknoinits // breaks initialization cycle.
 }
 
 // buildValidationCtx pre-computes the shared validation context from the
-// document catalog. Pages are collected once and resources resolved with
-// inherited fallback from the Pages tree root.
+// document catalog. Pages are collected once, each with the resources it
+// states or inherits from its nearest ancestor in the page tree (see
+// [pageObject.effectiveResources]).
 //
 // # Corpus evidence
 //
@@ -180,32 +179,18 @@ func buildValidationCtx(ctx context.Context, doc *document.Document, catalog ast
 }
 
 // collectPageContexts collects the pages of the document catalog once, each
-// with its resources, its own or those the root of the page tree gives, and
-// its decoded content, and marks the pages whose content an earlier page
-// shares (see [markJudgedContents]).
+// with its resources, its own or those its nearest ancestor in the page tree
+// lends it, and its decoded content, and marks the pages whose content an
+// earlier page shares (see [markJudgedContents]).
 func collectPageContexts(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []pageCtx {
-	// Resolve inherited resources from Pages tree root.
-	pagesDict, _ := document.ResolveDict(ctx, doc, catalog["Pages"])
-	var inheritedRes ast.PdfDict
-	if pagesDict != nil {
-		inheritedRes = resolveResources(ctx, doc, pagesDict)
-	}
-
-	// Collect pages once and resolve resources per page.
 	rawPages := collectPageObjects(ctx, doc, catalog)
 	pages := make([]pageCtx, len(rawPages))
 	for i, pageObj := range rawPages {
-		page := pageObj.dict
-		res := resolveResources(ctx, doc, page)
-		if res == nil {
-			res = inheritedRes
-		}
-		contentBytes, contentErr := resolvePageContentBytes(ctx, doc, page)
+		contentBytes, contentErr := resolvePageContentBytes(ctx, doc, pageObj.dict)
 		pages[i] = pageCtx{
-			dict:      page,
-			objNum:    pageObj.objNum,
-			resources: res,
-			content:   contentBytes,
+			pageObject: pageObj,
+			resources:  pageObj.effectiveResources(ctx, doc),
+			content:    contentBytes,
 			// A page whose /Contents is present but will not decode has content
 			// litho cannot read, which is the case the per-font and per-colour
 			// skips call "present but unparseable" and answer conservatively.
@@ -505,11 +490,85 @@ func collectPages(ctx context.Context, doc *document.Document, catalog ast.PdfDi
 	return pages
 }
 
-// pageObject is one leaf of the page tree: its dictionary and its object
-// number, 0 for a page written directly in its parent's /Kids.
+// pageObject is one leaf of the page tree: its dictionary, its object number,
+// 0 for a page written directly in its parent's /Kids, and the node whose
+// /Kids listed it.
 type pageObject struct {
 	dict   ast.PdfDict
 	objNum int
+	// parent is the node the walk reached the page through, nil for a page no
+	// page tree node lists.
+	parent *pageTreeNode
+}
+
+// pageTreeNode is a /Pages node on the path the walk took from the catalog to
+// a page. It is veraPDF's tree parent (PDPageTreeNode.getParent), which
+// PDPageTreeBranch sets from /Kids and writes over the child's /Parent entry,
+// so a page whose /Parent names another node still inherits from the node that
+// lists it.
+type pageTreeNode struct {
+	dict   ast.PdfDict
+	objNum int
+	// key names the node in the identities the checks key on: its object, or
+	// its place under the nearest node written as one.
+	key    string
+	parent *pageTreeNode
+}
+
+// inheritedHolder returns the node of the page tree whose entry key the page
+// takes, its site, and that node as the walk reached it, nil when it is the
+// page itself: the page or its nearest ancestor holding the entry, whatever
+// its value. It returns a nil dictionary when no node holds the entry.
+//
+// ISO 32000-1, 7.7.3.4 and Table 30 make /Resources, /MediaBox, /CropBox and
+// /Rotate inheritable, and veraPDF looks them up this way
+// (PDPageTreeNode.getInheritableResources, PDPage.getInheritedCOSBBox): a null
+// entry is absent (ISO 32000-1, 7.3.7), and any other value, a reference to a
+// missing object or one that is not a dictionary included, ends the search.
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b: a page whose /Resources
+// is null inherits its ancestor's fonts and colour spaces, and one whose
+// /Resources is 99 0 R, with no object 99, or 7 inherits none.
+//
+// # Corpus evidence
+//
+//   - All corpora: 35 of 39188 pages hold no /Resources that resolve to a
+//     dictionary. 14 inherit them from the root of the page tree, 21 from no
+//     node, and none from an intermediate node. No /Parent chain leads to
+//     another holder than the walk does, so resolving through the tree moves
+//     no count at PDF/A-1b or PDF/A-2b.
+func (p *pageObject) inheritedHolder(key ast.PdfName) (ast.PdfDict, propertyListSite, *pageTreeNode) {
+	if holdsEntry(p.dict, key) {
+		return p.dict, propertyListSite{objNum: p.objNum}, nil
+	}
+	for n := p.parent; n != nil; n = n.parent {
+		if holdsEntry(n.dict, key) {
+			return n.dict, propertyListSite{objNum: n.objNum}, n
+		}
+	}
+	return nil, propertyListSite{}, nil
+}
+
+// holdsEntry reports whether dict states key with a value other than null.
+func holdsEntry(dict ast.PdfDict, key ast.PdfName) bool {
+	value, ok := dict[key]
+	if !ok {
+		return false
+	}
+	_, null := value.(ast.PdfNull)
+	return !null
+}
+
+// effectiveResources returns the resource dictionary the page's content resolves
+// its names against: the page's own or, when it states none, the one its
+// nearest ancestor in the page tree states, whole, never merged with a farther
+// ancestor's (see [pageObject.inheritedHolder]). It is nil when that entry is
+// not a dictionary or no node states one.
+func (p *pageObject) effectiveResources(ctx context.Context, doc *document.Document) ast.PdfDict {
+	node, _, _ := p.inheritedHolder("Resources")
+	if node == nil {
+		return nil
+	}
+	return resolveResources(ctx, doc, node)
 }
 
 // collectPageObjects traverses the page tree and returns all leaf pages, in
@@ -521,7 +580,7 @@ func collectPageObjects(ctx context.Context, doc *document.Document, catalog ast
 		return nil
 	}
 	var pages []pageObject
-	collectPagesRecursive(ctx, doc, pagesObj, &pages, make(map[int]bool), 0)
+	collectPagesRecursive(ctx, doc, pagesObj, nil, "pages", &pages, make(map[int]bool), 0)
 	doc.Logger.Debug("compliance: collected pages", "count", len(pages))
 	return pages
 }
@@ -535,12 +594,14 @@ func collectPageObjects(ctx context.Context, doc *document.Document, catalog ast
 // realigned. remediation/fixer_annotations.go uses 100 as well.
 const maxPageTreeDepth = 100
 
-// collectPagesRecursive walks the page tree, appending leaf pages. seen
-// records each node visited so a shared or cyclic /Kids tree is traversed once:
-// a page tree is a strict tree (ISO 32000-1 §7.7.3.2), so a node reached again
-// is malformed, and without the guard a crafted tree whose every node lists the
+// collectPagesRecursive walks the page tree, appending leaf pages. parent is
+// the node whose /Kids listed obj, nil for the root, and key the name obj
+// takes in [pageTreeNode.key] when it is written directly. seen records each
+// node visited so a shared or cyclic /Kids tree is traversed once: a page tree
+// is a strict tree (ISO 32000-1 §7.7.3.2), so a node reached again is
+// malformed, and without the guard a crafted tree whose every node lists the
 // same child twice fans out 2^depth (a denial of service).
-func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, pages *[]pageObject, seen map[int]bool, depth int) {
+func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, parent *pageTreeNode, key string, pages *[]pageObject, seen map[int]bool, depth int) {
 	if ctx.Err() != nil || depth > maxPageTreeDepth {
 		return
 	}
@@ -551,40 +612,31 @@ func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.
 		}
 		seen[ref.ObjectNum] = true
 		objNum = ref.ObjectNum
+		key = "obj " + strconv.Itoa(objNum)
 	}
 	dict, err := document.ResolveDict(ctx, doc, obj)
 	if err != nil || dict == nil {
 		return
 	}
 	typeName, _ := document.ResolveName(ctx, doc, dict["Type"])
-	switch typeName {
-	case "Pages":
-		kids, err := document.ResolveArray(ctx, doc, dict["Kids"])
-		if err != nil {
-			return
-		}
-		for _, kid := range kids {
-			collectPagesRecursive(ctx, doc, kid, pages, seen, depth+1)
-		}
-	case "Page":
-		*pages = append(*pages, pageObject{dict: dict, objNum: objNum})
-	default:
-		// Some producers omit /Type; try /Kids to distinguish.
-		if _, hasKids := dict["Kids"]; hasKids {
-			kids, err := document.ResolveArray(ctx, doc, dict["Kids"])
-			if err != nil {
-				return
-			}
-			for _, kid := range kids {
-				collectPagesRecursive(ctx, doc, kid, pages, seen, depth+1)
-			}
-		} else {
-			*pages = append(*pages, pageObject{dict: dict, objNum: objNum})
-		}
+	_, hasKids := dict["Kids"]
+	// Some producers omit /Type; /Kids tells a node from a page.
+	if typeName == "Page" || (typeName != "Pages" && !hasKids) {
+		*pages = append(*pages, pageObject{dict: dict, objNum: objNum, parent: parent})
+		return
+	}
+	kids, err := document.ResolveArray(ctx, doc, dict["Kids"])
+	if err != nil {
+		return
+	}
+	node := &pageTreeNode{dict: dict, objNum: objNum, key: key, parent: parent}
+	for i, kid := range kids {
+		collectPagesRecursive(ctx, doc, kid, node, key+"/Kids/"+strconv.Itoa(i), pages, seen, depth+1)
 	}
 }
 
-// resolveResources returns the /Resources dict from a page.
+// resolveResources returns the /Resources dict of a page or page tree node:
+// its own entry alone, with no inheritance (see [pageObject.effectiveResources]).
 func resolveResources(ctx context.Context, doc *document.Document, page ast.PdfDict) ast.PdfDict {
 	res, err := document.ResolveDict(ctx, doc, page["Resources"])
 	if err != nil {
@@ -592,26 +644,6 @@ func resolveResources(ctx context.Context, doc *document.Document, page ast.PdfD
 		return nil
 	}
 	return res
-}
-
-// resolveInheritedResources returns a page's effective /Resources, honouring the
-// ISO 32000-1 §7.7.3.4 inheritance rule: a page that declares no /Resources of
-// its own uses the nearest ancestor Pages node that does. The upward /Parent
-// walk is bounded by [maxPageTreeDepth] so a malformed or cyclic /Parent chain
-// cannot loop.
-func resolveInheritedResources(ctx context.Context, doc *document.Document, page ast.PdfDict) ast.PdfDict {
-	node := page
-	for depth := 0; depth <= maxPageTreeDepth && node != nil; depth++ {
-		if res := resolveResources(ctx, doc, node); res != nil {
-			return res
-		}
-		parent, err := document.ResolveDict(ctx, doc, node["Parent"])
-		if err != nil || parent == nil {
-			return nil
-		}
-		node = parent
-	}
-	return nil
 }
 
 // fail creates a single-element Violation slice for a rule violation.

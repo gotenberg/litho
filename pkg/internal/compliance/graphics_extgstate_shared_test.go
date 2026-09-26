@@ -12,7 +12,7 @@ import (
 // pageCtxsFor builds the per-page context the page-scoped checks expect, the
 // same way check.go does.
 func pageCtxsFor(ctx context.Context, doc *document.Document, cat ast.PdfDict) []pageCtx {
-	return pageCtxsForPages(ctx, doc, collectPages(ctx, doc, cat)...)
+	return collectPageContexts(ctx, doc, cat)
 }
 
 // pageCtxsForPages wraps explicit page dictionaries the same way.
@@ -27,7 +27,7 @@ func pageCtxsForPages(ctx context.Context, doc *document.Document, pages ...ast.
 	for i, page := range pages {
 		contentBytes, contentErr := resolvePageContentBytes(ctx, doc, page)
 		out[i] = pageCtx{
-			dict:              page,
+			pageObject:        pageObject{dict: page},
 			resources:         resolveResources(ctx, doc, page),
 			content:           contentBytes,
 			parseFailed:       contentErr != nil && !errors.Is(contentErr, errUndecodableContent),

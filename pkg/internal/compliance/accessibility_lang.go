@@ -80,8 +80,8 @@ func checkMarkedContentLang(ctx context.Context, doc *document.Document, catalog
 // reach content-operator language tags, so this content-stream pass is the only
 // place they are observed.
 func forEachMarkedContentLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict, fn func(pageIdx int, lang ast.PdfString) bool) {
-	forEachPageContentOps(ctx, doc, catalog, func(pageIdx int, page ast.PdfDict, ops []content.Operation) bool {
-		props := markedContentProps{doc: doc, page: page}
+	forEachPageContentOps(ctx, doc, catalog, func(pageIdx int, page *pageObject, ops []content.Operation) bool {
+		props := markedContentProps{doc: doc, page: page.dict, resources: page.effectiveResources(ctx, doc)}
 		for _, op := range ops {
 			if op.Operator != "BDC" && op.Operator != "DP" {
 				continue
@@ -107,14 +107,16 @@ func forEachMarkedContentLang(ctx context.Context, doc *document.Document, catal
 }
 
 // forEachPageContentOps parses every page content stream and invokes fn with the
-// page index, the page dict and the parsed operations. A page whose content is
+// page index, the page and the parsed operations. A page whose content is
 // absent or unparsable is skipped. fn returns true to stop the scan early.
-func forEachPageContentOps(ctx context.Context, doc *document.Document, catalog ast.PdfDict, fn func(pageIdx int, page ast.PdfDict, ops []content.Operation) bool) {
-	for pageIdx, page := range collectPages(ctx, doc, catalog) {
+func forEachPageContentOps(ctx context.Context, doc *document.Document, catalog ast.PdfDict, fn func(pageIdx int, page *pageObject, ops []content.Operation) bool) {
+	pages := collectPageObjects(ctx, doc, catalog)
+	for pageIdx := range pages {
 		if ctx.Err() != nil {
 			return
 		}
-		data, err := resolvePageContentBytes(ctx, doc, page)
+		page := &pages[pageIdx]
+		data, err := resolvePageContentBytes(ctx, doc, page.dict)
 		if err != nil || len(data) == 0 {
 			continue
 		}
@@ -133,10 +135,15 @@ func forEachPageContentOps(ctx context.Context, doc *document.Document, catalog 
 // resolved once and reused: a content stream can carry thousands of
 // marked-content operators.
 type markedContentProps struct {
-	doc      *document.Document
-	page     ast.PdfDict
-	props    ast.PdfDict
-	resolved bool
+	doc  *document.Document
+	page ast.PdfDict
+	// resources names the property lists: the resources a page states or
+	// inherits (see [pageObject.effectiveResources]). Nil reads the /Resources
+	// page states itself, which is all a Form XObject's content names them
+	// from.
+	resources ast.PdfDict
+	props     ast.PdfDict
+	resolved  bool
 	// parentTree is the structure tree's ParentTree when the scan judges
 	// MCID-owned text through the tree, nil otherwise; owners caches the entry
 	// page's /StructParents selects in it.
@@ -161,7 +168,11 @@ func (m *markedContentProps) dict(ctx context.Context, op content.Operation) ast
 		return v
 	case ast.PdfName:
 		if !m.resolved {
-			if res := resolveResources(ctx, m.doc, m.page); res != nil {
+			res := m.resources
+			if res == nil {
+				res = resolveResources(ctx, m.doc, m.page)
+			}
+			if res != nil {
 				// Best-effort: a missing/unresolvable /Properties dict leaves
 				// props nil, handled by the guard below.
 				m.props, _ = document.ResolveDict(ctx, m.doc, res["Properties"])
@@ -220,8 +231,8 @@ func checkSpanMarkedContentLang(ctx context.Context, doc *document.Document, cat
 	}
 
 	var results []Violation
-	forEachPageContentOps(ctx, doc, catalog, func(pageIdx int, page ast.PdfDict, ops []content.Operation) bool {
-		results = append(results, spanLangViolations(ctx, doc, parentTree, page, pageIdx, ops)...)
+	forEachPageContentOps(ctx, doc, catalog, func(pageIdx int, page *pageObject, ops []content.Operation) bool {
+		results = append(results, spanLangViolations(ctx, doc, parentTree, page.dict, page.effectiveResources(ctx, doc), pageIdx, ops)...)
 		return ctx.Err() != nil
 	})
 	return results
@@ -230,9 +241,9 @@ func checkSpanMarkedContentLang(ctx context.Context, doc *document.Document, cat
 // spanLangViolations scans one page's operations for /Span marked-content
 // sequences whose natural language cannot be determined, following the Form
 // XObjects the page draws.
-func spanLangViolations(ctx context.Context, doc *document.Document, parentTree, page ast.PdfDict, pageIdx int, ops []content.Operation) []Violation {
+func spanLangViolations(ctx context.Context, doc *document.Document, parentTree, page, res ast.PdfDict, pageIdx int, ops []content.Operation) []Violation {
 	scan := spanLangScan{doc: doc, parentTree: parentTree, pageIdx: pageIdx, seen: make(map[int]bool)}
-	return scan.ops(ctx, ops, page, resolveResources(ctx, doc, page), false, 0)
+	return scan.ops(ctx, ops, page, res, false, 0)
 }
 
 // spanLangScan carries what one page's /Span scan shares across the Form
@@ -261,6 +272,11 @@ func (s *spanLangScan) ops(ctx context.Context, ops []content.Operation, owner, 
 		return nil
 	}
 	props := markedContentProps{doc: s.doc, page: owner}
+	if depth == 0 {
+		// The page's own content, whose property lists its resources name,
+		// stated or inherited.
+		props.resources = res
+	}
 	// Completeness is not threaded here: this scan asks only whether a language
 	// covers a sequence, and a truncated read withholds languages rather than
 	// inventing a missing one. Measured on a ParentTree nested past the bound,
@@ -892,11 +908,11 @@ func structElemsShowingText(ctx context.Context, doc *document.Document, catalog
 		return elems, inlineLang
 	}
 
-	forEachPageContentOps(ctx, doc, catalog, func(_ int, page ast.PdfDict, ops []content.Operation) bool {
+	forEachPageContentOps(ctx, doc, catalog, func(_ int, page *pageObject, ops []content.Operation) bool {
 		// Truncation empties arr, which drops elements from BOTH textElems and
 		// inlineLang. The caller tests textElems for PRESENCE, so the two shrink
 		// together and no finding is manufactured.
-		arr, _ := pageParentTreeEntries(ctx, doc, ptDict, page)
+		arr, _ := pageParentTreeEntries(ctx, doc, ptDict, page.dict)
 		for mcid, covered := range mcidsShowingText(ctx, ops) {
 			if mcid >= len(arr) {
 				continue
@@ -991,7 +1007,8 @@ func documentShowsUndeterminedText(ctx context.Context, doc *document.Document, 
 			parentTree, _ = document.ResolveDict(ctx, doc, treeRoot["ParentTree"])
 		}
 	}
-	for _, page := range collectPages(ctx, doc, catalog) {
+	for _, po := range collectPageObjects(ctx, doc, catalog) {
+		page := po.dict
 		if ctx.Err() != nil {
 			return false
 		}
@@ -1008,11 +1025,11 @@ func documentShowsUndeterminedText(ctx context.Context, doc *document.Document, 
 			doc.Logger.Debug("compliance.accessibility: cannot parse page content", "error", err)
 			return true
 		}
-		props := &markedContentProps{doc: doc, page: page, parentTree: parentTree}
 		// The visited set is per page: a Form XObject with no /Resources of its
 		// own resolves its nested names against the invoking page's, so the same
 		// XObject can reach different content from two pages.
-		res := resolveInheritedResources(ctx, doc, page)
+		res := po.effectiveResources(ctx, doc)
+		props := &markedContentProps{doc: doc, page: page, resources: res, parentTree: parentTree}
 		if opsShowUndeterminedText(ctx, doc, ops, props, res, false, mcidCovers, make(map[int]bool), 0) {
 			return true
 		}

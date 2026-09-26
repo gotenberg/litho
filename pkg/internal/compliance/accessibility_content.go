@@ -92,22 +92,14 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		return nil
 	}
 
-	pages := collectPages(ctx, doc, catalog)
+	pages := collectPageObjects(ctx, doc, catalog)
 	var results []Violation
 
-	// Inherited resources from the Pages tree root: a page that declares no
-	// /Resources of its own inherits them (ISO 32000-1 §7.7.3.4), so a Do whose
-	// XObject is defined only on the Pages node must still resolve.
-	pagesDict, _ := document.ResolveDict(ctx, doc, catalog["Pages"])
-	var inheritedRes ast.PdfDict
-	if pagesDict != nil {
-		inheritedRes = resolveResources(ctx, doc, pagesDict)
-	}
-
-	for _, page := range pages {
+	for i := range pages {
 		if ctx.Err() != nil {
 			return results
 		}
+		page := pages[i].dict
 
 		data, err := resolvePageContentBytes(ctx, doc, page)
 		if err != nil || len(data) == 0 {
@@ -125,12 +117,10 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 		allUntaggedIsTaggedDo := true
 		reportedT1 := false
 		reportedT2 := false
-		// A page with no own /Resources inherits the Pages-node resources; a page
-		// with its own (even empty) /Resources does not inherit.
-		resources := resolveResources(ctx, doc, page)
-		if resources == nil {
-			resources = inheritedRes
-		}
+		// A page that states no /Resources inherits its nearest ancestor's (ISO
+		// 32000-1 §7.7.3.4), so a Do whose XObject a /Pages node defines still
+		// resolves; a page that states its own, even empty, does not inherit.
+		resources := pages[i].effectiveResources(ctx, doc)
 
 		classifyMarker := func(op content.Operation) markerKind {
 			if len(op.Operands) < 1 {

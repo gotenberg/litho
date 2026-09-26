@@ -259,7 +259,7 @@ func checkPropertyListHexStrings(ctx context.Context, vctx *validationCtx) []Vio
 		if ctx.Err() != nil {
 			return results
 		}
-		homes[i] = pageResourcesHome(ctx, vctx, &vctx.pages[i])
+		homes[i] = pageResourcesHome(&vctx.pages[i])
 		results = append(results, j.judge(ctx, vctx.pages[i].parsedOps(ctx), resourcesHome{}, homes[i], i+1)...)
 	}
 	walk := newDrawnStreamWalk(vctx, func(s *drawnStream) {
@@ -341,16 +341,12 @@ type resourcesHome struct {
 }
 
 // pageResourcesHome returns the resources of page p, which [buildValidationCtx]
-// took from the page or else from the root of the page tree.
-func pageResourcesHome(ctx context.Context, vctx *validationCtx, p *pageCtx) resourcesHome {
-	if res := resolveResources(ctx, vctx.doc, p.dict); res != nil {
-		return resourcesHome{dict: res, site: propertyListSite{objNum: p.objNum}.child("Resources", p.dict["Resources"])}
-	}
+// took from the page or else from its nearest ancestor in the page tree, and
+// their site in the node that states them.
+func pageResourcesHome(p *pageCtx) resourcesHome {
 	home := resourcesHome{dict: p.resources}
-	if ref, ok := vctx.catalog["Pages"].(ast.PdfIndirectRef); ok {
-		if root, err := document.ResolveDict(ctx, vctx.doc, ref); err == nil && root != nil {
-			home.site = propertyListSite{objNum: ref.ObjectNum}.child("Resources", root["Resources"])
-		}
+	if node, site, _ := p.inheritedHolder("Resources"); node != nil && p.resources != nil {
+		home.site = site.child("Resources", node["Resources"])
 	}
 	return home
 }

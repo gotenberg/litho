@@ -132,7 +132,7 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 
 		results = append(results, checkPageTransparencyGroup1(ctx, doc, page, i+1, judged)...)
 
-		res := resolveInheritedResources(ctx, doc, page)
+		res := pages[i].resources
 		if res != nil && !pages[i].contentJudged {
 			drawn := pageDrawnResources(ctx, &pages[i])
 			results = append(results, checkExtGStateTransparency1(ctx, doc, res, i+1, drawn, judged)...)
@@ -550,7 +550,7 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		walk.walkPage(ctx, &pages[i], i+1)
 		results = append(results, annotationBlendModes(ctx, doc, page, i+1, part, judged)...)
 
-		res := resolveInheritedResources(ctx, doc, page)
+		res := pages[i].resources
 		if res == nil {
 			continue
 		}

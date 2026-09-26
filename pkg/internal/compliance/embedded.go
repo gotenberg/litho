@@ -561,8 +561,9 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	collectAFRefs(ctx, doc, catalog["AF"], afRefs)
 
 	// Also collect from pages, their annotations, and XObject resources.
-	pages := collectPages(ctx, doc, catalog)
-	for _, page := range pages {
+	pages := collectPageObjects(ctx, doc, catalog)
+	for i := range pages {
+		page := pages[i].dict
 		if ctx.Err() != nil {
 			break
 		}
@@ -604,7 +605,7 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 		}
 
 		// XObject resources (Image and Form XObjects can have /AF).
-		res := resolveInheritedResources(ctx, doc, page)
+		res := pages[i].effectiveResources(ctx, doc)
 		if res != nil {
 			xobjDict, err := document.ResolveDict(ctx, doc, res["XObject"])
 			if err == nil && xobjDict != nil {

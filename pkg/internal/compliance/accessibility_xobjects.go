@@ -20,24 +20,17 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 	var results []Violation
 	checkedForRef := make(map[int]bool)
 
-	// Get inherited resources from the Pages tree root (fallback for pages
-	// without their own /Resources).
-	pagesDict, _ := document.ResolveDict(ctx, doc, catalog["Pages"])
-	inheritedRes := resolveResources(ctx, doc, pagesDict)
-
 	// t01: Scan XObject resources for /Ref key (reference XObjects forbidden).
 	// t02: Count Do operator invocations per Form XObject across all pages.
 	doRefCounts := make(map[int]int) // Form XObject objNum -> Do invocation count
 
-	pages := collectPages(ctx, doc, catalog)
-	for _, page := range pages {
+	pages := collectPageObjects(ctx, doc, catalog)
+	for i := range pages {
 		if ctx.Err() != nil {
 			return results
 		}
-		res := resolveResources(ctx, doc, page)
-		if res == nil {
-			res = inheritedRes
-		}
+		page := pages[i].dict
+		res := pages[i].effectiveResources(ctx, doc)
 		if res == nil {
 			continue
 		}

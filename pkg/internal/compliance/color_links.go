@@ -469,7 +469,7 @@ func (w *colorLinkWalk) walkPage(ctx context.Context, p *pageCtx) {
 // walkContent walks the content of page p unless an earlier page shares it,
 // and returns the page's content stream.
 func (w *colorLinkWalk) walkContent(ctx context.Context, p *pageCtx) *linkStream {
-	page := w.newStream(ctx, resolveInheritedResources(ctx, w.doc, p.dict), nil)
+	page := w.newStream(ctx, p.resources, nil)
 	page.blendRef = resolvePageBlendingICCRef(ctx, w.doc, p.dict)
 	if !p.contentJudged {
 		w.walkStream(ctx, p.parsedOps(ctx), page, initialState(page), 0)

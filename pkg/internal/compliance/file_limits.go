@@ -328,7 +328,7 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 		if ctx.Err() != nil {
 			return results
 		}
-		res, resNum := pageResources(ctx, doc, &vctx.pages[i])
+		res, resNum := pageResources(&vctx.pages[i])
 		resourceNames(res, resNum, fmt.Sprintf("page %d resources", i+1))
 	}
 

@@ -210,7 +210,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// the fonts that page's resources name, so this page selects no font
 		// through it; see [markJudgedContents].
 		judgeContent := !p.contentJudged
-		site := pageSite(ctx, doc, catalog, p, pageIdx+1)
+		site := pageSite(ctx, doc, p, pageIdx+1)
 
 		if judgeContent {
 			results = append(results, checkPageDeclaredFonts(ctx, doc, catalog, p, site, pageIdx+1, profile, judged, visibleAnywhere)...)
@@ -249,31 +249,26 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 }
 
 // pageSite returns the [showSite] of a page's own content stream.
-func pageSite(ctx context.Context, doc *document.Document, catalog ast.PdfDict, p *pageCtx, pageNum int) showSite {
-	site := showSite{key: "page " + strconv.Itoa(pageNum), owner: structureKey(ctx, doc, p.dict), fonts: pageFontsKey(ctx, doc, catalog, p, pageNum)}
+func pageSite(ctx context.Context, doc *document.Document, p *pageCtx, pageNum int) showSite {
+	site := showSite{key: "page " + strconv.Itoa(pageNum), owner: structureKey(ctx, doc, p.dict), fonts: pageFontsKey(p, pageNum)}
 	site.props, _ = document.ResolveDict(ctx, doc, p.resources["Properties"])
 	return site
 }
 
 // pageFontsKey returns the [fontDictKey] of a page's /Font dictionary. The
-// resources are the page's own or, when it has none, those of the root /Pages
-// node, as [buildValidationCtx] resolves them, so pages that inherit one
-// dictionary share one key.
-func pageFontsKey(ctx context.Context, doc *document.Document, catalog ast.PdfDict, p *pageCtx, pageNum int) string {
+// resources are the page's own or, when it has none, those of its nearest
+// ancestor in the page tree, as [buildValidationCtx] resolves them, so pages
+// that inherit one dictionary share one key.
+func pageFontsKey(p *pageCtx, pageNum int) string {
+	node, _, ancestor := p.inheritedHolder("Resources")
 	holder := "page " + strconv.Itoa(pageNum)
-	if p.objNum != 0 {
+	switch {
+	case ancestor != nil:
+		holder = ancestor.key
+	case p.objNum != 0:
 		holder = "obj " + strconv.Itoa(p.objNum)
 	}
-	rawRes := p.dict["Resources"]
-	if resolveResources(ctx, doc, p.dict) == nil {
-		holder = "pages"
-		if ref, ok := catalog["Pages"].(ast.PdfIndirectRef); ok {
-			holder = "obj " + strconv.Itoa(ref.ObjectNum)
-		}
-		pagesDict, _ := document.ResolveDict(ctx, doc, catalog["Pages"])
-		rawRes = pagesDict["Resources"]
-	}
-	return fontDictKey(holder, rawRes, p.resources)
+	return fontDictKey(holder, node["Resources"], p.resources)
 }
 
 // fontJudgements records, for one run of the font group, what it has stated
@@ -524,7 +519,7 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 		}
 
 		// PUA ActualText check (needs page and catalog context).
-		results = append(results, checkPUAWithoutActualText(ctx, doc, font, fontKey, pageNum, profile, p.dict, catalog)...)
+		results = append(results, checkPUAWithoutActualText(ctx, doc, font, fontKey, pageNum, profile, p.dict, p.resources, catalog)...)
 	}
 	return results
 }
@@ -1239,14 +1234,16 @@ func checkFontUsageRules(ctx context.Context, doc *document.Document, fontDict a
 // page content shows to the Unicode Private Use Area when no /ActualText covers
 // that character (ISO 19005-2/3 §6.2.11.7.3, ISO 14289-2 §8.4.3, mirroring
 // veraPDF's per-glyph actualTextPresent). See [checkStreamPUAWithoutActualText].
-func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, page ast.PdfDict, catalog ast.PdfDict) []Violation {
+// res is the page's resources, its own or inherited ones, which name the
+// property lists its marked content carries.
+func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, page, res, catalog ast.PdfDict) []Violation {
 	if puaActualTextRule(profile).Specification == "" {
 		return nil
 	}
 	treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	contentData, _ := resolvePageContentBytes(ctx, doc, page)
 	return checkStreamPUAWithoutActualText(ctx, doc, fontDict, fontName, pageNum, profile, treeRoot,
-		contentData, page, resolveResources(ctx, doc, page))
+		contentData, page, res)
 }
 
 // checkFormPUA runs the PUA check over the fonts a Form XObject's own content
@@ -2639,7 +2636,7 @@ func collectVisibleFontObjects(ctx context.Context, doc *document.Document, vctx
 		if err != nil || fontDict == nil {
 			continue
 		}
-		site := showSite{fonts: pageFontsKey(ctx, doc, vctx.catalog, p, pageIdx+1)}
+		site := showSite{fonts: pageFontsKey(p, pageIdx+1)}
 		pageUsage := collectFontUsage(p.parsedOps(ctx))
 		for name, ref := range fontDict {
 			if u := pageUsage[string(name)]; p.parseFailed || (u != nil && u.visible) {

@@ -477,7 +477,7 @@ func pageBoxValues(ctx context.Context, vctx *validationCtx) []typedValue {
 		for _, box := range pageBoxes {
 			node, site := p.dict, propertyListSite{objNum: p.objNum}
 			if box.inherited {
-				node, site = inheritedHolder(ctx, vctx.doc, p, box.key)
+				node, site, _ = p.inheritedHolder(box.key)
 			}
 			if node == nil {
 				continue
@@ -493,53 +493,19 @@ func pageBoxValues(ctx context.Context, vctx *validationCtx) []typedValue {
 	return values
 }
 
-// inheritedHolder returns the node of the page tree whose entry key page p
-// takes, and its site: the page itself or its nearest ancestor holding the
-// entry, whatever its value (PDPage.getInheritedCOSBBox). It returns nil when
-// no node holds it, and stops at [maxPageTreeDepth] and at a node visited
-// twice.
-func inheritedHolder(ctx context.Context, doc *document.Document, p *pageCtx, key ast.PdfName) (ast.PdfDict, propertyListSite) {
-	node, site := p.dict, propertyListSite{objNum: p.objNum}
-	seen := make(map[int]bool)
-	for depth := 0; node != nil && depth <= maxPageTreeDepth; depth++ {
-		if value, ok := node[key]; ok {
-			if _, null := value.(ast.PdfNull); !null {
-				return node, site
-			}
-		}
-		parentRaw := node["Parent"]
-		ref, ok := parentRaw.(ast.PdfIndirectRef)
-		if !ok || seen[ref.ObjectNum] {
-			return nil, propertyListSite{}
-		}
-		seen[ref.ObjectNum] = true
-		parent, err := document.ResolveDict(ctx, doc, ref)
-		if err != nil {
-			return nil, propertyListSite{}
-		}
-		node, site = parent, propertyListSite{objNum: ref.ObjectNum}
-	}
-	return nil, propertyListSite{}
-}
-
 // pageResources returns the resource dictionary veraPDF reads for page p, the
 // page's own or else its nearest ancestor's (PDPage.getResources, ISO
-// 32000-1, Table 30), and its object number when written as an indirect
-// reference, 0 otherwise.
-func pageResources(ctx context.Context, doc *document.Document, p *pageCtx) (ast.PdfDict, int) {
-	node, _ := inheritedHolder(ctx, doc, p, "Resources")
-	if node == nil {
+// 32000-1, Table 30; see [pageObject.inheritedHolder]), and its object number
+// when written as an indirect reference, 0 otherwise.
+func pageResources(p *pageCtx) (ast.PdfDict, int) {
+	node, _, _ := p.inheritedHolder("Resources")
+	if node == nil || p.resources == nil {
 		return nil, 0
 	}
-	raw := node["Resources"]
-	res, err := document.ResolveDict(ctx, doc, raw)
-	if err != nil {
-		return nil, 0
+	if ref, ok := node["Resources"].(ast.PdfIndirectRef); ok {
+		return p.resources, ref.ObjectNum
 	}
-	if ref, ok := raw.(ast.PdfIndirectRef); ok {
-		return res, ref.ObjectNum
-	}
-	return res, 0
+	return p.resources, 0
 }
 
 // embeddedFileValues returns the dictionaries of the /EmbeddedFiles name tree

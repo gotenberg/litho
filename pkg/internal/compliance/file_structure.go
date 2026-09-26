@@ -1113,17 +1113,23 @@ func streamLengthRule(profile string) Rule {
 	return ruleByPart(PDFAPart(profile), Rule_19005_1_6_1_7_t01, Rule_19005_2_6_1_7_1_t01, Rule_19005_3_6_1_7_1_t01, Rule_19005_4_6_1_6_1_t01)
 }
 
-// pageBoundaryKeys lists all page boundary box keys defined in ISO 32000-1, §14.11.2.
-var pageBoundaryKeys = []ast.PdfName{"MediaBox", "CropBox", "BleedBox", "TrimBox", "ArtBox"} //nolint:gochecknoglobals // constant set.
-
 // checkPageBoundaries validates §6.1.13 t11: page boundary box dimensions must
 // be within [3, 14400] units in both directions.
 //
-// It judges each box as the file writes it, read from the page dictionaries
-// and the page tree root, and never the effective boxes on [document.Page].
-// Those are reduced to their intersection with the media box (ISO 32000-1,
-// 14.11.2.1), so a declared 14405-unit trim box on a 500-unit page would read
-// as 500 units and pass a limit ISO 19005-2, 6.1.13 places on the file.
+// It judges each box as the file writes it and never the effective boxes on
+// [document.Page]. Those are reduced to their intersection with the media box
+// (ISO 32000-1, 14.11.2.1), so a declared 14405-unit trim box on a 500-unit
+// page would read as 500 units and pass a limit ISO 19005-2, 6.1.13 places on
+// the file.
+//
+// Each page is judged on the boxes it takes: its own bleed, trim and art boxes,
+// and the media and crop boxes it states or inherits from its nearest ancestor
+// in the page tree (ISO 32000-1, 7.7.3.3, Table 30; see [pageBoxes] and
+// [pageObject.inheritedHolder]), as veraPDF reads them (PDPage.getMediaBox,
+// getCropBox). A box an ancestor writes fails once for every page that takes
+// it. Measured with veraPDF 1.30 at PDF/A-2b on two pages inheriting a 2 by 2
+// media box: the rule fails twice, whether the intermediate node or the root
+// writes it.
 //
 // # Corpus evidence
 //
@@ -1132,6 +1138,8 @@ var pageBoundaryKeys = []ast.PdfName{"MediaBox", "CropBox", "BleedBox", "TrimBox
 //   - verapdf PDF_A-2b__veraPDF_test_suite_6-1-13-t09-fail-b.pdf: declares
 //     14405-unit bleed, trim and art boxes on a 500-unit media box, and only
 //     the declared entries fail it.
+//   - All corpora: judging each page on the boxes it inherits, rather than the
+//     root's boxes once, moves no count at PDF/A-2b.
 func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	part := PDFAPart(profile)
 	// Page boundary size limits apply to PDF/A-2 and -3 only: PDF/A-4 builds
@@ -1147,57 +1155,18 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 	}
 	var results []Violation
 
-	// Also check the Pages tree root for inherited boundary boxes.
-	// Only flag root boundaries that are NOT overridden by individual pages.
-	pagesObj, _ := document.ResolveDict(ctx, doc, catalog["Pages"])
-
-	pages := collectPages(ctx, doc, catalog)
-
-	if pagesObj != nil {
-		for _, key := range pageBoundaryKeys {
-			boxObj, ok := pagesObj[key]
-			if !ok {
-				continue
-			}
-			// Only validate if at least one page inherits this key.
-			anyInherits := false
-			for _, page := range pages {
-				if _, has := page[key]; !has {
-					anyInherits = true
-					break
-				}
-			}
-			if !anyInherits {
-				continue // Every page has its own, so tree root value is irrelevant.
-			}
-			arr, err := document.ResolveArray(ctx, doc, boxObj)
-			if err != nil || len(arr) < 4 {
-				continue
-			}
-			x1, err1 := resolveFloat(ctx, doc, arr[0])
-			y1, err2 := resolveFloat(ctx, doc, arr[1])
-			x2, err3 := resolveFloat(ctx, doc, arr[2])
-			y2, err4 := resolveFloat(ctx, doc, arr[3])
-			if err1 != nil || err2 != nil || err3 != nil || err4 != nil {
-				continue
-			}
-			width := math.Abs(x2 - x1)
-			height := math.Abs(y2 - y1)
-			if width < minPageBound || width > maxPageBound || height < minPageBound || height > maxPageBound {
-				results = append(results, Violation{
-					Rule:    rule,
-					Context: fmt.Sprintf("Pages tree /%s: width=%.1f height=%.1f (valid: %.0f-%.0f)", string(key), width, height, minPageBound, maxPageBound),
-				})
-			}
-		}
-	}
-	for pageIdx, page := range pages {
+	pages := collectPageObjects(ctx, doc, catalog)
+	for pageIdx := range pages {
 		if ctx.Err() != nil {
 			return results
 		}
 
-		for _, key := range pageBoundaryKeys {
-			boxObj, ok := page[key]
+		for _, box := range pageBoxes {
+			node := pages[pageIdx].dict
+			if box.inherited {
+				node, _, _ = pages[pageIdx].inheritedHolder(box.key)
+			}
+			boxObj, ok := node[box.key]
 			if !ok {
 				continue
 			}
@@ -1221,7 +1190,7 @@ func checkPageBoundaries(ctx context.Context, doc *document.Document, catalog as
 			if width < minPageBound || width > maxPageBound || height < minPageBound || height > maxPageBound {
 				results = append(results, Violation{
 					Rule:    rule,
-					Context: fmt.Sprintf("page %d /%s: width=%.1f height=%.1f (valid: %.0f-%.0f)", pageIdx+1, string(key), width, height, minPageBound, maxPageBound),
+					Context: fmt.Sprintf("page %d /%s: width=%.1f height=%.1f (valid: %.0f-%.0f)", pageIdx+1, string(box.key), width, height, minPageBound, maxPageBound),
 				})
 			}
 		}
@@ -1316,12 +1285,12 @@ func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	seen := make(map[string]bool) // Avoid duplicate reports for the same name.
 	rule := utf8NameRule(profile)
 
-	pages := collectPages(ctx, doc, catalog)
-	for _, page := range pages {
+	pages := collectPageObjects(ctx, doc, catalog)
+	for i := range pages {
 		if ctx.Err() != nil {
 			return results
 		}
-		res := resolveInheritedResources(ctx, doc, page)
+		res := pages[i].effectiveResources(ctx, doc)
 		if res == nil {
 			continue
 		}
