@@ -81,6 +81,21 @@ func (cs *CommandSet) Split(run string) []string {
 	return append(parts, run[start:])
 }
 
+// Command returns the length of the first piece [CommandSet.Split] gives run:
+// the command a lexer set up by [Lexer.WithCommands] reads at the start of
+// run, or the whole run when no command starts it. It reads no further, and
+// allocates nothing, for a caller that reads one token at a time.
+func (cs *CommandSet) Command(run []byte) int {
+	command := false
+	for i := range len(run) {
+		if command && !cs.has(run[:i+1]) {
+			return i
+		}
+		command = cs.has(run[:i+1])
+	}
+	return len(run)
+}
+
 // WithCommands makes l end a run of regular characters at a command of cs the
 // way PDF.js does, and returns l. Without it a run ends only at white space or a
 // delimiter.

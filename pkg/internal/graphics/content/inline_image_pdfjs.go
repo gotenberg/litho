@@ -209,7 +209,7 @@ func pdfjsCommandAfter(window []byte) pdfjsCheck {
 		case pdfjsError:
 			return pdfjsThrows
 		case pdfjsCommand:
-			args, ok := pdfjsOperands[cmd]
+			args, ok := pdfjsOperands[string(cmd)]
 			if !ok {
 				return pdfjsNoOperator
 			}
@@ -248,9 +248,9 @@ type pdfjsLexer struct {
 	i int
 }
 
-// next reads the next token and returns its kind, and the command for a
+// next reads the next token and returns its kind, and the bytes of a
 // command.
-func (lx *pdfjsLexer) next() (pdfjsTokenKind, string) {
+func (lx *pdfjsLexer) next() (pdfjsTokenKind, []byte) {
 	b := lx.b
 	comment := false
 	for ; lx.i < len(b); lx.i++ {
@@ -264,68 +264,66 @@ func (lx *pdfjsLexer) next() (pdfjsTokenKind, string) {
 			return lx.token()
 		}
 	}
-	return pdfjsEOF, ""
+	return pdfjsEOF, nil
 }
 
 // token reads the token that starts at the current byte, which is no white
 // space.
-func (lx *pdfjsLexer) token() (pdfjsTokenKind, string) {
+func (lx *pdfjsLexer) token() (pdfjsTokenKind, []byte) {
 	b := lx.b
-	c := b[lx.i]
-	switch c {
+	start := lx.i
+	switch b[start] {
 	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '+', '-', '.':
 		if !lx.number() {
-			return pdfjsError, ""
+			return pdfjsError, nil
 		}
-		return pdfjsValue, ""
+		return pdfjsValue, nil
 	case '(':
 		lx.literalString()
-		return pdfjsValue, ""
+		return pdfjsValue, nil
 	case '/':
 		lx.i++
 		lx.regular()
-		return pdfjsValue, ""
+		return pdfjsValue, nil
 	case '[', ']', '{', '}':
 		lx.i++
-		return pdfjsCommand, string(c)
+		return pdfjsCommand, b[start:lx.i]
 	case '<':
 		lx.i++
 		if lx.i < len(b) && b[lx.i] == '<' {
 			lx.i++
-			return pdfjsCommand, "<<"
+			return pdfjsCommand, b[start:lx.i]
 		}
 		if gt := bytes.IndexByte(b[lx.i:], '>'); gt >= 0 {
 			lx.i += gt + 1
 		} else {
 			lx.i = len(b)
 		}
-		return pdfjsValue, ""
+		return pdfjsValue, nil
 	case '>':
 		lx.i++
 		if lx.i < len(b) && b[lx.i] == '>' {
 			lx.i++
-			return pdfjsCommand, ">>"
 		}
-		return pdfjsCommand, ">"
+		return pdfjsCommand, b[start:lx.i]
 	case ')':
 		lx.i++
-		return pdfjsError, ""
+		return pdfjsError, nil
 	}
 	// A command cannot start with a byte outside visible ASCII: one such
 	// byte before a visible one is a command of its own.
-	if (c < 0x20 || c > 0x7f) && lx.i+1 < len(b) && b[lx.i+1] >= 0x20 && b[lx.i+1] <= 0x7f {
+	if c := b[start]; (c < 0x20 || c > 0x7f) && start+1 < len(b) && b[start+1] >= 0x20 && b[start+1] <= 0x7f {
 		lx.i++
-		return pdfjsCommand, string(c)
+		return pdfjsCommand, b[start:lx.i]
 	}
-	start := lx.i
 	lx.regular()
-	cmd := gluedOperators.Split(string(b[start:lx.i]))[0]
-	lx.i = start + len(cmd)
-	switch cmd {
+	lx.i = start + gluedOperators.Command(b[start:lx.i])
+	switch cmd := b[start:lx.i]; string(cmd) {
 	case "true", "false", "null":
-		return pdfjsValue, ""
+		return pdfjsValue, nil
+	default:
+		return pdfjsCommand, cmd
 	}
-	return pdfjsCommand, cmd
 }
 
 // regular moves past the run of bytes that are neither white space nor a

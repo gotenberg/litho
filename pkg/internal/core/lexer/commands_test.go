@@ -107,3 +107,20 @@ func TestNewCommandSetAddsPartialCommands(t *testing.T) {
 		t.Error("a nil set has a member")
 	}
 }
+
+// TestCommandSetCommandIsFirstPiece pins that [CommandSet.Command] reads the
+// first piece [CommandSet.Split] gives, and no more.
+func TestCommandSetCommandIsFirstPiece(t *testing.T) {
+	t.Parallel()
+
+	for _, run := range []string{"ETBT", "BT", "BDC", "BDCX", "falseq", "fa", "q1", "XX", "Tf*", "f*f", "trueQ", ""} {
+		want := len(testCommands.Split(run)[0])
+		if got := testCommands.Command([]byte(run)); got != want {
+			t.Errorf("Command(%q) = %d, want %d", run, got, want)
+		}
+	}
+	var none *CommandSet
+	if got := none.Command([]byte("ETBT")); got != len("ETBT") {
+		t.Errorf("a nil set reads %d bytes of ETBT, want the run whole", got)
+	}
+}
