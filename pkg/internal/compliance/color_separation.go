@@ -318,6 +318,7 @@ func checkDeviceNLinks(ctx context.Context, doc *document.Document, pages []page
 	}
 	limit := deviceNColorantLimit(part)
 	names := newColorantNameReads(profile)
+	colorants := newDeviceNColorantsReads(colorantsRule)
 	var overLimit, missing, longNames []Violation
 	walkColorLinks(ctx, doc, pages, part, func(n colorNode) {
 		if n.kind == "Separation" || n.kind == "DeviceN" {
@@ -335,11 +336,7 @@ func checkDeviceNLinks(ctx context.Context, doc *document.Document, pages []page
 		if colorantsRule.Specification == "" {
 			return
 		}
-		if names := deviceNMissingColorants(ctx, doc, n.arr); len(names) > 0 {
-			missing = append(missing, failf(colorantsRule,
-				"page %d: DeviceN spot colorants %s have no Colorants entry",
-				n.page+1, strings.Join(names, ", "))...)
-		}
+		missing = append(missing, colorants.judge(ctx, doc, n)...)
 	})
 	*results = append(*results, overLimit...)
 	*results = append(*results, missing...)
@@ -359,6 +356,90 @@ func deviceNColorantCount(ctx context.Context, doc *document.Document, arr ast.P
 		return 0, false
 	}
 	return len(names), true
+}
+
+// maxMissingColorantsListed caps how many of the spot colorants a DeviceN
+// leaves out of its /Colorants dictionary the context of a failure of the
+// /Colorants rule names, and [MaxNameBytes] caps how many bytes of each name
+// it quotes. Anti-DoS guard, not spec-mandated: the context is built once for
+// each page that links to the colour space (see [deviceNColorantsReads]), and
+// a crafted DeviceN can name thousands of colorants, each as long as the file
+// allows. It equals the most colorants ISO 32000-1, Annex C, Table C.1 lets a
+// DeviceN name, [maxDeviceN2], so every DeviceN within that limit is listed
+// whole; the rest are counted.
+const maxMissingColorantsListed = maxDeviceN2
+
+// deviceNColorantsReads judges the /Colorants rule, ISO 19005-2/3, 6.2.4.4 t1,
+// at every link [walkColorLinks] follows to a DeviceN colour space. The rule
+// fails once per link, as [checkDeviceNLinks] measured veraPDF doing, but what
+// fails depends on the colour space alone: listed remembers, by the colour
+// space array, the spot colorants it leaves out, and failures, by the array
+// and the page, the failure one link adds. A link then costs no more than the
+// failure it adds, where listing the colorants anew at each one made a
+// DeviceN naming 1000 of them that 100000 operators reach cost 63 s and 5.5
+// GB.
+type deviceNColorantsReads struct {
+	rule     Rule
+	listed   map[*ast.PdfObject]string
+	failures map[deviceNPageLink][]Violation
+}
+
+// deviceNPageLink is a DeviceN colour space array, by its first element, as a
+// link on a page reaches it.
+type deviceNPageLink struct {
+	arr  *ast.PdfObject
+	page int
+}
+
+// newDeviceNColorantsReads returns the reads of a validation run whose
+// /Colorants rule is rule, the zero Rule for a part that states none.
+func newDeviceNColorantsReads(rule Rule) *deviceNColorantsReads {
+	return &deviceNColorantsReads{
+		rule:     rule,
+		listed:   make(map[*ast.PdfObject]string),
+		failures: make(map[deviceNPageLink][]Violation),
+	}
+}
+
+// judge returns the failure of the /Colorants rule the link n, to a DeviceN
+// colour space, adds, or nil when its spot colorants all have an entry.
+func (r *deviceNColorantsReads) judge(ctx context.Context, doc *document.Document, n colorNode) []Violation {
+	if r.rule.Specification == "" || len(n.arr) < 2 {
+		return nil
+	}
+	key := deviceNPageLink{arr: &n.arr[0], page: n.page}
+	if failures, ok := r.failures[key]; ok {
+		return failures
+	}
+	listed, ok := r.listed[key.arr]
+	if !ok {
+		listed = listColorants(deviceNMissingColorants(ctx, doc, n.arr))
+		r.listed[key.arr] = listed
+	}
+	var failures []Violation
+	if listed != "" {
+		failures = failf(r.rule, "page %d: DeviceN spot colorants %s have no Colorants entry", n.page+1, listed)
+	}
+	r.failures[key] = failures
+	return failures
+}
+
+// listColorants quotes names for the context of a failure, the first
+// [maxMissingColorantsListed] of them and each cut to [MaxNameBytes] bytes,
+// and counts the rest. No name gives "".
+func listColorants(names []string) string {
+	quoted := make([]string, 0, min(len(names), maxMissingColorantsListed))
+	for _, name := range names[:min(len(names), maxMissingColorantsListed)] {
+		if len(name) > MaxNameBytes {
+			name = name[:MaxNameBytes] + "..."
+		}
+		quoted = append(quoted, fmt.Sprintf("%q", name))
+	}
+	listed := strings.Join(quoted, ", ")
+	if more := len(names) - len(quoted); more > 0 {
+		listed += fmt.Sprintf(" and %d more", more)
+	}
+	return listed
 }
 
 // deviceNMissingColorants returns the spot colorants the DeviceN array arr
@@ -387,7 +468,7 @@ func deviceNMissingColorants(ctx context.Context, doc *document.Document, arr as
 		if cName == "None" || deviceNProcessColorants[cName] || allowed[cName] {
 			continue
 		}
-		missing = append(missing, fmt.Sprintf("%q", cName))
+		missing = append(missing, cName)
 	}
 	return missing
 }
