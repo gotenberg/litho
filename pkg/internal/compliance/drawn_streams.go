@@ -36,7 +36,8 @@ type drawnStream struct {
 	// directly rather than referenced.
 	objNum int
 	// resources is the stream's own resource dictionary, or nil when it has
-	// none. A glyph description reads the /Resources of its font.
+	// none. A glyph description reads the /Resources of its font, or its own
+	// (see [drawnStreamWalk]).
 	resources ast.PdfDict
 	// pageRes is the resource dictionary of the page the walk reached the
 	// stream from. It resolves every name the stream's own resources leave
@@ -93,7 +94,14 @@ type drawnStream struct {
 //     drew it: a form painted by a form whose resources alone define it is
 //     never reached. ISO 32000-1, 7.8.3 likewise has a form XObject without
 //     resources of its own use the page's. A glyph description reads the
-//     resources of its font.
+//     resources of its font (ISO 32000-1, 9.6.5), unless it carries a
+//     /Resources of its own under a profile built on ISO 32000-1, which it
+//     then reads in the font's stead (GFPDType3Font.getResourcesFromCharProcs,
+//     veraPDF-validation 1.30). Measured at PDF/A-2b and PDF/A-4: a glyph
+//     setting /GS1 fails ISO 19005-2, 6.2.10 t1 when its own resources give
+//     /GS1 the blend mode /Foo and its font's give it /Normal, passes it the
+//     other way round, and passes it when its own resources lack /GS1 and its
+//     font's name /Foo; ISO 19005-4, 6.2.9 t1 answers each the other way.
 //   - A form starts from the colour-space selection in force at its Do (ISO
 //     32000-1, 8.10.2), so a bare scn in it selects a pattern when the drawing
 //     stream selected the Pattern space.
@@ -138,6 +146,9 @@ type drawnStream struct {
 //   - pdfjs poppler-90-0-fuzzed.pdf: its pages share damaged Type3 fonts, and
 //     litho stated the undefined-operator rule 1874 times in their glyph
 //     descriptions, where veraPDF states it in none of them.
+//   - All corpora: reading the resources of a glyph description that has its
+//     own changes no count at PDF/A-1b or PDF/A-2b, veraPDF files at their
+//     own profile.
 type drawnStreamWalk struct {
 	doc *document.Document
 	// judged holds the object numbers of the streams already judged, and of
@@ -145,12 +156,22 @@ type drawnStreamWalk struct {
 	// referenced can be reached only once.
 	judged map[int]bool
 	judge  func(*drawnStream)
+	// glyphResources reports that a glyph description with a /Resources of
+	// its own reads it rather than its font's: the profile is built on ISO
+	// 32000-1.
+	glyphResources bool
 }
 
 // newDrawnStreamWalk returns a walk over the pages of vctx that hands every
-// stream it reaches to judge.
+// stream it reaches to judge. The profile of vctx says which resources a
+// glyph description reads; see [drawnStreamWalk].
 func newDrawnStreamWalk(vctx *validationCtx, judge func(*drawnStream)) *drawnStreamWalk {
-	w := &drawnStreamWalk{doc: vctx.doc, judged: make(map[int]bool), judge: judge}
+	w := &drawnStreamWalk{
+		doc:            vctx.doc,
+		judged:         make(map[int]bool),
+		judge:          judge,
+		glyphResources: PDFAPart(vctx.profile) != 4 && PDFUAPart(vctx.profile) != 2,
+	}
 	for i := range vctx.pages {
 		if ref, ok := vctx.pages[i].dict["Contents"].(ast.PdfIndirectRef); ok {
 			w.judged[ref.ObjectNum] = true
@@ -387,7 +408,7 @@ func (w *drawnStreamWalk) visit(ctx context.Context, obj ast.PdfObject, owner as
 		w.doc.Logger.Debug("compliance.graphics: cannot resolve drawn stream", "error", err)
 		return
 	}
-	if owner == nil {
+	if owner == nil || (kind == drawnGlyph && w.glyphResources && knownKey(stream.Dict, "Resources")) {
 		owner = stream.Dict
 	}
 	// A /Resources that is no dictionary defines no name, so the page's

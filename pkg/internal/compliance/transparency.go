@@ -614,12 +614,12 @@ func blendingCSRule(part int) Rule {
 //     annotations changes no count at PDF/A-1b or PDF/A-2b, veraPDF files at
 //     their own profile, where the 7 veraPDF files failing 6.2.10 t1 or 6.2.9
 //     t1 already matched their golden counts.
-func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []pageCtx, _ string, part int) []Violation {
+func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []pageCtx, profile string, part int) []Violation {
 	hasOutputIntent, _ := documentOutputIntentInfo(ctx, doc, catalog)
 
 	var results []Violation
 	judged := make(map[int]bool)
-	walk := newDrawnStreamWalk(&validationCtx{doc: doc, pages: pages}, func(s *drawnStream) {
+	walk := newDrawnStreamWalk(&validationCtx{doc: doc, profile: profile, part: part, pages: pages}, func(s *drawnStream) {
 		results = append(results, drawnStreamBlendModes(ctx, doc, s, part, judged)...)
 	})
 	for i := range pages {
