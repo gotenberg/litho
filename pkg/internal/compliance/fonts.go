@@ -2017,11 +2017,17 @@ func checkType0NotdefWidth(ctx context.Context, doc *document.Document, fontDict
 	}
 
 	expected := float64(bw) * 1000.0 / float64(unitsPerEm)
-	if widthsInconsistent(declared, expected) {
+	if !widthsInconsistent(declared, expected) {
+		return nil
+	}
+	// A code that does not decode names no CID of its own to be judged once
+	// for; a shown CID 0 is that glyph.
+	if notdef {
 		return failf(rule, "font %s on page %d: .notdef glyph "+WidthMismatchContext+" (declared=%.1f, font=%.1f)",
 			fontName, pageNum, declared, expected)
 	}
-	return nil
+	return glyphFailf(rule, 0, "font %s on page %d: .notdef glyph "+WidthMismatchContext+" (declared=%.1f, font=%.1f)",
+		fontName, pageNum, declared, expected)
 }
 
 // judgeMalformedCodes selects whether [checkType0NotdefGlyph] may conclude

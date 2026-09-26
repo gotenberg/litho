@@ -246,6 +246,24 @@ var noContext = glyphContext{mode: -1}
 //   - pdfjs bug920426.pdf: shows 13 codes its embedded CMap leaves unmapped,
 //     and veraPDF fails ISO 19005-1, 6.3.5 t1 and ISO 19005-2, 6.2.11.4.1 t2
 //     13 times each, where litho failed each once, for CID 0.
+//   - All corpora: the counts of ISO 19005-1, 6.3.6 t1, ISO 19005-2, 6.2.11.5
+//     t1 and ISO 19005-4, 6.2.10.5 t1 moved toward veraPDF's for 68 pairs of
+//     file and profile and away for 12, six files at each of PDF/A-1b and
+//     PDF/A-2b; their summed distance fell from 3309 to 1090.
+//   - govdocs thread_300_300035.pdf, thread_300_300083.pdf and
+//     thread_300_300084.pdf: the width counts that moved away. Each embeds
+//     Type 1 programs whose /FontMatrix makes the advances fractional, and
+//     veraPDF truncates them: litho states 24, 30 and 37 glyphs against
+//     veraPDF's 1, 12 and 12, and truncating litho's own program widths
+//     leaves exactly veraPDF's 1, 12 and 12.
+//   - govdocs thread_200_200155.pdf: the same truncation accounts for 146 of
+//     the 217 width glyphs litho states, against veraPDF's 69.
+//   - pdfjs issue19835.pdf: 28 of the 278 width glyphs litho states, against
+//     veraPDF's 204, come from a CIDFontType2 program with no cmap table, on
+//     page 8, where veraPDF reports none, and 44 more pass once truncated.
+//   - pdfjs issue7074_reduced.pdf: embeds a program whose post table is cut
+//     short, which veraPDF does not judge widths against; litho reads its
+//     hmtx and states 14 glyphs where it stated 1.
 func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fontID string, font ast.PdfDict, usage *fontUsageInfo, profile string, vs []Violation) []Violation {
 	var out []Violation
 	var where map[uint32][]shownGlyph

@@ -108,3 +108,44 @@ func TestGlyphRulesStatedOncePerGlyph(t *testing.T) {
 		}
 	}
 }
+
+// TestGlyphWidthStatedPerCode pins that the width rule is stated for every
+// shown code whose declared width disagrees with the program, not for the
+// first alone, and once for a code two pages show. veraPDF 1.30 reports each
+// such glyph at PDF/A-1b and PDF/A-2b.
+func TestGlyphWidthStatedPerCode(t *testing.T) {
+	t.Parallel()
+
+	font := subsetType1Font(t)
+	// Both A and B advance well past a declared width of 100.
+	font[0] = strings.Replace(font[0], "/Widths [600 600]", "/Widths [100 100]", 1)
+	for _, p := range []struct {
+		profile models.PDFAProfile
+		rule    Rule
+	}{
+		{models.PDFA1b, Rule_19005_1_6_3_6_t01},
+		{models.PDFA2b, Rule_19005_2_6_2_11_5_t01},
+	} {
+		for _, tc := range []struct {
+			name   string
+			bodies []string
+			want   int
+		}{
+			{"one page", []string{glyphText("(AB) Tj")}, 2},
+			{"two pages", []string{glyphText("(AB) Tj"), glyphText("(BA) Tj")}, 2},
+			{"rendering modes 0 and 3", []string{glyphText("(A) Tj 3 Tr (A) Tj")}, 1},
+		} {
+			t.Run(string(p.profile)+" "+tc.name, func(t *testing.T) {
+				t.Parallel()
+				doc, _ := objsDocPDF(t, glyphPagesObjs(font, tc.bodies...)...)
+				viols, err := ValidatePDFA(context.Background(), doc, p.profile)
+				if err != nil {
+					t.Fatalf("ValidatePDFA: %v", err)
+				}
+				if got := countRuleErrs(t, viols, p.rule); got != tc.want {
+					t.Errorf("%s test %d fired %d times, want %d", p.rule.Clause, p.rule.TestNumber, got, tc.want)
+				}
+			})
+		}
+	}
+}
