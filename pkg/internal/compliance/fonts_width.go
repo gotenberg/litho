@@ -740,7 +740,8 @@ func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontD
 		// GID to read (mirrors [checkType1FontWidths]). Decide presence by name.
 		return checkType1GlyphPresence(ctx, doc, fontDict, fontName, pageNum, rule, usage)
 	}
-	for code := range usage.charCodes {
+	faults := newGlyphFaults(rule)
+	for _, code := range sortedByteKeys(usage.charCodes) {
 		// Code 0 references .notdef, which the .notdef rule judges; veraPDF
 		// counts its glyph as present (GFGlyph.initForNotType3).
 		if code == 0 {
@@ -763,10 +764,10 @@ func checkSimpleGlyphPresence(ctx context.Context, doc *document.Document, fontD
 			}
 		}
 		if mapped && gid == 0 {
-			return failf(rule, "font %s on page %d: glyph for charCode %d not present in embedded font program", fontName, pageNum, code)
+			faults.add(uint32(code), "font %s on page %d: glyph for charCode %d not present in embedded font program", fontName, pageNum, code)
 		}
 	}
-	return nil
+	return faults.violations()
 }
 
 // checkType1GlyphPresence decides glyph presence for a Type 1 font whose
@@ -812,6 +813,7 @@ func checkType1GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 	builtin := builtinEncodingNames(fontData)
 	differences := fontDifferencesNames(ctx, doc, fontDict)
 	pdfEnc := resolveSimpleFontEncoding(ctx, doc, fontDict)
+	faults := newGlyphFaults(rule)
 	for _, code := range sortedByteKeys(usage.charCodes) {
 		name := pdfEnc[code]
 		// Outside /Differences the program's own name for the code is the better
@@ -830,21 +832,23 @@ func checkType1GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 			if len(pdfEnc) == 0 && len(builtin) == 0 {
 				continue
 			}
-			return failf(rule, "font %s on page %d: charCode %d is named by no encoding, so it selects no glyph",
+			faults.add(uint32(code), "font %s on page %d: charCode %d is named by no encoding, so it selects no glyph",
 				fontName, pageNum, code)
+			continue
 		}
 		// A code that selects .notdef paints no glyph: veraPDF's Type 1
 		// containsGlyph holds .notdef absent, so a /Differences entry naming it
 		// fails the rule too.
 		if name == ".notdef" {
-			return failf(rule, "font %s on page %d: charCode %d selects .notdef, which paints no glyph", fontName, pageNum, code)
+			faults.add(uint32(code), "font %s on page %d: charCode %d selects .notdef, which paints no glyph", fontName, pageNum, code)
+			continue
 		}
 		if !defined[name] {
-			return failf(rule, "font %s on page %d: glyph %s for charCode %d not present in embedded font program",
+			faults.add(uint32(code), "font %s on page %d: glyph %s for charCode %d not present in embedded font program",
 				fontName, pageNum, name, code)
 		}
 	}
-	return nil
+	return faults.violations()
 }
 
 // checkType3GlyphPresence validates that every character code a Type3 font
@@ -879,18 +883,20 @@ func checkType3GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 	}
 	slices.Sort(codes)
 
+	faults := newGlyphFaults(rule)
 	for _, code := range codes {
 		glyphName := encoding[code]
 		if glyphName == "" {
-			return failf(rule, "font %s on page %d: charCode %d is not defined by the Type3 /Encoding",
+			faults.add(uint32(code), "font %s on page %d: charCode %d is not defined by the Type3 /Encoding",
 				fontName, pageNum, code)
+			continue
 		}
 		if _, ok := charProcs[ast.PdfName(glyphName)]; !ok {
-			return failf(rule, "font %s on page %d: glyph %s for charCode %d has no /CharProcs entry",
+			faults.add(uint32(code), "font %s on page %d: glyph %s for charCode %d has no /CharProcs entry",
 				fontName, pageNum, glyphName, code)
 		}
 	}
-	return nil
+	return faults.violations()
 }
 
 // ExpectedCIDFontWidths returns each CID's correct width (in 1000-unit glyph

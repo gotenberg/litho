@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"slices"
+	"strconv"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -17,6 +18,7 @@ type fontUsageInfo struct {
 	visible    bool            // true if used with rendering mode != 3
 	charCodes  map[byte]bool   // character codes referenced by Tj/TJ
 	rawStrings []ast.PdfString // raw string operands from text operators (for CID .notdef detection)
+	shows      []glyphShow     // rawStrings again, each with the context it is shown in
 }
 
 // ShownCharCodes returns, per font resource name, the one-byte character codes
@@ -45,6 +47,13 @@ func ShownCharCodes(ops []content.Operation) map[string]map[byte]bool {
 // character codes are referenced. Returns nil if ops is nil or empty (in which
 // case all fonts should be checked).
 func collectFontUsage(ops []content.Operation) map[string]*fontUsageInfo {
+	return collectFontUsageAt(ops, showSite{})
+}
+
+// collectFontUsageAt is [collectFontUsage] for the content stream site names,
+// which keys the marked-content sequences its shows are recorded in; see
+// [markedContentKey].
+func collectFontUsageAt(ops []content.Operation, site showSite) map[string]*fontUsageInfo {
 	if len(ops) == 0 {
 		return nil
 	}
@@ -66,6 +75,10 @@ func collectFontUsage(ops []content.Operation) map[string]*fontUsageInfo {
 		renderMode int
 	}
 	var gsStack []savedTextState
+	// Marked content is not part of the graphics state (ISO 32000-1, 14.6), so
+	// q and Q leave this stack alone. Like gsStack it holds at most one entry
+	// per operator already materialized.
+	var mcStack []string
 
 	getOrCreate := func(name string) *fontUsageInfo {
 		if u, ok := usage[name]; ok {
@@ -76,6 +89,18 @@ func collectFontUsage(ops []content.Operation) map[string]*fontUsageInfo {
 		return u
 	}
 
+	record := func(u *fontUsageInfo, s ast.PdfString) {
+		for _, b := range []byte(s) {
+			u.charCodes[b] = true
+		}
+		u.rawStrings = append(u.rawStrings, s)
+		at := glyphContext{mode: renderMode}
+		if n := len(mcStack); n > 0 {
+			at.mc = mcStack[n-1]
+		}
+		u.shows = append(u.shows, glyphShow{str: s, at: at})
+	}
+
 	collectStringBytes := func(obj ast.PdfObject) {
 		if currentFont == "" {
 			return
@@ -83,23 +108,17 @@ func collectFontUsage(ops []content.Operation) map[string]*fontUsageInfo {
 		u := getOrCreate(currentFont)
 		switch s := obj.(type) {
 		case ast.PdfString:
-			for _, b := range []byte(s) {
-				u.charCodes[b] = true
-			}
-			u.rawStrings = append(u.rawStrings, s)
+			record(u, s)
 		case ast.PdfArray:
 			for _, item := range s {
 				if str, ok := item.(ast.PdfString); ok {
-					for _, b := range []byte(str) {
-						u.charCodes[b] = true
-					}
-					u.rawStrings = append(u.rawStrings, str)
+					record(u, str)
 				}
 			}
 		}
 	}
 
-	for _, op := range ops {
+	for i, op := range ops {
 		switch op.Operator {
 		case "q":
 			gsStack = append(gsStack, savedTextState{font: currentFont, renderMode: renderMode})
@@ -107,6 +126,12 @@ func collectFontUsage(ops []content.Operation) map[string]*fontUsageInfo {
 			if n := len(gsStack); n > 0 {
 				currentFont, renderMode = gsStack[n-1].font, gsStack[n-1].renderMode
 				gsStack = gsStack[:n-1]
+			}
+		case "BDC", "BMC":
+			mcStack = append(mcStack, markedContentKey(op, i, site))
+		case "EMC":
+			if n := len(mcStack); n > 0 {
+				mcStack = mcStack[:n-1]
 			}
 		case "Tf":
 			if len(op.Operands) >= 1 {
@@ -232,11 +257,14 @@ type fontJudgements struct {
 	// subset holds the font objects the subset rule failed for; see
 	// [fontJudgements.subsetCoverage].
 	subset map[int]bool
+	// glyph holds the glyph-level statements already made; see
+	// [fontJudgements.glyphs].
+	glyph map[glyphKey]bool
 }
 
 // newFontJudgements returns an empty record.
 func newFontJudgements() *fontJudgements {
-	return &fontJudgements{dict: make(map[int]bool), subset: make(map[int]bool)}
+	return &fontJudgements{dict: make(map[int]bool), subset: make(map[int]bool), glyph: make(map[glyphKey]bool)}
 }
 
 // subsetCoverage states the rule a font subset's /CharSet or /CIDSet answers
@@ -332,7 +360,9 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 	// per-font skip below uses this to match veraPDF's "check only fonts a
 	// content operator selects" model; parseFailed drives the conservative
 	// "check every declared font" fallback for present-but-unparseable content.
-	fontUsage := collectFontUsage(p.parsedOps(ctx))
+	site := showSite{key: "page " + strconv.Itoa(pageNum)}
+	site.props, _ = document.ResolveDict(ctx, doc, resources["Properties"])
+	fontUsage := collectFontUsageAt(p.parsedOps(ctx), site)
 	parseFailed := p.parseFailed
 
 	var results []Violation
@@ -399,8 +429,9 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 			embedVisible = true
 		}
 
+		var fontResults []Violation
 		if !dictRulesDone {
-			results = append(results, checkFontDictRules(ctx, doc, font, fontKey, pageNum, profile, embedVisible, usage)...)
+			fontResults = append(fontResults, checkFontDictRules(ctx, doc, font, fontKey, pageNum, profile, embedVisible, usage)...)
 		}
 		isType0 := fontSubtype(ctx, doc, font) == "Type0"
 		if isType0 {
@@ -413,15 +444,16 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 				// against recovered bytes veraPDF never reads.
 				if descArr, err := document.ResolveArray(ctx, doc, font["DescendantFonts"]); err == nil && len(descArr) > 0 && !parseFailed {
 					if cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0]); err == nil && cidFontDict != nil {
-						results = append(results, checkType0UsageRules(ctx, doc, font, cidFontDict, fontKey, pageNum, profile, usage, withoutMalformedCodes)...)
+						fontResults = append(fontResults, checkType0UsageRules(ctx, doc, font, cidFontDict, fontKey, pageNum, profile, usage, withoutMalformedCodes)...)
 					}
 				}
 			} else {
-				results = append(results, checkType0Font(ctx, doc, font, fontKey, pageNum, profile, isVisible, usage)...)
+				fontResults = append(fontResults, checkType0Font(ctx, doc, font, fontKey, pageNum, profile, isVisible, usage)...)
 			}
 		} else {
-			results = append(results, checkFontUsageRules(ctx, doc, font, fontKey, pageNum, profile, isVisible, usage)...)
+			fontResults = append(fontResults, checkFontUsageRules(ctx, doc, font, fontKey, pageNum, profile, isVisible, usage)...)
 		}
+		results = append(results, judged.glyphs(ctx, doc, fontIdentity(fontRef, fontName, site), font, usage, profile, fontResults)...)
 		// The subset rule judges glyphs too, so the unparsable content above
 		// states nothing more for a composite font judged on an earlier page.
 		if !isType0 || !dictRulesDone || !parseFailed {
@@ -490,7 +522,7 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 			doc.Logger.Debug("compliance: fonts: cannot parse Form XObject", "page", pageNum, "error", err)
 			continue
 		}
-		results = append(results, checkResourceFonts(ctx, doc, xobjRes, subOps, pageNum, profile, judged)...)
+		results = append(results, checkResourceFonts(ctx, doc, xobjRes, subOps, streamSite(ctx, doc, xobjRef, xobjRes), pageNum, profile, judged)...)
 		results = append(results, checkFormPUA(ctx, doc, xobjRes, subOps, data, stream.Dict, treeRoot, pageNum, profile)...)
 		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, xobjRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 		results = append(results, checkPatternFonts(ctx, doc, subOps, xobjRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
@@ -568,7 +600,7 @@ func checkPatternFonts(ctx context.Context, doc *document.Document, ops []conten
 			doc.Logger.Debug("compliance: fonts: cannot parse tiling pattern", "page", pageNum, "error", err)
 			continue
 		}
-		results = append(results, checkResourceFonts(ctx, doc, patternRes, subOps, pageNum, profile, judged)...)
+		results = append(results, checkResourceFonts(ctx, doc, patternRes, subOps, streamSite(ctx, doc, patternRef, patternRes), pageNum, profile, judged)...)
 		results = append(results, checkFormXObjectFonts(ctx, doc, subOps, patternRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 		results = append(results, checkPatternFonts(ctx, doc, subOps, patternRes, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 	}
@@ -657,7 +689,7 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 					"page", pageNum, "glyph", glyphName, "error", err)
 				continue
 			}
-			results = append(results, checkResourceFonts(ctx, doc, t3Res, procOps, pageNum, profile, judged)...)
+			results = append(results, checkResourceFonts(ctx, doc, t3Res, procOps, streamSite(ctx, doc, charProcs[ast.PdfName(glyphName)], t3Res), pageNum, profile, judged)...)
 			results = append(results, checkType3CharProcFonts(ctx, doc, procOps, t3Res, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 			results = append(results, checkFormXObjectFonts(ctx, doc, procOps, t3Res, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 		}
@@ -683,12 +715,13 @@ func shownGlyphNames(encoding map[byte]string, charCodes map[byte]bool) []string
 // content stream selects for rendering, resolved from res /Resources/Font. Only
 // fonts actually used (selected with Tf and shown) are checked; a font declared
 // in the resources but never selected renders no glyph and is out of scope.
-func checkResourceFonts(ctx context.Context, doc *document.Document, res ast.PdfDict, ops []content.Operation, pageNum int, profile string, judged *fontJudgements) []Violation {
+// site identifies the stream the operations come from.
+func checkResourceFonts(ctx context.Context, doc *document.Document, res ast.PdfDict, ops []content.Operation, site showSite, pageNum int, profile string, judged *fontJudgements) []Violation {
 	fontDict, _ := document.ResolveDict(ctx, doc, res["Font"])
 	if len(fontDict) == 0 {
 		return nil
 	}
-	usage := collectFontUsage(ops)
+	usage := collectFontUsageAt(ops, site)
 	if usage == nil {
 		return nil
 	}
@@ -700,20 +733,70 @@ func checkResourceFonts(ctx context.Context, doc *document.Document, res ast.Pdf
 			continue // declared in the form resources but never selected
 		}
 		fontRef := fontDict[fontName]
-		if ref, ok := fontRef.(ast.PdfIndirectRef); ok {
-			if judged.dict[ref.ObjectNum] {
-				continue
-			}
-			judged.dict[ref.ObjectNum] = true
-		}
-		font, err := document.ResolveDict(ctx, doc, fontRef)
-		if err != nil || font == nil {
-			continue
-		}
-		results = append(results, checkSingleFont(ctx, doc, font, string(fontName), pageNum, profile, fontUsage.visible, fontUsage)...)
-		results = append(results, judged.subsetCoverage(ctx, doc, fontRef, font, string(fontName), pageNum, profile, fontUsage)...)
+		results = append(results, judged.streamFont(ctx, doc, fontRef, fontName, site, pageNum, profile, fontUsage)...)
 	}
 	return results
+}
+
+// streamFont judges one font a stream other than a page's own content shows
+// through: the whole single-font suite the first time the font object is met,
+// and after that the glyph rules alone, for the glyphs they name. The glyphs
+// this stream shows are its own, and a glyph an earlier stream showed is
+// stated once, by [fontJudgements.glyphs]; checking the dictionary again would
+// report it once per stream. A glyph-rule violation that names no glyph speaks
+// for the font as a whole, which the stream that first met it already stated,
+// so it is not repeated here.
+func (j *fontJudgements) streamFont(ctx context.Context, doc *document.Document, fontRef ast.PdfObject, fontName ast.PdfName, site showSite, pageNum int, profile string, usage *fontUsageInfo) []Violation {
+	dictRulesDone := false
+	if ref, ok := fontRef.(ast.PdfIndirectRef); ok {
+		dictRulesDone = j.dict[ref.ObjectNum]
+		j.dict[ref.ObjectNum] = true
+	}
+	font, err := document.ResolveDict(ctx, doc, fontRef)
+	if err != nil || font == nil {
+		return nil
+	}
+	var fontResults []Violation
+	if dictRulesDone {
+		for _, v := range checkGlyphUsageRules(ctx, doc, font, string(fontName), pageNum, profile, usage) {
+			if v.glyph.named {
+				fontResults = append(fontResults, v)
+			}
+		}
+	} else {
+		fontResults = checkSingleFont(ctx, doc, font, string(fontName), pageNum, profile, usage.visible, usage)
+	}
+	results := j.glyphs(ctx, doc, fontIdentity(fontRef, fontName, site), font, usage, profile, fontResults)
+	return append(results, j.subsetCoverage(ctx, doc, fontRef, font, string(fontName), pageNum, profile, usage)...)
+}
+
+// checkGlyphUsageRules runs the rules that judge the glyphs a stream shows,
+// for a font whose dictionary was judged elsewhere: [checkFontUsageRules] for
+// a simple font and [checkType0UsageRules] for a composite one.
+func checkGlyphUsageRules(ctx context.Context, doc *document.Document, font ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
+	if fontSubtype(ctx, doc, font) != "Type0" {
+		return checkFontUsageRules(ctx, doc, font, fontName, pageNum, profile, usage.visible, usage)
+	}
+	descArr, err := document.ResolveArray(ctx, doc, font["DescendantFonts"])
+	if err != nil || len(descArr) == 0 {
+		return nil
+	}
+	cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0])
+	if err != nil || cidFontDict == nil {
+		return nil
+	}
+	return checkType0UsageRules(ctx, doc, font, cidFontDict, fontName, pageNum, profile, usage, withoutMalformedCodes)
+}
+
+// streamSite returns the [showSite] of the content stream ref names, whose
+// resources are res.
+func streamSite(ctx context.Context, doc *document.Document, ref ast.PdfObject, res ast.PdfDict) showSite {
+	site := showSite{key: "stream"}
+	if r, ok := ref.(ast.PdfIndirectRef); ok {
+		site.key = "obj " + strconv.Itoa(r.ObjectNum)
+	}
+	site.props, _ = document.ResolveDict(ctx, doc, res["Properties"])
+	return site
 }
 
 // maxAppearanceStateFonts bounds how many sub-appearances a single /AP entry's
@@ -823,7 +906,8 @@ func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apO
 		doc.Logger.Debug("compliance: fonts: cannot parse appearance stream", "page", pageNum, "error", err)
 		return nil
 	}
-	usage := collectFontUsage(ops)
+	site := streamSite(ctx, doc, apObj, res)
+	usage := collectFontUsageAt(ops, site)
 	if usage == nil {
 		return nil
 	}
@@ -841,19 +925,7 @@ func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apO
 		if fontUsage == nil {
 			continue // declared in the appearance resources but never selected
 		}
-		fontRef := fontDict[fontName]
-		if ref, ok := fontRef.(ast.PdfIndirectRef); ok {
-			if judged.dict[ref.ObjectNum] {
-				continue
-			}
-			judged.dict[ref.ObjectNum] = true
-		}
-		font, err := document.ResolveDict(ctx, doc, fontRef)
-		if err != nil || font == nil {
-			continue
-		}
-		results = append(results, checkSingleFont(ctx, doc, font, string(fontName), pageNum, profile, fontUsage.visible, fontUsage)...)
-		results = append(results, judged.subsetCoverage(ctx, doc, fontRef, font, string(fontName), pageNum, profile, fontUsage)...)
+		results = append(results, judged.streamFont(ctx, doc, fontDict[fontName], fontName, site, pageNum, profile, fontUsage)...)
 	}
 	return results
 }
@@ -966,6 +1038,7 @@ func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict as
 // text-showing operator, so these hold per page rather than per font object: a
 // font object shared by several pages must be judged against each page's own
 // usage, or a glyph defect that first appears on a later page is never seen.
+// A glyph two pages show is still stated once, by [fontJudgements.glyphs].
 // Simple fonts only; [checkType0Font] covers the composite path. The /CharSet
 // rule is stated once per font object, by [fontJudgements.subsetCoverage].
 func checkFontUsageRules(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool, usage *fontUsageInfo) []Violation {
@@ -1510,7 +1583,8 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 // one page shows, as opposed to those that judge the font dictionary. A font
 // object's dictionary is reported once, but every page that selects the font
 // shows its own codes, so these run again for each. veraPDF builds a glyph per
-// show operator. Simple fonts already work this way through
+// show operator, and a glyph two pages show is stated once, by
+// [fontJudgements.glyphs]. Simple fonts already work this way through
 // [checkFontUsageRules]. The /CIDSet rule is stated once per font object, by
 // [fontJudgements.subsetCoverage].
 //
@@ -2026,40 +2100,46 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		return results
 	}
 
+	// Every used CID is its own glyph for the presence rule; see
+	// [fontJudgements.glyphs]. The .notdef rule is stated for the first alone.
+	notdefs := newGlyphFaults(rule)
+	presence := newGlyphFaults(glyphPresenceRule(profile))
+	checksPresence := presence.rule.Specification != "" && usage.visible
+	judged := func() []Violation {
+		return append(notdefs.first(), presence.violations()...)
+	}
+
 	// CID 0 is always .notdef.
 	if usedCIDs[0] {
-		results := failf(rule, "font %s on page %d: text references CID 0 (.notdef)", fontName, pageNum)
+		notdefs.add(0, "font %s on page %d: text references CID 0 (.notdef)", fontName, pageNum)
 		// A code the encoding CMap maps nowhere reaches no glyph at all, which
 		// the glyph-presence rule covers as well: veraPDF reports both for it.
 		// A code written as CID 0 reaches the .notdef glyph, which the program
 		// does contain, so that keeps firing the .notdef rule alone (both tools
 		// agree there; see absentType0CIDs). renderingMode == 3 exempts the
 		// glyph-presence half, as in the decode-level branch above.
-		if pr := glyphPresenceRule(profile); unmappedZero && pr.Specification != "" &&
-			usage.visible && type0HasEmbeddedProgram(ctx, doc, fontDict) {
-			results = append(results, failf(pr,
-				"font %s on page %d: the encoding CMap maps a rendered code to no glyph in the embedded font program", fontName, pageNum)...)
+		if unmappedZero && checksPresence && type0HasEmbeddedProgram(ctx, doc, fontDict) {
+			presence.add(0, "font %s on page %d: the encoding CMap maps a rendered code to no glyph in the embedded font program", fontName, pageNum)
 		}
-		return results
 	}
 
 	// Resolve descendant CIDFont to verify referenced CIDs exist in the font program.
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
-		return nil
+		return judged()
 	}
 	cidFontDict, err := document.ResolveDict(ctx, doc, descArr[0])
 	if err != nil || cidFontDict == nil {
-		return nil
+		return judged()
 	}
 
 	fd := document.ResolveFontDescriptor(ctx, doc, cidFontDict)
 	if fd == nil {
-		return nil
+		return judged()
 	}
 	fontData := extractFontProgramData(ctx, doc, fd)
 	if fontData == nil {
-		return nil
+		return judged()
 	}
 
 	cidSubtype := fontSubtype(ctx, doc, cidFontDict)
@@ -2070,29 +2150,22 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		// deterministic context when several CIDs are absent.
 		validCIDs := typography.ExtractValidCIDs(fontData)
 		if validCIDs == nil {
-			return nil
+			return judged()
 		}
-		cids := make([]uint16, 0, len(usedCIDs))
-		for cid := range usedCIDs {
-			cids = append(cids, cid)
-		}
-		slices.Sort(cids)
-		for _, cid := range cids {
-			if !validCIDs[cid] {
-				// A used CID absent from the CFF charset has no glyph in
-				// the program, so both the .notdef rule and the
-				// glyph-presence rule apply: the code renders .notdef and
-				// no glyph is present for it. Glyph presence asks only about
-				// glyphs referenced for rendering, so renderingMode == 3
-				// exempts it, as in the CIDFontType2 branch below; the
-				// .notdef rule keeps firing, as veraPDF reports 6.2.11.8 and not
-				// 6.2.11.4.1 when every show operator is mode 3.
-				results := failf(rule, "font %s on page %d: CID %d not in font charset (.notdef)", fontName, pageNum, cid)
-				if pr := glyphPresenceRule(profile); pr.Specification != "" && usage.visible {
-					results = append(results, failf(pr,
-						"font %s on page %d: CID %d not present in embedded font program", fontName, pageNum, cid)...)
-				}
-				return results
+		for _, cid := range sortedCIDs(usedCIDs) {
+			if cid == 0 || validCIDs[cid] {
+				continue
+			}
+			// A used CID absent from the CFF charset has no glyph in the
+			// program, so both the .notdef rule and the glyph-presence rule
+			// apply: the code renders .notdef and no glyph is present for it.
+			// Glyph presence asks only about glyphs referenced for rendering,
+			// so renderingMode == 3 exempts it, as in the CIDFontType2 branch
+			// below; the .notdef rule keeps firing, as veraPDF reports 6.2.11.8
+			// and not 6.2.11.4.1 when every show operator is mode 3.
+			notdefs.add(uint32(cid), "font %s on page %d: CID %d not in font charset (.notdef)", fontName, pageNum, cid)
+			if checksPresence {
+				presence.add(uint32(cid), "font %s on page %d: CID %d not present in embedded font program", fontName, pageNum, cid)
 			}
 		}
 
@@ -2116,17 +2189,17 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		// .notdef rule the reasoning above rules out.
 		// renderingMode == 3 exempts the glyph, so a font every one of whose
 		// uses was invisible has nothing to answer for.
-		if pr := glyphPresenceRule(profile); pr.Specification != "" && usage.visible {
+		if checksPresence {
 			if cidToGIDMap, _ := document.ResolveName(ctx, doc, cidFontDict["CIDToGIDMap"]); cidToGIDMap == "Identity" {
-				if outside := outOfProgramCIDs(fontData, usedCIDs); len(outside) > 0 {
-					return failf(pr, "font %s on page %d: CID %d not present in embedded font program",
-						fontName, pageNum, outside[0])
+				for _, cid := range outOfProgramCIDs(fontData, usedCIDs) {
+					presence.add(uint32(cid), "font %s on page %d: CID %d not present in embedded font program",
+						fontName, pageNum, cid)
 				}
 			}
 		}
 	}
 
-	return nil
+	return judged()
 }
 
 // outOfProgramCIDs returns the used CIDs that an Identity /CIDToGIDMap resolves
@@ -2180,22 +2253,27 @@ func type0HasEmbeddedProgram(ctx context.Context, doc *document.Document, fontDi
 
 // absentType0CIDs returns the set of used CIDs whose glyph is absent from the
 // composite font's embedded program, plus the descendant CIDFont subtype. A CID
-// is absent when a CIDFontType0 (CFF) charset omits it, or a CIDFontType2
-// (TrueType, Identity CIDToGIDMap) maps it to an empty glyf entry with a zero
-// advance; CID 0 is always .notdef. Such CIDs render .notdef and have no glyph,
-// so they fire both the glyph-presence and the .notdef rule. The subtype lets
-// callers apply the CFF-specific per-glyph ToUnicode exemption: a CFF charset
-// that omits a CID has no glyph for it at all, so there is no glyph to map and
-// the per-glyph ToUnicode rule does not apply. A TrueType empty glyph still
-// exists in the glyf table (it is present, just empty), so it remains a mappable
-// glyph and the ToUnicode rule still applies. ok is false when litho cannot
-// decode the encoding to CIDs; callers then stay conservative.
+// is absent when a CIDFontType0 (CFF) charset omits it, or when a CIDFontType2
+// (TrueType) under an Identity CIDToGIDMap names a glyph index past the
+// program's glyph count; CID 0 is always .notdef. Such CIDs have no glyph, so
+// they fire the glyph-presence rule. The subtype lets callers apply the
+// CFF-specific per-glyph ToUnicode exemption: a CFF charset that omits a CID
+// has no glyph for it at all, so there is no glyph to map and the per-glyph
+// ToUnicode rule does not apply. ok is false when litho cannot decode the
+// encoding to CIDs; callers then stay conservative.
+//
+// An empty glyf entry with a zero advance is not absent: the program defines
+// that glyph, only without an outline, which is what ISO 19005-1, 6.3.5 asks
+// ("define all font glyphs referenced for rendering"). [checkType0NotdefGlyph]
+// reads a CIDFontType2 the same way for parts 2 to 4. Measured with veraPDF
+// 1.30 at PDF/A-1b: such glyphs pass 6.3.5 t1.
 //
 // # Corpus evidence
 //
-//   - pdfjs issue5874.pdf: passed §6.3.5 t1 until remediation added the
-//     /CIDToGIDMap /Identity that ISO 19005-1 §6.3.3.2 requires, and the same
-//     bytes then failed.
+//   - pdfjs issue5874.pdf: shows two CIDs whose glyf entries are empty and
+//     whose /W widths are 0, and veraPDF reports no ISO 19005-1, 6.3.5 t1 for
+//     them, with or without the /CIDToGIDMap /Identity ISO 19005-1, 6.3.3.2
+//     requires, which remediation adds.
 func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, usage *fontUsageInfo) (absent map[uint16]bool, subtype string, notdef bool, ok bool) {
 	absent = make(map[uint16]bool)
 	if usage == nil || len(usage.rawStrings) == 0 {
@@ -2266,13 +2344,6 @@ func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.P
 					absent[cid] = true
 				}
 			}
-			if emptyGIDs := typography.ExtractEmptyGIDs(ctx, fontData); emptyGIDs != nil {
-				for cid := range usedCIDs {
-					if emptyGIDs[cid] && lookupCIDWidth(ctx, doc, cidFontDict, cid) == 0 {
-						absent[cid] = true
-					}
-				}
-			}
 		}
 	}
 	return absent, subtype, notdef, true
@@ -2300,39 +2371,42 @@ func checkType0GlyphPresence(ctx context.Context, doc *document.Document, fontDi
 	if !ok {
 		return nil
 	}
-	// A code the encoding CMap maps nowhere reaches no glyph at all. Parts 2 to
-	// 4 report it from checkType0NotdefGlyph beside the .notdef rule; PDF/A-1
-	// has no .notdef rule and reaches only this path, so honor the signal here.
-	if !notdef && len(absent) == 0 {
-		encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
-		var embedded *cmap.CIDMap
-		if encName == "" {
-			if stream, serr := document.ResolveStream(ctx, doc, fontDict["Encoding"]); serr == nil {
-				if data, derr := doc.DecodeStream(ctx, stream); derr == nil {
-					embedded = cmap.ParseEmbeddedCIDMap(ctx, data)
-				}
-			}
-		}
-		if _, _, unmappedZero, decodeOK := collectType0CIDs(string(encName), embedded, usage); decodeOK && unmappedZero &&
-			usage.visible && type0HasEmbeddedProgram(ctx, doc, fontDict) {
-			return failf(rule, "font %s on page %d: the encoding CMap maps a rendered code to no glyph in the embedded font program", fontName, pageNum)
-		}
-	}
 	// A decode-level .notdef (odd-length code tail or a CID beyond 65535) means
 	// the rendered code resolves to no glyph. Parts 2-4 fire this via
 	// checkType0NotdefGlyph; PDF/A-1 has no Type0 .notdef rule and reaches only
-	// this path, so honor the decode signal here for parity.
-	if !notdef && len(absent) == 0 {
-		return nil
-	}
+	// this path, so honor the decode signal here for parity. It names no CID.
 	// A non-empty absent set already implies an embedded program (absentType0CIDs
 	// populates it only from decoded program bytes); the decode signal does not,
 	// so recheck. See type0HasEmbeddedProgram for why an unembedded font is out
 	// of scope for §6.3.5 t1.
-	if !type0HasEmbeddedProgram(ctx, doc, fontDict) {
-		return nil
+	if notdef {
+		if !type0HasEmbeddedProgram(ctx, doc, fontDict) {
+			return nil
+		}
+		return failf(rule, "font %s on page %d: rendered code resolves to no glyph in the embedded font program", fontName, pageNum)
 	}
-	return failf(rule, "font %s on page %d: rendered code resolves to no glyph in the embedded font program", fontName, pageNum)
+	// Every absent CID is its own glyph; see [fontJudgements.glyphs].
+	faults := newGlyphFaults(rule)
+	for _, cid := range sortedCIDs(absent) {
+		faults.add(uint32(cid), "font %s on page %d: CID %d resolves to no glyph in the embedded font program", fontName, pageNum, cid)
+	}
+	// A code the encoding CMap maps nowhere reaches no glyph at all. Parts 2 to
+	// 4 report it from checkType0NotdefGlyph beside the .notdef rule; PDF/A-1
+	// has no .notdef rule and reaches only this path, so honor the signal here.
+	encName, _ := document.ResolveName(ctx, doc, fontDict["Encoding"])
+	var embedded *cmap.CIDMap
+	if encName == "" {
+		if stream, serr := document.ResolveStream(ctx, doc, fontDict["Encoding"]); serr == nil {
+			if data, derr := doc.DecodeStream(ctx, stream); derr == nil {
+				embedded = cmap.ParseEmbeddedCIDMap(ctx, data)
+			}
+		}
+	}
+	if _, _, unmappedZero, decodeOK := collectType0CIDs(string(encName), embedded, usage); decodeOK && unmappedZero &&
+		usage.visible && type0HasEmbeddedProgram(ctx, doc, fontDict) {
+		faults.add(0, "font %s on page %d: the encoding CMap maps a rendered code to no glyph in the embedded font program", fontName, pageNum)
+	}
+	return faults.violations()
 }
 
 // collectVisibleFontObjects returns the font object numbers that at least one

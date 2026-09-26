@@ -144,6 +144,11 @@ type Violation struct {
 	// Context describes where the violation occurred (e.g., page number,
 	// object reference, font name).
 	Context string
+
+	// glyph names the glyph a glyph-level font rule failed for, so the font
+	// group can state that rule once per glyph; see [fontJudgements.glyphs].
+	// The group clears it before its violations leave it.
+	glyph glyphRef
 }
 
 // Error implements the error interface.
