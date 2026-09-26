@@ -153,7 +153,8 @@ func deviceFamilyIndex(family string) int {
 // [colorLinkWalk] follows them, that no Default colour space replaces and no
 // output intent covers: an OutputIntent whose profile names the family's
 // colour space, any OutputIntent for DeviceGray, and under PDF/A-4 the page's
-// output intent or its transparency group's device-independent blending space.
+// output intent or, for DeviceRGB and DeviceCMYK, its transparency group's
+// device-independent blending space (see [blendCovers]).
 // ISO 19005-2/3, 6.2.4.3 conditions DeviceRGB and DeviceCMYK on the
 // OutputIntent alone, so a blending space covers nothing there.
 //
@@ -219,7 +220,7 @@ func checkDeviceColorSpaces(ctx context.Context, doc *document.Document, pages [
 
 		for f, family := range deviceFamilies {
 			covered := effectiveHasICC && (family.intent == "" || effectiveICCCS == family.intent)
-			if blendingCS != "" && blendingCS == family.intent {
+			if blendCovers(blendingCS, family.name) {
 				covered = true
 			}
 			if covered {
@@ -260,43 +261,59 @@ func repeatViolation(rule Rule, n int, context string) []Violation {
 	return out
 }
 
-// pageBlendingColorSpace returns the ICC colour space signature of the page's
-// transparency group colour space (/Group /CS), or "" if absent. The returned
-// value is "RGB ", "CMYK", or "GRAY" (ICC 4-byte signature).
+// pageBlendingColorSpace returns the type of the blending colour space of the
+// page's transparency group (see [blendingSpaceType]), or "" when the page has
+// no transparency group or its /CS reads as no colour space.
 func pageBlendingColorSpace(ctx context.Context, doc *document.Document, page ast.PdfDict) string {
-	groupObj, ok := page["Group"]
-	if !ok {
-		return ""
-	}
-	group, err := document.ResolveDict(ctx, doc, groupObj)
+	group, err := document.ResolveDict(ctx, doc, page["Group"])
 	if err != nil || group == nil {
 		return ""
 	}
-	// Must be a transparency group.
-	s, _ := document.ResolveName(ctx, doc, group["S"])
-	if s != "Transparency" {
+	if s, _ := document.ResolveName(ctx, doc, group["S"]); s != "Transparency" { // Best-effort: an unreadable /S is no transparency group.
 		return ""
 	}
-	csObj, ok := group["CS"]
-	if !ok {
-		return ""
-	}
-	// Resolve the colour space. Device-independent blending colour spaces
-	// provide device CS coverage. This includes ICCBased, CalRGB, CalGray,
-	// and Lab. Device{RGB,CMYK,Gray} blending spaces do NOT count.
-	csName := resolveCSName(ctx, doc, csObj)
-	switch csName {
-	case "CalRGB":
-		return "RGB "
-	case "CalGray":
-		return "GRAY"
-	case "Lab":
-		return "GRAY" // Lab is device-independent; treat as covering Gray.
-	case "ICCBased":
-		// Read the ICC profile to determine the actual colour space.
-		arr, err := document.ResolveArray(ctx, doc, csObj)
-		if err != nil || len(arr) < 2 {
+	return blendingSpaceType(ctx, doc, group["CS"])
+}
+
+// blendingSpaceType returns the type veraPDF gives csObj, the /CS of a
+// transparency group, as the current transparency blending space that ISO
+// 19005-4, 6.2.4.3 t2 and t3 test (veraPDF-validation 1.30,
+// GFTransparencyColorSpace.getcolorSpaceType): the colour space the header of
+// its ICC profile names for an ICCBased space, "RGB " or "CMYK" among them,
+// and the family name of any other (ISO 32000-1, 8.6.5). It returns "" when
+// csObj reads as no colour space.
+//
+// veraPDF reads a group's /CS with no resources (PDGroup.getColorSpace), so a
+// name reads as a device family or as no colour space, a name of a
+// /ColorSpace entry among them. Measured with veraPDF 1.30 at PDF/A-4: a page
+// group, or an isolated form group, whose /CS is /CS0, an entry of the page's
+// or the form's resources holding an ICCBased space over an RGB profile,
+// leaves "1 0 0 rg" and f failing DeviceRGB twice, and the same ICCBased space
+// written as the /CS covers both.
+func blendingSpaceType(ctx context.Context, doc *document.Document, csObj ast.PdfObject) string {
+	for range maxColorSpaceNesting {
+		if name, err := document.ResolveName(ctx, doc, csObj); err == nil {
+			if deviceFamily(string(name)) == string(name) {
+				return string(name)
+			}
 			return ""
+		}
+		arr, err := document.ResolveArray(ctx, doc, csObj)
+		if err != nil || len(arr) == 0 {
+			return ""
+		}
+		// A one-element array holds the colour space it names (ISO 32000-1,
+		// 8.6.3), which veraPDF reads as it reads the element.
+		if len(arr) == 1 {
+			csObj = arr[0]
+			continue
+		}
+		kind, err := document.ResolveName(ctx, doc, arr[0])
+		if err != nil {
+			return ""
+		}
+		if kind != "ICCBased" {
+			return string(kind)
 		}
 		stream, err := document.ResolveStream(ctx, doc, arr[1])
 		if err != nil {
@@ -311,9 +328,8 @@ func pageBlendingColorSpace(ctx context.Context, doc *document.Document, page as
 			return ""
 		}
 		return hdr.colorSpace
-	default:
-		return ""
 	}
+	return ""
 }
 
 // collectDefaultColorSpaces returns the Default colour spaces a resources

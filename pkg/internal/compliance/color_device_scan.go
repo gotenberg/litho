@@ -8,56 +8,24 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
-// formGroupICCColorSpace returns the ICC colour space signature of a Form
-// XObject's /Group/CS, or "" if absent or not device-independent.
+// formGroupICCColorSpace returns the type of the blending colour space of a
+// form XObject's isolated transparency group (see [blendingSpaceType]), or ""
+// when the form has no isolated transparency group or its /CS reads as no
+// colour space. A group that is not isolated composites with its backdrop in
+// the space of the stream painting the form (ISO 32000-1, 11.4.5), which
+// covers nothing here.
 func formGroupICCColorSpace(ctx context.Context, doc *document.Document, stream ast.PdfStream) string {
-	groupObj, ok := stream.Dict["Group"]
-	if !ok {
-		return ""
-	}
-	group, err := document.ResolveDict(ctx, doc, groupObj)
+	group, err := document.ResolveDict(ctx, doc, stream.Dict["Group"])
 	if err != nil || group == nil {
 		return ""
 	}
-	s, _ := document.ResolveName(ctx, doc, group["S"])
-	if s != "Transparency" {
+	if s, _ := document.ResolveName(ctx, doc, group["S"]); s != "Transparency" { // Best-effort: an unreadable /S is no transparency group.
 		return ""
 	}
-	// Only isolated transparency groups provide device CS coverage.
-	// Non-isolated groups inherit the parent's colour space.
-	iVal, _ := document.ResolveBool(ctx, doc, group["I"])
-	if !iVal {
+	if isolated, _ := document.ResolveBool(ctx, doc, group["I"]); !isolated { // Best-effort: an unreadable /I is no isolated group.
 		return ""
 	}
-	csObj, ok := group["CS"]
-	if !ok {
-		return ""
-	}
-	// Check for device-independent CS types.
-	csName := resolveCSName(ctx, doc, csObj)
-	switch csName {
-	case "CalRGB":
-		return "RGB "
-	case "CalGray":
-		return "GRAY"
-	case "Lab":
-		return "GRAY"
-	case "ICCBased":
-		arr, err := document.ResolveArray(ctx, doc, csObj)
-		if err != nil || len(arr) < 2 {
-			return ""
-		}
-		iccStream, err := document.ResolveStream(ctx, doc, arr[1])
-		if err != nil {
-			return ""
-		}
-		data, err := doc.DecodeStream(ctx, iccStream)
-		if err != nil || len(data) < 20 {
-			return ""
-		}
-		return string(data[16:20])
-	}
-	return ""
+	return blendingSpaceType(ctx, doc, group["CS"])
 }
 
 // scanContentStreamDeviceCS surveys one page's already-parsed operations and

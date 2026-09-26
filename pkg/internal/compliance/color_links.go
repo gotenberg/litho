@@ -88,10 +88,10 @@ type linkStream struct {
 	fonts       ast.PdfDict
 	extGStates  ast.PdfDict
 	defaults    defaultCS
-	// blendCover is the ICC colour space of an isolated transparency group the
-	// stream is the content of, which covers a device family of that colour
-	// space under PDF/A-4 (see [formGroupICCColorSpace]), and blendRef the
-	// ICCBased profile stream the stream blends in (see
+	// blendCover is the type of the blending space of an isolated
+	// transparency group the stream is the content of, which covers a device
+	// family under PDF/A-4 (see [formGroupICCColorSpace] and [blendCovers]),
+	// and blendRef the ICCBased profile stream the stream blends in (see
 	// [resolveFormBlendingRef]).
 	blendCover string
 	blendRef   ast.PdfIndirectRef
@@ -154,16 +154,23 @@ func (s *linkStream) deviceRef(family string, named bool) csRef {
 	return csRef{family: family, covered: s.blends(family)}
 }
 
-// blendCovers reports whether a blending space whose ICC colour space is icc
-// covers the device family (see [formGroupICCColorSpace]).
-func blendCovers(icc, family string) bool {
+// blendCovers reports whether, under PDF/A-4, a transparency blending space
+// of type space (see [blendingSpaceType]) covers the device family.
+//
+// ISO 19005-4, 6.2.4.3 lets a device-independent RGB or CMYK blending space
+// cover DeviceRGB or DeviceCMYK, and veraPDF tests it as an ICC profile of
+// colour space "RGB " or a CalRGB space for DeviceRGB (t2), and an ICC
+// profile of colour space "CMYK" for DeviceCMYK (t3). Its DeviceGray test,
+// t4, asks for an output intent alone, so no blending space covers DeviceGray.
+// Measured with veraPDF 1.30 at PDF/A-4 on an isolated form group over a gray
+// ICC profile, a CalGray space or a Lab space: "0.5 g" and f in the form fail
+// DeviceGray twice.
+func blendCovers(space, family string) bool {
 	switch family {
 	case "DeviceRGB":
-		return icc == "RGB "
+		return space == "RGB " || space == "CalRGB"
 	case "DeviceCMYK":
-		return icc == "CMYK"
-	case "DeviceGray":
-		return icc == "GRAY"
+		return space == "CMYK"
 	}
 	return false
 }
@@ -1363,38 +1370,68 @@ func (w *colorLinkWalk) walkType3(ctx context.Context, obj ast.PdfObject, st csP
 	}
 }
 
-// judge3D judges the device colour spaces a 3D annotation's stream names in
-// its own /ColorSpace and in its resources' /ColorSpace, once per stream: the
-// 3D artwork renders into the page area, so the page's Default colour spaces
-// replace them (ISO 32000-1, 8.6.5.6), as veraPDF resolves them through the
-// page's resources (veraPDF-validation 1.30, GFPD3DStream.getColorSpace).
+// judge3D judges the colour space of the 3D stream a 3D annotation holds,
+// once for the whole document, as veraPDF builds it (veraPDF-validation 1.30,
+// PDAnnotation.get3DD and GFPD3DStream.getColorSpace).
+//
+// The stream is the /3DD of the annotation, or the /3DD of the 3D reference
+// dictionary /3DD holds, and it counts only when its /Type is /3D (ISO
+// 32000-1, 13.6.2 and 13.6.3). veraPDF reads its /ColorSpace alone,
+// no colour space of its /Resources. A name, alone or in a one-element array,
+// reads as the colour space the name selects in the page's resources, as cs
+// would select it there (see [colorLinkWalk.judgeFamilyName]): a device
+// family the page's Default colour space replaces (ISO 32000-1, 8.6.5.6), a
+// /ColorSpace entry, or nothing for a name neither defines. Any other array
+// is read with no resources: no Default colour space replaces a family it
+// holds and a name it holds reads as no colour space. Measured with veraPDF
+// 1.30 at PDF/A-1b, PDF/A-2b and PDF/A-4:
+//
+//   - /DeviceRGB and [/DeviceRGB] fail DeviceRGB once, [/Indexed /DeviceRGB
+//     ...] too, the page's DefaultRGB notwithstanding, [/Separation /Foo
+//     /DeviceCMYK ...] fails DeviceCMYK once, and an ICCBased space over an
+//     abstract profile fails the profile test once, written directly or as
+//     an indirect object.
+//   - /CS0, a page's /ColorSpace entry holding a Separation over DeviceCMYK,
+//     fails DeviceCMYK once, and a name nothing defines fails nothing;
+//     [/Indexed /CS0 ...] fails DeviceGray once, its base read as no colour
+//     space.
+//   - A /ColorSpace of the stream's /Resources, the /3DD of a /3DV view
+//     dictionary and a stream with no /Type /3D fail nothing, and a 3D
+//     reference dictionary's stream fails as the stream itself does.
 func (w *colorLinkWalk) judge3D(ctx context.Context, annot ast.PdfDict, page *linkStream) {
-	streams := []ast.PdfObject{annot["3DD"]}
-	if view, _ := document.ResolveDict(ctx, w.doc, annot["3DV"]); view != nil { // Best-effort: an unreadable view names nothing.
-		streams = append(streams, view["3DD"])
-	}
-	for _, obj := range streams {
-		if ref, ok := obj.(ast.PdfIndirectRef); ok {
-			if w.judged[ref.ObjectNum] {
-				continue
-			}
-			w.judged[ref.ObjectNum] = true
-		}
-		stream, err := document.ResolveStream(ctx, w.doc, obj)
-		if err != nil {
-			continue
-		}
-		spaces := []ast.PdfObject{stream.Dict["ColorSpace"]}
-		if res, _ := document.ResolveDict(ctx, w.doc, stream.Dict["Resources"]); res != nil { // Best-effort: no /Resources names nothing.
-			csDict, _ := document.ResolveDict(ctx, w.doc, res["ColorSpace"]) // Best-effort: an unreadable dictionary names nothing.
-			for _, name := range sortedNames(csDict) {
-				spaces = append(spaces, csDict[name])
-			}
-		}
-		for _, csObj := range spaces {
-			if family := deviceFamily(resolveCSName(ctx, w.doc, csObj)); family != "" && !w.replaceDevice(ctx, family, page.defaults, page, false, 0, overprintMode{}, nil) {
-				w.visit(colorNode{page: w.page, in: page, family: family, covered: page.blends(family)})
+	obj := annot["3DD"]
+	if resolved, err := document.ResolveObject(ctx, w.doc, obj); err == nil {
+		if ref, isDict := resolved.(ast.PdfDict); isDict {
+			if typ, _ := document.ResolveName(ctx, w.doc, ref["Type"]); typ == "3DRef" { // Best-effort: an unreadable /Type is no 3D reference.
+				obj = ref["3DD"]
 			}
 		}
 	}
+	if ref, ok := obj.(ast.PdfIndirectRef); ok {
+		if w.judged[ref.ObjectNum] {
+			return
+		}
+		w.judged[ref.ObjectNum] = true
+	}
+	stream, err := document.ResolveStream(ctx, w.doc, obj)
+	if err != nil {
+		return
+	}
+	if typ, _ := document.ResolveName(ctx, w.doc, stream.Dict["Type"]); typ != "3D" { // Best-effort: an unreadable /Type is no 3D stream.
+		return
+	}
+	csObj, ok := stream.Dict["ColorSpace"]
+	if !ok {
+		return
+	}
+	if arr, err := document.ResolveArray(ctx, w.doc, csObj); err == nil && len(arr) == 1 {
+		if _, err := document.ResolveName(ctx, w.doc, arr[0]); err == nil {
+			csObj = arr[0]
+		}
+	}
+	if _, err := document.ResolveName(ctx, w.doc, csObj); err == nil {
+		w.judgeSpace(ctx, csObj, page, page.defaults, false, 0)
+		return
+	}
+	w.judgeSpace(ctx, csObj, page, defaultCS{}, false, 0)
 }
