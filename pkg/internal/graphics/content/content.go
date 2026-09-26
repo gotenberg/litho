@@ -94,11 +94,15 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 				}
 				placer.dropOperands()
 				if images == nil {
-					images = newInlineImages(data)
+					images = newStreamImages(data, o)
 				}
 				dict, reads, err := readInlineImage(ctx, p, o, images)
 				if err != nil {
 					return nil, fmt.Errorf("inline image: %w", err)
+				}
+				if images.lost {
+					p.Abandon()
+					return nil, nil
 				}
 				if !reads {
 					break
@@ -128,10 +132,14 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 					return nil, fmt.Errorf("failed to consume operator token: %w", err)
 				}
 				if images == nil {
-					images = newInlineImages(data)
+					images = newStreamImages(data, o)
 				}
 				if err := p.ResumeAt(int64(images.resume(ctx, int(p.Position()), nil))); err != nil {
 					return nil, fmt.Errorf("inline image data: %w", err)
+				}
+				if images.lost {
+					p.Abandon()
+					return nil, nil
 				}
 				recordRange(p.Position())
 				continue
@@ -172,6 +180,17 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 		return nil, nil
 	}
 	return ops, nil
+}
+
+// newStreamImages returns the reader of the inline images of data for a parse
+// under o, which follows the buffer veraPDF reads the stream through when the
+// parse reads the stream as veraPDF does ([veraBuffer]).
+func newStreamImages(data []byte, o readOptions) *inlineImages {
+	r := newInlineImages(data)
+	if o.readsAsVeraPDF() {
+		r.followBuffer()
+	}
+	return r
 }
 
 // readInlineImage reads the inline image whose BI p has just consumed, and

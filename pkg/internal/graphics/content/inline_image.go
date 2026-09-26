@@ -48,14 +48,28 @@ const inlineImageCheckInterval = 64 * 1024
 //     An EI read before the /L bytes is part of the data, and data with no EI
 //     runs to the end of the stream.
 //
-// veraPDF moves back within a buffer of 2048 bytes (ASBufferedInFilter), which
-// this reading does not model: a check that reads far past its EI, or a last
+// veraPDF moves back within the buffer of 2048 bytes it reads the stream
+// through, which a reader that follows it follows too ([veraBuffer],
+// [inlineImages.followBuffer]): a check that reads far past its EI, or a last
 // image read with a check whose data is far longer, or shorter, than the
 // first's, can move it back past what the buffer holds, and veraPDF then
-// reads no operator of the stream at all. Measured as above, two images in a
-// row 3000 bytes apart in length lose every finding of their stream, the
-// colour of a fill before them included, while a comment of 1200 bytes after
-// an EI loses nothing.
+// reads no operator of the stream at all, the colour of a fill before the
+// images included ([inlineImages.lost]). The buffer drops the bytes it holds
+// 513 at a time, so whether a check that reads more than 1024 bytes loses
+// the stream depends on where the check stands in it. Measured as above, a
+// check that reads a comment, a literal or hexadecimal string, an array, a
+// dictionary, a name, a number, a keyword or an operator of 1200 bytes past
+// its EI loses the stream where this reading does, at every offset of a
+// period of the buffer, deep in a stream, near its end, Flate-encoded and in
+// the second of three parts of a page's content, and so do two images in a
+// row up to 3000 bytes apart in length.
+//
+// Two departures from veraPDF remain, on streams no producer writes. A move
+// back that fails inside the check of an image read with another loses the
+// stream here, where the check around it catches the failure and moves back
+// on its own. And litho reads a page's content with a line feed after its
+// last part, which veraPDF does not read, so the buffer can drop its bytes
+// once more at the end of a stream 1023 bytes longer than a multiple of 513.
 //
 // The token after an EI is read once for each EI that white space follows,
 // and two guards keep the reading of a stream linear in its length. A run of
@@ -73,6 +87,8 @@ const inlineImageCheckInterval = 64 * 1024
 //
 //   - All corpora: no content stream holds an inline image veraPDF reads with
 //     the check of the EI before it, over 6915 streams holding BI and ID.
+//   - All corpora: the 227,958 checks of an EI read at most 64 bytes past it,
+//     and following the buffer changes the reading of no stream.
 //   - All corpora: ending the data where veraPDF does changes what compliance
 //     reports on 3 files at PDF/A-1b and PDF/A-2b, veraPDF files at their own
 //     profile, each toward veraPDF's findings.
@@ -97,6 +113,19 @@ type inlineImages struct {
 	// lastLength is the data length the dictionary of the last image read
 	// states, which an ID that no BI begins reads its data with.
 	lastLength dataLength
+	// buffer follows the buffer veraPDF reads the stream through, or is nil
+	// for a reading that does not follow it ([inlineImages.followBuffer]).
+	buffer *veraBuffer
+	// reach is the offset past the last byte the last check read, and
+	// skippedReach the one of the check that skipped the run skipFrom and
+	// skipTo bound.
+	reach, skippedReach int
+	// objectBudget is what is left of the bytes [inlineImages.objectEnd] may
+	// read.
+	objectBudget int
+	// lost reports that a check moved back past what the buffer holds, where
+	// veraPDF reads no operator of the stream at all.
+	lost bool
 }
 
 // dataLength is the length the /L or /Length entry of an inline image
@@ -127,7 +156,14 @@ type nextImage struct {
 
 // newInlineImages returns a reader of the inline images of data.
 func newInlineImages(data []byte) *inlineImages {
-	return &inlineImages{data: data, budget: len(data)}
+	return &inlineImages{data: data, budget: len(data), objectBudget: len(data)}
+}
+
+// followBuffer makes r follow the buffer veraPDF reads the stream through, for
+// a parse that reads the stream as veraPDF does, which gives no operation for
+// a stream r loses ([inlineImages.lost]).
+func (r *inlineImages) followBuffer() {
+	r.buffer = newVeraBuffer(len(r.data))
 }
 
 // resume returns the offset a parse reading the stream as veraPDF does
@@ -140,9 +176,20 @@ func (r *inlineImages) resume(ctx context.Context, idEnd int, dict ast.PdfDict) 
 		length = inlineDataLength(dict)
 	}
 	first := r.dataStart(idEnd)
+	if r.buffer != nil {
+		r.buffer.readTo(first)
+	}
+	// links holds where the data of each image read with the first starts,
+	// and where its EI ends.
+	type link struct{ start, end int }
+	var links []link
 	start, end, last := first, -1, -1
 	for {
 		e, next := r.scan(ctx, start, length)
+		if r.lost {
+			return len(r.data)
+		}
+		links = append(links, link{start: start, end: e})
 		if end < 0 {
 			end = e
 		}
@@ -158,8 +205,22 @@ func (r *inlineImages) resume(ctx context.Context, idEnd int, dict ast.PdfDict) 
 	if last < 0 {
 		return end
 	}
+	// Each check that read the next image moves back once that image is read,
+	// the last first, by the bytes read of the data of the image after it,
+	// less the bytes it had read of its own: to the data of the last image,
+	// offset by the length of its own data.
+	resume := last + end - first
+	if b := r.buffer; b != nil {
+		for i := len(links) - 2; i >= 0; i-- {
+			if !b.holds(last + links[i].end - links[i].start) {
+				r.lost = true
+				return len(r.data)
+			}
+		}
+		b.moveTo(resume)
+	}
 	// Resuming past the end of the stream reads nothing more.
-	return min(last+end-first, len(r.data))
+	return min(resume, len(r.data))
 }
 
 // repairEnd returns the offset a repair's reading of the stream resumes at
@@ -246,6 +307,9 @@ func (r *inlineImages) scan(ctx context.Context, start int, length dataLength) (
 		// An EI ends the data only once the bytes read, "EI" included, reach
 		// the length.
 		if length.n > int64(len(data)-start) {
+			if r.buffer != nil {
+				r.buffer.readTo(len(data))
+			}
 			return len(data), nil
 		}
 		from = max(start, start+int(length.n)-2)
@@ -257,9 +321,25 @@ func (r *inlineImages) scan(ctx context.Context, start int, length dataLength) (
 		if data[j] != 'E' || data[j+1] != 'I' || !isVeraPDFSpace(data[j+2]) {
 			continue
 		}
-		if c := r.check(ctx, j+2); c.ends {
+		c := r.check(ctx, j+2)
+		if b := r.buffer; b != nil {
+			b.readTo(j + 2)
+			b.readTo(r.reach)
+			// A check that read no image moves back to its EI.
+			if c.next == nil {
+				if !b.holds(j + 2) {
+					r.lost = true
+					return len(data), nil
+				}
+				b.moveTo(j + 2)
+			}
+		}
+		if c.ends {
 			return j + 2, c.next
 		}
+	}
+	if r.buffer != nil {
+		r.buffer.readTo(len(data))
 	}
 	return len(data), nil
 }
@@ -273,11 +353,12 @@ func (r *inlineImages) check(ctx context.Context, pos int) eiCheck {
 		q++
 	}
 	if q == len(data) || data[q] != '%' {
-		return r.token(ctx, q)
+		return r.token(ctx, pos, q)
 	}
 	// A comment that starts inside the run the last check skipped ends at
 	// the same end of line, so the rest of that run leads to the same token.
 	if r.skipFrom <= q && q < r.skipTo {
+		r.reach = r.skippedReach
 		return r.skipped
 	}
 	from := q
@@ -293,25 +374,35 @@ func (r *inlineImages) check(ctx context.Context, pos int) eiCheck {
 			q++
 		}
 	}
-	c := r.token(ctx, q)
-	r.skipFrom, r.skipTo, r.skipped = from, q, c
+	c := r.token(ctx, pos, q)
+	r.skipFrom, r.skipTo, r.skipped, r.skippedReach = from, q, c, r.reach
 	return c
 }
 
-// token answers the check of an EI by the token that starts at q, as veraPDF
-// reads it (PDFStreamParser.parseNextToken): an object, the end of the
-// stream, or an operator of Annex A, Table A.1 ends the data, and a keyword
-// outside the table does not.
-func (r *inlineImages) token(ctx context.Context, q int) eiCheck {
+// token answers the check of the EI that ends at pos by the token that starts
+// at q, as veraPDF reads it (PDFStreamParser.parseNextToken): an object, the
+// end of the stream, or an operator of Annex A, Table A.1 ends the data, and
+// a keyword outside the table does not. It sets reach past the last byte the
+// check reads: the first byte of the token, which veraPDF reads and puts
+// back, and the token, with the byte that ends a keyword veraPDF reads and
+// puts back too.
+func (r *inlineImages) token(ctx context.Context, pos, q int) eiCheck {
 	data := r.data
 	if q >= len(data) {
+		r.reach = len(data)
 		return eiCheck{ends: true}
 	}
+	r.reach = q + 1
 	switch c := data[q]; {
 	case c == '(' || c == '<' || c == '[' || c == '/' || c == '.' || c == '+' || c == '-' || c >= '0' && c <= '9':
+		if r.buffer != nil {
+			r.reach = r.objectEnd(pos, q)
+		}
 		return eiCheck{ends: true}
 	case c == 'n' || c == 't' || c == 'f':
-		switch w := r.word(q); w {
+		w := r.word(q)
+		r.reach = min(q+len(w)+1, len(data))
+		switch w {
 		case "null", "true", "false":
 			return eiCheck{ends: true}
 		default:
@@ -319,6 +410,7 @@ func (r *inlineImages) token(ctx context.Context, q int) eiCheck {
 		}
 	case c == 'B':
 		w := r.word(q)
+		r.reach = min(q+len(w)+1, len(data))
 		if w != "BI" {
 			return eiCheck{ends: IsOperator(w)}
 		}
@@ -327,12 +419,16 @@ func (r *inlineImages) token(ctx context.Context, q int) eiCheck {
 	case c == 'I':
 		// veraPDF reads an I as the ID of an inline image, and reads the data
 		// after it as it reads any other.
+		r.reach = min(q+2, len(data))
 		if q+1 < len(data) && data[q+1] == 'D' {
-			return eiCheck{ends: true, next: &nextImage{start: r.dataStart(q + 2), inherits: true}}
+			next := &nextImage{start: r.dataStart(q + 2), inherits: true}
+			r.reach = next.start
+			return eiCheck{ends: true, next: next}
 		}
 		return eiCheck{}
 	}
 	w := r.operator(q)
+	r.reach = max(r.reach, q+len(w))
 	return eiCheck{ends: w == "" || IsOperator(w)}
 }
 
@@ -382,10 +478,13 @@ func (r *inlineImages) header(ctx context.Context, q int) *nextImage {
 	dict, err := p.ParseInlineImageHeader(ctx)
 	read := int(p.Position())
 	r.budget -= max(read, 1)
+	r.reach = max(r.reach, q+read)
 	if err != nil || p.Abandoned() {
 		return nil
 	}
-	return &nextImage{start: r.dataStart(q + read), length: inlineDataLength(dict)}
+	next := &nextImage{start: r.dataStart(q + read), length: inlineDataLength(dict)}
+	r.reach = next.start
+	return next
 }
 
 // inlineDataLength returns the data length an inline image dictionary states,

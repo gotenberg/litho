@@ -48,9 +48,17 @@ func (p *Parser) WithVeraPDFContainers() *Parser {
 }
 
 // Abandoned reports whether p has read, under [Parser.WithVeraPDFContainers],
-// a container veraPDF cannot read.
+// a container veraPDF cannot read, or a caller noted it gives up on the
+// stream ([Parser.Abandon]).
 func (p *Parser) Abandoned() bool {
 	return p.abandoned
+}
+
+// Abandon notes, under [Parser.WithVeraPDFContainers], that veraPDF gives up
+// on the stream p reads for a reason a caller found in bytes the parser does
+// not read itself, such as the data of an inline image.
+func (p *Parser) Abandon() {
+	p.abandon()
 }
 
 // abandon notes, under [Parser.WithVeraPDFContainers], a container veraPDF

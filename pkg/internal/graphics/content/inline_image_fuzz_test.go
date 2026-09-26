@@ -30,6 +30,15 @@ func FuzzInlineImages(f *testing.F) {
 		}
 		ctx := context.Background()
 		for _, idEnd := range []int{0, len(data) / 2, len(data)} {
+			// A reader that follows veraPDF's buffer resumes past the data or
+			// loses the stream, and resumes at its end then.
+			buffered := newInlineImages(data)
+			buffered.followBuffer()
+			for range 2 {
+				if got := buffered.resume(ctx, idEnd, nil); got < idEnd && !buffered.lost || buffered.lost && got != len(data) {
+					t.Fatalf("resume(%d) following the buffer = %d, lost %t", idEnd, got, buffered.lost)
+				}
+			}
 			r := newInlineImages(data)
 			for _, dict := range []ast.PdfDict{nil, {"L": ast.PdfInt(3)}, {"Length": ast.PdfReal(1e18)}} {
 				if got := r.resume(ctx, idEnd, dict); got < idEnd {
