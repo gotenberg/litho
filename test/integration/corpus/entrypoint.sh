@@ -44,6 +44,61 @@ OUTPUT="/output"
 PDFS="$OUTPUT/pdfs"
 mkdir -p "$PDFS"
 
+# The image records the versions it was built with (versions.env, overrides
+# included). Export them so the download scripts read their corpus revision
+# from the same place the version record below is written from.
+VERSIONS=/opt/litho/versions.env
+if [ ! -s "$VERSIONS" ]; then
+  echo "ERROR: $VERSIONS missing: build the image through corpus init" >&2
+  exit 1
+fi
+set -a
+# shellcheck disable=SC1090
+. "$VERSIONS"
+set +a
+
+PINS_JSON=$(jq -Rn '[inputs | capture("^(?<k>[A-Z][A-Z0-9_]*)=(?<v>.*)$")] | map({(.k): .v}) | add // {}' < "$VERSIONS")
+
+# tool_versions reports what the image's tools say about themselves. The
+# record carries it next to the pins so a golden's provenance can be read
+# without the image that made it.
+tool_versions() {
+  jq -n \
+    --arg verapdf "$(verapdf --version 2> /dev/null | head -n 2 | paste -sd ' ' -)" \
+    --arg java "$(java -version 2>&1 | head -n 2 | tail -n 1)" \
+    --arg node "$(node --version)" \
+    --arg pdfjs "$(jq -c . /opt/pdfjs/build/version.json 2> /dev/null || true)" \
+    --arg pdfcpu "$(pdfcpu version 2> /dev/null | grep -m 1 '^pdfcpu:' || true)" \
+    '{verapdf: $verapdf, java: $java, node: $node, pdfjs: $pdfjs, pdfcpu: $pdfcpu}'
+}
+TOOLS_JSON=$(tool_versions)
+
+# record_stage <relative_dir> [extra_json] writes the versions a stage ran
+# with into $OUTPUT/versions.json, keyed by the directory the stage filled
+# (pdfs, goldens/text, ...). The corpus CLI refuses to score a golden whose
+# record disagrees with versions.env. Only a stage that ran is recorded: one
+# skipped because its output already exists keeps its old record.
+record_stage() {
+  local rel="$1" extra="${2:-}" rec="$OUTPUT/versions.json" tmp
+  [ -n "$extra" ] || extra='{}'
+  tmp=$(mktemp)
+  if [ -s "$rec" ]; then
+    cat "$rec" > "$tmp"
+  else
+    echo '{"format": 1, "stages": {}}' > "$tmp"
+  fi
+  # Plain shell redirect sidesteps the fallocate probe of cp/mv, which
+  # breaks on macOS Docker Desktop's virtiofs bind mount.
+  jq --arg rel "$rel" \
+    --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --argjson pins "$PINS_JSON" \
+    --argjson tools "$TOOLS_JSON" \
+    --argjson extra "$extra" \
+    '.stages[$rel] = ({recorded_at: $at, pins: $pins, tools: $tools} + $extra)' \
+    "$tmp" > "$rec"
+  rm -f "$tmp"
+}
+
 # nonempty <dir> reports whether the directory exists and contains at
 # least one entry. Used to short-circuit each provisioning stage so
 # rerunning the container after a partial failure (or just bumping the
@@ -60,6 +115,9 @@ else
   "$DOWNLOAD" "$PDFS"
   PDF_COUNT=$(find "$PDFS" -maxdepth 1 -name '*.pdf' | wc -l)
   echo "==> ${CORPUS}: ${PDF_COUNT} PDFs ready."
+  if [ "$PDF_COUNT" -gt 0 ]; then
+    record_stage pdfs
+  fi
 fi
 if [ "$PDF_COUNT" -eq 0 ]; then
   echo "ERROR: no PDFs extracted for ${CORPUS}." >&2
@@ -94,6 +152,8 @@ if wants text || wants metadata; then
       --pdfs-dir "$PDFS" \
       --text-out "$TEXT" \
       --meta-out "$META"
+    record_stage goldens/text
+    record_stage goldens/metadata
   fi
 else
   echo "==> skipping text + metadata goldens (not requested by ${CORPUS})."
@@ -110,6 +170,7 @@ if wants imagedecode; then
       --pdfjs-dir /opt/pdfjs \
       --pdfs-dir "$PDFS" \
       --out "$IMAGES"
+    record_stage goldens/images
   fi
 else
   echo "==> skipping image goldens (not requested by ${CORPUS})."
@@ -123,6 +184,7 @@ if wants bookmarks; then
     mkdir -p "$BOOKS"
     echo "==> generating bookmarks goldens (pdfcpu)..."
     /work/lib/gen-bookmarks.sh "$PDFS" "$BOOKS"
+    record_stage goldens/bookmarks
   fi
 else
   echo "==> skipping bookmarks goldens (not requested by ${CORPUS})."
@@ -136,6 +198,7 @@ if wants merge; then
     mkdir -p "$MERGES"
     echo "==> generating merge goldens (pdfcpu merge + bookmarks export)..."
     /work/lib/gen-merges.sh "$PDFS" "$MERGES"
+    record_stage goldens/merges
   fi
 else
   echo "==> skipping merge goldens (not requested by ${CORPUS})."
@@ -149,6 +212,7 @@ if wants merge-empty; then
     mkdir -p "$ME"
     echo "==> generating merge-empty goldens (pdfcpu merge + bookmarks export)..."
     /work/lib/gen-merge-empty.sh "$PDFS" "$ME"
+    record_stage goldens/merge-empty
   fi
 else
   echo "==> skipping merge-empty goldens (not requested by ${CORPUS})."
@@ -162,6 +226,7 @@ if wants facturx-validity; then
     mkdir -p "$FX"
     echo "==> running Mustang per fixture..."
     /work/lib/run-mustang.sh "$PDFS" "$FX/jobs.json"
+    record_stage goldens/facturx-validity
   fi
 else
   echo "==> skipping Mustang goldens (not requested by ${CORPUS})."
@@ -175,6 +240,7 @@ if wants facturx-schematron; then
     mkdir -p "$KO"
     echo "==> running KoSIT per fixture..."
     /work/lib/run-kosit.sh "$PDFS" "$KO/jobs.json"
+    record_stage goldens/facturx-schematron
   fi
 else
   echo "==> skipping KoSIT goldens (not requested by ${CORPUS})."
@@ -193,6 +259,14 @@ if wants compliance || wants remediation || wants remediation-aggressive; then
       echo "==> running VeraPDF per profile (cartesian)..."
       /work/lib/run-verapdf.sh "$PDFS" "$COMP" "$PROFILES"
     fi
+    # Record the build the reports themselves name: it is what the corpus
+    # CLI reads back from a golden that predates the version record.
+    BUILD='{}'
+    REPORT=$(find "$COMP" -maxdepth 1 -name '*.json' | sort | head -n 1)
+    if [ -n "$REPORT" ]; then
+      BUILD=$(jq -c '{verapdf_build: .report.buildInformation.releaseDetails}' "$REPORT")
+    fi
+    record_stage goldens/compliance "$BUILD"
   fi
 else
   echo "==> skipping VeraPDF goldens (not requested by ${CORPUS})."

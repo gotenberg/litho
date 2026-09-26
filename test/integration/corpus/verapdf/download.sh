@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# verapdf/download.sh: clone the VeraPDF corpus and flatten its
+# verapdf/download.sh: fetch the VeraPDF corpus at the pinned revision
+# (VERAPDF_CORPUS_REVISION, from versions.env) and flatten its
 # profile-based tree into a single pdfs/ directory. Each PDF gets a
 # prefix from its source profile directory so basenames stay unique.
 #
@@ -8,7 +9,8 @@ set -euo pipefail
 
 OUT="$1"
 
-git clone --depth 1 https://github.com/veraPDF/veraPDF-corpus.git /tmp/verapdf-corpus
+/usr/local/bin/fetch-revision https://github.com/veraPDF/veraPDF-corpus.git \
+  "${VERAPDF_CORPUS_REVISION:?}" /tmp/verapdf-corpus
 
 for dir in /tmp/verapdf-corpus/PDF_A-* /tmp/verapdf-corpus/PDF_UA-*; do
   [ -d "$dir" ] || continue

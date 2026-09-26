@@ -4,8 +4,9 @@
 #
 # Usage: govdocs/download.sh <output_pdfs_dir>
 #
-# The thread list is hard-coded to keep provisioning reproducible across
-# machines. Bump it deliberately when more coverage is needed.
+# The thread list is pinned (GOVDOCS_THREADS, comma-separated, from
+# versions.env) to keep provisioning reproducible across machines. Bump
+# it deliberately when more coverage is needed.
 set -euo pipefail
 
 OUT="$1"
@@ -13,7 +14,7 @@ mkdir -p "$OUT"
 
 # Fixed thread IDs. Each thread holds ~1000 mixed-format files; roughly
 # 20-40% are PDFs. Five threads yields ~1000-2000 PDF fixtures.
-THREADS=(000 100 200 300 400)
+IFS=',' read -ra THREADS <<< "${GOVDOCS_THREADS:?}"
 
 BASE="https://digitalcorpora.s3.amazonaws.com/corpora/files/govdocs1/zipfiles"
 

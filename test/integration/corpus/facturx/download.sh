@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# facturx/download.sh: shallow-clone permissively-licensed Factur-X /
-# ZUGFeRD test repositories and flatten the relevant PDFs into a
-# single pdfs/ directory.
+# facturx/download.sh: fetch the permissively-licensed Factur-X /
+# ZUGFeRD test repository at the pinned revision
+# (FACTURX_CORPUS_REVISION, from versions.env) and flatten the relevant
+# PDFs into a single pdfs/ directory.
 #
 # Source:
 #
@@ -25,10 +26,10 @@ OUT="$1"
 mkdir -p "$OUT"
 
 SRC=/tmp/facturx-zugferd-corpus
-rm -rf "$SRC"
 
-if ! git clone --depth 1 https://github.com/ZUGFeRD/corpus.git "$SRC" 2> /dev/null; then
-  echo "  WARN: clone of ZUGFeRD/corpus failed"
+if ! /usr/local/bin/fetch-revision https://github.com/ZUGFeRD/corpus.git \
+  "${FACTURX_CORPUS_REVISION:?}" "$SRC"; then
+  echo "  WARN: fetch of ZUGFeRD/corpus at ${FACTURX_CORPUS_REVISION} failed"
   exit 1
 fi
 

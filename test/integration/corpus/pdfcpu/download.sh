@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# pdfcpu/download.sh: shallow-clone the pdfcpu repository and flatten
-# its sample/testdata PDFs into a single pdfs/ directory.
+# pdfcpu/download.sh: fetch the pdfcpu repository at the pinned revision
+# (PDFCPU_CORPUS_REVISION, from versions.env) and flatten its
+# sample/testdata PDFs into a single pdfs/ directory.
 #
 # The pdfcpu project (Apache-2.0) ships two parallel asset trees:
 #
@@ -22,8 +23,8 @@ OUT="$1"
 mkdir -p "$OUT"
 
 SRC=/tmp/pdfcpu-src
-rm -rf "$SRC"
-git clone --depth 1 https://github.com/pdfcpu/pdfcpu.git "$SRC"
+/usr/local/bin/fetch-revision https://github.com/pdfcpu/pdfcpu.git \
+  "${PDFCPU_CORPUS_REVISION:?}" "$SRC"
 
 # Iterate two source roots. Prefix each filename with the relative
 # directory so basenames stay unique when flattened (e.g. samples/

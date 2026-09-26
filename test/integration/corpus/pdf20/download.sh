@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# pdf20/download.sh: clone the PDF Association's pdf20examples
-# repository and flatten its tree into a single pdfs/ directory. The
+# pdf20/download.sh: fetch the PDF Association's pdf20examples
+# repository at the pinned revision (PDF20_REVISION, from versions.env)
+# and flatten its tree into a single pdfs/ directory. The
 # upstream project ships seven PDFs under CC BY-SA 4.0 (its LICENSE.md)
 # that exercise PDF 2.0 (ISO 32000-2) features (UTF-8 strings,
 # page-level output intents, incremental saves, an offset start,
@@ -14,7 +15,8 @@ set -euo pipefail
 OUT="$1"
 mkdir -p "$OUT"
 
-git clone --depth 1 https://github.com/pdf-association/pdf20examples.git /tmp/pdf20-examples
+/usr/local/bin/fetch-revision https://github.com/pdf-association/pdf20examples.git \
+  "${PDF20_REVISION:?}" /tmp/pdf20-examples
 
 # Flatten: prefix each PDF with the relative directory it came from
 # so basenames stay unique when subdirs share filenames. Plain shell

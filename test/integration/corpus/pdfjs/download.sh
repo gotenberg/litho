@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # pdfjs/download.sh: fetch the PDF.js test corpus into a flat pdfs/
-# directory. Re-uses the pdf.js clone baked into /opt/pdfjs so only the
-# external-URL downloads (.link sidecars) run at provisioning time.
+# directory. Re-uses the pdf.js checkout baked into /opt/pdfjs (pinned by
+# PDFJS_REVISION in versions.env) so only the external-URL downloads
+# (.link sidecars, MD5-checked against the test manifest) run at
+# provisioning time.
 #
 # Usage: pdfjs/download.sh <output_pdfs_dir>
 set -euo pipefail
