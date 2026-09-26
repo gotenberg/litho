@@ -35,7 +35,10 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		}
 
 		res := vctx.pages[i].resources
-		if res == nil {
+		// A content stream an earlier page shares is judged there alone, and
+		// what it draws is resolved through that page's resources; see
+		// [markJudgedContents].
+		if res == nil || vctx.pages[i].contentJudged {
 			continue
 		}
 
@@ -46,11 +49,8 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		scanXObjectResources(ctx, doc, res, i+1, part, profile, &results, visited, 0, referencedXObjects)
 		scanPatternImages(ctx, doc, res, used, i+1, part, profile, &results, visited)
 
-		// Check inline images for Interpolate = true. A content stream an
-		// earlier page shares is judged there alone; see [markJudgedContents].
-		if !vctx.pages[i].contentJudged {
-			results = append(results, checkInlineImageInterpolate(vctx.pages[i].parsedOps(ctx), i+1, part)...)
-		}
+		// Check inline images for Interpolate = true.
+		results = append(results, checkInlineImageInterpolate(vctx.pages[i].parsedOps(ctx), i+1, part)...)
 	}
 
 	doc.Logger.Debug("compliance.xobjects: checks complete", "violations", len(results))
@@ -158,14 +158,33 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 }
 
 // scanXObjectResources iterates XObject resources, validates each, and recurses
-// into Form XObject sub-resources. At depth 0 (page level), only XObjects
-// referenced by Do operators are checked. Unreferenced XObjects are skipped.
+// into the Form XObjects among them. Only the XObjects a Do operator of the
+// stream whose resources res are draws are checked, those referencedNames
+// holds; referencedNames nil checks them all. Each object is judged once for
+// the document, which visited records.
+//
+// veraPDF reaches an XObject through the Do operator that draws it
+// (GFOp_Do), so an entry of a form's /Resources the form's content never
+// draws is judged nowhere, as one of a page's is not, and neither is one of a
+// form whose content does not decode or parse. Measured with veraPDF 1.30 at
+// PDF/A-1b and PDF/A-2b on an image whose /Intent is /Bogus: listed by a form
+// the page draws, or by a form such a form draws, and drawn by neither, it
+// fails neither ISO 19005-1, 6.2.9 t1 nor ISO 19005-2, 6.2.6 t1; drawn twice
+// on a page, under two names, on two pages, or by a form two pages draw, it
+// fails each once.
 //
 // # Corpus evidence
 //
 //   - govdocs thread_400_400019.pdf: veraPDF reports a soft mask's
 //     /Interpolate 15 times against 57 plain XObjects (72 findings from
 //     veraPDF, 57 from litho).
+//   - govdocs thread_100_100173.pdf: draws 41 images whose /Intent is invalid,
+//     one per object, and veraPDF and litho state ISO 19005-1, 6.2.9 t1 and
+//     ISO 19005-2, 6.2.6 t1 41 times each.
+//   - All corpora, at PDF/A-1b, PDF/A-2b and PDF/A-2u, and at their own
+//     profile for the verapdf files: judging only the XObjects a form draws,
+//     and none through a page whose content an earlier page judged, moves no
+//     count; litho imagereach_2b.pdf plants both.
 func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, part int, profile string, results *[]Violation, visited map[string]bool, depth int, referencedNames map[string]bool) {
 	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return
@@ -178,8 +197,8 @@ func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.P
 
 	for _, name := range sortedNames(xobjectDict) {
 		obj := xobjectDict[name]
-		// At page level, only check XObjects actually invoked by Do operators.
-		if depth == 0 && referencedNames != nil && !referencedNames[string(name)] {
+		// Only check XObjects actually invoked by Do operators.
+		if referencedNames != nil && !referencedNames[string(name)] {
 			continue
 		}
 		if ctx.Err() != nil {
@@ -242,14 +261,39 @@ func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.P
 			}
 		}
 
-		// Recurse into Form XObject sub-resources.
+		// Recurse into the XObjects a Form XObject draws.
 		if subtype == "Form" {
 			subRes, _ := document.ResolveDict(ctx, doc, xobjDict["Resources"])
 			if subRes != nil {
-				scanXObjectResources(ctx, doc, subRes, pageNum, part, profile, results, visited, depth+1, nil)
+				scanXObjectResources(ctx, doc, subRes, pageNum, part, profile, results, visited, depth+1, formDrawnXObjects(ctx, doc, stream, pageNum))
 			}
 		}
 	}
+}
+
+// formDrawnXObjects returns the names the Do operators of the Form XObject
+// stream draw, none when its content does not decode or parse.
+func formDrawnXObjects(ctx context.Context, doc *document.Document, stream ast.PdfStream, pageNum int) map[string]bool {
+	drawn := make(map[string]bool)
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("compliance.xobjects: cannot decode Form XObject", "page", pageNum, "error", err)
+		return drawn
+	}
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		doc.Logger.Debug("compliance.xobjects: cannot parse Form XObject", "page", pageNum, "error", err)
+		return drawn
+	}
+	for _, op := range ops {
+		if op.Operator != "Do" || len(op.Operands) == 0 {
+			continue
+		}
+		if name, ok := op.Operands[0].(ast.PdfName); ok {
+			drawn[string(name)] = true
+		}
+	}
+	return drawn
 }
 
 // checkXObject validates a single XObject against the constraints for the given
