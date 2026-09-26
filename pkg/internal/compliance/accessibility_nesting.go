@@ -274,10 +274,25 @@ func numberTreeLookupObj(ctx context.Context, doc *document.Document, node ast.P
 // of its ancestors is an Artifact, is out of scope. An OBJR that references the
 // annotation does not bring it into scope.
 //
+// veraPDF 1.30.2 states that gate on §8.9.2.3 t1 and §8.2.5.20 t1 as well
+// (PDFUA-2-ISO32005.xml: "|| structParentType == null || isArtifact ==
+// true"). The PDF/UA-2 profile of veraPDF 1.30.1 tested the enclosing type
+// alone and reported every markup or Link annotation outside the structure
+// tree, while its WTPDF profiles already carried the gate. litho follows the
+// clause and the current profile, so the 1.30.1 goldens diverge on every such
+// annotation.
+//
 // It also judges §8.2.5.20 t2 (Link annotations that target different
 // locations shall be in separate structure elements), which the validation
 // profile tests on every Link annotation without those gates
 // ([linkTargetConflict]).
+//
+// # Corpus evidence
+//
+//   - verapdf: the 1.30.1 goldens report §8.9.2.3 t1 on 103 files and
+//     §8.2.5.20 t1 on 4 at PDF/UA-2, each an annotation no structure element
+//     encloses (none of the 107 files has a structure tree). veraPDF 1.30.2
+//     reports neither rule on any of them, and the goldens stay at 1.30.1.
 func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if PDFUAPart(profile) != 2 {
 		return nil

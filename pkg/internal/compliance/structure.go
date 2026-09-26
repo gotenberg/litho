@@ -575,6 +575,19 @@ func resolveToStandard(src ast.PdfName, mapping map[ast.PdfName]ast.PdfName, res
 // walkStructureTree recursively walks the structure tree to validate element
 // containment, heading hierarchy, table structure, list structure, captions,
 // and TH scope attributes.
+//
+// A document using both H and H1-H6 fails ISO 14289-1, 7.4.4 t2 and t3
+// together. veraPDF 1.30.2 marks both tests deferred (PDFUA-1.xml, deferred=
+// "true" on the SEH and SEHn rules), so it judges usesH and usesHn over the
+// whole tree and reports both. veraPDF 1.30.1 judged each element as it
+// reached it, so only the kind reached second failed, and its goldens report
+// one test where the clause states two.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.4.4-t02-fail-a, -t02-fail-b, -t03-fail-a and
+//     -t03-fail-b: the 1.30.1 goldens report only the test the file is named
+//     for, and veraPDF 1.30.2 reports t2 and t3 on all four, as litho does.
 func walkStructureTree(ctx context.Context, doc *document.Document, structTreeRoot ast.PdfDict, profile string, results *[]Violation) {
 	kidsObj, ok := structTreeRoot["K"]
 	if !ok {
