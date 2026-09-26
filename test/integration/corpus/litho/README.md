@@ -133,6 +133,7 @@ one deliberately rather than diffing it against a fresh build.
 | `fontclaims_2b.pdf`    | PDF/A-2b     | Name-keyed CFF gaps, pattern and Type 3 program reads, `.notdef` |
 | `imagereach_2b.pdf`    | PDF/A-2b     | Images a form lists or a shared content stream never draws       |
 | `repairleft_4.pdf`     | PDF/A-4      | Inherited colour spaces, emptied `'` and `"`, a covered group    |
+| `defaultcs_4.pdf`      | PDF/A-4      | Default colour spaces judged in place of the family they replace |
 
 ### Must-not-fire controls
 
@@ -310,6 +311,9 @@ violation but is exempt, so a firing is a false positive.
 | `colouroff_2b`                            | `PUnc`, an uncoloured cell selecting a space only the page defines     | ISO 32000-1, 8.7.3.3         |
 | `blendcs_4`                               | `FmRGB` and `FmCalRGB`, isolated groups covering their DeviceRGB       | ISO 19005-4, 6.2.4.3 t2      |
 | `threedcs_4`                              | `A7` to `A9`: a stream's resources, a view's stream, an untyped stream | ISO 32000-2, 13.6.3          |
+| `defaultcs_4`                             | Page 16: a DefaultRGB over a monitor GRAY profile, no component count  | ISO 32000-1, 8.6.5.6         |
+| `defaultcs_4`                             | Page 23: a glyph past `d1` selecting `rg` under a DefaultRGB of `5`    | ISO 32000-1, 9.6.5           |
+| `defaultcs_4`                             | Page 24: a form's DefaultGray of `5` under the page's inherited fill   | ISO 19005-4, 6.2.2 t3        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -342,6 +346,7 @@ which are covered under [Known divergences](#known-divergences).
 | `complex_ua1.pdf`      | 7    | 6    | 7    | 6    | 6    | 7    | 6    | 6    | 5   | 5    | 6    | 11   | 10   |
 | `complex_ua2.pdf`      | 11   | 8    | 16   | 12   | 12   | 16   | 12   | 12   | 8   | 8    | 9    | 18\* | 18\* |
 | `contentstream_4.pdf`  | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 6   | 6    | 7    | 8    | 7    |
+| `defaultcs_4.pdf`      | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 10   | 7    |
 | `docinfo_1b.pdf`       | 11   | 8    | 4    | 1    | 2    | 4    | 1    | 2    | 6   | 6    | 7    | 5    | 5    |
 | `docmdp_2b.pdf`        | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 10   | 8    |
 | `docsync_1b.pdf`       | 11   | 9    | 6    | 4    | 4    | 6    | 4    | 4    | 6   | 6    | 7    | 9    | 8    |
