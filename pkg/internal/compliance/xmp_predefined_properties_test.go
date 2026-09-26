@@ -73,7 +73,8 @@ func TestXMPPredefinedProperties_Part4NeverFlags(t *testing.T) {
 // extension schemas that extend predefined namespaces: PDF/A lets a
 // packet declare its own properties through pdfaExtension:schemas, so
 // once the schema describes exif:MakerNote it counts as declared and
-// the predefined-catalog audit must not flag it.
+// the predefined-catalog audit must not flag it. The declarations are the
+// ones [xmpPooledDeclaredProperties] reads off a one-packet document.
 func TestXMPPredefinedProperties_ExtensionSchemaExtendsPredefined(t *testing.T) {
 	data := xmpPacket(`<rdf:Description rdf:about=""
       xmlns:exif="http://ns.adobe.com/exif/1.0/"
@@ -94,8 +95,15 @@ func TestXMPPredefinedProperties_ExtensionSchemaExtendsPredefined(t *testing.T) 
       </rdf:li></rdf:Bag></pdfaExtension:schemas>
     </rdf:Description>`)
 
+	pooled := make(map[string]map[string]bool)
+	for ns, entry := range xmpExtEntries(2, XMPProperties(data), nil) {
+		pooled[ns] = make(map[string]bool)
+		for name := range entry.props {
+			pooled[ns][name] = true
+		}
+	}
 	var got []Violation
-	xmpCheckPredefinedProperties(context.Background(), data, 2, nil, nil, &got)
+	xmpCheckPredefinedProperties(context.Background(), data, 2, nil, pooled, &got)
 	if hasRule(got, Rule_19005_2_6_6_2_3_1_t01) {
 		t.Errorf("extension-declared exif:MakerNote must not be flagged, got %v", got)
 	}

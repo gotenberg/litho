@@ -90,7 +90,7 @@ func TestExtensionSchema_DeclarationIsPerName(t *testing.T) {
 
 // TestXMPPooledDeclaredProperties_ReplacementWithinAPacket pins that a later
 // schema entry replaces an earlier one carrying the same namespace URI, the
-// rule [xmpCheckExtensionPropertyResolution] already records for the type map.
+// rule [xmpExtEntries] applies to every entry.
 //
 // # Corpus evidence
 //

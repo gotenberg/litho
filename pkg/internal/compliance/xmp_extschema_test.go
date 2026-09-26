@@ -120,17 +120,17 @@ func zugferdExtSchemaXMP(props []string) []byte {
 func TestXMPExtSchemaMultiPropertySeq(t *testing.T) {
 	props := []string{"DocumentFileName", "DocumentType", "Version", "ConformanceLevel"}
 
-	schemas := xmpParseExtensionSchemas(zugferdExtSchemaXMP(props))
-	if len(schemas) != 1 {
-		t.Fatalf("schema entries: got %d, want 1", len(schemas))
+	entries := xmpExtEntries(3, XMPProperties(zugferdExtSchemaXMP(props)), nil)
+	entry := entries["urn:ferd:pdfa:CrossIndustryDocument:invoice:1p0#"]
+	if len(entries) != 1 || entry == nil {
+		t.Fatalf("schema entries: got %v, want the ZUGFeRD one alone", entries)
 	}
-	if len(schemas[0].propTypes) != len(props) {
-		t.Errorf("declared properties: got %d %v, want %d",
-			len(schemas[0].propTypes), schemas[0].propTypes, len(props))
+	if len(entry.props) != len(props) {
+		t.Errorf("declared properties: got %d %v, want %d", len(entry.props), entry.props, len(props))
 	}
 	for _, p := range props {
-		if schemas[0].propTypes[p] != "Text" {
-			t.Errorf("property %s: got type %q, want %q", p, schemas[0].propTypes[p], "Text")
+		if entry.props[p] != "Text" {
+			t.Errorf("property %s: got type %q, want %q", p, entry.props[p], "Text")
 		}
 	}
 
@@ -142,7 +142,7 @@ func TestXMPExtSchemaMultiPropertySeq(t *testing.T) {
 		rotated := append(append([]string{}, props[shift:]...), props[:shift]...)
 		for _, part := range []int{2, 3} {
 			var got []Violation
-			xmpCheckExtensionPropertyResolution(zugferdExtSchemaXMP(rotated), part, &got)
+			xmpCheckUndeclaredExtensionProperties(zugferdExtSchemaXMP(rotated), part, nil, nil, &got)
 			if len(got) != 0 {
 				t.Errorf("part %d, order %v: got %d violations %v, want none",
 					part, rotated, len(got), got)
@@ -201,16 +201,14 @@ func TestXMPExtSchemaAttributeForm(t *testing.T) {
 	props := []string{"DocumentFileName", "DocumentType", "Version", "ConformanceLevel"}
 	data := itextExtSchemaXMP(props)
 
-	schemas := xmpParseExtensionSchemas(data)
-	if len(schemas) != 1 {
-		t.Fatalf("schema entries: got %d, want 1", len(schemas))
-	}
-	if schemas[0].nsURI != itextExtNS {
-		t.Errorf("namespace URI: got %q, want %q", schemas[0].nsURI, itextExtNS)
+	entries := xmpExtEntries(3, XMPProperties(data), nil)
+	entry := entries[itextExtNS]
+	if len(entries) != 1 || entry == nil {
+		t.Fatalf("schema entries: got %v, want %s alone", entries, itextExtNS)
 	}
 	for _, p := range props {
-		if schemas[0].propTypes[p] != "Text" {
-			t.Errorf("property %s: got type %q, want %q", p, schemas[0].propTypes[p], "Text")
+		if entry.props[p] != "Text" {
+			t.Errorf("property %s: got type %q, want %q", p, entry.props[p], "Text")
 		}
 	}
 
@@ -230,7 +228,7 @@ func TestXMPExtSchemaAttributeForm(t *testing.T) {
 
 	for _, part := range []int{2, 3} {
 		var got []Violation
-		xmpCheckExtensionPropertyResolution(data, part, &got)
+		xmpCheckUndeclaredExtensionProperties(data, part, nil, nil, &got)
 		if len(got) != 0 {
 			t.Errorf("part %d resolution: got %d violations %v, want none",
 				part, len(got), got)
@@ -261,30 +259,36 @@ func TestXMPExtSchemaMultiValueTypeSeq(t *testing.T) {
 		`<rdf:Description rdf:about=""` +
 		` xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"` +
 		` xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#"` +
+		` xmlns:pdfaProperty="http://www.aiim.org/pdfa/ns/property#"` +
 		` xmlns:pdfaType="http://www.aiim.org/pdfa/ns/type#"` +
 		` xmlns:pdfaField="http://www.aiim.org/pdfa/ns/field#">` +
 		`<pdfaExtension:schemas><rdf:Bag><rdf:li rdf:parseType="Resource">` +
 		`<pdfaSchema:schema>X</pdfaSchema:schema>` +
 		`<pdfaSchema:namespaceURI>http://example.com/x</pdfaSchema:namespaceURI>` +
 		`<pdfaSchema:prefix>x</pdfaSchema:prefix>` +
+		`<pdfaSchema:property><rdf:Seq><rdf:li rdf:parseType="Resource">` +
+		`<pdfaProperty:name>a</pdfaProperty:name><pdfaProperty:valueType>TypeA</pdfaProperty:valueType>` +
+		`</rdf:li><rdf:li rdf:parseType="Resource">` +
+		`<pdfaProperty:name>b</pdfaProperty:name><pdfaProperty:valueType>TypeB</pdfaProperty:valueType>` +
+		`</rdf:li></rdf:Seq></pdfaSchema:property>` +
 		`<pdfaSchema:valueType><rdf:Seq>` +
 		valueType("TypeA") + valueType("TypeB") +
 		`</rdf:Seq></pdfaSchema:valueType>` +
 		`</rdf:li></rdf:Bag></pdfaExtension:schemas>` +
 		`</rdf:Description></rdf:RDF></x:xmpmeta>`)
 
-	schemas := xmpParseExtensionSchemas(data)
-	if len(schemas) != 1 {
-		t.Fatalf("schema entries: got %d, want 1", len(schemas))
+	entry := xmpExtEntries(2, XMPProperties(data), nil)["http://example.com/x"]
+	if entry == nil {
+		t.Fatal("the schema entry was not read")
 	}
-	for _, name := range []string{"TypeA", "TypeB"} {
-		hasFields, ok := schemas[0].typeFields[name]
-		if !ok {
-			t.Errorf("custom type %s: not recorded, got %v", name, schemas[0].typeFields)
-			continue
+	for _, name := range []string{"typea", "typeb"} {
+		if _, ok := entry.types[name]; !ok {
+			t.Errorf("custom type %s: not recorded as a structure, got %v", name, entry.types)
 		}
-		if !hasFields {
-			t.Errorf("custom type %s: got hasFields=false, want true", name)
+	}
+	for _, prop := range []string{"a", "b"} {
+		if entry.props[prop] == "" {
+			t.Errorf("property %s: not declared, got %v", prop, entry.props)
 		}
 	}
 }

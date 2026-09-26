@@ -49,11 +49,11 @@ func TestXMPPredefinedProperties_SchemasTheEditionsDisagreeOn(t *testing.T) {
 					tc.prefix, tc.property, part1)
 			}
 
-			// An extension schema declaring the namespace restores the pass,
+			// An extension schema declaring the property restores the pass,
 			// which is the isDefinedInCurrentPackage half of the same test.
 			var declared []Violation
 			xmpCheckPredefinedProperties(context.Background(), data, 1,
-				map[string]bool{tc.ns: true}, nil, &declared)
+				map[string]bool{tc.ns: true}, map[string]map[string]bool{tc.ns: {tc.property: true}}, &declared)
 			if len(declared) != 0 {
 				t.Errorf("%s:%s declared by an extension schema must pass, got %v",
 					tc.prefix, tc.property, declared)

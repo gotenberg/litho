@@ -53,7 +53,9 @@ func extSchemaFieldlessType(usage string) []byte {
 //     the property is never used, compliant.
 func TestXMPExtensionPropertyTypes_FieldlessTypeUnused(t *testing.T) {
 	var got []Violation
-	xmpCheckExtensionPropertyTypes(extSchemaFieldlessType(""), 2, &got)
+	packet := extSchemaFieldlessType("")
+	xmpCheckUndeclaredExtensionProperties(packet, 2, nil, nil, &got)
+	xmpCheckExtensionValueTypes(packet, 2, nil, &got)
 	if hasRule(got, Rule_19005_2_6_6_2_3_1_t02) {
 		t.Errorf("unused fieldless value type must not fail §6.6.2.3.1 t2: %v", got)
 	}
@@ -78,8 +80,8 @@ func TestXMPExtensionPropertyTypes_FieldlessTypeUsed(t *testing.T) {
     </rdf:Description>`
 	var got []Violation
 	packet := extSchemaFieldlessType(usage)
-	reported := xmpCheckExtensionPropertyTypes(packet, 2, &got)
-	xmpCheckExtensionValueTypes(packet, 2, nil, reported, &got)
+	xmpCheckUndeclaredExtensionProperties(packet, 2, nil, nil, &got)
+	xmpCheckExtensionValueTypes(packet, 2, nil, &got)
 	if n := countRule(got, Rule_19005_2_6_6_2_3_1_t02); n != 1 {
 		t.Errorf("used fieldless value type must fail §6.6.2.3.1 t2 once, got %d: %v", n, got)
 	}

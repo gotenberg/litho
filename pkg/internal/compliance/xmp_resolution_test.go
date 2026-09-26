@@ -56,13 +56,13 @@ func resolutionXMP(duplicateEntry bool) []byte {
 // type and fails t2.
 func TestXMPExtensionPropertyResolution_DuplicateURIReplacement(t *testing.T) {
 	var dup []Violation
-	xmpCheckExtensionPropertyResolution(resolutionXMP(true), 2, &dup)
+	xmpCheckUndeclaredExtensionProperties(resolutionXMP(true), 2, nil, nil, &dup)
 	if !hasRule(dup, Rule_19005_2_6_6_2_3_1_t02) {
 		t.Errorf("duplicate same-URI entry: got %v, want §6.6.2.3.1 t2 on ex:part", dup)
 	}
 
 	var single []Violation
-	xmpCheckExtensionPropertyResolution(resolutionXMP(false), 2, &single)
+	xmpCheckUndeclaredExtensionProperties(resolutionXMP(false), 2, nil, nil, &single)
 	if hasRule(single, Rule_19005_2_6_6_2_3_1_t02) {
 		t.Errorf("single entry declaring the property: got %v, want no t2", single)
 	}

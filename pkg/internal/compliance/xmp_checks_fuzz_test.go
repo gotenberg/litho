@@ -69,7 +69,7 @@ func FuzzXMPChecks(f *testing.F) {
 		_, _ = xmpExtractNamespaces(data)
 		_ = xmpExtractTopLevelProperties(data)
 		_ = xmpExtractPropertyValues(data)
-		_ = xmpParseExtensionSchemas(data)
+		_ = xmpExtEntries(2, XMPProperties(data), nil)
 		_ = dcTitleLangAltMalformed(data)
 		_ = xmpLangAltOnlyXDefault(data)
 
@@ -83,6 +83,8 @@ func FuzzXMPChecks(f *testing.F) {
 			xmpCheckPropertyTypes(data, part, ast.PdfStream{}, nil, &results)
 			xmpCheckPredefinedProperties(ctx, data, part, nil, nil, &results)
 			xmpCheckExtensionSchemas(ctx, data, part, &results)
+			xmpCheckUndeclaredExtensionProperties(data, part, nil, nil, &results)
+			xmpCheckExtensionValueTypes(data, part, nil, &results)
 		}
 		xmpCheckPDFAIdentification(ctx, data, "PDF/A-2b", 2, new([]Violation))
 		_ = xmpHasWrongPdfaidPrefix(ctx, data, "part")
@@ -105,11 +107,11 @@ func TestExtensionSchemaPacketIsRead(t *testing.T) {
 		t.Errorf("the declared extension namespace was not recognised, got %v", extensions)
 	}
 
-	schemas := xmpParseExtensionSchemas(data)
-	if len(schemas) != 1 {
-		t.Fatalf("parsed %d extension schemas, want 1", len(schemas))
+	entries := xmpExtEntries(2, XMPProperties(data), nil)
+	if len(entries) != 1 {
+		t.Fatalf("parsed %d extension schema entries, want 1", len(entries))
 	}
-	if got := schemas[0].nsURI; got != "http://ns.example.com/x/1.0/" {
-		t.Errorf("schema namespace = %q, want the declared one", got)
+	if entries["http://ns.example.com/x/1.0/"] == nil {
+		t.Errorf("schema entries = %v, want the declared namespace", entries)
 	}
 }

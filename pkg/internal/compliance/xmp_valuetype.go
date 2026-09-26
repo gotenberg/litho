@@ -400,9 +400,32 @@ func (e *xmpExtEntry) knownType(part int, typ string) bool {
 	return xmpValidatorBuiltin(part, t)
 }
 
+// xmpExtKnownType reports whether veraPDF's ValidatorsContainer.isKnownType
+// answers true for typ in the validators of entry, or, for a nil entry, in the
+// container of the basic types alone: veraPDF judges the value types of a
+// schema entry no counting entry answers for against
+// ValidatorsContainerCreator.EMPTY_VALIDATORS_CONTAINER, which holds neither
+// the part's predefined structures nor Locale and GPSCoordinate.
+func xmpExtKnownType(part int, entry *xmpExtEntry, typ string) bool {
+	if entry != nil {
+		return entry.knownType(part, typ)
+	}
+	return xmpBasicValueTypes[xmpArrayItemKey(typ)]
+}
+
+// xmpBasicValueTypes are the types every veraPDF validators container
+// registers at construction (ValidatorsContainer's constructor): Date, Lang
+// Alt, URI, URL, XPath and the SimpleTypeValidator.SimpleTypeEnum types.
+//
+//nolint:gochecknoglobals // static lookup table.
+var xmpBasicValueTypes = map[string]bool{
+	"date": true, "lang alt": true, "uri": true, "url": true, "xpath": true,
+	"boolean": true, "integer": true, "real": true, "mimetype": true, "propername": true,
+	"text": true, "agentname": true, "rational": true, "renditionclass": true,
+}
+
 // xmpChoiceAnywhere is the choice qualifier veraPDF's getSimplifiedType
-// removes with String.replaceAll, so wherever it appears, unlike
-// [xmpChoicePattern].
+// removes with String.replaceAll, so wherever it appears.
 //
 //nolint:gochecknoglobals // compiled-once pattern.
 var xmpChoiceAnywhere = regexp.MustCompile(`(open |closed )?(choice |choice$)(of )?`)
@@ -560,9 +583,8 @@ func xmpValueMatches(n *XMPNode, typ string, entry *xmpExtEntry, part, depth int
 // A property resolves through the schema entry of its namespace in packet, or
 // failing that in inherited, the entries of the document's main packet, which
 // govern the component packets of parts 2 and 3. A predefined property is left
-// to the predefined audit, and a property in reported, which
-// [xmpCheckExtensionPropertyTypes] already stated the rule for, is not stated
-// twice.
+// to the predefined audit, and a property no entry declares to
+// [xmpCheckUndeclaredExtensionProperties].
 //
 // # Corpus evidence
 //
@@ -578,8 +600,9 @@ func xmpValueMatches(n *XMPNode, typ string, entry *xmpExtEntry, part, depth int
 //     whose one field lacks its name or its value type, which leaves a type
 //     of no field, Text, that their structure fails. The one left,
 //     6-6-2-3-3-t03-fail-c.pdf, defines a type with no namespace URI, which
-//     veraPDF does not register, so it reads the property as undeclared.
-func xmpCheckExtensionValueTypes(packet []byte, part int, inherited map[string]*xmpExtEntry, reported map[[2]string]bool, results *[]Violation) {
+//     veraPDF does not register, so it reads the property as undeclared,
+//     which [xmpCheckUndeclaredExtensionProperties] reports.
+func xmpCheckExtensionValueTypes(packet []byte, part int, inherited map[string]*xmpExtEntry, results *[]Violation) {
 	if part < 1 || part > 3 {
 		return
 	}
@@ -595,7 +618,7 @@ func xmpCheckExtensionValueTypes(packet []byte, part int, inherited map[string]*
 		}
 		entry, typ := xmpExtResolve(own, inherited, n.NS, n.Name)
 		key := [2]string{n.NS, n.Name}
-		if typ == "" || reported[key] || stated[key] {
+		if typ == "" || stated[key] {
 			continue
 		}
 		if xmpValueMatches(n, typ, entry, part, 0) {

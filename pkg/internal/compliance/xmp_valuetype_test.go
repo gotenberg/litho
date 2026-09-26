@@ -128,7 +128,7 @@ func TestXMPCheckExtensionValueTypes(t *testing.T) {
 			t.Run(fmt.Sprintf("part %d, %s", part, tc.name), func(t *testing.T) {
 				t.Parallel()
 				var results []Violation
-				xmpCheckExtensionValueTypes(extProbePacket(tc.schema, usage, tc.usage), part, nil, nil, &results)
+				xmpCheckExtensionValueTypes(extProbePacket(tc.schema, usage, tc.usage), part, nil, &results)
 				got := 0
 				for _, v := range results {
 					if v.Rule == rule {
@@ -173,7 +173,7 @@ func TestXMPCheckStructFieldNames_ExtensionDeclared(t *testing.T) {
 
 	var declared []Violation
 	xmpCheckStructFieldNames(packet, 1, xmpExtensionDeclared(1, packet, nil), &declared)
-	xmpCheckExtensionValueTypes(packet, 1, nil, nil, &declared)
+	xmpCheckExtensionValueTypes(packet, 1, nil, &declared)
 	if len(declared) != 0 {
 		t.Errorf("a property its extension schema declares, holding its declared type, fired: %v", declared)
 	}
@@ -212,7 +212,7 @@ func TestXMPCheckExtensionValueTypes_ComponentArrayScope(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var results []Violation
-			xmpCheckExtensionValueTypes(component, 2, xmpMainExtensionEntries(2, tc.main), nil, &results)
+			xmpCheckExtensionValueTypes(component, 2, xmpMainExtensionEntries(2, tc.main), &results)
 			if got := hasRule(results, Rule_19005_2_6_6_2_3_1_t02); got != tc.want {
 				t.Errorf("6.6.2.3.1 t2 fired = %v, want %v (%v)", got, tc.want, results)
 			}
@@ -271,7 +271,7 @@ func TestXMPCheckExtensionValueTypes_Fonts(t *testing.T) {
 			t.Parallel()
 			var results []Violation
 			packet := extProbePacket(tc.schema, ` xmlns:xmpTPg="`+tpgNS+`" xmlns:stFnt="`+fntNS+`"`, usage)
-			xmpCheckExtensionValueTypes(packet, 1, nil, nil, &results)
+			xmpCheckExtensionValueTypes(packet, 1, nil, &results)
 			got := false
 			for _, v := range results {
 				got = got || v.Rule == Rule_19005_1_6_7_9_t03
