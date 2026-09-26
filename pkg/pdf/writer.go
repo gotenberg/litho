@@ -1412,6 +1412,12 @@ func (w *Writer) RemoveAttachment(name string) {
 // Sign applies a digital signature using the given signer. Signing always uses
 // incremental update (required for ByteRange integrity).
 //
+// A source litho repaired on reading, its cross-reference table rebuilt or
+// bytes found before its header, is rewritten in full first, as an unsigned
+// write with an edit rewrites it, and the signature goes in an incremental
+// update on top of that rewrite: one appended to the damaged bytes would carry
+// their wrong offsets into the signed file.
+//
 // Sign registers the signer rather than queueing a mutation, so it may be
 // called at any point: [Writer.WriteTo] applies every queued mutation and every
 // repair a remediation kept before computing the digest, and the signature
@@ -2456,7 +2462,11 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 		w.reader.doc.IsEncrypted) {
 		return ErrSignFullRewriteIncompatible
 	}
-	if err := w.writeToInternal(ctx, dst, w.signer, opts...); err != nil {
+	write := w.writeToInternal
+	if w.signer != nil && w.signsARewrite() {
+		write = w.writeSignedRewrite
+	}
+	if err := write(ctx, dst, w.signer, opts...); err != nil {
 		return err
 	}
 	w.consumed = true
@@ -2464,6 +2474,77 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	// failed write keeps it, since a retry serializes from it.
 	if err := w.releaseBase(); err != nil {
 		w.reader.doc.Logger.Debug("writer: releasing the remediation output failed", slog.Any("err", err))
+	}
+	return nil
+}
+
+// signsARewrite reports whether the output a signature goes on is a full
+// rewrite: the source is one the unsigned write rewrites in full, a signature
+// being an edit of it.
+//
+// A cross-reference table litho rebuilt records offsets that are wrong, and a
+// file with bytes before its header leaves readers disagreeing on what an
+// offset counts from: ISO 32000-1, 7.5.2 puts the header first, and Acrobat
+// counts from it where litho counts from the file start. An update appended to
+// either carries the damage on, and the signature covers it.
+func (w *Writer) signsARewrite() bool {
+	return w.reader.doc.Rebuilt || w.reader.doc.HeaderOffset > 0
+}
+
+// writeSignedRewrite writes the full rewrite the Writer queues to a temp file,
+// unsigned, then signs that file in an incremental update on top, as a caller
+// would by writing, reopening and signing. The signature covers every byte of
+// the file but its own value (ISO 32000-1, 12.8.1), so it is written last, and
+// a full rewrite renumbers every object, so the two cannot share one pass.
+//
+// It has the signature of [Writer.writeToInternal] so [Writer.WriteTo] can pick
+// either; signer is never nil here.
+func (w *Writer) writeSignedRewrite(ctx context.Context, dst io.Writer, signer Signer, opts ...WriteOption) error {
+	cfg := writeOpts{}
+	for _, o := range opts {
+		o(&cfg)
+	}
+	rewrite := opts
+	if w.signsARewrite() {
+		// The unsigned write rewrites a damaged source only when it carries an
+		// edit, and the signature is the edit here.
+		rewrite = append(append([]WriteOption(nil), opts...), WithFullRewrite())
+	}
+
+	f, err := w.createTemp("litho-sign-*.pdf")
+	if err != nil {
+		return fmt.Errorf("creating the temp file to sign: %w", err)
+	}
+	path := f.Name()
+	logger := w.reader.doc.Logger
+	defer removeTempFile(logger, path)
+	writeErr := w.writeToInternal(ctx, f, nil, rewrite...)
+	if closeErr := f.Close(); closeErr != nil && writeErr == nil {
+		writeErr = fmt.Errorf("closing %s: %w", path, closeErr)
+	}
+	if writeErr != nil {
+		return fmt.Errorf("writing the document to sign: %w", writeErr)
+	}
+
+	base, err := w.reader.reopenFile(ctx, path)
+	if err != nil {
+		return fmt.Errorf("reopening the document to sign: %w", err)
+	}
+	defer func() {
+		if closeErr := base.Close(); closeErr != nil {
+			logger.Debug("writer: closing the document to sign failed", slog.Any("err", closeErr))
+		}
+	}()
+	// A rewrite litho reads back only by repairing it would carry the damage
+	// into the signed file, which is what rewriting it first avoids.
+	if base.doc.Rebuilt || base.doc.HeaderOffset > 0 {
+		return fmt.Errorf("the rewritten document to sign does not read back as written")
+	}
+	if cfg.logger != nil {
+		base.doc.Logger = cfg.logger
+	}
+	if err := mutations.WriteWithSignature(ctx, dst, base.doc, signerAdapter{inner: signer}, nil, nil, cfg.xrefStream); err != nil {
+		return fmt.Errorf("signing the rewritten document: %w", err)
 	}
 	return nil
 }
@@ -2582,8 +2663,9 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 	// every offset, drops pre-header junk, and copies the decrypted
 	// object graph without /Encrypt (use Writer.Encrypt to re-protect).
 	// A write with no edits stays a byte-identical pass-through, and the
-	// signing path below is exempt: it is structurally incremental, and
-	// Writer.WriteTo rejects unsafe sign combinations.
+	// signing path below is exempt: it is structurally incremental, so
+	// Writer.WriteTo signs such a source through writeSignedRewrite, on top
+	// of its rewrite, and rejects the unsafe sign combinations.
 	hasEdits := len(w.mutations) > 0 || w.trailerDirty || len(w.rewriteOverrides) > 0 ||
 		w.encryptCfg != nil || w.decrypt
 	if hasEdits && signer == nil {
