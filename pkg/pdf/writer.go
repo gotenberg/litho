@@ -572,13 +572,24 @@ func (a signerAdapter) EstimatedSize() int                 { return a.inner.Esti
 // or is cancelled removes it itself. A Writer that is remediated and never
 // written keeps the file until [Writer.Close].
 //
+// A remediation that repairs its own output again in a later round leaves the
+// Writer editing that output instead of the Reader's document, because those
+// repairs exist only in the output. An edit queued afterwards applies to the
+// remediated document, and the page numbers it names are that document's.
+//
 // A Writer is single-use: create a new Writer (and, if you need a
 // pristine baseline, a new Reader) for each distinct output. Method
 // calls must be serialised; no Writer method is safe for concurrent
 // use, Close included. The Reader the Writer was built from must not be
 // consumed by any other goroutine between NewWriter and WriteTo.
 type Writer struct {
+	// reader is the document the Writer edits: source, until a remediation
+	// keeps a later round (see [Writer.rebase]). It then reads that round's
+	// output, the temp file at basePath, which the Writer owns and releases
+	// with [Writer.releaseBase].
 	reader       *Reader
+	source       *Reader
+	basePath     string
 	mutations    []mutation
 	encryptCfg   *crypto.EncryptConfig
 	decrypt      bool
@@ -616,7 +627,8 @@ type Writer struct {
 	// serialized PDF when remediation pre-serializes for accurate
 	// residual validation. When set, WriteTo streams from this file
 	// instead of re-serializing, then removes it. Close removes it too,
-	// and so does a later remediation, whose output supersedes it. The
+	// and so does a later remediation, whose output supersedes it, unless
+	// it is the file at basePath, which only releaseBase removes. The
 	// snapshot fields below record the Writer state at pre-serialization
 	// time: any edit
 	// queued afterwards (a new mutation, Sign, Encrypt, decrypt) or a
@@ -639,12 +651,12 @@ type mutation struct {
 // [Reader.Close] after the Writer has finished; do not issue further
 // reads through r while the Writer is active.
 func NewWriter(r *Reader) *Writer {
-	return &Writer{reader: r}
+	return &Writer{reader: r, source: r}
 }
 
 // Close removes the temp file a remediation left for [Writer.WriteTo] to
-// stream, when WriteTo has not consumed it. It does not close the Writer's
-// [Reader].
+// stream, when WriteTo has not consumed it, and closes the reader the Writer
+// opened over it. It does not close the Writer's [Reader].
 //
 // Close is idempotent and safe after WriteTo, which already removed the file,
 // so defer it right after [NewWriter]. After Close, WriteTo, [Writer.Redact]
@@ -656,22 +668,82 @@ func NewWriter(r *Reader) *Writer {
 // closed either way.
 func (w *Writer) Close() error {
 	w.closed = true
-	return w.releasePreSerialized()
+	return errors.Join(w.releasePreSerialized(), w.releaseBase())
 }
 
 // releasePreSerialized removes the remediation output WriteTo would stream,
 // if any, and forgets it, so WriteTo re-serializes the queued state instead.
-// A file already gone is not an error.
+// A file already gone is not an error. The file the Writer edits stays: it is
+// the document that re-serialization reads, and [Writer.releaseBase] removes
+// it.
 func (w *Writer) releasePreSerialized() error {
 	path := w.preSerializedPath
 	if path == "" {
 		return nil
 	}
 	w.preSerializedPath = ""
+	if path == w.basePath {
+		return nil
+	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("removing remediation temp file: %w", err)
 	}
 	return nil
+}
+
+// rebase makes next, a reader over the remediation output at path, the
+// document the Writer edits, and releases the output it edited before, if it
+// owned one.
+//
+// A remediation round after the first repairs a reopened copy of the previous
+// round's output, in that file's object numbers, which a full rewrite has
+// renumbered, so its repairs cannot join the overrides the Writer keeps in its
+// document's numbers. They exist only in the round's output, and the Writer
+// kept the first round's repairs alone: an edit queued after the remediation
+// made WriteTo serialize afresh, and the output lost every later repair.
+//
+// The output already holds every edit the Writer queued before the
+// remediation, its overrides and its trailer, so none of them stays queued,
+// where they would be applied a second time. The flags that decide how the
+// output is written stay.
+func (w *Writer) rebase(next *Reader, path string) error {
+	prev, prevPath := w.reader, w.basePath
+	w.reader, w.basePath = next, path
+	w.mutations = nil
+	w.rewriteOverrides = nil
+	w.trailerDirty = false
+	if prevPath == "" {
+		return nil
+	}
+	return releaseOwnedReader(prev, prevPath)
+}
+
+// releaseBase closes the reader over the remediation output the Writer edits,
+// removes the file and gives the Writer back its source [Reader]. A Writer
+// editing its source has nothing to release.
+func (w *Writer) releaseBase() error {
+	if w.basePath == "" {
+		return nil
+	}
+	base, path := w.reader, w.basePath
+	w.reader, w.basePath = w.source, ""
+	if w.preSerializedPath == path {
+		w.preSerializedPath = ""
+	}
+	return releaseOwnedReader(base, path)
+}
+
+// releaseOwnedReader closes r, a reader litho opened over the temp file at
+// path, and removes the file. A file already gone is not an error.
+func releaseOwnedReader(r *Reader, path string) error {
+	var errs []error
+	if err := r.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("closing the remediation output: %w", err))
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		errs = append(errs, fmt.Errorf("removing remediation temp file: %w", err))
+	}
+	return errors.Join(errs...)
 }
 
 // createTemp creates a temp file named after pattern in the Writer's temp
@@ -1592,7 +1664,9 @@ type remediationRun func(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 // fails with [ErrRemediationBrokePDF], restoring the Writer, when there is none
 // or the rollback does not recover the output. The result, rolled back or
 // not, runs further rounds, up to maxRemediationRounds, while residuals remain
-// and each round still fixes something (see [Writer.remediationRound]).
+// and each round still fixes something (see [Writer.remediationRound]). When
+// one is kept, the Writer edits its output from then on (see
+// [Writer.rebase]).
 //
 // The content-tier fixers a rollback discarded stay off in the later rounds,
 // and the others run in them. The engine runs the content tier after every
@@ -1671,16 +1745,19 @@ func (w *Writer) remediate(
 	preRewriteOverrides := w.rewriteOverrides
 	preTrailerSnap := make(ast.PdfDict, len(doc.Index.Trailer))
 	maps.Copy(preTrailerSnap, doc.Index.Trailer)
+	restoreTrailer := func() {
+		for k := range doc.Index.Trailer {
+			delete(doc.Index.Trailer, k)
+		}
+		maps.Copy(doc.Index.Trailer, preTrailerSnap)
+	}
 	restorePreState := func() {
 		w.mutations = w.mutations[:preMutations]
 		w.forceRewrite = preForceRewrite
 		w.trailerDirty = preTrailerDirty
 		w.requiredVersion = preRequiredVersion
 		w.rewriteOverrides = preRewriteOverrides
-		for k := range doc.Index.Trailer {
-			delete(doc.Index.Trailer, k)
-		}
-		maps.Copy(doc.Index.Trailer, preTrailerSnap)
+		restoreTrailer()
 	}
 	// cancelled ends a run whose caller gave up: nothing it serialized will
 	// be written, so its temp file goes now rather than at Close, and the
@@ -1891,6 +1968,7 @@ func (w *Writer) remediate(
 	// metadata one). Each extra round runs on the previous round's file and is kept only
 	// when it fixed something and survives the same probe-and-revalidate
 	// gates; otherwise the previous round's output stands.
+	keptLater := false
 	for round := 2; round <= maxRemediationRounds && len(residual) > 0; round++ {
 		next, ok := w.remediationRound(ctx, tmpPath, run, disabled, revalidate, baseline, tol)
 		if !ok {
@@ -1906,11 +1984,28 @@ func (w *Writer) remediate(
 		fixed = append(fixed, next.fixed...)
 		rolledBack = append(rolledBack, next.rolledBack...)
 		disabled = append(disabled, next.disabled...)
+		keptLater = true
 	}
 	// A cancellation inside a round ends the loop as a round that fixed
 	// nothing does, so it is told apart here, before the output is kept.
 	if err := ctx.Err(); err != nil {
 		return cancelled(tmpPath, err)
+	}
+	if keptLater {
+		// A later round's repairs exist only in its output, so the Writer
+		// edits that output from here on (see [Writer.rebase]).
+		next, err := w.reader.reopenFile(ctx, tmpPath)
+		if err != nil {
+			removeTempFile(doc.Logger, tmpPath)
+			restorePreState()
+			return nil, fmt.Errorf("reopening the remediation output: %w", err)
+		}
+		// The Writer no longer writes doc, so the repairs made to its
+		// trailer in place are undone.
+		restoreTrailer()
+		if err := w.rebase(next, tmpPath); err != nil {
+			doc.Logger.Debug("remediate: releasing the previous remediation output failed", slog.Any("err", err))
+		}
 	}
 	w.markPreSerialized(tmpPath)
 	return &RemediationReport{Fixed: dedupeFixes(fixed), Residual: residual, RolledBack: dedupeFixes(rolledBack)}, nil
@@ -2175,7 +2270,10 @@ func (w *Writer) copyFromPreSerialized(ctx context.Context, dst io.Writer) error
 // After a remediation, WriteTo streams the temp file the remediation wrote
 // and removes it, whether the write succeeds or not. An edit queued after
 // the remediation, or a write option that shapes the serialization, makes
-// that file stale: WriteTo then removes it and serializes afresh.
+// that file stale: WriteTo then removes it and serializes afresh. The one
+// exception is the output of a remediation that kept a later round, which
+// the Writer goes on to edit: a failed write keeps it for the retry, and it
+// goes once a write succeeds, or at [Writer.Close].
 //
 // Signing ([Writer.Sign]) is incompatible with operations that force
 // a full rewrite (encrypt, decrypt, delete/insert pages, flatten,
@@ -2222,6 +2320,11 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 		return err
 	}
 	w.consumed = true
+	// Nothing reads the remediation output the Writer edited any more. A
+	// failed write keeps it, since a retry serializes from it.
+	if err := w.releaseBase(); err != nil {
+		w.reader.doc.Logger.Debug("writer: releasing the remediation output failed", slog.Any("err", err))
+	}
 	return nil
 }
 
