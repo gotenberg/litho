@@ -3602,8 +3602,13 @@ func xmpPropertyTypeDetails(part int, ns, prop string, pv xmpPropertyValue, regi
 		}
 
 		// Validate Alt container items have xml:lang attribute. Struct-valued
-		// Alt items (e.g., xmp:Thumbnails) don't need xml:lang.
-		if expectedType == xmpPropAlt && !pv.hasLangAttr && !pv.isStructured {
+		// Alt items (e.g., xmp:Thumbnails) don't need xml:lang. An rdf:Alt
+		// holding no item is a language alternative all the same: veraPDF's
+		// LangAltValidator accepts an alternative array with no children,
+		// measured on dc:title, dc:description and dc:rights at PDF/A-1b and
+		// PDF/A-2b with veraPDF 1.30.2.
+		emptyAlt := pv.containerType == xmpContAlt && len(pv.items) == 0
+		if expectedType == xmpPropAlt && !pv.hasLangAttr && !pv.isStructured && !emptyAlt {
 			details = append(details, "Alt container items missing xml:lang attribute")
 		}
 
