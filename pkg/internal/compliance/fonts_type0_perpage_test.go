@@ -44,12 +44,17 @@ func type0TwoPagePDF(t *testing.T, page1, page2 string) []byte {
 // codes. litho gated the whole of the Type0 check on "font object not yet
 // seen", so a font selected on many pages was judged against the first page's
 // codes alone; simple fonts already avoid this through [checkFontUsageRules].
+// The .notdef rule judges a later page's glyphs wherever they are shown; the
+// glyph-presence rule judges them only on a page veraPDF reads the program for,
+// one that shows the font in a rendering mode no earlier page used
+// ([fontJudgements.readsProgram]). Measured with veraPDF 1.30 at PDF/A-2b.
 //
 // # Corpus evidence
 //
 //   - govdocs thread_100_100870.pdf: selects one Times-Roman Identity-H font
-//     on fourteen pages, and only page 20 shows CID 0 and a CID its CFF
-//     charset does not hold, both of which veraPDF reports and litho did not.
+//     on fourteen pages, and page 20 shows a CID its CFF charset does not hold
+//     in rendering mode 1, which no earlier page used; veraPDF reports it under
+//     ISO 19005-2, 6.2.11.8 and 6.2.11.4.1 t2, and litho did not.
 func TestType0Font_UsageJudgedOnEveryPage(t *testing.T) {
 	t.Parallel()
 
@@ -58,23 +63,28 @@ func TestType0Font_UsageJudgedOnEveryPage(t *testing.T) {
 	// and rendering mode 0 paints, which the glyph-presence rule requires.
 	const clean = "BT /F1 12 Tf 10 50 Td <0001> Tj ET"
 	const absent = "BT /F1 12 Tf 10 50 Td <0100> Tj ET"
+	const absentStroked = "BT /F1 12 Tf 1 Tr 10 50 Td <0100> Tj ET"
 
 	cases := []struct {
-		name  string
-		page1 string
-		page2 string
-		want  bool
+		name            string
+		page1           string
+		page2           string
+		notdef, present bool
 	}{
-		{"an absent glyph on the first page fires", absent, clean, true},
-		{"an absent glyph on a later page fires too", clean, absent, true},
-		{"no absent glyph on either page stays silent", clean, clean, false},
+		{"an absent glyph on the first page fires", absent, clean, true, true},
+		{"an absent glyph on a later page fires .notdef alone", clean, absent, true, false},
+		{"an absent glyph on a later page in a new rendering mode fires both", clean, absentStroked, true, true},
+		{"no absent glyph on either page stays silent", clean, clean, false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			data := type0TwoPagePDF(t, tc.page1, tc.page2)
-			if got := firesRuleProfile(t, data, models.PDFA2b, "6.2.11.4.1", 2); got != tc.want {
-				t.Errorf("glyph-presence violation = %v, want %v", got, tc.want)
+			if got := firesRuleProfile(t, data, models.PDFA2b, "6.2.11.8", 1); got != tc.notdef {
+				t.Errorf(".notdef violation = %v, want %v", got, tc.notdef)
+			}
+			if got := firesRuleProfile(t, data, models.PDFA2b, "6.2.11.4.1", 2); got != tc.present {
+				t.Errorf("glyph-presence violation = %v, want %v", got, tc.present)
 			}
 		})
 	}

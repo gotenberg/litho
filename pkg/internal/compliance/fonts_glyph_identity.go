@@ -331,17 +331,19 @@ var noContext = glyphContext{mode: -1}
 // or in one form drawn on two pages, once.
 //
 // veraPDF's identity also carries the structure key of the stream a glyph is
-// shown in ([structureKey]), and the ToUnicode rules (ISO 19005-2 and ISO
-// 19005-3, 6.2.11.7.2, ISO 19005-1, 6.3.8, ISO 14289-1, 7.21.7, ISO 14289-2,
-// 8.4.5.8 and ISO 19005-4, 6.2.10.7) state a glyph once per key. The presence
-// and width rules do not: measured with veraPDF 1.30 at PDF/A-2b, a CID an
-// embedded composite program lacks and a Type 1 width that disagrees with its
-// program each fail once on two pages whose /StructParents are 1 and 2, so the
-// key is left out of theirs.
-//
-// TODO: the .notdef rule (ISO 19005-2, 6.2.11.8) splits by the key too: the
-// same composite fixture fails it twice at PDF/A-2u. Key it once its counts
-// are measured over the corpora.
+// shown in ([structureKey]), so every one of these rules states a glyph once
+// per key: the ToUnicode rules (ISO 19005-2 and ISO 19005-3, 6.2.11.7.2, ISO
+// 19005-1, 6.3.8, ISO 14289-1, 7.21.7, ISO 14289-2, 8.4.5.8 and ISO 19005-4,
+// 6.2.10.7), the .notdef rule and the presence and width rules alike. The
+// presence and width rules judge a glyph only where veraPDF reads the font's
+// program for it ([fontJudgements.readsProgram]), which is the first page that
+// shows the font in the common case, so a glyph two pages with distinct keys
+// show mostly fails them once. Measured with veraPDF 1.30 at PDF/A-1b and
+// PDF/A-2b on two pages whose /StructParents are 1 and 2: CID 0 of a composite
+// font, and a code a simple font's encoding names .notdef, fail ISO 19005-2,
+// 6.2.11.8 t1 twice; a CID the program lacks fails it twice and the presence
+// and width rules once, and three times each when the second page also shows
+// another missing CID in a rendering mode the first did not use.
 //
 // A composite font's checks judge CIDs, while veraPDF names a glyph by its
 // character code, so a CID is stated once for every code that selects it:
@@ -378,9 +380,11 @@ var noContext = glyphContext{mode: -1}
 //   - govdocs thread_200_200155.pdf: the same truncation accounts for 148 of
 //     the 217 width glyphs litho states, leaving veraPDF's 69. litho keeps
 //     its exact comparison; see [checkType1FontWidths].
-//   - pdfjs issue19835.pdf: 28 of the 278 width glyphs litho states, against
-//     veraPDF's 204, come from a CIDFontType2 program with no cmap table, on
-//     page 8, where veraPDF reports none, and 44 more pass once truncated.
+//   - pdfjs issue19835.pdf: litho stated 278 width glyphs against veraPDF's
+//     204. The 74 more were shown by four fonts on pages after the first that
+//     shows each, where veraPDF does not read the program
+//     ([fontJudgements.readsProgram]); without them litho states veraPDF's
+//     204, font by font and page by page.
 //   - pdfjs issue7074_reduced.pdf: embeds a program whose post table is cut
 //     short, which veraPDF does not judge widths against; litho reads its
 //     hmtx and states 14 glyphs where it stated 1.
@@ -406,12 +410,20 @@ var noContext = glyphContext{mode: -1}
 //     Adobe-Korea1-UCS2 base CMap it names with usecmap, which litho did not
 //     load, so litho stated 10 unmapped codes where veraPDF states 5; see
 //     [resolveUsedCMaps].
+//   - All corpora, at PDF/A-1b, PDF/A-2b and PDF/A-2u, and at their own
+//     profile for the verapdf files: keying ISO 19005-2, 6.2.11.8 t1 by the
+//     structure key moves no count.
 func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fontID string, font ast.PdfDict, usage *fontUsageInfo, profile string, vs []Violation) []Violation {
 	var out []Violation
 	var where map[uint32][]shownGlyph
+	programRead := j.readsProgram(ctx, doc, fontID, font, usage)
 	for _, v := range vs {
+		renderedOnly := v.Rule == glyphPresenceRule(profile) || v.Rule == glyphWidthRule(profile)
+		unread := renderedOnly && !programRead
 		if !v.glyph.named {
-			out = append(out, v)
+			if !unread {
+				out = append(out, v)
+			}
 			continue
 		}
 		if where == nil {
@@ -423,23 +435,23 @@ func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fon
 		if len(shown) == 0 {
 			shown = []shownGlyph{{code: judgedGlyph, glyph: judgedGlyph, at: noContext}}
 		}
-		renderedOnly := v.Rule == glyphPresenceRule(profile) || v.Rule == glyphWidthRule(profile)
-		byOwner := v.Rule == toUnicodeRule(profile) || v.Rule == toUnicodeCMapValuesRule(profile)
 		var fresh []shownGlyph
 		for _, g := range shown {
 			if renderedOnly && g.at.mode == invisibleRenderingMode {
 				continue
 			}
-			at := g.at
-			if !byOwner {
-				at.owner = 0
-			}
-			key := glyphKey{rule: v.Rule, font: fontID, code: g.code, at: at}
+			key := glyphKey{rule: v.Rule, font: fontID, code: g.code, at: g.at}
 			if j.glyph[key] {
 				continue
 			}
+			// A glyph met where the program is not read is still met: veraPDF
+			// keeps the glyph it built then (StaticContainers.cachedGlyphs) and
+			// judges its identity once, so a later stream that reads the
+			// program does not state it either.
 			j.glyph[key] = true
-			fresh = append(fresh, g)
+			if !unread {
+				fresh = append(fresh, g)
+			}
 		}
 		for _, g := range fresh {
 			w := v
@@ -450,6 +462,86 @@ func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fon
 		}
 	}
 	return out
+}
+
+// readsProgram reports whether veraPDF reads the embedded program of the font
+// fontID names for the glyphs usage shows, and so whether the rules that read
+// it judge them: glyph presence (ISO 19005-1, 6.3.5 t1, ISO 19005-2 and ISO
+// 19005-3, 6.2.11.4.1 t2) and glyph width (ISO 19005-1, 6.3.6 t1, ISO 19005-2
+// and ISO 19005-3, 6.2.11.5 t1), and their ISO 19005-4 and ISO 14289
+// counterparts.
+//
+// veraPDF builds a font object for every resource dictionary and resource name
+// a stream selects the font through (PDResources.getFont), and reads the
+// program for it only when it builds the model of the font from it
+// (GFPDType1Font, GFPDTrueTypeFont, GFPDType0Font and GFPDCIDFont call
+// PDFont.setSuccessfullyParsed). It builds that model once per font object and
+// rendering mode (FontFactory.parseFont keys StaticContainers.cachedFonts on
+// both) as it parses a stream's text-showing operators, a Form XObject's where
+// the stream draws it. A glyph shown through a font object whose program was
+// never read has no isGlyphPresent, widthFromFontProgram or
+// widthFromDictionary (GFGlyph), and both rules pass it. A stream therefore
+// has its glyphs judged only when it is the first to show the font in some
+// rendering mode, mode 3 included, though both rules exempt the glyphs shown
+// in it. A Type 3 font has no program, and veraPDF judges its glyphs
+// everywhere. The .notdef rule reads the glyph's name, which needs no program.
+//
+// litho meets the streams of a page in the order it judges them: the page's
+// own text, the forms, patterns and Type 3 procedures it draws, then its
+// annotations' appearances. veraPDF parses a form where the page draws it and
+// an annotation's appearance after the page's content and forms, so every
+// order agrees but one: a form drawn before the page text first shows a font
+// claims its rendering modes after the page text in litho, and before it in
+// veraPDF.
+//
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on a CID a composite
+// program lacks: shown on a second page after the first showed another CID,
+// it fails neither rule, whether the pages share one /Resources or not, and
+// fails both when the second page shows it in a rendering mode the first did
+// not use, or shows any glyph in such a mode, mode 3 included; shown in a form
+// drawn, or an annotation appearance painted, after the page text shows
+// another CID, it fails neither, and the page text fails both when the
+// annotation shows the other CID; shown in an annotation on a page that draws
+// a form showing another CID, it fails neither, and in the form both. A Type1
+// width that disagrees with its program fails nothing on a second page, unless
+// that page shows the font in a new rendering mode, and a Type 3 code with no
+// glyph procedure fails presence there. The .notdef rule fails for each of
+// them.
+//
+// A glyph first met where the program is not read keeps the values it was
+// built with (StaticContainers.cachedGlyphs), so a later stream that reads the
+// program does not judge it: a CID a second page shows, and a third page shows
+// again beside a glyph in a new rendering mode, fails the presence rule for
+// the new glyph alone ([fontJudgements.glyphs]).
+//
+// # Corpus evidence
+//
+//   - All corpora, at PDF/A-1b, PDF/A-2b and PDF/A-2u, and at their own
+//     profile for the verapdf files: the counts of ISO 19005-1, 6.3.5 t1 and
+//     ISO 19005-2, 6.2.11.4.1 t2 moved onto veraPDF's in 4 files, 12 pairs of
+//     file and profile, and away in none; their summed distance fell from 21
+//     to 0.
+//   - pdfjs issue19835.pdf: the width counts moved onto veraPDF's at the
+//     three profiles, from 278 to 204.
+//   - govdocs thread_100_100870.pdf: the width counts that moved away, from 3
+//     to 0 against veraPDF's 2. litho's 3 glyphs are shown on pages after
+//     the first, which veraPDF does not judge. veraPDF's 2 are glyphs litho
+//     finds no mismatch in: a CID the CFF charset lacks, which veraPDF weighs
+//     at 1000 and litho does not weigh, and a CID whose charstring advances
+//     333, as /W declares, which veraPDF reads as 400.
+func (j *fontJudgements) readsProgram(ctx context.Context, doc *document.Document, fontID string, font ast.PdfDict, usage *fontUsageInfo) bool {
+	if usage == nil || isType3Font(ctx, doc, font) {
+		return true
+	}
+	scope := usage.scope + "\x00" + fontID
+	for _, show := range usage.shows {
+		mode := fontID + "\x00" + strconv.Itoa(show.at.mode)
+		if !j.programMode[mode] {
+			j.programMode[mode] = true
+			j.programScope[scope] = true
+		}
+	}
+	return j.programScope[scope]
 }
 
 // describe renders where a glyph stated for more than one code or context of

@@ -19,6 +19,9 @@ type fontUsageInfo struct {
 	charCodes  map[byte]bool   // character codes referenced by Tj/TJ
 	rawStrings []ast.PdfString // raw string operands from text operators (for CID .notdef detection)
 	shows      []glyphShow     // rawStrings again, each with the context it is shown in
+	// scope names the resource dictionary of the stream and the resource name
+	// the font is selected through; see [fontJudgements.readsProgram].
+	scope string
 }
 
 // ShownCharCodes returns, per font resource name, the one-byte character codes
@@ -84,7 +87,7 @@ func collectFontUsageAt(ops []content.Operation, site showSite) map[string]*font
 		if u, ok := usage[name]; ok {
 			return u
 		}
-		u := &fontUsageInfo{charCodes: make(map[byte]bool)}
+		u := &fontUsageInfo{charCodes: make(map[byte]bool), scope: site.key + "/" + name}
 		usage[name] = u
 		return u
 	}
@@ -211,34 +214,33 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		if judgeContent {
 			results = append(results, checkPageDeclaredFonts(ctx, doc, catalog, p, site, pageIdx+1, profile, judged, visibleAnywhere)...)
+
+			// Fonts used only inside a Form XObject invoked from the page
+			// content (a Do operator) are likewise not reached by the page
+			// /Resources/Font walk. veraPDF descends into the form's content
+			// stream and applies the same font rules there; litho matches by
+			// walking invoked forms.
+			xobjVisited := make(map[int]bool)
+			results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
+
+			// A tiling pattern's cell is another content stream the page walk
+			// above never enters. See checkPatternFonts.
+			results = append(results, checkPatternFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
+
+			// A Type3 glyph procedure is another content stream that may select
+			// fonts of its own, and the page walk above stops at the Type3 font
+			// itself. veraPDF applies the font rules inside those procedures
+			// too.
+			results = append(results, checkType3CharProcFonts(ctx, doc, p.parsedOps(ctx), p.resources, site, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
 		}
 
 		// Fonts referenced only from annotation appearance streams are never
 		// reached by the page /Resources/Font walk above. veraPDF validates them
 		// through the appearance content stream (for example
-		// annots[0]/appearance[0]/contentStream[0]/operators[N]/font[0]); litho
-		// matches by checking their subset glyph coverage here.
+		// annots[0]/appearance[0]/contentStream[0]/operators[N]/font[0]), after
+		// the page's content and the forms it draws, which decides where it
+		// reads a font's program ([fontJudgements.readsProgram]).
 		results = append(results, checkAnnotationAppearanceFonts(ctx, doc, p.dict, treeRoot, pageIdx+1, profile, judged)...)
-
-		if !judgeContent {
-			continue
-		}
-
-		// Fonts used only inside a Form XObject invoked from the page content
-		// (a Do operator) are likewise not reached by the page /Resources/Font
-		// walk. veraPDF descends into the form's content stream and applies the
-		// same font rules there; litho matches by walking invoked forms.
-		xobjVisited := make(map[int]bool)
-		results = append(results, checkFormXObjectFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
-
-		// A tiling pattern's cell is another content stream the page walk above
-		// never enters. See checkPatternFonts.
-		results = append(results, checkPatternFonts(ctx, doc, p.parsedOps(ctx), p.resources, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
-
-		// A Type3 glyph procedure is another content stream that may select
-		// fonts of its own, and the page walk above stops at the Type3 font
-		// itself. veraPDF applies the font rules inside those procedures too.
-		results = append(results, checkType3CharProcFonts(ctx, doc, p.parsedOps(ctx), p.resources, site, treeRoot, pageIdx+1, profile, judged, xobjVisited, 0)...)
 	}
 
 	doc.Logger.Debug("compliance: fonts: font checks complete",
@@ -291,15 +293,22 @@ type fontJudgements struct {
 	// glyph holds the glyph-level statements already made; see
 	// [fontJudgements.glyphs].
 	glyph map[glyphKey]bool
+	// programMode holds the pairs of font object and rendering mode already
+	// shown, and programScope the scopes that showed one of them first; see
+	// [fontJudgements.readsProgram].
+	programMode  map[string]bool
+	programScope map[string]bool
 }
 
 // newFontJudgements returns an empty record.
 func newFontJudgements() *fontJudgements {
 	return &fontJudgements{
-		dict:       make(map[string]bool),
-		descendant: make(map[string]bool),
-		subset:     make(map[string]bool),
-		glyph:      make(map[glyphKey]bool),
+		dict:         make(map[string]bool),
+		descendant:   make(map[string]bool),
+		subset:       make(map[string]bool),
+		glyph:        make(map[glyphKey]bool),
+		programMode:  make(map[string]bool),
+		programScope: make(map[string]bool),
 	}
 }
 
@@ -484,7 +493,7 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 
 		var fontResults []Violation
 		if !dictRulesDone {
-			fontResults = append(fontResults, checkFontDictRules(ctx, doc, font, fontKey, pageNum, profile, embedVisible, usage)...)
+			fontResults = append(fontResults, checkFontDictRules(ctx, doc, font, fontKey, pageNum, profile, embedVisible)...)
 		}
 		isType0 := fontSubtype(ctx, doc, font) == "Type0"
 		if isType0 {
@@ -1000,7 +1009,7 @@ func checkAppearanceStreamFonts(ctx context.Context, doc *document.Document, apO
 // (the font is not used for visible rendering). Usage provides per-charCode
 // usage information for ToUnicode exemption checks.
 func (j *fontJudgements) singleFont(ctx context.Context, doc *document.Document, id string, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool, usage *fontUsageInfo) []Violation {
-	results := checkFontDictRules(ctx, doc, fontDict, fontName, pageNum, profile, isVisible, usage)
+	results := checkFontDictRules(ctx, doc, fontDict, fontName, pageNum, profile, isVisible)
 	if fontSubtype(ctx, doc, fontDict) == "Type0" {
 		results = append(results, j.descendantRules(ctx, doc, id, fontDict, fontName, pageNum, profile, isVisible)...)
 		return append(results, checkType0Font(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
@@ -1009,13 +1018,19 @@ func (j *fontJudgements) singleFont(ctx context.Context, doc *document.Document,
 }
 
 // descendantRules states the rules veraPDF holds a composite font's descendant
-// CIDFont to, as opposed to the composite font itself: its embedding (ISO
-// 19005-1, 6.3.4 t1, ISO 19005-2, 6.2.11.4.1 t1, whose test exempts a Type0
-// font and so falls to its descendant) and its /CIDToGIDMap (ISO 19005-1,
-// 6.3.3.2 t1, ISO 19005-2, 6.2.11.3.2 t1). veraPDF judges the descendant once,
-// so composite fonts that share one are judged once between them, and the
-// font id names is judged here only when its descendant is new
-// ([descendantIdentity]).
+// CIDFont to, as opposed to the composite font itself: its /Type (ISO 19005-1,
+// 6.3.2 t1, ISO 19005-2, 6.2.11.2 t1), its embedding (ISO 19005-1, 6.3.4 t1,
+// ISO 19005-2, 6.2.11.4.1 t1, whose test exempts a Type0 font and so falls to
+// its descendant) and its /CIDToGIDMap (ISO 19005-1, 6.3.3.2 t1, ISO 19005-2,
+// 6.2.11.3.2 t1). veraPDF judges the descendant once, so composite fonts that
+// share one are judged once between them, and the font id names is judged here
+// only when its descendant is new ([descendantIdentity]).
+//
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on a descendant with no
+// /Type: one Type0 font over it fails ISO 19005-1, 6.3.2 t1 and ISO 19005-2,
+// 6.2.11.2 t1 twice, once for the Type0 font, which takes /Type from it (see
+// [checkFontDictRules]), and once for the descendant; two Type0 fonts over it
+// fail them three times.
 //
 // Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on a Type0 font whose
 // descendant has no /CIDToGIDMap and no embedded program: two Type0 objects
@@ -1033,6 +1048,10 @@ func (j *fontJudgements) singleFont(ctx context.Context, doc *document.Document,
 //   - pdfjs issue6127.pdf: names 24 Type0 fonts over 8 descendant CIDFonts,
 //     and litho failed ISO 19005-1, 6.3.4 t1 24 times, twice more than
 //     veraPDF's 22, by judging a shared descendant once per composite font.
+//   - pdfjs issue7544.pdf: its descendant with no /Type fails ISO 19005-1,
+//     6.3.2 t1 and ISO 19005-2, 6.2.11.2 t1 twice at PDF/A-1b, PDF/A-2b and
+//     PDF/A-2u, as veraPDF does, where litho failed them once. No other
+//     count of them moved on any corpus.
 func (j *fontJudgements) descendantRules(ctx context.Context, doc *document.Document, id string, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool) []Violation {
 	descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"])
 	if err != nil || len(descArr) == 0 {
@@ -1051,6 +1070,15 @@ func (j *fontJudgements) descendantRules(ctx context.Context, doc *document.Docu
 	// The descendant's PDFont reads its /BaseFont again, as the composite
 	// font's does; see [fontNameLimits].
 	results := fontNameLimits(ctx, doc, cidFontDict, "descendant CIDFont of font "+fontName, profile)
+	// ISO 32000-1, 9.7.4, Table 117 requires /Type /Font on a CIDFont, and
+	// veraPDF states ISO 19005-2, 6.2.11.2 t1 on the descendant as a PDFont of
+	// its own. Only /Type is judged: both CIDFont subtypes are valid, so t2
+	// cannot fire, t3 is left out, and t7 reads the descriptor
+	// [document.ResolveFontDescriptor] already reaches through the descendant,
+	// so the whole check would judge one descriptor twice.
+	if rule := fontReqKeyRule(PDFAPart(profile), 1); rule.Specification != "" {
+		results = append(results, descendantTypeViolations(ctx, doc, cidFontDict, rule, "descendant CIDFont ")...)
+	}
 
 	// The rendering-mode-3 exemption is not scoped to simple fonts: ISO 19005-1
 	// §6.3.4 t1, ISO 19005-2/3 §6.2.11.4.1 t1, ISO 19005-4 §6.2.10.4.1 t1, ISO
@@ -1069,6 +1097,25 @@ func (j *fontJudgements) descendantRules(ctx context.Context, doc *document.Docu
 	return append(results, checkCIDToGIDMap(ctx, doc, cidFontDict, fontSubtype(ctx, doc, cidFontDict), fontName, pageNum, profile, isVisible)...)
 }
 
+// descendantTypeViolations states rule when the CIDFont dictionary cid has no
+// /Type /Font, prefixing the context with subject. Absent, null and not a name
+// are three defects, and only the last case is "the file names the wrong
+// type"; see [checkFontRequiredKeys] for why %q on the empty name printed a
+// bare slash.
+func descendantTypeViolations(ctx context.Context, doc *document.Document, cid ast.PdfDict, rule Rule, subject string) []Violation {
+	typeObj, typePresent := cid["Type"]
+	typeName, typeErr := document.ResolveName(ctx, doc, typeObj)
+	switch {
+	case typeErr != nil:
+		return failf(rule, "%s/Type is not a name", subject)
+	case !typePresent || typeName == "":
+		return failf(rule, "%smissing /Type", subject)
+	case typeName != "Font":
+		return failf(rule, "%s/Type is %s, not Font", subject, typeName)
+	}
+	return nil
+}
+
 // checkFontDictRules runs the checks that read only the font dictionary, so
 // they hold for the font object wherever it is used. A page pass runs them once
 // per font object: repeating them per page would report the same dictionary
@@ -1081,46 +1128,34 @@ func (j *fontJudgements) descendantRules(ctx context.Context, doc *document.Docu
 //     /W but no /Type, confirmed in the file's own bytes, and veraPDF reports
 //     §6.2.11.2 t1 against it.
 //   - All corpora: the descendant CIDFont's t3 fires on no file.
-func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool, usage *fontUsageInfo) []Violation {
+func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool) []Violation {
 	var results []Violation
 
 	subtype := fontSubtype(ctx, doc, fontDict)
 
 	// Required font-dictionary keys (PDFont): §6.3.2 / §6.2.11.2 / §6.2.10.2.
-	results = append(results, checkFontRequiredKeys(ctx, doc, fontDict, subtype, PDFAPart(profile))...)
+	required := checkFontRequiredKeys(ctx, doc, fontDict, subtype, PDFAPart(profile))
+	results = append(results, required...)
 	// The PDFont reads its name again, as a name of its own.
 	if pdFontSubtypes[subtype] {
 		results = append(results, fontNameLimits(ctx, doc, fontDict, "font "+fontName, profile)...)
 	}
 	if subtype == "Type0" {
-		// A Type0's descendant CIDFont is a font dictionary in its own right,
-		// and ISO 32000-1, 9.7.4, Table 117 requires /Type /Font on it. veraPDF
-		// models it as a PDFont of its own and reports §6.2.11.2 t1 against it
-		// when the descendant carries no /Type.
-		//
-		// Only /Type is judged here. t2 cannot fire, since both CIDFont
-		// subtypes are already valid; t3 is left out; and t7 reads
-		// the descriptor that document.ResolveFontDescriptor already reaches
-		// THROUGH the descendant, so running the whole check again would judge
-		// one descriptor twice.
+		// veraPDF reads a Type0 font's /Type from its descendant CIDFont
+		// (PDType0Font is a PDCIDFont over the descendant's dictionary, and
+		// PDFont.getType reads that dictionary), so a descendant with no /Type
+		// fails ISO 19005-2, 6.2.11.2 t1 for the Type0 font too, besides once
+		// for itself ([fontJudgements.descendantRules]). ISO 32000-1, 9.7.5,
+		// Table 121 requires /Type /Font on the Type0 dictionary itself, which
+		// litho keeps judging, so the Type0 font is stated once when either
+		// dictionary fails.
+		rule := fontReqKeyRule(PDFAPart(profile), 1)
+		if rule.Specification == "" || slices.ContainsFunc(required, func(v Violation) bool { return v.Rule == rule }) {
+			return results
+		}
 		if descArr, err := document.ResolveArray(ctx, doc, fontDict["DescendantFonts"]); err == nil && len(descArr) > 0 {
 			if cid, err := document.ResolveDict(ctx, doc, descArr[0]); err == nil && cid != nil {
-				// Absent, null and not-a-name are three defects, and only the
-				// last of the cases below is "the file names the wrong type".
-				// See checkFontRequiredKeys for why %q on the empty name
-				// printed a bare slash.
-				typeObj, typePresent := cid["Type"]
-				typeName, typeErr := document.ResolveName(ctx, doc, typeObj)
-				rule := fontReqKeyRule(PDFAPart(profile), 1)
-				switch {
-				case typeErr != nil:
-					results = append(results, failf(rule, "descendant CIDFont /Type is not a name")...)
-				case !typePresent || typeName == "":
-					results = append(results, failf(rule, "descendant CIDFont missing /Type")...)
-				case typeName != "Font":
-					results = append(results, failf(rule,
-						"descendant CIDFont /Type is %s, not Font", typeName)...)
-				}
+				results = append(results, descendantTypeViolations(ctx, doc, cid, rule, "Type0 font read through its descendant CIDFont: ")...)
 			}
 		}
 		return results
@@ -1149,17 +1184,7 @@ func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict as
 
 	// /CharSet completeness compares the declared glyph list against the whole
 	// font program, which is likewise a property of the object.
-	results = append(results, checkCharSetDeclaredCoverage(ctx, doc, fontDict, fontName, pageNum, profile)...)
-
-	// Glyph widths compare the /Widths array against the font program, which is
-	// a property of the font object rather than of one page's codes, so this
-	// belongs with the dictionary rules. Judging it per page reported width
-	// defects veraPDF does not raise.
-	if isVisible {
-		results = append(results, checkGlyphWidths(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
-	}
-
-	return results
+	return append(results, checkCharSetDeclaredCoverage(ctx, doc, fontDict, fontName, pageNum, profile)...)
 }
 
 // checkFontUsageRules runs the checks whose verdict depends on which character
@@ -1170,6 +1195,18 @@ func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict as
 // A glyph two pages show is still stated once, by [fontJudgements.glyphs].
 // Simple fonts only; [checkType0Font] covers the composite path. The /CharSet
 // rule is stated once per font object, by [fontJudgements.subsetCoverage].
+//
+// The width rule belongs here too. It used to run once per font object,
+// because judging it on every page reported widths veraPDF does not; that
+// was veraPDF reading the program for the first page alone
+// ([fontJudgements.readsProgram]), which also judges a later page that shows
+// the font in a new rendering mode.
+//
+// # Corpus evidence
+//
+//   - All corpora, at PDF/A-1b, PDF/A-2b and PDF/A-2u, and at their own
+//     profile for the verapdf files: judging the width rule here rather than
+//     once per font object moves no count.
 func checkFontUsageRules(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, isVisible bool, usage *fontUsageInfo) []Violation {
 	var results []Violation
 
@@ -1180,6 +1217,13 @@ func checkFontUsageRules(ctx context.Context, doc *document.Document, fontDict a
 	// referenced for visible rendering must exist in the program.
 	if isVisible {
 		results = append(results, checkSimpleGlyphPresence(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
+	}
+
+	// Glyph widths, which veraPDF judges on every page it reads the program
+	// for ([fontJudgements.readsProgram]), and on every page for a Type 3
+	// font.
+	if isVisible {
+		results = append(results, checkGlyphWidths(ctx, doc, fontDict, fontName, pageNum, profile, usage)...)
 	}
 
 	// .notdef glyph.
@@ -1645,9 +1689,10 @@ func structTreeHasActualTextAt(ctx context.Context, doc *document.Document, node
 	return false
 }
 
-// checkType0Font validates composite font properties including CIDSystemInfo,
-// the CMap, and ToUnicode. The rules veraPDF states on the descendant CIDFont
-// alone, its embedding and its /CIDToGIDMap, are stated once per descendant by
+// checkType0Font validates composite font properties including CIDSystemInfo
+// and the CMap, then the glyphs the first stream shows ([checkType0UsageRules]).
+// The rules veraPDF states on the descendant CIDFont alone, its embedding and
+// its /CIDToGIDMap, are stated once per descendant by
 // [fontJudgements.descendantRules].
 func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	results := make([]Violation, 0, 4)
@@ -1673,9 +1718,6 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// CIDSystemInfo consistency.
 	results = append(results, checkCIDSystemInfo(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile)...)
 
-	// ToUnicode for composite fonts.
-	results = append(results, checkType0ToUnicode(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile, usage)...)
-
 	// CMap embedding and WMode.
 	results = append(results, checkCMapEmbedding(ctx, doc, fontDict, fontName, pageNum, profile)...)
 
@@ -1695,16 +1737,37 @@ func checkType0Font(ctx context.Context, doc *document.Document, fontDict ast.Pd
 // show operator, and a glyph two pages show is stated once, by
 // [fontJudgements.glyphs]. Simple fonts already work this way through
 // [checkFontUsageRules]. The /CIDSet rule is stated once per descendant
-// CIDFont, by [fontJudgements.subsetCoverage].
+// CIDFont, by [fontJudgements.subsetCoverage]. The presence and width rules
+// judge a page's glyphs only where veraPDF reads the program
+// ([fontJudgements.readsProgram]).
 //
 // # Corpus evidence
 //
 //   - govdocs thread_100_100870.pdf: selects one Times-Roman Identity-H font on
-//     fourteen pages, and only page 20 shows CID 0 and a CID its CFF charset
-//     does not hold. veraPDF reports both under ISO 19005-2 §6.2.11.8 and
+//     fourteen pages, and page 20 shows CID 0 and a CID its CFF charset does
+//     not hold in rendering mode 1, which no earlier page used. veraPDF
+//     reports both under ISO 19005-2 §6.2.11.8 and the second under
 //     §6.2.11.4.1 t2; litho judged the font on page 9 and never looked again.
+//   - All corpora but verapdf, at PDF/A-2u: judging a composite font's
+//     ToUnicode presence on every page, not the first alone, moved the counts
+//     of ISO 19005-2, 6.2.11.7.2 t1 onto veraPDF's in 17 files and away in
+//     none; their summed distance fell from 441 to 0.
+//   - pdfjs Brotli-Prototype-FileA.pdf: the one other count that moved, from
+//     23 to 42, which veraPDF 1.30 cannot check, as it cannot read the file's
+//     Brotli-compressed cross-reference stream.
+//   - verapdf: at each file's own profile, no count moved.
 func checkType0UsageRules(ctx context.Context, doc *document.Document, fontDict, cidFontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo, malformed judgeMalformedCodes) []Violation {
 	results := make([]Violation, 0, 4)
+
+	// ToUnicode presence, which veraPDF states on every glyph a page shows, the
+	// glyphs of later pages included (ISO 19005-2, 6.2.11.7.2 t1). A statement
+	// naming no glyph speaks for the font as a whole, and only the font's first
+	// judgement, the one that also judges malformed codes, makes it.
+	for _, v := range checkType0ToUnicode(ctx, doc, fontDict, cidFontDict, fontName, pageNum, profile, usage) {
+		if v.glyph.named || bool(malformed) {
+			results = append(results, v)
+		}
+	}
 
 	// Per-glyph ToUnicode coverage: a present map must cover every code
 	// rendered through the font (§6.2.11.7.2 t2 / UA 7.21.7 / 8.4.5.8).

@@ -1,7 +1,9 @@
 package compliance
 
 import (
+	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/models"
@@ -70,4 +72,70 @@ func TestDescendantCIDFontRequiresType(t *testing.T) {
 			t.Error("a null descendant has no CIDFont dictionary to judge")
 		}
 	})
+}
+
+// TestDescendantTypeCounts pins how often ISO 19005-1, 6.3.2 t1 and ISO
+// 19005-2, 6.2.11.2 t1 fire over a descendant CIDFont with no /Type: once for
+// every Type0 font over it, which veraPDF reads /Type from it for, and once
+// for the descendant. A Type0 dictionary with no /Type of its own fires once
+// for it, as ISO 32000-1, 9.7.5, Table 121 requires the entry there, although
+// veraPDF, reading the descendant's, reports nothing.
+//
+// Every count but the last was measured with veraPDF 1.30 at PDF/A-1b and
+// PDF/A-2b.
+func TestDescendantTypeCounts(t *testing.T) {
+	t.Parallel()
+
+	noType := func(objs []string) []string {
+		objs[5] = strings.Replace(objs[5], "/Type /Font ", "", 1)
+		return objs
+	}
+	twoType0 := func(objs []string) []string {
+		objs = withObject(objs, 9, "<< /Type /Font /Subtype /Type0 /BaseFont /ABCDEF+Arial /Encoding /Identity-H /DescendantFonts [6 0 R] >>")
+		objs[10] = strings.Replace(objs[10], "/F1 5 0 R", "/F1 9 0 R", 1)
+		return objs
+	}
+	for _, tc := range []struct {
+		name string
+		objs []string
+		want int
+	}{
+		{"one Type0 font", noType(glyphPagesObjs(programScopeType0Font(t), glyphText("<0025> Tj"))), 2},
+		{"two Type0 fonts", twoType0(noType(glyphPagesObjs(programScopeType0Font(t), glyphText("<0025> Tj"), glyphText("<0025> Tj")))), 3},
+		{"a descendant naming another type", func() []string {
+			objs := glyphPagesObjs(programScopeType0Font(t), glyphText("<0025> Tj"))
+			objs[5] = strings.Replace(objs[5], "/Type /Font ", "/Type /FontX ", 1)
+			return objs
+		}(), 2},
+		{"both dictionaries", func() []string {
+			objs := noType(glyphPagesObjs(programScopeType0Font(t), glyphText("<0025> Tj")))
+			objs[4] = strings.Replace(objs[4], "/Type /Font ", "", 1)
+			return objs
+		}(), 2},
+		{"the Type0 dictionary alone", func() []string {
+			objs := glyphPagesObjs(programScopeType0Font(t), glyphText("<0025> Tj"))
+			objs[4] = strings.Replace(objs[4], "/Type /Font ", "", 1)
+			return objs
+		}(), 1},
+	} {
+		for _, p := range []struct {
+			profile models.PDFAProfile
+			rule    Rule
+		}{
+			{models.PDFA1b, Rule_19005_1_6_3_2_t01},
+			{models.PDFA2b, Rule_19005_2_6_2_11_2_t01},
+		} {
+			t.Run(string(p.profile)+" "+tc.name, func(t *testing.T) {
+				t.Parallel()
+				doc, _ := objsDocPDF(t, tc.objs...)
+				viols, err := ValidatePDFA(context.Background(), doc, p.profile)
+				if err != nil {
+					t.Fatalf("ValidatePDFA: %v", err)
+				}
+				if got := countRuleErrs(t, viols, p.rule); got != tc.want {
+					t.Errorf("%s test %d fired %d times, want %d", p.rule.Clause, p.rule.TestNumber, got, tc.want)
+				}
+			})
+		}
+	}
 }
