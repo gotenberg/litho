@@ -522,12 +522,15 @@ type pageTreeNode struct {
 //
 // ISO 32000-1, 7.7.3.4 and Table 30 make /Resources, /MediaBox, /CropBox and
 // /Rotate inheritable, and veraPDF looks them up this way
-// (PDPageTreeNode.getInheritableResources, PDPage.getInheritedCOSBBox): a null
-// entry is absent (ISO 32000-1, 7.3.7), and any other value, a reference to a
-// missing object or one that is not a dictionary included, ends the search.
-// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b: a page whose /Resources
-// is null inherits its ancestor's fonts and colour spaces, and one whose
-// /Resources is 99 0 R, with no object 99, or 7 inherits none.
+// (PDPageTreeNode.getInheritableResources, PDPage.getInheritedCOSBBox), testing
+// whether the node holds the entry as [knownKey] does: a null entry is absent
+// (ISO 32000-1, 7.3.7), and any other value, one that is not a dictionary
+// included, ends the search. So does an indirect reference whatever it names,
+// although ISO 32000-1, 7.3.10 reads a reference to an undefined object as the
+// null object, which would make it absent: the verdicts follow the entry veraPDF
+// reads. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b: a page whose
+// /Resources is null inherits its ancestor's fonts and colour spaces, and one
+// whose /Resources is 99 0 R, with no object 99, or 7 inherits none.
 //
 // # Corpus evidence
 //
@@ -537,25 +540,15 @@ type pageTreeNode struct {
 //     another holder than the walk does, so resolving through the tree moves
 //     no count at PDF/A-1b or PDF/A-2b.
 func (p *pageObject) inheritedHolder(key ast.PdfName) (ast.PdfDict, propertyListSite, *pageTreeNode) {
-	if holdsEntry(p.dict, key) {
+	if knownKey(p.dict, key) {
 		return p.dict, propertyListSite{objNum: p.objNum}, nil
 	}
 	for n := p.parent; n != nil; n = n.parent {
-		if holdsEntry(n.dict, key) {
+		if knownKey(n.dict, key) {
 			return n.dict, propertyListSite{objNum: n.objNum}, n
 		}
 	}
 	return nil, propertyListSite{}, nil
-}
-
-// holdsEntry reports whether dict states key with a value other than null.
-func holdsEntry(dict ast.PdfDict, key ast.PdfName) bool {
-	value, ok := dict[key]
-	if !ok {
-		return false
-	}
-	_, null := value.(ast.PdfNull)
-	return !null
 }
 
 // effectiveResources returns the resource dictionary the page's content resolves
