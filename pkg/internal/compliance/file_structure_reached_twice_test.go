@@ -64,26 +64,46 @@ func TestCOSRulesJudgeInfoAndMetadataTwice(t *testing.T) {
 		rule    Rule
 		want    int
 	}{
-		{"odd hex string in /Info", reachedTwicePDF("", "", " /Info 5 0 R", "<< /Producer <414> >>"),
-			models.PDFA1b, Rule_19005_1_6_1_6_t01, 2},
-		{"odd hex string nested in /Info", reachedTwicePDF("", "", " /Info 5 0 R", "<< /Producer [<414>] >>"),
-			models.PDFA2b, Rule_19005_2_6_1_6_t01, 2},
-		{"integer out of range in /Info", reachedTwicePDF("", "", " /Info 5 0 R", "<< /Foo 2147483648 >>"),
-			models.PDFA1b, Rule_19005_1_6_1_12_t01, 2},
-		{"long name key in /Info", reachedTwicePDF("", "", " /Info 5 0 R", "<< /"+strings.Repeat("K", 200)+" (x) >>"),
-			models.PDFA2b, Rule_19005_2_6_1_13_t04, 2},
-		{"catalog metadata with a short /Length", reachedTwicePDF(" /Metadata 5 0 R", "", "", metadata(metaDict, 3)),
-			models.PDFA1b, Rule_19005_1_6_1_7_t01, 2},
-		{"catalog metadata with a short /Length at 2b", reachedTwicePDF(" /Metadata 5 0 R", "", "", metadata(metaDict, 3)),
-			models.PDFA2b, Rule_19005_2_6_1_7_1_t01, 2},
-		{"page metadata with a short /Length", reachedTwicePDF("", " /Metadata 5 0 R", "", metadata(metaDict, 3)),
-			models.PDFA2b, Rule_19005_2_6_1_7_1_t01, 2},
-		{"catalog metadata with /F", reachedTwicePDF(" /Metadata 5 0 R", "", "", metadata(metaDict+" /F (x.xml)", 0)),
-			models.PDFA1b, Rule_19005_1_6_1_7_t03, 2},
-		{"catalog metadata holding a long name", reachedTwicePDF(" /Metadata 5 0 R", "", "", metadata(metaDict+" /Foo /"+strings.Repeat("V", 200), 0)),
-			models.PDFA1b, Rule_19005_1_6_1_12_t04, 2},
-		{"catalog metadata with no /Type", reachedTwicePDF(" /Metadata 5 0 R", "", "", metadata("/Subtype /XML", 3)),
-			models.PDFA1b, Rule_19005_1_6_1_7_t01, 1},
+		{
+			"odd hex string in /Info", reachedTwicePDF("", "", " /Info 5 0 R", "<< /Producer <414> >>"),
+			models.PDFA1b, Rule_19005_1_6_1_6_t01, 2,
+		},
+		{
+			"odd hex string nested in /Info", reachedTwicePDF("", "", " /Info 5 0 R", "<< /Producer [<414>] >>"),
+			models.PDFA2b, Rule_19005_2_6_1_6_t01, 2,
+		},
+		{
+			"integer out of range in /Info", reachedTwicePDF("", "", " /Info 5 0 R", "<< /Foo 2147483648 >>"),
+			models.PDFA1b, Rule_19005_1_6_1_12_t01, 2,
+		},
+		{
+			"long name key in /Info", reachedTwicePDF("", "", " /Info 5 0 R", "<< /"+strings.Repeat("K", 200)+" (x) >>"),
+			models.PDFA2b, Rule_19005_2_6_1_13_t04, 2,
+		},
+		{
+			"catalog metadata with a short /Length", reachedTwicePDF(" /Metadata 5 0 R", "", "", metadata(metaDict, 3)),
+			models.PDFA1b, Rule_19005_1_6_1_7_t01, 2,
+		},
+		{
+			"catalog metadata with a short /Length at 2b", reachedTwicePDF(" /Metadata 5 0 R", "", "", metadata(metaDict, 3)),
+			models.PDFA2b, Rule_19005_2_6_1_7_1_t01, 2,
+		},
+		{
+			"page metadata with a short /Length", reachedTwicePDF("", " /Metadata 5 0 R", "", metadata(metaDict, 3)),
+			models.PDFA2b, Rule_19005_2_6_1_7_1_t01, 2,
+		},
+		{
+			"catalog metadata with /F", reachedTwicePDF(" /Metadata 5 0 R", "", "", metadata(metaDict+" /F (x.xml)", 0)),
+			models.PDFA1b, Rule_19005_1_6_1_7_t03, 2,
+		},
+		{
+			"catalog metadata holding a long name", reachedTwicePDF(" /Metadata 5 0 R", "", "", metadata(metaDict+" /Foo /"+strings.Repeat("V", 200), 0)),
+			models.PDFA1b, Rule_19005_1_6_1_12_t04, 2,
+		},
+		{
+			"catalog metadata with no /Type", reachedTwicePDF(" /Metadata 5 0 R", "", "", metadata("/Subtype /XML", 3)),
+			models.PDFA1b, Rule_19005_1_6_1_7_t01, 1,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

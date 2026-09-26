@@ -28,8 +28,10 @@ func TestColorLinkWalk_DeviceGroupCSCountsAsUsage(t *testing.T) {
 			t.Fatalf("resolve form: %v", err)
 		}
 		rgb := false
-		w := &colorLinkWalk{doc: doc, part: 4, judged: map[int]bool{}, streams: map[string]*linkStream{},
-			visit: func(n colorNode) { rgb = rgb || n.family == "DeviceRGB" && !n.covered }}
+		w := &colorLinkWalk{
+			doc: doc, part: 4, judged: map[int]bool{}, streams: map[string]*linkStream{},
+			visit: func(n colorNode) { rgb = rgb || n.family == "DeviceRGB" && !n.covered },
+		}
 		w.walkForm(ctx, stream, w.newStream(ctx, nil, nil), initialState, 0)
 		return rgb
 	}
