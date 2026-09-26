@@ -129,6 +129,7 @@ one deliberately rather than diffing it against a fresh build.
 | `colouroff_2b.pdf`     | PDF/A-2b     | Resource names a stream with its colour operators off never uses |
 | `blendcs_4.pdf`        | PDF/A-4      | Which transparency blending spaces cover device colour           |
 | `threedcs_4.pdf`       | PDF/A-4      | The colour space of a 3D stream, read as veraPDF builds it       |
+| `undecodable_2b.pdf`   | PDF/A-2b     | Content streams veraPDF reads no operator from                   |
 
 ### Must-not-fire controls
 
@@ -389,6 +390,7 @@ which are covered under [Known divergences](#known-divergences).
 | `ttcmap_2b.pdf`        | 8    | 5    | 9    | 6    | 7    | 9    | 6    | 7    | 6   | 6    | 7    | 9    | 8    |
 | `ttencoding_2b.pdf`    | 10   | 7    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 10   | 10   |
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 5    | 4    |
+| `undecodable_2b.pdf`   | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 11   | 9    |
 | `usedcs_2b.pdf`        | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `xfatable_ua1.pdf`     | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 4    | 7    |
 | `xmpsyntax_1b.pdf`     | 9    | 7    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 9    | 8    |
@@ -3099,6 +3101,64 @@ veraPDF counts `7.1/3` and `8.2.2/1` once per untagged content item, and `7.2/34
 once per text show, and litho once each, as for every untagged fixture,
 `usedcs_2b.pdf` among them.
 
+### `undecodable_2b.pdf`
+
+veraPDF 1.30 decodes a stream through FlateDecode, ASCIIHexDecode,
+ASCII85Decode, LZWDecode and RunLengthDecode alone, and reads no operator from
+a content stream whose chain ends with any other name: the abbreviations ISO
+32000-1, 8.9.7 gives inline images, the image codecs, BrotliDecode, an unknown
+name. A name it does not decode earlier in the chain passes its input on
+unchanged. Nor does it read a `/Contents` that is neither a stream nor an
+array. litho read the operators of the streams it decodes itself, judged every
+font of a page whose content it could not read, and read a Type 3 glyph's width
+from a procedure veraPDF cannot read either. The corpus files that reach the
+abbreviations, BrotliDecode, an image codec or a `/Contents` that is no stream
+are pdfjs files, which carry no compliance golden, and no file of any corpus
+writes a filter veraPDF does not decode before the last of a chain, or content
+stream parameters that do not fit their chain.
+
+Each page paints the same probe wherever a reader takes its operators, with a
+font of its own: text in an unembedded Helvetica, a DeviceRGB fill with no
+OutputIntent, and an undefined operator.
+
+| Page | Where the probe sits                                     | veraPDF reads it |
+| ---- | -------------------------------------------------------- | ---------------- |
+| 1    | the page, no filter                                      | yes              |
+| 2    | the page, `[/Foo /FlateDecode]` over Flate data          | yes              |
+| 3    | the page, `[/FlateDecode /Foo]` over Flate data          | no               |
+| 4    | the page, `/Fl` over Flate data                          | no               |
+| 5    | the page, `/DCTDecode` over the probe itself             | no               |
+| 6    | the page, `/BrotliDecode` over Brotli data               | no               |
+| 7    | none: `/Contents` is a dictionary                        | no               |
+| 8    | a form XObject, `/Fl` over Flate data                    | no               |
+| 9    | a tiling pattern cell, `/AHx` over hex digits            | no               |
+| 10   | an annotation appearance, `/A85` over base-85            | no               |
+| 12   | the page, `/FlateDecode` with two parameter dictionaries | no               |
+| 13   | the page, `/FlateDecode` with the parameters `[5]`       | no               |
+
+Page 2 gives `/Foo` a PNG predictor and `/FlateDecode` null, so the chain is
+read without `/Foo` only if the parameters leave with it. veraPDF fails to
+decode a stream whose parameters count other than its filters, or hold an entry
+that is neither a dictionary nor null. Page 11 shows the glyph of a Type 3 font
+whose procedure is `/AHx` over `500 0 d0`, under a `/Widths` of 500. veraPDF
+cannot read the procedure, takes the missing width of 0 and fails the glyph
+width, where litho read 500.
+
+| Rule at PDF/A-2b                  | veraPDF | litho | litho before |
+| --------------------------------- | ------- | ----- | ------------ |
+| `6.1.7.2/1` non-standard filter   | 8       | 8     | 8            |
+| `6.2.2/1` undefined operator      | 2       | 2     | 8            |
+| `6.2.4.3/2` DeviceRGB             | 4       | 4     | 16           |
+| `6.2.4.3/4` DeviceGray            | 3       | 3     | 10           |
+| `6.2.11.4.1/1` font not embedded  | 2       | 2     | 10           |
+| `6.2.11.5/1` glyph width mismatch | 1       | 1     | 0            |
+| `6.6.2.1/1` no XMP                | 1       | 1     | 1            |
+
+The file returns the same rule set as veraPDF 1.30.2 in all thirteen cells,
+and the same counts in the eleven PDF/A ones. At PDF/UA-1 veraPDF counts `7.1/3`
+and `7.2/34`, and at PDF/UA-2 `8.2.2/1`, once per untagged content item, and
+litho once each.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
@@ -3108,7 +3168,7 @@ and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 996 of the 1001 cells. The five
+fixtures exist to protect, and it holds in 1009 of the 1014 cells. The five
 exceptions, two on `complex_ua2` and three on `inlineimage_2b`, are marked `*`
 in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
