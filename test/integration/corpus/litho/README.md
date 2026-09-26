@@ -135,6 +135,7 @@ one deliberately rather than diffing it against a fresh build.
 | `repairleft_4.pdf`     | PDF/A-4      | Inherited colour spaces, emptied `'` and `"`, a covered group    |
 | `defaultcs_4.pdf`      | PDF/A-4      | Default colour spaces judged in place of the family they replace |
 | `csnames_2b.pdf`       | PDF/A-2b     | Colour-space names inside colour space arrays, read as the entry |
+| `offlimits_1b.pdf`     | PDF/A-1b     | Implementation limits in streams drawn with colour operators off |
 
 ### Must-not-fire controls
 
@@ -317,6 +318,9 @@ violation but is exempt, so a firing is a false positive.
 | `defaultcs_4`                             | Page 24: a form's DefaultGray of `5` under the page's inherited fill   | ISO 19005-4, 6.2.2 t3        |
 | `csnames_2b`                              | Page 17: a form's shading naming `/CS0`, which only the page defines   | ISO 32000-1, 7.8.3           |
 | `csnames_2b`                              | Page 20: two Separations of one colorant over `/CS0` and `/DeviceCMYK` | ISO 19005-2, 6.2.4.4 t2      |
+| `offlimits_1b`                            | Page 2: a coloured cell selecting `DN` beside an uncoloured one        | ISO 32000-1, 8.7.3.3         |
+| `offlimits_1b`                            | Pages 6, 8, 9: a pattern selected with colour operators off            | ISO 32000-1, 9.6.5           |
+| `offlimits_1b`                            | Pages 11 to 13: `99999999999 g` drawn with colour operators off        | ISO 19005-1, 6.1.12 t1       |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -387,6 +391,7 @@ which are covered under [Known divergences](#known-divergences).
 | `metafilter_1b.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 8    | 7    |
 | `multipage_2b.pdf`     | 12   | 10   | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 10   | 9    |
 | `namereads_1b.pdf`     | 10   | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 7   | 7    | 8    | 6    | 6    |
+| `offlimits_1b.pdf`     | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 6    | 7    | 7    | 7    |
 | `outputintent_2b.pdf`  | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
 | `pagegroup_2b.pdf`     | 7    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 6    | 6    |
 | `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
@@ -3343,6 +3348,56 @@ The two tools return the same rule set in all thirteen cells, and the same count
 for every rule at every PDF/A level; at the PDF/UA levels veraPDF counts `7.1/3`
 and `8.2.2/1` once per untagged content item.
 
+### `offlimits_1b.pdf`
+
+An uncoloured tiling pattern's cell ignores its colour operators (ISO 32000-1,
+8.7.3.3), and so does a Type 3 glyph past its `d1` (9.6.5). veraPDF builds no
+colour space and no pattern an operator in such a stream selects, and neither
+does it in a form or a glyph such a stream draws, so the DeviceN colourant
+limit, ISO 19005-1, 6.1.12 t9, and the integer limit of a number given to a
+colour operator, t1, go unjudged there; an image such a stream paints is still
+built. A census found 17 corpus files drawing a stream with its colour
+operators off and none holding a number past a limit in one, so no count
+reached the reading and no remediation had to leave such a number as written.
+
+Fourteen pages each hold one construct. `DN` is a DeviceN of 33 colourants,
+past the 8 of ISO 19005-1 and the 32 of ISO 19005-2:
+
+| Pages      | Construct                                                               | 6.1.12 at PDF/A-1b |
+| ---------- | ----------------------------------------------------------------------- | ------------------ |
+| 1, 3       | an uncoloured cell paints an image in `DN`, or a form painting one      | t9 x1 each         |
+| 2          | a coloured cell selects `DN` beside an uncoloured cell                  | nothing            |
+| 4, 5       | an `/Indexed` over the `DN` entry, selected and filled, then an image   | t9 x2, x1          |
+| 6, 7       | a glyph selects a pattern past its `d1`, then past the `Q` closing it   | nothing, t1 x1     |
+| 8, 9       | a pattern an uncoloured cell, or a form it paints, selects              | nothing            |
+| 10         | a bare `scn` in a form the page paints in the Pattern space             | t1 x1              |
+| 11, 12, 13 | `99999999999 g` in a form, a glyph and a coloured cell drawn colour-off | nothing            |
+| 14         | `99999999999 g` in a form the page paints                               | t1 x1              |
+
+The patterns of pages 6 to 10 are coloured cells of their own giving `w` the
+integer 2147483648, which counts only where veraPDF builds the pattern. Page 2
+is the uncoloured pattern turning the colour operators off for every tiling
+cell the same stream paints, the coloured one beside it included. Pages 11 to
+14 are what the content-limits repair reads: at PDF/A-1b it clamps the number on
+page 14, which compliance judges, and leaves the three it does not, in both
+modes. Page 7's glyph opens with `q`, so its `d1` is no first operator and its
+width reads as 0 against `/Widths` 1000, `6.3.6/1`.
+
+| Rule at PDF/A-1b       | veraPDF | litho |
+| ---------------------- | ------- | ----- |
+| `6.1.12/1` integer     | 3       | 3     |
+| `6.1.12/9` DeviceN     | 5       | 5     |
+| `6.2.3.3/2` DeviceCMYK | 5       | 5     |
+| `6.2.3.3/3` DeviceGray | 5       | 5     |
+| `6.3.6/1` glyph width  | 1       | 1     |
+| `6.7.2/1` no metadata  | 1       | 1     |
+
+The two tools return the same rule set in all thirteen cells. Their counts agree
+at every PDF/A level but PDF/A-1a, where veraPDF states `6.3.8/1` once per
+rendered glyph and litho once per font, and at the PDF/UA levels, where
+veraPDF counts `7.1/3`, `7.2/34` and `8.2.2/1` once per untagged item (see
+[Instance counts](#instance-counts-which-the-corpus-does-not-pin)).
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
@@ -3352,7 +3407,7 @@ and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1022 of the 1027 cells. The five
+fixtures exist to protect, and it holds in 1035 of the 1040 cells. The five
 exceptions, two on `complex_ua2` and three on `inlineimage_2b`, are marked `*`
 in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
