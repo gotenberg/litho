@@ -348,8 +348,9 @@ var noContext = glyphContext{mode: -1}
 //     [checkType3ToUnicode]. For the fonts it did judge the counts moved
 //     toward veraPDF's: T13 from 22 to 10 against 8, T18 from 3 to 4 against 4.
 //   - pdfjs issue5010.pdf: its /ToUnicode takes most mappings from the
-//     Adobe-Korea1-UCS2 base CMap it names with usecmap, which litho does not
-//     load, so litho states 10 unmapped codes where veraPDF states 5.
+//     Adobe-Korea1-UCS2 base CMap it names with usecmap, which litho did not
+//     load, so litho stated 10 unmapped codes where veraPDF states 5; see
+//     [resolveUsedCMaps].
 func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fontID string, font ast.PdfDict, usage *fontUsageInfo, profile string, vs []Violation) []Violation {
 	var out []Violation
 	var where map[uint32][]shownGlyph

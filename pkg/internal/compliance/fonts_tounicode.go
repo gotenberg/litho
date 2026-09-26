@@ -22,9 +22,9 @@ import (
 // CMap alone (GFGlyph.getToUnicodePDFA1). ISO 19005-4 sets no presence rule.
 //
 // A /ToUnicode entry that is not a stream, or whose stream cannot be decoded,
-// is left alone: a name such as /Identity-H maps every code for veraPDF, and
-// litho cannot tell which codes an undecodable stream maps. A stream that
-// decodes to no mapping maps no code.
+// is left alone: veraPDF (PDFont.cMapToUnicode) maps every code through a
+// name such as /Identity-H, and litho cannot tell which codes an undecodable
+// stream maps. A stream that decodes to no mapping maps no code.
 //
 // Measured with veraPDF 1.30 at PDF/A-2u, PDF/A-3u and PDF/UA-1 on a Type 3
 // font showing four codes named zzq, zzr, A and zzs whose /ToUnicode maps the
@@ -86,7 +86,8 @@ func checkType3ToUnicode(ctx context.Context, doc *document.Document, fontDict a
 
 // toUnicodeCodeValues returns the value of every code the /ToUnicode CMap
 // tuObj maps, read as veraPDF reads it for a simple font: by integer value, in
-// the strict view [cmap.CMap.StrictMapping] gives. A CMap carrying a token its syntax cannot produce maps
+// the strict view [cmap.CMap.StrictMapping] gives, with the CMaps it builds on
+// ([resolveUsedCMaps]). A CMap carrying a token its syntax cannot produce maps
 // nothing ([cmap.CMap.Malformed]). ok is false when tuObj is not a stream or
 // its stream cannot be decoded.
 func toUnicodeCodeValues(ctx context.Context, doc *document.Document, tuObj ast.PdfObject) (map[int]bool, bool) {
@@ -103,7 +104,94 @@ func toUnicodeCodeValues(ctx context.Context, doc *document.Document, tuObj ast.
 	if err != nil || parsed == nil || parsed.Malformed() {
 		return map[int]bool{}, true
 	}
+	parsed = resolveUsedCMaps(ctx, doc, tuObj, stream.Dict, parsed)
 	return sourceCodeValues(parsed.StrictMapping()), true
+}
+
+// resolveUsedCMaps returns parsed, the /ToUnicode CMap tuObj names, with the
+// mappings of the CMaps it builds on, merged the way veraPDF (PDCMap, CMap)
+// merges them. The usecmap operator (ISO 32000-1, 9.7.5.4) names a predefined
+// CMap, whose single-code mappings join the program's: veraPDF merges only
+// those (CMap.useCMap copies the base's bfchar entries and none of its bfrange
+// intervals). A /UseCMap entry in the stream dictionary (ISO 32000-1, 9.7.5.3,
+// Table 120) names a predefined CMap or an embedded CMap stream, whose every
+// mapping supplies a code the program leaves out, followed down its own
+// /UseCMap entries.
+//
+// The /UseCMap chain is bounded by [maxUseCMapChainDepth] and stops at a stream
+// it has already met; veraPDF raises "Loop inside CMap" there and abandons the
+// whole validation. An embedded base supplies its values only to codes the
+// program leaves out, where veraPDF also lets the base's single-code mappings
+// replace the program's own values; that changes the value of a code both map,
+// never whether it maps.
+//
+// Measured with veraPDF 1.30 at PDF/A-2u on a Type 3 font showing codes 41,
+// 60, 61 and 65 hexadecimal: a /ToUnicode mapping none of them fails four; one
+// whose program runs /Adobe-Korea1-UCS2 usecmap fails 41 and 65, which that
+// CMap maps only through bfrange; one whose dictionary names that CMap with
+// /UseCMap fails none; one whose /UseCMap names a stream mapping 41 and 65,
+// or a stream that in turn names one mapping 41 while mapping 65 itself, fails
+// 60 and 61. A program that maps 60 to U+0000 before its usecmap and 61 to
+// U+0000 after it fails the value rule for 61 alone.
+//
+// # Corpus evidence
+//
+//   - All corpora: pdfjs issue5010.pdf is the one file whose /ToUnicode builds
+//     on another CMap, through usecmap; none names one with /UseCMap.
+//   - pdfjs issue5010.pdf: its /ToUnicode runs /Adobe-Korea1-UCS2 usecmap and
+//     maps a handful of codes itself. veraPDF fails at PDF/A-2u exactly the
+//     five shown codes that CMap reaches only through bfrange; litho states
+//     those five where, not loading the base, it stated ten.
+func resolveUsedCMaps(ctx context.Context, doc *document.Document, tuObj ast.PdfObject, dict ast.PdfDict, parsed *cmap.CMap) *cmap.CMap {
+	visited := make(map[int]bool)
+	if ref, ok := tuObj.(ast.PdfIndirectRef); ok {
+		visited[ref.ObjectNum] = true
+	}
+	return resolveUsedCMapsAt(ctx, doc, dict, parsed, visited, 0)
+}
+
+// resolveUsedCMapsAt is [resolveUsedCMaps] for a CMap depth links down the
+// /UseCMap chain, visited holding the streams already met.
+func resolveUsedCMapsAt(ctx context.Context, doc *document.Document, dict ast.PdfDict, parsed *cmap.CMap, visited map[int]bool, depth int) *cmap.CMap {
+	if name := parsed.UseCMap(); name != "" {
+		if chars, _ := cmap.PredefinedUnicode(name); chars != nil {
+			parsed = parsed.WithBase(chars, nil, false)
+		}
+	}
+	baseObj, ok := dict["UseCMap"]
+	if !ok || depth >= maxUseCMapChainDepth || ctx.Err() != nil {
+		return parsed
+	}
+	if name, err := document.ResolveName(ctx, doc, baseObj); err == nil && name != "" {
+		// A predefined base is merged after the program has run, so its
+		// single-code mappings replace the program's own (PDCMap.getCMapFile).
+		chars, all := cmap.PredefinedUnicode(string(name))
+		if all == nil {
+			return parsed
+		}
+		return parsed.WithBase(chars, all, true)
+	}
+	if ref, ok := baseObj.(ast.PdfIndirectRef); ok {
+		if visited[ref.ObjectNum] {
+			return parsed
+		}
+		visited[ref.ObjectNum] = true
+	}
+	stream, err := document.ResolveStream(ctx, doc, baseObj)
+	if err != nil || stream.Dict == nil {
+		return parsed
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("compliance: fonts: failed to decode /UseCMap base CMap", "error", err)
+		return parsed
+	}
+	base, err := cmap.Parse(ctx, data)
+	if err != nil || base == nil || base.Malformed() {
+		return parsed
+	}
+	base = resolveUsedCMapsAt(ctx, doc, stream.Dict, base, visited, depth+1)
+	return parsed.WithBase(nil, base.StrictMapping(), true)
 }
 
 // sourceCodeValues returns the integer value of every source code of a

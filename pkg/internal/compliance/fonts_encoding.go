@@ -1449,6 +1449,9 @@ func shownCodesOutsideToUnicode(ctx context.Context, doc *document.Document, fon
 		return nil
 	}
 	parsed, err := cmap.Parse(ctx, data)
+	if err == nil && parsed != nil {
+		parsed = resolveUsedCMaps(ctx, doc, tuObj, stream.Dict, parsed)
+	}
 	if err != nil || parsed == nil || len(parsed.Mapping) == 0 {
 		doc.Logger.Debug("compliance: fonts: failed to parse ToUnicode CMap", "error", err)
 		return nil
@@ -1799,7 +1802,10 @@ func toUnicodeMapsNothing(ctx context.Context, doc *document.Document, tuObj ast
 		}
 	}
 	parsed, err := cmap.Parse(ctx, data)
-	return err != nil || parsed == nil || len(parsed.Mapping) == 0 || parsed.Malformed()
+	if err != nil || parsed == nil || parsed.Malformed() {
+		return true
+	}
+	return len(resolveUsedCMaps(ctx, doc, tuObj, stream.Dict, parsed).Mapping) == 0
 }
 
 // checkToUnicodeCMapValues validates that a readable /ToUnicode CMap does not
@@ -1856,6 +1862,9 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 	}
 
 	parsed, err := cmap.Parse(ctx, data)
+	if err == nil && parsed != nil {
+		parsed = resolveUsedCMaps(ctx, doc, tuObj, stream.Dict, parsed)
+	}
 	if err != nil || parsed == nil || len(parsed.Mapping) == 0 {
 		// Unparseable CMap: fall back to the destination-only byte scan
 		// over the whole map rather than silently passing.

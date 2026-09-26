@@ -5,6 +5,7 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strings"
 	"unicode/utf16"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -44,6 +45,12 @@ type CMap struct {
 	// malformed records a token the CMap syntax cannot produce, which leaves
 	// the whole CMap unusable to a validator even where entries still parsed.
 	malformed bool
+
+	// useCMap is the name the program's usecmap operator gives its base CMap,
+	// and afterUse, allocated once the operator runs, holds the codes the
+	// program maps after it; see [CMap.WithBase].
+	useCMap  string
+	afterUse map[string]bool
 }
 
 // StrictMapping returns the mapping without the codes that only a
@@ -76,6 +83,9 @@ func (c *CMap) set(code, uni string, conforming bool) {
 	c.Mapping[code] = uni
 	if c.strict != nil && conforming {
 		c.strict[code] = uni
+	}
+	if c.afterUse != nil {
+		c.afterUse[code] = true
 	}
 }
 
@@ -135,6 +145,9 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 	p := parser.NewParser(lex)
 
 	c := &CMap{Mapping: make(map[string]string)}
+	// lastName is the name token most recently read outside a mapping block,
+	// the operand a usecmap operator takes (ISO 32000-1, 9.7.5.4).
+	lastName := ""
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -322,6 +335,17 @@ func Parse(ctx context.Context, data []byte) (*CMap, error) {
 			// included.
 			if tok.Type == lexer.TokenDelimiter && tok.Value == ">" {
 				c.malformed = true
+			}
+			switch {
+			case tok.Type == lexer.TokenName:
+				lastName = strings.TrimPrefix(tok.Value, "/")
+			case tok.Type == lexer.TokenKeyword && tok.Value == "usecmap" && lastName != "":
+				// A second usecmap names a further base; the first is the one
+				// litho resolves, and every code mapped after it overrides it.
+				if c.useCMap == "" {
+					c.useCMap = lastName
+					c.afterUse = make(map[string]bool)
+				}
 			}
 			if _, err := p.Consume(); err != nil {
 				return nil, err

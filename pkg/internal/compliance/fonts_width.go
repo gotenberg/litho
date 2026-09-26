@@ -1396,6 +1396,9 @@ func checkType0PerGlyphToUnicode(ctx context.Context, doc *document.Document, fo
 		return nil
 	}
 	tu, err := cmap.Parse(ctx, data)
+	if err == nil && tu != nil {
+		tu = resolveUsedCMaps(ctx, doc, fontDict["ToUnicode"], tuStream.Dict, tu)
+	}
 	if err != nil || tu == nil || len(tu.Mapping) == 0 {
 		return nil
 	}

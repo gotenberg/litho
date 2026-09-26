@@ -132,6 +132,95 @@ func TestToUnicode_Type3CodesOutsideCMap(t *testing.T) {
 	}
 }
 
+// useCMapCases are the fixtures of [TestToUnicode_UseCMap]: a Type 3 font
+// showing codes 41, 60, 61 and 65 hexadecimal, none of them named with a
+// Unicode value, whose /ToUnicode builds on another CMap. Adobe-Korea1-UCS2
+// maps CIDs 60 and 61 through bfchar and CIDs 41 and 65 through bfrange.
+var useCMapCases = []struct {
+	name           string
+	tu, tuDict     string
+	bases          []string
+	t1, valueFails int
+}{
+	{"no base", toUnicodeProgram(""), "", nil, 4, 0},
+	{"usecmap naming a predefined CMap", toUnicodeProgram("/Adobe-Korea1-UCS2 usecmap\n"), "", nil, 2, 0},
+	{"usecmap naming a CMap litho does not bundle", toUnicodeProgram("/No-Such-CMap usecmap\n"), "", nil, 4, 0},
+	{"/UseCMap naming a predefined CMap", toUnicodeProgram(""), "/UseCMap /Adobe-Korea1-UCS2", nil, 0, 0},
+	{
+		"/UseCMap naming a stream", toUnicodeProgram(""), "/UseCMap 7 0 R",
+		[]string{exponentStream("", toUnicodeProgram(bfchars("41", "0041", "65", "0065")))},
+		2, 0,
+	},
+	{"/UseCMap chain", toUnicodeProgram(""), "/UseCMap 7 0 R", []string{
+		exponentStream("/UseCMap 8 0 R", toUnicodeProgram(bfchars("65", "0065"))),
+		exponentStream("", toUnicodeProgram(bfchars("41", "0041"))),
+	}, 2, 0},
+	{
+		"usecmap between two mappings to U+0000",
+		toUnicodeProgram(bfchars("60", "0000") + "/Adobe-Korea1-UCS2 usecmap\n" + bfchars("61", "0000")), "", nil, 2, 1,
+	},
+}
+
+// TestToUnicode_UseCMap pins that a /ToUnicode CMap is read with the CMaps it
+// builds on, as veraPDF reads it; see [resolveUsedCMaps]. The usecmap operator
+// merges the predefined base's bfchar mappings alone, a base CMap replaces a
+// mapping defined before the operator and yields to one defined after it, and
+// a /UseCMap entry supplies every mapping of its base down the chain. Every
+// count was measured with veraPDF 1.30 at PDF/A-2u on these PDFs.
+func TestToUnicode_UseCMap(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range useCMapCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			font := type3Font(0x41, []string{"zzq"}, tc.tu, tc.tuDict, tc.bases...)
+			// Codes 60, 61 and 65 take the names zzr, zzs and zzt.
+			font[0] = strings.Replace(font[0], "/Differences [65 /zzq]", "/Differences [65 /zzq 96 /zzr /zzs 101 /zzt]", 1)
+			font[0] = strings.Replace(font[0], "/CharProcs << /zzq 9 0 R >>", "/CharProcs << /zzq 9 0 R /zzr 9 0 R /zzs 9 0 R /zzt 9 0 R >>", 1)
+			font[0] = strings.Replace(font[0], "/LastChar 65 /Widths [500]", "/LastChar 101 /Widths ["+strings.TrimSpace(strings.Repeat("500 ", 37))+"]", 1)
+			objs := glyphPagesObjs(font, glyphText("<41606165> Tj"))
+			if got := validateCount(t, objs, "PDF/A-2u", Rule_19005_2_6_2_11_7_2_t01); got != tc.t1 {
+				t.Errorf("6.2.11.7.2 test 1 fired %d times, want %d", got, tc.t1)
+			}
+			if got := validateCount(t, objs, "PDF/A-2u", Rule_19005_2_6_2_11_7_2_t02); got != tc.valueFails {
+				t.Errorf("6.2.11.7.2 test 2 fired %d times, want %d", got, tc.valueFails)
+			}
+		})
+	}
+}
+
+// TestToUnicode_UseCMapLoop pins that a /UseCMap chain returning to a CMap it
+// has already met ends there. veraPDF 1.30 raises "Loop inside CMap" on it and
+// abandons the validation; litho states the codes neither CMap maps.
+func TestToUnicode_UseCMapLoop(t *testing.T) {
+	t.Parallel()
+
+	font := type3Font(0x41, []string{"zzq", "zzr"}, toUnicodeProgram(""), "/UseCMap 7 0 R",
+		exponentStream("/UseCMap 6 0 R", toUnicodeProgram(bfchars("41", "0041"))))
+	objs := glyphPagesObjs(font, glyphText("<4142> Tj"))
+	if got := validateCount(t, objs, "PDF/A-2u", Rule_19005_2_6_2_11_7_2_t01); got != 1 {
+		t.Errorf("6.2.11.7.2 test 1 fired %d times, want 1", got)
+	}
+}
+
+// TestToUnicode_Type0UseCMap pins that a composite font's /ToUnicode is read
+// with the predefined CMap its usecmap operator names, as pdfjs issue5010.pdf
+// needs: veraPDF 1.30 at PDF/A-2u fails CID 41 hexadecimal, which
+// Adobe-Korea1-UCS2 maps only through bfrange, and passes CID 60, which it maps
+// through bfchar, where litho failed both.
+func TestToUnicode_Type0UseCMap(t *testing.T) {
+	t.Parallel()
+
+	font := subsetType0Font(t, "")
+	font[0] = strings.TrimSuffix(font[0], " >>") + " /ToUnicode 21 0 R >>"
+	objs := glyphPagesObjs(font, glyphText("<00410060> Tj"))
+	objs = append(objs, exponentStream("", strings.Replace(toUnicodeProgram("/Adobe-Korea1-UCS2 usecmap\n"),
+		"<00> <FF>", "<0000> <FFFF>", 1)))
+	if got := validateCount(t, objs, "PDF/A-2u", Rule_19005_2_6_2_11_7_2_t01); got != 1 {
+		t.Errorf("6.2.11.7.2 test 1 fired %d times, want 1", got)
+	}
+}
+
 // structParentsCases are the fixtures of
 // [TestGlyphRulesSplitByStructParents]: the /StructParents of two pages that
 // show one glyph, -1 standing for none, and the times veraPDF 1.30 states a
