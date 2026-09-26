@@ -178,19 +178,21 @@ func TestParseXMPSchemaTarget(t *testing.T) {
 // the validator names the page packet's properties "object 5: <URI>:<name>".
 // The fixer read "object 5: " as part of the namespace URI: it claimed the
 // violations, found no such namespace in the catalog packet, and stripped
-// nothing, so the output kept failing the rule.
+// nothing, so the output kept failing the rule. dc:format, written as a
+// language alternative where its schema defines Text, is the property no
+// declaration answers; photoshop:History, which xmp-metadata declares with
+// the Text it holds, stays (see
+// [TestFixXMPSchema_KeepsAComponentPropertyXMPMetadataDeclared]).
 func TestFixXMPSchema_StripsTheFlaggedPropertyFromTheComponentPacket(t *testing.T) {
 	t.Parallel()
 
 	packet, schemaFixes := runComponentXMPFixers(t, componentCatalogPacket)
-	for _, prop := range []xmpSchemaProperty{{photoshopNS, "History"}, {dcNS, "format"}} {
-		if loc := findXMPProperty(packet, prop.nsURI, prop.localName); loc.Form != xmpPropertyNotFound {
-			t.Errorf("%s%s survived in the page packet: %q; xmp-schema fixes = %q; packet:\n%s",
-				prop.nsURI, prop.localName, xmpPropertyRawValue(packet, loc), schemaFixes, packet)
-		}
+	if loc := findXMPProperty(packet, dcNS, "format"); loc.Form != xmpPropertyNotFound {
+		t.Errorf("%sformat survived in the page packet: %q; xmp-schema fixes = %q; packet:\n%s",
+			dcNS, xmpPropertyRawValue(packet, loc), schemaFixes, packet)
 	}
-	if !containsFix(schemaFixes, "stripped 2 XMP schema-noncompliant propert(ies) from 1 component metadata stream(s)") {
-		t.Errorf("xmp-schema fixes = %q, want both properties counted", schemaFixes)
+	if !containsFix(schemaFixes, "stripped 1 XMP schema-noncompliant propert(ies) from 1 component metadata stream(s)") {
+		t.Errorf("xmp-schema fixes = %q, want the one property counted", schemaFixes)
 	}
 }
 
