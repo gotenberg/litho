@@ -194,29 +194,31 @@ func TestFixXMPSchema_StripsTheFlaggedPropertyFromTheComponentPacket(t *testing.
 	}
 }
 
-// TestFixXMPSchema_StripsAComponentPropertyXMPMetadataDeclared pins that
-// xmp-schema strips a flagged component property xmp-metadata has declared
-// since the validator judged it.
+// TestFixXMPSchema_KeepsAComponentPropertyXMPMetadataDeclared pins that
+// xmp-schema keeps a flagged component property xmp-metadata has declared,
+// since the validator judged it, with the value type its value holds, and
+// still strips the one no declaration can answer.
 //
-// xmp-metadata runs first and declares photoshop:History in an extension
-// schema of the page packet. A declaration answers ISO 19005-2, 6.6.2.3.1
-// only when the value matches the value type it declares, which xmp-schema
-// cannot vouch for (see TestFixXMPSchema_StripsTheFontsXMPMetadataDeclared),
-// so the flagged value is stripped all the same.
-func TestFixXMPSchema_StripsAComponentPropertyXMPMetadataDeclared(t *testing.T) {
+// xmp-metadata runs first and declares photoshop:History, which the XMP 2005
+// Photoshop schema does not define, as Text in an extension schema of the page
+// packet. That answers ISO 19005-2, 6.6.2.3.1 for the property, so stripping
+// it only lost the history. dc:format is predefined as MIMEType text and holds
+// a language alternative, which no extension schema can redeclare.
+func TestFixXMPSchema_KeepsAComponentPropertyXMPMetadataDeclared(t *testing.T) {
 	t.Parallel()
 
 	packet, schemaFixes := runComponentXMPFixers(t, componentPatchedCatalogPacket)
 	if !strings.Contains(string(packet), "<pdfaProperty:name>History</pdfaProperty:name>") {
 		t.Fatalf("precondition: xmp-metadata declared no photoshop:History in the page packet:\n%s", packet)
 	}
-	for _, prop := range []xmpSchemaProperty{{photoshopNS, "History"}, {dcNS, "format"}} {
-		if loc := findXMPProperty(packet, prop.nsURI, prop.localName); loc.Form != xmpPropertyNotFound {
-			t.Errorf("%s%s survived in the page packet: %q", prop.nsURI, prop.localName, xmpPropertyRawValue(packet, loc))
-		}
+	if loc := findXMPProperty(packet, photoshopNS, "History"); loc.Form == xmpPropertyNotFound {
+		t.Errorf("photoshop:History, declared as the Text it holds, was stripped from the page packet:\n%s", packet)
 	}
-	if !containsFix(schemaFixes, "stripped 2 XMP schema-noncompliant propert(ies) from 1 component metadata stream(s)") {
-		t.Errorf("xmp-schema fixes = %q, want both properties counted", schemaFixes)
+	if loc := findXMPProperty(packet, dcNS, "format"); loc.Form != xmpPropertyNotFound {
+		t.Errorf("dc:format survived in the page packet: %q", xmpPropertyRawValue(packet, loc))
+	}
+	if !containsFix(schemaFixes, "stripped 1 XMP schema-noncompliant propert(ies) from 1 component metadata stream(s)") {
+		t.Errorf("xmp-schema fixes = %q, want dc:format alone counted", schemaFixes)
 	}
 }
 
@@ -311,25 +313,25 @@ func fontsPDF() []byte {
 	return buf.Bytes()
 }
 
-// TestFixXMPSchema_StripsTheFontsXMPMetadataDeclared pins that xmp-schema
-// strips a flagged catalog property xmp-metadata has declared, in the value
-// type it inferred, since the validator judged it.
+// TestFixXMPSchema_KeepsTheFontsXMPMetadataDeclared pins that xmp-schema
+// keeps a flagged catalog property xmp-metadata has declared, since the
+// validator judged it, with the value type its value holds.
 //
-// xmp-metadata declares xmpTPg:Fonts as "bag Text", although its items are
-// structures. litho's validator accepts that declaration, and veraPDF does
-// not: ISO 19005-1, 6.7.9 t3 asks the value to match the value type its
-// extension schema declares. xmp-schema kept the property because it was
-// declared, and the output, which litho reported compliant, failed 6.7.9 t3
-// on veraPDF.
+// xmpTPg:Fonts is a bag of stFnt structures the XMP 2004 catalog of PDF/A-1
+// does not define. xmp-metadata declares it a bag of a type holding the stFnt
+// fields, which answers ISO 19005-1, 6.7.9 t3. It used to declare "bag Text",
+// which veraPDF fails under 6.7.9 t3 and litho's validator accepted, so
+// xmp-schema stripped every property an earlier fixer had declared whatever
+// the declaration said, and lost the fonts.
 //
 // # Corpus evidence
 //
 //   - verapdf PDF_A-1b__veraPDF_test_suite_6-7-2-t03-fail-i.pdf: remediated
-//     at PDF/A-1b and PDF/A-1a, its output kept xmpTPg:Fonts and failed 6.7.9
-//     t3 on veraPDF 1.30.2, where the strip passes it. The packet of
-//     PDF_A-2b__veraPDF_test_suite_6-6-2-3-1-t03-pass-b.pdf did the same
-//     with an xmpDM property at PDF/A-1b.
-func TestFixXMPSchema_StripsTheFontsXMPMetadataDeclared(t *testing.T) {
+//     at PDF/A-1b, its output keeps xmpTPg:Fonts and passes veraPDF 1.30.2,
+//     which failed the "bag Text" declaration. So does the packet of
+//     PDF_A-2b__veraPDF_test_suite_6-6-2-3-1-t03-pass-b.pdf at PDF/A-1b, with
+//     an xmpDM property.
+func TestFixXMPSchema_KeepsTheFontsXMPMetadataDeclared(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -373,13 +375,16 @@ func TestFixXMPSchema_StripsTheFontsXMPMetadataDeclared(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decoding the catalog packet: %v", err)
 	}
-	if !strings.Contains(string(packet), "<pdfaProperty:name>Fonts</pdfaProperty:name>") {
-		t.Fatalf("precondition: xmp-metadata declared no xmpTPg:Fonts, so nothing tempts xmp-schema to keep it:\n%s", packet)
+	if !strings.Contains(string(packet), "<pdfaProperty:valueType>bag FontsStruct</pdfaProperty:valueType>") {
+		t.Fatalf("precondition: xmp-metadata declared no xmpTPg:Fonts as a bag of its structures:\n%s", packet)
 	}
-	if loc := findXMPProperty(packet, xmpTPgNS, "Fonts"); loc.Form != xmpPropertyNotFound {
-		t.Errorf("xmpTPg:Fonts survived in the catalog packet; xmp-schema fixes = %q; packet:\n%s", schemaFixes, packet)
+	if loc := findXMPProperty(packet, xmpTPgNS, "Fonts"); loc.Form == xmpPropertyNotFound {
+		t.Errorf("xmpTPg:Fonts, declared with the type it holds, was stripped; xmp-schema fixes = %q; packet:\n%s", schemaFixes, packet)
 	}
-	if !containsFix(schemaFixes, "stripped 1 XMP schema-noncompliant propert(ies)") {
-		t.Errorf("xmp-schema fixes = %q, want the catalog strip reported", schemaFixes)
+	if len(schemaFixes) != 0 {
+		t.Errorf("xmp-schema fixes = %q, want none", schemaFixes)
+	}
+	for _, v := range extensionFindings(t, packet, models.PDFA1b) {
+		t.Errorf("the repaired packet still fails %s t%d: %s", v.Rule.Clause, v.Rule.TestNumber, v.Context)
 	}
 }

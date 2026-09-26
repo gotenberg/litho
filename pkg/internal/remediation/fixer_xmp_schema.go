@@ -47,13 +47,13 @@ func matchXMPSchema(v compliance.Violation) bool {
 // only a second remediation round restored it.
 //
 // A property an earlier fixer has only declared since, in an extension schema,
-// still holds the value the validator judged, and is stripped. A declaration
-// answers ISO 19005-1, 6.7.9 and ISO 19005-2/3, 6.6.2.3.1 only when the value
-// matches the value type it declares, and [fixXMP] can declare one the value
-// does not match: it declares an xmpTPg:Fonts whose items are structures as
-// "bag Text", which litho's validator accepts and veraPDF fails under 6.7.9
-// t3. Stripping the property repairs the finding whatever the declaration
-// says.
+// still holds the value the validator judged. It is kept when the declaration
+// answers ISO 19005-1, 6.7.9 and ISO 19005-2/3, 6.6.2.3.1 for it, which it
+// does only when the value matches the value type it declares
+// ([compliance.XMPExtensionPropertyChecker]), and stripped otherwise. [fixXMP]
+// declares a structure, or an array of them, with a type holding their fields,
+// where it used to declare an xmpTPg:Fonts of stFnt structures "bag Text",
+// which veraPDF fails under 6.7.9 t3.
 //
 // A property a component metadata stream holds is stripped from that stream
 // (see [stripComponentXMPSchema]). Its violation names the stream as
@@ -84,11 +84,26 @@ func matchXMPSchema(v compliance.Violation) bool {
 //     aggressive alike, and now leaves none: 15 of those outputs are now fully
 //     fixed.
 //   - verapdf PDF_A-1b__veraPDF_test_suite_6-7-2-t03-fail-i.pdf: xmp-metadata
-//     declares its xmpTPg:Fonts, a bag of stFnt structures, as "bag Text".
-//     Keeping the declared property failed 6.7.9 t3 on veraPDF 1.30.2 at
-//     PDF/A-1b and PDF/A-1a, where the strip passes the output.
-//     PDF_A-2b__veraPDF_test_suite_6-6-2-3-1-t03-pass-b.pdf did the same at
-//     PDF/A-1b with an xmpDM property.
+//     declared its xmpTPg:Fonts, a bag of stFnt structures, "bag Text", which
+//     veraPDF 1.30.2 fails under 6.7.9 t3, so the strip was the one safe
+//     repair. It now declares a bag of a type holding the stFnt fields, and
+//     the PDF/A-1b output keeps the fonts and passes veraPDF, as does
+//     PDF_A-2b__veraPDF_test_suite_6-6-2-3-1-t03-pass-b.pdf with its xmpDM
+//     property.
+//   - All corpora: of the 1394 files with a 6.7.9 t2 finding at PDF/A-1b and
+//     the 1199 with a 6.6.2.3.1 t1 finding at PDF/A-2b, keeping a property
+//     declared with the type it holds changes 786 and 595 outputs, default
+//     and aggressive alike, and moves no residual violation. veraPDF 1.30.2
+//     reports the same failed rules as on the stripped output on each of 529
+//     sampled default PDF/A-1b outputs and 327 PDF/A-2b ones, every
+//     non-govdocs one among them, and on the 227 non-govdocs aggressive
+//     PDF/A-2b ones.
+//   - pdfcpu pkg_testdata__RA_CI.pdf: a component packet declares
+//     xmpMM:Manifest and xmpMM:Ingredients arrays of types it defines while
+//     the catalog packet extends xmpMM too, which veraPDF fails under
+//     6.6.2.3.1 t2, the component's array items resolving through the
+//     catalog's entry. Kept, the two failed the output; they are stripped, and
+//     xmpTPg:SwatchGroups beside them is kept.
 //   - All corpora: over the PDF/A-1b, PDF/A-2b and PDF/UA-1 remediations,
 //     default and aggressive, of those 517 files, and the PDF/A-1a and
 //     PDF/A-1b remediations of the 2601 verapdf files, no residual violation
@@ -96,12 +111,22 @@ func matchXMPSchema(v compliance.Violation) bool {
 //     failed rules on every PDF/A-1a and PDF/A-1b output that changes, and the
 //     same or fewer on every PDF/A-2b one: 24 files fail 6.6.2.3.1 fewer
 //     times in each mode, and 13 of them now pass.
-func fixXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, _ string) ([]string, error) {
+func fixXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, profile string) ([]string, error) {
 	targets := xmpSchemaTargets(violations)
+	part := compliance.PDFAPart(profile)
 
 	var fixes []string
-	if n := stripCatalogXMPSchema(ctx, alloc, doc, targets[0]); n > 0 {
+	if n := stripCatalogXMPSchema(ctx, alloc, doc, targets[0], part); n > 0 {
 		fixes = append(fixes, fmt.Sprintf("stripped %d XMP schema-noncompliant propert(ies)", n))
+	}
+	// The component packets resolve their properties through the catalog
+	// packet's extension schemas too, as it stands after the strip above.
+	var mainPacket []byte
+	for objNum := range targets {
+		if objNum != 0 {
+			mainPacket = liveCatalogXMP(ctx, alloc, doc)
+			break
+		}
 	}
 
 	stripped, streams := 0, 0
@@ -112,7 +137,7 @@ func fixXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if n := stripComponentXMPSchema(ctx, alloc, doc, objNum, targets[objNum]); n > 0 {
+		if n := stripComponentXMPSchema(ctx, alloc, doc, objNum, targets[objNum], part, mainPacket); n > 0 {
 			stripped += n
 			streams++
 		}
@@ -153,8 +178,9 @@ func xmpSchemaTargets(violations []compliance.Violation) map[int][]xmpSchemaProp
 }
 
 // stripCatalogXMPSchema strips props from the catalog packet and returns how
-// many it stripped.
-func stripCatalogXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, props []xmpSchemaProperty) int {
+// many it stripped. A property its extension schemas now declare with the value
+// type it holds, at the given PDF/A part, is kept.
+func stripCatalogXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, props []xmpSchemaProperty, part int) int {
 	if len(props) == 0 {
 		return 0
 	}
@@ -191,7 +217,9 @@ func stripCatalogXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc 
 		return 0
 	}
 
-	out, stripped := stripJudgedXMPProperties(xmp, judgedCatalogXMP(ctx, doc, catalogRef), props)
+	declared := compliance.XMPExtensionPropertyChecker(xmp, nil, part)
+	valid := func(prop xmpSchemaProperty) bool { return declared(prop.nsURI, prop.localName) }
+	out, stripped := stripJudgedXMPProperties(xmp, judgedCatalogXMP(ctx, doc, catalogRef), props, valid)
 	if stripped == 0 {
 		return 0
 	}
@@ -216,14 +244,16 @@ func stripCatalogXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc 
 }
 
 // stripComponentXMPSchema strips props from the packet of the metadata stream
-// objNum, and returns how many it stripped.
+// objNum, and returns how many it stripped. A property the packet's extension
+// schemas, or those of mainPacket, the catalog's, now declare with the value
+// type it holds, at the given PDF/A part, is kept.
 //
 // ISO 19005-2 and 19005-3, 6.6.2.3.1 constrain the properties of every
 // metadata stream in the file, not only the catalog's, and the validator names
 // the stream a property sits in as "object N". The stream is read live:
 // [fixXMP] runs first and rewrites component packets too, and the repair
 // splices into its copy rather than the source one.
-func stripComponentXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, objNum int, props []xmpSchemaProperty) int {
+func stripComponentXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, objNum int, props []xmpSchemaProperty, part int, mainPacket []byte) int {
 	ref := ast.PdfIndirectRef{ObjectNum: objNum}
 	stream, ok := liveStream(ctx, alloc, doc, ref)
 	if !ok {
@@ -235,7 +265,9 @@ func stripComponentXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, do
 		return 0
 	}
 
-	out, stripped := stripJudgedXMPProperties(xmp, judgedComponentXMP(ctx, doc, ref), props)
+	declared := compliance.XMPExtensionPropertyChecker(xmp, mainPacket, part)
+	valid := func(prop xmpSchemaProperty) bool { return declared(prop.nsURI, prop.localName) }
+	out, stripped := stripJudgedXMPProperties(xmp, judgedComponentXMP(ctx, doc, ref), props, valid)
 	if stripped == 0 {
 		return 0
 	}
@@ -251,12 +283,16 @@ func stripComponentXMPSchema(ctx context.Context, alloc *writer.ObjAllocator, do
 }
 
 // stripJudgedXMPProperties removes every occurrence of each of props from xmp
-// that still holds a value the validator judged in judged, and returns the new
-// packet with the number of properties it removed.
-func stripJudgedXMPProperties(xmp, judged []byte, props []xmpSchemaProperty) ([]byte, int) {
+// that still holds a value the validator judged in judged, unless valid
+// reports the property declared since with the value type it holds, and
+// returns the new packet with the number of properties it removed.
+func stripJudgedXMPProperties(xmp, judged []byte, props []xmpSchemaProperty, valid func(xmpSchemaProperty) bool) ([]byte, int) {
 	stripped := 0
 	out := xmp
 	for _, prop := range props {
+		if valid(prop) {
+			continue
+		}
 		read := xmpPropertyValues(judged, prop.nsURI, prop.localName)
 		// Loop to drop every occurrence; a single property may appear in
 		// more than one rdf:Description in pathological XMP. The first one
@@ -280,6 +316,37 @@ func stripJudgedXMPProperties(xmp, judged []byte, props []xmpSchemaProperty) ([]
 		}
 	}
 	return out, stripped
+}
+
+// liveCatalogXMP returns the catalog packet as the fixers have left it so
+// far, decoded, or nil when there is none it can read.
+func liveCatalogXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) []byte {
+	catalogRef, ok := catalogRefForFixer(ctx, doc)
+	if !ok {
+		return nil
+	}
+	catalogDict := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	if catalogDict == nil {
+		return nil
+	}
+	metaObj, ok := catalogDict["Metadata"]
+	if !ok {
+		return nil
+	}
+	var metaRef ast.PdfIndirectRef
+	if ref, ok := metaObj.(ast.PdfIndirectRef); ok {
+		metaRef = ref
+	}
+	stream, ok := resolveStreamFromAllocOrDoc(ctx, alloc, doc, metaRef, metaObj)
+	if !ok {
+		return nil
+	}
+	data, err := doc.DecodeStream(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("remediation: xmp-schema: cannot decode the live catalog XMP stream", "error", err)
+		return nil
+	}
+	return data
 }
 
 // judgedCatalogXMP returns the catalog XMP packet the validator read: the
