@@ -600,11 +600,11 @@ var (
 //
 // A structure type, defined by an entry or predefined by the part, is a
 // structure whose every field is one of the type's, in the type's namespace,
-// and of the field's type (StructuredTypeValidator). An XPath is checked for
-// being a simple value only: veraPDF also compiles it, and reading this looser
-// never reports what veraPDF passes. Text is trimmed before the Boolean,
-// Integer, Real, MIME type and GPS patterns, which veraPDF does not do, for
-// the same reason.
+// and of the field's type (StructuredTypeValidator). An XPath is a simple
+// value that compiles as veraPDF's XPathTypeValidator compiles it
+// ([xpathCompiles]). Text is trimmed before the Boolean, Integer, Real, MIME
+// type and GPS patterns, which veraPDF does not do: reading this looser never
+// reports what veraPDF passes.
 func xmpValueMatches(n *XMPNode, typ string, entry *xmpExtEntry, part, depth int) bool {
 	if depth > maxXMPTreeDepth {
 		return true
@@ -658,8 +658,10 @@ func xmpValueMatches(n *XMPNode, typ string, entry *xmpExtEntry, part, depth int
 			return false
 		}
 		return len(n.Children) == 0 || slices.ContainsFunc(n.Children, func(c *XMPNode) bool { return c.Lang })
-	case "text", "propername", "agentname", "rational", "renditionclass", "locale", "uri", "url", "xpath":
+	case "text", "propername", "agentname", "rational", "renditionclass", "locale", "uri", "url":
 		return n.Kind == XMPSimple
+	case "xpath":
+		return n.Kind == XMPSimple && xpathCompiles(n.Value)
 	case "date":
 		v := strings.TrimSpace(n.Value)
 		return n.Kind == XMPSimple && (v == "" || xmpISO8601Loose.MatchString(v))
