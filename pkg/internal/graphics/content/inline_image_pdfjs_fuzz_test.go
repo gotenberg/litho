@@ -8,7 +8,7 @@ import (
 )
 
 // FuzzPDFJSInlineImageEnd feeds arbitrary bytes to the reading of inline image
-// data PDF.js does ([pdfjsInlineImageEnd]), under every filter it reads a
+// data PDF.js does ([pdfjsImages.end]), under every filter it reads a
 // marker for, and asserts crash-freedom, termination, and that reading resumes
 // inside the stream and no earlier than the data starts.
 //
@@ -29,11 +29,13 @@ func FuzzPDFJSInlineImageEnd(f *testing.F) {
 			return
 		}
 		ctx := context.Background()
+		// One reader serves every image, as it serves the images of a stream.
+		r := newPDFJSImages(data)
 		for _, idEnd := range []int{0, len(data) / 2, len(data)} {
 			start := min(idEnd+1, len(data))
 			for _, dict := range filters {
-				if got, _ := pdfjsInlineImageEnd(ctx, data, idEnd, dict); got < start || got > len(data) {
-					t.Fatalf("pdfjsInlineImageEnd(%d, %v) = %d, outside [%d, %d]", idEnd, dict, got, start, len(data))
+				if got, _ := r.end(ctx, idEnd, dict); got < start || got > len(data) {
+					t.Fatalf("end(%d, %v) = %d, outside [%d, %d]", idEnd, dict, got, start, len(data))
 				}
 			}
 		}

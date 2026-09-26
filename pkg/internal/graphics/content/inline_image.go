@@ -126,6 +126,9 @@ type inlineImages struct {
 	// lost reports that a check moved back past what the buffer holds, where
 	// veraPDF reads no operator of the stream at all.
 	lost bool
+	// pdfjs reads the data of the images as PDF.js does, or is nil before
+	// the first image read that way ([inlineImages.pdfjsEnd]).
+	pdfjs *pdfjsImages
 }
 
 // dataLength is the length the /L or /Length entry of an inline image
@@ -225,7 +228,7 @@ func (r *inlineImages) resume(ctx context.Context, idEnd int, dict ast.PdfDict) 
 
 // repairEnd returns the offset a repair's reading of the stream resumes at
 // after the inline image whose ID keyword ends at idEnd, with dict its
-// dictionary: past the data as PDF.js ends it ([pdfjsInlineImageEnd]) or as
+// dictionary: past the data as PDF.js ends it ([pdfjsImages.end]) or as
 // veraPDF ends the data of that image ([inlineImages.scan]), whichever runs
 // longer.
 //
@@ -242,8 +245,9 @@ func (r *inlineImages) resume(ctx context.Context, idEnd int, dict ast.PdfDict) 
 //
 // Both scans stop at the end they find, and the reading resumes at the later
 // one, so no scan reads a byte another scan of the stream has read, but the
-// one PDF.js makes to the end of a stream holding no EI it takes, past
-// which it met none.
+// ones PDF.js makes to the end of the stream for a filter marker or an EI
+// that never comes, whose findings the reader of PDF.js keeps so that the
+// scans of the images after them stop short ([pdfjsImages]).
 //
 // # Corpus evidence
 //
@@ -259,8 +263,20 @@ func (r *inlineImages) resume(ctx context.Context, idEnd int, dict ast.PdfDict) 
 //     reports the same findings on the output.
 func (r *inlineImages) repairEnd(ctx context.Context, idEnd int, dict ast.PdfDict) int {
 	vera, _ := r.scan(ctx, r.dataStart(idEnd), inlineDataLength(dict))
-	pdfjs, _ := pdfjsInlineImageEnd(ctx, r.data, idEnd, dict)
+	pdfjs, _ := r.pdfjsEnd(ctx, idEnd, dict)
 	return max(vera, pdfjs)
+}
+
+// pdfjsEnd returns where a parse reading the stream as PDF.js does resumes
+// after the inline image whose ID keyword ends at idEnd, with dict its
+// dictionary, and whether PDF.js stops reading the stream there instead
+// ([pdfjsImages.end]). The images of the stream share one reader, which keeps
+// reading them linear in the length of the stream.
+func (r *inlineImages) pdfjsEnd(ctx context.Context, idEnd int, dict ast.PdfDict) (int, bool) {
+	if r.pdfjs == nil {
+		r.pdfjs = newPDFJSImages(r.data)
+	}
+	return r.pdfjs.end(ctx, idEnd, dict)
 }
 
 // InlineImageEnds finds where the data of the inline images of one content

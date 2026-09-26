@@ -45,7 +45,7 @@ func FuzzInlineImages(f *testing.F) {
 					t.Fatalf("resume(%d) = %d, before the data", idEnd, got)
 				}
 				// A repair reads on past what either reader reads as data.
-				pdfjs, _ := pdfjsInlineImageEnd(ctx, data, idEnd, dict)
+				pdfjs, _ := newPDFJSImages(data).end(ctx, idEnd, dict)
 				if got := newInlineImages(data).repairEnd(ctx, idEnd, dict); got < pdfjs || got > len(data) {
 					t.Fatalf("repairEnd(%d) = %d, before the %d PDF.js reads to or past the stream", idEnd, got, pdfjs)
 				}

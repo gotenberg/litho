@@ -128,7 +128,7 @@ func TestInlineImagesReadByRepairs(t *testing.T) {
 // follows, and reads a NUL as white space and the bytes after it as no
 // operator ([inlineImages]). PDF.js ends it only at an EI that a space, a line
 // feed or a carriage return follows, and ends the data of an ASCII85Decode
-// image at its "~>" ([pdfjsInlineImageEnd]). Read as operators, the bytes
+// image at its "~>" ([pdfjsImages.end]). Read as operators, the bytes
 // after a false EI would be undefined operators to ISO 19005-2, 6.2.2.
 func TestInlineImageDataInEveryReading(t *testing.T) {
 	t.Parallel()

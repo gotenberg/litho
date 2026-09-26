@@ -1,16 +1,18 @@
 package content
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
 // TestInlineImagesReadAsPDFJS pins how [SplitGluedOperators] reads the data of
-// inline images, as PDF.js does (see [pdfjsInlineImageEnd]). Every stream was
+// inline images, as PDF.js does (see [pdfjsImages.end]). Every stream was
 // measured with PDF.js 6.3.289 as the content of a one-page file, after a
 // shown "B": the text getTextContent returns holds the "A" and "C" shown here
 // exactly when the operations below show them, and holds only the "B" when
@@ -102,9 +104,97 @@ func TestPDFJSInlineImageEnd(t *testing.T) {
 		if tc.filter != "" {
 			dict["F"] = tc.filter
 		}
-		got, stops := pdfjsInlineImageEnd(context.Background(), []byte(tc.data), len("ID"), dict)
+		got, stops := newPDFJSImages([]byte(tc.data)).end(context.Background(), len("ID"), dict)
 		if got != tc.want || stops != tc.stops {
-			t.Errorf("pdfjsInlineImageEnd(%q, %q) = %d, %t, want %d, %t", tc.data, tc.filter, got, stops, tc.want, tc.stops)
+			t.Errorf("end(%q, %q) = %d, %t, want %d, %t", tc.data, tc.filter, got, stops, tc.want, tc.stops)
 		}
+	}
+}
+
+// TestPDFJSInlineImagesReadInLinearTime reads, one after the other as a parse
+// does, the inline images of streams of 4 MiB whose end PDF.js looks for to
+// the end of the stream, once for each image. Read by scanning the rest of the
+// stream again for each image, no stream got past its 7,000th image, of the
+// 199,728 to 349,526 each holds, within the deadline. [pdfjsImages] keeps what its scans
+// learnt, and reads each in a few seconds under the race detector.
+func TestPDFJSInlineImagesReadInLinearTime(t *testing.T) {
+	t.Parallel()
+
+	const size = 4 << 20
+	for _, tc := range []struct {
+		name, first, unit string
+		dict              ast.PdfDict
+	}{
+		{"DCTDecode images with no EOI", "", "BI /F /DCT ID x EI Q ", ast.PdfDict{"F": ast.PdfName("DCT")}},
+		{"ASCII85Decode images with no end", "", "BI /F /A85 ID x EI Q ", ast.PdfDict{"F": ast.PdfName("A85")}},
+		// The EI of each image stands one byte past where the scan of the
+		// image before it reads an E, so that scan meets none of them.
+		{"EIs out of step", "BI ID x EI zz ", "BI IDEEI zz ", ast.PdfDict{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
+			data := []byte(tc.first + strings.Repeat(tc.unit, size/len(tc.unit)))
+			r := newPDFJSImages(data)
+			images := 0
+			for at := 0; ; {
+				k := bytes.Index(data[at:], []byte("ID"))
+				if k < 0 {
+					break
+				}
+				idEnd := at + k + len("ID")
+				end, stops := r.end(ctx, idEnd, tc.dict)
+				if err := ctx.Err(); err != nil {
+					t.Fatalf("read %d inline images: %v", images, err)
+				}
+				images++
+				if stops {
+					break
+				}
+				at = max(end, idEnd)
+			}
+			if want := bytes.Count(data, []byte("ID")); images != want {
+				t.Errorf("read %d inline images, want %d", images, want)
+			}
+		})
+	}
+}
+
+// BenchmarkPDFJSInlineImages reads crafted streams of about 1 MiB as PDF.js
+// does ([SplitGluedOperators]): EIs written back to back, or each before a
+// window of operators taking another count, of one long run, or of a string
+// the window ends inside, and images whose filter marker or EI never comes,
+// or comes out of step with the scan of the image before, which PDF.js scans
+// the rest of the stream for once for each image.
+func BenchmarkPDFJSInlineImages(b *testing.B) {
+	const (
+		size  = 1 << 20
+		image = "BI /W 1 /H 1 ID x"
+	)
+	fill := func(prefix, unit string) []byte {
+		return []byte(prefix + strings.Repeat(unit, size/len(unit)))
+	}
+	for _, bc := range []struct {
+		name string
+		data []byte
+	}{
+		{"EI after EI", fill(image, "EI ")},
+		{"EI before near-operators", fill(image, "EI "+strings.Repeat("1 Td ", 15))},
+		{"EI before a long run", fill(image, "EI "+strings.Repeat("EI", 37)+"E ")},
+		{"EI before a string", fill(image, "EI (")},
+		{"DCTDecode images with no EOI", fill("", "BI /W 1 /H 1 /F /DCT ID x EI Q ")},
+		{"ASCII85Decode images with no end", fill("", "BI /W 1 /H 1 /F /A85 ID x EI Q ")},
+		{"ASCIIHexDecode images with no end", fill("", "BI /W 1 /H 1 /F /AHx ID x EI Q ")},
+		{"EIs out of step", fill("BI ID x EI zz ", "BI IDEEI zz ")},
+	} {
+		b.Run(bc.name, func(b *testing.B) {
+			b.SetBytes(int64(len(bc.data)))
+			for b.Loop() {
+				if _, err := ParseStreamData(context.Background(), bc.data, SplitGluedOperators()); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
 	}
 }

@@ -198,7 +198,7 @@ func newStreamImages(data []byte, o readOptions) *inlineImages {
 // dictionary, and false when the parse reads no further.
 //
 // Read as veraPDF reads the stream, the data ends as [inlineImages] ends it,
-// and under [SplitGluedOperators] as PDF.js ends it ([pdfjsInlineImageEnd]).
+// and under [SplitGluedOperators] as PDF.js ends it ([pdfjsImages.end]).
 // PDF.js ends the dictionary at the end of the stream, and throws out of the
 // stream at a key that is no name (ISO 32000-1, 8.9.7) and at a token it
 // cannot read (Parser.makeInlineImage and Lexer.getObj, src/core/parser.js),
@@ -213,7 +213,7 @@ func readInlineImage(ctx context.Context, p *parser.Parser, o readOptions, image
 		if err != nil || p.SkippedInlineImageKey() {
 			return nil, false, ctx.Err()
 		}
-		end, stops := pdfjsInlineImageEnd(ctx, images.data, int(p.Position()), dict)
+		end, stops := images.pdfjsEnd(ctx, int(p.Position()), dict)
 		if stops {
 			return nil, false, nil
 		}
