@@ -562,13 +562,28 @@ func pruneDestsDict(ctx context.Context, doc *document.Document, dests ast.PdfDi
 	return kept, len(kept) != len(dests)
 }
 
-// nameTreeDropFunc decides whether one name-tree value goes. It may rewrite
-// objects the value reaches, which is how a Web Capture content set keeps its
-// entry while losing the pages it named.
-type nameTreeDropFunc func(value ast.PdfObject) bool
+// nameTreeDropFunc decides what becomes of one name-tree value. It returns nil
+// when the value goes, and otherwise the value to keep in its place, reporting
+// whether that is a rewrite of it. A value with an object number of its own
+// stays as it is, the function queuing any rewrite of it, or of an object it
+// reaches, at that number: that is how a Web Capture content set keeps its
+// entry while losing the pages it named. A value written inline has no number
+// to rewrite it at, so its rewrite comes back and takes its place in the node.
+type nameTreeDropFunc func(value ast.PdfObject) (kept ast.PdfObject, rewritten bool)
+
+// dropWhen returns the [nameTreeDropFunc] that drops a value when gone reports
+// true and keeps it as it is otherwise.
+func dropWhen(gone func(value ast.PdfObject) bool) nameTreeDropFunc {
+	return func(value ast.PdfObject) (ast.PdfObject, bool) {
+		if gone(value) {
+			return nil, false
+		}
+		return value, false
+	}
+}
 
 // pruneDestNameTree filters a name tree in place, returning the object to store
-// in the parent and whether anything was dropped.
+// in the parent and whether anything was dropped or rewritten.
 //
 // Nodes keep their shape: only the /Names pairs change. A /Limits left wider
 // than the keys that remain still contains every key below it, which is all a
@@ -636,13 +651,18 @@ func pruneDestNameTreeAt(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	if namesObj, hasNames := node["Names"]; hasNames {
 		if names, err := resolveArrayAllocFirst(ctx, alloc, doc, namesObj); err == nil {
 			keptPairs := make(ast.PdfArray, 0, len(names))
+			pairsChanged := false
 			for i := 0; i+1 < len(names); i += 2 {
-				if drop(names[i+1]) {
+				kept, rewritten := drop(names[i+1])
+				if kept == nil {
+					pairsChanged = true
 					continue
 				}
-				keptPairs = append(keptPairs, names[i], names[i+1])
+				pairsChanged = pairsChanged || rewritten
+				keptPairs = append(keptPairs, names[i], kept)
 			}
-			if len(keptPairs) != len(names) {
+			// An odd trailing key has no value and goes with the rebuild.
+			if pairsChanged || len(keptPairs) != len(names) {
 				changed = true
 				if ref, isRef := namesObj.(ast.PdfIndirectRef); isRef {
 					alloc.AllocAt(ref.ObjectNum, keptPairs)
@@ -723,9 +743,9 @@ func pruneCatalogDestinations(
 		if names, err := resolveDictAllocFirst(ctx, alloc, doc, namesObj); err == nil && names != nil {
 			if destsRoot, hasDestsRoot := names["Dests"]; hasDestsRoot {
 				newRoot, dropped, destsTruncated := pruneDestNameTree(ctx, alloc, doc, destsRoot,
-					func(value ast.PdfObject) bool {
+					dropWhen(func(value ast.PdfObject) bool {
 						return destTargetsRemoved(ctx, doc, value, removed, 0)
-					}, 0)
+					}), 0)
 				if destsTruncated {
 					truncated = true
 				}

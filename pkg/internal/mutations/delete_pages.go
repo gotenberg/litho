@@ -219,7 +219,7 @@ func rebuildPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		}
 		outlineTruncated := pruneOutlineDestinations(ctx, alloc, doc, catalogDict, removed)
 		pruneArticleBeads(ctx, alloc, doc, catalogDict, removed)
-		webTruncated := pruneWebCaptureSets(ctx, alloc, doc, catalogDict, removed)
+		webTruncated := pruneWebCaptureSets(ctx, alloc, doc, catalogRef, removed)
 
 		// Each prune unhooks one kind of reference to the page. Any of them
 		// stopping short leaves a reference the rewrite will follow, so the page

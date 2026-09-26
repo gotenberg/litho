@@ -69,7 +69,7 @@ func TestPruneDestNameTree_DoubledKidsStayLinear(t *testing.T) {
 
 	doc, alloc := newMutationDoc(t, doubledKidsTreePDF())
 	ctx := context.Background()
-	keepEverything := func(ast.PdfObject) bool { return false }
+	keepEverything := dropWhen(func(ast.PdfObject) bool { return false })
 
 	done := make(chan struct{})
 	go func() {
