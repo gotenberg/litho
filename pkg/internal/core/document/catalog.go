@@ -229,12 +229,11 @@ func scanForCatalog(ctx context.Context, doc *Document) ast.PdfDict {
 // catalog the trailer names is unusable, PDF.js re-reads the file in recovery
 // mode (XRef.indexObjects), which rebuilds its index from every "N G obj"
 // header in the bytes and resolves the catalog through that index. veraPDF
-// recovers no catalog at all and reports the file. Ranging the index without the augmentation saw the objects
-// the table leaves out only when some earlier lookup had missed and run it, so
-// the same bytes recovered a catalog or failed to depending on what the caller
-// did first (CONTRIBUTING "Deterministic output"). Under
-// [DeferXRefAugmentation] the scan defers it as a missed lookup does, and the
-// caller's run over the final index sees those objects.
+// recovers no catalog at all and reports the file. Ranging the index without
+// the augmentation saw the objects the table leaves out only when some earlier
+// lookup had missed and run it, so the same bytes recovered a catalog or
+// failed to depending on what the caller did first (CONTRIBUTING
+// "Deterministic output").
 //
 // # Corpus evidence
 //

@@ -60,10 +60,10 @@ func charProcTransparencyPDF(onFont bool) []byte {
 // it, so a transparency group or constant alpha reached only that way is still
 // rendered content and §6.4 forbids it.
 //
-// The repair side already covers this shape: fixType3CharProcTransparency
+// The repair side covers the same shape: fixType3CharProcTransparency
 // resolves fontDict["CharProcs"] and normalises each glyph stream, and
-// matchTransparency claims every ISO_19005_1 clause 6.4 violation. So litho can
-// already FIX what it cannot yet SEE.
+// matchTransparency claims every ISO_19005_1 clause 6.4 violation, so what
+// this detection reports the remediation repairs.
 //
 // The control is the point of the test's structure. "Did not fire" is
 // indistinguishable from "the fixture never parsed", so the same document with
@@ -79,8 +79,8 @@ func TestCharProcResources_TransparencyDetected(t *testing.T) {
 			"§6.4 t6; the fixture does not reach the transparency walk at all")
 	}
 
-	// THE GAP: identical document, the state moved to the glyph procedure's
-	// own /Resources and declared nowhere else.
+	// The case under test: identical document, the state moved to the glyph
+	// procedure's own /Resources and declared nowhere else.
 	if !firesRule(t, charProcTransparencyPDF(false), "6.4", 6) {
 		t.Error("an /ExtGState declared on a Type 3 CharProc's own /Resources must fire " +
 			"§6.4 t6: a glyph procedure's resources are invisible to the transparency survey")
