@@ -77,158 +77,241 @@ func fixGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 			return nil, fmt.Errorf("fixing graphics on page %d: %w", i+1, err)
 		}
 
-		resDict := page.Resources
+		// The node holding the /Resources the page resolves its names
+		// against owns every repair written inline below it: the page, or
+		// the ancestor it inherits them from. It is read through the
+		// allocator, so the /Default space output-intent injects into the
+		// same /Resources ahead of graphics rides this write.
+		holder, ok := resourcesHolder(ctx, alloc, doc, annotPageEntry{ref: page.Ref, dict: livePageDict(ctx, alloc, doc, page)})
+		if !ok {
+			continue
+		}
+		work := maps.Clone(holder.dict)
+		resDict := liveDictValue(ctx, alloc, doc, work["Resources"])
 		if resDict == nil {
 			continue
 		}
 
-		pageNotes, err := fixResourcesGraphics(ctx, alloc, doc, resDict, visited)
+		landed, pending, dirty, err := fixResourcesGraphics(ctx, alloc, doc, resDict, work, visited)
 		if err != nil {
 			return nil, fmt.Errorf("fixing graphics on page %d: %w", i+1, err)
 		}
-		notes = append(notes, pageNotes...)
+		notes = append(notes, landed...)
+		if dirty && alloc.AllocAt(holder.ref.ObjectNum, work) {
+			notes = append(notes, pending...)
+		}
 	}
 
 	return notes, nil
 }
 
-func fixResourcesGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, visited map[int]bool) ([]string, error) {
-	var notes []string
-
-	gsNotes, err := fixExtGStates(ctx, alloc, doc, resources)
+// fixResourcesGraphics repairs the graphics states one resource dictionary
+// declares and the XObjects it names, recursively.
+//
+// owner is the caller's working copy of the dictionary that holds resources
+// under /Resources, which [fixExtGStates] updates in place when a repair can
+// only be written through it. landed describes the repairs already written;
+// pending describes the ones that land with the caller's write of owner, which
+// the caller makes only when dirty is set.
+func fixResourcesGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, owner ast.PdfDict, visited map[int]bool) (landed, pending []string, dirty bool, err error) {
+	landed, pending, dirty, err = fixExtGStates(ctx, alloc, doc, resources, owner)
 	if err != nil {
-		return nil, err
+		return nil, nil, false, err
 	}
-	notes = append(notes, gsNotes...)
 
 	xobjNotes, err := fixXObjects(ctx, alloc, doc, resources, visited)
 	if err != nil {
-		return nil, err
+		return nil, nil, false, err
 	}
-	notes = append(notes, xobjNotes...)
+	landed = append(landed, xobjNotes...)
 
-	return notes, nil
+	return landed, pending, dirty, nil
 }
 
-func fixExtGStates(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict) ([]string, error) {
+// fixExtGStates repairs every graphics state parameter dictionary the
+// /ExtGState entry of resources declares, where it sits.
+//
+// ISO 32000-1, 7.3.7 lets /Resources, /ExtGState and each graphics state be
+// direct objects. A state with an object number of its own is written at it;
+// the others are written at the first link of the chain above them that has
+// one, through [writeResourceCategory]: the /ExtGState dictionary, the
+// /Resources dictionary, or owner, updated in place for the caller to write.
+// The repair wrote a state only at an object number of its own, so a direct
+// one kept every finding while the report listed it repaired. See
+// [fixResourcesGraphics] for what the results mean.
+//
+// Every dictionary is read through the allocator: output-intent writes the
+// same /Resources ahead of graphics, and rebuilding one from the document
+// would discard that write.
+//
+// # Corpus evidence
+//
+//   - litho gstate_2b.pdf: the direct states GS7, GS9, H1, H2 and the form's
+//     GSn kept 6.2.5 t1, t3, t4 and 6.2.6 t1 after a PDF/A-2b remediation,
+//     and 6.2.8 t1 and 6.2.9 t1 after a PDF/A-1b one, on litho and veraPDF
+//     alike.
+func fixExtGStates(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, resources ast.PdfDict, owner ast.PdfDict) (landed, pending []string, dirty bool, err error) {
 	gsObj, ok := resources["ExtGState"]
 	if !ok {
-		return nil, nil
+		return nil, nil, false, nil
 	}
 
-	gsDict, err := document.ResolveDict(ctx, doc, gsObj)
-	if err != nil {
-		doc.Logger.Debug("resolving ExtGState dict", slog.Any("err", err))
-		return nil, nil
-	}
+	gsDict := liveDictValue(ctx, alloc, doc, gsObj)
 	if gsDict == nil {
-		return nil, nil
+		doc.Logger.Debug("resolving ExtGState dict", slog.Any("value", gsObj))
+		return nil, nil, false, nil
 	}
 
-	var notes []string
+	// Entries with no object number of their own accumulate here and are
+	// written together: rebuilding the parent once per entry would keep only
+	// the last change.
+	var inline ast.PdfDict
+	var inlineNotes []string
 
 	// Sorted: the notes below become report lines, and ranging the dictionary
 	// emitted them in Go's randomized map order, so the same file produced a
 	// differently ordered report on every run.
 	for _, name := range slices.Sorted(maps.Keys(gsDict)) {
-		gsEntryObj := gsDict[name]
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, nil, false, err
 		}
-
-		var gsRef ast.PdfIndirectRef
-		var gsEntry ast.PdfDict
-		hasRef := false
-
-		if ref, ok := gsEntryObj.(ast.PdfIndirectRef); ok {
-			hasRef = true
-			gsRef = ref
-			gsEntry = resolveFromAllocOrDoc(ctx, alloc, doc, ref)
-		} else {
-			resolved, err := document.ResolveDict(ctx, doc, gsEntryObj)
-			if err != nil {
-				continue
-			}
-			gsEntry = resolved
-		}
+		entry := gsDict[name]
+		gsEntry := liveDictValue(ctx, alloc, doc, entry)
 		if gsEntry == nil {
 			continue
 		}
-
-		modified := false
-		newGS := make(ast.PdfDict, len(gsEntry))
-		maps.Copy(newGS, gsEntry)
-
-		// Fix invalid rendering intent (6.2.9 / 6.2.6).
-		if riObj, ok := newGS["RI"]; ok {
-			if riName, ok := riObj.(ast.PdfName); ok {
-				if !validRenderingIntents[riName] {
-					newGS["RI"] = ast.PdfName("RelativeColorimetric")
-					modified = true
-					notes = append(notes, fmt.Sprintf("replaced invalid rendering intent %q in ExtGState %s", string(riName), string(name)))
-				}
+		newGS, notes := repairGraphicsState(ctx, doc, name, gsEntry)
+		if newGS == nil {
+			continue
+		}
+		if ref, isRef := entry.(ast.PdfIndirectRef); isRef {
+			if alloc.AllocAt(ref.ObjectNum, newGS) {
+				landed = append(landed, notes...)
 			}
+			continue
 		}
+		if inline == nil {
+			inline = make(ast.PdfDict)
+		}
+		inline[name] = newGS
+		inlineNotes = append(inlineNotes, notes...)
+	}
+	if len(inline) == 0 {
+		return landed, nil, false, nil
+	}
 
-		// Fix OPM=1 with ICCBased CMYK (6.2.4.2).
-		if opmObj, ok := newGS["OPM"]; ok {
-			if document.Float(opmObj) == 1 {
-				newGS["OPM"] = ast.PdfInt(0)
-				modified = true
-				notes = append(notes, fmt.Sprintf("set OPM to 0 in ExtGState %s", string(name)))
-			}
-		}
+	newGSDict := maps.Clone(gsDict)
+	maps.Copy(newGSDict, inline)
+	written, ownerDirty := writeResourceCategory(alloc, owner, resources, "ExtGState", newGSDict)
+	switch {
+	case written:
+		landed = append(landed, inlineNotes...)
+	case ownerDirty:
+		pending = inlineNotes
+	}
+	return landed, pending, ownerDirty, nil
+}
 
-		// Fix invalid blend mode (6.2.10).
-		if bmObj, ok := newGS["BM"]; ok {
-			if bmName, ok := bmObj.(ast.PdfName); ok && bmName != "Normal" && bmName != "Compatible" {
-				newGS["BM"] = ast.PdfName("Normal")
-				modified = true
-				notes = append(notes, fmt.Sprintf("set blend mode to Normal in ExtGState %s", string(name)))
-			}
-		}
+// repairGraphicsState returns a repaired copy of the graphics state parameter
+// dictionary gs, declared under name, and a description of each repair, or nil
+// when gs needs none.
+func repairGraphicsState(ctx context.Context, doc *document.Document, name ast.PdfName, gs ast.PdfDict) (ast.PdfDict, []string) {
+	var notes []string
+	newGS := maps.Clone(gs)
 
-		// Strip forbidden transfer-function entries (ISO 19005-2 §6.2.5
-		// forbids /TR; /TR2 is permitted only when set to /Default).
-		if _, ok := newGS["TR"]; ok {
-			delete(newGS, "TR")
-			modified = true
-			notes = append(notes, fmt.Sprintf("removed /TR from ExtGState %s", string(name)))
-		}
-		if tr2, ok := newGS["TR2"]; ok {
-			if name, ok := tr2.(ast.PdfName); !ok || name != "Default" {
-				newGS["TR2"] = ast.PdfName("Default")
-				modified = true
+	// Fix invalid rendering intent (6.2.9 / 6.2.6).
+	if riObj, ok := newGS["RI"]; ok {
+		if riName, ok := riObj.(ast.PdfName); ok {
+			if !validRenderingIntents[riName] {
+				newGS["RI"] = ast.PdfName("RelativeColorimetric")
+				notes = append(notes, fmt.Sprintf("replaced invalid rendering intent %q in ExtGState %s", string(riName), string(name)))
 			}
-		}
-		// §6.2.5 also forbids /HTO and /HTP on ExtGState.
-		for _, key := range []ast.PdfName{"HTO", "HTP"} {
-			if _, ok := newGS[key]; ok {
-				delete(newGS, key)
-				modified = true
-				notes = append(notes, fmt.Sprintf("removed /%s from ExtGState %s", string(key), string(name)))
-			}
-		}
-		if htObj, ok := newGS["HT"]; ok {
-			if patched, changed := normalizeHalftone(ctx, doc, htObj); changed {
-				newGS["HT"] = patched
-				modified = true
-				notes = append(notes, fmt.Sprintf("normalised /HT in ExtGState %s", string(name)))
-			}
-		}
-
-		if modified && hasRef {
-			alloc.AllocAt(gsRef.ObjectNum, newGS)
 		}
 	}
 
-	return notes, nil
+	// Fix OPM=1 with ICCBased CMYK (6.2.4.2).
+	if opmObj, ok := newGS["OPM"]; ok {
+		if document.Float(opmObj) == 1 {
+			newGS["OPM"] = ast.PdfInt(0)
+			notes = append(notes, fmt.Sprintf("set OPM to 0 in ExtGState %s", string(name)))
+		}
+	}
+
+	// Fix invalid blend mode (6.2.10).
+	if bmObj, ok := newGS["BM"]; ok {
+		if bmName, ok := bmObj.(ast.PdfName); ok && bmName != "Normal" && bmName != "Compatible" {
+			newGS["BM"] = ast.PdfName("Normal")
+			notes = append(notes, fmt.Sprintf("set blend mode to Normal in ExtGState %s", string(name)))
+		}
+	}
+
+	// Strip forbidden transfer-function entries (ISO 19005-2 §6.2.5
+	// forbids /TR; /TR2 is permitted only when set to /Default).
+	if _, ok := newGS["TR"]; ok {
+		delete(newGS, "TR")
+		notes = append(notes, fmt.Sprintf("removed /TR from ExtGState %s", string(name)))
+	}
+	if tr2, ok := newGS["TR2"]; ok {
+		if tr2Name, ok := tr2.(ast.PdfName); !ok || tr2Name != "Default" {
+			newGS["TR2"] = ast.PdfName("Default")
+			notes = append(notes, fmt.Sprintf("set /TR2 to /Default in ExtGState %s", string(name)))
+		}
+	}
+	// §6.2.5 also forbids /HTO and /HTP on ExtGState.
+	for _, key := range []ast.PdfName{"HTO", "HTP"} {
+		if _, ok := newGS[key]; ok {
+			delete(newGS, key)
+			notes = append(notes, fmt.Sprintf("removed /%s from ExtGState %s", string(key), string(name)))
+		}
+	}
+	if htObj, ok := newGS["HT"]; ok {
+		if patched, changed := normalizeHalftone(ctx, doc, htObj); changed {
+			newGS["HT"] = patched
+			notes = append(notes, fmt.Sprintf("normalised /HT in ExtGState %s", string(name)))
+		}
+	}
+
+	if len(notes) == 0 {
+		return nil, nil
+	}
+	return newGS, notes
+}
+
+// writeResourceCategory writes rebuilt, a repaired copy of the resource
+// category dictionary resources hold under category, at the first link of the
+// chain above it that has an object number of its own, as ISO 32000-1, 7.3.7
+// lets every link be a direct object: the category dictionary itself, the
+// /Resources dictionary, or owner, the caller's working copy of the dictionary
+// holding resources under /Resources, which it updates in place for the caller
+// to write.
+//
+// resources must be the dictionary owner holds, as the allocator has it: the
+// copy rebuilt around rebuilt carries everything else it holds, and a copy of
+// the document's would discard what an earlier fixer queued there. written
+// reports a write that landed; ownerDirty, that owner was updated and the
+// repair lands with the caller's write of it.
+func writeResourceCategory(alloc *writer.ObjAllocator, owner, resources ast.PdfDict, category ast.PdfName, rebuilt ast.PdfDict) (written, ownerDirty bool) {
+	if ref, ok := resources[category].(ast.PdfIndirectRef); ok {
+		return alloc.AllocAt(ref.ObjectNum, rebuilt), false
+	}
+	resObj, ok := owner["Resources"]
+	if !ok {
+		return false, false
+	}
+	newRes := maps.Clone(resources)
+	newRes[category] = rebuilt
+	if ref, ok := resObj.(ast.PdfIndirectRef); ok {
+		return alloc.AllocAt(ref.ObjectNum, newRes), false
+	}
+	owner["Resources"] = newRes
+	return false, true
 }
 
 // normalizeHalftone coerces a halftone dict so it complies with
 // ISO 19005-2 §6.2.5: HalftoneType must be 1 or 5, HalftoneName is
-// forbidden, and any non-primary component of a Type-5 halftone needs
-// a TransferFunction (defaulted to /Identity when absent).
+// forbidden, the halftone a graphics state names carries no
+// TransferFunction, and any non-primary component of a Type-5 halftone
+// needs one (defaulted to /Identity when absent).
 func normalizeHalftone(ctx context.Context, doc *document.Document, htObj ast.PdfObject) (ast.PdfDict, bool) {
 	htDict, err := document.ResolveDict(ctx, doc, htObj)
 	if err != nil || htDict == nil {
@@ -241,6 +324,17 @@ func normalizeHalftone(ctx context.Context, doc *document.Document, htObj ast.Pd
 	if _, ok := newDict["HalftoneName"]; ok {
 		delete(newDict, "HalftoneName")
 		changed = true
+	}
+	// ISO 32000-1, 10.5.5, Table 130 wants a /TransferFunction on a halftone
+	// only as a component of a type 5 halftone, and ISO 19005-2, 6.2.5 t6
+	// forbids it elsewhere; the check lets /Default stand. Turning a type 6
+	// halftone into a type 1 below kept the one its source carried, so t4
+	// gave way to t6.
+	if tf, ok := newDict["TransferFunction"]; ok {
+		if name, _ := document.ResolveName(ctx, doc, tf); name != "Default" {
+			delete(newDict, "TransferFunction")
+			changed = true
+		}
 	}
 	htType := 1
 	if htTypeObj, ok := newDict["HalftoneType"]; ok {
@@ -308,18 +402,15 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		return nil, nil
 	}
 
-	xobjDict, err := document.ResolveDict(ctx, doc, xobjObj)
-	if err != nil {
-		doc.Logger.Debug("resolving XObject dict", slog.Any("err", err))
-		return nil, nil
-	}
+	xobjDict := liveDictValue(ctx, alloc, doc, xobjObj)
 	if xobjDict == nil {
+		doc.Logger.Debug("resolving XObject dict", slog.Any("value", xobjObj))
 		return nil, nil
 	}
 
 	var notes []string
 
-	// Sorted, for the reason given in fixExtGState.
+	// Sorted, for the reason given in fixExtGStates.
 	for _, name := range slices.Sorted(maps.Keys(xobjDict)) {
 		entryObj := xobjDict[name]
 		if err := ctx.Err(); err != nil {
@@ -358,13 +449,15 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		modified := false
 		newDict := make(ast.PdfDict, len(xobjStream.Dict))
 		maps.Copy(newDict, xobjStream.Dict)
+		// The repairs to this object, reported once its write lands.
+		var objNotes []string
 
 		if subtype == "Image" {
 			// Remove /Alternates (6.2.8 / 6.2.7.1).
 			if _, ok := newDict["Alternates"]; ok {
 				delete(newDict, "Alternates")
 				modified = true
-				notes = append(notes, fmt.Sprintf("removed /Alternates from image %s", string(name)))
+				objNotes = append(objNotes, fmt.Sprintf("removed /Alternates from image %s", string(name)))
 			}
 
 			// Remove /OPI: forbidden on image XObjects in every PDF/A part
@@ -374,7 +467,7 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 			if _, ok := newDict["OPI"]; ok {
 				delete(newDict, "OPI")
 				modified = true
-				notes = append(notes, fmt.Sprintf("removed /OPI from image %s", string(name)))
+				objNotes = append(objNotes, fmt.Sprintf("removed /OPI from image %s", string(name)))
 			}
 
 			// Set /Interpolate to false (6.2.4).
@@ -382,7 +475,7 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 				if b, ok := interpObj.(ast.PdfBool); ok && bool(b) {
 					newDict["Interpolate"] = ast.PdfBool(false)
 					modified = true
-					notes = append(notes, fmt.Sprintf("set /Interpolate to false in image %s", string(name)))
+					objNotes = append(objNotes, fmt.Sprintf("set /Interpolate to false in image %s", string(name)))
 				}
 			}
 
@@ -392,7 +485,7 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 				if intentName, ok := intentObj.(ast.PdfName); ok && !validRenderingIntents[intentName] {
 					newDict["Intent"] = ast.PdfName("RelativeColorimetric")
 					modified = true
-					notes = append(notes, fmt.Sprintf("replaced invalid rendering intent %q in image %s", string(intentName), string(name)))
+					objNotes = append(objNotes, fmt.Sprintf("replaced invalid rendering intent %q in image %s", string(intentName), string(name)))
 				}
 			}
 
@@ -447,37 +540,41 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 			if _, ok := newDict["Subtype2"]; ok {
 				delete(newDict, "Subtype2")
 				modified = true
-				notes = append(notes, fmt.Sprintf("removed /Subtype2 from form XObject %s", string(name)))
+				objNotes = append(objNotes, fmt.Sprintf("removed /Subtype2 from form XObject %s", string(name)))
 			}
 			if _, ok := newDict["PS"]; ok {
 				delete(newDict, "PS")
 				modified = true
-				notes = append(notes, fmt.Sprintf("removed /PS from form XObject %s", string(name)))
+				objNotes = append(objNotes, fmt.Sprintf("removed /PS from form XObject %s", string(name)))
 			}
 
 			// Remove /OPI (6.2.8.1).
 			if _, ok := newDict["OPI"]; ok {
 				delete(newDict, "OPI")
 				modified = true
-				notes = append(notes, fmt.Sprintf("removed /OPI from form XObject %s", string(name)))
+				objNotes = append(objNotes, fmt.Sprintf("removed /OPI from form XObject %s", string(name)))
 			}
 
 			// Remove /Ref (6.2.8.2).
 			if _, ok := newDict["Ref"]; ok {
 				delete(newDict, "Ref")
 				modified = true
-				notes = append(notes, fmt.Sprintf("removed /Ref from form XObject %s", string(name)))
+				objNotes = append(objNotes, fmt.Sprintf("removed /Ref from form XObject %s", string(name)))
 			}
 
-			// Recurse into form XObject resources.
-			if resObj, ok := newDict["Resources"]; ok {
-				formRes, err := document.ResolveDict(ctx, doc, resObj)
-				if err == nil && formRes != nil {
-					subNotes, err := fixResourcesGraphics(ctx, alloc, doc, formRes, visited)
-					if err != nil {
-						return nil, err
-					}
-					notes = append(notes, subNotes...)
+			// Recurse into form XObject resources. newDict is the working
+			// copy written below, so a graphics state written directly in
+			// the form's /Resources rides the same write as the keys removed
+			// above.
+			if formRes := liveDictValue(ctx, alloc, doc, newDict["Resources"]); formRes != nil {
+				landed, pending, dirty, err := fixResourcesGraphics(ctx, alloc, doc, formRes, newDict, visited)
+				if err != nil {
+					return nil, err
+				}
+				notes = append(notes, landed...)
+				if dirty {
+					modified = true
+					objNotes = append(objNotes, pending...)
 				}
 			}
 		}
@@ -495,8 +592,8 @@ func fixXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 				// safer than a corrupt stream, and re-validation re-surfaces it.
 				doc.Logger.Debug("skipping XObject dict fix; original stream unreadable",
 					slog.String("name", string(name)), slog.Any("err", derr))
-			} else {
-				alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, data))
+			} else if alloc.AllocAt(ref.ObjectNum, ast.NewStream(newDict, data)) {
+				notes = append(notes, objNotes...)
 			}
 		}
 	}
