@@ -74,7 +74,7 @@ func TestAlreadyTaggedFollowsTheRecoveredCatalog(t *testing.T) {
 	t.Parallel()
 
 	doc := brokenRootDoc(t, "/StructTreeRoot 99 0 R /MarkInfo << /Marked true >>")
-	tagged, err := alreadyTagged(context.Background(), doc)
+	tagged, err := alreadyTagged(context.Background(), nil, doc)
 	if err != nil {
 		t.Fatalf("alreadyTagged: %v", err)
 	}

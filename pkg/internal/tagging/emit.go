@@ -32,11 +32,12 @@ const maxTagDepth = 64
 //
 // Emit assumes an untagged document: it overwrites catalog /StructTreeRoot and
 // /MarkInfo and rewrites page content, so a caller must gate on the document
-// being untagged ([AutoTag] does this). It reads the catalog and page dicts
-// alloc-first, so a queued edit to those objects (a remediation fixer's catalog
-// or page patch) is preserved; it reads page content from the document, assuming
-// no earlier stage rewrote a page's /Contents (AutoTag is the first content
-// rewriter in the chain). Emit mutates alloc and is not safe for concurrent use.
+// being untagged ([AutoTag] does this). It reads the catalog, the page dicts,
+// their content and their resources alloc-first (see [stagedValue]), as
+// [Classify] does, so root's spans index the content it marks, and an edit an
+// earlier stage queued to any of them (a remediation fixer's catalog patch or
+// content repair, a stamp) is built on rather than overwritten. Emit mutates
+// alloc and is not safe for concurrent use.
 func Emit(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, root *Element) ([]string, error) {
 	if root == nil || root.Role != RoleDocument {
 		return nil, fmt.Errorf("tagging: root element must have role Document")
@@ -186,7 +187,7 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		data, err := pageContentBytes(ctx, e.doc, e.pages[pi])
+		data, err := pageContentBytes(ctx, e.alloc, e.doc, e.pages[pi])
 		if err != nil {
 			return nil, fmt.Errorf("tagging: page %d content: %w", pi, err)
 		}
@@ -197,7 +198,7 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 		leaves := e.perPage[pi]
 		sort.Slice(leaves, func(i, j int) bool { return leaves[i].span.start < leaves[j].span.start })
 
-		spans, elemRefs := pageSpans(data, leaves, textBearingXObjects(ctx, e.doc, e.pages[pi]))
+		spans, elemRefs := pageSpans(data, leaves, textBearingXObjects(ctx, e.alloc, e.doc, e.pages[pi]))
 		if len(spans) == 0 {
 			continue // no paintable content to mark
 		}
@@ -212,10 +213,7 @@ func (e *emitter) applyMarks(ctx context.Context) (ast.PdfArray, error) {
 		// Read the page dict alloc-first so an edit an earlier pipeline stage
 		// queued at this object number (a remediation fixer injecting a
 		// /DefaultRGB colour space, say) is preserved rather than overwritten.
-		baseDict := page.Dict
-		if queued, ok := e.alloc.Pending()[page.Ref.ObjectNum].(ast.PdfDict); ok {
-			baseDict = queued
-		}
+		baseDict := stagedPageDict(e.alloc, page)
 		newPage := make(ast.PdfDict, len(baseDict)+2)
 		maps.Copy(newPage, baseDict)
 		newPage["Contents"] = streamRef
@@ -283,11 +281,16 @@ func pageSpans(data []byte, leaves []leafEntry, textXObjects map[string]bool) ([
 
 // textBearingXObjects returns the page's Form XObject resource names whose
 // content paints text. Their invocations must not be swept into an /Artifact.
-func textBearingXObjects(ctx context.Context, doc *document.Document, page *document.Page) map[string]bool {
-	if page == nil || page.Resources == nil {
+// It reads the resources alloc stages (see [stagedResources]).
+func textBearingXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) map[string]bool {
+	if page == nil {
 		return nil
 	}
-	xobjs, err := document.ResolveDict(ctx, doc, page.Resources["XObject"])
+	resources := stagedResources(ctx, alloc, doc, page)
+	if resources == nil {
+		return nil
+	}
+	xobjs, err := stagedDict(ctx, alloc, doc, resources["XObject"])
 	if err != nil || xobjs == nil {
 		return nil
 	}
@@ -297,7 +300,7 @@ func textBearingXObjects(ctx context.Context, doc *document.Document, page *docu
 	// memo exists to stop inside a single scan.
 	answers := make(map[int]bool)
 	for name, entry := range xobjs {
-		if paints, _ := formPaintsText(ctx, doc, entry, make(map[int]bool), answers, 0); paints {
+		if paints, _ := formPaintsText(ctx, alloc, doc, entry, make(map[int]bool), answers, 0); paints {
 			names[string(name)] = true
 		}
 	}
@@ -331,6 +334,8 @@ func textBearingXObjects(ctx context.Context, doc *document.Document, page *docu
 // running out of depth says nothing about the same form reached higher up,
 // where the remaining budget would let the search continue.
 //
+// The forms and their resources are read alloc-first (see [stagedValue]).
+//
 // # Corpus evidence
 //
 //   - pdfjs issue15629: draws its field values through /X0, which does nothing
@@ -341,7 +346,7 @@ func textBearingXObjects(ctx context.Context, doc *document.Document, page *docu
 //     142% CPU, re-inflating the same streams, until the depth cap finally
 //     exhausted the search. It never returned within any run of the corpus
 //     harness.
-func formPaintsText(ctx context.Context, doc *document.Document, entry ast.PdfObject, visited map[int]bool, answers map[int]bool, depth int) (paints, complete bool) {
+func formPaintsText(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, entry ast.PdfObject, visited map[int]bool, answers map[int]bool, depth int) (paints, complete bool) {
 	if depth+1 > doc.Limits().MaxFormDepth {
 		return false, false
 	}
@@ -366,7 +371,7 @@ func formPaintsText(ctx context.Context, doc *document.Document, entry ast.PdfOb
 		return paints, complete
 	}
 
-	stream, err := document.ResolveStream(ctx, doc, entry)
+	stream, err := stagedStream(ctx, alloc, doc, entry)
 	if err != nil || stream.Dict == nil {
 		return memoise(false, true)
 	}
@@ -381,18 +386,18 @@ func formPaintsText(ctx context.Context, doc *document.Document, entry ast.PdfOb
 	if showsText(body) {
 		return memoise(true, true)
 	}
-	nested, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
+	nested, err := stagedDict(ctx, alloc, doc, stream.Dict["Resources"])
 	if err != nil || nested == nil {
 		return memoise(false, true)
 	}
-	inner, err := document.ResolveDict(ctx, doc, nested["XObject"])
+	inner, err := stagedDict(ctx, alloc, doc, nested["XObject"])
 	if err != nil || inner == nil {
 		return memoise(false, true)
 	}
 
 	childrenComplete := true
 	for _, child := range inner {
-		paints, complete := formPaintsText(ctx, doc, child, visited, answers, depth+1)
+		paints, complete := formPaintsText(ctx, alloc, doc, child, visited, answers, depth+1)
 		if paints {
 			return memoise(true, true)
 		}
@@ -450,7 +455,7 @@ func (e *emitter) wireCatalog(ctx context.Context, stRef ast.PdfIndirectRef) err
 	if !ok {
 		return fmt.Errorf("tagging: no catalog to wire the structure tree into")
 	}
-	catalogDict, err := e.dictAllocFirst(ctx, catalogRef)
+	catalogDict, err := stagedDict(ctx, e.alloc, e.doc, catalogRef)
 	if err != nil {
 		return fmt.Errorf("tagging: resolving catalog dict: %w", err)
 	}
@@ -463,23 +468,16 @@ func (e *emitter) wireCatalog(ctx context.Context, stRef ast.PdfIndirectRef) err
 	return nil
 }
 
-// dictAllocFirst returns the dict queued in alloc at ref, falling back to the
-// document. It lets Emit compose with a writer or remediation pipeline that has
-// already queued an edit to the same object.
-func (e *emitter) dictAllocFirst(ctx context.Context, ref ast.PdfIndirectRef) (ast.PdfDict, error) {
-	if obj, ok := e.alloc.Pending()[ref.ObjectNum]; ok {
-		if d, ok := obj.(ast.PdfDict); ok {
-			return d, nil
-		}
-	}
-	return document.ResolveDict(ctx, e.doc, ref)
-}
-
-// pageContentBytes returns a page's decoded, concatenated content. It mirrors
-// the stream assembly in [content.ParsePageContent] (each decoded stream
-// followed by a newline) so byte offsets the classifier derives from
+// pageContentBytes returns a page's decoded, concatenated content as alloc
+// stages it: the page dict, its /Contents and each content stream are read
+// alloc-first (see [stagedValue]), so the content marked is the content the
+// output holds, a repair an earlier stage queued included. It mirrors the
+// stream assembly in [content.ParsePageContent] (each decoded stream followed
+// by a newline) so byte offsets the classifier derives from
 // [content.ParseStreamDataWithOffsets] line up with the bytes marked here.
-// Classify and Emit both call it so they agree on the page's content bytes.
+// Classify and Emit both call it with the same alloc so they agree on the
+// page's content bytes: between the two, Emit queues only new objects and page
+// dicts, and it reads each page's content before rewriting that page.
 //
 // The content is bounded by [limits.Limits.MaxPageContentBytes] of the
 // document's budgets, an anti-DoS guard, not spec-mandated. It reads the same
@@ -493,12 +491,12 @@ func (e *emitter) dictAllocFirst(ctx context.Context, ref ast.PdfIndirectRef) (a
 //
 //   - pdfjs issue21089.pdf: page 1 decodes to 27.51 MB, within 16% of the
 //     stale 32 MB bound.
-func pageContentBytes(ctx context.Context, doc *document.Document, page *document.Page) ([]byte, error) {
-	contentsObj, ok := page.Dict["Contents"]
+func pageContentBytes(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) ([]byte, error) {
+	contentsObj, ok := stagedPageDict(alloc, page)["Contents"]
 	if !ok {
 		return nil, nil
 	}
-	resolved, err := document.ResolveObject(ctx, doc, contentsObj)
+	resolved, err := stagedObject(ctx, alloc, doc, contentsObj)
 	if err != nil {
 		return nil, err
 	}
@@ -509,7 +507,7 @@ func pageContentBytes(ctx context.Context, doc *document.Document, page *documen
 		streams = append(streams, v)
 	case ast.PdfArray:
 		for _, item := range v {
-			s, err := document.ResolveStream(ctx, doc, item)
+			s, err := stagedStream(ctx, alloc, doc, item)
 			if err != nil || s.Dict == nil {
 				continue
 			}

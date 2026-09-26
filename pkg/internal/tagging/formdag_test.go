@@ -142,7 +142,7 @@ func TestTextBearingXObjects_SharedFormsDecodedOnce(t *testing.T) {
 	// does, and count what it decided.
 	answers := make(map[int]bool)
 	for _, entry := range top {
-		if paints, _ := formPaintsText(ctx, doc, entry, make(map[int]bool), answers, 0); paints {
+		if paints, _ := formPaintsText(ctx, nil, doc, entry, make(map[int]bool), answers, 0); paints {
 			t.Fatal("no form in this graph shows text")
 		}
 	}
@@ -153,7 +153,7 @@ func TestTextBearingXObjects_SharedFormsDecodedOnce(t *testing.T) {
 			"which costs 4^10 visits instead of %d", len(answers), forms, forms)
 	}
 
-	if got := textBearingXObjects(ctx, doc, pages[0]); len(got) != 0 {
+	if got := textBearingXObjects(ctx, nil, doc, pages[0]); len(got) != 0 {
 		t.Errorf("no form in the graph shows text, got %v", got)
 	}
 }
@@ -192,7 +192,7 @@ func TestFormPaintsText_DepthCappedAnswerNotMemoised(t *testing.T) {
 
 	// Starting past the cap answers false without looking, and says nothing
 	// about the form itself.
-	paints, complete := formPaintsText(ctx, doc, outer, make(map[int]bool), answers, limits.DefaultMaxFormDepth)
+	paints, complete := formPaintsText(ctx, nil, doc, outer, make(map[int]bool), answers, limits.DefaultMaxFormDepth)
 	if paints || complete {
 		t.Errorf("beyond the depth cap: paints=%v complete=%v, want false and incomplete", paints, complete)
 	}
@@ -201,7 +201,7 @@ func TestFormPaintsText_DepthCappedAnswerNotMemoised(t *testing.T) {
 	}
 
 	// The same form from the top still finds the text it reaches through /Inner.
-	if paints, _ := formPaintsText(ctx, doc, outer, make(map[int]bool), answers, 0); !paints {
+	if paints, _ := formPaintsText(ctx, nil, doc, outer, make(map[int]bool), answers, 0); !paints {
 		t.Error("/X0 reaches text through /Inner but was reported as decoration")
 	}
 }

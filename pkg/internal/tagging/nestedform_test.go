@@ -74,7 +74,7 @@ func TestTextBearingXObjects_FollowsNestedForms(t *testing.T) {
 		t.Fatalf("ResolvePages: %v (%d pages)", err, len(pages))
 	}
 
-	got := textBearingXObjects(ctx, doc, pages[0])
+	got := textBearingXObjects(ctx, nil, doc, pages[0])
 	if !got["X0"] {
 		t.Error("/X0 reaches text through /Inner but was reported as decoration, so tagging would artifact it")
 	}
@@ -133,7 +133,7 @@ func TestFormPaintsText_CycleTerminates(t *testing.T) {
 	}
 
 	done := make(chan map[string]bool, 1)
-	go func() { done <- textBearingXObjects(ctx, doc, pages[0]) }()
+	go func() { done <- textBearingXObjects(ctx, nil, doc, pages[0]) }()
 	select {
 	case got := <-done:
 		if got["A"] {

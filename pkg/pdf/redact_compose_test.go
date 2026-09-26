@@ -63,7 +63,7 @@ func assertRedacted(t *testing.T, out []byte, gone, kept []string) {
 // reported success. Redact and remediation each started from an empty
 // allocator and replaced the other's overrides, a remediation file written
 // before Redact was streamed as is, and auto-tagging, queued or run as a
-// remediation fixer, rebuilds the page from the source content stream. The
+// remediation fixer, rebuilt the page from the source content stream. The
 // assertions are on the output: what the file holds is the only thing a
 // redaction promises.
 func TestWriter_Redact_SurvivesEveryWriterStage(t *testing.T) {

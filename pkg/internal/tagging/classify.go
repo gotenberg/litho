@@ -27,23 +27,27 @@ const maxHeadingLevels = 6
 // processors. Pages whose content cannot be parsed are skipped. It returns
 // Emit's descriptions, or nil with no error when there is nothing to tag.
 //
+// It tags the document as alloc stages it: every object it reads, the catalog
+// it judges tagged or not included, is the one alloc has queued at that number
+// when there is one (see [stagedValue]).
+//
 // AutoTag mutates alloc and is not safe for concurrent use.
 func AutoTag(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) ([]string, error) {
-	tagged, err := alreadyTagged(ctx, doc)
+	tagged, err := alreadyTagged(ctx, alloc, doc)
 	if err != nil {
 		return nil, err
 	}
 	if tagged {
 		return nil, nil
 	}
-	marked, err := hasMarkedContent(ctx, doc)
+	marked, err := hasMarkedContent(ctx, alloc, doc)
 	if err != nil {
 		return nil, err
 	}
 	if marked {
 		return nil, nil
 	}
-	root, err := Classify(ctx, doc)
+	root, err := Classify(ctx, alloc, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +67,7 @@ func AutoTag(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docu
 // The check is conservative: a false positive (a "BDC" or "BMC" literal inside a
 // string) only makes AutoTag defer, never corrupt. It scans the parsed page
 // content [pageContentBytes] so it agrees with the bytes Emit would rewrite.
-func hasMarkedContent(ctx context.Context, doc *document.Document) (bool, error) {
+func hasMarkedContent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (bool, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return false, fmt.Errorf("tagging: resolving catalog: %w", err)
@@ -76,7 +80,7 @@ func hasMarkedContent(ctx context.Context, doc *document.Document) (bool, error)
 		if err := ctx.Err(); err != nil {
 			return false, err
 		}
-		data, err := pageContentBytes(ctx, doc, pages[pi])
+		data, err := pageContentBytes(ctx, alloc, doc, pages[pi])
 		if err != nil {
 			// Content that cannot be assembled cannot be safely re-marked.
 			return true, nil //nolint:nilerr // unverifiable: treat as marked to defer, not corrupt
@@ -134,20 +138,21 @@ func catalogRefForTagging(ctx context.Context, doc *document.Document) (ast.PdfI
 }
 
 // alreadyTagged reports whether the document already declares a tagged
-// structure, in which case AutoTag must not overwrite it.
-func alreadyTagged(ctx context.Context, doc *document.Document) (bool, error) {
+// structure, in which case AutoTag must not overwrite it. It reads the catalog
+// alloc stages, which holds the structure an earlier stage built.
+func alreadyTagged(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (bool, error) {
 	catalogRef, ok := catalogRefForTagging(ctx, doc)
 	if !ok {
 		return false, nil
 	}
-	catalogDict, err := document.ResolveDict(ctx, doc, catalogRef)
+	catalogDict, err := stagedDict(ctx, alloc, doc, catalogRef)
 	if err != nil {
 		return false, fmt.Errorf("tagging: resolving catalog: %w", err)
 	}
 	if _, ok := catalogDict["StructTreeRoot"]; ok {
 		return true, nil
 	}
-	if mi, err := document.ResolveDict(ctx, doc, catalogDict["MarkInfo"]); err == nil {
+	if mi, err := stagedDict(ctx, alloc, doc, catalogDict["MarkInfo"]); err == nil {
 		if mi["Marked"] == ast.PdfBool(true) {
 			return true, nil
 		}
@@ -157,8 +162,12 @@ func alreadyTagged(ctx context.Context, doc *document.Document) (bool, error) {
 
 // Classify analyzes the document's text and returns a logical structure tree
 // (a Document with H1..Hn and P leaves) ready for [Emit]. It does not mutate
-// the document. Headings are detected by font size relative to body text and
-// numbered into a no-skip H1..Hn hierarchy.
+// the document or alloc. Headings are detected by font size relative to body
+// text and numbered into a no-skip H1..Hn hierarchy.
+//
+// It reads the pages as alloc stages them (see [stagedValue]), a nil alloc
+// reading the document alone, and [Emit] must be given the same alloc, so the
+// spans index the content Emit marks.
 //
 // Scope: single-column text. Text objects are segmented per BT…ET, classified
 // as headings (by font size) or paragraphs, and adjacent same-role lines are
@@ -176,7 +185,7 @@ func alreadyTagged(ctx context.Context, doc *document.Document) (bool, error) {
 // reading-order segmentation are not done. Content not placed in a structure
 // element (graphics, and text the heuristic misses) is marked as an artifact by
 // [Emit] so the output stays fully marked.
-func Classify(ctx context.Context, doc *document.Document) (*Element, error) {
+func Classify(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*Element, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
 		return nil, fmt.Errorf("tagging: resolving catalog: %w", err)
@@ -191,7 +200,7 @@ func Classify(ctx context.Context, doc *document.Document) (*Element, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		blocks, images, data, err := pageTextBlocks(ctx, doc, pages[pi])
+		blocks, images, data, err := pageTextBlocks(ctx, alloc, doc, pages[pi])
 		if err != nil || (len(blocks) == 0 && len(images) == 0) {
 			continue // skip unparseable or content-free pages
 		}
@@ -435,8 +444,8 @@ const firstTextPrefixLen = 16
 // The content is read whole ([content.WholeStream]): a viewer draws the text
 // after a stray "]" that validation reads no further than, and ISO 32000-1,
 // 14.8.2.2 asks that it be tagged too.
-func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.Page) ([]textBlock, []imageBlock, []byte, error) {
-	data, err := pageContentBytes(ctx, doc, page)
+func pageTextBlocks(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) ([]textBlock, []imageBlock, []byte, error) {
+	data, err := pageContentBytes(ctx, alloc, doc, page)
 	if err != nil || len(data) == 0 {
 		return nil, nil, data, err
 	}
@@ -445,7 +454,7 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 		return nil, nil, data, err
 	}
 
-	imageNames := pageImageXObjectNames(ctx, doc, page)
+	imageNames := pageImageXObjectNames(ctx, alloc, doc, page)
 
 	var blocks []textBlock
 	var images []imageBlock
@@ -641,20 +650,21 @@ func pageTextBlocks(ctx context.Context, doc *document.Document, page *document.
 // and returns the names whose streams carry /Subtype /Image. Form
 // XObjects are excluded: their content is not descended into (see the
 // Classify scope note), so wrapping their Do in a Figure would mark
-// arbitrary nested content as an image. The resources are the page's own
-// or those it inherits from the page tree (ISO 32000-1, 7.7.3.4), which
-// [document.Page.Resources] carries.
-func pageImageXObjectNames(ctx context.Context, doc *document.Document, page *document.Page) map[string]bool {
-	if page.Resources == nil {
+// arbitrary nested content as an image. It reads the page's resources as alloc
+// stages them, its own or those it inherits from the page tree (ISO 32000-1,
+// 7.7.3.4; see [stagedResources]).
+func pageImageXObjectNames(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) map[string]bool {
+	res := stagedResources(ctx, alloc, doc, page)
+	if res == nil {
 		return nil
 	}
-	xobjs, err := document.ResolveDict(ctx, doc, page.Resources["XObject"])
+	xobjs, err := stagedDict(ctx, alloc, doc, res["XObject"])
 	if err != nil || xobjs == nil {
 		return nil
 	}
 	names := make(map[string]bool, len(xobjs))
 	for name, obj := range xobjs {
-		stream, err := document.ResolveStream(ctx, doc, obj)
+		stream, err := stagedStream(ctx, alloc, doc, obj)
 		if err != nil {
 			continue
 		}

@@ -29,7 +29,7 @@ func TestClassify_HeadingAndParagraphs(t *testing.T) {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	root, err := Classify(ctx, doc)
+	root, err := Classify(ctx, nil, doc)
 	if err != nil {
 		t.Fatalf("Classify: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestClassify_MergesAndBreaks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	root, err := Classify(ctx, doc)
+	root, err := Classify(ctx, nil, doc)
 	if err != nil {
 		t.Fatalf("Classify: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestAutoTag_StrokeBlocksMergeAndStaysArtifact(t *testing.T) {
 	}
 
 	// Classification keeps the two paragraphs separate.
-	root, err := Classify(ctx, doc)
+	root, err := Classify(ctx, nil, doc)
 	if err != nil {
 		t.Fatalf("Classify: %v", err)
 	}
@@ -253,7 +253,7 @@ func TestClassify_AllBodyNoHeading(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	root, err := Classify(ctx, doc)
+	root, err := Classify(ctx, nil, doc)
 	if err != nil {
 		t.Fatalf("Classify: %v", err)
 	}
@@ -296,7 +296,7 @@ func TestClassify_Figures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	root, err := Classify(ctx, doc)
+	root, err := Classify(ctx, nil, doc)
 	if err != nil {
 		t.Fatalf("Classify: %v", err)
 	}
@@ -354,7 +354,7 @@ func TestClassify_FiguresInheritedResources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	root, err := Classify(ctx, doc)
+	root, err := Classify(ctx, nil, doc)
 	if err != nil {
 		t.Fatalf("Classify: %v", err)
 	}
@@ -424,7 +424,7 @@ func TestClassify_BulletList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	root, err := Classify(ctx, doc)
+	root, err := Classify(ctx, nil, doc)
 	if err != nil {
 		t.Fatalf("Classify: %v", err)
 	}
@@ -464,7 +464,7 @@ func TestClassify_NumberedListAndSingleDash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	root, err := Classify(ctx, doc)
+	root, err := Classify(ctx, nil, doc)
 	if err != nil {
 		t.Fatalf("Classify: %v", err)
 	}
@@ -496,7 +496,7 @@ func TestClassify_TableGrid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	root, err := Classify(ctx, doc)
+	root, err := Classify(ctx, nil, doc)
 	if err != nil {
 		t.Fatalf("Classify: %v", err)
 	}
@@ -537,7 +537,7 @@ func TestClassify_NoTableFalseClaims(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	root, err := Classify(ctx, doc)
+	root, err := Classify(ctx, nil, doc)
 	if err != nil {
 		t.Fatalf("Classify: %v", err)
 	}

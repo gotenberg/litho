@@ -49,7 +49,7 @@ func TestClassify_CMScaleSetsTheEffectiveFontSize(t *testing.T) {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	root, err := Classify(ctx, doc)
+	root, err := Classify(ctx, nil, doc)
 	if err != nil {
 		t.Fatalf("Classify: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestClassify_TmScaleSetsTheEffectiveFontSize(t *testing.T) {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	root, err := Classify(ctx, doc)
+	root, err := Classify(ctx, nil, doc)
 	if err != nil {
 		t.Fatalf("Classify: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestClassify_ScaledBlocksDoNotMergeAcrossACM(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	root, err := Classify(ctx, doc)
+	root, err := Classify(ctx, nil, doc)
 	if err != nil {
 		t.Fatalf("Classify: %v", err)
 	}

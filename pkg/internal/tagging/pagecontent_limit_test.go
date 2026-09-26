@@ -62,7 +62,7 @@ func TestPageContentBytes_RefusesPastTheBound(t *testing.T) {
 		if err != nil || len(pages) != 1 {
 			t.Fatalf("%s: ResolvePages = %d pages, %v", tc.name, len(pages), err)
 		}
-		content, err := pageContentBytes(ctx, doc, pages[0])
+		content, err := pageContentBytes(ctx, nil, doc, pages[0])
 		if tc.refused != errors.Is(err, limits.ErrPageContentTooLarge) || (!tc.refused && (err != nil || len(content) < 2*len(part))) {
 			t.Errorf("%s: pageContentBytes = %d bytes, %v; want the page refused %v", tc.name, len(content), err, tc.refused)
 		}
