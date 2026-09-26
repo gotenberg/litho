@@ -12,7 +12,8 @@ import (
 // -3, 6.2.9 fold /OPI, /Subtype2 /PS and /PS into a single rule; ISO 19005-4,
 // 6.2.8.1 covers /OPI alone, because ISO 32000-2 removed PostScript XObjects
 // from the format. Reporting a PostScript form under the part 4 rule accused it
-// of carrying an /OPI key it does not have.
+// of carrying an /OPI key it does not have. veraPDF states the folded rule as
+// one test on the form, so a form carrying several of the keys fails it once.
 func TestCheckFormXObject_PostScriptByPart(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -45,9 +46,9 @@ func TestCheckFormXObject_PostScriptByPart(t *testing.T) {
 			want: map[int]int{2: 1, 3: 1, 4: 1},
 		},
 		{
-			name: "a PostScript form carrying OPI answers once at part 4",
+			name: "a PostScript form carrying OPI answers once at every part",
 			dict: ast.PdfDict{"OPI": ast.PdfDict{}, "Subtype2": ast.PdfName("PS")},
-			want: map[int]int{2: 2, 3: 2, 4: 1},
+			want: map[int]int{2: 1, 3: 1, 4: 1},
 		},
 		{
 			name: "a plain form answers to nothing",

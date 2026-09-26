@@ -28,30 +28,25 @@ func formGroupICCColorSpace(ctx context.Context, doc *document.Document, stream 
 	return blendingSpaceType(ctx, doc, group["CS"])
 }
 
-// scanContentStreamDeviceCS surveys one page's already-parsed operations and
+// scanContentStreamDeviceCSFrom surveys one content stream's already-parsed
+// operations, which begin from the inherited colour-space state entry, and
 // detects device-dependent colour space usage from explicit colour operators.
 // It also returns the names of XObjects invoked by Do, the colour-space names
 // selected by cs/CS, so the resource scan can distinguish colour spaces that are
 // actually referenced from ones merely declared in /Resources/ColorSpace, and
 // the colour-space state in effect at each Do, which a Form XObject inherits.
 //
-// It takes the operations rather than the page, because three separate check
-// groups (colour, graphics, XObject) each survey every page and each used to
-// resolve and re-parse the same content stream to do it. The page's operations
-// are parsed once by [pageCtx.parsedOps] and shared from there. A page whose
-// content is missing or will not parse yields no operations, which is the same
-// empty survey the resolve and parse failures returned before.
-func scanContentStreamDeviceCS(ctx context.Context, ops []content.Operation, patternCSNames map[string]bool) (deviceCSUsage, map[string]bool, map[string]bool, *usedResources, map[string]inheritedCS) {
-	return scanContentStreamDeviceCSFrom(ctx, ops, patternCSNames, inheritedCSDefault())
-}
-
-// scanContentStreamDeviceCSFrom surveys operations that begin from an inherited
-// colour-space state.
+// It takes the operations rather than the page, because several check groups
+// survey every page and each used to resolve and re-parse the same content
+// stream to do it. The page's operations are parsed once by
+// [pageCtx.parsedOps] and shared from there. A page whose content is missing or
+// will not parse yields no operations, which is the same empty survey the
+// resolve and parse failures returned before.
 //
-// A page content stream inherits nothing, which is the state
-// [scanContentStreamDeviceCS] passes. A Form XObject instead begins from the
-// state in effect at the Do that invoked it (ISO 32000-1 §8.10.2), so a bare
-// scn there can name a pattern the invoking stream selected the space for.
+// A page content stream inherits nothing, the state [inheritedCSDefault]
+// gives. A Form XObject instead begins from the state in effect at the Do that
+// invoked it (ISO 32000-1 §8.10.2), so a bare scn there can name a pattern the
+// invoking stream selected the space for.
 func scanContentStreamDeviceCSFrom(ctx context.Context, ops []content.Operation, patternCSNames map[string]bool, entry inheritedCS) (deviceCSUsage, map[string]bool, map[string]bool, *usedResources, map[string]inheritedCS) {
 	var usage deviceCSUsage
 	referencedXObjects := make(map[string]bool)

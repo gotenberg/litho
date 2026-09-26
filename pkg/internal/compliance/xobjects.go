@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -12,6 +13,42 @@ import (
 // checkXObjectGroup validates XObject restrictions for PDF/A conformance.
 // It checks reference XObjects, form XObject forbidden keys, image /Alternates,
 // image /OPI, and image /Interpolate constraints across all pages.
+//
+// veraPDF judges an XObject where a content stream it parses draws it, and it
+// parses every stream [drawnStreamWalk] reaches: a page's content, the forms
+// a Do paints, the cells of the tiling patterns an scn or SCN selects, every
+// glyph procedure of a Type 3 font text is shown with, and every annotation
+// appearance stream, each once for the document. So the image and form rules
+// judge the XObjects each of those draws, and the inline images each holds,
+// wherever they stand ([checkDrawnXObjects], [checkInlineImageInterpolate]),
+// and an appearance stream is itself a form ([checkAppearanceForms]).
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on an image whose
+// /Intent is /Bogus and /Interpolate true: drawn by an annotation's normal,
+// down or rollover appearance, a hidden annotation's too, by a glyph a page
+// shows, by a glyph of that font the page does not show, by a glyph of a font
+// shown only in rendering mode 3 or 7, and by the cell of a pattern a form
+// paints with, it fails ISO 19005-1, 6.2.4 t3 and 6.2.9 t1 and ISO 19005-2,
+// 6.2.8 t3 and 6.2.6 t1 once each; drawn by a glyph of a font a Tf selects and
+// no text shows, neither.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug1771477.pdf: draws an image with /Interpolate true inside a
+//     tiling pattern.
+//   - pdfjs pr12564.pdf: draws images whose /Interpolate is true, and soft
+//     masks whose /Interpolate is true, through its 13 annotation appearances,
+//     and veraPDF states ISO 19005-1, 6.2.4 t3 and ISO 19005-2, 6.2.8 t3 22
+//     times, where litho stated 2.
+//   - pdfcpu pkg_testdata__FOSDEM14_HPC_devroom_14_GoCUDA.pdf: draws 6 such
+//     images in the cells of patterns its forms paint with, and veraPDF states
+//     both 17 times, where litho stated 11.
+//   - pdfjs issue11306.pdf: draws one more through its annotation
+//     appearance; veraPDF states both 5 times, where litho stated 4.
+//   - All corpora, at PDF/A-1b, PDF/A-2b and PDF/A-2u, and at their own
+//     profile for the verapdf files: reaching these streams, with the inline
+//     image and form counts ([checkInlineImageInterpolate],
+//     [formPostScriptFaults]), moved the counts of 8 files onto veraPDF's
+//     and none away, and no other count.
 func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	doc, profile := vctx.doc, vctx.profile
 
@@ -28,92 +65,49 @@ func checkXObjectGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	var results []Violation
 	visited := make(map[string]bool)
+	drawn := newDrawnStreamWalk(vctx, func(s *drawnStream) {
+		scope := appearanceResources(ctx, doc, s.resources, s.pageRes)
+		results = append(results, checkDrawnXObjects(ctx, doc, scope, s.ops, s.pageNum, part, profile, visited)...)
+		results = append(results, checkInlineImageInterpolate(s.ops, s.pageNum, part)...)
+	})
 
 	for i := range vctx.pages {
 		if ctx.Err() != nil {
 			return results
 		}
+		p := &vctx.pages[i]
 
-		res := vctx.pages[i].resources
 		// A content stream an earlier page shares is judged there alone, and
 		// what it draws is resolved through that page's resources; see
 		// [markJudgedContents].
-		if res == nil || vctx.pages[i].contentJudged {
-			continue
+		if !p.contentJudged {
+			ops := p.parsedOps(ctx)
+			results = append(results, checkDrawnXObjects(ctx, doc, p.resources, ops, i+1, part, profile, visited)...)
+			results = append(results, checkInlineImageInterpolate(ops, i+1, part)...)
 		}
-
-		// Collect Do operator targets from the page content stream so only
-		// XObjects that are actually referenced (used) are checked.
-		_, referencedXObjects, _, used, _ := scanContentStreamDeviceCS(ctx, vctx.pages[i].parsedOps(ctx), collectPatternCSNames(ctx, doc, res))
-
-		scanXObjectResources(ctx, doc, res, i+1, part, profile, &results, visited, 0, referencedXObjects)
-		scanPatternImages(ctx, doc, res, used, i+1, part, profile, &results, visited)
-
-		// Check inline images for Interpolate = true.
-		results = append(results, checkInlineImageInterpolate(vctx.pages[i].parsedOps(ctx), i+1, part)...)
+		results = append(results, checkAppearanceForms(ctx, doc, p.dict, i+1, part, profile, visited)...)
+		drawn.walkPage(ctx, p, i+1)
 	}
 
 	doc.Logger.Debug("compliance.xobjects: checks complete", "violations", len(results))
 	return results
 }
 
-// scanPatternImages applies the XObject rules to what a page's tiling patterns
-// draw. A tiling pattern carries its own /Resources and content stream (ISO
-// 32000-1, 8.7.3.1), which paint wherever a scn/SCN selects the pattern, so the
-// images and forms that content invokes are used as surely as a page's own.
-// veraPDF reaches them through the pattern the page selects and states the
-// image rules there, ISO 19005-2, 6.2.8 t3 among them. A pattern the page
-// declares but never selects paints nothing and is not judged, as veraPDF does
-// not judge it.
-//
-// # Corpus evidence
-//
-//   - pdfjs bug1771477.pdf: draws an image with /Interpolate true inside a
-//     tiling pattern.
-func scanPatternImages(ctx context.Context, doc *document.Document, res ast.PdfDict, used *usedResources, pageNum, part int, profile string, results *[]Violation, visited map[string]bool) {
-	patterns, err := document.ResolveDict(ctx, doc, res["Pattern"])
-	if err != nil || patterns == nil || used == nil {
-		return
-	}
-	for _, name := range sortedNames(patterns) {
-		if ctx.Err() != nil {
-			return
-		}
-		if !used.patterns[string(name)] {
-			continue
-		}
-		stream, err := document.ResolveStream(ctx, doc, patterns[name])
-		if err != nil {
-			continue // a shading pattern: a dictionary with no content of its own
-		}
-		if patternType, _ := document.ResolveInt(ctx, doc, stream.Dict["PatternType"]); patternType != 1 {
-			continue
-		}
-		data, reads := decodeContentStream(ctx, doc, stream)
-		if !reads {
-			continue
-		}
-		ops, err := content.ParseStreamData(ctx, data)
-		if err != nil {
-			doc.Logger.Debug("compliance.xobjects: cannot parse tiling pattern", "pattern", name, "error", err)
-			continue
-		}
-		if patternRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); patternRes != nil {
-			_, referenced, _, _, _ := scanContentStreamDeviceCS(ctx, ops, collectPatternCSNames(ctx, doc, patternRes))
-			scanXObjectResources(ctx, doc, patternRes, pageNum, part, profile, results, visited, 0, referenced)
-		}
-		*results = append(*results, checkInlineImageInterpolate(ops, pageNum, part)...)
-	}
-}
-
 // checkInlineImageInterpolate checks parsed BI operations for inline images
-// with /I true or /Interpolate true. Uses parsed operations instead of raw
-// byte scanning.
+// with /I true or /Interpolate true, one violation for each such image:
+// veraPDF judges every inline image as an image of its own. Measured with
+// veraPDF 1.30 at PDF/A-1b and PDF/A-2b: two such images in one content
+// stream fail ISO 19005-1, 6.2.4 t3 and ISO 19005-2, 6.2.8 t3 twice.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue14256.pdf: writes both /I and /Interpolate on one inline
 //     image.
+//   - govdocs thread_100_100877.pdf: holds 97 inline images with /I true on 9
+//     pages, and veraPDF states ISO 19005-1, 6.2.4 t3 and ISO 19005-2, 6.2.8
+//     t3 97 times, where litho stated 9.
+//   - pdfjs TAMReview.pdf, bug1065245.pdf and issue20722.pdf: the same, 2, 3
+//     and 13 times where litho stated 1, 1 and 8.
 func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []Violation {
 	if len(ops) == 0 {
 		return nil
@@ -134,6 +128,7 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 		return nil
 	}
 
+	var results []Violation
 	for _, op := range ops {
 		if op.Operator != "BI" || len(op.Operands) == 0 {
 			continue
@@ -151,27 +146,25 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 			val = dict["Interpolate"]
 		}
 		if b, ok := val.(ast.PdfBool); ok && bool(b) {
-			return failf(rule, "page %d: inline image has Interpolate=true", pageNum)
+			results = append(results, failf(rule, "page %d: inline image has Interpolate=true", pageNum)...)
 		}
 	}
-	return nil
+	return results
 }
 
-// scanXObjectResources iterates XObject resources, validates each, and recurses
-// into the Form XObjects among them. Only the XObjects a Do operator of the
-// stream whose resources res are draws are checked, those referencedNames
-// holds; referencedNames nil checks them all. Each object is judged once for
-// the document, which visited records.
+// checkDrawnXObjects applies the XObject rules to the XObjects the Do operators
+// of one content stream draw, whose operations are ops and whose names resolve
+// against scope, each object once for the document, which visited records.
 //
 // veraPDF reaches an XObject through the Do operator that draws it
-// (GFOp_Do), so an entry of a form's /Resources the form's content never
-// draws is judged nowhere, as one of a page's is not, and neither is one of a
-// form whose content does not decode or parse. Measured with veraPDF 1.30 at
-// PDF/A-1b and PDF/A-2b on an image whose /Intent is /Bogus: listed by a form
-// the page draws, or by a form such a form draws, and drawn by neither, it
-// fails neither ISO 19005-1, 6.2.9 t1 nor ISO 19005-2, 6.2.6 t1; drawn twice
-// on a page, under two names, on two pages, or by a form two pages draw, it
-// fails each once.
+// (GFOp_Do), so an entry of a stream's /Resources its content never draws is
+// judged nowhere. A Form XObject's own content is a stream [drawnStreamWalk]
+// reaches in turn. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on an
+// image whose /Intent is /Bogus: listed by a form the page draws, or by a form
+// such a form draws, and drawn by neither, it fails neither ISO 19005-1, 6.2.9
+// t1 nor ISO 19005-2, 6.2.6 t1; drawn twice on a page, under two names, on two
+// pages, or by a form two pages draw, it fails each once; named by the page
+// alone and drawn by a form whose resources lack it, or that has none, once.
 //
 // # Corpus evidence
 //
@@ -185,119 +178,159 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 //     profile for the verapdf files: judging only the XObjects a form draws,
 //     and none through a page whose content an earlier page judged, moves no
 //     count; litho imagereach_2b.pdf plants both.
-func scanXObjectResources(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, part int, profile string, results *[]Violation, visited map[string]bool, depth int, referencedNames map[string]bool) {
-	if formTooDeep(doc, depth) || ctx.Err() != nil {
-		return
+func checkDrawnXObjects(ctx context.Context, doc *document.Document, scope ast.PdfDict, ops []content.Operation, pageNum, part int, profile string, visited map[string]bool) []Violation {
+	xobjectDict, err := document.ResolveDict(ctx, doc, scope["XObject"])
+	if err != nil || len(xobjectDict) == 0 || len(ops) == 0 {
+		return nil
 	}
-
-	xobjectDict, err := document.ResolveDict(ctx, doc, res["XObject"])
-	if err != nil || xobjectDict == nil {
-		return
-	}
-
-	for _, name := range sortedNames(xobjectDict) {
-		obj := xobjectDict[name]
-		// Only check XObjects actually invoked by Do operators.
-		if referencedNames != nil && !referencedNames[string(name)] {
-			continue
-		}
-		if ctx.Err() != nil {
-			return
-		}
-
-		// Cycle detection via indirect ref.
-		if ref, ok := obj.(ast.PdfIndirectRef); ok {
-			key := fmt.Sprintf("xo:%d", ref.ObjectNum)
-			if visited[key] {
-				continue
-			}
-			visited[key] = true
-		}
-
-		// XObjects are streams. Resolve as stream to access the dict.
-		stream, err := document.ResolveStream(ctx, doc, obj)
-		if err != nil {
-			// Fallback: try as plain dict (some producers use dict-only XObjects).
-			xobjDict, err := document.ResolveDict(ctx, doc, obj)
-			if err != nil || xobjDict == nil {
-				continue
-			}
-			subtype, _ := document.ResolveName(ctx, doc, xobjDict["Subtype"])
-			*results = append(*results, checkXObject(ctx, doc, ast.PdfStream{}, xobjDict, subtype, name, pageNum, part, profile)...)
-			continue
-		}
-
-		xobjDict := stream.Dict
-		subtype, _ := document.ResolveName(ctx, doc, xobjDict["Subtype"])
-
-		*results = append(*results, checkXObject(ctx, doc, stream, xobjDict, subtype, name, pageNum, part, profile)...)
-
-		// An image's soft mask and stencil mask are image dictionaries in their
-		// own right, and the image rules bind to them too: veraPDF builds a
-		// PDSMaskImage for /SMask and reports its /Interpolate. Fixtures
-		// confirm it states the rule for /Mask as well. /Mask may instead be a
-		// colour-key ARRAY (ISO 32000-1, 8.9.6.4), which is no image and
-		// resolves to no stream.
-		if subtype == "Image" {
-			for _, maskKey := range []ast.PdfName{"SMask", "Mask"} {
-				maskObj, hasMask := xobjDict[maskKey]
-				if !hasMask {
-					continue
-				}
-				if ref, ok := maskObj.(ast.PdfIndirectRef); ok {
-					key := fmt.Sprintf("xo:%d", ref.ObjectNum)
-					if visited[key] {
-						continue
-					}
-					visited[key] = true
-				}
-				maskStream, err := document.ResolveStream(ctx, doc, maskObj)
-				if err != nil {
-					continue
-				}
-				maskSubtype, _ := document.ResolveName(ctx, doc, maskStream.Dict["Subtype"])
-				*results = append(*results, checkXObject(ctx, doc, maskStream, maskStream.Dict, maskSubtype,
-					name+"/"+maskKey, pageNum, part, profile)...)
-			}
-		}
-
-		// Recurse into the XObjects a Form XObject draws.
-		if subtype == "Form" {
-			subRes, _ := document.ResolveDict(ctx, doc, xobjDict["Resources"])
-			if subRes != nil {
-				scanXObjectResources(ctx, doc, subRes, pageNum, part, profile, results, visited, depth+1, formDrawnXObjects(ctx, doc, stream, pageNum))
-			}
-		}
-	}
-}
-
-// formDrawnXObjects returns the names the Do operators of the Form XObject
-// stream draw, none when veraPDF reads no operator from it
-// ([decodeContentStream]) or its content does not parse.
-func formDrawnXObjects(ctx context.Context, doc *document.Document, stream ast.PdfStream, pageNum int) map[string]bool {
-	drawn := make(map[string]bool)
-	data, reads := decodeContentStream(ctx, doc, stream)
-	if !reads {
-		return drawn
-	}
-	ops, err := content.ParseStreamData(ctx, data)
-	if err != nil {
-		doc.Logger.Debug("compliance.xobjects: cannot parse Form XObject", "page", pageNum, "error", err)
-		return drawn
-	}
+	drawn := make(map[ast.PdfName]bool)
 	for _, op := range ops {
 		if op.Operator != "Do" || len(op.Operands) == 0 {
 			continue
 		}
 		if name, ok := op.Operands[0].(ast.PdfName); ok {
-			drawn[string(name)] = true
+			drawn[name] = true
 		}
 	}
-	return drawn
+
+	var results []Violation
+	for _, name := range sortedNames(xobjectDict) {
+		if !drawn[name] {
+			continue
+		}
+		if ctx.Err() != nil {
+			return results
+		}
+		results = append(results, checkDrawnXObject(ctx, doc, name, xobjectDict[name], pageNum, part, profile, visited)...)
+	}
+	return results
+}
+
+// checkDrawnXObject applies the XObject rules to the XObject obj that a Do
+// draws under the name name, and to the soft mask and stencil mask of an
+// image, unless visited holds it already.
+func checkDrawnXObject(ctx context.Context, doc *document.Document, name ast.PdfName, obj ast.PdfObject, pageNum, part int, profile string, visited map[string]bool) []Violation {
+	if seenXObject(obj, visited, "xo") {
+		return nil
+	}
+
+	// XObjects are streams. Resolve as stream to access the dict.
+	stream, err := document.ResolveStream(ctx, doc, obj)
+	if err != nil {
+		// Fallback: try as plain dict (some producers use dict-only XObjects).
+		xobjDict, err := document.ResolveDict(ctx, doc, obj)
+		if err != nil || xobjDict == nil {
+			return nil
+		}
+		subtype, _ := document.ResolveName(ctx, doc, xobjDict["Subtype"])
+		return checkXObject(ctx, doc, ast.PdfStream{}, xobjDict, subtype, name, pageNum, part, profile, false)
+	}
+
+	xobjDict := stream.Dict
+	subtype, _ := document.ResolveName(ctx, doc, xobjDict["Subtype"])
+	results := checkXObject(ctx, doc, stream, xobjDict, subtype, name, pageNum, part, profile, false)
+	if subtype != "Image" {
+		return results
+	}
+
+	// An image's soft mask and stencil mask are image dictionaries in their
+	// own right, and the image rules bind to them too: veraPDF builds a
+	// PDSMaskImage for /SMask and reports its /Interpolate. Fixtures confirm
+	// it states the rule for /Mask as well. /Mask may instead be a colour-key
+	// ARRAY (ISO 32000-1, 8.9.6.4), which is no image and resolves to no
+	// stream.
+	for _, maskKey := range []ast.PdfName{"SMask", "Mask"} {
+		maskObj, hasMask := xobjDict[maskKey]
+		if !hasMask || seenXObject(maskObj, visited, string(maskKey)) {
+			continue
+		}
+		maskStream, err := document.ResolveStream(ctx, doc, maskObj)
+		if err != nil {
+			continue
+		}
+		maskSubtype, _ := document.ResolveName(ctx, doc, maskStream.Dict["Subtype"])
+		results = append(results, checkXObject(ctx, doc, maskStream, maskStream.Dict, maskSubtype,
+			name+"/"+maskKey, pageNum, part, profile, maskKey == "Mask")...)
+	}
+	return results
+}
+
+// seenXObject reports whether visited already holds the XObject obj
+// references in the given role, and records it when it does not. An XObject
+// written directly rather than referenced is never recorded, so it is judged
+// at every draw.
+//
+// veraPDF judges an object once per model object it builds from it, and the
+// role decides the model: a drawn XObject is a PDXImage or PDXForm, an
+// image's /SMask a PDSMaskImage and its /Mask a PDMaskImage. So one image
+// both drawn and named as another's mask is judged in each role.
+func seenXObject(obj ast.PdfObject, visited map[string]bool, role string) bool {
+	ref, ok := obj.(ast.PdfIndirectRef)
+	if !ok {
+		return false
+	}
+	key := fmt.Sprintf("%s:%d", role, ref.ObjectNum)
+	if visited[key] {
+		return true
+	}
+	visited[key] = true
+	return false
+}
+
+// checkAppearanceForms applies the Form XObject rules to the appearance
+// streams of the annotations of page, the pageNum-th, each once for the
+// document, which visited records alongside the XObjects Do operators draw.
+//
+// An appearance stream is a form XObject (ISO 32000-1, 12.5.5), and veraPDF
+// builds each as one (GFPDAnnot.addAppearance builds a GFPDXForm), whatever
+// its /Subtype says and whether or not its content decodes, so the form rules
+// judge its dictionary. The streams it draws are reached by [drawnStreamWalk].
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on a normal appearance:
+// carrying /OPI and /PS it fails ISO 19005-1, 6.2.4 t2 and 6.2.5 t1 and ISO
+// 19005-2, 6.2.9 t1 once each, with no /Subtype and /OPI, or with /OPI and
+// content that does not decode, the /OPI rules once, and carrying /Ref ISO
+// 19005-1, 6.2.6 t1 and ISO 19005-2, 6.2.9 t2 once.
+func checkAppearanceForms(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum, part int, profile string, visited map[string]bool) []Violation {
+	annots, err := document.ResolveArray(ctx, doc, page["Annots"])
+	if err != nil || len(annots) == 0 {
+		return nil
+	}
+	var results []Violation
+	for _, annotObj := range annots {
+		if ctx.Err() != nil {
+			return results
+		}
+		annot, _ := document.ResolveDict(ctx, doc, annotObj) // Best-effort: an unreadable annotation has no appearance.
+		if annot == nil {
+			continue
+		}
+		apDict, _ := document.ResolveDict(ctx, doc, annot["AP"]) // Best-effort: an unreadable /AP has no appearance.
+		if apDict == nil {
+			continue
+		}
+		for _, key := range []ast.PdfName{"N", "R", "D"} {
+			apObj, ok := apDict[key]
+			if !ok {
+				continue
+			}
+			for _, streamObj := range appearanceStreamObjects(ctx, doc, apObj) {
+				if seenXObject(streamObj, visited, "xo") {
+					continue
+				}
+				stream, err := document.ResolveStream(ctx, doc, streamObj)
+				if err != nil {
+					continue
+				}
+				results = append(results, checkXObject(ctx, doc, stream, stream.Dict, "Form", "AP/"+key, pageNum, part, profile, false)...)
+			}
+		}
+	}
+	return results
 }
 
 // checkXObject validates a single XObject against the constraints for the given
-// PDF/A part.
+// PDF/A part. stencil reports that the image is reached as another image's
+// /Mask; see [checkImageBitsPerComponent].
 func checkXObject(
 	ctx context.Context,
 	doc *document.Document,
@@ -308,15 +341,20 @@ func checkXObject(
 	pageNum int,
 	part int,
 	profile string,
+	stencil bool,
 ) []Violation {
 	var results []Violation
 
 	// §6.2.9: Reference XObjects forbidden (all parts).
-	// A /Ref key in the XObject dict indicates a reference XObject. The
-	// XObject presence tests here (/Ref, /OPI, /PS, /Alternates) read the key
-	// as veraPDF's knownKey does ([knownKey]): a direct null is absent (ISO
-	// 32000-1, 7.3.7), a reference counts. Measured on each.
-	if knownKey(xobjDict, "Ref") {
+	// A /Ref key in a form XObject's dict makes it a reference XObject (ISO
+	// 32000-1, 8.10.4, Table 95 gives /Ref to forms alone), and every profile
+	// states the rule on PDXForm: measured with veraPDF 1.30 at PDF/A-1b and
+	// PDF/A-2b, an image carrying /Ref fails neither ISO 19005-1, 6.2.6 t1
+	// nor ISO 19005-2, 6.2.9 t2. The XObject presence tests here (/Ref, /OPI,
+	// /PS, /Alternates) read the key as veraPDF's knownKey does ([knownKey]):
+	// a direct null is absent (ISO 32000-1, 7.3.7), a reference counts.
+	// Measured on each.
+	if subtype == "Form" && knownKey(xobjDict, "Ref") {
 		results = append(results, refXObjectRule(part, pageNum, name)...)
 	}
 
@@ -331,7 +369,7 @@ func checkXObject(
 		case "Form":
 			results = append(results, checkFormXObject(ctx, doc, xobjDict, name, pageNum, part, profile)...)
 		case "Image":
-			results = append(results, checkImageXObject(ctx, doc, xobjDict, name, pageNum, part)...)
+			results = append(results, checkImageXObject(ctx, doc, xobjDict, name, pageNum, part, stencil)...)
 			// §6.2.8.3 / §6.2.7.3: JPEG2000 codestream constraints.
 			if hasJPXFilter(ctx, doc, xobjDict) {
 				results = append(results, checkJPXImage(ctx, doc, stream, name, pageNum, part)...)
@@ -344,7 +382,7 @@ func checkXObject(
 		}
 		// PDF/A-1 also checks image constraints (§6.2.4).
 		if subtype == "Image" {
-			results = append(results, checkImageXObjectPart1(ctx, doc, xobjDict, name, pageNum)...)
+			results = append(results, checkImageXObjectPart1(ctx, doc, xobjDict, name, pageNum, stencil)...)
 		}
 	}
 
@@ -367,20 +405,36 @@ func checkFormXObjectPart1(
 		results = append(results, failf(Rule_19005_1_6_2_4_t02, "page %d, XObject %s", pageNum, name)...)
 	}
 
-	// /Subtype2 with value /PS is forbidden.
-	if sub2Obj, hasSub2 := formDict["Subtype2"]; hasSub2 {
-		sub2Name, _ := document.ResolveName(ctx, doc, sub2Obj)
-		if sub2Name == "PS" {
-			results = append(results, failf(Rule_19005_1_6_2_5_t01, "page %d, XObject %s", pageNum, name)...)
-		}
-	}
-
-	// /PS key is forbidden in form XObject.
-	if knownKey(formDict, "PS") {
-		results = append(results, failf(Rule_19005_1_6_2_5_t01, "page %d, XObject %s", pageNum, name)...)
+	// A /Subtype2 of /PS and a /PS key are forbidden, one test for both.
+	if faults := formPostScriptFaults(ctx, doc, formDict); len(faults) > 0 {
+		results = append(results, failf(Rule_19005_1_6_2_5_t01, "page %d, XObject %s: %s", pageNum, name, strings.Join(faults, ", "))...)
 	}
 
 	return results
+}
+
+// formPostScriptFaults returns what makes a form XObject a PostScript one: a
+// /Subtype2 of /PS and a /PS key (ISO 32000-1, 8.10.1 and 8.8.2). veraPDF
+// states ISO 19005-1, 6.2.5 t1 and ISO 19005-2 and -3, 6.2.9 t1 as one test
+// on the form, so a form carrying several of these fails it once. Measured
+// with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on a form carrying /OPI and /PS.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue9940.pdf: draws 10 forms each carrying /Subtype2 /PS and a
+//     /PS key, and veraPDF states ISO 19005-1, 6.2.5 t1 and ISO 19005-2,
+//     6.2.9 t1 10 times each, where litho stated 20.
+func formPostScriptFaults(ctx context.Context, doc *document.Document, formDict ast.PdfDict) []string {
+	var faults []string
+	if sub2Obj, hasSub2 := formDict["Subtype2"]; hasSub2 {
+		if sub2Name, _ := document.ResolveName(ctx, doc, sub2Obj); sub2Name == "PS" {
+			faults = append(faults, "Subtype2 is PS")
+		}
+	}
+	if knownKey(formDict, "PS") {
+		faults = append(faults, "PS key present")
+	}
+	return faults
 }
 
 // checkImageXObjectPart1 checks image XObject constraints for PDF/A-1 (§6.2.4).
@@ -390,6 +444,7 @@ func checkImageXObjectPart1(
 	imgDict ast.PdfDict,
 	name ast.PdfName,
 	pageNum int,
+	stencil bool,
 ) []Violation {
 	var results []Violation
 
@@ -421,12 +476,14 @@ func checkImageXObjectPart1(
 		}
 	}
 
-	results = append(results, checkImageBitsPerComponent(ctx, doc, imgDict, name, pageNum, 1)...)
+	results = append(results, checkImageBitsPerComponent(ctx, doc, imgDict, name, pageNum, 1, stencil)...)
 
 	return results
 }
 
 // checkFormXObject checks form XObject constraints for PDF/A parts 2+ and 4.
+// ISO 19005-2 and -3, 6.2.9 t1 is one test over /OPI, /Subtype2 and /PS, so a
+// form fails it once whatever it carries ([formPostScriptFaults]).
 func checkFormXObject(
 	ctx context.Context,
 	doc *document.Document,
@@ -436,8 +493,6 @@ func checkFormXObject(
 	part int,
 	_ string,
 ) []Violation {
-	var results []Violation
-
 	// Select the appropriate rule based on part.
 	var formRule Rule
 	switch part {
@@ -450,31 +505,22 @@ func checkFormXObject(
 	}
 
 	// /OPI key forbidden in form XObject.
+	var faults []string
 	if knownKey(formDict, "OPI") {
-		results = append(results, failf(formRule, "page %d, XObject %s: OPI key present", pageNum, name)...)
+		faults = append(faults, "OPI key present")
 	}
 
 	// ISO 19005-4, 6.2.8.1 forbids the OPI key and nothing else: ISO 32000-2
 	// removed PostScript XObjects from the format, so part 4 has no PostScript
 	// prohibition left to make. Only ISO 19005-2 and -3, 6.2.9 fold the three
 	// prohibitions into one rule.
-	if part == 4 {
-		return results
+	if part != 4 {
+		faults = append(faults, formPostScriptFaults(ctx, doc, formDict)...)
 	}
-
-	// Parts 2/3: /Subtype2 with value /PS forbidden, /PS key forbidden.
-	if sub2Obj, hasSub2 := formDict["Subtype2"]; hasSub2 {
-		sub2Name, _ := document.ResolveName(ctx, doc, sub2Obj)
-		if sub2Name == "PS" {
-			results = append(results, failf(formRule, "page %d, XObject %s: Subtype2 is PS", pageNum, name)...)
-		}
+	if len(faults) == 0 {
+		return nil
 	}
-
-	if knownKey(formDict, "PS") {
-		results = append(results, failf(formRule, "page %d, XObject %s: PS key present", pageNum, name)...)
-	}
-
-	return results
+	return failf(formRule, "page %d, XObject %s: %s", pageNum, name, strings.Join(faults, ", "))
 }
 
 // checkImageXObject checks image XObject constraints for PDF/A parts 2+ and 4.
@@ -485,6 +531,7 @@ func checkImageXObject(
 	name ast.PdfName,
 	pageNum int,
 	part int,
+	stencil bool,
 ) []Violation {
 	var results []Violation
 
@@ -533,7 +580,7 @@ func checkImageXObject(
 		}
 	}
 
-	results = append(results, checkImageBitsPerComponent(ctx, doc, imgDict, name, pageNum, part)...)
+	results = append(results, checkImageBitsPerComponent(ctx, doc, imgDict, name, pageNum, part, stencil)...)
 
 	return results
 }
@@ -582,13 +629,22 @@ func bpcMaskRule(part int) Rule {
 // checkImageBitsPerComponent validates an image XObject's /BitsPerComponent.
 // A regular image allows 1, 2, 4, or 8, and additionally 16 for PDF/A-2 and
 // later (part 1: §6.2.4 t04, parts 2-3: §6.2.8 t04, part 4: §6.2.7.1 t04); an
-// image mask must use 1 (the corresponding t05). An absent key is permitted.
+// image reached as another image's /Mask, stencil, must use 1 (the
+// corresponding t05). An absent key is permitted.
+//
+// veraPDF states t05 on PDMaskImage, the model object it builds for an
+// image's /Mask alone, and t04 on every PDXImage unless its isMask, which only
+// a PDMaskImage answers true, whatever /ImageMask says. Measured with veraPDF
+// 1.30 at PDF/A-2b: a drawn image mask with /BitsPerComponent 2 fails neither
+// ISO 19005-2, 6.2.8 t4 nor t5, and with 3 fails t4 alone; a /Mask with 2,
+// or with 8 and no /ImageMask, fails t5 alone.
+//
 // JPXDecode images are skipped: their bit depth is defined by the JPEG2000
 // codestream (validated separately) and /BitsPerComponent should be absent, so
 // the value rule does not apply. This is a detection-only check: correcting the
 // bit depth would require decompressing and resampling the pixel data, which
 // risks visible corruption and is out of scope for remediation.
-func checkImageBitsPerComponent(ctx context.Context, doc *document.Document, imgDict ast.PdfDict, name ast.PdfName, pageNum, part int) []Violation {
+func checkImageBitsPerComponent(ctx context.Context, doc *document.Document, imgDict ast.PdfDict, name ast.PdfName, pageNum, part int, stencil bool) []Violation {
 	bpcObj, ok := imgDict["BitsPerComponent"]
 	if !ok {
 		return nil
@@ -601,10 +657,7 @@ func checkImageBitsPerComponent(ctx context.Context, doc *document.Document, img
 		return nil
 	}
 
-	// An image mask is intrinsically 1 bit per component (ISO 19005 §6.2.4
-	// t05 / §6.2.8 t05 / §6.2.7.1 t05). An absent or unresolvable /ImageMask
-	// defaults to false, so the regular-image branch applies.
-	if mask, _ := document.ResolveBool(ctx, doc, imgDict["ImageMask"]); mask {
+	if stencil {
 		if bpc != 1 {
 			return failf(bpcMaskRule(part), "page %d, XObject %s: image mask BitsPerComponent=%d (must be 1)", pageNum, name, bpc)
 		}

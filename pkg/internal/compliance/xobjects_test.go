@@ -81,7 +81,7 @@ func TestXObjectRules_PartLabeling(t *testing.T) {
 		{"ps XObject part 2 unchanged", psXObjectRule(2, 1, im), Rule_19005_2_6_2_9_t03},
 		{"inline interpolate part 3", checkInlineImageInterpolate(interp, 1, 3), Rule_19005_3_6_2_8_t03},
 		{"form OPI part 3", checkFormXObject(context.Background(), nil, ast.PdfDict{"OPI": ast.PdfDict{}}, im, 1, 3, "PDF/A-3b"), Rule_19005_3_6_2_9_t01},
-		{"image Alternates part 3", checkImageXObject(context.Background(), nil, ast.PdfDict{"Alternates": ast.PdfArray{}}, im, 1, 3), Rule_19005_3_6_2_8_t01},
+		{"image Alternates part 3", checkImageXObject(context.Background(), nil, ast.PdfDict{"Alternates": ast.PdfArray{}}, im, 1, 3, false), Rule_19005_3_6_2_8_t01},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -103,27 +103,33 @@ func TestCheckImageBitsPerComponent(t *testing.T) {
 	t.Parallel()
 	im := ast.PdfName("Im0")
 	cases := []struct {
-		name string
-		dict ast.PdfDict
-		part int
-		want *Rule // nil means no violation
+		name    string
+		dict    ast.PdfDict
+		part    int
+		stencil bool
+		want    *Rule // nil means no violation
 	}{
-		{"valid 8 (part 2)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(8)}, 2, nil},
-		{"valid 16 (part 2)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(16)}, 2, nil},
-		{"valid 16 (part 3)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(16)}, 3, nil},
-		{"valid 16 (part 4)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(16)}, 4, nil},
-		{"16 rejected (part 1)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(16)}, 1, &Rule_19005_1_6_2_4_t04},
-		{"invalid 3 (part 2)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(3)}, 2, &Rule_19005_2_6_2_8_t04},
-		{"invalid 3 (part 4)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(3)}, 4, &Rule_19005_4_6_2_7_1_t04},
-		{"JPXDecode out-of-range skipped", ast.PdfDict{"Filter": ast.PdfName("JPXDecode"), "BitsPerComponent": ast.PdfInt(12)}, 2, nil},
-		{"absent is valid", ast.PdfDict{}, 2, nil},
-		{"mask BPC 1 ok", ast.PdfDict{"ImageMask": ast.PdfBool(true), "BitsPerComponent": ast.PdfInt(1)}, 2, nil},
-		{"mask BPC 2 bad", ast.PdfDict{"ImageMask": ast.PdfBool(true), "BitsPerComponent": ast.PdfInt(2)}, 2, &Rule_19005_2_6_2_8_t05},
+		{"valid 8 (part 2)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(8)}, 2, false, nil},
+		{"valid 16 (part 2)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(16)}, 2, false, nil},
+		{"valid 16 (part 3)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(16)}, 3, false, nil},
+		{"valid 16 (part 4)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(16)}, 4, false, nil},
+		{"16 rejected (part 1)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(16)}, 1, false, &Rule_19005_1_6_2_4_t04},
+		{"invalid 3 (part 2)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(3)}, 2, false, &Rule_19005_2_6_2_8_t04},
+		{"invalid 3 (part 4)", ast.PdfDict{"BitsPerComponent": ast.PdfInt(3)}, 4, false, &Rule_19005_4_6_2_7_1_t04},
+		{"JPXDecode out-of-range skipped", ast.PdfDict{"Filter": ast.PdfName("JPXDecode"), "BitsPerComponent": ast.PdfInt(12)}, 2, false, nil},
+		{"absent is valid", ast.PdfDict{}, 2, false, nil},
+		{"mask BPC 1 ok", ast.PdfDict{"ImageMask": ast.PdfBool(true), "BitsPerComponent": ast.PdfInt(1)}, 2, true, nil},
+		{"mask BPC 2 bad", ast.PdfDict{"ImageMask": ast.PdfBool(true), "BitsPerComponent": ast.PdfInt(2)}, 2, true, &Rule_19005_2_6_2_8_t05},
+		// A /Mask answers to t5 whatever /ImageMask says, and an image mask a
+		// Do draws answers to t4 alone, as any image does.
+		{"mask BPC 8 without ImageMask bad", ast.PdfDict{"BitsPerComponent": ast.PdfInt(8)}, 2, true, &Rule_19005_2_6_2_8_t05},
+		{"drawn image mask BPC 2 ok", ast.PdfDict{"ImageMask": ast.PdfBool(true), "BitsPerComponent": ast.PdfInt(2)}, 2, false, nil},
+		{"drawn image mask BPC 3 bad", ast.PdfDict{"ImageMask": ast.PdfBool(true), "BitsPerComponent": ast.PdfInt(3)}, 2, false, &Rule_19005_2_6_2_8_t04},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := checkImageBitsPerComponent(context.Background(), nil, tc.dict, im, 1, tc.part)
+			got := checkImageBitsPerComponent(context.Background(), nil, tc.dict, im, 1, tc.part, tc.stencil)
 			if tc.want == nil {
 				if len(got) != 0 {
 					t.Errorf("got %v, want no violation", got)

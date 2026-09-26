@@ -80,7 +80,7 @@ func (d defaultCS) outside() defaultCS {
 }
 
 // deviceCSUsage tracks which device-dependent colour spaces one content
-// stream's operators use (see [scanContentStreamDeviceCS]).
+// stream's operators use (see [scanContentStreamDeviceCSFrom]).
 type deviceCSUsage struct {
 	rgb  bool
 	cmyk bool
