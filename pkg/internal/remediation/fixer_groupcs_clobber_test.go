@@ -310,8 +310,10 @@ func TestFixGroupCS_KeepsADeviceIndependentBlendingSpace(t *testing.T) {
 	next, nextAlloc := newTestDoc(t, out.Bytes())
 	// Stand in for the finding that makes group-cs run again: one naming a
 	// device blending space elsewhere in the document.
-	device := []compliance.Violation{{Rule: compliance.Rule_19005_2_6_2_4_3_t02,
-		Context: "page 9: transparency group blending colour space is DeviceRGB without RGB OutputIntent"}}
+	device := []compliance.Violation{{
+		Rule:    compliance.Rule_19005_2_6_2_4_3_t02,
+		Context: "page 9: transparency group blending colour space is DeviceRGB without RGB OutputIntent",
+	}}
 	if _, err := fixGroupCS(ctx, nextAlloc, next, Options{}, device, string(models.PDFA2b)); err != nil {
 		t.Fatalf("group-cs, second round: %v", err)
 	}
