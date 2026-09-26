@@ -94,3 +94,73 @@ func TestWriterMetadataEditAfterOneRemediationRoundReachesTheXMP(t *testing.T) {
 		}
 	}
 }
+
+// TestWriterEditQueuedBeforeAStageIsAppliedOnce pins that an edit queued before
+// a remediation that keeps one round, or before a redaction, reaches the output
+// once.
+//
+// Both stages replay the edits queued before them, so that they see the
+// document as staged, and keep what the edits staged in their overrides. The
+// edits also stayed queued and were applied again on top of those overrides
+// when the Writer was written: a stamp, which appends to the page each time it
+// is applied, was drawn twice.
+func TestWriterEditQueuedBeforeAStageIsAppliedOnce(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		stage func(ctx context.Context, t *testing.T, w *Writer)
+	}{
+		{
+			name: "a remediation",
+			stage: func(ctx context.Context, t *testing.T, w *Writer) {
+				if _, err := w.RemediatePDFA(ctx, models.PDFA2b); err != nil {
+					t.Fatalf("RemediatePDFA: %v", err)
+				}
+			},
+		},
+		{
+			name: "a redaction",
+			stage: func(ctx context.Context, t *testing.T, w *Writer) {
+				report, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{10, 690, 100, 720}}})
+				if err != nil {
+					t.Fatalf("Redact: %v", err)
+				}
+				if len(report.RemovedText) == 0 {
+					t.Fatal("the redaction removed nothing, so the test proves nothing")
+				}
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			data := signablePDF()
+			rounds := &keptRounds{}
+			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)), WithLogger(slog.New(rounds)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer r.Close()
+			w := NewWriter(r)
+			defer w.Close()
+			if err := w.StampText(TextStamp{Text: "STAMPED", X: 50, Y: 50}); err != nil {
+				t.Fatalf("StampText: %v", err)
+			}
+			tc.stage(ctx, t, w)
+			if rounds.n.Load() != 0 {
+				t.Fatalf("the remediation kept %d later rounds, which write the edits into a file, so the test proves nothing", rounds.n.Load())
+			}
+
+			out := writeAndReopen(t, w)
+			text, err := out.ExtractText(ctx, 1, WithArtifacts())
+			if err != nil {
+				t.Fatalf("ExtractText: %v", err)
+			}
+			if n := strings.Count(text, "STAMPED"); n != 1 {
+				t.Errorf("the page shows the stamp %d times, want once: %q", n, text)
+			}
+		})
+	}
+}

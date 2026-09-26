@@ -173,12 +173,14 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 	// read the document as the caller has staged it rather than the untouched
 	// source. Starting empty replaced those stages' work: a second Redact
 	// dropped the first, and a Redact after remediation undid its fixes. The
-	// mutations stay queued: they are idempotent, and a refusal has to be able
-	// to put the Writer back as it was.
+	// mutations the overrides already hold are not applied again, and the rest
+	// stay queued, marked folded once the overrides hold them (see
+	// [Writer.folded]): a refusal has to be able to put the Writer back as it
+	// was.
 	seedAllocator(alloc, w.rewriteOverrides)
-	for i, m := range w.mutations {
+	for i, m := range w.unfoldedMutations() {
 		if applyErr := m.apply(ctx, alloc, doc); applyErr != nil {
-			return nil, fmt.Errorf("applying staged mutation %d before redaction: %w", i, applyErr)
+			return nil, fmt.Errorf("applying staged mutation %d before redaction: %w", w.folded+i, applyErr)
 		}
 	}
 	// What the passes below queue is told apart from what the stages above
@@ -261,6 +263,7 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 	// agree, but stomped the copier's destination allocations during a full
 	// rewrite and produced files whose trailer pointed at the wrong object.
 	w.rewriteOverrides = alloc.Pending()
+	w.folded = len(w.mutations)
 	w.forceRewrite = true
 	w.editRewrites = true
 	w.recordRedaction(regions, report.RemovedText)

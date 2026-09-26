@@ -643,8 +643,17 @@ type Writer struct {
 	// them starts from the ones already here, so a later stage builds on an
 	// earlier one instead of discarding it.
 	rewriteOverrides map[int]ast.PdfObject
-	signer           Signer
-	requiredVersion  string
+	// folded counts the queued mutations, from the first, whose edits
+	// rewriteOverrides already holds. A remediation or a redaction replays the
+	// mutations queued before it, so that it reads the document as staged, and
+	// keeps what they staged in its overrides. Only the mutations after these
+	// are applied on top of the overrides: applying one again repeats an edit
+	// that need not be idempotent, and a stamp was drawn twice. They stay
+	// queued all the same, since a stage that fails puts the Writer back as it
+	// was and the pre-serialized output is judged by how many are queued.
+	folded          int
+	signer          Signer
+	requiredVersion string
 
 	// redactions records the regions of every successful [Writer.Redact]
 	// call, in call order, and redactedTokens the text they removed. WriteTo
@@ -675,6 +684,13 @@ type Writer struct {
 // mutation is a deferred modification applied during WriteTo.
 type mutation struct {
 	apply func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error
+}
+
+// unfoldedMutations returns the queued mutations whose edits the rewrite
+// overrides do not hold yet, the ones a stage building on the overrides still
+// has to apply (see [Writer.folded]).
+func (w *Writer) unfoldedMutations() []mutation {
+	return w.mutations[w.folded:]
 }
 
 // NewWriter creates a single-use [Writer] that queues mutations
@@ -749,6 +765,7 @@ func (w *Writer) rebase(next *Reader, path string) error {
 	w.reader, w.basePath = next, path
 	w.mutations = nil
 	w.rewriteOverrides = nil
+	w.folded = 0
 	w.trailerDirty = false
 	if prevPath == "" {
 		return nil
@@ -1884,6 +1901,7 @@ func (w *Writer) remediate(
 	// which otherwise persist on the shared document even when
 	// remediation returns ErrRemediationBrokePDF.
 	preMutations := len(w.mutations)
+	preFolded := w.folded
 	preForceRewrite := w.forceRewrite
 	preTrailerDirty := w.trailerDirty
 	preRequiredVersion := w.requiredVersion
@@ -1898,6 +1916,7 @@ func (w *Writer) remediate(
 	}
 	restorePreState := func() {
 		w.mutations = w.mutations[:preMutations]
+		w.folded = preFolded
 		w.forceRewrite = preForceRewrite
 		w.trailerDirty = preTrailerDirty
 		w.requiredVersion = preRequiredVersion
@@ -1932,18 +1951,19 @@ func (w *Writer) remediate(
 	// Without this, remediation built its overrides from the untouched source
 	// and those overrides win at the same object number in writeToInternal, so
 	// `litho pipe f rotate -angle 90 remediate -profile PDF/A-2b` wrote the file
-	// with no rotation at all. The mutations stay queued: they are idempotent,
-	// applying them again at write time reaches the same result, and a
-	// remediation rollback must be able to put the Writer back as it was.
+	// with no rotation at all. The mutations stay queued, marked folded once the
+	// overrides below hold them (see [Writer.folded]): a remediation rollback
+	// must be able to put the Writer back as it was.
 	//
 	// The overrides an earlier stage produced go in first, for the same
 	// reason: remediation replaced them wholesale, so remediating a redacted
-	// document wrote the unredacted source back.
+	// document wrote the unredacted source back. The mutations those overrides
+	// already hold are not applied again.
 	seedAllocator(alloc, w.rewriteOverrides)
-	for i, m := range w.mutations {
+	for i, m := range w.unfoldedMutations() {
 		if err := m.apply(ctx, alloc, doc); err != nil {
 			restorePreState()
-			return nil, fmt.Errorf("applying staged mutation %d before remediation: %w", i, err)
+			return nil, fmt.Errorf("applying staged mutation %d before remediation: %w", w.folded+i, err)
 		}
 	}
 
@@ -1967,6 +1987,8 @@ func (w *Writer) remediate(
 		// whose trailer pointed at the wrong object. Seed via
 		// rewriteOverrides only.
 		w.rewriteOverrides = alloc.Pending()
+		// The map holds what every queued mutation staged, replayed above.
+		w.folded = len(w.mutations)
 	}
 	if report.TrailerDirty {
 		w.trailerDirty = true
@@ -2762,10 +2784,12 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 	// Signing requires its own two-pass incremental flow. It carries the
 	// overrides as the incremental path below does: after a remediation that
 	// kept one round they hold every repair, and signing without them wrote
-	// the source back with only the signature added.
+	// the source back with only the signature added. The mutations those
+	// overrides already hold are not applied again (see [Writer.folded]).
 	if signer != nil {
-		mutFuncs := make([]mutations.MutationFunc, len(w.mutations))
-		for i, m := range w.mutations {
+		pending := w.unfoldedMutations()
+		mutFuncs := make([]mutations.MutationFunc, len(pending))
+		for i, m := range pending {
 			mutFuncs[i] = m.apply
 		}
 		return mutations.WriteWithSignature(ctx, dst, w.reader.doc, signerAdapter{inner: signer}, w.rewriteOverrides, mutFuncs, cfg.xrefStream)
@@ -2780,7 +2804,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 		// the edit (a page rotation landed on whatever object the copier
 		// had renumbered into that slot).
 		overrides := w.rewriteOverrides
-		if len(w.mutations) > 0 {
+		if pending := w.unfoldedMutations(); len(pending) > 0 {
 			mutAlloc := writer.NewObjAllocator(w.reader.doc.HighestObjectNumber(ctx))
 			// A done ctx can stop the raw-byte augmentation short, and the allocator
 			// then starts below objects the file defines.
@@ -2796,14 +2820,14 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 			// number", which silently dropped whatever the caller asked for:
 			// `litho pipe f remediate -profile PDF/A-2b rotate -angle 90` wrote
 			// the file with no rotation. Mutations queued BEFORE remediation are
-			// already folded into those overrides by Writer.remediate, so
-			// re-applying them here lands on the same result.
+			// already folded into those overrides by Writer.remediate, and are
+			// not applied again (see [Writer.folded]).
 			for objNum, obj := range w.rewriteOverrides {
 				mutAlloc.AllocAt(objNum, obj)
 			}
-			for i, m := range w.mutations {
+			for i, m := range pending {
 				if err := m.apply(ctx, mutAlloc, w.reader.doc); err != nil {
-					return fmt.Errorf("applying mutation %d: %w", i, err)
+					return fmt.Errorf("applying mutation %d: %w", w.folded+i, err)
 				}
 			}
 			if len(mutAlloc.Pending()) > 0 {
@@ -2845,16 +2869,16 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 	// Seeding them last let them win at the same object number, which silently
 	// dropped whatever the caller asked for, such as a rotation queued after
 	// remediation. The full-rewrite branch above orders it the same way for the
-	// same reason.
+	// same reason, and skips the same folded mutations.
 	for objNum, obj := range w.rewriteOverrides {
 		alloc.AllocAt(objNum, obj)
 	}
 
-	for i, m := range w.mutations {
+	for i, m := range w.unfoldedMutations() {
 		if err := m.apply(ctx, alloc, doc); err != nil {
-			return fmt.Errorf("applying mutation %d: %w", i, err)
+			return fmt.Errorf("applying mutation %d: %w", w.folded+i, err)
 		}
-		logger.Debug("mutation applied", slog.Int("index", i))
+		logger.Debug("mutation applied", slog.Int("index", w.folded+i))
 	}
 
 	// If no mutations produced pending objects AND the trailer was not
