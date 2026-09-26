@@ -37,8 +37,22 @@ var operatorResourceCategory = map[string]ast.PdfName{
 // names fall back to: the page's for a form XObject, a tiling pattern, a Type3
 // glyph description or an annotation appearance stream, and the page tree's for
 // a page with no /Resources of its own. patterns names the patterns the
-// stream's scn and SCN operators select in a Pattern colour space, which are
-// resource names of the Pattern category.
+// stream's scn and SCN operators select in a Pattern colour space while the
+// stream processes its colour operators ([drawnScan]), which are resource
+// names of the Pattern category. colourOff reports that the stream starts
+// with its colour operators ignored ([NewColourState]).
+//
+// A stream whose colour operators are off, from its start or past a d1, looks
+// up none of the names cs, CS and sh give, nor the pattern scn and SCN
+// select, since veraPDF processes none of those operators there (ISO 32000-1,
+// 9.6.5, Table 113, and 8.7.3.3; veraPDF-validation 1.30,
+// OperatorParser.parseOperator, which resolves their names only while
+// GraphicState.isProcessColorOperators holds). Measured with veraPDF 1.30 at
+// PDF/A-2b and PDF/A-4: a Type 3 glyph past its d1 whose cs or sh names an
+// entry only the page defines, or whose scn selects such a pattern in the
+// Pattern space, and the cell of an uncoloured tiling pattern whose cs does,
+// fail neither t2 nor, when nothing defines the name, t3; the glyph fails t2
+// before its d1, and past the Q closing a d1 inside q.
 //
 // ISO 19005-2/3/4, 6.2.2 t2 and ISO 19005-4, 6.2.2 t3 judge the content stream,
 // not the name: veraPDF tests that the stream's inheritedResourceNames and
@@ -95,6 +109,7 @@ func checkContentStreamResourcesOps(
 	doc *document.Document,
 	ops []content.Operation,
 	patterns map[string]bool,
+	colourOff bool,
 	resources ast.PdfDict,
 	inherited ast.PdfDict,
 	part int,
@@ -139,10 +154,13 @@ func checkContentStreamResourcesOps(
 		}
 	}
 
+	colour := NewColourState(colourOff)
 	for idx, op := range ops {
 		if idx%200 == 0 && ctx.Err() != nil {
 			return results
 		}
+		colourOn := colour.On()
+		colour.Operator(op.Operator)
 
 		if op.Operator == "ri" && len(op.Operands) >= 1 && riRule.Specification != "" {
 			if riName, ok := op.Operands[0].(ast.PdfName); ok && !validRenderingIntents[string(riName)] {
@@ -165,6 +183,9 @@ func checkContentStreamResourcesOps(
 		// Test 2/3: check named resource references.
 		category, ok := operatorResourceCategory[op.Operator]
 		if !ok || len(op.Operands) < 1 {
+			continue
+		}
+		if !colourOn && colourOperators[op.Operator] {
 			continue
 		}
 

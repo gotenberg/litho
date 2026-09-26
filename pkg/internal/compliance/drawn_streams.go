@@ -49,8 +49,9 @@ type drawnStream struct {
 	pageRes ast.PdfDict
 	pageNum int
 	ops     []content.Operation
-	// patterns names the patterns its scn and SCN operators select, resource
-	// names the stream uses as much as its other operators' operands (see
+	// patterns names the patterns its scn and SCN operators select while it
+	// processes its colour operators ([drawnScan]), resource names the stream
+	// uses as much as its other operators' operands (see
 	// [checkContentStreamResourcesOps]).
 	patterns map[string]bool
 	// overflow counts the integer literals past the 64-bit range the parse
@@ -505,7 +506,7 @@ func (w *drawnStreamWalk) visit(ctx context.Context, obj ast.PdfObject, owner as
 		pageRes:      pageRes,
 		pageNum:      pageNum,
 		ops:          ops,
-		patterns:     scan.patterns(),
+		patterns:     scan.built,
 		overflow:     countOverflows(overflows),
 		format:       format,
 		colourOff:    colourOff,

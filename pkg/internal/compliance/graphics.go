@@ -48,7 +48,7 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 			ops := p.parsedOps(ctx)
 			if ops != nil {
 				ownRes, inheritedRes := pageResourceScopes(p)
-				_, _, _, selected, _ := scanContentStreamDeviceCS(ctx, ops, collectPatternCSNames(ctx, doc, res))
+				built := drawn.scan(ctx, ops, res, inheritedCSDefault(), false).built
 				// A page's Default colour spaces are those of the resources it
 				// uses, its own or inherited ones (ISO 32000-1, 7.7.3.4).
 				defaultUndefined := ""
@@ -59,7 +59,7 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 					}
 					defaultUndefined = unreadableDefaultSelected(ctx, doc, ops, defaultRes, ownRes, inheritedRes, true, false)
 				}
-				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, selected.patterns, ownRes, inheritedRes, part, i+1, false, defaultUndefined)...)
+				results = append(results, checkContentStreamResourcesOps(ctx, doc, ops, built, false, ownRes, inheritedRes, part, i+1, false, defaultUndefined)...)
 				// Check inline image /Intent values from parsed BI operations.
 				results = append(results, checkInlineImageIntent(ops, part, i+1)...)
 				// The inline image filters of a page's content are stated by
@@ -151,7 +151,7 @@ func checkDrawnStream(ctx context.Context, doc *document.Document, s *drawnStrea
 	if missingResourceRule(part).Specification != "" {
 		defaultUndefined = unreadableDefaultSelected(ctx, doc, s.ops, s.resources, s.resources, s.pageRes, s.kind == drawnAppearance, s.colourOff)
 	}
-	results := checkContentStreamResourcesOps(ctx, doc, s.ops, s.patterns, s.resources, s.pageRes, part, s.pageNum, true, defaultUndefined)
+	results := checkContentStreamResourcesOps(ctx, doc, s.ops, s.patterns, s.colourOff, s.resources, s.pageRes, part, s.pageNum, true, defaultUndefined)
 	results = append(results, hexStrings.check(s.format, s.pageNum)...)
 	results = append(results, checkInlineImageIntent(s.ops, part, s.pageNum)...)
 	results = append(results, checkInlineImageFilters(s.ops, part, s.pageNum)...)
