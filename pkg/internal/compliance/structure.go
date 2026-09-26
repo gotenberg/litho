@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -273,14 +274,14 @@ func checkStructureGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		}
 	}
 
-	// PDF/UA-2 §8.6 t1: an outline item /Title is a catalog-level text string,
-	// not a structure element, so it is judged whether or not the document
-	// carries a structure tree. veraPDF scopes the clause to CosTextString and
-	// reports a PUA title on a file whose catalog names no /StructTreeRoot;
-	// running the check inside the structure-tree branch above left exactly
-	// those files unreported.
+	// PDF/UA-2 §8.6 t1: an outline item /Title, the catalog /Lang and a
+	// marked-content /Lang are text strings outside the structure tree, so they
+	// are judged whether or not the document carries one. veraPDF scopes the
+	// clause to CosTextString and reports a PUA title on a file whose catalog
+	// names no /StructTreeRoot; running the check inside the structure-tree
+	// branch above left exactly those files unreported.
 	if profile == "PDF/UA-2" {
-		results = append(results, checkOutlineTitlePUA(ctx, doc, catalog)...)
+		results = append(results, checkTextStringPUA(ctx, vctx)...)
 	}
 
 	doc.Logger.Debug("compliance.structure: structure checks complete", "violations", len(results))
@@ -1696,12 +1697,15 @@ func checkActualTextPUA(ctx context.Context, doc *document.Document, catalog ast
 	return results
 }
 
-// containsPUARunes checks if a decoded string contains any Unicode PUA code points.
+// containsPUARunes checks if a decoded string contains any Unicode PUA code
+// points: the private-use characters, General_Category Co, which the Unicode
+// Standard, 23.5 places at U+E000 to U+F8FF and in planes 15 and 16 up to
+// U+FFFFD and U+10FFFD. The last two code points of each plane are
+// noncharacters (23.7), not private use, and veraPDF's PUAHelper.containPUA
+// stops at the same bounds.
 func containsPUARunes(s string) bool {
 	for _, r := range s {
-		if (r >= 0xE000 && r <= 0xF8FF) || // BMP PUA
-			(r >= 0xF0000 && r <= 0xFFFFF) || // Supplementary PUA-A
-			(r >= 0x100000 && r <= 0x10FFFF) { // Supplementary PUA-B
+		if unicode.Is(unicode.Co, r) {
 			return true
 		}
 	}
@@ -2052,61 +2056,50 @@ func roleMapStandardRemapRule(profile string) Rule {
 	return Rule{}
 }
 
-// checkOutlineTitlePUA validates ISO 14289-2 §8.6 t1 for outline item titles: a
-// text string a consumer reads out shall carry no Private Use Area code point,
-// because nothing outside the producing system knows what one means.
+// checkTextStringPUA validates ISO 14289-2, 8.6 t1: a text string a consumer
+// reads out shall carry no Private Use Area code point, because nothing outside
+// the producing system knows what one means.
 //
-// The clause is scoped to veraPDF's CosTextString, and which strings that
-// covers was established by measurement rather than from the clause text: an
-// outline item's /Title reaches it, while a document information /Title and an
-// annotation /Contents were both silent. Only the measured position fires here,
-// so an unmeasured one is a missing report rather than a wrong one.
-func checkOutlineTitlePUA(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []Violation {
-	outlinesObj, ok := catalog["Outlines"]
-	if !ok {
-		return nil
-	}
-	outlines, err := document.ResolveDict(ctx, doc, outlinesObj)
-	if err != nil || outlines == nil {
-		doc.Logger.Debug("compliance.structure: cannot resolve /Outlines", "error", err)
-		return nil
-	}
-
+// The clause is scoped to veraPDF's CosTextString, whose only instances in its
+// model are an outline item's /Title (GFPDOutline.getTitle) and every CosLang,
+// the one subtype: the catalog /Lang (GFPDDocument.getLang), a structure
+// element's /Lang (GFPDStructElem.getLang), the /Lang of the element an
+// annotation or a form field names by its /StructParent (GFPDAnnot.getLang,
+// GFPDFormField.getLang), and the /Lang of a marked-content property list
+// (GFOpMarkedContent.getLang). [typedValues] marks the dictionary strings
+// among them, and [forEachContentLang] reaches the property lists. A string
+// read as a CosActualText or a CosAlt is a CosString and answers ISO 14289-2,
+// 8.4.3 instead, and a document information /Title or an annotation's own
+// /Contents or /Lang is no typed string at all. Measured on veraPDF 1.30.2
+// with one crafted file per position, an annotation's own /Lang and a form
+// field's own /Lang silent among them. The code points are those of
+// PUAHelper.containPUA ([containsPUARunes]).
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-2__8.6-t01-fail-a: its catalog /Lang is <FEFFF00C>, and
+//     veraPDF reports it at PDF/UA-2 and both WTPDF levels, which litho,
+//     reading outline titles only, did not.
+func checkTextStringPUA(ctx context.Context, vctx *validationCtx) []Violation {
 	var results []Violation
-	walkOutlineTitlePUA(ctx, doc, outlines["First"], &results, 0, map[int]bool{})
+	for _, v := range typedValues(ctx, vctx) {
+		if !v.textString {
+			continue
+		}
+		if s, ok := v.value.(ast.PdfString); ok && containsPUARunes(document.DecodePdfString(s)) {
+			results = append(results, failf(Rule_14289_2_8_6_t01, "%s contains a Private Use Area code point", v.where)...)
+		}
+	}
+	forEachContentLang(ctx, vctx.doc, vctx.catalog, func(pageNum int, langObj ast.PdfObject, origin string) {
+		// A /Lang that is no string is no CosLang for veraPDF.
+		lang, err := document.ResolveString(ctx, vctx.doc, langObj)
+		if err != nil {
+			return
+		}
+		if containsPUARunes(document.DecodePdfString(lang)) {
+			results = append(results, failf(Rule_14289_2_8_6_t01,
+				"page %d, %s: marked-content /Lang contains a Private Use Area code point", pageNum, origin)...)
+		}
+	})
 	return results
-}
-
-// walkOutlineTitlePUA reports every outline item whose /Title carries a PUA code
-// point, following /Next across siblings and /First into children.
-func walkOutlineTitlePUA(ctx context.Context, doc *document.Document, itemObj ast.PdfObject, results *[]Violation, depth int, visited map[int]bool) {
-	if depth > maxStructTreeWalkDepth {
-		return
-	}
-	for itemObj != nil {
-		if ctx.Err() != nil {
-			return
-		}
-		if ref, ok := itemObj.(ast.PdfIndirectRef); ok {
-			if visited[ref.ObjectNum] {
-				return
-			}
-			visited[ref.ObjectNum] = true
-		}
-
-		item, err := document.ResolveDict(ctx, doc, itemObj)
-		if err != nil || item == nil {
-			return
-		}
-
-		if title, terr := document.ResolveString(ctx, doc, item["Title"]); terr == nil {
-			if containsPUARunes(document.DecodePdfString(title)) {
-				*results = append(*results, failf(Rule_14289_2_8_6_t01,
-					"outline item /Title contains PUA")...)
-			}
-		}
-
-		walkOutlineTitlePUA(ctx, doc, item["First"], results, depth+1, visited)
-		itemObj = item["Next"]
-	}
 }

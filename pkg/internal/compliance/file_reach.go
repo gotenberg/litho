@@ -46,6 +46,10 @@ type typedValue struct {
 	// unicodeName reports that the accessor reads the value, a name, as a
 	// CosUnicodeName, which the UTF-8 rule judges too ([checkUTF8Names]).
 	unicodeName bool
+	// textString reports that the accessor reads the value, a string, as a
+	// CosTextString, a CosLang included, which ISO 14289-2, 8.6 t1 judges too
+	// ([checkTextStringPUA]).
+	textString bool
 	// where names the accessor in the context of a violation.
 	where string
 }
@@ -189,6 +193,7 @@ func typedValues(ctx context.Context, vctx *validationCtx) []typedValue {
 
 	var values []typedValue
 	if v, ok := entryString(ctx, doc, catalogSite, catalog, "Lang", "catalog /Lang"); ok {
+		v.textString = true
 		values = append(values, v)
 	}
 	values = append(values, outlineTitleValues(ctx, doc, catalog)...)
@@ -246,6 +251,7 @@ func outlineTitleValues(ctx context.Context, doc *document.Document, catalog ast
 		}
 		seen[ref.ObjectNum] = true
 		if v, ok := entryString(ctx, doc, propertyListSite{objNum: ref.ObjectNum}, item, "Title", "outline item /Title"); ok {
+			v.textString = true
 			values = append(values, v)
 		}
 		pending = append(pending, item["Next"], item["First"])
@@ -342,6 +348,7 @@ func structParentLangValues(ctx context.Context, vctx *validationCtx, root ast.P
 			site = propertyListSite{objNum: ref.ObjectNum}
 		}
 		if v, ok := entryString(ctx, doc, site, elem, "Lang", where); ok {
+			v.textString = true
 			values = append(values, v)
 		}
 		return holder, true
@@ -444,6 +451,9 @@ func (w *structValueWalk) element(ctx context.Context, site propertyListSite, ra
 	}
 	for _, key := range []ast.PdfName{"Lang", "ActualText", "Alt"} {
 		if v, ok := entryString(ctx, w.doc, site, elem, key, "structure element /"+string(key)); ok {
+			// Only the /Lang is a CosTextString: veraPDF's CosActualText and
+			// CosAlt derive from CosString directly.
+			v.textString = key == "Lang"
 			w.values = append(w.values, v)
 		}
 	}

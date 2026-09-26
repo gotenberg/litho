@@ -42,9 +42,11 @@ func TestContainsPUARunes(t *testing.T) {
 		{"just below PUA", string(rune(0xDFFF)), false},
 		{"just above PUA", string(rune(0xF900)), false},
 		{"supplementary PUA-A start", string(rune(0xF0000)), true},
-		{"supplementary PUA-A end", string(rune(0xFFFFF)), true},
+		{"supplementary PUA-A end", string(rune(0xFFFFD)), true},
+		{"plane 15 noncharacter", string(rune(0xFFFFF)), false},
 		{"supplementary PUA-B start", string(rune(0x100000)), true},
-		{"supplementary PUA-B end", string(rune(0x10FFFF)), true},
+		{"supplementary PUA-B end", string(rune(0x10FFFD)), true},
+		{"plane 16 noncharacter", string(rune(0x10FFFF)), false},
 		{"mixed with PUA", "Hello" + string(rune(0xE000)) + "World", true},
 		{"CJK character", "\u4e16", false},
 	}
