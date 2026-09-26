@@ -125,11 +125,11 @@ var (
 	// ErrSignFullRewriteIncompatible is returned by [Writer.WriteTo] when
 	// [Writer.Sign] is combined with [Writer.Encrypt],
 	// [Writer.RemoveEncryption] or [WithEncryption], or with an encrypted
-	// source. Signing covers a ByteRange of the existing bytes via an
-	// incremental update, and the incremental update of an encrypted file
-	// would append the signature dictionary's strings in plaintext where its
-	// security handler requires ciphertext (ISO 32000-1, 7.6.1).
-	// Encrypted-then-signed output is permitted by the spec but not yet
+	// source, a remediated one included. Signing covers a ByteRange of the
+	// existing bytes via an incremental update, and the incremental update of
+	// an encrypted file would append the signature dictionary's strings in
+	// plaintext where its security handler requires ciphertext (ISO 32000-1,
+	// 7.6.1). Encrypted-then-signed output is permitted by the spec but not yet
 	// implemented.
 	//
 	// A full rewrite does not return it, despite the name: [WithFullRewrite],

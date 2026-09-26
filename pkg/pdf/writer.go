@@ -1572,7 +1572,14 @@ func (w *Writer) RemoveAttachment(name string) {
 //
 // What it is not compatible with is encryption, on the source or on the
 // output, and decryption, which [Writer.WriteTo] rejects with
-// [ErrSignFullRewriteIncompatible].
+// [ErrSignFullRewriteIncompatible]. The signature of an encrypted document
+// covers its encrypted bytes (ISO 32000-1, 12.8.1), and its signature
+// dictionary's strings are encrypted under the document's key like every
+// other string (ISO 32000-1, 7.6.1), an update litho cannot write. The source
+// decides: a remediation of an encrypted source works on a decrypted copy,
+// and signing is refused after it all the same, since the caller asked to sign
+// the encrypted document, not that copy. To sign a decrypted document, write
+// it, reopen the output and sign that.
 func (w *Writer) Sign(signer Signer) {
 	w.signer = signer
 }
@@ -2622,11 +2629,12 @@ func (w *Writer) copyFromPreSerialized(ctx context.Context, dst io.Writer) error
 // reading. WriteTo writes that output and signs it in an incremental update on
 // top (see [Writer.Sign]).
 //
-// Signing an already-encrypted source returns the same error even when
-// the caller asks for nothing else: the incremental signing flow would
-// append the signature dictionary's strings in plaintext where the
-// source's crypto handler requires ciphertext. Encrypted-then-signed
-// output is permitted by the specification but not yet implemented.
+// Signing an encrypted source returns the same error even when the caller
+// asks for nothing else, and after a remediation too, although the
+// remediation works on a decrypted copy: the signature of an encrypted
+// document belongs in its encrypted bytes, which litho cannot write (see
+// [Writer.Sign]). Encrypted-then-signed output is permitted by the
+// specification but not yet implemented.
 //
 // After [Writer.Redact], WriteTo checks the output against every removed
 // string before writing a byte, and returns [ErrRedactionRefused] or
@@ -2658,12 +2666,10 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 			return fmt.Errorf("%w (%s): WithEncryption after Writer.%s", ErrPDFAForbidsEncryption, w.pdfaClause, w.remediation)
 		}
 	}
-	// Signing an encrypted source is also rejected: the incremental signing
-	// flow would append the signature dictionary's strings in plaintext
-	// where the source's crypto handler requires ciphertext. A full rewrite
-	// the caller, an edit or a remediation asks for is not: its output is
-	// signed on top, see writeSignedRewrite.
-	if w.signer != nil && (w.encryptCfg != nil || encrypt != nil || w.decrypt || w.reader.doc.IsEncrypted) {
+	// Signing an encrypted source is also rejected (see signsEncrypted). A
+	// full rewrite the caller, an edit or a remediation asks for is not: its
+	// output is signed on top, see writeSignedRewrite.
+	if w.signer != nil && (w.encryptCfg != nil || encrypt != nil || w.decrypt || w.signsEncrypted()) {
 		return ErrSignFullRewriteIncompatible
 	}
 	if encrypt != nil {
@@ -2693,6 +2699,35 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 // asking.
 func (w *Writer) signsARewrite() bool {
 	return w.forceRewrite || w.sourceDamaged()
+}
+
+// signsEncrypted reports whether the document a signature is asked for is
+// encrypted: the source the Writer was built on, or the document it edits.
+//
+// The signature of an encrypted document is written in that document. Its
+// ByteRange covers the bytes of the file (ISO 32000-1, 12.8.1), and every
+// string of an encrypted file is encrypted under the file's key (ISO 32000-1,
+// 7.6.1), those of the signature dictionary included: only the signature value
+// in its /Contents is exempt (ISO 32000-2, 7.6.2). litho has no encryptor bound
+// to a source's security handler, so its incremental update would write those
+// strings in the clear where a reader decrypts them into noise.
+//
+// The source decides, not the document the Writer edits. A remediation edits
+// a decrypted copy when an edit was queued before it or when it keeps a later
+// round, and the refusal that read that copy let a signature asked for on the
+// encrypted document go on a document the caller never asked to decrypt,
+// depending on what was queued and on how many rounds the remediation kept.
+//
+// # Corpus evidence
+//
+//   - All corpora: litho opens 86 encrypted files, 84 of which remediate at
+//     PDF/A-2b and PDF/UA-1. With a metadata edit queued before the
+//     remediation, all 168 of those remediations were signed, and without one
+//     164 were refused and 2 signed: pdfjs issue5909_original.pdf and
+//     issue7303.pdf at PDF/A-2b, whose remediation keeps a later round. All
+//     336 are refused now.
+func (w *Writer) signsEncrypted() bool {
+	return w.source.doc.IsEncrypted || w.reader.doc.IsEncrypted
 }
 
 // sourceDamaged reports whether the document the Writer edits is one the

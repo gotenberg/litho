@@ -83,7 +83,8 @@
 // [Reader.ExtractSignatures] and [Reader.VerifySignatures] inspect existing
 // signatures. [Writer.Sign] queues a new signature; [Writer.WriteTo] produces a
 // signed incremental update, on top of the full rewrite when the output is
-// one.
+// one. An encrypted source, or an encrypted output, is not signed:
+// [ErrSignFullRewriteIncompatible].
 //
 // # Functional options
 //
