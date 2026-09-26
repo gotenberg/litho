@@ -130,6 +130,8 @@ one deliberately rather than diffing it against a fresh build.
 | `blendcs_4.pdf`        | PDF/A-4      | Which transparency blending spaces cover device colour           |
 | `threedcs_4.pdf`       | PDF/A-4      | The colour space of a 3D stream, read as veraPDF builds it       |
 | `undecodable_2b.pdf`   | PDF/A-2b     | Content streams veraPDF reads no operator from                   |
+| `fontclaims_2b.pdf`    | PDF/A-2b     | Name-keyed CFF gaps, pattern and Type 3 program reads, `.notdef` |
+| `imagereach_2b.pdf`    | PDF/A-2b     | Images a form lists or a shared content stream never draws       |
 
 ### Must-not-fire controls
 
@@ -347,6 +349,7 @@ which are covered under [Known divergences](#known-divergences).
 | `extschema_2b.pdf`     | 12   | 9    | 11   | 8    | 9    | 12   | 9    | 10   | 6   | 6    | 7    | 8    | 8    |
 | `fenote_ua2.pdf`       | 4    | 3    | 5    | 4    | 4    | 5    | 4    | 4    | 3   | 3    | 4    | 5    | 6    |
 | `filestruct_1b.pdf`    | 15   | 13   | 12   | 10   | 10   | 12   | 10   | 10   | 13  | 13   | 14   | 10   | 8    |
+| `fontclaims_2b.pdf`    | 9    | 6    | 9    | 6    | 7    | 9    | 6    | 7    | 7   | 7    | 8    | 11   | 11   |
 | `fontdict_2b.pdf`      | 9    | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 8   | 8    | 9    | 7    | 7    |
 | `fontkeys_1b.pdf`      | 13   | 10   | 13   | 10   | 11   | 13   | 10   | 11   | 11  | 11   | 12   | 8    | 8    |
 | `fontleft_2b.pdf`      | 7    | 4    | 9    | 5    | 7    | 9    | 5    | 7    | 7   | 7    | 8    | 14   | 13   |
@@ -362,6 +365,7 @@ which are covered under [Known divergences](#known-divergences).
 | `iccbased_4.pdf`       | 5    | 3    | 7    | 5    | 5    | 7    | 5    | 5    | 5   | 5    | 6    | 8    | 7    |
 | `idfields_ua2.pdf`     | 6    | 6    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 4    | 6    |
 | `idprefix_2b.pdf`      | 13   | 10   | 12   | 9    | 10   | 13   | 10   | 11   | 10  | 10   | 11   | 8    | 7    |
+| `imagereach_2b.pdf`    | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 5    | 6    |
 | `imgxmp_4.pdf`         | 10   | 8    | 15   | 13   | 13   | 15   | 13   | 13   | 8   | 9    | 10   | 7    | 6    |
 | `inlineimage_2b.pdf`   | 6\*  | 4    | 9\*  | 6    | 7    | 9\*  | 6    | 7    | 6   | 6    | 7    | 10   | 10   |
 | `jpx_2b.pdf`           | 4    | 2    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 5    | 6    |
@@ -3197,6 +3201,82 @@ The file returns the same rule set as veraPDF 1.30.2 in all thirteen cells,
 and the same counts in the eleven PDF/A ones. At PDF/UA-1 veraPDF counts `7.1/3`
 and `7.2/34`, and at PDF/UA-2 `8.2.2/1`, once per untagged content item, and
 litho once each.
+
+### `fontclaims_2b.pdf`
+
+`fontclaims_2b.pdf` covers glyphs no other corpus file reached: CIDs a
+name-keyed CFF program lacks, the streams whose glyphs claim a font's program
+before the page text does, and a control code an unembedded standard font names
+`.notdef`. Every construct rides on a font of its own, so each count has one
+source:
+
+| Font | Construct                                                                 | Answers at PDF/A-2b                        |
+| ---- | ------------------------------------------------------------------------- | ------------------------------------------ |
+| `NK` | CID 3 past a three-glyph name-keyed CFF, a subset, `/W` 500 against 1000  | `6.2.11.4.1/2`, `6.2.11.5/1`, `6.2.11.8/1` |
+| `NF` | the same CID in the same program, no subset tag, `/W` 600                 | `6.2.11.4.1/2`, `6.2.11.8/1`               |
+| `PT` | CID 5 in a tiling cell the page fills with, then CID 6 in the page text   | `6.2.11.8/1` x2                            |
+| `TC` | CID 5 in a Type 3 procedure the page shows, then CIDs 6 and 7 in its text | `6.2.11.4.1/2`, `6.2.11.8/1` x3            |
+| `TF` | CID 5 in the procedure of a Type 3 glyph a form shows                     | `6.2.11.4.1/2`, `6.2.11.8/1`               |
+| `HV` | code 1 through an unembedded Helvetica with no `/Encoding`                | `6.2.11.4.1/1`, `6.2.11.8/1`               |
+
+A name-keyed CFF program, one with no `ROS` operator, takes a CID as its glyph
+index (ISO 32000-1, 9.7.4.2). veraPDF weighs the glyph a subset lacks at the
+CIDFont's `/DW`, and the glyph a full font lacks at the program's
+`defaultWidthX`, 600 here, so `NF`'s `/W` of 600 passes the width rule.
+
+`PT` and `TC` are the reading order. veraPDF parses a tiling cell where an
+operator paints with the pattern and judges none of the cell's glyphs by the
+program reads that parse claims, so neither of `PT`'s glyphs answers the
+presence rule. It parses a Type 3 glyph procedure where the page shows the
+glyph, and judges the procedure's glyphs, so of `TC`'s three CIDs only the
+procedure's answers it. `TF` is reached through a form, where litho judged no
+Type 3 procedure before. `HV` reads StandardEncoding from the metrics of the
+standard 14 font, which names nothing at code 1; its `/ToUnicode` keeps the
+Unicode rules off the glyph.
+
+| Rule at PDF/A-2b                  | veraPDF | litho | litho before |
+| --------------------------------- | ------- | ----- | ------------ |
+| `6.2.11.4.1/1` font not embedded  | 1       | 1     | 1            |
+| `6.2.11.4.1/2` glyph missing      | 4       | 4     | 3            |
+| `6.2.11.5/1` glyph width          | 1       | 1     | 0            |
+| `6.2.11.8/1` `.notdef` referenced | 9       | 9     | 5            |
+| `6.2.4.3/4` DeviceGray            | 10      | 10    | 10           |
+| `6.6.2.1/1` no metadata           | 1       | 1     | 1            |
+
+The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
+counts, but at PDF/UA, where veraPDF counts `7.1/3`, `7.2/34` and `8.2.2/1`
+once per untagged content item and litho once, the family described under
+[Instance counts](#instance-counts-which-the-corpus-does-not-pin). At PDF/UA the
+form claims its fonts without its glyphs being judged, so `TF` does not answer
+the presence rule there, which counts 3.
+
+### `imagereach_2b.pdf`
+
+`imagereach_2b.pdf` holds three images, each with an `/Intent` outside the four
+ISO 32000-1 names and an `/Interpolate` of true, and no operator draws any of
+them. veraPDF reaches an image through the `Do` that draws it, once for the
+whole document, and a content stream two pages share through the resources of
+the first page:
+
+| Image | Where it sits                                                        |
+| ----- | -------------------------------------------------------------------- |
+| `I1`  | in the resources of a form the first page draws, whose content fills |
+| `I2`  | in the resources of a form nested in a form the first page draws     |
+| `I3`  | drawn by the form the second page names for the shared stream's `Do` |
+
+So neither image rule fails. litho judged every entry of a drawn form's
+resources and every page's resources for a shared stream, which failed both
+three times.
+
+| Rule at PDF/A-2b              | veraPDF | litho | litho before |
+| ----------------------------- | ------- | ----- | ------------ |
+| `6.2.6/1` rendering intent    | 0       | 0     | 3            |
+| `6.2.8/3` `/Interpolate` true | 0       | 0     | 3            |
+| `6.2.4.3/4` DeviceGray        | 2       | 2     | 2            |
+| `6.6.2.1/1` no metadata       | 1       | 1     | 1            |
+
+The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
+counts but for `7.1/3` and `8.2.2/1` at PDF/UA, the same family.
 
 ## Scope
 
