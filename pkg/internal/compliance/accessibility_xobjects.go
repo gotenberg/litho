@@ -12,6 +12,12 @@ import (
 // checkFormXObjectRestrictions validates PDF/UA-1 §7.20:
 //   - t01: Reference XObjects are forbidden (Form XObject with /Ref key)
 //   - t02: Form XObjects with MCIDs must not be referenced more than once
+//
+// An annotation's appearance stream is a form veraPDF judges by t01 too, at
+// every appearance entry of every annotation, as the PDF/A form rules judge it
+// ([checkAppearanceForms]): measured with veraPDF 1.30 at PDF/UA-1, a normal
+// appearance carrying /Ref fails ISO 14289-1, 7.20 t1 once, and twice when
+// two annotations share it.
 func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-1" {
 		return nil
@@ -19,6 +25,7 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 
 	var results []Violation
 	checkedForRef := make(map[int]bool)
+	annots := make(map[string]bool)
 
 	// t01: Scan XObject resources for /Ref key (reference XObjects forbidden).
 	// t02: Count Do operator invocations per Form XObject across all pages.
@@ -30,6 +37,12 @@ func checkFormXObjectRestrictions(ctx context.Context, doc *document.Document, c
 			return results
 		}
 		page := pages[i].dict
+		for _, ap := range annotationAppearances(ctx, doc, page, annots) {
+			if knownKey(ap.stream.Dict, "Ref") {
+				results = append(results, fail(Rule_14289_1_7_20_t01,
+					"annotation appearance contains /Ref key (reference XObject)")...)
+			}
+		}
 		res := pages[i].effectiveResources(ctx, doc)
 		if res == nil {
 			continue

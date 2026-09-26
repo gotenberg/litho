@@ -154,17 +154,23 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 
 // checkDrawnXObjects applies the XObject rules to the XObjects the Do operators
 // of one content stream draw, whose operations are ops and whose names resolve
-// against scope, each object once for the document, which visited records.
+// against scope: an image or other XObject once for the document, which
+// visited records, and a form at every Do that draws it.
 //
 // veraPDF reaches an XObject through the Do operator that draws it
 // (GFOp_Do), so an entry of a stream's /Resources its content never draws is
-// judged nowhere. A Form XObject's own content is a stream [drawnStreamWalk]
-// reaches in turn. Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on an
-// image whose /Intent is /Bogus: listed by a form the page draws, or by a form
-// such a form draws, and drawn by neither, it fails neither ISO 19005-1, 6.2.9
-// t1 nor ISO 19005-2, 6.2.6 t1; drawn twice on a page, under two names, on two
-// pages, or by a form two pages draw, it fails each once; named by the page
-// alone and drawn by a form whose resources lack it, or that has none, once.
+// judged nowhere. It judges the model object it builds for an image once, and
+// the one it builds for a form at every Do, since GFPDXForm.getID answers null
+// and the validator only skips an object whose identifier it has met. A Form
+// XObject's own content is a stream [drawnStreamWalk] reaches once. Measured
+// with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on an image whose /Intent is
+// /Bogus: listed by a form the page draws, or by a form such a form draws, and
+// drawn by neither, it fails neither ISO 19005-1, 6.2.9 t1 nor ISO 19005-2,
+// 6.2.6 t1; drawn twice on a page, under two names, on two pages, or by a form
+// two pages draw, it fails each once; named by the page alone and drawn by a
+// form whose resources lack it, or that has none, once. On a form carrying
+// /OPI: drawn twice on a page, under two names, or on two pages, it fails ISO
+// 19005-2, 6.2.9 t1 twice, and drawn by a form the page draws twice, once.
 //
 // # Corpus evidence
 //
@@ -183,39 +189,40 @@ func checkDrawnXObjects(ctx context.Context, doc *document.Document, scope ast.P
 	if err != nil || len(xobjectDict) == 0 || len(ops) == 0 {
 		return nil
 	}
-	drawn := make(map[ast.PdfName]bool)
-	for _, op := range ops {
+	var results []Violation
+	for i, op := range ops {
+		if i%contentOpCancelCheckInterval == 0 && ctx.Err() != nil {
+			return results
+		}
 		if op.Operator != "Do" || len(op.Operands) == 0 {
 			continue
 		}
-		if name, ok := op.Operands[0].(ast.PdfName); ok {
-			drawn[name] = true
-		}
-	}
-
-	var results []Violation
-	for _, name := range sortedNames(xobjectDict) {
-		if !drawn[name] {
+		name, ok := op.Operands[0].(ast.PdfName)
+		if !ok {
 			continue
 		}
-		if ctx.Err() != nil {
-			return results
+		if obj, ok := xobjectDict[name]; ok {
+			results = append(results, checkDrawnXObject(ctx, doc, name, obj, pageNum, part, profile, visited)...)
 		}
-		results = append(results, checkDrawnXObject(ctx, doc, name, xobjectDict[name], pageNum, part, profile, visited)...)
 	}
 	return results
 }
 
 // checkDrawnXObject applies the XObject rules to the XObject obj that a Do
 // draws under the name name, and to the soft mask and stencil mask of an
-// image, unless visited holds it already.
+// image: a form at every draw, anything else unless visited holds it
+// already; see [checkDrawnXObjects].
 func checkDrawnXObject(ctx context.Context, doc *document.Document, name ast.PdfName, obj ast.PdfObject, pageNum, part int, profile string, visited map[string]bool) []Violation {
-	if seenXObject(obj, visited, "xo") {
-		return nil
-	}
-
 	// XObjects are streams. Resolve as stream to access the dict.
 	stream, err := document.ResolveStream(ctx, doc, obj)
+	if err == nil {
+		if subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype == "Form" {
+			return checkXObject(ctx, doc, stream, stream.Dict, subtype, name, pageNum, part, profile, false)
+		}
+	}
+	if seenObject(obj, visited, "xo") {
+		return nil
+	}
 	if err != nil {
 		// Fallback: try as plain dict (some producers use dict-only XObjects).
 		xobjDict, err := document.ResolveDict(ctx, doc, obj)
@@ -241,7 +248,7 @@ func checkDrawnXObject(ctx context.Context, doc *document.Document, name ast.Pdf
 	// stream.
 	for _, maskKey := range []ast.PdfName{"SMask", "Mask"} {
 		maskObj, hasMask := xobjDict[maskKey]
-		if !hasMask || seenXObject(maskObj, visited, string(maskKey)) {
+		if !hasMask || seenObject(maskObj, visited, string(maskKey)) {
 			continue
 		}
 		maskStream, err := document.ResolveStream(ctx, doc, maskObj)
@@ -255,16 +262,17 @@ func checkDrawnXObject(ctx context.Context, doc *document.Document, name ast.Pdf
 	return results
 }
 
-// seenXObject reports whether visited already holds the XObject obj
-// references in the given role, and records it when it does not. An XObject
-// written directly rather than referenced is never recorded, so it is judged
-// at every draw.
+// seenObject reports whether visited already holds the object obj references
+// in the given role, and records it when it does not. An object written
+// directly rather than referenced is never recorded, so it is judged at every
+// reach.
 //
 // veraPDF judges an object once per model object it builds from it, and the
-// role decides the model: a drawn XObject is a PDXImage or PDXForm, an
-// image's /SMask a PDSMaskImage and its /Mask a PDMaskImage. So one image
-// both drawn and named as another's mask is judged in each role.
-func seenXObject(obj ast.PdfObject, visited map[string]bool, role string) bool {
+// role decides the model: a drawn image is a PDXImage, an image's /SMask a
+// PDSMaskImage and its /Mask a PDMaskImage. So one image both drawn and named
+// as another's mask is judged in each role. A form is judged at every draw
+// instead ([checkDrawnXObjects]).
+func seenObject(obj ast.PdfObject, visited map[string]bool, role string) bool {
 	ref, ok := obj.(ast.PdfIndirectRef)
 	if !ok {
 		return false
@@ -278,8 +286,9 @@ func seenXObject(obj ast.PdfObject, visited map[string]bool, role string) bool {
 }
 
 // checkAppearanceForms applies the Form XObject rules to the appearance
-// streams of the annotations of page, the pageNum-th, each once for the
-// document, which visited records alongside the XObjects Do operators draw.
+// streams of the annotations of page, the pageNum-th, at every appearance
+// entry of every annotation, each annotation once for the document, which
+// visited records.
 //
 // An appearance stream is a form XObject (ISO 32000-1, 12.5.5), and veraPDF
 // builds each as one (GFPDAnnot.addAppearance builds a GFPDXForm), whatever
@@ -289,16 +298,44 @@ func seenXObject(obj ast.PdfObject, visited map[string]bool, role string) bool {
 // carrying /OPI and /PS it fails ISO 19005-1, 6.2.4 t2 and 6.2.5 t1 and ISO
 // 19005-2, 6.2.9 t1 once each, with no /Subtype and /OPI, or with /OPI and
 // content that does not decode, the /OPI rules once, and carrying /Ref ISO
-// 19005-1, 6.2.6 t1 and ISO 19005-2, 6.2.9 t2 once.
+// 19005-1, 6.2.6 t1 and ISO 19005-2, 6.2.9 t2 once. As a drawn form is judged
+// at every Do ([checkDrawnXObjects]), an appearance is judged at every entry
+// naming it: one appearance two annotations share, or one annotation names
+// as both its normal and its down appearance, fails them twice, and so does a
+// form the page draws that is also an annotation's appearance.
 func checkAppearanceForms(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum, part int, profile string, visited map[string]bool) []Violation {
+	var results []Violation
+	for _, ap := range annotationAppearances(ctx, doc, page, visited) {
+		results = append(results, checkXObject(ctx, doc, ap.stream, ap.stream.Dict, "Form", "AP/"+ap.key, pageNum, part, profile, false)...)
+	}
+	return results
+}
+
+// appearance is one appearance stream of an annotation and the /AP entry, N,
+// R or D, it stands under.
+type appearance struct {
+	stream ast.PdfStream
+	key    ast.PdfName
+}
+
+// annotationAppearances returns the appearance streams of the annotations of
+// page, in the order of /Annots and, for each annotation, of its normal,
+// rollover and down appearances, a state subdictionary's streams by state
+// name ([appearanceStreamObjects]). An entry that resolves to no stream is
+// left out, and so is an annotation visited holds: veraPDF judges an
+// annotation object once, however many pages list it.
+func annotationAppearances(ctx context.Context, doc *document.Document, page ast.PdfDict, visited map[string]bool) []appearance {
 	annots, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annots) == 0 {
 		return nil
 	}
-	var results []Violation
+	var out []appearance
 	for _, annotObj := range annots {
 		if ctx.Err() != nil {
-			return results
+			return out
+		}
+		if seenObject(annotObj, visited, "annot") {
+			continue
 		}
 		annot, _ := document.ResolveDict(ctx, doc, annotObj) // Best-effort: an unreadable annotation has no appearance.
 		if annot == nil {
@@ -314,18 +351,15 @@ func checkAppearanceForms(ctx context.Context, doc *document.Document, page ast.
 				continue
 			}
 			for _, streamObj := range appearanceStreamObjects(ctx, doc, apObj) {
-				if seenXObject(streamObj, visited, "xo") {
-					continue
-				}
 				stream, err := document.ResolveStream(ctx, doc, streamObj)
 				if err != nil {
 					continue
 				}
-				results = append(results, checkXObject(ctx, doc, stream, stream.Dict, "Form", "AP/"+key, pageNum, part, profile, false)...)
+				out = append(out, appearance{stream: stream, key: key})
 			}
 		}
 	}
-	return results
+	return out
 }
 
 // checkXObject validates a single XObject against the constraints for the given

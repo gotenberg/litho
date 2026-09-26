@@ -316,11 +316,34 @@ func TestImageMaskBitsByRole(t *testing.T) {
 	}
 }
 
+// TestReferenceAppearanceUA1 pins that PDF/UA-1 judges an annotation's
+// appearance stream by the reference XObject rule, as the PDF/A form rules
+// do; see [checkFormXObjectRestrictions]. Measured with veraPDF 1.30 at
+// PDF/UA-1: one appearance carrying /Ref that two annotations share fails ISO
+// 14289-1, 7.20 t1 twice.
+func TestReferenceAppearanceUA1(t *testing.T) {
+	t.Parallel()
+
+	ref := exponentStream("/Type /XObject /Subtype /Form /BBox [0 0 10 10] /Ref << /F (x.pdf) /Page 0 >>", "0 0 1 1 re f")
+	objs := drawnImageObjs([]string{reachPage("<< >>", "20 0 R", "40 0 R 42 0 R")}, map[int]string{
+		20: exponentStream("", "0 0 1 1 re f"), 40: reachAnnot("41 0 R"), 41: ref, 42: reachAnnot("41 0 R"),
+	})
+	doc, _ := objsDocPDF(t, objs...)
+	viols, err := ValidatePDFUA(context.Background(), doc, models.PDFUA1)
+	if err != nil {
+		t.Fatalf("ValidatePDFUA: %v", err)
+	}
+	if got := countRuleErrs(t, viols, Rule_14289_1_7_20_t01); got != 2 {
+		t.Errorf("7.20 test 1 fired %d times, want 2", got)
+	}
+}
+
 // TestFormRulesReachAppearances pins that the Form XObject rules judge an
 // annotation's appearance stream as the form it is, whatever its /Subtype
 // says and whether or not its content decodes, and that each rule is stated
-// once per form: veraPDF states ISO 19005-2, 6.2.9 t1 as one test over /OPI,
-// /PS and /Subtype2, and the reference XObject rule on forms alone. Measured
+// once per reach of a form: veraPDF states ISO 19005-2, 6.2.9 t1 as one test
+// over /OPI, /PS and /Subtype2, the reference XObject rule on forms alone, and
+// both at every Do and every appearance entry that reach the form. Measured
 // with veraPDF 1.30 at PDF/A-1b and PDF/A-2b.
 func TestFormRulesReachAppearances(t *testing.T) {
 	t.Parallel()
@@ -382,6 +405,39 @@ func TestFormRulesReachAppearances(t *testing.T) {
 			map[models.PDFAProfile]map[Rule]int{
 				models.PDFA1b: {Rule_19005_1_6_2_4_t02: 1, Rule_19005_1_6_2_5_t01: 1},
 				models.PDFA2b: {Rule_19005_2_6_2_9_t01: 1},
+			},
+		},
+		{
+			"a form carrying /OPI the page draws twice",
+			drawnImageObjs([]string{reachPage("<< /XObject << /X1 41 0 R /X2 41 0 R >> >>", "20 0 R", "")}, map[int]string{
+				20: exponentStream("", "/X1 Do /X1 Do /X2 Do"), 41: exponentStream("/Type /XObject /Subtype /Form /BBox [0 0 10 10] /OPI << >>", "0 0 1 1 re f"),
+			}),
+			map[models.PDFAProfile]map[Rule]int{
+				models.PDFA1b: {Rule_19005_1_6_2_4_t02: 3},
+				models.PDFA2b: {Rule_19005_2_6_2_9_t01: 3},
+			},
+		},
+		{
+			"a form carrying /OPI inside a form the page draws twice",
+			drawnImageObjs([]string{reachPage("<< /XObject << /X1 42 0 R >> >>", "20 0 R", "")}, map[int]string{
+				20: exponentStream("", "/X1 Do /X1 Do"), 41: exponentStream("/Type /XObject /Subtype /Form /BBox [0 0 10 10] /OPI << >>", "0 0 1 1 re f"),
+				42: reachForm("<< /XObject << /In 41 0 R >> >>", "/In Do"),
+			}),
+			map[models.PDFAProfile]map[Rule]int{
+				models.PDFA1b: {Rule_19005_1_6_2_4_t02: 1},
+				models.PDFA2b: {Rule_19005_2_6_2_9_t01: 1},
+			},
+		},
+		{
+			"an appearance carrying /OPI that two annotations share, one naming it twice",
+			drawnImageObjs([]string{reachPage("<< >>", "20 0 R", "40 0 R 42 0 R")}, map[int]string{
+				20: exponentStream("", "0 0 1 1 re f"), 40: reachAnnot("41 0 R"),
+				41: exponentStream("/Type /XObject /Subtype /Form /BBox [0 0 10 10] /OPI << >>", "0 0 1 1 re f"),
+				42: "<< /Type /Annot /Subtype /Square /Rect [0 0 10 10] /F 4 /AP << /N 41 0 R /D 41 0 R >> >>",
+			}),
+			map[models.PDFAProfile]map[Rule]int{
+				models.PDFA1b: {Rule_19005_1_6_2_4_t02: 3},
+				models.PDFA2b: {Rule_19005_2_6_2_9_t01: 3},
 			},
 		},
 		{
