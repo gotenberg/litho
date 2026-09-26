@@ -111,6 +111,13 @@ type Document struct {
 	// (e.g., "1.4", "1.7", "2.0").
 	Version string
 
+	// HeaderVersion is the version the %PDF-X.Y header declares, kept when a
+	// catalog /Version replaces it in Version (see initCatalogVersion). An
+	// incremental update preserves the header, so a writer extending the file
+	// reads here what the output will still say at byte zero. Empty for a
+	// headerless file.
+	HeaderVersion string
+
 	// complianceMode enables parser-level format violation collection.
 	// When true, parsers created during object resolution collect hex
 	// string format issues and other structural violations without
@@ -923,6 +930,7 @@ func NewDocument(ctx context.Context, r io.ReaderAt, size int64, logger *slog.Lo
 		Version:      version,
 		HeaderOffset: headerOffset,
 	}
+	doc.HeaderVersion = version
 
 	// Probe for linearization before seeking to the end of the file. The probe
 	// starts at the header, not at byte 0: a file carrying a leading prefix

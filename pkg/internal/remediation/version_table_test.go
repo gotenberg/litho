@@ -15,11 +15,10 @@ import (
 // while their remediation wrote PDF 2.0 structure namespaces, so the output
 // declared a version its own contents contradicted.
 //
-// Note the reach, which this test does NOT cover: RequiredVersion travels into
-// the writer's full-rewrite config, and the incremental path ignores it. A
-// profile whose remediation does not force a rewrite keeps the source's
-// declared version whatever the table says. What is pinned here is the value
-// the table produces, not that every output carries it.
+// What is pinned here is the value the table produces, not that every output
+// carries it: RequiredVersion travels into the writer's full-rewrite config,
+// and an incremental output declares it in the catalog /Version, which
+// catalog_version_test.go covers.
 
 // versionTablePDF builds a single-page document declaring the given header
 // version, with a bare catalog: no /StructTreeRoot, /MarkInfo, /Metadata or
@@ -119,11 +118,10 @@ func TestRemediate_RequiredVersionPerProfile(t *testing.T) {
 			profile models.PDFUAProfile
 			want    string
 		}{
-			// ISO 14289-1 §6.1 wants %PDF-1.n with n in 0..7, so 1.7 is a CAP
-			// for a 2.0 source rather than a floor.
+			// ISO 14289-1 builds on ISO 32000-1, and its §6.1 wants
+			// %PDF-1.n with n in 0..7, so a 2.0 source is pinned down to 1.7.
 			{models.PDFUA1, "1.7"},
-			// ISO 14289-2 builds on PDF 2.0, which litho states itself:
-			// Rule_14289_2_6_2_t01 accepts only "2.n".
+			// ISO 14289-2 builds on PDF 2.0.
 			{models.PDFUA2, "2.0"},
 		} {
 			t.Run(string(tc.profile), func(t *testing.T) {

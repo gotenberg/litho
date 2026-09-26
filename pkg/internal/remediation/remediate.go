@@ -182,19 +182,12 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 
 	requiredVersion := requiredVersionFor(profile)
 
-	// requiredVersion only reaches the output through the writer's
-	// full-rewrite config. An incremental update preserves the original bytes
-	// and cannot re-emit the header, so a profile needing a later version
-	// than the source declares has one place left to say so: the catalog
-	// /Version (ISO 32000-1, 7.5.2), which litho's own reader honors (see
-	// document.initCatalogVersion). Declared before the content tier, so a
-	// rollback keeps it with the other repairs.
-	if !needsRewrite && catalogCarriesVersion(profile) && requiredVersion != "" {
-		if raised := writer.AtLeastVersion(doc.Version, requiredVersion); raised != doc.Version {
-			if declareCatalogVersion(ctx, alloc, doc, raised) {
-				fixed = append(fixed, fmt.Sprintf("declared PDF version %s in the document catalog", raised))
-			}
-		}
+	// A full rewrite writes requiredVersion in the header, and an incremental
+	// update, which cannot touch the header, declares it in the catalog
+	// /Version (ISO 32000-1, 7.7.2, Table 28). Declared before the content
+	// tier, so a rollback keeps it with the other repairs.
+	if fix := declareOutputVersion(ctx, alloc, doc, requiredVersion, needsRewrite); fix != "" {
+		fixed = append(fixed, fix)
 	}
 
 	// Snapshot of the allocator taken right before the content tier runs. It
@@ -296,19 +289,18 @@ func applyPlanEntry(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 }
 
 // requiredVersionFor returns the PDF version the output of a remediation for
-// profile must declare, or "" when the profile requires none. Each PDF/A
-// family pins its own: part 1 → 1.4, parts 2 and 3 → 1.7, part 4 → 2.0.
+// profile declares, or "" when the profile requires none: the version of the
+// PDF standard the profile builds on. ISO 19005-1 builds on PDF 1.4, ISO
+// 19005-2, ISO 19005-3 and ISO 14289-1 on ISO 32000-1 (PDF 1.7), and ISO
+// 19005-4 and ISO 14289-2 on ISO 32000-2 (PDF 2.0).
 //
-// Note the reach: this value travels through Report.RequiredVersion into the
-// writer's full-rewrite config, and the INCREMENTAL path ignores it, because
-// an incremental update preserves the original bytes and cannot re-emit the
-// header. A profile whose remediation does not force a rewrite therefore
-// keeps the source's declared version whatever this says. Measured on a
-// %PDF-1.4 source: WTPDF-1.0-Reuse rewrites and comes out 2.0, while
-// PDF/UA-1, PDF/UA-2 and WTPDF-1.0-Accessibility stay incremental and come
-// out 1.4. Raising those would mean writing a catalog /Version (ISO 32000-1,
-// 7.5.2), which the values below cannot express: some are CAPS (PDF/A-1,
-// PDF/UA-1 pin a later source DOWN) and some are FLOORS.
+// It reaches the output two ways. Report.RequiredVersion carries it into the
+// writer's full-rewrite config, which writes it in the header, and
+// [declareOutputVersion] writes it in the catalog /Version of an output the
+// writer extends incrementally, whose header stays the source's. The catalog
+// entry raises the header's version and cannot lower it (ISO 32000-1, 7.7.2,
+// Table 28), so an incremental PDF/A-1 output of a later source keeps the
+// later version, which ISO 19005-1, 6.1.2 does not constrain.
 func requiredVersionFor(profile string) string {
 	switch {
 	case strings.HasPrefix(profile, "PDF/A-4"):
@@ -323,12 +315,10 @@ func requiredVersionFor(profile string) string {
 		// to 1.7, the highest conforming version.
 		return "1.7"
 	case strings.HasPrefix(profile, "PDF/UA-2"):
-		// ISO 14289-2 builds on PDF 2.0, and litho says so itself:
-		// compliance.Rule_14289_2_6_2_t01 is checked with checkVersionIs2,
-		// which accepts only "2.n". Remediation writes PDF 2.0 structure
-		// namespaces (/Namespaces, /NS) for this profile, so leaving the
-		// source's version would declare a file that its own contents
-		// contradict.
+		// ISO 14289-2 builds on PDF 2.0. Remediation writes PDF 2.0
+		// structure namespaces (/Namespaces, /NS) for this profile, so
+		// leaving the source's version would declare a file that its own
+		// contents contradict.
 		return "2.0"
 	case strings.HasPrefix(profile, "WTPDF"):
 		// WTPDF 1.0 adopts the ISO 14289-2 requirements wholesale, differing
