@@ -125,6 +125,10 @@ one deliberately rather than diffing it against a fresh build.
 | `inlineimage_2b.pdf`   | PDF/A-2b     | Content repairs on a page that holds inline images               |
 | `pagegroup_2b.pdf`     | PDF/A-2b     | Page transparency groups, and an XMP packet a page carries       |
 | `fontleft_2b.pdf`      | PDF/A-2b     | Widths no program answers, and the order fonts are read in       |
+| `namereads_1b.pdf`     | PDF/A-1b     | Names read again at every colour link, every `gs`, every image   |
+| `colouroff_2b.pdf`     | PDF/A-2b     | Resource names a stream with its colour operators off never uses |
+| `blendcs_4.pdf`        | PDF/A-4      | Which transparency blending spaces cover device colour           |
+| `threedcs_4.pdf`       | PDF/A-4      | The colour space of a 3D stream, read as veraPDF builds it       |
 
 ### Must-not-fire controls
 
@@ -295,6 +299,11 @@ violation but is exempt, so a firing is a false positive.
 | `fontleft_2b`                             | `CN`, a code named `.notdef`, whose glyph the CFF charset holds        | ISO 19005-2, 6.2.11.4.1 t2   |
 | `fontleft_2b`                             | `TM`, a missing CID in a form drawn while rendering mode 3 is in force | ISO 19005-2, 6.2.11.4.1 t2   |
 | `fontleft_2b`                             | `TN`, a Type0 font with no `/BaseFont` over a descendant naming one    | ISO 19005-2, 6.2.11.2 t3     |
+| `namereads_1b`                            | A Separation a Type 3 glyph selects past its `d1`, read by no link     | ISO 32000-1, 9.6.5           |
+| `colouroff_2b`                            | Three glyphs past `d1` naming a colour resource only the page defines  | ISO 19005-2, 6.2.2 t2        |
+| `colouroff_2b`                            | `PUnc`, an uncoloured cell selecting a space only the page defines     | ISO 32000-1, 8.7.3.3         |
+| `blendcs_4`                               | `FmRGB` and `FmCalRGB`, isolated groups covering their DeviceRGB       | ISO 19005-4, 6.2.4.3 t2      |
+| `threedcs_4`                              | `A7` to `A9`: a stream's resources, a view's stream, an untyped stream | ISO 32000-2, 13.6.3          |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -314,8 +323,10 @@ which are covered under [Known divergences](#known-divergences).
 | `annots_1b.pdf`        | 16   | 14   | 14   | 12   | 12   | 14   | 12   | 12   | 10  | 10   | 11   | 12   | 8    |
 | `annotstruct_ua2.pdf`  | 13   | 12   | 12   | 12   | 12   | 14   | 14   | 14   | 10  | 9    | 9    | 8    | 13   |
 | `artifact_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 3    |
+| `blendcs_4.pdf`        | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 4   | 4    | 5    | 6    | 6    |
 | `charset_1b.pdf`       | 7    | 4    | 7    | 4    | 5    | 7    | 4    | 5    | 3   | 3    | 4    | 9    | 7    |
 | `cmaps_2b.pdf`         | 9    | 6    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 12   | 12   |
+| `colouroff_2b.pdf`     | 4    | 1    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
 | `complex_1b.pdf`       | 26   | 23   | 22   | 19   | 20   | 24   | 21   | 22   | 19  | 18   | 18   | 14   | 11   |
 | `complex_2a.pdf`       | 18   | 15   | 21   | 17   | 17   | 22   | 18   | 18   | 17  | 17   | 18   | 12   | 11   |
 | `complex_2b.pdf`       | 21   | 18   | 23   | 20   | 21   | 25   | 22   | 23   | 19  | 18   | 18   | 14   | 12   |
@@ -358,6 +369,7 @@ which are covered under [Known divergences](#known-divergences).
 | `megafont_2b.pdf`      | 12   | 9    | 13   | 10   | 11   | 13   | 10   | 11   | 10  | 10   | 11   | 12   | 11   |
 | `metafilter_1b.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 8    | 7    |
 | `multipage_2b.pdf`     | 12   | 10   | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 10   | 9    |
+| `namereads_1b.pdf`     | 10   | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 7   | 7    | 8    | 6    | 6    |
 | `outputintent_2b.pdf`  | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
 | `pagegroup_2b.pdf`     | 7    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 6    | 6    |
 | `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
@@ -372,6 +384,7 @@ which are covered under [Known divergences](#known-divergences).
 | `tables_ua1.pdf`       | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 2    | 5    |
 | `tablespan_ua2.pdf`    | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 4    | 4    |
 | `threed_4e.pdf`        | 7    | 5    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 11   | 8    |
+| `threedcs_4.pdf`       | 8    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 5    | 7    | 8    | 6    |
 | `trailer_2b.pdf`       | 7    | 5    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
 | `ttcmap_2b.pdf`        | 8    | 5    | 9    | 6    | 7    | 9    | 6    | 7    | 6   | 6    | 7    | 9    | 8    |
 | `ttencoding_2b.pdf`    | 10   | 7    | 10   | 7    | 8    | 10   | 7    | 8    | 8   | 8    | 9    | 10   | 10   |
@@ -1540,6 +1553,41 @@ litho is right on the spec: ISO 19005-2, 6.2.4.3 constrains DeviceRGB wherever
 content paints with it, and a coloured pattern's cell supplies its own colour
 (ISO 32000-1, 8.7.3.3). No code changed and no fixture plants it. Same treatment
 as the `7.1/12` entry below.
+
+**`6.2.10/2` at PDF/A-2b and `6.2.9/2` at PDF/A-4, a page transparency group.**
+The rule asks a page that uses transparency for a blending colour space, and
+the two tools decide both halves of that differently. veraPDF reads the page's
+transparency from its content and annotations alone (`GFPDPage` sets
+`containsTransparency` while it parses them), never from the page's own
+`/Group`. It reads the group's `/CS` with no resources
+(`PDGroup.getColorSpace`), so `containsGroupCS` is false for a `/CS` naming a
+`/ColorSpace` entry. litho counts the page `/Group` as transparency, and any
+non-null `/CS` as a blending space. Measured with veraPDF 1.30 at both profiles
+on one-page files:
+
+| Page                                                              | veraPDF | litho  |
+| ----------------------------------------------------------------- | ------- | ------ |
+| group with no `/CS`, painting nothing transparent                 | silent  | fires  |
+| group whose `/CS` names an entry, painting an isolated group form | fires   | silent |
+
+Reading the name as no colour space would fix the second row and break a page
+both tools agree on today, a group naming an entry over opaque content: litho
+would then count the group as transparency with no blending space and fire
+alone. The two halves need fixing together. `blendcs_4.pdf` gives its named
+page group a page of its own, which paints nothing transparent, for this
+reason. Not planted.
+
+**The graphics state rules, `6.2.8` and `6.2.9/1` at PDF/A-1b, `6.2.5` and
+`6.2.6/1` at PDF/A-2b.** veraPDF builds a `PDExtGState` only from a `gs`
+operator (`GFOp_gs`), once for the document when the graphics state is an
+indirect object and at every `gs` when it is written directly, and judges its
+`/TR`, `/TR2`, halftone and `/RI` there. litho judges every graphics state the
+page, form and appearance resources list, once each, whatever sets it. Measured
+with veraPDF 1.30 at PDF/A-1b and PDF/A-2b: a direct graphics state holding
+`/TR` or an invalid `/RI` that two `gs` set fails its test twice, where litho
+fails it once, and one no `gs` sets fails nothing, where litho fails it once.
+An indirect graphics state one or more `gs` set agrees. `namereads_1b.pdf` sets
+its direct `/RI` state once for this reason. Not planted.
 
 **`7.1/12` at PDF/UA-1.** litho reports a structure element missing its `/P`
 entry; veraPDF cannot. `GFPDStructElem.getcontainsParent` returns
@@ -2921,16 +2969,157 @@ except ISO 14289-1, 7.1 t3 and 7.2 t34 and ISO 14289-2, 8.2.2 t1, which veraPDF
 states once per untagged operator (10) and litho once per page (1), the family
 described under [Instance counts](#instance-counts-which-the-corpus-does-not-pin).
 
+### `namereads_1b.pdf`
+
+ISO 19005-1, 6.1.12 test 4 bounds a name to 127 bytes, and veraPDF judges a
+name once as a COS object and again each time a typed object of its model
+wraps it: the colorant name of a Separation or a DeviceN at every link an
+operator makes to the colour space, the `/RI` and `/BM` of a graphics state at
+every `gs` that builds it, and the `/Intent` of an image, of its `/SMask` and of
+an inline image. A space or a graphics state written directly carries no
+identity, so it is read again at every link, and one written as an indirect
+object once. No file of any corpus puts a long name in one of these places.
+
+Fourteen distinct 130-byte names each sit in one place, so the file fails the
+test 42 times: once per name in the object sweep, once more where a resource
+dictionary reads a Separation or DeviceN colorant itself, and once per re-read.
+The builder's table lists every name with its count. The control is a
+Separation a Type 3 glyph selects past its `d1`, which ignores its colour
+operators (ISO 32000-1, 9.6.5), so no link reads it again. The direct graphics
+state carrying an `/RI` is set by one `gs` alone, because litho judges the
+rendering-intent test once per graphics state its resources list, where
+veraPDF judges it at every `gs`, which a second `gs` would split.
+
+| Rule at PDF/A-1b                      | veraPDF | litho | litho before |
+| ------------------------------------- | ------- | ----- | ------------ |
+| `6.1.12/4` name past 127 bytes        | 42      | 42    | 19           |
+| `6.2.3.3/2` DeviceCMYK                | 19      | 19    | 19           |
+| `6.2.3.3/3` DeviceGray                | 3       | 3     | 3            |
+| `6.2.9/1` rendering intent            | 5       | 5     | 5            |
+| `6.4/2` soft mask, `6.4/4` blend mode | 1, 2    | 1, 2  | 1, 2         |
+| `6.7.2/1` no metadata                 | 1       | 1     | 1            |
+
+At the part 2, 3 and 4 levels the glyph's `cs` also stops failing 6.2.2 t2, as
+in `colouroff_2b.pdf`.
+
+### `colouroff_2b.pdf`
+
+ISO 19005-2, 6.2.2 test 2 fails a content stream that resolves a resource name
+only through the page's resources, once per stream. A Type 3 glyph past its
+`d1` ignores its colour operators (ISO 32000-1, 9.6.5, Table 113), and so does
+the cell of an uncoloured tiling pattern (8.7.3.3). veraPDF resolves the name
+of no `cs`, `CS`, `sh`, `scn` or `SCN` there, so none of them is an inherited
+name. Four glyphs, each in a Type 3 font of its own, and two tiling cells use
+names only the page defines:
+
+| Stream              | Names through the page | `6.2.2/2` |
+| ------------------- | ---------------------- | --------- |
+| `T1` glyph past d1  | `/CS0 cs`              | silent    |
+| `T2` glyph past d1  | `/Sh0 sh`              | silent    |
+| `T3` glyph past d1  | `/Pattern cs /P0 scn`  | silent    |
+| `T4` glyph after d0 | `/CS0 cs`              | fires     |
+| `PUnc` cell         | `/CS0 cs`              | silent    |
+| `PCol` cell         | `/CS0 cs`              | fires     |
+
+A form paints `PUnc`, not the page: an uncoloured pattern turns the colour
+operators off for every tiling cell the same stream paints, which would silence
+the `PCol` control too. Every glyph has a font of its own because veraPDF gives
+the glyphs of one Type 3 font a single set of inherited names.
+
+| Rule at PDF/A-2b   | veraPDF | litho | litho before |
+| ------------------ | ------- | ----- | ------------ |
+| `6.2.2/2`          | 2       | 2     | 6            |
+| `6.6.2.1/1` no XMP | 1       | 1     | 1            |
+
+At PDF/A-4 the same streams answer ISO 19005-4, 6.2.2 t2 the same way.
+
+### `blendcs_4.pdf`
+
+ISO 19005-4, 6.2.4.3 lets a device-independent transparency blending space of
+the same model cover DeviceRGB and DeviceCMYK. veraPDF tests the blending
+space's type, an ICC profile naming `RGB ` or a CalRGB space for DeviceRGB, an
+ICC profile naming `CMYK` for DeviceCMYK, and its DeviceGray test reads the
+output intent alone, so nothing covers DeviceGray. It reads a group's `/CS` with
+no resources, so a name of a `/ColorSpace` entry is no blending space at all.
+litho let a gray ICC, CalGray or Lab isolated group cover DeviceGray.
+
+| Stream      | Group `/CS`                          | `6.2.4.3` |
+| ----------- | ------------------------------------ | --------- |
+| page 1      | `/CS0`, a name                       | `/2` x2   |
+| `FmName`    | `/CS1`, a name of its own entry      | `/2` x2   |
+| `FmGray`    | `[/ICCBased]` over a `GRAY` profile  | `/4` x2   |
+| `FmCalGray` | `[/CalGray]`                         | `/4` x2   |
+| `FmLab`     | `[/Lab]`                             | `/4` x2   |
+| `FmRGB`     | `[/ICCBased]` over an `RGB ` profile | silent    |
+| `FmCalRGB`  | `[/CalRGB]`                          | silent    |
+
+Each stream paints `rg` or `g` and one fill. The forms sit on a second page,
+painted in this order, the two controls last; the named page group sits alone
+on the first, which paints nothing transparent (see
+[Known divergences](#known-divergences)).
+
+| Rule at PDF/A-4          | veraPDF | litho | litho before |
+| ------------------------ | ------- | ----- | ------------ |
+| `6.2.4.3/2` DeviceRGB    | 4       | 4     | 4            |
+| `6.2.4.3/4` DeviceGray   | 6       | 6     | 0            |
+| `6.2.9/2` blending space | 1       | 1     | 1            |
+| `6.7.2.1/1` no metadata  | 1       | 1     | 1            |
+
+### `threedcs_4.pdf`
+
+veraPDF reads the colour space of a 3D stream, one whose `/Type` is `/3D`, from
+its `/ColorSpace` alone (`GFPD3DStream`), following a 3D reference dictionary
+to its stream. A name, alone or in a one-element array, reads as `cs` would
+select it in the page's resources, so the page's Default colour space replaces a
+device family and a `/ColorSpace` entry is read in its place. Any other array is
+read with no resources: no Default replaces a family inside it, and a name
+inside it reads as no colour space. `threed_4e.pdf` gives no 3D stream a colour
+space, and no file of any corpus does. The page's DefaultRGB is an ICCBased
+space over an abstract profile, which fails ISO 19005-4, 6.2.4.2 wherever a
+link reaches it.
+
+| Annotation | 3D stream `/ColorSpace`                       | Answers     |
+| ---------- | --------------------------------------------- | ----------- |
+| `A1`       | `/DeviceRGB`, which DefaultRGB replaces       | `6.2.4.2/1` |
+| `A2`       | `[/ICCBased]` over an abstract profile        | `6.2.4.2/1` |
+| `A3`       | `[/Indexed /DeviceRGB ...]`, not replaced     | `6.2.4.3/2` |
+| `A4`       | `/CS0`, a Separation over DeviceCMYK          | `6.2.4.3/3` |
+| `A5`       | `[/Indexed /CS1 ...]`, `/CS1` read as nothing | `6.2.4.3/4` |
+| `A6`       | `/DeviceGray`, through a 3D reference         | `6.2.4.3/4` |
+| `A7`       | none; `/DeviceRGB` in its `/Resources`        | nothing     |
+| `A8`       | none; `/DeviceRGB` in a `/3DV` view's stream  | nothing     |
+| `A9`       | `/DeviceRGB`, on a stream with no `/Type /3D` | nothing     |
+
+The three controls each carry DeviceRGB, so reading any of them raises the
+DeviceRGB count above the one `A3` owes. A 3D annotation is a forbidden subtype
+at PDF/A-4, which answers on each annotation's own object.
+
+| Rule at PDF/A-4              | veraPDF | litho | litho before |
+| ---------------------------- | ------- | ----- | ------------ |
+| `6.2.4.2/1` ICC profile      | 2       | 2     | 4            |
+| `6.2.4.3/2` DeviceRGB        | 1       | 1     | 0            |
+| `6.2.4.3/3` DeviceCMYK       | 1       | 1     | 0            |
+| `6.2.4.3/4` DeviceGray       | 2       | 2     | 0            |
+| `6.3.1/1` annotation subtype | 9       | 9     | 9            |
+| `6.7.2.1/1` no metadata      | 1       | 1     | 1            |
+
+The four files return the same rule set as veraPDF 1.30.2 in all thirteen
+cells each. Their counts agree at every level but the two PDF/UA ones, where
+veraPDF counts `7.1/3` and `8.2.2/1` once per untagged content item, and `7.2/34`
+once per text show, and litho once each, as for every untagged fixture,
+`usedcs_2b.pdf` among them.
+
 ## Scope
 
 The runner's `compliance` feature compares verdicts, not rule sets, and
 `manifest.json` expands every fixture across the eight profiles it lists. The
 hand-measured matrix is wider: all thirteen conformance levels veraPDF
-validates, so 70 x 13 = 910 cells. litho and veraPDF return the same verdict in
-all of them: in each cell either both report nothing or both report something.
+validates, so 77 x 13 = 1001 cells. litho and veraPDF return the same verdict
+in all of them: in each cell either both report nothing or both report
+something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 905 of the 910 cells. The five
+fixtures exist to protect, and it holds in 996 of the 1001 cells. The five
 exceptions, two on `complex_ua2` and three on `inlineimage_2b`, are marked `*`
 in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in

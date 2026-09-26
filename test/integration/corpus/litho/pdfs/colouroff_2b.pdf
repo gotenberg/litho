@@ -1,0 +1,117 @@
+%PDF-1.7
+%¿÷¢þ
+1 0 obj
+<< /Pages 2 0 R /Type /Catalog >>
+endobj
+2 0 obj
+<< /Count 1 /Kids [ 3 0 R ] /Type /Pages >>
+endobj
+3 0 obj
+<< /Contents 4 0 R /MediaBox [ 0 0 200 200 ] /Parent 2 0 R /Resources << /ColorSpace << /CS0 [ /CalRGB << /WhitePoint [ 0.9505 1 1.089 ] >> ] >> /Font << /T1 5 0 R /T2 6 0 R /T3 7 0 R /T4 8 0 R >> /Pattern << /P0 9 0 R /PCol 10 0 R >> /Shading << /Sh0 11 0 R >> /XObject << /Fm 12 0 R >> >> /Type /Page >>
+endobj
+4 0 obj
+<< /Length 178 >>
+stream
+q /CS0 cs 0 0 0 sc
+BT /T1 10 Tf 10 150 Td (a) Tj /T2 10 Tf (a) Tj /T3 10 Tf (a) Tj /T4 10 Tf (a) Tj ET
+Q
+q /Pattern cs /PCol scn 10 100 20 20 re f Q
+q 1 0 0 1 50 100 cm /Fm Do Q
+
+endstream
+endobj
+5 0 obj
+<< /CharProcs << /a 13 0 R >> /Encoding << /Differences [ 97 /a ] /Type /Encoding >> /FirstChar 97 /FontBBox [ 0 0 10 10 ] /FontMatrix [ 0.1 0 0 0.1 0 0 ] /LastChar 97 /Resources << >> /Subtype /Type3 /Type /Font /Widths [ 10 ] >>
+endobj
+6 0 obj
+<< /CharProcs << /a 14 0 R >> /Encoding << /Differences [ 97 /a ] /Type /Encoding >> /FirstChar 97 /FontBBox [ 0 0 10 10 ] /FontMatrix [ 0.1 0 0 0.1 0 0 ] /LastChar 97 /Resources << >> /Subtype /Type3 /Type /Font /Widths [ 10 ] >>
+endobj
+7 0 obj
+<< /CharProcs << /a 15 0 R >> /Encoding << /Differences [ 97 /a ] /Type /Encoding >> /FirstChar 97 /FontBBox [ 0 0 10 10 ] /FontMatrix [ 0.1 0 0 0.1 0 0 ] /LastChar 97 /Resources << >> /Subtype /Type3 /Type /Font /Widths [ 10 ] >>
+endobj
+8 0 obj
+<< /CharProcs << /a 16 0 R >> /Encoding << /Differences [ 97 /a ] /Type /Encoding >> /FirstChar 97 /FontBBox [ 0 0 10 10 ] /FontMatrix [ 0.1 0 0 0.1 0 0 ] /LastChar 97 /Resources << >> /Subtype /Type3 /Type /Font /Widths [ 10 ] >>
+endobj
+9 0 obj
+<< /BBox [ 0 0 10 10 ] /PaintType 1 /PatternType 1 /Resources << >> /TilingType 1 /Type /Pattern /XStep 10 /YStep 10 /Length 30 >>
+stream
+/CS0 cs 0 1 0 sc 0 0 5 5 re f
+
+endstream
+endobj
+10 0 obj
+<< /BBox [ 0 0 10 10 ] /PaintType 1 /PatternType 1 /Resources << >> /TilingType 1 /Type /Pattern /XStep 10 /YStep 10 /Length 30 >>
+stream
+/CS0 cs 0 0 1 sc 0 0 5 5 re f
+
+endstream
+endobj
+11 0 obj
+<< /ColorSpace [ /CalRGB << /WhitePoint [ 0.9505 1 1.089 ] >> ] /Coords [ 0 0 1 0 ] /Function << /C0 [ 0 0 0 ] /C1 [ 1 1 1 ] /Domain [ 0 1 ] /FunctionType 2 /N 1 >> /ShadingType 2 >>
+endobj
+12 0 obj
+<< /BBox [ 0 0 10 10 ] /Resources << /ColorSpace << /PS [ /Pattern /DeviceGray ] >> /Pattern << /PUnc 17 0 R >> >> /Subtype /Form /Type /XObject /Length 36 >>
+stream
+/PS cs 0.5 /PUnc scn 0 0 10 10 re f
+
+endstream
+endobj
+13 0 obj
+<< /Length 48 >>
+stream
+10 0 0 0 10 10 d1 /CS0 cs 1 0 0 sc 0 0 5 5 re f
+
+endstream
+endobj
+14 0 obj
+<< /Length 26 >>
+stream
+10 0 0 0 10 10 d1 /Sh0 sh
+
+endstream
+endobj
+15 0 obj
+<< /Length 51 >>
+stream
+10 0 0 0 10 10 d1 /Pattern cs /P0 scn 0 0 5 5 re f
+
+endstream
+endobj
+16 0 obj
+<< /Length 38 >>
+stream
+10 0 d0 /CS0 cs 1 0 0 sc 0 0 5 5 re f
+
+endstream
+endobj
+17 0 obj
+<< /BBox [ 0 0 10 10 ] /PaintType 2 /PatternType 1 /Resources << >> /TilingType 1 /Type /Pattern /XStep 10 /YStep 10 /Length 30 >>
+stream
+/CS0 cs 1 0 0 sc 0 0 5 5 re f
+
+endstream
+endobj
+xref
+0 18
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000123 00000 n 
+0000000444 00000 n 
+0000000673 00000 n 
+0000000919 00000 n 
+0000001165 00000 n 
+0000001411 00000 n 
+0000001657 00000 n 
+0000001851 00000 n 
+0000002046 00000 n 
+0000002245 00000 n 
+0000002474 00000 n 
+0000002573 00000 n 
+0000002650 00000 n 
+0000002752 00000 n 
+0000002841 00000 n 
+trailer << /Root 1 0 R /Size 18 /ID [<ce33d7e424d185f719bd71b6d25b3d80><ce33d7e424d185f719bd71b6d25b3d80>] >>
+startxref
+3036
+%%EOF
