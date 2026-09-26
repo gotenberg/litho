@@ -32,6 +32,7 @@ litho implements ISO 32000 (PDF 1.4 through 2.0) in pure Go. It extracts text an
 - Repair PDF/A and PDF/UA violations behind a regression-bounded integrity probe that rolls back a content-modifying fix if it degrades the document.
 - Two modes: content-preserving by default, or aggressive via `WithAggressiveFixes`.
 - Build Factur-X and ZUGFeRD hybrid invoices by embedding a Cross-Industry Invoice payload and remediating the PDF/A-3 base.
+- A remediation is the last edit on a document: it judges the document the edits queued before it produce, so its report describes the output. A PDF/A output is never encrypted, since ISO 19005 forbids it.
 
 ### Transform and compose
 
@@ -116,6 +117,8 @@ The public surface lives in three types: `Reader` opens and extracts, `Writer` q
 
 `Reader` is safe for concurrent use after construction. `Writer` is single-use and not safe for concurrent use. Close a `Writer` when done: a remediated one holds its output in a temp file until `WriteTo` streams it or `Close` removes it.
 
+A remediation is the last edit on a `Writer`. Queue every other edit before it: afterwards the `Writer` accepts `Sign`, `WriteTo` and `Close`, and refuses anything else, a second remediation included, with `ErrEditAfterRemediation`.
+
 ## CLI
 
 `litho` exposes the same capabilities as subcommands.
@@ -140,8 +143,9 @@ litho rotate --angle 90 -o rotated.pdf document.pdf
 litho merge -o merged.pdf a.pdf b.pdf
 litho stamp-text --text "DRAFT" -o stamped.pdf document.pdf
 
-# Chain operations in one command.
+# Chain operations in one command. A remediate stage runs last.
 litho pipe document.pdf rotate --angle 90 stamp-text --text "DRAFT" -o out.pdf
+litho pipe document.pdf rotate --angle 90 remediate --profile PDF/UA-1 -o out.pdf
 
 # Redact and encrypt.
 litho redact --region 1:72,700,200,24 -o redacted.pdf document.pdf
@@ -180,7 +184,7 @@ Editing an encrypted document produces an unprotected one. litho opens the file 
 
 `decrypt` is the deliberate exception and stays silent, because producing an unprotected document is what it was asked to do.
 
-Re-protect the result in one of three ways. `split` and `merge` accept `--user-password` directly. `pipe` accepts an `encrypt` stage, which applies to the document it writes. Any other command can be followed by `litho encrypt`.
+Re-protect the result in one of three ways. `split` and `merge` accept `--user-password` directly. `pipe` accepts an `encrypt` stage, which applies to the document it writes. Any other command can be followed by `litho encrypt`. A PDF/A output is the exception: ISO 19005 forbids encryption, so `pipe` refuses an `encrypt` stage beside a PDF/A `remediate` stage, and encrypting the result costs its conformance.
 
 ### Exit codes
 
