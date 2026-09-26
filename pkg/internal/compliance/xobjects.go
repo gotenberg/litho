@@ -304,8 +304,9 @@ func seenObject(obj ast.PdfObject, visited map[string]bool, role string) bool {
 // as both its normal and its down appearance, fails them twice, and so does a
 // form the page draws that is also an annotation's appearance.
 func checkAppearanceForms(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum, part int, profile string, visited map[string]bool) []Violation {
-	var results []Violation
-	for _, ap := range annotationAppearances(ctx, doc, page, visited) {
+	appearances := annotationAppearances(ctx, doc, page, visited)
+	results := make([]Violation, 0, len(appearances))
+	for _, ap := range appearances {
 		results = append(results, checkXObject(ctx, doc, ap.stream, ap.stream.Dict, "Form", "AP/"+ap.key, pageNum, part, profile, false)...)
 	}
 	return results
