@@ -54,6 +54,7 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 	var infoFixes []string
 	if part == 1 {
 		infoFixes = dropNonTextInfoEntries(ctx, alloc, doc)
+		infoFixes = append(infoFixes, stripInfoControlChars(ctx, alloc, doc)...)
 	}
 
 	// Gather metadata from /Info dict for syncing.
@@ -359,15 +360,90 @@ func dropNonTextInfoEntries(ctx context.Context, alloc *writer.ObjAllocator, doc
 	for _, key := range dropped {
 		delete(newInfo, ast.PdfName(key))
 	}
-	if ref, isRef := infoObj.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
-		alloc.AllocAt(ref.ObjectNum, newInfo)
-	} else {
-		doc.Index.Trailer["Info"] = newInfo
-	}
+	writeInfoDict(alloc, doc, infoObj, newInfo)
 	fixes := make([]string, 0, len(dropped))
 	for _, key := range dropped {
 		fixes = append(fixes, fmt.Sprintf("removed /Info /%s, which holds no text string", key))
 	}
+	return fixes
+}
+
+// writeInfoDict queues dict as the document information dictionary infoObj
+// names: in place of the object it references, or in the trailer when it is
+// direct.
+func writeInfoDict(alloc *writer.ObjAllocator, doc *document.Document, infoObj ast.PdfObject, dict ast.PdfDict) {
+	if ref, isRef := infoObj.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
+		alloc.AllocAt(ref.ObjectNum, dict)
+	} else {
+		doc.Index.Trailer["Info"] = dict
+	}
+}
+
+// stripInfoControlChars removes from every /Info text entry the control
+// characters no XMP value can hold, and returns what it changed.
+//
+// ISO 19005-1, 6.7.3 requires each present entry to be equivalent to its XMP
+// analogue, and a control character makes that impossible: veraPDF reads a
+// byte PDFDocEncoding leaves undefined (ISO 32000-1, Table D.2) as the control
+// character it is, and XML 1.0, 2.2 admits no such character in a packet,
+// which veraPDF's parser repairs to a space whether it is written raw or as a
+// reference. So the entry loses the character, as [document.DecodePdfString]
+// already drops an undefined byte, and the sync writes the same text to the
+// analogue. Dates are left to their own repair.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100230.pdf: its /Producer is "\003 version 2.51-b".
+//     Its PDF/A-1b output failed 6.7.3 test 7 in veraPDF 1.30.2, default and
+//     aggressive, with a pdf:Producer of " version 2.51-b", while litho passed
+//     it. Both outputs now fail, on both tools, only the 6.3.7 test 2 its
+//     symbolic TrueType fonts leave.
+func stripInfoControlChars(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) []string {
+	infoObj, ok := doc.Index.Trailer["Info"]
+	if !ok {
+		return nil
+	}
+	infoDict := liveInfoDict(ctx, alloc, doc)
+	if infoDict == nil {
+		return nil
+	}
+	cleaned := make(map[ast.PdfName]string)
+	for _, key := range infoTextKeys {
+		v, ok := infoDict[key]
+		if !ok {
+			continue
+		}
+		s, err := document.ResolveString(ctx, doc, v)
+		if err != nil {
+			// An entry that holds no string is [dropNonTextInfoEntries]'s.
+			continue
+		}
+		text := document.DecodePdfString(s)
+		if !document.ContainsUndefinedPDFDocBytes(s) && !strings.ContainsFunc(text, compliance.XMPControlChar) {
+			continue
+		}
+		cleaned[key] = strings.Map(func(r rune) rune {
+			if compliance.XMPControlChar(r) {
+				return -1
+			}
+			return r
+		}, text)
+	}
+	if len(cleaned) == 0 {
+		return nil
+	}
+	newInfo := make(ast.PdfDict, len(infoDict))
+	maps.Copy(newInfo, infoDict)
+	fixes := make([]string, 0, len(cleaned))
+	for _, key := range infoTextKeys {
+		text, ok := cleaned[key]
+		if !ok {
+			continue
+		}
+		newInfo[key] = document.EncodePdfString(text)
+		fixes = append(fixes, fmt.Sprintf("removed the control characters of /Info /%s, which no XMP value can hold", key))
+	}
+	writeInfoDict(alloc, doc, infoObj, newInfo)
 	return fixes
 }
 
@@ -1513,7 +1589,16 @@ func xmlEscape(s string) string {
 	// bytes were written. A numeric character reference is exempt from that
 	// normalisation and parses back as CR.
 	s = strings.ReplaceAll(s, "\r", "&#xD;")
-	return s
+	// XML 1.0, 2.2 admits no other C0 control character, raw or referenced,
+	// so writing one costs the packet its well-formedness (ISO 19005-2,
+	// 6.6.2.1 test 4). The character goes, as [stripInfoControlChars] drops it
+	// from the /Info entry the value comes from.
+	return strings.Map(func(r rune) rune {
+		if compliance.XMPControlChar(r) {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // numericField validates one fixed-width numeric field of a PDF date and
