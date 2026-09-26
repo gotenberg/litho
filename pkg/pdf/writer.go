@@ -778,6 +778,13 @@ func (w *Writer) createTemp(pattern string) (*os.File, error) {
 // writeTempFile serializes what src queues into a new temp file named after
 // pattern in w's temp directory and returns its path.
 //
+// The file is never signed, even when [Writer.Sign] was called before the
+// remediation that writes it. It is what the remediation measures and
+// revalidates, and [Writer.WriteTo] signs afresh, so signing it ran the
+// caller's [Signer] once per probe for nothing. It also sent the probe through
+// the signing path, which then left out every repair, so the remediation
+// judged the unrepaired document.
+//
 // A file that cannot be created, written or closed is an error of the
 // environment, not of the document, and comes back wrapping
 // [ErrRemediationUnverified]; a failure of the serialization itself comes back
@@ -791,7 +798,7 @@ func (w *Writer) writeTempFile(ctx context.Context, src *Writer, pattern string)
 	}
 	path := f.Name()
 	tf := &tempFileWriter{f: f}
-	writeErr := src.writeToInternal(ctx, tf)
+	writeErr := src.writeToInternal(ctx, tf, nil)
 	closeErr := f.Close()
 
 	var failure error
@@ -1391,10 +1398,13 @@ func (w *Writer) RemoveAttachment(name string) {
 // incremental update (required for ByteRange integrity).
 //
 // Sign registers the signer rather than queueing a mutation, so it may be
-// called at any point: [Writer.WriteTo] applies every queued mutation before
-// computing the digest, and the signature covers the result either way. What it
-// is not compatible with is an operation forcing a full rewrite, which
-// [Writer.WriteTo] rejects with [ErrSignFullRewriteIncompatible].
+// called at any point: [Writer.WriteTo] applies every queued mutation and every
+// repair a remediation kept before computing the digest, and the signature
+// covers the result either way. The signer runs once, in WriteTo: the files a
+// remediation writes to revalidate its output are never signed. What it is not
+// compatible with is an operation forcing a full rewrite, a remediation whose
+// repairs need one included, which [Writer.WriteTo] rejects with
+// [ErrSignFullRewriteIncompatible].
 func (w *Writer) Sign(signer Signer) {
 	w.signer = signer
 }
@@ -2366,7 +2376,8 @@ func (w *Writer) copyFromPreSerialized(ctx context.Context, dst io.Writer) error
 //
 // Signing ([Writer.Sign]) is incompatible with operations that force
 // a full rewrite (encrypt, decrypt, delete/insert pages, flatten,
-// clear metadata, or [WithFullRewrite]); combining them returns
+// clear metadata, redaction, a remediation that rewrites the file, or
+// [WithFullRewrite]); combining them returns
 // [ErrSignFullRewriteIncompatible] instead of silently dropping the
 // requested operation.
 //
@@ -2405,7 +2416,7 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 		w.reader.doc.IsEncrypted) {
 		return ErrSignFullRewriteIncompatible
 	}
-	if err := w.writeToInternal(ctx, dst, opts...); err != nil {
+	if err := w.writeToInternal(ctx, dst, w.signer, opts...); err != nil {
 		return err
 	}
 	w.consumed = true
@@ -2453,10 +2464,11 @@ func copySourceCancellable(ctx context.Context, dst io.Writer, src io.ReaderAt, 
 // amount regardless of document size.
 const writeBufferSize = 64 << 10
 
-// writeToInternal performs the serialization. [Writer.WriteTo] wraps it
-// with the single-use guard and the sign/full-rewrite compatibility
-// check. Remediation calls this directly so its internal probe writes
-// do not trip the single-use guard before the caller's real WriteTo.
+// writeToInternal performs the serialization, signed with signer when it is
+// not nil. [Writer.WriteTo] wraps it with the single-use guard and the
+// sign/full-rewrite compatibility check, and passes the Writer's signer.
+// Remediation calls this directly, with no signer, so its internal probe
+// writes do not trip the single-use guard before the caller's real WriteTo.
 //
 // # Corpus evidence
 //
@@ -2467,7 +2479,7 @@ const writeBufferSize = 64 << 10
 //     `litho pipe f remediate -profile PDF/A-2b rotate -angle 90` with no
 //     rotation on any page while the remediation overrides were seeded after
 //     the queued mutations, which let them win at the same object number.
-func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...WriteOption) (err error) {
+func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Signer, opts ...WriteOption) (err error) {
 	// The serializer emits a write per token: a dictionary key, a delimiter, a
 	// number. Against an unbuffered destination every one of those is a
 	// syscall, which dominated remediation, since each round serializes the
@@ -2502,7 +2514,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 			len(w.redactions) != w.preSerializedRedactions ||
 			(w.encryptCfg != nil) != w.preSerializedEncrypt ||
 			w.decrypt != w.preSerializedDecrypt ||
-			w.signer != nil ||
+			signer != nil ||
 			cfg.fullRewrite || cfg.version != "" || cfg.xrefStream ||
 			cfg.packObjectStreams || cfg.dedupStreams
 		if !stale {
@@ -2534,7 +2546,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 	// Writer.WriteTo rejects unsafe sign combinations.
 	hasEdits := len(w.mutations) > 0 || w.trailerDirty || len(w.rewriteOverrides) > 0 ||
 		w.encryptCfg != nil || w.decrypt
-	if hasEdits && w.signer == nil {
+	if hasEdits && signer == nil {
 		if w.reader.doc.IsEncrypted && !w.reader.doc.Authenticated {
 			return ErrEncryptedNotAuthenticated
 		}
@@ -2564,7 +2576,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 	logger.Debug("writer.WriteTo started",
 		slog.Int("mutations", len(w.mutations)),
 		slog.Bool("full_rewrite", cfg.fullRewrite || w.forceRewrite),
-		slog.Bool("signer", w.signer != nil),
+		slog.Bool("signer", signer != nil),
 		slog.Bool("xref_stream", cfg.xrefStream),
 	)
 
@@ -2589,13 +2601,16 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 			slog.Bool("dedup_streams", cfg.dedupStreams))
 	}
 
-	// Signing requires its own two-pass incremental flow.
-	if w.signer != nil {
+	// Signing requires its own two-pass incremental flow. It carries the
+	// overrides as the incremental path below does: after a remediation that
+	// kept one round they hold every repair, and signing without them wrote
+	// the source back with only the signature added.
+	if signer != nil {
 		mutFuncs := make([]mutations.MutationFunc, len(w.mutations))
 		for i, m := range w.mutations {
 			mutFuncs[i] = m.apply
 		}
-		return mutations.WriteWithSignature(ctx, dst, w.reader.doc, signerAdapter{inner: w.signer}, mutFuncs, cfg.xrefStream)
+		return mutations.WriteWithSignature(ctx, dst, w.reader.doc, signerAdapter{inner: signer}, w.rewriteOverrides, mutFuncs, cfg.xrefStream)
 	}
 
 	if cfg.fullRewrite || w.forceRewrite {

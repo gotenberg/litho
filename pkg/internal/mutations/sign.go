@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -35,12 +36,30 @@ type MutationFunc func(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 // compute SHA-256 over the ByteRange (everything except the placeholder),
 // call [Signer.Sign] to get the PKCS#7 blob, then patch the placeholder
 // with the actual signature bytes.
-func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Document, signer Signer, mutations []MutationFunc, xrefStream bool) error {
+//
+// overrides holds objects an earlier stage replaced or added, keyed by their
+// number in doc, such as the repairs of a remediation. They are queued before
+// the mutations, so the update carries them and a mutation builds on them, the
+// way the unsigned incremental write orders them. Signing used to start from
+// an empty allocator, and a document signed after a remediation lost every
+// repair the remediation had kept in overrides.
+//
+// # Corpus evidence
+//
+//   - All corpora: of 110 files sampled across them, 42 could be signed after
+//     a PDF/A-2b remediation, and 39 of those validated worse signed than
+//     unsigned. pdfjs 160F-2019.pdf went from 7 violations to 671.
+func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Document, signer Signer, overrides map[int]ast.PdfObject, mutations []MutationFunc, xrefStream bool) error {
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	// A done ctx can stop the raw-byte augmentation short, and the allocator
 	// then starts below objects the file defines.
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("numbering the signature's objects: %w", err)
+	}
+	// Visited in order so the same overrides always drive the same sequence of
+	// edits.
+	for _, objNum := range slices.Sorted(maps.Keys(overrides)) {
+		alloc.AllocAt(objNum, overrides[objNum])
 	}
 
 	// Apply non-signature mutations first.

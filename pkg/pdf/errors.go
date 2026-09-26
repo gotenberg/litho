@@ -126,11 +126,13 @@ var (
 	// [Writer.Sign] is combined with an operation that requires a full
 	// rewrite: [Writer.Encrypt], [Writer.RemoveEncryption],
 	// [Writer.DeletePages], [Writer.InsertPages], [Writer.FlattenForm],
-	// [Writer.ClearMetadata], or [WithFullRewrite]. Signing covers a
-	// ByteRange of the existing bytes via an incremental update; a full
-	// rewrite renumbers objects and invalidates that ByteRange, so the
-	// two cannot be combined. Encrypted-then-signed output is permitted
-	// by the spec but not yet implemented.
+	// [Writer.ClearMetadata], [Writer.Redact], [WithFullRewrite], or a
+	// remediation that rewrites the file to repair its structure, such as the
+	// formatting a PDF/A profile requires of the header and of every object.
+	// Signing covers a ByteRange of the existing bytes via an incremental
+	// update; a full rewrite renumbers objects and invalidates that
+	// ByteRange, so the two cannot be combined. Encrypted-then-signed output
+	// is permitted by the spec but not yet implemented.
 	ErrSignFullRewriteIncompatible = errors.New("sign is incompatible with full-rewrite operations (encrypt, decrypt, delete/insert pages, flatten, clear metadata, full rewrite)")
 
 	// ErrEncryptedNotAuthenticated is returned by [Writer.WriteTo] when the
