@@ -76,6 +76,13 @@ func cidSetCompletenessRule(profile string) Rule {
 // (§6.3.5 t2), where CharSet only has to cover rendered glyphs; it is
 // ignored for parts 2/3, whose rule requires the full font-program
 // charset to be listed.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-2b__veraPDF_test_suite_6-2-11-4-1-t01-fail-a.pdf: its
+//     Type1 subset QUAJCC+TrajanPro-Regular carries /CharSet but no program,
+//     and veraPDF fails 6.3.5 t2 at PDF/A-1a and 1b.
+//   - All corpora: failing that /CharSet moves no other file at PDF/A-1b.
 func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, usage *fontUsageInfo) []Violation {
 	basefont := fontBaseFont(ctx, doc, fontDict)
 	if !isSubsetFont(basefont) {
@@ -121,6 +128,16 @@ func checkGlyphCoverage(ctx context.Context, doc *document.Document, fontDict as
 
 		fontData := extractFontProgramData(ctx, doc, fd)
 		if fontData == nil {
+			// ISO 19005-1, 6.3.5 asks the /CharSet of a Type 1 subset to list
+			// the names the subset defines, and a file that does not embed the
+			// subset holds nothing it could list them from, so part 1 fails the
+			// entry alongside the separate embedding rule, as it does a /CIDSet
+			// in checkCIDFontGlyphCoverage. Parts 2/3 scope their rule to an
+			// embedded Type 1 font (ISO 19005-2, 6.2.11.4.2), and so does
+			// PDF/UA-1.
+			if PDFAPart(profile) == 1 {
+				return failf(completenessRule, "font %s on page %d: /CharSet present but the Type1 subset is not embedded", fontName, pageNum)
+			}
 			return nil
 		}
 
@@ -273,6 +290,21 @@ func checkCharSetCompleteness(charSetStr string, glyphNames map[uint16]string, f
 // from the program (math/symbol fonts) yields a name absent from glyphNames,
 // which is skipped, so only a name that is rendered, present in the program, and
 // absent from /CharSet is reported. A nil usage or unresolvable encoding defers.
+//
+// A code the encoding leaves unnamed, or names .notdef, paints the .notdef
+// glyph, which /CharSet omits by definition: ISO 19005-1, 6.3.5 incorporates
+// PDF Reference 1.4, Table 5.18, which says .notdef should be omitted from the
+// string and is assumed to exist in the subset (ISO 32000-1, Table 122 makes
+// that "shall be omitted"). veraPDF's part-1 test does not skip .notdef, so it
+// fails a subset that shows .notdef under a /CharSet written as the Reference
+// asks; litho follows the Reference.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-2b__veraPDF_test_suite_6-2-11-8-t01-fail-a.pdf: shows code
+//     0 of GUHDHC+SourceSansPro-Light under WinAnsiEncoding, whose CFF charset
+//     is .notdef plus the eight names its /CharSet lists, and veraPDF fails
+//     6.3.5 t2 at PDF/A-1a and 1b.
 func checkCharSetRenderedGlyphs(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, glyphNames map[uint16]string, charSetStr, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
 	if usage == nil {
 		return nil

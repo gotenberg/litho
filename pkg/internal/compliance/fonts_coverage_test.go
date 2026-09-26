@@ -40,6 +40,9 @@ func TestCheckCharSetRenderedGlyphs(t *testing.T) {
 		{"rendered extra glyph missing from CharSet", "/A/B", usage(65, 66, 120), true},
 		{"unused program glyph not flagged", "/A/B", usage(65, 66), false},
 		{"encoding name absent from program is skipped", "/A/B", usage(67), false},
+		// PDF Reference 1.4, Table 5.18 omits .notdef from /CharSet, so a code
+		// painting it is no omission, where veraPDF fails the rule.
+		{"a code painting .notdef is exempt", "/A/B", usage(0, 65), false},
 		{"nil usage defers", "/B", nil, false},
 	}
 	for _, tc := range tests {
