@@ -575,6 +575,10 @@ type claimWalk struct {
 	// reads from a font a stream shows, nil for a font that is no Type 3 font
 	// with glyph procedures, so a font shown by many operators is read once.
 	type3 map[int]*type3Procs
+	// type3Modes receives, for each Type 3 font object with glyph procedures
+	// the walk meets shown, the rendering mode of the first operator showing
+	// it; see [checkType3CharProcFonts].
+	type3Modes map[string]int
 }
 
 // type3Procs is what the claim walk reads from a Type 3 font: its dictionary,
@@ -645,7 +649,11 @@ func (j *fontJudgements) claimStreamReads(ctx context.Context, doc *document.Doc
 		if shown, isShow := shownOperand(op); isShow {
 			ref, ok := fonts[ast.PdfName(text.font)]
 			if text.font != "" && ok && showsString(shown) {
-				j.claimProgram(scope+text.font, fontIdentity(ref, ast.PdfName(text.font), site), text.mode)
+				id := fontIdentity(ref, ast.PdfName(text.font), site)
+				j.claimProgram(scope+text.font, id, text.mode)
+				if _, seen := walk.type3Modes[id]; !seen && walk.type3Modes != nil && walk.resolveType3Procs(ctx, doc, ref) != nil {
+					walk.type3Modes[id] = text.mode
+				}
 				j.claimType3Reads(ctx, doc, walk, ref, ast.PdfName(text.font), site, shown, text.mode, colour.paintState, depth, unread)
 			}
 			fill, stroke := textPaints(text.mode)
@@ -933,7 +941,9 @@ func annotationsParsedFirst(profile string) bool {
 // claimAnnotationReads makes the claims of [fontJudgements.claimStreamReads]
 // for the appearance streams of the annotations of page, in the order
 // [checkAnnotationAppearanceFonts] walks them, pageNum being the page's number.
-func (j *fontJudgements) claimAnnotationReads(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int) {
+// modes receives the rendering mode each Type 3 font is first shown in
+// ([claimWalk]).
+func (j *fontJudgements) claimAnnotationReads(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int, modes map[string]int) {
 	annots, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annots) == 0 {
 		return
@@ -953,7 +963,7 @@ func (j *fontJudgements) claimAnnotationReads(ctx context.Context, doc *document
 		}
 		for _, key := range []ast.PdfName{"N", "R", "D"} {
 			if apObj, ok := apDict[key]; ok {
-				j.claimAppearanceReads(ctx, doc, apObj, pageNum, visited, 0)
+				j.claimAppearanceReads(ctx, doc, apObj, pageNum, visited, modes, 0)
 			}
 		}
 	}
@@ -962,7 +972,7 @@ func (j *fontJudgements) claimAnnotationReads(ctx context.Context, doc *document
 // claimAppearanceReads is [fontJudgements.claimAnnotationReads] for one
 // appearance entry, a stream or a state subdictionary of streams, walked as
 // [checkAppearanceStreamFonts] walks it.
-func (j *fontJudgements) claimAppearanceReads(ctx context.Context, doc *document.Document, apObj ast.PdfObject, pageNum int, visited map[int]bool, stateCount int) {
+func (j *fontJudgements) claimAppearanceReads(ctx context.Context, doc *document.Document, apObj ast.PdfObject, pageNum int, visited map[int]bool, modes map[string]int, stateCount int) {
 	stream, err := document.ResolveStream(ctx, doc, apObj)
 	if err != nil {
 		subDict, err := document.ResolveDict(ctx, doc, apObj)
@@ -974,7 +984,7 @@ func (j *fontJudgements) claimAppearanceReads(ctx context.Context, doc *document
 				break
 			}
 			stateCount++
-			j.claimAppearanceReads(ctx, doc, subDict[stateName], pageNum, visited, stateCount)
+			j.claimAppearanceReads(ctx, doc, subDict[stateName], pageNum, visited, modes, stateCount)
 		}
 		return
 	}
@@ -997,7 +1007,7 @@ func (j *fontJudgements) claimAppearanceReads(ctx context.Context, doc *document
 		doc.Logger.Debug("compliance: fonts: cannot parse appearance stream", "page", pageNum, "error", err)
 		return
 	}
-	walk := claimWalk{pageNum: pageNum, visited: visited, forms: formsReadWhereDrawn, type3: make(map[int]*type3Procs)}
+	walk := claimWalk{pageNum: pageNum, visited: visited, forms: formsReadWhereDrawn, type3: make(map[int]*type3Procs), type3Modes: modes}
 	j.claimStreamReads(ctx, doc, walk, ops, res, streamSite(ctx, doc, apObj, stream.Dict["Resources"], res), paintState{}, 0, false)
 }
 

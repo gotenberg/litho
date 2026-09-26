@@ -68,19 +68,23 @@ func TestCheckType3CharProcFonts_NestedUnembeddedFont(t *testing.T) {
 		t.Errorf("unembedded font inside a Type3 procedure must fire §6.2.11.4.1 t1, got %v", got)
 	}
 
-	// A glyph the page never shows brings no font into scope: code 98 selects
-	// no procedure, so the nested Helvetica is never reached.
-	unused := checkType3CharProcFonts(ctx, doc, parseOps(t, "BT /T3 12 Tf (b) Tj ET"), res, showSite{}, nil,
+	// Every procedure of a font text is shown with is judged, the glyph's the
+	// page shows or not: code 98 selects no procedure, and the nested
+	// Helvetica is still reached through /rect. Measured with veraPDF 1.30 at
+	// PDF/A-1b and PDF/A-2b; see [checkType3CharProcFonts].
+	unshown := checkType3CharProcFonts(ctx, doc, parseOps(t, "BT /T3 12 Tf (b) Tj ET"), res, showSite{}, nil,
 		1, "PDF/A-2b", newFontJudgements(), map[int]bool{}, 0)
-	if len(unused) != 0 {
-		t.Errorf("an unshown glyph paints nothing, so nothing may fire; got %v", unused)
+	if !hasRule(unshown, Rule_19005_2_6_2_11_4_1_t01) {
+		t.Errorf("an unshown glyph's procedure is judged too; got %v", unshown)
 	}
 
-	// Rendering mode 3 paints no glyph, so no procedure runs.
+	// A font shown in rendering mode 3 has its procedures judged in that mode,
+	// where the Helvetica they show paints nothing, so the embedding rule
+	// passes it.
 	invisible := checkType3CharProcFonts(ctx, doc, parseOps(t, "BT 3 Tr /T3 12 Tf (a) Tj ET"), res, showSite{}, nil,
 		1, "PDF/A-2b", newFontJudgements(), map[int]bool{}, 0)
-	if len(invisible) != 0 {
-		t.Errorf("a mode-3 Type3 font renders nothing; got %v", invisible)
+	if hasRule(invisible, Rule_19005_2_6_2_11_4_1_t01) {
+		t.Errorf("a font shown in mode 3 inside a mode-3 procedure is not rendered; got %v", invisible)
 	}
 }
 

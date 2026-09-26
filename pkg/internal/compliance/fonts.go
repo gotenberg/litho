@@ -249,17 +249,24 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		// draws them, before any is judged. Where the page's annotation
 		// appearances stand in that order depends on the part; see
 		// [annotationsParsedFirst].
+		//
+		// The same walks find the mode each Type 3 font is first shown in, the
+		// page's content before its annotations whatever the part; see
+		// [checkType3CharProcFonts].
+		contentModes, annotModes := make(map[string]int), make(map[string]int)
 		annotsFirst := annotationsParsedFirst(profile)
 		if annotsFirst {
-			judged.claimAnnotationReads(ctx, doc, p.dict, pageIdx+1)
+			judged.claimAnnotationReads(ctx, doc, p.dict, pageIdx+1, annotModes)
 		}
 		if judgeContent {
-			walk := claimWalk{pageNum: pageIdx + 1, visited: make(map[int]bool), forms: pageFormReads(profile), type3: make(map[int]*type3Procs)}
+			walk := claimWalk{pageNum: pageIdx + 1, visited: make(map[int]bool), forms: pageFormReads(profile), type3: make(map[int]*type3Procs), type3Modes: contentModes}
 			judged.claimStreamReads(ctx, doc, walk, p.parsedOps(ctx), p.resources, site, paintState{}, 0, false)
 		}
 		if !annotsFirst {
-			judged.claimAnnotationReads(ctx, doc, p.dict, pageIdx+1)
+			judged.claimAnnotationReads(ctx, doc, p.dict, pageIdx+1, annotModes)
 		}
+		judged.recordType3Modes(contentModes)
+		judged.recordType3Modes(annotModes)
 
 		if judgeContent {
 			results = append(results, checkPageDeclaredFonts(ctx, doc, catalog, p, site, pageIdx+1, profile, judged, visibleAnywhere)...)
@@ -345,6 +352,11 @@ type fontJudgements struct {
 	// type3Open holds the object numbers of the Type 3 fonts whose glyph
 	// procedures the walk is inside; see [checkType3CharProcFonts].
 	type3Open map[int]bool
+	// type3Mode holds the rendering mode each Type 3 font object is first
+	// shown in, and type3Proc the object numbers of the glyph procedures
+	// already judged; see [checkType3CharProcFonts].
+	type3Mode map[string]int
+	type3Proc map[int]bool
 }
 
 // newFontJudgements returns an empty record.
@@ -357,6 +369,18 @@ func newFontJudgements() *fontJudgements {
 		programMode:  make(map[string]bool),
 		programScope: make(map[string]bool),
 		type3Open:    make(map[int]bool),
+		type3Mode:    make(map[string]int),
+		type3Proc:    make(map[int]bool),
+	}
+}
+
+// recordType3Modes records in j the modes a claim walk found each Type 3 font
+// object first shown in, for the fonts no earlier walk recorded.
+func (j *fontJudgements) recordType3Modes(modes map[string]int) {
+	for id, mode := range modes {
+		if _, ok := j.type3Mode[id]; !ok {
+			j.type3Mode[id] = mode
+		}
 	}
 }
 
@@ -799,16 +823,38 @@ func resolveFontPattern(ctx context.Context, doc *document.Document, patternRef 
 // rules to what they select, so a non-embedded font reached only that way
 // (ISO 19005-2 §6.2.11.4.1) is otherwise never checked.
 //
-// Only the procedures for character codes the stream actually shows are
-// walked, so a glyph that is never painted brings no font into scope.
-// Recursion is bounded by the form budget ([formTooDeep]); visited holds the
-// object numbers already descended into, glyph procedures among them, which
-// breaks a resource cycle through nested Type3 fonts. A procedure is walked
-// once, so a font two streams show has the glyphs of each walked. Object
-// numbers are unique document-wide, so sharing one visited set with the Form
-// XObject walk cannot confuse a procedure for a form. site is the stream ops
-// come from; a procedure's fonts are the entries of the Type3 font's
-// /Resources, which [fontIdentity] keys on that font.
+// veraPDF reaches every procedure of a Type 3 font some operator shows text
+// with (GFPDType3Font.getCharStrings lists the whole /CharProcs), the
+// procedures of glyphs no operator shows included, and a font a Tf only
+// selects brings none into scope. It parses them once for the document, in the
+// text rendering mode of the operator that first shows the font, mode 3
+// included, and never again for another mode: the font object it validates is
+// the first one it builds, and each procedure's content stream is one object
+// (GFPDContentStream is identified by its object number). The first operator is
+// the first in drawing order, a page's content, with the forms it draws where
+// they are drawn, before its annotations, and the pages in order; the claim
+// walk records it in judged.type3Mode ([claimWalk]), and a font it did not
+// record takes the mode of the first operator showing it in ops. A procedure
+// judged is recorded in judged.type3Proc and not judged again, through this
+// font or another.
+//
+// Measured with veraPDF 1.30 at PDF/A-1b, PDF/A-2b and PDF/A-2u on a Type 3
+// glyph whose procedure shows code 1 through an unembedded Helvetica, which
+// StandardEncoding names .notdef: shown in rendering modes 0, 1, 2, 4, 5, 6
+// and 7 on one page, on two pages in modes 0 and 1, or through two procedures
+// shown in modes 0 and 1, it fails ISO 19005-2, 6.2.11.8 t1 and 6.2.11.7.2 t2
+// once; shown in mode 3 first, then 0, only in mode 3, in mode 3 on a first
+// page and 0 on the next, in mode 3 by a form the page draws before its text
+// shows it in mode 0, or in mode 3 by the page and 1 by an annotation, it
+// fails them once and ISO 19005-1, 6.3.4 t1 and ISO 19005-2, 6.2.11.4.1 t1 no
+// time, the Helvetica being built in mode 3; in mode 0 first, those once. A
+// procedure of a glyph the page does not show fails them as one it shows does.
+//
+// Recursion is bounded by the form budget ([formTooDeep]). visited is the
+// walk's, which [checkDrawnStreamFonts] shares with the Form XObject and
+// pattern walks; judged.type3Proc breaks a resource cycle through nested Type3
+// fonts. site is the stream ops come from; a procedure's fonts are the entries
+// of the Type3 font's /Resources, which [fontIdentity] keys on that font.
 //
 // A stream the walk reaches from a font's glyph procedures that shows the
 // same font again has none of that font's glyphs judged there, as veraPDF,
@@ -824,7 +870,11 @@ func resolveFontPattern(ctx context.Context, doc *document.Document, patternRef 
 //
 //   - pdfjs ContentStreamCycleType3insideType3.pdf: reaches an unembedded
 //     Helvetica through two nested Type3 fonts, and its name warns of the
-//     resource cycle the visited set breaks.
+//     resource cycle the procedure set breaks.
+//   - All corpora, at PDF/A-1b, PDF/A-2b and PDF/A-2u, and at their own
+//     profile for the verapdf files: judging every procedure once, in the
+//     mode the font is first shown in, moves no count; litho
+//     unembednames_2u.pdf plants it.
 func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, site showSite, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
 	if formTooDeep(doc, depth) || ctx.Err() != nil {
 		return nil
@@ -838,9 +888,7 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 	var results []Violation
 	for _, fontName := range sortedNames(fontDict) {
 		fontUsage := usage[string(fontName)]
-		// A Type3 font shown only in rendering mode 3 paints nothing, so its
-		// glyph procedures select nothing for rendering.
-		if fontUsage == nil || !fontUsage.visible || len(fontUsage.charCodes) == 0 {
+		if fontUsage == nil || len(fontUsage.charCodes) == 0 || len(fontUsage.shows) == 0 {
 			continue
 		}
 		fontRef := fontDict[fontName]
@@ -863,27 +911,29 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 		if len(charProcs) == 0 {
 			continue
 		}
-		encoding := resolveSimpleFontEncoding(ctx, doc, font)
-		modes := type3GlyphModes(encoding, fontUsage.shows)
+		mode, recorded := judged.type3Mode[fontIdentity(fontRef, fontName, site)]
+		if !recorded {
+			mode = fontUsage.shows[0].at.mode
+		}
 		fontNum := 0
 		if ref, ok := fontRef.(ast.PdfIndirectRef); ok && !judged.type3Open[ref.ObjectNum] {
 			fontNum = ref.ObjectNum
 			judged.type3Open[fontNum] = true
 		}
-		for _, glyphName := range shownGlyphNames(encoding, fontUsage.charCodes) {
-			procRef := charProcs[ast.PdfName(glyphName)]
+		for _, glyphName := range sortedNames(charProcs) {
+			procRef := charProcs[glyphName]
 			if ref, ok := procRef.(ast.PdfIndirectRef); ok {
-				if visited[ref.ObjectNum] {
+				if judged.type3Proc[ref.ObjectNum] {
 					continue
 				}
-				visited[ref.ObjectNum] = true
+				judged.type3Proc[ref.ObjectNum] = true
 			}
-			procOps, ok := parseType3Proc(ctx, doc, procRef, glyphName, pageNum)
+			procOps, ok := parseType3Proc(ctx, doc, procRef, string(glyphName), pageNum)
 			if !ok {
 				continue
 			}
 			procSite := type3ProcSite(ctx, doc, fontRef, fontName, font, t3Res, site, procRef)
-			procSite.mode = modes[glyphName]
+			procSite.mode = mode
 			results = append(results, checkResourceFonts(ctx, doc, t3Res, procOps, procSite, pageNum, profile, judged)...)
 			results = append(results, checkDrawnStreamFonts(ctx, doc, procOps, t3Res, procSite, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 		}
@@ -892,27 +942,6 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 		}
 	}
 	return results
-}
-
-// type3GlyphModes returns, for each glyph name a Type 3 font's encoding gives
-// a shown code, the text rendering mode shows first paints it in, a mode other
-// than 3 when one does. A glyph procedure starts in that mode: veraPDF parses
-// it with the text rendering mode of the operator showing its glyph (see
-// [fontJudgements.claimType3Reads]).
-func type3GlyphModes(encoding map[byte]string, shows []glyphShow) map[string]int {
-	modes := make(map[string]int)
-	for _, show := range shows {
-		for _, code := range []byte(show.str) {
-			name := encoding[code]
-			if name == "" {
-				continue
-			}
-			if mode, ok := modes[name]; !ok || (mode == invisibleRenderingMode && show.at.mode != invisibleRenderingMode) {
-				modes[name] = show.at.mode
-			}
-		}
-	}
-	return modes
 }
 
 // parseType3Proc returns the operators of the Type 3 glyph procedure procRef,
@@ -947,20 +976,6 @@ func type3ProcSite(ctx context.Context, doc *document.Document, fontRef ast.PdfO
 	procSite.owner = structureKey(ctx, doc, font)
 	procSite.fonts = fontDictKey(fontIdentity(fontRef, fontName, site), font["Resources"], t3Res)
 	return procSite
-}
-
-// shownGlyphNames returns, sorted, the glyph names a Type3 font's encoding
-// gives the character codes a content stream shows. A code the encoding leaves
-// unmapped names no procedure and is skipped.
-func shownGlyphNames(encoding map[byte]string, charCodes map[byte]bool) []string {
-	names := make([]string, 0, len(charCodes))
-	for code := range charCodes {
-		if name := encoding[code]; name != "" {
-			names = append(names, name)
-		}
-	}
-	slices.Sort(names)
-	return slices.Compact(names)
 }
 
 // checkResourceFonts runs the full single-font check suite over the fonts a
