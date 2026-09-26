@@ -278,10 +278,22 @@ func latestPage(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 // mergeStampResources reads the current /Resources sub-dictionaries from
 // baseDict and returns a new /Resources dict that includes the stamp's
 // additions. Existing resources are preserved.
+//
+// It reads them as earlier stages staged them, from alloc first. A remediation
+// that keeps one round queues its repairs there, a resource dictionary it
+// rewrote at its own number among them, and reading the source's copy instead
+// wrote the unrepaired resources into the stamped page.
+//
+// # Corpus evidence
+//
+//   - pdfcpu pkg_testdata__schmager_plateau10.pdf: stamped with text after a
+//     PDF/A-2b remediation, its page lost the Default colour space the
+//     remediation had added, and 12 uses of DeviceRGB failed ISO 19005-2,
+//     6.2.4.3 again.
 func mergeStampResources(
 	ctx context.Context,
 	doc *document.Document,
-	_alloc *writer.ObjAllocator,
+	alloc *writer.ObjAllocator,
 	baseDict ast.PdfDict,
 	page *document.Page,
 	additions []stampResource,
@@ -302,7 +314,7 @@ func mergeStampResources(
 	// everything it needs.
 	var current ast.PdfDict
 	if resObj, ok := baseDict["Resources"]; ok {
-		if d, err := document.ResolveDict(ctx, doc, resObj); err == nil && d != nil {
+		if d, err := resolveDictAllocFirst(ctx, alloc, doc, resObj); err == nil && d != nil {
 			current = d
 		}
 	} else if page != nil && page.Resources != nil {
@@ -315,7 +327,7 @@ func mergeStampResources(
 		// Start from the existing sub-dict for this category, if any.
 		subDict := ast.PdfDict{}
 		if existing, ok := newResources[category]; ok {
-			if d, err := document.ResolveDict(ctx, doc, existing); err == nil && d != nil {
+			if d, err := resolveDictAllocFirst(ctx, alloc, doc, existing); err == nil && d != nil {
 				subDict = make(ast.PdfDict, len(d)+len(entries))
 				maps.Copy(subDict, d)
 			}

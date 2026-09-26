@@ -261,3 +261,25 @@ func resolveAllocFirst(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	}
 	return resolved, nil
 }
+
+// resolveDictAllocFirst resolves obj to a dictionary as [document.ResolveDict]
+// does, preferring the object alloc has queued at its number.
+func resolveDictAllocFirst(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject) (ast.PdfDict, error) {
+	if ref, ok := obj.(ast.PdfIndirectRef); ok && alloc != nil {
+		if pending, ok := alloc.Pending()[ref.ObjectNum]; ok {
+			obj = pending
+		}
+	}
+	return document.ResolveDict(ctx, doc, obj)
+}
+
+// resolveArrayAllocFirst resolves obj to an array as [document.ResolveArray]
+// does, preferring the object alloc has queued at its number.
+func resolveArrayAllocFirst(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject) (ast.PdfArray, error) {
+	if ref, ok := obj.(ast.PdfIndirectRef); ok && alloc != nil {
+		if pending, ok := alloc.Pending()[ref.ObjectNum]; ok {
+			obj = pending
+		}
+	}
+	return document.ResolveArray(ctx, doc, obj)
+}

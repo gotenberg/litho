@@ -51,7 +51,7 @@ func cyclicFieldParentDoc(t *testing.T) (context.Context, *document.Document) {
 func TestWidgetFieldIdentity_CycleDoesNotFabricateAQualifiedName(t *testing.T) {
 	ctx, doc := cyclicFieldParentDoc(t)
 
-	_, _, fieldFT, qualified, ok := widgetFieldIdentity(ctx, doc, ast.PdfIndirectRef{ObjectNum: 6})
+	_, _, fieldFT, qualified, ok := widgetFieldIdentity(ctx, doc, nil, ast.PdfIndirectRef{ObjectNum: 6})
 	if !ok {
 		t.Fatal("widgetFieldIdentity refused a widget whose field states /FT and /T")
 	}

@@ -41,10 +41,17 @@ const maxFieldTreeDepth = 64
 // creating the interactive form when the document states none, so a viewer
 // that reads the form finds the value.
 //
+// The form, its fields and the widgets are read from alloc first, as earlier
+// stages staged them: each is rewritten from what is read, so reading the
+// source's copy of one a remediation had repaired wrote the repair away.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue12963.pdf: has 27 fields reachable only from the page and no
 //     /AcroForm at all.
+//   - pdfjs issue18561.pdf and litho syntax_1b.pdf: a field set after a
+//     PDF/A-2b remediation was rewritten from its source copy, and the output
+//     failed ISO 19005-2, 6.4.1 again.
 func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, name, value string) error {
 	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
@@ -58,7 +65,7 @@ func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	var acroFormDict ast.PdfDict
 	acroFormObj, hasAcroForm := catalogDict["AcroForm"]
 	if hasAcroForm {
-		acroFormDict, err = document.ResolveDict(ctx, doc, acroFormObj)
+		acroFormDict, err = resolveDictAllocFirst(ctx, alloc, doc, acroFormObj)
 		if err != nil {
 			return fmt.Errorf("resolving AcroForm: %w", err)
 		}
@@ -67,7 +74,7 @@ func SetFormField(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	var fieldsArr ast.PdfArray
 	if acroFormDict != nil {
 		if fieldsObj, ok := acroFormDict["Fields"]; ok {
-			fieldsArr, err = document.ResolveArray(ctx, doc, fieldsObj)
+			fieldsArr, err = resolveArrayAllocFirst(ctx, alloc, doc, fieldsObj)
 			if err != nil {
 				return fmt.Errorf("resolving Fields: %w", err)
 			}
@@ -157,12 +164,12 @@ func setPageWidgetField(
 		if !ok {
 			continue
 		}
-		annotsArr, err := document.ResolveArray(ctx, doc, annotsObj)
+		annotsArr, err := resolveArrayAllocFirst(ctx, alloc, doc, annotsObj)
 		if err != nil {
 			continue
 		}
 		for _, annotObj := range annotsArr {
-			fieldObj, fieldDict, fieldFT, qualified, ok := widgetFieldIdentity(ctx, doc, annotObj)
+			fieldObj, fieldDict, fieldFT, qualified, ok := widgetFieldIdentity(ctx, doc, alloc, annotObj)
 			if !ok || qualified != name {
 				continue
 			}
@@ -213,9 +220,10 @@ func rootFieldRef(ctx context.Context, doc *document.Document, annotObj ast.PdfO
 }
 
 // widgetFieldIdentity returns the field object a widget presents, its
-// dictionary, its field type, and its fully qualified name.
-func widgetFieldIdentity(ctx context.Context, doc *document.Document, annotObj ast.PdfObject) (ast.PdfObject, ast.PdfDict, string, string, bool) {
-	annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+// dictionary, its field type, and its fully qualified name. The widget is read
+// from alloc first.
+func widgetFieldIdentity(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotObj ast.PdfObject) (ast.PdfObject, ast.PdfDict, string, string, bool) {
+	annotDict, err := resolveDictAllocFirst(ctx, alloc, doc, annotObj)
 	if err != nil || annotDict == nil {
 		return nil, nil, "", "", false
 	}
@@ -298,7 +306,7 @@ func findAndSetFieldAt(ctx context.Context, doc *document.Document, alloc *write
 			fieldRef = ref
 		}
 
-		fieldDict, err := document.ResolveDict(ctx, doc, fieldObj)
+		fieldDict, err := resolveDictAllocFirst(ctx, alloc, doc, fieldObj)
 		if err != nil || fieldDict == nil {
 			doc.Logger.Debug("resolving form field dict failed",
 				slog.String("parent", parentName),
@@ -348,7 +356,7 @@ func findAndSetFieldAt(ctx context.Context, doc *document.Document, alloc *write
 			if num != 0 && onPath[num] {
 				continue
 			}
-			kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
+			kidsArr, err := resolveArrayAllocFirst(ctx, alloc, doc, kidsObj)
 			if err == nil && kidsArr != nil {
 				// A direct dictionary carries no object number and cannot name
 				// itself, so it closes no cycle and needs no mark.
@@ -407,7 +415,7 @@ func setKidAppearanceStates(ctx context.Context, doc *document.Document, alloc *
 		return
 	}
 
-	kidsArr, err := document.ResolveArray(ctx, doc, fieldDict["Kids"])
+	kidsArr, err := resolveArrayAllocFirst(ctx, alloc, doc, fieldDict["Kids"])
 	if err != nil || kidsArr == nil {
 		// A field merged with its widget carries /AP itself (12.5.6.19).
 		if _, hasAP := fieldDict["AP"]; hasAP {
@@ -421,7 +429,7 @@ func setKidAppearanceStates(ctx context.Context, doc *document.Document, alloc *
 		if !ok {
 			continue
 		}
-		kidDict, err := document.ResolveDict(ctx, doc, kidObj)
+		kidDict, err := resolveDictAllocFirst(ctx, alloc, doc, kidObj)
 		if err != nil || kidDict == nil {
 			continue
 		}
@@ -437,6 +445,18 @@ func setKidAppearanceStates(ctx context.Context, doc *document.Document, alloc *
 
 // FlattenForm bakes form field appearances into page content and removes
 // the AcroForm dictionary from the catalog.
+//
+// The form, the page annotations and their appearances are read from alloc
+// first, as earlier stages staged them. A remediation that keeps one round
+// queues its repairs there, and reading the source's copies undid them: the
+// form still asked for appearance regeneration, so a widget was kept rather
+// than flattened, and written back with the action the remediation removed.
+//
+// # Corpus evidence
+//
+//   - pdfjs 160F-2019.pdf: flattened after a PDF/A-2b remediation, it
+//     validated to 42 violations, against 3 when the remediated file is
+//     flattened on its own.
 func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
@@ -449,10 +469,10 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 
 	// Read the flag before the form goes: it decides whether the stored
 	// appearances are authoritative (see [flattenPageAnnotations]).
-	regenerated := formNeedsAppearances(ctx, doc, catalogDict)
+	regenerated := formNeedsAppearances(ctx, doc, alloc, catalogDict)
 	// The default appearance string a kept widget inherits from the form, which
 	// the form's removal would otherwise take with it.
-	inheritedDA := formDefaultAppearance(ctx, doc, catalogDict)
+	inheritedDA := formDefaultAppearance(ctx, doc, alloc, catalogDict)
 
 	// Remove /AcroForm from the catalog.
 	newCatalog := make(ast.PdfDict, len(catalogDict))
@@ -502,19 +522,19 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 //     streams into the page and then deleted the widgets, so the values left
 //     the document entirely.
 func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, page *document.Page, regenerated bool, inheritedDA ast.PdfObject, catalogDict ast.PdfDict) {
-	annotsObj, ok := page.Dict["Annots"]
+	// Start from the latest pending version of the page dict so the edit
+	// composes correctly with any prior mutation that has already
+	// rewritten this page, its /Annots included.
+	baseDict := latestPageDict(alloc, page)
+
+	annotsObj, ok := baseDict["Annots"]
 	if !ok {
 		return
 	}
-	annots, err := document.ResolveArray(ctx, doc, annotsObj)
+	annots, err := resolveArrayAllocFirst(ctx, alloc, doc, annotsObj)
 	if err != nil || annots == nil {
 		return
 	}
-
-	// Start from the latest pending version of the page dict so the edit
-	// composes correctly with any prior mutation that has already
-	// rewritten this page.
-	baseDict := latestPageDict(alloc, page)
 
 	var (
 		remainingAnnots  ast.PdfArray
@@ -523,7 +543,7 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 	)
 
 	for _, annotObj := range annots {
-		annotDict, err := document.ResolveDict(ctx, doc, annotObj)
+		annotDict, err := resolveDictAllocFirst(ctx, alloc, doc, annotObj)
 		if err != nil || annotDict == nil {
 			doc.Logger.Debug("resolving annotation dict failed during flatten",
 				slog.Any("err", err),
@@ -559,7 +579,7 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 		// A text field with a value and no /AP at all is rendered by generating
 		// an appearance from /V and /DA (ISO 32000-1, 12.7.3.3), and flattening
 		// it removed the widget and with it every character on the page.
-		apStream, ok := resolveWidgetAppearance(ctx, doc, annotDict)
+		apStream, ok := resolveWidgetAppearance(ctx, doc, alloc, annotDict)
 		if !ok {
 			// No stored appearance. Draw the value the field holds, the way a
 			// viewer would (ISO 32000-1, 12.7.3.3), so the flatten can finish
@@ -682,14 +702,15 @@ func annotationHiddenOrNoView(ctx context.Context, doc *document.Document, annot
 // widget annotation dict. Handles both the direct-stream form and the
 // state-dict form where /N is a dict keyed by /AS name. Returns the
 // resolved stream and ok=true on success; ok=false if any step of the
-// resolution failed (with a debug log explaining why).
-func resolveWidgetAppearance(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) (ast.PdfStream, bool) {
+// resolution failed (with a debug log explaining why). Each step reads alloc
+// first, where an appearance an earlier stage built lives.
+func resolveWidgetAppearance(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, annotDict ast.PdfDict) (ast.PdfStream, bool) {
 	apObj, ok := annotDict["AP"]
 	if !ok {
 		doc.Logger.Debug("widget has no /AP, skipping flatten")
 		return ast.PdfStream{}, false
 	}
-	apDict, err := document.ResolveDict(ctx, doc, apObj)
+	apDict, err := resolveDictAllocFirst(ctx, alloc, doc, apObj)
 	if err != nil || apDict == nil {
 		doc.Logger.Debug("resolving widget /AP failed", slog.Any("err", err))
 		return ast.PdfStream{}, false
@@ -706,7 +727,7 @@ func resolveWidgetAppearance(ctx context.Context, doc *document.Document, annotD
 		apStream = v
 	default:
 		// /N is a dict of states, or an indirect reference to one.
-		resolved, err := document.ResolveObject(ctx, doc, nObj)
+		resolved, err := resolveAllocFirst(ctx, alloc, doc, nObj)
 		if err != nil {
 			doc.Logger.Debug("resolving widget /N failed", slog.Any("err", err))
 			return ast.PdfStream{}, false
@@ -719,7 +740,7 @@ func resolveWidgetAppearance(ctx context.Context, doc *document.Document, annotD
 				asName = as
 			}
 			if stateObj, ok := stateDict[asName]; ok {
-				resolved2, err := document.ResolveObject(ctx, doc, stateObj)
+				resolved2, err := resolveAllocFirst(ctx, alloc, doc, stateObj)
 				if err == nil {
 					if s, ok := resolved2.(ast.PdfStream); ok {
 						apStream = s
@@ -783,9 +804,10 @@ func asFormXObject(stream ast.PdfStream, width, height float64) ast.PdfStream {
 }
 
 // formNeedsAppearances reports whether the interactive form asks viewers to
-// build field appearances from the field values (ISO 32000-1, 12.7.3.3).
-func formNeedsAppearances(ctx context.Context, doc *document.Document, catalogDict ast.PdfDict) bool {
-	acroForm, err := document.ResolveDict(ctx, doc, catalogDict["AcroForm"])
+// build field appearances from the field values (ISO 32000-1, 12.7.3.3). The
+// form is read from alloc first.
+func formNeedsAppearances(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, catalogDict ast.PdfDict) bool {
+	acroForm, err := resolveDictAllocFirst(ctx, alloc, doc, catalogDict["AcroForm"])
 	if err != nil || acroForm == nil {
 		return false
 	}
@@ -926,8 +948,9 @@ func keepWidget(alloc *writer.ObjAllocator, annotObj ast.PdfObject, annotDict as
 
 // formDefaultAppearance returns the interactive form's /DA string, the default
 // appearance a field inherits when it declares none (ISO 32000-1, 12.7.3.3).
-func formDefaultAppearance(ctx context.Context, doc *document.Document, catalogDict ast.PdfDict) ast.PdfObject {
-	acroForm, err := document.ResolveDict(ctx, doc, catalogDict["AcroForm"])
+// The form is read from alloc first.
+func formDefaultAppearance(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, catalogDict ast.PdfDict) ast.PdfObject {
+	acroForm, err := resolveDictAllocFirst(ctx, alloc, doc, catalogDict["AcroForm"])
 	if err != nil || acroForm == nil {
 		return nil
 	}
@@ -1165,9 +1188,9 @@ func appearanceFont(
 	fontName string,
 ) (ast.PdfObject, string, bool) {
 	if fontName != "" {
-		if acroForm, err := document.ResolveDict(ctx, doc, catalogDict["AcroForm"]); err == nil && acroForm != nil {
-			if dr, err := document.ResolveDict(ctx, doc, acroForm["DR"]); err == nil && dr != nil {
-				if fonts, err := document.ResolveDict(ctx, doc, dr["Font"]); err == nil && fonts != nil {
+		if acroForm, err := resolveDictAllocFirst(ctx, alloc, doc, catalogDict["AcroForm"]); err == nil && acroForm != nil {
+			if dr, err := resolveDictAllocFirst(ctx, alloc, doc, acroForm["DR"]); err == nil && dr != nil {
+				if fonts, err := resolveDictAllocFirst(ctx, alloc, doc, dr["Font"]); err == nil && fonts != nil {
 					if fontObj, ok := fonts[ast.PdfName(fontName)]; ok {
 						return fontObj, fontName, true
 					}
