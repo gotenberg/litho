@@ -2130,48 +2130,11 @@ func TestWriter_SignWithFullRewriteOps_ReturnsIncompatible(t *testing.T) {
 	cases := []struct {
 		name  string
 		setup func(t *testing.T, w *Writer, opts *[]WriteOption)
-		// src is the document signed, writerTestPDF when nil.
-		src []byte
 	}{
 		{name: "encrypt", setup: func(_ *testing.T, w *Writer, _ *[]WriteOption) {
 			w.Encrypt(EncryptConfig{UserPassword: "u", OwnerPassword: "o", Algorithm: EncryptAES256, Permissions: -1})
 		}},
 		{name: "remove-encryption", setup: func(_ *testing.T, w *Writer, _ *[]WriteOption) { w.RemoveEncryption() }},
-		{name: "clear-metadata", setup: func(_ *testing.T, w *Writer, _ *[]WriteOption) { w.ClearMetadata() }},
-		{name: "delete-pages", setup: func(t *testing.T, w *Writer, _ *[]WriteOption) {
-			if err := w.DeletePages(1); err != nil {
-				t.Fatalf("DeletePages: %v", err)
-			}
-		}},
-		{name: "insert-pages", setup: func(t *testing.T, w *Writer, _ *[]WriteOption) {
-			src, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
-			if err != nil {
-				t.Fatalf("Open: %v", err)
-			}
-			if err := w.InsertPages(0, src); err != nil {
-				t.Fatalf("InsertPages: %v", err)
-			}
-		}},
-		{name: "flatten-form", setup: func(_ *testing.T, w *Writer, _ *[]WriteOption) { w.FlattenForm() }},
-		// A redaction that removes nothing leaves the Writer untouched, so the
-		// region takes a word.
-		{name: "redact", setup: func(t *testing.T, w *Writer, _ *[]WriteOption) {
-			report, err := w.Redact(ctx, []RedactRegion{coversSecret})
-			if err != nil {
-				t.Fatalf("Redact: %v", err)
-			}
-			if len(report.RemovedText) == 0 {
-				t.Fatal("the redaction removed nothing, so the test proves nothing")
-			}
-		}, src: redactableTextPDF("")},
-		// A remediation whose repairs need a full rewrite is signed on top of
-		// its output, so an edit that forces one must still refuse with it.
-		{name: "clear-metadata before a remediation", setup: func(t *testing.T, w *Writer, _ *[]WriteOption) {
-			w.ClearMetadata()
-			if _, err := w.RemediatePDFA(ctx, models.PDFA2b); err != nil {
-				t.Fatalf("RemediatePDFA: %v", err)
-			}
-		}},
 		{name: "with-full-rewrite", setup: func(_ *testing.T, _ *Writer, opts *[]WriteOption) { *opts = append(*opts, WithFullRewrite()) }},
 		// WithEncryption reaches w.encryptCfg from inside WriteTo rather than
 		// from a setter called beforehand, so it is the one arm here that can
@@ -2187,11 +2150,7 @@ func TestWriter_SignWithFullRewriteOps_ReturnsIncompatible(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			src := data
-			if tc.src != nil {
-				src = tc.src
-			}
-			r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
+			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
 			if err != nil {
 				t.Fatalf("Open: %v", err)
 			}
