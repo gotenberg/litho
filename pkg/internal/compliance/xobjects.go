@@ -184,6 +184,10 @@ func checkInlineImageInterpolate(ops []content.Operation, pageNum, part int) []V
 //     profile for the verapdf files: judging only the XObjects a form draws,
 //     and none through a page whose content an earlier page judged, moves no
 //     count; litho imagereach_2b.pdf plants both.
+//   - govdocs thread_400_400002.pdf and thread_000_000372.pdf: draw forms
+//     carrying /OPI more than once, and veraPDF states ISO 19005-1, 6.2.4 t2
+//     and ISO 19005-2, 6.2.9 t1 65 and 44 times, where litho stated 42 and 43.
+//     Judging a form at every Do moved no other count on any corpus.
 func checkDrawnXObjects(ctx context.Context, doc *document.Document, scope ast.PdfDict, ops []content.Operation, pageNum, part int, profile string, visited map[string]bool) []Violation {
 	xobjectDict, err := document.ResolveDict(ctx, doc, scope["XObject"])
 	if err != nil || len(xobjectDict) == 0 || len(ops) == 0 {
