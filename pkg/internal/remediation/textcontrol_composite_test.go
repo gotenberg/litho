@@ -7,6 +7,25 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
+// stripControlBytesFromOps runs the repair of [fixTextControl]
+// ([controlByteStripper]) over ops in place, an operation it drops left with
+// no operator, and returns how many bytes it removed and whether it removed
+// any.
+func stripControlBytesFromOps(ops []content.Operation, fonts map[string]textFontInfo) (int, bool) {
+	s := controlByteStripper{fonts: fonts}
+	removed := 0
+	for i, op := range ops {
+		written, n := s.repair(op)
+		removed += n
+		if len(written) == 0 {
+			ops[i].Operator = ""
+			continue
+		}
+		ops[i] = written[0]
+	}
+	return removed, removed > 0
+}
+
 // TestStripControlBytesFromOps_CompositeFont pins that a string shown with a
 // composite font keeps its bytes.
 //

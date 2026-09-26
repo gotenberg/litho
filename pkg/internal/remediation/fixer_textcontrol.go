@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -54,18 +55,20 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		ops, contentsObj, err := livePageContentOps(ctx, alloc, doc, page)
+		data, contentsObj, err := livePageContentData(ctx, alloc, doc, page)
 		if err != nil || contentsObj == nil {
 			continue
 		}
-		removed, modified := stripControlBytesFromOps(ops, pageTextFonts(ctx, doc, page, fontCache))
-		if !modified {
-			continue
-		}
-		newData, err := serializeOps(filterOps(ops))
+		fonts := pageTextFonts(ctx, doc, page, fontCache)
+		newData, removed, err := repairContentOps(ctx, data, func() opRepair {
+			return (&controlByteStripper{fonts: fonts}).repair
+		})
 		if err != nil {
 			doc.Logger.Debug("remediation: cannot rewrite a content stream for its control bytes",
 				"page", pageNum+1, "error", err)
+			continue
+		}
+		if removed == 0 {
 			continue
 		}
 		if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
@@ -79,12 +82,13 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	return []string{fmt.Sprintf("stripped %d control-byte(s) from text operators", total)}, nil
 }
 
-// stripControlBytesFromOps mutates the operand slices of every
-// text-showing operator (Tj, TJ, ', ") in place, removing bytes that
-// fall in the ASCII control range 0x00-0x1F except TAB/LF/CR.
-// Operators whose entire operand becomes empty are cleared so the
-// serialiser drops them. Returns the count of removed bytes plus a
-// flag indicating whether any op changed.
+// controlByteStripper is the repair of [fixTextControl] for the operations of
+// one content stream, handed to it in stream order ([opRepair]): it removes
+// the bytes in the ASCII control range 0x00-0x1F, but TAB, LF and CR, from the
+// strings every text-showing operator (Tj, TJ, ' and ") shows, and drops an
+// operator whose string it empties. Every byte it removes counts as an edit.
+// It tracks the text font the strings are shown with, which the guard for a
+// composite font reads.
 //
 // # Corpus evidence
 //
@@ -95,90 +99,100 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 //     text.
 //   - verapdf: skipping composite fonts leaves ~56 .notdef references unfixed,
 //     which is the safe side of the trade.
-func stripControlBytesFromOps(ops []content.Operation, fonts map[string]textFontInfo) (int, bool) {
-	removed := 0
-	modified := false
-	var currentFont string
-	// The text font is part of the graphics state, so Q restores it
-	// (ISO 32000-1, 8.4.2 and Table 104). currentFont is the only state this
-	// loop carries, so one stack covers it; enumerate before you fix, because
-	// a font-only restore in tagging's collector missed the leading it also
-	// tracked and cost a second commit.
+type controlByteStripper struct {
+	fonts       map[string]textFontInfo
+	currentFont string
+	// fontStack holds the fonts q saved. The text font is part of the
+	// graphics state, so Q restores it (ISO 32000-1, 8.4.2 and Table 104).
+	// currentFont is the only state this repair carries, so one stack covers
+	// it; enumerate before you fix, because a font-only restore in tagging's
+	// collector missed the leading it also tracked and cost a second commit.
 	//
-	// Both directions are wrong without this, and both were measured. A simple
+	// Both directions are wrong without it, and both were measured. A simple
 	// font selected inside q…Q outliving the Q makes the composite guard
 	// consult the wrong name and STRIP a multi-byte string: the CIDs
 	// <0041 0020 0042> came back as "A B", their 0x00 high bytes eaten. A
 	// composite font outliving the Q does the opposite and SKIPS a simple
 	// string whose control byte should have gone.
-	var fontStack []string
-	for i := range ops {
-		op := ops[i].Operator
-		if op == "Tf" && len(ops[i].Operands) > 0 {
-			if name, ok := ops[i].Operands[0].(ast.PdfName); ok {
-				currentFont = string(name)
+	fontStack []string
+}
+
+// repair returns op with the control bytes of its strings removed, none when
+// it empties one of them, and how many bytes it removed. The operands of op
+// are left as they are: a repaired operation holds a copy.
+func (s *controlByteStripper) repair(op content.Operation) ([]content.Operation, int) {
+	switch op.Operator {
+	case "Tf":
+		if len(op.Operands) > 0 {
+			if name, ok := op.Operands[0].(ast.PdfName); ok {
+				s.currentFont = string(name)
 			}
 		}
-		// Placed before the show-text guard below on purpose: that guard
-		// continues on every non-showing operator, q and Q included, so a
-		// restore written after it would never run.
-		if op == "q" {
-			fontStack = append(fontStack, currentFont)
-		}
-		if op == "Q" {
-			if n := len(fontStack); n > 0 {
-				currentFont = fontStack[n-1]
-				fontStack = fontStack[:n-1]
-			}
-		}
-		if op != "Tj" && op != "TJ" && op != "'" && op != "\"" {
-			continue
-		}
-		// A composite font addresses glyphs with multi-byte codes
-		// (ISO 32000-1, 9.7.6), so a byte below 0x20 is usually the high
-		// half of an ordinary code, not a glyph reference: under
-		// Identity-H every CID under U+2000 carries a 0x00 high byte.
-		// Dropping those bytes deletes half of each code and slides the
-		// rest of the string into garbage.
-		//
-		// TODO: a composite font could still be repaired by dropping whole
-		// codes rather than bytes, which needs the /Encoding CMap's
-		// codespace ranges to know each code's width (ISO 32000-1, 9.7.6.2);
-		// Identity-H is two bytes but a predefined CMap may mix widths.
-		// Skipping leaves those .notdef references unfixed, which is the safe
-		// side of the trade.
-		info := fonts[currentFont]
-		if info.composite {
-			continue
-		}
-		for j, operand := range ops[i].Operands {
-			switch v := operand.(type) {
-			case ast.PdfString:
-				cleaned, n := stripControlString(v, info.defined)
-				if n == 0 {
-					continue
-				}
-				removed += n
-				modified = true
-				ops[i].Operands[j] = cleaned
-				if len(cleaned) == 0 {
-					ops[i].Operator = ""
-				}
-			case ast.PdfArray:
-				cleanedArr, n := stripControlTJArray(v, info.defined)
-				if n == 0 {
-					continue
-				}
-				removed += n
-				modified = true
-				ops[i].Operands[j] = cleanedArr
-				if isEmptyTJArray(cleanedArr) {
-					ops[i].Operator = ""
-				}
-			}
+	case "q":
+		s.fontStack = append(s.fontStack, s.currentFont)
+	case "Q":
+		if n := len(s.fontStack); n > 0 {
+			s.currentFont = s.fontStack[n-1]
+			s.fontStack = s.fontStack[:n-1]
 		}
 	}
-	return removed, modified
+	keep := []content.Operation{op}
+	if op.Operator != "Tj" && op.Operator != "TJ" && op.Operator != "'" && op.Operator != "\"" {
+		return keep, 0
+	}
+	// A composite font addresses glyphs with multi-byte codes
+	// (ISO 32000-1, 9.7.6), so a byte below 0x20 is usually the high
+	// half of an ordinary code, not a glyph reference: under
+	// Identity-H every CID under U+2000 carries a 0x00 high byte.
+	// Dropping those bytes deletes half of each code and slides the
+	// rest of the string into garbage.
+	//
+	// TODO: a composite font could still be repaired by dropping whole
+	// codes rather than bytes, which needs the /Encoding CMap's
+	// codespace ranges to know each code's width (ISO 32000-1, 9.7.6.2);
+	// Identity-H is two bytes but a predefined CMap may mix widths.
+	// Skipping leaves those .notdef references unfixed, which is the safe
+	// side of the trade.
+	info := s.fonts[s.currentFont]
+	if info.composite {
+		return keep, 0
+	}
+	var operands []ast.PdfObject
+	removed, emptied := 0, false
+	for j, operand := range op.Operands {
+		var cleaned ast.PdfObject
+		switch v := operand.(type) {
+		case ast.PdfString:
+			str, n := stripControlString(v, info.defined)
+			if n == 0 {
+				continue
+			}
+			removed += n
+			cleaned = str
+			emptied = emptied || len(str) == 0
+		case ast.PdfArray:
+			arr, n := stripControlTJArray(v, info.defined)
+			if n == 0 {
+				continue
+			}
+			removed += n
+			cleaned = arr
+			emptied = emptied || isEmptyTJArray(arr)
+		default:
+			continue
+		}
+		if operands == nil {
+			operands = slices.Clone(op.Operands)
+		}
+		operands[j] = cleaned
+	}
+	switch {
+	case removed == 0:
+		return keep, 0
+	case emptied:
+		return nil, removed
+	}
+	return []content.Operation{{Operator: op.Operator, Operands: operands}}, removed
 }
 
 // stripControlString returns a copy of s with ASCII control bytes

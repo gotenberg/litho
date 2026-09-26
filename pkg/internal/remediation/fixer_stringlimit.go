@@ -3,11 +3,13 @@ package remediation
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // pdfA1StringLimit is the 65535-byte cap imposed by ISO 19005-1 §6.1.12
@@ -54,8 +56,8 @@ func fixStringLimit(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		return nil, err
 	}
 
-	// Content-stream operand strings are rewritten in-place via the
-	// parser → serializer round trip.
+	// Content-stream operand strings are rewritten through the operations
+	// of the page ([repairContentOps]).
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err == nil {
 		// Best-effort: a page-tree resolve failure yields an empty slice;
@@ -65,26 +67,17 @@ func fixStringLimit(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 			if ctx.Err() != nil {
 				break
 			}
-			ops, contentsObj, err := livePageContentOps(ctx, alloc, doc, page)
+			data, contentsObj, err := livePageContentData(ctx, alloc, doc, page)
 			if err != nil || contentsObj == nil {
 				continue
 			}
-			modified := false
-			for i := range ops {
-				for j, operand := range ops[i].Operands {
-					if s, ok := operand.(ast.PdfString); ok && len(s) > limit {
-						ops[i].Operands[j] = s[:limit]
-						modified = true
-					}
-				}
-			}
-			if !modified {
-				continue
-			}
-			newData, err := serializeOps(ops)
+			newData, n, err := repairContentOps(ctx, data, func() opRepair { return truncatedOperandStrings(limit) })
 			if err != nil {
 				doc.Logger.Debug("remediation: cannot rewrite a content stream for its long strings",
 					"page", pageNum+1, "error", err)
+				continue
+			}
+			if n == 0 {
 				continue
 			}
 			if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
@@ -98,6 +91,31 @@ func fixStringLimit(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		return nil, nil
 	}
 	return []string{fmt.Sprintf("truncated over-long strings in %d object(s)/stream(s)", count)}, nil
+}
+
+// truncatedOperandStrings returns the repair of [fixStringLimit] for the
+// operations of a content stream: every string operand longer than limit is
+// cut to its first limit bytes, and every truncation counts as an edit.
+func truncatedOperandStrings(limit int) opRepair {
+	return func(op content.Operation) ([]content.Operation, int) {
+		var operands []ast.PdfObject
+		edits := 0
+		for j, operand := range op.Operands {
+			s, ok := operand.(ast.PdfString)
+			if !ok || len(s) <= limit {
+				continue
+			}
+			if operands == nil {
+				operands = slices.Clone(op.Operands)
+			}
+			operands[j] = s[:limit]
+			edits++
+		}
+		if edits == 0 {
+			return []content.Operation{op}, 0
+		}
+		return []content.Operation{{Operator: op.Operator, Operands: operands}}, edits
+	}
 }
 
 // truncStringsInDict walks d and truncates any PdfString whose length

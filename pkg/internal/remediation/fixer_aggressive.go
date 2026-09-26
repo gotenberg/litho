@@ -693,11 +693,11 @@ func replaceContentArrayStreams(alloc *writer.ObjAllocator, arr ast.PdfArray, ne
 	return nil
 }
 
-// livePageContentOps parses a page's current content operations, reading the
+// livePageContentData returns a page's current decoded content, reading the
 // page dict and its content stream(s) alloc-first so a rewrite queued by an
 // earlier fixer (auto-tag replaces /Contents with a marked stream; content-tag
 // wraps the page) is seen instead of the orphaned original. It returns the
-// operations and the /Contents object that addresses the live stream(s), which
+// bytes and the /Contents object that addresses the live stream(s), which
 // [replaceContentStream] writes back to. A nil /Contents means the page has no
 // content to rewrite.
 //
@@ -706,22 +706,9 @@ func replaceContentArrayStreams(alloc *writer.ObjAllocator, arr ast.PdfArray, ne
 // as a repair reads them ([content.ForRepair]), which [content.ParsePageContent]
 // matches save where the reading of veraPDF departs from what a repair keeps,
 // from the bytes with every run such as "3-5" in an array or a dictionary
-// written as the numbers veraPDF reads in it ([splitNestedNumberRuns]).
-func livePageContentOps(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) ([]content.Operation, ast.PdfObject, error) {
-	data, contentsObj, err := livePageContentData(ctx, alloc, doc, page)
-	if err != nil || contentsObj == nil {
-		return nil, contentsObj, err
-	}
-	ops, err := content.ParseStreamData(ctx, data, content.ForRepair())
-	if err != nil {
-		return nil, contentsObj, err
-	}
-	return ops, contentsObj, nil
-}
-
-// livePageContentData returns the bytes [livePageContentOps] reads a page's
-// operations from, for a caller that splices its repairs into them
-// ([spliceOperations]), and the /Contents object that addresses them.
+// written as the numbers veraPDF reads in it ([splitNestedNumberRuns]). A
+// caller writes its repairs through [repairContentOps] or [spliceOperations],
+// which carry the page's inline images across.
 func livePageContentData(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) ([]byte, ast.PdfObject, error) {
 	pageDict := resolveFromAllocOrDoc(ctx, alloc, doc, page.Ref)
 	if pageDict == nil {

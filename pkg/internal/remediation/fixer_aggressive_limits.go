@@ -150,10 +150,10 @@ func limitRepairsFor(violations []compliance.Violation, profile string) limitRep
 	return r
 }
 
-// flattenGraphicsStack appends balancing Q operators to any page content
-// stream whose q/Q nesting exceeds pdfAGraphicsDepth. Pops run to the
-// end of the stream, so visible drawing up to the overflow point is
-// preserved; everything after is discarded with the overflow.
+// flattenGraphicsStack rewrites every page content stream whose q/Q nesting
+// exceeds pdfAGraphicsDepth without the q operators that nest deeper and the
+// Q operators that close them ([qNestingClip]). Every other operator keeps
+// its place, so a state change made inside a dropped pair outlives it.
 func flattenGraphicsStack(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (int, error) {
 	catalog, err := document.ResolveCatalog(ctx, doc)
 	if err != nil {
@@ -169,32 +169,21 @@ func flattenGraphicsStack(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		if err := ctx.Err(); err != nil {
 			return count, err
 		}
-		ops, contentsObj, err := livePageContentOps(ctx, alloc, doc, page)
+		data, contentsObj, err := livePageContentData(ctx, alloc, doc, page)
 		if err != nil || contentsObj == nil {
 			continue
 		}
-		depth, maxDepth := 0, 0
-		for _, op := range ops {
-			switch op.Operator {
-			case "q":
-				depth++
-				if depth > maxDepth {
-					maxDepth = depth
-				}
-			case "Q":
-				if depth > 0 {
-					depth--
-				}
-			}
-		}
-		if maxDepth <= pdfAGraphicsDepth {
-			continue
-		}
-		clipped := clipQNesting(ops, pdfAGraphicsDepth)
-		newData, err := serializeOps(clipped)
+		// A stream nesting no deeper than the cap drops no q, so it makes no
+		// edit and is not written.
+		newData, dropped, err := repairContentOps(ctx, data, func() opRepair {
+			return (&qNestingClip{limit: pdfAGraphicsDepth}).repair
+		})
 		if err != nil {
 			doc.Logger.Debug("remediation: cannot rewrite a content stream for its q nesting",
 				"page", pageNum+1, "error", err)
+			continue
+		}
+		if dropped == 0 {
 			continue
 		}
 		if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum+1); err != nil {
@@ -205,37 +194,36 @@ func flattenGraphicsStack(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	return count, nil
 }
 
-// clipQNesting rewrites ops so no q/Q pair nests deeper than limit.
-// Extra q tokens are dropped; orphaned Q tokens matching the dropped
-// q's are removed alongside.
-func clipQNesting(ops []content.Operation, limit int) []content.Operation {
-	out := make([]content.Operation, 0, len(ops))
-	depth := 0
-	skippedDepth := 0
-	for _, op := range ops {
-		switch op.Operator {
-		case "q":
-			if depth >= limit {
-				skippedDepth++
-				continue
-			}
-			depth++
-			out = append(out, op)
-			continue
-		case "Q":
-			if skippedDepth > 0 {
-				skippedDepth--
-				continue
-			}
-			if depth > 0 {
-				depth--
-			}
-			out = append(out, op)
-			continue
+// qNestingClip is the repair of [flattenGraphicsStack] for the operations of
+// one content stream, handed to it in stream order ([opRepair]): it drops
+// every q that would nest deeper than limit, and the Q that closes it. Every
+// operator it drops counts as an edit.
+type qNestingClip struct {
+	limit int
+	// depth counts the q operators kept and not yet closed, and skipped the
+	// ones dropped and not yet closed.
+	depth, skipped int
+}
+
+// repair returns op, or none when it is a q or a Q the clip drops.
+func (c *qNestingClip) repair(op content.Operation) ([]content.Operation, int) {
+	switch op.Operator {
+	case "q":
+		if c.depth >= c.limit {
+			c.skipped++
+			return nil, 1
 		}
-		out = append(out, op)
+		c.depth++
+	case "Q":
+		if c.skipped > 0 {
+			c.skipped--
+			return nil, 1
+		}
+		if c.depth > 0 {
+			c.depth--
+		}
 	}
-	return out
+	return []content.Operation{op}, 0
 }
 
 // truncateOversizedDicts walks every indirect dict, array, or stream

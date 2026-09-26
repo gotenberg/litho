@@ -3,6 +3,7 @@ package remediation
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -28,10 +29,11 @@ const operatorRunDelimiters = ")>{}%"
 
 // opSpliceTally counts what [spliceOperations] changed: the malformed
 // numbers it folded, the operators it separated and removed, as
-// [repairContentData] counts them, and the rendering intents it replaced, as
-// [fixContentStreams] counts them.
+// [repairContentData] counts them, the rendering intents it replaced, as
+// [fixContentStreams] counts them, and the edits of the repair of another
+// fixer, as that fixer counts them ([repairContentOps]).
 type opSpliceTally struct {
-	folded, separated, removed, intents int
+	folded, separated, removed, intents, edits int
 }
 
 func (t *opSpliceTally) add(o opSpliceTally) {
@@ -39,6 +41,7 @@ func (t *opSpliceTally) add(o opSpliceTally) {
 	t.separated += o.separated
 	t.removed += o.removed
 	t.intents += o.intents
+	t.edits += o.edits
 }
 
 // operationRepair is the repair [spliceOperations] writes. fold reports
@@ -86,7 +89,9 @@ func spliceRepairedOperations(ctx context.Context, data []byte) ([]byte, opSplic
 //     ([separateGluedOperators]), and an operator ISO 32000-1 does not
 //     define, EI and ID outside an inline image among them, which goes with
 //     its operands ([dropUndefinedOperators]). The aggressive content rewrite
-//     also changes an invalid rendering intent ([aggressiveOperation]).
+//     also changes an invalid rendering intent ([aggressiveOperation]), and
+//     the fixers that rewrite a page's operations ([repairContentOps]) change
+//     the ones their repair edits or drops.
 //   - So is one whose bytes validation reads another way than the reading of a
 //     repair ([readsAsRepaired]), such as a stray delimiter where an operator
 //     stands, which the reading of a repair drops, or one that begins with a
@@ -159,6 +164,7 @@ func spliceOperations(ctx context.Context, data []byte, repair operationRepair) 
 		t.separated += changed.separated
 		t.removed += changed.removed
 		t.intents += changed.intents
+		t.edits += changed.edits
 		want = append(want, repaired...)
 		span := data[start:ranges[i].End]
 		if !folds && changed == (opSpliceTally{}) && !startsOperatorRun(data, start) && readsAsRepaired(ctx, span, op) {
@@ -200,6 +206,75 @@ func spliceOperations(ctx context.Context, data []byte, repair operationRepair) 
 		return nil, t, false
 	}
 	return out.Bytes(), t, true
+}
+
+// opRepair is a fixer's repair of the operations of one content stream,
+// handed to it one at a time in stream order. It returns the operations one
+// operation is written as, the operation alone when it keeps it and none when
+// it drops it, and how many edits it made there, as its fixer counts them. It
+// may carry state from one operation to the next, such as the graphics state
+// a q saves, so every reading of a stream takes a fresh one.
+type opRepair func(content.Operation) ([]content.Operation, int)
+
+// repairContentOps returns the bytes a fixer writes for a content stream's
+// decoded data, whose operations, read as a repair reads them
+// ([content.ForRepair]), go through a fresh repair of newRepair, and how many
+// edits the repair made. No edit means nothing is to be written. An error
+// leaves the stream as written.
+//
+// A stream that holds no inline image is serialized again from its repaired
+// operations ([serializeOps]). One that holds an inline image cannot be: the
+// parser reads an image's data off-token, so the BI operation keeps its
+// dictionary alone, and writing it back would drop the data and leave
+// "<< ... >> BI" with no ID or EI, a content stream no reader can parse (ISO
+// 32000-1, 8.9.7). Its repairs are spliced in place of the operations they
+// change instead, its images carried across byte for byte
+// ([spliceOperations]), and a splice that does not read back as the repair
+// intends fails with [errInlineImageSplice]: the stream keeps its bytes, and
+// its finding stays a residual for validation to report.
+func repairContentOps(ctx context.Context, data []byte, newRepair func() opRepair) ([]byte, int, error) {
+	ops, err := content.ParseStreamData(ctx, data, content.ForRepair())
+	if err != nil {
+		return nil, 0, fmt.Errorf("reading the content stream: %w", err)
+	}
+	repair := newRepair()
+	repaired := make([]content.Operation, 0, len(ops))
+	edits, images := 0, false
+	for i, op := range ops {
+		if i%spliceCheckInterval == 0 && ctx.Err() != nil {
+			return nil, 0, fmt.Errorf("repairing the content stream: %w", ctx.Err())
+		}
+		// The splice carries an image across whole and hands the repair
+		// every other operation, so the count here is the one it makes.
+		if beginsInlineImage(op) {
+			images = true
+			repaired = append(repaired, op)
+			continue
+		}
+		written, n := repair(op)
+		repaired = append(repaired, written...)
+		edits += n
+	}
+	if edits == 0 {
+		return nil, 0, nil
+	}
+	if !images {
+		out, err := serializeOps(repaired)
+		if err != nil {
+			return nil, 0, fmt.Errorf("writing the repaired operations: %w", err)
+		}
+		return out, edits, nil
+	}
+
+	repair = newRepair()
+	out, t, ok := spliceOperations(ctx, data, operationRepair{op: func(op content.Operation) ([]content.Operation, opSpliceTally, bool) {
+		written, n := repair(op)
+		return written, opSpliceTally{edits: n}, true
+	}})
+	if !ok || t.edits == 0 {
+		return nil, 0, errInlineImageSplice
+	}
+	return out, t.edits, nil
 }
 
 // repairOperation returns the operations the repairs of [repairContentData]

@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // matchMarkedContentLang claims the same /Lang clauses as the catalog repair.
@@ -71,49 +73,19 @@ func repairMarkedContentLangs(ctx context.Context, alloc *writer.ObjAllocator, d
 // repairPageMarkedContentLangs rewrites one page's content stream when a
 // marked-content property list carries an unusable /Lang.
 func repairPageMarkedContentLangs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page, pageNum int, requireDeclared bool) int {
-	ops, contentsObj, err := livePageContentOps(ctx, alloc, doc, page)
+	data, contentsObj, err := livePageContentData(ctx, alloc, doc, page)
 	if err != nil || contentsObj == nil {
 		return 0
 	}
-
-	removed := 0
-	for i, op := range ops {
-		if op.Operator != "BDC" && op.Operator != "DP" {
-			continue
-		}
-		// The property list is the second operand: /Tag properties BDC. A
-		// name operand refers to /Resources /Properties, an object the
-		// structure-tree repair does not own either, so it is handled below.
-		if len(op.Operands) < 2 {
-			continue
-		}
-		props, ok := op.Operands[1].(ast.PdfDict)
-		if !ok {
-			continue
-		}
-		if _, has := props["Lang"]; !has {
-			continue
-		}
-		if !markedLangUnusable(ctx, doc, props["Lang"], requireDeclared) {
-			continue
-		}
-		patched := make(ast.PdfDict, len(props))
-		for k, v := range props {
-			if k != "Lang" {
-				patched[k] = v
-			}
-		}
-		ops[i].Operands[1] = patched
-		removed++
-	}
-	if removed == 0 {
-		return 0
-	}
-
-	newData, err := serializeOps(ops)
+	newData, removed, err := repairContentOps(ctx, data, func() opRepair {
+		return markedContentLangRepair(ctx, doc, requireDeclared)
+	})
 	if err != nil {
 		doc.Logger.Debug("remediation: cannot rewrite content stream for marked-content /Lang",
 			"page", pageNum, "error", err)
+		return 0
+	}
+	if removed == 0 {
 		return 0
 	}
 	if err := replaceContentStream(ctx, alloc, doc, contentsObj, newData, pageNum); err != nil {
@@ -122,6 +94,35 @@ func repairPageMarkedContentLangs(ctx context.Context, alloc *writer.ObjAllocato
 		return 0
 	}
 	return removed
+}
+
+// markedContentLangRepair returns the repair of [repairPageMarkedContentLangs]
+// for the operations of a content stream: a BDC or DP whose inline property
+// list carries an unusable /Lang ([markedLangUnusable]) is written without it,
+// and every /Lang removed counts as an edit.
+func markedContentLangRepair(ctx context.Context, doc *document.Document, requireDeclared bool) opRepair {
+	return func(op content.Operation) ([]content.Operation, int) {
+		keep := []content.Operation{op}
+		// The property list is the second operand: /Tag properties BDC. A
+		// name operand refers to /Resources /Properties, an object the
+		// structure-tree repair does not own either, so
+		// [repairPropertyListLangs] handles it.
+		if (op.Operator != "BDC" && op.Operator != "DP") || len(op.Operands) < 2 {
+			return keep, 0
+		}
+		props, ok := op.Operands[1].(ast.PdfDict)
+		if !ok {
+			return keep, 0
+		}
+		if lang, has := props["Lang"]; !has || !markedLangUnusable(ctx, doc, lang, requireDeclared) {
+			return keep, 0
+		}
+		patched := maps.Clone(props)
+		delete(patched, "Lang")
+		operands := slices.Clone(op.Operands)
+		operands[1] = patched
+		return []content.Operation{{Operator: op.Operator, Operands: operands}}, 1
+	}
 }
 
 // markedLangUnusable reports whether a marked-content /Lang value cannot serve
