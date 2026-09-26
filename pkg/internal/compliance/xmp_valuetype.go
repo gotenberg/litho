@@ -582,9 +582,12 @@ func xmpValueMatches(n *XMPNode, typ string, entry *xmpExtEntry, part, depth int
 //
 // A property resolves through the schema entry of its namespace in packet, or
 // failing that in inherited, the entries of the document's main packet, which
-// govern the component packets of parts 2 and 3. A predefined property is left
-// to the predefined audit, and a property no entry declares to
-// [xmpCheckUndeclaredExtensionProperties].
+// govern the component packets of parts 2 and 3. A property the XMP
+// Specification predefines is judged against its declaration too: veraPDF
+// resolves a property through the extension schemas of its packet, then those
+// of the main packet, and only then through the predefined schemas
+// (AXLXMPProperty.getSchemasDefinition). A property no entry declares is left
+// to [xmpCheckUndeclaredExtensionProperties].
 //
 // # Corpus evidence
 //
@@ -613,7 +616,7 @@ func xmpCheckExtensionValueTypes(packet []byte, part int, inherited map[string]*
 	}
 	stated := make(map[[2]string]bool)
 	for _, n := range nodes {
-		if n.NS == xmpPdfaExtensionNamespace || XMPPredefinedProperty(part, n.NS, n.Name) {
+		if n.NS == xmpPdfaExtensionNamespace {
 			continue
 		}
 		entry, typ := xmpExtResolve(own, inherited, n.NS, n.Name)
@@ -636,8 +639,10 @@ func xmpCheckExtensionValueTypes(packet []byte, part int, inherited map[string]*
 // that type: whether ISO 19005-1, 6.7.9 and ISO 19005-2/3, 6.6.2.3.1 accept it
 // through its declaration. mainPacket is the document's main packet when
 // packet is a component's, whose extension schemas govern it at parts 2 and 3,
-// and nil otherwise. A predefined property, and a part without extension
-// schemas, answer false.
+// and nil otherwise. A property the XMP Specification predefines answers the
+// same way, since veraPDF resolves a property through the extension schemas
+// before the predefined ones (AXLXMPProperty.getSchemasDefinition). A part
+// without extension schemas answers false.
 func XMPExtensionPropertyChecker(packet, mainPacket []byte, part int) func(ns, name string) bool {
 	if part < 1 || part > 3 {
 		return func(string, string) bool { return false }
@@ -646,9 +651,6 @@ func XMPExtensionPropertyChecker(packet, mainPacket []byte, part int) func(ns, n
 	inherited := xmpMainExtensionEntries(part, mainPacket)
 	own := xmpExtEntries(part, nodes, inherited)
 	return func(ns, name string) bool {
-		if XMPPredefinedProperty(part, ns, name) {
-			return false
-		}
 		found := false
 		for _, n := range nodes {
 			if n.NS != ns || n.Name != name {
@@ -666,17 +668,16 @@ func XMPExtensionPropertyChecker(packet, mainPacket []byte, part int) func(ns, n
 
 // xmpExtensionDeclared reads packet once and returns a function reporting
 // whether its extension schemas, or inherited, the main packet's, declare a
-// property ns:name with a type veraPDF resolves, the property being no
-// predefined one: the properties veraPDF validates through their declaration.
+// property ns:name with a type veraPDF resolves: the properties veraPDF
+// validates through their declaration, predefined ones included, since it
+// resolves a property through the extension schemas before the predefined
+// ones (AXLXMPProperty.getSchemasDefinition).
 func xmpExtensionDeclared(part int, packet []byte, inherited map[string]*xmpExtEntry) func(ns, name string) bool {
 	if part < 1 || part > 3 {
 		return func(string, string) bool { return false }
 	}
 	own := xmpExtEntries(part, XMPProperties(packet), inherited)
 	return func(ns, name string) bool {
-		if XMPPredefinedProperty(part, ns, name) {
-			return false
-		}
 		_, typ := xmpExtResolve(own, inherited, ns, name)
 		return typ != ""
 	}

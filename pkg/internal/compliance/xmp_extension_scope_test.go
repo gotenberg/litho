@@ -22,6 +22,7 @@ const extScopeNS = ` xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/"` +
 	` xmlns:pdfaField="http://www.aiim.org/pdfa/ns/field#"` +
 	` xmlns:dc="http://purl.org/dc/elements/1.1/"` +
 	` xmlns:xmp="http://ns.adobe.com/xap/1.0/"` +
+	` xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"` +
 	` xmlns:stRef="http://ns.adobe.com/xap/1.0/sType/ResourceRef#"` +
 	` xmlns:stDim="http://ns.adobe.com/xap/1.0/sType/Dimensions#"` +
 	` xmlns:stFnt="http://ns.adobe.com/xap/1.0/sType/Font#"` +
