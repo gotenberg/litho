@@ -140,6 +140,55 @@ func TestDeviceNColorantsCountEachLink(t *testing.T) {
 	}
 }
 
+// TestSeparationConsistencyCountsEachLink pins that ISO 19005-2, 6.2.4.4 t2
+// fails at every link to a Separation whose colourant another Separation
+// veraPDF has built by then defines differently (see [checkSeparationLinks]
+// and [walkColorLinksDeclaring]). Every count was measured with veraPDF 1.30
+// at PDF/A-2b on the same fixture.
+func TestSeparationConsistencyCountsEachLink(t *testing.T) {
+	t.Parallel()
+
+	gray := "[/Separation /Spot1 /DeviceGray << /FunctionType 2 /Domain [0 1] /C0 [1] /C1 [0] /N 1 >>]"
+	rgb := "[/Separation /Spot1 /DeviceRGB << /FunctionType 2 /Domain [0 1] /C0 [0 0 0] /C1 [1 0 0] /N 1 >>]"
+	use := func(name string) string { return name + " cs 1 scn 0 0 10 10 re f " }
+	form := func(cs string) string {
+		return linkStreamObj("/Type /XObject /Subtype /Form /BBox [0 0 10 10] /Resources << /ColorSpace << /CS1 "+cs+" >> >>", use("/CS1"))
+	}
+	tests := []struct {
+		name string
+		data []byte
+		want int
+	}{
+		{"two direct Separations", linkPagePDF("<< /ColorSpace << /CS0 "+gray+" /CS1 "+rgb+" >> >>", use("/CS0")+use("/CS1")), 6},
+		{"two indirect Separations", linkPagePDF("<< /ColorSpace << /CS0 5 0 R /CS1 6 0 R >> >>", use("/CS0")+use("/CS1"), gray, rgb), 2},
+		{"the same definition twice", linkPagePDF("<< /ColorSpace << /CS0 "+gray+" /CS1 "+gray+" >> >>", use("/CS0")+use("/CS1")), 0},
+		{"the second in a form painted between", linkPagePDF("<< /ColorSpace << /CS0 "+gray+" >> /XObject << /Fm0 5 0 R >> >>",
+			use("/CS0")+"/Fm0 Do "+use("/CS0"), form(rgb)), 9},
+		{"the second an indexed space's base", linkPagePDF("<< /ColorSpace << /CS0 "+gray+" /CS1 [/Indexed "+rgb+" 1 <00FF>] >> >>",
+			use("/CS0")+"/CS1 cs 0 scn 0 0 10 10 re f"), 3},
+		{"the second in an annotation's appearance", cyclePDF(
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /ColorSpace << /CS0 "+gray+" >> >> /Contents 4 0 R /Annots [6 0 R] >>",
+			linkStreamObj("", use("/CS0")), form(rgb),
+			"<< /Type /Annot /Subtype /Square /Rect [0 0 10 10] /F 4 /AP << /N 5 0 R >> >>"), 6},
+		{"the second on a later page", cyclePDF(
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /ColorSpace << /CS0 "+gray+" >> >> /Contents 5 0 R >>",
+			"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << /ColorSpace << /CS0 "+rgb+" >> >> /Contents 6 0 R >>",
+			linkStreamObj("", use("/CS0")), linkStreamObj("", use("/CS0")+" ")), 3},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := ruleContexts(t, tt.data, models.PDFA2b, "6.2.4.4", 2); len(got) != tt.want {
+				t.Errorf("6.2.4.4 t2 fired %d times, want %d: %q", len(got), tt.want, got)
+			}
+		})
+	}
+}
+
 // TestICCBasedProfileCountsEachLink pins that the ICCBased profile test fails
 // once per link veraPDF makes to an ICCBased space over an abstract profile,
 // wherever [colorLinkWalk] reaches one, and once for the document for a direct

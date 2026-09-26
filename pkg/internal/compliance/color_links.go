@@ -235,24 +235,67 @@ type colorLinkWalk struct {
 	// inherits resolves against the resources of the stream that selected it.
 	streams map[string]*linkStream
 	page    int
+	// declare, when not nil, is called with every Separation array veraPDF
+	// builds before it judges it (see [walkColorLinksDeclaring]): those of
+	// a DeviceN's /Colorants, before any of them is judged, and, through pre,
+	// those the operators of a page's content and annotations select, with
+	// the forms and tiling patterns they paint, before any link of the page
+	// is judged.
+	declare func(ast.PdfArray)
+	// pre is the walk that declares, for each page, the Separations every
+	// operator of the page's content, of its annotations' appearance streams
+	// and of the streams they paint selects by name. declareOps marks that
+	// walk.
+	pre        *colorLinkWalk
+	declareOps bool
 }
 
 // walkColorLinks walks the colour-space links of pages (see [colorLinkWalk])
 // and calls visit for every device family and ICCBased space they reach.
 func walkColorLinks(ctx context.Context, doc *document.Document, pages []pageCtx, part int, visit func(colorNode)) {
-	w := &colorLinkWalk{doc: doc, part: part, visit: visit, judged: make(map[int]bool), streams: make(map[string]*linkStream)}
-	// A stream that is some page's content is judged as that page's content,
-	// never as a form a Do paints (see [colorSpaceLinkIndex]).
-	for i := range pages {
-		if ref, ok := pages[i].dict["Contents"].(ast.PdfIndirectRef); ok {
-			w.judged[ref.ObjectNum] = true
+	walkColorLinksDeclaring(ctx, doc, pages, part, visit, nil)
+}
+
+// walkColorLinksDeclaring is [walkColorLinks], calling declare with every
+// Separation array veraPDF builds before it judges it.
+//
+// veraPDF builds the colour space an operator selects when it parses the
+// content stream, and parses a page's content and its annotations'
+// appearance streams, with the forms and tiling patterns they paint, before
+// it judges the page, to learn whether they hold transparency. The spaces an
+// /Indexed space, a DeviceN or an image holds it builds when it reaches that
+// space. Measured with veraPDF 1.30 at PDF/A-2b on two Separations naming one
+// colourant over different alternate spaces (see [checkSeparationLinks]):
+// with one selected by the page and one by a form the page paints after it,
+// or by an annotation's appearance stream, every link fails; with the second
+// the base of an /Indexed space the page selects after the first, or on a
+// later page, only the three links to it do.
+func walkColorLinksDeclaring(ctx context.Context, doc *document.Document, pages []pageCtx, part int, visit func(colorNode), declare func(ast.PdfArray)) {
+	newWalk := func(visit func(colorNode)) *colorLinkWalk {
+		w := &colorLinkWalk{doc: doc, part: part, visit: visit, declare: declare, judged: make(map[int]bool), streams: make(map[string]*linkStream)}
+		// A stream that is some page's content is judged as that page's
+		// content, never as a form a Do paints (see [colorSpaceLinkIndex]).
+		for i := range pages {
+			if ref, ok := pages[i].dict["Contents"].(ast.PdfIndirectRef); ok {
+				w.judged[ref.ObjectNum] = true
+			}
 		}
+		return w
+	}
+	w := newWalk(visit)
+	if declare != nil {
+		w.pre = newWalk(func(colorNode) {})
+		w.pre.declareOps = true
 	}
 	for i := range pages {
 		if ctx.Err() != nil {
 			return
 		}
 		w.page = i
+		if w.pre != nil {
+			w.pre.page = i
+			w.pre.walkAnnotations(ctx, pages[i].dict, w.pre.walkContent(ctx, &pages[i]))
+		}
 		w.walkPage(ctx, &pages[i])
 	}
 }
@@ -301,13 +344,7 @@ func (w *colorLinkWalk) newStream(ctx context.Context, res ast.PdfDict, parent *
 // over a valid profile and one over an abstract one, the space met first
 // decides whether the profile test fails.
 func (w *colorLinkWalk) walkPage(ctx context.Context, p *pageCtx) {
-	doc := w.doc
-	page := w.newStream(ctx, resolveInheritedResources(ctx, doc, p.dict), nil)
-	page.blendRef = resolvePageBlendingICCRef(ctx, doc, p.dict)
-
-	if !p.contentJudged {
-		w.walkStream(ctx, p.parsedOps(ctx), page, initialState(page), 0)
-	}
+	page := w.walkContent(ctx, p)
 	w.walkAnnotations(ctx, p.dict, page)
 
 	// A page's transparency group blending space is a colour space veraPDF
@@ -317,6 +354,17 @@ func (w *colorLinkWalk) walkPage(ctx context.Context, p *pageCtx) {
 	site := *page
 	site.blendRef = ast.PdfIndirectRef{}
 	w.judgeGroup(ctx, p.dict, &site, true)
+}
+
+// walkContent walks the content of page p unless an earlier page shares it,
+// and returns the page's content stream.
+func (w *colorLinkWalk) walkContent(ctx context.Context, p *pageCtx) *linkStream {
+	page := w.newStream(ctx, resolveInheritedResources(ctx, w.doc, p.dict), nil)
+	page.blendRef = resolvePageBlendingICCRef(ctx, w.doc, p.dict)
+	if !p.contentJudged {
+		w.walkStream(ctx, p.parsedOps(ctx), page, initialState(page), 0)
+	}
+	return page
 }
 
 // walkAnnotations walks the appearance streams of the annotations of the page
@@ -446,6 +494,9 @@ func (w *colorLinkWalk) parse(ctx context.Context, stream ast.PdfStream) ([]cont
 func (w *colorLinkWalk) walkStream(ctx context.Context, ops []content.Operation, s *linkStream, entry csPaintState, depth int) {
 	s.entry = entry
 	colorSpaces := func(c *linkStream) ast.PdfDict { return c.colorSpaces }
+	if w.declareOps {
+		w.declareSeparations(ctx, ops, s, entry)
+	}
 	walkColorSpaceLinksWith(ctx, ops, entry, csLinkHooks{
 		resolve: func(name string) csRef {
 			if obj, def := s.lookup(colorSpaces, name); def != nil {
@@ -490,6 +541,36 @@ func (w *colorLinkWalk) walkStream(ctx context.Context, ops []content.Operation,
 			}
 		},
 	})
+}
+
+// declareSeparations declares every Separation an operator of s selects by
+// name, directly or as the entry state inherited it (see
+// [colorLinkWalk.declare]).
+func (w *colorLinkWalk) declareSeparations(ctx context.Context, ops []content.Operation, s *linkStream, entry csPaintState) {
+	walkColorSpaceLinksWith(ctx, ops, entry, csLinkHooks{
+		resolve: func(name string) csRef {
+			if _, def := s.lookup(func(c *linkStream) ast.PdfDict { return c.colorSpaces }, name); def != nil {
+				return csRef{scope: def.id, name: name}
+			}
+			return csRef{}
+		},
+		link: func(ref csRef, _ int, _ string) {
+			if def := w.streams[ref.scope]; def != nil && ref.name != "" {
+				w.declareSeparation(ctx, def.colorSpaces[ast.PdfName(ref.name)])
+			}
+		},
+	})
+}
+
+// declareSeparation declares obj when it is a Separation array.
+func (w *colorLinkWalk) declareSeparation(ctx context.Context, obj ast.PdfObject) {
+	arr, err := document.ResolveArray(ctx, w.doc, obj)
+	if err != nil || len(arr) == 0 {
+		return
+	}
+	if kind, _ := document.ResolveName(ctx, w.doc, arr[0]); kind == "Separation" { // Best-effort: an unreadable family is no Separation.
+		w.declare(arr)
+	}
 }
 
 // judgeRef judges the colour space an operator of s links to. A named entry
@@ -618,6 +699,11 @@ func (w *colorLinkWalk) judgeDeviceNAttributes(ctx context.Context, attrsObj ast
 		return
 	}
 	colorants, _ := document.ResolveDict(ctx, w.doc, attrs["Colorants"]) // Best-effort: unreadable colorants hold nothing.
+	if w.declare != nil && !w.declareOps {
+		for _, name := range sortedNames(colorants) {
+			w.declareSeparation(ctx, colorants[name])
+		}
+	}
 	for _, name := range sortedNames(colorants) {
 		w.judgeSpace(ctx, colorants[name], s, defaults, false, nesting)
 	}

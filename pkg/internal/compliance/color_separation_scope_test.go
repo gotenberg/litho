@@ -39,7 +39,7 @@ func sepScopeFormPDF(second, secondFn string) []byte {
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << "+
 			"/ColorSpace << /Sep0 5 0 R >> /XObject << /Fm0 8 0 R >> >> /Contents 4 0 R >>",
-		sepScopeStream("<<", sepScopePageOps),
+		sepScopeStream("<<", sepScopePageOps+" /Fm0 Do"),
 		sepScopeRGB,
 		sepScopeFnRGB,
 		sepScopeTiling("<< /ColorSpace << /Sep1 9 0 R >> >>"),
@@ -100,7 +100,7 @@ func sepScopeFormOwnCSPDF(formOps string) []byte {
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Resources << "+
 			"/ColorSpace << /Sep0 5 0 R >> /XObject << /X0 9 0 R >> >> /Contents 4 0 R >>",
-		sepScopeStream("<<", sepScopePageOps),
+		sepScopeStream("<<", sepScopePageOps+" /X0 Do"),
 		sepScopeRGB,
 		sepScopeFnRGB,
 		"[/Separation /Spot /DeviceRGB 8 0 R]",
