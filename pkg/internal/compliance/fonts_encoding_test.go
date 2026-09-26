@@ -12,11 +12,12 @@ import (
 )
 
 // TestNotdefSymbolicType1ControlCode pins that a control-range charCode absent
-// from a symbolic Type1 font's /Differences does not fire the .notdef rule: a
-// symbolic font resolves such codes through its built-in encoding (ISO 32000-1
-// §9.6.6.2), which litho does not parse, so reporting .notdef would be a false
-// positive. A non-symbolic font keeps firing, since standard encodings define
-// no glyph for control characters.
+// from the /Differences of a Type1 font that embeds no program, names no
+// standard 14 font and states no /BaseEncoding does not fire the .notdef rule,
+// symbolic or not: veraPDF gives such a code no glyph name at all, where only
+// a name of .notdef fails the rule (see [checkUnembeddedNotdef]). Measured
+// with veraPDF 1.30 at PDF/A-2b on this font showing code 15, with /Flags 4
+// and with /Flags 32: neither fails ISO 19005-2, 6.2.11.8 t1.
 func TestNotdefSymbolicType1ControlCode(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -41,8 +42,8 @@ func TestNotdefSymbolicType1ControlCode(t *testing.T) {
 	if got := build(4); len(got) != 0 { // Flags bit 3 (=4): Symbolic
 		t.Errorf("symbolic Type1 control-code should not fire .notdef, got %v", got)
 	}
-	if got := build(32); len(got) == 0 { // Flags bit 6 (=32): Nonsymbolic
-		t.Error("non-symbolic Type1 control-code without an encoding entry should fire .notdef")
+	if got := build(32); len(got) != 0 { // Flags bit 6 (=32): Nonsymbolic
+		t.Errorf("non-symbolic Type1 control-code the encoding leaves unnamed should not fire .notdef, got %v", got)
 	}
 }
 

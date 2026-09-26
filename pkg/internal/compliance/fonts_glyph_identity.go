@@ -817,9 +817,9 @@ func pathPaints(op string) (fill, stroke bool) {
 	return false, false
 }
 
-// textPaints reports whether text shown in rendering mode mode is painted with
-// the fill colour and with the stroke colour (ISO 32000-1, 9.3.6, Table 106):
-// modes 0, 2, 4 and 6 fill, and 1, 2, 5 and 6 stroke.
+// textPaints reports whether text shown in the given text rendering mode is
+// painted with the fill colour and with the stroke colour (ISO 32000-1, 9.3.6,
+// Table 106): modes 0, 2, 4 and 6 fill, and 1, 2, 5 and 6 stroke.
 func textPaints(mode int) (fill, stroke bool) {
 	switch mode {
 	case 0, 4:

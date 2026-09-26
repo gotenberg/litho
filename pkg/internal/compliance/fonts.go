@@ -2027,47 +2027,34 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 
 	subtype := fontSubtype(ctx, doc, fontDict)
 
-	// For Type1/CFF: if the encoding explicitly maps a used charCode to
-	// ".notdef", it's a violation. For charCodes below 0x20 (control range)
-	// with no encoding entry, the glyph is .notdef since standard encodings
-	// don't define glyphs for control characters. For charCodes >= 0x20,
-	// absence of explicit encoding doesn't imply .notdef (standard encoding
-	// provides defaults for printable ASCII).
-	if subtype == "Type1" || subtype == "MMType1" || subtype == "TrueType" {
+	// A font that embeds no program is judged by the name veraPDF gives each
+	// code; see [checkUnembeddedNotdef].
+	embedsProgram := false
+	if fd := document.ResolveFontDescriptor(ctx, doc, fontDict); fd != nil {
+		embedsProgram = extractFontProgramData(ctx, doc, fd) != nil
+	}
+	if (subtype == "Type1" || subtype == "MMType1" || subtype == "TrueType") && !embedsProgram {
+		checkUnembeddedNotdef(ctx, doc, fontDict, subtype, fontName, pageNum, faults, usage)
+	}
+
+	// For an embedded Type1/CFF: if the encoding explicitly maps a used
+	// charCode to ".notdef", it's a violation. For an embedded TrueType, a
+	// charCode below 0x20 (control range) with no encoding entry is .notdef
+	// too, since the standard encodings define no glyph for control
+	// characters.
+	if (subtype == "Type1" || subtype == "MMType1" || subtype == "TrueType") && embedsProgram {
 		enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
 		if len(enc) > 0 {
-			// An explicit /Differences ".notdef" fires for any used code. A C0
-			// control code (< 0x20) with no encoding entry renders .notdef
+			// A C0 control code (< 0x20) with no encoding entry renders .notdef
 			// because the ISO 32000-1 Annex D standard encodings define no glyph
-			// for control characters; this holds for a nonsymbolic simple font
-			// regardless of embedding, which is why it is evaluated here for
-			// Type1 and TrueType alike (the TrueType glyph-program path below
-			// cannot run for a non-embedded font, exactly where control-code
-			// .notdef references hide). DEL (0x7F) is deliberately excluded: some
-			// fonts do define a glyph there when they embed a program.
-			// A symbolic font resolves codes through its built-in encoding (ISO
+			// for control characters. DEL (0x7F) is deliberately excluded: some
+			// fonts do define a glyph there when they embed a program. A
+			// symbolic font resolves codes through its built-in encoding (ISO
 			// 32000-1 §9.6.6.2), which litho does not parse, so the implicit case
 			// is declined rather than reported as a false positive.
 			symbolic := false
 			if fd := document.ResolveFontDescriptor(ctx, doc, fontDict); fd != nil {
 				symbolic = isSymbolicFont(ctx, doc, fd)
-			}
-			// veraPDF names a glyph ".notdef" exactly when the font program does
-			// not contain the code (GFGlyph: containsCode(code) ? getGlyphName
-			// : ".notdef"). With no program embedded there is nothing to consult,
-			// so the declared encoding decides: a code its table leaves undefined
-			// selects no glyph. MacExpertEncoding is the case that exposed this,
-			// defining nothing at 'A' or 'B'. An embedded program is NOT judged
-			// this way, because it can still supply a code the encoding omits
-			// (ISO 32000-1, 9.6.6.2); answering that needs the program's own
-			// charset, which this check does not read, so it stays silent there.
-			namedTable := ""
-			embedded := false
-			if fd := document.ResolveFontDescriptor(ctx, doc, fontDict); fd == nil ||
-				extractFontProgramData(ctx, doc, fd) == nil {
-				namedTable = namedEncodingTable(ctx, doc, fontDict)
-			} else {
-				embedded = true
 			}
 			// An embedded Type 1 font is judged by the name its /Encoding gives
 			// the code (ISO 32000-1, 9.6.6.1): .notdef where the predefined base
@@ -2077,8 +2064,10 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 			// under StandardEncoding, a /Differences-only dictionary or no
 			// /Encoding a code the dictionary leaves alone gets no name and no
 			// report, while a code WinAnsiEncoding leaves undefined is reported
-			// even through a symbolic subset.
-			embeddedType1 := embedded && (subtype == "Type1" || subtype == "MMType1")
+			// even through a symbolic subset. An embedded program is not judged
+			// by the table alone otherwise, because it can still supply a code
+			// the encoding omits (ISO 32000-1, 9.6.6.2).
+			embeddedType1 := subtype == "Type1" || subtype == "MMType1"
 			type1Table := ""
 			var type1Differences map[byte]string
 			if embeddedType1 {
@@ -2096,19 +2085,6 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 						faults.add(uint32(code), "font %s on page %d: charCode %d is undefined in %s, so it maps to .notdef",
 							fontName, pageNum, code, type1Table)
 					}
-					continue
-				}
-				// The symbolic exemption below applies here too: a
-				// symbolic font resolves codes through its built-in encoding
-				// (ISO 32000-1, 9.6.6.2), which this check does not read. DEL is
-				// not exempt here: this branch runs only when the font embeds
-				// no program, so nothing can define a glyph at 0x7F, and none
-				// of the four predefined tables does. veraPDF agrees, reading
-				// predefinedEncoding[code] in Encoding.getName with no carve
-				// out for DEL.
-				if glyphName == "" && namedTable != "" && !symbolic {
-					faults.add(uint32(code), "font %s on page %d: charCode %d is undefined in %s, so it maps to .notdef",
-						fontName, pageNum, code, namedTable)
 					continue
 				}
 				if glyphName == "" && code < 0x20 && !symbolic {

@@ -115,6 +115,98 @@ func standard14BuiltinEncodingApplies(ctx context.Context, doc *document.Documen
 	return len(document.ResolveFontDescriptor(ctx, doc, fontDict)) == 0
 }
 
+// standardLatinEncodingApplies reports whether a simple font names its
+// character codes through StandardEncoding, the built-in encoding of the
+// twelve Latin fonts of the standard 14 (ISO 32000-1, 9.6.2.2 and Annex D.2;
+// their metrics declare EncodingScheme AdobeStandardEncoding), where its own
+// /Encoding gives no table: it holds where [standard14BuiltinEncodingApplies]
+// does, for a font other than Symbol and ZapfDingbats, whose built-in
+// encodings are their own (EncodingScheme FontSpecific). See
+// [checkUnembeddedNotdef].
+func standardLatinEncodingApplies(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) bool {
+	if !standard14BuiltinEncodingApplies(ctx, doc, fontDict) || isZapfDingbatsByName(ctx, doc, fontDict) {
+		return false
+	}
+	baseFont, _ := document.ResolveName(ctx, doc, fontDict["BaseFont"])
+	return baseFont != "Symbol"
+}
+
+// checkUnembeddedNotdef records in faults the codes of usage that a simple
+// font, subtype Type1, MMType1 or TrueType, that embeds no program shows as
+// .notdef: the codes whose glyph name is .notdef as veraPDF names it (ISO
+// 19005-2, 6.2.11.8 names the glyph a code selects, ISO 32000-1, 9.6.6.1).
+//
+// With no program to consult, the encoding alone names a glyph. A
+// /Differences entry names its code. Otherwise veraPDF holds a table for
+// MacRomanEncoding, MacExpertEncoding and WinAnsiEncoding alone, read from the
+// /Encoding name or its /BaseEncoding ([type1EncodingTable]), which names a
+// code it leaves undefined .notdef ([type1UndefinedCode]); any other encoding
+// leaves a code unnamed, and an unnamed code references no .notdef, but code 0
+// of a TrueType font (GFGlyph). A Type1 font of the standard 14 whose own
+// encoding gives no table reads StandardEncoding from its metrics instead
+// ([standardLatinEncodingApplies]; PDType1Font.calculateEncodingMapping keeps
+// the /Differences). A symbolic TrueType font's encoding is ignored
+// (GFGlyph), and a Type1 font's symbolic flag plays no part.
+//
+// Measured with veraPDF 1.30 at PDF/A-2b, PDF/A-4 and PDF/UA-1, the font
+// embedding no program, where ISO 19005-2, 6.2.11.8 t1 and its counterparts
+// fail, in rendering mode 3 too:
+//
+//   - With no /Encoding: code 1 through Helvetica, Helvetica-Bold,
+//     Times-Roman, Courier and a Times-Roman whose /FontDescriptor is empty,
+//     and codes 0, 0x1F, 0x7F and 0x80 through Helvetica, fail, and 0xA1
+//     passes; code 1 passes through Symbol, ZapfDingbats, an unembedded
+//     Arial, a Helvetica with a /FontDescriptor, symbolic or not, and a
+//     TrueType Arial, whose code 0 fails.
+//   - Code 1 fails through Helvetica under /StandardEncoding or /Foo, codes
+//     0x80 and 0xE2 through Times-Roman under a /Differences-only dictionary,
+//     and 0x80 under one whose /BaseEncoding is /StandardEncoding. Code 1
+//     passes through Arial under /StandardEncoding or a /Differences-only
+//     dictionary, and so does 0x80 under the latter, as code 1 does through a
+//     Helvetica with a /FontDescriptor under either, through Symbol under a
+//     /Differences-only dictionary, and through a TrueType Arial under one.
+//   - Under /WinAnsiEncoding codes 0 and 1 fail, through a symbolic Type1
+//     Arial too, and 0x7F and 0x81, which it maps to bullet, pass; through a
+//     symbolic TrueType Arial code 1 passes and code 0 fails. Under
+//     /MacRomanEncoding 0x80 passes.
+func checkUnembeddedNotdef(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, subtype, fontName string, pageNum int, faults *glyphFaults, usage *fontUsageInfo) {
+	trueType := subtype == "TrueType"
+	table := type1EncodingTable(ctx, doc, fontDict)
+	differences := fontDifferencesNames(ctx, doc, fontDict)
+	if trueType && isSymbolicFont(ctx, doc, document.ResolveFontDescriptor(ctx, doc, fontDict)) {
+		table, differences = "", nil
+	}
+	if table == "" && !trueType && standardLatinEncodingApplies(ctx, doc, fontDict) {
+		table = "StandardEncoding"
+	}
+	for _, code := range sortedByteKeys(usage.charCodes) {
+		if name, named := differences[code]; named {
+			if name == ".notdef" {
+				faults.add(uint32(code), "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
+			}
+			continue
+		}
+		switch {
+		case table != "" && encodingUndefinedCode(table, code):
+			faults.add(uint32(code), "font %s on page %d: charCode %d is undefined in %s, so it maps to .notdef",
+				fontName, pageNum, code, table)
+		case table == "" && trueType && code == 0:
+			faults.add(uint32(code), "font %s on page %d: charCode 0 names no glyph, so it maps to .notdef", fontName, pageNum)
+		}
+	}
+}
+
+// encodingUndefinedCode reports whether the predefined encoding table, one
+// veraPDF holds ([type1UndefinedCode]) or StandardEncoding, leaves code
+// undefined (ISO 32000-1, Annex D.2).
+func encodingUndefinedCode(table string, code byte) bool {
+	if table != "StandardEncoding" {
+		return type1UndefinedCode(table, code)
+	}
+	_, defined := predefinedEncodingNames(table)[code]
+	return !defined
+}
+
 // fontNamesUnencodedCodes reports whether a simple font can name a character
 // code its /Encoding leaves alone.
 //
@@ -2320,31 +2412,4 @@ func isPUAHex(token string) bool {
 	return (val >= 0xE000 && val <= 0xF8FF) || // BMP PUA
 		(val >= 0xF0000 && val <= 0xFFFFF) || // Supplementary PUA-A
 		(val >= 0x100000 && val <= 0x10FFFD) // Supplementary PUA-B
-}
-
-// namedEncodingTable returns the predefined encoding a simple font declares,
-// either as a direct /Encoding name or as the /BaseEncoding of an encoding
-// dictionary, and an empty string when the font declares none. Per
-// ISO 32000-1, 9.6.6.1 a named encoding replaces the font's built-in one, so a
-// code that table leaves undefined selects no glyph.
-func namedEncodingTable(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) string {
-	encObj, ok := fontDict["Encoding"]
-	if !ok {
-		return ""
-	}
-	if encName, err := document.ResolveName(ctx, doc, encObj); err == nil && encName != "" {
-		if predefinedEncodingNames(string(encName)) != nil {
-			return string(encName)
-		}
-		return ""
-	}
-	encDict, err := document.ResolveDict(ctx, doc, encObj)
-	if err != nil || encDict == nil {
-		return ""
-	}
-	baseName, err := document.ResolveName(ctx, doc, encDict["BaseEncoding"])
-	if err != nil || baseName == "" || predefinedEncodingNames(string(baseName)) == nil {
-		return ""
-	}
-	return string(baseName)
 }
