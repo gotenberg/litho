@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"unicode/utf16"
+	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -42,6 +43,9 @@ type typedValue struct {
 	// whole reports that the accessor walks the value again, its keys and
 	// entries at every depth, rather than judging it alone.
 	whole bool
+	// unicodeName reports that the accessor reads the value, a name, as a
+	// CosUnicodeName, which the UTF-8 rule judges too ([checkUTF8Names]).
+	unicodeName bool
 	// where names the accessor in the context of a violation.
 	where string
 }
@@ -269,8 +273,8 @@ func structureValues(ctx context.Context, vctx *validationCtx, catalogSite prope
 				continue
 			}
 			values = append(values,
-				typedValue{value: key, where: "structure tree /RoleMap key"},
-				typedValue{value: target, where: "structure tree /RoleMap value"})
+				typedValue{value: key, unicodeName: true, where: "structure tree /RoleMap key"},
+				typedValue{value: target, unicodeName: true, where: "structure tree /RoleMap value"})
 		}
 	}
 
@@ -434,6 +438,7 @@ func (w *structValueWalk) element(ctx context.Context, site propertyListSite, ra
 	}
 	if v, ok := entryValue(ctx, w.doc, site, elem, "S", "structure element /S"); ok {
 		if _, isName := v.value.(ast.PdfName); isName {
+			v.unicodeName = true
 			w.values = append(w.values, v)
 		}
 	}
@@ -575,14 +580,39 @@ func streamFilterLimits(ctx context.Context, doc *document.Document, obj ast.Pdf
 	return results
 }
 
-// resourceNameLimits judges against the name length limit the names veraPDF
-// reads again from the resource dictionary res, once for each time it reaches
-// it (GFPDResources.getResourcesNames): the /BaseFont of every font of /Font
-// that PDFontFactory builds, a dictionary whose /Subtype is Type1, MMType1,
-// TrueType, Type3 or Type0, whatever the content draws with it, and the
-// colorant names of every Separation and DeviceN colour space of /ColorSpace
-// (ISO 32000-1, 8.6.6.4 and 8.6.6.5), each read with the bytes it is written
-// with. where names the resources in the context of a violation.
+// nameNotUTF8 returns the violation of the rule that a font name, a colorant
+// name or a structure type name be valid UTF-8, ISO 19005-2/3, 6.1.8 t1 and
+// ISO 19005-4, 6.1.7 t1, for a name veraPDF reads as a CosUnicodeName, or nil
+// when its bytes are valid UTF-8 or the profile states no such rule (ISO
+// 19005-1 does not).
+//
+// name holds the bytes the name stands for: the lexer already expanded its #XX
+// escapes (ISO 32000-1, 7.3.5), and the rule judges those bytes. Expanding them
+// a second time misread a name whose bytes spell an escape: /Foo#23C3 stands
+// for the valid "Foo#C3", and read as the invalid "Foo\xC3". veraPDF 1.30
+// passes ISO 19005-2, 6.1.8 t1 and ISO 19005-4, 6.1.7 t1 on it and fails
+// /Foo#C3.
+func nameNotUTF8(name ast.PdfName, where, profile string) []Violation {
+	rule := utf8NameRule(profile)
+	if utf8.ValidString(string(name)) || rule.Specification == "" {
+		return nil
+	}
+	return []Violation{{
+		Rule:    rule,
+		Context: fmt.Sprintf("%s: name %q is not valid UTF-8", where, name),
+	}}
+}
+
+// resourceNameLimits judges the names veraPDF reads again from the resource
+// dictionary res, once for each time it reaches it
+// (GFPDResources.getResourcesNames), against the name length limit and, each
+// being a CosUnicodeName, against the UTF-8 rule ([nameNotUTF8]): the
+// /BaseFont of every font of /Font that PDFontFactory builds, a dictionary
+// whose /Subtype is Type1, MMType1, TrueType, Type3 or Type0, whatever the
+// content draws with it, and the colorant names of every Separation and
+// DeviceN colour space of /ColorSpace (ISO 32000-1, 8.6.6.4 and 8.6.6.5), each
+// read with the bytes it is written with. where names the resources in the
+// context of a violation.
 //
 // veraPDF reaches the resources of every page, inherited from the page tree
 // (ISO 32000-1, Table 30), and the own resources of every content stream it
@@ -594,8 +624,24 @@ func streamFilterLimits(ctx context.Context, doc *document.Document, obj ast.Pdf
 // each page when two pages write the resources directly or inherit them
 // from a node of the page tree, and for each glyph description of a Type3
 // font whose own /Resources name the font.
+//
+// Measured with veraPDF 1.30 at PDF/A-2b and PDF/A-4 on a colorant name that
+// is not valid UTF-8, /Bad#E9: a Separation of the page's /ColorSpace that no
+// operator selects fails ISO 19005-2, 6.1.8 t1 and ISO 19005-4, 6.1.7 t1 once,
+// twice when two entries hold it, when two pages write their resources
+// directly or inherit them from the page tree, and once more for the resources
+// of a form the page draws, of a painted tiling pattern, of an annotation's
+// appearance stream and of a Type 3 glyph description, each once for a form
+// drawn twice or two forms sharing one indirect /Resources; a /BaseFont that
+// is not valid UTF-8 fails them once for each such dictionary whose /Font
+// holds the font, whether or not the content shows it. A DeviceN's /Colorants
+// dictionary is not read here.
 func resourceNameLimits(ctx context.Context, doc *document.Document, res ast.PdfDict, where, profile string) []Violation {
 	var results []Violation
+	judge := func(name ast.PdfName, at string) {
+		results = append(results, nameTooLong(len(name), at, profile)...)
+		results = append(results, nameNotUTF8(name, at, profile)...)
+	}
 	fonts, _ := document.ResolveDict(ctx, doc, res["Font"]) // Best-effort: an unreadable /Font names no font.
 	for _, key := range slices.Sorted(maps.Keys(fonts)) {
 		font, err := document.ResolveDict(ctx, doc, fonts[key])
@@ -606,7 +652,7 @@ func resourceNameLimits(ctx context.Context, doc *document.Document, res ast.Pdf
 			continue
 		}
 		if name, err := document.ResolveName(ctx, doc, font["BaseFont"]); err == nil {
-			results = append(results, nameTooLong(len(name), where+" /Font /"+string(key)+" /BaseFont, read again", profile)...)
+			judge(name, where+" /Font /"+string(key)+" /BaseFont, read again")
 		}
 	}
 	spaces, _ := document.ResolveDict(ctx, doc, res["ColorSpace"]) // Best-effort: an unreadable /ColorSpace names no space.
@@ -619,13 +665,13 @@ func resourceNameLimits(ctx context.Context, doc *document.Document, res ast.Pdf
 		switch family, _ := document.ResolveName(ctx, doc, space[0]); family {
 		case "Separation":
 			if name, err := document.ResolveName(ctx, doc, space[1]); err == nil {
-				results = append(results, nameTooLong(len(name), at, profile)...)
+				judge(name, at)
 			}
 		case "DeviceN":
 			names, _ := document.ResolveArray(ctx, doc, space[1]) // Best-effort: an unreadable array names no colorant.
 			for _, obj := range names {
 				if name, err := document.ResolveName(ctx, doc, obj); err == nil {
-					results = append(results, nameTooLong(len(name), at, profile)...)
+					judge(name, at)
 				}
 			}
 		}
@@ -644,16 +690,16 @@ func resourceNameLimits(ctx context.Context, doc *document.Document, res ast.Pdf
 // Separation, and every DeviceN within that limit, is judged whole.
 const maxColorantNamesRead = maxDeviceN2
 
-// colorantNameReads judges against the name length limit the colorant names
-// veraPDF reads again at every link [colorLinkWalk] follows to a Separation
-// or a DeviceN colour space, as the colorant name of its PDSeparation and the
-// colorant names of its PDDeviceN (veraPDF-validation 1.30,
-// GFPDSeparation.getColorantName and GFPDDeviceN.getColorantNames), each a
-// CosUnicodeName of its own: a colour space written directly wherever a link
-// reaches it, an indirect one once for the whole document, and the
-// Separations of a DeviceN /Colorants dictionary as the links reach them.
-// Each name counts the bytes it is written with, as the object sweep counts
-// them, whether written directly or as an indirect object.
+// colorantNameReads judges the colorant names veraPDF reads again at every
+// link [colorLinkWalk] follows to a Separation or a DeviceN colour space, as
+// the colorant name of its PDSeparation and the colorant names of its
+// PDDeviceN (veraPDF-validation 1.30, GFPDSeparation.getColorantName and
+// GFPDDeviceN.getColorantNames), each a CosUnicodeName of its own, against
+// the name length limit and the UTF-8 rule ([nameNotUTF8]): a colour space
+// written directly wherever a link reaches it, an indirect one once for the
+// whole document, and the Separations of a DeviceN /Colorants dictionary as
+// the links reach them. Each name counts the bytes it is written with, as the
+// object sweep counts them, whether written directly or as an indirect object.
 //
 // Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b, a colorant name of 130
 // bytes fails ISO 19005-1, 6.1.12 t4 and ISO 19005-2, 6.1.13 t4 once more for
@@ -664,9 +710,20 @@ const maxColorantNamesRead = maxDeviceN2
 // painted twice and for each sh painting a direct shading; and not for a cs
 // past the d1 of a Type 3 glyph.
 //
+// Measured with veraPDF 1.30 at PDF/A-2b and PDF/A-4 on a colorant name that
+// is not valid UTF-8, /Bad#E9, beside the one read of the page's resources
+// ([resourceNameLimits]): a direct Separation that cs selects fails ISO
+// 19005-2, 6.1.8 t1 and ISO 19005-4, 6.1.7 t1 once more, then once more for
+// each scn, f, S after SCN, B, and text shown in rendering mode 0 reaching it,
+// an indirect one once more for all of them, and a direct /Indexed space over
+// it once more for each of cs, scn and f; an image in it painted twice once
+// more, and a direct shading in it once more for each sh; a direct DeviceN
+// naming two such colorants twice more for each link, and a /Colorants
+// Separation naming one of them once more.
+//
 // failures remembers, by the colour space array, the failures one link to it
-// adds, at most [maxColorantNamesRead], so a link costs no more than the
-// failures it adds.
+// adds, at most [maxColorantNamesRead] for each rule, so a link costs no more
+// than the failures it adds.
 type colorantNameReads struct {
 	profile  string
 	failures map[*ast.PdfObject][]Violation
@@ -680,44 +737,55 @@ func newColorantNameReads(profile string) *colorantNameReads {
 // judge returns the failures of the colorant names of n, a Separation or a
 // DeviceN node, read again at one link.
 func (r *colorantNameReads) judge(ctx context.Context, doc *document.Document, n colorNode) []Violation {
-	if len(n.arr) < 2 || nameLengthRule(r.profile).Specification == "" {
+	if len(n.arr) < 2 || (nameLengthRule(r.profile).Specification == "" && utf8NameRule(r.profile).Specification == "") {
 		return nil
 	}
 	key := &n.arr[0]
 	failures, ok := r.failures[key]
 	if !ok {
 		where := n.kind + " colorant name, read again at each link to its colour space"
-		for _, length := range longColorantNames(ctx, doc, n) {
+		long, invalid := colorantNameFaults(ctx, doc, n)
+		for _, length := range long {
 			failures = append(failures, nameTooLong(length, where, r.profile)...)
+		}
+		for _, name := range invalid {
+			failures = append(failures, nameNotUTF8(name, where, r.profile)...)
 		}
 		r.failures[key] = failures
 	}
 	return failures
 }
 
-// longColorantNames returns the lengths of the colorant names of n past the
-// name length limit, the first [maxColorantNamesRead] of them: the name a
-// Separation array gives, or each name of the array a DeviceN array gives
-// (ISO 32000-1, 8.6.6.4 and 8.6.6.5).
-func longColorantNames(ctx context.Context, doc *document.Document, n colorNode) []int {
+// colorantNameFaults returns, of the colorant names of n, the lengths of those
+// past the name length limit and the names that are not valid UTF-8, the
+// first [maxColorantNamesRead] of each: the name a Separation array gives, or
+// each name of the array a DeviceN array gives (ISO 32000-1, 8.6.6.4 and
+// 8.6.6.5).
+func colorantNameFaults(ctx context.Context, doc *document.Document, n colorNode) (long []int, invalid []ast.PdfName) {
 	names := []ast.PdfObject{n.arr[1]}
 	if n.kind == "DeviceN" {
 		arr, err := document.ResolveArray(ctx, doc, n.arr[1])
 		if err != nil {
-			return nil
+			return nil, nil
 		}
 		names = arr
 	}
-	var lengths []int
 	for _, obj := range names {
-		if len(lengths) == maxColorantNamesRead {
+		if len(long) == maxColorantNamesRead && len(invalid) == maxColorantNamesRead {
 			break
 		}
-		if name, ok := resolveNameObject(ctx, doc, obj); ok && len(name) > maxNameBytes {
-			lengths = append(lengths, len(name))
+		name, ok := resolveNameObject(ctx, doc, obj)
+		if !ok {
+			continue
+		}
+		if len(name) > maxNameBytes && len(long) < maxColorantNamesRead {
+			long = append(long, len(name))
+		}
+		if !utf8.ValidString(string(name)) && len(invalid) < maxColorantNamesRead {
+			invalid = append(invalid, name)
 		}
 	}
-	return lengths
+	return long, invalid
 }
 
 // operatorNameLimits judges against the name length limit the names veraPDF

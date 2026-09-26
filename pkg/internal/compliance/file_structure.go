@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"unicode/utf8"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -58,7 +57,7 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 		results = append(results, checkSignatureReferences(ctx, doc, catalog, profile)...)
 	}
 	if part >= 2 {
-		results = append(results, checkUTF8Names(ctx, doc, catalog, profile)...)
+		results = append(results, checkUTF8Names(profile, typed)...)
 	}
 	// ISO 19005-4, 6.1.3 t4 and t5 are stated once, by checkInfoDictPart4 in
 	// document.go.
@@ -1279,124 +1278,46 @@ func utf8NameRule(profile string) Rule {
 // checkUTF8Names validates §6.1.7 (PDF/A-4) / §6.1.8 (PDF/A-2/3): font names,
 // colorant names in Separation/DeviceN colour spaces, and structure type names
 // must be valid UTF-8 once their #XX escapes are expanded, which the lexer
-// does (see [checkNameUTF8]).
-func checkUTF8Names(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
-	var results []Violation
-	seen := make(map[string]bool) // Avoid duplicate reports for the same name.
-	rule := utf8NameRule(profile)
-
-	pages := collectPageObjects(ctx, doc, catalog)
-	for i := range pages {
-		if ctx.Err() != nil {
-			return results
-		}
-		res := pages[i].effectiveResources(ctx, doc)
-		if res == nil {
-			continue
-		}
-
-		// Font names: check /BaseFont on each font.
-		fontDict, err := document.ResolveDict(ctx, doc, res["Font"])
-		if err == nil && fontDict != nil {
-			// Sorted, like the RoleMap walk below: a page naming several fonts
-			// with invalid names reports one violation each, and ranging the
-			// resource dictionary ordered them randomly between runs.
-			for _, fontName := range sortedNames(fontDict) {
-				fontObj := fontDict[fontName]
-				fd, err := document.ResolveDict(ctx, doc, fontObj)
-				if err != nil || fd == nil {
-					continue
-				}
-				baseFontName, _ := document.ResolveName(ctx, doc, fd["BaseFont"])
-				if baseFontName != "" {
-					checkNameUTF8(string(baseFontName), "font name", rule, seen, &results)
-				}
-			}
-		}
-
-		// Colorant names in Separation/DeviceN colour spaces.
-		csDict, err := document.ResolveDict(ctx, doc, res["ColorSpace"])
-		if err == nil && csDict != nil {
-			for _, csName := range sortedNames(csDict) {
-				csObj := csDict[csName]
-				arr, err := document.ResolveArray(ctx, doc, csObj)
-				if err != nil || len(arr) < 2 {
-					continue
-				}
-				csType, _ := document.ResolveName(ctx, doc, arr[0])
-				switch string(csType) {
-				case "Separation":
-					if len(arr) >= 2 {
-						cName, _ := document.ResolveName(ctx, doc, arr[1])
-						if cName != "" {
-							checkNameUTF8(string(cName), "Separation colorant", rule, seen, &results)
-						}
-					}
-				case "DeviceN":
-					if len(arr) >= 2 {
-						names, _ := document.ResolveArray(ctx, doc, arr[1])
-						for _, nameObj := range names {
-							cName, _ := document.ResolveName(ctx, doc, nameObj)
-							if cName != "" {
-								checkNameUTF8(string(cName), "DeviceN colorant", rule, seen, &results)
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Structure type names.
-	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
-	if err == nil && treeRoot != nil {
-		checkStructureTypeUTF8(ctx, doc, treeRoot, rule, seen, &results)
-
-		// RoleMap names.
-		roleMap, err := document.ResolveDict(ctx, doc, treeRoot["RoleMap"])
-		if err == nil && roleMap != nil {
-			for _, srcName := range sortedNames(roleMap) {
-				dstObj := roleMap[srcName]
-				checkNameUTF8(string(srcName), "RoleMap source", rule, seen, &results)
-				dstName, _ := document.ResolveName(ctx, doc, dstObj)
-				if dstName != "" {
-					checkNameUTF8(string(dstName), "RoleMap target", rule, seen, &results)
-				}
-			}
-		}
-	}
-
-	return results
-}
-
-// checkStructureTypeUTF8 recursively walks the structure tree and validates
-// that each element's /S type name is valid UTF-8.
-func checkStructureTypeUTF8(ctx context.Context, doc *document.Document, root ast.PdfDict, rule Rule, seen map[string]bool, results *[]Violation) {
-	walkStructureElements(ctx, doc, root, func(elem ast.PdfDict, _ string) {
-		typeName, _ := document.ResolveName(ctx, doc, elem["S"])
-		if typeName != "" {
-			checkNameUTF8(string(typeName), "structure type", rule, seen, results)
-		}
-	})
-}
-
-// checkNameUTF8 validates that a PDF name is a valid UTF-8 string, and reports
-// a violation if not.
+// does (see [nameNotUTF8]).
 //
-// name holds the bytes the name stands for: the lexer already expanded its #XX
-// escapes (ISO 32000-1, 7.3.5), and the rule judges those bytes. Expanding them
-// a second time misread a name whose bytes spell an escape: /Foo#23C3 stands
-// for the valid "Foo#C3", and read as the invalid "Foo\xC3". veraPDF 1.30
-// passes ISO 19005-2, 6.1.8 t1 and ISO 19005-4, 6.1.7 t1 on it and fails
-// /Foo#C3.
-func checkNameUTF8(name, context string, rule Rule, seen map[string]bool, results *[]Violation) {
-	if seen[name] {
-		return
+// veraPDF states the rule on a CosUnicodeName, a name its model reads again
+// through a typed object, which has no identity of its own and is judged at
+// every read (see [typedValue]). This judges the structure type names and the
+// /RoleMap names of typed ([typedValues]): the /S of every structure element
+// veraPDF reaches and every key of the /RoleMap whose value is a name, with
+// that value. The font and colorant names of every resource dictionary veraPDF
+// reaches are judged where it reaches them ([resourceNameLimits]), and the
+// colorant names of every link to a Separation or DeviceN colour space where
+// the link is followed ([colorantNameReads]). A font's /BaseFont read through
+// the font itself (GFPDFont.getBaseFont) never fails: veraPDF decodes the
+// name to a string and encodes it again as UTF-8.
+//
+// Measured with veraPDF 1.30 at PDF/A-2b and PDF/A-4 on names that are not
+// valid UTF-8: two structure elements whose /S is /Bad#E9 fail ISO 19005-2,
+// 6.1.8 t1 and ISO 19005-4, 6.1.7 t1 twice, and a /RoleMap mapping /Bad#E9 to
+// /P and /Foo to /Worse#E8 twice.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-2b__veraPDF_test_suite_6-1-8-t01-fail-a.pdf and fail-b,
+//     and PDF_A-4__veraPDF_test_suite_6-1-7-t01-fail-a.pdf, fail-b and
+//     fail-d: litho stated the rule once each, and now 7, 4, 7, 4 and 2
+//     times, veraPDF's counts, the colorant names a direct DeviceN or
+//     Separation reads again at every cs, scn and f.
+//   - pdfjs bug1734802.pdf: litho stated the rule once and now 5 times, as
+//     veraPDF does.
+//   - litho a4syntax_4.pdf: 2 at PDF/A-2b, PDF/A-2u and PDF/A-4, as veraPDF
+//     states it, where litho stated 1.
+//   - pdfjs issue10004.pdf: the one other count that moved, from 3 to 8,
+//     which veraPDF 1.30 cannot check, as it cannot parse the file.
+//   - All corpora, at PDF/A-2b and PDF/A-2u, and at their own profile for
+//     the verapdf files: no other count moved.
+func checkUTF8Names(profile string, typed []typedValue) []Violation {
+	var results []Violation
+	for _, v := range typed {
+		if name, ok := v.value.(ast.PdfName); ok && v.unicodeName {
+			results = append(results, nameNotUTF8(name, v.where, profile)...)
+		}
 	}
-	seen[name] = true
-
-	if !utf8.ValidString(name) {
-		*results = append(*results, failf(rule,
-			"%s %q is not valid UTF-8", context, name)...)
-	}
+	return results
 }
