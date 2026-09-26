@@ -43,13 +43,9 @@ func Emit(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Documen
 		return nil, fmt.Errorf("tagging: root element must have role Document")
 	}
 
-	catalog, err := document.ResolveCatalog(ctx, doc)
+	pages, err := stagedPages(ctx, alloc, doc)
 	if err != nil {
-		return nil, fmt.Errorf("tagging: resolving catalog: %w", err)
-	}
-	pages, err := document.ResolvePages(ctx, doc, catalog)
-	if err != nil {
-		return nil, fmt.Errorf("tagging: resolving pages: %w", err)
+		return nil, err
 	}
 
 	e := &emitter{alloc: alloc, doc: doc, pages: pages, perPage: make(map[int][]leafEntry)}

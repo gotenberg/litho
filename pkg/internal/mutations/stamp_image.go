@@ -53,12 +53,7 @@ func StampImage(
 	}); err != nil {
 		return err
 	}
-	if len(pageNums) == 0 {
-		pageNums = make([]int, len(pages))
-		for i := range pages {
-			pageNums[i] = i + 1
-		}
-	}
+	pages, pageNums = pagesToEdit(ctx, alloc, doc, pages, pageNums)
 
 	var (
 		imgStream ast.PdfStream

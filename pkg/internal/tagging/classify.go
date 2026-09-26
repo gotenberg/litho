@@ -68,13 +68,9 @@ func AutoTag(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docu
 // string) only makes AutoTag defer, never corrupt. It scans the parsed page
 // content [pageContentBytes] so it agrees with the bytes Emit would rewrite.
 func hasMarkedContent(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (bool, error) {
-	catalog, err := document.ResolveCatalog(ctx, doc)
+	pages, err := stagedPages(ctx, alloc, doc)
 	if err != nil {
-		return false, fmt.Errorf("tagging: resolving catalog: %w", err)
-	}
-	pages, err := document.ResolvePages(ctx, doc, catalog)
-	if err != nil {
-		return false, fmt.Errorf("tagging: resolving pages: %w", err)
+		return false, err
 	}
 	for pi := range pages {
 		if err := ctx.Err(); err != nil {
@@ -186,13 +182,9 @@ func alreadyTagged(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // element (graphics, and text the heuristic misses) is marked as an artifact by
 // [Emit] so the output stays fully marked.
 func Classify(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (*Element, error) {
-	catalog, err := document.ResolveCatalog(ctx, doc)
+	pages, err := stagedPages(ctx, alloc, doc)
 	if err != nil {
-		return nil, fmt.Errorf("tagging: resolving catalog: %w", err)
-	}
-	pages, err := document.ResolvePages(ctx, doc, catalog)
-	if err != nil {
-		return nil, fmt.Errorf("tagging: resolving pages: %w", err)
+		return nil, err
 	}
 
 	root := &Element{Role: RoleDocument}

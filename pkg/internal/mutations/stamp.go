@@ -43,7 +43,8 @@ type TextStampOptions struct {
 
 // StampText draws a single line of text on the given 1-based page numbers.
 // See [TextStampOptions] for the available parameters. If pageNums is
-// empty, the stamp is applied to every page.
+// empty, the stamp is applied to every page the document holds as alloc
+// stages it (see [pagesToEdit]).
 func StampText(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -59,12 +60,7 @@ func StampText(
 	}); err != nil {
 		return err
 	}
-	if len(pageNums) == 0 {
-		pageNums = make([]int, len(pages))
-		for i := range pages {
-			pageNums[i] = i + 1
-		}
-	}
+	pages, pageNums = pagesToEdit(ctx, alloc, doc, pages, pageNums)
 
 	fontSize := opts.FontSize
 	if fontSize == 0 {

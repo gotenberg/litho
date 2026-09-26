@@ -2,11 +2,42 @@ package tagging
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/mutations"
 )
+
+// stagedPages returns the pages tagging reads and marks: the document's pages
+// as the edits queued in alloc leave its page tree (see
+// [mutations.StagedPages]).
+//
+// Tagging read the document's page tree alone, so after a deletion it marked
+// up the deleted page and gave its structure elements a /Pg naming it (ISO
+// 32000-1, 14.7.4.3). That reference is live, and the rewrite followed it: the
+// output carried the deleted page's content while reporting one page fewer. A
+// page an insertion staged was left untagged the same way.
+//
+// # Corpus evidence
+//
+//   - All corpora: of 52 files with two pages or more sampled across the
+//     seven, AutoTag after deleting page 1 wrote the deleted page back into
+//     28, reachable from nothing but the structure tree, and into none now.
+//     The PDF/UA-1 remediation of all 116 files sampled writes the same bytes
+//     as before.
+func stagedPages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) ([]*document.Page, error) {
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		return nil, fmt.Errorf("tagging: resolving catalog: %w", err)
+	}
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil {
+		return nil, fmt.Errorf("tagging: resolving pages: %w", err)
+	}
+	return mutations.StagedPages(ctx, alloc, doc, pages), nil
+}
 
 // stagedObject resolves obj as [document.ResolveObject] does, preferring the
 // object alloc has queued at its number (see [stagedValue]).

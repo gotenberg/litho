@@ -26,7 +26,7 @@ func TestRotatePages_AppliesRotateField(t *testing.T) {
 	alloc := writer.NewObjAllocator(10)
 	pages := newTestPages(3, 4, 5)
 
-	if err := RotatePages(context.Background(), alloc, pages, 90, []int{1, 3}); err != nil {
+	if err := RotatePages(context.Background(), alloc, nil, pages, 90, []int{1, 3}); err != nil {
 		t.Fatalf("RotatePages: %v", err)
 	}
 
@@ -63,7 +63,7 @@ func TestRotatePages_OutOfBounds(t *testing.T) {
 
 	tests := []int{0, -1, 3, 100}
 	for _, p := range tests {
-		err := RotatePages(context.Background(), alloc, pages, 90, []int{p})
+		err := RotatePages(context.Background(), alloc, nil, pages, 90, []int{p})
 		if err == nil {
 			t.Errorf("page %d: expected out-of-bounds error", p)
 			continue
@@ -84,7 +84,7 @@ func TestRotatePages_PreservesExistingFields(t *testing.T) {
 		},
 	}
 
-	if err := RotatePages(context.Background(), alloc, []*document.Page{page}, 180, []int{1}); err != nil {
+	if err := RotatePages(context.Background(), alloc, nil, []*document.Page{page}, 180, []int{1}); err != nil {
 		t.Fatalf("RotatePages: %v", err)
 	}
 
@@ -106,7 +106,7 @@ func TestRotatePages_ContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := RotatePages(ctx, alloc, pages, 90, []int{1})
+	err := RotatePages(ctx, alloc, nil, pages, 90, []int{1})
 	if err == nil {
 		t.Fatal("expected cancellation error")
 	}
@@ -150,7 +150,7 @@ func TestRotatePages_EmptyPageListRotatesEveryPage(t *testing.T) {
 	alloc := writer.NewObjAllocator(10)
 	pages := newTestPages(3, 4, 5)
 
-	if err := RotatePages(context.Background(), alloc, pages, 90, nil); err != nil {
+	if err := RotatePages(context.Background(), alloc, nil, pages, 90, nil); err != nil {
 		t.Fatalf("RotatePages: %v", err)
 	}
 
@@ -177,7 +177,7 @@ func TestRotatePages_ZeroClearsRotation(t *testing.T) {
 	pages := newTestPages(3)
 	pages[0].Dict["Rotate"] = ast.PdfInt(90)
 
-	if err := RotatePages(context.Background(), alloc, pages, 0, nil); err != nil {
+	if err := RotatePages(context.Background(), alloc, nil, pages, 0, nil); err != nil {
 		t.Fatalf("RotatePages: %v", err)
 	}
 	dict, ok := alloc.Pending()[3].(ast.PdfDict)
@@ -217,7 +217,7 @@ func TestRotatePages_NormalisesAngle(t *testing.T) {
 	for _, c := range cases {
 		alloc := writer.NewObjAllocator(10)
 		pages := newTestPages(3)
-		if err := RotatePages(context.Background(), alloc, pages, c.angle, nil); err != nil {
+		if err := RotatePages(context.Background(), alloc, nil, pages, c.angle, nil); err != nil {
 			t.Fatalf("RotatePages(%d): %v", c.angle, err)
 		}
 		dict, ok := alloc.Pending()[3].(ast.PdfDict)
@@ -247,7 +247,7 @@ func TestRotatePages_InlinePageIsReported(t *testing.T) {
 	alloc := writer.NewObjAllocator(10)
 	pages := []*document.Page{{Dict: ast.PdfDict{"Type": ast.PdfName("Page")}}}
 
-	err := RotatePages(context.Background(), alloc, pages, 90, nil)
+	err := RotatePages(context.Background(), alloc, nil, pages, 90, nil)
 	if !errors.Is(err, ErrPageNotAddressable) {
 		t.Fatalf("RotatePages on an inline page = %v, want ErrPageNotAddressable", err)
 	}

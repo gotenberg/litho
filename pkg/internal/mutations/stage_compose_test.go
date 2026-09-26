@@ -82,7 +82,7 @@ func TestDeleteKeepsAnEarlierStagesPageEdits(t *testing.T) {
 
 	ctx, doc, pages, alloc := composeFixture(t)
 
-	if err := RotatePages(ctx, alloc, pages, 90, nil); err != nil {
+	if err := RotatePages(ctx, alloc, doc, pages, 90, nil); err != nil {
 		t.Fatalf("RotatePages: %v", err)
 	}
 	if err := DeletePages(ctx, alloc, doc, pages, []int{1}); err != nil {
@@ -121,7 +121,7 @@ func TestInsertKeepsAnEarlierStagesPageEdits(t *testing.T) {
 		t.Fatalf("ResolvePages (source): %v", err)
 	}
 
-	if err := RotatePages(ctx, alloc, pages, 180, nil); err != nil {
+	if err := RotatePages(ctx, alloc, doc, pages, 180, nil); err != nil {
 		t.Fatalf("RotatePages: %v", err)
 	}
 	if err := InsertPages(ctx, alloc, doc, pages, 0, src, srcPages, []int{1}); err != nil {
@@ -150,7 +150,7 @@ func TestRotateKeepsAnEarlierStagesPageEdits(t *testing.T) {
 	if err := DeletePages(ctx, alloc, doc, pages, []int{1}); err != nil {
 		t.Fatalf("DeletePages: %v", err)
 	}
-	if err := RotatePages(ctx, alloc, pages, 270, nil); err != nil {
+	if err := RotatePages(ctx, alloc, doc, pages, 270, nil); err != nil {
 		t.Fatalf("RotatePages: %v", err)
 	}
 

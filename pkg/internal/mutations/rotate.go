@@ -17,13 +17,11 @@ import (
 // Without this, rotating a whole document was a silent no-op: the CLI leaves
 // its page list empty when -pages is absent, the loop below ran zero times, and
 // litho reported success over a byte-identical file.
-func RotatePages(ctx context.Context, alloc *writer.ObjAllocator, pages []*document.Page, rotation int, pageNums []int) error {
-	if len(pageNums) == 0 {
-		pageNums = make([]int, len(pages))
-		for i := range pages {
-			pageNums[i] = i + 1
-		}
-	}
+//
+// Every page is every page the document holds as alloc stages it, so a page
+// an earlier insertion added is rotated too (see [pagesToEdit]).
+func RotatePages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pages []*document.Page, rotation int, pageNums []int) error {
+	pages, pageNums = pagesToEdit(ctx, alloc, doc, pages, pageNums)
 
 	// Fold the angle into the four values /Rotate is documented to take.
 	// ISO 32000-1, Table 30 only requires a multiple of 90, so 720 and -90 are

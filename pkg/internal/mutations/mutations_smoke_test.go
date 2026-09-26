@@ -183,7 +183,7 @@ func TestRotatePages_90(t *testing.T) {
 	catalog, _ := document.ResolveCatalog(ctx, doc)
 	pages, _ := document.ResolvePages(ctx, doc, catalog)
 
-	err := RotatePages(ctx, alloc, pages, 90, []int{1})
+	err := RotatePages(ctx, alloc, doc, pages, 90, []int{1})
 	if err != nil {
 		t.Fatalf("RotatePages: %v", err)
 	}

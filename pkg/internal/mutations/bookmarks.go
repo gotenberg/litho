@@ -195,37 +195,6 @@ func buildOutlineItems(alloc *writer.ObjAllocator, bookmarks []models.Bookmark, 
 	return refs
 }
 
-// BookmarksOnHeldPages returns bookmarks without those naming one of pages an
-// earlier deletion removed from the staged page tree, each dropped bookmark's
-// children taking its place. A bookmark generated from a deleted page's
-// heading would quote that page, and its destination is enough to write the
-// page into the output. The generator bounds the depth it recurses over.
-func BookmarksOnHeldPages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pages []*document.Page, bookmarks []models.Bookmark) []models.Bookmark {
-	staged, ok := stagedPageKids(ctx, alloc, doc)
-	if !ok {
-		return bookmarks
-	}
-	held := make(map[int]bool, len(staged))
-	for _, ref := range staged {
-		held[ref.ObjectNum] = true
-	}
-	var keep func([]models.Bookmark) []models.Bookmark
-	keep = func(in []models.Bookmark) []models.Bookmark {
-		out := make([]models.Bookmark, 0, len(in))
-		for _, b := range in {
-			children := keep(b.Children)
-			if b.PageNumber >= 1 && b.PageNumber <= len(pages) && !held[pages[b.PageNumber-1].Ref.ObjectNum] {
-				out = append(out, children...)
-				continue
-			}
-			b.Children = children
-			out = append(out, b)
-		}
-		return out
-	}
-	return keep(bookmarks)
-}
-
 // StagedBookmarks returns the outline an earlier stage queued as bookmarks,
 // numbering pages as pages does, and reports false when no stage queued one:
 // the caller then reads the document's own outline.

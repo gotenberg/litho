@@ -933,10 +933,12 @@ func (w *Writer) ClearMetadata() {
 	})
 }
 
-// RotatePages sets the /Rotate value for the given 1-based page numbers.
-// If no pages are specified, every page is rotated. Rotation must be a
-// multiple of 90 (0, 90, 180, 270). The mutation is queued and applied when
-// [Writer.WriteTo] is called.
+// RotatePages sets the /Rotate value for the given 1-based page numbers,
+// which name the Reader's pages (see [Writer]). If no pages are specified,
+// every page the Writer holds when the rotation is queued is rotated: pages
+// inserted on it before are included, pages deleted on it before are not.
+// Rotation must be a multiple of 90 (0, 90, 180, 270). The mutation is queued
+// and applied when [Writer.WriteTo] is called.
 func (w *Writer) RotatePages(rotation int, pages ...int) error {
 	if err := w.refuseAfterRemediation("RotatePages"); err != nil {
 		return err
@@ -950,7 +952,7 @@ func (w *Writer) RotatePages(rotation int, pages ...int) error {
 			if err != nil {
 				return fmt.Errorf("resolving pages: %w", err)
 			}
-			return mutations.RotatePages(ctx, alloc, resolvedPages, rotation, pages)
+			return mutations.RotatePages(ctx, alloc, doc, resolvedPages, rotation, pages)
 		},
 	})
 	return nil
@@ -961,9 +963,10 @@ func (w *Writer) RotatePages(rotation int, pages ...int) error {
 // [Writer.WriteTo] is called.
 //
 // Returns [ErrEmptyPageList] when no pages are given. This is the only page
-// operation that refuses an empty list: [Writer.RotatePages],
-// [Writer.InsertPages] and the three stamps all document an empty list as
-// every page, which deletion cannot mean because it would leave no document.
+// operation that refuses an empty list: [Writer.RotatePages] and the three
+// stamps document an empty list as every page the Writer holds, and
+// [Writer.InsertPages] as every page of its source, which deletion cannot mean
+// because it would leave no document.
 //
 // The pages named are the Reader's. A deletion queued after an
 // insertion keeps the inserted pages, and one queued after another deletion
@@ -1076,26 +1079,25 @@ const (
 //
 // The existing bookmarks are the outline an earlier edit on the Writer set,
 // when one did, and the Reader's otherwise. The headings are detected in the
-// Reader's pages, as [Reader.GenerateBookmarks] detects them: a page inserted,
-// or content stamped or redacted on the same Writer, is not read, and a page
-// deleted on it yields no bookmark.
+// pages the Writer holds when GenerateBookmarks is queued: a page inserted
+// before it is read, and a page deleted before it yields no bookmark. A page of
+// the Reader is read as [Reader.GenerateBookmarks] reads it, so content
+// stamped or redacted on it on the same Writer is not read.
 func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode BookmarkMergeMode) {
 	if w.refuseAfterRemediation("GenerateBookmarks") != nil {
 		return
 	}
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
-			generated, err := w.reader.GenerateBookmarks(ctx, opts)
-			if err != nil {
-				return fmt.Errorf("generating bookmarks: %w", err)
-			}
-			resolvedPages, err := w.reader.resolvePages(ctx)
+			readerPages, err := w.reader.resolvePages(ctx)
 			if err != nil {
 				return fmt.Errorf("resolving pages for bookmarks: %w", err)
 			}
-			// The headings come from the Reader's pages, so those of a page
-			// an earlier deletion removed go.
-			generated = mutations.BookmarksOnHeldPages(ctx, alloc, doc, resolvedPages, generated)
+			resolvedPages := mutations.StagedPages(ctx, alloc, doc, readerPages)
+			generated, err := w.stagedHeadings(ctx, alloc, doc, readerPages, resolvedPages, opts)
+			if err != nil {
+				return fmt.Errorf("generating bookmarks: %w", err)
+			}
 			if len(generated) == 0 {
 				return nil
 			}
@@ -1110,6 +1112,7 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 				existing, staged := mutations.StagedBookmarks(ctx, alloc, doc, resolvedPages)
 				if !staged {
 					existing, err = w.reader.Bookmarks(ctx)
+					existing = renumberBookmarks(existing, readerPages, resolvedPages)
 				}
 				if err == nil && len(existing) > 0 {
 					if mode == BookmarkPrepend {
@@ -1144,10 +1147,12 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 //
 // It tags the document as the edits queued before it leave it, as every edit
 // does. Queue it before a remediation, which then judges the tagged document:
-// after one it is refused with [ErrEditAfterRemediation]. It is also a no-op
-// when any page's content is already marked, since marking it again would nest
-// or cross the existing sequences, and that includes the /Artifact sequence a
-// stamp wraps its content in: queue it before a stamp to tag the document.
+// after one it is refused with [ErrEditAfterRemediation]. It tags the pages the
+// Writer holds when it is queued, a page inserted before it included and a
+// page deleted before it left out. It is also a no-op when any page's content
+// is already marked, since marking it again would nest or cross the existing
+// sequences, and that includes the /Artifact sequence a stamp wraps its content
+// in: queue it before a stamp to tag the document.
 func (w *Writer) AutoTag() {
 	if w.refuseAfterRemediation("AutoTag") != nil {
 		return
@@ -1287,10 +1292,12 @@ func (w *Writer) FlattenForm() {
 }
 
 // StampText overlays text (a watermark or stamp) on the specified
-// 1-based pages. If no pages are specified, the stamp is applied to all
-// pages. A diagonal, semi-transparent watermark is a [TextStamp] with a
-// Rotation and an Opacity below 1. Uses incremental update. The mutation
-// is queued and applied when [Writer.WriteTo] is called.
+// 1-based pages, which name the Reader's pages (see [Writer]). If no pages are
+// specified, the stamp is applied to every page the Writer holds when the
+// stamp is queued: pages inserted on it before are stamped, pages deleted on
+// it before are not. A diagonal, semi-transparent watermark is a [TextStamp]
+// with a Rotation and an Opacity below 1. Uses incremental update. The
+// mutation is queued and applied when [Writer.WriteTo] is called.
 //
 // The stamp is marked as an /Artifact, which ISO 32000-1, 14.8.2.2 names a
 // watermark to be and which keeps a tagged document conformant with
@@ -1324,10 +1331,11 @@ func (w *Writer) StampText(stamp TextStamp, pages ...int) error {
 	return nil
 }
 
-// StampImage overlays a JPEG or PNG image on the specified 1-based pages.
-// If no pages are specified, the stamp is applied to all pages. Uses
-// incremental update. The mutation is queued and applied when
-// [Writer.WriteTo] is called.
+// StampImage overlays a JPEG or PNG image on the specified 1-based pages,
+// which name the Reader's pages. If no pages are specified, the stamp is
+// applied to every page the Writer holds when it is queued, as
+// [Writer.StampText] describes. Uses incremental update. The mutation is
+// queued and applied when [Writer.WriteTo] is called.
 //
 // The stamp is marked as an /Artifact, so it does not cost a tagged document
 // its ISO 14289-1, 7.1 conformance.
@@ -1363,9 +1371,10 @@ func (w *Writer) StampImage(stamp ImageStamp, pages ...int) error {
 }
 
 // StampPDF overlays a page from another PDF document on the specified
-// 1-based pages. If no pages are specified, the stamp is applied to all
-// pages. Uses incremental update. The mutation is queued and applied when
-// [Writer.WriteTo] is called.
+// 1-based pages, which name the Reader's pages. If no pages are specified, the
+// stamp is applied to every page the Writer holds when it is queued, as
+// [Writer.StampText] describes. Uses incremental update. The mutation is
+// queued and applied when [Writer.WriteTo] is called.
 //
 // The stamp is marked as an /Artifact, so it does not cost a tagged document
 // its ISO 14289-1, 7.1 conformance, and any text it carries is omitted from

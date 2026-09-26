@@ -52,12 +52,7 @@ func StampPDF(
 	if len(opts.SourcePages) == 0 {
 		return fmt.Errorf("pdf stamp: source has no pages")
 	}
-	if len(pageNums) == 0 {
-		pageNums = make([]int, len(pages))
-		for i := range pages {
-			pageNums[i] = i + 1
-		}
-	}
+	pages, pageNums = pagesToEdit(ctx, alloc, doc, pages, pageNums)
 
 	pageIdx := opts.Page - 1
 	if opts.Page == 0 {
