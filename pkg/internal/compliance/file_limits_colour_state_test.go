@@ -62,14 +62,18 @@ func TestLimitsFollowTheColourStateDrawnStreamsInherit(t *testing.T) {
 		},
 		{
 			name: "g in a form a glyph paints past its d1",
-			objs: []string{page("<< /Font << /T3 5 0 R >> >>"), type3("6", "<< /XObject << /Fm0 7 0 R >> >>"),
-				exponentStream("", "10 0 0 0 10 10 d1 /Fm0 Do"), form(big)},
+			objs: []string{
+				page("<< /Font << /T3 5 0 R >> >>"), type3("6", "<< /XObject << /Fm0 7 0 R >> >>"),
+				exponentStream("", "10 0 0 0 10 10 d1 /Fm0 Do"), form(big),
+			},
 			content: type3Use,
 		},
 		{
 			name: "g in a glyph an uncoloured cell shows",
-			objs: []string{page("<< " + patternCS + "/Pattern << /P2 5 0 R >> >>"), tiling("2", "<< /Font << /T3 6 0 R >> >>", type3Use),
-				type3("7", "<< >>"), exponentStream("", "10 0 d0 "+big)},
+			objs: []string{
+				page("<< " + patternCS + "/Pattern << /P2 5 0 R >> >>"), tiling("2", "<< /Font << /T3 6 0 R >> >>", type3Use),
+				type3("7", "<< >>"), exponentStream("", "10 0 d0 "+big),
+			},
 			content: uncoloured,
 		},
 	} {

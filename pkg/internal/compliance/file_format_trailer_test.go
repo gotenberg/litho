@@ -73,48 +73,88 @@ func TestTrailerValuesJudgedAsVeraPDFReachesThem(t *testing.T) {
 		rule    Rule
 		want    int
 	}{
-		{"odd hex string in a direct /Info", withEntries(" /Info << /Producer <414> >>"),
-			models.PDFA1b, Rule_19005_1_6_1_6_t01, 2},
-		{"odd hex string in a direct /Info at 2b", withEntries(" /Info << /Producer <414> >>"),
-			models.PDFA2b, Rule_19005_2_6_1_6_t01, 2},
-		{"odd hex string in a direct /Info at 4", withEntries(" /Info << /Producer <414> >>"),
-			models.PDFA4, Rule_19005_4_6_1_5_t01, 2},
-		{"non-hex character in a direct /Info", withEntries(" /Info << /Producer <41G1> >>"),
-			models.PDFA2b, Rule_19005_2_6_1_6_t02, 2},
-		{"odd hex string in an array in a direct /Info", withEntries(" /Info << /Producer [<414>] >>"),
-			models.PDFA1b, Rule_19005_1_6_1_6_t01, 2},
-		{"odd hex string in a dictionary in a direct /Info", withEntries(" /Info << /Foo << /Bar <414> >> >>"),
-			models.PDFA2b, Rule_19005_2_6_1_6_t01, 2},
-		{"odd hex string in another trailer entry", withEntries(" /Foo <414>"),
-			models.PDFA1b, Rule_19005_1_6_1_6_t01, 1},
-		{"non-hex character in another trailer entry", withEntries(" /Foo <41G1>"),
-			models.PDFA2b, Rule_19005_2_6_1_6_t02, 1},
-		{"odd hex string in /ID", trailerDictPDF("<< /Size %d /Root 1 0 R /ID [<00112233445566778899AABBCCDDEEF> <00112233445566778899AABBCCDDEEFF>] >>"),
-			models.PDFA2b, Rule_19005_2_6_1_6_t01, 1},
-		{"non-hex character in /ID", trailerDictPDF("<< /Size %d /Root 1 0 R /ID [<00112233445566778899AABBCCDDEEFG> <00112233445566778899AABBCCDDEEFF>] >>"),
-			models.PDFA1b, Rule_19005_1_6_1_6_t02, 1},
-		{"integer out of range in a direct /Info", withEntries(" /Info << /Foo 2147483648 >>"),
-			models.PDFA1b, Rule_19005_1_6_1_12_t01, 2},
-		{"integer out of range in a direct /Info at 2b", withEntries(" /Info << /Foo 2147483648 >>"),
-			models.PDFA2b, Rule_19005_2_6_1_13_t01, 2},
-		{"real out of range in a direct /Info", withEntries(" /Info << /Foo 40000.5 >>"),
-			models.PDFA1b, Rule_19005_1_6_1_12_t02, 2},
-		{"long string in a direct /Info", withEntries(" /Info << /Producer (" + strings.Repeat("x", 70000) + ") >>"),
-			models.PDFA2b, Rule_19005_2_6_1_13_t03, 2},
-		{"long name key in a direct /Info", withEntries(" /Info << /" + strings.Repeat("K", 200) + " (x) >>"),
-			models.PDFA1b, Rule_19005_1_6_1_12_t04, 2},
-		{"long name key in the trailer", withEntries(" /" + strings.Repeat("K", 200) + " 1"),
-			models.PDFA2b, Rule_19005_2_6_1_13_t04, 1},
+		{
+			"odd hex string in a direct /Info", withEntries(" /Info << /Producer <414> >>"),
+			models.PDFA1b, Rule_19005_1_6_1_6_t01, 2,
+		},
+		{
+			"odd hex string in a direct /Info at 2b", withEntries(" /Info << /Producer <414> >>"),
+			models.PDFA2b, Rule_19005_2_6_1_6_t01, 2,
+		},
+		{
+			"odd hex string in a direct /Info at 4", withEntries(" /Info << /Producer <414> >>"),
+			models.PDFA4, Rule_19005_4_6_1_5_t01, 2,
+		},
+		{
+			"non-hex character in a direct /Info", withEntries(" /Info << /Producer <41G1> >>"),
+			models.PDFA2b, Rule_19005_2_6_1_6_t02, 2,
+		},
+		{
+			"odd hex string in an array in a direct /Info", withEntries(" /Info << /Producer [<414>] >>"),
+			models.PDFA1b, Rule_19005_1_6_1_6_t01, 2,
+		},
+		{
+			"odd hex string in a dictionary in a direct /Info", withEntries(" /Info << /Foo << /Bar <414> >> >>"),
+			models.PDFA2b, Rule_19005_2_6_1_6_t01, 2,
+		},
+		{
+			"odd hex string in another trailer entry", withEntries(" /Foo <414>"),
+			models.PDFA1b, Rule_19005_1_6_1_6_t01, 1,
+		},
+		{
+			"non-hex character in another trailer entry", withEntries(" /Foo <41G1>"),
+			models.PDFA2b, Rule_19005_2_6_1_6_t02, 1,
+		},
+		{
+			"odd hex string in /ID", trailerDictPDF("<< /Size %d /Root 1 0 R /ID [<00112233445566778899AABBCCDDEEF> <00112233445566778899AABBCCDDEEFF>] >>"),
+			models.PDFA2b, Rule_19005_2_6_1_6_t01, 1,
+		},
+		{
+			"non-hex character in /ID", trailerDictPDF("<< /Size %d /Root 1 0 R /ID [<00112233445566778899AABBCCDDEEFG> <00112233445566778899AABBCCDDEEFF>] >>"),
+			models.PDFA1b, Rule_19005_1_6_1_6_t02, 1,
+		},
+		{
+			"integer out of range in a direct /Info", withEntries(" /Info << /Foo 2147483648 >>"),
+			models.PDFA1b, Rule_19005_1_6_1_12_t01, 2,
+		},
+		{
+			"integer out of range in a direct /Info at 2b", withEntries(" /Info << /Foo 2147483648 >>"),
+			models.PDFA2b, Rule_19005_2_6_1_13_t01, 2,
+		},
+		{
+			"real out of range in a direct /Info", withEntries(" /Info << /Foo 40000.5 >>"),
+			models.PDFA1b, Rule_19005_1_6_1_12_t02, 2,
+		},
+		{
+			"long string in a direct /Info", withEntries(" /Info << /Producer (" + strings.Repeat("x", 70000) + ") >>"),
+			models.PDFA2b, Rule_19005_2_6_1_13_t03, 2,
+		},
+		{
+			"long name key in a direct /Info", withEntries(" /Info << /" + strings.Repeat("K", 200) + " (x) >>"),
+			models.PDFA1b, Rule_19005_1_6_1_12_t04, 2,
+		},
+		{
+			"long name key in the trailer", withEntries(" /" + strings.Repeat("K", 200) + " 1"),
+			models.PDFA2b, Rule_19005_2_6_1_13_t04, 1,
+		},
 		// Only the trailer of the section startxref designates counts, and
 		// nothing an older one holds, carried forward or not.
-		{"odd hex string in the newest trailer", updatedTrailerPDF("", " /Foo <414>"),
-			models.PDFA2b, Rule_19005_2_6_1_6_t01, 1},
-		{"odd hex string in an older trailer", updatedTrailerPDF(" /Foo <414>", ""),
-			models.PDFA2b, Rule_19005_2_6_1_6_t01, 0},
-		{"odd hex string in an older trailer's direct /Info", updatedTrailerPDF(" /Info << /Producer <414> >>", ""),
-			models.PDFA2b, Rule_19005_2_6_1_6_t01, 0},
-		{"integer out of range in an older trailer's direct /Info", updatedTrailerPDF(" /Info << /Foo 2147483648 >>", ""),
-			models.PDFA2b, Rule_19005_2_6_1_13_t01, 0},
+		{
+			"odd hex string in the newest trailer", updatedTrailerPDF("", " /Foo <414>"),
+			models.PDFA2b, Rule_19005_2_6_1_6_t01, 1,
+		},
+		{
+			"odd hex string in an older trailer", updatedTrailerPDF(" /Foo <414>", ""),
+			models.PDFA2b, Rule_19005_2_6_1_6_t01, 0,
+		},
+		{
+			"odd hex string in an older trailer's direct /Info", updatedTrailerPDF(" /Info << /Producer <414> >>", ""),
+			models.PDFA2b, Rule_19005_2_6_1_6_t01, 0,
+		},
+		{
+			"integer out of range in an older trailer's direct /Info", updatedTrailerPDF(" /Info << /Foo 2147483648 >>", ""),
+			models.PDFA2b, Rule_19005_2_6_1_13_t01, 0,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
