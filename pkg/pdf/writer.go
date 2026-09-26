@@ -590,7 +590,16 @@ func (a signerAdapter) EstimatedSize() int                 { return a.inner.Esti
 // A remediation that repairs its own output again in a later round leaves the
 // Writer editing that output instead of the Reader's document, because those
 // repairs exist only in the output. An edit queued afterwards applies to the
-// remediated document, and the page numbers it names are that document's.
+// remediated document, and the page numbers it names are that document's. A
+// remediation that keeps its first round alone leaves the Writer editing the
+// Reader's document, its repairs queued with the other edits, and an edit
+// queued afterwards names the Reader's pages. Either way a later edit builds
+// on the repairs, with the exception [Writer.AutoTag] names. The page numbers
+// differ only when [Writer.DeletePages] or
+// [Writer.InsertPages] ran before the remediation: after a single round, page
+// 1 still names the Reader's first page, deleted or not. Queue those two after
+// the remediation, and every later edit names the same pages whatever the
+// round count.
 //
 // A Writer is single-use: create a new Writer (and, if you need a
 // pristine baseline, a new Reader) for each distinct output. Method
@@ -1039,6 +1048,12 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 // document language, title, or the PDF/UA identifier, which other operations
 // own. Pair it with [Writer.RemediatePDFUA], or set those explicitly, for full
 // PDF/UA conformance.
+//
+// Queue it before a remediation, whose repairs then apply to the marked-up
+// content. After a remediation that keeps one round it marks up the page
+// content the Reader holds (see [Writer]), and a repair the remediation made to
+// that content, such as a clamped out-of-range number, does not reach the
+// output.
 func (w *Writer) AutoTag() {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
@@ -1424,6 +1439,11 @@ func remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options
 // applies targeted fixes, and queues the result for writing. The report
 // describes what was fixed and what could not be fixed automatically.
 // Uses incremental update to preserve existing document structure.
+//
+// An edit queued afterwards names pages as [Writer] describes: the source's
+// after a remediation that keeps one round, the remediated document's after one
+// that keeps more. They differ only when pages were deleted or inserted before
+// the remediation.
 func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediatePDFA", &err)
 	cfg, remOpts := remediateConfig(opts)
@@ -1440,6 +1460,11 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 // describes what was fixed and what could not be fixed automatically; see
 // [RemediationReport.Residual], which the output's own pdfuaid claim does not
 // account for.
+//
+// An edit queued afterwards names pages as [Writer] describes: the source's
+// after a remediation that keeps one round, the remediated document's after one
+// that keeps more. They differ only when pages were deleted or inserted before
+// the remediation.
 func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediatePDFUA", &err)
 	cfg, remOpts := remediateConfig(opts)
@@ -1458,6 +1483,11 @@ func (w *Writer) RemediatePDFUA(ctx context.Context, profile models.PDFUAProfile
 //
 // Violations the level does not state are never reported: the run is judged
 // by [Reader.ValidateWTPDF], which applies the level's rule subtractions.
+//
+// An edit queued afterwards names pages as [Writer] describes: the source's
+// after a remediation that keeps one round, the remediated document's after one
+// that keeps more. They differ only when pages were deleted or inserted before
+// the remediation.
 func (w *Writer) RemediateWTPDF(ctx context.Context, profile models.WTPDFProfile, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediateWTPDF", &err)
 	cfg, remOpts := remediateConfig(opts)
@@ -1537,6 +1567,11 @@ type FacturXConfig struct {
 // is a PDF/A-3 carrying a legacy-named CII payload rather than a fully
 // spec-valid legacy ZUGFeRD file. Producing genuine 1.0/2.0 output is
 // out of scope.
+//
+// An edit queued afterwards names pages as [Writer] describes: the source's
+// after a remediation that keeps one round, the remediated document's after one
+// that keeps more. They differ only when pages were deleted or inserted before
+// the remediation.
 func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediateFacturX", &err)
 	if len(cfg.InvoiceXML) == 0 {
@@ -1594,6 +1629,11 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 // list. Returns [ErrNoInvoiceAttachment] when the document carries no
 // known invoice attachment. Use [Writer.RemediateFacturX] to embed a new
 // invoice instead.
+//
+// An edit queued afterwards names pages as [Writer] describes: the source's
+// after a remediation that keeps one round, the remediated document's after one
+// that keeps more. They differ only when pages were deleted or inserted before
+// the remediation.
 func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RepairFacturX", &err)
 	rcfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
