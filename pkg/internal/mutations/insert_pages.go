@@ -98,33 +98,62 @@ func InsertPages(
 		return fmt.Errorf("/Pages is not an indirect reference")
 	}
 
-	// Build new /Kids: target pages [0..pos) + inserted + target pages [pos..).
-	totalCount := len(targetPages) + len(copiedRefs)
-	kids := make(ast.PdfArray, 0, totalCount)
-	for i := range pos {
-		kids = append(kids, targetPages[i].Ref)
+	// The document's pages are the ones an earlier deletion or insertion
+	// staged, when one did (see [stagedPageKids]); pos still names a place
+	// among the Reader's pages. The inserted pages go before the first of the
+	// Reader's pages from pos on that the document still holds, and after its
+	// last page when there is none.
+	current, at := make([]ast.PdfIndirectRef, len(targetPages)), pos
+	for i, page := range targetPages {
+		current[i] = page.Ref
+	}
+	if staged, ok := stagedPageKids(ctx, alloc, doc); ok {
+		current, at = staged, len(staged)
+		stagedAt := make(map[int]int, len(staged))
+		for i, ref := range staged {
+			stagedAt[ref.ObjectNum] = i
+		}
+		for _, page := range targetPages[pos:] {
+			if i, held := stagedAt[page.Ref.ObjectNum]; held {
+				at = i
+				break
+			}
+		}
+	}
+
+	// Build new /Kids: pages [0..at) + inserted + pages [at..).
+	kids := make(ast.PdfArray, 0, len(current)+len(copiedRefs))
+	for _, ref := range current[:at] {
+		kids = append(kids, ref)
 	}
 	for _, ref := range copiedRefs {
 		kids = append(kids, ref)
 	}
-	for i := pos; i < len(targetPages); i++ {
-		kids = append(kids, targetPages[i].Ref)
+	for _, ref := range current[at:] {
+		kids = append(kids, ref)
 	}
 
 	// Replace the /Pages dict with a flat tree.
 	alloc.AllocAt(pagesRef.ObjectNum, ast.PdfDict{
 		"Type":  ast.PdfName("Pages"),
 		"Kids":  kids,
-		"Count": ast.PdfInt(totalCount),
+		"Count": ast.PdfInt(len(kids)),
 	})
 
 	// Update /Parent on all pages (existing and inserted) to point to the
-	// pages node.
-	for i := range pos {
+	// pages node. A page an earlier insertion staged already names it.
+	readerPages := make(map[int]*document.Page, len(targetPages))
+	for _, page := range targetPages {
+		readerPages[page.Ref.ObjectNum] = page
+	}
+	for _, ref := range current {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("inserting pages canceled: %w", err)
 		}
-		page := targetPages[i]
+		page, ok := readerPages[ref.ObjectNum]
+		if !ok {
+			continue
+		}
 		base := latestPageDict(alloc, page)
 		newDict := make(ast.PdfDict, len(base)+4)
 		maps.Copy(newDict, base)
@@ -142,19 +171,6 @@ func InsertPages(
 				pageDict["Parent"] = pagesRef
 			}
 		}
-	}
-
-	for i := pos; i < len(targetPages); i++ {
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("inserting pages canceled: %w", err)
-		}
-		page := targetPages[i]
-		base := latestPageDict(alloc, page)
-		newDict := make(ast.PdfDict, len(base)+4)
-		maps.Copy(newDict, base)
-		newDict["Parent"] = pagesRef
-		materializeInheritedAttrs(newDict, page)
-		alloc.AllocAt(page.Ref.ObjectNum, newDict)
 	}
 
 	return nil

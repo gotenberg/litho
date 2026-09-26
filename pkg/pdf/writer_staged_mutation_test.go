@@ -3,7 +3,9 @@ package pdf
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"testing"
 
@@ -160,6 +162,125 @@ func TestWriterEditQueuedBeforeAStageIsAppliedOnce(t *testing.T) {
 			}
 			if n := strings.Count(text, "STAMPED"); n != 1 {
 				t.Errorf("the page shows the stamp %d times, want once: %q", n, text)
+			}
+		})
+	}
+}
+
+// textPagePDF builds a one-page document whose page shows text.
+func textPagePDF(text string) []byte {
+	content := "BT /F1 12 Tf 100 700 Td (" + text + ") Tj ET\n"
+	return buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	})
+}
+
+// pageTexts returns the text of every page of r, trimmed.
+func pageTexts(t *testing.T, r *Reader) []string {
+	t.Helper()
+
+	ctx := context.Background()
+	n, err := r.PageCount(ctx)
+	if err != nil {
+		t.Fatalf("PageCount: %v", err)
+	}
+	texts := make([]string, n)
+	for i := range n {
+		text, err := r.ExtractText(ctx, i+1)
+		if err != nil {
+			t.Fatalf("ExtractText page %d: %v", i+1, err)
+		}
+		texts[i] = strings.TrimSpace(text)
+	}
+	return texts
+}
+
+// TestWriterPageTreeEditsCompose pins that page deletions and insertions queued
+// on one Writer build on each other's page tree.
+//
+// Each rebuilt the page tree from the Reader's pages, whatever an earlier one
+// had staged: a second insertion dropped the first, an insertion after a
+// deletion put the deleted page back, and a deletion after an insertion dropped
+// the inserted pages. The pages they name stay the Reader's, as [Writer]
+// documents.
+func TestWriterPageTreeEditsCompose(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		edits func(t *testing.T, w *Writer, open func(string) *Reader)
+		want  []string
+	}{
+		{
+			name: "two insertions",
+			edits: func(t *testing.T, w *Writer, open func(string) *Reader) {
+				if err := w.InsertPages(3, open("InsertedA")); err != nil {
+					t.Fatalf("InsertPages: %v", err)
+				}
+				if err := w.InsertPages(3, open("InsertedB")); err != nil {
+					t.Fatalf("InsertPages: %v", err)
+				}
+			},
+			want: []string{"Page1", "Page2", "Page3", "InsertedA", "InsertedB"},
+		},
+		{
+			name: "a deletion then an insertion",
+			edits: func(t *testing.T, w *Writer, open func(string) *Reader) {
+				if err := w.DeletePages(2); err != nil {
+					t.Fatalf("DeletePages: %v", err)
+				}
+				if err := w.InsertPages(3, open("InsertedA")); err != nil {
+					t.Fatalf("InsertPages: %v", err)
+				}
+			},
+			want: []string{"Page1", "Page3", "InsertedA"},
+		},
+		{
+			name: "an insertion then a deletion",
+			edits: func(t *testing.T, w *Writer, open func(string) *Reader) {
+				if err := w.InsertPages(1, open("InsertedA")); err != nil {
+					t.Fatalf("InsertPages: %v", err)
+				}
+				if err := w.DeletePages(3); err != nil {
+					t.Fatalf("DeletePages: %v", err)
+				}
+			},
+			want: []string{"Page1", "InsertedA", "Page2"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := context.Background()
+			data := threePagePDF()
+			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer r.Close()
+			open := func(text string) *Reader {
+				src := textPagePDF(text)
+				sr, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
+				if err != nil {
+					t.Fatalf("Open: %v", err)
+				}
+				t.Cleanup(func() {
+					if err := sr.Close(); err != nil {
+						t.Errorf("Reader.Close: %v", err)
+					}
+				})
+				return sr
+			}
+			w := NewWriter(r)
+			defer w.Close()
+			tc.edits(t, w, open)
+
+			if got := pageTexts(t, writeAndReopen(t, w)); !slices.Equal(got, tc.want) {
+				t.Errorf("the output pages show %q, want %q", got, tc.want)
 			}
 		})
 	}

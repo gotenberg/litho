@@ -932,6 +932,10 @@ func (w *Writer) RotatePages(rotation int, pages ...int) error {
 // [Writer.InsertPages] and the three stamps all document an empty list as
 // every page, which deletion cannot mean because it would leave no document.
 //
+// The pages named are the Reader's (see [Writer]). A deletion queued after an
+// insertion keeps the inserted pages, and one queued after another deletion
+// keeps what that one removed out.
+//
 // [Writer.WriteTo] reports [ErrPageDeletionIncomplete] when the document's
 // structure tree nests deeper than the page prune can walk. Elements below that
 // bound keep the deleted page alive through their /Pg, so the output would
@@ -968,6 +972,12 @@ func (w *Writer) DeletePages(pages ...int) error {
 // to the current page count appends. If sourcePages is empty, all pages
 // from source are inserted. Forces a full rewrite. The mutation is queued
 // and applied when [Writer.WriteTo] is called.
+//
+// Insertions and deletions queued on one Writer build on each other, and pos
+// names a place among the Reader's pages, as page numbers do (see [Writer]).
+// The pages go before the first of the Reader's pages from pos on that an
+// earlier deletion kept, after the pages an earlier insertion put there, and
+// at the end when no such page is left.
 func (w *Writer) InsertPages(pos int, source *Reader, sourcePages ...int) error {
 	if source == nil {
 		return ErrNilSource
