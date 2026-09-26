@@ -1315,6 +1315,14 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 		return checkType3ToUnicode(ctx, doc, fontDict, fontName, pageNum, profile, rule, usage)
 	}
 
+	// A simple font that embeds no program has no names but its encoding's,
+	// and each shown glyph is judged by the one veraPDF gives it; see
+	// [unembeddedUnicodeFaults]. The exemptions below reason about programs
+	// litho cannot read, and stand where the shown codes are unknown.
+	if subtype, unembedded := unembeddedSimpleFont(ctx, doc, fontDict); unembedded && usage != nil && len(usage.charCodes) > 0 {
+		return unembeddedUnicodeFaults(ctx, doc, fontDict, subtype, fontName, pageNum, profile, rule, Rule{}, usage, toUnicodeMappedCodes(ctx, doc, fontDict))
+	}
+
 	// Exemption (a): standard encoding with Adobe Glyph List coverage.
 	// This covers MacRomanEncoding, WinAnsiEncoding, and MacExpertEncoding.
 	if hasStandardEncoding(ctx, doc, fontDict) {
@@ -1951,10 +1959,25 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		return nil
 	}
 
+	// A simple font that embeds no program gives a code the CMap leaves out
+	// the value of the name its encoding gives it, U+0000 for .notdef; see
+	// [unembeddedUnicodeFaults]. names states those for the codes outside
+	// mapped, the codes the CMap maps.
+	subtype, unembedded := unembeddedSimpleFont(ctx, doc, fontDict)
+	names := func(mapped map[int]bool) []Violation {
+		if !unembedded {
+			return nil
+		}
+		return unembeddedUnicodeFaults(ctx, doc, fontDict, subtype, fontName, pageNum, profile, Rule{}, rule, usage, mapped)
+	}
+
 	// With no /ToUnicode the glyph name is the only mapping the font offers, so
 	// a rendered .notdef override has nothing to override it.
 	tuObj, hasToUnicode := fontDict["ToUnicode"]
 	if !hasToUnicode || resourceEntryNull(ctx, doc, tuObj) {
+		if unembedded {
+			return names(nil)
+		}
 		return notdefUnicodeViolation(ctx, doc, fontDict, fontName, pageNum, rule, usage, nil)
 	}
 
@@ -1969,10 +1992,10 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 	if err != nil {
 		doc.Logger.Debug("compliance: fonts: failed to resolve ToUnicode stream",
 			"font", fontName, "error", err)
-		return nil
+		return names(nil)
 	}
 	if stream.Dict == nil {
-		return nil
+		return names(nil)
 	}
 
 	data, err := doc.DecodeStream(ctx, stream)
@@ -1982,7 +2005,7 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		if err != nil || len(data) == 0 {
 			doc.Logger.Debug("compliance: fonts: failed to decode ToUnicode CMap",
 				"font", fontName, "error", err)
-			return nil
+			return names(nil)
 		}
 	}
 
@@ -1994,10 +2017,10 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 		// Unparseable CMap: fall back to the destination-only byte scan
 		// over the whole map rather than silently passing.
 		if containsInvalidUnicodeMapping(string(data)) {
-			return failf(rule, "font %s on page %d: /ToUnicode CMap maps to U+0000, U+FEFF, or U+FFFE",
-				fontName, pageNum)
+			return append(failf(rule, "font %s on page %d: /ToUnicode CMap maps to U+0000, U+FEFF, or U+FFFE",
+				fontName, pageNum), names(nil)...)
 		}
-		return nil
+		return names(nil)
 	}
 
 	// Every rendered code is its own glyph, stated once; see
@@ -2016,6 +2039,13 @@ func checkToUnicodeCMapValues(ctx context.Context, doc *document.Document, fontD
 			faults.add(value, "font %s on page %d: /ToUnicode maps a rendered code to U+0000, U+FEFF, or U+FFFE",
 				fontName, pageNum)
 		}
+	}
+
+	if unembedded {
+		for _, v := range names(cmapSourceCodeValues(parsed)) {
+			faults.add(v.glyph.code, "%s", v.Context)
+		}
+		return faults.violations()
 	}
 
 	// A rendered code the CMap leaves alone falls back to its glyph name, so an

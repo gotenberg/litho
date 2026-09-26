@@ -264,17 +264,26 @@ func TestToUnicodeTrueTypeStandardBaseDifferences(t *testing.T) {
 // (neither AGL- nor Symbol-encoding-resolvable, e.g. MathematicalPi's "H20850")
 // is NOT exempt from /ToUnicode: those codes have no Unicode mapping, which
 // veraPDF reports per glyph. A symbolic font whose used codes resolve (Symbol
-// encoding names, or the built-in encoding litho cannot parse) stays exempt.
+// encoding names, or the built-in encoding of an embedded program litho cannot
+// parse) stays exempt. A font that embeds no program has no built-in encoding,
+// so a code /Differences leaves alone has no name and no Unicode value (see
+// [unembeddedUnicodeFaults]); measured with veraPDF 1.30 at PDF/A-2u on this
+// font showing code 66, it fails ISO 19005-2, 6.2.11.7.2 t1.
 func TestToUnicodeSymbolicNonResolvableDifferences(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	build := func(diffs string, used byte) []Violation {
+	build := func(diffs string, used byte, embedded bool) []Violation {
+		fd := "<< /Type /FontDescriptor /FontName /GNDPAG+MathematicalPi-Three /Flags 4 >>" // 4 = Symbolic
+		if embedded {
+			fd = "<< /Type /FontDescriptor /FontName /GNDPAG+MathematicalPi-Three /Flags 4 /FontFile 5 0 R >>"
+		}
 		doc, _ := objsDocPDF(t,
 			"<< /Type /Catalog >>",
 			"<< /Type /Font /Subtype /Type1 /Name /F1 /FirstChar 0 /LastChar 255 /Encoding 3 0 R /FontDescriptor 4 0 R >>",
 			"<< /Type /Encoding /Differences "+diffs+" >>",
-			"<< /Type /FontDescriptor /FontName /GNDPAG+MathematicalPi-Three /Flags 4 >>", // 4 = Symbolic
+			fd,
+			"<< /Length 4 >>\nstream\n%!PS\nendstream",
 		)
 		fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 2})
 		if err != nil {
@@ -284,14 +293,19 @@ func TestToUnicodeSymbolicNonResolvableDifferences(t *testing.T) {
 		return checkToUnicode(ctx, doc, fontDict, "F1", 1, "PDF/A-2u", usage)
 	}
 
-	if got := build("[ 65 /H20850 ]", 65); len(got) == 0 {
-		t.Error("symbolic font with a used non-resolvable Differences name should require /ToUnicode")
+	for _, embedded := range []bool{true, false} {
+		if got := build("[ 65 /H20850 ]", 65, embedded); len(got) == 0 {
+			t.Errorf("embedded %v: symbolic font with a used non-resolvable Differences name should require /ToUnicode", embedded)
+		}
+		if got := build("[ 65 /alpha ]", 65, embedded); len(got) != 0 {
+			t.Errorf("embedded %v: symbolic font whose used Differences name is a Symbol-encoding name should be exempt, got %v", embedded, got)
+		}
 	}
-	if got := build("[ 65 /alpha ]", 65); len(got) != 0 {
-		t.Errorf("symbolic font whose used Differences name is a Symbol-encoding name should be exempt, got %v", got)
+	if got := build("[ 65 /H20850 ]", 66, true); len(got) != 0 {
+		t.Errorf("symbolic program whose UNUSED code is non-resolvable should stay exempt, got %v", got)
 	}
-	if got := build("[ 65 /H20850 ]", 66); len(got) != 0 {
-		t.Errorf("symbolic font whose UNUSED code is non-resolvable should stay exempt, got %v", got)
+	if got := build("[ 65 /H20850 ]", 66, false); len(got) != 1 {
+		t.Errorf("unembedded symbolic font showing a code /Differences leaves alone should fail once, got %v", got)
 	}
 }
 

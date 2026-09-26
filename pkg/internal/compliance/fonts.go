@@ -2114,19 +2114,22 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 	// [fontJudgements.glyphs]. The first reason found for a code stands.
 	faults := newGlyphFaults(rule)
 
-	// Check /Encoding /Differences for a used ".notdef" entry.
-	checkNotdefInDifferences(ctx, doc, fontDict, fontName, pageNum, faults, usage)
-
 	subtype := fontSubtype(ctx, doc, fontDict)
 
 	// A font that embeds no program is judged by the name veraPDF gives each
-	// code; see [checkUnembeddedNotdef].
+	// code, its /Differences entries included; see [checkUnembeddedNotdef].
+	// Measured with veraPDF 1.30 at PDF/A-2u: a symbolic unembedded TrueType
+	// Arial whose /Differences names code 0x41 .notdef, showing codes 0 and
+	// 0x41, fails ISO 19005-2, 6.2.11.8 t1 once, for code 0.
 	embedsProgram := false
 	if fd := document.ResolveFontDescriptor(ctx, doc, fontDict); fd != nil {
 		embedsProgram = extractFontProgramData(ctx, doc, fd) != nil
 	}
 	if (subtype == "Type1" || subtype == "MMType1" || subtype == "TrueType") && !embedsProgram {
 		checkUnembeddedNotdef(ctx, doc, fontDict, subtype, fontName, pageNum, faults, usage)
+	} else {
+		// Check /Encoding /Differences for a used ".notdef" entry.
+		checkNotdefInDifferences(ctx, doc, fontDict, fontName, pageNum, faults, usage)
 	}
 
 	// For an embedded Type1/CFF: if the encoding explicitly maps a used

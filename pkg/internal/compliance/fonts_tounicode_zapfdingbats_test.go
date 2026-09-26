@@ -63,7 +63,11 @@ func TestToUnicodeZapfDingbatsPart1(t *testing.T) {
 		{"the plain spelling under part 1", "ZapfDingbats", "PDF/A-1a", true},
 		{"part 2 keeps the exemption", "MHHIBN+ZapfDingbats", "PDF/A-2u", false},
 		{"part 3 keeps the exemption", "MHHIBN+ZapfDingbats", "PDF/A-3u", false},
-		{"another symbolic font is untouched", "MHHIBN+Symbol", "PDF/A-1a", false},
+		// a73 is no name of the Symbol font either, and veraPDF reports it
+		// there too, measured at PDF/A-1a on this font, which embeds no
+		// program; at PDF/A-2u it passes.
+		{"another symbolic font naming a73 under part 1", "MHHIBN+Symbol", "PDF/A-1a", true},
+		{"another symbolic font naming a73 under part 2", "MHHIBN+Symbol", "PDF/A-2u", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
