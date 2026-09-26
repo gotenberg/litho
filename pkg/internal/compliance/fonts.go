@@ -2072,10 +2072,13 @@ func type0UsedCIDs(ctx context.Context, doc *document.Document, fontDict ast.Pdf
 	return cids
 }
 
-// defaultCIDWidth returns the CIDFont /DW value, or the PDF default of 1000.
+// defaultCIDWidth returns the CIDFont /DW value, or the PDF default of 1000
+// when /DW is not a number (ISO 32000-1, 9.7.4.3, Table 117). An explicit 0
+// declares a width like any other, which veraPDF reads
+// (PDCIDFont.getDefaultWidth), as [lookupCIDWidth] does.
 func defaultCIDWidth(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict) float64 {
 	r, _ := document.ResolveObject(ctx, doc, cidFontDict["DW"])
-	if w := document.Float(r); w != 0 {
+	if w, ok := document.Number(r); ok {
 		return w
 	}
 	return 1000

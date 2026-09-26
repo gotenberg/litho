@@ -72,9 +72,10 @@ func ttfWithAdvances(unitsPerEm uint16, advances []uint16) string {
 //   - pdfjs issue6612.pdf: embeds a CIDFontType2 with /DW 595 and no /W whose
 //     glyphs advance 1229 at 2048 units per em, which is 600.098. veraPDF
 //     reports every shown glyph and fontTools confirms the advance.
-//   - pdfjs JBIG2Globals.pdf, complex_ttf_font.pdf: map CID 40 into a
-//     two-glyph program and CID 988 into a 143-glyph one respectively, and
-//     veraPDF reports neither zero advance.
+//   - pdfjs issue14821.pdf: shows four CIDs whose glyphs advance 0 under /DW
+//     1000, and veraPDF fails the width rule for each.
+//   - pdfjs complex_ttf_font.pdf: declares /W [988 989 0] over glyphs that
+//     advance 0, and veraPDF reports none of them.
 func TestCIDFontDefaultWidth(t *testing.T) {
 	t.Parallel()
 
@@ -147,13 +148,36 @@ func TestCIDFontDefaultWidth(t *testing.T) {
 		}
 	})
 
-	// A zero advance is missing information rather than a zero-wide glyph: the
-	// CID may reach past the program's glyph count or land on a blank the
-	// program gave no metrics for. veraPDF reports none of these.
-	t.Run("a zero advance is not a mismatch", func(t *testing.T) {
+	// A zero advance is the glyph's width, and veraPDF 1.30 compares it: a CID
+	// advancing 0 fails ISO 19005-2, 6.2.11.5 t1 against /DW 500 or the 1000
+	// default, and passes against /DW 0 or a /W entry of 0.
+	t.Run("a zero advance contradicting DW fires", func(t *testing.T) {
 		t.Parallel()
-		if fires(t, pdf("/DW 500", 0)) {
-			t.Error("a zero advance carries no width to contradict /DW")
+		if !fires(t, pdf("/DW 500", 0)) {
+			t.Error("/DW 500 against a 0 advance is a width mismatch")
 		}
 	})
+
+	t.Run("a zero advance matching DW does not", func(t *testing.T) {
+		t.Parallel()
+		if fires(t, pdf("/DW 0", 0)) {
+			t.Error("/DW 0 matches a 0 advance")
+		}
+	})
+
+	// A /W entry of 0 declares the CID's width, so /DW is not its width.
+	for _, w := range []string{"/W [1 [0]]", "/W [1 1 0]"} {
+		t.Run("a zero advance matching "+w+" does not", func(t *testing.T) {
+			t.Parallel()
+			if fires(t, pdf(w, 0)) {
+				t.Errorf("%s matches a 0 advance, whatever /DW says", w)
+			}
+		})
+		t.Run("a nonzero advance against "+w+" fires", func(t *testing.T) {
+			t.Parallel()
+			if !fires(t, pdf("/DW 600 "+w, 600)) {
+				t.Errorf("%s against a 600 advance is a width mismatch", w)
+			}
+		})
+	}
 }

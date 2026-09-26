@@ -1169,8 +1169,9 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 				if gid == 0 {
 					continue
 				}
+				// A width of 0 is a width like any other: veraPDF compares it.
 				pdfWidth, wOK := widthValue(ctx, doc, wEntry)
-				if !wOK || pdfWidth == 0 {
+				if !wOK {
 					continue
 				}
 				// Out-of-int32-range widths are crafted overflow input,
@@ -1196,9 +1197,11 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 			if i >= len(wArr) {
 				break
 			}
+			// A range declaring 0 is compared like any other, and covers its
+			// CIDs, so /DW is not their width.
 			pdfWidth, wOK := widthValue(ctx, doc, wArr[i])
 			i++
-			if !wOK || pdfWidth == 0 {
+			if !wOK {
 				continue
 			}
 			// Out-of-int32-range widths are crafted overflow input,
@@ -1270,16 +1273,28 @@ func checkCIDFontWidths(ctx context.Context, doc *document.Document, cidFontDict
 // declare a width for every glyph it shows, so skipping the font when /W is
 // absent leaves the widths unchecked.
 //
+// A program advance of 0 is a width like any other, and an explicit /DW 0 too
+// ([defaultCIDWidth]). Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b on
+// a CID whose TrueType glyph advances 0: /DW 1000, /DW 500 or no /DW fails ISO
+// 19005-1, 6.3.6 t1 and ISO 19005-2, 6.2.11.5 t1, and /DW 0 passes, as do
+// /W [1 [0]] and /W [1 1 0], which cover the CID ([checkCIDFontWidths]).
+//
 // # Corpus evidence
 //
 //   - pdfjs issue6612.pdf: embeds a CIDFontType2 with /DW 595 and no /W whose
 //     glyphs advance 1229 at 2048 units per em, which is 600.098. veraPDF
 //     reports the mismatch on every shown glyph and fontTools confirms the
 //     program advance, so litho's silence was a miss.
-//   - pdfjs JBIG2Globals.pdf, complex_ttf_font.pdf, issue7426.pdf: map CID 40
-//     into a two-glyph program, CID 988 into a 143-glyph one, and reach a
-//     glyph whose hmtx advance is 0, respectively. veraPDF reports none of
-//     them, which backs skipping a zero or missing program advance.
+//   - pdfjs issue14821.pdf: shows four CIDs whose glyphs advance 0 under /DW
+//     1000, and veraPDF fails the width rule for each, which litho skipped as
+//     missing information.
+//   - pdfjs complex_ttf_font.pdf, issue7426.pdf: declare /W ranges of 0, such
+//     as [988 989 0] and [51 57 0], over glyphs that advance 0, and veraPDF
+//     reports none of them. litho left a range of 0 out of the CIDs /W covers
+//     and compared those glyphs to /DW, which the skip of a zero advance
+//     hid.
+//   - pdfjs JBIG2Globals.pdf: maps CID 40 into a two-glyph program, which
+//     holds no advance for it; see [checkType2MissingGlyphWidths].
 func checkCIDDefaultWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, binaryWidths map[uint16]float64, unitsPerEm uint16, fontName string, pageNum int, rule Rule, usedCIDs, covered map[uint16]bool, cidToGID func(uint16) uint16) []Violation {
 	// Only the rendered CIDs are in scope, and with no recorded usage there is
 	// no set to walk: the rule is raised per shown glyph.
@@ -1288,10 +1303,6 @@ func checkCIDDefaultWidths(ctx context.Context, doc *document.Document, cidFontD
 	}
 
 	dw := defaultCIDWidth(ctx, doc, cidFontDict)
-	if dw == 0 {
-		return nil
-	}
-
 	faults := newGlyphFaults(rule)
 	for _, cid := range sortedCIDs(usedCIDs) {
 		if ctx.Err() != nil {
@@ -1308,14 +1319,11 @@ func checkCIDDefaultWidths(ctx context.Context, doc *document.Document, cidFontD
 		if gid == 0 {
 			continue
 		}
+		// A glyph the program holds no advance for is left to
+		// [checkType2MissingGlyphWidths]. An advance of 0 is compared: veraPDF
+		// reads it as the glyph's width (BaseTrueTypeProgram.getWidthWithCheck).
 		bw, ok := binaryWidths[gid]
-		if !ok || bw == 0 {
-			// A zero advance is missing information, not a zero-wide glyph: the
-			// CID may map past the program's glyph count, or reach a blank the
-			// program never gave metrics for. veraPDF reports none of these, and
-			// the /W path above already skips a zero declared width for the same
-			// reason. Whether the glyph exists at all is the coverage rule's
-			// concern.
+		if !ok {
 			continue
 		}
 		expectedWidth := bw * 1000.0 / float64(unitsPerEm)
