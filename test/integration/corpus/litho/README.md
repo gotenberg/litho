@@ -150,6 +150,9 @@ one deliberately rather than diffing it against a fresh build.
 | `paintop_2b.pdf`       | PDF/A-2b     | Transparency no operator paints under, halftones judged once     |
 | `imagedraws_2b.pdf`    | PDF/A-2b     | Images appearances and Type 3 glyphs draw; appearances as forms  |
 | `unembednames_2u.pdf`  | PDF/A-2u     | Glyph names of unembedded fonts; one reading of Type 3 glyphs    |
+| `exttypes_2b.pdf`      | PDF/A-2b     | Extension value types resolved per schema entry, not per packet  |
+| `extpredef_2b.pdf`     | PDF/A-2b     | Predefined properties, structures and XPath through declarations |
+| `extguards_2b.pdf`     | PDF/A-2b     | Extension-declared values veraPDF accepts, false-positive guards |
 
 ### Must-not-fire controls
 
@@ -349,6 +352,11 @@ violation but is exempt, so a firing is a false positive.
 | `imagedraws_2b`                           | `Stencil`, a drawn image mask with `/BitsPerComponent 2`               | ISO 19005-2, 6.2.8 t5        |
 | `unembednames_2u`                         | `ZD`, a ZapfDingbats code named `a71`                                  | ISO 19005-2, 6.2.11.7.2 t1   |
 | `unembednames_2u`                         | `H2`, a Helvetica only Type 3 procedures read in mode 3 show           | ISO 19005-2, 6.2.11.4.1 t1   |
+| `extguards_2b`                            | GPSCoordinate, Marker and Dimensions values an extension declares      | ISO 19005-2, 6.6.2.3.1 t2    |
+| `extguards_2b`                            | Thumbnail and Colorant values outside a closed choice                  | ISO 19005-2, 6.6.2.3.1 t2    |
+| `extguards_2b`                            | XPath values `a:b`, `$x` and `x:f(1)/a`, which the JDK compiles        | ISO 19005-2, 6.6.2.3.1 t2    |
+| `extguards_2b`                            | `xmpMM:DerivedFrom` declared a type holding `stRef:filePath`           | ISO 19005-2, 6.6.2.3.1 t2    |
+| `extguards_2b`                            | `xmp:CreateDate` declared an unknown type, holding a date              | ISO 19005-2, 6.6.2.3.1 t2    |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -388,8 +396,11 @@ which are covered under [Known divergences](#known-divergences).
 | `docmdp_2b.pdf`        | 6    | 4    | 8    | 6    | 6    | 8    | 6    | 6    | 5   | 5    | 6    | 10   | 8    |
 | `docsync_1b.pdf`       | 11   | 9    | 6    | 4    | 4    | 6    | 4    | 4    | 6   | 6    | 7    | 9    | 8    |
 | `encperm_ua1.pdf`      | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 2    | 4    |
+| `extguards_2b.pdf`     | 9    | 6    | 6    | 3    | 4    | 7    | 4    | 5    | 5   | 5    | 6    | 5    | 5    |
+| `extpredef_2b.pdf`     | 7    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 5   | 5    | 6    | 5    | 5    |
 | `extprop_2b.pdf`       | 7    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 6   | 6    | 7    | 8    | 7    |
 | `extschema_2b.pdf`     | 12   | 9    | 11   | 8    | 9    | 12   | 9    | 10   | 6   | 6    | 7    | 8    | 8    |
+| `exttypes_2b.pdf`      | 10   | 7    | 9    | 6    | 7    | 10   | 7    | 8    | 5   | 5    | 6    | 5    | 6    |
 | `extvalue_2b.pdf`      | 7    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 5   | 5    | 6    | 5    | 6    |
 | `fenote_ua2.pdf`       | 4    | 3    | 5    | 4    | 4    | 5    | 4    | 4    | 3   | 3    | 4    | 5    | 6    |
 | `filestruct_1b.pdf`    | 15   | 13   | 12   | 10   | 10   | 12   | 10   | 10   | 13  | 13   | 14   | 10   | 8    |
@@ -3912,6 +3923,104 @@ The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
 counts but for `7.1/3` and `7.2/34` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2, the
 same family.
 
+### `exttypes_2b.pdf`
+
+veraPDF builds one validators container per extension schema entry: the
+part's predefined types plus the types that entry defines, where a type with
+fields and no `pdfaType:namespaceURI` registers nothing
+(`ValidatorsContainerCreator.registerTypeNode`). An entry counts only with a
+namespace URI and a property array, the last one per URI replacing the
+others, and it declares a property only with a type it knows. Each entry's
+`pdfaProperty:valueType` and `pdfaField:valueType` are judged against the
+container of the entry that counts for its URI, and against the basic types
+alone when none counts (`AXLExtensionSchemasContainer`). litho pooled the
+types of every entry and resolved the predefined ones for any entry. Only
+verapdf `6-6-2-3-3-t03-fail-c.pdf` reached this among the corpora, through a
+structured type with no namespace URI.
+
+| Construct                                                                    | Rule at PDF/A-2b           |
+| ---------------------------------------------------------------------------- | -------------------------- |
+| `ex:old` of type `Pair`, defined by an entry a later one of its URI replaces | `6.6.2.3.3/8`              |
+| an entry with no property array, fields of type Dimensions, Locale and Box   | `6.6.2.3.3/17` three times |
+| `et:a` written at top level, where `et` names value types only               | `6.6.2.3.1/1` and `/2`     |
+
+| Rule at PDF/A-2b | veraPDF | litho |
+| ---------------- | ------- | ----- |
+| `6.1.7.1/1`      | 1       | 1     |
+| `6.1.7.1/2`      | 2       | 2     |
+| `6.6.2.3.1/1`    | 1       | 1     |
+| `6.6.2.3.1/2`    | 1       | 1     |
+| `6.6.2.3.3/8`    | 1       | 1     |
+| `6.6.2.3.3/17`   | 3       | 3     |
+
+At PDF/A-1b the same constructs fail `6.7.8/9`, `6.7.8/18` three times,
+`6.7.9/2` and `6.7.9/3`. All thirteen cells return the same rule set on both.
+
+### `extpredef_2b.pdf`
+
+veraPDF resolves a property through the extension schema entries of its packet
+first, then those of the main packet, and only then through the predefined
+schemas (`AXLXMPProperty.getSchemasDefinition`). A predefined property an entry
+declares is judged against the declared type, and one no entry declares
+against its predefined type, even when an entry extends its namespace. A
+structure type the part predefines is judged field by field
+(`StructuredTypeValidator`, with the fields of `XMPConstants`), and an XPath
+value is compiled by the JDK's XPath compiler (`XPathTypeValidator`). litho
+judged a predefined property of an extended namespace against nothing, a
+predefined structure for being a structure only, and an XPath for being a
+simple value only. No corpus file reaches any of the seven:
+
+| Property           | Declaration                        | Value                            |
+| ------------------ | ---------------------------------- | -------------------------------- |
+| `dc:title`         | `Text`                             | a Lang Alt                       |
+| `xmp:CreateDate`   | `Integer`                          | a date                           |
+| `xmpRights:Marked` | none, xmpRights extended otherwise | `yes`, not a Boolean             |
+| `ex:dim`           | `Dimensions`                       | `stDim:w` holding `abc`          |
+| `ex:ref`           | `ResourceRef`                      | `stRef:filePath`, a later member |
+| `ex:evt`           | `seq ResourceEvent`                | `stEvt:when` holding `notadate`  |
+| `ex:path`          | `XPath`                            | `///`                            |
+
+| Rule at PDF/A-2b | veraPDF | litho |
+| ---------------- | ------- | ----- |
+| `6.1.7.1/1`      | 1       | 1     |
+| `6.1.7.1/2`      | 2       | 2     |
+| `6.6.2.3.1/2`    | 7       | 7     |
+
+Every property fails the same test, so the rule set cannot tell one of them
+regressing from the rest: the count can. At PDF/A-1b each fails `6.7.9/3`
+instead. All thirteen cells return the same rule set on both.
+
+### `extguards_2b.pdf`
+
+The must-not-fire counterpart of `extpredef_2b.pdf`: every property passes ISO
+19005-2, 6.6.2.3.1 on veraPDF, and each is a shape litho reported at some
+point, so a firing of that clause at PDF/A-2b is a false positive. The one
+rule of 6.6.2.3 the fixture fires is `6.6.2.3.3/8`, for the unknown type `Nope`
+declared for `xmp:CreateDate`.
+
+| Property            | Declaration                      | Value                         | Why it passes                                |
+| ------------------- | -------------------------------- | ----------------------------- | -------------------------------------------- |
+| `ex:gps`            | `GPSCoordinate`                  | `10,20.5N`                    | a type of parts 2 and 3, its pattern matched |
+| `ex:mark`           | `Marker`                         | `xmpDM:startTime` a structure | the field is of type any                     |
+| `ex:dim`            | `Dimensions`                     | `stDim:w`, `h` and `unit`     | every field of the type, of its type         |
+| `ex:thumb`          | `Thumbnail`                      | `xmpGImg:format` of `PNG`     | a closed choice is read as Text              |
+| `ex:col`            | `Colorant`                       | `xmpG:mode` of `XYZ`          | likewise                                     |
+| `ex:xp1` to `xp3`   | `XPath`                          | `a:b`, `$x`, `x:f(1)/a`       | the JDK's XPath compiler takes all three     |
+| `xmp:CreateDate`    | `Nope`, which nothing defines    | a date                        | undeclared, so judged as the predefined Date |
+| `xmpMM:DerivedFrom` | `RefX`, holding `stRef:filePath` | a RefX structure              | judged against its declaration first         |
+| `dc:title`          | none, dc extended with `dc:foo`  | a Lang Alt                    | judged against its predefined type           |
+
+| Rule at PDF/A-2b | veraPDF | litho |
+| ---------------- | ------- | ----- |
+| `6.1.7.1/1`      | 1       | 1     |
+| `6.1.7.1/2`      | 2       | 2     |
+| `6.6.2.3.3/8`    | 1       | 1     |
+
+At PDF/A-1b the part-1 container knows no Marker nor Colorant and a stricter
+GPSCoordinate, so the fixture fires `6.7.8/9` three times, `6.7.9/2` twice and
+`6.7.9/3` three times there, on both. All thirteen cells return the same rule
+set on both.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
@@ -3933,6 +4042,7 @@ counts the cells whose sets of failed rules (clause and test) differ. Every
 fixture here is non-compliant on both sides, so a change that drops or invents
 a rule class leaves `matched` at 744 and moves only `ruleset_mismatch`. Four of
 a rule class leaves `matched` at 752 and moves only `ruleset_mismatch`. Four of
+a rule class leaves `matched` at 760 and moves only `ruleset_mismatch`. Four of
 the five exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1
 and PDF/UA-2 and `usecmap_2u` at PDF/A-2a and PDF/UA-2, so the metric reads 4 on
 this corpus, and the text scoreboard names the rules only one side reports. The
