@@ -14,10 +14,12 @@ import (
 )
 
 // laterRoundPDF builds a one-page document whose PDF/A-1b remediation keeps a
-// second round. Its XMP packet writes dc:title and dc:creator as attributes:
-// the first round syncs them with /Info and then strips them as properties
-// the XMP schema does not allow in that form, and only the second round, run
-// on the first round's output, injects them as ISO 19005-1, 6.7.3 requires.
+// second round. Its page paints in DeviceCMYK and carries a square annotation
+// with a /C colour array, and the document has no OutputIntent. The first
+// round installs a CMYK intent for the content, and annot-color waits for the
+// output to carry it (see fixAnnotColor): only the second round, run on the
+// first round's output, drops the /C array ISO 19005-1, 6.5.3 forbids next to
+// an intent that is not RGB.
 //
 // With binaryComment the file is otherwise well formed, so the first round
 // writes an incremental update. Without it, the header lacks the comment ISO
@@ -26,14 +28,15 @@ import (
 func laterRoundPDF(binaryComment bool) []byte {
 	const xmp = `<?xpacket begin="` + "\xEF\xBB\xBF" + `" id="W5M0MpCehiHzreSzNTczkc9d"?>` +
 		`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
-		`<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/" dc:title="Fixture" dc:creator="litho"/>` +
+		`<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"/>` +
 		`</rdf:RDF></x:xmpmeta><?xpacket end="w"?>`
-	const content = "BT /F1 12 Tf 20 700 Td (page) Tj ET\n"
+	const content = "0 0 1 0 k 20 20 100 100 re f BT /F1 12 Tf 20 700 Td (page) Tj ET\n"
 	objs := []string{
 		"<< /Type /Catalog /Pages 2 0 R /Metadata 6 0 R >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R" +
-			" /Resources << /Font << /F1 5 0 R >> >> >>",
+			" /Resources << /Font << /F1 5 0 R >> >>" +
+			" /Annots [<< /Type /Annot /Subtype /Square /Rect [300 300 400 400] /F 4 /C [1 0 0] >>] >>",
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 		fmt.Sprintf("<< /Type /Metadata /Subtype /XML /Length %d >>\nstream\n%s\nendstream", len(xmp), xmp),
@@ -260,8 +263,8 @@ func violationTexts(errs []error) []string {
 // output and handed back only its file, which WriteTo streams when nothing
 // else was queued. An edit queued afterwards makes that file stale, and
 // WriteTo serialized the Writer afresh from state that held the first round's
-// repairs alone: the rotated output lost the dc:title and dc:creator the
-// second round injected, and failed ISO 19005-1, 6.7.3 again.
+// repairs alone: the rotated output lost what the second round repaired, and
+// failed again the rules that round had cleared.
 func TestWriterEditAfterLaterRoundKeepsItsFixes(t *testing.T) {
 	t.Parallel()
 
