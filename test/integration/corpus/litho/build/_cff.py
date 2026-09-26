@@ -99,3 +99,51 @@ def build():
 
     return (header + name_index + _index([top]) + string_index + gsubr_index
             + charset + charstrings_index + private)
+
+
+def build_cid(cids):
+    """Return the bytes of a CID-keyed CFF holding .notdef and one glyph per CID.
+
+    The charset maps glyph i+1 to cids[i], so a CID the list leaves out has no
+    glyph in the program. Every glyph advances ADVANCE_WIDTH: the one font
+    DICT's Private DICT sets defaultWidthX, and no charstring states a width of
+    its own. A CID-keyed font carries its Private DICT in an FDArray, chosen per
+    glyph through FDSelect (Adobe Technical Note #5176, 19), and the ROS operator
+    in the Top DICT is what marks it CID-keyed.
+    """
+    charstrings = [b"\x0e"] + [_rect_charstring(400) for _ in cids]
+    private = _dict_int(ADVANCE_WIDTH) + b"\x14" + _dict_int(0) + b"\x15"
+
+    def make_font_dict(private_off):
+        return _dict_int(len(private)) + _dict_int(private_off) + b"\x12"
+
+    def make_top(charset_off, charstrings_off, fdarray_off, fdselect_off):
+        # ROS (12 30) naming standard string 0 twice with supplement 0, then
+        # charset (15), CharStrings (17), FDArray (12 36) and FDSelect (12 37).
+        return (
+            _dict_int(0) + _dict_int(0) + _dict_int(0) + b"\x0c\x1e"
+            + _dict_int(charset_off) + b"\x0f"
+            + _dict_int(charstrings_off) + b"\x11"
+            + _dict_int(fdarray_off) + b"\x0c\x24"
+            + _dict_int(fdselect_off) + b"\x0c\x25"
+        )
+
+    header = b"\x01\x00\x04\x01"
+    name_index = _index([FONT_NAME])
+    top_index_len = len(_index([make_top(0, 0, 0, 0)]))
+    string_index = _index([])
+    gsubr_index = _index([])
+
+    charset_off = len(header) + len(name_index) + top_index_len + len(string_index) + len(gsubr_index)
+    charset = b"\x00" + b"".join(struct.pack(">H", c) for c in cids)
+    fdselect_off = charset_off + len(charset)
+    # FDSelect format 3: one range putting every glyph in font DICT 0.
+    fdselect = struct.pack(">BHHBH", 3, 1, 0, 0, len(charstrings))
+    charstrings_off = fdselect_off + len(fdselect)
+    charstrings_index = _index(charstrings)
+    fdarray_off = charstrings_off + len(charstrings_index)
+    private_off = fdarray_off + len(_index([make_font_dict(0)]))
+
+    top = make_top(charset_off, charstrings_off, fdarray_off, fdselect_off)
+    return (header + name_index + _index([top]) + string_index + gsubr_index
+            + charset + fdselect + charstrings_index + _index([make_font_dict(private_off)]) + private)

@@ -124,6 +124,7 @@ one deliberately rather than diffing it against a fresh build.
 | `resinherit_2b.pdf`    | PDF/A-2b     | Resources and a media box a page inherits from an inner node     |
 | `inlineimage_2b.pdf`   | PDF/A-2b     | Content repairs on a page that holds inline images               |
 | `pagegroup_2b.pdf`     | PDF/A-2b     | Page transparency groups, and an XMP packet a page carries       |
+| `fontleft_2b.pdf`      | PDF/A-2b     | Widths no program answers, and the order fonts are read in       |
 
 ### Must-not-fire controls
 
@@ -289,6 +290,11 @@ violation but is exempt, so a firing is a false positive.
 | `resinherit_2b`                           | `F4` and `CS3`, an ancestor's, behind a `/Resources` naming no object  | veraPDF `knownKey` reading   |
 | `pagegroup_2b`                            | A page transparency group with an ICCBased blending space              | ISO 19005-2, 6.2.10 t2       |
 | `pagegroup_2b`                            | `xmp:CreatorTool` in the XMP packet a page carries                     | ISO 19005-2, 6.6.2.3.1       |
+| `fontleft_2b`                             | `CK`, a CID its CFF charset lacks, declared at the default width       | ISO 19005-2, 6.2.11.5        |
+| `fontleft_2b`                             | `TS`, Type 3 widths half a unit apart under a `/FontMatrix` of 0.01    | ISO 19005-2, 6.2.11.5        |
+| `fontleft_2b`                             | `CN`, a code named `.notdef`, whose glyph the CFF charset holds        | ISO 19005-2, 6.2.11.4.1 t2   |
+| `fontleft_2b`                             | `TM`, a missing CID in a form drawn while rendering mode 3 is in force | ISO 19005-2, 6.2.11.4.1 t2   |
+| `fontleft_2b`                             | `TN`, a Type0 font with no `/BaseFont` over a descendant naming one    | ISO 19005-2, 6.2.11.2 t3     |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -329,6 +335,7 @@ which are covered under [Known divergences](#known-divergences).
 | `filestruct_1b.pdf`    | 15   | 13   | 12   | 10   | 10   | 12   | 10   | 10   | 13  | 13   | 14   | 10   | 8    |
 | `fontdict_2b.pdf`      | 9    | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 8   | 8    | 9    | 7    | 7    |
 | `fontkeys_1b.pdf`      | 13   | 10   | 13   | 10   | 11   | 13   | 10   | 11   | 11  | 11   | 12   | 8    | 8    |
+| `fontleft_2b.pdf`      | 7    | 4    | 9    | 5    | 7    | 9    | 5    | 7    | 7   | 7    | 8    | 14   | 13   |
 | `forbidden_mix.pdf`    | 14   | 12   | 14   | 12   | 12   | 16   | 14   | 14   | 14  | 13   | 13   | 11   | 9    |
 | `formcs_2b.pdf`        | 6    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 7    | 7    |
 | `formmedia_ua1.pdf`    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 7   | 7    | 8    | 7    | 5    |
@@ -2864,6 +2871,55 @@ remediation took a second round to converge.
 
 The two tools return the same rule set in all thirteen cells, and the same
 instance count for every rule at every PDF/A level.
+
+### `fontleft_2b.pdf`
+
+`fontleft_2b.pdf` covers two things no other corpus file reached: glyph widths
+the font program cannot answer for, and the order in which veraPDF reads a
+font's program, which decides whether the presence and width rules judge a
+glyph at all. veraPDF builds a font's model, and reads its program, once per
+font object and rendering mode, for the stream it parses first; a later stream
+has its glyphs judged by neither rule unless it is the first to show the font
+in some other mode.
+
+Every construct rides on a font of its own, so each count has one source:
+
+| Font | Construct                                                               | Answers at PDF/A-2b                        |
+| ---- | ----------------------------------------------------------------------- | ------------------------------------------ |
+| `CC` | CID 3, absent from a CID-keyed CFF charset, `/W` 500 against `/DW` 1000 | `6.2.11.4.1/2`, `6.2.11.5/1`, `6.2.11.8/1` |
+| `CK` | the same CID with no `/W` entry, so declared at the default width       | `6.2.11.4.1/2`, `6.2.11.8/1`               |
+| `CN` | a bare CFF whose `/Differences` name code 65 `.notdef`, `/Widths` 500   | `6.2.11.5/1`, `6.2.11.8/1`                 |
+| `T3` | a Type 3 code named `/b` with no glyph procedure, `/Widths` 500         | `6.2.11.4.1/2`, `6.2.11.5/1`               |
+| `TS` | a Type 3 procedure declaring 50 against 50.5, `/FontMatrix` 0.01        | nothing                                    |
+| `TF` | a form drawn before the page text: CIDs 5, 6 and 8 in it, 7 after it    | `6.2.11.4.1/2` x3, `6.2.11.8/1` x4         |
+| `TA` | CID 5 in the page text, CIDs 6 and 7 in an annotation appearance        | `6.2.11.4.1/2`, `6.2.11.8/1` x3            |
+| `TM` | CID 5 in a form drawn while rendering mode 3 is in force                | `6.2.11.8/1`                               |
+| `TN` | a Type0 font with no `/BaseFont` over a descendant that names one       | nothing                                    |
+
+The composite TrueType fonts embed a three-glyph program, so CID 5 and above
+name no glyph, and their `/DW` equals the advance of glyph 0: those glyphs
+answer the presence and `.notdef` rules and never the width rule.
+
+`CC` and `CK` differ by one `/W` entry. veraPDF weighs a CID its CFF charset
+lacks at the CIDFont's default width, so the glyph fails the width rule only
+where `/W` declares something else. `T3` is weighed the same way, at a missing
+width of 0, and `TS` holds the control for a comparison veraPDF makes in glyph
+space, where the `/FontMatrix` plays no part.
+
+`TF`, `TA` and `TM` are the reading order. At PDF/A-2 a form is parsed where
+the page draws it, so the form's three glyphs are judged and the page text's
+CID 7 is not; the page text is parsed before the annotation, so `TA` answers
+once. At PDF/A-1 veraPDF parses a page's annotations before its content and
+`TA` answers twice, which is why `6.3.5/1` counts 8 at PDF/A-1b where
+`6.2.11.4.1/2` counts 7. At PDF/UA a form claims its modes where drawn but none
+of its glyphs is judged, and annotations come first as at PDF/A-1, so the
+presence rule counts 5. `TM` inherits rendering mode 3 from the page, which
+exempts it from the presence rule everywhere.
+
+The per-rule instance counts equal veraPDF 1.30.2's in all thirteen cells,
+except ISO 14289-1, 7.1 t3 and 7.2 t34 and ISO 14289-2, 8.2.2 t1, which veraPDF
+states once per untagged operator (10) and litho once per page (1), the family
+described under [Instance counts](#instance-counts-which-the-corpus-does-not-pin).
 
 ## Scope
 
