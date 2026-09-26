@@ -398,7 +398,7 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 
 	// Part 1 (§6.3.5 t3): unlike parts 2+ (full-program §6.2.11.4.2 t2), veraPDF
 	// scopes the part-1 CIDSet check to the glyphs the content actually renders,
-	// so a CIDSet omitting an unused or empty-outline glyph is conformant.
+	// so a CIDSet omitting an unused glyph is conformant.
 	if PDFAPart(profile) == 1 {
 		cidSetObj, hasCIDSet := fd["CIDSet"]
 		if hasCIDSet {
@@ -413,7 +413,7 @@ func checkCIDFontGlyphCoverage(ctx context.Context, doc *document.Document, cidF
 			if r := checkCIDSetCompletenessCFF(ctx, doc, cidFontDict, cidSetObj, fontName, pageNum, rule); r != nil {
 				return r
 			}
-			// TrueType subsets: only a rendered glyph with outline data that is
+			// TrueType subsets: only a rendered CID the program holds that is
 			// missing from the CIDSet is a defect.
 			if r := checkCIDSetCompletenessTrueTypeRendered(ctx, doc, cidFontDict, fd, cidSetObj, fontName, pageNum, rule, usedCIDs); r != nil {
 				return r
@@ -580,12 +580,27 @@ func cidToGIDStreamEntries(ctx context.Context, doc *document.Document, obj ast.
 }
 
 // checkCIDSetCompletenessTrueTypeRendered is the rendered-scoped TrueType CIDSet
-// check for PDF/A-1 §6.3.5 t3: a CID the content renders whose glyph has outline
-// data must appear in the /CIDSet. Unused CIDs and empty-outline glyphs are
-// exempt, which is the part-1 scope (parts 2+ require the full program; see
-// [checkCIDSetCompletenessTrueType]). The CIDSet is indexed by CID; the GID used
-// for the outline test comes from the /CIDToGIDMap (Identity, or a parsed
-// stream). usedCIDs nil returns nil.
+// check for PDF/A-1 §6.3.5 t3: a CID the content renders that the font program
+// holds must appear in the /CIDSet. ISO 19005-1, 6.3.5 has the set identify the
+// CIDs present in the program, and veraPDF
+// (GFPDCIDFont.getcidSetListsAllGlyphs) scopes that at part 1 to the CIDs
+// rendered, parts 2+ requiring the full program (see
+// [checkCIDSetCompletenessTrueType]). A CID is present when the /CIDToGIDMap
+// covers it and sends it to a glyph below maxp.numGlyphs
+// (CIDFontType2Program.containsCID), whether or not that glyph has an outline,
+// so a rendered CID past the program is exempt and one whose glyph is empty is
+// not. CID 0 is exempt. usedCIDs nil returns nil.
+//
+// # Corpus evidence
+//
+//   - pdfcpu pkg_testdata__adobe_supplement_iso32000_1.pdf: its CambriaMath
+//     subset renders CID 1, a glyph with no outline, outside its /CIDSet, and
+//     veraPDF reports it at PDF/A-1b. litho exempted empty glyphs and did not.
+//   - pdfjs issue11330.pdf: the same with CID 3 of a Calibri subset.
+//   - litho fontcopies_2b.pdf remediated at PDF/A-1b: the output's /CIDSet names
+//     the CIDs the three-glyph program holds while C renders CID 5, past it.
+//     veraPDF passes it, and litho reported it.
+//   - All corpora: no other file moves at PDF/A-1b.
 func checkCIDSetCompletenessTrueTypeRendered(ctx context.Context, doc *document.Document, cidFontDict, fd ast.PdfDict, cidSetObj ast.PdfObject, fontName string, pageNum int, rule Rule, usedCIDs map[uint16]bool) []Violation {
 	if usedCIDs == nil {
 		return nil
@@ -594,11 +609,11 @@ func checkCIDSetCompletenessTrueTypeRendered(ctx context.Context, doc *document.
 	if fontData == nil {
 		return nil
 	}
-	emptyGIDs := typography.ExtractEmptyGIDs(ctx, fontData)
-	if emptyGIDs == nil {
-		return nil // Not a TrueType program.
+	numGlyphs := typography.ExtractNumGlyphs(fontData)
+	if numGlyphs == 0 {
+		return nil // Not a TrueType program, or one with no glyph count to hold a CID.
 	}
-	cidToGID, ok := cidToGIDMapping(ctx, doc, cidFontDict)
+	cidToGID, ok := cidToGIDMapped(ctx, doc, cidFontDict)
 	if !ok {
 		return nil // A /CIDToGIDMap stream that cannot be read; skip rather than guess.
 	}
@@ -617,12 +632,12 @@ func checkCIDSetCompletenessTrueTypeRendered(ctx context.Context, doc *document.
 		if cid == 0 {
 			continue // .notdef
 		}
-		gid := cid
+		gid, covered := cid, true
 		if cidToGID != nil {
-			gid = cidToGID(cid)
+			gid, covered = cidToGID(cid)
 		}
-		if emptyGIDs[gid] {
-			continue // glyph has no outline data
+		if !covered || int(gid) >= numGlyphs {
+			continue // the program holds no glyph for this CID
 		}
 		if !cidSetBits[cid] {
 			worst.offer(cid)
