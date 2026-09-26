@@ -337,46 +337,68 @@ func shownType3CodesWithoutUnicode(ctx context.Context, doc *document.Document, 
 }
 
 // glyphNameHasUnicode reports whether a glyph name yields a Unicode value on
-// its own, with no /ToUnicode CMap: through the Symbol font character set (PDF
-// Reference Appendix D, Table D.5), whose names are standard Adobe glyph names,
-// or through the Adobe Glyph List, including the uniXXXX and subset spellings
-// [encodings.GlyphToRuneFull] accepts.
+// its own, with no /ToUnicode CMap.
 //
-// The names in [nonAGLGlyphNames] are excluded. [encodings.GlyphToRuneFull]
-// serves text extraction too and maps names no published glyph list defines, so
-// it answers a broader question than ISO 32000-1, 9.10.2 asks here.
+// ISO 32000-1, 9.10.2 obtains the value by looking the character name up in
+// the Adobe Glyph List, so a name carries one only when a published list holds
+// it: the Adobe Glyph List itself (glyphlist.txt, AGL 2.0, the legacy list of
+// 4281 names, which holds every name of the shorter AGLFN), the named
+// characters of the Symbol font (Annex D, Table D.5), and the a-numbered names
+// of the ZapfDingbats glyph list (zapfdingbats.txt) published beside the AGL.
+// A spelling the AGL Specification only lets a consumer derive is in no list:
+// uniXXXX, uXXXX to uXXXXXX, a name with a .suffix, and an underscore-joined
+// ligature. Neither is a name litho's text extraction resolves on its own, a
+// TeX math name (integraldisplay) or a code-point spelling a producer invents
+// (G4F).
+//
+// Admitting the whole AGL and the ZapfDingbats list relaxes 9.10.2, whose
+// Differences condition names only the standard Latin character set and the
+// Symbol font of Annex D. veraPDF, the reference validator of ISO 19005 and
+// ISO 14289, draws the same line: its PDSimpleFont.toUnicode looks the name up
+// in its copy of glyphlist.txt by exact match, then in its Symbol and
+// ZapfDingbats sets, and nothing else. Measured with veraPDF 1.30.2 at
+// PDF/A-1a, 2u, 2a and PDF/UA-1 on one-code fixtures through a Type 1, a
+// TrueType and a Type 3 font: uni0044, uni00E9, uni00410042, u0044, u00E9,
+// u1F600, A.sc, a.alt, D.001, A_B, f_f, Qcaron and circlecopyrt all fail the
+// Unicode rule, while A, Acyrillic and Aacutesmall (AGL names outside the
+// AGLFN), afii10017, Idot, Kacute, Tcommaaccent, dotlessj, nabla, alpha and
+// a71 pass. The one exception is veraPDF's PDF/A-1 Type 1 path
+// (PDType1Font.toUnicodePDFA1), which consults no ZapfDingbats list and so
+// fails a71; litho keeps one set of lists for every part.
+//
+// Text extraction still derives a value from the uniXXXX and uXXXX spellings,
+// as PDF.js getUnicodeForGlyph does; only this exemption stops at the lists.
 //
 // # Corpus evidence
 //
 //   - govdocs thread_300_300084.pdf: shows codes its embedded Type 1 program
 //     names G4F and G56, which litho read as U+004F and U+0056, and veraPDF
-//     reports those glyphs as having no Unicode value. It backs refusing the
-//     synthetic code-point spellings.
+//     reports those glyphs as having no Unicode value.
+//   - pdfjs issue11016_reduced.pdf: its Calibre-Medium subset binds code 31 to
+//     f_f, and veraPDF reports it as "The glyph can not be mapped to Unicode".
+//   - verapdf 6-2-11-7-2-t01-fail-a.pdf, 6-3-8-t01-fail-a.pdf: embed CMEX10
+//     whose sole glyph is integraldisplay, and veraPDF reports both.
+//   - govdocs thread_000_000859.pdf: binds code 1 to a71 through /Differences
+//     on an unembedded ZapfDingbats, and veraPDF reports nothing.
+//   - pdfjs issue10640.pdf, issue2176.pdf: show codes their embedded Type 1
+//     subsets name zero.os, one.oldstyle and the like, and veraPDF reports
+//     each glyph.
+//   - pdfjs issue5039.pdf, issue7439.pdf, issue7769.pdf, issue14864.pdf: show
+//     codes named uni0020, uni0053, uni0411 and the like through Type 1 and
+//     Type 3 fonts, and veraPDF reports each glyph.
+//   - All corpora: at PDF/A-2u those six files are the only ones whose verdict
+//     moved when the derived spellings were refused, and on each litho states
+//     the 79 glyphs veraPDF 1.30.2 reports, code for code, where it stated 3.
+//     On those files it also matches veraPDF code for code at PDF/A-1a and
+//     PDF/UA-1.
 func glyphNameHasUnicode(name string) bool {
 	if _, ok := encodings.SymbolGlyphsUnicode[name]; ok {
 		return true
 	}
-	// The typography tables reach past the AGL to serve text extraction; a
-	// conformance exemption may not. See [nonAGLGlyphNames].
-	if nonAGLGlyphNames[name] {
-		return false
-	}
-	// A name on the list wins even if it happens to look synthetic. Otherwise
-	// the code-point spellings producers invent are refused, since veraPDF
-	// gives such a glyph no Unicode value.
-	if _, ok := encodings.GlyphToRuneSimple(name); ok {
+	if _, ok := encodings.DingbatsGlyphsUnicode[name]; ok {
 		return true
 	}
-	if encodings.IsSyntheticGlyphName(name) {
-		return false
-	}
-	// TODO: veraPDF looks a name up in the Adobe Glyph List table alone
-	// (AdobeGlyphList.get), which holds no uniXXXX or uXXXX spelling, so a
-	// code named uni0044 has no Unicode value there: veraPDF 1.30 fails it at
-	// PDF/A-2u through a Type 1 and through a Type 3 font. Measure the corpora
-	// before refusing those spellings here.
-	_, ok := encodings.GlyphToRuneFull(name)
-	return ok
+	return encodings.InAdobeGlyphList(name)
 }
 
 // shownCodesNamedByResolvableDifferences reports whether /Differences names
@@ -756,7 +778,6 @@ func usedGlyphNamesResolvable(ctx context.Context, doc *document.Document, fontD
 		// [glyphNameHasUnicode] rather than encodings.GlyphToRuneFull: the
 		// typography tables serve text extraction and map names no published
 		// glyph list defines, which ISO 32000-1, 9.10.2 does not admit here.
-		// See [nonAGLGlyphNames].
 		if glyphNameHasUnicode(glyphName) || symbolEncodingNames[glyphName] {
 			continue
 		}
@@ -1217,18 +1238,19 @@ func checkToUnicode(ctx context.Context, doc *document.Document, fontDict ast.Pd
 	// [allGlyphNamesAGLResolvable] states: its glyphs are named a1 to a191, and
 	// ISO 32000-1, 9.10.2 admits "the Adobe standard Latin character set or the
 	// set of named characters in the Symbol font" and no third set, so those
-	// names carry no Unicode value here. The Adobe Glyph List does map them,
-	// which is why [glyphNameHasUnicode] answers true and every name survey
-	// below would pass the font. [allGlyphNamesAGLResolvable] already excluded
-	// the standard 14 spelling; an embedded subset reaches the surveys below
-	// instead.
+	// names carry no Unicode value here. The ZapfDingbats glyph list published
+	// beside the AGL does map them, which is why [glyphNameHasUnicode] answers
+	// true and every name survey below would pass the font.
+	// [allGlyphNamesAGLResolvable] already excluded the standard 14 spelling;
+	// an embedded subset reaches the surveys below instead.
 	//
 	// Part 1 only, and measured rather than assumed: veraPDF answers the very
 	// same test (`toUnicode != null` on a Glyph) differently by flavour,
 	// reporting such a glyph at PDF/A-1a and passing it at PDF/A-2u, where the
 	// rule runs and succeeds rather than going unapplied. Parts 2 and later
-	// evidently admit the Adobe Glyph List entry that 9.10.2 does not, so the
-	// exemption stands there.
+	// admit the ZapfDingbats glyph list entry that 9.10.2 does not (veraPDF's
+	// PDSimpleFont.toUnicode consults ZapfDingbats.hasGlyphName, and the part 1
+	// PDType1Font.toUnicodePDFA1 does not), so the exemption stands there.
 	dingbats := PDFAPart(profile) == 1 && isZapfDingbatsByName(ctx, doc, fontDict)
 
 	fd := document.ResolveFontDescriptor(ctx, doc, fontDict)
