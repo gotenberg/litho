@@ -24,6 +24,11 @@ var errUnexpectedDelimiter = errors.New("unexpected delimiter")
 // file, or at the end of the object when [Parser.WithObjectEnd] bounds it.
 var errTruncatedToken = errors.New("data ends inside a token")
 
+// ErrTruncatedInlineImageDict marks an inline image dictionary the data ends
+// inside, before the ID keyword that ends it (ISO 32000-1, 8.9.7).
+// [Parser.ParseInlineImageHeader] returns it wrapped.
+var ErrTruncatedInlineImageDict = errors.New("data ends inside an inline image dictionary")
+
 // errNestingTooDeep marks input whose object nesting passes
 // [maxParseNestingDepth]. Refusing the object is the only available answer:
 // the recursion is otherwise bounded by the goroutine stack alone, and a stack

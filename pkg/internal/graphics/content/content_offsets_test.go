@@ -2,8 +2,11 @@ package content
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/parser"
 )
 
 func TestParseStreamDataWithOffsets(t *testing.T) {
@@ -50,8 +53,9 @@ func TestParseStreamDataWithOffsets(t *testing.T) {
 // ends inside an inline image dictionary, before the ID that ISO 32000-1,
 // 8.9.7 ends it with, gives. The readings that read the image, veraPDF's, a
 // repair's and the whole stream's, fail on it, and [ParseStreamDataWithOffsets]
-// returns the error [ParseStreamData] returns, with both slices nil so they
-// stay parallel. An image whose data runs to the end of the stream fails no
+// returns the error [ParseStreamData] returns,
+// [parser.ErrTruncatedInlineImageDict], with both slices nil so they stay
+// parallel. An image whose data runs to the end of the stream fails no
 // reading: each ends the data there. The reading of PDF.js stops at the
 // dictionary instead ([readInlineImage]) and keeps what it read before.
 func TestParseStreamDataWithOffsets_ErrorIsConsistent(t *testing.T) {
@@ -66,8 +70,8 @@ func TestParseStreamDataWithOffsets_ErrorIsConsistent(t *testing.T) {
 	} {
 		ops, ranges, err := ParseStreamDataWithOffsets(ctx, data, opts...)
 		_, want := ParseStreamData(ctx, data, opts...)
-		if err == nil || want == nil || err.Error() != want.Error() {
-			t.Errorf("%s: ParseStreamDataWithOffsets error %v, want the error of ParseStreamData, %v", name, err, want)
+		if !errors.Is(err, parser.ErrTruncatedInlineImageDict) || !errors.Is(want, parser.ErrTruncatedInlineImageDict) {
+			t.Errorf("%s: ParseStreamDataWithOffsets error %v, ParseStreamData error %v, want both %v", name, err, want, parser.ErrTruncatedInlineImageDict)
 		}
 		if ops != nil || ranges != nil {
 			t.Errorf("%s: on error want nil ops and ranges; got %d ops, %d ranges", name, len(ops), len(ranges))

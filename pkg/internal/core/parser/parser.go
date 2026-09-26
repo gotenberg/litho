@@ -1590,7 +1590,7 @@ func (p *Parser) ParseInlineImageHeader(ctx context.Context) (ast.PdfDict, error
 			return nil, fmt.Errorf("inline image dict: %w", err)
 		}
 		if tok.Type == lexer.TokenEOF {
-			return nil, fmt.Errorf("unexpected EOF in inline image dictionary")
+			return nil, fmt.Errorf("reading the inline image dictionary: %w", ErrTruncatedInlineImageDict)
 		}
 		// ID marks the end of the dictionary and start of raw image data.
 		if tok.Type == lexer.TokenKeyword && tok.Value == "ID" {
@@ -1626,7 +1626,7 @@ func (p *Parser) ParseInlineImageHeader(ctx context.Context) (ast.PdfDict, error
 			break
 		}
 		if nextTok.Type == lexer.TokenEOF {
-			return nil, fmt.Errorf("unexpected EOF after inline image key %q", keyName)
+			return nil, fmt.Errorf("reading the value of inline image key %q: %w", keyName, ErrTruncatedInlineImageDict)
 		}
 
 		// The entries between BI and ID form a dictionary (ISO 32000-1,
