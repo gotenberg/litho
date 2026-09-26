@@ -140,6 +140,10 @@ one deliberately rather than diffing it against a fresh build.
 | `typedreads_1b.pdf`    | PDF/A-1b     | Values veraPDF reads again through typed objects of its model    |
 | `fontcopies_2b.pdf`    | PDF/A-2b     | Fonts written directly, judged per copy, and CIDs past a program |
 | `usecmap_2u.pdf`       | PDF/A-2u     | `/ToUnicode` CMaps built on usecmap and `/UseCMap` bases         |
+| `mclang_2a.pdf`        | PDF/A-2a     | Marked-content `/Lang` entries no content walk judges            |
+| `mcform_2a.pdf`        | PDF/A-2a     | Marked-content `/Lang` in forms and annotation appearances       |
+| `xmpempty_1b.pdf`      | PDF/A-1b     | Empty XMP containers and control bytes against `/Info`           |
+| `extvalue_2b.pdf`      | PDF/A-2b     | Extension property values against their declared types           |
 
 ### Must-not-fire controls
 
@@ -340,6 +344,7 @@ zero-area annotation.
 
 Counts are distinct rule classes (`clause/test`) reported by litho. litho and
 veraPDF agree exactly on the set in every cell except the eight marked `*`,
+veraPDF agree exactly on the set in every cell except the two marked `*`,
 which are covered under [Known divergences](#known-divergences).
 
 | Fixture                | A-1a | A-1b | A-2a | A-2b | A-2u | A-3a | A-3b | A-3u | A-4 | A-4e | A-4f | UA-1 | UA-2 |
@@ -370,6 +375,7 @@ which are covered under [Known divergences](#known-divergences).
 | `encperm_ua1.pdf`      | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 2    | 4    |
 | `extprop_2b.pdf`       | 7    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 6   | 6    | 7    | 8    | 7    |
 | `extschema_2b.pdf`     | 12   | 9    | 11   | 8    | 9    | 12   | 9    | 10   | 6   | 6    | 7    | 8    | 8    |
+| `extvalue_2b.pdf`      | 7    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 5   | 5    | 6    | 5    | 6    |
 | `fenote_ua2.pdf`       | 4    | 3    | 5    | 4    | 4    | 5    | 4    | 4    | 3   | 3    | 4    | 5    | 6    |
 | `filestruct_1b.pdf`    | 15   | 13   | 12   | 10   | 10   | 12   | 10   | 10   | 13  | 13   | 14   | 10   | 8    |
 | `fontclaims_2b.pdf`    | 9    | 6    | 9    | 6    | 7    | 9    | 6    | 7    | 7   | 7    | 8    | 11   | 11   |
@@ -391,12 +397,14 @@ which are covered under [Known divergences](#known-divergences).
 | `idprefix_2b.pdf`      | 13   | 10   | 12   | 9    | 10   | 13   | 10   | 11   | 10  | 10   | 11   | 8    | 7    |
 | `imagereach_2b.pdf`    | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 5    | 6    |
 | `imgxmp_4.pdf`         | 10   | 8    | 15   | 13   | 13   | 15   | 13   | 13   | 8   | 9    | 10   | 7    | 6    |
-| `inlineimage_2b.pdf`   | 6\*  | 4    | 9\*  | 6    | 7    | 9\*  | 6    | 7    | 6   | 6    | 7    | 10   | 10   |
+| `inlineimage_2b.pdf`   | 7    | 4    | 10   | 6    | 7    | 10   | 6    | 7    | 6   | 6    | 7    | 10   | 10   |
 | `jpx_2b.pdf`           | 4    | 2    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 5    | 6    |
 | `limits_1b.pdf`        | 12   | 9    | 9    | 6    | 7    | 9    | 6    | 7    | 4   | 4    | 5    | 11   | 9    |
 | `limits_2b.pdf`        | 10   | 8    | 12   | 10   | 10   | 12   | 10   | 10   | 6   | 6    | 7    | 10   | 8    |
 | `linearized_1b.pdf`    | 6    | 4    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `linkfont_ua2.pdf`     | 7    | 6    | 8    | 7    | 8    | 8    | 7    | 8    | 5   | 5    | 6    | 4    | 5    |
+| `mcform_2a.pdf`        | 3    | 2    | 3    | 2    | 2    | 4    | 3    | 3    | 6   | 6    | 7    | 7    | 6    |
+| `mclang_2a.pdf`        | 2    | 2    | 1    | 1    | 1    | 2    | 2    | 2    | 5   | 5    | 6    | 4    | 4    |
 | `megafont_2b.pdf`      | 12   | 9    | 13   | 10   | 11   | 13   | 10   | 11   | 10  | 10   | 11   | 12   | 11   |
 | `metafilter_1b.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 8    | 7    |
 | `multipage_2b.pdf`     | 12   | 10   | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 10   | 9    |
@@ -427,6 +435,7 @@ which are covered under [Known divergences](#known-divergences).
 | `usecmap_2u.pdf`       | 5    | 2    | 7\*  | 3    | 5    | 7\*  | 3    | 5    | 5   | 5    | 6    | 9    | 9\*  |
 | `usedcs_2b.pdf`        | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `xfatable_ua1.pdf`     | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 4    | 7    |
+| `xmpempty_1b.pdf`      | 8    | 5    | 6    | 3    | 4    | 6    | 3    | 4    | 7   | 7    | 8    | 5    | 6    |
 | `xmpsyntax_1b.pdf`     | 9    | 7    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 9    | 8    |
 | `xobjstate_2b.pdf`     | 8    | 6    | 11   | 9    | 9    | 11   | 9    | 9    | 10  | 10   | 11   | 7    | 7    |
 | `xpacket_1b.pdf`       | 8    | 5    | 9    | 6    | 7    | 9    | 6    | 7    | 9   | 9    | 10   | 8    | 7    |
