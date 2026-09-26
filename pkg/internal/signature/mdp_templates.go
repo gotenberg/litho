@@ -34,7 +34,9 @@ var fieldTraits = []ast.PdfName{"Ff", "MaxLen", "Opt", "DV", "Q", "DA"}
 
 // widgetTraits are the entries of a widget annotation that define how it is
 // shown: its annotation flags (ISO 32000-1, 12.5.2, Table 164; 12.5.3) and its
-// appearance characteristics (12.5.6.19, Table 188).
+// appearance characteristics (12.5.6.19, Table 188). They belong to the
+// annotation rather than to its field, which is why [widgetMatch.copied]
+// compares them at P=2 only.
 var widgetTraits = []ast.PdfName{"F", "MK"}
 
 // templateWidget is a widget of a page the signed revision names as a
@@ -234,9 +236,19 @@ type widgetMatch struct {
 // copied returns the widget of widgets that widget copies: the same
 // rectangle, the same field type, the same partial name for its field and the
 // same [fieldTraits], compared object by object across the two revisions
-// ([pairBudget.same]). At P=2 it also has the same [widgetTraits]. P=3, which
-// adds annotation modification (ISO 32000-1, 12.8.2.2, Table 254), lets those
-// differ, as [annotationEntries] lets them change on a signed widget.
+// ([pairBudget.same]). At P=2 it also has the same [widgetTraits].
+//
+// At P=3 the [widgetTraits] may differ. ISO 32000-1, 12.8.2.2, Table 254 adds
+// "annotation creation, deletion, and modification" to what P=2 permits and
+// leaves no annotation type out, a widget is an annotation (12.5.6.19), and
+// /F and /MK are entries of the annotation (12.5.2, Table 164; Table 188), not
+// of its field (12.7.3.1, Table 220). A template instantiation creates the
+// copy's widget, so at P=3 it creates an annotation, whose flags and
+// appearance characteristics are then its own, as [annotationEntries] lets
+// them change on a signed widget. P=3 would permit the same result in two
+// updates, a faithful copy followed by a change to its widget. The
+// [fieldTraits] stay compared at every P, since no annotation change reaches a
+// field.
 //
 // A copy whose flags, options, default value or appearance differ from the
 // template's adds, under a template field's name, a field that accepts or
@@ -265,6 +277,8 @@ func (w widgetMatch) copied(ctx context.Context, widget ast.PdfDict, widgets []t
 func (w widgetMatch) sameTraits(ctx context.Context, traits, template []ast.PdfObject) bool {
 	compared := len(traits)
 	if w.policy == 3 {
+		// ISO 32000-1, 12.8.2.2, Table 254: P=3 permits annotation creation,
+		// and the instantiation creates the copy's widget ([widgetMatch.copied]).
 		compared -= len(widgetTraits)
 	}
 	for i := range compared {
