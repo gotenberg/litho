@@ -62,7 +62,7 @@ type Document struct {
 	colorCacheBytes  int                 // bytes held in colorCache, bounded by limits.Limits.MaxColorCacheBytes
 	mu               sync.RWMutex        // protects objectCache, fontCache, cmapCache, objStmCache, fontProgCache, colorCache, formatViolations and xrefEntries once construction completes
 	runMu            sync.Mutex          // serializes compliance-engine validation runs
-	xrefAugment      sync.Once           // guards the one-shot raw-bytes augmentation of xrefEntries
+	xrefAugment      xrefAugmentation    // runs the raw-bytes augmentation of xrefEntries to completion at most once
 	xrefAugmented    bool                // the augmentation added or overrode an entry; protected by mu
 	xrefAdded        map[int]bool        // object numbers the augmentation added, absent from the index as opened; protected by mu
 	maxCacheSize     int                 // evict all objects when cache exceeds this size

@@ -37,6 +37,11 @@ type MutationFunc func(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 // with the actual signature bytes.
 func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Document, signer Signer, mutations []MutationFunc, xrefStream bool) error {
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
+	// A done ctx can stop the raw-byte augmentation short, and the allocator
+	// then starts below objects the file defines.
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("numbering the signature's objects: %w", err)
+	}
 
 	// Apply non-signature mutations first.
 	for _, m := range mutations {

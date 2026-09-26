@@ -246,7 +246,13 @@ func scanForCatalog(ctx context.Context, doc *Document) ast.PdfDict {
 //     augmentation while it opens, and its catalog, its page count and its
 //     PDF/A-1b and PDF/A-2b remediations do not change.
 func scanObjects(ctx context.Context, doc *Document, match func(ast.PdfDict) bool) (ast.PdfIndirectRef, ast.PdfDict) {
-	doc.AugmentXRef(ctx)
+	if err := doc.AugmentXRef(ctx); err != nil {
+		// ctx is done. Ranging the index without the objects the table leaves
+		// out would recover a catalog, or none, depending on when it was
+		// cancelled, and the caller fails on ctx anyway.
+		doc.Logger.Debug("catalog recovery: raw-byte augmentation did not complete", slog.Any("err", err))
+		return ast.PdfIndirectRef{}, nil
+	}
 	// The loop calls Resolve, and XRefEntries yields from a copy taken under
 	// the lock.
 	for objNum, entry := range doc.XRefEntries() {

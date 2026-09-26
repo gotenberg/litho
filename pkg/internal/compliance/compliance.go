@@ -92,7 +92,9 @@ func runValidationViolations(ctx context.Context, doc *document.Document, profil
 	// reads the index, rather than at whichever lookup misses first.
 	ctx = document.OpenedObjectsOnly(ctx)
 	if doc.Rebuilt {
-		doc.AugmentXRef(ctx)
+		if err := doc.AugmentXRef(ctx); err != nil {
+			return nil, fmt.Errorf("compliance: augmenting the rebuilt cross-reference index: %w", err)
+		}
 	}
 	doc.SetComplianceMode(true)
 	defer doc.SetComplianceMode(false)

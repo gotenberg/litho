@@ -1773,6 +1773,11 @@ func (w *Writer) remediate(
 	}
 	doc := w.reader.doc
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
+	// A done ctx can stop the raw-byte augmentation short, and the allocator
+	// then starts below objects the file defines.
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("remediation canceled: %w", err)
+	}
 
 	// An earlier remediation's output is superseded by this run's. Kept, it
 	// was also streamed in its place: WriteTo judges the file fresh by the
@@ -2169,6 +2174,12 @@ func (w *Writer) remediationRound(
 	defer r2.Close()
 
 	alloc := writer.NewObjAllocator(r2.doc.HighestObjectNumber(ctx))
+	// A done ctx can stop the raw-byte augmentation short, and the allocator
+	// then starts below objects the file defines. The round ends as one that
+	// fixed nothing, and the caller reports the cancellation after the loop.
+	if ctx.Err() != nil {
+		return roundResult{}, false, nil
+	}
 	rep, err := run(ctx, alloc, r2.doc, disabled)
 	if err != nil || rep == nil || countRepairs(rep.Fixed) == 0 {
 		return roundResult{}, false, nil
@@ -2598,6 +2609,11 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 		overrides := w.rewriteOverrides
 		if len(w.mutations) > 0 {
 			mutAlloc := writer.NewObjAllocator(w.reader.doc.HighestObjectNumber(ctx))
+			// A done ctx can stop the raw-byte augmentation short, and the allocator
+			// then starts below objects the file defines.
+			if err := ctx.Err(); err != nil {
+				return err
+			}
 			// Seed with the remediation overrides so a mutation queued after
 			// remediation builds ON its fixes rather than against the untouched
 			// source. The page mutations read through latestPageDict, so the
@@ -2641,6 +2657,11 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 	doc := w.reader.doc
 
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
+	// A done ctx can stop the raw-byte augmentation short, and the allocator
+	// then starts below objects the file defines.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	// Seed the remediation overrides FIRST so a queued mutation builds on the
 	// fixes instead of losing to them: the page mutations read through

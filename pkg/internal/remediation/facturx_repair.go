@@ -39,7 +39,9 @@ var hybridInvoiceNames = []hybridInvoiceName{
 // violations inside it stay residual. Returns the fix descriptions, or
 // nil when no known invoice attachment exists.
 func RepairHybridInvoice(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator) ([]string, error) {
-	reserveDefinedObjects(ctx, doc, alloc)
+	if err := reserveDefinedObjects(ctx, doc, alloc); err != nil {
+		return nil, fmt.Errorf("repair hybrid invoice: %w", err)
+	}
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
 		return nil, fmt.Errorf("repair hybrid invoice: trailer missing /Root")

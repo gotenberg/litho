@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"unicode/utf16"
 	"unicode/utf8"
 
@@ -1107,29 +1109,39 @@ func (d *Document) XRefEntriesSnapshot() map[int]xref.XRefEntry {
 }
 
 // AugmentXRef runs the raw-byte augmentation of the cross-reference index now
-// rather than at the first lookup that misses. It runs at most once per
-// Document, so a call after the augmentation ran does nothing.
+// rather than at the first lookup that misses. It runs to completion at most
+// once per Document, so a call after a run completed does nothing and returns
+// nil. It returns ctx's error when ctx is done before a run completes: the index
+// then stands as it did, and the next call runs the augmentation again.
 // [Document.XRefAugmented] reports whether it changed the index.
-func (d *Document) AugmentXRef(ctx context.Context) {
-	d.augmentXrefFromRawScan(ctx)
+func (d *Document) AugmentXRef(ctx context.Context) error {
+	return d.augmentXrefFromRawScan(ctx)
 }
 
 // XRefAugmented reports whether the raw-byte augmentation has changed the
-// cross-reference index, whichever goroutine ran it. The augmentation runs at
-// most once per Document, so the answer turns true at most once and never
-// back.
+// cross-reference index, whichever goroutine ran it. The augmentation runs to
+// completion at most once per Document, and a run that does not complete
+// changes nothing, so the answer turns true at most once and never back.
 func (d *Document) XRefAugmented() bool {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 	return d.xrefAugmented
 }
 
+// xrefAugmentation is the state of the raw-byte augmentation of the
+// cross-reference index ([Document.augmentXrefFromRawScan]). The zero value is
+// ready: no run has completed and none is in progress.
+type xrefAugmentation struct {
+	done    atomic.Bool   // a run completed; set once and never cleared
+	mu      sync.Mutex    // protects running
+	running chan struct{} // closed when the run in progress ends; nil when no run is in progress
+}
+
 // augmentXrefFromRawScan performs a single linear scan of the document
-// bytes looking for every "N G obj" marker. It runs at most once per
-// Document via d.xrefAugment. The scan is invoked from the
-// object-resolution path, so its cost is paid only on files whose xref
-// is truncated, lies about object offsets, or omits objects inserted
-// by an external editor.
+// bytes looking for every "N G obj" marker. It runs to completion at most once
+// per Document. The scan is invoked from the object-resolution path, so its
+// cost is paid only on files whose xref is truncated, lies about object
+// offsets, or omits objects inserted by an external editor.
 //
 // For each discovered marker the augmentation inserts the entry when
 // missing, recording its number in d.xrefAdded for
@@ -1137,11 +1149,24 @@ func (d *Document) XRefAugmented() bool {
 // xref-declared offset does not contain the expected "N G obj" header. Compressed
 // (type 2) and free (type 0) entries are left alone: a raw scan cannot
 // see into object streams, and free entries intentionally reference no
-// body. The sync.Once serializes the scan against itself; the mutation
-// loop holds d.mu so a concurrent reader, which reads the entries under
-// d.mu.RLock through [Document.XRefEntry] or [Document.XRefEntries], never
-// observes the map mid-write. The O(file size) scan runs unlocked so it does
-// not serialize unrelated resolves.
+// body.
+//
+// A run never overlaps another: a caller that finds one in progress waits for
+// it to end, or for its own ctx to be done, and then runs the scan itself when
+// that run ended without completing. A run whose ctx is done before the scan
+// has read the whole file ends without completing: it discards what it found,
+// leaves the index as it stood, and returns ctx's error, and the next call runs
+// the scan again under its own ctx. Spending the Document's one run on a
+// cancelled scan left the index without the objects the table leaves out for
+// the Document's lifetime, so an allocator seeded afterwards numbered a new
+// object over one of them. A scan that fails on a read error completes as a
+// run that found nothing: the reader failed, and running the scan again at
+// every lookup that misses would read the whole file each time.
+//
+// The mutation loop holds d.mu so a concurrent reader, which reads the entries
+// under d.mu.RLock through [Document.XRefEntry] or [Document.XRefEntries],
+// never observes the map mid-write. The O(file size) scan runs unlocked so it
+// does not serialize unrelated resolves.
 //
 // Deliberate leniency: ISO 32000-1, 7.3.10 makes a reference to an object the
 // table does not list a reference to null, and inserting what the scan finds
@@ -1158,45 +1183,94 @@ func (d *Document) XRefAugmented() bool {
 // file as veraPDF does instead, and resolves under [OpenedObjectsOnly],
 // where a lookup that misses the table does not run the scan and no object
 // it inserted resolves.
-func (d *Document) augmentXrefFromRawScan(ctx context.Context) {
-	d.xrefAugment.Do(func() {
-		discovered, err := scanIndirectObjects(ctx, d.r, d.size)
-		if err != nil {
-			d.Logger.Debug("xref augmentation scan failed", slog.Any("err", err))
-			return
+//
+// # Corpus evidence
+//
+//   - All corpora: with the one run spent on a scan cancelled before it began,
+//     466 files kept an index without the entries a completed run adds or
+//     moves, and the 7 that define objects past their table and /Size
+//     answered [Document.HighestObjectNumber] below those objects. With a
+//     later run completing it, every file that opens answers as a Document
+//     that was never cancelled does.
+func (d *Document) augmentXrefFromRawScan(ctx context.Context) error {
+	a := &d.xrefAugment
+	for !a.done.Load() {
+		a.mu.Lock()
+		if a.done.Load() {
+			a.mu.Unlock()
+			return nil
 		}
-		added, overridden := 0, 0
-		d.mu.Lock()
-		for objNum, entry := range discovered {
-			existing, exists := d.xrefEntries[objNum]
-			if !exists {
-				d.xrefEntries[objNum] = entry
-				if d.xrefAdded == nil {
-					d.xrefAdded = make(map[int]bool)
-				}
-				d.xrefAdded[objNum] = true
-				added++
-				continue
-			}
-			if existing.Type != xref.XRefTypeNormal {
-				continue
-			}
-			if objectHeaderMatches(d.r, existing.Offset, objNum) {
-				continue
-			}
+		running := a.running
+		if running == nil {
+			running = make(chan struct{})
+			a.running = running
+			a.mu.Unlock()
+			return d.runXrefAugmentation(ctx, running)
+		}
+		a.mu.Unlock()
+		select {
+		case <-running:
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for the raw-byte scan of the file: %w", ctx.Err())
+		}
+	}
+	return nil
+}
+
+// runXrefAugmentation is one run of [Document.augmentXrefFromRawScan]. The
+// caller registered running as the run in progress; the run clears it and
+// closes it when it ends, completed or not, so a waiter never outlives it.
+func (d *Document) runXrefAugmentation(ctx context.Context, running chan struct{}) error {
+	a := &d.xrefAugment
+	defer func() {
+		a.mu.Lock()
+		a.running = nil
+		a.mu.Unlock()
+		close(running)
+	}()
+
+	discovered, err := scanIndirectObjects(ctx, d.r, d.size)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return fmt.Errorf("scanning the file for object headers: %w", ctxErr)
+		}
+		d.Logger.Debug("xref augmentation scan failed", slog.Any("err", err))
+		a.done.Store(true)
+		return nil
+	}
+	added, overridden := 0, 0
+	d.mu.Lock()
+	for objNum, entry := range discovered {
+		existing, exists := d.xrefEntries[objNum]
+		if !exists {
 			d.xrefEntries[objNum] = entry
-			overridden++
+			if d.xrefAdded == nil {
+				d.xrefAdded = make(map[int]bool)
+			}
+			d.xrefAdded[objNum] = true
+			added++
+			continue
 		}
-		changed := added > 0 || overridden > 0
-		d.xrefAugmented = changed
-		d.mu.Unlock()
-		if changed {
-			d.Logger.Debug("xref augmented from raw scan",
-				slog.Int("added", added),
-				slog.Int("overridden", overridden),
-			)
+		if existing.Type != xref.XRefTypeNormal {
+			continue
 		}
-	})
+		if objectHeaderMatches(d.r, existing.Offset, objNum) {
+			continue
+		}
+		d.xrefEntries[objNum] = entry
+		overridden++
+	}
+	changed := added > 0 || overridden > 0
+	d.xrefAugmented = changed
+	d.mu.Unlock()
+	a.done.Store(true)
+	if changed {
+		d.Logger.Debug("xref augmented from raw scan",
+			slog.Int("added", added),
+			slog.Int("overridden", overridden),
+		)
+	}
+	return nil
 }
 
 // objectHeaderMatches reports whether the bytes at offset start with an
@@ -1484,9 +1558,12 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		// from a raw-byte scan of the file. Handles PDFs whose xref
 		// table is truncated or references objects inserted by
 		// external editors that never rewrote the table. The scan is
-		// O(file size) and memoised via sync.Once so subsequent
-		// lookups hit the cached index.
-		d.augmentXrefFromRawScan(ctx)
+		// O(file size) and completes once, so subsequent lookups hit
+		// the augmented index. A scan ctx cancelled has not looked for
+		// the object, which is not the same as the file lacking it.
+		if err := d.augmentXrefFromRawScan(ctx); err != nil {
+			return nil, fmt.Errorf("looking up object %d: %w", ref.ObjectNum, err)
+		}
 		entry, ok = d.XRefEntry(ref.ObjectNum)
 	}
 	if !ok {
@@ -1561,9 +1638,13 @@ func (d *Document) parseNormalObject(ctx context.Context, ref ast.PdfIndirectRef
 	// offsets, which happens on files rewritten by buggy producers or after
 	// truncation. Augment from the raw scan and retry at the discovered offset
 	// before giving up. The override lives inside augmentXrefFromRawScan so all
-	// writes to xrefEntries stay under the sync.Once.
+	// writes to xrefEntries stay in its one completed run. A run ctx cancelled
+	// has not moved the entry, and parsing at the offset the table gives would
+	// cache whatever sits there for every later lookup.
 	if !objectHeaderMatches(d.r, entry.Offset, ref.ObjectNum) {
-		d.augmentXrefFromRawScan(ctx)
+		if err := d.augmentXrefFromRawScan(ctx); err != nil {
+			return nil, fmt.Errorf("relocating object %d: %w", ref.ObjectNum, err)
+		}
 		if rescanned, ok := d.XRefEntry(ref.ObjectNum); ok {
 			entry = rescanned
 		}

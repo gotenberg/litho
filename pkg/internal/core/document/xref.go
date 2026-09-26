@@ -287,9 +287,12 @@ func (d *Document) objectNumberFits(objNum int) bool {
 // the index, for whichever caller makes it, so an answer read from the index
 // as it stood depended on what the caller did before, and the same bytes came
 // out with different object numbers (CONTRIBUTING "Deterministic output").
-// Running it here makes the answer a function of the bytes. It runs at most
-// once per Document, and a scan cancelled through ctx leaves the index as it
-// stood.
+// Running it here makes the answer a function of the bytes. It runs to
+// completion at most once per Document. A run ctx cancels leaves the index as it
+// stood, so the answer may then sit below an object the bytes define: a caller
+// checks ctx.Err() before it numbers an object from the answer, and a later
+// call under a live ctx runs the augmentation again. A nil ctx.Err() after the
+// call means the augmentation completed, since only a done ctx stops it short.
 //
 // # Corpus evidence
 //
@@ -318,7 +321,11 @@ func (d *Document) objectNumberFits(objNum int) bool {
 //     cross-reference stream, 9 and 23.
 //   - pdfjs issue12714.pdf, issue18444.pdf: the same, at 117 and 390.
 func (d *Document) HighestObjectNumber(ctx context.Context) int {
-	d.AugmentXRef(ctx)
+	if err := d.AugmentXRef(ctx); err != nil {
+		// ctx is done, and the caller learns it from ctx.Err(); the answer
+		// below is the index's as it stands.
+		d.Logger.Debug("highest object number read without the raw-byte augmentation", slog.Any("err", err))
+	}
 	highest := 0
 	// Under the read lock, because resolution registers objects it recovers by
 	// scanning long after the index was built, on whichever goroutine missed.

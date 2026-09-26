@@ -162,6 +162,11 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 	}
 
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
+	// A done ctx can stop the raw-byte augmentation short, and the allocator
+	// then starts below objects the file defines.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Start from what earlier stages produced, remediation or an earlier
 	// Redact, and replay whatever an earlier stage queued, so the passes below
@@ -309,6 +314,11 @@ func (w *Writer) enforceRedactions(ctx context.Context, overrides map[int]ast.Pd
 	}
 	doc := w.reader.doc
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
+	// A done ctx can stop the raw-byte augmentation short, and the allocator
+	// then starts below objects the file defines.
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	seedAllocator(alloc, overrides)
 
 	scan, err := mutations.ScanOutputForTokens(ctx, alloc, doc, w.redactedTokens)

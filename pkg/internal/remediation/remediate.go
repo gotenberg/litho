@@ -91,7 +91,9 @@ func RemediateWTPDF(ctx context.Context, doc *document.Document, alloc *writer.O
 // font's /Widths then reads the XMP packet the remediation added. The
 // allocator arrives from the caller, which seeds it the same way, and the
 // reservation keeps a caller that seeded it from anything less from handing a
-// repair such a number.
+// repair such a number. A ctx done before the augmentation completed leaves
+// the highest number read from the index alone, so the reservation fails with
+// ctx's error rather than let a repair allocate from it.
 //
 // # Corpus evidence
 //
@@ -106,8 +108,12 @@ func RemediateWTPDF(ctx context.Context, doc *document.Document, alloc *writer.O
 //     table leaves objects out, only those four files change, no residual
 //     violation moves, and a fresh reader and one that extracted the text of
 //     every page first write the same bytes.
-func reserveDefinedObjects(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator) {
+func reserveDefinedObjects(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator) error {
 	alloc.Reserve(doc.HighestObjectNumber(ctx))
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("reserving the object numbers the file defines: %w", err)
+	}
+	return nil
 }
 
 func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, profile string, opts Options, violations []error) (*Report, error) {
@@ -117,7 +123,9 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		)
 		return &Report{}, nil
 	}
-	reserveDefinedObjects(ctx, doc, alloc)
+	if err := reserveDefinedObjects(ctx, doc, alloc); err != nil {
+		return nil, err
+	}
 
 	// Classify violations by fixer. A disabled fixer claims nothing, so the
 	// violations it would have answered stay in the residual.
