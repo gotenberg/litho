@@ -11,5 +11,11 @@
 // Subcommands:
 //
 //	corpus init [--corpus=<names>]
-//	corpus run  [--corpus=...] [--feature=...] [--profile=...] [--format=text|json] [--workers=N]
+//	corpus run  [--corpus=...] [--feature=...] [--profile=...] [--format=text|json] [--workers=N] [--allow-version-drift]
+//	corpus versions [--build-args]
+//	corpus tools
+//
+// Every provisioning tool and corpus source comes at the version
+// test/integration/corpus/versions.env pins; run, baseline and check refuse
+// goldens recorded with other versions.
 package main

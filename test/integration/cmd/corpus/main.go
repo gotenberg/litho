@@ -44,6 +44,10 @@ func dispatch(cmd string, args []string) int {
 		return runCheck(args)
 	case "scan-claims":
 		return runScanClaims(args)
+	case "versions":
+		return runVersions(args)
+	case "tools":
+		return runTools(args)
 	case "-h", "--help", "help":
 		printUsage(os.Stderr)
 		return 0
@@ -60,7 +64,7 @@ func dispatch(cmd string, args []string) int {
 // the real text instead of a rebuilt copy of it, the way cmd/litho's printUsage
 // does. See [TestUsageNamesEveryDispatchableSubcommand].
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: corpus <init|run|baseline|check|scan-claims> [flags]")
+	fmt.Fprintln(w, "Usage: corpus <init|run|baseline|check|scan-claims|versions|tools> [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  init          Provision corpora via Docker (downloads PDFs and goldens)")
@@ -68,6 +72,8 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  baseline      Run the matrix and write the per-cell match counts to a baseline file")
 	fmt.Fprintln(w, "  check         Run the matrix and fail if any cell regressed against the baseline")
 	fmt.Fprintln(w, "  scan-claims   Emit a claims.csv mapping each PDF to its claimed profile")
+	fmt.Fprintln(w, "  versions      Print the pinned tool and source versions (--build-args: as docker build arguments)")
+	fmt.Fprintln(w, "  tools         Compare the local verapdf, node, java, qpdf, pdfsig and pikepdf with the pins")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Common run flags:")
 	fmt.Fprintln(w, "  --corpus=pdfjs,verapdf        Restrict to named corpora")
@@ -75,4 +81,8 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --profile=PDF_A-2b            Restrict to fixtures under one profile")
 	fmt.Fprintln(w, "  --format=text|json            Output format")
 	fmt.Fprintln(w, "  --workers=N                   Parallel workers (default: GOMAXPROCS)")
+	fmt.Fprintln(w, "  --allow-version-drift         Score goldens made with other versions than versions.env pins")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Versions come from test/integration/corpus/versions.env; an environment variable")
+	fmt.Fprintln(w, "of the same name overrides one (VERAPDF_VERSION=1.30.3 corpus init).")
 }

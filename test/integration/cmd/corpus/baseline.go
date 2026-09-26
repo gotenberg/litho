@@ -110,15 +110,17 @@ func runBaseline(args []string) int {
 	output := fs.String("output", defaultBaselinePath(), "Baseline file path to write")
 	merge := fs.Bool("merge", false, "Overlay this run's cells onto the existing baseline instead of replacing the whole file")
 	workers := fs.Int("workers", runtime.GOMAXPROCS(0), "Parallel fixture workers")
+	allowDrift := fs.Bool("allow-version-drift", false, allowVersionDriftUsage)
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
 		return 1
 	}
 
 	opts := runOptions{
-		corpora:  splitCSV(*corpus),
-		features: splitCSV(*feature),
-		workers:  *workers,
+		corpora:           splitCSV(*corpus),
+		features:          splitCSV(*feature),
+		workers:           *workers,
+		allowVersionDrift: *allowDrift,
 	}
 	if opts.workers < 1 {
 		opts.workers = 1
@@ -163,6 +165,7 @@ func runCheck(args []string) int {
 	feature := fs.String("feature", "", "Comma-separated feature names (empty = all)")
 	baselinePath := fs.String("baseline", defaultBaselinePath(), "Baseline file to check against")
 	workers := fs.Int("workers", runtime.GOMAXPROCS(0), "Parallel fixture workers")
+	allowDrift := fs.Bool("allow-version-drift", false, allowVersionDriftUsage)
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
 		return 1
@@ -175,9 +178,10 @@ func runCheck(args []string) int {
 	}
 
 	opts := runOptions{
-		corpora:  splitCSV(*corpus),
-		features: splitCSV(*feature),
-		workers:  *workers,
+		corpora:           splitCSV(*corpus),
+		features:          splitCSV(*feature),
+		workers:           *workers,
+		allowVersionDrift: *allowDrift,
 	}
 	if opts.workers < 1 {
 		opts.workers = 1

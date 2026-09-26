@@ -54,6 +54,9 @@ endif
 ifdef CORPUS_WORKERS
 CORPUS_RUN_FLAGS += --workers=$(CORPUS_WORKERS)
 endif
+ifdef CORPUS_ALLOW_VERSION_DRIFT
+CORPUS_RUN_FLAGS += --allow-version-drift
+endif
 
 CORPUS_INIT_FLAGS :=
 ifdef CORPUS_NAME
@@ -61,9 +64,17 @@ CORPUS_INIT_FLAGS += --corpus=$(CORPUS_NAME)
 endif
 
 .PHONY: corpus
-corpus: ## Score litho across the (corpus, feature) matrix; auto-provisions. Vars: CORPUS_JSON_OUTPUT, CORPUS_NAME, CORPUS_FEATURE, CORPUS_PROFILE, CORPUS_WORKERS
+corpus: ## Score litho across the (corpus, feature) matrix; auto-provisions. Vars: CORPUS_JSON_OUTPUT, CORPUS_NAME, CORPUS_FEATURE, CORPUS_PROFILE, CORPUS_WORKERS, CORPUS_ALLOW_VERSION_DRIFT
 	go run ./test/integration/cmd/corpus init $(CORPUS_INIT_FLAGS)
 	go run ./test/integration/cmd/corpus run $(CORPUS_RUN_FLAGS)
+
+.PHONY: corpus-init
+corpus-init: ## Provision missing corpora via Docker at the versions test/integration/corpus/versions.env pins (an env var of the same name overrides one). Vars: CORPUS_NAME
+	go run ./test/integration/cmd/corpus init $(CORPUS_INIT_FLAGS)
+
+.PHONY: corpus-tools
+corpus-tools: ## Compare the local verapdf, node, java, qpdf, pdfsig and pikepdf with the pinned versions
+	go run ./test/integration/cmd/corpus tools
 
 .PHONY: corpus-baseline
 corpus-baseline: ## Rewrite test/integration/baseline.json with the current matrix scores

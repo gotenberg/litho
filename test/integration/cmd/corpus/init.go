@@ -13,7 +13,9 @@ import (
 // runInit provisions one or more corpora via Docker. For each corpus,
 // the manifest's Source directory under test/integration/corpus/ must
 // ship a Dockerfile; the image writes PDFs and goldens to the corpus
-// testdata directory.
+// testdata directory. Every tool and source comes at the version
+// test/integration/corpus/versions.env pins, or its environment
+// override.
 func runInit(args []string) int {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
 	corpus := fs.String("corpus", "", "Comma-separated corpus names (empty = all)")
@@ -27,6 +29,14 @@ func runInit(args []string) int {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		return 1
 	}
+	pins, err := loadPins()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return 1
+	}
+	for _, n := range pins.Notices {
+		fmt.Printf("versions: %s\n", n)
+	}
 
 	for _, name := range names {
 		manifest, err := LoadManifest(name)
@@ -34,7 +44,7 @@ func runInit(args []string) int {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", name, err)
 			return 1
 		}
-		if err := provisionCorpus(manifest); err != nil {
+		if err := provisionCorpus(manifest, pins); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v\n", name, err)
 			return 1
 		}
@@ -42,9 +52,14 @@ func runInit(args []string) int {
 	return 0
 }
 
-// provisionCorpus builds the corpus Docker image and runs it with the
-// testdata directory bind-mounted at /output.
-func provisionCorpus(m *Manifest) error {
+// provisionCorpus builds the corpus Docker image at the pinned versions and
+// runs it with the testdata directory bind-mounted at /output.
+//
+// An already provisioned corpus is left alone, even when its version record
+// disagrees with the pins: deleting goldens is the operator's call, since a
+// re-provision can take an hour. The disagreement is reported with the
+// command that re-provisions, and run, baseline and check refuse to score it.
+func provisionCorpus(m *Manifest, pins *resolvedPins) error {
 	testdataRoot, err := filepath.Abs(m.TestdataRoot())
 	if err != nil {
 		return fmt.Errorf("resolve testdata root: %w", err)
@@ -55,6 +70,16 @@ func provisionCorpus(m *Manifest) error {
 
 	if provisioned(testdataRoot, m) {
 		fmt.Printf("%s: already provisioned (delete %s to force regeneration)\n", m.Name, testdataRoot)
+		check := checkCorpusVersions(m, m.TestdataRoot(), featuresFromGoldens(m), pins)
+		for _, line := range check.Warnings {
+			fmt.Printf("warning: %s\n", line)
+		}
+		for _, line := range check.Refusals {
+			fmt.Printf("stale: %s\n", line)
+		}
+		if check.Remedy != "" {
+			fmt.Printf("  re-provision: %s\n", check.Remedy)
+		}
 		return nil
 	}
 
@@ -65,7 +90,7 @@ func provisionCorpus(m *Manifest) error {
 	const image = "litho-corpus-builder"
 
 	fmt.Printf("%s: building shared corpus image (%s)...\n", m.Name, image)
-	build := exec.Command("docker", "build", "-t", image, dockerCtx) //nolint:gosec // build context is the fixed corpus directory
+	build := exec.Command("docker", dockerBuildArgs(image, dockerCtx, pins)...) //nolint:gosec // build context is the fixed corpus directory, pins are validated by parsePins
 	build.Stdout = os.Stdout
 	build.Stderr = os.Stderr
 	if err := build.Run(); err != nil {
@@ -105,6 +130,17 @@ func provisionCorpus(m *Manifest) error {
 	}
 	fmt.Printf("%s: provisioned.\n", m.Name)
 	return nil
+}
+
+// dockerBuildArgs returns the `docker build` argument list for the corpus
+// image: every pin as a --build-arg, so the Dockerfile needs no default of
+// its own.
+func dockerBuildArgs(image, dockerCtx string, pins *resolvedPins) []string {
+	pinArgs := pins.buildArgs()
+	args := make([]string, 0, 3+len(pinArgs)+1)
+	args = append(args, "build", "-t", image)
+	args = append(args, pinArgs...)
+	return append(args, dockerCtx)
 }
 
 // buildScanClaimsBinary cross-compiles the `corpus scan-claims` helper

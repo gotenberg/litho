@@ -43,6 +43,10 @@ type runOptions struct {
 	profile  string   // when non-empty, fixtures not under this profile skip
 	format   string   // "text" or "json"
 	workers  int      // parallelism
+
+	// allowVersionDrift scores goldens recorded with other versions than
+	// versions.env pins instead of refusing them.
+	allowVersionDrift bool
 }
 
 func runRun(args []string) int {
@@ -52,17 +56,19 @@ func runRun(args []string) int {
 	profile := fs.String("profile", "", "Filter to fixtures under this profile directory")
 	format := fs.String("format", "text", "Output format: text or json")
 	workers := fs.Int("workers", runtime.GOMAXPROCS(0), "Parallel fixture workers")
+	allowDrift := fs.Bool("allow-version-drift", false, allowVersionDriftUsage)
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "parsing flags: %v\n", err)
 		return 1
 	}
 
 	opts := runOptions{
-		corpora:  splitCSV(*corpus),
-		features: splitCSV(*feature),
-		profile:  *profile,
-		format:   *format,
-		workers:  *workers,
+		corpora:           splitCSV(*corpus),
+		features:          splitCSV(*feature),
+		profile:           *profile,
+		format:            *format,
+		workers:           *workers,
+		allowVersionDrift: *allowDrift,
 	}
 	if opts.workers < 1 {
 		opts.workers = 1
@@ -87,15 +93,31 @@ func runRun(args []string) int {
 	return 0
 }
 
+// allowVersionDriftUsage documents the flag run, baseline and check share.
+const allowVersionDriftUsage = "Score goldens recorded with other versions than test/integration/corpus/versions.env pins instead of refusing them"
+
 // buildScoreboard runs the matrix described by opts and returns the
 // aggregated [Scoreboard]. Shared between the run, baseline, and
-// check subcommands. Returns ok=false when corpus resolution fails;
-// per-corpus errors are reported to stderr and the offending corpus
-// is omitted from the result.
+// check subcommands. Returns ok=false when corpus resolution fails or
+// when a golden the run would read was provisioned with other versions
+// than the pins (see [verifyVersions]); per-corpus errors are reported
+// to stderr and the offending corpus is omitted from the result.
+//
+// The version refusal fails the whole run rather than omitting the
+// corpus: check treats an omitted corpus as "missing", which is not
+// fatal, so a stale corpus would pass the gate unscored.
 func buildScoreboard(ctx context.Context, opts runOptions) (*Scoreboard, bool) {
 	corpora, err := resolveCorpora(opts.corpora)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return nil, false
+	}
+	pins, err := loadPins()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		return nil, false
+	}
+	if !verifyVersions(os.Stderr, loadManifests(corpora), (*Manifest).TestdataRoot, featureNames(opts.features), pins, opts.allowVersionDrift) {
 		return nil, false
 	}
 	start := time.Now()
