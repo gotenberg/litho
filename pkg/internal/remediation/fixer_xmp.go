@@ -46,13 +46,18 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 		return nil, fmt.Errorf("resolving catalog")
 	}
 
-	// Gather metadata from /Info dict for syncing.
-	info := gatherInfoMetadata(ctx, alloc, doc)
-
 	// Determine PDF/A part and conformance from profile string.
 	part := compliance.PDFAPart(profile)
 	conformance := compliance.PDFAConformance(profile)
 	uaPart := compliance.PDFUAPart(profile)
+
+	var infoFixes []string
+	if part == 1 {
+		infoFixes = dropNonTextInfoEntries(ctx, alloc, doc)
+	}
+
+	// Gather metadata from /Info dict for syncing.
+	info := gatherInfoMetadata(ctx, alloc, doc)
 
 	// Check if XMP metadata stream already exists.
 	var existingXMP string
@@ -94,17 +99,17 @@ func fixXMP(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 		// Patch existing XMP.
 		patched, patchFixes := patchExistingXMP(existingXMP, part, conformance, uaPart, info)
 		if len(patchFixes) == 0 && !reencoded {
-			return nil, nil // nothing to patch
+			return infoFixes, nil // nothing to patch
 		}
 		xmpBytes = []byte(patched)
-		fixes = patchFixes
+		fixes = append(slices.Clone(infoFixes), patchFixes...)
 		if reencoded {
 			fixes = append(fixes, "re-encoded XMP packet to UTF-8")
 		}
 	} else {
 		// Generate new XMP.
 		xmpBytes = []byte(generateXMP(part, conformance, uaPart, info))
-		fixes = []string{"generated XMP metadata stream"}
+		fixes = append(slices.Clone(infoFixes), "generated XMP metadata stream")
 	}
 
 	// Create XMP stream.
@@ -201,10 +206,11 @@ type infoMetadata struct {
 	// FallbackTitle holds a best-effort title (first outline entry) for
 	// PDF/UA dc:title synthesis when the document has no /Title at all.
 	FallbackTitle string
-	// Present records which Info dict keys exist at all. ISO 19005
-	// §6.7.3 keys its sync rules on key presence, so an absent /Keywords
-	// must not be confused with an empty one: only present keys drive
-	// the XMP sync.
+	// Present records which Info dict keys hold a string, empty or not. ISO
+	// 19005 §6.7.3 keys its sync rules on key presence, so an absent
+	// /Keywords must not be confused with an empty one: only present keys
+	// drive the XMP sync. A key holding anything else is not present here
+	// (see [dropNonTextInfoEntries]).
 	Present map[string]bool
 }
 
@@ -212,12 +218,15 @@ func gatherInfoMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	var info infoMetadata
 	info.Present = make(map[string]bool)
 	if infoDict := liveInfoDict(ctx, alloc, doc); infoDict != nil {
+		// Only a string is an entry to sync. Read as an empty one, a stream
+		// blanked its analogue, which veraPDF then compared with the stream's
+		// own rendering and failed under 6.7.3, while litho, reading the same
+		// empty string, passed it.
 		readField := func(key ast.PdfName) string {
 			v, ok := infoDict[key]
 			if !ok {
 				return ""
 			}
-			info.Present[string(key)] = true
 			if _, isRef := v.(ast.PdfIndirectRef); isRef {
 				resolved, err := document.ResolveObject(ctx, doc, v)
 				if err != nil {
@@ -226,6 +235,7 @@ func gatherInfoMetadata(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 				v = resolved
 			}
 			if s, ok := v.(ast.PdfString); ok {
+				info.Present[string(key)] = true
 				return document.DecodePdfString(s)
 			}
 			return ""
@@ -281,6 +291,78 @@ func liveInfoDict(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		return nil
 	}
 	return resolved
+}
+
+// infoTextKeys are the /Info entries ISO 32000-1, Table 317 defines as text
+// strings and ISO 19005-1, 6.7.3 compares with an XMP analogue.
+var infoTextKeys = []ast.PdfName{"Title", "Author", "Subject", "Keywords", "Creator", "Producer"}
+
+// dropNonTextInfoEntries removes from /Info every text entry whose value is
+// not a string, and returns what it removed.
+//
+// ISO 32000-1, Table 317 makes these entries text strings, and ISO 19005-1,
+// 6.7.3 requires each present one to be equivalent to its XMP analogue.
+// veraPDF compares a value of another type as the text its Java object
+// renders: a stream, a dictionary, an array and a boolean as "stream(size =
+// 10)", "dictionary(size = 1)", "[T]" and an object hash, which no analogue
+// holds, and a number or a name as its spelling. None of them is the text the
+// entry is defined to hold, so the repair drops the entry: "Key == null" then
+// passes, and the analogue keeps whatever the packet says. A null value, and a
+// reference the file does not resolve, already pass, and stay.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-1b__veraPDF_test_suite_6-1-5-t01-fail-j.pdf: its /Title
+//     is a reference to a font program. Its PDF/A-1b and PDF/A-1a outputs,
+//     default and aggressive, failed 6.7.3 test 2 in veraPDF 1.30 whatever
+//     dc:title held, and now pass veraPDF outright, keeping the dc:title
+//     "Test title" of the source packet.
+//   - All corpora: it is the only file with a text entry that holds neither
+//     a string nor null, so no other output changes.
+func dropNonTextInfoEntries(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) []string {
+	infoObj, ok := doc.Index.Trailer["Info"]
+	if !ok {
+		return nil
+	}
+	infoDict := liveInfoDict(ctx, alloc, doc)
+	if infoDict == nil {
+		return nil
+	}
+	var dropped []string
+	for _, key := range infoTextKeys {
+		v, ok := infoDict[key]
+		if !ok {
+			continue
+		}
+		resolved, err := document.ResolveObject(ctx, doc, v)
+		if err != nil {
+			doc.Logger.Debug("remediation: xmp-metadata: /Info entry does not resolve, keeping it as null", "key", string(key), "error", err)
+			continue
+		}
+		switch resolved.(type) {
+		case nil, ast.PdfNull, ast.PdfString:
+			continue
+		}
+		dropped = append(dropped, string(key))
+	}
+	if len(dropped) == 0 {
+		return nil
+	}
+	newInfo := make(ast.PdfDict, len(infoDict))
+	maps.Copy(newInfo, infoDict)
+	for _, key := range dropped {
+		delete(newInfo, ast.PdfName(key))
+	}
+	if ref, isRef := infoObj.(ast.PdfIndirectRef); isRef && ref.ObjectNum > 0 {
+		alloc.AllocAt(ref.ObjectNum, newInfo)
+	} else {
+		doc.Index.Trailer["Info"] = newInfo
+	}
+	fixes := make([]string, 0, len(dropped))
+	for _, key := range dropped {
+		fixes = append(fixes, fmt.Sprintf("removed /Info /%s, which holds no text string", key))
+	}
+	return fixes
 }
 
 // maxFallbackTitleRunes caps a synthesized dc:title sourced from an outline
