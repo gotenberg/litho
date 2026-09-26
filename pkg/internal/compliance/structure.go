@@ -1924,9 +1924,9 @@ func checkSingleDocumentRoot(ctx context.Context, doc *document.Document, struct
 // §14.8.6).
 const pdf2NamespaceURI = "http://iso.org/pdf2/ssn"
 
-// checkPDFALangValid validates §6.8.4 (PDF/A-1) / §6.7.3.4 (PDF/A-2/3):
-// if a /Lang entry is present in the catalog or structure elements, its value
-// must be a valid RFC 3066 language tag.
+// checkPDFALangValid validates ISO 19005-1, 6.8.4 and ISO 19005-2/3, 6.7.4:
+// a /Lang entry in the catalog, in a structure element or in a marked-content
+// property list must be a language tag of the part's grammar.
 func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast.PdfDict, _ string, part int) []Violation {
 	rule := pdfaLangValidRule(part)
 
@@ -1944,117 +1944,29 @@ func checkPDFALangValid(ctx context.Context, doc *document.Document, catalog ast
 		}
 	}
 
-	// Check structure element /Lang values.
-	treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
-	if err != nil || treeRoot == nil {
-		return results
-	}
-
-	walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
-		langObj, ok := elem["Lang"]
-		if !ok {
-			return
-		}
-		langStr, err := document.ResolveString(ctx, doc, langObj)
-		if err != nil {
-			return
-		}
-		if pdfaLangTagInvalid(langStr, part) {
-			results = append(results, Violation{
-				Rule:    rule,
-				Context: fmt.Sprintf("lang=%s, %s", strings.TrimSpace(document.DecodePdfString(langStr)), path),
-			})
-		}
-	})
-
-	// Also scan page /Properties resource dicts for /Lang values (used by BDC operators).
-	pages := collectPageObjects(ctx, doc, catalog)
-	for pageIdx := range pages {
-		if ctx.Err() != nil {
-			return results
-		}
-		page := pages[pageIdx].dict
-		res := pages[pageIdx].effectiveResources(ctx, doc)
-		if res == nil {
-			continue
-		}
-		propsDict, _ := document.ResolveDict(ctx, doc, res["Properties"])
-
-		// Scan raw content stream for inline /Lang in BDC dicts.
-		streamData, _ := resolvePageContentBytes(ctx, doc, page)
-		if len(streamData) > 0 {
-			s := string(streamData)
-			searchStr := s
-			for ctx.Err() == nil {
-				idx := strings.Index(searchStr, "/Lang")
-				if idx < 0 {
-					break
-				}
-				searchStr = searchStr[idx+5:]
-				rest := strings.TrimLeft(searchStr, " \t\r\n")
-				if len(rest) == 0 {
-					break
-				}
-				var langVal ast.PdfString
-				if rest[0] == '(' {
-					depth := 1
-					i := 1
-					for i < len(rest) && depth > 0 {
-						switch rest[i] {
-						case '(':
-							depth++
-						case ')':
-							depth--
-						case '\\':
-							i++
-						}
-						i++
-					}
-					if i > 1 {
-						langVal = ast.PdfString(rest[1 : i-1])
-					}
-				} else if len(rest) > 1 && rest[0] == '<' && rest[1] != '<' {
-					// Hex string.
-					end := strings.Index(rest[1:], ">")
-					if end > 0 {
-						langVal = ast.PdfString(decodeHexString(rest[1 : end+1]))
-					}
-				}
-				if pdfaLangTagInvalid(langVal, part) {
-					results = append(results, Violation{
-						Rule: rule,
-						Context: fmt.Sprintf("lang=%s, page %d inline BDC",
-							strings.TrimSpace(document.DecodePdfString(langVal)), pageIdx+1),
-					})
-					break
-				}
-			}
-		}
-
-		for _, propName := range sortedNames(propsDict) {
-			propObj := propsDict[propName]
-			propDict, err := document.ResolveDict(ctx, doc, propObj)
-			if err != nil || propDict == nil {
-				continue
-			}
-			langObj, ok := propDict["Lang"]
+	// Check structure element /Lang values. A file with no structure tree has
+	// none, and its marked content below is judged all the same: the clause
+	// names every property list, whatever the tree.
+	if treeRoot, err := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"]); err == nil && treeRoot != nil {
+		walkStructureElements(ctx, doc, treeRoot, func(elem ast.PdfDict, path string) {
+			langObj, ok := elem["Lang"]
 			if !ok {
-				continue
+				return
 			}
 			langStr, err := document.ResolveString(ctx, doc, langObj)
 			if err != nil {
-				doc.Logger.Debug("compliance.structure: cannot resolve Lang string", "error", err)
-				continue
+				return
 			}
 			if pdfaLangTagInvalid(langStr, part) {
 				results = append(results, Violation{
-					Rule: rule,
-					Context: fmt.Sprintf("lang=%s, page %d property %s",
-						strings.TrimSpace(document.DecodePdfString(langStr)), pageIdx+1, propName),
+					Rule:    rule,
+					Context: fmt.Sprintf("lang=%s, %s", strings.TrimSpace(document.DecodePdfString(langStr)), path),
 				})
 			}
-		}
+		})
 	}
+
+	results = append(results, pdfaMarkedContentLang(ctx, doc, catalog, part, rule)...)
 
 	return results
 }

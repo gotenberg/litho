@@ -44,13 +44,20 @@ var spanLangSubjects = []struct {
 const contentOpCancelCheckInterval = 200
 
 // checkMarkedContentLang validates the language tag of any /Lang set on a
-// marked-content sequence (BDC/DP) in a page content stream. A /Lang on a
-// marked-content property list is a language tag like any other, so it must
-// match the RFC 3066 / BCP 47 grammar; an ill-formed value fails UA-1 §7.2 t29
-// or UA-2 §8.4.4 t2. The dict-based catalog and structure-tree checks operate on
-// object dictionaries and never reach content-operator language tags, so this
-// content-stream pass is required to cover them. An empty tag is "not present"
-// and passes [IsValidLangTag].
+// marked-content property list in content (see [forEachContentLang] for which
+// ones). A /Lang on a marked-content property list is a language tag like any
+// other, so it must match the RFC 3066 / BCP 47 grammar; an ill-formed value
+// fails UA-1 §7.2 t29 or UA-2 §8.4.4 t2. The dict-based catalog and
+// structure-tree checks operate on object dictionaries and never reach
+// content-operator language tags, so this content-stream pass is required to
+// cover them.
+//
+// # Corpus evidence
+//
+//   - All corpora: over the 71 files veraPDF parses among the 72 whose pages
+//     or forms spell "/Lang" in their content, the count equals veraPDF's on
+//     every file at PDF/UA-1 and PDF/UA-2, as it did when a DP operator
+//     counted and forms and annotation appearances did not.
 func checkMarkedContentLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !IsPDFUA(profile) {
 		return nil
@@ -58,7 +65,11 @@ func checkMarkedContentLang(ctx context.Context, doc *document.Document, catalog
 	rule := langValidRule(profile)
 
 	var results []Violation
-	forEachMarkedContentLang(ctx, doc, catalog, func(pageIdx int, lang ast.PdfString) bool {
+	forEachContentLang(ctx, doc, catalog, func(pageNum int, langObj ast.PdfObject, _ string) {
+		// Best-effort: a /Lang that resolves to a non-string is reported as the
+		// empty tag it decodes to, which fails the Language-Tag grammar just as
+		// the malformed value does.
+		lang, _ := document.ResolveString(ctx, doc, langObj)
 		// A /Lang present on a marked-content sequence must be a valid
 		// Language-Tag; for PDF/UA an empty value is invalid (UA-1 §7.2 t29
 		// / UA-2 §8.4.4 t2), unlike PDF/A where an empty text string is
@@ -66,44 +77,10 @@ func checkMarkedContentLang(ctx context.Context, doc *document.Document, catalog
 		tag := strings.TrimSpace(document.DecodePdfString(lang))
 		if tag == "" || !IsValidUALangTag(lang) {
 			results = append(results, failf(rule,
-				"page %d: marked-content /Lang %q is not a valid language tag", pageIdx+1, tag)...)
+				"page %d: marked-content /Lang %q is not a valid language tag", pageNum, tag)...)
 		}
-		return false
 	})
 	return results
-}
-
-// forEachMarkedContentLang invokes fn for every /Lang entry on a BDC or DP
-// marked-content operator across all page content streams. lang is the entry as
-// written (empty when it does not resolve to a string). fn returns true to stop
-// the scan early. The dict-based catalog and structure-tree checks never
-// reach content-operator language tags, so this content-stream pass is the only
-// place they are observed.
-func forEachMarkedContentLang(ctx context.Context, doc *document.Document, catalog ast.PdfDict, fn func(pageIdx int, lang ast.PdfString) bool) {
-	forEachPageContentOps(ctx, doc, catalog, func(pageIdx int, page *pageObject, ops []content.Operation) bool {
-		props := markedContentProps{doc: doc, page: page.dict, resources: page.effectiveResources(ctx, doc)}
-		for _, op := range ops {
-			if op.Operator != "BDC" && op.Operator != "DP" {
-				continue
-			}
-			pd := props.dict(ctx, op)
-			if pd == nil {
-				continue
-			}
-			langObj, ok := pd["Lang"]
-			if !ok {
-				continue
-			}
-			// Best-effort: a /Lang that resolves to a non-string is reported by
-			// the caller as the empty tag it decodes to, which fails the
-			// Language-Tag grammar just as the malformed value does.
-			lang, _ := document.ResolveString(ctx, doc, langObj)
-			if fn(pageIdx, lang) {
-				return true
-			}
-		}
-		return false
-	})
 }
 
 // forEachPageContentOps parses every page content stream and invokes fn with the

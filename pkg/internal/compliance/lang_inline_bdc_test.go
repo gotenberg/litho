@@ -11,12 +11,9 @@ import (
 
 // langBDCDoc builds a tagged one-page document whose content stream carries a
 // /Lang inside a BDC property dictionary, written exactly as bdcLang spells it.
-//
-// Two entries are load bearing rather than decorative. A /StructTreeRoot is
-// required because checkPDFALangValid returns as soon as it cannot resolve one,
-// so the inline scan would never run. /Resources is required because the scan
-// sits behind a resources lookup that falls through to the next page when
-// neither the page nor its parent declares any.
+// The check reads marked content whether or not a structure tree exists (see
+// TestCheckPDFALangValid_MarkedContent); the tree here keeps the document the
+// shape it was first measured in.
 func langBDCDoc(t *testing.T, bdcLang string) *document.Document {
 	t.Helper()
 	body := "/Span << " + bdcLang + " >> BDC BT ET EMC"
@@ -48,16 +45,13 @@ func inlineBDCLangViolations(t *testing.T, bdcLang string) []Violation {
 	return out
 }
 
-// TestCheckPDFALangValid_InlineBDC covers the raw content-stream scan that reads
-// a /Lang out of a BDC property dictionary. The function had no test at all, and
-// the branch selecting between the literal-string and hex-string forms carried a
-// dead sub-expression that no linter reports.
+// TestCheckPDFALangValid_InlineBDC covers a /Lang read out of an inline BDC
+// property dictionary, in both string forms.
 //
 // The last case is the one that discriminates. A dictionary value is not a
-// string, and reading "<<" as the start of a hex string decodes the dict's own
-// punctuation into bytes and reports a language tag the file never wrote.
-// Reducing the branch condition to a bare `rest[0] == '<'` makes exactly that
-// case fail, which is what shows this test can tell the shapes apart.
+// string, and a raw byte scan that read "<<" as the start of a hex string
+// decoded the dict's own punctuation into bytes and reported a language tag the
+// file never wrote.
 func TestCheckPDFALangValid_InlineBDC(t *testing.T) {
 	t.Parallel()
 
