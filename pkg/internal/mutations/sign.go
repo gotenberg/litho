@@ -32,10 +32,10 @@ type Signer interface {
 type MutationFunc func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error
 
 // WriteWithSignature performs the two-pass incremental signing flow:
-// write the incremental update with a placeholder /Contents hex string,
-// compute SHA-256 over the ByteRange (everything except the placeholder),
-// call [Signer.Sign] to get the PKCS#7 blob, then patch the placeholder
-// with the actual signature bytes.
+// write the incremental update with placeholder /Contents and /ByteRange
+// values, fill in the ByteRange, compute SHA-256 over the bytes it covers
+// (everything but the /Contents hex string), call [Signer.Sign] to get the
+// PKCS#7 blob, then patch the /Contents placeholder with it.
 //
 // overrides holds objects an earlier stage replaced or added, keyed by their
 // number in doc, such as the repairs of a remediation. They are queued before
@@ -189,51 +189,66 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 
 	pdfBytes := buf.Bytes()
 
-	// Find the placeholder in the output to determine ByteRange.
-	// The serializer writes binary PdfString as hex: <0000...0000>.
-	// Search for the unique zero-filled hex string.
+	// Both placeholders are looked for in the update alone. The source's bytes
+	// come first in the buffer, and a source holding a hex string or a
+	// ByteRange of the same shape, the placeholder of a signature another tool
+	// prepared, would otherwise take the patch meant for this one.
+	srcSize := doc.FileSize()
+	if srcSize < 0 || srcSize > int64(len(pdfBytes)) {
+		return fmt.Errorf("the %d-byte output cannot hold its %d-byte source", len(pdfBytes), srcSize)
+	}
+	update := pdfBytes[srcSize:]
+	updateStart := len(pdfBytes) - len(update)
+
+	// The serializer writes a binary PdfString as hex: <0000...0000>.
 	placeholderHex := bytes.Repeat([]byte("00"), estimatedSize)
 	sigContentsMarker := append([]byte{'<'}, placeholderHex...)
 	sigContentsMarker = append(sigContentsMarker, '>')
-	sigStart := bytes.Index(pdfBytes, sigContentsMarker)
-	if sigStart < 0 {
+	at := bytes.Index(update, sigContentsMarker)
+	if at < 0 {
 		return fmt.Errorf("signature placeholder not found in output")
 	}
+	sigStart := updateStart + at
 	sigEnd := sigStart + len(sigContentsMarker)
 
 	// ByteRange: [0, sigStart, sigEnd, totalLen-sigEnd]
 	totalLen := len(pdfBytes)
 	byteRange := [4]int{0, sigStart, sigEnd, totalLen - sigEnd}
 
-	// Compute the SHA-256 hash over the ByteRange regions.
+	// The ByteRange array lies in the signature dictionary, inside the bytes
+	// it covers (ISO 32000-1, 12.8.1), so it takes its final values before
+	// the digest is computed. Hashing it with the placeholder values left
+	// every signature failing verification. The placeholder uses ten-digit
+	// values so the zero-padded offsets replace it in place, and no offset
+	// computed above moves.
+	brOld := []byte("/ByteRange [0 9999999999 9999999999 9999999999]")
+	brNew := fmt.Appendf(nil, "/ByteRange [0 %010d %010d %010d]", byteRange[1], byteRange[2], byteRange[3])
+	brAt := bytes.Index(update, brOld)
+	if brAt < 0 || len(brNew) != len(brOld) {
+		return fmt.Errorf("signature ByteRange placeholder not found in output")
+	}
+	copy(update[brAt:], brNew)
+
 	h := sha256.New()
 	h.Write(pdfBytes[byteRange[0] : byteRange[0]+byteRange[1]])
 	h.Write(pdfBytes[byteRange[2] : byteRange[2]+byteRange[3]])
 	digest := h.Sum(nil)
 
-	// Get the PKCS#7 signature.
 	sigBytes, err := signer.Sign(digest)
 	if err != nil {
 		return fmt.Errorf("signing: %w", err)
 	}
 
-	// Hex-encode the signature and pad to fill the placeholder.
+	// Hex-encode the signature and pad it with zeros to fill the placeholder.
 	sigHex := hex.EncodeToString(sigBytes)
 	if len(sigHex) > placeholderHexLen {
 		return fmt.Errorf("signature (%d bytes) exceeds estimated size (%d bytes)", len(sigBytes), estimatedSize)
 	}
-	// Pad with zeros.
 	sigHex += string(bytes.Repeat([]byte("0"), placeholderHexLen-len(sigHex)))
-
-	// Patch the placeholder.
 	copy(pdfBytes[sigStart+1:sigEnd-1], []byte(sigHex))
 
-	// Patch the ByteRange array. The placeholder uses 10-digit values
-	// (9999999999) so zero-padded values of the same width can replace them.
-	brOld := []byte("/ByteRange [0 9999999999 9999999999 9999999999]")
-	brNew := fmt.Appendf(nil, "/ByteRange [0 %010d %010d %010d]", byteRange[1], byteRange[2], byteRange[3])
-	pdfBytes = bytes.Replace(pdfBytes, brOld, brNew, 1)
-
-	_, err = dst.Write(pdfBytes)
-	return err
+	if _, err := dst.Write(pdfBytes); err != nil {
+		return fmt.Errorf("writing the signed document: %w", err)
+	}
+	return nil
 }
