@@ -69,131 +69,119 @@ var resourceCategories = map[ast.PdfName]bool{
 // and ISO 19005-2/4 §6.1.13 test 4. Replacement uses '_' for the
 // offending bytes so the new name stays visible and distinct.
 //
-// Names used as keys of a resource-category dictionary are deliberately
-// left alone. A content stream addresses such a key by name, and this
-// package cannot rewrite every reference site in lockstep:
+// A name used as a key of a resource-category dictionary is addressed by
+// name from content streams, and from the /DA default-appearance strings of
+// an interactive form (ISO 32000-1 §12.7.3.3, Table 222), which name a /DR
+// font key from inside a PdfString. Renaming the key alone would leave the
+// old name in those places, addressing nothing, so such a key is renamed only
+// together with every place that writes it. When a name-length violation is
+// among the ones matched, [planContentNames] gives every over-long name of the
+// content streams and resource dictionaries one new spelling, which
+// [renameContentStreams] splices into the streams and the object walk writes
+// in the dictionaries and /DA strings. A key the plan cannot rename in every
+// place is left as written, a residual: a dangling reference is worse than an
+// honest one. A key with invalid UTF-8 bytes and no length defect is left
+// alone, since ISO 19005-2 §6.1.8 and ISO 19005-4 §6.1.7 judge the names of
+// fonts, colorants and structure types, not resource keys.
 //
-//   - Not every reference lives in a content stream. An interactive
-//     form's /DA default-appearance string (ISO 32000-1 §12.7.3.3,
-//     Table 222) names a /DR font key from inside a PdfString, which no
-//     name-level rewrite of the object graph can reach.
-//   - The one content-rewrite path here (livePageContentOps →
-//     serializeOps → replaceContentStream) cannot round-trip an inline
-//     image: the parser drops the binary payload off-token, as
-//     TestFixContentStreams_PreservesInlineImage pins. An inline image's
-//     /CS operand is itself a reference into /Resources/ColorSpace, so
-//     the very streams that would need rewriting are the ones that
-//     cannot be re-serialized.
-//   - That path also only reaches page /Contents. Form XObjects, tiling
-//     patterns, Type 3 glyph procedures and annotation appearance
-//     streams are content streams too (ISO 32000-1 §7.8.2, §8.10.1,
-//     §8.7.3.1, §9.6.5) and are not reachable through it.
+// The object walk offers every object [everyObject] reads, the ones stored in
+// an object stream and the ones an earlier fixer queued under a new number
+// included, the same objects the plan scans. A dictionary that cannot take a
+// rename, because it already holds the new spelling as a key or because the
+// stream it belongs to cannot be read back, refuses it, and the whole repair
+// runs again from where it started without that rename.
 //
-// Renaming the key regardless buys nothing: the over-long or malformed
-// name still sits verbatim in the content stream, so the violation
-// survives while the operand no longer resolves to any resource. A
-// dangling reference is worse than an honest residual, so the violation
-// is left for the post-fix validation to report.
-func fixNameUTF8(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
-	pinned, err := collectResourceKeys(ctx, alloc, doc)
+// # Corpus evidence
+//
+//   - pdfjs issue6151.pdf: selects its font with Tf by a /Font key of 139
+//     bytes, and litho limits_2b.pdf paints with cs by a /ColorSpace key of
+//     203 bytes. Both stayed residuals, in the key and in the content stream,
+//     after every remediation. Their PDF/A-1b and PDF/A-2b remediations,
+//     default and aggressive, now pass the name limit for litho and veraPDF
+//     1.30.
+//   - pdfjs bug1778692.pdf: stores 6 over-long names in an object stream,
+//     which the object walk did not reach, and its PDF/A-2b remediations now
+//     pass the name limit for both validators.
+//   - All corpora: of the 29 files holding a name this repair rewrites,
+//     remediated at PDF/A-1b, PDF/A-2b and PDF/A-4, default and aggressive,
+//     no other finding moves for litho or veraPDF, and the extracted text,
+//     the images and the inline image data of the outputs do not change.
+func fixNameUTF8(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, violations []compliance.Violation, _ string) ([]string, error) {
+	scan, err := scanObjects(ctx, alloc, doc)
 	if err != nil {
 		return nil, fmt.Errorf("collecting resource dictionary keys: %w", err)
 	}
-	logDeclinedNames(doc, pinned)
-
-	dictFn := func(d ast.PdfDict) (ast.PdfDict, bool) { return sanitizeDictNames(d, pinned) }
-	arrayFn := func(a ast.PdfArray) (ast.PdfArray, bool) { return sanitizeArrayNames(a, pinned) }
-
-	count, err := walkIndirectObjects(ctx, alloc, doc, dictFn, arrayFn)
-	if err != nil {
-		return nil, err
+	plan := &contentNamePlan{spelling: map[string]ast.PdfName{}}
+	if slices.ContainsFunc(violations, isNameLengthViolation) {
+		if plan, err = planContentNames(ctx, alloc, doc, scan); err != nil {
+			return nil, fmt.Errorf("planning the rename of over-long names: %w", err)
+		}
 	}
-	if count == 0 {
-		return nil, nil
+
+	var snap writer.Snapshot
+	if len(plan.keys) > 0 {
+		snap = alloc.Snapshot()
 	}
-	return []string{fmt.Sprintf("sanitised non-UTF-8 names in %d object(s)", count)}, nil
+	var tally contentRenameTally
+	var repair *nameRepair
+	for attempt := 1; ; attempt++ {
+		var refused map[string]bool
+		tally, refused, err = renameContentStreams(ctx, alloc, doc, plan, scan.pinned)
+		if err != nil {
+			return nil, err
+		}
+		repair = &nameRepair{pinned: scan.pinned, spelling: plan.spelling, refused: refused}
+		if err := repair.walk(ctx, alloc, doc); err != nil {
+			return nil, err
+		}
+		if len(repair.refused) == 0 {
+			break
+		}
+		alloc.Restore(snap)
+		if attempt == maxRenameAttempts {
+			// The round before withdrew every rename of a resource key,
+			// which is all a place can refuse, so no round reaches here.
+			// Should one, the document stays as it was rather than keep a
+			// rename some place refused.
+			doc.Logger.Debug("remediation: over-long name renames did not settle, leaving every name in place",
+				slog.Int("rounds", attempt))
+			return nil, nil
+		}
+		plan.withdraw(repair.refused, attempt+1 == maxRenameAttempts)
+	}
+	logDeclinedNames(doc, scan.pinned, plan.spelling)
+
+	var fixes []string
+	if repair.renamedKeys > 0 {
+		fixes = append(fixes, fmt.Sprintf("renamed %d over-long resource name(s) in their resource dictionaries and at %d place(s) content streams write them",
+			len(plan.keys), tally.keyUses))
+	}
+	if tally.otherUses > 0 {
+		fixes = append(fixes, fmt.Sprintf("shortened %d over-long name(s) in content streams", tally.otherUses))
+	}
+	if repair.appearances > 0 {
+		fixes = append(fixes, fmt.Sprintf("renamed over-long resource names in %d default-appearance string(s)", repair.appearances))
+	}
+	if repair.objects > 0 {
+		fixes = append(fixes, fmt.Sprintf("sanitised non-UTF-8 names in %d object(s)", repair.objects))
+	}
+	return fixes, nil
 }
 
-// logDeclinedNames reports at Debug the resource keys this fixer refuses
-// to rename, so a skipped repair is traceable rather than silent.
-func logDeclinedNames(doc *document.Document, pinned map[string]bool) {
+// logDeclinedNames reports at Debug the over-long resource keys this fixer
+// leaves in place, so a skipped repair is traceable rather than silent.
+func logDeclinedNames(doc *document.Document, pinned map[string]bool, spelling map[string]ast.PdfName) {
 	declined := 0
 	for name := range pinned {
-		if !utf8.ValidString(name) || len(name) > pdfANameMaxLen {
+		if _, renamed := spelling[name]; overLongName(name) && !renamed {
 			declined++
 		}
 	}
 	if declined == 0 {
 		return
 	}
-	doc.Logger.Debug("remediation: leaving malformed resource dictionary keys in place, renaming one would dangle its content-stream operand",
+	doc.Logger.Debug("remediation: leaving over-long resource dictionary keys in place, some place that writes them cannot be rewritten",
 		slog.Int("names", declined))
-}
-
-// collectResourceKeys returns every name used as a key of a
-// resource-category sub-dictionary anywhere in the document. Those names
-// are addressed by name from content streams and /DA strings, so
-// [fixNameUTF8] must not rewrite them.
-//
-// It scans the objects [walkIndirectObjects] rewrites, the ones stored in an
-// object stream included. A page stored there holds its /Resources, and a
-// scan that skipped it left that dictionary's keys unpinned for a walk that
-// renames names in the same object.
-func collectResourceKeys(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (map[string]bool, error) {
-	out := make(map[string]bool)
-	for objNum, entry := range sweptObjects(doc) {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if entry.Free || objNum == 0 {
-			continue
-		}
-		// Read alloc-first for the same reason walkIndirectObjects does:
-		// an earlier fixer may have queued a replacement whose resource
-		// keys differ from the parsed original.
-		obj, pending := alloc.Pending()[objNum]
-		if !pending {
-			resolved, err := doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation})
-			if err != nil || resolved == nil {
-				// An object that cannot be resolved contributes no keys.
-				// walkIndirectObjects skips it for the same reason, so the
-				// two passes stay in step.
-				doc.Logger.Debug("remediation: skipping object in resource key scan",
-					slog.Int("obj", objNum), slog.Any("err", err))
-				continue
-			}
-			obj = resolved
-		}
-		scanResourceKeys(ctx, alloc, doc, obj, out, 0)
-	}
-	return out, nil
-}
-
-// scanResourceKeys walks obj and records the keys of every
-// resource-category sub-dictionary it finds. Indirect references are
-// never followed except for the one hop that reaches a category
-// dictionary, so the walk terminates without cycle tracking.
-func scanResourceKeys(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, out map[string]bool, depth int) {
-	if depth > maxResourceScanDepth || ctx.Err() != nil {
-		return
-	}
-	switch v := obj.(type) {
-	case ast.PdfStream:
-		scanResourceKeys(ctx, alloc, doc, v.Dict, out, depth+1)
-	case ast.PdfArray:
-		for _, elem := range v {
-			scanResourceKeys(ctx, alloc, doc, elem, out, depth+1)
-		}
-	case ast.PdfDict:
-		for k, val := range v {
-			if resourceCategories[k] {
-				for name := range categoryDict(ctx, alloc, doc, val) {
-					out[string(name)] = true
-				}
-			}
-			scanResourceKeys(ctx, alloc, doc, val, out, depth+1)
-		}
-	}
 }
 
 // categoryDict resolves a resource-category value to its dictionary,
@@ -211,48 +199,144 @@ func categoryDict(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	return nil
 }
 
-// sanitizeDictNames walks a PdfDict and replaces every PdfName that
-// needs repair, leaving pinned resource keys untouched. Keys are visited
-// in sorted order: truncation can map two distinct over-long keys onto
-// the same 127-byte prefix, and the disambiguating suffix must not
-// depend on Go's randomized map iteration order.
-func sanitizeDictNames(dict ast.PdfDict, pinned map[string]bool) (ast.PdfDict, bool) {
+// nameRepair is one object walk of [fixNameUTF8]: it renames the names
+// spelling holds, and sanitises every other name that needs repair but the
+// pinned resource keys.
+type nameRepair struct {
+	// pinned holds every resource key of the document ([objectScan]).
+	pinned map[string]bool
+	// spelling maps the over-long names to rename to their new spelling
+	// ([contentNamePlan]).
+	spelling map[string]ast.PdfName
+	// refused holds the resource keys some place could not take the rename
+	// of.
+	refused map[string]bool
+	// touched holds the resource keys renamed in the object being walked,
+	// which it refuses when the object cannot be written back.
+	touched map[string]bool
+	// sanitised reports that the object being walked has a name repaired
+	// by [sanitizeName] rather than renamed by spelling.
+	sanitised bool
+	// objects counts the objects rewritten with a name [sanitizeName]
+	// repaired, appearances the /DA strings rewritten, and renamedKeys the
+	// resource keys renamed.
+	objects, appearances, renamedKeys int
+}
+
+// walk offers every object [everyObject] reads to the repair and writes back
+// the ones it changes. A stream keeps its body as read.
+func (r *nameRepair) walk(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
+	if r.refused == nil {
+		r.refused = make(map[string]bool)
+	}
+	write := func(objNum int, obj ast.PdfObject) {
+		if alloc.AllocAt(objNum, obj) && r.sanitised {
+			r.objects++
+		}
+	}
+	return everyObject(ctx, alloc, doc, func(objNum int, obj ast.PdfObject) {
+		r.touched = make(map[string]bool)
+		r.sanitised = false
+		switch v := obj.(type) {
+		case ast.PdfDict:
+			if patched, changed := r.dict(ctx, v); changed {
+				write(objNum, patched)
+			}
+		case ast.PdfArray:
+			if patched, changed := r.array(ctx, v); changed {
+				write(objNum, patched)
+			}
+		case ast.PdfStream:
+			patched, changed := r.dict(ctx, v.Dict)
+			if !changed {
+				return
+			}
+			raw, err := v.Bytes(ctx)
+			if err != nil {
+				// Reading the raw stream body failed (cancelled context,
+				// decryption error, I/O fault). Leaving the original object
+				// in place is safer than allocating a new stream with an
+				// empty body and silently dropping the payload, and the
+				// resource keys it keeps cannot be renamed elsewhere.
+				doc.Logger.Debug("remediation: skipping stream rewrite, body read failed",
+					slog.Int("obj", objNum), slog.Any("err", err))
+				maps.Copy(r.refused, r.touched)
+				return
+			}
+			write(objNum, ast.NewStream(patched, raw))
+		}
+	})
+}
+
+// needsFix reports whether a name is one the repair rewrites: a name spelling
+// renames, or one with invalid UTF-8 bytes or past PDF/A's 127-byte cap that
+// is no resource key.
+func (r *nameRepair) needsFix(s string) bool {
+	if _, ok := r.spelling[s]; ok {
+		return true
+	}
+	if r.pinned[s] {
+		return false
+	}
+	return !utf8.ValidString(s) || len(s) > pdfANameMaxLen
+}
+
+// respell returns the name a value that needs repair is written as: its
+// spelling for the whole document, or [sanitizeName]'s repair of it.
+func (r *nameRepair) respell(s string) ast.PdfName {
+	if spelled, ok := r.spelling[s]; ok {
+		return spelled
+	}
+	r.sanitised = true
+	return ast.PdfName(sanitizeName(s))
+}
+
+// dict walks a PdfDict and replaces every PdfName that needs repair, leaving
+// the pinned resource keys spelling does not rename untouched. Keys are
+// visited in sorted order: truncation can map two distinct over-long keys onto
+// the same 127-byte prefix, and the disambiguating suffix must not depend on
+// Go's randomized map iteration order. A /DA default-appearance string has the
+// names spelling renames respelled in it ([nameRepair.defaultAppearance]).
+func (r *nameRepair) dict(ctx context.Context, dict ast.PdfDict) (ast.PdfDict, bool) {
 	newDict := make(ast.PdfDict, len(dict))
 	changed := false
 
 	keys := slices.Sorted(maps.Keys(dict))
 	taken := make(map[ast.PdfName]bool, len(dict))
 	for _, k := range keys {
-		if !nameNeedsFix(string(k), pinned) {
+		if !r.needsFix(string(k)) {
 			taken[k] = true
 		}
 	}
 
 	for _, k := range keys {
-		newKey := k
-		if nameNeedsFix(string(k), pinned) {
-			if cand, ok := uniqueName(sanitizeName(string(k)), taken); ok {
-				newKey = cand
-				changed = true
-			}
-		}
+		newKey := r.key(k, taken)
+		changed = changed || newKey != k
 		taken[newKey] = true
 
 		switch val := dict[k].(type) {
 		case ast.PdfName:
-			if nameNeedsFix(string(val), pinned) {
-				newDict[newKey] = ast.PdfName(sanitizeName(string(val)))
+			if r.needsFix(string(val)) {
+				newDict[newKey] = r.respell(string(val))
 				changed = true
 				continue
 			}
+		case ast.PdfString:
+			if k == "DA" {
+				if s, c := r.defaultAppearance(ctx, val); c {
+					newDict[newKey] = s
+					changed = true
+					continue
+				}
+			}
 		case ast.PdfArray:
-			if sub, c := sanitizeArrayNames(val, pinned); c {
+			if sub, c := r.array(ctx, val); c {
 				newDict[newKey] = sub
 				changed = true
 				continue
 			}
 		case ast.PdfDict:
-			if sub, c := sanitizeDictNames(val, pinned); c {
+			if sub, c := r.dict(ctx, val); c {
 				newDict[newKey] = sub
 				changed = true
 				continue
@@ -266,27 +350,60 @@ func sanitizeDictNames(dict ast.PdfDict, pinned map[string]bool) (ast.PdfDict, b
 	return newDict, true
 }
 
-// sanitizeArrayNames behaves like sanitizeDictNames but for arrays,
-// which carry no keys and so need no collision handling.
-func sanitizeArrayNames(arr ast.PdfArray, pinned map[string]bool) (ast.PdfArray, bool) {
+// key returns the key k is written as in a dictionary whose keys taken holds
+// so far.
+//
+// A key spelling renames takes its spelling, which the plan chose clear of
+// every resource key. A dictionary that already holds that spelling as a key
+// refuses the rename of a resource key and keeps the key, since any other
+// spelling would part it from the content streams that write it. Any other
+// name falls back to a disambiguated [sanitizeName] repair, or keeps its
+// spelling when [uniqueName] finds no free one.
+func (r *nameRepair) key(k ast.PdfName, taken map[ast.PdfName]bool) ast.PdfName {
+	if !r.needsFix(string(k)) {
+		return k
+	}
+	if spelled, ok := r.spelling[string(k)]; ok {
+		if !taken[spelled] {
+			if r.pinned[string(k)] {
+				r.touched[string(k)] = true
+				r.renamedKeys++
+			}
+			return spelled
+		}
+		if r.pinned[string(k)] {
+			r.refused[string(k)] = true
+			return k
+		}
+	}
+	if cand, ok := uniqueName(sanitizeName(string(k)), taken); ok {
+		r.sanitised = true
+		return cand
+	}
+	return k
+}
+
+// array behaves like [nameRepair.dict] but for arrays, which carry no keys
+// and so need no collision handling.
+func (r *nameRepair) array(ctx context.Context, arr ast.PdfArray) (ast.PdfArray, bool) {
 	newArr := make(ast.PdfArray, len(arr))
 	changed := false
 	for i, v := range arr {
 		switch val := v.(type) {
 		case ast.PdfName:
-			if nameNeedsFix(string(val), pinned) {
-				newArr[i] = ast.PdfName(sanitizeName(string(val)))
+			if r.needsFix(string(val)) {
+				newArr[i] = r.respell(string(val))
 				changed = true
 				continue
 			}
 		case ast.PdfArray:
-			if sub, c := sanitizeArrayNames(val, pinned); c {
+			if sub, c := r.array(ctx, val); c {
 				newArr[i] = sub
 				changed = true
 				continue
 			}
 		case ast.PdfDict:
-			if sub, c := sanitizeDictNames(val, pinned); c {
+			if sub, c := r.dict(ctx, val); c {
 				newArr[i] = sub
 				changed = true
 				continue
@@ -300,14 +417,29 @@ func sanitizeArrayNames(arr ast.PdfArray, pinned map[string]bool) (ast.PdfArray,
 	return newArr, true
 }
 
-// nameNeedsFix reports whether a PDF name has invalid UTF-8 bytes or
-// exceeds PDF/A's 127-byte length cap and may be rewritten safely. Names
-// pinned as resource-dictionary keys are exempt; see [fixNameUTF8].
-func nameNeedsFix(s string, pinned map[string]bool) bool {
-	if pinned[s] {
-		return false
+// defaultAppearance returns a /DA default-appearance string with every name
+// spelling renames written in its new spelling. A /DA string is
+// content-stream syntax (ISO 32000-1, 12.7.3.3), so the names are spliced as
+// in a content stream ([nameSplices]). A resource key the splice cannot reach
+// is refused.
+func (r *nameRepair) defaultAppearance(ctx context.Context, s ast.PdfString) (ast.PdfString, bool) {
+	if len(r.spelling) == 0 {
+		return "", false
 	}
-	return !utf8.ValidString(s) || len(s) > pdfANameMaxLen
+	splices, missed, _ := nameSplices(ctx, []byte(s), func(name string) (ast.PdfName, bool) {
+		spelled, ok := r.spelling[name]
+		return spelled, ok
+	})
+	for name := range missed {
+		if r.pinned[name] {
+			r.refused[name] = true
+		}
+	}
+	if len(splices) == 0 {
+		return "", false
+	}
+	r.appearances++
+	return ast.PdfString(applyTokenSplices([]byte(s), splices)), true
 }
 
 // uniqueName returns base, or base plus a numeric suffix when base is

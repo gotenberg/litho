@@ -8,6 +8,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -62,64 +63,91 @@ func liveDict(t *testing.T, alloc *writer.ObjAllocator, doc *document.Document, 
 	return dict
 }
 
+// nameLengthViolations is what compliance reports for resourceRefPDF at
+// PDF/A-2b: the over-long names of its content stream, which ask for the
+// content-stream rename.
+var nameLengthViolations = []compliance.Violation{{
+	Rule:    compliance.Rule_19005_2_6_1_13_t04,
+	Context: "page 1 (stream content): name length 200 exceeds 127",
+}}
+
+// liveContentOps parses the content stream of a page as the writer will
+// serialize it, the replacement queued in alloc first.
+func liveContentOps(t *testing.T, alloc *writer.ObjAllocator, doc *document.Document, page ast.PdfDict) []content.Operation {
+	t.Helper()
+	ctx := context.Background()
+	data, err := liveContentBytes(ctx, alloc, doc, page["Contents"])
+	if err != nil {
+		t.Fatalf("reading /Contents: %v", err)
+	}
+	ops, err := content.ParseStreamData(ctx, data)
+	if err != nil {
+		t.Fatalf("parsing content stream: %v", err)
+	}
+	return ops
+}
+
 // TestFixNameUTF8_KeepsContentStreamReferencesResolvable is the regression
 // guard for the dangling-resource-reference bug: the fixer used to truncate
 // an over-long /Resources key to 127 bytes while leaving the content-stream
 // operand that names it untouched, so the operand resolved to nothing. The
 // name-length violation survived anyway (the long name is still in the
 // stream), so the rewrite only broke the document. Every name operand must
-// still resolve to a key of the resource dictionary it addresses.
+// still resolve to a key of the resource dictionary it addresses, whether the
+// rename runs, when a name-length violation is matched, or not.
 func TestFixNameUTF8_KeepsContentStreamReferencesResolvable(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-	doc, alloc := newTestDoc(t, resourceRefPDF(t))
+	for _, tc := range []struct {
+		name       string
+		violations []compliance.Violation
+		renamed    bool
+	}{
+		{name: "rename", violations: nameLengthViolations, renamed: true},
+		{name: "no name-length violation"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			doc, alloc := newTestDoc(t, resourceRefPDF(t))
 
-	if _, err := fixNameUTF8(ctx, alloc, doc, Options{}, nil, "PDF/A-2b"); err != nil {
-		t.Fatalf("fixNameUTF8: %v", err)
-	}
+			if _, err := fixNameUTF8(ctx, alloc, doc, Options{}, tc.violations, "PDF/A-2b"); err != nil {
+				t.Fatalf("fixNameUTF8: %v", err)
+			}
 
-	page := liveDict(t, alloc, doc, 3)
-	resources, ok := page["Resources"].(ast.PdfDict)
-	if !ok {
-		t.Fatalf("page /Resources: got %T, want ast.PdfDict", page["Resources"])
-	}
-	colorSpace, ok := resources["ColorSpace"].(ast.PdfDict)
-	if !ok {
-		t.Fatalf("/ColorSpace: got %T, want ast.PdfDict", resources["ColorSpace"])
-	}
-	xObject := liveDict(t, alloc, doc, 5)
+			page := liveDict(t, alloc, doc, 3)
+			resources, ok := page["Resources"].(ast.PdfDict)
+			if !ok {
+				t.Fatalf("page /Resources: got %T, want ast.PdfDict", page["Resources"])
+			}
+			colorSpace, ok := resources["ColorSpace"].(ast.PdfDict)
+			if !ok {
+				t.Fatalf("/ColorSpace: got %T, want ast.PdfDict", resources["ColorSpace"])
+			}
+			xObject := liveDict(t, alloc, doc, 5)
 
-	stream, err := document.ResolveStream(ctx, doc, page["Contents"])
-	if err != nil {
-		t.Fatalf("resolving /Contents: %v", err)
-	}
-	data, err := doc.DecodeStream(ctx, stream)
-	if err != nil {
-		t.Fatalf("decoding /Contents: %v", err)
-	}
-	ops, err := content.ParseStreamData(ctx, data)
-	if err != nil {
-		t.Fatalf("parsing content stream: %v", err)
-	}
-
-	categories := map[string]ast.PdfDict{"cs": colorSpace, "Do": xObject}
-	checked := 0
-	for _, op := range ops {
-		category, watched := categories[op.Operator]
-		if !watched || len(op.Operands) != 1 {
-			continue
-		}
-		name, ok := op.Operands[0].(ast.PdfName)
-		if !ok {
-			continue
-		}
-		if _, present := category[name]; !present {
-			t.Errorf("%s operand /%s… does not resolve to any resource key", op.Operator, string(name)[:16])
-		}
-		checked++
-	}
-	if checked != len(categories) {
-		t.Fatalf("checked %d name operands, want %d", checked, len(categories))
+			categories := map[string]ast.PdfDict{"cs": colorSpace, "Do": xObject}
+			checked := 0
+			for _, op := range liveContentOps(t, alloc, doc, page) {
+				category, watched := categories[op.Operator]
+				if !watched || len(op.Operands) != 1 {
+					continue
+				}
+				name, ok := op.Operands[0].(ast.PdfName)
+				if !ok {
+					continue
+				}
+				if _, present := category[name]; !present {
+					t.Errorf("%s operand /%s… does not resolve to any resource key", op.Operator, string(name)[:16])
+				}
+				if short := len(name) <= pdfANameMaxLen; short != tc.renamed {
+					t.Errorf("%s operand is %d bytes, want it renamed within %d: %v", op.Operator, len(name), pdfANameMaxLen, tc.renamed)
+				}
+				checked++
+			}
+			if checked != len(categories) {
+				t.Fatalf("checked %d name operands, want %d", checked, len(categories))
+			}
+		})
 	}
 }
 
@@ -150,11 +178,11 @@ func TestFixNameUTF8_RepairsUnreferencedName(t *testing.T) {
 	}
 }
 
-// TestSanitizeDictNames_DisambiguatesTruncationCollision guards against
+// TestNameRepair_DisambiguatesTruncationCollision guards against
 // silent data loss: two distinct over-long keys that share a 127-byte
 // prefix truncate onto the same name, and without disambiguation the
 // second entry overwrites the first.
-func TestSanitizeDictNames_DisambiguatesTruncationCollision(t *testing.T) {
+func TestNameRepair_DisambiguatesTruncationCollision(t *testing.T) {
 	t.Parallel()
 	prefix := strings.Repeat("K", pdfANameMaxLen)
 	dict := ast.PdfDict{
@@ -162,9 +190,9 @@ func TestSanitizeDictNames_DisambiguatesTruncationCollision(t *testing.T) {
 		ast.PdfName(prefix + "beta"):  ast.PdfInt(2),
 	}
 
-	patched, changed := sanitizeDictNames(dict, nil)
+	patched, changed := (&nameRepair{}).dict(context.Background(), dict)
 	if !changed {
-		t.Fatal("sanitizeDictNames reported no change")
+		t.Fatal("nameRepair.dict reported no change")
 	}
 	if len(patched) != len(dict) {
 		t.Fatalf("dict lost entries: got %d keys, want %d", len(patched), len(dict))
@@ -176,10 +204,10 @@ func TestSanitizeDictNames_DisambiguatesTruncationCollision(t *testing.T) {
 	}
 }
 
-// TestSanitizeDictNames_Deterministic pins deterministic output: the
+// TestNameRepair_Deterministic pins deterministic output: the
 // disambiguating suffix must not depend on Go's randomized map iteration
 // order, or two runs over identical input produce different bytes.
-func TestSanitizeDictNames_Deterministic(t *testing.T) {
+func TestNameRepair_Deterministic(t *testing.T) {
 	t.Parallel()
 	prefix := strings.Repeat("K", pdfANameMaxLen)
 	build := func() ast.PdfDict {
@@ -192,9 +220,9 @@ func TestSanitizeDictNames_Deterministic(t *testing.T) {
 		}
 	}
 
-	first, _ := sanitizeDictNames(build(), nil)
+	first, _ := (&nameRepair{}).dict(context.Background(), build())
 	for range 8 {
-		next, _ := sanitizeDictNames(build(), nil)
+		next, _ := (&nameRepair{}).dict(context.Background(), build())
 		if len(next) != len(first) {
 			t.Fatalf("key count drifted: got %d, want %d", len(next), len(first))
 		}
@@ -237,18 +265,19 @@ func TestSanitizeName_ReplacesInvalidBytes(t *testing.T) {
 	}
 }
 
-// TestCollectResourceKeys_FindsDirectAndIndirectCategories pins the scan
+// TestScanObjects_FindsDirectAndIndirectCategories pins the scan
 // that decides which names are addressed by name from a content stream:
 // a resource category is a direct sub-dictionary in one place and an
 // indirect reference in another, and both must be seen.
-func TestCollectResourceKeys_FindsDirectAndIndirectCategories(t *testing.T) {
+func TestScanObjects_FindsDirectAndIndirectCategories(t *testing.T) {
 	t.Parallel()
 	doc, alloc := newTestDoc(t, resourceRefPDF(t))
 
-	pinned, err := collectResourceKeys(context.Background(), alloc, doc)
+	scan, err := scanObjects(context.Background(), alloc, doc)
 	if err != nil {
-		t.Fatalf("collectResourceKeys: %v", err)
+		t.Fatalf("scanObjects: %v", err)
 	}
+	pinned := scan.pinned
 	for _, want := range []string{longName, longName + "X", "F1"} {
 		if !pinned[want] {
 			t.Errorf("resource key %q… not collected", want[:min(len(want), 8)])
