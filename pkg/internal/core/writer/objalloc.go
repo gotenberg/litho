@@ -11,6 +11,8 @@ import (
 type ObjAllocator struct {
 	nextObjNum int
 	pending    map[int]ast.PdfObject
+	// writes counts the objects queued, see [ObjAllocator.Writes].
+	writes int
 }
 
 // NewObjAllocator creates an allocator whose next object number starts after
@@ -30,6 +32,7 @@ func (a *ObjAllocator) Alloc(obj ast.PdfObject) ast.PdfIndirectRef {
 	num := a.nextObjNum
 	a.nextObjNum++
 	a.pending[num] = obj
+	a.writes++
 	return ast.PdfIndirectRef{ObjectNum: num, GenNum: 0}
 }
 
@@ -54,6 +57,7 @@ func (a *ObjAllocator) AllocAt(objNum int, obj ast.PdfObject) bool {
 		return false
 	}
 	a.pending[objNum] = obj
+	a.writes++
 	if objNum >= a.nextObjNum {
 		a.nextObjNum = objNum + 1
 	}
@@ -83,12 +87,22 @@ func (a *ObjAllocator) NextObjNum() int {
 	return a.nextObjNum
 }
 
+// Writes counts the objects [ObjAllocator.Alloc] and [ObjAllocator.AllocAt]
+// have queued, a replacement of a pending object included, so a caller that
+// seeded the allocator with an earlier stage's objects can tell whether its own
+// pass queued anything: the pending map holds both alike. [ObjAllocator.Restore]
+// puts the count back with the rest of the state.
+func (a *ObjAllocator) Writes() int {
+	return a.writes
+}
+
 // Snapshot is an opaque point-in-time state of an [ObjAllocator]. Pass it to
 // [ObjAllocator.Restore] to undo allocations queued after the snapshot.
 // Snapshot values are immutable and safe for concurrent reads.
 type Snapshot struct {
 	pending    map[int]ast.PdfObject
 	nextObjNum int
+	writes     int
 }
 
 // Snapshot captures the allocator's current state so a caller can roll back
@@ -100,7 +114,7 @@ type Snapshot struct {
 func (a *ObjAllocator) Snapshot() Snapshot {
 	pending := make(map[int]ast.PdfObject, len(a.pending))
 	maps.Copy(pending, a.pending)
-	return Snapshot{pending: pending, nextObjNum: a.nextObjNum}
+	return Snapshot{pending: pending, nextObjNum: a.nextObjNum, writes: a.writes}
 }
 
 // Restore reverts the allocator to the state captured by snap. Any objects
@@ -113,4 +127,5 @@ func (a *ObjAllocator) Restore(snap Snapshot) {
 	}
 	maps.Copy(a.pending, snap.pending)
 	a.nextObjNum = snap.nextObjNum
+	a.writes = snap.writes
 }

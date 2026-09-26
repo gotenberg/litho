@@ -181,6 +181,9 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 			return nil, fmt.Errorf("applying staged mutation %d before redaction: %w", i, applyErr)
 		}
 	}
+	// What the passes below queue is told apart from what the stages above
+	// staged, which is pending too.
+	staged := alloc.Writes()
 
 	// ClearMetadata empties /Info in place on the shared document, so a
 	// refusal after it has run would otherwise persist on a Writer the caller
@@ -214,7 +217,13 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 	// Nothing was selected, so there is nothing to sanitize and nothing to
 	// write. Leaving the Writer untouched keeps a redaction that removed
 	// nothing from forcing a rewrite of the whole file.
-	if len(report.RemovedText) == 0 && len(alloc.Pending()) == 0 {
+	//
+	// The passes queued nothing when the allocator took no write after the
+	// staged edits. Testing for an empty pending map instead read every staged
+	// edit as a removal: a redaction that selected nothing after a remediation
+	// went on to clear the metadata, and the output lost the XMP packet ISO
+	// 19005-2, 6.6.2.1 requires.
+	if len(report.RemovedText) == 0 && alloc.Writes() == staged {
 		restoreTrailer()
 		return report, nil
 	}
