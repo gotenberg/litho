@@ -311,11 +311,18 @@ func writeResourceCategory(alloc *writer.ObjAllocator, owner, resources ast.PdfD
 	return false, true
 }
 
-// normalizeHalftone coerces a halftone dict so it complies with
-// ISO 19005-2 §6.2.5: HalftoneType must be 1 or 5, HalftoneName is
-// forbidden, the halftone a graphics state names carries no
-// TransferFunction, and any non-primary component of a Type-5 halftone
-// needs one (defaulted to /Identity when absent).
+// normalizeHalftone coerces the halftone an /HT entry names so it complies
+// with ISO 19005-2 §6.2.5: HalftoneType must be 1 or 5, HalftoneName is
+// forbidden, and any non-primary component of a Type-5 halftone needs
+// a TransferFunction (defaulted to /Identity when absent).
+//
+// A halftone named by a name other than /Default has no type, and one written
+// as a stream is of type 6, 10 or 16 (ISO 32000-1, 10.5.5.1, Table 128), so
+// each is replaced by /Default, the device's own halftone. The halftone a
+// graphics state names is no component of a type 5 halftone, which ISO
+// 32000-1, 10.5.5.2, Table 130 alone gives a /TransferFunction, so its own is
+// removed, a /Default included, as the compliance check reads it (see
+// compliance.halftoneJudge).
 //
 // # Corpus evidence
 //
@@ -325,7 +332,14 @@ func writeResourceCategory(alloc *writer.ObjAllocator, owner, resources ast.PdfD
 //   - verapdf PDF_A-4__veraPDF_test_suite_6-2-5-t05-fail-c.pdf: its type 1
 //     halftone's /TransferFunction kept its finding through a PDF/A-4
 //     remediation, on litho and veraPDF alike.
-func normalizeHalftone(ctx context.Context, doc *document.Document, htObj ast.PdfObject) (ast.PdfDict, bool) {
+func normalizeHalftone(ctx context.Context, doc *document.Document, htObj ast.PdfObject) (ast.PdfObject, bool) {
+	resolved, _ := document.ResolveObject(ctx, doc, htObj) // Best-effort: an /HT that does not resolve is left alone.
+	switch v := resolved.(type) {
+	case ast.PdfName:
+		return ast.PdfName("Default"), v != "Default"
+	case ast.PdfStream:
+		return ast.PdfName("Default"), true
+	}
 	htDict, err := document.ResolveDict(ctx, doc, htObj)
 	if err != nil || htDict == nil {
 		return nil, false
@@ -334,20 +348,13 @@ func normalizeHalftone(ctx context.Context, doc *document.Document, htObj ast.Pd
 	maps.Copy(newDict, htDict)
 
 	changed := false
+	if _, ok := newDict["TransferFunction"]; ok {
+		delete(newDict, "TransferFunction")
+		changed = true
+	}
 	if _, ok := newDict["HalftoneName"]; ok {
 		delete(newDict, "HalftoneName")
 		changed = true
-	}
-	// ISO 32000-1, 10.5.5, Table 130 wants a /TransferFunction on a halftone
-	// only as a component of a type 5 halftone, and ISO 19005-2, 6.2.5 t6
-	// forbids it elsewhere; the check lets /Default stand. Turning a type 6
-	// halftone into a type 1 below kept the one its source carried, so t4
-	// gave way to t6.
-	if tf, ok := newDict["TransferFunction"]; ok {
-		if name, _ := document.ResolveName(ctx, doc, tf); name != "Default" {
-			delete(newDict, "TransferFunction")
-			changed = true
-		}
 	}
 	htType := 1
 	if htTypeObj, ok := newDict["HalftoneType"]; ok {

@@ -187,9 +187,14 @@ func TestNormalizeHalftone_DropsTheTransferFunctionOfATopLevelHalftone(t *testin
 		{"Type": ast.PdfName("Halftone"), "HalftoneType": ast.PdfInt(6), "Width": ast.PdfInt(8), "Height": ast.PdfInt(8), "TransferFunction": ast.PdfName("Identity")},
 		{"Type": ast.PdfName("Halftone"), "HalftoneType": ast.PdfInt(1), "Frequency": ast.PdfInt(60), "Angle": ast.PdfInt(45), "SpotFunction": ast.PdfName("Round"), "TransferFunction": ast.PdfName("Identity")},
 	} {
-		got, changed := normalizeHalftone(ctx, doc, ht)
+		patched, changed := normalizeHalftone(ctx, doc, ht)
 		if !changed {
 			t.Errorf("halftone %v: no change", ht)
+			continue
+		}
+		got, ok := patched.(ast.PdfDict)
+		if !ok {
+			t.Errorf("halftone %v became %v, want a dictionary", ht, patched)
 			continue
 		}
 		if _, has := got["TransferFunction"]; has {
