@@ -2104,22 +2104,33 @@ func TestWriter_FailedWriteDoesNotConsume(t *testing.T) {
 	w := NewWriter(r)
 	w.Sign(&mockSigner{})
 
-	// Sign + full rewrite is rejected before any bytes are written.
+	// Sign + encryption is rejected before any bytes are written.
 	var bad bytes.Buffer
-	if err := w.WriteTo(ctx, &bad, WithFullRewrite()); !errors.Is(err, ErrSignFullRewriteIncompatible) {
+	if err := w.WriteTo(ctx, &bad, WithEncryption(EncryptConfig{
+		OwnerPassword: "o", Algorithm: EncryptAES256, Permissions: -1,
+	})); !errors.Is(err, ErrSignFullRewriteIncompatible) {
 		t.Fatalf("rejected write: got %v, want ErrSignFullRewriteIncompatible", err)
 	}
 	if w.consumed {
 		t.Fatal("Writer marked consumed after a rejected write")
 	}
 
-	// A subsequent valid write (incremental sign) must still succeed.
+	// A subsequent valid write (incremental sign) must still succeed: the
+	// refused write left no encryption behind on the Writer.
 	var out bytes.Buffer
 	if err := w.WriteTo(ctx, &out); err != nil {
 		t.Fatalf("retry WriteTo: %v", err)
 	}
 	if out.Len() == 0 {
 		t.Error("retry produced no output")
+	}
+	got, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+	if err != nil {
+		t.Fatalf("reopening the retried output: %v", err)
+	}
+	defer got.Close()
+	if got.IsEncrypted() {
+		t.Error("the retried output is encrypted, though only the refused write asked for it")
 	}
 }
 
@@ -2135,12 +2146,14 @@ func TestWriter_SignWithFullRewriteOps_ReturnsIncompatible(t *testing.T) {
 			w.Encrypt(EncryptConfig{UserPassword: "u", OwnerPassword: "o", Algorithm: EncryptAES256, Permissions: -1})
 		}},
 		{name: "remove-encryption", setup: func(_ *testing.T, w *Writer, _ *[]WriteOption) { w.RemoveEncryption() }},
-		{name: "with-full-rewrite", setup: func(_ *testing.T, _ *Writer, opts *[]WriteOption) { *opts = append(*opts, WithFullRewrite()) }},
-		// WithEncryption reaches w.encryptCfg from inside WriteTo rather than
+		// WithFullRewrite is not among them: WriteTo signs the rewrite it asks
+		// for (TestWriterSignsARequestedFullRewrite).
+		//
+		// WithEncryption reaches the Writer from inside WriteTo rather than
 		// from a setter called beforehand, so it is the one arm here that can
-		// regress by ORDERING alone: applied after the guard instead of before
-		// it, the write proceeds and silently drops either the signature or
-		// the encryption.
+		// regress by ORDERING alone: read after the guard instead of by it,
+		// the write proceeds and silently drops either the signature or the
+		// encryption.
 		{name: "with-encryption", setup: func(_ *testing.T, _ *Writer, opts *[]WriteOption) {
 			*opts = append(*opts, WithEncryption(EncryptConfig{
 				UserPassword: "u", OwnerPassword: "o", Algorithm: EncryptAES256, Permissions: -1,

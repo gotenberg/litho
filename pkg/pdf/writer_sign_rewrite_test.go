@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/models"
 )
 
 // threeTextPagesPDF builds three pages drawing "first", "second" and "third"
@@ -197,5 +199,145 @@ func wantPages(t *testing.T, got *Reader, words ...string) {
 		if strings.TrimSpace(text) != word {
 			t.Errorf("page %d reads %q, want %q", i+1, text, word)
 		}
+	}
+}
+
+// TestWriterSignsARequestedFullRewrite pins that [WithFullRewrite] is signed
+// rather than refused: [Writer.WriteTo] writes the rewrite the option asks for,
+// then signs it in an incremental update on top, as it signs an edit that
+// forces one. The signature covers every byte of the file but its own value
+// (ISO 32000-1, 12.8.1), so it is written after the rewrite, which renumbers
+// every object.
+//
+// WriteTo returned [ErrSignFullRewriteIncompatible] for the option, and a
+// caller had to write, reopen and sign by hand.
+func TestWriterSignsARequestedFullRewrite(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	// The /ID a remediation mints is random unless pinned, and the test
+	// compares the signed output with the unsigned one byte for byte.
+	pinnedID := WithDocumentID([]byte("0123456789abcdef"))
+	three := []string{"first", "second", "third"}
+
+	for _, tc := range []struct {
+		name  string
+		data  func() []byte
+		opts  []WriteOption
+		edit  func(t *testing.T, w *Writer)
+		pages []string
+	}{
+		{
+			name:  "nothing queued",
+			data:  threeTextPagesPDF,
+			opts:  []WriteOption{WithFullRewrite()},
+			edit:  func(*testing.T, *Writer) {},
+			pages: three,
+		},
+		{
+			name: "an incremental edit",
+			data: threeTextPagesPDF,
+			opts: []WriteOption{WithFullRewrite()},
+			edit: func(t *testing.T, w *Writer) {
+				if err := w.RotatePages(90, 2); err != nil {
+					t.Fatalf("RotatePages: %v", err)
+				}
+			},
+			pages: three,
+		},
+		{
+			name:  "packed into object streams",
+			data:  threeTextPagesPDF,
+			opts:  []WriteOption{WithFullRewrite(), WithObjectStreams(), WithXRefStream()},
+			edit:  func(*testing.T, *Writer) {},
+			pages: three,
+		},
+		{
+			name: "a remediation",
+			data: signablePDF,
+			opts: []WriteOption{WithFullRewrite()},
+			edit: func(t *testing.T, w *Writer) {
+				if _, err := w.RemediatePDFA(ctx, models.PDFA2b, pinnedID); err != nil {
+					t.Fatalf("RemediatePDFA: %v", err)
+				}
+			},
+			pages: []string{"page"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			src := tc.data()
+			write := func(signer Signer) ([]byte, error) {
+				r, err := Open(ctx, bytes.NewReader(src), int64(len(src)))
+				if err != nil {
+					t.Fatalf("Open: %v", err)
+				}
+				defer r.Close()
+				w := NewWriter(r)
+				defer w.Close()
+				if signer != nil {
+					w.Sign(signer)
+				}
+				tc.edit(t, w)
+				var out bytes.Buffer
+				err = w.WriteTo(ctx, &out, tc.opts...)
+				return out.Bytes(), err
+			}
+
+			plain, err := write(nil)
+			if err != nil {
+				t.Fatalf("unsigned WriteTo: %v", err)
+			}
+			if bytes.HasPrefix(plain, src) {
+				t.Fatal("the unsigned output is an incremental update of the source, so the test proves nothing")
+			}
+			signer := newCMSTestSigner(t)
+			signed, err := write(signer)
+			if err != nil {
+				t.Fatalf("signed WriteTo: %v", err)
+			}
+
+			checkSignedOutput(t, signed, signer)
+			if n := signer.calls.Load(); n != 1 {
+				t.Errorf("the signer ran %d times, want once", n)
+			}
+			if !bytes.HasPrefix(signed, plain) {
+				t.Error("the signature is not an incremental update on top of the unsigned rewrite")
+			}
+			got, err := Open(ctx, bytes.NewReader(signed), int64(len(signed)))
+			if err != nil {
+				t.Fatalf("reopening the signed output: %v", err)
+			}
+			defer got.Close()
+			wantPages(t, got, tc.pages...)
+		})
+	}
+}
+
+// TestPipelineSignsARequestedFullRewrite pins the same through a [Pipeline],
+// whose final write takes the option.
+func TestPipelineSignsARequestedFullRewrite(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	data := threeTextPagesPDF()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	signer := newCMSTestSigner(t)
+	var out bytes.Buffer
+	_, err = NewPipeline().Open(r).Apply(func(_ context.Context, w *Writer) error {
+		w.Sign(signer)
+		return nil
+	}).WriteTo(ctx, &out, WithFullRewrite())
+	if err != nil {
+		t.Fatalf("Pipeline.WriteTo: %v", err)
+	}
+	checkSignedOutput(t, out.Bytes(), signer)
+	if bytes.HasPrefix(out.Bytes(), data) {
+		t.Error("the signed output is an incremental update of the source, not of its rewrite")
 	}
 }

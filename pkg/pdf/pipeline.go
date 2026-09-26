@@ -26,9 +26,8 @@ import (
 // The closure can call any [Writer] method, including
 // [Writer.RemediatePDFA]. Results are captured by the caller through
 // variables in the enclosing scope. The pipeline does not inspect
-// closure contents; incompatible-operation checks (e.g., Sign + an
-// edit forcing a full rewrite) are enforced by [Writer.WriteTo] at
-// execution time.
+// closure contents; incompatible-operation checks (e.g., Sign +
+// encryption) are enforced by [Writer.WriteTo] at execution time.
 //
 // A remediation is the last edit, as on any [Writer]: an Apply stage after
 // the one that remediates may only call [Writer.Sign], and a Split or Merge
@@ -113,7 +112,7 @@ func (p *Pipeline) Apply(fn func(ctx context.Context, w *Writer) error) *Pipelin
 // Validate runs build-time structural checks without executing the
 // pipeline. It catches empty pipelines, missing [Pipeline.Open], empty
 // page lists, and empty merge sources. Cross-stage compatibility (Sign
-// combined with encryption or [WithFullRewrite], a stage after a remediation)
+// combined with encryption, a stage after a remediation)
 // depends on what the Apply closures call, and is enforced at execution time:
 // it does not appear here.
 func (p *Pipeline) Validate() error {
