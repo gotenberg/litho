@@ -2,6 +2,7 @@ package compliance
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -22,6 +23,12 @@ func iccBasedNRule(part int) Rule {
 	// OutputIntent identity. Reporting a component-count mismatch under test 1
 	// there labelled it with a requirement it does not break.
 	return ruleByPart(part, Rule_19005_1_6_2_3_2_t02, Rule{}, Rule{}, Rule{})
+}
+
+// overprintModeRule returns the rule for overprint mode 1 with overprinting
+// on for an ICCBased CMYK colour space, which ISO 19005-1 does not state.
+func overprintModeRule(part int) Rule {
+	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_4_2_t02, Rule_19005_3_6_2_4_2_t02, Rule_19005_4_6_2_4_2_t02)
 }
 
 // iccBasedIdentityRule returns the rule for ICCBased profiles identical to
@@ -52,12 +59,28 @@ func iccBasedIdentityRule(part int) Rule {
 //
 // A four-component ICCBased space is the exception: veraPDF judges it as a
 // PDICCBasedCMYK, whose identity joins the array's own to the overprint mode
-// and flag in force, and a direct array's own identity is none, so every
-// direct four-component space of the document shares one. Measured the same
-// way: a direct CMYK space fails once however many operators link to it, and
-// two direct ones over different profiles fail once between them. The
-// overprint state is not followed, so a direct CMYK space judged again under
-// another overprint mode, which veraPDF fails again, fails once here.
+// and flag the link reaches it under (see [overprintMode]), and a direct
+// array's own identity is none, so every direct four-component space of the
+// document shares one per mode (veraPDF-validation 1.30,
+// GFPDICCBasedCMYK.getID and ColorSpaceFactory.getColorSpaceUniqueIdentifier).
+// It exists for ISO 19005-2/3/4, 6.2.4.2 t2, which fails once for each such
+// identity whose mode is 1 with overprinting on. Measured the same way: a
+// direct CMYK space fails once however many operators link to it, and two
+// direct ones over different profiles fail once between them; a fill, a
+// stroke or a text show after gs selects /OPM 1 with /op or /OP true, the
+// fill falling back to /OP, fails the profile test once more and t2 once, and
+// so does one of an indirect space; gs selecting /op alone or /OPM alone
+// makes a mode of its own, which fails the profile test again but not t2; a
+// Q undoes the mode, and a form filling after the gs fills under it; and an
+// image, an /Indexed base and the colour operators link under the zero mode.
+// Two pages painting under /OPM 1 with the same direct space, or with one
+// indirect space, fail t2 once between them.
+//
+// One divergence remains: veraPDF judges a device family a Default colour
+// space replaces as that space (ISO 32000-1, 8.6.5.6), so a DefaultCMYK over
+// an abstract profile that k selects and f fills before and after a gs
+// selecting /OPM 1 with /op true fails the profile test twice and t2 once,
+// where litho judges the family as covered and fails neither.
 //
 // # Corpus evidence
 //
@@ -69,9 +92,20 @@ func iccBasedIdentityRule(part int) Rule {
 //     times.
 //   - govdocs thread_400_400765.pdf: sixteen pages use one direct CMYK space,
 //     and veraPDF fails the profile test once.
-//   - govdocs thread_200_200973.pdf: veraPDF fails the profile test three
-//     times where litho fails it once, since its direct CMYK spaces are
-//     judged again under other overprint modes.
+//   - All corpora: under PDF/A-1b and PDF/A-2b, and the verapdf files under
+//     their own profile, following the overprint mode moves eight counts on
+//     five files, each to veraPDF's count, and no verdict: three of the
+//     profile tests and five of ISO 19005-2, 6.2.4.2 t2, which litho stated
+//     once per page for fills and once for strokes.
+//   - govdocs thread_200_200973.pdf: paints its direct CMYK space under three
+//     overprint modes, and veraPDF fails the profile test and ISO 19005-1,
+//     6.2.3.2 t2 three times each, and 6.2.4.2 t2 once, where litho failed
+//     the first two once and t2 four times.
+//   - govdocs thread_000_000372.pdf, thread_000_000314.pdf and
+//     thread_400_400567.pdf: veraPDF fails 6.2.4.2 t2 once, where litho
+//     failed it 40, 7 and 9 times.
+//   - govdocs thread_200_200087.pdf: veraPDF fails 6.2.4.2 t2 three times,
+//     where litho failed it 7 times.
 func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []pageCtx, part int, results *[]Violation) {
 	// Collect the OutputIntent ICC profile info for identity comparison (parts 2+).
 	var outputIntentRef ast.PdfIndirectRef
@@ -109,16 +143,24 @@ func checkICCBasedProfiles(ctx context.Context, doc *document.Document, catalog 
 		page, profile, blend int
 	}
 	judged := make(map[judgement][]Violation)
-	directCMYK := false
+	directCMYK := make(map[overprintMode]bool)
 	walkColorLinks(ctx, doc, pages, part, func(n colorNode) {
 		if n.kind != "ICCBased" {
 			return
 		}
 		if n.direct && iccBasedComponents(ctx, doc, n.arr) == cmykComponents {
-			if directCMYK {
+			if directCMYK[n.mode] {
 				return
 			}
-			directCMYK = true
+			directCMYK[n.mode] = true
+		}
+		// ISO 19005-2/3/4, 6.2.4.2 t2: overprint mode 1 with overprinting on
+		// for the CMYK space painted with; n.mode is set on a CMYK space alone.
+		if n.mode.on && n.mode.opm != 0 {
+			if rule := overprintModeRule(part); rule.Specification != "" {
+				*results = append(*results, Violation{Rule: rule, Context: fmt.Sprintf(
+					"page %d: ICCBased CMYK colour space painted with overprinting on under overprint mode %d", n.page+1, n.mode.opm)})
+			}
 		}
 		key := judgement{page: n.page, blend: n.in.blendRef.ObjectNum}
 		if len(n.arr) >= 2 {

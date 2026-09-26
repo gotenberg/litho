@@ -67,12 +67,6 @@ func checkGraphicsGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 		results = append(results, checkExtGStateGraphics(ctx, doc, res, profile, part, i+1, judgedGS)...)
 
-		if hasContent {
-			if part >= 2 {
-				results = append(results, checkContentStreamStateOps(ctx, doc, p.parsedOps(ctx), res, part, i+1)...)
-			}
-		}
-
 		// Scan Form XObject ExtGState for halftone/rendering intent violations.
 		results = append(results, checkFormXObjectExtGState(ctx, doc, res, profile, part, i+1, judgedGS)...)
 

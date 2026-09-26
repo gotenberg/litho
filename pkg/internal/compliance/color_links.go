@@ -26,7 +26,8 @@ const maxColorSpaceNesting = 8
 // covered records that a Default colour space replaces the device family
 // (ISO 32000-1, 8.6.5.6), and group that the family is the blending space of
 // the page's transparency group. direct records that an ICCBased array is
-// written directly rather than as an indirect object.
+// written directly rather than as an indirect object, and mode is the
+// overprint mode the link reached it under (see [overprintMode]).
 type colorNode struct {
 	page    int
 	in      *linkStream
@@ -36,6 +37,7 @@ type colorNode struct {
 	kind    string
 	arr     ast.PdfArray
 	direct  bool
+	mode    overprintMode
 }
 
 // linkStream is one content stream [colorLinkWalk] walks: a page's content,
@@ -63,6 +65,7 @@ type linkStream struct {
 	patterns    ast.PdfDict
 	shadings    ast.PdfDict
 	fonts       ast.PdfDict
+	extGStates  ast.PdfDict
 	defaults    defaultCS
 	// blendCover is the ICC colour space of an isolated transparency group the
 	// stream is the content of, which covers a device family of that colour
@@ -246,8 +249,10 @@ type colorLinkWalk struct {
 	visit func(colorNode)
 	// judged holds the object numbers of the indirect objects judged: forms,
 	// images, patterns, shadings, fonts, glyph descriptions, appearance
-	// streams and colour spaces.
-	judged map[int]bool
+	// streams and colour spaces, save the four-component ICCBased spaces,
+	// which judgedCMYK holds with the overprint mode each was judged under.
+	judged     map[int]bool
+	judgedCMYK map[cmykLink]bool
 	// streams holds every stream walked, by identity, so a colour space a form
 	// inherits resolves against the resources of the stream that selected it.
 	streams map[string]*linkStream
@@ -289,7 +294,7 @@ func walkColorLinks(ctx context.Context, doc *document.Document, pages []pageCtx
 // later page, only the three links to it do.
 func walkColorLinksDeclaring(ctx context.Context, doc *document.Document, pages []pageCtx, part int, visit func(colorNode), declare func(ast.PdfArray)) {
 	newWalk := func(visit func(colorNode)) *colorLinkWalk {
-		w := &colorLinkWalk{doc: doc, part: part, visit: visit, declare: declare, judged: make(map[int]bool), streams: make(map[string]*linkStream)}
+		w := &colorLinkWalk{doc: doc, part: part, visit: visit, declare: declare, judged: make(map[int]bool), judgedCMYK: make(map[cmykLink]bool), streams: make(map[string]*linkStream)}
 		// A stream that is some page's content is judged as that page's
 		// content, never as a form a Do paints (see [colorSpaceLinkIndex]).
 		for i := range pages {
@@ -342,6 +347,7 @@ func (w *colorLinkWalk) newStream(ctx context.Context, res ast.PdfDict, parent *
 	s.patterns = category("Pattern")
 	s.shadings = category("Shading")
 	s.fonts = category("Font")
+	s.extGStates = category("ExtGState")
 	return s
 }
 
@@ -515,8 +521,8 @@ func (w *colorLinkWalk) walkStream(ctx context.Context, ops []content.Operation,
 		w.declareSeparations(ctx, ops, s, entry)
 	}
 	hooks := w.spaceHooks(ctx, s)
-	hooks.link = func(ref csRef, _ int, _ string) {
-		w.judgeRef(ctx, ref, s, depth)
+	hooks.link = func(ref csRef, _ int, _ string, mode overprintMode) {
+		w.judgeRef(ctx, ref, s, depth, mode)
 	}
 	hooks.paint = func(name string, st csPaintState) {
 		if obj, _ := s.lookup(func(c *linkStream) ast.PdfDict { return c.xobjects }, name); obj != nil {
@@ -538,7 +544,7 @@ func (w *colorLinkWalk) walkStream(ctx context.Context, ops []content.Operation,
 	}
 	hooks.inlineSpace = func(cs ast.PdfObject) {
 		if cs == nil {
-			w.judgeRef(ctx, unknownSpace, s, depth)
+			w.judgeRef(ctx, unknownSpace, s, depth, overprintMode{})
 			return
 		}
 		// A colour space the image writes out is judged where the image
@@ -574,6 +580,10 @@ func (w *colorLinkWalk) spaceHooks(ctx context.Context, s *linkStream) csLinkHoo
 				return csRef{scope: def.id, pattern: name, isPattern: true}
 			}
 			return unknownSpace
+		},
+		gs: func(name string, cur overprintState) overprintState {
+			obj, _ := s.lookup(func(c *linkStream) ast.PdfDict { return c.extGStates }, name)
+			return extGStateOverprint(ctx, w.doc, obj, cur)
 		},
 		underlying: func(space csRef) csRef {
 			def := w.streams[space.scope]
@@ -617,7 +627,7 @@ func (w *colorLinkWalk) cellEntry(ctx context.Context, s *linkStream) csPaintSta
 	}
 	cells := s.entry
 	hooks := w.spaceHooks(ctx, s)
-	hooks.link = func(csRef, int, string) {}
+	hooks.link = func(csRef, int, string, overprintMode) {}
 	hooks.construct = func(ref csRef, st csPaintState) {
 		if ref.pattern == "" {
 			return
@@ -674,7 +684,7 @@ func (w *colorLinkWalk) declareSeparations(ctx context.Context, ops []content.Op
 			}
 			return csRef{}
 		},
-		link: func(ref csRef, _ int, _ string) {
+		link: func(ref csRef, _ int, _ string, _ overprintMode) {
 			if def := w.streams[ref.scope]; def != nil && ref.name != "" {
 				w.declareSeparation(ctx, def.colorSpaces[ast.PdfName(ref.name)])
 			}
@@ -693,10 +703,11 @@ func (w *colorLinkWalk) declareSeparation(ctx context.Context, obj ast.PdfObject
 	}
 }
 
-// judgeRef judges the colour space an operator of s links to. A named entry
-// or a pattern resolves against the stream that selected it, which a form
-// inheriting the space from the stream painting it does not define.
-func (w *colorLinkWalk) judgeRef(ctx context.Context, ref csRef, s *linkStream, depth int) {
+// judgeRef judges the colour space an operator of s links to under the
+// overprint mode mode. A named entry or a pattern resolves against the stream
+// that selected it, which a form inheriting the space from the stream painting
+// it does not define.
+func (w *colorLinkWalk) judgeRef(ctx context.Context, ref csRef, s *linkStream, depth int, mode overprintMode) {
 	switch {
 	case ref.pattern != "":
 		if def := w.streams[ref.scope]; def != nil {
@@ -708,12 +719,12 @@ func (w *colorLinkWalk) judgeRef(ctx context.Context, ref csRef, s *linkStream, 
 		// a device family it names (ISO 32000-1, 8.6.5.6).
 		if def := w.streams[ref.scope]; def != nil {
 			if arr, err := document.ResolveArray(ctx, w.doc, def.colorSpaces[ast.PdfName(ref.name)]); err == nil && len(arr) >= 2 {
-				w.judgeSpace(ctx, arr[1], s, def.defaults, true, 0)
+				w.judgeSpaceUnder(ctx, arr[1], s, def.defaults, mode)
 			}
 		}
 	case ref.name != "":
 		if def := w.streams[ref.scope]; def != nil {
-			w.judgeSpace(ctx, def.colorSpaces[ast.PdfName(ref.name)], s, def.defaults, true, 0)
+			w.judgeSpaceUnder(ctx, def.colorSpaces[ast.PdfName(ref.name)], s, def.defaults, mode)
 		}
 	case deviceFamily(ref.family) != "":
 		w.visit(colorNode{page: w.page, in: s, family: ref.family, covered: ref.covered})
@@ -733,14 +744,85 @@ func (w *colorLinkWalk) judgeRef(ctx context.Context, ref csRef, s *linkStream, 
 //nolint:gochecknoglobals // immutable value.
 var unknownSpace = csRef{family: "DeviceGray"}
 
+// cmykLink is the identity veraPDF judges an indirect four-component ICCBased
+// array under: its object number joined to the overprint mode the link reached
+// it under. A direct one has the mode alone (see [checkICCBasedProfiles]).
+type cmykLink struct {
+	obj  int
+	mode overprintMode
+}
+
+// isCMYKICCBased reports whether cs is a four-component ICCBased array, which
+// veraPDF judges as a PDICCBasedCMYK (see [checkICCBasedProfiles]).
+func (w *colorLinkWalk) isCMYKICCBased(ctx context.Context, cs ast.PdfObject) bool {
+	arr, ok := cs.(ast.PdfArray)
+	if !ok || len(arr) < 2 {
+		return false
+	}
+	kind, _ := document.ResolveName(ctx, w.doc, arr[0]) // Best-effort: an unreadable family is no ICCBased space.
+	return kind == "ICCBased" && iccBasedComponents(ctx, w.doc, arr) == cmykComponents
+}
+
+// extGStateOverprint returns the overprint state cur leaves once gs sets the
+// ExtGState obj (ISO 32000-1, 8.4.5, Table 58): /OP sets whether stroking
+// overprints, /op whether filling does, and /OP that too when /op is absent,
+// and /OPM the overprint mode. An entry of another type sets nothing, as
+// veraPDF reads them (veraPDF-validation 1.30,
+// GraphicState.copyPropertiesFormExtGState and
+// PDExtGState.getNonStrokingOverprintControl).
+func extGStateOverprint(ctx context.Context, doc *document.Document, obj ast.PdfObject, cur overprintState) overprintState {
+	gs, _ := document.ResolveDict(ctx, doc, obj) // Best-effort: an unreadable ExtGState sets nothing.
+	if gs == nil {
+		return cur
+	}
+	flag := func(key ast.PdfName) (bool, bool) {
+		if _, ok := gs[key]; !ok {
+			return false, false
+		}
+		b, err := document.ResolveBool(ctx, doc, gs[key])
+		return bool(b), err == nil
+	}
+	stroke, hasStroke := flag("OP")
+	if hasStroke {
+		cur.stroke = stroke
+	}
+	if fill, ok := flag("op"); ok {
+		cur.fill = fill
+	} else if hasStroke {
+		cur.fill = stroke
+	}
+	if _, ok := gs["OPM"]; ok {
+		if mode, err := document.ResolveInt(ctx, doc, gs["OPM"]); err == nil {
+			cur.mode = int(mode)
+		}
+	}
+	return cur
+}
+
 // judgeSpace judges the colour space obj, reached from a link of s, and the
-// spaces it holds. defaults are the Default colour spaces that replace a
-// device family obj holds: those of the resources defining the entry obj is,
-// or of the stream whose image or shading names it. unknown judges a space
-// that cannot be read as [unknownSpace], as veraPDF does for a space an
-// operator selects and for an /Indexed base or an alternate; an image's or a
-// shading's is judged as nothing.
+// spaces it holds (see [colorLinkWalk.judgeSpaceUnder]), under the zero
+// overprint mode every link but a painting operator's or a text show's
+// carries.
 func (w *colorLinkWalk) judgeSpace(ctx context.Context, obj ast.PdfObject, s *linkStream, defaults defaultCS, unknown bool, nesting int) {
+	w.judgeSpaceAs(ctx, obj, s, defaults, unknown, nesting, overprintMode{})
+}
+
+// judgeSpaceUnder judges the colour space obj an operator of s links to under
+// the overprint mode mode, and the spaces it holds, a space it cannot read as
+// [unknownSpace].
+func (w *colorLinkWalk) judgeSpaceUnder(ctx context.Context, obj ast.PdfObject, s *linkStream, defaults defaultCS, mode overprintMode) {
+	w.judgeSpaceAs(ctx, obj, s, defaults, true, 0, mode)
+}
+
+// judgeSpaceAs judges the colour space obj, reached from a link of s under
+// the overprint mode mode, and the spaces it holds. defaults are the Default
+// colour spaces that replace a device family obj holds: those of the resources
+// defining the entry obj is, or of the stream whose image or shading names it.
+// unknown judges a space that cannot be read as [unknownSpace], as veraPDF
+// does for a space an operator selects and for an /Indexed base or an
+// alternate; an image's or a shading's is judged as nothing. The spaces obj
+// holds are reached under the zero mode.
+func (w *colorLinkWalk) judgeSpaceAs(ctx context.Context, obj ast.PdfObject, s *linkStream, defaults defaultCS, unknown bool, nesting int, mode overprintMode) {
 	if obj == nil || nesting > maxColorSpaceNesting || ctx.Err() != nil {
 		return
 	}
@@ -756,11 +838,20 @@ func (w *colorLinkWalk) judgeSpace(ctx context.Context, obj ast.PdfObject, s *li
 		unreadable()
 		return
 	}
+	cmyk := w.isCMYKICCBased(ctx, resolved)
 	if ref, ok := obj.(ast.PdfIndirectRef); ok {
-		if w.judged[ref.ObjectNum] {
+		switch {
+		case cmyk:
+			key := cmykLink{obj: ref.ObjectNum, mode: mode}
+			if w.judgedCMYK[key] {
+				return
+			}
+			w.judgedCMYK[key] = true
+		case w.judged[ref.ObjectNum]:
 			return
+		default:
+			w.judged[ref.ObjectNum] = true
 		}
-		w.judged[ref.ObjectNum] = true
 	}
 	if name, ok := resolved.(ast.PdfName); ok {
 		w.judgeFamilyName(string(name), s, defaults, unreadable)
@@ -797,7 +888,11 @@ func (w *colorLinkWalk) judgeSpace(ctx context.Context, obj ast.PdfObject, s *li
 		}
 	case "ICCBased":
 		_, indirect := obj.(ast.PdfIndirectRef)
-		w.visit(colorNode{page: w.page, in: s, kind: string(kind), arr: arr, direct: !indirect})
+		node := colorNode{page: w.page, in: s, kind: string(kind), arr: arr, direct: !indirect}
+		if cmyk {
+			node.mode = mode
+		}
+		w.visit(node)
 	case "CalGray", "CalRGB", "Lab", "Pattern":
 	default:
 		// A one-element array holds a family name (ISO 32000-1, 8.6.3).
@@ -867,7 +962,7 @@ func (w *colorLinkWalk) paintXObject(ctx context.Context, obj ast.PdfObject, st 
 		// does not allow /ColorSpace on it, so one a producer writes anyway
 		// selects nothing.
 		if mask, _ := document.ResolveBool(ctx, w.doc, stream.Dict["ImageMask"]); mask { // Best-effort: an unreadable /ImageMask is no mask.
-			w.judgeRef(ctx, st.fill, s, depth)
+			w.judgeRef(ctx, st.fill, s, depth, overprintMode{})
 			return
 		}
 		w.judgeNamedOrSpace(ctx, stream.Dict["ColorSpace"], s)

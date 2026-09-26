@@ -272,7 +272,7 @@ func (w *drawnStreamWalk) scanColourStates(ctx context.Context, s *drawnScan) {
 				s.cellsOff = true
 			}
 		},
-		link: func(csRef, int, string) {},
+		link: func(csRef, int, string, overprintMode) {},
 		paint: func(name string, st csPaintState) {
 			if _, seen := s.formsOff[name]; !seen {
 				s.formsOff[name] = st.colourOff

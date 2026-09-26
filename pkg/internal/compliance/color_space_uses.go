@@ -58,13 +58,45 @@ type csRef struct {
 // stream it draws. fillUnder and strokeUnder are the underlying colour spaces
 // of the Pattern spaces the last scn and SCN selected a pattern in, which
 // veraPDF gives the tiling cells the stream paints (see
-// [colorLinkWalk.cellEntry]).
+// [colorLinkWalk.cellEntry]). overprint is the overprint part of the state gs
+// sets.
 type csPaintState struct {
 	fill, stroke           csRef
 	fillUnder, strokeUnder csRef
 	textRender             int
 	font                   string
 	colourOff              bool
+	overprint              overprintState
+}
+
+// overprintState is the overprint part of the graphics state: the overprint
+// mode and whether stroking and filling overprint (ISO 32000-1, 8.4.1, Table
+// 52), which an ExtGState sets through /OPM, /OP and /op (8.4.5, Table 58).
+type overprintState struct {
+	mode         int
+	stroke, fill bool
+}
+
+// overprintMode is the overprint mode and flag a link reaches a colour space
+// under. veraPDF gives the colour space a painting operator or a text show
+// paints with the overprint mode of the graphics state and its stroking or
+// filling flag, and every other link the zero mode (veraPDF-validation 1.30,
+// GFOpPathPaint.getColorSpace and GFOpTextShow.getColorSpace), and it joins
+// them to the identity of a four-component ICCBased space (see
+// [checkICCBasedProfiles]).
+type overprintMode struct {
+	opm int
+	on  bool
+}
+
+// fillMode returns the overprint mode a fill links its colour space under.
+func (o overprintState) fillMode() overprintMode {
+	return overprintMode{opm: o.mode, on: o.fill}
+}
+
+// strokeMode returns the overprint mode a stroke links its colour space under.
+func (o overprintState) strokeMode() overprintMode {
+	return overprintMode{opm: o.mode, on: o.stroke}
 }
 
 // colorSpaceUsesOf returns, per /Resources/ColorSpace name, every operator of
@@ -96,7 +128,11 @@ func colorSpaceUsesOf(ctx context.Context, ops []content.Operation) map[string][
 // links are those of [walkColorSpaceLinksWith], where g, rg and k (and G, RG
 // and K) leave no named space current.
 func walkColorSpaceLinks(ctx context.Context, ops []content.Operation, entry csPaintState, resolve func(string) csRef, link func(csRef, int, string), paint func(string, csPaintState)) {
-	walkColorSpaceLinksWith(ctx, ops, entry, csLinkHooks{resolve: resolve, link: link, paint: paint})
+	walkColorSpaceLinksWith(ctx, ops, entry, csLinkHooks{
+		resolve: resolve,
+		link:    func(ref csRef, idx int, operator string, _ overprintMode) { link(ref, idx, operator) },
+		paint:   paint,
+	})
 }
 
 // csLinkHooks are what [walkColorSpaceLinksWith] calls. resolve and link are
@@ -106,8 +142,12 @@ type csLinkHooks struct {
 	// space it names, and a zero result links nothing.
 	resolve func(name string) csRef
 	// link is called for every operator that links to a colour space, with
-	// its index among the operations.
-	link func(ref csRef, idx int, operator string)
+	// its index among the operations and the overprint mode the link
+	// reaches the space under.
+	link func(ref csRef, idx int, operator string, mode overprintMode)
+	// gs gives the overprint part of the graphics state after gs sets the
+	// ExtGState name in the state cur. Without it gs sets nothing.
+	gs func(name string, cur overprintState) overprintState
 	// paint is called at every Do with the XObject name and the state in force.
 	paint func(name string, st csPaintState)
 	// device gives the colour space g, rg and k select for filling, and G, RG
@@ -199,8 +239,10 @@ var deviceFamilyOperators = map[string]string{
 //     replaces (see [unknownSpace]): measured, one painted twice fails
 //     DeviceGray twice, and one in a form painted twice once.
 //   - g, rg and k select a device space for fill, G, RG and K for stroke, and
-//     link to it. q and Q save and restore both, with the text rendering mode
-//     and the font (ISO 32000-1, 8.4.2).
+//     link to it. q and Q save and restore both, with the text rendering mode,
+//     the font and the overprint state gs sets (ISO 32000-1, 8.4.2), which the
+//     links of the painting operators and the text shows carry (see
+//     [overprintMode]).
 //   - scn and SCN while a Pattern space is current select the pattern their
 //     name operand names, which they and later painting link to. veraPDF
 //     gives one that names no pattern the stream's resources define, or has
@@ -226,9 +268,9 @@ var deviceFamilyOperators = map[string]string{
 //     [/I /RGB 3 <...>], and veraPDF fails DeviceGray 128 times, where litho
 //     failed it 127 times.
 func walkColorSpaceLinksWith(ctx context.Context, ops []content.Operation, entry csPaintState, hooks csLinkHooks) {
-	add := func(ref csRef, idx int, operator string) {
+	add := func(ref csRef, idx int, operator string, mode overprintMode) {
 		if ref != (csRef{}) && ref.family != "Pattern" {
-			hooks.link(ref, idx, operator)
+			hooks.link(ref, idx, operator, mode)
 		}
 	}
 	construct := func(ref csRef, st csPaintState) {
@@ -290,6 +332,10 @@ func walkColorSpaceLinksWith(ctx context.Context, ops []content.Operation, entry
 				st = stack[len(stack)-1]
 				stack = stack[:len(stack)-1]
 			}
+		case "gs":
+			if name := lastNameOperand(op); name != "" && hooks.gs != nil {
+				st.overprint = hooks.gs(name, st.overprint)
+			}
 		case "Tr":
 			if len(op.Operands) >= 1 {
 				if mode, ok := op.Operands[0].(ast.PdfInt); ok {
@@ -304,45 +350,45 @@ func walkColorSpaceLinksWith(ctx context.Context, ops []content.Operation, entry
 			}
 		case "cs":
 			st.fill = selected(op)
-			add(st.fill, idx, op.Operator)
+			add(st.fill, idx, op.Operator, overprintMode{})
 		case "CS":
 			st.stroke = selected(op)
-			add(st.stroke, idx, op.Operator)
+			add(st.stroke, idx, op.Operator, overprintMode{})
 		case "scn":
 			st.fill, st.fillUnder = selectPattern(st.fill, st.fillUnder, op)
-			add(st.fill, idx, op.Operator)
+			add(st.fill, idx, op.Operator, overprintMode{})
 			construct(st.fill, st)
 		case "SCN":
 			st.stroke, st.strokeUnder = selectPattern(st.stroke, st.strokeUnder, op)
-			add(st.stroke, idx, op.Operator)
+			add(st.stroke, idx, op.Operator, overprintMode{})
 			construct(st.stroke, st)
 		case "g", "rg", "k":
 			st.fill = selectDevice(op.Operator)
-			add(st.fill, idx, op.Operator)
+			add(st.fill, idx, op.Operator, overprintMode{})
 		case "G", "RG", "K":
 			st.stroke = selectDevice(op.Operator)
-			add(st.stroke, idx, op.Operator)
+			add(st.stroke, idx, op.Operator, overprintMode{})
 		case "f", "F", "f*", "S", "s", "B", "B*", "b", "b*":
 			fills, strokes := paintedSpaces(op.Operator)
 			if fills {
-				add(st.fill, idx, op.Operator)
+				add(st.fill, idx, op.Operator, st.overprint.fillMode())
 				construct(st.fill, st)
 			}
 			if strokes {
-				add(st.stroke, idx, op.Operator)
+				add(st.stroke, idx, op.Operator, st.overprint.strokeMode())
 				construct(st.stroke, st)
 			}
 		case "Tj", "TJ", "'", `"`:
 			fills, strokes := textModePaints(st.textRender)
 			if fills {
 				if !st.colourOff {
-					add(st.fill, idx, op.Operator)
+					add(st.fill, idx, op.Operator, st.overprint.fillMode())
 				}
 				construct(st.fill, st)
 			}
 			if strokes {
 				if !st.colourOff {
-					add(st.stroke, idx, op.Operator)
+					add(st.stroke, idx, op.Operator, st.overprint.strokeMode())
 				}
 				construct(st.stroke, st)
 			}
@@ -352,10 +398,10 @@ func walkColorSpaceLinksWith(ctx context.Context, ops []content.Operation, entry
 		case "BI":
 			switch name := inlineImageCSName(op); {
 			case inlineImageIsMask(op):
-				add(st.fill, idx, op.Operator)
+				add(st.fill, idx, op.Operator, overprintMode{})
 			case st.colourOff:
 			case name != "":
-				add(hooks.resolve(name), idx, op.Operator)
+				add(hooks.resolve(name), idx, op.Operator, overprintMode{})
 			case hooks.inlineSpace != nil:
 				hooks.inlineSpace(inlineImageCS(op))
 			}
