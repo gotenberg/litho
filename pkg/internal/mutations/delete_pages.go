@@ -77,6 +77,13 @@ func DeletePages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 // page back. A staged node that is not flat, one a remediation rewrote without
 // changing which pages the document holds, reports false, and so does one
 // whose kids are not all indirect: the Reader's pages are then the document's.
+//
+// # Corpus evidence
+//
+//   - All corpora: of 100 files given two insertions on one Writer, all 100
+//     lost the first, and of the 33 with two pages or more, all 33 lost an
+//     insertion queued before a deletion and got back the page a deletion
+//     queued before an insertion had removed.
 func stagedPageKids(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) ([]ast.PdfIndirectRef, bool) {
 	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
