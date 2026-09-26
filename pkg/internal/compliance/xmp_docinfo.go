@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -57,7 +59,19 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 	}
 
 	for _, pair := range syncPairs {
-		infoVal := xmpInfoString(ctx, doc, infoDict, pair.infoKey)
+		entry := xmpInfoEntryValue(ctx, doc, infoDict, pair.infoKey)
+		isDateField := pair.infoKey == "CreationDate" || pair.infoKey == "ModDate"
+		// Tests 1 and 8 read "doCreationDatesMatch != false", and veraPDF
+		// leaves that null for a date entry that holds no string, so such an
+		// entry passes them whatever the XMP says.
+		if !entry.present || (isDateField && !entry.isString) {
+			continue
+		}
+		if !entry.comparable {
+			*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, entry.text, pair.xmpKey, syncResult.values[pair.xmpKey])...)
+			continue
+		}
+		infoVal := entry.text
 		if infoVal == "" {
 			// An Info entry that is present but empty is still present: every
 			// §6.7.3 test reads "Key == null || Key == XMPKey", and an empty
@@ -66,14 +80,9 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 			// its value. Measured on all four combinations: an empty /Title with
 			// no packet, or with a packet that omits dc:title, fails on both
 			// tools; an empty /Title against an empty dc:title passes on both.
-			// The same shape covers a non-null value litho cannot resolve to a
-			// string, which reads as empty here.
-			if xmpInfoKeyPresent(infoDict, pair.infoKey) &&
-				!xmpInfoValueIsNull(ctx, doc, infoDict, pair.infoKey) {
-				xmpVal := syncResult.values[pair.xmpKey]
-				if !syncResult.present[pair.xmpKey] || xmpVal != "" {
-					*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, "(empty)", pair.xmpKey, xmpVal)...)
-				}
+			xmpVal := syncResult.values[pair.xmpKey]
+			if !syncResult.present[pair.xmpKey] || xmpVal != "" {
+				*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, "(empty)", pair.xmpKey, xmpVal)...)
 			}
 			continue
 		}
@@ -102,7 +111,6 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 		// Date fields: Info dict dates must use D: prefix format.
 		// A date in non-D: format (e.g., raw ISO 8601) is malformed and
 		// considered non-equivalent even if the time value matches.
-		isDateField := pair.infoKey == "CreationDate" || pair.infoKey == "ModDate"
 		if isDateField && !strings.HasPrefix(normInfo, "D:") && normInfo != "" {
 			*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey, xmpVal)...)
 			continue
@@ -187,41 +195,120 @@ func xmpDocInfoSyncRulePart1(testNum int, ctx string) []Violation {
 	return nil
 }
 
-// xmpInfoKeyPresent returns true if the Info dict has the given key, even if
-// the value can't be resolved as a string.
-func xmpInfoKeyPresent(infoDict ast.PdfDict, key string) bool {
-	_, ok := infoDict[ast.PdfName(key)]
-	return ok
+// xmpInfoEntry is one document information dictionary entry as ISO 19005-1,
+// 6.7.3 compares it with its XMP analogue.
+type xmpInfoEntry struct {
+	// present is false for an absent entry and for one that is null, which
+	// every 6.7.3 test ("Key == null || ...") passes.
+	present bool
+	// text is the value compared with the analogue, or, when comparable is
+	// false, a description of the value for the violation context.
+	text string
+	// comparable is false for a value no XMP property equals.
+	comparable bool
+	// isString is true for a string value, direct or indirect.
+	isString bool
 }
 
-// xmpInfoValueIsNull returns true if the Info dict value for the given key
-// resolves to a PDF null object.
-func xmpInfoValueIsNull(ctx context.Context, doc *document.Document, infoDict ast.PdfDict, key string) bool {
+// xmpInfoEntryValue reads key from the document information dictionary as
+// veraPDF compares it with its XMP analogue.
+//
+// ISO 32000-1, Table 317 makes each of these entries a text string or a date,
+// and a string is compared as it decodes. veraPDF compares any other value too,
+// as the text its Java object renders, measured on crafted PDF/A-1b files: an
+// integer passes 6.7.3 against its decimal digits, a real against its Java
+// double spelling ("5.0", "0.5"), and a name against itself with its slash and
+// escapes ("/T", "/A#20B"). A stream, a dictionary, an array and a boolean
+// render as "stream(size = 10)", "dictionary(size = 1)", "[T]" and an object
+// hash, which litho treats as matching no XMP value: no producer writes such
+// a property, and a stream stands in for no title. A null value, and a
+// reference to an object the file does not define, which ISO 32000-1, 7.3.10
+// reads as null, pass every test as an absent entry does. So does a
+// /CreationDate or /ModDate that holds no string, whatever its type: the
+// caller skips it (see tests 1 and 8).
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-1b__veraPDF_test_suite_6-1-5-t01-fail-j.pdf: its /Title is
+//     a reference to a font program, and veraPDF fails 6.7.3 test 2 against
+//     its dc:title and against an empty one alike. litho read the stream as an
+//     empty /Title and passed the empty dc:title.
+//   - pdfjs issue18030.pdf: its /CreationDate and /ModDate are booleans, which
+//     veraPDF passes against its empty xmp:CreateDate and xmp:ModifyDate.
+//   - All corpora: those two and verapdf
+//     PDF_A-1b__veraPDF_test_suite_6-1-5-t02-pass-d.pdf, whose /Title is null,
+//     are the only files with an /Info entry of 6.7.3 that holds no string.
+func xmpInfoEntryValue(ctx context.Context, doc *document.Document, infoDict ast.PdfDict, key string) xmpInfoEntry {
 	valObj, ok := infoDict[ast.PdfName(key)]
 	if !ok {
-		return false
+		return xmpInfoEntry{}
 	}
 	resolved, err := document.ResolveObject(ctx, doc, valObj)
 	if err != nil {
-		return false
+		doc.Logger.Debug("compliance.xmp: Info entry does not resolve, reading it as null", "key", key, "error", err)
+		return xmpInfoEntry{}
 	}
-	_, isNull := resolved.(ast.PdfNull)
-	return isNull
+	switch v := resolved.(type) {
+	case nil, ast.PdfNull:
+		return xmpInfoEntry{}
+	case ast.PdfString:
+		return xmpInfoEntry{present: true, text: document.DecodePdfString(v), comparable: true, isString: true}
+	case ast.PdfInt:
+		return xmpInfoEntry{present: true, text: strconv.FormatInt(int64(v), 10), comparable: true}
+	case ast.PdfReal:
+		return xmpInfoEntry{present: true, text: javaDoubleString(float64(v)), comparable: true}
+	case ast.PdfName:
+		return xmpInfoEntry{present: true, text: escapedPdfName(v), comparable: true}
+	case ast.PdfStream, *ast.PdfStream:
+		return xmpInfoEntry{present: true, text: "(stream)"}
+	case ast.PdfDict:
+		return xmpInfoEntry{present: true, text: "(dictionary)"}
+	case ast.PdfArray:
+		return xmpInfoEntry{present: true, text: "(array)"}
+	case ast.PdfBool:
+		return xmpInfoEntry{present: true, text: "(boolean)"}
+	default:
+		return xmpInfoEntry{present: true, text: fmt.Sprintf("(%T)", resolved)}
+	}
 }
 
-// xmpInfoString returns the decoded string value of key in the document info
-// dictionary, resolving an indirect value. It returns "" when the key is
-// absent, does not resolve to a string, or holds an empty one.
-func xmpInfoString(ctx context.Context, doc *document.Document, infoDict ast.PdfDict, key string) string {
-	valObj, ok := infoDict[ast.PdfName(key)]
-	if !ok {
-		return ""
+// javaDoubleString spells f as Java's Double.toString does, which is how
+// veraPDF renders a real: at least one digit after the point, and scientific
+// notation ("1.0E7") outside [10^-3, 10^7).
+func javaDoubleString(f float64) string {
+	if abs := math.Abs(f); f == 0 || (abs >= 1e-3 && abs < 1e7) {
+		s := strconv.FormatFloat(f, 'f', -1, 64)
+		if !strings.Contains(s, ".") {
+			s += ".0"
+		}
+		return s
 	}
-	s, err := document.ResolveString(ctx, doc, valObj)
-	if err == nil && s != "" {
-		return document.DecodePdfString(s)
+	mantissa, exponent, _ := strings.Cut(strconv.FormatFloat(f, 'E', -1, 64), "E")
+	if !strings.Contains(mantissa, ".") {
+		mantissa += ".0"
 	}
-	return ""
+	exp, err := strconv.Atoi(exponent)
+	if err != nil {
+		return mantissa + "E" + exponent
+	}
+	return mantissa + "E" + strconv.Itoa(exp)
+}
+
+// escapedPdfName spells name as it is written in a file, slash included, with
+// the #XX escape ISO 32000-1, 7.3.5 requires for a byte outside the regular
+// printable characters.
+func escapedPdfName(name ast.PdfName) string {
+	var sb strings.Builder
+	sb.WriteByte('/')
+	for i := 0; i < len(name); i++ {
+		b := name[i]
+		if b < '!' || b > '~' || strings.IndexByte("#()<>[]{}/%", b) >= 0 {
+			fmt.Fprintf(&sb, "#%02X", b)
+			continue
+		}
+		sb.WriteByte(b)
+	}
+	return sb.String()
 }
 
 // xmpContainerTypedProperties are the §6.7.3 XMP analogues whose XMP type is an
