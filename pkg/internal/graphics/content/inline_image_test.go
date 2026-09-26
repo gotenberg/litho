@@ -121,6 +121,43 @@ func TestInlineImagesReadByRepairs(t *testing.T) {
 	}
 }
 
+// TestInlineImageDataInEveryReading pins that every reading reads on past the
+// EI that ends the data of an inline image, and takes as data an "EI" that no
+// white space follows, a delimiter included, or that a NUL and bytes outside
+// printable ASCII follow. veraPDF ends the data only at an EI that white space
+// follows, and reads a NUL as white space and the bytes after it as no
+// operator ([inlineImages]). PDF.js ends it only at an EI that a space, a line
+// feed or a carriage return follows, and ends the data of an ASCII85Decode
+// image at its "~>" ([pdfjsInlineImageEnd]). Read as operators, the bytes
+// after a false EI would be undefined operators to ISO 19005-2, 6.2.2.
+func TestInlineImageDataInEveryReading(t *testing.T) {
+	t.Parallel()
+
+	const g = "BI /W 2 /H 1 /BPC 8 /CS /G "
+	want := []string{"BI", "Q"}
+	for _, tc := range []struct{ name, data string }{
+		{"an empty dictionary", "BI ID \x00 \nEI Q\n"},
+		{"binary around an EI", g + "ID \xaaEI\xbb \nEI\nQ\n"},
+		{"a delimiter after an EI", g + "ID x EI/F1 EI\nQ\n"},
+		{"a NUL and binary after an EI", "BI /W 20 /H 1 /BPC 8 /F /Fl ID \x78\x9c\x63\x01\rEI\x00\x82\xbb\x0f\xf8\nEI Q\n"},
+		{"an ASCII85Decode image", g + "/F /A85 ID Gb\"0;!=]#/!5bE/ABCD\nEI/X\r\n~>\nEI Q\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			for name, opts := range map[string][]Option{
+				"veraPDF":     nil,
+				"PDF.js":      {SplitGluedOperators()},
+				"ForRepair":   {ForRepair()},
+				"WholeStream": {WholeStream()},
+			} {
+				if got := operatorsOf(t, tc.data, opts...); !reflect.DeepEqual(got, want) {
+					t.Errorf("%s: operators = %q, want %q", name, got, want)
+				}
+			}
+		})
+	}
+}
+
 // TestInlineImagesResumeOffsets pins where the reading resumes after an image
 // whose EI a BI follows: at the data of the last image read with it, offset
 // by the length of the data of the first, "EI" included.
