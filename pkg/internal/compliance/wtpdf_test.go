@@ -3,6 +3,7 @@ package compliance
 import (
 	"context"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -153,6 +154,36 @@ func TestWTPDFDeclarationRule(t *testing.T) {
 	}
 	if r, u := wtpdfDeclarationRule(models.WTPDFProfile("WTPDF-9")); r.Specification != "" || u != "" {
 		t.Errorf("unknown profile must yield no rule, got %v %q", r, u)
+	}
+}
+
+// TestWTPDFDeclaration_NoMetadata pins the scope of WTPDF 1.0, 6.1.2 and
+// 6.1.3: veraPDF tests them on the main XMP package, so a catalog with no
+// /Metadata draws neither, while a packet that states no declaration draws
+// the level's rule.
+func TestWTPDFDeclaration_NoMetadata(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	bare, _ := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [] /Count 0 >>",
+	)
+	packet := `<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about=""/></rdf:RDF></x:xmpmeta>`
+	withXMP, _ := objsDocPDF(t,
+		"<< /Type /Catalog /Pages 2 0 R /Metadata 3 0 R >>",
+		"<< /Type /Pages /Kids [] /Count 0 >>",
+		"<< /Type /Metadata /Subtype /XML /Length "+strconv.Itoa(len(packet))+" >>\nstream\n"+packet+"\nendstream",
+	)
+
+	for _, profile := range []models.WTPDFProfile{models.WTPDF1Reuse, models.WTPDF1Accessibility} {
+		rule, _ := wtpdfDeclarationRule(profile)
+		if got := checkWTPDFDeclaration(ctx, bare, profile); hasRule(got, rule) {
+			t.Errorf("%s, no /Metadata: got %v, want no declaration rule", profile, got)
+		}
+		if got := checkWTPDFDeclaration(ctx, withXMP, profile); !hasRule(got, rule) {
+			t.Errorf("%s, packet without declaration: got %v, want %s t%d", profile, got, rule.Clause, rule.TestNumber)
+		}
 	}
 }
 

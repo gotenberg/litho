@@ -166,7 +166,23 @@ func wtpdfDeclarations(ctx context.Context, xmpData []byte) []string {
 
 // checkWTPDFDeclaration validates the one rule WTPDF states of its own:
 // the file shall carry a PDF Declaration naming the conformance level
-// (WTPDF 1.0, 6.1.2 for reuse and 6.1.3 for accessibility).
+// (WTPDF 1.0, 6.1.2 for reuse and 6.1.3 for accessibility). A document with
+// no XMP metadata draws nothing here.
+//
+// veraPDF scopes both rules to the main XMP package (MainXMPPackage in
+// WTPDF-1-0-Reuse.xml and WTPDF-1-0-Accessibility.xml), which a catalog with
+// no /Metadata stream does not have, so the rule has nothing to test. The
+// missing metadata itself fails ISO 14289-2, 8.11.1 t2, which the PDF/UA-2
+// checks WTPDF runs report, so the document still fails. The PDF/UA
+// identification rule of clause 5 has the same scope and the same exemption
+// ([checkPDFUAIdentification]).
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-2b__veraPDF_test_suite_6-6-2-1-t01-fail-a,
+//     PDF_A-4__veraPDF_test_suite_6-7-2-1-t01-fail-a and
+//     PDF_UA-1__7.1-t08-fail-a: their catalogs name no /Metadata, and veraPDF
+//     reports 8.11.1 t2 and no declaration rule at either level.
 func checkWTPDFDeclaration(ctx context.Context, doc *document.Document, profile models.WTPDFProfile) []Violation {
 	rule, uri := wtpdfDeclarationRule(profile)
 	if rule.Specification == "" {
@@ -181,7 +197,7 @@ func checkWTPDFDeclaration(ctx context.Context, doc *document.Document, profile 
 
 	xmpData, ok := readCatalogXMP(ctx, doc, catalog)
 	if !ok {
-		return fail(rule, "catalog carries no XMP metadata, so it states no PDF Declaration")
+		return nil
 	}
 
 	if slices.Contains(wtpdfDeclarations(ctx, xmpData), uri) {
