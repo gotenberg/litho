@@ -936,11 +936,9 @@ func applyExtensionSchemas(buf []byte, part int) ([]byte, []string) {
 				"pdfaProperty":  pdfaPropertyNS,
 			}
 			for _, sc := range schemas {
-				for _, prop := range sc.properties {
-					if len(prop.structFields) > 0 {
-						decls["pdfaType"] = pdfaTypeNS
-						decls["pdfaField"] = pdfaFieldNS
-					}
+				if len(sc.types) > 0 {
+					decls["pdfaType"] = pdfaTypeNS
+					decls["pdfaField"] = pdfaFieldNS
 				}
 			}
 			// Each declaration is written into the packet, so ranging the
@@ -1127,25 +1125,36 @@ type extSchemaInfo struct {
 	nsURI      string
 	prefix     string
 	properties []extPropInfo
+	// types are the structure types the properties' values need, defined in
+	// this entry's pdfaSchema:valueType: veraPDF resolves a declared type only
+	// through the entry that declares the property.
+	types []extTypeInfo
 }
 
 // extPropInfo names one custom property and the XMP valueType matching its
 // serialized shape. A declared property's valueType must match its actual
-// container (ISO 19005-2 §6.6.2.3.1 t2), so declaring plain Text for an
-// rdf:Bag/Seq/Alt property trades the missing-schema violation for a
-// type-mismatch one.
+// value (ISO 19005-2 §6.6.2.3.1 t2, ISO 19005-1 §6.7.9 t3), so declaring
+// plain Text for an rdf:Bag/Seq/Alt property trades the missing-schema
+// violation for a type-mismatch one.
 type extPropInfo struct {
 	name      string
 	valueType string
-	// structNS, structPrefix, and structFields describe an inline
-	// structure property (rdf:parseType="Resource" or nested element
-	// fields). When structFields is non-empty the generator emits a
-	// matching pdfaSchema:valueType definition: a declared property's
-	// valueType must match its serialized shape, so a structure declared
-	// as a simple type fails ISO 19005-2 §6.6.2.3.1 t2.
-	structNS     string
-	structPrefix string
-	structFields []string
+}
+
+// extTypeInfo is one structure type an extension schema entry defines
+// (ISO 19005-2 §6.6.2.3.3): its name, the namespace and prefix of its fields,
+// and each field with the value type its value takes.
+type extTypeInfo struct {
+	name   string
+	ns     string
+	prefix string
+	fields []extFieldInfo
+}
+
+// extFieldInfo is one field of an [extTypeInfo].
+type extFieldInfo struct {
+	name      string
+	valueType string
 }
 
 // needsExtensionDeclaration reports whether the top-level property ns:name
@@ -1174,27 +1183,43 @@ type xmpPropKey struct {
 	name  string
 }
 
+// maxExtTypeNesting bounds how deep [extTypeInferrer] follows structures and
+// arrays inside one property's value. Anti-DoS guard, not spec-mandated: the
+// deepest predefined value nests three levels (xmpTPg:SwatchGroups holds
+// Colorants structures), so 8 types every real value, and a property nested
+// deeper is stripped as untypeable rather than declared.
+const maxExtTypeNesting = 8
+
 // extractUnknownNamespaceProperties parses XMP XML and returns the
 // namespaces holding properties that need an extension schema declaration
-// for the given PDF/A part, with their prefixes and property names: custom
-// namespaces in full, predefined namespaces restricted to the property
-// names absent from the part's predefined catalog (see
-// [needsExtensionDeclaration]).
+// for the given PDF/A part, with their prefixes, the value type each
+// property's value takes, and the structure types those need: custom
+// namespaces in full, predefined namespaces restricted to the property names
+// absent from the part's predefined catalog (see [needsExtensionDeclaration]).
 //
-// The second return lists properties whose value is a seq or bag of inline
-// structures (rdf:li rdf:parseType="Resource"). litho cannot declare an
-// arbitrarily nested structure type, and declaring such a property with a flat
-// "seq Text" type fails veraPDF's ISO 19005-2 §6.6.2.3.1 test 2. Callers strip
-// these from the XMP, the same safe repair [fixXMPSchema] applies.
+// The value is read as the validator reads it ([compliance.XMPProperties]),
+// and its type follows its shape (see [extTypeInferrer]): a structure, or an
+// array of them, is declared with a type the entry defines, whose fields are
+// the ones the structures hold. veraPDF judges the declaration against the
+// value (ISO 19005-2, 6.6.2.3.1 t2; ISO 19005-1, 6.7.9 t3), so a structure
+// declared "bag Text" fails as surely as an undeclared one.
+//
+// The second return lists properties whose value no declaration describes:
+// an array mixing structures and text, or arrays and text, a structure with no
+// field or with fields in two namespaces, or a value nested deeper than
+// [maxExtTypeNesting]. Callers strip these from the XMP, the same safe repair
+// [fixXMPSchema] applies.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-1b__veraPDF_test_suite_6-7-2-t03-fail-i.pdf: its
+//     xmpTPg:Fonts, which the XMP 2004 catalog of PDF/A-1 does not define, is
+//     a bag of stFnt structures each written as an rdf:li holding an
+//     rdf:Description. It was declared "bag Text", which veraPDF 1.30.2
+//     fails under 6.7.9 t3, and is now declared a bag of a type holding the
+//     stFnt fields, which veraPDF passes.
 func extractUnknownNamespaceProperties(data []byte, part int) ([]extSchemaInfo, []xmpPropKey) {
-	decoder := xml.NewDecoder(bytes.NewReader(data))
-	decoder.Strict = false
-
-	// Track namespace URI → prefix mapping from xmlns declarations.
-	nsPrefixes := make(map[string]string)
-	// Track namespace URI → property name → property info.
-	nsProps := make(map[string]map[string]extPropInfo)
-
+	nsPrefixes := xmpNamespacePrefixes(data)
 	ignoredNS := map[string]bool{
 		"": true, "xmlns": true,
 		"http://www.w3.org/1999/02/22-rdf-syntax-ns#": true,
@@ -1204,194 +1229,186 @@ func extractUnknownNamespaceProperties(data []byte, part int) ([]extSchemaInfo, 
 		"http://www.w3.org/2001/XMLSchema":            true,
 		"adobe:ns:meta/":                              true,
 	}
-	record := func(ns string, info extPropInfo) {
-		if nsProps[ns] == nil {
-			nsProps[ns] = make(map[string]extPropInfo)
-		}
-		if _, seen := nsProps[ns][info.name]; !seen {
-			nsProps[ns][info.name] = info
-		}
-	}
 
-	// descDepth counts nested rdf:Description elements; elemDepth counts
-	// elements below the innermost Description so that only DIRECT children
-	// are recorded as properties. Nested elements are property content
-	// (array items, structure fields), not properties of their own.
-	descDepth := 0
-	elemDepth := 0
-	var curNS, curName string // top-level custom property being classified
-	curType := ""
-	var curStructNS string
-	var curStructFields []string
-	curUntypeable := false
+	type nsEntry struct {
+		props []extPropInfo
+		seen  map[string]bool
+		types []extTypeInfo
+	}
+	entries := make(map[string]*nsEntry)
 	var stripKeys []xmpPropKey
-
-	finishProp := func() {
-		if curName == "" {
-			curStructNS, curStructFields, curUntypeable = "", nil, false
-			return
+	for _, n := range compliance.XMPProperties(data) {
+		if ignoredNS[n.NS] || !needsExtensionDeclaration(part, n.NS, n.Name) {
+			continue
 		}
-		switch {
-		case curUntypeable:
-			stripKeys = append(stripKeys, xmpPropKey{nsURI: curNS, name: curName})
-		case len(curStructFields) > 0:
-			record(curNS, extPropInfo{
-				name:         curName,
-				valueType:    curName + "Struct",
-				structNS:     curStructNS,
-				structPrefix: nsPrefixes[curStructNS],
-				structFields: curStructFields,
-			})
-		default:
-			if curType == "" || curType == "structPending" {
-				curType = "Text"
-			}
-			record(curNS, extPropInfo{name: curName, valueType: curType})
+		e := entries[n.NS]
+		if e == nil {
+			e = &nsEntry{seen: make(map[string]bool)}
+			entries[n.NS] = e
 		}
-		curNS, curName, curType = "", "", ""
-		curStructNS, curStructFields = "", nil
-		curUntypeable = false
-	}
-
-	for {
-		tok, err := decoder.Token()
-		if err != nil {
-			break
+		if e.seen[n.Name] {
+			continue
 		}
-		switch t := tok.(type) {
-		case xml.StartElement:
-			for _, attr := range t.Attr {
-				if attr.Name.Space == "xmlns" && attr.Value != "" {
-					nsPrefixes[attr.Value] = attr.Name.Local
-				}
-			}
-			if t.Name.Space == "http://www.w3.org/1999/02/22-rdf-syntax-ns#" && t.Name.Local == "Description" && elemDepth == 0 {
-				descDepth++
-				// Attribute-form custom properties are always simple values.
-				for _, attr := range t.Attr {
-					ns := attr.Name.Space
-					if ns == "" || ignoredNS[ns] || ns == "xmlns" ||
-						!needsExtensionDeclaration(part, ns, attr.Name.Local) {
-						continue
-					}
-					record(ns, extPropInfo{name: attr.Name.Local, valueType: "Text"})
-				}
-				continue
-			}
-			if descDepth == 0 {
-				continue
-			}
-			elemDepth++
-			switch {
-			case elemDepth == 1:
-				if !ignoredNS[t.Name.Space] && needsExtensionDeclaration(part, t.Name.Space, t.Name.Local) {
-					curNS, curName = t.Name.Space, t.Name.Local
-					curType = ""
-					// rdf:parseType="Resource" marks an inline structure:
-					// capture its field names so the generator can emit a
-					// matching pdfaSchema:valueType definition. A declared
-					// property's valueType must match its serialized shape,
-					// so a structure declared as a simple type fails
-					// §6.6.2.3.1 t2, and an undeclared one fails t1.
-					for _, attr := range t.Attr {
-						if attr.Name.Local == "parseType" {
-							curType = "structPending"
-						}
-					}
-				}
-			case elemDepth == 2 && curName != "":
-				if curType == "" {
-					// First child decides the container type. The accepted
-					// names mirror the predefined XMP value types the
-					// validator recognizes; a non-container child means a
-					// structure, handled like the parseType form below.
-					if t.Name.Space == "http://www.w3.org/1999/02/22-rdf-syntax-ns#" {
-						switch t.Name.Local {
-						case "Bag":
-							curType = "bag Text"
-						case "Seq":
-							curType = "seq Text"
-						case "Alt":
-							curType = "Lang Alt"
-						default:
-							curType = "structPending"
-						}
-					} else {
-						curType = "structPending"
-					}
-				}
-				if curType == "structPending" || curType == "Text" && len(curStructFields) > 0 {
-					// Structure field. Fields spanning more than one
-					// namespace cannot be described by a single pdfaType
-					// definition; drop the property rather than declare a
-					// type whose fields do not all share its namespace.
-					if curStructNS == "" {
-						curStructNS = t.Name.Space
-					}
-					if t.Name.Space == curStructNS {
-						curStructFields = append(curStructFields, t.Name.Local)
-					} else {
-						curName, curStructFields = "", nil
-					}
-				}
-			case elemDepth == 3 && curName != "":
-				// Items of a seq/bag container. When the container was typed as
-				// a flat "seq Text"/"bag Text" but its items are inline
-				// structures (rdf:li rdf:parseType="Resource", e.g. Adobe
-				// xapTPg:SwatchGroups), that type is wrong: §6.6.2.3.1 t2 rejects
-				// a structured value declared as text. Mark the property for
-				// stripping rather than declaring an untypeable nested structure.
-				if curType == "seq Text" || curType == "bag Text" {
-					for _, attr := range t.Attr {
-						if attr.Name.Local == "parseType" && attr.Value == "Resource" {
-							curUntypeable = true
-						}
-					}
-				}
-			}
-
-		case xml.EndElement:
-			if t.Name.Space == "http://www.w3.org/1999/02/22-rdf-syntax-ns#" && t.Name.Local == "Description" && elemDepth == 0 {
-				descDepth--
-				continue
-			}
-			if descDepth > 0 && elemDepth > 0 {
-				if elemDepth == 1 {
-					finishProp()
-				}
-				elemDepth--
-			}
+		e.seen[n.Name] = true
+		inf := extTypeInferrer{prefixes: nsPrefixes, taken: make(map[string]bool)}
+		for _, t := range e.types {
+			inf.taken[t.name] = true
 		}
+		vt, ok := inf.slotType([]*compliance.XMPNode{n}, n.Name, 0)
+		if !ok {
+			stripKeys = append(stripKeys, xmpPropKey{nsURI: n.NS, name: n.Name})
+			continue
+		}
+		e.props = append(e.props, extPropInfo{name: n.Name, valueType: vt})
+		e.types = append(e.types, inf.defined...)
 	}
 
 	// Build result. Iterate namespaces in sorted URI order so the
 	// synthesized fallback prefixes (nsN) - and therefore the emitted XMP
 	// bytes - are deterministic across runs.
-	schemas := make([]extSchemaInfo, 0, len(nsProps))
-	nsURIs := make([]string, 0, len(nsProps))
-	for nsURI := range nsProps {
-		nsURIs = append(nsURIs, nsURI)
+	nsURIs := make([]string, 0, len(entries))
+	for nsURI, e := range entries {
+		if len(e.props) > 0 {
+			nsURIs = append(nsURIs, nsURI)
+		}
 	}
 	sort.Strings(nsURIs)
+	schemas := make([]extSchemaInfo, 0, len(nsURIs))
 	for _, nsURI := range nsURIs {
-		props := nsProps[nsURI]
+		e := entries[nsURI]
 		prefix := nsPrefixes[nsURI]
 		if prefix == "" {
 			prefix = "ns" + fmt.Sprintf("%d", len(schemas)+1)
 		}
-		names := make([]string, 0, len(props))
-		for p := range props {
-			names = append(names, p)
-		}
-		sort.Strings(names)
-		infos := make([]extPropInfo, 0, len(names))
-		for _, n := range names {
-			infos = append(infos, props[n])
-		}
-		schemas = append(schemas, extSchemaInfo{nsURI: nsURI, prefix: prefix, properties: infos})
+		props := slices.Clone(e.props)
+		slices.SortFunc(props, func(a, b extPropInfo) int { return strings.Compare(a.name, b.name) })
+		schemas = append(schemas, extSchemaInfo{nsURI: nsURI, prefix: prefix, properties: props, types: e.types})
 	}
-	sort.Slice(schemas, func(i, j int) bool { return schemas[i].nsURI < schemas[j].nsURI })
 	return schemas, stripKeys
+}
+
+// xmpNamespacePrefixes maps each namespace URI the packet binds to the prefix
+// its last xmlns declaration gives it.
+func xmpNamespacePrefixes(data []byte) map[string]string {
+	prefixes := make(map[string]string)
+	decoder := xml.NewDecoder(bytes.NewReader(data))
+	decoder.Strict = false
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			return prefixes
+		}
+		if t, ok := tok.(xml.StartElement); ok {
+			for _, attr := range t.Attr {
+				if attr.Name.Space == "xmlns" && attr.Value != "" {
+					prefixes[attr.Value] = attr.Name.Local
+				}
+			}
+		}
+	}
+}
+
+// extTypeInferrer derives the value type of one property from its value, and
+// the structure types that type needs, as veraPDF's ValidatorsContainer will
+// judge them: a simple value is Text; an array is "bag", "seq" or "alt" of its
+// items' type, an alternative of simple items holding xml:lang being "Lang
+// Alt"; and structures are a type whose fields are theirs, each of the type
+// its values take. The values of one slot, the items of an array or one field
+// across structures, share one type, so they must share one shape.
+type extTypeInferrer struct {
+	prefixes map[string]string
+	// taken holds the type names the entry already defines or this property
+	// has defined, so a new type never replaces another.
+	taken map[string]bool
+	// defined are the types this property needs, in the order they were made.
+	defined []extTypeInfo
+}
+
+// slotType returns the value type every node of nodes takes, base naming the
+// structure types it defines, or false when no declaration describes them.
+func (inf *extTypeInferrer) slotType(nodes []*compliance.XMPNode, base string, depth int) (string, bool) {
+	if depth > maxExtTypeNesting || len(nodes) == 0 {
+		return "", false
+	}
+	kind := nodes[0].Kind
+	for _, n := range nodes[1:] {
+		if n.Kind != kind {
+			return "", false
+		}
+	}
+	switch kind {
+	case compliance.XMPSimple:
+		return "Text", true
+	case compliance.XMPStruct:
+		return inf.structType(nodes, base, depth)
+	case compliance.XMPBag, compliance.XMPSeq, compliance.XMPAlt:
+		// An array: its items share one type, read below.
+	}
+	var items []*compliance.XMPNode
+	for _, n := range nodes {
+		items = append(items, n.Children...)
+	}
+	array := map[compliance.XMPNodeKind]string{compliance.XMPBag: "bag", compliance.XMPSeq: "seq", compliance.XMPAlt: "alt"}[kind]
+	if len(items) == 0 {
+		if kind == compliance.XMPAlt {
+			return "Lang Alt", true
+		}
+		return array + " Text", true
+	}
+	itemType, ok := inf.slotType(items, base, depth+1)
+	if !ok || strings.HasPrefix(itemType, "bag ") || strings.HasPrefix(itemType, "seq ") ||
+		strings.HasPrefix(itemType, "alt ") || itemType == "Lang Alt" {
+		return "", false
+	}
+	if kind == compliance.XMPAlt && itemType == "Text" &&
+		slices.ContainsFunc(items, func(n *compliance.XMPNode) bool { return n.Lang }) {
+		return "Lang Alt", true
+	}
+	return array + " " + itemType, true
+}
+
+// structType defines the structure type the structures nodes share and
+// returns its name: its fields are every field any of them holds, which must
+// all live in one namespace, veraPDF's StructuredTypeValidator holding a
+// type's fields to the type's namespace.
+func (inf *extTypeInferrer) structType(nodes []*compliance.XMPNode, base string, depth int) (string, bool) {
+	var ns string
+	var order []string
+	slots := make(map[string][]*compliance.XMPNode)
+	for _, n := range nodes {
+		for _, f := range n.Children {
+			if f.NS == "" || ns != "" && f.NS != ns {
+				return "", false
+			}
+			ns = f.NS
+			if _, seen := slots[f.Name]; !seen {
+				order = append(order, f.Name)
+			}
+			slots[f.Name] = append(slots[f.Name], f)
+		}
+	}
+	if len(order) == 0 {
+		return "", false
+	}
+	fields := make([]extFieldInfo, 0, len(order))
+	for _, name := range order {
+		vt, ok := inf.slotType(slots[name], base+name, depth+1)
+		if !ok {
+			return "", false
+		}
+		fields = append(fields, extFieldInfo{name: name, valueType: vt})
+	}
+	name := base + "Struct"
+	for i := 2; inf.taken[name]; i++ {
+		name = fmt.Sprintf("%sStruct%d", base, i)
+	}
+	inf.taken[name] = true
+	prefix := inf.prefixes[ns]
+	if prefix == "" {
+		prefix = "stype"
+	}
+	inf.defined = append(inf.defined, extTypeInfo{name: name, ns: ns, prefix: prefix, fields: fields})
+	return name, true
 }
 
 // stripXMPPropertyKeys removes every occurrence of each property key from the
@@ -1435,30 +1452,23 @@ func generateExtensionSchemaBlock(schemas []extSchemaInfo) string {
 			sb.WriteString("          </rdf:Seq>\n        </pdfaSchema:property>\n")
 		}
 
-		// Structure-valued properties need a matching valueType
-		// definition (ISO 19005-2 §6.6.2.3.3): name, namespace, prefix,
-		// description, and one pdfaField entry per observed field. The
-		// fields are declared Text, matching their serialized leaves.
-		var structs []extPropInfo
-		for _, prop := range s.properties {
-			if len(prop.structFields) > 0 {
-				structs = append(structs, prop)
-			}
-		}
-		if len(structs) > 0 {
+		// The structure types the properties need (ISO 19005-2 §6.6.2.3.3):
+		// name, namespace, prefix, description, and one pdfaField entry per
+		// field, each of the value type its values take.
+		if len(s.types) > 0 {
 			sb.WriteString("        <pdfaSchema:valueType>\n          <rdf:Seq>\n")
-			for _, prop := range structs {
+			for _, typ := range s.types {
 				sb.WriteString("            <rdf:li rdf:parseType=\"Resource\">\n")
-				fmt.Fprintf(&sb, "              <pdfaType:type>%s</pdfaType:type>\n", xmlEscape(prop.valueType))
-				fmt.Fprintf(&sb, "              <pdfaType:namespaceURI>%s</pdfaType:namespaceURI>\n", xmlEscape(prop.structNS))
-				fmt.Fprintf(&sb, "              <pdfaType:prefix>%s</pdfaType:prefix>\n", xmlEscape(prop.structPrefix))
-				fmt.Fprintf(&sb, "              <pdfaType:description>%s</pdfaType:description>\n", xmlEscape(prop.name))
+				fmt.Fprintf(&sb, "              <pdfaType:type>%s</pdfaType:type>\n", xmlEscape(typ.name))
+				fmt.Fprintf(&sb, "              <pdfaType:namespaceURI>%s</pdfaType:namespaceURI>\n", xmlEscape(typ.ns))
+				fmt.Fprintf(&sb, "              <pdfaType:prefix>%s</pdfaType:prefix>\n", xmlEscape(typ.prefix))
+				fmt.Fprintf(&sb, "              <pdfaType:description>%s</pdfaType:description>\n", xmlEscape(typ.name))
 				sb.WriteString("              <pdfaType:field>\n                <rdf:Seq>\n")
-				for _, f := range prop.structFields {
+				for _, f := range typ.fields {
 					sb.WriteString("                  <rdf:li rdf:parseType=\"Resource\">\n")
-					fmt.Fprintf(&sb, "                    <pdfaField:name>%s</pdfaField:name>\n", xmlEscape(f))
-					sb.WriteString("                    <pdfaField:valueType>Text</pdfaField:valueType>\n")
-					fmt.Fprintf(&sb, "                    <pdfaField:description>%s</pdfaField:description>\n", xmlEscape(f))
+					fmt.Fprintf(&sb, "                    <pdfaField:name>%s</pdfaField:name>\n", xmlEscape(f.name))
+					fmt.Fprintf(&sb, "                    <pdfaField:valueType>%s</pdfaField:valueType>\n", xmlEscape(f.valueType))
+					fmt.Fprintf(&sb, "                    <pdfaField:description>%s</pdfaField:description>\n", xmlEscape(f.name))
 					sb.WriteString("                  </rdf:li>\n")
 				}
 				sb.WriteString("                </rdf:Seq>\n              </pdfaType:field>\n")

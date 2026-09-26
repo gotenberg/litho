@@ -761,9 +761,10 @@ func TestPatchExistingXMP_SelfClosingDistillerUA(t *testing.T) {
 
 // TestExtractUnknownNamespaceProperties_SeqOfStruct pins that a seq or bag
 // whose items are inline structures (rdf:li rdf:parseType="Resource") is
-// returned for stripping, not declared with a flat "seq Text" type that fails
-// veraPDF ISO 19005-2 §6.6.2.3.1 t2 (e.g. Adobe xapTPg:SwatchGroups). A sibling
-// simple property in the same namespace is still declared.
+// declared a seq or bag of a type holding their fields, not with a flat "seq
+// Text" type that fails veraPDF ISO 19005-2 §6.6.2.3.1 t2 (e.g. Adobe
+// xapTPg:SwatchGroups), nor stripped. A sibling simple property in the same
+// namespace is declared too.
 func TestExtractUnknownNamespaceProperties_SeqOfStruct(t *testing.T) {
 	t.Parallel()
 	xmp := []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/">
@@ -778,26 +779,24 @@ func TestExtractUnknownNamespaceProperties_SeqOfStruct(t *testing.T) {
 
 	schemas, stripKeys := extractUnknownNamespaceProperties(xmp, 2)
 
-	declared := make(map[string]bool)
+	declared := make(map[string]string)
 	for _, s := range schemas {
 		for _, p := range s.properties {
-			declared[p.name] = true
+			declared[p.name] = p.valueType
 		}
 	}
-	if !declared["NPages"] {
-		t.Errorf("simple property NPages should be declared, schemas=%+v", schemas)
+	want := map[string]string{
+		"NPages":       "Text",
+		"SwatchGroups": "seq SwatchGroupsStruct",
+		"Fonts":        "bag FontsStruct",
 	}
-	stripped := make(map[string]bool)
-	for _, k := range stripKeys {
-		stripped[k.name] = true
+	for name, vt := range want {
+		if declared[name] != vt {
+			t.Errorf("property %s: declared %q, want %q", name, declared[name], vt)
+		}
 	}
-	for _, name := range []string{"SwatchGroups", "Fonts"} {
-		if declared[name] {
-			t.Errorf("seq/bag-of-struct property %s must not be declared (flat type fails §6.6.2.3.1 t2)", name)
-		}
-		if !stripped[name] {
-			t.Errorf("seq/bag-of-struct property %s should be returned for stripping, stripKeys=%+v", name, stripKeys)
-		}
+	if len(stripKeys) != 0 {
+		t.Errorf("no property should be stripped, stripKeys=%+v", stripKeys)
 	}
 }
 
