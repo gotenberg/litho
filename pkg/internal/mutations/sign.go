@@ -85,19 +85,6 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		"Contents":  ast.PdfString(string(placeholderBytes)),
 		"ByteRange": ast.PdfArray{ast.PdfInt(0), ast.PdfInt(9999999999), ast.PdfInt(9999999999), ast.PdfInt(9999999999)},
 	}
-	sigRef := alloc.Alloc(sigDict)
-
-	// Create a signature field and add it to AcroForm.
-	sigFieldDict := ast.PdfDict{
-		"Type":    ast.PdfName("Annot"),
-		"Subtype": ast.PdfName("Widget"),
-		"FT":      ast.PdfName("Sig"),
-		"T":       ast.PdfString("Signature1"),
-		"V":       sigRef,
-		"Rect":    ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(0)},
-		"F":       ast.PdfInt(132), // Hidden + Print
-	}
-	sigFieldRef := alloc.Alloc(sigFieldDict)
 
 	// Update or create AcroForm with the signature field.
 	catalogRef, ok := CatalogRef(ctx, doc)
@@ -128,30 +115,47 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		}
 	}
 
+	var fields ast.PdfArray
+	if acroFormDict != nil {
+		if arr, err := resolveArrayAllocFirst(ctx, alloc, doc, acroFormDict["Fields"]); err == nil {
+			fields = slices.Clone(arr)
+		}
+	}
+	fieldName, err := signatureFieldName(ctx, alloc, doc, fields)
+	if err != nil {
+		return err
+	}
+
+	sigRef := alloc.Alloc(sigDict)
+	sigFieldRef := alloc.Alloc(ast.PdfDict{
+		"Type":    ast.PdfName("Annot"),
+		"Subtype": ast.PdfName("Widget"),
+		"FT":      ast.PdfName("Sig"),
+		"T":       document.EncodePdfString(fieldName),
+		"V":       sigRef,
+		"Rect":    ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(0)},
+		"F":       ast.PdfInt(132), // Hidden + Print
+	})
+
 	if acroFormDict == nil {
 		acroFormDict = ast.PdfDict{}
 		acroFormRef = alloc.Alloc(ast.PdfNull{}) // placeholder
 	}
-
-	// Add sig field to /Fields.
-	var fields ast.PdfArray
-	if fieldsObj, ok := acroFormDict["Fields"]; ok {
-		if arr, ok := fieldsObj.(ast.PdfArray); ok {
-			fields = arr
-		} else if arr, err := document.ResolveArray(ctx, doc, fieldsObj); err == nil {
-			fields = arr
-		}
-	}
-	fields = append(fields, sigFieldRef)
-	acroFormDict["Fields"] = fields
+	acroFormDict["Fields"] = append(fields, sigFieldRef)
 	acroFormDict["SigFlags"] = ast.PdfInt(3) // SignaturesExist | AppendOnly
 
-	alloc.AllocAt(acroFormRef.ObjectNum, acroFormDict)
-
-	// Update catalog.
 	newCatalog := make(ast.PdfDict, len(catalogDict)+1)
 	maps.Copy(newCatalog, catalogDict)
-	newCatalog["AcroForm"] = acroFormRef
+	if acroFormRef.ObjectNum > 0 {
+		alloc.AllocAt(acroFormRef.ObjectNum, acroFormDict)
+		newCatalog["AcroForm"] = acroFormRef
+	} else {
+		// The form dictionary was written inline in the catalog, and stays
+		// there: ISO 32000-1, Table 28 does not ask for an indirect one. It
+		// used to be queued as object 0, the head of the free list, with the
+		// catalog pointing at 0 0 R.
+		newCatalog["AcroForm"] = acroFormDict
+	}
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
 
 	// The update is written to a buffer first, so the placeholder can be
@@ -251,4 +255,71 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		return fmt.Errorf("writing the signed document: %w", err)
 	}
 	return nil
+}
+
+// signatureFieldName returns the first of Signature1, Signature2, ... that no
+// field of the interactive form holds as its fully qualified name, fields
+// being the form's root fields.
+//
+// A field's fully qualified name joins the partial names of it and its
+// ancestors with periods, and a field with no partial name adds none (ISO
+// 32000-1, 12.7.3.2). The signature field goes at the root, so its partial
+// name is its fully qualified name, and only a name without a period can equal
+// it: the name of a root field, or of a field whose ancestors carry no /T. The
+// walk descends through those ancestors alone. Two fields with one fully
+// qualified name are two widgets of the same field (12.7.3.2), so a signature
+// named after an existing field would not be a field of its own.
+//
+// Each indirect field and /Kids array is visited once, which ends a cycle and
+// bounds the walk by the objects the file holds.
+func signatureFieldName(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, fields ast.PdfArray) (string, error) {
+	taken := make(map[string]bool)
+	seen := make(map[int]bool)
+	firstVisit := func(obj ast.PdfObject) bool {
+		ref, ok := obj.(ast.PdfIndirectRef)
+		if !ok {
+			return true
+		}
+		if seen[ref.ObjectNum] {
+			return false
+		}
+		seen[ref.ObjectNum] = true
+		return true
+	}
+
+	stack := slices.Clone(fields)
+	for len(stack) > 0 {
+		if err := ctx.Err(); err != nil {
+			return "", fmt.Errorf("naming the signature field: %w", err)
+		}
+		obj := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if !firstVisit(obj) {
+			continue
+		}
+		field, err := resolveDictAllocFirst(ctx, alloc, doc, obj)
+		if err != nil || field == nil {
+			continue
+		}
+		if t, ok := field["T"]; ok {
+			if s, err := document.ResolveString(ctx, doc, t); err == nil && s != "" {
+				taken[document.DecodePdfString(s)] = true
+				continue
+			}
+		}
+		kidsObj, ok := field["Kids"]
+		if !ok || !firstVisit(kidsObj) {
+			continue
+		}
+		if kids, err := resolveArrayAllocFirst(ctx, alloc, doc, kidsObj); err == nil {
+			stack = append(stack, kids...)
+		}
+	}
+
+	// At most len(taken) candidates are held, so the loop ends by then.
+	for i := 1; ; i++ {
+		if name := fmt.Sprintf("Signature%d", i); !taken[name] {
+			return name, nil
+		}
+	}
 }

@@ -239,3 +239,130 @@ func TestWriterSignRewritesADamagedSource(t *testing.T) {
 		})
 	}
 }
+
+// TestWriterSignNamesItsFieldApart pins that the signature field takes a name
+// no field of the document has, and joins the form wherever the catalog keeps
+// it.
+//
+// A field's fully qualified name is the partial names of it and its ancestors
+// joined by periods, and a field with no partial name adds none (ISO 32000-1,
+// 12.7.3.2), so a /T-less parent leaves its kids' names at the top level. Two
+// fields sharing a name are two widgets of one field, so a signature named
+// after an existing field is not a field of its own. The writer named every
+// signature Signature1, whatever the form held.
+//
+// A form dictionary written inline in the catalog has no object number, and
+// the writer queued it as object 0, the head of the free list, with the
+// catalog pointing at 0 0 R.
+func TestWriterSignNamesItsFieldApart(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		objs []string
+		want string
+		// fields is the number of fields the signed form holds, or 0 to skip
+		// the count.
+		fields int
+	}{
+		{
+			name: "a root field and one under a parent with no name",
+			objs: []string{
+				"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Annots [5 0 R 7 0 R] >>",
+				"<< /Fields [5 0 R 6 0 R] >>",
+				"<< /Type /Annot /Subtype /Widget /FT /Sig /T (Signature1) /Rect [0 0 0 0] /P 3 0 R >>",
+				"<< /Kids [7 0 R] >>",
+				"<< /Type /Annot /Subtype /Widget /FT /Tx /T (Signature2) /Parent 6 0 R /Rect [0 0 10 10] /P 3 0 R >>",
+			},
+			want:   "Signature3",
+			fields: 3,
+		},
+		{
+			name: "a form written inline in the catalog",
+			objs: []string{
+				"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R] >> >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Annots [4 0 R] >>",
+				"<< /Type /Annot /Subtype /Widget /FT /Tx /T (Signature1) /V (x) /Rect [0 0 10 10] /P 3 0 R >>",
+			},
+			want:   "Signature2",
+			fields: 2,
+		},
+		{
+			// The walk must end on a cycle rather than follow it.
+			name: "a parent with no name among its own kids",
+			objs: []string{
+				"<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>",
+				"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Annots [6 0 R] >>",
+				"<< /Fields [5 0 R] >>",
+				"<< /Kids [5 0 R 6 0 R] >>",
+				"<< /Type /Annot /Subtype /Widget /FT /Tx /T (Signature1) /Parent 5 0 R /Rect [0 0 10 10] /P 3 0 R >>",
+			},
+			want: "Signature2",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var buf bytes.Buffer
+			buf.WriteString("%PDF-1.7\n%\xE2\xE3\xCF\xD3\n")
+			offs := make([]int, len(tc.objs)+1)
+			for i, o := range tc.objs {
+				offs[i+1] = buf.Len()
+				fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, o)
+			}
+			xref := buf.Len()
+			fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f\r\n", len(tc.objs)+1)
+			for i := 1; i <= len(tc.objs); i++ {
+				fmt.Fprintf(&buf, "%010d 00000 n\r\n", offs[i])
+			}
+			fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(tc.objs)+1, xref)
+			data := buf.Bytes()
+
+			ctx := context.Background()
+			r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+			if err != nil {
+				t.Fatalf("Open: %v", err)
+			}
+			defer r.Close()
+
+			signer := newCMSTestSigner(t)
+			w := NewWriter(r)
+			defer w.Close()
+			w.Sign(signer)
+			var out bytes.Buffer
+			if err := w.WriteTo(ctx, &out); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+
+			got, err := Open(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()))
+			if err != nil {
+				t.Fatalf("reopening the output: %v", err)
+			}
+			defer got.Close()
+			sigs, err := got.ExtractSignatures(ctx)
+			if err != nil {
+				t.Fatalf("ExtractSignatures: %v", err)
+			}
+			if len(sigs) != 1 {
+				t.Fatalf("the output holds %d signatures, want 1", len(sigs))
+			}
+			if sigs[0].FieldName != tc.want {
+				t.Errorf("the signature field is named %q, want %s, the first name the form leaves free", sigs[0].FieldName, tc.want)
+			}
+			if tc.fields > 0 {
+				fields, err := got.FormFields(ctx)
+				if err != nil {
+					t.Fatalf("FormFields: %v", err)
+				}
+				if len(fields) != tc.fields {
+					t.Errorf("the form holds %d fields, want %d: %+v", len(fields), tc.fields, fields)
+				}
+			}
+			checkSignedOutput(t, out.Bytes(), signer)
+		})
+	}
+}
