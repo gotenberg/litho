@@ -50,5 +50,6 @@ func FuzzCFF(f *testing.F) {
 		// all. The cid_fdarray_matrix.cff seed already loaded above is the
 		// fixture that drives it.
 		_, _ = CIDWidths(ctx, data)
+		_, _, _ = NameKeyedGlyphs(data)
 	})
 }

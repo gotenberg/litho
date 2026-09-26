@@ -422,6 +422,40 @@ func ValidCIDs(data []byte) (map[uint16]bool, error) {
 	return result, nil
 }
 
+// NameKeyedGlyphs reports, for a name-keyed CFF font, one whose Top DICT
+// carries no ROS operator (Adobe Technical Note #5176, 18), how many glyphs its
+// CharStrings INDEX holds and the defaultWidthX of its Private DICT, in font
+// units. ok is false for a CID-keyed font and for one whose Top DICT or
+// CharStrings INDEX cannot be read.
+func NameKeyedGlyphs(data []byte) (glyphs int, defaultWidthX float64, ok bool) {
+	if len(data) < 4 || data[0] != 1 {
+		return 0, 0, false
+	}
+	nameEnd, err := skipINDEX(data, max(int(data[2]), 4))
+	if err != nil {
+		return 0, 0, false
+	}
+	_, topDictEntries, err := parseINDEX(data, nameEnd)
+	if err != nil || len(topDictEntries) == 0 {
+		return 0, 0, false
+	}
+	info := parseTopDict(topDictEntries[0])
+	if info.isCID || info.charStringsOffset <= 0 || int(info.charStringsOffset) >= len(data) {
+		return 0, 0, false
+	}
+	_, charStrings, err := parseINDEX(data, int(info.charStringsOffset))
+	if err != nil || len(charStrings) == 0 {
+		return 0, 0, false
+	}
+	if info.privateDictOffset > 0 && info.privateDictSize > 0 {
+		start := int(info.privateDictOffset)
+		if end := start + int(info.privateDictSize); end <= len(data) {
+			_, defaultWidthX, _ = parsePrivateDict(data[start:end])
+		}
+	}
+	return len(charStrings), defaultWidthX, true
+}
+
 // parseINDEX reads a CFF INDEX structure and returns the end offset and
 // the data entries as byte slices.
 func parseINDEX(data []byte, pos int) (endPos int, entries [][]byte, err error) {

@@ -48,6 +48,7 @@ func FuzzExtractFontProgram(f *testing.F) {
 		_ = ExtractEmptyGIDs(ctx, data)
 		_ = ExtractNumGlyphs(data)
 		_ = ExtractValidCIDs(data)
+		_, _, _ = ExtractNameKeyedCFFGlyphs(data)
 		_ = ExtractCFFEncodingNames(data)
 		_ = ExtractType1AdvanceWidths(data)
 		_, _ = ExtractType1FontMatrixScale(data)

@@ -1864,7 +1864,7 @@ func checkType0UsageRules(ctx context.Context, doc *document.Document, fontDict,
 					results = append(results, checkCIDFontWidths(ctx, doc, cidFontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, usedCIDs)...)
 					results = append(results, checkType0NotdefWidth(ctx, doc, fontDict, cidFontDict, binaryWidths, unitsPerEm, fontName, pageNum, rule, usage)...)
 					results = append(results, checkType2MissingGlyphWidths(ctx, doc, cidFontDict, fontData, binaryWidths, unitsPerEm, fontName, pageNum, rule, usedCIDs)...)
-					results = append(results, checkCFFMissingGlyphWidths(ctx, doc, cidFontDict, fontData, fontName, pageNum, rule, usedCIDs)...)
+					results = append(results, checkCFFMissingGlyphWidths(ctx, doc, cidFontDict, fontData, unitsPerEm, fontName, pageNum, rule, usedCIDs)...)
 				}
 			}
 		}
@@ -2402,21 +2402,23 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 
 	switch cidSubtype {
 	case "CIDFontType0":
-		// CFF font: check if CIDs exist in the charset. Sort for a
-		// deterministic context when several CIDs are absent.
-		validCIDs := typography.ExtractValidCIDs(fontData)
-		if validCIDs == nil {
+		// CFF font: check whether the program holds a glyph for each CID, in
+		// its charset or, for a name-keyed program, among its charstrings
+		// ([cidFontType0Glyphs]). Sort for a deterministic context when
+		// several CIDs are absent.
+		holds, _, _, ok := cidFontType0Glyphs(fontData)
+		if !ok {
 			return judged()
 		}
 		for _, cid := range sortedCIDs(usedCIDs) {
-			if cid == 0 || validCIDs[cid] {
+			if cid == 0 || holds(cid) {
 				continue
 			}
-			// A used CID absent from the CFF charset has no glyph in the
-			// program, so both the .notdef rule and the glyph-presence rule
-			// apply: the code renders .notdef and no glyph is present for it.
-			// Glyph presence asks only about glyphs referenced for rendering,
-			// so renderingMode == 3 exempts it, as in the CIDFontType2 branch
+			// A used CID the CFF program holds no glyph for renders .notdef,
+			// so both the .notdef rule and the glyph-presence rule apply: the
+			// code renders .notdef and no glyph is present for it. Glyph
+			// presence asks only about glyphs referenced for rendering, so
+			// renderingMode == 3 exempts it, as in the CIDFontType2 branch
 			// below; the .notdef rule keeps firing, as veraPDF reports 6.2.11.8
 			// and not 6.2.11.4.1 when every show operator is mode 3.
 			notdefs.add(uint32(cid), "font %s on page %d: CID %d not in font charset (.notdef)", fontName, pageNum, cid)
@@ -2600,9 +2602,9 @@ func absentType0CIDs(ctx context.Context, doc *document.Document, fontDict ast.P
 
 	switch subtype {
 	case "CIDFontType0":
-		if validCIDs := typography.ExtractValidCIDs(fontData); validCIDs != nil {
+		if holds, _, _, ok := cidFontType0Glyphs(fontData); ok {
 			for cid := range usedCIDs {
-				if !validCIDs[cid] {
+				if !holds(cid) {
 					absent[cid] = true
 				}
 			}

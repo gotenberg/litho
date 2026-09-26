@@ -1238,6 +1238,23 @@ func ExtractValidCIDs(fontData []byte) map[uint16]bool {
 	return nil
 }
 
+// ExtractNameKeyedCFFGlyphs is [cff.NameKeyedGlyphs] for a font program that
+// is a bare CFF or an OpenType font carrying a CFF table.
+func ExtractNameKeyedCFFGlyphs(fontData []byte) (glyphs int, defaultWidthX float64, ok bool) {
+	switch detectFontFormat(fontData) {
+	case fontFormatBareCFF:
+		return cff.NameKeyedGlyphs(fontData)
+	case fontFormatOTTO:
+		cffData, err := extractCFFFromOTTO(fontData)
+		if err != nil {
+			return 0, 0, false
+		}
+		return cff.NameKeyedGlyphs(cffData)
+	case fontFormatTrueType, fontFormatUnknown:
+	}
+	return 0, 0, false
+}
+
 // readOS2AvgWidth extracts xAvgCharWidth from the OS/2 table. Returns 0 if
 // the table is absent or invalid. The value is in font design units.
 func readOS2AvgWidth(data []byte) uint16 {

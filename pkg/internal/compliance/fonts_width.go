@@ -5,6 +5,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -1456,9 +1457,50 @@ func checkType2MissingGlyphWidths(ctx context.Context, doc *document.Document, c
 	return faults.violations()
 }
 
+// cidFontType0Glyphs returns whether the CFF program fontData of a
+// CIDFontType0 holds a glyph for a CID. ok is false when the program is no CFF
+// litho can read.
+//
+// ISO 32000-1, 9.7.4.2 selects the glyph of a CIDFontType0 in one of two ways.
+// A CID-keyed program, whose Top DICT uses the CIDFont operators, maps a CID to
+// a glyph index through its charset, so a CID the charset does not list has no
+// glyph. A name-keyed program takes the CID as the glyph index itself, so a CID
+// at or past the number of its charstrings has none. veraPDF reads both ways
+// (CFFCIDFontProgram.containsCID, and CFFType1FontProgram.containsGID through
+// PDCIDFont.glyphIsPresent), a program wrapped in OpenType included.
+//
+// nameKeyed reports the second kind, and defaultWidthX is then the default
+// width of its Private DICT, in font units.
+func cidFontType0Glyphs(fontData []byte) (holds func(cid uint16) bool, nameKeyed bool, defaultWidthX float64, ok bool) {
+	if charset := typography.ExtractValidCIDs(fontData); charset != nil {
+		return func(cid uint16) bool { return charset[cid] }, false, 0, true
+	}
+	glyphs, defaultWidthX, ok := typography.ExtractNameKeyedCFFGlyphs(fontData)
+	if !ok {
+		return nil, false, 0, false
+	}
+	return func(cid uint16) bool { return int(cid) < glyphs }, true, defaultWidthX, true
+}
+
+// cffSubsetName reports whether veraPDF reads a CFF program as a subset's,
+// which decides the width it weighs a glyph the program lacks at: the part of
+// the CIDFont's /BaseFont before the first plus sign is six characters long
+// (PDFont.isSubset). The test is looser than the subset tag ISO 32000-1,
+// 9.9.2 describes, six uppercase letters and a plus sign ([isSubsetFont]): a
+// /BaseFont of six characters and no plus sign passes it.
+func cffSubsetName(baseFont string) bool {
+	before, _, _ := strings.Cut(baseFont, "+")
+	return len(before) == cffSubsetTagLength
+}
+
+// cffSubsetTagLength is the length of the subset tag ISO 32000-1, 9.9.2 puts
+// before the plus sign of a subset font's name.
+const cffSubsetTagLength = 6
+
 // checkCFFMissingGlyphWidths applies the glyph-width rule to the used CIDs a
-// CID-keyed CFF program's charset does not hold, which [checkCIDFontWidths]
-// and [checkCIDDefaultWidths] leave out for want of an advance of their own.
+// CIDFontType0's CFF program holds no glyph for ([cidFontType0Glyphs]), which
+// [checkCIDFontWidths] and [checkCIDDefaultWidths] leave out for want of an
+// advance of their own. unitsPerEm scales the program's own widths.
 //
 // ISO 19005-2, 6.2.11.5 asks such a glyph's widths to agree as well, and
 // veraPDF weighs one: its CID-keyed CFF program finds no glyph index for a CID
@@ -1473,6 +1515,18 @@ func checkType2MissingGlyphWidths(ctx context.Context, doc *document.Document, c
 // [1000]] with no /DW, and /DW 1000 or /DW 500 with no /W, pass; shown only in
 // rendering mode 3 it passes.
 //
+// A name-keyed program past its last glyph answers the same for a subset
+// ([cffSubsetName]), whose widths veraPDF reads up front and which has none
+// there (CharStringsWidths.getWidth). For any other font it reads the missing
+// charstring as empty, which carries no width, and weighs the glyph at the
+// defaultWidthX of the Private DICT, scaled by the font matrix. Measured with
+// veraPDF 1.30 at PDF/A-1b and PDF/A-2b on CID 3 of a three-glyph program with
+// defaultWidthX 0, under /DW 1000: /W [3 [500]] fails whatever the name; no /W
+// fails for the CIDFont /BaseFont LithoT1 and passes for ABCDEF+LithoT1 and
+// Lith01, and /W [3 [0]] passes for LithoT1 and fails for Lith01; the name of
+// the Type0 font does not matter. With defaultWidthX 700, /W [3 [700]] passes
+// for LithoT1.
+//
 // # Corpus evidence
 //
 //   - govdocs thread_100_100870.pdf: page 20 shows, in a rendering mode no
@@ -1481,20 +1535,23 @@ func checkType2MissingGlyphWidths(ctx context.Context, doc *document.Document, c
 //     PDF/A-2u and litho now does too, 1 of veraPDF's 2. The other is a CID
 //     whose charstring advances 333, as /W declares, which veraPDF reads as
 //     400.
-func checkCFFMissingGlyphWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, fontData []byte, fontName string, pageNum int, rule Rule, usedCIDs map[uint16]bool) []Violation {
+func checkCFFMissingGlyphWidths(ctx context.Context, doc *document.Document, cidFontDict ast.PdfDict, fontData []byte, unitsPerEm uint16, fontName string, pageNum int, rule Rule, usedCIDs map[uint16]bool) []Violation {
 	if fontSubtype(ctx, doc, cidFontDict) != "CIDFontType0" {
 		return nil
 	}
-	charset := typography.ExtractValidCIDs(fontData)
-	if charset == nil {
+	holds, nameKeyed, defaultWidthX, ok := cidFontType0Glyphs(fontData)
+	if !ok {
 		return nil
 	}
 	expected := defaultCIDWidth(ctx, doc, cidFontDict)
+	if nameKeyed && !cffSubsetName(fontBaseFont(ctx, doc, cidFontDict)) {
+		expected = defaultWidthX * 1000.0 / float64(unitsPerEm)
+	}
 	faults := newGlyphFaults(rule)
 	for _, cid := range sortedCIDs(usedCIDs) {
-		// CID 0 is the .notdef glyph every charset holds, whose width
+		// CID 0 is the .notdef glyph every program holds, whose width
 		// [checkType0NotdefWidth] owns.
-		if cid == 0 || charset[cid] {
+		if cid == 0 || holds(cid) {
 			continue
 		}
 		declared := lookupCIDWidth(ctx, doc, cidFontDict, cid)
