@@ -192,8 +192,8 @@ func checkActionGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// Check annotation /A and /AA.
 	results = append(results, checkAnnotationActions(ctx, doc, catalog, profile, part, judged)...)
 
-	// Check /Names/JavaScript name tree for JavaScript actions.
-	results = append(results, checkJavaScriptNameTree(ctx, doc, catalog, profile, part)...)
+	// Check the actions of the /Names/JavaScript name tree.
+	results = append(results, checkJavaScriptNameTree(ctx, doc, catalog, profile, part, judged)...)
 
 	// Check outline (bookmark) actions.
 	results = append(results, checkOutlineActions(ctx, doc, catalog, profile, part, judged)...)
@@ -672,32 +672,54 @@ func namedActionRule(part int) Rule {
 	return ruleByPart(part, Rule_19005_1_6_6_1_t02, Rule_19005_2_6_5_1_t02, Rule_19005_3_6_5_1_t02, Rule_19005_4_6_6_1_t02)
 }
 
-// checkJavaScriptNameTree checks for JavaScript actions in the /Names/JavaScript
-// name tree. JavaScript is forbidden by §6.6.1 for PDF/A-1 through -3; PDF/A-4
-// permits it, so the check is gated on the profile's action whitelist.
-func checkJavaScriptNameTree(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int) []Violation {
-	if allowedActionTypes(profile)["JavaScript"] {
-		return nil
-	}
-
-	namesObj, ok := catalog["Names"]
-	if !ok {
-		return nil
-	}
-
-	namesDict, err := document.ResolveDict(ctx, doc, namesObj)
+// checkJavaScriptNameTree judges the actions of the catalog's /Names
+// /JavaScript tree against the profile's action-type whitelist. ISO 32000-1,
+// 7.7.4, Table 31 makes that tree a map of document-level JavaScript actions
+// (12.6.4.16), which a reader runs when it opens the document, so ISO 19005-1,
+// 6.6.1 and ISO 19005-2/3, 6.5.1 forbid each of them as they forbid a
+// JavaScript action anywhere else, while ISO 19005-4, 6.6.1 permits them. Each
+// value is judged as an action, /Next tree included, so the finding names the
+// action rather than the key: a tree that is empty, lists no value or is
+// written as null (ISO 32000-1, 7.3.7) holds no action and draws none.
+//
+// veraPDF never judges these actions. Its validation model builds a PDAction
+// only from the catalog's /OpenAction and /AA, pages, annotations, outline
+// items and form fields (GFPDDocument), and only its feature reporter reads
+// the tree (PDNamesDictionary.getJavaScript), so it passes a file whose one
+// JavaScript action sits in this tree. That is a gap in veraPDF's reach, not
+// a reading of the clause: the same action written as the /OpenAction fails
+// the same rules in both tools. litho keeps the rule.
+//
+// # Corpus evidence
+//
+//   - All corpora: 83 files carry the tree. 80 hold JavaScript actions and no
+//     other type, one each in 21, three in 55, four in 3 and 65 in pdfjs
+//     issue20914.pdf; pdfjs bug1844576.pdf, doc_actions.pdf and js-authors.pdf
+//     write it as an empty dictionary. Judging the actions rather than the key
+//     moved no rule set at any PDF/A level, only the counts of those 62 files.
+//   - verapdf PDF_UA-1__7.11-t01-*, 7.15-t01-fail-a, 7.18.7-t01-*,
+//     PDF_UA-2__8.14.1-t01-fail-a and 8.9.2.4.10-t01-fail-a (11 files): their
+//     only JavaScript is in the tree, and litho alone fails 6.5.1 t1 at
+//     PDF/A-2a/2b/2u/3a/3b/3u and, on 7 of them, 6.6.1 t1 at PDF/A-1a/1b.
+func checkJavaScriptNameTree(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, judged map[int]bool) []Violation {
+	namesDict, err := document.ResolveDict(ctx, doc, catalog["Names"])
 	if err != nil || namesDict == nil {
 		return nil
 	}
-
-	_, ok = namesDict["JavaScript"]
+	tree, ok := namesDict["JavaScript"]
 	if !ok {
 		return nil
 	}
 
-	// The presence of a /JavaScript name tree means JavaScript actions exist.
-	rule := forbiddenActionTypeRule(part)
-	return failf(rule, "JavaScript at catalog /Names/JavaScript")
+	var results []Violation
+	walkErr := document.WalkNameTree(ctx, doc, tree, func(key string, value ast.PdfObject) {
+		location := fmt.Sprintf("catalog /Names/JavaScript %q", key)
+		results = append(results, judgeAction(ctx, doc, value, profile, part, location, judged)...)
+	})
+	if walkErr != nil {
+		doc.Logger.Debug("compliance.actions: /Names/JavaScript tree walk stopped", "error", walkErr)
+	}
+	return results
 }
 
 // checkOutlineActions walks the document outline (bookmarks) and checks
