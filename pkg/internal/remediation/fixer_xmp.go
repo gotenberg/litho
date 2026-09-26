@@ -322,17 +322,39 @@ func fallbackDocTitle(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 //     pkg_testdata__ECSTR11-01.pdf: the same at PDF/A-1b.
 //   - govdocs thread_400_400393, pdfjs issue14203.pdf and pdfcpu
 //     pkg_testdata__ECSTR11-01.pdf: took the second round at PDF/UA-1 too.
+//   - govdocs: 12 of 131 sampled files, among them thread_100_100582, carry
+//     an empty /Title, /Subject, /Author, /Creator or /Producer and no packet,
+//     and their PDF/A-1b remediations, default and aggressive, left 6.7.3
+//     tests 2, 3, 4, 6 or 7 failing against "Untitled", "litho" or no
+//     analogue at all. A generated packet now clears them.
+//   - pdfcpu pkg_testdata__ECSTR11-01.pdf, pkg_testdata__OptimizeTest.pdf and
+//     pkg_testdata__go-lecture.pdf, pdfjs issue17540.pdf: the same. Over these
+//     16 files, 31 residual 6.7.3 violations go in each mode.
+//   - All corpora: over the PDF/A-1b, PDF/A-2b and PDF/UA-1 remediations,
+//     default and aggressive, of 343 sampled files, the empty /Info entries
+//     change 21 PDF/A-1b residuals and no other: 36 violations go, none
+//     comes, and 8 more outputs are fully fixed in each mode. veraPDF 1.30
+//     reports the same change on every one of those outputs and passes 8 of
+//     them outright, and reports the same rules as before on the PDF/A-2b
+//     outputs of the 21 files, whose placeholders gave way to empty values.
 func generateXMP(part int, conformance string, uaPart int, info infoMetadata) string {
+	// A placeholder stands in only for an entry /Info leaves out. ISO 19005-1,
+	// 6.7.3 requires the analogue of a present entry to be equivalent to it, an
+	// empty entry included, and veraPDF compares the two verbatim: an empty
+	// /Title against a dc:title of "Untitled" fails test 2 as surely as an
+	// absent dc:title does, and only an empty one passes. Under PDF/UA an empty
+	// /Title still gets the placeholder, since an empty dc:title identifies no
+	// document (ISO 14289-1, 7.1) and PDF/UA states no such equivalence.
 	title := xmlEscape(info.Title)
-	if title == "" {
+	if title == "" && (uaPart > 0 || !info.Present["Title"]) {
 		title = "Untitled"
 	}
 	creator := xmlEscape(info.Creator)
-	if creator == "" {
+	if creator == "" && !info.Present["Creator"] {
 		creator = "litho"
 	}
 	producer := xmlEscape(info.Producer)
-	if producer == "" {
+	if producer == "" && !info.Present["Producer"] {
 		producer = "litho"
 	}
 
@@ -375,10 +397,13 @@ func generateXMP(part int, conformance string, uaPart int, info infoMetadata) st
 	}
 
 	fmt.Fprintf(&sb, "  <dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">%s</rdf:li></rdf:Alt></dc:title>\n", title)
-	if info.Author != "" {
+	// An empty /Author or /Subject needs its analogue too, holding one empty
+	// entry: veraPDF reads a container with no entry at all as no value, which
+	// an empty entry is not equal to.
+	if info.Author != "" || info.Present["Author"] {
 		fmt.Fprintf(&sb, "  <dc:creator><rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq></dc:creator>\n", xmlEscape(info.Author))
 	}
-	if info.Subject != "" {
+	if info.Subject != "" || info.Present["Subject"] {
 		fmt.Fprintf(&sb, "  <dc:description><rdf:Alt><rdf:li xml:lang=\"x-default\">%s</rdf:li></rdf:Alt></dc:description>\n", xmlEscape(info.Subject))
 	}
 	fmt.Fprintf(&sb, "  <xmp:CreatorTool>%s</xmp:CreatorTool>\n", creator)
@@ -1496,6 +1521,12 @@ func pdfDateToXMP(pdfDate string) string {
 //   - govdocs: seven files came out of remediation newly failing ISO 19005-2,
 //     6.6.2.1 tests 4 and 5 when the dc:description rdf:Alt was written into
 //     an attribute-form property.
+//   - govdocs thread_000_000009, thread_000_000354, thread_300_300259 and
+//     thread_400_400007, pdfjs issue17856.pdf: carry a packet and an empty
+//     /Author or /Subject, and kept failing 6.7.3 test 3 or 4 after their
+//     PDF/A-1b remediations, default and aggressive, until an empty entry
+//     drove the sync. thread_000_000354 and issue17856.pdf now come out fully
+//     fixed, and veraPDF 1.30 passes them.
 func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []string) {
 	var fixes []string
 	// Sync dc:title with Info /Title. PDF/UA additionally requires a
@@ -1503,8 +1534,16 @@ func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []strin
 	// neither DocInfo nor the packet carries one, synthesize it from the
 	// first outline title, then from a placeholder, so the requirement is
 	// met and /DisplayDocTitle has something to show.
+	//
+	// A present /Title drives the sync even when it is empty, as /Keywords
+	// does below: ISO 19005-1, 6.7.3 asks for an equivalent analogue of every
+	// present entry, and veraPDF fails an empty /Title against any dc:title
+	// but an empty one. PDF/UA is the exception, for the reason generateXMP
+	// gives: an empty /Title neither blanks nor replaces the dc:title that
+	// identifies the document.
 	title := info.Title
 	titleSource := "Info /Title"
+	syncTitle := title != "" || (info.Present["Title"] && uaPart == 0)
 	if uaPart > 0 && title == "" && findXMPProperty(buf, dcNS, "title").Form == xmpPropertyNotFound {
 		if info.FallbackTitle != "" {
 			title = info.FallbackTitle
@@ -1513,8 +1552,9 @@ func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []strin
 			title = "Untitled document"
 			titleSource = "placeholder"
 		}
+		syncTitle = true
 	}
-	if title != "" {
+	if syncTitle {
 		escaped := xmlEscape(title)
 		value := fmt.Sprintf(`<rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt>`, escaped)
 		element := fmt.Sprintf(`<dc:title>%s</dc:title>`, value)
@@ -1529,8 +1569,9 @@ func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []strin
 		}
 	}
 
-	// Sync dc:creator with Info /Author.
-	if info.Author != "" {
+	// Sync dc:creator with Info /Author, an empty /Author included for the
+	// reason the title gives, and so /Producer, /Creator and /Subject below.
+	if info.Author != "" || info.Present["Author"] {
 		escaped := xmlEscape(info.Author)
 		value := fmt.Sprintf(`<rdf:Seq><rdf:li>%s</rdf:li></rdf:Seq>`, escaped)
 		element := fmt.Sprintf(`<dc:creator>%s</dc:creator>`, value)
@@ -1546,7 +1587,7 @@ func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []strin
 	}
 
 	// Sync pdf:Producer with Info /Producer.
-	if info.Producer != "" {
+	if info.Producer != "" || info.Present["Producer"] {
 		escaped := xmlEscape(info.Producer)
 		if findXMPProperty(buf, pdfNS, "Producer").Form != xmpPropertyNotFound {
 			if out, err := replacePropertyValue(buf, pdfNS, "Producer", escaped); err == nil {
@@ -1568,7 +1609,7 @@ func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []strin
 	}
 
 	// Sync xmp:CreatorTool with Info /Creator.
-	if info.Creator != "" {
+	if info.Creator != "" || info.Present["Creator"] {
 		escaped := xmlEscape(info.Creator)
 		if findXMPProperty(buf, xmpNS, "CreatorTool").Form != xmpPropertyNotFound {
 			if out, err := replacePropertyValue(buf, xmpNS, "CreatorTool", escaped); err == nil {
@@ -1643,7 +1684,7 @@ func syncInfoIntoXMP(buf []byte, info infoMetadata, uaPart int) ([]byte, []strin
 	// puts a literal '<' inside an attribute value, which XML 1.0, 2.3
 	// forbids, and the output then newly fails ISO 19005-2, 6.6.2.1 tests 4
 	// and 5.
-	if info.Subject != "" {
+	if info.Subject != "" || info.Present["Subject"] {
 		escaped := xmlEscape(info.Subject)
 		value := fmt.Sprintf(`<rdf:Alt><rdf:li xml:lang="x-default">%s</rdf:li></rdf:Alt>`, escaped)
 		element := fmt.Sprintf(`<dc:description>%s</dc:description>`, value)
