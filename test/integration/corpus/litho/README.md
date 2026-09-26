@@ -148,6 +148,8 @@ one deliberately rather than diffing it against a fresh build.
 | `langpua_ua2.pdf`      | PDF/UA-2     | Private Use Area characters in structure and content `/Lang`     |
 | `repairroom_2b.pdf`    | PDF/A-2b     | Moves a stripped `.notdef` made, and DeviceN spaces in shadings  |
 | `paintop_2b.pdf`       | PDF/A-2b     | Transparency no operator paints under, halftones judged once     |
+| `imagedraws_2b.pdf`    | PDF/A-2b     | Images appearances and Type 3 glyphs draw; appearances as forms  |
+| `unembednames_2u.pdf`  | PDF/A-2u     | Glyph names of unembedded fonts; one reading of Type 3 glyphs    |
 
 ### Must-not-fire controls
 
@@ -343,6 +345,10 @@ violation but is exempt, so a firing is a false positive.
 | `afref_3b`                                | `FA3`: a FileAttachment `/FS` the catalog `/AF` also lists             | ISO 19005-3, 6.8 t4          |
 | `afref_3b`                                | A `/Names /JavaScript` tree written as an empty dictionary             | ISO 32000-1, 7.7.4           |
 | `langpua_ua2`                             | An annotation's own `/Lang` carrying a Private Use Area character      | no CosLang reads it          |
+| `imagedraws_2b`                           | `ImRef`, a drawn image carrying `/Ref`, which only a form answers for  | ISO 19005-2, 6.2.9 t2        |
+| `imagedraws_2b`                           | `Stencil`, a drawn image mask with `/BitsPerComponent 2`               | ISO 19005-2, 6.2.8 t5        |
+| `unembednames_2u`                         | `ZD`, a ZapfDingbats code named `a71`                                  | ISO 19005-2, 6.2.11.7.2 t1   |
+| `unembednames_2u`                         | `H2`, a Helvetica only Type 3 procedures read in mode 3 show           | ISO 19005-2, 6.2.11.4.1 t1   |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -404,6 +410,7 @@ which are covered under [Known divergences](#known-divergences).
 | `iccbased_4.pdf`       | 5    | 3    | 7    | 5    | 5    | 7    | 5    | 5    | 5   | 5    | 6    | 8    | 7    |
 | `idfields_ua2.pdf`     | 6    | 6    | 7    | 7    | 7    | 7    | 7    | 7    | 4   | 4    | 5    | 4    | 6    |
 | `idprefix_2b.pdf`      | 13   | 10   | 12   | 9    | 10   | 13   | 10   | 11   | 10  | 10   | 11   | 8    | 7    |
+| `imagedraws_2b.pdf`    | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 10   | 7    |
 | `imagereach_2b.pdf`    | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 5    | 6    |
 | `imgxmp_4.pdf`         | 10   | 8    | 15   | 13   | 13   | 15   | 13   | 13   | 8   | 9    | 10   | 7    | 6    |
 | `inlineimage_2b.pdf`   | 7    | 4    | 10   | 6    | 7    | 10   | 6    | 7    | 6   | 6    | 7    | 10   | 10   |
@@ -445,6 +452,8 @@ which are covered under [Known divergences](#known-divergences).
 | `uaid_ua1.pdf`         | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 5    | 4    |
 | `undecodable_2b.pdf`   | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 11   | 9    |
 | `usecmap_2u.pdf`       | 5    | 2    | 8    | 3    | 5    | 8    | 3    | 5    | 5   | 5    | 6    | 9    | 10   |
+| `unembednames_2u.pdf`  | 7    | 4    | 9    | 5    | 7    | 9    | 5    | 7    | 7   | 7    | 8    | 11   | 11   |
+| `usecmap_2u.pdf`       | 5    | 2    | 7\*  | 3    | 5    | 7\*  | 3    | 5    | 5   | 5    | 6    | 9    | 9\*  |
 | `usedcs_2b.pdf`        | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `xfatable_ua1.pdf`     | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 4    | 7    |
 | `xmpempty_1b.pdf`      | 8    | 5    | 6    | 3    | 4    | 6    | 3    | 4    | 7   | 7    | 8    | 5    | 6    |
@@ -3816,6 +3825,93 @@ set in all thirteen cells, and the same count for every rule at every PDF/A
 level. The repair replaces `H3` and `H4` with `/Default`, and every remediated
 output passes on both tools at PDF/A-1b, PDF/A-2b and PDF/A-4.
 
+### `imagedraws_2b.pdf`
+
+`imagedraws_2b.pdf` draws images where only the streams veraPDF parses beside a
+page's content reach them. veraPDF judges an image wherever a content stream it
+parses draws it: an annotation's appearance, every glyph procedure of a Type 3
+font text is shown with, and a form naming the image through the page's
+resources. It builds a form model object for each appearance, so the form rules
+judge an appearance's own dictionary too. Every image carries `/Interpolate`
+true:
+
+| Object    | Where it stands                                                           | Answers at PDF/A-2b |
+| --------- | ------------------------------------------------------------------------- | ------------------- |
+| `IAP`     | drawn by the normal appearance of a Square annotation                     | `6.2.8/3`           |
+| `IT3`     | drawn by glyph `b` of `T3`, the page showing only glyph `a`, in mode 3    | `6.2.8/3`           |
+| `IPF`     | drawn by `FmBare`, a form with no `/Resources`, through the page's name   | `6.2.8/3`           |
+| `BI`      | two inline images with `/I true` in the page's content                    | `6.2.8/3` x2        |
+| `ApOPI`   | an appearance with no `/Subtype`, carrying `/OPI`                         | `6.2.9/1`           |
+| `ApRef`   | an appearance carrying `/Ref`                                             | `6.2.9/2`           |
+| `ImRef`   | a drawn image carrying `/Ref`                                             | silent              |
+| `Stencil` | a drawn image mask with `/BitsPerComponent 2`                             | silent              |
+| `Base`    | an image whose `/Mask` declares `/BitsPerComponent 8` and no `/ImageMask` | `6.2.8/5`           |
+
+The last three are the roles veraPDF reads an image in: it states the
+reference XObject rule on forms alone, `t4` on every drawn image, an image mask
+included, and `t5` on an image's `/Mask` alone. litho judged the images of a
+page's content, its forms and its patterns, one inline image per stream, the
+`/Ref` of any XObject, and `t5` on any image mask, so its rule set matched
+veraPDF's but for `6.2.9/1`, two of its classes by coincidence: `ImRef` stood
+in for `ApRef`, and `Stencil` for `Base`.
+
+| Rule at PDF/A-2b               | veraPDF | litho | litho before |
+| ------------------------------ | ------- | ----- | ------------ |
+| `6.2.8/3` `/Interpolate` true  | 5       | 5     | 1            |
+| `6.2.8/5` mask bits            | 1       | 1     | 1            |
+| `6.2.9/1` form `/OPI` or `/PS` | 1       | 1     | 0            |
+| `6.2.9/2` reference XObject    | 1       | 1     | 1            |
+| `6.2.2/2` inherited resource   | 1       | 1     | 1            |
+| `6.2.4.3/4` DeviceGray         | 13      | 13    | 13           |
+| `6.6.2.1/1` no metadata        | 1       | 1     | 1            |
+
+The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
+counts but for `7.1/3` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2, the family
+described under
+[Instance counts](#instance-counts-which-the-corpus-does-not-pin).
+
+### `unembednames_2u.pdf`
+
+A simple font that embeds no program has no glyph names but its encoding's,
+and veraPDF takes each shown glyph's Unicode value from that name alone: no
+name fails `6.2.11.7.2/1`, the name `.notdef` has the value U+0000 in its glyph
+list and fails `6.2.11.7.2/2`, and a name the Adobe Glyph List, the Symbol font
+and ZapfDingbats all leave out fails `/1`. It holds a table for
+MacRomanEncoding, MacExpertEncoding and WinAnsiEncoding alone, and a standard
+14 Latin font with no table reads StandardEncoding from its metrics. The
+`.notdef` rule reads the same names, but for a symbolic TrueType, whose
+encoding it ignores.
+
+| Font | Construct                                                           | Answers at PDF/A-2u                  |
+| ---- | ------------------------------------------------------------------- | ------------------------------------ |
+| `HV` | Helvetica, no `/Encoding`, shows `01 80 41`                         | `6.2.11.7.2/2`, `6.2.11.8/1` x2 each |
+| `AS` | an Arial Type1 under `/StandardEncoding` shows `41`                 | `6.2.11.7.2/1`                       |
+| `TS` | a symbolic Arial TrueType under `/WinAnsiEncoding` shows `00 01 41` | `6.2.11.7.2/2` x2, `6.2.11.8/1`      |
+| `ZD` | ZapfDingbats, `/Differences` naming `41` `a71`, shows `41`          | silent; `6.3.8/1` at PDF/A-1a        |
+| `T3` | a Type 3 font shown in modes 3 and 0, then 1 on page 2              | `6.2.11.7.2/2`, `6.2.11.8/1` x2 each |
+
+`T3`'s glyph `a` shows code `01`, and its glyph `b`, which nothing shows, code
+`02`, both through the unembedded Helvetica `H2`. veraPDF parses every
+procedure of a Type 3 font once, in the rendering mode of the operator that
+first shows the font, mode 3 included: each code fails the Unicode value and
+`.notdef` rules once, and `H2`, built in mode 3, passes the embedding rule.
+litho judged the procedure of each shown glyph, per page, in the first visible
+mode that showed it.
+
+| Rule at PDF/A-2u               | veraPDF | litho | litho before |
+| ------------------------------ | ------- | ----- | ------------ |
+| `6.2.11.4.1/1` not embedded    | 4       | 4     | 5            |
+| `6.2.11.6/3` symbolic encoding | 1       | 1     | 1            |
+| `6.2.11.7.2/1` no Unicode      | 1       | 1     | 0            |
+| `6.2.11.7.2/2` U+0000          | 6       | 6     | 1            |
+| `6.2.11.8/1` `.notdef`         | 5       | 5     | 5            |
+| `6.2.4.3/4` DeviceGray         | 6       | 6     | 6            |
+| `6.6.2.1/1` no metadata        | 1       | 1     | 1            |
+
+The rule sets equal veraPDF 1.30.2's in all thirteen cells, and so do the
+counts but for `7.1/3` and `7.2/34` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2, the
+same family.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
@@ -3836,6 +3932,7 @@ verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates,
 counts the cells whose sets of failed rules (clause and test) differ. Every
 fixture here is non-compliant on both sides, so a change that drops or invents
 a rule class leaves `matched` at 744 and moves only `ruleset_mismatch`. Four of
+a rule class leaves `matched` at 752 and moves only `ruleset_mismatch`. Four of
 the five exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1
 and PDF/UA-2 and `usecmap_2u` at PDF/A-2a and PDF/UA-2, so the metric reads 4 on
 this corpus, and the text scoreboard names the rules only one side reports. The
