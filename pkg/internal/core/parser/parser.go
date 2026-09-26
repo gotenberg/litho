@@ -101,6 +101,10 @@ type Parser struct {
 	// [Parser.WithVeraPDFContainers].
 	veraPDFContainers bool
 	abandoned         bool
+
+	// skippedKey reports that the last [Parser.ParseInlineImageHeader] skipped
+	// a token that stood where a key of the dictionary stands.
+	skippedKey bool
 }
 
 // NewParser creates a new Parser that reads PDF objects from the given lexer.
@@ -1698,6 +1702,7 @@ func (p *Parser) ParseInlineImageDict(ctx context.Context) (ast.PdfDict, error) 
 // after the BI operator has been consumed.
 func (p *Parser) ParseInlineImageHeader(ctx context.Context) (ast.PdfDict, error) {
 	dict := ast.PdfDict{}
+	p.skippedKey = false
 
 	// Parse key/value pairs until the ID keyword.
 	for {
@@ -1723,6 +1728,7 @@ func (p *Parser) ParseInlineImageHeader(ctx context.Context) (ast.PdfDict, error
 			// the ID it ends at (PDFStreamParser.parseNextToken, veraPDF-parser
 			// 1.30), and gives up on the stream otherwise.
 			p.abandon()
+			p.skippedKey = true
 			if _, err := p.Consume(); err != nil {
 				return nil, fmt.Errorf("inline image dict key: %w", err)
 			}
@@ -1771,6 +1777,13 @@ func (p *Parser) ParseInlineImageHeader(ctx context.Context) (ast.PdfDict, error
 	}
 
 	return dict, nil
+}
+
+// SkippedInlineImageKey reports whether the last
+// [Parser.ParseInlineImageHeader] skipped a token that stood where a key of the
+// dictionary stands, which ISO 32000-1, 8.9.7 requires to be a name.
+func (p *Parser) SkippedInlineImageKey() bool {
+	return p.skippedKey
 }
 
 // ResumeAt moves the parser to offset in the data it reads, from where it

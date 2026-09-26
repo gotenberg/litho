@@ -48,8 +48,8 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 	operands := make([]ast.PdfObject, 0, 8) //nolint:mnd // most operators have ≤6 operands
 	tokenCount := 0
 	var prevEnd int64
-	// images reads the data of inline images as veraPDF does, made on the
-	// first one a parse that reads the stream as veraPDF does meets.
+	// images reads the data of inline images, made on the first one the
+	// parse meets.
 	var images *inlineImages
 
 	recordRange := func(end int64) {
@@ -93,22 +93,15 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 					return nil, fmt.Errorf("failed to consume BI: %w", err)
 				}
 				placer.dropOperands()
-				var dict ast.PdfDict
-				if stops {
-					dict, err = p.ParseInlineImageHeader(ctx)
-				} else {
-					dict, err = p.ParseInlineImageDict(ctx)
+				if images == nil {
+					images = newInlineImages(data)
 				}
+				dict, reads, err := readInlineImage(ctx, p, o, images)
 				if err != nil {
 					return nil, fmt.Errorf("inline image: %w", err)
 				}
-				if stops {
-					if images == nil {
-						images = newInlineImages(data)
-					}
-					if err := p.ResumeAt(int64(images.resume(ctx, int(p.Position()), dict))); err != nil {
-						return nil, fmt.Errorf("inline image: %w", err)
-					}
+				if !reads {
+					break
 				}
 				placer.take(0)
 				ops = append(ops, Operation{
@@ -119,8 +112,8 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 				operands = nil
 				// The image data is consumed off-token, and the token buffer is
 				// empty before raw bytes are read, so the reader position is
-				// where reading resumes, just past EI but for an image veraPDF
-				// reads with the one after it, and bounds the operation.
+				// where reading resumes, just past the end of the data the
+				// reading takes, and bounds the operation.
 				recordRange(p.Position())
 				continue
 			}
@@ -179,6 +172,42 @@ func parseOperations(ctx context.Context, p *parser.Parser, o readOptions, data 
 		return nil, nil
 	}
 	return ops, nil
+}
+
+// readInlineImage reads the inline image whose BI p has just consumed, and
+// leaves p where a parse under o reads on after it. It returns the image's
+// dictionary, and false when the parse reads no further.
+//
+// Read as veraPDF reads the stream, the data ends as [inlineImages] ends it,
+// and under [SplitGluedOperators] as PDF.js ends it ([pdfjsInlineImageEnd]).
+// PDF.js ends the dictionary at the end of the stream, and throws out of the
+// stream at a key that is no name (ISO 32000-1, 8.9.7) and at a token it
+// cannot read (Parser.makeInlineImage and Lexer.getObj, src/core/parser.js),
+// so a dictionary that parse cannot read ends it too, as does one that holds
+// such a key. The other readings end the data at an EI that white space
+// precedes and follows ([parser.Parser.ParseInlineImageDict]).
+func readInlineImage(ctx context.Context, p *parser.Parser, o readOptions, images *inlineImages) (ast.PdfDict, bool, error) {
+	switch {
+	case o.commands != nil:
+		dict, err := p.ParseInlineImageHeader(ctx)
+		if err != nil || p.SkippedInlineImageKey() {
+			return nil, false, ctx.Err()
+		}
+		end, stops := pdfjsInlineImageEnd(ctx, images.data, int(p.Position()), dict)
+		if stops {
+			return nil, false, nil
+		}
+		return dict, true, p.ResumeAt(int64(end))
+	case o.readsAsVeraPDF():
+		dict, err := p.ParseInlineImageHeader(ctx)
+		if err != nil {
+			return nil, false, err
+		}
+		return dict, true, p.ResumeAt(int64(images.resume(ctx, int(p.Position()), dict)))
+	default:
+		dict, err := p.ParseInlineImageDict(ctx)
+		return dict, err == nil, err
+	}
 }
 
 // endsReading reports whether tok, read where an operand or an operator
@@ -279,6 +308,9 @@ func WithWholeStreams(ctx context.Context) context.Context {
 // t1, and the remediation that answers it writes the operators back apart
 // ([GluedOperators]). Both readings take "q1" as q then the number 1.
 //
+// It reads the data of inline images as PDF.js does too, and ends the parse
+// where PDF.js stops reading the stream ([readInlineImage]).
+//
 // # Corpus evidence
 //
 //   - pdfjs sci-notation.pdf: writes "ETBT" between its two text objects,
@@ -338,7 +370,7 @@ func ForRepair() Option {
 // it reads every operator the stream holds: past the stray "]" where that
 // parse ends ([endsReading]), through the arrays and dictionaries it gives up
 // on the stream for ([parser.Parser.WithVeraPDFContainers]), and every inline
-// image, whose data it ends as [ForRepair] and [SplitGluedOperators] do
+// image, whose data it ends as [ForRepair] does
 // ([parser.Parser.ParseInlineImageDict]) rather than as veraPDF does, which
 // reads an image that follows another as part of it ([inlineImages]).
 //
