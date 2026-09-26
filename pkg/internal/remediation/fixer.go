@@ -191,6 +191,25 @@ func walkIndirectObjects(
 // walkNumberedObjects is [walkIndirectObjects] with the number of the object
 // passed to the transformers, for a repair that reads what the parse of that
 // object recorded, such as [document.Document.IntegerOverflows].
+//
+// The walk offers every object the file defines in use, the ones stored in an
+// object stream (ISO 32000-1, 7.5.7) included. Their cross-reference entry is
+// type 2 rather than a byte offset (Table 18), and the walk took type 1 entries
+// alone, so the limit, name and string repairs never reached them while
+// validation judges them where they are stored. Writing one back is sound: the
+// repair defines the object again under the same number, which an incremental
+// update lists in a later cross-reference section that supersedes the copy in
+// the object stream (7.5.8), and which a full rewrite copies in place of the
+// source object, as it does any other object the fixers replace. Objects in an
+// object stream have generation 0 (7.5.7), which is what their entry reports.
+//
+// # Corpus evidence
+//
+//   - All corpora: over the PDF/A-1b and PDF/A-2b remediations, default and
+//     aggressive, of 200 of the 662 files that store objects in object
+//     streams, 8 outputs change and no residual violation moves.
+//   - verapdf PDF_UA-1__7-18.3-t01-pass-a.pdf: its PDF/A-1b remediation
+//     clamps four out-of-range numbers held in an object stream.
 func walkNumberedObjects(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -203,7 +222,7 @@ func walkNumberedObjects(
 		if err := ctx.Err(); err != nil {
 			return count, err
 		}
-		if entry.Type != 1 || objNum == 0 {
+		if entry.Free || objNum == 0 {
 			continue
 		}
 		// Read alloc-first: an earlier fixer may have queued a replacement

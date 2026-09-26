@@ -134,13 +134,18 @@ func logDeclinedNames(doc *document.Document, pinned map[string]bool) {
 // resource-category sub-dictionary anywhere in the document. Those names
 // are addressed by name from content streams and /DA strings, so
 // [fixNameUTF8] must not rewrite them.
+//
+// It scans the objects [walkIndirectObjects] rewrites, the ones stored in an
+// object stream included. A page stored there holds its /Resources, and a
+// scan that skipped it left that dictionary's keys unpinned for a walk that
+// renames names in the same object.
 func collectResourceKeys(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (map[string]bool, error) {
 	out := make(map[string]bool)
 	for objNum, entry := range doc.XRefEntries() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if entry.Type != 1 || objNum == 0 {
+		if entry.Free || objNum == 0 {
 			continue
 		}
 		// Read alloc-first for the same reason walkIndirectObjects does:
