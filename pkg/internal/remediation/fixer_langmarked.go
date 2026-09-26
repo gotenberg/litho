@@ -18,8 +18,13 @@ import (
 // content stream, which is safetyContent work: the writer must be able to roll
 // it back. Its sibling only edits the catalog and the structure tree and is
 // registered structural.
+//
+// It does not share the sibling's claim on the violations of the fixers that
+// write language text ([writesLanguageText]): that text needs the catalog
+// /Lang, not a repaired property list, and a content-tier fixer in the plan
+// makes a regression roll back rather than fail the run.
 func matchMarkedContentLang(v compliance.Violation) bool {
-	return matchCatalogLang(v)
+	return matchLangClauses(v)
 }
 
 // fixMarkedContentLang strips an unusable /Lang from every marked-content

@@ -19,8 +19,8 @@ import (
 // breaks reference cycles.
 const maxStructTreeDepth = compliance.MaxStructTreeWalkDepth
 
-// matchCatalogLang matches the /Lang violations this fixer repairs, across the
-// specs that state them.
+// matchLangClauses matches the /Lang violations proper, across the specs that
+// state them.
 //
 // ISO 14289-1 states its language requirements in clause 7.2 exactly, and the
 // clause is matched exactly for that reason: [clausePrefix] is a string prefix
@@ -28,8 +28,50 @@ const maxStructTreeDepth = compliance.MaxStructTreeWalkDepth
 // PDF/UA-1 FONT family (CMaps, embedding, ToUnicode, .notdef). Claiming those
 // here made clause 7.21.8 look repaired while no fixer could touch it. The
 // other three clauses have no such neighbour, measured against the rule table.
-func matchCatalogLang(v compliance.Violation) bool {
+func matchLangClauses(v compliance.Violation) bool {
 	return clausePrefix(v, "6.7.4", "6.8.4", "8.4.4") || v.Rule.Clause == "7.2"
+}
+
+// matchCatalogLang matches the /Lang violations this fixer repairs and, under
+// PDF/UA-1, the violations answered by the fixers whose repair writes text in
+// a natural language.
+//
+// ISO 14289-1, 7.2 requires the natural language of such text to be
+// determined, and text a repair writes declares none, so only the catalog
+// /Lang determines it. xmp-metadata writes dc:title as a language alternative
+// with an x-default entry, which veraPDF's 7.2 test 33 (xDefault == false ||
+// gContainsCatalogLang == true) then judges, and auto-tag and figure-alt write
+// the /Alt of a Figure (test 22), form-tooltip a /TU (test 25) and a widget
+// /Contents (test 24). None of that text is in the document the violations
+// are judged on, so claiming the 7.2 findings alone left the catalog /Lang to
+// a second remediation round, run on the first round's output. The claim is
+// harmless where the text needs no language after all: the repair only adds a
+// /Lang the catalog lacks. PDF/UA-2 needs no such claim, since ISO 14289-2,
+// 8.4.4 requires the catalog /Lang outright.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100811 and thread_300_300189, pdfcpu
+//     pkg_testdata__empty.pdf, pkg_testdata__blank-scan.pdf and
+//     pkg_testdata__HL1396.pdf, and 19 pdfjs files, among them issue4379.pdf
+//     and issue8823.pdf: their source reports no 7.2 finding, and each
+//     PDF/UA-1 remediation, default and aggressive, took a second round for
+//     the catalog /Lang alone, once the dc:title xmp-metadata wrote failed
+//     test 33 and, on the auto-tagged scans, each Figure /Alt test 22.
+//   - All corpora: over the PDF/UA-1 remediations, default and aggressive,
+//     of 343 sampled files, those 24 now take one round and no residual
+//     moves. No other file took a second round for catalog-lang. veraPDF
+//     1.30 passes 23 of the 24 one-round outputs, as it passed the two-round
+//     ones, and cannot read the page tree of poppler-85140-0.pdf in either.
+func matchCatalogLang(v compliance.Violation) bool {
+	return matchLangClauses(v) || (v.Rule.Specification == "ISO_14289_1" && writesLanguageText(v))
+}
+
+// writesLanguageText reports whether v is answered by a fixer whose repair
+// writes text in a natural language: the dc:title of xmp-metadata, the Figure
+// /Alt of auto-tag and figure-alt, and the /TU and /Contents of form-tooltip.
+func writesLanguageText(v compliance.Violation) bool {
+	return matchXMP(v) || matchAutoTag(v) || matchFigureAlt(v) || matchFormTooltip(v)
 }
 
 // fixCatalogLang repairs the document language. It adds a missing catalog /Lang,
@@ -40,9 +82,13 @@ func matchCatalogLang(v compliance.Violation) bool {
 // §14.9.2. Validity is the BCP 47 / RFC 3066 form §14.9.2 requires, checked via
 // [compliance.IsValidLangTag] (reused, not re-derived).
 func fixCatalogLang(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
+	// A document with no catalog reference cannot take a catalog /Lang. Skip,
+	// as fixXMP and fixXMPSchema do: an error here discards the repairs of
+	// every other fixer, and this fixer also runs for violations that are not
+	// its own (see matchCatalogLang).
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
-		return nil, fmt.Errorf("trailer missing /Root")
+		return nil, nil
 	}
 	catalogDict := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
 	if catalogDict == nil {
