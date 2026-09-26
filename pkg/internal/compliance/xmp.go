@@ -968,6 +968,13 @@ func xmpFixControlChars(data []byte) []byte {
 	return out
 }
 
+// XMPControlChar reports whether r is a character veraPDF's parser repairs to
+// a space before it reads a packet (see [xmpFixControlChars]), so that no XMP
+// value holds it.
+func XMPControlChar(r rune) bool {
+	return xmpIsControlChar(int(r))
+}
+
 // xmpIsControlChar mirrors org.verapdf.xmp.impl.Utils.isControlChar, the
 // predicate veraPDF's parser uses to decide a character needs repairing.
 func xmpIsControlChar(c int) bool {

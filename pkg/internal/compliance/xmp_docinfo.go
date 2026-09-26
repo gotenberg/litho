@@ -81,7 +81,7 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 			// no packet, or with a packet that omits dc:title, fails on both
 			// tools; an empty /Title against an empty dc:title passes on both.
 			xmpVal := syncResult.values[pair.xmpKey]
-			if !syncResult.present[pair.xmpKey] || xmpVal != "" {
+			if !syncResult.present[pair.xmpKey] || xmpVal != "" || xmpCreatorSizeWrong(part, pair.infoKey, syncResult) {
 				*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, "(empty)", pair.xmpKey, xmpVal)...)
 			}
 			continue
@@ -96,14 +96,10 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 			continue
 		}
 
-		// §6.7.3 t3 (part 1): dc:creator must contain exactly one entry
-		// when /Author is present.
-		if part == 1 && pair.infoKey == "Author" {
-			if count, ok := syncResult.entryCounts[pair.xmpKey]; ok && count > 1 {
-				*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey,
-					fmt.Sprintf("%d entries", count))...)
-				continue
-			}
+		if xmpCreatorSizeWrong(part, pair.infoKey, syncResult) {
+			*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey,
+				fmt.Sprintf("%d entries", syncResult.entryCounts[pair.xmpKey]))...)
+			continue
 		}
 
 		normInfo := infoVal
@@ -157,6 +153,19 @@ func xmpCheckDocInfoSync(ctx context.Context, doc *document.Document, xmpData []
 			*results = append(*results, xmpDocInfoSyncRule(part, pair.testNum, pair.infoKey, infoVal, pair.xmpKey, xmpVal)...)
 		}
 	}
+}
+
+// xmpCreatorSizeWrong reports whether a present /Author fails ISO 19005-1,
+// 6.7.3 test 3 on the size of dc:creator alone: veraPDF's test reads
+// "XMPCreatorSize == 1", and the size counts every item of the container, an
+// empty one included, so an empty /Author against an empty first item still
+// fails when a second item follows it.
+func xmpCreatorSizeWrong(part int, infoKey string, sync *xmpSyncResult) bool {
+	if part != 1 || infoKey != "Author" {
+		return false
+	}
+	count, ok := sync.entryCounts["dc:creator"]
+	return ok && count != 1
 }
 
 func xmpDocInfoSyncRule(part, testNum int, infoKey, infoVal, xmpKey, xmpVal string) []Violation {
@@ -252,7 +261,17 @@ func xmpInfoEntryValue(ctx context.Context, doc *document.Document, infoDict ast
 	case nil, ast.PdfNull:
 		return xmpInfoEntry{}
 	case ast.PdfString:
-		return xmpInfoEntry{present: true, text: document.DecodePdfString(v), comparable: true, isString: true}
+		text := document.DecodePdfString(v)
+		// A text entry holding a control character equals no XMP value: veraPDF
+		// reads a byte PDFDocEncoding leaves undefined as the control character
+		// it is (where DecodePdfString drops it), and XMPCore reads a control
+		// character in a packet, raw or referenced, as a space (see
+		// [xmpFixControlChars]). Dates are left to their own comparison.
+		if key != "CreationDate" && key != "ModDate" &&
+			(document.ContainsUndefinedPDFDocBytes(v) || strings.ContainsFunc(text, func(r rune) bool { return xmpIsControlChar(int(r)) })) {
+			return xmpInfoEntry{present: true, text: text + " (holds a control character)", isString: true}
+		}
+		return xmpInfoEntry{present: true, text: text, comparable: true, isString: true}
 	case ast.PdfInt:
 		return xmpInfoEntry{present: true, text: strconv.FormatInt(int64(v), 10), comparable: true}
 	case ast.PdfReal:
@@ -340,8 +359,10 @@ var xmpContainerTypedProperties = map[string]map[string]bool{
 
 // xmpSyncResult holds the parsed XMP values and container entry counts.
 type xmpSyncResult struct {
-	values      map[string]string // Property key → first value
-	entryCounts map[string]int    // Property key → number of rdf:li entries (Seq/Bag only)
+	values map[string]string // Property key → first value
+	// entryCounts holds, per container property, how many rdf:li items its
+	// container holds, an empty item included: veraPDF's XMPCreatorSize.
+	entryCounts map[string]int
 	// present records every property the packet declares, whether or not it
 	// carries a value. §6.7.3 compares an Info entry against its XMP analogue,
 	// and an empty property that IS declared compares equal to an empty Info
@@ -354,7 +375,13 @@ type xmpSyncResult struct {
 // It handles both inline attribute values and rdf:Alt/rdf:Seq container
 // values. For Alt containers, the x-default language entry is preferred;
 // if absent, the first entry is used. For Seq containers, the first entry
-// is used. Entry counts are tracked for Seq/Bag containers.
+// is used. Entry counts are tracked for every container.
+//
+// An item is the text of one rdf:li, empty or not, as XMPCore reads it: an
+// empty item is the value "" and counts, and a container-typed property whose
+// container holds no item at all has no value, which veraPDF reads as null
+// (XMPTitle, XMPCreator and XMPDescription), measured on crafted PDF/A-1b
+// files against veraPDF 1.30.2.
 //
 // # Corpus evidence
 //
@@ -374,6 +401,8 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 	var propNS, propLocal string
 	var inAlt, inSeqOrBag, inLI bool
 	var liLang string // xml:lang attribute on current rdf:li
+	// liText accumulates the character data of the current rdf:li item.
+	var liText strings.Builder
 	depth := 0
 	inDesc := false
 	// descDepth counts nested rdf:Description elements; only the outermost
@@ -474,8 +503,10 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 						containerKind[makeKey(propNS, propLocal)] = t.Name.Local
 					}
 				}
-				if (inAlt || inSeqOrBag) && t.Name.Space == xmpRDFNamespace && t.Name.Local == "li" {
+				if depth == 3 && (inAlt || inSeqOrBag) && t.Name.Space == xmpRDFNamespace && t.Name.Local == "li" {
 					inLI = true
+					liText.Reset()
+					entryCounts[makeKey(propNS, propLocal)]++
 					// Extract xml:lang attribute for Alt container preference.
 					liLang = ""
 					for _, attr := range t.Attr {
@@ -493,38 +524,14 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 			if depth == 1 && propNS != "" {
 				simpleRaw.Write(t)
 			}
-			raw := string(t)
-			// Trimmed form gates structural whitespace (the pretty-print
-			// newlines between rdf:Seq and rdf:li). The stored value stays
-			// raw: rdf:li text is significant verbatim, so under §6.7.3
-			// /Author=" x " is non-equivalent to a trimmed dc:creator "x"
-			// yet equivalent to a spaced dc:creator " x " (§6.7.3 t3).
-			// Trimming here would erase whitespace the sync fixer
-			// deliberately writes to match /Author, making litho unable to
-			// see its own fix. Skip only OUTSIDE an rdf:li: a whitespace-only
-			// li is a legitimate value (a title of " ", which Go's tokenizer
-			// emits as a single CharData token), and dropping it misreads it
-			// as empty, firing a spurious Info/XMP mismatch veraPDF does not.
-			if strings.TrimSpace(raw) == "" && !inLI {
-				continue
-			}
-			if inLI && propNS != "" {
-				key := makeKey(propNS, propLocal)
-				if inAlt {
-					// For Alt containers, track x-default and first entries separately.
-					if liLang == "x-default" {
-						altDefaults[key] = raw
-					}
-					if _, exists := altFirst[key]; !exists {
-						altFirst[key] = raw
-					}
-				} else {
-					// Seq/Bag: take the first entry; count all entries.
-					entryCounts[key]++
-					if _, exists := result[key]; !exists {
-						result[key] = raw
-					}
-				}
+			// rdf:li text is significant verbatim, whitespace included: under
+			// §6.7.3 /Author=" x " is non-equivalent to a trimmed dc:creator
+			// "x" yet equivalent to a spaced dc:creator " x " (§6.7.3 t3), and
+			// a whitespace-only item is the value of a title of " ". Trimming
+			// would erase whitespace the sync fixer deliberately writes to
+			// match /Author, making litho unable to see its own fix.
+			if inLI && depth == 3 {
+				liText.Write(t)
 			}
 		case xml.EndElement:
 			if t.Name.Space == xmpRDFNamespace && t.Name.Local == "Description" {
@@ -543,7 +550,21 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 				inLI = false
 				liLang = ""
 			} else if inDesc {
-				if t.Name.Space == xmpRDFNamespace && t.Name.Local == "li" {
+				if inLI && depth == 3 && t.Name.Space == xmpRDFNamespace && t.Name.Local == "li" {
+					key := makeKey(propNS, propLocal)
+					raw := liText.String()
+					if inAlt {
+						// For Alt containers, track x-default and first entries separately.
+						if liLang == "x-default" {
+							altDefaults[key] = raw
+						}
+						if _, exists := altFirst[key]; !exists {
+							altFirst[key] = raw
+						}
+					} else if _, exists := result[key]; !exists {
+						// Seq/Bag: take the first entry.
+						result[key] = raw
+					}
 					inLI = false
 					liLang = ""
 				}
@@ -576,10 +597,11 @@ func xmpParseForSync(data []byte) *xmpSyncResult {
 	}
 
 	// A container-typed property carried by no container, or by one that does
-	// not answer its lookup, leaves the Info entry nothing to match. Drop it
-	// entirely rather than leaving a value that would compare equal.
+	// not answer its lookup, or by one holding no item, leaves the Info entry
+	// nothing to match. Drop it entirely rather than leaving a value that would
+	// compare equal.
 	for key, carriers := range xmpContainerTypedProperties {
-		if !carriers[containerKind[key]] {
+		if !carriers[containerKind[key]] || entryCounts[key] == 0 {
 			delete(result, key)
 			delete(present, key)
 		}

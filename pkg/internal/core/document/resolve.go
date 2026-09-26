@@ -306,10 +306,12 @@ func DecodePdfString(s ast.PdfString) string {
 	// route around the fast path when an undefined PDFDocEncoding control
 	// byte is present so pdfDocEncodingUndefined can drop it: a stray
 	// 0x05 inside an otherwise-ASCII bookmark title leaks through as
-	// U+0005 otherwise.
+	// U+0005 otherwise. The same holds for the spacing accents Table D.2 puts
+	// at 0x18-0x1F: an otherwise-ASCII string holding one returned the raw
+	// control character instead of the accent.
 	needsDecode := false
 	for _, c := range b {
-		if c > 0x7F || pdfDocEncodingUndefined(c) {
+		if c > 0x7F || pdfDocEncodingUndefined(c) || c >= 0x18 && c <= 0x1F {
 			needsDecode = true
 			break
 		}

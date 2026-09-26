@@ -69,6 +69,9 @@ func TestDecodePdfString(t *testing.T) {
 		// BREVE, not U+0018 CANCEL.
 		{"pdfdoc-breve", ast.PdfString("a\x18b\xff"), "a˘bÿ"},
 		{"pdfdoc-tilde", ast.PdfString("a\x1fb\xff"), "a˜bÿ"},
+		// With no high byte to force the slow path, the fast path returned
+		// the raw control character.
+		{"pdfdoc-breve-pure-ascii", ast.PdfString("a\x18b"), "a˘b"},
 		// Undefined PDFDocEncoding bytes (0x00-0x08, 0x0B, 0x0E-0x17,
 		// 0x7F) have no Unicode mapping. Dropping them keeps corrupted
 		// producer output (0x05 leaking between words) from surfacing
