@@ -999,7 +999,7 @@ func (p *Parser) settleSignatureContents(dict ast.PdfDict) error {
 	if !ok {
 		return nil
 	}
-	if isSignatureDict(dict) {
+	if IsSignatureDict(dict) {
 		return nil
 	}
 	dec, err := p.decryptFn([]byte(s))
@@ -1010,13 +1010,15 @@ func (p *Parser) settleSignatureContents(dict ast.PdfDict) error {
 	return nil
 }
 
-// isSignatureDict reports whether dict is a signature or document timestamp
-// dictionary (ISO 32000-1, Table 252).
+// IsSignatureDict reports whether dict is a signature or document timestamp
+// dictionary (ISO 32000-1, Table 252), whose /Contents the parser reads in the
+// clear in an encrypted file. A writer encrypting a file leaves the same
+// /Contents in the clear, so the two agree on which strings are exempt.
 //
 // /Type is optional there, so a dictionary pairing a /Contents string with a
 // /ByteRange array counts too. PDFBox reads the same two signals for the same
 // reason.
-func isSignatureDict(dict ast.PdfDict) bool {
+func IsSignatureDict(dict ast.PdfDict) bool {
 	if name, ok := dict["Type"].(ast.PdfName); ok {
 		if name == "Sig" || name == "DocTimeStamp" {
 			return true

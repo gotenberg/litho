@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/parser"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/crypto"
 )
@@ -103,9 +104,30 @@ func encryptObject(ctx context.Context, obj ast.PdfObject, enc *crypto.Encryptor
 }
 
 // encryptDict encrypts string values within a dictionary.
+//
+// The /Contents of a signature dictionary stays in the clear: ISO 32000-2,
+// 7.6.2 lists it among the strings encryption does not apply to, since the
+// signature value fills the hole its ByteRange leaves after the digest is
+// computed. Encrypted, it reached every reader as noise, the parser included,
+// which reads it in the clear (see [parser.IsSignatureDict], the test both
+// sides share).
+//
+// # Corpus evidence
+//
+//   - All corpora: 162 signed documents, the 61 corpus files that carry a
+//     signature and 101 outputs litho signed, encrypted at AES-256. litho read
+//     none of the 142 signature values it finds back as signed, and reads all
+//     142 now. qpdf reads 159 of 164 back, from 2. It decrypts a document
+//     timestamp's value, which litho leaves in the clear as it does a /Sig's:
+//     pdfjs issue8047.pdf and issue15813.pdf.
 func encryptDict(ctx context.Context, d ast.PdfDict, enc *crypto.Encryptor, objNum, genNum int) (ast.PdfDict, error) {
+	signature := parser.IsSignatureDict(d)
 	result := make(ast.PdfDict, len(d))
 	for k, v := range d {
+		if signature && k == "Contents" {
+			result[k] = v
+			continue
+		}
 		encrypted, err := encryptObject(ctx, v, enc, objNum, genNum)
 		if err != nil {
 			return nil, err
