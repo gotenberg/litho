@@ -182,6 +182,17 @@ Adding a new corpus means dropping `corpus/<name>/download.sh` + `manifest.json`
 
 A new corpus becomes regression-gated only after the next `make corpus-baseline` commit; until then it runs and scores but cannot fail `make corpus-check`.
 
+### Coverage: craft a litho fixture
+
+When a change touches a construct no corpus file reaches, add a fixture to the litho corpus so the gate covers it. A fix measured only on throwaway files is protected by nothing once it lands: a later change can undo it and the gate stays green.
+
+- Census first. Run a harness over the provisioned corpora and look for a file that reaches the construct. If one does, name it and build no fixture.
+- Build the fixture with a pikepdf builder in `corpus/litho/build/` that uses `_common.py` (deterministic `/ID`, `stream_decode_level=none`), so a rebuild reproduces the PDF byte for byte. Commit the builder, the PDF in `corpus/litho/pdfs/`, and its rows in `corpus/litho/README.md`: the Fixtures table, the expected firing set, a section, and a Known divergences entry when litho and veraPDF disagree.
+- Pack several independent constructs into one fixture. The corpus exists to catch a rule that masks another, which a one-construct file cannot show.
+- Confirm the counts with veraPDF at the fixture's home profile before committing, and compare litho's rule set with veraPDF's at every profile.
+- Provisioning captures the goldens with `corpus/lib/run-verapdf.sh`. On an already provisioned checkout, copy the PDF into `testdata/litho/pdfs/` and add its veraPDF jobs to each `testdata/litho/goldens/compliance/<profile>.json`, with the same veraPDF version as the existing goldens, then recapture `baseline.json`.
+- A fixture only protects what a feature runs on it. The litho corpus runs `compliance`, `remediation` and `remediation-aggressive`, so a construct only a Writer mutation reaches (a stamp, a page deletion, a signature) needs a feature that runs that mutation, not a fixture.
+
 ## Manifest schema
 
 ```json
