@@ -57,6 +57,9 @@ type FacturXOptions struct {
 // The returned [Report] aggregates the underlying PDF/A-3 fixes plus
 // the Factur-X-specific operations.
 func RemediateFacturX(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, cfg FacturXOptions, opts Options) (*Report, error) {
+	// The invoice attachment is allocated before the PDF/A remediation runs.
+	reserveDefinedObjects(ctx, doc, alloc)
+
 	// Factur-X 1.0.07 / ZUGFeRD 2.1+ mandate /text#2Fxml as the
 	// embedded stream /Subtype. text/xml is the spec-correct value
 	// and what the writer emits; the consumer side stays lenient

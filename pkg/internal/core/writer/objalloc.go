@@ -57,6 +57,18 @@ func (a *ObjAllocator) AllocAt(objNum int, obj ast.PdfObject) bool {
 	return true
 }
 
+// Reserve raises the next object number past maxExisting, so [ObjAllocator.Alloc]
+// never hands out a number up to it. It never lowers the next number, so the
+// objects already queued keep theirs. A caller whose view of the highest
+// object number the file uses grew after it created the allocator, as when the
+// raw-byte augmentation of the cross-reference index found objects the table
+// leaves out, calls it before allocating.
+func (a *ObjAllocator) Reserve(maxExisting int) {
+	if maxExisting >= a.nextObjNum {
+		a.nextObjNum = maxExisting + 1
+	}
+}
+
 // Pending returns all registered objects as a map from object number to object.
 func (a *ObjAllocator) Pending() map[int]ast.PdfObject {
 	return a.pending

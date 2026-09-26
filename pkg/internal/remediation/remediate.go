@@ -81,6 +81,41 @@ func RemediateWTPDF(ctx context.Context, doc *document.Document, alloc *writer.O
 	return remediate(ctx, doc, alloc, string(profile), opts, violations)
 }
 
+// reserveDefinedObjects runs the raw-byte augmentation of the cross-reference
+// index, then raises alloc past the highest object number the file uses
+// ([document.Document.HighestObjectNumber]), before a repair allocates an
+// object.
+//
+// A new object must not take a number the file's bytes define, even one its
+// table leaves out. litho resolves a reference to such an object through the
+// augmentation, as a reader rebuilding a damaged table does, and an object
+// written at its number takes its place: a font's /Widths then reads the XMP
+// packet the remediation added. The augmentation runs at the first lookup that
+// misses the index, for whichever caller makes it, so an allocator seeded from
+// the index started past those objects only when something had missed before:
+// the same bytes came out with different object numbers, and only one of the
+// two outputs kept the widths (CONTRIBUTING "Deterministic output"). Running it
+// here makes the numbers a function of the bytes. It runs at most once per
+// Document.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue18444.pdf: its table and its /Size stop at 389 while object
+//     390 holds its cross-reference stream, and its PDF/A-2b remediation wrote
+//     a new object 390.
+//   - pdfjs issue16759.pdf, pdfjsbad1586.pdf, poppler-90-0-fuzzed.pdf: define
+//     objects 60000, 33 and 406 past the numbers their tables and /Size cover,
+//     and their remediations now allocate past them.
+//   - All corpora: over the PDF/A-1b and PDF/A-2b remediations, default and
+//     aggressive, of 248 files that store objects in object streams or whose
+//     table leaves objects out, only those four files change, no residual
+//     violation moves, and a fresh reader and one that extracted the text of
+//     every page first write the same bytes.
+func reserveDefinedObjects(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator) {
+	doc.AugmentXRef(ctx)
+	alloc.Reserve(doc.HighestObjectNumber())
+}
+
 func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, profile string, opts Options, violations []error) (*Report, error) {
 	if len(violations) == 0 {
 		doc.Logger.Debug("remediate: no violations",
@@ -88,6 +123,7 @@ func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAll
 		)
 		return &Report{}, nil
 	}
+	reserveDefinedObjects(ctx, doc, alloc)
 
 	// Classify violations by fixer. A disabled fixer claims nothing, so the
 	// violations it would have answered stay in the residual.
