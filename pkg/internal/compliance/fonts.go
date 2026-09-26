@@ -94,7 +94,7 @@ func collectFontUsageAt(ops []content.Operation, site showSite) map[string]*font
 			u.charCodes[b] = true
 		}
 		u.rawStrings = append(u.rawStrings, s)
-		at := glyphContext{mode: renderMode}
+		at := glyphContext{mode: renderMode, owner: site.owner}
 		if n := len(mcStack); n > 0 {
 			at.mc = mcStack[n-1]
 		}
@@ -393,7 +393,7 @@ func checkPageDeclaredFonts(ctx context.Context, doc *document.Document, catalog
 	// per-font skip below uses this to match veraPDF's "check only fonts a
 	// content operator selects" model; parseFailed drives the conservative
 	// "check every declared font" fallback for present-but-unparseable content.
-	site := showSite{key: "page " + strconv.Itoa(pageNum)}
+	site := showSite{key: "page " + strconv.Itoa(pageNum), owner: structureKey(ctx, doc, p.dict)}
 	site.props, _ = document.ResolveDict(ctx, doc, resources["Properties"])
 	fontUsage := collectFontUsageAt(p.parsedOps(ctx), site)
 	parseFailed := p.parseFailed
@@ -722,7 +722,9 @@ func checkType3CharProcFonts(ctx context.Context, doc *document.Document, ops []
 					"page", pageNum, "glyph", glyphName, "error", err)
 				continue
 			}
-			results = append(results, checkResourceFonts(ctx, doc, t3Res, procOps, streamSite(ctx, doc, charProcs[ast.PdfName(glyphName)], t3Res), pageNum, profile, judged)...)
+			procSite := streamSite(ctx, doc, charProcs[ast.PdfName(glyphName)], t3Res)
+			procSite.owner = structureKey(ctx, doc, font)
+			results = append(results, checkResourceFonts(ctx, doc, t3Res, procOps, procSite, pageNum, profile, judged)...)
 			results = append(results, checkType3CharProcFonts(ctx, doc, procOps, t3Res, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 			results = append(results, checkFormXObjectFonts(ctx, doc, procOps, t3Res, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 		}
@@ -822,13 +824,16 @@ func checkGlyphUsageRules(ctx context.Context, doc *document.Document, font ast.
 }
 
 // streamSite returns the [showSite] of the content stream ref names, whose
-// resources are res.
+// resources are res. The stream owns itself for [structureKey].
 func streamSite(ctx context.Context, doc *document.Document, ref ast.PdfObject, res ast.PdfDict) showSite {
 	site := showSite{key: "stream"}
 	if r, ok := ref.(ast.PdfIndirectRef); ok {
 		site.key = "obj " + strconv.Itoa(r.ObjectNum)
 	}
 	site.props, _ = document.ResolveDict(ctx, doc, res["Properties"])
+	if stream, err := document.ResolveStream(ctx, doc, ref); err == nil {
+		site.owner = structureKey(ctx, doc, stream.Dict)
+	}
 	return site
 }
 

@@ -84,11 +84,13 @@ func (g *glyphFaults) first() []Violation {
 }
 
 // glyphContext is what veraPDF tells two glyphs of one font and one code apart
-// by: the text rendering mode in force and the marked-content sequence around
-// the show. mc is empty outside marked content.
+// by: the text rendering mode in force, the marked-content sequence around the
+// show, and the structure key of the stream it is shown in ([structureKey]).
+// mc is empty outside marked content.
 type glyphContext struct {
-	mode int
-	mc   string
+	mode  int
+	mc    string
+	owner int32
 }
 
 // describe renders where a glyph was shown, for a violation stated for more
@@ -131,10 +133,61 @@ const mcUnnamed = "none"
 // marked-content sequences it opens can be told apart from another stream's.
 // key is unique to the stream within the document; props is the /Properties
 // dictionary of the stream's resources, which a BDC may name its property list
-// from.
+// from; owner is the stream's [structureKey].
 type showSite struct {
 	key   string
 	props ast.PdfDict
+	owner int32
+}
+
+// structureKey returns the value veraPDF tells the glyphs of one content stream
+// apart from another's by: the /StructParent and /StructParents entries of the
+// dictionary that owns the stream, which is the page for a page's contents,
+// the stream itself for a Form XObject, a tiling pattern or an annotation
+// appearance, and the font for a Type 3 glyph procedure (ISO 32000-1, 14.7.4.4,
+// Table 326 gives pages and content-bearing streams these entries). veraPDF
+// keys a Glyph by StructureElementAccessObject.hashCode, 31 times the Java
+// hash of /StructParent plus that of /StructParents, so an entry that is
+// absent, zero or not an integer contributes nothing, and a page with
+// /StructParents 0 shares its glyphs with a page carrying none.
+//
+// Measured with veraPDF 1.30 at PDF/A-2u, PDF/A-3u and PDF/UA-1 on one glyph
+// with no Unicode value: shown on two pages whose /StructParents are 1 and 2,
+// or 0 and 1, it fails twice, through a Type 3, a Type 1 and a composite font
+// alike; on two pages with 1 and 1, 0 and none, or none and none, once. Which
+// rules the key splits is [fontJudgements.glyphs]' concern.
+//
+// # Corpus evidence
+//
+//   - All corpora, at PDF/A-2u: keying the ToUnicode rules by it moved the
+//     counts of ISO 19005-2, 6.2.11.7.2 t1 toward veraPDF's in 2 files and
+//     those of t2 in 1, and none away; each now equals veraPDF's, a summed
+//     distance of 368 and 298 before.
+//   - govdocs thread_000_000028.pdf: a tagged document showing its glyphs
+//     without Unicode values on pages with distinct /StructParents; litho
+//     states 5450 of them, as veraPDF does, where it stated 5083.
+//   - pdfcpu pkg_testdata__read.go.pdf: veraPDF states the value rule 324
+//     times for the glyphs of its Type 3 fonts, page by page; litho states
+//     324 where it stated 26.
+func structureKey(ctx context.Context, doc *document.Document, owner ast.PdfDict) int32 {
+	if owner == nil {
+		return 0
+	}
+	entry := func(key ast.PdfName) int32 {
+		obj, err := document.ResolveObject(ctx, doc, owner[key])
+		if err != nil {
+			return 0
+		}
+		n, ok := obj.(ast.PdfInt)
+		if !ok {
+			return 0
+		}
+		// Java's Long.hashCode folds the high half into the low one and keeps
+		// 32 bits by definition.
+		return int32(int64(n) ^ int64(uint64(n)>>32)) //nolint:gosec // the truncation is the hash being modelled.
+	}
+	// Signed overflow wraps in Go as it does in Java's int arithmetic.
+	return 31*entry("StructParent") + entry("StructParents")
 }
 
 // markedContentKey identifies the property list of the BDC or BMC operator op,
@@ -222,8 +275,20 @@ var noContext = glyphContext{mode: -1}
 // shown on two pages, or twice on one, it fails once; in rendering modes 0, 1,
 // 2 and 3 three times; through two font objects that share one program twice,
 // and through one object named twice once; on the page and in a Form XObject,
-// or in one form drawn on two pages, once. Pages with distinct /StructParents
-// do not split a simple font's glyph.
+// or in one form drawn on two pages, once.
+//
+// veraPDF's identity also carries the structure key of the stream a glyph is
+// shown in ([structureKey]), and the ToUnicode rules (ISO 19005-2 and ISO
+// 19005-3, 6.2.11.7.2, ISO 19005-1, 6.3.8, ISO 14289-1, 7.21.7, ISO 14289-2,
+// 8.4.5.8 and ISO 19005-4, 6.2.10.7) state a glyph once per key. The presence
+// and width rules do not: measured with veraPDF 1.30 at PDF/A-2b, a CID an
+// embedded composite program lacks and a Type 1 width that disagrees with its
+// program each fail once on two pages whose /StructParents are 1 and 2, so the
+// key is left out of theirs.
+//
+// TODO: the .notdef rule (ISO 19005-2, 6.2.11.8) splits by the key too: the
+// same composite fixture fails it twice at PDF/A-2u. Key it once its counts
+// are measured over the corpora.
 //
 // A composite font's checks judge CIDs, while veraPDF names a glyph by its
 // character code, so a CID is stated once for every code that selects it:
@@ -272,9 +337,9 @@ var noContext = glyphContext{mode: -1}
 //     summed distance fell from 23493 to 2634. Those of 6.2.11.7.2 t2 moved
 //     toward in 8 files and away in 1; their distance fell from 1493 to 1094.
 //   - pdfcpu pkg_testdata__read.go.pdf: the t2 count that moved away, from 164
-//     to 26 against veraPDF's 324. veraPDF tells the glyphs of its Type 3
-//     fonts apart by the /StructParents of each page that shows them, which
-//     litho does not model, having measured no such split for a simple font.
+//     to 26 against veraPDF's 324, because veraPDF tells the glyphs of its
+//     Type 3 fonts apart by the /StructParents of each page that shows them;
+//     see [structureKey].
 //   - verapdf: the ToUnicode presence counts at PDF/A-1a, PDF/A-2u, PDF/UA-1
 //     and PDF/UA-2, a distance of 27 from veraPDF's, now match them.
 //   - govdocs thread_200_200408.pdf: a ToUnicode count that moved away, from
@@ -303,12 +368,17 @@ func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fon
 			shown = []shownGlyph{{code: judgedGlyph, glyph: judgedGlyph, at: noContext}}
 		}
 		renderedOnly := v.Rule == glyphPresenceRule(profile) || v.Rule == glyphWidthRule(profile)
+		byOwner := v.Rule == toUnicodeRule(profile) || v.Rule == toUnicodeCMapValuesRule(profile)
 		var fresh []shownGlyph
 		for _, g := range shown {
 			if renderedOnly && g.at.mode == invisibleRenderingMode {
 				continue
 			}
-			key := glyphKey{rule: v.Rule, font: fontID, code: g.code, at: g.at}
+			at := g.at
+			if !byOwner {
+				at.owner = 0
+			}
+			key := glyphKey{rule: v.Rule, font: fontID, code: g.code, at: at}
 			if j.glyph[key] {
 				continue
 			}
