@@ -179,6 +179,50 @@ func TestXMPCheckStructFieldNames_ExtensionDeclared(t *testing.T) {
 	}
 }
 
+// TestXMPCheckExtensionValueTypes_ComponentArrayScope pins an array type in a
+// component packet, measured on veraPDF 1.30.2 at PDF/A-2b with a page packet
+// declaring xmpMM:Ingredients a bag of a type it defines itself. veraPDF
+// passes it when the main packet has no extension schema entry for xmpMM, and
+// fails it under 6.6.2.3.1 t2 when it has one: the component entry's validators
+// are a copy of the main entry's, whose array validators look their item type
+// up in the main entry, where the component's type is unknown.
+func TestXMPCheckExtensionValueTypes_ComponentArrayScope(t *testing.T) {
+	t.Parallel()
+
+	const (
+		mmNS  = "http://ns.adobe.com/xap/1.0/mm/"
+		refNS = "http://ns.adobe.com/xap/1.0/sType/ResourceRef#"
+	)
+	component := extProbePacket(extSchemaProbe{
+		ns: mmNS, prefix: "xmpMM",
+		props: [][2]string{{"Ingredients", "bag IngStruct"}},
+		types: []extTypeProbe{{name: "IngStruct", ns: refNS, prefix: "stRef", fields: [][2]string{{"filePath", "Text"}}}},
+	}, ` xmlns:xmpMM="`+mmNS+`" xmlns:stRef="`+refNS+`"`,
+		`<xmpMM:Ingredients><rdf:Bag><rdf:li rdf:parseType="Resource"><stRef:filePath>/a.png</stRef:filePath></rdf:li></rdf:Bag></xmpMM:Ingredients>`)
+	mainWithMM := extProbePacket(extSchemaProbe{ns: mmNS, prefix: "xmpMM", props: [][2]string{{"OriginalDocumentID", "Text"}}}, "", "")
+
+	for _, tc := range []struct {
+		name string
+		main []byte
+		want bool
+	}{
+		{"main packet without an xmpMM entry", nil, false},
+		{"main packet with an xmpMM entry", mainWithMM, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var results []Violation
+			xmpCheckExtensionValueTypes(component, 2, xmpMainExtensionEntries(2, tc.main), nil, &results)
+			if got := hasRule(results, Rule_19005_2_6_6_2_3_1_t02); got != tc.want {
+				t.Errorf("6.6.2.3.1 t2 fired = %v, want %v (%v)", got, tc.want, results)
+			}
+			if got := XMPExtensionPropertyChecker(component, tc.main, 2)(mmNS, "Ingredients"); got == tc.want {
+				t.Errorf("the property checker reports the declaration answered = %v, want %v", got, !tc.want)
+			}
+		})
+	}
+}
+
 // TestXMPCheckExtensionValueTypes_Fonts pins the xmpTPg:Fonts shapes of
 // PDF/A-1, where the XMP 2004 catalog has no Fonts and no Font type, measured
 // on veraPDF 1.30.2 at PDF/A-1b. A bag of stFnt structures passes 6.7.9 t3

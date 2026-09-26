@@ -282,6 +282,36 @@ type xmpExtEntry struct {
 	// textTypes are the types the entry defines with no field, which veraPDF
 	// registers as Text.
 	textTypes map[string]bool
+	// base is the main packet's entry for the same namespace when this one is
+	// a component packet's: veraPDF builds the component entry's validators
+	// on a copy of the main entry's, so the main entry's types resolve here
+	// too, and an array type resolves its items through the main entry alone
+	// (see [xmpValueMatches]).
+	base *xmpExtEntry
+}
+
+// structType returns the structure type t the entry resolves, its own
+// definitions first.
+func (e *xmpExtEntry) structType(t string) (xmpExtType, bool) {
+	if st, ok := e.types[t]; ok {
+		return st, true
+	}
+	if e.textTypes[t] || e.base == nil {
+		return xmpExtType{}, false
+	}
+	return e.base.structType(t)
+}
+
+// textType reports whether t is a type the entry resolves as one defined with
+// no field, which veraPDF registers as Text.
+func (e *xmpExtEntry) textType(t string) bool {
+	if e.textTypes[t] {
+		return true
+	}
+	if _, ok := e.types[t]; ok || e.base == nil {
+		return false
+	}
+	return e.base.textType(t)
 }
 
 // xmpExtEntries reads the pdfaExtension:schemas bags of the packet into the
@@ -289,8 +319,9 @@ type xmpExtEntry struct {
 // veraPDF's SchemasDefinitionCreator puts one definition per namespace. An
 // entry counts only with a namespace URI and a property array, and declares a
 // property only with a type it knows (SchemasDefinition.registerProperty), the
-// first declaration of a name winning.
-func xmpExtEntries(part int, nodes []*XMPNode) map[string]*xmpExtEntry {
+// first declaration of a name winning. inherited holds the main packet's
+// entries when nodes are a component packet's, and nil otherwise.
+func xmpExtEntries(part int, nodes []*XMPNode, inherited map[string]*xmpExtEntry) map[string]*xmpExtEntry {
 	entries := make(map[string]*xmpExtEntry)
 	for _, top := range nodes {
 		if top.NS != xmpPdfaExtensionNamespace || top.Name != "schemas" || !top.isArray() {
@@ -308,6 +339,7 @@ func xmpExtEntries(part int, nodes []*XMPNode) map[string]*xmpExtEntry {
 				types:     make(map[string]xmpExtType),
 				textTypes: make(map[string]bool),
 			}
+			entry.base = inherited[entry.NS]
 			if vtArr := item.field(xmpPdfaSchemaPrefix, "valueType"); vtArr.isArray() {
 				for _, typeNode := range vtArr.Children {
 					entry.registerType(typeNode)
@@ -362,7 +394,7 @@ func (e *xmpExtEntry) registerType(typeNode *XMPNode) {
 // or of the entry.
 func (e *xmpExtEntry) knownType(part int, typ string) bool {
 	t := xmpArrayItemKey(typ)
-	if _, ok := e.types[t]; ok || e.textTypes[t] {
+	if _, ok := e.structType(t); ok || e.textType(t) {
 		return true
 	}
 	return xmpValidatorBuiltin(part, t)
@@ -435,6 +467,13 @@ var (
 // ValidatorsContainer.validate decides it for the declarations of entry at the
 // given part.
 //
+// An array type resolves its item type through entry.base when entry has one:
+// veraPDF's copy of the main entry's validators keeps the main entry's array
+// validators, which look their item types up in the main entry. So a component
+// packet's array of a type only the component packet defines fails there,
+// measured on veraPDF 1.30.2 at PDF/A-2b, while the same array passes in a
+// component packet whose namespace the main packet does not extend.
+//
 // A structure type the part predefines is checked for being a structure only:
 // veraPDF also checks its fields against the type, and reading this looser
 // never reports what veraPDF passes. An XPath is likewise checked for being a
@@ -459,14 +498,18 @@ func xmpValueMatches(n *XMPNode, typ string, entry *xmpExtEntry, part, depth int
 		if n.Kind != a.kind {
 			return false
 		}
+		scope := entry
+		if entry.base != nil {
+			scope = entry.base
+		}
 		for _, c := range n.Children {
-			if !xmpValueMatches(c, item, entry, part, depth+1) {
+			if !xmpValueMatches(c, item, scope, part, depth+1) {
 				return false
 			}
 		}
 		return true
 	}
-	if st, ok := entry.types[t]; ok {
+	if st, ok := entry.structType(t); ok {
 		if n.Kind != XMPStruct {
 			return false
 		}
@@ -478,7 +521,7 @@ func xmpValueMatches(n *XMPNode, typ string, entry *xmpExtEntry, part, depth int
 		}
 		return true
 	}
-	if entry.textTypes[t] {
+	if entry.textType(t) {
 		return n.Kind == XMPSimple
 	}
 	switch t {
@@ -541,7 +584,7 @@ func xmpCheckExtensionValueTypes(packet []byte, part int, inherited map[string]*
 		return
 	}
 	nodes := xmpTopLevelNodes(xmpParseTree(packet))
-	own := xmpExtEntries(part, nodes)
+	own := xmpExtEntries(part, nodes, inherited)
 	if len(own) == 0 && len(inherited) == 0 {
 		return
 	}
@@ -577,8 +620,8 @@ func XMPExtensionPropertyChecker(packet, mainPacket []byte, part int) func(ns, n
 		return func(string, string) bool { return false }
 	}
 	nodes := XMPProperties(packet)
-	own := xmpExtEntries(part, nodes)
 	inherited := xmpMainExtensionEntries(part, mainPacket)
+	own := xmpExtEntries(part, nodes, inherited)
 	return func(ns, name string) bool {
 		if XMPPredefinedProperty(part, ns, name) {
 			return false
@@ -606,7 +649,7 @@ func xmpExtensionDeclared(part int, packet []byte, inherited map[string]*xmpExtE
 	if part < 1 || part > 3 {
 		return func(string, string) bool { return false }
 	}
-	own := xmpExtEntries(part, XMPProperties(packet))
+	own := xmpExtEntries(part, XMPProperties(packet), inherited)
 	return func(ns, name string) bool {
 		if XMPPredefinedProperty(part, ns, name) {
 			return false
@@ -653,5 +696,5 @@ func xmpMainExtensionEntries(part int, packet []byte) map[string]*xmpExtEntry {
 	if part != 2 && part != 3 || len(packet) == 0 {
 		return nil
 	}
-	return xmpExtEntries(part, xmpTopLevelNodes(xmpParseTree(packet)))
+	return xmpExtEntries(part, xmpTopLevelNodes(xmpParseTree(packet)), nil)
 }
