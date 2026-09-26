@@ -3,7 +3,6 @@ package remediation
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -91,23 +90,6 @@ func TestRepairContentDataKeepsEscapedNames(t *testing.T) {
 	if !sameOperations(after, before[:len(before)-1]) {
 		t.Errorf("the rewrite %q parsed back to\n  %v\nwant\n  %v", out, after, before[:len(before)-1])
 	}
-}
-
-// sameOperations reports whether a and b hold the same operators with the same
-// operands, an empty operand list matching a nil one.
-func sameOperations(a, b []content.Operation) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i].Operator != b[i].Operator || len(a[i].Operands) != len(b[i].Operands) {
-			return false
-		}
-		if len(a[i].Operands) > 0 && !reflect.DeepEqual(a[i].Operands, b[i].Operands) {
-			return false
-		}
-	}
-	return true
 }
 
 // TestSerializeOpsRefusesANameHoldingNull pins the one name no spelling

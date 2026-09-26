@@ -190,32 +190,28 @@ func TestFixUnknownOps_KeepsTheOperandsOfTheNextOperator(t *testing.T) {
 	}
 }
 
-// TestFixUnknownOps_LeavesAnInlineImageStreamItCannotSerialize pins the
-// residual: removing an operator re-serializes the parsed operations, which
-// keep an inline image's dictionary and drop its data, so a stream holding one
-// is not rewritten for an operator. An exponent in it is still rewritten,
-// since that splices the token and carries the image bytes across.
-func TestFixUnknownOps_LeavesAnInlineImageStreamItCannotSerialize(t *testing.T) {
+// TestFixUnknownOps_SplicesAnInlineImageStream pins that a stream holding an
+// inline image is repaired in place: removing an operator used to
+// re-serialize the parsed operations, which keep an inline image's dictionary
+// and drop its data, so such a stream kept its undefined operators. The
+// operator now goes where it stands and the image bytes are carried across,
+// and an exponent beside it is still rewritten.
+func TestFixUnknownOps_SplicesAnInlineImageStream(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
 	image := "q BI /W 1 /H 1 /BPC 8 /CS /G ID \x80 EI Q"
-
-	doc, alloc := newTestDoc(t, exponentPagePDF(image+" foo 1 0 0 RG", "", "", ""))
-	if _, err := fixUnknownOps(ctx, alloc, doc, Options{}, nil, "PDF/A-2b"); err != nil {
-		t.Fatalf("fixUnknownOps: %v", err)
-	}
-	if got, rewritten := alloc.Pending()[4]; rewritten {
-		body, _ := got.(ast.PdfStream).Bytes(ctx)
-		t.Errorf("the page was re-serialized to %q, which loses the inline image", body)
-	}
-
-	doc, alloc = newTestDoc(t, exponentPagePDF(image+" foo 1e1 w", "", "", ""))
-	if _, err := fixUnknownOps(ctx, alloc, doc, Options{}, nil, "PDF/A-2b"); err != nil {
-		t.Fatalf("fixUnknownOps: %v", err)
-	}
-	if got, want := string(bytes.TrimSpace(pendingStreamBytes(t, alloc, 4))), image+" foo 1 w"; got != want {
-		t.Errorf("page = %q, want %q", got, want)
+	for _, tc := range []struct{ content, want string }{
+		{image + " foo 1 0 0 RG", image + "  1 0 0 RG"},
+		{image + " foo 1e1 w", image + "  1 w"},
+	} {
+		ctx := context.Background()
+		doc, alloc := newTestDoc(t, exponentPagePDF(tc.content, "", "", ""))
+		if _, err := fixUnknownOps(ctx, alloc, doc, Options{}, nil, "PDF/A-2b"); err != nil {
+			t.Fatalf("fixUnknownOps: %v", err)
+		}
+		if got := string(bytes.TrimSpace(pendingStreamBytes(t, alloc, 4))); got != tc.want {
+			t.Errorf("page = %q, want %q", got, tc.want)
+		}
 	}
 }
 

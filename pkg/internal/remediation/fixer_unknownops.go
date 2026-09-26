@@ -207,10 +207,23 @@ func fixUnknownOps(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // operations, which cannot round-trip an inline image: the parser consumes its
 // data off-token, so the BI operation keeps its dictionary alone, and writing
 // it back leaves "<< ... >> BI" with no ID, data or EI, a content stream no
-// reader can parse (ISO 32000-1, 8.9.7). Such a
-// stream keeps its operators and malformed numbers as a reported residual, as
-// [fixContentStreams] keeps them. So does a stream holding a name with a NUL
-// byte, which [serializeOps] has no conforming spelling for.
+// reader can parse (ISO 32000-1, 8.9.7). A stream holding one has the repairs
+// spliced in place of the operations they change instead, and its images
+// carried across byte for byte ([spliceRepairedOperations]). It used to keep
+// its operators and malformed numbers as a reported residual, as
+// [fixContentStreams] keeps them, and still does where the splice cannot
+// stand. So does a stream holding a name with a NUL byte, which
+// [serializeOps] has no conforming spelling for.
+//
+// # Corpus evidence
+//
+//   - All corpora: 132 files draw inline images, and one holds a stream the
+//     repair changes beside one: pdfjs poppler-90-0-fuzzed.pdf, a fuzzed Type
+//     3 glyph that writes a garbled operator and "-5cm" ahead of its image.
+//     Its PDF/A-1b, PDF/A-2b and PDF/A-4 remediations, default and
+//     aggressive, now remove both, which neither validator judges in that
+//     glyph: the findings of litho and veraPDF 1.30, the extracted text, the
+//     images and the bytes of its 36 inline images do not change.
 func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unknownOpsTally) {
 	var t unknownOpsTally
 	data, t.exponents = rewriteExponentNumbers(ctx, data, part)
@@ -236,14 +249,35 @@ func repairContentData(ctx context.Context, data []byte, part int) ([]byte, unkn
 	t.repaired = folded + nested + split
 	ops, t.separated, t.removed = dropUndefinedOperators(ops)
 	t.delimited, t.strays = delimitedOperators(ctx, data)
-	hasInlineImage := slices.ContainsFunc(ops, func(op content.Operation) bool { return op.Operator == "BI" })
-	if (t.removed == 0 && folded == 0 && t.separated == 0 && t.delimited == 0 && t.strays == 0) || hasInlineImage {
+	if t.removed == 0 && folded == 0 && t.separated == 0 && t.delimited == 0 && t.strays == 0 {
 		return spliced()
+	}
+	if slices.ContainsFunc(ops, func(op content.Operation) bool { return op.Operator == "BI" }) {
+		return spliceInlineImageStream(ctx, parsed, t, nested+split, spliced)
 	}
 	out, err := serializeOps(filterOps(ops))
 	if err != nil {
 		return spliced()
 	}
+	return out, t
+}
+
+// spliceInlineImageStream is the end of [repairContentData] for a stream that
+// holds an inline image: the repairs are spliced in place of the operations
+// they change ([spliceRepairedOperations]), and what they changed is counted
+// from the splice and from what validation reads in the spliced stream. A
+// splice that cannot stand leaves the stream to the token splices, spliced.
+// runs counts the malformed numbers of arrays and dictionaries parsed already
+// holds respelled.
+func spliceInlineImageStream(ctx context.Context, parsed []byte, t unknownOpsTally, runs int, spliced func() ([]byte, unknownOpsTally)) ([]byte, unknownOpsTally) {
+	out, s, ok := spliceRepairedOperations(ctx, parsed)
+	if !ok {
+		return spliced()
+	}
+	delimited, strays := delimitedOperators(ctx, out)
+	t.repaired = s.folded + runs
+	t.separated, t.removed = s.separated, s.removed
+	t.delimited, t.strays = max(t.delimited-delimited, 0), max(t.strays-strays, 0)
 	return out, t
 }
 
