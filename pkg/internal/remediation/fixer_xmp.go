@@ -299,6 +299,19 @@ func fallbackDocTitle(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 	return title
 }
 
+// generateXMP writes the catalog XMP packet of a document that carries none:
+// the identification schemas the profile claims and the analogues of the /Info
+// entries, which ISO 19005-1, 6.7.3 requires equivalent to them.
+//
+// # Corpus evidence
+//
+//   - govdocs: 7 of 90 sampled files carry an empty /Keywords and no packet,
+//     and took a second PDF/A-1b round, default and aggressive alike, for the
+//     pdf:Keywords alone. One round now repairs them to the same residual.
+//   - pdfjs issue11004.pdf and issue14203.pdf, pdfcpu
+//     pkg_testdata__ECSTR11-01.pdf: the same at PDF/A-1b.
+//   - govdocs thread_400_400393, pdfjs issue14203.pdf and pdfcpu
+//     pkg_testdata__ECSTR11-01.pdf: took the second round at PDF/UA-1 too.
 func generateXMP(part int, conformance string, uaPart int, info infoMetadata) string {
 	title := xmlEscape(info.Title)
 	if title == "" {
@@ -370,7 +383,11 @@ func generateXMP(part int, conformance string, uaPart int, info infoMetadata) st
 		}
 	}
 	fmt.Fprintf(&sb, "  <pdf:Producer>%s</pdf:Producer>\n", producer)
-	if info.Keywords != "" {
+	// A present-but-empty /Keywords needs its pdf:Keywords too, for the reason
+	// syncInfoIntoXMP gives: ISO 19005-1, 6.7.3 keys on the entry being
+	// present. Generating the packet without it left the file failing 6.7.3
+	// test 5 until a second remediation round synced the empty value in.
+	if info.Keywords != "" || info.Present["Keywords"] {
 		fmt.Fprintf(&sb, "  <pdf:Keywords>%s</pdf:Keywords>\n", xmlEscape(info.Keywords))
 	}
 

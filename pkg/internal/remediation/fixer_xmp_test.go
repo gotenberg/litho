@@ -250,6 +250,29 @@ func TestPatchExistingXMP_SyncsEmptyKeywords(t *testing.T) {
 	}
 }
 
+// TestGenerateXMP_WritesEmptyKeywords pins that a generated packet carries the
+// pdf:Keywords of a present-but-empty /Keywords, as the sync above writes it
+// into an existing packet (ISO 19005-1, 6.7.3 test 5). The generated packet
+// left it out, and only a second remediation round, patching that packet,
+// added it. An absent /Keywords still adds nothing.
+func TestGenerateXMP_WritesEmptyKeywords(t *testing.T) {
+	t.Parallel()
+
+	packet := []byte(generateXMP(1, "B", 0, infoMetadata{Present: map[string]bool{"Keywords": true}}))
+	loc := findXMPProperty(packet, pdfNS, "Keywords")
+	if loc.Form == xmpPropertyNotFound {
+		t.Fatalf("no pdf:Keywords for a present /Keywords:\n%s", packet)
+	}
+	if got := xmpPropertyRawValue(packet, loc); got != "" {
+		t.Errorf("pdf:Keywords = %q, want the empty /Keywords", got)
+	}
+
+	absent := []byte(generateXMP(1, "B", 0, infoMetadata{Present: map[string]bool{}}))
+	if findXMPProperty(absent, pdfNS, "Keywords").Form != xmpPropertyNotFound {
+		t.Errorf("an absent /Keywords must add no pdf:Keywords:\n%s", absent)
+	}
+}
+
 // TestPatchExistingXMP_StripsPdfaidRevForParts1to3 pins the rev removal
 // when retargeting a PDF/A-4 document to parts 1-3: pdfaid:rev belongs
 // to the PDF/A-4 identification schema only. Under parts 1-3 the property
