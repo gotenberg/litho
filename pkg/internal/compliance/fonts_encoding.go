@@ -169,6 +169,17 @@ func standardLatinEncodingApplies(ctx context.Context, doc *document.Document, f
 //     Arial too, and 0x7F and 0x81, which it maps to bullet, pass; through a
 //     symbolic TrueType Arial code 1 passes and code 0 fails. Under
 //     /MacRomanEncoding 0x80 passes.
+//
+// # Corpus evidence
+//
+//   - pdfjs poppler-90-0-fuzzed.pdf: shows codes StandardEncoding leaves
+//     undefined through an unembedded Times-Roman under a /Differences-only
+//     encoding and an unembedded Times-Bold under none, both with no
+//     /FontDescriptor. litho stated ISO 19005-2, 6.2.11.8 t1 8 times at
+//     PDF/A-2b and PDF/A-2u, and now 22, veraPDF's count.
+//   - All corpora, at PDF/A-2b and PDF/A-2u, and at their own profile for
+//     the verapdf files: no other count moved. litho fontclaims_2b.pdf shows
+//     a control code through an unembedded Helvetica.
 func checkUnembeddedNotdef(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, subtype, fontName string, pageNum int, faults *glyphFaults, usage *fontUsageInfo) {
 	trueType := subtype == "TrueType"
 	table := type1EncodingTable(ctx, doc, fontDict)

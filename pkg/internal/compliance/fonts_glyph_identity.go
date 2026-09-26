@@ -706,6 +706,13 @@ func (j *fontJudgements) claimPaintReads(ctx context.Context, doc *document.Docu
 // before the page text, or whose cell draws a form showing the CID, claims
 // its fonts where it is painted, as does page text painted with it, after its
 // own glyphs; n, W n, S after scn and f after SCN paint nothing with it.
+//
+// # Corpus evidence
+//
+//   - All corpora, at PDF/A-1b, PDF/A-2b and PDF/A-2u, and at their own
+//     profile for the verapdf files: claiming where a pattern is painted, and
+//     where a Type 3 glyph is shown ([fontJudgements.claimType3Reads]), moves
+//     no count. litho fontclaims_2b.pdf plants both.
 func (j *fontJudgements) claimPatternReads(ctx context.Context, doc *document.Document, walk claimWalk, patternRef ast.PdfObject, depth int) {
 	if patternRef == nil {
 		return

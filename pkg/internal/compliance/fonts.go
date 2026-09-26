@@ -628,6 +628,17 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 // 6.2.11.4.1 t2 once, where a form the page draws shows the Type 3 glyph; and
 // the cell's glyph fails the .notdef rule where a Type 3 glyph procedure or an
 // annotation's appearance stream paints with the pattern.
+//
+// # Corpus evidence
+//
+//   - pdfjs ContentStreamCycleType3insideType3.pdf: a Type 3 procedure paints
+//     text with a pattern whose cell shows the same Type 3 font again.
+//     Judging the cell's glyphs of that font raised ISO 19005-2, 6.2.11.7.2
+//     t1 at PDF/A-2u from 3 to 5 against veraPDF's 3, which judging none of
+//     them there keeps at 3 ([checkType3CharProcFonts]).
+//   - All corpora, at PDF/A-1b, PDF/A-2b and PDF/A-2u, and at their own
+//     profile for the verapdf files: reaching the fonts of these streams moves
+//     no other count. litho fontclaims_2b.pdf shows a Type 3 glyph in a form.
 func checkDrawnStreamFonts(ctx context.Context, doc *document.Document, ops []content.Operation, res ast.PdfDict, site showSite, treeRoot ast.PdfDict, pageNum int, profile string, judged *fontJudgements, visited map[int]bool, depth int) []Violation {
 	results := checkFormXObjectFonts(ctx, doc, ops, site.mode, res, treeRoot, pageNum, profile, judged, visited, depth)
 	results = append(results, checkPatternFonts(ctx, doc, ops, res, treeRoot, pageNum, profile, judged, visited, depth)...)

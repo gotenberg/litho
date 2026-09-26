@@ -1471,6 +1471,24 @@ func checkType2MissingGlyphWidths(ctx context.Context, doc *document.Document, c
 //
 // nameKeyed reports the second kind, and defaultWidthX is then the default
 // width of its Private DICT, in font units.
+//
+// Deliberate divergence: CID 0 of a name-keyed program is glyph index 0, the
+// .notdef glyph, and litho states ISO 19005-2, 6.2.11.8 t1 for it
+// ([checkType0NotdefGlyph]). veraPDF reads CID 0 of such a program through the
+// program's own encoding instead, by the code that selects it
+// (PDCIDFont.glyphIsPresent, CFFType1FontProgram.containsCode), and finds
+// the name .notdef, which its charset holds, so it passes the code. Measured
+// with veraPDF 1.30 at PDF/A-2b on <0000> under Identity-H: the .notdef rule
+// passes, and a /W width other than glyph 0's advance fails the width rule.
+//
+// # Corpus evidence
+//
+//   - pdfjs bug816075.pdf, bug898853.pdf, bug921409.pdf, issue17689.pdf and
+//     issue9534_reduced.pdf: embed a name-keyed program under a CIDFontType0,
+//     as issue20426.pdf, issue5334.pdf, issue6782.pdf and issue7901.pdf do
+//     inside OpenType, and none shows a CID past its program, so no count
+//     moves at PDF/A-1b, PDF/A-2b or PDF/A-2u. litho fontclaims_2b.pdf shows
+//     one.
 func cidFontType0Glyphs(fontData []byte) (holds func(cid uint16) bool, nameKeyed bool, defaultWidthX float64, ok bool) {
 	if charset := typography.ExtractValidCIDs(fontData); charset != nil {
 		return func(cid uint16) bool { return charset[cid] }, false, 0, true
