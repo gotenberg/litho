@@ -85,7 +85,7 @@ func TestXMPPropertyAttributes_FieldsAreStillAudited(t *testing.T) {
     </rdf:Description>`)
 
 	var got []Violation
-	xmpCheckStructFieldNames(data, 2, &got)
+	xmpCheckStructFieldNames(data, 2, nil, &got)
 	if !hasRule(got, Rule_19005_2_6_6_2_3_1_t02) {
 		t.Errorf("an undefined field written as an attribute must report, got %v", got)
 	}
@@ -117,7 +117,7 @@ func TestXMPPropertyAttributes_FieldsInsideAnArrayAreAudited(t *testing.T) {
     </rdf:Description>`)
 
 	var got []Violation
-	xmpCheckStructFieldNames(data, 2, &got)
+	xmpCheckStructFieldNames(data, 2, nil, &got)
 	if !hasRule(got, Rule_19005_2_6_6_2_3_1_t02) {
 		t.Errorf("an undefined field on an array item must report, got %v", got)
 	}
@@ -142,7 +142,7 @@ func TestXMPPropertyAttributes_DefinedArrayFieldsStaySilent(t *testing.T) {
     </rdf:Description>`)
 
 	var got []Violation
-	xmpCheckStructFieldNames(data, 2, &got)
+	xmpCheckStructFieldNames(data, 2, nil, &got)
 	if len(got) != 0 {
 		t.Errorf("defined event fields must stay silent, got %v", got)
 	}
@@ -160,7 +160,7 @@ func TestXMPPropertyAttributes_DefinedFieldsStaySilent(t *testing.T) {
     </rdf:Description>`)
 
 	var got []Violation
-	xmpCheckStructFieldNames(data, 2, &got)
+	xmpCheckStructFieldNames(data, 2, nil, &got)
 	if len(got) != 0 {
 		t.Errorf("defined fields written as attributes must stay silent, got %v", got)
 	}

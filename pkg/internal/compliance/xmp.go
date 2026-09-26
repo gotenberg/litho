@@ -207,7 +207,8 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// 19005-2/3 §6.6.2.1 t2..t5), so they run over every other metadata
 	// stream too. Independent of the catalog packet: a file whose catalog
 	// packet is absent still has to carry well-formed page packets.
-	results = append(results, xmpCheckOtherPackets(ctx, doc, catalog, part, mainExtensionNS, pooledProps)...)
+	mainEntries := xmpMainExtensionEntries(part, xmpData)
+	results = append(results, xmpCheckOtherPackets(ctx, doc, catalog, part, mainExtensionNS, pooledProps, mainEntries)...)
 
 	// §6.7.3 compares the document information dictionary against XMP, and a
 	// document carrying no metadata stream at all is one of the ways the two can
@@ -301,7 +302,7 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	}
 
 	// Extension property valueType correspondence (§6.6.2.3.1 t02).
-	xmpCheckExtensionPropertyTypes(xmpData, part, &results)
+	unresolved := xmpCheckExtensionPropertyTypes(xmpData, part, &results)
 
 	if ctx.Err() != nil {
 		return results
@@ -310,6 +311,12 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// Usage-side value-type resolution for extension-declared namespaces
 	// (§6.7.9 t3 / §6.6.2.3.1 t2).
 	xmpCheckExtensionPropertyResolution(xmpData, part, &results)
+
+	// The value of each extension-declared property against its declared type
+	// (§6.7.9 t3 / §6.6.2.3.1 t2), a property-level audit of a parsed packet.
+	if packetParses {
+		xmpCheckExtensionValueTypes(xmpData, part, nil, unresolved, &results)
+	}
 
 	if ctx.Err() != nil {
 		return results
@@ -346,7 +353,7 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	// Structured value-type field names (§6.7.9 t3 / §6.6.2.3.1 t2), gated like
 	// every property-level audit, as xmpCheckOtherPackets already gates it.
 	if packetParses {
-		xmpCheckStructFieldNames(xmpData, part, &results)
+		xmpCheckStructFieldNames(xmpData, part, xmpExtensionDeclared(part, xmpData, nil), &results)
 	}
 
 	doc.Logger.Debug("compliance.xmp: XMP checks complete", "violations", len(results))
@@ -455,7 +462,7 @@ const maxXMPContainerDepth = 32
 //     define. litho reported it while the packet sat in the catalog and fell
 //     silent once remediation moved the same bytes into an object-level
 //     stream, which is why the field-name audit runs on every packet.
-func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, mainExtensionNS map[string]bool, pooled map[string]map[string]bool) []Violation {
+func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, mainExtensionNS map[string]bool, pooled map[string]map[string]bool, mainEntries map[string]*xmpExtEntry) []Violation {
 	if part == 1 {
 		return nil
 	}
@@ -493,9 +500,10 @@ func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog a
 		if len(serialization) == 0 {
 			xmpCheckPredefinedProperties(ctx, data, part, mainExtensionNS, pooled, &packet)
 			xmpCheckPropertyTypes(data, part, ast.PdfStream{}, mainExtensionNS, &packet)
+			xmpCheckExtensionValueTypes(data, part, mainEntries, nil, &packet)
 			// The structured value-type field names are a property-level audit
 			// too, so they answer for every packet by the same clause.
-			xmpCheckStructFieldNames(data, part, &packet)
+			xmpCheckStructFieldNames(data, part, xmpExtensionDeclared(part, data, mainEntries), &packet)
 		}
 
 		for _, v := range packet {
@@ -3281,11 +3289,14 @@ func xmpParseExtensionSchemas(data []byte) []xmpExtSchemaDef {
 
 // xmpCheckExtensionPropertyTypes flags an extension-schema property whose
 // declared valueType resolves to neither a predefined XMP type nor a custom
-// value type that declares fields, but only when the property is actually used
+// value type the packet defines, but only when the property is actually used
 // in the packet. ISO 19005-2/3 §6.6.2.3.1 t2 is an XMPProperty (usage) rule,
-// so a fieldless declaration with no usage is compliant. Gating on usage stops
-// a remediated declaration whose usage was removed from reporting a false
-// positive.
+// so a declaration with no usage is compliant. Gating on usage stops a
+// remediated declaration whose usage was removed from reporting a false
+// positive. A custom type defined with no field is Text, as veraPDF registers
+// it, and whether a value matches it is [xmpCheckExtensionValueTypes]'s to
+// judge. It returns the properties it reported, so that function states the
+// rule no second time for them.
 //
 // # Corpus evidence
 //
@@ -3296,24 +3307,26 @@ func xmpParseExtensionSchemas(data []byte) []xmpExtSchemaDef {
 //     matches both verdicts.
 //   - All corpora, 798-cell pool: the literal-string same-schema type lookup
 //     produced phantom findings against pdfd:declarations.
-func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation) {
+func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation) map[[2]string]bool {
 	schemas := xmpParseExtensionSchemas(data)
 
-	// A custom type counts as resolvable only when it declares fields: a
-	// fieldless declaration cannot satisfy a struct-valued usage. The declared
-	// valueType may wrap the custom element type in a container keyword ("Bag
-	// declaration" declares a bag of the custom type "declaration"), and the
-	// type definition may live in any schema entry of the packet, so the lookup
-	// strips the container prefix and searches every schema.
+	// A custom type counts as resolvable whether or not it declares fields:
+	// veraPDF's ValidatorsContainerCreator.registerTypeNode registers a
+	// fieldless one as Text, measured on veraPDF 1.30.2 at PDF/A-2b, where a
+	// simple value of such a type passes 6.6.2.3.1 t2 and a structure fails
+	// it. The declared valueType may wrap the custom element type in a
+	// container keyword ("Bag declaration" declares a bag of the custom type
+	// "declaration"), and the type definition may live in any schema entry of
+	// the packet, so the lookup strips the container prefix and searches every
+	// schema.
 	allTypes := make(map[string]bool)
 	for _, s := range schemas {
-		for name, hasFields := range s.typeFields {
-			if hasFields {
-				allTypes[name] = true
-			}
+		for name := range s.typeFields {
+			allTypes[name] = true
 		}
 	}
 	used := xmpExtractPropertyValues(data)
+	reported := make(map[[2]string]bool)
 	for _, s := range schemas {
 		// Sorted: these become report lines, and ranging the map emitted the
 		// same set of violations in a different order on every run.
@@ -3330,8 +3343,10 @@ func xmpCheckExtensionPropertyTypes(data []byte, part int, results *[]Violation)
 			}
 			*results = append(*results, xmpPropertyTypeRule(part, s.nsURI, pName,
 				fmt.Sprintf("does not correspond to type %s", vt))...)
+			reported[[2]string{s.nsURI, pName}] = true
 		}
 	}
+	return reported
 }
 
 // xmpCheckExtensionPropertyResolution resolves the value type of every
@@ -3358,7 +3373,19 @@ func xmpCheckExtensionPropertyResolution(data []byte, part int, results *[]Viola
 		}
 	}
 	// Sorted for the same reason: both the namespaces and the properties
-	// within each reach the report, so both walks have to be ordered.
+	// within each reach the report, so both walks have to be ordered. Only a
+	// top-level property resolves through a schema entry: the field of a
+	// structure written as a nested rdf:Description resolves through its
+	// structure's type, and xmpExtractPropertyValues records it too. Measured
+	// on veraPDF 1.30.2 at PDF/A-2b, a declared property holding such a
+	// structure, its fields in the property's own namespace, passes.
+	topLevel := make(map[string]map[string]bool)
+	for _, p := range xmpExtractTopLevelProperties(data) {
+		if topLevel[p.ns] == nil {
+			topLevel[p.ns] = make(map[string]bool)
+		}
+		topLevel[p.ns][p.name] = true
+	}
 	byNS := xmpExtractPropertyValues(data)
 	for _, ns := range slices.Sorted(maps.Keys(byNS)) {
 		props := byNS[ns]
@@ -3371,6 +3398,9 @@ func xmpCheckExtensionPropertyResolution(data []byte, part int, results *[]Viola
 		// catalog even when an extension schema declares the same URI.
 		predefined := xmpPropertyRegistry[ns]
 		for _, prop := range slices.Sorted(maps.Keys(props)) {
+			if !topLevel[ns][prop] {
+				continue
+			}
 			if _, ok := declared[prop]; ok {
 				continue
 			}
@@ -3774,13 +3804,22 @@ var xmpStructTypeFields = map[string]map[string]bool{
 // attributed to the enclosing top-level property, matching veraPDF's context
 // node; [xmpPropertyTypeRule] returns nil for part 4, which drops the requirement.
 //
+// A property an extension schema declares, which declared reports, is judged
+// against the type its declaration gives it instead ([xmpCheckExtensionValueTypes]),
+// whatever namespace its fields live in: veraPDF validates it through the
+// declared type alone. A nil declared declares nothing.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue13971.pdf: writes both attribute forms, <xmpMM:DerivedFrom
 //     stRef:originalDocumentID=".."/> and an xmpMM:History whose events
 //     carry stEvt:changed, and veraPDF reports each against its enclosing
 //     property.
-func xmpCheckStructFieldNames(data []byte, part int, results *[]Violation) {
+//   - pdfjs cmykjpeg.pdf and S2.pdf: remediated at PDF/A-1b, the output
+//     declares xmpMM:Manifest, which the XMP 2004 catalog does not define,
+//     with a type holding its stRef:filePath field. veraPDF 1.30.2 passes
+//     the output, and litho reported the field as no member of ResourceRef.
+func xmpCheckStructFieldNames(data []byte, part int, declared func(ns, name string) bool, results *[]Violation) {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	decoder.CharsetReader = xmpPassThroughCharset
 	decoder.Strict = false
@@ -3792,7 +3831,7 @@ func xmpCheckStructFieldNames(data []byte, part int, results *[]Violation) {
 
 	flag := func(ns, local, field string) {
 		key := ns + " " + local
-		if flagged[key] {
+		if flagged[key] || declared != nil && declared(ns, local) {
 			return
 		}
 		flagged[key] = true

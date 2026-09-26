@@ -60,8 +60,9 @@ func TestXMPExtensionPropertyTypes_FieldlessTypeUnused(t *testing.T) {
 }
 
 // TestXMPExtensionPropertyTypes_FieldlessTypeUsed is the positive control: when
-// fs:property1 is used, the fieldless type cannot satisfy the usage and the
-// property fails §6.6.2.3.1 t2.
+// fs:property1 is used as a structure, the fieldless type, which is Text,
+// cannot satisfy the usage and the property fails §6.6.2.3.1 t2, stated once
+// by the two checks together.
 //
 // # Corpus evidence
 //
@@ -76,9 +77,11 @@ func TestXMPExtensionPropertyTypes_FieldlessTypeUsed(t *testing.T) {
       </fs:property1>
     </rdf:Description>`
 	var got []Violation
-	xmpCheckExtensionPropertyTypes(extSchemaFieldlessType(usage), 2, &got)
-	if !hasRule(got, Rule_19005_2_6_6_2_3_1_t02) {
-		t.Errorf("used fieldless value type must fail §6.6.2.3.1 t2: %v", got)
+	packet := extSchemaFieldlessType(usage)
+	reported := xmpCheckExtensionPropertyTypes(packet, 2, &got)
+	xmpCheckExtensionValueTypes(packet, 2, nil, reported, &got)
+	if n := countRule(got, Rule_19005_2_6_6_2_3_1_t02); n != 1 {
+		t.Errorf("used fieldless value type must fail §6.6.2.3.1 t2 once, got %d: %v", n, got)
 	}
 }
 
@@ -101,13 +104,13 @@ func TestXMPStructFieldNames_ResourceEventBadField(t *testing.T) {
     </rdf:Description>`)
 
 	var got []Violation
-	xmpCheckStructFieldNames(data, 2, &got)
+	xmpCheckStructFieldNames(data, 2, nil, &got)
 	if !hasRule(got, Rule_19005_2_6_6_2_3_1_t02) {
 		t.Errorf("stEvt:When (member is stEvt:when) must fail §6.6.2.3.1 t2: %v", got)
 	}
 
 	var got4 []Violation
-	xmpCheckStructFieldNames(data, 4, &got4)
+	xmpCheckStructFieldNames(data, 4, nil, &got4)
 	if len(got4) != 0 {
 		t.Errorf("part 4 drops struct-field validation: %v", got4)
 	}
@@ -138,7 +141,7 @@ func TestXMPStructFieldNames_ValidStructsPass(t *testing.T) {
     </rdf:Description>`)
 
 	var got []Violation
-	xmpCheckStructFieldNames(data, 2, &got)
+	xmpCheckStructFieldNames(data, 2, nil, &got)
 	if len(got) != 0 {
 		t.Errorf("valid struct fields must not be flagged: %v", got)
 	}
@@ -158,7 +161,7 @@ func TestXMPStructFieldNames_UnknownNamespaceIgnored(t *testing.T) {
     </rdf:Description>`)
 
 	var got []Violation
-	xmpCheckStructFieldNames(data, 2, &got)
+	xmpCheckStructFieldNames(data, 2, nil, &got)
 	if len(got) != 0 {
 		t.Errorf("non-value-type namespace fields must be ignored here: %v", got)
 	}

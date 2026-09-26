@@ -79,7 +79,7 @@ func FuzzXMPChecks(f *testing.F) {
 			xmpCheckPacketHeader(data, part, &results)
 			_ = xmpPacketSerializationValidity(data, part)
 			xmpCheckNamespaces(data, part, &results)
-			xmpCheckStructFieldNames(data, part, &results)
+			xmpCheckStructFieldNames(data, part, nil, &results)
 			xmpCheckPropertyTypes(data, part, ast.PdfStream{}, nil, &results)
 			xmpCheckPredefinedProperties(ctx, data, part, nil, nil, &results)
 			xmpCheckExtensionSchemas(ctx, data, part, &results)
