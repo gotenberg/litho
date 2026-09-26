@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -88,9 +89,11 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 // strings every text-showing operator (Tj, TJ, ' and ") shows, and drops an
 // operator whose string it empties, keeping the line move and spacing a ' or "
 // sets and the position moves a TJ's numbers make (see [emptiedShowEffect]).
-// Every byte it removes counts as an edit.
-// It tracks the text font the strings are shown with, which the guard for a
-// composite font reads.
+// A glyph it removes keeps the room it took on the line (see
+// [controlByteStripper.keepAdvances]). Every byte it removes counts as an
+// edit. It tracks the text font the strings are shown with, which the guard
+// for a composite font reads, and the font size and character spacing the
+// room of a removed glyph depends on.
 //
 // # Corpus evidence
 //
@@ -104,19 +107,29 @@ func fixTextControl(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 type controlByteStripper struct {
 	fonts       map[string]textFontInfo
 	currentFont string
-	// fontStack holds the fonts q saved. The text font is part of the
+	// fontSize is the size Tf sets and charSpacing the spacing Tc and " set,
+	// both text state parameters starting at the page's defaults, unset and
+	// 0 (ISO 32000-1, 9.3.1, Table 104).
+	fontSize, charSpacing float64
+	// saved holds the text state q saved. The text state is part of the
 	// graphics state, so Q restores it (ISO 32000-1, 8.4.2 and Table 104).
-	// currentFont is the only state this repair carries, so one stack covers
-	// it; enumerate before you fix, because a font-only restore in tagging's
-	// collector missed the leading it also tracked and cost a second commit.
+	// Enumerate before you fix: a font-only restore in tagging's collector
+	// missed the leading it also tracked and cost a second commit.
 	//
-	// Both directions are wrong without it, and both were measured. A simple
-	// font selected inside q…Q outliving the Q makes the composite guard
-	// consult the wrong name and STRIP a multi-byte string: the CIDs
+	// Both directions are wrong without the font, and both were measured. A
+	// simple font selected inside q…Q outliving the Q makes the composite
+	// guard consult the wrong name and STRIP a multi-byte string: the CIDs
 	// <0041 0020 0042> came back as "A B", their 0x00 high bytes eaten. A
 	// composite font outliving the Q does the opposite and SKIPS a simple
 	// string whose control byte should have gone.
-	fontStack []string
+	saved []strippedTextState
+}
+
+// strippedTextState is the text state a [controlByteStripper] carries, as q
+// saves it.
+type strippedTextState struct {
+	font                  string
+	fontSize, charSpacing float64
 }
 
 // repair returns op with the control bytes of its strings removed, only what
@@ -131,12 +144,26 @@ func (s *controlByteStripper) repair(op content.Operation) ([]content.Operation,
 				s.currentFont = string(name)
 			}
 		}
+		if len(op.Operands) > 1 {
+			s.fontSize = document.Float(op.Operands[1])
+		}
+	case "Tc":
+		if len(op.Operands) > 0 {
+			s.charSpacing = document.Float(op.Operands[0])
+		}
+	case "\"":
+		// aw ac string " sets the character spacing to ac before it shows
+		// the string (ISO 32000-1, 9.4.3, Table 109).
+		if n := len(op.Operands); n >= 3 {
+			s.charSpacing = document.Float(op.Operands[n-2])
+		}
 	case "q":
-		s.fontStack = append(s.fontStack, s.currentFont)
+		s.saved = append(s.saved, strippedTextState{font: s.currentFont, fontSize: s.fontSize, charSpacing: s.charSpacing})
 	case "Q":
-		if n := len(s.fontStack); n > 0 {
-			s.currentFont = s.fontStack[n-1]
-			s.fontStack = s.fontStack[:n-1]
+		if n := len(s.saved); n > 0 {
+			st := s.saved[n-1]
+			s.currentFont, s.fontSize, s.charSpacing = st.font, st.fontSize, st.charSpacing
+			s.saved = s.saved[:n-1]
 		}
 	}
 	keep := []content.Operation{op}
@@ -189,13 +216,132 @@ func (s *controlByteStripper) repair(op content.Operation) ([]content.Operation,
 		}
 		operands[j] = cleaned
 	}
-	switch {
-	case removed == 0:
+	if removed == 0 {
 		return keep, 0
-	case emptied:
+	}
+	if kept, ok := s.keepAdvances(op, info); ok {
+		return kept, removed
+	}
+	if emptied {
 		return emptiedShowEffect(op, operands), removed
 	}
 	return []content.Operation{{Operator: op.Operator, Operands: operands}}, removed
+}
+
+// keepAdvances returns the operations that show what op shows less the
+// glyphs the strip removes, each removed glyph's room on the line kept as a
+// number in a TJ array, or false when every removed glyph took none.
+//
+// A glyph moves the text position by its width times the font size plus the
+// character spacing (ISO 32000-1, 9.4.4), and a number n in a TJ array moves
+// it by -n/1000 times the font size (9.4.3, Table 109), both times the
+// horizontal scaling. Removing a glyph that took room drew every later glyph
+// on the line that much further back, so the glyph gives way to the number
+// that moves the position as far. A Tj, ' or " doing so becomes a TJ after
+// what else it does, as Table 109 defines each.
+//
+// A font of size 0, a Type 3 font whose glyphs leave the text line, and an
+// operation of a shape Table 109 gives no meaning keep the strip alone: no
+// number moves the position as the glyph did.
+//
+// # Corpus evidence
+//
+//   - All corpora: of the 30 files a .notdef finding runs the strip on at
+//     PDF/A-2b, PDF/UA-1 or the profile their name states, 18 remove a glyph
+//     that took room with more glyphs after it on its line, in 511 operations
+//     of govdocs thread_400_400240.pdf and one to four in each other file.
+//   - litho repairleft_4.pdf: poppler drew the lines after its emptied " and
+//     ' at x 72 once the strip removed their code, where the source draws
+//     them at 80.2, and draws them at 80.2 with the room kept.
+func (s *controlByteStripper) keepAdvances(op content.Operation, info textFontInfo) ([]content.Operation, bool) {
+	if s.fontSize == 0 || info.offLine {
+		return nil, false
+	}
+	var shown ast.PdfArray
+	n := len(op.Operands)
+	switch {
+	case op.Operator == "TJ" && n == 1:
+		arr, ok := op.Operands[0].(ast.PdfArray)
+		if !ok {
+			return nil, false
+		}
+		shown = arr
+	case (op.Operator == "Tj" || op.Operator == "'") && n == 1, op.Operator == "\"" && n == 3:
+		str, ok := op.Operands[n-1].(ast.PdfString)
+		if !ok {
+			return nil, false
+		}
+		shown = ast.PdfArray{str}
+	default:
+		return nil, false
+	}
+
+	elems, moved := s.spacedElements(shown, info)
+	if !moved {
+		return nil, false
+	}
+	var ops []content.Operation
+	switch op.Operator {
+	case "'":
+		ops = append(ops, content.Operation{Operator: "T*"})
+	case "\"":
+		ops = append(ops,
+			content.Operation{Operator: "Tw", Operands: []ast.PdfObject{op.Operands[0]}},
+			content.Operation{Operator: "Tc", Operands: []ast.PdfObject{op.Operands[1]}},
+			content.Operation{Operator: "T*"})
+	}
+	return append(ops, content.Operation{Operator: "TJ", Operands: []ast.PdfObject{elems}}), true
+}
+
+// spacedElements returns the elements of the TJ array shown with the control
+// bytes of its strings removed, each run of removed glyphs replaced by the
+// number that moves the text position as far as they did (see
+// [controlByteStripper.keepAdvances]), and whether one such number is not 0.
+// Numbers are rounded to a thousandth, a millionth of a unit of text space
+// per unit of font size.
+func (s *controlByteStripper) spacedElements(shown ast.PdfArray, info textFontInfo) (ast.PdfArray, bool) {
+	out := make(ast.PdfArray, 0, len(shown))
+	moved := false
+	for _, elem := range shown {
+		str, ok := elem.(ast.PdfString)
+		if !ok {
+			out = append(out, elem)
+			continue
+		}
+		var run []byte
+		var gap float64
+		flush := func() {
+			if len(run) > 0 {
+				out = append(out, ast.PdfString(run))
+				run = nil
+			}
+			if gap = math.Round(gap*1000) / 1000; gap != 0 {
+				out = append(out, ast.PdfReal(gap))
+				moved = true
+			}
+			gap = 0
+		}
+		for _, b := range []byte(str) {
+			if !strippedByte(b, info.defined) {
+				if gap != 0 {
+					flush()
+				}
+				run = append(run, b)
+				continue
+			}
+			room := -(info.advance[b]*1000 + s.charSpacing*1000/s.fontSize)
+			if room == 0 {
+				continue
+			}
+			if len(run) > 0 {
+				out = append(out, ast.PdfString(run))
+				run = nil
+			}
+			gap += room
+		}
+		flush()
+	}
+	return out, moved
 }
 
 // emptiedShowEffect returns the operations that do what the text-showing
@@ -246,6 +392,12 @@ func emptiedShowEffect(op content.Operation, operands []ast.PdfObject) []content
 	return nil
 }
 
+// strippedByte reports whether the strip removes the code b: an ASCII
+// control byte but TAB, LF and CR, the font's encoding gives no glyph for.
+func strippedByte(b byte, defined map[byte]bool) bool {
+	return b < 0x20 && b != '\t' && b != '\n' && b != '\r' && !defined[b]
+}
+
 // stripControlString returns a copy of s with ASCII control bytes
 // removed. The returned count reports how many bytes were stripped.
 func stripControlString(s ast.PdfString, defined map[byte]bool) (ast.PdfString, int) {
@@ -253,7 +405,7 @@ func stripControlString(s ast.PdfString, defined map[byte]bool) (ast.PdfString, 
 	dst := make([]byte, 0, len(src))
 	removed := 0
 	for _, b := range src {
-		if b < 0x20 && b != '\t' && b != '\n' && b != '\r' && !defined[b] {
+		if strippedByte(b, defined) {
 			removed++
 			continue
 		}
@@ -319,6 +471,71 @@ type textFontInfo struct {
 	// defined holds the single-byte codes the font's /Encoding gives a glyph
 	// for, which are therefore not .notdef references.
 	defined map[byte]bool
+	// advance holds the horizontal displacement, in text space units per
+	// unit of font size, of each control code whose width is not 0 (see
+	// [controlAdvances]).
+	advance map[byte]float64
+	// offLine marks a Type 3 font whose glyphs move the text position off
+	// the text line, which no TJ number can follow.
+	offLine bool
+}
+
+// controlAdvances returns the horizontal displacement, in text space units per
+// unit of font size, of each code below 0x20 the simple font dictionary fd
+// gives a width that is not 0, and whether its glyphs move off the text line.
+//
+// A width is the /Widths entry of a code from /FirstChar to /LastChar and the
+// font descriptor's /MissingWidth, by default 0, for any other (ISO 32000-1,
+// 9.2.4 and 9.6.2.1, Table 111). It is in thousandths of a unit of text space,
+// but for a Type 3 font, whose widths are in glyph space and which the
+// /FontMatrix maps to text space (9.6.5, Table 112): a matrix with a second
+// element that is not 0 moves each glyph off the line.
+func controlAdvances(ctx context.Context, doc *document.Document, fd ast.PdfDict) (map[byte]float64, bool) {
+	scale := 0.001
+	if subtype, _ := document.ResolveName(ctx, doc, fd["Subtype"]); subtype == "Type3" {
+		// Best-effort: a Type 3 font with no readable /FontMatrix has no
+		// displacement to keep.
+		matrix, _ := document.ResolveArray(ctx, doc, fd["FontMatrix"])
+		if len(matrix) < 2 {
+			return nil, true
+		}
+		if resolvedFloat(ctx, doc, matrix[1]) != 0 {
+			return nil, true
+		}
+		scale = resolvedFloat(ctx, doc, matrix[0])
+	}
+	// Best-effort: an unreadable /FirstChar, /Widths or /FontDescriptor
+	// leaves the widths at the /MissingWidth default of 0.
+	first, _ := document.ResolveInt(ctx, doc, fd["FirstChar"])
+	widths, _ := document.ResolveArray(ctx, doc, fd["Widths"])
+	missing := 0.0
+	if desc, _ := document.ResolveDict(ctx, doc, fd["FontDescriptor"]); desc != nil {
+		missing = resolvedFloat(ctx, doc, desc["MissingWidth"])
+	}
+	var advance map[byte]float64
+	for code := range 0x20 {
+		width := missing
+		if idx := int64(code) - int64(first); idx >= 0 && idx < int64(len(widths)) {
+			width = resolvedFloat(ctx, doc, widths[idx])
+		}
+		if width*scale == 0 {
+			continue
+		}
+		if advance == nil {
+			advance = make(map[byte]float64)
+		}
+		advance[byte(code)] = width * scale
+	}
+	return advance, false
+}
+
+// resolvedFloat returns the number obj holds or refers to, 0 when it is none.
+func resolvedFloat(ctx context.Context, doc *document.Document, obj ast.PdfObject) float64 {
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return 0
+	}
+	return document.Float(resolved)
 }
 
 // pageTextFonts describes every font in a page's resources, reusing entries
@@ -360,6 +577,7 @@ func pageTextFonts(ctx context.Context, doc *document.Document, page *document.P
 			continue
 		}
 		info := textFontInfo{}
+		info.advance, info.offLine = controlAdvances(ctx, doc, fd)
 		if font, err := typography.ResolveFont(ctx, doc, fd); err == nil && font != nil {
 			for code := range font.Encoding {
 				if code < 0x20 {
