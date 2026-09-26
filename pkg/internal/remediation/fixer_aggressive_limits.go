@@ -414,8 +414,11 @@ func (w *deviceNTrim) firstVisit(obj ast.PdfObject) bool {
 
 // pageResources trims the page's effective /Resources and writes an inline
 // one back into the page or ancestor that holds it. The inheritance walk
-// mirrors compliance.resolveInheritedResources: the nearest node, the page
-// first, whose /Resources is a dictionary.
+// follows /Parent to the nearest node, the page first, whose /Resources is a
+// dictionary. Compliance (pageObject.inheritedHolder) stops at the nearest node
+// that states /Resources at all and follows the node the page tree walk came
+// through, so the two differ only on a /Resources that is not a dictionary or
+// a /Parent that names another node.
 func (w *deviceNTrim) pageResources(ctx context.Context, pe annotPageEntry) {
 	owner, ownerRef := pe.dict, pe.ref
 	seen := make(map[int]bool)

@@ -147,6 +147,42 @@ func TestFixLangStripsANamedPropertyListTag(t *testing.T) {
 	}
 }
 
+// TestFixLangStripsAnInheritedNamedPropertyListTag pins that a property list
+// the page names from resources it inherits is repaired too. The page states no
+// /Resources, so it uses its /Pages node's (ISO 32000-1, 7.7.3.4), and the
+// PDF/UA language check reads the property list there. Reading only the page's
+// own entry found no /Properties and left the tag in place.
+func TestFixLangStripsAnInheritedNamedPropertyListTag(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	marked := "/Span /MC0 BDC\nBT /F1 12 Tf 10 700 Td (hello) Tj ET\nEMC\n"
+	data := assemblePDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R /Lang (en) /StructTreeRoot 5 0 R /MarkInfo << /Marked true >> >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 /Resources << /Properties << /MC0 7 0 R >> >> >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(marked), marked),
+		"<< /Type /StructTreeRoot /K [6 0 R] >>",
+		"<< /Type /StructElem /S /Document /P 5 0 R >>",
+		"<< /Lang (1-pt) >>",
+	})
+	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
+	if err != nil {
+		t.Fatalf("NewDocument: %v", err)
+	}
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
+	if _, err := fixMarkedContentLang(ctx, alloc, doc, Options{}, nil, "PDF/UA-1"); err != nil {
+		t.Fatalf("fixMarkedContentLang: %v", err)
+	}
+	props, ok := alloc.Pending()[7].(ast.PdfDict)
+	if !ok {
+		t.Fatalf("the inherited property list was not rewritten: %T", alloc.Pending()[7])
+	}
+	if _, still := props["Lang"]; still {
+		t.Errorf("the inherited property list kept /Lang = %v", props["Lang"])
+	}
+}
+
 // TestFixLangLeavesMarkedContentAloneOutsidePDFUA is the control for the
 // profile gate: under PDF/A an empty tag means "unknown", which the spec
 // allows, so nothing is rewritten.

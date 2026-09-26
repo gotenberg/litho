@@ -157,8 +157,16 @@ func repairPropertyListLangs(ctx context.Context, alloc *writer.ObjAllocator, do
 		if pageDict == nil {
 			pageDict = page.Dict
 		}
-		resources, err := document.ResolveDict(ctx, doc, pageDict["Resources"])
-		if err != nil || resources == nil {
+		// A page with no /Resources of its own names property lists from the
+		// ones it inherits (ISO 32000-1, 7.7.3.4; a null entry is absent,
+		// 7.3.7), as the language check reads them.
+		resources := page.Resources
+		if own, ok := pageDict["Resources"]; ok {
+			if _, null := own.(ast.PdfNull); !null {
+				resources = liveDictValue(ctx, alloc, doc, own)
+			}
+		}
+		if resources == nil {
 			continue
 		}
 		properties, err := document.ResolveDict(ctx, doc, resources["Properties"])
