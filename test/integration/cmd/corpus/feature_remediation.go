@@ -513,7 +513,7 @@ func jobVerdict(vr verapdfValidationResult) veraVerdict {
 	rules := failedRules(vr)
 	ids := make([]string, 0, len(rules))
 	for _, r := range rules {
-		ids = append(ids, fmt.Sprintf("%s-t%02d", r.Clause, r.TestNumber))
+		ids = append(ids, ruleID(r.Clause, r.TestNumber))
 	}
 	// VeraPDF lists rule summaries in a different order for a single-file run
 	// than for the same file inside a batch, and singleValidate retries any
@@ -582,6 +582,13 @@ func profileDirToVeraPDFFlavour(profileDir string) (string, bool) {
 	return v, ok
 }
 
+// ruleID formats a rule as the "clause-tNN" id every feature of this tool
+// reports, so one rule reads the same in the compliance mismatch output and
+// in the remediation rule lists.
+func ruleID(clause string, test int) string {
+	return fmt.Sprintf("%s-t%02d", clause, test)
+}
+
 // distinctRuleIDs returns the sorted, deduplicated "clause-tNN" ids of
 // the violations, the same identifiers batchValidate derives from
 // VeraPDF rule summaries.
@@ -589,7 +596,7 @@ func distinctRuleIDs(violations []pdf.Violation) []string {
 	seen := make(map[string]bool, len(violations))
 	var ids []string
 	for _, v := range violations {
-		id := fmt.Sprintf("%s-t%02d", v.Clause, v.TestNumber)
+		id := ruleID(v.Clause, v.TestNumber)
 		if !seen[id] {
 			seen[id] = true
 			ids = append(ids, id)

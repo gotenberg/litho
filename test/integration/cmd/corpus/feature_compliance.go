@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -123,10 +124,12 @@ func (f *complianceFeature) HasGolden(fixtureID string) bool {
 	return ok
 }
 
-// complianceOutput is litho's verdict plus the raw violation strings.
+// complianceOutput is litho's verdict, the raw violation strings, and the
+// distinct rule ids those violations fail.
 type complianceOutput struct {
 	Compliant  bool     `json:"compliant"`
 	Violations []string `json:"violations,omitempty"`
+	Rules      []string `json:"rules,omitempty"`
 	ProfileDir string   `json:"profile_dir"`
 }
 
@@ -137,12 +140,9 @@ func (f *complianceFeature) Run(ctx context.Context, pdfPath, fixtureID string) 
 	if golden == nil {
 		return nil, nil
 	}
-	compliant, violations := validateWithLitho(ctx, pdfPath, golden.ProfileDir)
-	return json.Marshal(complianceOutput{
-		Compliant:  compliant,
-		Violations: violations,
-		ProfileDir: golden.ProfileDir,
-	})
+	out := validateWithLitho(ctx, pdfPath, golden.ProfileDir)
+	out.ProfileDir = golden.ProfileDir
+	return json.Marshal(out)
 }
 
 func (f *complianceFeature) Compare(fixtureID string, output []byte) Verdict {
@@ -175,18 +175,38 @@ func (f *complianceFeature) Compare(fixtureID string, output []byte) Verdict {
 		}
 	}
 
+	// The verdict alone cannot see a detection change on a fixture that
+	// breaks many rules: both tools call it non-compliant whether litho
+	// drops a rule class or invents one. The rule sets can, so every scored
+	// cell reports ruleset_mismatch, zero included, which keeps the key in
+	// the baseline and the bar in force when no cell diverges.
+	lithoOnly, veraOnly := ruleSetDiff(got.Rules, goldenRuleIDs(golden.FailedRules))
+	rulesDiffer := len(lithoOnly) > 0 || len(veraOnly) > 0
+	metrics["ruleset_mismatch"] = 0
+	if rulesDiffer {
+		metrics["ruleset_mismatch"] = 1
+		diff := "rule set differs: " + formatRuleSetDiff(lithoOnly, veraOnly)
+		if reason == "" {
+			reason = diff
+		} else {
+			reason += "; " + diff
+		}
+	}
+
 	score := 0.0
 	if match {
 		score = 1.0
 	}
 
 	var mismatches []json.RawMessage
-	if !match {
+	if !match || rulesDiffer {
 		raw, _ := json.Marshal(complianceMismatch{
-			File:            fixtureID,
-			Profile:         golden.ProfileDir,
-			VerapdfRules:    golden.FailedRules,
-			LithoViolations: got.Violations,
+			File:             fixtureID,
+			Profile:          golden.ProfileDir,
+			VerapdfRules:     golden.FailedRules,
+			LithoViolations:  got.Violations,
+			LithoOnlyRules:   lithoOnly,
+			VerapdfOnlyRules: veraOnly,
 		})
 		mismatches = append(mismatches, raw)
 	}
@@ -202,12 +222,64 @@ func (f *complianceFeature) Compare(fixtureID string, output []byte) Verdict {
 }
 
 // complianceMismatch pairs the golden's failed rules with litho's
-// violation strings for the scoreboard.
+// violation strings for the scoreboard, and names the rule ids only one
+// side reports.
 type complianceMismatch struct {
-	File            string           `json:"file"`
-	Profile         string           `json:"profile"`
-	VerapdfRules    []complianceRule `json:"verapdf_rules,omitempty"`
-	LithoViolations []string         `json:"litho_violations,omitempty"`
+	File             string           `json:"file"`
+	Profile          string           `json:"profile"`
+	VerapdfRules     []complianceRule `json:"verapdf_rules,omitempty"`
+	LithoViolations  []string         `json:"litho_violations,omitempty"`
+	LithoOnlyRules   []string         `json:"litho_only_rules,omitempty"`
+	VerapdfOnlyRules []string         `json:"verapdf_only_rules,omitempty"`
+}
+
+// goldenRuleIDs returns the ids of the rules VeraPDF failed, in the form
+// [distinctRuleIDs] gives litho's.
+func goldenRuleIDs(rules []complianceRule) []string {
+	ids := make([]string, len(rules))
+	for i, r := range rules {
+		ids[i] = ruleID(r.Clause, r.TestNumber)
+	}
+	return ids
+}
+
+// ruleSetDiff returns the ids only litho reports and the ids only VeraPDF
+// reports. It compares sets, so the order and multiplicity of either input
+// do not matter, and both results come back sorted.
+func ruleSetDiff(litho, vera []string) (lithoOnly, veraOnly []string) {
+	inLitho := make(map[string]bool, len(litho))
+	for _, id := range litho {
+		inLitho[id] = true
+	}
+	inVera := make(map[string]bool, len(vera))
+	for _, id := range vera {
+		inVera[id] = true
+	}
+	for id := range inLitho {
+		if !inVera[id] {
+			lithoOnly = append(lithoOnly, id)
+		}
+	}
+	for id := range inVera {
+		if !inLitho[id] {
+			veraOnly = append(veraOnly, id)
+		}
+	}
+	sort.Strings(lithoOnly)
+	sort.Strings(veraOnly)
+	return lithoOnly, veraOnly
+}
+
+// formatRuleSetDiff renders a rule-set difference for the text scoreboard.
+func formatRuleSetDiff(lithoOnly, veraOnly []string) string {
+	var parts []string
+	if len(lithoOnly) > 0 {
+		parts = append(parts, "litho only "+strings.Join(lithoOnly, " "))
+	}
+	if len(veraOnly) > 0 {
+		parts = append(parts, "VeraPDF only "+strings.Join(veraOnly, " "))
+	}
+	return strings.Join(parts, "; ")
 }
 
 // fixtureIDFromVeraPDFName derives the fixture ID from a VeraPDF job's
@@ -280,49 +352,57 @@ func loadVeraPDFGoldens(dir string, store func(id string, g *complianceGolden)) 
 }
 
 // validateWithLitho opens pdfPath, dispatches to the litho validator for
-// the matching PDF/A or PDF/UA profile, and returns the verdict plus the
-// violation strings.
-func validateWithLitho(ctx context.Context, pdfPath, profileDir string) (bool, []string) {
+// the matching PDF/A, PDF/UA or WTPDF profile, and returns the verdict, the
+// violation strings, and the distinct rule ids they fail. A file litho
+// cannot open or validate comes back non-compliant with the error as its
+// only violation and no rule ids.
+func validateWithLitho(ctx context.Context, pdfPath, profileDir string) complianceOutput {
+	failed := func(format string, err error) complianceOutput {
+		return complianceOutput{Violations: []string{fmt.Sprintf(format, err)}}
+	}
 	f, err := os.Open(pdfPath)
 	if err != nil {
-		return false, []string{fmt.Sprintf("open: %v", err)}
+		return failed("open: %v", err)
 	}
 	defer f.Close()
 
 	info, err := f.Stat()
 	if err != nil {
-		return false, []string{fmt.Sprintf("stat: %v", err)}
+		return failed("stat: %v", err)
 	}
 
 	r, err := pdf.Open(ctx, f, info.Size())
 	if err != nil {
-		return false, []string{fmt.Sprintf("pdf.Open: %v", err)}
+		return failed("pdf.Open: %v", err)
 	}
 	defer r.Close()
 
-	var errs []error
+	var violations []pdf.Violation
 	if pdfa, ok := dirToPDFAProfile[profileDir]; ok {
-		errs, err = r.ValidatePDFA(ctx, pdfa)
+		violations, err = r.ValidatePDFAReport(ctx, pdfa)
 	} else if pdfua, ok := dirToPDFUAProfile[profileDir]; ok {
-		errs, err = r.ValidatePDFUA(ctx, pdfua)
+		violations, err = r.ValidatePDFUAReport(ctx, pdfua)
 	} else if wtpdf, ok := dirToWTPDFProfile[profileDir]; ok {
-		errs, err = r.ValidateWTPDF(ctx, wtpdf)
+		violations, err = r.ValidateWTPDFReport(ctx, wtpdf)
 	} else {
 		// A profile directory no map covers scores every fixture in it as
 		// compliant, which reads as a feature that passed rather than one
 		// that validated nothing. Add the profile to a map above when a new
 		// golden directory appears.
-		return true, nil
+		return complianceOutput{Compliant: true}
 	}
 	if err != nil {
-		return false, []string{fmt.Sprintf("validate: %v", err)}
+		return failed("validate: %v", err)
 	}
-	if len(errs) == 0 {
-		return true, nil
+	if len(violations) == 0 {
+		return complianceOutput{Compliant: true}
 	}
-	out := make([]string, len(errs))
-	for i, e := range errs {
-		out[i] = e.Error()
+	out := complianceOutput{
+		Violations: make([]string, len(violations)),
+		Rules:      distinctRuleIDs(violations),
 	}
-	return false, out
+	for i, v := range violations {
+		out.Violations[i] = v.Error()
+	}
+	return out
 }

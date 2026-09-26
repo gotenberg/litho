@@ -66,6 +66,12 @@ var costMetrics = map[string]bool{
 	"acroform_invented": true,
 	"portfolio_dropped": true,
 	"lexicons_dropped":  true,
+
+	// The compliance cells whose failed-rule set differs from veraPDF's. A
+	// rise is a detection change the verdict comparison in matched cannot
+	// see, because a fixture that breaks many rules stays non-compliant on
+	// both sides whatever rule class litho drops or invents.
+	"ruleset_mismatch": true,
 }
 
 // uncomparedMetrics lists raw inventory totals that shift with any

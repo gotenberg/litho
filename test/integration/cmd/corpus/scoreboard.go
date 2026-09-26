@@ -57,6 +57,7 @@ func (s *Scoreboard) PrintText(w io.Writer) {
 	}
 
 	printMismatches(w, s)
+	printRuleSetMismatches(w, s)
 }
 
 func printFeatureRow(w io.Writer, fr *FeatureReport) {
@@ -82,7 +83,8 @@ func printFeatureRow(w io.Writer, fr *FeatureReport) {
 	case "compliance":
 		fp := fr.Metrics["false_positive"]
 		fn := fr.Metrics["false_negative"]
-		fmt.Fprintf(w, "%s %s  FP=%d FN=%d\n", prefix, primary, fp, fn)
+		rs := fr.Metrics["ruleset_mismatch"]
+		fmt.Fprintf(w, "%s %s  FP=%d FN=%d  ruleset_mismatch=%d\n", prefix, primary, fp, fn, rs)
 	case "remediation", "remediation-aggressive":
 		// Report the metrics the feature actually emits. No feature ever wrote
 		// "regression" or "improved", so both columns printed 0 for every
@@ -105,6 +107,11 @@ func printFeatureRow(w io.Writer, fr *FeatureReport) {
 	}
 }
 
+// maxTextMismatches caps the fixtures listed per cell in the text
+// scoreboard so the output stays readable; --format=json carries the full
+// list.
+const maxTextMismatches = 20
+
 func printMismatches(w io.Writer, s *Scoreboard) {
 	anyMismatches := false
 	for _, c := range s.Corpora {
@@ -125,7 +132,7 @@ func printMismatches(w io.Writer, s *Scoreboard) {
 				return losers[i].FixtureID < losers[j].FixtureID
 			})
 			for i, v := range losers {
-				if i >= 20 { //nolint:mnd // keep the text output readable; full list lives in --format=json
+				if i >= maxTextMismatches {
 					fmt.Fprintf(w, "  ... %d more\n", len(losers)-i)
 					break
 				}
@@ -140,5 +147,33 @@ func printMismatches(w io.Writer, s *Scoreboard) {
 	}
 	if !anyMismatches {
 		fmt.Fprintln(w, "No mismatches.")
+	}
+}
+
+// printRuleSetMismatches lists the cells whose failed-rule set differs from
+// the golden's. [printMismatches] lists verdict mismatches only, and a cell
+// can agree on the verdict while it disagrees on the rules, which is the
+// divergence the ruleset_mismatch metric counts.
+func printRuleSetMismatches(w io.Writer, s *Scoreboard) {
+	for _, c := range s.Corpora {
+		for _, fr := range c.Features {
+			n := fr.Metrics["ruleset_mismatch"]
+			if n == 0 {
+				continue
+			}
+			fmt.Fprintf(w, "\n%s / %s rule-set mismatches (%d):\n", c.Name, fr.Name, n)
+			shown := 0
+			for _, v := range fr.Verdicts {
+				if v.Metrics["ruleset_mismatch"] == 0 {
+					continue
+				}
+				if shown == maxTextMismatches {
+					fmt.Fprintf(w, "  ... %d more\n", n-shown)
+					break
+				}
+				fmt.Fprintf(w, "  %s: %s\n", v.FixtureID, v.Reason)
+				shown++
+			}
+		}
 	}
 }
