@@ -2,6 +2,8 @@ package compliance
 
 import (
 	"context"
+	"fmt"
+	"maps"
 	"math"
 	"slices"
 
@@ -588,22 +590,49 @@ func blendingCSRule(part int) Rule {
 // t1 twice, as one of the pages alone does, and t2 once per page. The blend
 // mode rule counts as ISO 19005-1, 6.4 does; see [blendModeTimes].
 //
+// The blend mode rule judges every graphics state veraPDF builds from a gs
+// operator, in whichever content stream it stands: a page's own, and every
+// form XObject, tiling pattern, Type3 glyph description and annotation
+// appearance [drawnStreamWalk] reaches from it (see [drawnStreamBlendModes]).
+// A form serving as a soft mask is not among them, since a gs selects it
+// without drawing it, and neither is the graphics state of a shading pattern.
+// Measured with veraPDF 1.30 at PDF/A-2b: a state naming a blend mode no table
+// lists fails t1 once when a painted form, a nested form, a selected tiling
+// pattern, a shown Type3 glyph or an appearance sets it, twice when a form
+// sets a direct state twice, once when two pages paint the form or two
+// annotations share the appearance, and never from a soft mask group or a
+// shading pattern. PDF/A-4 also judges the /BM of an annotation (see
+// [annotationBlendModes]).
+//
 // # Corpus evidence
 //
 //   - pdfjs issue6741.pdf: declares /G1 (/BM /Darken) and /G2 (/BM /Lighten),
 //     sets only /G0 (/BM /Normal), carries no page /Group and no OutputIntent,
 //     and veraPDF reports nothing for it while litho, surveying every declared
 //     ExtGState, fired §6.2.10 t2.
+//   - All corpora: judging the blend modes of the drawn streams and of
+//     annotations changes no count at PDF/A-1b or PDF/A-2b, veraPDF files at
+//     their own profile, where the 7 veraPDF files failing 6.2.10 t1 or 6.2.9
+//     t1 already matched their golden counts.
 func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, catalog ast.PdfDict, pages []pageCtx, _ string, part int) []Violation {
 	hasOutputIntent, _ := documentOutputIntentInfo(ctx, doc, catalog)
 
 	var results []Violation
 	judged := make(map[int]bool)
+	walk := newDrawnStreamWalk(&validationCtx{doc: doc, pages: pages}, func(s *drawnStream) {
+		results = append(results, drawnStreamBlendModes(ctx, doc, s, part, judged)...)
+	})
 	for i := range pages {
 		page := pages[i].dict
 		if ctx.Err() != nil {
 			return results
 		}
+
+		// The graphics states the page's forms, patterns, glyphs and
+		// annotation appearances set, and the blend modes its annotations
+		// name, answer to the blend mode rule as the page's own do.
+		walk.walkPage(ctx, &pages[i], i+1)
+		results = append(results, annotationBlendModes(ctx, doc, page, i+1, part, judged)...)
 
 		res := resolveInheritedResources(ctx, doc, page)
 		if res == nil {
@@ -649,18 +678,14 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 					continue
 				}
 
-				if bmObj, hasBM := gs["BM"]; hasBM {
-					bm := resolveBlendMode(ctx, doc, bmObj)
-					// A content stream an earlier page shares sets its states
-					// there alone; see [markJudgedContents].
-					if bm != "" && !standardBlendModes[bm] && !pages[i].contentJudged {
-						for range blendModeTimes(gsObj, drawn.gsCount(string(gsName)), judged) {
-							results = append(results, failf(blendModeRule(part), "page %d, ExtGState %s, BM=%s", i+1, string(gsName), bm)...)
-						}
-					}
-					if blendModeIsTransparency(bm) {
-						pageUsesTransparency = true
-					}
+				// A content stream an earlier page shares sets its states there
+				// alone; see [markJudgedContents].
+				if !pages[i].contentJudged {
+					results = append(results, blendModeViolations(ctx, doc, gs, gsObj, drawn.gsCount(string(gsName)), part, judged,
+						"page %d, ExtGState %s", i+1, string(gsName))...)
+				}
+				if bmObj, hasBM := gs["BM"]; hasBM && blendModeIsTransparency(resolveBlendMode(ctx, doc, bmObj)) {
+					pageUsesTransparency = true
 				}
 
 				// SMask (other than None) indicates transparency. One that resolves
@@ -752,6 +777,157 @@ func blendModeTimes(gsObj ast.PdfObject, times int, judged map[int]bool) int {
 	}
 	judged[ref.ObjectNum] = true
 	return 1
+}
+
+// blendModeViolations fails the blend mode rule, ISO 19005-2/3, 6.2.10 t1 and
+// ISO 19005-4, 6.2.9 t1, for the graphics state gs, which gsObj holds and
+// times gs operators set, when its /BM names a blend mode ISO 32000-1, 11.3.5,
+// Tables 136 and 137 do not list. It fails as often as [blendModeTimes]
+// counts, and format and args locate the state.
+func blendModeViolations(ctx context.Context, doc *document.Document, gs ast.PdfDict, gsObj ast.PdfObject, times, part int, judged map[int]bool, format string, args ...any) []Violation {
+	bm, ok := cosBlendMode(ctx, doc, gs["BM"], part)
+	if !ok || standardBlendModes[bm] {
+		return nil
+	}
+	where := fmt.Sprintf(format, args...)
+	var results []Violation
+	for range blendModeTimes(gsObj, times, judged) {
+		results = append(results, failf(blendModeRule(part), "%s, BM=%s", where, bm)...)
+	}
+	return results
+}
+
+// cosBlendMode returns the blend mode the blend mode rule judges in the /BM
+// value obj, and false when it judges none.
+//
+// veraPDF states the rule over its CosBM object, which it builds from a /BM
+// that resolves to a name, the empty name included. ISO 32000-1, 11.6.3 also
+// lets /BM be an array of names, of which a viewer uses the first it
+// recognises, and under the parts built on ISO 32000-1 veraPDF judges the
+// first element of the array that resolves to a name. PDF/A-4 is built on ISO
+// 32000-2, which deprecates the array form, and there veraPDF judges no array.
+// Measured with veraPDF 1.30: /BM [1 /Foo], /BM [/Foo] and a /BM naming /Foo
+// through an indirect reference fail t1 at PDF/A-2b, /BM [/Normal /Foo] passes
+// it, /BM / fails it at PDF/A-2b and PDF/A-4, and /BM [/Foo] fails nothing at
+// PDF/A-4.
+func cosBlendMode(ctx context.Context, doc *document.Document, obj ast.PdfObject, part int) (string, bool) {
+	if obj == nil {
+		return "", false
+	}
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return "", false
+	}
+	if name, ok := resolved.(ast.PdfName); ok {
+		return string(name), true
+	}
+	arr, ok := resolved.(ast.PdfArray)
+	if !ok || part >= 4 {
+		return "", false
+	}
+	for _, elem := range arr {
+		if name, ok := resolveNameObject(ctx, doc, elem); ok {
+			return string(name), true
+		}
+	}
+	return "", false
+}
+
+// resolveNameObject returns the name obj resolves to, and false when it
+// resolves to anything else. Unlike [document.ResolveName], it tells the empty
+// name, which is a name (ISO 32000-1, 7.3.5), from null.
+func resolveNameObject(ctx context.Context, doc *document.Document, obj ast.PdfObject) (ast.PdfName, bool) {
+	resolved, err := document.ResolveObject(ctx, doc, obj)
+	if err != nil {
+		return "", false
+	}
+	name, ok := resolved.(ast.PdfName)
+	return name, ok
+}
+
+// drawnStreamBlendModes fails the blend mode rule for the graphics states the
+// gs operators of s, a stream [drawnStreamWalk] reaches, set. A name resolves
+// against the stream's own resources first and then the page's, as veraPDF
+// resolves it (see [drawnStreamWalk]), and each state fails as often as
+// [blendModeTimes] counts: a state written as an indirect object once for the
+// whole document, one written directly once for every gs in a stream, which
+// is itself judged once.
+func drawnStreamBlendModes(ctx context.Context, doc *document.Document, s *drawnStream, part int, judged map[int]bool) []Violation {
+	sets := collectDrawnResources(s.ops).extGStates
+	if len(sets) == 0 {
+		return nil
+	}
+	scope := appearanceResources(ctx, doc, s.resources, s.pageRes)
+	states, err := document.ResolveDict(ctx, doc, scope["ExtGState"])
+	if err != nil || states == nil {
+		return nil
+	}
+	label := drawnStreamLabel(s)
+	var results []Violation
+	for _, name := range slices.Sorted(maps.Keys(sets)) {
+		gsObj, ok := states[ast.PdfName(name)]
+		if !ok {
+			continue
+		}
+		gs, err := document.ResolveDict(ctx, doc, gsObj)
+		if err != nil || gs == nil {
+			continue
+		}
+		results = append(results, blendModeViolations(ctx, doc, gs, gsObj, sets[name], part, judged,
+			"page %d, %s, ExtGState %s", s.pageNum, label, name)...)
+	}
+	return results
+}
+
+// drawnStreamLabel names the stream s in a violation's context.
+func drawnStreamLabel(s *drawnStream) string {
+	var kind string
+	switch s.kind {
+	case drawnForm:
+		kind = "form XObject"
+	case drawnPattern:
+		kind = "tiling pattern"
+	case drawnGlyph:
+		kind = "Type3 glyph"
+	case drawnAppearance:
+		kind = "annotation appearance"
+	}
+	if s.objNum == 0 {
+		return kind
+	}
+	return fmt.Sprintf("%s object %d", kind, s.objNum)
+}
+
+// annotationBlendModes fails the blend mode rule for the /BM of each
+// annotation page, the pageNum-th, lists. ISO 32000-2, 12.5.2 gives an
+// annotation a blend mode of its own, which ISO 32000-1 does not, so only
+// PDF/A-4 judges it: veraPDF builds a CosBM from an annotation's /BM under ISO
+// 32000-2 alone. An annotation written as an indirect object fails once for
+// the whole document ([blendModeTimes]). Measured with veraPDF 1.30: an
+// annotation naming /BM /Foo fails ISO 19005-4, 6.2.9 t1 once, also when two
+// pages list it, and passes ISO 19005-2, 6.2.10 t1 at PDF/A-2b, and one
+// written directly in /Annots with /BM [/Foo] fails nothing at PDF/A-4.
+func annotationBlendModes(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum, part int, judged map[int]bool) []Violation {
+	if part < 4 {
+		return nil
+	}
+	annots, err := document.ResolveArray(ctx, doc, page["Annots"])
+	if err != nil {
+		return nil
+	}
+	var results []Violation
+	for i, annotObj := range annots {
+		if ctx.Err() != nil {
+			return results
+		}
+		annot, err := document.ResolveDict(ctx, doc, annotObj)
+		if err != nil || annot == nil {
+			continue
+		}
+		results = append(results, blendModeViolations(ctx, doc, annot, annotObj, 1, part, judged,
+			"page %d, annotation %d", pageNum, i+1)...)
+	}
+	return results
 }
 
 // drawnResources records the resource names a content stream invokes: the
