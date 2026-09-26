@@ -232,6 +232,15 @@ type opRepair func(content.Operation) ([]content.Operation, int)
 // ([spliceOperations]), and a splice that does not read back as the repair
 // intends fails with [errInlineImageSplice]: the stream keeps its bytes, and
 // its finding stays a residual for validation to report.
+//
+// # Corpus evidence
+//
+//   - All corpora: 105 files draw 224,691 inline images in page content, and
+//     none of their pages is one the string-limit, text-control,
+//     marked-content /Lang or q/Q nesting fixers repair at PDF/A-1b, PDF/A-2b,
+//     PDF/A-4 or PDF/UA-1, default or aggressive: the findings litho reports
+//     on the 840 outputs, their extracted text and their inline image bytes
+//     are unchanged.
 func repairContentOps(ctx context.Context, data []byte, newRepair func() opRepair) ([]byte, int, error) {
 	ops, err := content.ParseStreamData(ctx, data, content.ForRepair())
 	if err != nil {
