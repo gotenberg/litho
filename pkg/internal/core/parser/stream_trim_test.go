@@ -1,7 +1,11 @@
 package parser
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
+	"fmt"
+	"io"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -163,5 +167,115 @@ func TestParseStream_XRefStreamNotTrimmed(t *testing.T) {
 	}
 	if len(b) != 6 {
 		t.Errorf("xref stream length = %d, want 6 (exact /Length must not be trimmed)", len(b))
+	}
+}
+
+// flateEndingIn returns zlib data (RFC 1950) whose last byte, the low byte of
+// its Adler-32 checksum, is last. The payload varies until the checksum
+// cooperates, which takes a few hundred tries at most.
+func flateEndingIn(t *testing.T, last byte) []byte {
+	t.Helper()
+	for i := range 1 << 16 {
+		var buf bytes.Buffer
+		zw := zlib.NewWriter(&buf)
+		if _, err := fmt.Fprintf(zw, "BT /F1 12 Tf 72 712 Td (line %d) Tj ET", i); err != nil {
+			t.Fatalf("compressing: %v", err)
+		}
+		if err := zw.Close(); err != nil {
+			t.Fatalf("closing: %v", err)
+		}
+		if b := buf.Bytes(); b[len(b)-1] == last {
+			return b
+		}
+	}
+	t.Fatalf("no payload yields zlib data ending in %#x", last)
+	return nil
+}
+
+// completeZlib reports whether data holds a whole zlib stream, its checksum
+// included: compress/zlib verifies the checksum once it reaches the end of the
+// deflate data, and fails with io.ErrUnexpectedEOF when bytes of it are
+// missing.
+func completeZlib(data []byte) error {
+	zr, err := zlib.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(io.Discard, zr); err != nil {
+		return err
+	}
+	return zr.Close()
+}
+
+// TestParseStream_FlateChecksumNotTrimmed pins that a FlateDecode stream keeps
+// every byte its /Length counts when no end-of-line marker separates them from
+// "endstream". The last one can be the final byte of the zlib checksum, and a
+// CR or LF there is data, not the marker ISO 32000-1, 7.3.8.1 places before
+// "endstream". Trimming it truncated the stream, and every copy litho wrote of
+// it carried the truncated checksum: qpdf warns "input stream is complete but
+// output may still be valid" on it.
+//
+// The folded case keeps its newline too: zlib data delimits itself, and no
+// decoder reads a byte after the checksum.
+//
+// # Corpus evidence
+//
+//   - pdfcpu golang.pdf: objects 20 and 88 end their checksum in CR, directly
+//     followed by "endstream".
+//   - pdfcpu CenterOfWhy.pdf: object 661 ends its checksum in CR and folds an
+//     LF into /Length, and the trim took the pair for one CRLF marker.
+func TestParseStream_FlateChecksumNotTrimmed(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		data []byte
+	}{
+		{"checksum ends in CR", flateEndingIn(t, '\r')},
+		{"checksum ends in LF", flateEndingIn(t, '\n')},
+		{"checksum ends in CR, folded LF", append(flateEndingIn(t, '\r'), '\n')},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			src := fmt.Sprintf("<< /Filter /FlateDecode /Length %d >>\nstream\n%sendstream", len(tc.data), tc.data)
+			obj, err := newParser(src).ParseObject(context.Background())
+			if err != nil {
+				t.Fatalf("ParseObject: %v", err)
+			}
+			s, ok := obj.(ast.PdfStream)
+			if !ok {
+				t.Fatalf("got %T, want ast.PdfStream", obj)
+			}
+			b, err := s.Bytes(context.Background())
+			if err != nil {
+				t.Fatalf("Bytes: %v", err)
+			}
+			if err := completeZlib(b); err != nil {
+				t.Errorf("stream keeps %d of the %d bytes /Length counts and is no "+
+					"longer a whole zlib stream: %v", len(b), len(tc.data), err)
+			}
+		})
+	}
+}
+
+// TestParseStream_UnfilteredStreamStillTrimmed is the control that confines the
+// change to FlateDecode: an unfiltered stream whose /Length folds in the
+// newline before "endstream" still loses it.
+func TestParseStream_UnfilteredStreamStillTrimmed(t *testing.T) {
+	t.Parallel()
+	obj, err := newParser("<< /Length 6 >>\nstream\n0 0 m\nendstream").ParseObject(context.Background())
+	if err != nil {
+		t.Fatalf("ParseObject: %v", err)
+	}
+	s, ok := obj.(ast.PdfStream)
+	if !ok {
+		t.Fatalf("got %T, want ast.PdfStream", obj)
+	}
+	b, err := s.Bytes(context.Background())
+	if err != nil {
+		t.Fatalf("Bytes: %v", err)
+	}
+	if string(b) != "0 0 m" {
+		t.Errorf("stream = %q, want %q (the folded newline trimmed)", b, "0 0 m")
 	}
 }

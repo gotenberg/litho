@@ -1076,9 +1076,11 @@ func (p *Parser) parseStreamAfterDict(ctx context.Context, dict ast.PdfDict) (as
 	//     cannot recover compressed objects (the whole page tree can be lost).
 	//   - Any stream whose /Length already stops at the last data byte, which a
 	//     surviving separator proves (see [separatorPrecedesEndstream]).
+	//   - FlateDecode streams, whose zlib data delimits itself (see
+	//     [zlibDataFirst]).
 	trimLen := dataLen
 	exactLength := usedLength && separatorPrecedesEndstream(reader.ReaderAt(), streamStart+dataLen)
-	if (p.decryptFn == nil || streamUsesIdentityCryptFilter(dict)) && !isXRefStream(dict) && !exactLength {
+	if (p.decryptFn == nil || streamUsesIdentityCryptFilter(dict)) && !isXRefStream(dict) && !exactLength && !zlibDataFirst(dict) {
 		trimLen = trimStreamTail(reader.ReaderAt(), streamStart, dataLen)
 	}
 	return p.newLazyStream(dict, reader.ReaderAt(), streamStart, trimLen), nil
@@ -1113,6 +1115,52 @@ func separatorPrecedesEndstream(src io.ReaderAt, off int64) bool {
 		return false
 	}
 	return b[0] == '\n' || b[0] == '\r'
+}
+
+// zlibDataFirst reports whether the stream's data is zlib data: the first
+// filter it names, past a Crypt filter, is FlateDecode (ISO 32000-1, 7.4.4).
+//
+// Such data needs no trim to find its end, however the end was found. A zlib
+// stream (RFC 1950) closes with its checksum and every decoder stops there, so
+// an end-of-line marker left before "endstream", whether a producer folded it
+// into /Length or the scan for "endstream" took it in, is a byte no reader
+// decodes. The checksum is another matter: its last byte is CR or LF in one
+// stream of 128, and when no marker follows it that byte is the last one the
+// data holds. Trimming it left the checksum a byte short, and every copy litho
+// wrote carried the truncated stream: qpdf warns "input stream is complete but
+// output may still be valid" on each, where the source draws no warning.
+//
+// A /Filter litho cannot read without resolving an indirect reference answers
+// false, and the stream is trimmed as before.
+//
+// # Corpus evidence
+//
+//   - All corpora: the trim shortened 45319 FlateDecode streams, 33005
+//     delimited by /Length and 12314 by the scan. 231 of them, in 107 files,
+//     lost the end of their checksum (govdocs 202, pdfjs 18, pdfcpu 11), and
+//     44064 hold complete zlib data before the bytes it removed.
+//   - pdfcpu golang.pdf, CenterOfWhy.pdf: qpdf warned on three streams of
+//     their PDF/A-1b and PDF/A-2b remediations, which rewrite the whole file,
+//     and on none of the source's.
+func zlibDataFirst(dict ast.PdfDict) bool {
+	var filters ast.PdfArray
+	switch f := dict["Filter"].(type) {
+	case ast.PdfName:
+		filters = ast.PdfArray{f}
+	case ast.PdfArray:
+		filters = f
+	}
+	for _, f := range filters {
+		name, ok := f.(ast.PdfName)
+		if !ok {
+			return false
+		}
+		if name == "Crypt" {
+			continue
+		}
+		return name == "FlateDecode" || name == "Fl"
+	}
+	return false
 }
 
 // isXRefStream reports whether dict is a cross-reference stream (/Type /XRef).
