@@ -5,6 +5,7 @@ import (
 	"context"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -1476,6 +1477,24 @@ func checkFormPUA(ctx context.Context, doc *document.Document, res ast.PdfDict, 
 // Identity-H or Identity-V, where each two-byte code is the CID the /ToUnicode
 // CMap is keyed by; any other encoding needs a CMap this check does not carry,
 // so it stays conservative and any /ActualText exempts the font.
+//
+// A /ToUnicode CMap that builds on another (ISO 32000-1, 9.7.5) takes its
+// values from the base as well, merged as [resolveUsedCMaps] merges them for
+// the other /ToUnicode rules, so a Private Use value only the base supplies
+// counts and one the base replaces does not. A composite font whose encoding
+// this check cannot read is then left unjudged rather than judged
+// conservatively, since an Adobe UCS2 base maps Private Use values the font may
+// never show.
+//
+// # Corpus evidence
+//
+//   - litho usecmap_2u.pdf: C2 shows CID 44DF through /Adobe-CNS1-UCS2
+//     usecmap, which maps it to U+F538 through bfchar. veraPDF reports it at
+//     PDF/A-2a, PDF/A-3a and PDF/UA-2, and litho, reading the program alone,
+//     did not.
+//   - All corpora: no other file moves at those three profiles. pdfjs
+//     issue5010.pdf, the one other file whose /ToUnicode builds on another
+//     CMap, names Adobe-Korea1-UCS2, which maps no Private Use value.
 func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, treeRoot ast.PdfDict, contentData []byte, holder, res ast.PdfDict) []Violation {
 	rule := puaActualTextRule(profile)
 	if rule.Specification == "" {
@@ -1486,24 +1505,18 @@ func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document
 	// its code, and otherwise, for a simple font, from its encoding's glyph name
 	// (ISO 32000-1, 9.10.2; veraPDF PDSimpleFont.toUnicode), so a PUA value can
 	// come from either.
-	var tuData []byte
-	if tuObj, ok := fontDict["ToUnicode"]; ok {
-		stream, err := document.ResolveStream(ctx, doc, tuObj)
-		if err != nil {
-			doc.Logger.Debug("compliance: cannot resolve ToUnicode stream", "error", err)
-		} else if data, derr := doc.DecodeStream(ctx, stream); derr != nil {
-			doc.Logger.Debug("compliance: cannot decode ToUnicode stream", "error", derr)
-		} else {
-			tuData = data
-		}
-	}
-	tuHasPUA := tuData != nil && containsPUAMapping(string(tuData))
+	tuData, based := toUnicodeBasedView(ctx, doc, fontDict)
+	tuHasPUA := false
 	puaCodes := make(map[uint32]bool)
-	if tuHasPUA {
+	switch {
+	case based != nil:
+		puaCodes = mappingPUACodes(based.StrictMapping())
+	case tuData != nil && containsPUAMapping(string(tuData)):
+		tuHasPUA = true
 		puaCodes = puaSourceCodes(string(tuData))
 	}
 	if fontSubtype(ctx, doc, fontDict) != "Type0" {
-		for code := range glyphNamePUACodes(ctx, doc, fontDict, tuData) {
+		for code := range glyphNamePUACodes(ctx, doc, fontDict, tuData, based) {
 			puaCodes[code] = true
 		}
 	}
@@ -1523,6 +1536,9 @@ func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document
 	splitCodes := singleByteCodes
 	if fontSubtype(ctx, doc, fontDict) == "Type0" {
 		if splitCodes = type0CodeSplitter(ctx, doc, fontDict); splitCodes == nil {
+			if !tuHasPUA {
+				return nil // a base's Private Use values say nothing of the codes shown
+			}
 			return conservative()
 		}
 	}
@@ -1737,10 +1753,15 @@ func showPaintsPUACode(op content.Operation, puaCodes map[uint32]bool, splitCode
 // leaving out any code its /ToUnicode CMap maps, whose value takes precedence
 // (veraPDF PDSimpleFont.toUnicode). A /ToUnicode that cannot be parsed leaves no
 // code to judge by name, so the font keeps the CMap route alone rather than
-// risk reporting a glyph the CMap in fact covers.
-func glyphNamePUACodes(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, tuData []byte) map[uint32]bool {
+// risk reporting a glyph the CMap in fact covers. based, when not nil, is the
+// CMap tuData holds merged with the CMaps it builds on ([toUnicodeBasedView]),
+// whose codes take precedence as well.
+func glyphNamePUACodes(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, tuData []byte, based *cmap.CMap) map[uint32]bool {
 	var mapped map[int]bool
-	if tuData != nil {
+	switch {
+	case based != nil:
+		mapped = cmapSourceCodeValues(based)
+	case tuData != nil:
 		parsed, err := cmap.Parse(ctx, tuData)
 		if err != nil || parsed == nil {
 			return nil
@@ -1758,6 +1779,66 @@ func glyphNamePUACodes(ctx context.Context, doc *document.Document, fontDict ast
 		if aglPUAGlyphNames[name] && !mapped[int(code)] {
 			out[uint32(code)] = true
 		}
+	}
+	return out
+}
+
+// toUnicodeBasedView returns the decoded bytes of fontDict's /ToUnicode CMap,
+// nil when the font has none or it cannot be read, and, when that CMap builds
+// on another through the usecmap operator or a /UseCMap entry (ISO 32000-1,
+// 9.7.5), the CMap merged with its bases as [resolveUsedCMaps] merges them.
+// based is nil for a CMap that builds on nothing, or that does not parse or
+// carries a token its syntax cannot produce ([cmap.CMap.Malformed]), which
+// the other /ToUnicode rules read as mapping nothing.
+func toUnicodeBasedView(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) (tuData []byte, based *cmap.CMap) {
+	tuObj, ok := fontDict["ToUnicode"]
+	if !ok {
+		return nil, nil
+	}
+	stream, err := document.ResolveStream(ctx, doc, tuObj)
+	if err != nil {
+		doc.Logger.Debug("compliance: cannot resolve ToUnicode stream", "error", err)
+		return nil, nil
+	}
+	tuData, err = doc.DecodeStream(ctx, stream)
+	if err != nil {
+		doc.Logger.Debug("compliance: cannot decode ToUnicode stream", "error", err)
+		return nil, nil
+	}
+	if _, entry := stream.Dict["UseCMap"]; !entry && !bytes.Contains(tuData, []byte("usecmap")) {
+		return tuData, nil
+	}
+	parsed, err := cmap.Parse(ctx, tuData)
+	if err != nil || parsed == nil || parsed.Malformed() {
+		return tuData, nil
+	}
+	if _, entry := stream.Dict["UseCMap"]; !entry && parsed.UseCMap() == "" {
+		return tuData, nil
+	}
+	return tuData, resolveUsedCMaps(ctx, doc, tuObj, stream.Dict, parsed)
+}
+
+// mappingPUACodes returns the value of every source code of a /ToUnicode
+// mapping whose Unicode string holds a Private Use Area code point, veraPDF's
+// per-glyph unicodePUA (PUAHelper.containPUA). Codes are read by integer
+// value, as [showPaintsPUACode] compares them; a source wider than four bytes
+// names no code a font shows.
+func mappingPUACodes(mapping map[string]string) map[uint32]bool {
+	out := make(map[uint32]bool)
+	for src, uni := range mapping {
+		if len(src) == 0 || len(src) > 4 {
+			continue
+		}
+		if !strings.ContainsFunc(uni, func(r rune) bool {
+			return isPUAScalar(uint32(r)) //nolint:gosec // a decoded rune is non-negative.
+		}) {
+			continue
+		}
+		v := uint32(0)
+		for i := range len(src) {
+			v = v<<8 | uint32(src[i])
+		}
+		out[v] = true
 	}
 	return out
 }
