@@ -61,7 +61,7 @@ one deliberately rather than diffing it against a fresh build.
 | `complex_ua1.pdf`      | PDF/UA-1     | Structure and accessibility defects in a wired tag tree          |
 | `complex_ua2.pdf`      | PDF/UA-2     | Part-2 specifics: namespaces, PUA text, structure destinations   |
 | `forbidden_mix.pdf`    | PDF/A-2b     | Forbidden actions, PostScript tint transforms, LZW               |
-| `gstate_2b.pdf`        | PDF/A-2b     | Transfer functions and halftones in six graphics states          |
+| `gstate_2b.pdf`        | PDF/A-2b     | Transfer functions and halftones, judged at the `gs` setting one |
 | `limits_2b.pdf`        | PDF/A-2b     | Implementation limits: real, string, name, nesting, DeviceN      |
 | `megafont_2b.pdf`      | PDF/A-2b     | Font embedding and glyph-width scoping                           |
 | `multipage_2b.pdf`     | PDF/A-2b     | Three pages, a violation class unique to each                    |
@@ -173,6 +173,7 @@ violation but is exempt, so a firing is a false positive.
 | `schemaprefix_1b`                         | Third field of the fifth value type, beside two defective ones         | ISO 19005-1, 6.7.8 t17-t19   |
 | `schemaprefix_1b`                         | Second property of the fifth schema entry, conforming                  | ISO 19005-1, 6.7.8 t8-t11    |
 | `gstate_2b`                               | Sixth graphics state: `/TR2 /Default`, unnamed type 1 halftone         | ISO 19005-2, 6.2.5           |
+| `gstate_2b`                               | `GS8` and `GSi`, `/TR` states no painted stream's `gs` sets            | ISO 19005-2, 6.2.5 t1        |
 | `tablespan_ua2`                           | Second table spanning two columns with both headers referenced         | ISO 14289-2, 8.2.5.26        |
 | `limits_1b`                               | Integers of `2147483647` and `-2147483648`                             | ISO 19005-1, 6.1.12 t1       |
 | `limits_1b`                               | Reals of `32767.0` and `-32767.0`                                      | ISO 19005-1, 6.1.12 t2       |
@@ -294,6 +295,7 @@ violation but is exempt, so a firing is a false positive.
 | `resinherit_2b`                           | `F6` and `CS4`, an ancestor's, behind the page's own `/Resources`      | ISO 32000-1, 7.7.3.4         |
 | `resinherit_2b`                           | `F4` and `CS3`, an ancestor's, behind a `/Resources` naming no object  | veraPDF `knownKey` reading   |
 | `pagegroup_2b`                            | A page transparency group with an ICCBased blending space              | ISO 19005-2, 6.2.10 t2       |
+| `pagegroup_2b`                            | A page transparency group with no `/CS` over opaque content            | ISO 19005-2, 6.2.10 t2       |
 | `pagegroup_2b`                            | `xmp:CreatorTool` in the XMP packet a page carries                     | ISO 19005-2, 6.6.2.3.1       |
 | `fontleft_2b`                             | `CK`, a CID its CFF charset lacks, declared at the default width       | ISO 19005-2, 6.2.11.5        |
 | `fontleft_2b`                             | `TS`, Type 3 widths half a unit apart under a `/FontMatrix` of 0.01    | ISO 19005-2, 6.2.11.5        |
@@ -354,7 +356,7 @@ which are covered under [Known divergences](#known-divergences).
 | `formstruct_ua2.pdf`   | 4    | 4    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 7    | 7    |
 | `glyphs_2b.pdf`        | 7    | 4    | 8    | 5    | 6    | 8    | 5    | 6    | 6   | 6    | 7    | 10   | 10   |
 | `grouping_ua2.pdf`     | 3    | 3    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 5    | 8    |
-| `gstate_2b.pdf`        | 8    | 6    | 12   | 10   | 10   | 12   | 10   | 10   | 10  | 10   | 11   | 7    | 7    |
+| `gstate_2b.pdf`        | 9    | 7    | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 7    | 7    |
 | `gstateform_1b.pdf`    | 9    | 6    | 8    | 5    | 6    | 8    | 5    | 6    | 9   | 9    | 10   | 8    | 7    |
 | `headings_ua1.pdf`     | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 3    | 4   | 4    | 5    | 5    | 5    |
 | `iccbased_4.pdf`       | 5    | 3    | 7    | 5    | 5    | 7    | 5    | 5    | 5   | 5    | 6    | 8    | 7    |
@@ -1237,6 +1239,45 @@ transfer function pairing, and the conforming state stays silent. Five
 different states carrying five different defects is the point: a check that
 reported the first and stopped would report one rule where five are due.
 
+veraPDF builds a graphics state only from a `gs` operator, so a state no `gs`
+sets is judged nowhere. It judges a state written as an indirect object once
+for the whole document, one written directly once for every `gs` that sets it,
+and a halftone written as an indirect object once, whatever states name it.
+The six states above are indirect and set once each. The same page also sets
+these, all written directly in a resource dictionary:
+
+| State  | Set by                                        | Answers at PDF/A-2b |
+| ------ | --------------------------------------------- | ------------------- |
+| GS7    | two `gs`, holding `/TR`                       | `6.2.5/1` x2        |
+| GS8    | no `gs`, holding `/TR`                        | nothing             |
+| GS9    | two `gs`, holding `/RI /Foo`                  | `6.2.6/1` x2        |
+| H1, H2 | one `gs` each, naming one indirect type 6 HT  | `6.2.5/4` once      |
+| GSn    | one `gs` in `FmInner`, which `FmOuter` paints | `6.2.5/3`           |
+| GSi    | one `gs` in `FmIdle`, which no `Do` paints    | nothing             |
+
+litho judged every state the page's resources, the resources of the forms the
+page's resources list and the annotation appearances' resources declared, once
+each, whatever set it: GS8 and GSi failed, GS7 and GS9 failed once, the shared
+halftone once per state, and `GSn`, one form further down, not at all.
+
+| Rule      | Profile  | veraPDF | litho | litho before |
+| --------- | -------- | ------- | ----- | ------------ |
+| `6.2.5/1` | PDF/A-2b | 3       | 3     | 4            |
+| `6.2.5/3` | PDF/A-2b | 2       | 2     | 1            |
+| `6.2.5/4` | PDF/A-2b | 2       | 2     | 3            |
+| `6.2.6/1` | PDF/A-2b | 2       | 2     | 1            |
+| `6.2.8/1` | PDF/A-1b | 3       | 3     | 4            |
+| `6.2.9/1` | PDF/A-1b | 2       | 2     | 1            |
+| `6.2.5/1` | PDF/A-4  | 3       | 3     | 4            |
+| `6.2.5/4` | PDF/A-4  | 2       | 2     | 3            |
+
+The rule sets match veraPDF 1.30.2 in all thirteen cells, and the counts at
+every PDF/A level. In the counts table, GS9 adds `6.2.9/1` at the part-1
+levels and `6.2.6/1` at the part-2 and part-3 levels. Remediation leaves the direct states as they
+are, so `6.2.5/1`, `/3`, `/4` and `6.2.6/1` stay after a PDF/A-2b repair, and
+`6.2.8/1` and `6.2.9/1` after a PDF/A-1b one; both tools report the same
+residual set on every output.
+
 ## Implementation limits
 
 ISO 19005-2, 6.1.13 scatters its tests across object types rather than
@@ -1545,40 +1586,21 @@ content paints with it, and a coloured pattern's cell supplies its own colour
 (ISO 32000-1, 8.7.3.3). No code changed and no fixture plants it. Same treatment
 as the `7.1/12` entry below.
 
-**`6.2.10/2` at PDF/A-2b and `6.2.9/2` at PDF/A-4, a page transparency group.**
-The rule asks a page that uses transparency for a blending colour space, and
-the two tools decide both halves of that differently. veraPDF reads the page's
-transparency from its content and annotations alone (`GFPDPage` sets
-`containsTransparency` while it parses them), never from the page's own
-`/Group`. It reads the group's `/CS` with no resources
-(`PDGroup.getColorSpace`), so `containsGroupCS` is false for a `/CS` naming a
-`/ColorSpace` entry. litho counts the page `/Group` as transparency, and any
-non-null `/CS` as a blending space. Measured with veraPDF 1.30 at both profiles
-on one-page files:
-
-| Page                                                              | veraPDF | litho  |
-| ----------------------------------------------------------------- | ------- | ------ |
-| group with no `/CS`, painting nothing transparent                 | silent  | fires  |
-| group whose `/CS` names an entry, painting an isolated group form | fires   | silent |
-
-Reading the name as no colour space would fix the second row and break a page
-both tools agree on today, a group naming an entry over opaque content: litho
-would then count the group as transparency with no blending space and fire
-alone. The two halves need fixing together. `blendcs_4.pdf` gives its named
-page group a page of its own, which paints nothing transparent, for this
-reason. Not planted.
-
-**The graphics state rules, `6.2.8` and `6.2.9/1` at PDF/A-1b, `6.2.5` and
-`6.2.6/1` at PDF/A-2b.** veraPDF builds a `PDExtGState` only from a `gs`
-operator (`GFOp_gs`), once for the document when the graphics state is an
-indirect object and at every `gs` when it is written directly, and judges its
-`/TR`, `/TR2`, halftone and `/RI` there. litho judges every graphics state the
-page, form and appearance resources list, once each, whatever sets it. Measured
-with veraPDF 1.30 at PDF/A-1b and PDF/A-2b: a direct graphics state holding
-`/TR` or an invalid `/RI` that two `gs` set fails its test twice, where litho
-fails it once, and one no `gs` sets fails nothing, where litho fails it once.
-An indirect graphics state one or more `gs` set agrees. `namereads_1b.pdf` sets
-its direct `/RI` state once for this reason. Not planted.
+**`6.2.10/2` at PDF/A-2b and `6.2.9/2` at PDF/A-4, transparency nothing
+paints.** Both tools now read a page's transparency from what its content and
+annotations draw and ignore the page's own `/Group`, but veraPDF also asks
+which operator paints under which state. It raises `containsTransparency` at a
+painting operator whose graphics state is transparent for it
+(`TransparencyBehaviour`, veraPDF-validation 1.30): a fill tests `/ca`, a
+stroke `/CA`, both a soft mask and a blend mode, and an alpha counts only
+below 1. litho counts every graphics state a `gs` sets. Measured with veraPDF
+1.30 at both profiles on one-page files with no group and no output intent,
+each of which litho fails and veraPDF passes: a `gs` setting `/ca 0.5` that
+`Q` undoes before any fill, `/ca 0.5` before a stroke alone, `/CA 0.5` before
+a fill alone, and `/ca 1.5` before a fill. Of the 227 corpus files litho fails
+under 6.2.10 t2 at PDF/A-2b, the 225 veraPDF processes fail it as often there,
+83 against the verapdf and litho goldens and 142 live, so no corpus file shows
+the difference. Not planted.
 
 **`7.1/12` at PDF/UA-1.** litho reports a structure element missing its `/P`
 entry; veraPDF cannot. `GFPDStructElem.getcontainsParent` returns
@@ -2864,9 +2886,10 @@ not restore it, and the writer refused the whole remediation. At PDF/UA-1 the
 
 ISO 19005-2, 6.2.10 test 2 asks every page that contains transparency, in a
 document without a PDF/A OutputIntent, for a `/Group` whose `/CS` names the
-default blending colour space. The file declares no OutputIntent, and four
-pages paint through constant alpha in an ICCBased space, so no page uses a
-device colour space of its own:
+default blending colour space. The file declares no OutputIntent, and every
+page paints in an ICCBased space, so no page uses a device colour space of its
+own. Pages 1 to 4 and 6 paint through constant alpha, page 5 paints opaquely,
+and page 7 paints a form with an isolated transparency group:
 
 | Page | `/Group`                              | Answers at PDF/A-2b |
 | ---- | ------------------------------------- | ------------------- |
@@ -2874,6 +2897,9 @@ device colour space of its own:
 | 2    | `/S /Transparency`, an ICCBased `/CS` | nothing             |
 | 3    | `/S /Transparency`, no `/CS`          | `6.2.10/2`          |
 | 4    | `/S /Transparency`, `/CS /DeviceRGB`  | `6.2.4.3/2`         |
+| 5    | `/S /Transparency`, no `/CS`          | nothing             |
+| 6    | `/S /Transparency`, `/CS /CS0`        | `6.2.10/2`          |
+| 7    | `/S /Transparency`, `/CS /CS0`        | `6.2.10/2`          |
 
 Page 2 is the control. Its ICCBased blending space answers the rule, and a
 repair of pages 1 and 3 has to leave it in place: litho's group repair dropped
@@ -2882,6 +2908,18 @@ round the space it had just given page 1, failing a rule the source passed.
 Page 3 is the group a check reading "has a `/Group`" as enough lets through.
 Page 4 blends in DeviceRGB, which test 2 of 6.2.4.3 allows only under an RGB
 OutputIntent.
+
+Pages 5 to 7 are how veraPDF reads the test's two halves. It decides that a
+page contains transparency from what its content and annotations draw, never
+from the page's own `/Group`, so page 5, a group with no `/CS` over opaque
+content, needs no blending space. It reads a group's `/CS` with no resources
+(`PDGroup.getColorSpace`), so the `/CS0` pages 6 and 7 name, the ICCBased entry
+of their own `/ColorSpace`, is no blending space. litho counted the page group
+as transparency and any `/CS` that is not null as a blending space, so it
+failed page 5 and passed pages 6 and 7: three findings at PDF/A-2b where
+veraPDF reports four, one of them on a page veraPDF passes. The group repair
+now replaces a named `/CS` with an ICCBased sRGB space, as it does a device
+one, and every remediated output passes 6.2.10 test 2 on both tools.
 
 Page 1 also carries its own XMP packet. ISO 19005-2, 6.6.2.3.1 constrains the
 properties of every metadata stream in the file, not only the catalog's:
@@ -2893,21 +2931,22 @@ object that holds it, `object N: `, which its schema repair read as part of the
 namespace URI, so it claimed the finding and stripped nothing. Part 1 judges
 the catalog packet alone, so the page packet is silent at PDF/A-1b.
 
-At PDF/A-1b the same three groups are what ISO 19005-1, 6.4 test 3 forbids,
-and page 4's blending space fails 6.2.3.3 test 1. That is the profile where a
+At PDF/A-1b the six page groups and the form group on page 7 are what ISO
+19005-1, 6.4 test 3 forbids, and page 4's blending space fails 6.2.3.3 test 1. That is the profile where a
 repair removing the groups and another synthesizing them again showed: the
 remediation took a second round to converge.
 
-| Profile  | Rule          | litho | veraPDF 1.30.2 |
-| -------- | ------------- | ----- | -------------- |
-| PDF/A-2b | `6.2.10/2`    | 2     | 2              |
-| PDF/A-2b | `6.2.4.3/2`   | 1     | 1              |
-| PDF/A-2b | `6.6.2.3.1/1` | 1     | 1              |
-| PDF/A-2b | `6.6.2.3.1/2` | 2     | 2              |
-| PDF/A-1b | `6.4/3`       | 3     | 3              |
-| PDF/A-1b | `6.4/6`       | 4     | 4              |
-| PDF/A-1b | `6.2.3.3/1`   | 1     | 1              |
-| PDF/A-1b | `6.7.11/2`    | 1     | 1              |
+| Profile  | Rule          | litho | veraPDF 1.30.2 | litho before |
+| -------- | ------------- | ----- | -------------- | ------------ |
+| PDF/A-2b | `6.2.10/2`    | 4     | 4              | 3            |
+| PDF/A-2b | `6.2.4.3/2`   | 1     | 1              | 1            |
+| PDF/A-2b | `6.6.2.3.1/1` | 1     | 1              | 1            |
+| PDF/A-2b | `6.6.2.3.1/2` | 2     | 2              | 2            |
+| PDF/A-4  | `6.2.9/2`     | 4     | 4              | 3            |
+| PDF/A-1b | `6.4/3`       | 7     | 7              | 7            |
+| PDF/A-1b | `6.4/6`       | 5     | 5              | 5            |
+| PDF/A-1b | `6.2.3.3/1`   | 1     | 1              | 1            |
+| PDF/A-1b | `6.7.11/2`    | 1     | 1              | 1            |
 
 The two tools return the same rule set in all thirteen cells, and the same
 instance count for every rule at every PDF/A level.
@@ -2978,9 +3017,8 @@ dictionary reads a Separation or DeviceN colorant itself, and once per re-read.
 The builder's table lists every name with its count. The control is a
 Separation a Type 3 glyph selects past its `d1`, which ignores its colour
 operators (ISO 32000-1, 9.6.5), so no link reads it again. The direct graphics
-state carrying an `/RI` is set by one `gs` alone, because litho judges the
-rendering-intent test once per graphics state its resources list, where
-veraPDF judges it at every `gs`, which a second `gs` would split.
+state carrying an `/RI` is set by one `gs`; `gstate_2b.pdf` holds the direct
+states two `gs` set, which fail the rendering-intent test at each of them.
 
 | Rule at PDF/A-1b                      | veraPDF | litho | litho before |
 | ------------------------------------- | ------- | ----- | ------------ |
@@ -3047,8 +3085,9 @@ litho let a gray ICC, CalGray or Lab isolated group cover DeviceGray.
 
 Each stream paints `rg` or `g` and one fill. The forms sit on a second page,
 painted in this order, the two controls last; the named page group sits alone
-on the first, which paints nothing transparent (see
-[Known divergences](#known-divergences)).
+on the first, which paints nothing transparent, so the page needs no blending
+space under ISO 19005-4, 6.2.9 t2 and the rule stays out of its count.
+`pagegroup_2b.pdf` holds named page groups over transparent content.
 
 | Rule at PDF/A-4          | veraPDF | litho | litho before |
 | ------------------------ | ------- | ----- | ------------ |

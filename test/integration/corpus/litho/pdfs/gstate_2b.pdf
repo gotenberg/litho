@@ -7,10 +7,10 @@ endobj
 << /Count 1 /Kids [ 3 0 R ] /Type /Pages >>
 endobj
 3 0 obj
-<< /Contents 4 0 R /MediaBox [ 0 0 612 792 ] /Parent 2 0 R /Resources << /ExtGState << /GS1 5 0 R /GS2 6 0 R /GS3 7 0 R /GS4 8 0 R /GS5 9 0 R /GS6 10 0 R >> /Font << /F1 11 0 R >> >> /Type /Page >>
+<< /Contents 4 0 R /MediaBox [ 0 0 612 792 ] /Parent 2 0 R /Resources << /ExtGState << /GS1 5 0 R /GS2 6 0 R /GS3 7 0 R /GS4 8 0 R /GS5 9 0 R /GS6 10 0 R /GS7 << /TR 11 0 R /Type /ExtGState >> /GS8 << /TR 11 0 R /Type /ExtGState >> /GS9 << /RI /Foo /Type /ExtGState >> /H1 << /HT 12 0 R /Type /ExtGState >> /H2 << /HT 12 0 R /Type /ExtGState >> >> /Font << /F1 13 0 R >> /XObject << /FmIdle 14 0 R /FmOuter 15 0 R >> >> /Type /Page >>
 endobj
 4 0 obj
-<< /Length 236 >>
+<< /Length 455 >>
 stream
 q /GS1 gs 0 0 0 rg 50 700 60 30 re f Q
 q /GS2 gs 50 660 60 30 re f Q
@@ -18,65 +18,100 @@ q /GS3 gs 50 620 60 30 re f Q
 q /GS4 gs 50 580 60 30 re f Q
 q /GS5 gs 50 540 60 30 re f Q
 q /GS6 gs 50 500 60 30 re f Q
+q /GS7 gs 150 700 60 30 re f Q
+q /GS7 gs 150 660 60 30 re f Q
+q /GS9 gs 150 620 60 30 re f Q
+q /GS9 gs 150 580 60 30 re f Q
+q /H1 gs 150 540 60 30 re f Q
+q /H2 gs 150 500 60 30 re f Q
+q 1 0 0 1 250 700 cm /FmOuter Do Q
 BT /F1 12 Tf 50 460 Td (graphics states) Tj ET
 
 endstream
 endobj
 5 0 obj
-<< /TR 12 0 R /Type /ExtGState >>
+<< /TR 11 0 R /Type /ExtGState >>
 endobj
 6 0 obj
-<< /TR2 12 0 R /Type /ExtGState >>
+<< /TR2 11 0 R /Type /ExtGState >>
 endobj
 7 0 obj
-<< /HTP [ 12 0 R ] /Type /ExtGState >>
+<< /HTP [ 11 0 R ] /Type /ExtGState >>
 endobj
 8 0 obj
-<< /HT 13 0 R /Type /ExtGState >>
+<< /HT 16 0 R /Type /ExtGState >>
 endobj
 9 0 obj
-<< /HT 14 0 R /Type /ExtGState >>
+<< /HT 17 0 R /Type /ExtGState >>
 endobj
 10 0 obj
-<< /HT 15 0 R /TR2 /Default /Type /ExtGState >>
+<< /HT 18 0 R /TR2 /Default /Type /ExtGState >>
 endobj
 11 0 obj
-<< /BaseFont /Helvetica /Encoding /WinAnsiEncoding /Subtype /Type1 /Type /Font >>
-endobj
-12 0 obj
 << /Domain [ 0 1 ] /FunctionType 4 /Range [ 0 1 ] /Length 14 >>
 stream
 { 1 exch sub }
 endstream
 endobj
+12 0 obj
+<< /HalftoneType 6 /Height 8 /Type /Halftone /Width 8 >>
+endobj
 13 0 obj
-<< /HalftoneType 6 /Height 8 /TransferFunction /Identity /Type /Halftone /Width 8 >>
+<< /BaseFont /Helvetica /Encoding /WinAnsiEncoding /Subtype /Type1 /Type /Font >>
 endobj
 14 0 obj
-<< /Angle 45 /Frequency 60 /HalftoneName (named halftone) /HalftoneType 1 /SpotFunction /Round /Type /Halftone >>
+<< /BBox [ 0 0 60 30 ] /Resources << /ExtGState << /GSi << /TR 11 0 R /Type /ExtGState >> >> >> /Subtype /Form /Type /XObject /Length 23 >>
+stream
+/GSi gs 0 0 60 30 re f
+
+endstream
 endobj
 15 0 obj
+<< /BBox [ 0 0 60 30 ] /Resources << /XObject << /FmInner 19 0 R >> >> /Subtype /Form /Type /XObject /Length 12 >>
+stream
+/FmInner Do
+
+endstream
+endobj
+16 0 obj
+<< /HalftoneType 6 /Height 8 /TransferFunction /Identity /Type /Halftone /Width 8 >>
+endobj
+17 0 obj
+<< /Angle 45 /Frequency 60 /HalftoneName (named halftone) /HalftoneType 1 /SpotFunction /Round /Type /Halftone >>
+endobj
+18 0 obj
 << /Angle 45 /Frequency 60 /HalftoneType 1 /SpotFunction /Round /Type /Halftone >>
 endobj
+19 0 obj
+<< /BBox [ 0 0 60 30 ] /Resources << /ExtGState << /GSn << /HTP [ 11 0 R ] /Type /ExtGState >> >> >> /Subtype /Form /Type /XObject /Length 23 >>
+stream
+/GSn gs 0 0 60 30 re f
+
+endstream
+endobj
 xref
-0 16
+0 20
 0000000000 65535 f 
 0000000015 00000 n 
 0000000064 00000 n 
 0000000123 00000 n 
-0000000336 00000 n 
-0000000623 00000 n 
-0000000672 00000 n 
-0000000722 00000 n 
-0000000776 00000 n 
-0000000825 00000 n 
-0000000874 00000 n 
-0000000938 00000 n 
-0000001036 00000 n 
-0000001148 00000 n 
-0000001249 00000 n 
-0000001379 00000 n 
-trailer << /Root 1 0 R /Size 16 /ID [<200392656a7c6c0e41fafc1652356583><200392656a7c6c0e41fafc1652356583>] >>
+0000000573 00000 n 
+0000001079 00000 n 
+0000001128 00000 n 
+0000001178 00000 n 
+0000001232 00000 n 
+0000001281 00000 n 
+0000001330 00000 n 
+0000001394 00000 n 
+0000001506 00000 n 
+0000001579 00000 n 
+0000001677 00000 n 
+0000001874 00000 n 
+0000002035 00000 n 
+0000002136 00000 n 
+0000002266 00000 n 
+0000002365 00000 n 
+trailer << /Root 1 0 R /Size 20 /ID [<94bec26c1ee9f54dba4d2bbf28a0850c><94bec26c1ee9f54dba4d2bbf28a0850c>] >>
 startxref
-1478
+2567
 %%EOF

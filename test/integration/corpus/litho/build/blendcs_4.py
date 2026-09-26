@@ -31,10 +31,10 @@ checker that reads no blending space at all reports them. They are painted
 last, after every form whose group covers nothing.
 
 The groups sit on two pages because ISO 19005-4, 6.2.9 t2 asks a page that uses
-transparency for a blending space, and the two tools decide differently which
-page uses it (see ../README.md, Known divergences): the second page's forms use
-transparency and it has no group, which both tools fail once, and the first
-page paints nothing transparent.
+transparency for a blending space, which a page's own group does not make it
+use: the second page's forms use transparency and it has no group, which both
+tools fail once, and the first page paints nothing transparent, so its named
+group owes the rule nothing.
 
 See ../README.md for the authoritative expected firing set.
 """

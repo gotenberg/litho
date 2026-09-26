@@ -13,10 +13,21 @@ space so no page uses a device colour space of its own:
 | 2    | `/S /Transparency /CS [/ICCBased ..]` | silent           |
 | 3    | `/S /Transparency`, no `/CS`          | `6.2.10/2`       |
 | 4    | `/S /Transparency /CS /DeviceRGB`     | `6.2.4.3/2`      |
+| 5    | `/S /Transparency`, no `/CS`, opaque  | silent           |
+| 6    | `/S /Transparency /CS /CS0`           | `6.2.10/2`       |
+| 7    | the same, painting an isolated group  | `6.2.10/2`       |
 
 Page 2 is the control: its ICCBased blending space answers the rule, and a
 repair of pages 1 and 3 has to leave it in place. Page 4 blends in DeviceRGB,
 which ISO 19005-2, 6.2.4.3 t2 allows only under an RGB OutputIntent.
+
+Pages 5 and 6 are the two halves of how veraPDF reads the rule. It decides a
+page contains transparency from what the page draws, never from its own
+/Group, so page 5, which paints the same square without the graphics state,
+needs no blending space. It reads the group's /CS with no resources, so the
+/CS0 that pages 6 and 7 name, the ICCBased entry of their own /ColorSpace,
+is no blending space at all. Page 7 draws its transparency as a form with an
+isolated transparency group rather than through constant alpha.
 
 At PDF/A-1b every one of those groups is a transparency group ISO 19005-1,
 6.4 t3 forbids, and page 4's DeviceRGB blending space fails 6.2.3.3 t1 as
@@ -87,9 +98,10 @@ PAGE_PACKET = (
 # Every page paints the same square through constant alpha, in the ICCBased
 # space, so each page contains transparency and none uses a device space.
 CONTENT = b"/GS0 gs /CS0 cs 0.2 0.4 0.6 scn 60 60 200 200 re f\n"
+OPAQUE = b"/CS0 cs 0.2 0.4 0.6 scn 60 60 200 200 re f\n"
 
 
-def add_page(group=None, metadata=None):
+def add_page(group=None, metadata=None, content=CONTENT, xobjects=None):
     page = Dictionary(
         Type=Name.Page,
         MediaBox=Array([0, 0, 612, 792]),
@@ -97,8 +109,10 @@ def add_page(group=None, metadata=None):
             ExtGState=Dictionary(GS0=Dictionary(Type=Name.ExtGState, ca=0.5)),
             ColorSpace=Dictionary(CS0=iccbased),
         ),
-        Contents=Stream(pdf, CONTENT),
+        Contents=Stream(pdf, content),
     )
+    if xobjects is not None:
+        page.Resources.XObject = xobjects
     if group is not None:
         page.Group = group
     if metadata is not None:
@@ -114,6 +128,20 @@ add_page(metadata=pdf.make_indirect(page_meta))
 add_page(group=Dictionary(Type=Name.Group, S=Name.Transparency, CS=iccbased))
 add_page(group=Dictionary(Type=Name.Group, S=Name.Transparency))
 add_page(group=Dictionary(Type=Name.Group, S=Name.Transparency, CS=Name.DeviceRGB))
+add_page(group=Dictionary(Type=Name.Group, S=Name.Transparency), content=OPAQUE)
+add_page(group=Dictionary(Type=Name.Group, S=Name.Transparency, CS=Name("/CS0")))
+
+isolated = Stream(pdf, OPAQUE)
+isolated.Type = Name.XObject
+isolated.Subtype = Name.Form
+isolated.BBox = Array([0, 0, 612, 792])
+isolated.Resources = Dictionary(ColorSpace=Dictionary(CS0=iccbased))
+isolated.Group = Dictionary(Type=Name.Group, S=Name.Transparency, CS=iccbased, I=True)
+add_page(
+    group=Dictionary(Type=Name.Group, S=Name.Transparency, CS=Name("/CS0")),
+    content=b"/Fm0 Do\n",
+    xobjects=Dictionary(Fm0=pdf.make_indirect(isolated)),
+)
 
 attach_xmp(pdf, xmp_packet(part=2, conformance="B"))
 save(pdf, "pagegroup_2b.pdf", min_version="1.7")
