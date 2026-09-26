@@ -39,7 +39,8 @@ operators off for every tiling cell the same stream paints, the coloured one
 beside it included; page 3 is an image being built where the space a colour
 operator selects is not. Pages 11 to 14 are the numbers a content-limits
 repair reads: it clamps the one compliance judges, on page 14, and leaves the
-three it does not, since rewriting them changes the file for no rule.
+three it does not, since rewriting them changes the file for no rule. It does
+clamp the `w` of the cells on pages 6, 8 and 9, which compliance never builds.
 
 See ../README.md for the authoritative expected firing set.
 """

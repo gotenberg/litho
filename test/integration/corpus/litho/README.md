@@ -3424,7 +3424,10 @@ is the uncoloured pattern turning the colour operators off for every tiling
 cell the same stream paints, the coloured one beside it included. Pages 11 to
 14 are what the content-limits repair reads: at PDF/A-1b it clamps the number on
 page 14, which compliance judges, and leaves the three it does not, in both
-modes. Page 7's glyph opens with `q`, so its `d1` is no first operator and its
+modes. It also clamps the `w` of pages 6, 8 and 9, in cells compliance never
+builds, which changes content no rule reads: the repair walks every tiling
+pattern the resources name, where compliance reaches a cell only through an
+operator that builds it. Page 7's glyph opens with `q`, so its `d1` is no first operator and its
 width reads as 0 against `/Widths` 1000, `6.3.6/1`.
 
 | Rule at PDF/A-1b       | veraPDF | litho |
