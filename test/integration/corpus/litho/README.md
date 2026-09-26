@@ -2569,6 +2569,12 @@ Apart from its unembedded font the document conforms, so at PDF/UA-1 exactly two
 rules answer: the permissions and `7.21.4.1`. A checker reading the permissions
 wrongly shows up immediately rather than behind a neighbour.
 
+Each cross-reference entry is 20 bytes, its end-of-line marker included, as ISO
+32000-1, 7.5.4 requires. The builder used to write a space before CR LF, 21
+bytes, which qpdf reports as an invalid entry and repairs by reconstructing the
+table. Neither litho's nor veraPDF's firing set moved on any of the 13 profiles
+when the entries shrank.
+
 ### `sigcms_2b.pdf`
 
 ISO 19005-2, 6.4.3 splits into three tests over two objects. Test 1 asks the

@@ -185,9 +185,11 @@ def build(path, permissions):
         out += b"%d 0 obj\n" % number + objects[number] + b"\nendobj\n"
 
     startxref = len(out)
-    out += b"xref\n0 %d\n0000000000 65535 f \r\n" % (len(objects) + 1)
+    # Each entry is exactly 20 bytes, its two-byte end-of-line marker
+    # included (ISO 32000-1, 7.5.4).
+    out += b"xref\n0 %d\n0000000000 65535 f\r\n" % (len(objects) + 1)
     for number in sorted(objects):
-        out += b"%010d 00000 n \r\n" % offsets[number]
+        out += b"%010d 00000 n\r\n" % offsets[number]
     out += (b"trailer\n<< /Size %d /Root 1 0 R /Encrypt 11 0 R /ID [<%s> <%s>] >>\n"
             b"startxref\n%d\n%%%%EOF\n"
             % (len(objects) + 1, DOC_ID.hex().encode(), DOC_ID.hex().encode(), startxref))
