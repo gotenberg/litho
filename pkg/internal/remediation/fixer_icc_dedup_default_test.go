@@ -69,7 +69,7 @@ func TestFixICCDedupLeavesDefaultColourSpaces(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	if _, err := fixICCDedup(ctx, alloc, doc, Options{}, nil, ""); err != nil {
 		t.Fatalf("fixICCDedup: %v", err)

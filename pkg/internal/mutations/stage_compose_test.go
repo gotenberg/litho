@@ -67,7 +67,7 @@ func composeFixture(t *testing.T) (context.Context, *document.Document, []*docum
 	if len(pages) != 3 {
 		t.Fatalf("fixture has %d pages, want 3", len(pages))
 	}
-	return ctx, doc, pages, writer.NewObjAllocator(doc.HighestObjectNumber())
+	return ctx, doc, pages, writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 }
 
 // TestDeleteKeepsAnEarlierStagesPageEdits pins that a mutation running after

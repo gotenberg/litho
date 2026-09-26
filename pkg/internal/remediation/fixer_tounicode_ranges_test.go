@@ -43,7 +43,7 @@ func runToUnicodeRanges(t *testing.T, data []byte) (*writer.ObjAllocator, []stri
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	first, err := fixToUnicodeRangeIssues(ctx, alloc, doc, Options{}, nil, "")
 	if err != nil {
 		t.Fatalf("first pass: %v", err)

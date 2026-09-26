@@ -79,7 +79,7 @@ func TestFlattenFormLeavesUndisplayedWidgetsAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if err := FlattenForm(ctx, alloc, doc); err != nil {
 		t.Fatalf("FlattenForm: %v", err)
 	}

@@ -91,7 +91,7 @@ func TestFixFontIssues_SettlesASharedDescriptorsCIDSetOnce(t *testing.T) {
 	const fdObj = 6
 	ctx := context.Background()
 	doc, alloc := newTestDoc(t, sharedDescriptorPDF(t, true, nil, nil))
-	highest := doc.HighestObjectNumber()
+	highest := doc.HighestObjectNumber(ctx)
 
 	if _, err := fixNameUTF8(ctx, alloc, doc, Options{}, nil, "PDF/A-2b"); err != nil {
 		t.Fatalf("fixNameUTF8: %v", err)
@@ -168,7 +168,7 @@ func TestFixFontIssues_ACIDSetCoversEverySharersMap(t *testing.T) {
 
 	ctx := context.Background()
 	doc, alloc := newTestDoc(t, sharedDescriptorPDF(t, false, mapA, mapB))
-	highest := doc.HighestObjectNumber()
+	highest := doc.HighestObjectNumber(ctx)
 
 	fixes, err := fixFontIssues(ctx, alloc, doc, Options{},
 		[]compliance.Violation{{Rule: compliance.Rule_19005_1_6_3_5_t03}}, "PDF/A-1b")

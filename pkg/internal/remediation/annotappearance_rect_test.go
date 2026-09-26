@@ -50,7 +50,7 @@ func appearanceFor(t *testing.T, rect string) ast.PdfDict {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if _, err := fixAnnotAppearance(ctx, alloc, doc, Options{}, nil, ""); err != nil {
 		t.Fatalf("fixAnnotAppearance: %v", err)
 	}

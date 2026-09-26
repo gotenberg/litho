@@ -52,7 +52,7 @@ func TestFixMessagesNameAKeyWithOneSlash(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	fixes, err := fixInfoDate(ctx, alloc, doc, Options{}, nil, "")
 	if err != nil {

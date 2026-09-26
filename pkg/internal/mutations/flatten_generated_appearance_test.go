@@ -46,7 +46,7 @@ func flattenDoc(t *testing.T, widget string, extra ...string) (context.Context, 
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	return ctx, doc, writer.NewObjAllocator(doc.HighestObjectNumber())
+	return ctx, doc, writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 }
 
 // flattenedPage returns the rewritten page and the content of every XObject the

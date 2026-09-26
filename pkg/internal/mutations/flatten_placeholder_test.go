@@ -60,7 +60,7 @@ func flattenPlaceholder(t *testing.T, draws bool) (kept bool, keptHasAP bool) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if err := FlattenForm(ctx, alloc, doc); err != nil {
 		t.Fatalf("FlattenForm: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestFlattenCarriesTheInheritedDefaultAppearance(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if err := FlattenForm(ctx, alloc, doc); err != nil {
 		t.Fatalf("FlattenForm: %v", err)
 	}

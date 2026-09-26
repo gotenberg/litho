@@ -81,22 +81,17 @@ func RemediateWTPDF(ctx context.Context, doc *document.Document, alloc *writer.O
 	return remediate(ctx, doc, alloc, string(profile), opts, violations)
 }
 
-// reserveDefinedObjects runs the raw-byte augmentation of the cross-reference
-// index, then raises alloc past the highest object number the file uses
-// ([document.Document.HighestObjectNumber]), before a repair allocates an
-// object.
+// reserveDefinedObjects raises alloc past the highest object number the file's
+// bytes define ([document.Document.HighestObjectNumber], which runs the raw-byte
+// augmentation of the cross-reference index first), before a repair allocates
+// an object.
 //
 // A new object must not take a number the file's bytes define, even one its
-// table leaves out. litho resolves a reference to such an object through the
-// augmentation, as a reader rebuilding a damaged table does, and an object
-// written at its number takes its place: a font's /Widths then reads the XMP
-// packet the remediation added. The augmentation runs at the first lookup that
-// misses the index, for whichever caller makes it, so an allocator seeded from
-// the index started past those objects only when something had missed before:
-// the same bytes came out with different object numbers, and only one of the
-// two outputs kept the widths (CONTRIBUTING "Deterministic output"). Running it
-// here makes the numbers a function of the bytes. It runs at most once per
-// Document.
+// table leaves out: an object written at its number takes its place, and a
+// font's /Widths then reads the XMP packet the remediation added. The
+// allocator arrives from the caller, which seeds it the same way, and the
+// reservation keeps a caller that seeded it from anything less from handing a
+// repair such a number.
 //
 // # Corpus evidence
 //
@@ -112,8 +107,7 @@ func RemediateWTPDF(ctx context.Context, doc *document.Document, alloc *writer.O
 //     violation moves, and a fresh reader and one that extracted the text of
 //     every page first write the same bytes.
 func reserveDefinedObjects(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator) {
-	doc.AugmentXRef(ctx)
-	alloc.Reserve(doc.HighestObjectNumber())
+	alloc.Reserve(doc.HighestObjectNumber(ctx))
 }
 
 func remediate(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, profile string, opts Options, violations []error) (*Report, error) {

@@ -85,7 +85,7 @@ func TestAnnotAppearanceKeepsAnIndirectAP(t *testing.T) {
 		t.Error("a widget whose indirect /AP resolves to a dictionary with /N was reported as missing an appearance")
 	}
 
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if _, err := fixAnnotAppearance(ctx, alloc, doc, Options{}, nil, ""); err != nil {
 		t.Fatalf("fixAnnotAppearance: %v", err)
 	}

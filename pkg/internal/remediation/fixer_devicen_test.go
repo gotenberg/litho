@@ -45,7 +45,7 @@ func populatedColorants(t *testing.T, data []byte) ast.PdfDict {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if _, err := fixDeviceNColorants(ctx, alloc, doc, Options{}, nil, ""); err != nil {
 		t.Fatalf("fixDeviceNColorants: %v", err)
 	}
@@ -146,7 +146,7 @@ func assertDeviceNUnchanged(t *testing.T, data []byte) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	fixes, err := fixDeviceNColorants(ctx, alloc, doc, Options{}, nil, "")
 	if err != nil {
 		t.Fatalf("fixDeviceNColorants: %v", err)

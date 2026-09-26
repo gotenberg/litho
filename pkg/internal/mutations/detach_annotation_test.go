@@ -48,7 +48,7 @@ func annotAttachmentDoc(t *testing.T) (context.Context, *document.Document, *wri
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	return ctx, doc, writer.NewObjAllocator(doc.HighestObjectNumber())
+	return ctx, doc, writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 }
 
 // pageAnnots returns the /Annots the allocator holds for the page, or nil when
@@ -161,7 +161,7 @@ func afAttachmentDoc(t *testing.T) (context.Context, *document.Document, *writer
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	return ctx, doc, writer.NewObjAllocator(doc.HighestObjectNumber())
+	return ctx, doc, writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 }
 
 // pendingCatalog returns the catalog the allocator holds, or nil when it was

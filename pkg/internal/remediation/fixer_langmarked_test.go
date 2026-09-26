@@ -67,7 +67,7 @@ func runMarkedLangFix(t *testing.T, tag string, named bool, profile string) (str
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	// The marked-content repair is its own fixer: it rewrites content streams,
 	// which is safetyContent work the writer must be able to roll back, while
 	// its catalog sibling only edits objects.

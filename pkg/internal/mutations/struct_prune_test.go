@@ -78,7 +78,7 @@ func deleteFirstOfTagged(t *testing.T) *writer.ObjAllocator {
 		t.Fatalf("fixture has %d pages, want 2", len(pages))
 	}
 
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if err := DeletePages(ctx, alloc, doc, pages, []int{1}); err != nil {
 		t.Fatalf("DeletePages: %v", err)
 	}

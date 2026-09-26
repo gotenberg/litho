@@ -85,7 +85,7 @@ func TestRepairHybridInvoicePatchesCompressedXMP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	if _, err := RepairHybridInvoice(ctx, doc, alloc); err != nil {
 		t.Fatalf("RepairHybridInvoice: %v", err)
@@ -125,7 +125,7 @@ func TestRepairHybridInvoicePatchesPlainXMP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	if _, err := RepairHybridInvoice(ctx, doc, alloc); err != nil {
 		t.Fatalf("RepairHybridInvoice: %v", err)

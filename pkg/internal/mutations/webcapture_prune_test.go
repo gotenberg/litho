@@ -77,7 +77,7 @@ func TestDeletePagesPrunesWebCaptureSets(t *testing.T) {
 		t.Fatalf("ResolvePages: %v", err)
 	}
 
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if err := DeletePages(ctx, alloc, doc, pages, []int{1}); err != nil {
 		t.Fatalf("DeletePages: %v", err)
 	}

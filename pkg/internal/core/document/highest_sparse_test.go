@@ -71,7 +71,7 @@ func TestHighestObjectNumberCountsSparseNumbers(t *testing.T) {
 	if got := doc.FileSize(); got >= 8799 {
 		t.Fatalf("fixture is %d bytes, too large to exercise the bound", got)
 	}
-	if got := doc.HighestObjectNumber(); got < 8799 {
+	if got := doc.HighestObjectNumber(ctx); got < 8799 {
 		t.Errorf("HighestObjectNumber = %d, want at least 8799: an allocator seeded"+
 			" from a lower number overwrites objects the file already defines", got)
 	}

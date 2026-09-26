@@ -1633,7 +1633,7 @@ func (w *Writer) remediate(
 		return nil, ErrWriterClosed
 	}
 	doc := w.reader.doc
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	// An earlier remediation's output is superseded by this run's. Kept, it
 	// was also streamed in its place: WriteTo judges the file fresh by the
@@ -1998,7 +1998,7 @@ func (w *Writer) remediationRound(
 	}
 	defer r2.Close()
 
-	alloc := writer.NewObjAllocator(r2.doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(r2.doc.HighestObjectNumber(ctx))
 	rep, err := run(ctx, alloc, r2.doc, disabled)
 	if err != nil || rep == nil || countRepairs(rep.Fixed) == 0 {
 		return roundResult{}, false
@@ -2416,7 +2416,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 		// had renumbered into that slot).
 		overrides := w.rewriteOverrides
 		if len(w.mutations) > 0 {
-			mutAlloc := writer.NewObjAllocator(w.reader.doc.HighestObjectNumber())
+			mutAlloc := writer.NewObjAllocator(w.reader.doc.HighestObjectNumber(ctx))
 			// Seed with the remediation overrides so a mutation queued after
 			// remediation builds ON its fixes rather than against the untouched
 			// source. The page mutations read through latestPageDict, so the
@@ -2459,7 +2459,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, opts ...Wri
 
 	doc := w.reader.doc
 
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	// Seed the remediation overrides FIRST so a queued mutation builds on the
 	// fixes instead of losing to them: the page mutations read through

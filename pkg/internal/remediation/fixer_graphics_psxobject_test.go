@@ -71,7 +71,7 @@ func TestFixGraphicsPSXObjectDropsTheFilter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	notes, err := fixGraphics(ctx, alloc, doc, Options{}, nil, "")
 	if err != nil {

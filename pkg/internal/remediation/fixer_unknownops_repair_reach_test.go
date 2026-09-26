@@ -119,7 +119,7 @@ func TestFixUnknownOps_RepairsEveryStreamItStrips(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewDocument: %v", err)
 			}
-			alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+			alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 			if _, err := fixUnknownOps(ctx, alloc, doc, Options{}, nil, ""); err != nil {
 				t.Fatalf("fixUnknownOps: %v", err)

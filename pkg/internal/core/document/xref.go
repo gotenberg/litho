@@ -246,7 +246,8 @@ func (d *Document) objectNumberFits(objNum int) bool {
 
 // HighestObjectNumber returns the highest object number the file uses. A writer
 // appending an incremental update allocates above it, so no new object can
-// shadow one already in the bytes.
+// shadow one already in the bytes. Every allocator that adds objects to a
+// document's own numbering is seeded from it.
 //
 // The cross-reference index alone does not answer this, and the gap is ordinary
 // rather than exotic: an xref stream need not list itself, so the object holding
@@ -268,6 +269,19 @@ func (d *Document) objectNumberFits(objNum int) bool {
 // object number to WRITE. Rejecting such a /Size drops the estimate back to the
 // index, and the update's own objects land on top of ones the file references.
 //
+// A table and its /Size can both stop short of an object the bytes define, so
+// the raw-byte augmentation runs first ([Document.AugmentXRef]) and adds every
+// "N G obj" the scan finds. litho resolves a reference to such an object
+// through the augmentation, as a reader rebuilding a damaged table does, so an
+// object written at its number replaces it: a font's /Widths then reads the
+// new object. The augmentation otherwise runs at the first lookup that misses
+// the index, for whichever caller makes it, so an answer read from the index
+// as it stood depended on what the caller did before, and the same bytes came
+// out with different object numbers (CONTRIBUTING "Deterministic output").
+// Running it here makes the answer a function of the bytes. It runs at most
+// once per Document, and a scan cancelled through ctx leaves the index as it
+// stood.
+//
 // # Corpus evidence
 //
 //   - verapdf 6-1-4-t03-fail-a: defines objects 1-22 and indexes 1-21, and
@@ -285,7 +299,17 @@ func (d *Document) objectNumberFits(objNum int) bool {
 //     the catalog points at. Every reader then refused the output: poppler with
 //     "Top-level pages object is wrong type (stream)" and qpdf with "unable to
 //     find /Root dictionary", on a file both of them read before the edit.
-func (d *Document) HighestObjectNumber() int {
+//   - All corpora: seven files define objects past the numbers their table and
+//     /Size cover, and they are the only files whose stamp, attachment,
+//     metadata, signing and full-rewrite outputs change with the augmentation
+//     run here. What qpdf --check and pdfinfo report on those outputs does not
+//     change.
+//   - pdfcpu pkg_testdata__testRot.pdf, pkg_testdata__testWithText.pdf: the
+//     first object an edit added took the number of the file's unlisted
+//     cross-reference stream, 9 and 23.
+//   - pdfjs issue12714.pdf, issue18444.pdf: the same, at 117 and 390.
+func (d *Document) HighestObjectNumber(ctx context.Context) int {
+	d.AugmentXRef(ctx)
 	highest := 0
 	// Under the read lock, because resolution registers objects it recovers by
 	// scanning long after the index was built, on whichever goroutine missed.

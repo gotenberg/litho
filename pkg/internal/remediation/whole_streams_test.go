@@ -72,7 +72,7 @@ func TestRemediationReadsContentStreamsWhole(t *testing.T) {
 		if judged != tc.judged {
 			t.Fatalf("%s: validation reports %d undefined operators, want %d", tc.name, judged, tc.judged)
 		}
-		report, err := RemediatePDFA(ctx, doc, writer.NewObjAllocator(doc.HighestObjectNumber()), models.PDFA1b, Options{})
+		report, err := RemediatePDFA(ctx, doc, writer.NewObjAllocator(doc.HighestObjectNumber(ctx)), models.PDFA1b, Options{})
 		if err != nil {
 			t.Fatalf("%s: RemediatePDFA: %v", tc.name, err)
 		}

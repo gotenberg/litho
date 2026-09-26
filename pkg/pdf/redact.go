@@ -161,7 +161,7 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 		return nil, err
 	}
 
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	// Start from what earlier stages produced, remediation or an earlier
 	// Redact, and replay whatever an earlier stage queued, so the passes below
@@ -308,7 +308,7 @@ func (w *Writer) enforceRedactions(ctx context.Context, overrides map[int]ast.Pd
 		return overrides, nil
 	}
 	doc := w.reader.doc
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	seedAllocator(alloc, overrides)
 
 	scan, err := mutations.ScanOutputForTokens(ctx, alloc, doc, w.redactedTokens)

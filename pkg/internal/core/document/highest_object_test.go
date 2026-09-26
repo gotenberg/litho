@@ -68,7 +68,7 @@ func TestHighestObjectNumberHonoursAnInflatedTrailerSize(t *testing.T) {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	if got := doc.HighestObjectNumber(); got < declared-1 {
+	if got := doc.HighestObjectNumber(context.Background()); got < declared-1 {
 		t.Errorf("HighestObjectNumber = %d, want at least %d: a new object would be written on top of one the file references",
 			got, declared-1)
 	}
@@ -86,7 +86,7 @@ func TestHighestObjectNumberRejectsAnAbsurdTrailerSize(t *testing.T) {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	if got := doc.HighestObjectNumber(); got > maxTrailerObjectCount {
+	if got := doc.HighestObjectNumber(context.Background()); got > maxTrailerObjectCount {
 		t.Errorf("HighestObjectNumber = %d, want no more than the %d cap", got, maxTrailerObjectCount)
 	}
 }

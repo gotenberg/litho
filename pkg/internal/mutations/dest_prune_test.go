@@ -75,7 +75,7 @@ func deleteFirstPage(t *testing.T) *writer.ObjAllocator {
 		t.Fatalf("fixture has %d pages, want 2", len(pages))
 	}
 
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if err := DeletePages(ctx, alloc, doc, pages, []int{1}); err != nil {
 		t.Fatalf("DeletePages: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestDeletePagesLeavesCleanDocumentsAlone(t *testing.T) {
 	// Deleting page 2 leaves every destination in the fixture valid except the
 	// ones naming page 2, so the name tree still changes; deleting nothing must
 	// change nothing at all.
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if err := DeletePages(ctx, alloc, doc, pages, nil); err != nil {
 		t.Fatalf("DeletePages: %v", err)
 	}
@@ -272,7 +272,7 @@ func TestDeletePagesDropsWidgetsOfRemovedPages(t *testing.T) {
 		t.Fatalf("ResolvePages: %v", err)
 	}
 
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if err := DeletePages(ctx, alloc, doc, pages, []int{1}); err != nil {
 		t.Fatalf("DeletePages: %v", err)
 	}

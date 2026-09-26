@@ -70,7 +70,7 @@ func TestFixOutputIntentAddsRGBOverACMYKIntent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	violations := []compliance.Violation{{
 		Rule:    compliance.Rule{Clause: "6.2.3.3"},

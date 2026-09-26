@@ -54,7 +54,7 @@ func runLangFix(t *testing.T, profile string) *writer.ObjAllocator {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if _, err := fixCatalogLang(ctx, alloc, doc, Options{}, nil, profile); err != nil {
 		t.Fatalf("fixCatalogLang: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestFixCatalogLangStillReplacesAMalformedTag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if _, err := fixCatalogLang(ctx, alloc, doc, Options{}, nil, "PDF/A-2a"); err != nil {
 		t.Fatalf("fixCatalogLang: %v", err)
 	}

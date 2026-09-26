@@ -14,7 +14,10 @@ type ObjAllocator struct {
 }
 
 // NewObjAllocator creates an allocator whose next object number starts after
-// the highest existing object number in the document.
+// the highest existing object number in the document. An allocator that adds
+// objects to a document's own numbering takes maxExisting from the document's
+// HighestObjectNumber, which counts the objects the file's bytes define and its
+// cross-reference table leaves out. A new document starts from 0.
 func NewObjAllocator(maxExisting int) *ObjAllocator {
 	return &ObjAllocator{
 		nextObjNum: maxExisting + 1,

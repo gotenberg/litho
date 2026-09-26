@@ -57,7 +57,7 @@ func shiftedOriginStampDoc(t *testing.T) (context.Context, *document.Document, [
 	if err != nil {
 		t.Fatalf("ResolvePages: %v", err)
 	}
-	return ctx, doc, pages, writer.NewObjAllocator(doc.HighestObjectNumber())
+	return ctx, doc, pages, writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 }
 
 // TestStampText_ContentIsMarkedAsArtifact pins the marking a stamp owes a

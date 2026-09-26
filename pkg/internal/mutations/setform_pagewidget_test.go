@@ -37,7 +37,7 @@ func setFormDoc(t *testing.T, objs []string) (context.Context, *document.Documen
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	return ctx, doc, writer.NewObjAllocator(doc.HighestObjectNumber())
+	return ctx, doc, writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 }
 
 // pageWidgetObjs builds a page carrying one text widget that the interactive

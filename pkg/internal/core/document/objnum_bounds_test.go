@@ -62,7 +62,7 @@ func TestHighestObjectNumberUsesTrailerSize(t *testing.T) {
 
 	// The mislabelled entries are gone, so the index alone stops at object 1
 	// while the file defines 3. Allocating 2 or 3 would shadow real bytes.
-	if got := doc.HighestObjectNumber(); got != 3 {
+	if got := doc.HighestObjectNumber(context.Background()); got != 3 {
 		t.Errorf("HighestObjectNumber() = %d, want 3 (trailer /Size 4 covers the objects the index missed)", got)
 	}
 }
@@ -77,7 +77,7 @@ func TestHighestObjectNumberIgnoresImpossibleSize(t *testing.T) {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	got := doc.HighestObjectNumber()
+	got := doc.HighestObjectNumber(context.Background())
 	if int64(got) > int64(len(data)) {
 		t.Errorf("HighestObjectNumber() = %d in a %d-byte file, want a number the file could hold", got, len(data))
 	}
@@ -92,7 +92,7 @@ func TestHighestObjectNumberIntactFile(t *testing.T) {
 		t.Fatalf("NewDocument: %v", err)
 	}
 
-	if got := doc.HighestObjectNumber(); got != 2 {
+	if got := doc.HighestObjectNumber(context.Background()); got != 2 {
 		t.Errorf("HighestObjectNumber() = %d, want 2", got)
 	}
 }

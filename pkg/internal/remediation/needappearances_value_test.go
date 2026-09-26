@@ -59,7 +59,7 @@ func runNeedAppearances(t *testing.T, data []byte) []string {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	fixes, err := fixNeedAppearances(ctx, alloc, doc, Options{}, nil, "")
 	if err != nil {
 		t.Fatalf("fixNeedAppearances: %v", err)

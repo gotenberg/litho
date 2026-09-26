@@ -59,7 +59,7 @@ func runCIDFix(t *testing.T, data []byte) *writer.ObjAllocator {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if _, err := fixCIDSystemInfo(ctx, alloc, doc, Options{}, nil, "PDF/A-4"); err != nil {
 		t.Fatalf("fixCIDSystemInfo: %v", err)
 	}

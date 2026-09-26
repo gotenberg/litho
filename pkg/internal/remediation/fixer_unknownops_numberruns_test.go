@@ -81,7 +81,7 @@ func TestFixRealLimitsLeavesMalformedNumbers(t *testing.T) {
 		t.Fatalf("NewDocument: %v", err)
 	}
 	for _, f := range []fixer{{name: "real-limits", apply: fixRealLimits}, {name: "content-limits", apply: fixContentLimits}} {
-		alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+		alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 		// The violations the "-" draws, so the object walk runs.
 		limits := []compliance.Violation{{Rule: compliance.Rule_19005_1_6_1_12_t01}, {Rule: compliance.Rule_19005_1_6_1_12_t02}}
 		fixes, err := f.apply(ctx, alloc, doc, Options{}, limits, "PDF/A-1b")

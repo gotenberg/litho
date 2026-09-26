@@ -52,7 +52,7 @@ func fixedPagesNode(t *testing.T, data []byte, preserveContent bool) ast.PdfDict
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if _, err := fixPageBoxes(ctx, alloc, doc, Options{PreserveContent: preserveContent}, nil, ""); err != nil {
 		t.Fatalf("fixPageBoxes: %v", err)
 	}

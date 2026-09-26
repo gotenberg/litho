@@ -43,7 +43,7 @@ func generatedToUnicode(t *testing.T, data []byte, shown map[byte]bool) (string,
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 4})
 	if err != nil {
 		t.Fatalf("resolving the font: %v", err)

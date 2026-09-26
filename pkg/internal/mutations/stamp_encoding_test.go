@@ -51,7 +51,7 @@ func stampDoc(t *testing.T) (context.Context, *document.Document, []*document.Pa
 	if err != nil {
 		t.Fatalf("ResolvePages: %v", err)
 	}
-	return ctx, doc, pages, writer.NewObjAllocator(doc.HighestObjectNumber())
+	return ctx, doc, pages, writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 }
 
 // stampedContent returns every content stream the stamp queued.

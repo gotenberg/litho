@@ -142,7 +142,7 @@ func TestInsertPages_RootCountMatchesAFlattenedTree(t *testing.T) {
 		t.Fatalf("catalog /Pages = %T, want an indirect reference", targetCatalog.Dict["Pages"])
 	}
 
-	alloc := writer.NewObjAllocator(target.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(target.HighestObjectNumber(ctx))
 	if err := InsertPages(ctx, alloc, target, targetPages, 0, src, srcPages, []int{1}); err != nil {
 		t.Fatalf("InsertPages: %v", err)
 	}

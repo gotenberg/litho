@@ -145,7 +145,7 @@ func TestSplitDoesNotCarryUnextractedPages(t *testing.T) {
 	for _, page := range pages {
 		inTree[page.Ref.ObjectNum] = true
 	}
-	for num := 1; num <= doc.HighestObjectNumber(); num++ {
+	for num := 1; num <= doc.HighestObjectNumber(ctx); num++ {
 		obj, resolveErr := document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: num})
 		if resolveErr != nil {
 			continue
@@ -312,7 +312,7 @@ func TestInsertPagesDoesNotCarryUnselectedSourcePages(t *testing.T) {
 		t.Fatalf("ResolvePages (source): %v", err)
 	}
 
-	alloc := writer.NewObjAllocator(target.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(target.HighestObjectNumber(ctx))
 	if err := InsertPages(ctx, alloc, target, targetPages, 0, src, srcPages, []int{1}); err != nil {
 		t.Fatalf("InsertPages: %v", err)
 	}

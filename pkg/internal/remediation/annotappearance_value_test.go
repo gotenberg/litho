@@ -74,7 +74,7 @@ func TestAnnotAppearanceLeavesAValuedFieldAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	if _, err := fixAnnotAppearance(ctx, alloc, doc, Options{}, nil, ""); err != nil {
 		t.Fatalf("fixAnnotAppearance: %v", err)
@@ -98,7 +98,7 @@ func TestAnnotAppearanceStillFixesAnEmptyField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	if _, err := fixAnnotAppearance(ctx, alloc, doc, Options{}, nil, ""); err != nil {
 		t.Fatalf("fixAnnotAppearance: %v", err)
@@ -171,7 +171,7 @@ func TestAnnotAppearanceLeavesAFreeTextAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	if _, err := fixAnnotAppearance(ctx, alloc, doc, Options{}, nil, ""); err != nil {
 		t.Fatalf("fixAnnotAppearance: %v", err)
@@ -194,7 +194,7 @@ func TestAnnotAppearanceStillFixesAnEmptyFreeText(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	if _, err := fixAnnotAppearance(ctx, alloc, doc, Options{}, nil, ""); err != nil {
 		t.Fatalf("fixAnnotAppearance: %v", err)
@@ -249,7 +249,7 @@ func lineAnnotGainedAP(t *testing.T, captioned bool) bool {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if _, err := fixAnnotAppearance(ctx, alloc, doc, Options{}, nil, ""); err != nil {
 		t.Fatalf("fixAnnotAppearance: %v", err)
 	}

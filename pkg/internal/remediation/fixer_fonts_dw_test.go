@@ -60,7 +60,7 @@ func repairedCIDFont(t *testing.T, data []byte) (ast.PdfDict, []string) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	fontDict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 4})
 	if err != nil {
 		t.Fatalf("resolving the Type0 font: %v", err)

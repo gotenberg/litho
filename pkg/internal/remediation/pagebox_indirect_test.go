@@ -61,7 +61,7 @@ func TestDegenerateMediaBoxTakesAnIndirectSiblingsSize(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	if _, err := fixPageBoxes(ctx, alloc, doc, Options{}, nil, ""); err != nil {
 		t.Fatalf("fixPageBoxes: %v", err)
@@ -145,7 +145,7 @@ func TestPageBoxKeepsIndirectCoordinates(t *testing.T) {
 		t.Fatal("fixture is wrong: the coordinates must be indirect references")
 	}
 
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	if _, err := fixPageBoxes(ctx, alloc, doc, Options{}, nil, ""); err != nil {
 		t.Fatalf("fixPageBoxes: %v", err)
 	}

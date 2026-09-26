@@ -90,7 +90,7 @@ func TestWriteOutlineKeepsTheCatalogItEdits(t *testing.T) {
 		t.Fatalf("fixture is wrong: resolving the catalog reference must yield an empty dictionary, got %v (err %v)", dict, derr)
 	}
 
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	pageRefs := map[int]ast.PdfIndirectRef{1: {ObjectNum: 3}}
 	if err := WriteOutline(ctx, alloc, doc, pageRefs, []models.Bookmark{{Title: "Probe", PageNumber: 1}}); err != nil {
 		t.Fatalf("WriteOutline: %v", err)

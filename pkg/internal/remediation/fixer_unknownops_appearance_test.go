@@ -74,7 +74,7 @@ func repairedAppearance(t *testing.T, stateDict bool) ast.PdfStream {
 	if err != nil {
 		t.Fatalf("NewDocument: %v", err)
 	}
-	alloc := writer.NewObjAllocator(doc.HighestObjectNumber())
+	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 
 	fixes, err := fixUnknownOps(ctx, alloc, doc, Options{}, nil, "")
 	if err != nil {
