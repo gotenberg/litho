@@ -1,7 +1,9 @@
 package compliance
 
 import (
+	"cmp"
 	"context"
+	"fmt"
 	"maps"
 	"slices"
 
@@ -279,8 +281,8 @@ func appearanceResources(ctx context.Context, doc *document.Document, streamRes,
 //     it four times.
 //   - All corpora: judging a state where a gs sets it moved 19 counts at
 //     PDF/A-1b, PDF/A-2b and PDF/A-4, in 7 files, all toward veraPDF's and
-//     13 onto it. The 6 still apart are 6.2.5 t6, which veraPDF states on
-//     each halftone of a type 5 halftone by its colorant name.
+//     13 onto it. The 6 then still apart were 6.2.5 t6, which [halftoneJudge]
+//     now states as veraPDF does.
 func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resources ast.PdfDict, drawn *drawnResources, profile string, part, pageNum int, judged map[int]bool) []Violation {
 	gsDict, err := document.ResolveDict(ctx, doc, resources["ExtGState"])
 	if err != nil || gsDict == nil {
@@ -316,22 +318,10 @@ func checkExtGStateGraphics(ctx context.Context, doc *document.Document, resourc
 		found = append(found, checkHTPKey(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
 		found = append(found, checkRenderingIntent(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
 		found = append(found, checkOverprint(ctx, doc, gs, profile, part, pageNum, string(gsName))...)
-		halftone := checkHalftone(ctx, doc, gs, profile, part, pageNum, string(gsName))
 		for range times {
 			results = append(results, found...)
 		}
-		if len(halftone) == 0 {
-			continue
-		}
-		if _, indirect := gs["HT"].(ast.PdfIndirectRef); indirect {
-			if !objectJudgedOnce(gs["HT"], judged) {
-				results = append(results, halftone...)
-			}
-			continue
-		}
-		for range times {
-			results = append(results, halftone...)
-		}
+		results = append(results, checkHalftone(ctx, doc, gs, part, times, judged, "page %d, ExtGState %s", pageNum, string(gsName))...)
 	}
 	return results
 }
@@ -408,87 +398,312 @@ func halftoneTransferRule(part int) Rule {
 	return ruleByPart(part, Rule{}, Rule_19005_2_6_2_5_t06, Rule_19005_3_6_2_5_t06, Rule_19005_4_6_2_5_t06)
 }
 
-func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, _ string, part, pageNum int, gsName string) []Violation {
-	// Halftone checks apply to parts 2+ and 4 only.
+// checkHalftone judges the halftone the graphics state gs names with /HT,
+// which times gs operators set, against ISO 19005-2/3, 6.2.5 t4 to t6 and ISO
+// 19005-4, 6.2.5 t4 to t6: a halftone type of 1 or 5, no /HalftoneName, and a
+// /TransferFunction only where ISO 32000-1, 10.5.5.2, Table 130 requires one.
+// format and args locate the state in each violation's context.
+//
+// veraPDF builds a PDHalftone from an /HT that is a name, a dictionary or a
+// stream (PDExtGState.getHalftone, veraPDF-validation 1.30), and a type 5
+// halftone gives one more for every entry whose value is a dictionary or a
+// stream, each judged under its key as the colorant name
+// (GFPDHalftone.getHalftones), and so on down; see [halftoneJudge]. A halftone
+// written as an indirect object is judged once for the whole document, which
+// judged records, whatever states, gs operators and type 5 halftones reach
+// it, and one written directly once for every gs that sets the state holding
+// it. Measured with veraPDF 1.30 at PDF/A-2b: a type 5 halftone written
+// directly in a state two gs set fails for its direct components twice, and
+// for a component it names as an indirect object once.
+func checkHalftone(ctx context.Context, doc *document.Document, gs ast.PdfDict, part, times int, judged map[int]bool, format string, args ...any) []Violation {
 	if part < 2 {
 		return nil
 	}
-
-	htObj, hasHT := gs["HT"]
-	if !hasHT {
+	htObj, ok := gs["HT"]
+	if !ok || objectJudgedOnce(htObj, judged) {
 		return nil
 	}
-
-	ht, err := document.ResolveDict(ctx, doc, htObj)
-	if err != nil || ht == nil {
-		return nil
+	h := halftoneJudge{doc: doc, part: part, judged: judged, where: fmt.Sprintf(format, args...)}
+	_, indirect := htObj.(ast.PdfIndirectRef)
+	h.judge(ctx, htObj, halftoneComponent{}, !indirect, 0)
+	results := h.once
+	for range times {
+		results = append(results, h.each...)
 	}
-
-	var results []Violation
-
-	// HalftoneType must be 1 or 5.
-	htType, err := document.ResolveInt(ctx, doc, ht["HalftoneType"])
-	if err == nil {
-		if htType != 1 && htType != 5 {
-			results = append(results, failf(halftoneTypeRule(part), "page %d, ExtGState %s, HalftoneType %d", pageNum, gsName, htType)...)
-		}
-	}
-
-	// HalftoneName forbidden. One that resolves to null names nothing (ISO
-	// 32000-1, 7.3.7 and 7.3.10): veraPDF reports neither a null nor a reference
-	// to a null object. Measured.
-	if nonNullKeyPresent(ctx, doc, ht, "HalftoneName") {
-		results = append(results, failf(halftoneNameRule(part), "page %d, ExtGState %s", pageNum, gsName)...)
-	}
-
-	// TransferFunction must be /Default or absent. One that resolves to null is
-	// absent (ISO 32000-1, 7.3.7 and 7.3.10), measured as for HalftoneName.
-	if tfObj, hasTF := ht["TransferFunction"]; hasTF && !resourceEntryNull(ctx, doc, tfObj) {
-		tfName, _ := document.ResolveName(ctx, doc, tfObj)
-		if tfName != "Default" {
-			results = append(results, failf(halftoneTransferRule(part), "page %d, ExtGState %s", pageNum, gsName)...)
-		}
-	}
-
-	// For Type 5 composite halftones (parts 2+), §6.2.5 t06 governs the
-	// TransferFunction on each sub-halftone dict. A device colorant
-	// (Cyan/Magenta/Yellow/Black) already has a process transfer function, so
-	// a per-component TransferFunction would redefine tone reproduction and is
-	// forbidden. A non-process colorant (Red/Green/Blue/spots) needs its own
-	// transfer function to be reproducible, so it must be present:
-	//   - Default: always exempt
-	//   - CMYK primaries (Cyan/Magenta/Yellow/Black): TF must be absent
-	//   - Non-primary colorants (Red/Green/Blue/spots): TF must be present
-	if htType == 5 && part >= 2 {
-		cmykPrimaries := map[ast.PdfName]bool{
-			"Cyan": true, "Magenta": true, "Yellow": true, "Black": true,
-		}
-		htMetaKeys := map[ast.PdfName]bool{
-			"HalftoneType": true, "HalftoneName": true, "Type": true, "TransferFunction": true,
-		}
-		for _, key := range sortedNames(ht) {
-			subObj := ht[key]
-			if htMetaKeys[key] || key == "Default" {
-				continue
-			}
-			subHT, err := document.ResolveDict(ctx, doc, subObj)
-			if err != nil || subHT == nil {
-				continue
-			}
-			_, hasTF := subHT["TransferFunction"]
-			if cmykPrimaries[key] && hasTF {
-				// CMYK primary: TF must be absent.
-				results = append(results, failf(halftoneTransferRule(part),
-					"page %d, ExtGState %s, CMYK halftone component %s has TransferFunction", pageNum, gsName, key)...)
-			} else if !cmykPrimaries[key] && !hasTF {
-				// Non-primary: TF must be present.
-				results = append(results, failf(halftoneTransferRule(part),
-					"page %d, ExtGState %s, non-primary halftone component %s missing TransferFunction", pageNum, gsName, key)...)
-			}
-		}
-	}
-
 	return results
+}
+
+// maxHalftoneNesting caps how deep [halftoneJudge] follows type 5 halftones
+// named as components of type 5 halftones. Anti-DoS guard, not spec-mandated:
+// ISO 32000-1, 10.5.5.6, Table 131 lets a type 5 halftone hold halftones of
+// types 1, 6, 10 and 16 alone, so a conforming file nests none, and a cycle
+// of indirect halftones already ends at the judged set.
+const maxHalftoneNesting = 8
+
+// halftoneCMYKColorants are the colorant names under which a type 5 halftone
+// component may not carry a /TransferFunction: the four process colorants of a
+// CMYK device, whose transfer functions the graphics state supplies (ISO
+// 32000-1, 10.5.5.2, Table 130). Under any other name but Default one is
+// required.
+//
+//nolint:gochecknoglobals // immutable lookup set.
+var halftoneCMYKColorants = map[ast.PdfName]bool{"Cyan": true, "Magenta": true, "Yellow": true, "Black": true}
+
+// halftoneJudge judges one halftone and the components a type 5 halftone
+// names, as veraPDF 1.30 judges its PDHalftone objects (GFPDHalftone and the
+// PDHalftone rules of its PDF/A-2, PDF/A-3 and PDF/A-4 profiles):
+//
+//   - A halftone named /Default reads as type 1 and any other name as having
+//     no type and naming itself as its /HalftoneName, so it fails t4 and t5.
+//     A dictionary or stream reads /HalftoneType as an integer, a missing one
+//     failing t4 like any type but 1 and 5, a type 6 stream included.
+//   - t6 reads /TransferFunction as absent when it is null or names a null
+//     object. The halftone the state names has no colorant, so any other
+//     value fails, /Default included. A component named Default passes
+//     whatever it holds, one named Cyan, Magenta, Yellow or Black fails with a
+//     transfer function, and one under any other name fails without one.
+//   - Every entry of a type 5 halftone whose value is a dictionary or a stream
+//     is a component, whatever its key: a /TransferFunction written as a
+//     function dictionary is judged as a halftone of colorant
+//     TransferFunction, which has no type and no transfer function.
+//   - veraPDF lists the components in the iteration order of the Java HashMap
+//     its COSDictionary keeps ([javaHashMapOrder]) and reaches them from the
+//     last, judging a component written as an indirect object where it first
+//     reaches it. Several colorants naming one object are judged once, under
+//     the name reached first.
+//
+// Measured with veraPDF 1.30 at PDF/A-2b and PDF/A-4, each on a page of its
+// own: /HT /Foo fails t4 and t5, /HT /Default nothing; a type 1 halftone with
+// /TransferFunction /Default or /Identity fails t6, with a null or a reference
+// to a null object nothing, and without /HalftoneType t4; a type 6 stream
+// fails t4; a type 5 halftone with a type 6 stream component under /Spot fails
+// t4 and t6 for it, a Default component with no type t4, and a
+// /TransferFunction dictionary t6 for the halftone and t4 and t6 as a
+// component; /Blue and /Yellow written in that order, naming one component
+// with no transfer function, fail nothing, and written the other way round
+// fail t6 once; a component with /HalftoneName fails t5; a type 5 component
+// holding /Red with no transfer function fails t6 for /Red; and a /Red and a
+// /Cyan component whose transfer function is null fail t6 for /Red alone.
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100518.pdf: six type 5 halftones in which Red and
+//     Cyan, Green and Magenta, Blue and Yellow, and Gray, Black and Default
+//     share a component each, and veraPDF fails t6 12 times, for Green and
+//     Blue, where litho failed it 24 times, once per non-process colorant.
+//   - govdocs thread_400_400570.pdf: the same halftone with Blue written
+//     before Yellow, where veraPDF fails t6 for Green alone.
+//   - All corpora: judging halftones as veraPDF does moved 10 counts of t6 at
+//     PDF/A-2b and PDF/A-4, in 5 govdocs files, each onto veraPDF's count,
+//     and no other count at PDF/A-1b, PDF/A-2b or PDF/A-4. No file reaches a
+//     halftone that is a name or a stream, or a top-level transfer function,
+//     which litho paintop_2b.pdf plants.
+type halftoneJudge struct {
+	doc    *document.Document
+	part   int
+	judged map[int]bool
+	where  string
+	// once holds the findings of the halftones judged once for the whole
+	// document, and each those of the ones judged at every gs setting the
+	// state.
+	once, each []Violation
+}
+
+// halftoneComponent names the colorant a type 5 halftone lists a halftone
+// under. The zero value is the halftone a graphics state names, which has
+// none.
+type halftoneComponent struct {
+	colorant ast.PdfName
+	listed   bool
+}
+
+// judge judges the halftone obj holds, listed under component, and the
+// components of a type 5 halftone in turn. repeat reports that the halftone
+// has no object of its own and is judged at every gs setting the state (see
+// [checkHalftone]).
+func (h *halftoneJudge) judge(ctx context.Context, obj ast.PdfObject, component halftoneComponent, repeat bool, nesting int) {
+	resolved, err := document.ResolveObject(ctx, h.doc, obj)
+	if err != nil {
+		return
+	}
+	var dict ast.PdfDict
+	var named ast.PdfName
+	isName := false
+	switch v := resolved.(type) {
+	case ast.PdfName:
+		named, isName = v, true
+	case ast.PdfDict:
+		dict = v
+	case ast.PdfStream:
+		dict = v.Dict
+	default:
+		return
+	}
+	add := func(rule Rule, detail string) {
+		where := h.where
+		if component.listed {
+			where += ", halftone component " + string(component.colorant)
+		}
+		v := failf(rule, "%s%s", where, detail)
+		if repeat {
+			h.each = append(h.each, v...)
+		} else {
+			h.once = append(h.once, v...)
+		}
+	}
+
+	htType, typed := halftoneType(ctx, h.doc, dict, named, isName)
+	if !typed || (htType != 1 && htType != 5) {
+		add(halftoneTypeRule(h.part), ", no HalftoneType of 1 or 5")
+	}
+	if (isName && named != "Default") || (dict != nil && nonNullKeyPresent(ctx, h.doc, dict, "HalftoneName")) {
+		add(halftoneNameRule(h.part), ", HalftoneName")
+	}
+	if component.colorant != "Default" {
+		hasTF := dict != nil && nonNullKeyPresent(ctx, h.doc, dict, "TransferFunction")
+		switch process := !component.listed || halftoneCMYKColorants[component.colorant]; {
+		case process && hasTF:
+			add(halftoneTransferRule(h.part), ", TransferFunction")
+		case !process && !hasTF:
+			add(halftoneTransferRule(h.part), ", no TransferFunction")
+		}
+	}
+
+	if !typed || htType != 5 || dict == nil || nesting >= maxHalftoneNesting {
+		return
+	}
+	components := halftoneComponents(ctx, h.doc, obj, dict)
+	for i := len(components) - 1; i >= 0; i-- {
+		if ctx.Err() != nil {
+			return
+		}
+		key := components[i]
+		sub := dict[key]
+		listed := halftoneComponent{colorant: key, listed: true}
+		if _, indirect := sub.(ast.PdfIndirectRef); indirect {
+			if objectJudgedOnce(sub, h.judged) {
+				continue
+			}
+			h.judge(ctx, sub, listed, false, nesting+1)
+			continue
+		}
+		h.judge(ctx, sub, listed, repeat, nesting+1)
+	}
+}
+
+// halftoneType returns the type of the halftone whose dictionary is dict, or
+// which the name named stands for when isName is set, and false when it has
+// none: /Default reads as type 1 and any other name as none, and
+// /HalftoneType as an integer, a real read as its integer part.
+func halftoneType(ctx context.Context, doc *document.Document, dict ast.PdfDict, named ast.PdfName, isName bool) (int64, bool) {
+	if isName {
+		return 1, named == "Default"
+	}
+	resolved, err := document.ResolveObject(ctx, doc, dict["HalftoneType"])
+	if err != nil {
+		return 0, false
+	}
+	n, ok := document.Number(resolved)
+	if !ok {
+		return 0, false
+	}
+	return int64(n), true
+}
+
+// halftoneComponents returns the keys of the type 5 halftone dict, which obj
+// holds, whose values are dictionaries or streams, in the order veraPDF lists
+// them ([javaHashMapOrder]). The order depends on the one the file writes the
+// keys in, which [document.Document.DictKeyOrder] reads for a halftone
+// written as an indirect object; a halftone written directly, or one whose
+// bytes do not give back the keys it holds, is ordered as if the file wrote
+// its keys sorted.
+func halftoneComponents(ctx context.Context, doc *document.Document, obj ast.PdfObject, dict ast.PdfDict) []ast.PdfName {
+	present := make(map[ast.PdfName]bool, len(dict))
+	for key, value := range dict {
+		if !resourceEntryNull(ctx, doc, value) || isReference(value) {
+			present[key] = true
+		}
+	}
+	var keys []ast.PdfName
+	if ref, ok := obj.(ast.PdfIndirectRef); ok {
+		keys = doc.DictKeyOrder(ctx, ref.ObjectNum)
+	}
+	if !sameKeySet(keys, present) {
+		keys = slices.Sorted(maps.Keys(present))
+	}
+	var components []ast.PdfName
+	for _, key := range javaHashMapOrder(keys) {
+		switch v, _ := document.ResolveObject(ctx, doc, dict[key]); v.(type) {
+		case ast.PdfDict, ast.PdfStream:
+			components = append(components, key)
+		}
+	}
+	return components
+}
+
+// isReference reports whether obj is an indirect reference.
+func isReference(obj ast.PdfObject) bool {
+	_, ok := obj.(ast.PdfIndirectRef)
+	return ok
+}
+
+// sameKeySet reports whether keys lists exactly the names set holds.
+func sameKeySet(keys []ast.PdfName, set map[ast.PdfName]bool) bool {
+	if len(keys) != len(set) {
+		return false
+	}
+	for _, key := range keys {
+		if !set[key] {
+			return false
+		}
+	}
+	return true
+}
+
+// javaHashMapOrder returns keys, the keys of a dictionary in the order the
+// file writes them, in the order veraPDF iterates them: its COSDictionary
+// keeps its entries in a java.util.HashMap built with the default capacity
+// and filled in file order, and an ASAtom hashes as its name string does
+// (ASAtom.hashCode, veraPDF core 1.30).
+//
+// A HashMap iterates its table from the first bucket to the last, and the
+// entries of one bucket in the order they were inserted. The table holds 16
+// buckets and doubles whenever the entries outnumber three quarters of it,
+// and an entry's bucket is its hash with the high half folded into the low
+// one, masked to the table size (java.util.HashMap.hash). A bucket that grows
+// past eight entries turns into a tree, which this does not model.
+func javaHashMapOrder(keys []ast.PdfName) []ast.PdfName {
+	buckets := javaHashMapInitialCapacity
+	for len(keys) > buckets/4*3 {
+		buckets *= 2
+	}
+	mask := uint32(buckets - 1) //nolint:gosec // G115: buckets is a power of two no larger than twice the key count.
+	out := slices.Clone(keys)
+	slices.SortStableFunc(out, func(a, b ast.PdfName) int {
+		return cmp.Compare(javaHashSpread(javaStringHash(string(a)))&mask, javaHashSpread(javaStringHash(string(b)))&mask)
+	})
+	return out
+}
+
+// javaHashMapInitialCapacity is the table size of a java.util.HashMap built
+// with its default constructor.
+const javaHashMapInitialCapacity = 16
+
+// javaStringHash returns java.lang.String.hashCode of s read as ISO 8859-1,
+// one character per byte, which is how a name made only of ASCII characters
+// reads in any encoding.
+func javaStringHash(s string) uint32 {
+	var h uint32
+	for i := range len(s) {
+		h = 31*h + uint32(s[i])
+	}
+	return h
+}
+
+// javaHashSpread folds the high half of a Java hash code into the low half,
+// as java.util.HashMap.hash does before masking it to a bucket.
+func javaHashSpread(h uint32) uint32 {
+	return h ^ (h >> 16) //nolint:mnd // the fold is by half of 32 bits.
 }
 
 // validRenderingIntents lists the four standard PDF rendering intents.
