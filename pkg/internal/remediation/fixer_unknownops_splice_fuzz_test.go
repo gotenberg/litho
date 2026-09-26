@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
@@ -48,6 +49,39 @@ func FuzzSpliceAggressiveOperations(f *testing.F) {
 			}
 			if got := inlineImageBytes(ctx, out); !slices.EqualFunc(in, got, bytes.Equal) {
 				t.Fatalf("the splice of %q changed its inline images:\n  %q\nto\n  %q", data, in, got)
+			}
+		}
+	})
+}
+
+// FuzzRepairContentOps asserts the repairs the string-limit, text-control,
+// marked-content /Lang and q/Q nesting fixers write through
+// [repairContentOps] never panic on crafted bytes, and that a stream they
+// write carries every inline image across byte for byte, from its BI to its
+// EI.
+func FuzzRepairContentOps(f *testing.F) {
+	f.Add([]byte("q q q /Span <</Lang (-pt)>> BDC BT (a\x01bc) Tj [(\x02) 1] TJ ET BI /W 4 /H 1 /BPC 8 /CS /G ID \x00\xff)\r EI EMC Q Q Q"))
+	f.Add([]byte("q q q BT (a\x01bc) Tj BI /W 4 /H 1 /BPC 8 /CS /G ID \x00")) // Truncated inside the image data.
+	page := inlineSplicePage("q Q")
+	doc, err := document.NewDocument(context.Background(), bytes.NewReader(page), int64(len(page)), nil)
+	if err != nil {
+		f.Fatalf("NewDocument: %v", err)
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		ctx := context.Background()
+		in := inlineImageBytes(ctx, data)
+		for _, newRepair := range []func() opRepair{
+			func() opRepair { return truncatedOperandStrings(2) },
+			func() opRepair { return (&controlByteStripper{}).repair },
+			func() opRepair { return markedContentLangRepair(ctx, doc, true) },
+			func() opRepair { return (&qNestingClip{limit: 2}).repair },
+		} {
+			out, n, err := repairContentOps(ctx, data, newRepair)
+			if err != nil || n == 0 {
+				continue
+			}
+			if got := inlineImageBytes(ctx, out); !slices.EqualFunc(in, got, bytes.Equal) {
+				t.Fatalf("the repair of %q changed its inline images:\n  %q\nto\n  %q", data, in, got)
 			}
 		}
 	})
