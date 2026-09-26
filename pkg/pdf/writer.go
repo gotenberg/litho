@@ -594,8 +594,7 @@ func (a signerAdapter) EstimatedSize() int                 { return a.inner.Esti
 // remediation that keeps its first round alone leaves the Writer editing the
 // Reader's document, its repairs queued with the other edits, and an edit
 // queued afterwards names the Reader's pages. Either way a later edit builds
-// on the repairs, with the exception [Writer.AutoTag] names. The page numbers
-// differ only when [Writer.DeletePages] or
+// on the repairs. The page numbers differ only when [Writer.DeletePages] or
 // [Writer.InsertPages] ran before the remediation: after a single round, page
 // 1 still names the Reader's first page, deleted or not. Queue those two after
 // the remediation, and every later edit names the same pages whatever the
@@ -1099,11 +1098,12 @@ func (w *Writer) GenerateBookmarks(opts BookmarkGenerationOptions, mode Bookmark
 // own. Pair it with [Writer.RemediatePDFUA], or set those explicitly, for full
 // PDF/UA conformance.
 //
-// Queue it before a remediation, whose repairs then apply to the marked-up
-// content. After a remediation that keeps one round it marks up the page
-// content the Reader holds (see [Writer]), and a repair the remediation made to
-// that content, such as a clamped out-of-range number, does not reach the
-// output.
+// It tags the document as the edits queued before it leave it, as every edit
+// does (see [Writer]): it marks up the content a remediation repaired, and it
+// leaves alone a document a remediation tagged. It is also a no-op when any
+// page's content is already marked, since marking it again would nest or cross
+// the existing sequences, and that includes the /Artifact sequence a stamp
+// wraps its content in: queue it before a stamp to tag the document.
 func (w *Writer) AutoTag() {
 	w.mutations = append(w.mutations, mutation{
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
