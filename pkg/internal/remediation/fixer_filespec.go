@@ -30,7 +30,7 @@ func matchFileSpecFUF(v compliance.Violation) bool {
 // 32000-1, 7.5.7) included, for the reason [walkNumberedObjects] gives.
 func fixFileSpecFUF(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	var count int
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptObjects(doc) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}

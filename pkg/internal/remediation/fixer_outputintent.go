@@ -230,7 +230,10 @@ func fixOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	}
 
 	// Skip documents with implementation-limit or structural issues that
-	// can corrupt newly added objects during serialization.
+	// can corrupt newly added objects during serialization. The whole index
+	// is read, the objects the raw-byte augmentation added included: this is
+	// about the numbers new objects are allocated past, which count them
+	// (see reserveDefinedObjects), not a repair of what validation judges.
 	for objNum, entry := range doc.XRefEntries() {
 		if entry.Offset > doc.FileSize() || int64(objNum) > maxPlausibleObjNum {
 			return nil, nil

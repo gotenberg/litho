@@ -67,13 +67,13 @@ func matchCIDSystemInfo(v compliance.Violation) bool {
 //     changes no residual violation at PDF/A-1b or 2b, with or without the
 //     aggressive fixes.
 func fixCIDSystemInfo(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
-	// In object-number order, which XRefEntries yields: two fonts sharing a
+	// In object-number order, which sweptObjects yields: two fonts sharing a
 	// CIDFont or a CMap each read the other's pending edit, so the order
 	// decides the output.
 	count := 0
 	aligned := 0
 	wmode := 0
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptObjects(doc) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}

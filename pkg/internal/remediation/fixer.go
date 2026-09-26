@@ -2,6 +2,7 @@ package remediation
 
 import (
 	"context"
+	"iter"
 	"log/slog"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/core/xref"
 )
 
 // safety tags a fixer with the worst-case impact of its edits. The writer
@@ -171,6 +173,36 @@ var registry = []fixer{
 	{name: "aggressive-limits", safety: safetyContent, matches: matchAggressiveLimits, apply: fixAggressiveLimits},
 }
 
+// sweptObjects returns the cross-reference entries a repair that sweeps every
+// object visits, in ascending object-number order: the ones the document was
+// opened with ([document.Document.OpenedXRefEntries]), which are the ones
+// validation judges.
+//
+// An object the file's table leaves out is not one of them, even once the
+// raw-byte augmentation has added it to the index. ISO 32000-1, 7.3.10 reads a
+// reference to an undefined object as the null object, veraPDF reads the
+// file's own table and judges no such object, and validation sweeps the
+// objects the table lists for that reason, so a sweep over the index as it
+// stands repaired objects for findings no validation reported. The
+// augmentation runs at the first lookup that misses the index, for whichever
+// caller makes it, so what such a sweep reached also depended on what ran
+// before it (CONTRIBUTING "Deterministic output"), and an incremental update
+// that rewrote one of those objects listed it in its own cross-reference
+// section, putting an object no reader following the file's table could reach
+// under the judgement of the next validation. A repair that follows a
+// reference to such an object still reaches it, as validation does.
+//
+// # Corpus evidence
+//
+//   - All corpora: 464 files define objects their table leaves out, and in
+//     458 of them those objects are cross-reference streams alone.
+//   - All corpora: over the PDF/A-1b and PDF/A-2b remediations, default and
+//     aggressive, of 249 files, among them the 6 whose table leaves out other
+//     objects, no output changes.
+func sweptObjects(doc *document.Document) iter.Seq2[int, xref.XRefEntry] {
+	return doc.OpenedXRefEntries()
+}
+
 // walkIndirectObjects iterates every in-use indirect object and offers
 // its top-level container (dict, array, or stream dict) to the supplied
 // transformers. When a transformer reports a change the result is
@@ -218,7 +250,7 @@ func walkNumberedObjects(
 	arrayFn func(int, ast.PdfArray) (ast.PdfArray, bool),
 ) (int, error) {
 	count := 0
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptObjects(doc) {
 		if err := ctx.Err(); err != nil {
 			return count, err
 		}

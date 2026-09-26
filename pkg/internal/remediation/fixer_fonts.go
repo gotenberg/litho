@@ -728,7 +728,7 @@ func cidFontsByDescriptor(ctx context.Context, alloc *writer.ObjAllocator, doc *
 			out[ref.ObjectNum] = append(out[ref.ObjectNum], d)
 		}
 	}
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptObjects(doc) {
 		if ctx.Err() != nil {
 			return out
 		}

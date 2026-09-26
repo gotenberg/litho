@@ -286,7 +286,7 @@ func retagDroppedRoles(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 // document uses type Annot. The scan walks the object index like
 // [collectFileSpecs]: structure elements are always indirect.
 func structTreeHasAnnotElement(ctx context.Context, doc *document.Document) bool {
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptObjects(doc) {
 		if ctx.Err() != nil {
 			return false
 		}

@@ -52,7 +52,7 @@ func matchFontWidth(v compliance.Violation) bool {
 // for the reason [walkNumberedObjects] gives.
 func fixFontWidth(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	var count int
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptObjects(doc) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}

@@ -89,7 +89,7 @@ func fixLZW(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Docum
 	var count int
 	renamed := make(map[int]string)
 
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptObjects(doc) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}

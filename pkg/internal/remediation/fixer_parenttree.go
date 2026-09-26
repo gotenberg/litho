@@ -65,11 +65,12 @@ func fixParentTree(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 		return nil, nil
 	}
 
-	// Collect per-page MCID → element registrations from the whole index:
-	// structure elements are always indirect and may live outside the
-	// reachable /K chains while remediation rounds are in flight.
+	// Collect per-page MCID → element registrations from every object
+	// sweptObjects yields: structure elements are always indirect and may
+	// live outside the reachable /K chains while remediation rounds are in
+	// flight.
 	perPage := make(map[int]map[int]ast.PdfIndirectRef)
-	for objNum := range doc.XRefEntries() {
+	for objNum := range sweptObjects(doc) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}

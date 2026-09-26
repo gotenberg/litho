@@ -111,7 +111,7 @@ func deleteEmbeddedFilesNameEntry(ctx context.Context, alloc *writer.ObjAllocato
 //     streams, only in the round after the full rewrite unpacked them.
 func stripEFFromFileSpecs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) int {
 	count := 0
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptObjects(doc) {
 		if ctx.Err() != nil {
 			return count
 		}

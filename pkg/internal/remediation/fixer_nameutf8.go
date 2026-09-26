@@ -141,7 +141,7 @@ func logDeclinedNames(doc *document.Document, pinned map[string]bool) {
 // renames names in the same object.
 func collectResourceKeys(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (map[string]bool, error) {
 	out := make(map[string]bool)
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptObjects(doc) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}

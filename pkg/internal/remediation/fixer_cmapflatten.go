@@ -52,11 +52,11 @@ func matchCMapFlatten(v compliance.Violation) bool {
 // A Type 0 font stored in an object stream (ISO 32000-1, 7.5.7) has its CMap
 // repaired too, for the reason [walkNumberedObjects] gives.
 func fixCMapFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
-	// XRefEntries yields in object-number order, so the fix list is identical
+	// sweptObjects yields in object-number order, so the fix list is identical
 	// across runs.
 	var fixes []string
 	done := make(map[int]bool)
-	for objNum, entry := range doc.XRefEntries() {
+	for objNum, entry := range sweptObjects(doc) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
