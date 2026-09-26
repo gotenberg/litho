@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"slices"
 	"sort"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -290,118 +291,203 @@ func textBearingXObjects(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	if err != nil || xobjs == nil {
 		return nil
 	}
+	g := scanForms(ctx, alloc, doc, xobjs)
 	names := make(map[string]bool)
-	// One memo for the whole page: sibling resources routinely invoke the same
-	// forms, and re-deciding a shared subtree per name is the same waste the
-	// memo exists to stop inside a single scan.
-	answers := make(map[int]bool)
-	for name, entry := range xobjs {
-		if paints, _ := formPaintsText(ctx, alloc, doc, entry, make(map[int]bool), answers, 0); paints {
+	for name, node := range g.entries {
+		if g.paintsText(node) {
 			names[string(name)] = true
 		}
 	}
 	return names
 }
 
-// formPaintsText reports whether a Form XObject shows text itself or reaches
-// text through the forms it invokes.
+// formGraph is the graph of the Form XObjects a page's resources reach, read to
+// decide which of the page's forms paint text.
 //
 // A form that only paints other forms carries no text-showing operator of its
 // own, and a filled-in field can draw its value that way. Judging such a form
-// by its own bytes marks it decoration and loses the value. The answer errs
-// toward "paints text": a form wrongly kept out of an /Artifact leaves an
-// honest ISO 14289-1, 7.1 residual, while one wrongly swept in hides real words
-// from assistive technology.
+// by its own bytes marks it decoration and loses the value, so a form paints
+// text when it shows text itself or reaches a form that does through the
+// XObjects its resources list. The answer errs toward "paints text": a form
+// wrongly kept out of an /Artifact leaves an honest ISO 14289-1, 7.1 residual,
+// while one wrongly swept in hides real words from assistive technology.
 //
-// visited holds the forms on the current path and breaks the cycles ISO 32000-1,
-// 8.10.1 forbids but files still contain. answers memoises the decision per
-// object so a form reached by several paths is decoded once: forms nest as a
-// DAG, not a tree, and re-deciding each subtree per path costs time exponential
-// in the nesting depth.
+// Each form is read once however many paths reach it: forms nest as a DAG, not
+// a tree, and re-reading each subtree per path costs time exponential in the
+// nesting depth. The answers come from the whole graph rather than from a
+// depth-first walk, because resources can list a form that lists them back:
+// ISO 32000-1, 8.10.1 forbids a form that invokes itself, but nothing stops a
+// form's resources from listing a form that lists it. A walk that stops at a
+// form already on its path and caches what it found below it caches a "no
+// text" for a form that reaches text only through that ancestor, so which
+// forms it judged decorative, and the page's /Artifact spans, would follow
+// Go's map order (CONTRIBUTING "Deterministic output").
 //
-// depth is how many forms sit between the page and entry, so entry itself is
-// depth+1 forms below the page. A form deeper than the document's form budget
-// (limits.Limits.MaxFormDepth) is not read: text extraction reads the same
+// A form further below the page than the document's form budget
+// ([limits.Limits.MaxFormDepth]) is not read: text extraction reads the same
 // budget, so a form deep enough to escape this scan carries no text the
-// extractor would reach either.
-//
-// complete reports whether the answer was reached without the depth cap cutting
-// the search short. Only a complete answer is memoised: a false produced by
-// running out of depth says nothing about the same form reached higher up,
-// where the remaining budget would let the search continue.
-//
-// The forms and their resources are read alloc-first (see [stagedValue]).
+// extractor would reach either. A page form paints text when a chain of at most
+// that many forms, itself included, leads it to a form showing text. The
+// shortest chain decides, not the path a form was first reached by.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue15629: draws its field values through /X0, which does nothing
 //     but invoke three /Annot_* forms; judging /X0 by its own bytes marked it
 //     decoration and lost the name the form was filled in with.
-//   - pdfjs issue6961.pdf: nests forms ten levels deep, and without the memo
-//     `litho remediate -profile PDF/UA-1` on it ran for over 50 minutes at
-//     142% CPU, re-inflating the same streams, until the depth cap finally
-//     exhausted the search. It never returned within any run of the corpus
-//     harness.
-func formPaintsText(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, entry ast.PdfObject, visited map[int]bool, answers map[int]bool, depth int) (paints, complete bool) {
-	if depth+1 > doc.Limits().MaxFormDepth {
-		return false, false
-	}
-	objNum := 0
-	if ref, ok := entry.(ast.PdfIndirectRef); ok {
-		objNum = ref.ObjectNum
-		if known, ok := answers[objNum]; ok {
-			return known, true
-		}
-		if visited[objNum] {
-			// A cycle contributes no text of its own, and the path that
-			// opened it still owns the answer, so this is not memoised.
-			return false, true
-		}
-		visited[objNum] = true
-		defer delete(visited, objNum)
-	}
-	memoise := func(paints, complete bool) (bool, bool) {
-		if objNum > 0 && complete {
-			answers[objNum] = paints
-		}
-		return paints, complete
-	}
+//   - pdfjs issue6961.pdf: nests forms ten levels deep, and reading each form
+//     once per path made `litho remediate -profile PDF/UA-1` on it run for over
+//     50 minutes at 142% CPU, re-inflating the same streams, until the depth
+//     cap finally exhausted the search. It never returned within any run of the
+//     corpus harness.
+//   - All corpora: one page lists forms whose resources list each other back,
+//     page 1 of pdfjs issue19800.pdf.
+//   - All corpora: every page names the same text-painting forms under the
+//     graph as under the depth-first walk, and 1907 pages name at least one.
+type formGraph struct {
+	// entries maps each XObject name of the page's resources to its node.
+	entries map[ast.PdfName]int
+	nodes   []formNode
+	// chain holds, per node, how many forms the shortest chain from it to a
+	// form showing text holds, both ends included, or 0 when none reaches one.
+	chain  []int
+	budget int
+}
 
+// formNode is one XObject the scan reached.
+type formNode struct {
+	// showsText reports whether the form's own content shows text.
+	showsText bool
+	// children are the nodes of the XObjects the form's resources list.
+	children []int
+}
+
+// scanForms reads the forms the page's XObjects xobjs reach, breadth first so
+// each form is read at its shortest distance from the page, and follows a
+// form's children only while that distance leaves them within the form budget.
+// The page's XObjects sit at distance 1, and the budget is at least 1
+// ([limits.Limits.WithDefaults]). The forms and their resources are read
+// alloc-first (see [stagedValue]).
+//
+// A scan that ctx stops leaves the forms it did not read showing no text, and
+// the caller's next check of ctx ends the tagging run.
+func scanForms(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, xobjs ast.PdfDict) *formGraph {
+	g := &formGraph{entries: make(map[ast.PdfName]int, len(xobjs)), budget: doc.Limits().MaxFormDepth}
+	type pending struct {
+		node  int
+		entry ast.PdfObject
+		// level counts the forms from the page down to this one, itself
+		// included, along the shortest chain.
+		level int
+	}
+	var queue []pending
+	byObjNum := make(map[int]int)
+	add := func(entry ast.PdfObject, level int) int {
+		ref, isRef := entry.(ast.PdfIndirectRef)
+		if isRef && ref.ObjectNum > 0 {
+			if node, seen := byObjNum[ref.ObjectNum]; seen {
+				return node
+			}
+			byObjNum[ref.ObjectNum] = len(g.nodes)
+		}
+		g.nodes = append(g.nodes, formNode{})
+		queue = append(queue, pending{node: len(g.nodes) - 1, entry: entry, level: level})
+		return len(g.nodes) - 1
+	}
+	for _, name := range slices.Sorted(maps.Keys(xobjs)) {
+		g.entries[name] = add(xobjs[name], 1)
+	}
+	for head := 0; head < len(queue); head++ {
+		if ctx.Err() != nil {
+			break
+		}
+		p := queue[head]
+		shows, inner := readForm(ctx, alloc, doc, p.entry)
+		g.nodes[p.node].showsText = shows
+		if shows || p.level == g.budget {
+			continue
+		}
+		for _, name := range slices.Sorted(maps.Keys(inner)) {
+			child := add(inner[name], p.level+1)
+			g.nodes[p.node].children = append(g.nodes[p.node].children, child)
+		}
+	}
+	g.chain = shortestTextChains(g.nodes)
+	return g
+}
+
+// shortestTextChains returns, per node, how many forms the shortest chain from
+// it to a form showing text holds, both ends included, or 0 when no chain
+// reaches one. It walks the edges backwards from the forms showing text, so the
+// answer is the graph's and not the order the edges are met in.
+func shortestTextChains(nodes []formNode) []int {
+	parents := make([][]int, len(nodes))
+	for i, n := range nodes {
+		for _, c := range n.children {
+			parents[c] = append(parents[c], i)
+		}
+	}
+	chain := make([]int, len(nodes))
+	var frontier []int
+	for i, n := range nodes {
+		if n.showsText {
+			chain[i] = 1
+			frontier = append(frontier, i)
+		}
+	}
+	for len(frontier) > 0 {
+		var next []int
+		for _, c := range frontier {
+			for _, p := range parents[c] {
+				if chain[p] == 0 {
+					chain[p] = chain[c] + 1
+					next = append(next, p)
+				}
+			}
+		}
+		frontier = next
+	}
+	return chain
+}
+
+// paintsText reports whether the form at node reaches a form showing text, its
+// own content included, through a chain of forms the budget lets text
+// extraction read.
+func (g *formGraph) paintsText(node int) bool {
+	return g.chain[node] > 0 && g.chain[node] <= g.budget
+}
+
+// readForm reports whether the Form XObject entry shows text of its own and,
+// when it does not, returns the XObjects its resources list, which the scan
+// follows next. Anything that is not a readable Form XObject, an image among
+// them, shows no text and lists nothing.
+func readForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, entry ast.PdfObject) (shows bool, inner ast.PdfDict) {
 	stream, err := stagedStream(ctx, alloc, doc, entry)
 	if err != nil || stream.Dict == nil {
-		return memoise(false, true)
+		return false, nil
 	}
+	// An unreadable /Subtype names no form, so its error needs no other
+	// handling: the entry shows no text either way.
 	if subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype != "Form" {
-		return memoise(false, true)
+		return false, nil
 	}
 	body, err := doc.DecodeStream(ctx, stream)
 	if err != nil {
 		doc.Logger.Debug("decoding form xobject for text scan", slog.Any("err", err))
-		return memoise(false, true)
+		return false, nil
 	}
 	if showsText(body) {
-		return memoise(true, true)
+		return true, nil
 	}
 	nested, err := stagedDict(ctx, alloc, doc, stream.Dict["Resources"])
 	if err != nil || nested == nil {
-		return memoise(false, true)
+		return false, nil
 	}
-	inner, err := stagedDict(ctx, alloc, doc, nested["XObject"])
-	if err != nil || inner == nil {
-		return memoise(false, true)
+	inner, err = stagedDict(ctx, alloc, doc, nested["XObject"])
+	if err != nil {
+		return false, nil
 	}
-
-	childrenComplete := true
-	for _, child := range inner {
-		paints, complete := formPaintsText(ctx, alloc, doc, child, visited, answers, depth+1)
-		if paints {
-			return memoise(true, true)
-		}
-		if !complete {
-			childrenComplete = false
-		}
-	}
-	return memoise(false, childrenComplete)
+	return false, inner
 }
 
 // showsText reports whether a content stream carries a text-showing operator

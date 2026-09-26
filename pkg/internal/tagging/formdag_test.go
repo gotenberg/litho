@@ -138,19 +138,18 @@ func TestTextBearingXObjects_SharedFormsDecodedOnce(t *testing.T) {
 		}
 	}
 
-	// Scan every top-level form through one memo, the way textBearingXObjects
-	// does, and count what it decided.
-	answers := make(map[int]bool)
-	for _, entry := range top {
-		if paints, _ := formPaintsText(ctx, nil, doc, entry, make(map[int]bool), answers, 0); paints {
-			t.Fatal("no form in this graph shows text")
-		}
-	}
-
+	// Scan the page's forms the way textBearingXObjects does and count the
+	// forms it read.
+	g := scanForms(ctx, nil, doc, top)
 	const forms = 10 * 4
-	if len(answers) != forms {
-		t.Errorf("the scan recorded %d decisions for %d distinct forms: a shared subtree is re-walked once per path, "+
-			"which costs 4^10 visits instead of %d", len(answers), forms, forms)
+	if len(g.nodes) != forms {
+		t.Errorf("the scan read %d forms for %d distinct forms: a shared subtree is re-read once per path, "+
+			"which costs 4^10 reads instead of %d", len(g.nodes), forms, forms)
+	}
+	for name, node := range g.entries {
+		if g.paintsText(node) {
+			t.Fatalf("no form in this graph shows text, but /%s was judged to paint some", name)
+		}
 	}
 
 	if got := textBearingXObjects(ctx, nil, doc, pages[0]); len(got) != 0 {
@@ -158,50 +157,90 @@ func TestTextBearingXObjects_SharedFormsDecodedOnce(t *testing.T) {
 	}
 }
 
-// TestFormPaintsText_DepthCappedAnswerNotMemoised pins that a decision cut short
-// by the depth cap is not cached and reused where more depth remains.
+// shortestChainPDF builds a page listing two forms that reach the same text at
+// different depths. /X0 lists /Deep and /Inner; /Deep lists /Mid, /Mid lists
+// /Inner, and /Inner shows text. /P lists only /Deep. /X0 reaches the text
+// through a chain of two forms, itself and /Inner, and /P through four.
+func shortestChainPDF() []byte {
+	paint := "0 0 10 10 re f"
+	text := "BT /F1 9 Tf 0 0 Td (Louise Anne Farrar) Tj ET"
+	form := func(resources, body string) string {
+		return fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] %s/Length %d >>\nstream\n%s\nendstream",
+			resources, len(body)+1, body)
+	}
+	objs := []string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R " +
+			"/Resources << /XObject << /X0 5 0 R /P 9 0 R >> >> >>",
+		"<< /Length 14 >>\nstream\n/X0 Do /P Do\nendstream",
+		form("/Resources << /XObject << /Deep 6 0 R /Inner 8 0 R >> >> ", paint),
+		form("/Resources << /XObject << /Mid 7 0 R >> >> ", paint),
+		form("/Resources << /XObject << /Inner 8 0 R >> >> ", paint),
+		form("", text),
+		form("/Resources << /XObject << /Deep 6 0 R >> >> ", paint),
+	}
+
+	var b bytes.Buffer
+	b.WriteString("%PDF-1.7\n")
+	offsets := make([]int, len(objs))
+	for i, o := range objs {
+		offsets[i] = b.Len()
+		fmt.Fprintf(&b, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	start := b.Len()
+	fmt.Fprintf(&b, "xref\n0 %d\n0000000000 65535 f \n", len(objs)+1)
+	for _, off := range offsets {
+		fmt.Fprintf(&b, "%010d 00000 n \n", off)
+	}
+	fmt.Fprintf(&b, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, start)
+	return b.Bytes()
+}
+
+// TestTextBearingXObjects_ShortestChainDecides pins that a form is judged by
+// the shortest chain of forms leading it to text, within the form budget, and
+// not by the path the scan met a form on first.
 //
-// A form deep in the graph can run out of budget and answer "no text" while the
-// same form reached nearer the top has room to find it. Caching the first answer
+// A form deep in the graph can run out of budget while the same form reached
+// nearer the top has room to show its text. Judging it where it was met first
 // would hide real words from assistive technology, the failure the scan errs
-// against.
-func TestFormPaintsText_DepthCappedAnswerNotMemoised(t *testing.T) {
+// against, and would make the answer depend on the order the resources are
+// walked in.
+func TestTextBearingXObjects_ShortestChainDecides(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	data := nestedFormPDF()
-	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
-	if err != nil {
-		t.Fatalf("NewDocument: %v", err)
-	}
-	catalog, err := document.ResolveCatalog(ctx, doc)
-	if err != nil {
-		t.Fatalf("ResolveCatalog: %v", err)
-	}
-	pages, err := document.ResolvePages(ctx, doc, catalog)
-	if err != nil || len(pages) == 0 {
-		t.Fatalf("ResolvePages: %v (%d pages)", err, len(pages))
-	}
-	resources, err := document.ResolveDict(ctx, doc, pages[0].Resources["XObject"])
-	if err != nil {
-		t.Fatalf("resolving /XObject: %v", err)
-	}
-	outer := resources["X0"]
-
-	answers := make(map[int]bool)
-
-	// Starting past the cap answers false without looking, and says nothing
-	// about the form itself.
-	paints, complete := formPaintsText(ctx, nil, doc, outer, make(map[int]bool), answers, limits.DefaultMaxFormDepth)
-	if paints || complete {
-		t.Errorf("beyond the depth cap: paints=%v complete=%v, want false and incomplete", paints, complete)
-	}
-	if len(answers) != 0 {
-		t.Errorf("an answer cut short by the depth cap was memoised: %v", answers)
-	}
-
-	// The same form from the top still finds the text it reaches through /Inner.
-	if paints, _ := formPaintsText(ctx, nil, doc, outer, make(map[int]bool), answers, 0); !paints {
-		t.Error("/X0 reaches text through /Inner but was reported as decoration")
+	data := shortestChainPDF()
+	for _, tc := range []struct {
+		budget int
+		want   map[string]bool
+	}{
+		// /X0 reaches the text in two forms and /P in four.
+		{budget: 1, want: map[string]bool{}},
+		{budget: 2, want: map[string]bool{"X0": true}},
+		{budget: 3, want: map[string]bool{"X0": true}},
+		{budget: 4, want: map[string]bool{"X0": true, "P": true}},
+	} {
+		doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil,
+			document.WithLimits(limits.Limits{MaxFormDepth: tc.budget}))
+		if err != nil {
+			t.Fatalf("NewDocument: %v", err)
+		}
+		catalog, err := document.ResolveCatalog(ctx, doc)
+		if err != nil {
+			t.Fatalf("ResolveCatalog: %v", err)
+		}
+		pages, err := document.ResolvePages(ctx, doc, catalog)
+		if err != nil || len(pages) == 0 {
+			t.Fatalf("ResolvePages: %v (%d pages)", err, len(pages))
+		}
+		// Each run draws a fresh map order, so an answer that depends on the
+		// path a form was first met on shows up as a run that differs.
+		for run := range 50 {
+			got := textBearingXObjects(ctx, nil, doc, pages[0])
+			if len(got) != len(tc.want) || got["X0"] != tc.want["X0"] || got["P"] != tc.want["P"] {
+				t.Fatalf("budget %d, run %d: text-bearing forms %v, want %v", tc.budget, run, got, tc.want)
+			}
+		}
 	}
 }
