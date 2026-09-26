@@ -44,7 +44,7 @@ func TestCheckType3FontTransparency_SoftMaskedImage(t *testing.T) {
 			image(""), // the soft-mask target
 		)
 		page := collectPages(ctx, doc, cat)[0]
-		return checkType3FontTransparency(ctx, doc, &pageCtxsForPages(ctx, doc, page)[0], resolveResources(ctx, doc, page))
+		return pagePaintsTransparency(ctx, doc, page, 2)
 	}
 
 	if !build(t, image("/SMask 9 0 R")) {

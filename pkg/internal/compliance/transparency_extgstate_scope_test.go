@@ -16,11 +16,12 @@ import (
 // ISO 19005-2, 6.2.10 t2 and ISO 19005-4, 6.2.9 t2 ask whether the PAGE
 // contains transparency, and veraPDF answers it from the content stream: it
 // builds a PDExtGState from the gs operator that selects one, so a state the
-// page merely declares is modelled nowhere. [checkExtGStateTransparency1] and
-// [resourcesUseTransparency] both scoped themselves that way, but the
-// ExtGState loop inside [checkTransparencyParts2Plus] did not, and it runs
-// first and short-circuits the others. The alpha arms matter as much as the
-// blend-mode ones: /CA on a state nothing selects trips the same loop.
+// page merely declares is modelled nowhere. [checkExtGStateTransparency1] scoped
+// itself that way, but the ExtGState loop inside
+// [checkTransparencyParts2Plus] did not, and it ran first and short-circuited
+// the others. The alpha arms matter as much as the blend-mode ones: /CA on a
+// state nothing selects tripped the same loop. The page now answers at the
+// painting operators ([paintTransparency]).
 //
 // The selected arms are what keep this honest. A gate that simply silenced the
 // loop would satisfy the unselected cases and quietly lose every real report.
@@ -71,16 +72,18 @@ func TestTransparencyParts2Plus_ExtGStateScopedToDrawn(t *testing.T) {
 		return false
 	}
 
-	const unselected = "0 0 10 10 re f"
 	const selected = "/G1 gs 0 0 10 10 re f"
 
+	// Each state is painted with the operator its alpha applies to: veraPDF
+	// tests /CA at a stroke alone (see [paintTransparency]).
 	states := []struct {
 		name   string
 		gsBody string
+		paint  string
 	}{
-		{"a transparent blend mode", "<< /Type /ExtGState /BM /Darken >>"},
-		{"a fill alpha below 1", "<< /Type /ExtGState /ca 0.5 >>"},
-		{"a stroke alpha below 1", "<< /Type /ExtGState /CA 0.5 >>"},
+		{"a transparent blend mode", "<< /Type /ExtGState /BM /Darken >>", "f"},
+		{"a fill alpha below 1", "<< /Type /ExtGState /ca 0.5 >>", "f"},
+		{"a stroke alpha below 1", "<< /Type /ExtGState /CA 0.5 >>", "S"},
 	}
 
 	profiles := []struct {
@@ -96,13 +99,13 @@ func TestTransparencyParts2Plus_ExtGStateScopedToDrawn(t *testing.T) {
 		for _, st := range states {
 			t.Run(pr.name+": "+st.name+" the content never selects", func(t *testing.T) {
 				t.Parallel()
-				if fires(t, pdf(st.gsBody, unselected), pr.profile, pr.clause) {
+				if fires(t, pdf(st.gsBody, "0 0 10 10 re "+st.paint), pr.profile, pr.clause) {
 					t.Error("a graphics state no gs operator selects contributes no transparency")
 				}
 			})
 			t.Run(pr.name+": "+st.name+" the content selects", func(t *testing.T) {
 				t.Parallel()
-				if !fires(t, pdf(st.gsBody, selected), pr.profile, pr.clause) {
+				if !fires(t, pdf(st.gsBody, "/G1 gs 0 0 10 10 re "+st.paint), pr.profile, pr.clause) {
 					t.Error("a selected transparent graphics state with no blending colour space must fire")
 				}
 			})

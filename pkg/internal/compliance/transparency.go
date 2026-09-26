@@ -521,9 +521,10 @@ func blendingCSRule(part int) Rule {
 // [annotationBlendModes]).
 //
 // The blending colour space rule asks whether the page contains transparency,
-// which veraPDF answers from what the page's content and annotations draw,
-// never from the page's own /Group, and whether the group's /CS reads as a
-// colour space with no resources; see [pageHasBlendingCS].
+// which veraPDF answers at the operators the page's content and annotations
+// paint with ([paintTransparency]), never from the page's own /Group, and
+// whether the group's /CS reads as a colour space with no resources; see
+// [pageHasBlendingCS].
 //
 // # Corpus evidence
 //
@@ -540,9 +541,11 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 
 	var results []Violation
 	judged := make(map[int]bool)
-	walk := newDrawnStreamWalk(&validationCtx{doc: doc, profile: profile, part: part, pages: pages}, func(s *drawnStream) {
+	vctx := &validationCtx{doc: doc, profile: profile, part: part, pages: pages}
+	walk := newDrawnStreamWalk(vctx, func(s *drawnStream) {
 		results = append(results, drawnStreamBlendModes(ctx, doc, s, part, judged)...)
 	})
+	paint := newPaintTransparency(vctx)
 	for i := range pages {
 		page := pages[i].dict
 		if ctx.Err() != nil {
@@ -555,102 +558,28 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		walk.walkPage(ctx, &pages[i], i+1)
 		results = append(results, annotationBlendModes(ctx, doc, page, i+1, part, judged)...)
 
-		res := pages[i].resources
-		if res == nil {
-			continue
+		// The blend modes of the graphics states the page's own content sets.
+		// A content stream an earlier page shares sets its states there alone;
+		// see [markJudgedContents].
+		if !pages[i].contentJudged {
+			results = append(results, pageBlendModes(ctx, doc, &pages[i], i+1, part, judged)...)
 		}
 
 		// The page's own /Group is no transparency: veraPDF raises the page's
-		// containsTransparency from what its content and its annotations draw
+		// containsTransparency from what its content and its annotations paint
 		// alone (GFPDPage.parseContentStream and parseAnnotations,
-		// veraPDF-validation 1.30). See [pageHasBlendingCS].
-		pageUsesTransparency := false
-
-		// A resource dictionary lists what the content MAY set, not what it
-		// sets, and veraPDF builds its PDExtGState from the gs operator that
-		// selects one, so a state nothing selects contributes no transparency.
-		// [checkExtGStateTransparency1] and [resourcesUseTransparency] already
-		// scope themselves this way; this loop did not, and it runs first.
-		// A nil drawn admits every name, which keeps a page whose content
-		// litho cannot read unscoped rather than silently clean.
-		drawn := pageDrawnResources(ctx, &pages[i])
-
-		// Check blend modes in ExtGState.
-		gsDict, err := document.ResolveDict(ctx, doc, res["ExtGState"])
-		if err == nil && gsDict != nil {
-			for _, gsName := range sortedNames(gsDict) {
-				gsObj := gsDict[gsName]
-				if ctx.Err() != nil {
-					return results
-				}
-				if !drawn.setsExtGState(string(gsName)) {
-					continue
-				}
-
-				gs, err := document.ResolveDict(ctx, doc, gsObj)
-				if err != nil || gs == nil {
-					continue
-				}
-
-				// A content stream an earlier page shares sets its states there
-				// alone; see [markJudgedContents].
-				if !pages[i].contentJudged {
-					results = append(results, blendModeViolations(ctx, doc, gs, gsObj, drawn.gsCount(string(gsName)), part, judged,
-						"page %d, ExtGState %s", i+1, string(gsName))...)
-				}
-				if bmObj, hasBM := gs["BM"]; hasBM && blendModeIsTransparency(resolveBlendMode(ctx, doc, bmObj)) {
-					pageUsesTransparency = true
-				}
-
-				// SMask (other than None) indicates transparency. One that resolves
-				// to null masks nothing (ISO 32000-1, 7.3.7 and 7.3.10): veraPDF sees
-				// no transparency in either a null or a reference to a null object.
-				// Measured, and so throughout the transparency detection here.
-				if smaskObj, hasSMask := gs["SMask"]; hasSMask && !resourceEntryNull(ctx, doc, smaskObj) {
-					smaskName, _ := document.ResolveName(ctx, doc, smaskObj)
-					if smaskName != "None" {
-						pageUsesTransparency = true
-					}
-				}
-
-				// Non-1.0 alpha values indicate transparency.
-				if caObj, hasCA := gs["CA"]; hasCA {
-					if !floatEquals1(document.Float(caObj)) {
-						pageUsesTransparency = true
-					}
-				}
-				if caObj, hasCa := gs["ca"]; hasCa {
-					if !floatEquals1(document.Float(caObj)) {
-						pageUsesTransparency = true
-					}
-				}
-			}
+		// veraPDF-validation 1.30), at their painting operators; see
+		// [paintTransparency] and [pageHasBlendingCS]. A page whose content
+		// litho cannot read has every state and XObject its resources list
+		// surveyed instead, rather than be called transparency-free.
+		var pageUsesTransparency bool
+		if pages[i].contentUnreadable {
+			pageUsesTransparency = resourcesUseTransparency(ctx, doc, pages[i].resources, 0, map[string]bool{})
+		} else {
+			pageUsesTransparency = paint.pageTransparent(ctx, &pages[i])
 		}
-
-		// Check XObjects for transparency, recursing into Form XObjects whose
-		// own resources may nest soft-mask images, blend modes, or further
-		// forms. veraPDF walks the full resource tree, so a page that carries
-		// its transparency only inside a Form XObject still requires a blending
-		// colour space (ISO 19005-2 §6.2.10 t2).
 		if !pageUsesTransparency {
-			pageUsesTransparency = resourcesUseTransparency(ctx, doc, res, 0, map[string]bool{}, drawn)
-		}
-
-		// Check tiling patterns for transparency triggers.
-		if !pageUsesTransparency {
-			pageUsesTransparency = checkPatternTransparency(ctx, doc, res)
-		}
-
-		// Check Type 3 fonts for transparency triggers.
-		// Type 3 font CharProcs may use ExtGState with transparency or
-		// reference Form XObjects with transparency groups.
-		if !pageUsesTransparency {
-			pageUsesTransparency = checkType3FontTransparency(ctx, doc, &pages[i], res)
-		}
-
-		// Also check annotations for transparency triggers.
-		if !pageUsesTransparency {
-			pageUsesTransparency = checkAnnotationTransparency(ctx, doc, page, part)
+			pageUsesTransparency = paint.annotationsTransparent(ctx, &pages[i], part)
 		}
 
 		// PDF/A-4: page-level OutputIntents supplement catalog-level.
@@ -670,6 +599,35 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 		if pageUsesTransparency && !effectiveHasOI && !pageHasBlendingCS(ctx, doc, page) {
 			results = append(results, failf(blendingCSRule(part), "page %d", i+1)...)
 		}
+	}
+	return results
+}
+
+// pageBlendModes fails the blend mode rule for the graphics states the gs
+// operators of page p, the pageNum-th, set from its resources, as often as
+// [blendModeTimes] counts. A page whose content litho cannot read has every
+// state its resources list judged once (see [pageDrawnResources]).
+func pageBlendModes(ctx context.Context, doc *document.Document, p *pageCtx, pageNum, part int, judged map[int]bool) []Violation {
+	gsDict, err := document.ResolveDict(ctx, doc, p.resources["ExtGState"])
+	if err != nil || gsDict == nil {
+		return nil
+	}
+	drawn := pageDrawnResources(ctx, p)
+	var results []Violation
+	for _, gsName := range sortedNames(gsDict) {
+		if ctx.Err() != nil {
+			return results
+		}
+		if !drawn.setsExtGState(string(gsName)) {
+			continue
+		}
+		gsObj := gsDict[gsName]
+		gs, err := document.ResolveDict(ctx, doc, gsObj)
+		if err != nil || gs == nil {
+			continue
+		}
+		results = append(results, blendModeViolations(ctx, doc, gs, gsObj, drawn.gsCount(string(gsName)), part, judged,
+			"page %d, ExtGState %s", pageNum, string(gsName))...)
 	}
 	return results
 }
@@ -945,110 +903,27 @@ func pageDrawnResources(ctx context.Context, p *pageCtx) *drawnResources {
 	return collectDrawnResources(ops)
 }
 
-// formDrawnResources parses a Form XObject's own content stream so recursion
-// into it judges what the form paints rather than what it declares. Returns nil
-// when the stream does not parse, which keeps the survey of that form's
-// resources unscoped rather than silently emptying it. A stream veraPDF reads
-// no operator from ([decodeContentStream]) paints nothing.
-func formDrawnResources(ctx context.Context, doc *document.Document, stream ast.PdfStream) *drawnResources {
-	data, reads := decodeContentStream(ctx, doc, stream)
-	if !reads {
-		return collectDrawnResources(nil)
-	}
-	ops, err := content.ParseStreamData(ctx, data)
-	if err != nil {
-		return nil
-	}
-	return collectDrawnResources(ops)
-}
-
-// blendModeIsTransparency reports whether an ExtGState /BM value makes the
-// content transparent for the blending-colour-space rules.
-//
-// /Compatible counts, which reads oddly: ISO 32000-1, 11.3.5 calls it "the same
-// as Normal" and ISO 19005-2 §6.2.10 t1 lists it beside Normal among the values
-// the blend mode may take, so litho read it as no transparency at all. The
-// question this answers is a different one, and veraPDF's
-// PDPage.containsTransparency is what §6.2.10 t2 acts on: given an ExtGState
-// naming /Compatible, no page /Group and no PDF/A OutputIntent it reports "The
-// page contains transparent objects with no blending colour space defined",
-// while the same file naming /Normal passes. The rule that judges which values
-// /BM may take is a separate check and still admits Compatible.
-//
-// # Corpus evidence
-//
-//   - govdocs thread_300_300345.pdf: the corpus case, an ExtGState naming
-//     /Compatible.
-func blendModeIsTransparency(bm string) bool {
-	return bm != "" && bm != "Normal"
-}
-
-// imageSoftMasked reports whether an image XObject carries a soft mask.
-//
-// Per ISO 32000-1, Table 89, the /SMask entry of an image is either a stream or
-// the name None, and None states that the image has no soft mask. Testing only
-// that the key is present and not null therefore read an explicit /SMask /None
-// as transparency and demanded a blending colour space the page does not need.
-// Two fixtures differing only in that value settle it. The ExtGState paths
-// already draw the same distinction inline.
-//
-// # Corpus evidence
-//
-//   - pdfjs issue14814.pdf: draws one image with /SMask /None on a page
-//     carrying no /Group under no OutputIntent, and veraPDF reports nothing
-//     there.
-func imageSoftMasked(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
-	if !nonNullKeyPresent(ctx, doc, dict, "SMask") {
-		return false
-	}
-	name, _ := document.ResolveName(ctx, doc, dict["SMask"])
-	return name != "None"
-}
-
-// resourcesUseTransparency reports whether a resource dictionary reaches any
-// transparency the content stream actually draws: an ExtGState with a
-// non-isolating blend mode, a soft mask, or a non-opaque constant alpha; an
-// Image XObject with a /SMask; or a Form XObject with a transparency /Group. It
-// recurses into Form XObject resources, bounded by the form budget
-// ([formTooDeep]) and a visited set of form-dict identities, so nested
-// transparency is detected while cyclic references cannot loop.
-//
-// drawn narrows the scan to the names the content stream invokes; see
-// [drawnResources]. A nil drawn admits every name, for callers that hold no
-// content stream to consult.
-func resourcesUseTransparency(ctx context.Context, doc *document.Document, res ast.PdfDict, depth int, visited map[string]bool, drawn *drawnResources) bool {
+// resourcesUseTransparency reports whether the resource dictionary res, of a
+// page whose content litho cannot read, lists any transparency: a graphics
+// state that would make a painting operator transparent ([paintAlpha]), an
+// image veraPDF reads as transparency ([imageTransparent]), or a form with a
+// transparency /Group, in its own resources or those of a form it lists. With
+// no content to walk, what the page paints is unknown, and every state and
+// XObject it may name answers for it rather than the page be called
+// transparency-free. The walk is bounded by the form budget ([formTooDeep])
+// and a visited set of form dictionaries, so a cycle of forms cannot loop.
+func resourcesUseTransparency(ctx context.Context, doc *document.Document, res ast.PdfDict, depth int, visited map[string]bool) bool {
 	if res == nil || formTooDeep(doc, depth) || ctx.Err() != nil {
 		return false
 	}
-
 	if gsDict, err := document.ResolveDict(ctx, doc, res["ExtGState"]); err == nil && gsDict != nil {
 		for _, name := range sortedNames(gsDict) {
-			if !drawn.setsExtGState(string(name)) {
-				continue
-			}
-			gs, err := document.ResolveDict(ctx, doc, gsDict[name])
-			if err != nil || gs == nil {
-				continue
-			}
-			if bmObj, ok := gs["BM"]; ok {
-				if blendModeIsTransparency(resolveBlendMode(ctx, doc, bmObj)) {
-					return true
-				}
-			}
-			if smObj, ok := gs["SMask"]; ok && !resourceEntryNull(ctx, doc, smObj) {
-				if nm, _ := document.ResolveName(ctx, doc, smObj); nm != "None" {
-					return true
-				}
-			}
-			if v, ok := gs["CA"]; ok && !floatEquals1(document.Float(v)) {
-				return true
-			}
-			if v, ok := gs["ca"]; ok && !floatEquals1(document.Float(v)) {
+			a := applyExtGStateAlpha(ctx, doc, gsDict[name], paintAlpha{fillAlpha: 1, strokeAlpha: 1})
+			if a.base() || a.fillAlpha < 1 || a.strokeAlpha < 1 {
 				return true
 			}
 		}
 	}
-
 	xobjDict, err := document.ResolveDict(ctx, doc, res["XObject"])
 	if err != nil || xobjDict == nil {
 		return false
@@ -1057,24 +932,13 @@ func resourcesUseTransparency(ctx context.Context, doc *document.Document, res a
 		if ctx.Err() != nil {
 			return false
 		}
-		if !drawn.drawsXObject(string(name)) {
-			continue
-		}
 		stream, err := document.ResolveStream(ctx, doc, xobjDict[name])
 		if err != nil {
 			continue
 		}
-		subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"])
-		switch subtype {
+		switch subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype {
 		case "Image":
-			if imageSoftMasked(ctx, doc, stream.Dict) {
-				return true
-			}
-			// A JPXDecode image can carry its opacity channel inside the JPEG2000
-			// codestream instead of an explicit /SMask, signalled by /SMaskInData
-			// 1 or 2 (ISO 32000-1 Table 89). That is still transparency, so the
-			// page needs a blending colour space (veraPDF §6.2.10 t2).
-			if document.Float(stream.Dict["SMaskInData"]) > 0 {
+			if imageTransparent(ctx, doc, stream.Dict) {
 				return true
 			}
 		case "Form":
@@ -1088,114 +952,13 @@ func resourcesUseTransparency(ctx context.Context, doc *document.Document, res a
 				continue
 			}
 			visited[addr] = true
-			formRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-			// A drawn form paints its own content, so recurse under the names
-			// that form invokes rather than the page's.
-			formDrawn := drawn
-			if drawn != nil {
-				formDrawn = formDrawnResources(ctx, doc, stream)
-			}
-			if resourcesUseTransparency(ctx, doc, formRes, depth+1, visited, formDrawn) {
+			formRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"]) // Best-effort: a /Resources that is no dictionary lists nothing.
+			if resourcesUseTransparency(ctx, doc, formRes, depth+1, visited) {
 				return true
 			}
 		}
 	}
 	return false
-}
-
-// checkAnnotationTransparency checks whether any annotation on the page
-// uses transparency (via appearance streams with transparency groups or
-// ExtGState with transparency settings), under the PDF/A part part.
-//
-// An annotation's own /BM is transparency under PDF/A-4 alone, and only when
-// it is a name other than /Normal: ISO 32000-2, 12.5.2 gives an annotation a
-// blend mode, which ISO 32000-1 does not, and veraPDF reads it under ISO
-// 32000-2 only, as a name (GFPDAnnot.parseBM, veraPDF-validation 1.30).
-// Measured with veraPDF 1.30 on pages whose one annotation names a blend mode
-// over an opaque appearance, with no output intent: /BM /Multiply fails ISO
-// 19005-4, 6.2.9 t2 and passes ISO 19005-2, 6.2.10 t2, and /BM [/Multiply]
-// passes both.
-//
-// # Corpus evidence
-//
-//   - pdfjs annotation-as.pdf: its appearances carry image /SMask entries,
-//     and it fails ISO 19005-2 §6.2.10 t2 in veraPDF.
-//   - pdfjs stamps.pdf: its appearances carry a /Group /S /Transparency, and
-//     it fails ISO 19005-2 §6.2.10 t2 in veraPDF.
-//   - verapdf PDF_A-4__veraPDF_test_suite_6-2-9-t02-fail-c.pdf: its one
-//     annotation names /BM /Multiply over an opaque appearance, and veraPDF
-//     fails 6.2.10 t2 nowhere at PDF/A-2b, where litho failed it once.
-func checkAnnotationTransparency(ctx context.Context, doc *document.Document, page ast.PdfDict, part int) bool {
-	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
-	if err != nil || len(annotsArr) == 0 {
-		return false
-	}
-	for _, annotObj := range annotsArr {
-		if ctx.Err() != nil {
-			return false
-		}
-		annot, err := document.ResolveDict(ctx, doc, annotObj)
-		if err != nil || annot == nil {
-			continue
-		}
-		// An annotation's own blend mode, ISO 32000-2, 12.5.2.
-		if part >= 4 {
-			if bm, ok := resolveNameObject(ctx, doc, annot["BM"]); ok && bm != "Normal" {
-				return true
-			}
-		}
-		apDict, err := document.ResolveDict(ctx, doc, annot["AP"])
-		if err != nil || apDict == nil {
-			continue
-		}
-		for _, key := range []ast.PdfName{"N", "R", "D"} {
-			apObj, ok := apDict[key]
-			if !ok {
-				continue
-			}
-			for _, stream := range appearanceStreams(ctx, doc, apObj) {
-				// Transparency group on the appearance Form XObject.
-				if group, err := document.ResolveDict(ctx, doc, stream.Dict["Group"]); err == nil && group != nil {
-					if s, _ := document.ResolveName(ctx, doc, group["S"]); s == "Transparency" {
-						return true
-					}
-				}
-				// Transparency in the appearance's own resources. This walks the
-				// same tree as the page pass: an appearance routinely paints a
-				// soft-masked image or a transparency-group form rather than
-				// setting an ExtGState, and veraPDF counts those toward the
-				// page's containsTransparency.
-				if apRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && apRes != nil {
-					if resourcesUseTransparency(ctx, doc, apRes, 0, map[string]bool{},
-						formDrawnResources(ctx, doc, stream)) {
-						return true
-					}
-				}
-			}
-		}
-	}
-	return false
-}
-
-// appearanceStreams resolves an /AP entry to its appearance stream(s). The value
-// is either a single Form XObject stream, or a sub-dictionary of appearance
-// states (e.g. /On and /Off for a checkbox or radio-button widget) whose values
-// are each an appearance stream.
-func appearanceStreams(ctx context.Context, doc *document.Document, apObj ast.PdfObject) []ast.PdfStream {
-	if stream, err := document.ResolveStream(ctx, doc, apObj); err == nil {
-		return []ast.PdfStream{stream}
-	}
-	sub, err := document.ResolveDict(ctx, doc, apObj)
-	if err != nil || sub == nil {
-		return nil
-	}
-	var streams []ast.PdfStream
-	for _, name := range sortedNames(sub) {
-		if stream, err := document.ResolveStream(ctx, doc, sub[name]); err == nil {
-			streams = append(streams, stream)
-		}
-	}
-	return streams
 }
 
 // documentOutputIntentInfo returns whether the document has an OutputIntent
@@ -1238,319 +1001,6 @@ func documentOutputIntentInfo(ctx context.Context, doc *document.Document, catal
 		return true, cs
 	}
 	return false, ""
-}
-
-// checkPatternTransparency checks whether any tiling pattern in the page
-// resources uses transparency (via ExtGState with alpha or blend mode).
-func checkPatternTransparency(ctx context.Context, doc *document.Document, pageRes ast.PdfDict) bool {
-	patDict, err := document.ResolveDict(ctx, doc, pageRes["Pattern"])
-	if err != nil || patDict == nil {
-		return false
-	}
-	for _, patObj := range patDict {
-		stream, err := document.ResolveStream(ctx, doc, patObj)
-		if err != nil {
-			doc.Logger.Debug("compliance.transparency: cannot resolve pattern stream", "error", err)
-			continue
-		}
-		patRes, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-		if err != nil || patRes == nil {
-			continue
-		}
-		gsDict, err := document.ResolveDict(ctx, doc, patRes["ExtGState"])
-		if err != nil || gsDict == nil {
-			continue
-		}
-		for _, gsObj := range gsDict {
-			gs, err := document.ResolveDict(ctx, doc, gsObj)
-			if err != nil || gs == nil {
-				continue
-			}
-			if bmObj, hasBM := gs["BM"]; hasBM {
-				if blendModeIsTransparency(resolveBlendMode(ctx, doc, bmObj)) {
-					return true
-				}
-			}
-			if smaskObj, hasSMask := gs["SMask"]; hasSMask && !resourceEntryNull(ctx, doc, smaskObj) {
-				smaskName, _ := document.ResolveName(ctx, doc, smaskObj)
-				if smaskName != "None" {
-					return true
-				}
-			}
-			if caObj, hasCA := gs["CA"]; hasCA {
-				if !floatEquals1(document.Float(caObj)) {
-					return true
-				}
-			}
-			if caObj, hasCa := gs["ca"]; hasCa {
-				if !floatEquals1(document.Float(caObj)) {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-// checkType3FontTransparency checks whether any Type 3 font in the page
-// resources uses transparency (via ExtGState or transparency group XObjects
-// in its own resources).
-func checkType3FontTransparency(ctx context.Context, doc *document.Document, p *pageCtx, pageRes ast.PdfDict) bool {
-	fontDict, err := document.ResolveDict(ctx, doc, pageRes["Font"])
-	if err != nil || fontDict == nil {
-		return false
-	}
-	rendered := pageType3RenderedCodes(ctx, p)
-	for fontName, fontObj := range fontDict {
-		fd, err := document.ResolveDict(ctx, doc, fontObj)
-		if err != nil || fd == nil {
-			continue
-		}
-		if subtype, _ := document.ResolveName(ctx, doc, fd["Subtype"]); subtype != "Type3" {
-			continue
-		}
-		fontRes, err := document.ResolveDict(ctx, doc, fd["Resources"])
-		if err != nil || fontRes == nil {
-			continue
-		}
-		charProcs, err := document.ResolveDict(ctx, doc, fd["CharProcs"])
-		if err != nil || charProcs == nil {
-			continue
-		}
-
-		// veraPDF counts a Type 3 font's transparency only for glyphs the content
-		// actually paints: a transparent glyph that is never shown does not make
-		// the page transparent (ISO 19005-2 §6.2.10 / 19005-4 §6.2.9, PDPage
-		// containsTransparency). Scope the scan to the rendered glyphs' CharProcs.
-		// If the rendered set cannot be determined (unparsable content), fall back
-		// to every CharProc so real transparency is never missed.
-		var glyphs []ast.PdfName
-		if codes := rendered[string(fontName)]; len(codes) > 0 {
-			codeToName := type3EncodingCodeToName(ctx, doc, fd)
-			for code := range codes {
-				if name, ok := codeToName[code]; ok {
-					glyphs = append(glyphs, ast.PdfName(name))
-				}
-			}
-		} else {
-			for name := range charProcs {
-				glyphs = append(glyphs, name)
-			}
-		}
-
-		for _, gname := range glyphs {
-			stream, err := document.ResolveStream(ctx, doc, charProcs[gname])
-			if err != nil {
-				continue
-			}
-			if type3CharProcTransparent(ctx, doc, stream, fontRes) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// pageType3RenderedCodes returns, per font resource name, the set of single-byte
-// character codes shown by the page's own content stream. It scans only the page
-// content (matching the resource scope of [checkType3FontTransparency]).
-func pageType3RenderedCodes(ctx context.Context, p *pageCtx) map[string]map[int]bool {
-	out := map[string]map[int]bool{}
-	ops := p.parsedOps(ctx)
-	if len(ops) == 0 {
-		return out
-	}
-	current := ""
-	// The text font belongs to the graphics state, so Q restores it. See ISO
-	// 32000-1, 8.4.2 and Table 104. Without this the codes shown after a
-	// restore are attributed to whichever font Tf named last.
-	var fontStack []string
-	record := func(s ast.PdfString) {
-		if current == "" {
-			return
-		}
-		codes := out[current]
-		if codes == nil {
-			codes = map[int]bool{}
-			out[current] = codes
-		}
-		for _, b := range []byte(s) {
-			codes[int(b)] = true
-		}
-	}
-	for _, op := range ops {
-		switch op.Operator {
-		case "q":
-			fontStack = append(fontStack, current)
-		case "Q":
-			if n := len(fontStack); n > 0 {
-				current = fontStack[n-1]
-				fontStack = fontStack[:n-1]
-			}
-		case "Tf":
-			if len(op.Operands) >= 1 {
-				if n, ok := op.Operands[0].(ast.PdfName); ok {
-					current = string(n)
-				}
-			}
-		case "Tj", "'", "\"":
-			for _, operand := range op.Operands {
-				if s, ok := operand.(ast.PdfString); ok {
-					record(s)
-				}
-			}
-		case "TJ":
-			if len(op.Operands) >= 1 {
-				if arr, ok := op.Operands[0].(ast.PdfArray); ok {
-					for _, el := range arr {
-						if s, ok := el.(ast.PdfString); ok {
-							record(s)
-						}
-					}
-				}
-			}
-		}
-	}
-	return out
-}
-
-// type3EncodingCodeToName maps character codes to glyph names from a Type 3
-// font's /Encoding /Differences array. Codes absent from the array are omitted.
-func type3EncodingCodeToName(ctx context.Context, doc *document.Document, fontDict ast.PdfDict) map[int]string {
-	out := map[int]string{}
-	encDict, err := document.ResolveDict(ctx, doc, fontDict["Encoding"])
-	if err != nil || encDict == nil {
-		return out
-	}
-	diffArr, err := document.ResolveArray(ctx, doc, encDict["Differences"])
-	if err != nil {
-		return out
-	}
-	code := 0
-	for _, item := range diffArr {
-		switch v := item.(type) {
-		case ast.PdfInt:
-			code = int(v)
-		case ast.PdfName:
-			out[code] = string(v)
-			code++
-		}
-	}
-	return out
-}
-
-// type3CharProcTransparent reports whether a Type 3 glyph procedure paints with
-// transparency: a gs operator selecting an ExtGState with a non-opaque alpha,
-// soft mask, or non-standard blend mode, or a Do operator painting a Form
-// XObject that is a transparency group. The referenced resources resolve through
-// the font's own /Resources.
-//
-// # Corpus evidence
-//
-//   - pdfjs issue10717.pdf: keeps its /SMask images in the Type3 font's own
-//     /Resources, where only this walk reaches them.
-func type3CharProcTransparent(ctx context.Context, doc *document.Document, charProc ast.PdfStream, fontRes ast.PdfDict) bool {
-	data, reads := decodeContentStream(ctx, doc, charProc)
-	if !reads {
-		return false
-	}
-	ops, err := content.ParseStreamData(ctx, data)
-	if err != nil {
-		return false
-	}
-	gsDict, _ := document.ResolveDict(ctx, doc, fontRes["ExtGState"])
-	xobjDict, _ := document.ResolveDict(ctx, doc, fontRes["XObject"])
-	for _, op := range ops {
-		switch op.Operator {
-		case "gs":
-			if gsDict == nil || len(op.Operands) < 1 {
-				continue
-			}
-			name, ok := op.Operands[0].(ast.PdfName)
-			if !ok {
-				continue
-			}
-			if gs, err := document.ResolveDict(ctx, doc, gsDict[name]); err == nil && gs != nil && extGStateTransparent(ctx, doc, gs) {
-				return true
-			}
-		case "Do":
-			if xobjDict == nil || len(op.Operands) < 1 {
-				continue
-			}
-			name, ok := op.Operands[0].(ast.PdfName)
-			if !ok {
-				continue
-			}
-			stream, err := document.ResolveStream(ctx, doc, xobjDict[name])
-			if err != nil {
-				continue
-			}
-			switch st, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); st {
-			case "Image":
-				// A glyph procedure that paints a soft-masked image makes the
-				// page transparent exactly as the page content would (ISO
-				// 32000-1 §11.6.5). Such images can sit in the Type3 font's
-				// own /Resources, where only this walk reaches them.
-				if imageSoftMasked(ctx, doc, stream.Dict) {
-					return true
-				}
-				if document.Float(stream.Dict["SMaskInData"]) > 0 {
-					return true
-				}
-			case "Form":
-				if group, err := document.ResolveDict(ctx, doc, stream.Dict["Group"]); err == nil && group != nil {
-					if s, _ := document.ResolveName(ctx, doc, group["S"]); s == "Transparency" {
-						return true
-					}
-				}
-				formRes, _ := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-				if resourcesUseTransparency(ctx, doc, formRes, 0, map[string]bool{},
-					formDrawnResources(ctx, doc, stream)) {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-// extGStateTransparent reports whether an ExtGState dictionary establishes
-// transparency: a non-standard blend mode, a soft mask, or a non-opaque
-// stroking or non-stroking constant alpha.
-func extGStateTransparent(ctx context.Context, doc *document.Document, gs ast.PdfDict) bool {
-	if bmObj, ok := gs["BM"]; ok {
-		if blendModeIsTransparency(resolveBlendMode(ctx, doc, bmObj)) {
-			return true
-		}
-	}
-	if smaskObj, ok := gs["SMask"]; ok && !resourceEntryNull(ctx, doc, smaskObj) {
-		if smaskName, _ := document.ResolveName(ctx, doc, smaskObj); smaskName != "None" {
-			return true
-		}
-	}
-	if caObj, ok := gs["CA"]; ok && !floatEquals1(document.Float(caObj)) {
-		return true
-	}
-	if caObj, ok := gs["ca"]; ok && !floatEquals1(document.Float(caObj)) {
-		return true
-	}
-	return false
-}
-
-// resolveBlendMode resolves a blend mode value which may be a name or the
-// first element of an array of names.
-func resolveBlendMode(ctx context.Context, doc *document.Document, obj ast.PdfObject) string {
-	// BM can be a single name.
-	if name, _ := document.ResolveName(ctx, doc, obj); name != "" {
-		return string(name)
-	}
-	// Or an array of names. Use the first entry.
-	arr, err := document.ResolveArray(ctx, doc, obj)
-	if err != nil || len(arr) == 0 {
-		return ""
-	}
-	name, _ := document.ResolveName(ctx, doc, arr[0])
-	return string(name)
 }
 
 // alphaEpsilon is the tolerance [floatEquals1] allows around 1.0.

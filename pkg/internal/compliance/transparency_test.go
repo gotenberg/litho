@@ -37,8 +37,7 @@ func TestCheckType3FontTransparency_RenderedGlyphsOnly(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolve page: %v", err)
 		}
-		res, _ := document.ResolveDict(ctx, doc, page["Resources"])
-		return checkType3FontTransparency(ctx, doc, &pageCtxsForPages(ctx, doc, page)[0], res)
+		return pagePaintsTransparency(ctx, doc, page, 2)
 	}
 
 	if build(t, "b") { // renders /triangle (opaque); /square never painted
@@ -102,9 +101,9 @@ func TestResourcesUseTransparency(t *testing.T) {
 		)
 		page := collectPages(ctx, doc, cat)[0]
 		res := resolveResources(ctx, doc, page)
-		// nil drawn: this exercises the resource survey itself, which is what a
-		// caller with no readable content stream falls back to.
-		return resourcesUseTransparency(ctx, doc, res, 0, map[string]bool{}, nil)
+		// This exercises the resource survey itself, which a page whose content
+		// litho cannot read falls back to.
+		return resourcesUseTransparency(ctx, doc, res, 0, map[string]bool{})
 	}
 
 	t.Run("soft-mask image nested in a form is detected", func(t *testing.T) {
@@ -185,7 +184,7 @@ func TestCheckAnnotationTransparency_AppearanceSubStates(t *testing.T) {
 		formStream("/Group << /S /Transparency >>"), // /On: transparency group
 	)
 	page := collectPages(ctx, doc, cat)[0]
-	if !checkAnnotationTransparency(ctx, doc, page, 2) {
+	if !pagePaintsTransparency(ctx, doc, page, 2) {
 		t.Error("transparency in a widget /AP /N sub-state (/On) must be detected")
 	}
 }
