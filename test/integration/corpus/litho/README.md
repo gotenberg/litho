@@ -464,7 +464,6 @@ which are covered under [Known divergences](#known-divergences).
 | `undecodable_2b.pdf`   | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 11   | 9    |
 | `usecmap_2u.pdf`       | 5    | 2    | 8    | 3    | 5    | 8    | 3    | 5    | 5   | 5    | 6    | 9    | 10   |
 | `unembednames_2u.pdf`  | 7    | 4    | 9    | 5    | 7    | 9    | 5    | 7    | 7   | 7    | 8    | 11   | 11   |
-| `usecmap_2u.pdf`       | 5    | 2    | 7\*  | 3    | 5    | 7\*  | 3    | 5    | 5   | 5    | 6    | 9    | 9\*  |
 | `usedcs_2b.pdf`        | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `xfatable_ua1.pdf`     | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 4    | 7    |
 | `xmpempty_1b.pdf`      | 8    | 5    | 6    | 3    | 4    | 6    | 3    | 4    | 7   | 7    | 8    | 5    | 6    |
@@ -4024,32 +4023,22 @@ set on both.
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
-the runner scores 93 x 8 = 744 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 93 x 13 = 1209 cells. litho
+the runner scores 101 x 8 = 808 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 101 x 13 = 1313 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1204 of the 1209 cells. The five
-exceptions, two on `complex_ua2` and three on `usecmap_2u`, are marked `*` in
-the counts table and covered under [Known divergences](#known-divergences);
-veraPDF reports a non-empty set in each, which is why the verdict still
-matches.
+fixtures exist to protect, and it holds in 1311 of the 1313 cells. The two
+exceptions, both on `complex_ua2`, are marked `*` in the counts table and
+covered under [Known divergences](#known-divergences); veraPDF reports a
+non-empty set in each, which is why the verdict still matches.
 
 The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates,
 counts the cells whose sets of failed rules (clause and test) differ. Every
 fixture here is non-compliant on both sides, so a change that drops or invents
-a rule class leaves `matched` at 744 and moves only `ruleset_mismatch`. Four of
-a rule class leaves `matched` at 752 and moves only `ruleset_mismatch`. Four of
-a rule class leaves `matched` at 760 and moves only `ruleset_mismatch`. Four of
-the five exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1
-and PDF/UA-2 and `usecmap_2u` at PDF/A-2a and PDF/UA-2, so the metric reads 4 on
-this corpus, and the text scoreboard names the rules only one side reports. The
-PDF/A-3a cell of `usecmap_2u` is outside the manifest. A fifth cell in the
-runner is a regression, or a divergence to cover under Known divergences and
-mark `*`.
-a rule class leaves `matched` at 736 and moves only `ruleset_mismatch`. Both
+a rule class leaves `matched` at 808 and moves only `ruleset_mismatch`. Both
 exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1 and
 PDF/UA-2, so the metric reads 2 on this corpus, and the text scoreboard names
 the rules only one side reports. A third cell in the runner is a regression, or
