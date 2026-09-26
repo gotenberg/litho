@@ -1425,9 +1425,7 @@ A coverage scan put PDF/A-4 second from the bottom: 43 of the 109 rules in
 ISO 19005-4, 6.2.7.1 governs the image XObject dictionary and only its
 `/Interpolate` test was reached, by `complex_4.pdf`. ISO 19005-4, 6.7.2.1
 governs the XMP packet and only its "the catalog has a metadata stream" test was
-reached. `imgxmp_4.pdf` closes the other eight. It takes litho from 43 rules to
-47 and veraPDF from 43 to 51; the difference between those two numbers is the
-divergence below.
+reached. `imgxmp_4.pdf` closes the other eight, on both tools.
 
 Four sibling images carry one defect each, so a check that reports the first
 offending image and stops reports one rule where four are due:
@@ -1491,31 +1489,22 @@ PDF/A-1 flavour veraPDF models the catalog packet and nothing else. The part-1
 spellings of these tests, `6.7.5/1`, `6.7.5/2` and `6.7.9/1`, stay silent on
 both sides.
 
-### For the Known divergences section
+Both tools report the same rule set on this fixture at every profile the gate
+runs, and the gate's `ruleset_mismatch` holds it there. Two classes depend on
+litho reading the file the way veraPDF does.
 
-**`6.7.2.1/2`, `/3`, `/4` and `/5` at PDF/A-4, and their part-2 and part-3
-spelling `6.6.2.1/2` to `/5` at PDF/A-2a, PDF/A-2b, PDF/A-2u and PDF/A-3b.**
-veraPDF reports all four on `imgxmp_4.pdf`; litho reports none. ISO 19005-4,
-6.7.2.1 t4 reads "all content of all XMP packets located in any metadata stream
-present in the PDF", and veraPDF matches that: `GFCosDict` builds a `PDMetadata`
-for every dictionary carrying a `/Metadata` key whose `/Type` is not `/Catalog`,
-so a page-level packet is an `XMPPackage` like any other. litho reads
-`catalog["Metadata"]` and nothing else: `xmpLoadMetadata` in
-`pkg/internal/compliance/xmp.go` is the only entry point, and every packet check
-hangs off its return value. The implementation is right and its scope is wrong,
-which an A/B pins down: the same `bytes=` attribute in the catalog packet fires
-`6.7.2.1/2` on both tools, and in a page packet on veraPDF alone. litho has the
-gap.
+**`6.7.2.1/2` to `/5` at PDF/A-4, and the part-2 and part-3 spelling
+`6.6.2.1/2` to `/5`.** ISO 19005-4, 6.7.2.1 t4 reads "all content of all XMP
+packets located in any metadata stream present in the PDF", and veraPDF builds
+a `PDMetadata` for every dictionary carrying a `/Metadata` key whose `/Type` is
+not `/Catalog`, so a page-level packet is an `XMPPackage` like any other.
+`f01dc81` made litho check the packet of every metadata stream, not only the
+catalog's, so both tools report all four.
 
-**`7.2/34` at PDF/UA-1.** litho reports it on `imgxmp_4.pdf`, veraPDF does not.
-The rule's subject is veraPDF's `SETextItem` and this fixture shows no glyphs,
-only image XObjects, so there is no text whose natural language could be
-undetermined. `checkStructureTreeLangCoverage` in
-`pkg/internal/compliance/accessibility_lang.go` returns the rule unconditionally
-when the catalog has no `/StructTreeRoot`, without first asking whether the
-document draws any text. Adding one `Tj` to the fixture makes veraPDF report it
-too, which is the whole difference between the two files. Every other fixture in
-this corpus draws text, so none of them could show this. litho has the gap.
+**`7.2/34` at PDF/UA-1.** The rule's subject is veraPDF's `SETextItem`, and
+this fixture shows no glyphs, only image XObjects. `6f22ce2` made a text item a
+precondition of the rule, as under `docinfo_1b.pdf` above, so neither tool
+reports it here.
 
 ## Known divergences
 
@@ -1613,10 +1602,11 @@ requires the `/P` entry, so litho is right and veraPDF has the gap. The
 construct stays because it is the only thing in the corpus that reaches
 either rule.
 
-**`7.2/34` at PDF/UA-1.** veraPDF reports it, litho does not. This one is a
-litho gap, not a veraPDF one. The masking bug behind it is fixed; what
-remains is a separate facet of the same rule, described under
-[Second bug found](#second-bug-found-pdfua-1-language-coverage-fixed-one-facet-remains).
+**`7.2/34` at PDF/UA-1 no longer disagrees.** The facet described under
+[Second bug found](#second-bug-found-pdfua-1-language-coverage-fixed) was text
+outside the structure tree. `c1c11d3` judges the language of text no structure
+element owns, and both tools now report the rule on this file, so `7.1/12` is
+the cell's only difference.
 
 Three more cells disagree, all on `inlineimage_2b.pdf` and all on the same
 construct: an unusable `/Lang` on a marked-content property list in a document
@@ -1748,7 +1738,7 @@ anyway. `902aa09` removed the exemption. Two files differing only in that entry
 now report `7.2/2` on both tools, and a catalog `/Lang` silences both.
 `structnest_ua1.pdf` uses a plain outline item, which reaches the same test.
 
-## Second bug found: PDF/UA-1 language coverage (fixed, one facet remains)
+## Second bug found: PDF/UA-1 language coverage (fixed)
 
 `checkStructureTreeLangCoverage` in
 `pkg/internal/compliance/accessibility_lang.go` computed a document-wide
@@ -1771,11 +1761,11 @@ not incidental: a `/Figure` whose marked content draws only an image XObject
 is an `SEImageXObjectItem` to veraPDF and never reaches t34, which no
 structural test can tell without reading the content stream.
 
-The remaining `7.2/34` divergence on `complex_ua2.pdf` is a **different
-facet** of the same rule, not the latch: that file's real content sits
-outside the structure tree entirely, and litho's t34 walk visits structure
-elements only. Closing it means reaching content the tree never references,
-which is a larger change and is deliberately not attempted here.
+A `7.2/34` divergence on `complex_ua2.pdf` outlived that fix. It was a
+**different facet** of the same rule, not the latch: that file's real content
+sits outside the structure tree entirely, and litho's t34 walk visited
+structure elements only. `c1c11d3` closed it by judging the language of text no
+structure element owns, and both tools now report the rule on that file.
 
 ## Inherited colour spaces
 
@@ -3111,12 +3101,11 @@ once per text show, and litho once each, as for every untagged fixture,
 
 ## Scope
 
-The runner's `compliance` feature compares verdicts, not rule sets, and
-`manifest.json` expands every fixture across the eight profiles it lists. The
-hand-measured matrix is wider: all thirteen conformance levels veraPDF
-validates, so 77 x 13 = 1001 cells. litho and veraPDF return the same verdict
-in all of them: in each cell either both report nothing or both report
-something.
+`manifest.json` expands every fixture across the eight profiles it lists, so
+the runner scores 77 x 8 = 616 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 77 x 13 = 1001 cells. litho
+and veraPDF return the same verdict in all of them: in each cell either both
+report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
 fixtures exist to protect, and it holds in 996 of the 1001 cells. The five
@@ -3125,9 +3114,21 @@ in the counts table and covered under
 [Known divergences](#known-divergences); veraPDF reports a non-empty set in
 each, which is why the verdict still matches.
 
-Both figures are measured by hand against a live veraPDF rather than taken from
-the runner. The thirteen flavours are `1a 1b 2a 2b 2u 3a 3b 3u 4 4e 4f ua1 ua2`
-on the veraPDF side and the matching `PDF/A-*` and `PDF/UA-*` names on litho's:
+The runner's `compliance` feature scores both. `matched` counts the cells whose
+verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates,
+counts the cells whose sets of failed rules (clause and test) differ. Every
+fixture here is non-compliant on both sides, so a change that drops or invents
+a rule class leaves `matched` at 616 and moves only `ruleset_mismatch`. Three of
+the five exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1
+and PDF/UA-2 and `inlineimage_2b` at PDF/A-2a, so the metric reads 3 on this
+corpus, and the text scoreboard names the rules only one side reports. The
+PDF/A-1a and PDF/A-3a cells of `inlineimage_2b` are outside the manifest. A
+fourth cell in the runner is a regression, or a divergence to cover under
+Known divergences and mark `*`.
+
+The thirteen-level figures are measured by hand against a live veraPDF. The
+thirteen flavours are `1a 1b 2a 2b 2u 3a 3b 3u 4 4e 4f ua1 ua2` on the veraPDF
+side and the matching `PDF/A-*` and `PDF/UA-*` names on litho's:
 
 ```bash
 go build -o /tmp/litho ./cmd/litho
