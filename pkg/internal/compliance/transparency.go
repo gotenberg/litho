@@ -36,8 +36,9 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 }
 
 // checkTransparencyPart1 applies the ISO 19005-1, 6.4 transparency rules to
-// each page: its own /Group, what its content stream draws and its annotation
-// appearances.
+// each page: its own /Group, what its content stream draws, its annotation
+// appearances, and what every content stream [drawnStreamWalk] reaches from
+// them draws.
 //
 // A page whose content stream an earlier page shares draws nothing more, since
 // veraPDF judges that stream on the first page alone, with what it draws (see
@@ -54,7 +55,7 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 //     however many pages, forms or Do and gs operators draw them.
 //   - A graphics state written directly in a resource dictionary has no
 //     object of its own, and fails once for every gs that sets it in a
-//     content stream, which is itself judged once (see visited below).
+//     content stream, which is itself judged once.
 //   - A form's own /SMask, and a transparency /Group written directly in it,
 //     fail once for every Do that paints it, and an annotation appearance's
 //     once for every annotation. A group written as an indirect object fails
@@ -64,9 +65,31 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 //     pages paint, or an appearance two annotations share, fails the rules of
 //     what it draws once.
 //
+// The forms, tiling patterns, Type3 glyph descriptions and appearance streams
+// are reached as veraPDF reaches them, which [drawnStreamWalk] follows: a
+// stream only through the operator that draws it, and a name it uses through
+// its own resources first and the page's then. Measured the same way:
+//
+//   - A form with no /Resources, or with resources lacking the name, that
+//     sets a graphics state only the page defines fails t4 once, and t1, t5
+//     and t6 once each for a state with a soft mask and constant alpha. A
+//     tiling pattern, a Type3 glyph description or an appearance stream with
+//     no resources fails t4 the same way.
+//   - A form with no /Resources painting a soft masked image or a form with a
+//     transparency group only the page defines fails t2 or t3 once, and one
+//     painting a form only the page defines fails what that form draws.
+//   - A tiling pattern no scn selects and a Type3 font no text is shown with
+//     fail nothing, whatever graphics states they set, and a Type3 font whose
+//     resources define two states fails t4 for the one its glyph sets alone.
+//   - A graphics state set only by the soft mask group a graphics state names,
+//     or named only by a shading pattern, fails nothing.
+//   - A content stream that is also the form its page paints is judged as the
+//     page's content alone: one setting a state with a soft mask and painting
+//     a form with a transparency group, each defined by both the page and the
+//     form's own resources, fails t1 and t3 once each.
+//
 // judged holds the image XObjects, graphics states and transparency groups
-// judged so far, and visited the streams and fonts whose resources the survey
-// has walked, which also breaks resource cycles.
+// judged so far.
 //
 // # Corpus evidence
 //
@@ -77,10 +100,30 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 //   - govdocs thread_000_000146.pdf: names the same indirect graphics states
 //     from the resources of many of its 163 forms, and veraPDF fails 6.4 t4,
 //     t5 and t6 two or three times, where litho failed them 19 or 20 times.
+//   - All corpora: reaching the streams a page draws as [drawnStreamWalk]
+//     does moved 4 counts of 6.4 t1 to t3 at PDF/A-1b, all onto veraPDF's,
+//     and no other count at PDF/A-1b or PDF/A-2b, veraPDF files at their own
+//     profile.
+//   - pdfjs issue19634.pdf: the resources of its Type3 fonts declare the forms
+//     their glyphs use as soft masks, each with a transparency group, and
+//     litho, surveying those resources whole, failed t3 30 times, where
+//     veraPDF fails it nowhere.
+//   - pdfjs issue18466.pdf: declares a tiling pattern that paints a soft
+//     masked image, and no scn selects it: veraPDF fails t2 twice, where
+//     litho failed it three times.
+//   - pdfjs issue18894.pdf: the content stream of its page is also the form
+//     the page paints, and litho judged what the stream draws once more
+//     through the form's own resources, failing t1 and t3 twice each, where
+//     veraPDF fails them once.
 func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages []pageCtx) []Violation {
 	var results []Violation
 	judged := make(map[int]bool)
-	visited := make(map[int]bool)
+	walk := newDrawnStreamWalk(&validationCtx{doc: doc, pages: pages}, func(s *drawnStream) {
+		scope := appearanceResources(ctx, doc, s.resources, s.pageRes)
+		drawn := collectDrawnResources(s.ops)
+		results = append(results, checkExtGStateTransparency1(ctx, doc, scope, s.pageNum, drawn, judged)...)
+		results = append(results, checkXObjectTransparency1(ctx, doc, scope, s.pageNum, drawn, judged)...)
+	})
 	for i := range pages {
 		page := pages[i].dict
 		if ctx.Err() != nil {
@@ -91,159 +134,29 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 
 		res := resolveInheritedResources(ctx, doc, page)
 		if res != nil && !pages[i].contentJudged {
-			results = append(results, checkResourceTransparency1(ctx, doc, res, i+1, visited, judged, 0,
-				pageDrawnResources(ctx, &pages[i]))...)
+			drawn := pageDrawnResources(ctx, &pages[i])
+			results = append(results, checkExtGStateTransparency1(ctx, doc, res, i+1, drawn, judged)...)
+			results = append(results, checkXObjectTransparency1(ctx, doc, res, i+1, drawn, judged)...)
 		}
 
-		// Annotation appearance streams carry their own /Resources, so an
-		// ExtGState reached only inside an appearance form is still part of
-		// the rendered content and falls under the PDF/A-1 §6.4 transparency
-		// restrictions.
-		results = append(results, checkAnnotAPTransparency1(ctx, doc, page, i+1, visited, judged)...)
+		results = append(results, checkAnnotAPTransparency1(ctx, doc, page, i+1, judged)...)
+		walk.walkPage(ctx, &pages[i], i+1)
 	}
 	return results
 }
 
-// checkResourceTransparency1 applies the PDF/A-1 §6.4 ExtGState and XObject
-// transparency checks to one resource dict and recurses into the resources of
-// nested Form XObjects and tiling patterns. The §6.4 restrictions cover every
-// graphics state used to render the page, so the walk follows resources through
-// nested XObjects and patterns rather than stopping at the page dict. visited
-// breaks resource cycles; depth is capped by the form budget ([formTooDeep]),
-// the anti-DoS guard every form walk shares.
-func checkResourceTransparency1(ctx context.Context, doc *document.Document, res ast.PdfDict, pageNum int, visited, judged map[int]bool, depth int, drawn *drawnResources) []Violation {
-	if formTooDeep(doc, depth) || ctx.Err() != nil {
-		return nil
-	}
-
-	results := checkExtGStateTransparency1(ctx, doc, res, pageNum, drawn, judged)
-	results = append(results, checkXObjectTransparency1(ctx, doc, res, pageNum, drawn, judged)...)
-
-	results = append(results, walkNestedResources1(ctx, doc, res["XObject"], pageNum, visited, judged, depth, drawn.drawsXObject)...)
-	// A pattern is selected by scn or SCN, which [drawnResources] does not
-	// record, so every pattern the resources declare is walked.
-	results = append(results, walkNestedResources1(ctx, doc, res["Pattern"], pageNum, visited, judged, depth, nil)...)
-
-	// Type 3 font resources: a CharProc is a content stream, and its
-	// operators draw through the font's own /Resources. A transparency Group
-	// XObject reached only via a glyph procedure is therefore still rendered
-	// content and is forbidden under PDF/A-1 §6.4, so the walk descends into
-	// each Type 3 font's resources.
-	if fontDict, err := document.ResolveDict(ctx, doc, res["Font"]); err == nil && fontDict != nil {
-		names := make([]ast.PdfName, 0, len(fontDict))
-		for name := range fontDict {
-			names = append(names, name)
-		}
-		slices.Sort(names)
-		for _, name := range names {
-			entry := fontDict[name]
-			if ref, ok := entry.(ast.PdfIndirectRef); ok {
-				if visited[ref.ObjectNum] {
-					continue
-				}
-				visited[ref.ObjectNum] = true
-			}
-			fd, err := document.ResolveDict(ctx, doc, entry)
-			if err != nil || fd == nil {
-				continue
-			}
-			if st, _ := document.ResolveName(ctx, doc, fd["Subtype"]); st != "Type3" {
-				continue
-			}
-			if fontRes, resErr := document.ResolveDict(ctx, doc, fd["Resources"]); resErr == nil && fontRes != nil {
-				// A Type 3 glyph draws through its own CharProc, whose operators
-				// are not in hand here, so its resources stay unscoped.
-				results = append(results, checkResourceTransparency1(ctx, doc, fontRes, pageNum, visited, judged, depth+1, nil)...)
-			}
-
-			// A glyph procedure is itself a content stream (ISO 32000-1, 9.6.5),
-			// so an /ExtGState it declares in its OWN /Resources is rendered
-			// content and §6.4 reaches it. Unlike the font's /Resources above,
-			// the glyph's operators ARE in hand, so the survey is scoped to what
-			// the glyph selects, exactly as walkNestedResources1 scopes a form.
-			//
-			// This walk is deliberately outside the /Resources branch: a font
-			// that declares no /Resources of its own still has glyph procedures
-			// that may declare theirs.
-			charProcs, procErr := document.ResolveDict(ctx, doc, fd["CharProcs"])
-			if procErr != nil || charProcs == nil {
-				continue
-			}
-			for _, glyph := range sortedNames(charProcs) {
-				entry := charProcs[glyph]
-				if ref, ok := entry.(ast.PdfIndirectRef); ok {
-					if visited[ref.ObjectNum] {
-						continue
-					}
-					visited[ref.ObjectNum] = true
-				}
-				stream, streamErr := document.ResolveStream(ctx, doc, entry)
-				if streamErr != nil {
-					continue
-				}
-				procRes, nestedErr := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-				if nestedErr != nil || procRes == nil {
-					continue
-				}
-				results = append(results, checkResourceTransparency1(ctx, doc, procRes, pageNum, visited, judged, depth+1,
-					formDrawnResources(ctx, doc, stream))...)
-			}
-		}
-	}
-	return results
-}
-
-// walkNestedResources1 recurses into the /Resources of each stream in an
-// XObject or Pattern resource sub-dictionary that drawn admits, or of every
-// stream when drawn is nil. Names are sorted so the violation order is
-// deterministic.
-func walkNestedResources1(ctx context.Context, doc *document.Document, dictObj ast.PdfObject, pageNum int, visited, judged map[int]bool, depth int, drawn func(string) bool) []Violation {
-	dict, err := document.ResolveDict(ctx, doc, dictObj)
-	if err != nil || dict == nil {
-		return nil
-	}
-
-	names := make([]ast.PdfName, 0, len(dict))
-	for name := range dict {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-
-	var results []Violation
-	for _, name := range names {
-		if drawn != nil && !drawn(string(name)) {
-			continue
-		}
-		entry := dict[name]
-		if ref, ok := entry.(ast.PdfIndirectRef); ok {
-			if visited[ref.ObjectNum] {
-				continue
-			}
-			visited[ref.ObjectNum] = true
-		}
-		stream, err := document.ResolveStream(ctx, doc, entry)
-		if err != nil {
-			continue
-		}
-		nested, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"])
-		if err != nil || nested == nil {
-			continue
-		}
-		results = append(results, checkResourceTransparency1(ctx, doc, nested, pageNum, visited, judged, depth+1,
-			formDrawnResources(ctx, doc, stream))...)
-	}
-	return results
-}
-
-// checkAnnotAPTransparency1 applies the PDF/A-1 §6.4 transparency checks to
-// each annotation's appearance streams: the appearance form XObject's own
-// /Group and /SMask, plus the ExtGStates and nested XObjects in its
-// /Resources. An appearance form is a form XObject that paints the
-// annotation, so a transparency Group or /SMask on it is rendered content and
-// falls under §6.4. The form's own keys are judged once for every annotation
-// that shows it, and what it draws once for the whole document; see
-// [checkTransparencyPart1].
-func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int, visited, judged map[int]bool) []Violation {
+// checkAnnotAPTransparency1 applies the ISO 19005-1, 6.4 soft mask and group
+// checks to the appearance streams of each annotation on a page. An appearance
+// stream is a form XObject that paints the annotation, so a transparency group
+// or a soft mask on it is rendered content. Its keys are judged once for every
+// annotation that shows it, and what it draws once for the whole document, by
+// [drawnStreamWalk]; see [checkTransparencyPart1].
+//
+// veraPDF reaches the normal, rollover and down appearances alone (ISO
+// 32000-1, 12.5.5, Table 168): measured with veraPDF 1.30 at PDF/A-1b, a form
+// with a transparency group under an /AP key other than /N, /R and /D fails
+// 6.4 t3 nowhere.
+func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int, judged map[int]bool) []Violation {
 	annots, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annots) == 0 {
 		return nil
@@ -262,48 +175,19 @@ func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page
 		if err != nil || apDict == nil {
 			continue
 		}
-		for _, apName := range sortedNames(apDict) {
-			results = append(results, appearanceTransparency1(ctx, doc, apDict[apName], pageNum, visited, judged)...)
+		for _, key := range []ast.PdfName{"N", "R", "D"} {
+			apObj, ok := apDict[key]
+			if !ok {
+				continue
+			}
+			for _, streamObj := range appearanceStreamObjects(ctx, doc, apObj) {
+				stream, err := document.ResolveStream(ctx, doc, streamObj)
+				if err != nil {
+					continue
+				}
+				results = append(results, formXObjectTransparency1(ctx, doc, stream.Dict, pageNum, "annotation appearance", 1, judged)...)
+			}
 		}
-	}
-	return results
-}
-
-// appearanceTransparency1 checks one /AP entry, either an appearance form
-// XObject stream or a sub-dictionary of appearance states (e.g. a button's
-// /On and /Off), for forbidden PDF/A-1 transparency.
-func appearanceTransparency1(ctx context.Context, doc *document.Document, entry ast.PdfObject, pageNum int, visited, judged map[int]bool) []Violation {
-	if stream, err := document.ResolveStream(ctx, doc, entry); err == nil {
-		return appearanceStreamTransparency1(ctx, doc, entry, stream, pageNum, visited, judged)
-	}
-	subDict, err := document.ResolveDict(ctx, doc, entry)
-	if err != nil || subDict == nil {
-		return nil
-	}
-	var results []Violation
-	for _, name := range sortedNames(subDict) {
-		sub := subDict[name]
-		if stream, err := document.ResolveStream(ctx, doc, sub); err == nil {
-			results = append(results, appearanceStreamTransparency1(ctx, doc, sub, stream, pageNum, visited, judged)...)
-		}
-	}
-	return results
-}
-
-// appearanceStreamTransparency1 checks an appearance form XObject's own
-// transparency keys and recurses into its /Resources, which visited walks once
-// however many annotations share the form.
-func appearanceStreamTransparency1(ctx context.Context, doc *document.Document, entry ast.PdfObject, stream ast.PdfStream, pageNum int, visited, judged map[int]bool) []Violation {
-	results := formXObjectTransparency1(ctx, doc, stream.Dict, pageNum, "annotation appearance", 1, judged)
-	if ref, ok := entry.(ast.PdfIndirectRef); ok {
-		if visited[ref.ObjectNum] {
-			return results
-		}
-		visited[ref.ObjectNum] = true
-	}
-	if nested, err := document.ResolveDict(ctx, doc, stream.Dict["Resources"]); err == nil && nested != nil {
-		results = append(results, checkResourceTransparency1(ctx, doc, nested, pageNum, visited, judged, 0,
-			formDrawnResources(ctx, doc, stream))...)
 	}
 	return results
 }
@@ -390,12 +274,8 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 			}
 		}
 
-		// BM must be Normal or Compatible.
-		if bmObj, hasBM := gs["BM"]; hasBM {
-			bm := resolveBlendMode(ctx, doc, bmObj)
-			if bm != "" && bm != "Normal" && bm != "Compatible" {
-				found = append(found, failf(Rule_19005_1_6_4_t04, "page %d, ExtGState %s, BM=%s", pageNum, string(gsName), bm)...)
-			}
+		if bm, ok := blendModeForbidden1(ctx, doc, gs); ok {
+			found = append(found, failf(Rule_19005_1_6_4_t04, "page %d, ExtGState %s, %s", pageNum, string(gsName), bm)...)
 		}
 
 		// CA (stroke alpha) must be 1.0.
@@ -420,14 +300,50 @@ func checkExtGStateTransparency1(ctx context.Context, doc *document.Document, re
 	return results
 }
 
+// blendModeForbidden1 reports whether the /BM of the graphics state gs fails
+// ISO 19005-1, 6.4 t4, which admits a blend mode key only with the value
+// Normal or Compatible, and describes the value for the violation's context.
+//
+// veraPDF states the test as containsBM == false || BMNameValue == "Normal" ||
+// BMNameValue == "Compatible", where containsBM reads the key as [knownKey]
+// does and BMNameValue is the name /BM resolves to, null for anything else.
+// ISO 32000-1, 11.6.3 also lets /BM be an array of blend modes, of which a
+// viewer uses the first it recognises, but the test admits the name alone: an
+// array fails it whatever it holds, [/Normal] included, and so does any other
+// value that is no name. Measured with veraPDF 1.30 at PDF/A-1b: /BM
+// [/Normal /Foo], [1 /Foo], [/Normal], [/Compatible], [], [5 0 R] where 5
+// is /Normal, the empty name, 1, and references to null, to an undefined
+// object and to [/Normal] fail t4 once each, and /Normal, a direct null and a
+// reference to /Normal pass it.
+//
+// # Corpus evidence
+//
+//   - All corpora: failing every /BM that is no name changes no count at
+//     PDF/A-1b.
+//   - pdfjs issue11279.pdf: the one file that sets a graphics state whose /BM
+//     is no name, and veraPDF fails t4 once for it, as litho did before.
+func blendModeForbidden1(ctx context.Context, doc *document.Document, gs ast.PdfDict) (string, bool) {
+	if !knownKey(gs, "BM") {
+		return "", false
+	}
+	name, ok := resolveNameObject(ctx, doc, gs["BM"])
+	switch {
+	case !ok:
+		return "BM is no name", true
+	case name == "Normal" || name == "Compatible":
+		return "", false
+	}
+	return "BM=" + string(name), true
+}
+
 // checkXObjectTransparency1 checks the XObjects a content stream paints for a
 // forbidden SMask or transparency group (PDF/A-1).
 //
 // A resource dictionary lists what the content MAY paint; see
 // [drawnResources]. veraPDF builds its PDXObject from the Do operator that
 // paints one, so an XObject nothing paints is reported nowhere, and neither is
-// anything its own resources hold, which [checkResourceTransparency1] leaves
-// unwalked. Measured with veraPDF 1.30 at PDF/A-1b: a page declaring a soft
+// anything its own resources hold, which [drawnStreamWalk] never reaches.
+// Measured with veraPDF 1.30 at PDF/A-1b: a page declaring a soft
 // masked image and a form with a transparency group, and painting neither,
 // passes ISO 19005-1, 6.4 t2 and t3.
 //

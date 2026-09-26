@@ -10,8 +10,8 @@ import (
 //
 // onFont controls where the offending /ExtGState lives:
 //
-//	true  - on the font dictionary's /Resources, the shape litho already walks
-//	        (checkResourceTransparency1 recurses into fd["Resources"])
+//	true  - on the font dictionary's /Resources, which a glyph with no
+//	        resources of its own reads (see [drawnStreamWalk])
 //	false - on the CharProc stream's own /Resources, and NOWHERE else
 //
 // The false case is the one under test, and the font dictionary deliberately
@@ -53,13 +53,12 @@ func charProcTransparencyPDF(onFont bool) []byte {
 // TestCharProcResources_TransparencyDetected pins that ISO 19005-1 §6.4 reaches
 // an /ExtGState a Type 3 GLYPH PROCEDURE declares in its own /Resources.
 //
-// [checkResourceTransparency1] walks a page's /ExtGState, its /XObject and
-// /Pattern trees, and each Type 3 font's fd["Resources"]. It never resolves
-// fd["CharProcs"], so a glyph stream carrying its own /Resources is outside
-// every path. Per ISO 32000-1 §9.6.5 a glyph procedure is a content stream that
-// paints through the resources in scope for it, so a transparency group or
-// constant alpha reached only that way is still rendered content and §6.4
-// forbids it.
+// [drawnStreamWalk] reaches every glyph description of a Type 3 font text is
+// shown with, and under a profile built on ISO 32000-1 a glyph carrying its own
+// /Resources reads them in its font's stead. Per ISO 32000-1 §9.6.5 a glyph
+// procedure is a content stream that paints through the resources in scope for
+// it, so a transparency group or constant alpha reached only that way is still
+// rendered content and §6.4 forbids it.
 //
 // The repair side already covers this shape: fixType3CharProcTransparency
 // resolves fontDict["CharProcs"] and normalises each glyph stream, and
@@ -84,8 +83,6 @@ func TestCharProcResources_TransparencyDetected(t *testing.T) {
 	// own /Resources and declared nowhere else.
 	if !firesRule(t, charProcTransparencyPDF(false), "6.4", 6) {
 		t.Error("an /ExtGState declared on a Type 3 CharProc's own /Resources must fire " +
-			"§6.4 t6: checkResourceTransparency1 walks fd[\"Resources\"] but never " +
-			"fd[\"CharProcs\"], so a glyph procedure's resources are invisible to the " +
-			"transparency survey")
+			"§6.4 t6: a glyph procedure's resources are invisible to the transparency survey")
 	}
 }
