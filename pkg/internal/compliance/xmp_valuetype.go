@@ -291,15 +291,25 @@ type xmpExtEntry struct {
 }
 
 // structType returns the structure type t the entry resolves, its own
-// definitions first.
-func (e *xmpExtEntry) structType(t string) (xmpExtType, bool) {
+// definitions first, then the main entry's, then the part's predefined ones,
+// with the entry whose validators resolve its fields: veraPDF registers a
+// structure against the container of the entry defining it, and the
+// predefined ones against the container every entry starts from, which is
+// the main entry's for a component entry.
+func (e *xmpExtEntry) structType(part int, t string) (xmpExtType, *xmpExtEntry, bool) {
 	if st, ok := e.types[t]; ok {
-		return st, true
+		return st, e, true
 	}
-	if e.textTypes[t] || e.base == nil {
-		return xmpExtType{}, false
+	if e.textTypes[t] {
+		return xmpExtType{}, nil, false
 	}
-	return e.base.structType(t)
+	if e.base != nil {
+		return e.base.structType(part, t)
+	}
+	if st, ok := xmpPredefinedStructType(part, t); ok {
+		return st, e, true
+	}
+	return xmpExtType{}, nil, false
 }
 
 // textType reports whether t is a type the entry resolves as one defined with
@@ -312,6 +322,97 @@ func (e *xmpExtEntry) textType(t string) bool {
 		return false
 	}
 	return e.base.textType(t)
+}
+
+// Namespaces of the structure types the parts predefine.
+const (
+	xmpStDimNS = "http://ns.adobe.com/xap/1.0/sType/Dimensions#"
+	xmpImgNS   = "http://ns.adobe.com/xap/1.0/g/img/"
+	xmpStEvtNS = "http://ns.adobe.com/xap/1.0/sType/ResourceEvent#"
+	xmpStRefNS = "http://ns.adobe.com/xap/1.0/sType/ResourceRef#"
+	xmpStVerNS = "http://ns.adobe.com/xap/1.0/sType/Version#"
+	xmpStJobNS = "http://ns.adobe.com/xap/1.0/sType/Job#"
+	xmpExifNS  = "http://ns.adobe.com/exif/1.0/"
+	xmpGNS     = "http://ns.adobe.com/xap/1.0/g/"
+	xmpStFntNS = "http://ns.adobe.com/xap/1.0/sType/Font#"
+	xmpDMNS    = "http://ns.adobe.com/xmp/1.0/DynamicMedia/"
+)
+
+// xmpPredefinedStructTypes1 are the structure types veraPDF 1.30.2 registers
+// for every part (ValidatorsContainerCreator.createBasicValidatorsContainer),
+// keyed by their simplified name, with the namespace and field types of
+// XMPConstants. A field whose values the XMP Specification closes to a choice
+// (Thumbnail format, Flash Return and Mode) is read as its base type: veraPDF
+// validates PDF/A with isClosedChoiceCheck false (GFPDMetadata.getXMPPackage).
+//
+//nolint:gochecknoglobals // static lookup table.
+var xmpPredefinedStructTypes1 = map[string]xmpExtType{
+	"dimensions": {NS: xmpStDimNS, fields: map[string]string{"w": "real", "h": "real", "unit": "text"}},
+	"thumbnail": {NS: xmpImgNS, fields: map[string]string{
+		"height": "integer", "width": "integer", "image": "text", "format": "text",
+	}},
+	"resourceevent": {NS: xmpStEvtNS, fields: map[string]string{
+		"action": "text", "instanceID": "uri", "parameters": "text", "softwareAgent": "agentname", "when": "date",
+	}},
+	"resourceref": {NS: xmpStRefNS, fields: map[string]string{
+		"instanceID": "uri", "documentID": "uri", "versionID": "text", "renditionClass": "renditionclass",
+		"renditionParams": "text", "manager": "agentname", "managerVariant": "text", "manageTo": "uri", "manageUI": "uri",
+	}},
+	"version": {NS: xmpStVerNS, fields: map[string]string{
+		"comments": "text", "event": "resourceevent", "modifyDate": "date", "modifier": "propername", "version": "text",
+	}},
+	"job": {NS: xmpStJobNS, fields: map[string]string{"name": "text", "id": "text", "url": "url"}},
+	"flash": {NS: xmpExifNS, fields: map[string]string{
+		"Fired": "boolean", "Function": "boolean", "RedEyeMode": "boolean", "Return": "text", "Mode": "text",
+	}},
+	"oecf/sfr": {NS: xmpExifNS, fields: map[string]string{
+		"Columns": "integer", "Rows": "integer", "Names": "seq text", "Values": "seq rational",
+	}},
+	"cfapattern":     {NS: xmpExifNS, fields: map[string]string{"Columns": "integer", "Rows": "integer", "Values": "seq integer"}},
+	"devicesettings": {NS: xmpExifNS, fields: map[string]string{"Columns": "integer", "Rows": "integer", "Settings": "seq text"}},
+}
+
+// xmpPredefinedStructTypes23 are the structure types veraPDF 1.30.2 adds for
+// parts 2 and 3 (ValidatorsContainerCreator.createValidatorsContainerPredefinedForPDFA_2_3),
+// read as [xmpPredefinedStructTypes1] reads its own. Marker's startTime and
+// duration are of type any, which every value matches.
+//
+//nolint:gochecknoglobals // static lookup table.
+var xmpPredefinedStructTypes23 = map[string]xmpExtType{
+	"colorant": {NS: xmpGNS, fields: map[string]string{
+		"swatchName": "text", "mode": "text", "type": "text", "cyan": "real", "magenta": "real", "yellow": "real",
+		"black": "real", "red": "integer", "green": "integer", "blue": "integer", "L": "real", "A": "integer", "B": "integer",
+	}},
+	"font": {NS: xmpStFntNS, fields: map[string]string{
+		"fontName": "text", "fontFamily": "text", "fontFace": "text", "fontType": "text", "versionString": "text",
+		"composite": "boolean", "fontFileName": "text", "childFontFiles": "seq text",
+	}},
+	"beatsplicestretch": {NS: xmpDMNS, fields: map[string]string{
+		"useFileBeatsMarker": "boolean", "riseInDecibel": "real", "riseInTimeDuration": "time",
+	}},
+	"marker": {NS: xmpDMNS, fields: map[string]string{
+		"startTime": "any", "duration": "any", "comment": "text", "name": "text", "location": "uri", "target": "text", "type": "text",
+	}},
+	"media": {NS: xmpDMNS, fields: map[string]string{
+		"path": "uri", "track": "text", "startTime": "time", "duration": "time", "managed": "boolean", "webStatement": "uri",
+	}},
+	"projectlink":      {NS: xmpDMNS, fields: map[string]string{"path": "uri", "type": "text"}},
+	"resamplestretch":  {NS: xmpDMNS, fields: map[string]string{"quality": "text"}},
+	"time":             {NS: xmpDMNS, fields: map[string]string{"value": "integer", "scale": "rational"}},
+	"timecode":         {NS: xmpDMNS, fields: map[string]string{"timeValue": "text", "timeFormat": "text"}},
+	"timescalestretch": {NS: xmpDMNS, fields: map[string]string{"frameSize": "real", "frameOverlappingPercentage": "real", "quality": "text"}},
+}
+
+// xmpPredefinedStructType returns the structure type key the part predefines.
+func xmpPredefinedStructType(part int, key string) (xmpExtType, bool) {
+	if st, ok := xmpPredefinedStructTypes1[key]; ok {
+		return st, true
+	}
+	if part == 1 {
+		return xmpExtType{}, false
+	}
+	st, ok := xmpPredefinedStructTypes23[key]
+	return st, ok
 }
 
 // xmpExtEntries reads the pdfaExtension:schemas bags of the packet into the
@@ -394,7 +495,7 @@ func (e *xmpExtEntry) registerType(typeNode *XMPNode) {
 // or of the entry.
 func (e *xmpExtEntry) knownType(part int, typ string) bool {
 	t := xmpArrayItemKey(typ)
-	if _, ok := e.structType(t); ok || e.textType(t) {
+	if _, _, ok := e.structType(part, t); ok || e.textType(t) {
 		return true
 	}
 	return xmpValidatorBuiltin(part, t)
@@ -497,11 +598,13 @@ var (
 // measured on veraPDF 1.30.2 at PDF/A-2b, while the same array passes in a
 // component packet whose namespace the main packet does not extend.
 //
-// A structure type the part predefines is checked for being a structure only:
-// veraPDF also checks its fields against the type, and reading this looser
-// never reports what veraPDF passes. An XPath is likewise checked for being a
-// simple value only. Text is trimmed before the Boolean, Integer, Real, MIME
-// type and GPS patterns, which veraPDF does not do, for the same reason.
+// A structure type, defined by an entry or predefined by the part, is a
+// structure whose every field is one of the type's, in the type's namespace,
+// and of the field's type (StructuredTypeValidator). An XPath is checked for
+// being a simple value only: veraPDF also compiles it, and reading this looser
+// never reports what veraPDF passes. Text is trimmed before the Boolean,
+// Integer, Real, MIME type and GPS patterns, which veraPDF does not do, for
+// the same reason.
 func xmpValueMatches(n *XMPNode, typ string, entry *xmpExtEntry, part, depth int) bool {
 	if depth > maxXMPTreeDepth {
 		return true
@@ -532,13 +635,13 @@ func xmpValueMatches(n *XMPNode, typ string, entry *xmpExtEntry, part, depth int
 		}
 		return true
 	}
-	if st, ok := entry.structType(t); ok {
+	if st, owner, ok := entry.structType(part, t); ok {
 		if n.Kind != XMPStruct {
 			return false
 		}
 		for _, c := range n.Children {
 			ft, declared := st.fields[c.Name]
-			if !declared || c.NS != st.NS || !xmpValueMatches(c, ft, entry, part, depth+1) {
+			if !declared || c.NS != st.NS || !xmpValueMatches(c, ft, owner, part, depth+1) {
 				return false
 			}
 		}
@@ -565,9 +668,6 @@ func xmpValueMatches(n *XMPNode, typ string, entry *xmpExtEntry, part, depth int
 	}
 	if re, ok := xmpSimpleTypePatterns[t]; ok {
 		return n.Kind == XMPSimple && re.MatchString(strings.TrimSpace(n.Value))
-	}
-	if xmpValidatorBuiltin(part, t) {
-		return n.Kind == XMPStruct
 	}
 	// veraPDF answers false for a type it does not know; the property is then
 	// undeclared, which [xmpExtEntries] already leaves out.
