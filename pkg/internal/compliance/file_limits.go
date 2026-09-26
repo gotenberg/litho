@@ -117,7 +117,10 @@ func indirectObjCountRule(profile string) Rule {
 
 // checkNumericLimits validates §6.1.12/6.1.13: numeric value limits for
 // names, strings, integers, reals, arrays, dicts, and indirect objects. An
-// object in twice fails each limit twice; see [cosReachedTwice].
+// object in twice fails each limit twice; see [cosReachedTwice]. A value in
+// typed is judged once more for each time a typed object of veraPDF's model
+// reads it again ([typedValues]), and so is every /Filter name of a stream
+// ([streamFilterLimits]).
 //
 // The trailer is judged once, and a document information dictionary written
 // directly in it twice, as veraPDF reaches it (see [trailerFormatViolations]).
@@ -146,7 +149,7 @@ func indirectObjCountRule(profile string) Rule {
 //   - All corpora: judging the trailer of a cross-reference stream as its
 //     trailer entries alone changes no count at PDF/A-1b or PDF/A-2b,
 //     veraPDF files at their own profile.
-func checkNumericLimits(ctx context.Context, doc *document.Document, profile string, twice map[int]bool) []Violation {
+func checkNumericLimits(ctx context.Context, doc *document.Document, profile string, twice map[int]bool, typed []typedValue) []Violation {
 	part := PDFAPart(profile)
 	var results []Violation
 
@@ -177,8 +180,24 @@ func checkNumericLimits(ctx context.Context, doc *document.Document, profile str
 			continue
 		}
 
+		where := fmt.Sprintf("object %d", objNum)
 		overflow := countOverflows(doc.IntegerOverflows(objNum))
-		results = append(results, asReached(twice, objNum, checkObjectNumericLimits(obj, fmt.Sprintf("object %d", objNum), part, profile, overflow))...)
+		found := checkObjectNumericLimits(obj, where, part, profile, overflow)
+		found = append(found, streamFilterLimits(ctx, doc, obj, where, profile)...)
+		results = append(results, asReached(twice, objNum, found)...)
+	}
+
+	// A value a typed object of veraPDF's model reads again is judged again;
+	// see [typedValues].
+	for _, v := range typed {
+		if ctx.Err() != nil {
+			return results
+		}
+		var overflow map[float64]int
+		if v.site.objNum != 0 {
+			overflow = countOverflows(doc.IntegerOverflows(v.site.objNum))
+		}
+		results = append(results, checkObjectNumericLimits(v.value, v.where+", read again", part, profile, overflow)...)
 	}
 
 	// The trailer dictionary is not an indirect object, so the walk above never
@@ -217,7 +236,9 @@ func withoutZeroRule(results []Violation) []Violation {
 // limits: the content of each page, and every stream [drawnStreamWalk] reaches
 // from it, its form XObjects, tiling patterns, Type3 glyphs and annotation
 // appearances included. Only content streams are scanned, not ICC profiles,
-// font programs or other binary streams.
+// font programs or other binary streams. The same walk judges the names the
+// resources of every page and of every stream it reaches read again; see
+// [resourceNameLimits].
 //
 // ISO 19005-2 §6.1.13 constrains every number a conforming file contains, and
 // ISO 19005-1, 6.1.12 t2 states the real-magnitude limit over CosReal, which is
@@ -290,8 +311,30 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 		results = append(results, checkOperandLimits(ops, countOverflows(overflows), where, false, maxStr, profile)...)
 	}
 
+	// A resource dictionary reads some names again, each time veraPDF reaches
+	// it, and once for the document when written as an indirect object; see
+	// [resourceNameLimits].
+	judgedResources := make(map[int]bool)
+	resourceNames := func(res ast.PdfDict, resNum int, where string) {
+		if res == nil || judgedResources[resNum] {
+			return
+		}
+		if resNum != 0 {
+			judgedResources[resNum] = true
+		}
+		results = append(results, resourceNameLimits(ctx, doc, res, where, profile)...)
+	}
+	for i := range vctx.pages {
+		if ctx.Err() != nil {
+			return results
+		}
+		res, resNum := pageResources(ctx, doc, &vctx.pages[i])
+		resourceNames(res, resNum, fmt.Sprintf("page %d resources", i+1))
+	}
+
 	walk := newDrawnStreamWalk(vctx, func(s *drawnStream) {
 		results = append(results, checkOperandLimits(s.ops, s.overflow, streamContentWhere(s.objNum), s.colourOff, maxStr, profile)...)
+		resourceNames(s.resources, s.resourcesNum, streamContentWhere(s.objNum)+" resources")
 	})
 	for i := range vctx.pages {
 		if ctx.Err() != nil {

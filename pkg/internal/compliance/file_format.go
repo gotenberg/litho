@@ -540,13 +540,15 @@ func (j *drawnStreamHexStrings) check(violations []content.FormatViolation, page
 // [cosReachedTwice]. They are read from the document by object, which reads
 // the snapshot's list: [resolveAllObjects] records every object's violations
 // before the context is built, and the first recording for an object wins.
+// So is a hex string finding in a value of typed, once for each time a typed
+// object of veraPDF's model reads the value again; see [typedValues].
 //
 // # Corpus evidence
 //
 //   - All corpora: no file writes a stream in an object stream, so the /Length
 //     of such a stream, which no check judges, costs no finding veraPDF
 //     states.
-func checkFormatViolations(vctx *validationCtx, profile string, twice map[int]bool) []Violation {
+func checkFormatViolations(vctx *validationCtx, profile string, twice map[int]bool, typed []typedValue) []Violation {
 	var results []Violation
 	for _, violation := range vctx.formatViolations {
 		if rule, ok := formatViolationRule(violation, profile); ok {
@@ -557,6 +559,25 @@ func checkFormatViolations(vctx *validationCtx, profile string, twice map[int]bo
 		for _, violation := range vctx.doc.ObjectFormatViolations(objNum) {
 			if rule, ok := formatViolationRule(violation, profile); ok {
 				results = append(results, Violation{Rule: rule, Context: violation.Error()})
+			}
+		}
+	}
+	objects := make(map[int][]error)
+	for _, v := range typed {
+		if v.site.objNum == 0 {
+			continue
+		}
+		violations, cached := objects[v.site.objNum]
+		if !cached {
+			violations = vctx.doc.ObjectFormatViolations(v.site.objNum)
+			objects[v.site.objNum] = violations
+		}
+		for _, violation := range violations {
+			if !isHexStringViolation(violation) || !v.holds(violation) {
+				continue
+			}
+			if rule, ok := formatViolationRule(violation, profile); ok {
+				results = append(results, Violation{Rule: rule, Context: violation.Error() + ", read again as the " + v.where})
 			}
 		}
 	}

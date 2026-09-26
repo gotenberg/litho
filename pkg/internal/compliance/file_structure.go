@@ -32,6 +32,7 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 
 	var results []Violation
 	twice := cosReachedTwice(ctx, doc, catalog)
+	typed := typedValues(ctx, vctx)
 
 	results = append(results, checkFileHeader(ctx, doc, profile)...)
 	results = append(results, checkTrailerID(ctx, doc, profile)...)
@@ -40,7 +41,7 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 	results = append(results, checkStreamExternalKeys(ctx, doc, profile, twice)...)
 	results = append(results, checkStreamLZW(ctx, doc, profile, twice)...)
 	results = append(results, checkEmbeddedFiles(ctx, doc, catalog, profile)...)
-	results = append(results, checkFormatViolations(vctx, profile, twice)...)
+	results = append(results, checkFormatViolations(vctx, profile, twice, typed)...)
 	results = append(results, trailerFormatViolations(doc, profile)...)
 	results = append(results, checkObjHeaderByteFormat(doc, profile)...)
 	results = append(results, checkStreamLengths(ctx, doc, profile, twice)...)
@@ -48,7 +49,7 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 	results = append(results, checkPropertyListHexStrings(ctx, vctx)...)
 	results = append(results, checkNonStandardFilters(ctx, doc, profile, twice)...)
 	results = append(results, checkPageBoundaries(ctx, doc, catalog, profile)...)
-	results = append(results, checkNumericLimits(ctx, doc, profile, twice)...)
+	results = append(results, checkNumericLimits(ctx, doc, profile, twice, typed)...)
 	results = append(results, checkContentStreamLimits(ctx, vctx)...)
 	results = append(results, checkXRefFormat(doc, profile)...)
 	results = append(results, checkXRefTableByteFormat(doc, profile)...)
@@ -99,7 +100,8 @@ func checkFileStructureGroup(ctx context.Context, vctx *validationCtx) []Violati
 //   - A catalog /Metadata stream with no /Type fails once.
 //
 // A trailer litho made up because the file has none names no /Info of the
-// file's own.
+// file's own. A single value a typed object reads again, an outline item's
+// /Title or a font's /BaseFont among them, is counted by [typedValues].
 //
 // # Corpus evidence
 //

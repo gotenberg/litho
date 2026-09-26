@@ -1048,6 +1048,10 @@ func (j *fontJudgements) descendantRules(ctx context.Context, doc *document.Docu
 	}
 	j.descendant[key] = true
 
+	// The descendant's PDFont reads its /BaseFont again, as the composite
+	// font's does; see [fontNameLimits].
+	results := fontNameLimits(ctx, doc, cidFontDict, "descendant CIDFont of font "+fontName, profile)
+
 	// The rendering-mode-3 exemption is not scoped to simple fonts: ISO 19005-1
 	// §6.3.4 t1, ISO 19005-2/3 §6.2.11.4.1 t1, ISO 19005-4 §6.2.10.4.1 t1, ISO
 	// 14289-1 §7.21.4.1 t1 and ISO 14289-2 §8.4.5.5.1 t1 all exempt a font "used
@@ -1055,7 +1059,6 @@ func (j *fontJudgements) descendantRules(ctx context.Context, doc *document.Docu
 	// applies the same escape to the descendant CIDFont (its PDCIDFont is a
 	// PDFont), so an unembedded composite font drawn only invisibly must stay
 	// silent here too.
-	var results []Violation
 	if isVisible {
 		results = append(results, checkFontEmbedding(ctx, doc, cidFontDict, fontName, pageNum, profile, false)...)
 	}
@@ -1085,6 +1088,10 @@ func checkFontDictRules(ctx context.Context, doc *document.Document, fontDict as
 
 	// Required font-dictionary keys (PDFont): §6.3.2 / §6.2.11.2 / §6.2.10.2.
 	results = append(results, checkFontRequiredKeys(ctx, doc, fontDict, subtype, PDFAPart(profile))...)
+	// The PDFont reads its name again, as a name of its own.
+	if pdFontSubtypes[subtype] {
+		results = append(results, fontNameLimits(ctx, doc, fontDict, "font "+fontName, profile)...)
+	}
 	if subtype == "Type0" {
 		// A Type0's descendant CIDFont is a font dictionary in its own right,
 		// and ISO 32000-1, 9.7.4, Table 117 requires /Type /Font on it. veraPDF

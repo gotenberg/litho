@@ -39,6 +39,9 @@ type drawnStream struct {
 	// none. A glyph description reads the /Resources of its font, or its own
 	// (see [drawnStreamWalk]).
 	resources ast.PdfDict
+	// resourcesNum is the object number of resources when the dictionary
+	// naming it writes it as an indirect reference, and 0 otherwise.
+	resourcesNum int
 	// pageRes is the resource dictionary of the page the walk reached the
 	// stream from. It resolves every name the stream's own resources leave
 	// undefined.
@@ -427,17 +430,22 @@ func (w *drawnStreamWalk) visit(ctx context.Context, obj ast.PdfObject, owner as
 		return
 	}
 	scan := w.scan(ctx, ops, appearanceResources(ctx, w.doc, res, pageRes), entry, colourOff)
+	resourcesNum := 0
+	if ref, ok := owner["Resources"].(ast.PdfIndirectRef); ok {
+		resourcesNum = ref.ObjectNum
+	}
 	w.judge(&drawnStream{
-		kind:      kind,
-		objNum:    objNum,
-		resources: res,
-		pageRes:   pageRes,
-		pageNum:   pageNum,
-		ops:       ops,
-		patterns:  scan.patterns(),
-		overflow:  countOverflows(overflows),
-		format:    format,
-		colourOff: colourOff,
+		kind:         kind,
+		objNum:       objNum,
+		resources:    res,
+		resourcesNum: resourcesNum,
+		pageRes:      pageRes,
+		pageNum:      pageNum,
+		ops:          ops,
+		patterns:     scan.patterns(),
+		overflow:     countOverflows(overflows),
+		format:       format,
+		colourOff:    colourOff,
 	})
 	w.descend(ctx, scan, pageRes, pageNum, depth+1)
 }
