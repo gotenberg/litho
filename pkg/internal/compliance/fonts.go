@@ -1664,10 +1664,12 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 		return nil
 	}
 
+	// Every shown code is its own glyph, stated once; see
+	// [fontJudgements.glyphs]. The first reason found for a code stands.
+	faults := newGlyphFaults(rule)
+
 	// Check /Encoding /Differences for a used ".notdef" entry.
-	if r := checkNotdefInDifferences(ctx, doc, fontDict, fontName, pageNum, rule, usage); r != nil {
-		return r
-	}
+	checkNotdefInDifferences(ctx, doc, fontDict, fontName, pageNum, faults, usage)
 
 	subtype := fontSubtype(ctx, doc, fontDict)
 
@@ -1732,11 +1734,12 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 			for _, code := range sortedByteKeys(usage.charCodes) {
 				glyphName := enc[code]
 				if glyphName == ".notdef" {
-					return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
+					faults.add(uint32(code), "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
+					continue
 				}
 				if embeddedType1 {
 					if _, named := type1Differences[code]; !named && type1UndefinedCode(type1Table, code) {
-						return failf(rule, "font %s on page %d: charCode %d is undefined in %s, so it maps to .notdef",
+						faults.add(uint32(code), "font %s on page %d: charCode %d is undefined in %s, so it maps to .notdef",
 							fontName, pageNum, code, type1Table)
 					}
 					continue
@@ -1750,11 +1753,12 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 				// predefinedEncoding[code] in Encoding.getName with no carve
 				// out for DEL.
 				if glyphName == "" && namedTable != "" && !symbolic {
-					return failf(rule, "font %s on page %d: charCode %d is undefined in %s, so it maps to .notdef",
+					faults.add(uint32(code), "font %s on page %d: charCode %d is undefined in %s, so it maps to .notdef",
 						fontName, pageNum, code, namedTable)
+					continue
 				}
 				if glyphName == "" && code < 0x20 && !symbolic {
-					return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
+					faults.add(uint32(code), "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
 				}
 			}
 		}
@@ -1776,7 +1780,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 				// text-showing operator, so litho declines to report it too rather
 				// than emit a false positive.
 				if fontDict["Encoding"] == nil && isSymbolicFont(ctx, doc, fd) {
-					return nil
+					return faults.violations()
 				}
 				enc := resolveSimpleFontEncoding(ctx, doc, fontDict)
 				// A TrueType simple font resolves a glyph through its /Encoding
@@ -1785,7 +1789,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 				// cmap. litho's no-post-table path otherwise trusts the cmap and
 				// misses this.
 				if len(enc) > 0 && usage.charCodes[0] && enc[0] == "" {
-					return failf(rule, "font %s on page %d: charCode 0 maps to .notdef", fontName, pageNum)
+					faults.add(0, "font %s on page %d: charCode 0 maps to .notdef", fontName, pageNum)
 				}
 				if glyphNames := typography.ExtractGlyphNames(ctx, fontData); glyphNames != nil {
 					// veraPDF names a simple font's glyph from its /Encoding
@@ -1794,7 +1798,6 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 					// (ISO 19005-2, 6.2.11.8). A code the encoding names is judged
 					// by that name alone, even when the program stores the glyph at
 					// GID 0, as a subset with no .notdef glyph can.
-					// Lowest offending code; see lowestOffender.
 					// A font that declares no /Encoding names no code at all, so an
 					// empty name here is the absence of a declaration rather than
 					// evidence of .notdef: ISO 32000-1, 9.6.6.4 resolves such a
@@ -1804,15 +1807,11 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 					// leaves a code undefined still fires, which is the
 					// MacExpertEncoding case above.
 					declaresEncoding := len(enc) > 0
-					var worst lowestOffender[byte]
-					for code := range usage.charCodes {
+					for _, code := range sortedByteKeys(usage.charCodes) {
 						glyphName := enc[code]
 						if glyphName == ".notdef" || (glyphName == "" && declaresEncoding) {
-							worst.offer(code)
+							faults.add(uint32(code), "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
 						}
-					}
-					if code, any := worst.result(); any {
-						return failf(rule, "font %s on page %d: charCode %d maps to .notdef", fontName, pageNum, code)
 					}
 				} else {
 					// No post table glyph names, so use cmap + loca + /Widths.
@@ -1820,7 +1819,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 					if charToGID != nil {
 						// GID 0 is always .notdef.
 						if usage.charCodes[0] && charToGID[0] == 0 {
-							return failf(rule, "font %s on page %d: charCode 0 maps to GID 0 (.notdef)", fontName, pageNum)
+							faults.add(0, "font %s on page %d: charCode 0 maps to GID 0 (.notdef)", fontName, pageNum)
 						}
 						// A code renders .notdef only when its cmap resolves to
 						// GID 0. An in-range non-zero GID is a real glyph even with
@@ -1830,7 +1829,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 						// keys on the glyph being .notdef, not on emptiness.
 						for _, code := range sortedByteKeys(usage.charCodes) {
 							if gid, inCmap := charToGID[uint16(code)]; inCmap && gid == 0 {
-								return failf(rule, "font %s on page %d: charCode %d maps to GID 0 (.notdef)", fontName, pageNum, code)
+								faults.add(uint32(code), "font %s on page %d: charCode %d maps to GID 0 (.notdef)", fontName, pageNum, code)
 							}
 						}
 					}
@@ -1839,7 +1838,7 @@ func checkNotdefGlyph(ctx context.Context, doc *document.Document, fontDict ast.
 		}
 	}
 
-	return nil
+	return faults.violations()
 }
 
 // collectType0CIDs decodes a Type0 font's shown strings into the set of CIDs
@@ -2106,13 +2105,13 @@ func checkType0NotdefGlyph(ctx context.Context, doc *document.Document, fontDict
 		return results
 	}
 
-	// Every used CID is its own glyph for the presence rule; see
-	// [fontJudgements.glyphs]. The .notdef rule is stated for the first alone.
+	// Every used CID is its own glyph, judged on its own; see
+	// [fontJudgements.glyphs]. A glyph can fail both rules.
 	notdefs := newGlyphFaults(rule)
 	presence := newGlyphFaults(glyphPresenceRule(profile))
 	checksPresence := presence.rule.Specification != "" && usage.visible
 	judged := func() []Violation {
-		return append(notdefs.first(), presence.violations()...)
+		return append(notdefs.violations(), presence.violations()...)
 	}
 
 	// CID 0 is always .notdef.

@@ -244,8 +244,8 @@ var noContext = glyphContext{mode: -1}
 //     and away for none; their summed distance from veraPDF fell from 382 to
 //     236.
 //   - pdfjs bug920426.pdf: shows 13 codes its embedded CMap leaves unmapped,
-//     and veraPDF fails ISO 19005-1, 6.3.5 t1 and ISO 19005-2, 6.2.11.4.1 t2
-//     13 times each, where litho failed each once, for CID 0.
+//     and veraPDF fails ISO 19005-1, 6.3.5 t1, ISO 19005-2, 6.2.11.4.1 t2 and
+//     6.2.11.8 t1 13 times each, where litho failed each once, for CID 0.
 //   - All corpora: the counts of ISO 19005-1, 6.3.6 t1, ISO 19005-2, 6.2.11.5
 //     t1 and ISO 19005-4, 6.2.10.5 t1 moved toward veraPDF's for 68 pairs of
 //     file and profile and away for 12, six files at each of PDF/A-1b and
@@ -264,6 +264,9 @@ var noContext = glyphContext{mode: -1}
 //   - pdfjs issue7074_reduced.pdf: embeds a program whose post table is cut
 //     short, which veraPDF does not judge widths against; litho reads its
 //     hmtx and states 14 glyphs where it stated 1.
+//   - All corpora: the counts of ISO 19005-2, 6.2.11.8 t1 moved toward
+//     veraPDF's in 34 files and away in none; their summed distance fell from
+//     2371 to 28.
 func (j *fontJudgements) glyphs(ctx context.Context, doc *document.Document, fontID string, font ast.PdfDict, usage *fontUsageInfo, profile string, vs []Violation) []Violation {
 	var out []Violation
 	var where map[uint32][]shownGlyph

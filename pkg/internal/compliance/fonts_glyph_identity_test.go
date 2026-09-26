@@ -109,6 +109,35 @@ func TestGlyphRulesStatedOncePerGlyph(t *testing.T) {
 	}
 }
 
+// TestGlyphNotdefCountsInvisibleModes pins that the .notdef rule, whose test
+// carries no rendering-mode term (ISO 19005-2, 6.2.11.8), states a CID 0 once
+// per rendering mode it is shown in, mode 3 included, and once for two pages.
+// Measured with veraPDF 1.30 at PDF/A-2b.
+func TestGlyphNotdefCountsInvisibleModes(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name   string
+		bodies []string
+		want   int
+	}{
+		{"rendering modes 0, 2 and 3", []string{glyphText("0 Tr <0000> Tj 2 Tr <0000> Tj 3 Tr <0000> Tj")}, 3},
+		{"two pages", []string{glyphText("<0000> Tj"), glyphText("<0000> Tj")}, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, _ := objsDocPDF(t, glyphPagesObjs(subsetType0Font(t, ""), tc.bodies...)...)
+			viols, err := ValidatePDFA(context.Background(), doc, models.PDFA2b)
+			if err != nil {
+				t.Fatalf("ValidatePDFA: %v", err)
+			}
+			if got := countRuleErrs(t, viols, Rule_19005_2_6_2_11_8_t01); got != tc.want {
+				t.Errorf("6.2.11.8 test 1 fired %d times, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestGlyphWidthStatedPerCode pins that the width rule is stated for every
 // shown code whose declared width disagrees with the program, not for the
 // first alone, and once for a code two pages show. veraPDF 1.30 reports each

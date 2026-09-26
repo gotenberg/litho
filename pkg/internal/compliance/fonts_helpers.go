@@ -863,22 +863,22 @@ func checkFontEmbedding(ctx context.Context, doc *document.Document, fontDict as
 // showing operators"; veraPDF is usage-driven here. Keying off the mere
 // presence of .notdef in the array (a common font-setup artifact for slots the
 // content never draws) produced false positives, so the check requires the
-// mapped code to appear in usage.
-func checkNotdefInDifferences(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, rule Rule, usage *fontUsageInfo) []Violation {
+// mapped code to appear in usage. Each such code is recorded in faults.
+func checkNotdefInDifferences(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, faults *glyphFaults, usage *fontUsageInfo) {
 	if usage == nil {
-		return nil
+		return
 	}
 	encObj, ok := fontDict["Encoding"]
 	if !ok {
-		return nil
+		return
 	}
 	encDict, err := document.ResolveDict(ctx, doc, encObj)
 	if err != nil || encDict == nil {
-		return nil
+		return
 	}
 	diffArr, err := document.ResolveArray(ctx, doc, encDict["Differences"])
 	if err != nil || diffArr == nil {
-		return nil
+		return
 	}
 	code := 0
 	for _, item := range diffArr {
@@ -887,12 +887,11 @@ func checkNotdefInDifferences(ctx context.Context, doc *document.Document, fontD
 			code = int(v)
 		case ast.PdfName:
 			if v == ".notdef" && code >= 0 && code <= 255 && usage.charCodes[byte(code)] { //nolint:gosec // G115: code is bounded to 0..255 by the guard.
-				return failf(rule, "font %s on page %d: charCode %d maps to .notdef via /Differences", fontName, pageNum, code)
+				faults.add(uint32(code), "font %s on page %d: charCode %d maps to .notdef via /Differences", fontName, pageNum, code) //nolint:gosec // G115: code is bounded to 0..255 by the guard.
 			}
 			code++
 		}
 	}
-	return nil
 }
 
 // lookupCIDWidth returns the PDF-declared width for a CID from the /W array
