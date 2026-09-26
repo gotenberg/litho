@@ -22,12 +22,13 @@ func matchDeviceNColorants(v compliance.Violation) bool {
 }
 
 // fixDeviceNColorants walks the /Resources/ColorSpace entries of every page,
-// inherited ones included, looking for DeviceN/NChannel colour spaces whose
-// /Attributes/Colorants dict is missing entries for one or more spot
-// colorants. Each missing colorant gets a minimal /Separation colour space
-// backed by a degenerate Type 2 function. That keeps the document compliant
-// without altering visible output beyond what the existing tint transform
-// already produced.
+// inherited ones included, and the shadings its /Shading and /Pattern
+// resources name ([patchPageShadingDeviceN]), looking for DeviceN/NChannel
+// colour spaces whose /Attributes/Colorants dict is missing entries for one or
+// more spot colorants. Each missing colorant gets a minimal /Separation colour
+// space backed by a degenerate Type 2 function. That keeps the document
+// compliant without altering visible output beyond what the existing tint
+// transform already produced.
 //
 // # Corpus evidence
 //
@@ -58,6 +59,7 @@ func fixDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	canon := make(map[ast.PdfName]ast.PdfArray)
 	for _, pe := range pageEntries {
 		collectSeparations(ctx, alloc, doc, pe, canon)
+		collectShadingSeparations(ctx, alloc, doc, pe, canon)
 	}
 
 	visited := make(map[int]bool)
@@ -66,8 +68,8 @@ func fixDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		n := patchPageDeviceN(ctx, alloc, doc, pe, canon, visited)
-		total += n
+		total += patchPageDeviceN(ctx, alloc, doc, pe, canon, visited)
+		total += patchPageShadingDeviceN(ctx, alloc, doc, pe, canon, visited)
 	}
 	if total == 0 {
 		return nil, nil
@@ -347,4 +349,263 @@ func syntheticSeparation(alloc *writer.ObjAllocator, name ast.PdfName, alt ast.P
 		alt,
 		funcRef,
 	}
+}
+
+// shadingPatternType is the /PatternType of a shading pattern (ISO 32000-1,
+// 8.7.4.1, Table 76), a dictionary whose /Shading paints the pattern.
+const shadingPatternType = 2
+
+// patchPageShadingDeviceN completes the DeviceN colour spaces the shadings of
+// the page's resources use, the ones [patchPageDeviceN] does not reach: a
+// shading its /Shading resources name for sh, and the shading of a shading
+// pattern its /Pattern resources name for scn (ISO 32000-1, 8.7.4.3 and
+// 8.7.4.5). ISO 19005-2, 6.2.4.4 t1 holds every DeviceN a page paints with to
+// the /Colorants rule, and compliance judges a shading's as it judges any
+// other. It returns how many it completed.
+//
+// The resources are the ones the page resolves its names against, its own or
+// the ones it inherits ([resourcesHolder]), read after patchPageDeviceN has
+// written them. A colour space, shading or pattern with an object number of
+// its own is written there; a direct one at the first link above it that has
+// one, up to the page or ancestor holding the /Resources.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue17065.pdf: the DeviceN of the shading pattern its page
+//     inherits kept 6.2.4.4 t1 after a PDF/A-2b remediation, on litho and
+//     veraPDF alike.
+func patchPageShadingDeviceN(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, canon map[ast.PdfName]ast.PdfArray, visited map[int]bool) int {
+	if live := resolveFromAllocOrDoc(ctx, alloc, doc, pe.ref); live != nil {
+		pe.dict = live
+	}
+	holder, ok := resourcesHolder(ctx, alloc, doc, pe)
+	if !ok {
+		return 0
+	}
+	w := &shadingDeviceNWalk{alloc: alloc, doc: doc, canon: canon, visited: visited}
+	work := maps.Clone(holder.dict)
+	if pending, dirty := w.resources(ctx, work); dirty && alloc.AllocAt(holder.ref.ObjectNum, work) {
+		w.completed += pending
+	}
+	return w.completed
+}
+
+// collectShadingSeparations records into canon the Separations the shadings
+// [patchPageShadingDeviceN] completes use, their colour space or a /Colorants
+// entry of their DeviceN, as [collectSeparations] records the page's /ColorSpace
+// resources' ahead of it. A colorant the repair gives a shading's DeviceN must
+// agree with the Separation of the same name another shading paints with (ISO
+// 19005-2, 6.2.4.4 t2) as much as with one the page's resources hold.
+func collectShadingSeparations(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry, canon map[ast.PdfName]ast.PdfArray) {
+	holder, ok := resourcesHolder(ctx, alloc, doc, pe)
+	if !ok {
+		return
+	}
+	res := liveDictValue(ctx, alloc, doc, holder.dict["Resources"])
+	var shadings []ast.PdfObject
+	named := liveDictValue(ctx, alloc, doc, res["Shading"])
+	for _, name := range sortedDictKeys(named) {
+		shadings = append(shadings, named[name])
+	}
+	patterns := liveDictValue(ctx, alloc, doc, res["Pattern"])
+	for _, name := range sortedDictKeys(patterns) {
+		pattern := liveDictValue(ctx, alloc, doc, patterns[name])
+		if patternType, _ := document.ResolveInt(ctx, doc, pattern["PatternType"]); patternType == shadingPatternType {
+			shadings = append(shadings, pattern["Shading"])
+		}
+	}
+	record := func(arr ast.PdfArray) {
+		if name, sep, ok := extractSeparation(arr); ok {
+			if _, seen := canon[name]; !seen {
+				canon[name] = sep
+			}
+		}
+	}
+	for _, obj := range shadings {
+		dict := liveDictValue(ctx, alloc, doc, obj)
+		if ref, isRef := obj.(ast.PdfIndirectRef); isRef {
+			if s, isStream := liveStream(ctx, alloc, doc, ref); isStream {
+				dict = s.Dict
+			}
+		}
+		cs := liveArray(ctx, alloc, doc, dict["ColorSpace"])
+		record(cs)
+		if len(cs) < 5 {
+			continue
+		}
+		attrs := liveDictValue(ctx, alloc, doc, cs[4])
+		colorants := liveDictValue(ctx, alloc, doc, attrs["Colorants"])
+		for _, name := range sortedDictKeys(colorants) {
+			record(liveArray(ctx, alloc, doc, colorants[name]))
+		}
+	}
+}
+
+// shadingDeviceNWalk carries one [patchPageShadingDeviceN] run. Each method
+// returns the value to put in place of a direct object it rebuilt, with how
+// many colour spaces it completed in it, which land with the caller's write;
+// it writes an object with a number of its own itself.
+type shadingDeviceNWalk struct {
+	alloc   *writer.ObjAllocator
+	doc     *document.Document
+	canon   map[ast.PdfName]ast.PdfArray
+	visited map[int]bool
+	// completed counts the colour spaces completed by writes that landed.
+	completed int
+}
+
+// resources completes the shadings the /Shading and /Pattern resources that
+// owner, the working copy of the page or ancestor holding them, holds under
+// /Resources. It returns how many completions land with the caller's write of
+// owner, which it updated when dirty is set.
+func (w *shadingDeviceNWalk) resources(ctx context.Context, owner ast.PdfDict) (int, bool) {
+	pending, dirty := 0, false
+	for _, category := range []ast.PdfName{"Shading", "Pattern"} {
+		// Read again for each category: the first may have rebuilt the
+		// /Resources the second writes through.
+		res := liveDictValue(ctx, w.alloc, w.doc, owner["Resources"])
+		entries := liveDictValue(ctx, w.alloc, w.doc, res[category])
+		var inline ast.PdfDict
+		n := 0
+		for _, name := range sortedDictKeys(entries) {
+			if ctx.Err() != nil {
+				return pending, dirty
+			}
+			var value ast.PdfObject
+			var p int
+			if category == "Shading" {
+				value, p = w.shading(ctx, entries[name])
+			} else {
+				value, p = w.pattern(ctx, entries[name])
+			}
+			if p == 0 {
+				continue
+			}
+			if inline == nil {
+				inline = make(ast.PdfDict)
+			}
+			inline[name] = value
+			n += p
+		}
+		if len(inline) == 0 {
+			continue
+		}
+		rebuilt := maps.Clone(entries)
+		maps.Copy(rebuilt, inline)
+		written, ownerDirty := writeResourceCategory(w.alloc, owner, res, category, rebuilt)
+		if written {
+			w.completed += n
+		}
+		if ownerDirty {
+			pending += n
+			dirty = true
+		}
+	}
+	return pending, dirty
+}
+
+// pattern completes the DeviceN the shading of the shading pattern obj uses. A
+// tiling pattern paints with the colour spaces of its own /Resources, which
+// this walk does not enter.
+func (w *shadingDeviceNWalk) pattern(ctx context.Context, obj ast.PdfObject) (ast.PdfObject, int) {
+	ref, isRef := obj.(ast.PdfIndirectRef)
+	if isRef && w.visited[ref.ObjectNum] {
+		return obj, 0
+	}
+	// A tiling pattern is a stream, which liveDictValue does not read.
+	dict := liveDictValue(ctx, w.alloc, w.doc, obj)
+	if dict == nil {
+		return obj, 0
+	}
+	if patternType, _ := document.ResolveInt(ctx, w.doc, dict["PatternType"]); patternType != shadingPatternType {
+		return obj, 0
+	}
+	if isRef {
+		w.visited[ref.ObjectNum] = true
+	}
+	shading, p := w.shading(ctx, dict["Shading"])
+	if p == 0 {
+		return obj, 0
+	}
+	rebuilt := maps.Clone(dict)
+	rebuilt["Shading"] = shading
+	if !isRef {
+		return rebuilt, p
+	}
+	if w.alloc.AllocAt(ref.ObjectNum, rebuilt) {
+		w.completed += p
+	}
+	return obj, 0
+}
+
+// shading completes the DeviceN the shading obj, a dictionary or a stream for
+// the types 4 to 7 (ISO 32000-1, 8.7.4.5.1), uses. A stream is written back
+// with its data.
+func (w *shadingDeviceNWalk) shading(ctx context.Context, obj ast.PdfObject) (ast.PdfObject, int) {
+	ref, isRef := obj.(ast.PdfIndirectRef)
+	var dict ast.PdfDict
+	var stream ast.PdfStream
+	isStream := false
+	if isRef {
+		if w.visited[ref.ObjectNum] {
+			return obj, 0
+		}
+		w.visited[ref.ObjectNum] = true
+		if s, ok := liveStream(ctx, w.alloc, w.doc, ref); ok {
+			stream, dict, isStream = s, s.Dict, true
+		}
+	}
+	if dict == nil {
+		dict = liveDictValue(ctx, w.alloc, w.doc, obj)
+	}
+	if dict == nil {
+		return obj, 0
+	}
+	cs, p := w.colourSpace(ctx, dict["ColorSpace"])
+	if p == 0 {
+		return obj, 0
+	}
+	rebuilt := maps.Clone(dict)
+	rebuilt["ColorSpace"] = cs
+	if !isRef {
+		return rebuilt, p
+	}
+	var replacement ast.PdfObject = rebuilt
+	if isStream {
+		replacement = ast.NewLazyStream(rebuilt, stream.Bytes)
+	}
+	if w.alloc.AllocAt(ref.ObjectNum, replacement) {
+		w.completed += p
+	}
+	return obj, 0
+}
+
+// colourSpace completes the DeviceN colour space obj, when it is one that
+// needs it ([buildPatchedDeviceN]).
+func (w *shadingDeviceNWalk) colourSpace(ctx context.Context, obj ast.PdfObject) (ast.PdfObject, int) {
+	ref, isRef := obj.(ast.PdfIndirectRef)
+	if isRef && w.visited[ref.ObjectNum] {
+		return obj, 0
+	}
+	arr := liveArray(ctx, w.alloc, w.doc, obj)
+	if len(arr) < 2 {
+		return obj, 0
+	}
+	if name, _ := arr[0].(ast.PdfName); name != "DeviceN" && name != "NChannel" {
+		return obj, 0
+	}
+	if isRef {
+		w.visited[ref.ObjectNum] = true
+	}
+	patched, changed := buildPatchedDeviceN(ctx, w.alloc, w.doc, arr, w.canon)
+	if !changed {
+		return obj, 0
+	}
+	if !isRef {
+		return patched, 1
+	}
+	if w.alloc.AllocAt(ref.ObjectNum, patched) {
+		w.completed++
+	}
+	return obj, 0
 }
