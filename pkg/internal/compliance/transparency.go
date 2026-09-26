@@ -520,6 +520,11 @@ func blendingCSRule(part int) Rule {
 // shading pattern. PDF/A-4 also judges the /BM of an annotation (see
 // [annotationBlendModes]).
 //
+// The blending colour space rule asks whether the page contains transparency,
+// which veraPDF answers from what the page's content and annotations draw,
+// never from the page's own /Group, and whether the group's /CS reads as a
+// colour space with no resources; see [pageHasBlendingCS].
+//
 // # Corpus evidence
 //
 //   - pdfjs issue6741.pdf: declares /G1 (/BM /Darken) and /G2 (/BM /Lighten),
@@ -555,18 +560,11 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 			continue
 		}
 
+		// The page's own /Group is no transparency: veraPDF raises the page's
+		// containsTransparency from what its content and its annotations draw
+		// alone (GFPDPage.parseContentStream and parseAnnotations,
+		// veraPDF-validation 1.30). See [pageHasBlendingCS].
 		pageUsesTransparency := false
-
-		// A page with its own transparency Group is itself using transparency.
-		if groupObj, hasGroup := page["Group"]; hasGroup {
-			group, gErr := document.ResolveDict(ctx, doc, groupObj)
-			if gErr == nil && group != nil {
-				s, _ := document.ResolveName(ctx, doc, group["S"])
-				if s == "Transparency" {
-					pageUsesTransparency = true
-				}
-			}
-		}
 
 		// A resource dictionary lists what the content MAY set, not what it
 		// sets, and veraPDF builds its PDExtGState from the gs operator that
@@ -652,7 +650,7 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 
 		// Also check annotations for transparency triggers.
 		if !pageUsesTransparency {
-			pageUsesTransparency = checkAnnotationTransparency(ctx, doc, page)
+			pageUsesTransparency = checkAnnotationTransparency(ctx, doc, page, part)
 		}
 
 		// PDF/A-4: page-level OutputIntents supplement catalog-level.
@@ -677,12 +675,13 @@ func checkTransparencyParts2Plus(ctx context.Context, doc *document.Document, ca
 }
 
 // blendModeTimes returns how many times the graphics state gsObj fails the
-// blend mode rule when a page's content sets it with times gs operators: once
-// for the whole document when it is an indirect object, which judged records,
-// and once for every gs otherwise. Measured with veraPDF 1.30 at PDF/A-2b: an indirect state and a
-// direct one, each naming a blend mode no table lists, fail ISO 19005-2,
-// 6.2.10 t1 three times when one page sets both twice or two pages set both
-// from a stream each.
+// blend mode rule, or any other rule veraPDF states on its PDExtGState (see
+// [checkExtGStateGraphics]), when a content stream sets it with times gs
+// operators: once for the whole document when it is an indirect object, which
+// judged records, and once for every gs otherwise. Measured with veraPDF 1.30
+// at PDF/A-2b: an indirect state and a direct one, each naming a blend mode no
+// table lists, fail ISO 19005-2, 6.2.10 t1 three times when one page sets both
+// twice or two pages set both from a stream each.
 func blendModeTimes(gsObj ast.PdfObject, times int, judged map[int]bool) int {
 	ref, ok := gsObj.(ast.PdfIndirectRef)
 	if !ok {
@@ -1106,7 +1105,16 @@ func resourcesUseTransparency(ctx context.Context, doc *document.Document, res a
 
 // checkAnnotationTransparency checks whether any annotation on the page
 // uses transparency (via appearance streams with transparency groups or
-// ExtGState with transparency settings).
+// ExtGState with transparency settings), under the PDF/A part part.
+//
+// An annotation's own /BM is transparency under PDF/A-4 alone, and only when
+// it is a name other than /Normal: ISO 32000-2, 12.5.2 gives an annotation a
+// blend mode, which ISO 32000-1 does not, and veraPDF reads it under ISO
+// 32000-2 only, as a name (GFPDAnnot.parseBM, veraPDF-validation 1.30).
+// Measured with veraPDF 1.30 on pages whose one annotation names a blend mode
+// over an opaque appearance, with no output intent: /BM /Multiply fails ISO
+// 19005-4, 6.2.9 t2 and passes ISO 19005-2, 6.2.10 t2, and /BM [/Multiply]
+// passes both.
 //
 // # Corpus evidence
 //
@@ -1114,7 +1122,10 @@ func resourcesUseTransparency(ctx context.Context, doc *document.Document, res a
 //     and it fails ISO 19005-2 §6.2.10 t2 in veraPDF.
 //   - pdfjs stamps.pdf: its appearances carry a /Group /S /Transparency, and
 //     it fails ISO 19005-2 §6.2.10 t2 in veraPDF.
-func checkAnnotationTransparency(ctx context.Context, doc *document.Document, page ast.PdfDict) bool {
+//   - verapdf PDF_A-4__veraPDF_test_suite_6-2-9-t02-fail-c.pdf: its one
+//     annotation names /BM /Multiply over an opaque appearance, and veraPDF
+//     fails 6.2.10 t2 nowhere at PDF/A-2b, where litho failed it once.
+func checkAnnotationTransparency(ctx context.Context, doc *document.Document, page ast.PdfDict, part int) bool {
 	annotsArr, err := document.ResolveArray(ctx, doc, page["Annots"])
 	if err != nil || len(annotsArr) == 0 {
 		return false
@@ -1127,10 +1138,9 @@ func checkAnnotationTransparency(ctx context.Context, doc *document.Document, pa
 		if err != nil || annot == nil {
 			continue
 		}
-		// Check /BM (blend mode) directly on the annotation dict.
-		// PDF annotations can carry their own blend mode (ISO 32000-2 Table 165).
-		if bmObj, hasBM := annot["BM"]; hasBM {
-			if blendModeIsTransparency(resolveBlendMode(ctx, doc, bmObj)) {
+		// An annotation's own blend mode, ISO 32000-2, 12.5.2.
+		if part >= 4 {
+			if bm, ok := resolveNameObject(ctx, doc, annot["BM"]); ok && bm != "Normal" {
 				return true
 			}
 		}
@@ -1551,41 +1561,107 @@ func floatEquals1(v float64) bool {
 	return math.Abs(v-1.0) < alphaEpsilon
 }
 
-// pageHasBlendingCS checks whether a page dictionary has a Group dict with
-// /S = Transparency and a /CS entry.
+// pageHasBlendingCS reports whether page has the group colour space ISO
+// 19005-2/3, 6.2.10 t2 and ISO 19005-4, 6.2.9 t2 accept in place of an output
+// intent, as veraPDF states the test (containsGroupCS, GFPDPage,
+// veraPDF-validation 1.30): a /Group that is a dictionary, whatever its /S,
+// whose /CS [GroupHasBlendingSpace] reads as a colour space.
+//
+// The page's own /Group is no transparency of the page (see
+// [checkTransparencyParts2Plus]), so a group with no usable /CS fails the rule
+// only on a page whose content or annotations draw transparency, and a group
+// is never the reason a page needs one. Measured with veraPDF 1.30 at
+// PDF/A-2b and PDF/A-4 on one-page files: a transparency group with no /CS
+// over opaque content passes, a group whose /CS names the page's /ColorSpace
+// entry fails when the page paints a form with an isolated group, and a group
+// whose /S is /Foo and whose /CS is /DeviceRGB passes over a fill at constant
+// alpha 0.5.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue11045.pdf: points its group /CS at a free object, so the
 //     page has no blending colour space.
+//   - All corpora: no file reaches either half, so reading them as veraPDF
+//     does moves no count at PDF/A-2b or PDF/A-4.
+//   - litho pagegroup_2b.pdf: pages 5 to 7 plant both halves.
 func pageHasBlendingCS(ctx context.Context, doc *document.Document, page ast.PdfDict) bool {
-	groupObj, hasGroup := page["Group"]
-	if !hasGroup {
-		return false
-	}
-
-	group, err := document.ResolveDict(ctx, doc, groupObj)
+	group, err := document.ResolveDict(ctx, doc, page["Group"])
 	if err != nil || group == nil {
 		return false
 	}
+	return GroupHasBlendingSpace(ctx, doc, group)
+}
 
-	sName, _ := document.ResolveName(ctx, doc, group["S"])
-	if sName != "Transparency" {
+// GroupHasBlendingSpace reports whether the /CS of the group dictionary group
+// reads as a colour space when read with no resources, as veraPDF reads a
+// group's /CS (PDGroup.getColorSpace and ColorSpaceFactory.getColorSpace,
+// veraPDF-validation 1.30):
+//
+//   - A name reads as DeviceGray, DeviceRGB, DeviceCMYK or Pattern, and as no
+//     colour space otherwise: a name of a /ColorSpace entry, or of a Default
+//     colour space, has no resources to be looked up in.
+//   - A one-element array reads as its element (ISO 32000-1, 8.6.3).
+//   - A longer array reads as a colour space when its first element names a
+//     family ISO 32000-1, 8.6 writes as an array, CalGray, CalRGB, Lab,
+//     ICCBased, Indexed, Separation, DeviceN or Pattern, or names CalCMYK,
+//     whatever its operands hold, and as none otherwise.
+//   - A dictionary or a stream reads as a pattern when its /PatternType is 1
+//     or 2 (ISO 32000-1, 8.7.3 and 8.7.4).
+//   - Anything else reads as none: an absent /CS, a null, and a reference to
+//     no object, which ISO 32000-1, 7.3.10 makes null, among them.
+//
+// Measured with veraPDF 1.30 at PDF/A-2b and PDF/A-4 on pages filling at
+// constant alpha 0.5 with no output intent: a group /CS of /DefaultRGB and of
+// [/DeviceRGB /Foo] fails ISO 19005-2, 6.2.10 t2 and ISO 19005-4, 6.2.9 t2,
+// and one of [/DeviceRGB], [/CalCMYK <<>>], an indirect /DeviceRGB and
+// [/ICCBased] over a stream that is no ICC profile passes them. A group /CS
+// of [/Pattern /DeviceRGB] stops veraPDF with a null link, so no verdict
+// stands against the reading.
+func GroupHasBlendingSpace(ctx context.Context, doc *document.Document, group ast.PdfDict) bool {
+	csObj := group["CS"]
+	for range maxColorSpaceNesting {
+		resolved, err := document.ResolveObject(ctx, doc, csObj)
+		if err != nil {
+			return false
+		}
+		switch cs := resolved.(type) {
+		case ast.PdfName:
+			switch cs {
+			case "DeviceGray", "DeviceRGB", "DeviceCMYK", "Pattern":
+				return true
+			}
+			return false
+		case ast.PdfArray:
+			if len(cs) == 1 {
+				csObj = cs[0]
+				continue
+			}
+			if len(cs) == 0 {
+				return false
+			}
+			family, ok := resolveNameObject(ctx, doc, cs[0])
+			if !ok {
+				return false
+			}
+			switch family {
+			case "CalGray", "CalRGB", "Lab", "ICCBased", "Indexed", "Separation", "DeviceN", "Pattern", "CalCMYK":
+				return true
+			}
+			return false
+		case ast.PdfDict:
+			return groupPatternType(ctx, doc, cs)
+		case ast.PdfStream:
+			return groupPatternType(ctx, doc, cs.Dict)
+		}
 		return false
 	}
+	return false
+}
 
-	csObj, hasCS := group["CS"]
-	if !hasCS {
-		return false
-	}
-	// Per ISO 32000-1 §7.3.9 an indirect reference to a non-existent object is
-	// the null object, and per §7.3.7 a dictionary entry whose value is null is
-	// equivalent to the entry being absent. A group /CS pointing at a free
-	// object leaves the page with no blending colour space, and it still owes
-	// ISO 19005-2 §6.2.10 t2 an answer.
-	cs, err := document.ResolveObject(ctx, doc, csObj)
-	if err != nil {
-		return false
-	}
-	return !isNullObject(cs)
+// groupPatternType reports whether dict, a group /CS written as a dictionary,
+// is the dictionary of a tiling or a shading pattern, which veraPDF reads as a
+// colour space ([GroupHasBlendingSpace]).
+func groupPatternType(ctx context.Context, doc *document.Document, dict ast.PdfDict) bool {
+	patternType, err := document.ResolveInt(ctx, doc, dict["PatternType"])
+	return err == nil && (patternType == 1 || patternType == 2)
 }

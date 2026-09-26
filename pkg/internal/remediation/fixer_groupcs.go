@@ -33,24 +33,16 @@ func groupCSIsDevice(ctx context.Context, doc *document.Document, csObj ast.PdfO
 
 // groupHasBlendingSpace reports whether the page group dict group gives the
 // page the blending colour space ISO 19005-2/3, 6.2.10 t2 and ISO 19005-4,
-// 6.2.9 t2 ask for: /S /Transparency, and a /CS that is not the null object,
-// which ISO 32000-1, 7.3.7 reads as an absent entry.
+// 6.2.9 t2 ask for: /S /Transparency, and a /CS that reads as a colour space
+// with no resources, as validation reads it
+// ([compliance.GroupHasBlendingSpace]). A /CS naming a /ColorSpace entry, or
+// resolving to null, gives none.
 func groupHasBlendingSpace(ctx context.Context, doc *document.Document, group ast.PdfDict) bool {
 	// Best-effort: an unreadable /S names no transparency group.
 	if s, _ := document.ResolveName(ctx, doc, group["S"]); s != "Transparency" {
 		return false
 	}
-	csObj, ok := group["CS"]
-	if !ok {
-		return false
-	}
-	cs, err := document.ResolveObject(ctx, doc, csObj)
-	if err != nil {
-		doc.Logger.Debug("remediation: group-cs: cannot resolve the page group /CS", "error", err)
-		return false
-	}
-	_, isNull := cs.(ast.PdfNull)
-	return cs != nil && !isNull
+	return compliance.GroupHasBlendingSpace(ctx, doc, group)
 }
 
 // matchGroupCS matches transparency /Group CS violations: mismatched

@@ -39,7 +39,7 @@ func TestCheckAnnotationTransparency_AppearanceResourceTree(t *testing.T) {
 		}
 		objs = append(objs, extraObjs...)
 		doc, cat := objsDocPDF(t, objs...)
-		return checkAnnotationTransparency(ctx, doc, collectPages(ctx, doc, cat)[0])
+		return checkAnnotationTransparency(ctx, doc, collectPages(ctx, doc, cat)[0], 2)
 	}
 
 	image := func(smask string) string {

@@ -185,7 +185,7 @@ func TestCheckAnnotationTransparency_AppearanceSubStates(t *testing.T) {
 		formStream("/Group << /S /Transparency >>"), // /On: transparency group
 	)
 	page := collectPages(ctx, doc, cat)[0]
-	if !checkAnnotationTransparency(ctx, doc, page) {
+	if !checkAnnotationTransparency(ctx, doc, page, 2) {
 		t.Error("transparency in a widget /AP /N sub-state (/On) must be detected")
 	}
 }

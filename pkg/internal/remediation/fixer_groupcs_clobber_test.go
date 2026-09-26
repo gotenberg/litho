@@ -342,3 +342,25 @@ func TestFixGroupCS_GivesAFlaggedGroupItsBlendingSpace(t *testing.T) {
 		t.Errorf("the flagged page group blends in %v, want [/ICCBased ref]", blendingSpaceOf(t, alloc, doc, 1))
 	}
 }
+
+// TestFixGroupCS_ReplacesANamedBlendingSpace pins that group-cs replaces a
+// page group /CS that names a colour space resource. ISO 19005-2, 6.2.10 t2
+// reads a group's /CS with no resources, as veraPDF does (see
+// [compliance.GroupHasBlendingSpace]), so a name that is no device family is
+// no blending space and the page stays flagged. The fixer read any non-null
+// /CS as a blending space and left the group alone.
+func TestFixGroupCS_ReplacesANamedBlendingSpace(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	doc, alloc := newTestDoc(t, transparentPagesPDF("<< /Type /Group /S /Transparency /CS /CS0 >>"))
+	f, matched := matchedBy(t, "group-cs", flaggedForGroup(t, doc))
+	if _, err := f.apply(ctx, alloc, doc, Options{}, matched, string(models.PDFA2b)); err != nil {
+		t.Fatalf("group-cs: %v", err)
+	}
+
+	cs, ok := blendingSpaceOf(t, alloc, doc, 1).(ast.PdfArray)
+	if !ok || len(cs) != 2 || cs[0] != ast.PdfName("ICCBased") {
+		t.Errorf("the flagged page group blends in %v, want [/ICCBased ref]", blendingSpaceOf(t, alloc, doc, 1))
+	}
+}
