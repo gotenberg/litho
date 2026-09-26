@@ -291,6 +291,9 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 		maxStr = maxStringBytes2
 	}
 	var results []Violation
+	// The graphics states and images whose names the operators read again,
+	// judged once for the document when indirect; see [operatorNameLimits].
+	judgedReads := make(map[int]bool)
 
 	for i := range vctx.pages {
 		if ctx.Err() != nil {
@@ -309,6 +312,7 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 		}
 		where := fmt.Sprintf("page %d (stream content)", i+1)
 		results = append(results, checkOperandLimits(ops, countOverflows(overflows), where, false, maxStr, profile)...)
+		results = append(results, operatorNameLimits(ctx, doc, ops, func() ast.PdfDict { return page.resources }, judgedReads, where, profile)...)
 	}
 
 	// A resource dictionary reads some names again, each time veraPDF reaches
@@ -334,6 +338,7 @@ func checkContentStreamLimits(ctx context.Context, vctx *validationCtx) []Violat
 
 	walk := newDrawnStreamWalk(vctx, func(s *drawnStream) {
 		results = append(results, checkOperandLimits(s.ops, s.overflow, streamContentWhere(s.objNum), s.colourOff, maxStr, profile)...)
+		results = append(results, operatorNameLimits(ctx, doc, s.ops, func() ast.PdfDict { return appearanceResources(ctx, doc, s.resources, s.pageRes) }, judgedReads, streamContentWhere(s.objNum), profile)...)
 		resourceNames(s.resources, s.resourcesNum, streamContentWhere(s.objNum)+" resources")
 	})
 	for i := range vctx.pages {
@@ -422,6 +427,9 @@ func checkOperandLimits(ops []content.Operation, overflow map[float64]int, where
 		reads := content.IsOperator(op.Operator)
 		if op.Operator == "BI" && n > 0 {
 			reads = colour.ReadsInlineImage(inlineImageMask(op.Operands[n-1]))
+			if reads {
+				l.results = append(l.results, inlineIntentLimit(op.Operands[n-1], where, profile)...)
+			}
 		}
 		for i, operand := range op.Operands {
 			link := OperandLink(0)

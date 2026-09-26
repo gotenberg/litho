@@ -12,6 +12,7 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/parser"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 )
 
 // typedValue is one value veraPDF judges once more than the object sweep does,
@@ -135,10 +136,12 @@ func (v typedValue) holds(violation error) bool {
 //
 // [checkNumericLimits] judges them against the limits and
 // [checkFormatViolations] restates the hex string findings in their strings.
-// Three more accessors are counted where the object they belong to is
-// reached: GFCosStream.getFilters by [streamFilterLimits], the
-// resourcesNames of GFPDResources by [resourceNameLimits], and
-// GFPDFont.getBaseFont by [fontNameLimits].
+// More accessors are counted where the object they belong to is reached:
+// GFCosStream.getFilters by [streamFilterLimits], the resourcesNames of
+// GFPDResources by [resourceNameLimits], GFPDFont.getBaseFont by
+// [fontNameLimits], the colorant names of a Separation or a DeviceN colour
+// space by [colorantNameReads], and the /RI and /BM of a graphics state and
+// the /Intent of an image by [operatorNameLimits] and [checkOperandLimits].
 //
 // Measured with veraPDF 1.30 at PDF/A-1b, PDF/A-2b and PDF/A-4, a hex string
 // with an odd digit count or a non-hex character, a string past the length
@@ -165,17 +168,6 @@ func (v typedValue) holds(violation error) bool {
 // indirect object once, the structure tree and the inheritance of a box stop
 // at [maxStructTreeWalkDepth] and [maxPageTreeDepth], and the name tree walk
 // is bounded as [document.WalkNameTree] states.
-//
-// TODO: veraPDF also reads names again through the objects a content-stream
-// operator reaches, each time the operator reaches one written directly: the
-// colorant names of a Separation or DeviceN colour space for every operator
-// selecting it or painting with it (GFPDSeparation.getColorantName,
-// GFPDDeviceN.getColorantNames), the /RI and /BM of an ExtGState for every gs
-// (GFPDExtGState.getRI, getlinkBM), and an image's /Intent for every Do
-// (GFPDXImage.getIntent). Measured with veraPDF 1.30 at PDF/A-1b and
-// PDF/A-2b, a colorant of 130 bytes a cs, an scn and an f reach fails ISO
-// 19005-1, 6.1.12 t4 and ISO 19005-2, 6.1.13 t4 three times more, and an /RI,
-// a /BM and an /Intent of 130 bytes once more each. None is counted yet.
 //
 // # Corpus evidence
 //
@@ -639,6 +631,235 @@ func resourceNameLimits(ctx context.Context, doc *document.Document, res ast.Pdf
 		}
 	}
 	return results
+}
+
+// maxColorantNamesRead caps how many colorant names past the length limit one
+// colour space adds to the failures of each link to it (see
+// [colorantNameReads]). Anti-DoS guard, not spec-mandated: each failure is
+// one link times one long name, so a crafted stream repeating one operator
+// millions of times over a DeviceN naming thousands of long colorants would
+// multiply the two, where the cap keeps the failures a constant multiple of
+// the links [colorLinkWalk] follows. It equals the most colorants ISO
+// 32000-1, Annex C, Table C.1 lets a DeviceN name, [maxDeviceN2], so every
+// Separation, and every DeviceN within that limit, is judged whole.
+const maxColorantNamesRead = maxDeviceN2
+
+// colorantNameReads judges against the name length limit the colorant names
+// veraPDF reads again at every link [colorLinkWalk] follows to a Separation
+// or a DeviceN colour space, as the colorant name of its PDSeparation and the
+// colorant names of its PDDeviceN (veraPDF-validation 1.30,
+// GFPDSeparation.getColorantName and GFPDDeviceN.getColorantNames), each a
+// CosUnicodeName of its own: a colour space written directly wherever a link
+// reaches it, an indirect one once for the whole document, and the
+// Separations of a DeviceN /Colorants dictionary as the links reach them.
+// Each name counts the bytes it is written with, as the object sweep counts
+// them, whether written directly or as an indirect object.
+//
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b, a colorant name of 130
+// bytes fails ISO 19005-1, 6.1.12 t4 and ISO 19005-2, 6.1.13 t4 once more for
+// each of cs, scn and f reaching a direct Separation or DeviceN, or a
+// Separation of a direct DeviceN's /Colorants, once more for all of them
+// reaching an indirect Separation, and, reaching an /Indexed space over a
+// direct Separation, once more for cs and for f; once more for an image
+// painted twice and for each sh painting a direct shading; and not for a cs
+// past the d1 of a Type 3 glyph.
+//
+// failures remembers, by the colour space array, the failures one link to it
+// adds, at most [maxColorantNamesRead], so a link costs no more than the
+// failures it adds.
+type colorantNameReads struct {
+	profile  string
+	failures map[*ast.PdfObject][]Violation
+}
+
+// newColorantNameReads returns the reads of a validation run under profile.
+func newColorantNameReads(profile string) *colorantNameReads {
+	return &colorantNameReads{profile: profile, failures: make(map[*ast.PdfObject][]Violation)}
+}
+
+// judge returns the failures of the colorant names of n, a Separation or a
+// DeviceN node, read again at one link.
+func (r *colorantNameReads) judge(ctx context.Context, doc *document.Document, n colorNode) []Violation {
+	if len(n.arr) < 2 || nameLengthRule(r.profile).Specification == "" {
+		return nil
+	}
+	key := &n.arr[0]
+	failures, ok := r.failures[key]
+	if !ok {
+		where := n.kind + " colorant name, read again at each link to its colour space"
+		for _, length := range longColorantNames(ctx, doc, n) {
+			failures = append(failures, nameTooLong(length, where, r.profile)...)
+		}
+		r.failures[key] = failures
+	}
+	return failures
+}
+
+// longColorantNames returns the lengths of the colorant names of n past the
+// name length limit, the first [maxColorantNamesRead] of them: the name a
+// Separation array gives, or each name of the array a DeviceN array gives
+// (ISO 32000-1, 8.6.6.4 and 8.6.6.5).
+func longColorantNames(ctx context.Context, doc *document.Document, n colorNode) []int {
+	names := []ast.PdfObject{n.arr[1]}
+	if n.kind == "DeviceN" {
+		arr, err := document.ResolveArray(ctx, doc, n.arr[1])
+		if err != nil {
+			return nil
+		}
+		names = arr
+	}
+	var lengths []int
+	for _, obj := range names {
+		if len(lengths) == maxColorantNamesRead {
+			break
+		}
+		if name, ok := resolveNameObject(ctx, doc, obj); ok && len(name) > maxNameBytes {
+			lengths = append(lengths, len(name))
+		}
+	}
+	return lengths
+}
+
+// operatorNameLimits judges against the name length limit the names veraPDF
+// reads again through the objects the gs and Do operators of one content
+// stream reach, ops, whose names resolve against the resources scopeOf
+// returns, read only when ops hold such an operator:
+//
+//   - The /RI and /BM of the graphics state every gs builds, as the
+//     CosRenderingIntent and the CosBM of its PDExtGState (veraPDF-validation
+//     1.30, GFPDExtGState.getRI and getlinkBM; see [cosBlendMode]): a state
+//     written as an indirect object once for the whole document, and one
+//     written directly once for every gs, as [blendModeTimes] counts. A state
+//     no gs sets is never built.
+//   - The /Intent of every image a Do paints, as the CosRenderingIntent of its
+//     PDXImage (GFPDXImage.getIntent), once for the whole document.
+//
+// judged records the indirect graphics states and the images already read,
+// and where names the stream in the context of a violation. The work is one
+// pass over ops and one read per name they give, whatever the count of gs
+// operators naming it.
+//
+// Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b, an /RI or a /BM of 130
+// bytes in a state written directly that two gs set fails ISO 19005-1, 6.1.12
+// t4 and ISO 19005-2, 6.1.13 t4 twice more, once more in an indirect state
+// two gs set or a direct state one gs sets in a form painted twice, and not
+// in a state no gs sets; an /Intent of 130 bytes in an image painted twice
+// fails it once more.
+func operatorNameLimits(ctx context.Context, doc *document.Document, ops []content.Operation, scopeOf func() ast.PdfDict, judged map[int]bool, where, profile string) []Violation {
+	if len(ops) == 0 || nameLengthRule(profile).Specification == "" {
+		return nil
+	}
+	drawn := collectDrawnResources(ops)
+	if len(drawn.extGStates) == 0 && len(drawn.xobjects) == 0 {
+		return nil
+	}
+	scope := scopeOf()
+	var results []Violation
+	if len(drawn.extGStates) > 0 {
+		states, _ := document.ResolveDict(ctx, doc, scope["ExtGState"]) // Best-effort: an unreadable /ExtGState defines no state.
+		for _, name := range slices.Sorted(maps.Keys(drawn.extGStates)) {
+			gsObj, ok := states[ast.PdfName(name)]
+			if !ok {
+				continue
+			}
+			gs, err := document.ResolveDict(ctx, doc, gsObj)
+			if err != nil || gs == nil {
+				continue
+			}
+			var failures []Violation
+			at := where + " ExtGState /" + name
+			if ri, ok := resolveNameObject(ctx, doc, gs["RI"]); ok {
+				failures = append(failures, nameTooLong(len(ri), at+" /RI, read again as its rendering intent", profile)...)
+			}
+			if bm, ok := cosBlendMode(ctx, doc, gs["BM"], PDFAPart(profile)); ok {
+				failures = append(failures, nameTooLong(len(bm), at+" /BM, read again as its blend mode", profile)...)
+			}
+			times := blendModeTimes(gsObj, drawn.extGStates[name], judged)
+			if len(failures) == 0 {
+				continue
+			}
+			for range times {
+				results = append(results, failures...)
+			}
+		}
+	}
+	if len(drawn.xobjects) > 0 {
+		xobjects, _ := document.ResolveDict(ctx, doc, scope["XObject"]) // Best-effort: an unreadable /XObject defines no image.
+		for _, name := range slices.Sorted(maps.Keys(drawn.xobjects)) {
+			ref, ok := xobjects[ast.PdfName(name)].(ast.PdfIndirectRef)
+			if !ok || judged[ref.ObjectNum] {
+				continue
+			}
+			stream, err := document.ResolveStream(ctx, doc, ref)
+			if err != nil {
+				continue
+			}
+			if subtype, _ := document.ResolveName(ctx, doc, stream.Dict["Subtype"]); subtype != "Image" { // Best-effort: an unreadable /Subtype is no image.
+				continue
+			}
+			results = append(results, imageIntentLimits(ctx, doc, ref, judged, where+" image /"+name, profile)...)
+		}
+	}
+	return results
+}
+
+// imageIntentLimits judges against the name length limit the /Intent of the
+// image, and of the images it holds, each once for the whole document:
+// its /SMask and its /Mask when they are streams, and the /Image of every
+// alternate its /Alternates lists (ISO 32000-1, 8.9.5, Table 89), which
+// veraPDF reads as images of its model too (veraPDF-validation 1.30,
+// GFPDXImage.getSMask, getMask and getAlternates). judged records the images
+// already read, and where names the image in the context of a violation.
+// Measured with veraPDF 1.30 at PDF/A-1b, an /Intent of 130 bytes in the
+// /SMask of a painted image fails ISO 19005-1, 6.1.12 t4 once more.
+func imageIntentLimits(ctx context.Context, doc *document.Document, image ast.PdfIndirectRef, judged map[int]bool, where, profile string) []Violation {
+	var results []Violation
+	pending := []ast.PdfObject{image}
+	for len(pending) > 0 && ctx.Err() == nil {
+		obj := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		ref, ok := obj.(ast.PdfIndirectRef)
+		if !ok || judged[ref.ObjectNum] {
+			continue
+		}
+		stream, err := document.ResolveStream(ctx, doc, ref)
+		if err != nil {
+			continue
+		}
+		judged[ref.ObjectNum] = true
+		if intent, ok := resolveNameObject(ctx, doc, stream.Dict["Intent"]); ok {
+			results = append(results, nameTooLong(len(intent), where+" /Intent, read again as its rendering intent", profile)...)
+		}
+		pending = append(pending, stream.Dict["SMask"], stream.Dict["Mask"])
+		alternates, _ := document.ResolveArray(ctx, doc, stream.Dict["Alternates"]) // Best-effort: unreadable /Alternates hold no image.
+		for _, alt := range alternates {
+			if altDict, err := document.ResolveDict(ctx, doc, alt); err == nil && altDict != nil {
+				pending = append(pending, altDict["Image"])
+			}
+		}
+	}
+	return results
+}
+
+// inlineIntentLimit judges against the name length limit the /Intent of the
+// inline image whose dictionary is dict, which veraPDF reads again as the
+// CosRenderingIntent of its PDInlineImage (veraPDF-validation 1.30,
+// GFPDXImage.getIntent and PDInlineImage.getIntent) beside the dictionary the
+// operand walk judges, for every inline image it reads (see
+// [ColourState.ReadsInlineImage]). where names the content stream in the
+// context of a violation. Measured with veraPDF 1.30 at PDF/A-1b and
+// PDF/A-2b, an inline image of a page whose /Intent is a name of 130 bytes
+// fails ISO 19005-1, 6.1.12 t4 and ISO 19005-2, 6.1.13 t4 twice.
+func inlineIntentLimit(dict ast.PdfObject, where, profile string) []Violation {
+	d, ok := dict.(ast.PdfDict)
+	if !ok {
+		return nil
+	}
+	intent, ok := d["Intent"].(ast.PdfName)
+	if !ok {
+		return nil
+	}
+	return nameTooLong(len(intent), where+" inline image /Intent, read again as its rendering intent", profile)
 }
 
 // pdFontSubtypes lists the /Subtype values of the font dictionaries veraPDF

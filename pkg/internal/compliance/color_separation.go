@@ -49,11 +49,14 @@ func separationColorantsRule(part int) Rule {
 
 // checkSeparationDeviceN validates the Separation and DeviceN rules on the
 // colour-space links veraPDF makes (see [colorLinkWalk]): the DeviceN
-// colourant limit, ISO 19005-1 §6.1.12 t9 and ISO 19005-2/3 §6.1.13 t9, and
-// ISO 19005-2 §6.2.4.4 t1 (see [checkDeviceNLinks]), and ISO 19005-2 §6.2.4.4
-// t2 (see [checkSeparationLinks]).
-func checkSeparationDeviceN(ctx context.Context, doc *document.Document, pages []pageCtx, part int, results *[]Violation) {
-	checkDeviceNLinks(ctx, doc, pages, part, results)
+// colourant limit, ISO 19005-1 §6.1.12 t9 and ISO 19005-2/3 §6.1.13 t9, ISO
+// 19005-2 §6.2.4.4 t1 and the name length limit of the colorant names every
+// link reads again, ISO 19005-1 §6.1.12 t4 and ISO 19005-2/3 §6.1.13 t4 (see
+// [checkDeviceNLinks]), and ISO 19005-2 §6.2.4.4 t2 (see
+// [checkSeparationLinks]).
+func checkSeparationDeviceN(ctx context.Context, doc *document.Document, pages []pageCtx, profile string, results *[]Violation) {
+	part := PDFAPart(profile)
+	checkDeviceNLinks(ctx, doc, pages, profile, results)
 	checkSeparationLinks(ctx, doc, pages, part, results)
 }
 
@@ -274,8 +277,11 @@ var deviceNProcessColorants = map[string]bool{
 // that breaks it, however far it breaks it: a direct DeviceN wherever a link
 // reaches it, an indirect one once for the whole document, in the state the
 // link walk follows, so a DeviceN an operator selects with its colour
-// operators off is never reached, while the image it paints is. The limit
-// violations come first, then the /Colorants ones.
+// operators off is never reached, while the image it paints is. The same links
+// to a Separation or a DeviceN read its colorant names again, which the name
+// length limit, ISO 19005-1 §6.1.12 t4 and ISO 19005-2/3 §6.1.13 t4, judges
+// (see [colorantNameReads]). The limit violations come first, then the
+// /Colorants ones, then the colorant names.
 //
 // Measured with veraPDF 1.30 at PDF/A-1b and PDF/A-2b:
 //
@@ -301,17 +307,22 @@ var deviceNProcessColorants = map[string]bool{
 //     fills fails the limit twice under PDF/A-1b and PDF/A-2b.
 //   - All corpora: judging the limit on the links, where a walk of the
 //     resources judged it, moves no count at PDF/A-1b or PDF/A-2b.
-func checkDeviceNLinks(ctx context.Context, doc *document.Document, pages []pageCtx, part int, results *[]Violation) {
+func checkDeviceNLinks(ctx context.Context, doc *document.Document, pages []pageCtx, profile string, results *[]Violation) {
 	// §6.2.4.4 t1 exists for parts 2+ only, and ISO 19005-4 states no
-	// colourant limit; a zero Rule must never be emitted (it serializes as a
-	// clause-less "-t00" residual).
+	// colourant limit nor name length limit; a zero Rule must never be
+	// emitted (it serializes as a clause-less "-t00" residual).
+	part := PDFAPart(profile)
 	limitRule, colorantsRule := deviceNComponentRule(part), separationColorantsRule(part)
-	if limitRule.Specification == "" && colorantsRule.Specification == "" {
+	if limitRule.Specification == "" && colorantsRule.Specification == "" && nameLengthRule(profile).Specification == "" {
 		return
 	}
 	limit := deviceNColorantLimit(part)
-	var overLimit, missing []Violation
+	names := newColorantNameReads(profile)
+	var overLimit, missing, longNames []Violation
 	walkColorLinks(ctx, doc, pages, part, func(n colorNode) {
+		if n.kind == "Separation" || n.kind == "DeviceN" {
+			longNames = append(longNames, names.judge(ctx, doc, n)...)
+		}
 		if n.kind != "DeviceN" {
 			return
 		}
@@ -332,6 +343,7 @@ func checkDeviceNLinks(ctx context.Context, doc *document.Document, pages []page
 	})
 	*results = append(*results, overLimit...)
 	*results = append(*results, missing...)
+	*results = append(*results, longNames...)
 }
 
 // deviceNColorantCount returns how many colourants the DeviceN array arr

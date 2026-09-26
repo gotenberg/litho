@@ -33,7 +33,7 @@ func checkColorGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	// Run for all parts: part 1 needs DeviceN component limit (§6.1.12 t09),
 	// parts 2+ need colorant consistency (§6.2.4.4 t01/t02).
-	checkSeparationDeviceN(ctx, doc, vctx.pages, part, &results)
+	checkSeparationDeviceN(ctx, doc, vctx.pages, vctx.profile, &results)
 
 	doc.Logger.Debug("compliance.color: color checks complete", "violations", len(results))
 	return results
