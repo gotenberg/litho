@@ -193,8 +193,9 @@ func stripAnnotDestination(alloc *writer.ObjAllocator, entry ast.PdfObject, anno
 // operation removes.
 //
 // An annotation listed by both a kept and a removed page belongs to the output,
-// so it is not dropped.
-func droppedPageAnnots(ctx context.Context, doc *document.Document, allPages []*document.Page, removed map[int]bool) map[int]bool {
+// so it is not dropped. The pages are read from alloc first, as earlier stages
+// staged them; a nil alloc reads the document alone.
+func droppedPageAnnots(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, allPages []*document.Page, removed map[int]bool) map[int]bool {
 	kept := make(map[int]bool)
 	dropped := make(map[int]bool)
 	for _, page := range allPages {
@@ -202,11 +203,15 @@ func droppedPageAnnots(ctx context.Context, doc *document.Document, allPages []*
 		if removed[page.Ref.ObjectNum] {
 			target = dropped
 		}
-		annotsObj, hasAnnots := page.Dict["Annots"]
+		pageDict := page.Dict
+		if alloc != nil {
+			pageDict = latestPageDict(alloc, page)
+		}
+		annotsObj, hasAnnots := pageDict["Annots"]
 		if !hasAnnots {
 			continue
 		}
-		arr, err := document.ResolveArray(ctx, doc, annotsObj)
+		arr, err := resolveArrayAllocFirst(ctx, alloc, doc, annotsObj)
 		if err != nil {
 			continue
 		}
@@ -232,6 +237,12 @@ func droppedPageAnnots(ctx context.Context, doc *document.Document, allPages []*
 // is gone therefore keeps the page. Only the dead widgets go; the field itself
 // stays, because it may carry the value the form was filled with.
 //
+// The form and its fields are read from alloc first, as earlier stages staged
+// them, so a field is rewritten from the value an edit gave it; a nil alloc
+// reads the document alone. A form edit queues the form afresh, and reading the
+// source's instead found none at its number, so the dead widgets stayed and
+// carried the deleted page into the output.
+//
 // # Corpus evidence
 //
 //   - govdocs thread_100_100852.pdf: extracting nine pages dragged 47
@@ -239,6 +250,7 @@ func droppedPageAnnots(ctx context.Context, doc *document.Document, allPages []*
 //     as /Pages/Kids[0]/Annots[0]/Parent/Kids[4]/P.
 func fieldKidOverrides(
 	ctx context.Context,
+	alloc *writer.ObjAllocator,
 	doc *document.Document,
 	catalogDict ast.PdfDict,
 	droppedAnnots map[int]bool,
@@ -247,11 +259,11 @@ func fieldKidOverrides(
 	if len(droppedAnnots) == 0 {
 		return overrides, false
 	}
-	acroForm, err := document.ResolveDict(ctx, doc, catalogDict["AcroForm"])
+	acroForm, err := resolveDictAllocFirst(ctx, alloc, doc, catalogDict["AcroForm"])
 	if err != nil || acroForm == nil {
 		return overrides, false
 	}
-	fields, err := document.ResolveArray(ctx, doc, acroForm["Fields"])
+	fields, err := resolveArrayAllocFirst(ctx, alloc, doc, acroForm["Fields"])
 	if err != nil {
 		return overrides, false
 	}
@@ -266,7 +278,7 @@ func fieldKidOverrides(
 			rootsChanged = true
 			continue
 		}
-		if pruneFieldKids(ctx, doc, entry, droppedAnnots, overrides, 0) {
+		if pruneFieldKids(ctx, alloc, doc, entry, droppedAnnots, overrides, 0) {
 			truncated = true
 		}
 		kept = append(kept, entry)
@@ -286,6 +298,7 @@ func fieldKidOverrides(
 // reporting whether the walk stopped at its depth bound with kids unread.
 func pruneFieldKids(
 	ctx context.Context,
+	alloc *writer.ObjAllocator,
 	doc *document.Document,
 	fieldObj ast.PdfObject,
 	droppedAnnots map[int]bool,
@@ -293,7 +306,7 @@ func pruneFieldKids(
 	depth int,
 ) bool {
 	truncated := false
-	pruneFieldKidsAt(ctx, doc, fieldObj, droppedAnnots, overrides, make(map[int]bool), depth, &truncated)
+	pruneFieldKidsAt(ctx, alloc, doc, fieldObj, droppedAnnots, overrides, make(map[int]bool), depth, &truncated)
 	return truncated
 }
 
@@ -317,6 +330,7 @@ func pruneFieldKids(
 // confusion under three different names.
 func pruneFieldKidsAt(
 	ctx context.Context,
+	alloc *writer.ObjAllocator,
 	doc *document.Document,
 	fieldObj ast.PdfObject,
 	droppedAnnots map[int]bool,
@@ -339,7 +353,7 @@ func pruneFieldKidsAt(
 		return
 	}
 	visited[ref.ObjectNum] = true
-	field, err := document.ResolveDict(ctx, doc, fieldObj)
+	field, err := resolveDictAllocFirst(ctx, alloc, doc, fieldObj)
 	if err != nil || field == nil {
 		return
 	}
@@ -347,7 +361,7 @@ func pruneFieldKidsAt(
 	if !hasKids {
 		return
 	}
-	kids, err := document.ResolveArray(ctx, doc, kidsObj)
+	kids, err := resolveArrayAllocFirst(ctx, alloc, doc, kidsObj)
 	if err != nil {
 		return
 	}
@@ -357,7 +371,7 @@ func pruneFieldKidsAt(
 		if kidRef, kidIsRef := kid.(ast.PdfIndirectRef); kidIsRef && droppedAnnots[kidRef.ObjectNum] {
 			continue
 		}
-		pruneFieldKidsAt(ctx, doc, kid, droppedAnnots, overrides, visited, depth+1, truncated)
+		pruneFieldKidsAt(ctx, alloc, doc, kid, droppedAnnots, overrides, visited, depth+1, truncated)
 		kept = append(kept, kid)
 	}
 	if len(kept) == len(kids) {

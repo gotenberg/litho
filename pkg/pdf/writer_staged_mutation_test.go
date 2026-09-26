@@ -659,3 +659,77 @@ func TestWriterGeneratedBookmarksSkipADeletedPage(t *testing.T) {
 		t.Errorf("the outline %q lost the heading of the kept page", titles)
 	}
 }
+
+// spanningFieldPDF builds a three-page document with one text field whose two
+// widgets sit on pages 1 and 3, holding the value "old". Page 3 draws the
+// text Page3.
+func spanningFieldPDF() []byte {
+	page := func(extra string) string {
+		return "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]" + extra + " >>"
+	}
+	const content = "BT /F1 12 Tf 100 700 Td (Page3) Tj ET\n"
+	return buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [6 0 R] /DA (/Helv 0 Tf 0 g) >> >>",
+		"<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>",
+		page(" /Annots [7 0 R]"),
+		page(""),
+		page(" /Annots [8 0 R] /Contents 9 0 R /Resources << /Font << /F1 10 0 R >> >>"),
+		"<< /FT /Tx /T (name) /V (old) /Kids [7 0 R 8 0 R] >>",
+		"<< /Type /Annot /Subtype /Widget /Parent 6 0 R /P 3 0 R /Rect [100 600 300 620] >>",
+		"<< /Type /Annot /Subtype /Widget /Parent 6 0 R /P 5 0 R /Rect [100 600 300 620] >>",
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+	})
+}
+
+// TestWriterDeletionKeepsAFieldEditOnTheSameWriter pins that deleting a page
+// holding one widget of a field, after an edit on the same Writer set the
+// field, drops that widget and keeps the value, as deleting the page from the
+// edited file does.
+//
+// The deletion drops the widgets of the deleted page from their field's /Kids,
+// and it read the form from the source document. The edit had queued the form
+// afresh, at a number the source does not define, so the deletion found no
+// form: the widget stayed, and its /P carried the deleted page into the file.
+// Had it found one, it would have rewritten the field from the source's copy,
+// with the old value.
+func TestWriterDeletionKeepsAFieldEditOnTheSameWriter(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	data := spanningFieldPDF()
+	r, err := Open(ctx, bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer r.Close()
+	w := NewWriter(r)
+	defer w.Close()
+	w.SetFormField("name", "new")
+	if err := w.DeletePages(3); err != nil {
+		t.Fatalf("DeletePages: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := w.WriteTo(ctx, &buf); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	if bytes.Contains(buf.Bytes(), []byte("(Page3)")) {
+		t.Error("the output carries the deleted page's content")
+	}
+	out, err := Open(ctx, bytes.NewReader(buf.Bytes()), int64(buf.Len()))
+	if err != nil {
+		t.Fatalf("reopening the output: %v", err)
+	}
+	defer out.Close()
+	fields, err := out.FormFields(ctx)
+	if err != nil {
+		t.Fatalf("FormFields: %v", err)
+	}
+	if !slices.Contains(fields, models.FormField{Name: "name", Value: "new"}) {
+		t.Errorf("the output form holds %+v, want the field set to new", fields)
+	}
+	if n, err := out.PageCount(ctx); err != nil || n != 2 {
+		t.Errorf("the output has %d pages (%v), want 2", n, err)
+	}
+}

@@ -54,12 +54,12 @@ func InsertPages(
 	if removed := unselectedPages(srcPages, pagesToInsert); len(removed) > 0 {
 		splitDestOverrides(ctx, srcDoc, pagesToInsert, removed, overrides)
 		if srcCatalog, err := document.ResolveCatalog(ctx, srcDoc); err == nil && srcCatalog != nil {
-			dropped := droppedPageAnnots(ctx, srcDoc, srcPages, removed)
+			dropped := droppedPageAnnots(ctx, nil, srcDoc, srcPages, removed)
 			// Dropped on purpose, for the same reason as split: insert copies
 			// only the selected source pages into the target, so an unselected
 			// source page is unreachable from what it copies. Measured past the
 			// bound, insert never carried one.
-			fieldOverrides, _ := fieldKidOverrides(ctx, srcDoc, srcCatalog.Dict, dropped)
+			fieldOverrides, _ := fieldKidOverrides(ctx, nil, srcDoc, srcCatalog.Dict, dropped)
 			maps.Copy(overrides, fieldOverrides)
 		}
 	}

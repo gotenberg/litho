@@ -201,8 +201,8 @@ func rebuildPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		// widget names its page in /P, so a widget left behind keeps the page
 		// too. Delete reuses the source object numbers in place, which is
 		// exactly what fieldKidOverrides is keyed by.
-		dropped := droppedPageAnnots(ctx, doc, allPages, removed)
-		fieldOverrides, fieldsTruncated := fieldKidOverrides(ctx, doc, catalogDict, dropped)
+		dropped := droppedPageAnnots(ctx, alloc, doc, allPages, removed)
+		fieldOverrides, fieldsTruncated := fieldKidOverrides(ctx, alloc, doc, catalogDict, dropped)
 		for objNum, patched := range fieldOverrides {
 			alloc.AllocAt(objNum, patched)
 		}
