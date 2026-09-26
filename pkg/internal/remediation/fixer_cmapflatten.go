@@ -48,6 +48,9 @@ func matchCMapFlatten(v compliance.Violation) bool {
 //   - a name that denotes a real predefined CMap litho ships is EMBEDDED,
 //     because the mappings it contributes are real and ISO 19005-1, 6.3.3.3
 //     wants them in the file.
+//
+// A Type 0 font stored in an object stream (ISO 32000-1, 7.5.7) has its CMap
+// repaired too, for the reason [walkNumberedObjects] gives.
 func fixCMapFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	// XRefEntries yields in object-number order, so the fix list is identical
 	// across runs.
@@ -57,7 +60,7 @@ func fixCMapFlatten(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if entry.Type != 1 || objNum == 0 {
+		if entry.Free || objNum == 0 {
 			continue
 		}
 		obj, err := doc.Resolve(ctx, ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation})

@@ -30,6 +30,15 @@ func matchTrueTypeEncoding(v compliance.Violation) bool {
 // /WinAnsiEncoding when the current value is absent or non-standard.
 // WinAnsiEncoding is the PDF/A-preferred default for non-symbolic
 // TrueType fonts.
+//
+// Fonts stored in an object stream (ISO 32000-1, 7.5.7) are repaired too, for
+// the reason [walkNumberedObjects] gives.
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_UA-1__7.21.6-t02-fail-a.pdf, PDF_UA-1__7.21.6-t02-fail-b.pdf,
+//     PDF_UA-1__7.21.6-t02-fail-c.pdf: their aggressive PDF/A-2b remediations
+//     left 6.2.11.6 t2 standing on a TrueType font stored in an object stream.
 func fixTrueTypeEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, _ string) ([]string, error) {
 	// Switching /Encoding to WinAnsi remaps character codes whose glyph
 	// names differ between Custom and WinAnsi; the rendered text can
@@ -48,7 +57,7 @@ func fixTrueTypeEncoding(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if entry.Type != 1 || objNum == 0 {
+		if entry.Free || objNum == 0 {
 			continue
 		}
 		// Alloc-aware read. The registry drives every fixer against one

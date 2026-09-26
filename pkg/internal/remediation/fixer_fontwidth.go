@@ -47,13 +47,16 @@ func matchFontWidth(v compliance.Violation) bool {
 // the wrong glyph and yield a spurious "mismatch", so rewriting /Widths from it
 // would corrupt correct widths. Until encoding resolution is reliable, simple
 // fonts are left to the validator to report.
+//
+// A CIDFont stored in an object stream (ISO 32000-1, 7.5.7) is repaired too,
+// for the reason [walkNumberedObjects] gives.
 func fixFontWidth(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	var count int
 	for objNum, entry := range doc.XRefEntries() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if entry.Type != 1 || objNum == 0 {
+		if entry.Free || objNum == 0 {
 			continue
 		}
 

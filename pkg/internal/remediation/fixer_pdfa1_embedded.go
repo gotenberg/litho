@@ -99,19 +99,23 @@ func deleteEmbeddedFilesNameEntry(ctx context.Context, alloc *writer.ObjAllocato
 // rule is keyed on the COS object (CosFileSpecification), and because a
 // specification carrying /EF is reachable through several containers. A file
 // can report t1 with no /Names/EmbeddedFiles tree at all, so deleting that tree
-// cannot be the whole repair.
+// cannot be the whole repair. A specification stored in an object stream (ISO
+// 32000-1, 7.5.7) is repaired too, for the reason [walkNumberedObjects] gives.
 //
 // # Corpus evidence
 //
 //   - All corpora: 18 of the cells report t1 with no /Names/EmbeddedFiles tree
 //     at all.
+//   - pdfjs bug1997343.pdf: its aggressive PDF/A-1b remediation stripped /EF
+//     from 2 of its 19 specifications, and from the other 17, stored in object
+//     streams, only in the round after the full rewrite unpacked them.
 func stripEFFromFileSpecs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) int {
 	count := 0
 	for objNum, entry := range doc.XRefEntries() {
 		if ctx.Err() != nil {
 			return count
 		}
-		if entry.Type != 1 || objNum == 0 {
+		if entry.Free || objNum == 0 {
 			continue
 		}
 		ref := ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation}

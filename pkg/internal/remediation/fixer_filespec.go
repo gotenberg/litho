@@ -26,14 +26,15 @@ func matchFileSpecFUF(v compliance.Violation) bool {
 // is render-neutral metadata: it never invents a name (both-missing is left
 // alone, as is an empty source value, since the rules also require the keys to
 // be non-empty), and it does not touch the embedded bytes. Only indirect file
-// spec objects are rewritten.
+// spec objects are rewritten, the ones stored in an object stream (ISO
+// 32000-1, 7.5.7) included, for the reason [walkNumberedObjects] gives.
 func fixFileSpecFUF(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	var count int
 	for objNum, entry := range doc.XRefEntries() {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if entry.Type != 1 || objNum == 0 {
+		if entry.Free || objNum == 0 {
 			continue
 		}
 
