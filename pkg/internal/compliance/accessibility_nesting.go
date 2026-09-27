@@ -34,90 +34,70 @@ func checkAnnotationNesting(ctx context.Context, doc *document.Document, catalog
 	}
 	typeState := &walkState{doc: doc, roleMap: buildRoleMapIndex(ctx, doc, treeRoot)}
 
-	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
 
-	for _, page := range pages {
+	// Each annotation is judged in the unit veraPDF judges it in
+	// ([judgedAnnotations]): an annotation object two pages list fails its
+	// rules once, and the page listing it first decides its crop box.
+	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
+		annot := pa.annot
+		subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 
-		annotsObj, ok := page["Annots"]
-		if !ok {
+		// Skip hidden or outside-crop-box annotations (all rules share these exemptions).
+		if isAnnotHidden(ctx, doc, annot) || isAnnotOutsideCropBox(ctx, doc, annot, pa.page) {
 			continue
 		}
 
-		annots, err := document.ResolveArray(ctx, doc, annotsObj)
-		if err != nil {
-			doc.Logger.Debug("compliance.accessibility: cannot resolve annots array", "error", err)
-			continue
-		}
+		// A Popup is not exempt, with or without a /Parent. ISO 14289-1
+		// §7.18.1 t1 excludes only Widget, PrinterMark and Link, and
+		// veraPDF follows the clause: it reports an unnested Popup that
+		// carries a /Parent. litho used to exempt a parented Popup as
+		// auxiliary to its markup annotation, which the clause does not say.
 
-		for _, annotObj := range annots {
-			if ctx.Err() != nil {
-				return results
+		parentType, nestType := annotStructParentTypes(ctx, typeState, treeRoot, annot)
+
+		switch subtype {
+		case "TrapNet":
+			// §7.18.2: TrapNet annotations are forbidden.
+			results = append(results, fail(Rule_14289_1_7_18_2_t01,
+				"TrapNet annotation exists")...)
+			// §7.18.1 t01: TrapNet is not exempt from the Annot-nesting
+			// requirement; veraPDF exempts only Widget, PrinterMark and Link.
+			if nestType != "Annot" {
+				results = append(results, failf(Rule_14289_1_7_18_1_t01,
+					"%s annotation nested within %s instead of Annot", subtype, nestingDesc(nestType))...)
 			}
 
-			annot, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annot == nil {
-				continue
+		case "PrinterMark":
+			// §7.18.8: PrinterMark must NOT be in logical structure. veraPDF
+			// tests structParentType, the enclosing element's /S as written.
+			if parentType != "" {
+				results = append(results, fail(Rule_14289_1_7_18_8_t01,
+					"PrinterMark annotation is included in logical structure")...)
 			}
 
-			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
-
-			// Skip hidden or outside-crop-box annotations (all rules share these exemptions).
-			if isAnnotHidden(ctx, doc, annot) || isAnnotOutsideCropBox(ctx, doc, annot, page) {
-				continue
+		case "Widget":
+			// §7.18.4: Widget must be nested within Form tag.
+			if nestType != "Form" {
+				results = append(results, failf(Rule_14289_1_7_18_4_t01,
+					"Widget annotation nested within %s instead of Form", nestingDesc(nestType))...)
 			}
 
-			// A Popup is not exempt, with or without a /Parent. ISO 14289-1
-			// §7.18.1 t1 excludes only Widget, PrinterMark and Link, and
-			// veraPDF follows the clause: it reports an unnested Popup that
-			// carries a /Parent. litho used to exempt a parented Popup as
-			// auxiliary to its markup annotation, which the clause does not say.
+		case "Link":
+			// §7.18.5: Link must be nested within Link tag.
+			if nestType != "Link" {
+				results = append(results, failf(Rule_14289_1_7_18_5_t01,
+					"Link annotation nested within %s instead of Link", nestingDesc(nestType))...)
+			}
 
-			parentType, nestType := annotStructParentTypes(ctx, typeState, treeRoot, annot)
-
-			switch subtype {
-			case "TrapNet":
-				// §7.18.2: TrapNet annotations are forbidden.
-				results = append(results, fail(Rule_14289_1_7_18_2_t01,
-					"TrapNet annotation exists")...)
-				// §7.18.1 t01: TrapNet is not exempt from the Annot-nesting
-				// requirement; veraPDF exempts only Widget, PrinterMark and Link.
-				if nestType != "Annot" {
-					results = append(results, failf(Rule_14289_1_7_18_1_t01,
-						"%s annotation nested within %s instead of Annot", subtype, nestingDesc(nestType))...)
-				}
-
-			case "PrinterMark":
-				// §7.18.8: PrinterMark must NOT be in logical structure. veraPDF
-				// tests structParentType, the enclosing element's /S as written.
-				if parentType != "" {
-					results = append(results, fail(Rule_14289_1_7_18_8_t01,
-						"PrinterMark annotation is included in logical structure")...)
-				}
-
-			case "Widget":
-				// §7.18.4: Widget must be nested within Form tag.
-				if nestType != "Form" {
-					results = append(results, failf(Rule_14289_1_7_18_4_t01,
-						"Widget annotation nested within %s instead of Form", nestingDesc(nestType))...)
-				}
-
-			case "Link":
-				// §7.18.5: Link must be nested within Link tag.
-				if nestType != "Link" {
-					results = append(results, failf(Rule_14289_1_7_18_5_t01,
-						"Link annotation nested within %s instead of Link", nestingDesc(nestType))...)
-				}
-
-			default:
-				// §7.18.1: All other annotations must be nested within Annot tag.
-				if nestType != "Annot" {
-					results = append(results, failf(Rule_14289_1_7_18_1_t01,
-						"%s annotation nested within %s instead of Annot", subtype, nestingDesc(nestType))...)
-				}
+		default:
+			// §7.18.1: All other annotations must be nested within Annot tag.
+			if nestType != "Annot" {
+				results = append(results, failf(Rule_14289_1_7_18_1_t01,
+					"%s annotation nested within %s instead of Annot", subtype, nestingDesc(nestType))...)
 			}
 		}
 	}
@@ -321,58 +301,55 @@ func checkPDFUA2AnnotStructNesting(ctx context.Context, doc *document.Document, 
 
 	var results []Violation
 	linkTargets := make(map[int]map[string]bool)
-	for _, page := range collectPages(ctx, doc, catalog) {
+	// Each annotation is judged in the unit veraPDF judges it in
+	// ([judgedAnnotations]): an annotation object two pages list fails its
+	// rules once.
+	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
-		annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
-		for _, annotObj := range annots {
-			annot, _ := document.ResolveDict(ctx, doc, annotObj)
-			if annot == nil {
-				continue
+		annot := pa.annot
+		subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+		if subtype == "Link" && linkTargetConflict(ctx, doc, treeRoot, annot, linkTargets) {
+			results = append(results, fail(Rule_14289_2_8_2_5_20_t02,
+				"Link annotation shares its structure element with a Link annotation targeting a different structure destination")...)
+		}
+		parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot)
+		if parent == nil || underArtifact {
+			continue
+		}
+		parentType, _ := document.ResolveName(ctx, doc, parent["S"])
+		// structParentStandardType is null for a type that resolves to no
+		// standard type, which matches none of the required types.
+		stdType, _, _ := r.elementStandardType(ctx, doc, parent)
+		encl := stdType
+		if encl == "" {
+			encl = string(parentType)
+		}
+		if markupAnnotationSubtypes[subtype] {
+			if stdType != "Annot" {
+				results = append(results, failf(Rule_14289_2_8_9_2_3_t01,
+					"%s markup annotation enclosed by %s instead of Annot", subtype, encl)...)
 			}
-			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
-			if subtype == "Link" && linkTargetConflict(ctx, doc, treeRoot, annot, linkTargets) {
-				results = append(results, fail(Rule_14289_2_8_2_5_20_t02,
-					"Link annotation shares its structure element with a Link annotation targeting a different structure destination")...)
-			}
-			parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot)
-			if parent == nil || underArtifact {
-				continue
-			}
-			parentType, _ := document.ResolveName(ctx, doc, parent["S"])
-			// structParentStandardType is null for a type that resolves to no
-			// standard type, which matches none of the required types.
-			stdType, _, _ := r.elementStandardType(ctx, doc, parent)
-			encl := stdType
-			if encl == "" {
-				encl = string(parentType)
-			}
-			if markupAnnotationSubtypes[subtype] {
-				if stdType != "Annot" {
-					results = append(results, failf(Rule_14289_2_8_9_2_3_t01,
-						"%s markup annotation enclosed by %s instead of Annot", subtype, encl)...)
-				}
-				continue
-			}
+			continue
+		}
 
-			switch subtype {
-			case "Widget":
-				// A field widget, as veraPDF's isFieldWidget decides (isFieldWidget).
-				if isFieldWidget(ctx, doc, annot) && stdType != "Form" {
-					results = append(results, failf(Rule_14289_2_8_10_1_t01,
-						"field Widget annotation enclosed by %s instead of Form", encl)...)
-				}
-			case "Watermark":
-				if stdType != "Annot" {
-					results = append(results, failf(Rule_14289_2_8_9_2_4_16_t01,
-						"Watermark annotation enclosed by %s instead of Annot", encl)...)
-				}
-			case "Link":
-				if stdType != "Link" && stdType != "Reference" {
-					results = append(results, failf(Rule_14289_2_8_2_5_20_t01,
-						"Link annotation enclosed by %s instead of Link or Reference", encl)...)
-				}
+		switch subtype {
+		case "Widget":
+			// A field widget, as veraPDF's isFieldWidget decides (isFieldWidget).
+			if isFieldWidget(ctx, doc, annot) && stdType != "Form" {
+				results = append(results, failf(Rule_14289_2_8_10_1_t01,
+					"field Widget annotation enclosed by %s instead of Form", encl)...)
+			}
+		case "Watermark":
+			if stdType != "Annot" {
+				results = append(results, failf(Rule_14289_2_8_9_2_4_16_t01,
+					"Watermark annotation enclosed by %s instead of Annot", encl)...)
+			}
+		case "Link":
+			if stdType != "Link" && stdType != "Reference" {
+				results = append(results, failf(Rule_14289_2_8_2_5_20_t01,
+					"Link annotation enclosed by %s instead of Link or Reference", encl)...)
 			}
 		}
 	}

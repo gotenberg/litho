@@ -130,8 +130,9 @@ func TestTransparencyPart1IndirectGroup(t *testing.T) {
 // TestTransparencyPart1SharedAppearance pins that an appearance form two
 // annotations show fails ISO 19005-1, 6.4 t3 for its own transparency group
 // once per annotation, and the graphics states its content sets once; see
-// [checkAnnotAPTransparency1]. Measured with veraPDF 1.30 at PDF/A-1b, the
-// counts listed for t3, t5 and t6.
+// [checkAnnotAPTransparency1]. One annotation object two pages list is one
+// annotation. Measured with veraPDF 1.30 (1.30.2 for the last case) at
+// PDF/A-1b, the counts listed for t3, t5 and t6.
 func TestTransparencyPart1SharedAppearance(t *testing.T) {
 	t.Parallel()
 
@@ -165,6 +166,7 @@ func TestTransparencyPart1SharedAppearance(t *testing.T) {
 		{"one annotation", objs("6 0 R"), []int{1, 1, 1}},
 		{"two annotations on one page", objs("6 0 R 7 0 R"), []int{2, 1, 1}},
 		{"an annotation on each of two pages", objs("6 0 R", "7 0 R"), []int{2, 1, 1}},
+		{"one annotation two pages list", objs("6 0 R", "6 0 R"), []int{1, 1, 1}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

@@ -365,39 +365,28 @@ func judgeAction(ctx context.Context, doc *document.Document, obj ast.PdfObject,
 }
 
 // checkAnnotationActions checks /A and /AA entries on all annotations across
-// all pages.
+// all pages, each annotation in the unit veraPDF judges it in
+// ([judgedAnnotations]): a Widget object several pages list fails its action
+// rules once.
 func checkAnnotationActions(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string, part int, judged map[int]bool) []Violation {
 	pages := collectPages(ctx, doc, catalog)
 
 	var results []Violation
+	seen := make(map[int]bool)
 	for pageIdx, page := range pages {
 		if ctx.Err() != nil {
 			return results
 		}
 
-		annotsObj, ok := page["Annots"]
-		if !ok {
-			continue
-		}
-		annots, err := document.ResolveArray(ctx, doc, annotsObj)
-		if err != nil {
-			doc.Logger.Debug("compliance.actions: failed to resolve /Annots array", "page", pageIdx+1, "error", err)
-			continue
-		}
-
-		for annotIdx, annotObj := range annots {
+		for _, pa := range judgedPageAnnotations(ctx, doc, page, pageIdx, seen) {
 			if ctx.Err() != nil {
 				return results
 			}
-
-			annotDict, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annotDict == nil {
-				continue
-			}
+			annotDict := pa.annot
 
 			subtype, _ := document.ResolveName(ctx, doc, annotDict["Subtype"])
 			isWidget := subtype == "Widget"
-			location := fmt.Sprintf("page %d annot %d (/%s)", pageIdx+1, annotIdx, subtype)
+			location := fmt.Sprintf("page %d annot %d (/%s)", pageIdx+1, pa.annotIdx, subtype)
 
 			if isWidget {
 				results = append(results, checkWidgetActions(ctx, doc, annotDict, profile, part, location, judged)...)

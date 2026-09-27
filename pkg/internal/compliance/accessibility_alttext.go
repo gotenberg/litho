@@ -123,80 +123,60 @@ func checkAnnotationAltText(ctx context.Context, doc *document.Document, catalog
 		doc.Logger.Debug("compliance.accessibility: cannot resolve structure tree root", "error", trErr)
 	}
 
-	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
 
-	for pageIdx, page := range pages {
+	// Each annotation is judged in the unit veraPDF judges it in
+	// ([judgedAnnotations]): an annotation object two pages list fails once.
+	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
+		annot := pa.annot
 
-		annotsObj, ok := page["Annots"]
-		if !ok {
+		subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+
+		// Widget annotations are excluded from this check. Link is NOT
+		// excluded under PDF/UA-1: ISO 14289-1 §7.18.1 t2 exempts only
+		// Widget/hidden/out-of-cropbox, so a Link lacking both /Contents
+		// and an enclosing-element /Alt fails, and veraPDF reports it. Under
+		// PDF/UA-2 the markup-subtype filter below still exempts Link (not a
+		// markup type).
+		if subtype == "Widget" {
+			continue
+		}
+		// A Popup is not exempt, with or without a /Parent. ISO 14289-1
+		// §7.18.1 t2 exempts only Widget, hidden and out-of-cropbox
+		// annotations, and veraPDF follows the clause: it reports a Popup
+		// that carries a /Parent and no /Contents. litho used to treat a
+		// parented Popup as inheriting its parent's content, which the
+		// clause does not say. Under PDF/UA-2 the markup-subtype filter
+		// below still exempts every Popup (Popup is not a markup type).
+
+		// ISO 14289-2 §8.9.2.3 covers markup annotations only, so a
+		// non-markup subtype is out of its scope. A /Contents-less
+		// RichMedia annotation fails its per-subtype description rule
+		// (§8.9.2.4.19), never §8.9.2.3. PDF/UA-1 §7.18.1 keeps the
+		// wider scope.
+		if profile == "PDF/UA-2" && !markupAnnotationSubtypes[subtype] {
 			continue
 		}
 
-		annots, err := document.ResolveArray(ctx, doc, annotsObj)
-		if err != nil {
-			doc.Logger.Debug("compliance.accessibility: cannot resolve annots array", "error", err)
+		// Skip hidden annotations or those outside the crop box.
+		if isAnnotHidden(ctx, doc, annot) || isAnnotOutsideCropBox(ctx, doc, annot, pa.page) {
 			continue
 		}
 
-		for annotIdx, annotObj := range annots {
-			if ctx.Err() != nil {
-				return results
-			}
-
-			annot, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annot == nil {
-				continue
-			}
-
-			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
-
-			// Widget annotations are excluded from this check. Link is NOT
-			// excluded under PDF/UA-1: ISO 14289-1 §7.18.1 t2 exempts only
-			// Widget/hidden/out-of-cropbox, so a Link lacking both /Contents
-			// and an enclosing-element /Alt fails, and veraPDF reports it. Under
-			// PDF/UA-2 the markup-subtype filter below still exempts Link (not a
-			// markup type).
-			if subtype == "Widget" {
-				continue
-			}
-			// A Popup is not exempt, with or without a /Parent. ISO 14289-1
-			// §7.18.1 t2 exempts only Widget, hidden and out-of-cropbox
-			// annotations, and veraPDF follows the clause: it reports a Popup
-			// that carries a /Parent and no /Contents. litho used to treat a
-			// parented Popup as inheriting its parent's content, which the
-			// clause does not say. Under PDF/UA-2 the markup-subtype filter
-			// below still exempts every Popup (Popup is not a markup type).
-
-			// ISO 14289-2 §8.9.2.3 covers markup annotations only, so a
-			// non-markup subtype is out of its scope. A /Contents-less
-			// RichMedia annotation fails its per-subtype description rule
-			// (§8.9.2.4.19), never §8.9.2.3. PDF/UA-1 §7.18.1 keeps the
-			// wider scope.
-			if profile == "PDF/UA-2" && !markupAnnotationSubtypes[subtype] {
-				continue
-			}
-
-			// Skip hidden annotations or those outside the crop box.
-			if isAnnotHidden(ctx, doc, annot) || isAnnotOutsideCropBox(ctx, doc, annot, page) {
-				continue
-			}
-
-			// ISO 14289-1 §7.18.1 t2: a non-empty /Contents, or a non-empty /Alt
-			// on the enclosing structure element (hasNonEmptyStringKey).
-			if hasNonEmptyStringKey(ctx, doc, annot, "Contents") {
-				continue
-			}
-			if parent := annotStructParent(ctx, doc, treeRoot, annot); parent != nil && hasNonEmptyStringKey(ctx, doc, parent, "Alt") {
-				continue
-			}
-
-			loc := fmt.Sprintf("page %d, annot %d (/%s)", pageIdx, annotIdx, subtype)
-			results = append(results, Violation{Rule: rule, Context: loc})
+		// ISO 14289-1 §7.18.1 t2: a non-empty /Contents, or a non-empty /Alt
+		// on the enclosing structure element (hasNonEmptyStringKey).
+		if hasNonEmptyStringKey(ctx, doc, annot, "Contents") {
+			continue
 		}
+		if parent := annotStructParent(ctx, doc, treeRoot, annot); parent != nil && hasNonEmptyStringKey(ctx, doc, parent, "Alt") {
+			continue
+		}
+
+		loc := fmt.Sprintf("page %d, annot %d (/%s)", pa.pageIdx, pa.annotIdx, subtype)
+		results = append(results, Violation{Rule: rule, Context: loc})
 	}
 
 	return results
@@ -219,28 +199,23 @@ func checkAnnotContentsAltMatch(ctx context.Context, doc *document.Document, cat
 	}
 
 	var results []Violation
-	for pageIdx, page := range collectPages(ctx, doc, catalog) {
+	// Each annotation is judged in the unit veraPDF judges it in
+	// ([judgedAnnotations]): an annotation object two pages list fails once.
+	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
-		annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
-		for annotIdx, annotObj := range annots {
-			annot, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annot == nil {
-				continue
-			}
-			contents, ok := decodedStringKey(ctx, doc, annot, "Contents")
-			if !ok {
-				continue
-			}
-			parent := annotStructParent(ctx, doc, treeRoot, annot)
-			if parent == nil {
-				continue
-			}
-			if alt, ok := decodedStringKey(ctx, doc, parent, "Alt"); ok && alt != contents {
-				results = append(results, failf(Rule_14289_2_8_9_4_2_t01,
-					"page %d, annot %d: /Contents differs from enclosing structure element /Alt", pageIdx, annotIdx)...)
-			}
+		contents, ok := decodedStringKey(ctx, doc, pa.annot, "Contents")
+		if !ok {
+			continue
+		}
+		parent := annotStructParent(ctx, doc, treeRoot, pa.annot)
+		if parent == nil {
+			continue
+		}
+		if alt, ok := decodedStringKey(ctx, doc, parent, "Alt"); ok && alt != contents {
+			results = append(results, failf(Rule_14289_2_8_9_4_2_t01,
+				"page %d, annot %d: /Contents differs from enclosing structure element /Alt", pa.pageIdx, pa.annotIdx)...)
 		}
 	}
 	return results
@@ -255,70 +230,50 @@ func checkWidgetAA(ctx context.Context, doc *document.Document, catalog ast.PdfD
 		doc.Logger.Debug("compliance.accessibility: cannot resolve structure tree root", "error", err)
 	}
 	r := newNSRoleResolver(ctx, doc, treeRoot)
-	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
 
-	for pageIdx, page := range pages {
+	// Each widget is judged in the unit veraPDF judges it in
+	// ([judgedAnnotations]): a widget object two pages list fails once.
+	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
+		annot := pa.annot
 
-		annotsObj, ok := page["Annots"]
-		if !ok {
+		subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+		if subtype != "Widget" {
 			continue
 		}
 
-		annots, err := document.ResolveArray(ctx, doc, annotsObj)
-		if err != nil {
-			doc.Logger.Debug("compliance.accessibility: cannot resolve annots array", "error", err)
+		// veraPDF's containsAA is a knownKey on /AA, so an /AA written as null is
+		// absent (ISO 32000-1, 7.3.7), measured on a widget without /Contents.
+		if !knownKey(annot, "AA") {
 			continue
 		}
 
-		for annotIdx, annotObj := range annots {
-			if ctx.Err() != nil {
-				return results
-			}
-
-			annot, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annot == nil {
-				continue
-			}
-
-			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
-			if subtype != "Widget" {
-				continue
-			}
-
-			// veraPDF's containsAA is a knownKey on /AA, so an /AA written as null is
-			// absent (ISO 32000-1, 7.3.7), measured on a widget without /Contents.
-			if !knownKey(annot, "AA") {
-				continue
-			}
-
-			// Only PDF/UA-2 restricts a Widget that carries /AA (§8.10.2.3 t02:
-			// it must also carry /Contents). PDF/UA-1 has no Widget-/AA rule:
-			// its 7.18.1 t3 is the TU-or-Alt requirement (checked elsewhere),
-			// not an /AA prohibition, so firing it here was a false positive.
-			if profile != "PDF/UA-2" {
-				continue
-			}
-			// ISO 14289-2 §8.10.2.3 t02 applies to a widget linked into the
-			// structure tree and not enclosed by an Artifact: veraPDF gates it on
-			// structParentType == null || isArtifact, read through the structure
-			// parent tree (annotStructScope), so a bare /StructParent the
-			// parent tree does not map leaves the widget exempt.
-			if parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot); parent == nil || underArtifact {
-				continue
-			}
-			loc := fmt.Sprintf("page %d, widget annot %d", pageIdx+1, annotIdx)
-			// /Contents counts only as a string (stringKeyPresent): veraPDF
-			// reports a widget whose /Contents is null or a name, measured.
-			if !stringKeyPresent(ctx, doc, annot, "Contents") {
-				results = append(results, Violation{
-					Rule:    Rule_14289_2_8_10_2_3_t02,
-					Context: loc,
-				})
-			}
+		// Only PDF/UA-2 restricts a Widget that carries /AA (§8.10.2.3 t02:
+		// it must also carry /Contents). PDF/UA-1 has no Widget-/AA rule:
+		// its 7.18.1 t3 is the TU-or-Alt requirement (checked elsewhere),
+		// not an /AA prohibition, so firing it here was a false positive.
+		if profile != "PDF/UA-2" {
+			continue
+		}
+		// ISO 14289-2 §8.10.2.3 t02 applies to a widget linked into the
+		// structure tree and not enclosed by an Artifact: veraPDF gates it on
+		// structParentType == null || isArtifact, read through the structure
+		// parent tree (annotStructScope), so a bare /StructParent the
+		// parent tree does not map leaves the widget exempt.
+		if parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot); parent == nil || underArtifact {
+			continue
+		}
+		loc := fmt.Sprintf("page %d, widget annot %d", pa.pageIdx+1, pa.annotIdx)
+		// /Contents counts only as a string (stringKeyPresent): veraPDF
+		// reports a widget whose /Contents is null or a name, measured.
+		if !stringKeyPresent(ctx, doc, annot, "Contents") {
+			results = append(results, Violation{
+				Rule:    Rule_14289_2_8_10_2_3_t02,
+				Context: loc,
+			})
 		}
 	}
 

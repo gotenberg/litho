@@ -109,30 +109,25 @@ func collectFieldObjNums(ctx context.Context, doc *document.Document, fields ast
 
 // checkOrphanWidgetAppearances applies the §6.9 appearance requirement to
 // widget annotations found through page /Annots whose object number is not in
-// covered (the /AcroForm /Fields tree).
+// covered (the /AcroForm /Fields tree). Each widget is judged in the unit
+// veraPDF judges it in ([judgedAnnotations]), so a widget object several pages
+// list fails once.
 func checkOrphanWidgetAppearances(ctx context.Context, doc *document.Document, vctx *validationCtx, covered map[int]bool, part int, results *[]Violation) {
+	seen := make(map[int]bool, len(covered))
+	for objNum := range covered {
+		seen[objNum] = true
+	}
 	for pi := range vctx.pages {
 		if ctx.Err() != nil {
 			return
 		}
-		annots, err := document.ResolveArray(ctx, doc, vctx.pages[pi].dict["Annots"])
-		if err != nil {
-			continue
-		}
-		for ai, annotObj := range annots {
-			if ref, ok := annotObj.(ast.PdfIndirectRef); ok && covered[ref.ObjectNum] {
-				continue
-			}
-			annot, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annot == nil {
-				continue
-			}
-			if subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"]); subtype != "Widget" {
+		for _, pa := range judgedPageAnnotations(ctx, doc, vctx.pages[pi].dict, pi, seen) {
+			if subtype, _ := document.ResolveName(ctx, doc, pa.annot["Subtype"]); subtype != "Widget" {
 				continue
 			}
 			// These annotations are reached through a page /Annots array, so they
 			// are in scope for the PDAnnot-keyed rule.
-			checkFieldAppearance(ctx, doc, annot, part, ai, true, results)
+			checkFieldAppearance(ctx, doc, pa.annot, part, pa.annotIdx, true, results)
 		}
 	}
 }

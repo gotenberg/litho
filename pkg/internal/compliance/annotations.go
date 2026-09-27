@@ -19,6 +19,73 @@ const (
 	annotFlagToggleNoView = 1 << 8 // bit 9 (PDF/A-2+)
 )
 
+// pageAnnot is one annotation as veraPDF judges it: the annotation dictionary,
+// the page whose /Annots reached it, that page's zero-based index in the pages
+// walked, and the annotation's index in that page's /Annots.
+type pageAnnot struct {
+	page, annot       ast.PdfDict
+	pageIdx, annotIdx int
+}
+
+// judgedAnnotations returns the annotations of pages in the unit veraPDF
+// judges them in: one entry per /Annots element that resolves to a dictionary,
+// in page order, except that an annotation that is an object of its own comes
+// once, with the first page listing it.
+//
+// veraPDF builds a PDAnnot for every element of every page's /Annots
+// (GFPDPage.parseAnnotations), and its validator skips an object it has met
+// already by its object key (BaseValidator.checkRequired). An annotation
+// written inline has no key, so it is judged again on every page whose /Annots
+// holds it, which two pages sharing one /Annots array do. An annotation object
+// two pages list, or one page lists twice, is judged once, on the first page
+// listing it. Measured against veraPDF 1.30.2 at PDF/UA-1, PDF/UA-2, PDF/A-1b,
+// PDF/A-2b and PDF/A-4 with eight annotation kinds failing ISO 14289-1, 7.18,
+// ISO 14289-2, 8.9, ISO 19005-1, 6.5, 6.6 and 6.9, and ISO 19005-2 and -4, 6.3
+// and 6.4: two pages listing the annotation objects, or one page listing them
+// twice, fail every rule as often as one page listing them once, and two pages
+// sharing an /Annots array that holds them inline fail every rule twice.
+//
+// # Corpus evidence
+//
+//   - All corpora: judging each annotation object once moves no count, at
+//     every profile the compliance goldens cover and at PDF/A-1b, 2b, 3b and 4
+//     and PDF/UA-1 and 2 on the other corpora. litho annotshare_ua1.pdf plants
+//     both shapes.
+func judgedAnnotations(ctx context.Context, doc *document.Document, pages []ast.PdfDict) []pageAnnot {
+	var out []pageAnnot
+	seen := make(map[int]bool)
+	for i, page := range pages {
+		if ctx.Err() != nil {
+			return out
+		}
+		out = append(out, judgedPageAnnotations(ctx, doc, page, i, seen)...)
+	}
+	return out
+}
+
+// judgedPageAnnotations is [judgedAnnotations] for one page, the pageIdx-th, of
+// a walk that visits the pages one at a time: seen holds the annotation objects
+// earlier pages of the walk listed, and receives this page's.
+func judgedPageAnnotations(ctx context.Context, doc *document.Document, page ast.PdfDict, pageIdx int, seen map[int]bool) []pageAnnot {
+	// Best-effort: an /Annots that does not resolve to an array lists no
+	// annotation, as veraPDF's PDPage.getAnnotations reads it.
+	annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
+	var out []pageAnnot
+	for i, annotObj := range annots {
+		if ref, ok := annotObj.(ast.PdfIndirectRef); ok {
+			if seen[ref.ObjectNum] {
+				continue
+			}
+			seen[ref.ObjectNum] = true
+		}
+		// Best-effort: an element that is no dictionary is no annotation.
+		if annot, _ := document.ResolveDict(ctx, doc, annotObj); annot != nil {
+			out = append(out, pageAnnot{page: page, annot: annot, pageIdx: pageIdx, annotIdx: i})
+		}
+	}
+	return out
+}
+
 // annotWhitelistPart23 lists the annotation subtypes ISO 19005-2/3 §6.3.1
 // permits. Modelled as a whitelist, not a blacklist: any /Subtype outside this
 // set is rejected, so a type the prose never enumerated as forbidden (Redact,
@@ -106,40 +173,26 @@ func checkAnnotationGroup(ctx context.Context, vctx *validationCtx) []Violation 
 		hasOutputProfile = outputIntentHasDestProfile(ctx, doc, vctx.catalog)
 	}
 
+	// Each annotation is judged in the unit veraPDF judges it in
+	// ([judgedAnnotations]): an annotation object several pages list fails its
+	// rules once.
+	seen := make(map[int]bool)
 	for pageIdx := range vctx.pages {
 		page := vctx.pages[pageIdx].dict
 		if ctx.Err() != nil {
 			return results
 		}
 
-		annotsObj, ok := page["Annots"]
-		if !ok {
-			continue
-		}
-
-		annots, err := document.ResolveArray(ctx, doc, annotsObj)
-		if err != nil {
-			doc.Logger.Debug("compliance: annotations: failed to resolve /Annots array",
-				"page", pageIdx, "error", err)
-			continue
-		}
-
-		for annotIdx, annotObj := range annots {
+		for _, pa := range judgedPageAnnotations(ctx, doc, page, pageIdx, seen) {
 			if ctx.Err() != nil {
 				return results
 			}
-
-			annot, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annot == nil {
-				doc.Logger.Debug("compliance: annotations: failed to resolve annotation dict",
-					"page", pageIdx, "annot", annotIdx, "error", err)
-				continue
-			}
+			annot := pa.annot
 
 			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 			// Pages read 1-based everywhere else a violation names one, so the
 			// zero-based loop index is not what goes into the context.
-			loc := fmt.Sprintf("page %d, annot %d (%s)", pageIdx+1, annotIdx, subtype)
+			loc := fmt.Sprintf("page %d, annot %d (%s)", pageIdx+1, pa.annotIdx, subtype)
 
 			// Forbidden annotation types.
 			results = append(results, checkForbiddenAnnotType(ctx, doc, annot, subtype, part, level, loc)...)

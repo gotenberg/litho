@@ -118,6 +118,7 @@ func checkTransparencyGroup(ctx context.Context, vctx *validationCtx) []Violatio
 func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages []pageCtx) []Violation {
 	var results []Violation
 	judged := make(map[int]bool)
+	annotsSeen := make(map[int]bool)
 	walk := newDrawnStreamWalk(&validationCtx{doc: doc, pages: pages}, func(s *drawnStream) {
 		scope := appearanceResources(ctx, doc, s.resources, s.pageRes)
 		drawn := collectDrawnResources(s.ops)
@@ -139,7 +140,7 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 			results = append(results, checkXObjectTransparency1(ctx, doc, res, i+1, drawn, judged)...)
 		}
 
-		results = append(results, checkAnnotAPTransparency1(ctx, doc, page, i+1, judged)...)
+		results = append(results, checkAnnotAPTransparency1(ctx, doc, page, i+1, judged, annotsSeen)...)
 		walk.walkPage(ctx, &pages[i], i+1)
 	}
 	return results
@@ -150,28 +151,22 @@ func checkTransparencyPart1(ctx context.Context, doc *document.Document, pages [
 // stream is a form XObject that paints the annotation, so a transparency group
 // or a soft mask on it is rendered content. Its keys are judged once for every
 // annotation that shows it, and what it draws once for the whole document, by
-// [drawnStreamWalk]; see [checkTransparencyPart1].
+// [drawnStreamWalk]; see [checkTransparencyPart1]. Each annotation is judged
+// in the unit veraPDF judges it in ([judgedAnnotations]), seen holding the
+// annotation objects earlier pages listed, so an annotation object two pages
+// list shows its appearance once.
 //
 // veraPDF reaches the normal, rollover and down appearances alone (ISO
 // 32000-1, 12.5.5, Table 168): measured with veraPDF 1.30 at PDF/A-1b, a form
 // with a transparency group under an /AP key other than /N, /R and /D fails
 // 6.4 t3 nowhere.
-func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int, judged map[int]bool) []Violation {
-	annots, err := document.ResolveArray(ctx, doc, page["Annots"])
-	if err != nil || len(annots) == 0 {
-		return nil
-	}
-
+func checkAnnotAPTransparency1(ctx context.Context, doc *document.Document, page ast.PdfDict, pageNum int, judged, seen map[int]bool) []Violation {
 	var results []Violation
-	for _, annotObj := range annots {
+	for _, pa := range judgedPageAnnotations(ctx, doc, page, pageNum-1, seen) {
 		if ctx.Err() != nil {
 			return results
 		}
-		annotDict, err := document.ResolveDict(ctx, doc, annotObj)
-		if err != nil || annotDict == nil {
-			continue
-		}
-		apDict, err := document.ResolveDict(ctx, doc, annotDict["AP"])
+		apDict, err := document.ResolveDict(ctx, doc, pa.annot["AP"])
 		if err != nil || apDict == nil {
 			continue
 		}

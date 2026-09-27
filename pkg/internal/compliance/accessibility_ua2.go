@@ -40,47 +40,45 @@ func checkPDFUA2FormStructure(ctx context.Context, doc *document.Document, catal
 
 	// §8.10.2.3 t01: Widget annotations without label need /Contents.
 	nsResolver := newNSRoleResolver(ctx, doc, treeRoot)
-	pages := collectPages(ctx, doc, catalog)
-	for _, page := range pages {
-		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
-		for _, annotObj := range annotsArr {
-			annot, _ := document.ResolveDict(ctx, doc, annotObj)
-			if annot == nil {
-				continue
-			}
-			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
-			if subtype != "Widget" {
-				continue
-			}
-			// veraPDF §8.10.2.3 t1 test:
-			//   containsLbl || Contents != null || isFieldWidget == false ||
-			//   structParentType == null || isArtifact == true
-			// so it fires only for a FIELD widget that participates in the
-			// structure tree and supplies neither a Lbl structure element nor a
-			// /Contents entry. There is NO Hidden exemption (unlike the UA-1
-			// §7.18.1 alt-text rule): a hidden field widget may still be exposed,
-			// e.g. shown by script, so it must be labelled.
-			if !isFieldWidget(ctx, doc, annot) {
-				continue
-			}
-			// structParentType == null / isArtifact: a widget with no enclosing
-			// element in the structure parent tree, or one under an Artifact, is
-			// out of scope.
-			structElem, underArtifact := annotStructScope(ctx, doc, treeRoot, nsResolver, annot)
-			if structElem == nil || underArtifact {
-				continue
-			}
-			// containsLbl: a Lbl kid of the enclosing element supplies the label.
-			if hasLabelKid(ctx, typeState, structElem) {
-				continue
-			}
-			// /Contents supplies description and context for the widget.
-			if widgetHasContents(ctx, doc, annot) {
-				continue
-			}
-			results = append(results, fail(Rule_14289_2_8_10_2_3_t01,
-				"field Widget annotation has neither a Lbl structure element nor a /Contents entry")...)
+	// Each widget is judged in the unit veraPDF judges it in
+	// ([judgedAnnotations]): a widget object two pages list fails once.
+	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
+		if ctx.Err() != nil {
+			return results
 		}
+		annot := pa.annot
+		subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+		if subtype != "Widget" {
+			continue
+		}
+		// veraPDF §8.10.2.3 t1 test:
+		//   containsLbl || Contents != null || isFieldWidget == false ||
+		//   structParentType == null || isArtifact == true
+		// so it fires only for a FIELD widget that participates in the
+		// structure tree and supplies neither a Lbl structure element nor a
+		// /Contents entry. There is NO Hidden exemption (unlike the UA-1
+		// §7.18.1 alt-text rule): a hidden field widget may still be exposed,
+		// e.g. shown by script, so it must be labelled.
+		if !isFieldWidget(ctx, doc, annot) {
+			continue
+		}
+		// structParentType == null / isArtifact: a widget with no enclosing
+		// element in the structure parent tree, or one under an Artifact, is
+		// out of scope.
+		structElem, underArtifact := annotStructScope(ctx, doc, treeRoot, nsResolver, annot)
+		if structElem == nil || underArtifact {
+			continue
+		}
+		// containsLbl: a Lbl kid of the enclosing element supplies the label.
+		if hasLabelKid(ctx, typeState, structElem) {
+			continue
+		}
+		// /Contents supplies description and context for the widget.
+		if widgetHasContents(ctx, doc, annot) {
+			continue
+		}
+		results = append(results, fail(Rule_14289_2_8_10_2_3_t01,
+			"field Widget annotation has neither a Lbl structure element nor a /Contents entry")...)
 	}
 
 	return results
@@ -340,8 +338,11 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 	// ISO 14289-2 §8.8 requires every intra-document destination to be a
 	// structure destination, regardless of where it is reached from. That
 	// covers Link /Dest entries and GoTo actions hanging off any
-	// annotation's /A or /AA (additional-actions) entries.
-	for _, page := range collectPages(ctx, doc, catalog) {
+	// annotation's /A or /AA (additional-actions) entries. Each annotation is
+	// judged in the unit veraPDF judges it in ([judgedAnnotations]): an
+	// annotation object two pages list reaches its destination once.
+	annotsSeen := make(map[int]bool)
+	for pageIdx, page := range collectPages(ctx, doc, catalog) {
 		if ctx.Err() != nil {
 			return results
 		}
@@ -358,12 +359,8 @@ func checkStructureDestinations(ctx context.Context, doc *document.Document, cat
 			}
 		}
 
-		annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
-		for _, aObj := range annots {
-			annot, _ := document.ResolveDict(ctx, doc, aObj)
-			if annot == nil {
-				continue
-			}
+		for _, pa := range judgedPageAnnotations(ctx, doc, page, pageIdx, annotsSeen) {
+			annot := pa.annot
 			if st, _ := document.ResolveName(ctx, doc, annot["Subtype"]); st == "Link" {
 				// A /Dest written as null is absent (ISO 32000-1, 7.3.7): veraPDF builds
 				// no destination from it, measured.

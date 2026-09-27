@@ -161,157 +161,107 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 	r := newNSRoleResolver(ctx, doc, treeRoot)
 
 	var results []Violation
-	for _, page := range collectPages(ctx, doc, catalog) {
+	// Each annotation is judged in the unit veraPDF judges it in
+	// ([judgedAnnotations]): an annotation object two pages list fails once.
+	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
-		annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
-		for _, annotObj := range annots {
-			annot, _ := document.ResolveDict(ctx, doc, annotObj)
-			if annot == nil {
-				continue
-			}
-			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+		annot := pa.annot
+		subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
 
-			// §8.9.2.3 t2 applies to every markup annotation rather than to one
-			// subtype, so it sits outside the switch below.
-			if markupAnnotationSubtypes[subtype] {
-				results = append(results, checkMarkupAnnotRichText(ctx, doc, annot)...)
-			}
+		// §8.9.2.3 t2 applies to every markup annotation rather than to one
+		// subtype, so it sits outside the switch below.
+		if markupAnnotationSubtypes[subtype] {
+			results = append(results, checkMarkupAnnotRichText(ctx, doc, annot)...)
+		}
 
-			switch subtype {
-			case "Sound":
-				results = append(results, failf(Rule_14289_2_8_9_2_4_11_t01,
-					"Sound annotation is forbidden in PDF/UA-2")...)
-			case "Movie":
-				results = append(results, failf(Rule_14289_2_8_9_2_4_11_t02,
-					"Movie annotation is forbidden in PDF/UA-2")...)
-			case "TrapNet":
-				// §8.9.2.4.15 t1: TrapNet annotations shall not be used.
-				results = append(results, failf(Rule_14289_2_8_9_2_4_15_t01,
-					"TrapNet annotation is forbidden in PDF/UA-2")...)
-			case "Popup":
-				// §8.9.2.4.9 t1: Popup annotations shall not be in the structure
-				// tree. veraPDF tests structParentType == null alone, with no
-				// isArtifact exemption, so a Popup under an Artifact still fails.
-				if parent, _ := annotStructScope(ctx, doc, treeRoot, r, annot); parent != nil {
-					results = append(results, failf(Rule_14289_2_8_9_2_4_9_t01,
-						"Popup annotation present in the structure tree")...)
+		switch subtype {
+		case "Sound":
+			results = append(results, failf(Rule_14289_2_8_9_2_4_11_t01,
+				"Sound annotation is forbidden in PDF/UA-2")...)
+		case "Movie":
+			results = append(results, failf(Rule_14289_2_8_9_2_4_11_t02,
+				"Movie annotation is forbidden in PDF/UA-2")...)
+		case "TrapNet":
+			// §8.9.2.4.15 t1: TrapNet annotations shall not be used.
+			results = append(results, failf(Rule_14289_2_8_9_2_4_15_t01,
+				"TrapNet annotation is forbidden in PDF/UA-2")...)
+		case "Popup":
+			// §8.9.2.4.9 t1: Popup annotations shall not be in the structure
+			// tree. veraPDF tests structParentType == null alone, with no
+			// isArtifact exemption, so a Popup under an Artifact still fails.
+			if parent, _ := annotStructScope(ctx, doc, treeRoot, r, annot); parent != nil {
+				results = append(results, failf(Rule_14289_2_8_9_2_4_9_t01,
+					"Popup annotation present in the structure tree")...)
+			}
+		case "PrinterMark":
+			// §8.9.2.4.14 t1: a printer mark annotation shall be an artifact.
+			if parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot); parent != nil && !underArtifact {
+				results = append(results, failf(Rule_14289_2_8_9_2_4_14_t01,
+					"PrinterMark annotation is not an artifact (present in the structure tree)")...)
+			}
+		case "Screen":
+			// §8.9.2.4.12 t1: Screen annotations shall include a /Contents
+			// entry. Like the other per-subtype description rules below,
+			// veraPDF tests "Contents != null" on getStringKey, so a /Contents
+			// that is null or not a string is absent (stringKeyPresent),
+			// measured on Ink and Stamp annotations.
+			if !stringKeyPresent(ctx, doc, annot, "Contents") {
+				results = append(results, failf(Rule_14289_2_8_9_2_4_12_t01,
+					"Screen annotation lacks a /Contents entry")...)
+			}
+		case "FileAttachment":
+			// §8.9.2.4.10 t1: a file attachment annotation referencing a file
+			// specification dictionary shall include /AFRelationship on it.
+			// veraPDF reads it with getNameKeyStringValue, so only a name
+			// counts (nameKeyPresent): a null or string value is absent.
+			if fs, _ := document.ResolveDict(ctx, doc, annot["FS"]); fs != nil {
+				if !nameKeyPresent(ctx, doc, fs, "AFRelationship") {
+					results = append(results, failf(Rule_14289_2_8_9_2_4_10_t01,
+						"FileAttachment file specification lacks /AFRelationship")...)
 				}
-			case "PrinterMark":
-				// §8.9.2.4.14 t1: a printer mark annotation shall be an artifact.
-				if parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot); parent != nil && !underArtifact {
-					results = append(results, failf(Rule_14289_2_8_9_2_4_14_t01,
-						"PrinterMark annotation is not an artifact (present in the structure tree)")...)
-				}
-			case "Screen":
-				// §8.9.2.4.12 t1: Screen annotations shall include a /Contents
-				// entry. Like the other per-subtype description rules below,
-				// veraPDF tests "Contents != null" on getStringKey, so a /Contents
-				// that is null or not a string is absent (stringKeyPresent),
-				// measured on Ink and Stamp annotations.
-				if !stringKeyPresent(ctx, doc, annot, "Contents") {
-					results = append(results, failf(Rule_14289_2_8_9_2_4_12_t01,
-						"Screen annotation lacks a /Contents entry")...)
-				}
-			case "FileAttachment":
-				// §8.9.2.4.10 t1: a file attachment annotation referencing a file
-				// specification dictionary shall include /AFRelationship on it.
-				// veraPDF reads it with getNameKeyStringValue, so only a name
-				// counts (nameKeyPresent): a null or string value is absent.
-				if fs, _ := document.ResolveDict(ctx, doc, annot["FS"]); fs != nil {
-					if !nameKeyPresent(ctx, doc, fs, "AFRelationship") {
-						results = append(results, failf(Rule_14289_2_8_9_2_4_10_t01,
-							"FileAttachment file specification lacks /AFRelationship")...)
-					}
-				}
-			case "Stamp":
-				// §8.9.2.4.7 t1: a rubber stamp annotation shall have a /Name or a
-				// /Contents entry describing the stamp's intent.
-				// veraPDF reads /Name with getNameKeyStringValue, so only a name
-				// counts (nameKeyPresent): a string /Name does not.
-				if !nameKeyPresent(ctx, doc, annot, "Name") && !stringKeyPresent(ctx, doc, annot, "Contents") {
-					results = append(results, failf(Rule_14289_2_8_9_2_4_7_t01,
-						"Stamp annotation lacks both /Name and /Contents")...)
-				}
-			case "Ink":
-				// §8.9.2.4.8 t1: Ink annotations shall include a /Contents entry.
-				if !stringKeyPresent(ctx, doc, annot, "Contents") {
-					results = append(results, failf(Rule_14289_2_8_9_2_4_8_t01,
-						"Ink annotation lacks a /Contents entry")...)
-				}
-			case "3D":
-				// §8.9.2.4.19 t1: 3D annotations shall include a /Contents entry.
-				if !stringKeyPresent(ctx, doc, annot, "Contents") {
-					results = append(results, failf(Rule_14289_2_8_9_2_4_19_t01,
-						"3D annotation lacks a /Contents entry")...)
-				}
-			case "RichMedia":
-				// §8.9.2.4.19 t2: RichMedia annotations shall include a /Contents entry.
-				if !stringKeyPresent(ctx, doc, annot, "Contents") {
-					results = append(results, failf(Rule_14289_2_8_9_2_4_19_t02,
-						"RichMedia annotation lacks a /Contents entry")...)
-				}
-			case "Widget":
-				// §8.9.2.4.13 t1: a zero height-and-width widget annotation shall
-				// be an artifact.
-				if !isZeroRect(ctx, doc, annot) {
-					break
-				}
-				if parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot); parent != nil && !underArtifact {
-					results = append(results, failf(Rule_14289_2_8_9_2_4_13_t01,
-						"zero-size Widget annotation is not an artifact (present in the structure tree)")...)
-				}
+			}
+		case "Stamp":
+			// §8.9.2.4.7 t1: a rubber stamp annotation shall have a /Name or a
+			// /Contents entry describing the stamp's intent.
+			// veraPDF reads /Name with getNameKeyStringValue, so only a name
+			// counts (nameKeyPresent): a string /Name does not.
+			if !nameKeyPresent(ctx, doc, annot, "Name") && !stringKeyPresent(ctx, doc, annot, "Contents") {
+				results = append(results, failf(Rule_14289_2_8_9_2_4_7_t01,
+					"Stamp annotation lacks both /Name and /Contents")...)
+			}
+		case "Ink":
+			// §8.9.2.4.8 t1: Ink annotations shall include a /Contents entry.
+			if !stringKeyPresent(ctx, doc, annot, "Contents") {
+				results = append(results, failf(Rule_14289_2_8_9_2_4_8_t01,
+					"Ink annotation lacks a /Contents entry")...)
+			}
+		case "3D":
+			// §8.9.2.4.19 t1: 3D annotations shall include a /Contents entry.
+			if !stringKeyPresent(ctx, doc, annot, "Contents") {
+				results = append(results, failf(Rule_14289_2_8_9_2_4_19_t01,
+					"3D annotation lacks a /Contents entry")...)
+			}
+		case "RichMedia":
+			// §8.9.2.4.19 t2: RichMedia annotations shall include a /Contents entry.
+			if !stringKeyPresent(ctx, doc, annot, "Contents") {
+				results = append(results, failf(Rule_14289_2_8_9_2_4_19_t02,
+					"RichMedia annotation lacks a /Contents entry")...)
+			}
+		case "Widget":
+			// §8.9.2.4.13 t1: a zero height-and-width widget annotation shall
+			// be an artifact.
+			if !isZeroRect(ctx, doc, annot) {
+				break
+			}
+			if parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot); parent != nil && !underArtifact {
+				results = append(results, failf(Rule_14289_2_8_9_2_4_13_t01,
+					"zero-size Widget annotation is not an artifact (present in the structure tree)")...)
 			}
 		}
 	}
 	return results
-}
-
-// pageAnnot is one annotation as veraPDF judges it: the annotation dictionary
-// and the page whose /Annots reached it.
-type pageAnnot struct {
-	page, annot ast.PdfDict
-}
-
-// judgedAnnotations returns the annotations of pages in the unit veraPDF
-// judges them in: one entry per /Annots element that resolves to a dictionary,
-// in page order, except that an annotation that is an object of its own comes
-// once, with the first page listing it.
-//
-// veraPDF builds a PDAnnot for every element of every page's /Annots
-// (GFPDPage.parseAnnotations), and its validator skips an object it has met
-// already by its object key (BaseValidator.checkRequired). An annotation
-// written inline has no key, so it is judged again on every page whose /Annots
-// holds it, which two pages sharing one /Annots array do. Measured against
-// veraPDF 1.30.2 at PDF/UA-1: a Link without /Contents written inline in an
-// /Annots array two pages share fails ISO 14289-1, 7.18.5 t2 twice, the same
-// Link as an object of its own fails it once, and the inline one whose
-// rectangle lies off the second page's crop box fails it once.
-func judgedAnnotations(ctx context.Context, doc *document.Document, pages []ast.PdfDict) []pageAnnot {
-	var out []pageAnnot
-	seen := make(map[int]bool)
-	for _, page := range pages {
-		if ctx.Err() != nil {
-			return out
-		}
-		// Best-effort: an /Annots that does not resolve to an array lists no
-		// annotation, as veraPDF's PDPage.getAnnotations reads it.
-		annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
-		for _, annotObj := range annots {
-			if ref, ok := annotObj.(ast.PdfIndirectRef); ok {
-				if seen[ref.ObjectNum] {
-					continue
-				}
-				seen[ref.ObjectNum] = true
-			}
-			// Best-effort: an element that is no dictionary is no annotation.
-			if annot, _ := document.ResolveDict(ctx, doc, annotObj); annot != nil {
-				out = append(out, pageAnnot{page: page, annot: annot})
-			}
-		}
-	}
-	return out
 }
 
 // checkLinkContents validates PDF/UA-1 §7.18.5 t2: Link annotations must
@@ -374,42 +324,40 @@ func checkMediaClipData(ctx context.Context, doc *document.Document, catalog ast
 	}
 
 	var results []Violation
-	pages := collectPages(ctx, doc, catalog)
-	for _, page := range pages {
-		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
-		for _, annotObj := range annotsArr {
-			annot, _ := document.ResolveDict(ctx, doc, annotObj)
-			if annot == nil {
-				continue
-			}
-			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
-			if subtype != "Screen" {
-				continue
-			}
-			// Find the media clip dict. Two structures are used:
-			//   (a) annot /A → rendition action /R → /C (clip dict)
-			//   (b) annot /A → rendition action /C (clip dict directly)
-			aDict, _ := document.ResolveDict(ctx, doc, annot["A"])
-			if aDict == nil {
-				continue
-			}
-			clipDict := resolveMediaClipDict(ctx, doc, aDict)
-			if clipDict == nil {
-				continue
-			}
+	// Each Screen annotation is judged in the unit veraPDF judges it in
+	// ([judgedAnnotations]): one two pages list reaches its clip once.
+	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
+		if ctx.Err() != nil {
+			return results
+		}
+		annot := pa.annot
+		subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+		if subtype != "Screen" {
+			continue
+		}
+		// Find the media clip dict. Two structures are used:
+		//   (a) annot /A → rendition action /R → /C (clip dict)
+		//   (b) annot /A → rendition action /C (clip dict directly)
+		aDict, _ := document.ResolveDict(ctx, doc, annot["A"])
+		if aDict == nil {
+			continue
+		}
+		clipDict := resolveMediaClipDict(ctx, doc, aDict)
+		if clipDict == nil {
+			continue
+		}
 
-			// t01: /CT shall be present on the clip dict. veraPDF reads it with
-			// getContentType, so only a string counts (stringKeyPresent): a
-			// null or name value is absent, measured.
-			if !stringKeyPresent(ctx, doc, clipDict, "CT") {
-				results = append(results, failf(Rule_14289_1_7_18_6_2_t01,
-					"media clip missing /CT key")...)
-			}
-			// t02: /Alt key must be present with valid content.
-			if !hasValidMediaClipAlt(ctx, doc, clipDict) {
-				results = append(results, failf(Rule_14289_1_7_18_6_2_t02,
-					"media clip missing or invalid /Alt key")...)
-			}
+		// t01: /CT shall be present on the clip dict. veraPDF reads it with
+		// getContentType, so only a string counts (stringKeyPresent): a
+		// null or name value is absent, measured.
+		if !stringKeyPresent(ctx, doc, clipDict, "CT") {
+			results = append(results, failf(Rule_14289_1_7_18_6_2_t01,
+				"media clip missing /CT key")...)
+		}
+		// t02: /Alt key must be present with valid content.
+		if !hasValidMediaClipAlt(ctx, doc, clipDict) {
+			results = append(results, failf(Rule_14289_1_7_18_6_2_t02,
+				"media clip missing or invalid /Alt key")...)
 		}
 	}
 	return results
@@ -481,47 +429,39 @@ func checkFormFieldTU(ctx context.Context, doc *document.Document, catalog ast.P
 	treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 
 	var results []Violation
-	for _, page := range collectPages(ctx, doc, catalog) {
+	// Each widget is judged in the unit veraPDF judges it in
+	// ([judgedAnnotations]): a widget object two pages list fails once.
+	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
-		annots, err := document.ResolveArray(ctx, doc, page["Annots"])
-		if err != nil {
-			doc.Logger.Debug("compliance.accessibility: cannot resolve page annots", "error", err)
+		annot := pa.annot
+		if subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"]); subtype != "Widget" {
 			continue
 		}
-		for _, annotObj := range annots {
-			annot, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annot == nil {
-				continue
-			}
-			if subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"]); subtype != "Widget" {
-				continue
-			}
-			// Only a HIDDEN annotation is exempt. The test reads
-			// `(F & 2) == 2`, naming that one bit; litho also exempted
-			// invisible and noView, which cost three of four widgets on a
-			// probe veraPDF reported in full.
-			flags, _ := document.ResolveInt(ctx, doc, annot["F"])
-			const hiddenBit = 1 << 1 // ISO 32000-1, Table 165: bit position 2
-			if int(flags)&hiddenBit != 0 {
-				continue
-			}
-			// Annotations with Rect outside the page CropBox are exempt.
-			if annotRectOutsideCropBox(ctx, doc, annot) {
-				continue
-			}
-			if fieldTU(ctx, doc, annot) != "" {
-				continue
-			}
-			if enclosingStructElemHasAlt(ctx, doc, treeRoot, annot) {
-				continue
-			}
-			name, _ := document.ResolveString(ctx, doc, annot["T"])
-			results = append(results, failf(Rule_14289_1_7_18_1_t03,
-				"form field %q: missing or empty /TU key and no Alt on enclosing structure element",
-				string(name))...)
+		// Only a HIDDEN annotation is exempt. The test reads
+		// `(F & 2) == 2`, naming that one bit; litho also exempted
+		// invisible and noView, which cost three of four widgets on a
+		// probe veraPDF reported in full.
+		flags, _ := document.ResolveInt(ctx, doc, annot["F"])
+		const hiddenBit = 1 << 1 // ISO 32000-1, Table 165: bit position 2
+		if int(flags)&hiddenBit != 0 {
+			continue
 		}
+		// Annotations with Rect outside the page CropBox are exempt.
+		if annotRectOutsideCropBox(ctx, doc, annot) {
+			continue
+		}
+		if fieldTU(ctx, doc, annot) != "" {
+			continue
+		}
+		if enclosingStructElemHasAlt(ctx, doc, treeRoot, annot) {
+			continue
+		}
+		name, _ := document.ResolveString(ctx, doc, annot["T"])
+		results = append(results, failf(Rule_14289_1_7_18_1_t03,
+			"form field %q: missing or empty /TU key and no Alt on enclosing structure element",
+			string(name))...)
 	}
 	return results
 }

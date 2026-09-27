@@ -691,32 +691,24 @@ func checkAnnotFormLang(ctx context.Context, doc *document.Document, catalog ast
 	var results []Violation
 	treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 
-	for _, page := range collectPages(ctx, doc, catalog) {
+	// Each annotation is judged in the unit veraPDF judges it in
+	// ([judgedAnnotations]): an annotation object two pages list fails once.
+	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
-		annots, err := document.ResolveArray(ctx, doc, page["Annots"])
-		if err != nil {
+		// veraPDF's test is Contents == null || ..., and its getStringKey
+		// returns null only for an absent or non-string entry, so an empty
+		// /Contents still needs a determinable language.
+		contentsObj, ok := pa.annot["Contents"]
+		if !ok {
 			continue
 		}
-		for _, annotObj := range annots {
-			annot, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annot == nil {
-				continue
-			}
-			// veraPDF's test is Contents == null || ..., and its getStringKey
-			// returns null only for an absent or non-string entry, so an empty
-			// /Contents still needs a determinable language.
-			contentsObj, ok := annot["Contents"]
-			if !ok {
-				continue
-			}
-			if _, err := document.ResolveString(ctx, doc, contentsObj); err != nil {
-				continue
-			}
-			if !objLangDeterminable(ctx, doc, treeRoot, annot) {
-				results = append(results, fail(Rule_14289_1_7_2_t24, "annotation /Contents")...)
-			}
+		if _, err := document.ResolveString(ctx, doc, contentsObj); err != nil {
+			continue
+		}
+		if !objLangDeterminable(ctx, doc, treeRoot, pa.annot) {
+			results = append(results, fail(Rule_14289_1_7_2_t24, "annotation /Contents")...)
 		}
 	}
 

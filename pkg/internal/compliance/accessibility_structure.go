@@ -937,62 +937,42 @@ func checkAnnotArtifactFlags(ctx context.Context, doc *document.Document, catalo
 	}
 	r := newNSRoleResolver(ctx, doc, treeRoot)
 
-	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
 
-	for pageIdx, page := range pages {
+	// Each annotation is judged in the unit veraPDF judges it in
+	// ([judgedAnnotations]): an annotation object two pages list fails once.
+	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
 		if ctx.Err() != nil {
 			return results
 		}
+		annot := pa.annot
 
-		annotsObj, ok := page["Annots"]
+		// Both tests apply only to an annotation in the logical structure
+		// that no Artifact encloses: veraPDF gates them on
+		// structParentType == null || isArtifact, see annotStructScope.
+		if parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot); parent == nil || underArtifact {
+			continue
+		}
+
+		fObj, ok := annot["F"]
 		if !ok {
 			continue
 		}
-
-		annots, err := document.ResolveArray(ctx, doc, annotsObj)
+		flags, err := document.ResolveInt(ctx, doc, fObj)
 		if err != nil {
-			doc.Logger.Debug("compliance.accessibility: cannot resolve annots array", "error", err)
+			doc.Logger.Debug("compliance.accessibility: cannot resolve annotation flags", "error", err)
 			continue
 		}
+		f := int(flags)
 
-		for annotIdx, annotObj := range annots {
-			if ctx.Err() != nil {
-				return results
-			}
+		subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+		loc := fmt.Sprintf("page %d, annot %d (%s)", pa.pageIdx+1, pa.annotIdx, subtype)
 
-			annot, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annot == nil {
-				continue
-			}
-
-			// Both tests apply only to an annotation in the logical structure
-			// that no Artifact encloses: veraPDF gates them on
-			// structParentType == null || isArtifact, see annotStructScope.
-			if parent, underArtifact := annotStructScope(ctx, doc, treeRoot, r, annot); parent == nil || underArtifact {
-				continue
-			}
-
-			fObj, ok := annot["F"]
-			if !ok {
-				continue
-			}
-			flags, err := document.ResolveInt(ctx, doc, fObj)
-			if err != nil {
-				doc.Logger.Debug("compliance.accessibility: cannot resolve annotation flags", "error", err)
-				continue
-			}
-			f := int(flags)
-
-			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
-			loc := fmt.Sprintf("page %d, annot %d (%s)", pageIdx+1, annotIdx, subtype)
-
-			if f&annotFlagInvisible != 0 {
-				results = append(results, Violation{Rule: Rule_14289_2_8_9_2_2_t01, Context: loc})
-			}
-			if f&annotFlagNoView != 0 && f&annotFlagToggleNoView == 0 {
-				results = append(results, Violation{Rule: Rule_14289_2_8_9_2_2_t02, Context: loc})
-			}
+		if f&annotFlagInvisible != 0 {
+			results = append(results, Violation{Rule: Rule_14289_2_8_9_2_2_t01, Context: loc})
+		}
+		if f&annotFlagNoView != 0 && f&annotFlagToggleNoView == 0 {
+			results = append(results, Violation{Rule: Rule_14289_2_8_9_2_2_t02, Context: loc})
 		}
 	}
 
