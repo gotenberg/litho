@@ -909,10 +909,13 @@ func patchExistingXMP(xmp string, part int, conformance string, uaPart int, info
 // applyExtensionSchemas ensures buf declares an XMP extension schema for every
 // custom or non-predefined property it uses (ISO 19005-2 §6.6.2.3), and strips
 // properties whose value is an untypeable nested structure. An incomplete
-// existing block (§6.6.2.3.3) is regenerated. Returns the updated bytes and
-// human-readable fix notes. The schema block is a large multi-element XML
-// fragment placed with insertChildElement so its indentation matches the
-// surrounding rdf:Description.
+// existing block (§6.6.2.3.3) is regenerated, and a complete one has its
+// container and the value types no property can use repaired in place (see
+// [repairExtensionSchemaGrammar]) under the parts that state that grammar,
+// ISO 19005-1 to -3. Returns the updated bytes and human-readable fix notes.
+// The schema block is a large multi-element XML fragment placed with
+// insertChildElement so its indentation matches the surrounding
+// rdf:Description.
 func applyExtensionSchemas(buf []byte, part int) ([]byte, []string) {
 	var fixes []string
 	if strings.Contains(string(buf), "pdfaExtension:schemas") {
@@ -922,6 +925,11 @@ func applyExtensionSchemas(buf []byte, part int) ([]byte, []string) {
 				fixes = append(fixes, "stripped incomplete extension schema block")
 			}
 		}
+	}
+	if part >= 1 && part <= 3 && strings.Contains(string(buf), "pdfaExtension:schemas") {
+		repaired, grammarFixes := repairExtensionSchemaGrammar(buf)
+		buf = repaired
+		fixes = append(fixes, grammarFixes...)
 	}
 	if !strings.Contains(string(buf), "pdfaExtension:schemas") {
 		schemas, stripKeys := extractUnknownNamespaceProperties(buf, part)

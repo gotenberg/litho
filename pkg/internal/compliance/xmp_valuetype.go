@@ -514,6 +514,15 @@ func xmpExtKnownType(part int, entry *xmpExtEntry, typ string) bool {
 	return xmpBasicValueTypes[xmpArrayItemKey(typ)]
 }
 
+// XMPBasicValueType reports whether typ, its array wrapper stripped, is one of
+// the basic types: the only ones a value type of an extension schema entry
+// resolves against when no entry counts for the entry's namespace, an entry
+// with no property array among them (ISO 19005-2 and -3, 6.6.2.3.3 t8 and
+// t17, ISO 19005-1, 6.7.8 t9 and t18). See [xmpExtKnownType].
+func XMPBasicValueType(typ string) bool {
+	return xmpExtKnownType(0, nil, typ)
+}
+
 // xmpBasicValueTypes are the types every veraPDF validators container
 // registers at construction (ValidatorsContainer's constructor): Date, Lang
 // Alt, URI, URL, XPath and the SimpleTypeValidator.SimpleTypeEnum types.
