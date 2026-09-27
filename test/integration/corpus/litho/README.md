@@ -179,6 +179,7 @@ one deliberately rather than diffing it against a fresh build.
 | `pageboxes_2b.pdf`     | PDF/A-2b     | Page boxes that are not rectangles, under inherited crop boxes   |
 | `rolemapscope_ua2.pdf` | PDF/UA-2     | Private types the root `/RoleMap` maps, per declared namespace   |
 | `destforms_ua2.pdf`    | PDF/UA-2     | Named destinations, `/Dest` dictionaries, additional actions     |
+| `rolemapns_ua2.pdf`    | PDF/UA-2     | Mapped private types in namespaces the root `/RoleMap` misses    |
 
 ### Must-not-fire controls
 
@@ -515,6 +516,7 @@ which are covered under [Known divergences](#known-divergences).
 | `repairleft_4.pdf`     | 10   | 8    | 16   | 13   | 14   | 16   | 13   | 14   | 9   | 10   | 11   | 11   | 9    |
 | `repairroom_2b.pdf`    | 5    | 2    | 7    | 3    | 5    | 8    | 4    | 6    | 8   | 8    | 9    | 10   | 9    |
 | `resinherit_2b.pdf`    | 9    | 6    | 11   | 8    | 9    | 11   | 8    | 9    | 9   | 9    | 10   | 9    | 9    |
+| `rolemapns_ua2.pdf`    | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 1    |
 | `rolemapscope_ua2.pdf` | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 2    |
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
@@ -5407,9 +5409,11 @@ PDF/UA-2 remediation declared the PDF 2.0 namespace on `Workbook`, which cut it
 off from the map, and the single-Document repair then wrapped it in a second
 `Document`: veraPDF reported `8.2.4/1` on the output, for `Workbook` and the
 `Para`, and litho nothing. Now the repair names the root element a PDF 2.0
-`Document` and leaves the `/RoleMap` as written, and both tools report
-`8.2.4/1` alone, the `Para` no repair maps, default and aggressive. Remediation
-at the seven other manifest profiles leaves nothing on either tool, and every
+`Document` and leaves the `/RoleMap` as written, and renames the `Para` in the
+PDF 2.0 namespace `P`, the type the map gives every other `Para` (see
+`rolemapns_ua2.pdf`): both tools report nothing, default and aggressive, and
+before that rename both reported `8.2.4/1` for the `Para` alone. Remediation at
+the seven other manifest profiles leaves nothing on either tool, and every
 `mutate-*` cell passes.
 
 ### `destforms_ua2.pdf`
@@ -5454,6 +5458,39 @@ each is a GoTo action carrying `/SD`, a name kept under `/D` and the dictionary
 under `/Dest` moved to `/A`, and PDF.js opens the page each opened before.
 Remediation at the eight manifest profiles, default and aggressive, leaves
 nothing on either tool, and every `mutate-*` cell passes.
+
+### `rolemapns_ua2.pdf`
+
+`rolemapscope_ua2.pdf` shows which placements the structure tree root's
+`/RoleMap` governs. This file holds, under a root `Document` in the PDF 2.0
+namespace, one element per repair PDF/UA-2 remediation makes when an element
+declares a namespace the map does not govern, while the map sends its private
+type to a standard one (ISO 32000-2, 14.8.6). No corpus file declares such a
+namespace, before or after remediation.
+
+| Element   | Namespace                                   | `/RoleMap`  | Repair                                   |
+| --------- | ------------------------------------------- | ----------- | ---------------------------------------- |
+| `Heading` | custom, no `/RoleMapNS`                     | `H1`        | the namespace maps it to the 2.0 `H1`    |
+| `Para`    | the same custom namespace                   | `P`         | the namespace maps it to the 2.0 `P`     |
+| `Para`    | custom, an indirect `/RoleMapNS` of `Other` | `P`         | the entry joins that indirect dictionary |
+| `Para`    | PDF 1.7, with a `/RoleMapNS` of `Chapter`   | `P`         | renamed `P`                              |
+| `Block`   | PDF 2.0                                     | `Body`, `P` | renamed `P`                              |
+
+A custom namespace defines no standard type, so its elements keep their names
+and the namespace's `/RoleMapNS` maps the type into the PDF 2.0 namespace; a
+standard namespace defines the target, so its elements are renamed. The file
+agrees with veraPDF 1.30.2 in all thirteen cells and both WTPDF levels, rule
+for rule and count for count. PDF/UA-2 reports each of the five elements
+(`8.2.4/1`, five checks on each tool); the WTPDF levels add their missing
+declaration. PDF/UA-1 and the level-A cells read the file as PDF 1.7, where the
+`/RoleMap` maps every element, and the other cells report what
+`rolemapscope_ua2.pdf` reports.
+
+Measured on litho and veraPDF 1.30.2 before the repair, PDF/UA-2 remediation,
+default and aggressive, left `8.2.4/1` on both tools, five checks each, and so
+did remediation to either WTPDF level. Now each of those outputs passes on both
+tools. Remediation at the seven other manifest profiles leaves nothing on
+either tool.
 
 ## Scope
 
