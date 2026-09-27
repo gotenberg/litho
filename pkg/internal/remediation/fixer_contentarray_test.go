@@ -1,14 +1,18 @@
 package remediation
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
+	"github.com/gotenberg/litho/pkg/internal/graphics/content"
+	"github.com/gotenberg/litho/pkg/internal/mutations"
 )
 
 // contentArrayPDF builds a page whose /Contents is a DIRECT array of two
@@ -162,6 +166,52 @@ func TestLiveContentBytes_MatchesTheDocumentWhenNothingIsQueued(t *testing.T) {
 				t.Errorf("%s: read %q, missing %s: an untouched page must read as the document has it",
 					tc.name, strings.TrimSpace(string(got)), want)
 			}
+		}
+	}
+}
+
+// TestReplaceContentStream_WritesAnIndirectArrayAsAnArray pins that a page
+// whose /Contents is a reference to an array keeps an array at that number
+// once its content is rewritten, in the allocator and in the file written
+// from it.
+//
+// The rewrite wrote the reference to the new stream as the value of the
+// array's object. ISO 32000-1, 7.3.10 makes an indirect object's value an
+// object of 7.3.1, which a reference is not, and 7.7.3.3 wants /Contents to be
+// a stream or an array. litho's text extraction found no text on such a page,
+// and qpdf read the object as the integer before the reference.
+func TestReplaceContentStream_WritesAnIndirectArrayAsAnArray(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	for _, queued := range []bool{false, true} {
+		doc, alloc := newTestDoc(t, contentIndirectArrayPDF())
+		contentsObj := firstPage(t, ctx, doc).Dict["Contents"]
+		if queued {
+			// An earlier fixer queued the array at its own number.
+			alloc.AllocAt(4, ast.PdfArray{ast.PdfIndirectRef{ObjectNum: 5}, ast.PdfIndirectRef{ObjectNum: 6}})
+		}
+		if err := replaceContentStream(ctx, alloc, doc, contentsObj, []byte("BT (REPAIRED) Tj ET"), 1); err != nil {
+			t.Fatalf("queued=%v: replaceContentStream: %v", queued, err)
+		}
+		if got, ok := alloc.Pending()[4].(ast.PdfArray); !ok || len(got) != 1 {
+			t.Errorf("queued=%v: object 4 is %T %v, want an array of the rewritten stream", queued, alloc.Pending()[4], alloc.Pending()[4])
+		}
+
+		var out bytes.Buffer
+		if err := mutations.FullRewrite(ctx, &out, mutations.FullRewriteConfig{Doc: doc, Overrides: alloc.Pending()}); err != nil {
+			t.Fatalf("queued=%v: FullRewrite: %v", queued, err)
+		}
+		if regexp.MustCompile(`\d+ 0 obj\s*\d+ 0 R\s*endobj`).Match(out.Bytes()) {
+			t.Errorf("queued=%v: the output holds an object whose value is a reference", queued)
+		}
+		reread, err := document.NewDocument(ctx, bytes.NewReader(out.Bytes()), int64(out.Len()), nil)
+		if err != nil {
+			t.Fatalf("queued=%v: reopening the output: %v", queued, err)
+		}
+		ops, err := content.ParsePageContent(ctx, reread, firstPage(t, ctx, reread).Dict)
+		if err != nil || len(ops) != 3 || ops[1].Operator != "Tj" || ops[1].Operands[0] != ast.PdfString("REPAIRED") {
+			t.Errorf("queued=%v: the output page reads %v (%v), want the repair", queued, ops, err)
 		}
 	}
 }

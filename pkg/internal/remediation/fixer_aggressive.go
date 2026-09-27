@@ -582,6 +582,25 @@ func writeOperand(buf *bytes.Buffer, obj ast.PdfObject) error {
 	return nil
 }
 
+// replaceContentStream writes newData, decoded content, as the content of the
+// page numbered pageNum whose /Contents is contentsObj: a stream stays at its
+// number, and an array, direct or through a reference, comes to hold the
+// content in one stream (ISO 32000-1, 7.7.3.3).
+//
+// # Corpus evidence
+//
+//   - govdocs thread_100_100877.pdf: page 4's /Contents is a reference to an
+//     array of 8 streams, and the first repair to rewrite that page, the
+//     inline image one, wrote the reference to its new stream as the value of
+//     the array's object. qpdf read the page's content as an integer and
+//     litho's text extraction found none on it, so the writer rolled the
+//     content repairs back, the 97 interpolated images with them.
+//   - All corpora: 96 files name an array through a reference as some page's
+//     /Contents. None of their PDF/A-1b, PDF/A-2b and PDF/A-4 remediations,
+//     default and aggressive, rolled back before the inline image repair,
+//     and with it and this write only thread_100_100877.pdf changes.
+//   - litho inlineinterp_2b.pdf: its page names such an array, and the inline
+//     image repair of the page rolled back until this write.
 func replaceContentStream(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, contentsObj ast.PdfObject, newData []byte, pageNum int) error {
 	ref, isRef := contentsObj.(ast.PdfIndirectRef)
 	if !isRef {
@@ -601,13 +620,19 @@ func replaceContentStream(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	// content-tag) may have replaced /Contents with a stream that is queued in
 	// alloc and not yet in the document. Writing back to the same object number
 	// keeps the live page pointing at the rewritten content.
+	//
+	// An array stays an array, of the one stream the content is written to. A
+	// stream is always an indirect object (ISO 32000-1, 7.3.8.1), so it gets a
+	// number of its own, and the array's number cannot hold the reference to
+	// it: 7.3.10 makes an indirect object's value an object of 7.3.1, which a
+	// reference is not, and 7.7.3.3 wants /Contents to be a stream or an array.
 	if pending, ok := alloc.Pending()[ref.ObjectNum]; ok {
 		switch pending.(type) {
 		case ast.PdfStream:
 			alloc.AllocAt(ref.ObjectNum, ast.NewStream(ast.PdfDict{}, newData))
 			return nil
 		case ast.PdfArray:
-			alloc.AllocAt(ref.ObjectNum, alloc.Alloc(ast.NewStream(ast.PdfDict{}, newData)))
+			alloc.AllocAt(ref.ObjectNum, ast.PdfArray{alloc.Alloc(ast.NewStream(ast.PdfDict{}, newData))})
 			return nil
 		}
 	}
@@ -621,9 +646,7 @@ func replaceContentStream(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	case ast.PdfStream:
 		alloc.AllocAt(ref.ObjectNum, ast.NewStream(ast.PdfDict{}, newData))
 	case ast.PdfArray:
-		newStream := ast.NewStream(ast.PdfDict{}, newData)
-		newRef := alloc.Alloc(newStream)
-		alloc.AllocAt(ref.ObjectNum, newRef)
+		alloc.AllocAt(ref.ObjectNum, ast.PdfArray{alloc.Alloc(ast.NewStream(ast.PdfDict{}, newData))})
 	default:
 		return fmt.Errorf("page %d /Contents has unexpected type %T", pageNum, resolved)
 	}
