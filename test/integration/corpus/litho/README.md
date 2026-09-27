@@ -155,6 +155,7 @@ one deliberately rather than diffing it against a fresh build.
 | `extguards_2b.pdf`     | PDF/A-2b     | Extension-declared values veraPDF accepts, false-positive guards |
 | `formcycle_ua1.pdf`    | PDF/UA-1     | Forms whose resources list each other, under auto-tagging        |
 | `formflat_ua1.pdf`     | PDF/UA-1     | Tagged widgets with no `/AcroForm`, under the form mutations     |
+| `remreach_2b.pdf`      | PDF/A-2b     | Defects below a page's resources the repairs did not reach       |
 
 ### Must-not-fire controls
 
@@ -447,6 +448,7 @@ which are covered under [Known divergences](#known-divergences).
 | `paintop_2b.pdf`       | 7    | 4    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 9    | 7    |
 | `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
+| `remreach_2b.pdf`      | 8    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 6    | 6    | 10   | 8    |
 | `repairleft_4.pdf`     | 10   | 8    | 16   | 13   | 14   | 16   | 13   | 14   | 9   | 10   | 11   | 11   | 9    |
 | `repairroom_2b.pdf`    | 5    | 2    | 7    | 3    | 5    | 8    | 4    | 6    | 8   | 8    | 9    | 10   | 9    |
 | `resinherit_2b.pdf`    | 9    | 6    | 11   | 8    | 9    | 11   | 8    | 9    | 9   | 9    | 10   | 9    | 9    |
@@ -4123,6 +4125,49 @@ no output intent (`6.2.3.3/1` and `/3` at part 1, `6.2.4.3/2` and `/4` from part
 dictionary (`6.5.3/5` at part 1, `6.3.3/3` from part 2), the missing XMP packet
 (`6.7.2/1`, `6.6.2.1/1`, `6.7.2.1/1`), and at PDF/A-4 the `%PDF-1.7` header and,
 at 4f, the missing `/EmbeddedFiles`.
+
+### `remreach_2b.pdf`
+
+`remreach_2b.pdf` holds defects compliance judges below a page's own
+resources, where the repairs of their rules did not reach. Six DeviceN colour
+spaces over one spot colorant each carry no `/Colorants`, which ISO 19005-2,
+6.2.4.4 t1 fails at every colour link that reaches the space:
+
+| Spot    | Where the DeviceN stands                                    | `6.2.4.4/1` |
+| ------- | ----------------------------------------------------------- | ----------- |
+| `SpotA` | the `/ColorSpace` resources of a form the page draws        | 3           |
+| `SpotB` | the colour space of an image the page draws                 | 1           |
+| `SpotC` | the resources of a coloured tiling pattern the page fills   | 3           |
+| `SpotD` | the base of an `/Indexed` space the page selects            | 2           |
+| `SpotE` | the resources of the Type 3 font whose glyph the page shows | 3           |
+| `SpotF` | the resources of an annotation's normal appearance          | 3           |
+
+The pattern's cell also draws an image with `/Interpolate` true (6.2.8 t3), and
+the catalog's `/Names /EmbeddedFiles` tree names a file specification typed
+`/F`, which ISO 32000-1, 7.11.4 makes one by position and no `/AF` lists (ISO
+19005-3, 6.8 t4). The `/Colorants` repair walked the page's `/ColorSpace`
+entries and shadings, the XObject repair the page's `/XObject` resources and
+the forms they name, and the association repair the dictionaries typed
+`/Filespec`, so a remediation left every one of these in place, on litho and
+veraPDF alike. A CMYK OutputIntent covers the DeviceCMYK alternates.
+
+| Rule at PDF/A-2b                | veraPDF | litho |
+| ------------------------------- | ------- | ----- |
+| `6.2.4.4/1` DeviceN colorants   | 15      | 15    |
+| `6.2.8/3` `/Interpolate` true   | 1       | 1     |
+| `6.8/5` embedded file not PDF/A | 1       | 1     |
+
+At PDF/A-3b the file fails `6.8/4` once in place of `6.8/5`. The rule sets
+equal veraPDF 1.30.2's in all thirteen cells, and so do the counts but for
+`7.1/3` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2, the family described under
+[Instance counts](#instance-counts-which-the-corpus-does-not-pin).
+
+The remediation at PDF/A-2a, 2b and 2u now leaves `6.8/5` alone, at PDF/A-4
+`6.9/3` alone, the embedded file no repair can make conforming, and at
+PDF/A-3b nothing, where each left the 15 DeviceN findings and the image, and
+PDF/A-3b the association. The aggressive remediation, which drops the
+attachment, leaves nothing at any PDF/A level. veraPDF agrees on every output
+in both modes.
 
 ## Scope
 
