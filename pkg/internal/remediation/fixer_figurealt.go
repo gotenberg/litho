@@ -47,6 +47,26 @@ type figureNode struct {
 // reported as still owing human review, so the residual stays auditable after the
 // verdict flips green. Only indirect Figure elements are touched; an inline
 // Figure has no object number to rewrite in place and is left alone.
+//
+// In safe mode without a caller string the finding stays in the report's
+// residual, as every refusal does. What a Figure paints changes nothing: no
+// drawing yields a description, so a Figure of vector art or images is left as
+// surely as one that paints only text or nothing at all.
+//
+// # Corpus evidence
+//
+//   - All corpora: PDF/UA-2 remediation in safe mode leaves ISO 14289-2
+//     8.2.5.28.2 t1 on 166 of 1127 tagged files, and at WTPDF-1.0
+//     Accessibility too. Their failing Figures paint vector art, images and
+//     forms, mostly mixed with text; no file's failing Figures paint only
+//     text, and 8 files' paint nothing (empty elements, or an /MCID no content
+//     stream marks). A caller string reaches every Figure on all 166, and
+//     aggressive mode leaves none.
+//   - verapdf PDF_A-1a/2a/2u/4 test files (9 sources, 18 cells at PDF/UA-2 and
+//     WTPDF-1.0 Accessibility): their Figures were out of reach until the
+//     single-doc-root repair stopped listing its Document as its own /K, which
+//     had left the whole tree unreachable to this fixer and to both
+//     validators.
 func fixFigureAlt(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, opts Options, _ []compliance.Violation, profile string) ([]string, error) {
 	altText := opts.FigureAlt
 	synthesized := false
