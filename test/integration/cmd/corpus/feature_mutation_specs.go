@@ -291,6 +291,11 @@ const mutationRedactReach = 1e6
 //     the page move change which page that is, so an image the second page
 //     draws is judged. veraPDF reports the same rule set on the outputs. Not a
 //     mutation defect.
+//   - litho namedmcid_ua1: 2 ruleset_changed cells under mutate-pages, 7.1
+//     test 3 at PDF/UA-1 and 8.2.2 test 1 at PDF/UA-2 added. The copy of the
+//     tagged first page carries its content, not its structure, so its MCIDs
+//     map to no element and its content is untagged. veraPDF reports the same
+//     rule set on the output. A limitation of InsertPages, not of the move.
 //   - litho a4syntax_4: 1 ruleset_changed cell (PDF/A-4, 6.1.2 test 1) under
 //     each of mutate-pages, mutate-flatten and mutate-encrypt: a full rewrite
 //     writes a %PDF-1.7 header over a PDF 2.0 source.
