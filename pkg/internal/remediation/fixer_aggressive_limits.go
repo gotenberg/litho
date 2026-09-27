@@ -311,9 +311,10 @@ func truncateDict(d ast.PdfDict) ast.PdfDict {
 //     colourants and their test 9 violation in aggressive mode. Trimmed,
 //     neither output draws test 9 from litho or veraPDF, and
 //     6-1-12-t09-fail-a.pdf passes veraPDF at PDF/A-1b.
-//   - All corpora: these two are the only files declaring a DeviceN space
-//     past 8 colourants anywhere, both at page level, so the walk below the
-//     page has no corpus reach.
+//   - All corpora: those two declare their DeviceN spaces at page level.
+//   - litho offlimits_1b.pdf: declares 33-colourant DeviceN spaces below the
+//     page, in tiling-pattern resources and in images, so the corpus reaches
+//     the walk below the page.
 func trimDeviceNColorants(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, limit int) (int, error) {
 	w := &deviceNWalk{
 		alloc:   alloc,
