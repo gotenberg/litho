@@ -170,7 +170,7 @@ func structDestArray(ctx context.Context, doc *document.Document, obj ast.PdfObj
 	if err != nil || elem == nil {
 		return nil
 	}
-	if _, isElement := elem["S"].(ast.PdfName); !isElement {
+	if s, err := document.ResolveName(ctx, doc, elem["S"]); err != nil || s == "" {
 		return nil
 	}
 	out := ast.PdfArray{ref}
@@ -310,7 +310,7 @@ func structPageTargets(ctx context.Context, resolve func(ast.PdfObject) ast.PdfO
 			if !isDict {
 				continue
 			}
-			if _, isElement := elem["S"].(ast.PdfName); !isElement {
+			if !pages.isElement(elem) {
 				continue
 			}
 			if isRef {
@@ -347,6 +347,21 @@ type elementStart struct {
 // newElementPages returns an [elementPages] reading objects through resolve.
 func newElementPages(resolve func(ast.PdfObject) ast.PdfObject) *elementPages {
 	return &elementPages{resolve: resolve, memo: make(map[int]elementStart), onPath: make(map[int]bool)}
+}
+
+// isElement reports whether d is a structure element: a dictionary whose /S
+// names its structure type (ISO 32000-1, 14.7.2, Table 323), directly or
+// through an indirect reference, which some producers write.
+//
+// # Corpus evidence
+//
+//   - govdocs: 5 tagged files name the type of some of their elements through
+//     an indirect reference to a name object, thread_000_000761.pdf 42 of its
+//     69, which left 2 pages its outline opens with no element beginning on
+//     them.
+func (e *elementPages) isElement(d ast.PdfDict) bool {
+	_, isName := e.resolve(d["S"]).(ast.PdfName)
+	return isName
 }
 
 // kids returns the entries of a /K value: the array's, or the one entry it is.
@@ -392,14 +407,14 @@ func (e *elementPages) start(ctx context.Context, elem ast.PdfDict, depth int) e
 		if !isDict {
 			continue
 		}
-		switch kind, _ := d["Type"].(ast.PdfName); kind {
+		switch kind, _ := e.resolve(d["Type"]).(ast.PdfName); kind {
 		case "MCR", "OBJR":
 			if own, has := d["Pg"].(ast.PdfIndirectRef); has {
 				return elementStart{page: own, found: true}
 			}
 			return onElementPage
 		}
-		if _, isElement := d["S"].(ast.PdfName); !isElement {
+		if !e.isElement(d) {
 			continue
 		}
 		kidStart, memoised := elementStart{}, false
