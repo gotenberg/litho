@@ -185,7 +185,7 @@ func TestBakeSignedSignatures_PrunesANestedSignedField(t *testing.T) {
 	ctx, doc, _ := setFormDoc(t, certifiedFormObjs())
 	pages := readerPages(ctx, doc, mustCatalog(t, ctx, doc))
 
-	overrides, err := bakeSignedSignatures(ctx, doc, pages[:1], pageCopyOverrides(pages[:1]), false)
+	overrides, err := bakeSignedSignatures(ctx, doc, pages[:1], pageCopyOverrides(pages[:1]), bakeUnmarked)
 	if err != nil {
 		t.Fatalf("bakeSignedSignatures: %v", err)
 	}

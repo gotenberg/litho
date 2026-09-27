@@ -49,6 +49,11 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	// output object (see [mergeOptionalContent]).
 	copiers := make([]*writer.Copier, len(sources))
 
+	// The structure trees of the tagged sources, joined into one (see
+	// [structOutput]), and the pages of the untagged ones.
+	var tree *structOutput
+	var untagged []untaggedCopy
+
 	for srcIdx, src := range sources {
 		cumulativeOffsets[srcIdx] = len(allPageRefs)
 		if err := ctx.Err(); err != nil {
@@ -61,14 +66,25 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		readVersion = writer.AtLeastVersion(readVersion, src.Doc.Version)
 
 		copier := writer.NewCopier(src.Doc, alloc)
-		// The output carries no /StructTreeRoot (see copyCatalogEntries), so
-		// a drawn signature is not marked.
-		overrides, err := bakeSignedSignatures(ctx, src.Doc, src.Pages, pageCopyOverrides(src.Pages), false)
+		// The output carries the structure of every tagged source, so a drawn
+		// signature is tagged under the element that enclosed its widget.
+		overrides, err := bakeSignedSignatures(ctx, src.Doc, src.Pages, pageCopyOverrides(src.Pages), bakeTagged)
+		if err != nil {
+			return fmt.Errorf("merging source %d: %w", srcIdx, err)
+		}
+		structs, overrides, err := newStructSource(ctx, src.Doc, overrides, src.Pages)
 		if err != nil {
 			return fmt.Errorf("merging source %d: %w", srcIdx, err)
 		}
 		if len(overrides) > 0 {
 			copier.WithOverrides(overrides)
+		}
+		if structs != nil {
+			if tree == nil {
+				_, lang := documentLang(ctx, sources[0].Doc)
+				tree = newStructOutput(alloc, lang)
+			}
+			tree.expect(structs, copier)
 		}
 		copiers[srcIdx] = copier
 		srcCatalogRef, srcHasCatalog := CatalogRef(ctx, src.Doc)
@@ -76,6 +92,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 			formSources = append(formSources, acroFormSource{Doc: src.Doc, Catalog: srcCatalog, Copier: copier})
 		}
 
+		srcPageRefs := make([]ast.PdfIndirectRef, 0, len(src.Pages))
 		for pageNum, page := range src.Pages {
 			if err := ctx.Err(); err != nil {
 				return fmt.Errorf("merge canceled: %w", err)
@@ -86,6 +103,14 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 				return fmt.Errorf("copying page %d from source %d: %w", pageNum+1, srcIdx, err)
 			}
 			allPageRefs = append(allPageRefs, newRef)
+			srcPageRefs = append(srcPageRefs, newRef)
+		}
+		if structs != nil {
+			if err := tree.add(ctx, structs, srcPageRefs, -1); err != nil {
+				return fmt.Errorf("carrying the structure tree of source %d: %w", srcIdx, err)
+			}
+		} else {
+			untagged = append(untagged, untaggedCopy{copier: copier, pages: srcPageRefs})
 		}
 
 		// Copy /Info from the first source that has one.
@@ -161,6 +186,19 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 				catalogDict["Outlines"] = outlineRef
 			}
 		}
+	}
+
+	// After every copy from the sources, whose content may name structure keys
+	// the tree has to carry or, from an untagged source, drop.
+	if tree != nil {
+		for _, u := range untagged {
+			tree.untag(u.copier, u.pages)
+		}
+		rootRef, err := tree.finish(ctx)
+		if err != nil {
+			return fmt.Errorf("carrying the structure tree: %w", err)
+		}
+		catalogDict["StructTreeRoot"] = rootRef
 	}
 
 	catalogRef := alloc.Alloc(catalogDict)

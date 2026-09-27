@@ -58,18 +58,28 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 			maps.Copy(overrides, fieldOverrides)
 		}
 	}
-	// The output carries no /StructTreeRoot (see copyCatalogEntries), so a
-	// drawn signature is not marked.
-	overrides, err := bakeSignedSignatures(ctx, doc, keptPages, overrides, false)
+	// The output carries the structure of the pages it keeps, so a drawn
+	// signature is tagged under the element that enclosed its widget.
+	overrides, err := bakeSignedSignatures(ctx, doc, keptPages, overrides, bakeTagged)
+	if err != nil {
+		return err
+	}
+	structs, overrides, err := newStructSource(ctx, doc, overrides, keptPages)
 	if err != nil {
 		return err
 	}
 	if len(overrides) > 0 {
 		copier.WithOverrides(overrides)
 	}
+	var tree *structOutput
+	if structs != nil {
+		tree = newStructOutput(alloc, structs.lang)
+		tree.expect(structs, copier)
+	}
 
 	// Copy each selected page, building new page refs.
 	pageRefs := make([]ast.PdfObject, 0, len(pages))
+	copiedPages := make([]ast.PdfIndirectRef, 0, len(pages))
 	for _, pageNum := range pages {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("split canceled: %w", err)
@@ -81,6 +91,12 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 			return fmt.Errorf("copying page %d: %w", pageNum, err)
 		}
 		pageRefs = append(pageRefs, newRef)
+		copiedPages = append(copiedPages, newRef)
+	}
+	if tree != nil {
+		if err := tree.add(ctx, structs, copiedPages, -1); err != nil {
+			return fmt.Errorf("carrying the structure tree: %w", err)
+		}
 	}
 
 	// Build new Pages dict.
@@ -152,6 +168,16 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 				catalogDict["Outlines"] = outlineRef
 			}
 		}
+	}
+
+	// After every copy from the source, whose content may name structure keys
+	// the tree has to carry.
+	if tree != nil {
+		rootRef, err := tree.finish(ctx)
+		if err != nil {
+			return fmt.Errorf("carrying the structure tree: %w", err)
+		}
+		catalogDict["StructTreeRoot"] = rootRef
 	}
 
 	catalogRef := alloc.Alloc(catalogDict)
@@ -238,11 +264,10 @@ func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *wri
 	// /StructTreeRoot and /PageLabels are deliberately NOT here. Both are keyed
 	// to pages: a structure tree names the pages its elements live on and a page
 	// label tree is indexed by page number, so copying either wholesale would
-	// describe pages the output does not have. Each needs the kind of remapping
-	// resolveSplitBookmarks does for the outline: Split and Merge rebuild
-	// /PageLabels for the pages they write (see [splitPageLabels] and
-	// [mergePageLabels]), and carry no structure tree, a larger change than
-	// this list. The 6.8.3.3 failure that leaves is honest.
+	// describe pages the output does not have. The caller rebuilds both for the
+	// pages it copies instead: the elements of those pages (see newStructSource
+	// and structOutput) and their labels (see [splitPageLabels] and
+	// [mergePageLabels]).
 	//
 	// /Collection marks a PDF Portfolio (ISO 32000-1, 12.3.5), whose payload is
 	// the embedded file set rebuildEmbeddedFiles already carries. Measured: a

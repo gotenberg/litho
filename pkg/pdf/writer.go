@@ -1148,12 +1148,23 @@ func (w *Writer) DeletePages(pages ...int) error {
 //     covers bytes of the source file the document does not hold (ISO
 //     32000-1, 12.8.1). Its widget's appearance is drawn into the page
 //     content, as [Writer.FlattenForm] draws one, and the widget removed, so
-//     the page looks as it did. In a tagged document the drawing is marked as
-//     an artifact: the insertion carries the source's pages, not its
-//     structure, so no structure element encloses it. A widget a viewer does
-//     not display, or with no area as an invisible signature has, goes
-//     without drawing. An unsigned signature field signs nothing and is
-//     listed like any other field.
+//     the page looks as it did. The drawing is tagged under the structure
+//     element that enclosed the widget when the pages bring their structure,
+//     and marked as an artifact in a tagged document they bring none to. A
+//     widget a viewer does not display, or with no area as an invisible
+//     signature has, goes without drawing. An unsigned signature field signs
+//     nothing and is listed like any other field.
+//   - The structure elements describing the inserted pages (ISO 32000-1,
+//     14.7) join the document's structure tree, before the elements of the
+//     pages that follow them, as a later source's join a [Merge]'s: into the
+//     document's Document element when both roots hold one (ISO 14289-2,
+//     8.2.5.2), their structure keys numbered after the document's, and a
+//     structure type, class or element identifier the document defines
+//     otherwise renamed. A document with no structure tree gets one holding
+//     the inserted pages' elements. Pages from a source with none join a
+//     tagged document outside its tree, and so do pages of any source when the
+//     document's /ParentTree or /IDTree cannot be read whole, which leaves its
+//     tree as it was.
 //   - The header declares at least the version source declares, and a
 //     catalog /Version the document carries is raised to the version source
 //     reads as ([Reader.Version]), so pages from a PDF 2.0 source never land
@@ -3678,6 +3689,16 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 // (ISO 32000-1, 12.4.2) are rebuilt for the pages it holds, in their order. A
 // src with no page labels gives an output with none.
 //
+// The output carries the logical structure of the extracted pages (ISO
+// 32000-1, 14.7): the structure elements describing content on them, with
+// their ancestors, and the /ParentTree, /IDTree, /RoleMap, /ClassMap,
+// /Namespaces and associated files of the tree's root. An element describing
+// only pages left out goes, and so does one whose every kid went, since it
+// describes nothing the output holds; the root's single Document element
+// stays. A signed signature's drawing is tagged under the element that
+// enclosed its widget. The pages of a source whose /ParentTree cannot be read
+// whole are extracted without their structure.
+//
 // Split reads a copy of src's document, as a [Writer] edits one, so src is
 // left as it was and other goroutines may read it meanwhile.
 func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ...WriteOption) (err error) {
@@ -3745,6 +3766,18 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 // Each page keeps the label it displays in its source (ISO 32000-1, 12.4.2).
 // The pages of a source with no page labels show their page numbers in it,
 // and an output none of whose sources has page labels has none.
+//
+// The output holds one structure tree over every tagged source (ISO 32000-1,
+// 14.7). The first tagged source's tree is its top. A later source's elements
+// go into its Document element when the roots of both hold one, so the root
+// keeps the single Document ISO 14289-2, 8.2.5.2 asks for, and beside it
+// otherwise. Each source's structure keys are numbered after the previous
+// one's, so no two sources claim one /ParentTree entry, and a structure type,
+// class or element identifier a later source defines otherwise than an
+// earlier one is renamed in the later one. A source whose catalog names
+// another language than the output's states it on its top-level elements. The
+// pages of an untagged source stay outside the tree, and the output's
+// /MarkInfo is the first source's, as its other catalog entries are.
 //
 // Merge reads a copy of each source's document, as [Split] does, so the
 // sources are left as they were and other goroutines may read them

@@ -40,8 +40,8 @@ func documentLevelPDF() []byte {
 // /PronunciationLexicon through both operations.
 //
 // Both describe the document rather than any page, so they satisfy the rule
-// copyCatalogEntries states for itself, and neither needs the remapping that
-// keeps /StructTreeRoot and /PageLabels out. Measured before the fix: a
+// copyCatalogEntries states for itself, and neither needs the remapping by page
+// that /StructTreeRoot takes and /PageLabels would. Measured before the fix: a
 // one-lexicon document came out of a split and a merge with none, and a
 // portfolio came out keeping its embedded file while [pdf.Reader.IsPortfolio]
 // answered false over it.
@@ -126,7 +126,7 @@ func TestSplitMerge_StillRefusePageKeyedEntries(t *testing.T) {
 		t.Fatalf("Split: %v", err)
 	}
 	out, _ := catalogKeysOf(t, split.Bytes())
-	for _, key := range []ast.PdfName{"StructTreeRoot", "PageLabels"} {
+	for _, key := range []ast.PdfName{"PageLabels"} {
 		if _, ok := out[key]; ok {
 			t.Errorf("split carried page-keyed %s without remapping it", key)
 		}

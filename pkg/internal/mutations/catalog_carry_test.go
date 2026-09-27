@@ -61,11 +61,6 @@ func TestSplitMerge_KeepConformanceEntries(t *testing.T) {
 		if _, ok := trailer["ID"]; !ok {
 			t.Errorf("%s dropped the trailer /ID", what)
 		}
-		// Page-keyed entries stay out: copying them wholesale would describe
-		// pages the output does not have.
-		if _, ok := catalog["StructTreeRoot"]; ok {
-			t.Errorf("%s carried /StructTreeRoot without remapping it", what)
-		}
 	}
 
 	doc, _ := newMutationDoc(t, conformantPDF())

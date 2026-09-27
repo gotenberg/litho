@@ -25,11 +25,12 @@ import (
 // below one that is not signed leaves its parent's /Kids too (see
 // [pruneNestedSignedFields]).
 //
-// artifacts marks each drawn appearance as an artifact. It is for a tagged
-// output that carries none of doc's structure, where no structure element
-// encloses the copied widget (see [artifactTags]). Otherwise the output has no
-// structure tree, and the appearance is drawn unmarked, as [FlattenForm] draws
-// one in an untagged document.
+// marking says how each drawn appearance is marked (see [bakeMarking]): tagged
+// under the structure element that enclosed its widget when the output carries
+// doc's structure, as [FlattenForm] tags one (see [flattenTags]), marked as an
+// artifact in a tagged output that carries none of it, and unmarked in an
+// output with no structure tree. The elements the tagging rewrites join the
+// overrides, so the copy carries them.
 //
 // A widget that shows nothing leaves without drawing: one the viewer does not
 // display (Hidden or NoView, ISO 32000-1, Table 165), one with no area, as an
@@ -56,7 +57,7 @@ func bakeSignedSignatures(
 	doc *document.Document,
 	pages []*document.Page,
 	overrides map[int]ast.PdfObject,
-	artifacts bool,
+	marking bakeMarking,
 ) (map[int]ast.PdfObject, error) {
 	var signed []*document.Page
 	seen := make(map[int]bool, len(pages))
@@ -84,8 +85,16 @@ func bakeSignedSignatures(
 		alloc.AllocAt(num, obj)
 	}
 	var tags *flattenTags
-	if artifacts {
+	switch marking {
+	case bakeArtifacts:
 		tags = artifactTags()
+	case bakeTagged:
+		if catalogRef, ok := CatalogRef(ctx, doc); ok {
+			if catalog, err := LiveCatalogDict(ctx, alloc, doc, catalogRef); err == nil {
+				tags = newFlattenTags(ctx, alloc, doc, catalogRef, catalog)
+			}
+		}
+	case bakeUnmarked:
 	}
 	for _, page := range signed {
 		if err := ctx.Err(); err != nil {
@@ -98,9 +107,32 @@ func bakeSignedSignatures(
 			return signedWidgetOutcome(ctx, doc, alloc, annotDict)
 		})
 	}
+	if err := tags.commit(ctx, alloc, doc); err != nil {
+		return nil, fmt.Errorf("tagging the signatures drawn into their pages: %w", err)
+	}
 	pruneNestedSignedFields(ctx, alloc, doc)
 	return alloc.Pending(), nil
 }
+
+// bakeMarking is how [bakeSignedSignatures] marks the appearances it draws
+// into page content, which ISO 14289-1, 7.1 and ISO 14289-2, 8.2.2 require to
+// be tagged as real content or marked as an artifact in a tagged document.
+type bakeMarking int
+
+const (
+	// bakeUnmarked draws each appearance unmarked, for an output with no
+	// structure tree, as [FlattenForm] draws one in an untagged document.
+	bakeUnmarked bakeMarking = iota
+	// bakeArtifacts marks each as an artifact, for a tagged output that
+	// carries none of the source's structure, where no structure element
+	// encloses the copied widget (ISO 32000-1, 14.8.2.2).
+	bakeArtifacts
+	// bakeTagged tags each under the structure element that enclosed its
+	// widget, for an output that carries the source's structure (see
+	// [newStructSource]). A widget no element enclosed is marked as an
+	// artifact, and an untagged source's appearances are drawn unmarked.
+	bakeTagged
+)
 
 // pruneNestedSignedFields takes each signed signature field out of doc's form,
 // queuing in alloc the fields whose /Kids lose one.

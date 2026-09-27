@@ -110,10 +110,9 @@ var pageCopyLinks = []ast.PdfName{"Parent", "B"}
 // Nothing usable is lost. Split and merge build their own flat page tree and
 // assign /Parent to every copied page afterwards, and [copyPageForOutput]
 // materialises the four attributes a page would otherwise inherit through it.
-// The beads go for the reason /StructTreeRoot is not carried either (see
-// copyCatalogEntries): it is keyed to pages the output does not have, and
-// with no /Threads in the new catalog to list them, an article that survived
-// would be unreachable anyway.
+// The beads go because they are keyed to pages the output does not have: each
+// chains to the next bead of its article, and with no /Threads in the new
+// catalog to list them, an article that survived would be unreachable anyway.
 //
 // # Corpus evidence
 //

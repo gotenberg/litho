@@ -89,16 +89,44 @@ func InsertPages(
 			maps.Copy(overrides, fieldOverrides)
 		}
 	}
-	// A tagged target is tagged by the test [FlattenForm] applies, and none of
-	// its structure elements encloses a copied widget: the insertion carries
-	// the source's pages, not its structure.
-	tagged := newFlattenTags(ctx, alloc, doc, catalogRef, catalogDict) != nil
-	overrides, err := bakeSignedSignatures(ctx, srcDoc, pagesToInsert, overrides, tagged)
+	// The inserted pages carry their structure into the target's tree, or into
+	// a tree of their own when the target has none (see [structOutput]). A
+	// target whose tree cannot be extended whole keeps it as it is, and the
+	// pages join it untagged.
+	target, targetUsable, err := newTargetStructOutput(ctx, alloc, doc, catalogRef)
+	if err != nil {
+		return fmt.Errorf("reading the target's structure tree: %w", err)
+	}
+	targetTagged := target != nil || !targetUsable
+	marking := bakeUnmarked
+	switch {
+	case targetUsable && hasStructTree(ctx, srcDoc):
+		marking = bakeTagged
+	case targetTagged:
+		// No structure element of the target encloses a copied widget.
+		marking = bakeArtifacts
+	}
+	overrides, err = bakeSignedSignatures(ctx, srcDoc, pagesToInsert, overrides, marking)
 	if err != nil {
 		return err
 	}
+	var structs *structSource
+	if marking == bakeTagged {
+		structs, overrides, err = newStructSource(ctx, srcDoc, overrides, pagesToInsert)
+		if err != nil {
+			return err
+		}
+	}
 	if len(overrides) > 0 {
 		copier.WithOverrides(overrides)
+	}
+	newTree := false
+	if structs != nil {
+		if target == nil {
+			_, lang := catalogLang(ctx, alloc, doc, catalogDict)
+			target, newTree = newStructOutput(alloc, lang), true
+		}
+		target.expect(structs, copier)
 	}
 	copiedRefs := make([]ast.PdfIndirectRef, len(pagesToInsert))
 	for i, page := range pagesToInsert {
@@ -141,6 +169,18 @@ func InsertPages(
 				at = i
 				break
 			}
+		}
+	}
+
+	if structs != nil {
+		// In a tree of their own the pages' elements are the whole tree. In
+		// the target's they join where their pages did.
+		place := -1
+		if !newTree {
+			place = target.insertionIndex(ctx, structs, current, at)
+		}
+		if err := target.add(ctx, structs, copiedRefs, place); err != nil {
+			return fmt.Errorf("carrying the inserted pages' structure: %w", err)
 		}
 	}
 
@@ -212,5 +252,39 @@ func InsertPages(
 			alloc.AllocAt(catalogRef.ObjectNum, raised)
 		}
 	}
+
+	switch {
+	case structs != nil:
+		// Last, after every copy from the source, whose content may name
+		// structure keys the tree has to carry.
+		rootRef, err := target.finish(ctx)
+		if err != nil {
+			return fmt.Errorf("carrying the inserted pages' structure: %w", err)
+		}
+		catalog, err := LiveCatalogDict(ctx, alloc, doc, catalogRef)
+		if err != nil {
+			return fmt.Errorf("naming the structure tree in the catalog: %w", err)
+		}
+		if current, _ := catalog["StructTreeRoot"].(ast.PdfIndirectRef); current != rootRef {
+			updated := maps.Clone(catalog)
+			updated["StructTreeRoot"] = rootRef
+			alloc.AllocAt(catalogRef.ObjectNum, updated)
+		}
+	case targetTagged:
+		// The inserted content joins a tagged document without its structure,
+		// so its keys index none of the target's /ParentTree entries.
+		stripStructKeys(alloc, copier, copiedRefs)
+	}
 	return nil
+}
+
+// hasStructTree reports whether doc's catalog names a structure tree root
+// (ISO 32000-1, 14.7.2).
+func hasStructTree(ctx context.Context, doc *document.Document) bool {
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil || catalog == nil {
+		return false
+	}
+	root, err := document.ResolveDict(ctx, doc, catalog.Dict["StructTreeRoot"])
+	return err == nil && root != nil
 }
