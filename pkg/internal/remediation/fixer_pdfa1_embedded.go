@@ -137,69 +137,42 @@ func stripEFFromFileSpecs(ctx context.Context, alloc *writer.ObjAllocator, doc *
 		count++
 	}
 
-	return count + stripEFFromDirectFileSpecs(ctx, alloc, doc)
+	inline, err := stripEFFromInlineFileSpecs(ctx, alloc, doc)
+	if err != nil {
+		doc.Logger.Debug("remediation: stripping /EF from inline file specifications stopped", "error", err)
+	}
+	return count + inline
 }
 
-// stripEFFromDirectFileSpecs handles a specification written inline as the /FS
-// value of an annotation. A direct dictionary has no object number of its own,
-// so the enclosing annotation is what gets rewritten, mirroring
-// [fixDirectFileSpecFUF].
-func stripEFFromDirectFileSpecs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) int {
-	catalogRef, ok := catalogRefForFixer(ctx, doc)
-	if !ok {
-		return 0
-	}
-	catalogDict := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
-	if catalogDict == nil {
-		return 0
-	}
-	pagesObj, ok := catalogDict["Pages"]
-	if !ok {
-		return 0
-	}
-
-	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
-
+// stripEFFromInlineFileSpecs removes /EF from every file specification written
+// inline, which ISO 32000-1, 7.11.3 permits, and returns how many it cleared. A
+// direct dictionary has no object number of its own, so the object holding it
+// is what gets rewritten ([rewriteInlineFileSpecs]). It reaches every one
+// §6.1.11 t1 judges: an annotation's /FS, a Screen annotation's media clip at
+// /A/R/C/D, an /AF entry, an inline annotation's, in any object.
+//
+// An inline dictionary without /Type is no file specification to the
+// validator, and keeps its /EF: the repair destroys an attachment only where
+// the rule forbids it. veraPDF reads it the same way, measured on a
+// FileAttachment /FS with /EF and no /Type, which fails neither ISO 19005-1,
+// 6.1.11 t1 nor any ISO 19005-3, 6.8 test, where the same /FS typed /Filespec
+// fails them.
+//
+// # Corpus evidence
+//
+//   - litho inlinefs_4.pdf: two inline /AF entries embed a file, and both
+//     kept ISO 19005-1, 6.1.11 t1 on veraPDF after an aggressive PDF/A-1b
+//     remediation, where litho saw one.
+func stripEFFromInlineFileSpecs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) (int, error) {
 	count := 0
-	seen := make(map[int]bool)
-	for _, pe := range pages {
-		if ctx.Err() != nil {
-			return count
+	_, err := rewriteInlineFileSpecs(ctx, alloc, doc, func(_ int, _ string, spec ast.PdfDict) (ast.PdfObject, bool) {
+		if _, hasEF := spec["EF"]; !hasEF {
+			return nil, false
 		}
-		annots, err := document.ResolveArray(ctx, doc, pe.dict["Annots"])
-		if err != nil {
-			continue
-		}
-		for _, annotObj := range annots {
-			ref, isRef := annotObj.(ast.PdfIndirectRef)
-			if !isRef || ref.ObjectNum <= 0 || seen[ref.ObjectNum] {
-				continue
-			}
-			seen[ref.ObjectNum] = true
-
-			annotDict := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
-			if annotDict == nil {
-				continue
-			}
-			fsDict, direct := annotDict["FS"].(ast.PdfDict)
-			if !direct {
-				continue
-			}
-			if _, hasEF := fsDict["EF"]; !hasEF {
-				continue
-			}
-
-			newFS := make(ast.PdfDict, len(fsDict))
-			maps.Copy(newFS, fsDict)
-			delete(newFS, "EF")
-
-			newAnnot := make(ast.PdfDict, len(annotDict))
-			maps.Copy(newAnnot, annotDict)
-			newAnnot["FS"] = newFS
-			alloc.AllocAt(ref.ObjectNum, newAnnot)
-			count++
-		}
-	}
-	return count
+		stripped := maps.Clone(spec)
+		delete(stripped, "EF")
+		count++
+		return stripped, true
+	})
+	return count, err
 }

@@ -186,24 +186,28 @@ func TestParseEmbeddedObjectContext(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		in     string
-		want   int
-		wantOK bool
+		in       string
+		want     int
+		wantPath string
+		wantOK   bool
 	}{
-		{"object 6: embedded file is not a PDF document", 6, true},
-		{"object 12: embedded file is not a valid PDF", 12, true},
-		{"object 41: embedded file is not compliant with an accepted PDF/A part", 41, true},
-		{"object 0: embedded file is not a PDF document", 0, false},
-		{"object -1: embedded file is not a PDF document", 0, false},
-		{"object : embedded file", 0, false},
-		{"object 6 /Names/EmbeddedFiles", 0, false},
-		{"objects 6: embedded file", 0, false},
-		{"", 0, false},
+		{"object 6: embedded file is not a PDF document", 6, "", true},
+		{"object 12: embedded file is not a valid PDF", 12, "", true},
+		{"object 41: embedded file is not compliant with an accepted PDF/A part", 41, "", true},
+		{"object 5 /AF[0]: embedded file is not a PDF document", 5, "/AF[0]", true},
+		{"object 3 /Annots[1]/A/R/C/D: embedded file is not a valid PDF", 3, "/Annots[1]/A/R/C/D", true},
+		{"object 7 /a: b: embedded file is not a PDF document", 7, "/a: b", true},
+		{"object 0: embedded file is not a PDF document", 0, "", false},
+		{"object -1: embedded file is not a PDF document", 0, "", false},
+		{"object : embedded file is not a PDF document", 0, "", false},
+		{"object 6 /Names/EmbeddedFiles", 0, "", false},
+		{"objects 6: embedded file is not a PDF document", 0, "", false},
+		{"", 0, "", false},
 	} {
-		got, ok := parseEmbeddedObjectContext(tc.in)
-		if got != tc.want || ok != tc.wantOK {
-			t.Errorf("parseEmbeddedObjectContext(%q) = (%d, %v), want (%d, %v)",
-				tc.in, got, ok, tc.want, tc.wantOK)
+		got, path, ok := parseEmbeddedObjectContext(tc.in)
+		if got != tc.want || path != tc.wantPath || ok != tc.wantOK {
+			t.Errorf("parseEmbeddedObjectContext(%q) = (%d, %q, %v), want (%d, %q, %v)",
+				tc.in, got, path, ok, tc.want, tc.wantPath, tc.wantOK)
 		}
 	}
 }

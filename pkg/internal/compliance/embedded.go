@@ -293,7 +293,7 @@ func (fs fileSpecEntry) label() string {
 //   - govdocs thread_400_400002.pdf: 42 /OPI dictionaries name their image
 //     file through an inline /F, and veraPDF reports each under ISO 19005-3,
 //     6.8 t3 and t4 where litho reported none.
-//   - All corpora, the 293 files that hold a file specification, at PDF/A-1b,
+//   - All corpora, the 298 files that hold a file specification, at PDF/A-1b,
 //     2b, 3b, 4, 4f and PDF/UA-1: those three files are the only counts the
 //     wider walk moves, and it costs no measurable time.
 func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []fileSpecEntry {
@@ -643,7 +643,9 @@ func checkCatalogAF(ctx context.Context, doc *document.Document, catalog ast.Pdf
 	var results []Violation
 	for _, fs := range associatedSpecs {
 		// Only an /AF array associates, and it lists indirect objects: a
-		// filespec written inline has no object number an /AF entry could name.
+		// filespec written inline has no object number an /AF entry could name,
+		// and veraPDF fails one even where an /AF array lists it inline,
+		// measured on an inline /AF entry of a Link annotation.
 		if fs.objNum == 0 || !afRefs[fs.objNum] {
 			results = append(results, Violation{
 				Rule:    rule,

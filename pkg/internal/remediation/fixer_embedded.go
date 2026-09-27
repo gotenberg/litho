@@ -49,10 +49,12 @@ func matchEmbeddedSubtype(v compliance.Violation) bool {
 //
 // It reaches the file specifications the validator judges: the values of the
 // /EmbeddedFiles name tree, whatever their /Type (ISO 32000-1, 7.11.4), whose
-// missing /F or /UF it also fills, and every indirect /Type /Filespec
-// dictionary, an annotation's /FS among them, whose embedded files alone it
-// repairs, leaving their /F and /UF to [fixFileSpecFUF]. A file specification
-// written inline in an annotation is not reached.
+// missing /F or /UF it also fills, and every other /Type /Filespec dictionary,
+// indirect or written inline in any object ([rewriteInlineFileSpecs]), whose
+// embedded files alone it repairs, leaving their /F and /UF to
+// [fixFileSpecFUF]. An embedded file is a stream, and so an indirect object
+// (ISO 32000-1, 7.3.8), whoever names it: the repair rewrites the stream and
+// never the object holding an inline file specification.
 //
 // Every dictionary and stream is read through the allocator: string-limit and
 // the other object sweeps ahead of this fixer may have rewritten the name
@@ -66,8 +68,10 @@ func matchEmbeddedSubtype(v compliance.Violation) bool {
 //     has no /Subtype, or /text#232Fplain, and each kept its ISO 19005-3, 6.8
 //     t1 or ISO 19005-4, 6.9 t1 finding after a PDF/A-3b or PDF/A-4
 //     remediation.
-//   - All corpora: no file specification written inline in an annotation
-//     holds an embedded file the validator refuses a media type.
+//   - litho inlinefs_4.pdf: two Links list an embedded file with no valid
+//     media type in an inline /AF entry, one of them a Link written inline in
+//     the page's /Annots, and each kept its ISO 19005-4, 6.9 t1 finding after
+//     a PDF/A-4 remediation.
 func fixEmbeddedSubtype(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -99,6 +103,12 @@ func fixEmbeddedSubtype(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 			continue
 		}
 		patchEmbeddedFileTypes(ctx, alloc, doc, spec, &count)
+	}
+	if _, err := rewriteInlineFileSpecs(ctx, alloc, doc, func(_ int, _ string, spec ast.PdfDict) (ast.PdfObject, bool) {
+		patchEmbeddedFileTypes(ctx, alloc, doc, spec, &count)
+		return nil, false
+	}); err != nil {
+		return nil, err
 	}
 	if count == 0 {
 		return nil, nil

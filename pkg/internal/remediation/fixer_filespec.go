@@ -25,9 +25,18 @@ func matchFileSpecFUF(v compliance.Violation) bool {
 // name, so when exactly one is present the other is filled from it. The repair
 // is render-neutral metadata: it never invents a name (both-missing is left
 // alone, as is an empty source value, since the rules also require the keys to
-// be non-empty), and it does not touch the embedded bytes. Only indirect file
-// spec objects are rewritten, the ones stored in an object stream (ISO
-// 32000-1, 7.5.7) included, for the reason [walkNumberedObjects] gives.
+// be non-empty), and it does not touch the embedded bytes. It repairs every
+// indirect file spec object, the ones stored in an object stream (ISO 32000-1,
+// 7.5.7) included, for the reason [walkNumberedObjects] gives, and every one
+// written inline, which ISO 32000-1, 7.11.3 permits, through the object holding
+// it ([rewriteInlineFileSpecs]), the nearest one the writer can address.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue14203.pdf: a FileAttachment's inline /FS carries /F and no
+//     /UF.
+//   - litho inlinefs_4.pdf: a Link's inline /AF entry carries /F and no /UF,
+//     and kept its ISO 19005-4, 6.9 t2 finding after a PDF/A-4 remediation.
 func fixFileSpecFUF(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	var count int
 	for objNum, entry := range sweptObjects(doc) {
@@ -58,7 +67,16 @@ func fixFileSpecFUF(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 		count++
 	}
 
-	count += fixDirectFileSpecFUF(ctx, alloc, doc)
+	if _, err := rewriteInlineFileSpecs(ctx, alloc, doc, func(_ int, _ string, spec ast.PdfDict) (ast.PdfObject, bool) {
+		patched := fileSpecFUFPatch(ctx, doc, spec)
+		if patched == nil {
+			return nil, false
+		}
+		count++
+		return patched, true
+	}); err != nil {
+		return nil, err
+	}
 
 	if count == 0 {
 		return nil, nil
@@ -96,75 +114,4 @@ func fileSpecFUFPatch(ctx context.Context, doc *document.Document, dict ast.PdfD
 	maps.Copy(newFS, dict)
 	newFS[dstKey] = srcObj
 	return newFS
-}
-
-// fixDirectFileSpecFUF repairs an embedded-file specification written as a
-// direct dictionary in an annotation's /FS.
-//
-// ISO 32000-1, 7.11.3 does not require a file specification to be an indirect
-// object, so the cross-reference sweep above cannot see one written inline. The
-// repair goes through the annotation holding it, the nearest object the writer
-// can address. The annotation is read through the allocator so a pending
-// rewrite from another fixer (the /AFRelationship repair visits the same
-// annotations) is preserved instead of being overwritten with the stale
-// on-disk dictionary.
-func fixDirectFileSpecFUF(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) int {
-	catalogRef, ok := catalogRefForFixer(ctx, doc)
-	if !ok {
-		return 0
-	}
-	catalogDict := resolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
-	if catalogDict == nil {
-		return 0
-	}
-	pagesObj, ok := catalogDict["Pages"]
-	if !ok {
-		return 0
-	}
-
-	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
-
-	count := 0
-	seen := make(map[int]bool)
-	for _, pe := range pages {
-		if ctx.Err() != nil {
-			return count
-		}
-		annots, err := document.ResolveArray(ctx, doc, pe.dict["Annots"])
-		if err != nil {
-			continue
-		}
-		for _, annotObj := range annots {
-			ref, isRef := annotObj.(ast.PdfIndirectRef)
-			if !isRef || ref.ObjectNum <= 0 || seen[ref.ObjectNum] {
-				continue
-			}
-			seen[ref.ObjectNum] = true
-
-			annotDict := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
-			if annotDict == nil {
-				continue
-			}
-			fsDict, direct := annotDict["FS"].(ast.PdfDict)
-			if !direct {
-				continue
-			}
-			if typeName, _ := document.ResolveName(ctx, doc, fsDict["Type"]); typeName != "Filespec" {
-				continue
-			}
-
-			newFS := fileSpecFUFPatch(ctx, doc, fsDict)
-			if newFS == nil {
-				continue
-			}
-
-			newAnnot := make(ast.PdfDict, len(annotDict))
-			maps.Copy(newAnnot, annotDict)
-			newAnnot["FS"] = newFS
-			alloc.AllocAt(ref.ObjectNum, newAnnot)
-			count++
-		}
-	}
-	return count
 }

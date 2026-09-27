@@ -33,12 +33,13 @@ func matchAFRelationship(v compliance.Violation) bool {
 }
 
 // fixAFRelationship adds /AFRelationship /Unspecified to every file specification
-// that lacks one, in both locations the rules cover: the catalog
-// /Names/EmbeddedFiles name tree (§6.8) and the /FS of each FileAttachment
-// annotation (PDF/UA-2 §8.9.2.4.10). /Unspecified is the honest default: the rules
-// require the entry to be present, not a particular relationship, and the source
-// document records no relationship to infer. The repair is additive and never
-// changes what renders.
+// that lacks one, wherever the rules find it: the catalog /Names/EmbeddedFiles
+// name tree (§6.8), the /FS of each FileAttachment annotation (PDF/UA-2
+// §8.9.2.4.10), every indirect /Type /Filespec dictionary, and every one written
+// inline in any object ([inlineFileSpecAF]). /Unspecified is the honest default:
+// the rules require the entry to be present, not a particular relationship, and
+// the source document records no relationship to infer. The repair is additive
+// and never changes what renders.
 func fixAFRelationship(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -62,17 +63,19 @@ func fixAFRelationship(ctx context.Context, alloc *writer.ObjAllocator, doc *doc
 	// /AF for PDF/A-3 targets; parts 2 and 4 carry no such requirement at
 	// this scope.
 	part3 := compliance.PDFAPart(profile) == 3
-	var promoted fileSpecPromotion
+	inline := inlineFileSpecAF{alloc: alloc, promote: part3}
+	if _, err := rewriteInlineFileSpecs(ctx, alloc, doc, inline.repair); err != nil {
+		return nil, err
+	}
+	count += inline.relationships
 	if part3 {
-		promoted = promoteInlineFileSpecs(ctx, doc, alloc, catalogDict)
-		count += promoted.relationships
-		specRefs = associatedFileSpecRefs(specRefs, treeSpecs, promoted.refs)
+		specRefs = associatedFileSpecRefs(specRefs, treeSpecs, inline.promoted)
 	}
 	if count > 0 {
 		fixes = append(fixes, fmt.Sprintf("added /AFRelationship /Unspecified to %d file specs", count))
 	}
-	if len(promoted.refs) > 0 {
-		fixes = append(fixes, fmt.Sprintf("moved %d inline file spec(s) to objects of their own", len(promoted.refs)))
+	if len(inline.promoted) > 0 {
+		fixes = append(fixes, fmt.Sprintf("moved %d inline file spec(s) to objects of their own", len(inline.promoted)))
 	}
 	if part3 && len(specRefs) > 0 {
 		if afFix := ensureCatalogAFRefs(ctx, doc, alloc, catalogRef, specRefs); afFix != "" {
@@ -111,38 +114,18 @@ func associatedFileSpecRefs(typed []int, tree map[int]bool, promoted []int) []in
 	return slices.Sorted(maps.Keys(all))
 }
 
-// maxInlineFileSpecDepth bounds the descent into an annotation's direct
-// values while looking for inline file specifications. Anti-DoS guard, not
-// spec-mandated: indirect values are not followed, so the walk cannot cycle,
-// and only a crafted annotation nests deeper than a handful of levels. It
-// equals compliance's maxAnnotFileSpecDepth, the bound of the walk that finds
-// the file specifications ISO 19005-3, 6.8 t4 judges, so the repair reaches
-// every one that walk reports.
-const maxInlineFileSpecDepth = 16
-
-// fileSpecPromotion is what [promoteInlineFileSpecs] did: the object numbers
-// of the file specifications it moved out of line, in the order it moved
-// them, and how many of them it gave an /AFRelationship.
-type fileSpecPromotion struct {
-	refs          []int
-	relationships int
-}
-
-// promoteInlineFileSpecs moves every file specification written inline in an
-// annotation to an object of its own and writes the annotation back naming it,
-// so an /AF array can list it (ISO 19005-3, 6.8 t4). A file specification
-// without /AFRelationship gets /Unspecified on the way, as the other walks
-// give it (6.8 t3).
+// inlineFileSpecAF repairs the file specifications written inline, the
+// [inlineFileSpecRepair] [fixAFRelationship] hands [rewriteInlineFileSpecs]. It
+// gives each one without /AFRelationship the /Unspecified the other walks give
+// (ISO 19005-3, 6.8 t3 and ISO 19005-4, 6.9 t4), and with promote set moves it
+// to an object of its own, so an /AF array can list it (ISO 19005-3, 6.8 t4).
 //
-// An /AF array lists indirect objects (ISO 32000-2, 14.13), and ISO 32000-1,
-// 7.3.10 makes an indirect reference the same value as the object it names,
-// so the move changes nothing a reader resolves. It reaches what compliance
-// judges: the /Type /Filespec dictionaries at any depth of the direct values
-// of an annotation that is itself an indirect object, an annotation's /FS and
-// a remote go-to action's /F among them. An inline annotation has no object
-// number to write back, and compliance cites none either. Each annotation is
-// read through the allocator, since filespec-fuf, annot-flags and
-// annot-appearance write it ahead of this fixer, and visited once.
+// An /AF array lists indirect objects (ISO 32000-2, 14.13), and veraPDF counts
+// an inline file specification as associated with nothing, even one an /AF
+// array lists inline: measured on an inline /AF entry of a Link annotation,
+// which fails 6.8 t4. ISO 32000-1, 7.3.10 makes an indirect reference the same
+// value as the object it names, so the move changes nothing a reader resolves,
+// and an /AF array that listed the dictionary inline lists the object after it.
 //
 // # Corpus evidence
 //
@@ -151,94 +134,33 @@ type fileSpecPromotion struct {
 //   - litho afref_3b.pdf: a FileAttachment's inline /FS and a Link's /GoToR
 //     /F kept 6.8 t4 after a PDF/A-3b remediation, on litho and veraPDF
 //     alike.
-func promoteInlineFileSpecs(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, catalogDict ast.PdfDict) fileSpecPromotion {
-	var p fileSpecPromotion
-	pagesObj, ok := catalogDict["Pages"]
-	if !ok {
-		return p
-	}
-	var pages []annotPageEntry
-	collectPageRefs(ctx, alloc, doc, pagesObj, &pages, make(map[int]bool), 0)
-
-	seen := make(map[int]bool)
-	for _, pe := range pages {
-		for _, annotObj := range liveArray(ctx, alloc, doc, pe.dict["Annots"]) {
-			if ctx.Err() != nil {
-				return p
-			}
-			ref, isRef := annotObj.(ast.PdfIndirectRef)
-			if !isRef || ref.ObjectNum <= 0 || seen[ref.ObjectNum] {
-				continue
-			}
-			seen[ref.ObjectNum] = true
-			annot := resolveFromAllocOrDoc(ctx, alloc, doc, ref)
-			if annot == nil {
-				continue
-			}
-			if rebuilt, changed := p.value(ctx, doc, alloc, annot, 0); changed {
-				alloc.AllocAt(ref.ObjectNum, rebuilt)
-			}
-		}
-	}
-	return p
+//   - litho inlinefs_4.pdf: the inline /AF entries of a Link written inline,
+//     of a form XObject and of the catalog kept 6.8 t4, and the form's 6.8 t3,
+//     on veraPDF after a PDF/A-3b remediation, where litho reported none.
+type inlineFileSpecAF struct {
+	alloc   *writer.ObjAllocator
+	promote bool
+	// promoted holds the object numbers of the file specifications moved out
+	// of line, in the order they moved.
+	promoted []int
+	// relationships counts the file specifications given an /AFRelationship.
+	relationships int
 }
 
-// value returns obj, a direct value at depth below an annotation, with every
-// file specification inside it moved to an object of its own, and whether
-// anything moved. The annotation itself, at depth 0, is never moved.
-func (p *fileSpecPromotion) value(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, obj ast.PdfObject, depth int) (ast.PdfObject, bool) {
-	if depth > maxInlineFileSpecDepth || ctx.Err() != nil {
-		return obj, false
+func (r *inlineFileSpecAF) repair(_ int, _ string, spec ast.PdfDict) (ast.PdfObject, bool) {
+	patched, added := spec, false
+	if _, ok := spec["AFRelationship"]; !ok {
+		patched = maps.Clone(spec)
+		patched["AFRelationship"] = ast.PdfName("Unspecified")
+		r.relationships++
+		added = true
 	}
-	switch v := obj.(type) {
-	case ast.PdfArray:
-		var rebuilt ast.PdfArray
-		for i, item := range v {
-			nv, changed := p.value(ctx, doc, alloc, item, depth+1)
-			if !changed {
-				continue
-			}
-			if rebuilt == nil {
-				rebuilt = slices.Clone(v)
-			}
-			rebuilt[i] = nv
-		}
-		if rebuilt == nil {
-			return obj, false
-		}
-		return rebuilt, true
-	case ast.PdfDict:
-		// Sorted, so the promoted objects take their numbers in a stable
-		// order and the output bytes do not vary between runs.
-		var rebuilt ast.PdfDict
-		for _, key := range sortedDictKeys(v) {
-			nv, changed := p.value(ctx, doc, alloc, v[key], depth+1)
-			if !changed {
-				continue
-			}
-			if rebuilt == nil {
-				rebuilt = maps.Clone(v)
-			}
-			rebuilt[key] = nv
-		}
-		if typeName, _ := document.ResolveName(ctx, doc, v["Type"]); depth == 0 || typeName != "Filespec" {
-			if rebuilt == nil {
-				return obj, false
-			}
-			return rebuilt, true
-		}
-		if rebuilt == nil {
-			rebuilt = maps.Clone(v)
-		}
-		if _, ok := rebuilt["AFRelationship"]; !ok {
-			rebuilt["AFRelationship"] = ast.PdfName("Unspecified")
-			p.relationships++
-		}
-		ref := alloc.Alloc(rebuilt)
-		p.refs = append(p.refs, ref.ObjectNum)
-		return ref, true
+	if !r.promote {
+		return patched, added
 	}
-	return obj, false
+	ref := r.alloc.Alloc(patched)
+	r.promoted = append(r.promoted, ref.ObjectNum)
+	return ref, true
 }
 
 // fixAFOnAllFilespecs walks every indirect object and adds /AFRelationship
