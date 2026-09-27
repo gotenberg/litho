@@ -110,11 +110,11 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 				modified = true
 			}
 		}
-		if !modified || pe.ref.ObjectNum == 0 {
-			continue
+		// A page written directly in its parent's /Kids is written back
+		// there ([writeTreeNode]).
+		if modified && writeTreeNode(ctx, alloc, doc, pe, newPage) {
+			count++
 		}
-		alloc.AllocAt(pe.ref.ObjectNum, newPage)
-		count++
 	}
 	// A box on an interior /Pages node is inherited by every page under it
 	// (ISO 32000-1, 7.7.3.4, Table 30), so it is just as much a page boundary

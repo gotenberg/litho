@@ -204,6 +204,13 @@ func writeTreeNode(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	return writeTreeNode(ctx, alloc, doc, *node.parent, newParent)
 }
 
+// treeNodeWritable reports whether [writeTreeNode] has a place to write the
+// page tree node the walk reached as node: its object number, or its place in
+// the /Kids of the node the walk listed it in.
+func treeNodeWritable(node annotPageEntry) bool {
+	return node.ref.ObjectNum > 0 || node.parent != nil
+}
+
 // resourcesHolder returns the node of the page tree whose /Resources the page's
 // content resolves its names against ([resourcesNode]), and false when that
 // entry is no dictionary or no node states one: the page then resolves no name

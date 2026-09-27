@@ -478,9 +478,9 @@ func fixForbiddenActionsOnPages(ctx context.Context, s *actionSplice, catalog as
 			pageFixes, newPage := removeForbiddenFromAA(ctx, s, pageDict, aaObj, fmt.Sprintf("page %d", pageNum))
 			if newPage != nil {
 				pageDict = newPage
-				if pe.ref.ObjectNum > 0 {
-					alloc.AllocAt(pe.ref.ObjectNum, pageDict)
-				}
+				// A page written directly in its parent's /Kids is written
+				// back there ([writeTreeNode]).
+				writeTreeNode(ctx, alloc, doc, pe, pageDict)
 			}
 			fixes = append(fixes, pageFixes...)
 		}

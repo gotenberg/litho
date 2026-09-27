@@ -299,7 +299,7 @@ func readAnnotSheets(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			sh.subtypes[i], _ = document.ResolveName(ctx, doc, dict["Subtype"])
 		}
 		annotsRef, isRef := annotsObj.(ast.PdfIndirectRef)
-		sh.writable = pe.ref.ObjectNum > 0 || (isRef && annotsRef.ObjectNum > 0)
+		sh.writable = treeNodeWritable(pe) || (isRef && annotsRef.ObjectNum > 0)
 		sheets = append(sheets, sh)
 	}
 	return sheets
@@ -313,22 +313,21 @@ func readAnnotSheets(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 // as the file wrote it (document.ResolveArray): one written back at its own
 // object number would show them the removed annotations, which they read past
 // their pending null and write back with a repair. Each of them reads the array
-// through the page. A page with no object number of its own, which ISO
-// 32000-1, 7.7.3.2 does not allow, leaves the indirect array to write.
+// through the page. A page written directly in its parent's /Kids, which ISO
+// 32000-1, 7.7.3.2, Table 29 does not allow, is written back there
+// ([writeTreeNode]); it used to leave the array to write, and its annotations
+// stayed on it when the array was its own.
 func writeSheetAnnots(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, sh *annotSheet, kept ast.PdfArray) bool {
-	if sh.page.ref.ObjectNum > 0 {
-		pageDict := resolveFromAllocOrDoc(ctx, alloc, doc, sh.page.ref)
-		if pageDict == nil {
-			pageDict = sh.page.dict
-		}
-		newPage := make(ast.PdfDict, len(pageDict))
-		maps.Copy(newPage, pageDict)
+	if treeNodeWritable(sh.page) {
+		newPage := maps.Clone(liveTreeNode(ctx, alloc, doc, sh.page))
 		if len(kept) == 0 {
 			delete(newPage, "Annots")
 		} else {
 			newPage["Annots"] = kept
 		}
-		return alloc.AllocAt(sh.page.ref.ObjectNum, newPage)
+		if writeTreeNode(ctx, alloc, doc, sh.page, newPage) {
+			return true
+		}
 	}
 	if annotsRef, isRef := sh.annotsObj.(ast.PdfIndirectRef); isRef && annotsRef.ObjectNum > 0 {
 		return alloc.AllocAt(annotsRef.ObjectNum, kept)
@@ -716,8 +715,9 @@ func fieldLabel(ctx context.Context, doc *document.Document, field ast.PdfDict) 
 //
 // An inline annotation is addressed only through its page's /Annots array, so
 // the array is rebuilt with the replacements and written to whichever object
-// owns it: the array itself when indirect, the page otherwise. A page with no
-// object number of its own cannot be written at all, and nothing is reported.
+// owns it: the array itself when indirect, the page otherwise, back into its
+// parent's /Kids for a page written directly there ([writeTreeNode]). A page
+// that cannot be written at all reports nothing.
 func installInlineAnnots(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -744,17 +744,10 @@ func installInlineAnnots(
 		return len(fixed)
 	}
 
-	if pe.ref.ObjectNum <= 0 {
+	newPage := maps.Clone(liveTreeNode(ctx, alloc, doc, pe))
+	newPage["Annots"] = newArr
+	if !writeTreeNode(ctx, alloc, doc, pe, newPage) {
 		return 0
 	}
-
-	pageDict := resolveFromAllocOrDoc(ctx, alloc, doc, pe.ref)
-	if pageDict == nil {
-		pageDict = pe.dict
-	}
-	newPage := make(ast.PdfDict, len(pageDict))
-	maps.Copy(newPage, pageDict)
-	newPage["Annots"] = newArr
-	alloc.AllocAt(pe.ref.ObjectNum, newPage)
 	return len(fixed)
 }

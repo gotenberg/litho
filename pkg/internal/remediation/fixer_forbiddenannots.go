@@ -86,14 +86,15 @@ func fixForbiddenAnnots(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		}
 
 		// Rewrite the /Annots array where it lives: the array object when it is
-		// referenced indirectly, otherwise the page dictionary that inlines it.
+		// referenced indirectly, otherwise the page dictionary that inlines it,
+		// written back into its parent's /Kids when the page is written
+		// directly there ([writeTreeNode]).
 		if ref, ok := annotsObj.(ast.PdfIndirectRef); ok && ref.ObjectNum > 0 {
 			alloc.AllocAt(ref.ObjectNum, filtered)
-		} else if pe.ref.ObjectNum > 0 {
-			newPage := make(ast.PdfDict, len(pe.dict))
-			maps.Copy(newPage, pe.dict)
+		} else {
+			newPage := maps.Clone(liveTreeNode(ctx, alloc, doc, pe))
 			newPage["Annots"] = filtered
-			alloc.AllocAt(pe.ref.ObjectNum, newPage)
+			writeTreeNode(ctx, alloc, doc, pe, newPage)
 		}
 	}
 

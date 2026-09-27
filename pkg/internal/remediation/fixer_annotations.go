@@ -154,16 +154,16 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 
 		pageDict := pe.dict
 
-		// Remove /AA from page dict (section 6.5.2).
+		// Remove /AA from page dict (section 6.5.2). A page written directly
+		// in its parent's /Kids is written back there ([writeTreeNode]).
 		if _, hasAA := pageDict["AA"]; hasAA {
 			newPage := make(ast.PdfDict, len(pageDict))
 			maps.Copy(newPage, pageDict)
 			delete(newPage, "AA")
 			pageDict = newPage
-			if pe.ref.ObjectNum > 0 {
-				alloc.AllocAt(pe.ref.ObjectNum, pageDict)
+			if writeTreeNode(ctx, alloc, doc, pe, pageDict) {
+				fixes = append(fixes, fmt.Sprintf("removed /AA from page %d", i+1))
 			}
-			fixes = append(fixes, fmt.Sprintf("removed /AA from page %d", i+1))
 		}
 
 		annotsObj, ok := pageDict["Annots"]
@@ -185,12 +185,11 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		pageFixes, modified := fixAnnotArray(ctx, alloc, doc, annots, i+1, opts, profile)
 		fixes = append(fixes, pageFixes...)
 
-		if modified && pe.ref.ObjectNum > 0 {
-			// Re-resolve in case the page dict was already replaced above.
-			currentPage := resolveFromAllocOrDoc(ctx, alloc, doc, pe.ref)
-			if currentPage != nil {
-				pageDict = currentPage
-			}
+		if modified {
+			// Re-read in case the page dict was already replaced above: at its
+			// object number, or in its parent's /Kids for a page written
+			// directly there ([liveTreeNode]).
+			pageDict = liveTreeNode(ctx, alloc, doc, pe)
 
 			rebuilt := rebuildAnnotsArray(annots)
 			if annotsRef, isRef := annotsObj.(ast.PdfIndirectRef); isRef {
@@ -199,7 +198,7 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 				newPage := make(ast.PdfDict, len(pageDict))
 				maps.Copy(newPage, pageDict)
 				newPage["Annots"] = rebuilt
-				alloc.AllocAt(pe.ref.ObjectNum, newPage)
+				writeTreeNode(ctx, alloc, doc, pe, newPage)
 			}
 		}
 	}
