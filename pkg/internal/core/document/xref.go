@@ -604,11 +604,27 @@ func (d *Document) validateObjectHeaderFormat(offset int64, objNum int) []error 
 // [nextObjectHeader] still ends the window at the header the object really
 // has.
 //
+// The EOL before endobj is judged whatever the object holds, as ISO 19005-2/3,
+// 6.1.9 and ISO 19005-1 and -4, 6.1.8 require it of every indirect object.
+// veraPDF 1.30.2 does not judge it for an object whose body is one or two
+// integers, such as "8746 endobj": COSParser.nextObject reads the token after
+// an integer to look for the R of a reference, so PDFParser.getObject has
+// already consumed the endobj keyword when it tests the byte before it, and
+// tests the whitespace after the keyword instead. That is a gap of veraPDF's
+// parser, not a reading of the clause, so litho keeps reporting the object.
+//
 // # Corpus evidence
 //
 //   - pdfjs issue15096.pdf: supersedes object 264, whose abandoned copy ends
 //     "endobj " and was reported as object 263's until the window stopped at
 //     the next object header.
+//   - facturx v2__correct_PHP_@gpFacturX_sample_*.pdf, the one file that name matches:
+//     writes the /Length of three streams as "8746 endobj", and litho alone
+//     reports ISO 19005-3, 6.1.9 t1 on it, the one rule-set difference of the
+//     gate's facturx cell.
+//   - pdfjs bug1011159.pdf, issue11004.pdf, issue1045.pdf and issue3566.pdf:
+//     hold 58, 16, 1 and 1 such objects, the whole of litho's 6.1.9 t1 count
+//     on each at PDF/A-2b, where veraPDF 1.30.2 reports none.
 //   - All corpora: forcing the augmentation once a file is open moves 5
 //     objects and adds 465 across 470 files, and every object judged at the
 //     same offset before and after it reports the same findings, whether the
