@@ -1235,7 +1235,8 @@ func walkStructureElementsWithLang(ctx context.Context, doc *document.Document, 
 type structLangVisitor func(elem ast.PdfDict, path string, objNum int, ancestorLang bool)
 
 // walkStructKidsWithLang is the /Lang-tracking twin of [walkStructKids]; seen
-// gives it the same one-visit-per-node guard against a fan-out denial of service.
+// gives it the same one-visit guard, per element and per /K array written as an
+// object of its own, against a fan-out denial of service.
 func walkStructKidsWithLang(ctx context.Context, doc *document.Document, obj ast.PdfObject, path string, seen map[int]bool, depth int, ancestorLang bool, fn structLangVisitor) {
 	if ctx.Err() != nil || depth > maxStructTreeWalkDepth {
 		return
@@ -1256,6 +1257,9 @@ func walkStructKidsWithLang(ctx context.Context, doc *document.Document, obj ast
 			return
 		}
 		visitStructElemWithLang(ctx, doc, dict, path, seen, depth, objNum, ancestorLang, fn)
+		return
+	}
+	if document.VisitedBefore(obj, seen) {
 		return
 	}
 

@@ -1891,7 +1891,9 @@ func structTreeHasActualText(ctx context.Context, doc *document.Document, node a
 // structTreeHasActualTextAt is [structTreeHasActualText] carrying the elements
 // already examined.
 //
-// visited bounds a crafted /K graph. This walk fans out over every kid, so
+// visited bounds a crafted /K graph, holding each element and each /K array
+// written as an object of its own the search has read: direct elements can
+// each name their own /K array again. This walk fans out over every kid, so
 // [maxStructAttrSearchDepth] caps the work at branch^depth rather than at
 // depth: an element whose /K names the same child twice costs 2^30 visits while
 // sitting entirely inside the bound. The answer cannot change, since the
@@ -1907,7 +1909,7 @@ func structTreeHasActualText(ctx context.Context, doc *document.Document, node a
 // encoding naming a CMap litho cannot load leaves [type0CodeSplitter] nil, and
 // that is what routes a document here.
 func structTreeHasActualTextAt(ctx context.Context, doc *document.Document, node ast.PdfDict, visited map[int]bool, depth int) bool {
-	if depth > maxStructAttrSearchDepth {
+	if depth > maxStructAttrSearchDepth || ctx.Err() != nil {
 		return false
 	}
 	if _, ok := node["ActualText"]; ok {
@@ -1918,6 +1920,9 @@ func structTreeHasActualTextAt(ctx context.Context, doc *document.Document, node
 		return false
 	}
 	if arr, _ := document.ResolveArray(ctx, doc, kObj); len(arr) > 0 {
+		if document.VisitedBefore(kObj, visited) {
+			return false
+		}
 		for _, kid := range arr {
 			if ref, isRef := kid.(ast.PdfIndirectRef); isRef {
 				if visited[ref.ObjectNum] {

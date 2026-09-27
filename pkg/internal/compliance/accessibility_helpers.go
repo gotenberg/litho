@@ -88,8 +88,10 @@ func walkStructureElements(ctx context.Context, doc *document.Document, root ast
 // structure element once: the structure tree is a strict tree (ISO 32000-1
 // §14.7.2), so a node reached twice is malformed, and without the guard a
 // crafted /K tree whose every node lists the same child twice fans out 2^depth
-// (a denial of service). The inline-dict path carries no object number, so the
-// depth cap bounds that dimension.
+// (a denial of service). seen holds each /K array written as an object of its
+// own as well: the direct elements such an array holds can each name it again,
+// and walked anew wherever it is reached it fans out 2^depth up to the depth
+// cap.
 func walkStructKids(ctx context.Context, doc *document.Document, obj ast.PdfObject, path string, seen map[int]bool, depth int, fn func(elem ast.PdfDict, path string)) {
 	if ctx.Err() != nil || depth > maxStructTreeWalkDepth {
 		return
@@ -110,6 +112,11 @@ func walkStructKids(ctx context.Context, doc *document.Document, obj ast.PdfObje
 			return
 		}
 		visitStructElem(ctx, doc, dict, path, seen, depth, fn)
+		return
+	}
+	// A /K array written as an object of its own is walked once, as an
+	// element is: its direct elements can each name it again as their /K.
+	if document.VisitedBefore(obj, seen) {
 		return
 	}
 

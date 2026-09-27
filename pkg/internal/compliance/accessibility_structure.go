@@ -506,6 +506,11 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 		return
 	}
 	if arr, _ := document.ResolveArray(ctx, doc, kObj); len(arr) > 0 {
+		// A /K array written as an object of its own is walked once, as an
+		// element is: its direct elements can each name it again as their /K.
+		if document.VisitedBefore(kObj, visited) {
+			return
+		}
 		for _, kid := range arr {
 			walkNSCheckChild(ctx, doc, kid, defaultNSURI, nsRoleMaps, roleMap, results, visited, depth)
 		}
@@ -763,7 +768,8 @@ type significantChild struct {
 // children instead of itself, recursively, because ISO 32000-2:2020, 14.8.4.4
 // defines the three as pure grouping wrappers whose descendants carry the
 // structural meaning. Nesting is bounded by [maxISO32005PassThroughDepth] and
-// by the visited set, so a cyclic or fan-out-heavy wrapper chain cannot make
+// by the visited set, which holds each wrapper and each /K array written as an
+// object of its own, so a cyclic or fan-out-heavy wrapper chain cannot make
 // the walk diverge.
 //
 // Content items are skipped: per ISO 32000-2:2020, Table 355 a structure
@@ -775,7 +781,7 @@ func (r *nsRoleResolver) significantChildren(ctx context.Context, doc *document.
 }
 
 // significantChildrenAt is [nsRoleResolver.significantChildren] carrying the
-// object numbers already expanded on the current pass-through spine.
+// object numbers of the wrappers and /K arrays already expanded.
 func (r *nsRoleResolver) significantChildrenAt(ctx context.Context, doc *document.Document, node ast.PdfDict, depth int, visited map[int]bool) []significantChild {
 	if ctx.Err() != nil || depth > maxISO32005PassThroughDepth {
 		return nil
@@ -787,6 +793,10 @@ func (r *nsRoleResolver) significantChildrenAt(ctx context.Context, doc *documen
 	items, err := document.ResolveArray(ctx, doc, kObj)
 	if err != nil {
 		items = ast.PdfArray{kObj}
+	} else if document.VisitedBefore(kObj, visited) {
+		// A /K array written as an object of its own is expanded once: the
+		// direct wrappers it holds can each name it again as their /K.
+		return nil
 	}
 
 	var out []significantChild
@@ -905,6 +915,12 @@ func collectFENoteRefGraph(ctx context.Context, doc *document.Document, r *nsRol
 			return
 		}
 		if arr, err := document.ResolveArray(ctx, doc, obj); err == nil {
+			// An array written as an object of its own is walked once: one
+			// that names itself, or whose direct kids name it, would fan out
+			// 2^depth.
+			if document.VisitedBefore(obj, seen) {
+				return
+			}
 			for _, kid := range arr {
 				visit(kid, depth+1)
 			}

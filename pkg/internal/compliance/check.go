@@ -587,7 +587,10 @@ const maxPageTreeDepth = 100
 // node visited so a shared or cyclic /Kids tree is traversed once: a page tree
 // is a strict tree (ISO 32000-1 §7.7.3.2), so a node reached again is
 // malformed, and without the guard a crafted tree whose every node lists the
-// same child twice fans out 2^depth (a denial of service).
+// same child twice fans out 2^depth (a denial of service). seen holds each
+// /Kids array written as an object of its own too, as [document.ResolvePages]
+// does: direct nodes that each name their own array again would fan it out the
+// same way.
 func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.PdfObject, parent *pageTreeNode, key string, pages *[]pageObject, seen map[int]bool, depth int) {
 	if ctx.Err() != nil || depth > maxPageTreeDepth {
 		return
@@ -613,7 +616,7 @@ func collectPagesRecursive(ctx context.Context, doc *document.Document, obj ast.
 		return
 	}
 	kids, err := document.ResolveArray(ctx, doc, dict["Kids"])
-	if err != nil {
+	if err != nil || document.VisitedBefore(dict["Kids"], seen) {
 		return
 	}
 	node := &pageTreeNode{dict: dict, objNum: objNum, key: key, parent: parent}

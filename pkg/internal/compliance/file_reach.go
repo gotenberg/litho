@@ -414,6 +414,11 @@ func (w *structValueWalk) children(ctx context.Context, site propertyListSite, n
 	case ast.PdfDict:
 		w.element(ctx, site.child("K", raw), raw, kids, depth)
 	case ast.PdfArray:
+		// An array written as an object of its own is walked once, as an
+		// element is: its direct elements can each name it again as their /K.
+		if document.VisitedBefore(raw, w.seen) {
+			return
+		}
 		for _, kid := range kids {
 			elem, err := document.ResolveDict(ctx, w.doc, kid)
 			if err != nil || elem == nil {

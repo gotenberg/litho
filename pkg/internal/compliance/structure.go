@@ -704,10 +704,12 @@ type walkState struct {
 	// root see that element's own type, which is where veraPDF's climb stops.
 	ua1Parent ua1ParentRef
 
-	// seen records every structure element visited so the walk processes each
-	// once. The structure tree is a strict tree (ISO 32000-1 §14.7.2); without
-	// this a crafted /K tree whose every node lists the same child twice fans
-	// out 2^depth (a denial of service).
+	// seen records every structure element, and every /K array written as an
+	// object of its own, visited so the walk processes each once. The
+	// structure tree is a strict tree (ISO 32000-1 §14.7.2); without this a
+	// crafted /K tree whose every node lists the same child twice, or whose
+	// direct elements each name their own /K array again, fans out 2^depth (a
+	// denial of service).
 	seen map[int]bool
 }
 
@@ -750,6 +752,15 @@ func walkChildren(ctx context.Context, state *walkState, kObj ast.PdfObject, par
 			return
 		}
 		walkElement(ctx, state, dict, parentType, depth, lastHeadingLevel)
+		return
+	}
+	// A /K array written as an object of its own is walked once, as an
+	// element is: its direct elements can each name it again as their /K, and
+	// walked anew wherever it is reached it fans out 2^depth up to
+	// [maxStructTreeDepth]. veraPDF walks such an array wherever it is
+	// reached; litho walks it once, a deliberate divergence and an anti-DoS
+	// guard, as [walkActionChain] does for /Next.
+	if document.VisitedBefore(kObj, state.seen) {
 		return
 	}
 
@@ -1552,7 +1563,9 @@ func feNoteType(ctx context.Context, state *walkState, elem ast.PdfDict) string 
 // structure-element kid, so a /Ref on a child identifies a TOCI's target as well
 // as one on the TOCI itself. A kid whose /Type names something other than
 // StructElem (an MCR or OBJR) is no structure element, as isStructElem reads it.
-// Recursion is bounded by [maxStructTreeWalkDepth]; visited guards cycles.
+// Recursion is bounded by [maxStructTreeWalkDepth]; visited guards cycles and
+// fan-out, holding each element and each /K array written as an object of its
+// own that the search has read.
 func structElemContainsRef(ctx context.Context, doc *document.Document, elem ast.PdfDict, depth int, visited map[int]bool) bool {
 	if _, ok := elem["Ref"]; ok {
 		return true
@@ -1567,6 +1580,8 @@ func structElemContainsRef(ctx context.Context, doc *document.Document, elem ast
 	kids, err := document.ResolveArray(ctx, doc, kObj)
 	if err != nil {
 		kids = ast.PdfArray{kObj}
+	} else if document.VisitedBefore(kObj, visited) {
+		return false
 	}
 	for _, kid := range kids {
 		if ref, isRef := kid.(ast.PdfIndirectRef); isRef {
@@ -1603,13 +1618,23 @@ func structClassMap(ctx context.Context, doc *document.Document, structTreeRoot 
 // its own kids. Both levels are read by standard type, as [iso32005Kids] reads
 // them: the /RoleMap applies first (ISO 32000-2:2020, 14.8.6), and a Div, Part,
 // or NonStruct kid contributes its own kids in its place. veraPDF decides
-// containsLabels the same way (GFSEL.getcontainsLabels).
+// containsLabels the same way (GFSEL.getcontainsLabels). Each wrapper and /K
+// array is read once, as [iso32005KidsAt] reads them.
 //
 // # Corpus evidence
 //
 //   - govdocs thread_300_300035.pdf: labels its items with LI_Label, which
 //     its role map maps to Lbl.
 func listContainsLabels(ctx context.Context, state *walkState, elem ast.PdfDict, depth int) bool {
+	return listContainsLabelsAt(ctx, state, elem, depth, make(map[int]bool))
+}
+
+// listContainsLabelsAt is [listContainsLabels] carrying the wrappers and /K
+// arrays it has read.
+func listContainsLabelsAt(ctx context.Context, state *walkState, elem ast.PdfDict, depth int, expanded map[int]bool) bool {
+	if ctx.Err() != nil {
+		return false
+	}
 	kObj, ok := elem["K"]
 	if !ok {
 		return false
@@ -1617,6 +1642,8 @@ func listContainsLabels(ctx context.Context, state *walkState, elem ast.PdfDict,
 	items, err := document.ResolveArray(ctx, state.doc, kObj)
 	if err != nil {
 		items = ast.PdfArray{kObj}
+	} else if document.VisitedBefore(kObj, expanded) {
+		return false
 	}
 	for _, item := range items {
 		d, derr := document.ResolveDict(ctx, state.doc, item)
@@ -1632,8 +1659,8 @@ func listContainsLabels(ctx context.Context, state *walkState, elem ast.PdfDict,
 			if kidKeys, _ := iso32005Kids(ctx, state, d); slices.Contains(kidKeys, "Lbl") {
 				return true
 			}
-		case iso32005PassThroughTypes[key] && depth < maxISO32005PassThroughDepth:
-			if listContainsLabels(ctx, state, d, depth+1) {
+		case iso32005PassThroughTypes[key] && depth < maxISO32005PassThroughDepth && !document.VisitedBefore(item, expanded):
+			if listContainsLabelsAt(ctx, state, d, depth+1, expanded) {
 				return true
 			}
 		}

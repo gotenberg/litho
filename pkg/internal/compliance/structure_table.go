@@ -260,11 +260,16 @@ type tableKid struct {
 //   - govdocs thread_100_100945.pdf: holds its rows in TableHead and TableBody
 //     elements its role map maps to THead and TBody.
 func tableKids(ctx context.Context, state *walkState, elem ast.PdfDict) []tableKid {
-	return tableKidsAt(ctx, state, elem, 0)
+	return tableKidsAt(ctx, state, elem, 0, make(map[int]bool))
 }
 
-// tableKidsAt is [tableKids] carrying the pass-through nesting depth.
-func tableKidsAt(ctx context.Context, state *walkState, elem ast.PdfDict, depth int) []tableKid {
+// tableKidsAt is [tableKids] carrying the pass-through nesting depth, and in
+// expanded the wrappers and /K arrays it has expanded, each once, as
+// [iso32005KidsAt] expands them.
+func tableKidsAt(ctx context.Context, state *walkState, elem ast.PdfDict, depth int, expanded map[int]bool) []tableKid {
+	if ctx.Err() != nil {
+		return nil
+	}
 	kObj, ok := elem["K"]
 	if !ok {
 		return nil
@@ -272,6 +277,8 @@ func tableKidsAt(ctx context.Context, state *walkState, elem ast.PdfDict, depth 
 	items, err := document.ResolveArray(ctx, state.doc, kObj)
 	if err != nil {
 		items = ast.PdfArray{kObj}
+	} else if document.VisitedBefore(kObj, expanded) {
+		return nil
 	}
 	var kids []tableKid
 	for _, item := range items {
@@ -285,8 +292,8 @@ func tableKidsAt(ctx context.Context, state *walkState, elem ast.PdfDict, depth 
 		}
 		key := iso32005Key(ctx, state, d, s)
 		if iso32005PassThroughTypes[key] {
-			if depth < maxISO32005PassThroughDepth {
-				kids = append(kids, tableKidsAt(ctx, state, d, depth+1)...)
+			if depth < maxISO32005PassThroughDepth && !document.VisitedBefore(item, expanded) {
+				kids = append(kids, tableKidsAt(ctx, state, d, depth+1, expanded)...)
 			}
 			continue
 		}
