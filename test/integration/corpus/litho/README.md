@@ -183,6 +183,7 @@ one deliberately rather than diffing it against a fresh build.
 | `viewerboxes_2b.pdf`   | PDF/A-2b     | Boxes veraPDF passes and no viewer uses, under the rewrites      |
 | `gotochain_ua2.pdf`    | PDF/UA-2     | GoTo actions run through `/Next`: arrays, a loop, a shared one   |
 | `emptyfig_ua2.pdf`     | PDF/UA-2     | Figures that enclose nothing, and every reference to them        |
+| `sharedk_ua1.pdf`      | PDF/UA-1     | A structure `/K` array two elements share, direct kids in it     |
 
 ### Must-not-fire controls
 
@@ -410,6 +411,7 @@ violation but is exempt, so a firing is a false positive.
 | `noresources_4`                           | Page 2's annotation appearance, which states no `/Resources` either    | ISO 19005-4, 6.2.2 t3        |
 | `gotochain_ua2`                           | A GoTo action run through `/Next` whose `/SD` names page 1's heading   | ISO 14289-2, 8.8 t2          |
 | `gotochain_ua2`                           | The GoTo action two chains share, a second time                        | one action per object        |
+| `sharedk_ua1`                             | The Figure the two Sects' shared `/K` array holds, a second time       | one element per array read   |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -526,6 +528,7 @@ which are covered under [Known divergences](#known-divergences).
 | `rolemapns_ua2.pdf`    | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 1    |
 | `rolemapscope_ua2.pdf` | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 2    |
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
+| `sharedk_ua1.pdf`      | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 1    | 5    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
 | `sigtagged_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 4    |
 | `structcopy_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 3    | 0    |
@@ -5663,16 +5666,59 @@ action to page 2. The default mode leaves the eleven findings on both tools, as
 before. Remediation at the six PDF/A manifest profiles and at WTPDF-1.0 Reuse,
 default and aggressive, leaves nothing on either tool.
 
+### `sharedk_ua1.pdf`
+
+ISO 32000-1, 14.7.2 makes the structure tree a strict tree, and Table 323 lets
+an element's `/K` be an array, which a file may write as an object of its own
+(7.3.10). A walk down `/K` that remembers the elements it met, and not the
+arrays it read, reads such an array again wherever it is reached, and so reads
+the elements written directly in it again: no object number marks them. Were
+those direct elements to name the array again as their own `/K`, the work
+would double at every level, and a four-object file ran every validation,
+remediation and page copy until the caller's timeout. No corpus file names a
+`/K` or `/Kids` array from two places, so this file does, once, in a tagged
+page whose `Document` holds a paragraph and two `Sect` elements:
+
+| Element       | `/K`                                                                        |
+| ------------- | --------------------------------------------------------------------------- |
+| `P`           | MCID 0, a filled rectangle on the page                                      |
+| First `Sect`  | the array object both `Sect` elements name: a `Figure` and a `Span`, direct |
+| Second `Sect` | the same array object                                                       |
+
+The `Figure` has no alternate text. litho reads the shared array once and
+reports it once, as veraPDF 1.30.2 does: the file agrees with veraPDF in all
+thirteen cells, rule for rule and count for count. PDF/UA-1 reports `7.3/1`.
+PDF/UA-2 reports `8.2.5.28.2/1`, the `Span` under a `Sect` (`Table 5.
+Sect-Span/1`), the part-1 claim and the missing `pdfuaid:rev` (`5/2`, `5/5`)
+and the `Document` outside the PDF 2.0 namespace (`8.2.5.2/2`). The PDF/A cells
+report the rectangle painted in device gray with no output intent (`6.2.3.3/3`
+at part 1, `6.2.4.3/4` from part 2) and the missing PDF/A identification;
+parts 1 to 3 add the `pdfuaid` property no extension schema declares, part 4
+the `%PDF-1.7` header (`6.1.2/1`), and PDF/A-4f the missing `/EmbeddedFiles`.
+
+Measured on litho before the fix, the walks read the array under each `Sect`
+and reported the `Figure` twice, `7.3/1`, `8.2.5.28.2/1` and `Table 5.
+Sect-Span/1` each twice, against veraPDF's once. Remediation at the eight
+manifest profiles, default and aggressive, leaves nothing at the six PDF/A
+profiles on either tool, and at PDF/UA-1 and PDF/UA-2 leaves the `Figure` on
+both: alternate text goes on a `Figure` written as an object of its own, and
+this one is written directly in the array. A split naming the page twice, a
+merge of the file with itself and an insertion of it into itself copy the tree
+twice, and each copy holds a `Figure` written directly in an array: litho
+reports each, twice in all, and veraPDF reports one, as it reports one for two
+`Figure` elements written directly in two arrays of a single tree. The rule
+sets agree.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 130 x 8 = 1040 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 130 x 13 = 1690 cells. litho
+runner scores 132 x 8 = 1056 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 132 x 13 = 1716 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1688 of the 1690 cells. The two
+fixtures exist to protect, and it holds in 1714 of the 1716 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -5684,7 +5730,7 @@ seven is non-compliant on both sides (`baretree_2b`, `pagelabels_2b` and
 `viewerboxes_2b` at PDF/A-2b; `formhidden_ua1` and `sigtagged_ua1` at PDF/UA-1;
 and `outlinedest_ua2` and `structcopy_ua2` at PDF/UA-2 are the corpus's
 conforming cells), so a change that drops or invents a rule class leaves
-`matched` at 1040 and moves only `ruleset_mismatch`, and on those seven cells it
+`matched` at 1056 and moves only `ruleset_mismatch`, and on those seven cells it
 moves both. Both exceptions sit in the manifest's profiles, `complex_ua2` at
 PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus, and the text
 scoreboard names the rules only one side reports. A third cell in the runner is
