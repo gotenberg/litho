@@ -256,8 +256,7 @@ Cross-tool comparisons live behind small normalisations so equivalent inputs do 
 | `pdf20`   | 7 PDFs (1 fixture per claim)      | PDF Association's `pdf20examples` (CC-BY-SA-4.0 PDF 2.0 samples)                                                                                                        |
 | `pdfcpu`  | ~50 PDFs (1 fixture each)         | pdfcpu's `pkg/samples/bookmarks` + `pkg/testdata` (Apache-2.0)                                                                                                          |
 | `facturx` | ~150 PDFs (1 fixture per claim)   | ZUGFeRD/corpus (Apache-2.0): real, sample and intentionally-broken Factur-X / ZUGFeRD invoices, flattened from the `ZUGFeRDv2`, `XML-Rechnung` and `ZUGFeRDv1` subtrees |
-| `litho`   | 132 PDFs × 8 profiles             | Self-authored, committed in-tree; see `corpus/litho/README.md`                                                                                                          |
-| `litho`   | 131 PDFs × 8 profiles             | Self-authored, committed in-tree; see `corpus/litho/README.md`                                                                                                          |
+| `litho`   | 133 PDFs × 8 profiles             | Self-authored, committed in-tree; see `corpus/litho/README.md`                                                                                                          |
 
 Fixture ID format depends on the corpus's `profile_mode` (see manifest schema):
 
