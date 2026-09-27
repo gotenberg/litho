@@ -262,14 +262,6 @@ const mutationRedactReach = 1e6
 //     ErrRedactionRefused (content a form XObject draws, an inline image, a
 //     stroked path) and 9 with ErrRedactionIncomplete; the 2 encrypted
 //     fixtures refuse the signature.
-//   - litho resinherit_2b: 6 ruleset_changed cells under mutate-stamp and 6
-//     under mutate-pages, and a qpdf "Resources is missing" warning under
-//     mutate-pages. The stamp, the page copy and the flat tree a deletion
-//     rebuilds write a page's /Resources from the page tree's key-by-key
-//     merge, which lets a page name fonts ISO 32000-1, 7.7.3.4 hides from it.
-//     The stamp also drops what a null /Resources inherits, and the rebuilt
-//     tree leaves the pages with a null or dangling /Resources none at all.
-//     veraPDF reports the same rule set on the outputs. A mutation defect.
 //   - litho imagereach_2b: 6 ruleset_changed cells under mutate-stamp and 6
 //     under mutate-pages. veraPDF judges a content stream two pages share once,
 //     through the first page's resources, and the stamp's /Contents arrays and
