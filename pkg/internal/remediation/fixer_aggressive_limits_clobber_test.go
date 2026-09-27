@@ -50,7 +50,7 @@ func deviceNManyColorantsPDF() []byte {
 // THE HELPER MUST MATCH THE OBJECT KIND. resolveFromAllocOrDoc returns a dict
 // and cannot make an array read live. The array read now goes through
 // liveArray, as in the three peers that read the same `entry` value drawn from
-// a /ColorSpace dictionary: patchPageDeviceN (devicen),
+// a /ColorSpace dictionary: deviceNWalk (devicen),
 // eachColorSpaceArrayMutable (sep-canon) and dedupICCInResources (icc-dedup).
 //
 // Peer and ordering are measured, not assumed. aggressive-limits is the LAST

@@ -13,7 +13,7 @@ import (
 // the DeviceN /Colorants repair keeps an earlier fixer's pending write to the
 // same colour-space object.
 //
-// [patchPageDeviceN] hands the DeviceN colour-space array to
+// The /Colorants repair ([deviceNWalk]) hands the DeviceN colour-space array to
 // [buildPatchedDeviceN] and writes the result back at the array's own object
 // number. It used to read that array with document.ResolveArray, consulting no
 // alloc-aware helper, so an earlier fixer's edit to the same colour-space
@@ -95,7 +95,7 @@ func TestPatchPageDeviceN_KeepsAnEarlierFixersPendingColourSpaceWrite(t *testing
 	}
 
 	if alt, _ := got[2].(ast.PdfName); alt != "DeviceRGB" {
-		t.Errorf("the alternate space is %v, want /DeviceRGB: patchPageDeviceN rebuilt "+
+		t.Errorf("the alternate space is %v, want /DeviceRGB: the /Colorants repair rebuilt "+
 			"the DeviceN array from the on-disk copy and discarded the earlier "+
 			"fixer's write; array = %v", got[2], got)
 	}
@@ -189,8 +189,8 @@ func separationColorant(t *testing.T, obj ast.PdfObject) ast.PdfName {
 
 // deviceNIndirectColourSpaceDictPDF stores the page's /ColorSpace DICTIONARY
 // indirectly at object 4 while both colour spaces inside it are INLINE, so
-// patchPageDeviceN reaches its csRef write, the one that rebuilds the whole
-// dictionary. /CSX names its colorant /Sp#E9t, byte 0xE9 on its own being
+// the /Colorants repair rebuilds the whole dictionary at its own number.
+// /CSX names its colorant /Sp#E9t, byte 0xE9 on its own being
 // invalid UTF-8, so name-utf8 has a reason to rewrite object 4 first.
 func deviceNIndirectColourSpaceDictPDF() []byte {
 	return assemblePDF([]string{
@@ -246,7 +246,7 @@ func TestPatchPageDeviceN_KeepsAnEarlierFixersPendingColourSpaceDictWrite(t *tes
 			"dictionary, so this test proves nothing about clobbering; /CSN = %v", csDictObj, got["CSN"])
 	}
 	if name := separationColorant(t, got["CSX"]); name != sanitised {
-		t.Errorf("/CSX names colorant %q, want name-utf8's %q: patchPageDeviceN rebuilt the "+
+		t.Errorf("/CSX names colorant %q, want name-utf8's %q: the /Colorants repair rebuilt the "+
 			"/ColorSpace dictionary from the document and discarded the earlier fixer's write",
 			name, sanitised)
 	}
@@ -320,7 +320,7 @@ func TestPatchPageDeviceN_KeepsAnEarlierFixersPendingResourcesWrite(t *testing.T
 
 			cs := liveResourceColourSpace(t, alloc, doc, resObj)
 			if _, has := cs["DefaultRGB"]; !has {
-				t.Errorf("/DefaultRGB is gone: patchPageDeviceN rebuilt /Resources %d from the "+
+				t.Errorf("/DefaultRGB is gone: the /Colorants repair rebuilt /Resources %d from the "+
 					"document and discarded output-intent's write; /ColorSpace = %v", resObj, cs)
 			}
 			if !hasColorants(cs["CSN"]) {
