@@ -240,6 +240,25 @@ func TestFullRewrite_CarriesADirectInfo(t *testing.T) {
 	}
 }
 
+// latestSourceCase is two documents written as one, and the version the
+// output declares for them.
+type latestSourceCase struct {
+	name                    string
+	first, firstCatalog     string
+	second                  string
+	wantHeader, wantReadsAs string
+}
+
+// latestSourceCases lists the declarations a merge of first and second, and an
+// insertion of second into first, write.
+func latestSourceCases() []latestSourceCase {
+	return []latestSourceCase{
+		{"a later second source raises the copied catalog entry", "1.4", "/Version /1.4", "2.0", "2.0", "2.0"},
+		{"an earlier second source lowers nothing", "2.0", "/Version /1.7", "1.4", "2.0", "1.7"},
+		{"no catalog entry leaves the header to declare", "1.4", "", "2.0", "2.0", "2.0"},
+	}
+}
+
 // TestMerge_DeclaresTheLatestSource pins that a merge declares the latest
 // version among its sources, in the header and in the catalog /Version it
 // copies from the first source.
@@ -251,16 +270,7 @@ func TestFullRewrite_CarriesADirectInfo(t *testing.T) {
 // %PDF-2.0 source with a catalog /1.7 to %PDF-1.7, as a full rewrite did.
 func TestMerge_DeclaresTheLatestSource(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name                    string
-		first, firstCatalog     string
-		second                  string
-		wantHeader, wantReadsAs string
-	}{
-		{"a later second source raises the copied catalog entry", "1.4", "/Version /1.4", "2.0", "2.0", "2.0"},
-		{"an earlier second source lowers nothing", "2.0", "/Version /1.7", "1.4", "2.0", "1.7"},
-		{"no catalog entry leaves the header to declare", "1.4", "", "2.0", "2.0", "2.0"},
-	} {
+	for _, tc := range latestSourceCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
@@ -282,5 +292,99 @@ func TestMerge_DeclaresTheLatestSource(t *testing.T) {
 				t.Errorf("merge reads as version %q, want %q", got, tc.wantReadsAs)
 			}
 		})
+	}
+}
+
+// TestWriter_InsertPages_DeclaresTheLatestSource pins that inserting pages
+// declares what a merge of the same two documents declares: the later version
+// of the two in the header, and in the catalog /Version when the target
+// carries one.
+//
+// The pages of a PDF 2.0 source need that version (ISO 32000-1, 7.5.2 and
+// Table 28), and an insertion kept the target's, so they landed in a file
+// declaring PDF 1.4.
+func TestWriter_InsertPages_DeclaresTheLatestSource(t *testing.T) {
+	t.Parallel()
+	for _, tc := range latestSourceCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			target := openDeclaration(t, declarationPDF(tc.first, tc.firstCatalog, ""), false)
+			defer target.Close()
+			source := openDeclaration(t, declarationPDF(tc.second, "", ""), false)
+			defer source.Close()
+
+			w := NewWriter(target)
+			defer w.Close()
+			if err := w.InsertPages(2, source, 1); err != nil {
+				t.Fatalf("InsertPages: %v", err)
+			}
+			var out bytes.Buffer
+			if err := w.WriteTo(ctx, &out); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			if got := pdfHeader(out.Bytes()); got != "%PDF-"+tc.wantHeader {
+				t.Errorf("header = %q, want %%PDF-%s", got, tc.wantHeader)
+			}
+			o := openDeclaration(t, out.Bytes(), false)
+			defer o.Close()
+			if got := o.Version(); got != tc.wantReadsAs {
+				t.Errorf("insertion reads as version %q, want %q, what a merge reads as", got, tc.wantReadsAs)
+			}
+		})
+	}
+}
+
+// TestWriter_InsertPages_RaisesWithVersion pins that a version the caller
+// names is raised to the inserted source's, as [Merge] raises it.
+func TestWriter_InsertPages_RaisesWithVersion(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	target := openDeclaration(t, declarationPDF("1.4", "", ""), false)
+	defer target.Close()
+	source := openDeclaration(t, declarationPDF("2.0", "", ""), false)
+	defer source.Close()
+
+	w := NewWriter(target)
+	defer w.Close()
+	if err := w.InsertPages(0, source, 1); err != nil {
+		t.Fatalf("InsertPages: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out, WithVersion("1.5")); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	if got := pdfHeader(out.Bytes()); got != "%PDF-2.0" {
+		t.Errorf("header = %q, want %%PDF-2.0, the inserted source's", got)
+	}
+}
+
+// TestWriter_InsertPages_DeclaresTheSourceAfterARedaction pins that an
+// insertion a later redaction folds into its edits still raises the header:
+// the inserted pages are in the output all the same.
+func TestWriter_InsertPages_DeclaresTheSourceAfterARedaction(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	target := openDeclaration(t, declarationPDF("1.4", "", ""), false)
+	defer target.Close()
+	source := openDeclaration(t, declarationPDF("2.0", "", ""), false)
+	defer source.Close()
+
+	w := NewWriter(target)
+	defer w.Close()
+	// The source's second page is blank, so no copy of the redacted text
+	// survives on it.
+	if err := w.InsertPages(2, source, 2); err != nil {
+		t.Fatalf("InsertPages: %v", err)
+	}
+	if _, err := w.Redact(ctx, []RedactRegion{{Page: 1, Rect: [4]float64{60, 690, 200, 720}}}); err != nil {
+		t.Fatalf("Redact: %v", err)
+	}
+	var out bytes.Buffer
+	if err := w.WriteTo(ctx, &out); err != nil {
+		t.Fatalf("WriteTo: %v", err)
+	}
+	if got := pdfHeader(out.Bytes()); got != "%PDF-2.0" {
+		t.Errorf("header = %q, want %%PDF-2.0, the inserted source's", got)
 	}
 }

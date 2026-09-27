@@ -41,7 +41,12 @@ type FullRewriteConfig struct {
 	Decrypt         bool
 	Version         string
 	RequiredVersion string
-	XRefStream      bool
+	// PageSources are the documents the overrides hold pages copied from (see
+	// [InsertPages]). The header declares at least the version each of them
+	// declares, as a merge's header declares its latest source's (see
+	// [Merge]), whichever version the fields above name.
+	PageSources []*document.Document
+	XRefStream  bool
 	// Compact selects the output-compaction passes the rewrite runs.
 	Compact CompactOptions
 	// Overrides pre-seeds the copier so edits made against the source
@@ -125,6 +130,9 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 	}
 	if version == "" {
 		version = sourceVersion(doc)
+	}
+	for _, src := range cfg.PageSources {
+		version = writer.AtLeastVersion(version, sourceVersion(src))
 	}
 
 	// Shared with Split and Merge so the three write paths cannot drift: see

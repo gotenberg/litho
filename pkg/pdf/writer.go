@@ -700,6 +700,23 @@ type Writer struct {
 // mutation is a deferred modification applied during WriteTo.
 type mutation struct {
 	apply func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error
+	// pageSource is the document an insertion copies pages from, nil for
+	// every other edit. The output declares at least its version (see
+	// [Writer.InsertPages]).
+	pageSource *document.Document
+}
+
+// pageSources returns the documents the queued insertions copy pages from,
+// in queue order, those a redaction folded in included: their pages are in the
+// output all the same.
+func (w *Writer) pageSources() []*document.Document {
+	var docs []*document.Document
+	for _, m := range w.mutations {
+		if m.pageSource != nil {
+			docs = append(docs, m.pageSource)
+		}
+	}
+	return docs
 }
 
 // unfoldedMutations returns the queued mutations whose edits the rewrite
@@ -1058,11 +1075,27 @@ func (w *Writer) DeletePages(pages ...int) error {
 // earlier deletion kept, after the pages an earlier insertion put there, and
 // at the end when no such page is left.
 //
-// The form fields the inserted pages' widgets present join the document's
-// interactive form, which is created when the document has none. Two root
-// fields cannot share a name (ISO 32000-1, 12.7.3.2), so a copied field whose
-// name the form already uses is renamed with the first free "_2", "_3"
-// suffix.
+// The inserted pages join the document as a later source's pages join a
+// [Merge]:
+//
+//   - The form fields their widgets present join the document's interactive
+//     form, which is created when the document has none. A field keeps its
+//     name when the form already uses it: fields with one fully qualified name
+//     are one field (ISO 32000-1, 12.7.3.2), so its widgets on the inserted
+//     pages and those already in the document show one value. A page moved
+//     within its own document, inserted and then deleted from where it was,
+//     keeps its widgets in the fields they presented.
+//   - A signed signature field is left out of the form, since its digest
+//     covers bytes of the source file the document does not hold (ISO
+//     32000-1, 12.8.1). Its widget stays on the page, drawing the appearance
+//     it had, outside the form, as in a merge. An unsigned signature field
+//     signs nothing and is listed like any other field, where a merge leaves
+//     it out too.
+//   - The header declares at least the version source declares, and a
+//     catalog /Version the document carries is raised to the version source
+//     reads as ([Reader.Version]), so pages from a PDF 2.0 source never land
+//     in a file declaring less (ISO 32000-1, 7.5.2). [WithVersion] names a
+//     version the insertion can only raise.
 func (w *Writer) InsertPages(pos int, source *Reader, sourcePages ...int) error {
 	if err := w.refuseAfterRemediation("InsertPages"); err != nil {
 		return err
@@ -1072,6 +1105,7 @@ func (w *Writer) InsertPages(pos int, source *Reader, sourcePages ...int) error 
 	}
 	w.forceRewrite = true
 	w.mutations = append(w.mutations, mutation{
+		pageSource: source.doc,
 		apply: func(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) error {
 			targetPages, err := w.reader.resolvePages(ctx)
 			if err != nil {
@@ -3259,6 +3293,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 			Decrypt:         w.decrypt,
 			Version:         cfg.version,
 			RequiredVersion: w.requiredVersion,
+			PageSources:     w.pageSources(),
 			XRefStream:      cfg.xrefStream,
 			Compact:         cfg.compactOptions(),
 			Overrides:       overrides,

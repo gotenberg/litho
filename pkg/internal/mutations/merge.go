@@ -198,27 +198,33 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	})
 }
 
-// raiseMergedCatalogVersion raises the catalog /Version a merge carries from
-// its first source to floor, the latest version any source reads as.
+// raiseMergedCatalogVersion raises the catalog /Version of a document that
+// takes pages from other documents to floor, the latest version any of them
+// reads as, and reports whether it changed the entry. It edits catalog in
+// place.
 //
-// The catalog entries come from the first source and the pages from every
-// source. litho reads the entry in both directions, as pdf.js does (see
-// document.initCatalogVersion), so a first source whose catalog said /1.4
-// made the merge with a PDF 2.0 source read as 1.4 under a %PDF-2.0 header.
-// ISO 32000-1, 7.7.2 (Table 28) lets the entry raise a document's version,
-// never lower it, and pages taken from a later source need that version.
+// A merge carries the catalog entries of its first source and the pages of
+// every source, and a page insertion keeps the target's catalog (see
+// [InsertPages]). litho reads the entry in both directions, as pdf.js does
+// (see document.initCatalogVersion), so a first source whose catalog said
+// /1.4 made the merge with a PDF 2.0 source read as 1.4 under a %PDF-2.0
+// header. ISO 32000-1, 7.7.2 (Table 28) lets the entry raise a document's
+// version, never lower it, and pages taken from a later source need that
+// version.
 //
 // Only an entry that is present and is a version number is raised. An absent
 // one defers to the header, which already names the latest source, and one
 // that is no version number is ignored by readers, so it misdescribes nothing.
-// The entry never falls below the first source's own reading, since floor
-// includes it.
-func raiseMergedCatalogVersion(catalog ast.PdfDict, floor string) {
+// The entry never falls below the catalog's own reading, since floor includes
+// it or [writer.AtLeastVersion] keeps it.
+func raiseMergedCatalogVersion(catalog ast.PdfDict, floor string) bool {
 	current, ok := catalog["Version"].(ast.PdfName)
 	if !ok || !writer.IsVersion(string(current)) {
-		return
+		return false
 	}
-	catalog["Version"] = ast.PdfName(writer.AtLeastVersion(string(current), floor))
+	raised := ast.PdfName(writer.AtLeastVersion(string(current), floor))
+	catalog["Version"] = raised
+	return raised != current
 }
 
 // mergeOptionalContent rebuilds the output's /OCProperties so it describes the

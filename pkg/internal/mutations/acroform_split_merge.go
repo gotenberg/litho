@@ -268,3 +268,26 @@ func dropsSignature(alloc *writer.ObjAllocator, ref ast.PdfIndirectRef) bool {
 	ft, _ := dict["FT"].(ast.PdfName)
 	return ft == "Sig"
 }
+
+// holdsSignature reports whether a root field is a signature field that is
+// signed: its /V is the signature dictionary that holds the signature (ISO
+// 32000-1, 12.7.4.5, Table 232). An unsigned signature field has no /V.
+//
+// A page insertion leaves such a field out of the form (see
+// [mergeInsertedFields]) for the reason [dropsSignature] gives: the digest,
+// which an unsigned field does not carry. [dropsSignature] leaves every
+// signature field out of a split or a merge, unsigned ones included.
+func holdsSignature(alloc *writer.ObjAllocator, ref ast.PdfIndirectRef) bool {
+	if !dropsSignature(alloc, ref) {
+		return false
+	}
+	field, _ := alloc.Pending()[ref.ObjectNum].(ast.PdfDict)
+	switch v := field["V"].(type) {
+	case ast.PdfDict:
+		return true
+	case ast.PdfIndirectRef:
+		_, isDict := alloc.Pending()[v.ObjectNum].(ast.PdfDict)
+		return isDict
+	}
+	return false
+}

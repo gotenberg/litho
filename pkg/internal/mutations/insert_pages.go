@@ -15,6 +15,12 @@ import (
 // position equal to the current page count appends. If sourcePageNums is
 // empty, all source pages are inserted. Page numbers in sourcePageNums are
 // 1-based.
+//
+// It treats the copied pages as [Merge] treats a later source's: their fields
+// join the form under their own names and their signed signature fields stay
+// out of it (see [mergeInsertedFields]), and the target's catalog /Version is
+// raised to the version the source reads as (see [raiseMergedCatalogVersion]).
+// The rewrite raises the header (see [FullRewriteConfig.PageSources]).
 func InsertPages(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -175,6 +181,16 @@ func InsertPages(
 
 	if err := mergeInsertedFields(ctx, alloc, doc, catalogRef, current, srcDoc, copier, copiedRefs); err != nil {
 		return fmt.Errorf("adding the inserted pages' form fields: %w", err)
+	}
+
+	// The inserted pages need the version their source reads as, as a merge's
+	// pages do. The header is the rewrite's to raise (see
+	// [FullRewriteConfig.PageSources]).
+	if catalog := ResolveFromAllocOrDoc(ctx, alloc, doc, catalogRef); catalog != nil {
+		raised := maps.Clone(catalog)
+		if raiseMergedCatalogVersion(raised, srcDoc.Version) {
+			alloc.AllocAt(catalogRef.ObjectNum, raised)
+		}
 	}
 	return nil
 }

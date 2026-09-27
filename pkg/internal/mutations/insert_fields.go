@@ -23,16 +23,18 @@ import (
 // collected from the copied widgets, as split and merge collect them (see
 // [rebuildAcroForm]), so a field whose widgets stayed behind is never listed.
 //
-// Signature fields are listed too. The Writer's full rewrite already keeps the
-// target's own signature dictionaries while moving every byte their /ByteRange
-// names, and a copied one is kept on the same terms; dropping it from the form
-// would strand its widget on the page instead.
+// A signed signature field is left out, as split and merge leave it out (see
+// [holdsSignature]): its digest covers bytes of the source file the new
+// document does not hold, so it can never verify there. Its widget stays on the
+// inserted page, drawing the appearance it had, outside the form, as it stays
+// in a merge. An unsigned signature field signs nothing and is listed like any
+// other field.
 //
-// Two root fields cannot share a fully qualified name (ISO 32000-1, 12.7.3.2):
-// fields with one name are the same field, which only the kids of one parent
-// can be. A copied root whose name the form already uses is renamed with the
-// first free "_2", "_3" suffix, since the copy is another field that happens to
-// share a name, not a view of the target's.
+// A copied root keeps its name when the form already uses it, as a merge keeps
+// it: fields with one fully qualified name are one field (ISO 32000-1,
+// 12.7.3.2), whose widgets share its value, so the copy joins the target's
+// field rather than becoming another one. A page moved within its own document
+// keeps the name its widgets had, whichever pages the rest of the field is on.
 //
 // A target with no form gets one, carrying the source form's appearance
 // defaults: /DA and /DR are what a viewer draws a field from when it builds an
@@ -49,9 +51,18 @@ import (
 // # Corpus evidence
 //
 //   - litho: 9 fixtures carried a widget qpdf reported as not reachable from
-//     /AcroForm after a page move, and none does now.
+//     /AcroForm after a page move. Of those, only docmdp_2b.pdf and
+//     sigcms_2b.pdf still do, each on the widgets of its signed signature
+//     fields, which the form leaves out.
 //   - All corpora, 617 files that mention a form: the warning went from the
-//     page-move output of 221 files to 5. Four carry it in their input.
+//     page-move output of 221 files to 5 while signed signature fields were
+//     listed. Four carry it in their input.
+//   - All corpora, 605 files that mention a form: leaving the signed
+//     signature fields out brings it back on the page move of 15 files, 10
+//     pdfjs and 5 verapdf, each on such a widget.
+//   - All corpora, 605 files that mention a form: after a page move, 216
+//     files read fields renamed with a "_2" suffix, 11 of them litho
+//     fixtures. They read the source's names now.
 //   - pdfjs issue15597.pdf, issue17794.pdf, issue18466.pdf: present widget
 //     fields with no /AcroForm, or with /Fields misspelled /Field, and a form
 //     listing only the copies left the pages' own widgets outside it.
@@ -72,7 +83,10 @@ func mergeInsertedFields(
 	for i, ref := range copiedRefs {
 		pageRefs[i] = ref
 	}
-	roots := collectRootFields(alloc, pageRefs, false)
+	roots := slices.DeleteFunc(collectRootFields(alloc, pageRefs, false), func(root ast.PdfObject) bool {
+		ref, isRef := root.(ast.PdfIndirectRef)
+		return isRef && holdsSignature(alloc, ref)
+	})
 	if len(roots) == 0 {
 		return nil
 	}
@@ -108,7 +122,6 @@ func mergeInsertedFields(
 		// defines, so their fields are listed first.
 		existing = targetRootFields(ctx, alloc, doc, targetPages)
 	}
-	renameClashingRoots(ctx, alloc, doc, existing, roots)
 
 	fields := make(ast.PdfArray, 0, len(existing)+len(roots))
 	fields = append(fields, existing...)
@@ -323,71 +336,4 @@ func sameString(ctx context.Context, alloc *writer.ObjAllocator, doc, srcDoc *do
 	ts, tOK := t.(ast.PdfString)
 	ss, sOK := s.(ast.PdfString)
 	return tOK && sOK && ts == ss
-}
-
-// renameClashingRoots renames each copied root field whose partial name another
-// root already uses, in the target or among the copies before it. A root's
-// partial name is its fully qualified name (ISO 32000-1, 12.7.3.2), and every
-// descendant's name starts with it, so the roots are where two forms clash.
-func renameClashingRoots(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, existing, roots ast.PdfArray) {
-	taken := make(map[string]bool, len(existing)+len(roots))
-	for _, root := range existing {
-		dict, err := resolveDictAllocFirst(ctx, alloc, doc, root)
-		if err != nil || dict == nil {
-			continue
-		}
-		if name, ok := partialName(ctx, alloc, doc, dict); ok {
-			taken[name] = true
-		}
-	}
-	for _, root := range roots {
-		ref, isRef := root.(ast.PdfIndirectRef)
-		if !isRef {
-			continue
-		}
-		field, ok := alloc.Pending()[ref.ObjectNum].(ast.PdfDict)
-		if !ok {
-			continue
-		}
-		name, ok := partialName(ctx, alloc, doc, field)
-		if !ok {
-			continue
-		}
-		if !taken[name] {
-			taken[name] = true
-			continue
-		}
-		// len(taken)+2 candidates cannot all be taken, so the loop always ends
-		// on a free name.
-		for n := 2; n <= len(taken)+2; n++ {
-			candidate := fmt.Sprintf("%s_%d", name, n)
-			if taken[candidate] {
-				continue
-			}
-			updated := make(ast.PdfDict, len(field))
-			maps.Copy(updated, field)
-			updated["T"] = document.EncodePdfString(candidate)
-			alloc.AllocAt(ref.ObjectNum, updated)
-			taken[candidate] = true
-			break
-		}
-	}
-}
-
-// partialName returns a field's /T decoded, and false when it has none. A
-// copied field's references name objects in alloc, so /T resolves there first.
-func partialName(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, field ast.PdfDict) (string, bool) {
-	obj, has := field["T"]
-	if !has {
-		return "", false
-	}
-	resolved, err := resolveAllocFirst(ctx, alloc, doc, obj)
-	if err != nil {
-		return "", false
-	}
-	s, ok := resolved.(ast.PdfString)
-	if !ok {
-		return "", false
-	}
-	return document.DecodePdfString(s), true
 }

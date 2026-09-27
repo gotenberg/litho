@@ -199,3 +199,29 @@ func TestCollectRootFields_DropsSignatureFields(t *testing.T) {
 		}
 	}
 }
+
+// TestHoldsSignature_OnlySigned pins that a signature field counts as signed
+// only when its /V is a signature dictionary (ISO 32000-1, 12.7.4.5), directly
+// or through a reference, and that no other field does.
+func TestHoldsSignature_OnlySigned(t *testing.T) {
+	t.Parallel()
+	alloc := writer.NewObjAllocator(1)
+	sigDict := alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Sig"), "Contents": ast.PdfString("x")})
+
+	for _, tc := range []struct {
+		name  string
+		field ast.PdfDict
+		want  bool
+	}{
+		{"signed through a reference", ast.PdfDict{"FT": ast.PdfName("Sig"), "V": sigDict}, true},
+		{"signed with a direct dictionary", ast.PdfDict{"FT": ast.PdfName("Sig"), "V": ast.PdfDict{"Type": ast.PdfName("Sig")}}, true},
+		{"unsigned", ast.PdfDict{"FT": ast.PdfName("Sig"), "T": ast.PdfString("blank")}, false},
+		{"a null value", ast.PdfDict{"FT": ast.PdfName("Sig"), "V": ast.PdfNull{}}, false},
+		{"a text field", ast.PdfDict{"FT": ast.PdfName("Tx"), "V": ast.PdfDict{}}, false},
+	} {
+		ref := alloc.Alloc(tc.field)
+		if got := holdsSignature(alloc, ref); got != tc.want {
+			t.Errorf("%s: holdsSignature = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
