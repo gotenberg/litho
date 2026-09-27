@@ -118,6 +118,9 @@ func extractJSTreeAt(ctx context.Context, doc *document.Document, nodeObj ast.Pd
 
 	// Traverse Kids
 	if kidsObj, ok := nodeDict["Kids"]; ok {
+		if document.VisitedBefore(kidsObj, visited) {
+			return nil
+		}
 		kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
 		if err == nil && kidsArr != nil {
 			for _, kid := range kidsArr {

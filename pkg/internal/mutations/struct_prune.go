@@ -624,7 +624,11 @@ func (p *structPrune) parentTreeAt(
 	newNode := maps.Clone(node)
 	changed := false
 
-	if kidsObj, hasKids := node["Kids"]; hasKids {
+	// A /Kids array written as an object of its own is walked once too, and
+	// rewritten at its own object number: its direct nodes can each name it
+	// again, which fans out 2^depth however the nodes are marked
+	// ([document.VisitedBefore]).
+	if kidsObj, hasKids := node["Kids"]; hasKids && !document.VisitedBefore(kidsObj, visited) {
 		if kids, kidsErr := resolveArrayAllocFirst(ctx, p.alloc, p.doc, kidsObj); kidsErr == nil {
 			newKids := make(ast.PdfArray, len(kids))
 			kidsChanged := false

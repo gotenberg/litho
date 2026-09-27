@@ -89,6 +89,9 @@ func collectEmbeddedFileEntriesAt(
 		return
 	}
 	if kidsObj, ok := node["Kids"]; ok {
+		if document.VisitedBefore(kidsObj, seen) {
+			return
+		}
 		if kids, err := document.ResolveArray(ctx, doc, kidsObj); err == nil {
 			for _, kid := range kids {
 				collectEmbeddedFileEntriesAt(ctx, alloc, doc, kid, depth+1, seen, out, truncated)

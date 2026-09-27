@@ -226,7 +226,9 @@ func numberTreeValue(ctx context.Context, doc *document.Document, node ast.PdfDi
 	// A kid that stopped early leaves the whole lookup incomplete: the key may
 	// sit in the part that went unread.
 	complete = true
-	if kidsObj, ok := node["Kids"]; ok {
+	// A /Kids array written as an object of its own is read once, as a node
+	// is: its direct nodes can each name it again ([document.VisitedBefore]).
+	if kidsObj, ok := node["Kids"]; ok && !document.VisitedBefore(kidsObj, seen) {
 		kids, err := document.ResolveArray(ctx, doc, kidsObj)
 		if err == nil {
 			for _, kid := range kids {

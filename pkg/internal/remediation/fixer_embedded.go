@@ -134,6 +134,11 @@ func walkEmbeddedFileTree(ctx context.Context, alloc *writer.ObjAllocator, doc *
 	for i := 1; i < len(names); i += 2 {
 		patchFileSpec(ctx, alloc, doc, names[i], count)
 	}
+	// A /Kids array written as an object of its own is walked once, as a node
+	// is: its direct nodes can each name it again ([document.VisitedBefore]).
+	if document.VisitedBefore(node["Kids"], seen) {
+		return
+	}
 	for _, kid := range liveArray(ctx, alloc, doc, node["Kids"]) {
 		if ref, ok := kid.(ast.PdfIndirectRef); ok {
 			if seen[ref.ObjectNum] {

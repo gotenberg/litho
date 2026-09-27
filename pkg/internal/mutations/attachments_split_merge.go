@@ -164,6 +164,9 @@ func collectSourceEmbeddedFilesAt(
 	if err != nil || node == nil {
 		return
 	}
+	if document.VisitedBefore(node["Kids"], seen) {
+		return
+	}
 	if kids, err := document.ResolveArray(ctx, doc, node["Kids"]); err == nil && kids != nil {
 		for _, kid := range kids {
 			collectSourceEmbeddedFilesAt(ctx, doc, kid, depth+1, seen, out, truncated)

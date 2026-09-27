@@ -644,7 +644,10 @@ func pruneDestNameTreeAt(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	maps.Copy(newNode, node)
 	changed := false
 
-	if kidsObj, hasKids := node["Kids"]; hasKids {
+	// A /Kids array written as an object of its own is walked once too: its
+	// direct nodes can each name it again, which fans out 2^depth however
+	// the nodes are marked ([document.VisitedBefore]).
+	if kidsObj, hasKids := node["Kids"]; hasKids && !document.VisitedBefore(kidsObj, visited) {
 		if kids, err := resolveArrayAllocFirst(ctx, alloc, doc, kidsObj); err == nil {
 			newKids := make(ast.PdfArray, len(kids))
 			for i, kid := range kids {

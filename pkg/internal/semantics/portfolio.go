@@ -93,8 +93,13 @@ func collectEmbeddedFilesAt(ctx context.Context, doc *document.Document, nodeObj
 		return nil
 	}
 
-	// Intermediate node: recurse into Kids.
+	// Intermediate node: recurse into Kids. A /Kids array written as an
+	// object of its own is marked too: its direct nodes can name it again, a
+	// cycle no node mark ends.
 	if kidsObj, ok := nodeDict["Kids"]; ok {
+		if document.VisitedBefore(kidsObj, visited) {
+			return nil
+		}
 		kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
 		if err != nil {
 			return fmt.Errorf("failed to resolve /Kids: %w", err)

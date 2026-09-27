@@ -327,8 +327,10 @@ func fixAFInNameTree(ctx context.Context, doc *document.Document, alloc *writer.
 		}
 	}
 
-	// Recurse into /Kids (intermediate nodes).
-	if kidsArr, ok := d["Kids"]; ok {
+	// Recurse into /Kids (intermediate nodes). An array written as an object
+	// of its own is walked once, as a node is: its direct nodes can each name
+	// it again ([document.VisitedBefore]).
+	if kidsArr, ok := d["Kids"]; ok && !document.VisitedBefore(kidsArr, seen) {
 		if arr, err := document.ResolveArray(ctx, doc, kidsArr); err == nil {
 			for _, kid := range arr {
 				count += fixAFInNameTree(ctx, doc, alloc, kid, seen, depth+1, specs)

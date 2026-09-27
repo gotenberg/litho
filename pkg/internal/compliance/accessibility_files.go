@@ -133,6 +133,11 @@ func collectNameTreeSpecRefs(ctx context.Context, doc *document.Document, obj as
 			}
 		}
 	}
+	// A /Kids array written as an object of its own is walked once, as a node
+	// is: its direct nodes can each name it again ([document.VisitedBefore]).
+	if document.VisitedBefore(node["Kids"], seen) {
+		return
+	}
 	if kids, err := document.ResolveArray(ctx, doc, node["Kids"]); err == nil {
 		for _, kid := range kids {
 			collectNameTreeSpecRefs(ctx, doc, kid, specs, seen, depth+1)
