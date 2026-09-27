@@ -25,9 +25,11 @@ const maxStructCompareDepth = 16
 //     output maps it to another type, or uses it unmapped: one /RoleMap serves
 //     every element of the default namespace, so s's mapping would remap the
 //     output's elements, or the output's s's. So is a type s uses unmapped
-//     that the output maps, keeping the meaning it had in s, unless it is a
-//     standard type the output remaps: a name mapped back to it would follow
-//     the output's mapping in turn, so that one is left, and logged.
+//     that the output maps, keeping the meaning it had in s. A standard type
+//     is never renamed, which would make s's elements of that type
+//     non-standard ones: where s and the output read one differently, one of
+//     them remaps it, which ISO 14289-2, 8.2.4 test 4 forbids, and the
+//     output's reading stands, logged.
 //   - A class the /ClassMap defines (ISO 32000-1, 14.7.5.2) with other
 //     attributes than the output's class of that name. A class defined alike
 //     is the same class, and s's elements use the output's definition.
@@ -36,6 +38,16 @@ const maxStructCompareDepth = 16
 //
 // The renaming itself happens once the elements of s are copied (see
 // [structOutput.rename]).
+//
+// # Corpus evidence
+//
+//   - verapdf PDF_A-2a__veraPDF_test_suite_6-2-11-7-3-t01-fail-b.pdf: its
+//     /RoleMap maps Document and Span to themselves. Renamed as a conflict,
+//     Document became Document_2 mapped to Document_2, and merged after
+//     another file it failed ISO 19005-2, 6.7.3.4 test 2, a circular mapping.
+//   - pdfjs issue16176.pdf: leaves Article unmapped, which pdfjs
+//     issue16119.pdf maps to Art. Merged after it, its Article elements read
+//     as Art elements and failed ISO/TS 32005, Table 5 for holding content.
 func (t *structOutput) join(ctx context.Context, s *structSource) error {
 	s.roleRenames = make(map[ast.PdfName]ast.PdfName)
 	s.classRenames = make(map[ast.PdfName]ast.PdfName)
@@ -58,6 +70,8 @@ func (t *structOutput) join(ctx context.Context, s *structSource) error {
 	for name := range roleMap {
 		roleNames[name] = true
 	}
+	// Remappings of a standard type the output reads otherwise, left out.
+	dropped := make(map[ast.PdfName]bool)
 	for _, name := range slices.Sorted(maps.Keys(roleMap)) {
 		if identity(name) {
 			continue
@@ -69,11 +83,23 @@ func (t *structOutput) join(ctx context.Context, s *structSource) error {
 		} else if !t.types[name] {
 			continue
 		}
+		if compliance.IsStandardStructType(name, string(models.PDFUA1)) {
+			// ISO 14289-2, 8.2.4 test 4 forbids remapping a standard type, and
+			// a new name would make s's elements of that type non-standard
+			// ones. The output's reading of the type stands, s's with it.
+			dropped[name] = true
+			logStructCopy(s.doc, "the source remaps a standard structure type the output reads otherwise",
+				"type", string(name))
+			continue
+		}
 		renamed := uniqueName(name, roleNames)
 		roleNames[renamed] = true
 		s.roleRenames[name] = renamed
 	}
 	for _, name := range slices.Sorted(maps.Keys(roleMap)) {
+		if dropped[name] {
+			continue
+		}
 		value := roleMap[name]
 		if mapped := s.nameOf(ctx, value); mapped != "" {
 			value = mapped

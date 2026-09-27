@@ -528,6 +528,37 @@ func TestMerge_KeepsAnUnmappedTypeUnmapped(t *testing.T) {
 	}
 }
 
+// TestMerge_LeavesOutARemappedStandardType pins that a merge renames no
+// standard structure type: the second source remaps Document to Book, which
+// ISO 14289-2, 8.2.4 test 4 forbids, while the first uses Document as it is.
+// Renamed to Document_2, the second source's Document would become a
+// non-standard type mapped to another. The first source's reading stands.
+func TestMerge_LeavesOutARemappedStandardType(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	first := openDeclaration(t, taggedThreePagePDF("en-US"), false)
+	defer first.Close()
+	second := openDeclaration(t, taggedThreePagePDF("en-US", "/RoleMap << /Para /P >>", "/RoleMap << /Para /P /Document /Book >>"), false)
+	defer second.Close()
+
+	var out bytes.Buffer
+	if err := Merge(ctx, []*Reader{first, second}, &out); err != nil {
+		t.Fatalf("Merge: %v", err)
+	}
+	tree := readOutputTree(t, out.Bytes())
+	roleMap := tree.dict(tree.root["RoleMap"])
+	for _, key := range []ast.PdfName{"Document", "Document_2"} {
+		if got, has := roleMap[key]; has {
+			t.Errorf("/RoleMap maps %s to %v", key, got)
+		}
+	}
+	const one = "Sect[Para#p1 Para#p2] Link Para#p3"
+	const two = "Sect[Para#p1_2 Para#p2_2] Link Para#p3_2"
+	if got, want := tree.outline(), "Document["+one+" Document["+two+"]]"; got != want {
+		t.Errorf("tree = %q, want %q", got, want)
+	}
+}
+
 // TestMerge_RenamesClassesAndTheIdentifiersCellsName pins that a merge keeps
 // a class two sources define differently apart, and renames a clashing
 // identifier wherever a table cell names it.
