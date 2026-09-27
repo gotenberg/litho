@@ -91,17 +91,17 @@ func TestPruneParentTree_DoubledKidsStayLinear(t *testing.T) {
 
 	doc, alloc := newMutationDoc(t, doubledKidsTreePDF())
 	ctx := context.Background()
-	removed := make(map[int]bool)
+	prune := newStructPrune(alloc, doc, func(ast.PdfIndirectRef) bool { return false }, nil, false)
 
 	done := make(chan struct{})
 	go func() {
-		pruneParentTree(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: 5}, removed, 0)
+		prune.parentTree(ctx, ast.PdfIndirectRef{ObjectNum: 5}, 0)
 		close(done)
 	}()
 
 	select {
 	case <-done:
 	case <-time.After(10 * time.Second):
-		t.Fatal("pruneParentTree did not finish: a doubled /Kids is being walked along every path")
+		t.Fatal("the /ParentTree prune did not finish: a doubled /Kids is being walked along every path")
 	}
 }

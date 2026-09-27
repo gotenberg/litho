@@ -227,7 +227,7 @@ func rebuildPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			alloc.AllocAt(objNum, patched)
 		}
 
-		if err := pruneStructTree(ctx, alloc, doc, catalogDict, removed); err != nil {
+		if err := pruneStructTree(ctx, alloc, doc, catalogRef, kept, removed); err != nil {
 			return fmt.Errorf("pruning the structure tree: %w", err)
 		}
 		outlineTruncated := pruneOutlineDestinations(ctx, alloc, doc, catalogDict, removed)
