@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
 // TestCheckNamespaceRoleMapping_LegacyRoleMapT04 covers ISO 14289-2 §8.2.4 t4 on
@@ -349,6 +350,77 @@ func TestCheckNamespaceRoleMapping_LegacyRoleMapScope(t *testing.T) {
 			got := hasRule(build(t, tc.childNS, tc.ns17, tc.custom), Rule_14289_2_8_2_4_t01)
 			if got != tc.wantT01 {
 				t.Errorf("/Para %q: §8.2.4 t1 fired = %v, want %v", tc.childNS, got, tc.wantT01)
+			}
+		})
+	}
+}
+
+// TestUngovernedRoleReaderAgreesWithTheValidator pins that the reader a
+// remediation fixer repairs from names exactly the elements ISO 14289-2 §8.2.4
+// t1 reports because the legacy /RoleMap does not govern the namespace they
+// declare, and the type that map gives them. A fixer that judged the elements
+// itself would repair a different set than the validator reports.
+func TestUngovernedRoleReaderAgreesWithTheValidator(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Object 5 is the PDF 2.0 namespace, object 6 the PDF 1.7 one and object 7
+	// a custom one. The legacy /RoleMap maps /Para to /P through /MyP, and
+	// /Aside2 to the PDF 1.7-only /Note.
+	build := func(t *testing.T, child, ns17, custom string) (*document.Document, ast.PdfDict, ast.PdfDict) {
+		t.Helper()
+		doc, cat := tableDoc(t, 1,
+			"<< /Type /Catalog /StructTreeRoot 2 0 R >>",
+			"<< /Type /StructTreeRoot /K [3 0 R] /RoleMap << /Para /MyP /MyP /P /Aside2 /Note >> /Namespaces [5 0 R 6 0 R 7 0 R] >>",
+			"<< /Type /StructElem /S /Document /NS 5 0 R /P 2 0 R /K [4 0 R] >>",
+			"<< /Type /StructElem "+child+" /P 3 0 R >>",
+			"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
+			"<< /Type /Namespace /NS (http://iso.org/pdf/ssn) "+ns17+" >>",
+			"<< /Type /Namespace /NS (http://litho.example/probe) "+custom+" >>",
+		)
+		elem, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 4})
+		if err != nil {
+			t.Fatalf("resolving the element: %v", err)
+		}
+		return doc, cat, elem
+	}
+
+	const otherMap = "/RoleMapNS << /Other [/P 5 0 R] >>"
+	tests := []struct {
+		name                string
+		child, ns17, custom string
+		wantT01             bool
+		wantTarget          ast.PdfName
+		wantNS              string
+	}{
+		{"no namespace", "/S /Para", "", "", false, "", ""},
+		{"pdf 1.7 namespace", "/S /Para /NS 6 0 R", "", "", false, "", ""},
+		{"pdf 2.0 namespace", "/S /Para /NS 5 0 R", "", "", true, "P", pdf2NamespaceURI},
+		{"custom namespace", "/S /Para /NS 7 0 R", "", "", true, "P", "http://litho.example/probe"},
+		{"custom namespace mapping other types", "/S /Para /NS 7 0 R", "", otherMap, true, "P", "http://litho.example/probe"},
+		{"pdf 1.7 namespace mapping other types", "/S /Para /NS 6 0 R", otherMap, "", true, "P", pdf1NamespaceURI},
+		{"custom namespace naming the type", "/S /Para /NS 7 0 R", "", "/RoleMapNS << /Para [/Gadget 7 0 R] >>", true, "", ""},
+		{"type the map does not map", "/S /Gadget /NS 5 0 R", "", "", true, "", ""},
+		{"type the map leads to a pdf 1.7 type", "/S /Aside2 /NS 5 0 R", "", "", true, "Note", pdf2NamespaceURI},
+		{"standard type", "/S /P /NS 5 0 R", "", "", false, "", ""},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			doc, cat, elem := build(t, tc.child, tc.ns17, tc.custom)
+			if got := hasRule(checkNamespaceRoleMapping(ctx, doc, cat, "PDF/UA-2"), Rule_14289_2_8_2_4_t01); got != tc.wantT01 {
+				t.Errorf("§8.2.4 t1 fired = %v, want %v", got, tc.wantT01)
+			}
+			treeRoot, err := document.ResolveDict(ctx, doc, cat["StructTreeRoot"])
+			if err != nil {
+				t.Fatalf("resolving the structure tree root: %v", err)
+			}
+			target, nsURI, ok := NewUngovernedRoleReader(ctx, doc, treeRoot).Target(ctx, doc, elem)
+			if ok != (tc.wantTarget != "") || target != tc.wantTarget || nsURI != tc.wantNS {
+				t.Errorf("Target = (%q, %q, %v), want (%q, %q, %v)", target, nsURI, ok, tc.wantTarget, tc.wantNS, tc.wantTarget != "")
+			}
+			if ok && !tc.wantT01 {
+				t.Errorf("the reader names an element the validator does not report")
 			}
 		})
 	}

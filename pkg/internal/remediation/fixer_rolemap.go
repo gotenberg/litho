@@ -17,7 +17,11 @@ func matchRoleMap(v compliance.Violation) bool {
 		descriptionContains(v, "circular mapping") ||
 		descriptionContains(v, "is remapped") ||
 		descriptionContains(v, "standard type") && descriptionContains(v, "remapped") ||
-		clausePrefix(v, "6.8.3.4")
+		clausePrefix(v, "6.8.3.4") ||
+		// ISO 14289-2 §8.2.4 t1: a type the legacy /RoleMap maps can still be
+		// unmapped in a namespace that map does not govern
+		// ([repairUngovernedRoles]).
+		(v.Rule.Specification == "ISO_14289_2" && v.Rule.Clause == "8.2.4" && v.Rule.TestNumber == 1)
 }
 
 // fixRoleMap cleans up the StructTreeRoot /RoleMap. It breaks every circular
@@ -26,7 +30,9 @@ func matchRoleMap(v compliance.Violation) bool {
 // type (ISO 32000-1 §14.8.4, forbidden by PDF/A-2a §7.1). A namespaced
 // (PDF 2.0 / PDF/UA-2) document is left to its namespace mechanism: a standard
 // *name* there may belong to a custom namespace and still need its mapping, so
-// the standard-type drop does not apply on name alone.
+// the standard-type drop does not apply on name alone. Under ISO 14289-2 it
+// gives a type the map maps, declared in a namespace the map does not govern,
+// the type the map gives it ([repairUngovernedRoles]).
 //
 // # Corpus evidence
 //
@@ -206,18 +212,35 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		annotMapped++
 	}
 
-	if cyclesBroken == 0 && standardsDropped == 0 && annotMapped == 0 {
-		return nil, nil
-	}
-
+	mapChanged := cyclesBroken > 0 || standardsDropped > 0 || annotMapped > 0
 	newST := make(ast.PdfDict, len(stDict))
 	maps.Copy(newST, stDict)
-	if len(keep) == 0 {
-		delete(newST, "RoleMap")
-	} else {
-		newST["RoleMap"] = keep
+	if mapChanged {
+		if len(keep) == 0 {
+			delete(newST, "RoleMap")
+		} else {
+			newST["RoleMap"] = keep
+		}
 	}
-	if stRef.ObjectNum > 0 {
+
+	// A namespaced element the legacy map does not govern is judged by the map
+	// as it stands after the passes above, so a broken cycle leads it where it
+	// leads every governed element.
+	var ungovernedFixes []string
+	stChanged := mapChanged
+	if compliance.PDFUAPart(profile) == 2 && len(keep) > 0 {
+		var withNS ast.PdfDict
+		ungovernedFixes, withNS = repairUngovernedRoles(ctx, alloc, doc, stRef, newST)
+		if withNS != nil {
+			newST = withNS
+			stChanged = true
+		}
+	}
+
+	if !stChanged && len(ungovernedFixes) == 0 {
+		return nil, nil
+	}
+	if stChanged && stRef.ObjectNum > 0 {
 		alloc.AllocAt(stRef.ObjectNum, newST)
 	}
 
@@ -234,7 +257,182 @@ func fixRoleMap(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 	if annotMapped > 0 {
 		fixes = append(fixes, "mapped Annot structure elements to Link for PDF/A-1")
 	}
-	return fixes, nil
+	return append(fixes, ungovernedFixes...), nil
+}
+
+// repairUngovernedRoles repairs the structure elements ISO 14289-2 §8.2.4 t1
+// reports only because they declare a namespace the structure tree root's
+// legacy /RoleMap does not govern, while the map sends their type to a standard
+// one ([compliance.UngovernedRoleReader]). It returns the fix descriptions and,
+// when a repair had to list a namespace the root's /Namespaces lacked, the
+// updated root dictionary; otherwise that result is nil.
+//
+// The legacy map governs a type in no namespace, or in the PDF 1.7 namespace
+// when that namespace declares no /RoleMapNS (ISO 32000-2:2020, 14.8.6), so an
+// element whose type it maps can still resolve to no standard type once it
+// declares another namespace. The repair gives the element the type the map
+// gives every element of that type it governs, the meaning the producer
+// declared, in the one form that namespace admits:
+//
+//   - an element of a standard namespace that defines that type is renamed to
+//     it, as [retagDroppedRoles] retags the elements of a dropped mapping. A
+//     /RoleMapNS entry costs more there: it either maps a type within its own
+//     namespace (§8.2.4 t3) or reads the element in a namespace other than the
+//     one it declares, and in the PDF 1.7 namespace it joins the very map that
+//     left the type unmapped;
+//   - a type of any other namespace, whose vocabulary no standard defines, is
+//     mapped through that namespace's /RoleMapNS to the type in a standard
+//     namespace (ISO 32000-2:2020, 14.8.6), the PDF 2.0 one where it defines
+//     the type and the PDF 1.7 one otherwise. The entry maps every element of
+//     that type in the namespace, and no element is renamed.
+//
+// A type the map leads to no standard type, or to one the element's standard
+// namespace does not define, is left to the residual: repairing it would
+// invent a meaning the document never declared. So is an inline element, which
+// has no object number to rename in place, and an element whose /NS is not an
+// indirect reference to a namespace dictionary (ISO 32000-2:2020, Table 355).
+//
+// # Corpus evidence
+//
+//   - All corpora: no tagged file declares, on an element whose type only the
+//     legacy map maps, a namespace that map does not govern, before or after
+//     PDF/UA-2 remediation.
+//   - litho rolemapscope_ua2: a Para in the PDF 2.0 namespace the map sends to
+//     P, which veraPDF reported as 8.2.4 t1 after PDF/UA-2 remediation.
+//   - litho rolemapns_ua2: one element per repair, in two custom namespaces,
+//     the PDF 1.7 namespace carrying its own /RoleMapNS and the PDF 2.0
+//     namespace. veraPDF reported 8.2.4 t1 on all five after PDF/UA-2 and
+//     WTPDF remediation, default and aggressive, and passes every output now.
+func repairUngovernedRoles(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, stRef ast.PdfIndirectRef, stDict ast.PdfDict) ([]string, ast.PdfDict) {
+	reader := compliance.NewUngovernedRoleReader(ctx, doc, stDict)
+	type reading struct {
+		target ast.PdfName
+		nsURI  string
+	}
+	// readings holds, in walk order, each element to repair beside what the
+	// reader said of it.
+	var elems []structNode
+	var readings []reading
+	visited := map[int]bool{stRef.ObjectNum: true}
+	walkStructElemsWhere(ctx, alloc, doc, stDict["K"], func(elem ast.PdfDict) bool {
+		target, nsURI, ok := reader.Target(ctx, doc, elem)
+		if ok {
+			readings = append(readings, reading{target: target, nsURI: nsURI})
+		}
+		return ok
+	}, visited, 0, &elems)
+
+	renamed := 0
+	// entries holds, per namespace object number, the /RoleMapNS entries the
+	// namespace receives: its type against the standard type the map gives it.
+	entries := make(map[int]map[ast.PdfName]ast.PdfName)
+	for i, elem := range elems {
+		target, nsURI := readings[i].target, readings[i].nsURI
+		if compliance.IsStandardNamespace(nsURI) {
+			if !compliance.IsStandardStructTypeInNS(target, nsURI) {
+				continue
+			}
+			newElem := make(ast.PdfDict, len(elem.dict))
+			maps.Copy(newElem, elem.dict)
+			newElem["S"] = target
+			if alloc.AllocAt(elem.ref.ObjectNum, newElem) {
+				renamed++
+			}
+			continue
+		}
+		nsRef, ok := elem.dict["NS"].(ast.PdfIndirectRef)
+		if !ok || nsRef.ObjectNum <= 0 {
+			continue
+		}
+		if entries[nsRef.ObjectNum] == nil {
+			entries[nsRef.ObjectNum] = make(map[ast.PdfName]ast.PdfName)
+		}
+		entries[nsRef.ObjectNum][structType(ctx, doc, elem.dict)] = target
+	}
+
+	mapped, newST := mapUngovernedTypes(ctx, alloc, doc, stDict, entries)
+
+	var fixes []string
+	if renamed > 0 {
+		fixes = append(fixes, fmt.Sprintf("retagged %d element(s) the /RoleMap maps in a namespace it does not govern as the standard type it maps them to", renamed))
+	}
+	if mapped > 0 {
+		fixes = append(fixes, fmt.Sprintf("mapped %d type(s) the /RoleMap maps in a namespace it does not govern through that namespace's /RoleMapNS", mapped))
+	}
+	return fixes, newST
+}
+
+// mapUngovernedTypes writes the /RoleMapNS entries of [repairUngovernedRoles]:
+// for each namespace object number, each type mapped to the standard type the
+// legacy /RoleMap gives it, as the [name namespace] pair a /RoleMapNS value
+// names a type of another namespace with (ISO 32000-2:2020, 14.8.6). It
+// returns the number of entries written and, when a target namespace had to be
+// added to the root's /Namespaces, the updated root dictionary; otherwise that
+// result is nil.
+//
+// A namespace whose /RoleMapNS is present but no dictionary is left alone:
+// writing one over it would replace a value the file wrote rather than extend
+// it.
+func mapUngovernedTypes(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, stDict ast.PdfDict, entries map[int]map[ast.PdfName]ast.PdfName) (int, ast.PdfDict) {
+	nsNums := slices.Sorted(maps.Keys(entries))
+	mapped := 0
+	st := stDict
+	var newST ast.PdfDict
+	for _, num := range nsNums {
+		if ctx.Err() != nil {
+			break
+		}
+		nsRef := ast.PdfIndirectRef{ObjectNum: num}
+		nsDict := resolveFromAllocOrDoc(ctx, alloc, doc, nsRef)
+		if nsDict == nil {
+			continue
+		}
+		rmObj, hasRM := nsDict["RoleMapNS"]
+		rmRef, rmIndirect := rmObj.(ast.PdfIndirectRef)
+		var rmns ast.PdfDict
+		if rmIndirect {
+			rmns = resolveFromAllocOrDoc(ctx, alloc, doc, rmRef)
+		} else if hasRM {
+			rmns, _ = rmObj.(ast.PdfDict)
+		}
+		if hasRM && rmns == nil {
+			doc.Logger.Debug("remediation.rolemap: namespace /RoleMapNS is no dictionary; left alone",
+				"namespace", num)
+			continue
+		}
+		newRMNS := make(ast.PdfDict, len(rmns)+len(entries[num]))
+		maps.Copy(newRMNS, rmns)
+		added := 0
+		for _, typ := range slices.Sorted(maps.Keys(entries[num])) {
+			if _, exists := newRMNS[typ]; exists {
+				continue
+			}
+			target := entries[num][typ]
+			targetURI := pdf1NamespaceURI
+			if compliance.IsStandardStructTypeInNS(target, pdf2NamespaceURI) {
+				targetURI = pdf2NamespaceURI
+			}
+			targetRef, withNS := ensureNamespace(ctx, alloc, doc, st, targetURI)
+			if withNS != nil {
+				st, newST = withNS, withNS
+			}
+			newRMNS[typ] = ast.PdfArray{target, targetRef}
+			added++
+		}
+		if added == 0 {
+			continue
+		}
+		if rmIndirect && rmRef.ObjectNum > 0 {
+			alloc.AllocAt(rmRef.ObjectNum, newRMNS)
+		} else {
+			newNS := make(ast.PdfDict, len(nsDict)+1)
+			maps.Copy(newNS, nsDict)
+			newNS["RoleMapNS"] = newRMNS
+			alloc.AllocAt(num, newNS)
+		}
+		mapped += added
+	}
+	return mapped, newST
 }
 
 // retagDroppedRoles rewrites /S on every element that used a role mapping the

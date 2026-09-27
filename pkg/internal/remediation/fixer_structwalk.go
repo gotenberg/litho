@@ -75,13 +75,22 @@ func collectStructElems(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 // visited set breaks reference cycles and the depth bound caps a pathological
 // tree.
 func walkStructElems(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, kObj ast.PdfObject, role ast.PdfName, visited map[int]bool, depth int, out *[]structNode) {
+	walkStructElemsWhere(ctx, alloc, doc, kObj, func(elem ast.PdfDict) bool {
+		return structType(ctx, doc, elem) == role
+	}, visited, depth, out)
+}
+
+// walkStructElemsWhere is [walkStructElems] gathering every indirect element
+// match accepts. An inline element is walked into but never gathered, since it
+// has no object number to rewrite in place.
+func walkStructElemsWhere(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, kObj ast.PdfObject, match func(ast.PdfDict) bool, visited map[int]bool, depth int, out *[]structNode) {
 	if depth > compliance.MaxStructTreeWalkDepth || ctx.Err() != nil {
 		return
 	}
 	switch v := kObj.(type) {
 	case ast.PdfArray:
 		for _, item := range v {
-			walkStructElems(ctx, alloc, doc, item, role, visited, depth, out)
+			walkStructElemsWhere(ctx, alloc, doc, item, match, visited, depth, out)
 		}
 	case ast.PdfIndirectRef:
 		if v.ObjectNum == 0 || visited[v.ObjectNum] {
@@ -92,12 +101,12 @@ func walkStructElems(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		if elem == nil {
 			return
 		}
-		if structType(ctx, doc, elem) == role {
+		if match(elem) {
 			*out = append(*out, structNode{ref: v, dict: elem})
 		}
-		walkStructElems(ctx, alloc, doc, elem["K"], role, visited, depth+1, out)
+		walkStructElemsWhere(ctx, alloc, doc, elem["K"], match, visited, depth+1, out)
 	case ast.PdfDict:
-		walkStructElems(ctx, alloc, doc, v["K"], role, visited, depth+1, out)
+		walkStructElemsWhere(ctx, alloc, doc, v["K"], match, visited, depth+1, out)
 	}
 }
 

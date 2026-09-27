@@ -240,6 +240,82 @@ func legacyRoleMapMaps(roleMap map[ast.PdfName]ast.PdfName, typeName ast.PdfName
 	return roleMapChainReachesStandard(roleMap, typeName, nsURI) || typeInLegacyRoleMap(roleMap, typeName)
 }
 
+// UngovernedRoleReader reads the structure types that the structure tree root's
+// legacy /RoleMap maps but does not govern, as ISO 14289-2 §8.2.4 t1 judges
+// them, so a remediation fixer repairs exactly the elements this validator
+// reports. Build it with [NewUngovernedRoleReader] from one structure tree
+// root. It performs no mutation after construction, so it is safe for
+// concurrent use.
+type UngovernedRoleReader struct {
+	r *nsRoleResolver
+}
+
+// NewUngovernedRoleReader returns a reader over treeRoot's legacy /RoleMap and
+// the /RoleMapNS of every namespace its /Namespaces array lists.
+func NewUngovernedRoleReader(ctx context.Context, doc *document.Document, treeRoot ast.PdfDict) *UngovernedRoleReader {
+	return &UngovernedRoleReader{r: newNSRoleResolver(ctx, doc, treeRoot)}
+}
+
+// Target reports the standard structure type the legacy /RoleMap gives elem's
+// type, for an element ISO 14289-2 §8.2.4 t1 reports only because that map does
+// not govern the namespace the element declares. nsURI is that namespace.
+//
+// The legacy /RoleMap governs a type in no namespace, or in the PDF 1.7
+// namespace when that namespace declares no /RoleMapNS ([legacyRoleMapGoverns],
+// ISO 32000-2:2020, 14.8.6). A type declared in any other namespace resolves
+// through that namespace's /RoleMapNS alone, so a type the legacy map sends to
+// a standard one is still unmapped there, unless the namespace defines the type
+// itself or its /RoleMapNS maps it. target is where the legacy map leads the
+// type read in no namespace, which is where it leads every element of that type
+// the map does govern: the reading the document's producer declared.
+//
+// ok is false for an element the map governs, one whose type the namespace
+// already resolves, one the namespace's own /RoleMapNS names (the namespace
+// states that type's mapping itself, so the legacy map is not the producer's
+// word for it), and one the legacy map leads to no standard type or back to the
+// type it names.
+func (u *UngovernedRoleReader) Target(ctx context.Context, doc *document.Document, elem ast.PdfDict) (target ast.PdfName, nsURI string, ok bool) {
+	sType, _ := document.ResolveName(ctx, doc, elem["S"])
+	if sType == "" {
+		return "", "", false
+	}
+	nsURI = u.r.declaredNSURI(ctx, doc, elem)
+	if nsURI == "" || legacyRoleMapGoverns(nsURI, u.r.rmnsByURI) {
+		return "", "", false
+	}
+	if standardNamespaceURIs[nsURI] && isStandardStructTypeInNS(sType, nsURI) {
+		return "", "", false
+	}
+	// A namespace role map that does not name the type leaves it unmapped
+	// ([roleMapNSChainOutcome] stops at its first hop), which is the §8.2.4 t1
+	// the validator reports.
+	if rmns, declares := u.r.rmnsByURI[nsURI]; declares {
+		if _, named := rmns[sType]; named {
+			return "", "", false
+		}
+	}
+	std, _, mapped := u.r.resolveStandardType(ctx, doc, string(sType), "")
+	if !mapped || ast.PdfName(std) == sType {
+		return "", "", false
+	}
+	return ast.PdfName(std), nsURI, true
+}
+
+// IsStandardStructTypeInNS reports whether name is a standard structure type of
+// the standard structure namespace nsURI, "" for a type in no namespace. Each
+// standard namespace defines its own vocabulary (ISO 32000-2:2020, 14.8.6). It
+// is exported so a remediation fixer names a type in a namespace exactly as the
+// validator judges it there.
+func IsStandardStructTypeInNS(name ast.PdfName, nsURI string) bool {
+	return isStandardStructTypeInNS(name, nsURI)
+}
+
+// IsStandardNamespace reports whether nsURI is one of the standard structure
+// namespaces of ISO 32000-2:2020, 14.8.6.
+func IsStandardNamespace(nsURI string) bool {
+	return standardNamespaceURIs[nsURI]
+}
+
 // nsTypeKey identifies a structure type within its namespace, for the cycle
 // detection of role-map chains. A struct keeps the pair apart where a joined
 // string would not: a name holds any byte a "#hh" escape decodes to, NUL

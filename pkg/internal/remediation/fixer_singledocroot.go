@@ -182,6 +182,11 @@ func indirectStructChildren(ctx context.Context, alloc *writer.ObjAllocator, doc
 // absent. When it adds the namespace it returns the updated root dictionary as
 // the second result; otherwise that result is nil and stDict is unchanged.
 func ensurePDF2Namespace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, stDict ast.PdfDict) (ast.PdfIndirectRef, ast.PdfDict) {
+	return ensureNamespace(ctx, alloc, doc, stDict, pdf2NamespaceURI)
+}
+
+// ensureNamespace is [ensurePDF2Namespace] for the namespace whose URI is uri.
+func ensureNamespace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, stDict ast.PdfDict, uri string) (ast.PdfIndirectRef, ast.PdfDict) {
 	var items ast.PdfArray
 	if arr, err := document.ResolveArray(ctx, doc, stDict["Namespaces"]); err == nil {
 		items = arr
@@ -194,13 +199,13 @@ func ensurePDF2Namespace(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 			if nsd == nil {
 				continue
 			}
-			if uri, _ := document.ResolveString(ctx, doc, nsd["NS"]); string(uri) == pdf2NamespaceURI {
+			if got, _ := document.ResolveString(ctx, doc, nsd["NS"]); string(got) == uri {
 				return ref, nil
 			}
 		}
 	}
 
-	ns := ast.PdfDict{"Type": ast.PdfName("Namespace"), "NS": ast.PdfString(pdf2NamespaceURI)}
+	ns := ast.PdfDict{"Type": ast.PdfName("Namespace"), "NS": ast.PdfString(uri)}
 	ref := alloc.Alloc(ns)
 	newArr := make(ast.PdfArray, 0, len(items)+1)
 	newArr = append(newArr, items...)
