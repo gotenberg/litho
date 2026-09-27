@@ -1,0 +1,81 @@
+%PDF-2.0
+%¿÷¢þ
+1 0 obj
+<< /AF [ << /AFRelationship /Supplement /F (cat.txt) /Type /Filespec /UF (cat.txt) >> ] /Metadata 2 0 R /Pages 3 0 R /Type /Catalog >>
+endobj
+2 0 obj
+<< /Subtype /XML /Type /Metadata /Length 567 >>
+stream
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" xmlns:pdfuaid="http://www.aiim.org/pdfua/ns/id/" xmlns:dc="http://purl.org/dc/elements/1.1/" rdf:about="">
+   <dc:title><rdf:Alt><rdf:li xml:lang="x-default">litho corpus fixture</rdf:li></rdf:Alt></dc:title>
+    <pdfaid:part>4</pdfaid:part>
+    <pdfaid:rev>2020</pdfaid:rev>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+
+<?xpacket end="w"?>
+
+endstream
+endobj
+3 0 obj
+<< /Count 1 /Kids [ 4 0 R ] /Type /Pages >>
+endobj
+4 0 obj
+<< /Annots [ 5 0 R << /AF [ << /AFRelationship /Data /EF << /F 6 0 R >> /F (lk2.txt) /Type /Filespec /UF (lk2.txt) >> ] /AP << /N 7 0 R >> /Border [ 0 0 0 ] /Contents (lk2) /F 4 /Rect [ 10 10 30 30 ] /Subtype /Link /Type /Annot >> ] /MediaBox [ 0 0 200 200 ] /Parent 3 0 R /Resources << /XObject << /Fm 8 0 R >> >> /Type /Page >>
+endobj
+5 0 obj
+<< /AF [ << /EF << /F 9 0 R >> /F (lk1.txt) /Type /Filespec >> ] /AP << /N 10 0 R >> /Border [ 0 0 0 ] /Contents (lk1) /F 4 /Rect [ 10 10 30 30 ] /Subtype /Link /Type /Annot >>
+endobj
+6 0 obj
+<< /Subtype /plain /Type /EmbeddedFile /Length 4 >>
+stream
+lk2
+
+endstream
+endobj
+7 0 obj
+<< /BBox [ 0 0 20 20 ] /Subtype /Form /Type /XObject /Length 0 >>
+stream
+
+endstream
+endobj
+8 0 obj
+<< /AF [ << /F (fm.txt) /Type /Filespec /UF (fm.txt) >> ] /BBox [ 0 0 1 1 ] /Subtype /Form /Type /XObject /Length 0 >>
+stream
+
+endstream
+endobj
+9 0 obj
+<< /Type /EmbeddedFile /Length 4 >>
+stream
+lk1
+
+endstream
+endobj
+10 0 obj
+<< /BBox [ 0 0 20 20 ] /Subtype /Form /Type /XObject /Length 0 >>
+stream
+
+endstream
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000015 00000 n 
+0000000165 00000 n 
+0000000813 00000 n 
+0000000872 00000 n 
+0000001217 00000 n 
+0000001409 00000 n 
+0000001498 00000 n 
+0000001597 00000 n 
+0000001749 00000 n 
+0000001822 00000 n 
+trailer << /Root 1 0 R /Size 11 /ID [<08e9f3776c0e715d208899d5ca1660b8><08e9f3776c0e715d208899d5ca1660b8>] >>
+startxref
+1922
+%%EOF

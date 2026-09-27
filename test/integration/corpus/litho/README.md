@@ -163,6 +163,7 @@ one deliberately rather than diffing it against a fresh build.
 | `formhidden_ua1.pdf`   | PDF/UA-1     | Hidden and NoView widgets under the form mutations; conforming   |
 | `annothidden_2b.pdf`   | PDF/A-2b     | Annotations that show nowhere, under PDF/A remediation           |
 | `kidsrepair_1b.pdf`    | PDF/A-1b     | Repairs of inherited resources and of pages written in `/Kids`   |
+| `inlinefs_4.pdf`       | PDF/A-4      | File specifications written inline outside any annotation `/FS`  |
 
 ### Must-not-fire controls
 
@@ -445,6 +446,7 @@ which are covered under [Known divergences](#known-divergences).
 | `imagedraws_2b.pdf`    | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 10   | 7    |
 | `imagereach_2b.pdf`    | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 5    | 6    |
 | `imgxmp_4.pdf`         | 10   | 8    | 15   | 13   | 13   | 15   | 13   | 13   | 8   | 9    | 10   | 7    | 6    |
+| `inlinefs_4.pdf`       | 7    | 5    | 9    | 7    | 7    | 11   | 9    | 9    | 4   | 4    | 5    | 10   | 6    |
 | `inlineimage_2b.pdf`   | 7    | 4    | 10   | 6    | 7    | 10   | 6    | 7    | 6   | 6    | 7    | 10   | 10   |
 | `inlineinterp_2b.pdf`  | 7    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 10   | 8    |
 | `jpx_2b.pdf`           | 4    | 2    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 5    | 6    |
@@ -3782,6 +3784,55 @@ other JavaScript actions, so no corpus file showed it.
 
 The two tools return the same rule set and the same count for every rule in
 all thirteen cells.
+
+### `inlinefs_4.pdf`
+
+ISO 32000-1, 7.11.3 does not require a file specification to be an indirect
+object. veraPDF judges a `/Type /Filespec` dictionary wherever it meets one, as
+it walks every value of every object, and names an inline one by the object
+holding it. litho judged an inline one only inside an annotation that is an
+object of its own, and its repairs reached an annotation's `/FS` alone. Four
+routes each carry a different set of defects, so a check or a repair that
+misses one reports a count other than the one due:
+
+| Route     | Where the specification sits                    | Embeds              | Keys                      |
+| --------- | ----------------------------------------------- | ------------------- | ------------------------- |
+| `LK1`     | the `/AF` of a Link that is an object           | text, no `/Subtype` | `/F` only                 |
+| `LK2`     | the `/AF` of a Link written inline in `/Annots` | text, `/plain`      | `/F`, `/UF`, relationship |
+| `Fm`      | the `/AF` of a form XObject the page lists      | nothing             | `/F`, `/UF`               |
+| `catalog` | the catalog's `/AF`                             | nothing             | `/F`, `/UF`, relationship |
+
+Neither embedded file is a PDF. An `/AF` array associates only the indirect
+objects it lists, and veraPDF counts an inline specification as associated
+with nothing, even one an `/AF` array lists inline, so `6.8/4` fires on all
+four at PDF/A-3b.
+
+| Rule                                | veraPDF | litho | litho before |
+| ----------------------------------- | ------- | ----- | ------------ |
+| PDF/A-1b `6.1.11/1` `/EF` present   | 2       | 2     | 1            |
+| PDF/A-2b `6.8/5` not PDF/A          | 2       | 2     | 1            |
+| PDF/A-3b `6.8/1` media type         | 2       | 2     | 1            |
+| PDF/A-3b `6.8/2` `/F` without `/UF` | 1       | 1     | 1            |
+| PDF/A-3b `6.8/3` no relationship    | 2       | 2     | 1            |
+| PDF/A-3b `6.8/4` not associated     | 4       | 4     | 1            |
+| PDF/A-4 `6.9/1` media type          | 2       | 2     | 1            |
+| PDF/A-4 `6.9/2` `/F` without `/UF`  | 1       | 1     | 1            |
+| PDF/A-4 `6.9/3` not PDF/A           | 2       | 2     | 1            |
+| PDF/A-4 `6.9/4` no relationship     | 1       | 1     | 1            |
+
+The two tools return the same rule set and the same count for every rule in
+all thirteen cells. The Links carry `/Contents` and the page draws nothing, so
+the PDF/UA levels judge the annotations and not the content.
+
+Remediation at the eight manifest profiles leaves the same rule set on both
+tools in every cell. The aggressive mode leaves nothing but `7.18.5/1` at
+PDF/UA-1, the Links the auto-tagger nests in an Artifact. The normal mode
+also keeps the embedded files, which the part 1 prohibition (`6.1.11/1`) and
+the PDF/A conformance of an attachment (`6.8/5` at part 2, `6.9/3` at part 4)
+refuse, and repairs everything else. Before, both modes left `6.9/1` to
+`6.9/4` at PDF/A-4, `6.8/2` and `6.8/5` at part 2 and `6.1.11/1` at part 1,
+and at PDF/A-3b left veraPDF reporting `6.8/1`, `6.8/3` and `6.8/4` on the
+routes litho neither judged nor repaired, where litho reported nothing.
 
 ### `repairroom_2b.pdf`
 
