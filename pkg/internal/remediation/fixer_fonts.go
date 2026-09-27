@@ -15,7 +15,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/core/xref"
-	"github.com/gotenberg/litho/pkg/internal/graphics/content"
 	"github.com/gotenberg/litho/pkg/internal/typography"
 )
 
@@ -149,75 +148,66 @@ func fixFontIssues(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	processed := make(map[int]bool)
 	cidSets := newCIDSetRepair(hasCIDSetViolation, needCIDSet)
 
+	// The codes each font shows, gathered over every stream that selects it
+	// before any font is repaired: a generated /ToUnicode is only attached when
+	// it covers them all, because that is the set the validator holds it to
+	// (see [collectFontUses]). The content is read through the allocator, as
+	// the fonts are: name-utf8 renames a font key in both, and a stale content
+	// against a live /Font matches no name it renamed.
 	entries := pageTreeEntries(ctx, alloc, doc, pages)
-	for i, page := range pages {
+	uses := collectFontUses(ctx, alloc, doc, pages, entries)
+	repair := func(fontEntry ast.PdfObject) {
+		var fontRef ast.PdfIndirectRef
+		if ref, ok := fontEntry.(ast.PdfIndirectRef); ok {
+			fontRef = ref
+		}
+		if fontRef.ObjectNum > 0 && processed[fontRef.ObjectNum] {
+			return
+		}
+		if fontRef.ObjectNum > 0 {
+			processed[fontRef.ObjectNum] = true
+		}
+
+		// Alloc-first: every writer below copies this dictionary, or a
+		// container built from it, back into the output, and font-keys and
+		// name-utf8 rewrite font dictionaries earlier in the registry.
+		fd := liveDictValue(ctx, alloc, doc, fontEntry)
+		if fd == nil {
+			return
+		}
+
+		subtype, _ := fd["Subtype"].(ast.PdfName)
+		switch string(subtype) {
+		case "Type0":
+			fixes = append(fixes, fixType0Font(ctx, doc, alloc, fd, fontRef, hasWidthViolation, cidSets)...)
+		case "Type1", "TrueType", "MMType1":
+			fixes = append(fixes, fixSimpleFont(ctx, doc, alloc, fd, fontRef, hasWidthViolation, hasCharSetViolation)...)
+			// A /ToUnicode is built from the font's /Encoding, so it needs
+			// none of the width repair's preconditions: no /Widths array, no
+			// /FontDescriptor, and no program metrics. Running it inside
+			// fixSimpleFont meant one of those early returns cancelled it,
+			// and every Type 1 font kept its missing Unicode mapping (ISO
+			// 19005-2, 6.2.11.7.2).
+			fixes = append(fixes, fixSimpleFontToUnicode(ctx, doc, alloc, fd, fontRef, uses.codes[fontRef.ObjectNum])...)
+		}
+	}
+	for i := range pages {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
 		// The fonts the page's text resolves its names against: a font only
-		// another node's /Resources name is not the one the page shows, and
-		// taking it here would mark it processed with this page's codes.
+		// another node's /Resources name is not one the page shows. Sorted
+		// iteration so CMap object allocation (and the output bytes) is
+		// deterministic across runs.
 		fontDict := pageResourceCategory(ctx, alloc, doc, entries[i], "Font")
-		if fontDict == nil {
-			continue
-		}
-
-		// Which codes this page actually shows, per font resource name. A
-		// generated /ToUnicode is only attached when it covers them, because
-		// that is the set the validator holds it to. The content is read
-		// through the allocator, as the fonts are: name-utf8 renames a font
-		// key in both, and a stale content against a live /Font matches no
-		// name it renamed.
-		var shown map[string]map[byte]bool
-		if data, _, err := livePageContentData(ctx, alloc, doc, page); err == nil && len(data) > 0 {
-			if ops, perr := content.ParseStreamData(ctx, data); perr == nil {
-				shown = compliance.ShownCharCodes(ops)
-			}
-		}
-
-		// Sorted iteration so CMap object allocation (and the output
-		// bytes) is deterministic across runs.
 		for _, fontName := range sortedDictKeys(fontDict) {
-			fontEntry := fontDict[fontName]
-			var fontRef ast.PdfIndirectRef
-			if ref, ok := fontEntry.(ast.PdfIndirectRef); ok {
-				fontRef = ref
-			}
-			if fontRef.ObjectNum > 0 && processed[fontRef.ObjectNum] {
-				continue
-			}
-			if fontRef.ObjectNum > 0 {
-				processed[fontRef.ObjectNum] = true
-			}
-
-			// Alloc-first: every writer below copies this dictionary, or a
-			// container built from it, back into the output, and font-keys and
-			// name-utf8 rewrite font dictionaries earlier in the registry.
-			fd := liveDictValue(ctx, alloc, doc, fontEntry)
-			if fd == nil {
-				continue
-			}
-
-			subtype, _ := fd["Subtype"].(ast.PdfName)
-			switch string(subtype) {
-			case "Type0":
-				if f := fixType0Font(ctx, doc, alloc, fd, fontRef, hasWidthViolation, cidSets); len(f) > 0 {
-					fixes = append(fixes, f...)
-				}
-			case "Type1", "TrueType", "MMType1":
-				if f := fixSimpleFont(ctx, doc, alloc, fd, fontRef, hasWidthViolation, hasCharSetViolation); len(f) > 0 {
-					fixes = append(fixes, f...)
-				}
-				// A /ToUnicode is built from the font's /Encoding, so it needs
-				// none of the width repair's preconditions: no /Widths array,
-				// no /FontDescriptor, and no program metrics. Running it inside
-				// fixSimpleFont meant one of those early returns cancelled it,
-				// and every Type 1 font kept its missing Unicode mapping
-				// (ISO 19005-2, 6.2.11.7.2).
-				if f := fixSimpleFontToUnicode(ctx, doc, alloc, fd, fontRef, shown[string(fontName)]); len(f) > 0 {
-					fixes = append(fixes, f...)
-				}
-			}
+			repair(fontDict[fontName])
+		}
+		// Then the fonts the streams the page draws select, which its own
+		// /Resources need not name: a form's, a pattern cell's, a Type 3
+		// glyph's or an appearance's.
+		for _, fontEntry := range uses.drawn[i] {
+			repair(fontEntry)
 		}
 	}
 
