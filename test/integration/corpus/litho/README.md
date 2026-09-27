@@ -177,6 +177,7 @@ one deliberately rather than diffing it against a fresh build.
 | `noresources_4.pdf`    | PDF/A-4      | Page content with no resource dictionary, its own or inherited   |
 | `outlinedest_ua2.pdf`  | PDF/UA-2     | Outline structure destinations in every form; named OC configs   |
 | `pageboxes_2b.pdf`     | PDF/A-2b     | Page boxes that are not rectangles, under inherited crop boxes   |
+| `rolemapscope_ua2.pdf` | PDF/UA-2     | Private types the root `/RoleMap` maps, per declared namespace   |
 
 ### Must-not-fire controls
 
@@ -271,6 +272,7 @@ violation but is exempt, so a firing is a false positive.
 | `structcopy_ua2`                          | A root `/RoleMap`, `/ClassMap`, `/IDTree` and two `/Namespaces`        | ISO 14289-2, 8.2             |
 | `outlinedest_ua2`                         | Outline items opening structure destinations in four forms             | ISO 14289-2, 8.8             |
 | `outlinedest_ua2`                         | Two optional content configurations, each named and ordering both      | ISO 14289-2, 8.7             |
+| `rolemapscope_ua2`                        | A `Para` in the PDF 2.0 namespace, which the PDF 1.7 reading maps      | ISO 14289-1, 7.1 t5          |
 | `xref_1b`                                 | Every object offset and `startxref` value left valid by the patch      | ISO 19005-1, 6.1.4           |
 | `contentstream_4`                         | `/F1`, a name the inherited dictionary does define                     | ISO 19005-4, 6.2.2 t3        |
 | `iccbased_4`                              | An RGB ICCBased space, valid and unrelated to the OutputIntent         | ISO 19005-4, 6.2.4.2         |
@@ -511,6 +513,7 @@ which are covered under [Known divergences](#known-divergences).
 | `repairleft_4.pdf`     | 10   | 8    | 16   | 13   | 14   | 16   | 13   | 14   | 9   | 10   | 11   | 11   | 9    |
 | `repairroom_2b.pdf`    | 5    | 2    | 7    | 3    | 5    | 8    | 4    | 6    | 8   | 8    | 9    | 10   | 9    |
 | `resinherit_2b.pdf`    | 9    | 6    | 11   | 8    | 9    | 11   | 8    | 9    | 9   | 9    | 10   | 9    | 9    |
+| `rolemapscope_ua2.pdf` | 4    | 4    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 2    |
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
 | `sigtagged_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 4    |
@@ -5365,16 +5368,58 @@ of those outputs passes `6.1.13/11` on both tools, and each page shows the
 region the table gives. Remediation at the eight manifest profiles, default and
 aggressive, leaves nothing on either tool.
 
+### `rolemapscope_ua2.pdf`
+
+The structure tree root's `/RoleMap` maps a private structure type to a
+standard one for an element in no namespace, or in the PDF 1.7 namespace when
+that namespace declares no `/RoleMapNS` (ISO 32000-2, 14.8.6). A type an
+element declares in the PDF 2.0 namespace resolves through that namespace
+alone, which defines no private type, and a `/RoleMap` target is a PDF 1.7
+type. No corpus file declares a namespace on an element whose type only the
+`/RoleMap` maps, so this file does, beside the two placements the map reaches,
+under a root element whose private type the map sends to `Document`:
+
+| Element                         | Namespace | `/RoleMap` | Read at PDF/UA-2                    |
+| ------------------------------- | --------- | ---------- | ----------------------------------- |
+| `Workbook`, the root's only kid | none      | `Document` | the PDF 1.7 `Document`: `8.2.5.2/2` |
+| `H1`                            | PDF 2.0   |            | `H1`                                |
+| `Para`                          | PDF 2.0   | `P`        | no standard type: `8.2.4/1`         |
+| `Para`                          | none      | `P`        | `P`                                 |
+| `Para`                          | PDF 1.7   | `P`        | `P`                                 |
+
+The file agrees with veraPDF 1.30.2 in all thirteen cells, rule for rule and
+count for count. PDF/UA-2 reports the root's `Document` outside the PDF 2.0
+namespace (`8.2.5.2/2`) and the `Para` in it (`8.2.4/1`), veraPDF one check
+each. PDF/UA-1 and the level-A cells read the file as PDF 1.7, where the
+`/RoleMap` maps all three `Para`, and report nothing of the structure:
+PDF/UA-1 reports the part-2 claim (`5/2`) and the `%PDF-2.0` header (`6.1/1`).
+The PDF/A cells report the text painted in device gray with no output intent
+(`6.2.3.3/3` at part 1, `6.2.4.3/4` from part 2), the missing PDF/A
+identification and the `pdfuaid` properties no extension schema declares, and
+the header at parts 2 and 3 (`6.1.2/1`); PDF/A-4f adds the missing
+`/EmbeddedFiles`.
+
+Measured on litho and veraPDF 1.30.2 before the fix, litho let the `/RoleMap`
+map the `Para` in the PDF 2.0 namespace and missed `8.2.4/1` at PDF/UA-2.
+PDF/UA-2 remediation declared the PDF 2.0 namespace on `Workbook`, which cut it
+off from the map, and the single-Document repair then wrapped it in a second
+`Document`: veraPDF reported `8.2.4/1` on the output, for `Workbook` and the
+`Para`, and litho nothing. Now the repair names the root element a PDF 2.0
+`Document` and leaves the `/RoleMap` as written, and both tools report
+`8.2.4/1` alone, the `Para` no repair maps, default and aggressive. Remediation
+at the seven other manifest profiles leaves nothing on either tool, and every
+`mutate-*` cell passes.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 125 x 8 = 1000 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 125 x 13 = 1625 cells. litho
+runner scores 126 x 8 = 1008 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 126 x 13 = 1638 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1623 of the 1625 cells. The two
+fixtures exist to protect, and it holds in 1636 of the 1638 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -5385,7 +5430,7 @@ the cells whose sets of failed rules (clause and test) differ. Every cell but
 six is non-compliant on both sides (`baretree_2b` and `pagelabels_2b` at
 PDF/A-2b; `formhidden_ua1` and `sigtagged_ua1` at PDF/UA-1; and
 `outlinedest_ua2` and `structcopy_ua2` at PDF/UA-2 are the corpus's conforming
-cells), so a change that drops or invents a rule class leaves `matched` at 1000
+cells), so a change that drops or invents a rule class leaves `matched` at 1008
 and moves only `ruleset_mismatch`, and on those six cells it moves both. Both
 exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1 and
 PDF/UA-2, so the metric reads 2 on this corpus, and the text scoreboard names
