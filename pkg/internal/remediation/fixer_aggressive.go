@@ -11,7 +11,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
-	"github.com/gotenberg/litho/pkg/internal/core/ioat"
 	"github.com/gotenberg/litho/pkg/internal/core/lexer"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 	"github.com/gotenberg/litho/pkg/internal/graphics/content"
@@ -355,11 +354,11 @@ func spliceAggressiveRepairs(ctx context.Context, data []byte, fixRI, fixUnknown
 // ISO 32000-1, 8.9.7 lets an inline image carry the /Intent entry of an image
 // XObject (Table 89), which it writes in full, and ISO 19005-1, 6.2.9 and ISO
 // 19005-2/3, 6.2.6 hold it to the four intents of Table 70 as they hold the
-// operand of ri. The names are spliced in place ([walkTokens]), so the image
-// data is carried across byte for byte. The result is read back, and must
-// hold the operations data holds, each image's dictionary with the intents
-// respelled and nothing else changed; otherwise data comes back unchanged
-// with a count of 0.
+// operand of ri. The names are spliced in place and the result read back
+// ([respellInlineImageEntries]), so the image data is carried across byte for
+// byte, and a respelling that reads as anything else leaves data unchanged
+// with a count of 0. An image holds one /Intent, so the count is the images
+// respelled.
 //
 // # Corpus evidence
 //
@@ -370,72 +369,34 @@ func spliceAggressiveRepairs(ctx context.Context, data []byte, fixRI, fixUnknown
 //     Respelled, the 4 outputs pass both validators, and their image data
 //     and extracted text do not change.
 func respellInlineImageIntents(ctx context.Context, data []byte) ([]byte, int) {
-	// key is the name offered just before, where a key of an inline image's
-	// dictionary stands, or empty.
-	key := ""
-	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
-	splices, _ := walkTokens(ctx, data, lex, func(tok lexer.Token, at tokenPlace) (tokenSplice, bool) {
-		prev := key
-		key = ""
-		if !at.inlineImage || at.depth != 1 || tok.Type != lexer.TokenName {
-			return tokenSplice{}, false
-		}
-		name, _ := strings.CutPrefix(tok.Value, "/")
-		if prev != "/Intent" || isValidRenderingIntent(name) {
-			key = tok.Value
-			return tokenSplice{}, false
-		}
-		start, ok := nameSpan(data, at.end, tok.Value)
-		if !ok {
-			return tokenSplice{}, false
-		}
-		return tokenSplice{start: start, end: at.end, text: "/RelativeColorimetric"}, true
+	return respellInlineImageEntries(ctx, data, imageEntryRespell{
+		splice: func(data []byte, key string, tok lexer.Token, at tokenPlace) (tokenSplice, bool) {
+			if key != "/Intent" || tok.Type != lexer.TokenName {
+				return tokenSplice{}, false
+			}
+			if name, _ := strings.CutPrefix(tok.Value, "/"); isValidRenderingIntent(name) {
+				return tokenSplice{}, false
+			}
+			start, ok := nameSpan(data, at.end, tok.Value)
+			if !ok {
+				return tokenSplice{}, false
+			}
+			return tokenSplice{start: start, end: at.end, text: "/RelativeColorimetric"}, true
+		},
+		fixed: respelledIntent,
 	})
-	if len(splices) == 0 {
-		return data, 0
-	}
-	out := applyTokenSplices(data, splices)
-	before, err := content.ParseStreamData(ctx, data, content.ForRepair())
-	if err != nil {
-		return data, 0
-	}
-	after, err := content.ParseStreamData(ctx, out, content.ForRepair())
-	if err != nil || len(after) != len(before) {
-		return data, 0
-	}
-	respelled := 0
-	for i, op := range before {
-		if want, ok := respelledIntent(op); ok {
-			op = want
-			respelled++
-		}
-		if !sameOperation(after[i], op) {
-			return data, 0
-		}
-	}
-	if respelled != len(splices) {
-		return data, 0
-	}
-	return out, respelled
 }
 
-// respelledIntent returns op, an inline image's BI operation, with the
-// invalid rendering intent its dictionary names replaced by
-// RelativeColorimetric, and false when op names none.
-func respelledIntent(op content.Operation) (content.Operation, bool) {
-	if !beginsInlineImage(op) || len(op.Operands) != 1 {
-		return op, false
-	}
-	dict, ok := op.Operands[0].(ast.PdfDict)
-	if !ok {
-		return op, false
-	}
+// respelledIntent returns dict, an inline image's dictionary, with the invalid
+// rendering intent it names replaced by RelativeColorimetric, and 1, or 0 when
+// it names none.
+func respelledIntent(dict ast.PdfDict) (ast.PdfDict, int) {
 	if name, ok := dict["Intent"].(ast.PdfName); !ok || isValidRenderingIntent(string(name)) {
-		return op, false
+		return dict, 0
 	}
 	fixed := maps.Clone(dict)
 	fixed["Intent"] = ast.PdfName("RelativeColorimetric")
-	return content.Operation{Operator: op.Operator, Operands: []ast.PdfObject{fixed}}, true
+	return fixed, 1
 }
 
 // aggressiveOperation returns the repair [fixContentStreams] splices into a

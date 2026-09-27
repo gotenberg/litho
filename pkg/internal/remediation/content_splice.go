@@ -295,6 +295,100 @@ func applyTokenSplices(data []byte, splices []tokenSplice) []byte {
 	return out.Bytes()
 }
 
+// imageEntryRespell is a repair of the entries of the inline image
+// dictionaries of one content stream, which [respellInlineImageEntries]
+// splices in place.
+type imageEntryRespell struct {
+	// splice returns the replacement for tok, a token of an inline image's
+	// dictionary one level down from it, where key is the name offered just
+	// before it, or empty, and false to keep it. data is the stream.
+	splice func(data []byte, key string, tok lexer.Token, at tokenPlace) (tokenSplice, bool)
+	// fixed returns dict, an inline image's dictionary as the reading of a
+	// repair reads it, with the entries the splices respell as they read once
+	// respelled, and how many entries it changed.
+	fixed func(dict ast.PdfDict) (ast.PdfDict, int)
+}
+
+// respellInlineImageEntries returns data with the tokens r.splice answers for
+// in the dictionaries of its inline images respelled in place, and how many
+// images it changed.
+//
+// The tokens are spliced in place ([walkTokens]), so every other byte of the
+// stream, the image data among them, is carried across as it was (ISO 32000-1,
+// 8.9.7). The result is read back as a repair reads it ([content.ForRepair]),
+// and must hold the operations data holds, save the dictionaries of the images
+// it changed, each one as r.fixed writes it, and the entries changed must
+// number the splices; otherwise data comes back unchanged with a count of 0.
+// An image whose dictionary the walk cannot read keeps its bytes
+// ([inlineImageDictSplices]), and the others still change: its finding stays
+// a residual.
+func respellInlineImageEntries(ctx context.Context, data []byte, r imageEntryRespell) ([]byte, int) {
+	// key is the name offered just before, where a key of an inline image's
+	// dictionary stands, or empty.
+	key := ""
+	lex := lexer.NewLexer(ioat.NewReader(bytes.NewReader(data), int64(len(data)), 0))
+	splices, _ := walkTokens(ctx, data, lex, func(tok lexer.Token, at tokenPlace) (tokenSplice, bool) {
+		prev := key
+		key = ""
+		if !at.inlineImage || at.depth != 1 {
+			return tokenSplice{}, false
+		}
+		if s, ok := r.splice(data, prev, tok, at); ok {
+			return s, true
+		}
+		if tok.Type == lexer.TokenName {
+			key = tok.Value
+		}
+		return tokenSplice{}, false
+	})
+	if len(splices) == 0 {
+		return data, 0
+	}
+	out := applyTokenSplices(data, splices)
+	before, err := content.ParseStreamData(ctx, data, content.ForRepair())
+	if err != nil {
+		return data, 0
+	}
+	after, err := content.ParseStreamData(ctx, out, content.ForRepair())
+	if err != nil || len(after) != len(before) {
+		return data, 0
+	}
+	images, entries := 0, 0
+	for i, op := range before {
+		if sameOperation(after[i], op) {
+			continue
+		}
+		want, n := fixedImage(op, r.fixed)
+		if n == 0 || !sameOperation(after[i], want) {
+			return data, 0
+		}
+		images++
+		entries += n
+	}
+	if entries != len(splices) {
+		return data, 0
+	}
+	return out, images
+}
+
+// fixedImage returns op, an operation of the reading of a repair, with the
+// dictionary of the inline image it begins as fixed writes it, and how many
+// entries fixed changed: none for any other operation.
+func fixedImage(op content.Operation, fixed func(ast.PdfDict) (ast.PdfDict, int)) (content.Operation, int) {
+	if !beginsInlineImage(op) || len(op.Operands) != 1 {
+		return op, 0
+	}
+	dict, ok := op.Operands[0].(ast.PdfDict)
+	if !ok {
+		return op, 0
+	}
+	d, n := fixed(dict)
+	if n == 0 {
+		return op, 0
+	}
+	return content.Operation{Operator: op.Operator, Operands: []ast.PdfObject{d}}, n
+}
+
 // replaceDecodedStream writes data at ref as the body of a stream whose
 // dictionary was dict, and reports whether the allocator took the write. The
 // stream stays a stream, with every key of dict but its filters.
