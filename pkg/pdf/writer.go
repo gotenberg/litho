@@ -1408,15 +1408,19 @@ type EncryptConfig struct {
 	//
 	// The P entry the output carries holds the permission bits of the mask
 	// and the reserved bits at the values ISO 32000-2, 7.6.4.2, Table 22
-	// requires, whatever the mask holds there: bits 1-2 cleared ("Reserved.
-	// Must be zero (0)."), bits 7-8 and 13-32 set ("Reserved. Must be 1."). -1
-	// is written as -4, and 0, every permission denied, as -3904. Readers
-	// ignore those bits (ISO 32000-1, 7.6.3.2), so this changes no permission.
+	// gives them, whatever the mask holds there: bits 1-2 cleared ("Reserved.
+	// Must be zero (0)."), bits 7-8 set ("Reserved. Must be 1.") and bits
+	// 13-32 set ("(Security handlers of revision 3 or greater) Reserved. Must
+	// be 1."). The table names no value of bits 13-32 for the revision 2
+	// handler, [EncryptRC4_40], which gets them set as well, as the example
+	// of ISO 32000-1, 7.6.3.2 shows. -1 is written as -4, and 0, every
+	// permission denied, as -3904. Readers ignore those bits (ISO 32000-1,
+	// 7.6.3.2), so this changes no permission.
 	//
 	// An output that declares PDF 2.0 sets bit 10 whatever the mask says: ISO
-	// 32000-2, Table 22 retires the bit, and requires writers to set it for
-	// readers that follow earlier specifications. Below 2.0 the mask is
-	// written as given, and bit 10 is the permission to extract content for
+	// 32000-2, Table 22 marks the bit "Not used" and reads "PDF writers shall
+	// always set this bit to 1". Below 2.0 the mask is written as given, and
+	// bit 10 is the permission to extract text and graphics in support of
 	// accessibility (ISO 32000-1, Table 22).
 	Permissions int32
 }
@@ -1857,11 +1861,12 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 // account for.
 //
 // Its output may be encrypted, but a PDF/UA-1 output only with permissions
-// that set bit 10 of the P key, the permission to extract content for
-// accessibility: ISO 14289-1, 7.16 requires it of an encrypted conforming
-// file, and [EncryptConfig.Permissions] of -1 or from [Permissions.Mask] set
-// it. The remediation judges its output before it is encrypted, so rather
-// than report a document the write would then break, it returns
+// that set bit 10 of the P key, which ISO 14289-1, 7.16 requires of an
+// encrypted conforming file, and [EncryptConfig.Permissions] of -1 or from
+// [Permissions.Mask] set it. ISO 32000-1, Table 22 makes the bit the
+// permission to extract text and graphics in support of accessibility. The
+// remediation judges its output before it is encrypted, so rather than report
+// a document the write would then break, it returns
 // [ErrPDFUAForbidsBarringAccessibility] when [Writer.Encrypt], or the
 // [WithEncryption] given to [NewWriter], cleared the bit before it, and
 // [Writer.WriteTo] returns it for WithEncryption.
@@ -2127,9 +2132,9 @@ type remediationTarget struct {
 
 // pdfuaAccessibilityClause returns the clause of profile that requires an
 // encrypted conforming file to set bit 10 of its P key, "" when it states
-// none. ISO 14289-1, 7.16 does. The PDF/UA-2 profile holds no such rule, as
-// ISO 32000-2, Table 22 deprecates the bit: readers ignore it and writers set
-// it.
+// none. ISO 14289-1, 7.16 does. The PDF/UA-2 profile holds no such rule. ISO
+// 32000-2, Table 22 marks the bit "Not used", and an output declaring PDF 2.0
+// sets it whatever the mask (see [EncryptConfig.Permissions]).
 func pdfuaAccessibilityClause(profile models.PDFUAProfile) string {
 	if profile == models.PDFUA1 {
 		return "ISO 14289-1, 7.16"

@@ -32,8 +32,10 @@ const (
 // AccessibilityPermission is bit 10 of the P entry of a standard security
 // handler. ISO 32000-1, 7.6.3.2, Table 22 makes it the permission to extract
 // text and graphics in support of accessibility, for handlers of revision 3 or
-// greater. ISO 32000-2, 7.6.4.2, Table 22 retires it: readers ignore it and
-// writers always set it.
+// greater. ISO 32000-2, 7.6.4.2, Table 22 marks it "Not used", the restriction
+// it carried "deprecated in PDF 2.0": "PDF readers shall ignore this bit and
+// PDF writers shall always set this bit to 1 to ensure compatibility with PDF
+// readers following earlier specifications."
 const AccessibilityPermission int32 = 1 << 9
 
 // Reserved bits of the P entry of a standard security handler, with the value
