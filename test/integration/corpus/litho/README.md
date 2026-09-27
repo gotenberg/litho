@@ -4012,6 +4012,10 @@ structured type with no namespace URI.
 At PDF/A-1b the same constructs fail `6.7.8/9`, `6.7.8/18` three times,
 `6.7.9/2` and `6.7.9/3`. All thirteen cells return the same rule set on both.
 
+Remediation drops the value types of the entry with no property array, which
+no property can use, so its output keeps `6.6.2.3.3/8` alone at PDF/A-2b and
+PDF/A-3b and `6.7.8/9` alone at PDF/A-1b, on both tools.
+
 ### `extpredef_2b.pdf`
 
 veraPDF resolves a property through the extension schema entries of its packet
@@ -4272,8 +4276,12 @@ An `/Encoding` that is neither a name, a dictionary nor null stops veraPDF
 Before the fix every one of the thirteen cells disagreed. After it the rule
 sets and the counts of every rule equal veraPDF 1.30.2's in all thirteen, and
 in the remediated output of the eight profiles `manifest.json` lists, default
-and aggressive. Remediation leaves the language rules at PDF/UA-1, PDF/UA-2 and
-PDF/A-2a on both tools, since the `/Lang` repair walks the structure tree.
+and aggressive. Remediation used to leave the language rules at PDF/UA-1,
+PDF/UA-2, PDF/A-1a and PDF/A-2a on both tools, since the `/Lang` repair walked
+the structure tree alone. It now strips the tags of the elements the
+`/ParentTree` maps as well, and the remediated output of those cells and of
+WTPDF-1.0-Accessibility, default and aggressive, fails no language rule on
+either tool.
 
 ### `xmppage_2b.pdf`
 
@@ -4324,10 +4332,13 @@ ISO 19005-1 builds no package for a page's metadata stream, so PDF/A-1b and
 PDF/A-1a are silent on the page packets, on both tools. All thirteen cells
 return the same rule set and the same counts on both.
 
-The remediation of every PDF/A-2 and PDF/A-3 cell leaves `6.6.2.3.3/1` and
-`/17` on both tools, as it does when the catalog packet carries the same two
+The remediation of every PDF/A-2 and PDF/A-3 cell used to leave `6.6.2.3.3/1`
+and `/17` on both tools, as it did when the catalog packet carries the same two
 defects. litho used to report nothing there, where veraPDF reported those two
-and, at PDF/A-2b, where nothing else ran the metadata repair, all nine.
+and, at PDF/A-2b, where nothing else ran the metadata repair, all nine. The
+repair now renames page 3's `rdf:Seq` an `rdf:Bag` and drops the value types of
+page 4's entry with no property array, which no property can use, so the
+PDF/A-2b and PDF/A-3b outputs, default and aggressive, pass on both tools.
 
 ## Scope
 
