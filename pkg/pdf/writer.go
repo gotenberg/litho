@@ -1346,9 +1346,9 @@ func (w *Writer) AutoTag() *AutoTagReport {
 }
 
 // EncryptAlgorithm identifies a PDF standard-security-handler algorithm.
-// Values cover the ISO 32000 V=1..5 security handlers. New code should
-// prefer [EncryptAES256]; the RC4 variants are provided for
-// legacy-compatibility writes only.
+// Values cover the ISO 32000 V=1..5 security handlers. The zero value is
+// [EncryptAES256], the recommended one; the RC4 variants are provided for
+// legacy-compatibility writes only, and a caller names them to get them.
 // EncryptAlgorithm values are immutable and safe for concurrent use.
 type EncryptAlgorithm int
 
@@ -1357,19 +1357,13 @@ type EncryptAlgorithm int
 // itself. RC4 needs nothing beyond PDF 1.4, AES-128 raises the output to 1.6,
 // and AES-256 raises it to 1.7 and records the Adobe extension that defines
 // it. See [EncryptAES256] for why 1.7 rather than 2.0.
+//
+// The constants are listed from the strongest handler down, and the
+// strongest is the zero value, so an [EncryptConfig] that names no algorithm
+// never selects a weak one.
 const (
-	// EncryptRC4_40 uses 40-bit RC4 (V=1, R=2), a PDF 1.1 handler. Weak.
-	// Legacy only.
-	EncryptRC4_40 EncryptAlgorithm = iota
-	// EncryptRC4_128 uses 128-bit RC4 (V=2, R=3), a PDF 1.4 handler. Weak.
-	// Legacy only.
-	EncryptRC4_128
-	// EncryptAES128 uses 128-bit AES-CBC (V=4, R=4) through the AESV2 crypt
-	// filter, which ISO 32000-1, Table 25 introduces in PDF 1.6. The output
-	// declares at least that version.
-	EncryptAES128
 	// EncryptAES256 uses 256-bit AES-CBC (V=5, R=6) through the AESV3 crypt
-	// filter. Recommended.
+	// filter. Recommended, and the zero value.
 	//
 	// ISO 32000-2 defines this handler, but the output declares PDF 1.7 plus
 	// an /Extensions entry naming Adobe extension level 3 rather than PDF
@@ -1377,7 +1371,17 @@ const (
 	// 2.0 would overstate a document whose body is unchanged. This matches
 	// what other producers write: qpdf emits the same 1.7-plus-extension
 	// pair.
-	EncryptAES256
+	EncryptAES256 EncryptAlgorithm = iota
+	// EncryptAES128 uses 128-bit AES-CBC (V=4, R=4) through the AESV2 crypt
+	// filter, which ISO 32000-1, Table 25 introduces in PDF 1.6. The output
+	// declares at least that version.
+	EncryptAES128
+	// EncryptRC4_128 uses 128-bit RC4 (V=2, R=3), a PDF 1.4 handler. Weak.
+	// Legacy only.
+	EncryptRC4_128
+	// EncryptRC4_40 uses 40-bit RC4 (V=1, R=2), a PDF 1.1 handler. Weak.
+	// Legacy only.
+	EncryptRC4_40
 )
 
 // EncryptConfig specifies the parameters for password-based encryption.
@@ -1395,7 +1399,9 @@ type EncryptConfig struct {
 	// passwords get the same effective permissions as an
 	// empty-user-password doc.
 	OwnerPassword string
-	// Algorithm selects the standard security handler variant.
+	// Algorithm selects the standard security handler variant. The zero
+	// value selects [EncryptAES256]; [EncryptRC4_40] and the other weaker
+	// handlers are written only when named.
 	Algorithm EncryptAlgorithm
 	// Permissions is the 32-bit PDF permission mask. Pass -1 for "all
 	// permissions granted", or build one with [Permissions.Mask].
@@ -1419,6 +1425,10 @@ type EncryptConfig struct {
 // [crypto.EncryptConfig] consumed by the write engine. Kept
 // lowercase-private so the internal type never appears in a public
 // signature.
+//
+// [EncryptAlgorithm] and [crypto.Algorithm] list the handlers in the same
+// order, AES-256 first, so the algorithm converts by value, and a value
+// outside the list stays one the engine refuses.
 func (c EncryptConfig) toInternal() crypto.EncryptConfig {
 	return crypto.EncryptConfig{
 		UserPassword:  c.UserPassword,

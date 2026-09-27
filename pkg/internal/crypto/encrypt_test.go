@@ -296,3 +296,19 @@ func TestNewEncryptorWritesTheReservedPermissionBits(t *testing.T) {
 		}
 	}
 }
+
+// TestNewEncryptor_ZeroAlgorithmIsAES256 pins that a config naming no
+// algorithm builds the AES-256 handler (V 5, R 6). The zero value was the
+// 40-bit RC4 handler, which is weak and for legacy use only.
+func TestNewEncryptor_ZeroAlgorithmIsAES256(t *testing.T) {
+	t.Parallel()
+
+	cfg := EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Permissions: -4}
+	_, encDict, err := NewEncryptor(cfg, []byte("0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("NewEncryptor: %v", err)
+	}
+	if v, r := encDict["V"], encDict["R"]; v != ast.PdfInt(5) || r != ast.PdfInt(6) {
+		t.Errorf("the zero algorithm builds V %v R %v, want V 5 R 6", v, r)
+	}
+}

@@ -12,18 +12,21 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
-// Algorithm enumerates supported encryption algorithms.
+// Algorithm enumerates supported encryption algorithms, from the strongest
+// down. The zero value is [AES_256], so a config that names none never
+// selects a weak handler. The order matches the public pdf.EncryptAlgorithm,
+// which converts to it by value.
 type Algorithm int
 
 const (
-	// RC4_40 uses 40-bit RC4 (V=1, R=2). Weak, for legacy compatibility only.
-	RC4_40 Algorithm = iota
-	// RC4_128 uses 128-bit RC4 (V=2, R=3).
-	RC4_128
+	// AES_256 uses 256-bit AES-CBC (V=5, R=6). Recommended.
+	AES_256 Algorithm = iota
 	// AES_128 uses 128-bit AES-CBC (V=4, R=4).
 	AES_128
-	// AES_256 uses 256-bit AES-CBC (V=5, R=6). Recommended.
-	AES_256
+	// RC4_128 uses 128-bit RC4 (V=2, R=3).
+	RC4_128
+	// RC4_40 uses 40-bit RC4 (V=1, R=2). Weak, for legacy compatibility only.
+	RC4_40
 )
 
 // AccessibilityPermission is bit 10 of the P entry of a standard security

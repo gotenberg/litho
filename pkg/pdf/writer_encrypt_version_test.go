@@ -82,3 +82,49 @@ func TestWriteTo_EncryptionDeclaresItsVersion(t *testing.T) {
 		})
 	}
 }
+
+// TestEncryptConfigZeroValueIsAES256 pins that an [EncryptConfig] naming no
+// algorithm encrypts with AES-256 (V 5, R 6), the handler [EncryptAES256]
+// recommends. The zero value selected [EncryptRC4_40], a 40-bit handler its own
+// documentation calls weak and for legacy use only. Each constant maps to the
+// handler it names, RC4-40 included.
+func TestEncryptConfigZeroValueIsAES256(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name         string
+		algorithm    EncryptAlgorithm
+		wantV, wantR int
+	}{
+		{name: "zero value", wantV: 5, wantR: 6},
+		{name: "EncryptAES256", algorithm: EncryptAES256, wantV: 5, wantR: 6},
+		{name: "EncryptAES128", algorithm: EncryptAES128, wantV: 4, wantR: 4},
+		{name: "EncryptRC4_128", algorithm: EncryptRC4_128, wantV: 2, wantR: 3},
+		{name: "EncryptRC4_40", algorithm: EncryptRC4_40, wantV: 1, wantR: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := EncryptConfig{UserPassword: "user", OwnerPassword: "owner", Algorithm: tc.algorithm, Permissions: -1}
+			if back := encryptConfigFromInternal(cfg.toInternal()); back != cfg {
+				t.Errorf("the config reads back from the write engine as %+v, want %+v", back, cfg)
+			}
+			out, err := writeWithOptions(t, twinPagesPDF(), nil, nil, []WriteOption{WithEncryption(cfg)})
+			if err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			r, err := Open(context.Background(), bytes.NewReader(out), int64(len(out)), WithPassword("user"))
+			if err != nil {
+				t.Fatalf("reopening the output: %v", err)
+			}
+			defer r.Close()
+			got := r.doc.Crypto
+			if got == nil {
+				t.Fatal("the output reopens with no security handler")
+			}
+			if got.V != tc.wantV || got.R != tc.wantR {
+				t.Errorf("the output's handler is V %d R %d, want V %d R %d", got.V, got.R, tc.wantV, tc.wantR)
+			}
+		})
+	}
+}
