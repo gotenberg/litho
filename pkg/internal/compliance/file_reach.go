@@ -297,7 +297,10 @@ func structureValues(ctx context.Context, vctx *validationCtx, catalogSite prope
 // CosLang. veraPDF reaches the dictionaries of every page's /Annots, and the
 // form fields of the /Fields of the /AcroForm and, below them, every /Kids
 // entry holding a /T (PDFormField.getChildFormFields); each once when written
-// as an indirect object. The field descent stops at [maxFieldTreeDepth].
+// as an indirect object. A /Kids array written as an object of its own is read
+// once too ([document.VisitedBefore]): its direct kids can each name it again,
+// and read anew wherever it is reached it fans out 2^depth. The field descent
+// stops at [maxFieldTreeDepth].
 func structParentLangValues(ctx context.Context, vctx *validationCtx, root ast.PdfDict) []typedValue {
 	doc := vctx.doc
 	parents := make(map[int]ast.PdfObject)
@@ -374,6 +377,11 @@ func structParentLangValues(ctx context.Context, vctx *validationCtx, root ast.P
 		}
 		field, ok := reach(raw, "structure element /Lang of a form field")
 		if !ok {
+			return
+		}
+		// A /Kids array written as an object of its own is read once, as a
+		// field is: its direct kids can each name it again.
+		if document.VisitedBefore(field["Kids"], seen) {
 			return
 		}
 		kids, _ := document.ResolveArray(ctx, doc, field["Kids"]) // Best-effort: unreadable /Kids hold no field.

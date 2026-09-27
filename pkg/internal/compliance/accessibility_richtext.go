@@ -203,7 +203,10 @@ func checkTextFieldRichValue(ctx context.Context, doc *document.Document, catalo
 }
 
 // walkTextFieldRichValue descends a field tree, carrying the inherited /FT down
-// to the terminal fields that ISO 32000-2, 12.7.4.3 lets omit it.
+// to the terminal fields that ISO 32000-2, 12.7.4.3 lets omit it. seen holds
+// the fields, and the /Kids arrays written as objects of their own, already
+// walked ([document.VisitedBefore]): direct kids that each name their own /Kids
+// array again would otherwise fan out 2^depth.
 func walkTextFieldRichValue(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, inheritedFT ast.PdfName, depth int, seen map[int]bool) []Violation {
 	if depth > maxTextFieldTreeDepth || ctx.Err() != nil {
 		return nil
@@ -229,6 +232,9 @@ func walkTextFieldRichValue(ctx context.Context, doc *document.Document, fieldOb
 		results = append(results, textFieldRichValueViolation(ctx, doc, field)...)
 	}
 
+	if document.VisitedBefore(field["Kids"], seen) {
+		return results
+	}
 	kids, err := document.ResolveArray(ctx, doc, field["Kids"])
 	if err != nil {
 		return results

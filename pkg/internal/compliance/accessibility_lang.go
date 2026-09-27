@@ -771,7 +771,9 @@ func structElementLang(ctx context.Context, doc *document.Document, treeRoot, ob
 
 // checkFieldTULang walks the form-field tree, reporting §7.2 t25 for a field
 // whose /TU entry is present but whose language is undeterminable. seen and
-// depth bound a shared or cyclic /Kids tree.
+// depth bound a shared or cyclic /Kids tree: seen holds the fields, and the
+// /Kids arrays written as objects of their own, already walked
+// ([document.VisitedBefore]).
 func checkFieldTULang(ctx context.Context, doc *document.Document, treeRoot ast.PdfDict, fields ast.PdfArray, seen map[int]bool, depth int, results *[]Violation) {
 	if ctx.Err() != nil || depth > maxFieldTreeDepth {
 		return
@@ -794,6 +796,9 @@ func checkFieldTULang(ctx context.Context, doc *document.Document, treeRoot ast.
 			if _, err := document.ResolveString(ctx, doc, tuObj); err == nil && !objLangDeterminable(ctx, doc, treeRoot, field) {
 				*results = append(*results, fail(Rule_14289_1_7_2_t25, "form field /TU")...)
 			}
+		}
+		if document.VisitedBefore(field["Kids"], seen) {
+			continue
 		}
 		if kids, err := document.ResolveArray(ctx, doc, field["Kids"]); err == nil && len(kids) > 0 {
 			checkFieldTULang(ctx, doc, treeRoot, kids, seen, depth+1, results)

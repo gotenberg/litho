@@ -85,7 +85,9 @@ func checkFormGroup(ctx context.Context, vctx *validationCtx) []Violation {
 // collectFieldObjNums records the object numbers of every field reachable from
 // the /AcroForm /Fields tree, including widget /Kids, so widget annotations
 // already validated by the field walk are not re-checked by the page /Annots
-// scan.
+// scan. seen holds the fields, and the /Kids arrays written as objects of their
+// own, already walked ([document.VisitedBefore]): direct kids that each name
+// their own /Kids array again would otherwise fan out 2^depth.
 func collectFieldObjNums(ctx context.Context, doc *document.Document, fields ast.PdfArray, seen map[int]bool, depth int) {
 	if ctx.Err() != nil || depth > maxFieldTreeDepth {
 		return
@@ -99,6 +101,9 @@ func collectFieldObjNums(ctx context.Context, doc *document.Document, fields ast
 		}
 		field, err := document.ResolveDict(ctx, doc, fieldObj)
 		if err != nil || field == nil {
+			continue
+		}
+		if document.VisitedBefore(field["Kids"], seen) {
 			continue
 		}
 		if kids, err := document.ResolveArray(ctx, doc, field["Kids"]); err == nil && len(kids) > 0 {
@@ -437,8 +442,10 @@ func isPdfWhitespaceByte(b byte) bool {
 }
 
 // checkFormField validates a single form field and recurses into child fields.
-// seen guards against a shared or cyclic /Kids tree: each field object is
-// processed at most once, so a crafted fan-out cannot force exponential work.
+// seen guards against a shared or cyclic /Kids tree: each field object, and
+// each /Kids array written as an object of its own, is processed at most once,
+// so a crafted fan-out cannot force exponential work. A direct field is judged
+// wherever it is reached, but only an indirect container can be reached twice.
 func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.PdfObject, _ string, part int, _ bool, fieldIdx int, results *[]Violation, depth int, seen, pageAnnotObjs map[int]bool) {
 	if ctx.Err() != nil || depth > maxFieldTreeDepth {
 		return
@@ -475,7 +482,7 @@ func checkFormField(ctx context.Context, doc *document.Document, fieldObj ast.Pd
 
 	// Recurse into child fields (/Kids).
 	kidsObj, ok := field["Kids"]
-	if !ok {
+	if !ok || document.VisitedBefore(kidsObj, seen) {
 		return
 	}
 
