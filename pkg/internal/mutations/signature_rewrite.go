@@ -426,7 +426,10 @@ func signatureInventory(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 // well.
 //
 // Each indirect field is visited once, which ends a cycle and bounds the walk
-// by the objects the file holds. The descent is bounded by
+// by the objects the file holds. A /Kids array written as an object of its own
+// is walked once too, and its result reused wherever it is reached again: the
+// direct fields it holds can each name it again, and walked anew wherever it
+// is reached it would fan out 2^depth. The descent is bounded by
 // [maxFieldParentDepth], borrowed from the /Parent ascent as pruneFieldKidsAt
 // borrows it, for the stack's sake.
 type signedFieldWalk struct {
@@ -435,6 +438,10 @@ type signedFieldWalk struct {
 	doc     *document.Document
 	rewrite bool
 	visited map[int]bool
+	// kids holds, per /Kids array written as an object of its own, the fields
+	// its walk kept and whether any went, and a nil entry while that walk is
+	// under way (see [signedFieldWalk.kidsList]).
+	kids map[int]*walkedKids
 	// found lists each signed signature field reached, in walk order.
 	found []signedField
 	// keptSignatureField is set when a signature field that is not signed
@@ -443,7 +450,36 @@ type signedFieldWalk struct {
 }
 
 func newSignedFieldWalk(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, rewrite bool) *signedFieldWalk {
-	return &signedFieldWalk{ctx: ctx, alloc: alloc, doc: doc, rewrite: rewrite, visited: make(map[int]bool)}
+	return &signedFieldWalk{ctx: ctx, alloc: alloc, doc: doc, rewrite: rewrite, visited: make(map[int]bool), kids: make(map[int]*walkedKids)}
+}
+
+// walkedKids is the result of walking one /Kids array: the fields it keeps,
+// and whether any went.
+type walkedKids struct {
+	kept    ast.PdfArray
+	changed bool
+}
+
+// kidsList walks kids, the /Kids value kidsObj, as [signedFieldWalk.list]
+// does. An array written as an object of its own is walked once, and a parent
+// that reaches it again takes the same result, so the field it lists goes from
+// every parent that names it. One reached again while its walk is under way, a
+// cycle back to it, is left as it is.
+func (w *signedFieldWalk) kidsList(kidsObj ast.PdfObject, kids ast.PdfArray, parentName string, ft ast.PdfName, v ast.PdfObject, depth int) (ast.PdfArray, bool) {
+	ref, isRef := kidsObj.(ast.PdfIndirectRef)
+	if !isRef {
+		return w.list(kids, parentName, ft, v, depth)
+	}
+	if done, ok := w.kids[ref.ObjectNum]; ok {
+		if done == nil {
+			return kids, false
+		}
+		return done.kept, done.changed
+	}
+	w.kids[ref.ObjectNum] = nil
+	kept, changed := w.list(kids, parentName, ft, v, depth)
+	w.kids[ref.ObjectNum] = &walkedKids{kept: kept, changed: changed}
+	return kept, changed
 }
 
 // list walks the fields of list, the form's /Fields or a field's /Kids, under
@@ -510,7 +546,7 @@ func (w *signedFieldWalk) field(obj ast.PdfObject, parentName string, ft ast.Pdf
 		return false, nil
 	}
 
-	remaining, changed := w.list(kids, name, ft, v, depth+1)
+	remaining, changed := w.kidsList(dict["Kids"], kids, name, ft, v, depth+1)
 	if !changed || !w.rewrite {
 		return true, nil
 	}

@@ -286,21 +286,102 @@ func widgetFieldIdentity(ctx context.Context, doc *document.Document, alloc *wri
 // field. parentFT carries the field type down the tree, which a kid inherits
 // when it does not state its own (ISO 32000-1, 12.7.3.1).
 func findAndSetField(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fields ast.PdfArray, parentName, parentFT, targetName, value string) (bool, error) {
-	return findAndSetFieldAt(ctx, doc, alloc, fields, parentName, parentFT, targetName, value, make(map[int]bool))
+	fs := &fieldSearch{onPath: make(map[int]bool), searched: make(map[fieldSearchKey]bool)}
+	return findAndSetFieldAt(ctx, doc, alloc, fields, parentName, parentFT, targetName, value, fs, 0)
 }
 
-// findAndSetFieldAt is [findAndSetField] carrying the field objects on the CURRENT
-// path. A /Kids entry naming an ancestor is a cycle: unguarded, a field whose
-// /Kids named itself recursed until the goroutine stack was exhausted, which is
-// a fatal runtime error no recover() converts, and every level appended another
+// fieldSearchKey keys one unit of a [findAndSetField] search: an indirect
+// field, or a /Kids array written as an object of its own, reached under the
+// fully qualified name parent with the inherited field type ft. Whether the
+// target lies below it depends on nothing else.
+type fieldSearchKey struct {
+	obj        int
+	parent, ft string
+}
+
+// fieldSearch carries the state of one [findAndSetField] search.
+type fieldSearch struct {
+	// onPath holds the fields, and the /Kids arrays written as objects of
+	// their own, on the current path: one reached again there closes a cycle.
+	onPath map[int]bool
+	// searched holds the units already searched without a match.
+	searched map[fieldSearchKey]bool
+}
+
+// firstSearch reports whether obj, reached under parent with the inherited
+// type ft, is a unit this search has not searched yet, and records it. A
+// direct object lives in the one container that spells it out, so only its
+// container can be reached twice.
+func (fs *fieldSearch) firstSearch(obj ast.PdfObject, parent, ft string) bool {
+	ref, ok := obj.(ast.PdfIndirectRef)
+	if !ok {
+		return true
+	}
+	key := fieldSearchKey{obj: ref.ObjectNum, parent: parent, ft: ft}
+	if fs.searched[key] {
+		return false
+	}
+	fs.searched[key] = true
+	return true
+}
+
+// enter marks obj on the current path, and reports false when it is on it
+// already. A direct object carries no object number and cannot name itself, so
+// it closes no cycle and needs no mark.
+func (fs *fieldSearch) enter(obj ast.PdfObject) bool {
+	ref, ok := obj.(ast.PdfIndirectRef)
+	if !ok {
+		return true
+	}
+	if fs.onPath[ref.ObjectNum] {
+		return false
+	}
+	fs.onPath[ref.ObjectNum] = true
+	return true
+}
+
+// leave clears the mark [fieldSearch.enter] put on obj.
+func (fs *fieldSearch) leave(obj ast.PdfObject) {
+	if ref, ok := obj.(ast.PdfIndirectRef); ok {
+		delete(fs.onPath, ref.ObjectNum)
+	}
+}
+
+// findAndSetFieldAt is [findAndSetField] carrying the search's state. A /Kids
+// entry naming an ancestor is a cycle: unguarded, a field whose /Kids named
+// itself recursed until the goroutine stack was exhausted, which is a fatal
+// runtime error no recover() converts, and every level appended another
 // segment to the qualified name it was building.
 //
-// onPath is cleared on the way back out rather than kept, because this walk
-// SEARCHES and matches on the fully qualified name. The same field reached under
-// a different parent has a different name, so a mark that outlived its path
-// would not merely save work: it would make a legitimate match unfindable.
-func findAndSetFieldAt(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fields ast.PdfArray, parentName, parentFT, targetName, value string, onPath map[int]bool) (bool, error) {
+// The path marks are cleared on the way back out rather than kept, because
+// this walk SEARCHES and matches on the fully qualified name. The same field
+// reached under a different parent has a different name, so a mark that
+// outlived its path would not merely save work: it would make a legitimate
+// match unfindable. They cover the /Kids arrays written as objects of their
+// own as well as the fields, since the direct fields such an array holds can
+// each name it again.
+//
+// What bounds the work is fs.searched and the target's name, not the path. A
+// unit reached again under the same name and inherited type holds no match
+// this time either, so it is searched once ([fieldSearchKey]); a /Kids array
+// that names one field twice, or that the direct fields it holds name again,
+// would otherwise fan out 2^depth. And a field's descendants all carry its
+// fully qualified name followed by a period (ISO 32000-1, 12.7.3.2), so a
+// field whose name does not begin the target's is not descended: fields that
+// give a shared child distinct names reach only the names the target begins
+// with. The descent borrows [maxFieldParentDepth], named for the /Parent
+// ascent, for the stack's sake, as signedFieldWalk does.
+func findAndSetFieldAt(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fields ast.PdfArray, parentName, parentFT, targetName, value string, fs *fieldSearch, depth int) (bool, error) {
+	if depth > maxFieldParentDepth {
+		return false, nil
+	}
 	for _, fieldObj := range fields {
+		if err := ctx.Err(); err != nil {
+			return false, fmt.Errorf("searching the form fields: %w", err)
+		}
+		if !fs.firstSearch(fieldObj, parentName, parentFT) {
+			continue
+		}
 		var fieldRef ast.PdfIndirectRef
 		if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
 			fieldRef = ref
@@ -350,31 +431,37 @@ func findAndSetFieldAt(ctx context.Context, doc *document.Document, alloc *write
 			return true, nil
 		}
 
-		// Recurse into /Kids, unless this field already sits on the path.
+		if fullName != "" && !strings.HasPrefix(targetName, fullName+".") {
+			continue
+		}
 		if kidsObj, ok := fieldDict["Kids"]; ok {
-			num := fieldRef.ObjectNum
-			if num != 0 && onPath[num] {
-				continue
-			}
-			kidsArr, err := resolveArrayAllocFirst(ctx, alloc, doc, kidsObj)
-			if err == nil && kidsArr != nil {
-				// A direct dictionary carries no object number and cannot name
-				// itself, so it closes no cycle and needs no mark.
-				if num != 0 {
-					onPath[num] = true
-				}
-				found, err := findAndSetFieldAt(ctx, doc, alloc, kidsArr, fullName, fieldFT, targetName, value, onPath)
-				if num != 0 {
-					delete(onPath, num)
-				}
-				if err != nil {
-					return false, err
-				}
-				if found {
-					return true, nil
-				}
+			found, err := searchKids(ctx, doc, alloc, fieldObj, kidsObj, fullName, fieldFT, targetName, value, fs, depth)
+			if err != nil || found {
+				return found, err
 			}
 		}
+	}
+	return false, nil
+}
+
+// searchKids searches the /Kids array kidsObj of the field fieldObj named
+// fullName, for [findAndSetFieldAt]: once per unit ([fieldSearchKey]), and not
+// at all when the field or the array is already on the path.
+func searchKids(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, fieldObj, kidsObj ast.PdfObject, fullName, fieldFT, targetName, value string, fs *fieldSearch, depth int) (bool, error) {
+	if !fs.enter(fieldObj) {
+		return false, nil
+	}
+	defer fs.leave(fieldObj)
+	if !fs.enter(kidsObj) {
+		return false, nil
+	}
+	defer fs.leave(kidsObj)
+	if !fs.firstSearch(kidsObj, fullName, fieldFT) {
+		return false, nil
+	}
+	// A /Kids that does not resolve holds no field to find.
+	if kidsArr, err := resolveArrayAllocFirst(ctx, alloc, doc, kidsObj); err == nil && kidsArr != nil {
+		return findAndSetFieldAt(ctx, doc, alloc, kidsArr, fullName, fieldFT, targetName, value, fs, depth+1)
 	}
 	return false, nil
 }
