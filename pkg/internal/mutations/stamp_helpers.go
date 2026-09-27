@@ -35,9 +35,11 @@ type stampResource struct {
 // starts at (0, 0), and real files often place it elsewhere, where an
 // unshifted stamp lands away from the corner the caller named.
 //
-// The CropBox is the right box because it is the area a viewer shows (ISO
-// 32000-1, 14.11.2), and [document.Page] already resolves it with the
-// MediaBox fallback the spec requires.
+// The box is the region a viewer shows (see [document.Page.ViewedBox]): the
+// crop box (ISO 32000-1, 14.11.2), reduced to the media box, the media box
+// where the crop box is no box a viewer uses, and US Letter from (0, 0) where
+// the media box is none either (see [document.UsableBox]). A page an insertion
+// staged reads its boxes the same way (see [stagedPage]).
 //
 // # Corpus evidence
 //
@@ -45,31 +47,20 @@ type stampResource struct {
 //   - govdocs thread_000_000018.pdf: its box starts at (-306, -396), where an
 //     unshifted stamp landed in the middle of the page and ran off the right
 //     edge, losing its last character to the crop.
+//   - litho viewerboxes_2b.pdf: page 1 states /MediaBox [10 10 300], which a
+//     viewer draws as US Letter from (0, 0). Read from its first two entries,
+//     it moved the stamp by (10, 10), where the pinned pdf.js now finds it at
+//     the X and Y given.
 func stampOriginShift(page *document.Page) (dx, dy float64, ok bool) {
-	box := page.CropBox
-	if len(box) < 2 {
-		box = page.MediaBox
-	}
-	if len(box) < 2 {
-		return 0, 0, false
-	}
-	x0, xOK := numeric(box[0])
-	y0, yOK := numeric(box[1])
-	if !xOK || !yOK || (x0 == 0 && y0 == 0) {
+	box := page.ViewedBox()
+	// A rectangle may name either pair of opposite corners (ISO 32000-1,
+	// 7.9.5), and the page's bottom-left corner is the lesser of each.
+	x0 := min(document.Float(box[0]), document.Float(box[2]))
+	y0 := min(document.Float(box[1]), document.Float(box[3]))
+	if x0 == 0 && y0 == 0 {
 		return 0, 0, false
 	}
 	return x0, y0, true
-}
-
-// numeric reads a PDF number as a float, reporting whether it was one.
-func numeric(obj ast.PdfObject) (float64, bool) {
-	switch v := obj.(type) {
-	case ast.PdfInt:
-		return float64(v), true
-	case ast.PdfReal:
-		return float64(v), true
-	}
-	return 0, false
 }
 
 // applyStampToPages appends a content stream of operations to each selected

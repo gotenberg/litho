@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -69,21 +70,28 @@ func StagedPages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 // document onto it (see [copyPageForOutput]), because the flat tree it joins
 // has no ancestor to inherit them from (ISO 32000-1, 7.7.3.4). So the page's
 // own entries are the whole of them, read alloc-first since the objects they
-// name were copied into alloc with it. The crop box defaults to the media box
-// (ISO 32000-1, 7.7.3.3, Table 30).
+// name were copied into alloc with it. Its boxes are read as the page tree walk
+// reads a page's, as a viewer reads them (see [document.Page.SetBoxes]): a
+// stamp lands on the region a viewer shows of the page, inserted or not.
+//
+// # Corpus evidence
+//
+//   - pdfjs boundingBox_invalid.pdf: page 3 states /CropBox
+//     [600 800 1000 1000] on /MediaBox [0 0 600 800]. Taken as written, its
+//     crop box moved a stamp on the inserted page by (600, 800), off the page.
+//   - govdocs thread_300_300123.pdf, pdfjs bug1755507.pdf: state a crop box
+//     reaching past the media box, which a viewer reduces to the media box.
+//     Taken as written, a stamp on the inserted page was not moved to the
+//     media box's corner, at (36, 36) and (39, 39).
 func stagedPage(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, ref ast.PdfIndirectRef, dict ast.PdfDict) *document.Page {
 	page := &document.Page{Ref: ref, Dict: dict, UserUnit: 1}
 	if res, err := resolveDictAllocFirst(ctx, alloc, doc, dict["Resources"]); err == nil {
 		page.Resources = res
 	}
-	if box, err := resolveArrayAllocFirst(ctx, alloc, doc, dict["MediaBox"]); err == nil && len(box) == 4 {
-		page.MediaBox = box
+	box := func(key ast.PdfName) ast.PdfArray {
+		return stagedRectangle(ctx, alloc, doc, dict[key])
 	}
-	page.CropBox = page.MediaBox
-	if box, err := resolveArrayAllocFirst(ctx, alloc, doc, dict["CropBox"]); err == nil && len(box) == 4 {
-		page.CropBox = box
-		page.DeclaredCropBox = box
-	}
+	page.SetBoxes(box("MediaBox"), box("CropBox"), box("BleedBox"), box("TrimBox"), box("ArtBox"))
 	if rotate, isInt := dict["Rotate"].(ast.PdfInt); isInt {
 		page.Rotate = int(rotate)
 	}
@@ -91,6 +99,41 @@ func stagedPage(ctx context.Context, alloc *writer.ObjAllocator, doc *document.D
 		page.UserUnit = v
 	}
 	return page
+}
+
+// stagedRectangle returns the page boundary obj, an entry of a staged page, as
+// the page tree walk reads one (see [document.ResolveRectangle]): the array it
+// names with each reference to a number replaced by the number, or nil when
+// obj is absent or names no array. It resolves alloc first, since a boundary
+// of a page an insertion copied in names objects the copy numbered in alloc.
+func stagedRectangle(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject) ast.PdfArray {
+	if obj == nil {
+		return nil
+	}
+	box, err := resolveArrayAllocFirst(ctx, alloc, doc, obj)
+	if err != nil || box == nil {
+		return nil
+	}
+	resolved, cloned := box, false
+	for i, entry := range box {
+		if _, isRef := entry.(ast.PdfIndirectRef); !isRef {
+			continue
+		}
+		// A reference that does not resolve, or names no number, stays a
+		// reference, and the box reads as none a viewer uses.
+		value, err := resolveAllocFirst(ctx, alloc, doc, entry)
+		if err != nil {
+			continue
+		}
+		if _, isNumber := document.Number(value); !isNumber {
+			continue
+		}
+		if !cloned {
+			resolved, cloned = slices.Clone(box), true
+		}
+		resolved[i] = value
+	}
+	return resolved
 }
 
 // pagesToEdit returns the pages an edit reads its page numbers against and the

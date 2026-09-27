@@ -64,6 +64,59 @@ type Page struct {
 	InheritedResources ast.PdfObject
 }
 
+// SetBoxes sets the page's boundaries from the entries that declare them, each
+// an array whose references to numbers are resolved (see [ResolveRectangle]),
+// nil where there is none: media and crop, the /MediaBox and /CropBox the page
+// states or inherits, and bleed, trim and art, the /BleedBox, /TrimBox and
+// /ArtBox it states. The effective boxes are read as a viewer reads them (see
+// [Page]). The page tree walk sets every page's boxes this way, and a caller
+// building a Page from a dictionary of its own calls it before sharing the
+// page.
+func (p *Page) SetBoxes(media, crop, bleed, trim, art ast.PdfArray) {
+	// The crop box defaults to the media box (ISO 32000-1, 7.7.3.3, Table 30)
+	// and is reduced to its intersection with it (ISO 32000-1, 14.11.2.1):
+	// the media box a viewer draws the page on, US Letter where the file
+	// gives none it can use (see [UsableBox]).
+	viewedMedia := viewedMediaBox(media)
+	effectiveCrop := clampToMediaBox(crop, viewedMedia, media)
+
+	// BleedBox, TrimBox and ArtBox are not inheritable and each defaults to
+	// the crop box (ISO 32000-1, 7.7.3.3, Table 30). ISO 32000-1, 14.11.2.1
+	// reduces each, like the crop box, to its intersection with the media
+	// box, and with nothing else: the crop box "has no defined relationship
+	// with any of the other boundaries", so a bleed box wider than the crop
+	// box but inside the media box stays as written.
+	p.MediaBox = media
+	p.CropBox = effectiveCrop
+	p.BleedBox = clampToMediaBox(bleed, viewedMedia, effectiveCrop)
+	p.TrimBox = clampToMediaBox(trim, viewedMedia, effectiveCrop)
+	p.ArtBox = clampToMediaBox(art, viewedMedia, effectiveCrop)
+	p.DeclaredCropBox = crop
+	p.DeclaredBleedBox = bleed
+	p.DeclaredTrimBox = trim
+	p.DeclaredArtBox = art
+}
+
+// ViewedMediaBox returns the media box a viewer draws the page on: MediaBox
+// when a viewer uses it, and [LetterMediaBox] when it does not (see
+// [UsableBox]).
+func (p *Page) ViewedMediaBox() ast.PdfArray {
+	return viewedMediaBox(p.MediaBox)
+}
+
+// ViewedBox returns the region of the page a viewer shows, what pdf.js calls
+// the page view: CropBox, the effective crop box, when a viewer uses it, and
+// the media box a viewer draws the page on (see [Page.ViewedMediaBox]) when it
+// does not. A page the page tree walk builds has a crop box a viewer uses
+// unless its media box is none either (see [clampToMediaBox]), and a viewer
+// then shows US Letter.
+func (p *Page) ViewedBox() ast.PdfArray {
+	if UsableBox(p.CropBox) {
+		return p.CropBox
+	}
+	return p.ViewedMediaBox()
+}
+
 // BuildPageMap constructs a reverse-lookup map from each page's [ast.PdfIndirectRef]
 // to its 1-based page number, enabling clean destination resolution without
 // mutating any struct fields.
@@ -583,26 +636,6 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			}
 		}
 	case "Page":
-		// The crop box defaults to the media box (ISO 32000-1, 7.7.3.3,
-		// Table 30) and is reduced to its intersection with it (ISO 32000-1,
-		// 14.11.2.1): the media box a viewer draws the page on, US Letter
-		// where the file gives none it can use (see [UsableBox]).
-		viewedMedia := viewedMediaBox(currentMediaBox)
-		effectiveCropBox := clampToMediaBox(currentCropBox, viewedMedia, currentMediaBox)
-
-		// BleedBox, TrimBox and ArtBox are not inheritable and each defaults
-		// to the crop box (ISO 32000-1, 7.7.3.3, Table 30). ISO 32000-1,
-		// 14.11.2.1 reduces each, like the crop box, to its intersection with
-		// the media box, and with nothing else: the crop box "has no defined
-		// relationship with any of the other boundaries", so a bleed box wider
-		// than the crop box but inside the media box stays as written.
-		declaredBleedBox := resolveBoxArray(ctx, doc, node, "BleedBox")
-		declaredTrimBox := resolveBoxArray(ctx, doc, node, "TrimBox")
-		declaredArtBox := resolveBoxArray(ctx, doc, node, "ArtBox")
-		bleedBox := clampToMediaBox(declaredBleedBox, viewedMedia, effectiveCropBox)
-		trimBox := clampToMediaBox(declaredTrimBox, viewedMedia, effectiveCropBox)
-		artBox := clampToMediaBox(declaredArtBox, viewedMedia, effectiveCropBox)
-
 		// UserUnit (PDF 1.6+, ISO 32000-1, 7.7.3.3, Table 30): a positive,
 		// non-inheritable scaling factor. Default is 1.0 (1 unit = 1/72
 		// inch).
@@ -613,24 +646,20 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 			}
 		}
 
-		*pages = append(*pages, &Page{
-			Ref:              nodeRef,
-			Dict:             node,
-			Resources:        currentResources,
-			MediaBox:         currentMediaBox,
-			CropBox:          effectiveCropBox,
-			BleedBox:         bleedBox,
-			TrimBox:          trimBox,
-			ArtBox:           artBox,
-			DeclaredCropBox:  currentCropBox,
-			DeclaredBleedBox: declaredBleedBox,
-			DeclaredTrimBox:  declaredTrimBox,
-			DeclaredArtBox:   declaredArtBox,
-			Rotate:           currentRotate,
-			UserUnit:         userUnit,
+		page := &Page{
+			Ref:       nodeRef,
+			Dict:      node,
+			Resources: currentResources,
+			Rotate:    currentRotate,
+			UserUnit:  userUnit,
 
 			InheritedResources: inheritedResourcesEntry,
-		})
+		}
+		page.SetBoxes(currentMediaBox, currentCropBox,
+			resolveBoxArray(ctx, doc, node, "BleedBox"),
+			resolveBoxArray(ctx, doc, node, "TrimBox"),
+			resolveBoxArray(ctx, doc, node, "ArtBox"))
+		*pages = append(*pages, page)
 	}
 
 	return nil
@@ -704,10 +733,11 @@ func clampToMediaBox(box, media, def ast.PdfArray) ast.PdfArray {
 // whose references to numbers are resolved (see [ResolveRectangle]): box is a
 // rectangle, four numbers (ISO 32000-1, 7.9.5), enclosing an area. It is the
 // one reading litho gives a page boundary wherever what a page shows is at
-// stake: the effective boxes of [Page], the size pdf.Reader.Page reports, and
-// the boxes a rewrite writes, which it writes as they read so no rewrite
-// changes how a page looks. Compliance measures a box as its validator does
-// instead (ISO 19005-2, 6.1.13), for its verdicts only.
+// stake: the effective boxes of [Page], the size pdf.Reader.Page reports, where
+// a stamp lands and what a page stamp clips to, and the boxes a rewrite or a
+// remediation writes, which it writes as they read so no write changes how a
+// page looks. Compliance measures a box as its validator does instead (ISO
+// 19005-2, 6.1.13), for its verdicts only.
 //
 // pdf.js reads a box through lookupNormalRect, which takes an array of exactly
 // four numbers, and keeps it when it encloses an area. poppler's

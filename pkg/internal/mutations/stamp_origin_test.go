@@ -66,6 +66,42 @@ func TestStampOriginShiftFallsBackToMediaBox(t *testing.T) {
 	}
 }
 
+// TestStampOriginShiftReadsTheViewedBox pins that the stamp is measured from
+// the bottom-left corner of the region a viewer shows (see
+// [document.Page.ViewedBox]): the lesser of each pair of corners, whichever
+// pair a rectangle names (ISO 32000-1, 7.9.5), and US Letter from (0, 0) where
+// the page has no box a viewer uses. A media box of three entries, or of no
+// width, moved the stamp by its first two entries.
+func TestStampOriginShiftReadsTheViewedBox(t *testing.T) {
+	box := func(v ...float64) ast.PdfArray {
+		arr := make(ast.PdfArray, len(v))
+		for i, x := range v {
+			arr[i] = ast.PdfReal(x)
+		}
+		return arr
+	}
+	for _, tc := range []struct {
+		name   string
+		media  ast.PdfArray
+		crop   ast.PdfArray
+		dx, dy float64
+	}{
+		{"corners swapped", box(0, 0, 700, 900), box(650, 830, 38, 38), 38, 38},
+		{"a media box of three entries", box(10, 10, 300), nil, 0, 0},
+		{"a media box of no width", box(5, 5, 5, 800), nil, 0, 0},
+		{"a crop box of no width", box(20, 20, 620, 820), box(50, 50, 50, 400), 20, 20},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			page := &document.Page{}
+			page.SetBoxes(tc.media, tc.crop, nil, nil, nil)
+			dx, dy, _ := stampOriginShift(page)
+			if dx != tc.dx || dy != tc.dy {
+				t.Errorf("shift = (%v, %v), want (%v, %v)", dx, dy, tc.dx, tc.dy)
+			}
+		})
+	}
+}
+
 // TestStampOriginShiftIgnoresMalformedBoxes checks a box litho cannot read as
 // numbers is left alone rather than shifting by a guess.
 func TestStampOriginShiftIgnoresMalformedBoxes(t *testing.T) {

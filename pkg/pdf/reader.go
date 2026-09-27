@@ -1636,15 +1636,12 @@ func (r *Reader) Page(ctx context.Context, pageNum int) (_ models.Page, err erro
 	// the spec says nothing about what to report when it is missing, and
 	// answering 0 by 0 describes a page no viewer would draw. Substitute the
 	// size every mainstream reader uses: pdf.js falls back to its
-	// LETTER_SIZE_MEDIABOX and poppler reports 612 x 792.
+	// LETTER_SIZE_MEDIABOX and poppler reports 612 x 792 (see
+	// [document.Page.ViewedBox]).
 	//
 	// Only the effective dimensions gain the fallback: MediaBox still reports
 	// what the file declares.
-	box := p.CropBox
-	if !document.UsableBox(box) {
-		box = document.LetterMediaBox()
-	}
-	w, h := mediaBoxDimensions(box)
+	w, h := mediaBoxDimensions(p.ViewedBox())
 
 	// /UserUnit (PDF 1.6+): scale raw coordinates to standard points.
 	if p.UserUnit > 0 && p.UserUnit != 1.0 {

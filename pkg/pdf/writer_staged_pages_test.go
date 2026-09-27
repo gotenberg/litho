@@ -254,6 +254,96 @@ func TestWriterEditsWithNoPageListReachInsertedPages(t *testing.T) {
 	}
 }
 
+// TestWriterStampsEachPageWhereAViewerShowsIt pins that a text stamp lands at
+// the X and Y it names from the bottom-left corner of the region a viewer
+// shows (see [TextStamp]), on a page of the Reader and on a page an insertion
+// staged alike, however the page states its boxes. The region is what pdf.js
+// calls the page view: the crop box reduced to the media box (ISO 32000-1,
+// 14.11.2.1), the media box where the crop box is no box a viewer uses, and US
+// Letter where the media box is none either (see [document.UsableBox]).
+//
+// An inserted page read its boxes with a four-entry check alone, so a crop box
+// missing its media box moved the stamp off the page, one of no width moved it
+// by its corner, and one reaching past its media box left it unmoved where the
+// page view starts elsewhere. A media box no viewer uses moved the stamp by its
+// corner, where a viewer draws US Letter from (0, 0).
+//
+// # Corpus evidence
+//
+//   - pdfjs boundingBox_invalid.pdf: page 3 states /CropBox [600 800 1000 1000]
+//     on /MediaBox [0 0 600 800]. Inserted, then stamped, its stamp was moved
+//     by (600, 800), off the page.
+//   - govdocs thread_300_300123.pdf, pdfjs bug1755507.pdf: state a crop box
+//     reaching past the media box. Inserted, then stamped, their stamps were
+//     not moved to the corner of the page view, (36, 36) and (39, 39).
+//   - litho viewerboxes_2b.pdf: page 1 states /MediaBox [10 10 300], and a
+//     stamp on it was moved by (10, 10).
+func TestWriterStampsEachPageWhereAViewerShowsIt(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	for _, shape := range []struct {
+		name, boxes string
+		corner      [2]float64
+	}{
+		{"a crop box missing the media box", "/MediaBox [0 0 600 800] /CropBox [600 800 1000 1000]", [2]float64{0, 0}},
+		{"a crop box of no width", "/MediaBox [0 0 600 800] /CropBox [50 50 50 400]", [2]float64{0, 0}},
+		{"a crop box reaching past the media box", "/MediaBox [36 36 648 828] /CropBox [0 0 684 864]", [2]float64{36, 36}},
+		{"a media box of three entries", "/MediaBox [10 10 300]", [2]float64{0, 0}},
+		{"a media box of no width", "/MediaBox [5 5 5 800]", [2]float64{0, 0}},
+		// Object 4 is the number 36, which the copy renumbers.
+		{"a crop box of references", "/MediaBox [0 0 600 800] /CropBox [4 0 R 4 0 R 500 700]", [2]float64{36, 36}},
+		{"control", "/MediaBox [20 20 620 820] /CropBox [30 30 600 800]", [2]float64{30, 30}},
+	} {
+		src := buildPDF([]string{
+			"<< /Type /Catalog /Pages 2 0 R >>",
+			"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+			"<< /Type /Page /Parent 2 0 R " + shape.boxes + " >>",
+			"36",
+		})
+		for _, inserted := range []bool{false, true} {
+			name := shape.name + ", on the Reader's page"
+			if inserted {
+				name = shape.name + ", on an inserted page"
+			}
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				target, pageNum := src, 1
+				if inserted {
+					target, pageNum = labelledPDF(1, ""), 2
+				}
+				out := writeLabelled(t, target, func(w *Writer) error {
+					if inserted {
+						if err := w.InsertPages(1, openBytes(t, src)); err != nil {
+							return err
+						}
+					}
+					return w.StampText(TextStamp{Text: "MARK", X: 100, Y: 100})
+				})
+				r := openBytes(t, out)
+				defer r.Close()
+				elements, err := r.ExtractTextElements(ctx, pageNum)
+				if err != nil {
+					t.Fatalf("ExtractTextElements: %v", err)
+				}
+				want := [2]float64{shape.corner[0] + 100, shape.corner[1] + 100}
+				found := false
+				for _, e := range elements {
+					if !strings.Contains(e.Text, "MARK") {
+						continue
+					}
+					found = true
+					if got := [2]float64{e.X, e.Y}; !almostEqual(got[0], want[0], 0.01) || !almostEqual(got[1], want[1], 0.01) {
+						t.Errorf("the stamp lands at %v, want %v", got, want)
+					}
+				}
+				if !found {
+					t.Errorf("page %d carries no stamp: %v", pageNum, elements)
+				}
+			})
+		}
+	}
+}
+
 // TestWriterGenerateBookmarksReadsInsertedPages pins that the headings
 // GenerateBookmarks finds are those of the pages the Writer holds: an inserted
 // page contributes its heading at its place in the document, and a deleted
