@@ -152,6 +152,11 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	}
 
 	catalogRef := alloc.Alloc(catalogDict)
+	// The copied pages keep what their source states, which can be short of
+	// what ISO 32000-1, Table 30 requires of a page.
+	if err := completeRewrittenPageTree(ctx, alloc, catalogRef); err != nil {
+		return err
+	}
 
 	// Build trailer.
 	trailer := ast.PdfDict{

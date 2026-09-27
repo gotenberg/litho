@@ -169,6 +169,10 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 		newCatalog["AcroForm"] = acroFormDict
 	}
 	alloc.AllocAt(catalogRef.ObjectNum, newCatalog)
+	// The update writes the catalog, and the pages the edits before it wrote.
+	if err := CompleteWrittenPageTree(ctx, alloc, doc); err != nil {
+		return err
+	}
 
 	// The update is written to a buffer first, so the placeholder can be
 	// patched before anything reaches dst.

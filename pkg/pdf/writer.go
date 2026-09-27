@@ -3016,6 +3016,13 @@ func (w *Writer) copyFromPreSerialized(ctx context.Context, dst io.Writer) error
 // covers bytes the rewrite moves (ISO 32000-1, 12.8.1). The appearance of each
 // signed widget is drawn into its page, and [Writer.DroppedSignatures] names
 // what the output left out. An incremental update keeps every signature.
+//
+// A full rewrite writes the catalog, every page tree node and every page with
+// the entries ISO 32000-1, 7.7.2 and 7.7.3 require of them, derived from the
+// page tree the Reader reads, where the source lacks one or states a wrong
+// one: a page no node gives a media box is written US Letter, the size readers
+// assume for it. An incremental update writes them into the objects it writes,
+// and leaves the others as the source has them.
 func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption) (err error) {
 	defer recoverToError(w.logger(), "Writer.WriteTo", &err)
 	if w.closed {
@@ -3597,6 +3604,11 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 		return copySourceCancellable(ctx, dst, doc.RawReader(), doc.FileSize())
 	}
 	appendPromotedPageTree(alloc, doc)
+	// A page or node the update writes goes out with the entries ISO 32000-1
+	// requires of it; the ones it does not write stay as the file has them.
+	if err := mutations.CompleteWrittenPageTree(ctx, alloc, doc); err != nil {
+		return err
+	}
 	logger.Debug("incremental update",
 		slog.Int("pending_objects", len(alloc.Pending())),
 	)
@@ -3652,6 +3664,9 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 // does not display, or with no area as an invisible signature has, goes
 // without drawing. An unsigned signature field stays a field that can be
 // signed.
+//
+// Every page is written with the entries ISO 32000-1, 7.7.3.3, Table 30
+// requires of a page, as a full rewrite writes them (see [Writer.WriteTo]).
 //
 // Split reads a copy of src's document, as a [Writer] edits one, so src is
 // left as it was and other goroutines may read it meanwhile.
@@ -3714,7 +3729,8 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 // Fields that share a fully qualified name across sources are one field of
 // the output's form (ISO 32000-1, 12.7.3.2). A signed signature field is drawn
 // into its page and leaves the form, as in [Split], and an unsigned one stays
-// a field that can be signed.
+// a field that can be signed. Every page is written with the entries ISO
+// 32000-1, Table 30 requires of a page, as in [Split].
 //
 // Merge reads a copy of each source's document, as [Split] does, so the
 // sources are left as they were and other goroutines may read them

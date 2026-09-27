@@ -106,6 +106,11 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 	if err := ensurePageTree(alloc, newCatalogRef, pageTreeWasLost(ctx, doc)); err != nil {
 		return err
 	}
+	// Before the sweep of applyEncryption, since a node it adds is an object
+	// of the output like any other.
+	if err := completeRewrittenPageTree(ctx, alloc, newCatalogRef); err != nil {
+		return err
+	}
 
 	// Build trailer.
 	trailer := ast.PdfDict{

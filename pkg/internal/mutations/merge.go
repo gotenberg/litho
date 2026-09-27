@@ -161,6 +161,11 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	}
 
 	catalogRef := alloc.Alloc(catalogDict)
+	// The copied pages keep what their sources state, which can be short of
+	// what ISO 32000-1, Table 30 requires of a page.
+	if err := completeRewrittenPageTree(ctx, alloc, catalogRef); err != nil {
+		return err
+	}
 
 	// Build trailer.
 	trailer := ast.PdfDict{
