@@ -133,67 +133,6 @@ func NumberOfHMetrics(data []byte) (int, error) {
 	return int(binary.BigEndian.Uint16(hheaData[34:36])), nil
 }
 
-// EmptyGIDs returns the set of GIDs that have zero-length glyph data in
-// a TrueType font. It parses the loca table (using the indexToLocFormat
-// from the head table) to find GIDs where loca[gid] == loca[gid+1],
-// indicating an empty/absent glyph outline (renders as .notdef).
-func EmptyGIDs(ctx context.Context, data []byte) (map[uint16]bool, error) {
-	records, err := ParseTableDirectory(data)
-	if err != nil {
-		return nil, err
-	}
-
-	headData, err := TableData(data, records, "head")
-	if err != nil {
-		return nil, err
-	}
-	if len(headData) < 54 { //nolint:mnd // The head table is 54 bytes (OpenType spec, head); indexToLocFormat sits at offset 50.
-		return nil, fmt.Errorf("%w: head table too short", ErrInvalidFont)
-	}
-	indexToLocFormat := int16(binary.BigEndian.Uint16(headData[50:52])) //nolint:gosec // intentional two's-complement conversion
-
-	locaData, err := TableData(data, records, "loca")
-	if err != nil {
-		return nil, err
-	}
-
-	maxpData, err := TableData(data, records, "maxp")
-	if err != nil {
-		return nil, err
-	}
-	if len(maxpData) < 6 { //nolint:mnd // maxp version 0.5 is 6 bytes (OpenType spec, maxp); numGlyphs sits at offset 4.
-		return nil, fmt.Errorf("%w: maxp table too short", ErrInvalidFont)
-	}
-	numGlyphs := int(binary.BigEndian.Uint16(maxpData[4:6]))
-
-	result := make(map[uint16]bool)
-	switch indexToLocFormat {
-	case 0: // Short format: offsets are uint16, actual offset = value * 2.
-		if len(locaData) < (numGlyphs+1)*2 {
-			return nil, fmt.Errorf("%w: loca table too short for short format", ErrInvalidFont)
-		}
-		for gid := range numGlyphs {
-			off0 := binary.BigEndian.Uint16(locaData[gid*2:])
-			off1 := binary.BigEndian.Uint16(locaData[gid*2+2:])
-			if off0 == off1 {
-				result[uint16(gid)] = true //nolint:gosec // gid < numGlyphs, read from maxp as a uint16
-			}
-		}
-	case 1: // Long format: offsets are uint32.
-		if len(locaData) < (numGlyphs+1)*4 {
-			return nil, fmt.Errorf("%w: loca table too short for long format", ErrInvalidFont)
-		}
-		for gid := range numGlyphs {
-			off0 := binary.BigEndian.Uint32(locaData[gid*4:])
-			off1 := binary.BigEndian.Uint32(locaData[gid*4+4:])
-			if off0 == off1 {
-				result[uint16(gid)] = true //nolint:gosec // gid < numGlyphs, read from maxp as a uint16
-			}
-		}
-	}
-	return result, nil
-}
-
 // NumGlyphs returns the glyph count from the font's maxp table (the number of
 // glyph slots in the program, whether or not each carries an outline).
 func NumGlyphs(data []byte) (int, error) {

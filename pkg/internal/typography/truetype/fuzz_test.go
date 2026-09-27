@@ -48,7 +48,6 @@ func FuzzTrueType(f *testing.F) {
 		// above it is a package entry point no other function in this package
 		// calls, so nothing else in this target reaches it.
 		_, _ = NumberOfHMetrics(data)
-		_, _ = EmptyGIDs(ctx, data)
 		_, _ = CharCodeToGID(ctx, data)
 		_, _ = GlyphToUnicode(ctx, data)
 		_, _ = PostGlyphNames(ctx, data)
