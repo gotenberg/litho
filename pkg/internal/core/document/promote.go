@@ -192,9 +192,10 @@ func (d *Document) highestPromoted() int {
 
 // kidPromoter walks a page tree for [Document.PromoteDirectKids]. staged holds
 // what it stages, next the number the next promoted kid takes, and done the
-// indirect nodes already walked: a page tree is a strict tree (ISO 32000-1,
-// 7.7.3.2), so a node reached again, through a cycle or a second parent, is
-// walked once, as [traversePageTree] walks it.
+// indirect nodes, and the /Kids arrays written as objects of their own, already
+// walked: a page tree is a strict tree (ISO 32000-1, 7.7.3.2), so a node or an
+// array reached again, through a cycle or a second parent, is walked once, as
+// [traversePageTree] walks it.
 type kidPromoter struct {
 	doc    *Document
 	next   int
@@ -253,6 +254,11 @@ func (p *kidPromoter) kids(ctx context.Context, dict ast.PdfDict, self ast.PdfIn
 		return dict, false, nil
 	}
 	kids, isArray := resolved.(ast.PdfArray)
+	if isArray && VisitedBefore(kidsObj, p.done) {
+		// The reader walks a /Kids array written as an object of its own
+		// once (see traversePageTree), so its direct kids are promoted once.
+		return dict, false, nil
+	}
 	if !isArray {
 		// A lone kid in place of the array, which the reader tolerates (see
 		// traversePageTree), is walked when it is a reference.

@@ -588,7 +588,13 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		switch v := resolved.(type) {
 		case ast.PdfArray:
 			// An empty array means zero kids and the loop below is a no-op.
-			kidsArr = v
+			// A /Kids array written as an object of its own is walked once,
+			// as a node is ([VisitedBefore]): the direct nodes it holds can
+			// each name it again as their /Kids, and walked anew wherever it
+			// is reached it fans out 2^depth up to [maxPageTreeDepth].
+			if !VisitedBefore(kidsObj, done) {
+				kidsArr = v
+			}
 		case ast.PdfDict:
 			// ISO 32000-1, 7.7.3.2 makes /Kids an array, so a lone node
 			// written without one is non-conforming, but it is still that

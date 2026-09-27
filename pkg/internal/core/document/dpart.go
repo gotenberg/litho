@@ -41,7 +41,9 @@ func ResolveDPartMap(ctx context.Context, doc *Document) (map[int]map[string]str
 	//
 	// The visited set bounds the walk to the file's distinct DPart objects, a
 	// natural bound rather than an arbitrary depth cap, and it detects the
-	// cycle instead of merely outlasting it.
+	// cycle instead of merely outlasting it. It holds the /K arrays written as
+	// objects of their own too: direct DPart nodes that each name their own
+	// array again close a cycle through no node's object number.
 	visited := make(map[int]bool)
 	if ref, ok := dprObj.(ast.PdfIndirectRef); ok {
 		visited[ref.ObjectNum] = true
@@ -82,6 +84,12 @@ func traverseDPart(ctx context.Context, doc *Document, node ast.PdfDict, inherit
 			doc.Logger.Debug("resolving DPart /K object", slog.Any("err", err))
 		}
 		if kArr, ok := kRes.(ast.PdfArray); ok {
+			// A /K array written as an object of its own is walked once, as
+			// a node is: the direct nodes it holds can each name it again as
+			// their /K, and nothing else would stop that recursion.
+			if VisitedBefore(kObj, visited) {
+				kArr = nil
+			}
 			for _, kid := range kArr {
 				var kidRef ast.PdfIndirectRef
 				if ref, ok := kid.(ast.PdfIndirectRef); ok {
