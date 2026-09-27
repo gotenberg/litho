@@ -228,23 +228,6 @@ func structElemReachesRoot(ctx context.Context, doc *document.Document, elem ast
 	return false
 }
 
-// inlineBDCMCID returns the /MCID of a BDC's inline property dictionary, or -1
-// when the operator carries none there.
-func inlineBDCMCID(ctx context.Context, doc *document.Document, op content.Operation) int {
-	if op.Operator != "BDC" || len(op.Operands) < 2 {
-		return -1
-	}
-	props, ok := op.Operands[1].(ast.PdfDict)
-	if !ok {
-		return -1
-	}
-	mcid, ok := mcidValue(ctx, doc, props["MCID"])
-	if !ok {
-		return -1
-	}
-	return mcid
-}
-
 // mcidValue returns the marked-content identifier obj holds, as veraPDF's
 // GFOpMarkedContent.getMCID reads it: the /MCID entry counts only as an
 // integer (getAttribute(MCID, COS_INTEGER)), so an /MCID written as null, a

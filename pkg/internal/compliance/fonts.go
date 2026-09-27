@@ -237,6 +237,7 @@ func checkFontGroup(ctx context.Context, vctx *validationCtx) []Violation {
 		if ctx.Err() != nil {
 			return results
 		}
+		judged.pageRes = p.resources
 		// A content stream an earlier page shares is judged there alone, with
 		// the fonts that page's resources name, so this page selects no font
 		// through it; see [markJudgedContents].
@@ -357,6 +358,10 @@ type fontJudgements struct {
 	// already judged; see [checkType3CharProcFonts].
 	type3Mode map[string]int
 	type3Proc map[int]bool
+	// pageRes holds the resources of the page the walk is on, which name a
+	// property list the resources of a form it draws leave out; see
+	// [markedContentProps].
+	pageRes ast.PdfDict
 }
 
 // newFontJudgements returns an empty record.
@@ -632,7 +637,7 @@ func checkFormXObjectFonts(ctx context.Context, doc *document.Document, ops []co
 		site := streamSite(ctx, doc, form.ref, form.dict["Resources"], form.res)
 		site.mode = text.mode
 		results = append(results, checkResourceFonts(ctx, doc, form.res, form.ops, site, pageNum, profile, judged)...)
-		results = append(results, checkFormPUA(ctx, doc, form.res, form.ops, form.data, form.dict, treeRoot, pageNum, profile)...)
+		results = append(results, checkFormPUA(ctx, doc, form.res, judged.pageRes, form.ops, form.data, form.dict, treeRoot, pageNum, profile)...)
 		results = append(results, checkDrawnStreamFonts(ctx, doc, form.ops, form.res, site, treeRoot, pageNum, profile, judged, visited, depth+1)...)
 	}
 	return results
@@ -1452,18 +1457,21 @@ func checkPUAWithoutActualText(ctx context.Context, doc *document.Document, font
 	treeRoot, _ := document.ResolveDict(ctx, doc, catalog["StructTreeRoot"])
 	contentData, _ := resolvePageContentBytes(ctx, doc, page)
 	return checkStreamPUAWithoutActualText(ctx, doc, fontDict, fontName, pageNum, profile, treeRoot,
-		contentData, page, res)
+		contentData, page, &markedContentProps{doc: doc, page: page, resources: res})
 }
 
 // checkFormPUA runs the PUA check over the fonts a Form XObject's own content
 // selects. It does not consult judged: a font already judged where the
-// page shows it can still show an uncovered PUA glyph inside the form.
-func checkFormPUA(ctx context.Context, doc *document.Document, res ast.PdfDict, ops []content.Operation, data []byte, form, treeRoot ast.PdfDict, pageNum int, profile string) []Violation {
+// page shows it can still show an uncovered PUA glyph inside the form. res
+// is the form's resources and pageRes those of the page it is drawn on, which
+// name a property list the form's leave out.
+func checkFormPUA(ctx context.Context, doc *document.Document, res, pageRes ast.PdfDict, ops []content.Operation, data []byte, form, treeRoot ast.PdfDict, pageNum int, profile string) []Violation {
 	if puaActualTextRule(profile).Specification == "" {
 		return nil
 	}
 	fontDict, _ := document.ResolveDict(ctx, doc, res["Font"])
 	usage := collectFontUsage(ops)
+	props := &markedContentProps{doc: doc, page: form, resources: res, pageResources: pageRes}
 	var results []Violation
 	for _, fontName := range sortedNames(fontDict) {
 		if usage[string(fontName)] == nil {
@@ -1474,7 +1482,7 @@ func checkFormPUA(ctx context.Context, doc *document.Document, res ast.PdfDict, 
 			continue
 		}
 		results = append(results, checkStreamPUAWithoutActualText(ctx, doc, font, string(fontName), pageNum, profile,
-			treeRoot, data, form, res)...)
+			treeRoot, data, form, props)...)
 	}
 	return results
 }
@@ -1483,7 +1491,8 @@ func checkFormPUA(ctx context.Context, doc *document.Document, res ast.PdfDict, 
 // stream shows: a page's, or a Form XObject's, since veraPDF builds a Glyph in
 // each and a form's glyphs are covered only by marked content inside the form.
 // holder is the page or form dictionary whose /StructParents keys the stream's
-// MCIDs in the structure parent tree; res supplies its /Properties.
+// MCIDs in the structure parent tree; props reads the property lists its
+// marked content carries, inline or named ([markedContentProps]).
 //
 // It walks the stream and fires only for a shown PUA code whose enclosing
 // marked-content sequence, or whose MCID's structure element, carries no
@@ -1510,7 +1519,7 @@ func checkFormPUA(ctx context.Context, doc *document.Document, res ast.PdfDict, 
 //   - All corpora: no other file moves at those three profiles. pdfjs
 //     issue5010.pdf, the one other file whose /ToUnicode builds on another
 //     CMap, names Adobe-Korea1-UCS2, which maps no Private Use value.
-func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, treeRoot ast.PdfDict, contentData []byte, holder, res ast.PdfDict) []Violation {
+func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document, fontDict ast.PdfDict, fontName string, pageNum int, profile string, treeRoot ast.PdfDict, contentData []byte, holder ast.PdfDict, props *markedContentProps) []Violation {
 	rule := puaActualTextRule(profile)
 	if rule.Specification == "" {
 		return nil
@@ -1575,18 +1584,6 @@ func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document
 	altCovers := IsPDFUA(profile)
 	mcidCovered := mcidActualTextCoverage(ctx, doc, treeRoot, holder, altCovers)
 
-	var props ast.PdfDict // the stream's /Properties, resolved lazily for named BDC lists
-	propsResolved := false
-	resolveProps := func() ast.PdfDict {
-		if !propsResolved {
-			if res != nil {
-				props, _ = document.ResolveDict(ctx, doc, res["Properties"])
-			}
-			propsResolved = true
-		}
-		return props
-	}
-
 	var actualTextStack []bool // per open BDC/BMC: does it carry /ActualText (or, under PDF/UA-2, /Alt)?
 	var mcidStack []int        // per open BDC/BMC: the effective /MCID (-1 if none)
 	var fontStack []string     // per open q: the text font Q restores
@@ -1604,9 +1601,13 @@ func checkStreamPUAWithoutActualText(ctx context.Context, doc *document.Document
 				fontStack = fontStack[:n-1]
 			}
 		case "BDC", "BMC":
-			actualTextStack = append(actualTextStack, bdcHasStringKey(ctx, doc, op, resolveProps, "ActualText") ||
-				(altCovers && bdcHasStringKey(ctx, doc, op, resolveProps, "Alt")))
-			mcid := bdcMCID(ctx, doc, op, resolveProps)
+			actualTextStack = append(actualTextStack, bdcHasStringKey(ctx, doc, op, props, "ActualText") ||
+				(altCovers && bdcHasStringKey(ctx, doc, op, props, "Alt")))
+			// Only an integer /MCID counts: an absent or null one read as 0
+			// let text under no identifier borrow the /ActualText of the
+			// element owning MCID 0, where veraPDF reports ISO 14289-2,
+			// 8.4.3 t1. Measured.
+			mcid := props.mcid(ctx, op)
 			if mcid < 0 {
 				mcid = currentMCID // inherit the enclosing MCID
 			}
@@ -1681,47 +1682,15 @@ func mcidActualTextCoverage(ctx context.Context, doc *document.Document, treeRoo
 	return out
 }
 
-// bdcProps returns a BDC operator's property list, written inline or named
-// through the stream's /Properties, or nil for a BMC or a list that does not
-// resolve.
-func bdcProps(ctx context.Context, doc *document.Document, op content.Operation, props func() ast.PdfDict) ast.PdfDict {
-	if op.Operator != "BDC" || len(op.Operands) < 2 {
-		return nil
+// bdcHasStringKey reports whether a BDC operator's property list, written
+// inline or named ([markedContentProps]), carries key with a text-string value,
+// the shape veraPDF's getInheritedStringAttribute accepts. A BMC carries no
+// property list.
+func bdcHasStringKey(ctx context.Context, doc *document.Document, op content.Operation, props *markedContentProps, key ast.PdfName) bool {
+	if op.Operator != "BDC" {
+		return false
 	}
-	switch v := op.Operands[1].(type) {
-	case ast.PdfDict:
-		return v
-	case ast.PdfName:
-		if p := props(); p != nil {
-			pd, _ := document.ResolveDict(ctx, doc, p[v])
-			return pd
-		}
-	}
-	return nil
-}
-
-// bdcMCID returns the /MCID value of a BDC operator's property list (inline or
-// named via the page /Properties), or -1 when it carries none. Only an integer
-// /MCID counts ([mcidValue]): document.ResolveInt read an absent or null one as
-// 0, so text under no identifier borrowed the /ActualText of the element that
-// owns MCID 0, where veraPDF reports ISO 14289-2, 8.4.3 t1. Measured.
-func bdcMCID(ctx context.Context, doc *document.Document, op content.Operation, props func() ast.PdfDict) int {
-	pd := bdcProps(ctx, doc, op, props)
-	if pd == nil {
-		return -1
-	}
-	mcid, ok := mcidValue(ctx, doc, pd["MCID"])
-	if !ok {
-		return -1
-	}
-	return mcid
-}
-
-// bdcHasStringKey reports whether a BDC operator's property list carries key
-// with a text-string value, the shape veraPDF's getInheritedStringAttribute
-// accepts.
-func bdcHasStringKey(ctx context.Context, doc *document.Document, op content.Operation, props func() ast.PdfDict, key ast.PdfName) bool {
-	return dictHasString(ctx, doc, bdcProps(ctx, doc, op, props), key)
+	return dictHasString(ctx, doc, props.dict(ctx, op), key)
 }
 
 // dictHasString reports whether d carries key with a string value.

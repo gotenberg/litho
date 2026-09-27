@@ -107,20 +107,38 @@ func forEachPageContentOps(ctx context.Context, doc *document.Document, catalog 
 	}
 }
 
-// markedContentProps resolves the property list of a BDC or DP operator on one
-// page. A named property list is looked up in the page /Properties resource,
-// resolved once and reused: a content stream can carry thousands of
-// marked-content operators.
+// markedContentProps resolves the property list of a BDC or DP operator in one
+// content stream: a page's, a Form XObject's or an annotation appearance's. A
+// property list written inline is the operand itself, and a named one comes
+// from the /Properties of the stream's resources (ISO 32000-1, 14.6.2). A
+// Form XObject or an annotation appearance names through its own resources
+// first and then through the page's, as veraPDF's
+// PDResourcesHandler.getProperties resolves every stream but the page's own.
+// Each /Properties dictionary is resolved once and reused: a content stream can
+// carry thousands of marked-content operators.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue20722.pdf: the one file whose marked content names a list
+//     carrying an /MCID, from its pages and from its forms' own resources, and
+//     it has no structure tree, so no rule set moves.
+//   - litho mcform_2a.pdf: the one file whose form names a list only the page
+//     defines, carrying a /Lang.
 type markedContentProps struct {
 	doc  *document.Document
 	page ast.PdfDict
-	// resources names the property lists: the resources a page states or
+	// resources names the property lists first: the resources a page states or
 	// inherits (see [pageObject.effectiveResources]). Nil reads the /Resources
-	// page states itself, which is all a Form XObject's content names them
+	// page states itself, which is what a Form XObject's content names them
 	// from.
 	resources ast.PdfDict
-	props     ast.PdfDict
-	resolved  bool
+	// pageResources are the resources of the page a Form XObject or an
+	// annotation appearance is drawn on, which define a name the stream's own
+	// resources leave out. Nil for a page's own content.
+	pageResources ast.PdfDict
+	props         ast.PdfDict
+	pageProps     ast.PdfDict
+	resolved      bool
 	// parentTree is the structure tree's ParentTree when the scan judges
 	// MCID-owned text through the tree, nil otherwise; owners caches the entry
 	// page's /StructParents selects in it.
@@ -149,22 +167,62 @@ func (m *markedContentProps) dict(ctx context.Context, op content.Operation) ast
 			if res == nil {
 				res = resolveResources(ctx, m.doc, m.page)
 			}
-			if res != nil {
-				// Best-effort: a missing/unresolvable /Properties dict leaves
-				// props nil, handled by the guard below.
-				m.props, _ = document.ResolveDict(ctx, m.doc, res["Properties"])
-			}
+			// Best-effort: a missing or unresolvable /Properties dict leaves
+			// the map nil, and a nil map defines no name.
+			m.props, _ = document.ResolveDict(ctx, m.doc, res["Properties"])
+			m.pageProps, _ = document.ResolveDict(ctx, m.doc, m.pageResources["Properties"])
 			m.resolved = true
 		}
-		if m.props == nil {
+		// A name the stream's own resources define, even as something other
+		// than a dictionary, is answered there; only one they leave out, or
+		// define as null (ISO 32000-1, 7.3.7), falls to the page's.
+		entry, ok := m.props[v]
+		if !ok || isNullObject(entry) {
+			entry = m.pageProps[v]
+		}
+		if entry == nil {
 			return nil
 		}
 		// Best-effort: an unresolvable property entry yields nil, which callers
 		// treat as "no property list".
-		pd, _ := document.ResolveDict(ctx, m.doc, m.props[v])
+		pd, _ := document.ResolveDict(ctx, m.doc, entry)
 		return pd
 	}
 	return nil
+}
+
+// mcid returns the marked-content identifier the property list of a BDC
+// operator carries, inline or named ([markedContentProps.dict]), or -1 when it
+// carries none. Only an integer counts ([mcidValue]). veraPDF reads the
+// identifier from the same property list (GFOpMarkedContent.getMCID, over
+// initializePropertiesDict), so a sequence naming its list from /Properties is
+// tied to the structure element the ParentTree maps as surely as one writing
+// it inline.
+func (m *markedContentProps) mcid(ctx context.Context, op content.Operation) int {
+	if op.Operator != "BDC" {
+		return -1
+	}
+	pd := m.dict(ctx, op)
+	if pd == nil {
+		return -1
+	}
+	mcid, ok := mcidValue(ctx, m.doc, pd["MCID"])
+	if !ok || mcid < 0 {
+		return -1
+	}
+	return mcid
+}
+
+// pageRes returns the resources of the page the stream m reads is drawn on,
+// which name what a Form XObject it draws leaves out.
+func (m *markedContentProps) pageRes(ctx context.Context) ast.PdfDict {
+	if m.pageResources != nil {
+		return m.pageResources
+	}
+	if m.resources != nil {
+		return m.resources
+	}
+	return resolveResources(ctx, m.doc, m.page)
 }
 
 // checkSpanMarkedContentLang reports ISO 14289-1 §7.2 t30, t31 and t32: text
@@ -219,17 +277,19 @@ func checkSpanMarkedContentLang(ctx context.Context, doc *document.Document, cat
 // sequences whose natural language cannot be determined, following the Form
 // XObjects the page draws.
 func spanLangViolations(ctx context.Context, doc *document.Document, parentTree, page, res ast.PdfDict, pageIdx int, ops []content.Operation) []Violation {
-	scan := spanLangScan{doc: doc, parentTree: parentTree, pageIdx: pageIdx, seen: make(map[int]bool)}
+	scan := spanLangScan{doc: doc, parentTree: parentTree, pageRes: res, pageIdx: pageIdx, seen: make(map[int]bool)}
 	return scan.ops(ctx, ops, page, res, false, 0)
 }
 
 // spanLangScan carries what one page's /Span scan shares across the Form
-// XObjects it follows: the structure tree's ParentTree, the page number the
+// XObjects it follows: the structure tree's ParentTree, the page's resources,
+// which name the property lists a form's own leave out, the page number the
 // findings name, and the XObjects already scanned, so a cyclic or repeated
 // invocation chain is walked once.
 type spanLangScan struct {
 	doc        *document.Document
 	parentTree ast.PdfDict
+	pageRes    ast.PdfDict
 	pageIdx    int
 	seen       map[int]bool
 }
@@ -248,11 +308,11 @@ func (s *spanLangScan) ops(ctx context.Context, ops []content.Operation, owner, 
 	if formTooDeep(s.doc, depth) {
 		return nil
 	}
-	props := markedContentProps{doc: s.doc, page: owner}
+	props := markedContentProps{doc: s.doc, page: owner, pageResources: s.pageRes}
 	if depth == 0 {
 		// The page's own content, whose property lists its resources name,
 		// stated or inherited.
-		props.resources = res
+		props = markedContentProps{doc: s.doc, page: owner, resources: res}
 	}
 	// Completeness is not threaded here: this scan asks only whether a language
 	// covers a sequence, and a truncated read withholds languages rather than
@@ -889,7 +949,8 @@ func structElemsShowingText(ctx context.Context, doc *document.Document, catalog
 		// inlineLang. The caller tests textElems for PRESENCE, so the two shrink
 		// together and no finding is manufactured.
 		arr, _ := pageParentTreeEntries(ctx, doc, ptDict, page.dict)
-		for mcid, covered := range mcidsShowingText(ctx, ops) {
+		props := &markedContentProps{doc: doc, page: page.dict, resources: page.effectiveResources(ctx, doc)}
+		for mcid, covered := range mcidsShowingText(ctx, ops, props) {
 			if mcid >= len(arr) {
 				continue
 			}
@@ -911,10 +972,12 @@ func structElemsShowingText(ctx context.Context, doc *document.Document, catalog
 // resolves a text item's owner through the enclosing marked content
 // (GFOpMarkedContent.getInheritedLang walks the same chain outwards).
 //
-// Only an inline property-list dict is read, never a named entry in the page
-// /Properties: an unresolved name leaves the element out of the subject set,
-// which under-reports rather than over-reports.
-func mcidsShowingText(ctx context.Context, ops []content.Operation) map[int]bool {
+// The /MCID and the /Lang come from the sequence's property list, written
+// inline or named from the page's /Properties ([markedContentProps]), as veraPDF
+// reads both. Measured against veraPDF 1.30.2 at PDF/UA-1: text under a named
+// list carrying an /MCID and no /Lang, owned by an element with no /Lang in a
+// catalog with none, fails §7.2 t34, and the same list carrying a /Lang passes.
+func mcidsShowingText(ctx context.Context, ops []content.Operation, props *markedContentProps) map[int]bool {
 	found := make(map[int]bool)
 	// One entry per open marked-content sequence: its /MCID (or -1) and whether
 	// it carries a /Lang. Bounded by len(ops), which the caller already holds.
@@ -929,7 +992,7 @@ func mcidsShowingText(ctx context.Context, ops []content.Operation) map[int]bool
 		}
 		switch op.Operator {
 		case "BMC", "BDC":
-			open = append(open, openSeq{mcid: markedContentID(op), hasLang: markedContentHasLang(op)})
+			open = append(open, openSeq{mcid: props.mcid(ctx, op), hasLang: markedContentLangPresent(ctx, props, op)})
 		case "EMC":
 			if len(open) > 0 {
 				open = open[:len(open)-1]
@@ -1047,7 +1110,7 @@ func opsShowUndeterminedText(ctx context.Context, doc *document.Document, ops []
 		case "Do":
 			// The XObject paints inside the sequence the Do sits in (ISO 32000-1
 			// §14.6), so that sequence's /Lang covers its text too.
-			if formShowsUndeterminedText(ctx, doc, op, res, cur, mcidCovers, props.parentTree, seen, depth) {
+			if formShowsUndeterminedText(ctx, doc, op, res, cur, mcidCovers, props, seen, depth) {
 				return true
 			}
 		}
@@ -1105,8 +1168,9 @@ func markedContentLangPresent(ctx context.Context, props *markedContentProps, op
 // formShowsUndeterminedText reports whether the Form XObject a Do operator
 // invokes paints text no /Lang covers. A Do naming an absent or non-Form XObject
 // paints no text: per ISO 32000-1 §8.10.1 an unresolvable name makes the
-// operator a no-op.
-func formShowsUndeterminedText(ctx context.Context, doc *document.Document, op content.Operation, res ast.PdfDict, covered, mcidCovers bool, parentTree ast.PdfDict, seen map[int]bool, depth int) bool {
+// operator a no-op. outer reads the invoking stream's property lists; the form
+// names its own through its resources and then the page's.
+func formShowsUndeterminedText(ctx context.Context, doc *document.Document, op content.Operation, res ast.PdfDict, covered, mcidCovers bool, outer *markedContentProps, seen map[int]bool, depth int) bool {
 	if res == nil || len(op.Operands) < 1 {
 		return false
 	}
@@ -1154,41 +1218,8 @@ func formShowsUndeterminedText(ctx context.Context, doc *document.Document, op c
 	if err != nil || subRes == nil {
 		subRes = res
 	}
-	return opsShowUndeterminedText(ctx, doc, ops, &markedContentProps{doc: doc, page: stream.Dict, parentTree: parentTree}, subRes, covered, mcidCovers, seen, depth+1)
-}
-
-// markedContentID returns the /MCID an inline BDC property list carries, or -1
-// when the operator has no inline property list or no /MCID in it.
-func markedContentID(op content.Operation) int {
-	if op.Operator != "BDC" || len(op.Operands) < 2 {
-		return -1
-	}
-	props, ok := op.Operands[1].(ast.PdfDict)
-	if !ok {
-		return -1
-	}
-	mcid, ok := props["MCID"].(ast.PdfInt)
-	if !ok || mcid < 0 {
-		return -1
-	}
-	return int(mcid)
-}
-
-// markedContentHasLang reports whether a BDC operator's inline property list
-// carries a /Lang entry. Presence is what counts, as for a structure element:
-// veraPDF treats an empty or malformed tag as determining the language, and
-// reports its format separately. Only an inline dict is read, never a named
-// entry in the page /Properties, matching [markedContentID].
-func markedContentHasLang(op content.Operation) bool {
-	if op.Operator != "BDC" || len(op.Operands) < 2 {
-		return false
-	}
-	props, ok := op.Operands[1].(ast.PdfDict)
-	if !ok {
-		return false
-	}
-	_, has := props["Lang"]
-	return has
+	props := &markedContentProps{doc: doc, page: stream.Dict, pageResources: outer.pageRes(ctx), parentTree: outer.parentTree}
+	return opsShowUndeterminedText(ctx, doc, ops, props, subRes, covered, mcidCovers, seen, depth+1)
 }
 
 // walkStructureElementsWithLang is like walkStructureElements but tracks /Lang

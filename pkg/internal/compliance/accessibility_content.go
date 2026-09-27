@@ -161,12 +161,14 @@ type formMarkingKey struct {
 	artifact bool
 }
 
-// contentMarkingWalk carries one page's [checkContentMarking] walk: the forms
-// already walked, per state around the Do, and the forms on the current
-// chain, so a form that draws itself is not walked again.
+// contentMarkingWalk carries one page's [checkContentMarking] walk: the page's
+// resources, which name the property lists a form's own leave out, the forms
+// already walked, per state around the Do, and the forms on the current chain,
+// so a form that draws itself is not walked again.
 type contentMarkingWalk struct {
 	doc        *document.Document
 	structTree ast.PdfDict
+	pageRes    ast.PdfDict
 	partOne    bool
 	walked     map[formMarkingKey]markingFindings
 	onChain    map[int]bool
@@ -183,11 +185,12 @@ type contentMarkingWalk struct {
 // the form XObject a Do draws, whose content inherits the marked-content state
 // around the Do (ISO 32000-1, 14.6). A form that paints nothing is no content,
 // an image XObject is, and the sequences a form opens are judged as the
-// page's are. Content is tagged when [levelsTagged] says so and exempt when an
-// /Artifact sequence holds it. t1 and t2 judge marked-content sequences
-// rather than painting: an /Artifact sequence opened in tagged content fails
-// both, being tagged content marked as an artifact, and a tagged sequence
-// opened under an /Artifact one fails t2.
+// page's are. Content is tagged when [pushLevel] says so and exempt when an
+// /Artifact sequence holds it. A sequence's /MCID comes from its property
+// list, written inline or named from /Properties ([markedContentProps]). t1
+// and t2 judge marked-content sequences rather than painting: an /Artifact
+// sequence opened in tagged content fails both, being tagged content marked as
+// an artifact, and a tagged sequence opened under an /Artifact one fails t2.
 //
 // t1 and t2 are PDF/UA-1 concepts. PDF/UA-2 has no equivalent rule: its §8.2.2
 // covers only unmarked content, so they stay gated to UA-1.
@@ -210,6 +213,9 @@ type contentMarkingWalk struct {
 //     8.2.2 t1, where litho did.
 //   - All corpora: no other file changes its rule set at PDF/UA-1 or
 //     PDF/UA-2.
+//   - litho namedmcid_ua1.pdf: tags text through lists its page and three
+//     forms name, and veraPDF reports neither t3 nor 8.2.2 t1, where litho
+//     reported both.
 func checkContentMarking(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !IsPDFUA(profile) {
 		return nil
@@ -234,17 +240,20 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 			doc.Logger.Debug("compliance.accessibility: cannot parse content stream", "error", err)
 			continue
 		}
+		// A page that states no /Resources inherits its nearest ancestor's (ISO
+		// 32000-1 §7.7.3.4), so a Do whose XObject a /Pages node defines still
+		// resolves; a page that states its own, even empty, does not inherit.
+		pageRes := pages[i].effectiveResources(ctx, doc)
 		w := contentMarkingWalk{
 			doc:        doc,
 			structTree: structTree,
+			pageRes:    pageRes,
 			partOne:    profile == "PDF/UA-1",
 			walked:     make(map[formMarkingKey]markingFindings),
 			onChain:    make(map[int]bool),
 		}
-		// A page that states no /Resources inherits its nearest ancestor's (ISO
-		// 32000-1 §7.7.3.4), so a Do whose XObject a /Pages node defines still
-		// resolves; a page that states its own, even empty, does not inherit.
-		found := w.stream(ctx, ops, page, pages[i].effectiveResources(ctx, doc), nil, 0)
+		props := &markedContentProps{doc: doc, page: page, resources: pageRes}
+		found := w.stream(ctx, ops, page, pageRes, props, nil, 0)
 		if found.artifactInTagged {
 			results = append(results, failf(Rule_14289_1_7_1_t01,
 				"content marked as Artifact inside tagged content")...)
@@ -268,12 +277,13 @@ func checkContentMarking(ctx context.Context, doc *document.Document, catalog as
 
 // stream walks one content stream under the levels around it. holder is the
 // dictionary whose /StructParents keys the stream's MCIDs into the ParentTree
-// (the page, or the form), res resolves the XObjects it draws, and depth is the
-// form nesting, which [formTooDeep] bounds.
+// (the page, or the form), res resolves the XObjects it draws, props reads the
+// property lists its BDC operators carry, inline or named, and depth is the form
+// nesting, which [formTooDeep] bounds.
 //
 // A sequence the stream opens closes within it: an EMC with none of the
 // stream's own open closes nothing around the Do, as veraPDF reads it.
-func (w *contentMarkingWalk) stream(ctx context.Context, ops []content.Operation, holder, res ast.PdfDict, outer []markLevel, depth int) markingFindings {
+func (w *contentMarkingWalk) stream(ctx context.Context, ops []content.Operation, holder, res ast.PdfDict, props *markedContentProps, outer []markLevel, depth int) markingFindings {
 	owners, complete := w.mcidOwners(ctx, holder)
 	levels := slices.Clone(outer)
 	floor := len(levels)
@@ -289,7 +299,7 @@ func (w *contentMarkingWalk) stream(ctx context.Context, ops []content.Operation
 				tag, _ := op.Operands[0].(ast.PdfName)
 				level.artifact = tag == "Artifact"
 			}
-			if mcid := inlineBDCMCID(ctx, w.doc, op); mcid >= 0 && w.structTree != nil {
+			if mcid := props.mcid(ctx, op); mcid >= 0 && w.structTree != nil {
 				reach, mapped := owners[mcid]
 				switch {
 				case mapped && reach:
@@ -426,7 +436,8 @@ func (w *contentMarkingWalk) form(ctx context.Context, stream ast.PdfStream, obj
 			// Best-effort: a form with no readable /Resources names through
 			// the stream that draws it.
 			own, _ := document.ResolveDict(ctx, w.doc, stream.Dict["Resources"])
-			found = w.stream(ctx, ops, stream.Dict, appearanceResources(ctx, w.doc, own, parentRes), outer, depth)
+			props := &markedContentProps{doc: w.doc, page: stream.Dict, resources: own, pageResources: w.pageRes}
+			found = w.stream(ctx, ops, stream.Dict, appearanceResources(ctx, w.doc, own, parentRes), props, outer, depth)
 		}
 	}
 	if objNum != 0 {

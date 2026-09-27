@@ -484,11 +484,13 @@ func TestMcidsShowingText_InlineLangIsPerSequence(t *testing.T) {
 	show := content.Operation{Operator: "Tj", Operands: []ast.PdfObject{ast.PdfString("x")}}
 	emc := content.Operation{Operator: "EMC"}
 
+	inline := &markedContentProps{}
+
 	t.Run("a tag covers its own sequence only", func(t *testing.T) {
 		got := mcidsShowingText(ctx, []content.Operation{
 			bdc(0, true), show, emc,
 			bdc(1, false), show, emc,
-		})
+		}, inline)
 		if !got[0] {
 			t.Error("MCID 0 carries the /Lang and should be covered")
 		}
@@ -501,19 +503,47 @@ func TestMcidsShowingText_InlineLangIsPerSequence(t *testing.T) {
 		// The outer sequence carries the tag; the inner one owns the text.
 		got := mcidsShowingText(ctx, []content.Operation{
 			bdc(0, true), bdc(1, false), show, emc, emc,
-		})
+		}, inline)
 		if !got[1] {
 			t.Error("MCID 1 is nested inside a tagged sequence and should be covered")
 		}
 	})
 
 	t.Run("no tag anywhere covers nothing", func(t *testing.T) {
-		got := mcidsShowingText(ctx, []content.Operation{bdc(0, false), show, emc})
+		got := mcidsShowingText(ctx, []content.Operation{bdc(0, false), show, emc}, inline)
 		if _, owns := got[0]; !owns {
 			t.Fatal("MCID 0 owns the text and should be present")
 		}
 		if got[0] {
 			t.Error("MCID 0 has no /Lang and must not be covered")
+		}
+	})
+
+	// A property list named from the page's /Properties carries its /MCID and
+	// /Lang as an inline one does (ISO 32000-1, 14.6.2). Measured against
+	// veraPDF 1.30.2: text under such a list is owned by the element its MCID
+	// maps, and a /Lang in it determines the text's language.
+	t.Run("a named property list owns and covers like an inline one", func(t *testing.T) {
+		named := &markedContentProps{resources: ast.PdfDict{"Properties": ast.PdfDict{
+			"MC0": ast.PdfDict{"MCID": ast.PdfInt(0)},
+			"MC1": ast.PdfDict{"MCID": ast.PdfInt(1), "Lang": ast.PdfString("en-US")},
+		}}}
+		bdcNamed := func(name string) content.Operation {
+			return content.Operation{Operator: "BDC", Operands: []ast.PdfObject{ast.PdfName("P"), ast.PdfName(name)}}
+		}
+		got := mcidsShowingText(ctx, []content.Operation{
+			bdcNamed("MC0"), show, emc,
+			bdcNamed("MC1"), show, emc,
+			bdcNamed("MC9"), show, emc,
+		}, named)
+		if covered, owns := got[0]; !owns || covered {
+			t.Errorf("MCID 0 = (%v, %v), want owned and not covered", covered, owns)
+		}
+		if !got[1] {
+			t.Error("MCID 1 carries a /Lang in its named list and should be covered")
+		}
+		if len(got) != 2 {
+			t.Errorf("got %v, want MCIDs 0 and 1 alone: MC9 names no list", got)
 		}
 	})
 }
