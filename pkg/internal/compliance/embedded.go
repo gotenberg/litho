@@ -22,6 +22,14 @@ import (
 //nolint:gochecknoglobals // compiled-once pattern shared by the MIME check.
 var mimeTypePattern = regexp.MustCompile(`^[-\w+.]+/[-\w+.]+$`)
 
+// IsValidMIMEType reports whether s is the media type ISO 19005-3, 6.8 t1 and
+// ISO 19005-4, 6.9 t1 require of an embedded file's /Subtype, as the
+// validator judges it: a "type/subtype" pair of RFC 2045 tokens, with no
+// parameter.
+func IsValidMIMEType(s string) bool {
+	return mimeTypePattern.MatchString(s)
+}
+
 // validAFRelationships lists the valid values for /AFRelationship (ISO 32000-2,
 // 7.11.3).
 //
