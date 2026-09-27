@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -215,4 +216,85 @@ func pageSizes(t *testing.T, data []byte) [][2]float64 {
 		sizes = append(sizes, [2]float64{p.Width, p.Height})
 	}
 	return sizes
+}
+
+// invalidBoundingBoxPDF builds three pages whose boxes a viewer reads in place
+// of the ones they state. Page 1 states /MediaBox [0 0 0 0] and draws its text
+// at (25, 700), page 2 a /CropBox [0 0 0 0] on an 800 by 600 media box, and
+// page 3 a /CropBox [600 800 1000 1000] that misses its 600 by 800 media box.
+//
+// # Corpus evidence
+//
+//   - pdfjs boundingBox_invalid.pdf: the document this one rebuilds.
+func invalidBoundingBoxPDF() []byte {
+	stream := func(content string) string {
+		return fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content)
+	}
+	const resources = "/Resources << /Font << /F1 6 0 R >> >>"
+	return buildPDF([]string{
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 0 0] " + resources + " /Contents 7 0 R >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 800 600] /CropBox [0 0 0 0] " + resources + " /Contents 8 0 R >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /CropBox [600 800 1000 1000] " + resources + " /Contents 9 0 R >>",
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>",
+		stream("BT 25 700 TD /F1 30 Tf (Empty /MediaBox) Tj ET"),
+		stream("BT 25 500 TD /F1 30 Tf (Empty /CropBox) Tj ET"),
+		stream("BT 25 700 TD /F1 30 Tf (Outside /CropBox) Tj ET"),
+	})
+}
+
+// TestRemediatePDFA_WritesUSLetterForAMediaBoxNoViewerUses pins that the
+// PDF/A page box repair replaces a /MediaBox no viewer uses (see
+// [document.UsableBox]) with the US Letter page a viewer draws in its place,
+// as a rewrite writes it, whatever sizes the other pages use. ISO 32000-1,
+// Table 30 gives the media box no default, and ISO 19005-2, 6.1.13 fails a
+// box under 3 units. The repair wrote the widest width and the widest height
+// the document's pages use, 800 by 800 here, a page larger than the one
+// pdf.js and poppler show. The text of page 1 lies inside US Letter, so the
+// remediation's text-loss check passes.
+func TestRemediatePDFA_WritesUSLetterForAMediaBoxNoViewerUses(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	src := invalidBoundingBoxPDF()
+	sizes := pageSizes(t, src)
+	if want := [][2]float64{{612, 792}, {800, 600}, {600, 800}}; !slices.Equal(sizes, want) {
+		t.Fatalf("the source pages measure %v, want %v", sizes, want)
+	}
+	for _, aggressive := range []bool{false, true} {
+		t.Run(fmt.Sprintf("aggressive=%v", aggressive), func(t *testing.T) {
+			t.Parallel()
+			source := openBytes(t, src)
+			defer source.Close()
+			w := NewWriter(source)
+			defer w.Close()
+			var opts []RemediateOption
+			if aggressive {
+				opts = append(opts, WithAggressiveFixes())
+			}
+			rep, err := w.RemediatePDFA(ctx, models.PDFA2b, opts...)
+			if err != nil {
+				t.Fatalf("RemediatePDFA: %v", err)
+			}
+			if !slices.ContainsFunc(rep.Fixed, func(fix string) bool { return strings.Contains(fix, "page boundaries") }) {
+				t.Fatalf("the remediation repaired no page boundary, so the test proves nothing: %q", rep.Fixed)
+			}
+			var out bytes.Buffer
+			if err := w.WriteTo(ctx, &out); err != nil {
+				t.Fatalf("WriteTo: %v", err)
+			}
+			if got := pageSizes(t, out.Bytes()); !slices.Equal(got, sizes) {
+				t.Errorf("the output pages measure %v, want the %v the source pages measure", got, sizes)
+			}
+			o := readOutputTree(t, out.Bytes())
+			if got, want := boxValues(o.pages[0].MediaBox), []float64{0, 0, 612, 792}; !slices.Equal(got, want) {
+				t.Errorf("page 1 states /MediaBox %v, want %v", got, want)
+			}
+			r := openBytes(t, out.Bytes())
+			defer r.Close()
+			if text := mustText(t, r, 1); !strings.Contains(text, "Empty /MediaBox") {
+				t.Errorf("page 1 reads %q, want its text", text)
+			}
+		})
+	}
 }

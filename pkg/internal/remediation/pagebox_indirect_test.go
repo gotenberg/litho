@@ -12,8 +12,8 @@ import (
 )
 
 // indirectMediaBoxPDF builds two pages: the first declares a degenerate
-// /MediaBox the fixer has to replace, the second declares a usable one through
-// an indirect reference.
+// /MediaBox the fixer has to replace, the second declares an 800 by 600 one
+// through an indirect reference.
 func indirectMediaBoxPDF() []byte {
 	content := "BT /F1 12 Tf 100 500 Td (hello) Tj ET"
 
@@ -42,17 +42,15 @@ func indirectMediaBoxPDF() []byte {
 	return b.Bytes()
 }
 
-// TestDegenerateMediaBoxTakesAnIndirectSiblingsSize pins that the replacement
-// for a degenerate /MediaBox comes from a size the document actually uses, even
-// when that page writes its box indirectly.
-//
-// A degenerate box has no default and must be replaced, and the replacement is
-// chosen from the document's own pages precisely so the page's content still
-// falls inside it. Any object may be given as an indirect reference (ISO
-// 32000-1, 7.3.10), and type-asserting the array skipped every page that does,
-// so the fallback silently became US Letter: a page sitting beside an 800x600
-// sibling was given 612x792 and anything past 612 units was cropped away.
-func TestDegenerateMediaBoxTakesAnIndirectSiblingsSize(t *testing.T) {
+// TestDegenerateMediaBoxBecomesUSLetter pins that the replacement for a
+// degenerate /MediaBox is the US Letter page a viewer draws in its place (see
+// [document.LetterMediaBox]), whatever size the document's other pages use,
+// here an 800 by 600 sibling that writes its box through an indirect reference
+// (ISO 32000-1, 7.3.10). ISO 32000-1, Table 30 gives the media box no default.
+// The replacement was the widest width and height the pages use, a page
+// larger than the one pdf.js and poppler show, and larger than the one a
+// rewrite writes.
+func TestDegenerateMediaBoxBecomesUSLetter(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -75,8 +73,10 @@ func TestDegenerateMediaBoxTakesAnIndirectSiblingsSize(t *testing.T) {
 	if !ok || len(box) != 4 {
 		t.Fatalf("/MediaBox = %v, want a four-element array", page["MediaBox"])
 	}
-	if document.Float(box[2]) != 800 || document.Float(box[3]) != 600 {
-		t.Errorf("/MediaBox = %v, want the sibling's 800x600 rather than the US Letter default", box)
+	for i, want := range []float64{0, 0, 612, 792} {
+		if document.Float(box[i]) != want {
+			t.Fatalf("/MediaBox = %v, want US Letter, [0 0 612 792]", box)
+		}
 	}
 }
 
@@ -163,32 +163,5 @@ func TestPageBoxKeepsIndirectCoordinates(t *testing.T) {
 	if w != 250 || h != 50 {
 		t.Errorf("page 1 measures %v x %v after remediation, want 250 x 50: "+
 			"its valid box was replaced by the fallback", w, h)
-	}
-}
-
-// TestWidestUsableMediaBoxReadsIndirectCoordinates pins that the replacement
-// size offered to a degenerate page comes from a sibling's real dimensions, not
-// from the default, when that sibling writes its box indirectly.
-func TestWidestUsableMediaBoxReadsIndirectCoordinates(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	data := indirectBoxPDF()
-	doc, err := document.NewDocument(ctx, bytes.NewReader(data), int64(len(data)), nil)
-	if err != nil {
-		t.Fatalf("NewDocument: %v", err)
-	}
-
-	page, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 3})
-	if err != nil {
-		t.Fatalf("resolving page 1: %v", err)
-	}
-
-	got := widestUsableMediaBox(ctx, doc, []annotPageEntry{{dict: page}})
-	if len(got) != 4 {
-		t.Fatalf("widestUsableMediaBox returned %v", got)
-	}
-	if document.Float(got[2]) != 250 || document.Float(got[3]) != 50 {
-		t.Errorf("fallback box = %v, want 250 x 50 taken from the indirect page", got)
 	}
 }
