@@ -264,22 +264,38 @@ func (fs fileSpecEntry) label() string {
 // between runs of the same binary on the same file: identical findings in a
 // different order, which reads as a diff to anything comparing reports.
 //
-// The cross-reference map holds only indirect objects, so the scan alone cannot
-// see a filespec written inline. Annotations carrying a direct /FS are gathered
-// separately, since every clause 6.8 check skipped such an attachment. A direct
-// filespec inside an /AF array stays out of scope.
+// ISO 32000-1, 7.11.3 does not require a file specification to be an indirect
+// object, and the cross-reference map holds only indirect ones, so the sweep
+// also walks the direct values of every object it resolves, a stream's
+// dictionary included, and gathers each /Type /Filespec dictionary written
+// inline there ([directFileSpecsIn]): an annotation's /FS or /AF entry, the
+// annotation itself written inline in a page's /Annots, a reference XObject's
+// /Ref, an /OPI dictionary's /F, a catalog or page /AF entry. veraPDF judges a
+// file specification wherever it sits, as it walks every value of every
+// object, and names an inline one by the object holding it and its path there,
+// as [fileSpecEntry.label] does.
 //
 // The sweep identifies a candidate by /Type alone, which is all it can do over
 // every object in a file, so it misses one whose /Type is wrong. The
 // /Names /EmbeddedFiles tree names its values regardless, and
-// [collectNameTreeFileSpecs] gathers those by position.
+// [collectNameTreeFileSpecs] gathers those by position. veraPDF sees no file
+// specification in an inline dictionary without /Type either, measured on a
+// FileAttachment /FS with /EF and a /Subtype-less embedded file, which fails
+// no clause 6.8 test.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue14203.pdf: attaches example.tex through an annotation's
 //     direct /FS, and every clause 6.8 check skipped it.
-//   - All corpora, 5144 files: no direct filespec inside an /AF array is
-//     observed, which keeps that shape out of scope.
+//   - litho complex_1b.pdf and complex_4.pdf: a reference XObject names its
+//     target file through a /Ref /F written inline, and veraPDF reports it
+//     under ISO 19005-3, 6.8 t3 and t4 where litho did not.
+//   - govdocs thread_400_400002.pdf: 42 /OPI dictionaries name their image
+//     file through an inline /F, and veraPDF reports each under ISO 19005-3,
+//     6.8 t3 and t4 where litho reported none.
+//   - All corpora, the 293 files that hold a file specification, at PDF/A-1b,
+//     2b, 3b, 4, 4f and PDF/UA-1: those three files are the only counts the
+//     wider walk moves, and it costs no measurable time.
 func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []fileSpecEntry {
 	var specs []fileSpecEntry
 
@@ -291,13 +307,23 @@ func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.P
 			continue
 		}
 
-		dict, err := document.ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
-		if err != nil || dict == nil {
+		obj, err := document.ResolveObject(ctx, doc, ast.PdfIndirectRef{ObjectNum: objNum})
+		if err != nil {
 			continue
 		}
+		// A stream is never a file specification, but its dictionary can hold
+		// one inline, as a reference XObject's /Ref does.
+		if stream, ok := obj.(ast.PdfStream); ok {
+			specs = append(specs, directFileSpecsIn(ctx, doc, stream.Dict, objNum, "", 0)...)
+			continue
+		}
+		specs = append(specs, directFileSpecsIn(ctx, doc, obj, objNum, "", 0)...)
 
-		typeName, _ := document.ResolveName(ctx, doc, dict["Type"])
-		if typeName != "Filespec" {
+		dict, ok := obj.(ast.PdfDict)
+		if !ok || dict == nil {
+			continue
+		}
+		if typeName, _ := document.ResolveName(ctx, doc, dict["Type"]); typeName != "Filespec" {
 			continue
 		}
 
@@ -311,8 +337,6 @@ func collectFileSpecs(ctx context.Context, doc *document.Document, catalog ast.P
 
 		specs = append(specs, fileSpecEntry{dict: dict, objNum: objNum, hasEF: hasEF})
 	}
-
-	specs = append(specs, collectDirectAnnotFileSpecs(ctx, doc, catalog)...)
 
 	gathered := make(map[int]bool, len(specs))
 	for _, fs := range specs {
@@ -394,65 +418,23 @@ func collectNameTreeFileSpecs(ctx context.Context, doc *document.Document, catal
 	return specs
 }
 
-// collectDirectAnnotFileSpecs gathers file specifications written as a direct
-// dictionary in an annotation's /FS.
-//
-// Only an annotation that is itself an indirect object is considered: a direct
-// filespec inside a direct annotation has no object number anywhere on its path
-// to cite in a violation. Each annotation is visited once, so an annotation
-// shared by two pages does not report its filespec twice.
-//
-// # Corpus evidence
-//
-//   - All corpora: no file carries a direct filespec inside a direct
-//     annotation.
-func collectDirectAnnotFileSpecs(ctx context.Context, doc *document.Document, catalog ast.PdfDict) []fileSpecEntry {
-	var specs []fileSpecEntry
-	seen := make(map[int]bool)
-
-	for _, page := range collectPages(ctx, doc, catalog) {
-		if ctx.Err() != nil {
-			return specs
-		}
-
-		annots, err := document.ResolveArray(ctx, doc, page["Annots"])
-		if err != nil || annots == nil {
-			continue
-		}
-
-		for _, annotObj := range annots {
-			ref, isRef := annotObj.(ast.PdfIndirectRef)
-			if !isRef || seen[ref.ObjectNum] {
-				continue
-			}
-			seen[ref.ObjectNum] = true
-
-			annotDict, err := document.ResolveDict(ctx, doc, annotObj)
-			if err != nil || annotDict == nil {
-				continue
-			}
-
-			specs = append(specs, directFileSpecsIn(ctx, doc, annotDict, ref.ObjectNum, "", 0)...)
-		}
-	}
-
-	return specs
-}
-
-// maxAnnotFileSpecDepth bounds the descent into an annotation's direct value
-// tree while looking for file specifications. Indirect objects are visited by
-// the outer sweep, so this recursion only walks the direct values of a single
-// annotation and cannot cycle. This is an anti-DoS guard, not spec-mandated: a
-// real annotation nests a handful of levels, the deepest observed being a
-// Rendition action reaching its media clip's filespec at /A/R/C/D, so 16 leaves
-// genuine documents untouched while capping a crafted one.
-const maxAnnotFileSpecDepth = 16
+// maxInlineFileSpecDepth bounds the descent into the direct values of one
+// object while looking for file specifications written inline. Indirect values
+// are visited by the outer sweep, so this recursion only walks the direct
+// values of a single object and cannot cycle. This is an anti-DoS guard, not
+// spec-mandated: a real object nests a handful of levels, the deepest observed
+// being a Rendition action reaching its media clip's filespec at /A/R/C/D of
+// an annotation, and an inline annotation adds two levels above it, so 16
+// leaves genuine documents untouched while capping a crafted one.
+const maxInlineFileSpecDepth = 16
 
 // directFileSpecsIn returns every /Type /Filespec dictionary written directly
-// inside obj, at any depth. An annotation reaches a filespec by more routes
-// than its own /FS: a Screen annotation's Rendition action holds its media
-// clip's data at /A/R/C/D (ISO 32000-1 §13.2.3), and PDF/A-1 §6.1.11 t1 forbids
-// the /EF key on a file specification wherever it sits.
+// inside obj, the value of the indirect object container, at any depth below
+// its top. An object reaches a filespec by more routes than an annotation's
+// /FS: a Screen annotation's Rendition action holds its media clip's data at
+// /A/R/C/D (ISO 32000-1 §13.2.3), an /AF array lists associated files (ISO
+// 32000-2, 14.13), and PDF/A-1 §6.1.11 t1 forbids the /EF key on a file
+// specification wherever it sits.
 //
 // Indirect values are skipped: the caller's sweep over the cross-reference table
 // already visits those, and following them here would report the same
@@ -464,13 +446,16 @@ const maxAnnotFileSpecDepth = 16
 //     action's media clip, and veraPDF reports every one; litho saw only /FS
 //     and passed them.
 func directFileSpecsIn(ctx context.Context, doc *document.Document, obj ast.PdfObject, container int, path string, depth int) []fileSpecEntry {
-	if depth > maxAnnotFileSpecDepth || ctx.Err() != nil {
+	if depth > maxInlineFileSpecDepth {
 		return nil
 	}
 
 	var specs []fileSpecEntry
 	switch v := obj.(type) {
 	case ast.PdfDict:
+		if ctx.Err() != nil {
+			return nil
+		}
 		if typeName, _ := document.ResolveName(ctx, doc, v["Type"]); typeName == "Filespec" && path != "" {
 			specs = append(specs, fileSpecEntry{
 				dict:      v,
@@ -483,6 +468,9 @@ func directFileSpecsIn(ctx context.Context, doc *document.Document, obj ast.PdfO
 			specs = append(specs, directFileSpecsIn(ctx, doc, v[key], container, path+"/"+string(key), depth+1)...)
 		}
 	case ast.PdfArray:
+		if ctx.Err() != nil {
+			return nil
+		}
 		for i, item := range v {
 			specs = append(specs, directFileSpecsIn(ctx, doc, item, container, fmt.Sprintf("%s[%d]", path, i), depth+1)...)
 		}
