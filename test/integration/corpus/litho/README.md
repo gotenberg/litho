@@ -165,6 +165,7 @@ one deliberately rather than diffing it against a fresh build.
 | `kidsrepair_1b.pdf`    | PDF/A-1b     | Repairs of inherited resources and of pages written in `/Kids`   |
 | `inlinefs_4.pdf`       | PDF/A-4      | File specifications written inline outside any annotation `/FS`  |
 | `sigtagged_ua1.pdf`    | PDF/UA-1     | A certified signature on a tagged page, under the rewrites       |
+| `kidsarray_2b.pdf`     | PDF/A-2b     | Pages written directly in a `/Kids` array named by reference     |
 
 ### Must-not-fire controls
 
@@ -451,6 +452,7 @@ which are covered under [Known divergences](#known-divergences).
 | `inlineimage_2b.pdf`   | 7    | 4    | 10   | 6    | 7    | 10   | 6    | 7    | 6   | 6    | 7    | 10   | 10   |
 | `inlineinterp_2b.pdf`  | 7    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 10   | 8    |
 | `jpx_2b.pdf`           | 4    | 2    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 5    | 6    |
+| `kidsarray_2b.pdf`     | 6    | 3    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 7    | 8    | 12   | 8    |
 | `kidsrepair_1b.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 5    | 5    |
 | `langpua_ua2.pdf`      | 7    | 5    | 8    | 7    | 7    | 8    | 7    | 7    | 4   | 4    | 5    | 4    | 3    |
 | `limits_1b.pdf`        | 12   | 9    | 9    | 6    | 7    | 9    | 6    | 7    | 4   | 4    | 5    | 11   | 9    |
@@ -4595,9 +4597,20 @@ Measured on veraPDF 1.30.2 and litho alike, the PDF/A-1b outputs kept all six
 findings in both modes before the fix, and the PDF/A-2a, 2b, 2u, 3b and 4
 outputs kept `6.2.2/2` for `Kid` and `6.2.5/1` for `Own`. Every output of the
 eight manifest profiles now passes both tools in both modes; the PDF/UA ones
-passed before too. The two sibling pages are written back into the one `/Kids`
-array, each keeping the other's repair, and qpdf reads every output, warning
-only that the two pages are direct, as it does on the fixture.
+passed before too.
+
+The mutations missed the two direct pages as well. `mutate-stamp` left `Kid`
+and `Own` unstamped, and `mutate-pages` rebuilt the tree from the pages'
+object numbers, listing both as object 0: litho read one page of four, qpdf
+warned that the tree holds a non-dictionary object, veraPDF could not parse the
+output, and litho's rule set lost `6.2.5/1` from PDF/A-2 on and `6.2.8/1` and
+`6.4/3` at PDF/A-1b. A Writer now gives each page written directly in `/Kids`
+an object number before any edit or repair, and node K names both by
+reference. Every mutation or remediation output that changes the file lists
+four pages and reads in qpdf without a warning. On the stamped and moved
+outputs veraPDF reports the fixture's rule set less `6.2.2/2`, which a page
+stating its own `/Resources` passes, plus the font and colour rules the stamp
+draws.
 
 ### `sigtagged_ua1.pdf`
 
@@ -4652,16 +4665,61 @@ nothing on either tool except `8.10.2.3/1` at PDF/UA-2, on both. The PDF/A-4
 remediation writes `%PDF-2.0` in a full rewrite, which drops the signature; the
 others update the file incrementally and keep it.
 
+### `kidsarray_2b.pdf`
+
+ISO 32000-1, 7.7.3.2, Table 29 makes `/Kids` an array of indirect references. A
+Writer gives each page written directly in one an object number before any edit
+or repair, and has the array name it by reference. `kidsrepair_1b.pdf` writes
+its two direct pages in a `/Kids` array its node holds inline. Here node L names
+its `/Kids` array by reference, so the numbering rewrites the array, not the
+node, and no corpus file had that shape. veraPDF 1.30.2 refuses a file whose
+page tree holds an intermediate node written directly in `/Kids` ("doesn't
+appear to be a valid PDF"), so the other shape the numbering handles has no
+fixture.
+
+| Page | Where it sits                                   | Shows | Carries                    |
+| ---- | ----------------------------------------------- | ----- | -------------------------- |
+| 1    | the root's `/Kids`, by reference                | `A`   | nothing                    |
+| 2    | the array node L names as its `/Kids`, directly | `B`   | a text field, a page `/AA` |
+| 3    | the same array, directly, after page 2          | `AB`  | a Text annotation, no `/F` |
+
+Each page states its own `/Resources` and shows its text in the conforming
+embedded TrueType of `ttcmap_2b.pdf`, painted in the initial DeviceGray with no
+output intent (`6.2.3.3/3` at part 1, `6.2.4.3/4` from part 2, once per page).
+Page 2's `/AA` holds a permitted GoTo action and fails `6.5.2/2` at parts 2 and
+3 and `6.6.3/1` at part 4. Page 3's annotation fails `6.5.3/2` at part 1 and
+`6.3.2/1` from part 2. Every appearance paints nothing. The other cells report
+the identification and tagging rules a part-2 claim draws at the other levels.
+
+The two tools return the same rule set in all thirteen cells, and the same
+counts in the eleven PDF/A ones. At PDF/UA-1 veraPDF counts `7.1/3` and
+`7.2/34`, and at PDF/UA-2 `8.2.2/1`, once per untagged content item, and litho
+once each.
+
+Measured on litho and veraPDF 1.30.2 before the numbering, the Writer missed
+both direct pages. `mutate-stamp` left them unstamped, `mutate-pages` wrote a
+tree listing them as object 0, which litho read as no page at all and qpdf
+refused, `mutate-flatten` left the field's widget on page 2, and
+`mutate-autotag` wrote the structure elements of pages 2 and 3 with
+`/Pg 0 0 R`. Remediation left page 2's `/AA` in place (`6.5.2/2` at PDF/A-2a,
+2b, 2u and 3b, `6.6.3/1` at PDF/A-4) and, at PDF/UA-1 and PDF/UA-2, the content
+of the two pages untagged (`7.1/3`, `8.2.2/1`) and their `/Tabs` unset
+(`7.18.3/1`, `8.9.3.3/1`), on both tools. Now every `mutate-*` cell passes but
+`mutate-redact`, which refuses by design, and every remediation output of the
+eight manifest profiles, default and aggressive, passes both tools but the
+PDF/UA-2 ones, where both report `8.8/2` for the destination of page 2's GoTo
+action. qpdf reads each output without a warning.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 113 x 8 = 904 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 113 x 13 = 1469 cells. litho
+runner scores 114 x 8 = 912 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 114 x 13 = 1482 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1467 of the 1469 cells. The two
+fixtures exist to protect, and it holds in 1480 of the 1482 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -4671,7 +4729,7 @@ verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
 two is non-compliant on both sides (`formhidden_ua1` and `sigtagged_ua1` at
 PDF/UA-1 are the corpus's conforming cells), so a change that drops or invents a
-rule class leaves `matched` at 904 and moves only `ruleset_mismatch`, and on
+rule class leaves `matched` at 912 and moves only `ruleset_mismatch`, and on
 those two cells it moves both. Both exceptions sit in the manifest's profiles,
 `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus,
 and the text scoreboard names the rules only one side reports. A third cell in
