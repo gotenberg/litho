@@ -157,6 +157,7 @@ one deliberately rather than diffing it against a fresh build.
 | `formflat_ua1.pdf`     | PDF/UA-1     | Tagged widgets with no `/AcroForm`, under the form mutations     |
 | `remreach_2b.pdf`      | PDF/A-2b     | Defects below a page's resources the repairs did not reach       |
 | `annotlang_ua1.pdf`    | PDF/UA-1     | Languages annotations name; symbolic TrueType encoding dicts     |
+| `xmppage_2b.pdf`       | PDF/A-2b     | Extension schema tests on the XMP packets pages carry            |
 
 ### Must-not-fire controls
 
@@ -365,6 +366,8 @@ violation but is exempt, so a firing is a false positive.
 | `annotlang_ua1`                           | An annotation's own malformed `/Lang`, beside an element with none     | ISO 14289-1, 7.2 t29         |
 | `annotlang_ua1`                           | A symbolic TrueType whose `/Encoding` lists `/Differences` only        | ISO 14289-1, 7.21.6 t3       |
 | `annotlang_ua1`                           | A symbolic TrueType whose `/Encoding` is an empty dictionary           | ISO 14289-1, 7.21.6 t3       |
+| `xmppage_2b`                              | `ex:pt` in a page packet, declared by the catalog packet alone         | ISO 19005-2, 6.6.2.3.1 t1    |
+| `xmppage_2b`                              | A page entry typing `ex:pa` `MainT`, which the catalog's entry defines | ISO 19005-2, 6.6.2.3.3 t8    |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -479,6 +482,7 @@ which are covered under [Known divergences](#known-divergences).
 | `usedcs_2b.pdf`        | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
 | `xfatable_ua1.pdf`     | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 4    | 7    |
 | `xmpempty_1b.pdf`      | 8    | 5    | 6    | 3    | 4    | 6    | 3    | 4    | 7   | 7    | 8    | 5    | 6    |
+| `xmppage_2b.pdf`       | 6    | 3    | 14   | 11   | 12   | 15   | 12   | 13   | 5   | 5    | 6    | 5    | 5    |
 | `xmpsyntax_1b.pdf`     | 9    | 7    | 9    | 7    | 7    | 9    | 7    | 7    | 7   | 7    | 8    | 9    | 8    |
 | `xobjstate_2b.pdf`     | 8    | 6    | 11   | 9    | 9    | 11   | 9    | 9    | 10  | 10   | 11   | 7    | 7    |
 | `xpacket_1b.pdf`       | 8    | 5    | 9    | 6    | 7    | 9    | 6    | 7    | 9   | 9    | 10   | 8    | 7    |
@@ -4229,6 +4233,60 @@ sets and the counts of every rule equal veraPDF 1.30.2's in all thirteen, and
 in the remediated output of the eight profiles `manifest.json` lists, default
 and aggressive. Remediation leaves the language rules at PDF/UA-1, PDF/UA-2 and
 PDF/A-2a on both tools, since the `/Lang` repair walks the structure tree.
+
+### `xmppage_2b.pdf`
+
+ISO 19005-2, 6.6.2.3 constrains the properties and extension schemas of every
+metadata stream in the file. veraPDF models the packet a page carries as an
+XMPPackage like the catalog's (`GFPDMetadata.getXMPPackage`): its properties
+resolve through its own extension schemas and the catalog packet's, and its
+schemas answer the structure tests. litho judged a page packet's properties by
+name alone and never judged its schemas, so a namespace no packet declares
+passed, and every structure defect did. No corpus file reaches a rule set this
+changes: the 16 files whose counts rise already fail the same rules elsewhere.
+Each page of the fixture plants one kind of defect, so each rule it fires comes
+from one page:
+
+| Page | Packet                                                          | Rule at PDF/A-2b              |
+| ---- | --------------------------------------------------------------- | ----------------------------- |
+| 1    | `eu:foo`, a namespace no packet declares                        | `6.6.2.3.1/1` and `/2`        |
+| 1    | `ex:pt`, declared by the catalog packet alone                   | silent                        |
+| 2    | a property with no description, one of category `sideways`      | `6.6.2.3.3/10`, `6.6.2.3.3/9` |
+| 2    | an entry with no prefix, a value type with no description       | `6.6.2.3.3/4`, `6.6.2.3.3/14` |
+| 2    | a `dc:stray` field inside a schema entry                        | `6.6.2.3.2/1`                 |
+| 3    | `pdfaExtension:schemas` written as an `rdf:Seq`                 | `6.6.2.3.3/1`                 |
+| 4    | `ex:pa` of type `MainT`, which the catalog's `ex` entry defines | silent                        |
+| 4    | an entry with no property array, a field of type `Dimensions`   | `6.6.2.3.3/17`                |
+
+Page 4's entry resolves `MainT` through the catalog's entry for the same
+namespace, as veraPDF builds a page entry's validators on a copy of the catalog
+entry's (`AXLXMPPackage.getCurrentSchemasDefinitionPDFA_2_3`). No property name
+repeats across packets: veraPDF checks one property per namespace, prefix and
+name in a document, the first its traversal meets, and litho judges every
+packet's, so a repeated name would tie the verdict to that order.
+
+| Rule at PDF/A-2b | veraPDF | litho | litho before |
+| ---------------- | ------- | ----- | ------------ |
+| `6.1.7.1/1`      | 4       | 4     | 4            |
+| `6.1.7.1/2`      | 10      | 10    | 10           |
+| `6.6.2.3.1/1`    | 1       | 1     | 0            |
+| `6.6.2.3.1/2`    | 1       | 1     | 0            |
+| `6.6.2.3.2/1`    | 1       | 1     | 0            |
+| `6.6.2.3.3/1`    | 1       | 1     | 0            |
+| `6.6.2.3.3/4`    | 1       | 1     | 0            |
+| `6.6.2.3.3/9`    | 1       | 1     | 0            |
+| `6.6.2.3.3/10`   | 1       | 1     | 0            |
+| `6.6.2.3.3/14`   | 1       | 1     | 0            |
+| `6.6.2.3.3/17`   | 1       | 1     | 0            |
+
+ISO 19005-1 builds no package for a page's metadata stream, so PDF/A-1b and
+PDF/A-1a are silent on the page packets, on both tools. All thirteen cells
+return the same rule set and the same counts on both.
+
+The remediation of every PDF/A-2 and PDF/A-3 cell leaves `6.6.2.3.3/1` and
+`/17` on both tools, as it does when the catalog packet carries the same two
+defects. litho used to report nothing there, where veraPDF reported those two
+and, at PDF/A-2b, where nothing else ran the metadata repair, all nine.
 
 ## Scope
 
