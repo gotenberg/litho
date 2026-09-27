@@ -273,7 +273,7 @@ const mutationRedactReach = 1e6
 // DeletePages refuses to delete the Reader's only page even once an
 // InsertPages has queued a second one: mutations.DeletePages compares the
 // deletion with the Reader's page count before it reads the staged tree. So
-// mutate-pages only appends the copy to a one-page input, and the deletion
+// mutate-pages only appends the copies to a one-page input, and the deletion
 // runs on the multi-page ones.
 //
 // The failures the features count on the code they were written against are
@@ -302,6 +302,18 @@ const mutationRedactReach = 1e6
 //   - litho: with the deletion no longer allowed to pass any rule at the
 //     tagged profiles, the 32 fixtures whose first page moves to the end
 //     count no ruleset_changed cell but imagereach_2b's six.
+//   - litho: naming page 1 twice moves no mutate-pages cell: the 124 fixtures
+//     count the 986 matched cells and imagereach_2b's 6 ruleset_changed ones
+//     that the single copy counted.
+//   - litho structcopy_ua2, pagelabels_2b, annotshare_ua1, sigtagged_ua1,
+//     complex_ua1, formstruct_ua2: veraPDF reports the input's rule set on the
+//     output of the repeat at each home profile, at PDF/UA-1 for the two
+//     PDF/UA-2 fixtures, and in all thirteen flavours for pagelabels_2b.
+//   - litho: planted in InsertPages, a repeat written as its first copy's page
+//     object again counts 124 pages_wrong PDFs, litho reading one page fewer
+//     than the plan promises, and a repeat copied without its structure counts
+//     57 ruleset_changed cells on 30 tagged fixtures: 7.1 test 3, or on 3 an
+//     annotation rule of 7.18, at PDF/UA-1, and 8.2.2 test 1 at PDF/UA-2.
 //   - litho a4syntax_4: 1 ruleset_changed cell (PDF/A-4, 6.1.2 test 1) under
 //     each of mutate-pages, mutate-flatten and mutate-encrypt: a full rewrite
 //     writes a %PDF-1.7 header over a PDF 2.0 source.
@@ -348,9 +360,10 @@ var mutationSpecs = []mutationSpec{
 			a := strictAllowance(rc.profile)
 			a.mayRemove = concatRules(a.mayRemove, explicitResourcesRules[family])
 			// Deleting a page prunes the structure elements that name it, and
-			// the copy that replaces the page carries them again, so a rule
+			// each copy that replaces the page carries them again, so a rule
 			// only they failed stays failed and no rule may go on their
-			// account. A rewrite drops the input's signatures (see
+			// account. The repeat adds none: its copy carries elements of its
+			// own. A rewrite drops the input's signatures (see
 			// [droppedSignaturesRemove]).
 			a.anyRemove = droppedSignaturesRemove(rc)
 			return a
@@ -548,34 +561,41 @@ func verifyStamp(ctx context.Context, _ *mutationFeature, in *mutationInput, out
 	return nil
 }
 
-// applyPages moves page 1 to the end of a multi-page input: a second Reader
-// over the same bytes supplies a copy of page 1, InsertPages appends it, and
-// DeletePages removes the original. A one-page input only gets the copy
-// appended, because DeletePages refuses to delete the Reader's only page
-// even once the insertion is queued.
+// applyPages moves page 1 to the end of a multi-page input and repeats it
+// there: a second Reader over the same bytes supplies page 1, InsertPages
+// appends it twice, and DeletePages removes the original. A one-page input
+// only gets the two copies appended, because DeletePages refuses to delete the
+// Reader's only page even once the insertion is queued.
+//
+// InsertPages names page 1 twice so that every input exercises a repeat, which
+// the Writer writes as a page of its own: a page object has one /Parent and
+// the page tree lists it once (ISO 32000-1, 7.7.3.2 and Table 30). Each copy
+// promises the text and the label of page 1, and a tagged copy carries
+// structure elements of its own, so the repeat moves the rule set no further
+// than a single copy does.
 func applyPages(ctx context.Context, _ *mutationFeature, in *mutationInput, w *pdf.Writer) (mutationPlan, error) {
 	copySrc, err := pdf.Open(ctx, bytes.NewReader(in.data), int64(len(in.data)))
 	if err != nil {
 		return mutationPlan{}, fmt.Errorf("opening the copy source: %w", err)
 	}
 	plan := mutationPlan{release: func() { copySrc.Close() }}
-	if err := w.InsertPages(in.pages, copySrc, 1); err != nil {
-		return plan, fmt.Errorf("inserting page 1: %w", err)
+	if err := w.InsertPages(in.pages, copySrc, 1, 1); err != nil {
+		return plan, fmt.Errorf("inserting page 1 twice: %w", err)
 	}
 	if in.pages == 1 {
-		plan.pages = 2
-		plan.pageSource = []int{0, 0}
+		plan.pages = 3
+		plan.pageSource = []int{0, 0, 0}
 		return plan, nil
 	}
 	if err := w.DeletePages(1); err != nil {
 		return plan, fmt.Errorf("deleting page 1: %w", err)
 	}
-	plan.pages = in.pages
+	plan.pages = in.pages + 1
 	plan.deleted = true
 	for i := 1; i < in.pages; i++ {
 		plan.pageSource = append(plan.pageSource, i)
 	}
-	plan.pageSource = append(plan.pageSource, 0)
+	plan.pageSource = append(plan.pageSource, 0, 0)
 	return plan, nil
 }
 

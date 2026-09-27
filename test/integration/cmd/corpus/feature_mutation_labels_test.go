@@ -4,9 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/pdf"
 )
 
 // labelledMutationPDF returns a three-page PDF, each page drawing its own line
@@ -45,6 +50,49 @@ func labelledMutationPDF(t *testing.T, labels string) []byte {
 	}
 	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(objects)+1, xref)
 	return buf.Bytes()
+}
+
+// TestMutatePages_RepeatsPageOne pins that mutate-pages names page 1 twice,
+// so every input exercises a page the Writer copies twice: a multi-page input
+// ends with two copies of page 1 and a one-page input gains two. The output
+// keeps what the plan promises, the page count and each page's text.
+func TestMutatePages_RepeatsPageOne(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	twoPages := mutationTestPDF(t)
+	src, err := pdf.Open(ctx, bytes.NewReader(twoPages), int64(len(twoPages)))
+	if err != nil {
+		t.Fatalf("opening the two-page input: %v", err)
+	}
+	defer src.Close()
+	var onePage bytes.Buffer
+	if err := pdf.Split(ctx, src, []int{1}, &onePage); err != nil {
+		t.Fatalf("splitting page 1 out: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name string
+		data []byte
+		want []int
+	}{
+		{"two pages", twoPages, []int{1, 0, 0}},
+		{"one page", onePage.Bytes(), []int{0, 0, 0}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "doc.pdf")
+			if err := os.WriteFile(path, tc.data, 0o600); err != nil {
+				t.Fatalf("writing the input: %v", err)
+			}
+			res := newMutationFeature(specNamed(t, "pages")).mutate(context.Background(), path)
+			if res.skip != "" || len(res.failures) > 0 {
+				t.Fatalf("skip %q failures %v, want a checked output", res.skip, res.failures)
+			}
+			if !slices.Equal(res.plan.pageSource, tc.want) || res.plan.pages != len(tc.want) {
+				t.Errorf("plan: %d pages from %v, want %d from %v", res.plan.pages, res.plan.pageSource, len(tc.want), tc.want)
+			}
+		})
+	}
 }
 
 // TestMutatePages_KeepsPageLabels pins the label promise of mutate-pages: the
