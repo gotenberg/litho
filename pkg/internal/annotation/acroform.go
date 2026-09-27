@@ -460,14 +460,101 @@ func joinChoiceValue(ctx context.Context, doc *document.Document, arr ast.PdfArr
 	return strings.Join(parts, choiceValueSeparator)
 }
 
+// traverseFields records into formData, calcScripts and order the fields of
+// the list fields and their descendants, under a parent whose fully qualified
+// name is parentName and whose inheritable /FT is inheritedFT (ISO 32000-1,
+// 12.7.3.1, Table 220). See [traverseFieldsAt].
 func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, inheritedFT string, formData map[string]string, calcScripts map[string]string, order *[]string, seen map[string]bool) error {
-	return traverseFieldsAt(ctx, doc, fields, parentName, inheritedFT, formData, calcScripts, order, seen, make(map[int]bool))
+	tr := &fieldTraversal{onPath: make(map[int]bool), walked: make(map[fieldVisit]bool)}
+	return traverseFieldsAt(ctx, doc, fields, parentName, inheritedFT, formData, calcScripts, order, seen, tr, 0)
 }
 
-// traverseFieldsAt is traverseFields carrying the field objects on the CURRENT
-// path. A /Kids entry naming an ancestor is a cycle: unguarded, a field whose
-// /Kids named itself recursed until the goroutine stack was exhausted, a fatal
-// runtime error no recover() converts, reached from Reader.FormData and
+// maxFieldTreeDepth bounds the descent DOWN a field's /Kids in
+// [traverseFieldsAt]. It is an anti-DoS guard, not spec-mandated: ISO 32000-1,
+// 12.7.3 describes a field hierarchy only a few levels deep, and a chain of
+// direct fields nested thousands deep would otherwise grow the goroutine stack
+// with it. The signature package bounds its /Kids descent at the same value,
+// and compliance at 100; [maxFieldParentDepth] bounds the /Parent ascent, the
+// opposite direction.
+const maxFieldTreeDepth = 64
+
+// maxFieldTreeVisits bounds the fields one [traverseFields] walk reads. It is
+// an anti-DoS guard, not spec-mandated. The walk reads a field once per fully
+// qualified name, and names are paths: fields that share a child under two
+// differently named parents give it two names, and a chain of such pairs gives
+// 2^depth names from a file that grows linearly with the depth. A real form
+// reads each of its fields once, and 1<<18 sits far above the largest.
+//
+// # Corpus evidence
+//
+//   - All corpora: the largest form tree holds 35200 fields and widgets, and
+//     no field names its /Kids by reference or is reached twice.
+const maxFieldTreeVisits = 1 << 18
+
+// fieldVisit keys one unit of a [traverseFields] walk: an indirect field, or a
+// /Kids array written as an object of its own, reached under the fully
+// qualified name parent with the inherited field type ft. The entries the walk
+// records below it depend on nothing else, so a unit reached again adds
+// nothing.
+type fieldVisit struct {
+	obj        int
+	parent, ft string
+}
+
+// fieldTraversal carries the state of one [traverseFields] walk.
+type fieldTraversal struct {
+	// onPath holds the fields, and the /Kids arrays written as objects of
+	// their own, on the current path: one reached again there closes a cycle.
+	onPath map[int]bool
+	// walked holds the units already walked (see [fieldVisit]).
+	walked map[fieldVisit]bool
+	// visits counts the fields read, up to [maxFieldTreeVisits].
+	visits int
+}
+
+// firstVisit reports whether obj, reached under parent with the inherited type
+// ft, is a unit this walk has not walked yet, and records it. A direct object
+// lives in the one container that spells it out, so only its container can be
+// reached twice.
+func (tr *fieldTraversal) firstVisit(obj ast.PdfObject, parent, ft string) bool {
+	ref, ok := obj.(ast.PdfIndirectRef)
+	if !ok {
+		return true
+	}
+	key := fieldVisit{obj: ref.ObjectNum, parent: parent, ft: ft}
+	if tr.walked[key] {
+		return false
+	}
+	tr.walked[key] = true
+	return true
+}
+
+// enter marks obj on the current path, and reports false when it is on it
+// already. A direct object carries no object number and cannot name itself, so
+// it closes no cycle and needs no mark.
+func (tr *fieldTraversal) enter(obj ast.PdfObject) bool {
+	ref, ok := obj.(ast.PdfIndirectRef)
+	if !ok {
+		return true
+	}
+	if tr.onPath[ref.ObjectNum] {
+		return false
+	}
+	tr.onPath[ref.ObjectNum] = true
+	return true
+}
+
+// leave clears the mark [fieldTraversal.enter] put on obj.
+func (tr *fieldTraversal) leave(obj ast.PdfObject) {
+	if ref, ok := obj.(ast.PdfIndirectRef); ok {
+		delete(tr.onPath, ref.ObjectNum)
+	}
+}
+
+// traverseFieldsAt is [traverseFields] carrying the walk's state. A /Kids
+// entry naming an ancestor is a cycle: unguarded, a field whose /Kids named
+// itself recursed until the goroutine stack was exhausted, a fatal runtime
+// error no recover() converts, reached from Reader.FormData and
 // Reader.FormFields.
 //
 // seen is NOT that guard, despite its name and type: it de-duplicates the
@@ -476,19 +563,36 @@ func traverseFields(ctx context.Context, doc *document.Document, fields ast.PdfA
 // and reached again from a page widget is reported once. A cyclic /Kids grows
 // fullName at every level, so seen can never match and never bounded anything.
 //
-// onPath is cleared on the way back out rather than kept. This walk collects
-// per fully qualified name, which depends on the path taken, so the same field
-// under a second parent is a different entry that must still be recorded: a
-// mark that outlived its path would silently drop form data.
-func traverseFieldsAt(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, inheritedFT string, formData map[string]string, calcScripts map[string]string, order *[]string, seen map[string]bool, onPath map[int]bool) error {
+// The path marks are cleared on the way back out rather than kept. This walk
+// collects per fully qualified name, which depends on the path taken, so the
+// same field under a second parent is a different entry that must still be
+// recorded: a mark that outlived its path would silently drop form data. They
+// cover the /Kids arrays written as objects of their own as well as the
+// fields, since the direct fields such an array holds can each name it again.
+//
+// What bounds the work is tr.walked, not the path: a unit reached again under
+// the same name and inherited type records the same entries, so it is walked
+// once ([fieldVisit]). A /Kids array that names one field twice, or that the
+// direct fields it holds name again, would otherwise fan out 2^depth up to
+// [maxFieldTreeDepth]. Fields that give a shared child distinct names are
+// bounded by [maxFieldTreeVisits].
+func traverseFieldsAt(ctx context.Context, doc *document.Document, fields ast.PdfArray, parentName string, inheritedFT string, formData map[string]string, calcScripts map[string]string, order *[]string, seen map[string]bool, tr *fieldTraversal, depth int) error {
+	if depth > maxFieldTreeDepth {
+		return nil
+	}
 	for _, fieldObj := range fields {
 		if err := ctx.Err(); err != nil {
 			return fmt.Errorf("traversing form fields: %w", err)
 		}
-		var fieldNum int
-		if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
-			fieldNum = ref.ObjectNum
+		if !tr.firstVisit(fieldObj, parentName, inheritedFT) {
+			continue
 		}
+		if tr.visits >= maxFieldTreeVisits {
+			doc.Logger.Debug("traversing form fields: the field budget is spent, the rest of the tree is not read",
+				slog.Int("visits", tr.visits))
+			return nil
+		}
+		tr.visits++
 		fieldDict, err := document.ResolveDict(ctx, doc, fieldObj)
 		if err != nil || fieldDict == nil {
 			continue
@@ -595,19 +699,8 @@ func traverseFieldsAt(ctx context.Context, doc *document.Document, fields ast.Pd
 				// reported as a terminal field below. Skipping a cycle must
 				// bound the walk without changing what gets reported.
 				hasKids = true
-				// A direct dictionary carries no object number and cannot name
-				// itself, so it closes no cycle and needs no mark.
-				if fieldNum == 0 || !onPath[fieldNum] {
-					if fieldNum != 0 {
-						onPath[fieldNum] = true
-					}
-					err := traverseFieldsAt(ctx, doc, kidsArr, fullName, currentFT, formData, calcScripts, order, seen, onPath)
-					if fieldNum != 0 {
-						delete(onPath, fieldNum)
-					}
-					if err != nil {
-						return fmt.Errorf("traversing child fields: %w", err)
-					}
+				if err := traverseKids(ctx, doc, fieldObj, kidsObj, kidsArr, fullName, currentFT, formData, calcScripts, order, seen, tr, depth); err != nil {
+					return err
 				}
 			}
 		}
@@ -621,6 +714,27 @@ func traverseFieldsAt(ctx context.Context, doc *document.Document, fields ast.Pd
 				*order = append(*order, fullName)
 			}
 		}
+	}
+	return nil
+}
+
+// traverseKids walks kids, the /Kids array kidsObj of the field fieldObj named
+// fullName, for [traverseFieldsAt]: once per unit ([fieldVisit]), and not at
+// all when the field or the array is already on the path.
+func traverseKids(ctx context.Context, doc *document.Document, fieldObj, kidsObj ast.PdfObject, kids ast.PdfArray, fullName, currentFT string, formData map[string]string, calcScripts map[string]string, order *[]string, seen map[string]bool, tr *fieldTraversal, depth int) error {
+	if !tr.enter(fieldObj) {
+		return nil
+	}
+	defer tr.leave(fieldObj)
+	if !tr.enter(kidsObj) {
+		return nil
+	}
+	defer tr.leave(kidsObj)
+	if !tr.firstVisit(kidsObj, fullName, currentFT) {
+		return nil
+	}
+	if err := traverseFieldsAt(ctx, doc, kids, fullName, currentFT, formData, calcScripts, order, seen, tr, depth+1); err != nil {
+		return fmt.Errorf("traversing child fields: %w", err)
 	}
 	return nil
 }
