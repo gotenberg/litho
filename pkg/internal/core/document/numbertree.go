@@ -36,10 +36,12 @@ func LookupNumberTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject,
 
 // searchNumberTreeAt searches one number-tree node for key.
 //
-// seen visits each node once: a number tree is a strict tree, so a /Kids entry
-// reached twice is malformed, and without the guard a node whose /Kids lists
-// the same child twice fans out 2^depth on a key that is absent, which is a
-// denial of service.
+// seen visits each node, and each /Kids array written as an object of its own,
+// once: a number tree is a strict tree, so a /Kids entry reached twice is
+// malformed, and without the guard a node whose /Kids lists the same child
+// twice, or a /Kids array whose direct nodes each name it again as their own
+// /Kids, fans out 2^depth on a key that is absent, which is a denial of
+// service ([VisitedBefore]).
 func searchNumberTreeAt(
 	ctx context.Context,
 	doc *Document,
@@ -86,7 +88,7 @@ func searchNumberTreeAt(
 	}
 
 	kidsObj, ok := nodeDict["Kids"]
-	if !ok {
+	if !ok || VisitedBefore(kidsObj, seen) {
 		return nil, nil
 	}
 	kids, err := ResolveArray(ctx, doc, kidsObj)
@@ -112,9 +114,10 @@ func searchNumberTreeAt(
 // its own (ISO 32000-1, 7.9.7, Table 37). A /Nums entry whose key is not an
 // integer is skipped, and a key the tree lists twice is passed to leaf twice.
 //
-// Each node is walked once and the descent stops at [maxNumberTreeDepth], as
-// in [LookupNumberTree], so a cycle or a /Kids entry listed twice ends the
-// walk there. A node that does not resolve reports its error.
+// Each node, and each /Kids array written as an object of its own, is walked
+// once and the descent stops at [maxNumberTreeDepth], as in
+// [LookupNumberTree], so a cycle, a /Kids entry listed twice or a /Kids array
+// that direct nodes name again ends the walk there. A node that does not resolve reports its error.
 func WalkNumberTree(
 	ctx context.Context,
 	doc *Document,
@@ -175,7 +178,7 @@ func walkNumberTreeAt(
 	}
 
 	kidsObj, ok := nodeDict["Kids"]
-	if !ok {
+	if !ok || VisitedBefore(kidsObj, seen) {
 		return nil
 	}
 	if ref, isRef := kidsObj.(ast.PdfIndirectRef); isRef {

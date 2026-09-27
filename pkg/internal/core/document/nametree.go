@@ -109,11 +109,12 @@ func lookupNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, k
 }
 
 // searchNameTreeAt searches a name-tree node for key and returns what leaf
-// makes of the first matching value it accepts. seen visits each node
-// once: a name tree is a strict tree, so a /Kids entry reached twice is
-// malformed, and without the guard a node whose /Kids lists the same child
-// twice (with no pruning /Limits) fans out 2^depth on a key that is absent (a
-// denial of service).
+// makes of the first matching value it accepts. seen visits each node, and
+// each /Kids array written as an object of its own, once: a name tree is a
+// strict tree, so a /Kids entry reached twice is malformed, and without the
+// guard a node whose /Kids lists the same child twice (with no pruning
+// /Limits), or a /Kids array whose direct nodes each name it again as their
+// own /Kids, fans out 2^depth on a key that is absent (a denial of service).
 func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject, key string, seen map[int]bool, depth int, prune bool, leaf func(ast.PdfObject) (ast.PdfObject, error)) (ast.PdfObject, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -155,6 +156,9 @@ func searchNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject,
 
 	// Intermediate node: recurse into /Kids.
 	if kidsObj, ok := nodeDict["Kids"]; ok {
+		if VisitedBefore(kidsObj, seen) {
+			return nil, nil
+		}
 		kidsArr, err := ResolveArray(ctx, doc, kidsObj)
 		if err != nil {
 			return nil, err
@@ -383,14 +387,38 @@ func nameTreeKey(ctx context.Context, doc *Document, obj ast.PdfObject) string {
 	return ""
 }
 
+// VisitedBefore reports whether obj is an indirect object a walk has visited
+// already, adding it to visited when it has not. A direct object is never
+// visited before: it lives in the one container that spells it out, so only an
+// indirect object can be reached twice.
+//
+// A walk over a tree or a chain of the object graph (a name or number tree,
+// a form field tree, an action's /Next tree) marks its node dictionaries and
+// also the arrays it descends through, /Kids or /Next: an array written as an
+// object of its own can hold direct nodes that each name it again, and walked
+// anew wherever it is reached it fans out 2^depth up to the walk's depth cap,
+// a denial of service no depth cap bounds.
+func VisitedBefore(obj ast.PdfObject, seen map[int]bool) bool {
+	ref, ok := obj.(ast.PdfIndirectRef)
+	if !ok {
+		return false
+	}
+	if seen[ref.ObjectNum] {
+		return true
+	}
+	seen[ref.ObjectNum] = true
+	return false
+}
+
 // WalkNameTree calls leaf with each key and value the name tree rooted at
 // nodeObj holds, the value unresolved, in the order the tree lists them (ISO
 // 32000-1, 7.9.6, Table 36). A key is read as [nameTreeKey] reads it, and a key
 // the tree lists twice is passed to leaf twice.
 //
-// Each node is walked once and the descent stops at [maxNameTreeDepth], as in
-// [LookupNameTree], so a cycle or a /Kids entry listed twice ends the walk
-// there. /Limits is not read: the walk visits every node anyway. A node that
+// Each node, and each /Kids array written as an object of its own, is walked
+// once and the descent stops at [maxNameTreeDepth], as in [LookupNameTree], so
+// a cycle, a /Kids entry listed twice or a /Kids array that direct nodes name
+// again ends the walk there. /Limits is not read: the walk visits every node anyway. A node that
 // does not resolve reports its error.
 func WalkNameTree(ctx context.Context, doc *Document, nodeObj ast.PdfObject, leaf func(key string, value ast.PdfObject)) error {
 	return walkNameTreeAt(ctx, doc, nodeObj, leaf, make(map[int]bool), 0)
@@ -429,7 +457,7 @@ func walkNameTreeAt(ctx context.Context, doc *Document, nodeObj ast.PdfObject, l
 	}
 
 	kidsObj, ok := nodeDict["Kids"]
-	if !ok {
+	if !ok || VisitedBefore(kidsObj, seen) {
 		return nil
 	}
 	kids, err := ResolveArray(ctx, doc, kidsObj)
