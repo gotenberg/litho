@@ -321,6 +321,18 @@ func TestAtLeastVersion(t *testing.T) {
 	}
 }
 
+func TestIsVersion(t *testing.T) {
+	t.Parallel()
+	for v, want := range map[string]bool{
+		"1.4": true, "2.0": true, "1.10": true,
+		"": false, "1.": false, ".4": false, "Nonsense": false, "+1.5": false, "1.4.1": false,
+	} {
+		if got := IsVersion(v); got != want {
+			t.Errorf("IsVersion(%q) = %t, want %t", v, got, want)
+		}
+	}
+}
+
 // TestRaiseCatalogVersion_LeavesWhatReadersIgnore covers the two catalogs that
 // must not be touched: one with no /Version, where the header already answers
 // the question and adding the key would write an entry the source never had,

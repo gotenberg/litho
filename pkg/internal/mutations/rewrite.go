@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -106,14 +107,8 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 		"Root": newCatalogRef,
 	}
 
-	// Copy /Info if present.
-	if infoObj, ok := doc.Index.Trailer["Info"]; ok {
-		if infoRef, ok := infoObj.(ast.PdfIndirectRef); ok {
-			newInfoRef, err := copier.CopyRef(ctx, infoRef)
-			if err == nil {
-				trailer["Info"] = newInfoRef
-			}
-		}
+	if infoRef, ok := copyTrailerInfo(ctx, doc, copier, alloc); ok {
+		trailer["Info"] = infoRef
 	}
 
 	// Copy /ID if present.
@@ -129,7 +124,7 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 		version = cfg.RequiredVersion
 	}
 	if version == "" {
-		version = doc.Version
+		version = sourceVersion(doc)
 	}
 
 	// Shared with Split and Merge so the three write paths cannot drift: see
@@ -152,6 +147,79 @@ func FullRewrite(ctx context.Context, dst io.Writer, cfg FullRewriteConfig) erro
 		PackObjectStreams: cfg.Compact.PackObjectStreams,
 		DedupStreams:      cfg.Compact.DedupStreams,
 	})
+}
+
+// sourceVersion returns the version a rewrite of doc declares in its header
+// when neither the caller nor a remediation names one: the later of what the
+// source's header declares and what its catalog /Version declares.
+//
+// [document.Document.Version] alone is not that. It follows the catalog entry
+// in both directions, as pdf.js does (see document.initCatalogVersion), so a
+// %PDF-2.0 file whose catalog says /1.7 reads as 1.7. The rewrite copies the
+// catalog and its /Version verbatim, so writing that answer into the header
+// too left no trace of 2.0 in the output. ISO 32000-1, 7.7.2 (Table 28) makes
+// a document conform to the later of the two, and ISO 19005-4, 6.1.2 requires
+// %PDF-2.n of a PDF/A-4 file whatever its catalog says. With the later of the
+// two in the header and the source's own entry in the catalog, the output
+// reads as its source does under either rule. A catalog entry later than the
+// header still raises the header, as it always has.
+//
+// A headerless source falls back to its catalog's version, and one with
+// neither yields "", which [writer.WriteRewrite] writes as 1.4.
+//
+// # Corpus evidence
+//
+//   - litho a4syntax_4.pdf: its header is %PDF-2.0 and its catalog /Version
+//     /1.7, and page insertion and deletion, flattening and encryption each
+//     wrote %PDF-1.7.
+//   - All corpora: 27 of the 5196 files litho opens declare a later version in
+//     the header than the reader reports (13 pdfjs, 13 verapdf, 1 litho), and a
+//     full rewrite wrote each one's header lower.
+func sourceVersion(doc *document.Document) string {
+	return writer.AtLeastVersion(doc.HeaderVersion, doc.Version)
+}
+
+// copyTrailerInfo copies doc's document information dictionary into a
+// rewrite and returns the reference its new trailer names it by, or false
+// when the source has none or it cannot be copied.
+//
+// ISO 32000-1, 7.5.5 (Table 15) makes the trailer /Info an indirect
+// reference, but a producer can write the dictionary directly, as qpdf does
+// when its trailer holds one, and litho reads it. Copying only a reference
+// dropped a direct /Info, and every title, author and date in it. A direct
+// dictionary is written as an object of its own: a new file has no reason to
+// repeat the source's departure from Table 15, and an encrypted output then
+// encrypts it like every other object, where a direct dictionary has no
+// object number for 7.6.2, Algorithm 1 to key its strings with.
+//
+// It allocates, so it runs before applyEncryption, which writes whatever is
+// allocated after it in the clear.
+//
+// # Corpus evidence
+//
+//   - litho xrefstm_2b.pdf: its cross-reference stream holds a direct /Info,
+//     and page insertion and deletion, flattening and encryption each wrote
+//     the file without one.
+//   - All corpora: 2 of the 5196 files litho opens hold a direct /Info, litho
+//     xrefstm_2b.pdf and pdfjs issue9540.pdf.
+func copyTrailerInfo(ctx context.Context, doc *document.Document, copier *writer.Copier, alloc *writer.ObjAllocator) (ast.PdfIndirectRef, bool) {
+	switch info := doc.Index.Trailer["Info"].(type) {
+	case ast.PdfIndirectRef:
+		ref, err := copier.CopyRef(ctx, info)
+		if err != nil {
+			doc.Logger.Debug("copying the trailer /Info failed", slog.Any("err", err))
+			return ast.PdfIndirectRef{}, false
+		}
+		return ref, true
+	case ast.PdfDict:
+		copied, err := copier.CopyObject(ctx, info)
+		if err != nil {
+			doc.Logger.Debug("copying the direct trailer /Info failed", slog.Any("err", err))
+			return ast.PdfIndirectRef{}, false
+		}
+		return alloc.Alloc(copied), true
+	}
+	return ast.PdfIndirectRef{}, false
 }
 
 // catalogRefResolves reports whether ref resolves to a catalog dictionary with

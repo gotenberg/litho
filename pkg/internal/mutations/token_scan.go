@@ -188,9 +188,12 @@ func ScanOutputForTokens(
 
 	// The rewrite copies the trailer's /Info, and /Info is a documented home for
 	// a copy of page text, so it is a root in its own right: nothing in the
-	// catalog graph reaches it.
-	if infoRef, ok := doc.Index.Trailer["Info"].(ast.PdfIndirectRef); ok {
-		w.follow(ctx, infoRef)
+	// catalog graph reaches it. It copies a dictionary the trailer holds
+	// directly as well as a reference (see copyTrailerInfo), so both are
+	// walked. A direct one has no object number and is reported against zero,
+	// as the recovered catalog above is.
+	if info, ok := doc.Index.Trailer["Info"]; ok {
+		w.walk(ctx, 0, info, 0)
 	}
 
 	if w.err != nil {

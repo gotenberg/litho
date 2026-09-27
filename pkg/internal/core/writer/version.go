@@ -67,6 +67,16 @@ func AtLeastVersion(v, floor string) string {
 	return atLeastVersion(v, floor)
 }
 
+// IsVersion reports whether v is a "major.minor" PDF version number, the form
+// ISO 32000-1, 7.5.2 gives the header version and Table 28 the catalog
+// /Version. A caller raising a version it read from a file checks it first:
+// [AtLeastVersion] answers its floor for a value that is not a version, and
+// readers ignore such a value rather than read it as an earlier version.
+func IsVersion(v string) bool {
+	_, _, ok := splitVersion(v)
+	return ok
+}
+
 // maxVersionComponent bounds one parsed version component. It is an overflow
 // guard, not a spec limit: ISO 32000-1, 7.5.2 writes the header version as a
 // single digit either side of the period, so a component beyond this comes

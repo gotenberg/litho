@@ -164,22 +164,14 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 		}
 	}
 
-	// Copy /Info if present.
-	if infoObj, ok := doc.Index.Trailer["Info"]; ok {
-		if infoRef, ok := infoObj.(ast.PdfIndirectRef); ok {
-			newInfoRef, err := copier.CopyRef(ctx, infoRef)
-			if err == nil {
-				trailer["Info"] = newInfoRef
-			} else {
-				doc.Logger.Debug("copying /Info for split failed",
-					slog.Any("err", err),
-				)
-			}
-		}
+	if infoRef, ok := copyTrailerInfo(ctx, doc, copier, alloc); ok {
+		trailer["Info"] = infoRef
 	}
 
+	// copyCatalogEntries carried the source's catalog /Version, so the header
+	// follows the rule a full rewrite does.
 	if version == "" {
-		version = doc.Version
+		version = sourceVersion(doc)
 	}
 
 	// Last, after every alloc.Alloc above: see applyEncryption on why an

@@ -36,6 +36,10 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	var allPageRefs []ast.PdfObject
 	var firstInfoRef ast.PdfIndirectRef
 	var hasInfo bool
+	// readVersion is the latest version a reader following the catalog entry
+	// (document.initCatalogVersion) gives any source; see
+	// [raiseMergedCatalogVersion].
+	var readVersion string
 	cumulativeOffsets := make([]int, len(sources))
 	formSources := make([]acroFormSource, 0, len(sources))
 
@@ -51,10 +55,10 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 			return fmt.Errorf("merge canceled: %w", err)
 		}
 
-		// Track the highest version across sources.
-		if version == "" || src.Doc.Version > version {
-			version = src.Doc.Version
-		}
+		// Track the highest version across sources, compared as numbers:
+		// "1.10" is later than "1.5", which a string comparison reverses.
+		version = writer.AtLeastVersion(version, sourceVersion(src.Doc))
+		readVersion = writer.AtLeastVersion(readVersion, src.Doc.Version)
 
 		copier := writer.NewCopier(src.Doc, alloc)
 		if overrides := pageCopyOverrides(src.Pages); len(overrides) > 0 {
@@ -80,20 +84,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 
 		// Copy /Info from the first source that has one.
 		if !hasInfo {
-			if infoObj, ok := src.Doc.Index.Trailer["Info"]; ok {
-				if infoRef, ok := infoObj.(ast.PdfIndirectRef); ok {
-					ref, err := copier.CopyRef(ctx, infoRef)
-					if err == nil {
-						firstInfoRef = ref
-						hasInfo = true
-					} else {
-						src.Doc.Logger.Debug("copying /Info from source failed",
-							slog.Int("source", srcIdx),
-							slog.Any("err", err),
-						)
-					}
-				}
-			}
+			firstInfoRef, hasInfo = copyTrailerInfo(ctx, src.Doc, copier, alloc)
 		}
 	}
 
@@ -136,6 +127,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	if copiers[0] != nil {
 		copyCatalogEntries(ctx, sources[0].Doc, copiers[0], catalogDict)
 	}
+	raiseMergedCatalogVersion(catalogDict, readVersion)
 	mergeOptionalContent(ctx, sources, copiers, catalogDict)
 
 	// Re-attach the interactive form, naming every field that kept a widget
@@ -204,6 +196,29 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		PackObjectStreams: compact.PackObjectStreams,
 		DedupStreams:      compact.DedupStreams,
 	})
+}
+
+// raiseMergedCatalogVersion raises the catalog /Version a merge carries from
+// its first source to floor, the latest version any source reads as.
+//
+// The catalog entries come from the first source and the pages from every
+// source. litho reads the entry in both directions, as pdf.js does (see
+// document.initCatalogVersion), so a first source whose catalog said /1.4
+// made the merge with a PDF 2.0 source read as 1.4 under a %PDF-2.0 header.
+// ISO 32000-1, 7.7.2 (Table 28) lets the entry raise a document's version,
+// never lower it, and pages taken from a later source need that version.
+//
+// Only an entry that is present and is a version number is raised. An absent
+// one defers to the header, which already names the latest source, and one
+// that is no version number is ignored by readers, so it misdescribes nothing.
+// The entry never falls below the first source's own reading, since floor
+// includes it.
+func raiseMergedCatalogVersion(catalog ast.PdfDict, floor string) {
+	current, ok := catalog["Version"].(ast.PdfName)
+	if !ok || !writer.IsVersion(string(current)) {
+		return
+	}
+	catalog["Version"] = ast.PdfName(writer.AtLeastVersion(string(current), floor))
 }
 
 // mergeOptionalContent rebuilds the output's /OCProperties so it describes the
