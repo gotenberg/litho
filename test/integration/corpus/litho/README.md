@@ -173,6 +173,7 @@ one deliberately rather than diffing it against a fresh build.
 | `directstream_2b.pdf`  | PDF/A-2b     | Streams written inside other objects, under every writer path    |
 | `pagelabels_2b.pdf`    | PDF/A-2b     | Page labels in every numbering style, under the page edits       |
 | `annotshare_ua1.pdf`   | PDF/UA-1     | Annotation objects on two pages; XMP scoping; short page boxes   |
+| `structcopy_ua2.pdf`   | PDF/UA-2     | Every part of a structure tree a copy of its pages carries       |
 
 ### Must-not-fire controls
 
@@ -264,6 +265,7 @@ violation but is exempt, so a firing is a false positive.
 | `outputintent_2b`                         | A well-formed `prtr`/`RGB ` destination profile beside the bad one     | ISO 19005-2, 6.2.3 t1        |
 | `formstruct_ua2`                          | A `Form` element enclosing exactly one widget                          | ISO 14289-2, 8.10.1 t2       |
 | `formstruct_ua2`                          | A widget with no `/StructParent`, outside the structure tree           | ISO 14289-2, 8.10.1 t1       |
+| `structcopy_ua2`                          | A root `/RoleMap`, `/ClassMap`, `/IDTree` and two `/Namespaces`        | ISO 14289-2, 8.2             |
 | `xref_1b`                                 | Every object offset and `startxref` value left valid by the patch      | ISO 19005-1, 6.1.4           |
 | `contentstream_4`                         | `/F1`, a name the inherited dictionary does define                     | ISO 19005-4, 6.2.2 t3        |
 | `iccbased_4`                              | An RGB ICCBased space, valid and unrelated to the OutputIntent         | ISO 19005-4, 6.2.4.2         |
@@ -501,6 +503,7 @@ which are covered under [Known divergences](#known-divergences).
 | `schemaprefix_1b.pdf`  | 17   | 14   | 18   | 15   | 16   | 18   | 15   | 16   | 6   | 6    | 7    | 8    | 8    |
 | `sigcms_2b.pdf`        | 6    | 4    | 9    | 7    | 7    | 9    | 7    | 7    | 5   | 5    | 6    | 10   | 8    |
 | `sigtagged_ua1.pdf`    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 4    |
+| `structcopy_ua2.pdf`   | 5    | 4    | 6    | 5    | 5    | 6    | 5    | 5    | 2   | 2    | 3    | 3    | 0    |
 | `structkinds_ua2.pdf`  | 6    | 5    | 7    | 6    | 6    | 7    | 6    | 6    | 3   | 3    | 4    | 5    | 7    |
 | `structnest_ua1.pdf`   | 5    | 4    | 4    | 4    | 4    | 4    | 4    | 4    | 3   | 3    | 4    | 36   | 30   |
 | `syntax_1b.pdf`        | 11   | 9    | 11   | 9    | 9    | 11   | 9    | 9    | 9   | 9    | 10   | 12   | 8    |
@@ -5123,6 +5126,57 @@ flatten, encrypt and redact mutations move the rule sets only as their
 allowances let them, and the one qpdf warning their outputs carry, the Square
 listed twice, is the input's own.
 
+### `structcopy_ua2.pdf`
+
+Split, merge and page insertion carry the structure elements that describe the
+pages they copy (ISO 32000-1, 14.7), and every entry of the structure tree root
+that names them: the `/ParentTree` keyed by the pages' `/StructParents` and the
+annotations' `/StructParent`, the `/IDTree`, the root `/RoleMap` and
+`/ClassMap`, and the PDF 2.0 `/Namespaces`. No corpus file packs all of those
+into one tree over several pages, so this file does, and conforms at PDF/UA-2 on
+both tools, so any part a copy mishandles shows as a rule the output adds.
+
+| Page | Content, in reading order                                                         |
+| ---- | --------------------------------------------------------------------------------- |
+| 1    | `H1` `title-1`, a `Para` `intro`, a `Para` of class `Centered`, a `Link` + `OBJR` |
+| 2    | a `Para` `cont`, then a 2 x 2 `Table`: `TH` `h1` and `h2`, `TD` naming them       |
+| 3    | `H1`, a `Para` in `fr-FR`, a `Callout` in a custom namespace, a `Link` + `OBJR`   |
+
+The Document element names the PDF 2.0 namespace, the other elements the default
+one, whose `Para` the root `/RoleMap` maps to `P`. The custom namespace's
+`/RoleMapNS` maps `Callout` to the PDF 2.0 `Aside` (ISO 32000-2, 14.7.4.2). The
+paragraphs of pages 1 and 2 sit under one `Sect` naming no page, so a copy of
+either page keeps part of it, and the two data cells name the header cells'
+identifiers in `/Headers`, so a merge renaming a clashing identifier has to
+rename both sides. Each link annotation's `/StructParent` keys the
+`/ParentTree` after the three pages' keys. The font is embedded and draws only
+`A` and `B`, which is all the text uses, and no word of page 1 occurs anywhere
+else, so a redaction of the page removes every copy of it.
+
+The file agrees with veraPDF 1.30.2 in all thirteen cells, rule for rule and
+count for count. PDF/UA-2 reports nothing. PDF/UA-1 reports the part-2 claim
+(`5/2`), the `%PDF-2.0` header (`6.1/1`) and the `Callout`, which the PDF 1.7
+reading leaves unmapped (`7.1/5`). The PDF/A cells report the thirteen text
+paints in device gray with no output intent (`6.2.3.3/3` at part 1,
+`6.2.4.3/4` from part 2), the missing PDF/A identification and the `pdfuaid`
+properties no extension schema declares, the header at parts 2 and 3
+(`6.1.2/1`), and the `Callout` again at level A (`6.8.3.4/1`, `6.7.3.4/1`);
+PDF/A-4f adds the missing `/EmbeddedFiles`.
+
+Measured on litho and veraPDF 1.30.2 before the structure was carried, a split
+of any page or range and a merge of the file with itself wrote no structure
+tree, failing `7.1/11`, `7.1/3` and, with a link on the page, `7.18.5/1` at
+PDF/UA-1 and `8.2.1/1` and `8.2.2/1` at PDF/UA-2, and `mutate-pages` added
+`7.1/3` and `7.18.5/1` at PDF/UA-1 and `8.2.2/1` at PDF/UA-2. Now every page
+alone, pages 2 to 3, the merge with itself, page 1 inserted in front of the file
+and after it, and the page move all pass PDF/UA-2 on both tools. At PDF/UA-1
+each reports the input's rules, or, with no `Callout` on the pages it keeps,
+the input's without `7.1/5`, which the merge counts once per `Callout`. Every
+`mutate-*` cell passes, the page move under the allowance that lets no rule go.
+Remediation at the eight manifest profiles, default and aggressive, leaves the
+same rule set on both tools in every cell: `6.7.3.4/1` at PDF/A-2a and `7.1/5`
+at PDF/UA-1, the `Callout` a PDF 1.7 reading cannot map.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
@@ -5149,6 +5203,11 @@ PDF/UA-1 and `baretree_2b` and `pagelabels_2b` at PDF/A-2b are the corpus's
 conforming cells), so a change that drops or invents a rule class leaves
 `matched` at 952 and moves only `ruleset_mismatch`, and on those four cells it
 moves both. Both exceptions sit
+four is non-compliant on both sides (`formhidden_ua1` and `sigtagged_ua1` at
+PDF/UA-1, `baretree_2b` at PDF/A-2b and `structcopy_ua2` at PDF/UA-2 are the
+corpus's conforming cells), so a change that drops or invents a rule class
+leaves `matched` at 952 and moves only `ruleset_mismatch`, and on those four
+cells it moves both. Both exceptions sit
 in the manifest's profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the
 metric reads 2 on this corpus, and the text scoreboard names the rules only one
 side reports. A third cell in the runner is a regression, or a divergence to
