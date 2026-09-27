@@ -180,6 +180,7 @@ one deliberately rather than diffing it against a fresh build.
 | `rolemapscope_ua2.pdf` | PDF/UA-2     | Private types the root `/RoleMap` maps, per declared namespace   |
 | `destforms_ua2.pdf`    | PDF/UA-2     | Named destinations, `/Dest` dictionaries, additional actions     |
 | `rolemapns_ua2.pdf`    | PDF/UA-2     | Mapped private types in namespaces the root `/RoleMap` misses    |
+| `viewerboxes_2b.pdf`   | PDF/A-2b     | Boxes veraPDF passes and no viewer uses, under the rewrites      |
 
 ### Must-not-fire controls
 
@@ -539,6 +540,7 @@ which are covered under [Known divergences](#known-divergences).
 | `usecmap_2u.pdf`       | 5    | 2    | 8    | 3    | 5    | 8    | 3    | 5    | 5   | 5    | 6    | 9    | 10   |
 | `unembednames_2u.pdf`  | 7    | 4    | 9    | 5    | 7    | 9    | 5    | 7    | 7   | 7    | 8    | 11   | 11   |
 | `usedcs_2b.pdf`        | 6    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 7    | 7    |
+| `viewerboxes_2b.pdf`   | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 5    | 5    |
 | `xfatable_ua1.pdf`     | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 4    | 7    |
 | `xmpempty_1b.pdf`      | 8    | 5    | 6    | 3    | 4    | 6    | 3    | 4    | 7   | 7    | 8    | 5    | 6    |
 | `xmppage_2b.pdf`       | 6    | 3    | 14   | 11   | 12   | 15   | 12   | 13   | 5   | 5    | 6    | 5    | 5    |
@@ -5327,32 +5329,38 @@ default and aggressive, leaves nothing on either tool.
 
 ISO 32000-1, 7.7.3.3, Table 30 makes each page boundary a rectangle, four
 numbers (7.9.5), and gives each but the media box a default: the media box for
-the crop box, the crop box for the others. litho reads a box on its first four
-entries, a missing one or one that is no number as 0. A rewrite copied a crop,
-bleed, trim or art box as its source stated it, and wrote US Letter for any
-media box that is not four numbers. The corpus holds a media box of more than
-four entries only where its first four are Letter (`directstream_2b.pdf`), and
-no such box on a page tree node, nor one beside a crop box a node above states.
+the crop box, the crop box for the others. veraPDF, and litho's compliance,
+measure a box on its first four entries, a missing one or one that is no number
+as 0. pdf.js and poppler read a box that is not four numbers enclosing an area
+as no box, and draw the page on its default, US Letter for the media box. A
+rewrite copied a crop, bleed, trim or art box as its source stated it, and
+wrote US Letter for any media box that is not four numbers. The corpus holds a
+media box of more than four entries only where its first four are Letter
+(`directstream_2b.pdf`), and no such box on a page tree node, nor one beside a
+crop box a node above states.
 
 The root states `/MediaBox [0 0 612 792]` and `/CropBox [0 0 500 700]`. A node
 under it states `/MediaBox [0 0 400 500 /X]` and `/CropBox [0 0 0 0]`, and lists
 pages 2 and 3. No page draws anything.
 
-| Page | Box         | As written         | Read as         | Written as    |
-| ---- | ----------- | ------------------ | --------------- | ------------- |
-| 1    | `/MediaBox` | `[0 0 600 800 7]`  | `[0 0 600 800]` | the same      |
-| 1    | `/CropBox`  | `[0 0 300]`        | no area         | the media box |
-| 1    | `/TrimBox`  | `[0 /Foo 200 300]` | `[0 0 200 300]` | the same      |
-| 1    | `/BleedBox` | `[0 0 300 400 9]`  | `[0 0 300 400]` | the same      |
-| 2    | `/MediaBox` | the node's         | `[0 0 400 500]` | the same      |
-| 2    | `/CropBox`  | the node's         | no area         | the media box |
-| 3    | `/MediaBox` | `[0 0 612]`        | no area         | US Letter     |
-| 3    | `/CropBox`  | the node's         | no area         | the media box |
+| Page | Box         | As written         | veraPDF measures | A viewer reads | Written as    |
+| ---- | ----------- | ------------------ | ---------------- | -------------- | ------------- |
+| 1    | `/MediaBox` | `[0 0 600 800 7]`  | `[0 0 600 800]`  | US Letter      | US Letter     |
+| 1    | `/CropBox`  | `[0 0 300]`        | no area          | the media box  | the media box |
+| 1    | `/TrimBox`  | `[0 /Foo 200 300]` | `[0 0 200 300]`  | the crop box   | none          |
+| 1    | `/BleedBox` | `[0 0 300 400 9]`  | `[0 0 300 400]`  | the crop box   | none          |
+| 2    | `/MediaBox` | the node's         | `[0 0 400 500]`  | US Letter      | US Letter     |
+| 2    | `/CropBox`  | the node's         | no area          | the media box  | the media box |
+| 3    | `/MediaBox` | `[0 0 612]`        | no area          | US Letter      | US Letter     |
+| 3    | `/CropBox`  | the node's         | no area          | the media box  | the media box |
 
-A crop box enclosing no area reads as its default, and the output drops it.
-Dropping page 1's, or the node's, would let the root's show through, so each
+Every rewrite writes a box as a viewer reads it. A crop, bleed, trim or art box
+a viewer does not use reads as its default, and the output drops it. Dropping
+page 1's crop box, or the node's, would let the root's show through, so each
 page states its media box as its crop box and shows the region it showed. A
-media box enclosing no area reads as US Letter, as pdf.js and poppler read it.
+media box a viewer does not use reads as US Letter, and the output writes
+Letter. The pinned pdf.js shows all three pages at 612 by 792, and so does every
+output.
 
 The file agrees with veraPDF 1.30.2 in all thirteen cells, rule for rule and
 count for count. From part 2 the crop box of page 1, the one pages 2 and 3
@@ -5371,6 +5379,16 @@ node's, and the root's then cropped pages 1 and 3 to 500 by 700. Now every one
 of those outputs passes `6.1.13/11` on both tools, and each page shows the
 region the table gives. Remediation at the eight manifest profiles, default and
 aggressive, leaves nothing on either tool.
+
+The fix wrote each box veraPDF measures as the rectangle it measures, where the
+table's last column once read "the same". Measured on the pinned pdf.js, the
+full rewrite, split and PDF/A-2b remediation then showed page 1 at 600 by 800
+and page 2 at 400 by 500, and kept page 1's trim and bleed boxes as the
+rectangles of their first four entries, boxes no viewer had drawn the page by.
+Now every output shows each page at US Letter and states no trim or bleed box,
+as the table gives; `6.1.13/11` still passes on both tools, and remediation at
+the eight manifest profiles, default and aggressive, still leaves nothing on
+either tool.
 
 ### `rolemapscope_ua2.pdf`
 
@@ -5492,6 +5510,58 @@ did remediation to either WTPDF level. Now each of those outputs passes on both
 tools. Remediation at the seven other manifest profiles leaves nothing on
 either tool.
 
+### `viewerboxes_2b.pdf`
+
+ISO 32000-1, 7.9.5 writes a rectangle as four numbers. veraPDF measures a page
+boundary on its first four entries, a missing one or one that is no number as
+0, and ISO 19005-2, 6.1.13 t11 passes every box below. pdf.js and poppler read
+each as no box, and draw the page on the box's default (ISO 32000-1, Table 30):
+US Letter for the media box, the media box for the crop box, the crop box for
+the others. `pageboxes_2b.pdf` holds boxes of those kinds that enclose no area
+once measured. No corpus file holds one that encloses an area, a media box
+holding a name, or a crop box a viewer uses on a media box it does not.
+
+Pages 2 and 4 state `/MediaBox [0 0 600 800]` and page 5 `[0 0 400 500]`.
+Page 5 sits under two nodes: the outer states `/CropBox [0 0 200 300]`, the
+inner `/CropBox [0 0 300 400 9]`. No page draws anything.
+
+| Page | Box         | As written         | veraPDF measures | A viewer reads   | Written as    |
+| ---- | ----------- | ------------------ | ---------------- | ---------------- | ------------- |
+| 1    | `/MediaBox` | `[10 10 300]`      | `[10 10 300 0]`  | US Letter        | US Letter     |
+| 2    | `/CropBox`  | `[0 0 300 400 9]`  | `[0 0 300 400]`  | the media box    | none          |
+| 2    | `/ArtBox`   | `[10 10 320]`      | `[10 10 320 0]`  | the crop box     | none          |
+| 3    | `/MediaBox` | `[0 /Foo 600 800]` | `[0 0 600 800]`  | US Letter        | US Letter     |
+| 3    | `/CropBox`  | `[0 0 700 900]`    | the same         | cut to US Letter | the same      |
+| 4    | `/CropBox`  | `[0 /Foo 300 400]` | `[0 0 300 400]`  | the media box    | none          |
+| 4    | `/TrimBox`  | `[0 0 310 410 9]`  | `[0 0 310 410]`  | the crop box     | none          |
+| 4    | `/BleedBox` | `[5 5 320]`        | `[5 5 320 0]`    | the crop box     | none          |
+| 5    | `/CropBox`  | the inner node's   | `[0 0 300 400]`  | the media box    | the media box |
+
+pdf.js takes a page's nearest crop box, the inner node's for page 5, and reads
+no box. Dropping it would let the outer node's show through, so the page states
+its media box as its crop box. poppler 26.09.0 passes over the inner box and
+shows the outer one, 200 by 300: the two viewers part there, and litho reads
+the page as pdf.js does. qpdf reads the media boxes of pages 1 and 3 as
+undefined and sets them to Letter.
+
+The file agrees with veraPDF 1.30.2 in all thirteen cells, rule for rule and
+count for count. Every box passes `6.1.13/11`, and PDF/A-2b reports nothing.
+Every other rule is one the file draws at a level it does not claim: the
+identification its part-2, level-B claim does not match, the tagging, title and
+language the a levels and PDF/UA ask for, and at part 4 the `%PDF-1.7` header
+and, at PDF/A-4f, the missing `/EmbeddedFiles`.
+
+Measured on the pinned pdf.js before the fix, the full rewrite wrote every box
+as the rectangle veraPDF measures: page 1 became a page 290 by 10 points, pages
+2, 4 and 5 showed 300 by 400 and page 3 600 by 800, where the source shows 612
+by 792, 600 by 800, 612 by 792, 600 by 800 and 400 by 500. The split wrote the
+same but for page 5, which it copied without the node above it. litho read page
+3 at 600 by 800 and page 4 at 300 by 400. Now litho reads the pages as pdf.js
+shows them, and the full rewrite, the split and remediation at the eight
+manifest profiles, default and aggressive, show each page as the source shows
+it. The rewrites pass PDF/A-2b on both tools, and the remediations leave nothing
+on either.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
@@ -5514,6 +5584,12 @@ PDF/A-2b; `formhidden_ua1` and `sigtagged_ua1` at PDF/UA-1; and
 `outlinedest_ua2` and `structcopy_ua2` at PDF/UA-2 are the corpus's conforming
 cells), so a change that drops or invents a rule class leaves `matched` at 1016
 and moves only `ruleset_mismatch`, and on those six cells it moves both. Both
+seven is non-compliant on both sides (`baretree_2b`, `pagelabels_2b` and
+`viewerboxes_2b` at PDF/A-2b; `formhidden_ua1` and `sigtagged_ua1` at PDF/UA-1;
+and `outlinedest_ua2` and `structcopy_ua2` at PDF/UA-2 are the corpus's
+conforming cells), so a change that drops or invents a rule class leaves
+`matched` at 1016 and moves only `ruleset_mismatch`, and on those seven cells it
+moves both. Both
 exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1 and
 PDF/UA-2, so the metric reads 2 on this corpus, and the text scoreboard names
 the rules only one side reports. A third cell in the runner is a regression, or
