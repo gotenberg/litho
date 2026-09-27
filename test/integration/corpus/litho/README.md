@@ -176,6 +176,7 @@ one deliberately rather than diffing it against a fresh build.
 | `structcopy_ua2.pdf`   | PDF/UA-2     | Every part of a structure tree a copy of its pages carries       |
 | `noresources_4.pdf`    | PDF/A-4      | Page content with no resource dictionary, its own or inherited   |
 | `outlinedest_ua2.pdf`  | PDF/UA-2     | Outline structure destinations in every form; named OC configs   |
+| `pageboxes_2b.pdf`     | PDF/A-2b     | Page boxes that are not rectangles, under inherited crop boxes   |
 
 ### Must-not-fire controls
 
@@ -499,6 +500,7 @@ which are covered under [Known divergences](#known-divergences).
 | `offlimits_1b.pdf`     | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 6    | 7    | 7    | 7    |
 | `outlinedest_ua2.pdf`  | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 0    |
 | `outputintent_2b.pdf`  | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
+| `pageboxes_2b.pdf`     | 4    | 1    | 4    | 1    | 2    | 5    | 2    | 3    | 4   | 4    | 5    | 5    | 5    |
 | `pagegroup_2b.pdf`     | 7    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 6    | 6    |
 | `pagelabels_2b.pdf`    | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `paintop_2b.pdf`       | 7    | 4    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 9    | 7    |
@@ -5135,7 +5137,11 @@ Page 3 also states an art box of `[0 0 400 null]`. veraPDF reads a missing
 corner and one that is no number as 0 (`GFCosBBox.getRequiredValue`), so the
 crop and art boxes fail `6.1.13/11` at every part-2 and part-3 level, twice;
 litho skipped any box that was not four numbers. No corpus file carries a box
-that short except one a damaged page object runs into.
+that short except one a damaged page object runs into. Every rewrite drops
+both boxes, which enclose no area (see `pageboxes_2b.pdf`), so its output
+passes `6.1.13/11`, and the Link on page 3 lies on the page: both tools count
+one more `7.18.1/2`, `7.18.5/1` and `7.18.5/2` check for each copy of the page,
+the rule sets unchanged.
 
 The XMP packet declares every namespace on the property element using it, as
 pikepdf's metadata API writes it: `pdfuaid:part` 1, `pdfaid:part` 2 and
@@ -5310,16 +5316,65 @@ and after, and the page move pass PDF/UA-2 on both tools, and report the input's
 rules at PDF/UA-1 and PDF/A-2b. Remediation at the eight manifest profiles,
 default and aggressive, leaves nothing on either tool.
 
+### `pageboxes_2b.pdf`
+
+ISO 32000-1, 7.7.3.3, Table 30 makes each page boundary a rectangle, four
+numbers (7.9.5), and gives each but the media box a default: the media box for
+the crop box, the crop box for the others. litho reads a box on its first four
+entries, a missing one or one that is no number as 0. A rewrite copied a crop,
+bleed, trim or art box as its source stated it, and wrote US Letter for any
+media box that is not four numbers. The corpus holds a media box of more than
+four entries only where its first four are Letter (`directstream_2b.pdf`), and
+no such box on a page tree node, nor one beside a crop box a node above states.
+
+The root states `/MediaBox [0 0 612 792]` and `/CropBox [0 0 500 700]`. A node
+under it states `/MediaBox [0 0 400 500 /X]` and `/CropBox [0 0 0 0]`, and lists
+pages 2 and 3. No page draws anything.
+
+| Page | Box         | As written         | Read as         | Written as    |
+| ---- | ----------- | ------------------ | --------------- | ------------- |
+| 1    | `/MediaBox` | `[0 0 600 800 7]`  | `[0 0 600 800]` | the same      |
+| 1    | `/CropBox`  | `[0 0 300]`        | no area         | the media box |
+| 1    | `/TrimBox`  | `[0 /Foo 200 300]` | `[0 0 200 300]` | the same      |
+| 1    | `/BleedBox` | `[0 0 300 400 9]`  | `[0 0 300 400]` | the same      |
+| 2    | `/MediaBox` | the node's         | `[0 0 400 500]` | the same      |
+| 2    | `/CropBox`  | the node's         | no area         | the media box |
+| 3    | `/MediaBox` | `[0 0 612]`        | no area         | US Letter     |
+| 3    | `/CropBox`  | the node's         | no area         | the media box |
+
+A crop box enclosing no area reads as its default, and the output drops it.
+Dropping page 1's, or the node's, would let the root's show through, so each
+page states its media box as its crop box and shows the region it showed. A
+media box enclosing no area reads as US Letter, as pdf.js and poppler read it.
+
+The file agrees with veraPDF 1.30.2 in all thirteen cells, rule for rule and
+count for count. From part 2 the crop box of page 1, the one pages 2 and 3
+inherit and the media box of page 3 fail `6.1.13/11`, four checks; every other
+box passes it. Every other rule is one the file draws at a level it does not
+claim: the identification its part-2, level-B claim does not match, the
+tagging, title and language the a levels and PDF/UA ask for, and at part 4 the
+`%PDF-1.7` header and, at PDF/A-4f, the missing `/EmbeddedFiles`.
+
+Measured on litho and veraPDF 1.30.2 before the fix, the full rewrite, split,
+merge, insertion, page move and PDF/A-1b remediation each wrote pages 1 and 2
+as US Letter, where litho read 600 by 800 and 400 by 500, kept page 1's crop,
+trim and bleed boxes as written, and failed `6.1.13/11`. The PDF/A-2b
+remediation, which repairs the boxes itself, dropped page 1's crop box and the
+node's, and the root's then cropped pages 1 and 3 to 500 by 700. Now every one
+of those outputs passes `6.1.13/11` on both tools, and each page shows the
+region the table gives. Remediation at the eight manifest profiles, default and
+aggressive, leaves nothing on either tool.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 124 x 8 = 992 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 124 x 13 = 1612 cells. litho
+runner scores 125 x 8 = 1000 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 125 x 13 = 1625 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1610 of the 1612 cells. The two
+fixtures exist to protect, and it holds in 1623 of the 1625 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -5330,7 +5385,7 @@ the cells whose sets of failed rules (clause and test) differ. Every cell but
 six is non-compliant on both sides (`baretree_2b` and `pagelabels_2b` at
 PDF/A-2b; `formhidden_ua1` and `sigtagged_ua1` at PDF/UA-1; and
 `outlinedest_ua2` and `structcopy_ua2` at PDF/UA-2 are the corpus's conforming
-cells), so a change that drops or invents a rule class leaves `matched` at 992
+cells), so a change that drops or invents a rule class leaves `matched` at 1000
 and moves only `ruleset_mismatch`, and on those six cells it moves both. Both
 exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1 and
 PDF/UA-2, so the metric reads 2 on this corpus, and the text scoreboard names
