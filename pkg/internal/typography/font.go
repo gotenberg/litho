@@ -1168,21 +1168,6 @@ func ExtractGlyphNames(ctx context.Context, fontData []byte) map[uint16]string {
 	return nil
 }
 
-// ExtractEmptyGIDs returns the set of GIDs with empty glyph data in a
-// TrueType font (where loca[gid] == loca[gid+1]). Returns nil for non-TrueType.
-func ExtractEmptyGIDs(ctx context.Context, fontData []byte) map[uint16]bool {
-	if len(fontData) < 4 {
-		return nil
-	}
-	sig := fontData[:4]
-	if (sig[0] == 0 && sig[1] == 1 && sig[2] == 0 && sig[3] == 0) ||
-		string(sig) == "true" {
-		m, _ := truetype.EmptyGIDs(ctx, fontData)
-		return m
-	}
-	return nil
-}
-
 // ExtractNumGlyphs returns the glyph count (maxp numGlyphs) of a TrueType font
 // program, or 0 when fontData is not a parseable TrueType (sfnt) program.
 func ExtractNumGlyphs(fontData []byte) int {
