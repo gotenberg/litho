@@ -154,6 +154,7 @@ one deliberately rather than diffing it against a fresh build.
 | `extpredef_2b.pdf`     | PDF/A-2b     | Predefined properties, structures and XPath through declarations |
 | `extguards_2b.pdf`     | PDF/A-2b     | Extension-declared values veraPDF accepts, false-positive guards |
 | `formcycle_ua1.pdf`    | PDF/UA-1     | Forms whose resources list each other, under auto-tagging        |
+| `formflat_ua1.pdf`     | PDF/UA-1     | Tagged widgets with no `/AcroForm`, under the form mutations     |
 
 ### Must-not-fire controls
 
@@ -413,6 +414,7 @@ which are covered under [Known divergences](#known-divergences).
 | `forbidden_mix.pdf`    | 14   | 12   | 14   | 12   | 12   | 16   | 14   | 14   | 14  | 13   | 13   | 11   | 9    |
 | `formcs_2b.pdf`        | 6    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 7    | 7    |
 | `formcycle_ua1.pdf`    | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
+| `formflat_ua1.pdf`     | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 6   | 6    | 7    | 1    | 3    |
 | `formmedia_ua1.pdf`    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 7   | 7    | 8    | 7    | 5    |
 | `formstruct_ua2.pdf`   | 4    | 4    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 7    | 7    |
 | `glyphs_2b.pdf`        | 7    | 4    | 8    | 5    | 6    | 8    | 5    | 6    | 6   | 6    | 7    | 10   | 10   |
@@ -4076,16 +4078,62 @@ Before remediation the file agrees with veraPDF in all thirteen cells:
 | `7.1/11` no structure tree     | 1       | 1     |
 | `7.2/34` no natural language   | 5       | 1     |
 
+### `formflat_ua1.pdf`
+
+Flattening a tagged form turns each widget's appearance into page content,
+which ISO 14289-1, 7.1 requires to be tagged or an artifact. litho hands the
+content to the structure element that enclosed the widget, and a Form element
+that then holds content rather than its one widget reference takes a PrintField
+`/Role` (ISO 32000-1, Table 348), which is what ISO 14289-1, 7.18.4 test 2 asks
+of it. A widget with nothing to draw leaves with the form, and an element left
+holding nothing leaves with it. `annotstruct_ua2`, `formstruct_ua2` and
+`idfields_ua2` reach the tagging; none reaches a Form element emptied by the
+flatten, an element that names no `/Pg`, or a radio or push-button role.
+
+One tagged page presents three widgets, each the only kid of its own Form
+element:
+
+| Widget                                       | Form element   | After `FlattenForm`                                    |
+| -------------------------------------------- | -------------- | ------------------------------------------------------ |
+| `empty`: a text field, no value, no `/AP`    | `/Pg` the page | widget dropped, element pruned from the tree           |
+| a kid of `choice`, a radio button that is on | no `/Pg`       | content tagged through an `/MCR` naming the page; `rb` |
+| `go`: a push button                          | `/Pg` the page | content tagged as MCID 2; `pb`                         |
+
+The catalog has no `/AcroForm`, a shape real files carry (pdfjs issue17794.pdf),
+so `mutate-pages`, which copies the page onto its own document, gives it a
+form. That form has to list the fields the page already presents as well as
+the copies, or qpdf reports the page's own widgets as not reachable from it.
+
+Measured on veraPDF 1.30.2 and litho before the fix, flattening added `7.1/3`
+at PDF/UA-1 and `8.2.2/1` at PDF/UA-2 on both tools and left the `empty` field
+behind. After it, the flattened file fails a subset of the input's rules at
+every level, on both tools, and qpdf reports nothing on either output.
+
+The file agrees with veraPDF in all thirteen cells, rule for rule and count for
+count. At the home profile:
+
+| Rule at PDF/UA-1           | veraPDF | litho |
+| -------------------------- | ------- | ----- |
+| `7.1/8` no metadata stream | 1       | 1     |
+
+The PDF/A rules are the appearances painting in DeviceRGB and DeviceGray with
+no output intent (`6.2.3.3/1` and `/3` at part 1, `6.2.4.3/2` and `/4` from part
+2), the `empty` field with no appearance (`6.9/2` at part 1, `6.3.3/1` from part
+2), the push button whose `/N` is a stream where a button's is a state
+dictionary (`6.5.3/5` at part 1, `6.3.3/3` from part 2), the missing XMP packet
+(`6.7.2/1`, `6.6.2.1/1`, `6.7.2.1/1`), and at PDF/A-4 the `%PDF-1.7` header and,
+at 4f, the missing `/EmbeddedFiles`.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
-the runner scores 102 x 8 = 816 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 102 x 13 = 1326 cells. litho
+the runner scores 103 x 8 = 824 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 103 x 13 = 1339 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1324 of the 1326 cells. The two
+fixtures exist to protect, and it holds in 1337 of the 1339 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -4094,7 +4142,7 @@ The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates,
 counts the cells whose sets of failed rules (clause and test) differ. Every
 fixture here is non-compliant on both sides, so a change that drops or invents
-a rule class leaves `matched` at 816 and moves only `ruleset_mismatch`. Both
+a rule class leaves `matched` at 824 and moves only `ruleset_mismatch`. Both
 exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1 and
 PDF/UA-2, so the metric reads 2 on this corpus, and the text scoreboard names
 the rules only one side reports. A third cell in the runner is a regression, or
