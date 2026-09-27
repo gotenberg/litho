@@ -161,17 +161,24 @@ func readNameTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	return entries, true
 }
 
-// documentLang is [catalogLang] for doc's catalog as the file holds it.
-func documentLang(ctx context.Context, doc *document.Document) (ast.PdfString, string) {
+// documentLang is [catalogLang] for doc's catalog as the file holds it, and
+// reports whether the catalog holds a /Lang string at all, the empty one
+// included.
+func documentLang(ctx context.Context, doc *document.Document) (ast.PdfString, string, bool) {
 	catalogRef, ok := CatalogRef(ctx, doc)
 	if !ok {
-		return "", ""
+		return "", "", false
 	}
 	catalog, err := CatalogDict(ctx, doc, catalogRef)
 	if err != nil {
-		return "", ""
+		return "", "", false
 	}
-	return catalogLang(ctx, nil, doc, catalog)
+	obj, err := resolveAllocFirst(ctx, nil, doc, catalog["Lang"])
+	if err != nil {
+		return "", "", false
+	}
+	s, isString := obj.(ast.PdfString)
+	return s, strings.TrimSpace(document.DecodePdfString(s)), isString
 }
 
 // catalogLang returns the catalog's /Lang string and the natural language it

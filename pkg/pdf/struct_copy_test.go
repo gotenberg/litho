@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -635,11 +636,18 @@ func TestMerge_LeavesAnUntaggedSourceOutsideTheTree(t *testing.T) {
 	if got, want := tree.structParents(), []int{-1, 0, 1, 2}; !slices.Equal(got, want) {
 		t.Errorf("pages' /StructParents = %v, want %v", got, want)
 	}
-	// The output's catalog is the untagged source's, which names no language,
-	// so the tagged source's Document states its own.
+	// The untagged source names no language, so the output's catalog names the
+	// tagged source's, and its Document inherits it rather than stating it.
+	catalog, err := document.ResolveCatalog(ctx, tree.doc)
+	if err != nil {
+		t.Fatalf("ResolveCatalog: %v", err)
+	}
+	if got := catalog.Dict["Lang"]; got != ast.PdfString("en-US") {
+		t.Errorf("the output's catalog /Lang = %v, want (en-US)", got)
+	}
 	for _, elem := range tree.elements() {
-		if elem["S"] == ast.PdfName("Document") && elem["Lang"] != ast.PdfString("en-US") {
-			t.Errorf("the tagged source's Document states /Lang %v, want (en-US)", elem["Lang"])
+		if lang, stated := elem["Lang"]; elem["S"] == ast.PdfName("Document") && stated {
+			t.Errorf("the tagged source's Document states /Lang %v, want none: it inherits the catalog's", lang)
 		}
 	}
 }

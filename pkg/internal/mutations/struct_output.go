@@ -319,16 +319,30 @@ func (t *structOutput) untag(copier *writer.Copier, pages []ast.PdfIndirectRef) 
 // negative: page order is the logical reading order the structure tree gives
 // (ISO 32000-1, 14.8.2.3), so an element joins where its pages did.
 //
-// A source whose catalog names a natural language the output's does not has it
-// written on each of its top-level elements that names none: an element takes
-// the language of its parent, and the catalog's when none names one (ISO
-// 32000-1, 14.9.2.1), so its content would otherwise read as the output's.
+// A source whose catalog names a natural language other than the one its
+// top-level elements inherit in the output has it written on each of them that
+// names none: an element takes the language of its parent, and the catalog's
+// when none names one (ISO 32000-1, 14.9.2.1), so its content would otherwise
+// read as another source's. A source whose catalog names none has the empty
+// language identifier written instead, which says the language is unknown
+// (ISO 32000-1, 14.9.2), on each such element some content of which inherits
+// it: its content named no language in its source, and would otherwise read
+// as written in one.
+//
+// # Corpus evidence
+//
+//   - All corpora: merging each of 1124 tagged files with the next, 160 merges
+//     write the unknown language on a source's elements, which ISO 14289-1,
+//     7.2 test 29 and ISO 14289-2, 8.4.4 test 2 then report, as veraPDF does.
+//     159 of those sources fail an ISO 14289-1, 7.2 language test on their
+//     own.
 func (t *structOutput) add(ctx context.Context, s *structSource, pageRefs []ast.PdfIndirectRef, at int) error {
 	s.pageRefs = pageRefs
 	if err := t.join(ctx, s); err != nil {
 		return err
 	}
 
+	inherited := t.parentLang(ctx, s)
 	copied := make(ast.PdfArray, 0, len(s.top))
 	for _, kid := range s.top {
 		// The Document element kept for the root's sake describes nothing a
@@ -343,9 +357,12 @@ func (t *structOutput) add(ctx context.Context, s *structSource, pageRefs []ast.
 		}
 		if elem := t.pendingDict(dst); elem != nil {
 			elem["P"] = s.parent
-			if s.lang != "" && !strings.EqualFold(s.lang, t.lang) {
-				if _, has := elem["Lang"]; !has {
+			if _, has := elem["Lang"]; !has {
+				switch {
+				case s.lang != "" && !strings.EqualFold(s.lang, inherited):
 					elem["Lang"] = s.langString
+				case s.lang == "" && inherited != "" && t.inheritsLang(ctx, elem):
+					elem["Lang"] = ast.PdfString("")
 				}
 			}
 		}
@@ -387,6 +404,65 @@ func (t *structOutput) add(ctx context.Context, s *structSource, pageRefs []ast.
 		t.kids = insertKids(t.kids, copied, at)
 	}
 	return nil
+}
+
+// parentLang returns the natural language the top-level elements of s inherit
+// in the output: the /Lang of the output's Document element when they join it
+// and it names one, and the catalog's otherwise (ISO 32000-1, 14.9.2.1).
+func (t *structOutput) parentLang(ctx context.Context, s *structSource) string {
+	if t.hosted && s.parent == t.container && t.container.ObjectNum != 0 {
+		if elem := t.resolveDict(ctx, t.container); elem != nil {
+			if lang, named := t.resolve(ctx, elem["Lang"]).(ast.PdfString); named {
+				return strings.TrimSpace(document.DecodePdfString(lang))
+			}
+		}
+	}
+	return t.lang
+}
+
+// inheritsLang reports whether some content elem describes, or a text of its
+// own, takes the language elem inherits: an /Alt, /ActualText or /E entry of
+// elem (ISO 32000-1, Table 323), or a content item on the way to which no
+// element names a /Lang of its own.
+func (t *structOutput) inheritsLang(ctx context.Context, elem ast.PdfDict) bool {
+	visited := make(map[int]bool)
+	var inherits func(elem ast.PdfDict, depth int) bool
+	inherits = func(elem ast.PdfDict, depth int) bool {
+		if depth > maxStructTreeDepth || ctx.Err() != nil {
+			return false
+		}
+		for _, key := range []ast.PdfName{"Alt", "ActualText", "E"} {
+			if _, has := elem[key]; has {
+				return true
+			}
+		}
+		for _, kid := range t.kidList(ctx, elem["K"]) {
+			if _, isMCID := kid.(ast.PdfInt); isMCID {
+				return true
+			}
+			if ref, isRef := kid.(ast.PdfIndirectRef); isRef {
+				if visited[ref.ObjectNum] {
+					continue
+				}
+				visited[ref.ObjectNum] = true
+			}
+			d := t.resolveDict(ctx, kid)
+			if d == nil {
+				continue
+			}
+			if kind, _ := d["Type"].(ast.PdfName); kind == "MCR" || kind == "OBJR" {
+				return true
+			}
+			if _, named := d["Lang"]; named {
+				continue
+			}
+			if inherits(d, depth+1) {
+				return true
+			}
+		}
+		return false
+	}
+	return inherits(elem, 0)
 }
 
 // appendNew appends obj to arr unless arr already holds it.

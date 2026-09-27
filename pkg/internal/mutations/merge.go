@@ -54,6 +54,7 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	var tree *structOutput
 	structSources := make([]*structSource, len(sources))
 	var untagged []untaggedCopy
+	langString, lang, declared := mergedLang(ctx, sources)
 
 	for srcIdx, src := range sources {
 		cumulativeOffsets[srcIdx] = len(allPageRefs)
@@ -82,7 +83,6 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		}
 		if structs != nil {
 			if tree == nil {
-				_, lang := documentLang(ctx, sources[0].Doc)
 				tree = newStructOutput(alloc, lang)
 			}
 			tree.expect(structs, copier)
@@ -159,6 +159,9 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	// covering every source).
 	if copiers[0] != nil {
 		copyCatalogEntries(ctx, sources[0].Doc, copiers[0], catalogDict)
+	}
+	if declared {
+		catalogDict["Lang"] = langString
 	}
 	raiseMergedCatalogVersion(catalogDict, readVersion)
 	mergeOptionalContent(ctx, sources, copiers, catalogDict)
@@ -255,6 +258,51 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		PackObjectStreams: compact.PackObjectStreams,
 		DedupStreams:      compact.DedupStreams,
 	})
+}
+
+// mergedLang returns the /Lang string the output's catalog holds and the
+// natural language it names, and reports false when no source's catalog holds
+// one: the /Lang of the first source whose catalog names a language, else the
+// empty one of the first source whose catalog says its language is unknown.
+//
+// The catalog's /Lang is the language of every text of the output that names
+// none of its own (ISO 32000-1, 14.9.2.1): the outline titles, annotation
+// contents and field descriptions ISO 14289-1, 7.2 asks a language of, and the
+// content of an untagged source. Taking the first source's entry alone left a
+// merge whose first source names none with no language, while later sources
+// named theirs. The first source naming one keeps the entries and metadata a
+// merge takes from its first source in their language whenever that source
+// names one. A tagged source naming another language, or none, states that on
+// its elements (see [structOutput.add]). With no language named, the empty
+// identifier still says the language is unknown (ISO 32000-1, 14.9.2), as its
+// source did, where no entry says nothing.
+//
+// # Corpus evidence
+//
+//   - All corpora: merging each of 1124 tagged files with the next, 126 merges
+//     pair a first source naming no language with a second naming one, and 36
+//     outputs added one of ISO 14289-1, 7.2 tests 2, 24, 25 and 34 over both
+//     their sources. None does now.
+//   - verapdf PDF_A-1a__veraPDF_test_suite_6-8-4-t01-pass-c.pdf and -pass-d.pdf,
+//     PDF_A-2a__veraPDF_test_suite_6-7-4-t01-pass-c.pdf and -pass-d.pdf: each
+//     pair names no language, the second through the empty /Lang, and 2 of
+//     those 36 merges kept adding test 34 until that entry was carried.
+func mergedLang(ctx context.Context, sources []MergeSource) (ast.PdfString, string, bool) {
+	var unknown ast.PdfString
+	found := false
+	for _, src := range sources {
+		if ctx.Err() != nil {
+			return "", "", false
+		}
+		langString, lang, held := documentLang(ctx, src.Doc)
+		if lang != "" {
+			return langString, lang, true
+		}
+		if held && !found {
+			unknown, found = langString, true
+		}
+	}
+	return unknown, "", found
 }
 
 // raiseMergedCatalogVersion raises the catalog /Version of a document that
