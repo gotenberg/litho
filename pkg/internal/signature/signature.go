@@ -69,15 +69,20 @@ func markSignatureValues(ctx context.Context, doc *document.Document, fields ast
 //
 // visited is not seen. seen records the object number of each /V signature
 // dictionary so the later page walk can tell an unreported signature from one
-// already described; visited records the FIELDS this descent has entered, so a
-// /Kids array naming the same field twice is walked once. Without it the bound
-// caps nothing, because the walk fans out: a field whose /Kids names the same
-// kid twice costs 2^depth.
+// already described; visited records the FIELDS this descent has entered, and
+// the /Kids arrays written as objects of their own, so a /Kids array naming the
+// same field twice, or reached again from the direct fields it holds, is walked
+// once ([document.VisitedBefore]). Without it the bound caps nothing, because
+// the walk fans out: a field whose /Kids names the same kid twice costs
+// 2^depth.
 func markSignatureValuesAt(ctx context.Context, doc *document.Document, fields ast.PdfArray, seen, visited map[int]bool, depth int) {
 	if depth > maxFieldTreeDepth {
 		return
 	}
 	for _, fieldObj := range fields {
+		if ctx.Err() != nil {
+			return
+		}
 		if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
 			if visited[ref.ObjectNum] {
 				continue
@@ -91,7 +96,7 @@ func markSignatureValuesAt(ctx context.Context, doc *document.Document, fields a
 		if ref, ok := fieldDict["V"].(ast.PdfIndirectRef); ok {
 			seen[ref.ObjectNum] = true
 		}
-		if kidsObj, ok := fieldDict["Kids"]; ok {
+		if kidsObj, ok := fieldDict["Kids"]; ok && !document.VisitedBefore(kidsObj, visited) {
 			kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
 			if err == nil && kidsArr != nil {
 				markSignatureValuesAt(ctx, doc, kidsArr, seen, visited, depth+1)
@@ -162,7 +167,10 @@ func extractSigsRecursive(ctx context.Context, doc *document.Document, fields as
 // walked.
 //
 // visited keeps a field tree that names the same field twice from reporting its
-// signature twice. Nothing downstream removes the duplicate: this appends
+// signature twice. It holds the /Kids arrays written as objects of their own as
+// well ([document.VisitedBefore]): the direct fields such an array holds can
+// each name it again, and walked anew wherever it is reached it would report
+// their signatures again and fan out 2^depth. Nothing downstream removes the duplicate: this appends
 // straight into sigs, and [ExtractSignatures] hands that slice to the caller as
 // it stands, so the doubled entry reaches Reader.ExtractSignatures. The depth
 // bound cannot stand in for it either, since the walk fans out over /Kids and a
@@ -173,6 +181,9 @@ func extractSigsRecursiveAt(ctx context.Context, doc *document.Document, fields 
 		return
 	}
 	for _, fieldObj := range fields {
+		if ctx.Err() != nil {
+			return
+		}
 		if ref, ok := fieldObj.(ast.PdfIndirectRef); ok {
 			if visited[ref.ObjectNum] {
 				continue
@@ -289,7 +300,7 @@ func extractSigsRecursiveAt(ctx context.Context, doc *document.Document, fields 
 		}
 
 		// Traverse Kids
-		if kidsObj, ok := fieldDict["Kids"]; ok {
+		if kidsObj, ok := fieldDict["Kids"]; ok && !document.VisitedBefore(kidsObj, visited) {
 			kidsArr, err := document.ResolveArray(ctx, doc, kidsObj)
 			if err != nil {
 				doc.Logger.Debug("resolving signature field kids", slog.Any("err", err))
