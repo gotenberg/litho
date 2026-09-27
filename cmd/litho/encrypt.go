@@ -19,7 +19,9 @@ var encryptAlgorithms = map[string]pdf.EncryptAlgorithm{
 // permission granted (ISO 32000-1, 7.6.3.2, Table 22). The CLI takes no
 // permission flags, so a password protects the document from being opened,
 // not from being printed, copied or read by assistive technology, which
-// ISO 14289-1, 7.16 requires an encrypted PDF/UA-1 file to allow.
+// ISO 14289-1, 7.16 requires an encrypted PDF/UA-1 file to allow. The writer
+// clears the reserved bits 1-2 that -1 sets (see [pdf.EncryptConfig]), so the
+// P key reads -4.
 const allPermissions int32 = -1
 
 // encryptWriteOptions builds the write options that encrypt a command's

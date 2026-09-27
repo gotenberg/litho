@@ -33,12 +33,50 @@ const (
 // writers always set it.
 const AccessibilityPermission int32 = 1 << 9
 
+// Reserved bits of the P entry of a standard security handler, with the value
+// ISO 32000-2, 7.6.4.2, Table 22 requires of each (see [permissionsEntry]).
+const (
+	// reservedZeroBits are bits 1-2: "Reserved. Must be zero (0)."
+	reservedZeroBits int32 = 0b11
+	// reservedOneBits are bits 7-8, "Reserved. Must be 1.", and bits 13-32,
+	// "(Security handlers of revision 3 or greater) Reserved. Must be 1.".
+	reservedOneBits int32 = 0b1100_0000 | ^int32(1<<12-1)
+)
+
+// permissionsEntry returns the P entry an /Encrypt dictionary carries for the
+// permission mask p: the permission bits of p, and every reserved bit set to
+// the value ISO 32000-2, 7.6.4.2, Table 22 requires of it. Bits 1-2 read
+// "Reserved. Must be zero (0).", bits 7-8 "Reserved. Must be 1." and bits
+// 13-32 "(Security handlers of revision 3 or greater) Reserved. Must be 1.".
+//
+// -1 is the usual way to grant every permission, and it sets bits 1-2; 0
+// denies every permission, and it clears bits 7-8 and 13-32. ISO 32000-1,
+// 7.6.3.2 lists no reserved row in its Table 22, but its NOTE reads "Since all
+// the reserved high-order flag bits in the encryption dictionary's P value are
+// required to be 1, the integer value P shall be specified as a negative
+// integer", and gives -44 as the example for a revision 2 handler. litho sets
+// bits 13-32 for that handler ([RC4_40]) too, as the example does, although
+// the ISO 32000-2 row names revision 3 or greater.
+//
+// A reader ignores the reserved bits: "Conforming readers shall ignore all
+// flags other than those at bit positions 3, 4, 5, 6, 9, 10, 11, and 12" (ISO
+// 32000-1, 7.6.3.2). So the correction grants or withholds nothing. It does
+// change the file key of the RC4 and AES-128 handlers, which hash P (ISO
+// 32000-1, 7.6.3.3, Algorithm 2), and the /Perms of the AES-256 one (ISO
+// 32000-2, 7.6.4.4.9), so it happens once, before either is computed.
+func permissionsEntry(p int32) int32 {
+	return p&^reservedZeroBits | reservedOneBits
+}
+
 // EncryptConfig specifies the encryption parameters for a new document.
 type EncryptConfig struct {
 	UserPassword  string
 	OwnerPassword string
 	Algorithm     Algorithm
-	Permissions   int32
+	// Permissions is the permission mask of the P entry. [NewEncryptor]
+	// writes it through [permissionsEntry], which sets the reserved bits to
+	// the values ISO 32000-2, Table 22 requires whatever the mask holds.
+	Permissions int32
 }
 
 // Encryptor creates per-object encryption functions for writing encrypted PDFs.
@@ -71,7 +109,10 @@ func NewEncryptor(cfg EncryptConfig, documentID []byte) (*Encryptor, ast.PdfDict
 		ownerPw = cfg.UserPassword
 	}
 
-	pVal := int(cfg.Permissions)
+	// The reserved bits of P take the values ISO 32000-2, 7.6.4.2, Table 22
+	// requires (see permissionsEntry) before the file key and /Perms are
+	// computed from it: every later use of P must see the value written.
+	pVal := int(permissionsEntry(cfg.Permissions))
 
 	if v == 5 {
 		return newEncryptorV5(cfg.UserPassword, ownerPw, pVal, keyLen, documentID)

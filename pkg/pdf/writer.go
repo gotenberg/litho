@@ -1320,7 +1320,14 @@ type EncryptConfig struct {
 	// Algorithm selects the standard security handler variant.
 	Algorithm EncryptAlgorithm
 	// Permissions is the 32-bit PDF permission mask. Pass -1 for "all
-	// permissions granted".
+	// permissions granted", or build one with [Permissions.Mask].
+	//
+	// The P entry the output carries holds the permission bits of the mask
+	// and the reserved bits at the values ISO 32000-2, 7.6.4.2, Table 22
+	// requires, whatever the mask holds there: bits 1-2 cleared ("Reserved.
+	// Must be zero (0)."), bits 7-8 and 13-32 set ("Reserved. Must be 1."). -1
+	// is written as -4, and 0, every permission denied, as -3904. Readers
+	// ignore those bits (ISO 32000-1, 7.6.3.2), so this changes no permission.
 	//
 	// An output that declares PDF 2.0 sets bit 10 whatever the mask says: ISO
 	// 32000-2, Table 22 retires the bit, and requires writers to set it for
