@@ -174,6 +174,7 @@ one deliberately rather than diffing it against a fresh build.
 | `pagelabels_2b.pdf`    | PDF/A-2b     | Page labels in every numbering style, under the page edits       |
 | `annotshare_ua1.pdf`   | PDF/UA-1     | Annotation objects on two pages; XMP scoping; short page boxes   |
 | `structcopy_ua2.pdf`   | PDF/UA-2     | Every part of a structure tree a copy of its pages carries       |
+| `noresources_4.pdf`    | PDF/A-4      | Page content with no resource dictionary, its own or inherited   |
 
 ### Must-not-fire controls
 
@@ -393,6 +394,9 @@ violation but is exempt, so a firing is a false positive.
 | `annotlang_ua1`                           | A symbolic TrueType whose `/Encoding` is an empty dictionary           | ISO 14289-1, 7.21.6 t3       |
 | `xmppage_2b`                              | `ex:pt` in a page packet, declared by the catalog packet alone         | ISO 19005-2, 6.6.2.3.1 t1    |
 | `xmppage_2b`                              | A page entry typing `ex:pa` `MainT`, which the catalog's entry defines | ISO 19005-2, 6.6.2.3.3 t8    |
+| `noresources_4`                           | Page 5, showing the content stream page 4 has judged already           | ISO 19005-4, 6.2.2 t3        |
+| `noresources_4`                           | Page 6, whose content paints nothing under an empty `/Resources`       | ISO 32000-2, Table 31        |
+| `noresources_4`                           | Page 2's annotation appearance, which states no `/Resources` either    | ISO 19005-4, 6.2.2 t3        |
 
 Verified counts at the home profile: `6.2.11.5` fires exactly once on
 `complex_2b` (the rendered `T3A` glyph, not the unrendered `T3B` one) on both
@@ -488,6 +492,7 @@ which are covered under [Known divergences](#known-divergences).
 | `multipage_2b.pdf`     | 12   | 10   | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 10   | 9    |
 | `namedmcid_ua1.pdf`    | 6    | 6    | 7    | 7    | 7    | 7    | 7    | 7    | 6   | 6    | 7    | 7    | 5    |
 | `namereads_1b.pdf`     | 10   | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 7   | 7    | 8    | 6    | 6    |
+| `noresources_4.pdf`    | 7    | 5    | 8    | 6    | 6    | 8    | 6    | 6    | 2   | 3    | 4    | 10   | 7    |
 | `offlimits_1b.pdf`     | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 6    | 7    | 7    | 7    |
 | `outputintent_2b.pdf`  | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
 | `pagegroup_2b.pdf`     | 7    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 6    | 6    |
@@ -1746,8 +1751,8 @@ outside the structure tree. `c1c11d3` judges the language of text no structure
 element owns, and both tools now report the rule on this file, so `7.1/12` is
 the cell's only difference.
 
-Two veraPDF gaps sit outside the corpus, because planting either would add a
-disagreeing cell rather than coverage.
+Four veraPDF gaps sit outside the corpus, because planting any of them would
+add a disagreeing cell rather than coverage.
 
 **`6.1.9/1`, an `endobj` with no preceding EOL, where litho is right.** The
 clause reads "The object number and endobj keyword shall each be preceded by an
@@ -1772,6 +1777,36 @@ any object be indirect, so the box is 612 by 792 and litho passes it, while it
 reads a missing corner and one that is no number as 0 as veraPDF does.
 `pdfjs/issue7872.pdf` writes every corner of its boxes that way, and veraPDF
 fails it twice.
+
+**The PDF/UA-1 off-page exemption on a rectangle written reversed, where litho
+is right.** ISO 14289-1, 7.18.1 exempts an annotation whose rectangle lies
+outside the crop box, and veraPDF's profile carries the exemption into every
+7.18 annotation test. Its `isOutsideCropBox` compares the corners as written,
+`crop[1] >= rect[3] || crop[0] >= rect[2] || crop[3] <= rect[1] || crop[2] <=
+rect[0]`, over a crop box it does not normalize either.
+ISO 32000-1, 7.9.5 lets a rectangle be written from any two diagonally
+opposite corners, so litho normalizes both. A Link with no `/Contents` written
+`[100 100 -50 50]`, across the left edge of its page, or lying squarely on a
+page whose media or crop box is written `[612 792 0 0]`, fails `7.18.1/2`,
+`7.18.5/1` and `7.18.5/2` on litho and nothing on veraPDF 1.30.2, which
+reports all three once the corners are written in order. `pdfjs/issue13447.pdf`,
+`issue16384.pdf` and `issue20062.pdf` each carry one such annotation, a
+PolyLine, a widget and a Polygon, and draw one `7.18.1` or `7.18.4` finding
+more from litho. The decision site is `isAnnotOutsideCropBox`,
+`pkg/internal/compliance/accessibility_helpers.go`.
+
+**A device colour space selected by name on a page with no resources, where
+litho is right.** `/DeviceRGB cs` selects DeviceRGB directly (ISO 32000-1,
+8.6.8, Table 74), with no resource dictionary. veraPDF resolves the name through
+the page's resources, finds none on a page that states and inherits none,
+leaves the fill colour space unset and judges the paint that follows in the
+initial DeviceGray. With no output intent, `/DeviceRGB cs 1 0 0 sc` and a fill
+fail `6.2.4.3/2` twice on litho and `6.2.4.3/4` twice on veraPDF 1.30.2 at
+PDF/A-2b, 3b and 4, and `6.2.3.3/1` against `6.2.3.3/3` at PDF/A-1b; the
+operators `rg`, `k` and `g` fall back to their own family and agree. At PDF/A-4
+both tools also report the page's missing dictionary (`6.2.2/3`, see
+`noresources_4.pdf`). No corpus file selects a device space that way on such a
+page.
 
 ### Instance counts, which the corpus does not pin
 
@@ -5177,16 +5212,65 @@ Remediation at the eight manifest profiles, default and aggressive, leaves the
 same rule set on both tools in every cell: `6.7.3.4/1` at PDF/A-2a and `7.1/5`
 at PDF/UA-1, the `Callout` a PDF 1.7 reading cannot map.
 
+### `noresources_4.pdf`
+
+ISO 32000-2, 7.7.3.3, Table 31 makes `/Resources` a required, inheritable entry
+of a page, and a page that needs no resources states an empty dictionary. A page
+that states none, under a page tree that states none either, leaves its content
+stream with no resource dictionary at all, where ISO 19005-4, 6.2.2 requires
+every content stream to have one. veraPDF fails `6.2.2/3` once for such a
+stream, whatever it paints, an empty one included: it resolves the stream's
+initial DeviceGray through the missing dictionary and reports that name as
+undefined. litho stated the test only for a name the stream uses, so a stream
+that names none drew nothing. No file the gate validates at PDF/A-4 has such a
+page; three pdfcpu and five pdfjs files do, and veraPDF agrees with litho on
+the six of them it can parse.
+
+| Page | `/Contents`                      | `/Resources`  | `6.2.2/3` |
+| ---- | -------------------------------- | ------------- | --------- |
+| 1    | paints a rectangle in DeviceGray | none          | once      |
+| 2    | an empty stream                  | none          | once      |
+| 3    | `q Q`                            | `null`        | once      |
+| 4    | `q Q`, one stream shared with 5  | none          | once      |
+| 5    | the stream page 4 shows          | none          | none      |
+| 6    | `q Q`                            | an empty dict | none      |
+| 7    | none                             | none          | none      |
+
+Page 2 carries a Square annotation whose appearance stream states no
+`/Resources` either, and fails nothing through it: veraPDF gives a form XObject
+resources of its own even when it states none. No stream names a resource, so
+`6.2.2/3` reaches the rule set through the missing dictionaries alone.
+
+| Rule                                  | veraPDF | litho | litho before |
+| ------------------------------------- | ------- | ----- | ------------ |
+| PDF/A-4 `6.2.2/3` undefined names     | 5       | 5     | 0            |
+| PDF/A-4 `6.2.4.3/4` DeviceGray, no OI | 2       | 2     | 2            |
+
+The two tools return the same rule set and the same count for every rule in all
+thirteen cells. Parts 1 to 3 have no test 3, and report page 1's DeviceGray
+(`6.2.3.3/3` at part 1, `6.2.4.3/4` from part 2), the part-4 identification,
+the `%PDF-2.0` header at parts 2 and 3 and, at level A, the missing structure.
+PDF/A-4e and 4f add their own identification, 4f the missing `/EmbeddedFiles`,
+and the PDF/UA cells report the untagged document and its annotation.
+
+Remediation at the eight manifest profiles, default and aggressive, leaves
+nothing on either tool in any cell: every rewrite writes the `/Resources`
+Table 31 requires, an empty dictionary on a page that inherits none. So does a
+stamp, a page move and an encryption, measured through the litho commands they
+call, and `6.2.2/3` passes on their outputs at PDF/A-4, which the mutation
+allowances admit (`pageResourcesRules`); flattening and redaction may pass any
+rule, and auto-tagging leaves the file, which holds no text, alone.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
-runner scores 122 x 8 = 976 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 122 x 13 = 1586 cells. litho
+runner scores 123 x 8 = 984 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 123 x 13 = 1599 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1584 of the 1586 cells. The two
+fixtures exist to protect, and it holds in 1597 of the 1599 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -5197,7 +5281,7 @@ the cells whose sets of failed rules (clause and test) differ. Every cell but
 five is non-compliant on both sides (`baretree_2b` and `pagelabels_2b` at
 PDF/A-2b; `formhidden_ua1` and `sigtagged_ua1` at PDF/UA-1; and `structcopy_ua2`
 at PDF/UA-2 are the corpus's conforming cells), so a change that drops or
-invents a rule class leaves `matched` at 976 and moves only `ruleset_mismatch`,
+invents a rule class leaves `matched` at 984 and moves only `ruleset_mismatch`,
 and on those five cells it moves both. Both exceptions sit in the manifest's
 profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this
 corpus, and the text scoreboard names the rules only one side reports. A third
