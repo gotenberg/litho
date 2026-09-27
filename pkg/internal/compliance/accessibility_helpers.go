@@ -384,6 +384,37 @@ func isAnnotHidden(ctx context.Context, doc *document.Document, annot ast.PdfDic
 // every ISO 14289-1, 7.18 annotation test states. A rectangle that only
 // touches the box's edge counts as outside. The crop box is the one
 // [pageCropBox] reads.
+//
+// Both rectangles are compared normalized, where veraPDF compares the corners
+// as written. ISO 32000-1, 7.9.5 lets a rectangle be written from any two
+// diagonally opposite corners and has a processor normalize it, and ISO
+// 14289-1, 7.18.1 exempts an annotation whose rectangle lies outside the crop
+// box, not one written from its upper-right corner. veraPDF-validation 1.30
+// (GFPDAnnot.getisOutsideCropBox) tests crop[1] >= rect[3] || crop[0] >=
+// rect[2] || crop[3] <= rect[1] || crop[2] <= rect[0] over a crop box it does
+// not normalize either (PDPage.getDoubleArrayForBox and clipToMediaBox).
+// Measured with veraPDF 1.30.2 at PDF/UA-1 on a Link with no /Contents: a
+// rectangle written reversed that straddles any edge of the page, and a
+// rectangle squarely on a page whose media or crop box is written reversed,
+// fail none of 7.18.1 t2, 7.18.5 t1 and t2, where litho fails all three, as
+// both tools do for the same rectangles written in order. A reversed rectangle
+// wholly on or wholly off the page draws the same verdict from both.
+//
+// # Corpus evidence
+//
+//   - pdfjs issue13447.pdf: a PolyLine written [667.5 250.69 567.75 344.44]
+//     straddles the right edge of its page, and veraPDF counts 7.18.1 t1 and
+//     t2 17 times where litho counts 18.
+//   - pdfjs issue16384.pdf: a widget written [0 842 43 799] straddles the top
+//     of a crop box 841.92 high, and veraPDF counts 7.18.4 t1 once where litho
+//     counts it twice.
+//   - pdfjs issue20062.pdf: a Polygon written [328.5 283.5 612 0] lies on its
+//     page, touching the bottom edge, and veraPDF does not report 7.18.1 t1,
+//     which litho does.
+//   - All corpora: 382 annotation rectangles are written reversed, and these
+//     three are the only ones the two readings judge differently. Three pages
+//     write their media box reversed, and their annotations lie off the page
+//     either way.
 func isAnnotOutsideCropBox(ctx context.Context, doc *document.Document, annot ast.PdfDict, page *pageObject) bool {
 	annotRect := resolveRect(ctx, doc, annot["Rect"])
 	if annotRect == nil {
@@ -413,10 +444,11 @@ func isAnnotOutsideCropBox(ctx context.Context, doc *document.Document, annot as
 // left the page with no box and no annotation off it. A box that is not four
 // numbers reads its missing corners as 0 ([pageBoxCorner]), as veraPDF's
 // PDPage.getDoubleArrayForBox does, so a crop box of [0 0 300] covers no
-// height and every annotation lies off it. Measured against veraPDF 1.30.2 at
-// PDF/UA-1: a Link without /Contents on a page with that crop box, and one
-// lying beyond a media box its page inherits, pass ISO 14289-1, 7.18.5 t1 and
-// t2 and 7.18.1 t2.
+// height and every annotation lies off it. A box written reversed is
+// normalized, which veraPDF does not do (see [isAnnotOutsideCropBox]).
+// Measured against veraPDF 1.30.2 at PDF/UA-1: a Link without /Contents on a
+// page with that crop box, and one lying beyond a media box its page inherits,
+// pass ISO 14289-1, 7.18.5 t1 and t2 and 7.18.1 t2.
 //
 // # Corpus evidence
 //
