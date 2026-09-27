@@ -5088,16 +5088,18 @@ identification and tagging rules a part-2 claim draws. At PDF/UA-1 veraPDF
 counts `7.1/3` and `7.2/34`, and at PDF/UA-2 `8.2.2/1`, once per untagged text
 of the eight pages, and litho once each.
 
-`mutate-pages` moves page 1 to the end, and its label promise, read with qpdf,
-wants the output to show `ii Cover A-7 A-8 a b Ü-IV i`. Before the fix the
-move kept the source's tree, so every page showed the label of the page that
-used to stand there. Measured on litho, pdf.js and veraPDF 1.30.2 after it:
-the move, a split of pages 3 to 6, a merge with an unlabelled document, an
-insertion of one at page 5 and a deletion of pages 2 and 5 show in pdf.js the
-labels their pages showed in their sources, the unlabelled pages their page
-numbers, and report the input's rule set on both tools, the move in all
-thirteen cells. Remediation at the eight manifest profiles, default and
-aggressive, leaves nothing on either tool and keeps every label.
+`mutate-pages` moves page 1 to the end and repeats it there, and its label
+promise, read with qpdf, wants the output to show
+`ii Cover A-7 A-8 a b Ü-IV i i`. Before the fix the move kept the source's
+tree, so every page showed the label of the page that used to stand there.
+Measured on litho, pdf.js and veraPDF 1.30.2 after it: the move, a split of
+pages 3 to 6, a merge with an unlabelled document, an insertion of one at page
+5 and a deletion of pages 2 and 5 show in pdf.js the labels their pages showed
+in their sources, the unlabelled pages their page numbers, and report the
+input's rule set on both tools, the move in all thirteen cells. The move that
+repeats page 1 does too on veraPDF 1.30.2, in all thirteen cells. Remediation
+at the eight manifest profiles, default and aggressive, leaves nothing on
+either tool and keeps every label.
 
 ### `annotshare_ua1.pdf`
 
