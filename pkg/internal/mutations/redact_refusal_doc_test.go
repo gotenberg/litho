@@ -27,7 +27,7 @@ var notARedactionRefusal = map[string]string{
 	"ErrAnnotationNotAddressable":      "ScrubAnnotationText",
 	"ErrFieldValueNotAddressable":      "ScrubFormFieldValues",
 	"ErrOutlineItemNotAddressable":     "ScrubOutlineTitles",
-	"ErrScanTokenEmpty":                "ScanForTokens",
+	"ErrScanTokenEmpty":                "ScanOutputForTokens",
 	"ErrSanitizationIncomplete":        "SanitizeDocument",
 	"ErrPagePruneIncomplete":           "DeletePages",
 	"ErrAttachmentTreeIncomplete":      "the attachment walks",

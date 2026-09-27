@@ -12,14 +12,15 @@ import (
 )
 
 func TestScanOutputForTokens_DropsTheContentStreamTheRewriteOrphans(t *testing.T) {
-	// The load-bearing case, and the whole reason this function exists beside
-	// ScanForTokens. An excision leaves the page's original content stream in
-	// the document referenced by nothing, so the parsed document still holds
+	// The load-bearing case, and the whole reason the scan resolves through the
+	// allocator. An excision leaves the page's original content stream in the
+	// document referenced by nothing, so the parsed document still holds
 	// "SECRET" at object 6 while the file a full rewrite writes does not.
 	//
-	// Asserting the contrast rather than just the new result is what makes this
-	// meaningful: if both scans answered the same, the new one would be an
-	// alias and this test would still pass on a bare "no hit on 6".
+	// Asserting the contrast rather than just the result is what makes this
+	// meaningful: the same document scanned without the allocator still
+	// reports object 6, so a bare "no hit on 6" cannot pass by the scan never
+	// reaching the page.
 	ctx := context.Background()
 	doc, page := redactScanFixture(t)
 	alloc := writer.NewObjAllocator(20)
@@ -32,12 +33,14 @@ func TestScanOutputForTokens_DropsTheContentStreamTheRewriteOrphans(t *testing.T
 		t.Fatalf("nothing was removed, so there is nothing to scan for")
 	}
 
-	swept, err := ScanForTokens(ctx, doc, []string{"SECRET"})
+	// The redaction queued its edits and left doc as it was, so a nil
+	// allocator scans the document before them.
+	before, err := ScanOutputForTokens(ctx, nil, doc, []string{"SECRET"})
 	if err != nil {
-		t.Fatalf("ScanForTokens: %v", err)
+		t.Fatalf("ScanOutputForTokens without the allocator: %v", err)
 	}
-	if !hasHit(swept, 6, "stream") {
-		t.Fatalf("the sweep did not report object 6, so the premise of this test is gone: %+v", swept.Hits)
+	if !hasHit(before, 6, "stream") {
+		t.Fatalf("the unedited document did not report object 6, so the premise of this test is gone: %+v", before.Hits)
 	}
 
 	out, err := ScanOutputForTokens(ctx, alloc, doc, []string{"SECRET"})

@@ -3,7 +3,6 @@ package mutations
 import (
 	"bytes"
 	"context"
-	"errors"
 	"strconv"
 	"testing"
 
@@ -12,7 +11,9 @@ import (
 
 // scanFixture builds a document holding the same word three ways: a literal
 // string, a UTF-16BE string with a BOM, and a Flate-compressed stream. Each is
-// a separate reason a naive scan would miss a surviving copy.
+// a separate reason a naive scan would miss a surviving copy. The stream hangs
+// off the catalog's /PieceInfo, one of the places a page edit never looks, so
+// the output a rewrite writes still carries it.
 func scanFixture(t *testing.T) *document.Document {
 	t.Helper()
 	ctx := context.Background()
@@ -31,7 +32,7 @@ func scanFixture(t *testing.T) *document.Document {
 
 	var buf bytes.Buffer
 	buf.WriteString("%PDF-1.7\n" +
-		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
+		"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /PieceInfo << /Scan << /Private 8 0 R >> >> >>\nendobj\n" +
 		"2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n" +
 		"4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
 		"5 0 obj\n<< /Font << /F1 4 0 R >> >>\nendobj\n" +
@@ -51,14 +52,14 @@ func scanFixture(t *testing.T) *document.Document {
 	return doc
 }
 
-func TestScanForTokens_FindsALiteralString(t *testing.T) {
-	// Positive control. If this fails with no hits, the sweep enumerated
-	// nothing and every "clean" result below would be meaningless.
+func TestScanOutputForTokens_FindsALiteralString(t *testing.T) {
+	// Positive control. If this fails with no hits, the walk reached nothing
+	// and every "clean" result below would be meaningless.
 	doc := scanFixture(t)
 
-	res, err := ScanForTokens(context.Background(), doc, []string{"LITERALSECRET"})
+	res, err := ScanOutputForTokens(context.Background(), nil, doc, []string{"LITERALSECRET"})
 	if err != nil {
-		t.Fatalf("ScanForTokens: %v", err)
+		t.Fatalf("ScanOutputForTokens: %v", err)
 	}
 	if len(res.Hits) == 0 {
 		t.Fatalf("no hits: the scan found no surviving copy (result %+v)", res)
@@ -70,85 +71,73 @@ func TestScanForTokens_FindsALiteralString(t *testing.T) {
 	}
 }
 
-func TestScanForTokens_FindsAUTF16String(t *testing.T) {
+func TestScanOutputForTokens_FindsAUTF16String(t *testing.T) {
 	// The bytes of this string spell nothing: every character is preceded by a
 	// zero byte and the whole is led by a BOM. Only decoding finds it, which is
 	// why the scan cannot be a byte search.
 	doc := scanFixture(t)
 
-	res, err := ScanForTokens(context.Background(), doc, []string{"TOPSECRET"})
+	res, err := ScanOutputForTokens(context.Background(), nil, doc, []string{"TOPSECRET"})
 	if err != nil {
-		t.Fatalf("ScanForTokens: %v", err)
+		t.Fatalf("ScanOutputForTokens: %v", err)
 	}
 	if len(res.Hits) == 0 {
 		t.Errorf("a UTF-16 copy of the token was not found: %+v", res)
 	}
 }
 
-func TestScanForTokens_FindsATokenInsideACompressedStream(t *testing.T) {
+func TestScanOutputForTokens_FindsATokenInsideACompressedStream(t *testing.T) {
 	// The stored bytes are Flate-compressed, so the word is absent from them.
 	// A scan that read raw stream bytes would call this document clean.
 	doc := scanFixture(t)
 
-	res, err := ScanForTokens(context.Background(), doc, []string{"STREAMSECRET"})
+	res, err := ScanOutputForTokens(context.Background(), nil, doc, []string{"STREAMSECRET"})
 	if err != nil {
-		t.Fatalf("ScanForTokens: %v", err)
+		t.Fatalf("ScanOutputForTokens: %v", err)
 	}
-	found := false
-	for _, hit := range res.Hits {
-		if hit.Token == "STREAMSECRET" && hit.Where == "stream" {
-			found = true
-		}
-	}
-	if !found {
+	if !hasHit(res, 8, "stream") {
 		t.Errorf("the compressed copy was not found: %+v", res)
 	}
 }
 
-func TestScanForTokens_AbsentTokenIsNotReported(t *testing.T) {
+func TestScanOutputForTokens_AbsentTokenIsNotReported(t *testing.T) {
 	doc := scanFixture(t)
 
-	res, err := ScanForTokens(context.Background(), doc, []string{"NOTINTHISDOCUMENT"})
+	res, err := ScanOutputForTokens(context.Background(), nil, doc, []string{"NOTINTHISDOCUMENT"})
 	if err != nil {
-		t.Fatalf("ScanForTokens: %v", err)
+		t.Fatalf("ScanOutputForTokens: %v", err)
 	}
 	if len(res.Hits) != 0 {
 		t.Errorf("Hits = %+v, want none", res.Hits)
 	}
 }
 
-func TestScanForTokens_RejectsAnEmptyToken(t *testing.T) {
-	// An empty token is contained in every string, so answering would report
-	// the whole document as leaking and mean nothing.
+func TestScanOutputForTokens_NoTokensIsNotAScan(t *testing.T) {
 	doc := scanFixture(t)
 
-	_, err := ScanForTokens(context.Background(), doc, []string{"LITERALSECRET", ""})
-	if !errors.Is(err, ErrScanTokenEmpty) {
-		t.Errorf("err = %v, want ErrScanTokenEmpty", err)
-	}
-}
-
-func TestScanForTokens_NoTokensIsNotAScan(t *testing.T) {
-	doc := scanFixture(t)
-
-	res, err := ScanForTokens(context.Background(), doc, nil)
+	res, err := ScanOutputForTokens(context.Background(), nil, doc, nil)
 	if err != nil {
-		t.Fatalf("ScanForTokens: %v", err)
+		t.Fatalf("ScanOutputForTokens: %v", err)
 	}
 	if !res.Clean() {
 		t.Errorf("result = %+v, want a clean empty result", res)
 	}
 }
 
-func TestScanForTokens_HitsAreOrdered(t *testing.T) {
-	// The sweep ranges a map of xref entries, so without the sort the order
-	// would differ run to run and a caller's report would be unstable.
+func TestScanOutputForTokens_HitsAreOrdered(t *testing.T) {
+	// The walk ranges dictionaries, which are maps, so without the sort the
+	// order would differ run to run and a caller's report would be unstable.
 	doc := scanFixture(t)
 
-	res, err := ScanForTokens(context.Background(), doc,
+	res, err := ScanOutputForTokens(context.Background(), nil, doc,
 		[]string{"LITERALSECRET", "TOPSECRET", "STREAMSECRET"})
 	if err != nil {
-		t.Fatalf("ScanForTokens: %v", err)
+		t.Fatalf("ScanOutputForTokens: %v", err)
+	}
+	// Two objects and three tokens, or the order below is checked over too
+	// few hits to mean anything.
+	if len(res.Hits) < 3 {
+		t.Fatalf("Hits = %+v, want the three tokens across objects 7 and 8", res.Hits)
 	}
 	for i := 1; i < len(res.Hits); i++ {
 		a, b := res.Hits[i-1], res.Hits[i]

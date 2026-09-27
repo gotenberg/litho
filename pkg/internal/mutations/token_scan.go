@@ -58,77 +58,19 @@ func (r ScanResult) Clean() bool {
 	return len(r.Hits) == 0 && len(r.Unreadable) == 0
 }
 
-// ScanForTokens reports every place one of tokens still appears in doc.
+// ScanOutputForTokens reports every place one of tokens would still appear in
+// the document [FullRewrite] writes from doc and the edits queued in alloc.
 //
 // Removing content from a page's content stream does not remove the copies of
 // it held elsewhere: the structure tree's /ActualText and /Alt, annotation
 // values and their appearance streams, outline titles, named destinations,
-// /PieceInfo and document metadata all survive a page edit, and several survive
-// a full rewrite as well. This walks every object in the file instead of the
-// places a redaction happens to know about, which is the point: it catches the
-// vector nobody enumerated.
-//
-// It reads the document as parsed, so it answers for the bytes on disk and for
-// an incremental update, which appends and leaves every superseded object in
-// the file. It does not see edits queued in an allocator, and it reports
-// objects a full rewrite would drop as unreferenced. Ask
-// [ScanOutputForTokens] what a full rewrite would write.
-//
-// Strings are compared after [document.DecodePdfString], so a token written as
-// UTF-16 matches the same as one written in PDFDocEncoding. Comparison is exact
-// and case-sensitive: a scan is a check on litho's own removal, not a search
-// for what a human would consider the same word.
-//
-// It is a check, not a proof. A token absent from every object may still be
-// recoverable from glyph advances left behind by a split text run
-// (arXiv 2206.02285), and a token this finds may be an innocent coincidence in
-// unrelated data.
-func ScanForTokens(ctx context.Context, doc *document.Document, tokens []string) (ScanResult, error) {
-	if err := validateScanTokens(tokens); err != nil {
-		return ScanResult{}, err
-	}
-	if len(tokens) == 0 {
-		return ScanResult{}, nil
-	}
-
-	// No allocator and no reference following: this sweep reaches every object
-	// in the file on its own.
-	w := newScanWalk(doc, nil, tokens, false)
-
-	count := 0
-	for objNum, entry := range doc.XRefEntriesSnapshot() {
-		if count%100 == 0 { //nolint:mnd // amortized cancellation check, matching the compliance sweep
-			if err := ctx.Err(); err != nil {
-				return ScanResult{}, err
-			}
-		}
-		count++
-		if entry.Free {
-			continue
-		}
-
-		ref := ast.PdfIndirectRef{ObjectNum: objNum, GenNum: entry.Generation}
-		obj, err := document.ResolveObject(ctx, doc, ref)
-		if err != nil {
-			// An object litho cannot parse is one it cannot clear either, so it
-			// counts as unread rather than as clean.
-			w.unreadable[objNum] = true
-			doc.Logger.Debug("token scan: object could not be resolved",
-				slog.Int("object", objNum), slog.Any("err", err))
-			continue
-		}
-		w.walk(ctx, objNum, obj, 0)
-	}
-
-	return w.result(), nil
-}
-
-// ScanOutputForTokens reports every place one of tokens would still appear in
-// the document [FullRewrite] writes from doc and the edits queued in alloc.
+// /PieceInfo and document metadata all survive a page edit. This walks every
+// object the output reaches instead of the places a redaction happens to know
+// about, which is the point: it catches the vector nobody enumerated.
 //
 // A redaction queues its replacements in an allocator and leaves the document
-// it read untouched, so [ScanForTokens] run straight afterwards answers about
-// the wrong bytes twice over: it reports the original content stream, which the
+// it read untouched, so a scan of the document as parsed answers about the
+// wrong bytes twice over: it reports the original content stream, which the
 // output no longer references, and it never sees the replacement, which exists
 // only in the allocator. This resolves every reference through alloc first and
 // reaches outward from the roots [FullRewrite] copies, so what it reports is
@@ -139,12 +81,20 @@ func ScanForTokens(ctx context.Context, doc *document.Document, tokens []string)
 // document, referenced by nothing; a full rewrite never copies it, so reporting
 // it would name a leak the output does not have. That reasoning holds only for
 // a full rewrite: an incremental update keeps every superseded object in the
-// file, and a caller writing one has to ask [ScanForTokens] instead.
+// file, so this answers for no incremental update, and redaction writes none.
 //
 // A nil alloc scans the document as a full rewrite of it would be written, with
 // no edits applied.
 //
-// The caveats on [ScanForTokens] hold here too: it is a check, not a proof.
+// Strings are compared after [document.DecodePdfString], so a token written as
+// UTF-16 matches the same as one written in PDFDocEncoding. Comparison is exact
+// and case-sensitive: a scan is a check on litho's own removal, not a search
+// for what a human would consider the same word.
+//
+// It is a check, not a proof. A token absent from every object may still be
+// recoverable from glyph advances left behind by a split text run
+// (arXiv 2206.02285), and a token this finds may be an innocent coincidence in
+// unrelated data.
 func ScanOutputForTokens(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -161,7 +111,7 @@ func ScanOutputForTokens(
 		return ScanResult{}, err
 	}
 
-	w := newScanWalk(doc, alloc, tokens, true)
+	w := newScanWalk(doc, alloc, tokens)
 
 	// Mirrors FullRewrite: the trailer /Root when it resolves to a real
 	// catalog, and the catalog the reader recovers when it does not. Reaching
@@ -219,10 +169,8 @@ type scanWalk struct {
 	hits       map[TokenHit]bool
 	unreadable map[int]bool
 
-	// visited is non-nil only on a walk that follows indirect references, and
-	// holds every object number already entered. The xref sweep leaves it nil:
-	// it reaches every object itself, so following a reference there would
-	// rescan objects and could loop.
+	// visited holds every object number already entered, so a reference cycle
+	// cannot loop the walk and an object reached twice is scanned once.
 	visited  map[int]bool
 	refDepth int
 
@@ -232,18 +180,15 @@ type scanWalk struct {
 	err error
 }
 
-func newScanWalk(doc *document.Document, alloc *writer.ObjAllocator, tokens []string, follow bool) *scanWalk {
-	w := &scanWalk{
+func newScanWalk(doc *document.Document, alloc *writer.ObjAllocator, tokens []string) *scanWalk {
+	return &scanWalk{
 		doc:        doc,
 		alloc:      alloc,
 		tokens:     tokens,
 		hits:       make(map[TokenHit]bool),
 		unreadable: make(map[int]bool),
+		visited:    make(map[int]bool),
 	}
-	if follow {
-		w.visited = make(map[int]bool)
-	}
-	return w
 }
 
 func (w *scanWalk) result() ScanResult {
@@ -288,18 +233,16 @@ func (w *scanWalk) walk(ctx context.Context, objNum int, obj ast.PdfObject, dept
 	}
 }
 
-// follow visits the object a reference names, once, on a walk that reaches
-// outward from a root. It does nothing on the xref sweep, which visits every
-// object itself.
+// follow visits the object a reference names, once.
 func (w *scanWalk) follow(ctx context.Context, ref ast.PdfIndirectRef) {
-	if w.visited == nil || w.visited[ref.ObjectNum] || w.err != nil {
+	if w.visited[ref.ObjectNum] || w.err != nil {
 		return
 	}
 	if w.refDepth >= maxScanRefDepth {
 		w.unreadable[ref.ObjectNum] = true
 		return
 	}
-	if len(w.visited)%100 == 0 { //nolint:mnd // amortized cancellation check, matching the sweep above
+	if len(w.visited)%100 == 0 { //nolint:mnd // amortized cancellation check, one per 100 objects as the compliance sweep does
 		if err := ctx.Err(); err != nil {
 			w.err = err
 			return
@@ -384,8 +327,9 @@ func (w *scanWalk) scanStreamData(ctx context.Context, objNum int, stream ast.Pd
 	}
 }
 
-// buildScanResult turns the collected sets into the ordered result. The sweep
-// ranges a map, so nothing here may depend on the order objects arrived in.
+// buildScanResult turns the collected sets into the ordered result. The walk
+// ranges dictionaries and the sets are maps, so nothing here may depend on the
+// order objects arrived in.
 func buildScanResult(hits map[TokenHit]bool, unreadable map[int]bool) ScanResult {
 	out := ScanResult{
 		Hits:       make([]TokenHit, 0, len(hits)),

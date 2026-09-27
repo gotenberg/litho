@@ -39,10 +39,9 @@ type SanitizeReport struct {
 //
 // Verification uses [ScanOutputForTokens], so it answers for the document a
 // FULL REWRITE would write: every reference resolved through alloc, and
-// unreferenced objects left out. That is the writer redaction requires. A caller
-// writing an incremental update instead keeps every superseded object in the
-// file and must ask [ScanForTokens] as well, which this deliberately does not
-// do on its behalf.
+// unreferenced objects left out. That is the writer redaction requires. An
+// incremental update instead keeps every superseded object in the file, so this
+// verifies nothing about one.
 //
 // The two ways it fails are not the same, and they are treated differently:
 //

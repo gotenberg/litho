@@ -136,16 +136,15 @@ func TestRedactReport_RemovedTextFindsTheCopyThePageEditMissed(t *testing.T) {
 		t.Fatalf("nothing reported as removed, so there is nothing to scan for")
 	}
 
-	res, err := ScanForTokens(context.Background(), doc, report.RemovedText)
+	res, err := ScanOutputForTokens(context.Background(), alloc, doc, report.RemovedText)
 	if err != nil {
-		t.Fatalf("ScanForTokens: %v", err)
+		t.Fatalf("ScanOutputForTokens: %v", err)
 	}
 
 	// Object 7 is the fixture's /Info dictionary. Asserting on that object
-	// rather than on "some hit" is what makes this meaningful: the scan reads
-	// the parsed document, whose page stream still holds the original text
-	// because the rewrite is queued in the allocator, so a bare "found
-	// something" would pass even if /Info had been clean.
+	// rather than on "some hit" is what makes this meaningful: a bare "found
+	// something" would also pass on a hit in the page's content, and would
+	// pass even if /Info had been clean.
 	found := false
 	for _, hit := range res.Hits {
 		if hit.ObjectNum == 7 && hit.Token == "SECRET" && hit.Where == "string" {

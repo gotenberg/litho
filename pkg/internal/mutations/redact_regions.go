@@ -22,13 +22,12 @@ import (
 //
 // It reports what it removed. Clearing a page is not clearing a document: the
 // same text survives in the structure tree, annotation values, outlines and
-// metadata, so a caller hands [RedactReport.RemovedText] to a scan to find the
-// copies this did not touch. Which scan depends on how the output is written.
-// [ScanForTokens] reads the document as parsed, which answers for the bytes on
-// disk and for an incremental update, since that appends and leaves every
-// superseded object in the file. [ScanOutputForTokens] resolves through this
-// allocator and reaches outward from the roots a rewrite copies, so it answers
-// for the file [FullRewrite] would write.
+// metadata, so a caller hands [RedactReport.RemovedText] to
+// [ScanOutputForTokens] to find the copies this did not touch. That scan
+// resolves through this allocator and reaches outward from the roots a rewrite
+// copies, so it answers for the file [FullRewrite] would write. It answers for
+// no incremental update, which appends and leaves every superseded object, the
+// original content stream among them, in the file.
 //
 // Selection is geometric and visibility-independent: a glyph counts when the
 // box it paints meets a region, whatever its colour, its text rendering mode,
@@ -120,9 +119,9 @@ func RedactPageRegions(
 // RedactReport says what a redaction removed, per vector.
 //
 // It exists because removing content from a page does not remove the copies of
-// it held elsewhere in the file. [ScanForTokens] takes RemovedText and looks for
-// those copies, which is the only way to tell a cleared page from a cleared
-// document.
+// it held elsewhere in the file. [ScanOutputForTokens] takes RemovedText and
+// looks for those copies, which is the only way to tell a cleared page from a
+// cleared document.
 type RedactReport struct {
 	// RemovedText holds the text of each show-text operator that was removed,
 	// one string per operator, in the order the page drew them.
