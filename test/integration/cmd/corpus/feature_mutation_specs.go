@@ -22,7 +22,7 @@ type mutationSpec struct {
 	// needsSigner has Prepare build the run's [corpusSigner].
 	needsSigner bool
 	// needsTagState validates the input at PDF/UA-1 before the write, to
-	// learn whether it has a structure tree.
+	// learn whether it has a structure tree, and scans it for marked content.
 	needsTagState bool
 	// extraMetrics are the metrics beyond the six every spec emits.
 	extraMetrics []string
@@ -66,8 +66,12 @@ type mutationInput struct {
 	boxes      [][4]float64
 	signatures int
 	// untagged is set, when the spec asks, for an input with neither a
-	// structure tree nor /MarkInfo /Marked true, which AutoTag leaves alone.
+	// structure tree nor /MarkInfo /Marked true, the inputs AutoTag does not
+	// leave alone as tagged.
 	untagged bool
+	// markedContent is set, when the spec asks, for an input a stream of
+	// which holds a marked-content operator (see [scanMarkedContent]).
+	markedContent bool
 }
 
 // mutationOutputDoc is the reopened output.
@@ -89,6 +93,9 @@ type mutationPlan struct {
 	deleted bool
 	// password opens an encrypted output.
 	password string
+	// autoTag is the report [pdf.Writer.AutoTag] returned, which the write
+	// fills.
+	autoTag *pdf.AutoTagReport
 	// release frees what the mutation holds until the write, a second Reader.
 	release func()
 }
@@ -137,6 +144,7 @@ func readMutationInput(ctx context.Context, r *pdf.Reader, data []byte, spec mut
 			return nil, err
 		}
 		in.untagged = containsAll(rules, structTreeRules[familyUA1]) && containsAll(rules, markInfoRules[familyUA1])
+		in.markedContent = scanMarkedContent(data)
 	}
 	in.boxes = make([][4]float64, n)
 	for i := range n {
@@ -274,10 +282,20 @@ const mutationRedactReach = 1e6
 //   - litho xrefstm_2b: 1 ruleset_changed cell (PDF/A-1b, 6.7.3 tests 2, 4
 //     and 7 pass) under mutate-pages and mutate-encrypt: a full rewrite drops
 //     the direct /Info dictionary the source's cross-reference stream holds.
-//   - litho complex_2u, forbidden_mix, inlineimage_2b: 3 promise_broken PDFs
-//     under mutate-autotag. Their content is already marked, and AutoTag
-//     leaves such a document alone by design, which the public API cannot
-//     tell the check.
+//   - litho: mutate-autotag tags 59 PDFs and leaves 43 alone, each for the
+//     reason [pdf.AutoTagReport] names and [verifyAutoTag] finds on the input:
+//     26 already tagged, 13 with nothing to tag, 3 with marked content and 1
+//     with a page it cannot read.
+//   - litho complex_2u, forbidden_mix, inlineimage_2b: the 3 with marked
+//     content counted promise_broken until AutoTag reported its skips.
+//   - litho undecodable_2b: the page it cannot read is page 7, and litho
+//     reads no text from it either.
+//   - litho: [scanMarkedContent] finds marked content in 26 inputs, the 23
+//     already tagged that carry it and the 3 above, and in none of the 59
+//     AutoTag tags.
+//   - litho: planted in AutoTag, a defect that reports every untagged page
+//     as marked counts 73 promise_broken PDFs, and one that builds the tree
+//     without wiring it into the catalog counts 59.
 //
 //nolint:gochecknoglobals // static feature table
 var mutationSpecs = []mutationSpec{
@@ -315,8 +333,9 @@ var mutationSpecs = []mutationSpec{
 		needsTagState: true,
 		extraMetrics:  []string{metricPromiseBroken},
 		apply: func(_ context.Context, _ *mutationFeature, in *mutationInput, w *pdf.Writer) (mutationPlan, error) {
-			w.AutoTag()
-			return identityPlan(in), nil
+			plan := identityPlan(in)
+			plan.autoTag = w.AutoTag()
+			return plan, nil
 		},
 		verify: verifyAutoTag,
 		allowance: func(rc ruleContext) ruleAllowance {
@@ -435,36 +454,6 @@ func uaRules(ctx context.Context, r *pdf.Reader) ([]string, error) {
 		return nil, fmt.Errorf("validating at PDF/UA-1: %w", err)
 	}
 	return distinctRuleIDs(violations), nil
-}
-
-// verifyAutoTag checks the text is untouched, and that an input AutoTag has no
-// documented reason to leave alone comes out tagged. It leaves alone a tagged
-// or already-marked document and one with nothing to classify; of these the
-// check sees an existing tree or /MarkInfo, a page litho cannot read, and a
-// document with no text. Marked content it cannot see through the public API.
-func verifyAutoTag(ctx context.Context, f *mutationFeature, in *mutationInput, out *mutationOutputDoc, plan mutationPlan) []mutationFailure {
-	failures := verifyIdentityText(ctx, f, in, out, plan)
-	if !in.untagged {
-		return failures
-	}
-	hasText := false
-	for _, page := range in.text {
-		if page.err != "" {
-			return failures
-		}
-		hasText = hasText || page.text != ""
-	}
-	if !hasText {
-		return failures
-	}
-	rules, err := uaRules(ctx, out.reader)
-	if err != nil {
-		return append(failures, mutationFailure{Metric: metricPromiseBroken, Detail: err.Error()})
-	}
-	if containsAll(rules, structTreeRules[familyUA1]) {
-		failures = append(failures, mutationFailure{Metric: metricPromiseBroken, Detail: "an untagged document with text has no structure tree after AutoTag"})
-	}
-	return failures
 }
 
 // applyStamp draws [mutationStampText] on every page, inside its crop box.
