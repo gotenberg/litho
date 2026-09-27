@@ -158,6 +158,7 @@ one deliberately rather than diffing it against a fresh build.
 | `remreach_2b.pdf`      | PDF/A-2b     | Defects below a page's resources the repairs did not reach       |
 | `annotlang_ua1.pdf`    | PDF/UA-1     | Languages annotations name; symbolic TrueType encoding dicts     |
 | `xmppage_2b.pdf`       | PDF/A-2b     | Extension schema tests on the XMP packets pages carry            |
+| `parentreach_2b.pdf`   | PDF/A-2b     | Repairs of the resources a page inherits past its `/Parent`      |
 
 ### Must-not-fire controls
 
@@ -455,6 +456,7 @@ which are covered under [Known divergences](#known-divergences).
 | `outputintent_2b.pdf`  | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
 | `pagegroup_2b.pdf`     | 7    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 6    | 6    |
 | `paintop_2b.pdf`       | 7    | 4    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 9    | 7    |
+| `parentreach_2b.pdf`   | 7    | 3    | 7    | 3    | 4    | 8    | 4    | 5    | 7   | 7    | 8    | 7    | 7    |
 | `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
 | `puatext_ua2.pdf`      | 5    | 5    | 6    | 6    | 6    | 6    | 6    | 6    | 4   | 4    | 5    | 3    | 4    |
 | `remreach_2b.pdf`      | 8    | 4    | 6    | 3    | 4    | 7    | 4    | 5    | 7   | 6    | 6    | 10   | 8    |
@@ -2929,6 +2931,45 @@ every PDF/A level. The PDF/UA levels differ on instance counts only, the
 per-content-item untagged-content rules the corpus does not pin (see
 [Instance counts](#instance-counts-which-the-corpus-does-not-pin)).
 
+### `parentreach_2b.pdf`
+
+`resinherit_2b.pdf` has a page whose `/Parent` names the root while an
+intermediate node lists it, but that node lends a font, which no repair
+touches. Here four pages sit under four intermediate nodes, each `/Parent`
+naming the root, and each node lends its page a defect one repair owns:
+
+| Page | Its node lends                                         | Repair              |
+| ---- | ------------------------------------------------------ | ------------------- |
+| `Gs` | `GS0`, a graphics state with a transfer function       | graphics            |
+| `Dn` | `CSD`, a DeviceN of nine colorants and no `/Colorants` | devicen, aggressive |
+| `Fm` | `Fm0`, a form stating no `/Resources`, and `GS1`       | nested-resources    |
+| `Lg` | `P1`, a property list whose `/Lang` is no language tag | marked-content-lang |
+
+The root lends `GSR`, a conforming graphics state no page draws with, and a
+CMYK OutputIntent covers the DeviceCMYK alternate. Every page names what it
+draws only through its node, so each also answers `6.2.2/2` from PDF/A-2 on.
+
+| Rule at PDF/A-2b               | veraPDF | litho |
+| ------------------------------ | ------- | ----- |
+| `6.2.2/2` names only inherited | 5       | 5     |
+| `6.2.4.4/1` DeviceN colorants  | 3       | 3     |
+| `6.2.5/1` transfer function    | 1       | 1     |
+
+At PDF/A-1b the DeviceN answers `6.1.12/9`, past eight colorants, and the
+graphics state `6.2.8/1`. The two tools return the same rule set and the same
+counts in all thirteen cells.
+
+The repairs of the resources a page inherits climbed `/Parent`, so they
+repaired the root's dictionary, and page-resources pinned the root's
+`/Resources` on every page. The PDF/A-2 and PDF/A-3 outputs passed both tools
+with every name the pages draw undefined: the form no longer drew, and the fill
+named no colour space. PDF/A-4 caught it (`6.2.2/3`). At PDF/A-1b, where no
+repair pins `/Resources` on a page, the defects stayed where no repair reached
+them, `6.2.8/1` and `6.1.12/9` in both modes, and PDF/UA-1 and PDF/UA-2 kept
+the property list's `/Lang` (`7.2/29`, `8.4.4/2`). Resolved through the node
+listing each page, every output passes both tools but the default PDF/A-1b
+one, which keeps `6.1.12/9`, a trim only the aggressive remediation makes.
+
 ### `inlineimage_2b.pdf`
 
 Four remediation fixers rewrite a page's content stream from its parsed
@@ -4291,13 +4332,13 @@ and, at PDF/A-2b, where nothing else ran the metadata repair, all nine.
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
-the runner scores 106 x 8 = 848 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 106 x 13 = 1378 cells. litho
+the runner scores 107 x 8 = 856 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 107 x 13 = 1391 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1376 of the 1378 cells. The two
+fixtures exist to protect, and it holds in 1389 of the 1391 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -4306,7 +4347,7 @@ The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates,
 counts the cells whose sets of failed rules (clause and test) differ. Every
 fixture here is non-compliant on both sides, so a change that drops or invents
-a rule class leaves `matched` at 848 and moves only `ruleset_mismatch`. Both
+a rule class leaves `matched` at 856 and moves only `ruleset_mismatch`. Both
 exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1 and
 PDF/UA-2, so the metric reads 2 on this corpus, and the text scoreboard names
 the rules only one side reports. A third cell in the runner is a regression, or
