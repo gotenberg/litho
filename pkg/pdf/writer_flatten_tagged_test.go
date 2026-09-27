@@ -7,6 +7,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/models"
 )
 
@@ -228,5 +229,113 @@ func TestWriter_FlattenForm_EmptiedFormElementGoes(t *testing.T) {
 		if !slices.Contains(before, id) {
 			t.Errorf("flattening added %s (before %v, after %v)", id, before, after)
 		}
+	}
+}
+
+// TestWriter_FlattenForm_DropsUndisplayedTaggedWidgets pins that a hidden or
+// no-view widget leaves a tagged document with its form and its Form element,
+// while a displayed widget beside them is still baked and tagged.
+//
+// Per ISO 32000-1, Table 165 a Hidden widget is neither displayed nor printed,
+// and a NoView one is not displayed, so neither is baked into the page. Content
+// that shows only when printed needs an optional content group whose /AS applies
+// its print usage (ISO 32000-1, 8.11.4.4), which ISO 14289-1, 7.10 and ISO
+// 14289-2, 8.7 forbid, so the printed no-view widget goes as well. Its Form
+// element is left holding nothing and goes with it, since ISO 14289-1, 7.18.4
+// test 2 fails an element that holds no widget reference.
+func TestWriter_FlattenForm_DropsUndisplayedTaggedWidgets(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	const pageContent = "/P <</MCID 0>> BDC BT /F1 12 Tf 50 740 Td (form) Tj ET EMC\n"
+	in := buildPDF([]string{
+		// 1: catalog.
+		"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [5 0 R 6 0 R 7 0 R] >> " +
+			"/StructTreeRoot 8 0 R /MarkInfo << /Marked true >> /Lang (en-US) " +
+			"/ViewerPreferences << /DisplayDocTitle true >> >>",
+		// 2: pages.
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		// 3: page.
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R " +
+			"/Resources << /Font << /F1 13 0 R >> >> /Annots [5 0 R 6 0 R 7 0 R] " +
+			"/StructParents 0 /Tabs /S >>",
+		// 4: page content.
+		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(pageContent), pageContent),
+		// 5: a hidden text field, its Print flag set as well.
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (secret) /TU (Secret) /V (hidden) " +
+			"/Rect [50 700 150 720] /F 6 /AP << /N 12 0 R >> /StructParent 1 >>",
+		// 6: a text field shown only when printed.
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (stamp) /TU (Stamp) /V (printed) " +
+			"/Rect [50 660 150 680] /F 36 /AP << /N 12 0 R >> /StructParent 2 >>",
+		// 7: a displayed text field.
+		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (name) /TU (Name) /V (Ada) " +
+			"/Rect [50 620 150 640] /F 4 /AP << /N 12 0 R >> /StructParent 3 >>",
+		// 8: structure tree root.
+		"<< /Type /StructTreeRoot /K 9 0 R " +
+			"/ParentTree << /Nums [0 [10 0 R] 1 11 0 R 2 14 0 R 3 15 0 R] >> /ParentTreeNextKey 4 >>",
+		// 9: document element.
+		"<< /Type /StructElem /S /Document /P 8 0 R /K [10 0 R 11 0 R 14 0 R 15 0 R] >>",
+		// 10: paragraph.
+		"<< /Type /StructElem /S /P /P 9 0 R /Pg 3 0 R /K 0 >>",
+		// 11: the hidden widget's Form element.
+		"<< /Type /StructElem /S /Form /P 9 0 R /Pg 3 0 R /K << /Type /OBJR /Obj 5 0 R >> >>",
+		// 12: the shared appearance.
+		fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 100 20] /Length %d >>\nstream\n%s\nendstream",
+			len(flattenAppearance), flattenAppearance),
+		// 13: font.
+		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+		// 14: the printed-only widget's Form element.
+		"<< /Type /StructElem /S /Form /P 9 0 R /Pg 3 0 R /K [<< /Type /OBJR /Obj 6 0 R >>] >>",
+		// 15: the displayed widget's Form element.
+		"<< /Type /StructElem /S /Form /P 9 0 R /Pg 3 0 R /K << /Type /OBJR /Obj 7 0 R >> >>",
+	})
+	out := flattenBytes(ctx, t, in)
+
+	for _, profile := range []models.PDFUAProfile{models.PDFUA1, models.PDFUA2} {
+		before := uaRuleIDs(ctx, t, in, profile)
+		after := uaRuleIDs(ctx, t, out, profile)
+		for _, id := range after {
+			if !slices.Contains(before, id) {
+				t.Errorf("%s: flattening added %s (before %v, after %v)", profile, id, before, after)
+			}
+		}
+	}
+
+	r, err := Open(ctx, bytes.NewReader(out), int64(len(out)))
+	if err != nil {
+		t.Fatalf("Open flattened: %v", err)
+	}
+	defer r.Close()
+	if fields, err := r.HasFormFields(ctx); err != nil || fields {
+		t.Errorf("HasFormFields = %v, %v; want false after flattening", fields, err)
+	}
+
+	catalog, err := document.ResolveCatalog(ctx, r.doc)
+	if err != nil {
+		t.Fatalf("ResolveCatalog: %v", err)
+	}
+	root, err := document.ResolveDict(ctx, r.doc, catalog.Dict["StructTreeRoot"])
+	if err != nil || root == nil {
+		t.Fatalf("resolving the structure tree root: %v", err)
+	}
+	docElem, err := document.ResolveDict(ctx, r.doc, root["K"])
+	if err != nil || docElem == nil {
+		t.Fatalf("resolving the Document element: %v", err)
+	}
+	kids, err := document.ResolveArray(ctx, r.doc, docElem["K"])
+	if err != nil {
+		t.Fatalf("resolving the Document element's kids: %v", err)
+	}
+	forms := 0
+	for _, kid := range kids {
+		elem, err := document.ResolveDict(ctx, r.doc, kid)
+		if err != nil || elem == nil {
+			continue
+		}
+		if s, _ := document.ResolveName(ctx, r.doc, elem["S"]); s == "Form" {
+			forms++
+		}
+	}
+	if forms != 1 {
+		t.Errorf("the Document element holds %d Form elements, want 1: the displayed field's", forms)
 	}
 }

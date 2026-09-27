@@ -446,6 +446,11 @@ func setKidAppearanceStates(ctx context.Context, doc *document.Document, alloc *
 // FlattenForm bakes form field appearances into page content and removes
 // the AcroForm dictionary from the catalog.
 //
+// A widget the viewer never displays, one whose Hidden or NoView flag is set
+// (ISO 32000-1, Table 165), leaves with the form without being drawn, even when
+// it would print: content that shows only in print needs optional content that
+// PDF/A and PDF/UA forbid (see [annotationHiddenOrNoView]).
+//
 // The form, the page annotations and their appearances are read from alloc
 // first, as earlier stages staged them. A remediation that keeps one round
 // queues its repairs there, and reading the source's copies undid them: the
@@ -562,17 +567,11 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 			continue
 		}
 
-		// A widget the viewer does not display must not be painted into the
-		// page. Per ISO 32000-1, Table 165 the Hidden flag (bit 2) means the
-		// annotation is neither displayed nor printed, and NoView (bit 6) means
-		// it is not displayed but still printed. Baking either one in makes it
-		// visible for good, which for a hidden field puts a value on the page
-		// that nobody could see before.
-		//
-		// The annotation is kept rather than dropped. Hidden shows nothing
-		// either way, but NoView still prints, and dropping it would lose that.
+		// A widget the viewer does not display is neither painted into the
+		// page nor kept: it leaves with the form, drawing nothing (see
+		// [annotationHiddenOrNoView] for the clauses).
 		if annotationHiddenOrNoView(ctx, doc, annotDict) {
-			remainingAnnots = append(remainingAnnots, annotObj)
+			tags.drop(ctx, alloc, doc, annotObj, annotDict)
 			continue
 		}
 
@@ -698,7 +697,44 @@ const (
 )
 
 // annotationHiddenOrNoView reports whether the annotation's /F flags keep it
-// off the displayed page.
+// off the displayed page, in which case [FlattenForm] drops the widget with its
+// field rather than bake its appearance.
+//
+// ISO 32000-1, 12.5.3, Table 165 gives the flags their meaning. A Hidden
+// annotation is neither displayed nor printed. A NoView one is not displayed,
+// and is printed only when its Print flag is set too. Baking either appearance
+// into the page content makes it visible on screen for good, and keeping the
+// widget leaves a form field in a document whose interactive form (12.7) the
+// flatten removes. A Hidden widget, or a NoView one that does not print, shows
+// nothing on screen or on paper, so dropping it loses nothing.
+//
+// A NoView widget that prints is dropped too, and its printed appearance goes
+// with it. Page content that shows only in print is optional content whose
+// group states a print usage, and a usage dictionary sets a group's state only
+// when the configuration's /AS array applies it (ISO 32000-1, 8.11.4.3 and
+// 8.11.4.4). Without /AS the group keeps its /D state on screen and on paper
+// alike, so no conformant construct shows the content in print alone: ISO
+// 19005-1, 6.1.13 forbids optional content, and ISO 19005-2 and ISO 19005-3,
+// 6.9, ISO 14289-1, 7.10 and ISO 14289-2, 8.7 forbid /AS. veraPDF reports each
+// of those clauses on a flattened page holding the appearance in such a group,
+// and none of them once the widget is dropped. A conforming PDF/A document
+// loses nothing either way: ISO 19005-1, 6.5.3 and ISO 19005-2 to ISO 19005-4,
+// 6.3.2 forbid the Hidden and NoView flags on any annotation.
+//
+// ToggleNoView (bit 9) inverts NoView on events a flattened page no longer
+// receives, so it does not change the answer, and Invisible (bit 1) concerns
+// only an annotation type with no handler, which a widget is not.
+//
+// # Corpus evidence
+//
+//   - All corpora, 618 files that mention a form: 7 carry 15 Hidden and 7
+//     NoView widgets, 6 of those printed. Flattening kept every one of them
+//     and a form field for 5 of the files. It now keeps none of them, and a
+//     field only in pdfjs bug1847733.pdf, for 4 displayed widgets it keeps
+//     for other reasons.
+//   - All corpora, same files: none of the 7 outputs fails a PDF/A-2b, PDF/UA-1
+//     or PDF/UA-2 rule the flatten that kept the widgets passed, and every
+//     page keeps its text.
 func annotationHiddenOrNoView(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) bool {
 	fObj, ok := annotDict["F"]
 	if !ok {

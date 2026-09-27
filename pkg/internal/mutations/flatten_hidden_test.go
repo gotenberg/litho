@@ -12,29 +12,37 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// hiddenWidgetsPDF builds a page carrying three widgets that all store an
-// appearance: one hidden (/F 2), one no-view (/F 32) and one ordinary (/F 4).
-// Each appearance is a distinct form XObject so the content can be searched for
-// which of them were baked in.
+// hiddenWidgetsPDF builds a page carrying six widgets that all store an
+// appearance: hidden (/F 2), hidden and printed (/F 6), no-view (/F 32),
+// no-view and printed (/F 36), no-view, printed and toggled (/F 292), and an
+// ordinary printed one (/F 4). Each appearance is a distinct form XObject so
+// the content can be searched for which of them were baked in.
 func hiddenWidgetsPDF() []byte {
-	ap := func(num int, marker string) string {
+	ap := func(marker string) string {
 		body := fmt.Sprintf("%s 0 0 rg 0 0 10 10 re f", marker)
 		return fmt.Sprintf("<< /Type /XObject /Subtype /Form /BBox [0 0 10 10] /Length %d >>\nstream\n%s\nendstream",
 			len(body), body)
 	}
+	widget := func(name string, flags, x, apNum int) string {
+		return fmt.Sprintf("<< /Type /Annot /Subtype /Widget /FT /Tx /T (%s) /V (%s) /Rect [%d 10 %d 20] /F %d"+
+			" /AP << /N %d 0 R >> >>", name, name, x, x+10, flags, apNum)
+	}
 	objs := []string{
-		"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 5 0 R 6 0 R] >> >>",
+		"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 5 0 R 6 0 R 7 0 R 8 0 R 9 0 R] >> >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R 5 0 R 6 0 R] >>",
-		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (hidden) /Rect [10 10 20 20] /F 2" +
-			" /AP << /N 7 0 R >> >>",
-		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (noview) /Rect [30 10 40 20] /F 32" +
-			" /AP << /N 8 0 R >> >>",
-		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (shown) /Rect [50 10 60 20] /F 4" +
-			" /AP << /N 9 0 R >> >>",
-		ap(7, "0.1"),
-		ap(8, "0.2"),
-		ap(9, "0.3"),
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R 5 0 R 6 0 R 7 0 R 8 0 R 9 0 R] >>",
+		widget("hidden", 2, 10, 10),
+		widget("hiddenprint", 6, 30, 11),
+		widget("noview", 32, 50, 12),
+		widget("noviewprint", 36, 70, 13),
+		widget("toggleprint", 292, 90, 14),
+		widget("shown", 4, 110, 15),
+		ap("0.1"),
+		ap("0.2"),
+		ap("0.3"),
+		ap("0.4"),
+		ap("0.5"),
+		ap("0.6"),
 	}
 
 	var b bytes.Buffer
@@ -53,24 +61,26 @@ func hiddenWidgetsPDF() []byte {
 	return b.Bytes()
 }
 
-// TestFlattenFormLeavesUndisplayedWidgetsAlone pins that flattening does not
-// paint a widget the viewer never shows.
+// TestFlattenFormDropsUndisplayedWidgets pins that flattening neither paints
+// nor keeps a widget the viewer never displays.
 //
 // Per ISO 32000-1, Table 165 the Hidden flag (bit 2) means the annotation is
 // neither displayed nor printed, and NoView (bit 6) means it is not displayed
-// but still printed. Baking either appearance into the page makes it visible for
-// good, which for a hidden field puts a value on the page nobody could see
-// before.
-//
-// Both are kept as annotations rather than dropped: hidden shows nothing either
-// way, but no-view still prints, and dropping it would lose that.
+// but still printed when the Print flag (bit 3) is set. Baking either
+// appearance into the page makes it visible for good. Keeping the widget left a
+// form field in a document the flatten promised had none. Content that shows
+// only when printed needs an optional content group whose /AS applies its
+// print usage (ISO 32000-1, 8.11.4.4), which ISO 19005-2, 6.9, ISO 14289-1,
+// 7.10 and ISO 14289-2, 8.7 forbid, so a printed no-view widget goes too.
 //
 // # Corpus evidence
 //
 //   - pdfjs annotation_hidden_noview.pdf: flattening drew both its hidden and
 //     its no-view text field, where poppler renders neither in the original.
-//     After the fix the flattened render is pixel-identical to it.
-func TestFlattenFormLeavesUndisplayedWidgetsAlone(t *testing.T) {
+//   - pdfjs annotation_hidden_noview.pdf, bug1737260.pdf, bug1847733.pdf,
+//     widget_hidden_print.pdf and verapdf PDF_UA-1__7.18.1-t03-pass-c.pdf:
+//     kept a form field after flattening, for a hidden or no-view widget.
+func TestFlattenFormDropsUndisplayedWidgets(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -89,26 +99,19 @@ func TestFlattenFormLeavesUndisplayedWidgetsAlone(t *testing.T) {
 		t.Fatal("the page was not rewritten, so nothing was flattened at all")
 	}
 
-	annots, err := document.ResolveArray(ctx, doc, pageDict["Annots"])
-	if err != nil {
-		t.Fatalf("resolving /Annots: %v", err)
-	}
-	kept := map[string]bool{}
-	for _, a := range annots {
-		d, err := document.ResolveDict(ctx, doc, a)
-		if err != nil || d == nil {
-			continue
+	if annotsObj, has := pageDict["Annots"]; has {
+		annots, err := document.ResolveArray(ctx, doc, annotsObj)
+		if err != nil {
+			t.Fatalf("resolving /Annots: %v", err)
 		}
-		name, _ := document.ResolveString(ctx, doc, d["T"])
-		kept[document.DecodePdfString(name)] = true
-	}
-	for _, want := range []string{"hidden", "noview"} {
-		if !kept[want] {
-			t.Errorf("the %q widget was removed; it is not displayed, so its appearance was baked in", want)
+		for _, a := range annots {
+			d, err := document.ResolveDict(ctx, doc, a)
+			if err != nil || d == nil {
+				continue
+			}
+			name, _ := document.ResolveString(ctx, doc, d["T"])
+			t.Errorf("the %q widget survived the flattening", document.DecodePdfString(name))
 		}
-	}
-	if kept["shown"] {
-		t.Error("the displayed widget was not flattened")
 	}
 
 	// The page content must invoke exactly one appearance: the shown widget's.
@@ -151,5 +154,8 @@ func TestFlattenFormLeavesUndisplayedWidgetsAlone(t *testing.T) {
 	}
 	if n := strings.Count(string(body), " Do"); n != 1 {
 		t.Errorf("content invokes %d appearances, want 1 (only the displayed widget): %q", n, body)
+	}
+	if !strings.Contains(string(body), "/FlatAP") {
+		t.Errorf("the displayed widget was not baked in: %q", body)
 	}
 }

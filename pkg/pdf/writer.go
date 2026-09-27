@@ -1404,11 +1404,17 @@ func (w *Writer) SetFormField(name, value string) {
 // queued and applied when [Writer.WriteTo] is called.
 //
 // A widget with nothing to draw, no appearance and no value, goes with the
-// form. On a tagged document each baked appearance is tagged under the
-// structure element that enclosed its widget, a Form element taking the
-// PrintField role of its field (ISO 32000-1, Table 348), or marked as an
-// artifact when no element did, so the page content stays tagged or artifact
-// as ISO 14289-1, 7.1 requires.
+// form. So does a widget the viewer never displays, one whose Hidden or NoView
+// flag is set (ISO 32000-1, Table 165), without being drawn: a NoView widget
+// that prints loses its printed appearance, because content that shows only in
+// print needs optional content usage that ISO 19005-1 to ISO 19005-3 and both
+// parts of ISO 14289 forbid.
+//
+// On a tagged document each baked appearance is tagged under the structure
+// element that enclosed its widget, a Form element taking the PrintField role
+// of its field (ISO 32000-1, Table 348), or marked as an artifact when no
+// element did, so the page content stays tagged or artifact as ISO 14289-1,
+// 7.1 requires.
 func (w *Writer) FlattenForm() {
 	if w.refuseAfterRemediation("FlattenForm") != nil {
 		return
