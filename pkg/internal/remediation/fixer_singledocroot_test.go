@@ -2,6 +2,7 @@ package remediation
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
@@ -67,6 +68,59 @@ func TestFixSingleDocRoot_WrapsMultipleChildren(t *testing.T) {
 		if p, _ := child["P"].(ast.PdfIndirectRef); p.ObjectNum != docRef.ObjectNum {
 			t.Errorf("child %d /P = obj %d, want the Document (%d)", objNum, p.ObjectNum, docRef.ObjectNum)
 		}
+	}
+	// And the Document holds them, in order.
+	wantKids(t, docElem, 5, 6)
+}
+
+// wantKids fails unless elem's /K lists exactly the objects nums, in order.
+func wantKids(t *testing.T, elem ast.PdfDict, nums ...int) {
+	t.Helper()
+	kids, _ := elem["K"].(ast.PdfArray)
+	got := make([]int, 0, len(kids))
+	for _, kid := range kids {
+		ref, _ := kid.(ast.PdfIndirectRef)
+		got = append(got, ref.ObjectNum)
+	}
+	if !slices.Equal(got, nums) {
+		t.Errorf("%v /K lists objects %v, want %v", elem["S"], got, nums)
+	}
+}
+
+// TestFixSingleDocRoot_KeepsTheTreeReachable pins that the Document names the
+// elements it wraps as its kids, and a container it interposes names the
+// element it holds (ISO 32000-1, 14.7.2, Table 323: /K lists an element's
+// children). Listing the Document itself in place of each kid left every
+// element of the tree unreachable from its root, and the walks that read the
+// tree from the root, the structure destination one among them, found no
+// element at all.
+func TestFixSingleDocRoot_KeepsTheTreeReachable(t *testing.T) {
+	t.Parallel()
+	pdf := buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R /StructTreeRoot 4 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
+		"<< /Type /StructTreeRoot /K [5 0 R 6 0 R] /Namespaces [7 0 R] >>",
+		"<< /Type /StructElem /S /H1 /P 4 0 R >>",
+		"<< /Type /StructElem /S /LI /P 4 0 R >>",
+		"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
+	)
+	doc, alloc := newTestDoc(t, pdf)
+	if _, err := fixSingleDocRoot(context.Background(), alloc, doc, Options{}, nil, "PDF/UA-2"); err != nil {
+		t.Fatalf("fixSingleDocRoot: %v", err)
+	}
+
+	docRef, _ := pendingDict(t, alloc, 4)["K"].(ast.PdfIndirectRef)
+	docElem := pendingDict(t, alloc, docRef.ObjectNum)
+	kids, _ := docElem["K"].(ast.PdfArray)
+	if len(kids) != 2 {
+		t.Fatalf("the Document holds %v, want the H1 and the LI's container", kids)
+	}
+	container, _ := kids[1].(ast.PdfIndirectRef)
+	wantKids(t, docElem, 5, container.ObjectNum)
+	wantKids(t, pendingDict(t, alloc, container.ObjectNum), 6)
+	if p, _ := pendingDict(t, alloc, 6)["P"].(ast.PdfIndirectRef); p.ObjectNum != container.ObjectNum {
+		t.Errorf("the LI's /P = obj %d, want its container (%d)", p.ObjectNum, container.ObjectNum)
 	}
 }
 

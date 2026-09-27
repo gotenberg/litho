@@ -40,6 +40,10 @@ func matchSingleDocRoot(v compliance.Violation) bool {
 //
 //   - All corpora: hanging the old roots straight off the new Document made 12
 //     files fail after remediation, a stray LI becoming "Table 5. Document-LI".
+//   - All corpora: listing the Document in place of each element it wrapped
+//     left the structure tree of 311 of 1126 tagged files remediated to
+//     PDF/UA-2 unreachable from its root, 35808 kid slots, and neither litho nor
+//     veraPDF reported it.
 func fixSingleDocRoot(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -96,7 +100,10 @@ func fixSingleDocRoot(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 			continue
 		}
 		role, _ := document.ResolveName(ctx, doc, elem["S"])
-		parentRef := docRef
+		// The Document lists the element as its kid, or the container that
+		// holds it: ISO 32000-1, 14.7.2, Table 323 has /K list an element's
+		// children, and each child's /P name the element listing it.
+		parentRef, kid := docRef, ref
 		container, needed := compliance.ISO32005Interposer("Document", string(role))
 		if needed {
 			// The container owns the element; the Document owns the container.
@@ -107,9 +114,10 @@ func fixSingleDocRoot(ctx context.Context, alloc *writer.ObjAllocator, doc *docu
 				"K":    ast.PdfArray{ref},
 				"NS":   nsRef,
 			})
+			kid = parentRef
 			interposed++
 		}
-		kidArray = append(kidArray, parentRef)
+		kidArray = append(kidArray, kid)
 
 		patched := make(ast.PdfDict, len(elem)+1)
 		maps.Copy(patched, elem)
