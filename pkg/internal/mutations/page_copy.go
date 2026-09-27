@@ -81,7 +81,7 @@ func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer
 			return ast.PdfIndirectRef{}, err
 		}
 	}
-	if crop, ok := cropBoxToWrite(ctx, doc, page); ok {
+	if crop, ok := cropBoxToWrite(page); ok {
 		if err := materialize("CropBox", crop); err != nil {
 			return ast.PdfIndirectRef{}, err
 		}
@@ -154,21 +154,16 @@ func pageCopyOverrides(pages []*document.Page) map[int]ast.PdfObject {
 //
 // Only a crop box the page states or inherits crops it. [document.Page.CropBox]
 // is the EFFECTIVE region, and falls back to the /MediaBox (ISO 32000-1, Table
-// 30) when no node declares a crop box or the one declared is not the four
-// entries of a rectangle (7.9.5). Materialising it unconditionally wrote a
+// 30) when no node declares a crop box or the one declared is no box a viewer
+// uses (see [document.UsableBox]). Materialising it unconditionally wrote a
 // redundant entry onto every copied page, and, for a /MediaBox that is no
 // rectangle, a /CropBox that is none either: [0 0 612 792 7 0 R] was copied
 // whole, the content stream it runs on into included. A crop box enclosing the
-// region of a /MediaBox that is a rectangle is not written either. The page's
-// /MediaBox is written on its own, and a rewrite completes one that is no
-// rectangle (see [completeRewrittenPageTree]), so a crop box is written
-// whatever that box holds.
-//
-// The box is written as a rectangle of four numbers, read as ISO 19005-2,
-// 6.1.13 reads it (see [compliance.PageBoundaryRect]): an entry that is no
-// number, or a reference that names none, counts 0. One enclosing no area
-// crops nothing a viewer shows, as [document.Page] reads such a box, and is
-// not written.
+// region of a /MediaBox a viewer uses is not written either. The page's
+// /MediaBox is written on its own, and a rewrite writes one a viewer does not
+// use as the US Letter page it draws in its place (see
+// [completeRewrittenPageTree]), which the effective crop box is already
+// reduced to.
 //
 // # Corpus evidence
 //
@@ -177,18 +172,14 @@ func pageCopyOverrides(pages []*document.Page) map[int]ast.PdfObject {
 //     page's /CropBox.
 //   - pdfjs issue13783.pdf, poppler-937-0-fuzzed.pdf: the same, for a
 //     /MediaBox a damaged page object runs on into the entries after it.
-func cropBoxToWrite(ctx context.Context, doc *document.Document, page *document.Page) (ast.PdfArray, bool) {
-	if len(page.DeclaredCropBox) != 4 || len(page.CropBox) != 4 {
+func cropBoxToWrite(page *document.Page) (ast.PdfArray, bool) {
+	if !document.UsableBox(page.DeclaredCropBox) || !document.UsableBox(page.CropBox) {
 		return nil, false
 	}
-	crop := pageRectangle(ctx, doc, page.CropBox)
-	if !enclosesArea(crop) {
+	if document.UsableBox(page.MediaBox) && sameRegion(page.CropBox, page.MediaBox) {
 		return nil, false
 	}
-	if isNumberRectangle(page.MediaBox) && sameRegion(crop, page.MediaBox) {
-		return nil, false
-	}
-	return crop, true
+	return page.CropBox, true
 }
 
 // pageRectangle returns box, a page boundary, as a rectangle of four numbers:
@@ -225,12 +216,6 @@ func rectangleCorners(box ast.PdfArray) (x0, y0, x1, y1 float64) {
 	return min(a, b), min(c, d), max(a, b), max(c, d)
 }
 
-// enclosesArea reports whether a rectangle of four numbers encloses an area.
-func enclosesArea(box ast.PdfArray) bool {
-	x0, y0, x1, y1 := rectangleCorners(box)
-	return x1 > x0 && y1 > y0
-}
-
 // sameRegion reports whether two rectangles of four numbers denote the same
 // region.
 func sameRegion(a, b ast.PdfArray) bool {
@@ -258,7 +243,7 @@ func materializeInheritedAttrs(ctx context.Context, alloc *writer.ObjAllocator, 
 	if page.MediaBox != nil && !statesEntry(dict, "MediaBox") {
 		dict["MediaBox"] = page.MediaBox
 	}
-	if crop, ok := cropBoxToWrite(ctx, doc, page); ok && !statesEntry(dict, "CropBox") {
+	if crop, ok := cropBoxToWrite(page); ok && !statesEntry(dict, "CropBox") {
 		dict["CropBox"] = crop
 	}
 	if page.Rotate != 0 && !statesEntry(dict, "Rotate") {

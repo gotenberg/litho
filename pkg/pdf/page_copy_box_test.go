@@ -66,7 +66,9 @@ func isRectangle(box ast.PdfArray) bool {
 // rectangle never matched, so it was written whole as the /CropBox,
 // [0 0 612 792 5 0 R] with a copy of the content stream it runs on into. Page
 // 1 declares no crop box, and gets none. Page 2 inherits [0 /Foo 300 400],
-// written as the rectangle ISO 19005-2, 6.1.13 reads it as, [0 0 300 400].
+// which pdf.js and poppler read as no box, and gets none either: each page
+// shows US Letter, as a viewer shows the source, since neither /MediaBox is a
+// box a viewer uses (see [document.UsableBox]).
 func TestPageCopies_WriteRectangleBoxes(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -92,11 +94,16 @@ func TestPageCopies_WriteRectangleBoxes(t *testing.T) {
 		first int
 		crops [][]float64
 	}{
-		{"split", split.Bytes(), 0, [][]float64{nil, {0, 0, 300, 400}}},
-		{"merge", merged.Bytes(), 1, [][]float64{nil, {0, 0, 300, 400}}},
-		{"insert", inserted, 1, [][]float64{nil, {0, 0, 300, 400}}},
-		{"delete", moved, 0, [][]float64{{0, 0, 300, 400}}},
+		{"split", split.Bytes(), 0, [][]float64{nil, nil}},
+		{"merge", merged.Bytes(), 1, [][]float64{nil, nil}},
+		{"insert", inserted, 1, [][]float64{nil, nil}},
+		{"delete", moved, 0, [][]float64{nil}},
 	} {
+		for i, size := range pageSizes(t, tc.data)[tc.first:] {
+			if size != [2]float64{612, 792} {
+				t.Errorf("%s: page %d measures %v, want US Letter, as the source page measures", tc.name, tc.first+i+1, size)
+			}
+		}
 		media, crop := pageBoxes(t, tc.data)
 		for i, box := range media {
 			if !isRectangle(box) {

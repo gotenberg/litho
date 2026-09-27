@@ -6,27 +6,10 @@ import (
 	"maps"
 	"slices"
 
-	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
-
-// letterMediaBox returns the media box a page is written with when neither it
-// nor any ancestor states one the reader can use: US Letter, 612 by 792 points.
-//
-// ISO 32000-1, 7.7.3.3, Table 30 makes /MediaBox a required, inheritable page
-// entry and gives it no default, so a page no node gives one describes no page
-// size at all, and one whose box encloses no area describes none either. Letter
-// is the size every mainstream reader assumes for such a page: pdf.js falls
-// back to its LETTER_SIZE_MEDIABOX, poppler's PageAttrs start from 612 by 792,
-// and qpdf reports "MediaBox is undefined; setting to letter / ANSI A".
-// pdf.Reader.Page reports the same size for the page, so the written box says
-// what litho already read. A fresh array each call, since the output holds it
-// as a page's own entry.
-func letterMediaBox() ast.PdfArray {
-	return ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(612), ast.PdfInt(792)}
-}
 
 // pageBoundaries are the page boundaries of ISO 32000-1, 14.11.2, each a
 // rectangle (7.9.5) a page tree node or a page states under the name Table 30
@@ -62,13 +45,13 @@ type inheritedEntries struct {
 	// (see traversePageTree).
 	mediaBox ast.PdfArray
 	// sourceCrop reports whether a page stating no /CropBox inherits, in the
-	// source, one the reader can use (see [pageTreeRepair.readBoundary]),
-	// rather than the default, its media box.
+	// source, one a viewer uses (see [pageTreeRepair.usable]), rather than
+	// the default, its media box.
 	sourceCrop bool
-	// cropBox is the /CropBox the reader can use that a page stating none
-	// inherits in the output, and nil when it takes the default. It differs
-	// from the source's where the output drops a crop box the reader could not
-	// use from a node, and the one of a node above it shows through.
+	// cropBox is the /CropBox a viewer uses that a page stating none inherits
+	// in the output, and nil when it takes the default. It differs from the
+	// source's where the output drops a crop box a viewer did not use from a
+	// node, and the one of a node above it shows through.
 	cropBox ast.PdfArray
 	// resources is the nearest ancestor's /Resources entry, as written, and
 	// nil when none states one (see [document.Page]).
@@ -95,7 +78,7 @@ type walkedKid struct {
 // the /Type its role in the walk gives it, every node the /Kids the walk kept
 // and the /Count of the pages under it, every kid but the root the /Parent
 // listing it, every page a /MediaBox and /Resources it states or inherits, and
-// every page boundary the rectangle the reader reads.
+// every page boundary as a viewer reads it.
 //
 //   - ISO 32000-1, 7.7.2, Table 28 makes the catalog's /Type /Catalog and
 //     /Pages required, /Pages an indirect reference to the page tree root. A
@@ -111,14 +94,14 @@ type walkedKid struct {
 //   - 7.7.3.3, Table 30 makes a page's /Type /Page, /Parent, /Resources and
 //     /MediaBox required, the last two inheritable (7.7.3.4), and each page
 //     boundary a rectangle (7.9.5). Every boundary a node or a page states is
-//     written as the rectangle the reader reads it as (see
-//     [pageTreeRepair.repairBoundary]). A page no node gives a /MediaBox the
-//     reader can use gets [letterMediaBox], and a crop, bleed, trim or art box
-//     the reader cannot use is dropped for the default Table 30 gives it. One
-//     no node gives /Resources, or whose /Resources is no dictionary, gets an
-//     empty dictionary, which is what Table 30 writes for a page needing no
-//     resources, as the flat page tree of a split already writes it (see
-//     [flatResources]).
+//     written as a viewer reads it, so the page looks as it did (see
+//     [pageTreeRepair.repairBoundary]). A page no node gives a /MediaBox a
+//     viewer uses gets [document.LetterMediaBox], and a crop, bleed, trim or
+//     art box a viewer does not use is dropped for the default Table 30 gives
+//     it. One no node gives /Resources, or whose /Resources is no dictionary,
+//     gets an empty dictionary, which is what Table 30 writes for a page
+//     needing no resources, as the flat page tree of a split already writes it
+//     (see [flatResources]).
 //
 // # Corpus evidence
 //
@@ -140,19 +123,21 @@ type walkedKid struct {
 //     does not write the object, but the 5 of pdfjs poppler-937-0-fuzzed.pdf's
 //     split, merge and insertion, which write a stream inside a dictionary.
 //     veraPDF parses 244 of the outputs, 206 before.
-//   - All corpora: 7 page boundaries in 5 files are not four numbers or enclose
-//     no area. A full rewrite of every file changes the boxes of 3: litho
-//     annotshare_ua1.pdf loses a /CropBox of three numbers and an /ArtBox
-//     ending in null, pdfjs boundingBox_invalid.pdf gets US Letter for a
+//   - All corpora: 7 files state a page boundary no viewer uses, and a full
+//     rewrite writes each as a viewer reads it. litho annotshare_ua1.pdf loses
+//     a /CropBox of three numbers and an /ArtBox ending in null, litho
+//     pageboxes_2b.pdf gets US Letter for its media boxes and loses a /TrimBox
+//     and a /BleedBox, pdfjs boundingBox_invalid.pdf gets US Letter for a
 //     /MediaBox of [0 0 0 0] and loses a /CropBox of [0 0 0 0], and pdfjs
 //     issue17190.pdf gets US Letter for its root's [0 0 0 0]. litho
-//     directstream_2b.pdf's [0 0 612 792 5 0 R] and pdfjs issue13783.pdf's
-//     damaged box already came out as they read.
+//     directstream_2b.pdf, pdfjs issue13783.pdf and poppler-937-0-fuzzed.pdf
+//     get US Letter for a /MediaBox that runs on into the entries after it.
+//     Every page measures in pdf.Reader.Page, and shows in the pinned pdf.js,
+//     what its source did.
 //   - All corpora: over the full rewrite, split, merge, insertion, page move
-//     and PDF/A-1b remediation of those 5 files and pdfjs
-//     poppler-937-0-fuzzed.pdf, veraPDF fails ISO 19005-2, 6.1.13 t11 on 12
-//     outputs, 0 now, and reports nothing else new at PDF/A-2b. qpdf reports
-//     what it did.
+//     and PDF/A-1b remediation of those files but litho pageboxes_2b.pdf,
+//     veraPDF fails ISO 19005-2, 6.1.13 t11 on 12 outputs, 0 now, and reports
+//     nothing else new at PDF/A-2b. qpdf reports what it did.
 //   - litho annotshare_ua1.pdf: page 3 lists a Link above a crop box of no
 //     height, which ISO 14289-1, 7.18 exempts. Its outputs show the whole
 //     page, and litho and veraPDF both count one more check of 7.18.1 t2 and
@@ -554,8 +539,8 @@ func (s *pageTreeRepair) nodeBoundaries(ctx context.Context, dict ast.PdfDict, o
 
 // pageMediaBox completes the /MediaBox of dict, a page, into out, and returns
 // the media box the page has in the output: its own, the one it inherits when
-// the reader can use it (see [pageTreeRepair.readBoundary]), or
-// [letterMediaBox] when neither the page nor any node gives it one.
+// a viewer uses it (see [pageTreeRepair.usable]), or
+// [document.LetterMediaBox] when neither the page nor any node gives it one.
 func (s *pageTreeRepair) pageMediaBox(ctx context.Context, dict ast.PdfDict, out *cowDict, inherited inheritedEntries) (ast.PdfArray, error) {
 	box, stated, err := s.boundary(ctx, dict, "MediaBox")
 	if err != nil {
@@ -570,7 +555,7 @@ func (s *pageTreeRepair) pageMediaBox(ctx context.Context, dict ast.PdfDict, out
 		box = inherited.mediaBox
 	}
 	if box == nil {
-		letter := letterMediaBox()
+		letter := document.LetterMediaBox()
 		out.set("MediaBox", letter)
 		return letter, nil
 	}
@@ -581,12 +566,12 @@ func (s *pageTreeRepair) pageMediaBox(ctx context.Context, dict ast.PdfDict, out
 // pageCropBox completes the /CropBox of dict, a page whose media box in the
 // output is media, into out.
 //
-// The reader reads a crop box it cannot use as the default, the media box
-// (see [pageTreeRepair.readBoundary]), and the output drops it. Where a node
-// above states a crop box the reader can use, that one would show through in
-// its place, so the page states its media box as its crop box instead, and
-// shows the region it showed. So does a page inheriting a crop box the output
-// drops from a node.
+// A viewer reads a crop box it does not use as the default, the media box
+// (see [pageTreeRepair.usable]), and the output drops it. Where a node above
+// states a crop box a viewer uses, that one would show through in its place,
+// so the page states its media box as its crop box instead, and shows the
+// region it showed. So does a page inheriting a crop box the output drops from
+// a node.
 func (s *pageTreeRepair) pageCropBox(ctx context.Context, dict ast.PdfDict, out *cowDict, inherited inheritedEntries, media ast.PdfArray) error {
 	box, stated, err := s.boundary(ctx, dict, "CropBox")
 	if err != nil {
@@ -633,30 +618,28 @@ func (s *pageTreeRepair) boundary(ctx context.Context, dict ast.PdfDict, key ast
 
 // repairBoundary completes into out box, the page boundary a node or a page
 // states under key, and returns the box out holds under key, nil when it holds
-// none, and whether the reader takes box as a boundary (see
-// [pageTreeRepair.readBoundary]).
+// none, and whether a viewer uses box (see [pageTreeRepair.usable]).
 //
 // ISO 32000-1, 7.7.3.3, Table 30 makes each page boundary a rectangle, four
-// numbers (7.9.5). A box the reader takes is written as the rectangle it reads,
-// where it is not that rectangle as written. A media box the reader cannot
-// take is replaced by [letterMediaBox], the size pdf.Reader.Page reports for
-// the page, since Table 30 gives the media box no default. Any other box it
-// cannot take is dropped: Table 30 defaults the crop box to the media box, and
-// the bleed, trim and art boxes to the crop box, which is what the reader
-// reads in its place.
+// numbers (7.9.5). A rewrite writes each box as a viewer reads it, so no
+// rewrite changes how a page looks: a box a viewer uses is kept as written. A
+// media box it does not use is replaced by [document.LetterMediaBox], the page
+// a viewer draws in its place, since Table 30 gives the media box no default.
+// Any other box it does not use is dropped: Table 30 defaults the crop box to
+// the media box, and the bleed, trim and art boxes to the crop box, which is
+// what a viewer reads in its place. Compliance measures such a box as its
+// validator does (ISO 19005-2, 6.1.13), and the box a rewrite writes is one
+// it measures as the page shows.
 func (s *pageTreeRepair) repairBoundary(ctx context.Context, key ast.PdfName, box ast.PdfArray, out *cowDict) (ast.PdfArray, bool, error) {
-	rect, usable, exact, err := s.readBoundary(ctx, box)
+	usable, err := s.usable(ctx, box)
 	if err != nil {
 		return nil, false, err
 	}
 	switch {
-	case usable && exact:
-		return box, true, nil
 	case usable:
-		out.set(key, rect)
-		return rect, true, nil
+		return box, true, nil
 	case key == "MediaBox":
-		letter := letterMediaBox()
+		letter := document.LetterMediaBox()
 		out.set(key, letter)
 		return letter, false, nil
 	default:
@@ -665,50 +648,41 @@ func (s *pageTreeRepair) repairBoundary(ctx context.Context, key ast.PdfName, bo
 	}
 }
 
-// readBoundary reads box, a page boundary a node or a page states, as litho
-// reads it: rect is the rectangle of its first four entries, a missing one or
-// one that is no number read as 0, the reading compliance, remediation and the
-// page copies share (see [compliance.PageBoundaryRect]). usable reports that
-// rect encloses an area, and exact that box is rect as written: four numbers,
-// each of which may be written as a reference (ISO 32000-1, 7.3.10).
-//
-// It is how pdf.Reader.Page reads a box of four entries or more: [document.Page]
-// reads a crop, bleed, trim or art box enclosing no area as absent, with the
-// default ISO 32000-1, Table 30 gives it (see clampToMediaBox), and
-// pdf.Reader.Page measures the media box on its first four entries, one
-// enclosing no area as US Letter. [document.Page] reads a crop, bleed, trim or
-// art box of more than four entries as absent too, as pdf.js and poppler do,
-// and pdf.Reader.Page a media box of fewer than four as US Letter. Such a box
-// that encloses an area is written as the rectangle compliance measured.
+// usable reports whether a viewer uses box, a page boundary a node or a page
+// states, as pdf.Reader.Page reads it (see [document.UsableBox]): four
+// numbers, each of which may be written as a reference (ISO 32000-1, 7.3.10),
+// enclosing an area. pdf.js and poppler read any other array as no box, and
+// draw the page on the box's default.
 //
 // # Corpus evidence
 //
-//   - All corpora: no file holds a crop, bleed, trim or art box of more than
-//     four entries, or a media box of fewer, that encloses an area, where the
-//     two readings part.
-func (s *pageTreeRepair) readBoundary(ctx context.Context, box ast.PdfArray) (rect ast.PdfArray, usable, exact bool, err error) {
+//   - litho pageboxes_2b.pdf: a /MediaBox of five entries on a page and on a
+//     node, a /BleedBox of five and a /TrimBox holding a name, each of which
+//     a rewrite wrote as the rectangle of its first four entries. The pinned
+//     pdf.js showed pages 1 and 2 of the output at 600 by 800 and 400 by 500,
+//     where it shows the source's at US Letter.
+func (s *pageTreeRepair) usable(ctx context.Context, box ast.PdfArray) (bool, error) {
+	if len(box) != 4 {
+		return false, nil
+	}
 	// The corners are read with no document to resolve against: the
 	// references among them are resolved here, alloc first, as the output
 	// holds them.
 	resolved, cloned := box, false
-	for i := range min(len(box), 4) {
-		if _, isRef := box[i].(ast.PdfIndirectRef); !isRef {
+	for i, entry := range box {
+		if _, isRef := entry.(ast.PdfIndirectRef); !isRef {
 			continue
 		}
-		obj, err := s.resolve(ctx, box[i])
+		obj, err := s.resolve(ctx, entry)
 		if err != nil {
-			return nil, false, false, err
-		}
-		if _, isRef := obj.(ast.PdfIndirectRef); isRef {
-			obj = ast.PdfNull{}
+			return false, err
 		}
 		if !cloned {
 			resolved, cloned = slices.Clone(box), true
 		}
 		resolved[i] = obj
 	}
-	rect, differs := compliance.PageBoundaryRect(ctx, nil, resolved)
-	return rect, enclosesArea(rect), !differs, nil
+	return document.UsableBox(resolved), nil
 }
 
 // name resolves obj to a name, empty when it is none.

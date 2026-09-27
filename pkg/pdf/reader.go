@@ -1090,14 +1090,6 @@ type HeadingScorer interface {
 // HeadingScript values are immutable and safe for concurrent use.
 type HeadingScript string
 
-// US Letter in PDF points, the size readers substitute for a page whose media
-// box is missing or encloses no area. Not spec-mandated: ISO 32000-1, Table 30
-// requires /MediaBox, so a file without a usable one is already invalid.
-const (
-	defaultPageWidth  = 612.0
-	defaultPageHeight = 792.0
-)
-
 // Heading-script constants mirror the engine's detected script set.
 const (
 	HeadingScriptLatin      HeadingScript = "Latin"
@@ -1607,17 +1599,24 @@ func (r *Reader) DSSInfo(ctx context.Context) (_ *models.DSSInfo, err error) {
 
 // Page returns the geometry and metadata for the given 1-based page number.
 // Width and Height are effective dimensions in PDF points, derived from the
-// CropBox (the visible area) and accounting for /Rotate and /UserUnit. A page
-// whose box is missing or encloses no area reports the US Letter size that
-// mainstream readers substitute, 612 x 792 before /UserUnit and /Rotate apply.
+// CropBox (the visible area) and accounting for /Rotate and /UserUnit. They
+// are the size a viewer shows the page at: a box that is not four numbers
+// enclosing an area is no box to pdf.js or poppler, and a page whose crop box
+// and media box are missing or no box reports the US Letter size they
+// substitute, 612 x 792 before /UserUnit and /Rotate apply. Every rewrite
+// writes a page's boxes as Page reads them, so no rewrite changes the size
+// Page reports.
 //
-// The box fields never gain that fallback. MediaBox reports the media box the
-// file declares. CropBox, BleedBox, TrimBox and ArtBox report the effective
-// boundaries: an absent box takes its default from ISO 32000-1, Table 30, and
-// a box extending beyond the media box is reduced to its intersection with it
-// (ISO 32000-1, 14.11.2.1). DeclaredCropBox, DeclaredBleedBox,
-// DeclaredTrimBox and DeclaredArtBox report the entries those four are derived
-// from, as written, and nil when absent. See [models.Page] for the exact rules.
+// No box field reports that fallback as a box. MediaBox reports the media box
+// the file declares. CropBox, BleedBox, TrimBox and ArtBox report the
+// effective boundaries: a box that is no rectangle enclosing an area reads as
+// absent, an absent box takes its default from ISO 32000-1, Table 30, the
+// declared media box for the crop box, and a box extending beyond the page is
+// reduced to its intersection with it (ISO 32000-1, 14.11.2.1): with the media
+// box, or with US Letter where the media box is no box. DeclaredCropBox,
+// DeclaredBleedBox, DeclaredTrimBox and DeclaredArtBox report the entries
+// those four are derived from, as written, and nil when absent. See
+// [models.Page] for the exact rules.
 //
 // # Corpus evidence
 //
@@ -1632,24 +1631,20 @@ func (r *Reader) Page(ctx context.Context, pageNum int) (_ models.Page, err erro
 		return models.Page{}, err
 	}
 
-	box := p.CropBox
-	if box == nil {
-		box = p.MediaBox
-	}
-	w, h := mediaBoxDimensions(box)
-
-	// A page whose box is absent or encloses no area has no renderable size.
-	// ISO 32000-1, Table 30 makes /MediaBox a required page entry, so the spec
-	// says nothing about what to report when it is missing, and answering 0 by 0
-	// describes a page no viewer would draw. Substitute the size every
-	// mainstream reader uses: pdf.js falls back to its LETTER_SIZE_MEDIABOX and
-	// poppler reports 612 x 792.
+	// A page whose box is absent or no box a viewer uses has no renderable
+	// size. ISO 32000-1, Table 30 makes /MediaBox a required page entry, so
+	// the spec says nothing about what to report when it is missing, and
+	// answering 0 by 0 describes a page no viewer would draw. Substitute the
+	// size every mainstream reader uses: pdf.js falls back to its
+	// LETTER_SIZE_MEDIABOX and poppler reports 612 x 792.
 	//
 	// Only the effective dimensions gain the fallback: MediaBox still reports
-	// what the file declares, and the other boxes are measured against it.
-	if w == 0 || h == 0 {
-		w, h = defaultPageWidth, defaultPageHeight
+	// what the file declares.
+	box := p.CropBox
+	if !document.UsableBox(box) {
+		box = document.LetterMediaBox()
 	}
+	w, h := mediaBoxDimensions(box)
 
 	// /UserUnit (PDF 1.6+): scale raw coordinates to standard points.
 	if p.UserUnit > 0 && p.UserUnit != 1.0 {
@@ -1988,12 +1983,18 @@ func boxToRect(arr ast.PdfArray) [4]float64 {
 
 // declaredRect converts a page boundary as the file declares it to the
 // rectangle [models.Page] reports, or nil when the entry is absent or does not
-// have the four elements of a rectangle (ISO 32000-1, 7.9.5). The effective
-// boxes read such an entry as absent too, so a nil declared box always means
-// its effective box took its ISO 32000-1, Table 30 default.
+// have the four numbers of a rectangle (ISO 32000-1, 7.9.5). The effective
+// boxes read such an entry as absent too (see [document.UsableBox]), so a nil
+// declared box always means its effective box took its ISO 32000-1, Table 30
+// default.
 func declaredRect(arr ast.PdfArray) *[4]float64 {
 	if len(arr) != 4 {
 		return nil
+	}
+	for _, v := range arr {
+		if _, isNumber := document.Number(v); !isNumber {
+			return nil
+		}
 	}
 	rect := boxToRect(arr)
 	return &rect

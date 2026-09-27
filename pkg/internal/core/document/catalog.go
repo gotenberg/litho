@@ -23,13 +23,15 @@ type PageTree struct {
 // Page represents a single page in the PDF document.
 //
 // MediaBox is the media box as the page or its nearest ancestor writes it.
-// CropBox, BleedBox, TrimBox and ArtBox are the effective boundaries: the
-// default ISO 32000-1, 7.7.3.3, Table 30 gives each applied, then each reduced
-// to its intersection with the media box as ISO 32000-1, 14.11.2.1 requires
-// (see [clampToMediaBox]). DeclaredCropBox, DeclaredBleedBox, DeclaredTrimBox
-// and DeclaredArtBox hold the entries those four are derived from, as written
-// and nil when absent. An inherited crop box is declared on an ancestor /Pages
-// node. Dict holds the page's own entries verbatim.
+// CropBox, BleedBox, TrimBox and ArtBox are the effective boundaries, as a
+// viewer reads them: a box that is no rectangle enclosing an area reads as
+// absent (see [UsableBox]), the default ISO 32000-1, 7.7.3.3, Table 30 gives
+// each applied, then each reduced to its intersection with the media box as
+// ISO 32000-1, 14.11.2.1 requires, US Letter where the media box is no box a
+// viewer uses (see [clampToMediaBox]). DeclaredCropBox, DeclaredBleedBox,
+// DeclaredTrimBox and DeclaredArtBox hold the entries those four are derived
+// from, as written and nil when absent. An inherited crop box is declared on
+// an ancestor /Pages node. Dict holds the page's own entries verbatim.
 //
 // Resources is the page's /Resources merged key by key with every ancestor's,
 // a leniency for reading (see [traversePageTree]). InheritedResources is the
@@ -583,8 +585,10 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 	case "Page":
 		// The crop box defaults to the media box (ISO 32000-1, 7.7.3.3,
 		// Table 30) and is reduced to its intersection with it (ISO 32000-1,
-		// 14.11.2.1).
-		effectiveCropBox := clampToMediaBox(currentCropBox, currentMediaBox, currentMediaBox)
+		// 14.11.2.1): the media box a viewer draws the page on, US Letter
+		// where the file gives none it can use (see [UsableBox]).
+		viewedMedia := viewedMediaBox(currentMediaBox)
+		effectiveCropBox := clampToMediaBox(currentCropBox, viewedMedia, currentMediaBox)
 
 		// BleedBox, TrimBox and ArtBox are not inheritable and each defaults
 		// to the crop box (ISO 32000-1, 7.7.3.3, Table 30). ISO 32000-1,
@@ -595,9 +599,9 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 		declaredBleedBox := resolveBoxArray(ctx, doc, node, "BleedBox")
 		declaredTrimBox := resolveBoxArray(ctx, doc, node, "TrimBox")
 		declaredArtBox := resolveBoxArray(ctx, doc, node, "ArtBox")
-		bleedBox := clampToMediaBox(declaredBleedBox, currentMediaBox, effectiveCropBox)
-		trimBox := clampToMediaBox(declaredTrimBox, currentMediaBox, effectiveCropBox)
-		artBox := clampToMediaBox(declaredArtBox, currentMediaBox, effectiveCropBox)
+		bleedBox := clampToMediaBox(declaredBleedBox, viewedMedia, effectiveCropBox)
+		trimBox := clampToMediaBox(declaredTrimBox, viewedMedia, effectiveCropBox)
+		artBox := clampToMediaBox(declaredArtBox, viewedMedia, effectiveCropBox)
 
 		// UserUnit (PDF 1.6+, ISO 32000-1, 7.7.3.3, Table 30): a positive,
 		// non-inheritable scaling factor. Default is 1.0 (1 unit = 1/72
@@ -633,8 +637,9 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 }
 
 // clampToMediaBox returns the region a page boundary effectively covers: box
-// reduced to its intersection with the media box, or def, the boundary's
-// default, when box is absent or covers nothing.
+// reduced to its intersection with media, the media box a viewer draws the
+// page on (see [viewedMediaBox]), or def, the boundary's default, when box is
+// absent, is no box a viewer uses, or covers nothing.
 //
 // ISO 32000-1, 14.11.2.1 says the crop, bleed, trim and art boxes "shall not
 // ordinarily extend beyond the boundaries of the media box. If they do, they
@@ -645,15 +650,18 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 // default ISO 32000-1, 7.7.3.3, Table 30 gives the boundary: the media box for
 // the crop box, the crop box for the other three.
 //
-// A rectangle is an array of four numbers (ISO 32000-1, 7.9.5), so box counts
-// as absent unless it has exactly four entries, which is also how poppler reads
-// a five-entry bleed box. A media box that is not four entries leaves nothing
-// to intersect with, and box stays as written.
+// A rectangle is four numbers (ISO 32000-1, 7.9.5), so box counts as absent
+// unless it is one enclosing an area, as viewers read it (see [UsableBox]).
+// Where the file gives the page no media box a viewer uses, the page is drawn
+// on US Letter, and box is reduced to its intersection with Letter, as pdf.js
+// intersects the crop box with its LETTER_SIZE_MEDIABOX and poppler clips it
+// to its 612 by 792 default.
 //
 // Deliberate leniency: a box that misses the media box, meets it only along an
 // edge, or encloses no area itself has an intersection with no area, which
 // 14.11.2.1 would make an empty boundary. An empty region describes no page, so
-// the box is treated as absent and its Table 30 default applies. poppler
+// the box is treated as absent and its Table 30 default applies, as pdf.js
+// reads an empty intersection of the crop box and the media box. poppler
 // agrees for a zero-area box and, for one that misses the media box, collapses
 // it onto the media box edge, a zero-area rectangle no consumer can use.
 //
@@ -675,11 +683,8 @@ func traversePageTree(ctx context.Context, doc *Document, node ast.PdfDict, node
 //     ISO 19005-2, 6.1.13 size check reads the declared entries from the page
 //     dictionary, not these effective boxes, and still fails the file.
 func clampToMediaBox(box, media, def ast.PdfArray) ast.PdfArray {
-	if len(box) != 4 {
+	if !UsableBox(box) {
 		return def
-	}
-	if len(media) != 4 {
-		return box
 	}
 	bx0, by0, bx1, by1 := boxCorners(box)
 	mx0, my0, mx1, my1 := boxCorners(media)
@@ -693,6 +698,78 @@ func clampToMediaBox(box, media, def ast.PdfArray) ast.PdfArray {
 		return box
 	}
 	return ast.PdfArray{ast.PdfReal(x0), ast.PdfReal(y0), ast.PdfReal(x1), ast.PdfReal(y1)}
+}
+
+// UsableBox reports whether a viewer draws a page by box, a page boundary
+// whose references to numbers are resolved (see [ResolveRectangle]): box is a
+// rectangle, four numbers (ISO 32000-1, 7.9.5), enclosing an area. It is the
+// one reading litho gives a page boundary wherever what a page shows is at
+// stake: the effective boxes of [Page], the size pdf.Reader.Page reports, and
+// the boxes a rewrite writes, which it writes as they read so no rewrite
+// changes how a page looks. Compliance measures a box as its validator does
+// instead (ISO 19005-2, 6.1.13), for its verdicts only.
+//
+// pdf.js reads a box through lookupNormalRect, which takes an array of exactly
+// four numbers, and keeps it when it encloses an area. poppler's
+// PageAttrs::readBox takes the same four numbers and refuses [0 0 0 0]. Any
+// other array, of fewer or more entries or holding something other than a
+// number, is no box to either, which draws the page on the box's default:
+// US Letter for the media box, which has none (ISO 32000-1, Table 30), the
+// media box for the crop box, the crop box for the bleed, trim and art boxes.
+//
+// The two viewers part in three shapes, and litho reads each one way:
+//
+//   - A box of four numbers enclosing no area, [0 0 0 792]: pdf.js reads no
+//     box, poppler a page of no width. litho reads no box, as pdf.js does:
+//     a page of no area shows nothing.
+//   - A page, or a node, stating an array that is no box, below a node stating
+//     a usable one: pdf.js takes the nearest entry and reads no box, poppler
+//     passes over it and takes the node's. litho takes the nearest, as pdf.js
+//     does (see [traversePageTree]).
+//   - A page stating null, or a value that is no array: pdf.js reads no box,
+//     poppler passes over it. litho passes over it, as poppler does and ISO
+//     32000-1, 7.3.7 reads a null entry.
+//
+// # Corpus evidence
+//
+//   - All corpora: reading a box no viewer uses as none moves 2 pages of
+//     pdf.Reader.Page, both in litho pageboxes_2b.pdf. Page 1, under a
+//     /MediaBox of five entries, measured 600 by 800, and its /TrimBox
+//     [0 /Foo 200 300] read as [0 0 200 300]; the pinned pdf.js shows the page
+//     at US Letter, and poppler reads the trim box as the crop box.
+func UsableBox(box ast.PdfArray) bool {
+	if len(box) != 4 {
+		return false
+	}
+	for _, v := range box {
+		if _, isNumber := Number(v); !isNumber {
+			return false
+		}
+	}
+	x0, y0, x1, y1 := boxCorners(box)
+	return x1 > x0 && y1 > y0
+}
+
+// LetterMediaBox returns US Letter, 612 by 792 points, the media box a viewer
+// draws a page on when the page and its ancestors give it none it can use (see
+// [UsableBox]). ISO 32000-1, 7.7.3.3, Table 30 makes /MediaBox required and
+// gives it no default, so such a page describes no size at all. Letter is the
+// size every mainstream reader assumes for it: pdf.js falls back to its
+// LETTER_SIZE_MEDIABOX, poppler's PageAttrs start from 612 by 792, and qpdf
+// reports "MediaBox is undefined; setting to letter / ANSI A". A fresh array
+// each call, so a caller may write it as an entry of its own.
+func LetterMediaBox() ast.PdfArray {
+	return ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(612), ast.PdfInt(792)}
+}
+
+// viewedMediaBox returns the media box a viewer draws a page on: media, the
+// one the page states or inherits, when a viewer uses it, and
+// [LetterMediaBox] when it does not (see [UsableBox]).
+func viewedMediaBox(media ast.PdfArray) ast.PdfArray {
+	if UsableBox(media) {
+		return media
+	}
+	return LetterMediaBox()
 }
 
 // boxCorners returns a rectangle's lower-left and upper-right corners, ordering

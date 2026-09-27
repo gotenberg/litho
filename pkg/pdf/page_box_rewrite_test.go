@@ -50,15 +50,23 @@ func boxValues(box ast.PdfArray) []float64 {
 	return values
 }
 
-// TestRewrites_WriteThePageBoxesTheReaderReads pins that every rewrite writes
-// each page boundary as a rectangle, four numbers (ISO 32000-1, 7.9.5, Table
-// 30): the rectangle of its first four entries, a missing one or one that is
-// no number read as 0, US Letter for a media box enclosing no area, and
-// nothing for a crop, bleed, trim or art box enclosing none, whose default
-// Table 30 gives. A crop box it drops would let the root's show through, so
-// the page states its media box instead. The pages show the regions litho read
-// from the source.
-func TestRewrites_WriteThePageBoxesTheReaderReads(t *testing.T) {
+// TestRewrites_WriteThePageBoxesViewersRead pins that every rewrite writes each
+// page boundary as a viewer reads it, so no rewrite changes how a page looks.
+// ISO 32000-1, 7.9.5 and Table 30 make each boundary a rectangle, four
+// numbers, and pdf.js and poppler read any other array, or four numbers
+// enclosing no area, as no box: a media box as US Letter, which the rewrite
+// writes, and a crop, bleed, trim or art box as its Table 30 default, which
+// the rewrite leaves to the reader by dropping the box. A crop box it drops
+// would let the root's show through, so the page states its media box
+// instead. Each output page measures what [Reader.Page] measured on the
+// source.
+//
+// Measured on the pinned pdf.js, whose page view is the region drawn: the
+// source shows pages A, C and D at 612 by 792 and page B at 500 by 700, and so
+// does every output. poppler 26.09.0 shows page A at the root's crop box
+// instead, since it passes over a box it cannot read and takes the node's (see
+// [document.UsableBox]).
+func TestRewrites_WriteThePageBoxesViewersRead(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	src := malformedBoxPDF()
@@ -135,20 +143,26 @@ func TestRewrites_WriteThePageBoxesTheReaderReads(t *testing.T) {
 			})
 		}, 1},
 	}
+	letter := []float64{0, 0, 612, 792}
 	want := []struct {
 		media, crop, trim, bleed []float64
 	}{
-		{[]float64{0, 0, 600, 800}, []float64{0, 0, 600, 800}, []float64{0, 0, 200, 300}, []float64{0, 0, 300, 400}},
-		{[]float64{0, 0, 612, 792}, []float64{0, 0, 500, 700}, nil, nil},
-		{[]float64{0, 0, 400, 500}, []float64{0, 0, 400, 500}, nil, nil},
-		{[]float64{0, 0, 612, 792}, []float64{0, 0, 612, 792}, nil, nil},
+		{letter, letter, nil, nil},
+		{letter, []float64{0, 0, 500, 700}, nil, nil},
+		{letter, letter, nil, nil},
+		{letter, letter, nil, nil},
 	}
+	sizes := pageSizes(t, src)
 	for _, path := range paths {
 		t.Run(path.name, func(t *testing.T) {
 			t.Parallel()
-			o := readOutputTree(t, path.write(t))
+			data := path.write(t)
+			o := readOutputTree(t, data)
 			if got := len(o.pages); got != path.first+len(want) {
 				t.Fatalf("the output has %d pages, want %d", got, path.first+len(want))
+			}
+			if got := pageSizes(t, data)[path.first:]; !slices.Equal(got, sizes) {
+				t.Errorf("the output pages measure %v, want the %v the source pages measure", got, sizes)
 			}
 			for i, w := range want {
 				page := o.pages[path.first+i]
@@ -181,4 +195,24 @@ func TestRewrites_WriteThePageBoxesTheReaderReads(t *testing.T) {
 			}
 		})
 	}
+}
+
+// pageSizes returns the size [Reader.Page] reports for each page of data.
+func pageSizes(t *testing.T, data []byte) [][2]float64 {
+	t.Helper()
+	r := openBytes(t, data)
+	defer r.Close()
+	n, err := r.PageCount(context.Background())
+	if err != nil {
+		t.Fatalf("PageCount: %v", err)
+	}
+	sizes := make([][2]float64, 0, n)
+	for i := 1; i <= n; i++ {
+		p, err := r.Page(context.Background(), i)
+		if err != nil {
+			t.Fatalf("Page(%d): %v", i, err)
+		}
+		sizes = append(sizes, [2]float64{p.Width, p.Height})
+	}
+	return sizes
 }

@@ -42,16 +42,20 @@ type Page struct {
 	// MediaBox is the media box as the page, or the page tree node it inherits
 	// from, writes it, in default user space units before /UserUnit applies.
 	// It is the zero rectangle when the file declares none: the US Letter
-	// fallback reaches Width and Height only.
+	// fallback reaches only Width and Height, and the page the other boxes
+	// are reduced to.
 	MediaBox [4]float64 `json:"mediaBox"`
 	// CropBox is the effective crop box. CropBox, BleedBox, TrimBox and
-	// ArtBox are the effective page boundaries, not the entries as written.
-	// An absent box takes its ISO 32000-1, Table 30 default: the media box for
-	// the crop box, the crop box for the bleed, trim and art boxes. A box that
-	// extends beyond the media box is reduced to its intersection with it, as
-	// ISO 32000-1, 14.11.2.1 requires, and a box whose intersection with it
-	// encloses no area takes its default. None is clipped to the crop box,
-	// which has no defined relationship with the other boundaries.
+	// ArtBox are the effective page boundaries, not the entries as written,
+	// read as pdf.js and poppler read them. A box that is not four numbers
+	// enclosing an area is no box to them and reads as absent. An absent box
+	// takes its ISO 32000-1, Table 30 default: the media box for the crop box,
+	// the crop box for the bleed, trim and art boxes. A box that extends beyond
+	// the media box is reduced to its intersection with it, as ISO 32000-1,
+	// 14.11.2.1 requires, or with US Letter where the media box is no box, and
+	// a box whose intersection encloses no area takes its default. None is
+	// clipped to the crop box, which has no defined relationship with the other
+	// boundaries.
 	CropBox [4]float64 `json:"cropBox"`
 	// BleedBox is the effective bleed box. See CropBox for the rules.
 	BleedBox [4]float64 `json:"bleedBox"`
@@ -65,7 +69,7 @@ type Page struct {
 	// written, in the units and corner order of the file, so a box that
 	// extends beyond the media box, which ISO 32000-1, 14.11.2.1 reduces in
 	// the effective box, reads here at its declared size. Each is nil when the
-	// entry is absent, or is not an array of four elements, which the
+	// entry is absent, or is not an array of four numbers, which the
 	// effective box also reads as absent (ISO 32000-1, 7.9.5). A declared box
 	// has no default: nil tells a missing entry apart from one that equals
 	// its default. MediaBox needs no declared counterpart, since it already

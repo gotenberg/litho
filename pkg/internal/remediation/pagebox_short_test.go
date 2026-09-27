@@ -13,11 +13,13 @@ import (
 
 // TestShortPageBoxesRepaired pins the repair of page boundaries that are not
 // four numbers, which ISO 19005-2, 6.1.13 t11 measures with their missing
-// corners, and the ones that are no number, at 0. A short media box has no
-// area and is replaced by the size a sibling page uses; a short crop box and an
-// art box ending in null enclose no area either and are dropped, their Table 30
-// defaults applying; a bleed box of five numbers is measured on its first four
-// and keeps them.
+// corners, and the ones that are no number, at 0, and which pdf.js and poppler
+// read as no box (see [document.UsableBox]). A short media box is replaced by
+// the size a sibling page uses; a short crop box, an art box ending in null
+// and a bleed box of five numbers are dropped, their Table 30 defaults
+// applying, which is what a viewer drew in their place. Measured on its first
+// four, the bleed box was kept as [0 0 700 500], a box a viewer had not drawn
+// the page by.
 func TestShortPageBoxesRepaired(t *testing.T) {
 	t.Parallel()
 
@@ -84,7 +86,7 @@ func TestShortPageBoxesRepaired(t *testing.T) {
 		{"a media box of three numbers", box(page1, "MediaBox"), "0 0 800 600"},
 		{"a crop box of three numbers", box(page2, "CropBox"), "absent"},
 		{"an art box ending in null", box(page2, "ArtBox"), "absent"},
-		{"a bleed box of five numbers", box(page2, "BleedBox"), "0 0 700 500"},
+		{"a bleed box of five numbers", box(page2, "BleedBox"), "absent"},
 		{"a media box of four numbers", box(page2, "MediaBox"), "0 0 800 600"},
 	} {
 		if tc.got != tc.want {

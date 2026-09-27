@@ -68,13 +68,46 @@ func TestClampToMediaBox(t *testing.T) {
 		{"art box meeting media only on an edge takes the crop box", rect(612, 0, 700, 792), media, crop, crop},
 		{"zero-area art box takes the crop box", rect(0, 0, 0, 0), media, crop, crop},
 		{"five-entry bleed box counts as absent", rect(1, 1, 600, 700, 9), media, crop, crop},
-		{"no media box leaves the box as written", rect(0, 0, 700, 900), nil, crop, rect(0, 0, 700, 900)},
+		{"three-entry box enclosing an area once padded counts as absent", rect(10, 10, 300), media, crop, crop},
+		{"four entries holding a name count as absent", ast.PdfArray{ast.PdfInt(0), ast.PdfName("Foo"), ast.PdfInt(200), ast.PdfInt(300)}, media, crop, crop},
+		{"no media box clamps to US Letter", rect(0, 0, 700, 900), viewedMediaBox(nil), crop, rect(0, 0, 612, 792)},
+		{"a media box no viewer uses clamps to US Letter", rect(0, 0, 700, 900), viewedMediaBox(rect(0, 0, 600, 800, 7)), crop, rect(0, 0, 612, 792)},
 	}
 
 	for _, c := range cases {
 		got := clampToMediaBox(c.box, c.media, c.def)
 		if !sameRect(got, c.want) {
 			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// TestUsableBox pins the page boundaries a viewer draws a page by: four
+// numbers (ISO 32000-1, 7.9.5) enclosing an area, as pdf.js's
+// lookupNormalRect and poppler's PageAttrs::readBox read them. Measured
+// against the pinned pdf.js and poppler 26.09.0, every array this test
+// rejects draws the page on the box's default in both.
+func TestUsableBox(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		box  ast.PdfArray
+		want bool
+	}{
+		{"four numbers", rect(0, 0, 600, 800), true},
+		{"four numbers written backwards", rect(600, 800, 0, 0), true},
+		{"integers", ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(1), ast.PdfInt(1)}, true},
+		{"absent", nil, false},
+		{"five entries", rect(0, 0, 600, 800, 7), false},
+		{"three entries", rect(10, 10, 300), false},
+		{"a name", ast.PdfArray{ast.PdfInt(0), ast.PdfName("Foo"), ast.PdfInt(600), ast.PdfInt(800)}, false},
+		{"null", ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(600), ast.PdfNull{}}, false},
+		{"an unresolved reference", ast.PdfArray{ast.PdfInt(0), ast.PdfInt(0), ast.PdfInt(600), ast.PdfIndirectRef{ObjectNum: 5}}, false},
+		{"no width", rect(0, 0, 0, 792), false},
+		{"no area", rect(0, 0, 0, 0), false},
+	} {
+		if got := UsableBox(tc.box); got != tc.want {
+			t.Errorf("%s: UsableBox(%v) = %v, want %v", tc.name, tc.box, got, tc.want)
 		}
 	}
 }

@@ -36,24 +36,36 @@ func matchPageBoxes(v compliance.Violation) bool {
 // runs; shrinking over-sized boxes can crop visible content and only
 // runs in aggressive mode.
 //
-// A box that is not four numbers is first read as the rectangle ISO 19005-2,
-// 6.1.13 t11 measures ([compliance.PageBoundaryRect]), its missing corners and
-// the ones that are no number at 0. A crop box of [0 0 300] so encloses no
-// area and is dropped like any degenerate box, and a media box of that shape
-// is replaced. Left as written, the box stayed unrepaired while the validator
+// A box no viewer uses (see [document.UsableBox]), because it is not four
+// numbers or encloses no area, is repaired as the absent box a viewer reads it
+// as, whatever ISO 19005-2, 6.1.13 t11 measures it as. A crop, bleed, trim or
+// art box is dropped for the default ISO 32000-1, Table 30 gives it, as a
+// rewrite drops it (see mutations.completeRewrittenPageTree), so the repair and
+// the write agree. A media box, which has none, is replaced by
+// [widestUsableMediaBox], where a rewrite writes the US Letter a viewer shows.
+// Read as the rectangle t11 measures, its missing corners and the ones that are
+// no number at 0, a crop box of [0 0 300 400 9] was written as [0 0 300 400],
+// and a viewer that had drawn the page on the media box drew it on the smaller
+// box. Left as written, [0 0 300] stayed unrepaired while the validator
 // reported it.
 //
 // A page that read the default crop box, its media box, because the crop box
-// it states or inherits encloses no area, would read the crop box of a node
-// above once that one is dropped, and show another region. Such a page states
-// its media box as its crop box instead (see [cropShowsThrough]), as a rewrite
-// writes it.
+// it states or inherits is no box a viewer uses, would read the crop box of a
+// node above once that one is dropped, and show another region. Such a page
+// states its media box as its crop box instead (see [cropShowsThrough]), as a
+// rewrite writes it.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue7872.pdf: writes its /MediaBox as an array of indirect
 //     references, which reads as zero-sized unless the coordinates are
 //     resolved.
+//   - litho pageboxes_2b.pdf: the PDF/A-2b remediation wrote page 1's
+//     /MediaBox [0 0 600 800 7], /TrimBox [0 /Foo 200 300] and /BleedBox
+//     [0 0 300 400 9] as the rectangles of their first four entries, and the
+//     pinned pdf.js showed the page at 600 by 800, where it shows the source
+//     at US Letter. The document's pages use no other media box, so the
+//     replacement is US Letter.
 //   - pdfjs boundingBox_invalid.pdf: growing a degenerate box at its
 //     lower-left corner lost the text of two pages, which litho's own
 //     regression gate caught, leaving the file unremediable.
@@ -77,7 +89,7 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	var pageEntries []annotPageEntry
 	collectPageRefs(ctx, alloc, doc, pagesObj, &pageEntries, make(map[int]bool), 0)
 
-	// A degenerate /MediaBox has to be replaced by a real one: unlike every
+	// A /MediaBox no viewer uses has to be replaced by a real one: unlike every
 	// other box it has no default, so it cannot simply be dropped. Prefer a
 	// size the document itself already uses, which is far likelier to contain
 	// the page's content than the 3-unit minimum.
@@ -103,19 +115,15 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 			// outside it. The resolved copy drives the decision only: a box
 			// needing no change keeps the form the producer wrote.
 			arr = document.ResolveRectangle(ctx, doc, arr)
-			if measured, differs := compliance.PageBoundaryRect(ctx, doc, arr); differs {
-				arr = measured
-				newPage[key] = measured
-				modified = true
-			}
-			// A degenerate box encloses nothing, and growing it to the 3-unit
-			// minimum at its lower-left corner leaves the page's content
-			// outside the page, so the text drawn there is lost. Every box
-			// except /MediaBox defaults to another box when absent (ISO
-			// 32000-1, Table 30), so dropping it is both lossless and what the
-			// producer meant. A crop box a node above states that would then
-			// show through is kept off the page below (see [cropShowsThrough]).
-			if isDegenerateBox(arr) {
+			// A box no viewer uses draws the page on its default, and growing
+			// it to the 3-unit minimum at its lower-left corner leaves the
+			// page's content outside the page, so the text drawn there is
+			// lost. Every box except /MediaBox defaults to another box when
+			// absent (ISO 32000-1, Table 30), so dropping it is both lossless
+			// and what a viewer already shows. A crop box a node above states
+			// that would then show through is kept off the page below (see
+			// [cropShowsThrough]).
+			if !document.UsableBox(arr) {
 				if key != "MediaBox" {
 					delete(newPage, key)
 					modified = true
@@ -157,12 +165,12 @@ func fixPageBoxes(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 	return fixes, nil
 }
 
-// cropShowsThrough reports whether, once the degenerate crop boxes are
+// cropShowsThrough reports whether, once the crop boxes no viewer uses are
 // dropped, a crop box a node above pe states would show through on pe, a page
 // that read the default in its place: fixed, pe's repaired dictionary, states
-// no crop box, and the one pe stated, or the nearest it inherited, enclosed no
-// area. The default is the media box (ISO 32000-1, Table 30), and the one of
-// a node above is another region.
+// no crop box, and the one pe stated, or the nearest it inherited, was no box
+// a viewer uses (see [document.UsableBox]). The default is the media box (ISO
+// 32000-1, Table 30), and the one of a node above is another region.
 //
 // A crop box written as a reference is left as it is, by the leaf pass and the
 // node pass alike, and one that is no array is passed over, as the reader
@@ -184,15 +192,15 @@ func cropShowsThrough(ctx context.Context, doc *document.Document, pe annotPageE
 		if err != nil || box == nil {
 			continue
 		}
-		degenerate := isDegenerateBox(measuredBox(ctx, doc, box))
+		noBox := !document.UsableBox(document.ResolveRectangle(ctx, doc, box))
 		if nearest {
-			readsDefault, nearest = degenerate, false
+			readsDefault, nearest = noBox, false
 		}
-		if _, direct := entry.(ast.PdfArray); direct && degenerate {
+		if _, direct := entry.(ast.PdfArray); direct && noBox {
 			// The node pass drops it, and the one above shows through.
 			continue
 		}
-		return readsDefault && !degenerate
+		return readsDefault && !noBox
 	}
 	return false
 }
@@ -211,25 +219,15 @@ func fixedMediaBox(ctx context.Context, doc *document.Document, pe annotPageEntr
 	if err != nil || box == nil {
 		return defaultMediaBox
 	}
+	box = document.ResolveRectangle(ctx, doc, box)
 	if _, direct := entry.(ast.PdfArray); !direct {
-		return document.ResolveRectangle(ctx, doc, box)
+		return box
 	}
-	box = measuredBox(ctx, doc, box)
-	if isDegenerateBox(box) {
+	if !document.UsableBox(box) {
 		return fallbackMedia
 	}
 	if clamped, changed := clampBoxArray(box, preserveContent); changed {
 		return clamped
-	}
-	return box
-}
-
-// measuredBox returns box as the rectangle ISO 19005-2, 6.1.13 t11 measures
-// (see [compliance.PageBoundaryRect]), its references to numbers resolved.
-func measuredBox(ctx context.Context, doc *document.Document, box ast.PdfArray) ast.PdfArray {
-	box = document.ResolveRectangle(ctx, doc, box)
-	if measured, differs := compliance.PageBoundaryRect(ctx, doc, box); differs {
-		return measured
 	}
 	return box
 }
@@ -291,12 +289,7 @@ func clampBoxesInDict(ctx context.Context, doc *document.Document, dict ast.PdfD
 			continue
 		}
 		arr = document.ResolveRectangle(ctx, doc, arr)
-		if measured, differs := compliance.PageBoundaryRect(ctx, doc, arr); differs {
-			arr = measured
-			out[key] = measured
-			modified = true
-		}
-		if isDegenerateBox(arr) {
+		if !document.UsableBox(arr) {
 			if key != "MediaBox" {
 				delete(out, key)
 			} else {
@@ -313,8 +306,8 @@ func clampBoxesInDict(ctx context.Context, doc *document.Document, dict ast.PdfD
 	return out, modified
 }
 
-// defaultMediaBox is US Letter, the size assumed when a degenerate /MediaBox
-// has to be replaced and the document offers no usable one of its own.
+// defaultMediaBox is US Letter, the size assumed when a /MediaBox no viewer
+// uses has to be replaced and the document offers no usable one of its own.
 //
 //nolint:gochecknoglobals // constant rectangle.
 var defaultMediaBox = ast.PdfArray{
@@ -322,8 +315,9 @@ var defaultMediaBox = ast.PdfArray{
 }
 
 // widestUsableMediaBox builds a replacement /MediaBox from the largest width
-// and the largest height any non-degenerate page box in the document declares,
-// falling back to [defaultMediaBox] when there is none.
+// and the largest height any page media box a viewer uses (see
+// [document.UsableBox]) declares, falling back to [defaultMediaBox] when there
+// is none.
 //
 // The two extents are taken independently on purpose. Picking the whole box
 // with the largest AREA is not enough: a landscape page and a portrait page can
@@ -344,11 +338,11 @@ func widestUsableMediaBox(ctx context.Context, doc *document.Document, entries [
 	maxW, maxH := 0.0, 0.0
 	for _, pe := range entries {
 		arr, err := document.ResolveArray(ctx, doc, pe.dict["MediaBox"])
-		if err != nil || len(arr) != 4 {
+		if err != nil {
 			continue
 		}
 		arr = document.ResolveRectangle(ctx, doc, arr)
-		if isDegenerateBox(arr) {
+		if !document.UsableBox(arr) {
 			continue
 		}
 		maxW = math.Max(maxW, math.Abs(document.Float(arr[2])-document.Float(arr[0])))
@@ -360,19 +354,6 @@ func widestUsableMediaBox(ctx context.Context, doc *document.Document, entries [
 	return ast.PdfArray{
 		ast.PdfReal(0), ast.PdfReal(0), ast.PdfReal(maxW), ast.PdfReal(maxH),
 	}
-}
-
-// isDegenerateBox reports whether a rectangle encloses no area at all, so that
-// nothing drawn on the page can fall inside it.
-func isDegenerateBox(arr ast.PdfArray) bool {
-	if len(arr) != 4 {
-		return false
-	}
-	llx := document.Float(arr[0])
-	lly := document.Float(arr[1])
-	urx := document.Float(arr[2])
-	ury := document.Float(arr[3])
-	return urx-llx == 0 || ury-lly == 0
 }
 
 // clampBoxArray enforces dimension limits on a PDF rectangle

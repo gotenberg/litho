@@ -148,8 +148,8 @@ func TestFullRewrite_WritesThePageTreeTheReaderReads(t *testing.T) {
 	if page3["Type"] != ast.PdfName("Page") || page3["Parent"] != rootRef {
 		t.Errorf("page 3 /Type %v /Parent %v, want /Page and %v", page3["Type"], page3["Parent"], rootRef)
 	}
-	if box, _ := page3["MediaBox"].(ast.PdfArray); !slices.Equal(box, letterMediaBox()) {
-		t.Errorf("page 3 /MediaBox = %v, want %v", page3["MediaBox"], letterMediaBox())
+	if box, _ := page3["MediaBox"].(ast.PdfArray); !slices.Equal(box, document.LetterMediaBox()) {
+		t.Errorf("page 3 /MediaBox = %v, want %v", page3["MediaBox"], document.LetterMediaBox())
 	}
 	if _, has := page3["Resources"]; has {
 		t.Errorf("page 3 states /Resources %v, where it inherits the root's", page3["Resources"])
@@ -272,8 +272,8 @@ func TestCompleteWrittenPageTree_CompletesOnlyWhatTheUpdateWrites(t *testing.T) 
 	if page["Type"] != ast.PdfName("Page") || page["Rotate"] != ast.PdfInt(90) {
 		t.Errorf("page 3 = %v, want /Type /Page beside the edit's /Rotate 90", page)
 	}
-	if box, _ := page["MediaBox"].(ast.PdfArray); !slices.Equal(box, letterMediaBox()) {
-		t.Errorf("page 3 /MediaBox = %v, want %v", page["MediaBox"], letterMediaBox())
+	if box, _ := page["MediaBox"].(ast.PdfArray); !slices.Equal(box, document.LetterMediaBox()) {
+		t.Errorf("page 3 /MediaBox = %v, want %v", page["MediaBox"], document.LetterMediaBox())
 	}
 	if got := len(alloc.Pending()); got != 1 {
 		t.Errorf("the update writes %d objects, want the one page it edited: %v", got, alloc.Pending())
@@ -290,8 +290,9 @@ func TestCompleteWrittenPageTree_CompletesOnlyWhatTheUpdateWrites(t *testing.T) 
 }
 
 // boxTreeObjects are the objects of a two-page document whose root states the
-// /CropBox [0 0 500 700]. Page 3 states /MediaBox [0 0 600 800 7] and /CropBox
-// [0 0 300], which the reader reads as the default, its media box. Node 4
+// /CropBox [0 0 500 700]. Page 3 states /MediaBox [0 0 600 800 7], which a
+// viewer reads as no box and draws the page on US Letter in its place, and
+// /CropBox [0 0 300], which it reads as the default, the media box. Node 4
 // states /CropBox [0 0 0 0], which page 5, stating none, reads as the default
 // too.
 var boxTreeObjects = []string{
@@ -304,11 +305,12 @@ var boxTreeObjects = []string{
 }
 
 // TestCompleteWrittenPageTree_WritesTheBoxesTheReaderReads pins that an
-// update writes the page boundaries of the pages and nodes it writes as the
-// rectangles the reader reads, and leaves the others as the file states them.
-// A crop box the reader cannot use is dropped, and where that lets the root's
-// show through, the page states its media box as its crop box instead: page 3
-// always, page 5 only when the update writes node 4, whose crop box it
+// update writes the page boundaries of the pages and nodes it writes as a
+// viewer reads them, and leaves the others as the file states them. A media
+// box a viewer does not use is written as US Letter, the page it draws in its
+// place, and a crop box it does not use is dropped. Where that lets the
+// root's show through, the page states its media box as its crop box instead:
+// page 3 always, page 5 only when the update writes node 4, whose crop box it
 // inherits.
 func TestCompleteWrittenPageTree_WritesTheBoxesTheReaderReads(t *testing.T) {
 	t.Parallel()
@@ -342,8 +344,8 @@ func TestCompleteWrittenPageTree_WritesTheBoxesTheReaderReads(t *testing.T) {
 			page3 := pendingDictAt(t, alloc, 3)
 			for _, key := range []ast.PdfName{"MediaBox", "CropBox"} {
 				box, _ := page3[key].(ast.PdfArray)
-				if !slices.Equal(boxNumbers(box), []float64{0, 0, 600, 800}) {
-					t.Errorf("page 3 /%s = %v, want [0 0 600 800]", key, page3[key])
+				if !slices.Equal(boxNumbers(box), []float64{0, 0, 612, 792}) {
+					t.Errorf("page 3 /%s = %v, want US Letter, [0 0 612 792]", key, page3[key])
 				}
 			}
 			page5 := pendingDictAt(t, alloc, 5)
