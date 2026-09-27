@@ -145,11 +145,12 @@ func repairPropertyListLangs(ctx context.Context, alloc *writer.ObjAllocator, do
 	}
 
 	w := &propertyListWalk{alloc: alloc, doc: doc, requireDeclared: requireDeclared, visited: make(map[int]bool)}
+	entries := pageTreeEntries(ctx, alloc, doc)
 	for _, page := range pages {
 		if ctx.Err() != nil {
 			return w.removed
 		}
-		w.page(ctx, page)
+		w.page(ctx, pageTreeEntry(ctx, alloc, doc, entries, page))
 	}
 	return w.removed
 }
@@ -181,16 +182,16 @@ type propertyListWalk struct {
 
 // page walks the /Resources a page resolves its names against, read from the
 // node of the page tree holding them ([resourcesHolder]), then its
-// annotations' appearances.
-func (w *propertyListWalk) page(ctx context.Context, page *document.Page) {
-	pageDict := livePageDict(ctx, w.alloc, w.doc, page)
-	if holder, ok := resourcesHolder(ctx, w.alloc, w.doc, annotPageEntry{ref: page.Ref, dict: pageDict}); ok {
+// annotations' appearances. pe carries the page's dictionary read through the
+// allocator ([pageTreeEntry]).
+func (w *propertyListWalk) page(ctx context.Context, pe annotPageEntry) {
+	if holder, ok := resourcesHolder(ctx, w.alloc, w.doc, pe); ok {
 		work := maps.Clone(holder.dict)
 		if pending, dirty := w.resources(ctx, work, 0); dirty && w.alloc.AllocAt(holder.ref.ObjectNum, work) {
 			w.removed += pending
 		}
 	}
-	w.annotations(ctx, pageDict)
+	w.annotations(ctx, pe.dict)
 }
 
 // resources repairs the property lists of the /Resources owner holds, owner

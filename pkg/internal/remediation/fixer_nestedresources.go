@@ -84,7 +84,7 @@ func fixNestedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	// bind the same name to different objects.
 	refCount := make(map[int]int)
 	for _, pe := range pages {
-		pageRes := pageResourcesFor(ctx, alloc, doc, pe.dict)
+		pageRes := pageResourcesFor(ctx, alloc, doc, pe)
 		if pageRes == nil {
 			continue
 		}
@@ -102,7 +102,7 @@ func fixNestedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		pageRes := pageResourcesFor(ctx, alloc, doc, pe.dict)
+		pageRes := pageResourcesFor(ctx, alloc, doc, pe)
 		if pageRes == nil {
 			continue
 		}
@@ -120,21 +120,15 @@ func fixNestedResources(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 	return fixes, nil
 }
 
-// pageResourcesFor returns the resources a page's streams resolve against,
-// falling back to the inherited dictionary the /Parent chain provides.
-func pageResourcesFor(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict) ast.PdfDict {
-	obj, ok := pageDict["Resources"]
+// pageResourcesFor returns the resources a page's streams resolve against:
+// its own, or the ones it inherits through the page tree ([resourcesHolder]),
+// read through the allocator.
+func pageResourcesFor(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pe annotPageEntry) ast.PdfDict {
+	holder, ok := resourcesHolder(ctx, alloc, doc, pe)
 	if !ok {
-		obj = findInheritedResources(ctx, alloc, doc, pageDict)
-	}
-	if obj == nil {
 		return nil
 	}
-	res, err := document.ResolveDict(ctx, doc, obj)
-	if err != nil {
-		return nil
-	}
-	return res
+	return liveDictValue(ctx, alloc, doc, holder.dict["Resources"])
 }
 
 // fixFormXObjectResources repairs every singly-referenced form XObject the page

@@ -479,6 +479,16 @@ func addOutputIntent(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 // missing. Patterns and Form XObjects have their own /Resources that PDF/A
 // §6.2.3.3 treats as independent scopes, so a page-only fix leaves
 // "used in pattern/form" violations behind.
+//
+// # Corpus evidence
+//
+//   - litho resinherit_2b.pdf: the page whose /Parent names the root was given
+//     the root's /Resources with the default space, so its text named /F5,
+//     which nothing defined any more, and the page whose /Resources is null
+//     was given none, so it kept 6.2.2 t2 after a PDF/A-2b remediation, on
+//     litho and veraPDF, default and aggressive. Each now gets its node's,
+//     and /F5, an unembedded font, adds a check to the embedding rule no
+//     repair meets (6.2.11.4.1 t1, and 6.3.4 t1 at PDF/A-1b).
 func injectDefaultColorSpace(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, key ast.PdfName, csArr func() ast.PdfArray) (int, error) {
 	pagesObj, ok := catalog["Pages"]
 	if !ok {
@@ -493,17 +503,12 @@ func injectDefaultColorSpace(ctx context.Context, alloc *writer.ObjAllocator, do
 		if ctx.Err() != nil {
 			return count, ctx.Err()
 		}
-		resolved, ok := pe.dict["Resources"]
-		if !ok {
-			// A page with no /Resources of its own inherits them from an
-			// ancestor (ISO 32000-2, 7.7.3.4). Writing a fresh dictionary here
-			// would SHADOW the inherited one, making every inherited font and
-			// XObject unreachable, so the inherited dictionary is the base to
-			// patch. Only a page that truly inherits nothing gets a new one.
-			if inherited := findInheritedResources(ctx, alloc, doc, pe.dict); inherited != nil {
-				resolved, ok = inherited, true
-			}
-		}
+		// A page with no /Resources of its own inherits them from an ancestor
+		// (ISO 32000-2, 7.7.3.4). Writing a fresh dictionary here would SHADOW
+		// the inherited one, making every inherited font and XObject
+		// unreachable, so the inherited dictionary is the base to patch. Only
+		// a page that truly inherits nothing gets a new one.
+		node, ok := resourcesNode(ctx, alloc, doc, pe)
 		if !ok {
 			newRes := ast.PdfDict{"ColorSpace": ast.PdfDict{key: csArr()}}
 			newPage := make(ast.PdfDict, len(pe.dict)+1)
@@ -515,7 +520,7 @@ func injectDefaultColorSpace(ctx context.Context, alloc *writer.ObjAllocator, do
 			}
 			continue
 		}
-		patched := patchResourceColorSpace(ctx, alloc, doc, resolved, key, csArr, visited)
+		patched := patchResourceColorSpace(ctx, alloc, doc, node.dict["Resources"], key, csArr, visited)
 		if patched.changed {
 			newPage := make(ast.PdfDict, len(pe.dict)+1)
 			maps.Copy(newPage, pe.dict)

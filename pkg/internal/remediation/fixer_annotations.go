@@ -120,10 +120,16 @@ func dropFieldAA(_ context.Context, aaObj ast.PdfObject, location string) ([]str
 	return []string{fmt.Sprintf("removed /AA from %s", location)}, ast.PdfDict{}
 }
 
-// annotPageEntry pairs a page dict with its indirect reference.
+// annotPageEntry pairs a page tree node's dictionary with its indirect
+// reference, and with the node the page tree walk reached it through.
 type annotPageEntry struct {
 	ref  ast.PdfIndirectRef
 	dict ast.PdfDict
+	// parent is the /Pages node whose /Kids listed this one on the walk
+	// [collectPageRefs] took, nil for the root of the page tree and for an
+	// entry built outside that walk. A page inherits its attributes from it,
+	// whatever its /Parent names (see [resourcesNode]).
+	parent *annotPageEntry
 }
 
 // fixPageAnnotations walks the page tree and fixes annotation issues on each page.
@@ -205,18 +211,20 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 // core/document/catalog.go bounds the same descent at 256 and carries the home
 // note for this cap; compliance/check.go uses 100 as here.
 //
-// One consumer borrows it for a different shape: findInheritedResources in
-// fixer_pageresources.go walks /Parent UPWARD rather than descending /Kids. The
-// limit is right either way, since both directions are shallow, but the name
-// describes the descent. See the note at that use site.
-//
 // # Corpus evidence
 //
 //   - All corpora: the deepest page tree is 4.
 const maxPageTreeDepth = 100
 
-// collectPageRefs recursively collects page dicts with their indirect refs.
+// collectPageRefs recursively collects page dicts with their indirect refs,
+// each linked to the /Pages node whose /Kids listed it.
 func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, pages *[]annotPageEntry, seen map[int]bool, depth int) {
+	collectPageTree(ctx, alloc, doc, obj, nil, pages, seen, depth)
+}
+
+// collectPageTree is [collectPageRefs] for obj listed in the /Kids of parent,
+// nil for the root of the page tree.
+func collectPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, obj ast.PdfObject, parent *annotPageEntry, pages *[]annotPageEntry, seen map[int]bool, depth int) {
 	if ctx.Err() != nil || depth > maxPageTreeDepth {
 		return
 	}
@@ -247,6 +255,7 @@ func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	// Best-effort: an unreadable /Type yields an empty name; the switch
 	// default handles it.
 	typeName, _ := document.ResolveName(ctx, doc, dict["Type"])
+	entry := annotPageEntry{ref: ref, dict: dict, parent: parent}
 	switch typeName {
 	case "Pages":
 		kids, err := document.ResolveArray(ctx, doc, dict["Kids"])
@@ -254,10 +263,10 @@ func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 			return
 		}
 		for _, kid := range kids {
-			collectPageRefs(ctx, alloc, doc, kid, pages, seen, depth+1)
+			collectPageTree(ctx, alloc, doc, kid, &entry, pages, seen, depth+1)
 		}
 	case "Page":
-		*pages = append(*pages, annotPageEntry{ref: ref, dict: dict})
+		*pages = append(*pages, entry)
 	default:
 		if _, hasKids := dict["Kids"]; hasKids {
 			kids, err := document.ResolveArray(ctx, doc, dict["Kids"])
@@ -265,10 +274,10 @@ func collectPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 				return
 			}
 			for _, kid := range kids {
-				collectPageRefs(ctx, alloc, doc, kid, pages, seen, depth+1)
+				collectPageTree(ctx, alloc, doc, kid, &entry, pages, seen, depth+1)
 			}
 		} else {
-			*pages = append(*pages, annotPageEntry{ref: ref, dict: dict})
+			*pages = append(*pages, entry)
 		}
 	}
 }

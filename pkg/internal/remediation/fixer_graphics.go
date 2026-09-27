@@ -72,6 +72,7 @@ func fixGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	var notes []string
 	visited := make(map[int]bool)
 	appearances := make(map[int]bool)
+	entries := pageTreeEntries(ctx, alloc, doc)
 
 	for i, page := range pages {
 		if err := ctx.Err(); err != nil {
@@ -83,7 +84,7 @@ func fixGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		// the ancestor it inherits them from. It is read through the
 		// allocator, so the /Default space output-intent injects into the
 		// same /Resources ahead of graphics rides this write.
-		holder, ok := resourcesHolder(ctx, alloc, doc, annotPageEntry{ref: page.Ref, dict: livePageDict(ctx, alloc, doc, page)})
+		holder, ok := resourcesHolder(ctx, alloc, doc, pageTreeEntry(ctx, alloc, doc, entries, page))
 		if !ok {
 			continue
 		}

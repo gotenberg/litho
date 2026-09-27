@@ -42,10 +42,7 @@ func liveShadingColourSpace(t *testing.T, alloc *writer.ObjAllocator, doc *docum
 	t.Helper()
 
 	ctx := context.Background()
-	holder, ok := resourcesHolder(ctx, alloc, doc, annotPageEntry{
-		ref:  ast.PdfIndirectRef{ObjectNum: 3},
-		dict: resolveFromAllocOrDoc(ctx, alloc, doc, ast.PdfIndirectRef{ObjectNum: 3}),
-	})
+	holder, ok := resourcesHolder(ctx, alloc, doc, pageTreeEntries(ctx, alloc, doc)[3])
 	if !ok {
 		t.Fatal("the page resolves no /Resources")
 	}
