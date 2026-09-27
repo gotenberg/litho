@@ -116,6 +116,9 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 
 	// Copy catalog-level entries that should survive split.
 	copyCatalogEntries(ctx, doc, copier, catalogDict)
+	if labels, ok := splitPageLabels(ctx, alloc, doc, len(allPages), pageRefs, keptIndices); ok {
+		catalogDict["PageLabels"] = labels
+	}
 
 	// Re-attach the interactive form to whichever fields kept a widget.
 	srcCatalogRef, hasSrcCatalog := CatalogRef(ctx, doc)
@@ -235,9 +238,11 @@ func copyCatalogEntries(ctx context.Context, doc *document.Document, copier *wri
 	// /StructTreeRoot and /PageLabels are deliberately NOT here. Both are keyed
 	// to pages: a structure tree names the pages its elements live on and a page
 	// label tree is indexed by page number, so copying either wholesale would
-	// describe pages the output does not have. Carrying them needs the same kind
-	// of remapping resolveSplitBookmarks does for the outline, which is a
-	// larger change than this list. The 6.8.3.3 failure that leaves is honest.
+	// describe pages the output does not have. Each needs the kind of remapping
+	// resolveSplitBookmarks does for the outline: Split and Merge rebuild
+	// /PageLabels for the pages they write (see [splitPageLabels] and
+	// [mergePageLabels]), and carry no structure tree, a larger change than
+	// this list. The 6.8.3.3 failure that leaves is honest.
 	//
 	// /Collection marks a PDF Portfolio (ISO 32000-1, 12.3.5), whose payload is
 	// the embedded file set rebuildEmbeddedFiles already carries. Measured: a

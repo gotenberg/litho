@@ -135,6 +135,9 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 	}
 	raiseMergedCatalogVersion(catalogDict, readVersion)
 	mergeOptionalContent(ctx, sources, copiers, catalogDict)
+	if labels, ok := mergePageLabels(ctx, alloc, sources, allPageRefs); ok {
+		catalogDict["PageLabels"] = labels
+	}
 
 	// Re-attach the interactive form, naming every field that kept a widget
 	// across all the sources.

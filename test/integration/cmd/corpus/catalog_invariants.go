@@ -68,8 +68,9 @@ func readCatalogFacts(ctx context.Context, src, out *pdf.Reader) catalogFacts {
 // in the failure message. Returns "" when every invariant holds.
 //
 // These are invariants rather than a catalog diff because both verbs
-// legitimately drop page-KEYED entries (/StructTreeRoot, /PageLabels), so an
-// exact catalog comparison would fail every tagged fixture by design.
+// legitimately drop or rebuild page-KEYED entries (/StructTreeRoot,
+// /PageLabels), so an exact catalog comparison would fail every tagged
+// fixture by design.
 //
 // Both verbs carry catalog entries from one source: split from its only input,
 // merge from sources[0] (merge.go:137). A merge of a document with itself

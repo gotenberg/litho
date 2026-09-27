@@ -1087,6 +1087,8 @@ func (w *Writer) RotatePages(rotation int, pages ...int) error {
 // an insertion queued before it leaves the document a page; [Writer.WriteTo]
 // refuses a deletion that leaves none.
 //
+// The pages kept show the labels they displayed (ISO 32000-1, 12.4.2).
+//
 // [Writer.WriteTo] reports [ErrPageDeletionIncomplete] when the document's
 // structure tree nests deeper than the page prune can walk. Elements below that
 // bound keep the deleted page alive through their /Pg, so the output would
@@ -1157,6 +1159,10 @@ func (w *Writer) DeletePages(pages ...int) error {
 //     reads as ([Reader.Version]), so pages from a PDF 2.0 source never land
 //     in a file declaring less (ISO 32000-1, 7.5.2). [WithVersion] names a
 //     version the insertion can only raise.
+//   - Every page keeps the label it displayed (ISO 32000-1, 12.4.2), the
+//     document's pages and the inserted ones alike, the pages of a document
+//     with no page labels showing their page numbers in it. A document and a
+//     source with none give a document with none.
 //
 // InsertPages reads a copy of source's document, as [Split] does, so source is
 // left as it was and other goroutines may read it meanwhile. source must stay
@@ -3668,6 +3674,10 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 // Every page is written with the entries ISO 32000-1, 7.7.3.3, Table 30
 // requires of a page, as a full rewrite writes them (see [Writer.WriteTo]).
 //
+// Each page keeps the label it displays in src: the output's page labels
+// (ISO 32000-1, 12.4.2) are rebuilt for the pages it holds, in their order. A
+// src with no page labels gives an output with none.
+//
 // Split reads a copy of src's document, as a [Writer] edits one, so src is
 // left as it was and other goroutines may read it meanwhile.
 func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ...WriteOption) (err error) {
@@ -3731,6 +3741,10 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 // into its page and leaves the form, as in [Split], and an unsigned one stays
 // a field that can be signed. Every page is written with the entries ISO
 // 32000-1, Table 30 requires of a page, as in [Split].
+//
+// Each page keeps the label it displays in its source (ISO 32000-1, 12.4.2).
+// The pages of a source with no page labels show their page numbers in it,
+// and an output none of whose sources has page labels has none.
 //
 // Merge reads a copy of each source's document, as [Split] does, so the
 // sources are left as they were and other goroutines may read them

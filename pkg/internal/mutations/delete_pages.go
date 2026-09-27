@@ -13,7 +13,8 @@ import (
 
 // DeletePages removes pages at the given 1-based positions from the document's
 // page tree. It rebuilds the /Pages tree as a flat list containing only the
-// remaining pages.
+// remaining pages, and the /PageLabels tree so each shows the label it showed
+// (see [keepPageLabels]).
 func DeletePages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, allPages []*document.Page, pagesToDelete []int) error {
 	if len(pagesToDelete) == 0 {
 		return nil
@@ -45,7 +46,10 @@ func DeletePages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		if len(kept) == 0 {
 			return fmt.Errorf("cannot delete all %d pages", len(staged))
 		}
-		return rebuildPageTree(ctx, alloc, doc, allPages, kept)
+		if err := rebuildPageTree(ctx, alloc, doc, allPages, kept); err != nil {
+			return err
+		}
+		return keepPageLabels(ctx, alloc, doc, staged, kept)
 	}
 
 	if len(deleteSet) >= len(allPages) {
@@ -66,7 +70,14 @@ func DeletePages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	for i, idx := range kept {
 		keptRefs[i] = allPages[idx].Ref
 	}
-	return rebuildPageTree(ctx, alloc, doc, allPages, keptRefs)
+	if err := rebuildPageTree(ctx, alloc, doc, allPages, keptRefs); err != nil {
+		return err
+	}
+	current := make([]ast.PdfIndirectRef, len(allPages))
+	for i, page := range allPages {
+		current[i] = page.Ref
+	}
+	return keepPageLabels(ctx, alloc, doc, current, keptRefs)
 }
 
 // stagedPageKids returns the pages of the page tree an earlier deletion or

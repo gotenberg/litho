@@ -21,7 +21,8 @@ import (
 // into the pages and stay out of the form (see [bakeSignedSignatures] and
 // [mergeInsertedFields]), and the target's catalog /Version is raised to the
 // version the source reads as (see [raiseMergedCatalogVersion]). The rewrite
-// raises the header (see [FullRewriteConfig.PageSources]).
+// raises the header (see [FullRewriteConfig.PageSources]). Every page keeps
+// the label it displayed (see [insertPageLabels]).
 func InsertPages(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -36,15 +37,22 @@ func InsertPages(
 		return fmt.Errorf("insert position %d out of range [0, %d]", pos, len(targetPages))
 	}
 
-	// Determine which source pages to insert.
+	// Determine which source pages to insert, and where each stands in the
+	// source.
 	pagesToInsert := srcPages
+	srcIndices := make([]int, len(srcPages))
+	for i := range srcIndices {
+		srcIndices[i] = i
+	}
 	if len(sourcePageNums) > 0 {
 		pagesToInsert = make([]*document.Page, len(sourcePageNums))
+		srcIndices = make([]int, len(sourcePageNums))
 		for i, num := range sourcePageNums {
 			if num < 1 || num > len(srcPages) {
 				return fmt.Errorf("source page %d out of range [1, %d]", num, len(srcPages))
 			}
 			pagesToInsert[i] = srcPages[num-1]
+			srcIndices[i] = num - 1
 		}
 	}
 
@@ -190,6 +198,9 @@ func InsertPages(
 
 	if err := mergeInsertedFields(ctx, alloc, doc, catalogRef, current, srcDoc, copier, copiedRefs); err != nil {
 		return fmt.Errorf("adding the inserted pages' form fields: %w", err)
+	}
+	if err := insertPageLabels(ctx, alloc, doc, catalogRef, current, at, copiedRefs, srcDoc, len(srcPages), srcIndices); err != nil {
+		return err
 	}
 
 	// The inserted pages need the version their source reads as, as a merge's
