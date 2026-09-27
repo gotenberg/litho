@@ -82,7 +82,7 @@ func TestExtensionSchema_NamespacelessEntryDefinesNoType(t *testing.T) {
 				3: Rule_19005_3_6_6_2_3_3_t08,
 			} {
 				var got []Violation
-				xmpCheckExtensionSchemas(context.Background(), entry(tc.nsURI, tc.vt), part, &got)
+				xmpCheckExtensionSchemas(context.Background(), entry(tc.nsURI, tc.vt), part, nil, &got)
 				if fired := hasRule(got, rule); fired != tc.fires {
 					t.Errorf("part %d: undefined-value-type violation = %v, want %v (%v)",
 						part, fired, tc.fires, got)

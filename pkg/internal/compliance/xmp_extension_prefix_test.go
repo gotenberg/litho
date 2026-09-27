@@ -39,7 +39,7 @@ func TestExtensionSchemaPrefix_UnusedDecoyBindingIgnored(t *testing.T) {
     <rdf:Description rdf:about="" xmlns:nonpdfaType="http://www.aiim.org/pdfa/ns/type#"></rdf:Description>`)
 
 	var got []Violation
-	xmpCheckExtensionSchemas(context.Background(), data, 2, &got)
+	xmpCheckExtensionSchemas(context.Background(), data, 2, nil, &got)
 	if len(got) != 0 {
 		t.Errorf("unused decoy binding must not fire, got %v", got)
 	}
@@ -69,7 +69,7 @@ func TestExtensionSchemaPrefix_UsedWrongPrefixStillFires(t *testing.T) {
     </rdf:Description>`)
 
 	var got []Violation
-	xmpCheckExtensionSchemas(context.Background(), data, 2, &got)
+	xmpCheckExtensionSchemas(context.Background(), data, 2, nil, &got)
 	if !hasRule(got, Rule_19005_2_6_6_2_3_3_t14) {
 		t.Errorf("used wrong pdfaType prefix must fire the valueType family, got %v", got)
 	}
@@ -121,7 +121,7 @@ func TestExtensionSchema_MultipleDefsAfterNestedContainer(t *testing.T) {
             <pdfaType:prefix>t2</pdfaType:prefix>
             <pdfaType:description>d2</pdfaType:description>`
 	var got []Violation
-	xmpCheckExtensionSchemas(context.Background(), packet(complete), 2, &got)
+	xmpCheckExtensionSchemas(context.Background(), packet(complete), 2, nil, &got)
 	if len(got) != 0 {
 		t.Errorf("complete second definition must be silent, got %v", got)
 	}
@@ -130,7 +130,7 @@ func TestExtensionSchema_MultipleDefsAfterNestedContainer(t *testing.T) {
             <pdfaType:namespaceURI>http://t2/</pdfaType:namespaceURI>
             <pdfaType:prefix>t2</pdfaType:prefix>`
 	var got2 []Violation
-	xmpCheckExtensionSchemas(context.Background(), packet(incomplete), 2, &got2)
+	xmpCheckExtensionSchemas(context.Background(), packet(incomplete), 2, nil, &got2)
 	if !hasRule(got2, Rule_19005_2_6_6_2_3_3_t14) {
 		t.Errorf("description-less second definition must fire t14, got %v", got2)
 	}
@@ -172,7 +172,7 @@ func TestExtensionSchemaPrefix_ReportsOnlyTheFieldsCarryingIt(t *testing.T) {
     </rdf:Description>`)
 
 	var got []Violation
-	xmpCheckExtensionSchemas(context.Background(), oneField, 2, &got)
+	xmpCheckExtensionSchemas(context.Background(), oneField, 2, nil, &got)
 	if !hasRule(got, Rule_19005_2_6_6_2_3_3_t02) {
 		t.Errorf("the misprefixed schema field must fire §6.6.2.3.3 t2: got %v", got)
 	}
@@ -202,7 +202,7 @@ func TestExtensionSchemaPrefix_ReportsOnlyTheFieldsCarryingIt(t *testing.T) {
     </rdf:Description>`)
 
 	var both []Violation
-	xmpCheckExtensionSchemas(context.Background(), twoLevels, 2, &both)
+	xmpCheckExtensionSchemas(context.Background(), twoLevels, 2, nil, &both)
 	if !hasRule(both, Rule_19005_2_6_6_2_3_3_t02) {
 		t.Errorf("schema level must still fire: got %v", both)
 	}
@@ -216,7 +216,7 @@ func TestExtensionSchemaPrefix_ReportsOnlyTheFieldsCarryingIt(t *testing.T) {
 	first := violationRuleSet(both)
 	for range 32 {
 		var again []Violation
-		xmpCheckExtensionSchemas(context.Background(), twoLevels, 2, &again)
+		xmpCheckExtensionSchemas(context.Background(), twoLevels, 2, nil, &again)
 		if got := violationRuleSet(again); got != first {
 			t.Fatalf("nondeterministic output: %q then %q", first, got)
 		}

@@ -270,7 +270,7 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 
 	// XMP schema validation (§6.7.9 / §6.6.2.3.1).
 	if packetParses {
-		xmpCheckNamespaces(xmpData, part, &results)
+		xmpCheckNamespaces(xmpData, part, nil, &results)
 	}
 
 	if ctx.Err() != nil {
@@ -294,7 +294,7 @@ func checkXMPGroup(ctx context.Context, vctx *validationCtx) []Violation {
 	}
 
 	// Extension schema structure (§6.7.8 / §6.6.2.3.3).
-	xmpCheckExtensionSchemas(ctx, xmpData, part, &results)
+	xmpCheckExtensionSchemas(ctx, xmpData, part, nil, &results)
 
 	if ctx.Err() != nil {
 		return results
@@ -441,6 +441,26 @@ const maxXMPContainerDepth = 32
 // catalog packet reports §6.7.5 t1. Part 1 therefore returns early: widening it
 // would raise violations no PDF/A-1 validator raises.
 //
+// The extension-schema tests of ISO 19005-2/3 §6.6.2.3 run on the other
+// packets as on the catalog's: veraPDF links the XMPProperty and
+// ExtensionSchemasContainer objects from every XMPPackage
+// (AXLXMPPackage.getLinkedObjects), and only the PDFAIdentification of §6.6.4
+// from the main one alone. A property resolves through the packet's own
+// extension schemas and the main packet's (isDefinedInCurrentPackage,
+// isDefinedInMainPackage), so a namespace neither declares fails §6.6.2.3.1
+// t1 and t2. A schema entry resolves its value types through the entries of
+// its own packet, each built on the main packet's entry for the same URI
+// (AXLXMPPackage.getCurrentSchemasDefinitionPDFA_2_3).
+//
+// litho does not reproduce the order veraPDF meets properties in. veraPDF
+// checks one XMPProperty per namespace URI, prefix and name in a document
+// (AXLXMPProperty.getID), the first its traversal meets, so a property another
+// packet also declares and uses passes or fails with the order of the two
+// packets: measured on veraPDF 1.30.2, a page packet is met before the
+// catalog's, and of two page packets the second page's first. litho judges each
+// packet's properties against that packet's declarations and the main
+// packet's, and reports a property veraPDF skipped.
+//
 // # Corpus evidence
 //
 //   - pdfcpu adobeImplOfPDFSpec.pdf, adobe_errata.pdf: each hangs a 23 KB
@@ -453,6 +473,11 @@ const maxXMPContainerDepth = 32
 //     define. litho reported it while the packet sat in the catalog and fell
 //     silent once remediation moved the same bytes into an object-level
 //     stream, which is why the field-name audit runs on every packet.
+//   - All corpora: 113 files carry a packet outside the catalog. With the
+//     namespace and extension-schema tests run on it, 16 fail §6.6.2.3.1 t1
+//     and t2 more often at PDF/A-2b and PDF/A-3b and none changes its rule
+//     set, against veraPDF 1.30.2 or before; none carries a defective
+//     extension schema there, which litho xmppage_2b.pdf plants.
 func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog ast.PdfDict, part int, mainExtensionNS map[string]bool, pooled map[string]map[string]bool, mainEntries map[string]*xmpExtEntry) []Violation {
 	if part == 1 {
 		return nil
@@ -489,6 +514,7 @@ func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog a
 		// has nothing to audit, so those run only when the serialization check
 		// is silent.
 		if len(serialization) == 0 {
+			xmpCheckNamespaces(data, part, mainExtensionNS, &packet)
 			xmpCheckPredefinedProperties(ctx, data, part, mainExtensionNS, pooled, &packet)
 			xmpCheckPropertyTypes(data, part, ast.PdfStream{}, mainExtensionNS, &packet)
 			xmpCheckUndeclaredExtensionProperties(data, part, mainExtensionNS, mainEntries, &packet)
@@ -496,6 +522,10 @@ func xmpCheckOtherPackets(ctx context.Context, doc *document.Document, catalog a
 			// The structured value-type field names are a property-level audit
 			// too, so they answer for every packet by the same clause.
 			xmpCheckStructFieldNames(data, part, xmpExtensionDeclared(part, data, mainEntries), &packet)
+			// The extension schemas a packet carries answer §6.6.2.3.2 and
+			// §6.6.2.3.3 in every packet veraPDF parsed, as they do in the
+			// catalog's.
+			xmpCheckExtensionSchemas(ctx, data, part, mainEntries, &packet)
 		}
 
 		for _, v := range packet {
@@ -1175,15 +1205,17 @@ func xmpNormalizeForChecks(data []byte, part int, results *[]Violation) []byte {
 
 // xmpCheckNamespaces walks the XMP XML and verifies that every namespace URI
 // used by properties is either a predefined XMP schema or is declared in a
-// PDF/A extension schema within the same XMP packet.
+// PDF/A extension schema within the same XMP packet, or in extraExtensionNS,
+// the main packet's, for a component packet.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue21089.pdf: names eighteen undeclared namespaces, whose
 //     violations came out in a different order on every run until the set
 //     was sorted.
-func xmpCheckNamespaces(data []byte, part int, results *[]Violation) {
+func xmpCheckNamespaces(data []byte, part int, extraExtensionNS map[string]bool, results *[]Violation) {
 	usedNamespaces, extensionNamespaces := xmpExtractNamespaces(data)
+	maps.Copy(extensionNamespaces, extraExtensionNS)
 
 	// Sorted: a packet naming several undeclared namespaces reports one
 	// violation per namespace, and ranging the set emitted them in Go's
@@ -2302,6 +2334,11 @@ func xmpNamespaceBindings(ctx context.Context, data []byte) []xmpNSBinding {
 // It also validates that extension schema elements use the expected namespace
 // prefix names (e.g., "pdfaSchema" not "nonpdfaSchema").
 //
+// inherited holds the main packet's entries when data is a component packet's,
+// and nil otherwise: the entries of a component packet resolve their value
+// types through the main packet's entry for the same namespace URI too
+// ([xmpExtEntries]).
+//
 // # Corpus evidence
 //
 //   - All corpora, 792-cell pool: a flag in place of the container stack
@@ -2310,7 +2347,7 @@ func xmpNamespaceBindings(ctx context.Context, data []byte) []xmpNSBinding {
 //     and a property using it but omits pdfaSchema:namespaceURI. veraPDF
 //     reports §6.7.8 t9 there, restoring the URI clears it, and naming a
 //     predefined type instead clears it too.
-func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, results *[]Violation) {
+func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, inherited map[string]*xmpExtEntry, results *[]Violation) {
 	// Check that pdfa extension schema namespace URIs use the expected
 	// prefix names. Only a binding that is actually USED on elements
 	// counts: a dangling xmlns declaration aliasing one of these URIs
@@ -2417,7 +2454,7 @@ func xmpCheckExtensionSchemas(ctx context.Context, data []byte, part int, result
 	typeTextKind := xmpTypeTextProperty
 	var typeText strings.Builder
 	var entryRefs []xmpTypeRef
-	effective := xmpExtEntries(part, XMPProperties(data), nil)
+	effective := xmpExtEntries(part, XMPProperties(data), inherited)
 
 	currentLevel := func() xmpExtSchemaLevel {
 		if len(levelStack) == 0 {

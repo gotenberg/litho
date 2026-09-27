@@ -24,7 +24,7 @@ func TestXMPExtSchemaBag(t *testing.T) {
 		`</rdf:Description></rdf:RDF></x:xmpmeta>`)
 
 	var got []Violation
-	xmpCheckExtensionSchemas(ctx, seqXMP, 1, &got)
+	xmpCheckExtensionSchemas(ctx, seqXMP, 1, nil, &got)
 	if !hasRule(got, Rule_19005_1_6_7_8_t02) {
 		t.Errorf("schemas as rdf:Seq: got %v, want §6.7.8 t2", got)
 	}
@@ -32,14 +32,14 @@ func TestXMPExtSchemaBag(t *testing.T) {
 	// The same structure with an rdf:Bag container is conformant.
 	bagXMP := bytes.ReplaceAll(seqXMP, []byte("rdf:Seq"), []byte("rdf:Bag"))
 	var ok []Violation
-	xmpCheckExtensionSchemas(ctx, bagXMP, 1, &ok)
+	xmpCheckExtensionSchemas(ctx, bagXMP, 1, nil, &ok)
 	if hasRule(ok, Rule_19005_1_6_7_8_t02) {
 		t.Errorf("schemas as rdf:Bag: got %v, want no §6.7.8 t2", ok)
 	}
 
 	// Part 2 emits its own clause id.
 	var got2 []Violation
-	xmpCheckExtensionSchemas(ctx, seqXMP, 2, &got2)
+	xmpCheckExtensionSchemas(ctx, seqXMP, 2, nil, &got2)
 	if !hasRule(got2, Rule_19005_2_6_6_2_3_3_t01) {
 		t.Errorf("part 2 schemas as rdf:Seq: got %v, want §6.6.2.3.3 t1", got2)
 	}
@@ -219,7 +219,7 @@ func TestXMPExtSchemaAttributeForm(t *testing.T) {
 
 	for _, part := range []int{1, 2, 3} {
 		var got []Violation
-		xmpCheckExtensionSchemas(ctx, data, part, &got)
+		xmpCheckExtensionSchemas(ctx, data, part, nil, &got)
 		if len(got) != 0 {
 			t.Errorf("part %d required fields: got %d violations %v, want none",
 				part, len(got), got)
@@ -298,7 +298,7 @@ func TestXMPExtValueTypeAndFieldSeq(t *testing.T) {
 
 	// valueType container as rdf:Bag (must be Seq) -> §6.7.8 t7.
 	var vt []Violation
-	xmpCheckExtensionSchemas(ctx, extSchemaXMP("Bag", "Seq"), 1, &vt)
+	xmpCheckExtensionSchemas(ctx, extSchemaXMP("Bag", "Seq"), 1, nil, &vt)
 	if !hasRule(vt, Rule_19005_1_6_7_8_t07) {
 		t.Errorf("valueType as rdf:Bag: got %v, want §6.7.8 t7", vt)
 	}
@@ -308,7 +308,7 @@ func TestXMPExtValueTypeAndFieldSeq(t *testing.T) {
 
 	// field container as rdf:Bag (must be Seq) -> §6.7.8 t16.
 	var fld []Violation
-	xmpCheckExtensionSchemas(ctx, extSchemaXMP("Seq", "Bag"), 1, &fld)
+	xmpCheckExtensionSchemas(ctx, extSchemaXMP("Seq", "Bag"), 1, nil, &fld)
 	if !hasRule(fld, Rule_19005_1_6_7_8_t16) {
 		t.Errorf("field as rdf:Bag: got %v, want §6.7.8 t16", fld)
 	}
@@ -318,7 +318,7 @@ func TestXMPExtValueTypeAndFieldSeq(t *testing.T) {
 
 	// Both containers as rdf:Seq -> conformant.
 	var okv []Violation
-	xmpCheckExtensionSchemas(ctx, extSchemaXMP("Seq", "Seq"), 1, &okv)
+	xmpCheckExtensionSchemas(ctx, extSchemaXMP("Seq", "Seq"), 1, nil, &okv)
 	if hasRule(okv, Rule_19005_1_6_7_8_t07) || hasRule(okv, Rule_19005_1_6_7_8_t16) {
 		t.Errorf("valueType+field as rdf:Seq: got %v, want neither t7 nor t16", okv)
 	}
@@ -387,7 +387,7 @@ func TestXMPExtSchemaCategoryValue(t *testing.T) {
 		data := categoryExtSchemaXMP("", tc.category)
 		for part, rule := range rules {
 			var got []Violation
-			xmpCheckExtensionSchemas(ctx, data, part, &got)
+			xmpCheckExtensionSchemas(ctx, data, part, nil, &got)
 			if hasRule(got, rule) != tc.want {
 				t.Errorf("category %s at part %d: got %v, want fired=%v",
 					tc.name, part, got, tc.want)
@@ -396,7 +396,7 @@ func TestXMPExtSchemaCategoryValue(t *testing.T) {
 
 		// ISO 19005-4 drops the extension schema requirements entirely.
 		var part4 []Violation
-		xmpCheckExtensionSchemas(ctx, data, 4, &part4)
+		xmpCheckExtensionSchemas(ctx, data, 4, nil, &part4)
 		if len(part4) != 0 {
 			t.Errorf("category %s at part 4: got %v, want none", tc.name, part4)
 		}
@@ -413,7 +413,7 @@ func TestXMPExtSchemaCategoryPrefix(t *testing.T) {
 		`<nonpdfaProperty:category>external</nonpdfaProperty:category>`)
 
 	var got []Violation
-	xmpCheckExtensionSchemas(ctx, data, 2, &got)
+	xmpCheckExtensionSchemas(ctx, data, 2, nil, &got)
 	if !hasRule(got, Rule_19005_2_6_6_2_3_3_t09) {
 		t.Errorf("category under a non-pdfaProperty prefix: got %v, want §6.6.2.3.3 t9", got)
 	}
@@ -457,7 +457,7 @@ func TestXMPExtSchemaCategoryAttributeForm(t *testing.T) {
 		{" external ", true},
 	} {
 		var got []Violation
-		xmpCheckExtensionSchemas(ctx, attrSchemaXMP(tc.category), 2, &got)
+		xmpCheckExtensionSchemas(ctx, attrSchemaXMP(tc.category), 2, nil, &got)
 		if hasRule(got, Rule_19005_2_6_6_2_3_3_t09) != tc.want {
 			t.Errorf("attribute category %q: got %v, want fired=%v", tc.category, got, tc.want)
 		}
@@ -501,7 +501,7 @@ func TestXMPExtPropertyCategoryValue(t *testing.T) {
 
 	fires := func(category string) bool {
 		var got []Violation
-		xmpCheckExtensionSchemas(ctx, categoryXMP(category), 2, &got)
+		xmpCheckExtensionSchemas(ctx, categoryXMP(category), 2, nil, &got)
 		return hasRule(got, Rule_19005_2_6_6_2_3_3_t09)
 	}
 
@@ -560,7 +560,7 @@ func TestExtensionSchemaPropertyContainer(t *testing.T) {
 	fires := func(t *testing.T, container string) []Violation {
 		t.Helper()
 		var got []Violation
-		xmpCheckExtensionSchemas(context.Background(), packet(container), 1, &got)
+		xmpCheckExtensionSchemas(context.Background(), packet(container), 1, nil, &got)
 		return got
 	}
 
@@ -634,7 +634,7 @@ func TestExtensionSchemaValueTypeDefined(t *testing.T) {
 	fires := func(t *testing.T, body string, part int, rule Rule) bool {
 		t.Helper()
 		var got []Violation
-		xmpCheckExtensionSchemas(context.Background(), entry(body), part, &got)
+		xmpCheckExtensionSchemas(context.Background(), entry(body), part, nil, &got)
 		return hasRule(got, rule)
 	}
 

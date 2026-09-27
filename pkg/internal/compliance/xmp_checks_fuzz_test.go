@@ -78,11 +78,11 @@ func FuzzXMPChecks(f *testing.F) {
 			_ = xmpNormalizeForChecks(data, part, &results)
 			xmpCheckPacketHeader(data, part, &results)
 			_ = xmpPacketSerializationValidity(data, part)
-			xmpCheckNamespaces(data, part, &results)
+			xmpCheckNamespaces(data, part, nil, &results)
 			xmpCheckStructFieldNames(data, part, nil, &results)
 			xmpCheckPropertyTypes(data, part, ast.PdfStream{}, nil, &results)
 			xmpCheckPredefinedProperties(ctx, data, part, nil, nil, &results)
-			xmpCheckExtensionSchemas(ctx, data, part, &results)
+			xmpCheckExtensionSchemas(ctx, data, part, nil, &results)
 			xmpCheckUndeclaredExtensionProperties(data, part, nil, nil, &results)
 			xmpCheckExtensionValueTypes(data, part, nil, &results)
 		}

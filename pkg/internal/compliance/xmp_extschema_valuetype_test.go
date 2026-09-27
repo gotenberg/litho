@@ -62,7 +62,7 @@ func TestExtensionSchemaPrefix_ValueTypeFieldReported(t *testing.T) {
 		t.Run(fmt.Sprintf("part %d", tc.part), func(t *testing.T) {
 			t.Parallel()
 			var got []Violation
-			xmpCheckExtensionSchemas(context.Background(), data, tc.part, &got)
+			xmpCheckExtensionSchemas(context.Background(), data, tc.part, nil, &got)
 			if !hasRule(got, tc.rule) {
 				t.Errorf("valueType under a non-canonical prefix must report %s %s t%d, got %v",
 					tc.rule.Specification, tc.rule.Clause, tc.rule.TestNumber, got)
@@ -92,7 +92,7 @@ func TestExtensionSchemaPrefix_ValueTypeFieldReported(t *testing.T) {
     </rdf:Description>`)
 
 	var clean1 []Violation
-	xmpCheckExtensionSchemas(context.Background(), clean, 1, &clean1)
+	xmpCheckExtensionSchemas(context.Background(), clean, 1, nil, &clean1)
 	if hasRule(clean1, Rule_19005_1_6_7_8_t07) {
 		t.Errorf("a canonical pdfaSchema:valueType must not fire, got %v", clean1)
 	}
@@ -147,7 +147,7 @@ func TestExtensionSchemaPrefix_TypeFieldFieldReported(t *testing.T) {
 		t.Run(fmt.Sprintf("part %d", tc.part), func(t *testing.T) {
 			t.Parallel()
 			var got []Violation
-			xmpCheckExtensionSchemas(context.Background(), data, tc.part, &got)
+			xmpCheckExtensionSchemas(context.Background(), data, tc.part, nil, &got)
 			if !hasRule(got, tc.rule) {
 				t.Errorf("pdfaType:field under a non-canonical prefix must report %s %s t%d, got %v",
 					tc.rule.Specification, tc.rule.Clause, tc.rule.TestNumber, got)
