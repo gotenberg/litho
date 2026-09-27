@@ -62,7 +62,7 @@ func fixFormTooltip(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	}
 
 	var count int
-	walkFormTooltipFields(ctx, alloc, doc, parentTree, fields, &count, make(map[int]bool))
+	walkFormTooltipFields(ctx, alloc, doc, parentTree, fields, &count, make(map[int]bool), 0)
 
 	if count == 0 {
 		return nil, nil
@@ -127,8 +127,12 @@ func enclosingAlt(ctx context.Context, doc *document.Document, parentTree ast.Pd
 }
 
 // walkFormTooltipFields recursively walks form field tree and patches each
-// field that lacks a tooltip-equivalent entry. seen processes each field object
-// once, so a shared or cyclic /Kids tree cannot force exponential work.
+// field that lacks a tooltip-equivalent entry. seen processes each field
+// object, and each /Kids array written as an object of its own, once
+// ([document.VisitedBefore]), so a shared or cyclic /Kids tree cannot force
+// exponential work: the direct fields such an array holds can each name it
+// again. The descent stops at [maxFieldTreeDepth], as the field action walk
+// does, for the stack's sake.
 //
 // # Corpus evidence
 //
@@ -137,7 +141,10 @@ func enclosingAlt(ctx context.Context, doc *document.Document, parentTree ast.Pd
 //   - pdfjs bug1669099.pdf, govdocs thread_300_300033.pdf: the next round
 //     nested every widget again, leaving 30 Form elements for 15 widgets and
 //     316 for 158.
-func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, parentTree ast.PdfObject, fields ast.PdfArray, count *int, seen map[int]bool) {
+func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, parentTree ast.PdfObject, fields ast.PdfArray, count *int, seen map[int]bool, depth int) {
+	if depth > maxFieldTreeDepth {
+		return
+	}
 	for _, fieldObj := range fields {
 		if ctx.Err() != nil {
 			return
@@ -160,9 +167,9 @@ func walkFormTooltipFields(ctx context.Context, alloc *writer.ObjAllocator, doc 
 		}
 
 		// Recurse into /Kids first.
-		if kidsObj, ok := field["Kids"]; ok {
+		if kidsObj, ok := field["Kids"]; ok && !document.VisitedBefore(kidsObj, seen) {
 			if kids := liveArray(ctx, alloc, doc, kidsObj); len(kids) > 0 {
-				walkFormTooltipFields(ctx, alloc, doc, parentTree, kids, count, seen)
+				walkFormTooltipFields(ctx, alloc, doc, parentTree, kids, count, seen, depth+1)
 			}
 		}
 
