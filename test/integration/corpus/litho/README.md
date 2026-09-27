@@ -161,6 +161,7 @@ one deliberately rather than diffing it against a fresh build.
 | `parentreach_2b.pdf`   | PDF/A-2b     | Repairs of the resources a page inherits past its `/Parent`      |
 | `inlineinterp_2b.pdf`  | PDF/A-2b     | Inline images asking for interpolation in every stream parsed    |
 | `formhidden_ua1.pdf`   | PDF/UA-1     | Hidden and NoView widgets under the form mutations; conforming   |
+| `annothidden_2b.pdf`   | PDF/A-2b     | Annotations that show nowhere, under PDF/A remediation           |
 
 ### Must-not-fire controls
 
@@ -387,6 +388,7 @@ which are covered under [Known divergences](#known-divergences).
 | ---------------------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | --- | ---- | ---- | ---- | ---- |
 | `a4syntax_4.pdf`       | 17   | 15   | 21   | 19   | 19   | 21   | 19   | 19   | 16  | 17   | 18   | 13   | 8    |
 | `afref_3b.pdf`         | 5    | 2    | 5    | 2    | 3    | 5    | 2    | 3    | 5   | 5    | 6    | 10   | 7    |
+| `annothidden_2b.pdf`   | 5    | 2    | 4    | 1    | 2    | 5    | 2    | 3    | 5   | 5    | 6    | 11   | 6    |
 | `annotkinds_ua2.pdf`   | 7    | 7    | 8    | 8    | 8    | 8    | 8    | 8    | 5   | 5    | 6    | 8    | 10   |
 | `annotlang_ua1.pdf`    | 6    | 5    | 6    | 5    | 5    | 6    | 5    | 5    | 4   | 4    | 5    | 1    | 4    |
 | `annots_1b.pdf`        | 16   | 14   | 14   | 12   | 12   | 14   | 12   | 12   | 10  | 10   | 11   | 12   | 8    |
@@ -4455,16 +4457,61 @@ on screen nor in print, with their fields and the Form elements and
 `/ParentTree` keys of `secret` and `note`. `stamp` and `tip` print, so they
 stay, their NoView flag cleared: they show on screen too.
 
+### `annothidden_2b.pdf`
+
+ISO 19005-2, 6.3.2 requires every annotation to print and to show on screen,
+and ISO 32000-1, Table 165 keeps a Hidden annotation off the screen and off
+paper, and a NoView one off the screen, printing it only with Print set. PDF/A
+remediation removes an annotation that shows nowhere rather than make it
+visible, with what goes with it, and repairs the flags of every other one. The
+census found 49 Hidden or NoView annotations in 22 corpus files and none of the
+constructs below, so no gate cell reached them:
+
+| Annotation                           | `/F`                      | After PDF/A remediation                     |
+| ------------------------------------ | ------------------------- | ------------------------------------------- |
+| page 1 `note`, a Text                | 6: Hidden, Print          | removed                                     |
+| its pop-up                           | none                      | removed with `note`                         |
+| a Text whose `/IRT` names `note`     | 4: Print                  | removed with `note`, the reply it is        |
+| `toggle`, a Square                   | 288: NoView, ToggleNoView | kept, `/F 4`: it shows on rollover          |
+| `shown`, a Square                    | 4: Print                  | kept, the control                           |
+| `note2`, a Text                      | 4: Print                  | kept, its `/Popup` dropped                  |
+| its pop-up                           | 2: Hidden                 | removed                                     |
+| page 2, a Square inline in `/Annots` | 2: Hidden                 | removed                                     |
+| first widget of field `pair`         | 2: Hidden                 | removed, `pair` keeps its second widget     |
+| only widget of field `lone`          | 32: NoView                | removed with `lone`, which leaves `/CO`     |
+| `item`, only child of field `group`  | 6: Hidden, Print          | removed with `group`                        |
+| widget of the signed field `sig`     | 2: Hidden                 | kept, `/F 4`: the signature needs its field |
+
+Page 1's `/Annots` is an indirect array, which the removal writes into the page
+where every later fixer reads it. The signature carries the CMS blob of
+`sigcms_2b.pdf` with a `/ByteRange` patched to cover the file, so `6.4.3` is
+silent. Every annotation but the pop-ups has an empty appearance, and the pages
+draw nothing.
+
+Measured on veraPDF 1.30.2 and litho, the file agrees with veraPDF in all
+thirteen cells, rule for rule and count for count. From part 2 it fails
+`6.3.2/2` eight times, once for each flagged annotation, and part 1 fails
+`6.5.3/2` nine times, the pop-up with no `/F` among them. The rest is the
+PDF/A-2b claim read at the other levels and the absent structure tree at the
+accessible ones.
+
+Remediation at the eight manifest profiles, normal and aggressive, leaves
+nothing on either tool at the six PDF/A profiles: 13 annotations become 5 and 4
+fields become 2. Before the removal each of those cells kept `6.3.2/2`, or
+`6.5.3/2` twice at PDF/A-1b, for the hidden pop-up the flag repair skips, and
+every hidden annotation came out visible. PDF/UA-1 leaves `7.18.1/2` three times
+and PDF/UA-2 nothing, on both tools and as before: neither removes anything.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
-the runner scores 109 x 8 = 872 cells. The hand-measured matrix is wider: all
-thirteen conformance levels veraPDF validates, so 109 x 13 = 1417 cells. litho
+the runner scores 110 x 8 = 880 cells. The hand-measured matrix is wider: all
+thirteen conformance levels veraPDF validates, so 110 x 13 = 1430 cells. litho
 and veraPDF return the same verdict in all of them: in each cell either both
 report nothing or both report something.
 
 Verdict agreement is the weaker property. Rule-set agreement is what these
-fixtures exist to protect, and it holds in 1415 of the 1417 cells. The two
+fixtures exist to protect, and it holds in 1428 of the 1430 cells. The two
 exceptions, both on `complex_ua2`, are marked `*` in the counts table and
 covered under [Known divergences](#known-divergences); veraPDF reports a
 non-empty set in each, which is why the verdict still matches.
@@ -4474,7 +4521,7 @@ verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
 one is non-compliant on both sides (`formhidden_ua1` at PDF/UA-1 is the corpus's
 conforming cell), so a change that drops or invents a rule class leaves
-`matched` at 872 and moves only `ruleset_mismatch`, and on that one cell it
+`matched` at 880 and moves only `ruleset_mismatch`, and on that one cell it
 moves both. Both exceptions sit in the manifest's profiles, `complex_ua2` at
 PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this corpus, and the text
 scoreboard names the rules only one side reports. A third cell in the runner is
