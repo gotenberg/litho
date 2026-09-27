@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/document"
 )
 
 // signedRangePattern matches the ByteRange litho writes, which pads each value
@@ -304,6 +306,9 @@ func TestWriterSignNamesItsFieldApart(t *testing.T) {
 				"<< /FT /Tx /T (Signature2) /Kids [6 0 R] >>",
 			},
 			want: "Signature3",
+			// The form listed nothing, so the page's two root fields join
+			// the signature rather than fall outside the form.
+			fields: 3,
 		},
 		{
 			name: "a widget on a page of a document with no form",
@@ -313,7 +318,8 @@ func TestWriterSignNamesItsFieldApart(t *testing.T) {
 				"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Annots [4 0 R] >>",
 				"<< /Type /Annot /Subtype /Widget /FT /Tx /T (Signature1) /Rect [0 0 10 10] /P 3 0 R >>",
 			},
-			want: "Signature2",
+			want:   "Signature2",
+			fields: 2,
 		},
 		{
 			// The walk must end on a cycle rather than follow it.
@@ -379,12 +385,22 @@ func TestWriterSignNamesItsFieldApart(t *testing.T) {
 				t.Errorf("the signature field is named %q, want %s, the first name the form leaves free", sigs[0].FieldName, tc.want)
 			}
 			if tc.fields > 0 {
-				fields, err := got.FormFields(ctx)
+				// The count is read from /AcroForm /Fields itself: FormFields
+				// also finds the widgets a page lists outside the form.
+				catalog, err := document.ResolveCatalog(ctx, got.doc)
 				if err != nil {
-					t.Fatalf("FormFields: %v", err)
+					t.Fatalf("ResolveCatalog: %v", err)
+				}
+				form, err := document.ResolveDict(ctx, got.doc, catalog.Dict["AcroForm"])
+				if err != nil || form == nil {
+					t.Fatalf("the output has no /AcroForm: %v", err)
+				}
+				fields, err := document.ResolveArray(ctx, got.doc, form["Fields"])
+				if err != nil {
+					t.Fatalf("resolving /Fields: %v", err)
 				}
 				if len(fields) != tc.fields {
-					t.Errorf("the form holds %d fields, want %d: %+v", len(fields), tc.fields, fields)
+					t.Errorf("/AcroForm /Fields lists %d fields, want %d: %v", len(fields), tc.fields, fields)
 				}
 			}
 			checkSignedOutput(t, out.Bytes(), signer)

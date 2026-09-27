@@ -125,6 +125,14 @@ func WriteWithSignature(ctx context.Context, dst io.Writer, doc *document.Docume
 			fields = slices.Clone(arr)
 		}
 	}
+	if len(fields) == 0 {
+		// A form that lists no field, or no form at all, describes none of
+		// the widgets the pages already present. Once /Fields names the
+		// signature, those widgets fall outside the form it defines (ISO
+		// 32000-1, 12.7.1), so their fields are listed first, as an insertion
+		// lists them ([mergeInsertedFields]).
+		fields = targetRootFields(ctx, alloc, doc, signedPageRefs(ctx, alloc, doc))
+	}
 	fieldName, err := signatureFieldName(ctx, alloc, doc, fields)
 	if err != nil {
 		return err
@@ -333,6 +341,30 @@ func signatureFieldName(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 			return name, nil
 		}
 	}
+}
+
+// signedPageRefs returns the pages of the document being signed: the ones an
+// earlier deletion or insertion staged ([stagedPageKids]), or else the
+// document's own. A page tree that cannot be read yields none.
+func signedPageRefs(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) []ast.PdfIndirectRef {
+	if staged, ok := stagedPageKids(ctx, alloc, doc); ok {
+		return staged
+	}
+	catalog, err := document.ResolveCatalog(ctx, doc)
+	if err != nil {
+		doc.Logger.Debug("signing: resolving the catalog for the page widgets failed", slog.Any("err", err))
+		return nil
+	}
+	pages, err := document.ResolvePages(ctx, doc, catalog)
+	if err != nil {
+		doc.Logger.Debug("signing: resolving the pages for their widgets failed", slog.Any("err", err))
+		return nil
+	}
+	refs := make([]ast.PdfIndirectRef, 0, len(pages))
+	for _, page := range pages {
+		refs = append(refs, page.Ref)
+	}
+	return refs
 }
 
 // pageWidgetFieldNames adds to taken the fully qualified name of the field of
