@@ -171,6 +171,7 @@ one deliberately rather than diffing it against a fresh build.
 | `baretree_2b.pdf`      | PDF/A-2b     | A page tree short of the entries it requires, under the rewrites |
 | `namedmcid_ua1.pdf`    | PDF/UA-1     | Marked content naming its property list; Links judged per page   |
 | `directstream_2b.pdf`  | PDF/A-2b     | Streams written inside other objects, under every writer path    |
+| `pagelabels_2b.pdf`    | PDF/A-2b     | Page labels in every numbering style, under the page edits       |
 
 ### Must-not-fire controls
 
@@ -482,6 +483,7 @@ which are covered under [Known divergences](#known-divergences).
 | `offlimits_1b.pdf`     | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 6    | 7    | 7    | 7    |
 | `outputintent_2b.pdf`  | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
 | `pagegroup_2b.pdf`     | 7    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 6    | 6    |
+| `pagelabels_2b.pdf`    | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
 | `paintop_2b.pdf`       | 7    | 4    | 5    | 2    | 3    | 6    | 3    | 4    | 6   | 6    | 7    | 9    | 7    |
 | `parentreach_2b.pdf`   | 7    | 3    | 7    | 3    | 4    | 8    | 4    | 5    | 7   | 7    | 8    | 7    | 7    |
 | `patterncs_2b.pdf`     | 5    | 3    | 5    | 3    | 3    | 5    | 3    | 3    | 4   | 4    | 5    | 10   | 8    |
@@ -4993,6 +4995,51 @@ nothing at the PDF/A profiles on either tool, and `7.1/3` at PDF/UA-1 and
 `8.2.2/1` at PDF/UA-2 on both, veraPDF counting two and litho one, before the
 fix and after.
 
+### `pagelabels_2b.pdf`
+
+ISO 32000-1, 12.4.2 makes `/PageLabels` a number tree keyed by page index, each
+range giving its pages a numbering style, a prefix and a start (Table 159), so
+an edit that moves, removes or adds a page changes what every later page
+displays. A split and a merge dropped the tree, and page insertion and deletion
+kept it as it was, keyed to pages that had moved. No litho fixture carried
+labels; 520 files of the other corpora do.
+
+Eight pages, each showing its own text, carry one range per style. The tree is
+a root with `/Kids` over two leaves, each with its `/Limits` (ISO 32000-1,
+7.9.7, Table 37), and the range of page 4 is a page label dictionary of its own
+with the optional `/Type`:
+
+| Page | Shows | Label   | Range                                               |
+| ---- | ----- | ------- | --------------------------------------------------- |
+| 1    | `A`   | `i`     | lowercase roman                                     |
+| 2    | `B`   | `ii`    |                                                     |
+| 3    | `AA`  | `Cover` | a prefix with no numbering style                    |
+| 4    | `AB`  | `A-7`   | decimal, prefix `A-`, start 7, an object of its own |
+| 5    | `BA`  | `A-8`   |                                                     |
+| 6    | `BB`  | `a`     | lowercase letters                                   |
+| 7    | `AAA` | `b`     |                                                     |
+| 8    | `AAB` | `Ü-IV`  | uppercase roman, a UTF-16BE prefix `Ü-`, start 4    |
+
+The file conforms to PDF/A-2b: the text is in the conforming embedded TrueType
+of `ttcmap_2b.pdf`, in DeviceGray under a CMYK OutputIntent, as in
+`baretree_2b.pdf`. No PDF/A or PDF/UA rule reads page labels. The two tools
+return the same rule set in all thirteen cells, and the same counts in the
+eleven PDF/A ones: nothing at PDF/A-2b, and at the other levels the
+identification and tagging rules a part-2 claim draws. At PDF/UA-1 veraPDF
+counts `7.1/3` and `7.2/34`, and at PDF/UA-2 `8.2.2/1`, once per untagged text
+of the eight pages, and litho once each.
+
+`mutate-pages` moves page 1 to the end, and its label promise, read with qpdf,
+wants the output to show `ii Cover A-7 A-8 a b Ü-IV i`. Before the fix the
+move kept the source's tree, so every page showed the label of the page that
+used to stand there. Measured on litho, pdf.js and veraPDF 1.30.2 after it:
+the move, a split of pages 3 to 6, a merge with an unlabelled document, an
+insertion of one at page 5 and a deletion of pages 2 and 5 show in pdf.js the
+labels their pages showed in their sources, the unlabelled pages their page
+numbers, and report the input's rule set on both tools, the move in all
+thirteen cells. Remediation at the eight manifest profiles, default and
+aggressive, leaves nothing on either tool and keeps every label.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
@@ -5014,6 +5061,11 @@ three is non-compliant on both sides (`formhidden_ua1` and `sigtagged_ua1` at
 PDF/UA-1 and `baretree_2b` at PDF/A-2b are the corpus's conforming cells), so a
 change that drops or invents a rule class leaves `matched` at 952 and moves only
 `ruleset_mismatch`, and on those three cells it moves both. Both exceptions sit
+four is non-compliant on both sides (`formhidden_ua1` and `sigtagged_ua1` at
+PDF/UA-1 and `baretree_2b` and `pagelabels_2b` at PDF/A-2b are the corpus's
+conforming cells), so a change that drops or invents a rule class leaves
+`matched` at 952 and moves only `ruleset_mismatch`, and on those four cells it
+moves both. Both exceptions sit
 in the manifest's profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the
 metric reads 2 on this corpus, and the text scoreboard names the rules only one
 side reports. A third cell in the runner is a regression, or a divergence to
