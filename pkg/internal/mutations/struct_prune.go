@@ -52,6 +52,11 @@ type structPrune struct {
 	// element at the top of a copied tree is (see [newStructSource]).
 	keepAlways map[int]bool
 	memo       map[int]structElemVerdict
+	// arrays remembers what pruning each /K array written as an object of
+	// its own produced, as memo remembers an element's verdict: the direct
+	// elements such an array holds can each name it again as their /K (see
+	// [structPrune.kids]).
+	arrays map[int]structKidsResult
 	// truncated reports that a walk stopped at [maxStructTreeDepth] with part of
 	// the tree unread.
 	truncated bool
@@ -74,6 +79,7 @@ func newStructPrune(alloc *writer.ObjAllocator, doc *document.Document, gone fun
 		keptAnnots:  keptAnnots,
 		dropEmptied: dropEmptied,
 		memo:        make(map[int]structElemVerdict),
+		arrays:      make(map[int]structKidsResult),
 	}
 }
 
@@ -279,8 +285,10 @@ type structKidsResult struct {
 // unchanged" where the first visit may have said "drop", and the two entries of
 // one /K array would then disagree. Returning the remembered verdict keeps the
 // output exactly what the unguarded walk produced while the work stays linear.
-// A well-formed tree never hits the memo at all, because no element is named
-// twice.
+// A /K array written as an object of its own is remembered the same way
+// ([structPrune.arrays]): its direct elements, which no element memo holds,
+// can each name it again. A well-formed tree never hits either memo, because
+// no element or array is named twice.
 func (p *structPrune) kids(ctx context.Context, kidsObj ast.PdfObject, ownerGone bool, depth int) structKidsResult {
 	// The two conditions are not the same thing and must not share a branch. An
 	// element with no /K is a leaf, which every tagged tree is full of; the depth
@@ -303,6 +311,18 @@ func (p *structPrune) kids(ctx context.Context, kidsObj ast.PdfObject, ownerGone
 		return structKidsResult{Value: out.replacement, Changed: out.replaced, Survivors: 1, Carries: out.carries}
 	}
 
+	// An array written as an object of its own answers with what its first
+	// walk produced, as an element does: direct elements that each name it
+	// again would otherwise fan out 2^depth. Recorded before the descent, so
+	// an array reached again below its own walk answers "keep, unchanged".
+	arrayRef, arrayIsRef := kidsObj.(ast.PdfIndirectRef)
+	if arrayIsRef {
+		if prior, done := p.arrays[arrayRef.ObjectNum]; done {
+			return prior
+		}
+		p.arrays[arrayRef.ObjectNum] = structKidsResult{Value: kidsObj, Survivors: 1, Carries: true}
+	}
+
 	res := structKidsResult{}
 	kept := make(ast.PdfArray, 0, len(arr))
 	for _, kid := range arr {
@@ -317,16 +337,18 @@ func (p *structPrune) kids(ctx context.Context, kidsObj ast.PdfObject, ownerGone
 		kept = append(kept, out.replacement)
 	}
 	res.Survivors = len(kept)
-	if !res.Changed {
+	switch {
+	case !res.Changed:
 		res.Value = kidsObj
-		return res
-	}
-	if ref, isRef := kidsObj.(ast.PdfIndirectRef); isRef {
-		p.alloc.AllocAt(ref.ObjectNum, kept)
+	case arrayIsRef:
+		p.alloc.AllocAt(arrayRef.ObjectNum, kept)
 		res.Value, res.Queued = kidsObj, true
-		return res
+	default:
+		res.Value = kept
 	}
-	res.Value = kept
+	if arrayIsRef {
+		p.arrays[arrayRef.ObjectNum] = res
+	}
 	return res
 }
 

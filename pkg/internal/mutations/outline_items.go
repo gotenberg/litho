@@ -304,6 +304,11 @@ func StructPageTargets(ctx context.Context, resolve func(ast.PdfObject) ast.PdfO
 		if depth > maxStructTreeDepth || ctx.Err() != nil {
 			return
 		}
+		// A /K array written as an object of its own is walked once, as an
+		// element is: its direct elements can each name it again as their /K.
+		if _, isArr := resolve(kObj).(ast.PdfArray); isArr && document.VisitedBefore(kObj, visited) {
+			return
+		}
 		for _, kid := range pages.kids(kObj) {
 			ref, isRef := kid.(ast.PdfIndirectRef)
 			if isRef {

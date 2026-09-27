@@ -302,7 +302,10 @@ func (t *structOutput) rename(ctx context.Context, s *structSource) {
 }
 
 // renameElement applies the renames of s to one copied element, and to the
-// elements written directly into its /K.
+// elements written directly into its /K. attrs holds the output objects
+// already renamed: the attribute objects [structOutput.renameHeaders] renames,
+// and the /K arrays written as objects of their own, each read once
+// ([structKidListOnce]).
 func (t *structOutput) renameElement(ctx context.Context, s *structSource, elem ast.PdfDict, attrs map[int]bool, depth int) {
 	if elem == nil || depth > maxStructTreeDepth {
 		return
@@ -339,7 +342,7 @@ func (t *structOutput) renameElement(ctx context.Context, s *structSource, elem 
 	if len(s.idRenames) > 0 {
 		t.renameHeaders(ctx, s, elem["A"], attrs)
 	}
-	for _, kid := range t.kidList(ctx, elem["K"]) {
+	for _, kid := range t.kidListOnce(ctx, elem["K"], attrs) {
 		direct, isDict := kid.(ast.PdfDict)
 		if !isDict {
 			continue

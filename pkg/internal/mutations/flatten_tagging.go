@@ -697,6 +697,24 @@ func structKidList(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 	return ast.PdfArray{kObj}
 }
 
+// structKidListOnce is [structKidList] reading a /K array written as an object
+// of its own once: it returns nil for one visited already holds, and marks it
+// otherwise ([document.VisitedBefore]). A walk down /K reads its arrays this
+// way: the direct elements such an array holds can each name it again as their
+// /K, and read anew wherever it is reached it fans out 2^depth.
+func structKidListOnce(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, kObj ast.PdfObject, visited map[int]bool) ast.PdfArray {
+	if kObj == nil {
+		return nil
+	}
+	if arr, err := resolveArrayAllocFirst(ctx, alloc, doc, kObj); err == nil {
+		if document.VisitedBefore(kObj, visited) {
+			return nil
+		}
+		return slices.Clone(arr)
+	}
+	return ast.PdfArray{kObj}
+}
+
 // objectRefTarget returns the object number an /OBJR kid references, and false
 // for any other kid.
 func objectRefTarget(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, kid ast.PdfObject) (int, bool) {

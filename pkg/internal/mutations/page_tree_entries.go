@@ -30,9 +30,10 @@ var pageBoundaries = []ast.PdfName{"MediaBox", "CropBox", "BleedBox", "TrimBox",
 type pageTreeRepair struct {
 	alloc *writer.ObjAllocator
 	doc   *document.Document
-	// done holds the nodes already walked. A page tree is a strict tree (ISO
-	// 32000-1, 7.7.3.2), and the reader walks a node reached a second time,
-	// through a cycle or a second parent, once (see traversePageTree).
+	// done holds the nodes, and the /Kids arrays written as objects of their
+	// own, already walked. A page tree is a strict tree (ISO 32000-1,
+	// 7.7.3.2), and the reader walks a node or an array reached a second
+	// time, through a cycle or a second parent, once (see traversePageTree).
 	done map[int]bool
 }
 
@@ -406,6 +407,12 @@ func (s *pageTreeRepair) nodeKids(ctx context.Context, dict ast.PdfDict, out *co
 		switch v := resolved.(type) {
 		case ast.PdfArray:
 			kids, rewriteKids = v, false
+			// The reader walks a /Kids array written as an object of its own
+			// once (see traversePageTree): reached again, it lists no kid the
+			// reader reads under this node, and the node lists none either.
+			if document.VisitedBefore(kidsObj, s.done) {
+				kids, rewriteKids = nil, true
+			}
 		case ast.PdfDict:
 			kids = ast.PdfArray{kidsObj}
 		}

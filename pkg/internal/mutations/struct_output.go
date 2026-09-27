@@ -205,7 +205,7 @@ func elementNames(ctx context.Context, alloc *writer.ObjAllocator, doc *document
 		if depth > maxStructTreeDepth || ctx.Err() != nil {
 			return
 		}
-		for _, kid := range structKidList(ctx, alloc, doc, obj) {
+		for _, kid := range structKidListOnce(ctx, alloc, doc, obj, visited) {
 			if ref, isRef := kid.(ast.PdfIndirectRef); isRef {
 				if visited[ref.ObjectNum] {
 					continue
@@ -276,6 +276,14 @@ func (t *structOutput) kidList(ctx context.Context, kObj ast.PdfObject) ast.PdfA
 		return slices.Clone(v)
 	}
 	return ast.PdfArray{kObj}
+}
+
+// kidListOnce is [structKidListOnce] for one of the output's objects.
+func (t *structOutput) kidListOnce(ctx context.Context, kObj ast.PdfObject, visited map[int]bool) ast.PdfArray {
+	if _, isArray := t.resolve(ctx, kObj).(ast.PdfArray); isArray && document.VisitedBefore(kObj, visited) {
+		return nil
+	}
+	return t.kidList(ctx, kObj)
 }
 
 // expect prepares copier, which copies the pages of s, to carry s's elements
@@ -486,7 +494,7 @@ func (t *structOutput) firstPage(ctx context.Context, obj ast.PdfObject, index m
 		if kind, _ := dict["Type"].(ast.PdfName); kind == "MCR" || kind == "OBJR" {
 			return
 		}
-		for _, kid := range t.kidList(ctx, dict["K"]) {
+		for _, kid := range t.kidListOnce(ctx, dict["K"], visited) {
 			walk(kid, depth+1)
 		}
 	}

@@ -301,12 +301,13 @@ func (n structNames) add(elem ast.PdfDict) {
 // into a kept element's /K included.
 func (p *structPrune) keptNames(ctx context.Context) structNames {
 	names := newStructNames()
+	arrays := make(map[int]bool)
 	var direct func(elem ast.PdfDict, depth int)
 	direct = func(elem ast.PdfDict, depth int) {
-		if depth > maxStructTreeDepth {
+		if depth > maxStructTreeDepth || ctx.Err() != nil {
 			return
 		}
-		for _, kid := range structKidList(ctx, p.alloc, p.doc, elem["K"]) {
+		for _, kid := range structKidListOnce(ctx, p.alloc, p.doc, elem["K"], arrays) {
 			d, isDict := kid.(ast.PdfDict)
 			if !isDict {
 				continue
