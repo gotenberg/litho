@@ -19,7 +19,8 @@ type RewriteConfig struct {
 	// Allocator holds all objects to be written.
 	Allocator *ObjAllocator
 	// Trailer is the trailer dict (/Root, /Info, /ID, etc.).
-	// /Size is set automatically.
+	// /Size is set automatically. A stream written directly in it is moved
+	// into an object of its own, in place (see [HoistDirectStreams]).
 	Trailer ast.PdfDict
 	// UseXRefStream forces xref stream format instead of a traditional table.
 	// A cross-reference stream is a PDF 1.5 construct (ISO 32000-1, 7.5.8),
@@ -62,6 +63,19 @@ func WriteRewrite(ctx context.Context, dst io.Writer, cfg RewriteConfig) error {
 	// would compare ciphertext keyed per object number and find nothing.
 	// The file is written uncompacted rather than incorrectly.
 	_, encrypted := cfg.Trailer["Encrypt"]
+
+	// Every stream goes out as an indirect object (ISO 32000-1, 7.3.8.1), and
+	// both compaction passes must see the objects a direct stream becomes:
+	// dedup compares whole stream objects, and packing would otherwise seal
+	// one inside an object stream, which 7.5.7 forbids. An encrypted
+	// document's streams were moved before encryption keyed each to its
+	// object number (see [HoistDirectStreams]). Moving one now would leave it
+	// keyed to its old container, so the serializer refuses what is left.
+	if !encrypted {
+		if _, err := HoistDirectStreams(ctx, cfg.Allocator, cfg.Trailer); err != nil {
+			return fmt.Errorf("hoisting direct streams: %w", err)
+		}
+	}
 
 	// The catalog /Version overrides the header (ISO 32000-1, 7.5.2), so a
 	// file whose catalog says 1.4 keeps reporting 1.4 however the header

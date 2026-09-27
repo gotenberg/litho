@@ -23,7 +23,8 @@ type IncrementalConfig struct {
 	Allocator *ObjAllocator
 	// Trailer is the base trailer dict. The writer adds /Prev, updates /Size,
 	// and drops any /XRefStm carried over from the source, whose value applies
-	// only to the section it came from.
+	// only to the section it came from. It writes a copy, so the map is left
+	// as it is.
 	Trailer ast.PdfDict
 	// UseXRefStream forces xref stream format instead of a traditional table.
 	UseXRefStream bool
@@ -41,6 +42,16 @@ type IncrementalConfig struct {
 func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig) error {
 	if err := ctx.Err(); err != nil {
 		return fmt.Errorf("incremental update canceled: %w", err)
+	}
+
+	// The update writes every stream as an indirect object (ISO 32000-1,
+	// 7.3.8.1), a replacement of a source object holding one inline included,
+	// and settles which objects it writes before a byte reaches dst. The
+	// trailer is copied first, since a stream in it moves too.
+	trailer := make(ast.PdfDict, len(cfg.Trailer)+2)
+	maps.Copy(trailer, cfg.Trailer)
+	if _, err := HoistDirectStreams(ctx, cfg.Allocator, trailer); err != nil {
+		return fmt.Errorf("hoisting direct streams: %w", err)
 	}
 
 	src := io.NewSectionReader(cfg.Source, 0, cfg.SourceSize)
@@ -99,9 +110,7 @@ func WriteIncremental(ctx context.Context, dst io.Writer, cfg IncrementalConfig)
 		records = append(records, XRefRecord{ObjNum: 0, Generation: 65535, Free: true})
 	}
 
-	// Build the new trailer.
-	trailer := make(ast.PdfDict, len(cfg.Trailer)+2)
-	maps.Copy(trailer, cfg.Trailer)
+	// Complete the new trailer.
 	trailer["Size"] = ast.PdfInt(cfg.Allocator.NextObjNum())
 	trailer["Prev"] = ast.PdfInt(cfg.StartXRefOffset)
 

@@ -17,6 +17,13 @@ import (
 // Streams write their raw bytes directly (content-preserving). Returns the
 // number of bytes written. A name holding a NUL byte has no conforming
 // spelling (ISO 32000-1, 7.3.5), so it fails with [ErrNameHoldsNull].
+//
+// obj itself may be a stream, as the value of an indirect object, but a stream
+// nested inside a dictionary or an array fails with [ErrDirectStream]: ISO
+// 32000-1, 7.3.8.1 makes every stream an indirect object, and qpdf reads the
+// object holding one inline as damaged. [HoistDirectStreams] gives each an
+// object of its own first, so the failure marks a writer path that skipped it,
+// not a document.
 func Serialize(ctx context.Context, w io.Writer, obj ast.PdfObject) (int64, error) {
 	if obj == nil {
 		n, err := io.WriteString(w, "null")
@@ -251,6 +258,9 @@ func serializeArray(ctx context.Context, w io.Writer, arr ast.PdfArray) (int64, 
 		if err := ctx.Err(); err != nil {
 			return total, fmt.Errorf("serializing array element %d: %w", i, err)
 		}
+		if _, isStream := elem.(ast.PdfStream); isStream {
+			return total, fmt.Errorf("%w: array element %d", ErrDirectStream, i)
+		}
 		if i > 0 {
 			n, err = io.WriteString(w, " ")
 			total += int64(n)
@@ -290,6 +300,9 @@ func serializeDict(ctx context.Context, w io.Writer, d ast.PdfDict) (int64, erro
 			return total, fmt.Errorf("serializing dict key %q: %w", k, err)
 		}
 		v := d[ast.PdfName(k)]
+		if _, isStream := v.(ast.PdfStream); isStream {
+			return total, fmt.Errorf("%w: dictionary entry %q", ErrDirectStream, k)
+		}
 		n, err = io.WriteString(w, " ")
 		total += int64(n)
 		if err != nil {

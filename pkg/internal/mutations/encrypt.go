@@ -51,6 +51,12 @@ func applyEncryption(ctx context.Context, alloc *writer.ObjAllocator, trailer as
 		return fmt.Errorf("creating encryptor: %w", err)
 	}
 
+	// A stream written inside another object moves into one of its own before
+	// the sweep keys its data to an object number (ISO 32000-1, 7.3.8.1 and
+	// 7.6.2, Algorithm 1): moved afterwards, it would decrypt to noise.
+	if _, err := writer.HoistDirectStreams(ctx, alloc, trailer); err != nil {
+		return fmt.Errorf("hoisting direct streams: %w", err)
+	}
 	if err := EncryptPendingObjects(ctx, alloc, encryptor); err != nil {
 		return fmt.Errorf("encrypting objects: %w", err)
 	}
