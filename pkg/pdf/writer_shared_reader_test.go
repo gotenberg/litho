@@ -175,16 +175,17 @@ func sharedReaderOps(t *testing.T) []sharedReaderOp {
 // TestReaderForkDecidesEveryField, so a Writer cannot lose a reading option
 // the caller opened the Reader with.
 var readerForkFields = map[string]string{
-	"doc":         "forked",
-	"ocr":         "shared",
-	"closer":      "fresh",
-	"pagesOnce":   "fresh",
-	"cachedPages": "fresh",
-	"pagesErr":    "fresh",
-	"ciiSchema":   "shared",
-	"schSchema":   "shared",
-	"schPhase":    "copied",
-	"lenient":     "copied",
+	"doc":             "forked",
+	"ocr":             "shared",
+	"closer":          "fresh",
+	"pagesOnce":       "fresh",
+	"cachedPages":     "fresh",
+	"pagesErr":        "fresh",
+	"ciiSchema":       "shared",
+	"schSchema":       "shared",
+	"schPhase":        "copied",
+	"lenient":         "copied",
+	"encryptedOrigin": "copied",
 }
 
 // TestReaderForkDecidesEveryField pins that [readerForkFields] names every

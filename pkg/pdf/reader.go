@@ -654,6 +654,10 @@ func (r *Reader) fork() *Reader {
 		schSchema: r.schSchema,
 		schPhase:  r.schPhase,
 		lenient:   r.lenient,
+		// The fork is the same document: one opened over a Pipeline's
+		// intermediate still derives from an encrypted source, and
+		// [Writer.Sign] must refuse it as it refuses the Reader.
+		encryptedOrigin: r.encryptedOrigin,
 	}
 }
 
