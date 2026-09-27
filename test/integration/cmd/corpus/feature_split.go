@@ -13,9 +13,15 @@ import (
 )
 
 // splitFeature is a self-consistency canary for [pdf.Split]: every
-// input PDF with at least two pages is split into a 2-page output
-// containing its first and last page, then the output is checked
-// against what litho already saw in the input.
+// input PDF with at least two pages is split into a 3-page output
+// holding its first page, its last page and its first page again, then
+// the output is checked against what litho already saw in the input.
+//
+// Naming page 1 twice sends every PDF through the path that writes a
+// page Split names twice as a page of its own (ISO 32000-1, 7.7.3.2
+// makes the page tree a strict tree, so the second copy cannot share
+// the first's object), which a list naming each page once never
+// reaches.
 //
 // Comparing litho's split-output extraction against litho's
 // input-PDF extraction (rather than against PDF.js's golden) keeps
@@ -25,10 +31,11 @@ import (
 //
 // Output assertions:
 //
-//   - output page count == 2
+//   - output page count == 3
 //   - output page[0] text == input page[1] text (litho extraction)
 //   - output page[1] text == input page[lastPage] text
-//   - every output bookmark targets page 0, 1, or 2
+//   - output page[2] text == input page[1] text
+//   - every output bookmark targets page 0, 1, 2 or 3
 //   - every output bookmark title appears somewhere in the input
 //     outline tree
 //
@@ -69,6 +76,7 @@ type splitOutput struct {
 	InputLast  string               `json:"input_last,omitempty"`
 	OutFirst   string               `json:"out_first,omitempty"`
 	OutLast    string               `json:"out_last,omitempty"`
+	OutRepeat  string               `json:"out_repeat,omitempty"`
 	InputBM    []normalizedBookmark `json:"input_bookmarks,omitempty"`
 	OutBM      []normalizedBookmark `json:"out_bookmarks,omitempty"`
 
@@ -145,7 +153,7 @@ func runSplit(ctx context.Context, pdfPath string) (splitOutput, error) {
 	}
 
 	var buf bytes.Buffer
-	if err := pdf.Split(ctx, src, []int{1, inputPages}, &buf); err != nil {
+	if err := pdf.Split(ctx, src, splitPages(inputPages), &buf); err != nil {
 		return splitOutput{}, fmt.Errorf("pdf.Split: %w", err)
 	}
 
@@ -182,6 +190,13 @@ func runSplit(ctx context.Context, pdfPath string) (splitOutput, error) {
 		}
 		result.OutLast = text
 	}
+	if numPages >= 3 {
+		text, err := out.ExtractText(ctx, 3, pdf.WithInvisibleText(), pdf.WithClipPathText(), pdf.WithArtifacts())
+		if err != nil && !errors.Is(err, pdf.ErrRequiresOCR) {
+			return splitOutput{}, fmt.Errorf("output page 3: %w", err)
+		}
+		result.OutRepeat = text
+	}
 
 	outBM, err := out.Bookmarks(ctx)
 	if err != nil {
@@ -192,6 +207,14 @@ func runSplit(ctx context.Context, pdfPath string) (splitOutput, error) {
 	result.catalogFacts = readCatalogFacts(ctx, src, out)
 
 	return result, nil
+}
+
+// splitPages returns the pages the split cell names for a document of
+// inputPages pages: the first, the last and the first again. The repeat
+// is what carries the cell through the path that writes a page named
+// twice as a page of its own.
+func splitPages(inputPages int) []int {
+	return []int{1, inputPages, 1}
 }
 
 // extractOrSkip pulls a single page's text via litho. When the page is
@@ -218,8 +241,8 @@ func (f *splitFeature) Compare(fixtureID string, output []byte) Verdict {
 		return Verdict{FixtureID: fixtureID, Skipped: true, Reason: got.SkipReason}
 	}
 
-	if got.NumPages != 2 {
-		return Verdict{FixtureID: fixtureID, Reason: fmt.Sprintf("page count: got %d, want 2", got.NumPages)}
+	if want := len(splitPages(got.InputPages)); got.NumPages != want {
+		return Verdict{FixtureID: fixtureID, Reason: fmt.Sprintf("page count: got %d, want %d", got.NumPages, want)}
 	}
 
 	if mm := comparePageText(fixtureID, 1, got.InputFirst, got.OutFirst); mm != nil {
@@ -229,6 +252,10 @@ func (f *splitFeature) Compare(fixtureID string, output []byte) Verdict {
 	if mm := comparePageText(fixtureID, got.InputPages, got.InputLast, got.OutLast); mm != nil {
 		raw, _ := json.Marshal(mm)
 		return Verdict{FixtureID: fixtureID, Reason: fmt.Sprintf("page[1] text differs from input page %d", got.InputPages), Mismatches: []json.RawMessage{raw}}
+	}
+	if mm := comparePageText(fixtureID, 1, got.InputFirst, got.OutRepeat); mm != nil {
+		raw, _ := json.Marshal(mm)
+		return Verdict{FixtureID: fixtureID, Reason: "page[2] text differs from input page 1, which it repeats", Mismatches: []json.RawMessage{raw}}
 	}
 
 	if reason := checkSplitBookmarks(got.OutBM, got.InputBM); reason != "" {
@@ -258,9 +285,9 @@ func (f *splitFeature) Compare(fixtureID string, output []byte) Verdict {
 
 // checkSplitBookmarks enforces the two split-output invariants:
 //
-//   - every bookmark targets page 0, 1, or 2 (page 0 = "no destination",
-//     which producers use for untitled outline parents; 1 and 2 are the
-//     surviving pages)
+//   - every bookmark targets page 0, 1, 2 or 3 (page 0 = "no destination",
+//     which producers use for untitled outline parents; 1, 2 and 3 are the
+//     surviving pages, 3 the repeat of page 1)
 //   - every bookmark title appears somewhere in the input outline tree
 //     (no fabricated entries)
 //
@@ -268,21 +295,24 @@ func (f *splitFeature) Compare(fixtureID string, output []byte) Verdict {
 // describing the first violation found in pre-order traversal.
 func checkSplitBookmarks(out, in []normalizedBookmark) string {
 	titles := collectBookmarkTitles(in, nil)
-	return walkSplitBookmarks("bookmarks", out, titles)
+	// The output's page count does not depend on the input's.
+	return walkSplitBookmarks("bookmarks", out, titles, len(splitPages(1)))
 }
 
-func walkSplitBookmarks(path string, bookmarks []normalizedBookmark, inputTitles map[string]struct{}) string {
+// walkSplitBookmarks checks bookmarks, the outline at path, against the
+// input's titles and outPages, the output's page count.
+func walkSplitBookmarks(path string, bookmarks []normalizedBookmark, inputTitles map[string]struct{}, outPages int) string {
 	for i, b := range bookmarks {
 		p := fmt.Sprintf("%s[%d]", path, i)
-		if b.Page != 0 && b.Page != 1 && b.Page != 2 {
-			return fmt.Sprintf("%s.page = %d (only 1 or 2 are valid after split)", p, b.Page)
+		if b.Page < 0 || b.Page > outPages {
+			return fmt.Sprintf("%s.page = %d (only 1 to %d are valid after split)", p, b.Page, outPages)
 		}
 		if b.Title != "" {
 			if _, ok := inputTitles[b.Title]; !ok {
 				return fmt.Sprintf("%s.title %q not present in input outline", p, b.Title)
 			}
 		}
-		if reason := walkSplitBookmarks(p+".children", b.Children, inputTitles); reason != "" {
+		if reason := walkSplitBookmarks(p+".children", b.Children, inputTitles, outPages); reason != "" {
 			return reason
 		}
 	}

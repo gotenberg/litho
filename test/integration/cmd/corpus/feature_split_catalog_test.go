@@ -242,11 +242,12 @@ func TestSplitFeature_Compare_CatalogViolationFailsTheFixture(t *testing.T) {
 	f := newSplitFeature()
 	out, _ := json.Marshal(splitOutput{
 		InputPages:   2,
-		NumPages:     2,
+		NumPages:     3,
 		InputFirst:   "First",
 		InputLast:    "Last",
 		OutFirst:     "First",
 		OutLast:      "Last",
+		OutRepeat:    "First",
 		catalogFacts: catalogFacts{OutAcroForm: true},
 	})
 	v := f.Compare("doc", out)
@@ -269,11 +270,12 @@ func TestSplitFeature_Compare_CleanFixtureStillCarriesMetrics(t *testing.T) {
 	f := newSplitFeature()
 	out, _ := json.Marshal(splitOutput{
 		InputPages: 2,
-		NumPages:   2,
+		NumPages:   3,
 		InputFirst: "First",
 		InputLast:  "Last",
 		OutFirst:   "First",
 		OutLast:    "Last",
+		OutRepeat:  "First",
 	})
 	v := f.Compare("doc", out)
 	if !v.Match {
@@ -291,7 +293,7 @@ func TestSplitFeature_Compare_CleanFixtureStillCarriesMetrics(t *testing.T) {
 func TestSplitFeature_Compare_EarlyFailureCarriesNoMetrics(t *testing.T) {
 	t.Parallel()
 	f := newSplitFeature()
-	out, _ := json.Marshal(splitOutput{InputPages: 3, NumPages: 3})
+	out, _ := json.Marshal(splitOutput{InputPages: 3, NumPages: 2})
 	v := f.Compare("doc", out)
 	if v.Match {
 		t.Fatalf("expected mismatch, got %+v", v)

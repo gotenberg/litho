@@ -15,8 +15,8 @@ func TestCheckSplitBookmarks_Empty(t *testing.T) {
 	}
 }
 
-// TestCheckSplitBookmarks_ValidPages: bookmarks targeting pages 1 and 2
-// pass; titles must exist in the input tree.
+// TestCheckSplitBookmarks_ValidPages: bookmarks targeting pages 1, 2 and 3,
+// the repeat of page 1, pass; titles must exist in the input tree.
 func TestCheckSplitBookmarks_ValidPages(t *testing.T) {
 	t.Parallel()
 	in := []normalizedBookmark{
@@ -27,6 +27,7 @@ func TestCheckSplitBookmarks_ValidPages(t *testing.T) {
 	out := []normalizedBookmark{
 		{Title: "First", Page: 1},
 		{Title: "Last", Page: 2},
+		{Title: "First", Page: 3},
 	}
 	if reason := checkSplitBookmarks(out, in); reason != "" {
 		t.Errorf("valid: got %q, want empty", reason)
@@ -34,14 +35,14 @@ func TestCheckSplitBookmarks_ValidPages(t *testing.T) {
 }
 
 // TestCheckSplitBookmarks_RejectStalePage flags a bookmark whose page
-// is outside {0, 1, 2} after split.
+// is outside {0, 1, 2, 3} after split.
 func TestCheckSplitBookmarks_RejectStalePage(t *testing.T) {
 	t.Parallel()
-	out := []normalizedBookmark{{Title: "x", Page: 3}}
+	out := []normalizedBookmark{{Title: "x", Page: 4}}
 	in := []normalizedBookmark{{Title: "x", Page: 5}}
 	reason := checkSplitBookmarks(out, in)
-	if !strings.Contains(reason, "page = 3") {
-		t.Errorf("stale page: got %q, want 'page = 3' substring", reason)
+	if !strings.Contains(reason, "page = 4") {
+		t.Errorf("stale page: got %q, want 'page = 4' substring", reason)
 	}
 }
 
@@ -105,16 +106,17 @@ func TestSplitFeature_Compare_SkippedPropagates(t *testing.T) {
 }
 
 // TestSplitFeature_Compare_PageCountWrong rejects outputs whose page
-// count is anything other than 2.
+// count is anything other than 3. A split that wrote page 1 once where
+// the list names it twice reads as 2 pages.
 func TestSplitFeature_Compare_PageCountWrong(t *testing.T) {
 	t.Parallel()
 	f := newSplitFeature()
-	out, _ := json.Marshal(splitOutput{InputPages: 3, NumPages: 3})
+	out, _ := json.Marshal(splitOutput{InputPages: 3, NumPages: 2})
 	v := f.Compare("doc", out)
 	if v.Match {
 		t.Fatalf("expected mismatch, got %+v", v)
 	}
-	if !strings.Contains(v.Reason, "page count: got 3") {
+	if !strings.Contains(v.Reason, "page count: got 2, want 3") {
 		t.Errorf("reason: got %q", v.Reason)
 	}
 }
@@ -126,11 +128,12 @@ func TestSplitFeature_Compare_HappyPath(t *testing.T) {
 	f := newSplitFeature()
 	out, _ := json.Marshal(splitOutput{
 		InputPages: 3,
-		NumPages:   2,
+		NumPages:   3,
 		InputFirst: "First",
 		InputLast:  "Last",
 		OutFirst:   "First",
 		OutLast:    "Last",
+		OutRepeat:  "First",
 		InputBM: []normalizedBookmark{
 			{Title: "Intro", Page: 1},
 			{Title: "End", Page: 3},
@@ -156,11 +159,12 @@ func TestSplitFeature_Compare_TextMismatch(t *testing.T) {
 	f := newSplitFeature()
 	out, _ := json.Marshal(splitOutput{
 		InputPages: 2,
-		NumPages:   2,
+		NumPages:   3,
 		InputFirst: "Expected",
 		InputLast:  "Last",
 		OutFirst:   "Wrong",
 		OutLast:    "Last",
+		OutRepeat:  "Expected",
 	})
 	v := f.Compare("doc", out)
 	if v.Match {
@@ -171,6 +175,41 @@ func TestSplitFeature_Compare_TextMismatch(t *testing.T) {
 	}
 }
 
+// TestSplitFeature_Compare_RepeatTextMismatch: output page[2], the second
+// copy of input page 1, disagrees with it while page[0] agrees. Reason
+// names page[2].
+func TestSplitFeature_Compare_RepeatTextMismatch(t *testing.T) {
+	t.Parallel()
+	f := newSplitFeature()
+	out, _ := json.Marshal(splitOutput{
+		InputPages: 2,
+		NumPages:   3,
+		InputFirst: "First",
+		InputLast:  "Last",
+		OutFirst:   "First",
+		OutLast:    "Last",
+		OutRepeat:  "Last",
+	})
+	v := f.Compare("doc", out)
+	if v.Match {
+		t.Fatalf("expected mismatch, got %+v", v)
+	}
+	if !strings.Contains(v.Reason, "page[2]") {
+		t.Errorf("reason missing page[2]: %q", v.Reason)
+	}
+}
+
+// TestSplitPages_RepeatsThePageItNamesFirst pins the list the cell splits:
+// the first page, the last and the first again, so every PDF of two
+// pages or more reaches the path that writes a page named twice.
+func TestSplitPages_RepeatsThePageItNamesFirst(t *testing.T) {
+	t.Parallel()
+	got := splitPages(7)
+	if len(got) != 3 || got[0] != 1 || got[1] != 7 || got[2] != 1 {
+		t.Errorf("splitPages(7) = %v, want [1 7 1]", got)
+	}
+}
+
 // TestSplitFeature_Compare_BookmarkInvariantViolation: page count and
 // text both agree, but a bookmark targets a non-surviving page.
 func TestSplitFeature_Compare_BookmarkInvariantViolation(t *testing.T) {
@@ -178,11 +217,12 @@ func TestSplitFeature_Compare_BookmarkInvariantViolation(t *testing.T) {
 	f := newSplitFeature()
 	out, _ := json.Marshal(splitOutput{
 		InputPages: 2,
-		NumPages:   2,
+		NumPages:   3,
 		InputFirst: "First",
 		InputLast:  "Last",
 		OutFirst:   "First",
 		OutLast:    "Last",
+		OutRepeat:  "First",
 		InputBM:    []normalizedBookmark{{Title: "X", Page: 1}},
 		OutBM:      []normalizedBookmark{{Title: "X", Page: 5}},
 	})
