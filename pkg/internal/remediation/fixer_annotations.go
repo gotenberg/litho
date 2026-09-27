@@ -267,20 +267,35 @@ func collectPageTree(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 	entry := annotPageEntry{ref: ref, dict: dict, parent: parent, kid: kid}
 	switch typeName {
 	case "Pages":
-		for i, kidObj := range liveArray(ctx, alloc, doc, dict["Kids"]) {
+		for i, kidObj := range pageTreeKids(ctx, alloc, doc, dict["Kids"], seen) {
 			collectPageTree(ctx, alloc, doc, kidObj, &entry, i, pages, seen, depth+1)
 		}
 	case "Page":
 		*pages = append(*pages, entry)
 	default:
 		if _, hasKids := dict["Kids"]; hasKids {
-			for i, kidObj := range liveArray(ctx, alloc, doc, dict["Kids"]) {
+			for i, kidObj := range pageTreeKids(ctx, alloc, doc, dict["Kids"], seen) {
 				collectPageTree(ctx, alloc, doc, kidObj, &entry, i, pages, seen, depth+1)
 			}
 		} else {
 			*pages = append(*pages, entry)
 		}
 	}
+}
+
+// pageTreeKids returns the /Kids array kidsObj names, as [liveArray] reads it,
+// and nil when it is an array written as an object of its own that seen
+// already holds, marking it. A page tree is a strict tree (ISO 32000-1,
+// 7.7.3.2), so an array reached twice is malformed, and walked anew wherever
+// it is reached, direct nodes that each name it again fan it out 2^depth up to
+// [maxPageTreeDepth]. The reader walks it once too (see
+// [document.ResolvePages]).
+func pageTreeKids(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, kidsObj ast.PdfObject, seen map[int]bool) ast.PdfArray {
+	kids := liveArray(ctx, alloc, doc, kidsObj)
+	if kids != nil && document.VisitedBefore(kidsObj, seen) {
+		return nil
+	}
+	return kids
 }
 
 // pdfa1PermittedAnnotSubtypes lists the PDF 1.4 annotation types ISO 19005-1

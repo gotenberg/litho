@@ -167,6 +167,10 @@ type emptyFigures struct {
 	// the order the walk reached them.
 	elems map[int]ast.PdfDict
 	order []int
+	// arrays marks the /K arrays written as objects of their own that the
+	// walk read, each read once: the direct elements such an array holds can
+	// each name it again as their /K.
+	arrays map[int]bool
 	// holders maps an element to the object numbers of the nodes whose /K
 	// lists it, elements or the root.
 	holders map[int][]int
@@ -218,6 +222,7 @@ func newEmptyFigures(ctx context.Context, alloc *writer.ObjAllocator, doc *docum
 		catalogRef: catalogRef,
 		rootRef:    rootRef,
 		elems:      make(map[int]ast.PdfDict),
+		arrays:     make(map[int]bool),
 		holders:    make(map[int][]int),
 		figures:    make(map[int]bool),
 		kept:       make(map[int]bool),
@@ -299,12 +304,19 @@ func isStructElement(d ast.PdfDict) bool {
 
 // walk records the elements the /K value kObj lists, holder being the object
 // number of the node listing them, 0 for an element written inline, and
-// descends into each. It reports false when the walk stopped at
+// descends into each. A /K array written as an object of its own is read once
+// ([emptyFigures.arrays]), as an element is: walked anew wherever it is
+// reached, direct elements that name it again fan it out 2^depth. It reports false when the walk stopped at
 // [compliance.MaxStructTreeWalkDepth], the depth validation walks to, with part
 // of the tree unread.
 func (f *emptyFigures) walk(ctx context.Context, kObj ast.PdfObject, holder, depth int) bool {
 	if depth > compliance.MaxStructTreeWalkDepth || ctx.Err() != nil {
 		return false
+	}
+	if v, state := f.lookup(ctx, kObj); state == lookupFound {
+		if _, isArr := v.(ast.PdfArray); isArr && document.VisitedBefore(kObj, f.arrays) {
+			return true
+		}
 	}
 	for _, kid := range f.kids(ctx, kObj) {
 		switch v := kid.(type) {
