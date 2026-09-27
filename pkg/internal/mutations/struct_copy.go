@@ -412,12 +412,14 @@ func structKeysOf(alloc *writer.ObjAllocator, num int) ast.PdfDict {
 
 // copiedObjects returns the output objects copier wrote, in order, and extra,
 // leaving out the ones it stood an output object in for (see
-// [writer.Copier.MapTo]).
-func copiedObjects(copier *writer.Copier, mapped map[int]bool, extra []ast.PdfIndirectRef) []int {
+// [writer.Copier.MapTo]): the element a source's root joins, and what a
+// repeated page shares with its first copy (see [shareRepeatedPages]), whose
+// structure keys another source owns.
+func copiedObjects(copier *writer.Copier, extra []ast.PdfIndirectRef) []int {
 	seen := make(map[int]bool)
 	var out []int
 	for src, dst := range copier.Mapping() {
-		if mapped[src] || seen[dst] {
+		if copier.StandsIn(src) || seen[dst] {
 			continue
 		}
 		seen[dst] = true
@@ -438,7 +440,7 @@ func copiedObjects(copier *writer.Copier, mapped map[int]bool, extra []ast.PdfIn
 // a tagged output without its structure: its keys index no entry of the
 // output's /ParentTree, or one that another document's content owns.
 func stripStructKeys(alloc *writer.ObjAllocator, copier *writer.Copier, pages []ast.PdfIndirectRef) {
-	for _, num := range copiedObjects(copier, nil, pages) {
+	for _, num := range copiedObjects(copier, pages) {
 		dict := structKeysOf(alloc, num)
 		for _, key := range structKeyEntries {
 			delete(dict, key)

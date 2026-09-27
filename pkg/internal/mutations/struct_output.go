@@ -557,10 +557,6 @@ func kidsValue(kids ast.PdfArray) ast.PdfObject {
 // annotation or XObject, so the keys are read again until none is new.
 func (t *structOutput) settle(ctx context.Context, s *structSource) error {
 	base := t.nextKey
-	mapped := map[int]bool{}
-	if s.rootRef.ObjectNum != 0 {
-		mapped[s.rootRef.ObjectNum] = true
-	}
 
 	for _, id := range slices.Sorted(maps.Keys(s.ids)) {
 		dst, err := s.copier.CopyObject(ctx, s.ids[id])
@@ -578,7 +574,7 @@ func (t *structOutput) settle(ctx context.Context, s *structSource) error {
 	maxKey := s.nextKey - 1
 	for range maxStructTreeDepth {
 		var fresh []int
-		for _, num := range copiedObjects(s.copier, mapped, s.pageRefs) {
+		for _, num := range copiedObjects(s.copier, s.pageRefs) {
 			dict := structKeysOf(t.alloc, num)
 			for _, entry := range structKeyEntries {
 				if key, isInt := dict[entry].(ast.PdfInt); isInt && key >= 0 && !seen[int(key)] {
@@ -619,7 +615,7 @@ func (t *structOutput) settle(ctx context.Context, s *structSource) error {
 			t.parentTree[base+key] = value
 		}
 	}
-	for _, num := range copiedObjects(s.copier, mapped, s.pageRefs) {
+	for _, num := range copiedObjects(s.copier, s.pageRefs) {
 		dict := structKeysOf(t.alloc, num)
 		for _, entry := range structKeyEntries {
 			key, isInt := dict[entry].(ast.PdfInt)

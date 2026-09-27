@@ -14,7 +14,8 @@ import (
 // the given 0-based position. Position 0 inserts before the first page;
 // position equal to the current page count appends. If sourcePageNums is
 // empty, all source pages are inserted. Page numbers in sourcePageNums are
-// 1-based.
+// 1-based, and one named more than once is inserted each time, a page of its
+// own (see [pageRanks] and [shareRepeatedPages]).
 //
 // It treats the copied pages as [Merge] treats a later source's: their fields
 // join the form under their own names, their signed signature fields are drawn
@@ -71,24 +72,6 @@ func InsertPages(
 		return fmt.Errorf("resolving catalog dict")
 	}
 
-	// Copy source page objects into the target allocator. copyPageForOutput
-	// carries the Resources, MediaBox, CropBox and Rotate the source pages
-	// inherited from their own tree, since the flat target tree gives them
-	// nothing to inherit.
-	copier := writer.NewCopier(srcDoc, alloc)
-	overrides := pageCopyOverrides(pagesToInsert)
-	if removed := unselectedPages(srcPages, pagesToInsert); len(removed) > 0 {
-		splitDestOverrides(ctx, srcDoc, pagesToInsert, removed, overrides)
-		if srcCatalog, err := document.ResolveCatalog(ctx, srcDoc); err == nil && srcCatalog != nil {
-			dropped := droppedPageAnnots(ctx, nil, srcDoc, srcPages, removed)
-			// Dropped on purpose, for the same reason as split: insert copies
-			// only the selected source pages into the target, so an unselected
-			// source page is unreachable from what it copies. Measured past the
-			// bound, insert never carried one.
-			fieldOverrides, _ := fieldKidOverrides(ctx, nil, srcDoc, srcCatalog.Dict, dropped)
-			maps.Copy(overrides, fieldOverrides)
-		}
-	}
 	// The inserted pages carry their structure into the target's tree, or into
 	// a tree of their own when the target has none (see [structOutput]). A
 	// target whose tree cannot be extended whole keeps it as it is, and the
@@ -105,39 +88,6 @@ func InsertPages(
 	case targetTagged:
 		// No structure element of the target encloses a copied widget.
 		marking = bakeArtifacts
-	}
-	overrides, err = bakeSignedSignatures(ctx, srcDoc, pagesToInsert, overrides, marking)
-	if err != nil {
-		return err
-	}
-	var structs *structSource
-	if marking == bakeTagged {
-		structs, overrides, err = newStructSource(ctx, srcDoc, overrides, pagesToInsert)
-		if err != nil {
-			return err
-		}
-	}
-	if len(overrides) > 0 {
-		copier.WithOverrides(overrides)
-	}
-	newTree := false
-	if structs != nil {
-		if target == nil {
-			_, lang := catalogLang(ctx, alloc, doc, catalogDict)
-			target, newTree = newStructOutput(alloc, lang), true
-		}
-		target.expect(structs, copier)
-	}
-	copiedRefs := make([]ast.PdfIndirectRef, len(pagesToInsert))
-	for i, page := range pagesToInsert {
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("inserting pages canceled: %w", err)
-		}
-		ref, err := copyPageForOutput(ctx, copier, alloc, srcDoc, page)
-		if err != nil {
-			return fmt.Errorf("copying source page %d: %w", i+1, err)
-		}
-		copiedRefs[i] = ref
 	}
 
 	pagesObj, ok := catalogDict["Pages"]
@@ -172,16 +122,72 @@ func InsertPages(
 		}
 	}
 
-	if structs != nil {
+	// Copy source page objects into the target allocator. copyPageForOutput
+	// carries the Resources, MediaBox, CropBox and Rotate the source pages
+	// inherited from their own tree, since the flat target tree gives them
+	// nothing to inherit. A source page named more than once is copied once
+	// for each naming, each later round by a copier of its own (see
+	// [pageRanks] and [shareRepeatedPages]), with elements of its own in the
+	// structure tree.
+	removed := unselectedPages(srcPages, pagesToInsert)
+	copiedRefs := make([]ast.PdfIndirectRef, len(pagesToInsert))
+	firstCopies := make(map[int]ast.PdfIndirectRef)
+	var copier *writer.Copier
+	var untagged []untaggedCopy
+	newTree, carried := false, false
+	for rank, indices := range pageRanks(pagesToInsert) {
+		rankPages := pagesAt(pagesToInsert, indices)
+		overrides, structs, err := pageCopyPlan(ctx, srcDoc, srcPages, rankPages, removed, marking)
+		if err != nil {
+			return err
+		}
+		c := writer.NewCopier(srcDoc, alloc)
+		if len(overrides) > 0 {
+			c.WithOverrides(overrides)
+		}
+		if rank == 0 {
+			copier = c
+		} else if err := shareRepeatedPages(ctx, srcDoc, copier, c, rankPages, firstCopies); err != nil {
+			return err
+		}
+		if structs != nil {
+			if target == nil {
+				_, lang := catalogLang(ctx, alloc, doc, catalogDict)
+				target, newTree = newStructOutput(alloc, lang), true
+			}
+			target.expect(structs, c)
+		}
+
+		copied := make([]ast.PdfIndirectRef, 0, len(indices))
+		for _, i := range indices {
+			if err := ctx.Err(); err != nil {
+				return fmt.Errorf("inserting pages canceled: %w", err)
+			}
+			ref, err := copyPageForOutput(ctx, c, alloc, srcDoc, pagesToInsert[i])
+			if err != nil {
+				return fmt.Errorf("copying source page %d: %w", i+1, err)
+			}
+			copiedRefs[i] = ref
+			copied = append(copied, ref)
+			if rank == 0 && pagesToInsert[i].Ref.ObjectNum > 0 {
+				firstCopies[pagesToInsert[i].Ref.ObjectNum] = ref
+			}
+		}
+		if structs == nil {
+			untagged = append(untagged, untaggedCopy{copier: c, pages: copied})
+			continue
+		}
 		// In a tree of their own the pages' elements are the whole tree. In
-		// the target's they join where their pages did.
+		// the target's they join where their pages did, a later round's after
+		// the elements an earlier one put there.
 		place := -1
 		if !newTree {
 			place = target.insertionIndex(ctx, structs, current, at)
 		}
-		if err := target.add(ctx, structs, copiedRefs, place); err != nil {
+		if err := target.add(ctx, structs, copied, place); err != nil {
 			return fmt.Errorf("carrying the inserted pages' structure: %w", err)
 		}
+		carried = true
 	}
 
 	// Build new /Kids: pages [0..at) + inserted + pages [at..).
@@ -254,9 +260,13 @@ func InsertPages(
 	}
 
 	switch {
-	case structs != nil:
+	case carried:
 		// Last, after every copy from the source, whose content may name
-		// structure keys the tree has to carry.
+		// structure keys the tree has to carry or, from a round copied
+		// without its structure, drop.
+		for _, u := range untagged {
+			target.untag(u.copier, u.pages)
+		}
 		rootRef, err := target.finish(ctx)
 		if err != nil {
 			return fmt.Errorf("carrying the inserted pages' structure: %w", err)
@@ -273,7 +283,9 @@ func InsertPages(
 	case targetTagged:
 		// The inserted content joins a tagged document without its structure,
 		// so its keys index none of the target's /ParentTree entries.
-		stripStructKeys(alloc, copier, copiedRefs)
+		for _, u := range untagged {
+			stripStructKeys(alloc, u.copier, u.pages)
+		}
 	}
 	return nil
 }

@@ -1174,6 +1174,9 @@ func (w *Writer) DeletePages(pages ...int) error {
 //     document's pages and the inserted ones alike, the pages of a document
 //     with no page labels showing their page numbers in it. A document and a
 //     source with none give a document with none.
+//   - A source page sourcePages names more than once is a page of the
+//     document each time, a page object with annotations and structure
+//     elements of its own, as a page [Split] names again is.
 //
 // InsertPages reads a copy of source's document, as [Split] does, so source is
 // left as it was and other goroutines may read it meanwhile. source must stay
@@ -3668,6 +3671,19 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 // outline is handled in the output (default: keep and remap existing,
 // drop orphans). Pass [WithWriteLogger] to receive structured debug logs
 // from the split engine.
+//
+// A page named more than once is a page of the output each time, a page
+// object of its own: a page has one /Parent and one place in the page tree
+// (ISO 32000-1, 7.7.3.3), so naming one object twice would give the output
+// the page once. The copies draw from the same content streams and resources,
+// all but a form XObject or an image that a structure key indexes, of which
+// each copy has its own. Each copy has annotations of its own, whose /P names
+// it, the widgets among them presenting a copy of their fields under the same
+// names, as a [Merge] of a document with itself presents them. A link to
+// another page of the output goes to that page. Each copy carries structure
+// elements of its own, since an element and a structure key describe one page
+// (14.7.4.4): the copies after the first join the tree as a later source's
+// elements join a [Merge]'s. Each copy shows its page's label.
 //
 // The output is written in the clear unless [WithEncryption] is passed, even
 // when src is encrypted: see that option for why a source's encryption cannot

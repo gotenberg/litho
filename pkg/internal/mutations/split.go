@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"maps"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -14,7 +13,8 @@ import (
 )
 
 // Split extracts the specified 1-based pages from a document into a new PDF
-// written to dst. Pages are included in the order given; duplicates are allowed.
+// written to dst. Pages are included in the order given; duplicates are allowed,
+// each a page of its own (see [pageRanks] and [shareRepeatedPages]).
 // bookmarkCfg controls how bookmarks are produced for the output.
 //
 // A non-nil encryptCfg encrypts the output. Passing nil writes it in the
@@ -34,68 +34,79 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	}
 
 	alloc := writer.NewObjAllocator(0)
-	copier := writer.NewCopier(doc, alloc)
 
+	selected := make([]*document.Page, len(pages))
 	keptIndices := make([]int, len(pages))
-	keptPages := make([]*document.Page, len(pages))
 	for i, pageNum := range pages {
 		keptIndices[i] = pageNum - 1
-		keptPages[i] = allPages[pageNum-1]
+		selected[i] = allPages[pageNum-1]
 	}
+	removed := removedPageSet(allPages, keptIndices)
 
-	overrides := pageCopyOverrides(keptPages)
-	if removed := removedPageSet(allPages, keptIndices); len(removed) > 0 {
-		splitDestOverrides(ctx, doc, keptPages, removed, overrides)
-		if srcCatalog, err := document.ResolveCatalog(ctx, doc); err == nil && srcCatalog != nil {
-			dropped := droppedPageAnnots(ctx, nil, doc, allPages, removed)
-			// The truncation flag is dropped here on purpose. Split copies
-			// outward from the pages it keeps, so an unextracted page is not
-			// reachable from the copied root however deep the field tree runs;
-			// measured across chain depths well past the bound, split never
-			// carried the excluded page. Only delete, which rewrites whatever
-			// the catalog reaches, has to refuse.
-			fieldOverrides, _ := fieldKidOverrides(ctx, nil, doc, srcCatalog.Dict, dropped)
-			maps.Copy(overrides, fieldOverrides)
-		}
-	}
-	// The output carries the structure of the pages it keeps, so a drawn
-	// signature is tagged under the element that enclosed its widget.
-	overrides, err := bakeSignedSignatures(ctx, doc, keptPages, overrides, bakeTagged)
-	if err != nil {
-		return err
-	}
-	structs, overrides, err := newStructSource(ctx, doc, overrides, keptPages)
-	if err != nil {
-		return err
-	}
-	if len(overrides) > 0 {
-		copier.WithOverrides(overrides)
-	}
+	// Each page is copied once for each time pages names it, the first
+	// namings of every page by one copier and each later round by one of its
+	// own (see [pageRanks]). The output carries the structure of the pages it
+	// keeps, each round's under its own elements, so a drawn signature is
+	// tagged under the element that enclosed its widget.
+	pageRefs := make([]ast.PdfObject, len(pages))
+	placed := make([]ast.PdfIndirectRef, len(pages))
+	firstCopies := make(map[int]ast.PdfIndirectRef)
+	var copier *writer.Copier
 	var tree *structOutput
-	if structs != nil {
-		tree = newStructOutput(alloc, structs.lang)
-		tree.expect(structs, copier)
-	}
-
-	// Copy each selected page, building new page refs.
-	pageRefs := make([]ast.PdfObject, 0, len(pages))
-	copiedPages := make([]ast.PdfIndirectRef, 0, len(pages))
-	for _, pageNum := range pages {
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("split canceled: %w", err)
-		}
-
-		srcPage := allPages[pageNum-1]
-		newRef, err := copyPageForOutput(ctx, copier, alloc, doc, srcPage)
+	var untagged []untaggedCopy
+	for rank, indices := range pageRanks(selected) {
+		rankPages := pagesAt(selected, indices)
+		overrides, structs, err := pageCopyPlan(ctx, doc, allPages, rankPages, removed, bakeTagged)
 		if err != nil {
-			return fmt.Errorf("copying page %d: %w", pageNum, err)
+			return err
 		}
-		pageRefs = append(pageRefs, newRef)
-		copiedPages = append(copiedPages, newRef)
-	}
-	if tree != nil {
-		if err := tree.add(ctx, structs, copiedPages, -1); err != nil {
+		c := writer.NewCopier(doc, alloc)
+		if len(overrides) > 0 {
+			c.WithOverrides(overrides)
+		}
+		if rank == 0 {
+			copier = c
+		} else if err := shareRepeatedPages(ctx, doc, copier, c, rankPages, firstCopies); err != nil {
+			return err
+		}
+		if structs != nil {
+			if tree == nil {
+				tree = newStructOutput(alloc, structs.lang)
+			}
+			tree.expect(structs, c)
+		}
+
+		copied := make([]ast.PdfIndirectRef, 0, len(indices))
+		for _, i := range indices {
+			if err := ctx.Err(); err != nil {
+				return fmt.Errorf("split canceled: %w", err)
+			}
+			newRef, err := copyPageForOutput(ctx, c, alloc, doc, selected[i])
+			if err != nil {
+				return fmt.Errorf("copying page %d: %w", pages[i], err)
+			}
+			pageRefs[i] = newRef
+			copied = append(copied, newRef)
+			if rank == 0 && selected[i].Ref.ObjectNum > 0 {
+				firstCopies[selected[i].Ref.ObjectNum] = newRef
+			}
+		}
+		if structs == nil {
+			untagged = append(untagged, untaggedCopy{copier: c, pages: copied})
+			continue
+		}
+		// A later round's elements go where its first page does among the
+		// pages copied so far: page order is the reading order the
+		// structure tree gives (ISO 32000-1, 14.8.2.3).
+		at := -1
+		if rank > 0 {
+			at = tree.insertionIndex(ctx, structs, placed, indices[0])
+		}
+		if err := tree.add(ctx, structs, copied, at); err != nil {
 			return fmt.Errorf("carrying the structure tree: %w", err)
+		}
+		for j, i := range indices {
+			placed[i] = copied[j]
 		}
 	}
 
@@ -171,8 +182,12 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 	}
 
 	// After every copy from the source, whose content may name structure keys
-	// the tree has to carry.
+	// the tree has to carry or, from a round copied without its structure,
+	// drop.
 	if tree != nil {
+		for _, u := range untagged {
+			tree.untag(u.copier, u.pages)
+		}
 		rootRef, err := tree.finish(ctx)
 		if err != nil {
 			return fmt.Errorf("carrying the structure tree: %w", err)

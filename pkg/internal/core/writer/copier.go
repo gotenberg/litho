@@ -18,6 +18,9 @@ type Copier struct {
 	allocator *ObjAllocator
 	mapping   map[int]int // src objNum -> dst objNum
 	overrides map[int]ast.PdfObject
+	// stoodIn holds the source objects [Copier.MapTo] stood an output object
+	// in for, which the copier never copied.
+	stoodIn map[int]bool
 }
 
 // NewCopier creates a Copier that copies objects from src into the allocator's
@@ -27,6 +30,7 @@ func NewCopier(src *document.Document, allocator *ObjAllocator) *Copier {
 		src:       src,
 		allocator: allocator,
 		mapping:   make(map[int]int),
+		stoodIn:   make(map[int]bool),
 	}
 }
 
@@ -63,6 +67,14 @@ func (c *Copier) Mapping() map[int]int {
 // call it before the copy that should honour it.
 func (c *Copier) MapTo(srcObjNum int, dst ast.PdfIndirectRef) {
 	c.mapping[srcObjNum] = dst.ObjectNum
+	c.stoodIn[srcObjNum] = true
+}
+
+// StandsIn reports whether [Copier.MapTo] stood an output object in for source
+// object srcObjNum, so the object [Copier.Mapping] gives for it is not one the
+// copier wrote.
+func (c *Copier) StandsIn(srcObjNum int) bool {
+	return c.stoodIn[srcObjNum]
 }
 
 // CopyRef resolves an indirect reference from the source document, deep-copies

@@ -302,8 +302,9 @@ func numberTreeOf(alloc *writer.ObjAllocator, nums ast.PdfArray, perNode int) as
 // A page listed again is held once, where it is first listed, and a kid with
 // no object number not at all, as the page tree a rewrite writes holds them:
 // [pageTreeRepair] drops a kid it has already walked, a page object having one
-// parent (ISO 32000-1, 7.7.3.3). A split naming a page twice lists its one
-// copy twice, so the labels follow the pages the output holds.
+// parent (ISO 32000-1, 7.7.3.3), so the labels follow the pages the output
+// holds. A split or an insertion naming a page twice writes a copy for each
+// naming (see [shareRepeatedPages]), and lists no page twice itself.
 func heldPageLabels(refs []ast.PdfIndirectRef, labelOf func(i int) pageLabel) []pageLabel {
 	seen := make(map[int]bool, len(refs))
 	labels := make([]pageLabel, 0, len(refs))

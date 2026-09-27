@@ -199,22 +199,16 @@ func TestSplitCarriesPageLabels(t *testing.T) {
 		assertLabels(t, fmt.Sprintf("split %v", tc.pages), out.Bytes(), tc.want, tc.keys)
 	}
 
-	// A page named twice: whatever pages the output holds, each shows the
-	// label its source page showed, which its /MediaBox width names.
+	// A page named twice is two pages, each showing the label its source page
+	// showed, which its /MediaBox width names.
 	var out bytes.Buffer
 	if err := Split(ctx, src, []int{2, 2, 3}, &out); err != nil {
 		t.Fatalf("Split: %v", err)
 	}
-	got, _ := displayedLabels(t, out.Bytes())
-	sources := pageSources(t, out.Bytes())
-	if len(got) != len(sources) {
-		t.Fatalf("split [2 2 3]: %d labels for %d pages", len(got), len(sources))
+	if got, want := pageSources(t, out.Bytes()), []int{1, 1, 2}; !slices.Equal(got, want) {
+		t.Fatalf("split [2 2 3]: pages copy source pages %v, want %v", got, want)
 	}
-	for i, source := range sources {
-		if got[i] != sixLabelled[source] {
-			t.Errorf("split [2 2 3]: page %d, source page %d, shows %q, want %q", i+1, source+1, got[i], sixLabelled[source])
-		}
-	}
+	assertLabels(t, "split [2 2 3]", out.Bytes(), []string{"ii", "ii", "A-5"}, []int{0, 1, 2})
 
 	out.Reset()
 	if err := Split(ctx, openBytes(t, labelledPDF(4, "")), []int{3, 4}, &out); err != nil {
@@ -344,19 +338,19 @@ func TestStagedPageEditsCarryPageLabels(t *testing.T) {
 	assertLabels(t, "delete then append plain pages", out, []string{"A-5", "A-6", "A", "B", "1", "2"}, []int{0, 2, 4})
 
 	// A source page named twice, then a deletion over the pages that left:
-	// whatever pages the output holds, each shows the label of the page its
-	// /MediaBox width names.
+	// the page is inserted twice, and each page shows the label of the page
+	// its /MediaBox width names.
 	out = writeLabelled(t, src, func(w *Writer) error {
 		if err := w.InsertPages(1, openBytes(t, src), 5, 5, 2); err != nil {
 			return err
 		}
 		return w.DeletePages(1, 3)
 	})
-	got, _ := displayedLabels(t, out)
 	sources := pageSources(t, out)
-	if len(got) != len(sources) {
-		t.Fatalf("repeated insertion: %d labels for %d pages", len(got), len(sources))
+	if want := []int{4, 4, 1, 1, 3, 4, 5}; !slices.Equal(sources, want) {
+		t.Fatalf("repeated insertion: pages copy source pages %v, want %v", sources, want)
 	}
+	got, _ := displayedLabels(t, out)
 	for i, source := range sources {
 		if got[i] != sixLabelled[source] {
 			t.Errorf("repeated insertion: page %d, source page %d, shows %q, want %q", i+1, source+1, got[i], sixLabelled[source])
