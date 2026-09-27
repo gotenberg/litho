@@ -1231,26 +1231,6 @@ func pageBoxCorner(ctx context.Context, doc *document.Document, box ast.PdfArray
 	return v
 }
 
-// PageBoundaryRect returns the rectangle ISO 19005-2, 6.1.13 t11 measures a
-// page boundary array as, [x0 y0 x1 y1] with each corner read by
-// [pageBoxCorner], and whether the array as written differs from it: it is not
-// four entries, or one of its first four is no number. The remediation writes
-// this rectangle in place of such a box, so it repairs the box the validator
-// measured.
-func PageBoundaryRect(ctx context.Context, doc *document.Document, box ast.PdfArray) (ast.PdfArray, bool) {
-	differs := len(box) != 4
-	rect := make(ast.PdfArray, 4)
-	for i := range rect {
-		rect[i] = ast.PdfReal(pageBoxCorner(ctx, doc, box, i))
-		if i < len(box) {
-			if _, err := resolveFloat(ctx, doc, box[i]); err != nil {
-				differs = true
-			}
-		}
-	}
-	return rect, differs
-}
-
 // resolveFloat resolves a PdfObject to a float64, handling both PdfInt and PdfReal.
 func resolveFloat(ctx context.Context, doc *document.Document, obj ast.PdfObject) (float64, error) {
 	resolved, err := document.ResolveObject(ctx, doc, obj)

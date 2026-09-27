@@ -4,7 +4,6 @@ import (
 	"context"
 	"maps"
 
-	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -180,31 +179,6 @@ func cropBoxToWrite(page *document.Page) (ast.PdfArray, bool) {
 		return nil, false
 	}
 	return page.CropBox, true
-}
-
-// pageRectangle returns box, a page boundary, as a rectangle of four numbers:
-// box itself when it is one, else the rectangle ISO 19005-2, 6.1.13 measures
-// it as (see [compliance.PageBoundaryRect]).
-func pageRectangle(ctx context.Context, doc *document.Document, box ast.PdfArray) ast.PdfArray {
-	if isNumberRectangle(box) {
-		return box
-	}
-	rect, _ := compliance.PageBoundaryRect(ctx, doc, box)
-	return rect
-}
-
-// isNumberRectangle reports whether box is a rectangle as ISO 32000-1, 7.9.5
-// writes one: an array of four numbers.
-func isNumberRectangle(box ast.PdfArray) bool {
-	if len(box) != 4 {
-		return false
-	}
-	for _, v := range box {
-		if _, isNumber := document.Number(v); !isNumber {
-			return false
-		}
-	}
-	return true
 }
 
 // rectangleCorners returns a rectangle of four numbers as its lower-left and

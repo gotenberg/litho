@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -99,11 +100,21 @@ func StampPDF(
 }
 
 // pageToFormXObject converts a PDF page into a Form XObject stream in the
-// allocator's namespace. The form's /BBox is the source page's /MediaBox,
-// /Resources is a deep copy of the source page's resources, and the
-// stream content is the concatenated raw bytes of the source page's
+// allocator's namespace. The form's /BBox is the media box a viewer draws the
+// source page on, /Resources is a deep copy of the source page's resources,
+// and the stream content is the concatenated raw bytes of the source page's
 // content stream(s). This is the standard PDF §8.10 transformation used
 // for n-up, stamping, and watermarking.
+//
+// # Corpus evidence
+//
+//   - pdfjs boundingBox_invalid.pdf: page 1 states /MediaBox [0 0 0 0], and
+//     read as the rectangle ISO 19005-2, 6.1.13 measures, the /BBox clipped
+//     the stamp away whole.
+//   - All corpora: 10 pages in 7 files state a media box no viewer uses, or
+//     none, and stamping them was refused, among them govdocs
+//     thread_400_400739.pdf, pdfjs issue9105_other.pdf and litho
+//     pageboxes_2b.pdf.
 func pageToFormXObject(
 	ctx context.Context,
 	srcDoc *document.Document,
@@ -111,19 +122,13 @@ func pageToFormXObject(
 	copier *writer.Copier,
 	alloc *writer.ObjAllocator,
 ) (ast.PdfIndirectRef, error) {
-	// BBox: prefer MediaBox, fall back to CropBox. A /BBox is a rectangle (ISO
-	// 32000-1, Table 95), so the box is written as four numbers (see
-	// [pageRectangle]). Written as the source states it, an entry that is no
-	// number stayed, and a reference to an object of srcDoc named whatever
-	// object of the target has that number.
-	bbox := srcPage.MediaBox
-	if len(bbox) != 4 && len(srcPage.CropBox) == 4 {
-		bbox = srcPage.CropBox
-	}
-	if len(bbox) != 4 {
-		return ast.PdfIndirectRef{}, fmt.Errorf("source page has no usable MediaBox")
-	}
-	bbox = pageRectangle(ctx, srcDoc, bbox)
+	// The /BBox clips the form (ISO 32000-1, 8.10.2, Table 95), and the stamp
+	// clips where a viewer draws the source page: on its /MediaBox when a
+	// viewer uses it, four numbers enclosing an area, and on US Letter when it
+	// does not (see [document.Page.ViewedMediaBox]). Either is four numbers,
+	// never a reference to an object of srcDoc, which would name another
+	// object in the target.
+	bbox := slices.Clone(srcPage.ViewedMediaBox())
 
 	// Copy resources into the destination allocator. Use the ones the source
 	// page reaches, which it inherits from an ancestor /Pages node when it

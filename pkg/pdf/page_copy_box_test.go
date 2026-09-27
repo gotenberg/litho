@@ -130,29 +130,52 @@ func TestPageCopies_WriteRectangleBoxes(t *testing.T) {
 	}
 }
 
-// TestStampPDF_WritesARectangleBBox pins that the form a PDF stamp builds from
-// a source page has a /BBox of four numbers (ISO 32000-1, Table 95) when the
-// page's /MediaBox is no rectangle. [0 /Foo 200 300] was written as it stood,
-// and [0 0 200 6 0 R], naming a dictionary, carried a reference to an object
-// of the source into the stamped document, where it named another object.
-func TestStampPDF_WritesARectangleBBox(t *testing.T) {
+// TestStampPDF_ClipsToThePageAViewerDraws pins that the form a PDF stamp builds
+// from a source page is clipped to the page a viewer draws, its /BBox (ISO
+// 32000-1, 8.10.1): the source's /MediaBox when a viewer uses it, and the US
+// Letter page a viewer draws in its place when it does not (see
+// [document.UsableBox]). The /BBox was the rectangle ISO 19005-2, 6.1.13
+// measures the box as: [0 /Foo 200 300] clipped the stamp to 200 by 300,
+// [0 0 0 0] clipped all of it away, and a page with no /MediaBox refused to
+// stamp. It is four numbers either way (ISO 32000-1, Table 95): [0 0 200 6 0 R],
+// naming a dictionary, was once written as it stood, a reference to an object
+// of the source that named another object in the stamped document.
+//
+// # Corpus evidence
+//
+//   - pdfjs boundingBox_invalid.pdf: page 1 states /MediaBox [0 0 0 0], and
+//     its stamp was clipped away whole.
+//   - All corpora: StampPDF refused 10 pages in 7 files, whose media box is
+//     none a viewer uses or absent, among them govdocs thread_400_400739.pdf,
+//     pdfjs issue9105_other.pdf and litho pageboxes_2b.pdf.
+func TestStampPDF_ClipsToThePageAViewerDraws(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	const content = "BT /F1 12 Tf 10 10 Td (Stamp) Tj ET"
 	src := buildPDF([]string{
 		"<< /Type /Catalog /Pages 2 0 R >>",
-		"<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>",
+		"<< /Type /Pages /Kids [3 0 R 4 0 R 8 0 R 9 0 R 10 0 R 11 0 R] /Count 6 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 /Foo 200 300] /Contents 5 0 R >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 6 0 R] /Contents 5 0 R >>",
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
 		"<< /Kind /NotANumber >>",
+		"300",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 0 0] /Contents 5 0 R >>",
+		"<< /Type /Page /Parent 2 0 R /Contents 5 0 R >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 7 0 R] /Contents 5 0 R >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 300] /Contents 5 0 R >>",
 	})
+	letter := []float64{0, 0, 612, 792}
 	for _, tc := range []struct {
 		page int
 		want []float64
 	}{
-		{1, []float64{0, 0, 200, 300}},
-		{2, []float64{0, 0, 200, 0}},
+		{1, letter},
+		{2, letter},
+		{3, letter},
+		{4, letter},
+		{5, []float64{0, 0, 200, 300}},
+		{6, []float64{0, 0, 200, 300}},
 	} {
 		out := writeLabelled(t, labelledPDF(1, ""), func(w *Writer) error {
 			return w.StampPDF(PDFStamp{Source: openBytes(t, src), Page: tc.page})
