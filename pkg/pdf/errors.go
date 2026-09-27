@@ -285,9 +285,9 @@ var (
 	// ISO 19005-3, 6.1.3 and ISO 19005-4, 6.1.3. [Writer.RemediatePDFA],
 	// [Writer.RemediateFacturX] and [Writer.RepairFacturX], whose Factur-X
 	// output is a PDF/A-3 file, return it when [Writer.Encrypt] was called
-	// before them, and [Writer.WriteTo] and [Pipeline.WriteTo] return it when
-	// [WithEncryption] asks to encrypt what such a remediation produced.
-	// Nothing is written.
+	// before them or [NewWriter] was given [WithEncryption], and
+	// [Writer.WriteTo] and [Pipeline.WriteTo] return it when WithEncryption
+	// asks to encrypt what such a remediation produced. Nothing is written.
 	ErrPDFAForbidsEncryption = errors.New("PDF/A forbids encryption: the trailer shall not contain the Encrypt key")
 
 	// ErrPDFUAForbidsBarringAccessibility is returned, naming the clause, when
@@ -295,9 +295,10 @@ var (
 	// that clear bit 10 of the P key, the permission to extract content for
 	// accessibility (ISO 32000-1, 7.6.3.2, Table 22). ISO 14289-1, 7.16
 	// requires an encrypted conforming file to set it.
-	// [Writer.RemediatePDFUA] returns it when [Writer.Encrypt] asked for such
-	// permissions before it, and [Writer.WriteTo] and [Pipeline.WriteTo] return
-	// it when [WithEncryption] asks for them after it. Nothing is written.
+	// [Writer.RemediatePDFUA] returns it when [Writer.Encrypt] or the
+	// [WithEncryption] given to [NewWriter] asked for such permissions before
+	// it, and [Writer.WriteTo] and [Pipeline.WriteTo] return it when
+	// [WithEncryption] asks for them after it. Nothing is written.
 	ErrPDFUAForbidsBarringAccessibility = errors.New("PDF/UA-1 requires an encrypted file to permit content extraction for accessibility: bit 10 of the P key shall be set")
 
 	// ErrEmptyInvoiceXML is returned by [Writer.RemediateFacturX] when

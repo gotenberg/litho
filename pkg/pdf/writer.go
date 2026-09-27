@@ -23,7 +23,9 @@ import (
 	"github.com/gotenberg/litho/pkg/models"
 )
 
-// WriteOption configures the behavior of [Writer.WriteTo].
+// WriteOption configures the behavior of [Writer.WriteTo], [Split], [Merge]
+// and [Pipeline.WriteTo]. Given to [NewWriter], an option is a default for the
+// Writer's WriteTo, which the same option given to WriteTo overrides.
 // WriteOption closures must be safe to call from any goroutine.
 type WriteOption func(*writeOpts)
 
@@ -53,7 +55,8 @@ func WithFullRewrite() WriteOption {
 }
 
 // WithEncryption encrypts the output with cfg. It applies to
-// [Writer.WriteTo], [Split] and [Merge].
+// [Writer.WriteTo], [Split] and [Merge], and to [NewWriter], where it asks for
+// the encryption as [Writer.Encrypt] does.
 //
 // The standalone operations need it because a source's encryption cannot
 // survive them unaided: the reader decrypts every object as it resolves it,
@@ -65,7 +68,8 @@ func WithFullRewrite() WriteOption {
 // single key derived from cfg.
 //
 // On [Writer.WriteTo] this is equivalent to [Writer.Encrypt] and likewise
-// forces a full rewrite, since every string and stream must be encrypted.
+// forces a full rewrite, since every string and stream must be encrypted. It
+// replaces the encryption Encrypt or NewWriter asked for.
 func WithEncryption(cfg EncryptConfig) WriteOption {
 	return func(o *writeOpts) {
 		o.encrypt = &cfg
@@ -178,6 +182,8 @@ func WithDedup() WriteOption {
 }
 
 // WithWriteLogger injects a structured logger for write-phase diagnostics.
+// Given to [NewWriter], it logs the Writer's [Writer.WriteTo], unless WriteTo
+// is given a logger of its own.
 func WithWriteLogger(logger *slog.Logger) WriteOption {
 	return func(o *writeOpts) {
 		o.logger = logger
@@ -197,12 +203,17 @@ func WithPipelineTempDir(dir string) WriteOption {
 
 // WithTempDir directs the temp files litho writes to dir instead of
 // [os.TempDir]. Passed to [NewWriter], it places the file a remediation writes
-// to revalidate its output; passed to [Pipeline.WriteTo], it also places the
-// pipeline's intermediate files, as [WithPipelineTempDir] does. Useful in
-// sandboxed environments where the default temp directory is not writable: a
-// remediation that cannot write there fails with [ErrRemediationUnverified].
+// to revalidate its output, and the temp files of the Writer's
+// [Writer.WriteTo]. Passed to WriteTo, it places the temp files that write
+// makes, the rewrite a signature goes on and the pages an insertion reads back
+// to generate bookmarks, instead of the directory NewWriter was given. Passed
+// to [Pipeline.WriteTo], it also places the pipeline's intermediate files, as
+// [WithPipelineTempDir] does. Useful in sandboxed environments where the
+// default temp directory is not writable: a remediation that cannot write
+// there fails with [ErrRemediationUnverified], and a write with the error it
+// met.
 //
-// [Writer.WriteTo], [Split] and [Merge] write no temp file and ignore it.
+// [Split] and [Merge] write no temp file and ignore it.
 func WithTempDir(dir string) WriteOption {
 	return func(o *writeOpts) {
 		o.tempDir = dir
@@ -636,6 +647,14 @@ type Writer struct {
 	decrypt      bool
 	forceRewrite bool
 	trailerDirty bool
+	// encryptBy names the call that asked for encryptCfg, "Writer.Encrypt" or
+	// the WithEncryption given to NewWriter, for the refusal of a remediation
+	// that forbids it.
+	encryptBy string
+	// defaults are the options NewWriter was given, but for the encryption,
+	// which it asks for as Encrypt does: WriteTo applies its own after them
+	// (see [Writer.writeOptions]).
+	defaults writeOpts
 	// consumed is set once WriteTo produces output successfully. A second
 	// WriteTo on the same Writer returns ErrWriterConsumed rather than
 	// re-applying the already-drained mutation state.
@@ -737,8 +756,13 @@ func (w *Writer) unfoldedMutations() []mutation {
 // before. The copy reads r's file, so r must stay open until the Writer has
 // finished.
 //
-// NewWriter reads [WithTempDir] from opts. The other options shape a write,
-// and belong to [Writer.WriteTo].
+// The options are defaults for [Writer.WriteTo]: it writes as if they came
+// before its own, so an option passed to WriteTo overrides the same setting
+// given here. [WithEncryption] asks for the encryption as [Writer.Encrypt]
+// does, so a later Encrypt replaces it as well, and a remediation that forbids
+// it refuses it as it refuses Encrypt. [WithTempDir] also places the temp
+// files a remediation writes. [WithBookmarks] shapes [Split] and [Merge] alone
+// and has no effect on a Writer.
 func NewWriter(r *Reader, opts ...WriteOption) *Writer {
 	cfg := writeOpts{}
 	for _, o := range opts {
@@ -746,7 +770,23 @@ func NewWriter(r *Reader, opts ...WriteOption) *Writer {
 	}
 	w := newWriterOn(r.fork())
 	w.tempDir = cfg.tempDir
+	if cfg.encrypt != nil {
+		w.askEncryption(*cfg.encrypt, "WithEncryption given to NewWriter")
+		cfg.encrypt = nil
+	}
+	w.defaults = cfg
 	return w
+}
+
+// writeOptions returns the options a write by [Writer.WriteTo] parses: the
+// ones [NewWriter] was given, then opts, so an option in opts overrides the
+// same setting given to NewWriter. Every parse starts from the zero
+// [writeOpts], and the first option puts NewWriter's settings in it.
+func (w *Writer) writeOptions(opts []WriteOption) []WriteOption {
+	defaults := w.defaults
+	merged := make([]WriteOption, 0, len(opts)+1)
+	merged = append(merged, func(o *writeOpts) { *o = defaults })
+	return append(merged, opts...)
 }
 
 // newWriterOn returns a Writer that edits r itself rather than a copy of it.
@@ -1402,13 +1442,21 @@ func encryptConfigFromInternal(c crypto.EncryptConfig) EncryptConfig {
 
 // Encrypt applies password-based encryption to the output document.
 // Forces a full rewrite since every string and stream must be
-// encrypted.
+// encrypted. It replaces the encryption [NewWriter] was given, and
+// [WithEncryption] passed to [Writer.WriteTo] replaces it.
 func (w *Writer) Encrypt(cfg EncryptConfig) {
 	if w.refuseAfterRemediation("Encrypt") != nil {
 		return
 	}
+	w.askEncryption(cfg, "Writer.Encrypt")
+}
+
+// askEncryption makes cfg the encryption of the output and forces the full
+// rewrite it needs. by names the call that asked for it.
+func (w *Writer) askEncryption(cfg EncryptConfig, by string) {
 	internal := cfg.toInternal()
 	w.encryptCfg = &internal
+	w.encryptBy = by
 	w.forceRewrite = true
 }
 
@@ -1774,8 +1822,8 @@ func remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options
 //
 // Its output is never encrypted: every part of ISO 19005 forbids the Encrypt
 // key in the trailer (6.1.3 in each). It returns [ErrPDFAForbidsEncryption]
-// when [Writer.Encrypt] was called before it, and [Writer.WriteTo] returns it
-// for [WithEncryption].
+// when [Writer.Encrypt] was called before it or [NewWriter] was given
+// [WithEncryption], and [Writer.WriteTo] returns it for WithEncryption.
 //
 // It is the last edit on the Writer (see [Writer]): it judges the document the
 // edits queued before it produce, and afterwards the Writer accepts
@@ -1804,8 +1852,9 @@ func (w *Writer) RemediatePDFA(ctx context.Context, profile models.PDFAProfile, 
 // file, and [EncryptConfig.Permissions] of -1 or from [Permissions.Mask] set
 // it. The remediation judges its output before it is encrypted, so rather
 // than report a document the write would then break, it returns
-// [ErrPDFUAForbidsBarringAccessibility] when [Writer.Encrypt] cleared the bit
-// before it, and [Writer.WriteTo] returns it for [WithEncryption].
+// [ErrPDFUAForbidsBarringAccessibility] when [Writer.Encrypt], or the
+// [WithEncryption] given to [NewWriter], cleared the bit before it, and
+// [Writer.WriteTo] returns it for WithEncryption.
 //
 // It is the last edit on the Writer (see [Writer]): it judges the document the
 // edits queued before it produce, and afterwards the Writer accepts
@@ -1919,7 +1968,8 @@ type FacturXConfig struct {
 //
 // Its output is a PDF/A-3 file, never encrypted (ISO 19005-3, 6.1.3): it
 // returns [ErrPDFAForbidsEncryption] when [Writer.Encrypt] was called before
-// it, and [Writer.WriteTo] returns it for [WithEncryption].
+// it or [NewWriter] was given [WithEncryption], and [Writer.WriteTo] returns
+// it for WithEncryption.
 func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RemediateFacturX", &err)
 	if len(cfg.InvoiceXML) == 0 {
@@ -1985,7 +2035,8 @@ func (w *Writer) RemediateFacturX(ctx context.Context, cfg FacturXConfig, opts .
 //
 // A repaired invoice is a PDF/A-3 file, never encrypted (ISO 19005-3, 6.1.3):
 // it returns [ErrPDFAForbidsEncryption] when [Writer.Encrypt] was called before
-// it, and [Writer.WriteTo] returns it for [WithEncryption].
+// it or [NewWriter] was given [WithEncryption], and [Writer.WriteTo] returns
+// it for WithEncryption.
 func (w *Writer) RepairFacturX(ctx context.Context, opts ...RemediateOption) (_ *RemediationReport, err error) {
 	defer recoverToError(w.logger(), "Writer.RepairFacturX", &err)
 	rcfg := remediateOpts{lang: "en", preserveContent: true, tolerance: DefaultRegressionTolerance}
@@ -2220,10 +2271,10 @@ type remediationRun func(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 //
 // A run that succeeds ends the Writer's edits (see
 // [Writer.refuseAfterRemediation]), and one on a Writer another run ended is
-// refused. So is a run for a PDF/A profile after [Writer.Encrypt], since ISO
-// 19005 forbids encrypting its output, and one for PDF/UA-1 after an
-// [Writer.Encrypt] that bars extraction for accessibility, which ISO 14289-1,
-// 7.16 forbids.
+// refused. So is a run for a PDF/A profile after [Writer.Encrypt] or the
+// [WithEncryption] given to [NewWriter], since ISO 19005 forbids encrypting its
+// output, and one for PDF/UA-1 after an encryption asked for either way that
+// bars extraction for accessibility, which ISO 14289-1, 7.16 forbids.
 //
 // The content-tier fixers a rollback discarded stay off in the later rounds,
 // and the others run in them. The engine runs the content tier after every
@@ -2268,13 +2319,13 @@ func (w *Writer) remediate(
 		return nil, err
 	}
 	if target.pdfaClause != "" && w.encryptCfg != nil {
-		return nil, fmt.Errorf("%w (%s): Writer.Encrypt before Writer.%s", ErrPDFAForbidsEncryption, target.pdfaClause, target.method)
+		return nil, fmt.Errorf("%w (%s): %s before Writer.%s", ErrPDFAForbidsEncryption, target.pdfaClause, w.encryptBy, target.method)
 	}
 	// The probes the remediation revalidates are never encrypted (see
 	// writeTempFile), so its report could not list the violation an encryption
 	// that bars accessibility adds to the output.
 	if target.accessibilityClause != "" && w.encryptCfg != nil && !permitsAccessibility(w.encryptCfg.Permissions) {
-		return nil, fmt.Errorf("%w (%s): Writer.Encrypt before Writer.%s", ErrPDFUAForbidsBarringAccessibility, target.accessibilityClause, target.method)
+		return nil, fmt.Errorf("%w (%s): %s before Writer.%s", ErrPDFUAForbidsBarringAccessibility, target.accessibilityClause, w.encryptBy, target.method)
 	}
 	unmaterialize, err := w.materialize(ctx)
 	if err != nil {
@@ -2824,6 +2875,10 @@ func (w *Writer) copyFromPreSerialized(ctx context.Context, dst io.Writer) error
 // rewrite, or [WithWriteLogger] for structured logs covering every
 // mutation, best-effort fallback, and write-engine decision.
 //
+// The options given to [NewWriter] apply first, and opts after them, so an
+// option in opts overrides the same setting given to NewWriter. Every refusal
+// below reads the options of both.
+//
 // WriteTo drains the mutation queue into the Writer's copy of the
 // document and leaves the [Reader] the Writer was built on as it was. It
 // is single-use: after it produces output successfully it returns
@@ -2876,17 +2931,28 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	if w.refused != nil {
 		return w.refused
 	}
+	// Every guard and every write below reads the options NewWriter was given
+	// under the ones passed here: a guard that read opts alone let an option
+	// given to NewWriter past it, and NewWriter's encryption was dropped.
+	opts = w.writeOptions(opts)
 	cfg := writeOpts{}
 	for _, o := range opts {
 		o(&cfg)
 	}
 	// The guard below reads the encryption WithEncryption asks for as well as
-	// w.encryptCfg: reading only the latter would let Sign + WithEncryption
-	// past it and silently drop one of the two. The Writer takes it only once
-	// the guard passes, so a refused write leaves the Writer as it was: it
-	// used to keep the encryption, and a retry without the option was refused
-	// or encrypted all the same.
-	encrypt := cfg.internalEncrypt()
+	// w.encryptCfg, the one Encrypt or NewWriter asked for: reading only the
+	// latter would let Sign + WithEncryption past it and silently drop one of
+	// the two. It reads the encryption of a pipeline intermediate too, which
+	// is written in the clear, since the pipeline's output owes it (see
+	// inTheClear). The Writer takes it only once the guard passes, so a
+	// refused write leaves the Writer as it was: it used to keep the
+	// encryption, and a retry without the option was refused or encrypted all
+	// the same.
+	var encrypt *crypto.EncryptConfig
+	if cfg.encrypt != nil {
+		internal := cfg.encrypt.toInternal()
+		encrypt = &internal
+	}
 	if encrypt != nil {
 		if w.pdfaClause != "" {
 			return fmt.Errorf("%w (%s): WithEncryption after Writer.%s", ErrPDFAForbidsEncryption, w.pdfaClause, w.remediation)
@@ -2903,7 +2969,16 @@ func (w *Writer) WriteTo(ctx context.Context, dst io.Writer, opts ...WriteOption
 	}
 	if encrypt != nil {
 		w.encryptCfg = encrypt
+		w.encryptBy = "WithEncryption given to Writer.WriteTo"
 		w.forceRewrite = true
+	}
+	// WithTempDir passed here places the temp files this write makes, a
+	// rewrite to sign or pages an insertion reads back, instead of the
+	// directory NewWriter or a Pipeline gave the Writer.
+	if cfg.tempDir != "" && cfg.tempDir != w.tempDir {
+		tempDir := w.tempDir
+		w.tempDir = cfg.tempDir
+		defer func() { w.tempDir = tempDir }()
 	}
 	// A pipeline intermediate is written in the clear once the guards above
 	// have read the encryption the Writer was asked for (see inTheClear). The

@@ -22,9 +22,11 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name       string
-		data       func() []byte
-		encrypt    bool
+		name    string
+		data    func() []byte
+		encrypt bool
+		// atNew are the options given to NewWriter.
+		atNew      []WriteOption
 		remediate  func(ctx context.Context, w *Writer) (*RemediationReport, error)
 		writeOpts  []WriteOption
 		wantClause string
@@ -57,6 +59,24 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 			wantClause: "ISO 19005-3, 6.1.3",
 		},
 		{
+			name:  "WithEncryption given to NewWriter before a PDF/A-2b remediation",
+			data:  signablePDF,
+			atNew: []WriteOption{WithEncryption(aes256)},
+			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+				return w.RemediatePDFA(ctx, models.PDFA2b)
+			},
+			wantClause: "ISO 19005-2, 6.1.3",
+		},
+		{
+			name:  "WithEncryption given to NewWriter before a Factur-X repair",
+			data:  defectiveInvoicePDF,
+			atNew: []WriteOption{WithEncryption(aes256)},
+			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
+				return w.RepairFacturX(ctx)
+			},
+			wantClause: "ISO 19005-3, 6.1.3",
+		},
+		{
 			name: "WithEncryption after a PDF/A-4 remediation",
 			data: signablePDF,
 			remediate: func(ctx context.Context, w *Writer) (*RemediationReport, error) {
@@ -85,13 +105,13 @@ func TestWriterRefusesToEncryptAPDFARemediation(t *testing.T) {
 				t.Fatalf("Open: %v", err)
 			}
 			defer r.Close()
-			w := NewWriter(r)
+			w := NewWriter(r, tc.atNew...)
 			defer w.Close()
 			if tc.encrypt {
 				w.Encrypt(aes256)
 			}
 			_, err = tc.remediate(ctx, w)
-			if tc.encrypt {
+			if tc.encrypt || len(tc.atNew) > 0 {
 				if !errors.Is(err, ErrPDFAForbidsEncryption) {
 					t.Fatalf("the remediation returned %v, want ErrPDFAForbidsEncryption", err)
 				}
@@ -285,6 +305,17 @@ func TestWriterRefusesAPDFUA1EncryptionBarringAccessibility(t *testing.T) {
 			},
 		},
 		{
+			name: "WithEncryption given to NewWriter before the remediation",
+			write: func(ctx context.Context, r *Reader, out *bytes.Buffer) error {
+				w := NewWriter(r, WithEncryption(barred))
+				defer w.Close()
+				if err := remediate(ctx, w); err != nil {
+					return err
+				}
+				return w.WriteTo(ctx, out)
+			},
+		},
+		{
 			name: "WithEncryption after the remediation",
 			write: func(ctx context.Context, r *Reader, out *bytes.Buffer) error {
 				w := NewWriter(r)
@@ -341,9 +372,11 @@ func TestWriterEncryptsAPDFUA1RemediationThatPermitsAccessibility(t *testing.T) 
 	for _, tc := range []struct {
 		name    string
 		encrypt bool
+		atNew   []WriteOption
 		opts    []WriteOption
 	}{
 		{name: "Encrypt before the remediation", encrypt: true},
+		{name: "WithEncryption given to NewWriter", atNew: []WriteOption{WithEncryption(permitted)}},
 		{name: "WithEncryption after the remediation", opts: []WriteOption{WithEncryption(permitted)}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -356,7 +389,7 @@ func TestWriterEncryptsAPDFUA1RemediationThatPermitsAccessibility(t *testing.T) 
 				t.Fatalf("Open: %v", err)
 			}
 			defer r.Close()
-			w := NewWriter(r)
+			w := NewWriter(r, tc.atNew...)
 			defer w.Close()
 			if tc.encrypt {
 				w.Encrypt(permitted)
