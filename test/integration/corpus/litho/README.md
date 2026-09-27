@@ -4450,8 +4450,10 @@ two NoView widgets (`8.9.2.2/2`) and the five tagged widgets with neither a
 
 Remediation at the eight manifest profiles, normal and aggressive, leaves
 nothing on either tool except `8.10.2.3/1` three times at PDF/UA-2, on both.
-The PDF/A remediations clear the Hidden and NoView flags the clauses forbid,
-which shows every one of the five widgets.
+The PDF/A remediations remove `secret`, `draft` and `note`, which show neither
+on screen nor in print, with their fields and the Form elements and
+`/ParentTree` keys of `secret` and `note`. `stamp` and `tip` print, so they
+stay, their NoView flag cleared: they show on screen too.
 
 ## Scope
 

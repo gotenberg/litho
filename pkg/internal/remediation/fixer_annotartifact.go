@@ -11,14 +11,6 @@ import (
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
 )
 
-// Annotation flag bits, ISO 32000-1 Table 165. Only the flags the
-// artifact-presence rules examine are defined here.
-const (
-	annotFlagInvisible    = 1 << 0 // bit 1
-	annotFlagNoView       = 1 << 5 // bit 6
-	annotFlagToggleNoView = 1 << 8 // bit 9
-)
-
 // markupAnnotSubtypes lists the markup annotation types per ISO 32000-2,
 // 12.5.6.2. It mirrors compliance.markupAnnotationSubtypes (kept in sync with
 // that spec table): for these subtypes ISO 14289-2 §8.9.2.3 requires the

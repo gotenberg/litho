@@ -19,7 +19,7 @@ import (
 // by annot-color restores the hidden /F and the /CA 0.5, and one by
 // annot-appearance restores both colour arrays.
 //
-// The annotation trips all four repairs: /F 2 is Hidden without Print, /CA 0.5
+// The annotation trips all four repairs: /F 0 lacks the Print flag, /CA 0.5
 // is not 1.0, /C and /IC sit under a CMYK intent, and it has no appearance.
 func TestFixAnnotColor_ComposesWithThePDFA1AnnotationPeers(t *testing.T) {
 	t.Parallel()
@@ -29,7 +29,7 @@ func TestFixAnnotColor_ComposesWithThePDFA1AnnotationPeers(t *testing.T) {
 		"<< /Type /Catalog /Pages 2 0 R /OutputIntents [5 0 R] >>",
 		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
 		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R] >>",
-		"<< /Type /Annot /Subtype /Square /Rect [10 10 60 60] /F 2 /CA 0.5 /C [1 0 0] /IC [0 0 1] >>",
+		"<< /Type /Annot /Subtype /Square /Rect [10 10 60 60] /F 0 /CA 0.5 /C [1 0 0] /IC [0 0 1] >>",
 		"<< /Type /OutputIntent /S /GTS_PDFA1 /OutputConditionIdentifier (cmyk) /DestOutputProfile 6 0 R >>",
 		iccObj(deflateAt(t, cmykICCProfile, zlib.BestCompression), 4),
 	}))

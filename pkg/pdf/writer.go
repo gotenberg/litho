@@ -1839,6 +1839,17 @@ func remediateConfig(opts []RemediateOption) (remediateOpts, remediation.Options
 // when [Writer.Encrypt] was called before it or [NewWriter] was given
 // [WithEncryption], and [Writer.WriteTo] returns it for WithEncryption.
 //
+// ISO 19005-1, 6.5.3 and ISO 19005-2 to ISO 19005-4, 6.3.2 require annotation
+// flags that print an annotation and show it on screen. An annotation that
+// shows neither on screen nor in print, one whose Hidden flag is set or whose
+// NoView flag is set with neither Print nor ToggleNoView (ISO 32000-1, Table
+// 165), is removed rather than made visible: its pop-up and its replies go
+// with it, a widget takes its form field when it was the field's only one, and
+// a tagged document loses its structure element. [RemediationReport.Fixed]
+// names each removal. A signed signature field keeps its widget. Every other
+// annotation gets the flags those clauses require, so one that showed only in
+// print now shows on screen too.
+//
 // It is the last edit on the Writer (see [Writer]): it judges the document the
 // edits queued before it produce, and afterwards the Writer accepts
 // [Writer.Sign], [Writer.WriteTo] and [Writer.Close] alone.
