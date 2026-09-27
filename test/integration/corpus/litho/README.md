@@ -175,6 +175,7 @@ one deliberately rather than diffing it against a fresh build.
 | `annotshare_ua1.pdf`   | PDF/UA-1     | Annotation objects on two pages; XMP scoping; short page boxes   |
 | `structcopy_ua2.pdf`   | PDF/UA-2     | Every part of a structure tree a copy of its pages carries       |
 | `noresources_4.pdf`    | PDF/A-4      | Page content with no resource dictionary, its own or inherited   |
+| `outlinedest_ua2.pdf`  | PDF/UA-2     | Outline structure destinations in every form; named OC configs   |
 
 ### Must-not-fire controls
 
@@ -267,6 +268,8 @@ violation but is exempt, so a firing is a false positive.
 | `formstruct_ua2`                          | A `Form` element enclosing exactly one widget                          | ISO 14289-2, 8.10.1 t2       |
 | `formstruct_ua2`                          | A widget with no `/StructParent`, outside the structure tree           | ISO 14289-2, 8.10.1 t1       |
 | `structcopy_ua2`                          | A root `/RoleMap`, `/ClassMap`, `/IDTree` and two `/Namespaces`        | ISO 14289-2, 8.2             |
+| `outlinedest_ua2`                         | Outline items opening structure destinations in four forms             | ISO 14289-2, 8.8             |
+| `outlinedest_ua2`                         | Two optional content configurations, each named and ordering both      | ISO 14289-2, 8.7             |
 | `xref_1b`                                 | Every object offset and `startxref` value left valid by the patch      | ISO 19005-1, 6.1.4           |
 | `contentstream_4`                         | `/F1`, a name the inherited dictionary does define                     | ISO 19005-4, 6.2.2 t3        |
 | `iccbased_4`                              | An RGB ICCBased space, valid and unrelated to the OutputIntent         | ISO 19005-4, 6.2.4.2         |
@@ -494,6 +497,7 @@ which are covered under [Known divergences](#known-divergences).
 | `namereads_1b.pdf`     | 10   | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 7   | 7    | 8    | 6    | 6    |
 | `noresources_4.pdf`    | 7    | 5    | 8    | 6    | 6    | 8    | 6    | 6    | 2   | 3    | 4    | 10   | 7    |
 | `offlimits_1b.pdf`     | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 6    | 7    | 7    | 7    |
+| `outlinedest_ua2.pdf`  | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 2   | 2    | 3    | 2    | 0    |
 | `outputintent_2b.pdf`  | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
 | `pagegroup_2b.pdf`     | 7    | 4    | 7    | 4    | 5    | 8    | 5    | 6    | 6   | 6    | 7    | 6    | 6    |
 | `pagelabels_2b.pdf`    | 4    | 1    | 3    | 0    | 1    | 4    | 1    | 2    | 4   | 4    | 5    | 7    | 6    |
@@ -5261,6 +5265,49 @@ call, and `6.2.2/3` passes on their outputs at PDF/A-4, which the mutation
 allowances admit (`pageResourcesRules`); flattening and redaction may pass any
 rule, and auto-tagging leaves the file, which holds no text, alone.
 
+### `outlinedest_ua2.pdf`
+
+Split and merge rebuild the outline of the pages they copy, and a page insertion
+copies the optional content its pages draw into another document. An outline
+item names a structure destination (ISO 32000-2, 12.3.2.3) in several forms,
+and ISO 14289-2, 8.8 asks every destination inside the document to be one. No
+corpus file packs those forms into one conforming file, and none names one
+through a named destination's dictionary, so this file does, over three pages
+that each open with a heading or a paragraph of their own:
+
+| Item               | Destination                                                              |
+| ------------------ | ------------------------------------------------------------------------ |
+| `Opening heading`  | A GoTo action: `/D` page 1 and `/SD` its `H1`, both `/XYZ 50 752 null`   |
+| `Second page`      | A child item whose `/Dest` is `[P /Fit]`, the first paragraph of page 2  |
+| `Third page`       | `/Dest (third)`, a `/Dests` entry `<< /D [page 3 /Fit] /SD [H1 /Fit] >>` |
+| `Third page again` | A GoTo action whose `/D` is `(third)`                                    |
+
+Page 1 draws one paragraph in a layer the default configuration shows and one
+in a layer it hides. `/OCProperties` lists both groups in the default
+configuration and in one `/Configs` entry, each named and each ordering both
+groups (ISO 14289-2, 8.7; ISO 19005-2, 6.9).
+
+The file agrees with veraPDF 1.30.2 in all thirteen cells, rule for rule.
+PDF/UA-2 reports nothing. PDF/UA-1 reports the part-2 claim (`5/2`) and the
+`%PDF-2.0` header (`6.1/1`). The PDF/A cells report the text painted in device
+gray with no output intent (`6.2.3.3/3` at part 1, `6.2.4.3/4` from part 2),
+the missing PDF/A identification and the `pdfuaid` properties no extension
+schema declares, the header at parts 2 and 3 (`6.1.2/1`), and at part 1 the
+optional content it forbids (`6.1.13/1`); PDF/A-4f adds the missing
+`/EmbeddedFiles`.
+
+Measured on litho and veraPDF 1.30.2 before these constructs were carried, a
+split of page 1, of page 3 and of pages 2 to 3, and a merge of the file with
+itself, failed `8.8/1` at PDF/UA-2, each rebuilt item naming its page alone; a
+split of page 2 dropped the item naming a paragraph and no page; the merge
+added `7.10/1` at PDF/UA-1 and `6.9/1` at PDF/A-2b, its default optional content
+configuration unnamed; and page 1 inserted in front of the file or after it left
+its copied groups out of `/OCProperties`, so a viewer drew the hidden layer. Now
+every page alone, pages 2 to 3, the merge with itself, page 1 inserted in front
+and after, and the page move pass PDF/UA-2 on both tools, and report the input's
+rules at PDF/UA-1 and PDF/A-2b. Remediation at the eight manifest profiles,
+default and aggressive, leaves nothing on either tool.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so the
@@ -5278,11 +5325,14 @@ non-empty set in each, which is why the verdict still matches.
 The runner's `compliance` feature scores both. `matched` counts the cells whose
 verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates, counts
 the cells whose sets of failed rules (clause and test) differ. Every cell but
-five is non-compliant on both sides (`baretree_2b` and `pagelabels_2b` at
+six is non-compliant on both sides (`baretree_2b` and `pagelabels_2b` at
 PDF/A-2b; `formhidden_ua1` and `sigtagged_ua1` at PDF/UA-1; and `structcopy_ua2`
 at PDF/UA-2 are the corpus's conforming cells), so a change that drops or
 invents a rule class leaves `matched` at 984 and moves only `ruleset_mismatch`,
 and on those five cells it moves both. Both exceptions sit in the manifest's
+and `outlinedest_ua2` at PDF/UA-2 are the corpus's conforming cells), so a
+change that drops or invents a rule class leaves `matched` at 984 and moves only
+`ruleset_mismatch`, and on those six cells it moves both. Both exceptions sit in the manifest's
 profiles, `complex_ua2` at PDF/UA-1 and PDF/UA-2, so the metric reads 2 on this
 corpus, and the text scoreboard names the rules only one side reports. A third
 cell in the runner is a regression, or a divergence to cover under Known
