@@ -631,6 +631,12 @@ func (a signerAdapter) EstimatedSize() int                 { return a.inner.Esti
 // removes it itself. A Writer that is remediated and never written keeps the
 // file until [Writer.Close].
 //
+// A page, or a page tree node, written directly in a /Kids array, which ISO
+// 32000-1, 7.7.3.2, Table 29 does not allow, gets an object number of its own
+// before any edit reads the document, and the node listing it names it by
+// reference: every edit reaches it as it reaches any other page, and every
+// output but an unedited copy of the source carries the repaired tree.
+//
 // A Writer is single-use: create a new Writer for each distinct output.
 // Method calls must be serialised; no Writer method is safe for
 // concurrent use, Close included. The Writer never modifies the Reader it
@@ -1151,6 +1157,10 @@ func (w *Writer) DeletePages(pages ...int) error {
 //     reads as ([Reader.Version]), so pages from a PDF 2.0 source never land
 //     in a file declaring less (ISO 32000-1, 7.5.2). [WithVersion] names a
 //     version the insertion can only raise.
+//
+// InsertPages reads a copy of source's document, as [Split] does, so source is
+// left as it was and other goroutines may read it meanwhile. source must stay
+// open until [Writer.WriteTo] returns.
 func (w *Writer) InsertPages(pos int, source *Reader, sourcePages ...int) error {
 	if err := w.refuseAfterRemediation("InsertPages"); err != nil {
 		return err
@@ -1158,6 +1168,10 @@ func (w *Writer) InsertPages(pos int, source *Reader, sourcePages ...int) error 
 	if source == nil {
 		return ErrNilSource
 	}
+	// The pages are copied from a copy of source's document, as Split and
+	// Merge copy theirs, so a page source writes directly in /Kids is
+	// numbered there (see [Writer.promotePageTree]) and never in source.
+	source = source.fork()
 	w.forceRewrite = true
 	w.mutations = append(w.mutations, mutation{
 		pageSource: source.doc,
@@ -1165,6 +1179,9 @@ func (w *Writer) InsertPages(pos int, source *Reader, sourcePages ...int) error 
 			targetPages, err := w.reader.resolvePages(ctx)
 			if err != nil {
 				return fmt.Errorf("resolving target pages: %w", err)
+			}
+			if err := source.doc.PromoteDirectKids(ctx); err != nil {
+				return fmt.Errorf("numbering the source pages written in /Kids: %w", err)
 			}
 			srcPages, err := source.resolvePages(ctx)
 			if err != nil {
@@ -2380,6 +2397,14 @@ func (w *Writer) remediate(
 	if err != nil {
 		return nil, err
 	}
+	// After materialize, so the page tree numbered is the one the engine
+	// repairs: materialize writes the queued edits through writeToInternal,
+	// which numbers the source's, and a write they left unchanged is a copy
+	// of the source.
+	if err := w.promotePageTree(ctx); err != nil {
+		unmaterialize()
+		return nil, err
+	}
 	doc := w.reader.doc
 	alloc := writer.NewObjAllocator(doc.HighestObjectNumber(ctx))
 	// A done ctx can stop the raw-byte augmentation short, and the allocator
@@ -2755,6 +2780,14 @@ func (w *Writer) remediationRound(
 	}
 	defer r2.Close()
 
+	// The round repairs the output of the one before, which names every page
+	// by reference unless it was a copy of a source that did not (see
+	// [Writer.promotePageTree]). A done ctx stops the numbering as it stops
+	// the round below.
+	if err := r2.doc.PromoteDirectKids(ctx); err != nil {
+		logger.Debug("remediate: numbering the round's pages written in /Kids failed", slog.Any("err", err))
+		return roundResult{}, false, nil
+	}
 	alloc := writer.NewObjAllocator(r2.doc.HighestObjectNumber(ctx))
 	// A done ctx can stop the raw-byte augmentation short, and the allocator
 	// then starts below objects the file defines. The round ends as one that
@@ -3243,6 +3276,59 @@ func copySourceCancellable(ctx context.Context, dst io.Writer, src io.ReaderAt, 
 	return ctx.Err()
 }
 
+// promotePageTree gives each page tree node the document the Writer edits
+// writes directly in a /Kids array an object number of its own, and has the
+// node listing it name it by reference (see
+// [document.Document.PromoteDirectKids]), before anything reads the page tree.
+// Every edit then finds each page at an object number, as ISO 32000-1,
+// 7.7.3.2, Table 29 asks of /Kids, and writes it there: a stamp, a rotation or
+// a repair of a direct page was dropped, and a page tree rebuilt from the
+// pages' references listed each direct page as object 0. Each entry point that
+// reads the document runs it first; it runs once per document.
+//
+// # Corpus evidence
+//
+//   - All corpora: four files write a page directly in /Kids, litho
+//     kidsrepair_1b.pdf and kidsarray_2b.pdf and pdfjs issue9105_other.pdf
+//     and issue9540.pdf.
+//   - litho kidsrepair_1b.pdf: mutate-stamp left its two direct pages
+//     unstamped, and mutate-pages wrote a tree listing them as object 0:
+//     litho read one page of four, qpdf warned "Pages tree includes
+//     non-dictionary object", veraPDF could not parse the output, and the
+//     rules the two pages fail left litho's rule set (6.2.5 t1 from PDF/A-2
+//     on, 6.2.8 t1 and 6.4 t3 at PDF/A-1b). Every mutate-* cell of the file
+//     now passes.
+//   - pdfjs issue9540.pdf: its PDF/UA-1 and PDF/UA-2 remediations tagged the
+//     direct page's content under a structure element whose /Pg was 0 0 R,
+//     and kept 7.1 t3 and 8.2.2 t1 on litho and veraPDF alike. Numbered, the
+//     page is tagged and both outputs pass both tools. The other 44
+//     remediations of it, kidsrepair_1b.pdf and issue9105_other.pdf come out
+//     as before on both tools.
+//   - litho kidsarray_2b.pdf: mutate-flatten left the widget on a direct page,
+//     mutate-autotag tagged its two direct pages with /Pg 0 0 R, and the
+//     remediations left a direct page's /AA and, at PDF/UA-1 and PDF/UA-2,
+//     the two pages untagged and without /Tabs, on both tools. Every
+//     mutate-* cell now passes but the redaction, which refuses by design.
+func (w *Writer) promotePageTree(ctx context.Context) error {
+	if err := w.reader.doc.PromoteDirectKids(ctx); err != nil {
+		return fmt.Errorf("numbering the pages written in /Kids: %w", err)
+	}
+	return nil
+}
+
+// appendPromotedPageTree queues in alloc each object the promotion of doc's
+// page tree staged (see [Writer.promotePageTree]) that no edit replaced. An
+// incremental update keeps the file's bytes, where the nodes still hold their
+// kids directly, and the edits name the promoted kids by number.
+func appendPromotedPageTree(alloc *writer.ObjAllocator, doc *document.Document) {
+	promoted := doc.PromotedObjects()
+	for _, objNum := range slices.Sorted(maps.Keys(promoted)) {
+		if _, edited := alloc.Pending()[objNum]; !edited {
+			alloc.AllocAt(objNum, promoted[objNum])
+		}
+	}
+}
+
 // writeBufferSize is the buffer [Writer.writeToInternal] wraps its destination
 // in. It is a throughput choice, not a limit: the serializer writes a few bytes
 // at a time, so the buffer decides how many of those become one syscall. 64 KiB
@@ -3279,6 +3365,10 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 	cfg := writeOpts{}
 	for _, o := range opts {
 		o(&cfg)
+	}
+
+	if err := w.promotePageTree(ctx); err != nil {
+		return err
 	}
 
 	// Fast path: remediation already serialized the output to a temp file
@@ -3390,7 +3480,15 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 		for i, m := range pending {
 			mutFuncs[i] = m.apply
 		}
-		return mutations.WriteWithSignature(ctx, dst, w.reader.doc, signerAdapter{inner: signer}, w.rewriteOverrides, mutFuncs, cfg.xrefStream)
+		// The promoted page tree goes under the overrides, which build on it,
+		// since the update names its pages by the numbers it gave them.
+		overrides := w.reader.doc.PromotedObjects()
+		if overrides == nil {
+			overrides = w.rewriteOverrides
+		} else {
+			maps.Copy(overrides, w.rewriteOverrides)
+		}
+		return mutations.WriteWithSignature(ctx, dst, w.reader.doc, signerAdapter{inner: signer}, overrides, mutFuncs, cfg.xrefStream)
 	}
 
 	if cfg.fullRewrite || w.forceRewrite {
@@ -3498,6 +3596,7 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 		logger.Debug("no pending objects, copying source as-is")
 		return copySourceCancellable(ctx, dst, doc.RawReader(), doc.FileSize())
 	}
+	appendPromotedPageTree(alloc, doc)
 	logger.Debug("incremental update",
 		slog.Int("pending_objects", len(alloc.Pending())),
 	)
@@ -3573,6 +3672,11 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 	src.doc.Logger.Debug("split started",
 		slog.Int("pages", len(pages)),
 	)
+	// A page the copy writes directly in /Kids is numbered there, so the split
+	// reaches it as it reaches any other (see [Writer.promotePageTree]).
+	if err := src.doc.PromoteDirectKids(ctx); err != nil {
+		return fmt.Errorf("numbering the source pages written in /Kids: %w", err)
+	}
 
 	allPages, err := src.resolvePages(ctx)
 	if err != nil {
@@ -3645,6 +3749,11 @@ func Merge(ctx context.Context, sources []*Reader, dst io.Writer, opts ...WriteO
 
 	mergeSources := make([]mutations.MergeSource, len(sources))
 	for i, src := range sources {
+		// As in Split, a page a copy writes directly in /Kids is numbered
+		// there (see [Writer.promotePageTree]).
+		if err := src.doc.PromoteDirectKids(ctx); err != nil {
+			return fmt.Errorf("numbering the pages source %d writes in /Kids: %w", i, err)
+		}
 		pages, err := src.resolvePages(ctx)
 		if err != nil {
 			return fmt.Errorf("resolving pages from source %d: %w", i, err)

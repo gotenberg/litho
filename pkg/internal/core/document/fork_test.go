@@ -65,6 +65,8 @@ var forkFields = map[string]string{
 	"XRefSectionOffsets":      "shared",
 	"Filters":                 "shared",
 	"CMYKProfile":             "shared",
+	"promoted":                "shared",
+	"promotedDone":            "copied",
 }
 
 // TestForkDecidesEveryField pins that [forkFields] names every field of

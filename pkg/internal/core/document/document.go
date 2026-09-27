@@ -211,6 +211,17 @@ type Document struct {
 	// document states no output intent for them. Nil selects litho's
 	// built-in profile. Set once during construction, then read-only.
 	CMYKProfile []byte
+
+	// promoted holds the objects [Document.PromoteDirectKids] staged over the
+	// file's, by object number: each page tree node written directly in a
+	// /Kids array at a number of its own, and each node listing one with a
+	// reference in its place. [Document.Resolve] answers from it first. Nil
+	// until a promotion stages something, and never modified once stored.
+	promoted atomic.Pointer[map[int]ast.PdfObject]
+
+	// promotedDone records that [Document.PromoteDirectKids] ran to the end,
+	// so a later call returns at once.
+	promotedDone atomic.Bool
 }
 
 // ComplianceMode reports whether parser-level format violation

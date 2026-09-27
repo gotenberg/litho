@@ -25,7 +25,9 @@ import (
 // What d fixed at construction and only reads afterwards is shared: the
 // underlying [io.ReaderAt], the security handler, which authentication
 // completed, the filter decoder, the resource budgets, the linearization
-// parameters, the optional-content configuration and the offset tables.
+// parameters, the optional-content configuration and the offset tables. So are
+// the objects [Document.PromoteDirectKids] staged, which the fork reads as d
+// reads them.
 //
 // Fork is safe to call concurrently with every read of d, and the fork
 // honours the same concurrency contract as d.
@@ -79,6 +81,10 @@ func (d *Document) Fork() *Document {
 	if done {
 		f.xrefAugment.done.Store(true)
 	}
+	// The fork reads the page tree d reads, promoted kids included. The map
+	// is never modified once stored, so both documents share it.
+	f.promoted.Store(d.promoted.Load())
+	f.promotedDone.Store(d.promotedDone.Load())
 	return f
 }
 

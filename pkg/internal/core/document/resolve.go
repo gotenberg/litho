@@ -1525,6 +1525,13 @@ func (d *Document) resolveWith(ctx context.Context, ref ast.PdfIndirectRef, visi
 		return nil, err
 	}
 
+	// A page tree node a writer promoted, or the node it moved out of, reads
+	// as staged, whatever the file or the cache holds at that number (see
+	// [Document.PromoteDirectKids]).
+	if obj, ok := d.promotedObject(ref.ObjectNum); ok {
+		return obj, nil
+	}
+
 	// Fast path: check cache under read lock. A lookup under
 	// OpenedObjectsOnly first answers for an object the table leaves out,
 	// which a caller that ran the augmentation may have cached.

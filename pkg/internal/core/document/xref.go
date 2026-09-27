@@ -340,7 +340,9 @@ func (d *Document) HighestObjectNumber(ctx context.Context) int {
 	if size, ok := d.trailerObjectCount(); ok && size-1 > highest {
 		highest = size - 1
 	}
-	return highest
+	// The kids a promotion numbered past the file's objects are the
+	// document's too (see [Document.PromoteDirectKids]).
+	return max(highest, d.highestPromoted())
 }
 
 // ObjectGeneration returns the generation number the file gives an in-use

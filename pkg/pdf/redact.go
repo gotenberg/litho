@@ -155,6 +155,9 @@ func (w *Writer) Redact(ctx context.Context, regions []RedactRegion) (_ *RedactR
 		return &RedactReport{}, nil
 	}
 
+	if err := w.promotePageTree(ctx); err != nil {
+		return nil, err
+	}
 	doc := w.reader.doc
 	pages, err := w.reader.resolvePages(ctx)
 	if err != nil {
