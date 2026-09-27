@@ -219,6 +219,18 @@ type simpleMutationOption func(*simpleMutationConfig)
 type simpleMutationConfig struct {
 	compact               bool
 	skipEncryptionWarning bool
+	afterWrite            func()
+}
+
+// withAfterWrite runs report once the output is written and closed.
+//
+// A queued edit fills its report only when the Writer applies it, during the
+// write, so a command that reports what its edit did reads the report here
+// rather than in the mutate function, where the report is still empty. It does
+// not run when the command fails, since the output it would describe does not
+// exist.
+func withAfterWrite(report func()) simpleMutationOption {
+	return func(c *simpleMutationConfig) { c.afterWrite = report }
 }
 
 // withCompactFlag gives the command a -compact flag.
@@ -307,6 +319,10 @@ func runSimpleMutation(ctx context.Context, args []string, stderr io.Writer, cmd
 	if err := closeDst(); err != nil {
 		fmt.Fprintf(stderr, "closing output: %v\n", err)
 		return exitError
+	}
+
+	if cmdCfg.afterWrite != nil {
+		cmdCfg.afterWrite()
 	}
 
 	return exitOK

@@ -128,6 +128,11 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	// here needs no synchronisation.
 	var remediationResidual []error
 
+	// The report of every autotag stage, in stage order, read after the write
+	// because the Writer fills each one when it applies the edit. Appended by
+	// the stage closures under the same sequential execution as the residuals.
+	var autoTagReports []*pdf.AutoTagReport
+
 	// Documents a page-operation stage opened for itself, so the encryption
 	// warning below can see them. merge has many sources and insert has two
 	// inputs, and any encrypted one means the output loses protection it had.
@@ -147,7 +152,7 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 		stageName := group[0]
 		stageFlags := group[1:]
 
-		closers, err := addStage(ctx, pipeline, r, stageName, stageFlags, password, stderr, &remediationResidual, &stageReaders)
+		closers, err := addStage(ctx, pipeline, r, stageName, stageFlags, password, stderr, &remediationResidual, &stageReaders, &autoTagReports)
 		stageClosers = append(stageClosers, closers...)
 		if err != nil {
 			// Asking a stage for its flags is a request, not a failure. The
@@ -239,6 +244,13 @@ func runPipe(ctx context.Context, args []string, _stdout, stderr io.Writer) int 
 	if closeErr := closeDst(); closeErr != nil {
 		fmt.Fprintf(stderr, "pipe: closing output: %v\n", closeErr)
 		return exitError
+	}
+
+	// The standalone autotag command reports a skip, so the stage does too.
+	// Pipe writes its other warnings to this stream, so the "pipe prints
+	// nothing but the document" rule, which concerns stdout, does not apply.
+	for _, report := range autoTagReports {
+		warnAutoTagSkipped(stderr, report)
 	}
 
 	// A remediate stage asserts the profile in the output whatever it could
@@ -545,7 +557,11 @@ var xfaDroppingStages = map[string]bool{
 // and usage past any capture the caller had installed, while only the wrapping
 // "pipe stage" line reached the writer. Every other command in this package
 // wires its FlagSet the same way.
-func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string, args []string, password string, stderr io.Writer, residual *[]error, opened *[]*pdf.Reader) ([]func(), error) {
+//
+// An autotag stage appends its report to autoTagged when the stage runs. The
+// Writer fills it later, when it applies the edit, so the caller reads it only
+// after [pdf.Pipeline.WriteTo] returns.
+func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string, args []string, password string, stderr io.Writer, residual *[]error, opened *[]*pdf.Reader, autoTagged *[]*pdf.AutoTagReport) ([]func(), error) {
 	switch name {
 	case "rotate":
 		fs := flag.NewFlagSet("rotate", flag.ContinueOnError)
@@ -1055,7 +1071,7 @@ func addStage(ctx context.Context, p *pdf.Pipeline, src *pdf.Reader, name string
 
 	case "autotag":
 		p.Apply(func(_ context.Context, w *pdf.Writer) error {
-			w.AutoTag()
+			*autoTagged = append(*autoTagged, w.AutoTag())
 			return nil
 		})
 
