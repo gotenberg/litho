@@ -51,49 +51,6 @@ func parentTreeDepthDoc(t *testing.T, ctx context.Context, chain, numsKey int, e
 	return doc, catalog
 }
 
-// TestCheckOrphanMCIDs_DeepParentTreeDoesNotFabricate pins that a ParentTree
-// nested past maxEFNameTreeDepth does not report content the tree does cover.
-//
-// numberTreeLookup returned nil both for a key that is absent and for a walk it
-// had stopped, parentTreeMCIDs turned that nil into an empty covered set, and
-// every MCID on the page then read as unreachable. Measured on this fixture: a
-// leaf at depth 64 reported nothing and a leaf at depth 65 reported
-// ISO 14289-1 §7.1 t3, on a file whose ParentTree names the element at every
-// nesting level.
-func TestCheckOrphanMCIDs_DeepParentTreeDoesNotFabricate(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	// Either side of the bound, and far past it.
-	chains := []int{maxEFNameTreeDepth, maxEFNameTreeDepth + 2, maxEFNameTreeDepth * 4}
-	for _, chain := range chains {
-		doc, catalog := parentTreeDepthDoc(t, ctx, chain, 0, "en-US")
-		if got := checkOrphanMCIDs(ctx, doc, catalog, "PDF/UA-1"); len(got) > 0 {
-			t.Errorf("ParentTree nested %d levels: violations = %d, want 0, the tree names the element (%v)",
-				chain, len(got), got)
-		}
-	}
-}
-
-// TestCheckOrphanMCIDs_AbsentEntryStillFires is the control that keeps the
-// abstention above from becoming blanket suppression. The page declares
-// /StructParents 0 and the ParentTree maps only key 7, so the entry is
-// genuinely absent and the walk completes: the content really is unreachable
-// and ISO 14289-1 §7.1 t3 must still fire.
-func TestCheckOrphanMCIDs_AbsentEntryStillFires(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	doc, catalog := parentTreeDepthDoc(t, ctx, 3, 7, "en-US")
-	got := checkOrphanMCIDs(ctx, doc, catalog, "PDF/UA-1")
-	if len(got) != 1 {
-		t.Fatalf("violations = %d, want 1: key 0 is absent from a fully read ParentTree (%v)", len(got), got)
-	}
-	if msg := got[0].Context; msg != "page 1: marked content MCID 0 is not reachable through the ParentTree" {
-		t.Fatalf("message = %q, want the orphan-MCID report", msg)
-	}
-}
-
 // TestStructureTreeLangCoverage_DeepParentTreeDoesNotFabricate pins the second
 // rule the same truncated read manufactured. markedContentHasMCID answered "no
 // owner" for content whose owner sat past the bound, so the scan counted the

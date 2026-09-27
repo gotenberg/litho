@@ -192,6 +192,12 @@ type contentMarkingWalk struct {
 // sequence opened in tagged content fails both, being tagged content marked as
 // an artifact, and a tagged sequence opened under an /Artifact one fails t2.
 //
+// This walk is the whole of t3 and 8.2.2 t1. A check that reported every /MCID
+// the ParentTree does not map, wherever it sat, is retired: it failed an
+// unmapped /MCID inside a mapped one, one wrapping no painting and one wrapping
+// only an artifact, none of which veraPDF 1.30.2 reports, and it found nothing
+// this walk does not.
+//
 // t1 and t2 are PDF/UA-1 concepts. PDF/UA-2 has no equivalent rule: its §8.2.2
 // covers only unmarked content, so they stay gated to UA-1.
 //
@@ -216,6 +222,10 @@ type contentMarkingWalk struct {
 //   - litho namedmcid_ua1.pdf: tags text through lists its page and three
 //     forms name, and veraPDF reports neither t3 nor 8.2.2 t1, where litho
 //     reported both.
+//   - All corpora: dropping the orphan-MCID check moves no rule set at
+//     PDF/UA-1, PDF/UA-2 or either WTPDF level. It lowers the t3 and 8.2.2 t1
+//     counts, from 2 to 1 on 25 files and from 4 to 1 on govdocs
+//     thread_200_200824.pdf.
 func checkContentMarking(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if !IsPDFUA(profile) {
 		return nil
