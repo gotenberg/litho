@@ -27,12 +27,10 @@ func DeletePages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 		deleteSet[p] = true
 	}
 
-	if len(deleteSet) >= len(allPages) {
-		return fmt.Errorf("cannot delete all %d pages", len(allPages))
-	}
-
 	// The pages an earlier deletion or insertion staged are the ones this
-	// deletion removes pages from. The numbers still name the Reader's pages.
+	// deletion removes pages from. The numbers still name the Reader's pages,
+	// so naming every one of them is refused only when no page is left: an
+	// insertion queued earlier keeps the document one.
 	if staged, ok := stagedPageKids(ctx, alloc, doc); ok {
 		deleted := make(map[int]bool, len(deleteSet))
 		for p := range deleteSet {
@@ -48,6 +46,10 @@ func DeletePages(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 			return fmt.Errorf("cannot delete all %d pages", len(staged))
 		}
 		return rebuildPageTree(ctx, alloc, doc, allPages, kept)
+	}
+
+	if len(deleteSet) >= len(allPages) {
+		return fmt.Errorf("cannot delete all %d pages", len(allPages))
 	}
 
 	// Collect kept page indices (0-based), preserving original order.

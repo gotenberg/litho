@@ -993,7 +993,9 @@ func (w *Writer) RotatePages(rotation int, pages ...int) error {
 //
 // The pages named are the Reader's. A deletion queued after an
 // insertion keeps the inserted pages, and one queued after another deletion
-// keeps what that one removed out.
+// keeps what that one removed out. It may name every page of the Reader when
+// an insertion queued before it leaves the document a page; [Writer.WriteTo]
+// refuses a deletion that leaves none.
 //
 // [Writer.WriteTo] reports [ErrPageDeletionIncomplete] when the document's
 // structure tree nests deeper than the page prune can walk. Elements below that
