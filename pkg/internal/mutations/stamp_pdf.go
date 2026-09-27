@@ -111,7 +111,11 @@ func pageToFormXObject(
 	copier *writer.Copier,
 	alloc *writer.ObjAllocator,
 ) (ast.PdfIndirectRef, error) {
-	// BBox: prefer MediaBox, fall back to CropBox.
+	// BBox: prefer MediaBox, fall back to CropBox. A /BBox is a rectangle (ISO
+	// 32000-1, Table 95), so the box is written as four numbers (see
+	// [pageRectangle]). Written as the source states it, an entry that is no
+	// number stayed, and a reference to an object of srcDoc named whatever
+	// object of the target has that number.
 	bbox := srcPage.MediaBox
 	if len(bbox) != 4 && len(srcPage.CropBox) == 4 {
 		bbox = srcPage.CropBox
@@ -119,6 +123,7 @@ func pageToFormXObject(
 	if len(bbox) != 4 {
 		return ast.PdfIndirectRef{}, fmt.Errorf("source page has no usable MediaBox")
 	}
+	bbox = pageRectangle(ctx, srcDoc, bbox)
 
 	// Copy resources into the destination allocator. Use the ones the source
 	// page reaches, which it inherits from an ancestor /Pages node when it

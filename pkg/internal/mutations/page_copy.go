@@ -4,6 +4,7 @@ import (
 	"context"
 	"maps"
 
+	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
 	"github.com/gotenberg/litho/pkg/internal/core/writer"
@@ -20,10 +21,10 @@ import (
 //     /Pages nodes (ISO 32000-1 §7.7.3.4). The output builds a flat single-level
 //     page tree with no ancestor to inherit from, so these resolved attributes
 //     are materialised onto the copied page (see [flatResources] for the
-//     resources). Without the Resources materialisation an inheriting page
-//     loses its fonts and its text becomes unextractable; without the CropBox
-//     one it is displayed at its /MediaBox size instead of the region it was
-//     cropped to.
+//     resources, [cropBoxToWrite] for the crop box). Without the Resources
+//     materialisation an inheriting page loses its fonts and its text becomes
+//     unextractable; without the CropBox one it is displayed at its /MediaBox
+//     size instead of the region it was cropped to.
 func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer.ObjAllocator, doc *document.Document, page *document.Page) (ast.PdfIndirectRef, error) {
 	var ref ast.PdfIndirectRef
 	if page.Ref.ObjectNum != 0 {
@@ -80,8 +81,8 @@ func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer
 			return ast.PdfIndirectRef{}, err
 		}
 	}
-	if croppedTighter(page) {
-		if err := materialize("CropBox", page.CropBox); err != nil {
+	if crop, ok := cropBoxToWrite(ctx, doc, page); ok {
+		if err := materialize("CropBox", crop); err != nil {
 			return ast.PdfIndirectRef{}, err
 		}
 	}
@@ -148,31 +149,94 @@ func pageCopyOverrides(pages []*document.Page) map[int]ast.PdfObject {
 	return overrides
 }
 
-// croppedTighter reports whether a page's visible region differs from its
-// /MediaBox, which is the only case where a copied page needs its own
-// /CropBox.
+// cropBoxToWrite returns the /CropBox a page leaving its page tree states so it
+// shows the region it showed, and false when it needs none.
 //
-// [document.Page.CropBox] is the EFFECTIVE region and already falls back to the
-// /MediaBox (ISO 32000-1, 14.11.2), so materialising it unconditionally would
-// write a redundant entry onto every copied page.
-func croppedTighter(page *document.Page) bool {
-	if page.CropBox == nil {
-		return false
+// Only a crop box the page states or inherits crops it. [document.Page.CropBox]
+// is the EFFECTIVE region, and falls back to the /MediaBox (ISO 32000-1, Table
+// 30) when no node declares a crop box or the one declared is not the four
+// entries of a rectangle (7.9.5). Materialising it unconditionally wrote a
+// redundant entry onto every copied page, and, for a /MediaBox that is no
+// rectangle, a /CropBox that is none either: [0 0 612 792 7 0 R] was copied
+// whole, the content stream it runs on into included. A crop box enclosing the
+// region of a /MediaBox that is a rectangle is not written either. The page's
+// /MediaBox is written on its own, and a rewrite completes one that is no
+// rectangle (see [completeRewrittenPageTree]), so a crop box is written
+// whatever that box holds.
+//
+// The box is written as a rectangle of four numbers, read as ISO 19005-2,
+// 6.1.13 reads it (see [compliance.PageBoundaryRect]): an entry that is no
+// number, or a reference that names none, counts 0. One enclosing no area
+// crops nothing a viewer shows, as [document.Page] reads such a box, and is
+// not written.
+//
+// # Corpus evidence
+//
+//   - litho directstream_2b.pdf: its /MediaBox [0 0 612 792 5 0 R] runs on
+//     into its content stream, and split, merge and insert wrote it as the
+//     page's /CropBox.
+//   - pdfjs issue13783.pdf, poppler-937-0-fuzzed.pdf: the same, for a
+//     /MediaBox a damaged page object runs on into the entries after it.
+func cropBoxToWrite(ctx context.Context, doc *document.Document, page *document.Page) (ast.PdfArray, bool) {
+	if len(page.DeclaredCropBox) != 4 || len(page.CropBox) != 4 {
+		return nil, false
 	}
-	return !sameBox(page.CropBox, page.MediaBox)
+	crop := pageRectangle(ctx, doc, page.CropBox)
+	if !enclosesArea(crop) {
+		return nil, false
+	}
+	if isNumberRectangle(page.MediaBox) && sameRegion(crop, page.MediaBox) {
+		return nil, false
+	}
+	return crop, true
 }
 
-// sameBox reports whether two rectangles denote the same region.
-func sameBox(a, b ast.PdfArray) bool {
-	if len(a) != 4 || len(b) != 4 {
+// pageRectangle returns box, a page boundary, as a rectangle of four numbers:
+// box itself when it is one, else the rectangle ISO 19005-2, 6.1.13 measures
+// it as (see [compliance.PageBoundaryRect]).
+func pageRectangle(ctx context.Context, doc *document.Document, box ast.PdfArray) ast.PdfArray {
+	if isNumberRectangle(box) {
+		return box
+	}
+	rect, _ := compliance.PageBoundaryRect(ctx, doc, box)
+	return rect
+}
+
+// isNumberRectangle reports whether box is a rectangle as ISO 32000-1, 7.9.5
+// writes one: an array of four numbers.
+func isNumberRectangle(box ast.PdfArray) bool {
+	if len(box) != 4 {
 		return false
 	}
-	for i := range a {
-		if document.Float(a[i]) != document.Float(b[i]) {
+	for _, v := range box {
+		if _, isNumber := document.Number(v); !isNumber {
 			return false
 		}
 	}
 	return true
+}
+
+// rectangleCorners returns a rectangle of four numbers as its lower-left and
+// upper-right corners, whichever pair of opposite corners it names (ISO
+// 32000-1, 7.9.5).
+func rectangleCorners(box ast.PdfArray) (x0, y0, x1, y1 float64) {
+	a, b := document.Float(box[0]), document.Float(box[2])
+	c, d := document.Float(box[1]), document.Float(box[3])
+	return min(a, b), min(c, d), max(a, b), max(c, d)
+}
+
+// enclosesArea reports whether a rectangle of four numbers encloses an area.
+func enclosesArea(box ast.PdfArray) bool {
+	x0, y0, x1, y1 := rectangleCorners(box)
+	return x1 > x0 && y1 > y0
+}
+
+// sameRegion reports whether two rectangles of four numbers denote the same
+// region.
+func sameRegion(a, b ast.PdfArray) bool {
+	ax0, ay0, ax1, ay1 := rectangleCorners(a)
+	bx0, by0, bx1, by1 := rectangleCorners(b)
+	return ax0 == bx0 && ay0 == by0 && ax1 == bx1 && ay1 == by1
 }
 
 // materializeInheritedAttrs writes the attributes a page inherits from ancestor
@@ -194,8 +258,8 @@ func materializeInheritedAttrs(ctx context.Context, alloc *writer.ObjAllocator, 
 	if page.MediaBox != nil && !statesEntry(dict, "MediaBox") {
 		dict["MediaBox"] = page.MediaBox
 	}
-	if croppedTighter(page) && !statesEntry(dict, "CropBox") {
-		dict["CropBox"] = page.CropBox
+	if crop, ok := cropBoxToWrite(ctx, doc, page); ok && !statesEntry(dict, "CropBox") {
+		dict["CropBox"] = crop
 	}
 	if page.Rotate != 0 && !statesEntry(dict, "Rotate") {
 		dict["Rotate"] = ast.PdfInt(page.Rotate)
