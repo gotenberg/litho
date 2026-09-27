@@ -162,6 +162,7 @@ one deliberately rather than diffing it against a fresh build.
 | `inlineinterp_2b.pdf`  | PDF/A-2b     | Inline images asking for interpolation in every stream parsed    |
 | `formhidden_ua1.pdf`   | PDF/UA-1     | Hidden and NoView widgets under the form mutations; conforming   |
 | `annothidden_2b.pdf`   | PDF/A-2b     | Annotations that show nowhere, under PDF/A remediation           |
+| `kidsrepair_1b.pdf`    | PDF/A-1b     | Repairs of inherited resources and of pages written in `/Kids`   |
 
 ### Must-not-fire controls
 
@@ -447,6 +448,7 @@ which are covered under [Known divergences](#known-divergences).
 | `inlineimage_2b.pdf`   | 7    | 4    | 10   | 6    | 7    | 10   | 6    | 7    | 6   | 6    | 7    | 10   | 10   |
 | `inlineinterp_2b.pdf`  | 7    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 10   | 8    |
 | `jpx_2b.pdf`           | 4    | 2    | 9    | 7    | 7    | 9    | 7    | 7    | 8   | 8    | 9    | 5    | 6    |
+| `kidsrepair_1b.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 5    | 5    |
 | `langpua_ua2.pdf`      | 7    | 5    | 8    | 7    | 7    | 8    | 7    | 7    | 4   | 4    | 5    | 4    | 3    |
 | `limits_1b.pdf`        | 12   | 9    | 9    | 6    | 7    | 9    | 6    | 7    | 4   | 4    | 5    | 11   | 9    |
 | `limits_2b.pdf`        | 10   | 8    | 12   | 10   | 10   | 12   | 10   | 10   | 6   | 6    | 7    | 10   | 8    |
@@ -4501,6 +4503,48 @@ fields become 2. Before the removal each of those cells kept `6.3.2/2`, or
 `6.5.3/2` twice at PDF/A-1b, for the hidden pop-up the flag repair skips, and
 every hidden annotation came out visible. PDF/UA-1 leaves `7.18.1/2` three times
 and PDF/UA-2 nothing, on both tools and as before: neither removes anything.
+
+### `kidsrepair_1b.pdf`
+
+ISO 32000-1, 7.7.3.4 hands a page stating no `/Resources` the dictionary of its
+nearest ancestor in the page tree, whole. `parentreach_2b.pdf` made the colour,
+graphics and language repairs find that ancestor through the node listing the
+page, but seven more still read the dictionary the parser merges key by key
+from every ancestor.
+The transparency repair wrote an inline graphics state repair through the
+page's own `/Resources` entry, so it dropped every repair of a dictionary a
+page inherits. And a page written directly in its node's `/Kids`, against ISO
+32000-1, Table 29, has no object number: page-resources skipped it, and every
+repair of the `/Resources` it states was refused. A census of every corpus
+found two such pages, in pdfjs `issue9105_other.pdf` and `issue9540.pdf`,
+neither carrying a defect a repair owns.
+
+Four pages each draw one graphics state with `/CA 0.5`, written directly in its
+`/ExtGState`, itself written directly in its `/Resources`, so a repair can only
+be written through the page tree node holding them:
+
+| Page  | Where it sits                        | Its `/Resources` | Draws | Lent by |
+| ----- | ------------------------------------ | ---------------- | ----- | ------- |
+| `Rt`  | the root's `/Kids`                   | none             | `GSR` | root    |
+| `Mis` | node M's `/Kids`, `/Parent` the root | none             | `GSM` | node M  |
+| `Kid` | written directly in node K's `/Kids` | none             | `GSK` | node K  |
+| `Own` | written directly in node K's `/Kids` | its own          | `GSO` | itself  |
+
+`GSO` also carries a transfer function, and `Own` a transparency page group.
+At PDF/A-1b the file answers `6.4/5` four times, one per graphics state,
+`6.4/3` for the group and `6.2.8/1` for the transfer function. From PDF/A-2 on
+it answers `6.2.2/2` for the three pages naming only inherited resources and
+`6.2.5/1` for the transfer function, beside the identification and tagging
+rules a part-1 claim draws at the other levels. The two tools return the same
+rule set and the same count for every rule in all thirteen cells.
+
+Measured on veraPDF 1.30.2 and litho alike, the PDF/A-1b outputs kept all six
+findings in both modes before the fix, and the PDF/A-2a, 2b, 2u, 3b and 4
+outputs kept `6.2.2/2` for `Kid` and `6.2.5/1` for `Own`. Every output of the
+eight manifest profiles now passes both tools in both modes; the PDF/UA ones
+passed before too. The two sibling pages are written back into the one `/Kids`
+array, each keeping the other's repair, and qpdf reads every output, warning
+only that the two pages are direct, as it does on the fixture.
 
 ## Scope
 
