@@ -74,6 +74,19 @@ func (l pageLabels) at(index int) pageLabel {
 // not a string, a start below 1) reads as no labels. pdf.js refuses such a
 // tree whole and shows page numbers, and so does a tree the walk cannot read
 // whole (see [readParentTree]), which viewers do not agree on either.
+//
+// # Corpus evidence
+//
+//   - All corpora: 520 files carry /PageLabels, 462 govdocs, 44 pdfjs, 13
+//     pdfcpu and 1 pdf20, and pdf.js reads labels from 518 of them.
+//   - pdfjs issue16114.pdf, a range starting at 0, and govdocs
+//     thread_300_300234.pdf, a range that is no dictionary: pdf.js shows
+//     their page numbers.
+//   - govdocs thread_200_200788.pdf, thread_400_400141.pdf and
+//     thread_400_400580.pdf: no range at page index 0, and pdf.js shows the
+//     pages before the first one with an empty label, as qpdf does.
+//   - govdocs thread_100_100556.pdf: its one range is keyed -2, and pdf.js
+//     shows each of its three pages with an empty label.
 func readPageLabels(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, catalog ast.PdfDict, count int) pageLabels {
 	treeObj, has := catalog["PageLabels"]
 	if !has || count <= 0 {
@@ -190,6 +203,21 @@ func pageLabelStart(obj ast.PdfObject) (int64, bool) {
 // labels holds for it: one range per run of labels a single range numbers,
 // the first at page index 0 as ISO 32000-1, 12.4.2 requires. Its nodes list
 // at most [maxPageLabelNodeEntries] entries (see [numberTreeOf]).
+//
+// # Corpus evidence
+//
+//   - All corpora: the 520 files carrying /PageLabels, split whole, in half
+//     and reversed, merged with themselves and after an unlabelled document,
+//     given an unlabelled document's pages, stripped of their first page and
+//     given their last page first, make 3947 outputs, each showing in pdf.js
+//     the labels its pages showed in their sources. Before, 3367 of them
+//     showed other labels.
+//   - All corpora: qpdf warned on 18 of those outputs before and on 6 after,
+//     the 6 the damage of pdfjs issue13783.pdf carries into every copy. The
+//     other 12 were the trees of govdocs thread_200_200394.pdf,
+//     thread_300_300234.pdf and thread_400_400580.pdf and pdfjs
+//     TAMReview.pdf, which an insertion, a deletion and a move kept as they
+//     were.
 func pageLabelTree(alloc *writer.ObjAllocator, labels []pageLabel) ast.PdfDict {
 	return numberTreeOf(alloc, pageLabelNums(labels), maxPageLabelNodeEntries)
 }
