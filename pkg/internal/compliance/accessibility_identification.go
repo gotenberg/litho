@@ -218,76 +218,65 @@ func checkPDFUAIDPrefixes(ctx context.Context, doc *document.Document, catalog a
 // exposed for unit testing. It takes the decoded XMP bytes and the
 // profile name and returns the same violations the I/O-bound wrapper
 // would.
+//
+// The properties are read with namespace scoping ([xmpScopedProperties]), so a
+// binding declared on the property element itself counts like one on
+// rdf:Description. XMP permits a URI to be aliased to several prefixes (seen
+// in the wild as dual bindings like pdfuaid + pdfuaia), and the prefix rules
+// (ISO 14289-1, 5 t3 to t5; ISO 14289-2, 5 t3 and t4) fire for a property
+// written only under a prefix other than the canonical "pdfuaid".
 func checkPDFUAIDPrefixesIn(ctx context.Context, xmpData []byte, profile string) []Violation {
-	const pdfuaIDNamespace = "http://www.aiim.org/pdfua/ns/id/"
-	// Enumerate every prefix bound to the PDF/UA Identification
-	// namespace URI. XMP permits a URI to be aliased to several prefixes
-	// (seen in the wild as dual bindings like pdfuaid + pdfuaia → UA
-	// URI). A single-value lookup would return only one of them and
-	// miss the "wrong-prefix" violation when the document uses a
-	// non-canonical alias for the target property.
-	uaPrefixes := xmpExtractAllPrefixesForURI(ctx, xmpData, pdfuaIDNamespace)
+	props := xmpScopedProperties(ctx, xmpData, xmpPdfuaIDNamespace)
 
-	var results []Violation
-	raw := string(xmpData)
-
-	// wrongPrefix reports whether any prefix bound to the PDF/UA URI,
-	// other than the canonical "pdfuaid", carries the named property.
-	// Returns the offending prefix on the first match.
+	// wrongPrefix returns the first prefix other than "pdfuaid" that writes
+	// the named property, unless "pdfuaid" writes it too.
 	wrongPrefix := func(property string) (string, bool) {
-		for _, p := range uaPrefixes {
-			if p == "pdfuaid" {
+		other := ""
+		for _, p := range props {
+			if p.local != property {
 				continue
 			}
-			if strings.Contains(raw, p+":"+property) {
-				return p, true
+			if p.prefix == "pdfuaid" {
+				return "", false
+			}
+			if other == "" {
+				other = p.prefix
 			}
 		}
-		return "", false
+		return other, other != ""
 	}
 
+	var results []Violation
 	if profile == "PDF/UA-1" {
-		if prefix, bad := wrongPrefix("part"); bad && !strings.Contains(raw, "pdfuaid:part") {
+		if prefix, bad := wrongPrefix("part"); bad {
 			results = append(results, failf(Rule_14289_1_5_t03,
 				"property 'part' uses prefix %q instead of 'pdfuaid'", prefix)...)
 		}
-		if prefix, bad := wrongPrefix("amd"); bad && !strings.Contains(raw, "pdfuaid:amd") {
+		if prefix, bad := wrongPrefix("amd"); bad {
 			results = append(results, failf(Rule_14289_1_5_t04,
 				"property 'amd' uses prefix %q instead of 'pdfuaid'", prefix)...)
 		}
-		if prefix, bad := wrongPrefix("corr"); bad && !strings.Contains(raw, "pdfuaid:corr") {
+		if prefix, bad := wrongPrefix("corr"); bad {
 			results = append(results, failf(Rule_14289_1_5_t05,
 				"property 'corr' uses prefix %q instead of 'pdfuaid'", prefix)...)
 		}
 	}
 
 	if profile == "PDF/UA-2" {
-		if prefix, bad := wrongPrefix("part"); bad && !strings.Contains(raw, "pdfuaid:part") {
+		if prefix, bad := wrongPrefix("part"); bad {
 			results = append(results, failf(Rule_14289_2_5_t03,
 				"property 'part' uses prefix %q instead of 'pdfuaid'", prefix)...)
 		}
-		if prefix, bad := wrongPrefix("rev"); bad && !strings.Contains(raw, "pdfuaid:rev") {
+		if prefix, bad := wrongPrefix("rev"); bad {
 			results = append(results, failf(Rule_14289_2_5_t04,
 				"property 'rev' uses prefix %q instead of 'pdfuaid'", prefix)...)
 		}
 		// t5: pdfuaid:rev must be the literal value pdfua2ExpectedRev.
 		// Read the value from the canonical prefix first, then from
 		// any other prefix bound to the PDF/UA URI. The PDF/A
-		// pdfaid:rev (under a different namespace URI) must never be
+		// pdfaid:rev (under a different namespace URI) is never
 		// consulted.
-		revValue := extractXMPPropertyValue(raw, "pdfuaid", "rev")
-		if revValue == "" {
-			for _, p := range uaPrefixes {
-				if p == "pdfuaid" {
-					continue
-				}
-				revValue = extractXMPPropertyValue(raw, p, "rev")
-				if revValue != "" {
-					break
-				}
-			}
-		}
-		if revValue != "" && revValue != pdfua2ExpectedRev {
+		if revValue := pdfuaIDRev(props); revValue != "" && revValue != pdfua2ExpectedRev {
 			results = append(results, failf(Rule_14289_2_5_t05,
 				"pdfuaid:rev=%q must be %q", revValue, pdfua2ExpectedRev)...)
 		}
@@ -296,34 +285,25 @@ func checkPDFUAIDPrefixesIn(ctx context.Context, xmpData []byte, profile string)
 	return results
 }
 
-// extractXMPPropertyValue extracts the value of prefix:localName from raw
-// XMP. Handles both attribute form (prefix:name="value") and element
-// form (<prefix:name>value</prefix:name>).
-//
-// The function is namespace-blind: it matches a literal prefix:localName
-// substring. Callers must verify that prefix is bound to the intended
-// namespace URI (via [xmpExtractPrefixMap] or equivalent) before calling,
-// or they risk confusing distinct properties that share a local name
-// across namespaces. For example pdfaid:rev (PDF/A) and pdfuaid:rev
-// (PDF/UA) both look like ":rev" under different URIs.
-func extractXMPPropertyValue(raw, prefix, localName string) string {
-	key := prefix + ":" + localName
-	// Attribute form: key="value"
-	if idx := strings.Index(raw, key+"=\""); idx >= 0 {
-		start := idx + len(key) + 2
-		end := strings.Index(raw[start:], "\"")
-		if end >= 0 {
-			return raw[start : start+end]
+// pdfuaIDRev returns the value of the rev property among props, the PDF/UA
+// identification properties of a packet: the one written under the canonical
+// "pdfuaid" prefix first, then any other, the first non-empty in document
+// order. An element's text is trimmed, an attribute's value is not.
+func pdfuaIDRev(props []xmpScopedProperty) string {
+	value := func(p xmpScopedProperty) string {
+		if p.attr {
+			return p.value
 		}
+		return strings.TrimSpace(p.value)
 	}
-	// Element form: <key>value</key>
-	openTag := "<" + key + ">"
-	closeTag := "</" + key + ">"
-	if idx := strings.Index(raw, openTag); idx >= 0 {
-		start := idx + len(openTag)
-		end := strings.Index(raw[start:], closeTag)
-		if end >= 0 {
-			return strings.TrimSpace(raw[start : start+end])
+	for _, canonical := range []bool{true, false} {
+		for _, p := range props {
+			if p.local != "rev" || (p.prefix == "pdfuaid") != canonical {
+				continue
+			}
+			if v := value(p); v != "" {
+				return v
+			}
 		}
 	}
 	return ""

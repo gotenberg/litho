@@ -1,10 +1,11 @@
 package semantics
 
 import (
+	"bytes"
 	"context"
+	"encoding/xml"
 	"io"
 	"log/slog"
-	"regexp"
 	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -23,21 +24,9 @@ import (
 //   - All corpora: a megabyte still reads the whole packet of every fixture.
 const maxPDFXPacketBytes = 1 << 20
 
-// pdfxXMPIdentifier matches the pdfxid:GTS_PDFXVersion property in both forms
-// XMP allows for a simple value: an attribute on rdf:Description, and a child
-// element. Both are legal (ISO 16684-1), and this mirrors the shape the PDF/A
-// identification scan uses.
-//
-// The prefix is part of the pattern on purpose. A PDF/A extension schema
-// DECLARES properties by name, so a document can carry
-// <pdfaProperty:name>GTS_PDFXVersion</pdfaProperty:name> while claiming no
-// PDF/X conformance at all. Matching the bare key reports a claim that is not
-// there; anchoring on pdfxid: does not.
-//
-// # Corpus evidence
-//
-//   - All corpora: only the element form appears.
-var pdfxXMPIdentifier = regexp.MustCompile(`pdfxid:GTS_PDFXVersion\s*(?:=\s*"([^"]*)"|>\s*([^<]*))`)
+// pdfxIDNamespace is the namespace URI the PDF/X identification schema binds
+// to the pdfxid prefix, under which PDF/X-4 and later declare conformance.
+const pdfxIDNamespace = "http://www.npes.org/pdfx/ns/id/"
 
 // DeclaredPDFX reports the PDF/X conformance level a document DECLARES, or the
 // empty profile when it declares none.
@@ -99,16 +88,81 @@ func pdfxFromXMP(ctx context.Context, doc *document.Document) models.PDFXProfile
 		doc.Logger.Debug("reading XMP packet for the PDF/X identifier", slog.Any("err", err))
 		return ""
 	}
-	m := pdfxXMPIdentifier.FindSubmatch(data)
-	if m == nil {
-		return ""
-	}
-	for _, group := range m[1:] {
-		if level := pdfxLevel(string(group)); level != "" {
+	for _, value := range pdfxXMPIdentifiers(ctx, data) {
+		if level := pdfxLevel(value); level != "" {
 			return level
 		}
 	}
 	return ""
+}
+
+// pdfxXMPIdentifiers returns the values of the GTS_PDFXVersion properties of
+// the PDF/X identification namespace in an XMP packet, in document order. XMP
+// allows a simple value in both forms (ISO 16684-1): an attribute on
+// rdf:Description and a child element.
+//
+// The property is found by namespace URI and local name, with the namespace
+// declarations in scope where it is written: on rdf:Description, or on the
+// property element itself, where pikepdf declares every namespace it writes.
+// A literal "pdfxid:GTS_PDFXVersion>" scan met only the closing tag of the
+// second shape and read no value. Keying on the namespace also keeps what a
+// PDF/A extension schema DECLARES out: it can carry
+// <pdfaProperty:name>GTS_PDFXVersion</pdfaProperty:name> while claiming no
+// PDF/X conformance at all, and matching the bare key would report a claim
+// that is not there.
+//
+// A packet that is not well-formed yields the values that precede the defect.
+//
+// # Corpus evidence
+//
+//   - All corpora: only the element form appears, every pdfxid prefix is
+//     bound to this namespace, and none is declared on the property element.
+func pdfxXMPIdentifiers(ctx context.Context, data []byte) []string {
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	dec.Strict = false
+	// The packet is read as the bytes it is: an encoding its header names
+	// changes no ASCII identifier.
+	dec.CharsetReader = func(_ string, r io.Reader) (io.Reader, error) { return r, nil }
+	var out []string
+	for n := 0; ; n++ {
+		if n%100 == 0 && ctx.Err() != nil {
+			return out
+		}
+		tok, err := dec.Token()
+		if err != nil {
+			return out
+		}
+		start, ok := tok.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		for _, a := range start.Attr {
+			if a.Name.Space == pdfxIDNamespace && a.Name.Local == "GTS_PDFXVersion" {
+				out = append(out, strings.TrimSpace(a.Value))
+			}
+		}
+		if start.Name.Space != pdfxIDNamespace || start.Name.Local != "GTS_PDFXVersion" {
+			continue
+		}
+		var text strings.Builder
+		for depth := 1; depth > 0; {
+			tok, err := dec.Token()
+			if err != nil {
+				return append(out, strings.TrimSpace(text.String()))
+			}
+			switch t := tok.(type) {
+			case xml.StartElement:
+				depth++
+			case xml.EndElement:
+				depth--
+			case xml.CharData:
+				if depth == 1 {
+					text.Write(t)
+				}
+			}
+		}
+		out = append(out, strings.TrimSpace(text.String()))
+	}
 }
 
 // pdfxFromInfo reads the Info-dictionary identifier used by X-1a and X-3.

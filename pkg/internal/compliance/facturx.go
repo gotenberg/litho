@@ -1,7 +1,6 @@
 package compliance
 
 import (
-	"bytes"
 	"context"
 	"encoding/xml"
 	"fmt"
@@ -710,16 +709,14 @@ func decodeHybridInvoiceXMP(xmp []byte, v hybridInvoiceVariant) xmpProperties {
 		}
 	}
 
-	// Extension-schema declaration: scan the raw bytes for an entry
-	// pointing at the variant namespace URI. The schema block is
-	// generated in a stable shape by the writer, so a substring check
-	// is reliable enough for this purpose.
-	if bytes.Contains(xmp, []byte("<pdfaExtension:schemas")) {
-		marker := []byte("<pdfaSchema:namespaceURI>" + v.namespaceURI + "</pdfaSchema:namespaceURI>")
-		if bytes.Contains(xmp, marker) {
-			props.extensionSchema = true
-		}
-	}
+	// Extension-schema declaration: an entry of pdfaExtension:schemas naming
+	// the variant namespace URI, read with namespaces as the PDF/A extension
+	// schema checks read it ([xmpExtractNamespaces]). A literal
+	// "<pdfaSchema:namespaceURI>" scan missed an entry declaring its
+	// namespace on the element itself, as pikepdf writes it, and one written
+	// as an attribute of the entry's rdf:Description, as iText writes it.
+	_, declared := xmpExtractNamespaces(xmp)
+	props.extensionSchema = declared[v.namespaceURI]
 	return props
 }
 

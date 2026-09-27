@@ -3,7 +3,6 @@ package compliance
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
 	"github.com/gotenberg/litho/pkg/internal/core/document"
@@ -318,22 +317,16 @@ func containsDCTitle(xmpData []byte) bool {
 	return sync != nil && sync.present["dc:title"]
 }
 
-// containsPDFUAIDPart reports whether the XMP declares the PDF/UA
-// Identification namespace and exposes a part property (element or
-// attribute) bound to that namespace with the requested value. The
-// canonical prefix is "pdfuaid" but XMP allows any prefix provided the
-// namespace URI matches.
+// containsPDFUAIDPart reports whether the XMP exposes a part property (element
+// or attribute) in the PDF/UA Identification namespace with the requested
+// value. The canonical prefix is "pdfuaid" but XMP allows any prefix bound to
+// the namespace URI, wherever the binding is declared: on rdf:Description or
+// on the property element itself ([xmpScopedProperties]). A URI bound to
+// several prefixes (dual bindings like pdfuaid + pdfuaia appear in the wild)
+// carries the property under any of them.
 func containsPDFUAIDPart(ctx context.Context, xmpData []byte, part string) bool {
-	const pdfuaIDNamespace = "http://www.aiim.org/pdfua/ns/id/"
-	xmp := string(xmpData)
-	// A namespace URI may be bound to several prefixes (dual bindings like
-	// pdfuaid + pdfuaia appear in the wild), and the property can sit under any
-	// of them. Check every prefix bound to the PDF/UA URI, not just one, so a
-	// last-write-wins map lookup cannot miss the property and falsely report it
-	// absent.
-	for _, prefix := range xmpExtractAllPrefixesForURI(ctx, xmpData, pdfuaIDNamespace) {
-		if strings.Contains(xmp, fmt.Sprintf("%s:part>%s<", prefix, part)) ||
-			strings.Contains(xmp, fmt.Sprintf("%s:part=\"%s\"", prefix, part)) {
+	for _, p := range xmpScopedProperties(ctx, xmpData, xmpPdfuaIDNamespace) {
+		if p.local == "part" && p.value == part {
 			return true
 		}
 	}
@@ -348,27 +341,23 @@ func containsPDFUAIDPart(ctx context.Context, xmpData []byte, part string) bool 
 // not the value requirement, so the value check keys off presence first to
 // avoid reporting an absent property under the value rule.
 func containsPDFUAIDProperty(ctx context.Context, xmpData []byte) bool {
-	const pdfuaIDNamespace = "http://www.aiim.org/pdfua/ns/id/"
-	xmp := string(xmpData)
-	for _, prefix := range xmpExtractAllPrefixesForURI(ctx, xmpData, pdfuaIDNamespace) {
-		if strings.Contains(xmp, prefix+":part>") || strings.Contains(xmp, prefix+":part=\"") {
-			return true
-		}
-	}
-	return false
+	return xmpScopedPropertyPresent(ctx, xmpData, xmpPdfuaIDNamespace, "part")
 }
 
 // containsPDFUAIDRev reports whether the XMP carries a pdfuaid:rev property
 // (with any value) under the PDF/UA Identification namespace. Like
-// [containsPDFUAIDPart] it keys off the namespace URI, checking every prefix
-// bound to it, so a non-canonical or dual-bound prefix carrying the property
-// still counts. The value itself is checked against [PDFUA2ExpectedRev] by
-// checkPDFUAIDPrefixesIn.
+// [containsPDFUAIDPart] it keys off the namespace URI, so a non-canonical or
+// dual-bound prefix carrying the property still counts. The value itself is
+// checked against [PDFUA2ExpectedRev] by checkPDFUAIDPrefixesIn.
 func containsPDFUAIDRev(ctx context.Context, xmpData []byte) bool {
-	const pdfuaIDNamespace = "http://www.aiim.org/pdfua/ns/id/"
-	xmp := string(xmpData)
-	for _, prefix := range xmpExtractAllPrefixesForURI(ctx, xmpData, pdfuaIDNamespace) {
-		if strings.Contains(xmp, prefix+":rev>") || strings.Contains(xmp, prefix+":rev=\"") {
+	return xmpScopedPropertyPresent(ctx, xmpData, xmpPdfuaIDNamespace, "rev")
+}
+
+// xmpScopedPropertyPresent reports whether the XMP carries a property named
+// local in namespace uri, with any value ([xmpScopedProperties]).
+func xmpScopedPropertyPresent(ctx context.Context, xmpData []byte, uri, local string) bool {
+	for _, p := range xmpScopedProperties(ctx, xmpData, uri) {
+		if p.local == local {
 			return true
 		}
 	}

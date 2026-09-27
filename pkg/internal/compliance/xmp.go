@@ -148,6 +148,10 @@ const (
 	xmpRDFNamespace       = "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
 )
 
+// xmpPdfuaIDNamespace is the namespace URI of the PDF/UA identification schema
+// (ISO 14289-1 and -2, 5).
+const xmpPdfuaIDNamespace = "http://www.aiim.org/pdfua/ns/id/"
+
 // The only two values an extension schema property's category may take, per
 // ISO 19005-1 §6.7.8 t10 and ISO 19005-2/3 §6.6.2.3.3 t9. The comparison is
 // verbatim: neither case folding nor whitespace trimming applies, so " external"
@@ -2286,6 +2290,108 @@ func xmpExtractAllPrefixesForURI(ctx context.Context, data []byte, targetURI str
 type xmpNSBinding struct {
 	prefix string
 	uri    string
+}
+
+// xmpScopedProperty is one element or attribute of an XMP packet whose name
+// resolves to a namespace: the prefix it is written with, its local name, its
+// value, and whether it is written as an attribute. An element's value is the
+// text directly inside it, untrimmed.
+type xmpScopedProperty struct {
+	prefix, local, value string
+	attr                 bool
+}
+
+// xmpScopedProperties returns every element and attribute of data whose
+// qualified name resolves to namespace uri, in document order.
+//
+// A prefix resolves through the xmlns declarations in scope where the name is
+// written, the element's own included (Namespaces in XML 1.0, 6.1). XMP
+// (ISO 16684-1, 7.3) serializes in RDF/XML, which leaves the place of a
+// declaration to the writer: one on rdf:Description and one on the property
+// element itself bind the property alike. pikepdf declares the namespace of
+// every property it writes on that property's element, and veraPDF, parsing
+// with namespaces, reads such a property as it reads any other. A literal
+// "prefix:name>" scan found only the closing tag there and read no value.
+//
+// The prefix is kept as written, since ISO 14289-1 and -2, 5 constrain it.
+// A packet that is not well-formed yields what precedes the defect.
+//
+// # Corpus evidence
+//
+//   - All corpora: no packet declares a namespace below rdf:Description but
+//     eight facturx ones, which declare stEvt on an rdf element of their
+//     history, so reading the PDF/UA identification this way moves no count.
+//     litho annotshare_ua1.pdf declares every namespace on the element using
+//     it.
+func xmpScopedProperties(ctx context.Context, data []byte, uri string) []xmpScopedProperty {
+	dec := xml.NewDecoder(bytes.NewReader(xmpRepairForParse(data)))
+	dec.CharsetReader = xmpPassThroughCharset
+	dec.Strict = false
+
+	// scopes holds the declarations of each open element, innermost last.
+	var scopes []map[string]string
+	resolve := func(prefix string) string {
+		for i := len(scopes) - 1; i >= 0; i-- {
+			if u, ok := scopes[i][prefix]; ok {
+				return u
+			}
+		}
+		return ""
+	}
+	var out []xmpScopedProperty
+	var open *xmpScopedProperty
+	var text strings.Builder
+	openDepth := 0
+	for n := 0; ; n++ {
+		if n%100 == 0 && ctx.Err() != nil {
+			return out
+		}
+		tok, err := dec.RawToken()
+		if err != nil {
+			return out
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			decl := make(map[string]string)
+			for _, a := range t.Attr {
+				switch {
+				case a.Name.Space == "xmlns":
+					decl[a.Name.Local] = a.Value
+				case a.Name.Space == "" && a.Name.Local == "xmlns":
+					decl[""] = a.Value
+				}
+			}
+			scopes = append(scopes, decl)
+			for _, a := range t.Attr {
+				// An unprefixed attribute is in no namespace (Namespaces in XML
+				// 1.0, 6.2), and an xmlns attribute declares one.
+				if a.Name.Space == "" || a.Name.Space == "xmlns" {
+					continue
+				}
+				if resolve(a.Name.Space) == uri {
+					out = append(out, xmpScopedProperty{prefix: a.Name.Space, local: a.Name.Local, value: a.Value, attr: true})
+				}
+			}
+			if open == nil && resolve(t.Name.Space) == uri {
+				open = &xmpScopedProperty{prefix: t.Name.Space, local: t.Name.Local}
+				openDepth = len(scopes)
+				text.Reset()
+			}
+		case xml.CharData:
+			if open != nil && len(scopes) == openDepth {
+				text.Write(t)
+			}
+		case xml.EndElement:
+			if open != nil && len(scopes) == openDepth {
+				open.value = text.String()
+				out = append(out, *open)
+				open = nil
+			}
+			if len(scopes) > 0 {
+				scopes = scopes[:len(scopes)-1]
+			}
+		}
+	}
 }
 
 // xmpNamespaceBindings walks every xmlns:prefix="uri" declaration in the

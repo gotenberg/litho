@@ -2,55 +2,59 @@ package compliance
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
-// TestExtractXMPPropertyValue pins [extractXMPPropertyValue] on the attribute
-// and element forms, trimmed element text, and a missing property.
-func TestExtractXMPPropertyValue(t *testing.T) {
+// TestXMPScopedProperties pins [xmpScopedProperties] on the attribute and
+// element forms, a namespace declared on the property element itself, a prefix
+// bound to another namespace, a declaration out of scope, and a missing
+// property, and [pdfuaIDRev] trimming element text.
+func TestXMPScopedProperties(t *testing.T) {
 	t.Parallel()
-
-	t.Run("attribute form", func(t *testing.T) {
-		t.Parallel()
-		raw := `<rdf:Description pdfuaid:part="2" pdfuaid:rev="2024">`
-		got := extractXMPPropertyValue(raw, "pdfuaid", "part")
-		if got != "2" {
-			t.Errorf("extractXMPPropertyValue() = %q, want %q", got, "2")
-		}
-	})
-
-	t.Run("element form", func(t *testing.T) {
-		t.Parallel()
-		raw := `<pdfuaid:part>2</pdfuaid:part>`
-		got := extractXMPPropertyValue(raw, "pdfuaid", "part")
-		if got != "2" {
-			t.Errorf("extractXMPPropertyValue() = %q, want %q", got, "2")
-		}
-	})
-
-	t.Run("element form with whitespace", func(t *testing.T) {
-		t.Parallel()
-		raw := `<pdfuaid:rev>  2024  </pdfuaid:rev>`
-		got := extractXMPPropertyValue(raw, "pdfuaid", "rev")
-		if got != "2024" {
-			t.Errorf("extractXMPPropertyValue() = %q, want %q", got, "2024")
-		}
-	})
-
-	t.Run("not found", func(t *testing.T) {
-		t.Parallel()
-		raw := `<rdf:Description>`
-		got := extractXMPPropertyValue(raw, "pdfuaid", "part")
-		if got != "" {
-			t.Errorf("extractXMPPropertyValue() = %q, want empty", got)
-		}
-	})
+	const (
+		rdfNS = `xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"`
+		uaNS  = `"http://www.aiim.org/pdfua/ns/id/"`
+	)
+	wrap := func(body string) []byte {
+		return []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF ` + rdfNS + `>` + body + `</rdf:RDF></x:xmpmeta>`)
+	}
+	for _, tc := range []struct {
+		name, body, want string
+	}{
+		{"attribute form", `<rdf:Description xmlns:pdfuaid=` + uaNS + ` pdfuaid:part="2" pdfuaid:rev="2024"/>`, "pdfuaid:part=2 pdfuaid:rev=2024"},
+		{"element form", `<rdf:Description xmlns:pdfuaid=` + uaNS + `><pdfuaid:part>2</pdfuaid:part></rdf:Description>`, "pdfuaid:part=2"},
+		{"declared on the element", `<rdf:Description><pdfuaid:part xmlns:pdfuaid=` + uaNS + `>1</pdfuaid:part></rdf:Description>`, "pdfuaid:part=1"},
+		{"another prefix", `<rdf:Description><ua:part xmlns:ua=` + uaNS + `>1</ua:part></rdf:Description>`, "ua:part=1"},
+		{"prefix bound elsewhere", `<rdf:Description xmlns:pdfuaid="http://www.aiim.org/pdfa/ns/id/"><pdfuaid:part>1</pdfuaid:part></rdf:Description>`, ""},
+		{"declaration out of scope", `<rdf:Description><a:b xmlns:pdfuaid=` + uaNS + `/><pdfuaid:part>1</pdfuaid:part></rdf:Description>`, ""},
+		{"not found", `<rdf:Description/>`, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var got []string
+			for _, p := range xmpScopedProperties(context.Background(), wrap(tc.body), xmpPdfuaIDNamespace) {
+				got = append(got, p.prefix+":"+p.local+"="+p.value)
+			}
+			if strings.Join(got, " ") != tc.want {
+				t.Errorf("xmpScopedProperties() = %q, want %q", strings.Join(got, " "), tc.want)
+			}
+		})
+	}
 
 	t.Run("empty input", func(t *testing.T) {
 		t.Parallel()
-		got := extractXMPPropertyValue("", "pdfuaid", "part")
-		if got != "" {
-			t.Errorf("extractXMPPropertyValue() = %q, want empty", got)
+		if got := xmpScopedProperties(context.Background(), nil, xmpPdfuaIDNamespace); len(got) != 0 {
+			t.Errorf("xmpScopedProperties() = %v, want none", got)
+		}
+	})
+
+	t.Run("rev element text trimmed", func(t *testing.T) {
+		t.Parallel()
+		props := xmpScopedProperties(context.Background(),
+			wrap(`<rdf:Description xmlns:pdfuaid=`+uaNS+`><pdfuaid:rev>  2024  </pdfuaid:rev></rdf:Description>`), xmpPdfuaIDNamespace)
+		if got := pdfuaIDRev(props); got != "2024" {
+			t.Errorf("pdfuaIDRev() = %q, want %q", got, "2024")
 		}
 	})
 }

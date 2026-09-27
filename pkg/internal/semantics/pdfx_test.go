@@ -249,3 +249,32 @@ func TestDeclaredPDFX_ResourceLevelPacketIsNotADocumentClaim(t *testing.T) {
 			"so the document declares nothing", got)
 	}
 }
+
+// TestDeclaredPDFX_NamespaceScoping pins that the XMP identifier is read by
+// namespace, with the declarations in scope where it is written: pikepdf
+// declares the pdfxid namespace on the property element itself, and a prefix
+// the packet binds to another namespace claims nothing.
+func TestDeclaredPDFX_NamespaceScoping(t *testing.T) {
+	t.Parallel()
+
+	packet := func(description string) string {
+		return `<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF ` +
+			`xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` + description + `</rdf:RDF></x:xmpmeta>`
+	}
+	for _, tc := range []struct {
+		name, xmp string
+		want      models.PDFXProfile
+	}{
+		{"declared on the element", packet(`<rdf:Description rdf:about=""><pdfxid:GTS_PDFXVersion xmlns:pdfxid="http://www.npes.org/pdfx/ns/id/">PDF/X-4</pdfxid:GTS_PDFXVersion></rdf:Description>`), models.PDFX4},
+		{"another prefix", packet(`<rdf:Description rdf:about="" xmlns:x4="http://www.npes.org/pdfx/ns/id/"><x4:GTS_PDFXVersion>PDF/X-4</x4:GTS_PDFXVersion></rdf:Description>`), models.PDFX4},
+		{"attribute form", packet(`<rdf:Description rdf:about="" xmlns:pdfxid="http://www.npes.org/pdfx/ns/id/" pdfxid:GTS_PDFXVersion="PDF/X-4"/>`), models.PDFX4},
+		{"prefix bound elsewhere", packet(`<rdf:Description rdf:about="" xmlns:pdfxid="http://ns.adobe.com/pdfx/1.3/"><pdfxid:GTS_PDFXVersion>PDF/X-4</pdfxid:GTS_PDFXVersion></rdf:Description>`), ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := declaredOf(t, pdfxPDF(t, "", tc.xmp)); got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

@@ -100,6 +100,48 @@ func TestDecodeHybridInvoiceXMP_AttributeForm(t *testing.T) {
 	}
 }
 
+// TestDecodeHybridInvoiceXMP_ExtensionSchemaShapes pins that the variant's
+// extension-schema entry is found by namespace whatever the serialization:
+// every namespace declared on the element using it, as pikepdf writes it,
+// and the entry's fields written as attributes of its rdf:Description, as
+// iText writes it. Both are RDF/XML (ISO 16684-1, 7.3) and declare the
+// namespace.
+//
+// # Corpus evidence
+//
+//   - facturx v2__fail_FX-With-UBL-REC50304330.pdf: iText writes the entry in
+//     attribute form, and Mustang finds its PDF part valid, where litho
+//     reported INVOICE test 10.
+func TestDecodeHybridInvoiceXMP_ExtensionSchemaShapes(t *testing.T) {
+	t.Parallel()
+	const uri = "urn:factur-x:pdfa:CrossIndustryDocument:invoice:1p0#"
+	packet := func(body string) []byte {
+		return []byte(`<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+			`<rdf:Description rdf:about="">` + body + `</rdf:Description></rdf:RDF></x:xmpmeta>`)
+	}
+	for _, tc := range []struct {
+		name string
+		xmp  []byte
+		want bool
+	}{
+		{"declared on each element", packet(`<pdfaExtension:schemas xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"><rdf:Bag><rdf:li rdf:parseType="Resource">` +
+			`<pdfaSchema:namespaceURI xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#">` + uri + `</pdfaSchema:namespaceURI>` +
+			`</rdf:li></rdf:Bag></pdfaExtension:schemas>`), true},
+		{"attribute form", packet(`<pdfaExtension:schemas xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/" xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#">` +
+			`<rdf:Bag><rdf:li><rdf:Description pdfaSchema:namespaceURI="` + uri + `" pdfaSchema:prefix="fx"/></rdf:li></rdf:Bag></pdfaExtension:schemas>`), true},
+		{"another namespace", packet(`<pdfaExtension:schemas xmlns:pdfaExtension="http://www.aiim.org/pdfa/ns/extension/"><rdf:Bag><rdf:li rdf:parseType="Resource">` +
+			`<pdfaSchema:namespaceURI xmlns:pdfaSchema="http://www.aiim.org/pdfa/ns/schema#">urn:other#</pdfaSchema:namespaceURI>` +
+			`</rdf:li></rdf:Bag></pdfaExtension:schemas>`), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := decodeHybridInvoiceXMP(tc.xmp, variantFacturX).extensionSchema; got != tc.want {
+				t.Errorf("extensionSchema = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestDecodeHybridInvoiceXMP_WrongNamespace(t *testing.T) {
 	// A zf-namespaced XMP should not satisfy the Factur-X variant.
 	xmp := []byte(`<?xml version="1.0"?>
