@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"testing"
+
+	"github.com/gotenberg/litho/pkg/internal/core/ast"
 )
 
 // buildIndirectBoxPDF assembles a one-page document from the given page
@@ -153,5 +155,37 @@ func TestDirectRectangleUnchanged(t *testing.T) {
 	}
 	if page.Rotate != 180 {
 		t.Errorf("/Rotate = %d, want 180", page.Rotate)
+	}
+}
+
+// TestRectangleKeepsReferenceToStream pins that a rectangle element naming
+// something other than a number stays a reference. A page box that runs on
+// into the page's /Contents reference named the content stream, and resolving
+// it put the stream itself in the array, which split, merge and insert then
+// wrote inline (ISO 32000-1, 7.3.8.1 makes every stream indirect). The
+// coordinates that do name numbers still resolve.
+//
+// # Corpus evidence
+//
+//   - pdfjs poppler-937-0-fuzzed.pdf, issue13783.pdf: a box array runs on
+//     into /Contents N 0 R.
+func TestRectangleKeepsReferenceToStream(t *testing.T) {
+	t.Parallel()
+
+	page := onlyPage(t, buildIndirectBoxPDF(
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 5 0 R 792 /Contents 4 0 R] /Contents 4 0 R >>",
+		[]string{"<< /Length 4 >>\nstream\nq Q\n\nendstream", "250"},
+	))
+
+	for i, elem := range page.MediaBox {
+		if _, isStream := elem.(ast.PdfStream); isStream {
+			t.Fatalf("media box element %d is the stream its reference names, not the reference", i)
+		}
+	}
+	if got, want := page.MediaBox[5], (ast.PdfIndirectRef{ObjectNum: 4}); got != want {
+		t.Errorf("media box element 5 = %v, want the reference %v", got, want)
+	}
+	if got := Float(page.MediaBox[2]); got != 250 {
+		t.Errorf("media box element 2 = %v, want the 250 its reference names", got)
 	}
 }

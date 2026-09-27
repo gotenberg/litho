@@ -848,13 +848,18 @@ func resolveBoxArray(ctx context.Context, doc *Document, dict ast.PdfDict, key a
 	return ResolveRectangle(ctx, doc, arr)
 }
 
-// ResolveRectangle returns arr with every indirect element replaced by the
-// object it names, so a rectangle survives [Float].
+// ResolveRectangle returns arr with every indirect element that names a number
+// replaced by that number, so a rectangle survives [Float].
 //
 // ISO 32000-1, 7.3.9 permits an indirect reference wherever a direct object may
 // appear, including inside an array, and producers do write rectangles that
 // way. Read verbatim, such coordinates are references rather than numbers, so
 // the page measures 0 by 0.
+//
+// A reference naming anything but a number stays a reference. A rectangle
+// holds four numbers (ISO 32000-1, 7.9.5), so the object it names reads as 0
+// either way, and a page copy writes the array back: a stream resolved into it
+// came out written inside the array, which ISO 32000-1, 7.3.8.1 forbids.
 //
 // The array is copied only when an element needs resolving, so the ordinary
 // rectangle keeps its backing array.
@@ -863,6 +868,9 @@ func resolveBoxArray(ctx context.Context, doc *Document, dict ast.PdfDict, key a
 //
 //   - pdfjs issue7872.pdf: declares /MediaBox [4 0 R 5 0 R 6 0 R 7 0 R], and
 //     read verbatim the page measured 0 by 0.
+//   - pdfjs poppler-937-0-fuzzed.pdf, issue13783.pdf: a page box array runs
+//     on into the page's /Contents reference, and split, merge and insert
+//     wrote the content stream inside the /CropBox they copied.
 func ResolveRectangle(ctx context.Context, doc *Document, arr ast.PdfArray) ast.PdfArray {
 	indirect := false
 	for _, elem := range arr {
@@ -888,6 +896,10 @@ func ResolveRectangle(ctx context.Context, doc *Document, arr ast.PdfArray) ast.
 				slog.Int("object", ref.ObjectNum),
 				slog.Any("err", err),
 			)
+			out[i] = elem
+			continue
+		}
+		if _, isNumber := Number(resolved); !isNumber {
 			out[i] = elem
 			continue
 		}
