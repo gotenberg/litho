@@ -23,7 +23,9 @@ import (
 // [mergeInsertedFields]), and the target's catalog /Version is raised to the
 // version the source reads as (see [raiseMergedCatalogVersion]). The rewrite
 // raises the header (see [FullRewriteConfig.PageSources]). Every page keeps
-// the label it displayed (see [insertPageLabels]).
+// the label it displayed (see [insertPageLabels]), and the inserted optional
+// content stays drawn or hidden as its source configured it (see
+// [insertOptionalContent]).
 func InsertPages(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -247,6 +249,9 @@ func InsertPages(
 	}
 	if err := insertPageLabels(ctx, alloc, doc, catalogRef, current, at, copiedRefs, srcDoc, len(srcPages), srcIndices); err != nil {
 		return err
+	}
+	if err := insertOptionalContent(ctx, alloc, doc, catalogRef, srcDoc, copier); err != nil {
+		return fmt.Errorf("adding the inserted pages' optional content: %w", err)
 	}
 
 	// The inserted pages need the version their source reads as, as a merge's

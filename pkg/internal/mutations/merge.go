@@ -438,8 +438,9 @@ func mergeOptionalContent(ctx context.Context, sources []MergeSource, copiers []
 	}
 }
 
-// mergedConfigName names the default optional content configuration of a merge
-// none of whose sources names its own.
+// mergedConfigName names the default optional content configuration litho
+// writes for a merge none of whose sources names its own, and for the target
+// of a page insertion that had none, whose source names none either.
 const mergedConfigName = "Default"
 
 // optionalContentConfigName returns the /Name of an optional content
