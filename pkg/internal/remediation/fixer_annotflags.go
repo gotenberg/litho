@@ -69,6 +69,10 @@ func matchAnnotFlags(v compliance.Violation) bool {
 //     litho and veraPDF alike, veraPDF reports 54 fewer rule classes and none
 //     new, the two agree on every output's rule set, and every page's extracted
 //     text is unchanged. No PDF/UA-1 or PDF/UA-2 output changes.
+//   - litho annothidden_2b.pdf: carries the constructs no other file does. Its
+//     remediations at the six PDF/A manifest profiles, default and aggressive,
+//     now pass on both tools, where each kept the flag finding of its hidden
+//     pop-up.
 func fixAnnotFlags(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, profile string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
