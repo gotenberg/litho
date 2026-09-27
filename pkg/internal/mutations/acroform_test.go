@@ -166,44 +166,41 @@ func TestSplitMerge_KeepAcroForm(t *testing.T) {
 	}
 }
 
-// TestCollectRootFields_DropsSignatureFields pins that a signature field is
-// left behind.
+// TestCollectRootFields_DropsSignedSignatureFields pins that a signed signature
+// field is left behind and an unsigned one is kept.
 //
 // A signature's digest covers the entire file and its /ByteRange names the
 // offsets it spans (ISO 32000-1, 12.8.1). Split and merge rewrite every byte,
 // so a carried signature can never verify, and the output advertises a
-// signature it cannot honour.
+// signature it cannot honour. An unsigned signature field carries no digest:
+// it stays a field the output can still be signed in.
 //
 // # Corpus evidence
 //
 //   - litho docmdp_2b.pdf: veraPDF reported ISO 19005-2, 6.4.3 against a
 //     split, a document that then advertised a signature it could not honour.
-func TestCollectRootFields_DropsSignatureFields(t *testing.T) {
+func TestCollectRootFields_DropsSignedSignatureFields(t *testing.T) {
 	alloc := writer.NewObjAllocator(1)
 
-	sig := alloc.Alloc(ast.PdfDict{"FT": ast.PdfName("Sig"), "T": ast.PdfString("Signature1")})
+	sigDict := alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Sig"), "Contents": ast.PdfString("x")})
+	sig := alloc.Alloc(ast.PdfDict{"FT": ast.PdfName("Sig"), "T": ast.PdfString("Signature1"), "V": sigDict})
 	sigWidget := alloc.Alloc(ast.PdfDict{"Subtype": ast.PdfName("Widget"), "Parent": sig})
+	blank := alloc.Alloc(ast.PdfDict{"FT": ast.PdfName("Sig"), "T": ast.PdfString("Signature2")})
+	blankWidget := alloc.Alloc(ast.PdfDict{"Subtype": ast.PdfName("Widget"), "Parent": blank})
 	text := alloc.Alloc(ast.PdfDict{"FT": ast.PdfName("Tx"), "T": ast.PdfString("name")})
 	textWidget := alloc.Alloc(ast.PdfDict{"Subtype": ast.PdfName("Widget"), "Parent": text})
 
-	got := collectRootFields(alloc, []ast.PdfObject{widgetPage(alloc, sigWidget, textWidget)}, true)
-	if len(got) != 1 {
-		t.Fatalf("/Fields = %v, want only the text field", got)
-	}
-	if got[0] != ast.PdfObject(text) {
-		t.Errorf("kept %v, want the text field %v", got[0], text)
-	}
-	for _, f := range got {
-		if f == ast.PdfObject(sig) {
-			t.Error("a signature field was carried into a rewritten file")
-		}
+	got := collectRootFields(alloc, []ast.PdfObject{widgetPage(alloc, sigWidget, blankWidget, textWidget)}, true)
+	want := ast.PdfArray{blank, text}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("/Fields = %v, want the unsigned signature field and the text field %v", got, want)
 	}
 }
 
-// TestHoldsSignature_OnlySigned pins that a signature field counts as signed
+// TestDropsSignature_OnlySigned pins that a signature field counts as signed
 // only when its /V is a signature dictionary (ISO 32000-1, 12.7.4.5), directly
 // or through a reference, and that no other field does.
-func TestHoldsSignature_OnlySigned(t *testing.T) {
+func TestDropsSignature_OnlySigned(t *testing.T) {
 	t.Parallel()
 	alloc := writer.NewObjAllocator(1)
 	sigDict := alloc.Alloc(ast.PdfDict{"Type": ast.PdfName("Sig"), "Contents": ast.PdfString("x")})
@@ -220,8 +217,8 @@ func TestHoldsSignature_OnlySigned(t *testing.T) {
 		{"a text field", ast.PdfDict{"FT": ast.PdfName("Tx"), "V": ast.PdfDict{}}, false},
 	} {
 		ref := alloc.Alloc(tc.field)
-		if got := holdsSignature(alloc, ref); got != tc.want {
-			t.Errorf("%s: holdsSignature = %v, want %v", tc.name, got, tc.want)
+		if got := dropsSignature(alloc, ref); got != tc.want {
+			t.Errorf("%s: dropsSignature = %v, want %v", tc.name, got, tc.want)
 		}
 	}
 }

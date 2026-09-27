@@ -251,43 +251,45 @@ func pendingArray(alloc *writer.ObjAllocator, obj ast.PdfObject) (ast.PdfArray, 
 	return nil, false
 }
 
-// dropsSignature reports whether a root field is a signature, which split and
-// merge must leave behind.
+// dropsSignature reports whether a root field is a signed signature field,
+// which split, merge and a page insertion leave behind.
 //
 // A signature's digest is computed over the entire file and its /ByteRange
-// names the byte offsets it covers (ISO 32000-1, 12.8.1). Both operations
-// rewrite every byte, so a carried signature can never verify again, and
-// keeping it leaves a document that ADVERTISES a signature it cannot honour:
-// veraPDF reports ISO 19005-2, 6.4.3 against the output. Dropping the field is
-// the honest answer, and it is why /SigFlags is not carried either.
+// names the byte offsets it covers (ISO 32000-1, 12.8.1). Each of these writes
+// a new file, so a carried signature can never verify again, and keeping it
+// leaves a document that ADVERTISES a signature it cannot honour: veraPDF
+// reports ISO 19005-2, 6.4.3 against the output. Dropping the field is the
+// honest answer, and it is why /SigFlags is not carried either. Its widget does
+// not stay behind: [bakeSignedSignatures] draws it into the page first.
+//
+// An unsigned signature field carries no digest, so it is kept as a field the
+// output can still be signed in. Every signature field used to be dropped, and
+// an unsigned one's widget stayed on the page outside the form.
 func dropsSignature(alloc *writer.ObjAllocator, ref ast.PdfIndirectRef) bool {
 	dict, ok := alloc.Pending()[ref.ObjectNum].(ast.PdfDict)
 	if !ok {
 		return false
 	}
-	ft, _ := dict["FT"].(ast.PdfName)
-	return ft == "Sig"
+	return signedSignatureField(dict, func(value ast.PdfObject) bool {
+		switch v := value.(type) {
+		case ast.PdfDict:
+			return true
+		case ast.PdfIndirectRef:
+			_, isDict := alloc.Pending()[v.ObjectNum].(ast.PdfDict)
+			return isDict
+		}
+		return false
+	})
 }
 
-// holdsSignature reports whether a root field is a signature field that is
-// signed: its /V is the signature dictionary that holds the signature (ISO
-// 32000-1, 12.7.4.5, Table 232). An unsigned signature field has no /V.
-//
-// A page insertion leaves such a field out of the form (see
-// [mergeInsertedFields]) for the reason [dropsSignature] gives: the digest,
-// which an unsigned field does not carry. [dropsSignature] leaves every
-// signature field out of a split or a merge, unsigned ones included.
-func holdsSignature(alloc *writer.ObjAllocator, ref ast.PdfIndirectRef) bool {
-	if !dropsSignature(alloc, ref) {
+// signedSignatureField reports whether field, a root field, is a signature
+// field that is signed: its /V, which isDict must find a dictionary for, is
+// the signature dictionary that holds the signature (ISO 32000-1, 12.7.4.5,
+// Table 232). An unsigned signature field has no /V.
+func signedSignatureField(field ast.PdfDict, isDict func(ast.PdfObject) bool) bool {
+	if ft, _ := field["FT"].(ast.PdfName); ft != "Sig" {
 		return false
 	}
-	field, _ := alloc.Pending()[ref.ObjectNum].(ast.PdfDict)
-	switch v := field["V"].(type) {
-	case ast.PdfDict:
-		return true
-	case ast.PdfIndirectRef:
-		_, isDict := alloc.Pending()[v.ObjectNum].(ast.PdfDict)
-		return isDict
-	}
-	return false
+	value, has := field["V"]
+	return has && isDict(value)
 }

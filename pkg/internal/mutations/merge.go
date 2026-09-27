@@ -61,7 +61,13 @@ func Merge(ctx context.Context, sources []MergeSource, dst io.Writer, version st
 		readVersion = writer.AtLeastVersion(readVersion, src.Doc.Version)
 
 		copier := writer.NewCopier(src.Doc, alloc)
-		if overrides := pageCopyOverrides(src.Pages); len(overrides) > 0 {
+		// The output carries no /StructTreeRoot (see copyCatalogEntries), so
+		// a drawn signature is not marked.
+		overrides, err := bakeSignedSignatures(ctx, src.Doc, src.Pages, pageCopyOverrides(src.Pages), false)
+		if err != nil {
+			return fmt.Errorf("merging source %d: %w", srcIdx, err)
+		}
+		if len(overrides) > 0 {
 			copier.WithOverrides(overrides)
 		}
 		copiers[srcIdx] = copier

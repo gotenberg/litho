@@ -17,10 +17,11 @@ import (
 // 1-based.
 //
 // It treats the copied pages as [Merge] treats a later source's: their fields
-// join the form under their own names and their signed signature fields stay
-// out of it (see [mergeInsertedFields]), and the target's catalog /Version is
-// raised to the version the source reads as (see [raiseMergedCatalogVersion]).
-// The rewrite raises the header (see [FullRewriteConfig.PageSources]).
+// join the form under their own names, their signed signature fields are drawn
+// into the pages and stay out of the form (see [bakeSignedSignatures] and
+// [mergeInsertedFields]), and the target's catalog /Version is raised to the
+// version the source reads as (see [raiseMergedCatalogVersion]). The rewrite
+// raises the header (see [FullRewriteConfig.PageSources]).
 func InsertPages(
 	ctx context.Context,
 	alloc *writer.ObjAllocator,
@@ -51,6 +52,17 @@ func InsertPages(
 		return nil
 	}
 
+	// Resolve the catalog and pages tree.
+	catalogRef, ok := CatalogRef(ctx, doc)
+	if !ok {
+		return fmt.Errorf("trailer missing /Root indirect reference")
+	}
+
+	catalogDict := ResolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
+	if catalogDict == nil {
+		return fmt.Errorf("resolving catalog dict")
+	}
+
 	// Copy source page objects into the target allocator. copyPageForOutput
 	// carries the Resources, MediaBox, CropBox and Rotate the source pages
 	// inherited from their own tree, since the flat target tree gives them
@@ -69,6 +81,14 @@ func InsertPages(
 			maps.Copy(overrides, fieldOverrides)
 		}
 	}
+	// A tagged target is tagged by the test [FlattenForm] applies, and none of
+	// its structure elements encloses a copied widget: the insertion carries
+	// the source's pages, not its structure.
+	tagged := newFlattenTags(ctx, alloc, doc, catalogRef, catalogDict) != nil
+	overrides, err := bakeSignedSignatures(ctx, srcDoc, pagesToInsert, overrides, tagged)
+	if err != nil {
+		return err
+	}
 	if len(overrides) > 0 {
 		copier.WithOverrides(overrides)
 	}
@@ -82,17 +102,6 @@ func InsertPages(
 			return fmt.Errorf("copying source page %d: %w", i+1, err)
 		}
 		copiedRefs[i] = ref
-	}
-
-	// Resolve the catalog and pages tree.
-	catalogRef, ok := CatalogRef(ctx, doc)
-	if !ok {
-		return fmt.Errorf("trailer missing /Root indirect reference")
-	}
-
-	catalogDict := ResolveFromAllocOrDoc(ctx, alloc, doc, catalogRef)
-	if catalogDict == nil {
-		return fmt.Errorf("resolving catalog dict")
 	}
 
 	pagesObj, ok := catalogDict["Pages"]

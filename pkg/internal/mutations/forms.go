@@ -509,13 +509,8 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 	return tags.commit(ctx, alloc, doc)
 }
 
-// flattenPageAnnotations processes widget annotations on a page,
-// stamping their appearance streams into the page content and removing
-// them from /Annots. All page-dict mutations (XObject resource
-// additions, /Contents append, /Annots trim) are accumulated into a
-// single draft and written with exactly one [writer.ObjAllocator.AllocAt]
-// call per page, the same invariant [applyStampToPages] follows, so
-// concurrent mutations cannot clobber each other.
+// flattenPageAnnotations bakes the page's widgets into its content as
+// [FlattenForm] decides, one widget at a time, through [flattenPageWidgets].
 //
 // # Corpus evidence
 //
@@ -529,6 +524,94 @@ func FlattenForm(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 //     streams into the page and then deleted the widgets, so the values left
 //     the document entirely.
 func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *writer.ObjAllocator, page *document.Page, regenerated bool, inheritedDA ast.PdfObject, catalogDict ast.PdfDict, tags *flattenTags) {
+	flattenPageWidgets(ctx, doc, alloc, page, tags, func(annotObj ast.PdfObject, annotDict ast.PdfDict) (widgetOutcome, ast.PdfStream) {
+		// Only flatten Widget annotations (form fields). Non-widget
+		// annotations (Link, Text, Highlight, ...) are preserved.
+		subtypeObj, _ := document.ResolveName(ctx, doc, annotDict["Subtype"])
+		if subtypeObj != "Widget" {
+			return widgetKept, ast.PdfStream{}
+		}
+
+		// A widget the viewer does not display is neither painted into the
+		// page nor kept: it leaves with the form, drawing nothing (see
+		// [annotationHiddenOrNoView] for the clauses).
+		if annotationHiddenOrNoView(ctx, doc, annotDict) {
+			return widgetDropped, ast.PdfStream{}
+		}
+
+		// A widget litho cannot bake into the page keeps its annotation. There is
+		// nothing to draw in its place, so dropping it deletes whatever it showed.
+		// A text field with a value and no /AP at all is rendered by generating
+		// an appearance from /V and /DA (ISO 32000-1, 12.7.3.3), and flattening
+		// it removed the widget and with it every character on the page.
+		apStream, ok := resolveWidgetAppearance(ctx, doc, alloc, annotDict)
+		if !ok {
+			// No stored appearance. Draw the value the field holds, the way a
+			// viewer would (ISO 32000-1, 12.7.3.3), so the flatten can finish
+			// rather than leaving the widget behind. `set-form` produces exactly
+			// this shape: it writes /V and asks for regeneration without
+			// building an /AP.
+			generated, built := generatedWidgetAppearance(ctx, doc, alloc, catalogDict, annotDict, inheritedDA)
+			if !built && widgetDrawsNothing(ctx, doc, annotDict) {
+				// Nothing to draw and nothing lost: the widget goes with the
+				// form rather than outliving it as a field.
+				return widgetDropped, ast.PdfStream{}
+			}
+			if !built {
+				keepWidget(alloc, annotObj, annotDict, inheritedDA)
+				return widgetKept, ast.PdfStream{}
+			}
+			apStream = generated
+		}
+
+		// A form that asks the viewer to build its appearances stores
+		// placeholders, and baking one in loses the value it stands for:
+		// flattening wrote the empty streams into the page and then deleted the
+		// widgets, so the values left the document entirely. Keeping the widget
+		// is not enough on its own, because the placeholder it carries is what a
+		// viewer would draw once /NeedAppearances goes with the form; the
+		// placeholder has to go too.
+		if regenerated && valueOutlivesAppearance(ctx, doc, annotDict, apStream) {
+			keepWidget(alloc, annotObj, annotDict, inheritedDA)
+			return widgetKept, ast.PdfStream{}
+		}
+		return widgetBaked, apStream
+	})
+}
+
+// widgetOutcome is what flattening a page does with one of its annotations.
+type widgetOutcome int
+
+const (
+	// widgetKept stays in /Annots.
+	widgetKept widgetOutcome = iota
+	// widgetDropped leaves /Annots and the structure tree, drawing nothing.
+	widgetDropped
+	// widgetBaked leaves /Annots, its appearance drawn into the page content.
+	widgetBaked
+)
+
+// flattenPageWidgets draws into the page's content the appearance of each
+// annotation decide bakes, and removes from /Annots every annotation it bakes
+// or drops. decide sees each annotation that resolves to a dictionary, and
+// returns the appearance to draw with [widgetBaked]. An annotation whose /Rect
+// cannot place a drawing is kept instead of baked.
+//
+// Each appearance is drawn as a form XObject placed at the widget's /Rect,
+// inside the marked content tags gives it (see [flattenTags]). All page-dict
+// mutations (XObject resource additions, /Contents append, /Annots trim) are
+// accumulated into a single draft and written with exactly one
+// [writer.ObjAllocator.AllocAt] call per page, the same invariant
+// [applyStampToPages] follows, so concurrent mutations cannot clobber each
+// other.
+func flattenPageWidgets(
+	ctx context.Context,
+	doc *document.Document,
+	alloc *writer.ObjAllocator,
+	page *document.Page,
+	tags *flattenTags,
+	decide func(annotObj ast.PdfObject, annotDict ast.PdfDict) (widgetOutcome, ast.PdfStream),
+) {
 	// Start from the latest pending version of the page dict so the edit
 	// composes correctly with any prior mutation that has already
 	// rewritten this page, its /Annots included.
@@ -559,75 +642,24 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 			continue
 		}
 
-		// Only flatten Widget annotations (form fields). Non-widget
-		// annotations (Link, Text, Highlight, ...) are preserved.
-		subtypeObj, _ := document.ResolveName(ctx, doc, annotDict["Subtype"])
-		if subtypeObj != "Widget" {
+		outcome, apStream := decide(annotObj, annotDict)
+		switch outcome {
+		case widgetKept:
 			remainingAnnots = append(remainingAnnots, annotObj)
 			continue
-		}
-
-		// A widget the viewer does not display is neither painted into the
-		// page nor kept: it leaves with the form, drawing nothing (see
-		// [annotationHiddenOrNoView] for the clauses).
-		if annotationHiddenOrNoView(ctx, doc, annotDict) {
+		case widgetDropped:
 			tags.drop(ctx, alloc, doc, annotObj, annotDict)
 			continue
+		case widgetBaked:
+			// Drawn below.
 		}
 
-		// A widget litho cannot bake into the page keeps its annotation. There is
-		// nothing to draw in its place, so dropping it deletes whatever it showed.
-		// A text field with a value and no /AP at all is rendered by generating
-		// an appearance from /V and /DA (ISO 32000-1, 12.7.3.3), and flattening
-		// it removed the widget and with it every character on the page.
-		apStream, ok := resolveWidgetAppearance(ctx, doc, alloc, annotDict)
+		rect, ok := widgetRect(ctx, doc, annotDict)
 		if !ok {
-			// No stored appearance. Draw the value the field holds, the way a
-			// viewer would (ISO 32000-1, 12.7.3.3), so the flatten can finish
-			// rather than leaving the widget behind. `set-form` produces exactly
-			// this shape: it writes /V and asks for regeneration without
-			// building an /AP.
-			generated, built := generatedWidgetAppearance(ctx, doc, alloc, catalogDict, annotDict, inheritedDA)
-			if !built && widgetDrawsNothing(ctx, doc, annotDict) {
-				// Nothing to draw and nothing lost: the widget goes with the
-				// form rather than outliving it as a field.
-				tags.drop(ctx, alloc, doc, annotObj, annotDict)
-				continue
-			}
-			if !built {
-				keepWidget(alloc, annotObj, annotDict, inheritedDA)
-				remainingAnnots = append(remainingAnnots, annotObj)
-				continue
-			}
-			apStream = generated
-		}
-
-		// A form that asks the viewer to build its appearances stores
-		// placeholders, and baking one in loses the value it stands for:
-		// flattening wrote the empty streams into the page and then deleted the
-		// widgets, so the values left the document entirely. Keeping the widget
-		// is not enough on its own, because the placeholder it carries is what a
-		// viewer would draw once /NeedAppearances goes with the form; the
-		// placeholder has to go too.
-		if regenerated && valueOutlivesAppearance(ctx, doc, annotDict, apStream) {
-			keepWidget(alloc, annotObj, annotDict, inheritedDA)
 			remainingAnnots = append(remainingAnnots, annotObj)
 			continue
 		}
-
-		rectArr, err := document.ResolveArray(ctx, doc, annotDict["Rect"])
-		if err != nil || len(rectArr) < 4 {
-			doc.Logger.Debug("widget /Rect invalid, keeping the annotation",
-				slog.Int("len", len(rectArr)),
-				slog.Any("err", err),
-			)
-			remainingAnnots = append(remainingAnnots, annotObj)
-			continue
-		}
-		x1 := document.Float(rectArr[0])
-		y1 := document.Float(rectArr[1])
-		x2 := document.Float(rectArr[2])
-		y2 := document.Float(rectArr[3])
+		x1, y1, x2, y2 := rect[0], rect[1], rect[2], rect[3]
 
 		apRef := alloc.Alloc(asFormXObject(apStream, x2-x1, y2-y1))
 		xobjName := ast.PdfName(fmt.Sprintf("FlatAP%d", apRef.ObjectNum))
@@ -687,6 +719,23 @@ func flattenPageAnnotations(ctx context.Context, doc *document.Document, alloc *
 	}
 
 	alloc.AllocAt(page.Ref.ObjectNum, newDict)
+}
+
+// widgetRect returns the annotation's /Rect as x1, y1, x2, y2, and false when
+// it is not an array of four numbers a drawing can be placed with.
+func widgetRect(ctx context.Context, doc *document.Document, annotDict ast.PdfDict) ([4]float64, bool) {
+	rectArr, err := document.ResolveArray(ctx, doc, annotDict["Rect"])
+	if err != nil || len(rectArr) < 4 {
+		doc.Logger.Debug("widget /Rect invalid, drawing nothing for it",
+			slog.Int("len", len(rectArr)),
+			slog.Any("err", err),
+		)
+		return [4]float64{}, false
+	}
+	return [4]float64{
+		document.Float(rectArr[0]), document.Float(rectArr[1]),
+		document.Float(rectArr[2]), document.Float(rectArr[3]),
+	}, true
 }
 
 // Annotation flags that keep a viewer from showing the annotation on screen

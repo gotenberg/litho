@@ -39,6 +39,14 @@ func (c *Copier) WithOverrides(overrides map[int]ast.PdfObject) *Copier {
 	return c
 }
 
+// Override returns the object the copier copies in place of source object
+// objNum, and false when it copies the source's own (see
+// [Copier.WithOverrides]).
+func (c *Copier) Override(objNum int) (ast.PdfObject, bool) {
+	obj, ok := c.overrides[objNum]
+	return obj, ok
+}
+
 // Mapping exposes the src-to-dst object number map assembled during the
 // copy pass. Callers use it to translate references allocated in the
 // source namespace into the destination namespace after copy completes.

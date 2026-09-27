@@ -58,8 +58,17 @@ func copyPageForOutput(ctx context.Context, copier *writer.Copier, alloc *writer
 	}
 
 	// Judged on the source page, whose entries name objects of doc, where the
-	// copy's name objects of alloc.
-	if res, needed := flatResources(ctx, nil, doc, page.Dict, page); needed {
+	// copy's name objects of alloc. The source page is the one the copier
+	// copied: its override when it has one, as a page whose signed signatures
+	// were drawn into it states the /Resources the drawing needs (see
+	// [bakeSignedSignatures]), which the page it inherited would hide.
+	source := page.Dict
+	if override, ok := copier.Override(page.Ref.ObjectNum); ok && page.Ref.ObjectNum != 0 {
+		if dict, isDict := override.(ast.PdfDict); isDict {
+			source = dict
+		}
+	}
+	if res, needed := flatResources(ctx, nil, doc, source, page); needed {
 		copied, err := copier.CopyObject(ctx, res)
 		if err != nil {
 			return ast.PdfIndirectRef{}, err

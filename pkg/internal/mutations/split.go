@@ -58,6 +58,12 @@ func Split(ctx context.Context, doc *document.Document, allPages []*document.Pag
 			maps.Copy(overrides, fieldOverrides)
 		}
 	}
+	// The output carries no /StructTreeRoot (see copyCatalogEntries), so a
+	// drawn signature is not marked.
+	overrides, err := bakeSignedSignatures(ctx, doc, keptPages, overrides, false)
+	if err != nil {
+		return err
+	}
 	if len(overrides) > 0 {
 		copier.WithOverrides(overrides)
 	}

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -253,51 +252,6 @@ func TestWriter_InsertPages_PageMoveKeepsFieldNames(t *testing.T) {
 		if name != "name" && name != "solo" {
 			t.Errorf("the form lists a root field %q the source does not have", name)
 		}
-	}
-}
-
-// signedFormPDF is a one-page form holding a signed signature field, an
-// unsigned one and a text field, each merged with its widget.
-func signedFormPDF() []byte {
-	return buildPDF([]string{
-		"<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [4 0 R 5 0 R 6 0 R] /SigFlags 3 >> >>",
-		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots [4 0 R 5 0 R 6 0 R] >>",
-		"<< /Type /Annot /Subtype /Widget /FT /Sig /T (signed) /V 7 0 R /Rect [50 700 250 750] /F 4 /P 3 0 R >>",
-		"<< /Type /Annot /Subtype /Widget /FT /Sig /T (blank) /Rect [50 600 250 650] /F 4 /P 3 0 R >>",
-		"<< /Type /Annot /Subtype /Widget /FT /Tx /T (city) /V (Paris) /Rect [50 500 250 520] /F 4 /P 3 0 R >>",
-		"<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /adbe.pkcs7.detached " +
-			"/ByteRange [0 100 200 300] /Contents <30820001> >>",
-	})
-}
-
-// TestWriter_InsertPages_DropsCopiedSignatures pins that a signed signature
-// field on an inserted page is left out of the form, as a merge leaves it out.
-//
-// The signature's digest covers the bytes of the source file its /ByteRange
-// names (ISO 32000-1, 12.8.1), none of which the new document holds, so a
-// copied signature can never verify. Its widget stays on the page, drawing
-// the appearance it had, outside the form, as a merge leaves it. An unsigned
-// signature field signs nothing and is listed like any other field.
-func TestWriter_InsertPages_DropsCopiedSignatures(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	target := buildPDF([]string{
-		"<< /Type /Catalog /Pages 2 0 R >>",
-		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>",
-	})
-	out := insertPageBytes(ctx, t, target, signedFormPDF(), 1, 1)
-
-	listed, outside := formRoots(ctx, t, out)
-	if !slices.Equal(listed, []string{"blank", "city"}) {
-		t.Errorf("root fields = %v, want [blank city]: the signed field left out, the unsigned one kept", listed)
-	}
-	if len(outside) != 1 {
-		t.Fatalf("widgets outside the form = %v, want the signed field's widget alone", outside)
-	}
-	if !strings.Contains(outside[0], `"signed"`) {
-		t.Errorf("widget outside the form = %q, want the one of the field \"signed\"", outside[0])
 	}
 }
 

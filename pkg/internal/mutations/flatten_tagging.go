@@ -140,6 +140,14 @@ func newFlattenTags(ctx context.Context, alloc *writer.ObjAllocator, doc *docume
 	return t
 }
 
+// artifactTags returns tagging state that marks every drawn appearance as an
+// artifact and edits no structure tree: the state for content that goes into a
+// tagged document which carries no structure element for it, where no
+// element encloses the widget (ISO 32000-1, 14.8.2.2).
+func artifactTags() *flattenTags {
+	return &flattenTags{loaded: true}
+}
+
 // load reads the parent tree and the object references the first time a widget
 // needs them.
 func (t *flattenTags) load(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document) {

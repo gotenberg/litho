@@ -1087,10 +1087,14 @@ func (w *Writer) DeletePages(pages ...int) error {
 //     keeps its widgets in the fields they presented.
 //   - A signed signature field is left out of the form, since its digest
 //     covers bytes of the source file the document does not hold (ISO
-//     32000-1, 12.8.1). Its widget stays on the page, drawing the appearance
-//     it had, outside the form, as in a merge. An unsigned signature field
-//     signs nothing and is listed like any other field, where a merge leaves
-//     it out too.
+//     32000-1, 12.8.1). Its widget's appearance is drawn into the page
+//     content, as [Writer.FlattenForm] draws one, and the widget removed, so
+//     the page looks as it did. In a tagged document the drawing is marked as
+//     an artifact: the insertion carries the source's pages, not its
+//     structure, so no structure element encloses it. A widget a viewer does
+//     not display, or with no area as an invisible signature has, goes
+//     without drawing. An unsigned signature field signs nothing and is
+//     listed like any other field.
 //   - The header declares at least the version source declares, and a
 //     catalog /Version the document carries is raised to the version source
 //     reads as ([Reader.Version]), so pages from a PDF 2.0 source never land
@@ -3385,6 +3389,15 @@ func (w *Writer) writeToInternal(ctx context.Context, dst io.Writer, signer Sign
 // when src is encrypted: see that option for why a source's encryption cannot
 // carry across on its own.
 //
+// The form fields the extracted pages' widgets present stay fields of the
+// output's form, but a signed signature field does not: its digest covers
+// bytes of src the output does not hold (ISO 32000-1, 12.8.1). Its widget's
+// appearance is drawn into the page content, as [Writer.FlattenForm] draws
+// one, and the widget removed, so the page looks as it did. A widget a viewer
+// does not display, or with no area as an invisible signature has, goes
+// without drawing. An unsigned signature field stays a field that can be
+// signed.
+//
 // Split reads a copy of src's document, as a [Writer] edits one, so src is
 // left as it was and other goroutines may read it meanwhile.
 func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ...WriteOption) (err error) {
@@ -3434,6 +3447,11 @@ func Split(ctx context.Context, src *Reader, pages []int, dst io.Writer, opts ..
 // The output is written in the clear unless [WithEncryption] is passed, even
 // when the sources are encrypted. Sources opened under different passwords
 // are written under the single key that option supplies.
+//
+// Fields that share a fully qualified name across sources are one field of
+// the output's form (ISO 32000-1, 12.7.3.2). A signed signature field is drawn
+// into its page and leaves the form, as in [Split], and an unsigned one stays
+// a field that can be signed.
 //
 // Merge reads a copy of each source's document, as [Split] does, so the
 // sources are left as they were and other goroutines may read them

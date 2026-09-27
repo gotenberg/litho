@@ -24,11 +24,11 @@ import (
 // [rebuildAcroForm]), so a field whose widgets stayed behind is never listed.
 //
 // A signed signature field is left out, as split and merge leave it out (see
-// [holdsSignature]): its digest covers bytes of the source file the new
-// document does not hold, so it can never verify there. Its widget stays on the
-// inserted page, drawing the appearance it had, outside the form, as it stays
-// in a merge. An unsigned signature field signs nothing and is listed like any
-// other field.
+// [dropsSignature]): its digest covers bytes of the source file the new
+// document does not hold, so it can never verify there. Its widget has already
+// left the inserted page, its appearance drawn into the page's content (see
+// [bakeSignedSignatures]). An unsigned signature field signs nothing and is
+// listed like any other field.
 //
 // A copied root keeps its name when the form already uses it, as a merge keeps
 // it: fields with one fully qualified name are one field (ISO 32000-1,
@@ -51,15 +51,9 @@ import (
 // # Corpus evidence
 //
 //   - litho: 9 fixtures carried a widget qpdf reported as not reachable from
-//     /AcroForm after a page move. Of those, only docmdp_2b.pdf and
-//     sigcms_2b.pdf still do, each on the widgets of its signed signature
-//     fields, which the form leaves out.
+//     /AcroForm after a page move, and none does now.
 //   - All corpora, 617 files that mention a form: the warning went from the
-//     page-move output of 221 files to 5 while signed signature fields were
-//     listed. Four carry it in their input.
-//   - All corpora, 605 files that mention a form: leaving the signed
-//     signature fields out brings it back on the page move of 15 files, 10
-//     pdfjs and 5 verapdf, each on such a widget.
+//     page-move output of 221 files to 5. Four carry it in their input.
 //   - All corpora, 605 files that mention a form: after a page move, 216
 //     files read fields renamed with a "_2" suffix, 11 of them litho
 //     fixtures. They read the source's names now.
@@ -83,10 +77,7 @@ func mergeInsertedFields(
 	for i, ref := range copiedRefs {
 		pageRefs[i] = ref
 	}
-	roots := slices.DeleteFunc(collectRootFields(alloc, pageRefs, false), func(root ast.PdfObject) bool {
-		ref, isRef := root.(ast.PdfIndirectRef)
-		return isRef && holdsSignature(alloc, ref)
-	})
+	roots := collectRootFields(alloc, pageRefs, true)
 	if len(roots) == 0 {
 		return nil
 	}
