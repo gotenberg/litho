@@ -268,50 +268,98 @@ func checkPDFUA2AnnotationConstraints(ctx context.Context, doc *document.Documen
 	return results
 }
 
+// pageAnnot is one annotation as veraPDF judges it: the annotation dictionary
+// and the page whose /Annots reached it.
+type pageAnnot struct {
+	page, annot ast.PdfDict
+}
+
+// judgedAnnotations returns the annotations of pages in the unit veraPDF
+// judges them in: one entry per /Annots element that resolves to a dictionary,
+// in page order, except that an annotation that is an object of its own comes
+// once, with the first page listing it.
+//
+// veraPDF builds a PDAnnot for every element of every page's /Annots
+// (GFPDPage.parseAnnotations), and its validator skips an object it has met
+// already by its object key (BaseValidator.checkRequired). An annotation
+// written inline has no key, so it is judged again on every page whose /Annots
+// holds it, which two pages sharing one /Annots array do. Measured against
+// veraPDF 1.30.2 at PDF/UA-1: a Link without /Contents written inline in an
+// /Annots array two pages share fails ISO 14289-1, 7.18.5 t2 twice, the same
+// Link as an object of its own fails it once, and the inline one whose
+// rectangle lies off the second page's crop box fails it once.
+func judgedAnnotations(ctx context.Context, doc *document.Document, pages []ast.PdfDict) []pageAnnot {
+	var out []pageAnnot
+	seen := make(map[int]bool)
+	for _, page := range pages {
+		if ctx.Err() != nil {
+			return out
+		}
+		// Best-effort: an /Annots that does not resolve to an array lists no
+		// annotation, as veraPDF's PDPage.getAnnotations reads it.
+		annots, _ := document.ResolveArray(ctx, doc, page["Annots"])
+		for _, annotObj := range annots {
+			if ref, ok := annotObj.(ast.PdfIndirectRef); ok {
+				if seen[ref.ObjectNum] {
+					continue
+				}
+				seen[ref.ObjectNum] = true
+			}
+			// Best-effort: an element that is no dictionary is no annotation.
+			if annot, _ := document.ResolveDict(ctx, doc, annotObj); annot != nil {
+				out = append(out, pageAnnot{page: page, annot: annot})
+			}
+		}
+	}
+	return out
+}
+
 // checkLinkContents validates PDF/UA-1 §7.18.5 t2: Link annotations must
-// have a non-empty /Contents key providing an alternate description.
+// have a non-empty /Contents key providing an alternate description. Each
+// Link is judged in the unit veraPDF judges it in ([judgedAnnotations]), so a
+// document with several fails the test once for each.
 //
 // # Corpus evidence
 //
 //   - pdfjs issue3694_reduced.pdf: has only an off-page Link without
 //     /Contents, and veraPDF passes it.
+//   - verapdf PDF_UA-2__8.2.5.20-t02-fail-a.pdf, fail-b, pass-a and pass-b:
+//     each carries three Links without /Contents, and veraPDF reports the test
+//     three times at PDF/UA-1, where litho reported it once.
+//   - litho annotstruct_ua2.pdf: carries four Links without /Contents, and
+//     veraPDF reports the test four times at PDF/UA-1, where litho reported it
+//     once.
+//   - All corpora: the count moves on 201 files at PDF/UA-1 and no rule set
+//     moves. Eleven of them, pdfjs bug1978317.pdf's 32768 Links the most,
+//     count as veraPDF does, measured live.
+//   - All corpora: no page lists an annotation another page lists too; litho
+//     namedmcid_ua1.pdf shares one /Annots array between two pages.
 func checkLinkContents(ctx context.Context, doc *document.Document, catalog ast.PdfDict, profile string) []Violation {
 	if profile != "PDF/UA-1" {
 		return nil
 	}
 
-	pages := collectPages(ctx, doc, catalog)
 	var results []Violation
-	for _, page := range pages {
-		if ctx.Err() != nil {
-			return results
+	for _, pa := range judgedAnnotations(ctx, doc, collectPages(ctx, doc, catalog)) {
+		annot := pa.annot
+		subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
+		if subtype != "Link" {
+			continue
 		}
-		annotsArr, _ := document.ResolveArray(ctx, doc, page["Annots"])
-		for _, annotObj := range annotsArr {
-			annot, _ := document.ResolveDict(ctx, doc, annotObj)
-			if annot == nil {
-				continue
-			}
-			subtype, _ := document.ResolveName(ctx, doc, annot["Subtype"])
-			if subtype != "Link" {
-				continue
-			}
-			// veraPDF's test exempts a hidden Link and one whose rectangle lies
-			// off the crop box of the page holding it: (F & 2) == 2 ||
-			// isOutsideCropBox == true.
-			flags, _ := document.ResolveInt(ctx, doc, annot["F"])
-			const hiddenBit = 1 << 1 // ISO 32000-1, Table 165: bit position 2
-			if int(flags)&hiddenBit != 0 || annotRectOutsidePageCropBox(ctx, doc, annot, page) {
-				continue
-			}
-			// /Contents is a text string, judged by the text it decodes to: a byte
-			// order mark alone decodes to nothing (ISO 32000-1, 7.9.2.2).
-			contents, _ := document.ResolveString(ctx, doc, annot["Contents"])
-			if document.DecodePdfString(contents) == "" {
-				results = append(results, failf(Rule_14289_1_7_18_5_t02,
-					"Link annotation without non-empty /Contents")...)
-				return results
-			}
+		// veraPDF's test exempts a hidden Link and one whose rectangle lies
+		// off the crop box of the page holding it: (F & 2) == 2 ||
+		// isOutsideCropBox == true.
+		flags, _ := document.ResolveInt(ctx, doc, annot["F"])
+		const hiddenBit = 1 << 1 // ISO 32000-1, Table 165: bit position 2
+		if int(flags)&hiddenBit != 0 || annotRectOutsidePageCropBox(ctx, doc, annot, pa.page) {
+			continue
+		}
+		// /Contents is a text string, judged by the text it decodes to: a byte
+		// order mark alone decodes to nothing (ISO 32000-1, 7.9.2.2).
+		contents, _ := document.ResolveString(ctx, doc, annot["Contents"])
+		if document.DecodePdfString(contents) == "" {
+			results = append(results, failf(Rule_14289_1_7_18_5_t02,
+				"Link annotation without non-empty /Contents")...)
 		}
 	}
 	return results
