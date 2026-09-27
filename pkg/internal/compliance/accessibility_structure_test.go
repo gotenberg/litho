@@ -301,3 +301,55 @@ func TestCheckNamespaceRoleMapping_NamespaceVocabulary(t *testing.T) {
 		})
 	}
 }
+
+// TestCheckNamespaceRoleMapping_LegacyRoleMapScope covers ISO 14289-2 §8.2.4 t1
+// for a non-standard type the structure tree root's legacy /RoleMap maps to a
+// standard one. The legacy map governs a type in no namespace, or in the PDF 1.7
+// namespace when that namespace declares no /RoleMapNS (ISO 32000-2:2020,
+// 14.8.6). A type in any other namespace resolves through that namespace's
+// /RoleMapNS alone, so the legacy entry leaves it unmapped. veraPDF 1.30.2
+// reports t1 on each placement below that wants it and nothing on the others,
+// measured on one file per row.
+func TestCheckNamespaceRoleMapping_LegacyRoleMapScope(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// Object 5 is the PDF 2.0 namespace, object 6 the PDF 1.7 one and object 7
+	// a custom one. The legacy /RoleMap maps /Para to /P.
+	build := func(t *testing.T, childNS, ns17, custom string) []Violation {
+		t.Helper()
+		doc, cat := tableDoc(t, 1,
+			"<< /Type /Catalog /StructTreeRoot 2 0 R >>",
+			"<< /Type /StructTreeRoot /K [3 0 R] /RoleMap << /Para /P >> /Namespaces [5 0 R 6 0 R 7 0 R] >>",
+			"<< /Type /StructElem /S /Document /NS 5 0 R /P 2 0 R /K [4 0 R] >>",
+			"<< /Type /StructElem /S /Para "+childNS+" /P 3 0 R >>",
+			"<< /Type /Namespace /NS (http://iso.org/pdf2/ssn) >>",
+			"<< /Type /Namespace /NS (http://iso.org/pdf/ssn) "+ns17+" >>",
+			"<< /Type /Namespace /NS (http://litho.example/probe) "+custom+" >>",
+		)
+		return checkNamespaceRoleMapping(ctx, doc, cat, "PDF/UA-2")
+	}
+
+	const otherMap = "/RoleMapNS << /Other [/P 5 0 R] >>"
+	tests := []struct {
+		name                  string
+		childNS, ns17, custom string
+		wantT01               bool
+	}{
+		{"no namespace", "", "", "", false},
+		{"pdf 1.7 namespace", "/NS 6 0 R", "", "", false},
+		{"pdf 2.0 namespace", "/NS 5 0 R", "", "", true},
+		{"custom namespace", "/NS 7 0 R", "", "", true},
+		{"custom namespace mapping other types", "/NS 7 0 R", "", otherMap, true},
+		{"pdf 1.7 namespace mapping other types", "/NS 6 0 R", otherMap, "", true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := hasRule(build(t, tc.childNS, tc.ns17, tc.custom), Rule_14289_2_8_2_4_t01)
+			if got != tc.wantT01 {
+				t.Errorf("/Para %q: §8.2.4 t1 fired = %v, want %v", tc.childNS, got, tc.wantT01)
+			}
+		})
+	}
+}

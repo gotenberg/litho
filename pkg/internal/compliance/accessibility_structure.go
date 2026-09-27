@@ -199,6 +199,47 @@ func typeInLegacyRoleMap(roleMap map[ast.PdfName]ast.PdfName, typeName ast.PdfNa
 	return ok
 }
 
+// legacyRoleMapGoverns reports whether the structure tree root's legacy /RoleMap
+// maps a type declared in namespace nsURI, "" for a type in no namespace. The
+// legacy map governs a type in no namespace, or in the PDF 1.7 namespace when
+// that namespace declares no /RoleMapNS of its own; a type in any other
+// namespace resolves through that namespace's /RoleMapNS alone
+// (ISO 32000-2:2020, 14.8.6). veraPDF 1.30.2 resolves the same way: once an
+// element declares the PDF 2.0 namespace, a custom one, or a PDF 1.7 namespace
+// carrying a /RoleMapNS, a legacy entry sending its type to a standard one
+// leaves it unmapped for ISO 14289-2 §8.2.4 t1. Measured.
+//
+// nsRoleMaps holds the /RoleMapNS of every namespace that declares one.
+//
+// # Corpus evidence
+//
+//   - All corpora: no tagged file declares, on an element whose type only the
+//     legacy map maps, a namespace that map does not govern.
+//   - litho rolemapscope_ua2: declares the PDF 2.0 namespace on such an
+//     element, beside the two placements the map governs.
+//   - All corpora: PDF/UA-2 remediation of 6 tagged files declared the PDF 2.0
+//     namespace on a root element the map sends to Document, and veraPDF
+//     reported 8.2.4 t1 on each output where litho reported nothing.
+func legacyRoleMapGoverns(nsURI string, nsRoleMaps map[string]ast.PdfDict) bool {
+	if nsURI == "" {
+		return true
+	}
+	_, declares := nsRoleMaps[nsURI]
+	return nsURI == pdf1NamespaceURI && !declares
+}
+
+// legacyRoleMapMaps reports whether the legacy /RoleMap maps typeName, declared
+// in namespace nsURI, for ISO 14289-2 §8.2.4 t1: the map has to govern the type
+// ([legacyRoleMapGoverns]), and then either lead it to a standard type or name
+// it at all, since a circular entry is still a mapping that t2 reports
+// ([typeInLegacyRoleMap]).
+func legacyRoleMapMaps(roleMap map[ast.PdfName]ast.PdfName, typeName ast.PdfName, nsURI string, nsRoleMaps map[string]ast.PdfDict) bool {
+	if !legacyRoleMapGoverns(nsURI, nsRoleMaps) {
+		return false
+	}
+	return roleMapChainReachesStandard(roleMap, typeName, nsURI) || typeInLegacyRoleMap(roleMap, typeName)
+}
+
 // nsTypeKey identifies a structure type within its namespace, for the cycle
 // detection of role-map chains. A struct keeps the pair apart where a joined
 // string would not: a name holds any byte a "#hh" escape decodes to, NUL
@@ -346,8 +387,7 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 			// contrast, is reported by t02/t03, so it is excluded here to avoid a
 			// double-fire. The standard-namespace branch below reads the same way.
 			if roleMapNSChainOutcome(ctx, doc, sType, elemNSURI, nsRoleMaps) == nsChainUnmapped &&
-				!roleMapChainReachesStandard(roleMap, sType, declaredNSURI) &&
-				!typeInLegacyRoleMap(roleMap, sType) {
+				!legacyRoleMapMaps(roleMap, sType, declaredNSURI, nsRoleMaps) {
 				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
 					"structure type %s in namespace %q is not mapped to a standard namespace",
 					sType, elemNSURI)...)
@@ -359,15 +399,17 @@ func walkNSCheck(ctx context.Context, doc *document.Document, node ast.PdfDict, 
 			// isNotMappedToStandardType): the standard namespaces define a fixed
 			// vocabulary, so e.g. /PDFDocument in the PDF 1.7 namespace fails
 			// §8.2.4 t1 unless it is role-mapped to a standard type, via the
-			// namespace's RoleMapNS or the legacy /RoleMap (e.g. /Standard /P).
+			// namespace's RoleMapNS or, where it governs, the legacy /RoleMap
+			// (e.g. /Standard /P). The legacy map never reaches a type the
+			// element declares in the PDF 2.0 namespace, so /PDFDocument there
+			// fails even when the map sends it to Document.
 			// Each namespace carries its own vocabulary (ISO 32000-2:2020,
 			// 14.8.6), so BlockQuote fails here in the PDF 2.0 namespace and
 			// FENote fails in the PDF 1.7 one.
 			// t01 fires when the type does not reach a standard type; a circular
 			// chain is reported by t02/t03, not t01, so exclude it here.
 			if roleMapNSChainOutcome(ctx, doc, sType, elemNSURI, nsRoleMaps) == nsChainUnmapped &&
-				!roleMapChainReachesStandard(roleMap, sType, declaredNSURI) &&
-				!typeInLegacyRoleMap(roleMap, sType) {
+				!legacyRoleMapMaps(roleMap, sType, declaredNSURI, nsRoleMaps) {
 				*results = append(*results, failf(Rule_14289_2_8_2_4_t01,
 					"structure type %s in standard namespace %q is not a standard type and is not role-mapped",
 					sType, elemNSURI)...)
@@ -550,17 +592,15 @@ func (r *nsRoleResolver) resolveStandardType(ctx context.Context, doc *document.
 // equivalentType returns the role-map target of one structure type, mirroring
 // [iso32005Equivalent]: a type whose namespace declares a /RoleMapNS is remapped
 // through it, while the structure tree root's legacy /RoleMap governs only a type
-// in no namespace or in the PDF 1.7 one (ISO 32000-2:2020, 14.8.6). A legacy
+// in no namespace or in the PDF 1.7 one ([legacyRoleMapGoverns]). A legacy
 // target names no namespace of its own. mapped is false when no mapping governs
 // the type, which is what makes it stand for itself.
 func (r *nsRoleResolver) equivalentType(ctx context.Context, doc *document.Document, typeName, nsURI string) (target, targetNS string, mapped bool) {
-	if nsURI != "" {
-		if rmns, declares := r.rmnsByURI[nsURI]; declares {
-			return roleMapNSTarget(ctx, doc, rmns[ast.PdfName(typeName)])
-		}
-		if nsURI != pdf1NamespaceURI {
-			return "", "", false
-		}
+	if rmns, declares := r.rmnsByURI[nsURI]; declares && nsURI != "" {
+		return roleMapNSTarget(ctx, doc, rmns[ast.PdfName(typeName)])
+	}
+	if !legacyRoleMapGoverns(nsURI, r.rmnsByURI) {
+		return "", "", false
 	}
 	next, exists := r.classicRole[ast.PdfName(typeName)]
 	if !exists {
