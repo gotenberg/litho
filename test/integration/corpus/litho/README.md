@@ -160,6 +160,7 @@ one deliberately rather than diffing it against a fresh build.
 | `xmppage_2b.pdf`       | PDF/A-2b     | Extension schema tests on the XMP packets pages carry            |
 | `parentreach_2b.pdf`   | PDF/A-2b     | Repairs of the resources a page inherits past its `/Parent`      |
 | `inlineinterp_2b.pdf`  | PDF/A-2b     | Inline images asking for interpolation in every stream parsed    |
+| `formhidden_ua1.pdf`   | PDF/UA-1     | Hidden and NoView widgets under the form mutations; conforming   |
 
 ### Must-not-fire controls
 
@@ -427,6 +428,7 @@ which are covered under [Known divergences](#known-divergences).
 | `formcs_2b.pdf`        | 6    | 4    | 6    | 4    | 4    | 6    | 4    | 4    | 5   | 5    | 6    | 7    | 7    |
 | `formcycle_ua1.pdf`    | 4    | 2    | 4    | 2    | 2    | 4    | 2    | 2    | 3   | 3    | 4    | 6    | 6    |
 | `formflat_ua1.pdf`     | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 6   | 6    | 7    | 1    | 3    |
+| `formhidden_ua1.pdf`   | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 5    | 4   | 4    | 5    | 0    | 5    |
 | `formmedia_ua1.pdf`    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 8    | 7   | 7    | 8    | 7    | 5    |
 | `formstruct_ua2.pdf`   | 4    | 4    | 6    | 6    | 6    | 6    | 6    | 6    | 5   | 5    | 6    | 7    | 7    |
 | `glyphs_2b.pdf`        | 7    | 4    | 8    | 5    | 6    | 8    | 5    | 6    | 6   | 6    | 7    | 10   | 10   |
@@ -4391,6 +4393,66 @@ the reference to its new stream as the value of the array's object, which
 qpdf reads as an integer and litho's text extraction as no text: the writer
 rolled the content repairs back and the four findings came back.
 
+### `formhidden_ua1.pdf`
+
+ISO 32000-1, Table 165 keeps a Hidden annotation off the screen and off paper,
+and a NoView one off the screen, printing it only when its Print flag is set.
+Flattening a form used to keep such widgets, and with them a form field in a
+document meant to have none. It now drops each one with its field, drawing
+nothing, and prunes the Form element it leaves holding nothing. A printed
+NoView widget goes too. Content that shows only in print needs an optional
+content group whose `/AS` applies a print usage (ISO 32000-1, 8.11.4.4), and
+veraPDF reports `6.1.13/1` at PDF/A-1b, `6.9/4` at PDF/A-2b and PDF/A-3b,
+`7.10/2` at PDF/UA-1 and `8.7/2` at PDF/UA-2 on a flattened page holding the
+appearance in such a group, where the same page without it passes. Without
+`/AS` the group passes but keeps its `/D` state in print too, so it never
+prints. No fixture carried a hidden widget, so `mutate-flatten` never reached
+one: pdfjs `annotation_hidden_noview.pdf`, `bug1737260.pdf`,
+`widget_hidden_print.pdf` and verapdf `PDF_UA-1__7.18.1-t03-pass-c.pdf` did,
+outside the cell.
+
+One tagged page presents six text fields, each with an appearance painting a
+box:
+
+| Field    | `/F`                             | Structure element | After `FlattenForm`            |
+| -------- | -------------------------------- | ----------------- | ------------------------------ |
+| `secret` | 6: Hidden, Print                 | its own Form      | dropped, its element pruned    |
+| `draft`  | 2: Hidden                        | none              | dropped                        |
+| `stamp`  | 36: NoView, Print                | its own Form      | dropped, its element pruned    |
+| `note`   | 32: NoView                       | its own Form      | dropped, its element pruned    |
+| `tip`    | 292: NoView, ToggleNoView, Print | its own Form      | dropped, its element pruned    |
+| `name`   | 4: Print                         | its own Form      | baked, tagged, PrintField `tv` |
+
+ISO 14289-1, 7.18.4 test 1 exempts a hidden widget from the Form tag, so
+`draft` needs none. ISO 14289-2, 8.9.2.2 test 2 fires on `stamp` and `note` and
+not on `tip`, whose ToggleNoView it permits. With an XMP packet claiming
+`pdfuaid:part` 1, the file conforms to PDF/UA-1 on both tools, the one cell of
+this corpus that reports nothing, and its flattened output conforms too.
+
+Measured on veraPDF 1.30.2 and litho, flattening before the fix kept all five
+widgets and their fields, which `mutate-flatten` counts as `promise_broken`.
+After it, the flattened file fails a subset of the input's rules at every
+level, on both tools: the flags rule, `8.9.2.2/2` and `8.10.2.3/1` go, and
+nothing comes. qpdf reports nothing on either file.
+
+The file agrees with veraPDF in all thirteen cells, rule for rule and count for
+count. PDF/UA-1 reports nothing on either tool. The other cells report the
+flags of the five widgets (`6.5.3/2` at part 1, `6.3.2/2` from part 2, 5 each),
+the appearances painting in DeviceGray with no output intent (`6.2.3.3/3` at
+part 1, `6.2.4.3/4` from part 2, 13 each), the `pdfuaid` properties no
+extension schema declares and the missing PDF/A identification (`6.7.9/2`,
+`/3` and `6.7.11/1` at part 1, `6.6.2.3.1/1`, `/2` and `6.6.4/1` at parts 2
+and 3, `6.7.3/1` at part 4), the `%PDF-1.7` header and, at 4f, the missing
+`/EmbeddedFiles` at part 4. At PDF/UA-2 they are the part-1 claim (`5/2`,
+`5/5`), the Document element outside the PDF 2.0 namespace (`8.2.5.2/2`), the
+two NoView widgets (`8.9.2.2/2`) and the five tagged widgets with neither a
+`Lbl` element nor `/Contents` (`8.10.2.3/1`).
+
+Remediation at the eight manifest profiles, normal and aggressive, leaves
+nothing on either tool except `8.10.2.3/1` three times at PDF/UA-2, on both.
+The PDF/A remediations clear the Hidden and NoView flags the clauses forbid,
+which shows every one of the five widgets.
+
 ## Scope
 
 `manifest.json` expands every fixture across the eight profiles it lists, so
@@ -4410,6 +4472,9 @@ verdicts agree, and `ruleset_mismatch`, a cost metric the baseline gates,
 counts the cells whose sets of failed rules (clause and test) differ. Every
 fixture here is non-compliant on both sides, so a change that drops or invents
 a rule class leaves `matched` at 856 and moves only `ruleset_mismatch`. Both
+cell but one is non-compliant on both sides, so a change that drops or invents
+a rule class there leaves `matched` at 856 and moves only `ruleset_mismatch`.
+The one conforming cell, `formhidden_ua1` at PDF/UA-1, moves both. Both
 exceptions sit in the manifest's profiles, `complex_ua2` at PDF/UA-1 and
 PDF/UA-2, so the metric reads 2 on this corpus, and the text scoreboard names
 the rules only one side reports. A third cell in the runner is a regression, or
