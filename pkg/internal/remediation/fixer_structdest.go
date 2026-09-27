@@ -33,7 +33,8 @@ const maxOutlineFixWalk = 10000
 // A structure destination is the /SD entry of a GoTo action, beside the page
 // destination under /D that a reader knowing no structure destination
 // follows (ISO 32000-2, 12.6.4.2, Table 202). A GoTo action gains /SD wherever
-// it hangs, under an /AA trigger included, and a destination becomes such an
+// it hangs, under an /AA trigger included, or after another action through
+// /Next (see [structElemPicker.fixAction]), and a destination becomes such an
 // action. A dictionary in its place would not do: the catalog /OpenAction
 // takes an array or an action dictionary (ISO 32000-1, 7.7.2, Table 28), and
 // an outline item's or a link's /Dest takes an array, a name or a byte string
@@ -88,6 +89,17 @@ const maxOutlineFixWalk = 10000
 //   - verapdf PDF_UA-1__7.15-t01-fail-a.pdf: its outline opens two page objects
 //     outside the page tree, which it keeps, and fails 8.8 test 2 four times
 //     on both tools.
+//   - govdocs thread_000_000904.pdf, pdfjs issue3214.pdf: the two files that
+//     run a GoTo action after another action through /Next, a page's /AA /O
+//     Named action and an outline item's GoTo action. Remediated to PDF/UA-2,
+//     default and aggressive, each output kept that GoTo action without /SD,
+//     and veraPDF reported 8.8 test 2 once. Walked through /Next, neither
+//     tool reports 8.8, and PDF.js opens every outline item of both outputs on
+//     the page it opens in the source.
+//   - litho gotochain_ua2.pdf: of its 7 GoTo actions lacking /SD, the 4 run
+//     through /Next, one in an array, one in a loop, one after a Named action
+//     and one two chains share, kept none, and both tools reported 8.8 test 2
+//     four times. Now neither reports anything.
 func fixStructDest(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, _ Options, _ []compliance.Violation, _ string) ([]string, error) {
 	catalogRef, ok := catalogRefForFixer(ctx, doc)
 	if !ok {
@@ -124,7 +136,7 @@ func fixStructDest(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 }
 
 // structElemPicker gives destinations the structure element their page opens
-// on.
+// on. One picker serves one run of the fixer. Not safe for concurrent use.
 type structElemPicker struct {
 	alloc *writer.ObjAllocator
 	doc   *document.Document
@@ -132,6 +144,9 @@ type structElemPicker struct {
 	// destination on that page names (see [mutations.StructPageTargets] and
 	// [newStructElemPicker]).
 	targets map[int]ast.PdfIndirectRef
+	// walked holds the object numbers of the actions, and of the /Next arrays,
+	// the run has walked (see [structElemPicker.fixAction]).
+	walked map[int]bool
 }
 
 // newStructElemPicker returns nil when the document has no structure tree
@@ -159,7 +174,7 @@ func newStructElemPicker(ctx context.Context, alloc *writer.ObjAllocator, doc *d
 	if len(targets) == 0 {
 		return nil
 	}
-	return &structElemPicker{alloc: alloc, doc: doc, targets: targets}
+	return &structElemPicker{alloc: alloc, doc: doc, targets: targets, walked: make(map[int]bool)}
 }
 
 // onlyPage returns the page of a document of one page, and false for any other
@@ -281,43 +296,54 @@ func (p *structElemPicker) withStructDest(ctx context.Context, act ast.PdfDict) 
 }
 
 // destAction returns the GoTo action with a structure destination that
-// replaces the destination dest, and false when there is none.
+// replaces the destination dest, and the number of destinations it gave a
+// structure destination, 0 when there is none.
 //
 // A dictionary is no destination: ISO 32000-1, Tables 153 and 173 allow an
 // array, a name or a byte string under /Dest. Producers write a GoTo action
 // there, or a dictionary holding the destination under /D as a named
 // destination's value does (12.3.2.3), and readers follow its /D. It becomes
-// the GoTo action it stands for when inDest, and stays when dest is the
+// the GoTo action it stands for when inDest, the actions its /Next runs given
+// theirs too (see [structElemPicker.fixAction]), and stays when dest is the
 // catalog /OpenAction, where a dictionary is the action itself (Table 28).
-func (p *structElemPicker) destAction(ctx context.Context, dest ast.PdfObject, inDest bool) (ast.PdfDict, bool) {
+func (p *structElemPicker) destAction(ctx context.Context, dest ast.PdfObject, inDest bool) (ast.PdfDict, int) {
 	resolved, err := document.ResolveObject(ctx, p.doc, dest)
 	if err != nil {
-		return nil, false
+		return nil, 0
 	}
 	if dict, isDict := resolved.(ast.PdfDict); isDict {
 		if !inDest {
-			return nil, false
+			return nil, 0
 		}
 		if s, _ := document.ResolveName(ctx, p.doc, dict["S"]); s != "" && s != "GoTo" {
-			return nil, false
+			return nil, 0
 		}
 		act := maps.Clone(dict)
 		act["S"] = ast.PdfName("GoTo")
-		return p.withStructDest(ctx, act)
+		fixed, ok := p.withStructDest(ctx, act)
+		if !ok {
+			return nil, 0
+		}
+		chained, n := p.fixActionDict(ctx, fixed, 0)
+		if chained == nil {
+			chained = fixed
+		}
+		return chained, 1 + n
 	}
 	d, sd, ok := p.structDest(ctx, resolved)
 	if !ok {
-		return nil, false
+		return nil, 0
 	}
-	return ast.PdfDict{"S": ast.PdfName("GoTo"), "D": d, "SD": sd}, true
+	return ast.PdfDict{"S": ast.PdfName("GoTo"), "D": d, "SD": sd}, 1
 }
 
 // fixOwner gives the destination owner holds a structure destination: a
 // destination under destKey becomes a GoTo action under actionKey (see
-// [structElemPicker.destAction]), and a GoTo action under actionKey gains /SD. destKey is empty for an owner that
-// holds an action alone. It returns owner rewritten, or nil when owner keeps
-// its entries, a GoTo action it names by reference being rewritten at its own
-// object number, and the number of destinations given a structure
+// [structElemPicker.destAction]), and the GoTo actions of the action under
+// actionKey gain /SD (see [structElemPicker.fixAction]). destKey is empty for
+// an owner that holds an action alone. It returns owner rewritten, or nil when
+// owner keeps its entries, an action it names by reference being rewritten at
+// its own object number, and the number of destinations given a structure
 // destination.
 //
 // A destination beside an action stays: ISO 32000-1, Tables 153 and 173 have
@@ -325,52 +351,144 @@ func (p *structElemPicker) destAction(ctx context.Context, dest ast.PdfObject, i
 func (p *structElemPicker) fixOwner(ctx context.Context, owner ast.PdfDict, destKey, actionKey ast.PdfName) (ast.PdfDict, int) {
 	hasAction := present(owner, actionKey)
 	if destKey != "" && (destKey == actionKey || !hasAction) {
-		if act, ok := p.destAction(ctx, owner[destKey], destKey != actionKey); ok {
+		if act, n := p.destAction(ctx, owner[destKey], destKey != actionKey); act != nil {
 			out := maps.Clone(owner)
 			delete(out, destKey)
 			out[actionKey] = act
-			return out, 1
+			return out, n
 		}
 	}
 	if !hasAction {
 		return nil, 0
 	}
-	if ref, isRef := owner[actionKey].(ast.PdfIndirectRef); isRef {
-		if p.fixGoToAction(ctx, ref) {
-			return nil, 1
-		}
-		return nil, 0
-	}
-	act, isDict := owner[actionKey].(ast.PdfDict)
-	if !isDict {
-		return nil, 0
-	}
-	fixed, ok := p.withStructDest(ctx, act)
-	if !ok {
-		return nil, 0
+	fixed, n := p.fixAction(ctx, owner[actionKey], 0)
+	if fixed == nil {
+		return nil, n
 	}
 	out := maps.Clone(owner)
 	out[actionKey] = fixed
-	return out, 1
+	return out, n
 }
 
-// fixGoToAction adds /SD to the GoTo action at ref, rewritten at its own
-// object number so every owner naming it sees the change, and reports
-// whether it did.
-func (p *structElemPicker) fixGoToAction(ctx context.Context, ref ast.PdfIndirectRef) bool {
-	if ref.ObjectNum <= 0 {
-		return false
+// fixAction gives the GoTo actions of the action tree obj heads a structure
+// destination, by the rules a GoTo action an owner holds itself follows (see
+// [structElemPicker.withStructDest]), and leaves every other action's entries
+// but its /Next as they are. An action's /Next holds one action or an array
+// of them, run after it (ISO 32000-1, 12.6.2, Table 193), and ISO 14289-2, 8.8
+// covers every destination whose target lies in the document, the one a GoTo
+// action run after another opens among them.
+//
+// An action or a /Next array written as an object of its own is rewritten at
+// its own object number, so every owner naming it sees the change, and a
+// direct one comes back rewritten for its owner to hold, or nil when it keeps
+// its entries. Each object is walked once a run: a /Next that loops back ends
+// there, an action several owners share gains /SD once, and a /Next array
+// whose direct actions each name it again cannot fan out 2^depth. The depth
+// is capped at [maxActionChainDepth], as deep as compliance judges a chain.
+// It returns the number of GoTo actions given a structure destination.
+func (p *structElemPicker) fixAction(ctx context.Context, obj ast.PdfObject, depth int) (ast.PdfDict, int) {
+	if ctx.Err() != nil || depth > maxActionChainDepth {
+		return nil, 0
 	}
-	act := resolveFromAllocOrDoc(ctx, p.alloc, p.doc, ref)
+	ref, isRef := obj.(ast.PdfIndirectRef)
+	if isRef {
+		if ref.ObjectNum <= 0 || p.walked[ref.ObjectNum] {
+			return nil, 0
+		}
+		p.walked[ref.ObjectNum] = true
+	}
+	act := liveDictValue(ctx, p.alloc, p.doc, obj)
 	if act == nil {
-		return false
+		return nil, 0
 	}
-	fixed, ok := p.withStructDest(ctx, act)
-	if !ok {
-		return false
+	fixed, n := p.fixActionDict(ctx, act, depth)
+	if fixed == nil || !isRef {
+		return fixed, n
 	}
 	p.alloc.AllocAt(ref.ObjectNum, fixed)
-	return true
+	return nil, n
+}
+
+// fixActionDict returns the action act with /SD when it is a GoTo action that
+// takes one, and with its /Next rewritten when a direct action in it changed,
+// or nil when act keeps its entries, and the number of GoTo actions of act's
+// tree given a structure destination (see [structElemPicker.fixAction]).
+func (p *structElemPicker) fixActionDict(ctx context.Context, act ast.PdfDict, depth int) (ast.PdfDict, int) {
+	out, ok := p.withStructDest(ctx, act)
+	count := 0
+	if ok {
+		count++
+	}
+	nextObj, hasNext := act["Next"]
+	if !hasNext {
+		return out, count
+	}
+	next, m := p.fixNext(ctx, nextObj, depth+1)
+	count += m
+	if next == nil {
+		return out, count
+	}
+	if out == nil {
+		out = maps.Clone(act)
+	}
+	out["Next"] = next
+	return out, count
+}
+
+// fixNext gives the GoTo actions of the /Next value nextObj a structure
+// destination (see [structElemPicker.fixAction]). It returns the value
+// rewritten for the action holding it, or nil when the action keeps it, and
+// the number of GoTo actions given a structure destination.
+func (p *structElemPicker) fixNext(ctx context.Context, nextObj ast.PdfObject, depth int) (ast.PdfObject, int) {
+	arr, isArr := nextObj.(ast.PdfArray)
+	ref, isRef := nextObj.(ast.PdfIndirectRef)
+	if isRef {
+		arr = liveArray(ctx, p.alloc, p.doc, ref)
+		isArr = arr != nil
+	}
+	if !isArr {
+		fixed, n := p.fixAction(ctx, nextObj, depth)
+		if fixed == nil {
+			return nil, n
+		}
+		return fixed, n
+	}
+	if !isRef {
+		return p.fixActionArray(ctx, arr, depth)
+	}
+	if ref.ObjectNum <= 0 || p.walked[ref.ObjectNum] {
+		return nil, 0
+	}
+	p.walked[ref.ObjectNum] = true
+	fixed, n := p.fixActionArray(ctx, arr, depth)
+	if fixed != nil {
+		p.alloc.AllocAt(ref.ObjectNum, fixed)
+	}
+	return nil, n
+}
+
+// fixActionArray gives the GoTo actions of the actions arr lists a structure
+// destination (see [structElemPicker.fixAction]). It returns arr rewritten,
+// or nil when every entry keeps its value, and the number of GoTo actions
+// given a structure destination.
+func (p *structElemPicker) fixActionArray(ctx context.Context, arr ast.PdfArray, depth int) (ast.PdfObject, int) {
+	var out ast.PdfArray
+	count := 0
+	for i, item := range arr {
+		fixed, n := p.fixAction(ctx, item, depth)
+		count += n
+		if fixed == nil {
+			continue
+		}
+		if out == nil {
+			out = slices.Clone(arr)
+		}
+		out[i] = fixed
+	}
+	if out == nil {
+		return nil, count
+	}
+	return out, count
 }
 
 // fixPages gives, across all pages, the GoTo actions of the page's /AA
@@ -448,10 +566,11 @@ func (p *structElemPicker) fixAnnot(ctx context.Context, ref ast.PdfIndirectRef)
 
 // fixAdditionalActions gives the GoTo actions of the additional-actions
 // dictionary aaObj a structure destination, those under triggers alone when
-// triggers is not nil. An action written by reference, and a dictionary written
-// by reference, are rewritten at their own object number. It returns the
-// dictionary rewritten, or nil when the owner keeps its /AA, and the number of
-// actions given a structure destination.
+// triggers is not nil, the actions each trigger's /Next runs included (see
+// [structElemPicker.fixAction]). An action written by reference, and a
+// dictionary written by reference, are rewritten at their own object number.
+// It returns the dictionary rewritten, or nil when the owner keeps its /AA,
+// and the number of actions given a structure destination.
 func (p *structElemPicker) fixAdditionalActions(ctx context.Context, aaObj ast.PdfObject, triggers []ast.PdfName) (ast.PdfDict, int) {
 	aa := liveDictValue(ctx, p.alloc, p.doc, aaObj)
 	if aa == nil {
@@ -463,20 +582,15 @@ func (p *structElemPicker) fixAdditionalActions(ctx context.Context, aaObj ast.P
 		if triggers != nil && !slices.Contains(triggers, key) {
 			continue
 		}
-		switch v := aa[key].(type) {
-		case ast.PdfIndirectRef:
-			if p.fixGoToAction(ctx, v) {
-				count++
-			}
-		case ast.PdfDict:
-			if fixed, ok := p.withStructDest(ctx, v); ok {
-				if out == nil {
-					out = maps.Clone(aa)
-				}
-				out[key] = fixed
-				count++
-			}
+		fixed, n := p.fixAction(ctx, aa[key], 0)
+		count += n
+		if fixed == nil {
+			continue
 		}
+		if out == nil {
+			out = maps.Clone(aa)
+		}
+		out[key] = fixed
 	}
 	if out == nil {
 		return nil, count

@@ -140,7 +140,9 @@ func fixJavaScript(ctx context.Context, alloc *writer.ObjAllocator, doc *documen
 // that repeats an action, or a chain that loops back on itself, adds no work.
 // The value is the depth compliance's walkActionChain judges to (its
 // maxActionChainDepth), so the splice reaches every action the validator
-// flags, and an action beyond it is neither flagged nor cut.
+// flags, and an action beyond it is neither flagged nor cut. The structure
+// destination fixer walks a chain as deep ([structElemPicker.fixAction]), the
+// depth compliance judges its GoTo actions to under ISO 14289-2, 8.8.
 const maxActionChainDepth = 200
 
 // actionSplice cuts the actions a profile forbids out of action trees. An
