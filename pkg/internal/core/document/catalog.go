@@ -408,6 +408,11 @@ func ResolvePages(ctx context.Context, doc *Document, catalog *Catalog) ([]*Page
 //     compliance and remediation caps is never reached.
 const maxPageTreeDepth = 256
 
+// MaxPageTreeDepth is [maxPageTreeDepth], for a writer that walks the page
+// tree the reader walks and has to stop where the reader stops, a node
+// deeper than the bound being one the reader never reaches.
+const MaxPageTreeDepth = maxPageTreeDepth
+
 // traversePageTree walks one page tree node, applying inherited attributes,
 // and appends each leaf page to pages.
 //
@@ -797,10 +802,24 @@ func resolveKidDict(ctx context.Context, doc *Document, kidObj ast.PdfObject) (a
 // /MediaBox or /Contents as Table 30 entries of a page. Which writers omit
 // /Type is not recorded.
 func inferPageTreeNodeType(ctx context.Context, doc *Document, node ast.PdfDict) string {
+	var typeName ast.PdfName
 	if typeObj, ok := node["Type"]; ok {
-		if typeStr, err := ResolveName(ctx, doc, typeObj); err == nil && typeStr != "" {
-			return string(typeStr)
+		if typeStr, err := ResolveName(ctx, doc, typeObj); err == nil {
+			typeName = typeStr
 		}
+	}
+	return PageTreeNodeRole(typeName, node)
+}
+
+// PageTreeNodeRole returns what the page tree walk reads node as, given the
+// name its /Type resolves to, empty when it resolves to none: that name when
+// there is one, "Pages" or "Page" by the node's shape when there is not, and
+// an empty string when the shape says neither. It is the rule
+// [ResolvePages] applies (see inferPageTreeNodeType), for a writer that has
+// to write a page tree the way the reader reads it.
+func PageTreeNodeRole(typeName ast.PdfName, node ast.PdfDict) string {
+	if typeName != "" {
+		return string(typeName)
 	}
 	if _, hasKids := node["Kids"]; hasKids {
 		return "Pages"

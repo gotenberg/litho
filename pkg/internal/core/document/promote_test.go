@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 	"testing"
@@ -163,5 +164,109 @@ func TestPromoteDirectKids_RunsAgainAfterACancelledRun(t *testing.T) {
 	}
 	if got, want := pageObjectNums(t, doc), []int{3, 7, 9, 10}; !slices.Equal(got, want) {
 		t.Errorf("the pages read as objects %v, want %v", got, want)
+	}
+}
+
+// directRootPDF builds a two-page document whose page tree root is written
+// directly in the catalog, against ISO 32000-1, 7.7.2, Table 28. rootEntry is
+// the trailer's /Root: "1 0 R" names the catalog, object 1, by reference, and
+// a dictionary writes the catalog in the trailer itself, against 7.5.5, Table
+// 15.
+func directRootPDF(rootEntry string) []byte {
+	var buf bytes.Buffer
+	buf.WriteString("%PDF-1.7\n")
+	objs := []string{
+		"<< /Type /Catalog /Lang (en) /Pages << /Type /Pages /Kids [2 0 R 3 0 R] /Count 2 >> >>",
+		"<< /Type /Page /MediaBox [0 0 100 100] >>",
+		"<< /Type /Page /MediaBox [0 0 200 200] >>",
+	}
+	offs := make([]int, len(objs))
+	for i, o := range objs {
+		offs[i] = buf.Len()
+		fmt.Fprintf(&buf, "%d 0 obj\n%s\nendobj\n", i+1, o)
+	}
+	xref := buf.Len()
+	fmt.Fprintf(&buf, "xref\n0 %d\n0000000000 65535 f\r\n", len(objs)+1)
+	for _, o := range offs {
+		fmt.Fprintf(&buf, "%010d 00000 n\r\n", o)
+	}
+	fmt.Fprintf(&buf, "trailer\n<< /Size %d /Root %s >>\nstartxref\n%d\n%%%%EOF\n", len(objs)+1, rootEntry, xref)
+	return buf.Bytes()
+}
+
+// TestPromoteDirectKids_NumbersARootWrittenInTheCatalog pins that a page tree
+// root written directly in the catalog gets the next object number, and that
+// the catalog names it by reference from then on, keeping every other entry.
+//
+// ISO 32000-1, 7.7.2, Table 28 makes the catalog's /Pages an indirect
+// reference. A writer rebuilding the page tree replaces the root at its object
+// number, so page deletion refused a root with none.
+func TestPromoteDirectKids_NumbersARootWrittenInTheCatalog(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	doc := openPromoteDoc(t, directRootPDF("1 0 R"))
+	if err := doc.PromoteDirectKids(ctx); err != nil {
+		t.Fatalf("PromoteDirectKids: %v", err)
+	}
+	if nums := slices.Sorted(maps.Keys(doc.PromotedObjects())); !slices.Equal(nums, []int{1, 4}) {
+		t.Fatalf("staged objects %v, want [1 4]: the catalog and its root", nums)
+	}
+	catalog, err := ResolveDict(ctx, doc, ast.PdfIndirectRef{ObjectNum: 1})
+	if err != nil {
+		t.Fatalf("ResolveDict(1): %v", err)
+	}
+	if catalog["Pages"] != (ast.PdfIndirectRef{ObjectNum: 4}) {
+		t.Errorf("the catalog names its root as %v, want 4 0 R", catalog["Pages"])
+	}
+	if catalog["Lang"] != ast.PdfString("en") {
+		t.Errorf("the catalog lost its /Lang: %v", catalog)
+	}
+	if ref, ok := doc.CatalogRef(ctx); !ok || ref.ObjectNum != 1 {
+		t.Errorf("CatalogRef = %v, %v, want 1 0 R", ref, ok)
+	}
+	if got := pageObjectNums(t, doc); !slices.Equal(got, []int{2, 3}) {
+		t.Errorf("the pages read as objects %v, want [2 3]", got)
+	}
+	if got := doc.HighestObjectNumber(ctx); got != 4 {
+		t.Errorf("HighestObjectNumber = %d, want 4, the root", got)
+	}
+}
+
+// TestPromoteDirectKids_NumbersACatalogWrittenInTheTrailer pins that a
+// catalog written directly in the trailer gets the next object number, ahead
+// of the root it writes directly in turn, that the trailer names it by
+// reference from then on, and that the source a fork was taken from keeps its
+// own trailer.
+//
+// ISO 32000-1, 7.5.5, Table 15 makes /Root an indirect reference, and every
+// writer that edits the catalog replaces it at its object number.
+func TestPromoteDirectKids_NumbersACatalogWrittenInTheTrailer(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	source := openPromoteDoc(t, directRootPDF("<< /Type /Catalog /Pages << /Type /Pages /Kids [2 0 R 3 0 R] /Count 2 >> >>"))
+	doc := source.Fork()
+	if err := doc.PromoteDirectKids(ctx); err != nil {
+		t.Fatalf("PromoteDirectKids: %v", err)
+	}
+	if doc.Index.Trailer["Root"] != (ast.PdfIndirectRef{ObjectNum: 4}) {
+		t.Fatalf("the trailer names the catalog as %v, want 4 0 R", doc.Index.Trailer["Root"])
+	}
+	if _, direct := source.Index.Trailer["Root"].(ast.PdfDict); !direct {
+		t.Errorf("the promotion of a fork reached its source's trailer: /Root %v", source.Index.Trailer["Root"])
+	}
+	catalog, err := ResolveCatalog(ctx, doc)
+	if err != nil {
+		t.Fatalf("ResolveCatalog: %v", err)
+	}
+	if catalog.Dict["Pages"] != (ast.PdfIndirectRef{ObjectNum: 5}) {
+		t.Errorf("the catalog names its root as %v, want 5 0 R", catalog.Dict["Pages"])
+	}
+	if ref, ok := doc.CatalogRef(ctx); !ok || ref.ObjectNum != 4 {
+		t.Errorf("CatalogRef = %v, %v, want 4 0 R", ref, ok)
+	}
+	if got := pageObjectNums(t, doc); !slices.Equal(got, []int{2, 3}) {
+		t.Errorf("the pages read as objects %v, want [2 3]", got)
 	}
 }
