@@ -333,9 +333,10 @@ var mutationSpecs = []mutationSpec{
 		},
 	},
 	{
-		name:   "pages",
-		apply:  applyPages,
-		verify: verifyIdentityText,
+		name:         "pages",
+		extraMetrics: []string{metricPromiseBroken},
+		apply:        applyPages,
+		verify:       verifyPagesMove,
 		allowance: func(rc ruleContext) ruleAllowance {
 			family := ruleFamily(rc.profile)
 			a := strictAllowance(rc.profile)
