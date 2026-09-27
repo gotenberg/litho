@@ -169,6 +169,7 @@ one deliberately rather than diffing it against a fresh build.
 | `formmark_ua1.pdf`     | PDF/UA-1     | Forms judged by what they draw, and the sequences they open      |
 | `laterreads_2u.pdf`    | PDF/A-2u     | What a later repair reads: removed annotations, a font's uses    |
 | `baretree_2b.pdf`      | PDF/A-2b     | A page tree short of the entries it requires, under the rewrites |
+| `namedmcid_ua1.pdf`    | PDF/UA-1     | Marked content naming its property list; Links judged per page   |
 
 ### Must-not-fire controls
 
@@ -246,6 +247,9 @@ violation but is exempt, so a firing is a false positive.
 | `tableregular_ua2`                        | A table whose every `TH` carries a `/Scope`, settling determination    | ISO 14289-2, 8.2.5.26 t5, t6 |
 | `artifact_ua1`                            | A tagged paragraph and a top-level artifact, neither one nested        | ISO 14289-1, 7.1 t1, t2      |
 | `formmark_ua1`                            | Five forms painting nothing untagged, two of them nothing at all       | ISO 14289-1, 7.1 t3          |
+| `namedmcid_ua1`                           | Page and form content tagged through a named property list's `/MCID`   | ISO 14289-1, 7.1 t3          |
+| `namedmcid_ua1`                           | Unmapped `/MCID`s inside a mapped one, around nothing, around artifact | ISO 14289-1, 7.1 t3          |
+| `namedmcid_ua1`                           | A Private Use glyph covered by `/ActualText` in the page's named list  | ISO 14289-2, 8.4.3 t1        |
 | `annots_1b`                               | A plain square and a plain widget, both with `/F 4` and an `/N` stream | ISO 19005-1, 6.5.3           |
 | `annots_1b`                               | An appearance dict carrying `/D` beside an `/N` of the wrong type      | ISO 19005-1, 6.5.3 t5, t6    |
 | `fontkeys_1b`                             | A Helvetica with no `/FirstChar`, `/LastChar` or `/Widths`             | ISO 19005-1, 6.3.2 t4-t6     |
@@ -471,6 +475,7 @@ which are covered under [Known divergences](#known-divergences).
 | `megafont_2b.pdf`      | 12   | 9    | 13   | 10   | 11   | 13   | 10   | 11   | 10  | 10   | 11   | 12   | 11   |
 | `metafilter_1b.pdf`    | 6    | 3    | 6    | 3    | 4    | 6    | 3    | 4    | 6   | 6    | 7    | 8    | 7    |
 | `multipage_2b.pdf`     | 12   | 10   | 13   | 11   | 11   | 13   | 11   | 11   | 10  | 10   | 11   | 10   | 9    |
+| `namedmcid_ua1.pdf`    | 6    | 6    | 7    | 7    | 7    | 7    | 7    | 7    | 6   | 6    | 7    | 7    | 5    |
 | `namereads_1b.pdf`     | 10   | 7    | 10   | 8    | 8    | 10   | 8    | 8    | 7   | 7    | 8    | 6    | 6    |
 | `offlimits_1b.pdf`     | 9    | 6    | 9    | 7    | 7    | 9    | 7    | 7    | 6   | 6    | 7    | 7    | 7    |
 | `outputintent_2b.pdf`  | 6    | 4    | 7    | 5    | 5    | 7    | 5    | 5    | 6   | 6    | 7    | 7    | 7    |
@@ -4874,6 +4879,67 @@ page leaves pages 3, 4 and 5 as the source has them. The outputs report the
 input's rule set on both tools, and the stamp adds only its unembedded font and
 DeviceRGB. Remediation at the eight manifest profiles, default and aggressive,
 leaves nothing on either tool, before the fix and after.
+
+### `namedmcid_ua1.pdf`
+
+A `BDC` operator writes its property list inline or names it from the
+`/Properties` of the current resources (ISO 32000-1, 14.6.2), and the `/MCID`
+that ties the content to its structure element sits in that list either way.
+veraPDF resolves the name through the stream's own resources and then through
+the page's (`PDResourcesHandler.getProperties`): a form's own definition wins,
+even one that is no dictionary, and only a missing or null one falls to the
+page's. litho read the `/MCID` and `/Lang` of an inline list alone, and resolved
+a form's names through the form's resources alone. No corpus file names a list
+carrying an `/MCID` under a structure tree.
+
+The catalog carries no `/Lang`, and every structure element but two carries one,
+so each language finding comes from the construct planted for it. Page 1 shows:
+
+| Construct                                                                 | Verdict        |
+| ------------------------------------------------------------------------- | -------------- |
+| text under `/MC0`, which the page's `/Properties` maps to `/MCID 0`       | silent         |
+| form `/Fm1`, whose text sits under `/MC1` from its own `/Properties`      | silent         |
+| form `/Fm2`, whose text sits under `/MC2`, which only the page defines    | silent         |
+| text under `/MC4`, `/MCID 2`, owned by an element with no `/Lang`         | `7.2/34`       |
+| text under `/MC5`, whose list carries the `/Lang` its element lacks       | silent         |
+| form `/Fm3`, a Private Use glyph under `/MC6` with `/ActualText`, page's  | silent         |
+| form `/Fm5`, a square in a `/Span` under the page's `/MC8`, `/ActualText` | `7.2/30`       |
+| `/MCID 9` unmapped inside the mapped `/MCID 1`, over text                 | silent         |
+| `/MCID 8` unmapped, wrapping nothing                                      | silent         |
+| `/MCID 7` unmapped, wrapping only an artifact                             | silent         |
+| a Link written inline in an `/Annots` array page 2 shares, no `/Contents` | `7.18.5/2` x 2 |
+
+`/Fm5`'s `/Span` has no `/Lang`, and the `/MC9` around it names an element with
+none, so the language of its `/ActualText` is determined nowhere. The three
+unmapped identifiers are the shapes the retired orphan-MCID check reported as
+`7.1/3` and veraPDF does not: content under an unmapped `/MCID` is tagged by the
+innermost mapped one around it, and a sequence painting nothing, or only an
+artifact, is no untagged content. veraPDF builds the inline Link once for each
+page listing it, and skips a Link that is an object of its own when it meets it
+again, so `7.18.5/2`, `7.18.5/1` and `7.18.1/2` each count 2.
+
+Measured on veraPDF 1.30.2 and litho, the file agrees with veraPDF in all
+thirteen cells, rule for rule and count for count. PDF/UA-1 reports `7.2/30`,
+`7.2/34`, `7.2/33` for the title with no language, the Link's three rules and
+the unembedded font (`7.21.4.1/1`), and PDF/UA-2 the part-1 claim (`5/2`,
+`5/5`), the Document element outside the PDF 2.0 namespace (`8.2.5.2/2`), the
+missing default language (`8.4.4/1`) and the font (`8.4.5.5.1/1`). Before the fix
+litho reported `7.1/3` twice at PDF/UA-1 and missed `7.2/30`, reported
+`8.2.2/1` twice and `8.4.3/1` at PDF/UA-2, reported `6.2.11.7.3/1` at PDF/A-2a
+and PDF/A-3a, and counted `7.18.5/2` once. The PDF/A cells report the
+unembedded font, the nine device gray paints with no output intent
+(`6.2.3.3/3` at part 1, `6.2.4.3/4` from part 2), the Link's missing print flag
+(`6.5.3/2` at part 1, `6.3.2/1` from part 2), the three forms naming a list only
+the page defines (`6.2.2/2` from part 2), the `pdfuaid` properties no extension
+schema declares and the missing PDF/A identification, the `%PDF-1.7` header at
+part 4 and, at 4f, the missing `/EmbeddedFiles`.
+
+Remediation at the eight manifest profiles, default and aggressive, leaves the
+same rule set and counts on both tools in every cell: the unembedded font
+everywhere, and at PDF/UA-1 the inline Link's three rules besides. Before the
+fix litho also left `7.1/3` at PDF/UA-1 and `8.2.2/1` and `8.4.3/1` at
+PDF/UA-2. Deleting either page and flattening leave outputs on which both tools
+report the same rule set and counts at both PDF/UA levels.
 
 ## Scope
 
