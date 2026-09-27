@@ -152,3 +152,40 @@ func TestRemediatePDFA_GraphicsReachKeepsThePeersWrites(t *testing.T) {
 		}
 	}
 }
+
+// TestFixGraphics_RepairsAnAppearanceThePageAlsoNames pins that an appearance
+// the page's /XObject resources also name is repaired as the form it is.
+//
+// The XObject walk marks every XObject it meets and repairs the form keys only
+// on one whose /Subtype is /Form. An appearance written with no /Subtype is a
+// form all the same (ISO 32000-1, 12.5.5), and compliance judges its /OPI
+// (ISO 19005-2, 6.2.9 t1); skipping every object the XObject walk had marked
+// left it in place.
+func TestFixGraphics_RepairsAnAppearanceThePageAlsoNames(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	doc, alloc := newTestDoc(t, buildStructPDF(
+		"<< /Type /Catalog /Pages 2 0 R >>",
+		"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+		"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] /Resources << /XObject << /Ap 5 0 R >> >> /Annots [4 0 R] >>",
+		"<< /Type /Annot /Subtype /Square /Rect [10 10 30 30] /F 4 /AP << /N 5 0 R >> >>",
+		streamBody("/BBox [0 0 20 20] /OPI << /2.0 << /Type /OPI /Version 2.0 /MainImage (x.tif) >> >>", "0 0 10 10 re f"),
+	))
+	errs, err := compliance.ValidatePDFA(ctx, doc, models.PDFA2b)
+	if err != nil {
+		t.Fatalf("ValidatePDFA: %v", err)
+	}
+	if n := len(failures(toViolations(errs), compliance.Rule_19005_2_6_2_9_t01)); n != 1 {
+		t.Fatalf("control: the source fails 6.2.9 t1 %d times, want 1", n)
+	}
+
+	if _, err := fixGraphics(ctx, alloc, doc, Options{}, nil, string(models.PDFA2b)); err != nil {
+		t.Fatalf("fixGraphics: %v", err)
+	}
+
+	after, _ := revalidatePDFA(t, doc, alloc, models.PDFA2b)
+	for _, v := range failures(after, compliance.Rule_19005_2_6_2_9_t01) {
+		t.Errorf("the output still fails %s t%d [%s]", v.Rule.Clause, v.Rule.TestNumber, v.Context)
+	}
+}

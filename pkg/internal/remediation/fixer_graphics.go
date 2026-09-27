@@ -71,6 +71,7 @@ func fixGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 
 	var notes []string
 	visited := make(map[int]bool)
+	appearances := make(map[int]bool)
 
 	for i, page := range pages {
 		if err := ctx.Err(); err != nil {
@@ -101,7 +102,7 @@ func fixGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.
 			notes = append(notes, pending...)
 		}
 
-		apNotes, err := fixAppearanceGraphics(ctx, alloc, doc, livePageDict(ctx, alloc, doc, page), visited)
+		apNotes, err := fixAppearanceGraphics(ctx, alloc, doc, livePageDict(ctx, alloc, doc, page), visited, appearances)
 		if err != nil {
 			return nil, fmt.Errorf("fixing graphics in the annotations of page %d: %w", i+1, err)
 		}
@@ -294,8 +295,12 @@ func fixPatternGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 //
 // An appearance stream is a form XObject (12.5.5), and compliance judges the
 // form rules on its dictionary whatever its /Subtype says, and the XObjects it
-// draws, as veraPDF does. Each is read through the allocator, and visited
-// once with the forms the resources name.
+// draws, as veraPDF does. Each is read through the allocator and repaired
+// once, which appearances records. visited does not decide it: the XObject
+// walk marks every XObject a /Resources names, and takes one whose /Subtype
+// is not /Form for no form, so an appearance the page also names would go
+// unrepaired. The repair builds on the live dictionary, so a second pass over
+// a form the XObject walk already repaired changes nothing.
 //
 // # Corpus evidence
 //
@@ -305,7 +310,7 @@ func fixPatternGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 //   - litho imagedraws_2b.pdf: appearances carrying /OPI and /Ref kept ISO
 //     19005-2, 6.2.9 t1 and t2 after a PDF/A-2b remediation, on litho and
 //     veraPDF alike.
-func fixAppearanceGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict, visited map[int]bool) ([]string, error) {
+func fixAppearanceGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc *document.Document, pageDict ast.PdfDict, visited, appearances map[int]bool) ([]string, error) {
 	var notes []string
 	for _, annotObj := range liveArray(ctx, alloc, doc, pageDict["Annots"]) {
 		if err := ctx.Err(); err != nil {
@@ -320,13 +325,14 @@ func fixAppearanceGraphics(ctx context.Context, alloc *writer.ObjAllocator, doc 
 			}
 			for _, streamObj := range appearanceStreams(ctx, alloc, doc, entry) {
 				ref, isRef := streamObj.(ast.PdfIndirectRef)
-				if !isRef || ref.ObjectNum <= 0 || visited[ref.ObjectNum] {
+				if !isRef || ref.ObjectNum <= 0 || appearances[ref.ObjectNum] {
 					continue
 				}
 				stream, ok := liveStream(ctx, alloc, doc, ref)
 				if !ok {
 					continue
 				}
+				appearances[ref.ObjectNum] = true
 				visited[ref.ObjectNum] = true
 				work := maps.Clone(stream.Dict)
 				landed, pending, modified, err := repairFormDict(ctx, alloc, doc, "AP/"+key, work, visited, 1)
