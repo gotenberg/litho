@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/gotenberg/litho/pkg/internal/compliance"
 	"github.com/gotenberg/litho/pkg/internal/core/ast"
@@ -160,10 +161,16 @@ func fixPageAnnotations(ctx context.Context, alloc *writer.ObjAllocator, doc *do
 			continue
 		}
 
-		annots, err := document.ResolveArray(ctx, doc, annotsObj)
-		if err != nil || len(annots) == 0 {
+		resolved, err := document.ResolveArray(ctx, doc, annotsObj)
+		if err != nil || len(resolved) == 0 {
 			continue
 		}
+		// fixAnnotArray marks and replaces entries in the array it is given,
+		// and the resolved one is the document's cached /Annots. Editing it in
+		// place wrote the removed annotations' null slots into the cache, where
+		// every later read of the document saw them: the allocator holds the
+		// rebuilt array, and the edit belongs there alone.
+		annots := slices.Clone(resolved)
 
 		pageFixes, modified := fixAnnotArray(ctx, alloc, doc, annots, i+1, opts, profile)
 		fixes = append(fixes, pageFixes...)
